@@ -56,7 +56,7 @@ type Frame struct {
 	cacheType   string
 	cacheSize   uint32
 	timeQuantum TimeQuantum
-	fields      []*Field
+	fields      []*oField
 
 	Logger Logger
 }
@@ -296,7 +296,7 @@ func (f *Frame) Close() error {
 }
 
 // Field returns a field by name.
-func (f *Frame) Field(name string) *Field {
+func (f *Frame) Field(name string) *oField {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	for _, field := range f.fields {
@@ -308,7 +308,7 @@ func (f *Frame) Field(name string) *Field {
 }
 
 // Fields returns the fields on the frame.
-func (f *Frame) Fields() []*Field {
+func (f *Frame) Fields() []*oField {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.fields
@@ -325,7 +325,7 @@ func (f *Frame) HasField(name string) bool {
 }
 
 // CreateField creates a new field on the frame.
-func (f *Frame) CreateField(field *Field) error {
+func (f *Frame) CreateField(field *oField) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -338,7 +338,7 @@ func (f *Frame) CreateField(field *Field) error {
 }
 
 // addField adds a single field to fields.
-func (f *Frame) addField(field *Field) error {
+func (f *Frame) addField(field *oField) error {
 	if err := ValidateField(field); err != nil {
 		return errors.Wrap(err, "validating field")
 	} else if f.HasField(field.Name) {
@@ -357,7 +357,7 @@ func (f *Frame) addField(field *Field) error {
 }
 
 // GetFields returns a list of all the fields in the frame.
-func (f *Frame) GetFields() ([]*Field, error) {
+func (f *Frame) GetFields() ([]*oField, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
@@ -950,7 +950,7 @@ type FrameOptions struct {
 	CacheType   string      `json:"cacheType,omitempty"`
 	CacheSize   uint32      `json:"cacheSize,omitempty"`
 	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
-	Fields      []*Field    `json:"fields,omitempty"`
+	Fields      []*oField   `json:"fields,omitempty"`
 }
 
 // Encode converts o into its internal representation.
@@ -996,8 +996,8 @@ func IsValidFieldType(v string) bool {
 	}
 }
 
-// Field represents a range field on a frame.
-type Field struct {
+// oField represents a range field on a frame.
+type oField struct {
 	Name string `json:"name,omitempty"`
 	Type string `json:"type,omitempty"`
 	Min  int64  `json:"min,omitempty"`
@@ -1005,7 +1005,7 @@ type Field struct {
 }
 
 // BitDepth returns the number of bits required to store a value between min & max.
-func (f *Field) BitDepth() uint {
+func (f *oField) BitDepth() uint {
 	for i := uint(0); i < 63; i++ {
 		if f.Max-f.Min < (1 << i) {
 			return i
@@ -1026,7 +1026,7 @@ func (f *Field) BitDepth() uint {
 // In order to make this work, we effectively need to change the operator to LTE.
 // Executor.executeFieldRangeSlice() takes this into account and returns
 // `frag.FieldNotNull(field.BitDepth())` in such instances.
-func (f *Field) BaseValue(op pql.Token, value int64) (baseValue uint64, outOfRange bool) {
+func (f *oField) BaseValue(op pql.Token, value int64) (baseValue uint64, outOfRange bool) {
 	if op == pql.GT || op == pql.GTE {
 		if value > f.Max {
 			return baseValue, true
@@ -1051,7 +1051,7 @@ func (f *Field) BaseValue(op pql.Token, value int64) (baseValue uint64, outOfRan
 }
 
 // BaseValueBetween adjusts the min/max value to align with the range for Field.
-func (f *Field) BaseValueBetween(min, max int64) (baseValueMin, baseValueMax uint64, outOfRange bool) {
+func (f *oField) BaseValueBetween(min, max int64) (baseValueMin, baseValueMax uint64, outOfRange bool) {
 	if max < f.Min || min > f.Max {
 		return baseValueMin, baseValueMax, true
 	}
@@ -1068,7 +1068,7 @@ func (f *Field) BaseValueBetween(min, max int64) (baseValueMin, baseValueMax uin
 	return baseValueMin, baseValueMax, false
 }
 
-func ValidateField(f *Field) error {
+func ValidateField(f *oField) error {
 	if f.Name == "" {
 		return ErrFieldNameRequired
 	} else if !IsValidFieldType(f.Type) {
@@ -1079,7 +1079,7 @@ func ValidateField(f *Field) error {
 	return nil
 }
 
-func encodeFields(a []*Field) []*internal.Field {
+func encodeFields(a []*oField) []*internal.Field {
 	if len(a) == 0 {
 		return nil
 	}
@@ -1090,18 +1090,18 @@ func encodeFields(a []*Field) []*internal.Field {
 	return other
 }
 
-func decodeFields(a []*internal.Field) []*Field {
+func decodeFields(a []*internal.Field) []*oField {
 	if len(a) == 0 {
 		return nil
 	}
-	other := make([]*Field, len(a))
+	other := make([]*oField, len(a))
 	for i := range a {
 		other[i] = decodeField(a[i])
 	}
 	return other
 }
 
-func encodeField(f *Field) *internal.Field {
+func encodeField(f *oField) *internal.Field {
 	if f == nil {
 		return nil
 	}
@@ -1113,11 +1113,11 @@ func encodeField(f *Field) *internal.Field {
 	}
 }
 
-func decodeField(f *internal.Field) *Field {
+func decodeField(f *internal.Field) *oField {
 	if f == nil {
 		return nil
 	}
-	return &Field{
+	return &oField{
 		Name: f.Name,
 		Type: f.Type,
 		Min:  f.Min,

@@ -621,7 +621,7 @@ func (h *Handler) handlePostFrameField(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	field := &Field{
+	field := &oField{
 		Name: fieldName,
 		Type: req.Type,
 		Min:  req.Min,
@@ -696,7 +696,7 @@ func (h *Handler) handleGetFrameFields(w http.ResponseWriter, r *http.Request) {
 }
 
 type getFrameFieldsResponse struct {
-	Fields []*Field `json:"fields,omitempty"`
+	Fields []*oField `json:"fields,omitempty"`
 }
 
 type deleteFrameFieldResponse struct{}

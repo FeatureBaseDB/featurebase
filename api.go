@@ -489,7 +489,7 @@ func (api *API) Schema(ctx context.Context) []*IndexInfo {
 }
 
 // CreateField creates a new BSI field in the given index and frame.
-func (api *API) CreateField(ctx context.Context, indexName string, frameName string, field *Field) error {
+func (api *API) CreateField(ctx context.Context, indexName string, frameName string, field *oField) error {
 	if err := api.validate(apiCreateField); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -549,7 +549,7 @@ func (api *API) DeleteField(ctx context.Context, indexName string, frameName str
 }
 
 // Fields returns the fields in the given frame.
-func (api *API) Fields(ctx context.Context, indexName string, frameName string) ([]*Field, error) {
+func (api *API) Fields(ctx context.Context, indexName string, frameName string) ([]*oField, error) {
 	if err := api.validate(apiFields); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
