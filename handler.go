@@ -169,9 +169,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handlePostFrame).Methods("POST")
 	router.HandleFunc("/index/{index}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
 	router.HandleFunc("/index/{index}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
-	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handlePostFrameField).Methods("POST")
-	router.HandleFunc("/index/{index}/frame/{frame}/fields", handler.handleGetFrameFields).Methods("GET")
-	router.HandleFunc("/index/{index}/frame/{frame}/field/{field}", handler.handleDeleteFrameField).Methods("DELETE")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
 
@@ -607,99 +604,6 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 }
 
 type deleteFrameResponse struct{}
-
-// handlePostFrameField handles POST /frame/field request.
-func (h *Handler) handlePostFrameField(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-	frameName := mux.Vars(r)["frame"]
-	fieldName := mux.Vars(r)["field"]
-
-	// Decode request.
-	var req postFrameFieldRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	field := &oField{
-		Name: fieldName,
-		Type: req.Type,
-		Min:  req.Min,
-		Max:  req.Max,
-	}
-
-	if err := h.API.CreateField(r.Context(), indexName, frameName, field); err != nil {
-		if errors.Cause(err) == ErrFrameNotFound {
-			http.Error(w, err.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Encode response.
-	if err := json.NewEncoder(w).Encode(postFrameFieldResponse{}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
-}
-
-type postFrameFieldRequest struct {
-	Type string `json:"type,omitempty"`
-	Min  int64  `json:"min,omitempty"`
-	Max  int64  `json:"max,omitempty"`
-}
-
-type postFrameFieldResponse struct{}
-
-// handleDeleteFrameField handles DELETE /frame/field request.
-func (h *Handler) handleDeleteFrameField(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-	frameName := mux.Vars(r)["frame"]
-	fieldName := mux.Vars(r)["field"]
-
-	if err := h.API.DeleteField(r.Context(), indexName, frameName, fieldName); err != nil {
-		if errors.Cause(err) == ErrFrameNotFound {
-			http.Error(w, err.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Encode response.
-	if err := json.NewEncoder(w).Encode(deleteFrameFieldResponse{}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
-}
-
-func (h *Handler) handleGetFrameFields(w http.ResponseWriter, r *http.Request) {
-	indexName := mux.Vars(r)["index"]
-	frameName := mux.Vars(r)["frame"]
-
-	fields, err := h.API.Fields(r.Context(), indexName, frameName)
-	if err != nil {
-		switch errors.Cause(err) {
-		case ErrIndexNotFound:
-			fallthrough
-		case ErrFrameNotFound:
-			http.Error(w, err.Error(), http.StatusNotFound)
-		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Encode response.
-	if err := json.NewEncoder(w).Encode(getFrameFieldsResponse{Fields: fields}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
-}
-
-type getFrameFieldsResponse struct {
-	Fields []*oField `json:"fields,omitempty"`
-}
-
-type deleteFrameFieldResponse struct{}
 
 // handlePostFrameAttrDiff handles POST /frame/attr/diff requests.
 func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request) {

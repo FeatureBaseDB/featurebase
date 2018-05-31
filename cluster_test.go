@@ -424,7 +424,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		// Add Field Data to node0.
 		if err := tc.CreateFrame("i", "fields", FrameOptions{
-			Fields: []*Field{
+			Fields: []*oField{
 				{
 					Name: "fld0",
 					Type: FieldTypeInt,
