@@ -548,25 +548,6 @@ func (api *API) DeleteField(ctx context.Context, indexName string, frameName str
 	return errors.Wrap(err, "sending DeleteField message")
 }
 
-// Fields returns the fields in the given frame.
-func (api *API) Fields(ctx context.Context, indexName string, frameName string) ([]*oField, error) {
-	if err := api.validate(apiFields); err != nil {
-		return nil, errors.Wrap(err, "validating api method")
-	}
-
-	index := api.Holder.index(indexName)
-	if index == nil {
-		return nil, ErrIndexNotFound
-	}
-
-	frame := index.frame(frameName)
-	if frame == nil {
-		return nil, ErrFrameNotFound
-	}
-
-	return frame.GetFields()
-}
-
 // Views returns the views in the given frame.
 func (api *API) Views(ctx context.Context, indexName string, frameName string) ([]*View, error) {
 	if err := api.validate(apiViews); err != nil {
@@ -877,7 +858,6 @@ const (
 	apiDeleteIndex
 	apiDeleteView
 	apiExportCSV
-	apiFields
 	apiFragmentBlockData
 	apiFragmentBlocks
 	apiFrameAttrDiff
@@ -923,7 +903,6 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiDeleteIndex:       struct{}{},
 	apiDeleteView:        struct{}{},
 	apiExportCSV:         struct{}{},
-	apiFields:            struct{}{},
 	apiFragmentBlockData: struct{}{},
 	apiFragmentBlocks:    struct{}{},
 	apiFrameAttrDiff:     struct{}{},

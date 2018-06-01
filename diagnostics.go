@@ -227,8 +227,8 @@ func (d *DiagnosticsCollector) EnrichWithSchemaProperties() {
 		numIndexes += 1
 		for _, frame := range index.Frames() {
 			numFrames += 1
-			if fields, err := frame.GetFields(); err == nil {
-				bsiFieldCount += len(fields)
+			if frame.Type() == FrameTypeInt {
+				bsiFieldCount += 1
 			}
 			if frame.TimeQuantum() != "" {
 				timeQuantumEnabled = true
