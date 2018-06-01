@@ -1783,7 +1783,7 @@ func (s *FragmentSyncer) SyncFragment() error {
 
 		// Retrieve remote blocks.
 		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
-		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.Index(), s.Fragment.Frame(), s.Fragment.View(), s.Fragment.Slice())
+		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.Index(), s.Fragment.Frame(), s.Fragment.Slice())
 		if err != nil && err != ErrFragmentNotFound {
 			return errors.Wrap(err, "getting blocks")
 		}
@@ -1862,7 +1862,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		clients = append(clients, client)
 
 		// Only sync the standard block.
-		rowIDs, columnIDs, err := client.BlockData(context.Background(), f.Index(), f.Frame(), ViewStandard, f.Slice(), id)
+		rowIDs, columnIDs, err := client.BlockData(context.Background(), f.Index(), f.Frame(), f.Slice(), id)
 		if err != nil {
 			return errors.Wrap(err, "getting block")
 		}

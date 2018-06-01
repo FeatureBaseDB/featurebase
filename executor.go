@@ -584,10 +584,7 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 		frame = DefaultFrame
 	}
 
-	// Determine view.
-	view := ViewStandard
-
-	f := e.Holder.Fragment(index, frame, view, slice)
+	f := e.Holder.Fragment(index, frame, ViewStandard, slice)
 	if f == nil {
 		return nil, nil
 	}

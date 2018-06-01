@@ -1259,7 +1259,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 
 				// Stream slice from remote node.
 				c.Logger.Printf("retrieve slice %d for index %s from host %s", src.Slice, src.Index, src.Node.URI)
-				rd, err := client.RetrieveSliceFromURI(context.Background(), src.Index, src.Frame, src.View, src.Slice, srcURI)
+				rd, err := client.RetrieveSliceFromURI(context.Background(), src.Index, src.Frame, src.Slice, srcURI)
 				if err != nil {
 					// For now it is an acceptable error if the fragment is not found
 					// on the remote node. This occurs when a slice has been skipped and

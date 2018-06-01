@@ -335,7 +335,7 @@ func TestClient_FragmentBlocks(t *testing.T) {
 
 	// Retrieve blocks.
 	c := test.MustNewClient(s.Host(), defaultClient)
-	blocks, err := c.FragmentBlocks(context.Background(), "i", "f", pilosa.ViewStandard, 0)
+	blocks, err := c.FragmentBlocks(context.Background(), "i", "f", 0)
 	if err != nil {
 		t.Fatal(err)
 	} else if len(blocks) != 2 {
