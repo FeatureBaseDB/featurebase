@@ -510,8 +510,8 @@ func (f *Fragment) FieldValue(columnID uint64, bitDepth uint) (value uint64, exi
 	return value, true, nil
 }
 
-// SetFieldValue uses a column of bits to set a multi-bit value.
-func (f *Fragment) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+// SetValue uses a column of bits to set a multi-bit value.
+func (f *Fragment) SetValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -541,8 +541,8 @@ func (f *Fragment) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (
 	return changed, nil
 }
 
-// importSetFieldValue is a more efficient SetFieldValue just for imports.
-func (f *Fragment) importSetFieldValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+// importSetValue is a more efficient SetValue just for imports.
+func (f *Fragment) importSetValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
 
 	for i := uint(0); i < bitDepth; i++ {
 		if value&(1<<i) != 0 {
@@ -1408,7 +1408,7 @@ func (f *Fragment) ImportValue(columnIDs, values []uint64, bitDepth uint) error 
 		for i := range columnIDs {
 			columnID, value := columnIDs[i], values[i]
 
-			_, err := f.importSetFieldValue(columnID, bitDepth, value)
+			_, err := f.importSetValue(columnID, bitDepth, value)
 			if err != nil {
 				return errors.Wrap(err, "setting")
 			}

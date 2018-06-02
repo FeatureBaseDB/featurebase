@@ -97,13 +97,13 @@ func TestFragment_ClearBit(t *testing.T) {
 }
 
 // Ensure a fragment can set & read a field value.
-func TestFragment_SetFieldValue(t *testing.T) {
+func TestFragment_SetValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
 		f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
 		defer f.Close()
 
 		// Set value.
-		if changed, err := f.SetFieldValue(100, 16, 3829); err != nil {
+		if changed, err := f.SetValue(100, 16, 3829); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
@@ -119,7 +119,7 @@ func TestFragment_SetFieldValue(t *testing.T) {
 		}
 
 		// Setting value should return no change.
-		if changed, err := f.SetFieldValue(100, 16, 3829); err != nil {
+		if changed, err := f.SetValue(100, 16, 3829); err != nil {
 			t.Fatal(err)
 		} else if changed {
 			t.Fatal("expected no change")
@@ -131,14 +131,14 @@ func TestFragment_SetFieldValue(t *testing.T) {
 		defer f.Close()
 
 		// Set value.
-		if changed, err := f.SetFieldValue(100, 16, 3829); err != nil {
+		if changed, err := f.SetValue(100, 16, 3829); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Overwriting value should overwrite all bits.
-		if changed, err := f.SetFieldValue(100, 16, 2028); err != nil {
+		if changed, err := f.SetValue(100, 16, 2028); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
@@ -159,7 +159,7 @@ func TestFragment_SetFieldValue(t *testing.T) {
 		defer f.Close()
 
 		// Set value.
-		if changed, err := f.SetFieldValue(100, 10, 20); err != nil {
+		if changed, err := f.SetValue(100, 10, 20); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
@@ -195,7 +195,7 @@ func TestFragment_SetFieldValue(t *testing.T) {
 
 				m[columnID] = int64(value)
 
-				if _, err := f.SetFieldValue(columnID, bitDepth, value); err != nil {
+				if _, err := f.SetValue(columnID, bitDepth, value); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -227,13 +227,13 @@ func TestFragment_FieldSum(t *testing.T) {
 	defer f.Close()
 
 	// Set values.
-	if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+	if _, err := f.SetValue(1000, bitDepth, 382); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+	} else if _, err := f.SetValue(2000, bitDepth, 300); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(3000, bitDepth, 2818); err != nil {
+	} else if _, err := f.SetValue(3000, bitDepth, 2818); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(4000, bitDepth, 300); err != nil {
+	} else if _, err := f.SetValue(4000, bitDepth, 300); err != nil {
 		t.Fatal(err)
 	}
 
@@ -266,19 +266,19 @@ func TestFragment_FieldMinMax(t *testing.T) {
 	defer f.Close()
 
 	// Set values.
-	if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+	if _, err := f.SetValue(1000, bitDepth, 382); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+	} else if _, err := f.SetValue(2000, bitDepth, 300); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(3000, bitDepth, 2818); err != nil {
+	} else if _, err := f.SetValue(3000, bitDepth, 2818); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(4000, bitDepth, 300); err != nil {
+	} else if _, err := f.SetValue(4000, bitDepth, 300); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(5000, bitDepth, 2818); err != nil {
+	} else if _, err := f.SetValue(5000, bitDepth, 2818); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(6000, bitDepth, 2817); err != nil {
+	} else if _, err := f.SetValue(6000, bitDepth, 2817); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetFieldValue(7000, bitDepth, 0); err != nil {
+	} else if _, err := f.SetValue(7000, bitDepth, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -340,13 +340,13 @@ func TestFragment_FieldRange(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.SetValue(1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetValue(2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(3000, bitDepth, 2818); err != nil {
+		} else if _, err := f.SetValue(3000, bitDepth, 2818); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(4000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetValue(4000, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		}
 
@@ -363,13 +363,13 @@ func TestFragment_FieldRange(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.SetValue(1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetValue(2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(3000, bitDepth, 2818); err != nil {
+		} else if _, err := f.SetValue(3000, bitDepth, 2818); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(4000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetValue(4000, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		}
 
@@ -386,17 +386,17 @@ func TestFragment_FieldRange(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.SetValue(1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetValue(2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(3000, bitDepth, 2817); err != nil {
+		} else if _, err := f.SetValue(3000, bitDepth, 2817); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(4000, bitDepth, 301); err != nil {
+		} else if _, err := f.SetValue(4000, bitDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(5000, bitDepth, 1); err != nil {
+		} else if _, err := f.SetValue(5000, bitDepth, 1); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(6000, bitDepth, 0); err != nil {
+		} else if _, err := f.SetValue(6000, bitDepth, 0); err != nil {
 			t.Fatal(err)
 		}
 
@@ -434,17 +434,17 @@ func TestFragment_FieldRange(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.SetValue(1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetValue(2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(3000, bitDepth, 2817); err != nil {
+		} else if _, err := f.SetValue(3000, bitDepth, 2817); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(4000, bitDepth, 301); err != nil {
+		} else if _, err := f.SetValue(4000, bitDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(5000, bitDepth, 1); err != nil {
+		} else if _, err := f.SetValue(5000, bitDepth, 1); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(6000, bitDepth, 0); err != nil {
+		} else if _, err := f.SetValue(6000, bitDepth, 0); err != nil {
 			t.Fatal(err)
 		}
 
@@ -482,17 +482,17 @@ func TestFragment_FieldRange(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetFieldValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.SetValue(1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.SetValue(2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(3000, bitDepth, 2817); err != nil {
+		} else if _, err := f.SetValue(3000, bitDepth, 2817); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(4000, bitDepth, 301); err != nil {
+		} else if _, err := f.SetValue(4000, bitDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(5000, bitDepth, 1); err != nil {
+		} else if _, err := f.SetValue(5000, bitDepth, 1); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetFieldValue(6000, bitDepth, 0); err != nil {
+		} else if _, err := f.SetValue(6000, bitDepth, 0); err != nil {
 			t.Fatal(err)
 		}
 

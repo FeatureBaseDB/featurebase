@@ -340,7 +340,7 @@ func (v *View) setValue(columnID uint64, bitDepth uint, value uint64) (changed b
 	if err != nil {
 		return changed, err
 	}
-	return frag.SetFieldValue(columnID, bitDepth, value)
+	return frag.SetValue(columnID, bitDepth, value)
 }
 
 // FieldSum returns the sum & count of a field.
