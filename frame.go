@@ -747,7 +747,7 @@ func (f *Frame) SetValue(columnID uint64, value int64) (changed bool, err error)
 	// Determine base value to store.
 	baseValue := uint64(value - field.Min)
 
-	return view.SetFieldValue(columnID, field.BitDepth(), baseValue)
+	return view.setValue(columnID, field.BitDepth(), baseValue)
 }
 
 // FieldSum returns the sum and count for a field.

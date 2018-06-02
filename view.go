@@ -333,8 +333,8 @@ func (v *View) FieldValue(columnID uint64, bitDepth uint) (value uint64, exists 
 	return frag.FieldValue(columnID, bitDepth)
 }
 
-// SetFieldValue uses a column of bits to set a multi-bit value.
-func (v *View) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+// setValue uses a column of bits to set a multi-bit value.
+func (v *View) setValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
 	slice := columnID / SliceWidth
 	frag, err := v.CreateFragmentIfNotExists(slice)
 	if err != nil {
