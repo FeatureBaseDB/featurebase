@@ -72,7 +72,7 @@ func TestFrame_SetTimeQuantum(t *testing.T) {
 }
 
 // Ensure a frame can set & read a field value.
-func TestFrame_SetFieldValue(t *testing.T) {
+func TestFrame_SetValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()

@@ -138,8 +138,8 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return e.executeCount(ctx, index, c, slices, opt)
 	case "SetBit":
 		return e.executeSetBit(ctx, index, c, opt)
-	case "SetFieldValue":
-		return nil, e.executeSetFieldValue(ctx, index, c, opt)
+	case "SetValue":
+		return nil, e.executeSetValue(ctx, index, c, opt)
 	case "SetRowAttrs":
 		return nil, e.executeSetRowAttrs(ctx, index, c, opt)
 	case "SetColumnAttrs":
@@ -1107,14 +1107,14 @@ func (e *Executor) executeSetBitView(ctx context.Context, index string, c *pql.C
 	return ret, nil
 }
 
-// executeSetFieldValue executes a SetFieldValue() call.
-func (e *Executor) executeSetFieldValue(ctx context.Context, index string, c *pql.Call, opt *ExecOptions) error {
+// executeSetValue executes a SetValue() call.
+func (e *Executor) executeSetValue(ctx context.Context, index string, c *pql.Call, opt *ExecOptions) error {
 	// Parse labels.
 	columnID, ok, err := c.UintArg(columnLabel)
 	if err != nil {
-		return fmt.Errorf("reading SetFieldValue() column: %v", err)
+		return fmt.Errorf("reading SetValue() column: %v", err)
 	} else if !ok {
-		return fmt.Errorf("SetFieldValue() column field '%v' required", columnLabel)
+		return fmt.Errorf("SetValue() column field '%v' required", columnLabel)
 	}
 
 	// Copy args and remove reserved fields.
@@ -1139,7 +1139,7 @@ func (e *Executor) executeSetFieldValue(ctx context.Context, index string, c *pq
 		default:
 			return ErrInvalidFieldValueType
 		}
-		frame.Stats.Count("SetFieldValue", 1, 1.0)
+		frame.Stats.Count("SetValue", 1, 1.0)
 	}
 
 	// Do not forward call if this is already being forwarded.
