@@ -87,7 +87,7 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		}
 
 		// Set value on field.
-		if changed, err := f.SetFieldValue(100, "f", 21); err != nil {
+		if changed, err := f.SetValue(100, 21); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
@@ -103,7 +103,7 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		}
 
 		// Setting value should return no change.
-		if changed, err := f.SetFieldValue(100, "f", 21); err != nil {
+		if changed, err := f.SetValue(100, 21); err != nil {
 			t.Fatal(err)
 		} else if changed {
 			t.Fatal("expected no change")
@@ -124,14 +124,14 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		}
 
 		// Set value.
-		if changed, err := f.SetFieldValue(100, "f", 21); err != nil {
+		if changed, err := f.SetValue(100, 21); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Set different value.
-		if changed, err := f.SetFieldValue(100, "f", 23); err != nil {
+		if changed, err := f.SetValue(100, 23); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
@@ -152,16 +152,14 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		defer idx.Close()
 
 		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Type: pilosa.FrameTypeInt,
-			Min:  0,
-			Max:  30,
+			Type: pilosa.FrameTypeSet,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		// Set value.
-		if _, err := f.SetFieldValue(100, "no_such_field", 21); err != pilosa.ErrFieldNotFound {
+		if _, err := f.SetValue(100, 21); err != pilosa.ErrFieldNotFound {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -180,7 +178,7 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		}
 
 		// Set value.
-		if _, err := f.SetFieldValue(100, "f", 15); err != pilosa.ErrFieldValueTooLow {
+		if _, err := f.SetValue(100, 15); err != pilosa.ErrFieldValueTooLow {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -199,7 +197,7 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		}
 
 		// Set value.
-		if _, err := f.SetFieldValue(100, "f", 31); err != pilosa.ErrFieldValueTooHigh {
+		if _, err := f.SetValue(100, 31); err != pilosa.ErrFieldValueTooHigh {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})

@@ -283,9 +283,9 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 
 		// Set field values.
 		e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-		if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=10, frame=f, f=25)`), nil, nil); err != nil {
+		if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=10, f=25)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=100, frame=f, f=10)`), nil, nil); err != nil {
+		} else if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=100, f=10)`), nil, nil); err != nil {
 			t.Fatal(err)
 		}
 
@@ -319,30 +319,23 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		t.Run("ErrFrameRequired", func(t *testing.T) {
-			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=10, f=100)`), nil, nil); err == nil || err.Error() != `SetFieldValue() frame required` {
-				t.Fatalf("unexpected error: %s", err)
-			}
-		})
-
 		t.Run("ErrColumnFieldRequired", func(t *testing.T) {
 			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(invalid_column_name=10, frame=f, f=100)`), nil, nil); err == nil || err.Error() != `SetFieldValue() column field 'col' required` {
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(invalid_column_name=10, f=100)`), nil, nil); err == nil || err.Error() != `SetFieldValue() column field 'col' required` {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 
 		t.Run("ErrColumnFieldValue", func(t *testing.T) {
 			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(invalid_column_name="bad_column", frame=f, f=100)`), nil, nil); err == nil || err.Error() != `SetFieldValue() column field 'col' required` {
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(invalid_column_name="bad_column", f=100)`), nil, nil); err == nil || err.Error() != `SetFieldValue() column field 'col' required` {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 
 		t.Run("ErrInvalidFieldValueType", func(t *testing.T) {
 			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=10, frame=f, f="hello")`), nil, nil); err == nil || err.Error() != `invalid field value type` {
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=10, f="hello")`), nil, nil); err == nil || err.Error() != `invalid field value type` {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
@@ -598,14 +591,14 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 		SetBit(frame=x, row=1, col=1)
 		SetBit(frame=x, row=2, col=`+strconv.Itoa(SliceWidth+2)+`)
 
-		SetFieldValue(frame=f, f=20, col=0)
-		SetFieldValue(frame=f, f=-5, col=1)
-		SetFieldValue(frame=f, f=-5, col=2)
-		SetFieldValue(frame=f, f=10, col=3)
-		SetFieldValue(frame=f, f=30, col=`+strconv.Itoa(SliceWidth)+`)
-		SetFieldValue(frame=f, f=40, col=`+strconv.Itoa(SliceWidth+2)+`)
-		SetFieldValue(frame=f, f=50, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
-		SetFieldValue(frame=f, f=60, col=`+strconv.Itoa(SliceWidth+1)+`)
+		SetFieldValue(f=20, col=0)
+		SetFieldValue(f=-5, col=1)
+		SetFieldValue(f=-5, col=2)
+		SetFieldValue(f=10, col=3)
+		SetFieldValue(f=30, col=`+strconv.Itoa(SliceWidth)+`)
+		SetFieldValue(f=40, col=`+strconv.Itoa(SliceWidth+2)+`)
+		SetFieldValue(f=50, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
+		SetFieldValue(f=60, col=`+strconv.Itoa(SliceWidth+1)+`)
 	`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -706,13 +699,13 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 		SetBit(frame=x, row=0, col=0)
 		SetBit(frame=x, row=0, col=`+strconv.Itoa(SliceWidth+1)+`)
 
-		SetFieldValue(frame=foo, foo=20, col=0)
-		SetFieldValue(frame=bar, bar=2000, col=0)
-		SetFieldValue(frame=foo, foo=30, col=`+strconv.Itoa(SliceWidth)+`)
-		SetFieldValue(frame=foo, foo=40, col=`+strconv.Itoa(SliceWidth+2)+`)
-		SetFieldValue(frame=foo, foo=50, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
-		SetFieldValue(frame=foo, foo=60, col=`+strconv.Itoa(SliceWidth+1)+`)
-		SetFieldValue(frame=other, other=1000, col=0)
+		SetFieldValue(foo=20, col=0)
+		SetFieldValue(bar=2000, col=0)
+		SetFieldValue(foo=30, col=`+strconv.Itoa(SliceWidth)+`)
+		SetFieldValue(foo=40, col=`+strconv.Itoa(SliceWidth+2)+`)
+		SetFieldValue(foo=50, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
+		SetFieldValue(foo=60, col=`+strconv.Itoa(SliceWidth+1)+`)
+		SetFieldValue(other=1000, col=0)
 	`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -827,15 +820,15 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 		SetBit(frame=f, row=0, col=0)
 		SetBit(frame=f, row=0, col=`+strconv.Itoa(SliceWidth+1)+`)
 
-		SetFieldValue(frame=foo, foo=20, col=50)
-		SetFieldValue(frame=bar, bar=2000, col=50)
-		SetFieldValue(frame=foo, foo=30, col=`+strconv.Itoa(SliceWidth)+`)
-		SetFieldValue(frame=foo, foo=10, col=`+strconv.Itoa(SliceWidth+2)+`)
-		SetFieldValue(frame=foo, foo=20, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
-		SetFieldValue(frame=foo, foo=60, col=`+strconv.Itoa(SliceWidth+1)+`)
-		SetFieldValue(frame=other, other=1000, col=0)
-		SetFieldValue(frame=edge, edge=100, col=0)
-		SetFieldValue(frame=edge, edge=-100, col=1)
+		SetFieldValue(foo=20, col=50)
+		SetFieldValue(bar=2000, col=50)
+		SetFieldValue(foo=30, col=`+strconv.Itoa(SliceWidth)+`)
+		SetFieldValue(foo=10, col=`+strconv.Itoa(SliceWidth+2)+`)
+		SetFieldValue(foo=20, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
+		SetFieldValue(foo=60, col=`+strconv.Itoa(SliceWidth+1)+`)
+		SetFieldValue(other=1000, col=0)
+		SetFieldValue(edge=100, col=0)
+		SetFieldValue(edge=-100, col=1)
 	`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
