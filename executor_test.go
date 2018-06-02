@@ -272,10 +272,9 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 		// Create frames.
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{
-			Fields: []*pilosa.Field{
-				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 50},
-				{Name: "field1", Type: pilosa.FieldTypeInt, Min: 1, Max: 2},
-			},
+			Type: pilosa.FrameTypeInt,
+			Min:  0,
+			Max:  50,
 		}); err != nil {
 			t.Fatal(err)
 		} else if _, err := index.CreateFrameIfNotExists("xxx", pilosa.FrameOptions{}); err != nil {
@@ -284,14 +283,14 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 
 		// Set field values.
 		e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-		if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=10, frame=f, field0=25, field1=2)`), nil, nil); err != nil {
+		if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=10, frame=f, f=25)`), nil, nil); err != nil {
 			t.Fatal(err)
-		} else if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=100, frame=f, field0=10)`), nil, nil); err != nil {
+		} else if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=100, frame=f, f=10)`), nil, nil); err != nil {
 			t.Fatal(err)
 		}
 
 		f := hldr.Frame("i", "f")
-		if value, exists, err := f.FieldValue(10, "field0"); err != nil {
+		if value, exists, err := f.FieldValue(10, "f"); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
@@ -299,15 +298,7 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 			t.Fatalf("unexpected value: %v", value)
 		}
 
-		if value, exists, err := f.FieldValue(10, "field1"); err != nil {
-			t.Fatal(err)
-		} else if !exists {
-			t.Fatal("expected value to exist")
-		} else if value != 2 {
-			t.Fatalf("unexpected value: %v", value)
-		}
-
-		if value, exists, err := f.FieldValue(100, "field0"); err != nil {
+		if value, exists, err := f.FieldValue(100, "f"); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
@@ -321,37 +312,37 @@ func TestExecutor_Execute_SetFieldValue(t *testing.T) {
 		defer hldr.Close()
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{
-			Fields: []*pilosa.Field{
-				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 100},
-			},
+			Type: pilosa.FrameTypeInt,
+			Min:  0,
+			Max:  100,
 		}); err != nil {
 			t.Fatal(err)
 		}
 
 		t.Run("ErrFrameRequired", func(t *testing.T) {
 			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=10, field0=100)`), nil, nil); err == nil || err.Error() != `SetFieldValue() frame required` {
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=10, f=100)`), nil, nil); err == nil || err.Error() != `SetFieldValue() frame required` {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 
 		t.Run("ErrColumnFieldRequired", func(t *testing.T) {
 			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(invalid_column_name=10, frame=f, field0=100)`), nil, nil); err == nil || err.Error() != `SetFieldValue() column field 'col' required` {
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(invalid_column_name=10, frame=f, f=100)`), nil, nil); err == nil || err.Error() != `SetFieldValue() column field 'col' required` {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 
 		t.Run("ErrColumnFieldValue", func(t *testing.T) {
 			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(invalid_column_name="bad_column", frame=f, field0=100)`), nil, nil); err == nil || err.Error() != `SetFieldValue() column field 'col' required` {
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(invalid_column_name="bad_column", frame=f, f=100)`), nil, nil); err == nil || err.Error() != `SetFieldValue() column field 'col' required` {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 
 		t.Run("ErrInvalidFieldValueType", func(t *testing.T) {
 			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=10, frame=f, field0="hello")`), nil, nil); err == nil || err.Error() != `invalid field value type` {
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetFieldValue(col=10, frame=f, f="hello")`), nil, nil); err == nil || err.Error() != `invalid field value type` {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
@@ -588,29 +579,33 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if _, err := idx.CreateFrame("x", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := idx.CreateFrame("f", pilosa.FrameOptions{
-		Fields: []*pilosa.Field{
-			{Name: "foo", Type: pilosa.FieldTypeInt, Min: -10, Max: 100},
-		},
+		Type: pilosa.FrameTypeInt,
+		Min:  -10,
+		Max:  100,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := e.Execute(context.Background(), "i", test.MustParse(`
-		SetBit(frame=f, row=0, col=0)
-		SetBit(frame=f, row=0, col=3)
-		SetBit(frame=f, row=0, col=`+strconv.Itoa(SliceWidth+1)+`)
-		SetBit(frame=f, row=1, col=1)
-		SetBit(frame=f, row=2, col=`+strconv.Itoa(SliceWidth+2)+`)
+		SetBit(frame=x, row=0, col=0)
+		SetBit(frame=x, row=0, col=3)
+		SetBit(frame=x, row=0, col=`+strconv.Itoa(SliceWidth+1)+`)
+		SetBit(frame=x, row=1, col=1)
+		SetBit(frame=x, row=2, col=`+strconv.Itoa(SliceWidth+2)+`)
 
-		SetFieldValue(frame=f, foo=20, col=0)
-		SetFieldValue(frame=f, foo=-5, col=1)
-		SetFieldValue(frame=f, foo=-5, col=2)
-		SetFieldValue(frame=f, foo=10, col=3)
-		SetFieldValue(frame=f, foo=30, col=`+strconv.Itoa(SliceWidth)+`)
-		SetFieldValue(frame=f, foo=40, col=`+strconv.Itoa(SliceWidth+2)+`)
-		SetFieldValue(frame=f, foo=50, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
-		SetFieldValue(frame=f, foo=60, col=`+strconv.Itoa(SliceWidth+1)+`)
+		SetFieldValue(frame=f, f=20, col=0)
+		SetFieldValue(frame=f, f=-5, col=1)
+		SetFieldValue(frame=f, f=-5, col=2)
+		SetFieldValue(frame=f, f=10, col=3)
+		SetFieldValue(frame=f, f=30, col=`+strconv.Itoa(SliceWidth)+`)
+		SetFieldValue(frame=f, f=40, col=`+strconv.Itoa(SliceWidth+2)+`)
+		SetFieldValue(frame=f, f=50, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
+		SetFieldValue(frame=f, f=60, col=`+strconv.Itoa(SliceWidth+1)+`)
 	`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -622,16 +617,16 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 			cnt    int64
 		}{
 			{filter: ``, exp: -5, cnt: 2},
-			{filter: `Bitmap(frame=f, row=0)`, exp: 10, cnt: 1},
-			{filter: `Bitmap(frame=f, row=1)`, exp: -5, cnt: 1},
-			{filter: `Bitmap(frame=f, row=2)`, exp: 40, cnt: 1},
+			{filter: `Bitmap(frame=x, row=0)`, exp: 10, cnt: 1},
+			{filter: `Bitmap(frame=x, row=1)`, exp: -5, cnt: 1},
+			{filter: `Bitmap(frame=x, row=2)`, exp: 40, cnt: 1},
 		}
 		for i, tt := range tests {
 			var pql string
 			if tt.filter == "" {
-				pql = `Min(frame=f, field=foo)`
+				pql = `Min(frame=f, field=f)`
 			} else {
-				pql = fmt.Sprintf(`Min(%s, frame=f, field=foo)`, tt.filter)
+				pql = fmt.Sprintf(`Min(%s, frame=f, field=f)`, tt.filter)
 			}
 			if result, err := e.Execute(context.Background(), "i", test.MustParse(pql), nil, nil); err != nil {
 				t.Fatal(err)
@@ -648,16 +643,16 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 			cnt    int64
 		}{
 			{filter: ``, exp: 60, cnt: 1},
-			{filter: `Bitmap(frame=f, row=0)`, exp: 60, cnt: 1},
-			{filter: `Bitmap(frame=f, row=1)`, exp: -5, cnt: 1},
-			{filter: `Bitmap(frame=f, row=2)`, exp: 40, cnt: 1},
+			{filter: `Bitmap(frame=x, row=0)`, exp: 60, cnt: 1},
+			{filter: `Bitmap(frame=x, row=1)`, exp: -5, cnt: 1},
+			{filter: `Bitmap(frame=x, row=2)`, exp: 40, cnt: 1},
 		}
 		for i, tt := range tests {
 			var pql string
 			if tt.filter == "" {
-				pql = `Max(frame=f, field=foo)`
+				pql = `Max(frame=f, field=f)`
 			} else {
-				pql = fmt.Sprintf(`Max(%s, frame=f, field=foo)`, tt.filter)
+				pql = fmt.Sprintf(`Max(%s, frame=f, field=f)`, tt.filter)
 			}
 			if result, err := e.Execute(context.Background(), "i", test.MustParse(pql), nil, nil); err != nil {
 				t.Fatal(err)
@@ -679,39 +674,51 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateFrame("f", pilosa.FrameOptions{
-		Fields: []*pilosa.Field{
-			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 10, Max: 100},
-			{Name: "bar", Type: pilosa.FieldTypeInt, Min: 0, Max: 100000},
-		},
+	if _, err := idx.CreateFrame("x", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := idx.CreateFrame("foo", pilosa.FrameOptions{
+		Type: pilosa.FrameTypeInt,
+		Min:  10,
+		Max:  100,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := idx.CreateFrame("bar", pilosa.FrameOptions{
+		Type: pilosa.FrameTypeInt,
+		Min:  0,
+		Max:  100000,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := idx.CreateFrame("other", pilosa.FrameOptions{
-		Fields: []*pilosa.Field{
-			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 0, Max: 1000},
-		},
+		Type: pilosa.FrameTypeInt,
+		Min:  0,
+		Max:  1000,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := e.Execute(context.Background(), "i", test.MustParse(`
-		SetBit(frame=f, row=0, col=0)
-		SetBit(frame=f, row=0, col=`+strconv.Itoa(SliceWidth+1)+`)
+		SetBit(frame=x, row=0, col=0)
+		SetBit(frame=x, row=0, col=`+strconv.Itoa(SliceWidth+1)+`)
 
-		SetFieldValue(frame=f, foo=20, bar=2000, col=0)
-		SetFieldValue(frame=f, foo=30, col=`+strconv.Itoa(SliceWidth)+`)
-		SetFieldValue(frame=f, foo=40, col=`+strconv.Itoa(SliceWidth+2)+`)
-		SetFieldValue(frame=f, foo=50, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
-		SetFieldValue(frame=f, foo=60, col=`+strconv.Itoa(SliceWidth+1)+`)
-		SetFieldValue(frame=other, foo=1000, col=0)
+		SetFieldValue(frame=foo, foo=20, col=0)
+		SetFieldValue(frame=bar, bar=2000, col=0)
+		SetFieldValue(frame=foo, foo=30, col=`+strconv.Itoa(SliceWidth)+`)
+		SetFieldValue(frame=foo, foo=40, col=`+strconv.Itoa(SliceWidth+2)+`)
+		SetFieldValue(frame=foo, foo=50, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
+		SetFieldValue(frame=foo, foo=60, col=`+strconv.Itoa(SliceWidth+1)+`)
+		SetFieldValue(frame=other, other=1000, col=0)
 	`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Run("NoFilter", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(frame=f, field=foo)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(frame=foo, field=foo)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(result[0], pilosa.ValCount{Val: 200, Count: 5}) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -719,7 +726,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 	})
 
 	t.Run("WithFilter", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(Bitmap(frame=f, row=0), frame=f, field=foo)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(Bitmap(frame=x, row=0), frame=foo, field=foo)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(result[0], pilosa.ValCount{Val: 80, Count: 2}) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -738,6 +745,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 
 	// Create frame.
 	if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{
+		Type:        pilosa.FrameTypeTime,
 		TimeQuantum: pilosa.TimeQuantum("YMDH"),
 	}); err != nil {
 		t.Fatal(err)
@@ -766,7 +774,6 @@ func TestExecutor_Execute_Range(t *testing.T) {
 			t.Fatalf("unexpected columns: %+v", columns)
 		}
 	})
-
 }
 
 // Ensure a Range(field) query can be executed.
@@ -780,27 +787,38 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateFrame("f", pilosa.FrameOptions{
-		Fields: []*pilosa.Field{
-			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 10, Max: 100},
-			{Name: "bar", Type: pilosa.FieldTypeInt, Min: 0, Max: 100000},
-		},
+	if _, err := idx.CreateFrame("f", pilosa.FrameOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := idx.CreateFrame("foo", pilosa.FrameOptions{
+		Type: pilosa.FrameTypeInt,
+		Min:  10,
+		Max:  100,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := idx.CreateFrame("bar", pilosa.FrameOptions{
+		Type: pilosa.FrameTypeInt,
+		Min:  0,
+		Max:  100000,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := idx.CreateFrame("other", pilosa.FrameOptions{
-		Fields: []*pilosa.Field{
-			{Name: "foo", Type: pilosa.FieldTypeInt, Min: 0, Max: 1000},
-		},
+		Type: pilosa.FrameTypeInt,
+		Min:  0,
+		Max:  1000,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := idx.CreateFrame("edge", pilosa.FrameOptions{
-		Fields: []*pilosa.Field{
-			{Name: "foo", Type: pilosa.FieldTypeInt, Min: -100, Max: 100},
-		},
+		Type: pilosa.FrameTypeInt,
+		Min:  -100,
+		Max:  100,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -809,20 +827,21 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 		SetBit(frame=f, row=0, col=0)
 		SetBit(frame=f, row=0, col=`+strconv.Itoa(SliceWidth+1)+`)
 
-		SetFieldValue(frame=f, foo=20, bar=2000, col=50)
-		SetFieldValue(frame=f, foo=30, col=`+strconv.Itoa(SliceWidth)+`)
-		SetFieldValue(frame=f, foo=10, col=`+strconv.Itoa(SliceWidth+2)+`)
-		SetFieldValue(frame=f, foo=20, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
-		SetFieldValue(frame=f, foo=60, col=`+strconv.Itoa(SliceWidth+1)+`)
-		SetFieldValue(frame=other, foo=1000, col=0)
-		SetFieldValue(frame=edge, foo=100, col=0)
-		SetFieldValue(frame=edge, foo=-100, col=1)
+		SetFieldValue(frame=foo, foo=20, col=50)
+		SetFieldValue(frame=bar, bar=2000, col=50)
+		SetFieldValue(frame=foo, foo=30, col=`+strconv.Itoa(SliceWidth)+`)
+		SetFieldValue(frame=foo, foo=10, col=`+strconv.Itoa(SliceWidth+2)+`)
+		SetFieldValue(frame=foo, foo=20, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
+		SetFieldValue(frame=foo, foo=60, col=`+strconv.Itoa(SliceWidth+1)+`)
+		SetFieldValue(frame=other, other=1000, col=0)
+		SetFieldValue(frame=edge, edge=100, col=0)
+		SetFieldValue(frame=edge, edge=-100, col=1)
 	`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Run("EQ", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo == 20)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, foo == 20)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{50, (5 * SliceWidth) + 100}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -831,19 +850,19 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 
 	t.Run("NEQ", func(t *testing.T) {
 		// NEQ null
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, foo != null)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, other != null)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 		// NEQ <int>
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo != 20)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, foo != 20)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{SliceWidth, SliceWidth + 1, SliceWidth + 2}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 		// NEQ -<int>
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, foo != -20)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, other != -20)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Row).Columns()) {
 			//t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -852,7 +871,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	})
 
 	t.Run("LT", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo < 20)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, foo < 20)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{SliceWidth + 2}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -860,7 +879,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	})
 
 	t.Run("LTE", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo <= 20)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, foo <= 20)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{50, SliceWidth + 2, (5 * SliceWidth) + 100}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -868,7 +887,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	})
 
 	t.Run("GT", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo > 20)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, foo > 20)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{SliceWidth, SliceWidth + 1}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -876,7 +895,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	})
 
 	t.Run("GTE", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo >= 20)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, foo >= 20)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{50, SliceWidth, SliceWidth + 1, (5 * SliceWidth) + 100}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -884,7 +903,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	})
 
 	t.Run("BETWEEN", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, foo >< [1, 1000])`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, other >< [1, 1000])`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -893,7 +912,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 
 	// Ensure that the FieldNotNull code path gets run.
 	t.Run("FieldNotNull", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, foo >< [0, 1000])`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, other >< [0, 1000])`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -901,7 +920,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	})
 
 	t.Run("BelowMin", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo == 0)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, foo == 0)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -909,7 +928,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	})
 
 	t.Run("AboveMax", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, foo == 200)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, foo == 200)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -917,7 +936,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	})
 
 	t.Run("LTAboveMax", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=edge, foo < 200)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=edge, edge < 200)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0, 1}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result[0].(*pilosa.Row).Columns()))
@@ -925,7 +944,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	})
 
 	t.Run("GTBelowMin", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=edge, foo > -200)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=edge, edge > -200)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0, 1}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result[0].(*pilosa.Row).Columns()))
@@ -939,7 +958,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	})
 
 	t.Run("ErrFieldNotFound", func(t *testing.T) {
-		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=f, bad_field >= 20)`), nil, nil); err != pilosa.ErrFieldNotFound {
+		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, bad_field >= 20)`), nil, nil); err != pilosa.ErrFieldNotFound {
 			t.Fatal(err)
 		}
 	})

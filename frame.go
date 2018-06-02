@@ -69,14 +69,25 @@ type Frame struct {
 	Logger Logger
 }
 
+// FrameOption is a functional option type for pilosa.Frame.
+type FrameOption func(f *Frame) error
+
+// TODO: break these out into separate Options (not a FrameOptions object)
+func OptFrameFrameOptions(o FrameOptions) FrameOption {
+	return func(f *Frame) error {
+		f.options = o
+		return nil
+	}
+}
+
 // NewFrame returns a new instance of frame.
-func NewFrame(path, index, name string) (*Frame, error) {
+func NewFrame(path, index, name string, opts ...FrameOption) (*Frame, error) {
 	err := ValidateName(name)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Frame{
+	f := &Frame{
 		path:  path,
 		index: index,
 		name:  name,
@@ -95,7 +106,16 @@ func NewFrame(path, index, name string) (*Frame, error) {
 		},
 
 		Logger: NopLogger,
-	}, nil
+	}
+
+	for _, opt := range opts {
+		err := opt(f)
+		if err != nil {
+			return nil, errors.Wrap(err, "applying option")
+		}
+	}
+
+	return f, nil
 }
 
 // Name returns the name the frame was initialized with.
@@ -299,7 +319,7 @@ func (f *Frame) applyOptions(opt FrameOptions) error {
 		f.options.TimeQuantum = ""
 	case FrameTypeInt:
 		f.options.Type = opt.Type
-		f.options.CacheType = ""
+		f.options.CacheType = CacheTypeNone
 		f.options.CacheSize = 0
 		f.options.Min = opt.Min
 		f.options.Max = opt.Max
@@ -321,7 +341,7 @@ func (f *Frame) applyOptions(opt FrameOptions) error {
 		}
 	case FrameTypeTime:
 		f.options.Type = opt.Type
-		f.options.CacheType = ""
+		f.options.CacheType = CacheTypeNone
 		f.options.CacheSize = 0
 		f.options.Min = 0
 		f.options.Max = 0
@@ -657,7 +677,7 @@ func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 
 	// Clear non-time bit.
 	if v, err := view.ClearBit(rowID, colID); err != nil {
-		return changed, errors.Wrap(err, "setting on view")
+		return changed, errors.Wrap(err, "clearing on view")
 	} else if v {
 		changed = v
 	}
@@ -675,7 +695,7 @@ func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 		}
 
 		if c, err := view.ClearBit(rowID, colID); err != nil {
-			return changed, errors.Wrapf(err, "setting on view %s", subname)
+			return changed, errors.Wrapf(err, "clearing on view %s", subname)
 		} else if c {
 			changed = true
 		}
@@ -995,7 +1015,7 @@ type FrameOptions struct {
 	CacheSize   uint32      `json:"cacheSize,omitempty"`
 	Min         int64       `json:"min,omitempty"`
 	Max         int64       `json:"max,omitempty"`
-	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"` // TODO travis: rename this Quantum?
+	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"` // TODO: rename this Quantum?
 }
 
 // Validate ensures that FrameOption values are valid.
@@ -1064,6 +1084,7 @@ func IsValidFieldType(v string) bool {
 	}
 }
 
+// TODO: finish unexporting this. also, rename it.
 // oField represents a range field on a frame.
 type oField struct {
 	Name string `json:"name,omitempty"`

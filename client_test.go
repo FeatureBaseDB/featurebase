@@ -244,16 +244,17 @@ func TestClient_ImportValue(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	fld := pilosa.Field{
-		Name: "fld",
-		Type: pilosa.FieldTypeInt,
+	fldName := "f"
+
+	fo := pilosa.FrameOptions{
+		Type: pilosa.FrameTypeInt,
 		Min:  -100,
 		Max:  100,
 	}
 
 	// Load bitmap into cache to ensure cache gets updated.
 	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	frame, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{Fields: []*pilosa.Field{&fld}})
+	frame, err := index.CreateFrameIfNotExists(fldName, fo)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +267,7 @@ func TestClient_ImportValue(t *testing.T) {
 
 	// Send import request.
 	c := test.MustNewClient(s.Host(), defaultClient)
-	if err := c.ImportValue(context.Background(), "i", "f", fld.Name, 0, []pilosa.FieldValue{
+	if err := c.ImportValue(context.Background(), "i", "f", fldName, 0, []pilosa.FieldValue{
 		{ColumnID: 1, Value: -10},
 		{ColumnID: 2, Value: 20},
 		{ColumnID: 3, Value: 40},
@@ -275,7 +276,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Sum.
-	sum, cnt, err := frame.FieldSum(nil, fld.Name)
+	sum, cnt, err := frame.FieldSum(nil, fldName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,7 +285,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Min.
-	min, cnt, err := frame.FieldMin(nil, fld.Name)
+	min, cnt, err := frame.FieldMin(nil, fldName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,11 +294,11 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Min with Filter.
-	filter, err := frame.FieldRange(fld.Name, pql.GT, 40)
+	filter, err := frame.FieldRange(fldName, pql.GT, 40)
 	if err != nil {
 		t.Fatal(err)
 	}
-	min, cnt, err = frame.FieldMin(filter, fld.Name)
+	min, cnt, err = frame.FieldMin(filter, fldName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +307,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Max.
-	max, cnt, err := frame.FieldMax(nil, fld.Name)
+	max, cnt, err := frame.FieldMax(nil, fldName)
 	if err != nil {
 		t.Fatal(err)
 	}

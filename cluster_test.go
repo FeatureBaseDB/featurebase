@@ -422,35 +422,12 @@ func TestCluster_ResizeStates(t *testing.T) {
 		tc.SetBit("i", "f", "standard", 1, 101, nil)
 		tc.SetBit("i", "f", "standard", 1, 1300000, nil)
 
-		// Add Field Data to node0.
-		if err := tc.CreateFrame("i", "fields", FrameOptions{
-			Fields: []*oField{
-				{
-					Name: "fld0",
-					Type: FieldTypeInt,
-					Min:  -100,
-					Max:  100,
-				},
-			},
-		}); err != nil {
-			t.Fatal(err)
-		}
-		tc.SetFieldValue("i", "fields", 1, "fld0", -10)
-		tc.SetFieldValue("i", "fields", 1, "fld0", 10)
-		tc.SetFieldValue("i", "fields", 1300000, "fld0", -99)
-		tc.SetFieldValue("i", "fields", 1300000, "fld0", 99)
-
 		// Before starting the resize, get the CheckSum to use for
 		// comparison later.
 		node0Frame := node0.Holder.Frame("i", "f")
 		node0View := node0Frame.View("standard")
 		node0Fragment := node0View.Fragment(1)
 		node0Checksum := node0Fragment.Checksum()
-
-		node0Frame = node0.Holder.Frame("i", "fields")
-		node0View = node0Frame.View("field_fld0")
-		node0Fragment = node0View.Fragment(1)
-		node0ChecksumFld := node0Fragment.Checksum()
 
 		// AddNode needs to block until the resize process has completed.
 		tc.AddNode(false)
@@ -483,17 +460,6 @@ func TestCluster_ResizeStates(t *testing.T) {
 		// Ensure checksums are the same.
 		if chksum := node1Fragment.Checksum(); !bytes.Equal(chksum, node0Checksum) {
 			t.Fatalf("expected standard view checksum to match: %x - %x", chksum, node0Checksum)
-		}
-
-		// Values
-		// Verify that node-1 contains the fragment (i/fields/field_fld0/1) transferred from node-0.
-		node1Frame = node1.Holder.Frame("i", "fields")
-		node1View = node1Frame.View("field_fld0")
-		node1Fragment = node1View.Fragment(1)
-
-		// Ensure checksums are the same.
-		if chksum := node1Fragment.Checksum(); !bytes.Equal(chksum, node0ChecksumFld) {
-			t.Fatalf("expected checksum to match: %x - %x", chksum, node0ChecksumFld)
 		}
 
 		// Close TestCluster.
