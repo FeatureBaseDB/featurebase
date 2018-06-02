@@ -61,7 +61,7 @@ type Config struct {
 	Handler struct {
 		// CORS Allowed Origins
 		AllowedOrigins []string `toml:"allowed-origins"`
-	}
+	} `toml:"handler"`
 
 	// TLS
 	TLS TLSConfig `toml:"tls"`
