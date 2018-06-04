@@ -64,7 +64,7 @@ type Frame struct {
 	// Frame options.
 	options FrameOptions
 
-	fields []*bsiGroup
+	bsiGroups []*bsiGroup
 
 	Logger Logger
 }
@@ -382,9 +382,9 @@ func (f *Frame) Close() error {
 func (f *Frame) Field(name string) *bsiGroup {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	for _, field := range f.fields {
-		if field.Name == name {
-			return field
+	for _, bsig := range f.bsiGroups {
+		if bsig.Name == name {
+			return bsig
 		}
 	}
 	return nil
@@ -392,8 +392,8 @@ func (f *Frame) Field(name string) *bsiGroup {
 
 // hasField returns true if a field exists on the frame.
 func (f *Frame) hasField(name string) bool {
-	for _, fld := range f.fields {
-		if fld.Name == name {
+	for _, bsig := range f.bsiGroups {
+		if bsig.Name == name {
 			return true
 		}
 	}
@@ -422,11 +422,11 @@ func (f *Frame) addField(bsig *bsiGroup) error {
 	}
 
 	// Add bsiGroup to list.
-	f.fields = append(f.fields, bsig)
+	f.bsiGroups = append(f.bsiGroups, bsig)
 
 	// Sort fields by name.
-	sort.Slice(f.fields, func(i, j int) bool {
-		return f.fields[i].Name < f.fields[j].Name
+	sort.Slice(f.bsiGroups, func(i, j int) bool {
+		return f.bsiGroups[i].Name < f.bsiGroups[j].Name
 	})
 
 	return nil
@@ -459,10 +459,10 @@ func (f *Frame) DeleteField(name string) error {
 
 // deleteField removes a single field from fields.
 func (f *Frame) deleteField(name string) error {
-	for i, field := range f.fields {
-		if field.Name == name {
-			copy(f.fields[i:], f.fields[i+1:])
-			f.fields, f.fields[len(f.fields)-1] = f.fields[:len(f.fields)-1], nil
+	for i, bsig := range f.bsiGroups {
+		if bsig.Name == name {
+			copy(f.bsiGroups[i:], f.bsiGroups[i+1:])
+			f.bsiGroups, f.bsiGroups[len(f.bsiGroups)-1] = f.bsiGroups[:len(f.bsiGroups)-1], nil
 			return nil
 		}
 	}
