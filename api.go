@@ -489,7 +489,7 @@ func (api *API) Schema(ctx context.Context) []*IndexInfo {
 }
 
 // CreateField creates a new BSI field in the given index and frame.
-func (api *API) CreateField(ctx context.Context, indexName string, frameName string, field *oField) error {
+func (api *API) CreateField(ctx context.Context, indexName string, frameName string, bsig *bsiGroup) error {
 	if err := api.validate(apiCreateField); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -500,17 +500,17 @@ func (api *API) CreateField(ctx context.Context, indexName string, frameName str
 		return ErrFrameNotFound
 	}
 
-	// Create new field.
-	if err := f.CreateField(field); err != nil {
-		return errors.Wrap(err, "creating field")
+	// Create new bsiGroup.
+	if err := f.CreateField(bsig); err != nil {
+		return errors.Wrap(err, "creating bsigroup")
 	}
 
-	// Send the create field message to all nodes.
+	// Send the create bsigroup message to all nodes.
 	err := api.Broadcaster.SendSync(
 		&internal.CreateFieldMessage{
 			Index: indexName,
 			Frame: frameName,
-			Field: encodeField(field),
+			Field: encodeField(bsig),
 		})
 	if err != nil {
 		api.Logger.Printf("problem sending CreateField message: %s", err)

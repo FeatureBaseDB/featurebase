@@ -64,7 +64,7 @@ type Frame struct {
 	// Frame options.
 	options FrameOptions
 
-	fields []*oField
+	fields []*bsiGroup
 
 	Logger Logger
 }
@@ -325,19 +325,19 @@ func (f *Frame) applyOptions(opt FrameOptions) error {
 		f.options.Max = opt.Max
 		f.options.TimeQuantum = ""
 
-		// Create new field.
-		field := &oField{
+		// Create new bsiGroup.
+		bsig := &bsiGroup{
 			Name: f.name,
 			Type: FieldTypeInt,
 			Min:  opt.Min,
 			Max:  opt.Max,
 		}
-		// Validate field.
-		if err := ValidateField(field); err != nil {
+		// Validate bsiGroup.
+		if err := ValidateField(bsig); err != nil {
 			return err
 		}
-		if err := f.CreateField(field); err != nil {
-			return errors.Wrap(err, "creating field")
+		if err := f.CreateField(bsig); err != nil {
+			return errors.Wrap(err, "creating bsigroup")
 		}
 	case FrameTypeTime:
 		f.options.Type = opt.Type
@@ -379,7 +379,7 @@ func (f *Frame) Close() error {
 }
 
 // Field returns a field by name.
-func (f *Frame) Field(name string) *oField {
+func (f *Frame) Field(name string) *bsiGroup {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	for _, field := range f.fields {
@@ -401,12 +401,12 @@ func (f *Frame) hasField(name string) bool {
 }
 
 // CreateField creates a new field on the frame.
-func (f *Frame) CreateField(field *oField) error {
+func (f *Frame) CreateField(bsig *bsiGroup) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// Append field.
-	if err := f.addField(field); err != nil {
+	// Append bsiGroup.
+	if err := f.addField(bsig); err != nil {
 		return err
 	}
 	f.saveMeta()
@@ -414,15 +414,15 @@ func (f *Frame) CreateField(field *oField) error {
 }
 
 // addField adds a single field to fields.
-func (f *Frame) addField(field *oField) error {
-	if err := ValidateField(field); err != nil {
-		return errors.Wrap(err, "validating field")
-	} else if f.hasField(field.Name) {
+func (f *Frame) addField(bsig *bsiGroup) error {
+	if err := ValidateField(bsig); err != nil {
+		return errors.Wrap(err, "validating bsigroup")
+	} else if f.hasField(bsig.Name) {
 		return ErrFieldExists
 	}
 
-	// Add field to list.
-	f.fields = append(f.fields, field)
+	// Add bsiGroup to list.
+	f.fields = append(f.fields, bsig)
 
 	// Sort fields by name.
 	sort.Slice(f.fields, func(i, j int) bool {
@@ -1084,9 +1084,8 @@ func IsValidFieldType(v string) bool {
 	}
 }
 
-// TODO: finish unexporting this. also, rename it.
-// oField represents a range field on a frame.
-type oField struct {
+// bsiGroup represents a range field on a frame.
+type bsiGroup struct {
 	Name string `json:"name,omitempty"`
 	Type string `json:"type,omitempty"`
 	Min  int64  `json:"min,omitempty"`
@@ -1094,9 +1093,9 @@ type oField struct {
 }
 
 // BitDepth returns the number of bits required to store a value between min & max.
-func (f *oField) BitDepth() uint {
+func (b *bsiGroup) BitDepth() uint {
 	for i := uint(0); i < 63; i++ {
-		if f.Max-f.Min < (1 << i) {
+		if b.Max-b.Min < (1 << i) {
 			return i
 		}
 	}
@@ -1115,80 +1114,80 @@ func (f *oField) BitDepth() uint {
 // In order to make this work, we effectively need to change the operator to LTE.
 // Executor.executeFieldRangeSlice() takes this into account and returns
 // `frag.FieldNotNull(field.BitDepth())` in such instances.
-func (f *oField) BaseValue(op pql.Token, value int64) (baseValue uint64, outOfRange bool) {
+func (b *bsiGroup) BaseValue(op pql.Token, value int64) (baseValue uint64, outOfRange bool) {
 	if op == pql.GT || op == pql.GTE {
-		if value > f.Max {
+		if value > b.Max {
 			return baseValue, true
-		} else if value > f.Min {
-			baseValue = uint64(value - f.Min)
+		} else if value > b.Min {
+			baseValue = uint64(value - b.Min)
 		}
 	} else if op == pql.LT || op == pql.LTE {
-		if value < f.Min {
+		if value < b.Min {
 			return baseValue, true
-		} else if value > f.Max {
-			baseValue = uint64(f.Max - f.Min)
+		} else if value > b.Max {
+			baseValue = uint64(b.Max - b.Min)
 		} else {
-			baseValue = uint64(value - f.Min)
+			baseValue = uint64(value - b.Min)
 		}
 	} else if op == pql.EQ || op == pql.NEQ {
-		if value < f.Min || value > f.Max {
+		if value < b.Min || value > b.Max {
 			return baseValue, true
 		}
-		baseValue = uint64(value - f.Min)
+		baseValue = uint64(value - b.Min)
 	}
 	return baseValue, false
 }
 
 // BaseValueBetween adjusts the min/max value to align with the range for Field.
-func (f *oField) BaseValueBetween(min, max int64) (baseValueMin, baseValueMax uint64, outOfRange bool) {
-	if max < f.Min || min > f.Max {
+func (b *bsiGroup) BaseValueBetween(min, max int64) (baseValueMin, baseValueMax uint64, outOfRange bool) {
+	if max < b.Min || min > b.Max {
 		return baseValueMin, baseValueMax, true
 	}
 	// Adjust min/max to range.
-	if min > f.Min {
-		baseValueMin = uint64(min - f.Min)
+	if min > b.Min {
+		baseValueMin = uint64(min - b.Min)
 	}
 	// Make sure the high value of the BETWEEN does not exceed BitDepth.
-	if max > f.Max {
-		baseValueMax = uint64(f.Max - f.Min)
-	} else if max > f.Min {
-		baseValueMax = uint64(max - f.Min)
+	if max > b.Max {
+		baseValueMax = uint64(b.Max - b.Min)
+	} else if max > b.Min {
+		baseValueMax = uint64(max - b.Min)
 	}
 	return baseValueMin, baseValueMax, false
 }
 
-func ValidateField(f *oField) error {
-	if f.Name == "" {
+func ValidateField(b *bsiGroup) error {
+	if b.Name == "" {
 		return ErrFieldNameRequired
-	} else if !IsValidFieldType(f.Type) {
+	} else if !IsValidFieldType(b.Type) {
 		return ErrInvalidFieldType
-	} else if f.Min > f.Max {
+	} else if b.Min > b.Max {
 		return ErrInvalidFieldRange
 	}
 	return nil
 }
 
-func encodeField(f *oField) *internal.Field {
-	if f == nil {
+func encodeField(b *bsiGroup) *internal.Field {
+	if b == nil {
 		return nil
 	}
 	return &internal.Field{
-		Name: f.Name,
-		Type: f.Type,
-		Min:  int64(f.Min),
-		Max:  int64(f.Max),
+		Name: b.Name,
+		Type: b.Type,
+		Min:  int64(b.Min),
+		Max:  int64(b.Max),
 	}
 }
 
-func decodeField(f *internal.Field) *oField {
-	if f == nil {
+func decodeField(b *internal.Field) *bsiGroup {
+	if b == nil {
 		return nil
 	}
-	return &oField{
-		Name: f.Name,
-		Type: f.Type,
-		Min:  f.Min,
-		Max:  f.Max,
+	return &bsiGroup{
+		Name: b.Name,
+		Type: b.Type,
+		Min:  b.Min,
+		Max:  b.Max,
 	}
 }
 
