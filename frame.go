@@ -378,7 +378,7 @@ func (f *Frame) Close() error {
 	return nil
 }
 
-// bsiGroup returns a field by name.
+// bsiGroup returns a bsiGroup by name.
 func (f *Frame) bsiGroup(name string) *bsiGroup {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
@@ -390,8 +390,8 @@ func (f *Frame) bsiGroup(name string) *bsiGroup {
 	return nil
 }
 
-// hasField returns true if a field exists on the frame.
-func (f *Frame) hasField(name string) bool {
+// hasBSIGroup returns true if a bsiGroup exists on the frame.
+func (f *Frame) hasBSIGroup(name string) bool {
 	for _, bsig := range f.bsiGroups {
 		if bsig.Name == name {
 			return true
@@ -400,25 +400,25 @@ func (f *Frame) hasField(name string) bool {
 	return false
 }
 
-// createBSIGroup creates a new field on the frame.
+// createBSIGroup creates a new bsiGroup on the frame.
 func (f *Frame) createBSIGroup(bsig *bsiGroup) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	// Append bsiGroup.
-	if err := f.addField(bsig); err != nil {
+	if err := f.addBSIGroup(bsig); err != nil {
 		return err
 	}
 	f.saveMeta()
 	return nil
 }
 
-// addField adds a single field to fields.
-func (f *Frame) addField(bsig *bsiGroup) error {
+// addBSIGroup adds a single bsiGroup to bsiGroups.
+func (f *Frame) addBSIGroup(bsig *bsiGroup) error {
 	if err := bsig.validate(); err != nil {
 		return errors.Wrap(err, "validating bsigroup")
-	} else if f.hasField(bsig.Name) {
-		return ErrFieldExists
+	} else if f.hasBSIGroup(bsig.Name) {
+		return ErrBSIGroupExists
 	}
 
 	// Add bsiGroup to list.
@@ -432,18 +432,19 @@ func (f *Frame) addField(bsig *bsiGroup) error {
 	return nil
 }
 
+// TODO: merge this into the un-exported deleteBSIGroup.
 // DeleteField deletes an existing field on the schema.
 func (f *Frame) DeleteField(name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	// Remove field.
-	if err := f.deleteField(name); err != nil {
+	if err := f.deleteBSIGroup(name); err != nil {
 		return err
 	}
 
 	// Remove views.
-	viewName := ViewFieldPrefix + name
+	viewName := viewBSIGroupPrefix + name
 	if view := f.views[viewName]; view != nil {
 		delete(f.views, viewName)
 
@@ -457,8 +458,8 @@ func (f *Frame) DeleteField(name string) error {
 	return nil
 }
 
-// deleteField removes a single field from fields.
-func (f *Frame) deleteField(name string) error {
+// deleteBSIGroup removes a single bsiGroup from bsiGroups.
+func (f *Frame) deleteBSIGroup(name string) error {
 	for i, bsig := range f.bsiGroups {
 		if bsig.Name == name {
 			copy(f.bsiGroups[i:], f.bsiGroups[i+1:])
@@ -466,7 +467,7 @@ func (f *Frame) deleteField(name string) error {
 			return nil
 		}
 	}
-	return ErrFieldNotFound
+	return ErrBSIGroupNotFound
 }
 
 // TimeQuantum returns the time quantum for the frame.
@@ -708,11 +709,11 @@ func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 func (f *Frame) FieldValue(columnID uint64, name string) (value int64, exists bool, err error) {
 	field := f.bsiGroup(name)
 	if field == nil {
-		return 0, false, ErrFieldNotFound
+		return 0, false, ErrBSIGroupNotFound
 	}
 
 	// Fetch target view.
-	view := f.View(ViewFieldPrefix + name)
+	view := f.View(viewBSIGroupPrefix + name)
 	if view == nil {
 		return 0, false, nil
 	}
@@ -731,15 +732,15 @@ func (f *Frame) SetValue(columnID uint64, value int64) (changed bool, err error)
 	// Fetch field and validate value.
 	field := f.bsiGroup(f.name)
 	if field == nil {
-		return false, ErrFieldNotFound
+		return false, ErrBSIGroupNotFound
 	} else if value < field.Min {
-		return false, ErrFieldValueTooLow
+		return false, ErrBSIGroupValueTooLow
 	} else if value > field.Max {
-		return false, ErrFieldValueTooHigh
+		return false, ErrBSIGroupValueTooHigh
 	}
 
 	// Fetch target view.
-	view, err := f.CreateViewIfNotExists(ViewFieldPrefix + f.name)
+	view, err := f.CreateViewIfNotExists(viewBSIGroupPrefix + f.name)
 	if err != nil {
 		return false, errors.Wrap(err, "creating view")
 	}
@@ -755,10 +756,10 @@ func (f *Frame) SetValue(columnID uint64, value int64) (changed bool, err error)
 func (f *Frame) FieldSum(filter *Row, name string) (sum, count int64, err error) {
 	field := f.bsiGroup(name)
 	if field == nil {
-		return 0, 0, ErrFieldNotFound
+		return 0, 0, ErrBSIGroupNotFound
 	}
 
-	view := f.View(ViewFieldPrefix + name)
+	view := f.View(viewBSIGroupPrefix + name)
 	if view == nil {
 		return 0, 0, nil
 	}
@@ -770,24 +771,24 @@ func (f *Frame) FieldSum(filter *Row, name string) (sum, count int64, err error)
 	return int64(vsum) + (int64(vcount) * field.Min), int64(vcount), nil
 }
 
-// FieldMin returns the min for a field.
+// FieldMin returns the min for a bsiGroup.
 // An optional filtering row can be provided.
 func (f *Frame) FieldMin(filter *Row, name string) (min, count int64, err error) {
-	field := f.bsiGroup(name)
-	if field == nil {
-		return 0, 0, ErrFieldNotFound
+	bsig := f.bsiGroup(name)
+	if bsig == nil {
+		return 0, 0, ErrBSIGroupNotFound
 	}
 
-	view := f.View(ViewFieldPrefix + name)
+	view := f.View(viewBSIGroupPrefix + name)
 	if view == nil {
 		return 0, 0, nil
 	}
 
-	vmin, vcount, err := view.FieldMin(filter, field.BitDepth())
+	vmin, vcount, err := view.FieldMin(filter, bsig.BitDepth())
 	if err != nil {
 		return 0, 0, err
 	}
-	return int64(vmin) + field.Min, int64(vcount), nil
+	return int64(vmin) + bsig.Min, int64(vcount), nil
 }
 
 // FieldMax returns the max for a field.
@@ -795,10 +796,10 @@ func (f *Frame) FieldMin(filter *Row, name string) (min, count int64, err error)
 func (f *Frame) FieldMax(filter *Row, name string) (max, count int64, err error) {
 	field := f.bsiGroup(name)
 	if field == nil {
-		return 0, 0, ErrFieldNotFound
+		return 0, 0, ErrBSIGroupNotFound
 	}
 
-	view := f.View(ViewFieldPrefix + name)
+	view := f.View(viewBSIGroupPrefix + name)
 	if view == nil {
 		return 0, 0, nil
 	}
@@ -814,13 +815,13 @@ func (f *Frame) FieldRange(name string, op pql.Token, predicate int64) (*Row, er
 	// Retrieve and validate field.
 	field := f.bsiGroup(name)
 	if field == nil {
-		return nil, ErrFieldNotFound
+		return nil, ErrBSIGroupNotFound
 	} else if predicate < field.Min || predicate > field.Max {
 		return nil, nil
 	}
 
 	// Retrieve field's view.
-	view := f.View(ViewFieldPrefix + name)
+	view := f.View(viewBSIGroupPrefix + name)
 	if view == nil {
 		return nil, nil
 	}
@@ -837,13 +838,13 @@ func (f *Frame) FieldRangeBetween(name string, predicateMin, predicateMax int64)
 	// Retrieve and validate field.
 	field := f.bsiGroup(name)
 	if field == nil {
-		return nil, ErrFieldNotFound
+		return nil, ErrBSIGroupNotFound
 	} else if predicateMin > predicateMax {
 		return nil, ErrInvalidBetweenValue
 	}
 
 	// Retrieve field's view.
-	view := f.View(ViewFieldPrefix + name)
+	view := f.View(viewBSIGroupPrefix + name)
 	if view == nil {
 		return nil, nil
 	}
@@ -915,7 +916,7 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 
 // ImportValue bulk imports range-encoded value data.
 func (f *Frame) ImportValue(fieldName string, columnIDs []uint64, values []int64) error {
-	viewName := ViewFieldPrefix + fieldName
+	viewName := viewBSIGroupPrefix + fieldName
 	// Get the field so we know bitDepth.
 	field := f.bsiGroup(fieldName)
 	if field == nil {
@@ -927,9 +928,9 @@ func (f *Frame) ImportValue(fieldName string, columnIDs []uint64, values []int64
 	for i := range columnIDs {
 		columnID, value := columnIDs[i], values[i]
 		if int64(value) > field.Max {
-			return fmt.Errorf("%v, columnID=%v, value=%v", ErrFieldValueTooHigh, columnID, value)
+			return fmt.Errorf("%v, columnID=%v, value=%v", ErrBSIGroupValueTooHigh, columnID, value)
 		} else if int64(value) < field.Min {
-			return fmt.Errorf("%v, columnID=%v, value=%v", ErrFieldValueTooLow, columnID, value)
+			return fmt.Errorf("%v, columnID=%v, value=%v", ErrBSIGroupValueTooLow, columnID, value)
 		}
 
 		// Attach value to each field view.
@@ -1025,7 +1026,7 @@ func (o *FrameOptions) Validate() error {
 		// TODO: cacheType, cacheSize validation
 	case FrameTypeInt:
 		if o.Min > o.Max {
-			return ErrInvalidFieldRange
+			return ErrInvalidBSIGroupRange
 		}
 	case FrameTypeTime:
 		if o.TimeQuantum == "" || !o.TimeQuantum.Valid() {
@@ -1075,7 +1076,7 @@ const (
 	bsiGroupTypeInt = "int"
 )
 
-func IsValidFieldType(v string) bool {
+func isValidBSIGroupType(v string) bool {
 	switch v {
 	case bsiGroupTypeInt:
 		return true
@@ -1158,11 +1159,11 @@ func (b *bsiGroup) BaseValueBetween(min, max int64) (baseValueMin, baseValueMax 
 
 func (b *bsiGroup) validate() error {
 	if b.Name == "" {
-		return ErrFieldNameRequired
-	} else if !IsValidFieldType(b.Type) {
-		return ErrInvalidFieldType
+		return ErrBSIGroupNameRequired
+	} else if !isValidBSIGroupType(b.Type) {
+		return ErrInvalidBSIGroupType
 	} else if b.Min > b.Max {
-		return ErrInvalidFieldRange
+		return ErrInvalidBSIGroupRange
 	}
 	return nil
 }

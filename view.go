@@ -31,7 +31,7 @@ import (
 const (
 	ViewStandard = "standard"
 
-	ViewFieldPrefix = "field_"
+	viewBSIGroupPrefix = "bsig_"
 )
 
 // IsValidView returns true if name is valid.
@@ -98,7 +98,7 @@ func (v *View) Path() string { return v.path }
 func (v *View) Open() error {
 
 	// Never keep a cache for field views.
-	if strings.HasPrefix(v.name, ViewFieldPrefix) {
+	if strings.HasPrefix(v.name, viewBSIGroupPrefix) {
 		v.cacheType = CacheTypeNone
 	}
 

@@ -951,7 +951,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	})
 
 	t.Run("ErrFieldNotFound", func(t *testing.T) {
-		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, bad_field >= 20)`), nil, nil); err != pilosa.ErrFieldNotFound {
+		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, bad_field >= 20)`), nil, nil); err != pilosa.ErrBSIGroupNotFound {
 			t.Fatal(err)
 		}
 	})

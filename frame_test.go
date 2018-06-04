@@ -159,7 +159,7 @@ func TestFrame_SetValue(t *testing.T) {
 		}
 
 		// Set value.
-		if _, err := f.SetValue(100, 21); err != pilosa.ErrFieldNotFound {
+		if _, err := f.SetValue(100, 21); err != pilosa.ErrBSIGroupNotFound {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -178,7 +178,7 @@ func TestFrame_SetValue(t *testing.T) {
 		}
 
 		// Set value.
-		if _, err := f.SetValue(100, 15); err != pilosa.ErrFieldValueTooLow {
+		if _, err := f.SetValue(100, 15); err != pilosa.ErrBSIGroupValueTooLow {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -197,7 +197,7 @@ func TestFrame_SetValue(t *testing.T) {
 		}
 
 		// Set value.
-		if _, err := f.SetValue(100, 31); err != pilosa.ErrFieldValueTooHigh {
+		if _, err := f.SetValue(100, 31); err != pilosa.ErrBSIGroupValueTooHigh {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
