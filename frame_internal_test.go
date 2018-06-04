@@ -25,20 +25,20 @@ import (
 func TestField_BaseValue(t *testing.T) {
 	b0 := &bsiGroup{
 		Name: "b0",
-		Type: FieldTypeInt,
+		Type: bsiGroupTypeInt,
 		Min:  -100,
 		Max:  900,
 	}
 	b1 := &bsiGroup{
 		Name: "b1",
-		Type: FieldTypeInt,
+		Type: bsiGroupTypeInt,
 		Min:  0,
 		Max:  1000,
 	}
 
 	b2 := &bsiGroup{
 		Name: "b2",
-		Type: FieldTypeInt,
+		Type: bsiGroupTypeInt,
 		Min:  100,
 		Max:  1100,
 	}

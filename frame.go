@@ -328,7 +328,7 @@ func (f *Frame) applyOptions(opt FrameOptions) error {
 		// Create new bsiGroup.
 		bsig := &bsiGroup{
 			Name: f.name,
-			Type: FieldTypeInt,
+			Type: bsiGroupTypeInt,
 			Min:  opt.Min,
 			Max:  opt.Max,
 		}
@@ -1070,14 +1070,14 @@ func decodeFrameOptions(options *internal.FrameMeta) *FrameOptions {
 	}
 }
 
-// List of field data types.
+// List of bsiGroup types.
 const (
-	FieldTypeInt = "int"
+	bsiGroupTypeInt = "int"
 )
 
 func IsValidFieldType(v string) bool {
 	switch v {
-	case FieldTypeInt:
+	case bsiGroupTypeInt:
 		return true
 	default:
 		return false
