@@ -473,7 +473,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 	case *internal.CreateFieldMessage:
 		f := s.Holder.Frame(obj.Index, obj.Frame)
 		field := decodeField(obj.Field)
-		if err := f.CreateField(field); err != nil {
+		if err := f.createBSIGroup(field); err != nil {
 			return err
 		}
 	case *internal.DeleteFieldMessage:

@@ -501,7 +501,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, frameName str
 	}
 
 	// Create new bsiGroup.
-	if err := f.CreateField(bsig); err != nil {
+	if err := f.createBSIGroup(bsig); err != nil {
 		return errors.Wrap(err, "creating bsigroup")
 	}
 

@@ -333,10 +333,10 @@ func (f *Frame) applyOptions(opt FrameOptions) error {
 			Max:  opt.Max,
 		}
 		// Validate bsiGroup.
-		if err := ValidateField(bsig); err != nil {
+		if err := bsig.validate(); err != nil {
 			return err
 		}
-		if err := f.CreateField(bsig); err != nil {
+		if err := f.createBSIGroup(bsig); err != nil {
 			return errors.Wrap(err, "creating bsigroup")
 		}
 	case FrameTypeTime:
@@ -400,8 +400,8 @@ func (f *Frame) hasField(name string) bool {
 	return false
 }
 
-// CreateField creates a new field on the frame.
-func (f *Frame) CreateField(bsig *bsiGroup) error {
+// createBSIGroup creates a new field on the frame.
+func (f *Frame) createBSIGroup(bsig *bsiGroup) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -415,7 +415,7 @@ func (f *Frame) CreateField(bsig *bsiGroup) error {
 
 // addField adds a single field to fields.
 func (f *Frame) addField(bsig *bsiGroup) error {
-	if err := ValidateField(bsig); err != nil {
+	if err := bsig.validate(); err != nil {
 		return errors.Wrap(err, "validating bsigroup")
 	} else if f.hasField(bsig.Name) {
 		return ErrFieldExists
@@ -1156,7 +1156,7 @@ func (b *bsiGroup) BaseValueBetween(min, max int64) (baseValueMin, baseValueMax 
 	return baseValueMin, baseValueMax, false
 }
 
-func ValidateField(b *bsiGroup) error {
+func (b *bsiGroup) validate() error {
 	if b.Name == "" {
 		return ErrFieldNameRequired
 	} else if !IsValidFieldType(b.Type) {
