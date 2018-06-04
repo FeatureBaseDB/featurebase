@@ -390,8 +390,8 @@ func (f *Frame) Field(name string) *oField {
 	return nil
 }
 
-// HasField returns true if a field exists on the frame.
-func (f *Frame) HasField(name string) bool {
+// hasField returns true if a field exists on the frame.
+func (f *Frame) hasField(name string) bool {
 	for _, fld := range f.fields {
 		if fld.Name == name {
 			return true
@@ -417,7 +417,7 @@ func (f *Frame) CreateField(field *oField) error {
 func (f *Frame) addField(field *oField) error {
 	if err := ValidateField(field); err != nil {
 		return errors.Wrap(err, "validating field")
-	} else if f.HasField(field.Name) {
+	} else if f.hasField(field.Name) {
 		return ErrFieldExists
 	}
 
@@ -1166,28 +1166,6 @@ func ValidateField(f *oField) error {
 		return ErrInvalidFieldRange
 	}
 	return nil
-}
-
-func encodeFields(a []*oField) []*internal.Field {
-	if len(a) == 0 {
-		return nil
-	}
-	other := make([]*internal.Field, len(a))
-	for i := range a {
-		other[i] = encodeField(a[i])
-	}
-	return other
-}
-
-func decodeFields(a []*internal.Field) []*oField {
-	if len(a) == 0 {
-		return nil
-	}
-	other := make([]*oField, len(a))
-	for i := range a {
-		other[i] = decodeField(a[i])
-	}
-	return other
 }
 
 func encodeField(f *oField) *internal.Field {
