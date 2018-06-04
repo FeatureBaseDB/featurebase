@@ -726,10 +726,10 @@ func (f *Frame) FieldValue(columnID uint64, name string) (value int64, exists bo
 	return int64(v) + field.Min, true, nil
 }
 
-// SetFieldValue sets a field value for a column.
-func (f *Frame) SetFieldValue(columnID uint64, name string, value int64) (changed bool, err error) {
+// SetValue sets a field value for a column.
+func (f *Frame) SetValue(columnID uint64, value int64) (changed bool, err error) {
 	// Fetch field and validate value.
-	field := f.Field(name)
+	field := f.Field(f.name)
 	if field == nil {
 		return false, ErrFieldNotFound
 	} else if value < field.Min {
@@ -739,7 +739,7 @@ func (f *Frame) SetFieldValue(columnID uint64, name string, value int64) (change
 	}
 
 	// Fetch target view.
-	view, err := f.CreateViewIfNotExists(ViewFieldPrefix + name)
+	view, err := f.CreateViewIfNotExists(ViewFieldPrefix + f.name)
 	if err != nil {
 		return false, errors.Wrap(err, "creating view")
 	}
@@ -747,7 +747,7 @@ func (f *Frame) SetFieldValue(columnID uint64, name string, value int64) (change
 	// Determine base value to store.
 	baseValue := uint64(value - field.Min)
 
-	return view.SetFieldValue(columnID, field.BitDepth(), baseValue)
+	return view.setValue(columnID, field.BitDepth(), baseValue)
 }
 
 // FieldSum returns the sum and count for a field.
