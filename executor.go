@@ -381,7 +381,7 @@ func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pq
 		return ValCount{}, nil
 	}
 
-	field := frame.Field(fieldName)
+	field := frame.bsiGroup(fieldName)
 	if field == nil {
 		return ValCount{}, nil
 	}
@@ -420,7 +420,7 @@ func (e *Executor) executeFieldMinSlice(ctx context.Context, index string, c *pq
 		return ValCount{}, nil
 	}
 
-	field := frame.Field(fieldName)
+	field := frame.bsiGroup(fieldName)
 	if field == nil {
 		return ValCount{}, nil
 	}
@@ -459,7 +459,7 @@ func (e *Executor) executeFieldMaxSlice(ctx context.Context, index string, c *pq
 		return ValCount{}, nil
 	}
 
-	field := frame.Field(fieldName)
+	field := frame.bsiGroup(fieldName)
 	if field == nil {
 		return ValCount{}, nil
 	}
@@ -800,7 +800,7 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 	// Handle `!= null`.
 	if cond.Op == pql.NEQ && cond.Value == nil {
 		// Find field.
-		field := f.Field(fieldName)
+		field := f.bsiGroup(fieldName)
 		if field == nil {
 			return nil, ErrFieldNotFound
 		}
@@ -830,7 +830,7 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		// here is because we need the call to be slice-specific.
 
 		// Find field.
-		field := f.Field(fieldName)
+		field := f.bsiGroup(fieldName)
 		if field == nil {
 			return nil, ErrFieldNotFound
 		}
@@ -863,7 +863,7 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		}
 
 		// Find field.
-		field := f.Field(fieldName)
+		field := f.bsiGroup(fieldName)
 		if field == nil {
 			return nil, ErrFieldNotFound
 		}

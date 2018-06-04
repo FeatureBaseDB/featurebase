@@ -378,8 +378,8 @@ func (f *Frame) Close() error {
 	return nil
 }
 
-// Field returns a field by name.
-func (f *Frame) Field(name string) *bsiGroup {
+// bsiGroup returns a field by name.
+func (f *Frame) bsiGroup(name string) *bsiGroup {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	for _, bsig := range f.bsiGroups {
@@ -706,7 +706,7 @@ func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 
 // FieldValue reads a field value for a column.
 func (f *Frame) FieldValue(columnID uint64, name string) (value int64, exists bool, err error) {
-	field := f.Field(name)
+	field := f.bsiGroup(name)
 	if field == nil {
 		return 0, false, ErrFieldNotFound
 	}
@@ -729,7 +729,7 @@ func (f *Frame) FieldValue(columnID uint64, name string) (value int64, exists bo
 // SetValue sets a field value for a column.
 func (f *Frame) SetValue(columnID uint64, value int64) (changed bool, err error) {
 	// Fetch field and validate value.
-	field := f.Field(f.name)
+	field := f.bsiGroup(f.name)
 	if field == nil {
 		return false, ErrFieldNotFound
 	} else if value < field.Min {
@@ -753,7 +753,7 @@ func (f *Frame) SetValue(columnID uint64, value int64) (changed bool, err error)
 // FieldSum returns the sum and count for a field.
 // An optional filtering row can be provided.
 func (f *Frame) FieldSum(filter *Row, name string) (sum, count int64, err error) {
-	field := f.Field(name)
+	field := f.bsiGroup(name)
 	if field == nil {
 		return 0, 0, ErrFieldNotFound
 	}
@@ -773,7 +773,7 @@ func (f *Frame) FieldSum(filter *Row, name string) (sum, count int64, err error)
 // FieldMin returns the min for a field.
 // An optional filtering row can be provided.
 func (f *Frame) FieldMin(filter *Row, name string) (min, count int64, err error) {
-	field := f.Field(name)
+	field := f.bsiGroup(name)
 	if field == nil {
 		return 0, 0, ErrFieldNotFound
 	}
@@ -793,7 +793,7 @@ func (f *Frame) FieldMin(filter *Row, name string) (min, count int64, err error)
 // FieldMax returns the max for a field.
 // An optional filtering row can be provided.
 func (f *Frame) FieldMax(filter *Row, name string) (max, count int64, err error) {
-	field := f.Field(name)
+	field := f.bsiGroup(name)
 	if field == nil {
 		return 0, 0, ErrFieldNotFound
 	}
@@ -812,7 +812,7 @@ func (f *Frame) FieldMax(filter *Row, name string) (max, count int64, err error)
 
 func (f *Frame) FieldRange(name string, op pql.Token, predicate int64) (*Row, error) {
 	// Retrieve and validate field.
-	field := f.Field(name)
+	field := f.bsiGroup(name)
 	if field == nil {
 		return nil, ErrFieldNotFound
 	} else if predicate < field.Min || predicate > field.Max {
@@ -835,7 +835,7 @@ func (f *Frame) FieldRange(name string, op pql.Token, predicate int64) (*Row, er
 
 func (f *Frame) FieldRangeBetween(name string, predicateMin, predicateMax int64) (*Row, error) {
 	// Retrieve and validate field.
-	field := f.Field(name)
+	field := f.bsiGroup(name)
 	if field == nil {
 		return nil, ErrFieldNotFound
 	} else if predicateMin > predicateMax {
@@ -917,7 +917,7 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 func (f *Frame) ImportValue(fieldName string, columnIDs []uint64, values []int64) error {
 	viewName := ViewFieldPrefix + fieldName
 	// Get the field so we know bitDepth.
-	field := f.Field(fieldName)
+	field := f.bsiGroup(fieldName)
 	if field == nil {
 		return fmt.Errorf("Field does not exist: %s", fieldName)
 	}
