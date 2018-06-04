@@ -276,7 +276,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Sum.
-	sum, cnt, err := frame.FieldSum(nil, fldName)
+	sum, cnt, err := frame.Sum(nil, fldName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Min.
-	min, cnt, err := frame.FieldMin(nil, fldName)
+	min, cnt, err := frame.Min(nil, fldName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,11 +294,11 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Min with Filter.
-	filter, err := frame.FieldRange(fldName, pql.GT, 40)
+	filter, err := frame.Range(fldName, pql.GT, 40)
 	if err != nil {
 		t.Fatal(err)
 	}
-	min, cnt, err = frame.FieldMin(filter, fldName)
+	min, cnt, err = frame.Min(filter, fldName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,7 +307,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Max.
-	max, cnt, err := frame.FieldMax(nil, fldName)
+	max, cnt, err := frame.Max(nil, fldName)
 	if err != nil {
 		t.Fatal(err)
 	}

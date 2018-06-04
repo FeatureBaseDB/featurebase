@@ -835,7 +835,7 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 			return nil, ErrBSIGroupNotFound
 		}
 
-		baseValueMin, baseValueMax, outOfRange := field.BaseValueBetween(predicates[0], predicates[1])
+		baseValueMin, baseValueMax, outOfRange := field.baseValueBetween(predicates[0], predicates[1])
 		if outOfRange {
 			return NewRow(), nil
 		}
@@ -868,7 +868,7 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 			return nil, ErrBSIGroupNotFound
 		}
 
-		baseValue, outOfRange := field.BaseValue(cond.Op, value)
+		baseValue, outOfRange := field.baseValue(cond.Op, value)
 		if outOfRange && cond.Op != pql.NEQ {
 			return NewRow(), nil
 		}

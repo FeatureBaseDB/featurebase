@@ -507,10 +507,10 @@ func (api *API) CreateField(ctx context.Context, indexName string, frameName str
 
 	// Send the create bsigroup message to all nodes.
 	err := api.Broadcaster.SendSync(
-		&internal.CreateFieldMessage{
-			Index: indexName,
-			Frame: frameName,
-			Field: encodeField(bsig),
+		&internal.CreateBSIGroupMessage{
+			Index:    indexName,
+			Frame:    frameName,
+			BSIGroup: encodeBSIGroup(bsig),
 		})
 	if err != nil {
 		api.Logger.Printf("problem sending CreateField message: %s", err)
@@ -518,6 +518,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, frameName str
 	return errors.Wrap(err, "sending CreateField message")
 }
 
+// TODO: remove this from the API
 // DeleteField deletes the given field.
 func (api *API) DeleteField(ctx context.Context, indexName string, frameName string, fieldName string) error {
 	if err := api.validate(apiDeleteField); err != nil {
@@ -531,16 +532,16 @@ func (api *API) DeleteField(ctx context.Context, indexName string, frameName str
 	}
 
 	// Delete field.
-	if err := f.DeleteField(fieldName); err != nil {
+	if err := f.deleteBSIGroupAndView(fieldName); err != nil {
 		return errors.Wrap(err, "deleting field")
 	}
 
 	// Send the delete field message to all nodes.
 	err := api.Broadcaster.SendSync(
-		&internal.DeleteFieldMessage{
-			Index: indexName,
-			Frame: frameName,
-			Field: fieldName,
+		&internal.DeleteBSIGroupMessage{
+			Index:    indexName,
+			Frame:    frameName,
+			BSIGroup: fieldName,
 		})
 	if err != nil {
 		api.Logger.Printf("problem sending DeleteField message: %s", err)

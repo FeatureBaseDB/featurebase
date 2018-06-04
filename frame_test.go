@@ -94,7 +94,7 @@ func TestFrame_SetValue(t *testing.T) {
 		}
 
 		// Read value.
-		if value, exists, err := f.FieldValue(100, "f"); err != nil {
+		if value, exists, err := f.Value(100, "f"); err != nil {
 			t.Fatal(err)
 		} else if value != 21 {
 			t.Fatalf("unexpected value: %d", value)
@@ -138,7 +138,7 @@ func TestFrame_SetValue(t *testing.T) {
 		}
 
 		// Read value.
-		if value, exists, err := f.FieldValue(100, "f"); err != nil {
+		if value, exists, err := f.Value(100, "f"); err != nil {
 			t.Fatal(err)
 		} else if value != 23 {
 			t.Fatalf("unexpected value: %d", value)

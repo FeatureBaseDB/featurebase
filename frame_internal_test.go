@@ -101,7 +101,7 @@ func TestField_BaseValue(t *testing.T) {
 			{b2, pql.EQ, 105, 5, false},
 			{b2, pql.EQ, 1105, 0, true},
 		} {
-			bv, oor := tt.f.BaseValue(tt.op, tt.val)
+			bv, oor := tt.f.baseValue(tt.op, tt.val)
 			if oor != tt.expOutOfRange {
 				t.Fatalf("baseValue calculation on %s op %s, expected outOfRange %v, got %v", tt.f.Name, tt.op, tt.expOutOfRange, oor)
 			} else if !reflect.DeepEqual(bv, tt.expBaseValue) {
@@ -138,7 +138,7 @@ func TestField_BaseValue(t *testing.T) {
 			{b2, 120, 1105, 20, 1000, false},
 			{b2, 1105, 2000, 0, 0, true},
 		} {
-			min, max, oor := tt.f.BaseValueBetween(tt.predMin, tt.predMax)
+			min, max, oor := tt.f.baseValueBetween(tt.predMin, tt.predMax)
 			if oor != tt.expOutOfRange {
 				t.Fatalf("baseValueBetween calculation on %s, expected outOfRange %v, got %v", tt.f.Name, tt.expOutOfRange, oor)
 			} else if !reflect.DeepEqual(min, tt.expBaseValueMin) || !reflect.DeepEqual(max, tt.expBaseValueMax) {
