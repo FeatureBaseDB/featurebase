@@ -147,7 +147,7 @@ func TestFrame_SetValue(t *testing.T) {
 		}
 	})
 
-	t.Run("ErrFieldNotFound", func(t *testing.T) {
+	t.Run("ErrBSIGroupNotFound", func(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
@@ -164,7 +164,7 @@ func TestFrame_SetValue(t *testing.T) {
 		}
 	})
 
-	t.Run("ErrFieldValueTooLow", func(t *testing.T) {
+	t.Run("ErrBSIGroupValueTooLow", func(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
@@ -183,7 +183,7 @@ func TestFrame_SetValue(t *testing.T) {
 		}
 	})
 
-	t.Run("ErrFieldValueTooHigh", func(t *testing.T) {
+	t.Run("ErrBSIGroupValueTooHigh", func(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
