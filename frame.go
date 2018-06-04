@@ -718,7 +718,7 @@ func (f *Frame) Value(columnID uint64, name string) (value int64, exists bool, e
 		return 0, false, nil
 	}
 
-	v, exists, err := view.FieldValue(columnID, field.BitDepth())
+	v, exists, err := view.value(columnID, field.BitDepth())
 	if err != nil {
 		return 0, false, err
 	} else if !exists {
@@ -764,7 +764,7 @@ func (f *Frame) Sum(filter *Row, name string) (sum, count int64, err error) {
 		return 0, 0, nil
 	}
 
-	vsum, vcount, err := view.FieldSum(filter, field.BitDepth())
+	vsum, vcount, err := view.sum(filter, field.BitDepth())
 	if err != nil {
 		return 0, 0, err
 	}
@@ -784,7 +784,7 @@ func (f *Frame) Min(filter *Row, name string) (min, count int64, err error) {
 		return 0, 0, nil
 	}
 
-	vmin, vcount, err := view.FieldMin(filter, bsig.BitDepth())
+	vmin, vcount, err := view.min(filter, bsig.BitDepth())
 	if err != nil {
 		return 0, 0, err
 	}
@@ -804,7 +804,7 @@ func (f *Frame) Max(filter *Row, name string) (max, count int64, err error) {
 		return 0, 0, nil
 	}
 
-	vmax, vcount, err := view.FieldMax(filter, field.BitDepth())
+	vmax, vcount, err := view.max(filter, field.BitDepth())
 	if err != nil {
 		return 0, 0, err
 	}
@@ -831,7 +831,7 @@ func (f *Frame) Range(name string, op pql.Token, predicate int64) (*Row, error) 
 		return NewRow(), nil
 	}
 
-	return view.FieldRange(op, field.BitDepth(), baseValue)
+	return view.rangeOp(op, field.BitDepth(), baseValue)
 }
 
 func (f *Frame) RangeBetween(name string, predicateMin, predicateMax int64) (*Row, error) {
@@ -854,7 +854,7 @@ func (f *Frame) RangeBetween(name string, predicateMin, predicateMax int64) (*Ro
 		return NewRow(), nil
 	}
 
-	return view.FieldRangeBetween(field.BitDepth(), baseValueMin, baseValueMax)
+	return view.rangeBetween(field.BitDepth(), baseValueMin, baseValueMax)
 }
 
 // Import bulk imports data.

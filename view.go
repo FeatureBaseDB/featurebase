@@ -323,8 +323,8 @@ func (v *View) ClearBit(rowID, columnID uint64) (changed bool, err error) {
 	return frag.ClearBit(rowID, columnID)
 }
 
-// FieldValue uses a column of bits to read a multi-bit value.
-func (v *View) FieldValue(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
+// value uses a column of bits to read a multi-bit value.
+func (v *View) value(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
 	slice := columnID / SliceWidth
 	frag, err := v.CreateFragmentIfNotExists(slice)
 	if err != nil {
@@ -343,8 +343,8 @@ func (v *View) setValue(columnID uint64, bitDepth uint, value uint64) (changed b
 	return frag.SetValue(columnID, bitDepth, value)
 }
 
-// FieldSum returns the sum & count of a field.
-func (v *View) FieldSum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
+// sum returns the sum & count of a field.
+func (v *View) sum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
 	for _, f := range v.Fragments() {
 		fsum, fcount, err := f.FieldSum(filter, bitDepth)
 		if err != nil {
@@ -356,8 +356,8 @@ func (v *View) FieldSum(filter *Row, bitDepth uint) (sum, count uint64, err erro
 	return sum, count, nil
 }
 
-// FieldMin returns the min and count of a field.
-func (v *View) FieldMin(filter *Row, bitDepth uint) (min, count uint64, err error) {
+// min returns the min and count of a field.
+func (v *View) min(filter *Row, bitDepth uint) (min, count uint64, err error) {
 	var minHasValue bool
 	for _, f := range v.Fragments() {
 		fmin, fcount, err := f.FieldMin(filter, bitDepth)
@@ -384,8 +384,8 @@ func (v *View) FieldMin(filter *Row, bitDepth uint) (min, count uint64, err erro
 	return min, count, nil
 }
 
-// FieldMax returns the max and count of a field.
-func (v *View) FieldMax(filter *Row, bitDepth uint) (max, count uint64, err error) {
+// max returns the max and count of a field.
+func (v *View) max(filter *Row, bitDepth uint) (max, count uint64, err error) {
 	for _, f := range v.Fragments() {
 		fmax, fcount, err := f.FieldMax(filter, bitDepth)
 		if err != nil {
@@ -399,8 +399,8 @@ func (v *View) FieldMax(filter *Row, bitDepth uint) (max, count uint64, err erro
 	return max, count, nil
 }
 
-// FieldRange returns rows with a field value encoding matching the predicate.
-func (v *View) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
+// rangeOp returns rows with a field value encoding matching the predicate.
+func (v *View) rangeOp(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
 	r := NewRow()
 	for _, frag := range v.Fragments() {
 		other, err := frag.FieldRange(op, bitDepth, predicate)
@@ -412,9 +412,9 @@ func (v *View) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Row, 
 	return r, nil
 }
 
-// FieldRangeBetween returns bitmaps with a field value encoding matching any
+// rangeBetween returns bitmaps with a field value encoding matching any
 // value between predicateMin and predicateMax.
-func (v *View) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
+func (v *View) rangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
 	r := NewRow()
 	for _, frag := range v.Fragments() {
 		other, err := frag.FieldRangeBetween(bitDepth, predicateMin, predicateMax)
