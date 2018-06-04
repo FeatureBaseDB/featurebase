@@ -29,12 +29,12 @@ type Frame struct {
 }
 
 // NewFrame returns a new instance of Frame d/0.
-func NewFrame() *Frame {
+func NewFrame(opt ...pilosa.FrameOption) *Frame {
 	path, err := ioutil.TempDir("", "pilosa-frame-")
 	if err != nil {
 		panic(err)
 	}
-	frame, err := pilosa.NewFrame(path, "i", "f")
+	frame, err := pilosa.NewFrame(path, "i", "f", opt...)
 	if err != nil {
 		panic(err)
 	}
@@ -42,8 +42,8 @@ func NewFrame() *Frame {
 }
 
 // MustOpenFrame returns a new, opened frame at a temporary path. Panic on error.
-func MustOpenFrame() *Frame {
-	f := NewFrame()
+func MustOpenFrame(opt ...pilosa.FrameOption) *Frame {
+	f := NewFrame(opt...)
 	if err := f.Open(); err != nil {
 		panic(err)
 	}

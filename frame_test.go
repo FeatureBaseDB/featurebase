@@ -16,11 +16,9 @@ package pilosa_test
 
 import (
 	"io/ioutil"
-	"reflect"
 	"testing"
 
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -52,7 +50,10 @@ func TestFrame_CreateViewIfNotExists(t *testing.T) {
 
 // Ensure frame can set its time quantum.
 func TestFrame_SetTimeQuantum(t *testing.T) {
-	f := test.MustOpenFrame()
+	fo := pilosa.FrameOptions{
+		Type: "time",
+	}
+	f := test.MustOpenFrame(pilosa.OptFrameFrameOptions(fo))
 	defer f.Close()
 
 	// Set & retrieve time quantum.
@@ -77,31 +78,23 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		defer idx.Close()
 
 		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Fields: []*pilosa.Field{
-				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 30},
-				{Name: "field1", Type: pilosa.FieldTypeInt, Min: 20, Max: 25},
-			},
+			Type: pilosa.FrameTypeInt,
+			Min:  0,
+			Max:  30,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		// Set value on first field.
-		if changed, err := f.SetFieldValue(100, "field0", 21); err != nil {
-			t.Fatal(err)
-		} else if !changed {
-			t.Fatal("expected change")
-		}
-
-		// Set value on same column but different field.
-		if changed, err := f.SetFieldValue(100, "field1", 25); err != nil {
+		// Set value on field.
+		if changed, err := f.SetFieldValue(100, "f", 21); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Read value.
-		if value, exists, err := f.FieldValue(100, "field0"); err != nil {
+		if value, exists, err := f.FieldValue(100, "f"); err != nil {
 			t.Fatal(err)
 		} else if value != 21 {
 			t.Fatalf("unexpected value: %d", value)
@@ -110,7 +103,7 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		}
 
 		// Setting value should return no change.
-		if changed, err := f.SetFieldValue(100, "field0", 21); err != nil {
+		if changed, err := f.SetFieldValue(100, "f", 21); err != nil {
 			t.Fatal(err)
 		} else if changed {
 			t.Fatal("expected no change")
@@ -122,30 +115,30 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		defer idx.Close()
 
 		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Fields: []*pilosa.Field{
-				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 30},
-			},
+			Type: pilosa.FrameTypeInt,
+			Min:  0,
+			Max:  30,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		// Set value.
-		if changed, err := f.SetFieldValue(100, "field0", 21); err != nil {
+		if changed, err := f.SetFieldValue(100, "f", 21); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Set different value.
-		if changed, err := f.SetFieldValue(100, "field0", 23); err != nil {
+		if changed, err := f.SetFieldValue(100, "f", 23); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Read value.
-		if value, exists, err := f.FieldValue(100, "field0"); err != nil {
+		if value, exists, err := f.FieldValue(100, "f"); err != nil {
 			t.Fatal(err)
 		} else if value != 23 {
 			t.Fatalf("unexpected value: %d", value)
@@ -159,9 +152,9 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		defer idx.Close()
 
 		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Fields: []*pilosa.Field{
-				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 0, Max: 30},
-			},
+			Type: pilosa.FrameTypeInt,
+			Min:  0,
+			Max:  30,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -178,16 +171,16 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		defer idx.Close()
 
 		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Fields: []*pilosa.Field{
-				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 20, Max: 30},
-			},
+			Type: pilosa.FrameTypeInt,
+			Min:  20,
+			Max:  30,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		// Set value.
-		if _, err := f.SetFieldValue(100, "field0", 15); err != pilosa.ErrFieldValueTooLow {
+		if _, err := f.SetFieldValue(100, "f", 15); err != pilosa.ErrFieldValueTooLow {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -197,16 +190,16 @@ func TestFrame_SetFieldValue(t *testing.T) {
 		defer idx.Close()
 
 		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Fields: []*pilosa.Field{
-				{Name: "field0", Type: pilosa.FieldTypeInt, Min: 20, Max: 30},
-			},
+			Type: pilosa.FrameTypeInt,
+			Min:  20,
+			Max:  30,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		// Set value.
-		if _, err := f.SetFieldValue(100, "field0", 31); err != pilosa.ErrFieldValueTooHigh {
+		if _, err := f.SetFieldValue(100, "f", 31); err != pilosa.ErrFieldValueTooHigh {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -293,131 +286,4 @@ func TestFrame_DeleteView(t *testing.T) {
 	} else if view == view2 {
 		t.Fatal("failed to create new view")
 	}
-}
-
-// Ensure a field can adjust to its baseValue.
-func TestField_BaseValue(t *testing.T) {
-	f0 := &pilosa.Field{
-		Name: "f0",
-		Type: pilosa.FieldTypeInt,
-		Min:  -100,
-		Max:  900,
-	}
-	f1 := &pilosa.Field{
-		Name: "f1",
-		Type: pilosa.FieldTypeInt,
-		Min:  0,
-		Max:  1000,
-	}
-
-	f2 := &pilosa.Field{
-		Name: "f2",
-		Type: pilosa.FieldTypeInt,
-		Min:  100,
-		Max:  1100,
-	}
-
-	t.Run("Normal Condition", func(t *testing.T) {
-
-		for _, tt := range []struct {
-			f             *pilosa.Field
-			op            pql.Token
-			val           int64
-			expBaseValue  uint64
-			expOutOfRange bool
-		}{
-			// LT
-			{f0, pql.LT, 5, 105, false},
-			{f0, pql.LT, -8, 92, false},
-			{f0, pql.LT, -108, 0, true},
-			{f0, pql.LT, 1005, 1000, false},
-			{f0, pql.LT, 0, 100, false},
-
-			{f1, pql.LT, 5, 5, false},
-			{f1, pql.LT, -8, 0, true},
-			{f1, pql.LT, 1005, 1000, false},
-			{f1, pql.LT, 0, 0, false},
-
-			{f2, pql.LT, 5, 0, true},
-			{f2, pql.LT, -8, 0, true},
-			{f2, pql.LT, 105, 5, false},
-			{f2, pql.LT, 1105, 1000, false},
-
-			// GT
-			{f0, pql.GT, -105, 0, false},
-			{f0, pql.GT, 5, 105, false},
-			{f0, pql.GT, 905, 0, true},
-			{f0, pql.GT, 0, 100, false},
-
-			{f1, pql.GT, 5, 5, false},
-			{f1, pql.GT, -8, 0, false},
-			{f1, pql.GT, 1005, 0, true},
-			{f1, pql.GT, 0, 0, false},
-
-			{f2, pql.GT, 5, 0, false},
-			{f2, pql.GT, -8, 0, false},
-			{f2, pql.GT, 105, 5, false},
-			{f2, pql.GT, 1105, 0, true},
-
-			// EQ
-			{f0, pql.EQ, -105, 0, true},
-			{f0, pql.EQ, 5, 105, false},
-			{f0, pql.EQ, 905, 0, true},
-			{f0, pql.EQ, 0, 100, false},
-
-			{f1, pql.EQ, 5, 5, false},
-			{f1, pql.EQ, -8, 0, true},
-			{f1, pql.EQ, 1005, 0, true},
-			{f1, pql.EQ, 0, 0, false},
-
-			{f2, pql.EQ, 5, 0, true},
-			{f2, pql.EQ, -8, 0, true},
-			{f2, pql.EQ, 105, 5, false},
-			{f2, pql.EQ, 1105, 0, true},
-		} {
-			bv, oor := tt.f.BaseValue(tt.op, tt.val)
-			if oor != tt.expOutOfRange {
-				t.Fatalf("baseValue calculation on %s op %s, expected outOfRange %v, got %v", tt.f.Name, tt.op, tt.expOutOfRange, oor)
-			} else if !reflect.DeepEqual(bv, tt.expBaseValue) {
-				t.Fatalf("baseValue calculation on %s, expected value %v, got %v", tt.f.Name, tt.expBaseValue, bv)
-			}
-		}
-	})
-
-	t.Run("Betwween Condition", func(t *testing.T) {
-		for _, tt := range []struct {
-			f               *pilosa.Field
-			predMin         int64
-			predMax         int64
-			expBaseValueMin uint64
-			expBaseValueMax uint64
-			expOutOfRange   bool
-		}{
-
-			{f0, -205, -105, 0, 0, true},
-			{f0, -105, 80, 0, 180, false},
-			{f0, 5, 20, 105, 120, false},
-			{f0, 20, 1005, 120, 1000, false},
-			{f0, 1005, 2000, 0, 0, true},
-
-			{f1, -105, -5, 0, 0, true},
-			{f1, -5, 20, 0, 20, false},
-			{f1, 5, 20, 5, 20, false},
-			{f1, 20, 1005, 20, 1000, false},
-			{f1, 1005, 2000, 0, 0, true},
-
-			{f2, 5, 95, 0, 0, true},
-			{f2, 95, 120, 0, 20, false},
-			{f2, 105, 120, 5, 20, false},
-			{f2, 120, 1105, 20, 1000, false},
-			{f2, 1105, 2000, 0, 0, true},
-		} {
-			min, max, oor := tt.f.BaseValueBetween(tt.predMin, tt.predMax)
-			if oor != tt.expOutOfRange {
-				t.Fatalf("baseValueBetween calculation on %s, expected outOfRange %v, got %v", tt.f.Name, tt.expOutOfRange, oor)
-			} else if !reflect.DeepEqual(min, tt.expBaseValueMin) || !reflect.DeepEqual(max, tt.expBaseValueMax) {
-				t.Fatalf("baseValueBetween calculation on %s, expected min/max %v/%v, got %v/%v", tt.f.Name, tt.expBaseValueMin, tt.expBaseValueMax, min, max)
-			}
-		}
-	})
 }

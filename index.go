@@ -299,11 +299,9 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 		return nil, ErrInvalidCacheType
 	}
 
-	// Validate fields.
-	for _, field := range opt.Fields {
-		if err := ValidateField(field); err != nil {
-			return nil, err
-		}
+	// Validate options.
+	if err := opt.Validate(); err != nil {
+		return nil, errors.Wrap(err, "validating options")
 	}
 
 	// Initialize frame.
@@ -317,24 +315,11 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 		return nil, errors.Wrap(err, "opening")
 	}
 
-	// Set the time quantum.
-	if err := f.SetTimeQuantum(opt.TimeQuantum); err != nil {
+	// Apply frame options.
+	if err := f.applyOptions(opt); err != nil {
 		f.Close()
-		return nil, errors.Wrap(err, "setting time quantum")
+		return nil, errors.Wrap(err, "applying options")
 	}
-
-	// Set cache type.
-	if opt.CacheType == "" {
-		opt.CacheType = DefaultCacheType
-	}
-	f.cacheType = opt.CacheType
-
-	if opt.CacheSize != 0 {
-		f.cacheSize = opt.CacheSize
-	}
-
-	// Set fields.
-	f.fields = opt.Fields
 
 	if err := f.saveMeta(); err != nil {
 		f.Close()

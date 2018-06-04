@@ -489,7 +489,7 @@ func (api *API) Schema(ctx context.Context) []*IndexInfo {
 }
 
 // CreateField creates a new BSI field in the given index and frame.
-func (api *API) CreateField(ctx context.Context, indexName string, frameName string, field *Field) error {
+func (api *API) CreateField(ctx context.Context, indexName string, frameName string, field *oField) error {
 	if err := api.validate(apiCreateField); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -546,25 +546,6 @@ func (api *API) DeleteField(ctx context.Context, indexName string, frameName str
 		api.Logger.Printf("problem sending DeleteField message: %s", err)
 	}
 	return errors.Wrap(err, "sending DeleteField message")
-}
-
-// Fields returns the fields in the given frame.
-func (api *API) Fields(ctx context.Context, indexName string, frameName string) ([]*Field, error) {
-	if err := api.validate(apiFields); err != nil {
-		return nil, errors.Wrap(err, "validating api method")
-	}
-
-	index := api.Holder.index(indexName)
-	if index == nil {
-		return nil, ErrIndexNotFound
-	}
-
-	frame := index.frame(frameName)
-	if frame == nil {
-		return nil, ErrFrameNotFound
-	}
-
-	return frame.GetFields()
 }
 
 // Views returns the views in the given frame.
@@ -877,7 +858,6 @@ const (
 	apiDeleteIndex
 	apiDeleteView
 	apiExportCSV
-	apiFields
 	apiFragmentBlockData
 	apiFragmentBlocks
 	apiFrameAttrDiff
@@ -923,7 +903,6 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiDeleteIndex:       struct{}{},
 	apiDeleteView:        struct{}{},
 	apiExportCSV:         struct{}{},
-	apiFields:            struct{}{},
 	apiFragmentBlockData: struct{}{},
 	apiFragmentBlocks:    struct{}{},
 	apiFrameAttrDiff:     struct{}{},

@@ -6,10 +6,13 @@ message IndexMeta {
 }
 
 message FrameMeta {
+    string Type = 8;
 	string CacheType = 3;
 	uint32 CacheSize = 4;
+    int64 Min = 9;
+    int64 Max = 10;
 	string TimeQuantum = 5;
-	repeated Field Fields = 7;
+	//repeated Field Fields = 7;
 }
 
 message ImportResponse {

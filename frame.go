@@ -31,10 +31,19 @@ import (
 
 // Default frame settings.
 const (
+	DefaultFrameType = FrameTypeSet
+
 	DefaultCacheType = CacheTypeRanked
 
 	// Default ranked frame cache
 	DefaultCacheSize = 50000
+)
+
+// Frame types.
+const (
+	FrameTypeSet  = "set"
+	FrameTypeInt  = "int"
+	FrameTypeTime = "time"
 )
 
 // Frame represents a container for views.
@@ -53,22 +62,32 @@ type Frame struct {
 	Stats       StatsClient
 
 	// Frame options.
-	cacheType   string
-	cacheSize   uint32
-	timeQuantum TimeQuantum
-	fields      []*Field
+	options FrameOptions
+
+	fields []*oField
 
 	Logger Logger
 }
 
+// FrameOption is a functional option type for pilosa.Frame.
+type FrameOption func(f *Frame) error
+
+// TODO: break these out into separate Options (not a FrameOptions object)
+func OptFrameFrameOptions(o FrameOptions) FrameOption {
+	return func(f *Frame) error {
+		f.options = o
+		return nil
+	}
+}
+
 // NewFrame returns a new instance of frame.
-func NewFrame(path, index, name string) (*Frame, error) {
+func NewFrame(path, index, name string, opts ...FrameOption) (*Frame, error) {
 	err := ValidateName(name)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Frame{
+	f := &Frame{
 		path:  path,
 		index: index,
 		name:  name,
@@ -80,13 +99,23 @@ func NewFrame(path, index, name string) (*Frame, error) {
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
 
-		cacheType: DefaultCacheType,
-		cacheSize: DefaultCacheSize,
-		//timeQuantum
-		//fields
+		options: FrameOptions{
+			Type:      DefaultFrameType,
+			CacheType: DefaultCacheType,
+			CacheSize: DefaultCacheSize,
+		},
 
 		Logger: NopLogger,
-	}, nil
+	}
+
+	for _, opt := range opts {
+		err := opt(f)
+		if err != nil {
+			return nil, errors.Wrap(err, "applying option")
+		}
+	}
+
+	return f, nil
 }
 
 // Name returns the name the frame was initialized with.
@@ -115,9 +144,18 @@ func (f *Frame) MaxSlice() uint64 {
 	return max
 }
 
+// Type returns the frame type.
+func (f *Frame) Type() string {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.options.Type
+}
+
 // CacheType returns the caching mode for the frame.
 func (f *Frame) CacheType() string {
-	return f.cacheType
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.options.CacheType
 }
 
 // SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
@@ -127,12 +165,12 @@ func (f *Frame) SetCacheSize(v uint32) error {
 	defer f.mu.Unlock()
 
 	// Ignore if no change occurred.
-	if v == 0 || f.cacheSize == v {
+	if v == 0 || f.options.CacheSize == v {
 		return nil
 	}
 
 	// Persist meta data to disk on change.
-	f.cacheSize = v
+	f.options.CacheSize = v
 	if err := f.saveMeta(); err != nil {
 		return errors.Wrap(err, "saving")
 	}
@@ -142,9 +180,9 @@ func (f *Frame) SetCacheSize(v uint32) error {
 
 // CacheSize returns the ranked frame cache size.
 func (f *Frame) CacheSize() uint32 {
-	f.mu.Lock()
-	v := f.cacheSize
-	f.mu.Unlock()
+	f.mu.RLock()
+	v := f.options.CacheSize
+	f.mu.RUnlock()
 	return v
 }
 
@@ -152,16 +190,7 @@ func (f *Frame) CacheSize() uint32 {
 func (f *Frame) Options() FrameOptions {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	return f.options()
-}
-
-func (f *Frame) options() FrameOptions {
-	return FrameOptions{
-		CacheType:   f.cacheType,
-		CacheSize:   f.cacheSize,
-		TimeQuantum: f.timeQuantum,
-		Fields:      f.fields,
-	}
+	return f.options
 }
 
 // Open opens and initializes the frame.
@@ -174,6 +203,11 @@ func (f *Frame) Open() error {
 
 		if err := f.loadMeta(); err != nil {
 			return errors.Wrap(err, "loading meta")
+		}
+
+		// Apply the frame options loaded from meta.
+		if err := f.applyOptions(f.options); err != nil {
+			return errors.Wrap(err, "applying options")
 		}
 
 		if err := f.openViews(); err != nil {
@@ -216,7 +250,7 @@ func (f *Frame) openViews() error {
 		name := filepath.Base(fi.Name())
 		view := f.newView(f.ViewPath(name), name)
 		if err := view.Open(); err != nil {
-			return fmt.Errorf("open view: view=%s, err=%s", view.Name(), err)
+			return fmt.Errorf("opening view: view=%s, err=%s", view.Name(), err)
 		}
 		view.RowAttrStore = f.rowAttrStore
 		f.views[view.Name()] = view
@@ -232,10 +266,6 @@ func (f *Frame) loadMeta() error {
 	// Read data from meta file.
 	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".meta"))
 	if os.IsNotExist(err) {
-		f.cacheType = DefaultCacheType
-		f.cacheSize = DefaultCacheSize
-		f.timeQuantum = ""
-		//f.fields
 		return nil
 	} else if err != nil {
 		return errors.Wrap(err, "reading meta")
@@ -246,13 +276,12 @@ func (f *Frame) loadMeta() error {
 	}
 
 	// Copy metadata fields.
-	f.cacheType = pb.CacheType
-	if f.cacheType == "" {
-		f.cacheType = DefaultCacheType
-	}
-	f.cacheSize = pb.CacheSize
-	f.timeQuantum = TimeQuantum(pb.TimeQuantum)
-	f.fields = decodeFields(pb.Fields)
+	f.options.Type = pb.Type
+	f.options.CacheType = pb.CacheType
+	f.options.CacheSize = pb.CacheSize
+	f.options.Min = pb.Min
+	f.options.Max = pb.Max
+	f.options.TimeQuantum = TimeQuantum(pb.TimeQuantum)
 
 	return nil
 }
@@ -260,7 +289,7 @@ func (f *Frame) loadMeta() error {
 // saveMeta writes meta data for the frame.
 func (f *Frame) saveMeta() error {
 	// Marshal metadata.
-	fo := f.options()
+	fo := f.options
 	buf, err := proto.Marshal(fo.Encode())
 	if err != nil {
 		return errors.Wrap(err, "marshaling")
@@ -269,6 +298,60 @@ func (f *Frame) saveMeta() error {
 	// Write to meta file.
 	if err := ioutil.WriteFile(filepath.Join(f.path, ".meta"), buf, 0666); err != nil {
 		return errors.Wrap(err, "writing meta")
+	}
+
+	return nil
+}
+
+// applyOptions configures the frame based on opt.
+func (f *Frame) applyOptions(opt FrameOptions) error {
+	switch opt.Type {
+	case FrameTypeSet, "":
+		f.options.Type = FrameTypeSet
+		if opt.CacheType != "" {
+			f.options.CacheType = opt.CacheType
+		}
+		if opt.CacheSize != 0 {
+			f.options.CacheSize = opt.CacheSize
+		}
+		f.options.Min = 0
+		f.options.Max = 0
+		f.options.TimeQuantum = ""
+	case FrameTypeInt:
+		f.options.Type = opt.Type
+		f.options.CacheType = CacheTypeNone
+		f.options.CacheSize = 0
+		f.options.Min = opt.Min
+		f.options.Max = opt.Max
+		f.options.TimeQuantum = ""
+
+		// Create new field.
+		field := &oField{
+			Name: f.name,
+			Type: FieldTypeInt,
+			Min:  opt.Min,
+			Max:  opt.Max,
+		}
+		// Validate field.
+		if err := ValidateField(field); err != nil {
+			return err
+		}
+		if err := f.CreateField(field); err != nil {
+			return errors.Wrap(err, "creating field")
+		}
+	case FrameTypeTime:
+		f.options.Type = opt.Type
+		f.options.CacheType = CacheTypeNone
+		f.options.CacheSize = 0
+		f.options.Min = 0
+		f.options.Max = 0
+		// Set the time quantum.
+		if err := f.SetTimeQuantum(opt.TimeQuantum); err != nil {
+			f.Close()
+			return errors.Wrap(err, "setting time quantum")
+		}
+	default:
+		return errors.New("invalid frame type")
 	}
 
 	return nil
@@ -296,7 +379,7 @@ func (f *Frame) Close() error {
 }
 
 // Field returns a field by name.
-func (f *Frame) Field(name string) *Field {
+func (f *Frame) Field(name string) *oField {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	for _, field := range f.fields {
@@ -307,15 +390,8 @@ func (f *Frame) Field(name string) *Field {
 	return nil
 }
 
-// Fields returns the fields on the frame.
-func (f *Frame) Fields() []*Field {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	return f.fields
-}
-
-// HasField returns true if a field exists on the frame.
-func (f *Frame) HasField(name string) bool {
+// hasField returns true if a field exists on the frame.
+func (f *Frame) hasField(name string) bool {
 	for _, fld := range f.fields {
 		if fld.Name == name {
 			return true
@@ -325,7 +401,7 @@ func (f *Frame) HasField(name string) bool {
 }
 
 // CreateField creates a new field on the frame.
-func (f *Frame) CreateField(field *Field) error {
+func (f *Frame) CreateField(field *oField) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -338,10 +414,10 @@ func (f *Frame) CreateField(field *Field) error {
 }
 
 // addField adds a single field to fields.
-func (f *Frame) addField(field *Field) error {
+func (f *Frame) addField(field *oField) error {
 	if err := ValidateField(field); err != nil {
 		return errors.Wrap(err, "validating field")
-	} else if f.HasField(field.Name) {
+	} else if f.hasField(field.Name) {
 		return ErrFieldExists
 	}
 
@@ -354,19 +430,6 @@ func (f *Frame) addField(field *Field) error {
 	})
 
 	return nil
-}
-
-// GetFields returns a list of all the fields in the frame.
-func (f *Frame) GetFields() ([]*Field, error) {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-
-	err := f.loadMeta()
-	if err != nil {
-		return nil, errors.Wrap(err, "loading meta")
-	}
-
-	return f.fields, nil
 }
 
 // DeleteField deletes an existing field on the schema.
@@ -410,7 +473,7 @@ func (f *Frame) deleteField(name string) error {
 func (f *Frame) TimeQuantum() TimeQuantum {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.timeQuantum
+	return f.options.TimeQuantum
 }
 
 // SetTimeQuantum sets the time quantum for the frame.
@@ -424,7 +487,7 @@ func (f *Frame) SetTimeQuantum(q TimeQuantum) error {
 	}
 
 	// Update value on frame.
-	f.timeQuantum = q
+	f.options.TimeQuantum = q
 
 	// Persist meta data to disk.
 	if err := f.saveMeta(); err != nil {
@@ -526,8 +589,8 @@ func (f *Frame) createViewIfNotExistsBase(name string) (*View, bool, error) {
 }
 
 func (f *Frame) newView(path, name string) *View {
-	view := NewView(path, f.index, f.name, name, f.cacheSize)
-	view.cacheType = f.cacheType
+	view := NewView(path, f.index, f.name, name, f.options.CacheSize)
+	view.cacheType = f.options.CacheType
 	view.Logger = f.Logger
 	view.RowAttrStore = f.rowAttrStore
 	view.stats = f.Stats.WithTags(fmt.Sprintf("view:%s", name))
@@ -614,7 +677,7 @@ func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 
 	// Clear non-time bit.
 	if v, err := view.ClearBit(rowID, colID); err != nil {
-		return changed, errors.Wrap(err, "setting on view")
+		return changed, errors.Wrap(err, "clearing on view")
 	} else if v {
 		changed = v
 	}
@@ -632,7 +695,7 @@ func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 		}
 
 		if c, err := view.ClearBit(rowID, colID); err != nil {
-			return changed, errors.Wrapf(err, "setting on view %s", subname)
+			return changed, errors.Wrapf(err, "clearing on view %s", subname)
 		} else if c {
 			changed = true
 		}
@@ -918,7 +981,7 @@ func encodeFrames(a []*Frame) []*internal.Frame {
 
 // encodeFrame converts f into its internal representation.
 func encodeFrame(f *Frame) *internal.Frame {
-	fo := f.options()
+	fo := f.options
 	return &internal.Frame{
 		Name:  f.name,
 		Meta:  fo.Encode(),
@@ -947,10 +1010,31 @@ func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
 // FrameOptions represents options to set when initializing a frame.
 type FrameOptions struct {
+	Type        string      `json:"type,omitempty"`
 	CacheType   string      `json:"cacheType,omitempty"`
 	CacheSize   uint32      `json:"cacheSize,omitempty"`
-	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
-	Fields      []*Field    `json:"fields,omitempty"`
+	Min         int64       `json:"min,omitempty"`
+	Max         int64       `json:"max,omitempty"`
+	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"` // TODO: rename this Quantum?
+}
+
+// Validate ensures that FrameOption values are valid.
+func (o *FrameOptions) Validate() error {
+	switch o.Type {
+	case FrameTypeSet, "":
+		// TODO: cacheType, cacheSize validation
+	case FrameTypeInt:
+		if o.Min > o.Max {
+			return ErrInvalidFieldRange
+		}
+	case FrameTypeTime:
+		if o.TimeQuantum == "" || !o.TimeQuantum.Valid() {
+			return ErrInvalidTimeQuantum
+		}
+	default:
+		return errors.New("invalid frame type")
+	}
+	return nil
 }
 
 // Encode converts o into its internal representation.
@@ -963,10 +1047,12 @@ func encodeFrameOptions(o *FrameOptions) *internal.FrameMeta {
 		return nil
 	}
 	return &internal.FrameMeta{
+		Type:        o.Type,
 		CacheType:   o.CacheType,
 		CacheSize:   o.CacheSize,
+		Min:         o.Min,
+		Max:         o.Max,
 		TimeQuantum: string(o.TimeQuantum),
-		Fields:      encodeFields(o.Fields),
 	}
 }
 
@@ -975,10 +1061,12 @@ func decodeFrameOptions(options *internal.FrameMeta) *FrameOptions {
 		return nil
 	}
 	return &FrameOptions{
+		Type:        options.Type,
 		CacheType:   options.CacheType,
 		CacheSize:   options.CacheSize,
+		Min:         options.Min,
+		Max:         options.Max,
 		TimeQuantum: TimeQuantum(options.TimeQuantum),
-		Fields:      decodeFields(options.Fields),
 	}
 }
 
@@ -996,8 +1084,9 @@ func IsValidFieldType(v string) bool {
 	}
 }
 
-// Field represents a range field on a frame.
-type Field struct {
+// TODO: finish unexporting this. also, rename it.
+// oField represents a range field on a frame.
+type oField struct {
 	Name string `json:"name,omitempty"`
 	Type string `json:"type,omitempty"`
 	Min  int64  `json:"min,omitempty"`
@@ -1005,7 +1094,7 @@ type Field struct {
 }
 
 // BitDepth returns the number of bits required to store a value between min & max.
-func (f *Field) BitDepth() uint {
+func (f *oField) BitDepth() uint {
 	for i := uint(0); i < 63; i++ {
 		if f.Max-f.Min < (1 << i) {
 			return i
@@ -1026,7 +1115,7 @@ func (f *Field) BitDepth() uint {
 // In order to make this work, we effectively need to change the operator to LTE.
 // Executor.executeFieldRangeSlice() takes this into account and returns
 // `frag.FieldNotNull(field.BitDepth())` in such instances.
-func (f *Field) BaseValue(op pql.Token, value int64) (baseValue uint64, outOfRange bool) {
+func (f *oField) BaseValue(op pql.Token, value int64) (baseValue uint64, outOfRange bool) {
 	if op == pql.GT || op == pql.GTE {
 		if value > f.Max {
 			return baseValue, true
@@ -1051,7 +1140,7 @@ func (f *Field) BaseValue(op pql.Token, value int64) (baseValue uint64, outOfRan
 }
 
 // BaseValueBetween adjusts the min/max value to align with the range for Field.
-func (f *Field) BaseValueBetween(min, max int64) (baseValueMin, baseValueMax uint64, outOfRange bool) {
+func (f *oField) BaseValueBetween(min, max int64) (baseValueMin, baseValueMax uint64, outOfRange bool) {
 	if max < f.Min || min > f.Max {
 		return baseValueMin, baseValueMax, true
 	}
@@ -1068,7 +1157,7 @@ func (f *Field) BaseValueBetween(min, max int64) (baseValueMin, baseValueMax uin
 	return baseValueMin, baseValueMax, false
 }
 
-func ValidateField(f *Field) error {
+func ValidateField(f *oField) error {
 	if f.Name == "" {
 		return ErrFieldNameRequired
 	} else if !IsValidFieldType(f.Type) {
@@ -1079,29 +1168,7 @@ func ValidateField(f *Field) error {
 	return nil
 }
 
-func encodeFields(a []*Field) []*internal.Field {
-	if len(a) == 0 {
-		return nil
-	}
-	other := make([]*internal.Field, len(a))
-	for i := range a {
-		other[i] = encodeField(a[i])
-	}
-	return other
-}
-
-func decodeFields(a []*internal.Field) []*Field {
-	if len(a) == 0 {
-		return nil
-	}
-	other := make([]*Field, len(a))
-	for i := range a {
-		other[i] = decodeField(a[i])
-	}
-	return other
-}
-
-func encodeField(f *Field) *internal.Field {
+func encodeField(f *oField) *internal.Field {
 	if f == nil {
 		return nil
 	}
@@ -1113,11 +1180,11 @@ func encodeField(f *Field) *internal.Field {
 	}
 }
 
-func decodeField(f *internal.Field) *Field {
+func decodeField(f *internal.Field) *oField {
 	if f == nil {
 		return nil
 	}
-	return &Field{
+	return &oField{
 		Name: f.Name,
 		Type: f.Type,
 		Min:  f.Min,
