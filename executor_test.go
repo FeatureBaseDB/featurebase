@@ -529,7 +529,7 @@ func TestExecutor_Execute_TopN_Attr(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-	if result, err := e.Execute(context.Background(), "i", test.MustParse(`TopN(frame="f", n=1, field="category", filters=[123])`), nil, nil); err != nil {
+	if result, err := e.Execute(context.Background(), "i", test.MustParse(`TopN(frame="f", n=1, attrName="category", attrValues=[123])`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(result, []interface{}{[]pilosa.Pair{
 		{ID: 10, Count: 1},
@@ -552,7 +552,7 @@ func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-	if result, err := e.Execute(context.Background(), "i", test.MustParse(`TopN(Bitmap(row=10,frame=f),frame="f", n=1, field="category", filters=[123])`), nil, nil); err != nil {
+	if result, err := e.Execute(context.Background(), "i", test.MustParse(`TopN(Bitmap(row=10,frame=f),frame="f", n=1, attrName="category", attrValues=[123])`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(result, []interface{}{[]pilosa.Pair{
 		{ID: 10, Count: 1},

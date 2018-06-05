@@ -552,7 +552,7 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNSlice: %v", err)
 	}
-	field, _ := c.Args["field"].(string) // TODO: rename this to something other than field
+	attrName, _ := c.Args["attrName"].(string)
 	rowIDs, _, err := c.UintSliceArg("ids")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNSlice: %v", err)
@@ -561,7 +561,7 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNSlice: %v", err)
 	}
-	filters, _ := c.Args["filters"].([]interface{})
+	attrValues, _ := c.Args["attrValues"].([]interface{})
 	tanimotoThreshold, _, err := c.UintArg("tanimotoThreshold")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNSlice: %v", err)
@@ -600,8 +600,8 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 		N:                 int(n),
 		Src:               src,
 		RowIDs:            rowIDs,
-		FilterName:        field,
-		FilterValues:      filters,
+		FilterName:        attrName,
+		FilterValues:      attrValues,
 		MinThreshold:      minThreshold,
 		TanimotoThreshold: tanimotoThreshold,
 	})
