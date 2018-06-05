@@ -96,7 +96,7 @@ func TestFragment_ClearBit(t *testing.T) {
 	}
 }
 
-// Ensure a fragment can set & read a field value.
+// Ensure a fragment can set & read a value.
 func TestFragment_SetValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
 		f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
@@ -219,8 +219,8 @@ func TestFragment_SetValue(t *testing.T) {
 	})
 }
 
-// Ensure a fragment can sum field values.
-func TestFragment_FieldSum(t *testing.T) {
+// Ensure a fragment can sum values.
+func TestFragment_Sum(t *testing.T) {
 	const bitDepth = 16
 
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
@@ -258,8 +258,8 @@ func TestFragment_FieldSum(t *testing.T) {
 	})
 }
 
-// Ensure a fragment can find the min and max of field values.
-func TestFragment_FieldMinMax(t *testing.T) {
+// Ensure a fragment can find the min and max of values.
+func TestFragment_MinMax(t *testing.T) {
 	const bitDepth = 16
 
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
@@ -331,8 +331,8 @@ func TestFragment_FieldMinMax(t *testing.T) {
 	})
 }
 
-// Ensure a fragment query for matching fields.
-func TestFragment_FieldRange(t *testing.T) {
+// Ensure a fragment query for matching values.
+func TestFragment_Range(t *testing.T) {
 	const bitDepth = 16
 
 	t.Run("EQ", func(t *testing.T) {
@@ -400,28 +400,28 @@ func TestFragment_FieldRange(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Query for fields less than (ending with set column).
+		// Query for values less than (ending with set column).
 		if b, err := f.RangeOp(pql.LT, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 5000, 6000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields less than (ending with unset column).
+		// Query for values less than (ending with unset column).
 		if b, err := f.RangeOp(pql.LT, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{5000, 6000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields less than or equal to (ending with set column).
+		// Query for values less than or equal to (ending with set column).
 		if b, err := f.RangeOp(pql.LTE, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 4000, 5000, 6000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields less than or equal to (ending with unset column).
+		// Query for values less than or equal to (ending with unset column).
 		if b, err := f.RangeOp(pql.LTE, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 5000, 6000}) {
@@ -448,28 +448,28 @@ func TestFragment_FieldRange(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Query for fields greater than (ending with unset bit).
+		// Query for values greater than (ending with unset bit).
 		if b, err := f.RangeOp(pql.GT, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than (ending with set bit).
+		// Query for values greater than (ending with set bit).
 		if b, err := f.RangeOp(pql.GT, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than or equal to (ending with unset bit).
+		// Query for values greater than or equal to (ending with unset bit).
 		if b, err := f.RangeOp(pql.GTE, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than or equal to (ending with set bit).
+		// Query for values greater than or equal to (ending with set bit).
 		if b, err := f.RangeOp(pql.GTE, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
@@ -496,28 +496,28 @@ func TestFragment_FieldRange(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Query for fields greater than (ending with unset column).
+		// Query for values greater than (ending with unset column).
 		if b, err := f.RangeBetween(bitDepth, 300, 2817); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than (ending with set column).
+		// Query for values greater than (ending with set column).
 		if b, err := f.RangeBetween(bitDepth, 301, 2817); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than or equal to (ending with unset column).
+		// Query for values greater than or equal to (ending with unset column).
 		if b, err := f.RangeBetween(bitDepth, 301, 2816); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
-		// Query for fields greater than or equal to (ending with set column).
+		// Query for values greater than or equal to (ending with set column).
 		if b, err := f.RangeBetween(bitDepth, 300, 2816); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 4000}) {

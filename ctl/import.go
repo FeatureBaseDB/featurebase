@@ -145,7 +145,7 @@ func (cmd *ImportCommand) ensureSchema(ctx context.Context) error {
 func (cmd *ImportCommand) importPath(ctx context.Context, frameType, path string) error {
 	// If frameType is `int`, treat the import data as values to be range-encoded.
 	if frameType == pilosa.FrameTypeInt {
-		return cmd.bufferFieldValues(ctx, path)
+		return cmd.bufferValues(ctx, path)
 	} else {
 		if cmd.StringKeys {
 			return cmd.bufferBitsK(ctx, path)
@@ -358,8 +358,8 @@ func (cmd *ImportCommand) importBitsK(ctx context.Context, bits []pilosa.Bit) er
 	return nil
 }
 
-// bufferFieldValues buffers slices of fieldValues to be imported as a batch.
-func (cmd *ImportCommand) bufferFieldValues(ctx context.Context, path string) error {
+// bufferValues buffers slices of FieldValues to be imported as a batch.
+func (cmd *ImportCommand) bufferValues(ctx context.Context, path string) error {
 	a := make([]pilosa.FieldValue, 0, cmd.BufferSize)
 
 	var r *csv.Reader
@@ -407,7 +407,7 @@ func (cmd *ImportCommand) bufferFieldValues(ctx context.Context, path string) er
 		}
 		val.ColumnID = columnID
 
-		// Parse field value.
+		// Parse FieldValue.
 		value, err := strconv.ParseInt(record[1], 10, 64)
 		if err != nil {
 			return fmt.Errorf("invalid value on row %d: %q", rnum, record[1])
@@ -416,9 +416,9 @@ func (cmd *ImportCommand) bufferFieldValues(ctx context.Context, path string) er
 
 		a = append(a, val)
 
-		// If we've reached the buffer size then import field values.
+		// If we've reached the buffer size then import FieldValues.
 		if len(a) == cmd.BufferSize {
-			if err := cmd.importFieldValues(ctx, a); err != nil {
+			if err := cmd.importValues(ctx, a); err != nil {
 				return err
 			}
 			a = a[:0]
@@ -426,22 +426,22 @@ func (cmd *ImportCommand) bufferFieldValues(ctx context.Context, path string) er
 	}
 
 	// If there are still values in the buffer then flush them.
-	if err := cmd.importFieldValues(ctx, a); err != nil {
+	if err := cmd.importValues(ctx, a); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// importFieldValues sends batches of fieldValues to the server.
-func (cmd *ImportCommand) importFieldValues(ctx context.Context, vals []pilosa.FieldValue) error {
+// importValues sends batches of FieldValues to the server.
+func (cmd *ImportCommand) importValues(ctx context.Context, vals []pilosa.FieldValue) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
 	// Group vals by slice.
 	logger.Printf("grouping %d vals", len(vals))
 	valsBySlice := pilosa.FieldValues(vals).GroupBySlice()
 
-	// Parse path into field values.
+	// Parse path into FieldValues.
 	for slice, vals := range valsBySlice {
 		if cmd.Sort {
 			sort.Sort(pilosa.FieldValues(vals))

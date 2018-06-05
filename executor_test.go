@@ -281,7 +281,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Set field values.
+		// Set bsiGroup values.
 		e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 		if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetValue(col=10, f=25)`), nil, nil); err != nil {
 			t.Fatal(err)
@@ -355,8 +355,8 @@ func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Set two fields on f/10.
-	// Also set fields on other bitmaps and frames to test isolation.
+	// Set two attrs on f/10.
+	// Also set attrs on other bitmaps and frames to test isolation.
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetRowAttrs(row=10, frame=f, foo="bar")`), nil, nil); err != nil {
 		t.Fatal(err)
@@ -617,9 +617,9 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 		for i, tt := range tests {
 			var pql string
 			if tt.filter == "" {
-				pql = `Min(frame=f, field=f)`
+				pql = `Min(frame=f)`
 			} else {
-				pql = fmt.Sprintf(`Min(%s, frame=f, field=f)`, tt.filter)
+				pql = fmt.Sprintf(`Min(%s, frame=f)`, tt.filter)
 			}
 			if result, err := e.Execute(context.Background(), "i", test.MustParse(pql), nil, nil); err != nil {
 				t.Fatal(err)
@@ -643,9 +643,9 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 		for i, tt := range tests {
 			var pql string
 			if tt.filter == "" {
-				pql = `Max(frame=f, field=f)`
+				pql = `Max(frame=f)`
 			} else {
-				pql = fmt.Sprintf(`Max(%s, frame=f, field=f)`, tt.filter)
+				pql = fmt.Sprintf(`Max(%s, frame=f)`, tt.filter)
 			}
 			if result, err := e.Execute(context.Background(), "i", test.MustParse(pql), nil, nil); err != nil {
 				t.Fatal(err)
@@ -711,7 +711,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 	}
 
 	t.Run("NoFilter", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(frame=foo, field=foo)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(frame=foo)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(result[0], pilosa.ValCount{Val: 200, Count: 5}) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -719,7 +719,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 	})
 
 	t.Run("WithFilter", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(Bitmap(frame=x, row=0), frame=foo, field=foo)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Sum(Bitmap(frame=x, row=0), frame=foo)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(result[0], pilosa.ValCount{Val: 80, Count: 2}) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -769,7 +769,7 @@ func TestExecutor_Execute_BSIGroupRange(t *testing.T) {
 	})
 }
 
-// Ensure a Range(field) query can be executed.
+// Ensure a Range(bsiGroup) query can be executed.
 func TestExecutor_Execute_Range(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
