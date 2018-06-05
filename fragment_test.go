@@ -220,7 +220,7 @@ func TestFragment_SetValue(t *testing.T) {
 }
 
 // Ensure a fragment can sum field values.
-func TestFragment_FieldSum(t *testing.T) {
+func TestFragment_Sum(t *testing.T) {
 	const bitDepth = 16
 
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
@@ -259,7 +259,7 @@ func TestFragment_FieldSum(t *testing.T) {
 }
 
 // Ensure a fragment can find the min and max of field values.
-func TestFragment_FieldMinMax(t *testing.T) {
+func TestFragment_MinMax(t *testing.T) {
 	const bitDepth = 16
 
 	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
@@ -332,7 +332,7 @@ func TestFragment_FieldMinMax(t *testing.T) {
 }
 
 // Ensure a fragment query for matching fields.
-func TestFragment_FieldRange(t *testing.T) {
+func TestFragment_Range(t *testing.T) {
 	const bitDepth = 16
 
 	t.Run("EQ", func(t *testing.T) {
