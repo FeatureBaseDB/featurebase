@@ -358,7 +358,7 @@ func (cmd *ImportCommand) importBitsK(ctx context.Context, bits []pilosa.Bit) er
 	return nil
 }
 
-// bufferValues buffers slices of fieldValues to be imported as a batch.
+// bufferValues buffers slices of FieldValues to be imported as a batch.
 func (cmd *ImportCommand) bufferValues(ctx context.Context, path string) error {
 	a := make([]pilosa.FieldValue, 0, cmd.BufferSize)
 
@@ -407,7 +407,7 @@ func (cmd *ImportCommand) bufferValues(ctx context.Context, path string) error {
 		}
 		val.ColumnID = columnID
 
-		// Parse field value.
+		// Parse FieldValue.
 		value, err := strconv.ParseInt(record[1], 10, 64)
 		if err != nil {
 			return fmt.Errorf("invalid value on row %d: %q", rnum, record[1])
@@ -416,7 +416,7 @@ func (cmd *ImportCommand) bufferValues(ctx context.Context, path string) error {
 
 		a = append(a, val)
 
-		// If we've reached the buffer size then import field values.
+		// If we've reached the buffer size then import FieldValues.
 		if len(a) == cmd.BufferSize {
 			if err := cmd.importValues(ctx, a); err != nil {
 				return err
@@ -433,7 +433,7 @@ func (cmd *ImportCommand) bufferValues(ctx context.Context, path string) error {
 	return nil
 }
 
-// importValues sends batches of fieldValues to the server.
+// importValues sends batches of FieldValues to the server.
 func (cmd *ImportCommand) importValues(ctx context.Context, vals []pilosa.FieldValue) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
@@ -441,7 +441,7 @@ func (cmd *ImportCommand) importValues(ctx context.Context, vals []pilosa.FieldV
 	logger.Printf("grouping %d vals", len(vals))
 	valsBySlice := pilosa.FieldValues(vals).GroupBySlice()
 
-	// Parse path into field values.
+	// Parse path into FieldValues.
 	for slice, vals := range valsBySlice {
 		if cmd.Sort {
 			sort.Sort(pilosa.FieldValues(vals))

@@ -71,7 +71,7 @@ func TestFrame_SetTimeQuantum(t *testing.T) {
 	}
 }
 
-// Ensure a frame can set & read a field value.
+// Ensure a frame can set & read a bsiGroup value.
 func TestFrame_SetValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
 		idx := test.MustOpenIndex()
@@ -86,7 +86,7 @@ func TestFrame_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Set value on field.
+		// Set value on frame.
 		if changed, err := f.SetValue(100, 21); err != nil {
 			t.Fatal(err)
 		} else if !changed {
