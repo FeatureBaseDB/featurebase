@@ -914,12 +914,12 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 }
 
 // ImportValue bulk imports range-encoded value data.
-func (f *Frame) ImportValue(fieldName string, columnIDs []uint64, values []int64) error {
-	viewName := viewBSIGroupPrefix + fieldName
+func (f *Frame) ImportValue(columnIDs []uint64, values []int64) error {
+	viewName := viewBSIGroupPrefix + f.name
 	// Get the bsiGroup so we know bitDepth.
-	bsig := f.bsiGroup(fieldName)
+	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
-		return errors.Wrap(ErrBSIGroupNotFound, fieldName)
+		return errors.Wrap(ErrBSIGroupNotFound, f.name)
 	}
 
 	// Split import data by fragment.
@@ -1084,7 +1084,7 @@ func isValidBSIGroupType(v string) bool {
 	}
 }
 
-// bsiGroup represents a range field on a frame.
+// bsiGroup represents a group of range-encoded rows on a frame.
 type bsiGroup struct {
 	Name string `json:"name,omitempty"`
 	Type string `json:"type,omitempty"`
@@ -1113,7 +1113,7 @@ func (b *bsiGroup) BitDepth() uint {
 // we can't simply return 1024.
 // In order to make this work, we effectively need to change the operator to LTE.
 // Executor.executeFieldRangeSlice() takes this into account and returns
-// `frag.FieldNotNull(field.BitDepth())` in such instances.
+// `frag.FieldNotNull(bsig.BitDepth())` in such instances.
 func (b *bsiGroup) baseValue(op pql.Token, value int64) (baseValue uint64, outOfRange bool) {
 	if op == pql.GT || op == pql.GTE {
 		if value > b.Max {

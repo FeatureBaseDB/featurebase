@@ -900,7 +900,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 
 	// Create a fast lookup of filter values.
 	var filters map[interface{}]struct{}
-	if opt.FilterField != "" && len(opt.FilterValues) > 0 {
+	if opt.FilterName != "" && len(opt.FilterValues) > 0 {
 		filters = make(map[interface{}]struct{})
 		for _, v := range opt.FilterValues {
 			filters[v] = struct{}{}
@@ -948,7 +948,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 				return nil, errors.Wrap(err, "getting attrs")
 			} else if attr == nil {
 				continue
-			} else if attrValue := attr[opt.FilterField]; attrValue == nil {
+			} else if attrValue := attr[opt.FilterName]; attrValue == nil {
 				continue
 			} else if _, ok := filters[attrValue]; !ok {
 				continue
@@ -1074,7 +1074,7 @@ type TopOptions struct {
 	MinThreshold uint64
 
 	// Filter field name & values.
-	FilterField       string
+	FilterName        string
 	FilterValues      []interface{}
 	TanimotoThreshold uint64
 }

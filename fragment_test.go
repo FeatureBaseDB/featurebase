@@ -623,7 +623,7 @@ func TestFragment_Top_Filter(t *testing.T) {
 	// Retrieve top rows.
 	if pairs, err := f.Top(pilosa.TopOptions{
 		N:            2,
-		FilterField:  "x",
+		FilterName:   "x",
 		FilterValues: []interface{}{int64(10), int64(15), int64(20)},
 	}); err != nil {
 		t.Fatal(err)

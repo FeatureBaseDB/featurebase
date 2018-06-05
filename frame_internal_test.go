@@ -21,8 +21,8 @@ import (
 	"github.com/pilosa/pilosa/pql"
 )
 
-// Ensure a field can adjust to its baseValue.
-func TestField_BaseValue(t *testing.T) {
+// Ensure a bsiGroup can adjust to its baseValue.
+func TestBSIGroup_BaseValue(t *testing.T) {
 	b0 := &bsiGroup{
 		Name: "b0",
 		Type: bsiGroupTypeInt,

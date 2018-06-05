@@ -710,9 +710,9 @@ func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest
 	}
 
 	// Import into fragment.
-	err = frame.ImportValue(req.Field, req.ColumnIDs, req.Values)
+	err = frame.ImportValue(req.ColumnIDs, req.Values)
 	if err != nil {
-		api.Logger.Printf("import error: index=%s, frame=%s, slice=%d, field=%s, columns=%d, err=%s", req.Index, req.Frame, req.Slice, req.Field, len(req.ColumnIDs), err)
+		api.Logger.Printf("import error: index=%s, frame=%s, slice=%d, columns=%d, err=%s", req.Index, req.Frame, req.Slice, len(req.ColumnIDs), err)
 	}
 	return errors.Wrap(err, "importing")
 }

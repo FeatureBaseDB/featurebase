@@ -267,7 +267,7 @@ func TestClient_ImportValue(t *testing.T) {
 
 	// Send import request.
 	c := test.MustNewClient(s.Host(), defaultClient)
-	if err := c.ImportValue(context.Background(), "i", "f", fldName, 0, []pilosa.FieldValue{
+	if err := c.ImportValue(context.Background(), "i", "f", 0, []pilosa.FieldValue{
 		{ColumnID: 1, Value: -10},
 		{ColumnID: 2, Value: 20},
 		{ColumnID: 3, Value: 40},
