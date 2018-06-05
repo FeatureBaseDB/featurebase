@@ -46,9 +46,6 @@ type ImportCommand struct {
 	// CreateSchema ensures the schema exists before import
 	CreateSchema bool
 
-	// For Range-Encoded fields, name of the Field to import into.
-	Field string `json:"field"`
-
 	// Indicates that the payload should be treated as string keys.
 	StringKeys bool `json:"StringKeys"`
 
@@ -105,10 +102,26 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 		}
 	}
 
+	// Determine the frame type in order to correctly handle the input data.
+	frameType := pilosa.DefaultFrameType
+	schema, err := cmd.Client.Schema(ctx)
+	if err != nil {
+		return errors.Wrap(err, "getting schema")
+	}
+	for _, index := range schema {
+		if index.Name == cmd.Index {
+			for _, frame := range index.Frames {
+				if frame.Name == cmd.Frame {
+					frameType = frame.Options.Type
+				}
+			}
+		}
+	}
+
 	// Import each path and import by slice.
 	for _, path := range cmd.Paths {
 		logger.Printf("parsing: %s", path)
-		if err := cmd.importPath(ctx, path); err != nil {
+		if err := cmd.importPath(ctx, frameType, path); err != nil {
 			return err
 		}
 	}
@@ -129,9 +142,9 @@ func (cmd *ImportCommand) ensureSchema(ctx context.Context) error {
 }
 
 // importPath parses a path into bits and imports it to the server.
-func (cmd *ImportCommand) importPath(ctx context.Context, path string) error {
-	// If a field is provided, treat the import data as values to be range-encoded.
-	if cmd.Field != "" {
+func (cmd *ImportCommand) importPath(ctx context.Context, frameType, path string) error {
+	// If frameType is `int`, treat the import data as values to be range-encoded.
+	if frameType == pilosa.FrameTypeInt {
 		return cmd.bufferFieldValues(ctx, path)
 	} else {
 		if cmd.StringKeys {

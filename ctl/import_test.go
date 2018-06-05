@@ -82,9 +82,7 @@ func TestImportCommand_Run(t *testing.T) {
 	}
 }
 
-// TODO: revisit this test once Frame is renamed Field
-// Ensure that the ImportValue path runs (note: we have specified a value
-// for cm.Field.)
+// Ensure that the ImportValue path runs.
 func TestImportCommand_RunValue(t *testing.T) {
 
 	buf := bytes.Buffer{}
@@ -112,7 +110,6 @@ func TestImportCommand_RunValue(t *testing.T) {
 
 	cm.Index = "i"
 	cm.Frame = "f"
-	cm.Field = "f"
 	cm.Paths = []string{file.Name()}
 	err = cm.Run(ctx)
 	if err != nil {
@@ -122,10 +119,19 @@ func TestImportCommand_RunValue(t *testing.T) {
 
 func TestImportCommand_InvalidFile(t *testing.T) {
 
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+	s := test.NewServer()
+	defer s.Close()
+
+	s.Handler.API.Cluster = test.NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
+	s.Handler.API.Holder = hldr.Holder
+
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewImportCommand(stdin, stdout, stderr)
-	cm.Host = "anyhost"
+	cm.Host = s.Host()
 	cm.Index = "i"
 	cm.Frame = "f"
 	file, err := ioutil.TempFile("", "import.csv")
