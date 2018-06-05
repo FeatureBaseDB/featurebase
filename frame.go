@@ -1112,7 +1112,7 @@ func (b *bsiGroup) BitDepth() uint {
 // Note that in this case (because the range uses the full BitDepth 0 to 1023),
 // we can't simply return 1024.
 // In order to make this work, we effectively need to change the operator to LTE.
-// Executor.executeFieldRangeSlice() takes this into account and returns
+// Executor.executeBSIGroupRangeSlice() takes this into account and returns
 // `frag.FieldNotNull(bsig.BitDepth())` in such instances.
 func (b *bsiGroup) baseValue(op pql.Token, value int64) (baseValue uint64, outOfRange bool) {
 	if op == pql.GT || op == pql.GTE {
