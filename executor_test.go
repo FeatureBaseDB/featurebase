@@ -834,7 +834,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 	}
 
 	t.Run("EQ", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, foo == 20)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(foo == 20)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{50, (5 * SliceWidth) + 100}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -843,19 +843,19 @@ func TestExecutor_Execute_Range(t *testing.T) {
 
 	t.Run("NEQ", func(t *testing.T) {
 		// NEQ null
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, other != null)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(other != null)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 		// NEQ <int>
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, foo != 20)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(foo != 20)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{SliceWidth, SliceWidth + 1, SliceWidth + 2}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 		// NEQ -<int>
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, other != -20)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(other != -20)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Row).Columns()) {
 			//t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -864,7 +864,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 	})
 
 	t.Run("LT", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, foo < 20)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(foo < 20)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{SliceWidth + 2}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -872,7 +872,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 	})
 
 	t.Run("LTE", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, foo <= 20)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(foo <= 20)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{50, SliceWidth + 2, (5 * SliceWidth) + 100}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -880,7 +880,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 	})
 
 	t.Run("GT", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, foo > 20)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(foo > 20)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{SliceWidth, SliceWidth + 1}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -888,7 +888,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 	})
 
 	t.Run("GTE", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, foo >= 20)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(foo >= 20)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{50, SliceWidth, SliceWidth + 1, (5 * SliceWidth) + 100}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -896,7 +896,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 	})
 
 	t.Run("BETWEEN", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, other >< [1, 1000])`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(other >< [1, 1000])`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -905,7 +905,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 
 	// Ensure that the NotNull code path gets run.
 	t.Run("NotNull", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, other >< [0, 1000])`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(other >< [0, 1000])`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -913,7 +913,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 	})
 
 	t.Run("BelowMin", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, foo == 0)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(foo == 0)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -921,7 +921,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 	})
 
 	t.Run("AboveMax", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, foo == 200)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(foo == 200)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -929,7 +929,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 	})
 
 	t.Run("LTAboveMax", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=edge, edge < 200)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(edge < 200)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0, 1}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result[0].(*pilosa.Row).Columns()))
@@ -937,7 +937,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 	})
 
 	t.Run("GTBelowMin", func(t *testing.T) {
-		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=edge, edge > -200)`), nil, nil); err != nil {
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(edge > -200)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0, 1}, result[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result[0].(*pilosa.Row).Columns()))
@@ -945,13 +945,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 	})
 
 	t.Run("ErrFrameNotFound", func(t *testing.T) {
-		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=bad_frame, foo >= 20)`), nil, nil); err != pilosa.ErrFrameNotFound {
-			t.Fatal(err)
-		}
-	})
-
-	t.Run("ErrBSIGroupNotFound", func(t *testing.T) {
-		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, bad_field >= 20)`), nil, nil); err != pilosa.ErrBSIGroupNotFound {
+		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Range(bad_frame >= 20)`), nil, nil); err != pilosa.ErrFrameNotFound {
 			t.Fatal(err)
 		}
 	})
