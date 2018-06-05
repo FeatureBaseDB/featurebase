@@ -435,7 +435,7 @@ func (cmd *ImportCommand) importFieldValues(ctx context.Context, vals []pilosa.F
 		}
 
 		logger.Printf("importing slice: %d, n=%d", slice, len(vals))
-		if err := cmd.Client.ImportValue(ctx, cmd.Index, cmd.Frame, cmd.Field, slice, vals); err != nil {
+		if err := cmd.Client.ImportValue(ctx, cmd.Index, cmd.Frame, slice, vals); err != nil {
 			return errors.Wrap(err, "importing values")
 		}
 	}

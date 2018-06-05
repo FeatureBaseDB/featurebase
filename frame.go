@@ -424,7 +424,7 @@ func (f *Frame) addBSIGroup(bsig *bsiGroup) error {
 	// Add bsiGroup to list.
 	f.bsiGroups = append(f.bsiGroups, bsig)
 
-	// Sort fields by name.
+	// Sort bsiGroups by name.
 	sort.Slice(f.bsiGroups, func(i, j int) bool {
 		return f.bsiGroups[i].Name < f.bsiGroups[j].Name
 	})
@@ -432,13 +432,12 @@ func (f *Frame) addBSIGroup(bsig *bsiGroup) error {
 	return nil
 }
 
-// TODO: merge this into the un-exported deleteBSIGroup.
-// deleteBSIGroupAndView deletes an existing field on the schema.
+// deleteBSIGroupAndView deletes an existing bsiGroup on the schema.
 func (f *Frame) deleteBSIGroupAndView(name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// Remove field.
+	// Remove bsiGroup.
 	if err := f.deleteBSIGroup(name); err != nil {
 		return err
 	}
@@ -705,37 +704,37 @@ func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 	return changed, nil
 }
 
-// Value reads a bsiGroup value for a column.
-func (f *Frame) Value(columnID uint64, name string) (value int64, exists bool, err error) {
-	field := f.bsiGroup(name)
-	if field == nil {
+// Value reads a frame value for a column.
+func (f *Frame) Value(columnID uint64) (value int64, exists bool, err error) {
+	bsig := f.bsiGroup(f.name)
+	if bsig == nil {
 		return 0, false, ErrBSIGroupNotFound
 	}
 
 	// Fetch target view.
-	view := f.View(viewBSIGroupPrefix + name)
+	view := f.View(viewBSIGroupPrefix + f.name)
 	if view == nil {
 		return 0, false, nil
 	}
 
-	v, exists, err := view.value(columnID, field.BitDepth())
+	v, exists, err := view.value(columnID, bsig.BitDepth())
 	if err != nil {
 		return 0, false, err
 	} else if !exists {
 		return 0, false, nil
 	}
-	return int64(v) + field.Min, true, nil
+	return int64(v) + bsig.Min, true, nil
 }
 
-// SetValue sets a field value for a column.
+// SetValue sets a frame value for a column.
 func (f *Frame) SetValue(columnID uint64, value int64) (changed bool, err error) {
-	// Fetch field and validate value.
-	field := f.bsiGroup(f.name)
-	if field == nil {
+	// Fetch bsiGroup and validate value.
+	bsig := f.bsiGroup(f.name)
+	if bsig == nil {
 		return false, ErrBSIGroupNotFound
-	} else if value < field.Min {
+	} else if value < bsig.Min {
 		return false, ErrBSIGroupValueTooLow
-	} else if value > field.Max {
+	} else if value > bsig.Max {
 		return false, ErrBSIGroupValueTooHigh
 	}
 
@@ -746,16 +745,16 @@ func (f *Frame) SetValue(columnID uint64, value int64) (changed bool, err error)
 	}
 
 	// Determine base value to store.
-	baseValue := uint64(value - field.Min)
+	baseValue := uint64(value - bsig.Min)
 
-	return view.setValue(columnID, field.BitDepth(), baseValue)
+	return view.setValue(columnID, bsig.BitDepth(), baseValue)
 }
 
-// Sum returns the sum and count for a field.
+// Sum returns the sum and count for a frame.
 // An optional filtering row can be provided.
 func (f *Frame) Sum(filter *Row, name string) (sum, count int64, err error) {
-	field := f.bsiGroup(name)
-	if field == nil {
+	bsig := f.bsiGroup(name)
+	if bsig == nil {
 		return 0, 0, ErrBSIGroupNotFound
 	}
 
@@ -764,14 +763,14 @@ func (f *Frame) Sum(filter *Row, name string) (sum, count int64, err error) {
 		return 0, 0, nil
 	}
 
-	vsum, vcount, err := view.sum(filter, field.BitDepth())
+	vsum, vcount, err := view.sum(filter, bsig.BitDepth())
 	if err != nil {
 		return 0, 0, err
 	}
-	return int64(vsum) + (int64(vcount) * field.Min), int64(vcount), nil
+	return int64(vsum) + (int64(vcount) * bsig.Min), int64(vcount), nil
 }
 
-// Min returns the min for a field.
+// Min returns the min for a frame.
 // An optional filtering row can be provided.
 func (f *Frame) Min(filter *Row, name string) (min, count int64, err error) {
 	bsig := f.bsiGroup(name)
@@ -791,11 +790,11 @@ func (f *Frame) Min(filter *Row, name string) (min, count int64, err error) {
 	return int64(vmin) + bsig.Min, int64(vcount), nil
 }
 
-// Max returns the max for a field.
+// Max returns the max for a frame.
 // An optional filtering row can be provided.
 func (f *Frame) Max(filter *Row, name string) (max, count int64, err error) {
-	field := f.bsiGroup(name)
-	if field == nil {
+	bsig := f.bsiGroup(name)
+	if bsig == nil {
 		return 0, 0, ErrBSIGroupNotFound
 	}
 
@@ -804,57 +803,57 @@ func (f *Frame) Max(filter *Row, name string) (max, count int64, err error) {
 		return 0, 0, nil
 	}
 
-	vmax, vcount, err := view.max(filter, field.BitDepth())
+	vmax, vcount, err := view.max(filter, bsig.BitDepth())
 	if err != nil {
 		return 0, 0, err
 	}
-	return int64(vmax) + field.Min, int64(vcount), nil
+	return int64(vmax) + bsig.Min, int64(vcount), nil
 }
 
 func (f *Frame) Range(name string, op pql.Token, predicate int64) (*Row, error) {
-	// Retrieve and validate field.
-	field := f.bsiGroup(name)
-	if field == nil {
+	// Retrieve and validate bsiGroup.
+	bsig := f.bsiGroup(name)
+	if bsig == nil {
 		return nil, ErrBSIGroupNotFound
-	} else if predicate < field.Min || predicate > field.Max {
+	} else if predicate < bsig.Min || predicate > bsig.Max {
 		return nil, nil
 	}
 
-	// Retrieve field's view.
+	// Retrieve bsiGroup's view.
 	view := f.View(viewBSIGroupPrefix + name)
 	if view == nil {
 		return nil, nil
 	}
 
-	baseValue, outOfRange := field.baseValue(op, predicate)
+	baseValue, outOfRange := bsig.baseValue(op, predicate)
 	if outOfRange {
 		return NewRow(), nil
 	}
 
-	return view.rangeOp(op, field.BitDepth(), baseValue)
+	return view.rangeOp(op, bsig.BitDepth(), baseValue)
 }
 
 func (f *Frame) RangeBetween(name string, predicateMin, predicateMax int64) (*Row, error) {
-	// Retrieve and validate field.
-	field := f.bsiGroup(name)
-	if field == nil {
+	// Retrieve and validate bsiGroup.
+	bsig := f.bsiGroup(name)
+	if bsig == nil {
 		return nil, ErrBSIGroupNotFound
 	} else if predicateMin > predicateMax {
 		return nil, ErrInvalidBetweenValue
 	}
 
-	// Retrieve field's view.
+	// Retrieve bsiGroup's view.
 	view := f.View(viewBSIGroupPrefix + name)
 	if view == nil {
 		return nil, nil
 	}
 
-	baseValueMin, baseValueMax, outOfRange := field.baseValueBetween(predicateMin, predicateMax)
+	baseValueMin, baseValueMax, outOfRange := bsig.baseValueBetween(predicateMin, predicateMax)
 	if outOfRange {
 		return NewRow(), nil
 	}
 
-	return view.rangeBetween(field.BitDepth(), baseValueMin, baseValueMax)
+	return view.rangeBetween(bsig.BitDepth(), baseValueMin, baseValueMax)
 }
 
 // Import bulk imports data.
@@ -915,12 +914,12 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 }
 
 // ImportValue bulk imports range-encoded value data.
-func (f *Frame) ImportValue(fieldName string, columnIDs []uint64, values []int64) error {
-	viewName := viewBSIGroupPrefix + fieldName
+func (f *Frame) ImportValue(columnIDs []uint64, values []int64) error {
+	viewName := viewBSIGroupPrefix + f.name
 	// Get the bsiGroup so we know bitDepth.
-	bsig := f.bsiGroup(fieldName)
+	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
-		return errors.Wrap(ErrBSIGroupNotFound, fieldName)
+		return errors.Wrap(ErrBSIGroupNotFound, f.name)
 	}
 
 	// Split import data by fragment.
@@ -1085,7 +1084,7 @@ func isValidBSIGroupType(v string) bool {
 	}
 }
 
-// bsiGroup represents a range field on a frame.
+// bsiGroup represents a group of range-encoded rows on a frame.
 type bsiGroup struct {
 	Name string `json:"name,omitempty"`
 	Type string `json:"type,omitempty"`
@@ -1113,8 +1112,8 @@ func (b *bsiGroup) BitDepth() uint {
 // Note that in this case (because the range uses the full BitDepth 0 to 1023),
 // we can't simply return 1024.
 // In order to make this work, we effectively need to change the operator to LTE.
-// Executor.executeFieldRangeSlice() takes this into account and returns
-// `frag.FieldNotNull(field.BitDepth())` in such instances.
+// Executor.executeBSIGroupRangeSlice() takes this into account and returns
+// `frag.FieldNotNull(bsig.BitDepth())` in such instances.
 func (b *bsiGroup) baseValue(op pql.Token, value int64) (baseValue uint64, outOfRange bool) {
 	if op == pql.GT || op == pql.GTE {
 		if value > b.Max {

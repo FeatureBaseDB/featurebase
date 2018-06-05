@@ -420,14 +420,14 @@ func (c *InternalHTTPClient) importNode(ctx context.Context, node *Node, buf []b
 }
 
 // ImportValue bulk imports field values for a single slice to a host.
-func (c *InternalHTTPClient) ImportValue(ctx context.Context, index, frame, field string, slice uint64, vals []FieldValue) error {
+func (c *InternalHTTPClient) ImportValue(ctx context.Context, index, frame string, slice uint64, vals []FieldValue) error {
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
 		return ErrFrameRequired
 	}
 
-	buf, err := marshalImportValuePayload(index, frame, field, slice, vals)
+	buf, err := marshalImportValuePayload(index, frame, slice, vals)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
@@ -449,7 +449,7 @@ func (c *InternalHTTPClient) ImportValue(ctx context.Context, index, frame, fiel
 }
 
 // marshalImportValuePayload marshalls the import parameters into a protobuf byte slice.
-func marshalImportValuePayload(index, frame, field string, slice uint64, vals []FieldValue) ([]byte, error) {
+func marshalImportValuePayload(index, frame string, slice uint64, vals []FieldValue) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
 	columnIDs := FieldValues(vals).ColumnIDs()
 	values := FieldValues(vals).Values()
@@ -459,7 +459,6 @@ func marshalImportValuePayload(index, frame, field string, slice uint64, vals []
 		Index:     index,
 		Frame:     frame,
 		Slice:     slice,
-		Field:     field,
 		ColumnIDs: columnIDs,
 		Values:    values,
 	})
@@ -1058,7 +1057,7 @@ type InternalClient interface {
 	ImportK(ctx context.Context, index, frame string, bits []Bit) error
 	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
 	EnsureFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) error
-	ImportValue(ctx context.Context, index, frame, field string, slice uint64, vals []FieldValue) error
+	ImportValue(ctx context.Context, index, frame string, slice uint64, vals []FieldValue) error
 	ExportCSV(ctx context.Context, index, frame string, slice uint64, w io.Writer) error
 	CreateFrame(ctx context.Context, index, frame string, opt FrameOptions) error
 	FragmentBlocks(ctx context.Context, index, frame string, slice uint64) ([]FragmentBlock, error)

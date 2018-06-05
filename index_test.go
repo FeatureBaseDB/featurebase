@@ -158,7 +158,7 @@ func TestIndex_CreateFrame(t *testing.T) {
 				}
 			})
 
-			t.Run("ErrInvalidFieldRange", func(t *testing.T) {
+			t.Run("ErrInvalidBSIGroupRange", func(t *testing.T) {
 				index := test.MustOpenIndex()
 				defer index.Close()
 
@@ -166,7 +166,7 @@ func TestIndex_CreateFrame(t *testing.T) {
 					Fields: []*pilosa.Field{
 						{Name: "field0", Type: pilosa.FieldTypeInt, Min: 100, Max: 50},
 					},
-				}); err != pilosa.ErrInvalidFieldRange {
+				}); err != pilosa.ErrInvalidBSIGroupRange {
 					t.Fatal(err)
 				}
 			})

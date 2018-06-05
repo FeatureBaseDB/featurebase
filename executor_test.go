@@ -290,7 +290,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		}
 
 		f := hldr.Frame("i", "f")
-		if value, exists, err := f.Value(10, "f"); err != nil {
+		if value, exists, err := f.Value(10); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
@@ -298,7 +298,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatalf("unexpected value: %v", value)
 		}
 
-		if value, exists, err := f.Value(100, "f"); err != nil {
+		if value, exists, err := f.Value(100); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
@@ -319,21 +319,21 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		t.Run("ErrColumnFieldRequired", func(t *testing.T) {
+		t.Run("ErrColumnBSIGroupRequired", func(t *testing.T) {
 			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetValue(invalid_column_name=10, f=100)`), nil, nil); err == nil || err.Error() != `SetValue() column field 'col' required` {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 
-		t.Run("ErrColumnFieldValue", func(t *testing.T) {
+		t.Run("ErrColumnBSIGroupValue", func(t *testing.T) {
 			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetValue(invalid_column_name="bad_column", f=100)`), nil, nil); err == nil || err.Error() != `SetValue() column field 'col' required` {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 
-		t.Run("ErrInvalidFieldValueType", func(t *testing.T) {
+		t.Run("ErrInvalidBSIGroupValueType", func(t *testing.T) {
 			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetValue(col=10, f="hello")`), nil, nil); err == nil || err != pilosa.ErrInvalidBSIGroupValueType {
 				t.Fatalf("unexpected error: %s", err)
@@ -728,7 +728,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 }
 
 // Ensure a range query can be executed.
-func TestExecutor_Execute_Range(t *testing.T) {
+func TestExecutor_Execute_BSIGroupRange(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
@@ -770,7 +770,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 }
 
 // Ensure a Range(field) query can be executed.
-func TestExecutor_Execute_FieldRange(t *testing.T) {
+func TestExecutor_Execute_Range(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
@@ -903,8 +903,8 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 		}
 	})
 
-	// Ensure that the FieldNotNull code path gets run.
-	t.Run("FieldNotNull", func(t *testing.T) {
+	// Ensure that the NotNull code path gets run.
+	t.Run("NotNull", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=other, other >< [0, 1000])`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0}, result[0].(*pilosa.Row).Columns()) {
@@ -950,7 +950,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 		}
 	})
 
-	t.Run("ErrFieldNotFound", func(t *testing.T) {
+	t.Run("ErrBSIGroupNotFound", func(t *testing.T) {
 		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, bad_field >= 20)`), nil, nil); err != pilosa.ErrBSIGroupNotFound {
 			t.Fatal(err)
 		}

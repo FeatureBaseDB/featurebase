@@ -127,10 +127,10 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return e.executeSum(ctx, index, c, slices, opt)
 	case "Min":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
-		return e.executeFieldMin(ctx, index, c, slices, opt)
+		return e.executeMin(ctx, index, c, slices, opt)
 	case "Max":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
-		return e.executeFieldMax(ctx, index, c, slices, opt)
+		return e.executeMax(ctx, index, c, slices, opt)
 	case "ClearBit":
 		return e.executeClearBit(ctx, index, c, opt)
 	case "Count":
@@ -207,8 +207,8 @@ func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, sl
 	return other, nil
 }
 
-// executeFieldMin executes a Min() call.
-func (e *Executor) executeFieldMin(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
+// executeMin executes a Min() call.
+func (e *Executor) executeMin(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
 	if frame := c.Args["frame"]; frame == "" {
 		return ValCount{}, errors.New("Min(): frame required")
 	} else if field := c.Args["field"]; field == "" {
@@ -221,7 +221,7 @@ func (e *Executor) executeFieldMin(ctx context.Context, index string, c *pql.Cal
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(slice uint64) (interface{}, error) {
-		return e.executeFieldMinSlice(ctx, index, c, slice)
+		return e.executeMinSlice(ctx, index, c, slice)
 	}
 
 	// Merge returned results at coordinating node.
@@ -242,8 +242,8 @@ func (e *Executor) executeFieldMin(ctx context.Context, index string, c *pql.Cal
 	return other, nil
 }
 
-// executeFieldMax executes a Max() call.
-func (e *Executor) executeFieldMax(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
+// executeMax executes a Max() call.
+func (e *Executor) executeMax(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
 	if frame := c.Args["frame"]; frame == "" {
 		return ValCount{}, errors.New("Max(): frame required")
 	} else if field := c.Args["field"]; field == "" {
@@ -256,7 +256,7 @@ func (e *Executor) executeFieldMax(ctx context.Context, index string, c *pql.Cal
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(slice uint64) (interface{}, error) {
-		return e.executeFieldMaxSlice(ctx, index, c, slice)
+		return e.executeMaxSlice(ctx, index, c, slice)
 	}
 
 	// Merge returned results at coordinating node.
@@ -391,7 +391,7 @@ func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pq
 		return ValCount{}, nil
 	}
 
-	vsum, vcount, err := fragment.FieldSum(filter, field.BitDepth())
+	vsum, vcount, err := fragment.Sum(filter, field.BitDepth())
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "computing sum")
 	}
@@ -401,8 +401,8 @@ func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pq
 	}, nil
 }
 
-// executeFieldMinSlice calculates the min for fields on a slice.
-func (e *Executor) executeFieldMinSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
+// executeMinSlice calculates the min for fields on a slice.
+func (e *Executor) executeMinSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
 	var filter *Row
 	if len(c.Children) == 1 {
 		row, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
@@ -430,7 +430,7 @@ func (e *Executor) executeFieldMinSlice(ctx context.Context, index string, c *pq
 		return ValCount{}, nil
 	}
 
-	fmin, fcount, err := fragment.FieldMin(filter, field.BitDepth())
+	fmin, fcount, err := fragment.Min(filter, field.BitDepth())
 	if err != nil {
 		return ValCount{}, err
 	}
@@ -440,8 +440,8 @@ func (e *Executor) executeFieldMinSlice(ctx context.Context, index string, c *pq
 	}, nil
 }
 
-// executeFieldMaxSlice calculates the max for fields on a slice.
-func (e *Executor) executeFieldMaxSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
+// executeMaxSlice calculates the max for fields on a slice.
+func (e *Executor) executeMaxSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
 	var filter *Row
 	if len(c.Children) == 1 {
 		row, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
@@ -469,7 +469,7 @@ func (e *Executor) executeFieldMaxSlice(ctx context.Context, index string, c *pq
 		return ValCount{}, nil
 	}
 
-	fmax, fcount, err := fragment.FieldMax(filter, field.BitDepth())
+	fmax, fcount, err := fragment.Max(filter, field.BitDepth())
 	if err != nil {
 		return ValCount{}, err
 	}
@@ -552,7 +552,7 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNSlice: %v", err)
 	}
-	field, _ := c.Args["field"].(string)
+	field, _ := c.Args["field"].(string) // TODO: rename this to something other than field
 	rowIDs, _, err := c.UintSliceArg("ids")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNSlice: %v", err)
@@ -600,7 +600,7 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 		N:                 int(n),
 		Src:               src,
 		RowIDs:            rowIDs,
-		FilterField:       field,
+		FilterName:        field,
 		FilterValues:      filters,
 		MinThreshold:      minThreshold,
 		TanimotoThreshold: tanimotoThreshold,
@@ -687,7 +687,7 @@ func (e *Executor) executeIntersectSlice(ctx context.Context, index string, c *p
 func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
 	// Handle field ranges differently.
 	if c.HasConditionArg() {
-		return e.executeFieldRangeSlice(ctx, index, c, slice)
+		return e.executeBSIGroupRangeSlice(ctx, index, c, slice)
 	}
 
 	// Parse frame, use default if unset.
@@ -756,8 +756,8 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	return row, nil
 }
 
-// executeFieldRangeSlice executes a range(field) call for a local slice.
-func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
+// executeBSIGroupRangeSlice executes a range(field) call for a local slice.
+func (e *Executor) executeBSIGroupRangeSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
 	// Parse frame, use default if unset.
 	frame, _ := c.Args["frame"].(string)
 	if frame == "" {
@@ -790,12 +790,12 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		fieldName, cond = k, vv
 	}
 
-	// EQ null           (not implemented: flip frag.FieldNotNull with max ColumnID)
-	// NEQ null          frag.FieldNotNull()
-	// BETWEEN a,b(in)   BETWEEN/frag.FieldRangeBetween()
-	// BETWEEN a,b(out)  BETWEEN/frag.FieldNotNull()
-	// EQ <int>          frag.FieldRange
-	// NEQ <int>         frag.FieldRange
+	// EQ null           (not implemented: flip frag.NotNull with max ColumnID)
+	// NEQ null          frag.NotNull()
+	// BETWEEN a,b(in)   BETWEEN/frag.RangeBetween()
+	// BETWEEN a,b(out)  BETWEEN/frag.NotNull()
+	// EQ <int>          frag.RangeOp
+	// NEQ <int>         frag.RangeOp
 
 	// Handle `!= null`.
 	if cond.Op == pql.NEQ && cond.Value == nil {
@@ -811,7 +811,7 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 			return NewRow(), nil
 		}
 
-		return frag.FieldNotNull(field.BitDepth())
+		return frag.NotNull(field.BitDepth())
 
 	} else if cond.Op == pql.BETWEEN {
 
@@ -826,7 +826,7 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		}
 
 		// The reason we don't just call:
-		//     return f.FieldRangeBetween(fieldName, predicates[0], predicates[1])
+		//     return f.RangeBetween(fieldName, predicates[0], predicates[1])
 		// here is because we need the call to be slice-specific.
 
 		// Find field.
@@ -849,10 +849,10 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		// If the query is asking for the entire valid range, just return
 		// the not-null bitmap for the field.
 		if predicates[0] <= field.Min && predicates[1] >= field.Max {
-			return frag.FieldNotNull(field.BitDepth())
+			return frag.NotNull(field.BitDepth())
 		}
 
-		return frag.FieldRangeBetween(field.BitDepth(), baseValueMin, baseValueMax)
+		return frag.RangeBetween(field.BitDepth(), baseValueMin, baseValueMax)
 
 	} else {
 
@@ -882,16 +882,16 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		// LT[E] and GT[E] should return all not-null if selected range fully encompasses valid field range.
 		if (cond.Op == pql.LT && value > field.Max) || (cond.Op == pql.LTE && value >= field.Max) ||
 			(cond.Op == pql.GT && value < field.Min) || (cond.Op == pql.GTE && value <= field.Min) {
-			return frag.FieldNotNull(field.BitDepth())
+			return frag.NotNull(field.BitDepth())
 		}
 
 		// outOfRange for NEQ should return all not-null.
 		if outOfRange && cond.Op == pql.NEQ {
-			return frag.FieldNotNull(field.BitDepth())
+			return frag.NotNull(field.BitDepth())
 		}
 
 		f.Stats.Count("range:field", 1, 1.0)
-		return frag.FieldRange(cond.Op, field.BitDepth(), baseValue)
+		return frag.RangeOp(cond.Op, field.BitDepth(), baseValue)
 	}
 }
 
