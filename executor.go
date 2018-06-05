@@ -790,12 +790,12 @@ func (e *Executor) executeBSIGroupRangeSlice(ctx context.Context, index string, 
 		fieldName, cond = k, vv
 	}
 
-	// EQ null           (not implemented: flip frag.FieldNotNull with max ColumnID)
-	// NEQ null          frag.FieldNotNull()
-	// BETWEEN a,b(in)   BETWEEN/frag.FieldRangeBetween()
-	// BETWEEN a,b(out)  BETWEEN/frag.FieldNotNull()
-	// EQ <int>          frag.FieldRange
-	// NEQ <int>         frag.FieldRange
+	// EQ null           (not implemented: flip frag.NotNull with max ColumnID)
+	// NEQ null          frag.NotNull()
+	// BETWEEN a,b(in)   BETWEEN/frag.RangeBetween()
+	// BETWEEN a,b(out)  BETWEEN/frag.NotNull()
+	// EQ <int>          frag.RangeOp
+	// NEQ <int>         frag.RangeOp
 
 	// Handle `!= null`.
 	if cond.Op == pql.NEQ && cond.Value == nil {
@@ -826,7 +826,7 @@ func (e *Executor) executeBSIGroupRangeSlice(ctx context.Context, index string, 
 		}
 
 		// The reason we don't just call:
-		//     return f.FieldRangeBetween(fieldName, predicates[0], predicates[1])
+		//     return f.RangeBetween(fieldName, predicates[0], predicates[1])
 		// here is because we need the call to be slice-specific.
 
 		// Find field.
