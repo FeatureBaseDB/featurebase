@@ -290,7 +290,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		}
 
 		f := hldr.Frame("i", "f")
-		if value, exists, err := f.Value(10, "f"); err != nil {
+		if value, exists, err := f.Value(10); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
@@ -298,7 +298,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatalf("unexpected value: %v", value)
 		}
 
-		if value, exists, err := f.Value(100, "f"); err != nil {
+		if value, exists, err := f.Value(100); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")

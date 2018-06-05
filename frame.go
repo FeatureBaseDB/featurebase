@@ -706,14 +706,14 @@ func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 }
 
 // Value reads a bsiGroup value for a column.
-func (f *Frame) Value(columnID uint64, name string) (value int64, exists bool, err error) {
-	field := f.bsiGroup(name)
+func (f *Frame) Value(columnID uint64) (value int64, exists bool, err error) {
+	field := f.bsiGroup(f.name)
 	if field == nil {
 		return 0, false, ErrBSIGroupNotFound
 	}
 
 	// Fetch target view.
-	view := f.View(viewBSIGroupPrefix + name)
+	view := f.View(viewBSIGroupPrefix + f.name)
 	if view == nil {
 		return 0, false, nil
 	}
