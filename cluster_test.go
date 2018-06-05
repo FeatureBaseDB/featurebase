@@ -416,7 +416,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Add Bit Data to node0.
-		if err := tc.CreateFrame("i", "f", FrameOptions{}); err != nil {
+		if err := tc.CreateFrame("i", "f", FieldOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		tc.SetBit("i", "f", "standard", 1, 101, nil)

@@ -104,7 +104,7 @@ func (t *ClusterCluster) CreateIndex(name string) error {
 	return nil
 }
 
-func (t *ClusterCluster) CreateFrame(index, frame string, opt FrameOptions) error {
+func (t *ClusterCluster) CreateFrame(index, frame string, opt FieldOptions) error {
 	for _, c := range t.Clusters {
 		idx, err := c.Holder.CreateIndexIfNotExists(index, IndexOptions{})
 		if err != nil {

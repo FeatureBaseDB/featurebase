@@ -35,7 +35,7 @@ type Index struct {
 	name string
 
 	// Frames by name.
-	frames map[string]*Frame
+	frames map[string]*Field
 
 	// Max Slice on any node in the cluster, according to this node.
 	remoteMaxSlice uint64
@@ -61,7 +61,7 @@ func NewIndex(path, name string) (*Index, error) {
 	return &Index{
 		path:   path,
 		name:   name,
-		frames: make(map[string]*Frame),
+		frames: make(map[string]*Field),
 
 		remoteMaxSlice: 0,
 
@@ -203,7 +203,7 @@ func (i *Index) Close() error {
 			return errors.Wrap(err, "closing frame")
 		}
 	}
-	i.frames = make(map[string]*Frame)
+	i.frames = make(map[string]*Field)
 
 	return nil
 }
@@ -238,24 +238,24 @@ func (i *Index) SetRemoteMaxSlice(newmax uint64) {
 func (i *Index) FramePath(name string) string { return filepath.Join(i.path, name) }
 
 // Frame returns a frame in the index by name.
-func (i *Index) Frame(name string) *Frame {
+func (i *Index) Frame(name string) *Field {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 	return i.frame(name)
 }
 
-func (i *Index) frame(name string) *Frame { return i.frames[name] }
+func (i *Index) frame(name string) *Field { return i.frames[name] }
 
 // Frames returns a list of all frames in the index.
-func (i *Index) Frames() []*Frame {
+func (i *Index) Frames() []*Field {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 
-	a := make([]*Frame, 0, len(i.frames))
+	a := make([]*Field, 0, len(i.frames))
 	for _, f := range i.frames {
 		a = append(a, f)
 	}
-	sort.Sort(frameSlice(a))
+	sort.Sort(fieldSlice(a))
 
 	return a
 }
@@ -268,7 +268,7 @@ func (i *Index) RecalculateCaches() {
 }
 
 // CreateFrame creates a frame.
-func (i *Index) CreateFrame(name string, opt FrameOptions) (*Frame, error) {
+func (i *Index) CreateFrame(name string, opt FieldOptions) (*Field, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -280,7 +280,7 @@ func (i *Index) CreateFrame(name string, opt FrameOptions) (*Frame, error) {
 }
 
 // CreateFrameIfNotExists creates a frame with the given options if it doesn't exist.
-func (i *Index) CreateFrameIfNotExists(name string, opt FrameOptions) (*Frame, error) {
+func (i *Index) CreateFrameIfNotExists(name string, opt FieldOptions) (*Field, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -292,7 +292,7 @@ func (i *Index) CreateFrameIfNotExists(name string, opt FrameOptions) (*Frame, e
 	return i.createFrame(name, opt)
 }
 
-func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
+func (i *Index) createFrame(name string, opt FieldOptions) (*Field, error) {
 	if name == "" {
 		return nil, errors.New("frame name required")
 	} else if opt.CacheType != "" && !IsValidCacheType(opt.CacheType) {
@@ -332,8 +332,8 @@ func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
 	return f, nil
 }
 
-func (i *Index) newFrame(path, name string) (*Frame, error) {
-	f, err := NewFrame(path, i.name, name)
+func (i *Index) newFrame(path, name string) (*Field, error) {
+	f, err := NewField(path, i.name, name)
 	if err != nil {
 		return nil, err
 	}
@@ -380,7 +380,7 @@ func (p indexSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 // IndexInfo represents schema information for an index.
 type IndexInfo struct {
 	Name   string       `json:"name"`
-	Frames []*FrameInfo `json:"frames"`
+	Frames []*FieldInfo `json:"frames"`
 }
 
 type indexInfoSlice []*IndexInfo
@@ -402,7 +402,7 @@ func EncodeIndexes(a []*Index) []*internal.Index {
 func encodeIndex(d *Index) *internal.Index {
 	return &internal.Index{
 		Name:   d.name,
-		Frames: encodeFrames(d.Frames()),
+		Frames: encodeFields(d.Frames()),
 	}
 }
 

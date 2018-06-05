@@ -546,7 +546,7 @@ func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
 		return errors.Wrap(err, "unmarshaling unexpected keys")
 	}
 
-	validFrameOptions := getValidOptions(FrameOptions{})
+	validFrameOptions := getValidOptions(FieldOptions{})
 	err := validateOptions(m, validFrameOptions)
 	if err != nil {
 		return err
@@ -575,7 +575,7 @@ func getValidOptions(option interface{}) []string {
 }
 
 type postFrameRequest struct {
-	Options FrameOptions `json:"options"`
+	Options FieldOptions `json:"options"`
 }
 
 type postFrameResponse struct{}

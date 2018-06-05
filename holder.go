@@ -215,14 +215,14 @@ func (h *Holder) Schema() []*IndexInfo {
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{Name: index.Name()}
 		for _, frame := range index.Frames() {
-			fi := &FrameInfo{Name: frame.Name(), Options: frame.Options()}
+			fi := &FieldInfo{Name: frame.Name(), Options: frame.Options()}
 			for _, view := range frame.Views() {
 				fi.Views = append(fi.Views, &ViewInfo{Name: view.Name()})
 			}
 			sort.Sort(viewInfoSlice(fi.Views))
 			di.Frames = append(di.Frames, fi)
 		}
-		sort.Sort(frameInfoSlice(di.Frames))
+		sort.Sort(fieldInfoSlice(di.Frames))
 		a = append(a, di)
 	}
 	sort.Sort(indexInfoSlice(a))
@@ -240,7 +240,7 @@ func (h *Holder) ApplySchema(schema *internal.Schema) error {
 		}
 		// Create frames that don't exist.
 		for _, f := range index.Frames {
-			opt := decodeFrameOptions(f.Meta)
+			opt := decodeFieldOptions(f.Meta)
 			frame, err := idx.CreateFrameIfNotExists(f.Name, *opt)
 			if err != nil {
 				return errors.Wrap(err, "creating frame")
@@ -391,7 +391,7 @@ func (h *Holder) DeleteIndex(name string) error {
 }
 
 // Frame returns the frame for an index and name.
-func (h *Holder) Frame(index, name string) *Frame {
+func (h *Holder) Frame(index, name string) *Field {
 	idx := h.Index(index)
 	if idx == nil {
 		return nil

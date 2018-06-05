@@ -246,8 +246,8 @@ func TestClient_ImportValue(t *testing.T) {
 
 	fldName := "f"
 
-	fo := pilosa.FrameOptions{
-		Type: pilosa.FrameTypeInt,
+	fo := pilosa.FieldOptions{
+		Type: pilosa.FieldTypeInt,
 		Min:  -100,
 		Max:  100,
 	}

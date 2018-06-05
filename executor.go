@@ -983,7 +983,7 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 }
 
 // executeClearBitView executes a ClearBit() call for a single view.
-func (e *Executor) executeClearBitView(ctx context.Context, index string, c *pql.Call, f *Frame, view string, colID, rowID uint64, opt *ExecOptions) (bool, error) {
+func (e *Executor) executeClearBitView(ctx context.Context, index string, c *pql.Call, f *Field, view string, colID, rowID uint64, opt *ExecOptions) (bool, error) {
 	slice := colID / SliceWidth
 	ret := false
 	for _, node := range e.Cluster.SliceNodes(index, slice) {
@@ -1058,7 +1058,7 @@ func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 }
 
 // executeSetBitView executes a SetBit() call for a specific view.
-func (e *Executor) executeSetBitView(ctx context.Context, index string, c *pql.Call, f *Frame, view string, colID, rowID uint64, timestamp *time.Time, opt *ExecOptions) (bool, error) {
+func (e *Executor) executeSetBitView(ctx context.Context, index string, c *pql.Call, f *Field, view string, colID, rowID uint64, timestamp *time.Time, opt *ExecOptions) (bool, error) {
 	slice := colID / SliceWidth
 	ret := false
 

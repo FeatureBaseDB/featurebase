@@ -50,10 +50,10 @@ func TestFrame_CreateViewIfNotExists(t *testing.T) {
 
 // Ensure frame can set its time quantum.
 func TestFrame_SetTimeQuantum(t *testing.T) {
-	fo := pilosa.FrameOptions{
+	fo := pilosa.FieldOptions{
 		Type: "time",
 	}
-	f := test.MustOpenFrame(pilosa.OptFrameFrameOptions(fo))
+	f := test.MustOpenFrame(pilosa.OptFieldFieldOptions(fo))
 	defer f.Close()
 
 	// Set & retrieve time quantum.
@@ -77,8 +77,8 @@ func TestFrame_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Type: pilosa.FrameTypeInt,
+		f, err := idx.CreateFrame("f", pilosa.FieldOptions{
+			Type: pilosa.FieldTypeInt,
 			Min:  0,
 			Max:  30,
 		})
@@ -114,8 +114,8 @@ func TestFrame_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Type: pilosa.FrameTypeInt,
+		f, err := idx.CreateFrame("f", pilosa.FieldOptions{
+			Type: pilosa.FieldTypeInt,
 			Min:  0,
 			Max:  30,
 		})
@@ -151,8 +151,8 @@ func TestFrame_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Type: pilosa.FrameTypeSet,
+		f, err := idx.CreateFrame("f", pilosa.FieldOptions{
+			Type: pilosa.FieldTypeSet,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -168,8 +168,8 @@ func TestFrame_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Type: pilosa.FrameTypeInt,
+		f, err := idx.CreateFrame("f", pilosa.FieldOptions{
+			Type: pilosa.FieldTypeInt,
 			Min:  20,
 			Max:  30,
 		})
@@ -187,8 +187,8 @@ func TestFrame_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Type: pilosa.FrameTypeInt,
+		f, err := idx.CreateFrame("f", pilosa.FieldOptions{
+			Type: pilosa.FieldTypeInt,
 			Min:  20,
 			Max:  30,
 		})
@@ -208,7 +208,7 @@ func TestFrame_NameRestriction(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	frame, err := pilosa.NewFrame(path, "i", ".meta")
+	frame, err := pilosa.NewField(path, "i", ".meta")
 	if frame != nil {
 		t.Fatalf("unexpected frame name %s", err)
 	}
@@ -240,13 +240,13 @@ func TestFrame_NameValidation(t *testing.T) {
 		panic(err)
 	}
 	for _, name := range validFrameNames {
-		_, err := pilosa.NewFrame(path, "i", name)
+		_, err := pilosa.NewField(path, "i", name)
 		if err != nil {
 			t.Fatalf("unexpected frame name: %s %s", name, err)
 		}
 	}
 	for _, name := range invalidFrameNames {
-		_, err := pilosa.NewFrame(path, "i", name)
+		_, err := pilosa.NewField(path, "i", name)
 		if err == nil {
 			t.Fatalf("expected error on frame name: %s", name)
 		}

@@ -25,24 +25,24 @@ import (
 
 // Frame represents a test wrapper for pilosa.Frame.
 type Frame struct {
-	*pilosa.Frame
+	*pilosa.Field
 }
 
 // NewFrame returns a new instance of Frame d/0.
-func NewFrame(opt ...pilosa.FrameOption) *Frame {
+func NewFrame(opt ...pilosa.FieldOption) *Frame {
 	path, err := ioutil.TempDir("", "pilosa-frame-")
 	if err != nil {
 		panic(err)
 	}
-	frame, err := pilosa.NewFrame(path, "i", "f", opt...)
+	frame, err := pilosa.NewField(path, "i", "f", opt...)
 	if err != nil {
 		panic(err)
 	}
-	return &Frame{Frame: frame}
+	return &Frame{Field: frame}
 }
 
 // MustOpenFrame returns a new, opened frame at a temporary path. Panic on error.
-func MustOpenFrame(opt ...pilosa.FrameOption) *Frame {
+func MustOpenFrame(opt ...pilosa.FieldOption) *Frame {
 	f := NewFrame(opt...)
 	if err := f.Open(); err != nil {
 		panic(err)
@@ -53,18 +53,18 @@ func MustOpenFrame(opt ...pilosa.FrameOption) *Frame {
 // Close closes the frame and removes the underlying data.
 func (f *Frame) Close() error {
 	defer os.RemoveAll(f.Path())
-	return f.Frame.Close()
+	return f.Field.Close()
 }
 
 // Reopen closes the index and reopens it.
 func (f *Frame) Reopen() error {
 	var err error
-	if err := f.Frame.Close(); err != nil {
+	if err := f.Field.Close(); err != nil {
 		return err
 	}
 
 	path, index, name := f.Path(), f.Index(), f.Name()
-	f.Frame, err = pilosa.NewFrame(path, index, name)
+	f.Field, err = pilosa.NewField(path, index, name)
 	if err != nil {
 		return err
 	}

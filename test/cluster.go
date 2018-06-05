@@ -114,7 +114,7 @@ func (t *TestCluster) CreateIndex(name string) error {
 	return nil
 }
 
-func (t *TestCluster) CreateFrame(index, frame string, opt pilosa.FrameOptions) error {
+func (t *TestCluster) CreateFrame(index, frame string, opt pilosa.FieldOptions) error {
 	for _, c := range t.Clusters {
 		idx, err := c.Holder.CreateIndexIfNotExists(index, pilosa.IndexOptions{})
 		if err != nil {

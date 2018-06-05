@@ -41,7 +41,7 @@ type ImportCommand struct {
 
 	// Options for index & frame to be created if they don't exist
 	IndexOptions pilosa.IndexOptions
-	FrameOptions pilosa.FrameOptions
+	FrameOptions pilosa.FieldOptions
 
 	// CreateSchema ensures the schema exists before import
 	CreateSchema bool
@@ -103,7 +103,7 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 	}
 
 	// Determine the frame type in order to correctly handle the input data.
-	frameType := pilosa.DefaultFrameType
+	frameType := pilosa.DefaultFieldType
 	schema, err := cmd.Client.Schema(ctx)
 	if err != nil {
 		return errors.Wrap(err, "getting schema")
@@ -144,7 +144,7 @@ func (cmd *ImportCommand) ensureSchema(ctx context.Context) error {
 // importPath parses a path into bits and imports it to the server.
 func (cmd *ImportCommand) importPath(ctx context.Context, frameType, path string) error {
 	// If frameType is `int`, treat the import data as values to be range-encoded.
-	if frameType == pilosa.FrameTypeInt {
+	if frameType == pilosa.FieldTypeInt {
 		return cmd.bufferValues(ctx, path)
 	} else {
 		if cmd.StringKeys {

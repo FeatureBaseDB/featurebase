@@ -82,7 +82,7 @@ func (h *Holder) MustCreateIndexIfNotExists(index string, opt pilosa.IndexOption
 
 // MustCreateFrameIfNotExists returns a given frame. Panic on error.
 func (h *Holder) MustCreateFrameIfNotExists(index, frame string) *Frame {
-	f, err := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{}).CreateFrameIfNotExists(frame, pilosa.FrameOptions{})
+	f, err := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{}).CreateFrameIfNotExists(frame, pilosa.FieldOptions{})
 	if err != nil {
 		panic(err)
 	}
@@ -92,7 +92,7 @@ func (h *Holder) MustCreateFrameIfNotExists(index, frame string) *Frame {
 // MustCreateFragmentIfNotExists returns a given fragment. Panic on error.
 func (h *Holder) MustCreateFragmentIfNotExists(index, frame, view string, slice uint64) *Fragment {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := idx.CreateFrameIfNotExists(frame, pilosa.FrameOptions{})
+	f, err := idx.CreateFrameIfNotExists(frame, pilosa.FieldOptions{})
 	if err != nil {
 		panic(err)
 	}
@@ -110,7 +110,7 @@ func (h *Holder) MustCreateFragmentIfNotExists(index, frame, view string, slice 
 // MustCreateRankedFragmentIfNotExists returns a given fragment with a ranked cache. Panic on error.
 func (h *Holder) MustCreateRankedFragmentIfNotExists(index, frame, view string, slice uint64) *Fragment {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := idx.CreateFrameIfNotExists(frame, pilosa.FrameOptions{CacheType: pilosa.CacheTypeRanked})
+	f, err := idx.CreateFrameIfNotExists(frame, pilosa.FieldOptions{CacheType: pilosa.CacheTypeRanked})
 	if err != nil {
 		panic(err)
 	}

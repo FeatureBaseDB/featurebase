@@ -19,7 +19,7 @@ func TestMonitorAntiEntropy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
-	err = client.CreateFrame(context.Background(), "balh", "fralh", pilosa.FrameOptions{})
+	err = client.CreateFrame(context.Background(), "balh", "fralh", pilosa.FieldOptions{})
 	if err != nil {
 		t.Fatalf("creating frame: %v", err)
 	}

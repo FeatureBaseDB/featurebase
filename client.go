@@ -330,7 +330,7 @@ func (c *InternalHTTPClient) EnsureIndex(ctx context.Context, name string, optio
 	return err
 }
 
-func (c *InternalHTTPClient) EnsureFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) error {
+func (c *InternalHTTPClient) EnsureFrame(ctx context.Context, indexName string, frameName string, options FieldOptions) error {
 	err := c.CreateFrame(ctx, indexName, frameName, options)
 	if err == nil || err == ErrFrameExists {
 		return nil
@@ -616,7 +616,7 @@ func (c *InternalHTTPClient) backupSliceNode(ctx context.Context, index, frame s
 }
 
 // CreateFrame creates a new frame on the server.
-func (c *InternalHTTPClient) CreateFrame(ctx context.Context, index, frame string, opt FrameOptions) error {
+func (c *InternalHTTPClient) CreateFrame(ctx context.Context, index, frame string, opt FieldOptions) error {
 	if index == "" {
 		return ErrIndexRequired
 	}
@@ -1056,10 +1056,10 @@ type InternalClient interface {
 	Import(ctx context.Context, index, frame string, slice uint64, bits []Bit) error
 	ImportK(ctx context.Context, index, frame string, bits []Bit) error
 	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
-	EnsureFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) error
+	EnsureFrame(ctx context.Context, indexName string, frameName string, options FieldOptions) error
 	ImportValue(ctx context.Context, index, frame string, slice uint64, vals []FieldValue) error
 	ExportCSV(ctx context.Context, index, frame string, slice uint64, w io.Writer) error
-	CreateFrame(ctx context.Context, index, frame string, opt FrameOptions) error
+	CreateFrame(ctx context.Context, index, frame string, opt FieldOptions) error
 	FragmentBlocks(ctx context.Context, index, frame string, slice uint64) ([]FragmentBlock, error)
 	BlockData(ctx context.Context, index, frame string, slice uint64, block int) ([]uint64, []uint64, error)
 	ColumnAttrDiff(ctx context.Context, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)

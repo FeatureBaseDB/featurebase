@@ -31,7 +31,7 @@ import (
 
 // Default frame settings.
 const (
-	DefaultFrameType = FrameTypeSet
+	DefaultFieldType = FieldTypeSet
 
 	DefaultCacheType = CacheTypeRanked
 
@@ -39,15 +39,15 @@ const (
 	DefaultCacheSize = 50000
 )
 
-// Frame types.
+// Field types.
 const (
-	FrameTypeSet  = "set"
-	FrameTypeInt  = "int"
-	FrameTypeTime = "time"
+	FieldTypeSet  = "set"
+	FieldTypeInt  = "int"
+	FieldTypeTime = "time"
 )
 
-// Frame represents a container for views.
-type Frame struct {
+// Field represents a container for views.
+type Field struct {
 	mu    sync.RWMutex
 	path  string
 	index string
@@ -61,33 +61,33 @@ type Frame struct {
 	broadcaster Broadcaster
 	Stats       StatsClient
 
-	// Frame options.
-	options FrameOptions
+	// Field options.
+	options FieldOptions
 
 	bsiGroups []*bsiGroup
 
 	Logger Logger
 }
 
-// FrameOption is a functional option type for pilosa.Frame.
-type FrameOption func(f *Frame) error
+// FieldOption is a functional option type for pilosa.Fielde.
+type FieldOption func(f *Field) error
 
-// TODO: break these out into separate Options (not a FrameOptions object)
-func OptFrameFrameOptions(o FrameOptions) FrameOption {
-	return func(f *Frame) error {
+// TODO: break these out into separate Options (not a FieldOptions object)
+func OptFieldFieldOptions(o FieldOptions) FieldOption {
+	return func(f *Field) error {
 		f.options = o
 		return nil
 	}
 }
 
-// NewFrame returns a new instance of frame.
-func NewFrame(path, index, name string, opts ...FrameOption) (*Frame, error) {
+// NewField returns a new instance of frame.
+func NewField(path, index, name string, opts ...FieldOption) (*Field, error) {
 	err := ValidateName(name)
 	if err != nil {
 		return nil, err
 	}
 
-	f := &Frame{
+	f := &Field{
 		path:  path,
 		index: index,
 		name:  name,
@@ -99,8 +99,8 @@ func NewFrame(path, index, name string, opts ...FrameOption) (*Frame, error) {
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
 
-		options: FrameOptions{
-			Type:      DefaultFrameType,
+		options: FieldOptions{
+			Type:      DefaultFieldType,
 			CacheType: DefaultCacheType,
 			CacheSize: DefaultCacheSize,
 		},
@@ -119,19 +119,19 @@ func NewFrame(path, index, name string, opts ...FrameOption) (*Frame, error) {
 }
 
 // Name returns the name the frame was initialized with.
-func (f *Frame) Name() string { return f.name }
+func (f *Field) Name() string { return f.name }
 
 // Index returns the index name the frame was initialized with.
-func (f *Frame) Index() string { return f.index }
+func (f *Field) Index() string { return f.index }
 
 // Path returns the path the frame was initialized with.
-func (f *Frame) Path() string { return f.path }
+func (f *Field) Path() string { return f.path }
 
 // RowAttrStore returns the attribute storage.
-func (f *Frame) RowAttrStore() AttrStore { return f.rowAttrStore }
+func (f *Field) RowAttrStore() AttrStore { return f.rowAttrStore }
 
 // MaxSlice returns the max slice in the frame.
-func (f *Frame) MaxSlice() uint64 {
+func (f *Field) MaxSlice() uint64 {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
@@ -145,14 +145,14 @@ func (f *Frame) MaxSlice() uint64 {
 }
 
 // Type returns the frame type.
-func (f *Frame) Type() string {
+func (f *Field) Type() string {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.options.Type
 }
 
 // CacheType returns the caching mode for the frame.
-func (f *Frame) CacheType() string {
+func (f *Field) CacheType() string {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.options.CacheType
@@ -160,7 +160,7 @@ func (f *Frame) CacheType() string {
 
 // SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
 // defaults to DefaultCacheSize 50000
-func (f *Frame) SetCacheSize(v uint32) error {
+func (f *Field) SetCacheSize(v uint32) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -179,7 +179,7 @@ func (f *Frame) SetCacheSize(v uint32) error {
 }
 
 // CacheSize returns the ranked frame cache size.
-func (f *Frame) CacheSize() uint32 {
+func (f *Field) CacheSize() uint32 {
 	f.mu.RLock()
 	v := f.options.CacheSize
 	f.mu.RUnlock()
@@ -187,14 +187,14 @@ func (f *Frame) CacheSize() uint32 {
 }
 
 // Options returns all options for this frame.
-func (f *Frame) Options() FrameOptions {
+func (f *Field) Options() FieldOptions {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.options
 }
 
 // Open opens and initializes the frame.
-func (f *Frame) Open() error {
+func (f *Field) Open() error {
 	if err := func() error {
 		// Ensure the frame's path exists.
 		if err := os.MkdirAll(f.path, 0777); err != nil {
@@ -228,7 +228,7 @@ func (f *Frame) Open() error {
 }
 
 // openViews opens and initializes the views inside the frame.
-func (f *Frame) openViews() error {
+func (f *Field) openViews() error {
 	file, err := os.Open(filepath.Join(f.path, "views"))
 	if os.IsNotExist(err) {
 		return nil
@@ -260,7 +260,7 @@ func (f *Frame) openViews() error {
 }
 
 // loadMeta reads meta data for the frame, if any.
-func (f *Frame) loadMeta() error {
+func (f *Field) loadMeta() error {
 	var pb internal.FrameMeta
 
 	// Read data from meta file.
@@ -287,7 +287,7 @@ func (f *Frame) loadMeta() error {
 }
 
 // saveMeta writes meta data for the frame.
-func (f *Frame) saveMeta() error {
+func (f *Field) saveMeta() error {
 	// Marshal metadata.
 	fo := f.options
 	buf, err := proto.Marshal(fo.Encode())
@@ -304,10 +304,10 @@ func (f *Frame) saveMeta() error {
 }
 
 // applyOptions configures the frame based on opt.
-func (f *Frame) applyOptions(opt FrameOptions) error {
+func (f *Field) applyOptions(opt FieldOptions) error {
 	switch opt.Type {
-	case FrameTypeSet, "":
-		f.options.Type = FrameTypeSet
+	case FieldTypeSet, "":
+		f.options.Type = FieldTypeSet
 		if opt.CacheType != "" {
 			f.options.CacheType = opt.CacheType
 		}
@@ -317,7 +317,7 @@ func (f *Frame) applyOptions(opt FrameOptions) error {
 		f.options.Min = 0
 		f.options.Max = 0
 		f.options.TimeQuantum = ""
-	case FrameTypeInt:
+	case FieldTypeInt:
 		f.options.Type = opt.Type
 		f.options.CacheType = CacheTypeNone
 		f.options.CacheSize = 0
@@ -339,7 +339,7 @@ func (f *Frame) applyOptions(opt FrameOptions) error {
 		if err := f.createBSIGroup(bsig); err != nil {
 			return errors.Wrap(err, "creating bsigroup")
 		}
-	case FrameTypeTime:
+	case FieldTypeTime:
 		f.options.Type = opt.Type
 		f.options.CacheType = CacheTypeNone
 		f.options.CacheSize = 0
@@ -358,7 +358,7 @@ func (f *Frame) applyOptions(opt FrameOptions) error {
 }
 
 // Close closes the frame and its views.
-func (f *Frame) Close() error {
+func (f *Field) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -379,7 +379,7 @@ func (f *Frame) Close() error {
 }
 
 // bsiGroup returns a bsiGroup by name.
-func (f *Frame) bsiGroup(name string) *bsiGroup {
+func (f *Field) bsiGroup(name string) *bsiGroup {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	for _, bsig := range f.bsiGroups {
@@ -391,7 +391,7 @@ func (f *Frame) bsiGroup(name string) *bsiGroup {
 }
 
 // hasBSIGroup returns true if a bsiGroup exists on the frame.
-func (f *Frame) hasBSIGroup(name string) bool {
+func (f *Field) hasBSIGroup(name string) bool {
 	for _, bsig := range f.bsiGroups {
 		if bsig.Name == name {
 			return true
@@ -401,7 +401,7 @@ func (f *Frame) hasBSIGroup(name string) bool {
 }
 
 // createBSIGroup creates a new bsiGroup on the frame.
-func (f *Frame) createBSIGroup(bsig *bsiGroup) error {
+func (f *Field) createBSIGroup(bsig *bsiGroup) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -414,7 +414,7 @@ func (f *Frame) createBSIGroup(bsig *bsiGroup) error {
 }
 
 // addBSIGroup adds a single bsiGroup to bsiGroups.
-func (f *Frame) addBSIGroup(bsig *bsiGroup) error {
+func (f *Field) addBSIGroup(bsig *bsiGroup) error {
 	if err := bsig.validate(); err != nil {
 		return errors.Wrap(err, "validating bsigroup")
 	} else if f.hasBSIGroup(bsig.Name) {
@@ -433,7 +433,7 @@ func (f *Frame) addBSIGroup(bsig *bsiGroup) error {
 }
 
 // deleteBSIGroupAndView deletes an existing bsiGroup on the schema.
-func (f *Frame) deleteBSIGroupAndView(name string) error {
+func (f *Field) deleteBSIGroupAndView(name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -458,7 +458,7 @@ func (f *Frame) deleteBSIGroupAndView(name string) error {
 }
 
 // deleteBSIGroup removes a single bsiGroup from bsiGroups.
-func (f *Frame) deleteBSIGroup(name string) error {
+func (f *Field) deleteBSIGroup(name string) error {
 	for i, bsig := range f.bsiGroups {
 		if bsig.Name == name {
 			copy(f.bsiGroups[i:], f.bsiGroups[i+1:])
@@ -470,14 +470,14 @@ func (f *Frame) deleteBSIGroup(name string) error {
 }
 
 // TimeQuantum returns the time quantum for the frame.
-func (f *Frame) TimeQuantum() TimeQuantum {
+func (f *Field) TimeQuantum() TimeQuantum {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.options.TimeQuantum
 }
 
 // SetTimeQuantum sets the time quantum for the frame.
-func (f *Frame) SetTimeQuantum(q TimeQuantum) error {
+func (f *Field) SetTimeQuantum(q TimeQuantum) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -498,21 +498,21 @@ func (f *Frame) SetTimeQuantum(q TimeQuantum) error {
 }
 
 // ViewPath returns the path to a view in the frame.
-func (f *Frame) ViewPath(name string) string {
+func (f *Field) ViewPath(name string) string {
 	return filepath.Join(f.path, "views", name)
 }
 
 // View returns a view in the frame by name.
-func (f *Frame) View(name string) *View {
+func (f *Field) View(name string) *View {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.view(name)
 }
 
-func (f *Frame) view(name string) *View { return f.views[name] }
+func (f *Field) view(name string) *View { return f.views[name] }
 
 // Views returns a list of all views in the frame.
-func (f *Frame) Views() []*View {
+func (f *Field) Views() []*View {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
@@ -524,7 +524,7 @@ func (f *Frame) Views() []*View {
 }
 
 // viewNames returns a list of all views (as a string) in the frame.
-func (f *Frame) viewNames() []string {
+func (f *Field) viewNames() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -536,7 +536,7 @@ func (f *Frame) viewNames() []string {
 }
 
 // RecalculateCaches recalculates caches on every view in the frame.
-func (f *Frame) RecalculateCaches() {
+func (f *Field) RecalculateCaches() {
 	for _, view := range f.Views() {
 		view.RecalculateCaches()
 	}
@@ -544,7 +544,7 @@ func (f *Frame) RecalculateCaches() {
 
 // CreateViewIfNotExists returns the named view, creating it if necessary.
 // Additionally, a CreateViewMessage is sent to the cluster.
-func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
+func (f *Field) CreateViewIfNotExists(name string) (*View, error) {
 
 	view, created, err := f.createViewIfNotExistsBase(name)
 	if err != nil {
@@ -569,7 +569,7 @@ func (f *Frame) CreateViewIfNotExists(name string) (*View, error) {
 
 // createViewIfNotExistsBase returns the named view, creating it if necessary.
 // The returned bool indicates whether the view was created or not.
-func (f *Frame) createViewIfNotExistsBase(name string) (*View, bool, error) {
+func (f *Field) createViewIfNotExistsBase(name string) (*View, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -588,7 +588,7 @@ func (f *Frame) createViewIfNotExistsBase(name string) (*View, bool, error) {
 	return view, true, nil
 }
 
-func (f *Frame) newView(path, name string) *View {
+func (f *Field) newView(path, name string) *View {
 	view := NewView(path, f.index, f.name, name, f.options.CacheSize)
 	view.cacheType = f.options.CacheType
 	view.Logger = f.Logger
@@ -599,7 +599,7 @@ func (f *Frame) newView(path, name string) *View {
 }
 
 // DeleteView removes the view from the frame.
-func (f *Frame) DeleteView(name string) error {
+func (f *Field) DeleteView(name string) error {
 	view := f.views[name]
 	if view == nil {
 		return ErrInvalidView
@@ -621,7 +621,7 @@ func (f *Frame) DeleteView(name string) error {
 }
 
 // SetBit sets a bit on a view within the frame.
-func (f *Frame) SetBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
+func (f *Field) SetBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
 	// Validate view name.
 	if !IsValidView(name) {
 		return false, ErrInvalidView
@@ -663,7 +663,7 @@ func (f *Frame) SetBit(name string, rowID, colID uint64, t *time.Time) (changed 
 }
 
 // ClearBit clears a bit within the frame.
-func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
+func (f *Field) ClearBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
 	// Validate view name.
 	if !IsValidView(name) {
 		return false, ErrInvalidView
@@ -705,7 +705,7 @@ func (f *Frame) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 }
 
 // Value reads a frame value for a column.
-func (f *Frame) Value(columnID uint64) (value int64, exists bool, err error) {
+func (f *Field) Value(columnID uint64) (value int64, exists bool, err error) {
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return 0, false, ErrBSIGroupNotFound
@@ -727,7 +727,7 @@ func (f *Frame) Value(columnID uint64) (value int64, exists bool, err error) {
 }
 
 // SetValue sets a frame value for a column.
-func (f *Frame) SetValue(columnID uint64, value int64) (changed bool, err error) {
+func (f *Field) SetValue(columnID uint64, value int64) (changed bool, err error) {
 	// Fetch bsiGroup and validate value.
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
@@ -752,7 +752,7 @@ func (f *Frame) SetValue(columnID uint64, value int64) (changed bool, err error)
 
 // Sum returns the sum and count for a frame.
 // An optional filtering row can be provided.
-func (f *Frame) Sum(filter *Row, name string) (sum, count int64, err error) {
+func (f *Field) Sum(filter *Row, name string) (sum, count int64, err error) {
 	bsig := f.bsiGroup(name)
 	if bsig == nil {
 		return 0, 0, ErrBSIGroupNotFound
@@ -772,7 +772,7 @@ func (f *Frame) Sum(filter *Row, name string) (sum, count int64, err error) {
 
 // Min returns the min for a frame.
 // An optional filtering row can be provided.
-func (f *Frame) Min(filter *Row, name string) (min, count int64, err error) {
+func (f *Field) Min(filter *Row, name string) (min, count int64, err error) {
 	bsig := f.bsiGroup(name)
 	if bsig == nil {
 		return 0, 0, ErrBSIGroupNotFound
@@ -792,7 +792,7 @@ func (f *Frame) Min(filter *Row, name string) (min, count int64, err error) {
 
 // Max returns the max for a frame.
 // An optional filtering row can be provided.
-func (f *Frame) Max(filter *Row, name string) (max, count int64, err error) {
+func (f *Field) Max(filter *Row, name string) (max, count int64, err error) {
 	bsig := f.bsiGroup(name)
 	if bsig == nil {
 		return 0, 0, ErrBSIGroupNotFound
@@ -810,7 +810,7 @@ func (f *Frame) Max(filter *Row, name string) (max, count int64, err error) {
 	return int64(vmax) + bsig.Min, int64(vcount), nil
 }
 
-func (f *Frame) Range(name string, op pql.Token, predicate int64) (*Row, error) {
+func (f *Field) Range(name string, op pql.Token, predicate int64) (*Row, error) {
 	// Retrieve and validate bsiGroup.
 	bsig := f.bsiGroup(name)
 	if bsig == nil {
@@ -833,7 +833,7 @@ func (f *Frame) Range(name string, op pql.Token, predicate int64) (*Row, error) 
 	return view.rangeOp(op, bsig.BitDepth(), baseValue)
 }
 
-func (f *Frame) RangeBetween(name string, predicateMin, predicateMax int64) (*Row, error) {
+func (f *Field) RangeBetween(name string, predicateMin, predicateMax int64) (*Row, error) {
 	// Retrieve and validate bsiGroup.
 	bsig := f.bsiGroup(name)
 	if bsig == nil {
@@ -857,7 +857,7 @@ func (f *Frame) RangeBetween(name string, predicateMin, predicateMax int64) (*Ro
 }
 
 // Import bulk imports data.
-func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) error {
+func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) error {
 	// Determine quantum if timestamps are set.
 	q := f.TimeQuantum()
 	if hasTime(timestamps) && q == "" {
@@ -914,7 +914,7 @@ func (f *Frame) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 }
 
 // ImportValue bulk imports range-encoded value data.
-func (f *Frame) ImportValue(columnIDs []uint64, values []int64) error {
+func (f *Field) ImportValue(columnIDs []uint64, values []int64) error {
 	viewName := viewBSIGroupPrefix + f.name
 	// Get the bsiGroup so we know bitDepth.
 	bsig := f.bsiGroup(f.name)
@@ -970,17 +970,17 @@ func (f *Frame) ImportValue(columnIDs []uint64, values []int64) error {
 	return nil
 }
 
-// encodeFrames converts a into its internal representation.
-func encodeFrames(a []*Frame) []*internal.Frame {
+// encodeFields converts a into its internal representation.
+func encodeFields(a []*Field) []*internal.Frame {
 	other := make([]*internal.Frame, len(a))
 	for i := range a {
-		other[i] = encodeFrame(a[i])
+		other[i] = encodeField(a[i])
 	}
 	return other
 }
 
-// encodeFrame converts f into its internal representation.
-func encodeFrame(f *Frame) *internal.Frame {
+// encodeField converts f into its internal representation.
+func encodeField(f *Field) *internal.Frame {
 	fo := f.options
 	return &internal.Frame{
 		Name:  f.name,
@@ -989,45 +989,45 @@ func encodeFrame(f *Frame) *internal.Frame {
 	}
 }
 
-type frameSlice []*Frame
+type fieldSlice []*Field
 
-func (p frameSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
-func (p frameSlice) Len() int           { return len(p) }
-func (p frameSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
+func (p fieldSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p fieldSlice) Len() int           { return len(p) }
+func (p fieldSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
-// FrameInfo represents schema information for a frame.
-type FrameInfo struct {
+// FieldInfo represents schema information for a frame.
+type FieldInfo struct {
 	Name    string       `json:"name"`
-	Options FrameOptions `json:"options"`
+	Options FieldOptions `json:"options"`
 	Views   []*ViewInfo  `json:"views,omitempty"`
 }
 
-type frameInfoSlice []*FrameInfo
+type fieldInfoSlice []*FieldInfo
 
-func (p frameInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
-func (p frameInfoSlice) Len() int           { return len(p) }
-func (p frameInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
+func (p fieldInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p fieldInfoSlice) Len() int           { return len(p) }
+func (p fieldInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
-// FrameOptions represents options to set when initializing a frame.
-type FrameOptions struct {
+// FieldOptions represents options to set when initializing a field.
+type FieldOptions struct {
 	Type        string      `json:"type,omitempty"`
 	CacheType   string      `json:"cacheType,omitempty"`
 	CacheSize   uint32      `json:"cacheSize,omitempty"`
 	Min         int64       `json:"min,omitempty"`
 	Max         int64       `json:"max,omitempty"`
-	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"` // TODO: rename this Quantum?
+	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
 }
 
-// Validate ensures that FrameOption values are valid.
-func (o *FrameOptions) Validate() error {
+// Validate ensures that FieldOption values are valid.
+func (o *FieldOptions) Validate() error {
 	switch o.Type {
-	case FrameTypeSet, "":
+	case FieldTypeSet, "":
 		// TODO: cacheType, cacheSize validation
-	case FrameTypeInt:
+	case FieldTypeInt:
 		if o.Min > o.Max {
 			return ErrInvalidBSIGroupRange
 		}
-	case FrameTypeTime:
+	case FieldTypeTime:
 		if o.TimeQuantum == "" || !o.TimeQuantum.Valid() {
 			return ErrInvalidTimeQuantum
 		}
@@ -1038,11 +1038,11 @@ func (o *FrameOptions) Validate() error {
 }
 
 // Encode converts o into its internal representation.
-func (o *FrameOptions) Encode() *internal.FrameMeta {
-	return encodeFrameOptions(o)
+func (o *FieldOptions) Encode() *internal.FrameMeta {
+	return encodeFieldOptions(o)
 }
 
-func encodeFrameOptions(o *FrameOptions) *internal.FrameMeta {
+func encodeFieldOptions(o *FieldOptions) *internal.FrameMeta {
 	if o == nil {
 		return nil
 	}
@@ -1056,11 +1056,11 @@ func encodeFrameOptions(o *FrameOptions) *internal.FrameMeta {
 	}
 }
 
-func decodeFrameOptions(options *internal.FrameMeta) *FrameOptions {
+func decodeFieldOptions(options *internal.FrameMeta) *FieldOptions {
 	if options == nil {
 		return nil
 	}
-	return &FrameOptions{
+	return &FieldOptions{
 		Type:        options.Type,
 		CacheType:   options.CacheType,
 		CacheSize:   options.CacheSize,

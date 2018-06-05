@@ -460,7 +460,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
-		opt := decodeFrameOptions(obj.Meta)
+		opt := decodeFieldOptions(obj.Meta)
 		_, err := idx.CreateFrame(obj.Frame, *opt)
 		if err != nil {
 			return err

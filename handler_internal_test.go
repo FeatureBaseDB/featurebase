@@ -62,12 +62,12 @@ func TestPostFrameRequestUnmarshalJSON(t *testing.T) {
 		expected postFrameRequest
 		err      string
 	}{
-		{json: `{"options": {}}`, expected: postFrameRequest{Options: FrameOptions{}}},
+		{json: `{"options": {}}`, expected: postFrameRequest{Options: FieldOptions{}}},
 		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"option": {}}`, err: "Unknown key: option:map[]"},
 		{json: `{"options": {"badKey": "test"}}`, err: "Unknown key: badKey:test"},
 		{json: `{"options": {"inverseEnabled": true}}`, err: "Unknown key: inverseEnabled:true"},
-		{json: `{"options": {"cacheType": "type"}}`, expected: postFrameRequest{Options: FrameOptions{CacheType: "type"}}},
+		{json: `{"options": {"cacheType": "type"}}`, expected: postFrameRequest{Options: FieldOptions{CacheType: "type"}}},
 		{json: `{"options": {"inverse": true, "cacheType": "type"}}`, err: "Unknown key: inverse:true"},
 	}
 	for _, test := range tests {

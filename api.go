@@ -218,7 +218,7 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 }
 
 // CreateFrame makes the named frame in the named index with the given options.
-func (api *API) CreateFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) (*Frame, error) {
+func (api *API) CreateFrame(ctx context.Context, indexName string, frameName string, options FieldOptions) (*Field, error) {
 	if err := api.validate(apiCreateFrame); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -679,7 +679,7 @@ func (api *API) LongQueryTime() time.Duration {
 	return api.Cluster.LongQueryTime
 }
 
-func (api *API) indexFrame(indexName string, frameName string, slice uint64) (*Index, *Frame, error) {
+func (api *API) indexFrame(indexName string, frameName string, slice uint64) (*Index, *Field, error) {
 	// Validate that this handler owns the slice.
 	if !api.Cluster.OwnsSlice(api.LocalID(), indexName, slice) {
 		api.Logger.Printf("node %s does not own slice %d of index %s", api.LocalID(), slice, indexName)

@@ -754,7 +754,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	defer index.Close()
 
 	// Create frame.
-	frame, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{CacheType: pilosa.CacheTypeRanked, CacheSize: cacheSize})
+	frame, err := index.CreateFrameIfNotExists("f", pilosa.FieldOptions{CacheType: pilosa.CacheTypeRanked, CacheSize: cacheSize})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -924,7 +924,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 	defer index.Close()
 
 	// Create frame.
-	frame, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{CacheType: pilosa.CacheTypeRanked})
+	frame, err := index.CreateFrameIfNotExists("f", pilosa.FieldOptions{CacheType: pilosa.CacheTypeRanked})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -54,7 +54,7 @@ func TestMain_Set_Quick(t *testing.T) {
 			if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && !strings.Contains(err.Error(), "index already exists") {
 				t.Fatal(err)
 			}
-			if err := client.CreateFrame(context.Background(), "i", cmd.Frame, pilosa.FrameOptions{}); err != nil && !strings.Contains(err.Error(), "frame already exists") {
+			if err := client.CreateFrame(context.Background(), "i", cmd.Frame, pilosa.FieldOptions{}); err != nil && !strings.Contains(err.Error(), "frame already exists") {
 				t.Fatal(err)
 			}
 			if _, err := m.Query("i", "", fmt.Sprintf(`SetBit(row=%d, frame=%q, col=%d)`, cmd.ID, cmd.Frame, cmd.ColumnID)); err != nil {
@@ -123,11 +123,11 @@ func TestMain_SetRowAttrs(t *testing.T) {
 	client := m.Client()
 	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal(err)
-	} else if err := client.CreateFrame(context.Background(), "i", "x", pilosa.FrameOptions{}); err != nil {
+	} else if err := client.CreateFrame(context.Background(), "i", "x", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
-	} else if err := client.CreateFrame(context.Background(), "i", "z", pilosa.FrameOptions{}); err != nil {
+	} else if err := client.CreateFrame(context.Background(), "i", "z", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
-	} else if err := client.CreateFrame(context.Background(), "i", "neg", pilosa.FrameOptions{}); err != nil {
+	} else if err := client.CreateFrame(context.Background(), "i", "neg", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -200,7 +200,7 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 	client := m.Client()
 	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal(err)
-	} else if err := client.CreateFrame(context.Background(), "i", "x", pilosa.FrameOptions{}); err != nil {
+	} else if err := client.CreateFrame(context.Background(), "i", "x", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -286,7 +286,7 @@ func TestMain_RecalculateHashes(t *testing.T) {
 	if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal("create index:", err)
 	}
-	if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{CacheType: "ranked"}); err != nil {
+	if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FieldOptions{CacheType: "ranked"}); err != nil {
 		t.Fatal("create frame:", err)
 	}
 

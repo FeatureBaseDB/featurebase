@@ -29,7 +29,7 @@ func TestIndex_CreateFrameIfNotExists(t *testing.T) {
 	defer index.Close()
 
 	// Create frame.
-	f, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
+	f, err := index.CreateFrameIfNotExists("f", pilosa.FieldOptions{})
 	if err != nil {
 		t.Fatal(err)
 	} else if f == nil {
@@ -37,14 +37,14 @@ func TestIndex_CreateFrameIfNotExists(t *testing.T) {
 	}
 
 	// Retrieve existing frame.
-	other, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
+	other, err := index.CreateFrameIfNotExists("f", pilosa.FieldOptions{})
 	if err != nil {
 		t.Fatal(err)
-	} else if f.Frame != other.Frame {
+	} else if f.Field != other.Field {
 		t.Fatal("frame mismatch")
 	}
 
-	if f.Frame != index.Frame("f") {
+	if f.Field != index.Frame("f") {
 		t.Fatal("frame mismatch")
 	}
 }
@@ -57,8 +57,8 @@ func TestIndex_CreateFrame(t *testing.T) {
 			defer index.Close()
 
 			// Create frame with explicit quantum.
-			f, err := index.CreateFrame("f", pilosa.FrameOptions{
-				Type:        pilosa.FrameTypeTime,
+			f, err := index.CreateFrame("f", pilosa.FieldOptions{
+				Type:        pilosa.FieldTypeTime,
 				TimeQuantum: pilosa.TimeQuantum("YMDH"),
 			})
 			if err != nil {
@@ -76,20 +76,20 @@ func TestIndex_CreateFrame(t *testing.T) {
 			defer index.Close()
 
 			// Create frame with schema and verify it exists.
-			if f, err := index.CreateFrame("f", pilosa.FrameOptions{
-				Type: pilosa.FrameTypeInt,
+			if f, err := index.CreateFrame("f", pilosa.FieldOptions{
+				Type: pilosa.FieldTypeInt,
 				Min:  10,
 				Max:  20,
 			}); err != nil {
 				t.Fatal(err)
-			} else if !reflect.DeepEqual(f.Type(), pilosa.FrameTypeInt) {
+			} else if !reflect.DeepEqual(f.Type(), pilosa.FieldTypeInt) {
 				t.Fatalf("unexpected type: %#v", f.Type())
 			}
 
 			// Reopen the index & verify the fields are loaded.
 			if err := index.Reopen(); err != nil {
 				t.Fatal(err)
-			} else if f := index.Frame("f"); !reflect.DeepEqual(f.Type(), pilosa.FrameTypeInt) {
+			} else if f := index.Frame("f"); !reflect.DeepEqual(f.Type(), pilosa.FieldTypeInt) {
 				t.Fatalf("unexpected type after reopen: %#v", f.Type())
 			}
 		})
@@ -180,7 +180,7 @@ func TestIndex_DeleteFrame(t *testing.T) {
 	defer index.Close()
 
 	// Create frame.
-	if _, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
+	if _, err := index.CreateFrameIfNotExists("f", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
