@@ -470,17 +470,6 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if err := idx.DeleteFrame(obj.Frame); err != nil {
 			return err
 		}
-	case *internal.CreateBSIGroupMessage:
-		f := s.Holder.Frame(obj.Index, obj.Frame)
-		field := decodeBSIGroup(obj.BSIGroup)
-		if err := f.createBSIGroup(field); err != nil {
-			return err
-		}
-	case *internal.DeleteBSIGroupMessage:
-		f := s.Holder.Frame(obj.Index, obj.Frame)
-		if err := f.deleteBSIGroupAndView(obj.BSIGroup); err != nil {
-			return err
-		}
 	case *internal.CreateViewMessage:
 		f := s.Holder.Frame(obj.Index, obj.Frame)
 		if f == nil {

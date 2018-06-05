@@ -127,8 +127,6 @@ const (
 	MessageTypeDeleteFrame
 	MessageTypeCreateView
 	MessageTypeDeleteView
-	MessageTypeCreateBSIGroup
-	MessageTypeDeleteBSIGroup
 	MessageTypeClusterStatus
 	MessageTypeResizeInstruction
 	MessageTypeResizeInstructionComplete
@@ -157,10 +155,6 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 		typ = MessageTypeCreateView
 	case *internal.DeleteViewMessage:
 		typ = MessageTypeDeleteView
-	case *internal.CreateBSIGroupMessage:
-		typ = MessageTypeCreateBSIGroup
-	case *internal.DeleteBSIGroupMessage:
-		typ = MessageTypeDeleteBSIGroup
 	case *internal.ClusterStatus:
 		typ = MessageTypeClusterStatus
 	case *internal.ResizeInstruction:
@@ -207,10 +201,6 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 		m = &internal.CreateViewMessage{}
 	case MessageTypeDeleteView:
 		m = &internal.DeleteViewMessage{}
-	case MessageTypeCreateBSIGroup:
-		m = &internal.CreateBSIGroupMessage{}
-	case MessageTypeDeleteBSIGroup:
-		m = &internal.DeleteBSIGroupMessage{}
 	case MessageTypeClusterStatus:
 		m = &internal.ClusterStatus{}
 	case MessageTypeResizeInstruction:

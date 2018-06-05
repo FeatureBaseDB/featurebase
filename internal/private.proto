@@ -64,18 +64,6 @@ message DeleteFrameMessage {
     string Frame = 2;
 }
 
-message CreateBSIGroupMessage {
-    string Index = 1;
-    string Frame = 2;
-    BSIGroup BSIGroup = 3;
-}
-
-message DeleteBSIGroupMessage {
-    string Index = 1;
-    string Frame = 2;
-    string BSIGroup = 3;
-}
-
 message Frame {
     string Name = 1;
     FrameMeta Meta = 2;

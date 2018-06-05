@@ -488,67 +488,6 @@ func (api *API) Schema(ctx context.Context) []*IndexInfo {
 	return api.Holder.Schema()
 }
 
-// CreateField creates a new BSI field in the given index and frame.
-func (api *API) CreateField(ctx context.Context, indexName string, frameName string, bsig *bsiGroup) error {
-	if err := api.validate(apiCreateField); err != nil {
-		return errors.Wrap(err, "validating api method")
-	}
-
-	// Retrieve frame by name.
-	f := api.Holder.Frame(indexName, frameName)
-	if f == nil {
-		return ErrFrameNotFound
-	}
-
-	// Create new bsiGroup.
-	if err := f.createBSIGroup(bsig); err != nil {
-		return errors.Wrap(err, "creating bsigroup")
-	}
-
-	// Send the create bsigroup message to all nodes.
-	err := api.Broadcaster.SendSync(
-		&internal.CreateBSIGroupMessage{
-			Index:    indexName,
-			Frame:    frameName,
-			BSIGroup: encodeBSIGroup(bsig),
-		})
-	if err != nil {
-		api.Logger.Printf("problem sending CreateField message: %s", err)
-	}
-	return errors.Wrap(err, "sending CreateField message")
-}
-
-// TODO: remove this from the API
-// DeleteField deletes the given field.
-func (api *API) DeleteField(ctx context.Context, indexName string, frameName string, fieldName string) error {
-	if err := api.validate(apiDeleteField); err != nil {
-		return errors.Wrap(err, "validating api method")
-	}
-
-	// Retrieve frame by name.
-	f := api.Holder.Frame(indexName, frameName)
-	if f == nil {
-		return ErrFrameNotFound
-	}
-
-	// Delete field.
-	if err := f.deleteBSIGroupAndView(fieldName); err != nil {
-		return errors.Wrap(err, "deleting field")
-	}
-
-	// Send the delete field message to all nodes.
-	err := api.Broadcaster.SendSync(
-		&internal.DeleteBSIGroupMessage{
-			Index:    indexName,
-			Frame:    frameName,
-			BSIGroup: fieldName,
-		})
-	if err != nil {
-		api.Logger.Printf("problem sending DeleteField message: %s", err)
-	}
-	return errors.Wrap(err, "sending DeleteField message")
-}
-
 // Views returns the views in the given frame.
 func (api *API) Views(ctx context.Context, indexName string, frameName string) ([]*View, error) {
 	if err := api.validate(apiViews); err != nil {
@@ -851,10 +790,8 @@ type apiMethod int
 // API validation constants.
 const (
 	apiClusterMessage apiMethod = iota
-	apiCreateField
 	apiCreateFrame
 	apiCreateIndex
-	apiDeleteField
 	apiDeleteFrame
 	apiDeleteIndex
 	apiDeleteView
@@ -896,10 +833,8 @@ var methodsResizing = map[apiMethod]struct{}{
 }
 
 var methodsNormal = map[apiMethod]struct{}{
-	apiCreateField:       struct{}{},
 	apiCreateFrame:       struct{}{},
 	apiCreateIndex:       struct{}{},
-	apiDeleteField:       struct{}{},
 	apiDeleteFrame:       struct{}{},
 	apiDeleteIndex:       struct{}{},
 	apiDeleteView:        struct{}{},
