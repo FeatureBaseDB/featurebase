@@ -330,7 +330,7 @@ func (v *View) value(columnID uint64, bitDepth uint) (value uint64, exists bool,
 	if err != nil {
 		return value, exists, err
 	}
-	return frag.FieldValue(columnID, bitDepth)
+	return frag.Value(columnID, bitDepth)
 }
 
 // setValue uses a column of bits to set a multi-bit value.
@@ -346,7 +346,7 @@ func (v *View) setValue(columnID uint64, bitDepth uint, value uint64) (changed b
 // sum returns the sum & count of a field.
 func (v *View) sum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
 	for _, f := range v.Fragments() {
-		fsum, fcount, err := f.FieldSum(filter, bitDepth)
+		fsum, fcount, err := f.Sum(filter, bitDepth)
 		if err != nil {
 			return sum, count, err
 		}
@@ -360,7 +360,7 @@ func (v *View) sum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
 func (v *View) min(filter *Row, bitDepth uint) (min, count uint64, err error) {
 	var minHasValue bool
 	for _, f := range v.Fragments() {
-		fmin, fcount, err := f.FieldMin(filter, bitDepth)
+		fmin, fcount, err := f.Min(filter, bitDepth)
 		if err != nil {
 			return min, count, err
 		}
@@ -387,7 +387,7 @@ func (v *View) min(filter *Row, bitDepth uint) (min, count uint64, err error) {
 // max returns the max and count of a field.
 func (v *View) max(filter *Row, bitDepth uint) (max, count uint64, err error) {
 	for _, f := range v.Fragments() {
-		fmax, fcount, err := f.FieldMax(filter, bitDepth)
+		fmax, fcount, err := f.Max(filter, bitDepth)
 		if err != nil {
 			return max, count, err
 		}
@@ -403,7 +403,7 @@ func (v *View) max(filter *Row, bitDepth uint) (max, count uint64, err error) {
 func (v *View) rangeOp(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
 	r := NewRow()
 	for _, frag := range v.Fragments() {
-		other, err := frag.FieldRange(op, bitDepth, predicate)
+		other, err := frag.RangeOp(op, bitDepth, predicate)
 		if err != nil {
 			return nil, err
 		}
@@ -417,7 +417,7 @@ func (v *View) rangeOp(op pql.Token, bitDepth uint, predicate uint64) (*Row, err
 func (v *View) rangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
 	r := NewRow()
 	for _, frag := range v.Fragments() {
-		other, err := frag.FieldRangeBetween(bitDepth, predicateMin, predicateMax)
+		other, err := frag.RangeBetween(bitDepth, predicateMin, predicateMax)
 		if err != nil {
 			return nil, err
 		}

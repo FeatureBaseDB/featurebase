@@ -391,7 +391,7 @@ func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pq
 		return ValCount{}, nil
 	}
 
-	vsum, vcount, err := fragment.FieldSum(filter, field.BitDepth())
+	vsum, vcount, err := fragment.Sum(filter, field.BitDepth())
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "computing sum")
 	}
@@ -430,7 +430,7 @@ func (e *Executor) executeMinSlice(ctx context.Context, index string, c *pql.Cal
 		return ValCount{}, nil
 	}
 
-	fmin, fcount, err := fragment.FieldMin(filter, field.BitDepth())
+	fmin, fcount, err := fragment.Min(filter, field.BitDepth())
 	if err != nil {
 		return ValCount{}, err
 	}
@@ -469,7 +469,7 @@ func (e *Executor) executeMaxSlice(ctx context.Context, index string, c *pql.Cal
 		return ValCount{}, nil
 	}
 
-	fmax, fcount, err := fragment.FieldMax(filter, field.BitDepth())
+	fmax, fcount, err := fragment.Max(filter, field.BitDepth())
 	if err != nil {
 		return ValCount{}, err
 	}
@@ -811,7 +811,7 @@ func (e *Executor) executeBSIGroupRangeSlice(ctx context.Context, index string, 
 			return NewRow(), nil
 		}
 
-		return frag.FieldNotNull(field.BitDepth())
+		return frag.NotNull(field.BitDepth())
 
 	} else if cond.Op == pql.BETWEEN {
 
@@ -849,10 +849,10 @@ func (e *Executor) executeBSIGroupRangeSlice(ctx context.Context, index string, 
 		// If the query is asking for the entire valid range, just return
 		// the not-null bitmap for the field.
 		if predicates[0] <= field.Min && predicates[1] >= field.Max {
-			return frag.FieldNotNull(field.BitDepth())
+			return frag.NotNull(field.BitDepth())
 		}
 
-		return frag.FieldRangeBetween(field.BitDepth(), baseValueMin, baseValueMax)
+		return frag.RangeBetween(field.BitDepth(), baseValueMin, baseValueMax)
 
 	} else {
 
@@ -882,16 +882,16 @@ func (e *Executor) executeBSIGroupRangeSlice(ctx context.Context, index string, 
 		// LT[E] and GT[E] should return all not-null if selected range fully encompasses valid field range.
 		if (cond.Op == pql.LT && value > field.Max) || (cond.Op == pql.LTE && value >= field.Max) ||
 			(cond.Op == pql.GT && value < field.Min) || (cond.Op == pql.GTE && value <= field.Min) {
-			return frag.FieldNotNull(field.BitDepth())
+			return frag.NotNull(field.BitDepth())
 		}
 
 		// outOfRange for NEQ should return all not-null.
 		if outOfRange && cond.Op == pql.NEQ {
-			return frag.FieldNotNull(field.BitDepth())
+			return frag.NotNull(field.BitDepth())
 		}
 
 		f.Stats.Count("range:field", 1, 1.0)
-		return frag.FieldRange(cond.Op, field.BitDepth(), baseValue)
+		return frag.RangeOp(cond.Op, field.BitDepth(), baseValue)
 	}
 }
 
