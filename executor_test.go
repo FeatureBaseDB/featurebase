@@ -290,7 +290,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		}
 
 		f := hldr.Frame("i", "f")
-		if value, exists, err := f.FieldValue(10, "f"); err != nil {
+		if value, exists, err := f.Value(10, "f"); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
@@ -298,7 +298,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatalf("unexpected value: %v", value)
 		}
 
-		if value, exists, err := f.FieldValue(100, "f"); err != nil {
+		if value, exists, err := f.Value(100, "f"); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
@@ -335,7 +335,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 
 		t.Run("ErrInvalidFieldValueType", func(t *testing.T) {
 			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetValue(col=10, f="hello")`), nil, nil); err == nil || err.Error() != `invalid field value type` {
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetValue(col=10, f="hello")`), nil, nil); err == nil || err != pilosa.ErrInvalidBSIGroupValueType {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
@@ -951,7 +951,7 @@ func TestExecutor_Execute_FieldRange(t *testing.T) {
 	})
 
 	t.Run("ErrFieldNotFound", func(t *testing.T) {
-		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, bad_field >= 20)`), nil, nil); err != pilosa.ErrFieldNotFound {
+		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Range(frame=foo, bad_field >= 20)`), nil, nil); err != pilosa.ErrBSIGroupNotFound {
 			t.Fatal(err)
 		}
 	})

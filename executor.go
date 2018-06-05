@@ -381,12 +381,12 @@ func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pq
 		return ValCount{}, nil
 	}
 
-	field := frame.Field(fieldName)
+	field := frame.bsiGroup(fieldName)
 	if field == nil {
 		return ValCount{}, nil
 	}
 
-	fragment := e.Holder.Fragment(index, frameName, ViewFieldPrefix+fieldName, slice)
+	fragment := e.Holder.Fragment(index, frameName, viewBSIGroupPrefix+fieldName, slice)
 	if fragment == nil {
 		return ValCount{}, nil
 	}
@@ -420,12 +420,12 @@ func (e *Executor) executeFieldMinSlice(ctx context.Context, index string, c *pq
 		return ValCount{}, nil
 	}
 
-	field := frame.Field(fieldName)
+	field := frame.bsiGroup(fieldName)
 	if field == nil {
 		return ValCount{}, nil
 	}
 
-	fragment := e.Holder.Fragment(index, frameName, ViewFieldPrefix+fieldName, slice)
+	fragment := e.Holder.Fragment(index, frameName, viewBSIGroupPrefix+fieldName, slice)
 	if fragment == nil {
 		return ValCount{}, nil
 	}
@@ -459,12 +459,12 @@ func (e *Executor) executeFieldMaxSlice(ctx context.Context, index string, c *pq
 		return ValCount{}, nil
 	}
 
-	field := frame.Field(fieldName)
+	field := frame.bsiGroup(fieldName)
 	if field == nil {
 		return ValCount{}, nil
 	}
 
-	fragment := e.Holder.Fragment(index, frameName, ViewFieldPrefix+fieldName, slice)
+	fragment := e.Holder.Fragment(index, frameName, viewBSIGroupPrefix+fieldName, slice)
 	if fragment == nil {
 		return ValCount{}, nil
 	}
@@ -800,13 +800,13 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 	// Handle `!= null`.
 	if cond.Op == pql.NEQ && cond.Value == nil {
 		// Find field.
-		field := f.Field(fieldName)
+		field := f.bsiGroup(fieldName)
 		if field == nil {
-			return nil, ErrFieldNotFound
+			return nil, ErrBSIGroupNotFound
 		}
 
 		// Retrieve fragment.
-		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
+		frag := e.Holder.Fragment(index, frame, viewBSIGroupPrefix+fieldName, slice)
 		if frag == nil {
 			return NewRow(), nil
 		}
@@ -830,18 +830,18 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		// here is because we need the call to be slice-specific.
 
 		// Find field.
-		field := f.Field(fieldName)
+		field := f.bsiGroup(fieldName)
 		if field == nil {
-			return nil, ErrFieldNotFound
+			return nil, ErrBSIGroupNotFound
 		}
 
-		baseValueMin, baseValueMax, outOfRange := field.BaseValueBetween(predicates[0], predicates[1])
+		baseValueMin, baseValueMax, outOfRange := field.baseValueBetween(predicates[0], predicates[1])
 		if outOfRange {
 			return NewRow(), nil
 		}
 
 		// Retrieve fragment.
-		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
+		frag := e.Holder.Fragment(index, frame, viewBSIGroupPrefix+fieldName, slice)
 		if frag == nil {
 			return NewRow(), nil
 		}
@@ -863,18 +863,18 @@ func (e *Executor) executeFieldRangeSlice(ctx context.Context, index string, c *
 		}
 
 		// Find field.
-		field := f.Field(fieldName)
+		field := f.bsiGroup(fieldName)
 		if field == nil {
-			return nil, ErrFieldNotFound
+			return nil, ErrBSIGroupNotFound
 		}
 
-		baseValue, outOfRange := field.BaseValue(cond.Op, value)
+		baseValue, outOfRange := field.baseValue(cond.Op, value)
 		if outOfRange && cond.Op != pql.NEQ {
 			return NewRow(), nil
 		}
 
 		// Retrieve fragment.
-		frag := e.Holder.Fragment(index, frame, ViewFieldPrefix+fieldName, slice)
+		frag := e.Holder.Fragment(index, frame, viewBSIGroupPrefix+fieldName, slice)
 		if frag == nil {
 			return NewRow(), nil
 		}
@@ -1137,7 +1137,7 @@ func (e *Executor) executeSetValue(ctx context.Context, index string, c *pql.Cal
 				return err
 			}
 		default:
-			return ErrInvalidFieldValueType
+			return ErrInvalidBSIGroupValueType
 		}
 		frame.Stats.Count("SetValue", 1, 1.0)
 	}

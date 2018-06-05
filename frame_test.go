@@ -94,7 +94,7 @@ func TestFrame_SetValue(t *testing.T) {
 		}
 
 		// Read value.
-		if value, exists, err := f.FieldValue(100, "f"); err != nil {
+		if value, exists, err := f.Value(100, "f"); err != nil {
 			t.Fatal(err)
 		} else if value != 21 {
 			t.Fatalf("unexpected value: %d", value)
@@ -138,7 +138,7 @@ func TestFrame_SetValue(t *testing.T) {
 		}
 
 		// Read value.
-		if value, exists, err := f.FieldValue(100, "f"); err != nil {
+		if value, exists, err := f.Value(100, "f"); err != nil {
 			t.Fatal(err)
 		} else if value != 23 {
 			t.Fatalf("unexpected value: %d", value)
@@ -147,7 +147,7 @@ func TestFrame_SetValue(t *testing.T) {
 		}
 	})
 
-	t.Run("ErrFieldNotFound", func(t *testing.T) {
+	t.Run("ErrBSIGroupNotFound", func(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
@@ -159,12 +159,12 @@ func TestFrame_SetValue(t *testing.T) {
 		}
 
 		// Set value.
-		if _, err := f.SetValue(100, 21); err != pilosa.ErrFieldNotFound {
+		if _, err := f.SetValue(100, 21); err != pilosa.ErrBSIGroupNotFound {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
 
-	t.Run("ErrFieldValueTooLow", func(t *testing.T) {
+	t.Run("ErrBSIGroupValueTooLow", func(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
@@ -178,12 +178,12 @@ func TestFrame_SetValue(t *testing.T) {
 		}
 
 		// Set value.
-		if _, err := f.SetValue(100, 15); err != pilosa.ErrFieldValueTooLow {
+		if _, err := f.SetValue(100, 15); err != pilosa.ErrBSIGroupValueTooLow {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
 
-	t.Run("ErrFieldValueTooHigh", func(t *testing.T) {
+	t.Run("ErrBSIGroupValueTooHigh", func(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
@@ -197,7 +197,7 @@ func TestFrame_SetValue(t *testing.T) {
 		}
 
 		// Set value.
-		if _, err := f.SetValue(100, 31); err != pilosa.ErrFieldValueTooHigh {
+		if _, err := f.SetValue(100, 31); err != pilosa.ErrBSIGroupValueTooHigh {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
