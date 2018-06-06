@@ -369,7 +369,7 @@ func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pq
 
 	frameName, _ := c.Args["frame"].(string)
 
-	frame := e.Holder.Frame(index, frameName)
+	frame := e.Holder.Field(index, frameName)
 	if frame == nil {
 		return ValCount{}, nil
 	}
@@ -407,7 +407,7 @@ func (e *Executor) executeMinSlice(ctx context.Context, index string, c *pql.Cal
 
 	frameName, _ := c.Args["frame"].(string)
 
-	frame := e.Holder.Frame(index, frameName)
+	frame := e.Holder.Field(index, frameName)
 	if frame == nil {
 		return ValCount{}, nil
 	}
@@ -445,7 +445,7 @@ func (e *Executor) executeMaxSlice(ctx context.Context, index string, c *pql.Cal
 
 	frameName, _ := c.Args["frame"].(string)
 
-	frame := e.Holder.Frame(index, frameName)
+	frame := e.Holder.Field(index, frameName)
 	if frame == nil {
 		return ValCount{}, nil
 	}
@@ -632,7 +632,7 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.
 	if frame == "" {
 		frame = DefaultFrame
 	}
-	f := e.Holder.Frame(index, frame)
+	f := e.Holder.Field(index, frame)
 	if f == nil {
 		return nil, ErrFieldNotFound
 	}
@@ -767,7 +767,7 @@ func (e *Executor) executeBSIGroupRangeSlice(ctx context.Context, index string, 
 		frameName, cond = k, vv
 	}
 
-	f := e.Holder.Frame(index, frameName)
+	f := e.Holder.Field(index, frameName)
 	if f == nil {
 		return nil, ErrFieldNotFound
 	}
@@ -1108,7 +1108,7 @@ func (e *Executor) executeSetValue(ctx context.Context, index string, c *pql.Cal
 	// Set values.
 	for name, value := range args {
 		// Retrieve frame.
-		frame := e.Holder.Frame(index, name)
+		frame := e.Holder.Field(index, name)
 		if frame == nil {
 			return ErrFieldNotFound
 		}
@@ -1157,7 +1157,7 @@ func (e *Executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	}
 
 	// Retrieve frame.
-	frame := e.Holder.Frame(index, frameName)
+	frame := e.Holder.Field(index, frameName)
 	if frame == nil {
 		return ErrFieldNotFound
 	}
@@ -1217,7 +1217,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 		}
 
 		// Retrieve frame.
-		f := e.Holder.Frame(index, frame)
+		f := e.Holder.Field(index, frame)
 		if f == nil {
 			return nil, ErrFieldNotFound
 		}
@@ -1255,7 +1255,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 	// Bulk insert attributes by frame.
 	for name, frameMap := range m {
 		// Retrieve frame.
-		frame := e.Holder.Frame(index, name)
+		frame := e.Holder.Field(index, name)
 		if frame == nil {
 			return nil, ErrFieldNotFound
 		}

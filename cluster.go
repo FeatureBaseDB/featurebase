@@ -1240,7 +1240,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 				srcURI := decodeURI(src.Node.URI)
 
 				// Retrieve frame.
-				f := c.Holder.Frame(src.Index, src.Frame)
+				f := c.Holder.Field(src.Index, src.Frame)
 				if f == nil {
 					return ErrFieldNotFound
 				}

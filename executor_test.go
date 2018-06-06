@@ -289,7 +289,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		f := hldr.Frame("i", "f")
+		f := hldr.Field("i", "f")
 		if value, exists, err := f.Value(10); err != nil {
 			t.Fatal(err)
 		} else if !exists {
@@ -371,7 +371,7 @@ func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f := hldr.Frame("i", "f")
+	f := hldr.Field("i", "f")
 	if m, err := f.RowAttrStore().Attrs(10); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(m, map[string]interface{}{"foo": "bar", "baz": int64(123), "bat": true}) {
@@ -525,7 +525,7 @@ func TestExecutor_Execute_TopN_Attr(t *testing.T) {
 	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
 	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(10, SliceWidth)
 
-	if err := hldr.Frame("i", "f").RowAttrStore().SetAttrs(10, map[string]interface{}{"category": int64(123)}); err != nil {
+	if err := hldr.Field("i", "f").RowAttrStore().SetAttrs(10, map[string]interface{}{"category": int64(123)}); err != nil {
 		t.Fatal(err)
 	}
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
@@ -548,7 +548,7 @@ func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
 	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
 	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(10, SliceWidth)
 
-	if err := hldr.Frame("i", "f").RowAttrStore().SetAttrs(10, map[string]interface{}{"category": uint64(123)}); err != nil {
+	if err := hldr.Field("i", "f").RowAttrStore().SetAttrs(10, map[string]interface{}{"category": uint64(123)}); err != nil {
 		t.Fatal(err)
 	}
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))

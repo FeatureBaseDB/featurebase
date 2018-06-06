@@ -155,7 +155,7 @@ func TestStatsCount_SetColumnAttrs(t *testing.T) {
 
 	called := false
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-	frame := e.Holder.Frame("d", "f")
+	frame := e.Holder.Field("d", "f")
 	if frame == nil {
 		t.Fatal("frame not found")
 	}

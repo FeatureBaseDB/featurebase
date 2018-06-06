@@ -424,7 +424,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		// Before starting the resize, get the CheckSum to use for
 		// comparison later.
-		node0Frame := node0.Holder.Frame("i", "f")
+		node0Frame := node0.Holder.Field("i", "f")
 		node0View := node0Frame.View("standard")
 		node0Fragment := node0View.Fragment(1)
 		node0Checksum := node0Fragment.Checksum()
@@ -453,7 +453,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		// Bits
 		// Verify that node-1 contains the fragment (i/f/standard/1) transferred from node-0.
-		node1Frame := node1.Holder.Frame("i", "f")
+		node1Frame := node1.Holder.Field("i", "f")
 		node1View := node1Frame.View("standard")
 		node1Fragment := node1View.Fragment(1)
 

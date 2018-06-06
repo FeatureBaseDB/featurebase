@@ -390,8 +390,8 @@ func (h *Holder) DeleteIndex(name string) error {
 	return nil
 }
 
-// Frame returns the frame for an index and name.
-func (h *Holder) Frame(index, name string) *Field {
+// Field returns the field for an index and name.
+func (h *Holder) Field(index, name string) *Field {
 	idx := h.Index(index)
 	if idx == nil {
 		return nil
@@ -401,7 +401,7 @@ func (h *Holder) Frame(index, name string) *Field {
 
 // View returns the view for an index, frame, and name.
 func (h *Holder) View(index, frame, name string) *View {
-	f := h.Frame(index, frame)
+	f := h.Field(index, frame)
 	if f == nil {
 		return nil
 	}
@@ -607,7 +607,7 @@ func (s *HolderSyncer) SyncHolder() error {
 			}
 
 			// Sync frame row attributes.
-			if err := s.syncFrame(di.Name, fi.Name); err != nil {
+			if err := s.syncField(di.Name, fi.Name); err != nil {
 				return fmt.Errorf("frame sync error: index=%s, frame=%s, err=%s", di.Name, fi.Name, err)
 			}
 
@@ -634,7 +634,7 @@ func (s *HolderSyncer) SyncHolder() error {
 					}
 				}
 			}
-			s.Stats.Histogram("syncFrame", float64(time.Since(tf)), 1.0)
+			s.Stats.Histogram("syncField", float64(time.Since(tf)), 1.0)
 			tf = time.Now() // reset tf
 		}
 		s.Stats.Histogram("syncIndex", float64(time.Since(ti)), 1.0)
@@ -689,10 +689,10 @@ func (s *HolderSyncer) syncIndex(index string) error {
 	return nil
 }
 
-// syncFrame synchronizes frame attributes with the rest of the cluster.
-func (s *HolderSyncer) syncFrame(index, name string) error {
+// syncField synchronizes field attributes with the rest of the cluster.
+func (s *HolderSyncer) syncField(index, name string) error {
 	// Retrieve frame reference.
-	f := s.Holder.Frame(index, name)
+	f := s.Holder.Field(index, name)
 	if f == nil {
 		return nil
 	}
@@ -740,7 +740,7 @@ func (s *HolderSyncer) syncFrame(index, name string) error {
 // syncFragment synchronizes a fragment with the rest of the cluster.
 func (s *HolderSyncer) syncFragment(index, frame, view string, slice uint64) error {
 	// Retrieve local frame.
-	f := s.Holder.Frame(index, frame)
+	f := s.Holder.Field(index, frame)
 	if f == nil {
 		return ErrFieldNotFound
 	}

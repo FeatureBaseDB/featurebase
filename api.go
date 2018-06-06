@@ -355,7 +355,7 @@ func (api *API) UnmarshalFragment(ctx context.Context, indexName string, frameNa
 	}
 
 	// Retrieve frame.
-	f := api.Holder.Frame(indexName, frameName)
+	f := api.Holder.Field(indexName, frameName)
 	if f == nil {
 		return ErrFieldNotFound
 	}
@@ -495,7 +495,7 @@ func (api *API) Views(ctx context.Context, indexName string, frameName string) (
 	}
 
 	// Retrieve views.
-	f := api.Holder.Frame(indexName, frameName)
+	f := api.Holder.Field(indexName, frameName)
 	if f == nil {
 		return nil, ErrFieldNotFound
 	}
@@ -512,7 +512,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, frameName stri
 	}
 
 	// Retrieve frame.
-	f := api.Holder.Frame(indexName, frameName)
+	f := api.Holder.Field(indexName, frameName)
 	if f == nil {
 		return ErrFieldNotFound
 	}
@@ -580,7 +580,7 @@ func (api *API) FrameAttrDiff(ctx context.Context, indexName string, frameName s
 	}
 
 	// Retrieve index from holder.
-	f := api.Holder.Frame(indexName, frameName)
+	f := api.Holder.Field(indexName, frameName)
 	if f == nil {
 		return nil, ErrFieldNotFound
 	}

@@ -128,7 +128,7 @@ func (t *ClusterCluster) SetBit(index, frame, view string, rowID, colID uint64, 
 		if c == nil {
 			continue
 		}
-		f := c.Holder.Frame(index, frame)
+		f := c.Holder.Field(index, frame)
 		if f == nil {
 			return fmt.Errorf("index/frame does not exist: %s/%s", index, frame)
 		}
@@ -373,7 +373,7 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstructi
 			destFragment := destCluster.Holder.Fragment(src.Index, src.Frame, src.View, src.Slice)
 			if destFragment == nil {
 				// Create fragment on destination if it doesn't exist.
-				f := destCluster.Holder.Frame(src.Index, src.Frame)
+				f := destCluster.Holder.Field(src.Index, src.Frame)
 				v := f.View(src.View)
 				var err error
 				destFragment, err = v.CreateFragmentIfNotExists(src.Slice)

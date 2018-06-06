@@ -471,7 +471,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			return err
 		}
 	case *internal.CreateViewMessage:
-		f := s.Holder.Frame(obj.Index, obj.Frame)
+		f := s.Holder.Field(obj.Index, obj.Frame)
 		if f == nil {
 			return fmt.Errorf("Local Frame not found: %s", obj.Frame)
 		}
@@ -480,7 +480,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			return err
 		}
 	case *internal.DeleteViewMessage:
-		f := s.Holder.Frame(obj.Index, obj.Frame)
+		f := s.Holder.Field(obj.Index, obj.Frame)
 		if f == nil {
 			return fmt.Errorf("Local Frame not found: %s", obj.Frame)
 		}
