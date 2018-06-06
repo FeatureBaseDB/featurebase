@@ -76,7 +76,7 @@ func (f *Fragment) Reopen() error {
 		return err
 	}
 
-	f.Fragment = pilosa.NewFragment(path, f.Index(), f.Frame(), f.View(), f.Slice())
+	f.Fragment = pilosa.NewFragment(path, f.Index(), f.Field(), f.View(), f.Slice())
 	f.Fragment.CacheType = cacheType
 	f.Fragment.RowAttrStore = f.RowAttrStore
 	if err := f.Open(); err != nil {
