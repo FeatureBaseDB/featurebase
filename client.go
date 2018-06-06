@@ -542,7 +542,7 @@ func (c *InternalHTTPClient) exportNodeCSV(ctx context.Context, node *Node, inde
 	u := nodePathToURL(node, "/export")
 	u.RawQuery = url.Values{
 		"index": {index},
-		"frame": {field},
+		"field": {field},
 		"slice": {strconv.FormatUint(slice, 10)},
 	}.Encode()
 
@@ -585,7 +585,7 @@ func (c *InternalHTTPClient) backupSliceNode(ctx context.Context, index, field s
 	u := nodePathToURL(node, "/fragment/data")
 	u.RawQuery = url.Values{
 		"index": {index},
-		"frame": {field},
+		"field": {field},
 		"slice": {strconv.FormatUint(slice, 10)},
 	}.Encode()
 
@@ -622,7 +622,7 @@ func (c *InternalHTTPClient) CreateField(ctx context.Context, index, field strin
 	}
 
 	// Encode query request.
-	buf, err := json.Marshal(&postFrameRequest{
+	buf, err := json.Marshal(&postFieldRequest{
 		Options: opt,
 	})
 	if err != nil {
@@ -630,7 +630,7 @@ func (c *InternalHTTPClient) CreateField(ctx context.Context, index, field strin
 	}
 
 	// Create URL & HTTP request.
-	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/frame/%s", index, field))
+	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/field/%s", index, field))
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 	if err != nil {
 		return errors.Wrap(err, "creating request")
@@ -670,7 +670,7 @@ func (c *InternalHTTPClient) FragmentBlocks(ctx context.Context, index, field st
 	u := uriPathToURL(c.defaultURI, "/fragment/blocks")
 	u.RawQuery = url.Values{
 		"index": {index},
-		"frame": {field},
+		"field": {field},
 		"slice": {strconv.FormatUint(slice, 10)},
 	}.Encode()
 
@@ -795,10 +795,10 @@ func (c *InternalHTTPClient) ColumnAttrDiff(ctx context.Context, index string, b
 
 // RowAttrDiff returns data from differing blocks on a remote host.
 func (c *InternalHTTPClient) RowAttrDiff(ctx context.Context, index, field string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
-	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/frame/%s/attr/diff", index, field))
+	u := uriPathToURL(c.defaultURI, fmt.Sprintf("/index/%s/field/%s/attr/diff", index, field))
 
 	// Encode request.
-	buf, err := json.Marshal(postFrameAttrDiffRequest{Blocks: blks})
+	buf, err := json.Marshal(postFieldAttrDiffRequest{Blocks: blks})
 	if err != nil {
 		return nil, errors.Wrap(err, "marshaling")
 	}
@@ -828,7 +828,7 @@ func (c *InternalHTTPClient) RowAttrDiff(ctx context.Context, index, field strin
 	}
 
 	// Decode response object.
-	var rsp postFrameAttrDiffResponse
+	var rsp postFieldAttrDiffResponse
 	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
 		return nil, errors.Wrap(err, "decoding")
 	}

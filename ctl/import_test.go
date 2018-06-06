@@ -43,7 +43,7 @@ func TestImportCommand_Validation(t *testing.T) {
 		t.Fatalf("Command not working, expect: %s, actual: '%s'", pilosa.ErrFieldRequired, err)
 	}
 
-	cm.Frame = "f"
+	cm.Field = "f"
 	err = cm.Run(context.Background())
 	if err.Error() != "path required" {
 		t.Fatalf("Command not working, expect: %s, actual: '%s'", "path required", err)
@@ -73,7 +73,7 @@ func TestImportCommand_Run(t *testing.T) {
 	cm.Host = s.Host()
 
 	cm.Index = "i"
-	cm.Frame = "f"
+	cm.Field = "f"
 	cm.CreateSchema = true
 	cm.Paths = []string{file.Name()}
 	err = cm.Run(ctx)
@@ -106,10 +106,10 @@ func TestImportCommand_RunValue(t *testing.T) {
 	cm.Host = s.Host()
 
 	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i", strings.NewReader("")))
-	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i/frame/f", strings.NewReader(`{"options":{"type": "int", "min": 0, "max": 100}}`)))
+	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i/field/f", strings.NewReader(`{"options":{"type": "int", "min": 0, "max": 100}}`)))
 
 	cm.Index = "i"
-	cm.Frame = "f"
+	cm.Field = "f"
 	cm.Paths = []string{file.Name()}
 	err = cm.Run(ctx)
 	if err != nil {
@@ -133,7 +133,7 @@ func TestImportCommand_InvalidFile(t *testing.T) {
 	cm := NewImportCommand(stdin, stdout, stderr)
 	cm.Host = s.Host()
 	cm.Index = "i"
-	cm.Frame = "f"
+	cm.Field = "f"
 	file, err := ioutil.TempFile("", "import.csv")
 	file.Write([]byte("a,2\n3,5\n5,6"))
 	if err != nil {

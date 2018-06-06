@@ -42,7 +42,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	// Expected indexes and Frames
+	// Expected indexes and Fields
 	expected := map[string][]string{
 		"i": []string{"f"},
 	}
@@ -51,14 +51,14 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	client0 := m0.Client()
 	client1 := m1.Client()
 
-	// Create indexes and frames on one node.
+	// Create indexes and fields on one node.
 	if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal(err)
 	} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
-	// Make sure node0 knows about the index and frame created.
+	// Make sure node0 knows about the index and field created.
 	schema0, err := client0.Schema(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -66,15 +66,15 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	received0 := map[string][]string{}
 	for _, idx := range schema0 {
 		received0[idx.Name] = []string{}
-		for _, frame := range idx.Fields {
-			received0[idx.Name] = append(received0[idx.Name], frame.Name)
+		for _, field := range idx.Fields {
+			received0[idx.Name] = append(received0[idx.Name], field.Name)
 		}
 	}
 	if !reflect.DeepEqual(received0, expected) {
 		t.Fatalf("unexpected schema on node0: %s", received0)
 	}
 
-	// Make sure node1 knows about the index and frame created.
+	// Make sure node1 knows about the index and field created.
 	schema1, err := client1.Schema(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -82,8 +82,8 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	received1 := map[string][]string{}
 	for _, idx := range schema1 {
 		received1[idx.Name] = []string{}
-		for _, frame := range idx.Fields {
-			received1[idx.Name] = append(received1[idx.Name], frame.Name)
+		for _, field := range idx.Fields {
+			received1[idx.Name] = append(received1[idx.Name], field.Name)
 		}
 	}
 	if !reflect.DeepEqual(received1, expected) {
@@ -92,8 +92,8 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 
 	// Write data on first node.
 	if _, err := m0.Query("i", "", `
-            SetBit(row=1, frame="f", col=1)
-            SetBit(row=1, frame="f", col=2400000)
+            SetBit(row=1, field="f", col=1)
+            SetBit(row=1, field="f", col=2400000)
         `); err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		// Create a client for each node.
 		client0 := m0.Client()
 
-		// Create indexes and frames on one node.
+		// Create indexes and fields on one node.
 		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 			t.Fatal(err)
 		} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldOptions{}); err != nil {
@@ -250,7 +250,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		client0 := m0.Client()
 		//client1 := m1.Client()
 
-		// Create indexes and frames on one node.
+		// Create indexes and fields on one node.
 		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 			t.Fatal(err)
 		} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldOptions{}); err != nil {
@@ -259,8 +259,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		// Write data on first node.
 		if _, err := m0.Query("i", "", `
-				SetBit(row=1, frame="f", col=1)
-				SetBit(row=1, frame="f", col=1300000)
+				SetBit(row=1, field="f", col=1)
+				SetBit(row=1, field="f", col=1300000)
 			`); err != nil {
 			t.Fatal(err)
 		}
@@ -302,7 +302,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		client0 := m0.Client()
 		//client1 := m1.Client()
 
-		// Create indexes and frames on one node.
+		// Create indexes and fields on one node.
 		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 			t.Fatal(err)
 		} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldOptions{}); err != nil {
@@ -311,8 +311,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		// Write data on first node. Note that no data is placed on slice 1.
 		if _, err := m0.Query("i", "", `
-				SetBit(row=1, frame="f", col=1)
-				SetBit(row=1, frame="f", col=2400000)
+				SetBit(row=1, field="f", col=1)
+				SetBit(row=1, field="f", col=2400000)
 			`); err != nil {
 			t.Fatal(err)
 		}
@@ -455,7 +455,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 	t.Run("ErrorRemoveWithoutReplicas", func(t *testing.T) {
 		client0 := m0.Client()
 
-		// Create indexes and frames on one node.
+		// Create indexes and fields on one node.
 		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 			t.Fatal(err)
 		} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldOptions{}); err != nil {
@@ -466,7 +466,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 		// TODO: Deterministic node IDs would ensure consistent results
 		setColumns := ""
 		for i := 0; i < 20; i++ {
-			setColumns += fmt.Sprintf("SetBit(row=1, frame=\"f\", col=%d) ", i*pilosa.SliceWidth)
+			setColumns += fmt.Sprintf("SetBit(row=1, field=\"f\", col=%d) ", i*pilosa.SliceWidth)
 		}
 
 		if _, err := m0.Query("i", "", setColumns); err != nil {

@@ -55,23 +55,23 @@ func TestPostIndexRequestUnmarshalJSON(t *testing.T) {
 	}
 }
 
-// Test custom UnmarshalJSON for postFrameRequest object
-func TestPostFrameRequestUnmarshalJSON(t *testing.T) {
+// Test custom UnmarshalJSON for postFieldRequest object
+func TestPostFieldRequestUnmarshalJSON(t *testing.T) {
 	tests := []struct {
 		json     string
-		expected postFrameRequest
+		expected postFieldRequest
 		err      string
 	}{
-		{json: `{"options": {}}`, expected: postFrameRequest{Options: FieldOptions{}}},
+		{json: `{"options": {}}`, expected: postFieldRequest{Options: FieldOptions{}}},
 		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"option": {}}`, err: "Unknown key: option:map[]"},
 		{json: `{"options": {"badKey": "test"}}`, err: "Unknown key: badKey:test"},
 		{json: `{"options": {"inverseEnabled": true}}`, err: "Unknown key: inverseEnabled:true"},
-		{json: `{"options": {"cacheType": "type"}}`, expected: postFrameRequest{Options: FieldOptions{CacheType: "type"}}},
+		{json: `{"options": {"cacheType": "type"}}`, expected: postFieldRequest{Options: FieldOptions{CacheType: "type"}}},
 		{json: `{"options": {"inverse": true, "cacheType": "type"}}`, err: "Unknown key: inverse:true"},
 	}
 	for _, test := range tests {
-		actual := &postFrameRequest{}
+		actual := &postFieldRequest{}
 		err := json.Unmarshal([]byte(test.json), actual)
 		if err != nil {
 			if test.err == "" || test.err != err.Error() {

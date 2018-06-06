@@ -59,10 +59,10 @@ func TestExportCommand_Run(t *testing.T) {
 	cm.Host = s.Host()
 
 	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", s.URL+"/index/i", strings.NewReader("")))
-	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", s.URL+"/index/i/frame/f", strings.NewReader("")))
+	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", s.URL+"/index/i/field/f", strings.NewReader("")))
 
 	cm.Index = "i"
-	cm.Frame = "f"
+	cm.Field = "f"
 	if err := cm.Run(context.Background()); err != nil {
 		t.Fatalf("Export Run doesn't work: %s", err)
 	}

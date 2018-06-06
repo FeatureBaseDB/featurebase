@@ -23,40 +23,40 @@ import (
 	"github.com/pilosa/pilosa/test"
 )
 
-// Ensure index can open and retrieve a frame.
-func TestIndex_CreateFrameIfNotExists(t *testing.T) {
+// Ensure index can open and retrieve a field.
+func TestIndex_CreateFieldIfNotExists(t *testing.T) {
 	index := test.MustOpenIndex()
 	defer index.Close()
 
-	// Create frame.
+	// Create field.
 	f, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{})
 	if err != nil {
 		t.Fatal(err)
 	} else if f == nil {
-		t.Fatal("expected frame")
+		t.Fatal("expected field")
 	}
 
-	// Retrieve existing frame.
+	// Retrieve existing field.
 	other, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{})
 	if err != nil {
 		t.Fatal(err)
 	} else if f.Field != other.Field {
-		t.Fatal("frame mismatch")
+		t.Fatal("field mismatch")
 	}
 
 	if f.Field != index.Field("f") {
-		t.Fatal("frame mismatch")
+		t.Fatal("field mismatch")
 	}
 }
 
-func TestIndex_CreateFrame(t *testing.T) {
-	// Ensure time quantum can be set appropriately on a new frame.
+func TestIndex_CreateField(t *testing.T) {
+	// Ensure time quantum can be set appropriately on a new field.
 	t.Run("TimeQuantum", func(t *testing.T) {
 		t.Run("Explicit", func(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()
 
-			// Create frame with explicit quantum.
+			// Create field with explicit quantum.
 			f, err := index.CreateField("f", pilosa.FieldOptions{
 				Type:        pilosa.FieldTypeTime,
 				TimeQuantum: pilosa.TimeQuantum("YMDH"),
@@ -64,18 +64,18 @@ func TestIndex_CreateFrame(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
-				t.Fatalf("unexpected frame time quantum: %s", q)
+				t.Fatalf("unexpected field time quantum: %s", q)
 			}
 		})
 	})
 
-	// Ensure frame can include range columns.
+	// Ensure field can include range columns.
 	t.Run("BSIFields", func(t *testing.T) {
 		t.Run("OK", func(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()
 
-			// Create frame with schema and verify it exists.
+			// Create field with schema and verify it exists.
 			if f, err := index.CreateField("f", pilosa.FieldOptions{
 				Type: pilosa.FieldTypeInt,
 				Min:  10,
@@ -95,13 +95,13 @@ func TestIndex_CreateFrame(t *testing.T) {
 		})
 
 		// TODO: These errors don't apply  here. Instead, we need these tests
-		// on frame creation FrameOptions validation.
+		// on field creation FieldOptions validation.
 		/*
 			t.Run("ErrRangeCacheAllowed", func(t *testing.T) {
 				index := test.MustOpenIndex()
 				defer index.Close()
 
-				if _, err := index.CreateFrame("f", pilosa.FrameOptions{
+				if _, err := index.CreateField("f", pilosa.FieldOptions{
 					CacheType: pilosa.CacheTypeRanked,
 				}); err != nil {
 					t.Fatal(err)
@@ -111,7 +111,7 @@ func TestIndex_CreateFrame(t *testing.T) {
 			t.Run("BSIFieldsWithCacheTypeNone", func(t *testing.T) {
 				index := test.MustOpenIndex()
 				defer index.Close()
-				if _, err := index.CreateFrame("f", pilosa.FrameOptions{
+				if _, err := index.CreateField("f", pilosa.FieldOptions{
 					CacheType: pilosa.CacheTypeNone,
 					CacheSize: uint32(5),
 				}); err != nil {
@@ -119,11 +119,11 @@ func TestIndex_CreateFrame(t *testing.T) {
 				}
 			})
 
-			t.Run("ErrFrameFieldsAllowed", func(t *testing.T) {
+			t.Run("ErrFieldFieldsAllowed", func(t *testing.T) {
 				index := test.MustOpenIndex()
 				defer index.Close()
 
-				if _, err := index.CreateFrame("f", pilosa.FrameOptions{
+				if _, err := index.CreateField("f", pilosa.FieldOptions{
 					Fields: []*pilosa.Field{
 						{Name: "field0", Type: pilosa.FieldTypeInt},
 					},
@@ -136,7 +136,7 @@ func TestIndex_CreateFrame(t *testing.T) {
 				index := test.MustOpenIndex()
 				defer index.Close()
 
-				if _, err := index.CreateFrame("f", pilosa.FrameOptions{
+				if _, err := index.CreateField("f", pilosa.FieldOptions{
 					Fields: []*pilosa.Field{
 						{Name: "", Type: pilosa.FieldTypeInt},
 					},
@@ -149,7 +149,7 @@ func TestIndex_CreateFrame(t *testing.T) {
 				index := test.MustOpenIndex()
 				defer index.Close()
 
-				if _, err := index.CreateFrame("f", pilosa.FrameOptions{
+				if _, err := index.CreateField("f", pilosa.FieldOptions{
 					Fields: []*pilosa.Field{
 						{Name: "field0", Type: "bad_type"},
 					},
@@ -162,7 +162,7 @@ func TestIndex_CreateFrame(t *testing.T) {
 				index := test.MustOpenIndex()
 				defer index.Close()
 
-				if _, err := index.CreateFrame("f", pilosa.FrameOptions{
+				if _, err := index.CreateField("f", pilosa.FieldOptions{
 					Fields: []*pilosa.Field{
 						{Name: "field0", Type: pilosa.FieldTypeInt, Min: 100, Max: 50},
 					},
@@ -174,21 +174,21 @@ func TestIndex_CreateFrame(t *testing.T) {
 	})
 }
 
-// Ensure index can delete a frame.
-func TestIndex_DeleteFrame(t *testing.T) {
+// Ensure index can delete a field.
+func TestIndex_DeleteField(t *testing.T) {
 	index := test.MustOpenIndex()
 	defer index.Close()
 
-	// Create frame.
+	// Create field.
 	if _, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
-	// Delete frame & verify it's gone.
+	// Delete field & verify it's gone.
 	if err := index.DeleteField("f"); err != nil {
 		t.Fatal(err)
 	} else if index.Field("f") != nil {
-		t.Fatal("expected nil frame")
+		t.Fatal("expected nil field")
 	}
 
 	// Delete again to make sure it doesn't error.
@@ -197,7 +197,7 @@ func TestIndex_DeleteFrame(t *testing.T) {
 	}
 }
 
-// Ensure index can delete a frame.
+// Ensure index can delete a field.
 func TestIndex_InvalidName(t *testing.T) {
 	path, err := ioutil.TempDir("", "pilosa-index-")
 	if err != nil {

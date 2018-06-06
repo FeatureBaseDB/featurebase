@@ -114,19 +114,19 @@ func (t *TestCluster) CreateIndex(name string) error {
 	return nil
 }
 
-func (t *TestCluster) CreateFrame(index, frame string, opt pilosa.FieldOptions) error {
+func (t *TestCluster) CreateField(index, field string, opt pilosa.FieldOptions) error {
 	for _, c := range t.Clusters {
 		idx, err := c.Holder.CreateIndexIfNotExists(index, pilosa.IndexOptions{})
 		if err != nil {
 			return err
 		}
-		if _, err := idx.CreateField(frame, opt); err != nil {
+		if _, err := idx.CreateField(field, opt); err != nil {
 			return err
 		}
 	}
 	return nil
 }
-func (t *TestCluster) SetBit(index, frame, view string, rowID, colID uint64, x *time.Time) error {
+func (t *TestCluster) SetBit(index, field, view string, rowID, colID uint64, x *time.Time) error {
 	// Determine which node should receive the SetBit.
 	c0 := t.Clusters[0] // use the first node's cluster to determine slice location.
 	slice := colID / pilosa.SliceWidth
@@ -137,9 +137,9 @@ func (t *TestCluster) SetBit(index, frame, view string, rowID, colID uint64, x *
 		if c == nil {
 			continue
 		}
-		f := c.Holder.Field(index, frame)
+		f := c.Holder.Field(index, field)
 		if f == nil {
-			return fmt.Errorf("index/frame does not exist: %s/%s", index, frame)
+			return fmt.Errorf("index/field does not exist: %s/%s", index, field)
 		}
 		_, err := f.SetBit(view, rowID, colID, x)
 		if err != nil {

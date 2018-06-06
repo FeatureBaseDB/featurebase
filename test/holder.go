@@ -80,9 +80,9 @@ func (h *Holder) MustCreateIndexIfNotExists(index string, opt pilosa.IndexOption
 	return &Index{Index: idx}
 }
 
-// MustCreateFrameIfNotExists returns a given frame. Panic on error.
-func (h *Holder) MustCreateFrameIfNotExists(index, frame string) *Field {
-	f, err := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{}).CreateFieldIfNotExists(frame, pilosa.FieldOptions{})
+// MustCreateFieldIfNotExists returns a given field. Panic on error.
+func (h *Holder) MustCreateFieldIfNotExists(index, field string) *Field {
+	f, err := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{}).CreateFieldIfNotExists(field, pilosa.FieldOptions{})
 	if err != nil {
 		panic(err)
 	}
@@ -90,9 +90,9 @@ func (h *Holder) MustCreateFrameIfNotExists(index, frame string) *Field {
 }
 
 // MustCreateFragmentIfNotExists returns a given fragment. Panic on error.
-func (h *Holder) MustCreateFragmentIfNotExists(index, frame, view string, slice uint64) *Fragment {
+func (h *Holder) MustCreateFragmentIfNotExists(index, field, view string, slice uint64) *Fragment {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := idx.CreateFieldIfNotExists(frame, pilosa.FieldOptions{})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.FieldOptions{})
 	if err != nil {
 		panic(err)
 	}
@@ -108,9 +108,9 @@ func (h *Holder) MustCreateFragmentIfNotExists(index, frame, view string, slice 
 }
 
 // MustCreateRankedFragmentIfNotExists returns a given fragment with a ranked cache. Panic on error.
-func (h *Holder) MustCreateRankedFragmentIfNotExists(index, frame, view string, slice uint64) *Fragment {
+func (h *Holder) MustCreateRankedFragmentIfNotExists(index, field, view string, slice uint64) *Fragment {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := idx.CreateFieldIfNotExists(frame, pilosa.FieldOptions{CacheType: pilosa.CacheTypeRanked})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.FieldOptions{CacheType: pilosa.CacheTypeRanked})
 	if err != nil {
 		panic(err)
 	}

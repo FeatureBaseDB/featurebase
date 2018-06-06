@@ -62,7 +62,7 @@ var externalPrefixFlag = map[string]bool{
 	"import":  true,
 	"export":  true,
 	"index":   true,
-	"frame":   true,
+	"field":   true,
 	"nodes":   true,
 	"version": true,
 }
@@ -108,10 +108,10 @@ func (h *Handler) populateValidators() {
 	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("slice", "index")
 	h.validators["GetSliceMax"] = queryValidationSpecRequired()
 	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeRowAttrs", "excludeColumns")
-	h.validators["GetExport"] = queryValidationSpecRequired("index", "frame", "slice")
-	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "frame", "slice")
-	h.validators["PostFragmentData"] = queryValidationSpecRequired("index", "frame", "slice")
-	h.validators["GetFragmentBlocks"] = queryValidationSpecRequired("index", "frame", "slice")
+	h.validators["GetExport"] = queryValidationSpecRequired("index", "field", "slice")
+	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "field", "slice")
+	h.validators["PostFragmentData"] = queryValidationSpecRequired("index", "field", "slice")
+	h.validators["GetFragmentBlocks"] = queryValidationSpecRequired("index", "field", "slice")
 }
 
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
@@ -165,10 +165,10 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}", handler.handlePostIndex).Methods("POST")
 	router.HandleFunc("/index/{index}", handler.handleDeleteIndex).Methods("DELETE")
 	router.HandleFunc("/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST")
-	//router.HandleFunc("/index/{index}/frame", handler.handleGetFrames).Methods("GET") // Not implemented.
-	router.HandleFunc("/index/{index}/frame/{frame}", handler.handlePostFrame).Methods("POST")
-	router.HandleFunc("/index/{index}/frame/{frame}", handler.handleDeleteFrame).Methods("DELETE")
-	router.HandleFunc("/index/{index}/frame/{frame}/attr/diff", handler.handlePostFrameAttrDiff).Methods("POST")
+	//router.HandleFunc("/index/{index}/field", handler.handleGetFields).Methods("GET") // Not implemented.
+	router.HandleFunc("/index/{index}/field/{field}", handler.handlePostField).Methods("POST")
+	router.HandleFunc("/index/{index}/field/{field}", handler.handleDeleteField).Methods("DELETE")
+	router.HandleFunc("/index/{index}/field/{field}/attr/diff", handler.handlePostFieldAttrDiff).Methods("POST")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
 
@@ -502,22 +502,22 @@ type postIndexAttrDiffResponse struct {
 	Attrs map[uint64]map[string]interface{} `json:"attrs"`
 }
 
-// handlePostFrame handles POST /frame request.
-func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
+// handlePostField handles POST /field request.
+func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
-	frameName := mux.Vars(r)["frame"]
+	fieldName := mux.Vars(r)["field"]
 
 	// Decode request.
-	var req postFrameRequest
+	var req postFieldRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err == io.EOF {
-		// If no data was provided (EOF), we still create the frame
+		// If no data was provided (EOF), we still create the field
 		// with default values.
 	} else if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	_, err = h.API.CreateField(r.Context(), indexName, frameName, req.Options)
+	_, err = h.API.CreateField(r.Context(), indexName, fieldName, req.Options)
 	if err != nil {
 		switch errors.Cause(err) {
 		case ErrIndexNotFound:
@@ -530,30 +530,30 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Encode response.
-	if err := json.NewEncoder(w).Encode(postFrameResponse{}); err != nil {
+	if err := json.NewEncoder(w).Encode(postFieldResponse{}); err != nil {
 		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
-type _postFrameRequest postFrameRequest
+type _postFieldRequest postFieldRequest
 
-// Custom Unmarshal JSON to validate request body when creating a new frame. If there's new FrameOptions,
-// adding it to validFrameOptions to make sure the new option is validated, otherwise the request will be failed
-func (p *postFrameRequest) UnmarshalJSON(b []byte) error {
+// Custom Unmarshal JSON to validate request body when creating a new field. If there's new FieldOptions,
+// adding it to validFieldOptions to make sure the new option is validated, otherwise the request will be failed
+func (p *postFieldRequest) UnmarshalJSON(b []byte) error {
 	// m is an overflow map used to capture additional, unexpected keys.
 	m := make(map[string]interface{})
 	if err := json.Unmarshal(b, &m); err != nil {
 		return errors.Wrap(err, "unmarshaling unexpected keys")
 	}
 
-	validFrameOptions := getValidOptions(FieldOptions{})
-	err := validateOptions(m, validFrameOptions)
+	validFieldOptions := getValidOptions(FieldOptions{})
+	err := validateOptions(m, validFieldOptions)
 	if err != nil {
 		return err
 	}
 
 	// Unmarshal expected values.
-	var _p _postFrameRequest
+	var _p _postFieldRequest
 	if err := json.Unmarshal(b, &_p); err != nil {
 		return errors.Wrap(err, "unmarshalling expected keys")
 	}
@@ -574,18 +574,18 @@ func getValidOptions(option interface{}) []string {
 	return validOptions
 }
 
-type postFrameRequest struct {
+type postFieldRequest struct {
 	Options FieldOptions `json:"options"`
 }
 
-type postFrameResponse struct{}
+type postFieldResponse struct{}
 
-// handleDeleteFrame handles DELETE /frame request.
-func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
+// handleDeleteField handles DELETE /field request.
+func (h *Handler) handleDeleteField(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
-	frameName := mux.Vars(r)["frame"]
+	fieldName := mux.Vars(r)["field"]
 
-	err := h.API.DeleteField(r.Context(), indexName, frameName)
+	err := h.API.DeleteField(r.Context(), indexName, fieldName)
 	if err != nil {
 		if errors.Cause(err) == ErrIndexNotFound {
 			if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
@@ -598,26 +598,26 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Encode response.
-	if err := json.NewEncoder(w).Encode(deleteFrameResponse{}); err != nil {
+	if err := json.NewEncoder(w).Encode(deleteFieldResponse{}); err != nil {
 		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
-type deleteFrameResponse struct{}
+type deleteFieldResponse struct{}
 
-// handlePostFrameAttrDiff handles POST /frame/attr/diff requests.
-func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request) {
+// handlePostFieldAttrDiff handles POST /field/attr/diff requests.
+func (h *Handler) handlePostFieldAttrDiff(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
-	frameName := mux.Vars(r)["frame"]
+	fieldName := mux.Vars(r)["field"]
 
 	// Decode request.
-	var req postFrameAttrDiffRequest
+	var req postFieldAttrDiffRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	attrs, err := h.API.FieldAttrDiff(r.Context(), indexName, frameName, req.Blocks)
+	attrs, err := h.API.FieldAttrDiff(r.Context(), indexName, fieldName, req.Blocks)
 	if err != nil {
 		switch errors.Cause(err) {
 		case ErrFragmentNotFound:
@@ -629,18 +629,18 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 	}
 
 	// Encode response.
-	if err := json.NewEncoder(w).Encode(postFrameAttrDiffResponse{
+	if err := json.NewEncoder(w).Encode(postFieldAttrDiffResponse{
 		Attrs: attrs,
 	}); err != nil {
 		h.Logger.Printf("response encoding error: %s", err)
 	}
 }
 
-type postFrameAttrDiffRequest struct {
+type postFieldAttrDiffRequest struct {
 	Blocks []AttrBlock `json:"blocks"`
 }
 
-type postFrameAttrDiffResponse struct {
+type postFieldAttrDiffResponse struct {
 	Attrs map[uint64]map[string]interface{} `json:"attrs"`
 }
 
@@ -839,7 +839,7 @@ func (h *Handler) handleGetExport(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters.
 	q := r.URL.Query()
-	index, frame := q.Get("index"), q.Get("frame")
+	index, field := q.Get("index"), q.Get("field")
 
 	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
 	if err != nil {
@@ -847,7 +847,7 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = h.API.ExportCSV(r.Context(), index, frame, slice, w); err != nil {
+	if err = h.API.ExportCSV(r.Context(), index, field, slice, w); err != nil {
 		switch errors.Cause(err) {
 		case ErrFragmentNotFound:
 			break
@@ -915,7 +915,7 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	blocks, err := h.API.FragmentBlocks(r.Context(), q.Get("index"), q.Get("frame"), slice)
+	blocks, err := h.API.FragmentBlocks(r.Context(), q.Get("index"), q.Get("field"), slice)
 	if err != nil {
 		if errors.Cause(err) == ErrFragmentNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)

@@ -753,14 +753,14 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	index := test.MustOpenIndex()
 	defer index.Close()
 
-	// Create frame.
-	frame, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{CacheType: pilosa.CacheTypeRanked, CacheSize: cacheSize})
+	// Create field.
+	field, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{CacheType: pilosa.CacheTypeRanked, CacheSize: cacheSize})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Create view.
-	view, err := frame.CreateViewIfNotExists(pilosa.ViewStandard)
+	view, err := field.CreateViewIfNotExists(pilosa.ViewStandard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -923,14 +923,14 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 	index := test.MustOpenIndex()
 	defer index.Close()
 
-	// Create frame.
-	frame, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{CacheType: pilosa.CacheTypeRanked})
+	// Create field.
+	field, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{CacheType: pilosa.CacheTypeRanked})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Create view.
-	view, err := frame.CreateViewIfNotExists(pilosa.ViewStandard)
+	view, err := field.CreateViewIfNotExists(pilosa.ViewStandard)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -28,7 +28,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Index represents a container for frames.
+// Index represents a container for fields.
 type Index struct {
 	mu   sync.RWMutex
 	path string
@@ -107,7 +107,7 @@ func (i *Index) Open() error {
 	}
 
 	if err := i.openFields(); err != nil {
-		return errors.Wrap(err, "opening frames")
+		return errors.Wrap(err, "opening fields")
 	}
 
 	if err := i.columnAttrStore.Open(); err != nil {
@@ -117,7 +117,7 @@ func (i *Index) Open() error {
 	return nil
 }
 
-// openFields opens and initializes the frames inside the index.
+// openFields opens and initializes the fields inside the index.
 func (i *Index) openFields() error {
 	f, err := os.Open(i.path)
 	if err != nil {
@@ -140,7 +140,7 @@ func (i *Index) openFields() error {
 			return ErrName
 		}
 		if err := fld.Open(); err != nil {
-			return fmt.Errorf("open frame: name=%s, err=%s", fld.Name(), err)
+			return fmt.Errorf("open field: name=%s, err=%s", fld.Name(), err)
 		}
 		i.fields[fld.Name()] = fld
 	}
@@ -189,7 +189,7 @@ func (i *Index) saveMeta() error {
 }
 */
 
-// Close closes the index and its frames.
+// Close closes the index and its fields.
 func (i *Index) Close() error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -197,10 +197,10 @@ func (i *Index) Close() error {
 	// Close the attribute store.
 	i.columnAttrStore.Close()
 
-	// Close all frames.
+	// Close all fields.
 	for _, f := range i.fields {
 		if err := f.Close(); err != nil {
-			return errors.Wrap(err, "closing frame")
+			return errors.Wrap(err, "closing field")
 		}
 	}
 	i.fields = make(map[string]*Field)
@@ -237,7 +237,7 @@ func (i *Index) SetRemoteMaxSlice(newmax uint64) {
 // FieldPath returns the path to a field in the index.
 func (i *Index) FieldPath(name string) string { return filepath.Join(i.path, name) }
 
-// Field returns a frame in the index by name.
+// Field returns a field in the index by name.
 func (i *Index) Field(name string) *Field {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
@@ -260,10 +260,10 @@ func (i *Index) Fields() []*Field {
 	return a
 }
 
-// RecalculateCaches recalculates caches on every frame in the index.
+// RecalculateCaches recalculates caches on every field in the index.
 func (i *Index) RecalculateCaches() {
-	for _, frame := range i.Fields() {
-		frame.RecalculateCaches()
+	for _, field := range i.Fields() {
+		field.RecalculateCaches()
 	}
 }
 
@@ -272,7 +272,7 @@ func (i *Index) CreateField(name string, opt FieldOptions) (*Field, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	// Ensure frame doesn't already exist.
+	// Ensure field doesn't already exist.
 	if i.fields[name] != nil {
 		return nil, ErrFieldExists
 	}
@@ -284,7 +284,7 @@ func (i *Index) CreateFieldIfNotExists(name string, opt FieldOptions) (*Field, e
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	// Find frame in cache first.
+	// Find field in cache first.
 	if f := i.fields[name]; f != nil {
 		return f, nil
 	}
@@ -294,7 +294,7 @@ func (i *Index) CreateFieldIfNotExists(name string, opt FieldOptions) (*Field, e
 
 func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 	if name == "" {
-		return nil, errors.New("frame name required")
+		return nil, errors.New("field name required")
 	} else if opt.CacheType != "" && !IsValidCacheType(opt.CacheType) {
 		return nil, ErrInvalidCacheType
 	}
@@ -304,18 +304,18 @@ func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 		return nil, errors.Wrap(err, "validating options")
 	}
 
-	// Initialize frame.
+	// Initialize field.
 	f, err := i.newField(i.FieldPath(name), name)
 	if err != nil {
 		return nil, errors.Wrap(err, "initializing")
 	}
 
-	// Open frame.
+	// Open field.
 	if err := f.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")
 	}
 
-	// Apply frame options.
+	// Apply field options.
 	if err := f.applyOptions(opt); err != nil {
 		f.Close()
 		return nil, errors.Wrap(err, "applying options")
@@ -326,7 +326,7 @@ func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 		return nil, errors.Wrap(err, "saving meta")
 	}
 
-	// Add to index's frame lookup.
+	// Add to index's field lookup.
 	i.fields[name] = f
 
 	return f, nil
@@ -338,7 +338,7 @@ func (i *Index) newField(path, name string) (*Field, error) {
 		return nil, err
 	}
 	f.Logger = i.Logger
-	f.Stats = i.Stats.WithTags(fmt.Sprintf("frame:%s", name))
+	f.Stats = i.Stats.WithTags(fmt.Sprintf("field:%s", name))
 	f.broadcaster = i.broadcaster
 	f.rowAttrStore = i.NewAttrStore(filepath.Join(f.path, ".data"))
 	return f, nil
@@ -349,18 +349,18 @@ func (i *Index) DeleteField(name string) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	// Ignore if frame doesn't exist.
+	// Ignore if field doesn't exist.
 	f := i.field(name)
 	if f == nil {
 		return nil
 	}
 
-	// Close frame.
+	// Close field.
 	if err := f.Close(); err != nil {
 		return errors.Wrap(err, "closing")
 	}
 
-	// Delete frame directory.
+	// Delete field directory.
 	if err := os.RemoveAll(i.FieldPath(name)); err != nil {
 		return errors.Wrap(err, "removing directory")
 	}

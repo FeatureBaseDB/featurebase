@@ -21,7 +21,7 @@ func TestMonitorAntiEntropy(t *testing.T) {
 	}
 	err = client.CreateField(context.Background(), "balh", "fralh", pilosa.FieldOptions{})
 	if err != nil {
-		t.Fatalf("creating frame: %v", err)
+		t.Fatalf("creating field: %v", err)
 	}
 
 	time.Sleep(time.Millisecond * 2)

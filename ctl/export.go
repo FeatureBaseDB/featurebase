@@ -30,9 +30,9 @@ type ExportCommand struct {
 	// Remote host and port.
 	Host string
 
-	// Name of the index & frame to export from.
+	// Name of the index & field to export from.
 	Index string
-	Frame string
+	Field string
 
 	// Filename to export to.
 	Path string
@@ -57,7 +57,7 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	// Validate arguments.
 	if cmd.Index == "" {
 		return pilosa.ErrIndexRequired
-	} else if cmd.Frame == "" {
+	} else if cmd.Field == "" {
 		return pilosa.ErrFieldRequired
 	}
 
@@ -89,7 +89,7 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	// Export each slice.
 	for slice := uint64(0); slice <= maxSlices[cmd.Index]; slice++ {
 		logger.Printf("exporting slice: %d", slice)
-		if err := client.ExportCSV(ctx, cmd.Index, cmd.Frame, slice, w); err != nil {
+		if err := client.ExportCSV(ctx, cmd.Index, cmd.Field, slice, w); err != nil {
 			return errors.Wrap(err, "exporting")
 		}
 	}
