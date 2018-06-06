@@ -45,13 +45,13 @@ func TestFragCombos(t *testing.T) {
 	tests := []struct {
 		idx        string
 		maxSlice   uint64
-		frameViews viewsByFrame
+		frameViews viewsByField
 		expected   fragsByHost
 	}{
 		{
 			idx:        "i",
 			maxSlice:   uint64(2),
-			frameViews: viewsByFrame{"f": []string{"v1", "v2"}},
+			frameViews: viewsByField{"f": []string{"v1", "v2"}},
 			expected: fragsByHost{
 				"node0": []frag{{"f", "v1", uint64(0)}, {"f", "v2", uint64(0)}},
 				"node1": []frag{{"f", "v1", uint64(1)}, {"f", "v2", uint64(1)}, {"f", "v1", uint64(2)}, {"f", "v2", uint64(2)}},
@@ -60,7 +60,7 @@ func TestFragCombos(t *testing.T) {
 		{
 			idx:        "foo",
 			maxSlice:   uint64(3),
-			frameViews: viewsByFrame{"f": []string{"v0"}},
+			frameViews: viewsByField{"f": []string{"v0"}},
 			expected: fragsByHost{
 				"node0": []frag{{"f", "v0", uint64(1)}, {"f", "v0", uint64(2)}},
 				"node1": []frag{{"f", "v0", uint64(0)}, {"f", "v0", uint64(3)}},
