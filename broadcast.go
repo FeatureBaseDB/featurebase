@@ -123,8 +123,8 @@ const (
 	MessageTypeCreateSlice = iota
 	MessageTypeCreateIndex
 	MessageTypeDeleteIndex
-	MessageTypeCreateFrame
-	MessageTypeDeleteFrame
+	MessageTypeCreateField
+	MessageTypeDeleteField
 	MessageTypeCreateView
 	MessageTypeDeleteView
 	MessageTypeClusterStatus
@@ -147,10 +147,10 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 		typ = MessageTypeCreateIndex
 	case *internal.DeleteIndexMessage:
 		typ = MessageTypeDeleteIndex
-	case *internal.CreateFrameMessage:
-		typ = MessageTypeCreateFrame
-	case *internal.DeleteFrameMessage:
-		typ = MessageTypeDeleteFrame
+	case *internal.CreateFieldMessage:
+		typ = MessageTypeCreateField
+	case *internal.DeleteFieldMessage:
+		typ = MessageTypeDeleteField
 	case *internal.CreateViewMessage:
 		typ = MessageTypeCreateView
 	case *internal.DeleteViewMessage:
@@ -193,10 +193,10 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 		m = &internal.CreateIndexMessage{}
 	case MessageTypeDeleteIndex:
 		m = &internal.DeleteIndexMessage{}
-	case MessageTypeCreateFrame:
-		m = &internal.CreateFrameMessage{}
-	case MessageTypeDeleteFrame:
-		m = &internal.DeleteFrameMessage{}
+	case MessageTypeCreateField:
+		m = &internal.CreateFieldMessage{}
+	case MessageTypeDeleteField:
+		m = &internal.DeleteFieldMessage{}
 	case MessageTypeCreateView:
 		m = &internal.CreateViewMessage{}
 	case MessageTypeDeleteView:

@@ -770,7 +770,7 @@ func (c *Cluster) fragSources(to *Cluster, idx *Index) (map[string][]*internal.R
 			src := &internal.ResizeSource{
 				Node:  EncodeNode(c.nodeByID(srcNodeID)),
 				Index: idx.Name(),
-				Frame: frag.field,
+				Field: frag.field,
 				View:  frag.view,
 				Slice: frag.slice,
 			}
@@ -1240,7 +1240,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 				srcURI := decodeURI(src.Node.URI)
 
 				// Retrieve field.
-				f := c.Holder.Field(src.Index, src.Frame)
+				f := c.Holder.Field(src.Index, src.Field)
 				if f == nil {
 					return ErrFieldNotFound
 				}
@@ -1259,7 +1259,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 
 				// Stream slice from remote node.
 				c.Logger.Printf("retrieve slice %d for index %s from host %s", src.Slice, src.Index, src.Node.URI)
-				rd, err := client.RetrieveSliceFromURI(context.Background(), src.Index, src.Frame, src.Slice, srcURI)
+				rd, err := client.RetrieveSliceFromURI(context.Background(), src.Index, src.Field, src.Slice, srcURI)
 				if err != nil {
 					// For now it is an acceptable error if the fragment is not found
 					// on the remote node. This occurs when a slice has been skipped and

@@ -348,7 +348,7 @@ func marshalImportPayload(index, field string, slice uint64, bits []Bit) ([]byte
 	// Marshal data to protobuf.
 	buf, err := proto.Marshal(&internal.ImportRequest{
 		Index:      index,
-		Frame:      field,
+		Field:      field,
 		Slice:      slice,
 		RowIDs:     rowIDs,
 		ColumnIDs:  columnIDs,
@@ -370,7 +370,7 @@ func marshalImportPayloadK(index, field string, bits []Bit) ([]byte, error) {
 	// Marshal data to protobuf.
 	buf, err := proto.Marshal(&internal.ImportRequest{
 		Index:      index,
-		Frame:      field,
+		Field:      field,
 		RowKeys:    rowKeys,
 		ColumnKeys: columnKeys,
 		Timestamps: timestamps,
@@ -457,7 +457,7 @@ func marshalImportValuePayload(index, field string, slice uint64, vals []FieldVa
 	// Marshal data to protobuf.
 	buf, err := proto.Marshal(&internal.ImportValueRequest{
 		Index:     index,
-		Frame:     field,
+		Field:     field,
 		Slice:     slice,
 		ColumnIDs: columnIDs,
 		Values:    values,
@@ -710,7 +710,7 @@ func (c *InternalHTTPClient) FragmentBlocks(ctx context.Context, index, field st
 func (c *InternalHTTPClient) BlockData(ctx context.Context, index, field string, slice uint64, block int) ([]uint64, []uint64, error) {
 	buf, err := proto.Marshal(&internal.BlockDataRequest{
 		Index: index,
-		Frame: field,
+		Field: field,
 		Slice: slice,
 		Block: uint64(block),
 	})

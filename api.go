@@ -237,16 +237,16 @@ func (api *API) CreateFrame(ctx context.Context, indexName string, frameName str
 
 	// Send the create frame message to all nodes.
 	err = api.Broadcaster.SendSync(
-		&internal.CreateFrameMessage{
+		&internal.CreateFieldMessage{
 			Index: indexName,
-			Frame: frameName,
+			Field: frameName,
 			Meta:  options.Encode(),
 		})
 	if err != nil {
-		api.Logger.Printf("problem sending CreateFrame message: %s", err)
-		return nil, errors.Wrap(err, "sending CreateFrame message")
+		api.Logger.Printf("problem sending CreateField message: %s", err)
+		return nil, errors.Wrap(err, "sending CreateField message")
 	}
-	api.Holder.Stats.CountWithCustomTags("createFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
+	api.Holder.Stats.CountWithCustomTags("createField", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
 	return frame, nil
 }
 
@@ -271,15 +271,15 @@ func (api *API) DeleteFrame(ctx context.Context, indexName string, frameName str
 
 	// Send the delete frame message to all nodes.
 	err := api.Broadcaster.SendSync(
-		&internal.DeleteFrameMessage{
+		&internal.DeleteFieldMessage{
 			Index: indexName,
-			Frame: frameName,
+			Field: frameName,
 		})
 	if err != nil {
-		api.Logger.Printf("problem sending DeleteFrame message: %s", err)
-		return errors.Wrap(err, "sending DeleteFrame message")
+		api.Logger.Printf("problem sending DeleteField message: %s", err)
+		return errors.Wrap(err, "sending DeleteField message")
 	}
-	api.Holder.Stats.CountWithCustomTags("deleteFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
+	api.Holder.Stats.CountWithCustomTags("deleteField", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
 	return nil
 }
 
@@ -397,7 +397,7 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 	}
 
 	// Retrieve fragment from holder.
-	f := api.Holder.Fragment(req.Index, req.Frame, ViewStandard, req.Slice)
+	f := api.Holder.Fragment(req.Index, req.Field, ViewStandard, req.Slice)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -529,7 +529,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, frameName stri
 	err := api.Broadcaster.SendSync(
 		&internal.DeleteViewMessage{
 			Index: indexName,
-			Frame: frameName,
+			Field: frameName,
 			View:  viewName,
 		})
 	if err != nil {
@@ -614,7 +614,7 @@ func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	_, frame, err := api.indexFrame(req.Index, req.Frame, req.Slice)
+	_, frame, err := api.indexFrame(req.Index, req.Field, req.Slice)
 	if err != nil {
 		return errors.Wrap(err, "getting frame")
 	}
@@ -632,7 +632,7 @@ func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 	// Import into fragment.
 	err = frame.Import(req.RowIDs, req.ColumnIDs, timestamps)
 	if err != nil {
-		api.Logger.Printf("import error: index=%s, frame=%s, slice=%d, columns=%d, err=%s", req.Index, req.Frame, req.Slice, len(req.ColumnIDs), err)
+		api.Logger.Printf("import error: index=%s, frame=%s, slice=%d, columns=%d, err=%s", req.Index, req.Field, req.Slice, len(req.ColumnIDs), err)
 	}
 	return errors.Wrap(err, "importing")
 }
@@ -643,7 +643,7 @@ func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest
 		return errors.Wrap(err, "validating api method")
 	}
 
-	_, frame, err := api.indexFrame(req.Index, req.Frame, req.Slice)
+	_, frame, err := api.indexFrame(req.Index, req.Field, req.Slice)
 	if err != nil {
 		return errors.Wrap(err, "getting frame")
 	}
@@ -651,7 +651,7 @@ func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest
 	// Import into fragment.
 	err = frame.ImportValue(req.ColumnIDs, req.Values)
 	if err != nil {
-		api.Logger.Printf("import error: index=%s, frame=%s, slice=%d, columns=%d, err=%s", req.Index, req.Frame, req.Slice, len(req.ColumnIDs), err)
+		api.Logger.Printf("import error: index=%s, frame=%s, slice=%d, columns=%d, err=%s", req.Index, req.Field, req.Slice, len(req.ColumnIDs), err)
 	}
 	return errors.Wrap(err, "importing")
 }

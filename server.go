@@ -455,34 +455,34 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if err := s.Holder.DeleteIndex(obj.Index); err != nil {
 			return err
 		}
-	case *internal.CreateFrameMessage:
+	case *internal.CreateFieldMessage:
 		idx := s.Holder.Index(obj.Index)
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
 		opt := decodeFieldOptions(obj.Meta)
-		_, err := idx.CreateField(obj.Frame, *opt)
+		_, err := idx.CreateField(obj.Field, *opt)
 		if err != nil {
 			return err
 		}
-	case *internal.DeleteFrameMessage:
+	case *internal.DeleteFieldMessage:
 		idx := s.Holder.Index(obj.Index)
-		if err := idx.DeleteField(obj.Frame); err != nil {
+		if err := idx.DeleteField(obj.Field); err != nil {
 			return err
 		}
 	case *internal.CreateViewMessage:
-		f := s.Holder.Field(obj.Index, obj.Frame)
+		f := s.Holder.Field(obj.Index, obj.Field)
 		if f == nil {
-			return fmt.Errorf("Local Frame not found: %s", obj.Frame)
+			return fmt.Errorf("Local Field not found: %s", obj.Field)
 		}
 		_, _, err := f.createViewIfNotExistsBase(obj.View)
 		if err != nil {
 			return err
 		}
 	case *internal.DeleteViewMessage:
-		f := s.Holder.Field(obj.Index, obj.Frame)
+		f := s.Holder.Field(obj.Index, obj.Field)
 		if f == nil {
-			return fmt.Errorf("Local Frame not found: %s", obj.Frame)
+			return fmt.Errorf("Local Field not found: %s", obj.Field)
 		}
 		err := f.DeleteView(obj.View)
 		if err != nil {

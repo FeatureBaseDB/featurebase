@@ -556,7 +556,7 @@ func (f *Field) CreateViewIfNotExists(name string) (*View, error) {
 		err = f.broadcaster.SendSync(
 			&internal.CreateViewMessage{
 				Index: f.index,
-				Frame: f.name,
+				Field: f.name,
 				View:  name,
 			})
 		if err != nil {

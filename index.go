@@ -402,7 +402,7 @@ func EncodeIndexes(a []*Index) []*internal.Index {
 func encodeIndex(d *Index) *internal.Index {
 	return &internal.Index{
 		Name:   d.name,
-		Frames: encodeFields(d.Fields()),
+		Fields: encodeFields(d.Fields()),
 	}
 }
 

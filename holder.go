@@ -239,7 +239,7 @@ func (h *Holder) ApplySchema(schema *internal.Schema) error {
 			return errors.Wrap(err, "creating index")
 		}
 		// Create frames that don't exist.
-		for _, f := range index.Frames {
+		for _, f := range index.Fields {
 			opt := decodeFieldOptions(f.Meta)
 			frame, err := idx.CreateFieldIfNotExists(f.Name, *opt)
 			if err != nil {
