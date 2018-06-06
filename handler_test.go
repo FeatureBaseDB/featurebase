@@ -31,7 +31,6 @@ import (
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
-	"github.com/pilosa/pilosa/statik"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -913,34 +912,6 @@ func TestHandler_RecalculateCaches(t *testing.T) {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	}
 
-}
-
-func TestHandler_WebUI(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-
-	h := test.MustNewHandler()
-	h.API.Holder = hldr.Holder
-	h.API.Cluster = test.NewCluster(1)
-	h.FileSystem = &statik.FileSystem{}
-
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/", nil))
-	if w.Code != http.StatusOK {
-		t.Fatalf("unexpected status code: %d", w.Code)
-	}
-	if !strings.Contains(w.Body.String(), "<title>Pilosa WebUI</title>") {
-		t.Fatalf("WebUI is not being served correctly.")
-	}
-
-	// If curl is the client, the response should be different
-	w = httptest.NewRecorder()
-	req := test.MustNewHTTPRequest("GET", "/", nil)
-	req.Header.Add("User-Agent", "curl/7.54.0")
-	h.ServeHTTP(w, req)
-	if !strings.Contains(w.Body.String(), "try the WebUI") {
-		t.Fatalf("WebUI is not being served correctly.")
-	}
 }
 
 func TestHandler_CORS(t *testing.T) {

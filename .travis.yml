@@ -13,7 +13,7 @@ env:
     - GOARCH=amd64
     - GOARCH=amd64 ENTERPRISE=1
 install:
-  - make install-dep install-statik vendor generate-statik
+  - make install-dep vendor
 script:
   - make test
 before_deploy:
