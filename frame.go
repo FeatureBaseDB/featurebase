@@ -29,13 +29,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Default frame settings.
+// Default field settings.
 const (
 	DefaultFieldType = FieldTypeSet
 
 	DefaultCacheType = CacheTypeRanked
 
-	// Default ranked frame cache
+	// Default ranked field cache
 	DefaultCacheSize = 50000
 )
 
@@ -80,7 +80,7 @@ func OptFieldFieldOptions(o FieldOptions) FieldOption {
 	}
 }
 
-// NewField returns a new instance of frame.
+// NewField returns a new instance of field.
 func NewField(path, index, name string, opts ...FieldOption) (*Field, error) {
 	err := ValidateName(name)
 	if err != nil {
@@ -118,19 +118,19 @@ func NewField(path, index, name string, opts ...FieldOption) (*Field, error) {
 	return f, nil
 }
 
-// Name returns the name the frame was initialized with.
+// Name returns the name the field was initialized with.
 func (f *Field) Name() string { return f.name }
 
-// Index returns the index name the frame was initialized with.
+// Index returns the index name the field was initialized with.
 func (f *Field) Index() string { return f.index }
 
-// Path returns the path the frame was initialized with.
+// Path returns the path the field was initialized with.
 func (f *Field) Path() string { return f.path }
 
 // RowAttrStore returns the attribute storage.
 func (f *Field) RowAttrStore() AttrStore { return f.rowAttrStore }
 
-// MaxSlice returns the max slice in the frame.
+// MaxSlice returns the max slice in the field.
 func (f *Field) MaxSlice() uint64 {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
@@ -144,14 +144,14 @@ func (f *Field) MaxSlice() uint64 {
 	return max
 }
 
-// Type returns the frame type.
+// Type returns the field type.
 func (f *Field) Type() string {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.options.Type
 }
 
-// CacheType returns the caching mode for the frame.
+// CacheType returns the caching mode for the field.
 func (f *Field) CacheType() string {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
@@ -178,7 +178,7 @@ func (f *Field) SetCacheSize(v uint32) error {
 	return nil
 }
 
-// CacheSize returns the ranked frame cache size.
+// CacheSize returns the ranked field cache size.
 func (f *Field) CacheSize() uint32 {
 	f.mu.RLock()
 	v := f.options.CacheSize
@@ -186,26 +186,26 @@ func (f *Field) CacheSize() uint32 {
 	return v
 }
 
-// Options returns all options for this frame.
+// Options returns all options for this field.
 func (f *Field) Options() FieldOptions {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.options
 }
 
-// Open opens and initializes the frame.
+// Open opens and initializes the field.
 func (f *Field) Open() error {
 	if err := func() error {
-		// Ensure the frame's path exists.
+		// Ensure the field's path exists.
 		if err := os.MkdirAll(f.path, 0777); err != nil {
-			return errors.Wrap(err, "creating frame dir")
+			return errors.Wrap(err, "creating field dir")
 		}
 
 		if err := f.loadMeta(); err != nil {
 			return errors.Wrap(err, "loading meta")
 		}
 
-		// Apply the frame options loaded from meta.
+		// Apply the field options loaded from meta.
 		if err := f.applyOptions(f.options); err != nil {
 			return errors.Wrap(err, "applying options")
 		}
@@ -227,7 +227,7 @@ func (f *Field) Open() error {
 	return nil
 }
 
-// openViews opens and initializes the views inside the frame.
+// openViews opens and initializes the views inside the field.
 func (f *Field) openViews() error {
 	file, err := os.Open(filepath.Join(f.path, "views"))
 	if os.IsNotExist(err) {
@@ -259,7 +259,7 @@ func (f *Field) openViews() error {
 	return nil
 }
 
-// loadMeta reads meta data for the frame, if any.
+// loadMeta reads meta data for the field, if any.
 func (f *Field) loadMeta() error {
 	var pb internal.FieldOptions
 
@@ -286,7 +286,7 @@ func (f *Field) loadMeta() error {
 	return nil
 }
 
-// saveMeta writes meta data for the frame.
+// saveMeta writes meta data for the field.
 func (f *Field) saveMeta() error {
 	// Marshal metadata.
 	fo := f.options
@@ -303,7 +303,7 @@ func (f *Field) saveMeta() error {
 	return nil
 }
 
-// applyOptions configures the frame based on opt.
+// applyOptions configures the field based on opt.
 func (f *Field) applyOptions(opt FieldOptions) error {
 	switch opt.Type {
 	case FieldTypeSet, "":
@@ -351,13 +351,13 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 			return errors.Wrap(err, "setting time quantum")
 		}
 	default:
-		return errors.New("invalid frame type")
+		return errors.New("invalid field type")
 	}
 
 	return nil
 }
 
-// Close closes the frame and its views.
+// Close closes the field and its views.
 func (f *Field) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -390,7 +390,7 @@ func (f *Field) bsiGroup(name string) *bsiGroup {
 	return nil
 }
 
-// hasBSIGroup returns true if a bsiGroup exists on the frame.
+// hasBSIGroup returns true if a bsiGroup exists on the field.
 func (f *Field) hasBSIGroup(name string) bool {
 	for _, bsig := range f.bsiGroups {
 		if bsig.Name == name {
@@ -400,7 +400,7 @@ func (f *Field) hasBSIGroup(name string) bool {
 	return false
 }
 
-// createBSIGroup creates a new bsiGroup on the frame.
+// createBSIGroup creates a new bsiGroup on the field.
 func (f *Field) createBSIGroup(bsig *bsiGroup) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -469,14 +469,14 @@ func (f *Field) deleteBSIGroup(name string) error {
 	return ErrBSIGroupNotFound
 }
 
-// TimeQuantum returns the time quantum for the frame.
+// TimeQuantum returns the time quantum for the field.
 func (f *Field) TimeQuantum() TimeQuantum {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.options.TimeQuantum
 }
 
-// SetTimeQuantum sets the time quantum for the frame.
+// SetTimeQuantum sets the time quantum for the field.
 func (f *Field) SetTimeQuantum(q TimeQuantum) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -486,7 +486,7 @@ func (f *Field) SetTimeQuantum(q TimeQuantum) error {
 		return ErrInvalidTimeQuantum
 	}
 
-	// Update value on frame.
+	// Update value on field.
 	f.options.TimeQuantum = q
 
 	// Persist meta data to disk.
@@ -497,12 +497,12 @@ func (f *Field) SetTimeQuantum(q TimeQuantum) error {
 	return nil
 }
 
-// ViewPath returns the path to a view in the frame.
+// ViewPath returns the path to a view in the field.
 func (f *Field) ViewPath(name string) string {
 	return filepath.Join(f.path, "views", name)
 }
 
-// View returns a view in the frame by name.
+// View returns a view in the field by name.
 func (f *Field) View(name string) *View {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
@@ -511,7 +511,7 @@ func (f *Field) View(name string) *View {
 
 func (f *Field) view(name string) *View { return f.views[name] }
 
-// Views returns a list of all views in the frame.
+// Views returns a list of all views in the field.
 func (f *Field) Views() []*View {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
@@ -523,7 +523,7 @@ func (f *Field) Views() []*View {
 	return other
 }
 
-// viewNames returns a list of all views (as a string) in the frame.
+// viewNames returns a list of all views (as a string) in the field.
 func (f *Field) viewNames() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -535,7 +535,7 @@ func (f *Field) viewNames() []string {
 	return other
 }
 
-// RecalculateCaches recalculates caches on every view in the frame.
+// RecalculateCaches recalculates caches on every view in the field.
 func (f *Field) RecalculateCaches() {
 	for _, view := range f.Views() {
 		view.RecalculateCaches()
@@ -598,7 +598,7 @@ func (f *Field) newView(path, name string) *View {
 	return view
 }
 
-// DeleteView removes the view from the frame.
+// DeleteView removes the view from the field.
 func (f *Field) DeleteView(name string) error {
 	view := f.views[name]
 	if view == nil {
@@ -620,7 +620,7 @@ func (f *Field) DeleteView(name string) error {
 	return nil
 }
 
-// SetBit sets a bit on a view within the frame.
+// SetBit sets a bit on a view within the field.
 func (f *Field) SetBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
 	// Validate view name.
 	if !IsValidView(name) {
@@ -662,7 +662,7 @@ func (f *Field) SetBit(name string, rowID, colID uint64, t *time.Time) (changed 
 	return changed, nil
 }
 
-// ClearBit clears a bit within the frame.
+// ClearBit clears a bit within the field.
 func (f *Field) ClearBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
 	// Validate view name.
 	if !IsValidView(name) {
@@ -704,7 +704,7 @@ func (f *Field) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 	return changed, nil
 }
 
-// Value reads a frame value for a column.
+// Value reads a field value for a column.
 func (f *Field) Value(columnID uint64) (value int64, exists bool, err error) {
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
@@ -726,7 +726,7 @@ func (f *Field) Value(columnID uint64) (value int64, exists bool, err error) {
 	return int64(v) + bsig.Min, true, nil
 }
 
-// SetValue sets a frame value for a column.
+// SetValue sets a field value for a column.
 func (f *Field) SetValue(columnID uint64, value int64) (changed bool, err error) {
 	// Fetch bsiGroup and validate value.
 	bsig := f.bsiGroup(f.name)
@@ -750,7 +750,7 @@ func (f *Field) SetValue(columnID uint64, value int64) (changed bool, err error)
 	return view.setValue(columnID, bsig.BitDepth(), baseValue)
 }
 
-// Sum returns the sum and count for a frame.
+// Sum returns the sum and count for a field.
 // An optional filtering row can be provided.
 func (f *Field) Sum(filter *Row, name string) (sum, count int64, err error) {
 	bsig := f.bsiGroup(name)
@@ -770,7 +770,7 @@ func (f *Field) Sum(filter *Row, name string) (sum, count int64, err error) {
 	return int64(vsum) + (int64(vcount) * bsig.Min), int64(vcount), nil
 }
 
-// Min returns the min for a frame.
+// Min returns the min for a field.
 // An optional filtering row can be provided.
 func (f *Field) Min(filter *Row, name string) (min, count int64, err error) {
 	bsig := f.bsiGroup(name)
@@ -790,7 +790,7 @@ func (f *Field) Min(filter *Row, name string) (min, count int64, err error) {
 	return int64(vmin) + bsig.Min, int64(vcount), nil
 }
 
-// Max returns the max for a frame.
+// Max returns the max for a field.
 // An optional filtering row can be provided.
 func (f *Field) Max(filter *Row, name string) (max, count int64, err error) {
 	bsig := f.bsiGroup(name)
@@ -861,7 +861,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 	// Determine quantum if timestamps are set.
 	q := f.TimeQuantum()
 	if hasTime(timestamps) && q == "" {
-		return errors.New("time quantum not set in either index or frame")
+		return errors.New("time quantum not set in field")
 	}
 
 	// Split import data by fragment.
@@ -995,7 +995,7 @@ func (p fieldSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p fieldSlice) Len() int           { return len(p) }
 func (p fieldSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
-// FieldInfo represents schema information for a frame.
+// FieldInfo represents schema information for a field.
 type FieldInfo struct {
 	Name    string       `json:"name"`
 	Options FieldOptions `json:"options"`
@@ -1032,7 +1032,7 @@ func (o *FieldOptions) Validate() error {
 			return ErrInvalidTimeQuantum
 		}
 	default:
-		return errors.New("invalid frame type")
+		return errors.New("invalid field type")
 	}
 	return nil
 }
@@ -1084,7 +1084,7 @@ func isValidBSIGroupType(v string) bool {
 	}
 }
 
-// bsiGroup represents a group of range-encoded rows on a frame.
+// bsiGroup represents a group of range-encoded rows on a field.
 type bsiGroup struct {
 	Name string `json:"name,omitempty"`
 	Type string `json:"type,omitempty"`
