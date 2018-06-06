@@ -971,8 +971,8 @@ func (f *Field) ImportValue(columnIDs []uint64, values []int64) error {
 }
 
 // encodeFields converts a into its internal representation.
-func encodeFields(a []*Field) []*internal.Frame {
-	other := make([]*internal.Frame, len(a))
+func encodeFields(a []*Field) []*internal.Field {
+	other := make([]*internal.Field, len(a))
 	for i := range a {
 		other[i] = encodeField(a[i])
 	}
@@ -980,9 +980,9 @@ func encodeFields(a []*Field) []*internal.Frame {
 }
 
 // encodeField converts f into its internal representation.
-func encodeField(f *Field) *internal.Frame {
+func encodeField(f *Field) *internal.Field {
 	fo := f.options
-	return &internal.Frame{
+	return &internal.Field{
 		Name:  f.name,
 		Meta:  fo.Encode(),
 		Views: f.viewNames(),

@@ -64,7 +64,7 @@ message DeleteFrameMessage {
     string Frame = 2;
 }
 
-message Frame {
+message Field {
     string Name = 1;
     FieldOptions Meta = 2;
     repeated string Views = 3;
@@ -76,7 +76,7 @@ message Schema {
 
 message Index {
     string Name = 1;
-    repeated Frame Frames = 4;
+    repeated Field Frames = 4;
 }
 
 message URI {
