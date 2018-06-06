@@ -272,8 +272,8 @@ func TestStatsCount_CreateFrame(t *testing.T) {
 	called := false
 	s.Handler.API.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, index []string) {
-			if name != "createFrame" {
-				t.Errorf("Expected createFrame, Results %s", name)
+			if name != "createField" {
+				t.Errorf("Expected createField, Results %s", name)
 			}
 			if index[0] != "index:i" {
 				t.Errorf("Expected index:i, Results %s", index)
@@ -303,8 +303,8 @@ func TestStatsCount_DeleteFrame(t *testing.T) {
 	}
 	s.Handler.API.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, index []string) {
-			if name != "deleteFrame" {
-				t.Errorf("Expected deleteFrame, Results %s", name)
+			if name != "deleteField" {
+				t.Errorf("Expected deleteField, Results %s", name)
 			}
 			if index[0] != "index:i" {
 				t.Errorf("Expected index:i, Results %s", index)

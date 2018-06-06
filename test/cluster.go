@@ -367,7 +367,7 @@ func (t *TestCluster) FollowResizeInstruction(instr *internal.ResizeInstruction)
 	if err := func() error {
 
 		// figure out which node it was meant for, then call the operation on that cluster
-		// basically need to mimic this: client.RetrieveSliceFromURI(context.Background(), src.Index, src.Frame, src.View, src.Slice, srcURI)
+		// basically need to mimic this: client.RetrieveSliceFromURI(context.Background(), src.Index, src.Field, src.View, src.Slice, srcURI)
 		instrNode := pilosa.DecodeNode(instr.Node)
 		destCluster := t.clusterByID(instrNode.ID)
 
@@ -380,11 +380,11 @@ func (t *TestCluster) FollowResizeInstruction(instr *internal.ResizeInstruction)
 			srcNode := pilosa.DecodeNode(src.Node)
 			srcCluster := t.clusterByID(srcNode.ID)
 
-			srcFragment := srcCluster.Holder.Fragment(src.Index, src.Frame, src.View, src.Slice)
-			destFragment := destCluster.Holder.Fragment(src.Index, src.Frame, src.View, src.Slice)
+			srcFragment := srcCluster.Holder.Fragment(src.Index, src.Field, src.View, src.Slice)
+			destFragment := destCluster.Holder.Fragment(src.Index, src.Field, src.View, src.Slice)
 			if destFragment == nil {
 				// Create fragment on destination if it doesn't exist.
-				f := destCluster.Holder.Field(src.Index, src.Frame)
+				f := destCluster.Holder.Field(src.Index, src.Field)
 				v := f.View(src.View)
 				var err error
 				destFragment, err = v.CreateFragmentIfNotExists(src.Slice)
