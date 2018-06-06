@@ -67,7 +67,7 @@ func (v *View) Reopen() error {
 		return err
 	}
 
-	v.View = pilosa.NewView(path, v.Index(), v.Frame(), v.Name(), pilosa.DefaultCacheSize)
+	v.View = pilosa.NewView(path, v.Index(), v.Field(), v.Name(), pilosa.DefaultCacheSize)
 	v.View.RowAttrStore = v.RowAttrStore
 	return v.Open()
 }
