@@ -114,19 +114,19 @@ func (t *TestCluster) CreateIndex(name string) error {
 	return nil
 }
 
-func (t *TestCluster) CreateFrame(index, frame string, opt pilosa.FrameOptions) error {
+func (t *TestCluster) CreateField(index, field string, opt pilosa.FieldOptions) error {
 	for _, c := range t.Clusters {
 		idx, err := c.Holder.CreateIndexIfNotExists(index, pilosa.IndexOptions{})
 		if err != nil {
 			return err
 		}
-		if _, err := idx.CreateFrame(frame, opt); err != nil {
+		if _, err := idx.CreateField(field, opt); err != nil {
 			return err
 		}
 	}
 	return nil
 }
-func (t *TestCluster) SetBit(index, frame, view string, rowID, colID uint64, x *time.Time) error {
+func (t *TestCluster) SetBit(index, field, view string, rowID, colID uint64, x *time.Time) error {
 	// Determine which node should receive the SetBit.
 	c0 := t.Clusters[0] // use the first node's cluster to determine slice location.
 	slice := colID / pilosa.SliceWidth
@@ -137,9 +137,9 @@ func (t *TestCluster) SetBit(index, frame, view string, rowID, colID uint64, x *
 		if c == nil {
 			continue
 		}
-		f := c.Holder.Frame(index, frame)
+		f := c.Holder.Field(index, field)
 		if f == nil {
-			return fmt.Errorf("index/frame does not exist: %s/%s", index, frame)
+			return fmt.Errorf("index/field does not exist: %s/%s", index, field)
 		}
 		_, err := f.SetBit(view, rowID, colID, x)
 		if err != nil {
@@ -367,7 +367,7 @@ func (t *TestCluster) FollowResizeInstruction(instr *internal.ResizeInstruction)
 	if err := func() error {
 
 		// figure out which node it was meant for, then call the operation on that cluster
-		// basically need to mimic this: client.RetrieveSliceFromURI(context.Background(), src.Index, src.Frame, src.View, src.Slice, srcURI)
+		// basically need to mimic this: client.RetrieveSliceFromURI(context.Background(), src.Index, src.Field, src.View, src.Slice, srcURI)
 		instrNode := pilosa.DecodeNode(instr.Node)
 		destCluster := t.clusterByID(instrNode.ID)
 
@@ -380,11 +380,11 @@ func (t *TestCluster) FollowResizeInstruction(instr *internal.ResizeInstruction)
 			srcNode := pilosa.DecodeNode(src.Node)
 			srcCluster := t.clusterByID(srcNode.ID)
 
-			srcFragment := srcCluster.Holder.Fragment(src.Index, src.Frame, src.View, src.Slice)
-			destFragment := destCluster.Holder.Fragment(src.Index, src.Frame, src.View, src.Slice)
+			srcFragment := srcCluster.Holder.Fragment(src.Index, src.Field, src.View, src.Slice)
+			destFragment := destCluster.Holder.Fragment(src.Index, src.Field, src.View, src.Slice)
 			if destFragment == nil {
 				// Create fragment on destination if it doesn't exist.
-				f := destCluster.Holder.Frame(src.Index, src.Frame)
+				f := destCluster.Holder.Field(src.Index, src.Field)
 				v := f.View(src.View)
 				var err error
 				destFragment, err = v.CreateFragmentIfNotExists(src.Slice)

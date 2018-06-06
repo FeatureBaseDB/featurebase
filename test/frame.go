@@ -23,48 +23,48 @@ import (
 	"github.com/pilosa/pilosa"
 )
 
-// Frame represents a test wrapper for pilosa.Frame.
-type Frame struct {
-	*pilosa.Frame
+// Field represents a test wrapper for pilosa.Field.
+type Field struct {
+	*pilosa.Field
 }
 
-// NewFrame returns a new instance of Frame d/0.
-func NewFrame(opt ...pilosa.FrameOption) *Frame {
-	path, err := ioutil.TempDir("", "pilosa-frame-")
+// NewField returns a new instance of Field d/0.
+func NewField(opt ...pilosa.FieldOption) *Field {
+	path, err := ioutil.TempDir("", "pilosa-field-")
 	if err != nil {
 		panic(err)
 	}
-	frame, err := pilosa.NewFrame(path, "i", "f", opt...)
+	field, err := pilosa.NewField(path, "i", "f", opt...)
 	if err != nil {
 		panic(err)
 	}
-	return &Frame{Frame: frame}
+	return &Field{Field: field}
 }
 
-// MustOpenFrame returns a new, opened frame at a temporary path. Panic on error.
-func MustOpenFrame(opt ...pilosa.FrameOption) *Frame {
-	f := NewFrame(opt...)
+// MustOpenField returns a new, opened field at a temporary path. Panic on error.
+func MustOpenField(opt ...pilosa.FieldOption) *Field {
+	f := NewField(opt...)
 	if err := f.Open(); err != nil {
 		panic(err)
 	}
 	return f
 }
 
-// Close closes the frame and removes the underlying data.
-func (f *Frame) Close() error {
+// Close closes the field and removes the underlying data.
+func (f *Field) Close() error {
 	defer os.RemoveAll(f.Path())
-	return f.Frame.Close()
+	return f.Field.Close()
 }
 
 // Reopen closes the index and reopens it.
-func (f *Frame) Reopen() error {
+func (f *Field) Reopen() error {
 	var err error
-	if err := f.Frame.Close(); err != nil {
+	if err := f.Field.Close(); err != nil {
 		return err
 	}
 
 	path, index, name := f.Path(), f.Index(), f.Name()
-	f.Frame, err = pilosa.NewFrame(path, index, name)
+	f.Field, err = pilosa.NewField(path, index, name)
 	if err != nil {
 		return err
 	}
@@ -75,8 +75,8 @@ func (f *Frame) Reopen() error {
 	return nil
 }
 
-// MustSetBit sets a bit on the frame. Panic on error.
-func (f *Frame) MustSetBit(view string, rowID, columnID uint64, t *time.Time) (changed bool) {
+// MustSetBit sets a bit on the field. Panic on error.
+func (f *Field) MustSetBit(view string, rowID, columnID uint64, t *time.Time) (changed bool) {
 	changed, err := f.SetBit(view, rowID, columnID, t)
 	if err != nil {
 		panic(err)
@@ -84,23 +84,23 @@ func (f *Frame) MustSetBit(view string, rowID, columnID uint64, t *time.Time) (c
 	return changed
 }
 
-// Ensure frame can set its cache
-func TestFrame_SetCacheSize(t *testing.T) {
-	f := MustOpenFrame()
+// Ensure field can set its cache
+func TestField_SetCacheSize(t *testing.T) {
+	f := MustOpenField()
 	defer f.Close()
 	cacheSize := uint32(100)
 
-	// Set & retrieve frame cache size.
+	// Set & retrieve field cache size.
 	if err := f.SetCacheSize(cacheSize); err != nil {
 		t.Fatal(err)
 	} else if q := f.CacheSize(); q != cacheSize {
-		t.Fatalf("unexpected frame cache size: %d", q)
+		t.Fatalf("unexpected field cache size: %d", q)
 	}
 
-	// Reload frame and verify that it is persisted.
+	// Reload field and verify that it is persisted.
 	if err := f.Reopen(); err != nil {
 		t.Fatal(err)
 	} else if q := f.CacheSize(); q != cacheSize {
-		t.Fatalf("unexpected frame cache size (reopen): %d", q)
+		t.Fatalf("unexpected field cache size (reopen): %d", q)
 	}
 }

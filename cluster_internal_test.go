@@ -45,13 +45,13 @@ func TestFragCombos(t *testing.T) {
 	tests := []struct {
 		idx        string
 		maxSlice   uint64
-		frameViews viewsByFrame
+		fieldViews viewsByField
 		expected   fragsByHost
 	}{
 		{
 			idx:        "i",
 			maxSlice:   uint64(2),
-			frameViews: viewsByFrame{"f": []string{"v1", "v2"}},
+			fieldViews: viewsByField{"f": []string{"v1", "v2"}},
 			expected: fragsByHost{
 				"node0": []frag{{"f", "v1", uint64(0)}, {"f", "v2", uint64(0)}},
 				"node1": []frag{{"f", "v1", uint64(1)}, {"f", "v2", uint64(1)}, {"f", "v1", uint64(2)}, {"f", "v2", uint64(2)}},
@@ -60,7 +60,7 @@ func TestFragCombos(t *testing.T) {
 		{
 			idx:        "foo",
 			maxSlice:   uint64(3),
-			frameViews: viewsByFrame{"f": []string{"v0"}},
+			fieldViews: viewsByField{"f": []string{"v0"}},
 			expected: fragsByHost{
 				"node0": []frag{{"f", "v0", uint64(1)}, {"f", "v0", uint64(2)}},
 				"node1": []frag{{"f", "v0", uint64(0)}, {"f", "v0", uint64(3)}},
@@ -69,7 +69,7 @@ func TestFragCombos(t *testing.T) {
 	}
 	for _, test := range tests {
 
-		actual := c.fragCombos(test.idx, test.maxSlice, test.frameViews)
+		actual := c.fragCombos(test.idx, test.maxSlice, test.fieldViews)
 		if !reflect.DeepEqual(actual, test.expected) {
 			t.Errorf("expected: %v, but got: %v", test.expected, actual)
 		}
@@ -145,23 +145,23 @@ func TestFragSources(t *testing.T) {
 	c5.addNodeBasicSorted(node3)
 
 	idx := newIndexWithTempPath("i")
-	frame, err := idx.CreateFrameIfNotExists("f", FrameOptions{})
+	field, err := idx.CreateFieldIfNotExists("f", FieldOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = frame.SetBit("standard", 1, 101, nil)
+	_, err = field.SetBit("standard", 1, 101, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = frame.SetBit("standard", 1, 1300000, nil)
+	_, err = field.SetBit("standard", 1, 1300000, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = frame.SetBit("standard", 1, 2600000, nil)
+	_, err = field.SetBit("standard", 1, 2600000, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = frame.SetBit("standard", 1, 3900000, nil)
+	_, err = field.SetBit("standard", 1, 3900000, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

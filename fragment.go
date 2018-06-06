@@ -66,13 +66,13 @@ const (
 	DefaultFragmentMaxOpN = 2000
 )
 
-// Fragment represents the intersection of a frame and slice in an index.
+// Fragment represents the intersection of a field and slice in an index.
 type Fragment struct {
 	mu sync.RWMutex
 
 	// Composite identifiers
 	index string
-	frame string
+	field string
 	view  string
 	slice uint64
 
@@ -84,7 +84,7 @@ type Fragment struct {
 	opN         int // number of ops since snapshot
 
 	// Cache for row counts.
-	CacheType string // passed in by frame
+	CacheType string // passed in by field
 	cache     Cache
 	CacheSize uint32
 
@@ -106,18 +106,18 @@ type Fragment struct {
 	Logger Logger
 
 	// Row attribute storage.
-	// This is set by the parent frame unless overridden for testing.
+	// This is set by the parent field unless overridden for testing.
 	RowAttrStore AttrStore
 
 	stats StatsClient
 }
 
 // NewFragment returns a new instance of Fragment.
-func NewFragment(path, index, frame, view string, slice uint64) *Fragment {
+func NewFragment(path, index, field, view string, slice uint64) *Fragment {
 	return &Fragment{
 		path:      path,
 		index:     index,
-		frame:     frame,
+		field:     field,
 		view:      view,
 		slice:     slice,
 		CacheType: DefaultCacheType,
@@ -139,8 +139,8 @@ func (f *Fragment) CachePath() string { return f.path + CacheExt }
 // Index returns the index that the fragment was initialized with.
 func (f *Fragment) Index() string { return f.index }
 
-// Frame returns the frame the fragment was initialized with.
-func (f *Fragment) Frame() string { return f.frame }
+// Field returns the field the fragment was initialized with.
+func (f *Fragment) Field() string { return f.field }
 
 // View returns the view the fragment was initialized with.
 func (f *Fragment) View() string { return f.view }
@@ -247,7 +247,7 @@ func (f *Fragment) openStorage() error {
 
 // openCache initializes the cache from row ids persisted to disk.
 func (f *Fragment) openCache() error {
-	// Determine cache type from frame name.
+	// Determine cache type from field name.
 	switch f.CacheType {
 	case CacheTypeRanked:
 		f.cache = NewRankCache(f.CacheSize)
@@ -1452,8 +1452,8 @@ func track(start time.Time, message string, stats StatsClient, logger Logger) {
 }
 
 func (f *Fragment) snapshot() error {
-	f.Logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.frame, f.view, f.slice)
-	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.frame, f.view, f.slice)
+	f.Logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.field, f.view, f.slice)
+	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.field, f.view, f.slice)
 	start := time.Now()
 	defer track(start, completeMessage, f.stats, f.Logger)
 
@@ -1783,7 +1783,7 @@ func (s *FragmentSyncer) SyncFragment() error {
 
 		// Retrieve remote blocks.
 		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
-		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.Index(), s.Fragment.Frame(), s.Fragment.Slice())
+		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.Index(), s.Fragment.Field(), s.Fragment.Slice())
 		if err != nil && err != ErrFragmentNotFound {
 			return errors.Wrap(err, "getting blocks")
 		}
@@ -1862,7 +1862,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		clients = append(clients, client)
 
 		// Only sync the standard block.
-		rowIDs, columnIDs, err := client.BlockData(context.Background(), f.Index(), f.Frame(), f.Slice(), id)
+		rowIDs, columnIDs, err := client.BlockData(context.Background(), f.Index(), f.Field(), f.Slice(), id)
 		if err != nil {
 			return errors.Wrap(err, "getting block")
 		}
@@ -1904,11 +1904,11 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 
 		// Only sync the standard block.
 		for j := 0; j < len(set.ColumnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/maxWrites]), "SetBit(frame=%q, row=%d, col=%d)\n", f.Frame(), set.RowIDs[j], (f.Slice()*SliceWidth)+set.ColumnIDs[j])
+			fmt.Fprintf(&(buffers[count/maxWrites]), "SetBit(field=%q, row=%d, col=%d)\n", f.Field(), set.RowIDs[j], (f.Slice()*SliceWidth)+set.ColumnIDs[j])
 			count++
 		}
 		for j := 0; j < len(clear.ColumnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/maxWrites]), "ClearBit(frame=%q, row=%d, col=%d)\n", f.Frame(), clear.RowIDs[j], (f.Slice()*SliceWidth)+clear.ColumnIDs[j])
+			fmt.Fprintf(&(buffers[count/maxWrites]), "ClearBit(field=%q, row=%d, col=%d)\n", f.Field(), clear.RowIDs[j], (f.Slice()*SliceWidth)+clear.ColumnIDs[j])
 			count++
 		}
 

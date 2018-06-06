@@ -145,7 +145,7 @@ func TestClient_MultiNode(t *testing.T) {
 
 	topN := 4
 	queryRequest := &internal.QueryRequest{
-		Query:  fmt.Sprintf(`TopN(frame="%s", n=%d)`, "f", topN),
+		Query:  fmt.Sprintf(`TopN(field="%s", n=%d)`, "f", topN),
 		Remote: false,
 	}
 	result, err := client[0].Query(context.Background(), "i", queryRequest)
@@ -246,15 +246,15 @@ func TestClient_ImportValue(t *testing.T) {
 
 	fldName := "f"
 
-	fo := pilosa.FrameOptions{
-		Type: pilosa.FrameTypeInt,
+	fo := pilosa.FieldOptions{
+		Type: pilosa.FieldTypeInt,
 		Min:  -100,
 		Max:  100,
 	}
 
 	// Load bitmap into cache to ensure cache gets updated.
 	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	frame, err := index.CreateFrameIfNotExists(fldName, fo)
+	field, err := index.CreateFieldIfNotExists(fldName, fo)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +276,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Sum.
-	sum, cnt, err := frame.Sum(nil, fldName)
+	sum, cnt, err := field.Sum(nil, fldName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Min.
-	min, cnt, err := frame.Min(nil, fldName)
+	min, cnt, err := field.Min(nil, fldName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,11 +294,11 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Min with Filter.
-	filter, err := frame.Range(fldName, pql.GT, 40)
+	filter, err := field.Range(fldName, pql.GT, 40)
 	if err != nil {
 		t.Fatal(err)
 	}
-	min, cnt, err = frame.Min(filter, fldName)
+	min, cnt, err = field.Min(filter, fldName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,7 +307,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Max.
-	max, cnt, err := frame.Max(nil, fldName)
+	max, cnt, err := field.Max(nil, fldName)
 	if err != nil {
 		t.Fatal(err)
 	}

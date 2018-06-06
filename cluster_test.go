@@ -416,7 +416,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Add Bit Data to node0.
-		if err := tc.CreateFrame("i", "f", FrameOptions{}); err != nil {
+		if err := tc.CreateField("i", "f", FieldOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		tc.SetBit("i", "f", "standard", 1, 101, nil)
@@ -424,8 +424,8 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		// Before starting the resize, get the CheckSum to use for
 		// comparison later.
-		node0Frame := node0.Holder.Frame("i", "f")
-		node0View := node0Frame.View("standard")
+		node0Field := node0.Holder.Field("i", "f")
+		node0View := node0Field.View("standard")
 		node0Fragment := node0View.Fragment(1)
 		node0Checksum := node0Fragment.Checksum()
 
@@ -453,8 +453,8 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		// Bits
 		// Verify that node-1 contains the fragment (i/f/standard/1) transferred from node-0.
-		node1Frame := node1.Holder.Frame("i", "f")
-		node1View := node1Frame.View("standard")
+		node1Field := node1.Holder.Field("i", "f")
+		node1View := node1Field.View("standard")
 		node1Fragment := node1View.Fragment(1)
 
 		// Ensure checksums are the same.

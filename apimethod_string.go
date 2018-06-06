@@ -4,7 +4,7 @@ package pilosa
 
 import "fmt"
 
-const _apiMethod_name = "apiClusterMessageapiCreateFrameapiCreateIndexapiDeleteFrameapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFrameAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiMarshalFragmentapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiSetCoordinatorapiSliceNodesapiUnmarshalFragmentapiViews"
+const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFieldAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiMarshalFragmentapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiSetCoordinatorapiSliceNodesapiUnmarshalFragmentapiViews"
 
 var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 73, 86, 98, 118, 135, 151, 160, 174, 182, 198, 216, 224, 244, 257, 271, 288, 301, 321, 329}
 

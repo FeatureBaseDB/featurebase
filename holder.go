@@ -209,20 +209,20 @@ func (h *Holder) MaxSlices() map[string]uint64 {
 	return a
 }
 
-// Schema returns schema information for all indexes, frames, and views.
+// Schema returns schema information for all indexes, fields, and views.
 func (h *Holder) Schema() []*IndexInfo {
 	var a []*IndexInfo
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{Name: index.Name()}
-		for _, frame := range index.Frames() {
-			fi := &FrameInfo{Name: frame.Name(), Options: frame.Options()}
-			for _, view := range frame.Views() {
+		for _, field := range index.Fields() {
+			fi := &FieldInfo{Name: field.Name(), Options: field.Options()}
+			for _, view := range field.Views() {
 				fi.Views = append(fi.Views, &ViewInfo{Name: view.Name()})
 			}
 			sort.Sort(viewInfoSlice(fi.Views))
-			di.Frames = append(di.Frames, fi)
+			di.Fields = append(di.Fields, fi)
 		}
-		sort.Sort(frameInfoSlice(di.Frames))
+		sort.Sort(fieldInfoSlice(di.Fields))
 		a = append(a, di)
 	}
 	sort.Sort(indexInfoSlice(a))
@@ -238,16 +238,16 @@ func (h *Holder) ApplySchema(schema *internal.Schema) error {
 		if err != nil {
 			return errors.Wrap(err, "creating index")
 		}
-		// Create frames that don't exist.
-		for _, f := range index.Frames {
-			opt := decodeFrameOptions(f.Meta)
-			frame, err := idx.CreateFrameIfNotExists(f.Name, *opt)
+		// Create fields that don't exist.
+		for _, f := range index.Fields {
+			opt := decodeFieldOptions(f.Meta)
+			field, err := idx.CreateFieldIfNotExists(f.Name, *opt)
 			if err != nil {
-				return errors.Wrap(err, "creating frame")
+				return errors.Wrap(err, "creating field")
 			}
 			// Create views that don't exist.
 			for _, v := range f.Views {
-				_, err := frame.CreateViewIfNotExists(v)
+				_, err := field.CreateViewIfNotExists(v)
 				if err != nil {
 					return errors.Wrap(err, "creating view")
 				}
@@ -390,27 +390,27 @@ func (h *Holder) DeleteIndex(name string) error {
 	return nil
 }
 
-// Frame returns the frame for an index and name.
-func (h *Holder) Frame(index, name string) *Frame {
+// Field returns the field for an index and name.
+func (h *Holder) Field(index, name string) *Field {
 	idx := h.Index(index)
 	if idx == nil {
 		return nil
 	}
-	return idx.Frame(name)
+	return idx.Field(name)
 }
 
-// View returns the view for an index, frame, and name.
-func (h *Holder) View(index, frame, name string) *View {
-	f := h.Frame(index, frame)
+// View returns the view for an index, field, and name.
+func (h *Holder) View(index, field, name string) *View {
+	f := h.Field(index, field)
 	if f == nil {
 		return nil
 	}
 	return f.View(name)
 }
 
-// Fragment returns the fragment for an index, frame & slice.
-func (h *Holder) Fragment(index, frame, view string, slice uint64) *Fragment {
-	v := h.View(index, frame, view)
+// Fragment returns the fragment for an index, field & slice.
+func (h *Holder) Fragment(index, field, view string, slice uint64) *Fragment {
+	v := h.View(index, field, view)
 	if v == nil {
 		return nil
 	}
@@ -435,8 +435,8 @@ func (h *Holder) monitorCacheFlush() {
 
 func (h *Holder) flushCaches() {
 	for _, index := range h.Indexes() {
-		for _, frame := range index.Frames() {
-			for _, view := range frame.Views() {
+		for _, field := range index.Fields() {
+			for _, view := range field.Views() {
 				for _, fragment := range view.Fragments() {
 					select {
 					case <-h.closing:
@@ -600,15 +600,15 @@ func (s *HolderSyncer) SyncHolder() error {
 		}
 
 		tf := time.Now()
-		for _, fi := range di.Frames {
+		for _, fi := range di.Fields {
 			// Verify syncer has not closed.
 			if s.IsClosing() {
 				return nil
 			}
 
-			// Sync frame row attributes.
-			if err := s.syncFrame(di.Name, fi.Name); err != nil {
-				return fmt.Errorf("frame sync error: index=%s, frame=%s, err=%s", di.Name, fi.Name, err)
+			// Sync field row attributes.
+			if err := s.syncField(di.Name, fi.Name); err != nil {
+				return fmt.Errorf("field sync error: index=%s, field=%s, err=%s", di.Name, fi.Name, err)
 			}
 
 			for _, vi := range fi.Views {
@@ -630,11 +630,11 @@ func (s *HolderSyncer) SyncHolder() error {
 
 					// Sync fragment if own it.
 					if err := s.syncFragment(di.Name, fi.Name, vi.Name, slice); err != nil {
-						return fmt.Errorf("fragment sync error: index=%s, frame=%s, slice=%d, err=%s", di.Name, fi.Name, slice, err)
+						return fmt.Errorf("fragment sync error: index=%s, field=%s, slice=%d, err=%s", di.Name, fi.Name, slice, err)
 					}
 				}
 			}
-			s.Stats.Histogram("syncFrame", float64(time.Since(tf)), 1.0)
+			s.Stats.Histogram("syncField", float64(time.Since(tf)), 1.0)
 			tf = time.Now() // reset tf
 		}
 		s.Stats.Histogram("syncIndex", float64(time.Since(ti)), 1.0)
@@ -689,22 +689,22 @@ func (s *HolderSyncer) syncIndex(index string) error {
 	return nil
 }
 
-// syncFrame synchronizes frame attributes with the rest of the cluster.
-func (s *HolderSyncer) syncFrame(index, name string) error {
-	// Retrieve frame reference.
-	f := s.Holder.Frame(index, name)
+// syncField synchronizes field attributes with the rest of the cluster.
+func (s *HolderSyncer) syncField(index, name string) error {
+	// Retrieve field reference.
+	f := s.Holder.Field(index, name)
 	if f == nil {
 		return nil
 	}
 	indexTag := fmt.Sprintf("index:%s", index)
-	frameTag := fmt.Sprintf("frame:%s", name)
+	fieldTag := fmt.Sprintf("field:%s", name)
 
 	// Read block checksums.
 	blks, err := f.RowAttrStore().Blocks()
 	if err != nil {
 		return errors.Wrap(err, "getting blocks")
 	}
-	s.Stats.CountWithCustomTags("RowAttrStoreBlocks", int64(len(blks)), 1.0, []string{indexTag, frameTag})
+	s.Stats.CountWithCustomTags("RowAttrStoreBlocks", int64(len(blks)), 1.0, []string{indexTag, fieldTag})
 
 	// Sync with every other host.
 	for _, node := range Nodes(s.Cluster.Nodes).FilterID(s.Node.ID) {
@@ -713,14 +713,14 @@ func (s *HolderSyncer) syncFrame(index, name string) error {
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
 		m, err := client.RowAttrDiff(context.Background(), index, name, blks)
-		if err == ErrFrameNotFound {
-			continue // frame not created remotely yet, skip
+		if err == ErrFieldNotFound {
+			continue // field not created remotely yet, skip
 		} else if err != nil {
 			return errors.Wrap(err, "getting differing blocks")
 		} else if len(m) == 0 {
 			continue
 		}
-		s.Stats.CountWithCustomTags("RowAttrDiff", int64(len(m)), 1.0, []string{indexTag, frameTag, node.ID})
+		s.Stats.CountWithCustomTags("RowAttrDiff", int64(len(m)), 1.0, []string{indexTag, fieldTag, node.ID})
 
 		// Update local copy.
 		if err := f.RowAttrStore().SetBulkAttrs(m); err != nil {
@@ -738,11 +738,11 @@ func (s *HolderSyncer) syncFrame(index, name string) error {
 }
 
 // syncFragment synchronizes a fragment with the rest of the cluster.
-func (s *HolderSyncer) syncFragment(index, frame, view string, slice uint64) error {
-	// Retrieve local frame.
-	f := s.Holder.Frame(index, frame)
+func (s *HolderSyncer) syncFragment(index, field, view string, slice uint64) error {
+	// Retrieve local field.
+	f := s.Holder.Field(index, field)
 	if f == nil {
-		return ErrFrameNotFound
+		return ErrFieldNotFound
 	}
 
 	// Ensure view exists locally.
@@ -806,8 +806,8 @@ func (c *HolderCleaner) CleanHolder() error {
 		containedSlices := c.Cluster.ContainsSlices(index.Name(), index.MaxSlice(), c.Node)
 
 		// Get the fragments registered in memory.
-		for _, frame := range index.Frames() {
-			for _, view := range frame.Views() {
+		for _, field := range index.Fields() {
+			for _, view := range field.Views() {
 				for _, fragment := range view.Fragments() {
 					fragSlice := fragment.Slice()
 					// Ignore fragments that should be present.

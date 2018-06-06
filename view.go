@@ -39,18 +39,18 @@ func IsValidView(name string) bool {
 	return name == ViewStandard
 }
 
-// View represents a container for frame data.
+// View represents a container for field data.
 type View struct {
 	mu    sync.RWMutex
 	path  string
 	index string
-	frame string
+	field string
 	name  string
 
 	cacheSize uint32
 
 	// Fragments by slice.
-	cacheType string // passed in by frame
+	cacheType string // passed in by field
 	fragments map[uint64]*Fragment
 
 	// maxSlice maintains this view's max slice in order to
@@ -65,11 +65,11 @@ type View struct {
 }
 
 // NewView returns a new instance of View.
-func NewView(path, index, frame, name string, cacheSize uint32) *View {
+func NewView(path, index, field, name string, cacheSize uint32) *View {
 	return &View{
 		path:      path,
 		index:     index,
-		frame:     frame,
+		field:     field,
 		name:      name,
 		cacheSize: cacheSize,
 
@@ -88,8 +88,8 @@ func (v *View) Name() string { return v.name }
 // Index returns the index name the view was initialized with.
 func (v *View) Index() string { return v.index }
 
-// Frame returns the frame name the view was initialized with.
-func (v *View) Frame() string { return v.frame }
+// Field returns the field name the view was initialized with.
+func (v *View) Field() string { return v.field }
 
 // Path returns the path the view was initialized with.
 func (v *View) Path() string { return v.path }
@@ -265,7 +265,7 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 }
 
 func (v *View) newFragment(path string, slice uint64) *Fragment {
-	frag := NewFragment(path, v.index, v.frame, v.name, slice)
+	frag := NewFragment(path, v.index, v.field, v.name, slice)
 	frag.CacheType = v.cacheType
 	frag.CacheSize = v.cacheSize
 	frag.Logger = v.Logger
@@ -281,7 +281,7 @@ func (v *View) DeleteFragment(slice uint64) error {
 		return ErrFragmentNotFound
 	}
 
-	v.Logger.Printf("delete fragment: (%s/%s/%s) %d", v.index, v.frame, v.name, slice)
+	v.Logger.Printf("delete fragment: (%s/%s/%s) %d", v.index, v.field, v.name, slice)
 
 	// Close data files before deletion.
 	if err := fragment.Close(); err != nil {

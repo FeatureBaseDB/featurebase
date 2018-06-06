@@ -31,10 +31,10 @@ var (
 	ErrIndexExists   = errors.New("index already exists")
 	ErrIndexNotFound = errors.New("index not found")
 
-	// ErrFrameRequired is returned when no frame is specified.
-	ErrFrameRequired = errors.New("frame required")
-	ErrFrameExists   = errors.New("frame already exists")
-	ErrFrameNotFound = errors.New("frame not found")
+	// ErrFieldRequired is returned when no field is specified.
+	ErrFieldRequired = errors.New("field required")
+	ErrFieldExists   = errors.New("field already exists")
+	ErrFieldNotFound = errors.New("field not found")
 
 	ErrBSIGroupNotFound         = errors.New("bsigroup not found")
 	ErrBSIGroupExists           = errors.New("bsigroup already exists")
@@ -50,7 +50,7 @@ var (
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")
 
-	ErrName  = errors.New("invalid index or frame's name, must match [a-z0-9_-]")
+	ErrName  = errors.New("invalid index or field name, must match [a-z0-9_-]")
 	ErrLabel = errors.New("invalid row or column label, must match [A-Za-z0-9_-]")
 
 	// ErrFragmentNotFound is returned when a fragment does not exist.
@@ -78,7 +78,7 @@ type BadRequestError struct {
 	error
 }
 
-// Regular expression to validate index and frame names.
+// Regular expression to validate index and field names.
 var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 
 // ColumnAttrSet represents a set of attributes for a vertical column in an index.

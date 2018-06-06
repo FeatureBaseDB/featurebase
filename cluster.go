@@ -584,7 +584,7 @@ func (c *Cluster) removeNodeBasicSorted(node *Node) bool {
 
 // frag is a struct of basic fragment information.
 type frag struct {
-	frame string
+	field string
 	view  string
 	slice uint64
 }
@@ -617,36 +617,36 @@ func (a fragsByHost) add(b fragsByHost) fragsByHost {
 	return a
 }
 
-type viewsByFrame map[string][]string
+type viewsByField map[string][]string
 
-func (a viewsByFrame) addView(frame, view string) {
-	a[frame] = append(a[frame], view)
+func (a viewsByField) addView(field, view string) {
+	a[field] = append(a[field], view)
 }
 
 func (c *Cluster) fragsByHost(idx *Index) fragsByHost {
-	// frameViews is a map of frame to slice of views.
-	frameViews := make(viewsByFrame)
+	// fieldViews is a map of field to slice of views.
+	fieldViews := make(viewsByField)
 
-	for _, frame := range idx.Frames() {
-		for _, view := range frame.Views() {
-			frameViews.addView(frame.Name(), view.Name())
+	for _, field := range idx.Fields() {
+		for _, view := range field.Views() {
+			fieldViews.addView(field.Name(), view.Name())
 
 		}
 	}
-	return c.fragCombos(idx.Name(), idx.MaxSlice(), frameViews)
+	return c.fragCombos(idx.Name(), idx.MaxSlice(), fieldViews)
 }
 
 // fragCombos returns a map (by uri) of lists of fragments for a given index
-// by creating every combination of frame/view specified in `frameViews` up to maxSlice.
-func (c *Cluster) fragCombos(idx string, maxSlice uint64, frameViews viewsByFrame) fragsByHost {
+// by creating every combination of field/view specified in `fieldViews` up to maxSlice.
+func (c *Cluster) fragCombos(idx string, maxSlice uint64, fieldViews viewsByField) fragsByHost {
 	t := make(fragsByHost)
 	for i := uint64(0); i <= maxSlice; i++ {
 		nodes := c.SliceNodes(idx, i)
 		for _, n := range nodes {
-			// for each frame/view combination:
-			for frame, views := range frameViews {
+			// for each field/view combination:
+			for field, views := range fieldViews {
 				for _, view := range views {
-					t[n.ID] = append(t[n.ID], frag{frame, view, i})
+					t[n.ID] = append(t[n.ID], frag{field, view, i})
 				}
 			}
 		}
@@ -770,7 +770,7 @@ func (c *Cluster) fragSources(to *Cluster, idx *Index) (map[string][]*internal.R
 			src := &internal.ResizeSource{
 				Node:  EncodeNode(c.nodeByID(srcNodeID)),
 				Index: idx.Name(),
-				Frame: frag.frame,
+				Field: frag.field,
 				View:  frag.view,
 				Slice: frag.slice,
 			}
@@ -1239,10 +1239,10 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 
 				srcURI := decodeURI(src.Node.URI)
 
-				// Retrieve frame.
-				f := c.Holder.Frame(src.Index, src.Frame)
+				// Retrieve field.
+				f := c.Holder.Field(src.Index, src.Field)
 				if f == nil {
-					return ErrFrameNotFound
+					return ErrFieldNotFound
 				}
 
 				// Create view.
@@ -1259,7 +1259,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 
 				// Stream slice from remote node.
 				c.Logger.Printf("retrieve slice %d for index %s from host %s", src.Slice, src.Index, src.Node.URI)
-				rd, err := client.RetrieveSliceFromURI(context.Background(), src.Index, src.Frame, src.Slice, srcURI)
+				rd, err := client.RetrieveSliceFromURI(context.Background(), src.Index, src.Field, src.Slice, srcURI)
 				if err != nil {
 					// For now it is an acceptable error if the fragment is not found
 					// on the remote node. This occurs when a slice has been skipped and
@@ -1275,7 +1275,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 					return fmt.Errorf("slice %v doesn't exist on host: %s", src.Slice, src.Node.URI)
 				}
 
-				// Write to local frame and always close reader.
+				// Write to local field and always close reader.
 				if err := func() error {
 					defer rd.Close()
 					_, err := frag.ReadFrom(rd)

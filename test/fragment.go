@@ -31,7 +31,7 @@ type Fragment struct {
 }
 
 // NewFragment returns a new instance of Fragment with a temporary path.
-func NewFragment(index, frame, view string, slice uint64, cacheType string) *Fragment {
+func NewFragment(index, field, view string, slice uint64, cacheType string) *Fragment {
 	file, err := ioutil.TempFile("", "pilosa-fragment-")
 	if err != nil {
 		panic(err)
@@ -39,7 +39,7 @@ func NewFragment(index, frame, view string, slice uint64, cacheType string) *Fra
 	file.Close()
 
 	f := &Fragment{
-		Fragment:     pilosa.NewFragment(file.Name(), index, frame, view, slice),
+		Fragment:     pilosa.NewFragment(file.Name(), index, field, view, slice),
 		RowAttrStore: MustOpenAttrStore(),
 	}
 	f.Fragment.CacheType = cacheType
@@ -48,11 +48,11 @@ func NewFragment(index, frame, view string, slice uint64, cacheType string) *Fra
 }
 
 // MustOpenFragment creates and opens an fragment at a temporary path. Panic on error.
-func MustOpenFragment(index, frame, view string, slice uint64, cacheType string) *Fragment {
+func MustOpenFragment(index, field, view string, slice uint64, cacheType string) *Fragment {
 	if cacheType == "" {
 		cacheType = pilosa.DefaultCacheType
 	}
-	f := NewFragment(index, frame, view, slice, cacheType)
+	f := NewFragment(index, field, view, slice, cacheType)
 
 	if err := f.Open(); err != nil {
 		panic(err)
@@ -76,7 +76,7 @@ func (f *Fragment) Reopen() error {
 		return err
 	}
 
-	f.Fragment = pilosa.NewFragment(path, f.Index(), f.Frame(), f.View(), f.Slice())
+	f.Fragment = pilosa.NewFragment(path, f.Index(), f.Field(), f.View(), f.Slice())
 	f.Fragment.CacheType = cacheType
 	f.Fragment.RowAttrStore = f.RowAttrStore
 	if err := f.Open(); err != nil {

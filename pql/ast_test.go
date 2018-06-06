@@ -33,11 +33,11 @@ func TestCall_String(t *testing.T) {
 		c := &pql.Call{
 			Name: "Range",
 			Args: map[string]interface{}{
-				"frame":  "f",
+				"other":  "f",
 				"field0": &pql.Condition{Op: pql.GTE, Value: 10},
 			},
 		}
-		if s := c.String(); s != `Range(field0 >= 10, frame="f")` {
+		if s := c.String(); s != `Range(field0 >= 10, other="f")` {
 			t.Fatalf("unexpected string: %s", s)
 		}
 	})

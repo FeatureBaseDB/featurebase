@@ -22,9 +22,9 @@ import (
 	"github.com/pilosa/pilosa/test"
 )
 
-// Ensure frame can open and retrieve a view.
-func TestFrame_CreateViewIfNotExists(t *testing.T) {
-	f := test.MustOpenFrame()
+// Ensure field can open and retrieve a view.
+func TestField_CreateViewIfNotExists(t *testing.T) {
+	f := test.MustOpenField()
 	defer f.Close()
 
 	// Create view.
@@ -48,12 +48,12 @@ func TestFrame_CreateViewIfNotExists(t *testing.T) {
 	}
 }
 
-// Ensure frame can set its time quantum.
-func TestFrame_SetTimeQuantum(t *testing.T) {
-	fo := pilosa.FrameOptions{
+// Ensure field can set its time quantum.
+func TestField_SetTimeQuantum(t *testing.T) {
+	fo := pilosa.FieldOptions{
 		Type: "time",
 	}
-	f := test.MustOpenFrame(pilosa.OptFrameFrameOptions(fo))
+	f := test.MustOpenField(pilosa.OptFieldFieldOptions(fo))
 	defer f.Close()
 
 	// Set & retrieve time quantum.
@@ -63,7 +63,7 @@ func TestFrame_SetTimeQuantum(t *testing.T) {
 		t.Fatalf("unexpected quantum: %s", q)
 	}
 
-	// Reload frame and verify that it is persisted.
+	// Reload field and verify that it is persisted.
 	if err := f.Reopen(); err != nil {
 		t.Fatal(err)
 	} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
@@ -71,14 +71,14 @@ func TestFrame_SetTimeQuantum(t *testing.T) {
 	}
 }
 
-// Ensure a frame can set & read a bsiGroup value.
-func TestFrame_SetValue(t *testing.T) {
+// Ensure a field can set & read a bsiGroup value.
+func TestField_SetValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Type: pilosa.FrameTypeInt,
+		f, err := idx.CreateField("f", pilosa.FieldOptions{
+			Type: pilosa.FieldTypeInt,
 			Min:  0,
 			Max:  30,
 		})
@@ -86,7 +86,7 @@ func TestFrame_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Set value on frame.
+		// Set value on field.
 		if changed, err := f.SetValue(100, 21); err != nil {
 			t.Fatal(err)
 		} else if !changed {
@@ -114,8 +114,8 @@ func TestFrame_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Type: pilosa.FrameTypeInt,
+		f, err := idx.CreateField("f", pilosa.FieldOptions{
+			Type: pilosa.FieldTypeInt,
 			Min:  0,
 			Max:  30,
 		})
@@ -151,8 +151,8 @@ func TestFrame_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Type: pilosa.FrameTypeSet,
+		f, err := idx.CreateField("f", pilosa.FieldOptions{
+			Type: pilosa.FieldTypeSet,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -168,8 +168,8 @@ func TestFrame_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Type: pilosa.FrameTypeInt,
+		f, err := idx.CreateField("f", pilosa.FieldOptions{
+			Type: pilosa.FieldTypeInt,
 			Min:  20,
 			Max:  30,
 		})
@@ -187,8 +187,8 @@ func TestFrame_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateFrame("f", pilosa.FrameOptions{
-			Type: pilosa.FrameTypeInt,
+		f, err := idx.CreateField("f", pilosa.FieldOptions{
+			Type: pilosa.FieldTypeInt,
 			Min:  20,
 			Max:  30,
 		})
@@ -203,27 +203,27 @@ func TestFrame_SetValue(t *testing.T) {
 	})
 }
 
-func TestFrame_NameRestriction(t *testing.T) {
-	path, err := ioutil.TempDir("", "pilosa-frame-")
+func TestField_NameRestriction(t *testing.T) {
+	path, err := ioutil.TempDir("", "pilosa-field-")
 	if err != nil {
 		panic(err)
 	}
-	frame, err := pilosa.NewFrame(path, "i", ".meta")
-	if frame != nil {
-		t.Fatalf("unexpected frame name %s", err)
+	field, err := pilosa.NewField(path, "i", ".meta")
+	if field != nil {
+		t.Fatalf("unexpected field name %s", err)
 	}
 }
 
-// Ensure that frame name validation is consistent.
-func TestFrame_NameValidation(t *testing.T) {
-	validFrameNames := []string{
+// Ensure that field name validation is consistent.
+func TestField_NameValidation(t *testing.T) {
+	validFieldNames := []string{
 		"foo",
 		"hyphen-ated",
 		"under_score",
 		"abc123",
 		"trailing_",
 	}
-	invalidFrameNames := []string{
+	invalidFieldNames := []string{
 		"",
 		"123abc",
 		"x.y",
@@ -235,27 +235,27 @@ func TestFrame_NameValidation(t *testing.T) {
 		"a12345678901234567890123456789012345678901234567890123456789012345",
 	}
 
-	path, err := ioutil.TempDir("", "pilosa-frame-")
+	path, err := ioutil.TempDir("", "pilosa-field-")
 	if err != nil {
 		panic(err)
 	}
-	for _, name := range validFrameNames {
-		_, err := pilosa.NewFrame(path, "i", name)
+	for _, name := range validFieldNames {
+		_, err := pilosa.NewField(path, "i", name)
 		if err != nil {
-			t.Fatalf("unexpected frame name: %s %s", name, err)
+			t.Fatalf("unexpected field name: %s %s", name, err)
 		}
 	}
-	for _, name := range invalidFrameNames {
-		_, err := pilosa.NewFrame(path, "i", name)
+	for _, name := range invalidFieldNames {
+		_, err := pilosa.NewField(path, "i", name)
 		if err == nil {
-			t.Fatalf("expected error on frame name: %s", name)
+			t.Fatalf("expected error on field name: %s", name)
 		}
 	}
 }
 
-// Ensure frame can open and retrieve a view.
-func TestFrame_DeleteView(t *testing.T) {
-	f := test.MustOpenFrame()
+// Ensure field can open and retrieve a view.
+func TestField_DeleteView(t *testing.T) {
+	f := test.MustOpenField()
 	defer f.Close()
 
 	viewName := pilosa.ViewStandard + "_v"
@@ -274,7 +274,7 @@ func TestFrame_DeleteView(t *testing.T) {
 	}
 
 	if f.View(viewName) != nil {
-		t.Fatal("view still exists in frame")
+		t.Fatal("view still exists in field")
 	}
 
 	// Recreate view with same name, verify that the old view was not reused.
