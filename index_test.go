@@ -29,7 +29,7 @@ func TestIndex_CreateFrameIfNotExists(t *testing.T) {
 	defer index.Close()
 
 	// Create frame.
-	f, err := index.CreateFrameIfNotExists("f", pilosa.FieldOptions{})
+	f, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{})
 	if err != nil {
 		t.Fatal(err)
 	} else if f == nil {
@@ -37,7 +37,7 @@ func TestIndex_CreateFrameIfNotExists(t *testing.T) {
 	}
 
 	// Retrieve existing frame.
-	other, err := index.CreateFrameIfNotExists("f", pilosa.FieldOptions{})
+	other, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{})
 	if err != nil {
 		t.Fatal(err)
 	} else if f.Field != other.Field {
@@ -57,7 +57,7 @@ func TestIndex_CreateFrame(t *testing.T) {
 			defer index.Close()
 
 			// Create frame with explicit quantum.
-			f, err := index.CreateFrame("f", pilosa.FieldOptions{
+			f, err := index.CreateField("f", pilosa.FieldOptions{
 				Type:        pilosa.FieldTypeTime,
 				TimeQuantum: pilosa.TimeQuantum("YMDH"),
 			})
@@ -76,7 +76,7 @@ func TestIndex_CreateFrame(t *testing.T) {
 			defer index.Close()
 
 			// Create frame with schema and verify it exists.
-			if f, err := index.CreateFrame("f", pilosa.FieldOptions{
+			if f, err := index.CreateField("f", pilosa.FieldOptions{
 				Type: pilosa.FieldTypeInt,
 				Min:  10,
 				Max:  20,
@@ -180,7 +180,7 @@ func TestIndex_DeleteFrame(t *testing.T) {
 	defer index.Close()
 
 	// Create frame.
-	if _, err := index.CreateFrameIfNotExists("f", pilosa.FieldOptions{}); err != nil {
+	if _, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
