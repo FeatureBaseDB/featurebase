@@ -66,7 +66,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	received0 := map[string][]string{}
 	for _, idx := range schema0 {
 		received0[idx.Name] = []string{}
-		for _, frame := range idx.Frames {
+		for _, frame := range idx.Fields {
 			received0[idx.Name] = append(received0[idx.Name], frame.Name)
 		}
 	}
@@ -82,7 +82,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	received1 := map[string][]string{}
 	for _, idx := range schema1 {
 		received1[idx.Name] = []string{}
-		for _, frame := range idx.Frames {
+		for _, frame := range idx.Fields {
 			received1[idx.Name] = append(received1[idx.Name], frame.Name)
 		}
 	}

@@ -84,7 +84,7 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 	if cmd.Index == "" {
 		return pilosa.ErrIndexRequired
 	} else if cmd.Frame == "" {
-		return pilosa.ErrFrameRequired
+		return pilosa.ErrFieldRequired
 	} else if len(cmd.Paths) == 0 {
 		return errors.New("path required")
 	}
@@ -110,7 +110,7 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 	}
 	for _, index := range schema {
 		if index.Name == cmd.Index {
-			for _, frame := range index.Frames {
+			for _, frame := range index.Fields {
 				if frame.Name == cmd.Frame {
 					frameType = frame.Options.Type
 				}

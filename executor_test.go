@@ -388,9 +388,9 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 	// Set columns for rows 0, 10, & 20 across two slices.
 	if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{}); err != nil {
 		t.Fatal(err)
-	} else if _, err := idx.CreateFrame("f", pilosa.FieldOptions{}); err != nil {
+	} else if _, err := idx.CreateField("f", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
-	} else if _, err := idx.CreateFrame("other", pilosa.FieldOptions{}); err != nil {
+	} else if _, err := idx.CreateField("other", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	} else if _, err := e.Execute(context.Background(), "i", test.MustParse(`
 		SetBit(frame=f, row=0, col=0)
@@ -572,11 +572,11 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateFrame("x", pilosa.FieldOptions{}); err != nil {
+	if _, err := idx.CreateField("x", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateFrame("f", pilosa.FieldOptions{
+	if _, err := idx.CreateField("f", pilosa.FieldOptions{
 		Type: pilosa.FieldTypeInt,
 		Min:  -10,
 		Max:  100,
@@ -667,11 +667,11 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateFrame("x", pilosa.FieldOptions{}); err != nil {
+	if _, err := idx.CreateField("x", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateFrame("foo", pilosa.FieldOptions{
+	if _, err := idx.CreateField("foo", pilosa.FieldOptions{
 		Type: pilosa.FieldTypeInt,
 		Min:  10,
 		Max:  100,
@@ -679,7 +679,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateFrame("bar", pilosa.FieldOptions{
+	if _, err := idx.CreateField("bar", pilosa.FieldOptions{
 		Type: pilosa.FieldTypeInt,
 		Min:  0,
 		Max:  100000,
@@ -687,7 +687,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateFrame("other", pilosa.FieldOptions{
+	if _, err := idx.CreateField("other", pilosa.FieldOptions{
 		Type: pilosa.FieldTypeInt,
 		Min:  0,
 		Max:  1000,
@@ -780,11 +780,11 @@ func TestExecutor_Execute_Range(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateFrame("f", pilosa.FieldOptions{}); err != nil {
+	if _, err := idx.CreateField("f", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateFrame("foo", pilosa.FieldOptions{
+	if _, err := idx.CreateField("foo", pilosa.FieldOptions{
 		Type: pilosa.FieldTypeInt,
 		Min:  10,
 		Max:  100,
@@ -792,7 +792,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateFrame("bar", pilosa.FieldOptions{
+	if _, err := idx.CreateField("bar", pilosa.FieldOptions{
 		Type: pilosa.FieldTypeInt,
 		Min:  0,
 		Max:  100000,
@@ -800,7 +800,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateFrame("other", pilosa.FieldOptions{
+	if _, err := idx.CreateField("other", pilosa.FieldOptions{
 		Type: pilosa.FieldTypeInt,
 		Min:  0,
 		Max:  1000,
@@ -808,7 +808,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateFrame("edge", pilosa.FieldOptions{
+	if _, err := idx.CreateField("edge", pilosa.FieldOptions{
 		Type: pilosa.FieldTypeInt,
 		Min:  -100,
 		Max:  100,
@@ -945,7 +945,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 	})
 
 	t.Run("ErrFrameNotFound", func(t *testing.T) {
-		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Range(bad_frame >= 20)`), nil, nil); err != pilosa.ErrFrameNotFound {
+		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Range(bad_frame >= 20)`), nil, nil); err != pilosa.ErrFieldNotFound {
 			t.Fatal(err)
 		}
 	})

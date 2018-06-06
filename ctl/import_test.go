@@ -39,8 +39,8 @@ func TestImportCommand_Validation(t *testing.T) {
 
 	cm.Index = "i"
 	err = cm.Run(context.Background())
-	if err != pilosa.ErrFrameRequired {
-		t.Fatalf("Command not working, expect: %s, actual: '%s'", pilosa.ErrFrameRequired, err)
+	if err != pilosa.ErrFieldRequired {
+		t.Fatalf("Command not working, expect: %s, actual: '%s'", pilosa.ErrFieldRequired, err)
 	}
 
 	cm.Frame = "f"

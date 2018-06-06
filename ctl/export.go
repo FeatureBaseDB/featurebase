@@ -58,7 +58,7 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	if cmd.Index == "" {
 		return pilosa.ErrIndexRequired
 	} else if cmd.Frame == "" {
-		return pilosa.ErrFrameRequired
+		return pilosa.ErrFieldRequired
 	}
 
 	// Use output file, if specified.

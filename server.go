@@ -461,13 +461,13 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
 		opt := decodeFieldOptions(obj.Meta)
-		_, err := idx.CreateFrame(obj.Frame, *opt)
+		_, err := idx.CreateField(obj.Frame, *opt)
 		if err != nil {
 			return err
 		}
 	case *internal.DeleteFrameMessage:
 		idx := s.Holder.Index(obj.Index)
-		if err := idx.DeleteFrame(obj.Frame); err != nil {
+		if err := idx.DeleteField(obj.Frame); err != nil {
 			return err
 		}
 	case *internal.CreateViewMessage:

@@ -145,7 +145,7 @@ func TestFragSources(t *testing.T) {
 	c5.addNodeBasicSorted(node3)
 
 	idx := newIndexWithTempPath("i")
-	frame, err := idx.CreateFrameIfNotExists("f", FieldOptions{})
+	frame, err := idx.CreateFieldIfNotExists("f", FieldOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

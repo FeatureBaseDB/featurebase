@@ -225,7 +225,7 @@ func (d *DiagnosticsCollector) EnrichWithSchemaProperties() {
 	for _, index := range d.server.Holder.Indexes() {
 		numSlices += index.MaxSlice() + 1
 		numIndexes += 1
-		for _, frame := range index.Frames() {
+		for _, frame := range index.Fields() {
 			numFrames += 1
 			if frame.Type() == FieldTypeInt {
 				bsiFieldCount += 1

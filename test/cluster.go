@@ -120,7 +120,7 @@ func (t *TestCluster) CreateFrame(index, frame string, opt pilosa.FieldOptions) 
 		if err != nil {
 			return err
 		}
-		if _, err := idx.CreateFrame(frame, opt); err != nil {
+		if _, err := idx.CreateField(frame, opt); err != nil {
 			return err
 		}
 	}

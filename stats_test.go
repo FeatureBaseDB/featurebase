@@ -298,7 +298,7 @@ func TestStatsCount_DeleteFrame(t *testing.T) {
 	called := false
 	// Create index.
 	indx, _ := hldr.CreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	if _, err := indx.CreateFrameIfNotExists("test", pilosa.FieldOptions{}); err != nil {
+	if _, err := indx.CreateFieldIfNotExists("test", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	s.Handler.API.Holder.Stats = &MockStats{

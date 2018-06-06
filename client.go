@@ -273,7 +273,7 @@ func (c *InternalHTTPClient) Import(ctx context.Context, index, frame string, sl
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
-		return ErrFrameRequired
+		return ErrFieldRequired
 	}
 
 	buf, err := marshalImportPayload(index, frame, slice, bits)
@@ -302,7 +302,7 @@ func (c *InternalHTTPClient) ImportK(ctx context.Context, index, frame string, c
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
-		return ErrFrameRequired
+		return ErrFieldRequired
 	}
 
 	buf, err := marshalImportPayloadK(index, frame, columns)
@@ -332,7 +332,7 @@ func (c *InternalHTTPClient) EnsureIndex(ctx context.Context, name string, optio
 
 func (c *InternalHTTPClient) EnsureFrame(ctx context.Context, indexName string, frameName string, options FieldOptions) error {
 	err := c.CreateFrame(ctx, indexName, frameName, options)
-	if err == nil || err == ErrFrameExists {
+	if err == nil || err == ErrFieldExists {
 		return nil
 	}
 	return err
@@ -424,7 +424,7 @@ func (c *InternalHTTPClient) ImportValue(ctx context.Context, index, frame strin
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
-		return ErrFrameRequired
+		return ErrFieldRequired
 	}
 
 	buf, err := marshalImportValuePayload(index, frame, slice, vals)
@@ -511,7 +511,7 @@ func (c *InternalHTTPClient) ExportCSV(ctx context.Context, index, frame string,
 	if index == "" {
 		return ErrIndexRequired
 	} else if frame == "" {
-		return ErrFrameRequired
+		return ErrFieldRequired
 	}
 
 	// Retrieve a list of nodes that own the slice.
@@ -658,7 +658,7 @@ func (c *InternalHTTPClient) CreateFrame(ctx context.Context, index, frame strin
 	case http.StatusOK:
 		return nil // ok
 	case http.StatusConflict:
-		return ErrFrameExists
+		return ErrFieldExists
 	default:
 		return errors.New(string(body))
 	}
@@ -822,7 +822,7 @@ func (c *InternalHTTPClient) RowAttrDiff(ctx context.Context, index, frame strin
 	switch resp.StatusCode {
 	case http.StatusOK: // ok
 	case http.StatusNotFound:
-		return nil, ErrFrameNotFound
+		return nil, ErrFieldNotFound
 	default:
 		return nil, fmt.Errorf("unexpected status: code=%d", resp.StatusCode)
 	}

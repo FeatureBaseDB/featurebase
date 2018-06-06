@@ -214,15 +214,15 @@ func (h *Holder) Schema() []*IndexInfo {
 	var a []*IndexInfo
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{Name: index.Name()}
-		for _, frame := range index.Frames() {
+		for _, frame := range index.Fields() {
 			fi := &FieldInfo{Name: frame.Name(), Options: frame.Options()}
 			for _, view := range frame.Views() {
 				fi.Views = append(fi.Views, &ViewInfo{Name: view.Name()})
 			}
 			sort.Sort(viewInfoSlice(fi.Views))
-			di.Frames = append(di.Frames, fi)
+			di.Fields = append(di.Fields, fi)
 		}
-		sort.Sort(fieldInfoSlice(di.Frames))
+		sort.Sort(fieldInfoSlice(di.Fields))
 		a = append(a, di)
 	}
 	sort.Sort(indexInfoSlice(a))
@@ -241,7 +241,7 @@ func (h *Holder) ApplySchema(schema *internal.Schema) error {
 		// Create frames that don't exist.
 		for _, f := range index.Frames {
 			opt := decodeFieldOptions(f.Meta)
-			frame, err := idx.CreateFrameIfNotExists(f.Name, *opt)
+			frame, err := idx.CreateFieldIfNotExists(f.Name, *opt)
 			if err != nil {
 				return errors.Wrap(err, "creating frame")
 			}
@@ -396,7 +396,7 @@ func (h *Holder) Frame(index, name string) *Field {
 	if idx == nil {
 		return nil
 	}
-	return idx.Frame(name)
+	return idx.Field(name)
 }
 
 // View returns the view for an index, frame, and name.
@@ -435,7 +435,7 @@ func (h *Holder) monitorCacheFlush() {
 
 func (h *Holder) flushCaches() {
 	for _, index := range h.Indexes() {
-		for _, frame := range index.Frames() {
+		for _, frame := range index.Fields() {
 			for _, view := range frame.Views() {
 				for _, fragment := range view.Fragments() {
 					select {
@@ -600,7 +600,7 @@ func (s *HolderSyncer) SyncHolder() error {
 		}
 
 		tf := time.Now()
-		for _, fi := range di.Frames {
+		for _, fi := range di.Fields {
 			// Verify syncer has not closed.
 			if s.IsClosing() {
 				return nil
@@ -713,7 +713,7 @@ func (s *HolderSyncer) syncFrame(index, name string) error {
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
 		m, err := client.RowAttrDiff(context.Background(), index, name, blks)
-		if err == ErrFrameNotFound {
+		if err == ErrFieldNotFound {
 			continue // frame not created remotely yet, skip
 		} else if err != nil {
 			return errors.Wrap(err, "getting differing blocks")
@@ -742,7 +742,7 @@ func (s *HolderSyncer) syncFragment(index, frame, view string, slice uint64) err
 	// Retrieve local frame.
 	f := s.Holder.Frame(index, frame)
 	if f == nil {
-		return ErrFrameNotFound
+		return ErrFieldNotFound
 	}
 
 	// Ensure view exists locally.
@@ -806,7 +806,7 @@ func (c *HolderCleaner) CleanHolder() error {
 		containedSlices := c.Cluster.ContainsSlices(index.Name(), index.MaxSlice(), c.Node)
 
 		// Get the fragments registered in memory.
-		for _, frame := range index.Frames() {
+		for _, frame := range index.Fields() {
 			for _, view := range frame.Views() {
 				for _, fragment := range view.Fragments() {
 					fragSlice := fragment.Slice()

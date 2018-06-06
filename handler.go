@@ -522,7 +522,7 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 		switch errors.Cause(err) {
 		case ErrIndexNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
-		case ErrFrameExists:
+		case ErrFieldExists:
 			http.Error(w, err.Error(), http.StatusConflict)
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -749,7 +749,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		switch errors.Cause(err) {
 		case ErrIndexNotFound:
 			fallthrough
-		case ErrFrameNotFound:
+		case ErrFieldNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
 		case ErrClusterDoesNotOwnSlice:
 			http.Error(w, err.Error(), http.StatusPreconditionFailed)
@@ -802,7 +802,7 @@ func (h *Handler) handlePostImportValue(w http.ResponseWriter, r *http.Request) 
 		switch errors.Cause(err) {
 		case ErrIndexNotFound:
 			fallthrough
-		case ErrFrameNotFound:
+		case ErrFieldNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
 		case ErrClusterDoesNotOwnSlice:
 			http.Error(w, err.Error(), http.StatusPreconditionFailed)

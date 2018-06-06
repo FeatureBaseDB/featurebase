@@ -961,7 +961,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 	}
 
 	// Re-fetch fragment.
-	f = index.Frame("f").View(pilosa.ViewStandard).Fragment(0)
+	f = index.Field("f").View(pilosa.ViewStandard).Fragment(0)
 
 	// Re-verify correct cache type and size.
 	if cache, ok := f.Cache().(*pilosa.RankCache); !ok {

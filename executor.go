@@ -313,7 +313,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 					return nil, err
 				} else {
 					frame, _ := c.Args["frame"].(string)
-					if fr := idx.Frame(frame); fr != nil {
+					if fr := idx.Field(frame); fr != nil {
 						rowID, _, err := c.UintArg(rowLabel)
 						if err != nil {
 							return nil, errors.Wrap(err, "getting row")
@@ -634,7 +634,7 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.
 	}
 	f := e.Holder.Frame(index, frame)
 	if f == nil {
-		return nil, ErrFrameNotFound
+		return nil, ErrFieldNotFound
 	}
 
 	rowID, rowOK, rowErr := c.UintArg(rowLabel)
@@ -694,9 +694,9 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	}
 
 	// Retrieve base frame.
-	f := idx.Frame(frame)
+	f := idx.Field(frame)
 	if f == nil {
-		return nil, ErrFrameNotFound
+		return nil, ErrFieldNotFound
 	}
 
 	// Read row & column id.
@@ -769,7 +769,7 @@ func (e *Executor) executeBSIGroupRangeSlice(ctx context.Context, index string, 
 
 	f := e.Holder.Frame(index, frameName)
 	if f == nil {
-		return nil, ErrFrameNotFound
+		return nil, ErrFieldNotFound
 	}
 
 	// EQ null           (not implemented: flip frag.NotNull with max ColumnID)
@@ -959,9 +959,9 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 	if idx == nil {
 		return false, ErrIndexNotFound
 	}
-	f := idx.Frame(frame)
+	f := idx.Field(frame)
 	if f == nil {
-		return false, ErrFrameNotFound
+		return false, ErrFieldNotFound
 	}
 
 	// Read fields using labels.
@@ -1024,9 +1024,9 @@ func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 	if idx == nil {
 		return false, ErrIndexNotFound
 	}
-	f := idx.Frame(frame)
+	f := idx.Field(frame)
 	if f == nil {
-		return false, ErrFrameNotFound
+		return false, ErrFieldNotFound
 	}
 
 	// Read fields using labels.
@@ -1110,7 +1110,7 @@ func (e *Executor) executeSetValue(ctx context.Context, index string, c *pql.Cal
 		// Retrieve frame.
 		frame := e.Holder.Frame(index, name)
 		if frame == nil {
-			return ErrFrameNotFound
+			return ErrFieldNotFound
 		}
 
 		switch value := value.(type) {
@@ -1159,7 +1159,7 @@ func (e *Executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	// Retrieve frame.
 	frame := e.Holder.Frame(index, frameName)
 	if frame == nil {
-		return ErrFrameNotFound
+		return ErrFieldNotFound
 	}
 
 	// Parse labels.
@@ -1219,7 +1219,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 		// Retrieve frame.
 		f := e.Holder.Frame(index, frame)
 		if f == nil {
-			return nil, ErrFrameNotFound
+			return nil, ErrFieldNotFound
 		}
 
 		rowID, ok, err := c.UintArg(rowLabel)
@@ -1257,7 +1257,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 		// Retrieve frame.
 		frame := e.Holder.Frame(index, name)
 		if frame == nil {
-			return nil, ErrFrameNotFound
+			return nil, ErrFieldNotFound
 		}
 
 		// Set attributes.

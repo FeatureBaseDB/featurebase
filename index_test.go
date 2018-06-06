@@ -44,7 +44,7 @@ func TestIndex_CreateFrameIfNotExists(t *testing.T) {
 		t.Fatal("frame mismatch")
 	}
 
-	if f.Field != index.Frame("f") {
+	if f.Field != index.Field("f") {
 		t.Fatal("frame mismatch")
 	}
 }
@@ -89,7 +89,7 @@ func TestIndex_CreateFrame(t *testing.T) {
 			// Reopen the index & verify the fields are loaded.
 			if err := index.Reopen(); err != nil {
 				t.Fatal(err)
-			} else if f := index.Frame("f"); !reflect.DeepEqual(f.Type(), pilosa.FieldTypeInt) {
+			} else if f := index.Field("f"); !reflect.DeepEqual(f.Type(), pilosa.FieldTypeInt) {
 				t.Fatalf("unexpected type after reopen: %#v", f.Type())
 			}
 		})
@@ -185,14 +185,14 @@ func TestIndex_DeleteFrame(t *testing.T) {
 	}
 
 	// Delete frame & verify it's gone.
-	if err := index.DeleteFrame("f"); err != nil {
+	if err := index.DeleteField("f"); err != nil {
 		t.Fatal(err)
-	} else if index.Frame("f") != nil {
+	} else if index.Field("f") != nil {
 		t.Fatal("expected nil frame")
 	}
 
 	// Delete again to make sure it doesn't error.
-	if err := index.DeleteFrame("f"); err != nil {
+	if err := index.DeleteField("f"); err != nil {
 		t.Fatal(err)
 	}
 }

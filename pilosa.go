@@ -31,10 +31,10 @@ var (
 	ErrIndexExists   = errors.New("index already exists")
 	ErrIndexNotFound = errors.New("index not found")
 
-	// ErrFrameRequired is returned when no frame is specified.
-	ErrFrameRequired = errors.New("frame required")
-	ErrFrameExists   = errors.New("frame already exists")
-	ErrFrameNotFound = errors.New("frame not found")
+	// ErrFieldRequired is returned when no field is specified.
+	ErrFieldRequired = errors.New("field required")
+	ErrFieldExists   = errors.New("field already exists")
+	ErrFieldNotFound = errors.New("field not found")
 
 	ErrBSIGroupNotFound         = errors.New("bsigroup not found")
 	ErrBSIGroupExists           = errors.New("bsigroup already exists")

@@ -627,7 +627,7 @@ func (c *Cluster) fragsByHost(idx *Index) fragsByHost {
 	// frameViews is a map of frame to slice of views.
 	frameViews := make(viewsByFrame)
 
-	for _, frame := range idx.Frames() {
+	for _, frame := range idx.Fields() {
 		for _, view := range frame.Views() {
 			frameViews.addView(frame.Name(), view.Name())
 
@@ -1242,7 +1242,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 				// Retrieve frame.
 				f := c.Holder.Frame(src.Index, src.Frame)
 				if f == nil {
-					return ErrFrameNotFound
+					return ErrFieldNotFound
 				}
 
 				// Create view.

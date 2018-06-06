@@ -230,7 +230,7 @@ func (api *API) CreateFrame(ctx context.Context, indexName string, frameName str
 	}
 
 	// Create frame.
-	frame, err := index.CreateFrame(frameName, options)
+	frame, err := index.CreateField(frameName, options)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating frame")
 	}
@@ -265,7 +265,7 @@ func (api *API) DeleteFrame(ctx context.Context, indexName string, frameName str
 	}
 
 	// Delete frame from the index.
-	if err := index.DeleteFrame(frameName); err != nil {
+	if err := index.DeleteField(frameName); err != nil {
 		return errors.Wrap(err, "deleting frame")
 	}
 
@@ -357,7 +357,7 @@ func (api *API) UnmarshalFragment(ctx context.Context, indexName string, frameNa
 	// Retrieve frame.
 	f := api.Holder.Frame(indexName, frameName)
 	if f == nil {
-		return ErrFrameNotFound
+		return ErrFieldNotFound
 	}
 
 	// Retrieve view.
@@ -497,7 +497,7 @@ func (api *API) Views(ctx context.Context, indexName string, frameName string) (
 	// Retrieve views.
 	f := api.Holder.Frame(indexName, frameName)
 	if f == nil {
-		return nil, ErrFrameNotFound
+		return nil, ErrFieldNotFound
 	}
 
 	// Fetch views.
@@ -514,7 +514,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, frameName stri
 	// Retrieve frame.
 	f := api.Holder.Frame(indexName, frameName)
 	if f == nil {
-		return ErrFrameNotFound
+		return ErrFieldNotFound
 	}
 
 	// Delete the view.
@@ -582,7 +582,7 @@ func (api *API) FrameAttrDiff(ctx context.Context, indexName string, frameName s
 	// Retrieve index from holder.
 	f := api.Holder.Frame(indexName, frameName)
 	if f == nil {
-		return nil, ErrFrameNotFound
+		return nil, ErrFieldNotFound
 	}
 
 	// Retrieve local blocks.
@@ -695,10 +695,10 @@ func (api *API) indexFrame(indexName string, frameName string, slice uint64) (*I
 	}
 
 	// Retrieve frame.
-	frame := index.Frame(frameName)
+	frame := index.Field(frameName)
 	if frame == nil {
-		api.Logger.Printf("frame error: index=%s, frame=%s, slice=%d, err=%s", indexName, frameName, slice, ErrFrameNotFound.Error())
-		return nil, nil, ErrFrameNotFound
+		api.Logger.Printf("frame error: index=%s, frame=%s, slice=%d, err=%s", indexName, frameName, slice, ErrFieldNotFound.Error())
+		return nil, nil, ErrFieldNotFound
 	}
 	return index, frame, nil
 }

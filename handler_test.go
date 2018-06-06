@@ -712,7 +712,7 @@ func TestHandler_DeleteFrame(t *testing.T) {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
-	} else if f := hldr.Index("i0").Frame("f1"); f != nil {
+	} else if f := hldr.Index("i0").Field("f1"); f != nil {
 		t.Fatal("expected nil frame")
 	}
 }
