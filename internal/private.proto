@@ -5,7 +5,7 @@ package internal;
 message IndexMeta {
 }
 
-message FrameMeta {
+message FieldOptions {
     string Type = 8;
 	string CacheType = 3;
 	uint32 CacheSize = 4;
@@ -56,7 +56,7 @@ message CreateIndexMessage {
 message CreateFrameMessage {
     string Index = 1;
     string Frame = 2;
-    FrameMeta Meta = 3;
+    FieldOptions Meta = 3;
 }
 
 message DeleteFrameMessage {
@@ -66,7 +66,7 @@ message DeleteFrameMessage {
 
 message Frame {
     string Name = 1;
-    FrameMeta Meta = 2;
+    FieldOptions Meta = 2;
     repeated string Views = 3;
 }
 

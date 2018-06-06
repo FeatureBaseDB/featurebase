@@ -113,7 +113,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
-	t.Run("ErrFrameMetaCorrupt", func(t *testing.T) {
+	t.Run("ErrFieldOptionsCorrupt", func(t *testing.T) {
 		h := test.MustOpenHolder()
 		defer h.Close()
 

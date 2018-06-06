@@ -261,7 +261,7 @@ func (f *Field) openViews() error {
 
 // loadMeta reads meta data for the frame, if any.
 func (f *Field) loadMeta() error {
-	var pb internal.FrameMeta
+	var pb internal.FieldOptions
 
 	// Read data from meta file.
 	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".meta"))
@@ -1038,15 +1038,15 @@ func (o *FieldOptions) Validate() error {
 }
 
 // Encode converts o into its internal representation.
-func (o *FieldOptions) Encode() *internal.FrameMeta {
+func (o *FieldOptions) Encode() *internal.FieldOptions {
 	return encodeFieldOptions(o)
 }
 
-func encodeFieldOptions(o *FieldOptions) *internal.FrameMeta {
+func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 	if o == nil {
 		return nil
 	}
-	return &internal.FrameMeta{
+	return &internal.FieldOptions{
 		Type:        o.Type,
 		CacheType:   o.CacheType,
 		CacheSize:   o.CacheSize,
@@ -1056,7 +1056,7 @@ func encodeFieldOptions(o *FieldOptions) *internal.FrameMeta {
 	}
 }
 
-func decodeFieldOptions(options *internal.FrameMeta) *FieldOptions {
+func decodeFieldOptions(options *internal.FieldOptions) *FieldOptions {
 	if options == nil {
 		return nil
 	}
