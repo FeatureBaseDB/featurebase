@@ -517,7 +517,7 @@ func (h *Handler) handlePostFrame(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	_, err = h.API.CreateFrame(r.Context(), indexName, frameName, req.Options)
+	_, err = h.API.CreateField(r.Context(), indexName, frameName, req.Options)
 	if err != nil {
 		switch errors.Cause(err) {
 		case ErrIndexNotFound:
@@ -585,7 +585,7 @@ func (h *Handler) handleDeleteFrame(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	frameName := mux.Vars(r)["frame"]
 
-	err := h.API.DeleteFrame(r.Context(), indexName, frameName)
+	err := h.API.DeleteField(r.Context(), indexName, frameName)
 	if err != nil {
 		if errors.Cause(err) == ErrIndexNotFound {
 			if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
@@ -617,7 +617,7 @@ func (h *Handler) handlePostFrameAttrDiff(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	attrs, err := h.API.FrameAttrDiff(r.Context(), indexName, frameName, req.Blocks)
+	attrs, err := h.API.FieldAttrDiff(r.Context(), indexName, frameName, req.Blocks)
 	if err != nil {
 		switch errors.Cause(err) {
 		case ErrFragmentNotFound:
