@@ -1,4 +1,4 @@
-.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-statik install install-build-deps install-dep install-protoc install-protoc-gen-gofast install-statik prerelease prerelease-build prerelease-upload release release-build require-dep require-protoc require-protoc-gen-gofast require-statik test
+.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc install install-build-deps install-dep install-protoc install-protoc-gen-gofast prerelease prerelease-build prerelease-upload release release-build require-dep require-protoc require-protoc-gen-gofast test
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
@@ -88,16 +88,12 @@ install: vendor
 generate-protoc: require-protoc require-protoc-gen-gofast
 	go generate github.com/pilosa/pilosa/internal
 
-# `go generate` statik assets (WebUI)
-generate-statik: require-statik
-	go generate github.com/pilosa/pilosa/statik
-
 # `go generate` stringers
 generate-stringer:
 	go generate github.com/pilosa/pilosa
 
 # `go generate` all needed packages
-generate: generate-protoc generate-statik generate-stringer
+generate: generate-protoc generate-stringer
 
 # Create Docker image from Dockerfile
 docker:
@@ -126,22 +122,16 @@ endef
 require-dep:
 	$(call require,dep)
 
-require-statik:
-	$(call require,statik)
-
 require-protoc-gen-gofast:
 	$(call require,protoc-gen-gofast)
 
 require-protoc:
 	$(call require,protoc)
 
-install-build-deps: install-dep install-statik install-protoc-gen-gofast install-protoc install-stringer
+install-build-deps: install-dep install-protoc-gen-gofast install-protoc install-stringer
 
 install-dep:
 	go get -u github.com/golang/dep/cmd/dep
-
-install-statik:
-	go get -u github.com/rakyll/statik
 
 install-stringer:
 	go get -u golang.org/x/tools/cmd/stringer

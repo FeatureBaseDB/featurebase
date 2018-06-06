@@ -78,7 +78,7 @@ Pilosa includes a Makefile that automates several tasks:
     make install
     ```
 
-- Install build dependencies (dep, statik, and protoc):
+- Install build dependencies (dep and protoc):
 
     ```sh
     make install-build-deps
@@ -112,12 +112,6 @@ Pilosa includes a Makefile that automates several tasks:
 
     ```sh
     make release
-    ```
-
-- Generate static assets for the WebUI:
-
-    ```sh
-    make generate-statik
     ```
 
 - Regenerate protocol buffer files in `internal/`:

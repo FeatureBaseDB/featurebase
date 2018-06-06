@@ -39,7 +39,6 @@ import (
 	"github.com/pilosa/pilosa/gcnotify"
 	"github.com/pilosa/pilosa/gopsutil"
 	"github.com/pilosa/pilosa/gossip"
-	"github.com/pilosa/pilosa/statik"
 	"github.com/pilosa/pilosa/statsd"
 	"github.com/pkg/errors"
 )
@@ -170,7 +169,6 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "wrapping handler")
 	}
 	handler.Logger = m.logger
-	handler.FileSystem = &statik.FileSystem{}
 	handler.API = pilosa.NewAPI()
 	handler.API.Logger = m.logger
 

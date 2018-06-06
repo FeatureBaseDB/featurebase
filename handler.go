@@ -42,8 +42,6 @@ import (
 type Handler struct {
 	Handler http.Handler
 
-	FileSystem FileSystem
-
 	Logger Logger
 
 	// Keeps the query argument validators for each handler
@@ -87,8 +85,7 @@ func OptHandlerAllowedOrigins(origins []string) HandlerOption {
 // NewHandler returns a new instance of Handler with a default logger.
 func NewHandler(opts ...HandlerOption) (*Handler, error) {
 	handler := &Handler{
-		FileSystem: NopFileSystem,
-		Logger:     NopLogger,
+		Logger: NopLogger,
 	}
 	handler.Handler = NewRouter(handler)
 	handler.populateValidators()
@@ -137,8 +134,7 @@ func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
 // NewRouter creates a new mux http router.
 func NewRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
-	router.HandleFunc("/", handler.handleWebUI).Methods("GET")
-	router.HandleFunc("/assets/{file}", handler.handleWebUI).Methods("GET")
+	router.HandleFunc("/", handler.handleHome).Methods("GET")
 	router.HandleFunc("/cluster/message", handler.handlePostClusterMessage).Methods("POST")
 	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
@@ -226,19 +222,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) handleWebUI(w http.ResponseWriter, r *http.Request) {
-	// If user is using curl, don't chuck HTML at them
-	if strings.HasPrefix(r.UserAgent(), "curl") {
-		http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information or try the WebUI by visiting this URL in your browser.", http.StatusNotFound)
-		return
-	}
-	filesystem, err := h.FileSystem.New()
-	if err != nil {
-		_ = h.writeQueryResponse(w, r, &QueryResponse{Err: err})
-		h.Logger.Printf("Pilosa WebUI is not available. Please run `make generate-statik` before building Pilosa with `make install`.")
-		return
-	}
-	http.FileServer(filesystem).ServeHTTP(w, r)
+func (h *Handler) handleHome(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information.", http.StatusNotFound)
 }
 
 // handleGetSchema handles GET /schema requests.
