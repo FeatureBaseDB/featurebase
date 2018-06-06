@@ -12,27 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package test
+package pilosa
 
 import (
-	"github.com/pilosa/pilosa"
+	"io/ioutil"
 )
 
-// SliceWidth is a helper reference to use when testing.
-const SliceWidth = pilosa.SliceWidth
-
-// Fragment is a test wrapper for pilosa.Fragment.
-type Fragment struct {
-	*pilosa.Fragment
-	RowAttrStore pilosa.AttrStore
+// mustOpenIndex returns a new, opened index at a temporary path. Panic on error.
+func mustOpenIndex() *Index {
+	path, err := ioutil.TempDir("", "pilosa-index-")
+	if err != nil {
+		panic(err)
+	}
+	index, err := NewIndex(path, "i")
+	if err != nil {
+		panic(err)
+	}
+	if err := index.Open(); err != nil {
+		panic(err)
+	}
+	return index
 }
 
-// MustSetBits sets columns on a row. Panic on error.
-// This function does not accept a timestamp or quantum.
-func (f *Fragment) MustSetBits(rowID uint64, columnIDs ...uint64) {
-	for _, columnID := range columnIDs {
-		if _, err := f.SetBit(rowID, columnID); err != nil {
-			panic(err)
-		}
+// reopen closes the index and reopens it.
+func (i *Index) reopen() error {
+	if err := i.Close(); err != nil {
+		return err
 	}
+	if err := i.Open(); err != nil {
+		return err
+	}
+	return nil
 }

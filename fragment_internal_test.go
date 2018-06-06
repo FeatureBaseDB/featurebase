@@ -12,20 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pilosa_test
+package pilosa
 
 import (
 	"bytes"
 	"flag"
+	"io/ioutil"
 	"math"
 	"reflect"
 	"testing"
 	"testing/quick"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/pql"
-	"github.com/pilosa/pilosa/test"
 )
 
 // Test flags
@@ -35,12 +34,9 @@ var (
 	FragmentPath = flag.String("fragment", "testdata/sample_view/0", "fragment path")
 )
 
-// SliceWidth is a helper reference to use when testing.
-const SliceWidth = pilosa.SliceWidth
-
 // Ensure a fragment can set a bit and retrieve it.
 func TestFragment_SetBit(t *testing.T) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 	defer f.Close()
 
 	// Set bits on the fragment.
@@ -60,7 +56,7 @@ func TestFragment_SetBit(t *testing.T) {
 	}
 
 	// Close and reopen the fragment & verify the data.
-	if err := f.Reopen(); err != nil {
+	if err := f.reopen(); err != nil {
 		t.Fatal(err)
 	} else if n := f.Row(120).Count(); n != 2 {
 		t.Fatalf("unexpected count (reopen): %d", n)
@@ -71,7 +67,7 @@ func TestFragment_SetBit(t *testing.T) {
 
 // Ensure a fragment can clear a set bit.
 func TestFragment_ClearBit(t *testing.T) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 	defer f.Close()
 
 	// Set and then clear bits on the fragment.
@@ -89,7 +85,7 @@ func TestFragment_ClearBit(t *testing.T) {
 	}
 
 	// Close and reopen the fragment & verify the data.
-	if err := f.Reopen(); err != nil {
+	if err := f.reopen(); err != nil {
 		t.Fatal(err)
 	} else if n := f.Row(1000).Count(); n != 1 {
 		t.Fatalf("unexpected count (reopen): %d", n)
@@ -99,7 +95,7 @@ func TestFragment_ClearBit(t *testing.T) {
 // Ensure a fragment can set & read a value.
 func TestFragment_SetValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
-		f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+		f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 		defer f.Close()
 
 		// Set value.
@@ -127,7 +123,7 @@ func TestFragment_SetValue(t *testing.T) {
 	})
 
 	t.Run("Overwrite", func(t *testing.T) {
-		f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+		f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 		defer f.Close()
 
 		// Set value.
@@ -155,7 +151,7 @@ func TestFragment_SetValue(t *testing.T) {
 	})
 
 	t.Run("NotExists", func(t *testing.T) {
-		f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+		f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 		defer f.Close()
 
 		// Set value.
@@ -185,7 +181,7 @@ func TestFragment_SetValue(t *testing.T) {
 				values[i] = values[i] % (1 << bitDepth)
 			}
 
-			f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+			f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 			defer f.Close()
 
 			// Set values.
@@ -223,7 +219,7 @@ func TestFragment_SetValue(t *testing.T) {
 func TestFragment_Sum(t *testing.T) {
 	const bitDepth = 16
 
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 	defer f.Close()
 
 	// Set values.
@@ -248,7 +244,7 @@ func TestFragment_Sum(t *testing.T) {
 	})
 
 	t.Run("WithFilter", func(t *testing.T) {
-		if sum, n, err := f.Sum(pilosa.NewRow(2000, 4000, 5000), bitDepth); err != nil {
+		if sum, n, err := f.Sum(NewRow(2000, 4000, 5000), bitDepth); err != nil {
 			t.Fatal(err)
 		} else if n != 2 {
 			t.Fatalf("unexpected count: %d", n)
@@ -262,7 +258,7 @@ func TestFragment_Sum(t *testing.T) {
 func TestFragment_MinMax(t *testing.T) {
 	const bitDepth = 16
 
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 	defer f.Close()
 
 	// Set values.
@@ -284,16 +280,16 @@ func TestFragment_MinMax(t *testing.T) {
 
 	t.Run("Min", func(t *testing.T) {
 		tests := []struct {
-			filter *pilosa.Row
+			filter *Row
 			exp    uint64
 			cnt    uint64
 		}{
 			{filter: nil, exp: 0, cnt: 1},
-			{filter: pilosa.NewRow(2000, 4000, 5000), exp: 300, cnt: 2},
-			{filter: pilosa.NewRow(2000, 4000), exp: 300, cnt: 2},
-			{filter: pilosa.NewRow(1), exp: 0, cnt: 0},
-			{filter: pilosa.NewRow(1000), exp: 382, cnt: 1},
-			{filter: pilosa.NewRow(7000), exp: 0, cnt: 1},
+			{filter: NewRow(2000, 4000, 5000), exp: 300, cnt: 2},
+			{filter: NewRow(2000, 4000), exp: 300, cnt: 2},
+			{filter: NewRow(1), exp: 0, cnt: 0},
+			{filter: NewRow(1000), exp: 382, cnt: 1},
+			{filter: NewRow(7000), exp: 0, cnt: 1},
 		}
 		for i, test := range tests {
 			if min, cnt, err := f.Min(test.filter, bitDepth); err != nil {
@@ -308,16 +304,16 @@ func TestFragment_MinMax(t *testing.T) {
 
 	t.Run("Max", func(t *testing.T) {
 		tests := []struct {
-			filter *pilosa.Row
+			filter *Row
 			exp    uint64
 			cnt    uint64
 		}{
 			{filter: nil, exp: 2818, cnt: 2},
-			{filter: pilosa.NewRow(2000, 4000, 5000), exp: 2818, cnt: 1},
-			{filter: pilosa.NewRow(2000, 4000), exp: 300, cnt: 2},
-			{filter: pilosa.NewRow(1), exp: 0, cnt: 0},
-			{filter: pilosa.NewRow(1000), exp: 382, cnt: 1},
-			{filter: pilosa.NewRow(7000), exp: 0, cnt: 1},
+			{filter: NewRow(2000, 4000, 5000), exp: 2818, cnt: 1},
+			{filter: NewRow(2000, 4000), exp: 300, cnt: 2},
+			{filter: NewRow(1), exp: 0, cnt: 0},
+			{filter: NewRow(1000), exp: 382, cnt: 1},
+			{filter: NewRow(7000), exp: 0, cnt: 1},
 		}
 		for i, test := range tests {
 			if max, cnt, err := f.Max(test.filter, bitDepth); err != nil {
@@ -336,7 +332,7 @@ func TestFragment_Range(t *testing.T) {
 	const bitDepth = 16
 
 	t.Run("EQ", func(t *testing.T) {
-		f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+		f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 		defer f.Close()
 
 		// Set values.
@@ -359,7 +355,7 @@ func TestFragment_Range(t *testing.T) {
 	})
 
 	t.Run("NEQ", func(t *testing.T) {
-		f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+		f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 		defer f.Close()
 
 		// Set values.
@@ -382,7 +378,7 @@ func TestFragment_Range(t *testing.T) {
 	})
 
 	t.Run("LT", func(t *testing.T) {
-		f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+		f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 		defer f.Close()
 
 		// Set values.
@@ -430,7 +426,7 @@ func TestFragment_Range(t *testing.T) {
 	})
 
 	t.Run("GT", func(t *testing.T) {
-		f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+		f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 		defer f.Close()
 
 		// Set values.
@@ -478,7 +474,7 @@ func TestFragment_Range(t *testing.T) {
 	})
 
 	t.Run("BETWEEN", func(t *testing.T) {
-		f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+		f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 		defer f.Close()
 
 		// Set values.
@@ -528,7 +524,7 @@ func TestFragment_Range(t *testing.T) {
 
 // Ensure a fragment can snapshot correctly.
 func TestFragment_Snapshot(t *testing.T) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 	defer f.Close()
 
 	// Set and then clear bits on the fragment.
@@ -548,7 +544,7 @@ func TestFragment_Snapshot(t *testing.T) {
 	}
 
 	// Close and reopen the fragment & verify the data.
-	if err := f.Reopen(); err != nil {
+	if err := f.reopen(); err != nil {
 		t.Fatal(err)
 	} else if n := f.Row(1000).Count(); n != 1 {
 		t.Fatalf("unexpected count (reopen): %d", n)
@@ -557,7 +553,7 @@ func TestFragment_Snapshot(t *testing.T) {
 
 // Ensure a fragment can iterate over all bits in order.
 func TestFragment_ForEachBit(t *testing.T) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 	defer f.Close()
 
 	// Set bits on the fragment.
@@ -586,42 +582,42 @@ func TestFragment_ForEachBit(t *testing.T) {
 
 // Ensure a fragment can return the top n results.
 func TestFragment_Top(t *testing.T) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeRanked)
+	f := mustOpenFragment("i", "f", ViewStandard, 0, CacheTypeRanked)
 	defer f.Close()
 	// Set bits on the rows 100, 101, & 102.
-	f.MustSetBits(100, 1, 3, 200)
-	f.MustSetBits(101, 1)
-	f.MustSetBits(102, 1, 2)
+	f.mustSetBits(100, 1, 3, 200)
+	f.mustSetBits(101, 1)
+	f.mustSetBits(102, 1, 2)
 	f.RecalculateCache()
 
 	// Retrieve top rows.
-	if pairs, err := f.Top(pilosa.TopOptions{N: 2}); err != nil {
+	if pairs, err := f.Top(TopOptions{N: 2}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) != 2 {
 		t.Fatalf("unexpected count: %d", len(pairs))
-	} else if pairs[0] != (pilosa.Pair{ID: 100, Count: 3}) {
+	} else if pairs[0] != (Pair{ID: 100, Count: 3}) {
 		t.Fatalf("unexpected pair(0): %v", pairs[0])
-	} else if pairs[1] != (pilosa.Pair{ID: 102, Count: 2}) {
+	} else if pairs[1] != (Pair{ID: 102, Count: 2}) {
 		t.Fatalf("unexpected pair(1): %v", pairs[1])
 	}
 }
 
 // Ensure a fragment can filter rows when retrieving the top n rows.
 func TestFragment_Top_Filter(t *testing.T) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeRanked)
+	f := mustOpenFragment("i", "f", ViewStandard, 0, CacheTypeRanked)
 	defer f.Close()
 
 	// Set bits on the rows 100, 101, & 102.
-	f.MustSetBits(100, 1, 3, 200)
-	f.MustSetBits(101, 1)
-	f.MustSetBits(102, 1, 2)
+	f.mustSetBits(100, 1, 3, 200)
+	f.mustSetBits(101, 1)
+	f.mustSetBits(102, 1, 2)
 	f.RecalculateCache()
 	// Assign attributes.
-	f.RowAttrStore.SetAttrs(101, map[string]interface{}{"x": uint64(10)})
-	f.RowAttrStore.SetAttrs(102, map[string]interface{}{"x": uint64(20)})
+	f.RowAttrStore.SetAttrs(101, map[string]interface{}{"x": int64(10)})
+	f.RowAttrStore.SetAttrs(102, map[string]interface{}{"x": int64(20)})
 
 	// Retrieve top rows.
-	if pairs, err := f.Top(pilosa.TopOptions{
+	if pairs, err := f.Top(TopOptions{
 		N:            2,
 		FilterName:   "x",
 		FilterValues: []interface{}{int64(10), int64(15), int64(20)},
@@ -629,32 +625,32 @@ func TestFragment_Top_Filter(t *testing.T) {
 		t.Fatal(err)
 	} else if len(pairs) != 2 {
 		t.Fatalf("unexpected count: %d", len(pairs))
-	} else if pairs[0] != (pilosa.Pair{ID: 102, Count: 2}) {
+	} else if pairs[0] != (Pair{ID: 102, Count: 2}) {
 		t.Fatalf("unexpected pair(0): %v", pairs[0])
-	} else if pairs[1] != (pilosa.Pair{ID: 101, Count: 1}) {
+	} else if pairs[1] != (Pair{ID: 101, Count: 1}) {
 		t.Fatalf("unexpected pair(1): %v", pairs[1])
 	}
 }
 
 // Ensure a fragment can return top rows that intersect with an input row.
 func TestFragment_TopN_Intersect(t *testing.T) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeRanked)
+	f := mustOpenFragment("i", "f", ViewStandard, 0, CacheTypeRanked)
 	defer f.Close()
 
 	// Create an intersecting input row.
-	src := pilosa.NewRow(1, 2, 3)
+	src := NewRow(1, 2, 3)
 
 	// Set bits on various rows.
-	f.MustSetBits(100, 1, 10, 11, 12)    // one intersection
-	f.MustSetBits(101, 1, 2, 3, 4)       // three intersections
-	f.MustSetBits(102, 1, 2, 4, 5, 6)    // two intersections
-	f.MustSetBits(103, 1000, 1001, 1002) // no intersection
+	f.mustSetBits(100, 1, 10, 11, 12)    // one intersection
+	f.mustSetBits(101, 1, 2, 3, 4)       // three intersections
+	f.mustSetBits(102, 1, 2, 4, 5, 6)    // two intersections
+	f.mustSetBits(103, 1000, 1001, 1002) // no intersection
 	f.RecalculateCache()
 
 	// Retrieve top rows.
-	if pairs, err := f.Top(pilosa.TopOptions{N: 3, Src: src}); err != nil {
+	if pairs, err := f.Top(TopOptions{N: 3, Src: src}); err != nil {
 		t.Fatal(err)
-	} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
+	} else if !reflect.DeepEqual(pairs, []Pair{
 		{ID: 101, Count: 3},
 		{ID: 102, Count: 2},
 		{ID: 100, Count: 1},
@@ -669,11 +665,11 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 		t.Skip("short mode")
 	}
 
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeRanked)
+	f := mustOpenFragment("i", "f", ViewStandard, 0, CacheTypeRanked)
 	defer f.Close()
 
 	// Create an intersecting input row.
-	src := pilosa.NewRow(
+	src := NewRow(
 		980, 981, 982, 983, 984, 985, 986, 987, 988, 989,
 		990, 991, 992, 993, 994, 995, 996, 997, 998, 999,
 	)
@@ -681,15 +677,15 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 	// Set bits on rows 0 - 999. Higher rows have higher bit counts.
 	for i := uint64(0); i < 1000; i++ {
 		for j := uint64(0); j < i; j++ {
-			f.MustSetBits(i, j)
+			f.mustSetBits(i, j)
 		}
 	}
 	f.RecalculateCache()
 
 	// Retrieve top rows.
-	if pairs, err := f.Top(pilosa.TopOptions{N: 10, Src: src}); err != nil {
+	if pairs, err := f.Top(TopOptions{N: 10, Src: src}); err != nil {
 		t.Fatal(err)
-	} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
+	} else if !reflect.DeepEqual(pairs, []Pair{
 		{ID: 999, Count: 19},
 		{ID: 998, Count: 18},
 		{ID: 997, Count: 17},
@@ -707,18 +703,18 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 
 // Ensure a fragment can return top rows when specified by ID.
 func TestFragment_TopN_IDs(t *testing.T) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeRanked)
+	f := mustOpenFragment("i", "f", ViewStandard, 0, CacheTypeRanked)
 	defer f.Close()
 
 	// Set bits on various rows.
-	f.MustSetBits(100, 1, 2, 3)
-	f.MustSetBits(101, 4, 5, 6, 7)
-	f.MustSetBits(102, 8, 9, 10, 11, 12)
+	f.mustSetBits(100, 1, 2, 3)
+	f.mustSetBits(101, 4, 5, 6, 7)
+	f.mustSetBits(102, 8, 9, 10, 11, 12)
 
 	// Retrieve top rows.
-	if pairs, err := f.Top(pilosa.TopOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
+	if pairs, err := f.Top(TopOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
 		t.Fatal(err)
-	} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
+	} else if !reflect.DeepEqual(pairs, []Pair{
 		{ID: 101, Count: 4},
 		{ID: 100, Count: 3},
 	}) {
@@ -728,18 +724,18 @@ func TestFragment_TopN_IDs(t *testing.T) {
 
 // Ensure a fragment return none if CacheTypeNone is set
 func TestFragment_TopN_NopCache(t *testing.T) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeNone)
+	f := mustOpenFragment("i", "f", ViewStandard, 0, CacheTypeNone)
 	defer f.Close()
 
 	// Set bits on various rows.
-	f.MustSetBits(100, 1, 2, 3)
-	f.MustSetBits(101, 4, 5, 6, 7)
-	f.MustSetBits(102, 8, 9, 10, 11, 12)
+	f.mustSetBits(100, 1, 2, 3)
+	f.mustSetBits(101, 4, 5, 6, 7)
+	f.mustSetBits(102, 8, 9, 10, 11, 12)
 
 	// Retrieve top rows.
-	if pairs, err := f.Top(pilosa.TopOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
+	if pairs, err := f.Top(TopOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
 		t.Fatal(err)
-	} else if !reflect.DeepEqual(pairs, []pilosa.Pair{}) {
+	} else if !reflect.DeepEqual(pairs, []Pair{}) {
 		t.Fatalf("unexpected pairs: %s", spew.Sdump(pairs))
 	}
 }
@@ -750,17 +746,17 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	cacheSize := uint32(3)
 
 	// Create Index.
-	index := test.MustOpenIndex()
+	index := mustOpenIndex()
 	defer index.Close()
 
 	// Create field.
-	field, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{CacheType: pilosa.CacheTypeRanked, CacheSize: cacheSize})
+	field, err := index.CreateFieldIfNotExists("f", FieldOptions{CacheType: CacheTypeRanked, CacheSize: cacheSize})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Create view.
-	view, err := field.CreateViewIfNotExists(pilosa.ViewStandard)
+	view, err := field.CreateViewIfNotExists(ViewStandard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -773,38 +769,34 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	// Close the storage so we can re-open it without encountering a flock.
 	frag.Close()
 
-	f := &test.Fragment{
-		Fragment:     frag,
-		RowAttrStore: test.MustOpenAttrStore(),
-	}
-	f.Fragment.RowAttrStore = f.RowAttrStore
+	f := frag
 	if err := f.Open(); err != nil {
 		panic(err)
 	}
 	defer f.Close()
 
 	// Set bits on various rows.
-	f.MustSetBits(100, 1, 2, 3)
-	f.MustSetBits(101, 4, 5, 6, 7)
-	f.MustSetBits(102, 8, 9, 10, 11, 12)
-	f.MustSetBits(103, 8, 9, 10, 11, 12, 13)
-	f.MustSetBits(104, 8, 9, 10, 11, 12, 13, 14)
-	f.MustSetBits(105, 10, 11)
+	f.mustSetBits(100, 1, 2, 3)
+	f.mustSetBits(101, 4, 5, 6, 7)
+	f.mustSetBits(102, 8, 9, 10, 11, 12)
+	f.mustSetBits(103, 8, 9, 10, 11, 12, 13)
+	f.mustSetBits(104, 8, 9, 10, 11, 12, 13, 14)
+	f.mustSetBits(105, 10, 11)
 
 	f.RecalculateCache()
 
-	p := []pilosa.Pair{
+	p := []Pair{
 		{ID: 104, Count: 7},
 		{ID: 103, Count: 6},
 		{ID: 102, Count: 5},
 	}
 
 	// Retrieve top rows.
-	if pairs, err := f.Top(pilosa.TopOptions{N: 5}); err != nil {
+	if pairs, err := f.Top(TopOptions{N: 5}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) > int(cacheSize) {
 		t.Fatalf("TopN count cannot exceed cache size: %d", cacheSize)
-	} else if pairs[0] != (pilosa.Pair{ID: 104, Count: 7}) {
+	} else if pairs[0] != (Pair{ID: 104, Count: 7}) {
 		t.Fatalf("unexpected pair(0): %v", pairs)
 	} else if !reflect.DeepEqual(pairs, p) {
 		t.Fatalf("Invalid TopN result set: %s", spew.Sdump(pairs))
@@ -813,14 +805,14 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 
 // Ensure fragment can return a checksum for its blocks.
 func TestFragment_Checksum(t *testing.T) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 	defer f.Close()
 
 	// Retrieve checksum and set bits.
 	orig := f.Checksum()
 	if _, err := f.SetBit(1, 200); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(pilosa.HashBlockSize*2, 200); err != nil {
+	} else if _, err := f.SetBit(HashBlockSize*2, 200); err != nil {
 		t.Fatal(err)
 	}
 
@@ -832,11 +824,11 @@ func TestFragment_Checksum(t *testing.T) {
 
 // Ensure fragment can return a checksum for a given block.
 func TestFragment_Blocks(t *testing.T) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 	defer f.Close()
 
 	// Retrieve initial checksum.
-	var prev []pilosa.FragmentBlock
+	var prev []FragmentBlock
 
 	// Set first bit.
 	if _, err := f.SetBit(0, 0); err != nil {
@@ -870,7 +862,7 @@ func TestFragment_Blocks(t *testing.T) {
 
 // Ensure fragment returns an empty checksum if no data exists for a block.
 func TestFragment_Blocks_Empty(t *testing.T) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 	defer f.Close()
 
 	// Set bits on a different block.
@@ -888,7 +880,7 @@ func TestFragment_Blocks_Empty(t *testing.T) {
 
 // Ensure a fragment's cache can be persisted between restarts.
 func TestFragment_LRUCache_Persistence(t *testing.T) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeLRU)
+	f := mustOpenFragment("i", "f", ViewStandard, 0, CacheTypeLRU)
 	defer f.Close()
 
 	// Set bits on the fragment.
@@ -899,19 +891,19 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 	}
 
 	// Verify correct cache type and size.
-	if cache, ok := f.Cache().(*pilosa.LRUCache); !ok {
+	if cache, ok := f.Cache().(*LRUCache); !ok {
 		t.Fatalf("unexpected cache: %T", f.Cache())
 	} else if cache.Len() != 1000 {
 		t.Fatalf("unexpected cache len: %d", cache.Len())
 	}
 
 	// Reopen the fragment.
-	if err := f.Reopen(); err != nil {
+	if err := f.reopen(); err != nil {
 		t.Fatal(err)
 	}
 
 	// Re-verify correct cache type and size.
-	if cache, ok := f.Cache().(*pilosa.LRUCache); !ok {
+	if cache, ok := f.Cache().(*LRUCache); !ok {
 		t.Fatalf("unexpected cache: %T", f.Cache())
 	} else if cache.Len() != 1000 {
 		t.Fatalf("unexpected cache len: %d", cache.Len())
@@ -920,17 +912,17 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 
 // Ensure a fragment's cache can be persisted between restarts.
 func TestFragment_RankCache_Persistence(t *testing.T) {
-	index := test.MustOpenIndex()
+	index := mustOpenIndex()
 	defer index.Close()
 
 	// Create field.
-	field, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{CacheType: pilosa.CacheTypeRanked})
+	field, err := index.CreateFieldIfNotExists("f", FieldOptions{CacheType: CacheTypeRanked})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Create view.
-	view, err := field.CreateViewIfNotExists(pilosa.ViewStandard)
+	view, err := field.CreateViewIfNotExists(ViewStandard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -949,22 +941,22 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 	}
 
 	// Verify correct cache type and size.
-	if cache, ok := f.Cache().(*pilosa.RankCache); !ok {
+	if cache, ok := f.Cache().(*RankCache); !ok {
 		t.Fatalf("unexpected cache: %T", f.Cache())
 	} else if cache.Len() != 1000 {
 		t.Fatalf("unexpected cache len: %d", cache.Len())
 	}
 
 	// Reopen the index.
-	if err := index.Reopen(); err != nil {
+	if err := index.reopen(); err != nil {
 		t.Fatal(err)
 	}
 
 	// Re-fetch fragment.
-	f = index.Field("f").View(pilosa.ViewStandard).Fragment(0)
+	f = index.Field("f").View(ViewStandard).Fragment(0)
 
 	// Re-verify correct cache type and size.
-	if cache, ok := f.Cache().(*pilosa.RankCache); !ok {
+	if cache, ok := f.Cache().(*RankCache); !ok {
 		t.Fatalf("unexpected cache: %T", f.Cache())
 	} else if cache.Len() != 1000 {
 		t.Fatalf("unexpected cache len: %d", cache.Len())
@@ -973,7 +965,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 
 // Ensure a fragment can be copied to another fragment.
 func TestFragment_WriteTo_ReadFrom(t *testing.T) {
-	f0 := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	f0 := mustOpenFragment("i", "f", ViewStandard, 0, "")
 	defer f0.Close()
 
 	// Set and then clear bits on the fragment.
@@ -998,7 +990,7 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	}
 
 	// Read into another fragment.
-	f1 := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	f1 := mustOpenFragment("i", "f", ViewStandard, 0, "")
 	if rn, err := f1.ReadFrom(&buf); err != nil {
 		t.Fatal(err)
 	} else if wn != rn {
@@ -1016,7 +1008,7 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	}
 
 	// Close and reopen the fragment & verify the data.
-	if err := f1.Reopen(); err != nil {
+	if err := f1.reopen(); err != nil {
 		t.Fatal(err)
 	} else if n := f1.Cache().Len(); n != 1 {
 		t.Fatalf("unexpected cache size (reopen): %d", n)
@@ -1031,7 +1023,7 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 	}
 
 	// Open the fragment specified by the path.
-	f := pilosa.NewFragment(*FragmentPath, "i", "f", pilosa.ViewStandard, 0)
+	f := NewFragment(*FragmentPath, "i", "f", ViewStandard, 0)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
@@ -1047,7 +1039,7 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 }
 
 func BenchmarkFragment_IntersectionCount(b *testing.B) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 	defer f.Close()
 	f.MaxOpN = math.MaxInt32
 
@@ -1078,55 +1070,55 @@ func BenchmarkFragment_IntersectionCount(b *testing.B) {
 }
 
 func TestFragment_Tanimoto(t *testing.T) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeRanked)
+	f := mustOpenFragment("i", "f", ViewStandard, 0, CacheTypeRanked)
 	defer f.Close()
 
-	src := pilosa.NewRow(1, 2, 3)
+	src := NewRow(1, 2, 3)
 
 	// Set bits on the rows 100, 101, & 102.
-	f.MustSetBits(100, 1, 3, 2, 200)
-	f.MustSetBits(101, 1, 3)
-	f.MustSetBits(102, 1, 2, 10, 12)
+	f.mustSetBits(100, 1, 3, 2, 200)
+	f.mustSetBits(101, 1, 3)
+	f.mustSetBits(102, 1, 2, 10, 12)
 	f.RecalculateCache()
 
-	if pairs, err := f.Top(pilosa.TopOptions{TanimotoThreshold: 50, Src: src}); err != nil {
+	if pairs, err := f.Top(TopOptions{TanimotoThreshold: 50, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) != 2 {
 		t.Fatalf("unexpected count: %d", len(pairs))
-	} else if pairs[0] != (pilosa.Pair{ID: 100, Count: 3}) {
+	} else if pairs[0] != (Pair{ID: 100, Count: 3}) {
 		t.Fatalf("unexpected pair(0): %v", pairs[0])
-	} else if pairs[1] != (pilosa.Pair{ID: 101, Count: 2}) {
+	} else if pairs[1] != (Pair{ID: 101, Count: 2}) {
 		t.Fatalf("unexpected pair(1): %v", pairs[1])
 	}
 }
 
 func TestFragment_Zero_Tanimoto(t *testing.T) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, pilosa.CacheTypeRanked)
+	f := mustOpenFragment("i", "f", ViewStandard, 0, CacheTypeRanked)
 	defer f.Close()
 
-	src := pilosa.NewRow(1, 2, 3)
+	src := NewRow(1, 2, 3)
 
 	// Set bits on the rows 100, 101, & 102.
-	f.MustSetBits(100, 1, 3, 2, 200)
-	f.MustSetBits(101, 1, 3)
-	f.MustSetBits(102, 1, 2, 10, 12)
+	f.mustSetBits(100, 1, 3, 2, 200)
+	f.mustSetBits(101, 1, 3)
+	f.mustSetBits(102, 1, 2, 10, 12)
 	f.RecalculateCache()
 
-	if pairs, err := f.Top(pilosa.TopOptions{TanimotoThreshold: 0, Src: src}); err != nil {
+	if pairs, err := f.Top(TopOptions{TanimotoThreshold: 0, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) != 3 {
 		t.Fatalf("unexpected count: %d", len(pairs))
-	} else if pairs[0] != (pilosa.Pair{ID: 100, Count: 3}) {
+	} else if pairs[0] != (Pair{ID: 100, Count: 3}) {
 		t.Fatalf("unexpected pair(0): %v", pairs[0])
-	} else if pairs[1] != (pilosa.Pair{ID: 101, Count: 2}) {
+	} else if pairs[1] != (Pair{ID: 101, Count: 2}) {
 		t.Fatalf("unexpected pair(1): %v", pairs[1])
-	} else if pairs[2] != (pilosa.Pair{ID: 102, Count: 2}) {
+	} else if pairs[2] != (Pair{ID: 102, Count: 2}) {
 		t.Fatalf("unexpected pair(1): %v", pairs[2])
 	}
 }
 
 func TestFragment_Snapshot_Run(t *testing.T) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 	defer f.Close()
 
 	// Set bits on the fragment.
@@ -1144,7 +1136,7 @@ func TestFragment_Snapshot_Run(t *testing.T) {
 	}
 
 	// Close and reopen the fragment & verify the data.
-	if err := f.Reopen(); err != nil {
+	if err := f.reopen(); err != nil {
 		t.Fatal(err)
 	} else if n := f.Row(1000).Count(); n != 2 {
 		t.Fatalf("unexpected count (reopen): %d", n)
@@ -1158,7 +1150,7 @@ func BenchmarkFragment_Snapshot(b *testing.B) {
 
 	b.ReportAllocs()
 	// Open the fragment specified by the path.
-	f := pilosa.NewFragment(*FragmentPath, "i", "f", pilosa.ViewStandard, 0)
+	f := NewFragment(*FragmentPath, "i", "f", ViewStandard, 0)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
@@ -1177,7 +1169,7 @@ func BenchmarkFragment_Snapshot(b *testing.B) {
 }
 
 func BenchmarkFragment_FullSnapshot(b *testing.B) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 	defer f.Close()
 	// Generate some intersecting data.
 	maxX := 1048576 / 2
@@ -1214,7 +1206,7 @@ func BenchmarkFragment_FullSnapshot(b *testing.B) {
 }
 
 func BenchmarkFragment_Import(b *testing.B) {
-	f := test.MustOpenFragment("i", "f", pilosa.ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
 	defer f.Close()
 	maxX := 1048576 * 5 * 2
 	sz := maxX
@@ -1238,6 +1230,51 @@ func BenchmarkFragment_Import(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		if err := f.Import(rows, cols); err != nil {
 			b.Fatalf("Error Building Sample: %s", err)
+		}
+	}
+}
+
+/////////////////////////////////////////////////////////////////////
+
+// mustOpenFragment returns a new instance of Fragment with a temporary path.
+func mustOpenFragment(index, field, view string, slice uint64, cacheType string) *Fragment {
+	file, err := ioutil.TempFile("", "pilosa-fragment-")
+	if err != nil {
+		panic(err)
+	}
+	file.Close()
+
+	if cacheType == "" {
+		cacheType = DefaultCacheType
+	}
+
+	f := NewFragment(file.Name(), index, field, view, slice)
+	f.CacheType = cacheType
+	f.RowAttrStore = newMemAttrStore()
+
+	if err := f.Open(); err != nil {
+		panic(err)
+	}
+	return f
+}
+
+// Reopen closes the fragment and reopens it as a new instance.
+func (f *Fragment) reopen() error {
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := f.Open(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// mustSetBits sets columns on a row. Panic on error.
+// This function does not accept a timestamp or quantum.
+func (f *Fragment) mustSetBits(rowID uint64, columnIDs ...uint64) {
+	for _, columnID := range columnIDs {
+		if _, err := f.SetBit(rowID, columnID); err != nil {
+			panic(err)
 		}
 	}
 }

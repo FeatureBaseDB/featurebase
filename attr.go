@@ -221,3 +221,56 @@ func DecodeAttrs(v []byte) (map[string]interface{}, error) {
 	}
 	return decodeAttrs(pb.GetAttrs()), nil
 }
+
+func newMemAttrStore() AttrStore {
+	return &memAttrStore{
+		store: make(map[uint64]map[string]interface{}),
+	}
+}
+
+// memAttrStore represents an in-memory implementation of the AttrStore interface.
+type memAttrStore struct {
+	store map[uint64]map[string]interface{}
+}
+
+// Path is an in-memory implementation of AttrStore Path method.
+func (s *memAttrStore) Path() string { return "" }
+
+// Open is an in-memory implementation of AttrStore Open method.
+func (s *memAttrStore) Open() error {
+	return nil
+}
+
+// Close is an in-memory implementation of AttrStore Close method.
+func (s *memAttrStore) Close() error {
+	return nil
+}
+
+// Attrs returns a set of attributes by ID.
+func (s *memAttrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
+	return s.store[id], nil
+}
+
+// SetAttrs sets attribute values for a given ID.
+func (s *memAttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
+	s.store[id] = m
+	return nil
+}
+
+// SetBulkAttrs sets attribute values for a set of ids.
+func (s *memAttrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
+	for id, v := range m {
+		s.store[id] = v
+	}
+	return nil
+}
+
+// Blocks is an in-memory implementation of AttrStore Blocks method.
+func (s *memAttrStore) Blocks() ([]AttrBlock, error) {
+	return nil, nil
+}
+
+// BlockData is an in-memory implementation of AttrStore BlockData method.
+func (s *memAttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) {
+	return nil, nil
+}
