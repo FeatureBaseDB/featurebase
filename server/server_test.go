@@ -51,10 +51,10 @@ func TestMain_Set_Quick(t *testing.T) {
 
 		// Execute SetBit() commands.
 		for _, cmd := range cmds {
-			if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && !strings.Contains(err.Error(), "index already exists") {
+			if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 				t.Fatal(err)
 			}
-			if err := client.CreateFrame(context.Background(), "i", cmd.Frame, pilosa.FieldOptions{}); err != nil && !strings.Contains(err.Error(), "frame already exists") {
+			if err := client.CreateFrame(context.Background(), "i", cmd.Frame, pilosa.FieldOptions{}); err != nil && err != pilosa.ErrFieldExists {
 				t.Fatal(err)
 			}
 			if _, err := m.Query("i", "", fmt.Sprintf(`SetBit(row=%d, frame=%q, col=%d)`, cmd.ID, cmd.Frame, cmd.ColumnID)); err != nil {
