@@ -134,7 +134,7 @@ func (cmd *ImportCommand) ensureSchema(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("Error Creating Index: %s", err)
 	}
-	err = cmd.Client.EnsureFrame(ctx, cmd.Index, cmd.Frame, cmd.FrameOptions)
+	err = cmd.Client.EnsureField(ctx, cmd.Index, cmd.Frame, cmd.FrameOptions)
 	if err != nil {
 		return fmt.Errorf("Error Creating Frame: %s", err)
 	}
