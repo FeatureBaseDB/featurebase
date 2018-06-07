@@ -323,14 +323,14 @@ func (f *Fragment) closeStorage() error {
 	return nil
 }
 
-// Row returns a row by ID.
-func (f *Fragment) Row(rowID uint64) *Row {
+// row returns a row by ID.
+func (f *Fragment) row(rowID uint64) *Row {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.row(rowID, true, true)
+	return f.unprotectedRow(rowID, true, true)
 }
 
-func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *Row {
+func (f *Fragment) unprotectedRow(rowID uint64, checkRowCache bool, updateRowCache bool) *Row {
 	if checkRowCache {
 		r, ok := f.rowCache.Fetch(rowID)
 		if ok && r != nil {
@@ -396,7 +396,7 @@ func (f *Fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 	}
 
 	// Get the row from row cache or fragment.storage.
-	row := f.row(rowID, true, true)
+	row := f.unprotectedRow(rowID, true, true)
 	row.SetBit(columnID)
 
 	// Update the cache.
@@ -448,7 +448,7 @@ func (f *Fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, er
 	}
 
 	// Get the row from cache or fragment.storage.
-	row := f.row(rowID, true, true)
+	row := f.unprotectedRow(rowID, true, true)
 	row.ClearBit(columnID)
 
 	// Update the cache.
@@ -567,7 +567,7 @@ func (f *Fragment) importSetValue(columnID uint64, bitDepth uint, value uint64) 
 // A bitmap can be passed in to optionally filter the computed columns.
 func (f *Fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
 	// Compute count based on the existence row.
-	row := f.Row(uint64(bitDepth))
+	row := f.row(uint64(bitDepth))
 	if filter != nil {
 		count = row.IntersectionCount(filter)
 	} else {
@@ -582,7 +582,7 @@ func (f *Fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error
 	//   10*(2^0) + 4*(2^1) + 3*(2^2) = 30
 	//
 	for i := uint(0); i < bitDepth; i++ {
-		row := f.Row(uint64(i))
+		row := f.row(uint64(i))
 		cnt := uint64(0)
 		if filter != nil {
 			cnt = row.IntersectionCount(filter)
@@ -599,7 +599,7 @@ func (f *Fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error
 // A bitmap can be passed in to optionally filter the computed columns.
 func (f *Fragment) min(filter *Row, bitDepth uint) (min, count uint64, err error) {
 
-	consider := f.Row(uint64(bitDepth))
+	consider := f.row(uint64(bitDepth))
 	if filter != nil {
 		consider = consider.Intersect(filter)
 	}
@@ -611,7 +611,7 @@ func (f *Fragment) min(filter *Row, bitDepth uint) (min, count uint64, err error
 
 	for i := bitDepth; i > uint(0); i-- {
 		ii := i - 1 // allow for uint range: (bitDepth-1) to 0
-		row := f.Row(uint64(ii))
+		row := f.row(uint64(ii))
 
 		x := consider.Difference(row)
 		count = x.Count()
@@ -632,7 +632,7 @@ func (f *Fragment) min(filter *Row, bitDepth uint) (min, count uint64, err error
 // A bitmap can be passed in to optionally filter the computed columns.
 func (f *Fragment) max(filter *Row, bitDepth uint) (max, count uint64, err error) {
 
-	consider := f.Row(uint64(bitDepth))
+	consider := f.row(uint64(bitDepth))
 	if filter != nil {
 		consider = consider.Intersect(filter)
 	}
@@ -644,7 +644,7 @@ func (f *Fragment) max(filter *Row, bitDepth uint) (max, count uint64, err error
 
 	for i := bitDepth; i > uint(0); i-- {
 		ii := i - 1 // allow for uint range: (bitDepth-1) to 0
-		row := f.Row(uint64(ii))
+		row := f.row(uint64(ii))
 
 		x := row.Intersect(consider)
 		count = x.Count()
@@ -677,11 +677,11 @@ func (f *Fragment) rangeOp(op pql.Token, bitDepth uint, predicate uint64) (*Row,
 
 func (f *Fragment) rangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	// Start with set of columns with values set.
-	b := f.Row(uint64(bitDepth))
+	b := f.row(uint64(bitDepth))
 
 	// Filter any bits that don't match the current bit value.
 	for i := int(bitDepth - 1); i >= 0; i-- {
-		row := f.Row(uint64(i))
+		row := f.row(uint64(i))
 		bit := (predicate >> uint(i)) & 1
 
 		if bit == 1 {
@@ -696,7 +696,7 @@ func (f *Fragment) rangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
 
 func (f *Fragment) rangeNEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	// Start with set of columns with values set.
-	b := f.Row(uint64(bitDepth))
+	b := f.row(uint64(bitDepth))
 
 	// Get the equal bitmap.
 	eq, err := f.rangeEQ(bitDepth, predicate)
@@ -714,12 +714,12 @@ func (f *Fragment) rangeLT(bitDepth uint, predicate uint64, allowEquality bool) 
 	keep := NewRow()
 
 	// Start with set of columns with values set.
-	b := f.Row(uint64(bitDepth))
+	b := f.row(uint64(bitDepth))
 
 	// Filter any bits that don't match the current bit value.
 	leadingZeros := true
 	for i := int(bitDepth - 1); i >= 0; i-- {
-		row := f.Row(uint64(i))
+		row := f.row(uint64(i))
 		bit := (predicate >> uint(i)) & 1
 
 		// Remove any columns with higher bits set.
@@ -759,12 +759,12 @@ func (f *Fragment) rangeLT(bitDepth uint, predicate uint64, allowEquality bool) 
 }
 
 func (f *Fragment) rangeGT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
-	b := f.Row(uint64(bitDepth))
+	b := f.row(uint64(bitDepth))
 	keep := NewRow()
 
 	// Filter any bits that don't match the current bit value.
 	for i := int(bitDepth - 1); i >= 0; i-- {
-		row := f.Row(uint64(i))
+		row := f.row(uint64(i))
 		bit := (predicate >> uint(i)) & 1
 
 		// Handle last bit differently.
@@ -795,18 +795,18 @@ func (f *Fragment) rangeGT(bitDepth uint, predicate uint64, allowEquality bool) 
 
 // notNull returns the not-null row (stored at bitDepth).
 func (f *Fragment) notNull(bitDepth uint) (*Row, error) {
-	return f.Row(uint64(bitDepth)), nil
+	return f.row(uint64(bitDepth)), nil
 }
 
 // rangeBetween returns bitmaps with a bsiGroup value encoding matching any value between predicateMin and predicateMax.
 func (f *Fragment) rangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
-	b := f.Row(uint64(bitDepth))
+	b := f.row(uint64(bitDepth))
 	keep1 := NewRow() // GTE
 	keep2 := NewRow() // LTE
 
 	// Filter any bits that don't match the current bit value.
 	for i := int(bitDepth - 1); i >= 0; i-- {
-		row := f.Row(uint64(i))
+		row := f.row(uint64(i))
 		bit1 := (predicateMin >> uint(i)) & 1
 		bit2 := (predicateMax >> uint(i)) & 1
 
@@ -941,7 +941,7 @@ func (f *Fragment) top(opt TopOptions) ([]Pair, error) {
 			// Calculate count and append.
 			count := cnt
 			if opt.Src != nil {
-				count = opt.Src.IntersectionCount(f.Row(rowID))
+				count = opt.Src.IntersectionCount(f.row(rowID))
 			}
 			if count == 0 {
 				continue
@@ -985,7 +985,7 @@ func (f *Fragment) top(opt TopOptions) ([]Pair, error) {
 
 		// Calculate the intersecting column count and skip if it's below our
 		// last row in our current result set.
-		count := opt.Src.IntersectionCount(f.Row(rowID))
+		count := opt.Src.IntersectionCount(f.row(rowID))
 		if count < threshold {
 			continue
 		}
@@ -1029,7 +1029,7 @@ func (f *Fragment) topBitmapPairs(rowIDs []uint64) []BitmapPair {
 			continue
 		}
 
-		row := f.Row(rowID)
+		row := f.row(rowID)
 		if row.Count() > 0 {
 			// Otherwise load from storage.
 			pairs = append(pairs, BitmapPair{
@@ -1347,7 +1347,7 @@ func (f *Fragment) bulkImport(rowIDs, columnIDs []uint64) error {
 			// Import should ALWAYS have row() load a new row from fragment.storage
 			// because the row that's in rowCache hasn't been updated with
 			// this import's data.
-			f.cache.BulkAdd(rowID, f.row(rowID, false, false).Count())
+			f.cache.BulkAdd(rowID, f.unprotectedRow(rowID, false, false).Count())
 		}
 
 		f.cache.Invalidate()

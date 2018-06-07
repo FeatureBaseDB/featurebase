@@ -620,6 +620,28 @@ func (f *Field) DeleteView(name string) error {
 	return nil
 }
 
+// Row returns a row for a slice of the standard view.
+func (f *Field) Row(slice, rowID uint64) (*Row, error) {
+	if f.Type() != FieldTypeSet {
+		return nil, errors.Errorf("row method unsupported for field type: %s", f.Type())
+	}
+	view := f.View(ViewStandard)
+	if view == nil {
+		return nil, ErrInvalidView
+	}
+	return view.row(slice, rowID), nil
+}
+
+// ViewRow returns a row for a view and slice.
+// TODO: unexport this with views (it's only used in tests).
+func (f *Field) ViewRow(viewName string, slice, rowID uint64) (*Row, error) {
+	view := f.View(viewName)
+	if view == nil {
+		return nil, ErrInvalidView
+	}
+	return view.row(slice, rowID), nil
+}
+
 // SetBit sets a bit on a view within the field.
 func (f *Field) SetBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
 	// Validate view name.

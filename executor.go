@@ -649,7 +649,7 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.
 	if frag == nil {
 		return NewRow(), nil
 	}
-	return frag.Row(rowID), nil
+	return frag.row(rowID), nil
 }
 
 // executeIntersectSlice executes a intersect() call for a local slice.
@@ -741,7 +741,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 		if f == nil {
 			continue
 		}
-		row = row.Union(f.Row(rowID))
+		row = row.Union(f.row(rowID))
 	}
 	f.Stats.Count("range", 1, 1.0)
 	return row, nil

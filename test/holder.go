@@ -125,6 +125,34 @@ func (h *Holder) MustCreateRankedFragmentIfNotExists(index, field, view string, 
 	return &Fragment{Fragment: frag}
 }
 
+// Row returns a Row for a given field.
+func (h *Holder) Row(index, field string, slice, rowID uint64) *pilosa.Row {
+	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.FieldOptions{})
+	if err != nil {
+		panic(err)
+	}
+	row, err := f.Row(slice, rowID)
+	if err != nil {
+		panic(err)
+	}
+	return row
+}
+
+// ViewRow returns a Row for a given field and view.
+func (h *Holder) ViewRow(index, field, view string, slice, rowID uint64) *pilosa.Row {
+	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.FieldOptions{})
+	if err != nil {
+		panic(err)
+	}
+	row, err := f.ViewRow(view, slice, rowID)
+	if err != nil {
+		panic(err)
+	}
+	return row
+}
+
 // SetBit clears a bit on the given field.
 func (h *Holder) SetBit(index, field string, rowID, columnID uint64) {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})

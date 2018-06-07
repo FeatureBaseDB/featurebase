@@ -49,18 +49,18 @@ func TestFragment_SetBit(t *testing.T) {
 	}
 
 	// Verify counts on rows.
-	if n := f.Row(120).Count(); n != 2 {
+	if n := f.row(120).Count(); n != 2 {
 		t.Fatalf("unexpected count: %d", n)
-	} else if n := f.Row(121).Count(); n != 1 {
+	} else if n := f.row(121).Count(); n != 1 {
 		t.Fatalf("unexpected count: %d", n)
 	}
 
 	// Close and reopen the fragment & verify the data.
 	if err := f.reopen(); err != nil {
 		t.Fatal(err)
-	} else if n := f.Row(120).Count(); n != 2 {
+	} else if n := f.row(120).Count(); n != 2 {
 		t.Fatalf("unexpected count (reopen): %d", n)
-	} else if n := f.Row(121).Count(); n != 1 {
+	} else if n := f.row(121).Count(); n != 1 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 }
@@ -80,14 +80,14 @@ func TestFragment_ClearBit(t *testing.T) {
 	}
 
 	// Verify count on row.
-	if n := f.Row(1000).Count(); n != 1 {
+	if n := f.row(1000).Count(); n != 1 {
 		t.Fatalf("unexpected count: %d", n)
 	}
 
 	// Close and reopen the fragment & verify the data.
 	if err := f.reopen(); err != nil {
 		t.Fatal(err)
-	} else if n := f.Row(1000).Count(); n != 1 {
+	} else if n := f.row(1000).Count(); n != 1 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 }
@@ -539,14 +539,14 @@ func TestFragment_Snapshot(t *testing.T) {
 	// Snapshot bitmap and verify data.
 	if err := f.Snapshot(); err != nil {
 		t.Fatal(err)
-	} else if n := f.Row(1000).Count(); n != 1 {
+	} else if n := f.row(1000).Count(); n != 1 {
 		t.Fatalf("unexpected count: %d", n)
 	}
 
 	// Close and reopen the fragment & verify the data.
 	if err := f.reopen(); err != nil {
 		t.Fatal(err)
-	} else if n := f.Row(1000).Count(); n != 1 {
+	} else if n := f.row(1000).Count(); n != 1 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 }
@@ -1003,7 +1003,7 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	}
 
 	// Verify data in other fragment.
-	if a := f1.Row(1000).Columns(); !reflect.DeepEqual(a, []uint64{2}) {
+	if a := f1.row(1000).Columns(); !reflect.DeepEqual(a, []uint64{2}) {
 		t.Fatalf("unexpected columns: %+v", a)
 	}
 
@@ -1012,7 +1012,7 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 		t.Fatal(err)
 	} else if n := f1.cache.Len(); n != 1 {
 		t.Fatalf("unexpected cache size (reopen): %d", n)
-	} else if a := f1.Row(1000).Columns(); !reflect.DeepEqual(a, []uint64{2}) {
+	} else if a := f1.row(1000).Columns(); !reflect.DeepEqual(a, []uint64{2}) {
 		t.Fatalf("unexpected columns (reopen): %+v", a)
 	}
 }
@@ -1063,7 +1063,7 @@ func BenchmarkFragment_IntersectionCount(b *testing.B) {
 	// Start benchmark
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if n := f.Row(1).IntersectionCount(f.Row(2)); n == 0 {
+		if n := f.row(1).IntersectionCount(f.row(2)); n == 0 {
 			b.Fatalf("unexpected count: %d", n)
 		}
 	}
@@ -1131,14 +1131,14 @@ func TestFragment_Snapshot_Run(t *testing.T) {
 	// Snapshot bitmap and verify data.
 	if err := f.Snapshot(); err != nil {
 		t.Fatal(err)
-	} else if n := f.Row(1000).Count(); n != 2 {
+	} else if n := f.row(1000).Count(); n != 2 {
 		t.Fatalf("unexpected count: %d", n)
 	}
 
 	// Close and reopen the fragment & verify the data.
 	if err := f.reopen(); err != nil {
 		t.Fatal(err)
-	} else if n := f.Row(1000).Count(); n != 2 {
+	} else if n := f.row(1000).Count(); n != 2 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 }
