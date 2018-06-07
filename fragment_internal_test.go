@@ -40,11 +40,11 @@ func TestFragment_SetBit(t *testing.T) {
 	defer f.Close()
 
 	// Set bits on the fragment.
-	if _, err := f.SetBit(120, 1); err != nil {
+	if _, err := f.setBit(120, 1); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(120, 6); err != nil {
+	} else if _, err := f.setBit(120, 6); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(121, 0); err != nil {
+	} else if _, err := f.setBit(121, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -71,11 +71,11 @@ func TestFragment_ClearBit(t *testing.T) {
 	defer f.Close()
 
 	// Set and then clear bits on the fragment.
-	if _, err := f.SetBit(1000, 1); err != nil {
+	if _, err := f.setBit(1000, 1); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(1000, 2); err != nil {
+	} else if _, err := f.setBit(1000, 2); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.ClearBit(1000, 1); err != nil {
+	} else if _, err := f.clearBit(1000, 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -528,11 +528,11 @@ func TestFragment_Snapshot(t *testing.T) {
 	defer f.Close()
 
 	// Set and then clear bits on the fragment.
-	if _, err := f.SetBit(1000, 1); err != nil {
+	if _, err := f.setBit(1000, 1); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(1000, 2); err != nil {
+	} else if _, err := f.setBit(1000, 2); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.ClearBit(1000, 1); err != nil {
+	} else if _, err := f.clearBit(1000, 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -557,11 +557,11 @@ func TestFragment_ForEachBit(t *testing.T) {
 	defer f.Close()
 
 	// Set bits on the fragment.
-	if _, err := f.SetBit(100, 20); err != nil {
+	if _, err := f.setBit(100, 20); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(2, 38); err != nil {
+	} else if _, err := f.setBit(2, 38); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(2, 37); err != nil {
+	} else if _, err := f.setBit(2, 37); err != nil {
 		t.Fatal(err)
 	}
 
@@ -810,9 +810,9 @@ func TestFragment_Checksum(t *testing.T) {
 
 	// Retrieve checksum and set bits.
 	orig := f.Checksum()
-	if _, err := f.SetBit(1, 200); err != nil {
+	if _, err := f.setBit(1, 200); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(HashBlockSize*2, 200); err != nil {
+	} else if _, err := f.setBit(HashBlockSize*2, 200); err != nil {
 		t.Fatal(err)
 	}
 
@@ -831,7 +831,7 @@ func TestFragment_Blocks(t *testing.T) {
 	var prev []FragmentBlock
 
 	// Set first bit.
-	if _, err := f.SetBit(0, 0); err != nil {
+	if _, err := f.setBit(0, 0); err != nil {
 		t.Fatal(err)
 	}
 	blocks := f.Blocks()
@@ -841,7 +841,7 @@ func TestFragment_Blocks(t *testing.T) {
 	prev = blocks
 
 	// Set bit on different row.
-	if _, err := f.SetBit(20, 0); err != nil {
+	if _, err := f.setBit(20, 0); err != nil {
 		t.Fatal(err)
 	}
 	blocks = f.Blocks()
@@ -851,7 +851,7 @@ func TestFragment_Blocks(t *testing.T) {
 	prev = blocks
 
 	// Set bit on different column.
-	if _, err := f.SetBit(20, 100); err != nil {
+	if _, err := f.setBit(20, 100); err != nil {
 		t.Fatal(err)
 	}
 	blocks = f.Blocks()
@@ -866,7 +866,7 @@ func TestFragment_Blocks_Empty(t *testing.T) {
 	defer f.Close()
 
 	// Set bits on a different block.
-	if _, err := f.SetBit(100, 1); err != nil {
+	if _, err := f.setBit(100, 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -885,7 +885,7 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 
 	// Set bits on the fragment.
 	for i := uint64(0); i < 1000; i++ {
-		if _, err := f.SetBit(i, 0); err != nil {
+		if _, err := f.setBit(i, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -935,7 +935,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 
 	// Set bits on the fragment.
 	for i := uint64(0); i < 1000; i++ {
-		if _, err := f.SetBit(i, 0); err != nil {
+		if _, err := f.setBit(i, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -969,11 +969,11 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	defer f0.Close()
 
 	// Set and then clear bits on the fragment.
-	if _, err := f0.SetBit(1000, 1); err != nil {
+	if _, err := f0.setBit(1000, 1); err != nil {
 		t.Fatal(err)
-	} else if _, err := f0.SetBit(1000, 2); err != nil {
+	} else if _, err := f0.setBit(1000, 2); err != nil {
 		t.Fatal(err)
-	} else if _, err := f0.ClearBit(1000, 1); err != nil {
+	} else if _, err := f0.clearBit(1000, 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1045,12 +1045,12 @@ func BenchmarkFragment_IntersectionCount(b *testing.B) {
 
 	// Generate some intersecting data.
 	for i := 0; i < 10000; i += 2 {
-		if _, err := f.SetBit(1, uint64(i)); err != nil {
+		if _, err := f.setBit(1, uint64(i)); err != nil {
 			b.Fatal(err)
 		}
 	}
 	for i := 0; i < 10000; i += 3 {
-		if _, err := f.SetBit(2, uint64(i)); err != nil {
+		if _, err := f.setBit(2, uint64(i)); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -1123,7 +1123,7 @@ func TestFragment_Snapshot_Run(t *testing.T) {
 
 	// Set bits on the fragment.
 	for i := uint64(1); i < 3; i++ {
-		if _, err := f.SetBit(1000, i); err != nil {
+		if _, err := f.setBit(1000, i); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1273,7 +1273,7 @@ func (f *Fragment) reopen() error {
 // This function does not accept a timestamp or quantum.
 func (f *Fragment) mustSetBits(rowID uint64, columnIDs ...uint64) {
 	for _, columnID := range columnIDs {
-		if _, err := f.SetBit(rowID, columnID); err != nil {
+		if _, err := f.setBit(rowID, columnID); err != nil {
 			panic(err)
 		}
 	}

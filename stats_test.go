@@ -36,11 +36,11 @@ func TestMultiStatClient_Expvar(t *testing.T) {
 	ms[0] = c
 	hldr.Stats = ms
 
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth+2)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).ClearBit(0, 1)
+	hldr.SetBit("d", "f", 0, 0)
+	hldr.SetBit("d", "f", 0, 1)
+	hldr.SetBit("d", "f", 0, SliceWidth)
+	hldr.SetBit("d", "f", 0, SliceWidth+2)
+	hldr.ClearBit("d", "f", 0, 1)
 
 	if pilosa.Expvar.String() != `{"index:d": {"field:f": {"view:standard": {"slice:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "slice:1": {"rows": 0, "setBit": 2}}}}}` {
 		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
@@ -88,10 +88,10 @@ func TestStatsCount_TopN(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth+2)
+	hldr.SetBit("d", "f", 0, 0)
+	hldr.SetBit("d", "f", 0, 1)
+	hldr.SetBit("d", "f", 0, SliceWidth)
+	hldr.SetBit("d", "f", 0, SliceWidth+2)
 
 	// Execute query.
 	called := false
@@ -121,8 +121,8 @@ func TestStatsCount_Bitmap(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
+	hldr.SetBit("d", "f", 0, 0)
+	hldr.SetBit("d", "f", 0, 1)
 	called := false
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	e.Holder.Stats = &MockStats{
@@ -150,8 +150,8 @@ func TestStatsCount_SetColumnAttrs(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 0)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 1)
+	hldr.SetBit("d", "f", 10, 0)
+	hldr.SetBit("d", "f", 10, 1)
 
 	called := false
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
@@ -180,8 +180,8 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 0)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 1)
+	hldr.SetBit("d", "f", 10, 0)
+	hldr.SetBit("d", "f", 10, 1)
 
 	called := false
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))

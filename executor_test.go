@@ -107,11 +107,11 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 func TestExecutor_Execute_Difference(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(10, 1)
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(10, 2)
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(10, 3)
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(11, 2)
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(11, 4)
+	hldr.SetBit("i", "general", 10, 1)
+	hldr.SetBit("i", "general", 10, 2)
+	hldr.SetBit("i", "general", 10, 3)
+	hldr.SetBit("i", "general", 11, 2)
+	hldr.SetBit("i", "general", 11, 4)
 
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Difference(Bitmap(row=10), Bitmap(row=11))`), nil, nil); err != nil {
@@ -125,7 +125,7 @@ func TestExecutor_Execute_Difference(t *testing.T) {
 func TestExecutor_Execute_Empty_Difference(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(10, 1)
+	hldr.SetBit("i", "general", 10, 1)
 
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Difference()`), nil, nil); err == nil {
@@ -137,13 +137,13 @@ func TestExecutor_Execute_Empty_Difference(t *testing.T) {
 func TestExecutor_Execute_Intersect(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(10, 1)
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+1)
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+2)
+	hldr.SetBit("i", "general", 10, 1)
+	hldr.SetBit("i", "general", 10, SliceWidth+1)
+	hldr.SetBit("i", "general", 10, SliceWidth+2)
 
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(11, 1)
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(11, 2)
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 1).MustSetBits(11, SliceWidth+2)
+	hldr.SetBit("i", "general", 11, 1)
+	hldr.SetBit("i", "general", 11, 2)
+	hldr.SetBit("i", "general", 11, SliceWidth+2)
 
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Intersect(Bitmap(row=10), Bitmap(row=11))`), nil, nil); err != nil {
@@ -168,12 +168,12 @@ func TestExecutor_Execute_Empty_Intersect(t *testing.T) {
 func TestExecutor_Execute_Union(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(10, 0)
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+1)
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+2)
+	hldr.SetBit("i", "general", 10, 0)
+	hldr.SetBit("i", "general", 10, SliceWidth+1)
+	hldr.SetBit("i", "general", 10, SliceWidth+2)
 
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(11, 2)
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 1).MustSetBits(11, SliceWidth+2)
+	hldr.SetBit("i", "general", 11, 2)
+	hldr.SetBit("i", "general", 11, SliceWidth+2)
 
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Union(Bitmap(row=10), Bitmap(row=11))`), nil, nil); err != nil {
@@ -187,7 +187,7 @@ func TestExecutor_Execute_Union(t *testing.T) {
 func TestExecutor_Execute_Empty_Union(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(10, 0)
+	hldr.SetBit("i", "general", 10, 0)
 
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Union()`), nil, nil); err != nil {
@@ -201,12 +201,12 @@ func TestExecutor_Execute_Empty_Union(t *testing.T) {
 func TestExecutor_Execute_Xor(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(10, 0)
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+1)
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+2)
+	hldr.SetBit("i", "general", 10, 0)
+	hldr.SetBit("i", "general", 10, SliceWidth+1)
+	hldr.SetBit("i", "general", 10, SliceWidth+2)
 
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 0).MustSetBits(11, 2)
-	hldr.MustCreateFragmentIfNotExists("i", "general", pilosa.ViewStandard, 1).MustSetBits(11, SliceWidth+2)
+	hldr.SetBit("i", "general", 11, 2)
+	hldr.SetBit("i", "general", 11, SliceWidth+2)
 
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Xor(Bitmap(row=10), Bitmap(row=11))`), nil, nil); err != nil {
@@ -220,9 +220,9 @@ func TestExecutor_Execute_Xor(t *testing.T) {
 func TestExecutor_Execute_Count(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).MustSetBits(10, 3)
-	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+1)
-	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).MustSetBits(10, SliceWidth+2)
+	hldr.SetBit("i", "f", 10, 3)
+	hldr.SetBit("i", "f", 10, SliceWidth+1)
+	hldr.SetBit("i", "f", 10, SliceWidth+2)
 
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Count(Bitmap(row=10, field=f))`), nil, nil); err != nil {
@@ -427,12 +427,12 @@ func TestExecutor_Execute_TopN_fill(t *testing.T) {
 	defer hldr.Close()
 
 	// Set columns for rows 0, 10, & 20 across two slices.
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 2)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(1, SliceWidth+2)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(1, SliceWidth)
+	hldr.SetBit("i", "f", 0, 0)
+	hldr.SetBit("i", "f", 0, 1)
+	hldr.SetBit("i", "f", 0, 2)
+	hldr.SetBit("i", "f", 0, SliceWidth)
+	hldr.SetBit("i", "f", 1, SliceWidth+2)
+	hldr.SetBit("i", "f", 1, SliceWidth)
 
 	// Execute query.
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
@@ -450,23 +450,23 @@ func TestExecutor_Execute_TopN_fill_small(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 2).SetBit(0, 2*SliceWidth)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 3).SetBit(0, 3*SliceWidth)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 4).SetBit(0, 4*SliceWidth)
+	hldr.SetBit("i", "f", 0, 0)
+	hldr.SetBit("i", "f", 0, SliceWidth)
+	hldr.SetBit("i", "f", 0, 2*SliceWidth)
+	hldr.SetBit("i", "f", 0, 3*SliceWidth)
+	hldr.SetBit("i", "f", 0, 4*SliceWidth)
 
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(1, 0)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(1, 1)
+	hldr.SetBit("i", "f", 1, 0)
+	hldr.SetBit("i", "f", 1, 1)
 
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(2, SliceWidth)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(2, SliceWidth+1)
+	hldr.SetBit("i", "f", 2, SliceWidth)
+	hldr.SetBit("i", "f", 2, SliceWidth+1)
 
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 2).SetBit(3, 2*SliceWidth)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 2).SetBit(3, 2*SliceWidth+1)
+	hldr.SetBit("i", "f", 3, 2*SliceWidth)
+	hldr.SetBit("i", "f", 3, 2*SliceWidth+1)
 
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 3).SetBit(4, 3*SliceWidth)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 3).SetBit(4, 3*SliceWidth+1)
+	hldr.SetBit("i", "f", 4, 3*SliceWidth)
+	hldr.SetBit("i", "f", 4, 3*SliceWidth+1)
 
 	// Execute query.
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
@@ -485,19 +485,19 @@ func TestExecutor_Execute_TopN_Src(t *testing.T) {
 	defer hldr.Close()
 
 	// Set columns for rows 0, 10, & 20 across two slices.
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(10, SliceWidth)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(10, SliceWidth+1)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(20, SliceWidth)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(20, SliceWidth+1)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(20, SliceWidth+2)
+	hldr.SetBit("i", "f", 0, 0)
+	hldr.SetBit("i", "f", 0, 1)
+	hldr.SetBit("i", "f", 0, SliceWidth)
+	hldr.SetBit("i", "f", 10, SliceWidth)
+	hldr.SetBit("i", "f", 10, SliceWidth+1)
+	hldr.SetBit("i", "f", 20, SliceWidth)
+	hldr.SetBit("i", "f", 20, SliceWidth+1)
+	hldr.SetBit("i", "f", 20, SliceWidth+2)
 
 	// Create an intersecting row.
-	hldr.MustCreateRankedFragmentIfNotExists("i", "other", pilosa.ViewStandard, 1).SetBit(100, SliceWidth)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "other", pilosa.ViewStandard, 1).SetBit(100, SliceWidth+1)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "other", pilosa.ViewStandard, 1).SetBit(100, SliceWidth+2)
+	hldr.SetBit("i", "other", 100, SliceWidth)
+	hldr.SetBit("i", "other", 100, SliceWidth+1)
+	hldr.SetBit("i", "other", 100, SliceWidth+2)
 
 	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).RecalculateCache()
 	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).RecalculateCache()
@@ -521,9 +521,9 @@ func TestExecutor_Execute_TopN_Attr(t *testing.T) {
 	//
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(10, SliceWidth)
+	hldr.SetBit("i", "f", 0, 0)
+	hldr.SetBit("i", "f", 0, 1)
+	hldr.SetBit("i", "f", 10, SliceWidth)
 
 	if err := hldr.Field("i", "f").RowAttrStore().SetAttrs(10, map[string]interface{}{"category": int64(123)}); err != nil {
 		t.Fatal(err)
@@ -544,9 +544,9 @@ func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
 	//
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).SetBit(10, SliceWidth)
+	hldr.SetBit("i", "f", 0, 0)
+	hldr.SetBit("i", "f", 0, 1)
+	hldr.SetBit("i", "f", 10, SliceWidth)
 
 	if err := hldr.Field("i", "f").RowAttrStore().SetAttrs(10, map[string]interface{}{"category": uint64(123)}); err != nil {
 		t.Fatal(err)
@@ -989,7 +989,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 	s.Handler.API.Holder = hldr.Holder
-	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).MustSetBits(10, (1*SliceWidth)+1)
+	hldr.SetBit("i", "f", 10, SliceWidth+1)
 
 	e := test.NewExecutor(hldr.Holder, c)
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Bitmap(row=10, field=f)`), nil, nil); err != nil {
@@ -1023,8 +1023,8 @@ func TestExecutor_Execute_Remote_Count(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 	s.Handler.API.Holder = hldr.Holder
-	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 2).MustSetBits(10, (2*SliceWidth)+1)
-	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 2).MustSetBits(10, (2*SliceWidth)+2)
+	hldr.SetBit("i", "f", 10, (2*SliceWidth)+1)
+	hldr.SetBit("i", "f", 10, (2*SliceWidth)+2)
 
 	e := test.NewExecutor(hldr.Holder, c)
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Count(Bitmap(row=10, field=f))`), nil, nil); err != nil {
@@ -1192,8 +1192,8 @@ func TestExecutor_Execute_Remote_TopN(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 	s.Handler.API.Holder = hldr.Holder
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 2).MustSetBits(30, (2*SliceWidth)+1)
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 4).MustSetBits(30, (4*SliceWidth)+2)
+	hldr.SetBit("i", "f", 30, (2*SliceWidth)+1)
+	hldr.SetBit("i", "f", 30, (4*SliceWidth)+2)
 
 	e := test.NewExecutor(hldr.Holder, c)
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`TopN(field=f, n=3)`), nil, nil); err != nil {

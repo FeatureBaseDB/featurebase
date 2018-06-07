@@ -310,7 +310,7 @@ func (v *View) SetBit(rowID, columnID uint64) (changed bool, err error) {
 	if err != nil {
 		return changed, err
 	}
-	return frag.SetBit(rowID, columnID)
+	return frag.setBit(rowID, columnID)
 }
 
 // ClearBit clears a bit within the view.
@@ -320,7 +320,7 @@ func (v *View) ClearBit(rowID, columnID uint64) (changed bool, err error) {
 	if err != nil {
 		return changed, err
 	}
-	return frag.ClearBit(rowID, columnID)
+	return frag.clearBit(rowID, columnID)
 }
 
 // value uses a column of bits to read a multi-bit value.

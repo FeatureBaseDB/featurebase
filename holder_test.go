@@ -331,14 +331,8 @@ func TestHolder_DeleteIndex(t *testing.T) {
 	defer hldr.Close()
 
 	// Write bits to separate indexes.
-	f0 := hldr.MustCreateFragmentIfNotExists("i0", "f", pilosa.ViewStandard, 0)
-	if _, err := f0.SetBit(100, 200); err != nil {
-		t.Fatal(err)
-	}
-	f1 := hldr.MustCreateFragmentIfNotExists("i1", "f", pilosa.ViewStandard, 0)
-	if _, err := f1.SetBit(100, 200); err != nil {
-		t.Fatal(err)
-	}
+	hldr.SetBit("i0", "f", 100, 200)
+	hldr.SetBit("i1", "f", 100, 200)
 
 	// Ensure i0 exists.
 	if _, err := os.Stat(hldr.IndexPath("i0")); err != nil {
@@ -399,42 +393,23 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	}
 
 	// Set data on the local holder.
-	f := hldr0.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0)
-	if _, err := f.SetBit(0, 10); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(2, 20); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(120, 10); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(200, 4); err != nil {
-		t.Fatal(err)
-	}
+	hldr0.SetBit("i", "f", 0, 10)
+	hldr0.SetBit("i", "f", 2, 20)
+	hldr0.SetBit("i", "f", 120, 10)
+	hldr0.SetBit("i", "f", 200, 4)
 
-	f = hldr0.MustCreateFragmentIfNotExists("i", "f0", pilosa.ViewStandard, 1)
-	if _, err := f.SetBit(9, SliceWidth+5); err != nil {
-		t.Fatal(err)
-	}
+	hldr0.SetBit("i", "f0", 9, SliceWidth+5)
 
 	hldr0.MustCreateFragmentIfNotExists("y", "z", pilosa.ViewStandard, 0)
 
 	// Set data on the remote holder.
-	f = hldr1.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0)
-	if _, err := f.SetBit(0, 4000); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(3, 10); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(120, 10); err != nil {
-		t.Fatal(err)
-	}
+	hldr1.SetBit("i", "f", 0, 4000)
+	hldr1.SetBit("i", "f", 3, 10)
+	hldr1.SetBit("i", "f", 120, 10)
 
-	f = hldr1.MustCreateFragmentIfNotExists("y", "z", pilosa.ViewStandard, 3)
-	if _, err := f.SetBit(10, (3*SliceWidth)+4); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(10, (3*SliceWidth)+5); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(10, (3*SliceWidth)+7); err != nil {
-		t.Fatal(err)
-	}
+	hldr1.SetBit("y", "z", 10, (3*SliceWidth)+4)
+	hldr1.SetBit("y", "z", 10, (3*SliceWidth)+5)
+	hldr1.SetBit("y", "z", 10, (3*SliceWidth)+7)
 
 	// Set highest slice.
 	hldr0.Index("i").SetRemoteMaxSlice(1)
@@ -469,10 +444,6 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 		}
 
 		f = hldr.Fragment("i", "f0", pilosa.ViewStandard, 1)
-		a := f.Row(9).Columns()
-		if !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
-			t.Fatalf("unexpected columns(%d/i/f0): %+v", i, a)
-		}
 		if a := f.Row(9).Columns(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
 			t.Fatalf("unexpected columns(%d/d/f0): %+v", i, a)
 		}
@@ -504,34 +475,18 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 	}
 
 	// Set data on the local holder.
-	f := hldr0.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0)
-	if _, err := f.SetBit(0, 10); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(0, 4000); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(2, 20); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(3, 10); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(120, 10); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(200, 4); err != nil {
-		t.Fatal(err)
-	}
+	hldr0.SetBit("i", "f", 0, 10)
+	hldr0.SetBit("i", "f", 0, 4000)
+	hldr0.SetBit("i", "f", 2, 20)
+	hldr0.SetBit("i", "f", 3, 10)
+	hldr0.SetBit("i", "f", 120, 10)
+	hldr0.SetBit("i", "f", 200, 4)
 
-	f = hldr0.MustCreateFragmentIfNotExists("i", "f0", pilosa.ViewStandard, 1)
-	if _, err := f.SetBit(9, SliceWidth+5); err != nil {
-		t.Fatal(err)
-	}
+	hldr0.SetBit("i", "f0", 9, SliceWidth+5)
 
-	f = hldr0.MustCreateFragmentIfNotExists("y", "z", pilosa.ViewStandard, 2)
-	if _, err := f.SetBit(10, (2*SliceWidth)+4); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(10, (2*SliceWidth)+5); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.SetBit(10, (2*SliceWidth)+7); err != nil {
-		t.Fatal(err)
-	}
+	hldr0.SetBit("y", "z", 10, (2*SliceWidth)+4)
+	hldr0.SetBit("y", "z", 10, (2*SliceWidth)+5)
+	hldr0.SetBit("y", "z", 10, (2*SliceWidth)+7)
 
 	// Set highest slice.
 	hldr0.Index("i").SetRemoteMaxSlice(1)

@@ -361,15 +361,15 @@ func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *R
 	return row
 }
 
-// SetBit sets a bit for a given column & row within the fragment.
+// setBit sets a bit for a given column & row within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
-func (f *Fragment) SetBit(rowID, columnID uint64) (changed bool, err error) {
+func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.setBit(rowID, columnID)
+	return f.unprotectedSetBit(rowID, columnID)
 }
 
-func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
+func (f *Fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err error) {
 	changed = false
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(rowID, columnID)
@@ -413,15 +413,15 @@ func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	return changed, nil
 }
 
-// ClearBit clears a bit for a given column & row within the fragment.
+// clearBit clears a bit for a given column & row within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
-func (f *Fragment) ClearBit(rowID, columnID uint64) (bool, error) {
+func (f *Fragment) clearBit(rowID, columnID uint64) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.clearBit(rowID, columnID)
+	return f.unprotectedClearBit(rowID, columnID)
 }
 
-func (f *Fragment) clearBit(rowID, columnID uint64) (changed bool, err error) {
+func (f *Fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, err error) {
 	changed = false
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(rowID, columnID)
@@ -498,13 +498,13 @@ func (f *Fragment) setValue(columnID uint64, bitDepth uint, value uint64) (chang
 
 	for i := uint(0); i < bitDepth; i++ {
 		if value&(1<<i) != 0 {
-			if c, err := f.setBit(uint64(i), columnID); err != nil {
+			if c, err := f.unprotectedSetBit(uint64(i), columnID); err != nil {
 				return changed, err
 			} else if c {
 				changed = true
 			}
 		} else {
-			if c, err := f.clearBit(uint64(i), columnID); err != nil {
+			if c, err := f.unprotectedClearBit(uint64(i), columnID); err != nil {
 				return changed, err
 			} else if c {
 				changed = true
@@ -513,7 +513,7 @@ func (f *Fragment) setValue(columnID uint64, bitDepth uint, value uint64) (chang
 	}
 
 	// Mark value as set.
-	if c, err := f.setBit(uint64(bitDepth), columnID); err != nil {
+	if c, err := f.unprotectedSetBit(uint64(bitDepth), columnID); err != nil {
 		return changed, errors.Wrap(err, "marking not-null")
 	} else if c {
 		changed = true
@@ -1281,14 +1281,14 @@ func (f *Fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, e
 
 	// Set local bits.
 	for i := range sets[0].columnIDs {
-		if _, err := f.setBit(sets[0].rowIDs[i], (f.slice*SliceWidth)+sets[0].columnIDs[i]); err != nil {
+		if _, err := f.unprotectedSetBit(sets[0].rowIDs[i], (f.slice*SliceWidth)+sets[0].columnIDs[i]); err != nil {
 			return nil, nil, errors.Wrap(err, "setting")
 		}
 	}
 
 	// Clear local bits.
 	for i := range clears[0].columnIDs {
-		if _, err := f.clearBit(clears[0].rowIDs[i], (f.slice*SliceWidth)+clears[0].columnIDs[i]); err != nil {
+		if _, err := f.unprotectedClearBit(clears[0].rowIDs[i], (f.slice*SliceWidth)+clears[0].columnIDs[i]); err != nil {
 			return nil, nil, errors.Wrap(err, "clearing")
 		}
 	}

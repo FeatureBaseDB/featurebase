@@ -124,3 +124,31 @@ func (h *Holder) MustCreateRankedFragmentIfNotExists(index, field, view string, 
 	}
 	return &Fragment{Fragment: frag}
 }
+
+// SetBit clears a bit on the given field.
+func (h *Holder) SetBit(index, field string, rowID, columnID uint64) {
+	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.FieldOptions{})
+	if err != nil {
+		panic(err)
+	}
+	f.SetBit(pilosa.ViewStandard, rowID, columnID, nil)
+}
+
+// ClearBit clears a bit on the given field.
+func (h *Holder) ClearBit(index, field string, rowID, columnID uint64) {
+	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.FieldOptions{})
+	if err != nil {
+		panic(err)
+	}
+	f.ClearBit(pilosa.ViewStandard, rowID, columnID, nil)
+}
+
+// MustSetBits sets columns on a row. Panic on error.
+// This function does not accept a timestamp or quantum.
+func (h *Holder) MustSetBits(index, field string, rowID uint64, columnIDs ...uint64) {
+	for _, columnID := range columnIDs {
+		h.SetBit(index, field, rowID, columnID)
+	}
+}
