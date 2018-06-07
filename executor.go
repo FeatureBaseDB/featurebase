@@ -384,7 +384,7 @@ func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pq
 		return ValCount{}, nil
 	}
 
-	vsum, vcount, err := fragment.Sum(filter, bsig.BitDepth())
+	vsum, vcount, err := fragment.sum(filter, bsig.BitDepth())
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "computing sum")
 	}
@@ -422,7 +422,7 @@ func (e *Executor) executeMinSlice(ctx context.Context, index string, c *pql.Cal
 		return ValCount{}, nil
 	}
 
-	fmin, fcount, err := fragment.Min(filter, bsig.BitDepth())
+	fmin, fcount, err := fragment.min(filter, bsig.BitDepth())
 	if err != nil {
 		return ValCount{}, err
 	}
@@ -460,7 +460,7 @@ func (e *Executor) executeMaxSlice(ctx context.Context, index string, c *pql.Cal
 		return ValCount{}, nil
 	}
 
-	fmax, fcount, err := fragment.Max(filter, bsig.BitDepth())
+	fmax, fcount, err := fragment.max(filter, bsig.BitDepth())
 	if err != nil {
 		return ValCount{}, err
 	}
@@ -587,7 +587,7 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 	if tanimotoThreshold > 100 {
 		return nil, errors.New("Tanimoto Threshold is from 1 to 100 only")
 	}
-	return f.Top(TopOptions{
+	return f.top(TopOptions{
 		N:                 int(n),
 		Src:               src,
 		RowIDs:            rowIDs,
@@ -793,7 +793,7 @@ func (e *Executor) executeBSIGroupRangeSlice(ctx context.Context, index string, 
 			return NewRow(), nil
 		}
 
-		return frag.NotNull(bsig.BitDepth())
+		return frag.notNull(bsig.BitDepth())
 
 	} else if cond.Op == pql.BETWEEN {
 
@@ -831,10 +831,10 @@ func (e *Executor) executeBSIGroupRangeSlice(ctx context.Context, index string, 
 		// If the query is asking for the entire valid range, just return
 		// the not-null bitmap for the bsiGroup.
 		if predicates[0] <= bsig.Min && predicates[1] >= bsig.Max {
-			return frag.NotNull(bsig.BitDepth())
+			return frag.notNull(bsig.BitDepth())
 		}
 
-		return frag.RangeBetween(bsig.BitDepth(), baseValueMin, baseValueMax)
+		return frag.rangeBetween(bsig.BitDepth(), baseValueMin, baseValueMax)
 
 	} else {
 
@@ -864,16 +864,16 @@ func (e *Executor) executeBSIGroupRangeSlice(ctx context.Context, index string, 
 		// LT[E] and GT[E] should return all not-null if selected range fully encompasses valid bsiGroup range.
 		if (cond.Op == pql.LT && value > bsig.Max) || (cond.Op == pql.LTE && value >= bsig.Max) ||
 			(cond.Op == pql.GT && value < bsig.Min) || (cond.Op == pql.GTE && value <= bsig.Min) {
-			return frag.NotNull(bsig.BitDepth())
+			return frag.notNull(bsig.BitDepth())
 		}
 
 		// outOfRange for NEQ should return all not-null.
 		if outOfRange && cond.Op == pql.NEQ {
-			return frag.NotNull(bsig.BitDepth())
+			return frag.notNull(bsig.BitDepth())
 		}
 
 		f.Stats.Count("range:bsigroup", 1, 1.0)
-		return frag.RangeOp(cond.Op, bsig.BitDepth(), baseValue)
+		return frag.rangeOp(cond.Op, bsig.BitDepth(), baseValue)
 	}
 }
 

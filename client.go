@@ -1017,7 +1017,7 @@ type BitsByPos []Bit
 func (p BitsByPos) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 func (p BitsByPos) Len() int      { return len(p) }
 func (p BitsByPos) Less(i, j int) bool {
-	p0, p1 := Pos(p[i].RowID, p[i].ColumnID), Pos(p[j].RowID, p[j].ColumnID)
+	p0, p1 := pos(p[i].RowID, p[i].ColumnID), pos(p[j].RowID, p[j].ColumnID)
 	if p0 == p1 {
 		return p[i].Timestamp < p[j].Timestamp
 	}

@@ -905,7 +905,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 			return errors.Wrap(err, "creating view")
 		}
 
-		if err := frag.Import(data.RowIDs, data.ColumnIDs); err != nil {
+		if err := frag.bulkImport(data.RowIDs, data.ColumnIDs); err != nil {
 			return err
 		}
 	}
@@ -962,7 +962,7 @@ func (f *Field) ImportValue(columnIDs []uint64, values []int64) error {
 			baseValues[i] = uint64(value - bsig.Min)
 		}
 
-		if err := frag.ImportValue(data.ColumnIDs, baseValues, bsig.BitDepth()); err != nil {
+		if err := frag.importValue(data.ColumnIDs, baseValues, bsig.BitDepth()); err != nil {
 			return err
 		}
 	}

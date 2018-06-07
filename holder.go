@@ -445,7 +445,7 @@ func (h *Holder) flushCaches() {
 					}
 
 					if err := fragment.FlushCache(); err != nil {
-						h.Logger.Printf("error flushing cache: err=%s, path=%s", err, fragment.CachePath())
+						h.Logger.Printf("error flushing cache: err=%s, path=%s", err, fragment.cachePath())
 					}
 				}
 			}
@@ -765,7 +765,7 @@ func (s *HolderSyncer) syncFragment(index, field, view string, slice uint64) err
 		Closing:      s.Closing,
 		RemoteClient: s.RemoteClient,
 	}
-	if err := fs.SyncFragment(); err != nil {
+	if err := fs.syncFragment(); err != nil {
 		return errors.Wrap(err, "syncing fragment")
 	}
 
@@ -809,7 +809,7 @@ func (c *HolderCleaner) CleanHolder() error {
 		for _, field := range index.Fields() {
 			for _, view := range field.Views() {
 				for _, fragment := range view.Fragments() {
-					fragSlice := fragment.Slice()
+					fragSlice := fragment.slice
 					// Ignore fragments that should be present.
 					if uint64InSlice(fragSlice, containedSlices) {
 						continue
