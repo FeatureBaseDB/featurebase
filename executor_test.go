@@ -1134,7 +1134,6 @@ func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
 	}
 
 	// Verify that one column is set on both node's holder.
-	//if n := hldr.MustCreateFragmentIfNotExists("i", "f", "standard_2016", 0).Row(10).Count(); n != 1 {
 	if n := hldr.ViewRow("i", "f", "standard_2016", 0, 10).Count(); n != 1 {
 		t.Fatalf("unexpected local count: %d", n)
 	}
