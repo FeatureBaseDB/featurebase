@@ -126,13 +126,13 @@ func (h *Holder) MustCreateRankedFragmentIfNotExists(index, field, view string, 
 }
 
 // Row returns a Row for a given field.
-func (h *Holder) Row(index, field string, slice, rowID uint64) *pilosa.Row {
+func (h *Holder) Row(index, field string, rowID uint64) *pilosa.Row {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
 	f, err := idx.CreateFieldIfNotExists(field, pilosa.FieldOptions{})
 	if err != nil {
 		panic(err)
 	}
-	row, err := f.Row(slice, rowID)
+	row, err := f.Row(rowID)
 	if err != nil {
 		panic(err)
 	}
@@ -140,13 +140,13 @@ func (h *Holder) Row(index, field string, slice, rowID uint64) *pilosa.Row {
 }
 
 // ViewRow returns a Row for a given field and view.
-func (h *Holder) ViewRow(index, field, view string, slice, rowID uint64) *pilosa.Row {
+func (h *Holder) ViewRow(index, field, view string, rowID uint64) *pilosa.Row {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
 	f, err := idx.CreateFieldIfNotExists(field, pilosa.FieldOptions{})
 	if err != nil {
 		panic(err)
 	}
-	row, err := f.ViewRow(view, slice, rowID)
+	row, err := f.ViewRow(view, rowID)
 	if err != nil {
 		panic(err)
 	}

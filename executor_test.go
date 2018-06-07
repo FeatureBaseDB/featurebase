@@ -241,7 +241,7 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 	hldr.SetBit("i", "f", 1, 0)
 
 	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-	if n := hldr.Row("i", "f", 0, 11).Count(); n != 0 {
+	if n := hldr.Row("i", "f", 11).Count(); n != 0 {
 		t.Fatalf("unexpected bitmap count: %d", n)
 	}
 
@@ -253,7 +253,7 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 		}
 	}
 
-	if n := hldr.Row("i", "f", 0, 11).Count(); n != 1 {
+	if n := hldr.Row("i", "f", 11).Count(); n != 1 {
 		t.Fatalf("unexpected bitmap count: %d", n)
 	}
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`SetBit(row=11, field=f, col=1)`), nil, nil); err != nil {
@@ -1080,7 +1080,7 @@ func TestExecutor_Execute_Remote_SetBit(t *testing.T) {
 	}
 
 	// Verify that one column is set on both node's holder.
-	if n := hldr.Row("i", "f", 0, 10).Count(); n != 1 {
+	if n := hldr.Row("i", "f", 10).Count(); n != 1 {
 		t.Fatalf("unexpected local count: %d", n)
 	}
 	if !remoteCalled {
@@ -1134,7 +1134,7 @@ func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
 	}
 
 	// Verify that one column is set on both node's holder.
-	if n := hldr.ViewRow("i", "f", "standard_2016", 0, 10).Count(); n != 1 {
+	if n := hldr.ViewRow("i", "f", "standard_2016", 10).Count(); n != 1 {
 		t.Fatalf("unexpected local count: %d", n)
 	}
 	if !remoteCalled {

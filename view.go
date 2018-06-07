@@ -304,9 +304,17 @@ func (v *View) DeleteFragment(slice uint64) error {
 }
 
 // row returns a row for a slice of the view.
-func (v *View) row(slice, rowID uint64) *Row {
-	frag := v.Fragment(slice)
-	return frag.row(rowID)
+func (v *View) row(rowID uint64) *Row {
+	row := NewRow()
+	for _, frag := range v.Fragments() {
+		fr := frag.row(rowID)
+		if fr == nil {
+			continue
+		}
+		row.Merge(fr)
+	}
+	return row
+
 }
 
 // SetBit sets a bit within the view.

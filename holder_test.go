@@ -430,23 +430,23 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 
 	// Verify data is the same on both nodes.
 	for i, hldr := range []*test.Holder{hldr0, hldr1} {
-		if a := hldr.Row("i", "f", 0, 0).Columns(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
+		if a := hldr.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
 			t.Fatalf("unexpected columns(%d/0): %+v", i, a)
-		} else if a := hldr.Row("i", "f", 0, 2).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
+		} else if a := hldr.Row("i", "f", 2).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
 			t.Fatalf("unexpected columns(%d/2): %+v", i, a)
-		} else if a := hldr.Row("i", "f", 0, 3).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+		} else if a := hldr.Row("i", "f", 3).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
 			t.Fatalf("unexpected columns(%d/3): %+v", i, a)
-		} else if a := hldr.Row("i", "f", 0, 120).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+		} else if a := hldr.Row("i", "f", 120).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
 			t.Fatalf("unexpected columns(%d/120): %+v", i, a)
-		} else if a := hldr.Row("i", "f", 0, 200).Columns(); !reflect.DeepEqual(a, []uint64{4}) {
+		} else if a := hldr.Row("i", "f", 200).Columns(); !reflect.DeepEqual(a, []uint64{4}) {
 			t.Fatalf("unexpected columns(%d/200): %+v", i, a)
 		}
 
-		if a := hldr.Row("i", "f0", 1, 9).Columns(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
+		if a := hldr.Row("i", "f0", 9).Columns(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
 			t.Fatalf("unexpected columns(%d/d/f0): %+v", i, a)
 		}
 
-		if a := hldr.Row("y", "z", 3, 10).Columns(); !reflect.DeepEqual(a, []uint64{(3 * SliceWidth) + 4, (3 * SliceWidth) + 5, (3 * SliceWidth) + 7}) {
+		if a := hldr.Row("y", "z", 10).Columns(); !reflect.DeepEqual(a, []uint64{(3 * SliceWidth) + 4, (3 * SliceWidth) + 5, (3 * SliceWidth) + 7}) {
 			t.Fatalf("unexpected columns(%d/y/z): %+v", i, a)
 		}
 	}
@@ -506,23 +506,23 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 
 	// Verify data is the same on both nodes.
 	for i, hldr := range []*test.Holder{hldr0} {
-		if a := hldr.Row("i", "f", 0, 0).Columns(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
+		if a := hldr.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
 			t.Fatalf("unexpected columns(%d/0): %+v", i, a)
-		} else if a := hldr.Row("i", "f", 0, 2).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
+		} else if a := hldr.Row("i", "f", 2).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
 			t.Fatalf("unexpected columns(%d/2): %+v", i, a)
-		} else if a := hldr.Row("i", "f", 0, 3).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+		} else if a := hldr.Row("i", "f", 3).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
 			t.Fatalf("unexpected columns(%d/3): %+v", i, a)
-		} else if a := hldr.Row("i", "f", 0, 120).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+		} else if a := hldr.Row("i", "f", 120).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
 			t.Fatalf("unexpected columns(%d/120): %+v", i, a)
-		} else if a := hldr.Row("i", "f", 0, 200).Columns(); !reflect.DeepEqual(a, []uint64{4}) {
+		} else if a := hldr.Row("i", "f", 200).Columns(); !reflect.DeepEqual(a, []uint64{4}) {
 			t.Fatalf("unexpected columns(%d/200): %+v", i, a)
 		}
 
-		if a := hldr.Row("i", "f0", 1, 9).Columns(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
+		if a := hldr.Row("i", "f0", 9).Columns(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
 			t.Fatalf("unexpected columns(%d/d/f0): %+v", i, a)
 		}
 
-		if a := hldr.Row("y", "z", 2, 10).Columns(); !reflect.DeepEqual(a, []uint64{(2 * SliceWidth) + 4, (2 * SliceWidth) + 5, (2 * SliceWidth) + 7}) {
+		if a := hldr.Row("y", "z", 10).Columns(); !reflect.DeepEqual(a, []uint64{(2 * SliceWidth) + 4, (2 * SliceWidth) + 5, (2 * SliceWidth) + 7}) {
 			t.Fatalf("unexpected columns(%d/y/z): %+v", i, a)
 		}
 	}
@@ -543,15 +543,15 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 
 	// Verify data is the same on both nodes.
 	for i, hldr := range []*test.Holder{hldr0} {
-		if a := hldr.Row("i", "f", 0, 0).Columns(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
+		if a := hldr.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
 			t.Fatalf("unexpected columns(%d/0): %+v", i, a)
-		} else if a := hldr.Row("i", "f", 0, 2).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
+		} else if a := hldr.Row("i", "f", 2).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
 			t.Fatalf("unexpected columns(%d/2): %+v", i, a)
-		} else if a := hldr.Row("i", "f", 0, 3).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+		} else if a := hldr.Row("i", "f", 3).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
 			t.Fatalf("unexpected columns(%d/3): %+v", i, a)
-		} else if a := hldr.Row("i", "f", 0, 120).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+		} else if a := hldr.Row("i", "f", 120).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
 			t.Fatalf("unexpected columns(%d/120): %+v", i, a)
-		} else if a := hldr.Row("i", "f", 0, 200).Columns(); !reflect.DeepEqual(a, []uint64{4}) {
+		} else if a := hldr.Row("i", "f", 200).Columns(); !reflect.DeepEqual(a, []uint64{4}) {
 			t.Fatalf("unexpected columns(%d/200): %+v", i, a)
 		}
 
@@ -560,7 +560,7 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 			t.Fatalf("expected fragment to be deleted: (%d/i/f0): %+v", i, f)
 		}
 
-		if a := hldr.Row("y", "z", 2, 10).Columns(); !reflect.DeepEqual(a, []uint64{(2 * SliceWidth) + 4, (2 * SliceWidth) + 5, (2 * SliceWidth) + 7}) {
+		if a := hldr.Row("y", "z", 10).Columns(); !reflect.DeepEqual(a, []uint64{(2 * SliceWidth) + 4, (2 * SliceWidth) + 5, (2 * SliceWidth) + 7}) {
 			t.Fatalf("unexpected columns(%d/y/z): %+v", i, a)
 		}
 	}

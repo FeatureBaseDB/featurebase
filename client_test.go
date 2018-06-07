@@ -212,7 +212,7 @@ func TestClient_Import(t *testing.T) {
 
 	// Load bitmap into cache to ensure cache gets updated.
 	hldr.SetBit("i", "f", 1, 0) // set a bit so the view gets created.
-	hldr.Row("i", "f", 0, 0)
+	hldr.Row("i", "f", 0)
 
 	s := test.NewServer()
 	defer s.Close()
@@ -231,10 +231,10 @@ func TestClient_Import(t *testing.T) {
 	}
 
 	// Verify data.
-	if a := hldr.Row("i", "f", 0, 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 5}) {
+	if a := hldr.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 5}) {
 		t.Fatalf("unexpected columns: %+v", a)
 	}
-	if a := hldr.Row("i", "f", 0, 200).Columns(); !reflect.DeepEqual(a, []uint64{6}) {
+	if a := hldr.Row("i", "f", 200).Columns(); !reflect.DeepEqual(a, []uint64{6}) {
 		t.Fatalf("unexpected columns: %+v", a)
 	}
 }
