@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -156,4 +157,36 @@ func BenchmarkDiagnostics(b *testing.B) {
 			d.Set("gg", "test")
 		}
 	})
+}
+
+func TestDiagnostics_Enrich(t *testing.T) {
+	uri, err := NewURIFromAddress("localhost:9999")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("tcp", uri.HostPort())
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &http.Client{}
+	handler, err := NewHandler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler.API = NewAPI()
+	s, err := NewServer(OptServerListener(ln), OptServerRemoteClient(c), OptServerHandler(handler))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	// Mock server.
+	server := httptest.NewServer(nil)
+
+	d := NewDiagnosticsCollector(server.URL)
+	s.diagnostics = d
+	d.server = s
+	d.EnrichWithOSInfo()
+	d.EnrichWithMemoryInfo()
+	d.EnrichWithSchemaProperties()
 }

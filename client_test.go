@@ -15,10 +15,12 @@
 package pilosa_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
 	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
@@ -351,4 +353,130 @@ func TestClient_FragmentBlocks(t *testing.T) {
 	if a := hldr.Fragment("i", "f", pilosa.ViewStandard, 0).Blocks(); !reflect.DeepEqual(a, blocks) {
 		t.Fatalf("blocks mismatch:\n\nexp=%s\n\ngot=%s\n\n", spew.Sdump(a), spew.Sdump(blocks))
 	}
+}
+
+func TestClient_Schema(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+
+	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0)
+	s := test.NewServer()
+	defer s.Close()
+	s.Handler.API.Cluster = test.NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
+	s.Handler.API.Holder = hldr.Holder
+
+	c := test.MustNewClient(s.Host(), defaultClient)
+	indexes, err := c.Schema(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(indexes) != 1 {
+		t.Fatalf("len indexes %d != %d", 1, len(indexes))
+	}
+	index := indexes[0]
+	if len(index.Frames) != 1 {
+		t.Fatalf("len index frames %d != %d", 1, len(index.Frames))
+	}
+}
+
+func TestClient_ExportCSV(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+
+	// Set two bits on blocks 0 & 3.
+	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
+	s := test.NewServer()
+	defer s.Close()
+	s.Handler.API.Cluster = test.NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
+	s.Handler.API.Holder = hldr.Holder
+
+	c := test.MustNewClient(s.Host(), defaultClient)
+	buf := bytes.NewBuffer([]byte{})
+	err := c.ExportCSV(context.Background(), "i", "f", pilosa.ViewStandard, 0, buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestClient_FrameViews(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+
+	// Set two bits on blocks 0 & 3.
+	hldr.MustCreateFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
+	s := test.NewServer()
+	defer s.Close()
+	s.Handler.API.Cluster = test.NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
+	s.Handler.API.Holder = hldr.Holder
+
+	c := test.MustNewClient(s.Host(), defaultClient)
+	views, err := c.FrameViews(context.Background(), "i", "f")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(views) != 1 {
+		t.Fatalf("len views %d != %d", 1, len(views))
+	}
+}
+
+func TestClient_Bits(t *testing.T) {
+	bits := pilosa.Bits{
+		pilosa.Bit{RowID: 1000, ColumnID: 100, RowKey: "rk1", ColumnKey: "ck1"},
+		pilosa.Bit{RowID: 100, ColumnID: SliceWidth + 1},
+	}
+
+	groups := bits.GroupBySlice()
+	if len(groups) != 2 {
+		t.Fatalf("len groups %d != %d", 2, len(groups))
+	}
+
+	rowKeys := bits.RowKeys()
+	targetRowKeys := []string{"rk1", ""}
+	if !reflect.DeepEqual(targetRowKeys, rowKeys) {
+		t.Fatalf("rowKeys %v != %v", targetRowKeys, rowKeys)
+	}
+
+	columnKeys := bits.ColumnKeys()
+	targetColumnKeys := []string{"ck1", ""}
+	if !reflect.DeepEqual(targetColumnKeys, columnKeys) {
+		t.Fatalf("columnKeys %v != %v", targetColumnKeys, columnKeys)
+	}
+
+	sort.Sort(bits)
+	targetSortedBits := pilosa.Bits{
+		pilosa.Bit{RowID: 100, ColumnID: SliceWidth + 1},
+		pilosa.Bit{RowID: 1000, ColumnID: 100, RowKey: "rk1", ColumnKey: "ck1"},
+	}
+	if !reflect.DeepEqual(targetSortedBits, bits) {
+		t.Fatalf("sorted bits %v != %v", targetSortedBits, bits)
+	}
+}
+
+func TestClient_FieldValues(t *testing.T) {
+	fvs := pilosa.FieldValues{
+		pilosa.FieldValue{ColumnID: 100, Value: 100},
+		pilosa.FieldValue{ColumnID: 1, Value: -100},
+	}
+
+	groups := fvs.GroupBySlice()
+	if len(groups) != 1 {
+		t.Fatalf("len groups %d != %d", 1, len(groups))
+	}
+
+	columnIDs := fvs.ColumnIDs()
+	targetColumnIDs := []uint64{100, 1}
+	if !reflect.DeepEqual(targetColumnIDs, columnIDs) {
+		t.Fatalf("columnIDs %v != %v", targetColumnIDs, columnIDs)
+	}
+
+	values := fvs.Values()
+	targetValues := []int64{100, -100}
+	if !reflect.DeepEqual(targetValues, values) {
+		t.Fatalf("values %v != %v", targetValues, values)
+	}
+
+	sort.Sort(fvs)
 }
