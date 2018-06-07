@@ -35,19 +35,16 @@ type ImportCommand struct {
 	// Destination host and port.
 	Host string `json:"host"`
 
-	// Name of the index & frame to import into.
+	// Name of the index & field to import into.
 	Index string `json:"index"`
-	Frame string `json:"frame"`
+	Field string `json:"field"`
 
-	// Options for index & frame to be created if they don't exist
+	// Options for index & field to be created if they don't exist
 	IndexOptions pilosa.IndexOptions
-	FrameOptions pilosa.FrameOptions
+	FieldOptions pilosa.FieldOptions
 
 	// CreateSchema ensures the schema exists before import
 	CreateSchema bool
-
-	// For Range-Encoded fields, name of the Field to import into.
-	Field string `json:"field"`
 
 	// Indicates that the payload should be treated as string keys.
 	StringKeys bool `json:"StringKeys"`
@@ -83,11 +80,11 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
 	// Validate arguments.
-	// Index and frame are validated early before the files are parsed.
+	// Index and field are validated early before the files are parsed.
 	if cmd.Index == "" {
 		return pilosa.ErrIndexRequired
-	} else if cmd.Frame == "" {
-		return pilosa.ErrFrameRequired
+	} else if cmd.Field == "" {
+		return pilosa.ErrFieldRequired
 	} else if len(cmd.Paths) == 0 {
 		return errors.New("path required")
 	}
@@ -105,10 +102,26 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 		}
 	}
 
+	// Determine the field type in order to correctly handle the input data.
+	fieldType := pilosa.DefaultFieldType
+	schema, err := cmd.Client.Schema(ctx)
+	if err != nil {
+		return errors.Wrap(err, "getting schema")
+	}
+	for _, index := range schema {
+		if index.Name == cmd.Index {
+			for _, field := range index.Fields {
+				if field.Name == cmd.Field {
+					fieldType = field.Options.Type
+				}
+			}
+		}
+	}
+
 	// Import each path and import by slice.
 	for _, path := range cmd.Paths {
 		logger.Printf("parsing: %s", path)
-		if err := cmd.importPath(ctx, path); err != nil {
+		if err := cmd.importPath(ctx, fieldType, path); err != nil {
 			return err
 		}
 	}
@@ -121,18 +134,18 @@ func (cmd *ImportCommand) ensureSchema(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("Error Creating Index: %s", err)
 	}
-	err = cmd.Client.EnsureFrame(ctx, cmd.Index, cmd.Frame, cmd.FrameOptions)
+	err = cmd.Client.EnsureField(ctx, cmd.Index, cmd.Field, cmd.FieldOptions)
 	if err != nil {
-		return fmt.Errorf("Error Creating Frame: %s", err)
+		return fmt.Errorf("Error Creating Field: %s", err)
 	}
 	return nil
 }
 
 // importPath parses a path into bits and imports it to the server.
-func (cmd *ImportCommand) importPath(ctx context.Context, path string) error {
-	// If a field is provided, treat the import data as values to be range-encoded.
-	if cmd.Field != "" {
-		return cmd.bufferFieldValues(ctx, path)
+func (cmd *ImportCommand) importPath(ctx context.Context, fieldType, path string) error {
+	// If fieldType is `int`, treat the import data as values to be range-encoded.
+	if fieldType == pilosa.FieldTypeInt {
+		return cmd.bufferValues(ctx, path)
 	} else {
 		if cmd.StringKeys {
 			return cmd.bufferBitsK(ctx, path)
@@ -241,7 +254,7 @@ func (cmd *ImportCommand) importBits(ctx context.Context, bits []pilosa.Bit) err
 		}
 
 		logger.Printf("importing slice: %d, n=%d", slice, len(chunk))
-		if err := cmd.Client.Import(ctx, cmd.Index, cmd.Frame, slice, chunk); err != nil {
+		if err := cmd.Client.Import(ctx, cmd.Index, cmd.Field, slice, chunk); err != nil {
 			return errors.Wrap(err, "importing")
 		}
 	}
@@ -338,15 +351,15 @@ func (cmd *ImportCommand) importBitsK(ctx context.Context, bits []pilosa.Bit) er
 	// TODO: does it help to sort the rowKeys?
 
 	logger.Printf("importing keys: n=%d", len(bits))
-	if err := cmd.Client.ImportK(ctx, cmd.Index, cmd.Frame, bits); err != nil {
+	if err := cmd.Client.ImportK(ctx, cmd.Index, cmd.Field, bits); err != nil {
 		return errors.Wrap(err, "importing keys")
 	}
 
 	return nil
 }
 
-// bufferFieldValues buffers slices of fieldValues to be imported as a batch.
-func (cmd *ImportCommand) bufferFieldValues(ctx context.Context, path string) error {
+// bufferValues buffers slices of FieldValues to be imported as a batch.
+func (cmd *ImportCommand) bufferValues(ctx context.Context, path string) error {
 	a := make([]pilosa.FieldValue, 0, cmd.BufferSize)
 
 	var r *csv.Reader
@@ -394,7 +407,7 @@ func (cmd *ImportCommand) bufferFieldValues(ctx context.Context, path string) er
 		}
 		val.ColumnID = columnID
 
-		// Parse field value.
+		// Parse FieldValue.
 		value, err := strconv.ParseInt(record[1], 10, 64)
 		if err != nil {
 			return fmt.Errorf("invalid value on row %d: %q", rnum, record[1])
@@ -403,9 +416,9 @@ func (cmd *ImportCommand) bufferFieldValues(ctx context.Context, path string) er
 
 		a = append(a, val)
 
-		// If we've reached the buffer size then import field values.
+		// If we've reached the buffer size then import FieldValues.
 		if len(a) == cmd.BufferSize {
-			if err := cmd.importFieldValues(ctx, a); err != nil {
+			if err := cmd.importValues(ctx, a); err != nil {
 				return err
 			}
 			a = a[:0]
@@ -413,29 +426,29 @@ func (cmd *ImportCommand) bufferFieldValues(ctx context.Context, path string) er
 	}
 
 	// If there are still values in the buffer then flush them.
-	if err := cmd.importFieldValues(ctx, a); err != nil {
+	if err := cmd.importValues(ctx, a); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// importFieldValues sends batches of fieldValues to the server.
-func (cmd *ImportCommand) importFieldValues(ctx context.Context, vals []pilosa.FieldValue) error {
+// importValues sends batches of FieldValues to the server.
+func (cmd *ImportCommand) importValues(ctx context.Context, vals []pilosa.FieldValue) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
 	// Group vals by slice.
 	logger.Printf("grouping %d vals", len(vals))
 	valsBySlice := pilosa.FieldValues(vals).GroupBySlice()
 
-	// Parse path into field values.
+	// Parse path into FieldValues.
 	for slice, vals := range valsBySlice {
 		if cmd.Sort {
 			sort.Sort(pilosa.FieldValues(vals))
 		}
 
 		logger.Printf("importing slice: %d, n=%d", slice, len(vals))
-		if err := cmd.Client.ImportValue(ctx, cmd.Index, cmd.Frame, cmd.Field, slice, vals); err != nil {
+		if err := cmd.Client.ImportValue(ctx, cmd.Index, cmd.Field, slice, vals); err != nil {
 			return errors.Wrap(err, "importing values")
 		}
 	}

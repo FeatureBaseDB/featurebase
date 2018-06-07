@@ -66,13 +66,13 @@ const (
 	DefaultFragmentMaxOpN = 2000
 )
 
-// Fragment represents the intersection of a frame and slice in an index.
+// Fragment represents the intersection of a field and slice in an index.
 type Fragment struct {
 	mu sync.RWMutex
 
 	// Composite identifiers
 	index string
-	frame string
+	field string
 	view  string
 	slice uint64
 
@@ -84,7 +84,7 @@ type Fragment struct {
 	opN         int // number of ops since snapshot
 
 	// Cache for row counts.
-	CacheType string // passed in by frame
+	CacheType string // passed in by field
 	cache     Cache
 	CacheSize uint32
 
@@ -106,18 +106,18 @@ type Fragment struct {
 	Logger Logger
 
 	// Row attribute storage.
-	// This is set by the parent frame unless overridden for testing.
+	// This is set by the parent field unless overridden for testing.
 	RowAttrStore AttrStore
 
 	stats StatsClient
 }
 
 // NewFragment returns a new instance of Fragment.
-func NewFragment(path, index, frame, view string, slice uint64) *Fragment {
+func NewFragment(path, index, field, view string, slice uint64) *Fragment {
 	return &Fragment{
 		path:      path,
 		index:     index,
-		frame:     frame,
+		field:     field,
 		view:      view,
 		slice:     slice,
 		CacheType: DefaultCacheType,
@@ -139,8 +139,8 @@ func (f *Fragment) CachePath() string { return f.path + CacheExt }
 // Index returns the index that the fragment was initialized with.
 func (f *Fragment) Index() string { return f.index }
 
-// Frame returns the frame the fragment was initialized with.
-func (f *Fragment) Frame() string { return f.frame }
+// Field returns the field the fragment was initialized with.
+func (f *Fragment) Field() string { return f.field }
 
 // View returns the view the fragment was initialized with.
 func (f *Fragment) View() string { return f.view }
@@ -247,7 +247,7 @@ func (f *Fragment) openStorage() error {
 
 // openCache initializes the cache from row ids persisted to disk.
 func (f *Fragment) openCache() error {
-	// Determine cache type from frame name.
+	// Determine cache type from field name.
 	switch f.CacheType {
 	case CacheTypeRanked:
 		f.cache = NewRankCache(f.CacheSize)
@@ -486,8 +486,8 @@ func (f *Fragment) bit(rowID, columnID uint64) (bool, error) {
 	return f.storage.Contains(pos), nil
 }
 
-// FieldValue uses a column of bits to read a multi-bit value.
-func (f *Fragment) FieldValue(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
+// Value uses a column of bits to read a multi-bit value.
+func (f *Fragment) Value(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -510,8 +510,8 @@ func (f *Fragment) FieldValue(columnID uint64, bitDepth uint) (value uint64, exi
 	return value, true, nil
 }
 
-// SetFieldValue uses a column of bits to set a multi-bit value.
-func (f *Fragment) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+// SetValue uses a column of bits to set a multi-bit value.
+func (f *Fragment) SetValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -541,8 +541,8 @@ func (f *Fragment) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (
 	return changed, nil
 }
 
-// importSetFieldValue is a more efficient SetFieldValue just for imports.
-func (f *Fragment) importSetFieldValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+// importSetValue is a more efficient SetValue just for imports.
+func (f *Fragment) importSetValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
 
 	for i := uint(0); i < bitDepth; i++ {
 		if value&(1<<i) != 0 {
@@ -582,9 +582,9 @@ func (f *Fragment) importSetFieldValue(columnID uint64, bitDepth uint, value uin
 	return changed, nil
 }
 
-// FieldSum returns the sum of a given field as well as the number of columns involved.
+// Sum returns the sum of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *Fragment) FieldSum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
+func (f *Fragment) Sum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
 	// Compute count based on the existence row.
 	row := f.Row(uint64(bitDepth))
 	if filter != nil {
@@ -614,9 +614,9 @@ func (f *Fragment) FieldSum(filter *Row, bitDepth uint) (sum, count uint64, err 
 	return sum, count, nil
 }
 
-// FieldMin returns the min of a given field as well as the number of columns involved.
+// Min returns the min of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *Fragment) FieldMin(filter *Row, bitDepth uint) (min, count uint64, err error) {
+func (f *Fragment) Min(filter *Row, bitDepth uint) (min, count uint64, err error) {
 
 	consider := f.Row(uint64(bitDepth))
 	if filter != nil {
@@ -647,9 +647,9 @@ func (f *Fragment) FieldMin(filter *Row, bitDepth uint) (min, count uint64, err 
 	return min, count, nil
 }
 
-// FieldMax returns the max of a given field as well as the number of columns involved.
+// Max returns the max of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *Fragment) FieldMax(filter *Row, bitDepth uint) (max, count uint64, err error) {
+func (f *Fragment) Max(filter *Row, bitDepth uint) (max, count uint64, err error) {
 
 	consider := f.Row(uint64(bitDepth))
 	if filter != nil {
@@ -678,23 +678,23 @@ func (f *Fragment) FieldMax(filter *Row, bitDepth uint) (max, count uint64, err 
 	return max, count, nil
 }
 
-// FieldRange returns bitmaps with a field value encoding matching the predicate.
-func (f *Fragment) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
+// RangeOp returns bitmaps with a bsiGroup value encoding matching the predicate.
+func (f *Fragment) RangeOp(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
 	switch op {
 	case pql.EQ:
-		return f.fieldRangeEQ(bitDepth, predicate)
+		return f.rangeEQ(bitDepth, predicate)
 	case pql.NEQ:
-		return f.fieldRangeNEQ(bitDepth, predicate)
+		return f.rangeNEQ(bitDepth, predicate)
 	case pql.LT, pql.LTE:
-		return f.fieldRangeLT(bitDepth, predicate, op == pql.LTE)
+		return f.rangeLT(bitDepth, predicate, op == pql.LTE)
 	case pql.GT, pql.GTE:
-		return f.fieldRangeGT(bitDepth, predicate, op == pql.GTE)
+		return f.rangeGT(bitDepth, predicate, op == pql.GTE)
 	default:
 		return nil, ErrInvalidRangeOperation
 	}
 }
 
-func (f *Fragment) fieldRangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
+func (f *Fragment) rangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	// Start with set of columns with values set.
 	b := f.Row(uint64(bitDepth))
 
@@ -713,12 +713,12 @@ func (f *Fragment) fieldRangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	return b, nil
 }
 
-func (f *Fragment) fieldRangeNEQ(bitDepth uint, predicate uint64) (*Row, error) {
+func (f *Fragment) rangeNEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	// Start with set of columns with values set.
 	b := f.Row(uint64(bitDepth))
 
 	// Get the equal bitmap.
-	eq, err := f.fieldRangeEQ(bitDepth, predicate)
+	eq, err := f.rangeEQ(bitDepth, predicate)
 	if err != nil {
 		return nil, err
 	}
@@ -729,7 +729,7 @@ func (f *Fragment) fieldRangeNEQ(bitDepth uint, predicate uint64) (*Row, error) 
 	return b, nil
 }
 
-func (f *Fragment) fieldRangeLT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
+func (f *Fragment) rangeLT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
 	keep := NewRow()
 
 	// Start with set of columns with values set.
@@ -777,7 +777,7 @@ func (f *Fragment) fieldRangeLT(bitDepth uint, predicate uint64, allowEquality b
 	return b, nil
 }
 
-func (f *Fragment) fieldRangeGT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
+func (f *Fragment) rangeGT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
 	b := f.Row(uint64(bitDepth))
 	keep := NewRow()
 
@@ -812,13 +812,13 @@ func (f *Fragment) fieldRangeGT(bitDepth uint, predicate uint64, allowEquality b
 	return b, nil
 }
 
-// FieldNotNull returns the not-null row (stored at bitDepth).
-func (f *Fragment) FieldNotNull(bitDepth uint) (*Row, error) {
+// NotNull returns the not-null row (stored at bitDepth).
+func (f *Fragment) NotNull(bitDepth uint) (*Row, error) {
 	return f.Row(uint64(bitDepth)), nil
 }
 
-// FieldRangeBetween returns bitmaps with a field value encoding matching any value between predicateMin and predicateMax.
-func (f *Fragment) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
+// RangeBetween returns bitmaps with a bsiGroup value encoding matching any value between predicateMin and predicateMax.
+func (f *Fragment) RangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
 	b := f.Row(uint64(bitDepth))
 	keep1 := NewRow() // GTE
 	keep2 := NewRow() // LTE
@@ -900,7 +900,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 
 	// Create a fast lookup of filter values.
 	var filters map[interface{}]struct{}
-	if opt.FilterField != "" && len(opt.FilterValues) > 0 {
+	if opt.FilterName != "" && len(opt.FilterValues) > 0 {
 		filters = make(map[interface{}]struct{})
 		for _, v := range opt.FilterValues {
 			filters[v] = struct{}{}
@@ -948,7 +948,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 				return nil, errors.Wrap(err, "getting attrs")
 			} else if attr == nil {
 				continue
-			} else if attrValue := attr[opt.FilterField]; attrValue == nil {
+			} else if attrValue := attr[opt.FilterName]; attrValue == nil {
 				continue
 			} else if _, ok := filters[attrValue]; !ok {
 				continue
@@ -1074,7 +1074,7 @@ type TopOptions struct {
 	MinThreshold uint64
 
 	// Filter field name & values.
-	FilterField       string
+	FilterName        string
 	FilterValues      []interface{}
 	TanimotoThreshold uint64
 }
@@ -1408,7 +1408,7 @@ func (f *Fragment) ImportValue(columnIDs, values []uint64, bitDepth uint) error 
 		for i := range columnIDs {
 			columnID, value := columnIDs[i], values[i]
 
-			_, err := f.importSetFieldValue(columnID, bitDepth, value)
+			_, err := f.importSetValue(columnID, bitDepth, value)
 			if err != nil {
 				return errors.Wrap(err, "setting")
 			}
@@ -1452,8 +1452,8 @@ func track(start time.Time, message string, stats StatsClient, logger Logger) {
 }
 
 func (f *Fragment) snapshot() error {
-	f.Logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.frame, f.view, f.slice)
-	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.frame, f.view, f.slice)
+	f.Logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.field, f.view, f.slice)
+	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.field, f.view, f.slice)
 	start := time.Now()
 	defer track(start, completeMessage, f.stats, f.Logger)
 
@@ -1783,7 +1783,7 @@ func (s *FragmentSyncer) SyncFragment() error {
 
 		// Retrieve remote blocks.
 		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
-		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.Index(), s.Fragment.Frame(), s.Fragment.Slice())
+		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.Index(), s.Fragment.Field(), s.Fragment.Slice())
 		if err != nil && err != ErrFragmentNotFound {
 			return errors.Wrap(err, "getting blocks")
 		}
@@ -1862,7 +1862,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		clients = append(clients, client)
 
 		// Only sync the standard block.
-		rowIDs, columnIDs, err := client.BlockData(context.Background(), f.Index(), f.Frame(), f.Slice(), id)
+		rowIDs, columnIDs, err := client.BlockData(context.Background(), f.Index(), f.Field(), f.Slice(), id)
 		if err != nil {
 			return errors.Wrap(err, "getting block")
 		}
@@ -1904,11 +1904,11 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 
 		// Only sync the standard block.
 		for j := 0; j < len(set.ColumnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/maxWrites]), "SetBit(frame=%q, row=%d, col=%d)\n", f.Frame(), set.RowIDs[j], (f.Slice()*SliceWidth)+set.ColumnIDs[j])
+			fmt.Fprintf(&(buffers[count/maxWrites]), "SetBit(field=%q, row=%d, col=%d)\n", f.Field(), set.RowIDs[j], (f.Slice()*SliceWidth)+set.ColumnIDs[j])
 			count++
 		}
 		for j := 0; j < len(clear.ColumnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/maxWrites]), "ClearBit(frame=%q, row=%d, col=%d)\n", f.Frame(), clear.RowIDs[j], (f.Slice()*SliceWidth)+clear.ColumnIDs[j])
+			fmt.Fprintf(&(buffers[count/maxWrites]), "ClearBit(field=%q, row=%d, col=%d)\n", f.Field(), clear.RowIDs[j], (f.Slice()*SliceWidth)+clear.ColumnIDs[j])
 			count++
 		}
 

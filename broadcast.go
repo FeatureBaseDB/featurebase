@@ -123,12 +123,10 @@ const (
 	MessageTypeCreateSlice = iota
 	MessageTypeCreateIndex
 	MessageTypeDeleteIndex
-	MessageTypeCreateFrame
-	MessageTypeDeleteFrame
-	MessageTypeCreateView
-	MessageTypeDeleteView
 	MessageTypeCreateField
 	MessageTypeDeleteField
+	MessageTypeCreateView
+	MessageTypeDeleteView
 	MessageTypeClusterStatus
 	MessageTypeResizeInstruction
 	MessageTypeResizeInstructionComplete
@@ -149,18 +147,14 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 		typ = MessageTypeCreateIndex
 	case *internal.DeleteIndexMessage:
 		typ = MessageTypeDeleteIndex
-	case *internal.CreateFrameMessage:
-		typ = MessageTypeCreateFrame
-	case *internal.DeleteFrameMessage:
-		typ = MessageTypeDeleteFrame
-	case *internal.CreateViewMessage:
-		typ = MessageTypeCreateView
-	case *internal.DeleteViewMessage:
-		typ = MessageTypeDeleteView
 	case *internal.CreateFieldMessage:
 		typ = MessageTypeCreateField
 	case *internal.DeleteFieldMessage:
 		typ = MessageTypeDeleteField
+	case *internal.CreateViewMessage:
+		typ = MessageTypeCreateView
+	case *internal.DeleteViewMessage:
+		typ = MessageTypeDeleteView
 	case *internal.ClusterStatus:
 		typ = MessageTypeClusterStatus
 	case *internal.ResizeInstruction:
@@ -199,18 +193,14 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 		m = &internal.CreateIndexMessage{}
 	case MessageTypeDeleteIndex:
 		m = &internal.DeleteIndexMessage{}
-	case MessageTypeCreateFrame:
-		m = &internal.CreateFrameMessage{}
-	case MessageTypeDeleteFrame:
-		m = &internal.DeleteFrameMessage{}
-	case MessageTypeCreateView:
-		m = &internal.CreateViewMessage{}
-	case MessageTypeDeleteView:
-		m = &internal.DeleteViewMessage{}
 	case MessageTypeCreateField:
 		m = &internal.CreateFieldMessage{}
 	case MessageTypeDeleteField:
 		m = &internal.DeleteFieldMessage{}
+	case MessageTypeCreateView:
+		m = &internal.CreateViewMessage{}
+	case MessageTypeDeleteView:
+		m = &internal.DeleteViewMessage{}
 	case MessageTypeClusterStatus:
 		m = &internal.ClusterStatus{}
 	case MessageTypeResizeInstruction:

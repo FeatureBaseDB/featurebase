@@ -15,28 +15,32 @@
 package pilosa
 
 import (
-	"fmt"
-	"net/http"
+	"io/ioutil"
 )
 
-// Ensure nopFileSystem implements interface.
-var _ FileSystem = &nopFileSystem{}
-
-// FileSystem represents an interface for a WebUI file system.
-type FileSystem interface {
-	New() (http.FileSystem, error)
+// mustOpenIndex returns a new, opened index at a temporary path. Panic on error.
+func mustOpenIndex() *Index {
+	path, err := ioutil.TempDir("", "pilosa-index-")
+	if err != nil {
+		panic(err)
+	}
+	index, err := NewIndex(path, "i")
+	if err != nil {
+		panic(err)
+	}
+	if err := index.Open(); err != nil {
+		panic(err)
+	}
+	return index
 }
 
-func init() {
-	NopFileSystem = &nopFileSystem{}
-}
-
-// NopFileSystem represents a FileSystem that returns an error if called.
-var NopFileSystem FileSystem
-
-type nopFileSystem struct{}
-
-// New is a no-op implementation of FileSystem New method.
-func (n *nopFileSystem) New() (http.FileSystem, error) {
-	return nil, fmt.Errorf("file system not implemented")
+// reopen closes the index and reopens it.
+func (i *Index) reopen() error {
+	if err := i.Close(); err != nil {
+		return err
+	}
+	if err := i.Open(); err != nil {
+		return err
+	}
+	return nil
 }

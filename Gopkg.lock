@@ -2,12 +2,6 @@
 
 
 [[projects]]
-  name = "github.com/BurntSushi/toml"
-  packages = ["."]
-  revision = "b26d9c308763d68093482582cea63d69be07a0f0"
-  version = "v0.3.0"
-
-[[projects]]
   branch = "master"
   name = "github.com/CAFxX/gcnotifier"
   packages = ["."]
@@ -212,13 +206,21 @@
 [[projects]]
   name = "github.com/shirou/gopsutil"
   packages = [
+    "cpu",
     "host",
     "internal/common",
     "mem",
+    "net",
     "process"
   ]
   revision = "bfe3c2e8f406bf352bc8df81f98c752224867349"
   version = "v2.17.11"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/shirou/w32"
+  packages = ["."]
+  revision = "bb4de0191aa41b5507caa14b0650cdbddcd9280b"
 
 [[projects]]
   branch = "master"
@@ -302,6 +304,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "8f633d73d966ca439d2fdf3704a41d8ea59be8ed9a2cab0ab73de4b72c5772ba"
+  inputs-digest = "325d0fb217ec7f1509186ff947e184f6c8e65941f06000eb110180e65816b1a4"
   solver-name = "gps-cdcl"
   solver-version = 1

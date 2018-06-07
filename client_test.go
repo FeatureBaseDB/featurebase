@@ -145,7 +145,7 @@ func TestClient_MultiNode(t *testing.T) {
 
 	topN := 4
 	queryRequest := &internal.QueryRequest{
-		Query:  fmt.Sprintf(`TopN(frame="%s", n=%d)`, "f", topN),
+		Query:  fmt.Sprintf(`TopN(field="%s", n=%d)`, "f", topN),
 		Remote: false,
 	}
 	result, err := client[0].Query(context.Background(), "i", queryRequest)
@@ -244,8 +244,9 @@ func TestClient_ImportValue(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	fld := pilosa.Field{
-		Name: "fld",
+	fldName := "f"
+
+	fo := pilosa.FieldOptions{
 		Type: pilosa.FieldTypeInt,
 		Min:  -100,
 		Max:  100,
@@ -253,7 +254,7 @@ func TestClient_ImportValue(t *testing.T) {
 
 	// Load bitmap into cache to ensure cache gets updated.
 	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	frame, err := index.CreateFrameIfNotExists("f", pilosa.FrameOptions{Fields: []*pilosa.Field{&fld}})
+	field, err := index.CreateFieldIfNotExists(fldName, fo)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +267,7 @@ func TestClient_ImportValue(t *testing.T) {
 
 	// Send import request.
 	c := test.MustNewClient(s.Host(), defaultClient)
-	if err := c.ImportValue(context.Background(), "i", "f", fld.Name, 0, []pilosa.FieldValue{
+	if err := c.ImportValue(context.Background(), "i", "f", 0, []pilosa.FieldValue{
 		{ColumnID: 1, Value: -10},
 		{ColumnID: 2, Value: 20},
 		{ColumnID: 3, Value: 40},
@@ -275,7 +276,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Sum.
-	sum, cnt, err := frame.FieldSum(nil, fld.Name)
+	sum, cnt, err := field.Sum(nil, fldName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,7 +285,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Min.
-	min, cnt, err := frame.FieldMin(nil, fld.Name)
+	min, cnt, err := field.Min(nil, fldName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,11 +294,11 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Min with Filter.
-	filter, err := frame.FieldRange(fld.Name, pql.GT, 40)
+	filter, err := field.Range(fldName, pql.GT, 40)
 	if err != nil {
 		t.Fatal(err)
 	}
-	min, cnt, err = frame.FieldMin(filter, fld.Name)
+	min, cnt, err = field.Min(filter, fldName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +307,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Max.
-	max, cnt, err := frame.FieldMax(nil, fld.Name)
+	max, cnt, err := field.Max(nil, fldName)
 	if err != nil {
 		t.Fatal(err)
 	}

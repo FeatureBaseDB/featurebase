@@ -17,7 +17,6 @@ package pilosa_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -32,7 +31,6 @@ import (
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
-	"github.com/pilosa/pilosa/statik"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -84,17 +82,17 @@ func TestHandler_Schema(t *testing.T) {
 	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
 
-	if f, err := i0.CreateFrameIfNotExists("f1", pilosa.FrameOptions{}); err != nil {
+	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if f, err := i1.CreateFrameIfNotExists("f0", pilosa.FrameOptions{}); err != nil {
+	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := i0.CreateFrameIfNotExists("f0", pilosa.FrameOptions{}); err != nil {
+	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -105,8 +103,8 @@ func TestHandler_Schema(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"indexes":[{"name":"i0","frames":[{"name":"f0"},{"name":"f1","views":[{"name":"standard"}]}]},{"name":"i1","frames":[{"name":"f0","views":[{"name":"standard"}]}]}]}`+"\n" {
-	} else if body := w.Body.String(); body != `{"indexes":[{"name":"i0","frames":[{"name":"f0","options":{"cacheType":"ranked","cacheSize":50000}},{"name":"f1","options":{"cacheType":"ranked","cacheSize":50000},"views":[{"name":"standard"}]}]},{"name":"i1","frames":[{"name":"f0","options":{"cacheType":"ranked","cacheSize":50000},"views":[{"name":"standard"}]}]}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"indexes":[{"name":"i0","fields":[{"name":"f0"},{"name":"f1","views":[{"name":"standard"}]}]},{"name":"i1","fields":[{"name":"f0","views":[{"name":"standard"}]}]}]}`+"\n" {
+	} else if body := w.Body.String(); body != `{"indexes":[{"name":"i0","fields":[{"name":"f0","options":{"cacheType":"ranked","cacheSize":50000}},{"name":"f1","options":{"cacheType":"ranked","cacheSize":50000},"views":[{"name":"standard"}]}]},{"name":"i1","fields":[{"name":"f0","options":{"cacheType":"ranked","cacheSize":50000},"views":[{"name":"standard"}]}]}]}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
 }
@@ -121,17 +119,17 @@ func TestHandler_Status(t *testing.T) {
 	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
 
-	if f, err := i0.CreateFrameIfNotExists("f1", pilosa.FrameOptions{}); err != nil {
+	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if f, err := i1.CreateFrameIfNotExists("f0", pilosa.FrameOptions{}); err != nil {
+	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := i0.CreateFrameIfNotExists("f0", pilosa.FrameOptions{}); err != nil {
+	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -537,7 +535,7 @@ func TestHandler_Query_Pairs_JSON(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader(`TopN(frame=x, n=2)`)))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader(`TopN(field=x, n=2)`)))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"results":[[{"id":1,"count":2},{"id":3,"count":4}]]}`+"\n" {
@@ -561,7 +559,7 @@ func TestHandler_Query_Pairs_Protobuf(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	r := test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader(`TopN(frame=x, n=2)`))
+	r := test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader(`TopN(field=x, n=2)`))
 	r.Header.Set("Accept", "application/x-protobuf")
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
@@ -612,7 +610,7 @@ func TestHandler_Query_Err_Protobuf(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	r := test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader(`TopN(frame=x, n=2)`))
+	r := test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader(`TopN(field=x, n=2)`))
 	r.Header.Set("Accept", "application/x-protobuf")
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusBadRequest {
@@ -695,12 +693,12 @@ func TestHandler_Index_Delete(t *testing.T) {
 	}
 }
 
-// Ensure handler can delete a frame.
-func TestHandler_DeleteFrame(t *testing.T) {
+// Ensure handler can delete a field.
+func TestHandler_DeleteField(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
-	if _, err := i0.CreateFrameIfNotExists("f1", pilosa.FrameOptions{}); err != nil {
+	if _, err := i0.CreateFieldIfNotExists("f1", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -708,13 +706,13 @@ func TestHandler_DeleteFrame(t *testing.T) {
 	h.API.Holder = hldr.Holder
 	h.API.Cluster = test.NewCluster(1)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i0/frame/f1", strings.NewReader("")))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i0/field/f1", strings.NewReader("")))
 	if w.Code != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
-	} else if f := hldr.Index("i0").Frame("f1"); f != nil {
-		t.Fatal("expected nil frame")
+	} else if f := hldr.Index("i0").Field("f1"); f != nil {
+		t.Fatal("expected nil field")
 	}
 }
 
@@ -767,8 +765,8 @@ func TestHandler_Index_AttrStore_Diff(t *testing.T) {
 	}
 }
 
-// Ensure the handler can return data in differing blocks for a frame.
-func TestHandler_Frame_AttrStore_Diff(t *testing.T) {
+// Ensure the handler can return data in differing blocks for a field.
+func TestHandler_Field_AttrStore_Diff(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
@@ -778,7 +776,7 @@ func TestHandler_Frame_AttrStore_Diff(t *testing.T) {
 
 	// Set attributes on the index.
 	idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	f, err := idx.CreateFrameIfNotExists("meta", pilosa.FrameOptions{})
+	f, err := idx.CreateFieldIfNotExists("meta", pilosa.FieldOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -802,7 +800,7 @@ func TestHandler_Frame_AttrStore_Diff(t *testing.T) {
 
 	// Send block checksums to determine diff.
 	resp, err := http.Post(
-		s.URL+"/index/i/frame/meta/attr/diff",
+		s.URL+"/index/i/field/meta/attr/diff",
 		"application/json",
 		strings.NewReader(`{"blocks":`+string(test.MustMarshalJSON(blks))+`}`),
 	)
@@ -815,245 +813,6 @@ func TestHandler_Frame_AttrStore_Diff(t *testing.T) {
 	if body := string(test.MustReadAll(resp.Body)); body != `{"attrs":{"1":{"bar":2,"foo":1},"200":{"snowman":"☃"}}}`+"\n" {
 		t.Fatalf("unexpected body: %s", body)
 	}
-}
-
-// Ensure the handler can create a new field on an existing frame.
-func TestHandler_Frame_AddField(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-
-	s := test.NewServer()
-	s.Handler.API.Holder = hldr.Holder
-	defer s.Close()
-
-	t.Run("OK", func(t *testing.T) {
-		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		resp, err := http.Post(
-			s.URL+"/index/i/frame/f/field/x",
-			"application/json",
-			strings.NewReader(`{"type":"int","min":100,"max":200}`),
-		)
-		if err != nil {
-			t.Fatal(err)
-		} else if err := resp.Body.Close(); err != nil {
-			t.Fatal(err)
-		} else if resp.StatusCode != http.StatusOK {
-			t.Fatalf("unexpected status code: %d", resp.StatusCode)
-		}
-
-		if field := f.Field("x"); !reflect.DeepEqual(field, &pilosa.Field{Name: "x", Type: "int", Min: 100, Max: 200}) {
-			t.Fatalf("unexpected field: %#v", field)
-		}
-	})
-
-	t.Run("ErrInvalidFieldType", func(t *testing.T) {
-		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
-			t.Fatal(err)
-		}
-
-		resp, err := http.Post(
-			s.URL+"/index/i/frame/f/field/x",
-			"application/json",
-			strings.NewReader(`{"type":"bad_type","min":100,"max":200}`),
-		)
-		if err != nil {
-			t.Fatal(err)
-		} else if body := MustReadAll(resp.Body); string(body) != `creating field: validating field: invalid field type`+"\n" {
-			t.Fatalf("unexpected body: %q", body)
-		} else if err := resp.Body.Close(); err != nil {
-			t.Fatal(err)
-		} else if resp.StatusCode != http.StatusInternalServerError {
-			t.Fatalf("unexpected status code: %d", resp.StatusCode)
-		}
-	})
-
-	t.Run("ErrInvalidFieldRange", func(t *testing.T) {
-		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{}); err != nil {
-			t.Fatal(err)
-		}
-
-		resp, err := http.Post(
-			s.URL+"/index/i/frame/f/field/x",
-			"application/json",
-			strings.NewReader(`{"type":"int","min":200,"max":100}`),
-		)
-		if err != nil {
-			t.Fatal(err)
-		} else if body := MustReadAll(resp.Body); string(body) != `creating field: validating field: invalid field range`+"\n" {
-			t.Fatalf("unexpected body: %q", body)
-		} else if err := resp.Body.Close(); err != nil {
-			t.Fatal(err)
-		} else if resp.StatusCode != http.StatusInternalServerError {
-			t.Fatalf("unexpected status code: %d", resp.StatusCode)
-		}
-	})
-
-	t.Run("ErrFieldAlreadyExists", func(t *testing.T) {
-		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		if _, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{
-			Fields: []*pilosa.Field{{Name: "x", Type: pilosa.FieldTypeInt, Min: 0, Max: 100}},
-		}); err != nil {
-			t.Fatal(err)
-		}
-
-		resp, err := http.Post(
-			s.URL+"/index/i/frame/f/field/x",
-			"application/json",
-			strings.NewReader(`{"type":"int","min":0,"max":100}`),
-		)
-		if err != nil {
-			t.Fatal(err)
-		} else if body := MustReadAll(resp.Body); string(body) != `creating field: field already exists`+"\n" {
-			t.Fatalf("unexpected body: %q", body)
-		} else if err := resp.Body.Close(); err != nil {
-			t.Fatal(err)
-		} else if resp.StatusCode != http.StatusInternalServerError {
-			t.Fatalf("unexpected status code: %d", resp.StatusCode)
-		}
-	})
-}
-
-// Ensure the handler can delete existing fields.
-func TestHandler_Frame_DeleteField(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-
-	s := test.NewServer()
-	s.Handler.API.Holder = hldr.Holder
-	defer s.Close()
-
-	t.Run("OK", func(t *testing.T) {
-		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
-		if err != nil {
-			t.Fatal(err)
-		} else if err := f.CreateField(&pilosa.Field{Name: "x", Type: pilosa.FieldTypeInt, Min: 0, Max: 100}); err != nil {
-			t.Fatal(err)
-		}
-
-		req, err := http.NewRequest("DELETE", s.URL+"/index/i/frame/f/field/x", nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		} else if err := resp.Body.Close(); err != nil {
-			t.Fatal(err)
-		} else if resp.StatusCode != http.StatusOK {
-			t.Fatalf("unexpected status code: %d", resp.StatusCode)
-		}
-
-		if field := f.Field("x"); field != nil {
-			t.Fatalf("expected nil field, got: %#v", field)
-		}
-	})
-
-	t.Run("ErrFieldNotFound", func(t *testing.T) {
-		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
-		if err != nil {
-			t.Fatal(err)
-		} else if err := f.CreateField(&pilosa.Field{Name: "x", Type: pilosa.FieldTypeInt, Min: 0, Max: 100}); err != nil {
-			t.Fatal(err)
-		}
-
-		req, err := http.NewRequest("DELETE", s.URL+"/index/i/frame/f/field/y", nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		} else if body, err := ioutil.ReadAll(resp.Body); err != nil {
-			t.Fatal(err)
-		} else if strings.TrimSpace(string(body)) != `deleting field: field not found` {
-			t.Fatalf("unexpected body: %q", body)
-		} else if err := resp.Body.Close(); err != nil {
-			t.Fatal(err)
-		} else if resp.StatusCode != http.StatusInternalServerError {
-			t.Fatalf("unexpected status code: %d", resp.StatusCode)
-		}
-	})
-}
-
-func TestHandler_Frame_GetFields(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-
-	s := test.NewServer()
-	s.Handler.API.Holder = hldr.Holder
-	defer s.Close()
-
-	t.Run("OK", func(t *testing.T) {
-		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		f, err := idx.CreateFrameIfNotExists("f", pilosa.FrameOptions{})
-		if err != nil {
-			t.Fatal(err)
-		} else if err := f.CreateField(&pilosa.Field{Name: "x", Type: pilosa.FieldTypeInt, Min: 1, Max: 100}); err != nil {
-			t.Fatal(err)
-		}
-		resp, err := http.Get(s.URL + "/index/i/frame/f/fields")
-		if err != nil {
-			t.Fatal(err)
-		} else if resp.StatusCode != http.StatusOK {
-			t.Fatalf("unexpected status code: %d", resp.StatusCode)
-		}
-
-		var fields FrameFields
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err = json.Unmarshal([]byte(body), &fields); err != nil {
-			t.Fatal(err)
-		}
-		field := fields.Fields[0]
-		if field.Name != "x" {
-			t.Fatalf("expected field's name: x, actuall name: %v", field.Name)
-		} else if field.Min != 1 {
-			t.Fatalf("expected field's min: x, actuall min: %v", field.Min)
-		} else if field.Max != 100 {
-			t.Fatalf("expected field's max: x, actuall max: %v", field.Max)
-		}
-
-	})
-
-	t.Run("ErrFrameFieldNotAllowed", func(t *testing.T) {
-		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		_, err := idx.CreateFrameIfNotExists("f1", pilosa.FrameOptions{})
-		if err != nil {
-			t.Fatalf("creating frame: %v", err)
-		}
-
-		resp, err := http.Get(s.URL + "/index/i/frame/f1/fields")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err != nil {
-			t.Fatal(err)
-		} else if resp.StatusCode != http.StatusOK {
-			t.Fatalf("unexpected status code: %d", resp.StatusCode)
-		} else if body, err := ioutil.ReadAll(resp.Body); err != nil {
-			t.Fatal(err)
-		} else if strings.TrimSpace(string(body)) == `frame fields not allowed` {
-			t.Fatalf("shouldn't get frame fields not allowed error: %q", body)
-		}
-	})
-
-}
-
-type FrameFields struct {
-	Fields []pilosa.Field
 }
 
 // Ensure the handler can retrieve the version.
@@ -1153,34 +912,6 @@ func TestHandler_RecalculateCaches(t *testing.T) {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	}
 
-}
-
-func TestHandler_WebUI(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-
-	h := test.MustNewHandler()
-	h.API.Holder = hldr.Holder
-	h.API.Cluster = test.NewCluster(1)
-	h.FileSystem = &statik.FileSystem{}
-
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/", nil))
-	if w.Code != http.StatusOK {
-		t.Fatalf("unexpected status code: %d", w.Code)
-	}
-	if !strings.Contains(w.Body.String(), "<title>Pilosa WebUI</title>") {
-		t.Fatalf("WebUI is not being served correctly.")
-	}
-
-	// If curl is the client, the response should be different
-	w = httptest.NewRecorder()
-	req := test.MustNewHTTPRequest("GET", "/", nil)
-	req.Header.Add("User-Agent", "curl/7.54.0")
-	h.ServeHTTP(w, req)
-	if !strings.Contains(w.Body.String(), "try the WebUI") {
-		t.Fatalf("WebUI is not being served correctly.")
-	}
 }
 
 func TestHandler_CORS(t *testing.T) {

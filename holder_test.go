@@ -91,7 +91,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 
-	t.Run("ErrFramePermission", func(t *testing.T) {
+	t.Run("ErrFieldPermission", func(t *testing.T) {
 		if os.Geteuid() == 0 {
 			t.Skip("Skipping permissions test since user is root.")
 		}
@@ -100,7 +100,7 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if _, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
+		} else if _, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
@@ -113,13 +113,13 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
-	t.Run("ErrFrameMetaCorrupt", func(t *testing.T) {
+	t.Run("ErrFieldOptionsCorrupt", func(t *testing.T) {
 		h := test.MustOpenHolder()
 		defer h.Close()
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if _, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
+		} else if _, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
@@ -127,17 +127,17 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open index: name=foo, err=opening frames: open frame: name=bar, err=loading meta: unmarshaling: unexpected EOF") {
+		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open index: name=foo, err=opening fields: open field: name=bar, err=loading meta: unmarshaling: unexpected EOF") {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
-	t.Run("ErrFrameAttrStoreCorrupt", func(t *testing.T) {
+	t.Run("ErrFieldAttrStoreCorrupt", func(t *testing.T) {
 		h := test.MustOpenHolder()
 		defer h.Close()
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if _, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
+		} else if _, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
@@ -145,7 +145,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open index: name=foo, err=opening frames: open frame: name=bar, err=opening attrstore: opening storage: invalid database") {
+		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open index: name=foo, err=opening fields: open field: name=bar, err=opening attrstore: opening storage: invalid database") {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -159,9 +159,9 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if frame, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
+		} else if field, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
 			t.Fatal(err)
-		} else if _, err := frame.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
+		} else if _, err := field.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
@@ -183,9 +183,9 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if frame, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
+		} else if field, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
 			t.Fatal(err)
-		} else if _, err := frame.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
+		} else if _, err := field.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
@@ -208,9 +208,9 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if frame, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
+		} else if field, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
 			t.Fatal(err)
-		} else if view, err := frame.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
+		} else if view, err := field.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
 			t.Fatal(err)
 		} else if _, err := view.SetBit(0, 0); err != nil {
 			t.Fatal(err)
@@ -231,9 +231,9 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if frame, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
+		} else if field, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
 			t.Fatal(err)
-		} else if view, err := frame.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
+		} else if view, err := field.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
 			t.Fatal(err)
 		} else if _, err := view.SetBit(0, 0); err != nil {
 			t.Fatal(err)
@@ -257,9 +257,9 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if frame, err := idx.CreateFrame("bar", pilosa.FrameOptions{}); err != nil {
+		} else if field, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
 			t.Fatal(err)
-		} else if view, err := frame.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
+		} else if view, err := field.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
 			t.Fatal(err)
 		} else if _, err := view.SetBit(0, 0); err != nil {
 			t.Fatal(err)
@@ -391,11 +391,11 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	cluster.Nodes[0].URI = test.NewURIFromHostPort("localhost", 0)
 	cluster.Nodes[1].URI = *uri
 
-	// Create frames on nodes.
+	// Create fields on nodes.
 	for _, hldr := range []*test.Holder{hldr0, hldr1} {
-		hldr.MustCreateFrameIfNotExists("i", "f")
-		hldr.MustCreateFrameIfNotExists("i", "f0")
-		hldr.MustCreateFrameIfNotExists("y", "z")
+		hldr.MustCreateFieldIfNotExists("i", "f")
+		hldr.MustCreateFieldIfNotExists("i", "f0")
+		hldr.MustCreateFieldIfNotExists("y", "z")
 	}
 
 	// Set data on the local holder.
@@ -496,11 +496,11 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 
 	cluster.Nodes[0].URI = test.NewURIFromHostPort("localhost", 0)
 
-	// Create frames on nodes.
+	// Create fields on nodes.
 	for _, hldr := range []*test.Holder{hldr0} {
-		hldr.MustCreateFrameIfNotExists("i", "f")
-		hldr.MustCreateFrameIfNotExists("i", "f0")
-		hldr.MustCreateFrameIfNotExists("y", "z")
+		hldr.MustCreateFieldIfNotExists("i", "f")
+		hldr.MustCreateFieldIfNotExists("i", "f0")
+		hldr.MustCreateFieldIfNotExists("y", "z")
 	}
 
 	// Set data on the local holder.
