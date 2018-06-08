@@ -137,7 +137,7 @@ func (f *Field) MaxSlice() uint64 {
 
 	var max uint64
 	for _, view := range f.views {
-		if viewMaxSlice := view.MaxSlice(); viewMaxSlice > max {
+		if viewMaxSlice := view.calculateMaxSlice(); viewMaxSlice > max {
 			max = viewMaxSlice
 		}
 	}
@@ -249,11 +249,11 @@ func (f *Field) openViews() error {
 
 		name := filepath.Base(fi.Name())
 		view := f.newView(f.ViewPath(name), name)
-		if err := view.Open(); err != nil {
-			return fmt.Errorf("opening view: view=%s, err=%s", view.Name(), err)
+		if err := view.open(); err != nil {
+			return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
 		}
 		view.RowAttrStore = f.rowAttrStore
-		f.views[view.Name()] = view
+		f.views[view.name] = view
 	}
 
 	return nil
@@ -369,7 +369,7 @@ func (f *Field) Close() error {
 
 	// Close all views.
 	for _, view := range f.views {
-		if err := view.Close(); err != nil {
+		if err := view.close(); err != nil {
 			return err
 		}
 	}
@@ -447,9 +447,9 @@ func (f *Field) deleteBSIGroupAndView(name string) error {
 	if view := f.views[viewName]; view != nil {
 		delete(f.views, viewName)
 
-		if err := view.Close(); err != nil {
+		if err := view.close(); err != nil {
 			return errors.Wrap(err, "closing view")
-		} else if err := os.RemoveAll(view.Path()); err != nil {
+		} else if err := os.RemoveAll(view.path); err != nil {
 			return errors.Wrap(err, "deleting directory")
 		}
 	}
@@ -538,7 +538,7 @@ func (f *Field) viewNames() []string {
 // RecalculateCaches recalculates caches on every view in the field.
 func (f *Field) RecalculateCaches() {
 	for _, view := range f.Views() {
-		view.RecalculateCaches()
+		view.recalculateCaches()
 	}
 }
 
@@ -579,11 +579,11 @@ func (f *Field) createViewIfNotExistsBase(name string) (*View, bool, error) {
 
 	view := f.newView(f.ViewPath(name), name)
 
-	if err := view.Open(); err != nil {
+	if err := view.open(); err != nil {
 		return nil, false, errors.Wrap(err, "opening view")
 	}
 	view.RowAttrStore = f.rowAttrStore
-	f.views[view.Name()] = view
+	f.views[view.name] = view
 
 	return view, true, nil
 }
@@ -606,12 +606,12 @@ func (f *Field) DeleteView(name string) error {
 	}
 
 	// Close data files before deletion.
-	if err := view.Close(); err != nil {
+	if err := view.close(); err != nil {
 		return errors.Wrap(err, "closing view")
 	}
 
 	// Delete view directory.
-	if err := os.RemoveAll(view.Path()); err != nil {
+	if err := os.RemoveAll(view.path); err != nil {
 		return errors.Wrap(err, "deleting directory")
 	}
 
@@ -656,7 +656,7 @@ func (f *Field) SetBit(name string, rowID, colID uint64, t *time.Time) (changed 
 	}
 
 	// Set non-time bit.
-	if v, err := view.SetBit(rowID, colID); err != nil {
+	if v, err := view.setBit(rowID, colID); err != nil {
 		return changed, errors.Wrap(err, "setting on view")
 	} else if v {
 		changed = v
@@ -674,7 +674,7 @@ func (f *Field) SetBit(name string, rowID, colID uint64, t *time.Time) (changed 
 			return changed, errors.Wrapf(err, "creating view %s", subname)
 		}
 
-		if c, err := view.SetBit(rowID, colID); err != nil {
+		if c, err := view.setBit(rowID, colID); err != nil {
 			return changed, errors.Wrapf(err, "setting on view %s", subname)
 		} else if c {
 			changed = true
@@ -698,7 +698,7 @@ func (f *Field) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 	}
 
 	// Clear non-time bit.
-	if v, err := view.ClearBit(rowID, colID); err != nil {
+	if v, err := view.clearBit(rowID, colID); err != nil {
 		return changed, errors.Wrap(err, "clearing on view")
 	} else if v {
 		changed = v
@@ -716,7 +716,7 @@ func (f *Field) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 			return changed, errors.Wrapf(err, "creating view %s", subname)
 		}
 
-		if c, err := view.ClearBit(rowID, colID); err != nil {
+		if c, err := view.clearBit(rowID, colID); err != nil {
 			return changed, errors.Wrapf(err, "clearing on view %s", subname)
 		} else if c {
 			changed = true

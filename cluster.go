@@ -629,7 +629,7 @@ func (c *Cluster) fragsByHost(idx *Index) fragsByHost {
 
 	for _, field := range idx.Fields() {
 		for _, view := range field.Views() {
-			fieldViews.addView(field.Name(), view.Name())
+			fieldViews.addView(field.Name(), view.name)
 
 		}
 	}
