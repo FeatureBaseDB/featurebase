@@ -332,7 +332,7 @@ func (s *Server) Open() error {
 	}
 
 	// Open Cluster management.
-	if err := s.Cluster.Open(); err != nil {
+	if err := s.Cluster.open(); err != nil {
 		return fmt.Errorf("opening Cluster: %v", err)
 	}
 
@@ -340,7 +340,7 @@ func (s *Server) Open() error {
 	if err := s.Holder.Open(); err != nil {
 		return fmt.Errorf("opening Holder: %v", err)
 	}
-	if err := s.Cluster.SetNodeState(NodeStateReady); err != nil {
+	if err := s.Cluster.setNodeState(NodeStateReady); err != nil {
 		return fmt.Errorf("setting nodeState: %v", err)
 	}
 
@@ -349,7 +349,7 @@ func (s *Server) Open() error {
 	// the cluster without waiting for data to load on the coordinator. Before
 	// this starts, the joins are queued up in the Cluster.joiningLeavingNodes
 	// buffered channel.
-	s.Cluster.ListenForJoins()
+	s.Cluster.listenForJoins()
 
 	// Start background monitoring.
 	s.wg.Add(3)
@@ -370,7 +370,7 @@ func (s *Server) Close() error {
 		s.ln.Close()
 	}
 	if s.Cluster != nil {
-		s.Cluster.Close()
+		s.Cluster.close()
 	}
 	if s.Holder != nil {
 		s.Holder.Close()
@@ -493,26 +493,26 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			return err
 		}
 	case *internal.ClusterStatus:
-		err := s.Cluster.MergeClusterStatus(obj)
+		err := s.Cluster.mergeClusterStatus(obj)
 		if err != nil {
 			return err
 		}
 	case *internal.ResizeInstruction:
-		err := s.Cluster.FollowResizeInstruction(obj)
+		err := s.Cluster.followResizeInstruction(obj)
 		if err != nil {
 			return err
 		}
 	case *internal.ResizeInstructionComplete:
-		err := s.Cluster.MarkResizeInstructionComplete(obj)
+		err := s.Cluster.markResizeInstructionComplete(obj)
 		if err != nil {
 			return err
 		}
 	case *internal.SetCoordinatorMessage:
-		s.Cluster.SetCoordinator(DecodeNode(obj.New))
+		s.Cluster.setCoordinator(DecodeNode(obj.New))
 	case *internal.UpdateCoordinatorMessage:
-		s.Cluster.UpdateCoordinator(DecodeNode(obj.New))
+		s.Cluster.updateCoordinator(DecodeNode(obj.New))
 	case *internal.NodeStateMessage:
-		err := s.Cluster.ReceiveNodeState(obj.NodeID, obj.State)
+		err := s.Cluster.receiveNodeState(obj.NodeID, obj.State)
 		if err != nil {
 			return err
 		}
@@ -650,7 +650,7 @@ func (s *Server) monitorDiagnostics() {
 	s.diagnostics.Logger = s.logger
 	s.diagnostics.SetVersion(Version)
 	s.diagnostics.Set("Host", s.URI.host)
-	s.diagnostics.Set("Cluster", strings.Join(s.Cluster.NodeIDs(), ","))
+	s.diagnostics.Set("Cluster", strings.Join(s.Cluster.nodeIDs(), ","))
 	s.diagnostics.Set("NumNodes", len(s.Cluster.Nodes))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
 	s.diagnostics.Set("NodeID", s.NodeID)

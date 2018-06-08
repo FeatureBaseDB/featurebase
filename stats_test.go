@@ -95,7 +95,7 @@ func TestStatsCount_TopN(t *testing.T) {
 
 	// Execute query.
 	called := false
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	e.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
 			if name != "TopN" {
@@ -124,7 +124,7 @@ func TestStatsCount_Bitmap(t *testing.T) {
 	hldr.SetBit("d", "f", 0, 0)
 	hldr.SetBit("d", "f", 0, 1)
 	called := false
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	e.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
 			if name != "Bitmap" {
@@ -154,7 +154,7 @@ func TestStatsCount_SetColumnAttrs(t *testing.T) {
 	hldr.SetBit("d", "f", 10, 1)
 
 	called := false
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	field := e.Holder.Field("d", "f")
 	if field == nil {
 		t.Fatal("field not found")
@@ -184,7 +184,7 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 	hldr.SetBit("d", "f", 10, 1)
 
 	called := false
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	idx := e.Holder.Index("d")
 	if idx == nil {
 		t.Fatal("idex not found")
