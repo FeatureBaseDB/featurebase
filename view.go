@@ -151,10 +151,10 @@ func (v *View) openFragments() error {
 
 		frag := v.newFragment(v.FragmentPath(slice), slice)
 		if err := frag.Open(); err != nil {
-			return fmt.Errorf("open fragment: slice=%d, err=%s", frag.Slice(), err)
+			return fmt.Errorf("open fragment: slice=%d, err=%s", frag.slice, err)
 		}
 		frag.RowAttrStore = v.RowAttrStore
-		v.fragments[frag.Slice()] = frag
+		v.fragments[frag.slice] = frag
 	}
 
 	return nil
@@ -289,18 +289,32 @@ func (v *View) DeleteFragment(slice uint64) error {
 	}
 
 	// Delete fragment file.
-	if err := os.Remove(fragment.Path()); err != nil {
+	if err := os.Remove(fragment.path); err != nil {
 		return errors.Wrap(err, "deleting fragment file")
 	}
 
 	// Delete fragment cache file.
-	if err := os.Remove(fragment.CachePath()); err != nil {
+	if err := os.Remove(fragment.cachePath()); err != nil {
 		v.Logger.Printf("no cache file to delete for slice %d", slice)
 	}
 
 	delete(v.fragments, slice)
 
 	return nil
+}
+
+// row returns a row for a slice of the view.
+func (v *View) row(rowID uint64) *Row {
+	row := NewRow()
+	for _, frag := range v.Fragments() {
+		fr := frag.row(rowID)
+		if fr == nil {
+			continue
+		}
+		row.Merge(fr)
+	}
+	return row
+
 }
 
 // SetBit sets a bit within the view.
@@ -310,7 +324,7 @@ func (v *View) SetBit(rowID, columnID uint64) (changed bool, err error) {
 	if err != nil {
 		return changed, err
 	}
-	return frag.SetBit(rowID, columnID)
+	return frag.setBit(rowID, columnID)
 }
 
 // ClearBit clears a bit within the view.
@@ -320,7 +334,7 @@ func (v *View) ClearBit(rowID, columnID uint64) (changed bool, err error) {
 	if err != nil {
 		return changed, err
 	}
-	return frag.ClearBit(rowID, columnID)
+	return frag.clearBit(rowID, columnID)
 }
 
 // value uses a column of bits to read a multi-bit value.
@@ -330,7 +344,7 @@ func (v *View) value(columnID uint64, bitDepth uint) (value uint64, exists bool,
 	if err != nil {
 		return value, exists, err
 	}
-	return frag.Value(columnID, bitDepth)
+	return frag.value(columnID, bitDepth)
 }
 
 // setValue uses a column of bits to set a multi-bit value.
@@ -340,13 +354,13 @@ func (v *View) setValue(columnID uint64, bitDepth uint, value uint64) (changed b
 	if err != nil {
 		return changed, err
 	}
-	return frag.SetValue(columnID, bitDepth, value)
+	return frag.setValue(columnID, bitDepth, value)
 }
 
 // sum returns the sum & count of a field.
 func (v *View) sum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
 	for _, f := range v.Fragments() {
-		fsum, fcount, err := f.Sum(filter, bitDepth)
+		fsum, fcount, err := f.sum(filter, bitDepth)
 		if err != nil {
 			return sum, count, err
 		}
@@ -360,7 +374,7 @@ func (v *View) sum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
 func (v *View) min(filter *Row, bitDepth uint) (min, count uint64, err error) {
 	var minHasValue bool
 	for _, f := range v.Fragments() {
-		fmin, fcount, err := f.Min(filter, bitDepth)
+		fmin, fcount, err := f.min(filter, bitDepth)
 		if err != nil {
 			return min, count, err
 		}
@@ -387,7 +401,7 @@ func (v *View) min(filter *Row, bitDepth uint) (min, count uint64, err error) {
 // max returns the max and count of a field.
 func (v *View) max(filter *Row, bitDepth uint) (max, count uint64, err error) {
 	for _, f := range v.Fragments() {
-		fmax, fcount, err := f.Max(filter, bitDepth)
+		fmax, fcount, err := f.max(filter, bitDepth)
 		if err != nil {
 			return max, count, err
 		}
@@ -403,7 +417,7 @@ func (v *View) max(filter *Row, bitDepth uint) (max, count uint64, err error) {
 func (v *View) rangeOp(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
 	r := NewRow()
 	for _, frag := range v.Fragments() {
-		other, err := frag.RangeOp(op, bitDepth, predicate)
+		other, err := frag.rangeOp(op, bitDepth, predicate)
 		if err != nil {
 			return nil, err
 		}
@@ -417,7 +431,7 @@ func (v *View) rangeOp(op pql.Token, bitDepth uint, predicate uint64) (*Row, err
 func (v *View) rangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
 	r := NewRow()
 	for _, frag := range v.Fragments() {
-		other, err := frag.RangeBetween(bitDepth, predicateMin, predicateMax)
+		other, err := frag.rangeBetween(bitDepth, predicateMin, predicateMax)
 		if err != nil {
 			return nil, err
 		}

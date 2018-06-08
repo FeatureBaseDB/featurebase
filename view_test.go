@@ -72,16 +72,6 @@ func (v *View) Reopen() error {
 	return v.Open()
 }
 
-// MustSetBits sets columns on a row. Panic on error.
-// This function does not accept a timestamp or quantum.
-func (v *View) MustSetBits(rowID uint64, columnIDs ...uint64) {
-	for _, columnID := range columnIDs {
-		if _, err := v.SetBit(rowID, columnID); err != nil {
-			panic(err)
-		}
-	}
-}
-
 // MustClearColumns clears columns on a row. Panic on error.
 func (v *View) MustClearBits(rowID uint64, columnIDs ...uint64) {
 	for _, columnID := range columnIDs {

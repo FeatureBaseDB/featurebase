@@ -26,13 +26,3 @@ type Fragment struct {
 	*pilosa.Fragment
 	RowAttrStore pilosa.AttrStore
 }
-
-// MustSetBits sets columns on a row. Panic on error.
-// This function does not accept a timestamp or quantum.
-func (f *Fragment) MustSetBits(rowID uint64, columnIDs ...uint64) {
-	for _, columnID := range columnIDs {
-		if _, err := f.SetBit(rowID, columnID); err != nil {
-			panic(err)
-		}
-	}
-}

@@ -306,7 +306,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 	cw := csv.NewWriter(w)
 
 	// Iterate over each column.
-	if err := f.ForEachBit(func(rowID, columnID uint64) error {
+	if err := f.forEachBit(func(rowID, columnID uint64) error {
 		return cw.Write([]string{
 			strconv.FormatUint(rowID, 10),
 			strconv.FormatUint(columnID, 10),
@@ -403,7 +403,7 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 	}
 
 	var resp = internal.BlockDataResponse{}
-	resp.RowIDs, resp.ColumnIDs = f.BlockData(int(req.Block))
+	resp.RowIDs, resp.ColumnIDs = f.blockData(int(req.Block))
 
 	// Encode response.
 	buf, err := proto.Marshal(&resp)

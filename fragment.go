@@ -130,27 +130,8 @@ func NewFragment(path, index, field, view string, slice uint64) *Fragment {
 	}
 }
 
-// Path returns the path the fragment was initialized with.
-func (f *Fragment) Path() string { return f.path }
-
-// CachePath returns the path to the fragment's cache data.
-func (f *Fragment) CachePath() string { return f.path + CacheExt }
-
-// Index returns the index that the fragment was initialized with.
-func (f *Fragment) Index() string { return f.index }
-
-// Field returns the field the fragment was initialized with.
-func (f *Fragment) Field() string { return f.field }
-
-// View returns the view the fragment was initialized with.
-func (f *Fragment) View() string { return f.view }
-
-// Slice returns the slice the fragment was initialized with.
-func (f *Fragment) Slice() uint64 { return f.slice }
-
-// Cache returns the fragment's cache.
-// This is not safe for concurrent use.
-func (f *Fragment) Cache() Cache { return f.cache }
+// cachePath returns the path to the fragment's cache data.
+func (f *Fragment) cachePath() string { return f.path + CacheExt }
 
 // Open opens the underlying storage.
 func (f *Fragment) Open() error {
@@ -261,7 +242,7 @@ func (f *Fragment) openCache() error {
 	}
 
 	// Read cache data from disk.
-	path := f.CachePath()
+	path := f.cachePath()
 	buf, err := ioutil.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil
@@ -342,14 +323,14 @@ func (f *Fragment) closeStorage() error {
 	return nil
 }
 
-// Row returns a row by ID.
-func (f *Fragment) Row(rowID uint64) *Row {
+// row returns a row by ID.
+func (f *Fragment) row(rowID uint64) *Row {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.row(rowID, true, true)
+	return f.unprotectedRow(rowID, true, true)
 }
 
-func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *Row {
+func (f *Fragment) unprotectedRow(rowID uint64, checkRowCache bool, updateRowCache bool) *Row {
 	if checkRowCache {
 		r, ok := f.rowCache.Fetch(rowID)
 		if ok && r != nil {
@@ -380,15 +361,15 @@ func (f *Fragment) row(rowID uint64, checkRowCache bool, updateRowCache bool) *R
 	return row
 }
 
-// SetBit sets a bit for a given column & row within the fragment.
+// setBit sets a bit for a given column & row within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
-func (f *Fragment) SetBit(rowID, columnID uint64) (changed bool, err error) {
+func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.setBit(rowID, columnID)
+	return f.unprotectedSetBit(rowID, columnID)
 }
 
-func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
+func (f *Fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err error) {
 	changed = false
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(rowID, columnID)
@@ -415,7 +396,7 @@ func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	}
 
 	// Get the row from row cache or fragment.storage.
-	row := f.row(rowID, true, true)
+	row := f.unprotectedRow(rowID, true, true)
 	row.SetBit(columnID)
 
 	// Update the cache.
@@ -432,15 +413,15 @@ func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	return changed, nil
 }
 
-// ClearBit clears a bit for a given column & row within the fragment.
+// clearBit clears a bit for a given column & row within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
-func (f *Fragment) ClearBit(rowID, columnID uint64) (bool, error) {
+func (f *Fragment) clearBit(rowID, columnID uint64) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.clearBit(rowID, columnID)
+	return f.unprotectedClearBit(rowID, columnID)
 }
 
-func (f *Fragment) clearBit(rowID, columnID uint64) (changed bool, err error) {
+func (f *Fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, err error) {
 	changed = false
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(rowID, columnID)
@@ -467,7 +448,7 @@ func (f *Fragment) clearBit(rowID, columnID uint64) (changed bool, err error) {
 	}
 
 	// Get the row from cache or fragment.storage.
-	row := f.row(rowID, true, true)
+	row := f.unprotectedRow(rowID, true, true)
 	row.ClearBit(columnID)
 
 	// Update the cache.
@@ -486,8 +467,8 @@ func (f *Fragment) bit(rowID, columnID uint64) (bool, error) {
 	return f.storage.Contains(pos), nil
 }
 
-// Value uses a column of bits to read a multi-bit value.
-func (f *Fragment) Value(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
+// value uses a column of bits to read a multi-bit value.
+func (f *Fragment) value(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -510,20 +491,20 @@ func (f *Fragment) Value(columnID uint64, bitDepth uint) (value uint64, exists b
 	return value, true, nil
 }
 
-// SetValue uses a column of bits to set a multi-bit value.
-func (f *Fragment) SetValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+// setValue uses a column of bits to set a multi-bit value.
+func (f *Fragment) setValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	for i := uint(0); i < bitDepth; i++ {
 		if value&(1<<i) != 0 {
-			if c, err := f.setBit(uint64(i), columnID); err != nil {
+			if c, err := f.unprotectedSetBit(uint64(i), columnID); err != nil {
 				return changed, err
 			} else if c {
 				changed = true
 			}
 		} else {
-			if c, err := f.clearBit(uint64(i), columnID); err != nil {
+			if c, err := f.unprotectedClearBit(uint64(i), columnID); err != nil {
 				return changed, err
 			} else if c {
 				changed = true
@@ -532,7 +513,7 @@ func (f *Fragment) SetValue(columnID uint64, bitDepth uint, value uint64) (chang
 	}
 
 	// Mark value as set.
-	if c, err := f.setBit(uint64(bitDepth), columnID); err != nil {
+	if c, err := f.unprotectedSetBit(uint64(bitDepth), columnID); err != nil {
 		return changed, errors.Wrap(err, "marking not-null")
 	} else if c {
 		changed = true
@@ -582,11 +563,11 @@ func (f *Fragment) importSetValue(columnID uint64, bitDepth uint, value uint64) 
 	return changed, nil
 }
 
-// Sum returns the sum of a given bsiGroup as well as the number of columns involved.
+// sum returns the sum of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *Fragment) Sum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
+func (f *Fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
 	// Compute count based on the existence row.
-	row := f.Row(uint64(bitDepth))
+	row := f.row(uint64(bitDepth))
 	if filter != nil {
 		count = row.IntersectionCount(filter)
 	} else {
@@ -601,7 +582,7 @@ func (f *Fragment) Sum(filter *Row, bitDepth uint) (sum, count uint64, err error
 	//   10*(2^0) + 4*(2^1) + 3*(2^2) = 30
 	//
 	for i := uint(0); i < bitDepth; i++ {
-		row := f.Row(uint64(i))
+		row := f.row(uint64(i))
 		cnt := uint64(0)
 		if filter != nil {
 			cnt = row.IntersectionCount(filter)
@@ -614,11 +595,11 @@ func (f *Fragment) Sum(filter *Row, bitDepth uint) (sum, count uint64, err error
 	return sum, count, nil
 }
 
-// Min returns the min of a given bsiGroup as well as the number of columns involved.
+// min returns the min of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *Fragment) Min(filter *Row, bitDepth uint) (min, count uint64, err error) {
+func (f *Fragment) min(filter *Row, bitDepth uint) (min, count uint64, err error) {
 
-	consider := f.Row(uint64(bitDepth))
+	consider := f.row(uint64(bitDepth))
 	if filter != nil {
 		consider = consider.Intersect(filter)
 	}
@@ -630,7 +611,7 @@ func (f *Fragment) Min(filter *Row, bitDepth uint) (min, count uint64, err error
 
 	for i := bitDepth; i > uint(0); i-- {
 		ii := i - 1 // allow for uint range: (bitDepth-1) to 0
-		row := f.Row(uint64(ii))
+		row := f.row(uint64(ii))
 
 		x := consider.Difference(row)
 		count = x.Count()
@@ -647,11 +628,11 @@ func (f *Fragment) Min(filter *Row, bitDepth uint) (min, count uint64, err error
 	return min, count, nil
 }
 
-// Max returns the max of a given bsiGroup as well as the number of columns involved.
+// max returns the max of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *Fragment) Max(filter *Row, bitDepth uint) (max, count uint64, err error) {
+func (f *Fragment) max(filter *Row, bitDepth uint) (max, count uint64, err error) {
 
-	consider := f.Row(uint64(bitDepth))
+	consider := f.row(uint64(bitDepth))
 	if filter != nil {
 		consider = consider.Intersect(filter)
 	}
@@ -663,7 +644,7 @@ func (f *Fragment) Max(filter *Row, bitDepth uint) (max, count uint64, err error
 
 	for i := bitDepth; i > uint(0); i-- {
 		ii := i - 1 // allow for uint range: (bitDepth-1) to 0
-		row := f.Row(uint64(ii))
+		row := f.row(uint64(ii))
 
 		x := row.Intersect(consider)
 		count = x.Count()
@@ -678,8 +659,8 @@ func (f *Fragment) Max(filter *Row, bitDepth uint) (max, count uint64, err error
 	return max, count, nil
 }
 
-// RangeOp returns bitmaps with a bsiGroup value encoding matching the predicate.
-func (f *Fragment) RangeOp(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
+// rangeOp returns bitmaps with a bsiGroup value encoding matching the predicate.
+func (f *Fragment) rangeOp(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
 	switch op {
 	case pql.EQ:
 		return f.rangeEQ(bitDepth, predicate)
@@ -696,11 +677,11 @@ func (f *Fragment) RangeOp(op pql.Token, bitDepth uint, predicate uint64) (*Row,
 
 func (f *Fragment) rangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	// Start with set of columns with values set.
-	b := f.Row(uint64(bitDepth))
+	b := f.row(uint64(bitDepth))
 
 	// Filter any bits that don't match the current bit value.
 	for i := int(bitDepth - 1); i >= 0; i-- {
-		row := f.Row(uint64(i))
+		row := f.row(uint64(i))
 		bit := (predicate >> uint(i)) & 1
 
 		if bit == 1 {
@@ -715,7 +696,7 @@ func (f *Fragment) rangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
 
 func (f *Fragment) rangeNEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	// Start with set of columns with values set.
-	b := f.Row(uint64(bitDepth))
+	b := f.row(uint64(bitDepth))
 
 	// Get the equal bitmap.
 	eq, err := f.rangeEQ(bitDepth, predicate)
@@ -733,12 +714,12 @@ func (f *Fragment) rangeLT(bitDepth uint, predicate uint64, allowEquality bool) 
 	keep := NewRow()
 
 	// Start with set of columns with values set.
-	b := f.Row(uint64(bitDepth))
+	b := f.row(uint64(bitDepth))
 
 	// Filter any bits that don't match the current bit value.
 	leadingZeros := true
 	for i := int(bitDepth - 1); i >= 0; i-- {
-		row := f.Row(uint64(i))
+		row := f.row(uint64(i))
 		bit := (predicate >> uint(i)) & 1
 
 		// Remove any columns with higher bits set.
@@ -778,12 +759,12 @@ func (f *Fragment) rangeLT(bitDepth uint, predicate uint64, allowEquality bool) 
 }
 
 func (f *Fragment) rangeGT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
-	b := f.Row(uint64(bitDepth))
+	b := f.row(uint64(bitDepth))
 	keep := NewRow()
 
 	// Filter any bits that don't match the current bit value.
 	for i := int(bitDepth - 1); i >= 0; i-- {
-		row := f.Row(uint64(i))
+		row := f.row(uint64(i))
 		bit := (predicate >> uint(i)) & 1
 
 		// Handle last bit differently.
@@ -812,20 +793,20 @@ func (f *Fragment) rangeGT(bitDepth uint, predicate uint64, allowEquality bool) 
 	return b, nil
 }
 
-// NotNull returns the not-null row (stored at bitDepth).
-func (f *Fragment) NotNull(bitDepth uint) (*Row, error) {
-	return f.Row(uint64(bitDepth)), nil
+// notNull returns the not-null row (stored at bitDepth).
+func (f *Fragment) notNull(bitDepth uint) (*Row, error) {
+	return f.row(uint64(bitDepth)), nil
 }
 
-// RangeBetween returns bitmaps with a bsiGroup value encoding matching any value between predicateMin and predicateMax.
-func (f *Fragment) RangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
-	b := f.Row(uint64(bitDepth))
+// rangeBetween returns bitmaps with a bsiGroup value encoding matching any value between predicateMin and predicateMax.
+func (f *Fragment) rangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
+	b := f.row(uint64(bitDepth))
 	keep1 := NewRow() // GTE
 	keep2 := NewRow() // LTE
 
 	// Filter any bits that don't match the current bit value.
 	for i := int(bitDepth - 1); i >= 0; i-- {
-		row := f.Row(uint64(i))
+		row := f.row(uint64(i))
 		bit1 := (predicateMin >> uint(i)) & 1
 		bit2 := (predicateMax >> uint(i)) & 1
 
@@ -864,12 +845,12 @@ func (f *Fragment) pos(rowID, columnID uint64) (uint64, error) {
 	if columnID < minColumnID || columnID >= minColumnID+SliceWidth {
 		return 0, errors.New("column out of bounds")
 	}
-	return Pos(rowID, columnID), nil
+	return pos(rowID, columnID), nil
 }
 
-// ForEachBit executes fn for every bit set in the fragment.
+// forEachBit executes fn for every bit set in the fragment.
 // Errors returned from fn are passed through.
-func (f *Fragment) ForEachBit(fn func(rowID, columnID uint64) error) error {
+func (f *Fragment) forEachBit(fn func(rowID, columnID uint64) error) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -886,10 +867,10 @@ func (f *Fragment) ForEachBit(fn func(rowID, columnID uint64) error) error {
 	return err
 }
 
-// Top returns the top rows from the fragment.
+// top returns the top rows from the fragment.
 // If opt.Src is specified then only rows which intersect src are returned.
 // If opt.FilterValues exist then the row attribute specified by field is matched.
-func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
+func (f *Fragment) top(opt TopOptions) ([]Pair, error) {
 	// Retrieve pairs. If no row ids specified then return from cache.
 	pairs := f.topBitmapPairs(opt.RowIDs)
 
@@ -960,7 +941,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 			// Calculate count and append.
 			count := cnt
 			if opt.Src != nil {
-				count = opt.Src.IntersectionCount(f.Row(rowID))
+				count = opt.Src.IntersectionCount(f.row(rowID))
 			}
 			if count == 0 {
 				continue
@@ -1004,7 +985,7 @@ func (f *Fragment) Top(opt TopOptions) ([]Pair, error) {
 
 		// Calculate the intersecting column count and skip if it's below our
 		// last row in our current result set.
-		count := opt.Src.IntersectionCount(f.Row(rowID))
+		count := opt.Src.IntersectionCount(f.row(rowID))
 		if count < threshold {
 			continue
 		}
@@ -1048,7 +1029,7 @@ func (f *Fragment) topBitmapPairs(rowIDs []uint64) []BitmapPair {
 			continue
 		}
 
-		row := f.Row(rowID)
+		row := f.row(rowID)
 		if row.Count() > 0 {
 			// Otherwise load from storage.
 			pairs = append(pairs, BitmapPair{
@@ -1087,13 +1068,6 @@ func (f *Fragment) Checksum() []byte {
 		h.Write(block.Checksum)
 	}
 	return h.Sum(nil)
-}
-
-// BlockN returns the number of blocks in the fragment.
-func (f *Fragment) BlockN() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return int(f.storage.Max() / (HashBlockSize * SliceWidth))
 }
 
 // InvalidateChecksums clears all cached block checksums.
@@ -1184,8 +1158,8 @@ func (f *Fragment) readContiguousChecksums(a *[]FragmentBlock, blockID int) (n i
 	}
 }
 
-// BlockData returns bits in a block as row & column ID pairs.
-func (f *Fragment) BlockData(id int) (rowIDs, columnIDs []uint64) {
+// blockData returns bits in a block as row & column ID pairs.
+func (f *Fragment) blockData(id int) (rowIDs, columnIDs []uint64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -1196,17 +1170,17 @@ func (f *Fragment) BlockData(id int) (rowIDs, columnIDs []uint64) {
 	return
 }
 
-// MergeBlock compares the block's bits and computes a diff with another set of block bits.
+// mergeBlock compares the block's bits and computes a diff with another set of block bits.
 // The state of a bit is determined by consensus from all blocks being considered.
 //
 // For example, if 3 blocks are compared and two have a set bit and one has a
 // cleared bit then the bit is considered cleared. The function returns the
 // diff per incoming block so that all can be in sync.
-func (f *Fragment) MergeBlock(id int, data []PairSet) (sets, clears []PairSet, err error) {
+func (f *Fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, err error) {
 	// Ensure that all pair sets are of equal length.
 	for i := range data {
-		if len(data[i].RowIDs) != len(data[i].ColumnIDs) {
-			return nil, nil, fmt.Errorf("pair set mismatch(idx=%d): %d != %d", i, len(data[i].RowIDs), len(data[i].ColumnIDs))
+		if len(data[i].rowIDs) != len(data[i].columnIDs) {
+			return nil, nil, fmt.Errorf("pair set mismatch(idx=%d): %d != %d", i, len(data[i].rowIDs), len(data[i].columnIDs))
 		}
 	}
 
@@ -1214,8 +1188,8 @@ func (f *Fragment) MergeBlock(id int, data []PairSet) (sets, clears []PairSet, e
 	defer f.mu.Unlock()
 
 	// Track sets and clears for all blocks (including local).
-	sets = make([]PairSet, len(data)+1)
-	clears = make([]PairSet, len(data)+1)
+	sets = make([]pairSet, len(data)+1)
+	clears = make([]pairSet, len(data)+1)
 
 	// Limit upper row/column pair.
 	maxRowID := uint64(id+1) * HashBlockSize
@@ -1231,7 +1205,7 @@ func (f *Fragment) MergeBlock(id int, data []PairSet) (sets, clears []PairSet, e
 
 	// Append buffered iterators for each incoming block.
 	for i := range data {
-		var itr Iterator = NewSliceIterator(data[i].RowIDs, data[i].ColumnIDs)
+		var itr Iterator = NewSliceIterator(data[i].rowIDs, data[i].columnIDs)
 		itr = NewLimitIterator(itr, maxRowID, maxColumnID)
 		itrs = append(itrs, NewBufIterator(itr))
 	}
@@ -1296,25 +1270,25 @@ func (f *Fragment) MergeBlock(id int, data []PairSet) (sets, clears []PairSet, e
 
 			// Append to either the set or clear diff.
 			if newValue {
-				sets[i].RowIDs = append(sets[i].RowIDs, min.rowID)
-				sets[i].ColumnIDs = append(sets[i].ColumnIDs, min.columnID)
+				sets[i].rowIDs = append(sets[i].rowIDs, min.rowID)
+				sets[i].columnIDs = append(sets[i].columnIDs, min.columnID)
 			} else {
-				clears[i].RowIDs = append(sets[i].RowIDs, min.rowID)
-				clears[i].ColumnIDs = append(sets[i].ColumnIDs, min.columnID)
+				clears[i].rowIDs = append(sets[i].rowIDs, min.rowID)
+				clears[i].columnIDs = append(sets[i].columnIDs, min.columnID)
 			}
 		}
 	}
 
 	// Set local bits.
-	for i := range sets[0].ColumnIDs {
-		if _, err := f.setBit(sets[0].RowIDs[i], (f.Slice()*SliceWidth)+sets[0].ColumnIDs[i]); err != nil {
+	for i := range sets[0].columnIDs {
+		if _, err := f.unprotectedSetBit(sets[0].rowIDs[i], (f.slice*SliceWidth)+sets[0].columnIDs[i]); err != nil {
 			return nil, nil, errors.Wrap(err, "setting")
 		}
 	}
 
 	// Clear local bits.
-	for i := range clears[0].ColumnIDs {
-		if _, err := f.clearBit(clears[0].RowIDs[i], (f.Slice()*SliceWidth)+clears[0].ColumnIDs[i]); err != nil {
+	for i := range clears[0].columnIDs {
+		if _, err := f.unprotectedClearBit(clears[0].rowIDs[i], (f.slice*SliceWidth)+clears[0].columnIDs[i]); err != nil {
 			return nil, nil, errors.Wrap(err, "clearing")
 		}
 	}
@@ -1322,9 +1296,9 @@ func (f *Fragment) MergeBlock(id int, data []PairSet) (sets, clears []PairSet, e
 	return sets[1:], clears[1:], nil
 }
 
-// Import bulk imports a set of bits and then snapshots the storage.
+// bulkImport bulk imports a set of bits and then snapshots the storage.
 // This does not affect the fragment's cache.
-func (f *Fragment) Import(rowIDs, columnIDs []uint64) error {
+func (f *Fragment) bulkImport(rowIDs, columnIDs []uint64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	// Verify that there are an equal number of row ids and column ids.
@@ -1373,7 +1347,7 @@ func (f *Fragment) Import(rowIDs, columnIDs []uint64) error {
 			// Import should ALWAYS have row() load a new row from fragment.storage
 			// because the row that's in rowCache hasn't been updated with
 			// this import's data.
-			f.cache.BulkAdd(rowID, f.row(rowID, false, false).Count())
+			f.cache.BulkAdd(rowID, f.unprotectedRow(rowID, false, false).Count())
 		}
 
 		f.cache.Invalidate()
@@ -1392,8 +1366,8 @@ func (f *Fragment) Import(rowIDs, columnIDs []uint64) error {
 	return nil
 }
 
-// ImportValue bulk imports a set of range-encoded values.
-func (f *Fragment) ImportValue(columnIDs, values []uint64, bitDepth uint) error {
+// importValue bulk imports a set of range-encoded values.
+func (f *Fragment) importValue(columnIDs, values []uint64, bitDepth uint) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	// Verify that there are an equal number of column ids and values.
@@ -1529,7 +1503,7 @@ func (f *Fragment) flushCache() error {
 	}
 
 	// Write to disk.
-	if err := ioutil.WriteFile(f.CachePath(), buf, 0666); err != nil {
+	if err := ioutil.WriteFile(f.cachePath(), buf, 0666); err != nil {
 		return errors.Wrap(err, "writing")
 	}
 
@@ -1603,7 +1577,7 @@ func (f *Fragment) writeCacheToArchive(tw *tar.Writer) error {
 	defer f.mu.Unlock()
 
 	// Read cache into buffer.
-	buf, err := ioutil.ReadFile(f.CachePath())
+	buf, err := ioutil.ReadFile(f.cachePath())
 	if os.IsNotExist(err) {
 		return nil
 	} else if err != nil {
@@ -1697,7 +1671,7 @@ func (f *Fragment) readCacheFromArchive(r io.Reader) error {
 	buf, err := ioutil.ReadAll(r)
 	if err != nil {
 		return errors.Wrap(err, "reading")
-	} else if err := ioutil.WriteFile(f.CachePath(), buf, 0666); err != nil {
+	} else if err := ioutil.WriteFile(f.cachePath(), buf, 0666); err != nil {
 		return errors.Wrap(err, "writing")
 	}
 
@@ -1762,11 +1736,11 @@ func (s *FragmentSyncer) isClosing() bool {
 	}
 }
 
-// SyncFragment compares checksums for the local and remote fragments and
+// syncFragment compares checksums for the local and remote fragments and
 // then merges any blocks which have differences.
-func (s *FragmentSyncer) SyncFragment() error {
+func (s *FragmentSyncer) syncFragment() error {
 	// Determine replica set.
-	nodes := s.Cluster.SliceNodes(s.Fragment.Index(), s.Fragment.Slice())
+	nodes := s.Cluster.SliceNodes(s.Fragment.index, s.Fragment.slice)
 	if len(nodes) == 1 {
 		return nil
 	}
@@ -1783,7 +1757,7 @@ func (s *FragmentSyncer) SyncFragment() error {
 
 		// Retrieve remote blocks.
 		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
-		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.Index(), s.Fragment.Field(), s.Fragment.Slice())
+		blocks, err := client.FragmentBlocks(context.Background(), s.Fragment.index, s.Fragment.field, s.Fragment.slice)
 		if err != nil && err != ErrFragmentNotFound {
 			return errors.Wrap(err, "getting blocks")
 		}
@@ -1846,9 +1820,9 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 	f := s.Fragment
 
 	// Read pairs from each remote block.
-	var pairSets []PairSet
+	var pairSets []pairSet
 	var clients []InternalClient
-	for _, node := range s.Cluster.SliceNodes(f.Index(), f.Slice()) {
+	for _, node := range s.Cluster.SliceNodes(f.index, f.slice) {
 		if s.Node.ID == node.ID {
 			continue
 		}
@@ -1862,14 +1836,14 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		clients = append(clients, client)
 
 		// Only sync the standard block.
-		rowIDs, columnIDs, err := client.BlockData(context.Background(), f.Index(), f.Field(), f.Slice(), id)
+		rowIDs, columnIDs, err := client.BlockData(context.Background(), f.index, f.field, f.slice, id)
 		if err != nil {
 			return errors.Wrap(err, "getting block")
 		}
 
-		pairSets = append(pairSets, PairSet{
-			ColumnIDs: columnIDs,
-			RowIDs:    rowIDs,
+		pairSets = append(pairSets, pairSet{
+			columnIDs: columnIDs,
+			rowIDs:    rowIDs,
 		})
 	}
 
@@ -1879,7 +1853,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 	}
 
 	// Merge blocks together.
-	sets, clears, err := f.MergeBlock(id, pairSets)
+	sets, clears, err := f.mergeBlock(id, pairSets)
 	if err != nil {
 		return errors.Wrap(err, "merging")
 	}
@@ -1890,12 +1864,12 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		count := 0
 
 		// Ignore if there are no differences.
-		if len(set.ColumnIDs) == 0 && len(clear.ColumnIDs) == 0 {
+		if len(set.columnIDs) == 0 && len(clear.columnIDs) == 0 {
 			continue
 		}
 
 		// Generate query with sets & clears, and group the requests to not exceed MaxWritesPerRequest.
-		total := len(set.ColumnIDs) + len(clear.ColumnIDs)
+		total := len(set.columnIDs) + len(clear.columnIDs)
 		maxWrites := s.Cluster.MaxWritesPerRequest
 		if maxWrites <= 0 {
 			maxWrites = 5000
@@ -1903,12 +1877,12 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		buffers := make([]bytes.Buffer, int(math.Ceil(float64(total)/float64(maxWrites))))
 
 		// Only sync the standard block.
-		for j := 0; j < len(set.ColumnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/maxWrites]), "SetBit(field=%q, row=%d, col=%d)\n", f.Field(), set.RowIDs[j], (f.Slice()*SliceWidth)+set.ColumnIDs[j])
+		for j := 0; j < len(set.columnIDs); j++ {
+			fmt.Fprintf(&(buffers[count/maxWrites]), "SetBit(field=%q, row=%d, col=%d)\n", f.field, set.rowIDs[j], (f.slice*SliceWidth)+set.columnIDs[j])
 			count++
 		}
-		for j := 0; j < len(clear.ColumnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/maxWrites]), "ClearBit(field=%q, row=%d, col=%d)\n", f.Field(), clear.RowIDs[j], (f.Slice()*SliceWidth)+clear.ColumnIDs[j])
+		for j := 0; j < len(clear.columnIDs); j++ {
+			fmt.Fprintf(&(buffers[count/maxWrites]), "ClearBit(field=%q, row=%d, col=%d)\n", f.field, clear.rowIDs[j], (f.slice*SliceWidth)+clear.columnIDs[j])
 			count++
 		}
 
@@ -1924,7 +1898,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 				Query:  buffers[k].String(),
 				Remote: true,
 			}
-			_, err := clients[i].Query(context.Background(), f.Index(), queryRequest)
+			_, err := clients[i].Query(context.Background(), f.index, queryRequest)
 			if err != nil {
 				return errors.Wrap(err, "executing")
 			}
@@ -1942,10 +1916,10 @@ func madvise(b []byte, advice int) (err error) {
 	return
 }
 
-// PairSet is a list of equal length row and column id lists.
-type PairSet struct {
-	RowIDs    []uint64
-	ColumnIDs []uint64
+// pairSet is a list of equal length row and column id lists.
+type pairSet struct {
+	rowIDs    []uint64
+	columnIDs []uint64
 }
 
 // byteSlicesEqual returns true if all slices are equal.
@@ -1962,7 +1936,7 @@ func byteSlicesEqual(a [][]byte) bool {
 	return true
 }
 
-// Pos returns the row position of a row/column pair.
-func Pos(rowID, columnID uint64) uint64 {
+// pos returns the row position of a row/column pair.
+func pos(rowID, columnID uint64) uint64 {
 	return (rowID * SliceWidth) + (columnID % SliceWidth)
 }

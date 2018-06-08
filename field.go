@@ -620,6 +620,28 @@ func (f *Field) DeleteView(name string) error {
 	return nil
 }
 
+// Row returns a row of the standard view.
+func (f *Field) Row(rowID uint64) (*Row, error) {
+	if f.Type() != FieldTypeSet {
+		return nil, errors.Errorf("row method unsupported for field type: %s", f.Type())
+	}
+	view := f.View(ViewStandard)
+	if view == nil {
+		return nil, ErrInvalidView
+	}
+	return view.row(rowID), nil
+}
+
+// ViewRow returns a row for a view and slice.
+// TODO: unexport this with views (it's only used in tests).
+func (f *Field) ViewRow(viewName string, rowID uint64) (*Row, error) {
+	view := f.View(viewName)
+	if view == nil {
+		return nil, ErrInvalidView
+	}
+	return view.row(rowID), nil
+}
+
 // SetBit sets a bit on a view within the field.
 func (f *Field) SetBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
 	// Validate view name.
@@ -905,7 +927,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 			return errors.Wrap(err, "creating view")
 		}
 
-		if err := frag.Import(data.RowIDs, data.ColumnIDs); err != nil {
+		if err := frag.bulkImport(data.RowIDs, data.ColumnIDs); err != nil {
 			return err
 		}
 	}
@@ -962,7 +984,7 @@ func (f *Field) ImportValue(columnIDs []uint64, values []int64) error {
 			baseValues[i] = uint64(value - bsig.Min)
 		}
 
-		if err := frag.ImportValue(data.ColumnIDs, baseValues, bsig.BitDepth()); err != nil {
+		if err := frag.importValue(data.ColumnIDs, baseValues, bsig.BitDepth()); err != nil {
 			return err
 		}
 	}
