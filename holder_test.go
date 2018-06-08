@@ -210,9 +210,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		} else if field, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
 			t.Fatal(err)
-		} else if view, err := field.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
-			t.Fatal(err)
-		} else if _, err := view.SetBit(0, 0); err != nil {
+		} else if _, err := field.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
@@ -233,9 +231,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		} else if field, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
 			t.Fatal(err)
-		} else if view, err := field.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
-			t.Fatal(err)
-		} else if _, err := view.SetBit(0, 0); err != nil {
+		} else if _, err := field.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
@@ -261,7 +257,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		} else if view, err := field.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
 			t.Fatal(err)
-		} else if _, err := view.SetBit(0, 0); err != nil {
+		} else if _, err := field.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
 			t.Fatal(err)
 		} else if err := view.Fragment(0).FlushCache(); err != nil {
 			t.Fatal(err)
@@ -400,7 +396,8 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 
 	hldr0.SetBit("i", "f0", 9, SliceWidth+5)
 
-	hldr0.MustCreateFragmentIfNotExists("y", "z", pilosa.ViewStandard, 0)
+	// Set a bit to create the fragment.
+	hldr0.SetBit("y", "z", 0, 0)
 
 	// Set data on the remote holder.
 	hldr1.SetBit("i", "f", 0, 4000)
