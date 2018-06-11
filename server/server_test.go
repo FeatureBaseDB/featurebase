@@ -21,7 +21,6 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"reflect"
-	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -261,21 +260,6 @@ func tempMkdir(t *testing.T) string {
 		t.Fatalf("failed to create test directory: %s", err)
 	}
 	return dir
-}
-
-// Ensure the file handle count is working
-func TestCountOpenFiles(t *testing.T) {
-	// Windows is not supported yet
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping unsupported CountOpenFiles test on Windows.")
-	}
-	count, err := pilosa.CountOpenFiles()
-	if err != nil {
-		t.Errorf("CountOpenFiles failed: %s", err)
-	}
-	if count == 0 {
-		t.Error("CountOpenFiles returned invalid value 0.")
-	}
 }
 
 func TestMain_RecalculateHashes(t *testing.T) {
