@@ -48,22 +48,20 @@ const (
 	// SliceWidth is the number of column IDs in a slice.
 	SliceWidth = 1048576
 
-	// SnapshotExt is the file extension used for an in-process snapshot.
-	SnapshotExt = ".snapshotting"
+	// snapshotExt is the file extension used for an in-process snapshot.
+	snapshotExt = ".snapshotting"
 
-	// CopyExt is the file extension used for the temp file used while copying.
-	CopyExt = ".copying"
+	// copyExt is the file extension used for the temp file used while copying.
+	copyExt = ".copying"
 
-	// CacheExt is the file extension for persisted cache ids.
-	CacheExt = ".cache"
+	// cacheExt is the file extension for persisted cache ids.
+	cacheExt = ".cache"
 
 	// HashBlockSize is the number of rows in a merkle hash block.
 	HashBlockSize = 100
-)
 
-const (
-	// DefaultFragmentMaxOpN is the default value for Fragment.MaxOpN.
-	DefaultFragmentMaxOpN = 2000
+	// defaultFragmentMaxOpN is the default value for Fragment.MaxOpN.
+	defaultFragmentMaxOpN = 2000
 )
 
 // Fragment represents the intersection of a field and slice in an index.
@@ -120,18 +118,18 @@ func NewFragment(path, index, field, view string, slice uint64) *Fragment {
 		field:     field,
 		view:      view,
 		slice:     slice,
-		CacheType: DefaultCacheType,
-		CacheSize: DefaultCacheSize,
+		CacheType: defaultCacheType,
+		CacheSize: defaultCacheSize,
 
 		Logger: NopLogger,
-		MaxOpN: DefaultFragmentMaxOpN,
+		MaxOpN: defaultFragmentMaxOpN,
 
 		stats: NopStatsClient,
 	}
 }
 
 // cachePath returns the path to the fragment's cache data.
-func (f *Fragment) cachePath() string { return f.path + CacheExt }
+func (f *Fragment) cachePath() string { return f.path + cacheExt }
 
 // Open opens the underlying storage.
 func (f *Fragment) Open() error {
@@ -1432,7 +1430,7 @@ func (f *Fragment) snapshot() error {
 	defer track(start, completeMessage, f.stats, f.Logger)
 
 	// Create a temporary file to snapshot to.
-	snapshotPath := f.path + SnapshotExt
+	snapshotPath := f.path + snapshotExt
 	file, err := os.Create(snapshotPath)
 	if err != nil {
 		return fmt.Errorf("create snapshot file: %s", err)
@@ -1636,7 +1634,7 @@ func (f *Fragment) ReadFrom(r io.Reader) (n int64, err error) {
 
 func (f *Fragment) readStorageFromArchive(r io.Reader) error {
 	// Create a temporary file to copy into.
-	path := f.path + CopyExt
+	path := f.path + copyExt
 	file, err := os.Create(path)
 	if err != nil {
 		return errors.Wrap(err, "creating directory")
