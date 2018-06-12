@@ -31,9 +31,12 @@ item <- ( 'null' { p.addVal(nil) }
          / < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(buffer[begin:end]) }
          / < '-'? '.'[0-9]+ > { p.addNumVal(buffer[begin:end]) }
          / < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > { p.addVal(buffer[begin:end]) }
-         / '"' < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > '"' { p.addVal(buffer[begin:end]) }
-         / '\'' < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > '\'' { p.addVal(buffer[begin:end]) }
+         / '"' < doublequotedstring > '"' { p.addVal(buffer[begin:end]) }
+         / '\'' < singlequotedstring > '\'' { p.addVal(buffer[begin:end]) }
          )
+
+doublequotedstring <- ( [^"\\\n] / '\\n' / '\\\"' / '\\\'' / '\\\\' )*
+singlequotedstring <- ( [^'\\\n] / '\\n' / '\\\"' / '\\\'' / '\\\\' )*
 
 field <- < [[A-Z]] ( [[A-Z]] / [0-9] / '_' )* > { p.addField(buffer[begin:end]) }
 close <- ')' sp
