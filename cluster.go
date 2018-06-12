@@ -266,6 +266,8 @@ type Cluster struct {
 
 	//
 	RemoteClient *http.Client
+
+	InternalClient InternalClient
 }
 
 // NewCluster returns a new instance of Cluster with defaults.
@@ -280,6 +282,8 @@ func NewCluster() *Cluster {
 		jobs:                make(map[int64]*ResizeJob),
 		closing:             make(chan struct{}),
 		joining:             make(chan struct{}),
+
+		InternalClient: NewNopInternalClient(),
 
 		Logger: NopLogger,
 	}
@@ -1230,9 +1234,6 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 				return errors.Wrap(err, "applying schema")
 			}
 
-			// Create a client for calling remote nodes.
-			client := NewInternalHTTPClientFromURI(&c.Node.URI, c.RemoteClient) // TODO: ClientOptions
-
 			// Request each source file in ResizeSources.
 			for _, src := range instr.Sources {
 				c.Logger.Printf("get slice %d for index %s from host %s", src.Slice, src.Index, src.Node.URI)
@@ -1259,7 +1260,7 @@ func (c *Cluster) FollowResizeInstruction(instr *internal.ResizeInstruction) err
 
 				// Stream slice from remote node.
 				c.Logger.Printf("retrieve slice %d for index %s from host %s", src.Slice, src.Index, src.Node.URI)
-				rd, err := client.RetrieveSliceFromURI(context.Background(), src.Index, src.Field, src.Slice, srcURI)
+				rd, err := c.InternalClient.RetrieveSliceFromURI(context.Background(), src.Index, src.Field, src.Slice, srcURI)
 				if err != nil {
 					// For now it is an acceptable error if the fragment is not found
 					// on the remote node. This occurs when a slice has been skipped and

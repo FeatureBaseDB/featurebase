@@ -59,7 +59,7 @@ type Server struct {
 	executor    *Executor
 
 	// External
-	handler           *Handler
+	handler           Handlerer
 	Broadcaster       Broadcaster
 	BroadcastReceiver BroadcastReceiver
 	Gossiper          Gossiper
@@ -127,7 +127,7 @@ func OptServerLongQueryTime(dur time.Duration) ServerOption {
 	}
 }
 
-func OptServerHandler(h *Handler) ServerOption {
+func OptServerHandler(h Handlerer) ServerOption {
 	return func(s *Server) error {
 		s.handler = h
 		return nil
@@ -162,12 +162,20 @@ func OptServerGCNotifier(gcn GCNotifier) ServerOption {
 	}
 }
 
+// TODO: Remove RemoteClient
 func OptServerRemoteClient(c *http.Client) ServerOption {
 	return func(s *Server) error {
-		s.executor = NewExecutor(c)
 		s.remoteClient = c
-		s.defaultClient = NewInternalHTTPClientFromURI(nil, c)
 		s.Cluster.RemoteClient = c
+		return nil
+	}
+}
+
+func OptServerInternalClient(c InternalClient) ServerOption {
+	return func(s *Server) error {
+		s.executor = NewExecutor(ExecutorOptInternalQueryClient(c))
+		s.defaultClient = c
+		s.Cluster.InternalClient = c
 		return nil
 	}
 }
@@ -203,15 +211,15 @@ func OptServerURI(uri *URI) ServerOption {
 
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
-	handler, err := NewHandler()
-	if err != nil {
-		return nil, errors.Wrap(err, "initializing handler")
-	}
+	//handler, err := NewNopHandler()
+	//if err != nil {
+	//	return nil, errors.Wrap(err, "initializing handler")
+	//}
 	s := &Server{
-		closing:           make(chan struct{}),
-		Cluster:           NewCluster(),
-		Holder:            NewHolder(),
-		handler:           handler,
+		closing: make(chan struct{}),
+		Cluster: NewCluster(),
+		Holder:  NewHolder(),
+		//handler:           handler,
 		Broadcaster:       NopBroadcaster,
 		BroadcastReceiver: NopBroadcastReceiver,
 		diagnostics:       NewDiagnosticsCollector(DefaultDiagnosticServer),
@@ -268,7 +276,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.executor.Node = node
 	s.executor.Cluster = s.Cluster
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
-	s.handler.API.Executor = s.executor
+	s.handler.GetAPI().Executor = s.executor
 
 	return s, nil
 }
@@ -300,11 +308,12 @@ func (s *Server) Open() error {
 	s.Cluster.MaxWritesPerRequest = s.maxWritesPerRequest
 
 	// Initialize HTTP handler.
-	s.handler.API.Holder = s.Holder
-	s.handler.API.Broadcaster = s.Broadcaster
-	s.handler.API.BroadcastHandler = s
-	s.handler.API.StatusHandler = s
-	s.handler.API.Cluster = s.Cluster
+	api := s.handler.GetAPI()
+	api.Holder = s.Holder
+	api.Broadcaster = s.Broadcaster
+	api.BroadcastHandler = s
+	api.StatusHandler = s
+	api.Cluster = s.Cluster
 
 	// Initialize Holder.
 	s.Holder.Broadcaster = s.Broadcaster

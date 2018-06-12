@@ -88,17 +88,17 @@ type ColumnAttrSet struct {
 	Attrs map[string]interface{} `json:"attrs,omitempty"`
 }
 
-// encodeColumnAttrSets converts a into its internal representation.
-func encodeColumnAttrSets(a []*ColumnAttrSet) []*internal.ColumnAttrSet {
+// EncodeColumnAttrSets converts a into its internal representation.
+func EncodeColumnAttrSets(a []*ColumnAttrSet) []*internal.ColumnAttrSet {
 	other := make([]*internal.ColumnAttrSet, len(a))
 	for i := range a {
-		other[i] = encodeColumnAttrSet(a[i])
+		other[i] = EncodeColumnAttrSet(a[i])
 	}
 	return other
 }
 
-// encodeColumnAttrSet converts set into its internal representation.
-func encodeColumnAttrSet(set *ColumnAttrSet) *internal.ColumnAttrSet {
+// EncodeColumnAttrSet converts set into its internal representation.
+func EncodeColumnAttrSet(set *ColumnAttrSet) *internal.ColumnAttrSet {
 	return &internal.ColumnAttrSet{
 		ID:    set.ID,
 		Attrs: encodeAttrs(set.Attrs),

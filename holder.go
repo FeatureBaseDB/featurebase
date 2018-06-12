@@ -662,11 +662,9 @@ func (s *HolderSyncer) syncIndex(index string) error {
 
 	// Sync with every other host.
 	for _, node := range Nodes(s.Cluster.Nodes).FilterID(s.Node.ID) {
-		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
-
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
-		m, err := client.ColumnAttrDiff(context.Background(), index, blks)
+		m, err := s.Cluster.InternalClient.ColumnAttrDiff(context.Background(), &node.URI, index, blks)
 		if err != nil {
 			return errors.Wrap(err, "getting differing blocks")
 		} else if len(m) == 0 {
@@ -708,11 +706,9 @@ func (s *HolderSyncer) syncField(index, name string) error {
 
 	// Sync with every other host.
 	for _, node := range Nodes(s.Cluster.Nodes).FilterID(s.Node.ID) {
-		client := NewInternalHTTPClientFromURI(&node.URI, s.RemoteClient)
-
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
-		m, err := client.RowAttrDiff(context.Background(), index, name, blks)
+		m, err := s.Cluster.InternalClient.RowAttrDiff(context.Background(), &node.URI, index, name, blks)
 		if err == ErrFieldNotFound {
 			continue // field not created remotely yet, skip
 		} else if err != nil {

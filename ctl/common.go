@@ -17,7 +17,7 @@ package ctl
 import (
 	"crypto/tls"
 
-	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -37,7 +37,7 @@ func SetTLSConfig(flags *pflag.FlagSet, certificatePath *string, certificateKeyP
 }
 
 // CommandClient returns a pilosa.InternalHTTPClient for the command
-func CommandClient(cmd CommandWithTLSSupport) (*pilosa.InternalHTTPClient, error) {
+func CommandClient(cmd CommandWithTLSSupport) (*http.InternalHTTPClient, error) {
 	tlsConfig := cmd.TLSConfiguration()
 	var TLSConfig *tls.Config
 	if tlsConfig.CertificatePath != "" && tlsConfig.CertificateKeyPath != "" {
@@ -50,7 +50,7 @@ func CommandClient(cmd CommandWithTLSSupport) (*pilosa.InternalHTTPClient, error
 			InsecureSkipVerify: tlsConfig.SkipVerify,
 		}
 	}
-	client, err := pilosa.NewInternalHTTPClient(cmd.TLSHost(), server.GetHTTPClient(TLSConfig))
+	client, err := http.NewInternalHTTPClient(cmd.TLSHost(), http.GetHTTPClient(TLSConfig))
 	if err != nil {
 		return nil, errors.Wrap(err, "getting internal client")
 	}

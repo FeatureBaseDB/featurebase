@@ -29,6 +29,7 @@ import (
 
 	"github.com/pelletier/go-toml"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
@@ -44,7 +45,7 @@ func TestMain_Set_Quick(t *testing.T) {
 		defer m.Close()
 
 		// Create client.
-		client, err := pilosa.NewInternalHTTPClient(m.Server.URI.HostPort(), server.GetHTTPClient(nil))
+		client, err := http.NewInternalHTTPClient(m.Server.URI.HostPort(), http.GetHTTPClient(nil))
 		if err != nil {
 			t.Fatal(err)
 		}

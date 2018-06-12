@@ -19,25 +19,26 @@ import (
 	"encoding/json"
 	"io"
 	"io/ioutil"
-	"net/http"
+	gohttp "net/http"
 	"net/http/httptest"
 	"net/url"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 )
 
 // Handler represents a test wrapper for pilosa.Handler.
 type Handler struct {
-	*pilosa.Handler
+	*http.Handler
 	Executor HandlerExecutor
 }
 
 // NewHandler returns a new instance of Handler.
-func NewHandler(opts ...pilosa.HandlerOption) (*Handler, error) {
-	handler, err := pilosa.NewHandler(opts...)
+func NewHandler(opts ...http.HandlerOption) (*Handler, error) {
+	handler, err := http.NewHandler(opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +56,7 @@ func NewHandler(opts ...pilosa.HandlerOption) (*Handler, error) {
 }
 
 // MustNewHandler returns a new instance of Handler.
-func MustNewHandler(opts ...pilosa.HandlerOption) *Handler {
+func MustNewHandler(opts ...http.HandlerOption) *Handler {
 	h, err := NewHandler(opts...)
 	if err != nil {
 		panic(err)
@@ -145,8 +146,8 @@ func MustParseURLHost(rawurl string) string {
 }
 
 // MustNewHTTPRequest creates a new HTTP request. Panic on error.
-func MustNewHTTPRequest(method, urlStr string, body io.Reader) *http.Request {
-	req, err := http.NewRequest(method, urlStr, body)
+func MustNewHTTPRequest(method, urlStr string, body io.Reader) *gohttp.Request {
+	req, err := gohttp.NewRequest(method, urlStr, body)
 	if err != nil {
 		panic(err)
 	}

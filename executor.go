@@ -17,7 +17,6 @@ package pilosa
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"sort"
 	"time"
 
@@ -47,17 +46,33 @@ type Executor struct {
 	Cluster *Cluster
 
 	// Client used for remote requests.
-	client InternalClient
+	client InternalQueryClient
 
 	// Maximum number of SetBit() or ClearBit() commands per request.
 	MaxWritesPerRequest int
 }
 
-// NewExecutor returns a new instance of Executor.
-func NewExecutor(remoteClient *http.Client) *Executor {
-	return &Executor{
-		client: NewInternalHTTPClientFromURI(nil, remoteClient),
+type ExecutorOpt func(e *Executor) error
+
+func ExecutorOptInternalQueryClient(c InternalQueryClient) ExecutorOpt {
+	return func(e *Executor) error {
+		e.client = c
+		return nil
 	}
+}
+
+// NewExecutor returns a new instance of Executor.
+func NewExecutor(opts ...ExecutorOpt) *Executor {
+	e := &Executor{
+		client: NewNopInternalQueryClient(),
+	}
+	for _, opt := range opts {
+		err := opt(e)
+		if err != nil {
+			panic(err)
+		}
+	}
+	return e
 }
 
 // Execute executes a PQL query.
@@ -1380,7 +1395,7 @@ func (e *Executor) remoteExec(ctx context.Context, node *Node, index string, q *
 		case "SetRowAttrs":
 		case "SetColumnAttrs":
 		default:
-			v, err = decodeRow(pb.Results[i].GetRow()), nil
+			v, err = DecodeRow(pb.Results[i].GetRow()), nil
 		}
 		if err != nil {
 			return nil, err
@@ -1619,7 +1634,7 @@ func (vc *ValCount) Add(other ValCount) ValCount {
 	}
 }
 
-func encodeValCount(vc ValCount) *internal.ValCount {
+func EncodeValCount(vc ValCount) *internal.ValCount {
 	return &internal.ValCount{
 		Val:   vc.Val,
 		Count: vc.Count,

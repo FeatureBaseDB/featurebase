@@ -15,12 +15,12 @@
 package test
 
 import (
-	"net/http"
+	gohttp "net/http"
 	"strings"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/pql"
-	"github.com/pilosa/pilosa/server"
 )
 
 // Executor represents a test wrapper for pilosa.Executor.
@@ -28,16 +28,17 @@ type Executor struct {
 	*pilosa.Executor
 }
 
-var remoteClient *http.Client
+var remoteClient *gohttp.Client
 
 func init() {
-	remoteClient = server.GetHTTPClient(nil)
+	remoteClient = http.GetHTTPClient(nil)
 }
 
 // NewExecutor returns a new instance of Executor.
 // The executor always matches the uri of the first cluster node.
 func NewExecutor(holder *pilosa.Holder, cluster *pilosa.Cluster) *Executor {
-	executor := pilosa.NewExecutor(remoteClient)
+	client := http.NewInternalHTTPClientFromURI(nil, remoteClient)
+	executor := pilosa.NewExecutor(pilosa.ExecutorOptInternalQueryClient(client))
 	e := &Executor{Executor: executor}
 	e.Holder = holder
 	e.Cluster = cluster

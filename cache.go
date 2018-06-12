@@ -409,7 +409,7 @@ func (p Pairs) String() string {
 	return buf.String()
 }
 
-func encodePairs(a Pairs) []*internal.Pair {
+func EncodePairs(a Pairs) []*internal.Pair {
 	other := make([]*internal.Pair, len(a))
 	for i := range a {
 		other[i] = encodePair(a[i])

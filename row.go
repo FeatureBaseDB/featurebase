@@ -261,8 +261,8 @@ func (r *Row) Columns() []uint64 {
 	return a
 }
 
-// encodeRow converts r into its internal representation.
-func encodeRow(r *Row) *internal.Row {
+// EncodeRow converts r into its internal representation.
+func EncodeRow(r *Row) *internal.Row {
 	if r == nil {
 		return nil
 	}
@@ -273,8 +273,8 @@ func encodeRow(r *Row) *internal.Row {
 	}
 }
 
-// decodeRow converts r from its internal representation.
-func decodeRow(pr *internal.Row) *Row {
+// DecodeRow converts r from its internal representation.
+func DecodeRow(pr *internal.Row) *Row {
 	if pr == nil {
 		return nil
 	}

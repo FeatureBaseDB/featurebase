@@ -25,7 +25,6 @@ import (
 	"log"
 	"math/rand"
 	"net"
-	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -39,6 +38,7 @@ import (
 	"github.com/pilosa/pilosa/gcnotify"
 	"github.com/pilosa/pilosa/gopsutil"
 	"github.com/pilosa/pilosa/gossip"
+	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/statsd"
 	"github.com/pkg/errors"
 )
@@ -164,13 +164,17 @@ func (m *Command) SetupServer() error {
 	}
 	m.logger.Printf("%s %s, build time %s\n", productName, pilosa.Version, pilosa.BuildTime)
 
-	handler, err := pilosa.NewHandler(pilosa.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins))
+	api := pilosa.NewAPI()
+	api.Logger = m.logger
+
+	handler, err := http.NewHandler(
+		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
+		http.OptHandlerAPI(api),
+		http.OptHandlerLogger(m.logger),
+	)
 	if err != nil {
 		return errors.Wrap(err, "wrapping handler")
 	}
-	handler.Logger = m.logger
-	handler.API = pilosa.NewAPI()
-	handler.API.Logger = m.logger
 
 	uri, err := pilosa.AddressWithDefaults(m.Config.Bind)
 	if err != nil {
@@ -211,8 +215,8 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "getting listener")
 	}
 
-	c := GetHTTPClient(TLSConfig)
-	handler.API.RemoteClient = c
+	c := http.GetHTTPClient(TLSConfig)
+	api.RemoteClient = c
 
 	m.Server, err = pilosa.NewServer(
 		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
@@ -232,29 +236,10 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerListener(ln),
 		pilosa.OptServerURI(uri),
 		pilosa.OptServerRemoteClient(c),
+		pilosa.OptServerInternalClient(http.NewInternalHTTPClientFromURI(uri, c)),
 	)
 
 	return errors.Wrap(err, "new server")
-}
-
-func GetHTTPClient(t *tls.Config) *http.Client {
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          1000,
-		MaxIdleConnsPerHost:   200,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-	if t != nil {
-		transport.TLSClientConfig = t
-	}
-	return &http.Client{Transport: transport}
 }
 
 // SetupNetworking sets up internode communication based on the configuration.
