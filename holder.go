@@ -217,7 +217,7 @@ func (h *Holder) Schema() []*IndexInfo {
 		for _, field := range index.Fields() {
 			fi := &FieldInfo{Name: field.Name(), Options: field.Options()}
 			for _, view := range field.Views() {
-				fi.Views = append(fi.Views, &ViewInfo{Name: view.Name()})
+				fi.Views = append(fi.Views, &ViewInfo{Name: view.name})
 			}
 			sort.Sort(viewInfoSlice(fi.Views))
 			di.Fields = append(di.Fields, fi)
@@ -437,7 +437,7 @@ func (h *Holder) flushCaches() {
 	for _, index := range h.Indexes() {
 		for _, field := range index.Fields() {
 			for _, view := range field.Views() {
-				for _, fragment := range view.Fragments() {
+				for _, fragment := range view.allFragments() {
 					select {
 					case <-h.closing:
 						return
@@ -445,7 +445,7 @@ func (h *Holder) flushCaches() {
 					}
 
 					if err := fragment.FlushCache(); err != nil {
-						h.Logger.Printf("error flushing cache: err=%s, path=%s", err, fragment.CachePath())
+						h.Logger.Printf("error flushing cache: err=%s, path=%s", err, fragment.cachePath())
 					}
 				}
 			}
@@ -761,7 +761,7 @@ func (s *HolderSyncer) syncFragment(index, field, view string, slice uint64) err
 		Closing:      s.Closing,
 		RemoteClient: s.RemoteClient,
 	}
-	if err := fs.SyncFragment(); err != nil {
+	if err := fs.syncFragment(); err != nil {
 		return errors.Wrap(err, "syncing fragment")
 	}
 
@@ -804,14 +804,14 @@ func (c *HolderCleaner) CleanHolder() error {
 		// Get the fragments registered in memory.
 		for _, field := range index.Fields() {
 			for _, view := range field.Views() {
-				for _, fragment := range view.Fragments() {
-					fragSlice := fragment.Slice()
+				for _, fragment := range view.allFragments() {
+					fragSlice := fragment.slice
 					// Ignore fragments that should be present.
 					if uint64InSlice(fragSlice, containedSlices) {
 						continue
 					}
 					// Delete fragment.
-					if err := view.DeleteFragment(fragSlice); err != nil {
+					if err := view.deleteFragment(fragSlice); err != nil {
 						return errors.Wrap(err, "deleting fragment")
 					}
 				}

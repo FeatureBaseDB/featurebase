@@ -40,27 +40,27 @@ func TestFragment_SetBit(t *testing.T) {
 	defer f.Close()
 
 	// Set bits on the fragment.
-	if _, err := f.SetBit(120, 1); err != nil {
+	if _, err := f.setBit(120, 1); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(120, 6); err != nil {
+	} else if _, err := f.setBit(120, 6); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(121, 0); err != nil {
+	} else if _, err := f.setBit(121, 0); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify counts on rows.
-	if n := f.Row(120).Count(); n != 2 {
+	if n := f.row(120).Count(); n != 2 {
 		t.Fatalf("unexpected count: %d", n)
-	} else if n := f.Row(121).Count(); n != 1 {
+	} else if n := f.row(121).Count(); n != 1 {
 		t.Fatalf("unexpected count: %d", n)
 	}
 
 	// Close and reopen the fragment & verify the data.
 	if err := f.reopen(); err != nil {
 		t.Fatal(err)
-	} else if n := f.Row(120).Count(); n != 2 {
+	} else if n := f.row(120).Count(); n != 2 {
 		t.Fatalf("unexpected count (reopen): %d", n)
-	} else if n := f.Row(121).Count(); n != 1 {
+	} else if n := f.row(121).Count(); n != 1 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 }
@@ -71,23 +71,23 @@ func TestFragment_ClearBit(t *testing.T) {
 	defer f.Close()
 
 	// Set and then clear bits on the fragment.
-	if _, err := f.SetBit(1000, 1); err != nil {
+	if _, err := f.setBit(1000, 1); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(1000, 2); err != nil {
+	} else if _, err := f.setBit(1000, 2); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.ClearBit(1000, 1); err != nil {
+	} else if _, err := f.clearBit(1000, 1); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify count on row.
-	if n := f.Row(1000).Count(); n != 1 {
+	if n := f.row(1000).Count(); n != 1 {
 		t.Fatalf("unexpected count: %d", n)
 	}
 
 	// Close and reopen the fragment & verify the data.
 	if err := f.reopen(); err != nil {
 		t.Fatal(err)
-	} else if n := f.Row(1000).Count(); n != 1 {
+	} else if n := f.row(1000).Count(); n != 1 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 }
@@ -99,14 +99,14 @@ func TestFragment_SetValue(t *testing.T) {
 		defer f.Close()
 
 		// Set value.
-		if changed, err := f.SetValue(100, 16, 3829); err != nil {
+		if changed, err := f.setValue(100, 16, 3829); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Read value.
-		if value, exists, err := f.Value(100, 16); err != nil {
+		if value, exists, err := f.value(100, 16); err != nil {
 			t.Fatal(err)
 		} else if value != 3829 {
 			t.Fatalf("unexpected value: %d", value)
@@ -115,7 +115,7 @@ func TestFragment_SetValue(t *testing.T) {
 		}
 
 		// Setting value should return no change.
-		if changed, err := f.SetValue(100, 16, 3829); err != nil {
+		if changed, err := f.setValue(100, 16, 3829); err != nil {
 			t.Fatal(err)
 		} else if changed {
 			t.Fatal("expected no change")
@@ -127,21 +127,21 @@ func TestFragment_SetValue(t *testing.T) {
 		defer f.Close()
 
 		// Set value.
-		if changed, err := f.SetValue(100, 16, 3829); err != nil {
+		if changed, err := f.setValue(100, 16, 3829); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Overwriting value should overwrite all bits.
-		if changed, err := f.SetValue(100, 16, 2028); err != nil {
+		if changed, err := f.setValue(100, 16, 2028); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Read value.
-		if value, exists, err := f.Value(100, 16); err != nil {
+		if value, exists, err := f.value(100, 16); err != nil {
 			t.Fatal(err)
 		} else if value != 2028 {
 			t.Fatalf("unexpected value: %d", value)
@@ -155,14 +155,14 @@ func TestFragment_SetValue(t *testing.T) {
 		defer f.Close()
 
 		// Set value.
-		if changed, err := f.SetValue(100, 10, 20); err != nil {
+		if changed, err := f.setValue(100, 10, 20); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Non-existent value.
-		if value, exists, err := f.Value(100, 11); err != nil {
+		if value, exists, err := f.value(100, 11); err != nil {
 			t.Fatal(err)
 		} else if value != 0 {
 			t.Fatalf("unexpected value: %d", value)
@@ -191,14 +191,14 @@ func TestFragment_SetValue(t *testing.T) {
 
 				m[columnID] = int64(value)
 
-				if _, err := f.SetValue(columnID, bitDepth, value); err != nil {
+				if _, err := f.setValue(columnID, bitDepth, value); err != nil {
 					t.Fatal(err)
 				}
 			}
 
 			// Ensure values are set.
 			for columnID, value := range m {
-				v, exists, err := f.Value(columnID, bitDepth)
+				v, exists, err := f.value(columnID, bitDepth)
 				if err != nil {
 					t.Fatal(err)
 				} else if value != int64(v) {
@@ -223,18 +223,18 @@ func TestFragment_Sum(t *testing.T) {
 	defer f.Close()
 
 	// Set values.
-	if _, err := f.SetValue(1000, bitDepth, 382); err != nil {
+	if _, err := f.setValue(1000, bitDepth, 382); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetValue(2000, bitDepth, 300); err != nil {
+	} else if _, err := f.setValue(2000, bitDepth, 300); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetValue(3000, bitDepth, 2818); err != nil {
+	} else if _, err := f.setValue(3000, bitDepth, 2818); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetValue(4000, bitDepth, 300); err != nil {
+	} else if _, err := f.setValue(4000, bitDepth, 300); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Run("NoFilter", func(t *testing.T) {
-		if sum, n, err := f.Sum(nil, bitDepth); err != nil {
+		if sum, n, err := f.sum(nil, bitDepth); err != nil {
 			t.Fatal(err)
 		} else if n != 4 {
 			t.Fatalf("unexpected count: %d", n)
@@ -244,7 +244,7 @@ func TestFragment_Sum(t *testing.T) {
 	})
 
 	t.Run("WithFilter", func(t *testing.T) {
-		if sum, n, err := f.Sum(NewRow(2000, 4000, 5000), bitDepth); err != nil {
+		if sum, n, err := f.sum(NewRow(2000, 4000, 5000), bitDepth); err != nil {
 			t.Fatal(err)
 		} else if n != 2 {
 			t.Fatalf("unexpected count: %d", n)
@@ -262,19 +262,19 @@ func TestFragment_MinMax(t *testing.T) {
 	defer f.Close()
 
 	// Set values.
-	if _, err := f.SetValue(1000, bitDepth, 382); err != nil {
+	if _, err := f.setValue(1000, bitDepth, 382); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetValue(2000, bitDepth, 300); err != nil {
+	} else if _, err := f.setValue(2000, bitDepth, 300); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetValue(3000, bitDepth, 2818); err != nil {
+	} else if _, err := f.setValue(3000, bitDepth, 2818); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetValue(4000, bitDepth, 300); err != nil {
+	} else if _, err := f.setValue(4000, bitDepth, 300); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetValue(5000, bitDepth, 2818); err != nil {
+	} else if _, err := f.setValue(5000, bitDepth, 2818); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetValue(6000, bitDepth, 2817); err != nil {
+	} else if _, err := f.setValue(6000, bitDepth, 2817); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetValue(7000, bitDepth, 0); err != nil {
+	} else if _, err := f.setValue(7000, bitDepth, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -292,7 +292,7 @@ func TestFragment_MinMax(t *testing.T) {
 			{filter: NewRow(7000), exp: 0, cnt: 1},
 		}
 		for i, test := range tests {
-			if min, cnt, err := f.Min(test.filter, bitDepth); err != nil {
+			if min, cnt, err := f.min(test.filter, bitDepth); err != nil {
 				t.Fatal(err)
 			} else if min != test.exp {
 				t.Errorf("test %d expected min: %v, but got: %v", i, test.exp, min)
@@ -316,7 +316,7 @@ func TestFragment_MinMax(t *testing.T) {
 			{filter: NewRow(7000), exp: 0, cnt: 1},
 		}
 		for i, test := range tests {
-			if max, cnt, err := f.Max(test.filter, bitDepth); err != nil {
+			if max, cnt, err := f.max(test.filter, bitDepth); err != nil {
 				t.Fatal(err)
 			} else if max != test.exp {
 				t.Errorf("test %d expected max: %v, but got: %v", i, test.exp, max)
@@ -336,18 +336,18 @@ func TestFragment_Range(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.setValue(1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.setValue(2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(3000, bitDepth, 2818); err != nil {
+		} else if _, err := f.setValue(3000, bitDepth, 2818); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(4000, bitDepth, 300); err != nil {
+		} else if _, err := f.setValue(4000, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		}
 
 		// Query for equality.
-		if b, err := f.RangeOp(pql.EQ, bitDepth, 300); err != nil {
+		if b, err := f.rangeOp(pql.EQ, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
@@ -359,18 +359,18 @@ func TestFragment_Range(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.setValue(1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.setValue(2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(3000, bitDepth, 2818); err != nil {
+		} else if _, err := f.setValue(3000, bitDepth, 2818); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(4000, bitDepth, 300); err != nil {
+		} else if _, err := f.setValue(4000, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		}
 
 		// Query for inequality.
-		if b, err := f.RangeOp(pql.NEQ, bitDepth, 300); err != nil {
+		if b, err := f.rangeOp(pql.NEQ, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
@@ -382,43 +382,43 @@ func TestFragment_Range(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.setValue(1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.setValue(2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(3000, bitDepth, 2817); err != nil {
+		} else if _, err := f.setValue(3000, bitDepth, 2817); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(4000, bitDepth, 301); err != nil {
+		} else if _, err := f.setValue(4000, bitDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(5000, bitDepth, 1); err != nil {
+		} else if _, err := f.setValue(5000, bitDepth, 1); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(6000, bitDepth, 0); err != nil {
+		} else if _, err := f.setValue(6000, bitDepth, 0); err != nil {
 			t.Fatal(err)
 		}
 
 		// Query for values less than (ending with set column).
-		if b, err := f.RangeOp(pql.LT, bitDepth, 301); err != nil {
+		if b, err := f.rangeOp(pql.LT, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 5000, 6000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for values less than (ending with unset column).
-		if b, err := f.RangeOp(pql.LT, bitDepth, 300); err != nil {
+		if b, err := f.rangeOp(pql.LT, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{5000, 6000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for values less than or equal to (ending with set column).
-		if b, err := f.RangeOp(pql.LTE, bitDepth, 301); err != nil {
+		if b, err := f.rangeOp(pql.LTE, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 4000, 5000, 6000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for values less than or equal to (ending with unset column).
-		if b, err := f.RangeOp(pql.LTE, bitDepth, 300); err != nil {
+		if b, err := f.rangeOp(pql.LTE, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{2000, 5000, 6000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
@@ -430,43 +430,43 @@ func TestFragment_Range(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.setValue(1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.setValue(2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(3000, bitDepth, 2817); err != nil {
+		} else if _, err := f.setValue(3000, bitDepth, 2817); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(4000, bitDepth, 301); err != nil {
+		} else if _, err := f.setValue(4000, bitDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(5000, bitDepth, 1); err != nil {
+		} else if _, err := f.setValue(5000, bitDepth, 1); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(6000, bitDepth, 0); err != nil {
+		} else if _, err := f.setValue(6000, bitDepth, 0); err != nil {
 			t.Fatal(err)
 		}
 
 		// Query for values greater than (ending with unset bit).
-		if b, err := f.RangeOp(pql.GT, bitDepth, 300); err != nil {
+		if b, err := f.rangeOp(pql.GT, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for values greater than (ending with set bit).
-		if b, err := f.RangeOp(pql.GT, bitDepth, 301); err != nil {
+		if b, err := f.rangeOp(pql.GT, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for values greater than or equal to (ending with unset bit).
-		if b, err := f.RangeOp(pql.GTE, bitDepth, 300); err != nil {
+		if b, err := f.rangeOp(pql.GTE, bitDepth, 300); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for values greater than or equal to (ending with set bit).
-		if b, err := f.RangeOp(pql.GTE, bitDepth, 301); err != nil {
+		if b, err := f.rangeOp(pql.GTE, bitDepth, 301); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
@@ -478,43 +478,43 @@ func TestFragment_Range(t *testing.T) {
 		defer f.Close()
 
 		// Set values.
-		if _, err := f.SetValue(1000, bitDepth, 382); err != nil {
+		if _, err := f.setValue(1000, bitDepth, 382); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(2000, bitDepth, 300); err != nil {
+		} else if _, err := f.setValue(2000, bitDepth, 300); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(3000, bitDepth, 2817); err != nil {
+		} else if _, err := f.setValue(3000, bitDepth, 2817); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(4000, bitDepth, 301); err != nil {
+		} else if _, err := f.setValue(4000, bitDepth, 301); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(5000, bitDepth, 1); err != nil {
+		} else if _, err := f.setValue(5000, bitDepth, 1); err != nil {
 			t.Fatal(err)
-		} else if _, err := f.SetValue(6000, bitDepth, 0); err != nil {
+		} else if _, err := f.setValue(6000, bitDepth, 0); err != nil {
 			t.Fatal(err)
 		}
 
 		// Query for values greater than (ending with unset column).
-		if b, err := f.RangeBetween(bitDepth, 300, 2817); err != nil {
+		if b, err := f.rangeBetween(bitDepth, 300, 2817); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for values greater than (ending with set column).
-		if b, err := f.RangeBetween(bitDepth, 301, 2817); err != nil {
+		if b, err := f.rangeBetween(bitDepth, 301, 2817); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for values greater than or equal to (ending with unset column).
-		if b, err := f.RangeBetween(bitDepth, 301, 2816); err != nil {
+		if b, err := f.rangeBetween(bitDepth, 301, 2816); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 
 		// Query for values greater than or equal to (ending with set column).
-		if b, err := f.RangeBetween(bitDepth, 300, 2816); err != nil {
+		if b, err := f.rangeBetween(bitDepth, 300, 2816); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 2000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
@@ -528,25 +528,25 @@ func TestFragment_Snapshot(t *testing.T) {
 	defer f.Close()
 
 	// Set and then clear bits on the fragment.
-	if _, err := f.SetBit(1000, 1); err != nil {
+	if _, err := f.setBit(1000, 1); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(1000, 2); err != nil {
+	} else if _, err := f.setBit(1000, 2); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.ClearBit(1000, 1); err != nil {
+	} else if _, err := f.clearBit(1000, 1); err != nil {
 		t.Fatal(err)
 	}
 
 	// Snapshot bitmap and verify data.
 	if err := f.Snapshot(); err != nil {
 		t.Fatal(err)
-	} else if n := f.Row(1000).Count(); n != 1 {
+	} else if n := f.row(1000).Count(); n != 1 {
 		t.Fatalf("unexpected count: %d", n)
 	}
 
 	// Close and reopen the fragment & verify the data.
 	if err := f.reopen(); err != nil {
 		t.Fatal(err)
-	} else if n := f.Row(1000).Count(); n != 1 {
+	} else if n := f.row(1000).Count(); n != 1 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 }
@@ -557,17 +557,17 @@ func TestFragment_ForEachBit(t *testing.T) {
 	defer f.Close()
 
 	// Set bits on the fragment.
-	if _, err := f.SetBit(100, 20); err != nil {
+	if _, err := f.setBit(100, 20); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(2, 38); err != nil {
+	} else if _, err := f.setBit(2, 38); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(2, 37); err != nil {
+	} else if _, err := f.setBit(2, 37); err != nil {
 		t.Fatal(err)
 	}
 
 	// Iterate over bits.
 	var result [][2]uint64
-	if err := f.ForEachBit(func(rowID, columnID uint64) error {
+	if err := f.forEachBit(func(rowID, columnID uint64) error {
 		result = append(result, [2]uint64{rowID, columnID})
 		return nil
 	}); err != nil {
@@ -591,7 +591,7 @@ func TestFragment_Top(t *testing.T) {
 	f.RecalculateCache()
 
 	// Retrieve top rows.
-	if pairs, err := f.Top(TopOptions{N: 2}); err != nil {
+	if pairs, err := f.top(TopOptions{N: 2}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) != 2 {
 		t.Fatalf("unexpected count: %d", len(pairs))
@@ -617,7 +617,7 @@ func TestFragment_Top_Filter(t *testing.T) {
 	f.RowAttrStore.SetAttrs(102, map[string]interface{}{"x": int64(20)})
 
 	// Retrieve top rows.
-	if pairs, err := f.Top(TopOptions{
+	if pairs, err := f.top(TopOptions{
 		N:            2,
 		FilterName:   "x",
 		FilterValues: []interface{}{int64(10), int64(15), int64(20)},
@@ -648,7 +648,7 @@ func TestFragment_TopN_Intersect(t *testing.T) {
 	f.RecalculateCache()
 
 	// Retrieve top rows.
-	if pairs, err := f.Top(TopOptions{N: 3, Src: src}); err != nil {
+	if pairs, err := f.top(TopOptions{N: 3, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []Pair{
 		{ID: 101, Count: 3},
@@ -683,7 +683,7 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 	f.RecalculateCache()
 
 	// Retrieve top rows.
-	if pairs, err := f.Top(TopOptions{N: 10, Src: src}); err != nil {
+	if pairs, err := f.top(TopOptions{N: 10, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []Pair{
 		{ID: 999, Count: 19},
@@ -712,7 +712,7 @@ func TestFragment_TopN_IDs(t *testing.T) {
 	f.mustSetBits(102, 8, 9, 10, 11, 12)
 
 	// Retrieve top rows.
-	if pairs, err := f.Top(TopOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
+	if pairs, err := f.top(TopOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []Pair{
 		{ID: 101, Count: 4},
@@ -733,7 +733,7 @@ func TestFragment_TopN_NopCache(t *testing.T) {
 	f.mustSetBits(102, 8, 9, 10, 11, 12)
 
 	// Retrieve top rows.
-	if pairs, err := f.Top(TopOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
+	if pairs, err := f.top(TopOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []Pair{}) {
 		t.Fatalf("unexpected pairs: %s", spew.Sdump(pairs))
@@ -792,7 +792,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	}
 
 	// Retrieve top rows.
-	if pairs, err := f.Top(TopOptions{N: 5}); err != nil {
+	if pairs, err := f.top(TopOptions{N: 5}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) > int(cacheSize) {
 		t.Fatalf("TopN count cannot exceed cache size: %d", cacheSize)
@@ -810,9 +810,9 @@ func TestFragment_Checksum(t *testing.T) {
 
 	// Retrieve checksum and set bits.
 	orig := f.Checksum()
-	if _, err := f.SetBit(1, 200); err != nil {
+	if _, err := f.setBit(1, 200); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(HashBlockSize*2, 200); err != nil {
+	} else if _, err := f.setBit(HashBlockSize*2, 200); err != nil {
 		t.Fatal(err)
 	}
 
@@ -831,7 +831,7 @@ func TestFragment_Blocks(t *testing.T) {
 	var prev []FragmentBlock
 
 	// Set first bit.
-	if _, err := f.SetBit(0, 0); err != nil {
+	if _, err := f.setBit(0, 0); err != nil {
 		t.Fatal(err)
 	}
 	blocks := f.Blocks()
@@ -841,7 +841,7 @@ func TestFragment_Blocks(t *testing.T) {
 	prev = blocks
 
 	// Set bit on different row.
-	if _, err := f.SetBit(20, 0); err != nil {
+	if _, err := f.setBit(20, 0); err != nil {
 		t.Fatal(err)
 	}
 	blocks = f.Blocks()
@@ -851,7 +851,7 @@ func TestFragment_Blocks(t *testing.T) {
 	prev = blocks
 
 	// Set bit on different column.
-	if _, err := f.SetBit(20, 100); err != nil {
+	if _, err := f.setBit(20, 100); err != nil {
 		t.Fatal(err)
 	}
 	blocks = f.Blocks()
@@ -866,7 +866,7 @@ func TestFragment_Blocks_Empty(t *testing.T) {
 	defer f.Close()
 
 	// Set bits on a different block.
-	if _, err := f.SetBit(100, 1); err != nil {
+	if _, err := f.setBit(100, 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -885,14 +885,14 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 
 	// Set bits on the fragment.
 	for i := uint64(0); i < 1000; i++ {
-		if _, err := f.SetBit(i, 0); err != nil {
+		if _, err := f.setBit(i, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// Verify correct cache type and size.
-	if cache, ok := f.Cache().(*LRUCache); !ok {
-		t.Fatalf("unexpected cache: %T", f.Cache())
+	if cache, ok := f.cache.(*LRUCache); !ok {
+		t.Fatalf("unexpected cache: %T", f.cache)
 	} else if cache.Len() != 1000 {
 		t.Fatalf("unexpected cache len: %d", cache.Len())
 	}
@@ -903,8 +903,8 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 	}
 
 	// Re-verify correct cache type and size.
-	if cache, ok := f.Cache().(*LRUCache); !ok {
-		t.Fatalf("unexpected cache: %T", f.Cache())
+	if cache, ok := f.cache.(*LRUCache); !ok {
+		t.Fatalf("unexpected cache: %T", f.cache)
 	} else if cache.Len() != 1000 {
 		t.Fatalf("unexpected cache len: %d", cache.Len())
 	}
@@ -935,14 +935,14 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 
 	// Set bits on the fragment.
 	for i := uint64(0); i < 1000; i++ {
-		if _, err := f.SetBit(i, 0); err != nil {
+		if _, err := f.setBit(i, 0); err != nil {
 			t.Fatal(err)
 		}
 	}
 
 	// Verify correct cache type and size.
-	if cache, ok := f.Cache().(*RankCache); !ok {
-		t.Fatalf("unexpected cache: %T", f.Cache())
+	if cache, ok := f.cache.(*RankCache); !ok {
+		t.Fatalf("unexpected cache: %T", f.cache)
 	} else if cache.Len() != 1000 {
 		t.Fatalf("unexpected cache len: %d", cache.Len())
 	}
@@ -956,8 +956,8 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 	f = index.Field("f").View(ViewStandard).Fragment(0)
 
 	// Re-verify correct cache type and size.
-	if cache, ok := f.Cache().(*RankCache); !ok {
-		t.Fatalf("unexpected cache: %T", f.Cache())
+	if cache, ok := f.cache.(*RankCache); !ok {
+		t.Fatalf("unexpected cache: %T", f.cache)
 	} else if cache.Len() != 1000 {
 		t.Fatalf("unexpected cache len: %d", cache.Len())
 	}
@@ -969,16 +969,16 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	defer f0.Close()
 
 	// Set and then clear bits on the fragment.
-	if _, err := f0.SetBit(1000, 1); err != nil {
+	if _, err := f0.setBit(1000, 1); err != nil {
 		t.Fatal(err)
-	} else if _, err := f0.SetBit(1000, 2); err != nil {
+	} else if _, err := f0.setBit(1000, 2); err != nil {
 		t.Fatal(err)
-	} else if _, err := f0.ClearBit(1000, 1); err != nil {
+	} else if _, err := f0.clearBit(1000, 1); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify cache is populated.
-	if n := f0.Cache().Len(); n != 1 {
+	if n := f0.cache.Len(); n != 1 {
 		t.Fatalf("unexpected cache size: %d", n)
 	}
 
@@ -998,21 +998,21 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	}
 
 	// Verify cache is in other fragment.
-	if n := f1.Cache().Len(); n != 1 {
+	if n := f1.cache.Len(); n != 1 {
 		t.Fatalf("unexpected cache size: %d", n)
 	}
 
 	// Verify data in other fragment.
-	if a := f1.Row(1000).Columns(); !reflect.DeepEqual(a, []uint64{2}) {
+	if a := f1.row(1000).Columns(); !reflect.DeepEqual(a, []uint64{2}) {
 		t.Fatalf("unexpected columns: %+v", a)
 	}
 
 	// Close and reopen the fragment & verify the data.
 	if err := f1.reopen(); err != nil {
 		t.Fatal(err)
-	} else if n := f1.Cache().Len(); n != 1 {
+	} else if n := f1.cache.Len(); n != 1 {
 		t.Fatalf("unexpected cache size (reopen): %d", n)
-	} else if a := f1.Row(1000).Columns(); !reflect.DeepEqual(a, []uint64{2}) {
+	} else if a := f1.row(1000).Columns(); !reflect.DeepEqual(a, []uint64{2}) {
 		t.Fatalf("unexpected columns (reopen): %+v", a)
 	}
 }
@@ -1045,12 +1045,12 @@ func BenchmarkFragment_IntersectionCount(b *testing.B) {
 
 	// Generate some intersecting data.
 	for i := 0; i < 10000; i += 2 {
-		if _, err := f.SetBit(1, uint64(i)); err != nil {
+		if _, err := f.setBit(1, uint64(i)); err != nil {
 			b.Fatal(err)
 		}
 	}
 	for i := 0; i < 10000; i += 3 {
-		if _, err := f.SetBit(2, uint64(i)); err != nil {
+		if _, err := f.setBit(2, uint64(i)); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -1063,7 +1063,7 @@ func BenchmarkFragment_IntersectionCount(b *testing.B) {
 	// Start benchmark
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if n := f.Row(1).IntersectionCount(f.Row(2)); n == 0 {
+		if n := f.row(1).IntersectionCount(f.row(2)); n == 0 {
 			b.Fatalf("unexpected count: %d", n)
 		}
 	}
@@ -1081,7 +1081,7 @@ func TestFragment_Tanimoto(t *testing.T) {
 	f.mustSetBits(102, 1, 2, 10, 12)
 	f.RecalculateCache()
 
-	if pairs, err := f.Top(TopOptions{TanimotoThreshold: 50, Src: src}); err != nil {
+	if pairs, err := f.top(TopOptions{TanimotoThreshold: 50, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) != 2 {
 		t.Fatalf("unexpected count: %d", len(pairs))
@@ -1104,7 +1104,7 @@ func TestFragment_Zero_Tanimoto(t *testing.T) {
 	f.mustSetBits(102, 1, 2, 10, 12)
 	f.RecalculateCache()
 
-	if pairs, err := f.Top(TopOptions{TanimotoThreshold: 0, Src: src}); err != nil {
+	if pairs, err := f.top(TopOptions{TanimotoThreshold: 0, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) != 3 {
 		t.Fatalf("unexpected count: %d", len(pairs))
@@ -1123,7 +1123,7 @@ func TestFragment_Snapshot_Run(t *testing.T) {
 
 	// Set bits on the fragment.
 	for i := uint64(1); i < 3; i++ {
-		if _, err := f.SetBit(1000, i); err != nil {
+		if _, err := f.setBit(1000, i); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1131,14 +1131,14 @@ func TestFragment_Snapshot_Run(t *testing.T) {
 	// Snapshot bitmap and verify data.
 	if err := f.Snapshot(); err != nil {
 		t.Fatal(err)
-	} else if n := f.Row(1000).Count(); n != 2 {
+	} else if n := f.row(1000).Count(); n != 2 {
 		t.Fatalf("unexpected count: %d", n)
 	}
 
 	// Close and reopen the fragment & verify the data.
 	if err := f.reopen(); err != nil {
 		t.Fatal(err)
-	} else if n := f.Row(1000).Count(); n != 2 {
+	} else if n := f.row(1000).Count(); n != 2 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
 }
@@ -1187,7 +1187,7 @@ func BenchmarkFragment_FullSnapshot(b *testing.B) {
 			val += 2
 			i++
 		}
-		if err := f.Import(rows, cols); err != nil {
+		if err := f.bulkImport(rows, cols); err != nil {
 			b.Fatalf("Error Building Sample: %s", err)
 		}
 		if row > max {
@@ -1228,7 +1228,7 @@ func BenchmarkFragment_Import(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		if err := f.Import(rows, cols); err != nil {
+		if err := f.bulkImport(rows, cols); err != nil {
 			b.Fatalf("Error Building Sample: %s", err)
 		}
 	}
@@ -1273,7 +1273,7 @@ func (f *Fragment) reopen() error {
 // This function does not accept a timestamp or quantum.
 func (f *Fragment) mustSetBits(rowID uint64, columnIDs ...uint64) {
 	for _, columnID := range columnIDs {
-		if _, err := f.SetBit(rowID, columnID); err != nil {
+		if _, err := f.setBit(rowID, columnID); err != nil {
 			panic(err)
 		}
 	}

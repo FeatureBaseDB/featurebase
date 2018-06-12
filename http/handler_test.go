@@ -189,13 +189,13 @@ func TestHandler_MaxSlices(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	hldr.MustCreateFragmentIfNotExists("i0", "f0", pilosa.ViewStandard, 1).MustSetBits(30, (1*pilosa.SliceWidth)+1)
-	hldr.MustCreateFragmentIfNotExists("i0", "f0", pilosa.ViewStandard, 1).MustSetBits(30, (1*pilosa.SliceWidth)+2)
-	hldr.MustCreateFragmentIfNotExists("i0", "f0", pilosa.ViewStandard, 3).MustSetBits(30, (3*pilosa.SliceWidth)+4)
+	hldr.SetBit("i0", "f0", 30, (1*pilosa.SliceWidth)+1)
+	hldr.SetBit("i0", "f0", 30, (1*pilosa.SliceWidth)+2)
+	hldr.SetBit("i0", "f0", 30, (3*pilosa.SliceWidth)+4)
 
-	hldr.MustCreateFragmentIfNotExists("i1", "f1", pilosa.ViewStandard, 0).MustSetBits(40, (0*pilosa.SliceWidth)+1)
-	hldr.MustCreateFragmentIfNotExists("i1", "f1", pilosa.ViewStandard, 0).MustSetBits(40, (0*pilosa.SliceWidth)+2)
-	hldr.MustCreateFragmentIfNotExists("i1", "f1", pilosa.ViewStandard, 0).MustSetBits(40, (0*pilosa.SliceWidth)+8)
+	hldr.SetBit("i1", "f1", 40, (0*pilosa.SliceWidth)+1)
+	hldr.SetBit("i1", "f1", 40, (0*pilosa.SliceWidth)+2)
+	hldr.SetBit("i1", "f1", 40, (0*pilosa.SliceWidth)+8)
 
 	h := test.MustNewHandler()
 	h.API.Holder = hldr.Holder

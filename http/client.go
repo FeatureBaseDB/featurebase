@@ -1010,11 +1010,16 @@ type BitsByPos []pilosa.Bit
 func (p BitsByPos) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 func (p BitsByPos) Len() int      { return len(p) }
 func (p BitsByPos) Less(i, j int) bool {
-	p0, p1 := pilosa.Pos(p[i].RowID, p[i].ColumnID), pilosa.Pos(p[j].RowID, p[j].ColumnID)
+	p0, p1 := pos(p[i].RowID, p[i].ColumnID), pos(p[j].RowID, p[j].ColumnID)
 	if p0 == p1 {
 		return p[i].Timestamp < p[j].Timestamp
 	}
 	return p0 < p1
+}
+
+// pos returns the row position of a row/column pair.
+func pos(rowID, columnID uint64) uint64 {
+	return (rowID * pilosa.SliceWidth) + (columnID % pilosa.SliceWidth)
 }
 
 func uriPathToURL(uri *pilosa.URI, path string) url.URL {

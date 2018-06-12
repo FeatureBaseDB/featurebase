@@ -89,24 +89,6 @@ func (h *Holder) MustCreateFieldIfNotExists(index, field string) *Field {
 	return f
 }
 
-// MustCreateFragmentIfNotExists returns a given fragment. Panic on error.
-func (h *Holder) MustCreateFragmentIfNotExists(index, field, view string, slice uint64) *Fragment {
-	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := idx.CreateFieldIfNotExists(field, pilosa.FieldOptions{})
-	if err != nil {
-		panic(err)
-	}
-	v, err := f.CreateViewIfNotExists(view)
-	if err != nil {
-		panic(err)
-	}
-	frag, err := v.CreateFragmentIfNotExists(slice)
-	if err != nil {
-		panic(err)
-	}
-	return &Fragment{Fragment: frag}
-}
-
 // MustCreateRankedFragmentIfNotExists returns a given fragment with a ranked cache. Panic on error.
 func (h *Holder) MustCreateRankedFragmentIfNotExists(index, field, view string, slice uint64) *Fragment {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
@@ -123,4 +105,60 @@ func (h *Holder) MustCreateRankedFragmentIfNotExists(index, field, view string, 
 		panic(err)
 	}
 	return &Fragment{Fragment: frag}
+}
+
+// Row returns a Row for a given field.
+func (h *Holder) Row(index, field string, rowID uint64) *pilosa.Row {
+	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.FieldOptions{})
+	if err != nil {
+		panic(err)
+	}
+	row, err := f.Row(rowID)
+	if err != nil {
+		panic(err)
+	}
+	return row
+}
+
+// ViewRow returns a Row for a given field and view.
+func (h *Holder) ViewRow(index, field, view string, rowID uint64) *pilosa.Row {
+	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.FieldOptions{})
+	if err != nil {
+		panic(err)
+	}
+	row, err := f.ViewRow(view, rowID)
+	if err != nil {
+		panic(err)
+	}
+	return row
+}
+
+// SetBit clears a bit on the given field.
+func (h *Holder) SetBit(index, field string, rowID, columnID uint64) {
+	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.FieldOptions{})
+	if err != nil {
+		panic(err)
+	}
+	f.SetBit(pilosa.ViewStandard, rowID, columnID, nil)
+}
+
+// ClearBit clears a bit on the given field.
+func (h *Holder) ClearBit(index, field string, rowID, columnID uint64) {
+	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.FieldOptions{})
+	if err != nil {
+		panic(err)
+	}
+	f.ClearBit(pilosa.ViewStandard, rowID, columnID, nil)
+}
+
+// MustSetBits sets columns on a row. Panic on error.
+// This function does not accept a timestamp or quantum.
+func (h *Holder) MustSetBits(index, field string, rowID uint64, columnIDs ...uint64) {
+	for _, columnID := range columnIDs {
+		h.SetBit(index, field, rowID, columnID)
+	}
 }
