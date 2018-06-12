@@ -1,0 +1,44 @@
+package pql
+
+type PQL Peg {
+     Query
+}
+
+
+Calls <- Call* !.
+Call <-  newline* < [[A-Z]]+ > { p.startCall(buffer[begin:end] ) } open args close newline* { p.endCall() }
+args <- arg (comma args)? sp / sp
+arg <- ( Call
+         / field sp '=' sp value
+         / field sp COND sp value
+         )
+COND <- ( '><' { p.addBTWN() }
+        / '<=' { p.addLTE() }
+        / '>=' { p.addGTE() }
+        / '==' { p.addEQ() }
+        / '!=' { p.addNEQ() }
+        / '<' { p.addLT() }
+        / '>' { p.addGT() }
+        )
+open <- '(' sp
+value <- ( item
+         / lbrack { p.startList() } list rbrack { p.endList() }
+         )
+list <- item (comma list)?
+item <- ( 'null' { p.addVal(nil) }
+         / 'true' { p.addVal(true) }
+         / 'false' { p.addVal(false) }
+         / < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(buffer[begin:end]) }
+         / < '-'? '.'[0-9]+ > { p.addNumVal(buffer[begin:end]) }
+         / < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > { p.addVal(buffer[begin:end]) }
+         / '"' < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > '"' { p.addVal(buffer[begin:end]) }
+         / '\'' < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > '\'' { p.addVal(buffer[begin:end]) }
+         )
+
+field <- < [[A-Z]] ( [[A-Z]] / [0-9] / '_' )* > { p.addField(buffer[begin:end]) }
+close <- ')' sp
+sp <- ( ' ' / '\t' )*
+comma <- sp ',' sp
+lbrack <- '[' sp
+rbrack <- sp ']' sp
+newline <- sp '\n' sp

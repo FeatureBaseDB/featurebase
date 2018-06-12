@@ -26,6 +26,144 @@ import (
 // Query represents a PQL query.
 type Query struct {
 	Calls []*Call
+
+	lastField string
+	lastCond  Token
+	inList    bool
+	callStack []*Call
+}
+
+func (q *Query) startCall(name string) {
+	newCall := &Call{Name: name}
+	q.callStack = append(q.callStack, newCall)
+
+	if len(q.callStack) == 1 {
+		q.Calls = append(q.Calls, newCall)
+	} else {
+		calls := q.callStack[len(q.callStack)-2].Children
+		q.callStack[len(q.callStack)-2].Children = append(calls, newCall)
+	}
+
+}
+
+func (q *Query) endCall() {
+	q.callStack = q.callStack[:len(q.callStack)-1]
+}
+
+func (q *Query) addField(field string) {
+	if q.lastField != "" {
+		panic(fmt.Sprintf("addField called with '%s' while field is not empty, it's: %s", field, q.lastField))
+	}
+	q.lastField = field
+	call := q.callStack[len(q.callStack)-1]
+	if call.Args == nil {
+		call.Args = make(map[string]interface{})
+	}
+}
+
+func (q *Query) addVal(val interface{}) {
+	if q.lastField == "" {
+		panic(fmt.Sprintf("addVal called with '%s' when lastField is empty", val))
+	}
+	call := q.callStack[len(q.callStack)-1]
+	if q.inList {
+		list := call.Args[q.lastField].([]interface{})
+		call.Args[q.lastField] = append(list, val)
+		return
+	}
+	if q.lastCond != ILLEGAL {
+		if val != nil || q.lastCond != NEQ {
+			panic(fmt.Sprintf("can't add val %s with condition %s", val, q.lastCond))
+		}
+		call.Args[q.lastField] = &Condition{
+			Op:    NEQ,
+			Value: val,
+		}
+	} else {
+		call.Args[q.lastField] = val
+	}
+	q.lastField = ""
+	q.lastCond = ILLEGAL
+}
+
+func (q *Query) addNumVal(val string) {
+	if q.lastField == "" {
+		panic(fmt.Sprintf("addIntVal called with '%s' when lastField is empty", val))
+	}
+	var ival interface{}
+	var err error
+	if strings.Contains(val, ".") {
+		ival, err = strconv.ParseFloat(val, 64)
+	} else {
+		ival, err = strconv.ParseInt(val, 10, 64)
+	}
+	if err != nil {
+		panic(err)
+	}
+	call := q.callStack[len(q.callStack)-1]
+	if q.inList {
+		if q.lastCond != ILLEGAL {
+			list := call.Args[q.lastField].(*Condition).Value.([]interface{})
+			call.Args[q.lastField] = &Condition{
+				Op:    q.lastCond,
+				Value: append(list, ival),
+			}
+		} else {
+			list := call.Args[q.lastField].([]interface{})
+			call.Args[q.lastField] = append(list, ival)
+		}
+		return
+	} else if q.lastCond != ILLEGAL {
+		call.Args[q.lastField] = &Condition{
+			Op:    q.lastCond,
+			Value: ival,
+		}
+	} else {
+		call.Args[q.lastField] = ival
+	}
+	q.lastField = ""
+	q.lastCond = ILLEGAL
+}
+
+func (q *Query) startList() {
+	call := q.callStack[len(q.callStack)-1]
+	if q.lastCond != ILLEGAL {
+		call.Args[q.lastField] = &Condition{
+			Op:    q.lastCond,
+			Value: make([]interface{}, 0),
+		}
+	} else {
+		call.Args[q.lastField] = make([]interface{}, 0)
+	}
+	q.inList = true
+}
+
+func (q *Query) endList() {
+	q.inList = false
+	q.lastField = ""
+	q.lastCond = ILLEGAL
+}
+
+func (q *Query) addGT() {
+	q.lastCond = GT
+}
+func (q *Query) addLT() {
+	q.lastCond = LT
+}
+func (q *Query) addGTE() {
+	q.lastCond = GTE
+}
+func (q *Query) addLTE() {
+	q.lastCond = LTE
+}
+func (q *Query) addEQ() {
+	q.lastCond = EQ
+}
+func (q *Query) addNEQ() {
+	q.lastCond = NEQ
+}
+func (q *Query) addBTWN() {
+	q.lastCond = BETWEEN
 }
 
 // WriteCallN returns the number of mutating calls.
