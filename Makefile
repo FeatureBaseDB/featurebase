@@ -93,7 +93,7 @@ generate-stringer:
 	go generate github.com/pilosa/pilosa
 
 generate-pql: require-peg
-	cd pql && peg -inline -switch pql.peg && cd ..
+	cd pql && peg -inline pql.peg && cd ..
 
 # `go generate` all needed packages
 generate: generate-protoc generate-stringer generate-pql
