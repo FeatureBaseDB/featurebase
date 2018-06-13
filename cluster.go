@@ -21,7 +21,6 @@ import (
 	"hash/fnv"
 	"io/ioutil"
 	"math/rand"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -263,9 +262,6 @@ type Cluster struct {
 	closing chan struct{}
 
 	Logger Logger
-
-	//
-	RemoteClient *http.Client
 
 	InternalClient InternalClient
 }

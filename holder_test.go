@@ -362,7 +362,6 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	client := http.GetHTTPClient(nil)
 	httpClient := http.NewInternalClientFromURI(uri, client)
 	cluster.InternalClient = httpClient
-	cluster.RemoteClient = client
 
 	// Create a local holder.
 	hldr0 := test.MustOpenHolder()
@@ -419,11 +418,10 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 
 	// Set up syncer.
 	syncer := pilosa.HolderSyncer{
-		Holder:       hldr0.Holder,
-		Node:         cluster.Nodes[0],
-		Cluster:      cluster,
-		RemoteClient: http.GetHTTPClient(nil),
-		Stats:        pilosa.NopStatsClient,
+		Holder:  hldr0.Holder,
+		Node:    cluster.Nodes[0],
+		Cluster: cluster,
+		Stats:   pilosa.NopStatsClient,
 	}
 
 	if err := syncer.SyncHolder(); err != nil {

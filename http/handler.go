@@ -117,6 +117,18 @@ func NewHandler(opts ...HandlerOption) (*Handler, error) {
 	return handler, nil
 }
 
+func (h *Handler) Serve(ln net.Listener, closing <-chan struct{}) {
+	server := &http.Server{Handler: h}
+	go func() {
+		<-closing
+		server.Close()
+	}()
+	err := server.Serve(ln)
+	if err != nil && err.Error() != "http: Server closed" {
+		h.Logger.Printf("HTTP handler terminated with error: %s\n", err)
+	}
+}
+
 func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
 	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("slice", "index")

@@ -25,7 +25,6 @@ import (
 	"hash"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"sort"
 	"sync"
@@ -1719,9 +1718,8 @@ func (h *blockHasher) WriteValue(v uint64) {
 type FragmentSyncer struct {
 	Fragment *Fragment
 
-	Node         *Node
-	Cluster      *Cluster
-	RemoteClient *http.Client
+	Node    *Node
+	Cluster *Cluster
 
 	Closing <-chan struct{}
 }

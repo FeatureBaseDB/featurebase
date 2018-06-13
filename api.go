@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -45,7 +44,6 @@ type API struct {
 	BroadcastHandler BroadcastHandler
 	StatusHandler    StatusHandler
 	Cluster          *Cluster
-	RemoteClient     *http.Client
 	Logger           Logger
 }
 
