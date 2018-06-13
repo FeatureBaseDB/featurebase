@@ -619,7 +619,7 @@ func (s *HolderSyncer) SyncHolder() error {
 
 				for slice := uint64(0); slice <= s.Holder.Index(di.Name).MaxSlice(); slice++ {
 					// Ignore slices that this host doesn't own.
-					if !s.Cluster.OwnsSlice(s.Node.ID, di.Name, slice) {
+					if !s.Cluster.ownsSlice(s.Node.ID, di.Name, slice) {
 						continue
 					}
 
@@ -799,7 +799,7 @@ func (c *HolderCleaner) CleanHolder() error {
 		}
 
 		// Get the fragments that node is responsible for (based on hash(index, node)).
-		containedSlices := c.Cluster.ContainsSlices(index.Name(), index.MaxSlice(), c.Node)
+		containedSlices := c.Cluster.containsSlices(index.Name(), index.MaxSlice(), c.Node)
 
 		// Get the fragments registered in memory.
 		for _, field := range index.Fields() {

@@ -87,10 +87,17 @@ func TestClient_MultiNode(t *testing.T) {
 
 	// Create a dispersed set of bitmaps across 3 nodes such that each individual node and slice width increment would reveal a different TopN.
 	sliceNums := []uint64{1, 2, 6}
+
+	// This was generated with: `owns := s[i].Handler.Handler.API.Cluster.OwnsSlices("i", 20, s[i].HostURI())`
+	owns := [][]uint64{
+		{1, 3, 4, 8, 10, 13, 17, 19},
+		{2, 5, 7, 11, 12, 14, 18},
+		{0, 6, 9, 15, 16, 20},
+	}
+
 	for i, num := range sliceNums {
-		owns := s[i].Handler.Handler.API.Cluster.OwnsSlices("i", 20, s[i].HostURI())
 		ownsNum := false
-		for _, ownNum := range owns {
+		for _, ownNum := range owns[i] {
 			if ownNum == num {
 				ownsNum = true
 				break

@@ -1740,7 +1740,7 @@ func (s *FragmentSyncer) isClosing() bool {
 // then merges any blocks which have differences.
 func (s *FragmentSyncer) syncFragment() error {
 	// Determine replica set.
-	nodes := s.Cluster.SliceNodes(s.Fragment.index, s.Fragment.slice)
+	nodes := s.Cluster.sliceNodes(s.Fragment.index, s.Fragment.slice)
 	if len(nodes) == 1 {
 		return nil
 	}
@@ -1821,7 +1821,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 	// Read pairs from each remote block.
 	var uris []*URI
 	var pairSets []pairSet
-	for _, node := range s.Cluster.SliceNodes(f.index, f.slice) {
+	for _, node := range s.Cluster.sliceNodes(f.index, f.slice) {
 		if s.Node.ID == node.ID {
 			continue
 		}

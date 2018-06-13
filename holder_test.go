@@ -383,7 +383,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	// Mock 2-node, fully replicated cluster.
 	cluster.ReplicaN = 2
 
-	cluster.Nodes[0].URI = test.NewURIFromHostPort("localhost", 0)
+	cluster.Nodes[0].URI = pilosa.NewTestURIFromHostPort("localhost", 0)
 	cluster.Nodes[1].URI = *uri
 
 	// Create fields on nodes.
@@ -456,7 +456,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 
 // Ensure holder can clean up orphaned fragments.
 func TestHolderCleaner_CleanHolder(t *testing.T) {
-	cluster := test.NewCluster(2)
+	cluster := pilosa.NewTestCluster(2)
 
 	// Create a local holder.
 	hldr0 := test.MustOpenHolder()
@@ -465,7 +465,7 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 	// Mock 2-node, fully replicated cluster.
 	cluster.ReplicaN = 2
 
-	cluster.Nodes[0].URI = test.NewURIFromHostPort("localhost", 0)
+	cluster.Nodes[0].URI = pilosa.NewTestURIFromHostPort("localhost", 0)
 
 	// Create fields on nodes.
 	for _, hldr := range []*test.Holder{hldr0} {
