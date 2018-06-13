@@ -22,14 +22,14 @@ import (
 
 // Client represents a test wrapper for pilosa.Client.
 type Client struct {
-	*http.InternalHTTPClient
+	*http.InternalClient
 }
 
 // MustNewClient returns a new instance of Client. Panic on error.
 func MustNewClient(host string, h *gohttp.Client) *Client {
-	c, err := http.NewInternalHTTPClient(host, h)
+	c, err := http.NewInternalClient(host, h)
 	if err != nil {
 		panic(err)
 	}
-	return &Client{InternalHTTPClient: c}
+	return &Client{InternalClient: c}
 }

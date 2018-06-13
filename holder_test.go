@@ -360,7 +360,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 
 	cluster := test.NewCluster(2)
 	client := http.GetHTTPClient(nil)
-	httpClient := http.NewInternalHTTPClientFromURI(uri, client)
+	httpClient := http.NewInternalClientFromURI(uri, client)
 	cluster.InternalClient = httpClient
 	cluster.RemoteClient = client
 

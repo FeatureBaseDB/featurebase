@@ -238,8 +238,8 @@ func (m *Main) RunWithTransport(host string, bindPort int, joinSeeds []string) (
 func (m *Main) URL() string { return "http://" + m.Server.Addr().String() }
 
 // Client returns a client to connect to the program.
-func (m *Main) Client() *http.InternalHTTPClient {
-	client, err := http.NewInternalHTTPClient(m.Server.URI.HostPort(), http.GetHTTPClient(nil))
+func (m *Main) Client() *http.InternalClient {
+	client, err := http.NewInternalClient(m.Server.URI.HostPort(), http.GetHTTPClient(nil))
 	if err != nil {
 		panic(err)
 	}

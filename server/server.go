@@ -236,7 +236,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerListener(ln),
 		pilosa.OptServerURI(uri),
 		pilosa.OptServerRemoteClient(c),
-		pilosa.OptServerInternalClient(http.NewInternalHTTPClientFromURI(uri, c)),
+		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 	)
 
 	return errors.Wrap(err, "new server")

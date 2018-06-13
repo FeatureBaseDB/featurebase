@@ -40,16 +40,16 @@ type ClientOptions struct {
 	TLS *tls.Config
 }
 
-// InternalHTTPClient represents a client to the Pilosa cluster.
-type InternalHTTPClient struct {
+// InternalClient represents a client to the Pilosa cluster.
+type InternalClient struct {
 	defaultURI *pilosa.URI
 
 	// The client to use for HTTP communication.
 	HTTPClient *http.Client
 }
 
-// NewInternalHTTPClient returns a new instance of InternalHTTPClient to connect to host.
-func NewInternalHTTPClient(host string, remoteClient *http.Client) (*InternalHTTPClient, error) {
+// NewInternalClient returns a new instance of InternalClient to connect to host.
+func NewInternalClient(host string, remoteClient *http.Client) (*InternalClient, error) {
 	if host == "" {
 		return nil, pilosa.ErrHostRequired
 	}
@@ -59,27 +59,27 @@ func NewInternalHTTPClient(host string, remoteClient *http.Client) (*InternalHTT
 		return nil, errors.Wrap(err, "getting URI")
 	}
 
-	client := NewInternalHTTPClientFromURI(uri, remoteClient)
+	client := NewInternalClientFromURI(uri, remoteClient)
 	return client, nil
 }
 
-func NewInternalHTTPClientFromURI(defaultURI *pilosa.URI, remoteClient *http.Client) *InternalHTTPClient {
-	return &InternalHTTPClient{
+func NewInternalClientFromURI(defaultURI *pilosa.URI, remoteClient *http.Client) *InternalClient {
+	return &InternalClient{
 		defaultURI: defaultURI,
 		HTTPClient: remoteClient,
 	}
 }
 
 // Host returns the host the client was initialized with.
-func (c *InternalHTTPClient) Host() *pilosa.URI { return c.defaultURI }
+func (c *InternalClient) Host() *pilosa.URI { return c.defaultURI }
 
 // MaxSliceByIndex returns the number of slices on a server by index.
-func (c *InternalHTTPClient) MaxSliceByIndex(ctx context.Context) (map[string]uint64, error) {
+func (c *InternalClient) MaxSliceByIndex(ctx context.Context) (map[string]uint64, error) {
 	return c.maxSliceByIndex(ctx)
 }
 
 // maxSliceByIndex returns the number of slices on a server by index.
-func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context) (map[string]uint64, error) {
+func (c *InternalClient) maxSliceByIndex(ctx context.Context) (map[string]uint64, error) {
 	// Execute request against the host.
 	u := uriPathToURL(c.defaultURI, "/slices/max")
 
@@ -109,7 +109,7 @@ func (c *InternalHTTPClient) maxSliceByIndex(ctx context.Context) (map[string]ui
 }
 
 // Schema returns all index and field schema information.
-func (c *InternalHTTPClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error) {
+func (c *InternalClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error) {
 	// Execute request against the host.
 	u := c.defaultURI.Path("/schema")
 
@@ -138,7 +138,7 @@ func (c *InternalHTTPClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, e
 }
 
 // CreateIndex creates a new index on the server.
-func (c *InternalHTTPClient) CreateIndex(ctx context.Context, index string, opt pilosa.IndexOptions) error {
+func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilosa.IndexOptions) error {
 	// Encode query request.
 	buf, err := json.Marshal(&postIndexRequest{
 		Options: opt,
@@ -183,7 +183,7 @@ func (c *InternalHTTPClient) CreateIndex(ctx context.Context, index string, opt 
 }
 
 // FragmentNodes returns a list of nodes that own a slice.
-func (c *InternalHTTPClient) FragmentNodes(ctx context.Context, index string, slice uint64) ([]*pilosa.Node, error) {
+func (c *InternalClient) FragmentNodes(ctx context.Context, index string, slice uint64) ([]*pilosa.Node, error) {
 	// Execute request against the host.
 	u := uriPathToURL(c.defaultURI, "/fragment/nodes")
 	u.RawQuery = (url.Values{"index": {index}, "slice": {strconv.FormatUint(slice, 10)}}).Encode()
@@ -214,12 +214,12 @@ func (c *InternalHTTPClient) FragmentNodes(ctx context.Context, index string, sl
 }
 
 // Query executes query against the index.
-func (c *InternalHTTPClient) Query(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
+func (c *InternalClient) Query(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
 	return c.QueryNode(ctx, c.defaultURI, index, queryRequest)
 }
 
 // QueryNode executes query against the index, sending the request to the node specified.
-func (c *InternalHTTPClient) QueryNode(ctx context.Context, uri *pilosa.URI, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
+func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
 	if index == "" {
 		return nil, pilosa.ErrIndexRequired
 	} else if queryRequest.Query == "" {
@@ -270,7 +270,7 @@ func (c *InternalHTTPClient) QueryNode(ctx context.Context, uri *pilosa.URI, ind
 }
 
 // Import bulk imports bits for a single slice to a host.
-func (c *InternalHTTPClient) Import(ctx context.Context, index, field string, slice uint64, bits []pilosa.Bit) error {
+func (c *InternalClient) Import(ctx context.Context, index, field string, slice uint64, bits []pilosa.Bit) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
@@ -299,7 +299,7 @@ func (c *InternalHTTPClient) Import(ctx context.Context, index, field string, sl
 }
 
 // ImportK bulk imports bits specified by string keys to a host.
-func (c *InternalHTTPClient) ImportK(ctx context.Context, index, field string, columns []pilosa.Bit) error {
+func (c *InternalClient) ImportK(ctx context.Context, index, field string, columns []pilosa.Bit) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
@@ -323,7 +323,7 @@ func (c *InternalHTTPClient) ImportK(ctx context.Context, index, field string, c
 	return nil
 }
 
-func (c *InternalHTTPClient) EnsureIndex(ctx context.Context, name string, options pilosa.IndexOptions) error {
+func (c *InternalClient) EnsureIndex(ctx context.Context, name string, options pilosa.IndexOptions) error {
 	err := c.CreateIndex(ctx, name, options)
 	if err == nil || err == pilosa.ErrIndexExists {
 		return nil
@@ -331,7 +331,7 @@ func (c *InternalHTTPClient) EnsureIndex(ctx context.Context, name string, optio
 	return err
 }
 
-func (c *InternalHTTPClient) EnsureField(ctx context.Context, indexName string, fieldName string, options pilosa.FieldOptions) error {
+func (c *InternalClient) EnsureField(ctx context.Context, indexName string, fieldName string, options pilosa.FieldOptions) error {
 	err := c.CreateField(ctx, indexName, fieldName, options)
 	if err == nil || err == pilosa.ErrFieldExists {
 		return nil
@@ -383,7 +383,7 @@ func marshalImportPayloadK(index, field string, bits []pilosa.Bit) ([]byte, erro
 }
 
 // importNode sends a pre-marshaled import request to a node.
-func (c *InternalHTTPClient) importNode(ctx context.Context, node *pilosa.Node, buf []byte) error {
+func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, buf []byte) error {
 	// Create URL & HTTP request.
 	u := nodePathToURL(node, "/import")
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
@@ -421,7 +421,7 @@ func (c *InternalHTTPClient) importNode(ctx context.Context, node *pilosa.Node, 
 }
 
 // ImportValue bulk imports field values for a single slice to a host.
-func (c *InternalHTTPClient) ImportValue(ctx context.Context, index, field string, slice uint64, vals []pilosa.FieldValue) error {
+func (c *InternalClient) ImportValue(ctx context.Context, index, field string, slice uint64, vals []pilosa.FieldValue) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
@@ -470,7 +470,7 @@ func marshalImportValuePayload(index, field string, slice uint64, vals []pilosa.
 }
 
 // importValueNode sends a pre-marshaled import request to a node.
-func (c *InternalHTTPClient) importValueNode(ctx context.Context, node *pilosa.Node, buf []byte) error {
+func (c *InternalClient) importValueNode(ctx context.Context, node *pilosa.Node, buf []byte) error {
 	// Create URL & HTTP request.
 	u := nodePathToURL(node, "/import-value")
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
@@ -508,7 +508,7 @@ func (c *InternalHTTPClient) importValueNode(ctx context.Context, node *pilosa.N
 }
 
 // ExportCSV bulk exports data for a single slice from a host to CSV format.
-func (c *InternalHTTPClient) ExportCSV(ctx context.Context, index, field string, slice uint64, w io.Writer) error {
+func (c *InternalClient) ExportCSV(ctx context.Context, index, field string, slice uint64, w io.Writer) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
@@ -538,7 +538,7 @@ func (c *InternalHTTPClient) ExportCSV(ctx context.Context, index, field string,
 }
 
 // exportNode copies a CSV export from a node to w.
-func (c *InternalHTTPClient) exportNodeCSV(ctx context.Context, node *pilosa.Node, index, field string, slice uint64, w io.Writer) error {
+func (c *InternalClient) exportNodeCSV(ctx context.Context, node *pilosa.Node, index, field string, slice uint64, w io.Writer) error {
 	// Create URL.
 	u := nodePathToURL(node, "/export")
 	u.RawQuery = url.Values{
@@ -575,14 +575,14 @@ func (c *InternalHTTPClient) exportNodeCSV(ctx context.Context, node *pilosa.Nod
 	return nil
 }
 
-func (c *InternalHTTPClient) RetrieveSliceFromURI(ctx context.Context, index, field string, slice uint64, uri pilosa.URI) (io.ReadCloser, error) {
+func (c *InternalClient) RetrieveSliceFromURI(ctx context.Context, index, field string, slice uint64, uri pilosa.URI) (io.ReadCloser, error) {
 	node := &pilosa.Node{
 		URI: uri,
 	}
 	return c.backupSliceNode(ctx, index, field, slice, node)
 }
 
-func (c *InternalHTTPClient) backupSliceNode(ctx context.Context, index, field string, slice uint64, node *pilosa.Node) (io.ReadCloser, error) {
+func (c *InternalClient) backupSliceNode(ctx context.Context, index, field string, slice uint64, node *pilosa.Node) (io.ReadCloser, error) {
 	u := nodePathToURL(node, "/fragment/data")
 	u.RawQuery = url.Values{
 		"index": {index},
@@ -617,7 +617,7 @@ func (c *InternalHTTPClient) backupSliceNode(ctx context.Context, index, field s
 }
 
 // CreateField creates a new field on the server.
-func (c *InternalHTTPClient) CreateField(ctx context.Context, index, field string, opt pilosa.FieldOptions) error {
+func (c *InternalClient) CreateField(ctx context.Context, index, field string, opt pilosa.FieldOptions) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	}
@@ -667,7 +667,7 @@ func (c *InternalHTTPClient) CreateField(ctx context.Context, index, field strin
 
 // FragmentBlocks returns a list of block checksums for a fragment on a host.
 // Only returns blocks which contain data.
-func (c *InternalHTTPClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, index, field string, slice uint64) ([]pilosa.FragmentBlock, error) {
+func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, index, field string, slice uint64) ([]pilosa.FragmentBlock, error) {
 	if uri == nil {
 		uri = c.defaultURI
 	}
@@ -711,7 +711,7 @@ func (c *InternalHTTPClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI
 }
 
 // BlockData returns row/column id pairs for a block.
-func (c *InternalHTTPClient) BlockData(ctx context.Context, uri *pilosa.URI, index, field string, slice uint64, block int) ([]uint64, []uint64, error) {
+func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, field string, slice uint64, block int) ([]uint64, []uint64, error) {
 	buf, err := proto.Marshal(&internal.BlockDataRequest{
 		Index: index,
 		Field: field,
@@ -758,7 +758,7 @@ func (c *InternalHTTPClient) BlockData(ctx context.Context, uri *pilosa.URI, ind
 }
 
 // ColumnAttrDiff returns data from differing blocks on a remote host.
-func (c *InternalHTTPClient) ColumnAttrDiff(ctx context.Context, uri *pilosa.URI, index string, blks []pilosa.AttrBlock) (map[uint64]map[string]interface{}, error) {
+func (c *InternalClient) ColumnAttrDiff(ctx context.Context, uri *pilosa.URI, index string, blks []pilosa.AttrBlock) (map[uint64]map[string]interface{}, error) {
 	if uri == nil {
 		uri = c.defaultURI
 	}
@@ -801,7 +801,7 @@ func (c *InternalHTTPClient) ColumnAttrDiff(ctx context.Context, uri *pilosa.URI
 }
 
 // RowAttrDiff returns data from differing blocks on a remote host.
-func (c *InternalHTTPClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, index, field string, blks []pilosa.AttrBlock) (map[uint64]map[string]interface{}, error) {
+func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, index, field string, blks []pilosa.AttrBlock) (map[uint64]map[string]interface{}, error) {
 	if uri == nil {
 		uri = c.defaultURI
 	}
@@ -846,7 +846,7 @@ func (c *InternalHTTPClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, i
 }
 
 // SendMessage posts a message synchronously.
-func (c *InternalHTTPClient) SendMessage(ctx context.Context, uri *pilosa.URI, pb proto.Message) error {
+func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, pb proto.Message) error {
 	msg, err := pilosa.MarshalMessage(pb)
 	if err != nil {
 		return fmt.Errorf("marshaling message: %v", err)

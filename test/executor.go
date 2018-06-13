@@ -37,7 +37,7 @@ func init() {
 // NewExecutor returns a new instance of Executor.
 // The executor always matches the uri of the first cluster node.
 func NewExecutor(holder *pilosa.Holder, cluster *pilosa.Cluster) *Executor {
-	client := http.NewInternalHTTPClientFromURI(nil, remoteClient)
+	client := http.NewInternalClientFromURI(nil, remoteClient)
 	executor := pilosa.NewExecutor(pilosa.ExecutorOptInternalQueryClient(client))
 	e := &Executor{Executor: executor}
 	e.Holder = holder
