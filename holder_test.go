@@ -24,8 +24,8 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/pql"
-	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -350,8 +350,20 @@ func TestHolder_DeleteIndex(t *testing.T) {
 
 // Ensure holder can sync with a remote holder.
 func TestHolderSyncer_SyncHolder(t *testing.T) {
+	s := test.NewServer()
+	defer s.Close()
+
+	uri, err := pilosa.NewURIFromAddress(s.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	cluster := test.NewCluster(2)
-	client := server.GetHTTPClient(nil)
+	client := http.GetHTTPClient(nil)
+	httpClient := http.NewInternalClientFromURI(uri, client)
+	cluster.InternalClient = httpClient
+	cluster.RemoteClient = client
+
 	// Create a local holder.
 	hldr0 := test.MustOpenHolder()
 	defer hldr0.Close()
@@ -359,11 +371,9 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	// Create a remote holder wrapped by an HTTP
 	hldr1 := test.MustOpenHolder()
 	defer hldr1.Close()
-	s := test.NewServer()
-	defer s.Close()
 	s.Handler.API.Holder = hldr1.Holder
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor(client)
+		e := pilosa.NewExecutor(pilosa.OptExecutorInternalQueryClient(httpClient))
 		e.Holder = hldr1.Holder
 		e.Node = cluster.Nodes[1]
 		e.Cluster = cluster
@@ -372,11 +382,6 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 
 	// Mock 2-node, fully replicated cluster.
 	cluster.ReplicaN = 2
-
-	uri, err := pilosa.NewURIFromAddress(s.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	cluster.Nodes[0].URI = test.NewURIFromHostPort("localhost", 0)
 	cluster.Nodes[1].URI = *uri
@@ -417,7 +422,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 		Holder:       hldr0.Holder,
 		Node:         cluster.Nodes[0],
 		Cluster:      cluster,
-		RemoteClient: server.GetHTTPClient(nil),
+		RemoteClient: http.GetHTTPClient(nil),
 		Stats:        pilosa.NopStatsClient,
 	}
 

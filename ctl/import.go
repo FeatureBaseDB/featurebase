@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pkg/errors"
 )
@@ -245,12 +246,12 @@ func (cmd *ImportCommand) importBits(ctx context.Context, bits []pilosa.Bit) err
 
 	// Group bits by slice.
 	logger.Printf("grouping %d bits", len(bits))
-	bitsBySlice := pilosa.Bits(bits).GroupBySlice()
+	bitsBySlice := http.Bits(bits).GroupBySlice()
 
 	// Parse path into bits.
 	for slice, chunk := range bitsBySlice {
 		if cmd.Sort {
-			sort.Sort(pilosa.BitsByPos(chunk))
+			sort.Sort(http.BitsByPos(chunk))
 		}
 
 		logger.Printf("importing slice: %d, n=%d", slice, len(chunk))
@@ -439,12 +440,12 @@ func (cmd *ImportCommand) importValues(ctx context.Context, vals []pilosa.FieldV
 
 	// Group vals by slice.
 	logger.Printf("grouping %d vals", len(vals))
-	valsBySlice := pilosa.FieldValues(vals).GroupBySlice()
+	valsBySlice := http.FieldValues(vals).GroupBySlice()
 
 	// Parse path into FieldValues.
 	for slice, vals := range valsBySlice {
 		if cmd.Sort {
-			sort.Sort(pilosa.FieldValues(vals))
+			sort.Sort(http.FieldValues(vals))
 		}
 
 		logger.Printf("importing slice: %d, n=%d", slice, len(vals))

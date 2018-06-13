@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pilosa_test
+package http_test
 
 import (
 	"context"
 	"fmt"
-	"net/http"
+	gohttp "net/http"
 	"reflect"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
-	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -43,10 +43,10 @@ func createCluster(c *pilosa.Cluster) ([]*test.Server, []*test.Holder) {
 	return server, hldr
 }
 
-var defaultClient *http.Client
+var defaultClient *gohttp.Client
 
 func init() {
-	defaultClient = server.GetHTTPClient(nil)
+	defaultClient = http.GetHTTPClient(nil)
 
 }
 
@@ -61,21 +61,24 @@ func TestClient_MultiNode(t *testing.T) {
 	}
 
 	s[0].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor(defaultClient)
+		httpClient := http.NewInternalClientFromURI(&cluster.Nodes[0].URI, defaultClient)
+		e := pilosa.NewExecutor(pilosa.OptExecutorInternalQueryClient(httpClient))
 		e.Holder = hldr[0].Holder
 		e.Node = cluster.Nodes[0]
 		e.Cluster = cluster
 		return e.Execute(ctx, index, query, slices, opt)
 	}
 	s[1].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor(defaultClient)
+		httpClient := http.NewInternalClientFromURI(&cluster.Nodes[0].URI, defaultClient)
+		e := pilosa.NewExecutor(pilosa.OptExecutorInternalQueryClient(httpClient))
 		e.Holder = hldr[1].Holder
 		e.Node = cluster.Nodes[1]
 		e.Cluster = cluster
 		return e.Execute(ctx, index, query, slices, opt)
 	}
 	s[2].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor(defaultClient)
+		httpClient := http.NewInternalClientFromURI(&cluster.Nodes[0].URI, defaultClient)
+		e := pilosa.NewExecutor(pilosa.OptExecutorInternalQueryClient(httpClient))
 		e.Holder = hldr[2].Holder
 		e.Node = cluster.Nodes[2]
 		e.Cluster = cluster
@@ -98,9 +101,9 @@ func TestClient_MultiNode(t *testing.T) {
 		}
 	}
 
-	baseBit0 := SliceWidth * sliceNums[0]
-	baseBit1 := SliceWidth * sliceNums[1]
-	baseBit2 := SliceWidth * sliceNums[2]
+	baseBit0 := pilosa.SliceWidth * sliceNums[0]
+	baseBit1 := pilosa.SliceWidth * sliceNums[1]
+	baseBit2 := pilosa.SliceWidth * sliceNums[2]
 
 	maxSlice := uint64(0)
 	for _, x := range sliceNums {
@@ -336,7 +339,7 @@ func TestClient_FragmentBlocks(t *testing.T) {
 
 	// Retrieve blocks.
 	c := test.MustNewClient(s.Host(), defaultClient)
-	blocks, err := c.FragmentBlocks(context.Background(), "i", "f", 0)
+	blocks, err := c.FragmentBlocks(context.Background(), nil, "i", "f", 0)
 	if err != nil {
 		t.Fatal(err)
 	} else if len(blocks) != 2 {
