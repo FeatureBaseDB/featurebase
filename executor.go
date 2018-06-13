@@ -52,9 +52,10 @@ type Executor struct {
 	MaxWritesPerRequest int
 }
 
-type ExecutorOpt func(e *Executor) error
+// ExecutorOption is a functional option type for pilosa.Executor
+type ExecutorOption func(e *Executor) error
 
-func ExecutorOptInternalQueryClient(c InternalQueryClient) ExecutorOpt {
+func OptExecutorInternalQueryClient(c InternalQueryClient) ExecutorOption {
 	return func(e *Executor) error {
 		e.client = c
 		return nil
@@ -62,7 +63,7 @@ func ExecutorOptInternalQueryClient(c InternalQueryClient) ExecutorOpt {
 }
 
 // NewExecutor returns a new instance of Executor.
-func NewExecutor(opts ...ExecutorOpt) *Executor {
+func NewExecutor(opts ...ExecutorOption) *Executor {
 	e := &Executor{
 		client: NewNopInternalQueryClient(),
 	}

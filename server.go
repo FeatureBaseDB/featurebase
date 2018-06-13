@@ -173,7 +173,7 @@ func OptServerRemoteClient(c *http.Client) ServerOption {
 
 func OptServerInternalClient(c InternalClient) ServerOption {
 	return func(s *Server) error {
-		s.executor = NewExecutor(ExecutorOptInternalQueryClient(c))
+		s.executor = NewExecutor(OptExecutorInternalQueryClient(c))
 		s.defaultClient = c
 		s.Cluster.InternalClient = c
 		return nil

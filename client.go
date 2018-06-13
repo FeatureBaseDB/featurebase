@@ -18,7 +18,7 @@ type Bit struct {
 	Timestamp int64
 }
 
-// FieldValues represents the value for a column within a
+// FieldValue represents the value for a column within a
 // range-encoded field.
 type FieldValue struct {
 	ColumnID uint64

@@ -373,7 +373,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	defer hldr1.Close()
 	s.Handler.API.Holder = hldr1.Holder
 	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor(pilosa.ExecutorOptInternalQueryClient(httpClient))
+		e := pilosa.NewExecutor(pilosa.OptExecutorInternalQueryClient(httpClient))
 		e.Holder = hldr1.Holder
 		e.Node = cluster.Nodes[1]
 		e.Cluster = cluster

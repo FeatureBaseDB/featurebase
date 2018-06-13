@@ -62,7 +62,7 @@ func TestClient_MultiNode(t *testing.T) {
 
 	s[0].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		httpClient := http.NewInternalClientFromURI(&cluster.Nodes[0].URI, defaultClient)
-		e := pilosa.NewExecutor(pilosa.ExecutorOptInternalQueryClient(httpClient))
+		e := pilosa.NewExecutor(pilosa.OptExecutorInternalQueryClient(httpClient))
 		e.Holder = hldr[0].Holder
 		e.Node = cluster.Nodes[0]
 		e.Cluster = cluster
@@ -70,7 +70,7 @@ func TestClient_MultiNode(t *testing.T) {
 	}
 	s[1].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		httpClient := http.NewInternalClientFromURI(&cluster.Nodes[0].URI, defaultClient)
-		e := pilosa.NewExecutor(pilosa.ExecutorOptInternalQueryClient(httpClient))
+		e := pilosa.NewExecutor(pilosa.OptExecutorInternalQueryClient(httpClient))
 		e.Holder = hldr[1].Holder
 		e.Node = cluster.Nodes[1]
 		e.Cluster = cluster
@@ -78,7 +78,7 @@ func TestClient_MultiNode(t *testing.T) {
 	}
 	s[2].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		httpClient := http.NewInternalClientFromURI(&cluster.Nodes[0].URI, defaultClient)
-		e := pilosa.NewExecutor(pilosa.ExecutorOptInternalQueryClient(httpClient))
+		e := pilosa.NewExecutor(pilosa.OptExecutorInternalQueryClient(httpClient))
 		e.Holder = hldr[2].Holder
 		e.Node = cluster.Nodes[2]
 		e.Cluster = cluster
