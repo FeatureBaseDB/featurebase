@@ -59,7 +59,7 @@ type Server struct {
 	executor    *Executor
 
 	// External
-	handler           Handlerer
+	handler           Handler
 	Broadcaster       Broadcaster
 	BroadcastReceiver BroadcastReceiver
 	Gossiper          Gossiper
@@ -127,7 +127,7 @@ func OptServerLongQueryTime(dur time.Duration) ServerOption {
 	}
 }
 
-func OptServerHandler(h Handlerer) ServerOption {
+func OptServerHandler(h Handler) ServerOption {
 	return func(s *Server) error {
 		s.handler = h
 		return nil

@@ -60,7 +60,7 @@ func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(output)
 }
 
-type Handlerer interface {
+type Handler interface {
 	http.Handler
 	GetAPI() *API
 }
@@ -73,6 +73,6 @@ func (n *NopHandler) GetAPI() *API {
 	return nil
 }
 
-func NewNopHandler() Handlerer {
+func NewNopHandler() Handler {
 	return &NopHandler{}
 }
