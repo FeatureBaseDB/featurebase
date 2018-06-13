@@ -338,7 +338,7 @@ func NewStatsClient(name string, host string) (pilosa.StatsClient, error) {
 	case "nop", "none":
 		return pilosa.NopStatsClient, nil
 	default:
-		return nil, errors.Errorf("'%v' not a valid stats client, choose from [expvar, statsd, none].")
+		return nil, errors.Errorf("'%v' not a valid stats client, choose from [expvar, statsd, none].", name)
 	}
 }
 
