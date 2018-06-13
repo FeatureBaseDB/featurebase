@@ -53,7 +53,7 @@ type Index struct {
 
 // NewIndex returns a new instance of Index.
 func NewIndex(path, name string) (*Index, error) {
-	err := ValidateName(name)
+	err := validateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
 	}
@@ -295,7 +295,7 @@ func (i *Index) CreateFieldIfNotExists(name string, opt FieldOptions) (*Field, e
 func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 	if name == "" {
 		return nil, errors.New("field name required")
-	} else if opt.CacheType != "" && !IsValidCacheType(opt.CacheType) {
+	} else if opt.CacheType != "" && !isValidCacheType(opt.CacheType) {
 		return nil, ErrInvalidCacheType
 	}
 

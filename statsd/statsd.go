@@ -15,6 +15,7 @@
 package statsd
 
 import (
+	"sort"
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
@@ -72,7 +73,7 @@ func (c *StatsClient) Tags() []string {
 func (c *StatsClient) WithTags(tags ...string) pilosa.StatsClient {
 	return &StatsClient{
 		client: c.client,
-		tags:   pilosa.UnionStringSlice(c.tags, tags),
+		tags:   unionStringSlice(c.tags, tags),
 		logger: c.logger,
 	}
 }
@@ -123,4 +124,39 @@ func (c *StatsClient) Timing(name string, value time.Duration, rate float64) {
 // SetLogger sets the logger for client.
 func (c *StatsClient) SetLogger(logger pilosa.Logger) {
 	c.logger = logger
+}
+
+// unionStringSlice returns a sorted set of tags which combine a & b.
+func unionStringSlice(a, b []string) []string {
+	// Sort both sets first.
+	sort.Strings(a)
+	sort.Strings(b)
+
+	// Find size of largest slice.
+	n := len(a)
+	if len(b) > n {
+		n = len(b)
+	}
+
+	// Exit if both sets are empty.
+	if n == 0 {
+		return nil
+	}
+
+	// Iterate over both in order and merge.
+	other := make([]string, 0, n)
+	for len(a) > 0 || len(b) > 0 {
+		if len(a) == 0 {
+			other, b = append(other, b[0]), b[1:]
+		} else if len(b) == 0 {
+			other, a = append(other, a[0]), a[1:]
+		} else if a[0] < b[0] {
+			other, a = append(other, a[0]), a[1:]
+		} else if b[0] < a[0] {
+			other, b = append(other, b[0]), b[1:]
+		} else {
+			other, a, b = append(other, a[0]), a[1:], b[1:]
+		}
+	}
+	return other
 }

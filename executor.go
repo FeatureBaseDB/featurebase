@@ -752,7 +752,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 
 	// Union bitmaps across all time-based views.
 	row := &Row{}
-	for _, view := range ViewsByTimeRange(ViewStandard, startTime, endTime, q) {
+	for _, view := range viewsByTimeRange(ViewStandard, startTime, endTime, q) {
 		f := e.Holder.Fragment(index, field, view, slice)
 		if f == nil {
 			continue
