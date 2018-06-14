@@ -653,7 +653,7 @@ func TestHandler_Query_ErrParse(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1", strings.NewReader("bad_fn(")))
 	if w.Code != gohttp.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"error":"parsing: parsing: \nparse error near PegText (line 1 symbol 1 - line 1 symbol 4):\n\"bad\"\n"}`+"\n" {
+	} else if body := w.Body.String(); body != `{"error":"parsing: parsing: \nparse error near open (line 1 symbol 7 - line 1 symbol 8):\n\"(\"\n"}`+"\n" {
 		t.Fatalf("unexpected body: \n%s", body)
 	}
 }

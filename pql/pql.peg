@@ -6,10 +6,10 @@ type PQL Peg {
 
 
 Calls <- Call* !.
-Call <-  newline* < [[A-Z]]+ > { p.startCall(buffer[begin:end] ) } open args close newline* { p.endCall() }
-args <- arg (comma args)? sp / sp
-arg <- ( Call
-         / field sp '=' sp value
+Call <-  whitesp < IDENT > { p.startCall(buffer[begin:end] ) } open allargs comma? close whitesp { p.endCall() }
+allargs <- Call (comma Call)* (comma args)? / comma? args / sp
+args <- arg (comma args)? sp
+arg <- (   field sp '=' sp value
          / field sp COND sp value
          )
 COND <- ( '><' { p.addBTWN() }
@@ -25,9 +25,9 @@ value <- ( item
          / lbrack { p.startList() } list rbrack { p.endList() }
          )
 list <- item (comma list)?
-item <- ( 'null' { p.addVal(nil) }
-         / 'true' { p.addVal(true) }
-         / 'false' { p.addVal(false) }
+item <- ( 'null' &(comma / sp close) { p.addVal(nil) }
+         / 'true' &(comma / sp close) { p.addVal(true) }
+         / 'false' &(comma / sp close) { p.addVal(false) }
          / < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(buffer[begin:end]) }
          / < '-'? '.'[0-9]+ > { p.addNumVal(buffer[begin:end]) }
          / < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > { p.addVal(buffer[begin:end]) }
@@ -44,4 +44,5 @@ sp <- ( ' ' / '\t' )*
 comma <- sp ',' sp
 lbrack <- '[' sp
 rbrack <- sp ']' sp
-newline <- sp '\n' sp
+whitesp <- ( ' ' / '\t' / '\n' )*
+IDENT <- [[A-Z]] ([[A-Z]] / [0-9] / '-' / '_' / '.')*

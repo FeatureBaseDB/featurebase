@@ -71,7 +71,7 @@ func (s *Scanner) Scan() (tok Token, pos Pos, lit string) {
 			return NEQ, pos, "!="
 		}
 		s.unread()
-		return ASSIGN, pos, string(ch)
+		return ILLEGAL, pos, string(ch)
 	case '<':
 		if next := s.read(); next == '=' {
 			return LTE, pos, "<="

@@ -72,11 +72,8 @@ func (q *Query) addVal(val interface{}) {
 		return
 	}
 	if q.lastCond != ILLEGAL {
-		if val != nil || q.lastCond != NEQ {
-			panic(fmt.Sprintf("can't add val %s with condition %s", val, q.lastCond))
-		}
 		call.Args[q.lastField] = &Condition{
-			Op:    NEQ,
+			Op:    q.lastCond,
 			Value: val,
 		}
 	} else {

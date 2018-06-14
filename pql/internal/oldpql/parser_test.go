@@ -190,5 +190,4 @@ func TestParser_Parse(t *testing.T) {
 			t.Fatalf("unexpected call: %#v", q.Calls[0])
 		}
 	})
-
 }
