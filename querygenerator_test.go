@@ -1,4 +1,4 @@
-package test
+package pilosa_test
 
 import (
 	"fmt"
