@@ -939,14 +939,14 @@ func (c *Cluster) markAsJoined() {
 }
 
 func (c *Cluster) needTopologyAgreement() bool {
-	return c.State() == ClusterStateStarting && !StringSlicesAreEqual(c.Topology.NodeIDs, c.nodeIDs())
+	return c.State() == ClusterStateStarting && !stringSlicesAreEqual(c.Topology.NodeIDs, c.nodeIDs())
 }
 
 func (c *Cluster) haveTopologyAgreement() bool {
 	if c.Static {
 		return true
 	}
-	return StringSlicesAreEqual(c.Topology.NodeIDs, c.nodeIDs())
+	return stringSlicesAreEqual(c.Topology.NodeIDs, c.nodeIDs())
 }
 
 func (c *Cluster) allNodesReady() bool {

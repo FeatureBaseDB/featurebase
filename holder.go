@@ -33,8 +33,8 @@ import (
 )
 
 const (
-	// DefaultCacheFlushInterval is the default value for Fragment.CacheFlushInterval.
-	DefaultCacheFlushInterval = 1 * time.Minute
+	// defaultCacheFlushInterval is the default value for Fragment.CacheFlushInterval.
+	defaultCacheFlushInterval = 1 * time.Minute
 
 	// FileLimit is the maximum open file limit (ulimit -n) to automatically set.
 	FileLimit = 262144 // (512^2)
@@ -83,7 +83,7 @@ func NewHolder() *Holder {
 
 		NewAttrStore: NewNopAttrStore,
 
-		CacheFlushInterval: DefaultCacheFlushInterval,
+		CacheFlushInterval: defaultCacheFlushInterval,
 
 		Logger: NopLogger,
 	}

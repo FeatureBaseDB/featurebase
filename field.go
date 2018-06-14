@@ -33,10 +33,10 @@ import (
 const (
 	DefaultFieldType = FieldTypeSet
 
-	DefaultCacheType = CacheTypeRanked
+	defaultCacheType = CacheTypeRanked
 
 	// Default ranked field cache
-	DefaultCacheSize = 50000
+	defaultCacheSize = 50000
 )
 
 // Field types.
@@ -82,7 +82,7 @@ func OptFieldFieldOptions(o FieldOptions) FieldOption {
 
 // NewField returns a new instance of field.
 func NewField(path, index, name string, opts ...FieldOption) (*Field, error) {
-	err := ValidateName(name)
+	err := validateName(name)
 	if err != nil {
 		return nil, err
 	}
@@ -101,8 +101,8 @@ func NewField(path, index, name string, opts ...FieldOption) (*Field, error) {
 
 		options: FieldOptions{
 			Type:      DefaultFieldType,
-			CacheType: DefaultCacheType,
-			CacheSize: DefaultCacheSize,
+			CacheType: defaultCacheType,
+			CacheSize: defaultCacheSize,
 		},
 
 		Logger: NopLogger,
@@ -645,7 +645,7 @@ func (f *Field) ViewRow(viewName string, rowID uint64) (*Row, error) {
 // SetBit sets a bit on a view within the field.
 func (f *Field) SetBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
 	// Validate view name.
-	if !IsValidView(name) {
+	if !isValidView(name) {
 		return false, ErrInvalidView
 	}
 
@@ -668,7 +668,7 @@ func (f *Field) SetBit(name string, rowID, colID uint64, t *time.Time) (changed 
 	}
 
 	// If a timestamp is specified then set bits across all views for the quantum.
-	for _, subname := range ViewsByTime(name, *t, f.TimeQuantum()) {
+	for _, subname := range viewsByTime(name, *t, f.TimeQuantum()) {
 		view, err := f.CreateViewIfNotExists(subname)
 		if err != nil {
 			return changed, errors.Wrapf(err, "creating view %s", subname)
@@ -687,7 +687,7 @@ func (f *Field) SetBit(name string, rowID, colID uint64, t *time.Time) (changed 
 // ClearBit clears a bit within the field.
 func (f *Field) ClearBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
 	// Validate view name.
-	if !IsValidView(name) {
+	if !isValidView(name) {
 		return false, ErrInvalidView
 	}
 
@@ -710,7 +710,7 @@ func (f *Field) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 	}
 
 	// If a timestamp is specified then clear bits across all views for the quantum.
-	for _, subname := range ViewsByTime(name, *t, f.TimeQuantum()) {
+	for _, subname := range viewsByTime(name, *t, f.TimeQuantum()) {
 		view, err := f.CreateViewIfNotExists(subname)
 		if err != nil {
 			return changed, errors.Wrapf(err, "creating view %s", subname)
@@ -899,7 +899,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 		if timestamp == nil {
 			standard = []string{ViewStandard}
 		} else {
-			standard = ViewsByTime(ViewStandard, *timestamp, q)
+			standard = viewsByTime(ViewStandard, *timestamp, q)
 			// In order to match the logic of `SetBit()`, we want bits
 			// with timestamps to write to both time and standard views.
 			standard = append(standard, ViewStandard)
@@ -1233,8 +1233,8 @@ const (
 	CacheTypeNone   = "none"
 )
 
-// IsValidCacheType returns true if v is a valid cache type.
-func IsValidCacheType(v string) bool {
+// isValidCacheType returns true if v is a valid cache type.
+func isValidCacheType(v string) bool {
 	switch v {
 	case CacheTypeLRU, CacheTypeRanked, CacheTypeNone:
 		return true

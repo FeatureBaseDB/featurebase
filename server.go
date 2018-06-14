@@ -637,7 +637,7 @@ func (s *Server) monitorDiagnostics() {
 
 	// Flush the diagnostics metrics at startup, then on each tick interval
 	flush := func() {
-		openFiles, err := CountOpenFiles()
+		openFiles, err := countOpenFiles()
 		if err == nil {
 			s.diagnostics.Set("OpenFiles", openFiles)
 		}
@@ -694,7 +694,7 @@ func (s *Server) monitorRuntime() {
 		// Record the number of go routines.
 		s.Holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
 
-		openFiles, err := CountOpenFiles()
+		openFiles, err := countOpenFiles()
 		// Open File handles.
 		if err == nil {
 			s.Holder.Stats.Gauge("OpenFiles", float64(openFiles), 1.0)
@@ -710,8 +710,8 @@ func (s *Server) monitorRuntime() {
 	}
 }
 
-// CountOpenFiles on operating systems that support lsof.
-func CountOpenFiles() (int, error) {
+// countOpenFiles on operating systems that support lsof.
+func countOpenFiles() (int, error) {
 	switch runtime.GOOS {
 	case "darwin", "linux", "unix", "freebsd":
 		// -b option avoid kernel blocks
@@ -725,9 +725,9 @@ func CountOpenFiles() (int, error) {
 		return len(lines), nil
 	case "windows":
 		// TODO: count open file handles on windows
-		return 0, errors.New("CountOpenFiles() on Windows is not supported")
+		return 0, errors.New("countOpenFiles() on Windows is not supported")
 	default:
-		return 0, errors.New("CountOpenFiles() on this OS is not supported")
+		return 0, errors.New("countOpenFiles() on this OS is not supported")
 	}
 }
 
