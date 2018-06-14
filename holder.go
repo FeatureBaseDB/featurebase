@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -563,9 +562,8 @@ func (h *Holder) logStartup() error {
 type HolderSyncer struct {
 	Holder *Holder
 
-	Node         *Node
-	Cluster      *Cluster
-	RemoteClient *http.Client
+	Node    *Node
+	Cluster *Cluster
 
 	// Stats
 	Stats StatsClient
@@ -755,11 +753,10 @@ func (s *HolderSyncer) syncFragment(index, field, view string, slice uint64) err
 
 	// Sync fragments together.
 	fs := FragmentSyncer{
-		Fragment:     frag,
-		Node:         s.Node,
-		Cluster:      s.Cluster,
-		Closing:      s.Closing,
-		RemoteClient: s.RemoteClient,
+		Fragment: frag,
+		Node:     s.Node,
+		Cluster:  s.Cluster,
+		Closing:  s.Closing,
 	}
 	if err := fs.syncFragment(); err != nil {
 		return errors.Wrap(err, "syncing fragment")

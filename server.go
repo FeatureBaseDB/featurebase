@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,7 +62,6 @@ type Server struct {
 	Broadcaster       Broadcaster
 	BroadcastReceiver BroadcastReceiver
 	Gossiper          Gossiper
-	remoteClient      *http.Client
 	systemInfo        SystemInfo
 	gcNotifier        GCNotifier
 	NewAttrStore      func(string) AttrStore
@@ -158,15 +156,6 @@ func OptServerSystemInfo(si SystemInfo) ServerOption {
 func OptServerGCNotifier(gcn GCNotifier) ServerOption {
 	return func(s *Server) error {
 		s.gcNotifier = gcn
-		return nil
-	}
-}
-
-// TODO: Remove RemoteClient
-func OptServerRemoteClient(c *http.Client) ServerOption {
-	return func(s *Server) error {
-		s.remoteClient = c
-		s.Cluster.RemoteClient = c
 		return nil
 	}
 }
@@ -313,18 +302,8 @@ func (s *Server) Open() error {
 	// Initialize Holder.
 	s.Holder.Broadcaster = s.Broadcaster
 
-	// Serve HTTP.
-	go func() {
-		server := &http.Server{Handler: s.handler}
-		go func() {
-			<-s.closing
-			server.Close()
-		}()
-		err := server.Serve(s.ln)
-		if err != nil && err.Error() != "http: Server closed" {
-			s.logger.Printf("HTTP handler terminated with error: %s\n", err)
-		}
-	}()
+	// Serve handler.
+	go s.handler.Serve(s.ln, s.closing)
 
 	// Start the BroadcastReceiver.
 	if err := s.BroadcastReceiver.Start(s); err != nil {
@@ -424,7 +403,6 @@ func (s *Server) monitorAntiEntropy() {
 		syncer.Node = s.Cluster.Node
 		syncer.Cluster = s.Cluster
 		syncer.Closing = s.closing
-		syncer.RemoteClient = s.remoteClient
 		syncer.Stats = s.Holder.Stats.WithTags("HolderSyncer")
 
 		// Sync holders.
