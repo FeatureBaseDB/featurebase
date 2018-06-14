@@ -33,10 +33,10 @@ import (
 const (
 	DefaultFieldType = FieldTypeSet
 
-	DefaultCacheType = CacheTypeRanked
+	defaultCacheType = CacheTypeRanked
 
 	// Default ranked field cache
-	DefaultCacheSize = 50000
+	defaultCacheSize = 50000
 )
 
 // Field types.
@@ -101,8 +101,8 @@ func NewField(path, index, name string, opts ...FieldOption) (*Field, error) {
 
 		options: FieldOptions{
 			Type:      DefaultFieldType,
-			CacheType: DefaultCacheType,
-			CacheSize: DefaultCacheSize,
+			CacheType: defaultCacheType,
+			CacheSize: defaultCacheSize,
 		},
 
 		Logger: NopLogger,

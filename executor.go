@@ -25,13 +25,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-// DefaultField is the field used if one is not specified.
+// defaultField is the field used if one is not specified.
 const (
-	DefaultField = "general"
+	defaultField = "general"
 
-	// MinThreshold is the lowest count to use in a Top-N operation when
+	// defaultMinThreshold is the lowest count to use in a Top-N operation when
 	// looking for additional id/count pairs.
-	MinThreshold = 1
+	defaultMinThreshold = 1
 
 	columnLabel = "col"
 	rowLabel    = "row"
@@ -588,7 +588,7 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 
 	// Set default field.
 	if field == "" {
-		field = DefaultField
+		field = defaultField
 	}
 
 	f := e.Holder.Fragment(index, field, ViewStandard, slice)
@@ -597,7 +597,7 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 	}
 
 	if minThreshold <= 0 {
-		minThreshold = MinThreshold
+		minThreshold = defaultMinThreshold
 	}
 
 	if tanimotoThreshold > 100 {
@@ -646,7 +646,7 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.
 	// Fetch field & row label based on argument.
 	field, _ := c.Args["field"].(string)
 	if field == "" {
-		field = DefaultField
+		field = defaultField
 	}
 	f := e.Holder.Field(index, field)
 	if f == nil {
@@ -700,7 +700,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	// Parse field, use default if unset.
 	field, _ := c.Args["field"].(string)
 	if field == "" {
-		field = DefaultField
+		field = defaultField
 	}
 
 	// Retrieve column label.

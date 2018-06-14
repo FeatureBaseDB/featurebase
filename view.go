@@ -73,7 +73,7 @@ func NewView(path, index, field, name string, cacheSize uint32) *View {
 		name:      name,
 		cacheSize: cacheSize,
 
-		cacheType: DefaultCacheType,
+		cacheType: defaultCacheType,
 		fragments: make(map[uint64]*Fragment),
 
 		broadcaster: NopBroadcaster,
