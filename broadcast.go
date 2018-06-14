@@ -120,21 +120,21 @@ func (n *nopGossiper) SendAsync(pb proto.Message) error {
 
 // Broadcast message types.
 const (
-	MessageTypeCreateSlice = iota
-	MessageTypeCreateIndex
-	MessageTypeDeleteIndex
-	MessageTypeCreateField
-	MessageTypeDeleteField
-	MessageTypeCreateView
-	MessageTypeDeleteView
-	MessageTypeClusterStatus
-	MessageTypeResizeInstruction
-	MessageTypeResizeInstructionComplete
-	MessageTypeSetCoordinator
-	MessageTypeUpdateCoordinator
-	MessageTypeNodeState
-	MessageTypeRecalculateCaches
-	MessageTypeNodeEvent
+	messageTypeCreateSlice = iota
+	messageTypeCreateIndex
+	messageTypeDeleteIndex
+	messageTypeCreateField
+	messageTypeDeleteField
+	messageTypeCreateView
+	messageTypeDeleteView
+	messageTypeClusterStatus
+	messageTypeResizeInstruction
+	messageTypeResizeInstructionComplete
+	messageTypeSetCoordinator
+	messageTypeUpdateCoordinator
+	messageTypeNodeState
+	messageTypeRecalculateCaches
+	messageTypeNodeEvent
 )
 
 // MarshalMessage encodes the protobuf message into a byte slice.
@@ -142,35 +142,35 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 	var typ uint8
 	switch obj := m.(type) {
 	case *internal.CreateSliceMessage:
-		typ = MessageTypeCreateSlice
+		typ = messageTypeCreateSlice
 	case *internal.CreateIndexMessage:
-		typ = MessageTypeCreateIndex
+		typ = messageTypeCreateIndex
 	case *internal.DeleteIndexMessage:
-		typ = MessageTypeDeleteIndex
+		typ = messageTypeDeleteIndex
 	case *internal.CreateFieldMessage:
-		typ = MessageTypeCreateField
+		typ = messageTypeCreateField
 	case *internal.DeleteFieldMessage:
-		typ = MessageTypeDeleteField
+		typ = messageTypeDeleteField
 	case *internal.CreateViewMessage:
-		typ = MessageTypeCreateView
+		typ = messageTypeCreateView
 	case *internal.DeleteViewMessage:
-		typ = MessageTypeDeleteView
+		typ = messageTypeDeleteView
 	case *internal.ClusterStatus:
-		typ = MessageTypeClusterStatus
+		typ = messageTypeClusterStatus
 	case *internal.ResizeInstruction:
-		typ = MessageTypeResizeInstruction
+		typ = messageTypeResizeInstruction
 	case *internal.ResizeInstructionComplete:
-		typ = MessageTypeResizeInstructionComplete
+		typ = messageTypeResizeInstructionComplete
 	case *internal.SetCoordinatorMessage:
-		typ = MessageTypeSetCoordinator
+		typ = messageTypeSetCoordinator
 	case *internal.UpdateCoordinatorMessage:
-		typ = MessageTypeUpdateCoordinator
+		typ = messageTypeUpdateCoordinator
 	case *internal.NodeStateMessage:
-		typ = MessageTypeNodeState
+		typ = messageTypeNodeState
 	case *internal.RecalculateCaches:
-		typ = MessageTypeRecalculateCaches
+		typ = messageTypeRecalculateCaches
 	case *internal.NodeEventMessage:
-		typ = MessageTypeNodeEvent
+		typ = messageTypeNodeEvent
 	default:
 		return nil, fmt.Errorf("message type not implemented for marshalling: %s", reflect.TypeOf(obj))
 	}
@@ -187,35 +187,35 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 
 	var m proto.Message
 	switch typ {
-	case MessageTypeCreateSlice:
+	case messageTypeCreateSlice:
 		m = &internal.CreateSliceMessage{}
-	case MessageTypeCreateIndex:
+	case messageTypeCreateIndex:
 		m = &internal.CreateIndexMessage{}
-	case MessageTypeDeleteIndex:
+	case messageTypeDeleteIndex:
 		m = &internal.DeleteIndexMessage{}
-	case MessageTypeCreateField:
+	case messageTypeCreateField:
 		m = &internal.CreateFieldMessage{}
-	case MessageTypeDeleteField:
+	case messageTypeDeleteField:
 		m = &internal.DeleteFieldMessage{}
-	case MessageTypeCreateView:
+	case messageTypeCreateView:
 		m = &internal.CreateViewMessage{}
-	case MessageTypeDeleteView:
+	case messageTypeDeleteView:
 		m = &internal.DeleteViewMessage{}
-	case MessageTypeClusterStatus:
+	case messageTypeClusterStatus:
 		m = &internal.ClusterStatus{}
-	case MessageTypeResizeInstruction:
+	case messageTypeResizeInstruction:
 		m = &internal.ResizeInstruction{}
-	case MessageTypeResizeInstructionComplete:
+	case messageTypeResizeInstructionComplete:
 		m = &internal.ResizeInstructionComplete{}
-	case MessageTypeSetCoordinator:
+	case messageTypeSetCoordinator:
 		m = &internal.SetCoordinatorMessage{}
-	case MessageTypeUpdateCoordinator:
+	case messageTypeUpdateCoordinator:
 		m = &internal.UpdateCoordinatorMessage{}
-	case MessageTypeNodeState:
+	case messageTypeNodeState:
 		m = &internal.NodeStateMessage{}
-	case MessageTypeRecalculateCaches:
+	case messageTypeRecalculateCaches:
 		m = &internal.RecalculateCaches{}
-	case MessageTypeNodeEvent:
+	case messageTypeNodeEvent:
 		m = &internal.NodeEventMessage{}
 	default:
 		return nil, fmt.Errorf("invalid message type: %d", typ)

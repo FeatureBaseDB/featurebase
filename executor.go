@@ -25,13 +25,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-// DefaultField is the field used if one is not specified.
+// defaultField is the field used if one is not specified.
 const (
-	DefaultField = "general"
+	defaultField = "general"
 
-	// MinThreshold is the lowest count to use in a Top-N operation when
+	// defaultMinThreshold is the lowest count to use in a Top-N operation when
 	// looking for additional id/count pairs.
-	MinThreshold = 1
+	defaultMinThreshold = 1
 
 	columnLabel = "col"
 	rowLabel    = "row"
@@ -588,7 +588,7 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 
 	// Set default field.
 	if field == "" {
-		field = DefaultField
+		field = defaultField
 	}
 
 	f := e.Holder.Fragment(index, field, ViewStandard, slice)
@@ -597,7 +597,7 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 	}
 
 	if minThreshold <= 0 {
-		minThreshold = MinThreshold
+		minThreshold = defaultMinThreshold
 	}
 
 	if tanimotoThreshold > 100 {
@@ -646,7 +646,7 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.
 	// Fetch field & row label based on argument.
 	field, _ := c.Args["field"].(string)
 	if field == "" {
-		field = DefaultField
+		field = defaultField
 	}
 	f := e.Holder.Field(index, field)
 	if f == nil {
@@ -700,7 +700,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	// Parse field, use default if unset.
 	field, _ := c.Args["field"].(string)
 	if field == "" {
-		field = DefaultField
+		field = defaultField
 	}
 
 	// Retrieve column label.
@@ -752,7 +752,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 
 	// Union bitmaps across all time-based views.
 	row := &Row{}
-	for _, view := range ViewsByTimeRange(ViewStandard, startTime, endTime, q) {
+	for _, view := range viewsByTimeRange(ViewStandard, startTime, endTime, q) {
 		f := e.Holder.Fragment(index, field, view, slice)
 		if f == nil {
 			continue
@@ -1002,7 +1002,7 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 func (e *Executor) executeClearBitView(ctx context.Context, index string, c *pql.Call, f *Field, view string, colID, rowID uint64, opt *ExecOptions) (bool, error) {
 	slice := colID / SliceWidth
 	ret := false
-	for _, node := range e.Cluster.SliceNodes(index, slice) {
+	for _, node := range e.Cluster.sliceNodes(index, slice) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
 			val, err := f.ClearBit(view, rowID, colID, nil)
@@ -1078,7 +1078,7 @@ func (e *Executor) executeSetBitView(ctx context.Context, index string, c *pql.C
 	slice := colID / SliceWidth
 	ret := false
 
-	for _, node := range e.Cluster.SliceNodes(index, slice) {
+	for _, node := range e.Cluster.sliceNodes(index, slice) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
 			val, err := f.SetBit(view, rowID, colID, timestamp)
@@ -1414,7 +1414,7 @@ func (e *Executor) slicesByNode(nodes []*Node, index string, slices []uint64) (m
 
 loop:
 	for _, slice := range slices {
-		for _, node := range e.Cluster.SliceNodes(index, slice) {
+		for _, node := range e.Cluster.sliceNodes(index, slice) {
 			if Nodes(nodes).Contains(node) {
 				m[node] = append(m[node], slice)
 				continue loop
@@ -1444,7 +1444,7 @@ func (e *Executor) mapReduce(ctx context.Context, index string, slices []uint64,
 	if !opt.Remote {
 		nodes = Nodes(e.Cluster.Nodes).Clone()
 	} else {
-		nodes = []*Node{e.Cluster.nodeByID(e.Node.ID)}
+		nodes = []*Node{e.Cluster.unprotectedNodeByID(e.Node.ID)}
 	}
 
 	// Start mapping across all primary owners.

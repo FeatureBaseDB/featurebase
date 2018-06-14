@@ -121,7 +121,7 @@ func (t *ClusterCluster) SetBit(index, field, view string, rowID, colID uint64, 
 	// Determine which node should receive the SetBit.
 	c0 := t.Clusters[0] // use the first node's cluster to determine slice location.
 	slice := colID / SliceWidth
-	nodes := c0.SliceNodes(index, slice)
+	nodes := c0.sliceNodes(index, slice)
 
 	for _, node := range nodes {
 		c := t.clusterByID(node.ID)
@@ -236,7 +236,7 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*Cluster, error) 
 	// add nodes
 	if saveTopology {
 		for _, n := range t.common.Nodes {
-			c.AddNode(n)
+			c.addNode(n)
 		}
 	}
 
@@ -273,13 +273,13 @@ func (t *ClusterCluster) SetState(state string) {
 // Open opens all clusters in the test cluster.
 func (t *ClusterCluster) Open() error {
 	for _, c := range t.Clusters {
-		if err := c.Open(); err != nil {
+		if err := c.open(); err != nil {
 			return err
 		}
 		if err := c.Holder.Open(); err != nil {
 			return err
 		}
-		if err := c.SetNodeState(NodeStateReady); err != nil {
+		if err := c.setNodeState(NodeStateReady); err != nil {
 			return err
 		}
 	}
@@ -288,7 +288,7 @@ func (t *ClusterCluster) Open() error {
 	if len(t.Clusters) == 0 {
 		return nil
 	}
-	t.Clusters[0].ListenForJoins()
+	t.Clusters[0].listenForJoins()
 
 	return nil
 }
@@ -296,7 +296,7 @@ func (t *ClusterCluster) Open() error {
 // Close closes all clusters in the test cluster.
 func (t *ClusterCluster) Close() error {
 	for _, c := range t.Clusters {
-		err := c.Close()
+		err := c.close()
 		if err != nil {
 			return err
 		}
@@ -310,7 +310,7 @@ func (t *ClusterCluster) SendSync(pb proto.Message) error {
 	case *internal.ClusterStatus:
 		// Apply the send message to all nodes (except the coordinator).
 		for _, c := range t.Clusters {
-			c.MergeClusterStatus(obj)
+			c.mergeClusterStatus(obj)
 		}
 		t.mu.RLock()
 		if obj.State == ClusterStateNormal && t.resizing {
@@ -337,7 +337,7 @@ func (t *ClusterCluster) SendTo(to *Node, pb proto.Message) error {
 		}
 	case *internal.ResizeInstructionComplete:
 		coord := t.clusterByID(to.ID)
-		go coord.MarkResizeInstructionComplete(obj)
+		go coord.markResizeInstructionComplete(obj)
 	}
 	return nil
 }

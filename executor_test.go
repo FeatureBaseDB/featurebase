@@ -38,7 +38,7 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+		e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 
 		// Set bits.
 		if _, err := e.Execute(context.Background(), "i", test.MustParse(``+
@@ -87,7 +87,7 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+		e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 
 		// Set bits.
 		if _, err := e.Execute(context.Background(), "i", test.MustParse(``+
@@ -113,7 +113,7 @@ func TestExecutor_Execute_Difference(t *testing.T) {
 	hldr.SetBit("i", "general", 11, 2)
 	hldr.SetBit("i", "general", 11, 4)
 
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Difference(Bitmap(row=10), Bitmap(row=11))`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if columns := res[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{1, 3}) {
@@ -127,7 +127,7 @@ func TestExecutor_Execute_Empty_Difference(t *testing.T) {
 	defer hldr.Close()
 	hldr.SetBit("i", "general", 10, 1)
 
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Difference()`), nil, nil); err == nil {
 		t.Fatalf("Empty Difference query should give error, but got %v", res)
 	}
@@ -145,7 +145,7 @@ func TestExecutor_Execute_Intersect(t *testing.T) {
 	hldr.SetBit("i", "general", 11, 2)
 	hldr.SetBit("i", "general", 11, SliceWidth+2)
 
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Intersect(Bitmap(row=10), Bitmap(row=11))`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if columns := res[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{1, SliceWidth + 2}) {
@@ -158,7 +158,7 @@ func TestExecutor_Execute_Empty_Intersect(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Intersect()`), nil, nil); err == nil {
 		t.Fatalf("Empty Intersect query should give error, but got %v", res)
 	}
@@ -175,7 +175,7 @@ func TestExecutor_Execute_Union(t *testing.T) {
 	hldr.SetBit("i", "general", 11, 2)
 	hldr.SetBit("i", "general", 11, SliceWidth+2)
 
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Union(Bitmap(row=10), Bitmap(row=11))`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if columns := res[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{0, 2, SliceWidth + 1, SliceWidth + 2}) {
@@ -189,7 +189,7 @@ func TestExecutor_Execute_Empty_Union(t *testing.T) {
 	defer hldr.Close()
 	hldr.SetBit("i", "general", 10, 0)
 
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Union()`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if columns := res[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{}) {
@@ -208,7 +208,7 @@ func TestExecutor_Execute_Xor(t *testing.T) {
 	hldr.SetBit("i", "general", 11, 2)
 	hldr.SetBit("i", "general", 11, SliceWidth+2)
 
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Xor(Bitmap(row=10), Bitmap(row=11))`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if columns := res[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{0, 2, SliceWidth + 1}) {
@@ -224,7 +224,7 @@ func TestExecutor_Execute_Count(t *testing.T) {
 	hldr.SetBit("i", "f", 10, SliceWidth+1)
 	hldr.SetBit("i", "f", 10, SliceWidth+2)
 
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Count(Bitmap(row=10, field=f))`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if res[0] != uint64(3) {
@@ -240,7 +240,7 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 	// set a bit so the view gets created.
 	hldr.SetBit("i", "f", 1, 0)
 
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	if n := hldr.Row("i", "f", 11).Count(); n != 0 {
 		t.Fatalf("unexpected bitmap count: %d", n)
 	}
@@ -284,7 +284,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		}
 
 		// Set bsiGroup values.
-		e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+		e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 		if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetValue(col=10, f=25)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetValue(col=100, f=10)`), nil, nil); err != nil {
@@ -322,21 +322,21 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		}
 
 		t.Run("ErrColumnBSIGroupRequired", func(t *testing.T) {
-			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+			e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetValue(invalid_column_name=10, f=100)`), nil, nil); err == nil || err.Error() != `SetValue() column field 'col' required` {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 
 		t.Run("ErrColumnBSIGroupValue", func(t *testing.T) {
-			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+			e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetValue(invalid_column_name="bad_column", f=100)`), nil, nil); err == nil || err.Error() != `SetValue() column field 'col' required` {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
 
 		t.Run("ErrInvalidBSIGroupValueType", func(t *testing.T) {
-			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+			e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetValue(col=10, f="hello")`), nil, nil); err == nil || err != pilosa.ErrInvalidBSIGroupValueType {
 				t.Fatalf("unexpected error: %s", err)
 			}
@@ -359,7 +359,7 @@ func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 
 	// Set two attrs on f/10.
 	// Also set attrs on other bitmaps and fields to test isolation.
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetRowAttrs(row=10, field=f, foo="bar")`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -385,7 +385,7 @@ func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 func TestExecutor_Execute_TopN(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 
 	// Set columns for rows 0, 10, & 20 across two slices.
 	if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{}); err != nil {
@@ -437,7 +437,7 @@ func TestExecutor_Execute_TopN_fill(t *testing.T) {
 	hldr.SetBit("i", "f", 1, SliceWidth)
 
 	// Execute query.
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	if result, err := e.Execute(context.Background(), "i", test.MustParse(`TopN(field=f, n=1)`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(result, []interface{}{[]pilosa.Pair{
@@ -471,7 +471,7 @@ func TestExecutor_Execute_TopN_fill_small(t *testing.T) {
 	hldr.SetBit("i", "f", 4, 3*SliceWidth+1)
 
 	// Execute query.
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	if result, err := e.Execute(context.Background(), "i", test.MustParse(`TopN(field=f, n=1)`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(result, []interface{}{[]pilosa.Pair{
@@ -506,7 +506,7 @@ func TestExecutor_Execute_TopN_Src(t *testing.T) {
 	hldr.MustCreateRankedFragmentIfNotExists("i", "other", pilosa.ViewStandard, 1).RecalculateCache()
 
 	// Execute query.
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	if result, err := e.Execute(context.Background(), "i", test.MustParse(`TopN(Bitmap(row=100, field=other), field=f, n=3)`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(result, []interface{}{[]pilosa.Pair{
@@ -530,7 +530,7 @@ func TestExecutor_Execute_TopN_Attr(t *testing.T) {
 	if err := hldr.Field("i", "f").RowAttrStore().SetAttrs(10, map[string]interface{}{"category": int64(123)}); err != nil {
 		t.Fatal(err)
 	}
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	if result, err := e.Execute(context.Background(), "i", test.MustParse(`TopN(field="f", n=1, attrName="category", attrValues=[123])`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(result, []interface{}{[]pilosa.Pair{
@@ -553,7 +553,7 @@ func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
 	if err := hldr.Field("i", "f").RowAttrStore().SetAttrs(10, map[string]interface{}{"category": uint64(123)}); err != nil {
 		t.Fatal(err)
 	}
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	if result, err := e.Execute(context.Background(), "i", test.MustParse(`TopN(Bitmap(row=10,field=f),field="f", n=1, attrName="category", attrValues=[123])`), nil, nil); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(result, []interface{}{[]pilosa.Pair{
@@ -567,7 +567,7 @@ func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
 func TestExecutor_Execute_MinMax(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 
 	idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
 	if err != nil {
@@ -662,7 +662,7 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 func TestExecutor_Execute_Sum(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 
 	idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
 	if err != nil {
@@ -733,7 +733,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 func TestExecutor_Execute_BSIGroupRange(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 
 	// Create index.
 	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
@@ -775,7 +775,7 @@ func TestExecutor_Execute_BSIGroupRange(t *testing.T) {
 func TestExecutor_Execute_Range(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 
 	idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
 	if err != nil {
@@ -955,7 +955,7 @@ func TestExecutor_Execute_Range(t *testing.T) {
 
 // Ensure a remote query can return a row.
 func TestExecutor_Execute_Remote_Row(t *testing.T) {
-	c := test.NewCluster(2)
+	c := pilosa.NewTestCluster(2)
 
 	// Create secondary server and update second cluster node.
 	s := test.NewServer()
@@ -1003,7 +1003,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 
 // Ensure a remote query can return a count.
 func TestExecutor_Execute_Remote_Count(t *testing.T) {
-	c := test.NewCluster(2)
+	c := pilosa.NewTestCluster(2)
 
 	// Create secondary server and update second cluster node.
 	s := test.NewServer()
@@ -1038,7 +1038,7 @@ func TestExecutor_Execute_Remote_Count(t *testing.T) {
 
 // Ensure a remote query can set columns on multiple nodes.
 func TestExecutor_Execute_Remote_SetBit(t *testing.T) {
-	c := test.NewCluster(2)
+	c := pilosa.NewTestCluster(2)
 	c.ReplicaN = 2
 
 	// Create secondary server and update second cluster node.
@@ -1090,7 +1090,7 @@ func TestExecutor_Execute_Remote_SetBit(t *testing.T) {
 
 // Ensure a remote query can set columns on multiple nodes.
 func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
-	c := test.NewCluster(2)
+	c := pilosa.NewTestCluster(2)
 	c.ReplicaN = 2
 
 	// Create secondary server and update second cluster node.
@@ -1144,7 +1144,7 @@ func TestExecutor_Execute_Remote_SetBit_With_Timestamp(t *testing.T) {
 
 // Ensure a remote query can return a top-n query.
 func TestExecutor_Execute_Remote_TopN(t *testing.T) {
-	c := test.NewCluster(2)
+	c := pilosa.NewTestCluster(2)
 
 	// Create secondary server and update second cluster node.
 	s := test.NewServer()
@@ -1213,7 +1213,7 @@ func TestExecutor_Execute_Remote_TopN(t *testing.T) {
 func TestExecutor_Execute_ErrMaxWritesPerRequest(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	e.MaxWritesPerRequest = 3
 	if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetBit() ClearBit() SetBit() SetBit()`), nil, nil); err != pilosa.ErrTooManyWrites {
 		t.Fatalf("unexpected error: %s", err)
@@ -1229,7 +1229,7 @@ func TestExectutor_SetColumnAttrs_ExcludeField(t *testing.T) {
 	targetAttrs := map[string]interface{}{
 		"foo": "bar",
 	}
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 
 	// SetColumnAttrs call should exclude the field attribute
 	_, err := e.Execute(context.Background(), "i", test.MustParse("SetBit(field='f', row=1, col=10)"), nil, nil)

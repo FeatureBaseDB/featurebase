@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
@@ -213,7 +214,7 @@ func NewGossipMemberSet(name string, host string, cfg Config, ger *GossipEventRe
 	conf.BindAddr = host
 	conf.BindPort = port
 	conf.AdvertisePort = port
-	conf.AdvertiseAddr = pilosa.HostToIP(host)
+	conf.AdvertiseAddr = hostToIP(host)
 	//
 	conf.TCPTimeout = time.Duration(cfg.StreamTimeout)
 	conf.SuspicionMult = cfg.SuspicionMult
@@ -579,4 +580,22 @@ type Config struct {
 	Interval      toml.Duration `toml:"interval"`
 	Nodes         int           `toml:"nodes"`
 	ToTheDeadTime toml.Duration `toml:"to-the-dead-time"`
+}
+
+// hostToIP converts host to an IP4 address based on net.LookupIP().
+func hostToIP(host string) string {
+	// if host is not an IP addr, check net.LookupIP()
+	if net.ParseIP(host) == nil {
+		hosts, err := net.LookupIP(host)
+		if err != nil {
+			return host
+		}
+		for _, h := range hosts {
+			// this restricts pilosa to IP4
+			if h.To4() != nil {
+				return h.String()
+			}
+		}
+	}
+	return host
 }

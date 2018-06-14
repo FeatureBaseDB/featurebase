@@ -216,7 +216,6 @@ func (m *Command) SetupServer() error {
 	}
 
 	c := http.GetHTTPClient(TLSConfig)
-	api.RemoteClient = c
 
 	m.Server, err = pilosa.NewServer(
 		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
@@ -235,7 +234,6 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerStatsClient(statsClient),
 		pilosa.OptServerListener(ln),
 		pilosa.OptServerURI(uri),
-		pilosa.OptServerRemoteClient(c),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 	)
 

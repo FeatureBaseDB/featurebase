@@ -34,8 +34,8 @@ const (
 	viewBSIGroupPrefix = "bsig_"
 )
 
-// IsValidView returns true if name is valid.
-func IsValidView(name string) bool {
+// isValidView returns true if name is valid.
+func isValidView(name string) bool {
 	return name == ViewStandard
 }
 
@@ -73,7 +73,7 @@ func NewView(path, index, field, name string, cacheSize uint32) *View {
 		name:      name,
 		cacheSize: cacheSize,
 
-		cacheType: DefaultCacheType,
+		cacheType: defaultCacheType,
 		fragments: make(map[uint64]*Fragment),
 
 		broadcaster: NopBroadcaster,

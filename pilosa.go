@@ -16,9 +16,7 @@ package pilosa
 
 import (
 	"errors"
-	"net"
 	"regexp"
-	"strings"
 
 	"github.com/pilosa/pilosa/internal"
 )
@@ -108,26 +106,16 @@ func EncodeColumnAttrSet(set *ColumnAttrSet) *internal.ColumnAttrSet {
 // TimeFormat is the go-style time format used to parse string dates.
 const TimeFormat = "2006-01-02T15:04"
 
-// ValidateName ensures that the name is a valid format.
-func ValidateName(name string) error {
+// validateName ensures that the name is a valid format.
+func validateName(name string) error {
 	if !nameRegexp.Match([]byte(name)) {
 		return ErrName
 	}
 	return nil
 }
 
-// StringInSlice checks for substring a in the slice.
-func StringInSlice(a string, list []string) bool {
-	for _, b := range list {
-		if b == a {
-			return true
-		}
-	}
-	return false
-}
-
-// StringSlicesAreEqual determines if two string slices are equal.
-func StringSlicesAreEqual(a, b []string) bool {
+// stringSlicesAreEqual determines if two string slices are equal.
+func stringSlicesAreEqual(a, b []string) bool {
 
 	if a == nil && b == nil {
 		return true
@@ -148,54 +136,6 @@ func StringSlicesAreEqual(a, b []string) bool {
 	}
 
 	return true
-}
-
-// SliceDiff returns the difference between two uint64 slices.
-func SliceDiff(a, b []uint64) []uint64 {
-	m := make(map[uint64]uint64)
-
-	for _, y := range b {
-		m[y]++
-	}
-
-	var ret []uint64
-	for _, x := range a {
-		if m[x] > 0 {
-			m[x]--
-			continue
-		}
-		ret = append(ret, x)
-	}
-
-	return ret
-}
-
-// ContainsSubstring checks to see if substring a is contained in any string in the slice.
-func ContainsSubstring(a string, list []string) bool {
-	for _, b := range list {
-		if strings.Contains(b, a) {
-			return true
-		}
-	}
-	return false
-}
-
-// HostToIP converts host to an IP4 address based on net.LookupIP().
-func HostToIP(host string) string {
-	// if host is not an IP addr, check net.LookupIP()
-	if net.ParseIP(host) == nil {
-		hosts, err := net.LookupIP(host)
-		if err != nil {
-			return host
-		}
-		for _, h := range hosts {
-			// this restricts pilosa to IP4
-			if h.To4() != nil {
-				return h.String()
-			}
-		}
-	}
-	return host
 }
 
 // AddressWithDefaults converts addr into a valid address,
