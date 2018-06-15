@@ -442,8 +442,11 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
-		opt := decodeFieldOptions(obj.Meta)
-		_, err := idx.CreateField(obj.Field, *opt)
+		opt, err := decodeOptions(*obj.Meta)
+		if err != nil {
+			return err
+		}
+		_, err = idx.CreateField(obj.Field, opt)
 		if err != nil {
 			return err
 		}

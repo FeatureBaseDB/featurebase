@@ -256,10 +256,9 @@ func TestClient_ImportValue(t *testing.T) {
 
 	fldName := "f"
 
-	fo := pilosa.FieldOptions{
-		Type: pilosa.FieldTypeInt,
-		Min:  -100,
-		Max:  100,
+	fo := pilosa.FieldTypeOptionsInt{
+		Min: -100,
+		Max: 100,
 	}
 
 	// Load bitmap into cache to ensure cache gets updated.

@@ -54,7 +54,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	// Create indexes and fields on one node.
 	if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal(err)
-	} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldOptions{}); err != nil {
+	} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldTypeOptionsSet{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -209,7 +209,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		// Create indexes and fields on one node.
 		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 			t.Fatal(err)
-		} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldOptions{}); err != nil {
+		} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldTypeOptionsSet{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -253,7 +253,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		// Create indexes and fields on one node.
 		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 			t.Fatal(err)
-		} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldOptions{}); err != nil {
+		} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldTypeOptionsSet{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -305,7 +305,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		// Create indexes and fields on one node.
 		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 			t.Fatal(err)
-		} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldOptions{}); err != nil {
+		} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldTypeOptionsSet{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -458,7 +458,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 		// Create indexes and fields on one node.
 		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 			t.Fatal(err)
-		} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldOptions{}); err != nil {
+		} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldTypeOptionsSet{}); err != nil {
 			t.Fatal(err)
 		}
 

@@ -268,7 +268,7 @@ func (i *Index) RecalculateCaches() {
 }
 
 // CreateField creates a field.
-func (i *Index) CreateField(name string, opt FieldOptions) (*Field, error) {
+func (i *Index) CreateField(name string, opt FieldTypeOptions) (*Field, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -280,7 +280,7 @@ func (i *Index) CreateField(name string, opt FieldOptions) (*Field, error) {
 }
 
 // CreateFieldIfNotExists creates a field with the given options if it doesn't exist.
-func (i *Index) CreateFieldIfNotExists(name string, opt FieldOptions) (*Field, error) {
+func (i *Index) CreateFieldIfNotExists(name string, opt FieldTypeOptions) (*Field, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -292,16 +292,16 @@ func (i *Index) CreateFieldIfNotExists(name string, opt FieldOptions) (*Field, e
 	return i.createField(name, opt)
 }
 
-func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
+func (i *Index) createField(name string, opt FieldTypeOptions) (*Field, error) {
 	if name == "" {
 		return nil, errors.New("field name required")
-	} else if opt.CacheType != "" && !isValidCacheType(opt.CacheType) {
-		return nil, ErrInvalidCacheType
 	}
 
 	// Validate options.
-	if err := opt.Validate(); err != nil {
-		return nil, errors.Wrap(err, "validating options")
+	if opt != nil {
+		if err := opt.Validate(); err != nil {
+			return nil, errors.Wrap(err, "validating options")
+		}
 	}
 
 	// Initialize field.
@@ -321,6 +321,7 @@ func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 		return nil, errors.Wrap(err, "applying options")
 	}
 
+	// Save meta data.
 	if err := f.saveMeta(); err != nil {
 		f.Close()
 		return nil, errors.Wrap(err, "saving meta")

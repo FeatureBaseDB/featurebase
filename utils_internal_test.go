@@ -104,7 +104,7 @@ func (t *ClusterCluster) CreateIndex(name string) error {
 	return nil
 }
 
-func (t *ClusterCluster) CreateField(index, field string, opt FieldOptions) error {
+func (t *ClusterCluster) CreateField(index, field string, opt FieldTypeOptions) error {
 	for _, c := range t.Clusters {
 		idx, err := c.Holder.CreateIndexIfNotExists(index, IndexOptions{})
 		if err != nil {
@@ -203,10 +203,6 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*Cluster, error) 
 		ID:  id,
 		URI: uri,
 	}
-
-	// add URI to common
-	//t.common.NodeIDs = append(t.common.NodeIDs, id)
-	//sort.Sort(t.common.NodeIDs)
 
 	// add node to common
 	t.common.Nodes = append(t.common.Nodes, node)

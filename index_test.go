@@ -32,7 +32,7 @@ func TestIndex_CreateFieldIfNotExists(t *testing.T) {
 	defer index.Close()
 
 	// Create field.
-	f, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{})
+	f, err := index.CreateFieldIfNotExists("f", pilosa.FieldTypeOptionsSet{})
 	if err != nil {
 		t.Fatal(err)
 	} else if f == nil {
@@ -40,7 +40,7 @@ func TestIndex_CreateFieldIfNotExists(t *testing.T) {
 	}
 
 	// Retrieve existing field.
-	other, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{})
+	other, err := index.CreateFieldIfNotExists("f", pilosa.FieldTypeOptionsSet{})
 	if err != nil {
 		t.Fatal(err)
 	} else if f.Field != other.Field {
@@ -60,13 +60,14 @@ func TestIndex_CreateField(t *testing.T) {
 			defer index.Close()
 
 			// Create field with explicit quantum.
-			f, err := index.CreateField("f", pilosa.FieldOptions{
-				Type:        pilosa.FieldTypeTime,
+			f, err := index.CreateField("f", pilosa.FieldTypeOptionsTime{
 				TimeQuantum: pilosa.TimeQuantum("YMDH"),
 			})
 			if err != nil {
 				t.Fatal(err)
-			} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
+			}
+			fo := f.Options().(pilosa.FieldTypeOptionsTime)
+			if q := fo.TimeQuantum; q != pilosa.TimeQuantum("YMDH") {
 				t.Fatalf("unexpected field time quantum: %s", q)
 			}
 		})
@@ -79,10 +80,9 @@ func TestIndex_CreateField(t *testing.T) {
 			defer index.Close()
 
 			// Create field with schema and verify it exists.
-			if f, err := index.CreateField("f", pilosa.FieldOptions{
-				Type: pilosa.FieldTypeInt,
-				Min:  10,
-				Max:  20,
+			if f, err := index.CreateField("f", pilosa.FieldTypeOptionsInt{
+				Min: 10,
+				Max: 20,
 			}); err != nil {
 				t.Fatal(err)
 			} else if !reflect.DeepEqual(f.Type(), pilosa.FieldTypeInt) {
@@ -104,7 +104,7 @@ func TestIndex_CreateField(t *testing.T) {
 				index := test.MustOpenIndex()
 				defer index.Close()
 
-				if _, err := index.CreateField("f", pilosa.FieldOptions{
+				if _, err := index.CreateField("f", pilosa.FieldTypeOptionsSet{
 					CacheType: pilosa.CacheTypeRanked,
 				}); err != nil {
 					t.Fatal(err)
@@ -114,7 +114,7 @@ func TestIndex_CreateField(t *testing.T) {
 			t.Run("BSIFieldsWithCacheTypeNone", func(t *testing.T) {
 				index := test.MustOpenIndex()
 				defer index.Close()
-				if _, err := index.CreateField("f", pilosa.FieldOptions{
+				if _, err := index.CreateField("f", pilosa.FieldTypeOptionsSet{
 					CacheType: pilosa.CacheTypeNone,
 					CacheSize: uint32(5),
 				}); err != nil {
@@ -126,7 +126,7 @@ func TestIndex_CreateField(t *testing.T) {
 				index := test.MustOpenIndex()
 				defer index.Close()
 
-				if _, err := index.CreateField("f", pilosa.FieldOptions{
+				if _, err := index.CreateField("f", pilosa.FieldTypeOptionsSet{
 					Fields: []*pilosa.Field{
 						{Name: "field0", Type: pilosa.FieldTypeInt},
 					},
@@ -139,7 +139,7 @@ func TestIndex_CreateField(t *testing.T) {
 				index := test.MustOpenIndex()
 				defer index.Close()
 
-				if _, err := index.CreateField("f", pilosa.FieldOptions{
+				if _, err := index.CreateField("f", pilosa.FieldTypeOptionsSet{
 					Fields: []*pilosa.Field{
 						{Name: "", Type: pilosa.FieldTypeInt},
 					},
@@ -152,7 +152,7 @@ func TestIndex_CreateField(t *testing.T) {
 				index := test.MustOpenIndex()
 				defer index.Close()
 
-				if _, err := index.CreateField("f", pilosa.FieldOptions{
+				if _, err := index.CreateField("f", pilosa.FieldTypeOptionsSet{
 					Fields: []*pilosa.Field{
 						{Name: "field0", Type: "bad_type"},
 					},
@@ -165,7 +165,7 @@ func TestIndex_CreateField(t *testing.T) {
 				index := test.MustOpenIndex()
 				defer index.Close()
 
-				if _, err := index.CreateField("f", pilosa.FieldOptions{
+				if _, err := index.CreateField("f", pilosa.FieldTypeOptionsSet{
 					Fields: []*pilosa.Field{
 						{Name: "field0", Type: pilosa.FieldTypeInt, Min: 100, Max: 50},
 					},
@@ -183,7 +183,7 @@ func TestIndex_DeleteField(t *testing.T) {
 	defer index.Close()
 
 	// Create field.
-	if _, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{}); err != nil {
+	if _, err := index.CreateFieldIfNotExists("f", pilosa.FieldTypeOptionsSet{}); err != nil {
 		t.Fatal(err)
 	}
 

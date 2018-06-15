@@ -100,7 +100,7 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if _, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
+		} else if _, err := idx.CreateField("bar", pilosa.FieldTypeOptionsSet{}); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
@@ -119,14 +119,13 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if _, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
+		} else if _, err := idx.CreateField("bar", pilosa.FieldTypeOptionsSet{}); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
 		} else if err := os.Truncate(filepath.Join(h.Path, "foo", "bar", ".meta"), 2); err != nil {
 			t.Fatal(err)
 		}
-
 		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open index: name=foo, err=opening fields: open field: name=bar, err=loading meta: unmarshaling: unexpected EOF") {
 			t.Fatalf("unexpected error: %s", err)
 		}
@@ -137,7 +136,7 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if _, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
+		} else if _, err := idx.CreateField("bar", pilosa.FieldTypeOptionsSet{}); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
@@ -159,7 +158,7 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if field, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
+		} else if field, err := idx.CreateField("bar", pilosa.FieldTypeOptionsSet{}); err != nil {
 			t.Fatal(err)
 		} else if _, err := field.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
 			t.Fatal(err)
@@ -183,7 +182,7 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if field, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
+		} else if field, err := idx.CreateField("bar", pilosa.FieldTypeOptionsSet{}); err != nil {
 			t.Fatal(err)
 		} else if _, err := field.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
 			t.Fatal(err)
@@ -208,7 +207,7 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if field, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
+		} else if field, err := idx.CreateField("bar", pilosa.FieldTypeOptionsSet{}); err != nil {
 			t.Fatal(err)
 		} else if _, err := field.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
 			t.Fatal(err)
@@ -229,7 +228,7 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if field, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
+		} else if field, err := idx.CreateField("bar", pilosa.FieldTypeOptionsSet{}); err != nil {
 			t.Fatal(err)
 		} else if _, err := field.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
 			t.Fatal(err)
@@ -253,7 +252,7 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if field, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
+		} else if field, err := idx.CreateField("bar", pilosa.FieldTypeOptionsSet{}); err != nil {
 			t.Fatal(err)
 		} else if view, err := field.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
 			t.Fatal(err)

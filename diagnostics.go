@@ -227,10 +227,10 @@ func (d *DiagnosticsCollector) EnrichWithSchemaProperties() {
 		numIndexes += 1
 		for _, field := range index.Fields() {
 			numFields += 1
-			if field.Type() == FieldTypeInt {
+			switch field.Type() {
+			case FieldTypeInt:
 				bsiFieldCount += 1
-			}
-			if field.TimeQuantum() != "" {
+			case FieldTypeTime:
 				timeQuantumEnabled = true
 			}
 		}
