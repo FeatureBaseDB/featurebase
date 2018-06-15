@@ -50,23 +50,21 @@ func TestField_CreateViewIfNotExists(t *testing.T) {
 
 // Ensure field can set its time quantum.
 func TestField_SetTimeQuantum(t *testing.T) {
-	fo := pilosa.FieldOptions{
-		Type: "time",
-	}
-	f := test.MustOpenField(pilosa.OptFieldFieldOptions(fo))
+	f := test.MustOpenField(pilosa.OptFieldTime("YMDH"))
 	defer f.Close()
 
-	// Set & retrieve time quantum.
-	if err := f.SetTimeQuantum(pilosa.TimeQuantum("YMDH")); err != nil {
-		t.Fatal(err)
-	} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
+	// Retrieve time quantum.
+	fo := f.Options().(pilosa.FieldTypeOptionsTime)
+	if q := fo.TimeQuantum; q != pilosa.TimeQuantum("YMDH") {
 		t.Fatalf("unexpected quantum: %s", q)
 	}
 
 	// Reload field and verify that it is persisted.
 	if err := f.Reopen(); err != nil {
 		t.Fatal(err)
-	} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
+	}
+	fp := f.Options().(pilosa.FieldTypeOptionsTime)
+	if q := fp.TimeQuantum; q != pilosa.TimeQuantum("YMDH") {
 		t.Fatalf("unexpected quantum (reopen): %s", q)
 	}
 }
@@ -77,10 +75,9 @@ func TestField_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateField("f", pilosa.FieldOptions{
-			Type: pilosa.FieldTypeInt,
-			Min:  0,
-			Max:  30,
+		f, err := idx.CreateField("f", pilosa.FieldTypeOptionsInt{
+			Min: 0,
+			Max: 30,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -114,10 +111,9 @@ func TestField_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateField("f", pilosa.FieldOptions{
-			Type: pilosa.FieldTypeInt,
-			Min:  0,
-			Max:  30,
+		f, err := idx.CreateField("f", pilosa.FieldTypeOptionsInt{
+			Min: 0,
+			Max: 30,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -151,9 +147,7 @@ func TestField_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateField("f", pilosa.FieldOptions{
-			Type: pilosa.FieldTypeSet,
-		})
+		f, err := idx.CreateField("f", pilosa.FieldTypeOptionsSet{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -168,10 +162,9 @@ func TestField_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateField("f", pilosa.FieldOptions{
-			Type: pilosa.FieldTypeInt,
-			Min:  20,
-			Max:  30,
+		f, err := idx.CreateField("f", pilosa.FieldTypeOptionsInt{
+			Min: 20,
+			Max: 30,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -187,10 +180,9 @@ func TestField_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateField("f", pilosa.FieldOptions{
-			Type: pilosa.FieldTypeInt,
-			Min:  20,
-			Max:  30,
+		f, err := idx.CreateField("f", pilosa.FieldTypeOptionsInt{
+			Min: 20,
+			Max: 30,
 		})
 		if err != nil {
 			t.Fatal(err)

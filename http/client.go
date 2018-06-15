@@ -331,7 +331,7 @@ func (c *InternalClient) EnsureIndex(ctx context.Context, name string, options p
 	return err
 }
 
-func (c *InternalClient) EnsureField(ctx context.Context, indexName string, fieldName string, options pilosa.FieldOptions) error {
+func (c *InternalClient) EnsureField(ctx context.Context, indexName string, fieldName string, options pilosa.FieldTypeOptions) error {
 	err := c.CreateField(ctx, indexName, fieldName, options)
 	if err == nil || err == pilosa.ErrFieldExists {
 		return nil
@@ -617,7 +617,7 @@ func (c *InternalClient) backupSliceNode(ctx context.Context, index, field strin
 }
 
 // CreateField creates a new field on the server.
-func (c *InternalClient) CreateField(ctx context.Context, index, field string, opt pilosa.FieldOptions) error {
+func (c *InternalClient) CreateField(ctx context.Context, index, field string, opt pilosa.FieldTypeOptions) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	}

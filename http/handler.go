@@ -24,9 +24,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
 	// Imported for its side-effect of registering pprof endpoints with the server.
 	_ "net/http/pprof"
-	"reflect"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -400,7 +400,7 @@ func (p *postIndexRequest) UnmarshalJSON(b []byte) error {
 }
 
 // Raise errors for any unknown key
-func validateOptions(data map[string]interface{}, validIndexOptions []string) error {
+func validateOptions(data map[string]interface{}, validKeys []string) error {
 	for k, v := range data {
 		switch k {
 		case "options":
@@ -409,7 +409,7 @@ func validateOptions(data map[string]interface{}, validIndexOptions []string) er
 				return errors.New("options is not map[string]interface{}")
 			}
 			for kk, vv := range options {
-				if !foundItem(validIndexOptions, kk) {
+				if !foundItem(validKeys, kk) {
 					return fmt.Errorf("Unknown key: %v:%v", kk, vv)
 				}
 			}
@@ -549,8 +549,6 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type _postFieldRequest postFieldRequest
-
 // Custom Unmarshal JSON to validate request body when creating a new field. If there's new FieldOptions,
 // adding it to validFieldOptions to make sure the new option is validated, otherwise the request will be failed
 func (p *postFieldRequest) UnmarshalJSON(b []byte) error {
@@ -560,21 +558,33 @@ func (p *postFieldRequest) UnmarshalJSON(b []byte) error {
 		return errors.Wrap(err, "unmarshaling unexpected keys")
 	}
 
-	validFieldOptions := getValidOptions(pilosa.FieldOptions{})
-	err := validateOptions(m, validFieldOptions)
+	var invalidKeysFound []string
+	for k, _ := range m {
+		if k != "options" {
+			invalidKeysFound = append(invalidKeysFound, k)
+		}
+	}
+	if len(invalidKeysFound) > 0 {
+		return fmt.Errorf("unknown keys: %s", strings.Join(invalidKeysFound, ", "))
+	}
+
+	opts := make(map[string]interface{})
+
+	if _, ok := m["options"]; ok {
+		if mopts, ok := m["options"].(map[string]interface{}); !ok {
+			return errors.New("unmarshaling options")
+		} else {
+			opts = mopts
+		}
+	}
+
+	var err error
+	p.Options, err = pilosa.UnmarshalFieldTypeOptions(opts)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "unmarshaling options")
 	}
 
-	// Unmarshal expected values.
-	var _p _postFieldRequest
-	if err := json.Unmarshal(b, &_p); err != nil {
-		return errors.Wrap(err, "unmarshalling expected keys")
-	}
-
-	p.Options = _p.Options
 	return nil
-
 }
 
 func getValidOptions(option interface{}) []string {
@@ -589,7 +599,7 @@ func getValidOptions(option interface{}) []string {
 }
 
 type postFieldRequest struct {
-	Options pilosa.FieldOptions `json:"options"`
+	Options pilosa.FieldTypeOptions `json:"options,omitempty"`
 }
 
 type postFieldResponse struct{}

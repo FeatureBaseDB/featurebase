@@ -715,6 +715,12 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 		return nil, ErrFieldNotFound
 	}
 
+	// Type-assert field options.
+	fo, ok := f.options.(FieldTypeOptionsTime)
+	if !ok {
+		return nil, errors.New("Range() requires a time field")
+	}
+
 	// Read row & column id.
 	rowID, rowOK, err := c.UintArg(rowLabel)
 	if err != nil {
@@ -744,8 +750,8 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 		return nil, errors.New("cannot parse Range() end time")
 	}
 
-	// If no quantum exists then return an empty bitmap.
-	q := f.TimeQuantum()
+	// If no quantum exists then return an empty row.
+	q := fo.TimeQuantum
 	if q == "" {
 		return &Row{}, nil
 	}

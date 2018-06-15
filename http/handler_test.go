@@ -83,17 +83,17 @@ func TestHandler_Schema(t *testing.T) {
 	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
 
-	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.FieldOptions{}); err != nil {
+	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.FieldTypeOptionsSet{}); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.FieldOptions{}); err != nil {
+	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.FieldTypeOptionsSet{}); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.FieldOptions{}); err != nil {
+	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.FieldTypeOptionsSet{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -120,17 +120,17 @@ func TestHandler_Status(t *testing.T) {
 	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
 
-	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.FieldOptions{}); err != nil {
+	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.FieldTypeOptionsSet{}); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.FieldOptions{}); err != nil {
+	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.FieldTypeOptionsSet{}); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.FieldOptions{}); err != nil {
+	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.FieldTypeOptionsSet{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -699,7 +699,7 @@ func TestHandler_DeleteField(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
-	if _, err := i0.CreateFieldIfNotExists("f1", pilosa.FieldOptions{}); err != nil {
+	if _, err := i0.CreateFieldIfNotExists("f1", pilosa.FieldTypeOptionsSet{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -777,7 +777,7 @@ func TestHandler_Field_AttrStore_Diff(t *testing.T) {
 
 	// Set attributes on the index.
 	idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	f, err := idx.CreateFieldIfNotExists("meta", pilosa.FieldOptions{})
+	f, err := idx.CreateFieldIfNotExists("meta", pilosa.FieldTypeOptionsSet{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -216,7 +216,7 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 }
 
 // CreateField makes the named field in the named index with the given options.
-func (api *API) CreateField(ctx context.Context, indexName string, fieldName string, options FieldOptions) (*Field, error) {
+func (api *API) CreateField(ctx context.Context, indexName string, fieldName string, options FieldTypeOptions) (*Field, error) {
 	if err := api.validate(apiCreateField); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -238,7 +238,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 		&internal.CreateFieldMessage{
 			Index: indexName,
 			Field: fieldName,
-			Meta:  options.Encode(),
+			Meta:  encodeOptions(options),
 		})
 	if err != nil {
 		api.Logger.Printf("problem sending CreateField message: %s", err)

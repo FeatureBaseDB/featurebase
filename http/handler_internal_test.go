@@ -64,13 +64,13 @@ func TestPostFieldRequestUnmarshalJSON(t *testing.T) {
 		expected postFieldRequest
 		err      string
 	}{
-		{json: `{"options": {}}`, expected: postFieldRequest{Options: pilosa.FieldOptions{}}},
-		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
-		{json: `{"option": {}}`, err: "Unknown key: option:map[]"},
-		{json: `{"options": {"badKey": "test"}}`, err: "Unknown key: badKey:test"},
-		{json: `{"options": {"inverseEnabled": true}}`, err: "Unknown key: inverseEnabled:true"},
-		{json: `{"options": {"cacheType": "type"}}`, expected: postFieldRequest{Options: pilosa.FieldOptions{CacheType: "type"}}},
-		{json: `{"options": {"inverse": true, "cacheType": "type"}}`, err: "Unknown key: inverse:true"},
+		{json: `{"options": {}}`, expected: postFieldRequest{Options: pilosa.FieldTypeOptionsSet{}}},
+		{json: `{"options": 4}`, err: "unmarshaling options"},
+		{json: `{"option": {}}`, err: "unknown keys: option"},
+		{json: `{"options": {"badKey": "test"}}`, err: "unmarshaling options: unknown key: badKey"},
+		{json: `{"options": {"inverseEnabled": true}}`, err: "unmarshaling options: unknown key: inverseEnabled"},
+		{json: `{"options": {"cacheType": "type"}}`, expected: postFieldRequest{Options: pilosa.FieldTypeOptionsSet{CacheType: "type"}}},
+		{json: `{"options": {"inverse": true, "cacheType": "type"}}`, err: "unmarshaling options: unknown key: inverse"},
 	}
 	for _, test := range tests {
 		actual := &postFieldRequest{}

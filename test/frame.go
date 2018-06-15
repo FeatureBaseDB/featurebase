@@ -17,7 +17,6 @@ package test
 import (
 	"io/ioutil"
 	"os"
-	"testing"
 	"time"
 
 	"github.com/pilosa/pilosa"
@@ -82,25 +81,4 @@ func (f *Field) MustSetBit(view string, rowID, columnID uint64, t *time.Time) (c
 		panic(err)
 	}
 	return changed
-}
-
-// Ensure field can set its cache
-func TestField_SetCacheSize(t *testing.T) {
-	f := MustOpenField()
-	defer f.Close()
-	cacheSize := uint32(100)
-
-	// Set & retrieve field cache size.
-	if err := f.SetCacheSize(cacheSize); err != nil {
-		t.Fatal(err)
-	} else if q := f.CacheSize(); q != cacheSize {
-		t.Fatalf("unexpected field cache size: %d", q)
-	}
-
-	// Reload field and verify that it is persisted.
-	if err := f.Reopen(); err != nil {
-		t.Fatal(err)
-	} else if q := f.CacheSize(); q != cacheSize {
-		t.Fatalf("unexpected field cache size (reopen): %d", q)
-	}
 }

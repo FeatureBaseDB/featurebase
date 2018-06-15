@@ -113,7 +113,7 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 		if index.Name == cmd.Index {
 			for _, field := range index.Fields {
 				if field.Name == cmd.Field {
-					fieldType = field.Options.Type
+					fieldType = field.Options.Type()
 				}
 			}
 		}
@@ -135,7 +135,7 @@ func (cmd *ImportCommand) ensureSchema(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("Error Creating Index: %s", err)
 	}
-	err = cmd.Client.EnsureField(ctx, cmd.Index, cmd.Field, cmd.FieldOptions)
+	err = cmd.Client.EnsureField(ctx, cmd.Index, cmd.Field, cmd.FieldOptions.Typed())
 	if err != nil {
 		return fmt.Errorf("Error Creating Field: %s", err)
 	}
