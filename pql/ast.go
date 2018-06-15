@@ -31,6 +31,8 @@ type Query struct {
 	lastCond  Token
 	inList    bool
 	callStack []*Call
+
+	conditional []string
 }
 
 func (q *Query) startCall(name string) {
@@ -43,11 +45,50 @@ func (q *Query) startCall(name string) {
 		calls := q.callStack[len(q.callStack)-2].Children
 		q.callStack[len(q.callStack)-2].Children = append(calls, newCall)
 	}
-
 }
 
 func (q *Query) endCall() {
 	q.callStack = q.callStack[:len(q.callStack)-1]
+}
+
+func (q *Query) addPosNum(key, value string) {
+	q.addField(key)
+	q.addNumVal(value)
+}
+
+func (q *Query) addPosStr(key, value string) {
+	q.addField(key)
+	q.addVal(value)
+}
+
+func (q *Query) startConditional() {
+	q.conditional = make([]string, 0)
+}
+
+func (q *Query) condAdd(val string) {
+	q.conditional = append(q.conditional, val)
+}
+
+func (q *Query) endConditional() {
+	// do stuff
+	if len(q.conditional) != 5 {
+		panic(fmt.Sprintf("conditional of wrong length: %#v", q.conditional))
+	}
+	low, _ := strconv.ParseInt(q.conditional[0], 10, 64)
+	field := q.conditional[2]
+	high, _ := strconv.ParseInt(q.conditional[4], 10, 64)
+
+	if q.conditional[1] == "<" {
+		low++
+	}
+	if q.conditional[3] == "<=" {
+		high++
+	}
+
+	call := q.callStack[len(q.callStack)-1]
+	call.Args[field] = Condition{Op: BETWEEN, Value: []interface{}{low, high}}
+
+	q.conditional = nil
 }
 
 func (q *Query) addField(field string) {
