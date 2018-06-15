@@ -20,6 +20,7 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/http"
+	"github.com/pilosa/pilosa/inmem"
 	"github.com/pilosa/pilosa/pql"
 )
 
@@ -42,6 +43,7 @@ func NewExecutor(holder *pilosa.Holder, cluster *pilosa.Cluster) *Executor {
 	e := &Executor{Executor: executor}
 	e.Holder = holder
 	e.Cluster = cluster
+	e.TranslateStore = inmem.NewTranslateStore()
 	e.Node = cluster.Nodes[0]
 	return e
 }

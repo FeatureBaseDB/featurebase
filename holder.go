@@ -111,7 +111,8 @@ func (h *Holder) Open() error {
 	}
 
 	for _, fi := range fis {
-		if !fi.IsDir() {
+		// Skip files or hidden directories.
+		if !fi.IsDir() || strings.HasPrefix(fi.Name(), ".") {
 			continue
 		}
 
@@ -338,12 +339,15 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 		return nil, errors.Wrap(err, "creating")
 	}
 
+	index.keys = opt.Keys
+
 	if err := index.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")
+	} else if err := index.saveMeta(); err != nil {
+		return nil, errors.Wrap(err, "meta")
 	}
 
 	// Update options.
-
 	h.indexes[index.Name()] = index
 
 	return index, nil

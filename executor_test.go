@@ -22,6 +22,8 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/test"
@@ -99,6 +101,35 @@ func TestExecutor_Execute_Bitmap(t *testing.T) {
 		}
 		if err := index.ColumnAttrStore().SetAttrs(SliceWidth+1, map[string]interface{}{"foo": "bar", "baz": uint64(123)}); err != nil {
 			t.Fatal(err)
+		}
+	})
+
+	t.Run("Keys", func(t *testing.T) {
+		hldr := test.MustOpenHolder()
+		defer hldr.Close()
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{Keys: true})
+		if _, err := index.CreateField("f", pilosa.FieldOptions{Keys: true}); err != nil {
+			t.Fatal(err)
+		}
+
+		e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+
+		// Set bits.
+		if _, err := e.Execute(context.Background(), "i", test.MustParse(``+
+			`SetBit(field=f, row="bar", col="foo")`+"\n"+
+			`SetBit(field=f, row="baz", col="foo")`+"\n"+
+			`SetBit(field=f, row="bar", col="bat")`+"\n"+
+			`SetBit(field=f, row="bbb", col="aaa")`+"\n",
+		), nil, nil); err != nil {
+			t.Fatal(err)
+		}
+
+		if results, err := e.Execute(context.Background(), "i", test.MustParse(`Bitmap(row="bar", field=f)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if diff := cmp.Diff(results, []interface{}{
+			&pilosa.Row{Keys: []string{"foo", "bat"}, Attrs: map[string]interface{}{}},
+		}, cmpopts.IgnoreUnexported(pilosa.Row{})); diff != "" {
+			t.Fatal(diff)
 		}
 	})
 }
@@ -383,36 +414,36 @@ func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 
 // Ensure a TopN() query can be executed.
 func TestExecutor_Execute_TopN(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
+	t.Run("ID", func(t *testing.T) {
+		hldr := test.MustOpenHolder()
+		defer hldr.Close()
+		e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 
-	// Set columns for rows 0, 10, & 20 across two slices.
-	if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{}); err != nil {
-		t.Fatal(err)
-	} else if _, err := idx.CreateField("f", pilosa.FieldOptions{}); err != nil {
-		t.Fatal(err)
-	} else if _, err := idx.CreateField("other", pilosa.FieldOptions{}); err != nil {
-		t.Fatal(err)
-	} else if _, err := e.Execute(context.Background(), "i", test.MustParse(`
-		SetBit(field=f, row=0, col=0)
-		SetBit(field=f, row=0, col=1)
-		SetBit(field=f, row=0, col=`+strconv.Itoa(SliceWidth)+`)
-		SetBit(field=f, row=0, col=`+strconv.Itoa(SliceWidth+2)+`)
-		SetBit(field=f, row=0, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
-		SetBit(field=f, row=10, col=0)
-		SetBit(field=f, row=10, col=`+strconv.Itoa(SliceWidth)+`)
-		SetBit(field=f, row=20, col=`+strconv.Itoa(SliceWidth)+`)
-		SetBit(field=other, row=0, col=0)
-	`), nil, nil); err != nil {
-		t.Fatal(err)
-	}
+		// Set columns for rows 0, 10, & 20 across two slices.
+		if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateField("f", pilosa.FieldOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateField("other", pilosa.FieldOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := e.Execute(context.Background(), "i", test.MustParse(`
+			SetBit(field=f, row=0, col=0)
+			SetBit(field=f, row=0, col=1)
+			SetBit(field=f, row=0, col=`+strconv.Itoa(SliceWidth)+`)
+			SetBit(field=f, row=0, col=`+strconv.Itoa(SliceWidth+2)+`)
+			SetBit(field=f, row=0, col=`+strconv.Itoa((5*SliceWidth)+100)+`)
+			SetBit(field=f, row=10, col=0)
+			SetBit(field=f, row=10, col=`+strconv.Itoa(SliceWidth)+`)
+			SetBit(field=f, row=20, col=`+strconv.Itoa(SliceWidth)+`)
+			SetBit(field=other, row=0, col=0)
+		`), nil, nil); err != nil {
+			t.Fatal(err)
+		}
 
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).RecalculateCache()
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).RecalculateCache()
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 5).RecalculateCache()
+		hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).RecalculateCache()
+		hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).RecalculateCache()
+		hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 5).RecalculateCache()
 
-	t.Run("Standard", func(t *testing.T) {
 		if result, err := e.Execute(context.Background(), "i", test.MustParse(`TopN(field=f, n=2)`), nil, nil); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(result[0], []pilosa.Pair{
@@ -420,6 +451,46 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 			{ID: 10, Count: 2},
 		}) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		}
+	})
+
+	t.Run("Keys", func(t *testing.T) {
+		hldr := test.MustOpenHolder()
+		defer hldr.Close()
+		e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+
+		// Set columns for rows 0, 10, & 20 across two slices.
+		if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{Keys: true}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateField("f", pilosa.FieldOptions{Keys: true}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateField("other", pilosa.FieldOptions{Keys: true}); err != nil {
+			t.Fatal(err)
+		} else if _, err := e.Execute(context.Background(), "i", test.MustParse(`
+			SetBit(field=f, row="foo", col="a")
+			SetBit(field=f, row="foo", col="b")
+			SetBit(field=f, row="foo", col="c")
+			SetBit(field=f, row="foo", col="d")
+			SetBit(field=f, row="foo", col="e")
+			SetBit(field=f, row="bar", col="a")
+			SetBit(field=f, row="bar", col="b")
+			SetBit(field=f, row="baz", col="b")
+			SetBit(field=other, row="foo", col="a")
+		`), nil, nil); err != nil {
+			t.Fatal(err)
+		}
+
+		hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).RecalculateCache()
+
+		if result, err := e.Execute(context.Background(), "i", test.MustParse(`TopN(field=f, n=2)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if diff := cmp.Diff(result, []interface{}{
+			[]pilosa.Pair{
+				{Key: "foo", Count: 5},
+				{Key: "bar", Count: 2},
+			},
+		}); diff != "" {
+			t.Fatal(diff)
 		}
 	})
 }
@@ -1213,6 +1284,7 @@ func TestExecutor_Execute_Remote_TopN(t *testing.T) {
 func TestExecutor_Execute_ErrMaxWritesPerRequest(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
+	hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	e.MaxWritesPerRequest = 3
 	if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetBit() ClearBit() SetBit() SetBit()`), nil, nil); err != pilosa.ErrTooManyWrites {
