@@ -135,7 +135,7 @@ func TestParser_Parse(t *testing.T) {
 
 	// Parse with both child calls and arguments.
 	t.Run("ChildrenAndArguments", func(t *testing.T) {
-		q, err := pql.ParseString(`TopN(Bitmap(id=100, field=other), field=f, n=3)`)
+		q, err := pql.ParseString(`TopN(f, Bitmap(id=100, field=other), n=3)`)
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(q.Calls[0],
@@ -145,7 +145,7 @@ func TestParser_Parse(t *testing.T) {
 					Name: "Bitmap",
 					Args: map[string]interface{}{"id": int64(100), "field": "other"},
 				}},
-				Args: map[string]interface{}{"n": int64(3), "field": "f"},
+				Args: map[string]interface{}{"n": int64(3), "_field": "f"},
 			},
 		) {
 			t.Fatalf("unexpected call: %#v", q.Calls[0])
@@ -154,15 +154,15 @@ func TestParser_Parse(t *testing.T) {
 
 	// Parse a list argument.
 	t.Run("ListArgument", func(t *testing.T) {
-		q, err := pql.ParseString(`TopN(field="f", ids=[0,10,30])`)
+		q, err := pql.ParseString(`TopN(f, ids=[0,10,30])`)
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(q.Calls[0],
 			&pql.Call{
 				Name: "TopN",
 				Args: map[string]interface{}{
-					"field": "f",
-					"ids":   []interface{}{int64(0), int64(10), int64(30)},
+					"_field": "f",
+					"ids":    []interface{}{int64(0), int64(10), int64(30)},
 				},
 			},
 		) {
