@@ -148,10 +148,10 @@ func TestClient_MultiNode(t *testing.T) {
 	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).RecalculateCache()
 
 	// Connect to each node to compare results.
-	client := make([]*test.Client, 3)
-	client[0] = test.MustNewClient(s[0].Host(), defaultClient)
-	client[1] = test.MustNewClient(s[1].Host(), defaultClient)
-	client[2] = test.MustNewClient(s[2].Host(), defaultClient)
+	client := make([]*Client, 3)
+	client[0] = MustNewClient(s[0].Host(), defaultClient)
+	client[1] = MustNewClient(s[1].Host(), defaultClient)
+	client[2] = MustNewClient(s[2].Host(), defaultClient)
 
 	topN := 4
 	queryRequest := &internal.QueryRequest{
@@ -231,7 +231,7 @@ func TestClient_Import(t *testing.T) {
 	s.Handler.API.Holder = hldr.Holder
 
 	// Send import request.
-	c := test.MustNewClient(s.Host(), defaultClient)
+	c := MustNewClient(s.Host(), defaultClient)
 	if err := c.Import(context.Background(), "i", "f", 0, []pilosa.Bit{
 		{RowID: 0, ColumnID: 1},
 		{RowID: 0, ColumnID: 5},
@@ -276,7 +276,7 @@ func TestClient_ImportValue(t *testing.T) {
 	s.Handler.API.Holder = hldr.Holder
 
 	// Send import request.
-	c := test.MustNewClient(s.Host(), defaultClient)
+	c := MustNewClient(s.Host(), defaultClient)
 	if err := c.ImportValue(context.Background(), "i", "f", 0, []pilosa.FieldValue{
 		{ColumnID: 1, Value: -10},
 		{ColumnID: 2, Value: 20},
@@ -345,7 +345,7 @@ func TestClient_FragmentBlocks(t *testing.T) {
 	s.Handler.API.Holder = hldr.Holder
 
 	// Retrieve blocks.
-	c := test.MustNewClient(s.Host(), defaultClient)
+	c := MustNewClient(s.Host(), defaultClient)
 	blocks, err := c.FragmentBlocks(context.Background(), nil, "i", "f", 0)
 	if err != nil {
 		t.Fatal(err)
@@ -361,4 +361,18 @@ func TestClient_FragmentBlocks(t *testing.T) {
 	if a := hldr.Fragment("i", "f", pilosa.ViewStandard, 0).Blocks(); !reflect.DeepEqual(a, blocks) {
 		t.Fatalf("blocks mismatch:\n\nexp=%s\n\ngot=%s\n\n", spew.Sdump(a), spew.Sdump(blocks))
 	}
+}
+
+// Client represents a test wrapper for pilosa.Client.
+type Client struct {
+	*http.InternalClient
+}
+
+// MustNewClient returns a new instance of Client. Panic on error.
+func MustNewClient(host string, h *gohttp.Client) *Client {
+	c, err := http.NewInternalClient(host, h)
+	if err != nil {
+		panic(err)
+	}
+	return &Client{InternalClient: c}
 }
