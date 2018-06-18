@@ -352,21 +352,15 @@ func (h *Handler) handleGetIndexes(w http.ResponseWriter, r *http.Request) {
 // handleGetIndex handles GET /index/<indexname> requests.
 func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
-	index, err := h.API.Index(r.Context(), indexName)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
+	for _, idx := range h.API.Schema(r.Context()) {
+		if idx.Name == indexName {
+			if err := json.NewEncoder(w).Encode(idx); err != nil {
+				h.Logger.Printf("write response error: %s", err)
+			}
+			return
+		}
 	}
-
-	if err := json.NewEncoder(w).Encode(getIndexResponse{
-		map[string]string{"name": index.Name()},
-	}); err != nil {
-		h.Logger.Printf("write response error: %s", err)
-	}
-}
-
-type getIndexResponse struct {
-	Index map[string]string `json:"index"`
+	http.Error(w, fmt.Sprintf("Index %s Not Found", indexName), http.StatusNotFound)
 }
 
 type postIndexRequest struct {
