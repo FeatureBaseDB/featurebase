@@ -343,16 +343,22 @@ func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
+	fields := make(map[string]string)
+	for _, field := range index.Fields() {
+		fields["name"] = field.Name()
+	}
 
 	if err := json.NewEncoder(w).Encode(getIndexResponse{
-		map[string]string{"name": index.Name()},
+		Index:  map[string]string{"name": index.Name()},
+		Fields: fields,
 	}); err != nil {
 		h.Logger.Printf("write response error: %s", err)
 	}
 }
 
 type getIndexResponse struct {
-	Index map[string]string `json:"index"`
+	Index  map[string]string `json:"index"`
+	Fields map[string]string `json:"fields"`
 }
 
 type postIndexRequest struct {
