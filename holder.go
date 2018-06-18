@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -34,8 +33,8 @@ import (
 )
 
 const (
-	// DefaultCacheFlushInterval is the default value for Fragment.CacheFlushInterval.
-	DefaultCacheFlushInterval = 1 * time.Minute
+	// defaultCacheFlushInterval is the default value for Fragment.CacheFlushInterval.
+	defaultCacheFlushInterval = 1 * time.Minute
 
 	// FileLimit is the maximum open file limit (ulimit -n) to automatically set.
 	FileLimit = 262144 // (512^2)
@@ -84,7 +83,7 @@ func NewHolder() *Holder {
 
 		NewAttrStore: NewNopAttrStore,
 
-		CacheFlushInterval: DefaultCacheFlushInterval,
+		CacheFlushInterval: defaultCacheFlushInterval,
 
 		Logger: NopLogger,
 	}
@@ -112,7 +111,8 @@ func (h *Holder) Open() error {
 	}
 
 	for _, fi := range fis {
-		if !fi.IsDir() {
+		// Skip files or hidden directories.
+		if !fi.IsDir() || strings.HasPrefix(fi.Name(), ".") {
 			continue
 		}
 
@@ -339,12 +339,15 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 		return nil, errors.Wrap(err, "creating")
 	}
 
+	index.keys = opt.Keys
+
 	if err := index.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")
+	} else if err := index.saveMeta(); err != nil {
+		return nil, errors.Wrap(err, "meta")
 	}
 
 	// Update options.
-
 	h.indexes[index.Name()] = index
 
 	return index, nil
@@ -563,9 +566,8 @@ func (h *Holder) logStartup() error {
 type HolderSyncer struct {
 	Holder *Holder
 
-	Node         *Node
-	Cluster      *Cluster
-	RemoteClient *http.Client
+	Node    *Node
+	Cluster *Cluster
 
 	// Stats
 	Stats StatsClient
@@ -619,7 +621,7 @@ func (s *HolderSyncer) SyncHolder() error {
 
 				for slice := uint64(0); slice <= s.Holder.Index(di.Name).MaxSlice(); slice++ {
 					// Ignore slices that this host doesn't own.
-					if !s.Cluster.OwnsSlice(s.Node.ID, di.Name, slice) {
+					if !s.Cluster.ownsSlice(s.Node.ID, di.Name, slice) {
 						continue
 					}
 
@@ -755,11 +757,10 @@ func (s *HolderSyncer) syncFragment(index, field, view string, slice uint64) err
 
 	// Sync fragments together.
 	fs := FragmentSyncer{
-		Fragment:     frag,
-		Node:         s.Node,
-		Cluster:      s.Cluster,
-		Closing:      s.Closing,
-		RemoteClient: s.RemoteClient,
+		Fragment: frag,
+		Node:     s.Node,
+		Cluster:  s.Cluster,
+		Closing:  s.Closing,
 	}
 	if err := fs.syncFragment(); err != nil {
 		return errors.Wrap(err, "syncing fragment")
@@ -799,7 +800,7 @@ func (c *HolderCleaner) CleanHolder() error {
 		}
 
 		// Get the fragments that node is responsible for (based on hash(index, node)).
-		containedSlices := c.Cluster.ContainsSlices(index.Name(), index.MaxSlice(), c.Node)
+		containedSlices := c.Cluster.containsSlices(index.Name(), index.MaxSlice(), c.Node)
 
 		// Get the fragments registered in memory.
 		for _, field := range index.Fields() {

@@ -110,7 +110,7 @@ func (c *ExpvarStatsClient) WithTags(tags ...string) StatsClient {
 
 	return &ExpvarStatsClient{
 		m:    m,
-		tags: UnionStringSlice(c.tags, tags),
+		tags: unionStringSlice(c.tags, tags),
 	}
 }
 
@@ -249,8 +249,8 @@ func (a MultiStatsClient) Close() error {
 	return nil
 }
 
-// UnionStringSlice returns a sorted set of tags which combine a & b.
-func UnionStringSlice(a, b []string) []string {
+// unionStringSlice returns a sorted set of tags which combine a & b.
+func unionStringSlice(a, b []string) []string {
 	// Sort both sets first.
 	sort.Strings(a)
 	sort.Strings(b)

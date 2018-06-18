@@ -117,6 +117,18 @@ func NewHandler(opts ...HandlerOption) (*Handler, error) {
 	return handler, nil
 }
 
+func (h *Handler) Serve(ln net.Listener, closing <-chan struct{}) {
+	server := &http.Server{Handler: h}
+	go func() {
+		<-closing
+		server.Close()
+	}()
+	err := server.Serve(ln)
+	if err != nil && err.Error() != "http: Server closed" {
+		h.Logger.Printf("HTTP handler terminated with error: %s\n", err)
+	}
+}
+
 func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
 	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("slice", "index")
@@ -190,6 +202,8 @@ func NewRouter(handler *Handler) *mux.Router {
 	// https://github.com/gorilla/mux/issues/6
 	// For now we just do it for the most commonly used handler, /query
 	router.HandleFunc("/index/{index}/query", handler.methodNotAllowedHandler).Methods("GET")
+
+	router.HandleFunc("/translate/data", handler.handleGetTranslateData).Methods("GET")
 
 	router.Use(handler.queryArgValidator)
 	return router
@@ -1165,6 +1179,56 @@ func (h *Handler) GetAPI() *pilosa.API {
 }
 
 type defaultClusterMessageResponse struct{}
+
+// TranslateStoreBufferSize is the buffer size used for streaming data.
+const TranslateStoreBufferSize = 65536
+
+func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	offset, _ := strconv.ParseInt(q.Get("offset"), 10, 64)
+
+	rc, err := h.API.TranslateStore.Reader(r.Context(), offset)
+	if err == pilosa.ErrNotImplemented {
+		http.Error(w, err.Error(), http.StatusNotImplemented)
+		return
+	} else if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rc.Close()
+
+	// Ensure reader is closed when the client disconnects.
+	go func() { <-r.Context().Done(); rc.Close() }()
+
+	// Flush header so client can continue.
+	w.WriteHeader(http.StatusOK)
+	if w, ok := w.(http.Flusher); ok {
+		w.Flush()
+	}
+
+	// Copy from reader to client until store or client disconnect.
+	buf := make([]byte, TranslateStoreBufferSize)
+	for {
+		// Read from store.
+		n, err := rc.Read(buf)
+		if err == io.EOF {
+			return
+		} else if err != nil {
+			h.Logger.Printf("http: translate store read error: %s", err)
+			return
+		} else if n == 0 {
+			continue
+		}
+
+		// Write to response & flush.
+		if _, err := w.Write(buf[:n]); err != nil {
+			h.Logger.Printf("http: translate store response write error: %s", err)
+			return
+		} else if w, ok := w.(http.Flusher); ok {
+			w.Flush()
+		}
+	}
+}
 
 type queryValidationSpec struct {
 	required []string

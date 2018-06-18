@@ -24,10 +24,10 @@ import (
 
 // Attribute data type enum.
 const (
-	AttrTypeString = 1
-	AttrTypeInt    = 2
-	AttrTypeBool   = 3
-	AttrTypeFloat  = 4
+	attrTypeString = 1
+	attrTypeInt    = 2
+	attrTypeBool   = 3
+	attrTypeFloat  = 4
 )
 
 // AttrStore represents an interface for handling row/column attributes.
@@ -165,19 +165,19 @@ func encodeAttr(key string, value interface{}) *internal.Attr {
 	pb := &internal.Attr{Key: key}
 	switch value := value.(type) {
 	case string:
-		pb.Type = AttrTypeString
+		pb.Type = attrTypeString
 		pb.StringValue = value
 	case float64:
-		pb.Type = AttrTypeFloat
+		pb.Type = attrTypeFloat
 		pb.FloatValue = value
 	case uint64:
-		pb.Type = AttrTypeInt
+		pb.Type = attrTypeInt
 		pb.IntValue = int64(value)
 	case int64:
-		pb.Type = AttrTypeInt
+		pb.Type = attrTypeInt
 		pb.IntValue = value
 	case bool:
-		pb.Type = AttrTypeBool
+		pb.Type = attrTypeBool
 		pb.BoolValue = value
 	}
 	return pb
@@ -186,13 +186,13 @@ func encodeAttr(key string, value interface{}) *internal.Attr {
 // decodeAttr converts from an Attr internal representation to a key/value pair.
 func decodeAttr(attr *internal.Attr) (key string, value interface{}) {
 	switch attr.Type {
-	case AttrTypeString:
+	case attrTypeString:
 		return attr.Key, attr.StringValue
-	case AttrTypeInt:
+	case attrTypeInt:
 		return attr.Key, attr.IntValue
-	case AttrTypeBool:
+	case attrTypeBool:
 		return attr.Key, attr.BoolValue
-	case AttrTypeFloat:
+	case attrTypeFloat:
 		return attr.Key, attr.FloatValue
 	default:
 		return attr.Key, nil

@@ -2,7 +2,7 @@ package pilosa
 
 import (
 	"encoding/json"
-	"net/http"
+	"net"
 )
 
 // QueryRequest represent a request to process a query.
@@ -61,13 +61,13 @@ func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 }
 
 type Handler interface {
-	http.Handler
+	Serve(ln net.Listener, closing <-chan struct{})
 	GetAPI() *API
 }
 
 type NopHandler struct{}
 
-func (n *NopHandler) ServeHTTP(_ http.ResponseWriter, _ *http.Request) {}
+func (n *NopHandler) Serve(ln net.Listener, closing <-chan struct{}) {}
 
 func (n *NopHandler) GetAPI() *API {
 	return nil

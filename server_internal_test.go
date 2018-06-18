@@ -12,24 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package test
+package pilosa
 
 import (
-	gohttp "net/http"
-
-	"github.com/pilosa/pilosa/http"
+	"runtime"
+	"testing"
 )
 
-// Client represents a test wrapper for pilosa.Client.
-type Client struct {
-	*http.InternalClient
-}
-
-// MustNewClient returns a new instance of Client. Panic on error.
-func MustNewClient(host string, h *gohttp.Client) *Client {
-	c, err := http.NewInternalClient(host, h)
-	if err != nil {
-		panic(err)
+// Ensure the file handle count is working
+func TestCountOpenFiles(t *testing.T) {
+	// Windows is not supported yet
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping unsupported countOpenFiles test on Windows.")
 	}
-	return &Client{InternalClient: c}
+	count, err := countOpenFiles()
+	if err != nil {
+		t.Errorf("countOpenFiles failed: %s", err)
+	}
+	if count == 0 {
+		t.Error("countOpenFiles returned invalid value 0.")
+	}
 }

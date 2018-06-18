@@ -33,6 +33,7 @@ type Index struct {
 	mu   sync.RWMutex
 	path string
 	name string
+	keys bool // use string keys
 
 	// Fields by name.
 	fields map[string]*Field
@@ -53,7 +54,7 @@ type Index struct {
 
 // NewIndex returns a new instance of Index.
 func NewIndex(path, name string) (*Index, error) {
-	err := ValidateName(name)
+	err := validateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
 	}
@@ -79,6 +80,9 @@ func (i *Index) Name() string { return i.name }
 
 // Path returns the path the index was initialized with.
 func (i *Index) Path() string { return i.path }
+
+// Keys returns true if the index uses string keys.
+func (i *Index) Keys() bool { return i.keys }
 
 // ColumnAttrStore returns the storage for column attributes.
 func (i *Index) ColumnAttrStore() AttrStore { return i.columnAttrStore }
@@ -164,18 +168,17 @@ func (i *Index) loadMeta() error {
 	}
 
 	// Copy metadata fields.
+	i.keys = pb.Keys
 
 	return nil
 }
 
-// NOTE: Until we introduce new attributes to store in the index .meta file,
-// we don't need to actually write the file. The code related to index.options
-// and the index meta file are left in place for future use.
-/*
 // saveMeta writes meta data for the index.
 func (i *Index) saveMeta() error {
 	// Marshal metadata.
-	buf, err := proto.Marshal(&internal.IndexMeta{})
+	buf, err := proto.Marshal(&internal.IndexMeta{
+		Keys: i.keys,
+	})
 	if err != nil {
 		return errors.Wrap(err, "marshalling")
 	}
@@ -187,7 +190,6 @@ func (i *Index) saveMeta() error {
 
 	return nil
 }
-*/
 
 // Close closes the index and its fields.
 func (i *Index) Close() error {
@@ -295,7 +297,7 @@ func (i *Index) CreateFieldIfNotExists(name string, opt FieldOptions) (*Field, e
 func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 	if name == "" {
 		return nil, errors.New("field name required")
-	} else if opt.CacheType != "" && !IsValidCacheType(opt.CacheType) {
+	} else if opt.CacheType != "" && !isValidCacheType(opt.CacheType) {
 		return nil, ErrInvalidCacheType
 	}
 
@@ -407,11 +409,15 @@ func encodeIndex(d *Index) *internal.Index {
 }
 
 // IndexOptions represents options to set when initializing an index.
-type IndexOptions struct{}
+type IndexOptions struct {
+	Keys bool `json:"keys"`
+}
 
 // Encode converts i into its internal representation.
 func (i *IndexOptions) Encode() *internal.IndexMeta {
-	return &internal.IndexMeta{}
+	return &internal.IndexMeta{
+		Keys: i.Keys,
+	}
 }
 
 // hasTime returns true if a contains a non-nil time.

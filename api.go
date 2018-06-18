@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -45,7 +44,7 @@ type API struct {
 	BroadcastHandler BroadcastHandler
 	StatusHandler    StatusHandler
 	Cluster          *Cluster
-	RemoteClient     *http.Client
+	TranslateStore   TranslateStore
 	Logger           Logger
 }
 
@@ -126,6 +125,18 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 		if err != nil {
 			return resp, errors.Wrap(err, "reading column attrs")
 		}
+
+		// Translate column attributes, if necessary.
+		if api.TranslateStore != nil {
+			for _, col := range resp.ColumnAttrSets {
+				v, err := api.TranslateStore.TranslateColumnToString(req.Index, col.ID)
+				if err != nil {
+					return resp, err
+				}
+				col.Key, col.ID = v, 0
+			}
+		}
+
 		resp.ColumnAttrSets = columnAttrSets
 	}
 	return resp, nil
@@ -291,7 +302,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 	}
 
 	// Validate that this handler owns the slice.
-	if !api.Cluster.OwnsSlice(api.LocalID(), indexName, slice) {
+	if !api.Cluster.ownsSlice(api.LocalID(), indexName, slice) {
 		api.Logger.Printf("node %s does not own slice %d of index %s", api.LocalID(), slice, indexName)
 		return ErrClusterDoesNotOwnSlice
 	}
@@ -327,7 +338,7 @@ func (api *API) SliceNodes(ctx context.Context, indexName string, slice uint64) 
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	return api.Cluster.SliceNodes(indexName, slice), nil
+	return api.Cluster.sliceNodes(indexName, slice), nil
 }
 
 // MarshalFragment returns an object which can write the specified fragment's data
@@ -681,7 +692,7 @@ func (api *API) LongQueryTime() time.Duration {
 
 func (api *API) indexField(indexName string, fieldName string, slice uint64) (*Index, *Field, error) {
 	// Validate that this handler owns the slice.
-	if !api.Cluster.OwnsSlice(api.LocalID(), indexName, slice) {
+	if !api.Cluster.ownsSlice(api.LocalID(), indexName, slice) {
 		api.Logger.Printf("node %s does not own slice %d of index %s", api.LocalID(), slice, indexName)
 		return nil, nil, ErrClusterDoesNotOwnSlice
 	}
@@ -709,15 +720,15 @@ func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode
 		return nil, nil, errors.Wrap(err, "validating api method")
 	}
 
-	oldNode = api.Cluster.NodeByID(api.Cluster.Coordinator)
-	newNode = api.Cluster.NodeByID(id)
+	oldNode = api.Cluster.nodeByID(api.Cluster.Coordinator)
+	newNode = api.Cluster.nodeByID(id)
 	if newNode == nil {
 		return nil, nil, errors.Wrap(ErrNodeIDNotExists, "getting new node")
 	}
 
 	// If the new coordinator is this node, do the SetCoordinator directly.
 	if newNode.ID == api.LocalID() {
-		return oldNode, newNode, api.Cluster.SetCoordinator(newNode)
+		return oldNode, newNode, api.Cluster.setCoordinator(newNode)
 	}
 
 	// Send the set-coordinator message to new node.
@@ -739,13 +750,13 @@ func (api *API) RemoveNode(id string) (*Node, error) {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	removeNode := api.Cluster.nodeByID(id)
+	removeNode := api.Cluster.unprotectedNodeByID(id)
 	if removeNode == nil {
 		return nil, errors.Wrap(ErrNodeIDNotExists, "finding node to remove")
 	}
 
 	// Start the resize process (similar to NodeJoin)
-	err := api.Cluster.NodeLeave(removeNode)
+	err := api.Cluster.nodeLeave(removeNode)
 	if err != nil {
 		return removeNode, errors.Wrap(err, "calling node leave")
 	}
@@ -758,7 +769,7 @@ func (api *API) ResizeAbort() error {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	err := api.Cluster.CompleteCurrentJob(ResizeJobStateAborted)
+	err := api.Cluster.completeCurrentJob(resizeJobStateAborted)
 	return errors.Wrap(err, "complete current job")
 }
 
