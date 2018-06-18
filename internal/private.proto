@@ -3,6 +3,7 @@ syntax = "proto3";
 package internal;
 
 message IndexMeta {
+	bool Keys = 3;
 }
 
 message FieldOptions {
@@ -12,6 +13,7 @@ message FieldOptions {
     int64 Min = 9;
     int64 Max = 10;
 	string TimeQuantum = 5;
+    bool Keys = 11;
 }
 
 message ImportResponse {

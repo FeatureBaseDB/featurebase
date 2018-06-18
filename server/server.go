@@ -217,6 +217,12 @@ func (m *Command) SetupServer() error {
 
 	c := http.GetHTTPClient(TLSConfig)
 
+	// Setup connection to primary store if this is a replica.
+	var primaryTranslateStore pilosa.TranslateStore
+	if m.Config.Translation.PrimaryURL != "" {
+		primaryTranslateStore = http.NewTranslateStore(m.Config.Translation.PrimaryURL)
+	}
+
 	m.Server, err = pilosa.NewServer(
 		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
 		pilosa.OptServerLongQueryTime(time.Duration(m.Config.Cluster.LongQueryTime)),
@@ -235,6 +241,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerListener(ln),
 		pilosa.OptServerURI(uri),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
+		pilosa.OptServerPrimaryTranslateStore(primaryTranslateStore),
 	)
 
 	return errors.Wrap(err, "new server")

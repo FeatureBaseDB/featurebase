@@ -52,10 +52,11 @@ type Server struct {
 	closing chan struct{}
 
 	// Internal
-	Holder      *Holder
-	Cluster     *Cluster
-	diagnostics *DiagnosticsCollector
-	executor    *Executor
+	Holder        *Holder
+	Cluster       *Cluster
+	TranslateFile *TranslateFile
+	diagnostics   *DiagnosticsCollector
+	executor      *Executor
 
 	// External
 	handler           Handler
@@ -74,6 +75,8 @@ type Server struct {
 	metricInterval      time.Duration
 	diagnosticInterval  time.Duration
 	maxWritesPerRequest int
+
+	primaryTranslateStore TranslateStore
 
 	defaultClient InternalClient
 	dataDir       string
@@ -169,6 +172,13 @@ func OptServerInternalClient(c InternalClient) ServerOption {
 	}
 }
 
+func OptServerPrimaryTranslateStore(store TranslateStore) ServerOption {
+	return func(s *Server) error {
+		s.primaryTranslateStore = store
+		return nil
+	}
+}
+
 func OptServerStatsClient(sc StatsClient) ServerOption {
 	return func(s *Server) error {
 		s.Holder.Stats = sc
@@ -241,6 +251,14 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.Cluster.Logger = s.logger
 	s.Cluster.Holder = s.Holder
 
+	// Initialize translation database.
+	s.TranslateFile = NewTranslateFile()
+	s.TranslateFile.Path = filepath.Join(path, "keys")
+	s.TranslateFile.PrimaryTranslateStore = s.primaryTranslateStore
+	if err := s.TranslateFile.Open(); err != nil {
+		return nil, err
+	}
+
 	// update URI port with actual listener port. TODO this should probably be done outside of here.
 	if s.URI.Port() == 0 {
 		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
@@ -259,8 +277,10 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.executor.Holder = s.Holder
 	s.executor.Node = node
 	s.executor.Cluster = s.Cluster
+	s.executor.TranslateStore = s.TranslateFile
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
 	s.handler.GetAPI().Executor = s.executor
+	s.handler.GetAPI().TranslateStore = s.TranslateFile
 
 	return s, nil
 }
@@ -353,6 +373,9 @@ func (s *Server) Close() error {
 	}
 	if s.Holder != nil {
 		s.Holder.Close()
+	}
+	if s.TranslateFile != nil {
+		s.TranslateFile.Close()
 	}
 
 	return nil

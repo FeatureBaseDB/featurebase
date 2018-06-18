@@ -61,6 +61,8 @@ var (
 	ErrNodeIDNotExists    = errors.New("node with provided ID does not exist")
 	ErrNodeNotCoordinator = errors.New("node is not the coordinator")
 	ErrResizeNotRunning   = errors.New("no resize job currently running")
+
+	ErrNotImplemented = errors.New("not implemented")
 )
 
 // ApiMethodNotAllowedError wraps an error value indicating that a particular
@@ -83,6 +85,7 @@ var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 // Can have a set of attributes attached to it.
 type ColumnAttrSet struct {
 	ID    uint64                 `json:"id"`
+	Key   string                 `json:"key,omitempty"`
 	Attrs map[string]interface{} `json:"attrs,omitempty"`
 }
 

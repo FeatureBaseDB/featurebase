@@ -44,6 +44,7 @@ type API struct {
 	BroadcastHandler BroadcastHandler
 	StatusHandler    StatusHandler
 	Cluster          *Cluster
+	TranslateStore   TranslateStore
 	Logger           Logger
 }
 
@@ -124,6 +125,18 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 		if err != nil {
 			return resp, errors.Wrap(err, "reading column attrs")
 		}
+
+		// Translate column attributes, if necessary.
+		if api.TranslateStore != nil {
+			for _, col := range resp.ColumnAttrSets {
+				v, err := api.TranslateStore.TranslateColumnToString(req.Index, col.ID)
+				if err != nil {
+					return resp, err
+				}
+				col.Key, col.ID = v, 0
+			}
+		}
+
 		resp.ColumnAttrSets = columnAttrSets
 	}
 	return resp, nil
