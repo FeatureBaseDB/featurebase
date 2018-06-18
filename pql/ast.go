@@ -90,7 +90,7 @@ func (q *Query) endConditional() {
 	}
 
 	call := q.callStack[len(q.callStack)-1]
-	call.Args[field] = Condition{Op: BETWEEN, Value: []interface{}{low, high}}
+	call.Args[field] = &Condition{Op: BETWEEN, Value: []interface{}{low, high}}
 
 	q.conditional = nil
 }

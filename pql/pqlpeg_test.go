@@ -1,6 +1,7 @@
 package pql
 
 import (
+	"reflect"
 	"strconv"
 	"testing"
 )
@@ -270,6 +271,204 @@ func TestPEGErrors(t *testing.T) {
 			q, err := ParseString(test.input)
 			if err == nil {
 				t.Fatalf("parsing query '%s' - expected error, got: %s", test.input, q)
+			}
+		})
+	}
+}
+
+func TestPQLDeepEquality(t *testing.T) {
+	tests := []struct {
+		name string
+		call string
+		exp  *Call
+	}{
+		{
+			name: "Set",
+			call: "Set(1, a=7, 2010-07-08T14:44)",
+			exp: &Call{
+				Name: "Set",
+				Args: map[string]interface{}{
+					"a":          int64(7),
+					"_col":       int64(1),
+					"_timestamp": "2010-07-08T14:44",
+				},
+			}},
+		{
+			name: "SetRowAttrs",
+			call: "SetRowAttrs(myfield, 9, z=4)",
+			exp: &Call{
+				Name: "SetRowAttrs",
+				Args: map[string]interface{}{
+					"z":      int64(4),
+					"_field": "myfield",
+					"_row":   int64(9),
+				},
+			}},
+		{
+			name: "SetColAttrs",
+			call: "SetColAttrs(myfield, 9, z=4)",
+			exp: &Call{
+				Name: "SetColAttrs",
+				Args: map[string]interface{}{
+					"z":      int64(4),
+					"_field": "myfield",
+					"_col":   int64(9),
+				},
+			}},
+		{
+			name: "Clear",
+			call: "Clear(1, a=7)",
+			exp: &Call{
+				Name: "Clear",
+				Args: map[string]interface{}{
+					"a":    int64(7),
+					"_col": int64(1),
+				},
+			}},
+		{
+			name: "TopN",
+			call: "TopN(myfield, Row(), a=7)",
+			exp: &Call{
+				Name: "TopN",
+				Args: map[string]interface{}{
+					"a":      int64(7),
+					"_field": "myfield",
+				},
+				Children: []*Call{
+					{Name: "Row"},
+				},
+			}},
+		{
+			name: "RangeEQ",
+			call: "Range(a==7)",
+			exp: &Call{
+				Name: "Range",
+				Args: map[string]interface{}{
+					"a": &Condition{
+						Op:    EQ,
+						Value: int64(7),
+					},
+				},
+			}},
+		{
+			name: "RangeLT",
+			call: "Range(a<7)",
+			exp: &Call{
+				Name: "Range",
+				Args: map[string]interface{}{
+					"a": &Condition{
+						Op:    LT,
+						Value: int64(7),
+					},
+				},
+			}},
+		{
+			name: "RangeLTE",
+			call: "Range(a<=7)",
+			exp: &Call{
+				Name: "Range",
+				Args: map[string]interface{}{
+					"a": &Condition{
+						Op:    LTE,
+						Value: int64(7),
+					},
+				},
+			}},
+		{
+			name: "RangeGTE",
+			call: "Range(a>=7)",
+			exp: &Call{
+				Name: "Range",
+				Args: map[string]interface{}{
+					"a": &Condition{
+						Op:    GTE,
+						Value: int64(7),
+					},
+				},
+			}},
+		{
+			name: "RangeGT",
+			call: "Range(a>7)",
+			exp: &Call{
+				Name: "Range",
+				Args: map[string]interface{}{
+					"a": &Condition{
+						Op:    GT,
+						Value: int64(7),
+					},
+				},
+			}},
+		{
+			name: "RangeNEQ",
+			call: "Range(a!=null)",
+			exp: &Call{
+				Name: "Range",
+				Args: map[string]interface{}{
+					"a": &Condition{
+						Op:    NEQ,
+						Value: nil,
+					},
+				},
+			}},
+		{
+			name: "RangeLTELT",
+			call: "Range(4 <= a < 9)",
+			exp: &Call{
+				Name: "Range",
+				Args: map[string]interface{}{
+					"a": &Condition{
+						Op:    BETWEEN,
+						Value: []interface{}{int64(4), int64(9)},
+					},
+				},
+			}},
+		{
+			name: "RangeLTLT",
+			call: "Range(4 < a < 9)",
+			exp: &Call{
+				Name: "Range",
+				Args: map[string]interface{}{
+					"a": &Condition{
+						Op:    BETWEEN,
+						Value: []interface{}{int64(5), int64(9)},
+					},
+				},
+			}},
+		{
+			name: "RangeLTELTE",
+			call: "Range(4 <= a <= 9)",
+			exp: &Call{
+				Name: "Range",
+				Args: map[string]interface{}{
+					"a": &Condition{
+						Op:    BETWEEN,
+						Value: []interface{}{int64(4), int64(10)},
+					},
+				},
+			}},
+		{
+			name: "RangeLTLTE",
+			call: "Range(4 < a <= 9)",
+			exp: &Call{
+				Name: "Range",
+				Args: map[string]interface{}{
+					"a": &Condition{
+						Op:    BETWEEN,
+						Value: []interface{}{int64(5), int64(10)},
+					},
+				},
+			}},
+	}
+
+	for i, test := range tests {
+		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
+			q, err := ParseString(test.call)
+			if err != nil {
+				t.Fatalf("parsing query '%s': %v", test.call, err)
+			}
+
+			if !reflect.DeepEqual(test.exp, q.Calls[0]) {
+				t.Fatalf("unexpected call:\n%s\ninstead of:\n%s\n'%#v'\ninstead of:\n'%#v'", q.Calls[0], test.exp, q.Calls[0], test.exp)
 			}
 		})
 	}
