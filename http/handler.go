@@ -337,29 +337,31 @@ func (h *Handler) handleGetIndexes(w http.ResponseWriter, r *http.Request) {
 
 // handleGetIndex handles GET /index/<indexname> requests.
 func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
+
 	indexName := mux.Vars(r)["index"]
-	index, err := h.API.Index(r.Context(), indexName)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+	var info *pilosa.IndexInfo
+	for _, idx := range h.API.Schema(r.Context()) {
+		if strings.Compare(idx.Name, indexName) == 0 {
+			info = idx
+			break
+		}
+	}
+	if info == nil {
+		http.Error(w, fmt.Sprintf("Index %s Not Found", indexName), http.StatusNotFound)
 		return
 	}
-	fields := make(map[string]string)
-	for _, field := range index.Fields() {
-		fields["name"] = field.Name()
-	}
 
-	if err := json.NewEncoder(w).Encode(getIndexResponse{
-		Index:  map[string]string{"name": index.Name()},
-		Fields: fields,
-	}); err != nil {
+	if err := json.NewEncoder(w).Encode(info); err != nil {
 		h.Logger.Printf("write response error: %s", err)
 	}
 }
 
+/*
 type getIndexResponse struct {
 	Index  map[string]string `json:"index"`
 	Fields map[string]string `json:"fields"`
 }
+*/
 
 type postIndexRequest struct {
 	Options pilosa.IndexOptions `json:"options"`
