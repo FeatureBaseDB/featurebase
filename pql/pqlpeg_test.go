@@ -132,6 +132,78 @@ func TestPEGWorking(t *testing.T) {
 			name:   "single quoted args",
 			input:  `B(a='zm""e')`,
 			ncalls: 1},
+		{
+			name:   "SetRowAttrs",
+			input:  "SetRowAttrs(blah, 9, a=47)",
+			ncalls: 1},
+		{
+			name:   "SetRowAttrs2args",
+			input:  "SetRowAttrs(blah, 9, a=47, b=bval)",
+			ncalls: 1},
+		{
+			name:   "SetColAttrs",
+			input:  "SetColAttrs(blah, 9, a=47)",
+			ncalls: 1},
+		{
+			name:   "SetColAttrs2args",
+			input:  "SetColAttrs(blah, 9, a=47, b=bval)",
+			ncalls: 1},
+		{
+			name:   "Clear",
+			input:  "Clear(1, a=53)",
+			ncalls: 1},
+		{
+			name:   "Clear2args",
+			input:  "Clear(1, a=53, b=33)",
+			ncalls: 1},
+		{
+			name:   "TopN",
+			input:  "TopN(myfield, n=44)",
+			ncalls: 1},
+		{
+			name:   "TopNBitmap",
+			input:  "TopN(myfield, Row(a=47), n=10)",
+			ncalls: 1},
+		{
+			name:   "RangeLT",
+			input:  "Range(a < 4)",
+			ncalls: 1},
+		{
+			name:   "RangeGT",
+			input:  "Range(a > 4)",
+			ncalls: 1},
+		{
+			name:   "RangeLTE",
+			input:  "Range(a <= 4)",
+			ncalls: 1},
+		{
+			name:   "RangeGTE",
+			input:  "Range(a >= 4)",
+			ncalls: 1},
+		{
+			name:   "RangeEQ",
+			input:  "Range(a == 4)",
+			ncalls: 1},
+		{
+			name:   "RangeNEQ",
+			input:  "Range(a != null)",
+			ncalls: 1},
+		{
+			name:   "RangeLTLT",
+			input:  "Range(4 < a < 9)",
+			ncalls: 1},
+		{
+			name:   "RangeLTLTE",
+			input:  "Range(4 < a <= 9)",
+			ncalls: 1},
+		{
+			name:   "RangeLTELT",
+			input:  "Range(4 <= a < 9)",
+			ncalls: 1},
+		{
+			name:   "RangeLTELTE",
+			input:  "Range(4 <= a <= 9)",
+			ncalls: 1},
 	}
 
 	for i, test := range tests {
@@ -185,6 +257,12 @@ func TestPEGErrors(t *testing.T) {
 		{
 			name:  "TopN No Field",
 			input: "TopN(a=77)"},
+		{
+			name:  "SetRowAttrs0args",
+			input: "SetRowAttrs(blah, 9)"},
+		{
+			name:  "Clear0args",
+			input: "Clear(9)"},
 	}
 
 	for i, test := range tests {

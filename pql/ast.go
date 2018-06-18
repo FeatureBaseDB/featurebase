@@ -63,6 +63,10 @@ func (q *Query) addPosStr(key, value string) {
 
 func (q *Query) startConditional() {
 	q.conditional = make([]string, 0)
+	call := q.callStack[len(q.callStack)-1]
+	if call.Args == nil {
+		call.Args = make(map[string]interface{})
+	}
 }
 
 func (q *Query) condAdd(val string) {

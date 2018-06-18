@@ -26,7 +26,11 @@ COND <- ( '><' { p.addBTWN() }
         / '<' { p.addLT() }
         / '>' { p.addGT() }
         )
-conditional <- {p.startConditional()} int ('<=' / '<') fieldExpr ('<=' / '<') int {p.endConditional()}
+conditional <- {p.startConditional()} condint condLT condfield condLT condint {p.endConditional()}
+condint <- <'-'? [1-9] [0-9]* / '0'> sp {p.condAdd(buffer[begin:end])}
+condLT <- <('<=' / '<')> sp {p.condAdd(buffer[begin:end])}
+condfield <- <fieldExpr> sp {p.condAdd(buffer[begin:end])}
+
 value <- ( item
          / lbrack { p.startList() } list rbrack { p.endList() }
          )
@@ -48,7 +52,6 @@ fieldExpr <- [[A-Z]] ( [[A-Z]] / [0-9] / '_' )*
 field <- <fieldExpr> { p.addField(buffer[begin:end]) }
 posfield <- <fieldExpr> { p.addPosStr("_field", buffer[begin:end]) }
 uint <- [1-9] [0-9]* / '0'
-int <- '-'? [1-9] [0-9]* / '0'
 uintrow <- <uint>{p.addPosNum("_row", buffer[begin:end])}
 uintcol <- <uint>{p.addPosNum("_col", buffer[begin:end])}
 
