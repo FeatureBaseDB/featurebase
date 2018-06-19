@@ -263,6 +263,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
 	}
 
+	// Get or create NodeID.
 	s.NodeID = s.LoadNodeID()
 	// Set Cluster Node.
 	node := &Node{
@@ -271,6 +272,8 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		IsCoordinator: s.Cluster.Coordinator == s.NodeID,
 	}
 	s.Cluster.Node = node
+
+	// Append the NodeID tag to stats.
 	s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%s", s.NodeID))
 
 	s.executor.Holder = s.Holder
@@ -297,14 +300,6 @@ func (s *Server) Open() error {
 	if err != nil {
 		log.Println(errors.Wrap(err, "logging startup"))
 	}
-
-	// Get or create NodeID.
-
-	// Append the NodeID tag to stats.
-
-	// Create default HTTP client
-
-	// Create executor for executing queries.
 
 	// Cluster settings.
 	s.Cluster.Broadcaster = s.Broadcaster
