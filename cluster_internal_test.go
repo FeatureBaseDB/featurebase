@@ -552,7 +552,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 	t.Run("Single node, in topology", func(t *testing.T) {
 		tc := NewClusterCluster(0)
-		tc.AddNode(false)
+		tc.addNode(false)
 
 		node := tc.Clusters[0]
 
@@ -580,7 +580,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 	t.Run("Single node, not in topology", func(t *testing.T) {
 		tc := NewClusterCluster(0)
-		tc.AddNode(false)
+		tc.addNode(false)
 
 		node := tc.Clusters[0]
 
@@ -605,14 +605,14 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 	t.Run("Multiple nodes, no data", func(t *testing.T) {
 		tc := NewClusterCluster(0)
-		tc.AddNode(false)
+		tc.addNode(false)
 
 		// Open TestCluster.
 		if err := tc.Open(); err != nil {
 			t.Fatal(err)
 		}
 
-		tc.AddNode(false)
+		tc.addNode(false)
 
 		node0 := tc.Clusters[0]
 		node1 := tc.Clusters[1]
@@ -643,7 +643,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 	t.Run("Multiple nodes, in/not in topology", func(t *testing.T) {
 		tc := NewClusterCluster(0)
-		tc.AddNode(false)
+		tc.addNode(false)
 		node0 := tc.Clusters[0]
 
 		// write topology to data file
@@ -664,12 +664,12 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		// Expect an error by adding a node not in the topology.
 		expectedError := "host is not in topology: node1"
-		err := tc.AddNode(false)
+		err := tc.addNode(false)
 		if err == nil || err.Error() != expectedError {
 			t.Errorf("did not receive expected error: %s", expectedError)
 		}
 
-		tc.AddNode(false)
+		tc.addNode(false)
 		node2 := tc.Clusters[2]
 
 		// Ensure that node comes up in state NORMAL.
@@ -687,7 +687,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 	t.Run("Multiple nodes, with data", func(t *testing.T) {
 		tc := NewClusterCluster(0)
-		tc.AddNode(false)
+		tc.addNode(false)
 		node0 := tc.Clusters[0]
 
 		// Open TestCluster.
@@ -710,7 +710,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 		node0Checksum := node0Fragment.Checksum()
 
 		// AddNode needs to block until the resize process has completed.
-		tc.AddNode(false)
+		tc.addNode(false)
 		node1 := tc.Clusters[1]
 
 		// Ensure that nodes come up in state NORMAL.
