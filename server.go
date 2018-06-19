@@ -62,7 +62,6 @@ type Server struct {
 	handler           Handler
 	Broadcaster       Broadcaster
 	BroadcastReceiver BroadcastReceiver
-	Gossiper          Gossiper
 	systemInfo        SystemInfo
 	gcNotifier        GCNotifier
 	NewAttrStore      func(string) AttrStore
@@ -547,7 +546,7 @@ func (s *Server) SendSync(pb proto.Message) error {
 
 // SendAsync represents an implementation of Broadcaster.
 func (s *Server) SendAsync(pb proto.Message) error {
-	return s.Gossiper.SendAsync(pb)
+	return ErrNotImplemented
 }
 
 // SendTo represents an implementation of Broadcaster.

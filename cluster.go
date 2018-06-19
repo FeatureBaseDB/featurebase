@@ -910,7 +910,7 @@ func (c *Cluster) open() error {
 			Event: uint32(NodeJoin),
 			Node:  EncodeNode(c.Node),
 		}
-		if err := c.Broadcaster.SendAsync(msg); err != nil {
+		if err := c.Broadcaster.SendSync(msg); err != nil {
 			return fmt.Errorf("sending restart NodeJoin: %v", err)
 		}
 
