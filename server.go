@@ -492,6 +492,8 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if err != nil {
 			return err
 		}
+	case *internal.RecalculateCaches:
+		s.Holder.RecalculateCaches()
 	case *internal.ClusterStatus:
 		err := s.Cluster.mergeClusterStatus(obj)
 		if err != nil {
@@ -516,8 +518,6 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if err != nil {
 			return err
 		}
-	case *internal.RecalculateCaches:
-		s.Holder.RecalculateCaches()
 	case *internal.NodeEventMessage:
 		s.Cluster.ReceiveEvent(DecodeNodeEvent(obj))
 	}
