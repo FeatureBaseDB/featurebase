@@ -34,14 +34,15 @@ Let's make sure Pilosa is running:
 curl localhost:10101/status
 ```
 ``` response
-{"state":"NORMAL","nodes":[{"id":"18eb5546-5a1a-4ba4-9c52-b53fbe22317e","uri":{"scheme":"http","host":"localhost","port":10101}}]}
+{"state":"NORMAL","nodes":[{"id":"91715a50-7d50-4c54-9a03-873801da1cd1","uri":{"scheme":"http","host":"localhost","port
+":10101},"isCoordinator":true}],"localID":"91715a50-7d50-4c54-9a03-873801da1cd1"}
 ```
 
 ### Sample Project
 
 In order to better understand Pilosa's capabilities, we will create a sample project called "Star Trace" containing information about 1,000 popular Github repositories which have "go" in their name. The Star Trace index will include data points such as programming language, tags, and stargazers—people who have starred a project.
 
-Although Pilosa doesn't keep the data in a tabular format, we still use the terms "columns" and "rows" when describing the data model. We put the primary objects in columns, and the properties of those objects in rows. For example, the Star Trace project will contain an index called "repository" which contains columns representing Github repositories, and rows representing properties like programming languages and tags. We can better organize the rows by grouping them into sets called Frames. So the "repository" index might have a "languages" frame as well as a "tags" frame. You can learn more about indexes and frames in the [Data Model](../data-model/) section of the documentation.
+Although Pilosa doesn't keep the data in a tabular format, we still use the terms "columns" and "rows" when describing the data model. We put the primary objects in columns, and the properties of those objects in rows. For example, the Star Trace project will contain an index called "repository" which contains columns representing Github repositories, and rows representing properties like programming languages and tags. We can better organize the rows by grouping them into sets called Fields. So the "repository" index might have a "languages" field as well as a "tags" field. You can learn more about indexes and fields in the [Data Model](../data-model/) section of the documentation.
 
 #### Create the Schema
 
@@ -55,7 +56,7 @@ curl localhost:10101/schema
 {"indexes":null}
 ```
 
-Before we can import data or run queries, we need to create our indexes and the frames within them. Let's create the repository index first:
+Before we can import data or run queries, we need to create our indexes and the fields within them. Let's create the repository index first:
 ``` request
 curl localhost:10101/index/repository -X POST
 ```
@@ -63,26 +64,28 @@ curl localhost:10101/index/repository -X POST
 {}
 ```
 
-Let's create the `stargazer` frame which has user IDs of stargazers as its rows:
+Let's create the `stargazer` field which has user IDs of stargazers as its rows:
 ``` request
-curl localhost:10101/index/repository/frame/stargazer \
+curl localhost:10101/index/repository/field/stargazer \
      -X POST \
-     -d '{"options": {"timeQuantum": "YMD"}}'
+     -d '{"options": {"type": "time", "timeQuantum": "YMD"}}'
 ```
 ``` response
 {}
 ```
 
-Since our data contains time stamps for the time users starred repos, we set the *time quantum* for the `stargazer` frame in the options as well. Time quantum is the resolution of the time we want to use, and we set it to `YMD` (year, month, day) for `stargazer`.
+Since our data contains time stamps for the time users starred repos, we set the field type to `time`. Time quantum is the resolution of the time we want to use, and we set it to `YMD` (year, month, day) for `stargazer`.
 
-Next up is the `language` frame, which will contain IDs for programming languages:
+Next up is the `language` field, which will contain IDs for programming languages:
 ``` request
-curl localhost:10101/index/repository/frame/language \
+curl localhost:10101/index/repository/field/language \
      -X POST
 ```
 ``` response
 {}
 ```
+
+The `language` is a `set` field, but since the default field type is `set`, we didn't specify it in field options.
 
 #### Import Data From CSV Files
 
@@ -116,14 +119,14 @@ Which repositories did user 14 star:
 ``` request
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'Bitmap(frame="stargazer", row=14)'
+     -d 'Bitmap(field="stargazer", row=14)'
 ```
 ``` response
 {
     "results":[
         {
             "attrs":{},
-            "bits":[1,2,3,362,368,391,396,409,416,430,436,450,454,460,461,464,466,469,470,483,484,486,490,491,503,504,514]
+            "columns":[1,2,3,362,368,391,396,409,416,430,436,450,454,460,461,464,466,469,470,483,484,486,490,491,503,504,514]
         }
     ]
 }
@@ -133,7 +136,7 @@ What are the top 5 languages in the sample data:
 ``` request
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'TopN(frame="language", n=5)'
+     -d 'TopN(field="language", n=5)'
 ```
 ``` response
 {
@@ -154,8 +157,8 @@ Which repositories were starred by user 14 and 19:
 curl localhost:10101/index/repository/query \
      -X POST \
      -d 'Intersect(
-            Bitmap(frame="stargazer", row=14), 
-            Bitmap(frame="stargazer", row=19)
+            Bitmap(field="stargazer", row=14), 
+            Bitmap(field="stargazer", row=19)
         )'
 ```
 ``` response
@@ -163,7 +166,7 @@ curl localhost:10101/index/repository/query \
     "results":[
         {
             "attrs":{},
-            "bits":[2,3,362,396,416,461,464,466,470,486]
+            "columns":[2,3,362,396,416,461,464,466,470,486]
         }
     ]
 }
@@ -174,8 +177,8 @@ Which repositories were starred by user 14 or 19:
 curl localhost:10101/index/repository/query \
      -X POST \
      -d 'Union(
-            Bitmap(frame="stargazer", row=14),
-            Bitmap(frame="stargazer", row=19)
+            Bitmap(field="stargazer", row=14),
+            Bitmap(field="stargazer", row=19)
         )'
 ```
 ``` response
@@ -183,7 +186,7 @@ curl localhost:10101/index/repository/query \
     "results":[
         {
             "attrs":{},
-            "bits":[1,2,3,361,362,368,376,377,378,382,386,388,391,396,398,400,409,411,412,416,426,428,430,435,436,450,452,453,454,456,460,461,464,465,466,469,470,483,484,486,487,489,490,491,500,503,504,505,512,514]
+            "columns":[1,2,3,361,362,368,376,377,378,382,386,388,391,396,398,400,409,411,412,416,426,428,430,435,436,450,452,453,454,456,460,461,464,465,466,469,470,483,484,486,487,489,490,491,500,503,504,505,512,514]
         }
     ]
 }
@@ -194,9 +197,9 @@ Which repositories were starred by user 14 and 19 and also were written in langu
 curl localhost:10101/index/repository/query \
      -X POST \
      -d 'Intersect(
-            Bitmap(frame="stargazer", row=14),
-            Bitmap(frame="stargazer", row=19),
-            Bitmap(frame="language", row=1)
+            Bitmap(field="stargazer", row=14),
+            Bitmap(field="stargazer", row=19),
+            Bitmap(field="language", row=1)
         )'
 ```
 ``` response
@@ -204,7 +207,7 @@ curl localhost:10101/index/repository/query \
     "results":[
         {
             "attrs":{},
-            "bits":[2,362,416,461]
+            "columns":[2,362,416,461]
         }
     ]
 }
@@ -214,7 +217,7 @@ Set user 99999 as a stargazer for repository 77777:
 ``` request
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'SetBit(frame="stargazer", col=77777, row=99999)'
+     -d 'SetBit(field="stargazer", col=77777, row=99999)'
 ```
 ``` response
 {"results":[true]}
