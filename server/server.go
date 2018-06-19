@@ -209,10 +209,6 @@ func (m *Command) SetupServer() error {
 	if err != nil {
 		return errors.Wrap(err, "new stats client")
 	}
-	var hosts []string
-	if m.Config.Cluster.Disabled {
-		hosts = m.Config.Cluster.Hosts
-	}
 
 	ln, err := getListener(*uri, TLSConfig)
 	if err != nil {
@@ -246,7 +242,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerURI(uri),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 		pilosa.OptServerPrimaryTranslateStore(primaryTranslateStore),
-		pilosa.OptServerClusterStatic(hosts),
+		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
 	)
 
 	return errors.Wrap(err, "new server")

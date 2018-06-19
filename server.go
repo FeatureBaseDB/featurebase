@@ -52,12 +52,13 @@ type Server struct {
 	closing chan struct{}
 
 	// Internal
-	Holder        *Holder
-	Cluster       *Cluster
-	TranslateFile *TranslateFile
-	diagnostics   *DiagnosticsCollector
-	executor      *Executor
-	hosts         []string
+	Holder          *Holder
+	Cluster         *Cluster
+	TranslateFile   *TranslateFile
+	diagnostics     *DiagnosticsCollector
+	executor        *Executor
+	hosts           []string
+	clusterDisabled bool
 
 	// External
 	handler           Handler
@@ -208,11 +209,12 @@ func OptServerURI(uri *URI) ServerOption {
 	}
 }
 
-// OptClusterStatic tells the server to use a static cluster with the defined
-// hosts. Mostly used for testing.
-func OptServerClusterStatic(hosts []string) ServerOption {
+// OptClusterDisabled tells the server whether to use a static cluster with the
+// defined hosts. Mostly used for testing.
+func OptServerClusterDisabled(disabled bool, hosts []string) ServerOption {
 	return func(s *Server) error {
 		s.hosts = hosts
+		s.clusterDisabled = disabled
 		return nil
 	}
 }
@@ -282,7 +284,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		IsCoordinator: s.Cluster.Coordinator == s.NodeID,
 	}
 	s.Cluster.Node = node
-	if len(s.hosts) > 0 {
+	if s.clusterDisabled {
 		err := s.Cluster.setStatic(s.hosts)
 		if err != nil {
 			return nil, errors.Wrap(err, "setting cluster static")

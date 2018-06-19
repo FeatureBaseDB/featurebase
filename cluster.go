@@ -1803,9 +1803,6 @@ func (c *Cluster) mergeClusterStatus(cs *internal.ClusterStatus) error {
 }
 
 func (c *Cluster) setStatic(hosts []string) error {
-	if len(hosts) == 0 {
-		return errors.New("must specify at least one host")
-	}
 	c.Static = true
 	c.Coordinator = c.Node.ID
 	for _, address := range hosts {
