@@ -205,6 +205,14 @@ func TestPEGWorking(t *testing.T) {
 			name:   "RangeLTELTE",
 			input:  "Range(4 <= a <= 9)",
 			ncalls: 1},
+		{
+			name:   "RangeTime",
+			input:  "Range(a=4, 2010-07-04T00:00, 2010-08-04T00:00)",
+			ncalls: 1},
+		{
+			name:   "RangeTimeQuotes",
+			input:  `Range(a=4, '2010-07-04T00:00', "2010-08-04T00:00")`,
+			ncalls: 1},
 	}
 
 	for i, test := range tests {
@@ -264,6 +272,12 @@ func TestPEGErrors(t *testing.T) {
 		{
 			name:  "Clear0args",
 			input: "Clear(9)"},
+		{
+			name:  "RangeTimeGT",
+			input: "Range(a>4, 2010-07-04T00:00, 2010-08-04T00:00)"},
+		{
+			name:  "RangeTimeOneStamp",
+			input: "Range(a=4, 2010-07-04T00:00)"},
 	}
 
 	for i, test := range tests {
