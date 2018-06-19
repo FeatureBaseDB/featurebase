@@ -57,6 +57,7 @@ type Server struct {
 	TranslateFile *TranslateFile
 	diagnostics   *DiagnosticsCollector
 	executor      *Executor
+	hosts         []string
 
 	// External
 	handler           Handler
@@ -207,6 +208,15 @@ func OptServerURI(uri *URI) ServerOption {
 	}
 }
 
+// OptClusterStatic tells the server to use a static cluster with the defined
+// hosts. Mostly used for testing.
+func OptServerClusterStatic(hosts []string) ServerOption {
+	return func(s *Server) error {
+		s.hosts = hosts
+		return nil
+	}
+}
+
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
@@ -272,6 +282,12 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		IsCoordinator: s.Cluster.Coordinator == s.NodeID,
 	}
 	s.Cluster.Node = node
+	if len(s.hosts) > 0 {
+		err := s.Cluster.setStatic(s.hosts)
+		if err != nil {
+			return nil, errors.Wrap(err, "setting cluster static")
+		}
+	}
 
 	// Append the NodeID tag to stats.
 	s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%s", s.NodeID))
@@ -290,9 +306,8 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 // Open opens and initializes the server.
 func (s *Server) Open() error {
 	s.logger.Printf("open server")
-	// s.ln can be configured prior to Open() via s.OpenListener().
 	if s.ln == nil {
-		return errors.New("Must pass a listener option to NewServer")
+		return errors.New("must pass a listener option to NewServer")
 	}
 
 	// Log startup

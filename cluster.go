@@ -1801,3 +1801,20 @@ func (c *Cluster) mergeClusterStatus(cs *internal.ClusterStatus) error {
 
 	return nil
 }
+
+func (c *Cluster) setStatic(hosts []string) error {
+	if len(hosts) == 0 {
+		return errors.New("must specify at least one host")
+	}
+	c.Static = true
+	c.Coordinator = c.Node.ID
+	for _, address := range hosts {
+		uri, err := NewURIFromAddress(address)
+		if err != nil {
+			return errors.Wrap(err, "getting URI")
+		}
+		c.Nodes = append(c.Nodes, &Node{URI: *uri})
+	}
+	c.MemberSet = NewStaticMemberSet(c.Nodes)
+	return nil
+}
