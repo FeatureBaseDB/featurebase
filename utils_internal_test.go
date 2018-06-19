@@ -117,7 +117,7 @@ func (t *ClusterCluster) CreateField(index, field string, opt FieldOptions) erro
 	return nil
 }
 
-func (t *ClusterCluster) SetBit(index, field, view string, rowID, colID uint64, x *time.Time) error {
+func (t *ClusterCluster) SetBit(index, field string, rowID, colID uint64, x *time.Time) error {
 	// Determine which node should receive the SetBit.
 	c0 := t.Clusters[0] // use the first node's cluster to determine slice location.
 	slice := colID / SliceWidth
@@ -132,7 +132,7 @@ func (t *ClusterCluster) SetBit(index, field, view string, rowID, colID uint64, 
 		if f == nil {
 			return fmt.Errorf("index/field does not exist: %s/%s", index, field)
 		}
-		_, err := f.SetBit(view, rowID, colID, x)
+		_, err := f.SetBit(rowID, colID, x)
 		if err != nil {
 			return err
 		}
