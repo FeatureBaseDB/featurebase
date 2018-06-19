@@ -249,9 +249,6 @@ func (m *Command) SetupServer() error {
 
 // SetupNetworking sets up internode communication based on the configuration.
 func (m *Command) SetupNetworking() error {
-
-	m.Server.NodeID = m.Server.LoadNodeID()
-
 	if m.Config.Cluster.Disabled {
 		m.Server.Cluster.Static = true
 		m.Server.Cluster.Coordinator = m.Server.NodeID
@@ -265,9 +262,7 @@ func (m *Command) SetupNetworking() error {
 			})
 		}
 
-		m.Server.Broadcaster = pilosa.NopBroadcaster
 		m.Server.Cluster.MemberSet = pilosa.NewStaticMemberSet(m.Server.Cluster.Nodes)
-		m.Server.BroadcastReceiver = pilosa.NopBroadcastReceiver
 		return nil
 	}
 
