@@ -1026,6 +1026,11 @@ func (c *Container) Mapped() bool {
 	return c.mapped
 }
 
+// N returns the cached bit count of the container
+func (c *Container) N() int {
+	return c.n
+}
+
 // Update updates the container
 func (c *Container) Update(containerType byte, n int, mapped bool) {
 	c.containerType = containerType
