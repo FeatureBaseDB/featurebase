@@ -25,12 +25,9 @@ import (
 	"log"
 	"math/rand"
 	"net"
-	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -41,7 +38,7 @@ import (
 	"github.com/pilosa/pilosa/gcnotify"
 	"github.com/pilosa/pilosa/gopsutil"
 	"github.com/pilosa/pilosa/gossip"
-	"github.com/pilosa/pilosa/statik"
+	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/statsd"
 	"github.com/pkg/errors"
 )
@@ -93,30 +90,22 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer) *Command {
 // Start starts the pilosa server - it returns once the server is running.
 func (m *Command) Start() (err error) {
 	defer close(m.Started)
-	prefix := "~" + string(filepath.Separator)
-	if strings.HasPrefix(m.Config.DataDir, prefix) {
-		HomeDir := os.Getenv("HOME")
-		if HomeDir == "" {
-			return errors.New("data directory not specified and no home dir available")
-		}
-		m.Config.DataDir = filepath.Join(HomeDir, strings.TrimPrefix(m.Config.DataDir, prefix))
-	}
 
 	// SetupServer
 	err = m.SetupServer()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "setting up server")
 	}
 
 	// SetupNetworking
 	err = m.SetupNetworking()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "setting up networking")
 	}
 
 	// Initialize server.
 	if err = m.Server.Open(); err != nil {
-		return fmt.Errorf("server.Open: %v", err)
+		return errors.Wrap(err, "opening server")
 	}
 
 	m.logger.Printf("Listening as %s\n", m.Server.URI)
@@ -169,11 +158,23 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "setting up logger")
 	}
 
-	handler := pilosa.NewHandler()
-	handler.Logger = m.logger
-	handler.FileSystem = &statik.FileSystem{}
-	handler.API = pilosa.NewAPI()
-	handler.API.Logger = m.logger
+	productName := "Pilosa"
+	if pilosa.EnterpriseEnabled {
+		productName += " Enterprise"
+	}
+	m.logger.Printf("%s %s, build time %s\n", productName, pilosa.Version, pilosa.BuildTime)
+
+	api := pilosa.NewAPI()
+	api.Logger = m.logger
+
+	handler, err := http.NewHandler(
+		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
+		http.OptHandlerAPI(api),
+		http.OptHandlerLogger(m.logger),
+	)
+	if err != nil {
+		return errors.Wrap(err, "wrapping handler")
+	}
 
 	uri, err := pilosa.AddressWithDefaults(m.Config.Bind)
 	if err != nil {
@@ -214,8 +215,13 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "getting listener")
 	}
 
-	c := GetHTTPClient(TLSConfig)
-	handler.API.RemoteClient = c
+	c := http.GetHTTPClient(TLSConfig)
+
+	// Setup connection to primary store if this is a replica.
+	var primaryTranslateStore pilosa.TranslateStore
+	if m.Config.Translation.PrimaryURL != "" {
+		primaryTranslateStore = http.NewTranslateStore(m.Config.Translation.PrimaryURL)
+	}
 
 	m.Server, err = pilosa.NewServer(
 		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
@@ -234,30 +240,11 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerStatsClient(statsClient),
 		pilosa.OptServerListener(ln),
 		pilosa.OptServerURI(uri),
-		pilosa.OptServerRemoteClient(c),
+		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
+		pilosa.OptServerPrimaryTranslateStore(primaryTranslateStore),
 	)
 
 	return errors.Wrap(err, "new server")
-}
-
-func GetHTTPClient(t *tls.Config) *http.Client {
-	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          1000,
-		MaxIdleConnsPerHost:   200,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-	if t != nil {
-		transport.TLSClientConfig = t
-	}
-	return &http.Client{Transport: transport}
 }
 
 // SetupNetworking sets up internode communication based on the configuration.
@@ -271,7 +258,7 @@ func (m *Command) SetupNetworking() error {
 		for _, address := range m.Config.Cluster.Hosts {
 			uri, err := pilosa.NewURIFromAddress(address)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "getting URI")
 			}
 			m.Server.Cluster.Nodes = append(m.Server.Cluster.Nodes, &pilosa.Node{
 				URI: *uri,
@@ -281,13 +268,12 @@ func (m *Command) SetupNetworking() error {
 		m.Server.Broadcaster = pilosa.NopBroadcaster
 		m.Server.Cluster.MemberSet = pilosa.NewStaticMemberSet(m.Server.Cluster.Nodes)
 		m.Server.BroadcastReceiver = pilosa.NopBroadcastReceiver
-		m.Server.Gossiper = pilosa.NopGossiper
 		return nil
 	}
 
 	gossipPort, err := strconv.Atoi(m.Config.Gossip.Port)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "parsing port")
 	}
 
 	// get the host portion of addr to use for binding
@@ -298,7 +284,7 @@ func (m *Command) SetupNetworking() error {
 	} else {
 		transport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
 		if err != nil {
-			return err
+			return errors.Wrap(err, "getting transport")
 		}
 	}
 
@@ -310,14 +296,22 @@ func (m *Command) SetupNetworking() error {
 
 	gossipEventReceiver := gossip.NewGossipEventReceiver(m.logger)
 	m.Server.Cluster.EventReceiver = gossipEventReceiver
-	gossipMemberSet, err := gossip.NewGossipMemberSet(m.Server.NodeID, m.Server.URI.Host(), m.Config.Gossip, gossipEventReceiver, m.Server, gossip.WithLogger(m.logger.Logger()), gossip.WithTransport(transport))
+	gossipMemberSet, err := gossip.NewGossipMemberSet(
+		m.Server.NodeID,
+		m.Server.URI.Host(),
+		m.Config.Gossip,
+		gossipEventReceiver,
+		m.Server,
+		gossip.WithLogger(m.logger.Logger()),
+		gossip.WithTransport(transport),
+	)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "getting memberset")
 	}
+	gossipMemberSet.Logger = m.logger
 	m.Server.Cluster.MemberSet = gossipMemberSet
 	m.Server.Broadcaster = m.Server
 	m.Server.BroadcastReceiver = gossipMemberSet
-	m.Server.Gossiper = gossipMemberSet
 	return nil
 }
 
@@ -347,7 +341,7 @@ func NewStatsClient(name string, host string) (pilosa.StatsClient, error) {
 	case "nop", "none":
 		return pilosa.NopStatsClient, nil
 	default:
-		return nil, errors.Errorf("'%v' not a valid stats client, choose from [expvar, statsd, none].")
+		return nil, errors.Errorf("'%v' not a valid stats client, choose from [expvar, statsd, none].", name)
 	}
 }
 

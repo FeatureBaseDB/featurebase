@@ -19,26 +19,31 @@ import (
 	"encoding/json"
 	"io"
 	"io/ioutil"
-	"net/http"
+	gohttp "net/http"
 	"net/http/httptest"
 	"net/url"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 )
 
 // Handler represents a test wrapper for pilosa.Handler.
 type Handler struct {
-	*pilosa.Handler
+	*http.Handler
 	Executor HandlerExecutor
 }
 
 // NewHandler returns a new instance of Handler.
-func NewHandler() *Handler {
+func NewHandler(opts ...http.HandlerOption) (*Handler, error) {
+	handler, err := http.NewHandler(opts...)
+	if err != nil {
+		return nil, err
+	}
 	h := &Handler{
-		Handler: pilosa.NewHandler(),
+		Handler: handler,
 	}
 	h.API = pilosa.NewAPI()
 	h.Handler.API = h.API
@@ -47,6 +52,15 @@ func NewHandler() *Handler {
 	// Handler test messages can no-op.
 	h.API.Broadcaster = pilosa.NopBroadcaster
 
+	return h, nil
+}
+
+// MustNewHandler returns a new instance of Handler.
+func MustNewHandler(opts ...http.HandlerOption) *Handler {
+	h, err := NewHandler(opts...)
+	if err != nil {
+		panic(err)
+	}
 	return h
 }
 
@@ -70,17 +84,14 @@ type Server struct {
 
 // NewServer returns a test server running on a random port.
 func NewServer() *Server {
-	s := &Server{
-		Handler: NewHandler(),
-	}
-	s.Server = httptest.NewServer(s.Handler.Handler)
-
-	// Update handler to use hostname.
-	uri, err := pilosa.NewURIFromAddress(s.Host())
+	handler, err := NewHandler()
 	if err != nil {
 		panic(err)
 	}
-	s.Handler.API.URI = *uri
+	s := &Server{
+		Handler: handler,
+	}
+	s.Server = httptest.NewServer(s.Handler.Handler)
 
 	// Handler test messages can no-op.
 	s.Handler.API.Broadcaster = pilosa.NopBroadcaster
@@ -135,8 +146,8 @@ func MustParseURLHost(rawurl string) string {
 }
 
 // MustNewHTTPRequest creates a new HTTP request. Panic on error.
-func MustNewHTTPRequest(method, urlStr string, body io.Reader) *http.Request {
-	req, err := http.NewRequest(method, urlStr, body)
+func MustNewHTTPRequest(method, urlStr string, body io.Reader) *gohttp.Request {
+	req, err := gohttp.NewRequest(method, urlStr, body)
 	if err != nil {
 		panic(err)
 	}

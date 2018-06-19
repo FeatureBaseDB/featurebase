@@ -38,15 +38,8 @@ func TestExportCommand_Validation(t *testing.T) {
 
 	cm.Index = "i"
 	err = cm.Run(context.Background())
-	if err != pilosa.ErrFrameRequired {
-		t.Fatalf("Command not working, expect: %s, actual: '%s'", pilosa.ErrFrameRequired, err)
-	}
-
-	cm.Frame = "f"
-	cm.View = "test"
-	err = cm.Run(context.Background())
-	if err != pilosa.ErrInvalidView {
-		t.Fatalf("Command not working, expect: %s, actual: '%s'", pilosa.ErrInvalidView, err)
+	if err != pilosa.ErrFieldRequired {
+		t.Fatalf("Command not working, expect: %s, actual: '%s'", pilosa.ErrFieldRequired, err)
 	}
 }
 
@@ -59,24 +52,18 @@ func TestExportCommand_Run(t *testing.T) {
 	defer hldr.Close()
 	s := test.NewServer()
 	defer s.Close()
-	uri, err := pilosa.NewURIFromAddress(s.Host())
-	if err != nil {
-		t.Fatal(err)
-	}
-	s.Handler.API.URI = *uri
+
 	s.Handler.API.Cluster = test.NewCluster(1)
 	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
 	s.Handler.API.Holder = hldr.Holder
 	cm.Host = s.Host()
 
 	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", s.URL+"/index/i", strings.NewReader("")))
-	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", s.URL+"/index/i/frame/f", strings.NewReader("")))
+	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", s.URL+"/index/i/field/f", strings.NewReader("")))
 
 	cm.Index = "i"
-	cm.Frame = "f"
-	cm.View = pilosa.ViewStandard
-	err = cm.Run(context.Background())
-	if err != nil {
+	cm.Field = "f"
+	if err := cm.Run(context.Background()); err != nil {
 		t.Fatalf("Export Run doesn't work: %s", err)
 	}
 }

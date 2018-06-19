@@ -27,8 +27,8 @@ import (
 )
 
 const (
-	// ThresholdFactor is used to calculate the threshold for new items entering the cache
-	ThresholdFactor = 1.1
+	// thresholdFactor is used to calculate the threshold for new items entering the cache
+	thresholdFactor = 1.1
 )
 
 // Cache represents a cache of counts.
@@ -158,7 +158,7 @@ type RankCache struct {
 func NewRankCache(maxEntries uint32) *RankCache {
 	return &RankCache{
 		maxEntries:      maxEntries,
-		thresholdBuffer: int(ThresholdFactor * float64(maxEntries)),
+		thresholdBuffer: int(thresholdFactor * float64(maxEntries)),
 		entries:         make(map[uint64]uint64),
 		stats:           NopStatsClient,
 	}
@@ -168,7 +168,7 @@ func NewRankCache(maxEntries uint32) *RankCache {
 func (c *RankCache) Add(id uint64, n uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// Ignore if the bit count is below the threshold.
+	// Ignore if the column count is below the threshold.
 	if n < c.thresholdValue {
 		return
 	}
@@ -233,7 +233,7 @@ func (c *RankCache) Recalculate() {
 func (c *RankCache) invalidate() {
 	// Don't invalidate more than once every X seconds.
 	// TODO: consider making this configurable.
-	if time.Now().Sub(c.updateTime).Seconds() < 10 {
+	if time.Since(c.updateTime).Seconds() < 10 {
 		return
 	}
 	c.stats.Count("cache.invalidate", 1, 1.0)
@@ -409,7 +409,7 @@ func (p Pairs) String() string {
 	return buf.String()
 }
 
-func encodePairs(a Pairs) []*internal.Pair {
+func EncodePairs(a Pairs) []*internal.Pair {
 	other := make([]*internal.Pair, len(a))
 	for i := range a {
 		other[i] = encodePair(a[i])
@@ -463,27 +463,27 @@ func (p uint64Slice) merge(other []uint64) []uint64 {
 
 // BitmapCache provides an interface for caching full bitmaps.
 type BitmapCache interface {
-	Fetch(id uint64) (*Bitmap, bool)
-	Add(id uint64, b *Bitmap)
+	Fetch(id uint64) (*Row, bool)
+	Add(id uint64, b *Row)
 }
 
 // SimpleCache implements BitmapCache
 // it is meant to be a short-lived cache for cases where writes are continuing to access
-// the same bit within a short time frame (i.e. good for write-heavy loads)
+// the same row within a short time frame (i.e. good for write-heavy loads)
 // A read-heavy use case would cause the cache to get bigger, potentially causing the
 // node to run out of memory.
 type SimpleCache struct {
-	cache map[uint64]*Bitmap
+	cache map[uint64]*Row
 }
 
 // Fetch retrieves the bitmap at the id in the cache.
-func (s *SimpleCache) Fetch(id uint64) (*Bitmap, bool) {
+func (s *SimpleCache) Fetch(id uint64) (*Row, bool) {
 	m, ok := s.cache[id]
 	return m, ok
 }
 
 // Add adds the bitmap to the cache, keyed on the id.
-func (s *SimpleCache) Add(id uint64, b *Bitmap) {
+func (s *SimpleCache) Add(id uint64, b *Row) {
 	s.cache[id] = b
 }
 
@@ -505,7 +505,7 @@ func NewNopCache() *NopCache {
 func (c *NopCache) Add(id uint64, n uint64)     {}
 func (c *NopCache) BulkAdd(id uint64, n uint64) {}
 func (c *NopCache) Get(id uint64) uint64        { return 0 }
-func (c *NopCache) IDs() []uint64               { return make([]uint64, 0, 0) }
+func (c *NopCache) IDs() []uint64               { return make([]uint64, 0) }
 
 func (c *NopCache) Invalidate() {}
 func (c *NopCache) Len() int    { return 0 }

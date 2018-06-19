@@ -4,9 +4,9 @@ package pilosa
 
 import "fmt"
 
-const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateFrameapiCreateIndexapiCreateInputDefinitionapiDeleteFieldapiDeleteFrameapiDeleteIndexapiDeleteInputDefinitionapiDeleteViewapiExportCSVapiFieldsapiFragmentBlockDataapiFragmentBlocksapiFrameAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiInputDefinitionapiMarshalFragmentapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiRestoreFrameapiSetCoordinatorapiSliceNodesapiUnmarshalFragmentapiViewsapiWriteInput"
+const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFieldAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiMarshalFragmentapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiSetCoordinatorapiSliceNodesapiUnmarshalFragmentapiViews"
 
-var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 83, 97, 111, 125, 149, 162, 174, 183, 203, 220, 236, 245, 259, 267, 283, 301, 319, 327, 347, 360, 374, 389, 406, 419, 439, 447, 460}
+var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 73, 86, 98, 118, 135, 151, 160, 174, 182, 198, 216, 224, 244, 257, 271, 288, 301, 321, 329}
 
 func (i apiMethod) String() string {
 	if i < 0 || i >= apiMethod(len(_apiMethod_index)-1) {

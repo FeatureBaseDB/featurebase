@@ -26,6 +26,7 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pkg/errors"
 )
 
 // InspectCommand represents a command for inspecting fragment data files.
@@ -49,19 +50,19 @@ func (cmd *InspectCommand) Run(ctx context.Context) error {
 	// Open file handle.
 	f, err := os.Open(cmd.Path)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "opening file")
 	}
 	defer f.Close()
 
 	fi, err := f.Stat()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "statting file")
 	}
 
 	// Memory map the file.
 	data, err := syscall.Mmap(int(f.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "mmapping")
 	}
 	defer syscall.Munmap(data)
 
@@ -70,7 +71,7 @@ func (cmd *InspectCommand) Run(ctx context.Context) error {
 	fmt.Fprintf(cmd.Stderr, "unmarshaling bitmap...")
 	bm := roaring.NewBitmap()
 	if err := bm.UnmarshalBinary(data); err != nil {
-		return err
+		return errors.Wrap(err, "unmarshalling")
 	}
 	fmt.Fprintf(cmd.Stderr, " (%s)\n", time.Since(t))
 

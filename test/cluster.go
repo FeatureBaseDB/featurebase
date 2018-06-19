@@ -30,14 +30,14 @@ func NewCluster(n int) *pilosa.Cluster {
 
 	c := pilosa.NewCluster()
 	c.ReplicaN = 1
-	c.Hasher = NewModHasher()
+	c.Hasher = newModHasher()
 	c.Path = path
 	c.Topology = pilosa.NewTopology()
 
 	for i := 0; i < n; i++ {
 		c.Nodes = append(c.Nodes, &pilosa.Node{
 			ID:  fmt.Sprintf("node%d", i),
-			URI: NewURI("http", fmt.Sprintf("host%d", i), uint16(0)),
+			URI: newURI("http", fmt.Sprintf("host%d", i), uint16(0)),
 		})
 	}
 
@@ -48,35 +48,18 @@ func NewCluster(n int) *pilosa.Cluster {
 	return c
 }
 
-// ModHasher represents a simple, mod-based hashing.
-type ModHasher struct{}
+// modHasher represents a simple, mod-based hashing.
+type modHasher struct{}
 
-// NewModHasher returns a new instance of ModHasher with n buckets.
-func NewModHasher() *ModHasher { return &ModHasher{} }
+// newModHasher returns a new instance of ModHasher with n buckets.
+func newModHasher() *modHasher { return &modHasher{} }
 
-func (*ModHasher) Hash(key uint64, n int) int { return int(key) % n }
+func (*modHasher) Hash(key uint64, n int) int { return int(key) % n }
 
-// ConstHasher represents hash that always returns the same index.
-type ConstHasher struct {
-	i int
-}
-
-// NewConstHasher returns a new instance of ConstHasher that always returns i.
-func NewConstHasher(i int) *ConstHasher { return &ConstHasher{i: i} }
-
-func (h *ConstHasher) Hash(key uint64, n int) int { return h.i }
-
-// NewURI is a test URI creator that intentionally swallows errors.
-func NewURI(scheme, host string, port uint16) pilosa.URI {
+// newURI is a test URI creator that intentionally swallows errors.
+func newURI(scheme, host string, port uint16) pilosa.URI {
 	uri := pilosa.DefaultURI()
 	uri.SetScheme(scheme)
-	uri.SetHost(host)
-	uri.SetPort(port)
-	return *uri
-}
-
-func NewURIFromHostPort(host string, port uint16) pilosa.URI {
-	uri := pilosa.DefaultURI()
 	uri.SetHost(host)
 	uri.SetPort(port)
 	return *uri

@@ -24,10 +24,10 @@ import (
 
 // Attribute data type enum.
 const (
-	AttrTypeString = 1
-	AttrTypeInt    = 2
-	AttrTypeBool   = 3
-	AttrTypeFloat  = 4
+	attrTypeString = 1
+	attrTypeInt    = 2
+	attrTypeBool   = 3
+	attrTypeFloat  = 4
 )
 
 // AttrStore represents an interface for handling row/column attributes.
@@ -165,19 +165,19 @@ func encodeAttr(key string, value interface{}) *internal.Attr {
 	pb := &internal.Attr{Key: key}
 	switch value := value.(type) {
 	case string:
-		pb.Type = AttrTypeString
+		pb.Type = attrTypeString
 		pb.StringValue = value
 	case float64:
-		pb.Type = AttrTypeFloat
+		pb.Type = attrTypeFloat
 		pb.FloatValue = value
 	case uint64:
-		pb.Type = AttrTypeInt
+		pb.Type = attrTypeInt
 		pb.IntValue = int64(value)
 	case int64:
-		pb.Type = AttrTypeInt
+		pb.Type = attrTypeInt
 		pb.IntValue = value
 	case bool:
-		pb.Type = AttrTypeBool
+		pb.Type = attrTypeBool
 		pb.BoolValue = value
 	}
 	return pb
@@ -186,13 +186,13 @@ func encodeAttr(key string, value interface{}) *internal.Attr {
 // decodeAttr converts from an Attr internal representation to a key/value pair.
 func decodeAttr(attr *internal.Attr) (key string, value interface{}) {
 	switch attr.Type {
-	case AttrTypeString:
+	case attrTypeString:
 		return attr.Key, attr.StringValue
-	case AttrTypeInt:
+	case attrTypeInt:
 		return attr.Key, attr.IntValue
-	case AttrTypeBool:
+	case attrTypeBool:
 		return attr.Key, attr.BoolValue
-	case AttrTypeFloat:
+	case attrTypeFloat:
 		return attr.Key, attr.FloatValue
 	default:
 		return attr.Key, nil
@@ -220,4 +220,57 @@ func DecodeAttrs(v []byte) (map[string]interface{}, error) {
 		return nil, err
 	}
 	return decodeAttrs(pb.GetAttrs()), nil
+}
+
+func newMemAttrStore() AttrStore {
+	return &memAttrStore{
+		store: make(map[uint64]map[string]interface{}),
+	}
+}
+
+// memAttrStore represents an in-memory implementation of the AttrStore interface.
+type memAttrStore struct {
+	store map[uint64]map[string]interface{}
+}
+
+// Path is an in-memory implementation of AttrStore Path method.
+func (s *memAttrStore) Path() string { return "" }
+
+// Open is an in-memory implementation of AttrStore Open method.
+func (s *memAttrStore) Open() error {
+	return nil
+}
+
+// Close is an in-memory implementation of AttrStore Close method.
+func (s *memAttrStore) Close() error {
+	return nil
+}
+
+// Attrs returns a set of attributes by ID.
+func (s *memAttrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
+	return s.store[id], nil
+}
+
+// SetAttrs sets attribute values for a given ID.
+func (s *memAttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
+	s.store[id] = m
+	return nil
+}
+
+// SetBulkAttrs sets attribute values for a set of ids.
+func (s *memAttrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
+	for id, v := range m {
+		s.store[id] = v
+	}
+	return nil
+}
+
+// Blocks is an in-memory implementation of AttrStore Blocks method.
+func (s *memAttrStore) Blocks() ([]AttrBlock, error) {
+	return nil, nil
+}
+
+// BlockData is an in-memory implementation of AttrStore BlockData method.
+func (s *memAttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) {
+	return nil, nil
 }

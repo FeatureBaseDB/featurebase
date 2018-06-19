@@ -65,13 +65,13 @@ Each column that we want to use must be mapped to a combination of frames and ro
 
 ##### 0 columns → 1 frame
 
-cab_type: contains one row for each type of cab. Each column, representing one ride, has a bit set in exactly one row of this frame. The mapping is a simple enumeration, for example yellow=0, green=1, etc. The values of the bits in this frame are determined by the source of the data. That is, we're importing data from several disparate sources: NYC yellow taxi cabs, NYC green taxi cabs, and Uber cars. For each source, the single row to be set in the cab_type frame is constant.
+**cab_type**: contains one row for each type of cab. Each column, representing one ride, has a bit set in exactly one row of this frame. The mapping is a simple enumeration, for example yellow=0, green=1, etc. The values of the bits in this frame are determined by the source of the data. That is, we're importing data from several disparate sources: NYC yellow taxi cabs, NYC green taxi cabs, and Uber cars. For each source, the single row to be set in the cab_type frame is constant.
 
 ##### 1 column → 1 frame
 
 The following three frames are mapped in a simple direct way from single columns of the original data.
 
-dist_miles: each row represents rides of a certain distance. The mapping is simple: as an example, row 1 represents rides with a distance in the interval [0.5, 1.5]. That is, we round the floating point value of distance to an integer, and use that as the row ID directly. Generally, the mapping from a floating point value to a row ID could be arbitrary. The rounding mapping is concise to implement, which simplifies importing and analysis. As an added bonus, it's human-readable. We'll see this pattern used several times.
+**dist_miles:** each row represents rides of a certain distance. The mapping is simple: as an example, row 1 represents rides with a distance in the interval [0.5, 1.5]. That is, we round the floating point value of distance to an integer, and use that as the row ID directly. Generally, the mapping from a floating point value to a row ID could be arbitrary. The rounding mapping is concise to implement, which simplifies importing and analysis. As an added bonus, it's human-readable. We'll see this pattern used several times.
 
 In PDK parlance, we define a Mapper, which is simply a function that returns integer row IDs. PDK has a number of predefined mappers that can be described with a few parameters. One of these is LinearFloatMapper, which applies a linear function to the input, and casts it to an integer, so the rounding is handled implicitly. In code:
 ```go
@@ -123,7 +123,7 @@ These same objects are represented in the JSON definition file:
 }
 ```
 
-Here, we define a list of Mappers, each including a name, which we use to refer to the mapper later, in the list of BitMappers. We can also do this with Parsers, but a few simple Parsers that need no configuration are available by default. We also have a list of Fields, which is simply a map of field names to column indices. We use these names in the BitMapper definitions to keep things human-readable.
+Here, we define a list of Mappers, each including a name, which we use to refer to the mapper later, in the list of BitMappers. We can also do this with Parsers, but a few simple Parsers that need no configuration are available by default. We also have a list of Fields, which is simply a map of field names (in the source data) to column indices (in Pilosa). We use these names in the BitMapper definitions to keep things human-readable.
 
 **total_amount_dollars:** Here we use the rounding mapping again, so each row represents rides with a total cost that rounds to the row's ID. The BitMapper definition is very similar to the previous one.
 
@@ -163,7 +163,7 @@ durm := pdk.CustomMapper{
 
 #### Import process
 
-After designing this schema and mapping, we capture it in a JSON definition file that can be read by the PDK import tool. Running `pdk taxi` runs the import based on the information in this file. See [PDK](../pdk/) for more details on this process.
+After designing this schema and mapping, we capture it in a JSON definition file that can be read by the PDK import tool. Running `pdk taxi` runs the import based on the information in this file. For more details, see the [PDK](../pdk/) section, or check out the [code](https://github.com/pilosa/pdk/tree/master/usecase/taxi) itself.
 
 #### Queries
 
@@ -171,17 +171,23 @@ Now we can run some example queries.
 
 Count per cab type can be retrieved, sorted, with a single PQL call.
 
-```
+```request
 TopN(frame=cab_type)
+```
+```response
+{"results":[[{"id":1,"count":1992943},{"id":0,"count":7057}]]}
 ```
 
 High traffic location IDs can be retrieved with a similar call. These IDs correspond to latitude, longitude pairs, which can be recovered from the mapping that generates the IDs.
 
-```
+```request
 TopN(frame=pickup_grid_id)
 ```
+```response
+{"results":[[{"id":5060,"count":40620},{"id":4861,"count":38145},{"id":4962,"count":35268},...]]}
+```
 
-Average of total_amount per passenger_count can be computed with some postprocessing. We use a small number of `TopN` calls to retrieve counts of rides by passenger_count, then use those counts to compute an average.
+Average of `total_amount` per `passenger_count` can be computed with some postprocessing. We use a small number of `TopN` calls to retrieve counts of rides by passenger_count, then use those counts to compute an average.
 
 ```python
 queries = ''
@@ -197,12 +203,16 @@ for pcount, topn in zip(pcounts, resp.json()['results']):
     average_amounts.append(float(wsum)/count)
 ```
 
+<div class="note">
+Note that the <a href="../data-model/#bsi-range-encoding">BSI</a>-powered <a href="../query-language/#sum">Sum</a> query now provides an alternative approach to this kind of query.
+</div>
+
 For more examples and details, see this [ipython notebook](https://github.com/pilosa/notebooks/blob/master/taxi-use-case.ipynb).
 
 ### Chemical similarity search
 
 <div class="warning">
-This example uses the inverse frames feature, which is deprecated as of v0.9.0. This will soon be updated to reflect the current Pilosa API.
+This example uses the inverse frames feature, which is deprecated as of v0.9.0. The example will soon be updated to reflect the current Pilosa API.
 </div>
 
 #### Overview
@@ -233,29 +243,6 @@ threshold = 90
 ```
 
 return the set of molecules that have at least a 90% similarity with the given molecule.
-
-The Inverse view swaps the rows and columns automatically to enable queries over either the chembl_id or fingerprint.
-
-Standard View is used to calculate similarity
-```
-Index: mole
-    View: Standard
-        Col: chembl_id
-            Frame: fingerprint
-                Row: position_id ("on" bit positions of a fingerprint)
-```
-
-Inverse View is used for finding chembl_id based on given SMILES. 
-From a given SMILES, we use RDKit to convert it to fingerprints with "on" bit position. From "on" bit positions,  we can search a list of chembl_ids that match the bit positions. To choose the right chembl_id, we need another query to Standard View then choose the right chembl_id which has the length that matches the given fingerprint's length after using RDKit to convert SMILES to fingerprint.
-```
-Index: mole
-    View: Inverse
-        Col: position_id ("on" bit positions of a fingerprint)
-            Frame: fingerprint
-                Row: chembl_id
-```
-
-After retrieving chembl_id from the Inverse View, we can use the Tanimoto coefficient to compare chembl_id with the entire data set of molecules. The result of this comparison is the list of `chembl_id`s that have a Tanimoto coefficient greater than the given threshold.
 
 #### Import process
 
@@ -302,15 +289,6 @@ Return chembl_id = 6223. This script uses Pilosa’s Intersection query to get a
     fp = list(AllChem.GetMorganFingerprintAsBitVect(mol, 2, nBits=4096).GetOnBits())
     ```
         
-* Query all chembl_id that have all "on" positions from the inverse view, return list of chembl_id
-
-    ```python
-    bit_maps = ["Bitmap(col=%s, frame=%s, inversed=%s)" % (f, frame, True) for f in fp]
-    bitmap_string = ', '.join(bit_maps)
-    intersection = "Intersect(%s)" % bitmap_string
-    mole_ids = requests.post("http://%s/index/%s/query" % (host, db), data=intersection).json()["results"][0]["bits"]
-    ```
-
 * From list of chembl_id, query all "on" position from mol index, if the length of array of "on" position is matched to len(fp) then return that chembl_id, otherwise the given SMILES does not exist.
 
     ```python    

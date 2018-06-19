@@ -16,8 +16,10 @@ Pilosa is not a database in the traditional sense. While Pilosa does store data 
 
 ### Where does Pilosa fit in my stack?
 
-Pilosa sits on top of a data store or multiple data stores.  
-How is Pilosa different than Elasticsearch since they are both indexes?
+Pilosa was designed to index the relationships in your data. Pilosa runs along with your existing stack, integrating with one or more backing data stores. Pilosa can connect through a stream platform like Kafka or application integration via [PDK](../pdk/).
+
+### How is Pilosa different from Elasticsearch since they are both indexes?
+
 Elasticsearch is a search engine based on Lucene, and is therefore very good at indexing and searching large volumes of unstructured text. As it matures, Elasticsearch has continued to move into the analytics space, but its core data object is still the "document". Pilosa is specifically designed to index structured data and improve query speed. By representing data as the relationship between objects, and then storing those relationships in bitmaps, Pilosa can very efficiently search and compare many millions of data points while still maintaining a small memory footprint.
 
 ### How do I get my data into Pilosa?
@@ -30,12 +32,11 @@ For the case where data is continually mutating, one would apply a parallel data
 
 ### What languages can I use with it?
 
-There is currently client support for Go, Python, and Java. If you want to use Pilosa with a different language, you can access Pilosa via the Pilosa API.
+There is currently [client support](../client-libraries/) for [Go](https://github.com/pilosa/go-pilosa), [Python](https://github.com/pilosa/python-pilosa), and [Java](https://github.com/pilosa/java-pilosa). If you want to use Pilosa with a different language, you can access Pilosa via the [Pilosa API](../api-reference/).
 
 ### Do you query Pilosa using SQL?
 
-One can access Pilosa directly via the terminal using the Pilosa Query Language (PQL), but a typical implementation would use one of the Pilosa client libraries to integrate with an existing codebase. There is currently client support for Go, Python, and Java.
-
+One can access Pilosa directly via the terminal using the [Pilosa Query Language](../query-language/) (PQL), but a typical implementation would use one of the Pilosa client libraries to integrate with an existing codebase. There is currently client support for Go, Python, and Java.
 
 ### Replication on each node?
 

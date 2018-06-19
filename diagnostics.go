@@ -23,6 +23,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 // Default version check URL.
@@ -80,13 +82,16 @@ func (d *DiagnosticsCollector) Flush() error {
 	d.metrics["Uptime"] = (time.Now().Unix() - d.startTime)
 	buf, err := d.encode()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "encoding")
 	}
 	req, err := http.NewRequest("POST", d.host, bytes.NewReader(buf))
+	if err != nil {
+		return errors.Wrap(err, "making new request")
+	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := d.client.Do(req)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "posting")
 	}
 	// Intentionally ignoring response body, as user does not need to be notified of error.
 	defer resp.Body.Close()
@@ -97,9 +102,12 @@ func (d *DiagnosticsCollector) Flush() error {
 func (d *DiagnosticsCollector) CheckVersion() error {
 	var rsp versionResponse
 	req, err := http.NewRequest("GET", d.VersionURL, nil)
+	if err != nil {
+		return errors.Wrap(err, "making request")
+	}
 	resp, err := d.client.Do(req)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "getting version")
 	}
 	defer resp.Body.Close()
 
@@ -209,7 +217,7 @@ func (d *DiagnosticsCollector) EnrichWithMemoryInfo() {
 // EnrichWithSchemaProperties adds schema info to the diagnostics payload.
 func (d *DiagnosticsCollector) EnrichWithSchemaProperties() {
 	var numSlices uint64
-	numFrames := 0
+	numFields := 0
 	numIndexes := 0
 	bsiFieldCount := 0
 	timeQuantumEnabled := false
@@ -217,19 +225,19 @@ func (d *DiagnosticsCollector) EnrichWithSchemaProperties() {
 	for _, index := range d.server.Holder.Indexes() {
 		numSlices += index.MaxSlice() + 1
 		numIndexes += 1
-		for _, frame := range index.Frames() {
-			numFrames += 1
-			if fields, err := frame.GetFields(); err == nil {
-				bsiFieldCount += len(fields)
+		for _, field := range index.Fields() {
+			numFields += 1
+			if field.Type() == FieldTypeInt {
+				bsiFieldCount += 1
 			}
-			if frame.TimeQuantum() != "" {
+			if field.TimeQuantum() != "" {
 				timeQuantumEnabled = true
 			}
 		}
 	}
 
 	d.Set("NumIndexes", numIndexes)
-	d.Set("NumFrames", numFrames)
+	d.Set("NumFields", numFields)
 	d.Set("NumSlices", numSlices)
 	d.Set("BSIFieldCount", bsiFieldCount)
 	d.Set("TimeQuantumEnabled", timeQuantumEnabled)

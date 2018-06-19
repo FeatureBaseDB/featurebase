@@ -19,15 +19,15 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
+	gohttp "net/http"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/boltdb"
 	"github.com/pilosa/pilosa/gossip"
+	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/toml"
 	"github.com/pkg/errors"
@@ -238,8 +238,8 @@ func (m *Main) RunWithTransport(host string, bindPort int, joinSeeds []string) (
 func (m *Main) URL() string { return "http://" + m.Server.Addr().String() }
 
 // Client returns a client to connect to the program.
-func (m *Main) Client() *pilosa.InternalHTTPClient {
-	client, err := pilosa.NewInternalHTTPClient(m.Server.URI.HostPort(), server.GetHTTPClient(nil))
+func (m *Main) Client() *http.InternalClient {
+	client, err := http.NewInternalClient(m.Server.URI.HostPort(), http.GetHTTPClient(nil))
 	if err != nil {
 		panic(err)
 	}
@@ -249,16 +249,7 @@ func (m *Main) Client() *pilosa.InternalHTTPClient {
 // Query executes a query against the program through the HTTP API.
 func (m *Main) Query(index, rawQuery, query string) (string, error) {
 	resp := MustDo("POST", m.URL()+fmt.Sprintf("/index/%s/query?", index)+rawQuery, query)
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
-	}
-	return resp.Body, nil
-}
-
-// CreateDefinition.
-func (m *Main) CreateDefinition(index, def, query string) (string, error) {
-	resp := MustDo("POST", m.URL()+fmt.Sprintf("/index/%s/input-definition/%s", index, def), query)
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != gohttp.StatusOK {
 		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 	}
 	return resp.Body, nil
@@ -276,11 +267,11 @@ func (m *Main) RecalculateCaches() error {
 
 // MustDo executes http.Do() with an http.NewRequest(). Panic on error.
 func MustDo(method, urlStr string, body string) *httpResponse {
-	req, err := http.NewRequest(method, urlStr, strings.NewReader(body))
+	req, err := gohttp.NewRequest(method, urlStr, strings.NewReader(body))
 	if err != nil {
 		panic(err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := gohttp.DefaultClient.Do(req)
 	if err != nil {
 		panic(err)
 	}
@@ -296,6 +287,6 @@ func MustDo(method, urlStr string, body string) *httpResponse {
 
 // httpResponse is a wrapper for http.Response that holds the Body as a string.
 type httpResponse struct {
-	*http.Response
+	*gohttp.Response
 	Body string
 }

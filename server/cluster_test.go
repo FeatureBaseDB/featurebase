@@ -16,6 +16,7 @@ package server_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -41,7 +42,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	// Expected indexes and Frames
+	// Expected indexes and Fields
 	expected := map[string][]string{
 		"i": []string{"f"},
 	}
@@ -50,14 +51,14 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	client0 := m0.Client()
 	client1 := m1.Client()
 
-	// Create indexes and frames on one node.
+	// Create indexes and fields on one node.
 	if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal(err)
-	} else if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+	} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
-	// Make sure node0 knows about the index and frame created.
+	// Make sure node0 knows about the index and field created.
 	schema0, err := client0.Schema(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -65,15 +66,15 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	received0 := map[string][]string{}
 	for _, idx := range schema0 {
 		received0[idx.Name] = []string{}
-		for _, frame := range idx.Frames {
-			received0[idx.Name] = append(received0[idx.Name], frame.Name)
+		for _, field := range idx.Fields {
+			received0[idx.Name] = append(received0[idx.Name], field.Name)
 		}
 	}
 	if !reflect.DeepEqual(received0, expected) {
 		t.Fatalf("unexpected schema on node0: %s", received0)
 	}
 
-	// Make sure node1 knows about the index and frame created.
+	// Make sure node1 knows about the index and field created.
 	schema1, err := client1.Schema(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -81,8 +82,8 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	received1 := map[string][]string{}
 	for _, idx := range schema1 {
 		received1[idx.Name] = []string{}
-		for _, frame := range idx.Frames {
-			received1[idx.Name] = append(received1[idx.Name], frame.Name)
+		for _, field := range idx.Fields {
+			received1[idx.Name] = append(received1[idx.Name], field.Name)
 		}
 	}
 	if !reflect.DeepEqual(received1, expected) {
@@ -91,8 +92,8 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 
 	// Write data on first node.
 	if _, err := m0.Query("i", "", `
-            SetBit(row=1, frame="f", col=1)
-            SetBit(row=1, frame="f", col=2400000)
+            SetBit(row=1, field="f", col=1)
+            SetBit(row=1, field="f", col=2400000)
         `); err != nil {
 		t.Fatal(err)
 	}
@@ -116,32 +117,6 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	}
 	if maxSlices1["i"] != 2 {
 		t.Fatalf("unexpected maxSlice on node1: %d", maxSlices1["i"])
-	}
-
-	// Write input definition to the first node.
-	if _, err := m0.CreateDefinition("i", "test", `{
-            "frames": [{"name": "event-time",
-                        "options": {
-                            "cacheType": "ranked",
-                            "timeQuantum": "YMD"
-                        }}],
-            "fields": [{"name": "col",
-                        "primaryKey": true
-                        }]}
-        `); err != nil {
-		t.Fatal(err)
-	}
-
-	// We have to wait for the broadcast message to be sent before checking state.
-	time.Sleep(1 * time.Second)
-
-	frame0 := m0.Server.Holder.Frame("i", "event-time")
-	if frame0 == nil {
-		t.Fatal("frame not found")
-	}
-	frame1 := m1.Server.Holder.Frame("i", "event-time")
-	if frame1 == nil {
-		t.Fatal("frame not found")
 	}
 }
 
@@ -212,11 +187,9 @@ func TestClusterResize_AddNode(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		time.Sleep(1 * time.Second)
-
-		if m0.Server.Cluster.State() != pilosa.ClusterStateNormal {
+		if !checkClusterState(m0.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
 			t.Fatalf("unexpected node0 cluster state: %s", m0.Server.Cluster.State())
-		} else if m1.Server.Cluster.State() != pilosa.ClusterStateNormal {
+		} else if !checkClusterState(m1.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
 			t.Fatalf("unexpected node1 cluster state: %s", m1.Server.Cluster.State())
 		}
 	})
@@ -233,10 +206,10 @@ func TestClusterResize_AddNode(t *testing.T) {
 		// Create a client for each node.
 		client0 := m0.Client()
 
-		// Create indexes and frames on one node.
+		// Create indexes and fields on one node.
 		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 			t.Fatal(err)
-		} else if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+		} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -256,12 +229,9 @@ func TestClusterResize_AddNode(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Give the cluster time to settle.
-		time.Sleep(1 * time.Second)
-
-		if m0.Server.Cluster.State() != pilosa.ClusterStateNormal {
+		if !checkClusterState(m0.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
 			t.Fatalf("unexpected node0 cluster state: %s", m0.Server.Cluster.State())
-		} else if m1.Server.Cluster.State() != pilosa.ClusterStateNormal {
+		} else if !checkClusterState(m1.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
 			t.Fatalf("unexpected node1 cluster state: %s", m1.Server.Cluster.State())
 		}
 	})
@@ -280,17 +250,17 @@ func TestClusterResize_AddNode(t *testing.T) {
 		client0 := m0.Client()
 		//client1 := m1.Client()
 
-		// Create indexes and frames on one node.
+		// Create indexes and fields on one node.
 		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 			t.Fatal(err)
-		} else if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+		} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
 		// Write data on first node.
 		if _, err := m0.Query("i", "", `
-				SetBit(row=1, frame="f", col=1)
-				SetBit(row=1, frame="f", col=1300000)
+				SetBit(row=1, field="f", col=1)
+				SetBit(row=1, field="f", col=1300000)
 			`); err != nil {
 			t.Fatal(err)
 		}
@@ -311,12 +281,9 @@ func TestClusterResize_AddNode(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Give the cluster time to settle.
-		time.Sleep(1 * time.Second)
-
-		if m0.Server.Cluster.State() != pilosa.ClusterStateNormal {
+		if !checkClusterState(m0.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
 			t.Fatalf("unexpected node0 cluster state: %s", m0.Server.Cluster.State())
-		} else if m1.Server.Cluster.State() != pilosa.ClusterStateNormal {
+		} else if !checkClusterState(m1.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
 			t.Fatalf("unexpected node1 cluster state: %s", m1.Server.Cluster.State())
 		}
 	})
@@ -335,17 +302,17 @@ func TestClusterResize_AddNode(t *testing.T) {
 		client0 := m0.Client()
 		//client1 := m1.Client()
 
-		// Create indexes and frames on one node.
+		// Create indexes and fields on one node.
 		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 			t.Fatal(err)
-		} else if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+		} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
 		// Write data on first node. Note that no data is placed on slice 1.
 		if _, err := m0.Query("i", "", `
-				SetBit(row=1, frame="f", col=1)
-				SetBit(row=1, frame="f", col=2400000)
+				SetBit(row=1, field="f", col=1)
+				SetBit(row=1, field="f", col=2400000)
 			`); err != nil {
 			t.Fatal(err)
 		}
@@ -366,12 +333,9 @@ func TestClusterResize_AddNode(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Give the cluster time to settle.
-		time.Sleep(1 * time.Second)
-
-		if m0.Server.Cluster.State() != pilosa.ClusterStateNormal {
+		if !checkClusterState(m0.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
 			t.Fatalf("unexpected node0 cluster state: %s", m0.Server.Cluster.State())
-		} else if m1.Server.Cluster.State() != pilosa.ClusterStateNormal {
+		} else if !checkClusterState(m1.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
 			t.Fatalf("unexpected node1 cluster state: %s", m1.Server.Cluster.State())
 		}
 	})
@@ -420,14 +384,11 @@ func TestCluster_GossipMembership(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Give the cluster time to settle.
-		time.Sleep(1 * time.Second)
-
-		if m0.Server.Cluster.State() != pilosa.ClusterStateNormal {
+		if !checkClusterState(m0.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
 			t.Fatalf("unexpected node0 cluster state: %s", m0.Server.Cluster.State())
-		} else if m1.Server.Cluster.State() != pilosa.ClusterStateNormal {
+		} else if !checkClusterState(m1.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
 			t.Fatalf("unexpected node1 cluster state: %s", m1.Server.Cluster.State())
-		} else if m2.Server.Cluster.State() != pilosa.ClusterStateNormal {
+		} else if !checkClusterState(m2.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
 			t.Fatalf("unexpected node2 cluster state: %s", m2.Server.Cluster.State())
 		}
 
@@ -443,6 +404,19 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 	m0 := cluster[0]
 	m1 := cluster[1]
 
+	mustNodeID := func(baseURL string) string {
+		body := test.MustDo("GET", fmt.Sprintf("%s/status", baseURL), "").Body
+		var resp map[string]interface{}
+		err := json.Unmarshal([]byte(body), &resp)
+		if err != nil {
+			panic(err)
+		}
+		if localID, ok := resp["localID"].(string); ok {
+			return localID
+		}
+		panic("localID should be a string")
+	}
+
 	t.Run("ErrorRemoveInvalidNode", func(t *testing.T) {
 		resp := test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), `{"id": "invalid-node-id"}`)
 		expBody := "removing node: finding node to remove: node with provided ID does not exist"
@@ -454,10 +428,8 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 	})
 
 	t.Run("ErrorRemoveCoordinator", func(t *testing.T) {
-		resp := test.MustDo("GET", m0.URL()+fmt.Sprintf("/id"), "")
-		nodeID := resp.Body
-
-		resp = test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
+		nodeID := mustNodeID(m0.URL())
+		resp := test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
 
 		expBody := "removing node: calling node leave: coordinator cannot be removed; first, make a different node the new coordinator."
 		if resp.StatusCode != http.StatusInternalServerError {
@@ -468,13 +440,9 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 	})
 
 	t.Run("ErrorRemoveOnNonCoordinator", func(t *testing.T) {
-		resp := test.MustDo("GET", m0.URL()+fmt.Sprintf("/id"), "")
-		coordinatorNodeID := resp.Body
-
-		resp = test.MustDo("GET", m1.URL()+fmt.Sprintf("/id"), "")
-		nodeID := resp.Body
-
-		resp = test.MustDo("POST", m1.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
+		coordinatorNodeID := mustNodeID(m0.URL())
+		nodeID := mustNodeID(m1.URL())
+		resp := test.MustDo("POST", m1.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
 
 		expBody := fmt.Sprintf("removing node: calling node leave: node removal requests are only valid on the coordinator node: %s", coordinatorNodeID)
 		if resp.StatusCode != http.StatusInternalServerError {
@@ -487,28 +455,26 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 	t.Run("ErrorRemoveWithoutReplicas", func(t *testing.T) {
 		client0 := m0.Client()
 
-		// Create indexes and frames on one node.
+		// Create indexes and fields on one node.
 		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 			t.Fatal(err)
-		} else if err := client0.CreateFrame(context.Background(), "i", "f", pilosa.FrameOptions{}); err != nil {
+		} else if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldOptions{}); err != nil {
 			t.Fatal(err)
 		}
 
 		// This is an attempt to ensure there is data on both nodes, but is not guaranteed.
 		// TODO: Deterministic node IDs would ensure consistent results
-		setBits := ""
+		setColumns := ""
 		for i := 0; i < 20; i++ {
-			setBits += fmt.Sprintf("SetBit(row=1, frame=\"f\", col=%d) ", i*pilosa.SliceWidth)
+			setColumns += fmt.Sprintf("SetBit(row=1, field=\"f\", col=%d) ", i*pilosa.SliceWidth)
 		}
 
-		if _, err := m0.Query("i", "", setBits); err != nil {
+		if _, err := m0.Query("i", "", setColumns); err != nil {
 			t.Fatal(err)
 		}
 
-		resp := test.MustDo("GET", m1.URL()+fmt.Sprintf("/id"), "")
-		nodeID := resp.Body
-
-		resp = test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
+		nodeID := mustNodeID(m1.URL())
+		resp := test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
 		expBody := "not enough data to perform resize"
 		if resp.StatusCode != http.StatusInternalServerError {
 			t.Fatalf("expected StatusCode %d but got %d", http.StatusInternalServerError, resp.StatusCode)
@@ -516,4 +482,16 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 			t.Fatalf("expected to contain '%s' but got '%s'", expBody, strings.TrimSpace(resp.Body))
 		}
 	})
+}
+
+// checkClusterState polls a given cluster for its state until it
+// receives a matching state. It polls up to n times before returning.
+func checkClusterState(c *pilosa.Cluster, state string, n int) bool {
+	for i := 0; i < n; i++ {
+		if c.State() == state {
+			return true
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return false
 }

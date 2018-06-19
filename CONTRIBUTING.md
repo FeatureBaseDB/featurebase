@@ -1,5 +1,7 @@
 # Contributing to Pilosa
 
+The workflow components of these instructions apply to all Pilosa repositories.
+
 ## Reporting a bug
 
 If you have discovered a bug and don't see it in the [github issue tracker][5], [open a new issue][1].
@@ -20,7 +22,7 @@ If you want to help but you aren't sure where to start, check out our [github la
 
 ### Development Environment
 
-- Ensure you have a recent version of [Go](https://golang.org/doc/install) installed. Pilosa generally supports the current and previous minor versions; check our [travis file](../.travis.yml) for the most up-to-date information.
+- Ensure you have a recent version of [Go](https://golang.org/doc/install) installed. Pilosa generally supports the current and previous minor versions; check our [travis file](../master/.travis.yml) for the most up-to-date information.
 
 - Make sure `$GOPATH` environment variable points to your Go working directory and `$PATH` incudes `$GOPATH/bin`, as described [here](https://golang.org/doc/code.html#GOPATH).
 
@@ -76,7 +78,7 @@ Pilosa includes a Makefile that automates several tasks:
     make install
     ```
 
-- Install build dependencies (dep, statik, and protoc):
+- Install build dependencies (dep and protoc):
 
     ```sh
     make install-build-deps
@@ -110,12 +112,6 @@ Pilosa includes a Makefile that automates several tasks:
 
     ```sh
     make release
-    ```
-
-- Generate static assets for the WebUI:
-
-    ```sh
-    make generate-statik
     ```
 
 - Regenerate protocol buffer files in `internal/`:
@@ -154,7 +150,7 @@ Additional commands are available in the `Makefile`.
     git checkout -b something-amazing
     ```
 
-- Commit your changes locally using `git add` and `git commit`.
+- Commit your changes locally using `git add` and `git commit`. Please use [appropriate commit messages](https://chris.beams.io/posts/git-commit/).
 
 - Make sure that you've written tests for your new feature, and then run the tests:
 

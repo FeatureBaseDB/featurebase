@@ -18,12 +18,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/hashicorp/memberlist"
@@ -35,7 +34,6 @@ import (
 
 // Ensure GossipMemberSet implements interfaces.
 var _ pilosa.BroadcastReceiver = &GossipMemberSet{}
-var _ pilosa.Gossiper = &GossipMemberSet{}
 var _ memberlist.Delegate = &GossipMemberSet{}
 
 // GossipMemberSet represents a gossip implementation of MemberSet using memberlist.
@@ -169,12 +167,14 @@ func WithLogger(logger *log.Logger) GossipMemberSetOption {
 
 // NewGossipMemberSet returns a new instance of GossipMemberSet based on options.
 func NewGossipMemberSet(name string, host string, cfg Config, ger *GossipEventReceiver, sh pilosa.StatusHandler, options ...GossipMemberSetOption) (*GossipMemberSet, error) {
-	g := &GossipMemberSet{}
+	g := &GossipMemberSet{
+		Logger: pilosa.NopLogger,
+	}
 
 	// options
 	for _, opt := range options {
 		if err := opt(g); err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "executing option")
 		}
 	}
 
@@ -211,7 +211,7 @@ func NewGossipMemberSet(name string, host string, cfg Config, ger *GossipEventRe
 	conf.BindAddr = host
 	conf.BindPort = port
 	conf.AdvertisePort = port
-	conf.AdvertiseAddr = pilosa.HostToIP(host)
+	conf.AdvertiseAddr = hostToIP(host)
 	//
 	conf.TCPTimeout = time.Duration(cfg.StreamTimeout)
 	conf.SuspicionMult = cfg.SuspicionMult
@@ -235,49 +235,6 @@ func NewGossipMemberSet(name string, host string, cfg Config, ger *GossipEventRe
 	g.statusHandler = sh
 
 	return g, nil
-}
-
-// SendSync implementation of the Broadcaster interface.
-func (g *GossipMemberSet) SendSync(pb proto.Message) error {
-	msg, err := pilosa.MarshalMessage(pb)
-	if err != nil {
-		return fmt.Errorf("marshal message: %s", err)
-	}
-
-	mlist := g.memberlist
-
-	// Direct sends the message directly to every node.
-	// An error from any node raises an error on the entire operation.
-	//
-	// Gossip uses the gossip protocol to eventually deliver the message
-	// to every node.
-	var eg errgroup.Group
-	for _, n := range mlist.Members() {
-		// Don't send the message to the local node.
-		if n == mlist.LocalNode() {
-			continue
-		}
-		node := n
-		eg.Go(func() error {
-			return mlist.SendToTCP(node, msg)
-		})
-	}
-	return eg.Wait()
-}
-
-// SendAsync implementation of the Gossiper interface.
-func (g *GossipMemberSet) SendAsync(pb proto.Message) error {
-	msg, err := pilosa.MarshalMessage(pb)
-	if err != nil {
-		return fmt.Errorf("marshal message: %s", err)
-	}
-
-	b := &broadcast{
-		msg:    msg,
-		notify: nil,
-	}
-	g.broadcasts.QueueBroadcast(b)
-	return nil
 }
 
 // NodeMeta implementation of the memberlist.Delegate interface.
@@ -577,4 +534,22 @@ type Config struct {
 	Interval      toml.Duration `toml:"interval"`
 	Nodes         int           `toml:"nodes"`
 	ToTheDeadTime toml.Duration `toml:"to-the-dead-time"`
+}
+
+// hostToIP converts host to an IP4 address based on net.LookupIP().
+func hostToIP(host string) string {
+	// if host is not an IP addr, check net.LookupIP()
+	if net.ParseIP(host) == nil {
+		hosts, err := net.LookupIP(host)
+		if err != nil {
+			return host
+		}
+		for _, h := range hosts {
+			// this restricts pilosa to IP4
+			if h.To4() != nil {
+				return h.String()
+			}
+		}
+	}
+	return host
 }

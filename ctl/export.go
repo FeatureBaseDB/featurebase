@@ -22,6 +22,7 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/server"
+	"github.com/pkg/errors"
 )
 
 // ExportCommand represents a command for bulk exporting data from a server.
@@ -29,10 +30,10 @@ type ExportCommand struct {
 	// Remote host and port.
 	Host string
 
-	// Name of the index & frame to export from.
+	// Name of the index & field to export from.
 	Index string
-	Frame string
-	View  string
+	Field string
+
 	// Filename to export to.
 	Path string
 
@@ -56,10 +57,8 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	// Validate arguments.
 	if cmd.Index == "" {
 		return pilosa.ErrIndexRequired
-	} else if cmd.Frame == "" {
-		return pilosa.ErrFrameRequired
-	} else if !(cmd.View == pilosa.ViewStandard || cmd.View == pilosa.ViewInverse) {
-		return pilosa.ErrInvalidView
+	} else if cmd.Field == "" {
+		return pilosa.ErrFieldRequired
 	}
 
 	// Use output file, if specified.
@@ -68,7 +67,7 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	if cmd.Path != "" {
 		f, err := os.Create(cmd.Path)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "creating file")
 		}
 		defer f.Close()
 
@@ -78,33 +77,27 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	// Create a client to the server.
 	client, err := CommandClient(cmd)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating client")
 	}
 
 	// Determine slice count.
-	var maxSlices map[string]uint64
-	if cmd.View == pilosa.ViewStandard {
-		maxSlices, err = client.MaxSliceByIndex(ctx)
-	} else if cmd.View == pilosa.ViewInverse {
-		maxSlices, err = client.MaxInverseSliceByIndex(ctx)
-	}
-
+	maxSlices, err := client.MaxSliceByIndex(ctx)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "getting slice count")
 	}
 
 	// Export each slice.
 	for slice := uint64(0); slice <= maxSlices[cmd.Index]; slice++ {
 		logger.Printf("exporting slice: %d", slice)
-		if err := client.ExportCSV(ctx, cmd.Index, cmd.Frame, cmd.View, slice, w); err != nil {
-			return err
+		if err := client.ExportCSV(ctx, cmd.Index, cmd.Field, slice, w); err != nil {
+			return errors.Wrap(err, "exporting")
 		}
 	}
 
 	// Close writer, if applicable.
 	if w, ok := w.(io.Closer); ok {
 		if err := w.Close(); err != nil {
-			return err
+			return errors.Wrap(err, "closing")
 		}
 	}
 

@@ -2,8 +2,8 @@ syntax = "proto3";
 
 package internal;
 
-message Bitmap {
-	repeated uint64 Bits = 1;
+message Row {
+	repeated uint64 Columns = 1;
 	repeated string Keys = 3;
 	repeated Attr Attrs = 2;
 }
@@ -49,8 +49,8 @@ message QueryRequest {
 	repeated uint64 Slices = 2;
 	bool ColumnAttrs = 3;
 	bool Remote = 5;
-	bool ExcludeAttrs = 6;
-	bool ExcludeBits = 7;
+	bool ExcludeRowAttrs = 6;
+	bool ExcludeColumns = 7;
 }
 
 message QueryResponse {
@@ -61,7 +61,7 @@ message QueryResponse {
 
 message QueryResult {
 	uint32 Type = 6;
-	Bitmap Bitmap = 1;
+	Row Row = 1;
 	uint64 N = 2;
 	repeated Pair Pairs = 3;
 	ValCount ValCount = 5;
@@ -70,7 +70,7 @@ message QueryResult {
 
 message ImportRequest {
 	string Index = 1;
-	string Frame = 2;
+	string Field = 2;
 	uint64 Slice = 3;
 	repeated uint64 RowIDs = 4;
 	repeated uint64 ColumnIDs = 5;
@@ -81,9 +81,8 @@ message ImportRequest {
 
 message ImportValueRequest {
 	string Index = 1;
-	string Frame = 2;
+	string Field = 2;
 	uint64 Slice = 3;
-	string Field = 4;
 	repeated uint64 ColumnIDs = 5;
 	repeated string ColumnKeys = 7;
 	repeated int64 Values = 6;

@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [v0.10.0] - 2018-05-15
+
+This version contains 93 contribution from 8 contributors. There are 93 files changed, 4,495 insertions, and 5,392 deletions.
+
+### Added
+
+- Add B+Tree containers (Enterprise Edition) ([#1285](https://github.com/pilosa/pilosa/pull/1285))
+- Add /info endpoint ([#1236](https://github.com/pilosa/pilosa/pull/1236))
+
+### Changed
+
+- Wrap errors ([#1271](https://github.com/pilosa/pilosa/pull/1271), [#1258](https://github.com/pilosa/pilosa/pull/1258), [#1274](https://github.com/pilosa/pilosa/pull/1274), [#1270](https://github.com/pilosa/pilosa/pull/1270), [#1273](https://github.com/pilosa/pilosa/pull/1273), [#1272](https://github.com/pilosa/pilosa/pull/1272), [#1260](https://github.com/pilosa/pilosa/pull/1260), [#1259](https://github.com/pilosa/pilosa/pull/1259), [#1256](https://github.com/pilosa/pilosa/pull/1256), [#1257](https://github.com/pilosa/pilosa/pull/1257), [#1261](https://github.com/pilosa/pilosa/pull/1261), [#1262](https://github.com/pilosa/pilosa/pull/1262), [#1263](https://github.com/pilosa/pilosa/pull/1263), [#1265](https://github.com/pilosa/pilosa/pull/1265))
+
+### Removed
+
+- Remove unused code ([#1286](https://github.com/pilosa/pilosa/pull/1286))
+- Remove input definition, add install-stringer to Makefile ([#1284](https://github.com/pilosa/pilosa/pull/1284))
+- Remove /id and /hosts endpoints. Add local ID to /status ([#1238](https://github.com/pilosa/pilosa/pull/1238))
+- Remove API.URI ([#1255](https://github.com/pilosa/pilosa/pull/1255))
+
+### Fixed
+
+- Assorted docs fixes ([#1281](https://github.com/pilosa/pilosa/pull/1281), [#1269](https://github.com/pilosa/pilosa/pull/1269))
+- Update PQL syntax in bench subcommand ([#1279](https://github.com/pilosa/pilosa/pull/1279))
+- Update help menu in WebUI ([#1278](https://github.com/pilosa/pilosa/pull/1278))
+- Fix dead lock ([#1268](https://github.com/pilosa/pilosa/pull/1268))
+- Make sure gossipMemberSet.Logger is set during server setup ([#1266](https://github.com/pilosa/pilosa/pull/1266))
+- Make sure ~ is expanded in NewServer; BroadcastReceiver uses temp path ([#1242](https://github.com/pilosa/pilosa/pull/1242))
+- Avoid creating a slice of nil timestamps on Import() ([#1234](https://github.com/pilosa/pilosa/pull/1234))
+- Fixup internal client ([#1253](https://github.com/pilosa/pilosa/pull/1253))
+
 ## [v0.9.0] - 2018-05-04
 
 This version contains 188 contribution from 12 contributors. There are 141 files changed, 17,832 insertions, and 7,503 deletions.

@@ -22,8 +22,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -46,8 +44,7 @@ type API struct {
 	BroadcastHandler BroadcastHandler
 	StatusHandler    StatusHandler
 	Cluster          *Cluster
-	URI              URI
-	RemoteClient     *http.Client
+	TranslateStore   TranslateStore
 	Logger           Logger
 }
 
@@ -91,43 +88,55 @@ func (api *API) validate(f apiMethod) error {
 // Query parses a PQL query out of the request and executes it.
 func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, error) {
 	if err := api.validate(apiQuery); err != nil {
-		return QueryResponse{}, errors.Wrap(err, "validate api method")
+		return QueryResponse{}, errors.Wrap(err, "validating api method")
 	}
 
 	resp := QueryResponse{}
 
 	q, err := pql.NewParser(strings.NewReader(req.Query)).Parse()
 	if err != nil {
-		return resp, err
+		return resp, errors.Wrap(err, "parsing")
 	}
 	execOpts := &ExecOptions{
-		Remote:       req.Remote,
-		ExcludeAttrs: req.ExcludeAttrs,
-		ExcludeBits:  req.ExcludeBits,
+		Remote:          req.Remote,
+		ExcludeRowAttrs: req.ExcludeRowAttrs,
+		ExcludeColumns:  req.ExcludeColumns,
 	}
 	results, err := api.Executor.Execute(ctx, req.Index, q, req.Slices, execOpts)
 	if err != nil {
-		return resp, err
+		return resp, errors.Wrap(err, "executing")
 	}
 	resp.Results = results
 
 	// Fill column attributes if requested.
-	if req.ColumnAttrs && !req.ExcludeBits {
+	if req.ColumnAttrs && !req.ExcludeColumns {
 		// Consolidate all column ids across all calls.
 		var columnIDs []uint64
 		for _, result := range results {
-			bm, ok := result.(*Bitmap)
+			bm, ok := result.(*Row)
 			if !ok {
 				continue
 			}
-			columnIDs = uint64Slice(columnIDs).merge(bm.Bits())
+			columnIDs = uint64Slice(columnIDs).merge(bm.Columns())
 		}
 
 		// Retrieve column attributes across all calls.
 		columnAttrSets, err := api.readColumnAttrSets(api.Holder.Index(req.Index), columnIDs)
 		if err != nil {
-			return resp, err
+			return resp, errors.Wrap(err, "reading column attrs")
 		}
+
+		// Translate column attributes, if necessary.
+		if api.TranslateStore != nil {
+			for _, col := range resp.ColumnAttrSets {
+				v, err := api.TranslateStore.TranslateColumnToString(req.Index, col.ID)
+				if err != nil {
+					return resp, err
+				}
+				col.Key, col.ID = v, 0
+			}
+		}
+
 		resp.ColumnAttrSets = columnAttrSets
 	}
 	return resp, nil
@@ -144,7 +153,7 @@ func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet
 		// Read attributes for column. Skip column if empty.
 		attrs, err := index.ColumnAttrStore().Attrs(id)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "getting attrs")
 		} else if len(attrs) == 0 {
 			continue
 		}
@@ -159,13 +168,13 @@ func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet
 // CreateIndex makes a new Pilosa index.
 func (api *API) CreateIndex(ctx context.Context, indexName string, options IndexOptions) (*Index, error) {
 	if err := api.validate(apiCreateIndex); err != nil {
-		return nil, errors.Wrap(err, "validate api method")
+		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	// Create index.
 	index, err := api.Holder.CreateIndex(indexName, options)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "creating index")
 	}
 	// Send the create index message to all nodes.
 	err = api.Broadcaster.SendSync(
@@ -175,7 +184,7 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 		})
 	if err != nil {
 		api.Logger.Printf("problem sending CreateIndex message: %s", err)
-		return nil, err
+		return nil, errors.Wrap(err, "sending CreateIndex message")
 	}
 	api.Holder.Stats.Count("createIndex", 1, 1.0)
 	return index, nil
@@ -184,7 +193,7 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 // Index retrieves the named index.
 func (api *API) Index(ctx context.Context, indexName string) (*Index, error) {
 	if err := api.validate(apiIndex); err != nil {
-		return nil, errors.Wrap(err, "validate api method")
+		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	index := api.Holder.Index(indexName)
@@ -198,13 +207,13 @@ func (api *API) Index(ctx context.Context, indexName string) (*Index, error) {
 // nothing and returns no error.
 func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 	if err := api.validate(apiDeleteIndex); err != nil {
-		return errors.Wrap(err, "validate api method")
+		return errors.Wrap(err, "validating api method")
 	}
 
 	// Delete index from the holder.
 	err := api.Holder.DeleteIndex(indexName)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "deleting index")
 	}
 	// Send the delete index message to all nodes.
 	err = api.Broadcaster.SendSync(
@@ -213,16 +222,16 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 		})
 	if err != nil {
 		api.Logger.Printf("problem sending DeleteIndex message: %s", err)
-		return err
+		return errors.Wrap(err, "sending DeleteIndex message")
 	}
 	api.Holder.Stats.Count("deleteIndex", 1, 1.0)
 	return nil
 }
 
-// CreateFrame makes the named frame in the named index with the given options.
-func (api *API) CreateFrame(ctx context.Context, indexName string, frameName string, options FrameOptions) (*Frame, error) {
-	if err := api.validate(apiCreateFrame); err != nil {
-		return nil, errors.Wrap(err, "validate api method")
+// CreateField makes the named field in the named index with the given options.
+func (api *API) CreateField(ctx context.Context, indexName string, fieldName string, options FieldOptions) (*Field, error) {
+	if err := api.validate(apiCreateField); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	// Find index.
@@ -231,33 +240,33 @@ func (api *API) CreateFrame(ctx context.Context, indexName string, frameName str
 		return nil, ErrIndexNotFound
 	}
 
-	// Create frame.
-	frame, err := index.CreateFrame(frameName, options)
+	// Create field.
+	field, err := index.CreateField(fieldName, options)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "creating field")
 	}
 
-	// Send the create frame message to all nodes.
+	// Send the create field message to all nodes.
 	err = api.Broadcaster.SendSync(
-		&internal.CreateFrameMessage{
+		&internal.CreateFieldMessage{
 			Index: indexName,
-			Frame: frameName,
+			Field: fieldName,
 			Meta:  options.Encode(),
 		})
 	if err != nil {
-		api.Logger.Printf("problem sending CreateFrame message: %s", err)
-		return nil, err
+		api.Logger.Printf("problem sending CreateField message: %s", err)
+		return nil, errors.Wrap(err, "sending CreateField message")
 	}
-	api.Holder.Stats.CountWithCustomTags("createFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
-	return frame, nil
+	api.Holder.Stats.CountWithCustomTags("createField", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
+	return field, nil
 }
 
-// DeleteFrame removes the named frame from the named index. If the index is not
-// found, an error is returned. If the frame is not found, it is ignored and no
+// DeleteField removes the named field from the named index. If the index is not
+// found, an error is returned. If the field is not found, it is ignored and no
 // action is taken.
-func (api *API) DeleteFrame(ctx context.Context, indexName string, frameName string) error {
-	if err := api.validate(apiDeleteFrame); err != nil {
-		return errors.Wrap(err, "validate api method")
+func (api *API) DeleteField(ctx context.Context, indexName string, fieldName string) error {
+	if err := api.validate(apiDeleteField); err != nil {
+		return errors.Wrap(err, "validating api method")
 	}
 
 	// Find index.
@@ -266,40 +275,40 @@ func (api *API) DeleteFrame(ctx context.Context, indexName string, frameName str
 		return ErrIndexNotFound
 	}
 
-	// Delete frame from the index.
-	if err := index.DeleteFrame(frameName); err != nil {
-		return err
+	// Delete field from the index.
+	if err := index.DeleteField(fieldName); err != nil {
+		return errors.Wrap(err, "deleting field")
 	}
 
-	// Send the delete frame message to all nodes.
+	// Send the delete field message to all nodes.
 	err := api.Broadcaster.SendSync(
-		&internal.DeleteFrameMessage{
+		&internal.DeleteFieldMessage{
 			Index: indexName,
-			Frame: frameName,
+			Field: fieldName,
 		})
 	if err != nil {
-		api.Logger.Printf("problem sending DeleteFrame message: %s", err)
-		return err
+		api.Logger.Printf("problem sending DeleteField message: %s", err)
+		return errors.Wrap(err, "sending DeleteField message")
 	}
-	api.Holder.Stats.CountWithCustomTags("deleteFrame", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
+	api.Holder.Stats.CountWithCustomTags("deleteField", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
 	return nil
 }
 
-// ExportCSV encodes the fragment designated by the index,frame,view,slice as
+// ExportCSV encodes the fragment designated by the index,field,slice as
 // CSV of the form <row>,<col>
-func (api *API) ExportCSV(ctx context.Context, indexName string, frameName string, viewName string, slice uint64, w io.Writer) error {
+func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName string, slice uint64, w io.Writer) error {
 	if err := api.validate(apiExportCSV); err != nil {
-		return errors.Wrap(err, "validate api method")
+		return errors.Wrap(err, "validating api method")
 	}
 
 	// Validate that this handler owns the slice.
-	if !api.Cluster.OwnsSlice(api.LocalID(), indexName, slice) {
-		api.Logger.Printf("host does not own slice %s-%s slice:%d", api.URI, indexName, slice)
+	if !api.Cluster.ownsSlice(api.LocalID(), indexName, slice) {
+		api.Logger.Printf("node %s does not own slice %d of index %s", api.LocalID(), slice, indexName)
 		return ErrClusterDoesNotOwnSlice
 	}
 
 	// Find the fragment.
-	f := api.Holder.Fragment(indexName, frameName, viewName, slice)
+	f := api.Holder.Fragment(indexName, fieldName, ViewStandard, slice)
 	if f == nil {
 		return ErrFragmentNotFound
 	}
@@ -307,14 +316,14 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, frameName strin
 	// Wrap writer with a CSV writer.
 	cw := csv.NewWriter(w)
 
-	// Iterate over each bit.
-	if err := f.ForEachBit(func(rowID, columnID uint64) error {
+	// Iterate over each column.
+	if err := f.forEachBit(func(rowID, columnID uint64) error {
 		return cw.Write([]string{
 			strconv.FormatUint(rowID, 10),
 			strconv.FormatUint(columnID, 10),
 		})
 	}); err != nil {
-		return err
+		return errors.Wrap(err, "writing CSV")
 	}
 
 	// Ensure data is flushed.
@@ -326,22 +335,22 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, frameName strin
 // SliceNodes returns the node and all replicas which should contain a slice's data.
 func (api *API) SliceNodes(ctx context.Context, indexName string, slice uint64) ([]*Node, error) {
 	if err := api.validate(apiSliceNodes); err != nil {
-		return nil, errors.Wrap(err, "validate api method")
+		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	return api.Cluster.SliceNodes(indexName, slice), nil
+	return api.Cluster.sliceNodes(indexName, slice), nil
 }
 
 // MarshalFragment returns an object which can write the specified fragment's data
 // to an io.Writer. The serialized data can be read back into a fragment with
 // the UnmarshalFragment API call.
-func (api *API) MarshalFragment(ctx context.Context, indexName string, frameName string, viewName string, slice uint64) (io.WriterTo, error) {
+func (api *API) MarshalFragment(ctx context.Context, indexName string, fieldName string, slice uint64) (io.WriterTo, error) {
 	if err := api.validate(apiMarshalFragment); err != nil {
-		return nil, errors.Wrap(err, "validate api method")
+		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	// Retrieve fragment from holder.
-	f := api.Holder.Fragment(indexName, frameName, viewName, slice)
+	f := api.Holder.Fragment(indexName, fieldName, ViewStandard, slice)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -351,32 +360,32 @@ func (api *API) MarshalFragment(ctx context.Context, indexName string, frameName
 // UnmarshalFragment creates a new fragment (if necessary) and reads data from a
 // Reader which was previously written by MarshalFragment to populate the
 // fragment's data.
-func (api *API) UnmarshalFragment(ctx context.Context, indexName string, frameName string, viewName string, slice uint64, reader io.ReadCloser) error {
+func (api *API) UnmarshalFragment(ctx context.Context, indexName string, fieldName string, slice uint64, reader io.ReadCloser) error {
 	if err := api.validate(apiUnmarshalFragment); err != nil {
-		return errors.Wrap(err, "validate api method")
+		return errors.Wrap(err, "validating api method")
 	}
 
-	// Retrieve frame.
-	f := api.Holder.Frame(indexName, frameName)
+	// Retrieve field.
+	f := api.Holder.Field(indexName, fieldName)
 	if f == nil {
-		return ErrFrameNotFound
+		return ErrFieldNotFound
 	}
 
 	// Retrieve view.
-	view, err := f.CreateViewIfNotExists(viewName)
+	view, err := f.CreateViewIfNotExists(ViewStandard)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating view")
 	}
 
-	// Retrieve fragment from frame.
+	// Retrieve fragment from field.
 	frag, err := view.CreateFragmentIfNotExists(slice)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "creating fragment")
 	}
 
 	// Read fragment in from request body.
 	if _, err := frag.ReadFrom(reader); err != nil {
-		return err
+		return errors.Wrap(err, "reading fragment")
 	}
 	return nil
 }
@@ -386,7 +395,7 @@ func (api *API) UnmarshalFragment(ctx context.Context, indexName string, frameNa
 // ids from a "block" which is a subdivision of a fragment.
 func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, error) {
 	if err := api.validate(apiFragmentBlockData); err != nil {
-		return nil, errors.Wrap(err, "validate api method")
+		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	reqBytes, err := ioutil.ReadAll(body)
@@ -399,13 +408,13 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 	}
 
 	// Retrieve fragment from holder.
-	f := api.Holder.Fragment(req.Index, req.Frame, req.View, req.Slice)
+	f := api.Holder.Fragment(req.Index, req.Field, ViewStandard, req.Slice)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
 
 	var resp = internal.BlockDataResponse{}
-	resp.RowIDs, resp.ColumnIDs = f.BlockData(int(req.Block))
+	resp.RowIDs, resp.ColumnIDs = f.blockData(int(req.Block))
 
 	// Encode response.
 	buf, err := proto.Marshal(&resp)
@@ -417,13 +426,13 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 }
 
 // FragmentBlocks returns the checksums and block ids for all blocks in the specified fragment.
-func (api *API) FragmentBlocks(ctx context.Context, indexName string, frameName string, viewName string, slice uint64) ([]FragmentBlock, error) {
+func (api *API) FragmentBlocks(ctx context.Context, indexName string, fieldName string, slice uint64) ([]FragmentBlock, error) {
 	if err := api.validate(apiFragmentBlocks); err != nil {
-		return nil, errors.Wrap(err, "validate api method")
+		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	// Retrieve fragment from holder.
-	f := api.Holder.Fragment(indexName, frameName, viewName, slice)
+	f := api.Holder.Fragment(indexName, fieldName, ViewStandard, slice)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -433,204 +442,16 @@ func (api *API) FragmentBlocks(ctx context.Context, indexName string, frameName 
 	return blocks, nil
 }
 
-// RestoreFrame reads all the data that this host should have for a given frame
-// from replicas in the cluster and restores that data to it.
-func (api *API) RestoreFrame(ctx context.Context, indexName string, frameName string, host *URI) error {
-	if err := api.validate(apiRestoreFrame); err != nil {
-		return errors.Wrap(err, "validate api method")
-	}
-
-	// Create a client for the remote cluster.
-	client := NewInternalHTTPClientFromURI(host, api.RemoteClient)
-
-	// Determine the maximum number of slices.
-	maxSlices, err := client.MaxSliceByIndex(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Retrieve frame.
-	f := api.Holder.Frame(indexName, frameName)
-	if f == nil {
-		return ErrFrameNotFound
-	}
-
-	// Retrieve list of all views.
-	views, err := client.FrameViews(ctx, indexName, frameName)
-	if err != nil {
-		return err
-	}
-
-	// Loop over each slice and import it if this node owns it.
-	for slice := uint64(0); slice <= maxSlices[indexName]; slice++ {
-		// Ignore this slice if we don't own it.
-		if !api.Cluster.OwnsSlice(api.LocalID(), indexName, slice) {
-			continue
-		}
-
-		// Loop over view names.
-		for _, view := range views {
-			// Create view.
-			v, err := f.CreateViewIfNotExists(view)
-			if err != nil {
-				return err
-			}
-
-			// Otherwise retrieve the local fragment.
-			frag, err := v.CreateFragmentIfNotExists(slice)
-			if err != nil {
-				return err
-			}
-
-			// Stream backup from remote node.
-			rd, err := client.BackupSlice(ctx, indexName, frameName, view, slice)
-			if err != nil {
-				return err
-			} else if rd == nil {
-				continue // slice doesn't exist
-			}
-
-			// Restore to local frame and always close reader.
-			if err := func() error {
-				defer rd.Close()
-				if _, err := frag.ReadFrom(rd); err != nil {
-					return err
-				}
-				return nil
-			}(); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
 // Hosts returns a list of the hosts in the cluster including their ID,
 // URL, and which is the coordinator.
 func (api *API) Hosts(ctx context.Context) []*Node {
 	return api.Cluster.Nodes
 }
 
-// CreateInputDefinition is deprecated and will be removed. Do not use it.
-func (api *API) CreateInputDefinition(ctx context.Context, indexName string, inputDefName string, inputDef InputDefinitionInfo) error {
-	if err := api.validate(apiCreateInputDefinition); err != nil {
-		return errors.Wrap(err, "validate api method")
-	}
-
-	api.Logger.Printf(`CreateInputDefinition is deprecated and will be removed.
-Please open an issue if you need to continue using it.`)
-	// Find index.
-	index := api.Holder.Index(indexName)
-	if index == nil {
-		return ErrIndexNotFound
-	}
-
-	if err := inputDef.Validate(); err != nil {
-		return err
-	}
-
-	// Encode InputDefinition to its internal representation.
-	def := inputDef.Encode()
-	def.Name = inputDefName
-
-	// Create InputDefinition.
-	if _, err := index.CreateInputDefinition(def); err != nil {
-		return err
-	}
-
-	err := api.Broadcaster.SendSync(
-		&internal.CreateInputDefinitionMessage{
-			Index:      indexName,
-			Definition: def,
-		})
-	if err != nil {
-		api.Logger.Printf("problem sending CreateInputDefinition message: %s", err)
-	}
-	return nil
-}
-
-// InputDefinition is deprecated and will be removed.
-func (api *API) InputDefinition(ctx context.Context, indexName string, inputDefName string) (*InputDefinition, error) {
-	if err := api.validate(apiInputDefinition); err != nil {
-		return nil, errors.Wrap(err, "validate api method")
-	}
-
-	api.Logger.Printf(`InputDefinition is deprecated and will be removed.`)
-	// Find index.
-	index := api.Holder.Index(indexName)
-	if index == nil {
-		return nil, ErrIndexNotFound
-	}
-
-	inputDef, err := index.InputDefinition(inputDefName)
-	if err != nil {
-		return nil, err
-	}
-	return inputDef, nil
-}
-
-// DeleteInputDefinition is deprecated and will be removed.
-func (api *API) DeleteInputDefinition(ctx context.Context, indexName string, inputDefName string) error {
-	if err := api.validate(apiDeleteInputDefinition); err != nil {
-		return errors.Wrap(err, "validate api method")
-	}
-
-	api.Logger.Printf("DeleteInputDefinition is deprecated and will be removed.")
-	// Find index.
-	index := api.Holder.Index(indexName)
-	if index == nil {
-		return ErrIndexNotFound
-	}
-
-	// Delete input definition from the index.
-	if err := index.DeleteInputDefinition(inputDefName); err != nil {
-		return err
-	}
-
-	err := api.Broadcaster.SendSync(
-		&internal.DeleteInputDefinitionMessage{
-			Index: indexName,
-			Name:  inputDefName,
-		})
-	if err != nil {
-		api.Logger.Printf("problem sending DeleteInputDefinition message: %s", err)
-	}
-	return nil
-}
-
-// WriteInput is deprecated and will be removed.
-func (api *API) WriteInput(ctx context.Context, indexName string, inputDefName string, reqs []interface{}) error {
-	if err := api.validate(apiWriteInput); err != nil {
-		return errors.Wrap(err, "validate api method")
-	}
-
-	api.Logger.Printf("WriteInput is deprecated and will be removed.")
-	// Find index.
-	index := api.Holder.Index(indexName)
-	if index == nil {
-		return ErrIndexNotFound
-	}
-
-	for _, req := range reqs {
-		bits, err := api.inputJSONDataParser(req.(map[string]interface{}), index, inputDefName)
-		if err != nil {
-			return err
-		}
-		for fr, bs := range bits {
-			if err := index.InputBits(fr, bs); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
 // RecalculateCaches forces all TopN caches to be updated. Used mainly for integration tests.
 func (api *API) RecalculateCaches(ctx context.Context) error {
 	if err := api.validate(apiRecalculateCaches); err != nil {
-		return errors.Wrap(err, "validate api method")
+		return errors.Wrap(err, "validating api method")
 	}
 
 	err := api.Broadcaster.SendSync(&internal.RecalculateCaches{})
@@ -645,7 +466,7 @@ func (api *API) RecalculateCaches(ctx context.Context) error {
 // the body and forwards it to the BroadcastHandler.
 func (api *API) ClusterMessage(ctx context.Context, reqBody io.Reader) error {
 	if err := api.validate(apiClusterMessage); err != nil {
-		return errors.Wrap(err, "validate api method")
+		return errors.Wrap(err, "validating api method")
 	}
 
 	// Read entire body.
@@ -672,101 +493,22 @@ func (api *API) LocalID() string {
 	return api.Cluster.Node.ID
 }
 
-// Schema returns information about each index in Pilosa including which frames
+// Schema returns information about each index in Pilosa including which fields
 // and views they contain.
 func (api *API) Schema(ctx context.Context) []*IndexInfo {
 	return api.Holder.Schema()
 }
 
-// CreateField creates a new BSI field in the given index and frame.
-func (api *API) CreateField(ctx context.Context, indexName string, frameName string, field *Field) error {
-	if err := api.validate(apiCreateField); err != nil {
-		return errors.Wrap(err, "validate api method")
-	}
-
-	// Retrieve frame by name.
-	f := api.Holder.Frame(indexName, frameName)
-	if f == nil {
-		return ErrFrameNotFound
-	}
-
-	// Create new field.
-	if err := f.CreateField(field); err != nil {
-		return err
-	}
-
-	// Send the create field message to all nodes.
-	err := api.Broadcaster.SendSync(
-		&internal.CreateFieldMessage{
-			Index: indexName,
-			Frame: frameName,
-			Field: encodeField(field),
-		})
-	if err != nil {
-		api.Logger.Printf("problem sending CreateField message: %s", err)
-	}
-	return err
-}
-
-// DeleteField deletes the given field.
-func (api *API) DeleteField(ctx context.Context, indexName string, frameName string, fieldName string) error {
-	if err := api.validate(apiDeleteField); err != nil {
-		return errors.Wrap(err, "validate api method")
-	}
-
-	// Retrieve frame by name.
-	f := api.Holder.Frame(indexName, frameName)
-	if f == nil {
-		return ErrFrameNotFound
-	}
-
-	// Delete field.
-	if err := f.DeleteField(fieldName); err != nil {
-		return err
-	}
-
-	// Send the delete field message to all nodes.
-	err := api.Broadcaster.SendSync(
-		&internal.DeleteFieldMessage{
-			Index: indexName,
-			Frame: frameName,
-			Field: fieldName,
-		})
-	if err != nil {
-		api.Logger.Printf("problem sending DeleteField message: %s", err)
-	}
-	return err
-}
-
-// Fields returns the fields in the given frame.
-func (api *API) Fields(ctx context.Context, indexName string, frameName string) ([]*Field, error) {
-	if err := api.validate(apiFields); err != nil {
-		return nil, errors.Wrap(err, "validate api method")
-	}
-
-	index := api.Holder.index(indexName)
-	if index == nil {
-		return nil, ErrIndexNotFound
-	}
-
-	frame := index.frame(frameName)
-	if frame == nil {
-		return nil, ErrFrameNotFound
-	}
-
-	return frame.GetFields()
-}
-
-// Views returns the views in the given frame.
-func (api *API) Views(ctx context.Context, indexName string, frameName string) ([]*View, error) {
+// Views returns the views in the given field.
+func (api *API) Views(ctx context.Context, indexName string, fieldName string) ([]*View, error) {
 	if err := api.validate(apiViews); err != nil {
-		return nil, errors.Wrap(err, "validate api method")
+		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	// Retrieve views.
-	f := api.Holder.Frame(indexName, frameName)
+	f := api.Holder.Field(indexName, fieldName)
 	if f == nil {
-		return nil, ErrFrameNotFound
+		return nil, ErrFieldNotFound
 	}
 
 	// Fetch views.
@@ -775,22 +517,22 @@ func (api *API) Views(ctx context.Context, indexName string, frameName string) (
 }
 
 // DeleteView removes the given view.
-func (api *API) DeleteView(ctx context.Context, indexName string, frameName string, viewName string) error {
+func (api *API) DeleteView(ctx context.Context, indexName string, fieldName string, viewName string) error {
 	if err := api.validate(apiDeleteView); err != nil {
-		return errors.Wrap(err, "validate api method")
+		return errors.Wrap(err, "validating api method")
 	}
 
-	// Retrieve frame.
-	f := api.Holder.Frame(indexName, frameName)
+	// Retrieve field.
+	f := api.Holder.Field(indexName, fieldName)
 	if f == nil {
-		return ErrFrameNotFound
+		return ErrFieldNotFound
 	}
 
 	// Delete the view.
 	if err := f.DeleteView(viewName); err != nil {
 		// Ignore this error because views do not exist on all nodes due to slice distribution.
 		if err != ErrInvalidView {
-			return err
+			return errors.Wrap(err, "deleting view")
 		}
 	}
 
@@ -798,20 +540,20 @@ func (api *API) DeleteView(ctx context.Context, indexName string, frameName stri
 	err := api.Broadcaster.SendSync(
 		&internal.DeleteViewMessage{
 			Index: indexName,
-			Frame: frameName,
+			Field: fieldName,
 			View:  viewName,
 		})
 	if err != nil {
 		api.Logger.Printf("problem sending DeleteView message: %s", err)
 	}
 
-	return err
+	return errors.Wrap(err, "sending DeleteView message")
 }
 
 // IndexAttrDiff
 func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	if err := api.validate(apiIndexAttrDiff); err != nil {
-		return nil, errors.Wrap(err, "validate api method")
+		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	// Retrieve index from holder.
@@ -823,7 +565,7 @@ func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []At
 	// Retrieve local blocks.
 	localBlocks, err := index.ColumnAttrStore().Blocks()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "getting blocks")
 	}
 
 	// Read all attributes from all mismatched blocks.
@@ -832,7 +574,7 @@ func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []At
 		// Retrieve block data.
 		m, err := index.ColumnAttrStore().BlockData(blockID)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "getting block")
 		}
 
 		// Copy to index-wide struct.
@@ -843,21 +585,21 @@ func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []At
 	return attrs, nil
 }
 
-func (api *API) FrameAttrDiff(ctx context.Context, indexName string, frameName string, blocks []AttrBlock) (map[uint64]map[string]interface{}, error) {
-	if err := api.validate(apiFrameAttrDiff); err != nil {
-		return nil, errors.Wrap(err, "validate api method")
+func (api *API) FieldAttrDiff(ctx context.Context, indexName string, fieldName string, blocks []AttrBlock) (map[uint64]map[string]interface{}, error) {
+	if err := api.validate(apiFieldAttrDiff); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	// Retrieve index from holder.
-	f := api.Holder.Frame(indexName, frameName)
+	f := api.Holder.Field(indexName, fieldName)
 	if f == nil {
-		return nil, ErrFrameNotFound
+		return nil, ErrFieldNotFound
 	}
 
 	// Retrieve local blocks.
 	localBlocks, err := f.RowAttrStore().Blocks()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "getting blocks")
 	}
 
 	// Read all attributes from all mismatched blocks.
@@ -866,7 +608,7 @@ func (api *API) FrameAttrDiff(ctx context.Context, indexName string, frameName s
 		// Retrieve block data.
 		m, err := f.RowAttrStore().BlockData(blockID)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "getting block")
 		}
 
 		// Copy to index-wide struct.
@@ -877,15 +619,15 @@ func (api *API) FrameAttrDiff(ctx context.Context, indexName string, frameName s
 	return attrs, nil
 }
 
-// Import bulk imports data into a particular index,frame,slice.
+// Import bulk imports data into a particular index,field,slice.
 func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 	if err := api.validate(apiImport); err != nil {
-		return errors.Wrap(err, "validate api method")
+		return errors.Wrap(err, "validating api method")
 	}
 
-	_, frame, err := api.indexFrame(req.Index, req.Frame, req.Slice)
+	_, field, err := api.indexField(req.Index, req.Field, req.Slice)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "getting field")
 	}
 
 	// Convert timestamps to time.Time.
@@ -899,41 +641,35 @@ func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 	}
 
 	// Import into fragment.
-	err = frame.Import(req.RowIDs, req.ColumnIDs, timestamps)
+	err = field.Import(req.RowIDs, req.ColumnIDs, timestamps)
 	if err != nil {
-		api.Logger.Printf("import error: index=%s, frame=%s, slice=%d, bits=%d, err=%s", req.Index, req.Frame, req.Slice, len(req.ColumnIDs), err)
+		api.Logger.Printf("import error: index=%s, field=%s, slice=%d, columns=%d, err=%s", req.Index, req.Field, req.Slice, len(req.ColumnIDs), err)
 	}
-	return err
+	return errors.Wrap(err, "importing")
 }
 
 // ImportValue bulk imports values into a particular field.
 func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest) error {
 	if err := api.validate(apiImportValue); err != nil {
-		return errors.Wrap(err, "validate api method")
+		return errors.Wrap(err, "validating api method")
 	}
 
-	_, frame, err := api.indexFrame(req.Index, req.Frame, req.Slice)
+	_, field, err := api.indexField(req.Index, req.Field, req.Slice)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "getting field")
 	}
 
 	// Import into fragment.
-	err = frame.ImportValue(req.Field, req.ColumnIDs, req.Values)
+	err = field.ImportValue(req.ColumnIDs, req.Values)
 	if err != nil {
-		api.Logger.Printf("import error: index=%s, frame=%s, slice=%d, field=%s, bits=%d, err=%s", req.Index, req.Frame, req.Slice, req.Field, len(req.ColumnIDs), err)
+		api.Logger.Printf("import error: index=%s, field=%s, slice=%d, columns=%d, err=%s", req.Index, req.Field, req.Slice, len(req.ColumnIDs), err)
 	}
-	return err
+	return errors.Wrap(err, "importing")
 }
 
 // MaxSlices returns the maximum slice number for each index in a map.
 func (api *API) MaxSlices(ctx context.Context) map[string]uint64 {
 	return api.Holder.MaxSlices()
-}
-
-// MaxInverseSlices returns the maximum inverse slice number for each index in a
-// map.
-func (api *API) MaxInverseSlices(ctx context.Context) map[string]uint64 {
-	return api.Holder.MaxInverseSlices()
 }
 
 // StatsWithTags returns an instance of whatever implementation of StatsClient
@@ -954,114 +690,45 @@ func (api *API) LongQueryTime() time.Duration {
 	return api.Cluster.LongQueryTime
 }
 
-func (api *API) indexFrame(indexName string, frameName string, slice uint64) (*Index, *Frame, error) {
+func (api *API) indexField(indexName string, fieldName string, slice uint64) (*Index, *Field, error) {
 	// Validate that this handler owns the slice.
-	if !api.Cluster.OwnsSlice(api.LocalID(), indexName, slice) {
-		api.Logger.Printf("host does not own slice %s-%s slice:%d", api.URI, indexName, slice)
+	if !api.Cluster.ownsSlice(api.LocalID(), indexName, slice) {
+		api.Logger.Printf("node %s does not own slice %d of index %s", api.LocalID(), slice, indexName)
 		return nil, nil, ErrClusterDoesNotOwnSlice
 	}
 
 	// Find the Index.
-	api.Logger.Printf("importing: %v %v %v", indexName, frameName, slice)
+	api.Logger.Printf("importing: %v %v %v", indexName, fieldName, slice)
 	index := api.Holder.Index(indexName)
 	if index == nil {
-		api.Logger.Printf("fragment error: index=%s, frame=%s, slice=%d, err=%s", indexName, frameName, slice, ErrIndexNotFound.Error())
+		api.Logger.Printf("fragment error: index=%s, field=%s, slice=%d, err=%s", indexName, fieldName, slice, ErrIndexNotFound.Error())
 		return nil, nil, ErrIndexNotFound
 	}
 
-	// Retrieve frame.
-	frame := index.Frame(frameName)
-	if frame == nil {
-		api.Logger.Printf("frame error: index=%s, frame=%s, slice=%d, err=%s", indexName, frameName, slice, ErrFrameNotFound.Error())
-		return nil, nil, ErrFrameNotFound
+	// Retrieve field.
+	field := index.Field(fieldName)
+	if field == nil {
+		api.Logger.Printf("field error: index=%s, field=%s, slice=%d, err=%s", indexName, fieldName, slice, ErrFieldNotFound.Error())
+		return nil, nil, ErrFieldNotFound
 	}
-	return index, frame, nil
-}
-
-// inputJSONDataParser validates input json file and executes SetBit. Deprecated - remove with input definition stuff.
-func (api *API) inputJSONDataParser(req map[string]interface{}, index *Index, name string) (map[string][]*Bit, error) {
-	inputDef, err := index.InputDefinition(name)
-	if err != nil {
-		return nil, err
-	}
-	// If field in input data is not in defined definition, return error.
-	var colValue uint64
-	validFields := make(map[string]bool)
-	timestampFrame := make(map[string]int64)
-	for _, field := range inputDef.Fields() {
-		validFields[field.Name] = true
-		if field.PrimaryKey {
-			value, ok := req[field.Name]
-			if !ok {
-				return nil, fmt.Errorf("primary key does not exist")
-			}
-			rawValue, ok := value.(float64) // The default JSON marshalling will interpret this as a float
-			if !ok {
-				return nil, fmt.Errorf("float64 require, got value:%s, type: %s", value, reflect.TypeOf(value))
-			}
-			colValue = uint64(rawValue)
-		}
-		// Find frame that need to add timestamp.
-		for _, action := range field.Actions {
-			if action.ValueDestination == InputSetTimestamp {
-				timestampFrame[action.Frame], err = GetTimeStamp(req, field.Name)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
-	}
-
-	for key := range req {
-		_, ok := validFields[key]
-		if !ok {
-			return nil, fmt.Errorf("field not found: %s", key)
-		}
-	}
-
-	setBits := make(map[string][]*Bit)
-
-	for _, field := range inputDef.Fields() {
-		// skip field that defined in definition but not in input data
-		if _, ok := req[field.Name]; !ok {
-			continue
-		}
-
-		// Looking into timestampFrame map and set timestamp to the whole frame
-		for _, action := range field.Actions {
-			frame := action.Frame
-			timestamp := timestampFrame[action.Frame]
-			// Skip input data field values that are set to null
-			if req[field.Name] == nil {
-				continue
-			}
-			bit, err := HandleAction(action, req[field.Name], colValue, timestamp)
-			if err != nil {
-				return nil, fmt.Errorf("error handling action: %s, err: %s", action.ValueDestination, err)
-			}
-			if bit != nil {
-				setBits[frame] = append(setBits[frame], bit)
-			}
-		}
-	}
-	return setBits, nil
+	return index, field, nil
 }
 
 // SetCoordinator makes a new Node the cluster coordinator.
 func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode *Node, err error) {
 	if err := api.validate(apiSetCoordinator); err != nil {
-		return nil, nil, errors.Wrap(err, "validate api method")
+		return nil, nil, errors.Wrap(err, "validating api method")
 	}
 
-	oldNode = api.Cluster.NodeByID(api.Cluster.Coordinator)
-	newNode = api.Cluster.NodeByID(id)
+	oldNode = api.Cluster.nodeByID(api.Cluster.Coordinator)
+	newNode = api.Cluster.nodeByID(id)
 	if newNode == nil {
 		return nil, nil, errors.Wrap(ErrNodeIDNotExists, "getting new node")
 	}
 
 	// If the new coordinator is this node, do the SetCoordinator directly.
 	if newNode.ID == api.LocalID() {
-		return oldNode, newNode, api.Cluster.SetCoordinator(newNode)
+		return oldNode, newNode, api.Cluster.setCoordinator(newNode)
 	}
 
 	// Send the set-coordinator message to new node.
@@ -1080,16 +747,16 @@ func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode
 // removing the given node.
 func (api *API) RemoveNode(id string) (*Node, error) {
 	if err := api.validate(apiRemoveNode); err != nil {
-		return nil, errors.Wrap(err, "validate api method")
+		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	removeNode := api.Cluster.nodeByID(id)
+	removeNode := api.Cluster.unprotectedNodeByID(id)
 	if removeNode == nil {
 		return nil, errors.Wrap(ErrNodeIDNotExists, "finding node to remove")
 	}
 
 	// Start the resize process (similar to NodeJoin)
-	err := api.Cluster.NodeLeave(removeNode)
+	err := api.Cluster.nodeLeave(removeNode)
 	if err != nil {
 		return removeNode, errors.Wrap(err, "calling node leave")
 	}
@@ -1099,10 +766,10 @@ func (api *API) RemoveNode(id string) (*Node, error) {
 // ResizeAbort stops the current resize job.
 func (api *API) ResizeAbort() error {
 	if err := api.validate(apiResizeAbort); err != nil {
-		return errors.Wrap(err, "validate api method")
+		return errors.Wrap(err, "validating api method")
 	}
 
-	err := api.Cluster.CompleteCurrentJob(ResizeJobStateAborted)
+	err := api.Cluster.completeCurrentJob(resizeJobStateAborted)
 	return errors.Wrap(err, "complete current job")
 }
 
@@ -1118,41 +785,44 @@ func (api *API) Version() string {
 	return strings.TrimPrefix(Version, "v")
 }
 
+// Info returns information about this server instance
+func (api *API) Info() ServerInfo {
+	return ServerInfo{
+		SliceWidth: SliceWidth,
+	}
+}
+
+type ServerInfo struct {
+	SliceWidth uint64 `json:"sliceWidth"`
+}
+
 type apiMethod int
 
 // API validation constants.
 const (
 	apiClusterMessage apiMethod = iota
 	apiCreateField
-	apiCreateFrame
 	apiCreateIndex
-	apiCreateInputDefinition
 	apiDeleteField
-	apiDeleteFrame
 	apiDeleteIndex
-	apiDeleteInputDefinition
 	apiDeleteView
 	apiExportCSV
-	apiFields
 	apiFragmentBlockData
 	apiFragmentBlocks
-	apiFrameAttrDiff
+	apiFieldAttrDiff
 	//apiHosts // not implemented
 	apiImport
 	apiImportValue
 	apiIndex
 	apiIndexAttrDiff
-	apiInputDefinition
 	//apiLocalID // not implemented
 	//apiLongQueryTime // not implemented
 	apiMarshalFragment
-	//apiMaxInverseSlices // not implemented
 	//apiMaxSlices // not implemented
 	apiQuery
 	apiRecalculateCaches
 	apiRemoveNode
 	apiResizeAbort
-	apiRestoreFrame
 	//apiSchema // not implemented
 	apiSetCoordinator
 	apiSliceNodes
@@ -1161,7 +831,6 @@ const (
 	apiUnmarshalFragment
 	//apiVersion // not implemented
 	apiViews
-	apiWriteInput
 )
 
 var methodsCommon = map[apiMethod]struct{}{
@@ -1175,31 +844,23 @@ var methodsResizing = map[apiMethod]struct{}{
 }
 
 var methodsNormal = map[apiMethod]struct{}{
-	apiCreateField:           struct{}{},
-	apiCreateFrame:           struct{}{},
-	apiCreateIndex:           struct{}{},
-	apiCreateInputDefinition: struct{}{},
-	apiDeleteField:           struct{}{},
-	apiDeleteFrame:           struct{}{},
-	apiDeleteIndex:           struct{}{},
-	apiDeleteInputDefinition: struct{}{},
-	apiDeleteView:            struct{}{},
-	apiExportCSV:             struct{}{},
-	apiFields:                struct{}{},
-	apiFragmentBlockData:     struct{}{},
-	apiFragmentBlocks:        struct{}{},
-	apiFrameAttrDiff:         struct{}{},
-	apiImport:                struct{}{},
-	apiImportValue:           struct{}{},
-	apiIndex:                 struct{}{},
-	apiIndexAttrDiff:         struct{}{},
-	apiInputDefinition:       struct{}{},
-	apiQuery:                 struct{}{},
-	apiRecalculateCaches:     struct{}{},
-	apiRemoveNode:            struct{}{},
-	apiRestoreFrame:          struct{}{},
-	apiSliceNodes:            struct{}{},
-	apiUnmarshalFragment:     struct{}{},
-	apiViews:                 struct{}{},
-	apiWriteInput:            struct{}{},
+	apiCreateField:       struct{}{},
+	apiCreateIndex:       struct{}{},
+	apiDeleteField:       struct{}{},
+	apiDeleteIndex:       struct{}{},
+	apiDeleteView:        struct{}{},
+	apiExportCSV:         struct{}{},
+	apiFragmentBlockData: struct{}{},
+	apiFragmentBlocks:    struct{}{},
+	apiFieldAttrDiff:     struct{}{},
+	apiImport:            struct{}{},
+	apiImportValue:       struct{}{},
+	apiIndex:             struct{}{},
+	apiIndexAttrDiff:     struct{}{},
+	apiQuery:             struct{}{},
+	apiRecalculateCaches: struct{}{},
+	apiRemoveNode:        struct{}{},
+	apiSliceNodes:        struct{}{},
+	apiUnmarshalFragment: struct{}{},
+	apiViews:             struct{}{},
 }
