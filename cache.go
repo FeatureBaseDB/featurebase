@@ -27,8 +27,8 @@ import (
 )
 
 const (
-	// ThresholdFactor is used to calculate the threshold for new items entering the cache
-	ThresholdFactor = 1.1
+	// thresholdFactor is used to calculate the threshold for new items entering the cache
+	thresholdFactor = 1.1
 )
 
 // Cache represents a cache of counts.
@@ -158,7 +158,7 @@ type RankCache struct {
 func NewRankCache(maxEntries uint32) *RankCache {
 	return &RankCache{
 		maxEntries:      maxEntries,
-		thresholdBuffer: int(ThresholdFactor * float64(maxEntries)),
+		thresholdBuffer: int(thresholdFactor * float64(maxEntries)),
 		entries:         make(map[uint64]uint64),
 		stats:           NopStatsClient,
 	}
@@ -409,7 +409,7 @@ func (p Pairs) String() string {
 	return buf.String()
 }
 
-func encodePairs(a Pairs) []*internal.Pair {
+func EncodePairs(a Pairs) []*internal.Pair {
 	other := make([]*internal.Pair, len(a))
 	for i := range a {
 		other[i] = encodePair(a[i])

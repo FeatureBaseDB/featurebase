@@ -112,10 +112,6 @@ Note that both the user IDs and the repository IDs were remapped to sequential i
 
 #### Make Some Queries
 
-<div class="note">
-    <p>Note the Pilosa server comes with a <a href="../webui/">WebUI</a> for constructing queries in a browser. In local development, it is available at <a href="http://localhost:10101">localhost:10101</a>.</p>
-</div>
-
 Which repositories did user 14 star:
 ``` request
 curl localhost:10101/index/repository/query \

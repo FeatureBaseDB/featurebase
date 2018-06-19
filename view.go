@@ -31,26 +31,26 @@ import (
 const (
 	ViewStandard = "standard"
 
-	ViewFieldPrefix = "field_"
+	viewBSIGroupPrefix = "bsig_"
 )
 
-// IsValidView returns true if name is valid.
-func IsValidView(name string) bool {
+// isValidView returns true if name is valid.
+func isValidView(name string) bool {
 	return name == ViewStandard
 }
 
-// View represents a container for frame data.
+// View represents a container for field data.
 type View struct {
 	mu    sync.RWMutex
 	path  string
 	index string
-	frame string
+	field string
 	name  string
 
 	cacheSize uint32
 
 	// Fragments by slice.
-	cacheType string // passed in by frame
+	cacheType string // passed in by field
 	fragments map[uint64]*Fragment
 
 	// maxSlice maintains this view's max slice in order to
@@ -65,15 +65,15 @@ type View struct {
 }
 
 // NewView returns a new instance of View.
-func NewView(path, index, frame, name string, cacheSize uint32) *View {
+func NewView(path, index, field, name string, cacheSize uint32) *View {
 	return &View{
 		path:      path,
 		index:     index,
-		frame:     frame,
+		field:     field,
 		name:      name,
 		cacheSize: cacheSize,
 
-		cacheType: DefaultCacheType,
+		cacheType: defaultCacheType,
 		fragments: make(map[uint64]*Fragment),
 
 		broadcaster: NopBroadcaster,
@@ -82,23 +82,11 @@ func NewView(path, index, frame, name string, cacheSize uint32) *View {
 	}
 }
 
-// Name returns the name the view was initialized with.
-func (v *View) Name() string { return v.name }
-
-// Index returns the index name the view was initialized with.
-func (v *View) Index() string { return v.index }
-
-// Frame returns the frame name the view was initialized with.
-func (v *View) Frame() string { return v.frame }
-
-// Path returns the path the view was initialized with.
-func (v *View) Path() string { return v.path }
-
-// Open opens and initializes the view.
-func (v *View) Open() error {
+// open opens and initializes the view.
+func (v *View) open() error {
 
 	// Never keep a cache for field views.
-	if strings.HasPrefix(v.name, ViewFieldPrefix) {
+	if strings.HasPrefix(v.name, viewBSIGroupPrefix) {
 		v.cacheType = CacheTypeNone
 	}
 
@@ -116,7 +104,7 @@ func (v *View) Open() error {
 
 		return nil
 	}(); err != nil {
-		v.Close()
+		v.close()
 		return err
 	}
 
@@ -149,19 +137,19 @@ func (v *View) openFragments() error {
 			continue
 		}
 
-		frag := v.newFragment(v.FragmentPath(slice), slice)
+		frag := v.newFragment(v.fragmentPath(slice), slice)
 		if err := frag.Open(); err != nil {
-			return fmt.Errorf("open fragment: slice=%d, err=%s", frag.Slice(), err)
+			return fmt.Errorf("open fragment: slice=%d, err=%s", frag.slice, err)
 		}
 		frag.RowAttrStore = v.RowAttrStore
-		v.fragments[frag.Slice()] = frag
+		v.fragments[frag.slice] = frag
 	}
 
 	return nil
 }
 
-// Close closes the view and its fragments.
-func (v *View) Close() error {
+// close closes the view and its fragments.
+func (v *View) close() error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -176,8 +164,8 @@ func (v *View) Close() error {
 	return nil
 }
 
-// MaxSlice returns the max slice in the view.
-func (v *View) MaxSlice() uint64 {
+// calculateMaxSlice returns the max slice in the view.
+func (v *View) calculateMaxSlice() uint64 {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
@@ -191,8 +179,8 @@ func (v *View) MaxSlice() uint64 {
 	return max
 }
 
-// FragmentPath returns the path to a fragment in the view.
-func (v *View) FragmentPath(slice uint64) string {
+// fragmentPath returns the path to a fragment in the view.
+func (v *View) fragmentPath(slice uint64) string {
 	return filepath.Join(v.path, "fragments", strconv.FormatUint(slice, 10))
 }
 
@@ -205,8 +193,8 @@ func (v *View) Fragment(slice uint64) *Fragment {
 
 func (v *View) fragment(slice uint64) *Fragment { return v.fragments[slice] }
 
-// Fragments returns a list of all fragments in the view.
-func (v *View) Fragments() []*Fragment {
+// allFragments returns a list of all fragments in the view.
+func (v *View) allFragments() []*Fragment {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
@@ -217,9 +205,9 @@ func (v *View) Fragments() []*Fragment {
 	return other
 }
 
-// RecalculateCaches recalculates the cache on every fragment in the view.
-func (v *View) RecalculateCaches() {
-	for _, fragment := range v.Fragments() {
+// recalculateCaches recalculates the cache on every fragment in the view.
+func (v *View) recalculateCaches() {
+	for _, fragment := range v.allFragments() {
 		fragment.RecalculateCache()
 	}
 }
@@ -238,7 +226,7 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 	}
 
 	// Initialize and open fragment.
-	frag := v.newFragment(v.FragmentPath(slice), slice)
+	frag := v.newFragment(v.fragmentPath(slice), slice)
 	if err := frag.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening fragment")
 	}
@@ -249,13 +237,13 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 		v.maxSlice = slice
 
 		// Send the create slice message to all nodes.
-		err := v.broadcaster.SendAsync(
+		err := v.broadcaster.SendSync(
 			&internal.CreateSliceMessage{
 				Index: v.index,
 				Slice: slice,
 			})
 		if err != nil {
-			return nil, errors.Wrap(err, "sending message")
+			return nil, errors.Wrap(err, "sending createslice message")
 		}
 	}
 
@@ -265,7 +253,7 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 }
 
 func (v *View) newFragment(path string, slice uint64) *Fragment {
-	frag := NewFragment(path, v.index, v.frame, v.name, slice)
+	frag := NewFragment(path, v.index, v.field, v.name, slice)
 	frag.CacheType = v.cacheType
 	frag.CacheSize = v.cacheSize
 	frag.Logger = v.Logger
@@ -273,15 +261,15 @@ func (v *View) newFragment(path string, slice uint64) *Fragment {
 	return frag
 }
 
-// DeleteFragment removes the fragment from the view.
-func (v *View) DeleteFragment(slice uint64) error {
+// deleteFragment removes the fragment from the view.
+func (v *View) deleteFragment(slice uint64) error {
 
 	fragment := v.fragments[slice]
 	if fragment == nil {
 		return ErrFragmentNotFound
 	}
 
-	v.Logger.Printf("delete fragment: (%s/%s/%s) %d", v.index, v.frame, v.name, slice)
+	v.Logger.Printf("delete fragment: (%s/%s/%s) %d", v.index, v.field, v.name, slice)
 
 	// Close data files before deletion.
 	if err := fragment.Close(); err != nil {
@@ -289,12 +277,12 @@ func (v *View) DeleteFragment(slice uint64) error {
 	}
 
 	// Delete fragment file.
-	if err := os.Remove(fragment.Path()); err != nil {
+	if err := os.Remove(fragment.path); err != nil {
 		return errors.Wrap(err, "deleting fragment file")
 	}
 
 	// Delete fragment cache file.
-	if err := os.Remove(fragment.CachePath()); err != nil {
+	if err := os.Remove(fragment.cachePath()); err != nil {
 		v.Logger.Printf("no cache file to delete for slice %d", slice)
 	}
 
@@ -303,50 +291,64 @@ func (v *View) DeleteFragment(slice uint64) error {
 	return nil
 }
 
-// SetBit sets a bit within the view.
-func (v *View) SetBit(rowID, columnID uint64) (changed bool, err error) {
+// row returns a row for a slice of the view.
+func (v *View) row(rowID uint64) *Row {
+	row := NewRow()
+	for _, frag := range v.allFragments() {
+		fr := frag.row(rowID)
+		if fr == nil {
+			continue
+		}
+		row.Merge(fr)
+	}
+	return row
+
+}
+
+// setBit sets a bit within the view.
+func (v *View) setBit(rowID, columnID uint64) (changed bool, err error) {
 	slice := columnID / SliceWidth
 	frag, err := v.CreateFragmentIfNotExists(slice)
 	if err != nil {
 		return changed, err
 	}
-	return frag.SetBit(rowID, columnID)
+	return frag.setBit(rowID, columnID)
 }
 
-// ClearBit clears a bit within the view.
-func (v *View) ClearBit(rowID, columnID uint64) (changed bool, err error) {
+// clearBit clears a bit within the view.
+func (v *View) clearBit(rowID, columnID uint64) (changed bool, err error) {
 	slice := columnID / SliceWidth
 	frag, err := v.CreateFragmentIfNotExists(slice)
 	if err != nil {
 		return changed, err
 	}
-	return frag.ClearBit(rowID, columnID)
+	return frag.clearBit(rowID, columnID)
 }
 
-// FieldValue uses a column of bits to read a multi-bit value.
-func (v *View) FieldValue(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
+// value uses a column of bits to read a multi-bit value.
+func (v *View) value(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
 	slice := columnID / SliceWidth
 	frag, err := v.CreateFragmentIfNotExists(slice)
 	if err != nil {
 		return value, exists, err
 	}
-	return frag.FieldValue(columnID, bitDepth)
+	return frag.value(columnID, bitDepth)
 }
 
-// SetFieldValue uses a column of bits to set a multi-bit value.
-func (v *View) SetFieldValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+// setValue uses a column of bits to set a multi-bit value.
+func (v *View) setValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
 	slice := columnID / SliceWidth
 	frag, err := v.CreateFragmentIfNotExists(slice)
 	if err != nil {
 		return changed, err
 	}
-	return frag.SetFieldValue(columnID, bitDepth, value)
+	return frag.setValue(columnID, bitDepth, value)
 }
 
-// FieldSum returns the sum & count of a field.
-func (v *View) FieldSum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
-	for _, f := range v.Fragments() {
-		fsum, fcount, err := f.FieldSum(filter, bitDepth)
+// sum returns the sum & count of a field.
+func (v *View) sum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
+	for _, f := range v.allFragments() {
+		fsum, fcount, err := f.sum(filter, bitDepth)
 		if err != nil {
 			return sum, count, err
 		}
@@ -356,11 +358,11 @@ func (v *View) FieldSum(filter *Row, bitDepth uint) (sum, count uint64, err erro
 	return sum, count, nil
 }
 
-// FieldMin returns the min and count of a field.
-func (v *View) FieldMin(filter *Row, bitDepth uint) (min, count uint64, err error) {
+// min returns the min and count of a field.
+func (v *View) min(filter *Row, bitDepth uint) (min, count uint64, err error) {
 	var minHasValue bool
-	for _, f := range v.Fragments() {
-		fmin, fcount, err := f.FieldMin(filter, bitDepth)
+	for _, f := range v.allFragments() {
+		fmin, fcount, err := f.min(filter, bitDepth)
 		if err != nil {
 			return min, count, err
 		}
@@ -384,10 +386,10 @@ func (v *View) FieldMin(filter *Row, bitDepth uint) (min, count uint64, err erro
 	return min, count, nil
 }
 
-// FieldMax returns the max and count of a field.
-func (v *View) FieldMax(filter *Row, bitDepth uint) (max, count uint64, err error) {
-	for _, f := range v.Fragments() {
-		fmax, fcount, err := f.FieldMax(filter, bitDepth)
+// max returns the max and count of a field.
+func (v *View) max(filter *Row, bitDepth uint) (max, count uint64, err error) {
+	for _, f := range v.allFragments() {
+		fmax, fcount, err := f.max(filter, bitDepth)
 		if err != nil {
 			return max, count, err
 		}
@@ -399,11 +401,11 @@ func (v *View) FieldMax(filter *Row, bitDepth uint) (max, count uint64, err erro
 	return max, count, nil
 }
 
-// FieldRange returns rows with a field value encoding matching the predicate.
-func (v *View) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
+// rangeOp returns rows with a field value encoding matching the predicate.
+func (v *View) rangeOp(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
 	r := NewRow()
-	for _, frag := range v.Fragments() {
-		other, err := frag.FieldRange(op, bitDepth, predicate)
+	for _, frag := range v.allFragments() {
+		other, err := frag.rangeOp(op, bitDepth, predicate)
 		if err != nil {
 			return nil, err
 		}
@@ -412,12 +414,12 @@ func (v *View) FieldRange(op pql.Token, bitDepth uint, predicate uint64) (*Row, 
 	return r, nil
 }
 
-// FieldRangeBetween returns bitmaps with a field value encoding matching any
+// rangeBetween returns bitmaps with a field value encoding matching any
 // value between predicateMin and predicateMax.
-func (v *View) FieldRangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
+func (v *View) rangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
 	r := NewRow()
-	for _, frag := range v.Fragments() {
-		other, err := frag.FieldRangeBetween(bitDepth, predicateMin, predicateMax)
+	for _, frag := range v.allFragments() {
+		other, err := frag.rangeBetween(bitDepth, predicateMin, predicateMax)
 		if err != nil {
 			return nil, err
 		}

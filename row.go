@@ -27,6 +27,9 @@ import (
 type Row struct {
 	segments []RowSegment
 
+	// String keys translated to/from segment columns.
+	Keys []string
+
 	// Attributes associated with the row.
 	Attrs map[string]interface{}
 }
@@ -166,6 +169,11 @@ func (r *Row) ClearBit(i uint64) (changed bool) {
 	return s.ClearBit(i)
 }
 
+// Segments returns a list of all segments in the row.
+func (r *Row) Segments() []RowSegment {
+	return r.segments
+}
+
 // segment returns a segment for a given slice.
 // Returns nil if segment does not exist.
 func (r *Row) segment(slice uint64) *RowSegment {
@@ -241,8 +249,10 @@ func (r *Row) MarshalJSON() ([]byte, error) {
 	var o struct {
 		Attrs   map[string]interface{} `json:"attrs"`
 		Columns []uint64               `json:"columns"`
+		Keys    []string               `json:"keys,omitempty"`
 	}
 	o.Columns = r.Columns()
+	o.Keys = r.Keys
 
 	o.Attrs = r.Attrs
 	if o.Attrs == nil {
@@ -261,8 +271,8 @@ func (r *Row) Columns() []uint64 {
 	return a
 }
 
-// encodeRow converts r into its internal representation.
-func encodeRow(r *Row) *internal.Row {
+// EncodeRow converts r into its internal representation.
+func EncodeRow(r *Row) *internal.Row {
 	if r == nil {
 		return nil
 	}
@@ -273,8 +283,8 @@ func encodeRow(r *Row) *internal.Row {
 	}
 }
 
-// decodeRow converts r from its internal representation.
-func decodeRow(pr *internal.Row) *Row {
+// DecodeRow converts r from its internal representation.
+func DecodeRow(pr *internal.Row) *Row {
 	if pr == nil {
 		return nil
 	}

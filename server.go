@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -53,17 +52,16 @@ type Server struct {
 	closing chan struct{}
 
 	// Internal
-	Holder      *Holder
-	Cluster     *Cluster
-	diagnostics *DiagnosticsCollector
-	executor    *Executor
+	Holder        *Holder
+	Cluster       *Cluster
+	TranslateFile *TranslateFile
+	diagnostics   *DiagnosticsCollector
+	executor      *Executor
 
 	// External
-	handler           *Handler
+	handler           Handler
 	Broadcaster       Broadcaster
 	BroadcastReceiver BroadcastReceiver
-	Gossiper          Gossiper
-	remoteClient      *http.Client
 	systemInfo        SystemInfo
 	gcNotifier        GCNotifier
 	NewAttrStore      func(string) AttrStore
@@ -76,6 +74,8 @@ type Server struct {
 	metricInterval      time.Duration
 	diagnosticInterval  time.Duration
 	maxWritesPerRequest int
+
+	primaryTranslateStore TranslateStore
 
 	defaultClient InternalClient
 	dataDir       string
@@ -127,7 +127,7 @@ func OptServerLongQueryTime(dur time.Duration) ServerOption {
 	}
 }
 
-func OptServerHandler(h *Handler) ServerOption {
+func OptServerHandler(h Handler) ServerOption {
 	return func(s *Server) error {
 		s.handler = h
 		return nil
@@ -162,12 +162,18 @@ func OptServerGCNotifier(gcn GCNotifier) ServerOption {
 	}
 }
 
-func OptServerRemoteClient(c *http.Client) ServerOption {
+func OptServerInternalClient(c InternalClient) ServerOption {
 	return func(s *Server) error {
-		s.executor = NewExecutor(c)
-		s.remoteClient = c
-		s.defaultClient = NewInternalHTTPClientFromURI(nil, c)
-		s.Cluster.RemoteClient = c
+		s.executor = NewExecutor(OptExecutorInternalQueryClient(c))
+		s.defaultClient = c
+		s.Cluster.InternalClient = c
+		return nil
+	}
+}
+
+func OptServerPrimaryTranslateStore(store TranslateStore) ServerOption {
+	return func(s *Server) error {
+		s.primaryTranslateStore = store
 		return nil
 	}
 }
@@ -203,15 +209,10 @@ func OptServerURI(uri *URI) ServerOption {
 
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
-	handler, err := NewHandler()
-	if err != nil {
-		return nil, errors.Wrap(err, "initializing handler")
-	}
 	s := &Server{
 		closing:           make(chan struct{}),
 		Cluster:           NewCluster(),
 		Holder:            NewHolder(),
-		handler:           handler,
 		Broadcaster:       NopBroadcaster,
 		BroadcastReceiver: NopBroadcastReceiver,
 		diagnostics:       NewDiagnosticsCollector(DefaultDiagnosticServer),
@@ -249,6 +250,14 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.Cluster.Logger = s.logger
 	s.Cluster.Holder = s.Holder
 
+	// Initialize translation database.
+	s.TranslateFile = NewTranslateFile()
+	s.TranslateFile.Path = filepath.Join(path, "keys")
+	s.TranslateFile.PrimaryTranslateStore = s.primaryTranslateStore
+	if err := s.TranslateFile.Open(); err != nil {
+		return nil, err
+	}
+
 	// update URI port with actual listener port. TODO this should probably be done outside of here.
 	if s.URI.Port() == 0 {
 		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
@@ -267,8 +276,10 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.executor.Holder = s.Holder
 	s.executor.Node = node
 	s.executor.Cluster = s.Cluster
+	s.executor.TranslateStore = s.TranslateFile
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
-	s.handler.API.Executor = s.executor
+	s.handler.GetAPI().Executor = s.executor
+	s.handler.GetAPI().TranslateStore = s.TranslateFile
 
 	return s, nil
 }
@@ -300,27 +311,18 @@ func (s *Server) Open() error {
 	s.Cluster.MaxWritesPerRequest = s.maxWritesPerRequest
 
 	// Initialize HTTP handler.
-	s.handler.API.Holder = s.Holder
-	s.handler.API.Broadcaster = s.Broadcaster
-	s.handler.API.BroadcastHandler = s
-	s.handler.API.StatusHandler = s
-	s.handler.API.Cluster = s.Cluster
+	api := s.handler.GetAPI()
+	api.Holder = s.Holder
+	api.Broadcaster = s.Broadcaster
+	api.BroadcastHandler = s
+	api.StatusHandler = s
+	api.Cluster = s.Cluster
 
 	// Initialize Holder.
 	s.Holder.Broadcaster = s.Broadcaster
 
-	// Serve HTTP.
-	go func() {
-		server := &http.Server{Handler: s.handler}
-		go func() {
-			<-s.closing
-			server.Close()
-		}()
-		err := server.Serve(s.ln)
-		if err != nil && err.Error() != "http: Server closed" {
-			s.logger.Printf("HTTP handler terminated with error: %s\n", err)
-		}
-	}()
+	// Serve handler.
+	go s.handler.Serve(s.ln, s.closing)
 
 	// Start the BroadcastReceiver.
 	if err := s.BroadcastReceiver.Start(s); err != nil {
@@ -328,7 +330,7 @@ func (s *Server) Open() error {
 	}
 
 	// Open Cluster management.
-	if err := s.Cluster.Open(); err != nil {
+	if err := s.Cluster.open(); err != nil {
 		return fmt.Errorf("opening Cluster: %v", err)
 	}
 
@@ -336,7 +338,7 @@ func (s *Server) Open() error {
 	if err := s.Holder.Open(); err != nil {
 		return fmt.Errorf("opening Holder: %v", err)
 	}
-	if err := s.Cluster.SetNodeState(NodeStateReady); err != nil {
+	if err := s.Cluster.setNodeState(NodeStateReady); err != nil {
 		return fmt.Errorf("setting nodeState: %v", err)
 	}
 
@@ -345,7 +347,7 @@ func (s *Server) Open() error {
 	// the cluster without waiting for data to load on the coordinator. Before
 	// this starts, the joins are queued up in the Cluster.joiningLeavingNodes
 	// buffered channel.
-	s.Cluster.ListenForJoins()
+	s.Cluster.listenForJoins()
 
 	// Start background monitoring.
 	s.wg.Add(3)
@@ -366,10 +368,13 @@ func (s *Server) Close() error {
 		s.ln.Close()
 	}
 	if s.Cluster != nil {
-		s.Cluster.Close()
+		s.Cluster.close()
 	}
 	if s.Holder != nil {
 		s.Holder.Close()
+	}
+	if s.TranslateFile != nil {
+		s.TranslateFile.Close()
 	}
 
 	return nil
@@ -420,7 +425,6 @@ func (s *Server) monitorAntiEntropy() {
 		syncer.Node = s.Cluster.Node
 		syncer.Cluster = s.Cluster
 		syncer.Closing = s.closing
-		syncer.RemoteClient = s.remoteClient
 		syncer.Stats = s.Holder.Stats.WithTags("HolderSyncer")
 
 		// Sync holders.
@@ -455,71 +459,60 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if err := s.Holder.DeleteIndex(obj.Index); err != nil {
 			return err
 		}
-	case *internal.CreateFrameMessage:
+	case *internal.CreateFieldMessage:
 		idx := s.Holder.Index(obj.Index)
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
-		opt := decodeFrameOptions(obj.Meta)
-		_, err := idx.CreateFrame(obj.Frame, *opt)
+		opt := decodeFieldOptions(obj.Meta)
+		_, err := idx.CreateField(obj.Field, *opt)
 		if err != nil {
 			return err
 		}
-	case *internal.DeleteFrameMessage:
-		idx := s.Holder.Index(obj.Index)
-		if err := idx.DeleteFrame(obj.Frame); err != nil {
-			return err
-		}
-	case *internal.CreateFieldMessage:
-		f := s.Holder.Frame(obj.Index, obj.Frame)
-		field := decodeField(obj.Field)
-		if err := f.CreateField(field); err != nil {
-			return err
-		}
 	case *internal.DeleteFieldMessage:
-		f := s.Holder.Frame(obj.Index, obj.Frame)
-		if err := f.DeleteField(obj.Field); err != nil {
+		idx := s.Holder.Index(obj.Index)
+		if err := idx.DeleteField(obj.Field); err != nil {
 			return err
 		}
 	case *internal.CreateViewMessage:
-		f := s.Holder.Frame(obj.Index, obj.Frame)
+		f := s.Holder.Field(obj.Index, obj.Field)
 		if f == nil {
-			return fmt.Errorf("Local Frame not found: %s", obj.Frame)
+			return fmt.Errorf("Local Field not found: %s", obj.Field)
 		}
 		_, _, err := f.createViewIfNotExistsBase(obj.View)
 		if err != nil {
 			return err
 		}
 	case *internal.DeleteViewMessage:
-		f := s.Holder.Frame(obj.Index, obj.Frame)
+		f := s.Holder.Field(obj.Index, obj.Field)
 		if f == nil {
-			return fmt.Errorf("Local Frame not found: %s", obj.Frame)
+			return fmt.Errorf("Local Field not found: %s", obj.Field)
 		}
 		err := f.DeleteView(obj.View)
 		if err != nil {
 			return err
 		}
 	case *internal.ClusterStatus:
-		err := s.Cluster.MergeClusterStatus(obj)
+		err := s.Cluster.mergeClusterStatus(obj)
 		if err != nil {
 			return err
 		}
 	case *internal.ResizeInstruction:
-		err := s.Cluster.FollowResizeInstruction(obj)
+		err := s.Cluster.followResizeInstruction(obj)
 		if err != nil {
 			return err
 		}
 	case *internal.ResizeInstructionComplete:
-		err := s.Cluster.MarkResizeInstructionComplete(obj)
+		err := s.Cluster.markResizeInstructionComplete(obj)
 		if err != nil {
 			return err
 		}
 	case *internal.SetCoordinatorMessage:
-		s.Cluster.SetCoordinator(DecodeNode(obj.New))
+		s.Cluster.setCoordinator(DecodeNode(obj.New))
 	case *internal.UpdateCoordinatorMessage:
-		s.Cluster.UpdateCoordinator(DecodeNode(obj.New))
+		s.Cluster.updateCoordinator(DecodeNode(obj.New))
 	case *internal.NodeStateMessage:
-		err := s.Cluster.ReceiveNodeState(obj.NodeID, obj.State)
+		err := s.Cluster.receiveNodeState(obj.NodeID, obj.State)
 		if err != nil {
 			return err
 		}
@@ -553,7 +546,7 @@ func (s *Server) SendSync(pb proto.Message) error {
 
 // SendAsync represents an implementation of Broadcaster.
 func (s *Server) SendAsync(pb proto.Message) error {
-	return s.Gossiper.SendAsync(pb)
+	return ErrNotImplemented
 }
 
 // SendTo represents an implementation of Broadcaster.
@@ -657,7 +650,7 @@ func (s *Server) monitorDiagnostics() {
 	s.diagnostics.Logger = s.logger
 	s.diagnostics.SetVersion(Version)
 	s.diagnostics.Set("Host", s.URI.host)
-	s.diagnostics.Set("Cluster", strings.Join(s.Cluster.NodeIDs(), ","))
+	s.diagnostics.Set("Cluster", strings.Join(s.Cluster.nodeIDs(), ","))
 	s.diagnostics.Set("NumNodes", len(s.Cluster.Nodes))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
 	s.diagnostics.Set("NodeID", s.NodeID)
@@ -666,7 +659,7 @@ func (s *Server) monitorDiagnostics() {
 
 	// Flush the diagnostics metrics at startup, then on each tick interval
 	flush := func() {
-		openFiles, err := CountOpenFiles()
+		openFiles, err := countOpenFiles()
 		if err == nil {
 			s.diagnostics.Set("OpenFiles", openFiles)
 		}
@@ -723,7 +716,7 @@ func (s *Server) monitorRuntime() {
 		// Record the number of go routines.
 		s.Holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
 
-		openFiles, err := CountOpenFiles()
+		openFiles, err := countOpenFiles()
 		// Open File handles.
 		if err == nil {
 			s.Holder.Stats.Gauge("OpenFiles", float64(openFiles), 1.0)
@@ -739,8 +732,8 @@ func (s *Server) monitorRuntime() {
 	}
 }
 
-// CountOpenFiles on operating systems that support lsof.
-func CountOpenFiles() (int, error) {
+// countOpenFiles on operating systems that support lsof.
+func countOpenFiles() (int, error) {
 	switch runtime.GOOS {
 	case "darwin", "linux", "unix", "freebsd":
 		// -b option avoid kernel blocks
@@ -754,9 +747,9 @@ func CountOpenFiles() (int, error) {
 		return len(lines), nil
 	case "windows":
 		// TODO: count open file handles on windows
-		return 0, errors.New("CountOpenFiles() on Windows is not supported")
+		return 0, errors.New("countOpenFiles() on Windows is not supported")
 	default:
-		return 0, errors.New("CountOpenFiles() on this OS is not supported")
+		return 0, errors.New("countOpenFiles() on this OS is not supported")
 	}
 }
 

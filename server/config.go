@@ -61,7 +61,7 @@ type Config struct {
 	Handler struct {
 		// CORS Allowed Origins
 		AllowedOrigins []string `toml:"allowed-origins"`
-	}
+	} `toml:"handler"`
 
 	// TLS
 	TLS TLSConfig `toml:"tls"`
@@ -77,6 +77,11 @@ type Config struct {
 
 	// Gossip config is based around memberlist.Config.
 	Gossip gossip.Config `toml:"gossip"`
+
+	// Translation config supports translation store replication.
+	Translation struct {
+		PrimaryURL string `toml:"primary-url"`
+	}
 
 	AntiEntropy struct {
 		Interval toml.Duration `toml:"interval"`

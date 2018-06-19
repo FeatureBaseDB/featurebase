@@ -104,59 +104,35 @@ func (t *ClusterCluster) CreateIndex(name string) error {
 	return nil
 }
 
-func (t *ClusterCluster) CreateFrame(index, frame string, opt FrameOptions) error {
+func (t *ClusterCluster) CreateField(index, field string, opt FieldOptions) error {
 	for _, c := range t.Clusters {
 		idx, err := c.Holder.CreateIndexIfNotExists(index, IndexOptions{})
 		if err != nil {
 			return err
 		}
-		if _, err := idx.CreateFrame(frame, opt); err != nil {
+		if _, err := idx.CreateField(field, opt); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (t *ClusterCluster) SetBit(index, frame, view string, rowID, colID uint64, x *time.Time) error {
+func (t *ClusterCluster) SetBit(index, field, view string, rowID, colID uint64, x *time.Time) error {
 	// Determine which node should receive the SetBit.
 	c0 := t.Clusters[0] // use the first node's cluster to determine slice location.
 	slice := colID / SliceWidth
-	nodes := c0.SliceNodes(index, slice)
+	nodes := c0.sliceNodes(index, slice)
 
 	for _, node := range nodes {
 		c := t.clusterByID(node.ID)
 		if c == nil {
 			continue
 		}
-		f := c.Holder.Frame(index, frame)
+		f := c.Holder.Field(index, field)
 		if f == nil {
-			return fmt.Errorf("index/frame does not exist: %s/%s", index, frame)
+			return fmt.Errorf("index/field does not exist: %s/%s", index, field)
 		}
 		_, err := f.SetBit(view, rowID, colID, x)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (t *ClusterCluster) SetFieldValue(index, frame string, columnID uint64, name string, value int64) error {
-	// Determine which node should receive the SetFieldValue.
-	c0 := t.Clusters[0] // use the first node's cluster to determine slice location.
-	slice := columnID / SliceWidth
-	nodes := c0.SliceNodes(index, slice)
-
-	for _, node := range nodes {
-		c := t.clusterByID(node.ID)
-		if c == nil {
-			continue
-		}
-		f := c.Holder.Frame(index, frame)
-		if f == nil {
-			return fmt.Errorf("index/frame does not exist: %s/%s", index, frame)
-		}
-		_, err := f.SetFieldValue(columnID, name, value)
 		if err != nil {
 			return err
 		}
@@ -260,7 +236,7 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*Cluster, error) 
 	// add nodes
 	if saveTopology {
 		for _, n := range t.common.Nodes {
-			c.AddNode(n)
+			c.addNode(n)
 		}
 	}
 
@@ -297,13 +273,13 @@ func (t *ClusterCluster) SetState(state string) {
 // Open opens all clusters in the test cluster.
 func (t *ClusterCluster) Open() error {
 	for _, c := range t.Clusters {
-		if err := c.Open(); err != nil {
+		if err := c.open(); err != nil {
 			return err
 		}
 		if err := c.Holder.Open(); err != nil {
 			return err
 		}
-		if err := c.SetNodeState(NodeStateReady); err != nil {
+		if err := c.setNodeState(NodeStateReady); err != nil {
 			return err
 		}
 	}
@@ -312,7 +288,7 @@ func (t *ClusterCluster) Open() error {
 	if len(t.Clusters) == 0 {
 		return nil
 	}
-	t.Clusters[0].ListenForJoins()
+	t.Clusters[0].listenForJoins()
 
 	return nil
 }
@@ -320,7 +296,7 @@ func (t *ClusterCluster) Open() error {
 // Close closes all clusters in the test cluster.
 func (t *ClusterCluster) Close() error {
 	for _, c := range t.Clusters {
-		err := c.Close()
+		err := c.close()
 		if err != nil {
 			return err
 		}
@@ -334,7 +310,7 @@ func (t *ClusterCluster) SendSync(pb proto.Message) error {
 	case *internal.ClusterStatus:
 		// Apply the send message to all nodes (except the coordinator).
 		for _, c := range t.Clusters {
-			c.MergeClusterStatus(obj)
+			c.mergeClusterStatus(obj)
 		}
 		t.mu.RLock()
 		if obj.State == ClusterStateNormal && t.resizing {
@@ -361,7 +337,7 @@ func (t *ClusterCluster) SendTo(to *Node, pb proto.Message) error {
 		}
 	case *internal.ResizeInstructionComplete:
 		coord := t.clusterByID(to.ID)
-		go coord.MarkResizeInstructionComplete(obj)
+		go coord.markResizeInstructionComplete(obj)
 	}
 	return nil
 }
@@ -380,7 +356,7 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstructi
 	if err := func() error {
 
 		// figure out which node it was meant for, then call the operation on that cluster
-		// basically need to mimic this: client.RetrieveSliceFromURI(context.Background(), src.Index, src.Frame, src.View, src.Slice, srcURI)
+		// basically need to mimic this: client.RetrieveSliceFromURI(context.Background(), src.Index, src.Field, src.View, src.Slice, srcURI)
 		instrNode := DecodeNode(instr.Node)
 		destCluster := t.clusterByID(instrNode.ID)
 
@@ -393,11 +369,11 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstructi
 			srcNode := DecodeNode(src.Node)
 			srcCluster := t.clusterByID(srcNode.ID)
 
-			srcFragment := srcCluster.Holder.Fragment(src.Index, src.Frame, src.View, src.Slice)
-			destFragment := destCluster.Holder.Fragment(src.Index, src.Frame, src.View, src.Slice)
+			srcFragment := srcCluster.Holder.Fragment(src.Index, src.Field, src.View, src.Slice)
+			destFragment := destCluster.Holder.Fragment(src.Index, src.Field, src.View, src.Slice)
 			if destFragment == nil {
 				// Create fragment on destination if it doesn't exist.
-				f := destCluster.Holder.Frame(src.Index, src.Frame)
+				f := destCluster.Holder.Field(src.Index, src.Field)
 				v := f.View(src.View)
 				var err error
 				destFragment, err = v.CreateFragmentIfNotExists(src.Slice)

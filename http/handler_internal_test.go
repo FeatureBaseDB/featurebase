@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pilosa
+package http
 
 import (
 	"encoding/json"
 	"reflect"
 	"testing"
+
+	"github.com/pilosa/pilosa"
 )
 
 // Test custom UnmarshalJSON for postIndexRequest object
@@ -27,7 +29,7 @@ func TestPostIndexRequestUnmarshalJSON(t *testing.T) {
 		expected postIndexRequest
 		err      string
 	}{
-		{json: `{"options": {}}`, expected: postIndexRequest{Options: IndexOptions{}}},
+		{json: `{"options": {}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{}}},
 		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"option": {}}`, err: "Unknown key: option:map[]"},
 		{json: `{"options": {"badKey": "test"}}`, err: "Unknown key: badKey:test"},
@@ -55,23 +57,23 @@ func TestPostIndexRequestUnmarshalJSON(t *testing.T) {
 	}
 }
 
-// Test custom UnmarshalJSON for postFrameRequest object
-func TestPostFrameRequestUnmarshalJSON(t *testing.T) {
+// Test custom UnmarshalJSON for postFieldRequest object
+func TestPostFieldRequestUnmarshalJSON(t *testing.T) {
 	tests := []struct {
 		json     string
-		expected postFrameRequest
+		expected postFieldRequest
 		err      string
 	}{
-		{json: `{"options": {}}`, expected: postFrameRequest{Options: FrameOptions{}}},
+		{json: `{"options": {}}`, expected: postFieldRequest{Options: pilosa.FieldOptions{}}},
 		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"option": {}}`, err: "Unknown key: option:map[]"},
 		{json: `{"options": {"badKey": "test"}}`, err: "Unknown key: badKey:test"},
 		{json: `{"options": {"inverseEnabled": true}}`, err: "Unknown key: inverseEnabled:true"},
-		{json: `{"options": {"cacheType": "type"}}`, expected: postFrameRequest{Options: FrameOptions{CacheType: "type"}}},
+		{json: `{"options": {"cacheType": "type"}}`, expected: postFieldRequest{Options: pilosa.FieldOptions{CacheType: "type"}}},
 		{json: `{"options": {"inverse": true, "cacheType": "type"}}`, err: "Unknown key: inverse:true"},
 	}
 	for _, test := range tests {
-		actual := &postFrameRequest{}
+		actual := &postFieldRequest{}
 		err := json.Unmarshal([]byte(test.json), actual)
 		if err != nil {
 			if test.err == "" || test.err != err.Error() {

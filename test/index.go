@@ -73,20 +73,20 @@ func (i *Index) Reopen() error {
 	return nil
 }
 
-// CreateFrame creates a frame with the given options.
-func (i *Index) CreateFrame(name string, opt pilosa.FrameOptions) (*Frame, error) {
-	f, err := i.Index.CreateFrame(name, opt)
+// CreateField creates a field with the given options.
+func (i *Index) CreateField(name string, opt pilosa.FieldOptions) (*Field, error) {
+	f, err := i.Index.CreateField(name, opt)
 	if err != nil {
 		return nil, err
 	}
-	return &Frame{Frame: f}, nil
+	return &Field{Field: f}, nil
 }
 
-// CreateFrameIfNotExists creates a frame with the given options if it doesn't exist.
-func (i *Index) CreateFrameIfNotExists(name string, opt pilosa.FrameOptions) (*Frame, error) {
-	f, err := i.Index.CreateFrameIfNotExists(name, opt)
+// CreateFieldIfNotExists creates a field with the given options if it doesn't exist.
+func (i *Index) CreateFieldIfNotExists(name string, opt pilosa.FieldOptions) (*Field, error) {
+	f, err := i.Index.CreateFieldIfNotExists(name, opt)
 	if err != nil {
 		return nil, err
 	}
-	return &Frame{Frame: f}, nil
+	return &Field{Field: f}, nil
 }

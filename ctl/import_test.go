@@ -15,6 +15,7 @@
 package ctl
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"io"
@@ -38,11 +39,11 @@ func TestImportCommand_Validation(t *testing.T) {
 
 	cm.Index = "i"
 	err = cm.Run(context.Background())
-	if err != pilosa.ErrFrameRequired {
-		t.Fatalf("Command not working, expect: %s, actual: '%s'", pilosa.ErrFrameRequired, err)
+	if err != pilosa.ErrFieldRequired {
+		t.Fatalf("Command not working, expect: %s, actual: '%s'", pilosa.ErrFieldRequired, err)
 	}
 
-	cm.Frame = "f"
+	cm.Field = "f"
 	err = cm.Run(context.Background())
 	if err.Error() != "path required" {
 		t.Fatalf("Command not working, expect: %s, actual: '%s'", "path required", err)
@@ -72,7 +73,7 @@ func TestImportCommand_Run(t *testing.T) {
 	cm.Host = s.Host()
 
 	cm.Index = "i"
-	cm.Frame = "f"
+	cm.Field = "f"
 	cm.CreateSchema = true
 	cm.Paths = []string{file.Name()}
 	err = cm.Run(ctx)
@@ -81,8 +82,7 @@ func TestImportCommand_Run(t *testing.T) {
 	}
 }
 
-// Ensure that the ImportValue path runs (note: we have specified a value
-// for cm.Field.)
+// Ensure that the ImportValue path runs.
 func TestImportCommand_RunValue(t *testing.T) {
 
 	buf := bytes.Buffer{}
@@ -106,11 +106,10 @@ func TestImportCommand_RunValue(t *testing.T) {
 	cm.Host = s.Host()
 
 	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i", strings.NewReader("")))
-	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i/frame/f", strings.NewReader(`{"options":{"fields": [{"name": "foo", "type": "int", "min": 0, "max": 100}]}}`)))
+	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i/field/f", strings.NewReader(`{"options":{"type": "int", "min": 0, "max": 100}}`)))
 
 	cm.Index = "i"
-	cm.Frame = "f"
-	cm.Field = "foo"
+	cm.Field = "f"
 	cm.Paths = []string{file.Name()}
 	err = cm.Run(ctx)
 	if err != nil {
@@ -120,12 +119,21 @@ func TestImportCommand_RunValue(t *testing.T) {
 
 func TestImportCommand_InvalidFile(t *testing.T) {
 
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+	s := test.NewServer()
+	defer s.Close()
+
+	s.Handler.API.Cluster = test.NewCluster(1)
+	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
+	s.Handler.API.Holder = hldr.Holder
+
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewImportCommand(stdin, stdout, stderr)
-	cm.Host = "anyhost"
+	cm.Host = s.Host()
 	cm.Index = "i"
-	cm.Frame = "f"
+	cm.Field = "f"
 	file, err := ioutil.TempFile("", "import.csv")
 	file.Write([]byte("a,2\n3,5\n5,6"))
 	if err != nil {
@@ -179,4 +187,13 @@ func MustNewHTTPRequest(method, urlStr string, body io.Reader) *http.Request {
 		panic(err)
 	}
 	return req
+}
+
+// declare stdin, stdout, stderr
+func GetIO(buf bytes.Buffer) (io.Reader, io.Writer, io.Writer) {
+	rder := []byte{}
+	stdin := bytes.NewReader(rder)
+	stdout := bufio.NewWriter(&buf)
+	stderr := bufio.NewWriter(&buf)
+	return stdin, stdout, stderr
 }
