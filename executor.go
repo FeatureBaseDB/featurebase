@@ -50,6 +50,9 @@ type Executor struct {
 
 	// Maximum number of SetBit() or ClearBit() commands per request.
 	MaxWritesPerRequest int
+
+	// Stores key/id translation data.
+	TranslateStore TranslateStore
 }
 
 // ExecutorOption is a functional option type for pilosa.Executor
@@ -83,6 +86,11 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 		return nil, ErrIndexRequired
 	}
 
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	}
+
 	// Verify that the number of writes do not exceed the maximum.
 	if e.MaxWritesPerRequest > 0 && q.WriteCallN() > e.MaxWritesPerRequest {
 		return nil, ErrTooManyWrites
@@ -93,6 +101,29 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 		opt = &ExecOptions{}
 	}
 
+	// Translate query keys to ids, if necessary.
+	for i := range q.Calls {
+		if err := e.translateCall(index, idx, q.Calls[i]); err != nil {
+			return nil, err
+		}
+	}
+
+	results, err := e.execute(ctx, index, q, slices, opt)
+	if err != nil {
+		return nil, err
+	}
+
+	// Translate response objects from ids to keys, if necessary.
+	for i := range results {
+		results[i], err = e.translateResult(index, idx, q.Calls[i], results[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return results, nil
+}
+
+func (e *Executor) execute(ctx context.Context, index string, q *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error) {
 	// Don't bother calculating slices for query types that don't require it.
 	needsSlices := needsSlices(q.Calls)
 
@@ -995,17 +1026,17 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 		return false, fmt.Errorf("ClearBit col field '%v' required", columnLabel)
 	}
 
-	return e.executeClearBitView(ctx, index, c, f, ViewStandard, colID, rowID, opt)
+	return e.executeClearBitField(ctx, index, c, f, colID, rowID, opt)
 }
 
-// executeClearBitView executes a ClearBit() call for a single view.
-func (e *Executor) executeClearBitView(ctx context.Context, index string, c *pql.Call, f *Field, view string, colID, rowID uint64, opt *ExecOptions) (bool, error) {
+// executeClearBitField executes a ClearBit() call for a single view.
+func (e *Executor) executeClearBitField(ctx context.Context, index string, c *pql.Call, f *Field, colID, rowID uint64, opt *ExecOptions) (bool, error) {
 	slice := colID / SliceWidth
 	ret := false
 	for _, node := range e.Cluster.sliceNodes(index, slice) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
-			val, err := f.ClearBit(view, rowID, colID, nil)
+			val, err := f.ClearBit(rowID, colID, nil)
 			if err != nil {
 				return false, err
 			} else if val {
@@ -1070,18 +1101,18 @@ func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 		timestamp = &t
 	}
 
-	return e.executeSetBitView(ctx, index, c, f, ViewStandard, colID, rowID, timestamp, opt)
+	return e.executeSetBitField(ctx, index, c, f, colID, rowID, timestamp, opt)
 }
 
-// executeSetBitView executes a SetBit() call for a specific view.
-func (e *Executor) executeSetBitView(ctx context.Context, index string, c *pql.Call, f *Field, view string, colID, rowID uint64, timestamp *time.Time, opt *ExecOptions) (bool, error) {
+// executeSetBitField executes a SetBit() call for a specific view.
+func (e *Executor) executeSetBitField(ctx context.Context, index string, c *pql.Call, f *Field, colID, rowID uint64, timestamp *time.Time, opt *ExecOptions) (bool, error) {
 	slice := colID / SliceWidth
 	ret := false
 
 	for _, node := range e.Cluster.sliceNodes(index, slice) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
-			val, err := f.SetBit(view, rowID, colID, timestamp)
+			val, err := f.SetBit(rowID, colID, timestamp)
 			if err != nil {
 				return false, err
 			} else if val {
@@ -1559,6 +1590,78 @@ func (e *Executor) mapperLocal(ctx context.Context, slices []uint64, mapFn mapFu
 	}
 }
 
+func (e *Executor) translateCall(index string, idx *Index, c *pql.Call) error {
+	// Translate column key.
+	if idx.Keys() {
+		if value := callArgString(c, "col"); value != "" {
+			ids, err := e.TranslateStore.TranslateColumnsToUint64(index, []string{value})
+			if err != nil {
+				return err
+			}
+			c.Args["col"] = ids[0]
+		}
+	}
+
+	// Translate row key, if field is specified & key exists.
+	if fieldName := callArgString(c, "field"); fieldName != "" {
+		field := idx.Field(fieldName)
+		if field.Keys() {
+			if value := callArgString(c, "row"); value != "" {
+				ids, err := e.TranslateStore.TranslateRowsToUint64(index, fieldName, []string{value})
+				if err != nil {
+					return err
+				}
+				c.Args["row"] = ids[0]
+			}
+		}
+	}
+
+	// Translate child calls.
+	for _, child := range c.Children {
+		if err := e.translateCall(index, idx, child); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (e *Executor) translateResult(index string, idx *Index, call *pql.Call, result interface{}) (interface{}, error) {
+	switch result := result.(type) {
+	case *Row:
+		if idx.Keys() {
+			other := &Row{Attrs: result.Attrs}
+			for _, segment := range result.Segments() {
+				for _, col := range segment.Columns() {
+					key, err := e.TranslateStore.TranslateColumnToString(index, col)
+					if err != nil {
+						return nil, err
+					}
+					other.Keys = append(other.Keys, key)
+				}
+			}
+			return other, nil
+		}
+
+	case []Pair:
+		if fieldName := callArgString(call, "field"); fieldName != "" {
+			field := idx.Field(fieldName)
+			if field.Keys() {
+				other := make([]Pair, len(result))
+				for i := range result {
+					key, err := e.TranslateStore.TranslateRowToString(index, fieldName, result[i].ID)
+					if err != nil {
+						return nil, err
+					}
+					other[i] = Pair{Key: key, Count: result[i].Count}
+				}
+				return other, nil
+			}
+		}
+	}
+	return result, nil
+}
+
 // errSliceUnavailable is a marker error if no nodes are available.
 var errSliceUnavailable = errors.New("slice unavailable")
 
@@ -1669,4 +1772,13 @@ func (vc *ValCount) Larger(other ValCount) ValCount {
 		Val:   vc.Val,
 		Count: vc.Count,
 	}
+}
+
+func callArgString(call *pql.Call, key string) string {
+	value, ok := call.Args[key]
+	if !ok {
+		return ""
+	}
+	s, _ := value.(string)
+	return s
 }

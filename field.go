@@ -282,6 +282,7 @@ func (f *Field) loadMeta() error {
 	f.options.Min = pb.Min
 	f.options.Max = pb.Max
 	f.options.TimeQuantum = TimeQuantum(pb.TimeQuantum)
+	f.options.Keys = pb.Keys
 
 	return nil
 }
@@ -317,6 +318,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Min = 0
 		f.options.Max = 0
 		f.options.TimeQuantum = ""
+		f.options.Keys = opt.Keys
 	case FieldTypeInt:
 		f.options.Type = opt.Type
 		f.options.CacheType = CacheTypeNone
@@ -324,6 +326,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Min = opt.Min
 		f.options.Max = opt.Max
 		f.options.TimeQuantum = ""
+		f.options.Keys = opt.Keys
 
 		// Create new bsiGroup.
 		bsig := &bsiGroup{
@@ -345,6 +348,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.CacheSize = 0
 		f.options.Min = 0
 		f.options.Max = 0
+		f.options.Keys = opt.Keys
 		// Set the time quantum.
 		if err := f.SetTimeQuantum(opt.TimeQuantum); err != nil {
 			f.Close()
@@ -376,6 +380,13 @@ func (f *Field) Close() error {
 	f.views = make(map[string]*View)
 
 	return nil
+}
+
+// Keys returns true if the field uses string keys.
+func (f *Field) Keys() bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.options.Keys
 }
 
 // bsiGroup returns a bsiGroup by name.
@@ -643,14 +654,11 @@ func (f *Field) ViewRow(viewName string, rowID uint64) (*Row, error) {
 }
 
 // SetBit sets a bit on a view within the field.
-func (f *Field) SetBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
-	// Validate view name.
-	if !isValidView(name) {
-		return false, ErrInvalidView
-	}
+func (f *Field) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err error) {
+	viewName := ViewStandard
 
 	// Retrieve view. Exit if it doesn't exist.
-	view, err := f.CreateViewIfNotExists(name)
+	view, err := f.CreateViewIfNotExists(viewName)
 	if err != nil {
 		return changed, errors.Wrap(err, "creating view")
 	}
@@ -668,7 +676,7 @@ func (f *Field) SetBit(name string, rowID, colID uint64, t *time.Time) (changed 
 	}
 
 	// If a timestamp is specified then set bits across all views for the quantum.
-	for _, subname := range viewsByTime(name, *t, f.TimeQuantum()) {
+	for _, subname := range viewsByTime(viewName, *t, f.TimeQuantum()) {
 		view, err := f.CreateViewIfNotExists(subname)
 		if err != nil {
 			return changed, errors.Wrapf(err, "creating view %s", subname)
@@ -685,14 +693,11 @@ func (f *Field) SetBit(name string, rowID, colID uint64, t *time.Time) (changed 
 }
 
 // ClearBit clears a bit within the field.
-func (f *Field) ClearBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
-	// Validate view name.
-	if !isValidView(name) {
-		return false, ErrInvalidView
-	}
+func (f *Field) ClearBit(rowID, colID uint64, t *time.Time) (changed bool, err error) {
+	viewName := ViewStandard
 
 	// Retrieve view. Exit if it doesn't exist.
-	view, err := f.CreateViewIfNotExists(name)
+	view, err := f.CreateViewIfNotExists(viewName)
 	if err != nil {
 		return changed, errors.Wrap(err, "creating view")
 	}
@@ -710,7 +715,7 @@ func (f *Field) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 	}
 
 	// If a timestamp is specified then clear bits across all views for the quantum.
-	for _, subname := range viewsByTime(name, *t, f.TimeQuantum()) {
+	for _, subname := range viewsByTime(viewName, *t, f.TimeQuantum()) {
 		view, err := f.CreateViewIfNotExists(subname)
 		if err != nil {
 			return changed, errors.Wrapf(err, "creating view %s", subname)
@@ -1038,6 +1043,7 @@ type FieldOptions struct {
 	Min         int64       `json:"min,omitempty"`
 	Max         int64       `json:"max,omitempty"`
 	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
+	Keys        bool        `json:"keys,omitempty"`
 }
 
 // Validate ensures that FieldOption values are valid.
@@ -1075,6 +1081,7 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 		Min:         o.Min,
 		Max:         o.Max,
 		TimeQuantum: string(o.TimeQuantum),
+		Keys:        o.Keys,
 	}
 }
 
@@ -1089,6 +1096,7 @@ func decodeFieldOptions(options *internal.FieldOptions) *FieldOptions {
 		Min:         options.Min,
 		Max:         options.Max,
 		TimeQuantum: TimeQuantum(options.TimeQuantum),
+		Keys:        options.Keys,
 	}
 }
 

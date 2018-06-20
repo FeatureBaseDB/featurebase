@@ -910,7 +910,7 @@ func (c *Cluster) open() error {
 			Event: uint32(NodeJoin),
 			Node:  EncodeNode(c.Node),
 		}
-		if err := c.Broadcaster.SendAsync(msg); err != nil {
+		if err := c.Broadcaster.SendSync(msg); err != nil {
 			return fmt.Errorf("sending restart NodeJoin: %v", err)
 		}
 
@@ -1799,5 +1799,19 @@ func (c *Cluster) mergeClusterStatus(cs *internal.ClusterStatus) error {
 
 	c.markAsJoined()
 
+	return nil
+}
+
+func (c *Cluster) setStatic(hosts []string) error {
+	c.Static = true
+	c.Coordinator = c.Node.ID
+	for _, address := range hosts {
+		uri, err := NewURIFromAddress(address)
+		if err != nil {
+			return errors.Wrap(err, "getting URI")
+		}
+		c.Nodes = append(c.Nodes, &Node{URI: *uri})
+	}
+	c.MemberSet = NewStaticMemberSet(c.Nodes)
 	return nil
 }

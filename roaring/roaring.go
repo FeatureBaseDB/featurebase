@@ -93,6 +93,7 @@ type Containers interface {
 	// return the first container at or after key. found will be true if a
 	// container is found at key.
 	Iterator(key uint64) (citer ContainerIterator, found bool)
+	Count() uint64
 }
 
 type ContainerIterator interface {
@@ -218,12 +219,7 @@ func (b *Bitmap) Max() uint64 {
 
 // Count returns the number of bits set in the bitmap.
 func (b *Bitmap) Count() (n uint64) {
-	citer, _ := b.Containers.Iterator(0)
-	for citer.Next() {
-		_, c := citer.Value()
-		n += uint64(c.n)
-	}
-	return n
+	return b.Containers.Count()
 }
 
 // CountRange returns the number of bits set between [start, end).
@@ -1028,6 +1024,11 @@ func NewContainer() *Container {
 // Mapped returns true if the container is mapped directly to a byte slice
 func (c *Container) Mapped() bool {
 	return c.mapped
+}
+
+// N returns the cached bit count of the container
+func (c *Container) N() int {
+	return c.n
 }
 
 // Update updates the container

@@ -121,6 +121,16 @@ func (btc *BTreeContainers) GetOrCreate(key uint64) *roaring.Container {
 	return btc.lastContainer
 }
 
+func (btc *BTreeContainers) Count() (n uint64) {
+	e, _ := btc.tree.Seek(0)
+	_, c, err := e.Next()
+	for err != io.EOF {
+		n += uint64(c.N())
+		_, c, err = e.Next()
+	}
+	return
+}
+
 func (btc *BTreeContainers) Clone() roaring.Containers {
 	nbtc := NewBTreeContainers()
 

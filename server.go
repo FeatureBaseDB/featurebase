@@ -52,16 +52,18 @@ type Server struct {
 	closing chan struct{}
 
 	// Internal
-	Holder      *Holder
-	Cluster     *Cluster
-	diagnostics *DiagnosticsCollector
-	executor    *Executor
+	Holder          *Holder
+	Cluster         *Cluster
+	TranslateFile   *TranslateFile
+	diagnostics     *DiagnosticsCollector
+	executor        *Executor
+	hosts           []string
+	clusterDisabled bool
 
 	// External
 	handler           Handler
 	Broadcaster       Broadcaster
 	BroadcastReceiver BroadcastReceiver
-	Gossiper          Gossiper
 	systemInfo        SystemInfo
 	gcNotifier        GCNotifier
 	NewAttrStore      func(string) AttrStore
@@ -74,6 +76,8 @@ type Server struct {
 	metricInterval      time.Duration
 	diagnosticInterval  time.Duration
 	maxWritesPerRequest int
+
+	primaryTranslateStore TranslateStore
 
 	defaultClient InternalClient
 	dataDir       string
@@ -169,6 +173,13 @@ func OptServerInternalClient(c InternalClient) ServerOption {
 	}
 }
 
+func OptServerPrimaryTranslateStore(store TranslateStore) ServerOption {
+	return func(s *Server) error {
+		s.primaryTranslateStore = store
+		return nil
+	}
+}
+
 func OptServerStatsClient(sc StatsClient) ServerOption {
 	return func(s *Server) error {
 		s.Holder.Stats = sc
@@ -194,6 +205,16 @@ func OptServerListener(ln net.Listener) ServerOption {
 func OptServerURI(uri *URI) ServerOption {
 	return func(s *Server) error {
 		s.URI = *uri
+		return nil
+	}
+}
+
+// OptClusterDisabled tells the server whether to use a static cluster with the
+// defined hosts. Mostly used for testing.
+func OptServerClusterDisabled(disabled bool, hosts []string) ServerOption {
+	return func(s *Server) error {
+		s.hosts = hosts
+		s.clusterDisabled = disabled
 		return nil
 	}
 }
@@ -241,11 +262,20 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.Cluster.Logger = s.logger
 	s.Cluster.Holder = s.Holder
 
+	// Initialize translation database.
+	s.TranslateFile = NewTranslateFile()
+	s.TranslateFile.Path = filepath.Join(path, "keys")
+	s.TranslateFile.PrimaryTranslateStore = s.primaryTranslateStore
+	if err := s.TranslateFile.Open(); err != nil {
+		return nil, err
+	}
+
 	// update URI port with actual listener port. TODO this should probably be done outside of here.
 	if s.URI.Port() == 0 {
 		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
 	}
 
+	// Get or create NodeID.
 	s.NodeID = s.LoadNodeID()
 	// Set Cluster Node.
 	node := &Node{
@@ -254,13 +284,23 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		IsCoordinator: s.Cluster.Coordinator == s.NodeID,
 	}
 	s.Cluster.Node = node
+	if s.clusterDisabled {
+		err := s.Cluster.setStatic(s.hosts)
+		if err != nil {
+			return nil, errors.Wrap(err, "setting cluster static")
+		}
+	}
+
+	// Append the NodeID tag to stats.
 	s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%s", s.NodeID))
 
 	s.executor.Holder = s.Holder
 	s.executor.Node = node
 	s.executor.Cluster = s.Cluster
+	s.executor.TranslateStore = s.TranslateFile
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
 	s.handler.GetAPI().Executor = s.executor
+	s.handler.GetAPI().TranslateStore = s.TranslateFile
 
 	return s, nil
 }
@@ -268,9 +308,8 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 // Open opens and initializes the server.
 func (s *Server) Open() error {
 	s.logger.Printf("open server")
-	// s.ln can be configured prior to Open() via s.OpenListener().
 	if s.ln == nil {
-		return errors.New("Must pass a listener option to NewServer")
+		return errors.New("must pass a listener option to NewServer")
 	}
 
 	// Log startup
@@ -278,14 +317,6 @@ func (s *Server) Open() error {
 	if err != nil {
 		log.Println(errors.Wrap(err, "logging startup"))
 	}
-
-	// Get or create NodeID.
-
-	// Append the NodeID tag to stats.
-
-	// Create default HTTP client
-
-	// Create executor for executing queries.
 
 	// Cluster settings.
 	s.Cluster.Broadcaster = s.Broadcaster
@@ -353,6 +384,9 @@ func (s *Server) Close() error {
 	}
 	if s.Holder != nil {
 		s.Holder.Close()
+	}
+	if s.TranslateFile != nil {
+		s.TranslateFile.Close()
 	}
 
 	return nil
@@ -524,7 +558,7 @@ func (s *Server) SendSync(pb proto.Message) error {
 
 // SendAsync represents an implementation of Broadcaster.
 func (s *Server) SendAsync(pb proto.Message) error {
-	return s.Gossiper.SendAsync(pb)
+	return ErrNotImplemented
 }
 
 // SendTo represents an implementation of Broadcaster.

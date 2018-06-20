@@ -237,13 +237,13 @@ func (v *View) createFragmentIfNotExists(slice uint64) (*Fragment, error) {
 		v.maxSlice = slice
 
 		// Send the create slice message to all nodes.
-		err := v.broadcaster.SendAsync(
+		err := v.broadcaster.SendSync(
 			&internal.CreateSliceMessage{
 				Index: v.index,
 				Slice: slice,
 			})
 		if err != nil {
-			return nil, errors.Wrap(err, "sending message")
+			return nil, errors.Wrap(err, "sending createslice message")
 		}
 	}
 

@@ -78,6 +78,11 @@ type Config struct {
 	// Gossip config is based around memberlist.Config.
 	Gossip gossip.Config `toml:"gossip"`
 
+	// Translation config supports translation store replication.
+	Translation struct {
+		PrimaryURL string `toml:"primary-url"`
+	}
+
 	AntiEntropy struct {
 		Interval toml.Duration `toml:"interval"`
 	} `toml:"anti-entropy"`

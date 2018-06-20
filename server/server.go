@@ -217,6 +217,12 @@ func (m *Command) SetupServer() error {
 
 	c := http.GetHTTPClient(TLSConfig)
 
+	// Setup connection to primary store if this is a replica.
+	var primaryTranslateStore pilosa.TranslateStore
+	if m.Config.Translation.PrimaryURL != "" {
+		primaryTranslateStore = http.NewTranslateStore(m.Config.Translation.PrimaryURL)
+	}
+
 	m.Server, err = pilosa.NewServer(
 		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
 		pilosa.OptServerLongQueryTime(time.Duration(m.Config.Cluster.LongQueryTime)),
@@ -235,6 +241,8 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerListener(ln),
 		pilosa.OptServerURI(uri),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
+		pilosa.OptServerPrimaryTranslateStore(primaryTranslateStore),
+		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
 	)
 
 	return errors.Wrap(err, "new server")
@@ -242,26 +250,7 @@ func (m *Command) SetupServer() error {
 
 // SetupNetworking sets up internode communication based on the configuration.
 func (m *Command) SetupNetworking() error {
-
-	m.Server.NodeID = m.Server.LoadNodeID()
-
 	if m.Config.Cluster.Disabled {
-		m.Server.Cluster.Static = true
-		m.Server.Cluster.Coordinator = m.Server.NodeID
-		for _, address := range m.Config.Cluster.Hosts {
-			uri, err := pilosa.NewURIFromAddress(address)
-			if err != nil {
-				return errors.Wrap(err, "getting URI")
-			}
-			m.Server.Cluster.Nodes = append(m.Server.Cluster.Nodes, &pilosa.Node{
-				URI: *uri,
-			})
-		}
-
-		m.Server.Broadcaster = pilosa.NopBroadcaster
-		m.Server.Cluster.MemberSet = pilosa.NewStaticMemberSet(m.Server.Cluster.Nodes)
-		m.Server.BroadcastReceiver = pilosa.NopBroadcastReceiver
-		m.Server.Gossiper = pilosa.NopGossiper
 		return nil
 	}
 
@@ -306,7 +295,6 @@ func (m *Command) SetupNetworking() error {
 	m.Server.Cluster.MemberSet = gossipMemberSet
 	m.Server.Broadcaster = m.Server
 	m.Server.BroadcastReceiver = gossipMemberSet
-	m.Server.Gossiper = gossipMemberSet
 	return nil
 }
 

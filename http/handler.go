@@ -203,6 +203,8 @@ func NewRouter(handler *Handler) *mux.Router {
 	// For now we just do it for the most commonly used handler, /query
 	router.HandleFunc("/index/{index}/query", handler.methodNotAllowedHandler).Methods("GET")
 
+	router.HandleFunc("/translate/data", handler.handleGetTranslateData).Methods("GET")
+
 	router.Use(handler.queryArgValidator)
 	return router
 }
@@ -350,21 +352,15 @@ func (h *Handler) handleGetIndexes(w http.ResponseWriter, r *http.Request) {
 // handleGetIndex handles GET /index/<indexname> requests.
 func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
-	index, err := h.API.Index(r.Context(), indexName)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
+	for _, idx := range h.API.Schema(r.Context()) {
+		if idx.Name == indexName {
+			if err := json.NewEncoder(w).Encode(idx); err != nil {
+				h.Logger.Printf("write response error: %s", err)
+			}
+			return
+		}
 	}
-
-	if err := json.NewEncoder(w).Encode(getIndexResponse{
-		map[string]string{"name": index.Name()},
-	}); err != nil {
-		h.Logger.Printf("write response error: %s", err)
-	}
-}
-
-type getIndexResponse struct {
-	Index map[string]string `json:"index"`
+	http.Error(w, fmt.Sprintf("Index %s Not Found", indexName), http.StatusNotFound)
 }
 
 type postIndexRequest struct {
@@ -1183,6 +1179,56 @@ func (h *Handler) GetAPI() *pilosa.API {
 }
 
 type defaultClusterMessageResponse struct{}
+
+// TranslateStoreBufferSize is the buffer size used for streaming data.
+const TranslateStoreBufferSize = 65536
+
+func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	offset, _ := strconv.ParseInt(q.Get("offset"), 10, 64)
+
+	rc, err := h.API.TranslateStore.Reader(r.Context(), offset)
+	if err == pilosa.ErrNotImplemented {
+		http.Error(w, err.Error(), http.StatusNotImplemented)
+		return
+	} else if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rc.Close()
+
+	// Ensure reader is closed when the client disconnects.
+	go func() { <-r.Context().Done(); rc.Close() }()
+
+	// Flush header so client can continue.
+	w.WriteHeader(http.StatusOK)
+	if w, ok := w.(http.Flusher); ok {
+		w.Flush()
+	}
+
+	// Copy from reader to client until store or client disconnect.
+	buf := make([]byte, TranslateStoreBufferSize)
+	for {
+		// Read from store.
+		n, err := rc.Read(buf)
+		if err == io.EOF {
+			return
+		} else if err != nil {
+			h.Logger.Printf("http: translate store read error: %s", err)
+			return
+		} else if n == 0 {
+			continue
+		}
+
+		// Write to response & flush.
+		if _, err := w.Write(buf[:n]); err != nil {
+			h.Logger.Printf("http: translate store response write error: %s", err)
+			return
+		} else if w, ok := w.(http.Flusher); ok {
+			w.Flush()
+		}
+	}
+}
 
 type queryValidationSpec struct {
 	required []string
