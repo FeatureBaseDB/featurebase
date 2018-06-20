@@ -148,6 +148,7 @@ func MustParseURLHost(rawurl string) string {
 // MustNewHTTPRequest creates a new HTTP request. Panic on error.
 func MustNewHTTPRequest(method, urlStr string, body io.Reader) *gohttp.Request {
 	req, err := gohttp.NewRequest(method, urlStr, body)
+	req.Header.Add("Accept", "application/json")
 	if err != nil {
 		panic(err)
 	}
