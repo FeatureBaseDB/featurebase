@@ -1010,6 +1010,9 @@ func (c *Cluster) handleNodeAction(nodeAction nodeAction) error {
 
 func (c *Cluster) setStateAndBroadcast(state string) error {
 	c.SetState(state)
+	if c.Static {
+		return nil
+	}
 	// Broadcast cluster status changes to the cluster.
 	c.Logger.Printf("broadcasting ClusterStatus: %s", state)
 	return c.Broadcaster.SendSync(c.Status())
