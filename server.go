@@ -54,7 +54,7 @@ type Server struct {
 	// Internal
 	holder          *Holder
 	Cluster         *Cluster
-	TranslateFile   *TranslateFile
+	translateFile   *TranslateFile
 	diagnostics     *DiagnosticsCollector
 	executor        *Executor
 	hosts           []string
@@ -259,10 +259,10 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.Cluster.Holder = s.holder
 
 	// Initialize translation database.
-	s.TranslateFile = NewTranslateFile()
-	s.TranslateFile.Path = filepath.Join(path, "keys")
-	s.TranslateFile.PrimaryTranslateStore = s.primaryTranslateStore
-	if err := s.TranslateFile.Open(); err != nil {
+	s.translateFile = NewTranslateFile()
+	s.translateFile.Path = filepath.Join(path, "keys")
+	s.translateFile.PrimaryTranslateStore = s.primaryTranslateStore
+	if err := s.translateFile.Open(); err != nil {
 		return nil, err
 	}
 
@@ -293,10 +293,10 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.executor.Holder = s.holder
 	s.executor.Node = node
 	s.executor.Cluster = s.Cluster
-	s.executor.TranslateStore = s.TranslateFile
+	s.executor.TranslateStore = s.translateFile
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
 	s.handler.GetAPI().Executor = s.executor
-	s.handler.GetAPI().TranslateStore = s.TranslateFile
+	s.handler.GetAPI().TranslateStore = s.translateFile
 
 	return s, nil
 }
@@ -381,8 +381,8 @@ func (s *Server) Close() error {
 	if s.holder != nil {
 		s.holder.Close()
 	}
-	if s.TranslateFile != nil {
-		s.TranslateFile.Close()
+	if s.translateFile != nil {
+		s.translateFile.Close()
 	}
 
 	return nil
