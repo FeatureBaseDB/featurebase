@@ -43,7 +43,7 @@ func TestNewCluster(t *testing.T) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		panic(err)
+		t.Fatalf("sending request: %v", err)
 	}
 	defer resp.Body.Close()
 
