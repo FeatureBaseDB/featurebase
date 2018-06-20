@@ -62,7 +62,6 @@ type Server struct {
 
 	// External
 	handler           Handler
-	Broadcaster       Broadcaster
 	BroadcastReceiver BroadcastReceiver
 	systemInfo        SystemInfo
 	gcNotifier        GCNotifier
@@ -223,7 +222,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		closing:           make(chan struct{}),
 		Cluster:           NewCluster(),
 		holder:            NewHolder(),
-		Broadcaster:       NopBroadcaster,
 		BroadcastReceiver: NopBroadcastReceiver,
 		diagnostics:       NewDiagnosticsCollector(DefaultDiagnosticServer),
 		systemInfo:        NewNopSystemInfo(),
@@ -315,19 +313,19 @@ func (s *Server) Open() error {
 	}
 
 	// Cluster settings.
-	s.Cluster.Broadcaster = s.Broadcaster
+	s.Cluster.Broadcaster = s
 	s.Cluster.MaxWritesPerRequest = s.maxWritesPerRequest
 
 	// Initialize HTTP handler.
 	api := s.handler.GetAPI()
 	api.Holder = s.holder
-	api.Broadcaster = s.Broadcaster
+	api.Broadcaster = s
 	api.BroadcastHandler = s
 	api.StatusHandler = s
 	api.Cluster = s.Cluster
 
 	// Initialize Holder.
-	s.holder.Broadcaster = s.Broadcaster
+	s.holder.Broadcaster = s
 
 	// Serve handler.
 	go s.handler.Serve(s.ln, s.closing)
