@@ -242,6 +242,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerURI(uri),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 		pilosa.OptServerPrimaryTranslateStore(primaryTranslateStore),
+		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
 	)
 
 	return errors.Wrap(err, "new server")
@@ -250,19 +251,6 @@ func (m *Command) SetupServer() error {
 // SetupNetworking sets up internode communication based on the configuration.
 func (m *Command) SetupNetworking() error {
 	if m.Config.Cluster.Disabled {
-		m.Server.Cluster.Static = true
-		m.Server.Cluster.Coordinator = m.Server.NodeID
-		for _, address := range m.Config.Cluster.Hosts {
-			uri, err := pilosa.NewURIFromAddress(address)
-			if err != nil {
-				return errors.Wrap(err, "getting URI")
-			}
-			m.Server.Cluster.Nodes = append(m.Server.Cluster.Nodes, &pilosa.Node{
-				URI: *uri,
-			})
-		}
-
-		m.Server.Cluster.MemberSet = pilosa.NewStaticMemberSet(m.Server.Cluster.Nodes)
 		return nil
 	}
 
