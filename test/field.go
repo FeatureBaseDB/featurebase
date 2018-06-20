@@ -18,7 +18,6 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/pilosa/pilosa"
 )
@@ -73,15 +72,6 @@ func (f *Field) Reopen() error {
 		return err
 	}
 	return nil
-}
-
-// MustSetBit sets a bit on the field. Panic on error.
-func (f *Field) MustSetBit(view string, rowID, columnID uint64, t *time.Time) (changed bool) {
-	changed, err := f.SetBit(view, rowID, columnID, t)
-	if err != nil {
-		panic(err)
-	}
-	return changed
 }
 
 // Ensure field can set its cache
