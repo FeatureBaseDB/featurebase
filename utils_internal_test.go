@@ -150,11 +150,11 @@ func (t *ClusterCluster) clusterByID(id string) *Cluster {
 	return nil
 }
 
-// AddNode adds a node to the cluster and (potentially) starts a resize job.
-func (t *ClusterCluster) addNode(saveTopology bool) error {
+// addNode adds a node to the cluster and (potentially) starts a resize job.
+func (t *ClusterCluster) addNode() error {
 	id := len(t.Clusters)
 
-	c, err := t.addCluster(id, saveTopology)
+	c, err := t.addCluster(id, false)
 	if err != nil {
 		return err
 	}
