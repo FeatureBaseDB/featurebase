@@ -259,7 +259,6 @@ func (h *Handler) handleHome(w http.ResponseWriter, r *http.Request) {
 }
 
 func checkHeaderAcceptJSON(header http.Header) bool {
-
 	v, found := header["Accept"]
 	sendError := false
 	if found {
@@ -270,10 +269,8 @@ func checkHeaderAcceptJSON(header http.Header) bool {
 
 			}
 		}
-
 	}
 	return sendError
-
 }
 
 // handleGetSchema handles GET /schema requests.
