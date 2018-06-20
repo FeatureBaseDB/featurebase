@@ -293,7 +293,6 @@ func (m *Command) SetupNetworking() error {
 	}
 	gossipMemberSet.Logger = m.logger
 	m.Server.Cluster.MemberSet = gossipMemberSet
-	m.Server.Broadcaster = m.Server
 	m.Server.BroadcastReceiver = gossipMemberSet
 	return nil
 }
