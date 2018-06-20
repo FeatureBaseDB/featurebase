@@ -750,11 +750,17 @@ func TestHandler_Index_AttrStore_Diff(t *testing.T) {
 	blks[1].Checksum = []byte("MISMATCHED_CHECKSUM")
 
 	// Send block checksums to determine diff.
-	resp, err := gohttp.Post(
+	req, err := gohttp.NewRequest(
+		"POST",
 		s.URL+"/index/i/attr/diff",
-		"application/json",
 		strings.NewReader(`{"blocks":`+string(test.MustMarshalJSON(blks))+`}`),
 	)
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	client := &gohttp.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -800,11 +806,17 @@ func TestHandler_Field_AttrStore_Diff(t *testing.T) {
 	blks[1].Checksum = []byte("MISMATCHED_CHECKSUM")
 
 	// Send block checksums to determine diff.
-	resp, err := gohttp.Post(
+	req, err := gohttp.NewRequest(
+		"POST",
 		s.URL+"/index/i/field/meta/attr/diff",
-		"application/json",
 		strings.NewReader(`{"blocks":`+string(test.MustMarshalJSON(blks))+`}`),
 	)
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	client := &gohttp.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -164,11 +164,12 @@ func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
 func NewRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
 	router.HandleFunc("/", handler.handleHome).Methods("GET")
-	router.HandleFunc("/cluster/message", handler.handlePostClusterMessage).Methods("POST")
-	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
+
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
+	router.HandleFunc("/cluster/message", handler.handlePostClusterMessage).Methods("POST")
+	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST")
 	router.HandleFunc("/slices/max", handler.handleGetSlicesMax).Methods("GET") // TODO: deprecate, but it's being used by the client
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
 	router.HandleFunc("/info", handler.handleGetInfo).Methods("GET")
@@ -259,6 +260,11 @@ func (h *Handler) handleHome(w http.ResponseWriter, r *http.Request) {
 
 // handleGetSchema handles GET /schema requests.
 func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
 	schema := h.API.Schema(r.Context())
 	if err := json.NewEncoder(w).Encode(getSchemaResponse{
 		Indexes: schema,
@@ -269,6 +275,10 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 
 // handleGetStatus handles GET /status requests.
 func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
 	status := getStatusResponse{
 		State:   h.API.State(),
 		Nodes:   h.API.Hosts(r.Context()),
@@ -280,6 +290,10 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleGetInfo(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
 	info := h.API.Info()
 	if err := json.NewEncoder(w).Encode(info); err != nil {
 		h.Logger.Printf("write info response error: %s", err)
@@ -333,6 +347,10 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 
 // handleGetSlicesMax handles GET /schema requests.
 func (h *Handler) handleGetSlicesMax(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
 	if err := json.NewEncoder(w).Encode(getSlicesMaxResponse{
 		Standard: h.API.MaxSlices(r.Context()),
 	}); err != nil {
@@ -351,6 +369,10 @@ func (h *Handler) handleGetIndexes(w http.ResponseWriter, r *http.Request) {
 
 // handleGetIndex handles GET /index/<indexname> requests.
 func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
 	indexName := mux.Vars(r)["index"]
 	for _, idx := range h.API.Schema(r.Context()) {
 		if idx.Name == indexName {
@@ -429,6 +451,10 @@ type postIndexResponse struct{}
 
 // handleDeleteIndex handles DELETE /index request.
 func (h *Handler) handleDeleteIndex(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
 	indexName := mux.Vars(r)["index"]
 	err := h.API.DeleteIndex(r.Context(), indexName)
 	if err != nil {
@@ -447,6 +473,10 @@ type deleteIndexResponse struct{}
 
 // handlePostIndex handles POST /index request.
 func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
 	indexName := mux.Vars(r)["index"]
 
 	// Decode request.
@@ -477,6 +507,10 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 
 // handlePostIndexAttrDiff handles POST /index/attr/diff requests.
 func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
 	indexName := mux.Vars(r)["index"]
 
 	// Decode request.
@@ -514,6 +548,10 @@ type postIndexAttrDiffResponse struct {
 
 // handlePostField handles POST /field request.
 func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
 	indexName := mux.Vars(r)["index"]
 	fieldName := mux.Vars(r)["field"]
 
@@ -592,6 +630,11 @@ type postFieldResponse struct{}
 
 // handleDeleteField handles DELETE /field request.
 func (h *Handler) handleDeleteField(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
 	indexName := mux.Vars(r)["index"]
 	fieldName := mux.Vars(r)["field"]
 
@@ -617,6 +660,10 @@ type deleteFieldResponse struct{}
 
 // handlePostFieldAttrDiff handles POST /field/attr/diff requests.
 func (h *Handler) handlePostFieldAttrDiff(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
 	indexName := mux.Vars(r)["index"]
 	fieldName := mux.Vars(r)["field"]
 
@@ -872,6 +919,10 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 
 // handleGetFragmentNodes handles /fragment/nodes requests.
 func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
 	q := r.URL.Query()
 	index := q.Get("index")
 
@@ -917,6 +968,10 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 
 // handleGetFragmentBlocks handles GET /fragment/blocks requests.
 func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
 	// Read slice parameter.
 	q := r.URL.Query()
 	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
@@ -949,6 +1004,10 @@ type getFragmentBlocksResponse struct {
 
 // handleGetVersion handles /version requests.
 func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
 	err := json.NewEncoder(w).Encode(struct {
 		Version string `json:"version"`
 	}{
@@ -1047,6 +1106,10 @@ func errorString(err error) string {
 }
 
 func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
 	// Decode request.
 	var req setCoordinatorRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -1084,6 +1147,10 @@ type setCoordinatorResponse struct {
 
 // handlePostClusterResizeRemoveNode handles POST /cluster/resize/remove-node request.
 func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
 	// Decode request.
 	var req removeNodeRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -1120,6 +1187,10 @@ type removeNodeResponse struct {
 
 // handlePostClusterResizeAbort handles POST /cluster/resize/abort request.
 func (h *Handler) handlePostClusterResizeAbort(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
 	err := h.API.ResizeAbort()
 	var msg string
 	if err != nil {
@@ -1157,6 +1228,10 @@ func (h *Handler) handleRecalculateCaches(w http.ResponseWriter, r *http.Request
 }
 
 func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.Header.Get("Accept"), "application/json") {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
 	// Verify that request is only communicating over protobufs.
 	if r.Header.Get("Content-Type") != "application/x-protobuf" {
 		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
