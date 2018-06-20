@@ -65,10 +65,10 @@ type Command struct {
 	// Standard input/output
 	*pilosa.CmdIO
 
-	// Started will be closed once Command.Run is finished.
+	// Started will be closed once Command.Start is finished.
 	Started chan struct{}
-	// Done will be closed when Command.Close() is called
-	Done chan struct{}
+	// done will be closed when Command.Close() is called
+	done chan struct{}
 
 	// Passed to the Gossip implementation.
 	logOutput io.Writer
@@ -83,7 +83,7 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer) *Command {
 		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
 
 		Started: make(chan struct{}),
-		Done:    make(chan struct{}),
+		done:    make(chan struct{}),
 	}
 }
 
@@ -125,7 +125,7 @@ func (m *Command) Wait() error {
 		// Second signal causes a hard shutdown.
 		go func() { <-c; os.Exit(1) }()
 		return errors.Wrap(m.Close(), "closing command")
-	case <-m.Done:
+	case <-m.done:
 		m.logger.Printf("Server closed externally")
 		return nil
 	}
@@ -305,7 +305,7 @@ func (m *Command) Close() error {
 	if closer, ok := m.logOutput.(io.Closer); ok {
 		logErr = closer.Close()
 	}
-	close(m.Done)
+	close(m.done)
 	if serveErr != nil && logErr != nil {
 		return fmt.Errorf("closing server: '%v', closing logs: '%v'", serveErr, logErr)
 	} else if logErr != nil {

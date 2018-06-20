@@ -222,7 +222,7 @@ func (d *DiagnosticsCollector) EnrichWithSchemaProperties() {
 	bsiFieldCount := 0
 	timeQuantumEnabled := false
 
-	for _, index := range d.server.Holder.Indexes() {
+	for _, index := range d.server.holder.Indexes() {
 		numSlices += index.MaxSlice() + 1
 		numIndexes += 1
 		for _, field := range index.Fields() {
