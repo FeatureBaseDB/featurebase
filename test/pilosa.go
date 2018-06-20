@@ -164,8 +164,7 @@ func (m *Main) Reopen() error {
 		return errors.Wrap(err, "setting up server")
 	}
 
-	m.Server.NewAttrStore = boltdb.NewAttrStore
-	m.Server.Holder.NewAttrStore = m.Server.NewAttrStore
+	m.Server.Holder.NewAttrStore = boltdb.NewAttrStore
 
 	// Run new program.
 	if err := m.Start(); err != nil {

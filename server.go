@@ -66,7 +66,6 @@ type Server struct {
 	BroadcastReceiver BroadcastReceiver
 	systemInfo        SystemInfo
 	gcNotifier        GCNotifier
-	NewAttrStore      func(string) AttrStore
 	logger            Logger
 	ln                net.Listener
 
@@ -109,7 +108,6 @@ func OptServerDataDir(dir string) ServerOption {
 
 func OptServerAttrStoreFunc(af func(string) AttrStore) ServerOption {
 	return func(s *Server) error {
-		s.NewAttrStore = af
 		s.Holder.NewAttrStore = af
 		return nil
 	}
@@ -231,8 +229,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		systemInfo:        NewNopSystemInfo(),
 
 		gcNotifier: NopGCNotifier,
-
-		NewAttrStore: NewNopAttrStore,
 
 		antiEntropyInterval: time.Minute * 10,
 		metricInterval:      0,
