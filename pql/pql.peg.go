@@ -391,7 +391,7 @@ func (p *PQL) Execute() {
 		case ruleAction3:
 			p.endCall()
 		case ruleAction4:
-			p.startCall("SetColAttrs")
+			p.startCall("SetColumnAttrs")
 		case ruleAction5:
 			p.endCall()
 		case ruleAction6:
@@ -579,7 +579,7 @@ func (p *PQL) Init() {
 			position, tokenIndex = position0, tokenIndex0
 			return false
 		},
-		/* 1 Call <- <(('S' 'e' 't' Action0 open uintcol comma args (comma timestamp)? close Action1) / ('S' 'e' 't' 'R' 'o' 'w' 'A' 't' 't' 'r' 's' Action2 open posfield comma uintrow comma args close Action3) / ('S' 'e' 't' 'C' 'o' 'l' 'A' 't' 't' 'r' 's' Action4 open posfield comma uintcol comma args close Action5) / ('C' 'l' 'e' 'a' 'r' Action6 open uintcol comma args close Action7) / ('T' 'o' 'p' 'N' Action8 open posfield (comma allargs)? close Action9) / ('R' 'a' 'n' 'g' 'e' Action10 open (timerange / conditional / arg) close Action11) / (<IDENT> Action12 open allargs comma? close Action13))> */
+		/* 1 Call <- <(('S' 'e' 't' Action0 open uintcol comma args (comma timestamp)? close Action1) / ('S' 'e' 't' 'R' 'o' 'w' 'A' 't' 't' 'r' 's' Action2 open posfield comma uintrow comma args close Action3) / ('S' 'e' 't' 'C' 'o' 'l' 'u' 'm' 'n' 'A' 't' 't' 'r' 's' Action4 open posfield comma uintcol comma args close Action5) / ('C' 'l' 'e' 'a' 'r' Action6 open uintcol comma args close Action7) / ('T' 'o' 'p' 'N' Action8 open posfield (comma allargs)? close Action9) / ('R' 'a' 'n' 'g' 'e' Action10 open (timerange / conditional / arg) close Action11) / (<IDENT> Action12 open allargs comma? close Action13))> */
 		func() bool {
 			position5, tokenIndex5 := position, tokenIndex
 			{
@@ -752,6 +752,18 @@ func (p *PQL) Init() {
 					}
 					position++
 					if buffer[position] != rune('l') {
+						goto l22
+					}
+					position++
+					if buffer[position] != rune('u') {
+						goto l22
+					}
+					position++
+					if buffer[position] != rune('m') {
+						goto l22
+					}
+					position++
+					if buffer[position] != rune('n') {
 						goto l22
 					}
 					position++
@@ -1128,6 +1140,18 @@ func (p *PQL) Init() {
 									}
 									position++
 									if buffer[position] != rune('l') {
+										goto l56
+									}
+									position++
+									if buffer[position] != rune('u') {
+										goto l56
+									}
+									position++
+									if buffer[position] != rune('m') {
+										goto l56
+									}
+									position++
+									if buffer[position] != rune('n') {
 										goto l56
 									}
 									position++
@@ -2606,7 +2630,7 @@ func (p *PQL) Init() {
 			}
 			return true
 		},
-		/* 29 IDENT <- <(!(('S' 'e' 't' '(') / ('S' 'e' 't' 'R' 'o' 'w' 'A' 't' 't' 'r' 's' '(') / ('S' 'e' 't' 'C' 'o' 'l' 'A' 't' 't' 'r' 's' '(') / ('C' 'l' 'e' 'a' 'r' '(') / ('T' 'o' 'p' 'N' '(') / ('R' 'a' 'n' 'g' 'e' '(')) ([a-z] / [A-Z]) ([a-z] / [A-Z] / [0-9])*)> */
+		/* 29 IDENT <- <(!(('S' 'e' 't' '(') / ('S' 'e' 't' 'R' 'o' 'w' 'A' 't' 't' 'r' 's' '(') / ('S' 'e' 't' 'C' 'o' 'l' 'u' 'm' 'n' 'A' 't' 't' 'r' 's' '(') / ('C' 'l' 'e' 'a' 'r' '(') / ('T' 'o' 'p' 'N' '(') / ('R' 'a' 'n' 'g' 'e' '(')) ([a-z] / [A-Z]) ([a-z] / [A-Z] / [0-9])*)> */
 		nil,
 		/* 30 timestampbasicfmt <- <([0-9] [0-9] [0-9] [0-9] '-' ('0' / '1') [0-9] '-' [0-3] [0-9] 'T' [0-9] [0-9] ':' [0-9] [0-9])> */
 		func() bool {
@@ -2752,7 +2776,7 @@ func (p *PQL) Init() {
 		nil,
 		/* 37 Action3 <- <{p.endCall()}> */
 		nil,
-		/* 38 Action4 <- <{p.startCall("SetColAttrs")}> */
+		/* 38 Action4 <- <{p.startCall("SetColumnAttrs")}> */
 		nil,
 		/* 39 Action5 <- <{p.endCall()}> */
 		nil,

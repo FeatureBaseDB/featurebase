@@ -142,12 +142,12 @@ func TestPEGWorking(t *testing.T) {
 			input:  "SetRowAttrs(blah, 9, a=47, b=bval)",
 			ncalls: 1},
 		{
-			name:   "SetColAttrs",
-			input:  "SetColAttrs(blah, 9, a=47)",
+			name:   "SetColumnAttrs",
+			input:  "SetColumnAttrs(blah, 9, a=47)",
 			ncalls: 1},
 		{
-			name:   "SetColAttrs2args",
-			input:  "SetColAttrs(blah, 9, a=47, b=bval)",
+			name:   "SetColumnAttrs2args",
+			input:  "SetColumnAttrs(blah, 9, a=47, b=bval)",
 			ncalls: 1},
 		{
 			name:   "Clear",
@@ -252,8 +252,8 @@ func TestPEGErrors(t *testing.T) {
 			name:  "SetRowAttrsNoField",
 			input: "SetRowAttrs(a=4)"},
 		{
-			name:  "SetColAttrsNoField",
-			input: "SetColAttrs(a=4)"},
+			name:  "SetColumnAttrsNoField",
+			input: "SetColumnAttrs(a=4)"},
 		{
 			name:  "ClearNoCol",
 			input: "Clear(a=4)"},
@@ -319,10 +319,10 @@ func TestPQLDeepEquality(t *testing.T) {
 				},
 			}},
 		{
-			name: "SetColAttrs",
-			call: "SetColAttrs(myfield, 9, z=4)",
+			name: "SetColumnAttrs",
+			call: "SetColumnAttrs(myfield, 9, z=4)",
 			exp: &Call{
-				Name: "SetColAttrs",
+				Name: "SetColumnAttrs",
 				Args: map[string]interface{}{
 					"z":      int64(4),
 					"_field": "myfield",
