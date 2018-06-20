@@ -654,14 +654,11 @@ func (f *Field) ViewRow(viewName string, rowID uint64) (*Row, error) {
 }
 
 // SetBit sets a bit on a view within the field.
-func (f *Field) SetBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
-	// Validate view name.
-	if !isValidView(name) {
-		return false, ErrInvalidView
-	}
+func (f *Field) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err error) {
+	viewName := ViewStandard
 
 	// Retrieve view. Exit if it doesn't exist.
-	view, err := f.CreateViewIfNotExists(name)
+	view, err := f.CreateViewIfNotExists(viewName)
 	if err != nil {
 		return changed, errors.Wrap(err, "creating view")
 	}
@@ -679,7 +676,7 @@ func (f *Field) SetBit(name string, rowID, colID uint64, t *time.Time) (changed 
 	}
 
 	// If a timestamp is specified then set bits across all views for the quantum.
-	for _, subname := range viewsByTime(name, *t, f.TimeQuantum()) {
+	for _, subname := range viewsByTime(viewName, *t, f.TimeQuantum()) {
 		view, err := f.CreateViewIfNotExists(subname)
 		if err != nil {
 			return changed, errors.Wrapf(err, "creating view %s", subname)
@@ -696,14 +693,11 @@ func (f *Field) SetBit(name string, rowID, colID uint64, t *time.Time) (changed 
 }
 
 // ClearBit clears a bit within the field.
-func (f *Field) ClearBit(name string, rowID, colID uint64, t *time.Time) (changed bool, err error) {
-	// Validate view name.
-	if !isValidView(name) {
-		return false, ErrInvalidView
-	}
+func (f *Field) ClearBit(rowID, colID uint64, t *time.Time) (changed bool, err error) {
+	viewName := ViewStandard
 
 	// Retrieve view. Exit if it doesn't exist.
-	view, err := f.CreateViewIfNotExists(name)
+	view, err := f.CreateViewIfNotExists(viewName)
 	if err != nil {
 		return changed, errors.Wrap(err, "creating view")
 	}
@@ -721,7 +715,7 @@ func (f *Field) ClearBit(name string, rowID, colID uint64, t *time.Time) (change
 	}
 
 	// If a timestamp is specified then clear bits across all views for the quantum.
-	for _, subname := range viewsByTime(name, *t, f.TimeQuantum()) {
+	for _, subname := range viewsByTime(viewName, *t, f.TimeQuantum()) {
 		view, err := f.CreateViewIfNotExists(subname)
 		if err != nil {
 			return changed, errors.Wrapf(err, "creating view %s", subname)

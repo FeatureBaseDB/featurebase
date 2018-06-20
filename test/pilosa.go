@@ -25,7 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/boltdb"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/server"
@@ -163,9 +162,6 @@ func (m *Main) Reopen() error {
 	if err != nil {
 		return errors.Wrap(err, "setting up server")
 	}
-
-	m.Server.NewAttrStore = boltdb.NewAttrStore
-	m.Server.Holder.NewAttrStore = m.Server.NewAttrStore
 
 	// Run new program.
 	if err := m.Start(); err != nil {

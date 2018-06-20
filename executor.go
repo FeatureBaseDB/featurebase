@@ -1026,17 +1026,17 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 		return false, fmt.Errorf("ClearBit col field '%v' required", columnLabel)
 	}
 
-	return e.executeClearBitView(ctx, index, c, f, ViewStandard, colID, rowID, opt)
+	return e.executeClearBitField(ctx, index, c, f, colID, rowID, opt)
 }
 
-// executeClearBitView executes a ClearBit() call for a single view.
-func (e *Executor) executeClearBitView(ctx context.Context, index string, c *pql.Call, f *Field, view string, colID, rowID uint64, opt *ExecOptions) (bool, error) {
+// executeClearBitField executes a ClearBit() call for a single view.
+func (e *Executor) executeClearBitField(ctx context.Context, index string, c *pql.Call, f *Field, colID, rowID uint64, opt *ExecOptions) (bool, error) {
 	slice := colID / SliceWidth
 	ret := false
 	for _, node := range e.Cluster.sliceNodes(index, slice) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
-			val, err := f.ClearBit(view, rowID, colID, nil)
+			val, err := f.ClearBit(rowID, colID, nil)
 			if err != nil {
 				return false, err
 			} else if val {
@@ -1101,18 +1101,18 @@ func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 		timestamp = &t
 	}
 
-	return e.executeSetBitView(ctx, index, c, f, ViewStandard, colID, rowID, timestamp, opt)
+	return e.executeSetBitField(ctx, index, c, f, colID, rowID, timestamp, opt)
 }
 
-// executeSetBitView executes a SetBit() call for a specific view.
-func (e *Executor) executeSetBitView(ctx context.Context, index string, c *pql.Call, f *Field, view string, colID, rowID uint64, timestamp *time.Time, opt *ExecOptions) (bool, error) {
+// executeSetBitField executes a SetBit() call for a specific view.
+func (e *Executor) executeSetBitField(ctx context.Context, index string, c *pql.Call, f *Field, colID, rowID uint64, timestamp *time.Time, opt *ExecOptions) (bool, error) {
 	slice := colID / SliceWidth
 	ret := false
 
 	for _, node := range e.Cluster.sliceNodes(index, slice) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
-			val, err := f.SetBit(view, rowID, colID, timestamp)
+			val, err := f.SetBit(rowID, colID, timestamp)
 			if err != nil {
 				return false, err
 			} else if val {

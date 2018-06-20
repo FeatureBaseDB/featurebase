@@ -117,7 +117,7 @@ func (t *ClusterCluster) CreateField(index, field string, opt FieldOptions) erro
 	return nil
 }
 
-func (t *ClusterCluster) SetBit(index, field, view string, rowID, colID uint64, x *time.Time) error {
+func (t *ClusterCluster) SetBit(index, field string, rowID, colID uint64, x *time.Time) error {
 	// Determine which node should receive the SetBit.
 	c0 := t.Clusters[0] // use the first node's cluster to determine slice location.
 	slice := colID / SliceWidth
@@ -132,7 +132,7 @@ func (t *ClusterCluster) SetBit(index, field, view string, rowID, colID uint64, 
 		if f == nil {
 			return fmt.Errorf("index/field does not exist: %s/%s", index, field)
 		}
-		_, err := f.SetBit(view, rowID, colID, x)
+		_, err := f.SetBit(rowID, colID, x)
 		if err != nil {
 			return err
 		}
@@ -150,11 +150,11 @@ func (t *ClusterCluster) clusterByID(id string) *Cluster {
 	return nil
 }
 
-// AddNode adds a node to the cluster and (potentially) starts a resize job.
-func (t *ClusterCluster) addNode(saveTopology bool) error {
+// addNode adds a node to the cluster and (potentially) starts a resize job.
+func (t *ClusterCluster) addNode() error {
 	id := len(t.Clusters)
 
-	c, err := t.addCluster(id, saveTopology)
+	c, err := t.addCluster(id, false)
 	if err != nil {
 		return err
 	}
