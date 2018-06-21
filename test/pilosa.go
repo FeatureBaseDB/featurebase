@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	gohttp "net/http"
 	"os"
 	"strings"
@@ -220,6 +221,13 @@ func (m *Main) RunWithTransport(host string, bindPort int, joinSeeds []string) (
 	}
 
 	m.Server.Cluster.Static = false
+
+	go func() {
+		err := m.Handler.Serve()
+		if err != nil {
+			log.Printf("Handler serve error: %v", err)
+		}
+	}()
 
 	// Initialize server.
 	err = m.Server.Open()

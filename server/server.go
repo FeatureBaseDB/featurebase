@@ -74,7 +74,7 @@ type Command struct {
 	logOutput io.Writer
 	logger    loggerLogger
 
-	handler pilosa.Handler
+	Handler pilosa.Handler
 	ln      net.Listener
 }
 
@@ -105,18 +105,17 @@ func (m *Command) Start() (err error) {
 	if err != nil {
 		return errors.Wrap(err, "setting up networking")
 	}
+	go func() {
+		err := m.Handler.Serve()
+		if err != nil {
+			m.logger.Printf("Handler serve error: %v", err)
+		}
+	}()
 
 	// Initialize server.
 	if err = m.Server.Open(); err != nil {
 		return errors.Wrap(err, "opening server")
 	}
-
-	go func() {
-		err := m.handler.Serve()
-		if err != nil {
-			m.logger.Printf("Handler serve error: %v", err)
-		}
-	}()
 
 	m.logger.Printf("Listening as %s\n", m.Server.URI)
 
@@ -245,23 +244,23 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerPrimaryTranslateStore(primaryTranslateStore),
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
 	)
+	if err != nil {
+		return errors.Wrap(err, "new server")
+	}
 
 	api, err := pilosa.NewAPI(pilosa.OptAPIServer(m.Server))
 	if err != nil {
 		return errors.Wrap(err, "new api")
 	}
 
-	m.handler, err = http.NewHandler(
+	m.Handler, err = http.NewHandler(
 		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
 		http.OptHandlerAPI(api),
 		http.OptHandlerLogger(m.logger),
 		http.OptHandlerListener(m.ln),
 	)
-	if err != nil {
-		return errors.Wrap(err, "new handler")
-	}
+	return errors.Wrap(err, "new handler")
 
-	return errors.Wrap(err, "new server")
 }
 
 // SetupNetworking sets up internode communication based on the configuration.
@@ -316,7 +315,7 @@ func (m *Command) SetupNetworking() error {
 // Close shuts down the server.
 func (m *Command) Close() error {
 	var logErr error
-	handlerErr := m.handler.Close()
+	handlerErr := m.Handler.Close()
 	serveErr := m.Server.Close()
 	if closer, ok := m.logOutput.(io.Closer); ok {
 		logErr = closer.Close()
