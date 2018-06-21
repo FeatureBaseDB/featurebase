@@ -160,6 +160,10 @@ func (btc *BTreeContainers) Size() int {
 	return btc.tree.Len()
 }
 
+func (btc *BTreeContainers) Reset() {
+	btc.tree = TreeNew(cmp)
+}
+
 func (btc *BTreeContainers) Iterator(key uint64) (citer roaring.ContainerIterator, found bool) {
 	e, ok := btc.tree.Seek(key)
 	if ok {
