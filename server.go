@@ -79,6 +79,11 @@ type Server struct {
 	dataDir       string
 }
 
+// TODO: have this return an interface for Holder instead of concrete object?
+func (s *Server) Holder() *Holder {
+	return s.holder
+}
+
 // ServerOption is a functional option type for pilosa.Server
 type ServerOption func(s *Server) error
 
