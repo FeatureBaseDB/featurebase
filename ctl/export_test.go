@@ -44,6 +44,8 @@ func TestExportCommand_Validation(t *testing.T) {
 }
 
 func TestExportCommand_Run(t *testing.T) {
+	t.Skip() // Until test.NewServer() works
+
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewExportCommand(stdin, stdout, stderr)

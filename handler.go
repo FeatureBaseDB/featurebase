@@ -2,7 +2,6 @@ package pilosa
 
 import (
 	"encoding/json"
-	"net"
 )
 
 // QueryRequest represent a request to process a query.
@@ -61,18 +60,18 @@ func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 }
 
 type Handler interface {
-	Serve(ln net.Listener, closing <-chan struct{})
-	GetAPI() *API
+	Serve() error
+	Close() error
 }
 
-type NopHandler struct{}
+type nopHandler struct{}
 
-func (n *NopHandler) Serve(ln net.Listener, closing <-chan struct{}) {}
-
-func (n *NopHandler) GetAPI() *API {
+func (n nopHandler) Serve() error {
 	return nil
 }
 
-func NewNopHandler() Handler {
-	return &NopHandler{}
+func (n nopHandler) Close() error {
+	return nil
 }
+
+var NopHandler Handler = nopHandler{}
