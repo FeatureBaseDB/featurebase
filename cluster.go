@@ -229,7 +229,7 @@ type Cluster struct {
 	// Threshold for logging long-running queries
 	LongQueryTime time.Duration
 
-	// Maximum number of SetBit() or ClearBit() commands per request.
+	// Maximum number of Set() or Clear() commands per request.
 	MaxWritesPerRequest int
 
 	// EventReceiver receives NodeEvents pertaining to node membership.

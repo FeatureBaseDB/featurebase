@@ -213,6 +213,39 @@ func TestFragment_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+	t.Run("Crash", func(t *testing.T) {
+		f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+		defer f.Close()
+
+		// Set value.
+		if changed, err := f.setValue(0, 32, 17); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		if changed, err := f.setValue(0, 32, 16); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		if changed, err := f.setValue(0, 32, 19); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		// Read value.
+		if value, exists, err := f.value(0, 32); err != nil {
+			t.Fatal(err)
+		} else if value != 19 {
+			t.Fatalf("unexpected value: %d", value)
+		} else if !exists {
+			t.Fatal("expected to exist")
+		}
+	})
+
 }
 
 // Ensure a fragment can sum values.
