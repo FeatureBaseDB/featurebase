@@ -6,10 +6,10 @@ type PQL Peg {
 
 
 Calls <- whitesp (Call whitesp)* !.
-Call <-  'Set' {p.startCall("Set")} open uintcol comma args (comma timestamp)? close {p.endCall()}
+Call <-  'Set' {p.startCall("Set")} open col comma args (comma timestamp)? close {p.endCall()}
        / 'SetRowAttrs' {p.startCall("SetRowAttrs")} open posfield comma uintrow comma args close {p.endCall()}
-       / 'SetColumnAttrs' {p.startCall("SetColumnAttrs")} open posfield comma uintcol comma args close {p.endCall()}
-       / 'Clear' {p.startCall("Clear")} open uintcol comma args close {p.endCall()}
+       / 'SetColumnAttrs' {p.startCall("SetColumnAttrs")} open col comma args close {p.endCall()}
+       / 'Clear' {p.startCall("Clear")} open col comma args close {p.endCall()}
        / 'TopN' {p.startCall("TopN")} open posfield (comma allargs)? close {p.endCall()}
        / 'Range' {p.startCall("Range")} open (timerange / conditional / arg) close {p.endCall()}
        / < IDENT > { p.startCall(buffer[begin:end] ) } open allargs comma? close { p.endCall() }
@@ -51,11 +51,14 @@ doublequotedstring <- ( [^"\\\n] / '\\n' / '\\\"' / '\\\'' / '\\\\' )*
 singlequotedstring <- ( [^'\\\n] / '\\n' / '\\\"' / '\\\'' / '\\\\' )*
 
 fieldExpr <- [[A-Z]] ( [[A-Z]] / [0-9] / '_' )*
-field <- <fieldExpr> { p.addField(buffer[begin:end]) }
+field <- <fieldExpr / reserved> { p.addField(buffer[begin:end]) }
+reserved <- ('_row' / '_col' / '_start' / '_end' / '_timestamp' / '_field')
 posfield <- <fieldExpr> { p.addPosStr("_field", buffer[begin:end]) }
 uint <- [1-9] [0-9]* / '0'
 uintrow <- <uint>{p.addPosNum("_row", buffer[begin:end])}
-uintcol <- <uint>{p.addPosNum("_col", buffer[begin:end])}
+col <- ( <uint> {p.addPosNum("_col", buffer[begin:end])}
+        / '"' <doublequotedstring> '"' {p.addPosStr("_col", buffer[begin:end])}
+        )
 
 open <- '(' sp
 close <- ')' sp
@@ -64,7 +67,7 @@ comma <- sp ',' whitesp
 lbrack <- '[' sp
 rbrack <- sp ']' sp
 whitesp <- ( ' ' / '\t' / '\n' )*
-IDENT <- !('Set(' / 'SetRowAttrs(' / 'SetColumnAttrs(' / 'Clear(' / 'TopN(' / 'Range(') [[A-Z]] ([[A-Z]] / [0-9])*
+IDENT <- [[A-Z]] ([[A-Z]] / [0-9])*
 
 
 timestampbasicfmt <- [0-9][0-9][0-9][0-9]'-'[01][0-9]'-'[0-3][0-9]'T'[0-9][0-9]':'[0-9][0-9]

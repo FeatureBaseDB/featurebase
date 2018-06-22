@@ -47,6 +47,13 @@ SetBit(Union(Zitmap(row==4), Intersect(Qitmap(blah>4), Ritmap(field="http://zoo9
 
 }
 
+func TestOldPQL(t *testing.T) {
+	_, err := ParseString(`SetBit(f=11, col=1)`)
+	if err != nil {
+		t.Fatalf("should have parsed: %v", err)
+	}
+}
+
 func TestPEGWorking(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -59,7 +66,11 @@ func TestPEGWorking(t *testing.T) {
 			ncalls: 0},
 		{
 			name:   "Set",
-			input:  "Set(1, a=4)",
+			input:  "Set(2, f=10)",
+			ncalls: 1},
+		{
+			name:   "SetTime",
+			input:  "Set(2, f=1, 1999-12-31T00:00)",
 			ncalls: 1},
 		{
 			name:   "DoubleSet",
@@ -143,11 +154,11 @@ func TestPEGWorking(t *testing.T) {
 			ncalls: 1},
 		{
 			name:   "SetColumnAttrs",
-			input:  "SetColumnAttrs(blah, 9, a=47)",
+			input:  "SetColumnAttrs(9, a=47)",
 			ncalls: 1},
 		{
 			name:   "SetColumnAttrs2args",
-			input:  "SetColumnAttrs(blah, 9, a=47, b=bval)",
+			input:  "SetColumnAttrs(9, a=47, b=bval)",
 			ncalls: 1},
 		{
 			name:   "Clear",
@@ -234,12 +245,6 @@ func TestPEGErrors(t *testing.T) {
 		input string
 	}{
 		{
-			name:  "SetEmpty",
-			input: "Set()"},
-		{
-			name:  "SetNoCol",
-			input: "Set(a=4)"},
-		{
 			name:  "SetNoParens",
 			input: "Set"},
 		{
@@ -249,23 +254,11 @@ func TestPEGErrors(t *testing.T) {
 			name:  "SetTimestampNoArg",
 			input: "Set(1, 2017-04-03T19:34)"},
 		{
-			name:  "SetRowAttrsNoField",
-			input: "SetRowAttrs(a=4)"},
-		{
-			name:  "SetColumnAttrsNoField",
-			input: "SetColumnAttrs(a=4)"},
-		{
-			name:  "ClearNoCol",
-			input: "Clear(a=4)"},
-		{
 			name:  "SetStartingComma",
 			input: "Set(, 1, a=4)"},
 		{
 			name:  "StartinCommaArb",
 			input: "Zeeb(, a=4)"},
-		{
-			name:  "TopN No Field",
-			input: "TopN(a=77)"},
 		{
 			name:  "SetRowAttrs0args",
 			input: "SetRowAttrs(blah, 9)"},
@@ -320,13 +313,12 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "SetColumnAttrs",
-			call: "SetColumnAttrs(myfield, 9, z=4)",
+			call: "SetColumnAttrs(9, z=4)",
 			exp: &Call{
 				Name: "SetColumnAttrs",
 				Args: map[string]interface{}{
-					"z":      int64(4),
-					"_field": "myfield",
-					"_col":   int64(9),
+					"z":    int64(4),
+					"_col": int64(9),
 				},
 			}},
 		{
@@ -470,6 +462,51 @@ func TestPQLDeepEquality(t *testing.T) {
 						Op:    BETWEEN,
 						Value: []interface{}{int64(5), int64(10)},
 					},
+				},
+			}},
+		{
+			name: "Sum",
+			call: "Sum(field=f)",
+			exp: &Call{
+				Name: "Sum",
+				Args: map[string]interface{}{
+					"field": "f",
+				},
+			}},
+		{
+			name: "SumChild",
+			call: "Sum(Row(), field=f)",
+			exp: &Call{
+				Name: "Sum",
+				Args: map[string]interface{}{
+					"field": "f",
+				},
+				Children: []*Call{
+					{Name: "Row"},
+				},
+			}},
+		{
+			name: "MinChild",
+			call: "Min(Row(), field=f)",
+			exp: &Call{
+				Name: "Min",
+				Args: map[string]interface{}{
+					"field": "f",
+				},
+				Children: []*Call{
+					{Name: "Row"},
+				},
+			}},
+		{
+			name: "MaxChild",
+			call: "Max(Row(), field=f)",
+			exp: &Call{
+				Name: "Max",
+				Args: map[string]interface{}{
+					"field": "f",
+				},
+				Children: []*Call{
+					{Name: "Row"},
 				},
 			}},
 	}

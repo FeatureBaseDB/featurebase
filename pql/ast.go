@@ -213,7 +213,7 @@ func (q *Query) WriteCallN() int {
 	var n int
 	for _, call := range q.Calls {
 		switch call.Name {
-		case "SetBit", "ClearBit", "SetRowAttrs", "SetColumnAttrs":
+		case "Set", "Clear", "SetRowAttrs", "SetColumnAttrs":
 			n++
 		}
 	}
@@ -251,6 +251,18 @@ type Call struct {
 	Name     string
 	Args     map[string]interface{}
 	Children []*Call
+}
+
+// FieldArg determines which key-value pair contains the field and rowID,
+// in the case of arguments like Set(colID, field=rowID).
+// Returns the field as a string if present, or an error if not.
+func (c *Call) FieldArg() (string, error) {
+	for arg := range c.Args {
+		if !strings.HasPrefix(arg, "_") {
+			return arg, nil
+		}
+	}
+	return "", fmt.Errorf("No field argument specified")
 }
 
 // UintArg is for reading the value at key from call.Args as a uint64. If the
