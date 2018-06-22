@@ -52,19 +52,19 @@ type Server struct {
 	closing chan struct{}
 
 	// Internal
-	Holder        *Holder
-	Cluster       *Cluster
-	TranslateFile *TranslateFile
-	diagnostics   *DiagnosticsCollector
-	executor      *Executor
+	holder          *Holder
+	Cluster         *Cluster
+	translateFile   *TranslateFile
+	diagnostics     *DiagnosticsCollector
+	executor        *Executor
+	hosts           []string
+	clusterDisabled bool
 
 	// External
 	handler           Handler
-	Broadcaster       Broadcaster
 	BroadcastReceiver BroadcastReceiver
 	systemInfo        SystemInfo
 	gcNotifier        GCNotifier
-	NewAttrStore      func(string) AttrStore
 	logger            Logger
 	ln                net.Listener
 
@@ -107,8 +107,7 @@ func OptServerDataDir(dir string) ServerOption {
 
 func OptServerAttrStoreFunc(af func(string) AttrStore) ServerOption {
 	return func(s *Server) error {
-		s.NewAttrStore = af
-		s.Holder.NewAttrStore = af
+		s.holder.NewAttrStore = af
 		return nil
 	}
 }
@@ -180,7 +179,7 @@ func OptServerPrimaryTranslateStore(store TranslateStore) ServerOption {
 
 func OptServerStatsClient(sc StatsClient) ServerOption {
 	return func(s *Server) error {
-		s.Holder.Stats = sc
+		s.holder.Stats = sc
 		return nil
 	}
 }
@@ -207,20 +206,27 @@ func OptServerURI(uri *URI) ServerOption {
 	}
 }
 
+// OptClusterDisabled tells the server whether to use a static cluster with the
+// defined hosts. Mostly used for testing.
+func OptServerClusterDisabled(disabled bool, hosts []string) ServerOption {
+	return func(s *Server) error {
+		s.hosts = hosts
+		s.clusterDisabled = disabled
+		return nil
+	}
+}
+
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
 		closing:           make(chan struct{}),
 		Cluster:           NewCluster(),
-		Holder:            NewHolder(),
-		Broadcaster:       NopBroadcaster,
+		holder:            NewHolder(),
 		BroadcastReceiver: NopBroadcastReceiver,
 		diagnostics:       NewDiagnosticsCollector(DefaultDiagnosticServer),
 		systemInfo:        NewNopSystemInfo(),
 
 		gcNotifier: NopGCNotifier,
-
-		NewAttrStore: NewNopAttrStore,
 
 		antiEntropyInterval: time.Minute * 10,
 		metricInterval:      0,
@@ -242,19 +248,19 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		return nil, err
 	}
 
-	s.Holder.Path = path
-	s.Holder.Logger = s.logger
-	s.Holder.Stats.SetLogger(s.logger)
+	s.holder.Path = path
+	s.holder.Logger = s.logger
+	s.holder.Stats.SetLogger(s.logger)
 
 	s.Cluster.Path = path
 	s.Cluster.Logger = s.logger
-	s.Cluster.Holder = s.Holder
+	s.Cluster.Holder = s.holder
 
 	// Initialize translation database.
-	s.TranslateFile = NewTranslateFile()
-	s.TranslateFile.Path = filepath.Join(path, "keys")
-	s.TranslateFile.PrimaryTranslateStore = s.primaryTranslateStore
-	if err := s.TranslateFile.Open(); err != nil {
+	s.translateFile = NewTranslateFile()
+	s.translateFile.Path = filepath.Join(path, "keys")
+	s.translateFile.PrimaryTranslateStore = s.primaryTranslateStore
+	if err := s.translateFile.Open(); err != nil {
 		return nil, err
 	}
 
@@ -263,6 +269,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
 	}
 
+	// Get or create NodeID.
 	s.NodeID = s.LoadNodeID()
 	// Set Cluster Node.
 	node := &Node{
@@ -271,15 +278,23 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		IsCoordinator: s.Cluster.Coordinator == s.NodeID,
 	}
 	s.Cluster.Node = node
-	s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%s", s.NodeID))
+	if s.clusterDisabled {
+		err := s.Cluster.setStatic(s.hosts)
+		if err != nil {
+			return nil, errors.Wrap(err, "setting cluster static")
+		}
+	}
 
-	s.executor.Holder = s.Holder
+	// Append the NodeID tag to stats.
+	s.holder.Stats = s.holder.Stats.WithTags(fmt.Sprintf("NodeID:%s", s.NodeID))
+
+	s.executor.Holder = s.holder
 	s.executor.Node = node
 	s.executor.Cluster = s.Cluster
-	s.executor.TranslateStore = s.TranslateFile
+	s.executor.TranslateStore = s.translateFile
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
 	s.handler.GetAPI().Executor = s.executor
-	s.handler.GetAPI().TranslateStore = s.TranslateFile
+	s.handler.GetAPI().TranslateStore = s.translateFile
 
 	return s, nil
 }
@@ -287,39 +302,30 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 // Open opens and initializes the server.
 func (s *Server) Open() error {
 	s.logger.Printf("open server")
-	// s.ln can be configured prior to Open() via s.OpenListener().
 	if s.ln == nil {
-		return errors.New("Must pass a listener option to NewServer")
+		return errors.New("must pass a listener option to NewServer")
 	}
 
 	// Log startup
-	err := s.Holder.logStartup()
+	err := s.holder.logStartup()
 	if err != nil {
 		log.Println(errors.Wrap(err, "logging startup"))
 	}
 
-	// Get or create NodeID.
-
-	// Append the NodeID tag to stats.
-
-	// Create default HTTP client
-
-	// Create executor for executing queries.
-
 	// Cluster settings.
-	s.Cluster.Broadcaster = s.Broadcaster
+	s.Cluster.Broadcaster = s
 	s.Cluster.MaxWritesPerRequest = s.maxWritesPerRequest
 
 	// Initialize HTTP handler.
 	api := s.handler.GetAPI()
-	api.Holder = s.Holder
-	api.Broadcaster = s.Broadcaster
+	api.Holder = s.holder
+	api.Broadcaster = s
 	api.BroadcastHandler = s
 	api.StatusHandler = s
 	api.Cluster = s.Cluster
 
 	// Initialize Holder.
-	s.Holder.Broadcaster = s.Broadcaster
+	s.holder.Broadcaster = s
 
 	// Serve handler.
 	go s.handler.Serve(s.ln, s.closing)
@@ -335,7 +341,7 @@ func (s *Server) Open() error {
 	}
 
 	// Open holder.
-	if err := s.Holder.Open(); err != nil {
+	if err := s.holder.Open(); err != nil {
 		return fmt.Errorf("opening Holder: %v", err)
 	}
 	if err := s.Cluster.setNodeState(NodeStateReady); err != nil {
@@ -370,11 +376,11 @@ func (s *Server) Close() error {
 	if s.Cluster != nil {
 		s.Cluster.close()
 	}
-	if s.Holder != nil {
-		s.Holder.Close()
+	if s.holder != nil {
+		s.holder.Close()
 	}
-	if s.TranslateFile != nil {
-		s.TranslateFile.Close()
+	if s.translateFile != nil {
+		s.translateFile.Close()
 	}
 
 	return nil
@@ -386,7 +392,7 @@ func (s *Server) LoadNodeID() string {
 	if s.NodeID != "" {
 		return s.NodeID
 	}
-	nodeID, err := s.Holder.loadNodeID()
+	nodeID, err := s.holder.loadNodeID()
 	if err != nil {
 		s.logger.Printf("loading NodeID: %v", err)
 		return s.NodeID
@@ -414,18 +420,18 @@ func (s *Server) monitorAntiEntropy() {
 		case <-s.closing:
 			return
 		case <-ticker.C:
-			s.Holder.Stats.Count("AntiEntropy", 1, 1.0)
+			s.holder.Stats.Count("AntiEntropy", 1, 1.0)
 		}
 		t := time.Now()
 		s.logger.Printf("holder sync beginning")
 
 		// Initialize syncer with local holder and remote client.
 		var syncer HolderSyncer
-		syncer.Holder = s.Holder
+		syncer.Holder = s.holder
 		syncer.Node = s.Cluster.Node
 		syncer.Cluster = s.Cluster
 		syncer.Closing = s.closing
-		syncer.Stats = s.Holder.Stats.WithTags("HolderSyncer")
+		syncer.Stats = s.holder.Stats.WithTags("HolderSyncer")
 
 		// Sync holders.
 		if err := syncer.SyncHolder(); err != nil {
@@ -436,7 +442,7 @@ func (s *Server) monitorAntiEntropy() {
 		// Record successful sync in log.
 		s.logger.Printf("holder sync complete")
 		dif := time.Since(t)
-		s.Holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
+		s.holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
 	}
 }
 
@@ -444,23 +450,23 @@ func (s *Server) monitorAntiEntropy() {
 func (s *Server) ReceiveMessage(pb proto.Message) error {
 	switch obj := pb.(type) {
 	case *internal.CreateSliceMessage:
-		idx := s.Holder.Index(obj.Index)
+		idx := s.holder.Index(obj.Index)
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
 		idx.SetRemoteMaxSlice(obj.Slice)
 	case *internal.CreateIndexMessage:
 		opt := IndexOptions{}
-		_, err := s.Holder.CreateIndex(obj.Index, opt)
+		_, err := s.holder.CreateIndex(obj.Index, opt)
 		if err != nil {
 			return err
 		}
 	case *internal.DeleteIndexMessage:
-		if err := s.Holder.DeleteIndex(obj.Index); err != nil {
+		if err := s.holder.DeleteIndex(obj.Index); err != nil {
 			return err
 		}
 	case *internal.CreateFieldMessage:
-		idx := s.Holder.Index(obj.Index)
+		idx := s.holder.Index(obj.Index)
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
@@ -470,12 +476,12 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			return err
 		}
 	case *internal.DeleteFieldMessage:
-		idx := s.Holder.Index(obj.Index)
+		idx := s.holder.Index(obj.Index)
 		if err := idx.DeleteField(obj.Field); err != nil {
 			return err
 		}
 	case *internal.CreateViewMessage:
-		f := s.Holder.Field(obj.Index, obj.Field)
+		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
 			return fmt.Errorf("Local Field not found: %s", obj.Field)
 		}
@@ -484,7 +490,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			return err
 		}
 	case *internal.DeleteViewMessage:
-		f := s.Holder.Field(obj.Index, obj.Field)
+		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
 			return fmt.Errorf("Local Field not found: %s", obj.Field)
 		}
@@ -517,7 +523,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			return err
 		}
 	case *internal.RecalculateCaches:
-		s.Holder.RecalculateCaches()
+		s.holder.RecalculateCaches()
 	case *internal.NodeEventMessage:
 		s.Cluster.ReceiveEvent(DecodeNodeEvent(obj))
 	}
@@ -569,14 +575,14 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	if s.Cluster == nil {
 		return nil, errors.New("Server.Cluster is nil")
 	}
-	if s.Holder == nil {
+	if s.holder == nil {
 		return nil, errors.New("Server.Holder is nil")
 	}
 
 	ns := internal.NodeStatus{
 		Node:      EncodeNode(s.Cluster.Node),
-		MaxSlices: s.Holder.EncodeMaxSlices(),
-		Schema:    s.Holder.EncodeSchema(),
+		MaxSlices: s.holder.EncodeMaxSlices(),
+		Schema:    s.holder.EncodeSchema(),
 	}
 
 	return &ns, nil
@@ -596,7 +602,7 @@ func (s *Server) HandleRemoteStatus(pb proto.Message) error {
 
 	go func() {
 		// Make sure the holder has opened.
-		<-s.Holder.opened
+		<-s.holder.opened
 
 		err := s.mergeRemoteStatus(pb.(*internal.NodeStatus))
 		if err != nil {
@@ -614,14 +620,14 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 	}
 
 	// Sync schema.
-	if err := s.Holder.ApplySchema(ns.Schema); err != nil {
+	if err := s.holder.ApplySchema(ns.Schema); err != nil {
 		return errors.Wrap(err, "applying schema")
 	}
 
 	// Sync maxSlices.
-	oldmaxslices := s.Holder.MaxSlices()
+	oldmaxslices := s.holder.MaxSlices()
 	for index, newMax := range ns.MaxSlices.Standard {
-		localIndex := s.Holder.Index(index)
+		localIndex := s.holder.Index(index)
 		// if we don't know about an index locally, log an error because
 		// indexes should be created and synced prior to slice creation
 		if localIndex == nil {
@@ -709,26 +715,26 @@ func (s *Server) monitorRuntime() {
 			return
 		case <-s.gcNotifier.AfterGC():
 			// GC just ran.
-			s.Holder.Stats.Count("garbage_collection", 1, 1.0)
+			s.holder.Stats.Count("garbage_collection", 1, 1.0)
 		case <-ticker.C:
 		}
 
 		// Record the number of go routines.
-		s.Holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
+		s.holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
 
 		openFiles, err := countOpenFiles()
 		// Open File handles.
 		if err == nil {
-			s.Holder.Stats.Gauge("OpenFiles", float64(openFiles), 1.0)
+			s.holder.Stats.Gauge("OpenFiles", float64(openFiles), 1.0)
 		}
 
 		// Runtime memory metrics.
 		runtime.ReadMemStats(&m)
-		s.Holder.Stats.Gauge("HeapAlloc", float64(m.HeapAlloc), 1.0)
-		s.Holder.Stats.Gauge("HeapInuse", float64(m.HeapInuse), 1.0)
-		s.Holder.Stats.Gauge("StackInuse", float64(m.StackInuse), 1.0)
-		s.Holder.Stats.Gauge("Mallocs", float64(m.Mallocs), 1.0)
-		s.Holder.Stats.Gauge("Frees", float64(m.Frees), 1.0)
+		s.holder.Stats.Gauge("HeapAlloc", float64(m.HeapAlloc), 1.0)
+		s.holder.Stats.Gauge("HeapInuse", float64(m.HeapInuse), 1.0)
+		s.holder.Stats.Gauge("StackInuse", float64(m.StackInuse), 1.0)
+		s.holder.Stats.Gauge("Mallocs", float64(m.Mallocs), 1.0)
+		s.holder.Stats.Gauge("Frees", float64(m.Frees), 1.0)
 	}
 }
 

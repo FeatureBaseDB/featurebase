@@ -85,12 +85,12 @@ func TestHandler_Schema(t *testing.T) {
 
 	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
+	} else if _, err := f.SetBit(0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
+	} else if _, err := f.SetBit(0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.FieldOptions{}); err != nil {
@@ -122,12 +122,12 @@ func TestHandler_Status(t *testing.T) {
 
 	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
+	} else if _, err := f.SetBit(0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.FieldOptions{}); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(pilosa.ViewStandard, 0, 0, nil); err != nil {
+	} else if _, err := f.SetBit(0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.FieldOptions{}); err != nil {
@@ -750,11 +750,17 @@ func TestHandler_Index_AttrStore_Diff(t *testing.T) {
 	blks[1].Checksum = []byte("MISMATCHED_CHECKSUM")
 
 	// Send block checksums to determine diff.
-	resp, err := gohttp.Post(
+	req, err := gohttp.NewRequest(
+		"POST",
 		s.URL+"/index/i/attr/diff",
-		"application/json",
 		strings.NewReader(`{"blocks":`+string(test.MustMarshalJSON(blks))+`}`),
 	)
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	client := &gohttp.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -800,11 +806,17 @@ func TestHandler_Field_AttrStore_Diff(t *testing.T) {
 	blks[1].Checksum = []byte("MISMATCHED_CHECKSUM")
 
 	// Send block checksums to determine diff.
-	resp, err := gohttp.Post(
+	req, err := gohttp.NewRequest(
+		"POST",
 		s.URL+"/index/i/field/meta/attr/diff",
-		"application/json",
 		strings.NewReader(`{"blocks":`+string(test.MustMarshalJSON(blks))+`}`),
 	)
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	client := &gohttp.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
