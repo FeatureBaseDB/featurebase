@@ -93,6 +93,9 @@ type Containers interface {
 	// return the first container at or after key. found will be true if a
 	// container is found at key.
 	Iterator(key uint64) (citer ContainerIterator, found bool)
+	//Reset will clear the containers collection to allow for recycling during snapshot
+	Reset()
+
 }
 
 type ContainerIterator interface {
@@ -635,7 +638,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	keyN := binary.LittleEndian.Uint32(data[4:8])
 
 	headerSize := headerBaseSize
-
+	b.Containers.Reset()
 	// Descriptive header section: Read container keys and cardinalities.
 	for i, buf := 0, data[headerSize:]; i < int(keyN); i, buf = i+1, buf[12:] {
 		b.Containers.PutContainerValues(
