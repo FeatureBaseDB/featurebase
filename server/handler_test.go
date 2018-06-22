@@ -38,6 +38,8 @@ import (
 func TestHandler_Endpoints(t *testing.T) {
 	cmd := test.MustRunMainWithCluster(t, 1)[0]
 	h := cmd.Handler.(*http.Handler).Handler
+	holder := cmd.Server.Holder()
+	hldr := test.Holder{holder}
 
 	t.Run("Not Found", func(t *testing.T) {
 		w := httptest.NewRecorder()
@@ -57,8 +59,6 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	})
 
-	holder := cmd.Server.Holder()
-	hldr := test.Holder{holder}
 	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
 	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.FieldOptions{}); err != nil {
