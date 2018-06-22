@@ -90,6 +90,7 @@ func (c *InternalClient) maxSliceByIndex(ctx context.Context) (map[string]uint64
 	}
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
@@ -120,6 +121,7 @@ func (c *InternalClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error
 	}
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
@@ -195,6 +197,7 @@ func (c *InternalClient) FragmentNodes(ctx context.Context, index string, slice 
 	}
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
@@ -685,6 +688,7 @@ func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, in
 	}
 
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
@@ -777,6 +781,7 @@ func (c *InternalClient) ColumnAttrDiff(ctx context.Context, uri *pilosa.URI, in
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
@@ -820,6 +825,7 @@ func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, index
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
@@ -859,6 +865,7 @@ func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, pb pr
 	}
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
 	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
