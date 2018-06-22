@@ -133,7 +133,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("Slices args", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?slices=0,1", strings.NewReader("Count(Bitmap(field=f0, row=30))")))
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?slices=0,1", strings.NewReader("Count(Row(f0=30))")))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d %s", w.Code, w.Body.String())
 		} else if body := w.Body.String(); body != `{"results":[2]}`+"\n" {
@@ -144,7 +144,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Slices args protobuf", func(t *testing.T) {
 		// Generate request body.
 		reqBody, err := proto.Marshal(&internal.QueryRequest{
-			Query:  "Count(Bitmap(field=f0, row=30))",
+			Query:  "Count(Row(f0=30))",
 			Slices: []uint64{0, 1},
 		})
 		if err != nil {
@@ -168,7 +168,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("Query args error", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?slices=a,b", strings.NewReader("Count(Bitmap(field=f0, row=30))")))
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?slices=a,b", strings.NewReader("Count(Row(f0=30))")))
 		if w.Code != gohttp.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != `{"error":"invalid slice argument"}`+"\n" {
@@ -178,7 +178,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("Query params err", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?slices=0,1&db=sample", strings.NewReader("Count(Bitmap(field=f0, row=30))")))
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?slices=0,1&db=sample", strings.NewReader("Count(Row(f0=30))")))
 		if w.Code != gohttp.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != `{"error":"db is not a valid argument"}`+"\n" {
@@ -188,7 +188,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("Uint64 protobuf", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		r := test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader("Count(Bitmap(field=f0, row=30))"))
+		r := test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader("Count(Row(f0=30))"))
 		r.Header.Set("Accept", "application/x-protobuf")
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusOK {
@@ -205,9 +205,9 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("Bitmap JSON", func(t *testing.T) {
+	t.Run("Row JSON", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader("Bitmap(field=f0, row=30)")))
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader("Row(f0=30)")))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != `{"results":[{"attrs":{},"columns":[1048577,1048578,3145732]}]}`+"\n" {
@@ -226,7 +226,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("ColumnAttrs_JSON", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?columnAttrs=true", strings.NewReader("Bitmap(field=f0, row=30)")))
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?columnAttrs=true", strings.NewReader("Row(f0=30)")))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d. body: %s", w.Code, w.Body.String())
 		} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"columns":[1048577,1048578,3145732]}],"columnAttrs":[{"id":1048577,"attrs":{"x":"y"}},{"id":1048578,"attrs":{"y":123,"z":false}}]}`+"\n" {
@@ -236,7 +236,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("Row pbuf", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		r := test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader("Bitmap(field=f0, row=30)"))
+		r := test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader("Row(f0=30)"))
 		r.Header.Set("Accept", "application/x-protobuf")
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusOK {
@@ -264,7 +264,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Row columnattrs protobuf", func(t *testing.T) {
 		// Encode request body.
 		buf, err := proto.Marshal(&internal.QueryRequest{
-			Query:       "Bitmap(field=f0, row=30)",
+			Query:       "Row(f0=30)",
 			ColumnAttrs: true,
 		})
 		if err != nil {
@@ -311,7 +311,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("Query Pairs JSON", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader(`TopN(field=f0, n=2)`)))
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader(`TopN(f0, n=2)`)))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != `{"results":[[{"id":30,"count":3},{"id":31,"count":1}]]}`+"\n" {
@@ -321,7 +321,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("Query Pairs protobuf", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		r := test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader(`TopN(field=f0, n=2)`))
+		r := test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader(`TopN(f0, n=2)`))
 		r.Header.Set("Accept", "application/x-protobuf")
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusOK {
@@ -340,7 +340,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("Query err JSON", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader(`Bitmap(row=30)`)))
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader(`Row(row=30)`)))
 		if w.Code != gohttp.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != `{"error":"executing: field not found"}`+"\n" {
@@ -350,7 +350,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("Query err protobuf", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		r := test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader(`Bitmap(row=30)`))
+		r := test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader(`Row(row=30)`))
 		r.Header.Set("Accept", "application/x-protobuf")
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusBadRequest {
@@ -378,7 +378,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1", strings.NewReader("bad_fn(")))
 		if w.Code != gohttp.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if body := w.Body.String(); body != `{"error":"parsing: expected comma, right paren, or identifier, found \"\" occurred at line 1, char 8"}`+"\n" {
+		} else if body := w.Body.String(); body != `{"error":"parsing: parsing: \nparse error near IDENT (line 1 symbol 1 - line 1 symbol 4):\n\"bad\"\n"}`+"\n" {
 			t.Fatalf("unexpected body: %s", body)
 		}
 	})
