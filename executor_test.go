@@ -265,35 +265,132 @@ func TestExecutor_Execute_Count(t *testing.T) {
 
 // Ensure a set query can be executed.
 func TestExecutor_Execute_SetBit(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
+	t.Run("ID", func(t *testing.T) {
+		t.Run("OK", func(t *testing.T) {
+			hldr := test.MustOpenHolder()
+			defer hldr.Close()
 
-	// set a bit so the view gets created.
-	hldr.SetBit("i", "f", 1, 0)
+			// set a bit so the view gets created.
+			hldr.SetBit("i", "f", 1, 0)
 
-	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
-	if n := hldr.Row("i", "f", 11).Count(); n != 0 {
-		t.Fatalf("unexpected bitmap count: %d", n)
-	}
+			e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
+			if n := hldr.Row("i", "f", 11).Count(); n != 0 {
+				t.Fatalf("unexpected bitmap count: %d", n)
+			}
 
-	if res, err := e.Execute(context.Background(), "i", test.MustParse(`SetBit(row=11, field=f, col=1)`), nil, nil); err != nil {
-		t.Fatal(err)
-	} else {
-		if !res[0].(bool) {
-			t.Fatalf("expected column changed")
-		}
-	}
+			if res, err := e.Execute(context.Background(), "i", test.MustParse(`SetBit(row=11, field=f, col=1)`), nil, nil); err != nil {
+				t.Fatal(err)
+			} else {
+				if !res[0].(bool) {
+					t.Fatalf("expected column changed")
+				}
+			}
 
-	if n := hldr.Row("i", "f", 11).Count(); n != 1 {
-		t.Fatalf("unexpected bitmap count: %d", n)
-	}
-	if res, err := e.Execute(context.Background(), "i", test.MustParse(`SetBit(row=11, field=f, col=1)`), nil, nil); err != nil {
-		t.Fatal(err)
-	} else {
-		if res[0].(bool) {
-			t.Fatalf("expected column unchanged")
-		}
-	}
+			if n := hldr.Row("i", "f", 11).Count(); n != 1 {
+				t.Fatalf("unexpected bitmap count: %d", n)
+			}
+			if res, err := e.Execute(context.Background(), "i", test.MustParse(`SetBit(row=11, field=f, col=1)`), nil, nil); err != nil {
+				t.Fatal(err)
+			} else {
+				if res[0].(bool) {
+					t.Fatalf("expected column unchanged")
+				}
+			}
+		})
+
+		t.Run("ErrInvalidColValueType", func(t *testing.T) {
+			hldr := test.MustOpenHolder()
+			defer hldr.Close()
+			index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+			if _, err := index.CreateField("f", pilosa.FieldOptions{}); err != nil {
+				t.Fatal(err)
+			}
+
+			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetBit(field=f, row=1, col="foo")`), nil, nil); err == nil || err.Error() != `string 'col' value not allowed unless index 'keys' option enabled` {
+				t.Fatal(err)
+			}
+		})
+
+		t.Run("ErrInvalidRowValueType", func(t *testing.T) {
+			hldr := test.MustOpenHolder()
+			defer hldr.Close()
+			index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+			if _, err := index.CreateField("f", pilosa.FieldOptions{}); err != nil {
+				t.Fatal(err)
+			}
+
+			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetBit(field=f, row="bar", col=2)`), nil, nil); err == nil || err.Error() != `string 'row' value not allowed unless field 'keys' option enabled` {
+				t.Fatal(err)
+			}
+		})
+	})
+
+	t.Run("Keys", func(t *testing.T) {
+		t.Run("OK", func(t *testing.T) {
+			hldr := test.MustOpenHolder()
+			defer hldr.Close()
+			hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{Keys: true})
+
+			// set a bit so the view gets created.
+			hldr.SetBit("i", "f", 1, 0)
+
+			e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
+			if n := hldr.Row("i", "f", 11).Count(); n != 0 {
+				t.Fatalf("unexpected bitmap count: %d", n)
+			}
+
+			if res, err := e.Execute(context.Background(), "i", test.MustParse(`SetBit(row=11, field=f, col="foo")`), nil, nil); err != nil {
+				t.Fatal(err)
+			} else {
+				if !res[0].(bool) {
+					t.Fatalf("expected column changed")
+				}
+			}
+
+			if n := hldr.Row("i", "f", 11).Count(); n != 1 {
+				t.Fatalf("unexpected bitmap count: %d", n)
+			}
+			if res, err := e.Execute(context.Background(), "i", test.MustParse(`SetBit(row=11, field=f, col="foo")`), nil, nil); err != nil {
+				t.Fatal(err)
+			} else {
+				if res[0].(bool) {
+					t.Fatalf("expected column unchanged")
+				}
+			}
+		})
+
+		t.Run("ErrInvalidColValueType", func(t *testing.T) {
+			hldr := test.MustOpenHolder()
+			defer hldr.Close()
+			index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{Keys: true})
+			if _, err := index.CreateField("f", pilosa.FieldOptions{}); err != nil {
+				t.Fatal(err)
+			}
+
+			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetBit(field=f, row=1, col=2)`), nil, nil); err == nil || err.Error() != `'col' value must be a string when index 'keys' option enabled` {
+				t.Fatal(err)
+			}
+		})
+
+		t.Run("ErrInvalidRowValueType", func(t *testing.T) {
+			hldr := test.MustOpenHolder()
+			defer hldr.Close()
+			index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+			if _, err := index.CreateField("f", pilosa.FieldOptions{Keys: true}); err != nil {
+				t.Fatal(err)
+			}
+
+			e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
+
+			if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetBit(field=f, row=1, col=2)`), nil, nil); err == nil || err.Error() != `'row' value must be a string when field 'keys' option enabled` {
+				t.Fatal(err)
+			}
+		})
+	})
 }
 
 // Ensure a SetValue() query can be executed.
