@@ -1,1 +1,0 @@
-TopN(Bitmap(id=100, field=other), field=f, n=3)
