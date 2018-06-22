@@ -124,6 +124,13 @@ func (sc *SliceContainers) Size() int {
 
 }
 
+func (sc *SliceContainers) Reset() {
+	sc.keys = sc.keys[:0]
+	sc.containers = sc.containers[:0]
+	sc.lastContainer = nil
+	sc.lastKey = 0
+}
+
 func (sc *SliceContainers) seek(key uint64) (int, bool) {
 	i := search64(sc.keys, key)
 	found := true
