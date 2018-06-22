@@ -65,10 +65,10 @@ type Command struct {
 	// Standard input/output
 	*pilosa.CmdIO
 
-	// Started will be closed once Command.Run is finished.
+	// Started will be closed once Command.Start is finished.
 	Started chan struct{}
-	// Done will be closed when Command.Close() is called
-	Done chan struct{}
+	// done will be closed when Command.Close() is called
+	done chan struct{}
 
 	// Passed to the Gossip implementation.
 	logOutput io.Writer
@@ -83,7 +83,7 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer) *Command {
 		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
 
 		Started: make(chan struct{}),
-		Done:    make(chan struct{}),
+		done:    make(chan struct{}),
 	}
 }
 
@@ -125,7 +125,7 @@ func (m *Command) Wait() error {
 		// Second signal causes a hard shutdown.
 		go func() { <-c; os.Exit(1) }()
 		return errors.Wrap(m.Close(), "closing command")
-	case <-m.Done:
+	case <-m.done:
 		m.logger.Printf("Server closed externally")
 		return nil
 	}
@@ -242,6 +242,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerURI(uri),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 		pilosa.OptServerPrimaryTranslateStore(primaryTranslateStore),
+		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
 	)
 
 	return errors.Wrap(err, "new server")
@@ -249,25 +250,7 @@ func (m *Command) SetupServer() error {
 
 // SetupNetworking sets up internode communication based on the configuration.
 func (m *Command) SetupNetworking() error {
-
-	m.Server.NodeID = m.Server.LoadNodeID()
-
 	if m.Config.Cluster.Disabled {
-		m.Server.Cluster.Static = true
-		m.Server.Cluster.Coordinator = m.Server.NodeID
-		for _, address := range m.Config.Cluster.Hosts {
-			uri, err := pilosa.NewURIFromAddress(address)
-			if err != nil {
-				return errors.Wrap(err, "getting URI")
-			}
-			m.Server.Cluster.Nodes = append(m.Server.Cluster.Nodes, &pilosa.Node{
-				URI: *uri,
-			})
-		}
-
-		m.Server.Broadcaster = pilosa.NopBroadcaster
-		m.Server.Cluster.MemberSet = pilosa.NewStaticMemberSet(m.Server.Cluster.Nodes)
-		m.Server.BroadcastReceiver = pilosa.NopBroadcastReceiver
 		return nil
 	}
 
@@ -310,7 +293,6 @@ func (m *Command) SetupNetworking() error {
 	}
 	gossipMemberSet.Logger = m.logger
 	m.Server.Cluster.MemberSet = gossipMemberSet
-	m.Server.Broadcaster = m.Server
 	m.Server.BroadcastReceiver = gossipMemberSet
 	return nil
 }
@@ -322,7 +304,7 @@ func (m *Command) Close() error {
 	if closer, ok := m.logOutput.(io.Closer); ok {
 		logErr = closer.Close()
 	}
-	close(m.Done)
+	close(m.done)
 	if serveErr != nil && logErr != nil {
 		return fmt.Errorf("closing server: '%v', closing logs: '%v'", serveErr, logErr)
 	} else if logErr != nil {

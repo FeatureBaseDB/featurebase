@@ -17,6 +17,7 @@ package test_test
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa"
@@ -32,12 +33,21 @@ func TestNewCluster(t *testing.T) {
 			t.Fatalf("node %d does not have the same coordinator as node 0. '%v' and '%v' respectively", i, coordi, coordinator)
 		}
 	}
+	req, err := http.NewRequest(
+		"GET",
+		"http://"+cluster[0].Server.Addr().String()+"/status",
+		strings.NewReader(""),
+	)
 
-	response, err := http.Get("http://" + cluster[0].Server.Addr().String() + "/status")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("getting schema: %v", err)
+		t.Fatalf("sending request: %v", err)
 	}
-	dec := json.NewDecoder(response.Body)
+	defer resp.Body.Close()
+
+	dec := json.NewDecoder(resp.Body)
 	body := struct {
 		State string
 		Nodes []struct {
