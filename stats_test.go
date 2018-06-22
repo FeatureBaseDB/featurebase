@@ -127,8 +127,8 @@ func TestStatsCount_Bitmap(t *testing.T) {
 	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 	e.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
-			if name != "Bitmap" {
-				t.Errorf("Expected Bitmap, Results %s", name)
+			if name != "Row" {
+				t.Errorf("Expected Row, Results %s", name)
 			}
 
 			if tags[0] != "index:d" {
@@ -138,7 +138,7 @@ func TestStatsCount_Bitmap(t *testing.T) {
 			called = true
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", test.MustParse(`Bitmap(field=f, row=0)`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", test.MustParse(`Row(f=0)`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -168,7 +168,7 @@ func TestStatsCount_SetColumnAttrs(t *testing.T) {
 			called = true
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetRowAttrs(row=10, field=f, foo="bar")`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetRowAttrs(f, 10, foo="bar")`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -199,7 +199,7 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 			called = true
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetColumnAttrs(col=10, field=f, foo="bar")`), nil, nil); err != nil {
+	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetColumnAttrs(10, foo="bar")`), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
