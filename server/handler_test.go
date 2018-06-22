@@ -39,7 +39,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	cmd := test.MustRunMainWithCluster(t, 1)[0]
 	h := cmd.Handler.(*http.Handler).Handler
 	holder := cmd.Server.Holder()
-	hldr := test.Holder{holder}
+	hldr := test.Holder{Holder: holder}
 
 	t.Run("Not Found", func(t *testing.T) {
 		w := httptest.NewRecorder()
