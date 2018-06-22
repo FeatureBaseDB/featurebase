@@ -134,11 +134,12 @@ func NewHandler(opts ...HandlerOption) (*Handler, error) {
 		return nil, errors.New("must pass OptHandlerListener")
 	}
 
+	handler.server = &http.Server{Handler: handler}
+
 	return handler, nil
 }
 
 func (h *Handler) Serve() error {
-	h.server = &http.Server{Handler: h}
 	err := h.server.Serve(h.ln)
 	if err != nil && err.Error() != "http: Server closed" {
 		h.Logger.Printf("HTTP handler terminated with error: %s\n", err)
