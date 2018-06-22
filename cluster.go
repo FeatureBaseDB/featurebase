@@ -1010,6 +1010,9 @@ func (c *Cluster) handleNodeAction(nodeAction nodeAction) error {
 
 func (c *Cluster) setStateAndBroadcast(state string) error {
 	c.SetState(state)
+	if c.Static {
+		return nil
+	}
 	// Broadcast cluster status changes to the cluster.
 	c.Logger.Printf("broadcasting ClusterStatus: %s", state)
 	return c.Broadcaster.SendSync(c.Status())
@@ -1799,5 +1802,19 @@ func (c *Cluster) mergeClusterStatus(cs *internal.ClusterStatus) error {
 
 	c.markAsJoined()
 
+	return nil
+}
+
+func (c *Cluster) setStatic(hosts []string) error {
+	c.Static = true
+	c.Coordinator = c.Node.ID
+	for _, address := range hosts {
+		uri, err := NewURIFromAddress(address)
+		if err != nil {
+			return errors.Wrap(err, "getting URI")
+		}
+		c.Nodes = append(c.Nodes, &Node{URI: *uri})
+	}
+	c.MemberSet = NewStaticMemberSet(c.Nodes)
 	return nil
 }

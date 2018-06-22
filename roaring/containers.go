@@ -124,6 +124,14 @@ func (sc *SliceContainers) Size() int {
 
 }
 
+func (sc *SliceContainers) Count() uint64 {
+	n := uint64(0)
+	for i := range sc.containers {
+		n += uint64(sc.containers[i].n)
+	}
+	return n
+}
+
 func (sc *SliceContainers) seek(key uint64) (int, bool) {
 	i := search64(sc.keys, key)
 	found := true
@@ -153,6 +161,7 @@ func (si *SliceIterator) Next() bool {
 	si.key = si.e.keys[si.i]
 	si.value = si.e.containers[si.i]
 	si.i++
+
 	return true
 }
 

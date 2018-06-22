@@ -183,6 +183,7 @@ func TestImportCommand_InvalidFile(t *testing.T) {
 // MustNewHTTPRequest creates a new HTTP request. Panic on error.
 func MustNewHTTPRequest(method, urlStr string, body io.Reader) *http.Request {
 	req, err := http.NewRequest(method, urlStr, body)
+	req.Header.Add("Accept", "application/json")
 	if err != nil {
 		panic(err)
 	}

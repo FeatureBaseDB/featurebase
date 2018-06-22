@@ -153,19 +153,19 @@ func TestFragSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = field.SetBit("standard", 1, 101, nil)
+	_, err = field.SetBit(1, 101, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = field.SetBit("standard", 1, 1300000, nil)
+	_, err = field.SetBit(1, 1300000, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = field.SetBit("standard", 1, 2600000, nil)
+	_, err = field.SetBit(1, 2600000, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = field.SetBit("standard", 1, 3900000, nil)
+	_, err = field.SetBit(1, 3900000, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -552,7 +552,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 	t.Run("Single node, in topology", func(t *testing.T) {
 		tc := NewClusterCluster(0)
-		tc.AddNode(false)
+		tc.addNode()
 
 		node := tc.Clusters[0]
 
@@ -580,7 +580,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 	t.Run("Single node, not in topology", func(t *testing.T) {
 		tc := NewClusterCluster(0)
-		tc.AddNode(false)
+		tc.addNode()
 
 		node := tc.Clusters[0]
 
@@ -605,14 +605,14 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 	t.Run("Multiple nodes, no data", func(t *testing.T) {
 		tc := NewClusterCluster(0)
-		tc.AddNode(false)
+		tc.addNode()
 
 		// Open TestCluster.
 		if err := tc.Open(); err != nil {
 			t.Fatal(err)
 		}
 
-		tc.AddNode(false)
+		tc.addNode()
 
 		node0 := tc.Clusters[0]
 		node1 := tc.Clusters[1]
@@ -643,7 +643,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 	t.Run("Multiple nodes, in/not in topology", func(t *testing.T) {
 		tc := NewClusterCluster(0)
-		tc.AddNode(false)
+		tc.addNode()
 		node0 := tc.Clusters[0]
 
 		// write topology to data file
@@ -664,12 +664,12 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		// Expect an error by adding a node not in the topology.
 		expectedError := "host is not in topology: node1"
-		err := tc.AddNode(false)
+		err := tc.addNode()
 		if err == nil || err.Error() != expectedError {
 			t.Errorf("did not receive expected error: %s", expectedError)
 		}
 
-		tc.AddNode(false)
+		tc.addNode()
 		node2 := tc.Clusters[2]
 
 		// Ensure that node comes up in state NORMAL.
@@ -687,7 +687,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 	t.Run("Multiple nodes, with data", func(t *testing.T) {
 		tc := NewClusterCluster(0)
-		tc.AddNode(false)
+		tc.addNode()
 		node0 := tc.Clusters[0]
 
 		// Open TestCluster.
@@ -699,8 +699,8 @@ func TestCluster_ResizeStates(t *testing.T) {
 		if err := tc.CreateField("i", "f", FieldOptions{}); err != nil {
 			t.Fatal(err)
 		}
-		tc.SetBit("i", "f", "standard", 1, 101, nil)
-		tc.SetBit("i", "f", "standard", 1, 1300000, nil)
+		tc.SetBit("i", "f", 1, 101, nil)
+		tc.SetBit("i", "f", 1, 1300000, nil)
 
 		// Before starting the resize, get the CheckSum to use for
 		// comparison later.
@@ -709,8 +709,8 @@ func TestCluster_ResizeStates(t *testing.T) {
 		node0Fragment := node0View.Fragment(1)
 		node0Checksum := node0Fragment.Checksum()
 
-		// AddNode needs to block until the resize process has completed.
-		tc.AddNode(false)
+		// addNode needs to block until the resize process has completed.
+		tc.addNode()
 		node1 := tc.Clusters[1]
 
 		// Ensure that nodes come up in state NORMAL.

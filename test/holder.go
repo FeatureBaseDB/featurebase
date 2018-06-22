@@ -142,7 +142,7 @@ func (h *Holder) SetBit(index, field string, rowID, columnID uint64) {
 	if err != nil {
 		panic(err)
 	}
-	f.SetBit(pilosa.ViewStandard, rowID, columnID, nil)
+	f.SetBit(rowID, columnID, nil)
 }
 
 // ClearBit clears a bit on the given field.
@@ -152,7 +152,7 @@ func (h *Holder) ClearBit(index, field string, rowID, columnID uint64) {
 	if err != nil {
 		panic(err)
 	}
-	f.ClearBit(pilosa.ViewStandard, rowID, columnID, nil)
+	f.ClearBit(rowID, columnID, nil)
 }
 
 // MustSetBits sets columns on a row. Panic on error.

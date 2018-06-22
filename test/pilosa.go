@@ -25,7 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/boltdb"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/server"
@@ -164,9 +163,6 @@ func (m *Main) Reopen() error {
 		return errors.Wrap(err, "setting up server")
 	}
 
-	m.Server.NewAttrStore = boltdb.NewAttrStore
-	m.Server.Holder.NewAttrStore = m.Server.NewAttrStore
-
 	// Run new program.
 	if err := m.Start(); err != nil {
 		return err
@@ -267,10 +263,15 @@ func (m *Main) RecalculateCaches() error {
 
 // MustDo executes http.Do() with an http.NewRequest(). Panic on error.
 func MustDo(method, urlStr string, body string) *httpResponse {
-	req, err := gohttp.NewRequest(method, urlStr, strings.NewReader(body))
-	if err != nil {
-		panic(err)
-	}
+	req, err := gohttp.NewRequest(
+		method,
+		urlStr,
+		strings.NewReader(body),
+	)
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
 	resp, err := gohttp.DefaultClient.Do(req)
 	if err != nil {
 		panic(err)
