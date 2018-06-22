@@ -551,46 +551,33 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	})
 
-}
+	t.Run("CORS", func(t *testing.T) {
+		req := test.MustNewHTTPRequest("OPTIONS", "/index/foo/query", nil)
+		req.Header.Add("Origin", "http://test/")
+		req.Header.Add("Access-Control-Request-Method", "POST")
 
-func TestHandler_CORS(t *testing.T) {
-	t.Skip() // Until test.NewServer() works
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		result := w.Result()
 
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
+		// This handler does not support CORS, return Method Not Allowed (405)
+		if result.StatusCode != 405 {
+			t.Fatalf("CORS preflight status should be 405, but is %v", result.StatusCode)
+		}
 
-	s := test.NewServer()
-	s.Handler.API.Holder = hldr.Holder
-	defer s.Close()
+		clus := test.MustRunMainWithCluster(t, 1, test.OptAllowedOrigins([]string{"http://test/"}))
+		w = httptest.NewRecorder()
+		h := clus[0].Handler.(*http.Handler).Handler
+		h.ServeHTTP(w, req)
+		result = w.Result()
 
-	// No CORS config present, so should fail
-	handler := test.MustNewHandler()
-
-	req := test.MustNewHTTPRequest("OPTIONS", "/index/foo/query", nil)
-	req.Header.Add("Origin", "http://test/")
-	req.Header.Add("Access-Control-Request-Method", "POST")
-
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-	result := w.Result()
-
-	// This handler does not support CORS, return Method Not Allowed (405)
-	if result.StatusCode != 405 {
-		t.Fatalf("CORS preflight status should be 405, but is %v", result.StatusCode)
-	}
-
-	// CORS config should allow preflight response
-	handler = test.MustNewHandler(http.OptHandlerAllowedOrigins([]string{"http://test/"}))
-	w = httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-	result = w.Result()
-
-	if result.StatusCode != 200 {
-		t.Fatalf("CORS preflight status should be 200, but is %v", result.StatusCode)
-	}
-	if w.HeaderMap["Access-Control-Allow-Origin"][0] != "http://test/" {
-		t.Fatal("CORS header not present")
-	}
+		if result.StatusCode != 200 {
+			t.Fatalf("CORS preflight status should be 200, but is %v", result.StatusCode)
+		}
+		if w.HeaderMap["Access-Control-Allow-Origin"][0] != "http://test/" {
+			t.Fatal("CORS header not present")
+		}
+	})
 }
 
 func mustJSONDecode(t *testing.T, r io.Reader) (ret map[string]interface{}) {

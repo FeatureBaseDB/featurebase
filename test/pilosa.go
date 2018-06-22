@@ -52,6 +52,13 @@ func OptAntiEntropyInterval(dur time.Duration) MainOpt {
 	}
 }
 
+func OptAllowedOrigins(origins []string) MainOpt {
+	return func(m *Main) error {
+		m.Config.Handler.AllowedOrigins = origins
+		return nil
+	}
+}
+
 // NewMain returns a new instance of Main with a temporary data directory and random port.
 func NewMain(opts ...MainOpt) *Main {
 	path, err := ioutil.TempDir("", "pilosa-")
