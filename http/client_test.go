@@ -155,7 +155,7 @@ func TestClient_MultiNode(t *testing.T) {
 
 	topN := 4
 	queryRequest := &internal.QueryRequest{
-		Query:  fmt.Sprintf(`TopN(field="%s", n=%d)`, "f", topN),
+		Query:  fmt.Sprintf(`TopN(f, n=%d)`, topN),
 		Remote: false,
 	}
 	result, err := client[0].Query(context.Background(), "i", queryRequest)

@@ -92,8 +92,8 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 
 	// Write data on first node.
 	if _, err := m0.Query("i", "", `
-            SetBit(row=1, field="f", col=1)
-            SetBit(row=1, field="f", col=2400000)
+            Set(1, f=1)
+            Set(2400000, f=1)
         `); err != nil {
 		t.Fatal(err)
 	}
@@ -259,8 +259,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		// Write data on first node.
 		if _, err := m0.Query("i", "", `
-				SetBit(row=1, field="f", col=1)
-				SetBit(row=1, field="f", col=1300000)
+				Set(1, f=1)
+				Set(1300000, f=1)
 			`); err != nil {
 			t.Fatal(err)
 		}
@@ -311,8 +311,8 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		// Write data on first node. Note that no data is placed on slice 1.
 		if _, err := m0.Query("i", "", `
-				SetBit(row=1, field="f", col=1)
-				SetBit(row=1, field="f", col=2400000)
+				Set(1, f=1)
+				Set(2400000, f=1)
 			`); err != nil {
 			t.Fatal(err)
 		}
@@ -466,7 +466,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 		// TODO: Deterministic node IDs would ensure consistent results
 		setColumns := ""
 		for i := 0; i < 20; i++ {
-			setColumns += fmt.Sprintf("SetBit(row=1, field=\"f\", col=%d) ", i*pilosa.SliceWidth)
+			setColumns += fmt.Sprintf("Set(%d, f=1) ", i*pilosa.SliceWidth)
 		}
 
 		if _, err := m0.Query("i", "", setColumns); err != nil {

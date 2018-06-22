@@ -220,7 +220,7 @@ func TestHandler_Query_Args_URL(t *testing.T) {
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		if index != "idx0" {
 			t.Fatalf("unexpected index: %s", index)
-		} else if query.String() != `Count(Bitmap(id=100))` {
+		} else if query.String() != `Count(Row(id=100))` {
 			t.Fatalf("unexpected query: %s", query.String())
 		} else if !reflect.DeepEqual(slices, []uint64{0, 1}) {
 			t.Fatalf("unexpected slices: %+v", slices)
@@ -229,7 +229,7 @@ func TestHandler_Query_Args_URL(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1", strings.NewReader("Count( Bitmap( id=100))")))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1", strings.NewReader("Count( Row( id=100))")))
 	if w.Code != gohttp.StatusOK {
 		t.Fatalf("unexpected status code: %d %s", w.Code, w.Body.String())
 	} else if body := w.Body.String(); body != `{"results":[100]}`+"\n" {
@@ -248,7 +248,7 @@ func TestHandler_Query_Args_Protobuf(t *testing.T) {
 	h.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		if index != "idx0" {
 			t.Fatalf("unexpected index: %s", index)
-		} else if query.String() != `Count(Bitmap(id=100))` {
+		} else if query.String() != `Count(Row(id=100))` {
 			t.Fatalf("unexpected query: %s", query.String())
 		} else if !reflect.DeepEqual(slices, []uint64{0, 1}) {
 			t.Fatalf("unexpected slices: %+v", slices)
@@ -258,7 +258,7 @@ func TestHandler_Query_Args_Protobuf(t *testing.T) {
 
 	// Generate request body.
 	reqBody, err := proto.Marshal(&internal.QueryRequest{
-		Query:  "Count(Bitmap(id=100))",
+		Query:  "Count(Row(id=100))",
 		Slices: []uint64{0, 1},
 	})
 	if err != nil {
@@ -286,7 +286,7 @@ func TestHandler_Query_Args_Err(t *testing.T) {
 	h.API.Cluster = test.NewCluster(1)
 	h.API.Holder = hldr.Holder
 
-	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=a,b", strings.NewReader("Bitmap(id=100)")))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=a,b", strings.NewReader("Row(id=100)")))
 	if w.Code != gohttp.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"error":"invalid slice argument"}`+"\n" {
@@ -295,7 +295,7 @@ func TestHandler_Query_Args_Err(t *testing.T) {
 }
 func TestHandler_Query_Params_Err(t *testing.T) {
 	w := httptest.NewRecorder()
-	test.MustNewHandler().ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1&db=sample", strings.NewReader("Bitmap(id=100)")))
+	test.MustNewHandler().ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1&db=sample", strings.NewReader("Row(id=100)")))
 	if w.Code != gohttp.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"error":"db is not a valid argument"}`+"\n" {
@@ -317,7 +317,7 @@ func TestHandler_Query_Uint64_JSON(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1", strings.NewReader("Count( Bitmap( id=100))")))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1", strings.NewReader("Count( Row( id=100))")))
 	if w.Code != gohttp.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"results":[100]}`+"\n" {
@@ -338,7 +338,7 @@ func TestHandler_Query_Uint64_Protobuf(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	r := test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader("Count(Bitmap(id=100))"))
+	r := test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader("Count(Row(id=100))"))
 	r.Header.Set("Accept", "application/x-protobuf")
 	h.ServeHTTP(w, r)
 	if w.Code != gohttp.StatusOK {
@@ -370,7 +370,7 @@ func TestHandler_Query_Bitmap_JSON(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader("Bitmap(id=100)")))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader("Row(id=100)")))
 	if w.Code != gohttp.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"columns":[1,3,66,1048577]}]}`+"\n" {
@@ -403,7 +403,7 @@ func TestHandler_Query_Row_ColumnAttrs_JSON(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i/query?columnAttrs=true", strings.NewReader("Bitmap(id=100)")))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i/query?columnAttrs=true", strings.NewReader("Row(id=100)")))
 	if w.Code != gohttp.StatusOK {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"columns":[1,3,66,1048577]}],"columnAttrs":[{"id":3,"attrs":{"x":"y"}},{"id":66,"attrs":{"y":123,"z":false}}]}`+"\n" {
@@ -426,7 +426,7 @@ func TestHandler_Query_Row_Protobuf(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	r := test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader("Bitmap(id=100)"))
+	r := test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader("Row(id=100)"))
 	r.Header.Set("Accept", "application/x-protobuf")
 	h.ServeHTTP(w, r)
 	if w.Code != gohttp.StatusOK {
@@ -475,7 +475,7 @@ func TestHandler_Query_Row_ColumnAttrs_Protobuf(t *testing.T) {
 
 	// Encode request body.
 	buf, err := proto.Marshal(&internal.QueryRequest{
-		Query:       "Bitmap(id=100)",
+		Query:       "Row(id=100)",
 		ColumnAttrs: true,
 	})
 	if err != nil {
@@ -590,7 +590,7 @@ func TestHandler_Query_Err_JSON(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader(`Bitmap(id=100)`)))
+	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i/query", strings.NewReader(`Row(id=100)`)))
 	if w.Code != gohttp.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
 	} else if body := w.Body.String(); body != `{"error":"executing: marker"}`+"\n" {
@@ -653,7 +653,7 @@ func TestHandler_Query_ErrParse(t *testing.T) {
 	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1", strings.NewReader("bad_fn(")))
 	if w.Code != gohttp.StatusBadRequest {
 		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `{"error":"parsing: parsing: \nparse error near open (line 1 symbol 7 - line 1 symbol 8):\n\"(\"\n"}`+"\n" {
+	} else if body := w.Body.String(); body != `{"error":"parsing: parsing: \nparse error near IDENT (line 1 symbol 1 - line 1 symbol 4):\n\"bad\"\n"}`+"\n" { // TODO not confident
 		t.Fatalf("unexpected body: \n%s", body)
 	}
 }
