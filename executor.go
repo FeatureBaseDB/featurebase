@@ -1593,6 +1593,9 @@ func (e *Executor) mapperLocal(ctx context.Context, slices []uint64, mapFn mapFu
 func (e *Executor) translateCall(index string, idx *Index, c *pql.Call) error {
 	// Translate column key.
 	if idx.Keys() {
+		if c.Args["col"] != nil && !isString(c.Args["col"]) {
+			return errors.New("'col' value must be a string when index 'keys' option enabled")
+		}
 		if value := callArgString(c, "col"); value != "" {
 			ids, err := e.TranslateStore.TranslateColumnsToUint64(index, []string{value})
 			if err != nil {
@@ -1600,18 +1603,29 @@ func (e *Executor) translateCall(index string, idx *Index, c *pql.Call) error {
 			}
 			c.Args["col"] = ids[0]
 		}
+	} else {
+		if isString(c.Args["col"]) {
+			return errors.New("string 'col' value not allowed unless index 'keys' option enabled")
+		}
 	}
 
 	// Translate row key, if field is specified & key exists.
 	if fieldName := callArgString(c, "field"); fieldName != "" {
 		field := idx.Field(fieldName)
 		if field.Keys() {
+			if c.Args["row"] != nil && !isString(c.Args["row"]) {
+				return errors.New("'row' value must be a string when field 'keys' option enabled")
+			}
 			if value := callArgString(c, "row"); value != "" {
 				ids, err := e.TranslateStore.TranslateRowsToUint64(index, fieldName, []string{value})
 				if err != nil {
 					return err
 				}
 				c.Args["row"] = ids[0]
+			}
+		} else {
+			if isString(c.Args["row"]) {
+				return errors.New("string 'row' value not allowed unless field 'keys' option enabled")
 			}
 		}
 	}
@@ -1781,4 +1795,9 @@ func callArgString(call *pql.Call, key string) string {
 	}
 	s, _ := value.(string)
 	return s
+}
+
+func isString(v interface{}) bool {
+	_, ok := v.(string)
+	return ok
 }
