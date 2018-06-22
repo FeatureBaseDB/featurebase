@@ -406,234 +406,150 @@ func TestHandler_Endpoints(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i/field/f1", strings.NewReader("")))
 		if w.Code != gohttp.StatusOK {
-			t.Fatalf("unexpected status code: %d", w.Code)
+			t.Fatalf("unexpected status code: %d, body: %s", w.Code, w.Body.String())
 		} else if body := w.Body.String(); body != `{}`+"\n" {
 			t.Fatalf("unexpected body: %s", body)
 		} else if f := hldr.Index("i").Field("f1"); f != nil {
 			t.Fatal("expected nil field")
 		}
 	})
-}
 
-// Ensure the handler can return data in differing blocks for an index.
-func TestHandler_Index_AttrStore_Diff(t *testing.T) {
-	t.Skip() // Until test.NewServer() works
+	i := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+	if err := i.ColumnAttrStore().SetAttrs(1, map[string]interface{}{"foo": 1, "bar": 2}); err != nil {
+		t.Fatal(err)
+	} else if err := i.ColumnAttrStore().SetAttrs(100, map[string]interface{}{"x": "y"}); err != nil {
+		t.Fatal(err)
+	} else if err := i.ColumnAttrStore().SetAttrs(200, map[string]interface{}{"snowman": "☃"}); err != nil {
+		t.Fatal(err)
+	}
 
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
+	t.Run("AttrStore Diff", func(t *testing.T) {
+		blks, err := i.ColumnAttrStore().Blocks()
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	s := test.NewServer()
-	s.Handler.API.Holder = hldr.Holder
-	defer s.Close()
+		blks = blks[1:]
+		blks[1].Checksum = []byte("MISMATCHED_CHECKSUM")
 
-	// Set attributes on the index.
-	index, err := hldr.CreateIndexIfNotExists("i", pilosa.IndexOptions{})
+		// Send block checksums to determine diff.
+		req := test.MustNewHTTPRequest(
+			"POST",
+			"/index/i/attr/diff",
+			strings.NewReader(`{"blocks":`+string(test.MustMarshalJSON(blks))+`}`),
+		)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d, body: %s", w.Code, w.Body.String())
+		}
+
+		// Read and validate body.
+		if w.Body.String() != `{"attrs":{"1":{"bar":2,"foo":1},"200":{"snowman":"☃"}}}`+"\n" {
+			t.Fatalf("unexpected body: %s", w.Body.String())
+		}
+	})
+
+	meta, err := i.CreateFieldIfNotExists("meta", pilosa.FieldOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := index.ColumnAttrStore().SetAttrs(1, map[string]interface{}{"foo": 1, "bar": 2}); err != nil {
+	if err := meta.RowAttrStore().SetAttrs(1, map[string]interface{}{"foo": 1, "bar": 2}); err != nil {
 		t.Fatal(err)
-	} else if err := index.ColumnAttrStore().SetAttrs(100, map[string]interface{}{"x": "y"}); err != nil {
+	} else if err := meta.RowAttrStore().SetAttrs(100, map[string]interface{}{"x": "y"}); err != nil {
 		t.Fatal(err)
-	} else if err := index.ColumnAttrStore().SetAttrs(200, map[string]interface{}{"snowman": "☃"}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Retrieve block checksums.
-	blks, err := index.ColumnAttrStore().Blocks()
-	if err != nil {
+	} else if err := meta.RowAttrStore().SetAttrs(200, map[string]interface{}{"snowman": "☃"}); err != nil {
 		t.Fatal(err)
 	}
 
-	// Remove block #0 and alter block 2's checksum.
-	blks = blks[1:]
-	blks[1].Checksum = []byte("MISMATCHED_CHECKSUM")
+	t.Run("field attrstore diff", func(t *testing.T) {
+		blks, err := meta.RowAttrStore().Blocks()
+		if err != nil {
+			t.Fatal(err)
+		}
+		blks = blks[1:]
+		blks[1].Checksum = []byte("MISMATCHED_CHECKSUM")
 
-	// Send block checksums to determine diff.
-	req, err := gohttp.NewRequest(
-		"POST",
-		s.URL+"/index/i0/attr/diff",
-		strings.NewReader(`{"blocks":`+string(test.MustMarshalJSON(blks))+`}`),
-	)
+		// Send block checksums to determine diff.
+		req := test.MustNewHTTPRequest(
+			"POST",
+			"/index/i/field/meta/attr/diff",
+			strings.NewReader(`{"blocks":`+string(test.MustMarshalJSON(blks))+`}`),
+		)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d, body: %s", w.Code, w.Body.String())
+		}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+		// Read and validate body.
+		if w.Body.String() != `{"attrs":{"1":{"bar":2,"foo":1},"200":{"snowman":"☃"}}}`+"\n" {
+			t.Fatalf("unexpected body: %s", w.Body.String())
+		}
+	})
 
-	client := &gohttp.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
+	t.Run("Version", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		r := test.MustNewHTTPRequest("GET", "/version", nil)
+		h.ServeHTTP(w, r)
+		version := strings.TrimPrefix(pilosa.Version, "v")
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		} else if w.Body.String() != `{"version":"`+version+`"}`+"\n" {
+			t.Fatalf("unexpected body: %q", w.Body.String())
+		}
+	})
 
-	// Read and validate body.
-	if body := string(test.MustReadAll(resp.Body)); body != `{"attrs":{"1":{"bar":2,"foo":1},"200":{"snowman":"☃"}}}`+"\n" {
-		t.Fatalf("unexpected body: %s", body)
-	}
-}
+	t.Run("Fragment Nodes", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		r := test.MustNewHTTPRequest("GET", "/fragment/nodes?index=i&slice=0", nil)
+		h.ServeHTTP(w, r)
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		body := mustJSONDecodeSlice(t, w.Body)
+		bmap := body[0].(map[string]interface{})
+		if bmap["isCoordinator"] != true {
+			t.Fatalf("expected true coordinator")
+		}
 
-// Ensure the handler can return data in differing blocks for a field.
-func TestHandler_Field_AttrStore_Diff(t *testing.T) {
-	t.Skip() // Until test.NewServer() works
+		// invalid argument should return BadRequest
+		w = httptest.NewRecorder()
+		r = test.MustNewHTTPRequest("GET", "/fragment/nodes?db=X&slice=0", nil)
+		h.ServeHTTP(w, r)
+		if w.Code != gohttp.StatusBadRequest {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
 
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
+		// index is required
+		w = httptest.NewRecorder()
+		r = test.MustNewHTTPRequest("GET", "/fragment/nodes?slice=0", nil)
+		h.ServeHTTP(w, r)
+		if w.Code != gohttp.StatusBadRequest {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+	})
 
-	s := test.NewServer()
-	s.Handler.API.Holder = hldr.Holder
-	defer s.Close()
+	t.Run("Expvars", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		r := test.MustNewHTTPRequest("GET", "/debug/vars", nil)
+		h.ServeHTTP(w, r)
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+	})
 
-	// Set attributes on the index.
-	idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	f, err := idx.CreateFieldIfNotExists("meta", pilosa.FieldOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := f.RowAttrStore().SetAttrs(1, map[string]interface{}{"foo": 1, "bar": 2}); err != nil {
-		t.Fatal(err)
-	} else if err := f.RowAttrStore().SetAttrs(100, map[string]interface{}{"x": "y"}); err != nil {
-		t.Fatal(err)
-	} else if err := f.RowAttrStore().SetAttrs(200, map[string]interface{}{"snowman": "☃"}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Retrieve block checksums.
-	blks, err := f.RowAttrStore().Blocks()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Remove block #0 and alter block 2's checksum.
-	blks = blks[1:]
-	blks[1].Checksum = []byte("MISMATCHED_CHECKSUM")
-
-	// Send block checksums to determine diff.
-	req, err := gohttp.NewRequest(
-		"POST",
-		s.URL+"/index/i0/field/meta/attr/diff",
-		strings.NewReader(`{"blocks":`+string(test.MustMarshalJSON(blks))+`}`),
-	)
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-
-	client := &gohttp.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-
-	// Read and validate body.
-	if body := string(test.MustReadAll(resp.Body)); body != `{"attrs":{"1":{"bar":2,"foo":1},"200":{"snowman":"☃"}}}`+"\n" {
-		t.Fatalf("unexpected body: %s", body)
-	}
-}
-
-// Ensure the handler can retrieve the version.
-func TestHandler_Version(t *testing.T) {
-	t.Skip() // Until test.NewServer() works
-
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-
-	h := test.MustNewHandler()
-	h.API.Cluster = test.NewCluster(1)
-	h.API.Holder = hldr.Holder
-
-	w := httptest.NewRecorder()
-	r := test.MustNewHTTPRequest("GET", "/version", nil)
-	h.ServeHTTP(w, r)
-	version := pilosa.Version
-	if strings.HasPrefix(version, "v") {
-		version = version[1:]
-	}
-	if w.Code != gohttp.StatusOK {
-		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if w.Body.String() != `{"version":"`+version+`"}`+"\n" {
-		t.Fatalf("unexpected body: %q", w.Body.String())
-	}
-}
-
-// Ensure the handler can return a list of nodes for a fragment.
-func TestHandler_Fragment_Nodes(t *testing.T) {
-	t.Skip() // Until test.NewServer() works
-
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-
-	h := test.MustNewHandler()
-	h.API.Holder = hldr.Holder
-	h.API.Cluster = test.NewCluster(3)
-	h.API.Cluster.ReplicaN = 2
-
-	w := httptest.NewRecorder()
-	r := test.MustNewHTTPRequest("GET", "/fragment/nodes?index=X&slice=0", nil)
-	h.ServeHTTP(w, r)
-	if w.Code != gohttp.StatusOK {
-		t.Fatalf("unexpected status code: %d", w.Code)
-	} else if body := w.Body.String(); body != `[{"id":"node2","uri":{"scheme":"http","host":"host2"},"isCoordinator":false},{"id":"node0","uri":{"scheme":"http","host":"host0"},"isCoordinator":false}]`+"\n" {
-		t.Fatalf("unexpected body: %q", body)
-	}
-
-	// invalid argument should return BadRequest
-	w = httptest.NewRecorder()
-	r = test.MustNewHTTPRequest("GET", "/fragment/nodes?db=X&slice=0", nil)
-	h.ServeHTTP(w, r)
-	if w.Code != gohttp.StatusBadRequest {
-		t.Fatalf("unexpected status code: %d", w.Code)
-	}
-
-	// index is required
-	w = httptest.NewRecorder()
-	r = test.MustNewHTTPRequest("GET", "/fragment/nodes?slice=0", nil)
-	h.ServeHTTP(w, r)
-	if w.Code != gohttp.StatusBadRequest {
-		t.Fatalf("unexpected status code: %d", w.Code)
-	}
-}
-
-// Ensure the handler can return expvars without panicking.
-func TestHandler_Expvars(t *testing.T) {
-	t.Skip() // Until test.NewServer() works
-
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-
-	h := test.MustNewHandler()
-	h.API.Cluster = test.NewCluster(1)
-	h.API.Holder = hldr.Holder
-	w := httptest.NewRecorder()
-	r := test.MustNewHTTPRequest("GET", "/debug/vars", nil)
-	h.ServeHTTP(w, r)
-	if w.Code != gohttp.StatusOK {
-		t.Fatalf("unexpected status code: %d", w.Code)
-	}
-}
-
-func MustReadAll(r io.Reader) []byte {
-	buf, err := ioutil.ReadAll(r)
-	if err != nil {
-		panic(err)
-	}
-	return buf
-}
-
-func TestHandler_RecalculateCaches(t *testing.T) {
-	t.Skip() // Until test.NewServer() works
-
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-
-	h := test.MustNewHandler()
-	h.API.Holder = hldr.Holder
-	h.API.Cluster = test.NewCluster(1)
-
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/recalculate-caches", nil))
-	if w.Code != gohttp.StatusNoContent {
-		t.Fatalf("unexpected status code: %d", w.Code)
-	}
+	t.Run("Recalculate Caches", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/recalculate-caches", nil))
+		if w.Code != gohttp.StatusNoContent {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+	})
 
 }
 
@@ -678,6 +594,15 @@ func TestHandler_CORS(t *testing.T) {
 }
 
 func mustJSONDecode(t *testing.T, r io.Reader) (ret map[string]interface{}) {
+	dec := json.NewDecoder(r)
+	err := dec.Decode(&ret)
+	if err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	return ret
+}
+
+func mustJSONDecodeSlice(t *testing.T, r io.Reader) (ret []interface{}) {
 	dec := json.NewDecoder(r)
 	err := dec.Decode(&ret)
 	if err != nil {
