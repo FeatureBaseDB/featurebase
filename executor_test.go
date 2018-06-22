@@ -297,9 +297,7 @@ func TestExecutor_Execute_Set(t *testing.T) {
 }
 
 // Ensure old PQL syntax doesn't break anything too badly.
-func TestExecutor_Execute_OldSetBit(t *testing.T) {
-	return
-	// TODO
+func TestExecutor_Execute_OldPQL(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
@@ -308,12 +306,8 @@ func TestExecutor_Execute_OldSetBit(t *testing.T) {
 
 	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
 
-	if res, err := e.Execute(context.Background(), "i", test.MustParse(`SetBit(frame=f, row=11, col=1)`), nil, nil); err != nil {
-		t.Fatal(err)
-	} else {
-		if !res[0].(bool) {
-			t.Fatalf("expected column changed")
-		}
+	if _, err := e.Execute(context.Background(), "i", test.MustParse(`SetBit(frame=f, row=11, col=1)`), nil, nil); err == nil || err.Error() != "unknown call: SetBit" {
+		t.Fatal("Expected error: 'unknown call: SetBit'")
 	}
 }
 
