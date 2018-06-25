@@ -1614,7 +1614,6 @@ func (e *Executor) translateCall(index string, idx *Index, c *pql.Call) error {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("translated %s to %d in field %s\n", value, ids[0], fieldName)
 			c.Args[colKey] = ids[0]
 		}
 	} else {
