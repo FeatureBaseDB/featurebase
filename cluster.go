@@ -229,7 +229,7 @@ type Cluster struct {
 	// Threshold for logging long-running queries
 	LongQueryTime time.Duration
 
-	// Maximum number of SetBit() or ClearBit() commands per request.
+	// Maximum number of Set() or Clear() commands per request.
 	MaxWritesPerRequest int
 
 	// EventReceiver receives NodeEvents pertaining to node membership.
@@ -914,7 +914,7 @@ func (c *Cluster) open() error {
 			return fmt.Errorf("sending restart NodeJoin: %v", err)
 		}
 
-		c.Logger.Printf("wait for joining to complete")
+		c.Logger.Printf("%v wait for joining to complete", c.Node.ID)
 		<-c.joining
 		c.Logger.Printf("joining has completed")
 	}

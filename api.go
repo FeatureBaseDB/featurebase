@@ -46,16 +46,43 @@ type API struct {
 	Cluster          *Cluster
 	TranslateStore   TranslateStore
 	Logger           Logger
+	server           *Server
+}
+
+// APIOption is a functional option type for pilosa.API
+type APIOption func(*API) error
+
+func OptAPIServer(s *Server) APIOption {
+	return func(a *API) error {
+		a.server = s
+		a.Executor = s.executor
+		a.TranslateStore = s.translateFile
+		a.Holder = s.holder
+		a.Broadcaster = s
+		a.BroadcastHandler = s
+		a.StatusHandler = s
+		a.Cluster = s.Cluster
+		a.Logger = s.logger
+		return nil
+	}
 }
 
 // NewAPI returns a new API instance.
-func NewAPI() *API {
-	return &API{
+func NewAPI(opts ...APIOption) (*API, error) {
+	api := &API{
 		Broadcaster: NopBroadcaster,
 		//BroadcastHandler: NopBroadcastHandler, // TODO: implement the nop
 		//StatusHandler:    NopStatusHandler,    // TODO: implement the nop
 		Logger: NopLogger,
 	}
+
+	for _, opt := range opts {
+		err := opt(api)
+		if err != nil {
+			return nil, errors.Wrap(err, "applying option")
+		}
+	}
+	return api, nil
 }
 
 // validAPIMethods specifies the api methods that are valid for each
@@ -658,7 +685,6 @@ func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest
 	if err != nil {
 		return errors.Wrap(err, "getting field")
 	}
-
 	// Import into fragment.
 	err = field.ImportValue(req.ColumnIDs, req.Values)
 	if err != nil {
