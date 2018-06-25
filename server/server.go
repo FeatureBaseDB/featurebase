@@ -77,14 +77,14 @@ type Command struct {
 	Handler pilosa.Handler
 	ln      net.Listener
 
-	serverOptions []pilosa.ServerOption
+	ServerOptions []pilosa.ServerOption
 }
 
 type CommandOption func(c *Command) error
 
 func OptCommandServerOptions(opts ...pilosa.ServerOption) CommandOption {
 	return func(c *Command) error {
-		c.serverOptions = append(c.serverOptions, opts...)
+		c.ServerOptions = append(c.ServerOptions, opts...)
 		return nil
 	}
 }
@@ -266,7 +266,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
 	}
 
-	serverOptions = append(serverOptions, m.serverOptions...)
+	serverOptions = append(serverOptions, m.ServerOptions...)
 
 	m.Server, err = pilosa.NewServer(serverOptions...)
 

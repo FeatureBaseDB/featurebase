@@ -34,7 +34,7 @@ import (
 )
 
 ////////////////////////////////////////////////////////////////////////////////////
-// Main represents a test wrapper for main.Main.
+// Main represents a test wrapper for server.Command.
 type Main struct {
 	*server.Command
 
@@ -43,43 +43,35 @@ type Main struct {
 	Stderr bytes.Buffer
 }
 
-type MainOpt func(m *Main) error
-
-func OptAntiEntropyInterval(dur time.Duration) MainOpt {
-	return func(m *Main) error {
-		m.Command.Config.AntiEntropy.Interval = toml.Duration(dur)
+func OptAntiEntropyInterval(dur time.Duration) server.CommandOption {
+	return func(m *server.Command) error {
+		m.Config.AntiEntropy.Interval = toml.Duration(dur)
 		return nil
 	}
 }
 
-func OptAllowedOrigins(origins []string) MainOpt {
-	return func(m *Main) error {
+func OptAllowedOrigins(origins []string) server.CommandOption {
+	return func(m *server.Command) error {
 		m.Config.Handler.AllowedOrigins = origins
 		return nil
 	}
 }
 
 // NewMain returns a new instance of Main with a temporary data directory and random port.
-func NewMain(opts ...MainOpt) *Main {
+func NewMain(opts ...server.CommandOption) *Main {
 	path, err := ioutil.TempDir("", "pilosa-")
 	if err != nil {
 		panic(err)
 	}
 
-	m := &Main{Command: server.NewCommand(os.Stdin, os.Stdout, os.Stderr)}
+	m := &Main{Command: server.NewCommand(os.Stdin, os.Stdout, os.Stderr, opts...)}
 	m.Config.DataDir = path
 	m.Config.Bind = "http://localhost:0"
 	m.Config.Cluster.Disabled = true
 	m.Command.Stdin = &m.Stdin
 	m.Command.Stdout = &m.Stdout
 	m.Command.Stderr = &m.Stderr
-	for _, opt := range opts {
-		err := opt(m)
-		if err != nil {
-			panic(err)
-		}
 
-	}
 	err = m.SetupServer()
 	if err != nil {
 		panic(err)
@@ -94,7 +86,7 @@ func NewMain(opts ...MainOpt) *Main {
 }
 
 // NewMainWithCluster returns a new instance of Main with clustering enabled.
-func NewMainWithCluster(isCoordinator bool, opts ...MainOpt) *Main {
+func NewMainWithCluster(isCoordinator bool, opts ...server.CommandOption) *Main {
 	m := NewMain(opts...)
 	m.Config.Cluster.Disabled = false
 	m.Config.Cluster.Coordinator = isCoordinator
@@ -103,7 +95,7 @@ func NewMainWithCluster(isCoordinator bool, opts ...MainOpt) *Main {
 
 // MustRunMainWithCluster ruturns a running array of *Main where
 // all nodes are joined via memberlist (i.e. clustering enabled).
-func MustRunMainWithCluster(t *testing.T, size int, opts ...MainOpt) []*Main {
+func MustRunMainWithCluster(t *testing.T, size int, opts ...server.CommandOption) []*Main {
 	ma, err := runMainWithCluster(size, opts...)
 	if err != nil {
 		t.Fatalf("new main array with cluster: %v", err)
@@ -113,7 +105,7 @@ func MustRunMainWithCluster(t *testing.T, size int, opts ...MainOpt) []*Main {
 
 // runMainWithCluster runs an array of *Main where all nodes are
 // joined via memberlist (i.e. clustering enabled).
-func runMainWithCluster(size int, opts ...MainOpt) ([]*Main, error) {
+func runMainWithCluster(size int, opts ...server.CommandOption) ([]*Main, error) {
 	if size == 0 {
 		return nil, errors.New("cluster must contain at least one node")
 	}
@@ -164,7 +156,7 @@ func (m *Main) Reopen() error {
 
 	// Create new main with the same config.
 	config := m.Command.Config
-	m.Command = server.NewCommand(os.Stdin, os.Stdout, os.Stderr)
+	m.Command = server.NewCommand(os.Stdin, os.Stdout, os.Stderr, server.OptCommandServerOptions(m.ServerOptions...))
 	m.Command.Config = config
 	err := m.SetupServer()
 	if err != nil {
