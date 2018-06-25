@@ -20,7 +20,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/ctl"
 )
 
@@ -59,9 +58,9 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 	flags.IntVarP(&Importer.BufferSize, "buffer-size", "s", 10000000, "Number of bits to buffer/sort before importing.")
 	flags.BoolVarP(&Importer.Sort, "sort", "", false, "Enables sorting before import.")
 	flags.BoolVarP(&Importer.CreateSchema, "create", "e", false, "Create the schema if it does not exist before import.")
-	flags.Var(&Importer.FieldOptions.TimeQuantum, "field-time-quantum", "Time quantum for the field")
-	flags.StringVar(&Importer.FieldOptions.CacheType, "field-cache-type", pilosa.CacheTypeRanked, "Cache type for the field; valid values: none, lru, ranked")
-	flags.Uint32Var(&Importer.FieldOptions.CacheSize, "field-cache-size", 50000, "Cache size for the field")
+	//flags.Var(&Importer.FieldOptions.TimeQuantum, "field-time-quantum", "Time quantum for the field")
+	//flags.StringVar(&Importer.FieldOptions.CacheType, "field-cache-type", pilosa.CacheTypeRanked, "Cache type for the field; valid values: none, lru, ranked")
+	//flags.Uint32Var(&Importer.FieldOptions.CacheSize, "field-cache-size", 50000, "Cache size for the field")
 	ctl.SetTLSConfig(flags, &Importer.TLS.CertificatePath, &Importer.TLS.CertificateKeyPath, &Importer.TLS.SkipVerify)
 
 	return importCmd

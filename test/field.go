@@ -28,12 +28,12 @@ type Field struct {
 }
 
 // NewField returns a new instance of Field d/0.
-func NewField(opt ...pilosa.FieldOption) *Field {
+func NewField(options pilosa.FieldOptions) *Field {
 	path, err := ioutil.TempDir("", "pilosa-field-")
 	if err != nil {
 		panic(err)
 	}
-	field, err := pilosa.NewField(path, "i", "f", opt...)
+	field, err := pilosa.NewField(path, "i", "f", options)
 	if err != nil {
 		panic(err)
 	}
@@ -41,8 +41,8 @@ func NewField(opt ...pilosa.FieldOption) *Field {
 }
 
 // MustOpenField returns a new, opened field at a temporary path. Panic on error.
-func MustOpenField(opt ...pilosa.FieldOption) *Field {
-	f := NewField(opt...)
+func MustOpenField(options pilosa.FieldOptions) *Field {
+	f := NewField(options)
 	if err := f.Open(); err != nil {
 		panic(err)
 	}
@@ -63,7 +63,7 @@ func (f *Field) Reopen() error {
 	}
 
 	path, index, name := f.Path(), f.Index(), f.Name()
-	f.Field, err = pilosa.NewField(path, index, name)
+	f.Field, err = pilosa.NewField(path, index, name, pilosa.FieldOptions{})
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func (f *Field) Reopen() error {
 
 // Ensure field can set its cache
 func TestField_SetCacheSize(t *testing.T) {
-	f := MustOpenField()
+	f := MustOpenField(pilosa.FieldOptions{})
 	defer f.Close()
 	cacheSize := uint32(100)
 

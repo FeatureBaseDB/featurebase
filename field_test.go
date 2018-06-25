@@ -24,7 +24,7 @@ import (
 
 // Ensure field can open and retrieve a view.
 func TestField_CreateViewIfNotExists(t *testing.T) {
-	f := test.MustOpenField()
+	f := test.MustOpenField(pilosa.FieldOptions{})
 	defer f.Close()
 
 	// Create view.
@@ -50,10 +50,7 @@ func TestField_CreateViewIfNotExists(t *testing.T) {
 
 // Ensure field can set its time quantum.
 func TestField_SetTimeQuantum(t *testing.T) {
-	fo := pilosa.FieldOptions{
-		Type: "time",
-	}
-	f := test.MustOpenField(pilosa.OptFieldFieldOptions(fo))
+	f := test.MustOpenField(pilosa.FieldOptions{Type: pilosa.FieldTypeTime})
 	defer f.Close()
 
 	// Set & retrieve time quantum.
@@ -208,7 +205,7 @@ func TestField_NameRestriction(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	field, err := pilosa.NewField(path, "i", ".meta")
+	field, err := pilosa.NewField(path, "i", ".meta", pilosa.FieldOptions{})
 	if field != nil {
 		t.Fatalf("unexpected field name %s", err)
 	}
@@ -240,13 +237,13 @@ func TestField_NameValidation(t *testing.T) {
 		panic(err)
 	}
 	for _, name := range validFieldNames {
-		_, err := pilosa.NewField(path, "i", name)
+		_, err := pilosa.NewField(path, "i", name, pilosa.FieldOptions{})
 		if err != nil {
 			t.Fatalf("unexpected field name: %s %s", name, err)
 		}
 	}
 	for _, name := range invalidFieldNames {
-		_, err := pilosa.NewField(path, "i", name)
+		_, err := pilosa.NewField(path, "i", name, pilosa.FieldOptions{})
 		if err == nil {
 			t.Fatalf("expected error on field name: %s", name)
 		}
@@ -255,7 +252,7 @@ func TestField_NameValidation(t *testing.T) {
 
 // Ensure field can open and retrieve a view.
 func TestField_DeleteView(t *testing.T) {
-	f := test.MustOpenField()
+	f := test.MustOpenField(pilosa.FieldOptions{})
 	defer f.Close()
 
 	viewName := pilosa.ViewStandard + "_v"

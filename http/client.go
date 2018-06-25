@@ -334,8 +334,8 @@ func (c *InternalClient) EnsureIndex(ctx context.Context, name string, options p
 	return err
 }
 
-func (c *InternalClient) EnsureField(ctx context.Context, indexName string, fieldName string, options pilosa.FieldOptions) error {
-	err := c.CreateField(ctx, indexName, fieldName, options)
+func (c *InternalClient) EnsureField(ctx context.Context, indexName string, fieldName string) error {
+	err := c.CreateField(ctx, indexName, fieldName)
 	if err == nil || err == pilosa.ErrFieldExists {
 		return nil
 	}
@@ -620,14 +620,15 @@ func (c *InternalClient) backupSliceNode(ctx context.Context, index, field strin
 }
 
 // CreateField creates a new field on the server.
-func (c *InternalClient) CreateField(ctx context.Context, index, field string, opt pilosa.FieldOptions) error {
+func (c *InternalClient) CreateField(ctx context.Context, index, field string) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	}
 
+	// TODO: remove buf completely? (depends on whether importer needs to create specific field types)
 	// Encode query request.
 	buf, err := json.Marshal(&postFieldRequest{
-		Options: opt,
+		//Options: opt,
 	})
 	if err != nil {
 		return errors.Wrap(err, "marshaling")

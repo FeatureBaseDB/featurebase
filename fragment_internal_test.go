@@ -1245,7 +1245,7 @@ func mustOpenFragment(index, field, view string, slice uint64, cacheType string)
 	file.Close()
 
 	if cacheType == "" {
-		cacheType = defaultCacheType
+		cacheType = DefaultCacheType
 	}
 
 	f := NewFragment(file.Name(), index, field, view, slice)

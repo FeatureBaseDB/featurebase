@@ -26,7 +26,7 @@ func mustOpenView(index, field, name string) *View {
 		panic(err)
 	}
 
-	v := NewView(path, index, field, name, defaultCacheSize)
+	v := NewView(path, index, field, name, DefaultCacheSize)
 	if err := v.open(); err != nil {
 		panic(err)
 	}

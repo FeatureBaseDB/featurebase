@@ -41,10 +41,10 @@ type InternalClient interface {
 	Import(ctx context.Context, index, field string, slice uint64, bits []Bit) error
 	ImportK(ctx context.Context, index, field string, bits []Bit) error
 	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
-	EnsureField(ctx context.Context, indexName string, fieldName string, options FieldOptions) error
+	EnsureField(ctx context.Context, indexName string, fieldName string) error
 	ImportValue(ctx context.Context, index, field string, slice uint64, vals []FieldValue) error
 	ExportCSV(ctx context.Context, index, field string, slice uint64, w io.Writer) error
-	CreateField(ctx context.Context, index, field string, opt FieldOptions) error
+	CreateField(ctx context.Context, index, field string) error
 	FragmentBlocks(ctx context.Context, uri *URI, index, field string, slice uint64) ([]FragmentBlock, error)
 	BlockData(ctx context.Context, uri *URI, index, field string, slice uint64, block int) ([]uint64, []uint64, error)
 	ColumnAttrDiff(ctx context.Context, uri *URI, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
@@ -108,7 +108,7 @@ func (n *NopInternalClient) ImportK(ctx context.Context, index, field string, bi
 func (n *NopInternalClient) EnsureIndex(ctx context.Context, name string, options IndexOptions) error {
 	return nil
 }
-func (n *NopInternalClient) EnsureField(ctx context.Context, indexName string, fieldName string, options FieldOptions) error {
+func (n *NopInternalClient) EnsureField(ctx context.Context, indexName string, fieldName string) error {
 	return nil
 }
 func (n *NopInternalClient) ImportValue(ctx context.Context, index, field string, slice uint64, vals []FieldValue) error {
@@ -117,7 +117,7 @@ func (n *NopInternalClient) ImportValue(ctx context.Context, index, field string
 func (n *NopInternalClient) ExportCSV(ctx context.Context, index, field string, slice uint64, w io.Writer) error {
 	return nil
 }
-func (n *NopInternalClient) CreateField(ctx context.Context, index, field string, opt FieldOptions) error {
+func (n *NopInternalClient) CreateField(ctx context.Context, index, field string) error {
 	return nil
 }
 func (n *NopInternalClient) FragmentBlocks(ctx context.Context, uri *URI, index, field string, slice uint64) ([]FragmentBlock, error) {

@@ -335,7 +335,7 @@ func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 }
 
 func (i *Index) newField(path, name string) (*Field, error) {
-	f, err := NewField(path, i.name, name)
+	f, err := NewField(path, i.name, name, FieldOptions{}) // TODO: NewField should be un-exported along with FieldOptions
 	if err != nil {
 		return nil, err
 	}

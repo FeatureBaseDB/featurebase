@@ -117,8 +117,8 @@ func NewFragment(path, index, field, view string, slice uint64) *Fragment {
 		field:     field,
 		view:      view,
 		slice:     slice,
-		CacheType: defaultCacheType,
-		CacheSize: defaultCacheSize,
+		CacheType: DefaultCacheType,
+		CacheSize: DefaultCacheSize,
 
 		Logger: NopLogger,
 		MaxOpN: defaultFragmentMaxOpN,
