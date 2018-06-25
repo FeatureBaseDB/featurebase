@@ -51,7 +51,6 @@ func TestImportCommand_Validation(t *testing.T) {
 }
 
 func TestImportCommand_Run(t *testing.T) {
-
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewImportCommand(stdin, stdout, stderr)
@@ -62,15 +61,8 @@ func TestImportCommand_Run(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-	s := test.NewServer()
-	defer s.Close()
-
-	s.Handler.API.Cluster = test.NewCluster(1)
-	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
-	s.Handler.API.Holder = hldr.Holder
-	cm.Host = s.Host()
+	cmd := test.MustRunMainWithCluster(t, 1)[0]
+	cm.Host = cmd.Server.URI.HostPort()
 
 	cm.Index = "i"
 	cm.Field = "f"
@@ -84,7 +76,6 @@ func TestImportCommand_Run(t *testing.T) {
 
 // Ensure that the ImportValue path runs.
 func TestImportCommand_RunValue(t *testing.T) {
-
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewImportCommand(stdin, stdout, stderr)
@@ -95,18 +86,11 @@ func TestImportCommand_RunValue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-	s := test.NewServer()
-	defer s.Close()
+	cmd := test.MustRunMainWithCluster(t, 1)[0]
+	cm.Host = cmd.Server.URI.HostPort()
 
-	s.Handler.API.Cluster = test.NewCluster(1)
-	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
-	s.Handler.API.Holder = hldr.Holder
-	cm.Host = s.Host()
-
-	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i", strings.NewReader("")))
-	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i/field/f", strings.NewReader(`{"options":{"type": "int", "min": 0, "max": 100}}`)))
+	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader("")))
+	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i/field/f", strings.NewReader(`{"options":{"type": "int", "min": 0, "max": 100}}`)))
 
 	cm.Index = "i"
 	cm.Field = "f"
@@ -118,20 +102,12 @@ func TestImportCommand_RunValue(t *testing.T) {
 }
 
 func TestImportCommand_InvalidFile(t *testing.T) {
-
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-	s := test.NewServer()
-	defer s.Close()
-
-	s.Handler.API.Cluster = test.NewCluster(1)
-	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
-	s.Handler.API.Holder = hldr.Holder
+	cmd := test.MustRunMainWithCluster(t, 1)[0]
 
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewImportCommand(stdin, stdout, stderr)
-	cm.Host = s.Host()
+	cm.Host = cmd.Server.URI.HostPort()
 	cm.Index = "i"
 	cm.Field = "f"
 	file, err := ioutil.TempFile("", "import.csv")
@@ -200,6 +176,7 @@ func GetIO(buf bytes.Buffer) (io.Reader, io.Writer, io.Writer) {
 }
 
 func TestImportCommand_BugOverwriteValue(t *testing.T) {
+	cmd := test.MustRunMainWithCluster(t, 1)[0]
 
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
@@ -211,18 +188,10 @@ func TestImportCommand_BugOverwriteValue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-	s := test.NewServer()
-	defer s.Close()
+	cm.Host = cmd.Server.Addr().String()
 
-	s.Handler.API.Cluster = test.NewCluster(1)
-	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
-	s.Handler.API.Holder = hldr.Holder
-	cm.Host = s.Host()
-
-	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i", strings.NewReader("")))
-	http.DefaultClient.Do(MustNewHTTPRequest("POST", s.URL+"/index/i/field/f", strings.NewReader(`{"options":{"type": "int", "min": 0, "max":2147483648 }}`)))
+	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader("")))
+	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i/field/f", strings.NewReader(`{"options":{"type": "int", "min": 0, "max":2147483648 }}`)))
 
 	cm.Index = "i"
 	cm.Field = "f"

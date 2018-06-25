@@ -15,6 +15,7 @@
 package http
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"expvar"
@@ -53,6 +54,10 @@ type Handler struct {
 	API *pilosa.API
 
 	AllowedOrigins []string
+
+	ln net.Listener
+
+	server *http.Server
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -99,6 +104,13 @@ func OptHandlerLogger(logger pilosa.Logger) HandlerOption {
 	}
 }
 
+func OptHandlerListener(ln net.Listener) HandlerOption {
+	return func(h *Handler) error {
+		h.ln = ln
+		return nil
+	}
+}
+
 // NewHandler returns a new instance of Handler with a default logger.
 func NewHandler(opts ...HandlerOption) (*Handler, error) {
 	handler := &Handler{
@@ -114,19 +126,32 @@ func NewHandler(opts ...HandlerOption) (*Handler, error) {
 		}
 	}
 
+	if handler.API == nil {
+		return nil, errors.New("must pass OptHandlerAPI")
+	}
+
+	if handler.ln == nil {
+		return nil, errors.New("must pass OptHandlerListener")
+	}
+
+	handler.server = &http.Server{Handler: handler}
+
 	return handler, nil
 }
 
-func (h *Handler) Serve(ln net.Listener, closing <-chan struct{}) {
-	server := &http.Server{Handler: h}
-	go func() {
-		<-closing
-		server.Close()
-	}()
-	err := server.Serve(ln)
+func (h *Handler) Serve() error {
+	err := h.server.Serve(h.ln)
 	if err != nil && err.Error() != "http: Server closed" {
 		h.Logger.Printf("HTTP handler terminated with error: %s\n", err)
+		return errors.Wrap(err, "serve http")
 	}
+	return nil
+}
+
+func (h *Handler) Close() error {
+	// TODO: timeout?
+	err := h.server.Shutdown(context.Background())
+	return errors.Wrap(err, "shutdown http server")
 }
 
 func (h *Handler) populateValidators() {

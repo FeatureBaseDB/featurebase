@@ -914,7 +914,7 @@ func (c *Cluster) open() error {
 			return fmt.Errorf("sending restart NodeJoin: %v", err)
 		}
 
-		c.Logger.Printf("wait for joining to complete")
+		c.Logger.Printf("%v wait for joining to complete", c.Node.ID)
 		<-c.joining
 		c.Logger.Printf("joining has completed")
 	}
