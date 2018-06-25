@@ -50,7 +50,7 @@ type API struct {
 }
 
 // APIOption is a functional option type for pilosa.API
-type APIOption func(s *API) error
+type APIOption func(*API) error
 
 func OptAPIServer(s *Server) APIOption {
 	return func(a *API) error {

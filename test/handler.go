@@ -46,13 +46,6 @@ func NewHandler(opts ...http.HandlerOption) (*Handler, error) {
 		Handler: handler,
 	}
 
-	//h.API, err = pilosa.NewAPI(OptAPIServer(s))
-	if err != nil {
-		return nil, err
-	}
-	h.Handler.API = h.API
-	h.Handler.API.Executor = &h.Executor
-
 	// Handler test messages can no-op.
 	h.API.Broadcaster = pilosa.NopBroadcaster
 

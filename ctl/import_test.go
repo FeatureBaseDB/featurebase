@@ -87,11 +87,10 @@ func TestImportCommand_RunValue(t *testing.T) {
 	}
 
 	cmd := test.MustRunMainWithCluster(t, 1)[0]
-	hostport := cmd.Server.URI.HostPort()
-	cm.Host = hostport
+	cm.Host = cmd.Server.URI.HostPort()
 
-	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+hostport+"/index/i", strings.NewReader("")))
-	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+hostport+"/index/i/field/f", strings.NewReader(`{"options":{"type": "int", "min": 0, "max": 100}}`)))
+	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader("")))
+	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i/field/f", strings.NewReader(`{"options":{"type": "int", "min": 0, "max": 100}}`)))
 
 	cm.Index = "i"
 	cm.Field = "f"
