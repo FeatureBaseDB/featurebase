@@ -292,13 +292,10 @@ func (m *Command) SetupNetworking() error {
 		m.Server.Cluster.Node.IsCoordinator = true
 	}
 
-	gossipEventReceiver := gossip.NewGossipEventReceiver(m.logger)
-	m.Server.Cluster.EventReceiver = gossipEventReceiver
 	gossipMemberSet, err := gossip.NewGossipMemberSet(
 		m.Server.NodeID,
 		m.Server.URI.Host(),
 		m.Config.Gossip,
-		gossipEventReceiver,
 		m.Server,
 		gossip.WithLogger(m.logger.Logger()),
 		gossip.WithTransport(transport),
@@ -306,9 +303,7 @@ func (m *Command) SetupNetworking() error {
 	if err != nil {
 		return errors.Wrap(err, "getting memberset")
 	}
-	gossipMemberSet.Logger = m.logger
 	m.Server.Cluster.MemberSet = gossipMemberSet
-	m.Server.BroadcastReceiver = gossipMemberSet
 	return nil
 }
 
