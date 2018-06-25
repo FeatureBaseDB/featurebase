@@ -44,22 +44,16 @@ func TestExportCommand_Validation(t *testing.T) {
 }
 
 func TestExportCommand_Run(t *testing.T) {
+	cmd := test.MustRunMainWithCluster(t, 1)[0]
+
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewExportCommand(stdin, stdout, stderr)
+	hostport := cmd.Server.URI.HostPort()
+	cm.Host = hostport
 
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-	s := test.NewServer()
-	defer s.Close()
-
-	s.Handler.API.Cluster = test.NewCluster(1)
-	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
-	s.Handler.API.Holder = hldr.Holder
-	cm.Host = s.Host()
-
-	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", s.URL+"/index/i", strings.NewReader("")))
-	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", s.URL+"/index/i/field/f", strings.NewReader("")))
+	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", "http://"+hostport+"/index/i", strings.NewReader("")))
+	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", "http://"+hostport+"/index/i/field/f", strings.NewReader("")))
 
 	cm.Index = "i"
 	cm.Field = "f"

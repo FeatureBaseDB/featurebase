@@ -1618,6 +1618,9 @@ func (e *Executor) translateCall(index string, idx *Index, c *pql.Call) error {
 	// Translate row key, if field is specified & key exists.
 	if fieldName != "" {
 		field := idx.Field(fieldName)
+		if field == nil {
+			return ErrFieldNotFound
+		}
 		if field.Keys() {
 			if value := callArgString(c, rowKey); value != "" {
 				ids, err := e.TranslateStore.TranslateRowsToUint64(index, fieldName, []string{value})
@@ -1659,6 +1662,9 @@ func (e *Executor) translateResult(index string, idx *Index, call *pql.Call, res
 	case []Pair:
 		if fieldName := callArgString(call, "_field"); fieldName != "" {
 			field := idx.Field(fieldName)
+			if field == nil {
+				return nil, ErrFieldNotFound
+			}
 			if field.Keys() {
 				other := make([]Pair, len(result))
 				for i := range result {
