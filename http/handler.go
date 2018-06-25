@@ -258,19 +258,19 @@ func (h *Handler) handleHome(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information.", http.StatusNotFound)
 }
 
+// checkHeaderAcceptJSON returns true if one or more Accept
+// headers are present, but none of them are "application/json"
+// (or any matching wildcard). Otherwise returns false.
 func checkHeaderAcceptJSON(header http.Header) bool {
-	v, found := header["Accept"]
-	sendError := false
-	if found {
-		sendError = true
+	if v, found := header["Accept"]; found {
 		for _, v := range v {
-			if v == "application/json" {
-				sendError = false
-
+			if v == "application/json" || v == "*/*" || v == "*/json" || v == "application/*" {
+				return false
 			}
 		}
+		return true
 	}
-	return sendError
+	return false
 }
 
 // handleGetSchema handles GET /schema requests.
