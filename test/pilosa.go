@@ -196,13 +196,6 @@ func (m *Main) RunWithTransport(host string, bindPort int, joinSeeds []string) (
 	   - SetupNetworking (does the gossip or static stuff) - calls NewTransport
 	   - Open server - calls OpenListener
 	*/
-
-	// SetupServer
-	err = m.SetupServer()
-	if err != nil {
-		return seed, err
-	}
-
 	// Open gossip transport to use in SetupServer.
 	transport, err := gossip.NewTransport(host, bindPort, nil)
 	if err != nil {
@@ -215,16 +208,20 @@ func (m *Main) RunWithTransport(host string, bindPort int, joinSeeds []string) (
 	} else {
 		m.Config.Gossip.Seeds = []string{transport.URI.String()}
 	}
-
 	seed = transport.URI.String()
+
+	// SetupServer
+	m.Config.Cluster.Disabled = false
+	err = m.SetupServer()
+	if err != nil {
+		return seed, err
+	}
 
 	// SetupNetworking
 	err = m.SetupNetworking()
 	if err != nil {
 		return seed, err
 	}
-
-	m.Server.Cluster.Static = false
 
 	go func() {
 		err := m.Handler.Serve()

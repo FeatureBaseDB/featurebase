@@ -38,7 +38,6 @@ var _ memberlist.Delegate = &GossipMemberSet{}
 // GossipMemberSet represents a gossip implementation of MemberSet using memberlist.
 type GossipMemberSet struct {
 	mu         sync.RWMutex
-	node       *pilosa.Node
 	memberlist *memberlist.Memberlist
 	handler    pilosa.BroadcastHandler
 
@@ -63,7 +62,7 @@ func (g *GossipMemberSet) GetBindAddr() string {
 }
 
 // Open implements the MemberSet interface to start network activity.
-func (g *GossipMemberSet) Open(n *pilosa.Node) error {
+func (g *GossipMemberSet) Open() error {
 	err := g.gossipEventReceiver.Start(g.pserver)
 	if err != nil {
 		return errors.Wrap(err, "starting event delegate")
@@ -71,8 +70,6 @@ func (g *GossipMemberSet) Open(n *pilosa.Node) error {
 	if g.handler == nil {
 		return fmt.Errorf("must call Start(pilosa.BroadcastHandler) before calling Open()")
 	}
-
-	g.node = n
 
 	g.mu.Lock()
 	g.memberlist, err = memberlist.Create(g.config.memberlistConfig)
@@ -241,7 +238,7 @@ func NewGossipMemberSet(name string, host string, cfg Config, s *pilosa.Server, 
 
 // NodeMeta implementation of the memberlist.Delegate interface.
 func (g *GossipMemberSet) NodeMeta(limit int) []byte {
-	buf, err := proto.Marshal(pilosa.EncodeNode(g.node))
+	buf, err := proto.Marshal(pilosa.EncodeNode(g.pserver.Node()))
 	if err != nil {
 		g.Logger.Printf("marshal message error: %s", err)
 		return []byte{}

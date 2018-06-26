@@ -27,7 +27,7 @@ import (
 type MemberSet interface {
 	// Open starts any network activity implemented by the MemberSet
 	// Node is the local node, used for membership broadcasts.
-	Open(n *Node) error
+	Open() error
 }
 
 // StaticMemberSet represents a basic MemberSet for testing.
@@ -43,7 +43,7 @@ func NewStaticMemberSet(nodes []*Node) *StaticMemberSet {
 }
 
 // Open implements the MemberSet interface to start network activity, but for a static MemberSet it does nothing.
-func (s *StaticMemberSet) Open(n *Node) error {
+func (s *StaticMemberSet) Open() error {
 	return nil
 }
 
