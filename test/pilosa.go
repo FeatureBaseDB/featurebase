@@ -38,6 +38,8 @@ import (
 type Main struct {
 	*server.Command
 
+	commandOptions []server.CommandOption
+
 	Stdin  bytes.Buffer
 	Stdout bytes.Buffer
 	Stderr bytes.Buffer
@@ -64,7 +66,7 @@ func NewMain(opts ...server.CommandOption) *Main {
 		panic(err)
 	}
 
-	m := &Main{Command: server.NewCommand(os.Stdin, os.Stdout, os.Stderr, opts...)}
+	m := &Main{Command: server.NewCommand(os.Stdin, os.Stdout, os.Stderr, opts...), commandOptions: opts}
 	m.Config.DataDir = path
 	m.Config.Bind = "http://localhost:0"
 	m.Config.Cluster.Disabled = true
@@ -156,7 +158,7 @@ func (m *Main) Reopen() error {
 
 	// Create new main with the same config.
 	config := m.Command.Config
-	m.Command = server.NewCommand(os.Stdin, os.Stdout, os.Stderr, server.OptCommandServerOptions(m.ServerOptions...))
+	m.Command = server.NewCommand(os.Stdin, os.Stdout, os.Stderr, m.commandOptions...)
 	m.Command.Config = config
 	err := m.SetupServer()
 	if err != nil {
