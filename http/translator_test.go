@@ -54,7 +54,7 @@ func TestTranslateStore_Reader(t *testing.T) {
 			}
 
 			opts := server.OptCommandServerOptions(pilosa.OptServerPrimaryTranslateStore(translateStore))
-			main := test.MustRunMainWithCluster(t, 1, opts)[0]
+			main := test.MustRunMainWithCluster(t, 1, []server.CommandOption{opts})[0]
 			defer main.Close()
 
 			// Connect to server and stream all available data.
@@ -98,7 +98,7 @@ func TestTranslateStore_Reader(t *testing.T) {
 			}
 
 			opts := server.OptCommandServerOptions(pilosa.OptServerPrimaryTranslateStore(translateStore))
-			main := test.MustRunMainWithCluster(t, 1, opts)[0]
+			main := test.MustRunMainWithCluster(t, 1, []server.CommandOption{opts})[0]
 
 			defer main.Close()
 			defer close(done)
@@ -127,7 +127,7 @@ func TestTranslateStore_Reader(t *testing.T) {
 		}
 
 		opts := server.OptCommandServerOptions(pilosa.OptServerPrimaryTranslateStore(translateStore))
-		main := test.MustRunMainWithCluster(t, 1, opts)[0]
+		main := test.MustRunMainWithCluster(t, 1, []server.CommandOption{opts})[0]
 
 		_, err := http.NewTranslateStore(main.Server.URI.String()).Reader(context.Background(), 0)
 		if err != pilosa.ErrNotImplemented {

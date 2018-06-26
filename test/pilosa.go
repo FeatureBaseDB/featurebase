@@ -97,7 +97,7 @@ func NewMainWithCluster(isCoordinator bool, opts ...server.CommandOption) *Main 
 
 // MustRunMainWithCluster ruturns a running array of *Main where
 // all nodes are joined via memberlist (i.e. clustering enabled).
-func MustRunMainWithCluster(t *testing.T, size int, opts ...server.CommandOption) []*Main {
+func MustRunMainWithCluster(t *testing.T, size int, opts ...[]server.CommandOption) []*Main {
 	ma, err := runMainWithCluster(size, opts...)
 	if err != nil {
 		t.Fatalf("new main array with cluster: %v", err)
@@ -107,9 +107,12 @@ func MustRunMainWithCluster(t *testing.T, size int, opts ...server.CommandOption
 
 // runMainWithCluster runs an array of *Main where all nodes are
 // joined via memberlist (i.e. clustering enabled).
-func runMainWithCluster(size int, opts ...server.CommandOption) ([]*Main, error) {
+func runMainWithCluster(size int, opts ...[]server.CommandOption) ([]*Main, error) {
 	if size == 0 {
 		return nil, errors.New("cluster must contain at least one node")
+	}
+	if len(opts) != size && len(opts) != 0 && len(opts) != 1 {
+		return nil, errors.New("Slice of CommandOptions must be of length 0, 1, or equal to the number of cluster nodes")
 	}
 
 	mains := make([]*Main, size)
@@ -120,7 +123,11 @@ func runMainWithCluster(size int, opts ...server.CommandOption) ([]*Main, error)
 	var gossipSeeds = make([]string, size)
 
 	for i := 0; i < size; i++ {
-		m := NewMainWithCluster(i == 0, opts...)
+		var commandOpts []server.CommandOption
+		if len(opts) > 0 {
+			commandOpts = opts[i%len(opts)]
+		}
+		m := NewMainWithCluster(i == 0, commandOpts...)
 		m.Config.Cluster.Disabled = false
 
 		gossipSeeds[i], err = m.RunWithTransport(gossipHost, gossipPort, gossipSeeds[:i])
