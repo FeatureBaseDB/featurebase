@@ -94,6 +94,8 @@ type Containers interface {
 	// container is found at key.
 	Iterator(key uint64) (citer ContainerIterator, found bool)
 	Count() uint64
+	//Reset will clear the containers collection to allow for recycling during snapshot
+	Reset()
 }
 
 type ContainerIterator interface {
@@ -631,7 +633,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	keyN := binary.LittleEndian.Uint32(data[4:8])
 
 	headerSize := headerBaseSize
-
+	b.Containers.Reset()
 	// Descriptive header section: Read container keys and cardinalities.
 	for i, buf := 0, data[headerSize:]; i < int(keyN); i, buf = i+1, buf[12:] {
 		b.Containers.PutContainerValues(
@@ -688,6 +690,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 			// FIXME(benbjohnson): return error with position so file can be trimmed.
 			return err
 		}
+
 		opr.apply(b)
 
 		// Increase the op count.

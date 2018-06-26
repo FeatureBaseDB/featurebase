@@ -61,12 +61,10 @@ type Server struct {
 	clusterDisabled bool
 
 	// External
-	handler           Handler
 	BroadcastReceiver BroadcastReceiver
 	systemInfo        SystemInfo
 	gcNotifier        GCNotifier
 	logger            Logger
-	ln                net.Listener
 
 	NodeID              string
 	URI                 URI
@@ -79,6 +77,11 @@ type Server struct {
 
 	defaultClient InternalClient
 	dataDir       string
+}
+
+// TODO: have this return an interface for Holder instead of concrete object?
+func (s *Server) Holder() *Holder {
+	return s.holder
 }
 
 // ServerOption is a functional option type for pilosa.Server
@@ -122,13 +125,6 @@ func OptServerAntiEntropyInterval(interval time.Duration) ServerOption {
 func OptServerLongQueryTime(dur time.Duration) ServerOption {
 	return func(s *Server) error {
 		s.Cluster.LongQueryTime = dur
-		return nil
-	}
-}
-
-func OptServerHandler(h Handler) ServerOption {
-	return func(s *Server) error {
-		s.handler = h
 		return nil
 	}
 }
@@ -187,14 +183,6 @@ func OptServerStatsClient(sc StatsClient) ServerOption {
 func OptServerDiagnosticsInterval(dur time.Duration) ServerOption {
 	return func(s *Server) error {
 		s.diagnosticInterval = dur
-		return nil
-	}
-}
-
-func OptServerListener(ln net.Listener) ServerOption {
-	return func(s *Server) error {
-		s.ln = ln
-
 		return nil
 	}
 }
@@ -264,11 +252,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		return nil, err
 	}
 
-	// update URI port with actual listener port. TODO this should probably be done outside of here.
-	if s.URI.Port() == 0 {
-		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
-	}
-
 	// Get or create NodeID.
 	s.NodeID = s.LoadNodeID()
 	// Set Cluster Node.
@@ -293,8 +276,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.executor.Cluster = s.Cluster
 	s.executor.TranslateStore = s.translateFile
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
-	s.handler.GetAPI().Executor = s.executor
-	s.handler.GetAPI().TranslateStore = s.translateFile
 
 	return s, nil
 }
@@ -302,9 +283,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 // Open opens and initializes the server.
 func (s *Server) Open() error {
 	s.logger.Printf("open server")
-	if s.ln == nil {
-		return errors.New("must pass a listener option to NewServer")
-	}
 
 	// Log startup
 	err := s.holder.logStartup()
@@ -316,19 +294,8 @@ func (s *Server) Open() error {
 	s.Cluster.Broadcaster = s
 	s.Cluster.MaxWritesPerRequest = s.maxWritesPerRequest
 
-	// Initialize HTTP handler.
-	api := s.handler.GetAPI()
-	api.Holder = s.holder
-	api.Broadcaster = s
-	api.BroadcastHandler = s
-	api.StatusHandler = s
-	api.Cluster = s.Cluster
-
 	// Initialize Holder.
 	s.holder.Broadcaster = s
-
-	// Serve handler.
-	go s.handler.Serve(s.ln, s.closing)
 
 	// Start the BroadcastReceiver.
 	if err := s.BroadcastReceiver.Start(s); err != nil {
@@ -370,9 +337,6 @@ func (s *Server) Close() error {
 	close(s.closing)
 	s.wg.Wait()
 
-	if s.ln != nil {
-		s.ln.Close()
-	}
 	if s.Cluster != nil {
 		s.Cluster.close()
 	}
@@ -400,12 +364,21 @@ func (s *Server) LoadNodeID() string {
 	return nodeID
 }
 
+type pilosaAddr URI
+
+func (p pilosaAddr) String() string {
+	uri := URI(p)
+	return uri.HostPort()
+
+}
+
+func (pilosaAddr) Network() string {
+	return "tcp"
+}
+
 // Addr returns the address of the listener.
 func (s *Server) Addr() net.Addr {
-	if s.ln == nil {
-		return nil
-	}
-	return s.ln.Addr()
+	return pilosaAddr(s.URI)
 }
 
 func (s *Server) monitorAntiEntropy() {

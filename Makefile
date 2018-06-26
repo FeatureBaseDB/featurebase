@@ -1,4 +1,4 @@
-.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc install install-build-deps install-dep install-protoc install-protoc-gen-gofast prerelease prerelease-build prerelease-upload release release-build require-dep require-protoc require-protoc-gen-gofast test
+.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-pql install install-build-deps install-dep install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-build prerelease-upload release release-build require-dep require-protoc require-protoc-gen-gofast require-peg test
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
@@ -92,8 +92,11 @@ generate-protoc: require-protoc require-protoc-gen-gofast
 generate-stringer:
 	go generate github.com/pilosa/pilosa
 
+generate-pql: require-peg
+	cd pql && peg -inline pql.peg && cd ..
+
 # `go generate` all needed packages
-generate: generate-protoc generate-stringer
+generate: generate-protoc generate-stringer generate-pql
 
 # Create Docker image from Dockerfile
 docker:
@@ -128,7 +131,10 @@ require-protoc-gen-gofast:
 require-protoc:
 	$(call require,protoc)
 
-install-build-deps: install-dep install-protoc-gen-gofast install-protoc install-stringer
+require-peg:
+	$(call require,peg)
+
+install-build-deps: install-dep install-protoc-gen-gofast install-protoc install-stringer install-peg
 
 install-dep:
 	go get -u github.com/golang/dep/cmd/dep
@@ -141,3 +147,6 @@ install-protoc-gen-gofast:
 
 install-protoc:
 	@echo This tool cannot automatically install protoc. Please download and install protoc from https://google.github.io/proto-lens/installing-protoc.html
+
+install-peg:
+	go get github.com/pointlander/peg

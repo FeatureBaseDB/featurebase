@@ -45,9 +45,6 @@ func NewHandler(opts ...http.HandlerOption) (*Handler, error) {
 	h := &Handler{
 		Handler: handler,
 	}
-	h.API = pilosa.NewAPI()
-	h.Handler.API = h.API
-	h.Handler.API.Executor = &h.Executor
 
 	// Handler test messages can no-op.
 	h.API.Broadcaster = pilosa.NopBroadcaster
@@ -84,22 +81,23 @@ type Server struct {
 
 // NewServer returns a test server running on a random port.
 func NewServer() *Server {
-	handler, err := NewHandler()
-	if err != nil {
-		panic(err)
-	}
-	s := &Server{
-		Handler: handler,
-	}
-	s.Server = httptest.NewServer(s.Handler.Handler)
+	return &Server{}
+	//handler, err := pilosa.NewHandler()
+	//if err != nil {
+	//	panic(err)
+	//}
+	//s := &Server{
+	//	Handler: handler,
+	//}
+	//s.Server = httptest.NewServer(s.Handler.Handler)
 
-	// Handler test messages can no-op.
-	s.Handler.API.Broadcaster = pilosa.NopBroadcaster
-	// Create a default cluster on the handler
-	s.Handler.API.Cluster = NewCluster(1)
-	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
+	//// Handler test messages can no-op.
+	//s.Handler.API.Broadcaster = pilosa.NopBroadcaster
+	//// Create a default cluster on the handler
+	//s.Handler.API.Cluster = NewCluster(1)
+	//s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
 
-	return s
+	//return s
 }
 
 // LocalStatus exists so that test.Server implements StatusHandler.

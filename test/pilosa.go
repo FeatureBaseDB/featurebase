@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	gohttp "net/http"
 	"os"
 	"strings"
@@ -47,6 +48,13 @@ type MainOpt func(m *Main) error
 func OptAntiEntropyInterval(dur time.Duration) MainOpt {
 	return func(m *Main) error {
 		m.Command.Config.AntiEntropy.Interval = toml.Duration(dur)
+		return nil
+	}
+}
+
+func OptAllowedOrigins(origins []string) MainOpt {
+	return func(m *Main) error {
+		m.Config.Handler.AllowedOrigins = origins
 		return nil
 	}
 }
@@ -220,6 +228,13 @@ func (m *Main) RunWithTransport(host string, bindPort int, joinSeeds []string) (
 	}
 
 	m.Server.Cluster.Static = false
+
+	go func() {
+		err := m.Handler.Serve()
+		if err != nil {
+			log.Printf("Handler serve error: %v", err)
+		}
+	}()
 
 	// Initialize server.
 	err = m.Server.Open()

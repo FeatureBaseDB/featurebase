@@ -47,7 +47,7 @@ type Config struct {
 	Bind string `toml:"bind"`
 
 	// MaxWritesPerRequest limits the number of mutating commands that can be in
-	// a single request to the server. This includes SetBit, ClearBit,
+	// a single request to the server. This includes Set, Clear,
 	// SetRowAttrs & SetColumnAttrs.
 	MaxWritesPerRequest int `toml:"max-writes-per-request"`
 

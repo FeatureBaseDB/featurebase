@@ -48,7 +48,7 @@ type Executor struct {
 	// Client used for remote requests.
 	client InternalQueryClient
 
-	// Maximum number of SetBit() or ClearBit() commands per request.
+	// Maximum number of Set() or Clear() commands per request.
 	MaxWritesPerRequest int
 
 	// Stores key/id translation data.
@@ -178,12 +178,12 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "Max":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeMax(ctx, index, c, slices, opt)
-	case "ClearBit":
+	case "Clear":
 		return e.executeClearBit(ctx, index, c, opt)
 	case "Count":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeCount(ctx, index, c, slices, opt)
-	case "SetBit":
+	case "Set":
 		return e.executeSetBit(ctx, index, c, opt)
 	case "SetValue":
 		return nil, e.executeSetValue(ctx, index, c, opt)
@@ -340,17 +340,17 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 		return nil, err
 	}
 
-	// Attach attributes for Bitmap() calls.
+	// Attach attributes for Row() calls.
 	// If the column label is used then return column attributes.
 	// If the row label is used then return bitmap attributes.
 	row, _ := other.(*Row)
-	if c.Name == "Bitmap" {
+	if c.Name == "Row" {
 		if opt.ExcludeRowAttrs {
 			row.Attrs = map[string]interface{}{}
 		} else {
 			idx := e.Holder.Index(index)
 			if idx != nil {
-				if columnID, ok, err := c.UintArg(columnLabel); ok && err == nil {
+				if columnID, ok, err := c.UintArg("_" + columnLabel); ok && err == nil {
 					attrs, err := idx.ColumnAttrStore().Attrs(columnID)
 					if err != nil {
 						return nil, errors.Wrap(err, "getting column attrs")
@@ -359,9 +359,10 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 				} else if err != nil {
 					return nil, err
 				} else {
-					field, _ := c.Args["field"].(string)
-					if fr := idx.Field(field); fr != nil {
-						rowID, _, err := c.UintArg(rowLabel)
+					// field, _ := c.Args["field"].(string)
+					fieldName, _ := c.FieldArg()
+					if fr := idx.Field(fieldName); fr != nil {
+						rowID, _, err := c.UintArg(fieldName)
 						if err != nil {
 							return nil, errors.Wrap(err, "getting row")
 						}
@@ -386,7 +387,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 // executeBitmapCallSlice executes a bitmap call for a single slice.
 func (e *Executor) executeBitmapCallSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
 	switch c.Name {
-	case "Bitmap":
+	case "Row":
 		return e.executeBitmapSlice(ctx, index, c, slice)
 	case "Difference":
 		return e.executeDifferenceSlice(ctx, index, c, slice)
@@ -585,7 +586,7 @@ func (e *Executor) executeTopNSlices(ctx context.Context, index string, c *pql.C
 
 // executeTopNSlice executes a TopN call for a single slice.
 func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Call, slice uint64) ([]Pair, error) {
-	field, _ := c.Args["field"].(string)
+	field, _ := c.Args["_field"].(string)
 	n, _, err := c.UintArg("n")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNSlice: %v", err)
@@ -675,24 +676,24 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.
 	}
 
 	// Fetch field & row label based on argument.
-	field, _ := c.Args["field"].(string)
-	if field == "" {
-		field = defaultField
+	fieldName, err := c.FieldArg()
+	if err != nil {
+		return nil, errors.New("Row() argument required: field")
 	}
-	f := e.Holder.Field(index, field)
+	f := e.Holder.Field(index, fieldName)
 	if f == nil {
 		return nil, ErrFieldNotFound
 	}
 
-	rowID, rowOK, rowErr := c.UintArg(rowLabel)
+	rowID, rowOK, rowErr := c.UintArg(fieldName)
 	if rowErr != nil {
-		return nil, fmt.Errorf("Bitmap() error with arg for row: %v", rowErr)
+		return nil, fmt.Errorf("Row() error with arg for row: %v", rowErr)
 	}
 	if !rowOK {
-		return nil, fmt.Errorf("Bitmap() must specify %v", rowLabel)
+		return nil, fmt.Errorf("Row() must specify %v", rowLabel)
 	}
 
-	frag := e.Holder.Fragment(index, field, ViewStandard, slice)
+	frag := e.Holder.Fragment(index, fieldName, ViewStandard, slice)
 	if frag == nil {
 		return NewRow(), nil
 	}
@@ -728,10 +729,10 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 		return e.executeBSIGroupRangeSlice(ctx, index, c, slice)
 	}
 
-	// Parse field, use default if unset.
-	field, _ := c.Args["field"].(string)
-	if field == "" {
-		field = defaultField
+	// Parse field.
+	fieldName, err := c.FieldArg()
+	if err != nil {
+		return nil, errors.New("Range() argument required: field")
 	}
 
 	// Retrieve column label.
@@ -741,13 +742,13 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	}
 
 	// Retrieve base field.
-	f := idx.Field(field)
+	f := idx.Field(fieldName)
 	if f == nil {
 		return nil, ErrFieldNotFound
 	}
 
 	// Read row & column id.
-	rowID, rowOK, err := c.UintArg(rowLabel)
+	rowID, rowOK, err := c.UintArg(fieldName)
 	if err != nil {
 		return nil, fmt.Errorf("executeRangeSlice - reading row: %v", err)
 	}
@@ -756,7 +757,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	}
 
 	// Parse start time.
-	startTimeStr, ok := c.Args["start"].(string)
+	startTimeStr, ok := c.Args["_start"].(string)
 	if !ok {
 		return nil, errors.New("Range() start time required")
 	}
@@ -766,7 +767,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	}
 
 	// Parse end time.
-	endTimeStr, ok := c.Args["end"].(string)
+	endTimeStr, ok := c.Args["_end"].(string)
 	if !ok {
 		return nil, errors.New("Range() end time required")
 	}
@@ -784,7 +785,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	// Union bitmaps across all time-based views.
 	row := &Row{}
 	for _, view := range viewsByTimeRange(ViewStandard, startTime, endTime, q) {
-		f := e.Holder.Fragment(index, field, view, slice)
+		f := e.Holder.Fragment(index, fieldName, view, slice)
 		if f == nil {
 			continue
 		}
@@ -994,11 +995,11 @@ func (e *Executor) executeCount(ctx context.Context, index string, c *pql.Call, 
 	return n, nil
 }
 
-// executeClearBit executes a ClearBit() call.
+// executeClearBit executes a Clear() call.
 func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Call, opt *ExecOptions) (bool, error) {
-	field, ok := c.Args["field"].(string)
-	if !ok {
-		return false, errors.New("ClearBit() field required")
+	fieldName, err := c.FieldArg()
+	if err != nil {
+		return false, errors.New("Clear() argument required: field")
 	}
 
 	// Retrieve field.
@@ -1006,30 +1007,30 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 	if idx == nil {
 		return false, ErrIndexNotFound
 	}
-	f := idx.Field(field)
+	f := idx.Field(fieldName)
 	if f == nil {
 		return false, ErrFieldNotFound
 	}
 
 	// Read fields using labels.
-	rowID, ok, err := c.UintArg(rowLabel)
+	rowID, ok, err := c.UintArg(fieldName)
 	if err != nil {
-		return false, fmt.Errorf("reading ClearBit() row: %v", err)
+		return false, fmt.Errorf("reading Clear() row: %v", err)
 	} else if !ok {
-		return false, fmt.Errorf("ClearBit() row field '%v' required", rowLabel)
+		return false, fmt.Errorf("Clear() row argument '%v' required", rowLabel)
 	}
 
-	colID, ok, err := c.UintArg(columnLabel)
+	colID, ok, err := c.UintArg("_" + columnLabel)
 	if err != nil {
-		return false, fmt.Errorf("reading ClearBit() column: %v", err)
+		return false, fmt.Errorf("reading Clear() column: %v", err)
 	} else if !ok {
-		return false, fmt.Errorf("ClearBit col field '%v' required", columnLabel)
+		return false, fmt.Errorf("Clear() col argument '%v' required", columnLabel)
 	}
 
 	return e.executeClearBitField(ctx, index, c, f, colID, rowID, opt)
 }
 
-// executeClearBitField executes a ClearBit() call for a single view.
+// executeClearBitField executes a Clear() call for a single view.
 func (e *Executor) executeClearBitField(ctx context.Context, index string, c *pql.Call, f *Field, colID, rowID uint64, opt *ExecOptions) (bool, error) {
 	slice := colID / SliceWidth
 	ret := false
@@ -1059,11 +1060,11 @@ func (e *Executor) executeClearBitField(ctx context.Context, index string, c *pq
 	return ret, nil
 }
 
-// executeSetBit executes a SetBit() call.
+// executeSetBit executes a Set() call.
 func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call, opt *ExecOptions) (bool, error) {
-	field, ok := c.Args["field"].(string)
-	if !ok {
-		return false, errors.New("SetBit() field required: field")
+	fieldName, err := c.FieldArg()
+	if err != nil {
+		return false, errors.New("Set() argument required: field")
 	}
 
 	// Retrieve field.
@@ -1071,28 +1072,28 @@ func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 	if idx == nil {
 		return false, ErrIndexNotFound
 	}
-	f := idx.Field(field)
+	f := idx.Field(fieldName)
 	if f == nil {
 		return false, ErrFieldNotFound
 	}
 
 	// Read fields using labels.
-	rowID, ok, err := c.UintArg(rowLabel)
+	rowID, ok, err := c.UintArg(fieldName)
 	if err != nil {
-		return false, fmt.Errorf("reading SetBit() row: %v", err)
+		return false, fmt.Errorf("reading Set() row: %v", err)
 	} else if !ok {
-		return false, fmt.Errorf("SetBit() row field '%v' required", rowLabel)
+		return false, fmt.Errorf("Set() row argument '%v' required", rowLabel)
 	}
 
-	colID, ok, err := c.UintArg(columnLabel)
+	colID, ok, err := c.UintArg("_" + columnLabel)
 	if err != nil {
-		return false, fmt.Errorf("reading SetBit() column: %v", err)
+		return false, fmt.Errorf("reading Set() column: %v", err)
 	} else if !ok {
-		return false, fmt.Errorf("SetBit() column field '%v' required", columnLabel)
+		return false, fmt.Errorf("Set() column argument '%v' required", columnLabel)
 	}
 
 	var timestamp *time.Time
-	sTimestamp, ok := c.Args["timestamp"].(string)
+	sTimestamp, ok := c.Args["_timestamp"].(string)
 	if ok {
 		t, err := time.Parse(TimeFormat, sTimestamp)
 		if err != nil {
@@ -1104,7 +1105,7 @@ func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 	return e.executeSetBitField(ctx, index, c, f, colID, rowID, timestamp, opt)
 }
 
-// executeSetBitField executes a SetBit() call for a specific view.
+// executeSetBitField executes a Set() call for a specific view.
 func (e *Executor) executeSetBitField(ctx context.Context, index string, c *pql.Call, f *Field, colID, rowID uint64, timestamp *time.Time, opt *ExecOptions) (bool, error) {
 	slice := colID / SliceWidth
 	ret := false
@@ -1198,7 +1199,7 @@ func (e *Executor) executeSetValue(ctx context.Context, index string, c *pql.Cal
 
 // executeSetRowAttrs executes a SetRowAttrs() call.
 func (e *Executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.Call, opt *ExecOptions) error {
-	fieldName, ok := c.Args["field"].(string)
+	fieldName, ok := c.Args["_field"].(string)
 	if !ok {
 		return errors.New("SetRowAttrs() field required")
 	}
@@ -1210,7 +1211,7 @@ func (e *Executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	}
 
 	// Parse labels.
-	rowID, ok, err := c.UintArg(rowLabel)
+	rowID, ok, err := c.UintArg("_" + rowLabel)
 	if err != nil {
 		return fmt.Errorf("reading SetRowAttrs() row: %v", err)
 	} else if !ok {
@@ -1219,8 +1220,8 @@ func (e *Executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 
 	// Copy args and remove reserved fields.
 	attrs := pql.CopyArgs(c.Args)
-	delete(attrs, "field")
-	delete(attrs, rowLabel)
+	delete(attrs, "_field")
+	delete(attrs, "_"+rowLabel)
 
 	// Set attributes.
 	if err := field.RowAttrStore().SetAttrs(rowID, attrs); err != nil {
@@ -1258,7 +1259,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 	// Collect attributes by field/id.
 	m := make(map[string]map[uint64]map[string]interface{})
 	for _, c := range calls {
-		field, ok := c.Args["field"].(string)
+		field, ok := c.Args["_field"].(string)
 		if !ok {
 			return nil, errors.New("SetRowAttrs() field required")
 		}
@@ -1269,7 +1270,7 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 			return nil, ErrFieldNotFound
 		}
 
-		rowID, ok, err := c.UintArg(rowLabel)
+		rowID, ok, err := c.UintArg("_" + rowLabel)
 		if err != nil {
 			return nil, fmt.Errorf("reading SetRowAttrs() row: %v", rowLabel)
 		} else if !ok {
@@ -1278,8 +1279,8 @@ func (e *Executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 
 		// Copy args and remove reserved fields.
 		attrs := pql.CopyArgs(c.Args)
-		delete(attrs, "field")
-		delete(attrs, rowLabel)
+		delete(attrs, "_field")
+		delete(attrs, "_"+rowLabel)
 
 		// Create field group, if not exists.
 		fieldMap := m[field]
@@ -1348,14 +1349,14 @@ func (e *Executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 		return ErrIndexNotFound
 	}
 
-	col, okCol, errCol := c.UintArg(columnLabel)
+	col, okCol, errCol := c.UintArg("_" + columnLabel)
 	if errCol != nil || !okCol {
 		return fmt.Errorf("reading SetColumnAttrs() col errs: %v found %v", errCol, okCol)
 	}
 
 	// Copy args and remove reserved fields.
 	attrs := pql.CopyArgs(c.Args)
-	delete(attrs, columnLabel)
+	delete(attrs, "_"+columnLabel)
 	delete(attrs, "field")
 
 	// Set attributes.
@@ -1420,9 +1421,9 @@ func (e *Executor) remoteExec(ctx context.Context, node *Node, index string, q *
 			v, err = decodePairs(pb.Results[i].GetPairs()), nil
 		case "Count":
 			v, err = pb.Results[i].N, nil
-		case "SetBit":
+		case "Set":
 			v, err = pb.Results[i].Changed, nil
-		case "ClearBit":
+		case "Clear":
 			v, err = pb.Results[i].Changed, nil
 		case "SetRowAttrs":
 		case "SetColumnAttrs":
@@ -1493,6 +1494,7 @@ func (e *Executor) mapReduce(ctx context.Context, index string, slices []uint64,
 		case resp := <-ch:
 			// On error retry against remaining nodes. If an error returns then
 			// the context will cancel and cause all open goroutines to return.
+
 			if resp.err != nil {
 				// Filter out unavailable nodes.
 				nodes = Nodes(nodes).Filter(resp.node)
@@ -1591,27 +1593,41 @@ func (e *Executor) mapperLocal(ctx context.Context, slices []uint64, mapFn mapFu
 }
 
 func (e *Executor) translateCall(index string, idx *Index, c *pql.Call) error {
+	var colKey, rowKey, fieldName string
+	if c.Name == "Set" || c.Name == "Clear" || c.Name == "Row" {
+		// Positional args in new PQL syntax require special handling here.
+		colKey = "_" + columnLabel
+		fieldName, _ = c.FieldArg()
+		rowKey = fieldName
+	} else {
+		colKey = "col"
+		fieldName = callArgString(c, "field")
+		rowKey = "row"
+	}
 	// Translate column key.
 	if idx.Keys() {
-		if value := callArgString(c, "col"); value != "" {
+		if value := callArgString(c, colKey); value != "" {
 			ids, err := e.TranslateStore.TranslateColumnsToUint64(index, []string{value})
 			if err != nil {
 				return err
 			}
-			c.Args["col"] = ids[0]
+			c.Args[colKey] = ids[0]
 		}
 	}
 
 	// Translate row key, if field is specified & key exists.
-	if fieldName := callArgString(c, "field"); fieldName != "" {
+	if fieldName != "" {
 		field := idx.Field(fieldName)
+		if field == nil {
+			return ErrFieldNotFound
+		}
 		if field.Keys() {
-			if value := callArgString(c, "row"); value != "" {
+			if value := callArgString(c, rowKey); value != "" {
 				ids, err := e.TranslateStore.TranslateRowsToUint64(index, fieldName, []string{value})
 				if err != nil {
 					return err
 				}
-				c.Args["row"] = ids[0]
+				c.Args[rowKey] = ids[0]
 			}
 		}
 	}
@@ -1644,8 +1660,11 @@ func (e *Executor) translateResult(index string, idx *Index, call *pql.Call, res
 		}
 
 	case []Pair:
-		if fieldName := callArgString(call, "field"); fieldName != "" {
+		if fieldName := callArgString(call, "_field"); fieldName != "" {
 			field := idx.Field(fieldName)
+			if field == nil {
+				return nil, ErrFieldNotFound
+			}
 			if field.Keys() {
 				other := make([]Pair, len(result))
 				for i := range result {
@@ -1713,7 +1732,7 @@ func needsSlices(calls []*pql.Call) bool {
 	}
 	for _, call := range calls {
 		switch call.Name {
-		case "ClearBit", "SetBit", "SetRowAttrs", "SetColumnAttrs":
+		case "Clear", "Set", "SetRowAttrs", "SetColumnAttrs":
 			continue
 		case "Count", "TopN":
 			return true

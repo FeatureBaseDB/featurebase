@@ -26,6 +26,186 @@ import (
 // Query represents a PQL query.
 type Query struct {
 	Calls []*Call
+
+	lastField string
+	lastCond  Token
+	inList    bool
+	callStack []*Call
+
+	conditional []string
+}
+
+func (q *Query) startCall(name string) {
+	newCall := &Call{Name: name}
+	q.callStack = append(q.callStack, newCall)
+
+	if len(q.callStack) == 1 {
+		q.Calls = append(q.Calls, newCall)
+	} else {
+		calls := q.callStack[len(q.callStack)-2].Children
+		q.callStack[len(q.callStack)-2].Children = append(calls, newCall)
+	}
+}
+
+func (q *Query) endCall() {
+	q.callStack = q.callStack[:len(q.callStack)-1]
+}
+
+func (q *Query) addPosNum(key, value string) {
+	q.addField(key)
+	q.addNumVal(value)
+}
+
+func (q *Query) addPosStr(key, value string) {
+	q.addField(key)
+	q.addVal(value)
+}
+
+func (q *Query) startConditional() {
+	q.conditional = make([]string, 0)
+	call := q.callStack[len(q.callStack)-1]
+	if call.Args == nil {
+		call.Args = make(map[string]interface{})
+	}
+}
+
+func (q *Query) condAdd(val string) {
+	q.conditional = append(q.conditional, val)
+}
+
+func (q *Query) endConditional() {
+	// do stuff
+	if len(q.conditional) != 5 {
+		panic(fmt.Sprintf("conditional of wrong length: %#v", q.conditional))
+	}
+	low, _ := strconv.ParseInt(q.conditional[0], 10, 64)
+	field := q.conditional[2]
+	high, _ := strconv.ParseInt(q.conditional[4], 10, 64)
+
+	if q.conditional[1] == "<" {
+		low++
+	}
+	if q.conditional[3] == "<=" {
+		high++
+	}
+
+	call := q.callStack[len(q.callStack)-1]
+	call.Args[field] = &Condition{Op: BETWEEN, Value: []interface{}{low, high}}
+
+	q.conditional = nil
+}
+
+func (q *Query) addField(field string) {
+	if q.lastField != "" {
+		panic(fmt.Sprintf("addField called with '%s' while field is not empty, it's: %s", field, q.lastField))
+	}
+	q.lastField = field
+	call := q.callStack[len(q.callStack)-1]
+	if call.Args == nil {
+		call.Args = make(map[string]interface{})
+	}
+}
+
+func (q *Query) addVal(val interface{}) {
+	if q.lastField == "" {
+		panic(fmt.Sprintf("addVal called with '%s' when lastField is empty", val))
+	}
+	call := q.callStack[len(q.callStack)-1]
+	if q.inList {
+		list := call.Args[q.lastField].([]interface{})
+		call.Args[q.lastField] = append(list, val)
+		return
+	}
+	if q.lastCond != ILLEGAL {
+		call.Args[q.lastField] = &Condition{
+			Op:    q.lastCond,
+			Value: val,
+		}
+	} else {
+		call.Args[q.lastField] = val
+	}
+	q.lastField = ""
+	q.lastCond = ILLEGAL
+}
+
+func (q *Query) addNumVal(val string) {
+	if q.lastField == "" {
+		panic(fmt.Sprintf("addIntVal called with '%s' when lastField is empty", val))
+	}
+	var ival interface{}
+	var err error
+	if strings.Contains(val, ".") {
+		ival, err = strconv.ParseFloat(val, 64)
+	} else {
+		ival, err = strconv.ParseInt(val, 10, 64)
+	}
+	if err != nil {
+		panic(err)
+	}
+	call := q.callStack[len(q.callStack)-1]
+	if q.inList {
+		if q.lastCond != ILLEGAL {
+			list := call.Args[q.lastField].(*Condition).Value.([]interface{})
+			call.Args[q.lastField] = &Condition{
+				Op:    q.lastCond,
+				Value: append(list, ival),
+			}
+		} else {
+			list := call.Args[q.lastField].([]interface{})
+			call.Args[q.lastField] = append(list, ival)
+		}
+		return
+	} else if q.lastCond != ILLEGAL {
+		call.Args[q.lastField] = &Condition{
+			Op:    q.lastCond,
+			Value: ival,
+		}
+	} else {
+		call.Args[q.lastField] = ival
+	}
+	q.lastField = ""
+	q.lastCond = ILLEGAL
+}
+
+func (q *Query) startList() {
+	call := q.callStack[len(q.callStack)-1]
+	if q.lastCond != ILLEGAL {
+		call.Args[q.lastField] = &Condition{
+			Op:    q.lastCond,
+			Value: make([]interface{}, 0),
+		}
+	} else {
+		call.Args[q.lastField] = make([]interface{}, 0)
+	}
+	q.inList = true
+}
+
+func (q *Query) endList() {
+	q.inList = false
+	q.lastField = ""
+	q.lastCond = ILLEGAL
+}
+
+func (q *Query) addGT() {
+	q.lastCond = GT
+}
+func (q *Query) addLT() {
+	q.lastCond = LT
+}
+func (q *Query) addGTE() {
+	q.lastCond = GTE
+}
+func (q *Query) addLTE() {
+	q.lastCond = LTE
+}
+func (q *Query) addEQ() {
+	q.lastCond = EQ
+}
+func (q *Query) addNEQ() {
+	q.lastCond = NEQ
+}
+func (q *Query) addBTWN() {
+	q.lastCond = BETWEEN
 }
 
 // WriteCallN returns the number of mutating calls.
@@ -33,7 +213,7 @@ func (q *Query) WriteCallN() int {
 	var n int
 	for _, call := range q.Calls {
 		switch call.Name {
-		case "SetBit", "ClearBit", "SetRowAttrs", "SetColumnAttrs":
+		case "Set", "Clear", "SetRowAttrs", "SetColumnAttrs":
 			n++
 		}
 	}
@@ -71,6 +251,18 @@ type Call struct {
 	Name     string
 	Args     map[string]interface{}
 	Children []*Call
+}
+
+// FieldArg determines which key-value pair contains the field and rowID,
+// in the case of arguments like Set(colID, field=rowID).
+// Returns the field as a string if present, or an error if not.
+func (c *Call) FieldArg() (string, error) {
+	for arg := range c.Args {
+		if !strings.HasPrefix(arg, "_") {
+			return arg, nil
+		}
+	}
+	return "", fmt.Errorf("No field argument specified")
 }
 
 // UintArg is for reading the value at key from call.Args as a uint64. If the

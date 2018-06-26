@@ -15,6 +15,7 @@
 package http
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"expvar"
@@ -53,6 +54,10 @@ type Handler struct {
 	API *pilosa.API
 
 	AllowedOrigins []string
+
+	ln net.Listener
+
+	server *http.Server
 }
 
 // externalPrefixFlag denotes endpoints that are intended to be exposed to clients.
@@ -99,6 +104,13 @@ func OptHandlerLogger(logger pilosa.Logger) HandlerOption {
 	}
 }
 
+func OptHandlerListener(ln net.Listener) HandlerOption {
+	return func(h *Handler) error {
+		h.ln = ln
+		return nil
+	}
+}
+
 // NewHandler returns a new instance of Handler with a default logger.
 func NewHandler(opts ...HandlerOption) (*Handler, error) {
 	handler := &Handler{
@@ -114,19 +126,32 @@ func NewHandler(opts ...HandlerOption) (*Handler, error) {
 		}
 	}
 
+	if handler.API == nil {
+		return nil, errors.New("must pass OptHandlerAPI")
+	}
+
+	if handler.ln == nil {
+		return nil, errors.New("must pass OptHandlerListener")
+	}
+
+	handler.server = &http.Server{Handler: handler}
+
 	return handler, nil
 }
 
-func (h *Handler) Serve(ln net.Listener, closing <-chan struct{}) {
-	server := &http.Server{Handler: h}
-	go func() {
-		<-closing
-		server.Close()
-	}()
-	err := server.Serve(ln)
+func (h *Handler) Serve() error {
+	err := h.server.Serve(h.ln)
 	if err != nil && err.Error() != "http: Server closed" {
 		h.Logger.Printf("HTTP handler terminated with error: %s\n", err)
+		return errors.Wrap(err, "serve http")
 	}
+	return nil
+}
+
+func (h *Handler) Close() error {
+	// TODO: timeout?
+	err := h.server.Shutdown(context.Background())
+	return errors.Wrap(err, "shutdown http server")
 }
 
 func (h *Handler) populateValidators() {
@@ -258,24 +283,24 @@ func (h *Handler) handleHome(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information.", http.StatusNotFound)
 }
 
-func checkHeaderAcceptJSON(header http.Header) bool {
-	v, found := header["Accept"]
-	sendError := false
-	if found {
-		sendError = true
+// validHeaderAcceptJSON returns false if one or more Accept
+// headers are present, but none of them are "application/json"
+// (or any matching wildcard). Otherwise returns true.
+func validHeaderAcceptJSON(header http.Header) bool {
+	if v, found := header["Accept"]; found {
 		for _, v := range v {
-			if v == "application/json" {
-				sendError = false
-
+			if v == "application/json" || v == "*/*" || v == "*/json" || v == "application/*" {
+				return true
 			}
 		}
+		return false
 	}
-	return sendError
+	return true
 }
 
 // handleGetSchema handles GET /schema requests.
 func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
@@ -290,7 +315,7 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 
 // handleGetStatus handles GET /status requests.
 func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
@@ -305,7 +330,7 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleGetInfo(w http.ResponseWriter, r *http.Request) {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
@@ -362,7 +387,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 
 // handleGetSlicesMax handles GET /schema requests.
 func (h *Handler) handleGetSlicesMax(w http.ResponseWriter, r *http.Request) {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
@@ -384,7 +409,7 @@ func (h *Handler) handleGetIndexes(w http.ResponseWriter, r *http.Request) {
 
 // handleGetIndex handles GET /index/<indexname> requests.
 func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
@@ -466,7 +491,7 @@ type postIndexResponse struct{}
 
 // handleDeleteIndex handles DELETE /index request.
 func (h *Handler) handleDeleteIndex(w http.ResponseWriter, r *http.Request) {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
@@ -488,7 +513,7 @@ type deleteIndexResponse struct{}
 
 // handlePostIndex handles POST /index request.
 func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
@@ -522,7 +547,7 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 
 // handlePostIndexAttrDiff handles POST /index/attr/diff requests.
 func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request) {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
@@ -563,7 +588,7 @@ type postIndexAttrDiffResponse struct {
 
 // handlePostField handles POST /field request.
 func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
@@ -645,7 +670,7 @@ type postFieldResponse struct{}
 
 // handleDeleteField handles DELETE /field request.
 func (h *Handler) handleDeleteField(w http.ResponseWriter, r *http.Request) {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
@@ -675,7 +700,7 @@ type deleteFieldResponse struct{}
 
 // handlePostFieldAttrDiff handles POST /field/attr/diff requests.
 func (h *Handler) handlePostFieldAttrDiff(w http.ResponseWriter, r *http.Request) {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
@@ -771,7 +796,7 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*pilosa.QueryRequest, er
 
 // writeQueryResponse writes the response from the executor to w.
 func (h *Handler) writeQueryResponse(w http.ResponseWriter, r *http.Request, resp *pilosa.QueryResponse) error {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		return h.writeProtobufQueryResponse(w, resp)
 	}
 	return h.writeJSONQueryResponse(w, resp)
@@ -934,7 +959,7 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 
 // handleGetFragmentNodes handles /fragment/nodes requests.
 func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request) {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
@@ -983,7 +1008,7 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 
 // handleGetFragmentBlocks handles GET /fragment/blocks requests.
 func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request) {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
@@ -1019,7 +1044,7 @@ type getFragmentBlocksResponse struct {
 
 // handleGetVersion handles /version requests.
 func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
@@ -1121,7 +1146,7 @@ func errorString(err error) string {
 }
 
 func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r *http.Request) {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
@@ -1162,7 +1187,7 @@ type setCoordinatorResponse struct {
 
 // handlePostClusterResizeRemoveNode handles POST /cluster/resize/remove-node request.
 func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *http.Request) {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
@@ -1202,7 +1227,7 @@ type removeNodeResponse struct {
 
 // handlePostClusterResizeAbort handles POST /cluster/resize/abort request.
 func (h *Handler) handlePostClusterResizeAbort(w http.ResponseWriter, r *http.Request) {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
@@ -1243,7 +1268,7 @@ func (h *Handler) handleRecalculateCaches(w http.ResponseWriter, r *http.Request
 }
 
 func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Request) {
-	if checkHeaderAcceptJSON(r.Header) {
+	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}

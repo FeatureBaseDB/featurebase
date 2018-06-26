@@ -73,6 +73,9 @@ type Command struct {
 	// Passed to the Gossip implementation.
 	logOutput io.Writer
 	logger    loggerLogger
+
+	Handler pilosa.Handler
+	ln      net.Listener
 }
 
 // NewCommand returns a new instance of Main.
@@ -102,6 +105,12 @@ func (m *Command) Start() (err error) {
 	if err != nil {
 		return errors.Wrap(err, "setting up networking")
 	}
+	go func() {
+		err := m.Handler.Serve()
+		if err != nil {
+			m.logger.Printf("Handler serve error: %v", err)
+		}
+	}()
 
 	// Initialize server.
 	if err = m.Server.Open(); err != nil {
@@ -164,18 +173,6 @@ func (m *Command) SetupServer() error {
 	}
 	m.logger.Printf("%s %s, build time %s\n", productName, pilosa.Version, pilosa.BuildTime)
 
-	api := pilosa.NewAPI()
-	api.Logger = m.logger
-
-	handler, err := http.NewHandler(
-		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
-		http.OptHandlerAPI(api),
-		http.OptHandlerLogger(m.logger),
-	)
-	if err != nil {
-		return errors.Wrap(err, "wrapping handler")
-	}
-
 	uri, err := pilosa.AddressWithDefaults(m.Config.Bind)
 	if err != nil {
 		return errors.Wrap(err, "processing bind address")
@@ -210,9 +207,14 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "new stats client")
 	}
 
-	ln, err := getListener(*uri, TLSConfig)
+	m.ln, err = getListener(*uri, TLSConfig)
 	if err != nil {
 		return errors.Wrap(err, "getting listener")
+	}
+
+	// If port is 0, get auto-allocated port from listener
+	if uri.Port() == 0 {
+		uri.SetPort(uint16(m.ln.Addr().(*net.TCPAddr).Port))
 	}
 
 	c := http.GetHTTPClient(TLSConfig)
@@ -234,18 +236,31 @@ func (m *Command) SetupServer() error {
 
 		pilosa.OptServerLogger(m.logger),
 		pilosa.OptServerAttrStoreFunc(boltdb.NewAttrStore),
-		pilosa.OptServerHandler(handler),
 		pilosa.OptServerSystemInfo(gopsutil.NewSystemInfo()),
 		pilosa.OptServerGCNotifier(gcnotify.NewActiveGCNotifier()),
 		pilosa.OptServerStatsClient(statsClient),
-		pilosa.OptServerListener(ln),
 		pilosa.OptServerURI(uri),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 		pilosa.OptServerPrimaryTranslateStore(primaryTranslateStore),
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
 	)
+	if err != nil {
+		return errors.Wrap(err, "new server")
+	}
 
-	return errors.Wrap(err, "new server")
+	api, err := pilosa.NewAPI(pilosa.OptAPIServer(m.Server))
+	if err != nil {
+		return errors.Wrap(err, "new api")
+	}
+
+	m.Handler, err = http.NewHandler(
+		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
+		http.OptHandlerAPI(api),
+		http.OptHandlerLogger(m.logger),
+		http.OptHandlerListener(m.ln),
+	)
+	return errors.Wrap(err, "new handler")
+
 }
 
 // SetupNetworking sets up internode communication based on the configuration.
@@ -300,17 +315,16 @@ func (m *Command) SetupNetworking() error {
 // Close shuts down the server.
 func (m *Command) Close() error {
 	var logErr error
+	handlerErr := m.Handler.Close()
 	serveErr := m.Server.Close()
 	if closer, ok := m.logOutput.(io.Closer); ok {
 		logErr = closer.Close()
 	}
 	close(m.done)
-	if serveErr != nil && logErr != nil {
-		return fmt.Errorf("closing server: '%v', closing logs: '%v'", serveErr, logErr)
-	} else if logErr != nil {
-		return logErr
+	if serveErr != nil || logErr != nil || handlerErr != nil {
+		return fmt.Errorf("closing server: '%v', closing logs: '%v', closing handler: '%v'", serveErr, logErr, handlerErr)
 	}
-	return serveErr
+	return nil
 }
 
 // NewStatsClient creates a stats client from the config

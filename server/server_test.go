@@ -49,7 +49,7 @@ func TestMain_Set_Quick(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Execute SetBit() commands.
+		// Execute Set() commands.
 		for _, cmd := range cmds {
 			if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 				t.Fatal(err)
@@ -57,7 +57,7 @@ func TestMain_Set_Quick(t *testing.T) {
 			if err := client.CreateField(context.Background(), "i", cmd.Field, pilosa.FieldOptions{}); err != nil && err != pilosa.ErrFieldExists {
 				t.Fatal(err)
 			}
-			if _, err := m.Query("i", "", fmt.Sprintf(`SetBit(row=%d, field=%q, col=%d)`, cmd.ID, cmd.Field, cmd.ColumnID)); err != nil {
+			if _, err := m.Query("i", "", fmt.Sprintf(`Set(%d, %s=%d)`, cmd.ColumnID, cmd.Field, cmd.ID)); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -73,7 +73,7 @@ func TestMain_Set_Quick(t *testing.T) {
 						},
 					},
 				}) + "\n"
-				if res, err := m.Query("i", "", fmt.Sprintf(`Bitmap(row=%d, field=%q)`, id, field)); err != nil {
+				if res, err := m.Query("i", "", fmt.Sprintf(`Row(%s=%d)`, field, id)); err != nil {
 					t.Fatal(err)
 				} else if res != exp {
 					t.Fatalf("unexpected result:\n\ngot=%s\n\nexp=%s\n\n", res, exp)
@@ -96,7 +96,7 @@ func TestMain_Set_Quick(t *testing.T) {
 						},
 					},
 				}) + "\n"
-				if res, err := m.Query("i", "", fmt.Sprintf(`Bitmap(row=%d, field=%q)`, id, field)); err != nil {
+				if res, err := m.Query("i", "", fmt.Sprintf(`Row(%s=%d)`, field, id)); err != nil {
 					t.Fatal(err)
 				} else if res != exp {
 					t.Fatalf("unexpected result (reopen):\n\ngot=%s\n\nexp=%s\n\n", res, exp)
@@ -132,36 +132,36 @@ func TestMain_SetRowAttrs(t *testing.T) {
 	}
 
 	// Set columns on different rows in different fields.
-	if _, err := m.Query("i", "", `SetBit(row=1, field="x", col=100)`); err != nil {
+	if _, err := m.Query("i", "", `Set(100, x=1)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetBit(row=2, field="x", col=100)`); err != nil {
+	} else if _, err := m.Query("i", "", `Set(100, x=2)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetBit(row=2, field="z", col=100)`); err != nil {
+	} else if _, err := m.Query("i", "", `Set(100, x=2)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetBit(row=3, field="neg", col=100)`); err != nil {
+	} else if _, err := m.Query("i", "", `Set(100, neg=3)`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set row attributes.
-	if _, err := m.Query("i", "", `SetRowAttrs(row=1, field="x", x=100)`); err != nil {
+	if _, err := m.Query("i", "", `SetRowAttrs(x, 1, x=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetRowAttrs(row=2, field="x", x=-200)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetRowAttrs(x, 2, x=-200)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetRowAttrs(row=2, field="z", x=300)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetRowAttrs(z, 2, x=300)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetRowAttrs(row=3, field="neg", x=-0.44)`); err != nil {
+	} else if _, err := m.Query("i", "", `SetRowAttrs(neg, 3, x=-0.44)`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Query row x/1.
-	if res, err := m.Query("i", "", `Bitmap(row=1, field="x")`); err != nil {
+	if res, err := m.Query("i", "", `Row(x=1)`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":100},"columns":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 
 	// Query row x/2.
-	if res, err := m.Query("i", "", `Bitmap(row=2, field="x")`); err != nil {
+	if res, err := m.Query("i", "", `Row(x=2)`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":-200},"columns":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
@@ -172,19 +172,19 @@ func TestMain_SetRowAttrs(t *testing.T) {
 	}
 
 	// Query rows after reopening.
-	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(row=1, field="x")`); err != nil {
+	if res, err := m.Query("i", "columnAttrs=true", `Row(x=1)`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":100},"columns":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
 	}
 
-	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(row=3, field="neg")`); err != nil {
+	if res, err := m.Query("i", "columnAttrs=true", `Row(neg=3)`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":-0.44},"columns":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
 	}
 	// Query row x/2.
-	if res, err := m.Query("i", "", `Bitmap(row=2, field="x")`); err != nil {
+	if res, err := m.Query("i", "", `Row(x=2)`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":-200},"columns":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
@@ -205,19 +205,19 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 	}
 
 	// Set columns on row.
-	if _, err := m.Query("i", "", `SetBit(row=1, field="x", col=100)`); err != nil {
+	if _, err := m.Query("i", "", `Set(100, x=1)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetBit(row=1, field="x", col=101)`); err != nil {
+	} else if _, err := m.Query("i", "", `Set(101, x=1)`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set column attributes.
-	if _, err := m.Query("i", "", `SetColumnAttrs(col=100, foo="bar")`); err != nil {
+	if _, err := m.Query("i", "", `SetColumnAttrs(100, foo="bar")`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Query row.
-	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(row=1, field="x")`); err != nil {
+	if res, err := m.Query("i", "columnAttrs=true", `Row(x=1)`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{},"columns":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
@@ -228,7 +228,7 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 	}
 
 	// Query row after reopening.
-	if res, err := m.Query("i", "columnAttrs=true", `Bitmap(row=1, field="x")`); err != nil {
+	if res, err := m.Query("i", "columnAttrs=true", `Row(x=1)`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{},"columns":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
@@ -279,7 +279,7 @@ func TestMain_RecalculateHashes(t *testing.T) {
 	data := []string{}
 	for rowID := 1; rowID < 10; rowID++ {
 		for columnID := 1; columnID < 100; columnID++ {
-			data = append(data, fmt.Sprintf(`SetBit(row=%d, field="f", col=%d)`, rowID, columnID))
+			data = append(data, fmt.Sprintf(`Set(%d, f=%d)`, columnID, rowID))
 		}
 	}
 	if _, err := cluster[0].Query("i", "", strings.Join(data, "")); err != nil {
@@ -296,7 +296,7 @@ func TestMain_RecalculateHashes(t *testing.T) {
 
 	// Run a TopN query on all nodes. The result should be the same as the target.
 	for _, m := range cluster {
-		res, err := m.Query("i", "", `TopN(field="f")`)
+		res, err := m.Query("i", "", `TopN(f)`)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -15,7 +15,6 @@
 package cmd_test
 
 import (
-	"errors"
 	"io/ioutil"
 	"strings"
 	"testing"
@@ -24,6 +23,7 @@ import (
 	"github.com/pilosa/pilosa/cmd"
 	_ "github.com/pilosa/pilosa/test"
 	"github.com/pilosa/pilosa/toml"
+	"github.com/pkg/errors"
 )
 
 func TestServerHelp(t *testing.T) {

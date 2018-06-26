@@ -1873,11 +1873,11 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 
 		// Only sync the standard block.
 		for j := 0; j < len(set.columnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/maxWrites]), "SetBit(field=%q, row=%d, col=%d)\n", f.field, set.rowIDs[j], (f.slice*SliceWidth)+set.columnIDs[j])
+			fmt.Fprintf(&(buffers[count/maxWrites]), "Set(%d, %s=%d)\n", (f.slice*SliceWidth)+set.columnIDs[j], f.field, set.rowIDs[j])
 			count++
 		}
 		for j := 0; j < len(clear.columnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/maxWrites]), "ClearBit(field=%q, row=%d, col=%d)\n", f.field, clear.rowIDs[j], (f.slice*SliceWidth)+clear.columnIDs[j])
+			fmt.Fprintf(&(buffers[count/maxWrites]), "Clear(%d, %s=%d)\n", (f.slice*SliceWidth)+clear.columnIDs[j], f.field, clear.rowIDs[j])
 			count++
 		}
 
