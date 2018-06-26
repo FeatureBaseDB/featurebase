@@ -1606,12 +1606,19 @@ func (e *Executor) translateCall(index string, idx *Index, c *pql.Call) error {
 	}
 	// Translate column key.
 	if idx.Keys() {
+		if c.Args[colKey] != nil && !isString(c.Args[colKey]) {
+			return errors.New("column value must be a string when index 'keys' option enabled")
+		}
 		if value := callArgString(c, colKey); value != "" {
 			ids, err := e.TranslateStore.TranslateColumnsToUint64(index, []string{value})
 			if err != nil {
 				return err
 			}
 			c.Args[colKey] = ids[0]
+		}
+	} else {
+		if isString(c.Args[colKey]) {
+			return errors.New("string 'col' value not allowed unless index 'keys' option enabled")
 		}
 	}
 
@@ -1622,12 +1629,19 @@ func (e *Executor) translateCall(index string, idx *Index, c *pql.Call) error {
 			return ErrFieldNotFound
 		}
 		if field.Keys() {
+			if c.Args[rowKey] != nil && !isString(c.Args[rowKey]) {
+				return errors.New("row value must be a string when field 'keys' option enabled")
+			}
 			if value := callArgString(c, rowKey); value != "" {
 				ids, err := e.TranslateStore.TranslateRowsToUint64(index, fieldName, []string{value})
 				if err != nil {
 					return err
 				}
 				c.Args[rowKey] = ids[0]
+			}
+		} else {
+			if isString(c.Args[rowKey]) {
+				return errors.New("string 'row' value not allowed unless field 'keys' option enabled")
 			}
 		}
 	}
@@ -1800,4 +1814,9 @@ func callArgString(call *pql.Call, key string) string {
 	}
 	s, _ := value.(string)
 	return s
+}
+
+func isString(v interface{}) bool {
+	_, ok := v.(string)
+	return ok
 }

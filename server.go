@@ -244,11 +244,8 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 	// Initialize translation database.
 	s.translateFile = NewTranslateFile()
-	s.translateFile.Path = filepath.Join(path, "keys")
+	s.translateFile.Path = filepath.Join(path, ".keys")
 	s.translateFile.PrimaryTranslateStore = s.primaryTranslateStore
-	if err := s.translateFile.Open(); err != nil {
-		return nil, err
-	}
 
 	// Get or create NodeID.
 	s.NodeID = s.LoadNodeID()
@@ -286,6 +283,11 @@ func (s *Server) Open() error {
 	err := s.holder.logStartup()
 	if err != nil {
 		log.Println(errors.Wrap(err, "logging startup"))
+	}
+
+	// Initialize id-key storage.
+	if err := s.translateFile.Open(); err != nil {
+		return err
 	}
 
 	// Cluster settings.

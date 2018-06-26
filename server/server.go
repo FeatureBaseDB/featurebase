@@ -75,6 +75,7 @@ type Command struct {
 	logger    loggerLogger
 
 	Handler pilosa.Handler
+	API     *pilosa.API
 	ln      net.Listener
 
 	serverOptions []pilosa.ServerOption
@@ -274,14 +275,14 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "new server")
 	}
 
-	api, err := pilosa.NewAPI(pilosa.OptAPIServer(m.Server))
+	m.API, err = pilosa.NewAPI(pilosa.OptAPIServer(m.Server))
 	if err != nil {
 		return errors.Wrap(err, "new api")
 	}
 
 	m.Handler, err = http.NewHandler(
 		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
-		http.OptHandlerAPI(api),
+		http.OptHandlerAPI(m.API),
 		http.OptHandlerLogger(m.logger),
 		http.OptHandlerListener(m.ln),
 	)
