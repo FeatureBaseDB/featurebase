@@ -33,7 +33,6 @@ import (
 )
 
 // Ensure GossipMemberSet implements interfaces.
-var _ pilosa.BroadcastReceiver = &GossipMemberSet{}
 var _ memberlist.Delegate = &GossipMemberSet{}
 
 // GossipMemberSet represents a gossip implementation of MemberSet using memberlist.
@@ -45,19 +44,15 @@ type GossipMemberSet struct {
 
 	broadcasts *memberlist.TransmitLimitedQueue
 
-	statusHandler pilosa.StatusHandler
-	config        *gossipConfig
+	pserver *pilosa.Server
+	config  *gossipConfig
 
 	Logger pilosa.Logger
 
 	logger    *log.Logger
 	transport *Transport
-}
 
-// Start implements the BroadcastReceiver interface and sets the BroadcastHandler.
-func (g *GossipMemberSet) Start(h pilosa.BroadcastHandler) error {
-	g.handler = h
-	return nil
+	gossipEventReceiver *GossipEventReceiver
 }
 
 // GetBindAddr returns the gossip bind address based on config and auto bind port.
@@ -69,13 +64,16 @@ func (g *GossipMemberSet) GetBindAddr() string {
 
 // Open implements the MemberSet interface to start network activity.
 func (g *GossipMemberSet) Open(n *pilosa.Node) error {
+	err := g.gossipEventReceiver.Start(g.pserver)
+	if err != nil {
+		return errors.Wrap(err, "starting event delegate")
+	}
 	if g.handler == nil {
 		return fmt.Errorf("must call Start(pilosa.BroadcastHandler) before calling Open()")
 	}
 
 	g.node = n
 
-	err := error(nil)
 	g.mu.Lock()
 	g.memberlist, err = memberlist.Create(g.config.memberlistConfig)
 	g.mu.Unlock()
@@ -166,7 +164,7 @@ func WithLogger(logger *log.Logger) GossipMemberSetOption {
 }
 
 // NewGossipMemberSet returns a new instance of GossipMemberSet based on options.
-func NewGossipMemberSet(name string, host string, cfg Config, ger *GossipEventReceiver, sh pilosa.StatusHandler, options ...GossipMemberSetOption) (*GossipMemberSet, error) {
+func NewGossipMemberSet(name string, host string, cfg Config, s *pilosa.Server, options ...GossipMemberSetOption) (*GossipMemberSet, error) {
 	g := &GossipMemberSet{
 		Logger: pilosa.NopLogger,
 	}
@@ -177,6 +175,10 @@ func NewGossipMemberSet(name string, host string, cfg Config, ger *GossipEventRe
 			return nil, errors.Wrap(err, "executing option")
 		}
 	}
+	ger := NewGossipEventReceiver(g.logger)
+	g.gossipEventReceiver = ger
+
+	g.handler = s
 
 	if g.transport == nil {
 		port, err := strconv.Atoi(cfg.Port)
@@ -232,7 +234,7 @@ func NewGossipMemberSet(name string, host string, cfg Config, ger *GossipEventRe
 		gossipSeeds:      cfg.Seeds,
 	}
 
-	g.statusHandler = sh
+	g.pserver = s
 
 	return g, nil
 }
@@ -270,7 +272,7 @@ func (g *GossipMemberSet) GetBroadcasts(overhead, limit int) [][]byte {
 // LocalState implementation of the memberlist.Delegate interface
 // sends this Node's state data.
 func (g *GossipMemberSet) LocalState(join bool) []byte {
-	pb, err := g.statusHandler.LocalStatus()
+	pb, err := g.pserver.LocalStatus()
 	if err != nil {
 		g.Logger.Printf("error getting local state, err=%s", err)
 		return []byte{}
@@ -294,7 +296,7 @@ func (g *GossipMemberSet) MergeRemoteState(buf []byte, join bool) {
 		g.Logger.Printf("error unmarshalling nodestate data, err=%s", err)
 		return
 	}
-	err := g.statusHandler.HandleRemoteStatus(&pb)
+	err := g.pserver.HandleRemoteStatus(&pb)
 	if err != nil {
 		g.Logger.Printf("merge state error: %s", err)
 	}
@@ -309,11 +311,11 @@ type GossipEventReceiver struct {
 	ch           chan memberlist.NodeEvent
 	eventHandler pilosa.EventHandler
 
-	Logger pilosa.Logger
+	Logger *log.Logger
 }
 
 // NewGossipEventReceiver returns a new instance of GossipEventReceiver.
-func NewGossipEventReceiver(logger pilosa.Logger) *GossipEventReceiver {
+func NewGossipEventReceiver(logger *log.Logger) *GossipEventReceiver {
 	return &GossipEventReceiver{
 		ch:     make(chan memberlist.NodeEvent, 1),
 		Logger: logger,
