@@ -76,11 +76,22 @@ type Command struct {
 
 	Handler pilosa.Handler
 	ln      net.Listener
+
+	serverOptions []pilosa.ServerOption
+}
+
+type CommandOption func(c *Command) error
+
+func OptCommandServerOptions(opts ...pilosa.ServerOption) CommandOption {
+	return func(c *Command) error {
+		c.serverOptions = append(c.serverOptions, opts...)
+		return nil
+	}
 }
 
 // NewCommand returns a new instance of Main.
-func NewCommand(stdin io.Reader, stdout, stderr io.Writer) *Command {
-	return &Command{
+func NewCommand(stdin io.Reader, stdout, stderr io.Writer, opts ...CommandOption) *Command {
+	c := &Command{
 		Config: NewConfig(),
 
 		CmdIO: pilosa.NewCmdIO(stdin, stdout, stderr),
@@ -88,6 +99,16 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer) *Command {
 		Started: make(chan struct{}),
 		done:    make(chan struct{}),
 	}
+
+	for _, opt := range opts {
+		err := opt(c)
+		if err != nil {
+			panic(err)
+			// TODO: Return error instead of panic?
+		}
+	}
+
+	return c
 }
 
 // Start starts the pilosa server - it returns once the server is running.
@@ -225,7 +246,7 @@ func (m *Command) SetupServer() error {
 		primaryTranslateStore = http.NewTranslateStore(m.Config.Translation.PrimaryURL)
 	}
 
-	m.Server, err = pilosa.NewServer(
+	serverOptions := []pilosa.ServerOption{
 		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
 		pilosa.OptServerLongQueryTime(time.Duration(m.Config.Cluster.LongQueryTime)),
 		pilosa.OptServerDataDir(m.Config.DataDir),
@@ -243,7 +264,12 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 		pilosa.OptServerPrimaryTranslateStore(primaryTranslateStore),
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
-	)
+	}
+
+	serverOptions = append(serverOptions, m.serverOptions...)
+
+	m.Server, err = pilosa.NewServer(serverOptions...)
+
 	if err != nil {
 		return errors.Wrap(err, "new server")
 	}

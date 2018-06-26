@@ -31,6 +31,7 @@ import (
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -565,7 +566,7 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("CORS preflight status should be 405, but is %v", result.StatusCode)
 		}
 
-		clus := test.MustRunMainWithCluster(t, 1, test.OptAllowedOrigins([]string{"http://test/"}))
+		clus := test.MustRunMainWithCluster(t, 1, []server.CommandOption{test.OptAllowedOrigins([]string{"http://test/"})})
 		w = httptest.NewRecorder()
 		h := clus[0].Handler.(*http.Handler).Handler
 		h.ServeHTTP(w, req)
