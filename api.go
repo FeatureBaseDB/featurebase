@@ -35,18 +35,11 @@ import (
 // API provides the top level programmatic interface to Pilosa. It is usually
 // wrapped by a handler which provides an external interface (e.g. HTTP).
 type API struct {
-	Holder *Holder
-	// The execution engine for running queries.
-	Executor interface {
-		Execute(context context.Context, index string, query *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error)
-	}
-	Broadcaster      Broadcaster
-	BroadcastHandler BroadcastHandler
-	StatusHandler    StatusHandler
-	Cluster          *Cluster
-	TranslateStore   TranslateStore
-	Logger           Logger
-	server           *Server
+	Holder         *Holder
+	Broadcaster    Broadcaster
+	Cluster        *Cluster
+	TranslateStore TranslateStore
+	server         *Server
 }
 
 // APIOption is a functional option type for pilosa.API
@@ -55,14 +48,10 @@ type APIOption func(*API) error
 func OptAPIServer(s *Server) APIOption {
 	return func(a *API) error {
 		a.server = s
-		a.Executor = s.executor
 		a.TranslateStore = s.translateFile
 		a.Holder = s.holder
 		a.Broadcaster = s
-		a.BroadcastHandler = s
-		a.StatusHandler = s
 		a.Cluster = s.Cluster
-		a.Logger = s.logger
 		return nil
 	}
 }
@@ -73,7 +62,6 @@ func NewAPI(opts ...APIOption) (*API, error) {
 		Broadcaster: NopBroadcaster,
 		//BroadcastHandler: NopBroadcastHandler, // TODO: implement the nop
 		//StatusHandler:    NopStatusHandler,    // TODO: implement the nop
-		Logger: NopLogger,
 	}
 
 	for _, opt := range opts {
@@ -129,7 +117,7 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 		ExcludeRowAttrs: req.ExcludeRowAttrs,
 		ExcludeColumns:  req.ExcludeColumns,
 	}
-	results, err := api.Executor.Execute(ctx, req.Index, q, req.Slices, execOpts)
+	results, err := api.server.executor.Execute(ctx, req.Index, q, req.Slices, execOpts)
 	if err != nil {
 		return resp, errors.Wrap(err, "executing")
 	}
@@ -210,7 +198,7 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 			Meta:  options.Encode(),
 		})
 	if err != nil {
-		api.Logger.Printf("problem sending CreateIndex message: %s", err)
+		api.server.logger.Printf("problem sending CreateIndex message: %s", err)
 		return nil, errors.Wrap(err, "sending CreateIndex message")
 	}
 	api.Holder.Stats.Count("createIndex", 1, 1.0)
@@ -248,7 +236,7 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 			Index: indexName,
 		})
 	if err != nil {
-		api.Logger.Printf("problem sending DeleteIndex message: %s", err)
+		api.server.logger.Printf("problem sending DeleteIndex message: %s", err)
 		return errors.Wrap(err, "sending DeleteIndex message")
 	}
 	api.Holder.Stats.Count("deleteIndex", 1, 1.0)
@@ -281,7 +269,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 			Meta:  options.Encode(),
 		})
 	if err != nil {
-		api.Logger.Printf("problem sending CreateField message: %s", err)
+		api.server.logger.Printf("problem sending CreateField message: %s", err)
 		return nil, errors.Wrap(err, "sending CreateField message")
 	}
 	api.Holder.Stats.CountWithCustomTags("createField", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
@@ -314,7 +302,7 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 			Field: fieldName,
 		})
 	if err != nil {
-		api.Logger.Printf("problem sending DeleteField message: %s", err)
+		api.server.logger.Printf("problem sending DeleteField message: %s", err)
 		return errors.Wrap(err, "sending DeleteField message")
 	}
 	api.Holder.Stats.CountWithCustomTags("deleteField", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
@@ -330,7 +318,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 
 	// Validate that this handler owns the slice.
 	if !api.Cluster.ownsSlice(api.LocalID(), indexName, slice) {
-		api.Logger.Printf("node %s does not own slice %d of index %s", api.LocalID(), slice, indexName)
+		api.server.logger.Printf("node %s does not own slice %d of index %s", api.LocalID(), slice, indexName)
 		return ErrClusterDoesNotOwnSlice
 	}
 
@@ -509,7 +497,7 @@ func (api *API) ClusterMessage(ctx context.Context, reqBody io.Reader) error {
 	}
 
 	// Forward the error message.
-	if err := api.BroadcastHandler.ReceiveMessage(pb); err != nil {
+	if err := api.server.ReceiveMessage(pb); err != nil {
 		return errors.Wrap(err, "receiving message")
 	}
 	return nil
@@ -571,7 +559,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, fieldName stri
 			View:  viewName,
 		})
 	if err != nil {
-		api.Logger.Printf("problem sending DeleteView message: %s", err)
+		api.server.logger.Printf("problem sending DeleteView message: %s", err)
 	}
 
 	return errors.Wrap(err, "sending DeleteView message")
@@ -670,7 +658,7 @@ func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 	// Import into fragment.
 	err = field.Import(req.RowIDs, req.ColumnIDs, timestamps)
 	if err != nil {
-		api.Logger.Printf("import error: index=%s, field=%s, slice=%d, columns=%d, err=%s", req.Index, req.Field, req.Slice, len(req.ColumnIDs), err)
+		api.server.logger.Printf("import error: index=%s, field=%s, slice=%d, columns=%d, err=%s", req.Index, req.Field, req.Slice, len(req.ColumnIDs), err)
 	}
 	return errors.Wrap(err, "importing")
 }
@@ -688,7 +676,7 @@ func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest
 	// Import into fragment.
 	err = field.ImportValue(req.ColumnIDs, req.Values)
 	if err != nil {
-		api.Logger.Printf("import error: index=%s, field=%s, slice=%d, columns=%d, err=%s", req.Index, req.Field, req.Slice, len(req.ColumnIDs), err)
+		api.server.logger.Printf("import error: index=%s, field=%s, slice=%d, columns=%d, err=%s", req.Index, req.Field, req.Slice, len(req.ColumnIDs), err)
 	}
 	return errors.Wrap(err, "importing")
 }
@@ -719,22 +707,22 @@ func (api *API) LongQueryTime() time.Duration {
 func (api *API) indexField(indexName string, fieldName string, slice uint64) (*Index, *Field, error) {
 	// Validate that this handler owns the slice.
 	if !api.Cluster.ownsSlice(api.LocalID(), indexName, slice) {
-		api.Logger.Printf("node %s does not own slice %d of index %s", api.LocalID(), slice, indexName)
+		api.server.logger.Printf("node %s does not own slice %d of index %s", api.LocalID(), slice, indexName)
 		return nil, nil, ErrClusterDoesNotOwnSlice
 	}
 
 	// Find the Index.
-	api.Logger.Printf("importing: %v %v %v", indexName, fieldName, slice)
+	api.server.logger.Printf("importing: %v %v %v", indexName, fieldName, slice)
 	index := api.Holder.Index(indexName)
 	if index == nil {
-		api.Logger.Printf("fragment error: index=%s, field=%s, slice=%d, err=%s", indexName, fieldName, slice, ErrIndexNotFound.Error())
+		api.server.logger.Printf("fragment error: index=%s, field=%s, slice=%d, err=%s", indexName, fieldName, slice, ErrIndexNotFound.Error())
 		return nil, nil, ErrIndexNotFound
 	}
 
 	// Retrieve field.
 	field := index.Field(fieldName)
 	if field == nil {
-		api.Logger.Printf("field error: index=%s, field=%s, slice=%d, err=%s", indexName, fieldName, slice, ErrFieldNotFound.Error())
+		api.server.logger.Printf("field error: index=%s, field=%s, slice=%d, err=%s", indexName, fieldName, slice, ErrFieldNotFound.Error())
 		return nil, nil, ErrFieldNotFound
 	}
 	return index, field, nil
