@@ -704,7 +704,7 @@ func (s *Server) monitorRuntime() {
 	}
 }
 
-// ReceiveEvent implement EventHandler
+// ReceiveEvent implements the EventHandler interface.
 func (s *Server) ReceiveEvent(e *NodeEvent) error {
 	return s.Cluster.ReceiveEvent(e)
 }
