@@ -244,17 +244,18 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 }
 
 // CreateField makes the named field in the named index with the given options.
-func (api *API) CreateField(ctx context.Context, indexName string, fieldName string, opts ...FieldOption) (*Field, error) {
+// This method currently only takes a single functional option, but that may be
+// changed in the future to support multiple options.
+func (api *API) CreateField(ctx context.Context, indexName string, fieldName string, opts FieldOption) (*Field, error) {
 	if err := api.validate(apiCreateField); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
+	// Apply functional option.
 	fo := FieldOptions{}
-	for _, opt := range opts {
-		err := opt(&fo)
-		if err != nil {
-			return nil, errors.Wrap(err, "applying option")
-		}
+	err := opts(&fo)
+	if err != nil {
+		return nil, errors.Wrap(err, "applying option")
 	}
 
 	// Find index.

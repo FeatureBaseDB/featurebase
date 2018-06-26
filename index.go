@@ -301,11 +301,6 @@ func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 		return nil, ErrInvalidCacheType
 	}
 
-	// Validate options.
-	if err := opt.Validate(); err != nil {
-		return nil, errors.Wrap(err, "validating options")
-	}
-
 	// Initialize field.
 	f, err := i.newField(i.FieldPath(name), name)
 	if err != nil {

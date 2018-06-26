@@ -104,8 +104,6 @@ func int64Ptr(i int64) *int64 {
 
 // Test fieldOption validation.
 func TestFieldOptionValidation(t *testing.T) {
-	//foo := "foo"
-	//set := "set"
 	timeQuantum := pilosa.TimeQuantum("YMD")
 	defaultCacheSize := uint32(pilosa.DefaultCacheSize)
 	tests := []struct {

@@ -626,17 +626,17 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Convert json options into functional options.
-	var fos []pilosa.FieldOption
+	var fos pilosa.FieldOption
 	switch req.Options.Type {
 	case pilosa.FieldTypeSet:
-		fos = append(fos, pilosa.OptFieldTypeSet(*req.Options.CacheType, *req.Options.CacheSize))
+		fos = pilosa.OptFieldTypeSet(*req.Options.CacheType, *req.Options.CacheSize)
 	case pilosa.FieldTypeInt:
-		fos = append(fos, pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max))
+		fos = pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max)
 	case pilosa.FieldTypeTime:
-		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum))
+		fos = pilosa.OptFieldTypeTime(*req.Options.TimeQuantum)
 	}
 
-	_, err = h.API.CreateField(r.Context(), indexName, fieldName, fos...)
+	_, err = h.API.CreateField(r.Context(), indexName, fieldName, fos)
 	if err != nil {
 		switch errors.Cause(err) {
 		case pilosa.ErrIndexNotFound:

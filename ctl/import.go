@@ -42,7 +42,6 @@ type ImportCommand struct {
 
 	// Options for index & field to be created if they don't exist
 	IndexOptions pilosa.IndexOptions
-	//FieldOptions pilosa.FieldOptions
 
 	// CreateSchema ensures the schema exists before import
 	CreateSchema bool

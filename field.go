@@ -90,6 +90,9 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 		if fo.Type != "" {
 			return errors.Errorf("field type is already set to: %s", fo.Type)
 		}
+		if min > max {
+			return ErrInvalidBSIGroupRange
+		}
 		fo.Type = FieldTypeInt
 		fo.Min = min
 		fo.Max = max
@@ -101,6 +104,9 @@ func OptFieldTypeTime(timeQuantum TimeQuantum) FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
 			return errors.Errorf("field type is already set to: %s", fo.Type)
+		}
+		if !timeQuantum.Valid() {
+			return ErrInvalidTimeQuantum
 		}
 		fo.Type = FieldTypeTime
 		fo.TimeQuantum = timeQuantum
@@ -1073,25 +1079,6 @@ func applyDefaultOptions(o FieldOptions) FieldOptions {
 		}
 	}
 	return o
-}
-
-// Validate ensures that FieldOption values are valid.
-func (o *FieldOptions) Validate() error {
-	switch o.Type {
-	case FieldTypeSet, "":
-		// TODO: cacheType, cacheSize validation
-	case FieldTypeInt:
-		if o.Min > o.Max {
-			return ErrInvalidBSIGroupRange
-		}
-	case FieldTypeTime:
-		if o.TimeQuantum == "" || !o.TimeQuantum.Valid() {
-			return ErrInvalidTimeQuantum
-		}
-	default:
-		return errors.New("invalid field type")
-	}
-	return nil
 }
 
 // Encode converts o into its internal representation.
