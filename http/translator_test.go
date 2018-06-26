@@ -4,13 +4,13 @@ import (
 	"context"
 	"io"
 	"io/ioutil"
-	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/mock"
+	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -52,13 +52,14 @@ func TestTranslateStore_Reader(t *testing.T) {
 				}
 				return &mrc, nil
 			}
-			h := test.MustNewHandler()
-			h.API.TranslateStore = &translateStore
-			s := httptest.NewServer(h)
-			defer s.Close()
+
+			opts := server.OptCommandServerOptions(pilosa.OptServerPrimaryTranslateStore(translateStore))
+			main := test.MustRunMainWithCluster(t, 1, []server.CommandOption{opts})[0]
+			defer main.Close()
 
 			// Connect to server and stream all available data.
-			store := http.NewTranslateStore(s.URL)
+			store := http.NewTranslateStore(main.Server.URI.String())
+
 			rc, err := store.Reader(context.Background(), 100)
 			if err != nil {
 				t.Fatal(err)
@@ -95,15 +96,16 @@ func TestTranslateStore_Reader(t *testing.T) {
 			translateStore.ReaderFunc = func(ctx context.Context, off int64) (io.ReadCloser, error) {
 				return &mrc, nil
 			}
-			h := test.MustNewHandler()
-			h.API.TranslateStore = &translateStore
-			s := httptest.NewServer(h)
-			defer s.Close()
+
+			opts := server.OptCommandServerOptions(pilosa.OptServerPrimaryTranslateStore(translateStore))
+			main := test.MustRunMainWithCluster(t, 1, []server.CommandOption{opts})[0]
+
+			defer main.Close()
 			defer close(done)
 
 			// Connect to server and begin streaming.
 			ctx, cancel := context.WithCancel(context.Background())
-			store := http.NewTranslateStore(s.URL)
+			store := http.NewTranslateStore(main.Server.URI.String())
 			if _, err := store.Reader(ctx, 0); err != nil {
 				t.Fatal(err)
 			}
@@ -123,12 +125,11 @@ func TestTranslateStore_Reader(t *testing.T) {
 		translateStore.ReaderFunc = func(ctx context.Context, off int64) (io.ReadCloser, error) {
 			return nil, pilosa.ErrNotImplemented
 		}
-		h := test.MustNewHandler()
-		h.API.TranslateStore = &translateStore
-		s := httptest.NewServer(h)
-		defer s.Close()
 
-		_, err := http.NewTranslateStore(s.URL).Reader(context.Background(), 0)
+		opts := server.OptCommandServerOptions(pilosa.OptServerPrimaryTranslateStore(translateStore))
+		main := test.MustRunMainWithCluster(t, 1, []server.CommandOption{opts})[0]
+
+		_, err := http.NewTranslateStore(main.Server.URI.String()).Reader(context.Background(), 0)
 		if err != pilosa.ErrNotImplemented {
 			t.Fatalf("unexpected error: %s", err)
 		}
