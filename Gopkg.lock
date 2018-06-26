@@ -198,12 +198,6 @@
   version = "v0.8.0"
 
 [[projects]]
-  name = "github.com/rakyll/statik"
-  packages = ["fs"]
-  revision = "fd36b3595eb2ec8da4b8153b107f7ea08504899d"
-  version = "v0.1.1"
-
-[[projects]]
   name = "github.com/satori/go.uuid"
   packages = ["."]
   revision = "879c5887cd475cd7864858769793b2ceb0d44feb"

@@ -224,10 +224,6 @@ func (m *Main) RunWithTransport(host string, bindPort int, joinSeeds []string) (
 		return seed, err
 	}
 
-	if err = m.Server.BroadcastReceiver.Start(m.Server); err != nil {
-		return seed, err
-	}
-
 	m.Server.Cluster.Static = false
 
 	go func() {

@@ -27,6 +27,7 @@ import (
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/test"
+	"github.com/pkg/errors"
 )
 
 // Ensure a bitmap query can be executed.
@@ -264,36 +265,107 @@ func TestExecutor_Execute_Count(t *testing.T) {
 }
 
 // Ensure a set query can be executed.
-func TestExecutor_Execute_Set(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
+func TestExecutor_Execute_SetBit(t *testing.T) {
+	t.Run("ID", func(t *testing.T) {
+		cmd := test.MustRunMainWithCluster(t, 1)[0]
+		holder := cmd.Server.Holder()
+		hldr := test.Holder{Holder: holder}
+		hldr.SetBit("i", "f", 1, 0)
 
-	// set a bit so the view gets created.
-	hldr.SetBit("i", "f", 1, 0)
+		t.Run("OK", func(t *testing.T) {
+			hldr.ClearBit("i", "f", 11, 1)
+			if n := hldr.Row("i", "f", 11).Count(); n != 0 {
+				t.Fatalf("unexpected bitmap count: %d", n)
+			}
 
-	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
-	if n := hldr.Row("i", "f", 11).Count(); n != 0 {
-		t.Fatalf("unexpected bitmap count: %d", n)
-	}
+			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1, f=11)`}); err != nil {
+				t.Fatal(err)
+			} else {
+				if !res.Results[0].(bool) {
+					t.Fatalf("expected column changed")
+				}
+			}
 
-	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Set(1, f=11)`), nil, nil); err != nil {
-		t.Fatal(err)
-	} else {
-		if !res[0].(bool) {
-			t.Fatalf("expected column changed")
-		}
-	}
+			if n := hldr.Row("i", "f", 11).Count(); n != 1 {
+				t.Fatalf("unexpected bitmap count: %d", n)
+			}
+			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1, f=11)`}); err != nil {
+				t.Fatal(err)
+			} else {
+				if res.Results[0].(bool) {
+					t.Fatalf("expected column unchanged")
+				}
+			}
+		})
 
-	if n := hldr.Row("i", "f", 11).Count(); n != 1 {
-		t.Fatalf("unexpected bitmap count: %d", n)
-	}
-	if res, err := e.Execute(context.Background(), "i", test.MustParse(`Set(1, f=11)`), nil, nil); err != nil {
-		t.Fatal(err)
-	} else {
-		if res[0].(bool) {
-			t.Fatalf("expected column unchanged")
-		}
-	}
+		t.Run("ErrInvalidColValueType", func(t *testing.T) {
+			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("foo", f=1)`}); err == nil || errors.Cause(err).Error() != `string 'col' value not allowed unless index 'keys' option enabled` {
+				t.Fatalf("The error is: '%v'", err)
+			}
+		})
+
+		t.Run("ErrInvalidRowValueType", func(t *testing.T) {
+			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2, f="bar")`}); err == nil || errors.Cause(err).Error() != `string 'row' value not allowed unless field 'keys' option enabled` {
+				t.Fatal(err)
+			}
+		})
+	})
+
+	t.Run("Keys", func(t *testing.T) {
+		cmd := test.MustRunMainWithCluster(t, 1)[0]
+		holder := cmd.Server.Holder()
+		hldr := test.Holder{Holder: holder}
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{Keys: true})
+
+		t.Run("OK", func(t *testing.T) {
+			hldr.SetBit("i", "f", 1, 0)
+			if n := hldr.Row("i", "f", 11).Count(); n != 0 {
+				t.Fatalf("unexpected bitmap count: %d", n)
+			}
+
+			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("foo", f=11)`}); err != nil {
+				t.Fatal(err)
+			} else {
+				if !res.Results[0].(bool) {
+					t.Fatalf("expected column changed")
+				}
+			}
+
+			if n := hldr.Row("i", "f", 11).Count(); n != 1 {
+				t.Fatalf("unexpected bitmap count: %d", n)
+			}
+			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("foo", f=11)`}); err != nil {
+				t.Fatal(err)
+			} else {
+				if res.Results[0].(bool) {
+					t.Fatalf("expected column unchanged")
+				}
+			}
+		})
+
+		t.Run("ErrInvalidColValueType", func(t *testing.T) {
+			if err := index.DeleteField("f"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := index.CreateField("f", pilosa.FieldOptions{}); err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2, f=1)`}); err == nil || errors.Cause(err).Error() != `column value must be a string when index 'keys' option enabled` {
+				t.Fatal(err)
+			}
+		})
+
+		t.Run("ErrInvalidRowValueType", func(t *testing.T) {
+			index := hldr.MustCreateIndexIfNotExists("inokey", pilosa.IndexOptions{})
+			if _, err := index.CreateField("f", pilosa.FieldOptions{Keys: true}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "inokey", Query: `Set(2, f=1)`}); err == nil || errors.Cause(err).Error() != `row value must be a string when field 'keys' option enabled` {
+				t.Fatal(err)
+			}
+		})
+	})
 }
 
 // Ensure old PQL syntax doesn't break anything too badly.

@@ -886,11 +886,6 @@ func (c *Cluster) open() error {
 		return errors.Wrap(err, "adding local node")
 	}
 
-	// Start the EventReceiver.
-	if err := c.EventReceiver.Start(c); err != nil {
-		return fmt.Errorf("starting EventReceiver: %v", err)
-	}
-
 	// Open MemberSet communication.
 	if err := c.MemberSet.Open(c.Node); err != nil {
 		return fmt.Errorf("opening MemberSet: %v", err)
