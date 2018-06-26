@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -27,7 +28,7 @@ import (
 // pilosa.Server was not having its remoteClient field set by an option and so
 // it was using a nil client in monitorAntiEntropy.
 func TestMonitorAntiEntropy(t *testing.T) {
-	cluster := test.MustRunMainWithCluster(t, 3, test.OptAntiEntropyInterval(time.Millisecond*20))
+	cluster := test.MustRunMainWithCluster(t, 3, []server.CommandOption{test.OptAntiEntropyInterval(time.Millisecond * 20)})
 	client := cluster[1].Client()
 	err := client.CreateIndex(context.Background(), "balh", pilosa.IndexOptions{})
 	if err != nil {

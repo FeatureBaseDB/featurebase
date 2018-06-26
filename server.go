@@ -61,10 +61,9 @@ type Server struct {
 	clusterDisabled bool
 
 	// External
-	BroadcastReceiver BroadcastReceiver
-	systemInfo        SystemInfo
-	gcNotifier        GCNotifier
-	logger            Logger
+	systemInfo SystemInfo
+	gcNotifier GCNotifier
+	logger     Logger
 
 	NodeID              string
 	URI                 URI
@@ -207,12 +206,11 @@ func OptServerClusterDisabled(disabled bool, hosts []string) ServerOption {
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
-		closing:           make(chan struct{}),
-		Cluster:           NewCluster(),
-		holder:            NewHolder(),
-		BroadcastReceiver: NopBroadcastReceiver,
-		diagnostics:       NewDiagnosticsCollector(DefaultDiagnosticServer),
-		systemInfo:        NewNopSystemInfo(),
+		closing:     make(chan struct{}),
+		Cluster:     NewCluster(),
+		holder:      NewHolder(),
+		diagnostics: NewDiagnosticsCollector(DefaultDiagnosticServer),
+		systemInfo:  NewNopSystemInfo(),
 
 		gcNotifier: NopGCNotifier,
 
@@ -246,11 +244,8 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 	// Initialize translation database.
 	s.translateFile = NewTranslateFile()
-	s.translateFile.Path = filepath.Join(path, "keys")
+	s.translateFile.Path = filepath.Join(path, ".keys")
 	s.translateFile.PrimaryTranslateStore = s.primaryTranslateStore
-	if err := s.translateFile.Open(); err != nil {
-		return nil, err
-	}
 
 	// Get or create NodeID.
 	s.NodeID = s.LoadNodeID()
@@ -290,17 +285,17 @@ func (s *Server) Open() error {
 		log.Println(errors.Wrap(err, "logging startup"))
 	}
 
+	// Initialize id-key storage.
+	if err := s.translateFile.Open(); err != nil {
+		return err
+	}
+
 	// Cluster settings.
 	s.Cluster.Broadcaster = s
 	s.Cluster.MaxWritesPerRequest = s.maxWritesPerRequest
 
 	// Initialize Holder.
 	s.holder.Broadcaster = s
-
-	// Start the BroadcastReceiver.
-	if err := s.BroadcastReceiver.Start(s); err != nil {
-		return fmt.Errorf("starting BroadcastReceiver: %v", err)
-	}
 
 	// Open Cluster management.
 	if err := s.Cluster.open(); err != nil {
@@ -709,6 +704,11 @@ func (s *Server) monitorRuntime() {
 		s.holder.Stats.Gauge("Mallocs", float64(m.Mallocs), 1.0)
 		s.holder.Stats.Gauge("Frees", float64(m.Frees), 1.0)
 	}
+}
+
+// ReceiveEvent implements the EventHandler interface.
+func (s *Server) ReceiveEvent(e *NodeEvent) error {
+	return s.Cluster.ReceiveEvent(e)
 }
 
 // countOpenFiles on operating systems that support lsof.
