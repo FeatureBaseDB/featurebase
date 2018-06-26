@@ -224,6 +224,10 @@ func TestPEGWorking(t *testing.T) {
 			name:   "RangeTimeQuotes",
 			input:  `Range(a=4, '2010-07-04T00:00', "2010-08-04T00:00")`,
 			ncalls: 1},
+		{
+			name:   "Dashed Frame",
+			input:  "Set(1, my-frame=9)",
+			ncalls: 1},
 	}
 
 	for i, test := range tests {
@@ -471,6 +475,15 @@ func TestPQLDeepEquality(t *testing.T) {
 				Name: "Sum",
 				Args: map[string]interface{}{
 					"field": "f",
+				},
+			}},
+		{
+			name: "Weird dash",
+			call: "Sum(field-=f)",
+			exp: &Call{
+				Name: "Sum",
+				Args: map[string]interface{}{
+					"field-": "f",
 				},
 			}},
 		{
