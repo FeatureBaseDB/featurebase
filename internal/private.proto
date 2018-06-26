@@ -126,6 +126,7 @@ message CreateViewMessage {
     string Index = 1;
     string Field = 2;
     string View = 3;
+    string Type = 4;
 }
 
 message DeleteViewMessage {

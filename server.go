@@ -458,7 +458,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if f == nil {
 			return fmt.Errorf("Local Field not found: %s", obj.Field)
 		}
-		_, _, err := f.createViewIfNotExistsBase(obj.View)
+		_, _, err := f.createViewIfNotExistsBase(viewTimeKey{name: obj.View})
 		if err != nil {
 			return err
 		}

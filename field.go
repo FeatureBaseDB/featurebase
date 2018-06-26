@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,6 +38,9 @@ const (
 
 	// Default ranked field cache
 	defaultCacheSize = 50000
+
+	BitsPerWord = 32 << (^uint(0) >> 63) // either 32 or 64
+	MaxInt      = 1<<(BitsPerWord-1) - 1 // either 1<<31 - 1 or 1<<63 - 1
 )
 
 // Field types.
@@ -248,7 +252,7 @@ func (f *Field) openViews() error {
 		}
 
 		name := filepath.Base(fi.Name())
-		view := f.newView(f.ViewPath(name), name)
+		view := f.newView(f.ViewPath(name), viewTimeKey{name: name})
 		if err := view.open(); err != nil {
 			return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
 		}
@@ -555,9 +559,9 @@ func (f *Field) RecalculateCaches() {
 
 // CreateViewIfNotExists returns the named view, creating it if necessary.
 // Additionally, a CreateViewMessage is sent to the cluster.
-func (f *Field) CreateViewIfNotExists(name string) (*View, error) {
+func (f *Field) CreateViewIfNotExists(vtk viewTimeKey) (*View, error) {
 
-	view, created, err := f.createViewIfNotExistsBase(name)
+	view, created, err := f.createViewIfNotExistsBase(vtk)
 	if err != nil {
 		return nil, err
 	}
@@ -568,7 +572,8 @@ func (f *Field) CreateViewIfNotExists(name string) (*View, error) {
 			&internal.CreateViewMessage{
 				Index: f.index,
 				Field: f.name,
-				View:  name,
+				View:  vtk.name,
+				Type:  string(vtk.quantum),
 			})
 		if err != nil {
 			return nil, errors.Wrap(err, "sending CreateView message")
@@ -580,15 +585,15 @@ func (f *Field) CreateViewIfNotExists(name string) (*View, error) {
 
 // createViewIfNotExistsBase returns the named view, creating it if necessary.
 // The returned bool indicates whether the view was created or not.
-func (f *Field) createViewIfNotExistsBase(name string) (*View, bool, error) {
+func (f *Field) createViewIfNotExistsBase(vtk viewTimeKey) (*View, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if view := f.views[name]; view != nil {
+	if view := f.views[vtk.name]; view != nil {
 		return view, false, nil
 	}
 
-	view := f.newView(f.ViewPath(name), name)
+	view := f.newView(f.ViewPath(vtk.name), vtk)
 
 	if err := view.open(); err != nil {
 		return nil, false, errors.Wrap(err, "opening view")
@@ -599,13 +604,14 @@ func (f *Field) createViewIfNotExistsBase(name string) (*View, bool, error) {
 	return view, true, nil
 }
 
-func (f *Field) newView(path, name string) *View {
-	view := NewView(path, f.index, f.name, name, f.options.CacheSize)
+func (f *Field) newView(path string, vtk viewTimeKey) *View {
+	view := NewView(path, f.index, f.name, vtk.name, f.options.CacheSize)
 	view.cacheType = f.options.CacheType
 	view.Logger = f.Logger
 	view.RowAttrStore = f.rowAttrStore
-	view.stats = f.Stats.WithTags(fmt.Sprintf("view:%s", name))
+	view.stats = f.Stats.WithTags(fmt.Sprintf("view:%s", vtk.name))
 	view.broadcaster = f.broadcaster
+	view.viewType = vtk.quantum
 	return view
 }
 
@@ -655,7 +661,7 @@ func (f *Field) ViewRow(viewName string, rowID uint64) (*Row, error) {
 
 // SetBit sets a bit on a view within the field.
 func (f *Field) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err error) {
-	viewName := ViewStandard
+	viewName := viewTimeKey{name: ViewStandard}
 
 	// Retrieve view. Exit if it doesn't exist.
 	view, err := f.CreateViewIfNotExists(viewName)
@@ -676,14 +682,14 @@ func (f *Field) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err err
 	}
 
 	// If a timestamp is specified then set bits across all views for the quantum.
-	for _, subname := range viewsByTime(viewName, *t, f.TimeQuantum()) {
-		view, err := f.CreateViewIfNotExists(subname)
+	for _, vtk := range viewsByTime(viewName.name, *t, f.TimeQuantum()) {
+		view, err := f.CreateViewIfNotExists(vtk)
 		if err != nil {
-			return changed, errors.Wrapf(err, "creating view %s", subname)
+			return changed, errors.Wrapf(err, "creating view %s", vtk.name)
 		}
 
 		if c, err := view.setBit(rowID, colID); err != nil {
-			return changed, errors.Wrapf(err, "setting on view %s", subname)
+			return changed, errors.Wrapf(err, "setting on view %s", vtk.name)
 		} else if c {
 			changed = true
 		}
@@ -693,42 +699,86 @@ func (f *Field) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err err
 }
 
 // ClearBit clears a bit within the field.
-func (f *Field) ClearBit(rowID, colID uint64, t *time.Time) (changed bool, err error) {
-	viewName := ViewStandard
+func (f *Field) ClearBit(rowID, colID uint64) (changed bool, err error) {
+	viewName := viewTimeKey{name: ViewStandard}
 
 	// Retrieve view. Exit if it doesn't exist.
-	view, err := f.CreateViewIfNotExists(viewName)
-	if err != nil {
-		return changed, errors.Wrap(err, "creating view")
+	view, present := f.views[viewName.name]
+	if !present {
+		return changed, errors.Wrap(err, "clearing missing view")
+
 	}
 
 	// Clear non-time bit.
-	if v, err := view.clearBit(rowID, colID); err != nil {
+	if v, _, err := view.clearBit(rowID, colID); err != nil {
 		return changed, errors.Wrap(err, "clearing on view")
 	} else if v {
 		changed = v
 	}
 
-	// Exit early if no timestamp is specified.
-	if t == nil {
-		return changed, nil
-	}
-
-	// If a timestamp is specified then clear bits across all views for the quantum.
-	for _, subname := range viewsByTime(viewName, *t, f.TimeQuantum()) {
-		view, err := f.CreateViewIfNotExists(subname)
-		if err != nil {
-			return changed, errors.Wrapf(err, "creating view %s", subname)
+	process := true
+	anyRemaining := false
+	lastLevel := 0
+	skipLevel := MaxInt //just setting to a bignum
+	for i, quantumView := range f.allTimeViewsSortedByQuantum() {
+		if process {
+			if changed, remainingBits, err := quantumView.clearBit(rowID, colID); err != nil {
+				return changed, errors.Wrapf(err, "clearing on view %s", quantumView.name)
+			} else if remainingBits { //now empty implies that the row as just been cleared and removed
+				anyRemaining = true
+			}
 		}
+		if i == 0 {
+			lastLevel = len(quantumView.name)
+		} else if lastLevel != len(quantumView.name) {
+			if lastLevel < len(quantumView.name) {
+				if anyRemaining {
+					skipLevel = lastLevel
+					process = false
+					anyRemaining = false
+				}
+			} else if lastLevel > len(quantumView.name) {
+				if len(quantumView.name) <= skipLevel { //skip no more
+					process = true
+					skipLevel = MaxInt
+				}
+			}
 
-		if c, err := view.clearBit(rowID, colID); err != nil {
-			return changed, errors.Wrapf(err, "clearing on view %s", subname)
-		} else if c {
-			changed = true
 		}
+		lastLevel = len(quantumView.name)
 	}
 
 	return changed, nil
+}
+
+func groupCompare(a, b string, offset int) (lt, eq bool) {
+	v := strings.Compare(a[:offset], b[:offset])
+	return v < 0, v == 0
+}
+
+func (f *Field) allTimeViewsSortedByQuantum() (me []*View) {
+	me = make([]*View, len(f.views), len(f.views))
+	for _, v := range f.views {
+		if v.viewType != 0 { // skip non-time views
+			me = append(me, v)
+		}
+	}
+	year := strings.Index(me[0].name, "_") + 4
+	month := year + 2
+	day := month + 2
+	sort.Slice(me, func(i, j int) (lt bool) {
+		var eq bool
+		//	ensure all catA are grouped together:
+		if lt, eq = groupCompare(me[i].name, me[j].name, year); eq {
+			if lt, eq = groupCompare(me[i].name, me[j].name, month); eq {
+				if lt, eq = groupCompare(me[i].name, me[j].name, day); eq {
+					lt = strings.Compare(me[i].name, me[j].name) > 0
+				}
+			}
+		}
+		return
+	})
+	return
 }
 
 // Value reads a field value for a column.
@@ -766,7 +816,7 @@ func (f *Field) SetValue(columnID uint64, value int64) (changed bool, err error)
 	}
 
 	// Fetch target view.
-	view, err := f.CreateViewIfNotExists(viewBSIGroupPrefix + f.name)
+	view, err := f.CreateViewIfNotExists(viewTimeKey{name: viewBSIGroupPrefix + f.name})
 	if err != nil {
 		return false, errors.Wrap(err, "creating view")
 	}
@@ -900,19 +950,19 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 			timestamp = timestamps[i]
 		}
 
-		var standard []string
+		var standard []viewTimeKey
 		if timestamp == nil {
-			standard = []string{ViewStandard}
+			standard = []viewTimeKey{{name: ViewStandard}}
 		} else {
 			standard = viewsByTime(ViewStandard, *timestamp, q)
 			// In order to match the logic of `SetBit()`, we want bits
 			// with timestamps to write to both time and standard views.
-			standard = append(standard, ViewStandard)
+			standard = append(standard, viewTimeKey{name: ViewStandard})
 		}
 
 		// Attach bit to each standard view.
-		for _, name := range standard {
-			key := importKey{View: name, Slice: columnID / SliceWidth}
+		for _, vtk := range standard {
+			key := importKey{View: vtk.name, Slice: columnID / SliceWidth}
 			data := dataByFragment[key]
 			data.RowIDs = append(data.RowIDs, rowID)
 			data.ColumnIDs = append(data.ColumnIDs, columnID)
@@ -922,7 +972,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 
 	// Import into each fragment.
 	for key, data := range dataByFragment {
-		view, err := f.CreateViewIfNotExists(key.View)
+		view, err := f.CreateViewIfNotExists(viewTimeKey{name: key.View})
 		if err != nil {
 			return errors.Wrap(err, "creating view")
 		}
@@ -974,7 +1024,7 @@ func (f *Field) ImportValue(columnIDs []uint64, values []int64) error {
 
 		// The view must already exist (i.e. we can't create it)
 		// because we need to know bitDepth (based on min/max value).
-		view, err := f.CreateViewIfNotExists(key.View)
+		view, err := f.CreateViewIfNotExists(viewTimeKey{name: key.View})
 		if err != nil {
 			return errors.Wrap(err, "creating view")
 		}

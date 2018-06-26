@@ -785,7 +785,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	// Union bitmaps across all time-based views.
 	row := &Row{}
 	for _, view := range viewsByTimeRange(ViewStandard, startTime, endTime, q) {
-		f := e.Holder.Fragment(index, fieldName, view, slice)
+		f := e.Holder.Fragment(index, fieldName, view.name, slice)
 		if f == nil {
 			continue
 		}
@@ -1037,7 +1037,7 @@ func (e *Executor) executeClearBitField(ctx context.Context, index string, c *pq
 	for _, node := range e.Cluster.sliceNodes(index, slice) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
-			val, err := f.ClearBit(rowID, colID, nil)
+			val, err := f.ClearBit(rowID, colID)
 			if err != nil {
 				return false, err
 			} else if val {
