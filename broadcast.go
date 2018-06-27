@@ -23,30 +23,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// MemberSet represents an interface for Node membership and inter-node communication.
-type MemberSet interface {
-	// Open starts any network activity implemented by the MemberSet
-	// Node is the local node, used for membership broadcasts.
-	Open() error
-}
-
-// StaticMemberSet represents a basic MemberSet for testing.
-type StaticMemberSet struct {
-	nodes []*Node
-}
-
-// NewStaticMemberSet creates a statically defined MemberSet.
-func NewStaticMemberSet(nodes []*Node) *StaticMemberSet {
-	return &StaticMemberSet{
-		nodes: nodes,
-	}
-}
-
-// Open implements the MemberSet interface to start network activity, but for a static MemberSet it does nothing.
-func (s *StaticMemberSet) Open() error {
-	return nil
-}
-
 // Broadcaster is an interface for broadcasting messages.
 type Broadcaster interface {
 	SendSync(pb proto.Message) error
@@ -56,7 +32,6 @@ type Broadcaster interface {
 
 func init() {
 	NopBroadcaster = &nopBroadcaster{}
-	NopGossiper = &nopGossiper{}
 }
 
 // NopBroadcaster represents a Broadcaster that doesn't do anything.
@@ -83,39 +58,6 @@ func (c *nopBroadcaster) SendTo(to *Node, pb proto.Message) error {
 // handle broadcast messages. (Hint: this is implemented by pilosa.Server)
 type BroadcastHandler interface {
 	ReceiveMessage(pb proto.Message) error
-}
-
-// BroadcastReceiver is the interface for the object which will listen for and
-// decode broadcast messages before passing them to pilosa to handle. The
-// implementation of this could be an http server which listens for messages,
-// gets the protobuf payload, and then passes it to
-// BroadcastHandler.ReceiveMessage.
-type BroadcastReceiver interface {
-	// Start starts listening for broadcast messages - it should return
-	// immediately, spawning a goroutine if necessary.
-	Start(BroadcastHandler) error
-}
-
-type nopBroadcastReceiver struct{}
-
-func (n *nopBroadcastReceiver) Start(b BroadcastHandler) error { return nil }
-
-// NopBroadcastReceiver is a no-op implementation of the BroadcastReceiver.
-var NopBroadcastReceiver = &nopBroadcastReceiver{}
-
-// Gossiper is an interface for sharing messages via gossip.
-type Gossiper interface {
-	SendAsync(pb proto.Message) error
-}
-
-// NopBroadcaster represents a Broadcaster that doesn't do anything.
-var NopGossiper Gossiper
-
-type nopGossiper struct{}
-
-// SendAsync A no-op implementation of Gossiper SendAsync method.
-func (n *nopGossiper) SendAsync(pb proto.Message) error {
-	return nil
 }
 
 // Broadcast message types.
