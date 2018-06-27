@@ -329,8 +329,7 @@ func (m *Command) SetupNetworking() error {
 	if err != nil {
 		return errors.Wrap(err, "getting memberset")
 	}
-	m.Server.Cluster.MemberSet = gossipMemberSet
-	return nil
+	return errors.Wrap(gossipMemberSet.Open(), "opening gossip memberset")
 }
 
 // Close shuts down the server.
