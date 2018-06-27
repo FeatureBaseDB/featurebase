@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -370,23 +369,6 @@ func (s *Server) LoadNodeID() string {
 		return s.nodeID
 	}
 	return nodeID
-}
-
-type pilosaAddr URI
-
-func (p pilosaAddr) String() string {
-	uri := URI(p)
-	return uri.HostPort()
-
-}
-
-func (pilosaAddr) Network() string {
-	return "tcp"
-}
-
-// Addr returns the address of the listener.
-func (s *Server) Addr() net.Addr {
-	return pilosaAddr(s.URI)
 }
 
 func (s *Server) monitorAntiEntropy() {

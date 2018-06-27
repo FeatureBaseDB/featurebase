@@ -37,7 +37,7 @@ func TestNewCluster(t *testing.T) {
 	}
 	req, err := http.NewRequest(
 		"GET",
-		"http://"+cluster[0].Server.Addr().String()+"/status",
+		cluster[0].URL()+"/status",
 		strings.NewReader(""),
 	)
 
