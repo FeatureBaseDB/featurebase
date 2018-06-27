@@ -65,7 +65,7 @@ type Server struct {
 	gcNotifier GCNotifier
 	logger     Logger
 
-	NodeID              string
+	nodeID              string
 	URI                 URI
 	antiEntropyInterval time.Duration
 	metricInterval      time.Duration
@@ -256,16 +256,16 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.translateFile.PrimaryTranslateStore = s.primaryTranslateStore
 
 	// Get or create NodeID.
-	s.NodeID = s.LoadNodeID()
+	s.nodeID = s.LoadNodeID()
 	if s.isCoordinator {
-		s.cluster.Coordinator = s.NodeID
+		s.cluster.Coordinator = s.nodeID
 	}
 
 	// Set Cluster Node.
 	node := &Node{
-		ID:            s.NodeID,
+		ID:            s.nodeID,
 		URI:           s.URI,
-		IsCoordinator: s.cluster.Coordinator == s.NodeID,
+		IsCoordinator: s.cluster.Coordinator == s.nodeID,
 	}
 	s.cluster.Node = node
 	if s.clusterDisabled {
@@ -276,7 +276,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	// Append the NodeID tag to stats.
-	s.holder.Stats = s.holder.Stats.WithTags(fmt.Sprintf("NodeID:%s", s.NodeID))
+	s.holder.Stats = s.holder.Stats.WithTags(fmt.Sprintf("NodeID:%s", s.nodeID))
 
 	s.executor.Holder = s.holder
 	s.executor.Node = node
@@ -361,13 +361,13 @@ func (s *Server) Close() error {
 // LoadNodeID gets NodeID from disk, or creates a new value.
 // If server.NodeID is already set, a new ID is not created.
 func (s *Server) LoadNodeID() string {
-	if s.NodeID != "" {
-		return s.NodeID
+	if s.nodeID != "" {
+		return s.nodeID
 	}
 	nodeID, err := s.holder.loadNodeID()
 	if err != nil {
 		s.logger.Printf("loading NodeID: %v", err)
-		return s.NodeID
+		return s.nodeID
 	}
 	return nodeID
 }
@@ -602,7 +602,7 @@ func (s *Server) HandleRemoteStatus(pb proto.Message) error {
 
 func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 	// Ignore status updates from self.
-	if s.NodeID == DecodeNode(ns.Node).ID {
+	if s.nodeID == DecodeNode(ns.Node).ID {
 		return nil
 	}
 
@@ -646,7 +646,7 @@ func (s *Server) monitorDiagnostics() {
 	s.diagnostics.Set("Cluster", strings.Join(s.cluster.nodeIDs(), ","))
 	s.diagnostics.Set("NumNodes", len(s.cluster.Nodes))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
-	s.diagnostics.Set("NodeID", s.NodeID)
+	s.diagnostics.Set("NodeID", s.nodeID)
 	s.diagnostics.Set("ClusterID", s.cluster.ID)
 	s.diagnostics.EnrichWithOSInfo()
 
