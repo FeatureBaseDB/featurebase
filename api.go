@@ -48,7 +48,7 @@ type APIOption func(*API) error
 func OptAPIServer(s *Server) APIOption {
 	return func(a *API) error {
 		a.server = s
-		a.TranslateStore = s.translateFile
+		a.TranslateStore = s.primaryTranslateStore
 		a.Holder = s.holder
 		a.Broadcaster = s
 		a.Cluster = s.Cluster
