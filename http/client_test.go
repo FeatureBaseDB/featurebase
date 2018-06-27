@@ -220,7 +220,7 @@ func TestClient_MultiNode(t *testing.T) {
 // Ensure client can bulk import data.
 func TestClient_Import(t *testing.T) {
 	cmd := test.MustRunMainWithCluster(t, 1)[0]
-	host := cmd.Server.Addr().String()
+	host := cmd.URL()
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
 
@@ -250,7 +250,7 @@ func TestClient_Import(t *testing.T) {
 // Ensure client can bulk import value data.
 func TestClient_ImportValue(t *testing.T) {
 	cmd := test.MustRunMainWithCluster(t, 1)[0]
-	host := cmd.Server.Addr().String()
+	host := cmd.URL()
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
 
@@ -330,7 +330,7 @@ func TestClient_FragmentBlocks(t *testing.T) {
 
 	// Set a bit on a different slice.
 	hldr.SetBit("i", "f", 0, 1)
-	c := MustNewClient(cmd.Server.Addr().String(), defaultClient)
+	c := MustNewClient(cmd.URL(), defaultClient)
 	blocks, err := c.FragmentBlocks(context.Background(), nil, "i", "f", 0)
 	if err != nil {
 		t.Fatal(err)

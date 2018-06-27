@@ -180,7 +180,7 @@ func (m *Main) Reopen() error {
 }
 
 // URL returns the base URL string for accessing the running program.
-func (m *Main) URL() string { return "http://" + m.Server.Addr().String() }
+func (m *Main) URL() string { return m.Server.URI.String() }
 
 // Client returns a client to connect to the program.
 func (m *Main) Client() *http.InternalClient {

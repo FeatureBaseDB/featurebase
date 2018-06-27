@@ -49,7 +49,7 @@ func OptAPIServer(s *Server) APIOption {
 		a.server = s
 		a.Holder = s.holder
 		a.Broadcaster = s
-		a.Cluster = s.Cluster
+		a.Cluster = s.cluster
 		return nil
 	}
 }
