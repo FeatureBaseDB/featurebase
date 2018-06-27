@@ -37,7 +37,7 @@ import (
 
 // Ensure the handler returns "not found" for invalid paths.
 func TestHandler_Endpoints(t *testing.T) {
-	cmd := test.MustRunMainWithCluster(t, 1)[0]
+	cmd := test.MustRunCluster(t, 1)[0]
 	h := cmd.Handler.(*http.Handler).Handler
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
@@ -566,7 +566,7 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("CORS preflight status should be 405, but is %v", result.StatusCode)
 		}
 
-		clus := test.MustRunMainWithCluster(t, 1, []server.CommandOption{test.OptAllowedOrigins([]string{"http://test/"})})
+		clus := test.MustRunCluster(t, 1, []server.CommandOption{test.OptAllowedOrigins([]string{"http://test/"})})
 		w = httptest.NewRecorder()
 		h := clus[0].Handler.(*http.Handler).Handler
 		h.ServeHTTP(w, req)

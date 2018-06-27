@@ -40,7 +40,7 @@ func TestMain_Set_Quick(t *testing.T) {
 	}
 
 	if err := quick.Check(func(cmds []SetCommand) bool {
-		m := test.MustRunMain()
+		m := test.MustRunCommand()
 		defer m.Close()
 
 		// Create client.
@@ -116,7 +116,7 @@ func TestMain_Set_Quick(t *testing.T) {
 
 // Ensure program can set row attributes and retrieve them.
 func TestMain_SetRowAttrs(t *testing.T) {
-	m := test.MustRunMain()
+	m := test.MustRunCommand()
 	defer m.Close()
 
 	// Create fields.
@@ -193,7 +193,7 @@ func TestMain_SetRowAttrs(t *testing.T) {
 
 // Ensure program can set column attributes and retrieve them.
 func TestMain_SetColumnAttrs(t *testing.T) {
-	m := test.MustRunMain()
+	m := test.MustRunCommand()
 	defer m.Close()
 
 	// Create fields.
@@ -264,7 +264,7 @@ func tempMkdir(t *testing.T) string {
 
 func TestMain_RecalculateHashes(t *testing.T) {
 	const clusterSize = 5
-	cluster := test.MustRunMainWithCluster(t, clusterSize)
+	cluster := test.MustRunCluster(t, clusterSize)
 
 	// Create the schema.
 	client0 := cluster[0].Client()

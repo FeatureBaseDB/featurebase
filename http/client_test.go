@@ -219,7 +219,7 @@ func TestClient_MultiNode(t *testing.T) {
 
 // Ensure client can bulk import data.
 func TestClient_Import(t *testing.T) {
-	cmd := test.MustRunMainWithCluster(t, 1)[0]
+	cmd := test.MustRunCluster(t, 1)[0]
 	host := cmd.URL()
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
@@ -249,7 +249,7 @@ func TestClient_Import(t *testing.T) {
 
 // Ensure client can bulk import value data.
 func TestClient_ImportValue(t *testing.T) {
-	cmd := test.MustRunMainWithCluster(t, 1)[0]
+	cmd := test.MustRunCluster(t, 1)[0]
 	host := cmd.URL()
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
@@ -321,7 +321,7 @@ func TestClient_ImportValue(t *testing.T) {
 
 // Ensure client can retrieve a list of all checksums for blocks in a fragment.
 func TestClient_FragmentBlocks(t *testing.T) {
-	cmd := test.MustRunMainWithCluster(t, 1)[0]
+	cmd := test.MustRunCluster(t, 1)[0]
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
 
