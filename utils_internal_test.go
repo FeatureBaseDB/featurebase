@@ -228,7 +228,6 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*Cluster, error) 
 	c.Path = path
 	c.Topology = NewTopology()
 	c.Holder = h
-	c.MemberSet = NewStaticMemberSet(c.Nodes)
 	c.Node = node
 	c.Coordinator = t.common.Nodes[0].ID // the first node is the coordinator
 	c.Broadcaster = t

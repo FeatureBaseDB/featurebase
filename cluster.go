@@ -212,10 +212,9 @@ type nodeAction struct {
 
 // Cluster represents a collection of nodes.
 type Cluster struct {
-	ID        string
-	Node      *Node
-	Nodes     []*Node // TODO phase this out?
-	MemberSet MemberSet
+	ID    string
+	Node  *Node
+	Nodes []*Node // TODO phase this out?
 
 	// Hashing algorithm used to assign partitions to nodes.
 	Hasher Hasher
@@ -897,11 +896,6 @@ func (c *Cluster) open() error {
 }
 
 func (c *Cluster) waitForStarted() error {
-	// Open MemberSet communication.
-	if err := c.MemberSet.Open(); err != nil {
-		return errors.Wrap(err, "opening MemberSet")
-	}
-
 	// If not coordinator then wait for ClusterStatus from coordinator.
 	if !c.isCoordinator() {
 		// In the case where a node has been restarted and memberlist has
@@ -1821,6 +1815,5 @@ func (c *Cluster) setStatic(hosts []string) error {
 		}
 		c.Nodes = append(c.Nodes, &Node{URI: *uri})
 	}
-	c.MemberSet = NewStaticMemberSet(c.Nodes)
 	return nil
 }
