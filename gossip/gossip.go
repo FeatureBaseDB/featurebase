@@ -161,7 +161,8 @@ func WithLogger(logger *log.Logger) GossipMemberSetOption {
 }
 
 // NewGossipMemberSet returns a new instance of GossipMemberSet based on options.
-func NewGossipMemberSet(name string, host string, cfg Config, s *pilosa.Server, options ...GossipMemberSetOption) (*GossipMemberSet, error) {
+func NewGossipMemberSet(cfg Config, s *pilosa.Server, options ...GossipMemberSetOption) (*GossipMemberSet, error) {
+	host := s.Node().URI.Host()
 	g := &GossipMemberSet{
 		Logger: pilosa.NopLogger,
 	}
@@ -206,11 +207,11 @@ func NewGossipMemberSet(name string, host string, cfg Config, s *pilosa.Server, 
 	// memberlist config
 	conf := memberlist.DefaultWANConfig()
 	conf.Transport = g.transport.Net
-	conf.Name = name
-	conf.BindAddr = host
+	conf.Name = s.Node().ID
+	conf.BindAddr = s.Node().URI.Host()
 	conf.BindPort = port
 	conf.AdvertisePort = port
-	conf.AdvertiseAddr = hostToIP(host)
+	conf.AdvertiseAddr = hostToIP(s.Node().URI.Host())
 	//
 	conf.TCPTimeout = time.Duration(cfg.StreamTimeout)
 	conf.SuspicionMult = cfg.SuspicionMult

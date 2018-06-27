@@ -321,8 +321,6 @@ func (m *Command) SetupNetworking() error {
 	}
 
 	gossipMemberSet, err := gossip.NewGossipMemberSet(
-		m.Server.NodeID,
-		m.Server.URI.Host(),
 		m.Config.Gossip,
 		m.Server,
 		gossip.WithLogger(m.logger.Logger()),
