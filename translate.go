@@ -306,11 +306,13 @@ func (s *TranslateFile) replicate(ctx context.Context) error {
 		} else if err != nil {
 			return err
 		}
-
+		s.mu.Lock()
 		// Write to local store.
 		if err := s.appendEntry(&entry); err != nil {
+			s.mu.Unlock()
 			return err
 		}
+		s.mu.Unlock()
 	}
 }
 

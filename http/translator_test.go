@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/ioutil"
 	gohttp "net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,9 +38,10 @@ func TestTranslateStore_Reader(t *testing.T) {
 					return 0, nil
 				}
 			}
-			var closeInvoked bool
+			closeInvoked := atomic.Value{}
+			closeInvoked.Store(false)
 			mrc.CloseFunc = func() error {
-				closeInvoked = true
+				closeInvoked.Store(true)
 				return nil
 			}
 
@@ -85,7 +87,7 @@ func TestTranslateStore_Reader(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if !closeInvoked {
+			if !closeInvoked.Load().(bool) {
 				t.Fatal("expected server close")
 			}
 		})
@@ -100,9 +102,12 @@ func TestTranslateStore_Reader(t *testing.T) {
 				<-done
 				return 0, io.EOF
 			}
-			var closeInvoked bool
+
+			closeInvoked := atomic.Value{}
+			closeInvoked.Store(false)
+
 			mrc.CloseFunc = func() error {
-				closeInvoked = true
+				closeInvoked.Store(true)
 				return nil
 			}
 
@@ -127,7 +132,7 @@ func TestTranslateStore_Reader(t *testing.T) {
 			// Cancel the context and check if server is closed.
 			cancel()
 			time.Sleep(100 * time.Millisecond)
-			if !closeInvoked {
+			if !closeInvoked.Load().(bool) {
 				t.Fatal("expected server-side close")
 			}
 		})
