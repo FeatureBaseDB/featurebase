@@ -61,10 +61,9 @@ type Server struct {
 	clusterDisabled bool
 
 	// External
-	BroadcastReceiver BroadcastReceiver
-	systemInfo        SystemInfo
-	gcNotifier        GCNotifier
-	logger            Logger
+	systemInfo SystemInfo
+	gcNotifier GCNotifier
+	logger     Logger
 
 	NodeID              string
 	URI                 URI
@@ -72,6 +71,7 @@ type Server struct {
 	metricInterval      time.Duration
 	diagnosticInterval  time.Duration
 	maxWritesPerRequest int
+	isCoordinator       bool
 
 	primaryTranslateStore TranslateStore
 
@@ -204,15 +204,21 @@ func OptServerClusterDisabled(disabled bool, hosts []string) ServerOption {
 	}
 }
 
+func OptServerIsCoordinator(is bool) ServerOption {
+	return func(s *Server) error {
+		s.isCoordinator = is
+		return nil
+	}
+}
+
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
-		closing:           make(chan struct{}),
-		Cluster:           NewCluster(),
-		holder:            NewHolder(),
-		BroadcastReceiver: NopBroadcastReceiver,
-		diagnostics:       NewDiagnosticsCollector(DefaultDiagnosticServer),
-		systemInfo:        NewNopSystemInfo(),
+		closing:     make(chan struct{}),
+		Cluster:     NewCluster(),
+		holder:      NewHolder(),
+		diagnostics: NewDiagnosticsCollector(DefaultDiagnosticServer),
+		systemInfo:  NewNopSystemInfo(),
 
 		gcNotifier: NopGCNotifier,
 
@@ -246,14 +252,15 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 	// Initialize translation database.
 	s.translateFile = NewTranslateFile()
-	s.translateFile.Path = filepath.Join(path, "keys")
+	s.translateFile.Path = filepath.Join(path, ".keys")
 	s.translateFile.PrimaryTranslateStore = s.primaryTranslateStore
-	if err := s.translateFile.Open(); err != nil {
-		return nil, err
-	}
 
 	// Get or create NodeID.
 	s.NodeID = s.LoadNodeID()
+	if s.isCoordinator {
+		s.Cluster.Coordinator = s.NodeID
+	}
+
 	// Set Cluster Node.
 	node := &Node{
 		ID:            s.NodeID,
@@ -276,6 +283,14 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.executor.Cluster = s.Cluster
 	s.executor.TranslateStore = s.translateFile
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
+	s.Cluster.Broadcaster = s
+	s.Cluster.MaxWritesPerRequest = s.maxWritesPerRequest
+	s.holder.Broadcaster = s
+
+	err = s.Cluster.setup()
+	if err != nil {
+		return nil, errors.Wrap(err, "setting up cluster")
+	}
 
 	return s, nil
 }
@@ -290,20 +305,13 @@ func (s *Server) Open() error {
 		log.Println(errors.Wrap(err, "logging startup"))
 	}
 
-	// Cluster settings.
-	s.Cluster.Broadcaster = s
-	s.Cluster.MaxWritesPerRequest = s.maxWritesPerRequest
-
-	// Initialize Holder.
-	s.holder.Broadcaster = s
-
-	// Start the BroadcastReceiver.
-	if err := s.BroadcastReceiver.Start(s); err != nil {
-		return fmt.Errorf("starting BroadcastReceiver: %v", err)
+	// Initialize id-key storage.
+	if err := s.translateFile.Open(); err != nil {
+		return err
 	}
 
 	// Open Cluster management.
-	if err := s.Cluster.open(); err != nil {
+	if err := s.Cluster.waitForStarted(); err != nil {
 		return fmt.Errorf("opening Cluster: %v", err)
 	}
 
@@ -534,6 +542,12 @@ func (s *Server) SendTo(to *Node, pb proto.Message) error {
 	return s.defaultClient.SendMessage(context.Background(), &to.URI, pb)
 }
 
+// Node returns the pilosa.Node object. It is used by membership protocols to
+// get this node's name(ID), location(URI), and coordinator status.
+func (s *Server) Node() *Node {
+	return s.Cluster.Node
+}
+
 // Server implements StatusHandler.
 // LocalStatus is used to periodically sync information
 // between nodes. Under normal conditions, nodes should
@@ -709,6 +723,11 @@ func (s *Server) monitorRuntime() {
 		s.holder.Stats.Gauge("Mallocs", float64(m.Mallocs), 1.0)
 		s.holder.Stats.Gauge("Frees", float64(m.Frees), 1.0)
 	}
+}
+
+// ReceiveEvent implements the EventHandler interface.
+func (s *Server) ReceiveEvent(e *NodeEvent) error {
+	return s.Cluster.ReceiveEvent(e)
 }
 
 // countOpenFiles on operating systems that support lsof.

@@ -75,6 +75,7 @@ type Command struct {
 	logger    loggerLogger
 
 	Handler pilosa.Handler
+	API     *pilosa.API
 	ln      net.Listener
 
 	serverOptions []pilosa.ServerOption
@@ -246,6 +247,12 @@ func (m *Command) SetupServer() error {
 		primaryTranslateStore = http.NewTranslateStore(m.Config.Translation.PrimaryURL)
 	}
 
+	// Set Coordinator.
+	coordinatorOpt := pilosa.OptServerIsCoordinator(false)
+	if m.Config.Cluster.Coordinator || len(m.Config.Gossip.Seeds) == 0 {
+		coordinatorOpt = pilosa.OptServerIsCoordinator(true)
+	}
+
 	serverOptions := []pilosa.ServerOption{
 		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
 		pilosa.OptServerLongQueryTime(time.Duration(m.Config.Cluster.LongQueryTime)),
@@ -264,6 +271,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 		pilosa.OptServerPrimaryTranslateStore(primaryTranslateStore),
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
+		coordinatorOpt,
 	}
 
 	serverOptions = append(serverOptions, m.serverOptions...)
@@ -274,14 +282,14 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "new server")
 	}
 
-	api, err := pilosa.NewAPI(pilosa.OptAPIServer(m.Server))
+	m.API, err = pilosa.NewAPI(pilosa.OptAPIServer(m.Server))
 	if err != nil {
 		return errors.Wrap(err, "new api")
 	}
 
 	m.Handler, err = http.NewHandler(
 		http.OptHandlerAllowedOrigins(m.Config.Handler.AllowedOrigins),
-		http.OptHandlerAPI(api),
+		http.OptHandlerAPI(m.API),
 		http.OptHandlerLogger(m.logger),
 		http.OptHandlerListener(m.ln),
 	)
@@ -312,19 +320,10 @@ func (m *Command) SetupNetworking() error {
 		}
 	}
 
-	// Set Coordinator.
-	if m.Config.Cluster.Coordinator || len(m.Config.Gossip.Seeds) == 0 {
-		m.Server.Cluster.Coordinator = m.Server.NodeID
-		m.Server.Cluster.Node.IsCoordinator = true
-	}
-
-	gossipEventReceiver := gossip.NewGossipEventReceiver(m.logger)
-	m.Server.Cluster.EventReceiver = gossipEventReceiver
 	gossipMemberSet, err := gossip.NewGossipMemberSet(
 		m.Server.NodeID,
 		m.Server.URI.Host(),
 		m.Config.Gossip,
-		gossipEventReceiver,
 		m.Server,
 		gossip.WithLogger(m.logger.Logger()),
 		gossip.WithTransport(transport),
@@ -332,9 +331,7 @@ func (m *Command) SetupNetworking() error {
 	if err != nil {
 		return errors.Wrap(err, "getting memberset")
 	}
-	gossipMemberSet.Logger = m.logger
 	m.Server.Cluster.MemberSet = gossipMemberSet
-	m.Server.BroadcastReceiver = gossipMemberSet
 	return nil
 }
 

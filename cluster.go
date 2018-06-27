@@ -861,7 +861,7 @@ func (h *jmphasher) Hash(key uint64, n int) int {
 	return int(b)
 }
 
-func (c *Cluster) open() error {
+func (c *Cluster) setup() error {
 	// Cluster always comes up in state STARTING until cluster membership is determined.
 	c.state = ClusterStateStarting
 
@@ -876,7 +876,7 @@ func (c *Cluster) open() error {
 	if c.isCoordinator() {
 		err := c.considerTopology()
 		if err != nil {
-			return fmt.Errorf("considerTopology: %v", err)
+			return errors.Wrap(err, "considerTopology")
 		}
 	}
 
@@ -885,15 +885,21 @@ func (c *Cluster) open() error {
 	if err != nil {
 		return errors.Wrap(err, "adding local node")
 	}
+	return nil
+}
 
-	// Start the EventReceiver.
-	if err := c.EventReceiver.Start(c); err != nil {
-		return fmt.Errorf("starting EventReceiver: %v", err)
+func (c *Cluster) open() error {
+	err := c.setup()
+	if err != nil {
+		return errors.Wrap(err, "setting up cluster")
 	}
+	return c.waitForStarted()
+}
 
+func (c *Cluster) waitForStarted() error {
 	// Open MemberSet communication.
-	if err := c.MemberSet.Open(c.Node); err != nil {
-		return fmt.Errorf("opening MemberSet: %v", err)
+	if err := c.MemberSet.Open(); err != nil {
+		return errors.Wrap(err, "opening MemberSet")
 	}
 
 	// If not coordinator then wait for ClusterStatus from coordinator.
