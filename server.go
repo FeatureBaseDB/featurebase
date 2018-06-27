@@ -255,7 +255,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.translateFile.PrimaryTranslateStore = s.primaryTranslateStore
 
 	// Get or create NodeID.
-	s.nodeID = s.LoadNodeID()
+	s.nodeID = s.loadNodeID()
 	if s.isCoordinator {
 		s.cluster.Coordinator = s.nodeID
 	}
@@ -357,9 +357,9 @@ func (s *Server) Close() error {
 	return nil
 }
 
-// LoadNodeID gets NodeID from disk, or creates a new value.
+// loadNodeID gets NodeID from disk, or creates a new value.
 // If server.NodeID is already set, a new ID is not created.
-func (s *Server) LoadNodeID() string {
+func (s *Server) loadNodeID() string {
 	if s.nodeID != "" {
 		return s.nodeID
 	}
