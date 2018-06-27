@@ -247,6 +247,12 @@ func (m *Command) SetupServer() error {
 		primaryTranslateStore = http.NewTranslateStore(m.Config.Translation.PrimaryURL)
 	}
 
+	// Set Coordinator.
+	coordinatorOpt := pilosa.OptServerIsCoordinator(false)
+	if m.Config.Cluster.Coordinator || len(m.Config.Gossip.Seeds) == 0 {
+		coordinatorOpt = pilosa.OptServerIsCoordinator(true)
+	}
+
 	serverOptions := []pilosa.ServerOption{
 		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
 		pilosa.OptServerLongQueryTime(time.Duration(m.Config.Cluster.LongQueryTime)),
@@ -265,6 +271,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 		pilosa.OptServerPrimaryTranslateStore(primaryTranslateStore),
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
+		coordinatorOpt,
 	}
 
 	serverOptions = append(serverOptions, m.serverOptions...)
@@ -311,12 +318,6 @@ func (m *Command) SetupNetworking() error {
 		if err != nil {
 			return errors.Wrap(err, "getting transport")
 		}
-	}
-
-	// Set Coordinator.
-	if m.Config.Cluster.Coordinator || len(m.Config.Gossip.Seeds) == 0 {
-		m.Server.Cluster.Coordinator = m.Server.NodeID
-		m.Server.Cluster.Node.IsCoordinator = true
 	}
 
 	gossipMemberSet, err := gossip.NewGossipMemberSet(

@@ -25,6 +25,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pkg/errors"
 )
 
 // Ensure that fragCombos creates the correct fragment mapping.
@@ -591,10 +592,10 @@ func TestCluster_ResizeStates(t *testing.T) {
 		tc.WriteTopology(node.Path, top)
 
 		// Open TestCluster.
-		expected := "considerTopology: coordinator node0 is not in topology: [some-other-host]"
+		expected := "coordinator node0 is not in topology: [some-other-host]"
 		err := tc.Open()
-		if err == nil || err.Error() != expected {
-			t.Errorf("did not receive expected error: %s", expected)
+		if err == nil || errors.Cause(err).Error() != expected {
+			t.Errorf("did not receive expected error, got: %s", errors.Cause(err).Error())
 		}
 
 		// Close TestCluster.
