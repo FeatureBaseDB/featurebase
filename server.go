@@ -53,7 +53,7 @@ type Server struct {
 
 	// Internal
 	holder          *Holder
-	Cluster         *Cluster
+	cluster         *Cluster
 	translateFile   *TranslateFile
 	diagnostics     *DiagnosticsCollector
 	executor        *Executor
@@ -96,7 +96,7 @@ func OptServerLogger(l Logger) ServerOption {
 
 func OptServerReplicaN(n int) ServerOption {
 	return func(s *Server) error {
-		s.Cluster.ReplicaN = n
+		s.cluster.ReplicaN = n
 		return nil
 	}
 }
@@ -124,7 +124,7 @@ func OptServerAntiEntropyInterval(interval time.Duration) ServerOption {
 
 func OptServerLongQueryTime(dur time.Duration) ServerOption {
 	return func(s *Server) error {
-		s.Cluster.LongQueryTime = dur
+		s.cluster.LongQueryTime = dur
 		return nil
 	}
 }
@@ -161,7 +161,7 @@ func OptServerInternalClient(c InternalClient) ServerOption {
 	return func(s *Server) error {
 		s.executor = NewExecutor(OptExecutorInternalQueryClient(c))
 		s.defaultClient = c
-		s.Cluster.InternalClient = c
+		s.cluster.InternalClient = c
 		return nil
 	}
 }
@@ -215,7 +215,7 @@ func OptServerIsCoordinator(is bool) ServerOption {
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
 		closing:     make(chan struct{}),
-		Cluster:     NewCluster(),
+		cluster:     NewCluster(),
 		holder:      NewHolder(),
 		diagnostics: NewDiagnosticsCollector(DefaultDiagnosticServer),
 		systemInfo:  NewNopSystemInfo(),
@@ -246,9 +246,9 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.holder.Logger = s.logger
 	s.holder.Stats.SetLogger(s.logger)
 
-	s.Cluster.Path = path
-	s.Cluster.Logger = s.logger
-	s.Cluster.Holder = s.holder
+	s.cluster.Path = path
+	s.cluster.Logger = s.logger
+	s.cluster.Holder = s.holder
 
 	// Initialize translation database.
 	s.translateFile = NewTranslateFile()
@@ -258,18 +258,18 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	// Get or create NodeID.
 	s.NodeID = s.LoadNodeID()
 	if s.isCoordinator {
-		s.Cluster.Coordinator = s.NodeID
+		s.cluster.Coordinator = s.NodeID
 	}
 
 	// Set Cluster Node.
 	node := &Node{
 		ID:            s.NodeID,
 		URI:           s.URI,
-		IsCoordinator: s.Cluster.Coordinator == s.NodeID,
+		IsCoordinator: s.cluster.Coordinator == s.NodeID,
 	}
-	s.Cluster.Node = node
+	s.cluster.Node = node
 	if s.clusterDisabled {
-		err := s.Cluster.setStatic(s.hosts)
+		err := s.cluster.setStatic(s.hosts)
 		if err != nil {
 			return nil, errors.Wrap(err, "setting cluster static")
 		}
@@ -280,14 +280,14 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 	s.executor.Holder = s.holder
 	s.executor.Node = node
-	s.executor.Cluster = s.Cluster
+	s.executor.Cluster = s.cluster
 	s.executor.TranslateStore = s.translateFile
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
-	s.Cluster.Broadcaster = s
-	s.Cluster.MaxWritesPerRequest = s.maxWritesPerRequest
+	s.cluster.Broadcaster = s
+	s.cluster.MaxWritesPerRequest = s.maxWritesPerRequest
 	s.holder.Broadcaster = s
 
-	err = s.Cluster.setup()
+	err = s.cluster.setup()
 	if err != nil {
 		return nil, errors.Wrap(err, "setting up cluster")
 	}
@@ -311,7 +311,7 @@ func (s *Server) Open() error {
 	}
 
 	// Open Cluster management.
-	if err := s.Cluster.waitForStarted(); err != nil {
+	if err := s.cluster.waitForStarted(); err != nil {
 		return fmt.Errorf("opening Cluster: %v", err)
 	}
 
@@ -319,7 +319,7 @@ func (s *Server) Open() error {
 	if err := s.holder.Open(); err != nil {
 		return fmt.Errorf("opening Holder: %v", err)
 	}
-	if err := s.Cluster.setNodeState(NodeStateReady); err != nil {
+	if err := s.cluster.setNodeState(NodeStateReady); err != nil {
 		return fmt.Errorf("setting nodeState: %v", err)
 	}
 
@@ -328,7 +328,7 @@ func (s *Server) Open() error {
 	// the cluster without waiting for data to load on the coordinator. Before
 	// this starts, the joins are queued up in the Cluster.joiningLeavingNodes
 	// buffered channel.
-	s.Cluster.listenForJoins()
+	s.cluster.listenForJoins()
 
 	// Start background monitoring.
 	s.wg.Add(3)
@@ -345,8 +345,8 @@ func (s *Server) Close() error {
 	close(s.closing)
 	s.wg.Wait()
 
-	if s.Cluster != nil {
-		s.Cluster.close()
+	if s.cluster != nil {
+		s.cluster.close()
 	}
 	if s.holder != nil {
 		s.holder.Close()
@@ -409,8 +409,8 @@ func (s *Server) monitorAntiEntropy() {
 		// Initialize syncer with local holder and remote client.
 		var syncer HolderSyncer
 		syncer.Holder = s.holder
-		syncer.Node = s.Cluster.Node
-		syncer.Cluster = s.Cluster
+		syncer.Node = s.cluster.Node
+		syncer.Cluster = s.cluster
 		syncer.Closing = s.closing
 		syncer.Stats = s.holder.Stats.WithTags("HolderSyncer")
 
@@ -480,33 +480,33 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 			return err
 		}
 	case *internal.ClusterStatus:
-		err := s.Cluster.mergeClusterStatus(obj)
+		err := s.cluster.mergeClusterStatus(obj)
 		if err != nil {
 			return err
 		}
 	case *internal.ResizeInstruction:
-		err := s.Cluster.followResizeInstruction(obj)
+		err := s.cluster.followResizeInstruction(obj)
 		if err != nil {
 			return err
 		}
 	case *internal.ResizeInstructionComplete:
-		err := s.Cluster.markResizeInstructionComplete(obj)
+		err := s.cluster.markResizeInstructionComplete(obj)
 		if err != nil {
 			return err
 		}
 	case *internal.SetCoordinatorMessage:
-		s.Cluster.setCoordinator(DecodeNode(obj.New))
+		s.cluster.setCoordinator(DecodeNode(obj.New))
 	case *internal.UpdateCoordinatorMessage:
-		s.Cluster.updateCoordinator(DecodeNode(obj.New))
+		s.cluster.updateCoordinator(DecodeNode(obj.New))
 	case *internal.NodeStateMessage:
-		err := s.Cluster.receiveNodeState(obj.NodeID, obj.State)
+		err := s.cluster.receiveNodeState(obj.NodeID, obj.State)
 		if err != nil {
 			return err
 		}
 	case *internal.RecalculateCaches:
 		s.holder.RecalculateCaches()
 	case *internal.NodeEventMessage:
-		s.Cluster.ReceiveEvent(DecodeNodeEvent(obj))
+		s.cluster.ReceiveEvent(DecodeNodeEvent(obj))
 	}
 
 	return nil
@@ -515,7 +515,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 // SendSync represents an implementation of Broadcaster.
 func (s *Server) SendSync(pb proto.Message) error {
 	var eg errgroup.Group
-	for _, node := range s.Cluster.Nodes {
+	for _, node := range s.cluster.Nodes {
 		node := node
 		s.logger.Printf("SendSync to: %s", node.URI)
 		// Don't forward the message to ourselves.
@@ -545,7 +545,7 @@ func (s *Server) SendTo(to *Node, pb proto.Message) error {
 // Node returns the pilosa.Node object. It is used by membership protocols to
 // get this node's name(ID), location(URI), and coordinator status.
 func (s *Server) Node() *Node {
-	return s.Cluster.Node
+	return s.cluster.Node
 }
 
 // Server implements StatusHandler.
@@ -559,7 +559,7 @@ func (s *Server) Node() *Node {
 // - Schema
 // In a gossip implementation, memberlist.Delegate.LocalState() uses this.
 func (s *Server) LocalStatus() (proto.Message, error) {
-	if s.Cluster == nil {
+	if s.cluster == nil {
 		return nil, errors.New("Server.Cluster is nil")
 	}
 	if s.holder == nil {
@@ -567,7 +567,7 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	}
 
 	ns := internal.NodeStatus{
-		Node:      EncodeNode(s.Cluster.Node),
+		Node:      EncodeNode(s.cluster.Node),
 		MaxSlices: s.holder.EncodeMaxSlices(),
 		Schema:    s.holder.EncodeSchema(),
 	}
@@ -577,13 +577,13 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 
 // ClusterStatus returns the ClusterState and NodeSet for the cluster.
 func (s *Server) ClusterStatus() (proto.Message, error) {
-	return s.Cluster.Status(), nil
+	return s.cluster.Status(), nil
 }
 
 // HandleRemoteStatus receives incoming NodeStatus from remote nodes.
 func (s *Server) HandleRemoteStatus(pb proto.Message) error {
 	// Ignore NodeStatus messages until the cluster is in a Normal state.
-	if s.Cluster.State() != ClusterStateNormal {
+	if s.cluster.State() != ClusterStateNormal {
 		return nil
 	}
 
@@ -643,11 +643,11 @@ func (s *Server) monitorDiagnostics() {
 	s.diagnostics.Logger = s.logger
 	s.diagnostics.SetVersion(Version)
 	s.diagnostics.Set("Host", s.URI.host)
-	s.diagnostics.Set("Cluster", strings.Join(s.Cluster.nodeIDs(), ","))
-	s.diagnostics.Set("NumNodes", len(s.Cluster.Nodes))
+	s.diagnostics.Set("Cluster", strings.Join(s.cluster.nodeIDs(), ","))
+	s.diagnostics.Set("NumNodes", len(s.cluster.Nodes))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
 	s.diagnostics.Set("NodeID", s.NodeID)
-	s.diagnostics.Set("ClusterID", s.Cluster.ID)
+	s.diagnostics.Set("ClusterID", s.cluster.ID)
 	s.diagnostics.EnrichWithOSInfo()
 
 	// Flush the diagnostics metrics at startup, then on each tick interval
@@ -727,7 +727,7 @@ func (s *Server) monitorRuntime() {
 
 // ReceiveEvent implements the EventHandler interface.
 func (s *Server) ReceiveEvent(e *NodeEvent) error {
-	return s.Cluster.ReceiveEvent(e)
+	return s.cluster.ReceiveEvent(e)
 }
 
 // countOpenFiles on operating systems that support lsof.
