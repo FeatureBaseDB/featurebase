@@ -231,9 +231,6 @@ type Cluster struct {
 	// Maximum number of Set() or Clear() commands per request.
 	MaxWritesPerRequest int
 
-	// EventReceiver receives NodeEvents pertaining to node membership.
-	EventReceiver EventReceiver
-
 	// Data directory path.
 	Path     string
 	Topology *Topology
@@ -268,10 +265,9 @@ type Cluster struct {
 // NewCluster returns a new instance of Cluster with defaults.
 func NewCluster() *Cluster {
 	return &Cluster{
-		Hasher:        &jmphasher{},
-		PartitionN:    DefaultPartitionN,
-		ReplicaN:      1,
-		EventReceiver: NopEventReceiver,
+		Hasher:     &jmphasher{},
+		PartitionN: DefaultPartitionN,
+		ReplicaN:   1,
 
 		joiningLeavingNodes: make(chan nodeAction, 10), // buffered channel
 		jobs:                make(map[int64]*resizeJob),

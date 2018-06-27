@@ -35,21 +35,3 @@ type NodeEvent struct {
 type EventHandler interface {
 	ReceiveEvent(e *NodeEvent) error
 }
-
-// EventReceiver is the interface for the object which will listen for and
-// decode broadcast messages before passing them to pilosa to handle. The
-// implementation of this could be an http server which listens for messages,
-// gets the protobuf payload, and then passes it to
-// EventHandler.ReceiveMessage.
-type EventReceiver interface {
-	// Start starts listening for broadcast messages - it should return
-	// immediately, spawning a goroutine if necessary.
-	Start(EventHandler) error
-}
-
-type nopEventReceiver struct{}
-
-func (n *nopEventReceiver) Start(e EventHandler) error { return nil }
-
-// NopEventReceiver is a no-op implementation of the EventReceiver.
-var NopEventReceiver = &nopEventReceiver{}
