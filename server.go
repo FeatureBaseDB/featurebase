@@ -123,7 +123,7 @@ func OptServerAntiEntropyInterval(interval time.Duration) ServerOption {
 
 func OptServerLongQueryTime(dur time.Duration) ServerOption {
 	return func(s *Server) error {
-		s.cluster.LongQueryTime = dur
+		s.cluster.longQueryTime = dur
 		return nil
 	}
 }
@@ -246,8 +246,8 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.holder.Stats.SetLogger(s.logger)
 
 	s.cluster.Path = path
-	s.cluster.Logger = s.logger
-	s.cluster.Holder = s.holder
+	s.cluster.logger = s.logger
+	s.cluster.holder = s.holder
 
 	// Initialize translation database.
 	s.translateFile = NewTranslateFile()
@@ -282,8 +282,8 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.executor.Cluster = s.cluster
 	s.executor.TranslateStore = s.translateFile
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
-	s.cluster.Broadcaster = s
-	s.cluster.MaxWritesPerRequest = s.maxWritesPerRequest
+	s.cluster.broadcaster = s
+	s.cluster.maxWritesPerRequest = s.maxWritesPerRequest
 	s.holder.Broadcaster = s
 
 	err = s.cluster.setup()
@@ -629,7 +629,7 @@ func (s *Server) monitorDiagnostics() {
 	s.diagnostics.Set("NumNodes", len(s.cluster.Nodes))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
 	s.diagnostics.Set("NodeID", s.nodeID)
-	s.diagnostics.Set("ClusterID", s.cluster.ID)
+	s.diagnostics.Set("ClusterID", s.cluster.id)
 	s.diagnostics.EnrichWithOSInfo()
 
 	// Flush the diagnostics metrics at startup, then on each tick interval

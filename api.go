@@ -699,7 +699,7 @@ func (api *API) LongQueryTime() time.Duration {
 	if api.Cluster == nil {
 		return 0
 	}
-	return api.Cluster.LongQueryTime
+	return api.Cluster.longQueryTime
 }
 
 func (api *API) indexField(indexName string, fieldName string, slice uint64) (*Index, *Field, error) {
