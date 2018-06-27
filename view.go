@@ -59,7 +59,7 @@ type View struct {
 
 	broadcaster  Broadcaster
 	stats        StatsClient
-	viewType     rune
+	viewType     string
 	RowAttrStore AttrStore
 	Logger       Logger
 }
@@ -316,11 +316,11 @@ func (v *View) setBit(rowID, columnID uint64) (changed bool, err error) {
 }
 
 // clearBit clears a bit within the view.
-func (v *View) clearBit(rowID, columnID uint64) (changed bool, remaining bool, err error) {
+func (v *View) clearBit(rowID, columnID uint64) (changed bool, err error) {
 	slice := columnID / SliceWidth
 	frag, found := v.fragments[slice]
 	if !found {
-		return false, false, nil
+		return false, nil
 	}
 	return frag.clearBit(rowID, columnID)
 }

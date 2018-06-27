@@ -928,6 +928,18 @@ func TestExecutor_Execute_Range(t *testing.T) {
 			t.Fatalf("unexpected columns: %+v", columns)
 		}
 	})
+
+	t.Run("Clear", func(t *testing.T) {
+		if _, err := e.Execute(context.Background(), "i", test.MustParse(`Clear( 2, f=1)`), nil, nil); err != nil {
+			t.Fatal(err)
+		}
+
+		if res, err := e.Execute(context.Background(), "i", test.MustParse(`Range(f=1, 1999-12-31T00:00, 2002-01-01T03:00)`), nil, nil); err != nil {
+			t.Fatal(err)
+		} else if columns := res[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{3, 4, 5, 6, 7}) {
+			t.Fatalf("unexpected columns: %+v", columns)
+		}
+	})
 }
 
 // Ensure a Range(bsiGroup) query can be executed.

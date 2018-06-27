@@ -79,33 +79,28 @@ func ParseTimeQuantum(v string) (TimeQuantum, error) {
 	return q, nil
 }
 
-type viewTimeKey struct {
-	name    string
-	quantum rune
-}
-
 // viewByTimeUnit returns the view name for time with a given quantum unit.
-func viewByTimeUnit(name string, t time.Time, unit rune) viewTimeKey {
+func viewByTimeUnit(name string, t time.Time, unit rune) string {
 	switch unit {
 	case 'Y':
-		return viewTimeKey{name: fmt.Sprintf("%s_%s", name, t.Format("2006")), quantum: unit}
+		return fmt.Sprintf("%s_%s", name, t.Format("2006"))
 	case 'M':
-		return viewTimeKey{name: fmt.Sprintf("%s_%s", name, t.Format("200601")), quantum: unit}
+		return fmt.Sprintf("%s_%s", name, t.Format("200601"))
 	case 'D':
-		return viewTimeKey{name: fmt.Sprintf("%s_%s", name, t.Format("20060102")), quantum: unit}
+		return fmt.Sprintf("%s_%s", name, t.Format("20060102"))
 	case 'H':
-		return viewTimeKey{name: fmt.Sprintf("%s_%s", name, t.Format("2006010215")), quantum: unit}
+		return fmt.Sprintf("%s_%s", name, t.Format("2006010215"))
 	default:
-		return viewTimeKey{}
+		return ""
 	}
 }
 
 // viewsByTime returns a list of views for a given timestamp.
-func viewsByTime(name string, t time.Time, q TimeQuantum) []viewTimeKey {
-	a := make([]viewTimeKey, 0, len(q))
+func viewsByTime(name string, t time.Time, q TimeQuantum) []string {
+	a := make([]string, 0, len(q))
 	for _, unit := range q {
 		view := viewByTimeUnit(name, t, unit)
-		if view.name == "" {
+		if view == "" {
 			continue
 		}
 		a = append(a, view)
@@ -114,7 +109,7 @@ func viewsByTime(name string, t time.Time, q TimeQuantum) []viewTimeKey {
 }
 
 // viewsByTimeRange returns a list of views to traverse to query a time range.
-func viewsByTimeRange(name string, start, end time.Time, q TimeQuantum) []viewTimeKey {
+func viewsByTimeRange(name string, start, end time.Time, q TimeQuantum) []string {
 	t := start
 
 	// Save flags for performance.
@@ -123,7 +118,7 @@ func viewsByTimeRange(name string, start, end time.Time, q TimeQuantum) []viewTi
 	hasDay := q.HasDay()
 	hasHour := q.HasHour()
 
-	var results []viewTimeKey
+	var results []string
 
 	// Walk up from smallest units to largest units.
 	if hasHour || hasDay || hasMonth {

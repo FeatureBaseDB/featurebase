@@ -1221,7 +1221,7 @@ func (c *Cluster) followResizeInstruction(instr *internal.ResizeInstruction) err
 				}
 
 				// Create view.
-				v, err := f.CreateViewIfNotExists(viewTimeKey{name: src.View})
+				v, err := f.CreateViewIfNotExists(src.View)
 				if err != nil {
 					return errors.Wrap(err, "creating view")
 				}

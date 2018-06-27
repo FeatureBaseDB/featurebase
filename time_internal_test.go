@@ -42,23 +42,23 @@ func TestViewByTimeUnit(t *testing.T) {
 	ts := time.Date(2000, time.January, 2, 3, 4, 5, 6, time.UTC)
 
 	t.Run("Y", func(t *testing.T) {
-		if s := viewByTimeUnit("F", ts, 'Y'); s.name != "F_2000" {
-			t.Fatalf("unexpected name: %s", s.name)
+		if s := viewByTimeUnit("F", ts, 'Y'); s != "F_2000" {
+			t.Fatalf("unexpected name: %s", s)
 		}
 	})
 	t.Run("M", func(t *testing.T) {
-		if s := viewByTimeUnit("F", ts, 'M'); s.name != "F_200001" {
-			t.Fatalf("unexpected name: %s", s.name)
+		if s := viewByTimeUnit("F", ts, 'M'); s != "F_200001" {
+			t.Fatalf("unexpected name: %s", s)
 		}
 	})
 	t.Run("D", func(t *testing.T) {
-		if s := viewByTimeUnit("F", ts, 'D'); s.name != "F_20000102" {
-			t.Fatalf("unexpected name: %s", s.name)
+		if s := viewByTimeUnit("F", ts, 'D'); s != "F_20000102" {
+			t.Fatalf("unexpected name: %s", s)
 		}
 	})
 	t.Run("H", func(t *testing.T) {
-		if s := viewByTimeUnit("F", ts, 'H'); s.name != "F_2000010203" {
-			t.Fatalf("unexpected name: %s", s.name)
+		if s := viewByTimeUnit("F", ts, 'H'); s != "F_2000010203" {
+			t.Fatalf("unexpected name: %s", s)
 		}
 	})
 }

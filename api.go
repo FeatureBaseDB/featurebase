@@ -387,7 +387,7 @@ func (api *API) UnmarshalFragment(ctx context.Context, indexName string, fieldNa
 	}
 
 	// Retrieve view.
-	view, err := f.CreateViewIfNotExists(viewTimeKey{name: ViewStandard})
+	view, err := f.CreateViewIfNotExists(ViewStandard)
 	if err != nil {
 		return errors.Wrap(err, "creating view")
 	}

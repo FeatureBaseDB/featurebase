@@ -412,28 +412,28 @@ func (f *Fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 
 // clearBit clears a bit for a given column & row within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
-func (f *Fragment) clearBit(rowID, columnID uint64) (bool, bool, error) {
+func (f *Fragment) clearBit(rowID, columnID uint64) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.unprotectedClearBit(rowID, columnID)
 }
 
-func (f *Fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, remaining bool, err error) {
+func (f *Fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, err error) {
 	changed = false
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(rowID, columnID)
 	if err != nil {
-		return false, false, errors.Wrap(err, "getting bit pos")
+		return false, errors.Wrap(err, "getting bit pos")
 	}
 
 	// Write to storage.
 	if changed, err = f.storage.Remove(pos); err != nil {
-		return false, false, errors.Wrap(err, "writing")
+		return false, errors.Wrap(err, "writing")
 	}
 
 	// Don't update the cache if nothing changed.
 	if !changed {
-		return changed, false, nil
+		return changed, nil
 	}
 
 	// Invalidate block checksum.
@@ -441,7 +441,7 @@ func (f *Fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, re
 
 	// Increment number of operations until snapshot is required.
 	if err := f.incrementOpN(); err != nil {
-		return false, false, errors.Wrap(err, "incrementing")
+		return false, errors.Wrap(err, "incrementing")
 	}
 
 	// Get the row from cache or fragment.storage.
@@ -449,12 +449,11 @@ func (f *Fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, re
 	row.ClearBit(columnID)
 
 	// Update the cache.
-	c := row.Count()
-	f.cache.Add(rowID, c)
+	f.cache.Add(rowID, row.Count())
 
 	f.stats.Count("clearBit", 1, 1.0)
 
-	return changed, c > 0, nil
+	return changed, nil
 }
 
 func (f *Fragment) bit(rowID, columnID uint64) (bool, error) {
@@ -502,7 +501,7 @@ func (f *Fragment) setValue(columnID uint64, bitDepth uint, value uint64) (chang
 				changed = true
 			}
 		} else {
-			if c, _, err := f.unprotectedClearBit(uint64(i), columnID); err != nil {
+			if c, err := f.unprotectedClearBit(uint64(i), columnID); err != nil {
 				return changed, err
 			} else if c {
 				changed = true
@@ -1286,7 +1285,7 @@ func (f *Fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, e
 
 	// Clear local bits.
 	for i := range clears[0].columnIDs {
-		if _, _, err := f.unprotectedClearBit(clears[0].rowIDs[i], (f.slice*SliceWidth)+clears[0].columnIDs[i]); err != nil {
+		if _, err := f.unprotectedClearBit(clears[0].rowIDs[i], (f.slice*SliceWidth)+clears[0].columnIDs[i]); err != nil {
 			return nil, nil, errors.Wrap(err, "clearing")
 		}
 	}

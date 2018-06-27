@@ -75,7 +75,7 @@ func TestFragment_ClearBit(t *testing.T) {
 		t.Fatal(err)
 	} else if _, err := f.setBit(1000, 2); err != nil {
 		t.Fatal(err)
-	} else if _, _, err := f.clearBit(1000, 1); err != nil {
+	} else if _, err := f.clearBit(1000, 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -532,7 +532,7 @@ func TestFragment_Snapshot(t *testing.T) {
 		t.Fatal(err)
 	} else if _, err := f.setBit(1000, 2); err != nil {
 		t.Fatal(err)
-	} else if _, _, err := f.clearBit(1000, 1); err != nil {
+	} else if _, err := f.clearBit(1000, 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -756,7 +756,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	}
 
 	// Create view.
-	view, err := field.CreateViewIfNotExists(viewTimeKey{name: ViewStandard})
+	view, err := field.CreateViewIfNotExists(ViewStandard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -922,7 +922,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 	}
 
 	// Create view.
-	view, err := field.CreateViewIfNotExists(viewTimeKey{name: ViewStandard})
+	view, err := field.CreateViewIfNotExists(ViewStandard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -973,7 +973,7 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 		t.Fatal(err)
 	} else if _, err := f0.setBit(1000, 2); err != nil {
 		t.Fatal(err)
-	} else if _, _, err := f0.clearBit(1000, 1); err != nil {
+	} else if _, err := f0.clearBit(1000, 1); err != nil {
 		t.Fatal(err)
 	}
 

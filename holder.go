@@ -247,7 +247,7 @@ func (h *Holder) ApplySchema(schema *internal.Schema) error {
 			}
 			// Create views that don't exist.
 			for _, v := range f.Views {
-				_, err := field.CreateViewIfNotExists(viewTimeKey{name: v})
+				_, err := field.CreateViewIfNotExists(v)
 				if err != nil {
 					return errors.Wrap(err, "creating view")
 				}
@@ -744,7 +744,7 @@ func (s *HolderSyncer) syncFragment(index, field, view string, slice uint64) err
 	}
 
 	// Ensure view exists locally.
-	v, err := f.CreateViewIfNotExists(viewTimeKey{name: view})
+	v, err := f.CreateViewIfNotExists(view)
 	if err != nil {
 		return errors.Wrap(err, "creating view")
 	}

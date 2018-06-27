@@ -96,7 +96,7 @@ func (h *Holder) MustCreateRankedFragmentIfNotExists(index, field, view string, 
 	if err != nil {
 		panic(err)
 	}
-	v, err := f.CreateViewIfNotExists(viewTimeKey{name: view})
+	v, err := f.CreateViewIfNotExists(view)
 	if err != nil {
 		panic(err)
 	}
