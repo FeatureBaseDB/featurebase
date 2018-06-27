@@ -36,11 +36,6 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	defer m0.Close()
 	defer m1.Close()
 
-	m0.Server.Cluster.SetState(pilosa.ClusterStateNormal)
-	m1.Server.Cluster.SetState(pilosa.ClusterStateNormal)
-
-	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 	// Expected indexes and Fields
 	expected := map[string][]string{
 		"i": []string{"f"},
@@ -124,8 +119,8 @@ func TestClusterResize_EmptyNode(t *testing.T) {
 	m0 := test.MustRunMain()
 	defer m0.Close()
 
-	if m0.Server.Cluster.State() != pilosa.ClusterStateNormal {
-		t.Fatalf("unexpected cluster state: %s", m0.Server.Cluster.State())
+	if m0.API.State() != pilosa.ClusterStateNormal {
+		t.Fatalf("unexpected cluster state: %s", m0.API.State())
 	}
 }
 
@@ -135,10 +130,10 @@ func TestClusterResize_EmptyNodes(t *testing.T) {
 	defer clus[0].Close()
 	defer clus[1].Close()
 
-	if clus[0].Server.Cluster.State() != pilosa.ClusterStateNormal {
-		t.Fatalf("unexpected node0 cluster state: %s", clus[0].Server.Cluster.State())
-	} else if clus[1].Server.Cluster.State() != pilosa.ClusterStateNormal {
-		t.Fatalf("unexpected node1 cluster state: %s", clus[1].Server.Cluster.State())
+	if clus[0].API.State() != pilosa.ClusterStateNormal {
+		t.Fatalf("unexpected node0 cluster state: %s", clus[0].API.State())
+	} else if clus[1].API.State() != pilosa.ClusterStateNormal {
+		t.Fatalf("unexpected node1 cluster state: %s", clus[1].API.State())
 	}
 }
 
@@ -147,10 +142,10 @@ func TestClusterResize_AddNode(t *testing.T) {
 	t.Run("NoData", func(t *testing.T) {
 		clus := test.MustRunMainWithCluster(t, 2)
 
-		if !checkClusterState(clus[0].Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", clus[0].Server.Cluster.State())
-		} else if !checkClusterState(clus[1].Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", clus[1].Server.Cluster.State())
+		if !checkClusterState(clus[0], pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s", clus[0].API.State())
+		} else if !checkClusterState(clus[1], pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s", clus[1].API.State())
 		}
 	})
 	t.Run("WithIndex", func(t *testing.T) {
@@ -180,10 +175,10 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 		defer m1.Close()
 
-		if !checkClusterState(m0.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", m0.Server.Cluster.State())
-		} else if !checkClusterState(m1.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", m1.Server.Cluster.State())
+		if !checkClusterState(m0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
+		} else if !checkClusterState(m1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
 		}
 	})
 	t.Run("ContinuousSlices", func(t *testing.T) {
@@ -221,10 +216,10 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 		defer m1.Close()
 
-		if !checkClusterState(m0.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", m0.Server.Cluster.State())
-		} else if !checkClusterState(m1.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", m1.Server.Cluster.State())
+		if !checkClusterState(m0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
+		} else if !checkClusterState(m1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
 		}
 	})
 	t.Run("SkippedSlice", func(t *testing.T) {
@@ -262,10 +257,10 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 		defer m1.Close()
 
-		if !checkClusterState(m0.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", m0.Server.Cluster.State())
-		} else if !checkClusterState(m1.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", m1.Server.Cluster.State())
+		if !checkClusterState(m0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
+		} else if !checkClusterState(m1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
 		}
 	})
 }
@@ -313,15 +308,15 @@ func TestCluster_GossipMembership(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if !checkClusterState(m0.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", m0.Server.Cluster.State())
-		} else if !checkClusterState(m1.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", m1.Server.Cluster.State())
-		} else if !checkClusterState(m2.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node2 cluster state: %s", m2.Server.Cluster.State())
+		if !checkClusterState(m0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
+		} else if !checkClusterState(m1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
+		} else if !checkClusterState(m2, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node2 cluster state: %s", m2.API.State())
 		}
 
-		numNodes := len(m0.Server.Cluster.Status().Nodes)
+		numNodes := len(m0.API.Hosts(context.Background()))
 		if numNodes != 3 {
 			t.Fatalf("Expected 3 nodes, got %d", numNodes)
 		}
@@ -415,9 +410,9 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 
 // checkClusterState polls a given cluster for its state until it
 // receives a matching state. It polls up to n times before returning.
-func checkClusterState(c *pilosa.Cluster, state string, n int) bool {
+func checkClusterState(m *test.Main, state string, n int) bool {
 	for i := 0; i < n; i++ {
-		if c.State() == state {
+		if m.API.State() == state {
 			return true
 		}
 		time.Sleep(10 * time.Millisecond)
