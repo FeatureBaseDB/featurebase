@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"io/ioutil"
+	gohttp "net/http"
 	"testing"
 	"time"
 
@@ -15,8 +16,6 @@ import (
 )
 
 func TestTranslateStore_Reader(t *testing.T) {
-	t.Skip() // Until test.NewServer() works
-
 	// Ensure client can connect and stream the translate store data.
 	t.Run("OK", func(t *testing.T) {
 		t.Run("ServerDisconnect", func(t *testing.T) {
@@ -46,15 +45,30 @@ func TestTranslateStore_Reader(t *testing.T) {
 
 			// Setup handler on test server.
 			var translateStore mock.TranslateStore
+
 			translateStore.ReaderFunc = func(ctx context.Context, off int64) (io.ReadCloser, error) {
-				if off != 100 {
-					t.Fatalf("unexpected off: %d", off)
+				// Check context to make sure this is the call we are looking for.
+				// (Something else calls ReaderFunc on server startup)
+				if ctx.Value(gohttp.ServerContextKey) != nil {
+					if off != 100 {
+						t.Fatalf("unexpected off: %d", off)
+					}
+					return &mrc, nil
 				}
-				return &mrc, nil
+				mrc2 := mock.ReadCloser{
+					ReadFunc: func(p []byte) (int, error) {
+						return 0, io.EOF
+					},
+					CloseFunc: func() error {
+						return nil
+					},
+				}
+				return &mrc2, nil
 			}
 
 			opts := server.OptCommandServerOptions(pilosa.OptServerPrimaryTranslateStore(translateStore))
 			main := test.MustRunMainWithCluster(t, 1, []server.CommandOption{opts})[0]
+
 			defer main.Close()
 
 			// Connect to server and stream all available data.
@@ -128,6 +142,7 @@ func TestTranslateStore_Reader(t *testing.T) {
 
 		opts := server.OptCommandServerOptions(pilosa.OptServerPrimaryTranslateStore(translateStore))
 		main := test.MustRunMainWithCluster(t, 1, []server.CommandOption{opts})[0]
+		defer main.Close()
 
 		_, err := http.NewTranslateStore(main.Server.URI.String()).Reader(context.Background(), 0)
 		if err != pilosa.ErrNotImplemented {
