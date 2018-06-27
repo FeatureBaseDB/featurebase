@@ -188,7 +188,7 @@ func TestImportCommand_BugOverwriteValue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cm.Host = cmd.Server.Addr().String()
+	cm.Host = cmd.Server.URI.HostPort()
 
 	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader("")))
 	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i/field/f", strings.NewReader(`{"options":{"type": "int", "min": 0, "max":2147483648 }}`)))

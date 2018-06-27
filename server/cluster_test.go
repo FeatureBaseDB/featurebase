@@ -24,10 +24,9 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/test"
+	"golang.org/x/sync/errgroup"
 )
 
 // Ensure program can send/receive broadcast messages.
@@ -36,11 +35,6 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	m0, m1 := ms[0], ms[1]
 	defer m0.Close()
 	defer m1.Close()
-
-	m0.Server.Cluster.SetState(pilosa.ClusterStateNormal)
-	m1.Server.Cluster.SetState(pilosa.ClusterStateNormal)
-
-	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	// Expected indexes and Fields
 	expected := map[string][]string{
@@ -125,83 +119,41 @@ func TestClusterResize_EmptyNode(t *testing.T) {
 	m0 := test.MustRunMain()
 	defer m0.Close()
 
-	if m0.Server.Cluster.State() != pilosa.ClusterStateNormal {
-		t.Fatalf("unexpected cluster state: %s", m0.Server.Cluster.State())
+	if m0.API.State() != pilosa.ClusterStateNormal {
+		t.Fatalf("unexpected cluster state: %s", m0.API.State())
 	}
 }
 
 // Ensure that a cluster of empty nodes comes up in a NORMAL state.
 func TestClusterResize_EmptyNodes(t *testing.T) {
-	// Configure node0
-	m0 := test.NewMainWithCluster(true)
-	defer m0.Close()
+	clus := test.MustRunMainWithCluster(t, 2)
+	defer clus[0].Close()
+	defer clus[1].Close()
 
-	gossipHost := "localhost"
-	gossipPort := 0
-	seed, err := m0.RunWithTransport(gossipHost, gossipPort, []string{})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Configure node1
-	m1 := test.NewMainWithCluster(false)
-	defer m1.Close()
-
-	seed, err = m1.RunWithTransport(gossipHost, gossipPort, []string{seed})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if m0.Server.Cluster.State() != pilosa.ClusterStateNormal {
-		t.Fatalf("unexpected node0 cluster state: %s", m0.Server.Cluster.State())
-	} else if m1.Server.Cluster.State() != pilosa.ClusterStateNormal {
-		t.Fatalf("unexpected node1 cluster state: %s", m1.Server.Cluster.State())
+	if clus[0].API.State() != pilosa.ClusterStateNormal {
+		t.Fatalf("unexpected node0 cluster state: %s", clus[0].API.State())
+	} else if clus[1].API.State() != pilosa.ClusterStateNormal {
+		t.Fatalf("unexpected node1 cluster state: %s", clus[1].API.State())
 	}
 }
 
 // Ensure that adding a node correctly resizes the cluster.
 func TestClusterResize_AddNode(t *testing.T) {
 	t.Run("NoData", func(t *testing.T) {
-		// Configure node0
-		m0 := test.NewMainWithCluster(true)
-		defer m0.Close()
+		clus := test.MustRunMainWithCluster(t, 2)
 
-		seed, err := m0.RunWithTransport("localhost", 0, []string{})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Configure node1
-		m1 := test.NewMainWithCluster(false)
-		defer m1.Close()
-
-		var eg errgroup.Group
-		eg.Go(func() error {
-			_, err = m1.RunWithTransport("localhost", 0, []string{seed})
-			if err != nil {
-				return err
-			}
-			return nil
-		})
-		if err := eg.Wait(); err != nil {
-			t.Fatal(err)
-		}
-
-		if !checkClusterState(m0.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", m0.Server.Cluster.State())
-		} else if !checkClusterState(m1.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", m1.Server.Cluster.State())
+		if !checkClusterState(clus[0], pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s", clus[0].API.State())
+		} else if !checkClusterState(clus[1], pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s", clus[1].API.State())
 		}
 	})
 	t.Run("WithIndex", func(t *testing.T) {
 		// Configure node0
-		m0 := test.NewMainWithCluster(true)
+		m0 := test.MustRunMainWithCluster(t, 1)[0]
 		defer m0.Close()
 
-		seed, err := m0.RunWithTransport("localhost", 0, []string{})
-		if err != nil {
-			t.Fatal(err)
-		}
+		seed := m0.GossipAddress()
 
 		// Create a client for each node.
 		client0 := m0.Client()
@@ -215,40 +167,29 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewMainWithCluster(false)
+		m1.Config.Gossip.Port = "0"
+		m1.Config.Gossip.Seeds = []string{seed}
+		err := m1.Start()
+		if err != nil {
+			t.Fatalf("starting second main: %v", err)
+		}
 		defer m1.Close()
 
-		var eg errgroup.Group
-		eg.Go(func() error {
-			_, err = m1.RunWithTransport("localhost", 0, []string{seed})
-			if err != nil {
-				return err
-			}
-			return nil
-		})
-		if err := eg.Wait(); err != nil {
-			t.Fatal(err)
-		}
-
-		if !checkClusterState(m0.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", m0.Server.Cluster.State())
-		} else if !checkClusterState(m1.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", m1.Server.Cluster.State())
+		if !checkClusterState(m0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
+		} else if !checkClusterState(m1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
 		}
 	})
 	t.Run("ContinuousSlices", func(t *testing.T) {
-
 		// Configure node0
-		m0 := test.NewMainWithCluster(true)
+		m0 := test.MustRunMainWithCluster(t, 1)[0]
 		defer m0.Close()
 
-		seed, err := m0.RunWithTransport("localhost", 0, []string{})
-		if err != nil {
-			t.Fatal(err)
-		}
+		seed := m0.GossipAddress()
 
 		// Create a client for each node.
 		client0 := m0.Client()
-		//client1 := m1.Client()
 
 		// Create indexes and fields on one node.
 		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
@@ -267,40 +208,29 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewMainWithCluster(false)
+		m1.Config.Gossip.Port = "0"
+		m1.Config.Gossip.Seeds = []string{seed}
+		err := m1.Start()
+		if err != nil {
+			t.Fatalf("starting second main: %v", err)
+		}
 		defer m1.Close()
 
-		var eg errgroup.Group
-		eg.Go(func() error {
-			_, err = m1.RunWithTransport("localhost", 0, []string{seed})
-			if err != nil {
-				return err
-			}
-			return nil
-		})
-		if err := eg.Wait(); err != nil {
-			t.Fatal(err)
-		}
-
-		if !checkClusterState(m0.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", m0.Server.Cluster.State())
-		} else if !checkClusterState(m1.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", m1.Server.Cluster.State())
+		if !checkClusterState(m0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
+		} else if !checkClusterState(m1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
 		}
 	})
 	t.Run("SkippedSlice", func(t *testing.T) {
-
 		// Configure node0
-		m0 := test.NewMainWithCluster(true)
+		m0 := test.MustRunMainWithCluster(t, 1)[0]
 		defer m0.Close()
 
-		seed, err := m0.RunWithTransport("localhost", 0, []string{})
-		if err != nil {
-			t.Fatal(err)
-		}
+		seed := m0.GossipAddress()
 
 		// Create a client for each node.
 		client0 := m0.Client()
-		//client1 := m1.Client()
 
 		// Create indexes and fields on one node.
 		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
@@ -319,24 +249,18 @@ func TestClusterResize_AddNode(t *testing.T) {
 
 		// Configure node1
 		m1 := test.NewMainWithCluster(false)
+		m1.Config.Gossip.Port = "0"
+		m1.Config.Gossip.Seeds = []string{seed}
+		err := m1.Start()
+		if err != nil {
+			t.Fatalf("starting second main: %v", err)
+		}
 		defer m1.Close()
 
-		var eg errgroup.Group
-		eg.Go(func() error {
-			_, err = m1.RunWithTransport("localhost", 0, []string{seed})
-			if err != nil {
-				return err
-			}
-			return nil
-		})
-		if err := eg.Wait(); err != nil {
-			t.Fatal(err)
-		}
-
-		if !checkClusterState(m0.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", m0.Server.Cluster.State())
-		} else if !checkClusterState(m1.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", m1.Server.Cluster.State())
+		if !checkClusterState(m0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
+		} else if !checkClusterState(m1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
 		}
 	})
 }
@@ -345,37 +269,37 @@ func TestClusterResize_AddNode(t *testing.T) {
 func TestCluster_GossipMembership(t *testing.T) {
 	t.Run("Node0Down", func(t *testing.T) {
 		// Configure node0
-		m0 := test.NewMainWithCluster(true)
+		m0 := test.MustRunMainWithCluster(t, 1)[0]
 		defer m0.Close()
 
-		seed, err := m0.RunWithTransport("localhost", 0, []string{})
-		if err != nil {
-			t.Fatal(err)
-		}
+		seed := m0.GossipAddress()
+
+		var eg errgroup.Group
 
 		// Configure node1
 		m1 := test.NewMainWithCluster(false)
 		defer m1.Close()
-
-		var eg errgroup.Group
 		eg.Go(func() error {
+			m1.Config.Gossip.Port = "0"
 			// Pass invalid seed as first in list
-			_, err := m1.RunWithTransport("localhost", 0, []string{"http://localhost:8765", seed})
+			m1.Config.Gossip.Seeds = []string{"http://localhost:8765", seed}
+			err := m1.Start()
 			if err != nil {
-				return err
+				t.Fatalf("starting second main: %v", err)
 			}
 			return nil
 		})
 
-		// Configure node2
+		// Configure node1
 		m2 := test.NewMainWithCluster(false)
 		defer m2.Close()
-
 		eg.Go(func() error {
-			// Pass invalid seed as last in list
-			_, err := m2.RunWithTransport("localhost", 0, []string{seed, "http://localhost:8765"})
+			m2.Config.Gossip.Port = "0"
+			// Pass invalid seed as first in list
+			m2.Config.Gossip.Seeds = []string{seed, "http://localhost:8765"}
+			err := m2.Start()
 			if err != nil {
-				return err
+				t.Fatalf("starting second main: %v", err)
 			}
 			return nil
 		})
@@ -384,15 +308,15 @@ func TestCluster_GossipMembership(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if !checkClusterState(m0.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node0 cluster state: %s", m0.Server.Cluster.State())
-		} else if !checkClusterState(m1.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node1 cluster state: %s", m1.Server.Cluster.State())
-		} else if !checkClusterState(m2.Server.Cluster, pilosa.ClusterStateNormal, 1000) {
-			t.Fatalf("unexpected node2 cluster state: %s", m2.Server.Cluster.State())
+		if !checkClusterState(m0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
+		} else if !checkClusterState(m1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
+		} else if !checkClusterState(m2, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node2 cluster state: %s", m2.API.State())
 		}
 
-		numNodes := len(m0.Server.Cluster.Status().Nodes)
+		numNodes := len(m0.API.Hosts(context.Background()))
 		if numNodes != 3 {
 			t.Fatalf("Expected 3 nodes, got %d", numNodes)
 		}
@@ -486,9 +410,9 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 
 // checkClusterState polls a given cluster for its state until it
 // receives a matching state. It polls up to n times before returning.
-func checkClusterState(c *pilosa.Cluster, state string, n int) bool {
+func checkClusterState(m *test.Main, state string, n int) bool {
 	for i := 0; i < n; i++ {
-		if c.State() == state {
+		if m.API.State() == state {
 			return true
 		}
 		time.Sleep(10 * time.Millisecond)

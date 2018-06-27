@@ -97,7 +97,7 @@ type commonClusterSettings struct {
 
 func (t *ClusterCluster) CreateIndex(name string) error {
 	for _, c := range t.Clusters {
-		if _, err := c.Holder.CreateIndexIfNotExists(name, IndexOptions{}); err != nil {
+		if _, err := c.holder.CreateIndexIfNotExists(name, IndexOptions{}); err != nil {
 			return err
 		}
 	}
@@ -106,7 +106,7 @@ func (t *ClusterCluster) CreateIndex(name string) error {
 
 func (t *ClusterCluster) CreateField(index, field string, opt FieldOptions) error {
 	for _, c := range t.Clusters {
-		idx, err := c.Holder.CreateIndexIfNotExists(index, IndexOptions{})
+		idx, err := c.holder.CreateIndexIfNotExists(index, IndexOptions{})
 		if err != nil {
 			return err
 		}
@@ -128,7 +128,7 @@ func (t *ClusterCluster) SetBit(index, field string, rowID, colID uint64, x *tim
 		if c == nil {
 			continue
 		}
-		f := c.Holder.Field(index, field)
+		f := c.holder.Field(index, field)
 		if f == nil {
 			return fmt.Errorf("index/field does not exist: %s/%s", index, field)
 		}
@@ -227,11 +227,10 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*Cluster, error) 
 	c.Hasher = NewTestModHasher()
 	c.Path = path
 	c.Topology = NewTopology()
-	c.Holder = h
-	c.MemberSet = NewStaticMemberSet(c.Nodes)
+	c.holder = h
 	c.Node = node
 	c.Coordinator = t.common.Nodes[0].ID // the first node is the coordinator
-	c.Broadcaster = t
+	c.broadcaster = t
 
 	// add nodes
 	if saveTopology {
@@ -276,7 +275,7 @@ func (t *ClusterCluster) Open() error {
 		if err := c.open(); err != nil {
 			return err
 		}
-		if err := c.Holder.Open(); err != nil {
+		if err := c.holder.Open(); err != nil {
 			return err
 		}
 		if err := c.setNodeState(NodeStateReady); err != nil {
@@ -361,7 +360,7 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstructi
 		destCluster := t.clusterByID(instrNode.ID)
 
 		// Sync the schema received in the resize instruction.
-		if err := destCluster.Holder.ApplySchema(instr.Schema); err != nil {
+		if err := destCluster.holder.ApplySchema(instr.Schema); err != nil {
 			return err
 		}
 
@@ -369,11 +368,11 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstructi
 			srcNode := DecodeNode(src.Node)
 			srcCluster := t.clusterByID(srcNode.ID)
 
-			srcFragment := srcCluster.Holder.Fragment(src.Index, src.Field, src.View, src.Slice)
-			destFragment := destCluster.Holder.Fragment(src.Index, src.Field, src.View, src.Slice)
+			srcFragment := srcCluster.holder.Fragment(src.Index, src.Field, src.View, src.Slice)
+			destFragment := destCluster.holder.Fragment(src.Index, src.Field, src.View, src.Slice)
 			if destFragment == nil {
 				// Create fragment on destination if it doesn't exist.
-				f := destCluster.Holder.Field(src.Index, src.Field)
+				f := destCluster.holder.Field(src.Index, src.Field)
 				v := f.View(src.View)
 				var err error
 				destFragment, err = v.CreateFragmentIfNotExists(src.Slice)
