@@ -36,31 +36,6 @@ type Handler struct {
 	Executor HandlerExecutor
 }
 
-// NewHandler returns a new instance of Handler.
-func NewHandler(opts ...http.HandlerOption) (*Handler, error) {
-	handler, err := http.NewHandler(opts...)
-	if err != nil {
-		return nil, err
-	}
-	h := &Handler{
-		Handler: handler,
-	}
-
-	// Handler test messages can no-op.
-	h.API.Broadcaster = pilosa.NopBroadcaster
-
-	return h, nil
-}
-
-// MustNewHandler returns a new instance of Handler.
-func MustNewHandler(opts ...http.HandlerOption) *Handler {
-	h, err := NewHandler(opts...)
-	if err != nil {
-		panic(err)
-	}
-	return h
-}
-
 // HandlerExecutor is a mock implementing pilosa.Handler.Executor.
 type HandlerExecutor struct {
 	cluster   *pilosa.Cluster
