@@ -60,7 +60,7 @@ type Command struct {
 	Config *Config
 
 	// Gossip transport
-	GossipTransport *gossip.Transport
+	gossipTransport *gossip.Transport
 
 	// Standard input/output
 	*pilosa.CmdIO
@@ -247,6 +247,12 @@ func (m *Command) SetupServer() error {
 		primaryTranslateStore = http.NewTranslateStore(m.Config.Translation.PrimaryURL)
 	}
 
+	// Set Coordinator.
+	coordinatorOpt := pilosa.OptServerIsCoordinator(false)
+	if m.Config.Cluster.Coordinator || len(m.Config.Gossip.Seeds) == 0 {
+		coordinatorOpt = pilosa.OptServerIsCoordinator(true)
+	}
+
 	serverOptions := []pilosa.ServerOption{
 		pilosa.OptServerAntiEntropyInterval(time.Duration(m.Config.AntiEntropy.Interval)),
 		pilosa.OptServerLongQueryTime(time.Duration(m.Config.Cluster.LongQueryTime)),
@@ -265,6 +271,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 		pilosa.OptServerPrimaryTranslateStore(primaryTranslateStore),
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
+		coordinatorOpt,
 	}
 
 	serverOptions = append(serverOptions, m.serverOptions...)
@@ -303,35 +310,28 @@ func (m *Command) SetupNetworking() error {
 
 	// get the host portion of addr to use for binding
 	gossipHost := m.Server.URI.Host()
-	var transport *gossip.Transport
-	if m.GossipTransport != nil {
-		transport = m.GossipTransport
-	} else {
-		transport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
-		if err != nil {
-			return errors.Wrap(err, "getting transport")
-		}
-	}
-
-	// Set Coordinator.
-	if m.Config.Cluster.Coordinator || len(m.Config.Gossip.Seeds) == 0 {
-		m.Server.Cluster.Coordinator = m.Server.NodeID
-		m.Server.Cluster.Node.IsCoordinator = true
+	m.gossipTransport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
+	if err != nil {
+		return errors.Wrap(err, "getting transport")
 	}
 
 	gossipMemberSet, err := gossip.NewGossipMemberSet(
-		m.Server.NodeID,
-		m.Server.URI.Host(),
 		m.Config.Gossip,
 		m.Server,
 		gossip.WithLogger(m.logger.Logger()),
-		gossip.WithTransport(transport),
+		gossip.WithTransport(m.gossipTransport),
 	)
 	if err != nil {
 		return errors.Wrap(err, "getting memberset")
 	}
-	m.Server.Cluster.MemberSet = gossipMemberSet
-	return nil
+	return errors.Wrap(gossipMemberSet.Open(), "opening gossip memberset")
+}
+
+// GossipTransport allows a caller to return the gossip transport created when
+// setting up the GossipMemberSet. This is useful if one needs to determine the
+// allocated ephemeral port programmatically. (usually used in tests)
+func (m *Command) GossipTransport() *gossip.Transport {
+	return m.gossipTransport
 }
 
 // Close shuts down the server.
