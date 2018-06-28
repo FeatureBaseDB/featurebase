@@ -95,22 +95,22 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	// We have to wait for the broadcast message to be sent before checking state.
 	time.Sleep(1 * time.Second)
 
-	// Make sure node0 knows about the latest MaxSlice.
-	maxSlices0, err := client0.MaxSliceByIndex(context.Background())
+	// Make sure node0 knows about the latest MaxShard.
+	maxShards0, err := client0.MaxShardByIndex(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if maxSlices0["i"] != 2 {
-		t.Fatalf("unexpected maxSlice on node0: %d", maxSlices0["i"])
+	if maxShards0["i"] != 2 {
+		t.Fatalf("unexpected maxShard on node0: %d", maxShards0["i"])
 	}
 
-	// Make sure node1 knows about the latest MaxSlice.
-	maxSlices1, err := client1.MaxSliceByIndex(context.Background())
+	// Make sure node1 knows about the latest MaxShard.
+	maxShards1, err := client1.MaxShardByIndex(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if maxSlices1["i"] != 2 {
-		t.Fatalf("unexpected maxSlice on node1: %d", maxSlices1["i"])
+	if maxShards1["i"] != 2 {
+		t.Fatalf("unexpected maxShard on node1: %d", maxShards1["i"])
 	}
 }
 
@@ -181,7 +181,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
 		}
 	})
-	t.Run("ContinuousSlices", func(t *testing.T) {
+	t.Run("ContinuousShards", func(t *testing.T) {
 		// Configure node0
 		m0 := test.MustRunCluster(t, 1)[0]
 		defer m0.Close()
@@ -222,7 +222,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
 		}
 	})
-	t.Run("SkippedSlice", func(t *testing.T) {
+	t.Run("SkippedShard", func(t *testing.T) {
 		// Configure node0
 		m0 := test.MustRunCluster(t, 1)[0]
 		defer m0.Close()
@@ -239,7 +239,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Write data on first node. Note that no data is placed on slice 1.
+		// Write data on first node. Note that no data is placed on shard 1.
 		if _, err := m0.Query("i", "", `
 				Set(1, f=1)
 				Set(2400000, f=1)
@@ -390,7 +390,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 		// TODO: Deterministic node IDs would ensure consistent results
 		setColumns := ""
 		for i := 0; i < 20; i++ {
-			setColumns += fmt.Sprintf("Set(%d, f=1) ", i*pilosa.SliceWidth)
+			setColumns += fmt.Sprintf("Set(%d, f=1) ", i*pilosa.ShardWidth)
 		}
 
 		if _, err := m0.Query("i", "", setColumns); err != nil {

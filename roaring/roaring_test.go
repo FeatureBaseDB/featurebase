@@ -471,10 +471,10 @@ func TestBitmap_Difference(t *testing.T) {
 }
 
 func TestBitmap_Difference2(t *testing.T) {
-	bm0 := roaring.NewFileBitmap(0, 1, 2, 131072, 262144, pilosa.SliceWidth+5, pilosa.SliceWidth+7)
-	bm1 := roaring.NewFileBitmap(2, 3, 100000, 262144, 2*pilosa.SliceWidth+1)
+	bm0 := roaring.NewFileBitmap(0, 1, 2, 131072, 262144, pilosa.ShardWidth+5, pilosa.ShardWidth+7)
+	bm1 := roaring.NewFileBitmap(2, 3, 100000, 262144, 2*pilosa.ShardWidth+1)
 	result := bm0.Difference(bm1)
-	if !reflect.DeepEqual(result.Slice(), []uint64{0, 1, 131072, pilosa.SliceWidth + 5, pilosa.SliceWidth + 7}) {
+	if !reflect.DeepEqual(result.Slice(), []uint64{0, 1, 131072, pilosa.ShardWidth + 5, pilosa.ShardWidth + 7}) {
 		t.Fatalf("unexpected : %v", result.Slice())
 	}
 }
@@ -1161,7 +1161,7 @@ func BenchmarkContainerLinear(b *testing.B) {
 		bm := roaring.NewFileBitmap()
 		for row := uint64(1); row < NumRows; row++ {
 			for col := uint64(1); col < NumColums; col++ {
-				bm.Add(row*pilosa.SliceWidth + (col * MaxContainerVal))
+				bm.Add(row*pilosa.ShardWidth + (col * MaxContainerVal))
 			}
 		}
 	}
@@ -1172,7 +1172,7 @@ func BenchmarkContainerReverse(b *testing.B) {
 		bm := roaring.NewFileBitmap()
 		for row := NumRows - 1; row >= 1; row-- {
 			for col := NumColums - 1; col >= 1; col-- {
-				bm.Add(row*pilosa.SliceWidth + (col * MaxContainerVal))
+				bm.Add(row*pilosa.ShardWidth + (col * MaxContainerVal))
 			}
 		}
 	}
@@ -1183,7 +1183,7 @@ func BenchmarkContainerColumn(b *testing.B) {
 		bm := roaring.NewFileBitmap()
 		for col := uint64(1); col < NumColums; col++ {
 			for row := uint64(1); row < NumRows; row++ {
-				bm.Add(row*pilosa.SliceWidth + (col * MaxContainerVal))
+				bm.Add(row*pilosa.ShardWidth + (col * MaxContainerVal))
 			}
 		}
 	}
@@ -1196,8 +1196,8 @@ func BenchmarkContainerOutsideIn(b *testing.B) {
 
 		for col := uint64(1); col < NumColums; col++ {
 			for row := uint64(1); row < middle; row++ {
-				bm.Add(row*pilosa.SliceWidth + (col * MaxContainerVal))
-				bm.Add((NumRows-row)*pilosa.SliceWidth + (col * MaxContainerVal))
+				bm.Add(row*pilosa.ShardWidth + (col * MaxContainerVal))
+				bm.Add((NumRows-row)*pilosa.ShardWidth + (col * MaxContainerVal))
 			}
 		}
 	}
@@ -1209,8 +1209,8 @@ func BenchmarkContainerInsideOut(b *testing.B) {
 		bm := roaring.NewFileBitmap()
 		for col := uint64(1); col < NumColums; col++ {
 			for row := uint64(1); row <= middle; row++ {
-				bm.Add((middle+row)*pilosa.SliceWidth + (col * MaxContainerVal))
-				bm.Add((middle-row)*pilosa.SliceWidth + (col * MaxContainerVal))
+				bm.Add((middle+row)*pilosa.ShardWidth + (col * MaxContainerVal))
+				bm.Add((middle-row)*pilosa.ShardWidth + (col * MaxContainerVal))
 			}
 		}
 	}
@@ -1219,7 +1219,7 @@ func BenchmarkContainerInsideOut(b *testing.B) {
 func BenchmarkSliceAscending(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		bm := roaring.NewFileBitmap()
-		for col := uint64(0); col < pilosa.SliceWidth; col++ {
+		for col := uint64(0); col < pilosa.ShardWidth; col++ {
 			bm.Add(col)
 		}
 	}
@@ -1228,7 +1228,7 @@ func BenchmarkSliceAscending(b *testing.B) {
 func BenchmarkSliceDescending(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		bm := roaring.NewFileBitmap()
-		for col := uint64(pilosa.SliceWidth); col > uint64(0); col-- {
+		for col := uint64(pilosa.ShardWidth); col > uint64(0); col-- {
 			bm.Add(col)
 		}
 	}

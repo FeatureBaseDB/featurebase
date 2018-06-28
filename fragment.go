@@ -44,8 +44,8 @@ import (
 )
 
 const (
-	// SliceWidth is the number of column IDs in a slice.
-	SliceWidth = 1048576
+	// ShardWidth is the number of column IDs in a shard.
+	ShardWidth = 1048576
 
 	// snapshotExt is the file extension used for an in-process snapshot.
 	snapshotExt = ".snapshotting"
@@ -63,7 +63,7 @@ const (
 	defaultFragmentMaxOpN = 2000
 )
 
-// Fragment represents the intersection of a field and slice in an index.
+// Fragment represents the intersection of a field and shard in an index.
 type Fragment struct {
 	mu sync.RWMutex
 
@@ -71,7 +71,7 @@ type Fragment struct {
 	index string
 	field string
 	view  string
-	slice uint64
+	shard uint64
 
 	// File-backed storage
 	path        string
@@ -110,13 +110,13 @@ type Fragment struct {
 }
 
 // NewFragment returns a new instance of Fragment.
-func NewFragment(path, index, field, view string, slice uint64) *Fragment {
+func NewFragment(path, index, field, view string, shard uint64) *Fragment {
 	return &Fragment{
 		path:      path,
 		index:     index,
 		field:     field,
 		view:      view,
-		slice:     slice,
+		shard:     shard,
 		CacheType: DefaultCacheType,
 		CacheSize: DefaultCacheSize,
 
@@ -151,7 +151,7 @@ func (f *Fragment) Open() error {
 
 		// Read last bit to determine max row.
 		pos := f.storage.Max()
-		f.maxRowID = pos / SliceWidth
+		f.maxRowID = pos / ShardWidth
 		f.stats.Gauge("rows", float64(f.maxRowID), 1.0)
 
 		return nil
@@ -165,7 +165,7 @@ func (f *Fragment) Open() error {
 
 // openStorage opens the storage bitmap.
 func (f *Fragment) openStorage() error {
-	// Create a roaring bitmap to serve as storage for the slice.
+	// Create a roaring bitmap to serve as storage for the shard.
 	if f.storage == nil {
 		f.storage = roaring.NewFileBitmap()
 	}
@@ -257,7 +257,7 @@ func (f *Fragment) openCache() error {
 	// Read in all rows by ID.
 	// This will cause them to be added to the cache.
 	for _, id := range pb.IDs {
-		n := f.storage.CountRange(id*SliceWidth, (id+1)*SliceWidth)
+		n := f.storage.CountRange(id*ShardWidth, (id+1)*ShardWidth)
 		f.cache.BulkAdd(id, n)
 	}
 	f.cache.Invalidate()
@@ -337,7 +337,7 @@ func (f *Fragment) unprotectedRow(rowID uint64, checkRowCache bool, updateRowCac
 
 	// Only use a subset of the containers.
 	// NOTE: The start & end ranges must be divisible by
-	data := f.storage.OffsetRange(f.slice*SliceWidth, rowID*SliceWidth, (rowID+1)*SliceWidth)
+	data := f.storage.OffsetRange(f.shard*ShardWidth, rowID*ShardWidth, (rowID+1)*ShardWidth)
 
 	// Reference bitmap subrange in storage.
 	// We Clone() data because otherwise row will contains pointers to containers in storage.
@@ -345,7 +345,7 @@ func (f *Fragment) unprotectedRow(rowID uint64, checkRowCache bool, updateRowCac
 	row := &Row{
 		segments: []RowSegment{{
 			data:     *data.Clone(),
-			slice:    f.slice,
+			shard:    f.shard,
 			writable: false,
 		}},
 	}
@@ -837,9 +837,9 @@ func (f *Fragment) rangeBetween(bitDepth uint, predicateMin, predicateMax uint64
 
 // pos translates the row ID and column ID into a position in the storage bitmap.
 func (f *Fragment) pos(rowID, columnID uint64) (uint64, error) {
-	// Return an error if the column ID is out of the range of the fragment's slice.
-	minColumnID := f.slice * SliceWidth
-	if columnID < minColumnID || columnID >= minColumnID+SliceWidth {
+	// Return an error if the column ID is out of the range of the fragment's shard.
+	minColumnID := f.shard * ShardWidth
+	if columnID < minColumnID || columnID >= minColumnID+ShardWidth {
 		return 0, errors.New("column out of bounds")
 	}
 	return pos(rowID, columnID), nil
@@ -859,7 +859,7 @@ func (f *Fragment) forEachBit(fn func(rowID, columnID uint64) error) error {
 		}
 
 		// Invoke caller's function.
-		err = fn(i/SliceWidth, (f.slice*SliceWidth)+(i%SliceWidth))
+		err = fn(i/ShardWidth, (f.shard*ShardWidth)+(i%ShardWidth))
 	})
 	return err
 }
@@ -1093,16 +1093,16 @@ func (f *Fragment) Blocks() []FragmentBlock {
 	if eof {
 		return nil
 	}
-	blockID := int(v / (HashBlockSize * SliceWidth))
+	blockID := int(v / (HashBlockSize * ShardWidth))
 	for {
 		// Check for multiple block checksums in a row.
 		if n := f.readContiguousChecksums(&a, blockID); n > 0 {
-			itr.Seek(uint64(blockID+n) * HashBlockSize * SliceWidth)
+			itr.Seek(uint64(blockID+n) * HashBlockSize * ShardWidth)
 			v, eof = itr.Next()
 			if eof {
 				break
 			}
-			blockID = int(v / (HashBlockSize * SliceWidth))
+			blockID = int(v / (HashBlockSize * ShardWidth))
 			continue
 		}
 
@@ -1113,7 +1113,7 @@ func (f *Fragment) Blocks() []FragmentBlock {
 		// Read all values for the block.
 		for ; ; v, eof = itr.Next() {
 			// Once we hit the next block, save the value for the next iteration.
-			blockID = int(v / (HashBlockSize * SliceWidth))
+			blockID = int(v / (HashBlockSize * ShardWidth))
 			if blockID != h.blockID || eof {
 				break
 			}
@@ -1160,9 +1160,9 @@ func (f *Fragment) blockData(id int) (rowIDs, columnIDs []uint64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	f.storage.ForEachRange(uint64(id)*HashBlockSize*SliceWidth, (uint64(id)+1)*HashBlockSize*SliceWidth, func(i uint64) {
-		rowIDs = append(rowIDs, i/SliceWidth)
-		columnIDs = append(columnIDs, i%SliceWidth)
+	f.storage.ForEachRange(uint64(id)*HashBlockSize*ShardWidth, (uint64(id)+1)*HashBlockSize*ShardWidth, func(i uint64) {
+		rowIDs = append(rowIDs, i/ShardWidth)
+		columnIDs = append(columnIDs, i%ShardWidth)
 	})
 	return
 }
@@ -1190,7 +1190,7 @@ func (f *Fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, e
 
 	// Limit upper row/column pair.
 	maxRowID := uint64(id+1) * HashBlockSize
-	maxColumnID := uint64(SliceWidth)
+	maxColumnID := uint64(ShardWidth)
 
 	// Create buffered iterator for local block.
 	itrs := make([]*BufIterator, 1, len(data)+1)
@@ -1278,14 +1278,14 @@ func (f *Fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, e
 
 	// Set local bits.
 	for i := range sets[0].columnIDs {
-		if _, err := f.unprotectedSetBit(sets[0].rowIDs[i], (f.slice*SliceWidth)+sets[0].columnIDs[i]); err != nil {
+		if _, err := f.unprotectedSetBit(sets[0].rowIDs[i], (f.shard*ShardWidth)+sets[0].columnIDs[i]); err != nil {
 			return nil, nil, errors.Wrap(err, "setting")
 		}
 	}
 
 	// Clear local bits.
 	for i := range clears[0].columnIDs {
-		if _, err := f.unprotectedClearBit(clears[0].rowIDs[i], (f.slice*SliceWidth)+clears[0].columnIDs[i]); err != nil {
+		if _, err := f.unprotectedClearBit(clears[0].rowIDs[i], (f.shard*ShardWidth)+clears[0].columnIDs[i]); err != nil {
 			return nil, nil, errors.Wrap(err, "clearing")
 		}
 	}
@@ -1423,8 +1423,8 @@ func track(start time.Time, message string, stats StatsClient, logger Logger) {
 }
 
 func (f *Fragment) snapshot() error {
-	f.Logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.field, f.view, f.slice)
-	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.field, f.view, f.slice)
+	f.Logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
+	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	start := time.Now()
 	defer track(start, completeMessage, f.stats, f.Logger)
 
@@ -1736,7 +1736,7 @@ func (s *FragmentSyncer) isClosing() bool {
 // then merges any blocks which have differences.
 func (s *FragmentSyncer) syncFragment() error {
 	// Determine replica set.
-	nodes := s.Cluster.sliceNodes(s.Fragment.index, s.Fragment.slice)
+	nodes := s.Cluster.shardNodes(s.Fragment.index, s.Fragment.shard)
 	if len(nodes) == 1 {
 		return nil
 	}
@@ -1752,7 +1752,7 @@ func (s *FragmentSyncer) syncFragment() error {
 		}
 
 		// Retrieve remote blocks.
-		blocks, err := s.Cluster.InternalClient.FragmentBlocks(context.Background(), nil, s.Fragment.index, s.Fragment.field, s.Fragment.slice)
+		blocks, err := s.Cluster.InternalClient.FragmentBlocks(context.Background(), nil, s.Fragment.index, s.Fragment.field, s.Fragment.shard)
 		if err != nil && err != ErrFragmentNotFound {
 			return errors.Wrap(err, "getting blocks")
 		}
@@ -1817,7 +1817,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 	// Read pairs from each remote block.
 	var uris []*URI
 	var pairSets []pairSet
-	for _, node := range s.Cluster.sliceNodes(f.index, f.slice) {
+	for _, node := range s.Cluster.shardNodes(f.index, f.shard) {
 		if s.Node.ID == node.ID {
 			continue
 		}
@@ -1831,7 +1831,7 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 		uris = append(uris, uri)
 
 		// Only sync the standard block.
-		rowIDs, columnIDs, err := s.Cluster.InternalClient.BlockData(context.Background(), &node.URI, f.index, f.field, f.slice, id)
+		rowIDs, columnIDs, err := s.Cluster.InternalClient.BlockData(context.Background(), &node.URI, f.index, f.field, f.shard, id)
 		if err != nil {
 			return errors.Wrap(err, "getting block")
 		}
@@ -1873,11 +1873,11 @@ func (s *FragmentSyncer) syncBlock(id int) error {
 
 		// Only sync the standard block.
 		for j := 0; j < len(set.columnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/maxWrites]), "Set(%d, %s=%d)\n", (f.slice*SliceWidth)+set.columnIDs[j], f.field, set.rowIDs[j])
+			fmt.Fprintf(&(buffers[count/maxWrites]), "Set(%d, %s=%d)\n", (f.shard*ShardWidth)+set.columnIDs[j], f.field, set.rowIDs[j])
 			count++
 		}
 		for j := 0; j < len(clear.columnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/maxWrites]), "Clear(%d, %s=%d)\n", (f.slice*SliceWidth)+clear.columnIDs[j], f.field, clear.rowIDs[j])
+			fmt.Fprintf(&(buffers[count/maxWrites]), "Clear(%d, %s=%d)\n", (f.shard*ShardWidth)+clear.columnIDs[j], f.field, clear.rowIDs[j])
 			count++
 		}
 
@@ -1933,5 +1933,5 @@ func byteSlicesEqual(a [][]byte) bool {
 
 // pos returns the row position of a row/column pair.
 func pos(rowID, columnID uint64) uint64 {
-	return (rowID * SliceWidth) + (columnID % SliceWidth)
+	return (rowID * ShardWidth) + (columnID % ShardWidth)
 }

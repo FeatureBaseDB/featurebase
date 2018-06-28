@@ -30,9 +30,9 @@ import (
 // Ensure a message can be marshaled and unmarshaled.
 func TestMessage_Marshal(t *testing.T) {
 
-	testMessageMarshal(t, &internal.CreateSliceMessage{
+	testMessageMarshal(t, &internal.CreateShardMessage{
 		Index: "i",
-		Slice: 8,
+		Shard: 8,
 	})
 
 	testMessageMarshal(t, &internal.DeleteIndexMessage{

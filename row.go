@@ -157,12 +157,12 @@ func (r *Row) Difference(other *Row) *Row {
 
 // SetBit sets the i-th column of the row.
 func (r *Row) SetBit(i uint64) (changed bool) {
-	return r.createSegmentIfNotExists(i / SliceWidth).SetBit(i)
+	return r.createSegmentIfNotExists(i / ShardWidth).SetBit(i)
 }
 
 // ClearBit clears the i-th column of the row.
 func (r *Row) ClearBit(i uint64) (changed bool) {
-	s := r.segment(i / SliceWidth)
+	s := r.segment(i / ShardWidth)
 	if s == nil {
 		return false
 	}
@@ -174,24 +174,24 @@ func (r *Row) Segments() []RowSegment {
 	return r.segments
 }
 
-// segment returns a segment for a given slice.
+// segment returns a segment for a given shard.
 // Returns nil if segment does not exist.
-func (r *Row) segment(slice uint64) *RowSegment {
+func (r *Row) segment(shard uint64) *RowSegment {
 	if i := sort.Search(len(r.segments), func(i int) bool {
-		return r.segments[i].slice >= slice
-	}); i < len(r.segments) && r.segments[i].slice == slice {
+		return r.segments[i].shard >= shard
+	}); i < len(r.segments) && r.segments[i].shard == shard {
 		return &r.segments[i]
 	}
 	return nil
 }
 
-func (r *Row) createSegmentIfNotExists(slice uint64) *RowSegment {
+func (r *Row) createSegmentIfNotExists(shard uint64) *RowSegment {
 	i := sort.Search(len(r.segments), func(i int) bool {
-		return r.segments[i].slice >= slice
+		return r.segments[i].shard >= shard
 	})
 
 	// Return exact match.
-	if i < len(r.segments) && r.segments[i].slice == slice {
+	if i < len(r.segments) && r.segments[i].shard == shard {
 		return &r.segments[i]
 	}
 
@@ -202,7 +202,7 @@ func (r *Row) createSegmentIfNotExists(slice uint64) *RowSegment {
 	}
 	r.segments[i] = RowSegment{
 		data:     *roaring.NewBitmap(),
-		slice:    slice,
+		shard:    shard,
 		writable: true,
 	}
 
@@ -218,7 +218,7 @@ func (r *Row) InvalidateCount() {
 
 // IncrementCount increments the row cached counter, note this is an optimization that assumes that the caller is aware the size increased.
 func (r *Row) IncrementCount(i uint64) {
-	seg := r.segment(i / SliceWidth)
+	seg := r.segment(i / ShardWidth)
 	if seg != nil {
 		seg.n++
 	}
@@ -227,7 +227,7 @@ func (r *Row) IncrementCount(i uint64) {
 
 // DecrementCount decrements the row cached counter.
 func (r *Row) DecrementCount(i uint64) {
-	seg := r.segment(i / SliceWidth)
+	seg := r.segment(i / ShardWidth)
 	if seg != nil {
 		if seg.n > 0 {
 			seg.n--
@@ -308,10 +308,10 @@ func Union(rows []*Row) *Row {
 
 // RowSegment holds a subset of a row.
 // This could point to a mmapped roaring bitmap or an in-memory bitmap. The
-// width of the segment will always match the slice width.
+// width of the segment will always match the shard width.
 type RowSegment struct {
-	// Slice this segment belongs to
-	slice uint64
+	// Shard this segment belongs to
+	shard uint64
 
 	// Underlying raw bitmap implementation.
 	// This is an mmapped bitmap if writable is false. Otherwise
@@ -345,7 +345,7 @@ func (s *RowSegment) Intersect(other *RowSegment) *RowSegment {
 
 	return &RowSegment{
 		data:  *data,
-		slice: s.slice,
+		shard: s.shard,
 		n:     data.Count(),
 	}
 }
@@ -356,7 +356,7 @@ func (s *RowSegment) Union(other *RowSegment) *RowSegment {
 
 	return &RowSegment{
 		data:  *data,
-		slice: s.slice,
+		shard: s.shard,
 		n:     data.Count(),
 	}
 }
@@ -367,7 +367,7 @@ func (s *RowSegment) Difference(other *RowSegment) *RowSegment {
 
 	return &RowSegment{
 		data:  *data,
-		slice: s.slice,
+		shard: s.shard,
 		n:     data.Count(),
 	}
 }
@@ -378,7 +378,7 @@ func (s *RowSegment) Xor(other *RowSegment) *RowSegment {
 
 	return &RowSegment{
 		data:  *data,
-		slice: s.slice,
+		shard: s.shard,
 		n:     data.Count(),
 	}
 }
@@ -464,15 +464,15 @@ func (itr *mergeSegmentIterator) next() (s0, s1 *RowSegment) {
 	}
 
 	// Otherwise determine which is first.
-	if s0.slice < s1.slice {
+	if s0.shard < s1.shard {
 		itr.a0 = itr.a0[1:]
 		return s0, nil
-	} else if s0.slice > s1.slice {
+	} else if s0.shard > s1.shard {
 		itr.a1 = itr.a1[1:]
 		return s1, nil
 	}
 
-	// Return both if slices are equal.
+	// Return both if shards are equal.
 	itr.a0, itr.a1 = itr.a0[1:], itr.a1[1:]
 	return s0, s1
 }

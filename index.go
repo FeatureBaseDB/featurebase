@@ -38,8 +38,8 @@ type Index struct {
 	// Fields by name.
 	fields map[string]*Field
 
-	// Max Slice on any node in the cluster, according to this node.
-	remoteMaxSlice uint64
+	// Max shard on any node in the cluster, according to this node.
+	remoteMaxShard uint64
 
 	NewAttrStore func(string) AttrStore
 
@@ -64,7 +64,7 @@ func NewIndex(path, name string) (*Index, error) {
 		name:   name,
 		fields: make(map[string]*Field),
 
-		remoteMaxSlice: 0,
+		remoteMaxShard: 0,
 
 		NewAttrStore:    NewNopAttrStore,
 		columnAttrStore: NopAttrStore,
@@ -210,30 +210,30 @@ func (i *Index) Close() error {
 	return nil
 }
 
-// MaxSlice returns the max slice in the index according to this node.
-func (i *Index) MaxSlice() uint64 {
+// MaxShard returns the max shard in the index according to this node.
+func (i *Index) MaxShard() uint64 {
 	if i == nil {
 		return 0
 	}
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 
-	max := i.remoteMaxSlice
+	max := i.remoteMaxShard
 	for _, f := range i.fields {
-		if slice := f.MaxSlice(); slice > max {
-			max = slice
+		if shard := f.MaxShard(); shard > max {
+			max = shard
 		}
 	}
 
-	i.Stats.Gauge("maxSlice", float64(max), 1.0)
+	i.Stats.Gauge("maxShard", float64(max), 1.0)
 	return max
 }
 
-// SetRemoteMaxSlice sets the remote max slice value received from another node.
-func (i *Index) SetRemoteMaxSlice(newmax uint64) {
+// SetRemoteMaxShard sets the remote max shard value received from another node.
+func (i *Index) SetRemoteMaxShard(newmax uint64) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	i.remoteMaxSlice = newmax
+	i.remoteMaxShard = newmax
 }
 
 // FieldPath returns the path to a field in the index.
@@ -427,7 +427,7 @@ func hasTime(a []*time.Time) bool {
 
 type importKey struct {
 	View  string
-	Slice uint64
+	Shard uint64
 }
 
 type importData struct {

@@ -115,7 +115,7 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 		ExcludeRowAttrs: req.ExcludeRowAttrs,
 		ExcludeColumns:  req.ExcludeColumns,
 	}
-	results, err := api.server.executor.Execute(ctx, req.Index, q, req.Slices, execOpts)
+	results, err := api.server.executor.Execute(ctx, req.Index, q, req.Shards, execOpts)
 	if err != nil {
 		return resp, errors.Wrap(err, "executing")
 	}
@@ -316,21 +316,21 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 	return nil
 }
 
-// ExportCSV encodes the fragment designated by the index,field,slice as
+// ExportCSV encodes the fragment designated by the index,field,shard as
 // CSV of the form <row>,<col>
-func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName string, slice uint64, w io.Writer) error {
+func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName string, shard uint64, w io.Writer) error {
 	if err := api.validate(apiExportCSV); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	// Validate that this handler owns the slice.
-	if !api.Cluster.ownsSlice(api.LocalID(), indexName, slice) {
-		api.server.logger.Printf("node %s does not own slice %d of index %s", api.LocalID(), slice, indexName)
-		return ErrClusterDoesNotOwnSlice
+	// Validate that this handler owns the shard.
+	if !api.Cluster.ownsShard(api.LocalID(), indexName, shard) {
+		api.server.logger.Printf("node %s does not own shard %d of index %s", api.LocalID(), shard, indexName)
+		return ErrClusterDoesNotOwnShard
 	}
 
 	// Find the fragment.
-	f := api.Holder.Fragment(indexName, fieldName, ViewStandard, slice)
+	f := api.Holder.Fragment(indexName, fieldName, ViewStandard, shard)
 	if f == nil {
 		return ErrFragmentNotFound
 	}
@@ -354,25 +354,25 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 	return nil
 }
 
-// SliceNodes returns the node and all replicas which should contain a slice's data.
-func (api *API) SliceNodes(ctx context.Context, indexName string, slice uint64) ([]*Node, error) {
-	if err := api.validate(apiSliceNodes); err != nil {
+// ShardNodes returns the node and all replicas which should contain a shard's data.
+func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) ([]*Node, error) {
+	if err := api.validate(apiShardNodes); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	return api.Cluster.sliceNodes(indexName, slice), nil
+	return api.Cluster.shardNodes(indexName, shard), nil
 }
 
 // MarshalFragment returns an object which can write the specified fragment's data
 // to an io.Writer. The serialized data can be read back into a fragment with
 // the UnmarshalFragment API call.
-func (api *API) MarshalFragment(ctx context.Context, indexName string, fieldName string, slice uint64) (io.WriterTo, error) {
+func (api *API) MarshalFragment(ctx context.Context, indexName string, fieldName string, shard uint64) (io.WriterTo, error) {
 	if err := api.validate(apiMarshalFragment); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	// Retrieve fragment from holder.
-	f := api.Holder.Fragment(indexName, fieldName, ViewStandard, slice)
+	f := api.Holder.Fragment(indexName, fieldName, ViewStandard, shard)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -382,7 +382,7 @@ func (api *API) MarshalFragment(ctx context.Context, indexName string, fieldName
 // UnmarshalFragment creates a new fragment (if necessary) and reads data from a
 // Reader which was previously written by MarshalFragment to populate the
 // fragment's data.
-func (api *API) UnmarshalFragment(ctx context.Context, indexName string, fieldName string, slice uint64, reader io.ReadCloser) error {
+func (api *API) UnmarshalFragment(ctx context.Context, indexName string, fieldName string, shard uint64, reader io.ReadCloser) error {
 	if err := api.validate(apiUnmarshalFragment); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -400,7 +400,7 @@ func (api *API) UnmarshalFragment(ctx context.Context, indexName string, fieldNa
 	}
 
 	// Retrieve fragment from field.
-	frag, err := view.CreateFragmentIfNotExists(slice)
+	frag, err := view.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		return errors.Wrap(err, "creating fragment")
 	}
@@ -430,7 +430,7 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 	}
 
 	// Retrieve fragment from holder.
-	f := api.Holder.Fragment(req.Index, req.Field, ViewStandard, req.Slice)
+	f := api.Holder.Fragment(req.Index, req.Field, ViewStandard, req.Shard)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -448,13 +448,13 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 }
 
 // FragmentBlocks returns the checksums and block ids for all blocks in the specified fragment.
-func (api *API) FragmentBlocks(ctx context.Context, indexName string, fieldName string, slice uint64) ([]FragmentBlock, error) {
+func (api *API) FragmentBlocks(ctx context.Context, indexName string, fieldName string, shard uint64) ([]FragmentBlock, error) {
 	if err := api.validate(apiFragmentBlocks); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	// Retrieve fragment from holder.
-	f := api.Holder.Fragment(indexName, fieldName, ViewStandard, slice)
+	f := api.Holder.Fragment(indexName, fieldName, ViewStandard, shard)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -552,7 +552,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, fieldName stri
 
 	// Delete the view.
 	if err := f.DeleteView(viewName); err != nil {
-		// Ignore this error because views do not exist on all nodes due to slice distribution.
+		// Ignore this error because views do not exist on all nodes due to shard distribution.
 		if err != ErrInvalidView {
 			return errors.Wrap(err, "deleting view")
 		}
@@ -641,13 +641,13 @@ func (api *API) FieldAttrDiff(ctx context.Context, indexName string, fieldName s
 	return attrs, nil
 }
 
-// Import bulk imports data into a particular index,field,slice.
+// Import bulk imports data into a particular index,field,shard.
 func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 	if err := api.validate(apiImport); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	_, field, err := api.indexField(req.Index, req.Field, req.Slice)
+	_, field, err := api.indexField(req.Index, req.Field, req.Shard)
 	if err != nil {
 		return errors.Wrap(err, "getting field")
 	}
@@ -665,7 +665,7 @@ func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 	// Import into fragment.
 	err = field.Import(req.RowIDs, req.ColumnIDs, timestamps)
 	if err != nil {
-		api.server.logger.Printf("import error: index=%s, field=%s, slice=%d, columns=%d, err=%s", req.Index, req.Field, req.Slice, len(req.ColumnIDs), err)
+		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 	}
 	return errors.Wrap(err, "importing")
 }
@@ -676,21 +676,21 @@ func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest
 		return errors.Wrap(err, "validating api method")
 	}
 
-	_, field, err := api.indexField(req.Index, req.Field, req.Slice)
+	_, field, err := api.indexField(req.Index, req.Field, req.Shard)
 	if err != nil {
 		return errors.Wrap(err, "getting field")
 	}
 	// Import into fragment.
 	err = field.ImportValue(req.ColumnIDs, req.Values)
 	if err != nil {
-		api.server.logger.Printf("import error: index=%s, field=%s, slice=%d, columns=%d, err=%s", req.Index, req.Field, req.Slice, len(req.ColumnIDs), err)
+		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 	}
 	return errors.Wrap(err, "importing")
 }
 
-// MaxSlices returns the maximum slice number for each index in a map.
-func (api *API) MaxSlices(ctx context.Context) map[string]uint64 {
-	return api.Holder.MaxSlices()
+// MaxShards returns the maximum shard number for each index in a map.
+func (api *API) MaxShards(ctx context.Context) map[string]uint64 {
+	return api.Holder.MaxShards()
 }
 
 // StatsWithTags returns an instance of whatever implementation of StatsClient
@@ -711,25 +711,25 @@ func (api *API) LongQueryTime() time.Duration {
 	return api.Cluster.longQueryTime
 }
 
-func (api *API) indexField(indexName string, fieldName string, slice uint64) (*Index, *Field, error) {
-	// Validate that this handler owns the slice.
-	if !api.Cluster.ownsSlice(api.LocalID(), indexName, slice) {
-		api.server.logger.Printf("node %s does not own slice %d of index %s", api.LocalID(), slice, indexName)
-		return nil, nil, ErrClusterDoesNotOwnSlice
+func (api *API) indexField(indexName string, fieldName string, shard uint64) (*Index, *Field, error) {
+	// Validate that this handler owns the shard.
+	if !api.Cluster.ownsShard(api.LocalID(), indexName, shard) {
+		api.server.logger.Printf("node %s does not own shard %d of index %s", api.LocalID(), shard, indexName)
+		return nil, nil, ErrClusterDoesNotOwnShard
 	}
 
 	// Find the Index.
-	api.server.logger.Printf("importing: %v %v %v", indexName, fieldName, slice)
+	api.server.logger.Printf("importing: %v %v %v", indexName, fieldName, shard)
 	index := api.Holder.Index(indexName)
 	if index == nil {
-		api.server.logger.Printf("fragment error: index=%s, field=%s, slice=%d, err=%s", indexName, fieldName, slice, ErrIndexNotFound.Error())
+		api.server.logger.Printf("fragment error: index=%s, field=%s, shard=%d, err=%s", indexName, fieldName, shard, ErrIndexNotFound.Error())
 		return nil, nil, ErrIndexNotFound
 	}
 
 	// Retrieve field.
 	field := index.Field(fieldName)
 	if field == nil {
-		api.server.logger.Printf("field error: index=%s, field=%s, slice=%d, err=%s", indexName, fieldName, slice, ErrFieldNotFound.Error())
+		api.server.logger.Printf("field error: index=%s, field=%s, shard=%d, err=%s", indexName, fieldName, shard, ErrFieldNotFound.Error())
 		return nil, nil, ErrFieldNotFound
 	}
 	return index, field, nil
@@ -851,12 +851,12 @@ func (api *API) Version() string {
 // Info returns information about this server instance
 func (api *API) Info() ServerInfo {
 	return ServerInfo{
-		SliceWidth: SliceWidth,
+		ShardWidth: ShardWidth,
 	}
 }
 
 type ServerInfo struct {
-	SliceWidth uint64 `json:"sliceWidth"`
+	ShardWidth uint64 `json:"shardWidth"`
 }
 
 type apiMethod int
@@ -881,14 +881,14 @@ const (
 	//apiLocalID // not implemented
 	//apiLongQueryTime // not implemented
 	apiMarshalFragment
-	//apiMaxSlices // not implemented
+	//apiMaxShards // not implemented
 	apiQuery
 	apiRecalculateCaches
 	apiRemoveNode
 	apiResizeAbort
 	//apiSchema // not implemented
 	apiSetCoordinator
-	apiSliceNodes
+	apiShardNodes
 	//apiState // not implemented
 	//apiStatsWithTags // not implemented
 	apiUnmarshalFragment
@@ -923,7 +923,7 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiQuery:             struct{}{},
 	apiRecalculateCaches: struct{}{},
 	apiRemoveNode:        struct{}{},
-	apiSliceNodes:        struct{}{},
+	apiShardNodes:        struct{}{},
 	apiUnmarshalFragment: struct{}{},
 	apiViews:             struct{}{},
 }

@@ -412,12 +412,12 @@ func (s *Server) monitorAntiEntropy() {
 // ReceiveMessage represents an implementation of BroadcastHandler.
 func (s *Server) ReceiveMessage(pb proto.Message) error {
 	switch obj := pb.(type) {
-	case *internal.CreateSliceMessage:
+	case *internal.CreateShardMessage:
 		idx := s.holder.Index(obj.Index)
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
-		idx.SetRemoteMaxSlice(obj.Slice)
+		idx.SetRemoteMaxShard(obj.Shard)
 	case *internal.CreateIndexMessage:
 		opt := IndexOptions{}
 		_, err := s.holder.CreateIndex(obj.Index, opt)
@@ -537,7 +537,7 @@ func (s *Server) Node() *Node {
 // where a node fails to receive a Broadcast message, or
 // when a new (empty) node needs to get in sync with the
 // rest of the cluster, two things are shared via gossip:
-// - MaxSlice by Index
+// - MaxShard by Index
 // - Schema
 // In a gossip implementation, memberlist.Delegate.LocalState() uses this.
 func (s *Server) LocalStatus() (proto.Message, error) {
@@ -550,7 +550,7 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 
 	ns := internal.NodeStatus{
 		Node:      EncodeNode(s.cluster.Node),
-		MaxSlices: s.holder.EncodeMaxSlices(),
+		MaxShards: s.holder.EncodeMaxShards(),
 		Schema:    s.holder.EncodeSchema(),
 	}
 
@@ -593,19 +593,19 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 		return errors.Wrap(err, "applying schema")
 	}
 
-	// Sync maxSlices.
-	oldmaxslices := s.holder.MaxSlices()
-	for index, newMax := range ns.MaxSlices.Standard {
+	// Sync maxShards.
+	oldmaxshards := s.holder.MaxShards()
+	for index, newMax := range ns.MaxShards.Standard {
 		localIndex := s.holder.Index(index)
 		// if we don't know about an index locally, log an error because
-		// indexes should be created and synced prior to slice creation
+		// indexes should be created and synced prior to shard creation
 		if localIndex == nil {
 			s.logger.Printf("Local Index not found: %s", index)
 			continue
 		}
-		if newMax > oldmaxslices[index] {
-			oldmaxslices[index] = newMax
-			localIndex.SetRemoteMaxSlice(newMax)
+		if newMax > oldmaxshards[index] {
+			oldmaxshards[index] = newMax
+			localIndex.SetRemoteMaxShard(newMax)
 		}
 	}
 

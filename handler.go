@@ -12,9 +12,9 @@ type QueryRequest struct {
 	// The query string to parse and execute.
 	Query string
 
-	// The slices to include in the query execution.
-	// If empty, all slices are included.
-	Slices []uint64
+	// The shards to include in the query execution.
+	// If empty, all shards are included.
+	Shards []uint64
 
 	// Return column attributes, if true.
 	ColumnAttrs bool
