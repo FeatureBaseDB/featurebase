@@ -184,11 +184,11 @@ func NewRoaringIterator(itr *roaring.Iterator) *RoaringIterator {
 // Seek moves the cursor to a pair matching bseek/pseek.
 // If the pair is not found then it moves to the next pair.
 func (itr *RoaringIterator) Seek(bseek, pseek uint64) {
-	itr.itr.Seek((bseek * SliceWidth) + pseek)
+	itr.itr.Seek((bseek * ShardWidth) + pseek)
 }
 
 // Next returns the next column/row ID pair.
 func (itr *RoaringIterator) Next() (rowID, columnID uint64, eof bool) {
 	v, eof := itr.itr.Next()
-	return v / SliceWidth, v % SliceWidth, eof
+	return v / ShardWidth, v % ShardWidth, eof
 }

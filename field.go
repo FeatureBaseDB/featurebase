@@ -157,15 +157,15 @@ func (f *Field) Path() string { return f.path }
 // RowAttrStore returns the attribute storage.
 func (f *Field) RowAttrStore() AttrStore { return f.rowAttrStore }
 
-// MaxSlice returns the max slice in the field.
-func (f *Field) MaxSlice() uint64 {
+// MaxShard returns the max shard in the field.
+func (f *Field) MaxShard() uint64 {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
 	var max uint64
 	for _, view := range f.views {
-		if viewMaxSlice := view.calculateMaxSlice(); viewMaxSlice > max {
-			max = viewMaxSlice
+		if viewMaxShard := view.calculateMaxShard(); viewMaxShard > max {
+			max = viewMaxShard
 		}
 	}
 	return max
@@ -669,7 +669,7 @@ func (f *Field) Row(rowID uint64) (*Row, error) {
 	return view.row(rowID), nil
 }
 
-// ViewRow returns a row for a view and slice.
+// ViewRow returns a row for a view and shard.
 // TODO: unexport this with views (it's only used in tests).
 func (f *Field) ViewRow(viewName string, rowID uint64) (*Row, error) {
 	view := f.View(viewName)
@@ -985,7 +985,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 
 		// Attach bit to each standard view.
 		for _, name := range standard {
-			key := importKey{View: name, Slice: columnID / SliceWidth}
+			key := importKey{View: name, Shard: columnID / ShardWidth}
 			data := dataByFragment[key]
 			data.RowIDs = append(data.RowIDs, rowID)
 			data.ColumnIDs = append(data.ColumnIDs, columnID)
@@ -1000,7 +1000,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 			return errors.Wrap(err, "creating view")
 		}
 
-		frag, err := view.CreateFragmentIfNotExists(key.Slice)
+		frag, err := view.CreateFragmentIfNotExists(key.Shard)
 		if err != nil {
 			return errors.Wrap(err, "creating view")
 		}
@@ -1034,7 +1034,7 @@ func (f *Field) ImportValue(columnIDs []uint64, values []int64) error {
 
 		// Attach value to each bsiGroup view.
 		for _, name := range []string{viewName} {
-			key := importKey{View: name, Slice: columnID / SliceWidth}
+			key := importKey{View: name, Shard: columnID / ShardWidth}
 			data := dataByFragment[key]
 			data.ColumnIDs = append(data.ColumnIDs, columnID)
 			data.Values = append(data.Values, value)
@@ -1052,7 +1052,7 @@ func (f *Field) ImportValue(columnIDs []uint64, values []int64) error {
 			return errors.Wrap(err, "creating view")
 		}
 
-		frag, err := view.CreateFragmentIfNotExists(key.Slice)
+		frag, err := view.CreateFragmentIfNotExists(key.Shard)
 		if err != nil {
 			return errors.Wrap(err, "creating fragment")
 		}
@@ -1243,7 +1243,7 @@ func (b *bsiGroup) BitDepth() uint {
 // Note that in this case (because the range uses the full BitDepth 0 to 1023),
 // we can't simply return 1024.
 // In order to make this work, we effectively need to change the operator to LTE.
-// Executor.executeBSIGroupRangeSlice() takes this into account and returns
+// Executor.executeBSIGroupRangeShard() takes this into account and returns
 // `frag.FieldNotNull(bsig.BitDepth())` in such instances.
 func (b *bsiGroup) baseValue(op pql.Token, value int64) (baseValue uint64, outOfRange bool) {
 	if op == pql.GT || op == pql.GTE {

@@ -156,13 +156,13 @@ func (h *Handler) Close() error {
 
 func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
-	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("slice", "index")
-	h.validators["GetSliceMax"] = queryValidationSpecRequired()
-	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("slices", "columnAttrs", "excludeRowAttrs", "excludeColumns")
-	h.validators["GetExport"] = queryValidationSpecRequired("index", "field", "slice")
-	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "field", "slice")
-	h.validators["PostFragmentData"] = queryValidationSpecRequired("index", "field", "slice")
-	h.validators["GetFragmentBlocks"] = queryValidationSpecRequired("index", "field", "slice")
+	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("shard", "index")
+	h.validators["GetShardMax"] = queryValidationSpecRequired()
+	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("shards", "columnAttrs", "excludeRowAttrs", "excludeColumns")
+	h.validators["GetExport"] = queryValidationSpecRequired("index", "field", "shard")
+	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "field", "shard")
+	h.validators["PostFragmentData"] = queryValidationSpecRequired("index", "field", "shard")
+	h.validators["GetFragmentBlocks"] = queryValidationSpecRequired("index", "field", "shard")
 }
 
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
@@ -195,7 +195,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
 	router.HandleFunc("/cluster/message", handler.handlePostClusterMessage).Methods("POST")
 	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST")
-	router.HandleFunc("/slices/max", handler.handleGetSlicesMax).Methods("GET") // TODO: deprecate, but it's being used by the client
+	router.HandleFunc("/shards/max", handler.handleGetShardsMax).Methods("GET") // TODO: deprecate, but it's being used by the client
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
 	router.HandleFunc("/info", handler.handleGetInfo).Methods("GET")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
@@ -385,20 +385,20 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleGetSlicesMax handles GET /schema requests.
-func (h *Handler) handleGetSlicesMax(w http.ResponseWriter, r *http.Request) {
+// handleGetShardsMax handles GET /shards/max requests.
+func (h *Handler) handleGetShardsMax(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
-	if err := json.NewEncoder(w).Encode(getSlicesMaxResponse{
-		Standard: h.API.MaxSlices(r.Context()),
+	if err := json.NewEncoder(w).Encode(getShardsMaxResponse{
+		Standard: h.API.MaxShards(r.Context()),
 	}); err != nil {
-		h.Logger.Printf("write slices-max response error: %s", err)
+		h.Logger.Printf("write shards-max response error: %s", err)
 	}
 }
 
-type getSlicesMaxResponse struct {
+type getShardsMaxResponse struct {
 	Standard map[string]uint64 `json:"standard"`
 }
 
@@ -839,15 +839,15 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*pilosa.QueryRequest, er
 	}
 	query := string(buf)
 
-	// Parse list of slices.
-	slices, err := parseUint64Slice(q.Get("slices"))
+	// Parse list of shards.
+	shards, err := parseUint64Slice(q.Get("shards"))
 	if err != nil {
-		return nil, errors.New("invalid slice argument")
+		return nil, errors.New("invalid shard argument")
 	}
 
 	return &pilosa.QueryRequest{
 		Query:           query,
-		Slices:          slices,
+		Shards:          shards,
 		ColumnAttrs:     q.Get("columnAttrs") == "true",
 		ExcludeRowAttrs: q.Get("excludeRowAttrs") == "true",
 		ExcludeColumns:  q.Get("excludeColumns") == "true",
@@ -908,7 +908,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			fallthrough
 		case pilosa.ErrFieldNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
-		case pilosa.ErrClusterDoesNotOwnSlice:
+		case pilosa.ErrClusterDoesNotOwnShard:
 			http.Error(w, err.Error(), http.StatusPreconditionFailed)
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -961,7 +961,7 @@ func (h *Handler) handlePostImportValue(w http.ResponseWriter, r *http.Request) 
 			fallthrough
 		case pilosa.ErrFieldNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
-		case pilosa.ErrClusterDoesNotOwnSlice:
+		case pilosa.ErrClusterDoesNotOwnShard:
 			http.Error(w, err.Error(), http.StatusPreconditionFailed)
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -998,17 +998,17 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	index, field := q.Get("index"), q.Get("field")
 
-	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
+	shard, err := strconv.ParseUint(q.Get("shard"), 10, 64)
 	if err != nil {
-		http.Error(w, "invalid slice", http.StatusBadRequest)
+		http.Error(w, "invalid shard", http.StatusBadRequest)
 		return
 	}
 
-	if err = h.API.ExportCSV(r.Context(), index, field, slice, w); err != nil {
+	if err = h.API.ExportCSV(r.Context(), index, field, shard, w); err != nil {
 		switch errors.Cause(err) {
 		case pilosa.ErrFragmentNotFound:
 			break
-		case pilosa.ErrClusterDoesNotOwnSlice:
+		case pilosa.ErrClusterDoesNotOwnShard:
 			http.Error(w, err.Error(), http.StatusPreconditionFailed)
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1026,15 +1026,15 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 	q := r.URL.Query()
 	index := q.Get("index")
 
-	// Read slice parameter.
-	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
+	// Read shard parameter.
+	shard, err := strconv.ParseUint(q.Get("shard"), 10, 64)
 	if err != nil {
-		http.Error(w, "slice should be an unsigned integer", http.StatusBadRequest)
+		http.Error(w, "shard should be an unsigned integer", http.StatusBadRequest)
 		return
 	}
 
 	// Retrieve fragment owner nodes.
-	nodes, err := h.API.SliceNodes(r.Context(), index, slice)
+	nodes, err := h.API.ShardNodes(r.Context(), index, shard)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -1072,15 +1072,15 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
-	// Read slice parameter.
+	// Read shard parameter.
 	q := r.URL.Query()
-	slice, err := strconv.ParseUint(q.Get("slice"), 10, 64)
+	shard, err := strconv.ParseUint(q.Get("shard"), 10, 64)
 	if err != nil {
-		http.Error(w, "slice required", http.StatusBadRequest)
+		http.Error(w, "shard required", http.StatusBadRequest)
 		return
 	}
 
-	blocks, err := h.API.FragmentBlocks(r.Context(), q.Get("index"), q.Get("field"), slice)
+	blocks, err := h.API.FragmentBlocks(r.Context(), q.Get("index"), q.Get("field"), shard)
 	if err != nil {
 		if errors.Cause(err) == pilosa.ErrFragmentNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -1131,7 +1131,7 @@ const (
 func decodeQueryRequest(pb *internal.QueryRequest) *pilosa.QueryRequest {
 	req := &pilosa.QueryRequest{
 		Query:           pb.Query,
-		Slices:          pb.Slices,
+		Shards:          pb.Shards,
 		ColumnAttrs:     pb.ColumnAttrs,
 		Remote:          pb.Remote,
 		ExcludeRowAttrs: pb.ExcludeRowAttrs,

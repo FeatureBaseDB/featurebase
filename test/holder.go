@@ -90,7 +90,7 @@ func (h *Holder) MustCreateFieldIfNotExists(index, field string) *Field {
 }
 
 // MustCreateRankedFragmentIfNotExists returns a given fragment with a ranked cache. Panic on error.
-func (h *Holder) MustCreateRankedFragmentIfNotExists(index, field, view string, slice uint64) *Fragment {
+func (h *Holder) MustCreateRankedFragmentIfNotExists(index, field, view string, shard uint64) *Fragment {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
 	f, err := idx.CreateFieldIfNotExists(field, pilosa.FieldOptions{})
 	if err != nil {
@@ -100,7 +100,7 @@ func (h *Holder) MustCreateRankedFragmentIfNotExists(index, field, view string, 
 	if err != nil {
 		panic(err)
 	}
-	frag, err := v.CreateFragmentIfNotExists(slice)
+	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		panic(err)
 	}

@@ -239,7 +239,7 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open fragment: slice=0, err=opening storage: unmarshal storage") {
+		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "open fragment: shard=0, err=opening storage: unmarshal storage") {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -373,12 +373,12 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	hldr1 := test.MustOpenHolder()
 	defer hldr1.Close()
 	s.Handler.API.Holder = hldr1.Holder
-	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
+	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, shards []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		e := pilosa.NewExecutor(pilosa.OptExecutorInternalQueryClient(httpClient))
 		e.Holder = hldr1.Holder
 		e.Node = cluster.Nodes[1]
 		e.Cluster = cluster
-		return e.Execute(ctx, index, query, slices, opt)
+		return e.Execute(ctx, index, query, shards, opt)
 	}
 
 	// Mock 2-node, fully replicated cluster.
@@ -400,7 +400,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	hldr0.SetBit("i", "f", 120, 10)
 	hldr0.SetBit("i", "f", 200, 4)
 
-	hldr0.SetBit("i", "f0", 9, SliceWidth+5)
+	hldr0.SetBit("i", "f0", 9, ShardWidth+5)
 
 	// Set a bit to create the fragment.
 	hldr0.SetBit("y", "z", 0, 0)
@@ -410,13 +410,13 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	hldr1.SetBit("i", "f", 3, 10)
 	hldr1.SetBit("i", "f", 120, 10)
 
-	hldr1.SetBit("y", "z", 10, (3*SliceWidth)+4)
-	hldr1.SetBit("y", "z", 10, (3*SliceWidth)+5)
-	hldr1.SetBit("y", "z", 10, (3*SliceWidth)+7)
+	hldr1.SetBit("y", "z", 10, (3*ShardWidth)+4)
+	hldr1.SetBit("y", "z", 10, (3*ShardWidth)+5)
+	hldr1.SetBit("y", "z", 10, (3*ShardWidth)+7)
 
-	// Set highest slice.
-	hldr0.Index("i").SetRemoteMaxSlice(1)
-	hldr0.Index("y").SetRemoteMaxSlice(3)
+	// Set highest shard.
+	hldr0.Index("i").SetRemoteMaxShard(1)
+	hldr0.Index("y").SetRemoteMaxShard(3)
 
 	// Set up syncer.
 	syncer := pilosa.HolderSyncer{
@@ -444,11 +444,11 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 			t.Fatalf("unexpected columns(%d/200): %+v", i, a)
 		}
 
-		if a := hldr.Row("i", "f0", 9).Columns(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
+		if a := hldr.Row("i", "f0", 9).Columns(); !reflect.DeepEqual(a, []uint64{ShardWidth + 5}) {
 			t.Fatalf("unexpected columns(%d/d/f0): %+v", i, a)
 		}
 
-		if a := hldr.Row("y", "z", 10).Columns(); !reflect.DeepEqual(a, []uint64{(3 * SliceWidth) + 4, (3 * SliceWidth) + 5, (3 * SliceWidth) + 7}) {
+		if a := hldr.Row("y", "z", 10).Columns(); !reflect.DeepEqual(a, []uint64{(3 * ShardWidth) + 4, (3 * ShardWidth) + 5, (3 * ShardWidth) + 7}) {
 			t.Fatalf("unexpected columns(%d/y/z): %+v", i, a)
 		}
 	}
@@ -482,15 +482,15 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 	hldr0.SetBit("i", "f", 120, 10)
 	hldr0.SetBit("i", "f", 200, 4)
 
-	hldr0.SetBit("i", "f0", 9, SliceWidth+5)
+	hldr0.SetBit("i", "f0", 9, ShardWidth+5)
 
-	hldr0.SetBit("y", "z", 10, (2*SliceWidth)+4)
-	hldr0.SetBit("y", "z", 10, (2*SliceWidth)+5)
-	hldr0.SetBit("y", "z", 10, (2*SliceWidth)+7)
+	hldr0.SetBit("y", "z", 10, (2*ShardWidth)+4)
+	hldr0.SetBit("y", "z", 10, (2*ShardWidth)+5)
+	hldr0.SetBit("y", "z", 10, (2*ShardWidth)+7)
 
-	// Set highest slice.
-	hldr0.Index("i").SetRemoteMaxSlice(1)
-	hldr0.Index("y").SetRemoteMaxSlice(2)
+	// Set highest shard.
+	hldr0.Index("i").SetRemoteMaxShard(1)
+	hldr0.Index("y").SetRemoteMaxShard(2)
 
 	// Keep replication the same and ensure we get the expected results.
 	cluster.ReplicaN = 2
@@ -520,11 +520,11 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 			t.Fatalf("unexpected columns(%d/200): %+v", i, a)
 		}
 
-		if a := hldr.Row("i", "f0", 9).Columns(); !reflect.DeepEqual(a, []uint64{SliceWidth + 5}) {
+		if a := hldr.Row("i", "f0", 9).Columns(); !reflect.DeepEqual(a, []uint64{ShardWidth + 5}) {
 			t.Fatalf("unexpected columns(%d/d/f0): %+v", i, a)
 		}
 
-		if a := hldr.Row("y", "z", 10).Columns(); !reflect.DeepEqual(a, []uint64{(2 * SliceWidth) + 4, (2 * SliceWidth) + 5, (2 * SliceWidth) + 7}) {
+		if a := hldr.Row("y", "z", 10).Columns(); !reflect.DeepEqual(a, []uint64{(2 * ShardWidth) + 4, (2 * ShardWidth) + 5, (2 * ShardWidth) + 7}) {
 			t.Fatalf("unexpected columns(%d/y/z): %+v", i, a)
 		}
 	}
@@ -562,7 +562,7 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 			t.Fatalf("expected fragment to be deleted: (%d/i/f0): %+v", i, f)
 		}
 
-		if a := hldr.Row("y", "z", 10).Columns(); !reflect.DeepEqual(a, []uint64{(2 * SliceWidth) + 4, (2 * SliceWidth) + 5, (2 * SliceWidth) + 7}) {
+		if a := hldr.Row("y", "z", 10).Columns(); !reflect.DeepEqual(a, []uint64{(2 * ShardWidth) + 4, (2 * ShardWidth) + 5, (2 * ShardWidth) + 7}) {
 			t.Fatalf("unexpected columns(%d/y/z): %+v", i, a)
 		}
 	}

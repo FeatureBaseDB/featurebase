@@ -80,16 +80,16 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 		return errors.Wrap(err, "creating client")
 	}
 
-	// Determine slice count.
-	maxSlices, err := client.MaxSliceByIndex(ctx)
+	// Determine shard count.
+	maxShards, err := client.MaxShardByIndex(ctx)
 	if err != nil {
-		return errors.Wrap(err, "getting slice count")
+		return errors.Wrap(err, "getting shard count")
 	}
 
-	// Export each slice.
-	for slice := uint64(0); slice <= maxSlices[cmd.Index]; slice++ {
-		logger.Printf("exporting slice: %d", slice)
-		if err := client.ExportCSV(ctx, cmd.Index, cmd.Field, slice, w); err != nil {
+	// Export each shard.
+	for shard := uint64(0); shard <= maxShards[cmd.Index]; shard++ {
+		logger.Printf("exporting shard: %d", shard)
+		if err := client.ExportCSV(ctx, cmd.Index, cmd.Field, shard, w); err != nil {
 			return errors.Wrap(err, "exporting")
 		}
 	}

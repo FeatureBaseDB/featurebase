@@ -73,15 +73,15 @@ func NewInternalClientFromURI(defaultURI *pilosa.URI, remoteClient *http.Client)
 // Host returns the host the client was initialized with.
 func (c *InternalClient) Host() *pilosa.URI { return c.defaultURI }
 
-// MaxSliceByIndex returns the number of slices on a server by index.
-func (c *InternalClient) MaxSliceByIndex(ctx context.Context) (map[string]uint64, error) {
-	return c.maxSliceByIndex(ctx)
+// MaxShardByIndex returns the number of shards on a server by index.
+func (c *InternalClient) MaxShardByIndex(ctx context.Context) (map[string]uint64, error) {
+	return c.maxShardByIndex(ctx)
 }
 
-// maxSliceByIndex returns the number of slices on a server by index.
-func (c *InternalClient) maxSliceByIndex(ctx context.Context) (map[string]uint64, error) {
+// maxShardByIndex returns the number of shards on a server by index.
+func (c *InternalClient) maxShardByIndex(ctx context.Context) (map[string]uint64, error) {
 	// Execute request against the host.
-	u := uriPathToURL(c.defaultURI, "/slices/max")
+	u := uriPathToURL(c.defaultURI, "/shards/max")
 
 	// Build request.
 	req, err := http.NewRequest("GET", u.String(), nil)
@@ -99,7 +99,7 @@ func (c *InternalClient) maxSliceByIndex(ctx context.Context) (map[string]uint64
 	}
 	defer resp.Body.Close()
 
-	var rsp getSlicesMaxResponse
+	var rsp getShardsMaxResponse
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
 	} else if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
@@ -184,11 +184,11 @@ func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilo
 	}
 }
 
-// FragmentNodes returns a list of nodes that own a slice.
-func (c *InternalClient) FragmentNodes(ctx context.Context, index string, slice uint64) ([]*pilosa.Node, error) {
+// FragmentNodes returns a list of nodes that own a shard.
+func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard uint64) ([]*pilosa.Node, error) {
 	// Execute request against the host.
 	u := uriPathToURL(c.defaultURI, "/fragment/nodes")
-	u.RawQuery = (url.Values{"index": {index}, "slice": {strconv.FormatUint(slice, 10)}}).Encode()
+	u.RawQuery = (url.Values{"index": {index}, "shard": {strconv.FormatUint(shard, 10)}}).Encode()
 
 	// Build request.
 	req, err := http.NewRequest("GET", u.String(), nil)
@@ -272,23 +272,23 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index s
 	return qresp, nil
 }
 
-// Import bulk imports bits for a single slice to a host.
-func (c *InternalClient) Import(ctx context.Context, index, field string, slice uint64, bits []pilosa.Bit) error {
+// Import bulk imports bits for a single shard to a host.
+func (c *InternalClient) Import(ctx context.Context, index, field string, shard uint64, bits []pilosa.Bit) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
 		return pilosa.ErrFieldRequired
 	}
 
-	buf, err := marshalImportPayload(index, field, slice, bits)
+	buf, err := marshalImportPayload(index, field, shard, bits)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
 
-	// Retrieve a list of nodes that own the slice.
-	nodes, err := c.FragmentNodes(ctx, index, slice)
+	// Retrieve a list of nodes that own the shard.
+	nodes, err := c.FragmentNodes(ctx, index, shard)
 	if err != nil {
-		return fmt.Errorf("slice nodes: %s", err)
+		return fmt.Errorf("shard nodes: %s", err)
 	}
 
 	// Import to each node.
@@ -343,7 +343,7 @@ func (c *InternalClient) EnsureField(ctx context.Context, indexName string, fiel
 }
 
 // marshalImportPayload marshalls the import parameters into a protobuf byte slice.
-func marshalImportPayload(index, field string, slice uint64, bits []pilosa.Bit) ([]byte, error) {
+func marshalImportPayload(index, field string, shard uint64, bits []pilosa.Bit) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
 	rowIDs := Bits(bits).RowIDs()
 	columnIDs := Bits(bits).ColumnIDs()
@@ -353,7 +353,7 @@ func marshalImportPayload(index, field string, slice uint64, bits []pilosa.Bit) 
 	buf, err := proto.Marshal(&internal.ImportRequest{
 		Index:      index,
 		Field:      field,
-		Slice:      slice,
+		Shard:      shard,
 		RowIDs:     rowIDs,
 		ColumnIDs:  columnIDs,
 		Timestamps: timestamps,
@@ -423,23 +423,23 @@ func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, buf 
 	return nil
 }
 
-// ImportValue bulk imports field values for a single slice to a host.
-func (c *InternalClient) ImportValue(ctx context.Context, index, field string, slice uint64, vals []pilosa.FieldValue) error {
+// ImportValue bulk imports field values for a single shard to a host.
+func (c *InternalClient) ImportValue(ctx context.Context, index, field string, shard uint64, vals []pilosa.FieldValue) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
 		return pilosa.ErrFieldRequired
 	}
 
-	buf, err := marshalImportValuePayload(index, field, slice, vals)
+	buf, err := marshalImportValuePayload(index, field, shard, vals)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
 
-	// Retrieve a list of nodes that own the slice.
-	nodes, err := c.FragmentNodes(ctx, index, slice)
+	// Retrieve a list of nodes that own the shard.
+	nodes, err := c.FragmentNodes(ctx, index, shard)
 	if err != nil {
-		return fmt.Errorf("slice nodes: %s", err)
+		return fmt.Errorf("shard nodes: %s", err)
 	}
 
 	// Import to each node.
@@ -453,7 +453,7 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 }
 
 // marshalImportValuePayload marshalls the import parameters into a protobuf byte slice.
-func marshalImportValuePayload(index, field string, slice uint64, vals []pilosa.FieldValue) ([]byte, error) {
+func marshalImportValuePayload(index, field string, shard uint64, vals []pilosa.FieldValue) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
 	columnIDs := FieldValues(vals).ColumnIDs()
 	values := FieldValues(vals).Values()
@@ -462,7 +462,7 @@ func marshalImportValuePayload(index, field string, slice uint64, vals []pilosa.
 	buf, err := proto.Marshal(&internal.ImportValueRequest{
 		Index:     index,
 		Field:     field,
-		Slice:     slice,
+		Shard:     shard,
 		ColumnIDs: columnIDs,
 		Values:    values,
 	})
@@ -510,18 +510,18 @@ func (c *InternalClient) importValueNode(ctx context.Context, node *pilosa.Node,
 	return nil
 }
 
-// ExportCSV bulk exports data for a single slice from a host to CSV format.
-func (c *InternalClient) ExportCSV(ctx context.Context, index, field string, slice uint64, w io.Writer) error {
+// ExportCSV bulk exports data for a single shard from a host to CSV format.
+func (c *InternalClient) ExportCSV(ctx context.Context, index, field string, shard uint64, w io.Writer) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
 		return pilosa.ErrFieldRequired
 	}
 
-	// Retrieve a list of nodes that own the slice.
-	nodes, err := c.FragmentNodes(ctx, index, slice)
+	// Retrieve a list of nodes that own the shard.
+	nodes, err := c.FragmentNodes(ctx, index, shard)
 	if err != nil {
-		return fmt.Errorf("slice nodes: %s", err)
+		return fmt.Errorf("shard nodes: %s", err)
 	}
 
 	// Attempt nodes in random order.
@@ -529,7 +529,7 @@ func (c *InternalClient) ExportCSV(ctx context.Context, index, field string, sli
 	for _, i := range rand.Perm(len(nodes)) {
 		node := nodes[i]
 
-		if err := c.exportNodeCSV(ctx, node, index, field, slice, w); err != nil {
+		if err := c.exportNodeCSV(ctx, node, index, field, shard, w); err != nil {
 			e = fmt.Errorf("export node: host=%s, err=%s", node.URI, err)
 			continue
 		} else {
@@ -541,13 +541,13 @@ func (c *InternalClient) ExportCSV(ctx context.Context, index, field string, sli
 }
 
 // exportNode copies a CSV export from a node to w.
-func (c *InternalClient) exportNodeCSV(ctx context.Context, node *pilosa.Node, index, field string, slice uint64, w io.Writer) error {
+func (c *InternalClient) exportNodeCSV(ctx context.Context, node *pilosa.Node, index, field string, shard uint64, w io.Writer) error {
 	// Create URL.
 	u := nodePathToURL(node, "/export")
 	u.RawQuery = url.Values{
 		"index": {index},
 		"field": {field},
-		"slice": {strconv.FormatUint(slice, 10)},
+		"shard": {strconv.FormatUint(shard, 10)},
 	}.Encode()
 
 	// Generate HTTP request.
@@ -578,19 +578,19 @@ func (c *InternalClient) exportNodeCSV(ctx context.Context, node *pilosa.Node, i
 	return nil
 }
 
-func (c *InternalClient) RetrieveSliceFromURI(ctx context.Context, index, field string, slice uint64, uri pilosa.URI) (io.ReadCloser, error) {
+func (c *InternalClient) RetrieveShardFromURI(ctx context.Context, index, field string, shard uint64, uri pilosa.URI) (io.ReadCloser, error) {
 	node := &pilosa.Node{
 		URI: uri,
 	}
-	return c.backupSliceNode(ctx, index, field, slice, node)
+	return c.backupShardNode(ctx, index, field, shard, node)
 }
 
-func (c *InternalClient) backupSliceNode(ctx context.Context, index, field string, slice uint64, node *pilosa.Node) (io.ReadCloser, error) {
+func (c *InternalClient) backupShardNode(ctx context.Context, index, field string, shard uint64, node *pilosa.Node) (io.ReadCloser, error) {
 	u := nodePathToURL(node, "/fragment/data")
 	u.RawQuery = url.Values{
 		"index": {index},
 		"field": {field},
-		"slice": {strconv.FormatUint(slice, 10)},
+		"shard": {strconv.FormatUint(shard, 10)},
 	}.Encode()
 
 	// Build request.
@@ -671,7 +671,7 @@ func (c *InternalClient) CreateField(ctx context.Context, index, field string) e
 
 // FragmentBlocks returns a list of block checksums for a fragment on a host.
 // Only returns blocks which contain data.
-func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, index, field string, slice uint64) ([]pilosa.FragmentBlock, error) {
+func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64) ([]pilosa.FragmentBlock, error) {
 	if uri == nil {
 		uri = c.defaultURI
 	}
@@ -679,7 +679,7 @@ func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, in
 	u.RawQuery = url.Values{
 		"index": {index},
 		"field": {field},
-		"slice": {strconv.FormatUint(slice, 10)},
+		"shard": {strconv.FormatUint(shard, 10)},
 	}.Encode()
 
 	// Build request.
@@ -716,11 +716,11 @@ func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, in
 }
 
 // BlockData returns row/column id pairs for a block.
-func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, field string, slice uint64, block int) ([]uint64, []uint64, error) {
+func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64, block int) ([]uint64, []uint64, error) {
 	buf, err := proto.Marshal(&internal.BlockDataRequest{
 		Index: index,
 		Field: field,
-		Slice: slice,
+		Shard: shard,
 		Block: uint64(block),
 	})
 	if err != nil {
@@ -952,17 +952,17 @@ func (p Bits) Timestamps() []int64 {
 	return other
 }
 
-// GroupBySlice returns a map of bits by slice.
-func (p Bits) GroupBySlice() map[uint64][]pilosa.Bit {
+// GroupByShard returns a map of bits by shard.
+func (p Bits) GroupByShard() map[uint64][]pilosa.Bit {
 	m := make(map[uint64][]pilosa.Bit)
 	for _, bit := range p {
-		slice := bit.ColumnID / pilosa.SliceWidth
-		m[slice] = append(m[slice], bit)
+		shard := bit.ColumnID / pilosa.ShardWidth
+		m[shard] = append(m[shard], bit)
 	}
 
-	for slice, bits := range m {
+	for shard, bits := range m {
 		sort.Sort(Bits(bits))
-		m[slice] = bits
+		m[shard] = bits
 	}
 
 	return m
@@ -996,17 +996,17 @@ func (p FieldValues) Values() []int64 {
 	return other
 }
 
-// GroupBySlice returns a map of field values by slice.
-func (p FieldValues) GroupBySlice() map[uint64][]pilosa.FieldValue {
+// GroupByShard returns a map of field values by shard.
+func (p FieldValues) GroupByShard() map[uint64][]pilosa.FieldValue {
 	m := make(map[uint64][]pilosa.FieldValue)
 	for _, val := range p {
-		slice := val.ColumnID / pilosa.SliceWidth
-		m[slice] = append(m[slice], val)
+		shard := val.ColumnID / pilosa.ShardWidth
+		m[shard] = append(m[shard], val)
 	}
 
-	for slice, vals := range m {
+	for shard, vals := range m {
 		sort.Sort(FieldValues(vals))
-		m[slice] = vals
+		m[shard] = vals
 	}
 
 	return m
@@ -1027,7 +1027,7 @@ func (p BitsByPos) Less(i, j int) bool {
 
 // pos returns the row position of a row/column pair.
 func pos(rowID, columnID uint64) uint64 {
-	return (rowID * pilosa.SliceWidth) + (columnID % pilosa.SliceWidth)
+	return (rowID * pilosa.ShardWidth) + (columnID % pilosa.ShardWidth)
 }
 
 func uriPathToURL(uri *pilosa.URI, path string) url.URL {

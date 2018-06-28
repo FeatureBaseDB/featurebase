@@ -37,7 +37,7 @@ const (
 	rowLabel    = "row"
 )
 
-// Executor recursively executes calls in a PQL query across all slices.
+// Executor recursively executes calls in a PQL query across all shards.
 type Executor struct {
 	Holder *Holder
 
@@ -80,7 +80,7 @@ func NewExecutor(opts ...ExecutorOption) *Executor {
 }
 
 // Execute executes a PQL query.
-func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error) {
+func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *ExecOptions) ([]interface{}, error) {
 	// Verify that an index is set.
 	if index == "" {
 		return nil, ErrIndexRequired
@@ -108,7 +108,7 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 		}
 	}
 
-	results, err := e.execute(ctx, index, q, slices, opt)
+	results, err := e.execute(ctx, index, q, shards, opt)
 	if err != nil {
 		return nil, err
 	}
@@ -123,24 +123,24 @@ func (e *Executor) Execute(ctx context.Context, index string, q *pql.Query, slic
 	return results, nil
 }
 
-func (e *Executor) execute(ctx context.Context, index string, q *pql.Query, slices []uint64, opt *ExecOptions) ([]interface{}, error) {
-	// Don't bother calculating slices for query types that don't require it.
-	needsSlices := needsSlices(q.Calls)
+func (e *Executor) execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *ExecOptions) ([]interface{}, error) {
+	// Don't bother calculating shards for query types that don't require it.
+	needsShards := needsShards(q.Calls)
 
-	// If slices are specified, then use that value for slices. If slices aren't
+	// If shards are specified, then use that value for shards. If shards aren't
 	// specified, then include all of them.
-	if len(slices) == 0 && needsSlices {
-		// Round up the number of slices.
+	if len(shards) == 0 && needsShards {
+		// Round up the number of shards.
 		idx := e.Holder.Index(index)
 		if idx == nil {
 			return nil, ErrIndexNotFound
 		}
-		maxSlice := idx.MaxSlice()
+		maxShard := idx.MaxShard()
 
-		// Generate a slices of all slices.
-		slices = make([]uint64, maxSlice+1)
-		for i := range slices {
-			slices[i] = uint64(i)
+		// Generate a slice of all shards.
+		shards = make([]uint64, maxShard+1)
+		for i := range shards {
+			shards[i] = uint64(i)
 		}
 	}
 
@@ -152,7 +152,7 @@ func (e *Executor) execute(ctx context.Context, index string, q *pql.Query, slic
 	// Execute each call serially.
 	results := make([]interface{}, 0, len(q.Calls))
 	for _, call := range q.Calls {
-		v, err := e.executeCall(ctx, index, call, slices, opt)
+		v, err := e.executeCall(ctx, index, call, shards, opt)
 		if err != nil {
 			return nil, err
 		}
@@ -162,7 +162,7 @@ func (e *Executor) execute(ctx context.Context, index string, q *pql.Query, slic
 }
 
 // executeCall executes a call.
-func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (interface{}, error) {
+func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (interface{}, error) {
 	if err := e.validateCallArgs(c); err != nil {
 		return nil, errors.Wrap(err, "validating args")
 	}
@@ -171,18 +171,18 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	switch c.Name {
 	case "Sum":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
-		return e.executeSum(ctx, index, c, slices, opt)
+		return e.executeSum(ctx, index, c, shards, opt)
 	case "Min":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
-		return e.executeMin(ctx, index, c, slices, opt)
+		return e.executeMin(ctx, index, c, shards, opt)
 	case "Max":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
-		return e.executeMax(ctx, index, c, slices, opt)
+		return e.executeMax(ctx, index, c, shards, opt)
 	case "Clear":
 		return e.executeClearBit(ctx, index, c, opt)
 	case "Count":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
-		return e.executeCount(ctx, index, c, slices, opt)
+		return e.executeCount(ctx, index, c, shards, opt)
 	case "Set":
 		return e.executeSetBit(ctx, index, c, opt)
 	case "SetValue":
@@ -193,10 +193,10 @@ func (e *Executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return nil, e.executeSetColumnAttrs(ctx, index, c, opt)
 	case "TopN":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
-		return e.executeTopN(ctx, index, c, slices, opt)
+		return e.executeTopN(ctx, index, c, shards, opt)
 	default:
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
-		return e.executeBitmapCall(ctx, index, c, slices, opt)
+		return e.executeBitmapCall(ctx, index, c, shards, opt)
 	}
 }
 
@@ -220,7 +220,7 @@ func (e *Executor) validateCallArgs(c *pql.Call) error {
 }
 
 // executeSum executes a Sum() call.
-func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
+func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (ValCount, error) {
 	if field := c.Args["field"]; field == "" {
 		return ValCount{}, errors.New("Sum(): field required")
 	}
@@ -230,8 +230,8 @@ func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, sl
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(slice uint64) (interface{}, error) {
-		return e.executeSumCountSlice(ctx, index, c, slice)
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeSumCountShard(ctx, index, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
@@ -240,7 +240,7 @@ func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, sl
 		return other.Add(v.(ValCount))
 	}
 
-	result, err := e.mapReduce(ctx, index, slices, c, opt, mapFn, reduceFn)
+	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
 	if err != nil {
 		return ValCount{}, err
 	}
@@ -253,7 +253,7 @@ func (e *Executor) executeSum(ctx context.Context, index string, c *pql.Call, sl
 }
 
 // executeMin executes a Min() call.
-func (e *Executor) executeMin(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
+func (e *Executor) executeMin(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (ValCount, error) {
 	if field := c.Args["field"]; field == "" {
 		return ValCount{}, errors.New("Min(): field required")
 	}
@@ -263,8 +263,8 @@ func (e *Executor) executeMin(ctx context.Context, index string, c *pql.Call, sl
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(slice uint64) (interface{}, error) {
-		return e.executeMinSlice(ctx, index, c, slice)
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeMinShard(ctx, index, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
@@ -273,7 +273,7 @@ func (e *Executor) executeMin(ctx context.Context, index string, c *pql.Call, sl
 		return other.Smaller(v.(ValCount))
 	}
 
-	result, err := e.mapReduce(ctx, index, slices, c, opt, mapFn, reduceFn)
+	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
 	if err != nil {
 		return ValCount{}, err
 	}
@@ -286,7 +286,7 @@ func (e *Executor) executeMin(ctx context.Context, index string, c *pql.Call, sl
 }
 
 // executeMax executes a Max() call.
-func (e *Executor) executeMax(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (ValCount, error) {
+func (e *Executor) executeMax(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (ValCount, error) {
 	if field := c.Args["field"]; field == "" {
 		return ValCount{}, errors.New("Max(): field required")
 	}
@@ -296,8 +296,8 @@ func (e *Executor) executeMax(ctx context.Context, index string, c *pql.Call, sl
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(slice uint64) (interface{}, error) {
-		return e.executeMaxSlice(ctx, index, c, slice)
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeMaxShard(ctx, index, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
@@ -306,7 +306,7 @@ func (e *Executor) executeMax(ctx context.Context, index string, c *pql.Call, sl
 		return other.Larger(v.(ValCount))
 	}
 
-	result, err := e.mapReduce(ctx, index, slices, c, opt, mapFn, reduceFn)
+	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
 	if err != nil {
 		return ValCount{}, err
 	}
@@ -319,10 +319,10 @@ func (e *Executor) executeMax(ctx context.Context, index string, c *pql.Call, sl
 }
 
 // executeBitmapCall executes a call that returns a bitmap.
-func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (*Row, error) {
+func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (*Row, error) {
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(slice uint64) (interface{}, error) {
-		return e.executeBitmapCallSlice(ctx, index, c, slice)
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeBitmapCallShard(ctx, index, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
@@ -335,7 +335,7 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 		return other
 	}
 
-	other, err := e.mapReduce(ctx, index, slices, c, opt, mapFn, reduceFn)
+	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
 	if err != nil {
 		return nil, err
 	}
@@ -384,31 +384,31 @@ func (e *Executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 	return row, nil
 }
 
-// executeBitmapCallSlice executes a bitmap call for a single slice.
-func (e *Executor) executeBitmapCallSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
+// executeBitmapCallShard executes a bitmap call for a single shard.
+func (e *Executor) executeBitmapCallShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
 	switch c.Name {
 	case "Row":
-		return e.executeBitmapSlice(ctx, index, c, slice)
+		return e.executeBitmapShard(ctx, index, c, shard)
 	case "Difference":
-		return e.executeDifferenceSlice(ctx, index, c, slice)
+		return e.executeDifferenceShard(ctx, index, c, shard)
 	case "Intersect":
-		return e.executeIntersectSlice(ctx, index, c, slice)
+		return e.executeIntersectShard(ctx, index, c, shard)
 	case "Range":
-		return e.executeRangeSlice(ctx, index, c, slice)
+		return e.executeRangeShard(ctx, index, c, shard)
 	case "Union":
-		return e.executeUnionSlice(ctx, index, c, slice)
+		return e.executeUnionShard(ctx, index, c, shard)
 	case "Xor":
-		return e.executeXorSlice(ctx, index, c, slice)
+		return e.executeXorShard(ctx, index, c, shard)
 	default:
 		return nil, fmt.Errorf("unknown call: %s", c.Name)
 	}
 }
 
-// executeSumCountSlice calculates the sum and count for bsiGroups on a slice.
-func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
+// executeSumCountShard calculates the sum and count for bsiGroups on a shard.
+func (e *Executor) executeSumCountShard(ctx context.Context, index string, c *pql.Call, shard uint64) (ValCount, error) {
 	var filter *Row
 	if len(c.Children) == 1 {
-		row, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
+		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
 		if err != nil {
 			return ValCount{}, errors.Wrap(err, "executing bitmap call")
 		}
@@ -427,7 +427,7 @@ func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pq
 		return ValCount{}, nil
 	}
 
-	fragment := e.Holder.Fragment(index, fieldName, viewBSIGroupPrefix+fieldName, slice)
+	fragment := e.Holder.Fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
 	if fragment == nil {
 		return ValCount{}, nil
 	}
@@ -442,11 +442,11 @@ func (e *Executor) executeSumCountSlice(ctx context.Context, index string, c *pq
 	}, nil
 }
 
-// executeMinSlice calculates the min for bsiGroups on a slice.
-func (e *Executor) executeMinSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
+// executeMinShard calculates the min for bsiGroups on a shard.
+func (e *Executor) executeMinShard(ctx context.Context, index string, c *pql.Call, shard uint64) (ValCount, error) {
 	var filter *Row
 	if len(c.Children) == 1 {
-		row, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
+		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
 		if err != nil {
 			return ValCount{}, err
 		}
@@ -465,7 +465,7 @@ func (e *Executor) executeMinSlice(ctx context.Context, index string, c *pql.Cal
 		return ValCount{}, nil
 	}
 
-	fragment := e.Holder.Fragment(index, fieldName, viewBSIGroupPrefix+fieldName, slice)
+	fragment := e.Holder.Fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
 	if fragment == nil {
 		return ValCount{}, nil
 	}
@@ -480,11 +480,11 @@ func (e *Executor) executeMinSlice(ctx context.Context, index string, c *pql.Cal
 	}, nil
 }
 
-// executeMaxSlice calculates the max for bsiGroups on a slice.
-func (e *Executor) executeMaxSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (ValCount, error) {
+// executeMaxShard calculates the max for bsiGroups on a shard.
+func (e *Executor) executeMaxShard(ctx context.Context, index string, c *pql.Call, shard uint64) (ValCount, error) {
 	var filter *Row
 	if len(c.Children) == 1 {
-		row, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
+		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
 		if err != nil {
 			return ValCount{}, err
 		}
@@ -503,7 +503,7 @@ func (e *Executor) executeMaxSlice(ctx context.Context, index string, c *pql.Cal
 		return ValCount{}, nil
 	}
 
-	fragment := e.Holder.Fragment(index, fieldName, viewBSIGroupPrefix+fieldName, slice)
+	fragment := e.Holder.Fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
 	if fragment == nil {
 		return ValCount{}, nil
 	}
@@ -521,7 +521,7 @@ func (e *Executor) executeMaxSlice(ctx context.Context, index string, c *pql.Cal
 // executeTopN executes a TopN() call.
 // This first performs the TopN() to determine the top results and then
 // requeries to retrieve the full counts for each of the top results.
-func (e *Executor) executeTopN(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) ([]Pair, error) {
+func (e *Executor) executeTopN(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *ExecOptions) ([]Pair, error) {
 	idsArg, _, err := c.UintSliceArg("ids")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopN: %v", err)
@@ -532,7 +532,7 @@ func (e *Executor) executeTopN(ctx context.Context, index string, c *pql.Call, s
 	}
 
 	// Execute original query.
-	pairs, err := e.executeTopNSlices(ctx, index, c, slices, opt)
+	pairs, err := e.executeTopNShards(ctx, index, c, shards, opt)
 	if err != nil {
 		return nil, errors.Wrap(err, "finding top results")
 	}
@@ -549,7 +549,7 @@ func (e *Executor) executeTopN(ctx context.Context, index string, c *pql.Call, s
 	sort.Sort(uint64Slice(ids))
 	other.Args["ids"] = ids
 
-	trimmedList, err := e.executeTopNSlices(ctx, index, other, slices, opt)
+	trimmedList, err := e.executeTopNShards(ctx, index, other, shards, opt)
 	if err != nil {
 		return nil, errors.Wrap(err, "retrieving full counts")
 	}
@@ -560,10 +560,10 @@ func (e *Executor) executeTopN(ctx context.Context, index string, c *pql.Call, s
 	return trimmedList, nil
 }
 
-func (e *Executor) executeTopNSlices(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) ([]Pair, error) {
+func (e *Executor) executeTopNShards(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *ExecOptions) ([]Pair, error) {
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(slice uint64) (interface{}, error) {
-		return e.executeTopNSlice(ctx, index, c, slice)
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeTopNShard(ctx, index, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
@@ -572,7 +572,7 @@ func (e *Executor) executeTopNSlices(ctx context.Context, index string, c *pql.C
 		return Pairs(other).Add(v.([]Pair))
 	}
 
-	other, err := e.mapReduce(ctx, index, slices, c, opt, mapFn, reduceFn)
+	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
 	if err != nil {
 		return nil, err
 	}
@@ -584,32 +584,32 @@ func (e *Executor) executeTopNSlices(ctx context.Context, index string, c *pql.C
 	return results, nil
 }
 
-// executeTopNSlice executes a TopN call for a single slice.
-func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Call, slice uint64) ([]Pair, error) {
+// executeTopNShard executes a TopN call for a single shard.
+func (e *Executor) executeTopNShard(ctx context.Context, index string, c *pql.Call, shard uint64) ([]Pair, error) {
 	field, _ := c.Args["_field"].(string)
 	n, _, err := c.UintArg("n")
 	if err != nil {
-		return nil, fmt.Errorf("executeTopNSlice: %v", err)
+		return nil, fmt.Errorf("executeTopNShard: %v", err)
 	}
 	attrName, _ := c.Args["attrName"].(string)
 	rowIDs, _, err := c.UintSliceArg("ids")
 	if err != nil {
-		return nil, fmt.Errorf("executeTopNSlice: %v", err)
+		return nil, fmt.Errorf("executeTopNShard: %v", err)
 	}
 	minThreshold, _, err := c.UintArg("threshold")
 	if err != nil {
-		return nil, fmt.Errorf("executeTopNSlice: %v", err)
+		return nil, fmt.Errorf("executeTopNShard: %v", err)
 	}
 	attrValues, _ := c.Args["attrValues"].([]interface{})
 	tanimotoThreshold, _, err := c.UintArg("tanimotoThreshold")
 	if err != nil {
-		return nil, fmt.Errorf("executeTopNSlice: %v", err)
+		return nil, fmt.Errorf("executeTopNShard: %v", err)
 	}
 
 	// Retrieve bitmap used to intersect.
 	var src *Row
 	if len(c.Children) == 1 {
-		row, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
+		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
 		if err != nil {
 			return nil, err
 		}
@@ -623,7 +623,7 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 		field = defaultField
 	}
 
-	f := e.Holder.Fragment(index, field, ViewStandard, slice)
+	f := e.Holder.Fragment(index, field, ViewStandard, shard)
 	if f == nil {
 		return nil, nil
 	}
@@ -646,14 +646,14 @@ func (e *Executor) executeTopNSlice(ctx context.Context, index string, c *pql.Ca
 	})
 }
 
-// executeDifferenceSlice executes a difference() call for a local slice.
-func (e *Executor) executeDifferenceSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
+// executeDifferenceShard executes a difference() call for a local shard.
+func (e *Executor) executeDifferenceShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
 	var other *Row
 	if len(c.Children) == 0 {
 		return nil, fmt.Errorf("empty Difference query is currently not supported")
 	}
 	for i, input := range c.Children {
-		row, err := e.executeBitmapCallSlice(ctx, index, input, slice)
+		row, err := e.executeBitmapCallShard(ctx, index, input, shard)
 		if err != nil {
 			return nil, err
 		}
@@ -668,7 +668,7 @@ func (e *Executor) executeDifferenceSlice(ctx context.Context, index string, c *
 	return other, nil
 }
 
-func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
+func (e *Executor) executeBitmapShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
 	// Fetch column label from index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
@@ -693,21 +693,21 @@ func (e *Executor) executeBitmapSlice(ctx context.Context, index string, c *pql.
 		return nil, fmt.Errorf("Row() must specify %v", rowLabel)
 	}
 
-	frag := e.Holder.Fragment(index, fieldName, ViewStandard, slice)
+	frag := e.Holder.Fragment(index, fieldName, ViewStandard, shard)
 	if frag == nil {
 		return NewRow(), nil
 	}
 	return frag.row(rowID), nil
 }
 
-// executeIntersectSlice executes a intersect() call for a local slice.
-func (e *Executor) executeIntersectSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
+// executeIntersectShard executes a intersect() call for a local shard.
+func (e *Executor) executeIntersectShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
 	var other *Row
 	if len(c.Children) == 0 {
 		return nil, fmt.Errorf("empty Intersect query is currently not supported")
 	}
 	for i, input := range c.Children {
-		row, err := e.executeBitmapCallSlice(ctx, index, input, slice)
+		row, err := e.executeBitmapCallShard(ctx, index, input, shard)
 		if err != nil {
 			return nil, err
 		}
@@ -722,11 +722,11 @@ func (e *Executor) executeIntersectSlice(ctx context.Context, index string, c *p
 	return other, nil
 }
 
-// executeRangeSlice executes a range() call for a local slice.
-func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
+// executeRangeShard executes a range() call for a local shard.
+func (e *Executor) executeRangeShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
 	// Handle bsiGroup ranges differently.
 	if c.HasConditionArg() {
-		return e.executeBSIGroupRangeSlice(ctx, index, c, slice)
+		return e.executeBSIGroupRangeShard(ctx, index, c, shard)
 	}
 
 	// Parse field.
@@ -750,7 +750,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	// Read row & column id.
 	rowID, rowOK, err := c.UintArg(fieldName)
 	if err != nil {
-		return nil, fmt.Errorf("executeRangeSlice - reading row: %v", err)
+		return nil, fmt.Errorf("executeRangeShard - reading row: %v", err)
 	}
 	if !rowOK {
 		return nil, fmt.Errorf("Range() must specify %q", rowLabel)
@@ -785,7 +785,7 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	// Union bitmaps across all time-based views.
 	row := &Row{}
 	for _, view := range viewsByTimeRange(ViewStandard, startTime, endTime, q) {
-		f := e.Holder.Fragment(index, fieldName, view, slice)
+		f := e.Holder.Fragment(index, fieldName, view, shard)
 		if f == nil {
 			continue
 		}
@@ -795,8 +795,8 @@ func (e *Executor) executeRangeSlice(ctx context.Context, index string, c *pql.C
 	return row, nil
 }
 
-// executeBSIGroupRangeSlice executes a range(bsiGroup) call for a local slice.
-func (e *Executor) executeBSIGroupRangeSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
+// executeBSIGroupRangeShard executes a range(bsiGroup) call for a local shard.
+func (e *Executor) executeBSIGroupRangeShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
 	// Only one conditional should be present.
 	if len(c.Args) == 0 {
 		return nil, errors.New("Range(): condition required")
@@ -836,7 +836,7 @@ func (e *Executor) executeBSIGroupRangeSlice(ctx context.Context, index string, 
 		}
 
 		// Retrieve fragment.
-		frag := e.Holder.Fragment(index, fieldName, viewBSIGroupPrefix+fieldName, slice)
+		frag := e.Holder.Fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
 		if frag == nil {
 			return NewRow(), nil
 		}
@@ -857,7 +857,7 @@ func (e *Executor) executeBSIGroupRangeSlice(ctx context.Context, index string, 
 
 		// The reason we don't just call:
 		//     return f.RangeBetween(fieldName, predicates[0], predicates[1])
-		// here is because we need the call to be slice-specific.
+		// here is because we need the call to be shard-specific.
 
 		// Find bsiGroup.
 		bsig := f.bsiGroup(fieldName)
@@ -871,7 +871,7 @@ func (e *Executor) executeBSIGroupRangeSlice(ctx context.Context, index string, 
 		}
 
 		// Retrieve fragment.
-		frag := e.Holder.Fragment(index, fieldName, viewBSIGroupPrefix+fieldName, slice)
+		frag := e.Holder.Fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
 		if frag == nil {
 			return NewRow(), nil
 		}
@@ -904,7 +904,7 @@ func (e *Executor) executeBSIGroupRangeSlice(ctx context.Context, index string, 
 		}
 
 		// Retrieve fragment.
-		frag := e.Holder.Fragment(index, fieldName, viewBSIGroupPrefix+fieldName, slice)
+		frag := e.Holder.Fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
 		if frag == nil {
 			return NewRow(), nil
 		}
@@ -925,11 +925,11 @@ func (e *Executor) executeBSIGroupRangeSlice(ctx context.Context, index string, 
 	}
 }
 
-// executeUnionSlice executes a union() call for a local slice.
-func (e *Executor) executeUnionSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
+// executeUnionShard executes a union() call for a local shard.
+func (e *Executor) executeUnionShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
 	other := NewRow()
 	for i, input := range c.Children {
-		row, err := e.executeBitmapCallSlice(ctx, index, input, slice)
+		row, err := e.executeBitmapCallShard(ctx, index, input, shard)
 		if err != nil {
 			return nil, err
 		}
@@ -944,11 +944,11 @@ func (e *Executor) executeUnionSlice(ctx context.Context, index string, c *pql.C
 	return other, nil
 }
 
-// executeXorSlice executes a xor() call for a local slice.
-func (e *Executor) executeXorSlice(ctx context.Context, index string, c *pql.Call, slice uint64) (*Row, error) {
+// executeXorShard executes a xor() call for a local shard.
+func (e *Executor) executeXorShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
 	other := NewRow()
 	for i, input := range c.Children {
-		row, err := e.executeBitmapCallSlice(ctx, index, input, slice)
+		row, err := e.executeBitmapCallShard(ctx, index, input, shard)
 		if err != nil {
 			return nil, err
 		}
@@ -964,7 +964,7 @@ func (e *Executor) executeXorSlice(ctx context.Context, index string, c *pql.Cal
 }
 
 // executeCount executes a count() call.
-func (e *Executor) executeCount(ctx context.Context, index string, c *pql.Call, slices []uint64, opt *ExecOptions) (uint64, error) {
+func (e *Executor) executeCount(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (uint64, error) {
 	if len(c.Children) == 0 {
 		return 0, errors.New("Count() requires an input bitmap")
 	} else if len(c.Children) > 1 {
@@ -972,8 +972,8 @@ func (e *Executor) executeCount(ctx context.Context, index string, c *pql.Call, 
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(slice uint64) (interface{}, error) {
-		row, err := e.executeBitmapCallSlice(ctx, index, c.Children[0], slice)
+	mapFn := func(shard uint64) (interface{}, error) {
+		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
 		if err != nil {
 			return 0, err
 		}
@@ -986,7 +986,7 @@ func (e *Executor) executeCount(ctx context.Context, index string, c *pql.Call, 
 		return other + v.(uint64)
 	}
 
-	result, err := e.mapReduce(ctx, index, slices, c, opt, mapFn, reduceFn)
+	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
 	if err != nil {
 		return 0, err
 	}
@@ -1032,9 +1032,9 @@ func (e *Executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 
 // executeClearBitField executes a Clear() call for a single view.
 func (e *Executor) executeClearBitField(ctx context.Context, index string, c *pql.Call, f *Field, colID, rowID uint64, opt *ExecOptions) (bool, error) {
-	slice := colID / SliceWidth
+	shard := colID / ShardWidth
 	ret := false
-	for _, node := range e.Cluster.sliceNodes(index, slice) {
+	for _, node := range e.Cluster.shardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
 			val, err := f.ClearBit(rowID, colID)
@@ -1107,10 +1107,10 @@ func (e *Executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 
 // executeSetBitField executes a Set() call for a specific view.
 func (e *Executor) executeSetBitField(ctx context.Context, index string, c *pql.Call, f *Field, colID, rowID uint64, timestamp *time.Time, opt *ExecOptions) (bool, error) {
-	slice := colID / SliceWidth
+	shard := colID / ShardWidth
 	ret := false
 
-	for _, node := range e.Cluster.sliceNodes(index, slice) {
+	for _, node := range e.Cluster.shardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
 			val, err := f.SetBit(rowID, colID, timestamp)
@@ -1389,12 +1389,12 @@ func (e *Executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 	return nil
 }
 
-// exec executes a PQL query remotely for a set of slices on a node.
-func (e *Executor) remoteExec(ctx context.Context, node *Node, index string, q *pql.Query, slices []uint64, opt *ExecOptions) (results []interface{}, err error) {
+// exec executes a PQL query remotely for a set of shards on a node.
+func (e *Executor) remoteExec(ctx context.Context, node *Node, index string, q *pql.Query, shards []uint64, opt *ExecOptions) (results []interface{}, err error) {
 	// Encode request object.
 	pbreq := &internal.QueryRequest{
 		Query:  q.String(),
-		Slices: slices,
+		Shards: shards,
 		Remote: true,
 	}
 
@@ -1439,29 +1439,29 @@ func (e *Executor) remoteExec(ctx context.Context, node *Node, index string, q *
 	return results, nil
 }
 
-// slicesByNode returns a mapping of nodes to slices.
-// Returns errSliceUnavailable if a slice cannot be allocated to a node.
-func (e *Executor) slicesByNode(nodes []*Node, index string, slices []uint64) (map[*Node][]uint64, error) {
+// shardsByNode returns a mapping of nodes to shards.
+// Returns errShardUnavailable if a shard cannot be allocated to a node.
+func (e *Executor) shardsByNode(nodes []*Node, index string, shards []uint64) (map[*Node][]uint64, error) {
 	m := make(map[*Node][]uint64)
 
 loop:
-	for _, slice := range slices {
-		for _, node := range e.Cluster.sliceNodes(index, slice) {
+	for _, shard := range shards {
+		for _, node := range e.Cluster.shardNodes(index, shard) {
 			if Nodes(nodes).Contains(node) {
-				m[node] = append(m[node], slice)
+				m[node] = append(m[node], shard)
 				continue loop
 			}
 		}
-		return nil, errSliceUnavailable
+		return nil, errShardUnavailable
 	}
 	return m, nil
 }
 
 // mapReduce maps and reduces data across the cluster.
 //
-// If a mapping of slices to a node fails then the slices are resplit across
+// If a mapping of shards to a node fails then the shards are resplit across
 // secondary nodes and retried. This continues to occur until all nodes are exhausted.
-func (e *Executor) mapReduce(ctx context.Context, index string, slices []uint64, c *pql.Call, opt *ExecOptions, mapFn mapFunc, reduceFn reduceFunc) (interface{}, error) {
+func (e *Executor) mapReduce(ctx context.Context, index string, shards []uint64, c *pql.Call, opt *ExecOptions, mapFn mapFunc, reduceFn reduceFunc) (interface{}, error) {
 	ch := make(chan mapResponse)
 
 	// Wrap context with a cancel to kill goroutines on exit.
@@ -1480,13 +1480,13 @@ func (e *Executor) mapReduce(ctx context.Context, index string, slices []uint64,
 	}
 
 	// Start mapping across all primary owners.
-	if err := e.mapper(ctx, ch, nodes, index, slices, c, opt, mapFn, reduceFn); err != nil {
+	if err := e.mapper(ctx, ch, nodes, index, shards, c, opt, mapFn, reduceFn); err != nil {
 		return nil, errors.Wrap(err, "starting mapper")
 	}
 
 	// Iterate over all map responses and reduce.
 	var result interface{}
-	var maxSlice int
+	var maxShard int
 	for {
 		select {
 		case <-ctx.Done():
@@ -1500,7 +1500,7 @@ func (e *Executor) mapReduce(ctx context.Context, index string, slices []uint64,
 				nodes = Nodes(nodes).Filter(resp.node)
 
 				// Begin mapper against secondary nodes.
-				if err := e.mapper(ctx, ch, nodes, index, resp.slices, c, opt, mapFn, reduceFn); err == errSliceUnavailable {
+				if err := e.mapper(ctx, ch, nodes, index, resp.shards, c, opt, mapFn, reduceFn); err == errShardUnavailable {
 					return nil, resp.err
 				} else if err != nil {
 					return nil, err
@@ -1511,32 +1511,32 @@ func (e *Executor) mapReduce(ctx context.Context, index string, slices []uint64,
 			// Reduce value.
 			result = reduceFn(result, resp.result)
 
-			// If all slices have been processed then return.
-			maxSlice += len(resp.slices)
-			if maxSlice >= len(slices) {
+			// If all shards have been processed then return.
+			maxShard += len(resp.shards)
+			if maxShard >= len(shards) {
 				return result, nil
 			}
 		}
 	}
 }
 
-func (e *Executor) mapper(ctx context.Context, ch chan mapResponse, nodes []*Node, index string, slices []uint64, c *pql.Call, opt *ExecOptions, mapFn mapFunc, reduceFn reduceFunc) error {
-	// Group slices together by nodes.
-	m, err := e.slicesByNode(nodes, index, slices)
+func (e *Executor) mapper(ctx context.Context, ch chan mapResponse, nodes []*Node, index string, shards []uint64, c *pql.Call, opt *ExecOptions, mapFn mapFunc, reduceFn reduceFunc) error {
+	// Group shards together by nodes.
+	m, err := e.shardsByNode(nodes, index, shards)
 	if err != nil {
 		return err
 	}
 
 	// Execute each node in a separate goroutine.
-	for n, nodeSlices := range m {
-		go func(n *Node, nodeSlices []uint64) {
-			resp := mapResponse{node: n, slices: nodeSlices}
+	for n, nodeShards := range m {
+		go func(n *Node, nodeShards []uint64) {
+			resp := mapResponse{node: n, shards: nodeShards}
 
-			// Send local slices to mapper, otherwise remote exec.
+			// Send local shards to mapper, otherwise remote exec.
 			if n.ID == e.Node.ID {
-				resp.result, resp.err = e.mapperLocal(ctx, nodeSlices, mapFn, reduceFn)
+				resp.result, resp.err = e.mapperLocal(ctx, nodeShards, mapFn, reduceFn)
 			} else if !opt.Remote {
-				results, err := e.remoteExec(ctx, n, index, &pql.Query{Calls: []*pql.Call{c}}, nodeSlices, opt)
+				results, err := e.remoteExec(ctx, n, index, &pql.Query{Calls: []*pql.Call{c}}, nodeShards, opt)
 				if len(results) > 0 {
 					resp.result = results[0]
 				}
@@ -1548,30 +1548,30 @@ func (e *Executor) mapper(ctx context.Context, ch chan mapResponse, nodes []*Nod
 			case <-ctx.Done():
 			case ch <- resp:
 			}
-		}(n, nodeSlices)
+		}(n, nodeShards)
 	}
 
 	return nil
 }
 
 // mapperLocal performs map & reduce entirely on the local node.
-func (e *Executor) mapperLocal(ctx context.Context, slices []uint64, mapFn mapFunc, reduceFn reduceFunc) (interface{}, error) {
-	ch := make(chan mapResponse, len(slices))
+func (e *Executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFunc, reduceFn reduceFunc) (interface{}, error) {
+	ch := make(chan mapResponse, len(shards))
 
-	for _, slice := range slices {
-		go func(slice uint64) {
-			result, err := mapFn(slice)
+	for _, shard := range shards {
+		go func(shard uint64) {
+			result, err := mapFn(shard)
 
 			// Return response to the channel.
 			select {
 			case <-ctx.Done():
 			case ch <- mapResponse{result: result, err: err}:
 			}
-		}(slice)
+		}(shard)
 	}
 
 	// Reduce results
-	var maxSlice int
+	var maxShard int
 	var result interface{}
 	for {
 		select {
@@ -1582,11 +1582,11 @@ func (e *Executor) mapperLocal(ctx context.Context, slices []uint64, mapFn mapFu
 				return nil, resp.err
 			}
 			result = reduceFn(result, resp.result)
-			maxSlice++
+			maxShard++
 		}
 
-		// Exit once all slices are processed.
-		if maxSlice == len(slices) {
+		// Exit once all shards are processed.
+		if maxShard == len(shards) {
 			return result, nil
 		}
 	}
@@ -1695,16 +1695,16 @@ func (e *Executor) translateResult(index string, idx *Index, call *pql.Call, res
 	return result, nil
 }
 
-// errSliceUnavailable is a marker error if no nodes are available.
-var errSliceUnavailable = errors.New("slice unavailable")
+// errShardUnavailable is a marker error if no nodes are available.
+var errShardUnavailable = errors.New("shard unavailable")
 
-type mapFunc func(slice uint64) (interface{}, error)
+type mapFunc func(shard uint64) (interface{}, error)
 
 type reduceFunc func(prev, v interface{}) interface{}
 
 type mapResponse struct {
 	node   *Node
-	slices []uint64
+	shards []uint64
 
 	result interface{}
 	err    error
@@ -1740,7 +1740,7 @@ func hasOnlySetRowAttrs(calls []*pql.Call) bool {
 	return true
 }
 
-func needsSlices(calls []*pql.Call) bool {
+func needsShards(calls []*pql.Call) bool {
 	if len(calls) == 0 {
 		return false
 	}

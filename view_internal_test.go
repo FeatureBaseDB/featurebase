@@ -39,27 +39,27 @@ func TestView_DeleteFragment(t *testing.T) {
 	v := mustOpenView("i", "f", "v")
 	defer v.close()
 
-	slice := uint64(9)
+	shard := uint64(9)
 
 	// Create fragment.
-	fragment, err := v.CreateFragmentIfNotExists(slice)
+	fragment, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		t.Fatal(err)
 	} else if fragment == nil {
 		t.Fatal("expected fragment")
 	}
 
-	err = v.deleteFragment(slice)
+	err = v.deleteFragment(shard)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if v.Fragment(slice) != nil {
+	if v.Fragment(shard) != nil {
 		t.Fatal("fragment still exists in view")
 	}
 
-	// Recreate fragment with same slice, verify that the old fragment was not reused.
-	fragment2, err := v.CreateFragmentIfNotExists(slice)
+	// Recreate fragment with same shard, verify that the old fragment was not reused.
+	fragment2, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		t.Fatal(err)
 	} else if fragment == fragment2 {

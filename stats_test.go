@@ -39,43 +39,43 @@ func TestMultiStatClient_Expvar(t *testing.T) {
 
 	hldr.SetBit("d", "f", 0, 0)
 	hldr.SetBit("d", "f", 0, 1)
-	hldr.SetBit("d", "f", 0, SliceWidth)
-	hldr.SetBit("d", "f", 0, SliceWidth+2)
+	hldr.SetBit("d", "f", 0, ShardWidth)
+	hldr.SetBit("d", "f", 0, ShardWidth+2)
 	hldr.ClearBit("d", "f", 0, 1)
 
-	if pilosa.Expvar.String() != `{"index:d": {"field:f": {"view:standard": {"slice:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "slice:1": {"rows": 0, "setBit": 2}}}}}` {
+	if pilosa.Expvar.String() != `{"index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}}` {
 		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
 	}
 
 	hldr.Stats.CountWithCustomTags("cc", 1, 1.0, []string{"foo:bar"})
-	if pilosa.Expvar.String() != `{"cc": 1, "index:d": {"field:f": {"view:standard": {"slice:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "slice:1": {"rows": 0, "setBit": 2}}}}}` {
+	if pilosa.Expvar.String() != `{"cc": 1, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}}` {
 		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
 	}
 
 	// Gauge creates a unique key, subsequent Gauge calls will overwrite
 	hldr.Stats.Gauge("g", 5, 1.0)
 	hldr.Stats.Gauge("g", 8, 1.0)
-	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"field:f": {"view:standard": {"slice:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "slice:1": {"rows": 0, "setBit": 2}}}}}` {
+	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}}` {
 		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
 	}
 
 	// Set creates a unique key, subsequent sets will overwrite
 	hldr.Stats.Set("s", "4", 1.0)
 	hldr.Stats.Set("s", "7", 1.0)
-	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"field:f": {"view:standard": {"slice:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "slice:1": {"rows": 0, "setBit": 2}}}}, "s": "7"}` {
+	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}, "s": "7"}` {
 		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
 	}
 
 	// Record timing duration and a uniquely Set key/value
 	dur, _ := time.ParseDuration("123us")
 	hldr.Stats.Timing("tt", dur, 1.0)
-	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"field:f": {"view:standard": {"slice:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "slice:1": {"rows": 0, "setBit": 2}}}}, "s": "7", "tt": 123µs}` {
+	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}, "s": "7", "tt": 123µs}` {
 		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
 	}
 
 	// Expvar histogram is implemented as a gauge
 	hldr.Stats.Histogram("hh", 3, 1.0)
-	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "hh": 3, "index:d": {"field:f": {"view:standard": {"slice:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "slice:1": {"rows": 0, "setBit": 2}}}}, "s": "7", "tt": 123µs}` {
+	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "hh": 3, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}, "s": "7", "tt": 123µs}` {
 		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
 	}
 
@@ -91,8 +91,8 @@ func TestStatsCount_TopN(t *testing.T) {
 
 	hldr.SetBit("d", "f", 0, 0)
 	hldr.SetBit("d", "f", 0, 1)
-	hldr.SetBit("d", "f", 0, SliceWidth)
-	hldr.SetBit("d", "f", 0, SliceWidth+2)
+	hldr.SetBit("d", "f", 0, ShardWidth)
+	hldr.SetBit("d", "f", 0, ShardWidth+2)
 
 	// Execute query.
 	called := false

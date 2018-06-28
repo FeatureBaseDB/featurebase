@@ -118,7 +118,7 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 		}
 	}
 
-	// Import each path and import by slice.
+	// Import each path and import by shard.
 	for _, path := range cmd.Paths {
 		logger.Printf("parsing: %s", path)
 		if err := cmd.importPath(ctx, fieldType, path); err != nil {
@@ -243,18 +243,18 @@ func (cmd *ImportCommand) bufferBits(ctx context.Context, path string) error {
 func (cmd *ImportCommand) importBits(ctx context.Context, bits []pilosa.Bit) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
-	// Group bits by slice.
+	// Group bits by shard.
 	logger.Printf("grouping %d bits", len(bits))
-	bitsBySlice := http.Bits(bits).GroupBySlice()
+	bitsByShard := http.Bits(bits).GroupByShard()
 
 	// Parse path into bits.
-	for slice, chunk := range bitsBySlice {
+	for shard, chunk := range bitsByShard {
 		if cmd.Sort {
 			sort.Sort(http.BitsByPos(chunk))
 		}
 
-		logger.Printf("importing slice: %d, n=%d", slice, len(chunk))
-		if err := cmd.Client.Import(ctx, cmd.Index, cmd.Field, slice, chunk); err != nil {
+		logger.Printf("importing shard: %d, n=%d", shard, len(chunk))
+		if err := cmd.Client.Import(ctx, cmd.Index, cmd.Field, shard, chunk); err != nil {
 			return errors.Wrap(err, "importing")
 		}
 	}
@@ -437,18 +437,18 @@ func (cmd *ImportCommand) bufferValues(ctx context.Context, path string) error {
 func (cmd *ImportCommand) importValues(ctx context.Context, vals []pilosa.FieldValue) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
-	// Group vals by slice.
+	// Group vals by shard.
 	logger.Printf("grouping %d vals", len(vals))
-	valsBySlice := http.FieldValues(vals).GroupBySlice()
+	valsByShard := http.FieldValues(vals).GroupByShard()
 
 	// Parse path into FieldValues.
-	for slice, vals := range valsBySlice {
+	for shard, vals := range valsByShard {
 		if cmd.Sort {
 			sort.Sort(http.FieldValues(vals))
 		}
 
-		logger.Printf("importing slice: %d, n=%d", slice, len(vals))
-		if err := cmd.Client.ImportValue(ctx, cmd.Index, cmd.Field, slice, vals); err != nil {
+		logger.Printf("importing shard: %d, n=%d", shard, len(vals))
+		if err := cmd.Client.ImportValue(ctx, cmd.Index, cmd.Field, shard, vals); err != nil {
 			return errors.Wrap(err, "importing values")
 		}
 	}
