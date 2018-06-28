@@ -108,8 +108,8 @@ func DecodeNode(node *internal.Node) *Node {
 	}
 }
 
-func DecodeNodeEvent(ne *internal.NodeEventMessage) *NodeEvent {
-	return &NodeEvent{
+func DecodeNodeEvent(ne *internal.NodeEventMessage) *nodeEvent {
+	return &nodeEvent{
 		Event: NodeEventType(ne.Event),
 		Node:  DecodeNode(ne.Node),
 	}
@@ -1612,7 +1612,7 @@ func (c *Cluster) considerTopology() error {
 }
 
 // ReceiveEvent represents an implementation of EventHandler.
-func (c *Cluster) ReceiveEvent(e *NodeEvent) error {
+func (c *Cluster) ReceiveEvent(e *nodeEvent) error {
 	// Ignore events sent from this node.
 	if e.Node.ID == c.Node.ID {
 		return nil

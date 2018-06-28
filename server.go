@@ -41,7 +41,7 @@ const (
 
 // Ensure Server implements interfaces.
 var _ Broadcaster = &Server{}
-var _ BroadcastHandler = &Server{}
+var _ MemberServer = &Server{}
 
 // Server represents a holder wrapped by a running HTTP server.
 type Server struct {
@@ -701,11 +701,6 @@ func (s *Server) monitorRuntime() {
 	}
 }
 
-// ReceiveEvent implements the EventHandler interface.
-func (s *Server) ReceiveEvent(e *NodeEvent) error {
-	return s.cluster.ReceiveEvent(e)
-}
-
 // countOpenFiles on operating systems that support lsof.
 func countOpenFiles() (int, error) {
 	switch runtime.GOOS {
@@ -737,4 +732,11 @@ func expandDirName(path string) (string, error) {
 		return filepath.Join(HomeDir, strings.TrimPrefix(path, prefix)), nil
 	}
 	return path, nil
+}
+
+type MemberServer interface {
+	ReceiveMessage(proto.Message) error
+	LocalStatus() (proto.Message, error)
+	HandleRemoteStatus(proto.Message) error
+	Node() *Node
 }

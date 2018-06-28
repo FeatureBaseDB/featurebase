@@ -39,11 +39,10 @@ var _ memberlist.Delegate = &GossipMemberSet{}
 type GossipMemberSet struct {
 	mu         sync.RWMutex
 	memberlist *memberlist.Memberlist
-	handler    pilosa.BroadcastHandler
 
 	broadcasts *memberlist.TransmitLimitedQueue
 
-	pserver *pilosa.Server
+	pserver pilosa.MemberServer
 	config  *gossipConfig
 
 	Logger pilosa.Logger
@@ -238,7 +237,7 @@ func (g *GossipMemberSet) NotifyMsg(b []byte) {
 		g.Logger.Printf("unmarshal message error: %s", err)
 		return
 	}
-	if err := g.handler.ReceiveMessage(m); err != nil {
+	if err := g.pserver.ReceiveMessage(m); err != nil {
 		g.Logger.Printf("receive message error: %s", err)
 		return
 	}

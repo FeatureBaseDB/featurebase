@@ -14,8 +14,7 @@
 
 package pilosa
 
-// NodeEventType are the types of events that can be sent from the
-// ChannelEventDelegate.
+// NodeEventType are the types of node events.
 type NodeEventType int
 
 const (
@@ -24,14 +23,8 @@ const (
 	NodeUpdate
 )
 
-// NodeEvent is a single event related to node activity in the cluster.
-type NodeEvent struct {
+// nodeEvent is a single event related to node activity in the cluster.
+type nodeEvent struct {
 	Event NodeEventType
 	Node  *Node
-}
-
-// EventHandler is the interface for the pilosa object which knows how to
-// handle broadcast messages. (Hint: this is implemented by pilosa.Server)
-type EventHandler interface {
-	ReceiveEvent(e *NodeEvent) error
 }
