@@ -54,13 +54,6 @@ type GossipMemberSet struct {
 	gossipEventReceiver *gossipEventReceiver
 }
 
-// GetBindAddr returns the gossip bind address based on config and auto bind port.
-// This method is currently only used in a test scenario where a second node needs
-// the auto-bind address of the first node to use as its gossip seed.
-func (g *GossipMemberSet) GetBindAddr() string {
-	return fmt.Sprintf("%s:%d", g.config.memberlistConfig.BindAddr, g.config.memberlistConfig.BindPort)
-}
-
 // Open implements the MemberSet interface to start network activity.
 func (g *GossipMemberSet) Open() error {
 	err := g.gossipEventReceiver.Start(g.pserver)
@@ -170,7 +163,7 @@ func NewGossipMemberSet(cfg Config, s *pilosa.Server, options ...GossipMemberSet
 			return nil, errors.Wrap(err, "executing option")
 		}
 	}
-	ger := NewGossipEventReceiver(g.logger)
+	ger := newGossipEventReceiver(g.logger)
 	g.gossipEventReceiver = ger
 
 	g.handler = s
@@ -309,8 +302,8 @@ type gossipEventReceiver struct {
 	Logger *log.Logger
 }
 
-// NewGossipEventReceiver returns a new instance of GossipEventReceiver.
-func NewGossipEventReceiver(logger *log.Logger) *gossipEventReceiver {
+// newGossipEventReceiver returns a new instance of GossipEventReceiver.
+func newGossipEventReceiver(logger *log.Logger) *gossipEventReceiver {
 	return &gossipEventReceiver{
 		ch:     make(chan memberlist.NodeEvent, 1),
 		Logger: logger,
