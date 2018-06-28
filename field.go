@@ -38,7 +38,7 @@ const (
 	DefaultCacheType = CacheTypeRanked
 
 	// Default ranked field cache
-	defaultCacheSize = 50000
+	DefaultCacheSize = 50000
 
 	bitsPerWord = 32 << (^uint(0) >> 63) // either 32 or 64
 	maxInt      = 1<<(bitsPerWord-1) - 1 // either 1<<31 - 1 or 1<<63 - 1
