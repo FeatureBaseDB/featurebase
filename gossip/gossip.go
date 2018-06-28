@@ -51,7 +51,7 @@ type GossipMemberSet struct {
 	logger    *log.Logger
 	transport *Transport
 
-	gossipEventReceiver *GossipEventReceiver
+	gossipEventReceiver *gossipEventReceiver
 }
 
 // GetBindAddr returns the gossip bind address based on config and auto bind port.
@@ -66,9 +66,6 @@ func (g *GossipMemberSet) Open() error {
 	err := g.gossipEventReceiver.Start(g.pserver)
 	if err != nil {
 		return errors.Wrap(err, "starting event delegate")
-	}
-	if g.handler == nil {
-		return fmt.Errorf("must call Start(pilosa.BroadcastHandler) before calling Open()")
 	}
 
 	g.mu.Lock()
@@ -300,12 +297,12 @@ func (g *GossipMemberSet) MergeRemoteState(buf []byte, join bool) {
 	}
 }
 
-// GossipEventReceiver is used to enable an application to receive
+// gossipEventReceiver is used to enable an application to receive
 // events about joins and leaves over a channel.
 //
 // Care must be taken that events are processed in a timely manner from
 // the channel, since this delegate will block until an event can be sent.
-type GossipEventReceiver struct {
+type gossipEventReceiver struct {
 	ch           chan memberlist.NodeEvent
 	eventHandler pilosa.EventHandler
 
@@ -313,33 +310,33 @@ type GossipEventReceiver struct {
 }
 
 // NewGossipEventReceiver returns a new instance of GossipEventReceiver.
-func NewGossipEventReceiver(logger *log.Logger) *GossipEventReceiver {
-	return &GossipEventReceiver{
+func NewGossipEventReceiver(logger *log.Logger) *gossipEventReceiver {
+	return &gossipEventReceiver{
 		ch:     make(chan memberlist.NodeEvent, 1),
 		Logger: logger,
 	}
 }
 
-func (g *GossipEventReceiver) NotifyJoin(n *memberlist.Node) {
+func (g *gossipEventReceiver) NotifyJoin(n *memberlist.Node) {
 	g.ch <- memberlist.NodeEvent{memberlist.NodeJoin, n}
 }
 
-func (g *GossipEventReceiver) NotifyLeave(n *memberlist.Node) {
+func (g *gossipEventReceiver) NotifyLeave(n *memberlist.Node) {
 	g.ch <- memberlist.NodeEvent{memberlist.NodeLeave, n}
 }
 
-func (g *GossipEventReceiver) NotifyUpdate(n *memberlist.Node) {
+func (g *gossipEventReceiver) NotifyUpdate(n *memberlist.Node) {
 	g.ch <- memberlist.NodeEvent{memberlist.NodeUpdate, n}
 }
 
 // Start implements the pilosa.EventReceiver interface and sets the EventHandler.
-func (g *GossipEventReceiver) Start(h pilosa.EventHandler) error {
+func (g *gossipEventReceiver) Start(h pilosa.EventHandler) error {
 	g.eventHandler = h
 	go g.listen()
 	return nil
 }
 
-func (g *GossipEventReceiver) listen() {
+func (g *gossipEventReceiver) listen() {
 	var nodeEventType pilosa.NodeEventType
 	for {
 		e := <-g.ch
