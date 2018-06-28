@@ -5,7 +5,6 @@ import (
 	"io"
 	"io/ioutil"
 	gohttp "net/http"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,6 +14,17 @@ import (
 	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
+
+func newMockReadCloser() *mock.ReadCloser {
+	return &mock.ReadCloser{
+		ReadFunc: func(p []byte) (int, error) {
+			return 0, io.EOF
+		},
+		CloseFunc: func() error {
+			return nil
+		},
+	}
+}
 
 func TestTranslateStore_Reader(t *testing.T) {
 	// Ensure client can connect and stream the translate store data.
@@ -38,10 +48,9 @@ func TestTranslateStore_Reader(t *testing.T) {
 					return 0, nil
 				}
 			}
-			closeInvoked := atomic.Value{}
-			closeInvoked.Store(false)
+			closeInvoked := make(chan struct{})
 			mrc.CloseFunc = func() error {
-				closeInvoked.Store(true)
+				close(closeInvoked)
 				return nil
 			}
 
@@ -57,15 +66,7 @@ func TestTranslateStore_Reader(t *testing.T) {
 					}
 					return &mrc, nil
 				}
-				mrc2 := mock.ReadCloser{
-					ReadFunc: func(p []byte) (int, error) {
-						return 0, io.EOF
-					},
-					CloseFunc: func() error {
-						return nil
-					},
-				}
-				return &mrc2, nil
+				return newMockReadCloser(), nil
 			}
 
 			opts := server.OptCommandServerOptions(pilosa.OptServerPrimaryTranslateStore(translateStore))
@@ -87,8 +88,11 @@ func TestTranslateStore_Reader(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if !closeInvoked.Load().(bool) {
+			select {
+			case <-time.NewTimer(time.Millisecond * 100).C:
 				t.Fatal("expected server close")
+			case <-closeInvoked:
+				return
 			}
 		})
 
@@ -103,15 +107,15 @@ func TestTranslateStore_Reader(t *testing.T) {
 				return 0, io.EOF
 			}
 
-			closeInvoked := atomic.Value{}
-			closeInvoked.Store(false)
+			closeInvoked := make(chan struct{})
 
 			mrc.CloseFunc = func() error {
-				closeInvoked.Store(true)
+				close(closeInvoked)
 				return nil
 			}
 
 			var translateStore mock.TranslateStore
+
 			translateStore.ReaderFunc = func(ctx context.Context, off int64) (io.ReadCloser, error) {
 				return &mrc, nil
 			}
@@ -131,9 +135,11 @@ func TestTranslateStore_Reader(t *testing.T) {
 
 			// Cancel the context and check if server is closed.
 			cancel()
-			time.Sleep(100 * time.Millisecond)
-			if !closeInvoked.Load().(bool) {
-				t.Fatal("expected server-side close")
+			select {
+			case <-time.NewTimer(time.Millisecond * 100).C:
+				t.Fatal("expected server close")
+			case <-closeInvoked:
+				return
 			}
 		})
 	})
