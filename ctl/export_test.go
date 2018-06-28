@@ -44,7 +44,7 @@ func TestExportCommand_Validation(t *testing.T) {
 }
 
 func TestExportCommand_Run(t *testing.T) {
-	cmd := test.MustRunMainWithCluster(t, 1)[0]
+	cmd := test.MustRunCluster(t, 1)[0]
 
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)

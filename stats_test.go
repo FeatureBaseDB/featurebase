@@ -209,7 +209,7 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 }
 
 func TestStatsCount_APICalls(t *testing.T) {
-	cmd := test.MustRunMainWithCluster(t, 1)[0]
+	cmd := test.MustRunCluster(t, 1)[0]
 	h := cmd.Handler.(*http.Handler).Handler
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
