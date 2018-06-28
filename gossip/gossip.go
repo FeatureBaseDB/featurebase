@@ -290,13 +290,13 @@ func (g *GossipMemberSet) MergeRemoteState(buf []byte, join bool) {
 // the channel, since this delegate will block until an event can be sent.
 type gossipEventReceiver struct {
 	ch           chan memberlist.NodeEvent
-	eventHandler pilosa.EventHandler
+	eventHandler *pilosa.Server
 
 	logger *log.Logger
 }
 
 // newGossipEventReceiver returns a new instance of GossipEventReceiver.
-func newGossipEventReceiver(logger *log.Logger, pserver pilosa.EventHandler) *gossipEventReceiver {
+func newGossipEventReceiver(logger *log.Logger, pserver *pilosa.Server) *gossipEventReceiver {
 	ger := &gossipEventReceiver{
 		ch:           make(chan memberlist.NodeEvent, 1),
 		logger:       logger,
@@ -338,13 +338,13 @@ func (g *gossipEventReceiver) listen() {
 		if err := proto.Unmarshal(e.Node.Meta, &n); err != nil {
 			panic("failed to unmarshal event node meta data")
 		}
-		node := pilosa.DecodeNode(&n)
+		// node := pilosa.DecodeNode(&n)
 
-		ne := &pilosa.NodeEvent{
-			Event: nodeEventType,
-			Node:  node,
+		ne := &internal.NodeEventMessage{
+			Event: uint32(nodeEventType),
+			Node:  &n,
 		}
-		if err := g.eventHandler.ReceiveEvent(ne); err != nil {
+		if err := g.eventHandler.ReceiveMessage(ne); err != nil {
 			g.logger.Printf("receive event error: %s", err)
 		}
 	}

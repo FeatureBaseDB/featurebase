@@ -42,7 +42,6 @@ const (
 // Ensure Server implements interfaces.
 var _ Broadcaster = &Server{}
 var _ BroadcastHandler = &Server{}
-var _ StatusHandler = &Server{}
 
 // Server represents a holder wrapped by a running HTTP server.
 type Server struct {
@@ -557,11 +556,6 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	return &ns, nil
 }
 
-// ClusterStatus returns the ClusterState and NodeSet for the cluster.
-func (s *Server) ClusterStatus() (proto.Message, error) {
-	return s.cluster.Status(), nil
-}
-
 // HandleRemoteStatus receives incoming NodeStatus from remote nodes.
 func (s *Server) HandleRemoteStatus(pb proto.Message) error {
 	// Ignore NodeStatus messages until the cluster is in a Normal state.
@@ -731,15 +725,6 @@ func countOpenFiles() (int, error) {
 	default:
 		return 0, errors.New("countOpenFiles() on this OS is not supported")
 	}
-}
-
-// StatusHandler specifies the methods which an object must implement to share
-// state in the cluster. These are used by the GossipMemberSet to implement the
-// LocalState and MergeRemoteState methods of memberlist.Delegate
-type StatusHandler interface {
-	LocalStatus() (proto.Message, error)
-	ClusterStatus() (proto.Message, error)
-	HandleRemoteStatus(proto.Message) error
 }
 
 func expandDirName(path string) (string, error) {
