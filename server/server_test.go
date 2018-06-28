@@ -54,7 +54,7 @@ func TestMain_Set_Quick(t *testing.T) {
 			if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 				t.Fatal(err)
 			}
-			if err := client.CreateField(context.Background(), "i", cmd.Field, pilosa.FieldOptions{}); err != nil && err != pilosa.ErrFieldExists {
+			if err := client.CreateField(context.Background(), "i", cmd.Field); err != nil && err != pilosa.ErrFieldExists {
 				t.Fatal(err)
 			}
 			if _, err := m.Query("i", "", fmt.Sprintf(`Set(%d, %s=%d)`, cmd.ColumnID, cmd.Field, cmd.ID)); err != nil {
@@ -123,11 +123,11 @@ func TestMain_SetRowAttrs(t *testing.T) {
 	client := m.Client()
 	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal(err)
-	} else if err := client.CreateField(context.Background(), "i", "x", pilosa.FieldOptions{}); err != nil {
+	} else if err := client.CreateField(context.Background(), "i", "x"); err != nil {
 		t.Fatal(err)
-	} else if err := client.CreateField(context.Background(), "i", "z", pilosa.FieldOptions{}); err != nil {
+	} else if err := client.CreateField(context.Background(), "i", "z"); err != nil {
 		t.Fatal(err)
-	} else if err := client.CreateField(context.Background(), "i", "neg", pilosa.FieldOptions{}); err != nil {
+	} else if err := client.CreateField(context.Background(), "i", "neg"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -200,7 +200,7 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 	client := m.Client()
 	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal(err)
-	} else if err := client.CreateField(context.Background(), "i", "x", pilosa.FieldOptions{}); err != nil {
+	} else if err := client.CreateField(context.Background(), "i", "x"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -271,9 +271,10 @@ func TestMain_RecalculateHashes(t *testing.T) {
 	if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal("create index:", err)
 	}
-	if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldOptions{CacheType: "ranked"}); err != nil {
+	if err := client0.CreateField(context.Background(), "i", "f"); err != nil {
 		t.Fatal("create field:", err)
 	}
+	return
 
 	// Set some columns
 	data := []string{}
