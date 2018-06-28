@@ -1037,7 +1037,7 @@ func (e *Executor) executeClearBitField(ctx context.Context, index string, c *pq
 	for _, node := range e.Cluster.shardNodes(index, shard) {
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
-			val, err := f.ClearBit(rowID, colID, nil)
+			val, err := f.ClearBit(rowID, colID)
 			if err != nil {
 				return false, err
 			} else if val {

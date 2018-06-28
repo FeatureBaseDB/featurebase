@@ -152,7 +152,7 @@ func (h *Holder) ClearBit(index, field string, rowID, columnID uint64) {
 	if err != nil {
 		panic(err)
 	}
-	f.ClearBit(rowID, columnID, nil)
+	f.ClearBit(rowID, columnID)
 }
 
 // MustSetBits sets columns on a row. Panic on error.

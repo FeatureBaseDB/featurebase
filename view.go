@@ -57,9 +57,8 @@ type View struct {
 	// prevent sending multiple `CreateShardMessage` messages
 	maxShard uint64
 
-	broadcaster Broadcaster
-	stats       StatsClient
-
+	broadcaster  Broadcaster
+	stats        StatsClient
 	RowAttrStore AttrStore
 	Logger       Logger
 }
@@ -318,9 +317,9 @@ func (v *View) setBit(rowID, columnID uint64) (changed bool, err error) {
 // clearBit clears a bit within the view.
 func (v *View) clearBit(rowID, columnID uint64) (changed bool, err error) {
 	shard := columnID / ShardWidth
-	frag, err := v.CreateFragmentIfNotExists(shard)
-	if err != nil {
-		return changed, err
+	frag, found := v.fragments[shard]
+	if !found {
+		return false, nil
 	}
 	return frag.clearBit(rowID, columnID)
 }
