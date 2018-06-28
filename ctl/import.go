@@ -42,7 +42,6 @@ type ImportCommand struct {
 
 	// Options for index & field to be created if they don't exist
 	IndexOptions pilosa.IndexOptions
-	FieldOptions pilosa.FieldOptions
 
 	// CreateSchema ensures the schema exists before import
 	CreateSchema bool
@@ -135,7 +134,7 @@ func (cmd *ImportCommand) ensureSchema(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("Error Creating Index: %s", err)
 	}
-	err = cmd.Client.EnsureField(ctx, cmd.Index, cmd.Field, cmd.FieldOptions)
+	err = cmd.Client.EnsureField(ctx, cmd.Index, cmd.Field)
 	if err != nil {
 		return fmt.Errorf("Error Creating Field: %s", err)
 	}

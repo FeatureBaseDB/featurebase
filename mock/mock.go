@@ -1,8 +1,11 @@
 package mock
 
+import "sync"
+
 type ReadCloser struct {
 	ReadFunc  func(p []byte) (int, error)
 	CloseFunc func() error
+	once      sync.Once
 }
 
 func (rc *ReadCloser) Read(p []byte) (int, error) {
@@ -10,5 +13,9 @@ func (rc *ReadCloser) Read(p []byte) (int, error) {
 }
 
 func (rc *ReadCloser) Close() error {
-	return rc.CloseFunc()
+	var err error = nil
+	rc.once.Do(func() {
+		err = rc.CloseFunc()
+	})
+	return err
 }

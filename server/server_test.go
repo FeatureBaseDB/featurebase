@@ -40,7 +40,7 @@ func TestMain_Set_Quick(t *testing.T) {
 	}
 
 	if err := quick.Check(func(cmds []SetCommand) bool {
-		m := test.MustRunMain()
+		m := test.MustRunCommand()
 		defer m.Close()
 
 		// Create client.
@@ -54,7 +54,7 @@ func TestMain_Set_Quick(t *testing.T) {
 			if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 				t.Fatal(err)
 			}
-			if err := client.CreateField(context.Background(), "i", cmd.Field, pilosa.FieldOptions{}); err != nil && err != pilosa.ErrFieldExists {
+			if err := client.CreateField(context.Background(), "i", cmd.Field); err != nil && err != pilosa.ErrFieldExists {
 				t.Fatal(err)
 			}
 			if _, err := m.Query("i", "", fmt.Sprintf(`Set(%d, %s=%d)`, cmd.ColumnID, cmd.Field, cmd.ID)); err != nil {
@@ -116,18 +116,18 @@ func TestMain_Set_Quick(t *testing.T) {
 
 // Ensure program can set row attributes and retrieve them.
 func TestMain_SetRowAttrs(t *testing.T) {
-	m := test.MustRunMain()
+	m := test.MustRunCommand()
 	defer m.Close()
 
 	// Create fields.
 	client := m.Client()
 	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal(err)
-	} else if err := client.CreateField(context.Background(), "i", "x", pilosa.FieldOptions{}); err != nil {
+	} else if err := client.CreateField(context.Background(), "i", "x"); err != nil {
 		t.Fatal(err)
-	} else if err := client.CreateField(context.Background(), "i", "z", pilosa.FieldOptions{}); err != nil {
+	} else if err := client.CreateField(context.Background(), "i", "z"); err != nil {
 		t.Fatal(err)
-	} else if err := client.CreateField(context.Background(), "i", "neg", pilosa.FieldOptions{}); err != nil {
+	} else if err := client.CreateField(context.Background(), "i", "neg"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -193,14 +193,14 @@ func TestMain_SetRowAttrs(t *testing.T) {
 
 // Ensure program can set column attributes and retrieve them.
 func TestMain_SetColumnAttrs(t *testing.T) {
-	m := test.MustRunMain()
+	m := test.MustRunCommand()
 	defer m.Close()
 
 	// Create fields.
 	client := m.Client()
 	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal(err)
-	} else if err := client.CreateField(context.Background(), "i", "x", pilosa.FieldOptions{}); err != nil {
+	} else if err := client.CreateField(context.Background(), "i", "x"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -264,16 +264,17 @@ func tempMkdir(t *testing.T) string {
 
 func TestMain_RecalculateHashes(t *testing.T) {
 	const clusterSize = 5
-	cluster := test.MustRunMainWithCluster(t, clusterSize)
+	cluster := test.MustRunCluster(t, clusterSize)
 
 	// Create the schema.
 	client0 := cluster[0].Client()
 	if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 		t.Fatal("create index:", err)
 	}
-	if err := client0.CreateField(context.Background(), "i", "f", pilosa.FieldOptions{CacheType: "ranked"}); err != nil {
+	if err := client0.CreateField(context.Background(), "i", "f"); err != nil {
 		t.Fatal("create field:", err)
 	}
+	return
 
 	// Set some columns
 	data := []string{}

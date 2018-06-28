@@ -457,6 +457,17 @@ func (p *postIndexRequest) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+func getValidOptions(option interface{}) []string {
+	validOptions := []string{}
+	val := reflect.ValueOf(option)
+	for i := 0; i < val.Type().NumField(); i++ {
+		jsonTag := val.Type().Field(i).Tag.Get("json")
+		s := strings.Split(jsonTag, ",")
+		validOptions = append(validOptions, s[0])
+	}
+	return validOptions
+}
+
 // Raise errors for any unknown key
 func validateOptions(data map[string]interface{}, validIndexOptions []string) error {
 	for k, v := range data {
@@ -597,7 +608,9 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 
 	// Decode request.
 	var req postFieldRequest
-	err := json.NewDecoder(r.Body).Decode(&req)
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	err := dec.Decode(&req)
 	if err == io.EOF {
 		// If no data was provided (EOF), we still create the field
 		// with default values.
@@ -605,7 +618,25 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	_, err = h.API.CreateField(r.Context(), indexName, fieldName, req.Options)
+
+	// Validate field options.
+	if err := req.Options.validate(); err != nil {
+		http.Error(w, err.Error(), http.StatusNotAcceptable)
+		return
+	}
+
+	// Convert json options into functional options.
+	var fos pilosa.FieldOption
+	switch req.Options.Type {
+	case pilosa.FieldTypeSet:
+		fos = pilosa.OptFieldTypeSet(*req.Options.CacheType, *req.Options.CacheSize)
+	case pilosa.FieldTypeInt:
+		fos = pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max)
+	case pilosa.FieldTypeTime:
+		fos = pilosa.OptFieldTypeTime(*req.Options.TimeQuantum)
+	}
+
+	_, err = h.API.CreateField(r.Context(), indexName, fieldName, fos)
 	if err != nil {
 		switch errors.Cause(err) {
 		case pilosa.ErrIndexNotFound:
@@ -623,50 +654,79 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type _postFieldRequest postFieldRequest
-
-// Custom Unmarshal JSON to validate request body when creating a new field. If there's new FieldOptions,
-// adding it to validFieldOptions to make sure the new option is validated, otherwise the request will be failed
-func (p *postFieldRequest) UnmarshalJSON(b []byte) error {
-	// m is an overflow map used to capture additional, unexpected keys.
-	m := make(map[string]interface{})
-	if err := json.Unmarshal(b, &m); err != nil {
-		return errors.Wrap(err, "unmarshaling unexpected keys")
-	}
-
-	validFieldOptions := getValidOptions(pilosa.FieldOptions{})
-	err := validateOptions(m, validFieldOptions)
-	if err != nil {
-		return err
-	}
-
-	// Unmarshal expected values.
-	var _p _postFieldRequest
-	if err := json.Unmarshal(b, &_p); err != nil {
-		return errors.Wrap(err, "unmarshalling expected keys")
-	}
-
-	p.Options = _p.Options
-	return nil
-
-}
-
-func getValidOptions(option interface{}) []string {
-	validOptions := []string{}
-	val := reflect.ValueOf(option)
-	for i := 0; i < val.Type().NumField(); i++ {
-		jsonTag := val.Type().Field(i).Tag.Get("json")
-		s := strings.Split(jsonTag, ",")
-		validOptions = append(validOptions, s[0])
-	}
-	return validOptions
-}
-
 type postFieldRequest struct {
-	Options pilosa.FieldOptions `json:"options"`
+	Options fieldOptions `json:"options"`
 }
 
 type postFieldResponse struct{}
+
+// fieldOptions tracks pilosa.FieldOptions. It is made up of pointers to values,
+// and used for input validation.
+type fieldOptions struct {
+	Type        string              `json:"type,omitempty"`
+	CacheType   *string             `json:"cacheType,omitempty"`
+	CacheSize   *uint32             `json:"cacheSize,omitempty"`
+	Min         *int64              `json:"min,omitempty"`
+	Max         *int64              `json:"max,omitempty"`
+	TimeQuantum *pilosa.TimeQuantum `json:"timeQuantum,omitempty"`
+	Keys        *bool               `json:"keys,omitempty"`
+}
+
+func (o *fieldOptions) validate() error {
+	// Pointers to default values.
+	defaultCacheType := pilosa.DefaultCacheType
+	defaultCacheSize := uint32(pilosa.DefaultCacheSize)
+
+	switch o.Type {
+	case pilosa.FieldTypeSet, "":
+		// Because FieldTypeSet is the default, its arguments are
+		// not required. Instead, the defaults are applied whenever
+		// a value does not exist.
+		if o.Type == "" {
+			o.Type = pilosa.FieldTypeSet
+		}
+		if o.CacheType == nil {
+			o.CacheType = &defaultCacheType
+		}
+		if o.CacheSize == nil {
+			o.CacheSize = &defaultCacheSize
+		}
+		if o.Min != nil {
+			return errors.New("min does not apply to field type set")
+		} else if o.Max != nil {
+			return errors.New("max does not apply to field type set")
+		} else if o.TimeQuantum != nil {
+			return errors.New("timeQuantum does not apply to field type set")
+		}
+	case pilosa.FieldTypeInt:
+		if o.CacheType != nil {
+			return errors.New("cacheType does not apply to field type int")
+		} else if o.CacheSize != nil {
+			return errors.New("cacheSize does not apply to field type int")
+		} else if o.Min == nil {
+			return errors.New("min is required for field type int")
+		} else if o.Max == nil {
+			return errors.New("max is required for field type int")
+		} else if o.TimeQuantum != nil {
+			return errors.New("timeQuantum does not apply to field type int")
+		}
+	case pilosa.FieldTypeTime:
+		if o.CacheType != nil {
+			return errors.New("cacheType does not apply to field type time")
+		} else if o.CacheSize != nil {
+			return errors.New("cacheSize does not apply to field type time")
+		} else if o.Min != nil {
+			return errors.New("min does not apply to field type time")
+		} else if o.Max != nil {
+			return errors.New("max does not apply to field type time")
+		} else if o.TimeQuantum == nil {
+			return errors.New("timeQuantum is required for field type time")
+		}
+	default:
+		return errors.Errorf("invalid field type: %s", o.Type)
+	}
+	return nil
+}
 
 // handleDeleteField handles DELETE /field request.
 func (h *Handler) handleDeleteField(w http.ResponseWriter, r *http.Request) {

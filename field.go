@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -34,13 +35,14 @@ import (
 const (
 	DefaultFieldType = FieldTypeSet
 
-	defaultCacheType = CacheTypeRanked
+	DefaultCacheType = CacheTypeRanked
 
 	// Default ranked field cache
 	defaultCacheSize = 50000
 
 	bitsPerWord = 32 << (^uint(0) >> 63) // either 32 or 64
 	maxInt      = 1<<(bitsPerWord-1) - 1 // either 1<<31 - 1 or 1<<63 - 1
+
 )
 
 // Field types.
@@ -73,19 +75,52 @@ type Field struct {
 	Logger Logger
 }
 
-// FieldOption is a functional option type for pilosa.Fielde.
-type FieldOption func(f *Field) error
+// FieldOption is a functional option type for pilosa.FieldOptions.
+type FieldOption func(fo *FieldOptions) error
 
-// TODO: break these out into separate Options (not a FieldOptions object)
-func OptFieldFieldOptions(o FieldOptions) FieldOption {
-	return func(f *Field) error {
-		f.options = o
+func OptFieldTypeSet(cacheType string, cacheSize uint32) FieldOption {
+	return func(fo *FieldOptions) error {
+		if fo.Type != "" {
+			return errors.Errorf("field type is already set to: %s", fo.Type)
+		}
+		fo.Type = FieldTypeSet
+		fo.CacheType = cacheType
+		fo.CacheSize = cacheSize
+		return nil
+	}
+}
+
+func OptFieldTypeInt(min, max int64) FieldOption {
+	return func(fo *FieldOptions) error {
+		if fo.Type != "" {
+			return errors.Errorf("field type is already set to: %s", fo.Type)
+		}
+		if min > max {
+			return ErrInvalidBSIGroupRange
+		}
+		fo.Type = FieldTypeInt
+		fo.Min = min
+		fo.Max = max
+		return nil
+	}
+}
+
+func OptFieldTypeTime(timeQuantum TimeQuantum) FieldOption {
+	return func(fo *FieldOptions) error {
+		if fo.Type != "" {
+			return errors.Errorf("field type is already set to: %s", fo.Type)
+		}
+		if !timeQuantum.Valid() {
+			return ErrInvalidTimeQuantum
+		}
+		fo.Type = FieldTypeTime
+		fo.TimeQuantum = timeQuantum
 		return nil
 	}
 }
 
 // NewField returns a new instance of field.
-func NewField(path, index, name string, opts ...FieldOption) (*Field, error) {
+func NewField(path, index, name string, options FieldOptions) (*Field, error) {
 	err := validateName(name)
 	if err != nil {
 		return nil, err
@@ -103,22 +138,10 @@ func NewField(path, index, name string, opts ...FieldOption) (*Field, error) {
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
 
-		options: FieldOptions{
-			Type:      DefaultFieldType,
-			CacheType: defaultCacheType,
-			CacheSize: defaultCacheSize,
-		},
+		options: applyDefaultOptions(options),
 
 		Logger: NopLogger,
 	}
-
-	for _, opt := range opts {
-		err := opt(f)
-		if err != nil {
-			return nil, errors.Wrap(err, "applying option")
-		}
-	}
-
 	return f, nil
 }
 
@@ -1096,23 +1119,17 @@ type FieldOptions struct {
 	Keys        bool        `json:"keys,omitempty"`
 }
 
-// Validate ensures that FieldOption values are valid.
-func (o *FieldOptions) Validate() error {
-	switch o.Type {
-	case FieldTypeSet, "":
-		// TODO: cacheType, cacheSize validation
-	case FieldTypeInt:
-		if o.Min > o.Max {
-			return ErrInvalidBSIGroupRange
+// applyDefaultOptions returns a new FieldOptions object
+// with default values if o does not contain a valid type.
+func applyDefaultOptions(o FieldOptions) FieldOptions {
+	if o.Type == "" {
+		return FieldOptions{
+			Type:      DefaultFieldType,
+			CacheType: DefaultCacheType,
+			CacheSize: DefaultCacheSize,
 		}
-	case FieldTypeTime:
-		if o.TimeQuantum == "" || !o.TimeQuantum.Valid() {
-			return ErrInvalidTimeQuantum
-		}
-	default:
-		return errors.New("invalid field type")
 	}
-	return nil
+	return o
 }
 
 // Encode converts o into its internal representation.
@@ -1148,6 +1165,40 @@ func decodeFieldOptions(options *internal.FieldOptions) *FieldOptions {
 		TimeQuantum: TimeQuantum(options.TimeQuantum),
 		Keys:        options.Keys,
 	}
+}
+
+func (o *FieldOptions) MarshalJSON() ([]byte, error) {
+	switch o.Type {
+	case FieldTypeSet:
+		return json.Marshal(struct {
+			Type      string `json:"type"`
+			CacheType string `json:"cacheType"`
+			CacheSize uint32 `json:"cacheSize"`
+		}{
+			o.Type,
+			o.CacheType,
+			o.CacheSize,
+		})
+	case FieldTypeInt:
+		return json.Marshal(struct {
+			Type string `json:"type"`
+			Min  int64  `json:"min"`
+			Max  int64  `json:"max"`
+		}{
+			o.Type,
+			o.Min,
+			o.Max,
+		})
+	case FieldTypeTime:
+		return json.Marshal(struct {
+			Type        string      `json:"type"`
+			TimeQuantum TimeQuantum `json:"timeQuantum"`
+		}{
+			o.Type,
+			o.TimeQuantum,
+		})
+	}
+	return nil, errors.New("invalid field type")
 }
 
 // List of bsiGroup types.
