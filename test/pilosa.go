@@ -179,7 +179,7 @@ func (c Cluster) Start() error {
 		if err := cc.Start(); err != nil {
 			return errors.Wrapf(err, "starting server %d", i)
 		}
-		gossipSeeds[i] = cc.GossipTransport().URI.String()
+		gossipSeeds[i] = cc.GossipAddress()
 	}
 	return nil
 }
