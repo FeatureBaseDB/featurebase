@@ -19,14 +19,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	gohttp "net/http"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/toml"
@@ -57,6 +55,13 @@ func OptAllowedOrigins(origins []string) server.CommandOption {
 		m.Config.Handler.AllowedOrigins = origins
 		return nil
 	}
+}
+
+// GossipAddress returns the address on which gossip is listening after a Main
+// has been setup. Useful to pass as a seed to other nodes when creating and
+// testing clusters.
+func (m *Main) GossipAddress() string {
+	return m.GossipTransport().URI.String()
 }
 
 // NewMain returns a new instance of Main with a temporary data directory and random port.
@@ -116,25 +121,20 @@ func runMainWithCluster(size int, opts ...[]server.CommandOption) ([]*Main, erro
 	}
 
 	mains := make([]*Main, size)
-
-	gossipHost := "localhost"
-	gossipPort := 0
-	var err error
 	var gossipSeeds = make([]string, size)
-
 	for i := 0; i < size; i++ {
 		var commandOpts []server.CommandOption
 		if len(opts) > 0 {
 			commandOpts = opts[i%len(opts)]
 		}
 		m := NewMainWithCluster(i == 0, commandOpts...)
-		m.Config.Cluster.Disabled = false
+		m.Config.Gossip.Port = "0"
+		m.Config.Gossip.Seeds = gossipSeeds[:i]
 
-		gossipSeeds[i], err = m.RunWithTransport(gossipHost, gossipPort, gossipSeeds[:i])
-		if err != nil {
-			return nil, errors.Wrap(err, "RunWithTransport")
+		if err := m.Start(); err != nil {
+			return nil, errors.Wrapf(err, "Starting server %d", i)
 		}
-
+		gossipSeeds[i] = m.GossipTransport().URI.String()
 		mains[i] = m
 	}
 
@@ -179,71 +179,8 @@ func (m *Main) Reopen() error {
 	return nil
 }
 
-// RunWithTransport runs Main and returns the dynamically allocated gossip port.
-func (m *Main) RunWithTransport(host string, bindPort int, joinSeeds []string) (seed string, err error) {
-	defer close(m.Started)
-
-	/*
-	   TEST:
-	   - SetupServer (just static settings from config)
-	   - OpenListener (sets Server.Name to use in gossip)
-	   - NewTransport (gossip)
-	   - SetupNetworking (does the gossip or static stuff) - uses Server.Name
-	   - Open server
-
-	   PRODUCTION:
-	   - SetupServer (just static settings from config)
-	   - SetupNetworking (does the gossip or static stuff) - calls NewTransport
-	   - Open server - calls OpenListener
-	*/
-
-	// SetupServer
-	err = m.SetupServer()
-	if err != nil {
-		return seed, err
-	}
-
-	// Open gossip transport to use in SetupServer.
-	transport, err := gossip.NewTransport(host, bindPort, nil)
-	if err != nil {
-		return seed, err
-	}
-	m.GossipTransport = transport
-
-	if len(joinSeeds) != 0 {
-		m.Config.Gossip.Seeds = joinSeeds
-	} else {
-		m.Config.Gossip.Seeds = []string{transport.URI.String()}
-	}
-
-	seed = transport.URI.String()
-
-	// SetupNetworking
-	err = m.SetupNetworking()
-	if err != nil {
-		return seed, err
-	}
-
-	m.Server.Cluster.Static = false
-
-	go func() {
-		err := m.Handler.Serve()
-		if err != nil {
-			log.Printf("Handler serve error: %v", err)
-		}
-	}()
-
-	// Initialize server.
-	err = m.Server.Open()
-	if err != nil {
-		return seed, err
-	}
-
-	return seed, nil
-}
-
 // URL returns the base URL string for accessing the running program.
-func (m *Main) URL() string { return "http://" + m.Server.Addr().String() }
+func (m *Main) URL() string { return m.Server.URI.String() }
 
 // Client returns a client to connect to the program.
 func (m *Main) Client() *http.InternalClient {
