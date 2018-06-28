@@ -15,6 +15,17 @@ import (
 	"github.com/pilosa/pilosa/test"
 )
 
+func newMockReadCloser() *mock.ReadCloser {
+	return &mock.ReadCloser{
+		ReadFunc: func(p []byte) (int, error) {
+			return 0, io.EOF
+		},
+		CloseFunc: func() error {
+			return nil
+		},
+	}
+}
+
 func TestTranslateStore_Reader(t *testing.T) {
 	// Ensure client can connect and stream the translate store data.
 	t.Run("OK", func(t *testing.T) {
@@ -37,9 +48,9 @@ func TestTranslateStore_Reader(t *testing.T) {
 					return 0, nil
 				}
 			}
-			var closeInvoked bool
+			closeInvoked := make(chan struct{})
 			mrc.CloseFunc = func() error {
-				closeInvoked = true
+				close(closeInvoked)
 				return nil
 			}
 
@@ -55,15 +66,7 @@ func TestTranslateStore_Reader(t *testing.T) {
 					}
 					return &mrc, nil
 				}
-				mrc2 := mock.ReadCloser{
-					ReadFunc: func(p []byte) (int, error) {
-						return 0, io.EOF
-					},
-					CloseFunc: func() error {
-						return nil
-					},
-				}
-				return &mrc2, nil
+				return newMockReadCloser(), nil
 			}
 
 			opts := server.OptCommandServerOptions(pilosa.OptServerPrimaryTranslateStore(translateStore))
@@ -85,8 +88,11 @@ func TestTranslateStore_Reader(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if !closeInvoked {
+			select {
+			case <-time.NewTimer(time.Millisecond * 100).C:
 				t.Fatal("expected server close")
+			case <-closeInvoked:
+				return
 			}
 		})
 
@@ -100,13 +106,16 @@ func TestTranslateStore_Reader(t *testing.T) {
 				<-done
 				return 0, io.EOF
 			}
-			var closeInvoked bool
+
+			closeInvoked := make(chan struct{})
+
 			mrc.CloseFunc = func() error {
-				closeInvoked = true
+				close(closeInvoked)
 				return nil
 			}
 
 			var translateStore mock.TranslateStore
+
 			translateStore.ReaderFunc = func(ctx context.Context, off int64) (io.ReadCloser, error) {
 				return &mrc, nil
 			}
@@ -126,9 +135,11 @@ func TestTranslateStore_Reader(t *testing.T) {
 
 			// Cancel the context and check if server is closed.
 			cancel()
-			time.Sleep(100 * time.Millisecond)
-			if !closeInvoked {
-				t.Fatal("expected server-side close")
+			select {
+			case <-time.NewTimer(time.Millisecond * 100).C:
+				t.Fatal("expected server close")
+			case <-closeInvoked:
+				return
 			}
 		})
 	})
