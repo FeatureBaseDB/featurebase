@@ -55,12 +55,7 @@ type GossipMemberSet struct {
 }
 
 // Open implements the MemberSet interface to start network activity.
-func (g *GossipMemberSet) Open() error {
-	err := g.gossipEventReceiver.Start(g.pserver)
-	if err != nil {
-		return errors.Wrap(err, "starting event delegate")
-	}
-
+func (g *GossipMemberSet) Open() (err error) {
 	g.mu.Lock()
 	g.memberlist, err = memberlist.Create(g.config.memberlistConfig)
 	g.mu.Unlock()
@@ -163,10 +158,8 @@ func NewGossipMemberSet(cfg Config, s *pilosa.Server, options ...GossipMemberSet
 			return nil, errors.Wrap(err, "executing option")
 		}
 	}
-	ger := newGossipEventReceiver(g.logger)
+	ger := newGossipEventReceiver(g.logger, s)
 	g.gossipEventReceiver = ger
-
-	g.handler = s
 
 	if g.transport == nil {
 		port, err := strconv.Atoi(cfg.Port)
@@ -299,15 +292,18 @@ type gossipEventReceiver struct {
 	ch           chan memberlist.NodeEvent
 	eventHandler pilosa.EventHandler
 
-	Logger *log.Logger
+	logger *log.Logger
 }
 
 // newGossipEventReceiver returns a new instance of GossipEventReceiver.
-func newGossipEventReceiver(logger *log.Logger) *gossipEventReceiver {
-	return &gossipEventReceiver{
-		ch:     make(chan memberlist.NodeEvent, 1),
-		Logger: logger,
+func newGossipEventReceiver(logger *log.Logger, pserver pilosa.EventHandler) *gossipEventReceiver {
+	ger := &gossipEventReceiver{
+		ch:           make(chan memberlist.NodeEvent, 1),
+		logger:       logger,
+		eventHandler: pserver,
 	}
+	go ger.listen()
+	return ger
 }
 
 func (g *gossipEventReceiver) NotifyJoin(n *memberlist.Node) {
@@ -320,13 +316,6 @@ func (g *gossipEventReceiver) NotifyLeave(n *memberlist.Node) {
 
 func (g *gossipEventReceiver) NotifyUpdate(n *memberlist.Node) {
 	g.ch <- memberlist.NodeEvent{memberlist.NodeUpdate, n}
-}
-
-// Start implements the pilosa.EventReceiver interface and sets the EventHandler.
-func (g *gossipEventReceiver) Start(h pilosa.EventHandler) error {
-	g.eventHandler = h
-	go g.listen()
-	return nil
 }
 
 func (g *gossipEventReceiver) listen() {
@@ -356,28 +345,8 @@ func (g *gossipEventReceiver) listen() {
 			Node:  node,
 		}
 		if err := g.eventHandler.ReceiveEvent(ne); err != nil {
-			g.Logger.Printf("receive event error: %s", err)
+			g.logger.Printf("receive event error: %s", err)
 		}
-	}
-}
-
-// broadcast represents an implementation of memberlist.Broadcast
-type broadcast struct {
-	msg    []byte
-	notify chan<- struct{}
-}
-
-func (b *broadcast) Invalidates(other memberlist.Broadcast) bool {
-	return false
-}
-
-func (b *broadcast) Message() []byte {
-	return b.msg
-}
-
-func (b *broadcast) Finished() {
-	if b.notify != nil {
-		close(b.notify)
 	}
 }
 
