@@ -59,7 +59,6 @@ type View struct {
 
 	broadcaster  Broadcaster
 	stats        StatsClient
-	viewType     string
 	RowAttrStore AttrStore
 	Logger       Logger
 }

@@ -39,8 +39,8 @@ const (
 	// Default ranked field cache
 	defaultCacheSize = 50000
 
-	BitsPerWord = 32 << (^uint(0) >> 63) // either 32 or 64
-	MaxInt      = 1<<(BitsPerWord-1) - 1 // either 1<<31 - 1 or 1<<63 - 1
+	bitsPerWord = 32 << (^uint(0) >> 63) // either 32 or 64
+	maxInt      = 1<<(bitsPerWord-1) - 1 // either 1<<31 - 1 or 1<<63 - 1
 )
 
 // Field types.
@@ -572,7 +572,7 @@ func (f *Field) CreateViewIfNotExists(name string) (*View, error) {
 			&internal.CreateViewMessage{
 				Index: f.index,
 				Field: f.name,
-				View:  view.name,
+				View:  name,
 			})
 		if err != nil {
 			return nil, errors.Wrap(err, "sending CreateView message")
@@ -602,7 +602,7 @@ func (f *Field) createViewIfNotExistsBase(name string) (*View, bool, error) {
 	return view, true, nil
 }
 
-func (f *Field) newView(path string, name string) *View {
+func (f *Field) newView(path, name string) *View {
 	view := NewView(path, f.index, f.name, name, f.options.CacheSize)
 	view.cacheType = f.options.CacheType
 	view.Logger = f.Logger
@@ -679,14 +679,14 @@ func (f *Field) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err err
 	}
 
 	// If a timestamp is specified then set bits across all views for the quantum.
-	for _, name := range viewsByTime(viewName, *t, f.TimeQuantum()) {
-		view, err := f.CreateViewIfNotExists(name)
+	for _, subname := range viewsByTime(viewName, *t, f.TimeQuantum()) {
+		view, err := f.CreateViewIfNotExists(subname)
 		if err != nil {
-			return changed, errors.Wrapf(err, "creating view %s", name)
+			return changed, errors.Wrapf(err, "creating view %s", subname)
 		}
 
 		if c, err := view.setBit(rowID, colID); err != nil {
-			return changed, errors.Wrapf(err, "setting on view %s", name)
+			return changed, errors.Wrapf(err, "setting on view %s", subname)
 		} else if c {
 			changed = true
 		}
@@ -715,29 +715,26 @@ func (f *Field) ClearBit(rowID, colID uint64) (changed bool, err error) {
 	if len(f.views) == 1 { // assuming no time views
 		return changed, nil
 	}
-	lastLevel := 0
+	lastViewNameSize := 0
 	level := 0
-	skipBelow := MaxInt
+	skipAbove := maxInt
 	for _, view := range f.allTimeViewsSortedByQuantum() {
-		if lastLevel < len(view.name) {
+		if lastViewNameSize < len(view.name) {
 			level++
-		} else if lastLevel > len(view.name) {
+		} else if lastViewNameSize > len(view.name) {
 			level--
 		}
-		if level < skipBelow {
+		if level < skipAbove {
 			if changed, err = view.clearBit(rowID, colID); err != nil {
 				return changed, errors.Wrapf(err, "clearing on view %s", view.name)
 			}
 			if !changed {
-				if level < skipBelow {
-					skipBelow = level + 1
-				}
+				skipAbove = level + 1
 			} else {
-
-				skipBelow = MaxInt
+				skipAbove = maxInt
 			}
 		}
-		lastLevel = len(view.name)
+		lastViewNameSize = len(view.name)
 	}
 
 	return changed, nil
@@ -771,7 +768,7 @@ func (f *Field) allTimeViewsSortedByQuantum() (me []*View) {
 	day := month + 2
 	sort.Slice(me, func(i, j int) (lt bool) {
 		var eq bool
-		//	ensure all catA are grouped together:
+		// group by quantum from year to hour
 		if lt, eq = groupCompare(me[i].name, me[j].name, year); eq {
 			if lt, eq = groupCompare(me[i].name, me[j].name, month); eq {
 				if lt, eq = groupCompare(me[i].name, me[j].name, day); eq {
