@@ -1298,43 +1298,6 @@ func (b *bsiGroup) validate() error {
 	return nil
 }
 
-func encodeBSIGroup(b *bsiGroup) *internal.BSIGroup {
-	if b == nil {
-		return nil
-	}
-	return &internal.BSIGroup{
-		Name: b.Name,
-		Type: b.Type,
-		Min:  int64(b.Min),
-		Max:  int64(b.Max),
-	}
-}
-
-func decodeBSIGroup(b *internal.BSIGroup) *bsiGroup {
-	if b == nil {
-		return nil
-	}
-	return &bsiGroup{
-		Name: b.Name,
-		Type: b.Type,
-		Min:  b.Min,
-		Max:  b.Max,
-	}
-}
-
-// importBitSet represents slices of row and column ids.
-// This is used to sort data during import.
-type importBitSet struct {
-	rowIDs, columnIDs []uint64
-}
-
-func (p importBitSet) Swap(i, j int) {
-	p.rowIDs[i], p.rowIDs[j] = p.rowIDs[j], p.rowIDs[i]
-	p.columnIDs[i], p.columnIDs[j] = p.columnIDs[j], p.columnIDs[i]
-}
-func (p importBitSet) Len() int           { return len(p.rowIDs) }
-func (p importBitSet) Less(i, j int) bool { return p.rowIDs[i] < p.rowIDs[j] }
-
 // Cache types.
 const (
 	CacheTypeLRU    = "lru"
