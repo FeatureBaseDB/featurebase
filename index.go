@@ -276,7 +276,7 @@ func (i *Index) CreateField(name string, opt FieldOptions) (*Field, error) {
 
 	// Ensure field doesn't already exist.
 	if i.fields[name] != nil {
-		return nil, ErrFieldExists
+		return nil, ConflictError{ErrFieldExists}
 	}
 	return i.createField(name, opt)
 }

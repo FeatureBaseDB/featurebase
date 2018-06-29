@@ -78,6 +78,24 @@ type BadRequestError struct {
 	error
 }
 
+// NewBadRequestError returns err wrapped in a BadRequestError.
+func NewBadRequestError(err error) BadRequestError {
+	return BadRequestError{err}
+}
+
+// ConflictError wraps an error value to signify that a conflict with an
+// existing resource occurred such that in an HTTP scenario, http.StatusConflict
+// would be returned.
+type ConflictError struct {
+	error
+}
+
+// NotFoundError wraps an error value to signify that a resource was not found
+// such that in an HTTP scenario, http.StatusNotFound would be returned.
+type NotFoundError struct {
+	error
+}
+
 // Regular expression to validate index and field names.
 var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 

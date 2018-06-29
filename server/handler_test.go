@@ -390,7 +390,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i", strings.NewReader("")))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d, body: %s", w.Code, w.Body.String())
-		} else if w.Body.String() != "{}\n" {
+		} else if w.Body.String() != `{"success":true}`+"\n" {
 			t.Fatalf("unexpected response body: %s", w.Body.String())
 		}
 		// Verify index is gone.
@@ -408,7 +408,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i/field/f1", strings.NewReader("")))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d, body: %s", w.Code, w.Body.String())
-		} else if body := w.Body.String(); body != `{}`+"\n" {
+		} else if body := w.Body.String(); body != `{"success":true}`+"\n" {
 			t.Fatalf("unexpected body: %s", body)
 		} else if f := hldr.Index("i").Field("f1"); f != nil {
 			t.Fatal("expected nil field")
