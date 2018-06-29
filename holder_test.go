@@ -24,8 +24,6 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/http"
-	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -350,49 +348,40 @@ func TestHolder_DeleteIndex(t *testing.T) {
 
 // Ensure holder can sync with a remote holder.
 func TestHolderSyncer_SyncHolder(t *testing.T) {
-	t.Skip() // Until test.NewServer() works
-
-	s := test.NewServer()
-	defer s.Close()
-
-	uri, err := pilosa.NewURIFromAddress(s.URL)
+	c := test.MustNewCluster(t, 2)
+	c[0].Config.Cluster.ReplicaN = 2
+	c[0].Config.AntiEntropy.Interval = 0
+	c[1].Config.Cluster.ReplicaN = 2
+	c[1].Config.AntiEntropy.Interval = 0
+	err := c.Start()
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("starting cluster: %v", err)
+	}
+	defer c.Close()
+
+	_, err = c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatalf("creating index i: %v", err)
+	}
+	_, err = c[0].API.CreateIndex(context.Background(), "y", pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatalf("creating index y: %v", err)
+	}
+	_, err = c[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+	if err != nil {
+		t.Fatalf("creating field f: %v", err)
+	}
+	_, err = c[0].API.CreateField(context.Background(), "i", "f0", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+	if err != nil {
+		t.Fatalf("creating field f0: %v", err)
+	}
+	_, err = c[0].API.CreateField(context.Background(), "y", "z", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+	if err != nil {
+		t.Fatalf("creating field z in y: %v", err)
 	}
 
-	cluster := test.NewCluster(2)
-	client := http.GetHTTPClient(nil)
-	httpClient := http.NewInternalClientFromURI(uri, client)
-	cluster.InternalClient = httpClient
-
-	// Create a local holder.
-	hldr0 := test.MustOpenHolder()
-	defer hldr0.Close()
-
-	// Create a remote holder wrapped by an HTTP
-	hldr1 := test.MustOpenHolder()
-	defer hldr1.Close()
-	s.Handler.API.Holder = hldr1.Holder
-	s.Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, shards []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		e := pilosa.NewExecutor(pilosa.OptExecutorInternalQueryClient(httpClient))
-		e.Holder = hldr1.Holder
-		e.Node = cluster.Nodes[1]
-		e.Cluster = cluster
-		return e.Execute(ctx, index, query, shards, opt)
-	}
-
-	// Mock 2-node, fully replicated cluster.
-	cluster.ReplicaN = 2
-
-	cluster.Nodes[0].URI = pilosa.NewTestURIFromHostPort("localhost", 0)
-	cluster.Nodes[1].URI = *uri
-
-	// Create fields on nodes.
-	for _, hldr := range []*test.Holder{hldr0, hldr1} {
-		hldr.MustCreateFieldIfNotExists("i", "f")
-		hldr.MustCreateFieldIfNotExists("i", "f0")
-		hldr.MustCreateFieldIfNotExists("y", "z")
-	}
+	hldr0 := &test.Holder{Holder: c[0].Server.Holder()}
+	hldr1 := &test.Holder{Holder: c[1].Server.Holder()}
 
 	// Set data on the local holder.
 	hldr0.SetBit("i", "f", 0, 10)
@@ -414,42 +403,39 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	hldr1.SetBit("y", "z", 10, (3*ShardWidth)+5)
 	hldr1.SetBit("y", "z", 10, (3*ShardWidth)+7)
 
-	// Set highest shard.
-	hldr0.Index("i").SetRemoteMaxShard(1)
-	hldr0.Index("y").SetRemoteMaxShard(3)
-
-	// Set up syncer.
-	syncer := pilosa.HolderSyncer{
-		Holder:  hldr0.Holder,
-		Node:    cluster.Nodes[0],
-		Cluster: cluster,
-		Stats:   pilosa.NopStatsClient,
+	err = c[0].Server.SyncData()
+	if err != nil {
+		t.Fatalf("syncing node 0: %v", err)
 	}
-
-	if err := syncer.SyncHolder(); err != nil {
-		t.Fatal(err)
+	err = c[1].Server.SyncData()
+	if err != nil {
+		t.Fatalf("syncing node 1: %v", err)
 	}
 
 	// Verify data is the same on both nodes.
 	for i, hldr := range []*test.Holder{hldr0, hldr1} {
 		if a := hldr.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
-			t.Fatalf("unexpected columns(%d/0): %+v", i, a)
-		} else if a := hldr.Row("i", "f", 2).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
-			t.Fatalf("unexpected columns(%d/2): %+v", i, a)
-		} else if a := hldr.Row("i", "f", 3).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
-			t.Fatalf("unexpected columns(%d/3): %+v", i, a)
-		} else if a := hldr.Row("i", "f", 120).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
-			t.Fatalf("unexpected columns(%d/120): %+v", i, a)
-		} else if a := hldr.Row("i", "f", 200).Columns(); !reflect.DeepEqual(a, []uint64{4}) {
-			t.Fatalf("unexpected columns(%d/200): %+v", i, a)
+			t.Errorf("unexpected columns(%d/0): %+v", i, a)
+		}
+		if a := hldr.Row("i", "f", 2).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
+			t.Errorf("unexpected columns(%d/2): %+v", i, a)
+		}
+		if a := hldr.Row("i", "f", 3).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+			t.Errorf("unexpected columns(%d/3): %+v", i, a)
+		}
+		if a := hldr.Row("i", "f", 120).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+			t.Errorf("unexpected columns(%d/120): %+v", i, a)
+		}
+		if a := hldr.Row("i", "f", 200).Columns(); !reflect.DeepEqual(a, []uint64{4}) {
+			t.Errorf("unexpected columns(%d/200): %+v", i, a)
 		}
 
 		if a := hldr.Row("i", "f0", 9).Columns(); !reflect.DeepEqual(a, []uint64{ShardWidth + 5}) {
-			t.Fatalf("unexpected columns(%d/d/f0): %+v", i, a)
+			t.Errorf("unexpected columns(%d/d/f0): %+v", i, a)
 		}
 
 		if a := hldr.Row("y", "z", 10).Columns(); !reflect.DeepEqual(a, []uint64{(3 * ShardWidth) + 4, (3 * ShardWidth) + 5, (3 * ShardWidth) + 7}) {
-			t.Fatalf("unexpected columns(%d/y/z): %+v", i, a)
+			t.Errorf("unexpected columns(%d/y/z): %+v", i, a)
 		}
 	}
 }

@@ -30,20 +30,6 @@ import (
 	"github.com/pilosa/pilosa/test"
 )
 
-func createCluster(c *pilosa.Cluster) ([]*test.Server, []*test.Holder) {
-	numNodes := len(c.Nodes)
-	hldr := make([]*test.Holder, numNodes)
-	server := make([]*test.Server, numNodes)
-	for i := 0; i < numNodes; i++ {
-		hldr[i] = test.MustOpenHolder()
-		server[i] = test.NewServer()
-		server[i].Handler.API.Cluster = c
-		server[i].Handler.API.Cluster.Nodes[i].URI = server[i].HostURI()
-		server[i].Handler.API.Holder = hldr[i].Holder
-	}
-	return server, hldr
-}
-
 var defaultClient *gohttp.Client
 
 func init() {
