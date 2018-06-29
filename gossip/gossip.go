@@ -337,7 +337,6 @@ func (g *gossipEventReceiver) listen() {
 		if err := proto.Unmarshal(e.Node.Meta, &n); err != nil {
 			panic("failed to unmarshal event node meta data")
 		}
-		// node := pilosa.DecodeNode(&n)
 
 		ne := &internal.NodeEventMessage{
 			Event: uint32(nodeEventType),
