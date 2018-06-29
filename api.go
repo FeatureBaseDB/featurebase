@@ -35,10 +35,9 @@ import (
 // API provides the top level programmatic interface to Pilosa. It is usually
 // wrapped by a handler which provides an external interface (e.g. HTTP).
 type API struct {
-	Holder      *Holder
-	Broadcaster Broadcaster
-	Cluster     *Cluster
-	server      *Server
+	Holder  *Holder
+	Cluster *Cluster
+	server  *Server
 }
 
 // APIOption is a functional option type for pilosa.API
@@ -48,7 +47,6 @@ func OptAPIServer(s *Server) APIOption {
 	return func(a *API) error {
 		a.server = s
 		a.Holder = s.holder
-		a.Broadcaster = s
 		a.Cluster = s.cluster
 		return nil
 	}
@@ -56,11 +54,7 @@ func OptAPIServer(s *Server) APIOption {
 
 // NewAPI returns a new API instance.
 func NewAPI(opts ...APIOption) (*API, error) {
-	api := &API{
-		Broadcaster: NopBroadcaster,
-		//BroadcastHandler: NopBroadcastHandler, // TODO: implement the nop
-		//StatusHandler:    NopStatusHandler,    // TODO: implement the nop
-	}
+	api := &API{}
 
 	for _, opt := range opts {
 		err := opt(api)
@@ -190,7 +184,7 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 		return nil, errors.Wrap(err, "creating index")
 	}
 	// Send the create index message to all nodes.
-	err = api.Broadcaster.SendSync(
+	err = api.server.SendSync(
 		&internal.CreateIndexMessage{
 			Index: indexName,
 			Meta:  options.Encode(),
@@ -229,7 +223,7 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 		return errors.Wrap(err, "deleting index")
 	}
 	// Send the delete index message to all nodes.
-	err = api.Broadcaster.SendSync(
+	err = api.server.SendSync(
 		&internal.DeleteIndexMessage{
 			Index: indexName,
 		})
@@ -269,7 +263,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 	}
 
 	// Send the create field message to all nodes.
-	err = api.Broadcaster.SendSync(
+	err = api.server.SendSync(
 		&internal.CreateFieldMessage{
 			Index: indexName,
 			Field: fieldName,
@@ -303,7 +297,7 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 	}
 
 	// Send the delete field message to all nodes.
-	err := api.Broadcaster.SendSync(
+	err := api.server.SendSync(
 		&internal.DeleteFieldMessage{
 			Index: indexName,
 			Field: fieldName,
@@ -476,7 +470,7 @@ func (api *API) RecalculateCaches(ctx context.Context) error {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	err := api.Broadcaster.SendSync(&internal.RecalculateCaches{})
+	err := api.server.SendSync(&internal.RecalculateCaches{})
 	if err != nil {
 		return errors.Wrap(err, "broacasting message")
 	}
@@ -559,7 +553,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, fieldName stri
 	}
 
 	// Send the delete view message to all nodes.
-	err := api.Broadcaster.SendSync(
+	err := api.server.SendSync(
 		&internal.DeleteViewMessage{
 			Index: indexName,
 			Field: fieldName,
@@ -753,7 +747,7 @@ func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode
 	}
 
 	// Send the set-coordinator message to new node.
-	err = api.Broadcaster.SendTo(
+	err = api.server.SendTo(
 		newNode,
 		&internal.SetCoordinatorMessage{
 			New: EncodeNode(newNode),

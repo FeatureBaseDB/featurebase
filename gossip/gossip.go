@@ -39,11 +39,10 @@ var _ memberlist.Delegate = &GossipMemberSet{}
 type GossipMemberSet struct {
 	mu         sync.RWMutex
 	memberlist *memberlist.Memberlist
-	handler    pilosa.BroadcastHandler
 
 	broadcasts *memberlist.TransmitLimitedQueue
 
-	pserver *pilosa.Server
+	pserver pilosa.MemberServer
 	config  *gossipConfig
 
 	Logger pilosa.Logger
@@ -51,26 +50,11 @@ type GossipMemberSet struct {
 	logger    *log.Logger
 	transport *Transport
 
-	gossipEventReceiver *GossipEventReceiver
-}
-
-// GetBindAddr returns the gossip bind address based on config and auto bind port.
-// This method is currently only used in a test scenario where a second node needs
-// the auto-bind address of the first node to use as its gossip seed.
-func (g *GossipMemberSet) GetBindAddr() string {
-	return fmt.Sprintf("%s:%d", g.config.memberlistConfig.BindAddr, g.config.memberlistConfig.BindPort)
+	gossipEventReceiver *gossipEventReceiver
 }
 
 // Open implements the MemberSet interface to start network activity.
-func (g *GossipMemberSet) Open() error {
-	err := g.gossipEventReceiver.Start(g.pserver)
-	if err != nil {
-		return errors.Wrap(err, "starting event delegate")
-	}
-	if g.handler == nil {
-		return fmt.Errorf("must call Start(pilosa.BroadcastHandler) before calling Open()")
-	}
-
+func (g *GossipMemberSet) Open() (err error) {
 	g.mu.Lock()
 	g.memberlist, err = memberlist.Create(g.config.memberlistConfig)
 	g.mu.Unlock()
@@ -173,10 +157,8 @@ func NewGossipMemberSet(cfg Config, s *pilosa.Server, options ...GossipMemberSet
 			return nil, errors.Wrap(err, "executing option")
 		}
 	}
-	ger := NewGossipEventReceiver(g.logger)
+	ger := newGossipEventReceiver(g.logger, s)
 	g.gossipEventReceiver = ger
-
-	g.handler = s
 
 	if g.transport == nil {
 		port, err := strconv.Atoi(cfg.Port)
@@ -255,7 +237,7 @@ func (g *GossipMemberSet) NotifyMsg(b []byte) {
 		g.Logger.Printf("unmarshal message error: %s", err)
 		return
 	}
-	if err := g.handler.ReceiveMessage(m); err != nil {
+	if err := g.pserver.ReceiveMessage(m); err != nil {
 		g.Logger.Printf("receive message error: %s", err)
 		return
 	}
@@ -300,46 +282,42 @@ func (g *GossipMemberSet) MergeRemoteState(buf []byte, join bool) {
 	}
 }
 
-// GossipEventReceiver is used to enable an application to receive
+// gossipEventReceiver is used to enable an application to receive
 // events about joins and leaves over a channel.
 //
 // Care must be taken that events are processed in a timely manner from
 // the channel, since this delegate will block until an event can be sent.
-type GossipEventReceiver struct {
+type gossipEventReceiver struct {
 	ch           chan memberlist.NodeEvent
-	eventHandler pilosa.EventHandler
+	eventHandler *pilosa.Server
 
-	Logger *log.Logger
+	logger *log.Logger
 }
 
-// NewGossipEventReceiver returns a new instance of GossipEventReceiver.
-func NewGossipEventReceiver(logger *log.Logger) *GossipEventReceiver {
-	return &GossipEventReceiver{
-		ch:     make(chan memberlist.NodeEvent, 1),
-		Logger: logger,
+// newGossipEventReceiver returns a new instance of GossipEventReceiver.
+func newGossipEventReceiver(logger *log.Logger, pserver *pilosa.Server) *gossipEventReceiver {
+	ger := &gossipEventReceiver{
+		ch:           make(chan memberlist.NodeEvent, 1),
+		logger:       logger,
+		eventHandler: pserver,
 	}
+	go ger.listen()
+	return ger
 }
 
-func (g *GossipEventReceiver) NotifyJoin(n *memberlist.Node) {
+func (g *gossipEventReceiver) NotifyJoin(n *memberlist.Node) {
 	g.ch <- memberlist.NodeEvent{memberlist.NodeJoin, n}
 }
 
-func (g *GossipEventReceiver) NotifyLeave(n *memberlist.Node) {
+func (g *gossipEventReceiver) NotifyLeave(n *memberlist.Node) {
 	g.ch <- memberlist.NodeEvent{memberlist.NodeLeave, n}
 }
 
-func (g *GossipEventReceiver) NotifyUpdate(n *memberlist.Node) {
+func (g *gossipEventReceiver) NotifyUpdate(n *memberlist.Node) {
 	g.ch <- memberlist.NodeEvent{memberlist.NodeUpdate, n}
 }
 
-// Start implements the pilosa.EventReceiver interface and sets the EventHandler.
-func (g *GossipEventReceiver) Start(h pilosa.EventHandler) error {
-	g.eventHandler = h
-	go g.listen()
-	return nil
-}
-
-func (g *GossipEventReceiver) listen() {
+func (g *gossipEventReceiver) listen() {
 	var nodeEventType pilosa.NodeEventType
 	for {
 		e := <-g.ch
@@ -359,35 +337,14 @@ func (g *GossipEventReceiver) listen() {
 		if err := proto.Unmarshal(e.Node.Meta, &n); err != nil {
 			panic("failed to unmarshal event node meta data")
 		}
-		node := pilosa.DecodeNode(&n)
 
-		ne := &pilosa.NodeEvent{
-			Event: nodeEventType,
-			Node:  node,
+		ne := &internal.NodeEventMessage{
+			Event: uint32(nodeEventType),
+			Node:  &n,
 		}
-		if err := g.eventHandler.ReceiveEvent(ne); err != nil {
-			g.Logger.Printf("receive event error: %s", err)
+		if err := g.eventHandler.ReceiveMessage(ne); err != nil {
+			g.logger.Printf("receive event error: %s", err)
 		}
-	}
-}
-
-// broadcast represents an implementation of memberlist.Broadcast
-type broadcast struct {
-	msg    []byte
-	notify chan<- struct{}
-}
-
-func (b *broadcast) Invalidates(other memberlist.Broadcast) bool {
-	return false
-}
-
-func (b *broadcast) Message() []byte {
-	return b.msg
-}
-
-func (b *broadcast) Finished() {
-	if b.notify != nil {
-		close(b.notify)
 	}
 }
 

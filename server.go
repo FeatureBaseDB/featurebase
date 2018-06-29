@@ -41,8 +41,7 @@ const (
 
 // Ensure Server implements interfaces.
 var _ Broadcaster = &Server{}
-var _ BroadcastHandler = &Server{}
-var _ StatusHandler = &Server{}
+var _ MemberServer = &Server{}
 
 // Server represents a holder wrapped by a running HTTP server.
 type Server struct {
@@ -557,11 +556,6 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 	return &ns, nil
 }
 
-// ClusterStatus returns the ClusterState and NodeSet for the cluster.
-func (s *Server) ClusterStatus() (proto.Message, error) {
-	return s.cluster.Status(), nil
-}
-
 // HandleRemoteStatus receives incoming NodeStatus from remote nodes.
 func (s *Server) HandleRemoteStatus(pb proto.Message) error {
 	// Ignore NodeStatus messages until the cluster is in a Normal state.
@@ -707,11 +701,6 @@ func (s *Server) monitorRuntime() {
 	}
 }
 
-// ReceiveEvent implements the EventHandler interface.
-func (s *Server) ReceiveEvent(e *NodeEvent) error {
-	return s.cluster.ReceiveEvent(e)
-}
-
 // countOpenFiles on operating systems that support lsof.
 func countOpenFiles() (int, error) {
 	switch runtime.GOOS {
@@ -733,15 +722,6 @@ func countOpenFiles() (int, error) {
 	}
 }
 
-// StatusHandler specifies the methods which an object must implement to share
-// state in the cluster. These are used by the GossipMemberSet to implement the
-// LocalState and MergeRemoteState methods of memberlist.Delegate
-type StatusHandler interface {
-	LocalStatus() (proto.Message, error)
-	ClusterStatus() (proto.Message, error)
-	HandleRemoteStatus(proto.Message) error
-}
-
 func expandDirName(path string) (string, error) {
 	prefix := "~" + string(filepath.Separator)
 	if strings.HasPrefix(path, prefix) {
@@ -752,4 +732,11 @@ func expandDirName(path string) (string, error) {
 		return filepath.Join(HomeDir, strings.TrimPrefix(path, prefix)), nil
 	}
 	return path, nil
+}
+
+type MemberServer interface {
+	ReceiveMessage(proto.Message) error
+	LocalStatus() (proto.Message, error)
+	HandleRemoteStatus(proto.Message) error
+	Node() *Node
 }
