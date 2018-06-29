@@ -209,6 +209,20 @@ func OptServerIsCoordinator(is bool) ServerOption {
 	}
 }
 
+func OptServerNodeID(nodeID string) ServerOption {
+	return func(s *Server) error {
+		s.nodeID = nodeID
+		return nil
+	}
+}
+
+func OptServerClusterHasher(h Hasher) ServerOption {
+	return func(s *Server) error {
+		s.cluster.Hasher = h
+		return nil
+	}
+}
+
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{

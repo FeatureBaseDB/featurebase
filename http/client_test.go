@@ -26,6 +26,7 @@ import (
 	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -50,41 +51,26 @@ func init() {
 
 }
 
+// modHasher represents a simple, mod-based hashing.
+type modHasher struct{}
+
+func (*modHasher) Hash(key uint64, n int) int { return int(key) % n }
+
 // Test distributed TopN Row count across 3 nodes.
 func TestClient_MultiNode(t *testing.T) {
-	t.Skip() // Until test.NewServer() works
+	c := test.MustRunCluster(t, 3,
+		[]server.CommandOption{
+			server.OptCommandServerOptions(pilosa.OptServerNodeID("node0"), pilosa.OptServerClusterHasher(&modHasher{}))},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(pilosa.OptServerNodeID("node1"), pilosa.OptServerClusterHasher(&modHasher{}))},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(pilosa.OptServerNodeID("node2"), pilosa.OptServerClusterHasher(&modHasher{}))},
+	)
+	defer c.Close()
 
-	cluster := test.NewCluster(3)
-	s, hldr := createCluster(cluster)
-
-	for i := 0; i < len(cluster.Nodes); i++ {
-		defer hldr[i].Close()
-		defer s[i].Close()
-	}
-
-	s[0].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, shards []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		httpClient := http.NewInternalClientFromURI(&cluster.Nodes[0].URI, defaultClient)
-		e := pilosa.NewExecutor(pilosa.OptExecutorInternalQueryClient(httpClient))
-		e.Holder = hldr[0].Holder
-		e.Node = cluster.Nodes[0]
-		e.Cluster = cluster
-		return e.Execute(ctx, index, query, shards, opt)
-	}
-	s[1].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, shards []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		httpClient := http.NewInternalClientFromURI(&cluster.Nodes[0].URI, defaultClient)
-		e := pilosa.NewExecutor(pilosa.OptExecutorInternalQueryClient(httpClient))
-		e.Holder = hldr[1].Holder
-		e.Node = cluster.Nodes[1]
-		e.Cluster = cluster
-		return e.Execute(ctx, index, query, shards, opt)
-	}
-	s[2].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, shards []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-		httpClient := http.NewInternalClientFromURI(&cluster.Nodes[0].URI, defaultClient)
-		e := pilosa.NewExecutor(pilosa.OptExecutorInternalQueryClient(httpClient))
-		e.Holder = hldr[2].Holder
-		e.Node = cluster.Nodes[2]
-		e.Cluster = cluster
-		return e.Execute(ctx, index, query, shards, opt)
+	hldr := []test.Holder{}
+	for _, command := range c {
+		hldr = append(hldr, test.Holder{Holder: command.Server.Holder()})
 	}
 
 	// Create a dispersed set of bitmaps across 3 nodes such that each individual node and shard width increment would reveal a different TopN.
@@ -106,7 +92,7 @@ func TestClient_MultiNode(t *testing.T) {
 			}
 		}
 		if !ownsNum {
-			t.Fatalf("Trying to use shard %d on host %s, but it doesn't own that shard. It owns %v", num, s[i].Host(), owns)
+			t.Fatalf("Trying to use shard %d on host %s, but it doesn't own that shard. It owns %v", num, c[i].URL(), owns)
 		}
 	}
 
@@ -120,13 +106,21 @@ func TestClient_MultiNode(t *testing.T) {
 			maxShard = x
 		}
 	}
+	_, err := c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+	_, err = c[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, 100))
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
 
 	hldr[0].MustSetBits("i", "f", 100, baseBit0+10)
 	hldr[0].MustSetBits("i", "f", 4, baseBit0+10, baseBit0+11, baseBit0+12)
 	hldr[0].MustSetBits("i", "f", 4, baseBit0+10, baseBit0+11, baseBit0+12, baseBit0+13, baseBit0+14, baseBit0+15)
 	hldr[0].MustSetBits("i", "f", 2, baseBit0+1, baseBit0+2, baseBit0+3, baseBit0+4)
 	hldr[0].MustSetBits("i", "f", 3, baseBit0+1, baseBit0+2, baseBit0+3, baseBit0+4, baseBit0+5)
-	hldr[0].MustSetBits("i", "f", 22, baseBit0+1, baseBit0+2, baseBit0+10)
+	hldr[0].MustSetBits("i", "f", 22, baseBit0+1, baseBit0+2)
 
 	hldr[1].MustSetBits("i", "f", 99, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4)
 	hldr[1].MustSetBits("i", "f", 100, baseBit1+1, baseBit1+2, baseBit1+3, baseBit1+4, baseBit1+5, baseBit1+6, baseBit1+7, baseBit1+8, baseBit1+9, baseBit1+10)
@@ -145,38 +139,26 @@ func TestClient_MultiNode(t *testing.T) {
 	// Rebuild the RankCache.
 	// We have to do this to avoid the 10-second cache invalidation delay
 	// built into cache.Invalidate()
-	hldr[0].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, shardNums[0]).RecalculateCache()
-	hldr[1].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, shardNums[1]).RecalculateCache()
-	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, shardNums[2]).RecalculateCache()
+	c[0].RecalculateCaches()
+	c[1].RecalculateCaches()
+	c[2].RecalculateCaches()
 
 	// Connect to each node to compare results.
 	client := make([]*Client, 3)
-	client[0] = MustNewClient(s[0].Host(), defaultClient)
-	client[1] = MustNewClient(s[1].Host(), defaultClient)
-	client[2] = MustNewClient(s[2].Host(), defaultClient)
+	client[0] = MustNewClient(c[0].URL(), defaultClient)
+	client[1] = MustNewClient(c[1].URL(), defaultClient)
+	client[2] = MustNewClient(c[2].URL(), defaultClient)
 
 	topN := 4
 	queryRequest := &internal.QueryRequest{
 		Query:  fmt.Sprintf(`TopN(f, n=%d)`, topN),
 		Remote: false,
 	}
+
 	result, err := client[0].Query(context.Background(), "i", queryRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// Check the results before every node has the correct max shard value.
-	pairs := result.Results[0].Pairs
-	for _, pair := range pairs {
-		if pair.ID == 22 && pair.Count != 3 {
-			t.Fatalf("Invalid Cluster wide MaxShard prevents accurate calculation of %s", pair)
-		}
-	}
-
-	// Set max shard to correct value.
-	hldr[0].Index("i").SetRemoteMaxShard(maxShard)
-	hldr[1].Index("i").SetRemoteMaxShard(maxShard)
-	hldr[2].Index("i").SetRemoteMaxShard(maxShard)
 
 	result, err = client[0].Query(context.Background(), "i", queryRequest)
 	if err != nil {
@@ -189,7 +171,7 @@ func TestClient_MultiNode(t *testing.T) {
 	}
 	p := []*internal.Pair{
 		{ID: 100, Count: 12},
-		{ID: 22, Count: 11},
+		{ID: 22, Count: 10},
 		{ID: 98, Count: 8},
 		{ID: 99, Count: 7}}
 
