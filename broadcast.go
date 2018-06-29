@@ -54,12 +54,6 @@ func (c *nopBroadcaster) SendTo(to *Node, pb proto.Message) error {
 	return nil
 }
 
-// BroadcastHandler is the interface for the pilosa object which knows how to
-// handle broadcast messages. (Hint: this is implemented by pilosa.Server)
-type BroadcastHandler interface {
-	ReceiveMessage(pb proto.Message) error
-}
-
 // Broadcast message types.
 const (
 	messageTypeCreateShard = iota
