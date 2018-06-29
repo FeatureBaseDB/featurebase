@@ -49,13 +49,13 @@ func TestFragCombos(t *testing.T) {
 
 	tests := []struct {
 		idx        string
-		maxSlice   uint64
+		maxShard   uint64
 		fieldViews viewsByField
 		expected   fragsByHost
 	}{
 		{
 			idx:        "i",
-			maxSlice:   uint64(2),
+			maxShard:   uint64(2),
 			fieldViews: viewsByField{"f": []string{"v1", "v2"}},
 			expected: fragsByHost{
 				"node0": []frag{{"f", "v1", uint64(0)}, {"f", "v2", uint64(0)}},
@@ -64,7 +64,7 @@ func TestFragCombos(t *testing.T) {
 		},
 		{
 			idx:        "foo",
-			maxSlice:   uint64(3),
+			maxShard:   uint64(3),
 			fieldViews: viewsByField{"f": []string{"v0"}},
 			expected: fragsByHost{
 				"node0": []frag{{"f", "v0", uint64(1)}, {"f", "v0", uint64(2)}},
@@ -74,7 +74,7 @@ func TestFragCombos(t *testing.T) {
 	}
 	for _, test := range tests {
 
-		actual := c.fragCombos(test.idx, test.maxSlice, test.fieldViews)
+		actual := c.fragCombos(test.idx, test.maxShard, test.fieldViews)
 		if !reflect.DeepEqual(actual, test.expected) {
 			t.Errorf("expected: %v, but got: %v", test.expected, actual)
 		}
@@ -339,13 +339,13 @@ func TestCluster_Owners(t *testing.T) {
 
 // Ensure the partitioner can assign a fragment to a partition.
 func TestCluster_Partition(t *testing.T) {
-	if err := quick.Check(func(index string, slice uint64, partitionN int) bool {
+	if err := quick.Check(func(index string, shard uint64, partitionN int) bool {
 		c := NewCluster()
 		c.partitionN = partitionN
 
-		partitionID := c.partition(index, slice)
+		partitionID := c.partition(index, shard)
 		if partitionID < 0 || partitionID >= partitionN {
-			t.Errorf("partition out of range: slice=%d, p=%d, n=%d", slice, partitionID, partitionN)
+			t.Errorf("partition out of range: shard=%d, p=%d, n=%d", shard, partitionID, partitionN)
 		}
 
 		return true
@@ -380,14 +380,14 @@ func TestHasher(t *testing.T) {
 	}
 }
 
-// Ensure ContainsSlices can find the actual slice list for node and index.
-func TestCluster_ContainsSlices(t *testing.T) {
+// Ensure ContainsShards can find the actual shard list for node and index.
+func TestCluster_ContainsShards(t *testing.T) {
 	c := NewTestCluster(5)
 	c.ReplicaN = 3
-	slices := c.containsSlices("test", 10, c.Nodes[2])
+	shards := c.containsShards("test", 10, c.Nodes[2])
 
-	if !reflect.DeepEqual(slices, []uint64{0, 2, 3, 5, 6, 9, 10}) {
-		t.Fatalf("unexpected slices for node's index: %v", slices)
+	if !reflect.DeepEqual(shards, []uint64{0, 2, 3, 5, 6, 9, 10}) {
+		t.Fatalf("unexpected shars for node's index: %v", shards)
 	}
 }
 

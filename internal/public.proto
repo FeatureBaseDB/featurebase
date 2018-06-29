@@ -46,7 +46,7 @@ message AttrMap {
 
 message QueryRequest {
 	string Query = 1;
-	repeated uint64 Slices = 2;
+	repeated uint64 Shards = 2;
 	bool ColumnAttrs = 3;
 	bool Remote = 5;
 	bool ExcludeRowAttrs = 6;
@@ -71,7 +71,7 @@ message QueryResult {
 message ImportRequest {
 	string Index = 1;
 	string Field = 2;
-	uint64 Slice = 3;
+	uint64 Shard = 3;
 	repeated uint64 RowIDs = 4;
 	repeated uint64 ColumnIDs = 5;
 	repeated string RowKeys = 7;
@@ -82,7 +82,7 @@ message ImportRequest {
 message ImportValueRequest {
 	string Index = 1;
 	string Field = 2;
-	uint64 Slice = 3;
+	uint64 Shard = 3;
 	repeated uint64 ColumnIDs = 5;
 	repeated string ColumnKeys = 7;
 	repeated int64 Values = 6;

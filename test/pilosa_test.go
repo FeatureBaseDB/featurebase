@@ -27,7 +27,7 @@ import (
 
 func TestNewCluster(t *testing.T) {
 	numNodes := 3
-	cluster := test.MustRunMainWithCluster(t, numNodes)
+	cluster := test.MustRunCluster(t, numNodes)
 
 	coordinator := getCoordinator(cluster[0])
 	for i := 1; i < numNodes; i++ {
@@ -78,7 +78,7 @@ func TestNewCluster(t *testing.T) {
 	}
 }
 
-func getCoordinator(m *test.Main) string {
+func getCoordinator(m *test.Command) string {
 	hosts := m.API.Hosts(context.Background())
 	for _, host := range hosts {
 		if host.IsCoordinator {

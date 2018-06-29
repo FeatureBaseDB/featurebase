@@ -18,8 +18,8 @@ import (
 	"github.com/pilosa/pilosa"
 )
 
-// SliceWidth is a helper reference to use when testing.
-const SliceWidth = pilosa.SliceWidth
+// ShardWidth is a helper reference to use when testing.
+const ShardWidth = pilosa.ShardWidth
 
 // Fragment is a test wrapper for pilosa.Fragment.
 type Fragment struct {

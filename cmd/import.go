@@ -32,7 +32,7 @@ func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command 
 		Use:   "import",
 		Short: "Bulk load data into pilosa.",
 		Long: `Bulk imports one or more CSV files to a host's index and field. The data
-of the CSV file are grouped by slice for the most efficient import.
+of the CSV file are grouped by shard for the most efficient import.
 
 The format of the CSV file is:
 

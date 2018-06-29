@@ -200,11 +200,11 @@ func (h *Holder) HasData() (bool, error) {
 	return false, nil
 }
 
-// MaxSlices returns MaxSlice map for all indexes.
-func (h *Holder) MaxSlices() map[string]uint64 {
+// MaxShards returns MaxShard map for all indexes.
+func (h *Holder) MaxShards() map[string]uint64 {
 	a := make(map[string]uint64)
 	for _, index := range h.Indexes() {
-		a[index.Name()] = index.MaxSlice()
+		a[index.Name()] = index.MaxShard()
 	}
 	return a
 }
@@ -257,10 +257,10 @@ func (h *Holder) ApplySchema(schema *internal.Schema) error {
 	return nil
 }
 
-// EncodeMaxSlices creates and internal representation of max slices.
-func (h *Holder) EncodeMaxSlices() *internal.MaxSlices {
-	return &internal.MaxSlices{
-		Standard: h.MaxSlices(),
+// EncodeMaxShards creates and internal representation of max shards.
+func (h *Holder) EncodeMaxShards() *internal.MaxShards {
+	return &internal.MaxShards{
+		Standard: h.MaxShards(),
 	}
 }
 
@@ -411,13 +411,13 @@ func (h *Holder) View(index, field, name string) *View {
 	return f.View(name)
 }
 
-// Fragment returns the fragment for an index, field & slice.
-func (h *Holder) Fragment(index, field, view string, slice uint64) *Fragment {
+// Fragment returns the fragment for an index, field & shard.
+func (h *Holder) Fragment(index, field, view string, shard uint64) *Fragment {
 	v := h.View(index, field, view)
 	if v == nil {
 		return nil
 	}
-	return v.Fragment(slice)
+	return v.Fragment(shard)
 }
 
 // monitorCacheFlush periodically flushes all fragment caches sequentially.
@@ -619,9 +619,9 @@ func (s *HolderSyncer) SyncHolder() error {
 					return nil
 				}
 
-				for slice := uint64(0); slice <= s.Holder.Index(di.Name).MaxSlice(); slice++ {
-					// Ignore slices that this host doesn't own.
-					if !s.Cluster.ownsSlice(s.Node.ID, di.Name, slice) {
+				for shard := uint64(0); shard <= s.Holder.Index(di.Name).MaxShard(); shard++ {
+					// Ignore shards that this host doesn't own.
+					if !s.Cluster.ownsShard(s.Node.ID, di.Name, shard) {
 						continue
 					}
 
@@ -631,8 +631,8 @@ func (s *HolderSyncer) SyncHolder() error {
 					}
 
 					// Sync fragment if own it.
-					if err := s.syncFragment(di.Name, fi.Name, vi.Name, slice); err != nil {
-						return fmt.Errorf("fragment sync error: index=%s, field=%s, slice=%d, err=%s", di.Name, fi.Name, slice, err)
+					if err := s.syncFragment(di.Name, fi.Name, vi.Name, shard); err != nil {
+						return fmt.Errorf("fragment sync error: index=%s, field=%s, shard=%d, err=%s", di.Name, fi.Name, shard, err)
 					}
 				}
 			}
@@ -736,7 +736,7 @@ func (s *HolderSyncer) syncField(index, name string) error {
 }
 
 // syncFragment synchronizes a fragment with the rest of the cluster.
-func (s *HolderSyncer) syncFragment(index, field, view string, slice uint64) error {
+func (s *HolderSyncer) syncFragment(index, field, view string, shard uint64) error {
 	// Retrieve local field.
 	f := s.Holder.Field(index, field)
 	if f == nil {
@@ -750,7 +750,7 @@ func (s *HolderSyncer) syncFragment(index, field, view string, slice uint64) err
 	}
 
 	// Ensure fragment exists locally.
-	frag, err := v.CreateFragmentIfNotExists(slice)
+	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		return errors.Wrap(err, "creating fragment")
 	}
@@ -800,19 +800,19 @@ func (c *HolderCleaner) CleanHolder() error {
 		}
 
 		// Get the fragments that node is responsible for (based on hash(index, node)).
-		containedSlices := c.Cluster.containsSlices(index.Name(), index.MaxSlice(), c.Node)
+		containedShards := c.Cluster.containsShards(index.Name(), index.MaxShard(), c.Node)
 
 		// Get the fragments registered in memory.
 		for _, field := range index.Fields() {
 			for _, view := range field.Views() {
 				for _, fragment := range view.allFragments() {
-					fragSlice := fragment.slice
+					fragShard := fragment.shard
 					// Ignore fragments that should be present.
-					if uint64InSlice(fragSlice, containedSlices) {
+					if uint64InSlice(fragShard, containedShards) {
 						continue
 					}
 					// Delete fragment.
-					if err := view.deleteFragment(fragSlice); err != nil {
+					if err := view.deleteFragment(fragShard); err != nil {
 						return errors.Wrap(err, "deleting fragment")
 					}
 				}

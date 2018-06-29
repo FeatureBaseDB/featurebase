@@ -56,7 +56,7 @@ var (
 	ErrQueryRequired    = errors.New("query required")
 	ErrTooManyWrites    = errors.New("too many write commands")
 
-	ErrClusterDoesNotOwnSlice = errors.New("cluster does not own slice")
+	ErrClusterDoesNotOwnShard = errors.New("cluster does not own shard")
 
 	ErrNodeIDNotExists    = errors.New("node with provided ID does not exist")
 	ErrNodeNotCoordinator = errors.New("node is not the coordinator")

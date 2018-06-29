@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,6 +39,10 @@ const (
 
 	// Default ranked field cache
 	DefaultCacheSize = 50000
+
+	bitsPerWord = 32 << (^uint(0) >> 63) // either 32 or 64
+	maxInt      = 1<<(bitsPerWord-1) - 1 // either 1<<31 - 1 or 1<<63 - 1
+
 )
 
 // Field types.
@@ -152,15 +157,15 @@ func (f *Field) Path() string { return f.path }
 // RowAttrStore returns the attribute storage.
 func (f *Field) RowAttrStore() AttrStore { return f.rowAttrStore }
 
-// MaxSlice returns the max slice in the field.
-func (f *Field) MaxSlice() uint64 {
+// MaxShard returns the max shard in the field.
+func (f *Field) MaxShard() uint64 {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
 	var max uint64
 	for _, view := range f.views {
-		if viewMaxSlice := view.calculateMaxSlice(); viewMaxSlice > max {
-			max = viewMaxSlice
+		if viewMaxShard := view.calculateMaxShard(); viewMaxShard > max {
+			max = viewMaxShard
 		}
 	}
 	return max
@@ -609,7 +614,6 @@ func (f *Field) createViewIfNotExistsBase(name string) (*View, bool, error) {
 	if view := f.views[name]; view != nil {
 		return view, false, nil
 	}
-
 	view := f.newView(f.ViewPath(name), name)
 
 	if err := view.open(); err != nil {
@@ -665,7 +669,7 @@ func (f *Field) Row(rowID uint64) (*Row, error) {
 	return view.row(rowID), nil
 }
 
-// ViewRow returns a row for a view and slice.
+// ViewRow returns a row for a view and shard.
 // TODO: unexport this with views (it's only used in tests).
 func (f *Field) ViewRow(viewName string, rowID uint64) (*Row, error) {
 	view := f.View(viewName)
@@ -715,13 +719,14 @@ func (f *Field) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err err
 }
 
 // ClearBit clears a bit within the field.
-func (f *Field) ClearBit(rowID, colID uint64, t *time.Time) (changed bool, err error) {
+func (f *Field) ClearBit(rowID, colID uint64) (changed bool, err error) {
 	viewName := ViewStandard
 
 	// Retrieve view. Exit if it doesn't exist.
-	view, err := f.CreateViewIfNotExists(viewName)
-	if err != nil {
-		return changed, errors.Wrap(err, "creating view")
+	view, present := f.views[viewName]
+	if !present {
+		return changed, errors.Wrap(err, "clearing missing view")
+
 	}
 
 	// Clear non-time bit.
@@ -730,27 +735,73 @@ func (f *Field) ClearBit(rowID, colID uint64, t *time.Time) (changed bool, err e
 	} else if v {
 		changed = v
 	}
-
-	// Exit early if no timestamp is specified.
-	if t == nil {
+	if len(f.views) == 1 { // assuming no time views
 		return changed, nil
 	}
-
-	// If a timestamp is specified then clear bits across all views for the quantum.
-	for _, subname := range viewsByTime(viewName, *t, f.TimeQuantum()) {
-		view, err := f.CreateViewIfNotExists(subname)
-		if err != nil {
-			return changed, errors.Wrapf(err, "creating view %s", subname)
+	lastViewNameSize := 0
+	level := 0
+	skipAbove := maxInt
+	for _, view := range f.allTimeViewsSortedByQuantum() {
+		if lastViewNameSize < len(view.name) {
+			level++
+		} else if lastViewNameSize > len(view.name) {
+			level--
 		}
-
-		if c, err := view.clearBit(rowID, colID); err != nil {
-			return changed, errors.Wrapf(err, "clearing on view %s", subname)
-		} else if c {
-			changed = true
+		if level < skipAbove {
+			if changed, err = view.clearBit(rowID, colID); err != nil {
+				return changed, errors.Wrapf(err, "clearing on view %s", view.name)
+			}
+			if !changed {
+				skipAbove = level + 1
+			} else {
+				skipAbove = maxInt
+			}
 		}
+		lastViewNameSize = len(view.name)
 	}
 
 	return changed, nil
+}
+
+func groupCompare(a, b string, offset int) (lt, eq bool) {
+	if len(a) > offset {
+		a = a[:offset]
+	}
+	if len(b) > offset {
+		b = b[:offset]
+	}
+	v := strings.Compare(a, b)
+	return v < 0, v == 0
+}
+
+func (f *Field) allTimeViewsSortedByQuantum() (me []*View) {
+	me = make([]*View, len(f.views), len(f.views))
+	prefix := ViewStandard + "_"
+	offset := len(ViewStandard) + 1
+	i := 0
+	for _, v := range f.views {
+		if len(v.name) > offset && strings.Compare(v.name[:offset], prefix) == 0 { // skip non-time views
+			me[i] = v
+			i++
+		}
+	}
+	me = me[:i]
+	year := strings.Index(me[0].name, "_") + 4
+	month := year + 2
+	day := month + 2
+	sort.Slice(me, func(i, j int) (lt bool) {
+		var eq bool
+		// group by quantum from year to hour
+		if lt, eq = groupCompare(me[i].name, me[j].name, year); eq {
+			if lt, eq = groupCompare(me[i].name, me[j].name, month); eq {
+				if lt, eq = groupCompare(me[i].name, me[j].name, day); eq {
+					lt = strings.Compare(me[i].name, me[j].name) > 0
+				}
+			}
+		}
+		return
+	})
+	return
 }
 
 // Value reads a field value for a column.
@@ -934,7 +985,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 
 		// Attach bit to each standard view.
 		for _, name := range standard {
-			key := importKey{View: name, Slice: columnID / SliceWidth}
+			key := importKey{View: name, Shard: columnID / ShardWidth}
 			data := dataByFragment[key]
 			data.RowIDs = append(data.RowIDs, rowID)
 			data.ColumnIDs = append(data.ColumnIDs, columnID)
@@ -949,7 +1000,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 			return errors.Wrap(err, "creating view")
 		}
 
-		frag, err := view.CreateFragmentIfNotExists(key.Slice)
+		frag, err := view.CreateFragmentIfNotExists(key.Shard)
 		if err != nil {
 			return errors.Wrap(err, "creating view")
 		}
@@ -983,7 +1034,7 @@ func (f *Field) ImportValue(columnIDs []uint64, values []int64) error {
 
 		// Attach value to each bsiGroup view.
 		for _, name := range []string{viewName} {
-			key := importKey{View: name, Slice: columnID / SliceWidth}
+			key := importKey{View: name, Shard: columnID / ShardWidth}
 			data := dataByFragment[key]
 			data.ColumnIDs = append(data.ColumnIDs, columnID)
 			data.Values = append(data.Values, value)
@@ -1001,7 +1052,7 @@ func (f *Field) ImportValue(columnIDs []uint64, values []int64) error {
 			return errors.Wrap(err, "creating view")
 		}
 
-		frag, err := view.CreateFragmentIfNotExists(key.Slice)
+		frag, err := view.CreateFragmentIfNotExists(key.Shard)
 		if err != nil {
 			return errors.Wrap(err, "creating fragment")
 		}
@@ -1192,7 +1243,7 @@ func (b *bsiGroup) BitDepth() uint {
 // Note that in this case (because the range uses the full BitDepth 0 to 1023),
 // we can't simply return 1024.
 // In order to make this work, we effectively need to change the operator to LTE.
-// Executor.executeBSIGroupRangeSlice() takes this into account and returns
+// Executor.executeBSIGroupRangeShard() takes this into account and returns
 // `frag.FieldNotNull(bsig.BitDepth())` in such instances.
 func (b *bsiGroup) baseValue(op pql.Token, value int64) (baseValue uint64, outOfRange bool) {
 	if op == pql.GT || op == pql.GTE {

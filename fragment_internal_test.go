@@ -742,7 +742,7 @@ func TestFragment_TopN_NopCache(t *testing.T) {
 
 // Ensure the fragment cache limit works
 func TestFragment_TopN_CacheSize(t *testing.T) {
-	slice := uint64(0)
+	shard := uint64(0)
 	cacheSize := uint32(3)
 
 	// Create Index.
@@ -762,7 +762,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	}
 
 	// Create fragment.
-	frag, err := view.CreateFragmentIfNotExists(slice)
+	frag, err := view.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1181,7 +1181,7 @@ func BenchmarkFragment_FullSnapshot(b *testing.B) {
 	for row := 0; row < 100; row++ {
 		val := 1
 		i := 0
-		for col := 0; col < SliceWidth/2; col++ {
+		for col := 0; col < ShardWidth/2; col++ {
 			rows[i] = uint64(row)
 			cols[i] = uint64(val)
 			val += 2
@@ -1215,7 +1215,7 @@ func BenchmarkFragment_Import(b *testing.B) {
 	i := 0
 	for row := 0; row < 100; row++ {
 		val := 1
-		for col := 0; col < SliceWidth/2; col++ {
+		for col := 0; col < ShardWidth/2; col++ {
 			rows[i] = uint64(row)
 			cols[i] = uint64(val)
 			val += 2
@@ -1237,7 +1237,7 @@ func BenchmarkFragment_Import(b *testing.B) {
 /////////////////////////////////////////////////////////////////////
 
 // mustOpenFragment returns a new instance of Fragment with a temporary path.
-func mustOpenFragment(index, field, view string, slice uint64, cacheType string) *Fragment {
+func mustOpenFragment(index, field, view string, shard uint64, cacheType string) *Fragment {
 	file, err := ioutil.TempFile("", "pilosa-fragment-")
 	if err != nil {
 		panic(err)
@@ -1248,7 +1248,7 @@ func mustOpenFragment(index, field, view string, slice uint64, cacheType string)
 		cacheType = DefaultCacheType
 	}
 
-	f := NewFragment(file.Name(), index, field, view, slice)
+	f := NewFragment(file.Name(), index, field, view, shard)
 	f.CacheType = cacheType
 	f.RowAttrStore = newMemAttrStore()
 

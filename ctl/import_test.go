@@ -61,7 +61,7 @@ func TestImportCommand_Run(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := test.MustRunMainWithCluster(t, 1)[0]
+	cmd := test.MustRunCluster(t, 1)[0]
 	cm.Host = cmd.Server.URI.HostPort()
 
 	cm.Index = "i"
@@ -86,7 +86,7 @@ func TestImportCommand_RunValue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := test.MustRunMainWithCluster(t, 1)[0]
+	cmd := test.MustRunCluster(t, 1)[0]
 	cm.Host = cmd.Server.URI.HostPort()
 
 	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader("")))
@@ -102,7 +102,7 @@ func TestImportCommand_RunValue(t *testing.T) {
 }
 
 func TestImportCommand_InvalidFile(t *testing.T) {
-	cmd := test.MustRunMainWithCluster(t, 1)[0]
+	cmd := test.MustRunCluster(t, 1)[0]
 
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
@@ -176,7 +176,7 @@ func GetIO(buf bytes.Buffer) (io.Reader, io.Writer, io.Writer) {
 }
 
 func TestImportCommand_BugOverwriteValue(t *testing.T) {
-	cmd := test.MustRunMainWithCluster(t, 1)[0]
+	cmd := test.MustRunCluster(t, 1)[0]
 
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)

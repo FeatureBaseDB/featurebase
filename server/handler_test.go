@@ -37,7 +37,7 @@ import (
 
 // Ensure the handler returns "not found" for invalid paths.
 func TestHandler_Endpoints(t *testing.T) {
-	cmd := test.MustRunMainWithCluster(t, 1)[0]
+	cmd := test.MustRunCluster(t, 1)[0]
 	h := cmd.Handler.(*http.Handler).Handler
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
@@ -55,7 +55,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/info", nil))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if body := w.Body.String(); body != fmt.Sprintf("{\"sliceWidth\":%d}\n", pilosa.SliceWidth) {
+		} else if body := w.Body.String(); body != fmt.Sprintf("{\"shardWidth\":%d}\n", pilosa.ShardWidth) {
 			t.Fatalf("unexpected body: %s", body)
 		}
 	})
@@ -112,19 +112,19 @@ func TestHandler_Endpoints(t *testing.T) {
 		// TODO need to test aborting a cluster resize job. this may not be the right place
 	})
 
-	hldr.SetBit("i0", "f0", 30, (1*pilosa.SliceWidth)+1)
-	hldr.SetBit("i0", "f0", 30, (1*pilosa.SliceWidth)+2)
-	hldr.SetBit("i0", "f0", 30, (3*pilosa.SliceWidth)+4)
+	hldr.SetBit("i0", "f0", 30, (1*pilosa.ShardWidth)+1)
+	hldr.SetBit("i0", "f0", 30, (1*pilosa.ShardWidth)+2)
+	hldr.SetBit("i0", "f0", 30, (3*pilosa.ShardWidth)+4)
 
 	hldr.SetBit("i0", "f0", 31, 1)
 
-	hldr.SetBit("i1", "f1", 40, (0*pilosa.SliceWidth)+1)
-	hldr.SetBit("i1", "f1", 40, (0*pilosa.SliceWidth)+2)
-	hldr.SetBit("i1", "f1", 40, (0*pilosa.SliceWidth)+8)
+	hldr.SetBit("i1", "f1", 40, (0*pilosa.ShardWidth)+1)
+	hldr.SetBit("i1", "f1", 40, (0*pilosa.ShardWidth)+2)
+	hldr.SetBit("i1", "f1", 40, (0*pilosa.ShardWidth)+8)
 
-	t.Run("Max Slice", func(t *testing.T) {
+	t.Run("Max Shard", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/slices/max", nil))
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/shards/max", nil))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != `{"standard":{"i0":3,"i1":0}}`+"\n" {
@@ -132,9 +132,9 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("Slices args", func(t *testing.T) {
+	t.Run("Shards args", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?slices=0,1", strings.NewReader("Count(Row(f0=30))")))
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?shards=0,1", strings.NewReader("Count(Row(f0=30))")))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d %s", w.Code, w.Body.String())
 		} else if body := w.Body.String(); body != `{"results":[2]}`+"\n" {
@@ -142,11 +142,11 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("Slices args protobuf", func(t *testing.T) {
+	t.Run("Shards args protobuf", func(t *testing.T) {
 		// Generate request body.
 		reqBody, err := proto.Marshal(&internal.QueryRequest{
 			Query:  "Count(Row(f0=30))",
-			Slices: []uint64{0, 1},
+			Shards: []uint64{0, 1},
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -169,17 +169,17 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("Query args error", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?slices=a,b", strings.NewReader("Count(Row(f0=30))")))
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?shards=a,b", strings.NewReader("Count(Row(f0=30))")))
 		if w.Code != gohttp.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if body := w.Body.String(); body != `{"error":"invalid slice argument"}`+"\n" {
+		} else if body := w.Body.String(); body != `{"error":"invalid shard argument"}`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
 		}
 	})
 
 	t.Run("Query params err", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?slices=0,1&db=sample", strings.NewReader("Count(Row(f0=30))")))
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?shards=0,1&db=sample", strings.NewReader("Count(Row(f0=30))")))
 		if w.Code != gohttp.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != `{"error":"db is not a valid argument"}`+"\n" {
@@ -217,9 +217,9 @@ func TestHandler_Endpoints(t *testing.T) {
 	})
 
 	f0 := i0.Field("f0")
-	if err := i0.ColumnAttrStore().SetAttrs((1*pilosa.SliceWidth)+1, map[string]interface{}{"x": "y"}); err != nil {
+	if err := i0.ColumnAttrStore().SetAttrs((1*pilosa.ShardWidth)+1, map[string]interface{}{"x": "y"}); err != nil {
 		t.Fatal(err)
-	} else if err := i0.ColumnAttrStore().SetAttrs((1*pilosa.SliceWidth)+2, map[string]interface{}{"y": 123, "z": false}); err != nil {
+	} else if err := i0.ColumnAttrStore().SetAttrs((1*pilosa.ShardWidth)+2, map[string]interface{}{"y": 123, "z": false}); err != nil {
 		t.Fatal(err)
 	} else if err := f0.RowAttrStore().SetAttrs(30, map[string]interface{}{"a": "b", "c": 1, "d": true}); err != nil {
 		t.Fatal(err)
@@ -249,7 +249,7 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatal(err)
 		} else if rt := resp.Results[0].Type; rt != http.QueryResultTypeRow {
 			t.Fatalf("unexpected response type: %d", resp.Results[0].Type)
-		} else if columns := resp.Results[0].Row.Columns; !reflect.DeepEqual(columns, []uint64{pilosa.SliceWidth + 1, pilosa.SliceWidth + 2, (3 * pilosa.SliceWidth) + 4}) {
+		} else if columns := resp.Results[0].Row.Columns; !reflect.DeepEqual(columns, []uint64{pilosa.ShardWidth + 1, pilosa.ShardWidth + 2, (3 * pilosa.ShardWidth) + 4}) {
 			t.Fatalf("unexpected columns: %+v", columns)
 		} else if attrs := resp.Results[0].Row.Attrs; len(attrs) != 3 {
 			t.Fatalf("unexpected attr length: %d", len(attrs))
@@ -285,7 +285,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 			t.Fatal(err)
 		}
-		if columns := resp.Results[0].Row.Columns; !reflect.DeepEqual(columns, []uint64{pilosa.SliceWidth + 1, pilosa.SliceWidth + 2, (3 * pilosa.SliceWidth) + 4}) {
+		if columns := resp.Results[0].Row.Columns; !reflect.DeepEqual(columns, []uint64{pilosa.ShardWidth + 1, pilosa.ShardWidth + 2, (3 * pilosa.ShardWidth) + 4}) {
 			t.Fatalf("unexpected columns: %+v", columns)
 		} else if rt := resp.Results[0].Type; rt != http.QueryResultTypeRow {
 			t.Fatalf("unexpected response type: %d", resp.Results[0].Type)
@@ -301,7 +301,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 		if a := resp.ColumnAttrSets; len(a) != 2 {
 			t.Fatalf("unexpected column attributes length: %d", len(a))
-		} else if a[0].ID != pilosa.SliceWidth+1 {
+		} else if a[0].ID != pilosa.ShardWidth+1 {
 			t.Fatalf("unexpected id: %d", a[0].ID)
 		} else if len(a[0].Attrs) != 1 {
 			t.Fatalf("unexpected column attr length: %d", len(a))
@@ -376,7 +376,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("Err Parse", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?slices=0,1", strings.NewReader("bad_fn(")))
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/idx0/query?shards=0,1", strings.NewReader("bad_fn(")))
 		if w.Code != gohttp.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != `{"error":"parsing: parsing: \nparse error near IDENT (line 1 symbol 1 - line 1 symbol 4):\n\"bad\"\n"}`+"\n" {
@@ -507,7 +507,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("Fragment Nodes", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		r := test.MustNewHTTPRequest("GET", "/fragment/nodes?index=i&slice=0", nil)
+		r := test.MustNewHTTPRequest("GET", "/fragment/nodes?index=i&shard=0", nil)
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
@@ -520,7 +520,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 		// invalid argument should return BadRequest
 		w = httptest.NewRecorder()
-		r = test.MustNewHTTPRequest("GET", "/fragment/nodes?db=X&slice=0", nil)
+		r = test.MustNewHTTPRequest("GET", "/fragment/nodes?db=X&shard=0", nil)
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
@@ -528,7 +528,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 		// index is required
 		w = httptest.NewRecorder()
-		r = test.MustNewHTTPRequest("GET", "/fragment/nodes?slice=0", nil)
+		r = test.MustNewHTTPRequest("GET", "/fragment/nodes?shard=0", nil)
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
@@ -566,7 +566,7 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("CORS preflight status should be 405, but is %v", result.StatusCode)
 		}
 
-		clus := test.MustRunMainWithCluster(t, 1, []server.CommandOption{test.OptAllowedOrigins([]string{"http://test/"})})
+		clus := test.MustRunCluster(t, 1, []server.CommandOption{test.OptAllowedOrigins([]string{"http://test/"})})
 		w = httptest.NewRecorder()
 		h := clus[0].Handler.(*http.Handler).Handler
 		h.ServeHTTP(w, req)

@@ -56,7 +56,7 @@ func (c *nopBroadcaster) SendTo(to *Node, pb proto.Message) error {
 
 // Broadcast message types.
 const (
-	messageTypeCreateSlice = iota
+	messageTypeCreateShard = iota
 	messageTypeCreateIndex
 	messageTypeDeleteIndex
 	messageTypeCreateField
@@ -77,8 +77,8 @@ const (
 func MarshalMessage(m proto.Message) ([]byte, error) {
 	var typ uint8
 	switch obj := m.(type) {
-	case *internal.CreateSliceMessage:
-		typ = messageTypeCreateSlice
+	case *internal.CreateShardMessage:
+		typ = messageTypeCreateShard
 	case *internal.CreateIndexMessage:
 		typ = messageTypeCreateIndex
 	case *internal.DeleteIndexMessage:
@@ -123,8 +123,8 @@ func UnmarshalMessage(buf []byte) (proto.Message, error) {
 
 	var m proto.Message
 	switch typ {
-	case messageTypeCreateSlice:
-		m = &internal.CreateSliceMessage{}
+	case messageTypeCreateShard:
+		m = &internal.CreateShardMessage{}
 	case messageTypeCreateIndex:
 		m = &internal.CreateIndexMessage{}
 	case messageTypeDeleteIndex:

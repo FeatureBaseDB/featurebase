@@ -576,7 +576,7 @@ func (c *Cluster) removeNodeBasicSorted(node *Node) bool {
 type frag struct {
 	field string
 	view  string
-	slice uint64
+	shard uint64
 }
 
 func fragsDiff(a, b []frag) []frag {
@@ -623,15 +623,15 @@ func (c *Cluster) fragsByHost(idx *Index) fragsByHost {
 
 		}
 	}
-	return c.fragCombos(idx.Name(), idx.MaxSlice(), fieldViews)
+	return c.fragCombos(idx.Name(), idx.MaxShard(), fieldViews)
 }
 
 // fragCombos returns a map (by uri) of lists of fragments for a given index
-// by creating every combination of field/view specified in `fieldViews` up to maxSlice.
-func (c *Cluster) fragCombos(idx string, maxSlice uint64, fieldViews viewsByField) fragsByHost {
+// by creating every combination of field/view specified in `fieldViews` up to maxShard.
+func (c *Cluster) fragCombos(idx string, maxShard uint64, fieldViews viewsByField) fragsByHost {
 	t := make(fragsByHost)
-	for i := uint64(0); i <= maxSlice; i++ {
-		nodes := c.sliceNodes(idx, i)
+	for i := uint64(0); i <= maxShard; i++ {
+		nodes := c.shardNodes(idx, i)
 		for _, n := range nodes {
 			// for each field/view combination:
 			for field, views := range fieldViews {
@@ -762,7 +762,7 @@ func (c *Cluster) fragSources(to *Cluster, idx *Index) (map[string][]*internal.R
 				Index: idx.Name(),
 				Field: frag.field,
 				View:  frag.view,
-				Slice: frag.slice,
+				Shard: frag.shard,
 			}
 
 			m[nodeID] = append(m[nodeID], src)
@@ -772,10 +772,10 @@ func (c *Cluster) fragSources(to *Cluster, idx *Index) (map[string][]*internal.R
 	return m, nil
 }
 
-// partition returns the partition that a slice belongs to.
-func (c *Cluster) partition(index string, slice uint64) int {
+// partition returns the partition that a shard belongs to.
+func (c *Cluster) partition(index string, shard uint64) int {
 	var buf [8]byte
-	binary.BigEndian.PutUint64(buf[:], slice)
+	binary.BigEndian.PutUint64(buf[:], shard)
 
 	// Hash the bytes and mod by partition count.
 	h := fnv.New64a()
@@ -784,14 +784,14 @@ func (c *Cluster) partition(index string, slice uint64) int {
 	return int(h.Sum64() % uint64(c.partitionN))
 }
 
-// sliceNodes returns a list of nodes that own a fragment.
-func (c *Cluster) sliceNodes(index string, slice uint64) []*Node {
-	return c.partitionNodes(c.partition(index, slice))
+// shardNodes returns a list of nodes that own a fragment.
+func (c *Cluster) shardNodes(index string, shard uint64) []*Node {
+	return c.partitionNodes(c.partition(index, shard))
 }
 
-// ownsSlice returns true if a host owns a fragment.
-func (c *Cluster) ownsSlice(nodeID string, index string, slice uint64) bool {
-	return Nodes(c.sliceNodes(index, slice)).ContainsID(nodeID)
+// ownsShard returns true if a host owns a fragment.
+func (c *Cluster) ownsShard(nodeID string, index string, shard uint64) bool {
+	return Nodes(c.shardNodes(index, shard)).ContainsID(nodeID)
 }
 
 // partitionNodes returns a list of nodes that own a partition.
@@ -817,20 +817,20 @@ func (c *Cluster) partitionNodes(partitionID int) []*Node {
 	return nodes
 }
 
-// containsSlices is like OwnsSlices, but it includes replicas.
-func (c *Cluster) containsSlices(index string, maxSlice uint64, node *Node) []uint64 {
-	var slices []uint64
-	for i := uint64(0); i <= maxSlice; i++ {
+// containsShards is like OwnsShards, but it includes replicas.
+func (c *Cluster) containsShards(index string, maxShard uint64, node *Node) []uint64 {
+	var shards []uint64
+	for i := uint64(0); i <= maxShard; i++ {
 		p := c.partition(index, i)
 		// Determine the nodes for partition.
 		nodes := c.partitionNodes(p)
 		for _, n := range nodes {
 			if n.ID == node.ID {
-				slices = append(slices, i)
+				shards = append(shards, i)
 			}
 		}
 	}
-	return slices
+	return shards
 }
 
 // Hasher represents an interface to hash integers into buckets.
@@ -1211,7 +1211,7 @@ func (c *Cluster) followResizeInstruction(instr *internal.ResizeInstruction) err
 
 			// Request each source file in ResizeSources.
 			for _, src := range instr.Sources {
-				c.logger.Printf("get slice %d for index %s from host %s", src.Slice, src.Index, src.Node.URI)
+				c.logger.Printf("get shard %d for index %s from host %s", src.Shard, src.Index, src.Node.URI)
 
 				srcURI := decodeURI(src.Node.URI)
 
@@ -1228,27 +1228,27 @@ func (c *Cluster) followResizeInstruction(instr *internal.ResizeInstruction) err
 				}
 
 				// Create the local fragment.
-				frag, err := v.CreateFragmentIfNotExists(src.Slice)
+				frag, err := v.CreateFragmentIfNotExists(src.Shard)
 				if err != nil {
 					return errors.Wrap(err, "creating fragment")
 				}
 
-				// Stream slice from remote node.
-				c.logger.Printf("retrieve slice %d for index %s from host %s", src.Slice, src.Index, src.Node.URI)
-				rd, err := c.InternalClient.RetrieveSliceFromURI(context.Background(), src.Index, src.Field, src.Slice, srcURI)
+				// Stream shard from remote node.
+				c.logger.Printf("retrieve shard %d for index %s from host %s", src.Shard, src.Index, src.Node.URI)
+				rd, err := c.InternalClient.RetrieveShardFromURI(context.Background(), src.Index, src.Field, src.Shard, srcURI)
 				if err != nil {
 					// For now it is an acceptable error if the fragment is not found
-					// on the remote node. This occurs when a slice has been skipped and
+					// on the remote node. This occurs when a shard has been skipped and
 					// therefore doesn't contain data. The coordinator correctly determined
-					// the resize instruction to retrieve the slice, but it doesn't have data.
+					// the resize instruction to retrieve the shard, but it doesn't have data.
 					// TODO: figure out a way to distinguish from "fragment not found" errors
 					// which are true errors and which simply mean the fragment doesn't have data.
 					if err == ErrFragmentNotFound {
 						return nil
 					}
-					return errors.Wrap(err, "retrieving slice")
+					return errors.Wrap(err, "retrieving shard")
 				} else if rd == nil {
-					return fmt.Errorf("slice %v doesn't exist on host: %s", src.Slice, src.Node.URI)
+					return fmt.Errorf("shard %v doesn't exist on host: %s", src.Shard, src.Node.URI)
 				}
 
 				// Write to local field and always close reader.
@@ -1257,7 +1257,7 @@ func (c *Cluster) followResizeInstruction(instr *internal.ResizeInstruction) err
 					_, err := frag.ReadFrom(rd)
 					return err
 				}(); err != nil {
-					return errors.Wrap(err, "copying remote slice")
+					return errors.Wrap(err, "copying remote shard")
 				}
 			}
 			return nil

@@ -23,8 +23,8 @@ import (
 	"github.com/pilosa/pilosa/test"
 )
 
-// SliceWidth is a helper reference to use when testing.
-const SliceWidth = pilosa.SliceWidth
+// ShardWidth is a helper reference to use when testing.
+const ShardWidth = pilosa.ShardWidth
 
 // Ensure index can open and retrieve a field.
 func TestIndex_CreateFieldIfNotExists(t *testing.T) {

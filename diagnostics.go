@@ -216,14 +216,14 @@ func (d *DiagnosticsCollector) EnrichWithMemoryInfo() {
 
 // EnrichWithSchemaProperties adds schema info to the diagnostics payload.
 func (d *DiagnosticsCollector) EnrichWithSchemaProperties() {
-	var numSlices uint64
+	var numShards uint64
 	numFields := 0
 	numIndexes := 0
 	bsiFieldCount := 0
 	timeQuantumEnabled := false
 
 	for _, index := range d.server.holder.Indexes() {
-		numSlices += index.MaxSlice() + 1
+		numShards += index.MaxShard() + 1
 		numIndexes += 1
 		for _, field := range index.Fields() {
 			numFields += 1
@@ -238,7 +238,7 @@ func (d *DiagnosticsCollector) EnrichWithSchemaProperties() {
 
 	d.Set("NumIndexes", numIndexes)
 	d.Set("NumFields", numFields)
-	d.Set("NumSlices", numSlices)
+	d.Set("NumShards", numShards)
 	d.Set("BSIFieldCount", bsiFieldCount)
 	d.Set("TimeQuantumEnabled", timeQuantumEnabled)
 }

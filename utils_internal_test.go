@@ -119,9 +119,9 @@ func (t *ClusterCluster) CreateField(index, field string, opt FieldOptions) erro
 
 func (t *ClusterCluster) SetBit(index, field string, rowID, colID uint64, x *time.Time) error {
 	// Determine which node should receive the SetBit.
-	c0 := t.Clusters[0] // use the first node's cluster to determine slice location.
-	slice := colID / SliceWidth
-	nodes := c0.sliceNodes(index, slice)
+	c0 := t.Clusters[0] // use the first node's cluster to determine shard location.
+	shard := colID / ShardWidth
+	nodes := c0.shardNodes(index, shard)
 
 	for _, node := range nodes {
 		c := t.clusterByID(node.ID)
@@ -355,7 +355,7 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstructi
 	if err := func() error {
 
 		// figure out which node it was meant for, then call the operation on that cluster
-		// basically need to mimic this: client.RetrieveSliceFromURI(context.Background(), src.Index, src.Field, src.View, src.Slice, srcURI)
+		// basically need to mimic this: client.RetrieveShardFromURI(context.Background(), src.Index, src.Field, src.View, src.Shard, srcURI)
 		instrNode := DecodeNode(instr.Node)
 		destCluster := t.clusterByID(instrNode.ID)
 
@@ -368,14 +368,14 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstructi
 			srcNode := DecodeNode(src.Node)
 			srcCluster := t.clusterByID(srcNode.ID)
 
-			srcFragment := srcCluster.holder.Fragment(src.Index, src.Field, src.View, src.Slice)
-			destFragment := destCluster.holder.Fragment(src.Index, src.Field, src.View, src.Slice)
+			srcFragment := srcCluster.holder.Fragment(src.Index, src.Field, src.View, src.Shard)
+			destFragment := destCluster.holder.Fragment(src.Index, src.Field, src.View, src.Shard)
 			if destFragment == nil {
 				// Create fragment on destination if it doesn't exist.
 				f := destCluster.holder.Field(src.Index, src.Field)
 				v := f.View(src.View)
 				var err error
-				destFragment, err = v.CreateFragmentIfNotExists(src.Slice)
+				destFragment, err = v.CreateFragmentIfNotExists(src.Shard)
 				if err != nil {
 					return err
 				}

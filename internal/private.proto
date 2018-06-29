@@ -24,7 +24,7 @@ message BlockDataRequest {
 	string Index = 1;
 	string Field = 2;
 	string View = 5;
-	uint64 Slice = 4;
+	uint64 Shard = 4;
 	uint64 Block = 3;
 }
 
@@ -37,13 +37,13 @@ message Cache {
 	repeated uint64 IDs = 1;
 }
 
-message MaxSlices {
+message MaxShards {
     map<string, uint64> Standard = 1;
 }
 
-message CreateSliceMessage {
+message CreateShardMessage {
     string Index = 1;
-    uint64 Slice = 2;
+    uint64 Shard = 2;
 }
 
 message DeleteIndexMessage {
@@ -105,7 +105,7 @@ message NodeEventMessage {
 
 message NodeStatus {
     Node Node = 1;
-    MaxSlices MaxSlices = 2;
+    MaxShards MaxShards = 2;
     Schema Schema = 3;
 }
 
@@ -148,7 +148,7 @@ message ResizeSource {
     string Index = 2;
     string Field = 3;
     string View = 4;
-    uint64 Slice = 5;
+    uint64 Shard = 5;
 }
 
 message ResizeInstructionComplete {

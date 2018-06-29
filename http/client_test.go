@@ -62,42 +62,42 @@ func TestClient_MultiNode(t *testing.T) {
 		defer s[i].Close()
 	}
 
-	s[0].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
+	s[0].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, shards []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		httpClient := http.NewInternalClientFromURI(&cluster.Nodes[0].URI, defaultClient)
 		e := pilosa.NewExecutor(pilosa.OptExecutorInternalQueryClient(httpClient))
 		e.Holder = hldr[0].Holder
 		e.Node = cluster.Nodes[0]
 		e.Cluster = cluster
-		return e.Execute(ctx, index, query, slices, opt)
+		return e.Execute(ctx, index, query, shards, opt)
 	}
-	s[1].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
+	s[1].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, shards []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		httpClient := http.NewInternalClientFromURI(&cluster.Nodes[0].URI, defaultClient)
 		e := pilosa.NewExecutor(pilosa.OptExecutorInternalQueryClient(httpClient))
 		e.Holder = hldr[1].Holder
 		e.Node = cluster.Nodes[1]
 		e.Cluster = cluster
-		return e.Execute(ctx, index, query, slices, opt)
+		return e.Execute(ctx, index, query, shards, opt)
 	}
-	s[2].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
+	s[2].Handler.Executor.ExecuteFn = func(ctx context.Context, index string, query *pql.Query, shards []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
 		httpClient := http.NewInternalClientFromURI(&cluster.Nodes[0].URI, defaultClient)
 		e := pilosa.NewExecutor(pilosa.OptExecutorInternalQueryClient(httpClient))
 		e.Holder = hldr[2].Holder
 		e.Node = cluster.Nodes[2]
 		e.Cluster = cluster
-		return e.Execute(ctx, index, query, slices, opt)
+		return e.Execute(ctx, index, query, shards, opt)
 	}
 
-	// Create a dispersed set of bitmaps across 3 nodes such that each individual node and slice width increment would reveal a different TopN.
-	sliceNums := []uint64{1, 2, 6}
+	// Create a dispersed set of bitmaps across 3 nodes such that each individual node and shard width increment would reveal a different TopN.
+	shardNums := []uint64{1, 2, 6}
 
-	// This was generated with: `owns := s[i].Handler.Handler.API.Cluster.OwnsSlices("i", 20, s[i].HostURI())`
+	// This was generated with: `owns := s[i].Handler.Handler.API.Cluster.OwnsShards("i", 20, s[i].HostURI())`
 	owns := [][]uint64{
 		{1, 3, 4, 8, 10, 13, 17, 19},
 		{2, 5, 7, 11, 12, 14, 18},
 		{0, 6, 9, 15, 16, 20},
 	}
 
-	for i, num := range sliceNums {
+	for i, num := range shardNums {
 		ownsNum := false
 		for _, ownNum := range owns[i] {
 			if ownNum == num {
@@ -106,18 +106,18 @@ func TestClient_MultiNode(t *testing.T) {
 			}
 		}
 		if !ownsNum {
-			t.Fatalf("Trying to use slice %d on host %s, but it doesn't own that slice. It owns %v", num, s[i].Host(), owns)
+			t.Fatalf("Trying to use shard %d on host %s, but it doesn't own that shard. It owns %v", num, s[i].Host(), owns)
 		}
 	}
 
-	baseBit0 := pilosa.SliceWidth * sliceNums[0]
-	baseBit1 := pilosa.SliceWidth * sliceNums[1]
-	baseBit2 := pilosa.SliceWidth * sliceNums[2]
+	baseBit0 := pilosa.ShardWidth * shardNums[0]
+	baseBit1 := pilosa.ShardWidth * shardNums[1]
+	baseBit2 := pilosa.ShardWidth * shardNums[2]
 
-	maxSlice := uint64(0)
-	for _, x := range sliceNums {
-		if x > maxSlice {
-			maxSlice = x
+	maxShard := uint64(0)
+	for _, x := range shardNums {
+		if x > maxShard {
+			maxShard = x
 		}
 	}
 
@@ -145,9 +145,9 @@ func TestClient_MultiNode(t *testing.T) {
 	// Rebuild the RankCache.
 	// We have to do this to avoid the 10-second cache invalidation delay
 	// built into cache.Invalidate()
-	hldr[0].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[0]).RecalculateCache()
-	hldr[1].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[1]).RecalculateCache()
-	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, sliceNums[2]).RecalculateCache()
+	hldr[0].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, shardNums[0]).RecalculateCache()
+	hldr[1].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, shardNums[1]).RecalculateCache()
+	hldr[2].MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, shardNums[2]).RecalculateCache()
 
 	// Connect to each node to compare results.
 	client := make([]*Client, 3)
@@ -165,18 +165,18 @@ func TestClient_MultiNode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Check the results before every node has the correct max slice value.
+	// Check the results before every node has the correct max shard value.
 	pairs := result.Results[0].Pairs
 	for _, pair := range pairs {
 		if pair.ID == 22 && pair.Count != 3 {
-			t.Fatalf("Invalid Cluster wide MaxSlice prevents accurate calculation of %s", pair)
+			t.Fatalf("Invalid Cluster wide MaxShard prevents accurate calculation of %s", pair)
 		}
 	}
 
-	// Set max slice to correct value.
-	hldr[0].Index("i").SetRemoteMaxSlice(maxSlice)
-	hldr[1].Index("i").SetRemoteMaxSlice(maxSlice)
-	hldr[2].Index("i").SetRemoteMaxSlice(maxSlice)
+	// Set max shard to correct value.
+	hldr[0].Index("i").SetRemoteMaxShard(maxShard)
+	hldr[1].Index("i").SetRemoteMaxShard(maxShard)
+	hldr[2].Index("i").SetRemoteMaxShard(maxShard)
 
 	result, err = client[0].Query(context.Background(), "i", queryRequest)
 	if err != nil {
@@ -219,7 +219,7 @@ func TestClient_MultiNode(t *testing.T) {
 
 // Ensure client can bulk import data.
 func TestClient_Import(t *testing.T) {
-	cmd := test.MustRunMainWithCluster(t, 1)[0]
+	cmd := test.MustRunCluster(t, 1)[0]
 	host := cmd.URL()
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
@@ -249,7 +249,7 @@ func TestClient_Import(t *testing.T) {
 
 // Ensure client can bulk import value data.
 func TestClient_ImportValue(t *testing.T) {
-	cmd := test.MustRunMainWithCluster(t, 1)[0]
+	cmd := test.MustRunCluster(t, 1)[0]
 	host := cmd.URL()
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
@@ -321,14 +321,14 @@ func TestClient_ImportValue(t *testing.T) {
 
 // Ensure client can retrieve a list of all checksums for blocks in a fragment.
 func TestClient_FragmentBlocks(t *testing.T) {
-	cmd := test.MustRunMainWithCluster(t, 1)[0]
+	cmd := test.MustRunCluster(t, 1)[0]
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
 
 	hldr.SetBit("i", "f", 0, 1)
 	hldr.SetBit("i", "f", pilosa.HashBlockSize*3, 100)
 
-	// Set a bit on a different slice.
+	// Set a bit on a different shard.
 	hldr.SetBit("i", "f", 0, 1)
 	c := MustNewClient(cmd.URL(), defaultClient)
 	blocks, err := c.FragmentBlocks(context.Background(), nil, "i", "f", 0)

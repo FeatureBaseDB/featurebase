@@ -36,41 +36,16 @@ type Handler struct {
 	Executor HandlerExecutor
 }
 
-// NewHandler returns a new instance of Handler.
-func NewHandler(opts ...http.HandlerOption) (*Handler, error) {
-	handler, err := http.NewHandler(opts...)
-	if err != nil {
-		return nil, err
-	}
-	h := &Handler{
-		Handler: handler,
-	}
-
-	// Handler test messages can no-op.
-	h.API.Broadcaster = pilosa.NopBroadcaster
-
-	return h, nil
-}
-
-// MustNewHandler returns a new instance of Handler.
-func MustNewHandler(opts ...http.HandlerOption) *Handler {
-	h, err := NewHandler(opts...)
-	if err != nil {
-		panic(err)
-	}
-	return h
-}
-
 // HandlerExecutor is a mock implementing pilosa.Handler.Executor.
 type HandlerExecutor struct {
 	cluster   *pilosa.Cluster
-	ExecuteFn func(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error)
+	ExecuteFn func(ctx context.Context, index string, query *pql.Query, shards []uint64, opt *pilosa.ExecOptions) ([]interface{}, error)
 }
 
 func (c *HandlerExecutor) Cluster() *pilosa.Cluster { return c.cluster }
 
-func (c *HandlerExecutor) Execute(ctx context.Context, index string, query *pql.Query, slices []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
-	return c.ExecuteFn(ctx, index, query, slices, opt)
+func (c *HandlerExecutor) Execute(ctx context.Context, index string, query *pql.Query, shards []uint64, opt *pilosa.ExecOptions) ([]interface{}, error) {
+	return c.ExecuteFn(ctx, index, query, shards, opt)
 }
 
 // Server represents a test wrapper for httptest.Server.
