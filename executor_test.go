@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
@@ -1497,6 +1498,67 @@ func TestExecutor_SetColumnAttrs_ExcludeField(t *testing.T) {
 	}
 	if !reflect.DeepEqual(attrs, targetAttrs) {
 		t.Fatalf("%#v != %#v", targetAttrs, attrs)
+	}
+
+}
+
+func TestExecutor_Time_Clear_Quantums(t *testing.T) {
+	hldr := test.MustOpenHolder()
+	defer hldr.Close()
+	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
+
+	var rangeTests = []struct {
+		quantum  pilosa.TimeQuantum
+		expected []uint64
+	}{
+		{quantum: "Y", expected: []uint64{3, 4, 5, 6}},
+		{quantum: "M", expected: []uint64{3, 4, 6}},
+		{quantum: "D", expected: []uint64{3, 4, 5, 6}},
+		{quantum: "H", expected: []uint64{3, 4, 5, 6, 7}},
+		{quantum: "YM", expected: []uint64{3, 4, 5, 6}},
+		{quantum: "YMD", expected: []uint64{3, 4, 5, 6}},
+		{quantum: "YMDH", expected: []uint64{3, 4, 5, 6, 7}},
+	}
+	populateBatch := test.MustParse(`
+				  Set(2, f=1, 1999-12-31T00:00)
+				  Set(3, f=1, 2000-01-01T00:00)
+				  Set(4, f=1, 2000-01-02T00:00)
+				  Set(5, f=1, 2000-02-01T00:00)
+				  Set(6, f=1, 2001-01-01T00:00)
+				  Set(7, f=1, 2002-01-01T02:00)
+				  Set(2, f=1, 1999-12-30T00:00)
+				  Set(2, f=1, 2002-02-01T00:00)
+				  Set(2, f=10, 2001-01-01T00:00)
+			`)
+	clearColumn := test.MustParse(`Clear( 2, f=1)`)
+	rangeCheckQuery := test.MustParse(`Range(f=1, 1999-12-31T00:00, 2002-01-01T03:00)`)
+
+	for i, tt := range rangeTests {
+		t.Run(fmt.Sprintf("#%d Quantum %s", i+1, tt.quantum), func(t *testing.T) {
+			// Create index.
+			indexName := strings.ToLower(string(tt.quantum))
+			index := hldr.MustCreateIndexIfNotExists(indexName, pilosa.IndexOptions{})
+			// Create field.
+			if _, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{
+				Type:        pilosa.FieldTypeTime,
+				TimeQuantum: tt.quantum,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			// Populate
+			if _, err := e.Execute(context.Background(), indexName, populateBatch, nil, nil); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := e.Execute(context.Background(), indexName, clearColumn, nil, nil); err != nil {
+				t.Fatal(err)
+			}
+			if res, err := e.Execute(context.Background(), indexName, rangeCheckQuery, nil, nil); err != nil {
+				t.Fatal(err)
+			} else if columns := res[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, tt.expected) {
+				t.Fatalf("unexpected columns: %+v", columns)
+			}
+
+		})
 	}
 
 }
