@@ -371,10 +371,10 @@ func (h *Holder) DeleteIndex(name string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// Ignore if index doesn't exist.
+	// Confirm index exists.
 	index := h.index(name)
 	if index == nil {
-		return nil
+		return NotFoundError{ErrIndexNotFound}
 	}
 
 	// Close index.

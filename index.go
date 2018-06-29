@@ -346,10 +346,10 @@ func (i *Index) DeleteField(name string) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	// Ignore if field doesn't exist.
+	// Confirm field exists.
 	f := i.field(name)
 	if f == nil {
-		return nil
+		return NotFoundError{ErrFieldNotFound}
 	}
 
 	// Close field.

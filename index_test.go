@@ -194,13 +194,14 @@ func TestIndex_DeleteField(t *testing.T) {
 		t.Fatal("expected nil field")
 	}
 
-	// Delete again to make sure it doesn't error.
-	if err := index.DeleteField("f"); err != nil {
+	// Delete again to make sure it errors.
+	err := index.DeleteField("f")
+	if err == nil || err.Error() != pilosa.ErrFieldNotFound.Error() {
 		t.Fatal(err)
 	}
 }
 
-// Ensure index can delete a field.
+// Ensure index can validate its name.
 func TestIndex_InvalidName(t *testing.T) {
 	path, err := ioutil.TempDir("", "pilosa-index-")
 	if err != nil {
