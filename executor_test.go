@@ -1518,6 +1518,9 @@ func TestExecutor_Time_Clear_Quantums(t *testing.T) {
 		{quantum: "YM", expected: []uint64{3, 4, 5, 6}},
 		{quantum: "YMD", expected: []uint64{3, 4, 5, 6}},
 		{quantum: "YMDH", expected: []uint64{3, 4, 5, 6, 7}},
+		{quantum: "MD", expected: []uint64{3, 4, 5, 6}},
+		{quantum: "MDH", expected: []uint64{3, 4, 5, 6, 7}},
+		{quantum: "DH", expected: []uint64{3, 4, 5, 6, 7}},
 	}
 	populateBatch := test.MustParse(`
 				  Set(2, f=1, 1999-12-31T00:00)
