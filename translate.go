@@ -25,8 +25,6 @@ const (
 )
 
 const (
-	DefaultMapSize = 10 * (1 << 30) // 10GB
-
 	DefaultReplicationRetryInterval = 1 * time.Second
 )
 
