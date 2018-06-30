@@ -54,7 +54,7 @@ func (s *TranslateStore) Reader(ctx context.Context, off int64) (io.ReadCloser, 
 	if err != nil {
 		return nil, err
 	}
-	u.Path = "/translate/data"
+	u.Path = "/internal/translate/data"
 	u.RawQuery = (url.Values{
 		"offset": {strconv.FormatInt(off, 10)},
 	}).Encode()

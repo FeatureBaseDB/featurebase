@@ -232,7 +232,7 @@ Note: This will only work when the replication factor is >= 2
   - List of all indexes on your cluster
   - List of all frames in your indexes
   - Max slice per index, listed in the `/slices/max` endpoint
-- With this information you can query the `/fragment/nodes` endpoint and iterate over each slice
+- With this information you can query the `/internal/fragment/nodes` endpoint and iterate over each slice
 - Using the list of slices owned by this node you will then need to manually:
   - setup a directory structure similar to the other nodes with a path for each Index/Frame
   - copy each owned slice for an existing node to this new node

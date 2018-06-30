@@ -124,7 +124,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("Max Shard", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/shards/max", nil))
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/internal/shards/max", nil))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != `{"standard":{"i0":3,"i1":0}}`+"\n" {
@@ -436,7 +436,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		// Send block checksums to determine diff.
 		req := test.MustNewHTTPRequest(
 			"POST",
-			"/index/i/attr/diff",
+			"/internal/index/i/attr/diff",
 			strings.NewReader(`{"blocks":`+string(test.MustMarshalJSON(blks))+`}`),
 		)
 		req.Header.Set("Content-Type", "application/json")
@@ -476,7 +476,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		// Send block checksums to determine diff.
 		req := test.MustNewHTTPRequest(
 			"POST",
-			"/index/i/field/meta/attr/diff",
+			"/internal/index/i/field/meta/attr/diff",
 			strings.NewReader(`{"blocks":`+string(test.MustMarshalJSON(blks))+`}`),
 		)
 		req.Header.Set("Content-Type", "application/json")
@@ -507,7 +507,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("Fragment Nodes", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		r := test.MustNewHTTPRequest("GET", "/fragment/nodes?index=i&shard=0", nil)
+		r := test.MustNewHTTPRequest("GET", "/internal/fragment/nodes?index=i&shard=0", nil)
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
@@ -520,7 +520,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 		// invalid argument should return BadRequest
 		w = httptest.NewRecorder()
-		r = test.MustNewHTTPRequest("GET", "/fragment/nodes?db=X&shard=0", nil)
+		r = test.MustNewHTTPRequest("GET", "/internal/fragment/nodes?db=X&shard=0", nil)
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
@@ -528,7 +528,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 		// index is required
 		w = httptest.NewRecorder()
-		r = test.MustNewHTTPRequest("GET", "/fragment/nodes?shard=0", nil)
+		r = test.MustNewHTTPRequest("GET", "/internal/fragment/nodes?shard=0", nil)
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
