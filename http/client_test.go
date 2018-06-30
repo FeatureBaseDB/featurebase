@@ -37,20 +37,15 @@ func init() {
 
 }
 
-// modHasher represents a simple, mod-based hashing.
-type modHasher struct{}
-
-func (*modHasher) Hash(key uint64, n int) int { return int(key) % n }
-
 // Test distributed TopN Row count across 3 nodes.
 func TestClient_MultiNode(t *testing.T) {
 	c := test.MustRunCluster(t, 3,
 		[]server.CommandOption{
-			server.OptCommandServerOptions(pilosa.OptServerNodeID("node0"), pilosa.OptServerClusterHasher(&modHasher{}))},
+			server.OptCommandServerOptions(pilosa.OptServerNodeID("node0"), pilosa.OptServerClusterHasher(&test.ModHasher{}))},
 		[]server.CommandOption{
-			server.OptCommandServerOptions(pilosa.OptServerNodeID("node1"), pilosa.OptServerClusterHasher(&modHasher{}))},
+			server.OptCommandServerOptions(pilosa.OptServerNodeID("node1"), pilosa.OptServerClusterHasher(&test.ModHasher{}))},
 		[]server.CommandOption{
-			server.OptCommandServerOptions(pilosa.OptServerNodeID("node2"), pilosa.OptServerClusterHasher(&modHasher{}))},
+			server.OptCommandServerOptions(pilosa.OptServerNodeID("node2"), pilosa.OptServerClusterHasher(&test.ModHasher{}))},
 	)
 	defer c.Close()
 

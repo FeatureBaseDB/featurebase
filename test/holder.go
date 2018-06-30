@@ -121,6 +121,15 @@ func (h *Holder) Row(index, field string, rowID uint64) *pilosa.Row {
 	return row
 }
 
+func (h *Holder) RowAttrStore(index, field string) pilosa.AttrStore {
+	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.FieldOptions{})
+	if err != nil {
+		panic(err)
+	}
+	return f.RowAttrStore()
+}
+
 // ViewRow returns a Row for a given field and view.
 func (h *Holder) ViewRow(index, field, view string, rowID uint64) *pilosa.Row {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
