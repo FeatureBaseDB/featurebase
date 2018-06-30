@@ -579,6 +579,88 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatal("CORS header not present")
 		}
 	})
+
+	t.Run("index handlers", func(t *testing.T) {
+		// create index
+		w := httptest.NewRecorder()
+		r := test.MustNewHTTPRequest("POST", "/index/idx1", strings.NewReader(""))
+		h.ServeHTTP(w, r)
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		} else if w.Body.String() != `{"success":true}`+"\n" {
+			t.Fatalf("unexpected body: %q", w.Body.String())
+		}
+
+		// create index again
+		w = httptest.NewRecorder()
+		r = test.MustNewHTTPRequest("POST", "/index/idx1", strings.NewReader(""))
+		h.ServeHTTP(w, r)
+		if w.Code != gohttp.StatusConflict {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		} else if w.Body.String() != `{"success":false,"error":{"message":"index already exists"}}`+"\n" {
+			t.Fatalf("unexpected body: %q", w.Body.String())
+		}
+
+		// create field
+		w = httptest.NewRecorder()
+		r = test.MustNewHTTPRequest("POST", "/index/idx1/field/fld1", strings.NewReader(""))
+		h.ServeHTTP(w, r)
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		} else if w.Body.String() != `{"success":true}`+"\n" {
+			t.Fatalf("unexpected body: %q", w.Body.String())
+		}
+
+		// create field again
+		w = httptest.NewRecorder()
+		r = test.MustNewHTTPRequest("POST", "/index/idx1/field/fld1", strings.NewReader(""))
+		h.ServeHTTP(w, r)
+		if w.Code != gohttp.StatusConflict {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		} else if w.Body.String() != `{"success":false,"error":{"message":"field already exists"}}`+"\n" {
+			t.Fatalf("unexpected body: %q", w.Body.String())
+		}
+
+		// delete field
+		w = httptest.NewRecorder()
+		r = test.MustNewHTTPRequest("DELETE", "/index/idx1/field/fld1", strings.NewReader(""))
+		h.ServeHTTP(w, r)
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		} else if w.Body.String() != `{"success":true}`+"\n" {
+			t.Fatalf("unexpected body: %q", w.Body.String())
+		}
+
+		// delete field again
+		w = httptest.NewRecorder()
+		r = test.MustNewHTTPRequest("DELETE", "/index/idx1/field/fld1", strings.NewReader(""))
+		h.ServeHTTP(w, r)
+		if w.Code != gohttp.StatusNotFound {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		} else if w.Body.String() != `{"success":false,"error":{"message":"field not found"}}`+"\n" {
+			t.Fatalf("unexpected body: %q", w.Body.String())
+		}
+
+		// delete index
+		w = httptest.NewRecorder()
+		r = test.MustNewHTTPRequest("DELETE", "/index/idx1", strings.NewReader(""))
+		h.ServeHTTP(w, r)
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		} else if w.Body.String() != `{"success":true}`+"\n" {
+			t.Fatalf("unexpected body: %q", w.Body.String())
+		}
+
+		// delete index again
+		w = httptest.NewRecorder()
+		r = test.MustNewHTTPRequest("DELETE", "/index/idx1", strings.NewReader(""))
+		h.ServeHTTP(w, r)
+		if w.Code != gohttp.StatusNotFound {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		} else if w.Body.String() != `{"success":false,"error":{"message":"index not found"}}`+"\n" {
+			t.Fatalf("unexpected body: %q", w.Body.String())
+		}
+	})
 }
 
 func mustJSONDecode(t *testing.T, r io.Reader) (ret map[string]interface{}) {
