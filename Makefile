@@ -48,8 +48,8 @@ build: vendor
 # Create a single release build under the build directory
 release-build: vendor
 	$(MAKE) $(if $(DOCKER_BUILD),docker-)build FLAGS="-o build/pilosa-$(VERSION_ID)/pilosa" RELEASE=1
-	cp NOTICE LICENSE README.md build/pilosa-$(VERSION_ID)
-	$(if $(ENTERPRISE_ENABLED),cp enterprise/COPYING build/pilosa-$(VERSION_ID))
+	cp NOTICE README.md build/pilosa-$(VERSION_ID)
+	$(if $(ENTERPRISE_ENABLED),cp enterprise/COPYING build/pilosa-$(VERSION_ID),cp LICENSE build/pilosa-$(VERSION_ID))
 	tar -cvz -C build -f build/pilosa-$(VERSION_ID).tar.gz pilosa-$(VERSION_ID)/
 	@echo Created release build: build/pilosa-$(VERSION_ID).tar.gz
 

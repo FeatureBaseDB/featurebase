@@ -583,7 +583,6 @@ func (f *Field) RecalculateCaches() {
 // CreateViewIfNotExists returns the named view, creating it if necessary.
 // Additionally, a CreateViewMessage is sent to the cluster.
 func (f *Field) CreateViewIfNotExists(name string) (*View, error) {
-
 	view, created, err := f.createViewIfNotExistsBase(name)
 	if err != nil {
 		return nil, err
