@@ -121,6 +121,15 @@ func (h *Holder) Row(index, field string, rowID uint64) *pilosa.Row {
 	return row
 }
 
+func (h *Holder) RowAttrStore(index, field string) pilosa.AttrStore {
+	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.FieldOptions{})
+	if err != nil {
+		panic(err)
+	}
+	return f.RowAttrStore()
+}
+
 // ViewRow returns a Row for a given field and view.
 func (h *Holder) ViewRow(index, field, view string, rowID uint64) *pilosa.Row {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
@@ -142,7 +151,10 @@ func (h *Holder) SetBit(index, field string, rowID, columnID uint64) {
 	if err != nil {
 		panic(err)
 	}
-	f.SetBit(rowID, columnID, nil)
+	_, err = f.SetBit(rowID, columnID, nil)
+	if err != nil {
+		panic(err)
+	}
 }
 
 // ClearBit clears a bit on the given field.
@@ -152,7 +164,10 @@ func (h *Holder) ClearBit(index, field string, rowID, columnID uint64) {
 	if err != nil {
 		panic(err)
 	}
-	f.ClearBit(rowID, columnID)
+	_, err = f.ClearBit(rowID, columnID)
+	if err != nil {
+		panic(err)
+	}
 }
 
 // MustSetBits sets columns on a row. Panic on error.

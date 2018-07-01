@@ -1752,7 +1752,7 @@ func (s *FragmentSyncer) syncFragment() error {
 		}
 
 		// Retrieve remote blocks.
-		blocks, err := s.Cluster.InternalClient.FragmentBlocks(context.Background(), nil, s.Fragment.index, s.Fragment.field, s.Fragment.shard)
+		blocks, err := s.Cluster.InternalClient.FragmentBlocks(context.Background(), &node.URI, s.Fragment.index, s.Fragment.field, s.Fragment.shard)
 		if err != nil && err != ErrFragmentNotFound {
 			return errors.Wrap(err, "getting blocks")
 		}

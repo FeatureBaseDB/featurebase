@@ -717,6 +717,9 @@ func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, in
 
 // BlockData returns row/column id pairs for a block.
 func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64, block int) ([]uint64, []uint64, error) {
+	if uri == nil {
+		panic("need to pass a URI to BlockData")
+	}
 	buf, err := proto.Marshal(&internal.BlockDataRequest{
 		Index: index,
 		Field: field,
@@ -727,7 +730,7 @@ func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, 
 		return nil, nil, errors.Wrap(err, "marshaling")
 	}
 
-	u := uriPathToURL(c.defaultURI, "/fragment/block/data")
+	u := uriPathToURL(uri, "/fragment/block/data")
 	req, err := http.NewRequest("GET", u.String(), bytes.NewReader(buf))
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "creating request")

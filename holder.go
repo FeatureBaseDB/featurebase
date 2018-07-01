@@ -564,6 +564,8 @@ func (h *Holder) logStartup() error {
 // HolderSyncer is an active anti-entropy tool that compares the local holder
 // with a remote holder based on block checksums and resolves differences.
 type HolderSyncer struct {
+	mu sync.Mutex
+
 	Holder *Holder
 
 	Node    *Node
@@ -588,6 +590,8 @@ func (s *HolderSyncer) IsClosing() bool {
 
 // SyncHolder compares the holder on host with the local holder and resolves differences.
 func (s *HolderSyncer) SyncHolder() error {
+	s.mu.Lock() // only allow one instance of SyncHolder to be running at a time
+	defer s.mu.Unlock()
 	ti := time.Now()
 	// Iterate over schema in sorted order.
 	for _, di := range s.Holder.Schema() {

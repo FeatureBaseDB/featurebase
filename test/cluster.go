@@ -21,6 +21,11 @@ import (
 	"github.com/pilosa/pilosa"
 )
 
+// modHasher represents a simple, mod-based hashing.
+type ModHasher struct{}
+
+func (*ModHasher) Hash(key uint64, n int) int { return int(key) % n }
+
 // NewCluster returns a cluster with n nodes and uses a mod-based hasher.
 func NewCluster(n int) *pilosa.Cluster {
 	path, err := ioutil.TempDir("", "pilosa-cluster-")
@@ -30,7 +35,7 @@ func NewCluster(n int) *pilosa.Cluster {
 
 	c := pilosa.NewCluster()
 	c.ReplicaN = 1
-	c.Hasher = newModHasher()
+	c.Hasher = &ModHasher{}
 	c.Path = path
 	c.Topology = pilosa.NewTopology()
 
@@ -47,14 +52,6 @@ func NewCluster(n int) *pilosa.Cluster {
 
 	return c
 }
-
-// modHasher represents a simple, mod-based hashing.
-type modHasher struct{}
-
-// newModHasher returns a new instance of ModHasher with n buckets.
-func newModHasher() *modHasher { return &modHasher{} }
-
-func (*modHasher) Hash(key uint64, n int) int { return int(key) % n }
 
 // newURI is a test URI creator that intentionally swallows errors.
 func newURI(scheme, host string, port uint16) pilosa.URI {

@@ -70,6 +70,7 @@ type Server struct {
 	diagnosticInterval  time.Duration
 	maxWritesPerRequest int
 	isCoordinator       bool
+	syncer              HolderSyncer
 
 	primaryTranslateStore TranslateStore
 
@@ -209,6 +210,20 @@ func OptServerIsCoordinator(is bool) ServerOption {
 	}
 }
 
+func OptServerNodeID(nodeID string) ServerOption {
+	return func(s *Server) error {
+		s.nodeID = nodeID
+		return nil
+	}
+}
+
+func OptServerClusterHasher(h Hasher) ServerOption {
+	return func(s *Server) error {
+		s.cluster.Hasher = h
+		return nil
+	}
+}
+
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
@@ -328,6 +343,12 @@ func (s *Server) Open() error {
 	// buffered channel.
 	s.cluster.listenForJoins()
 
+	s.syncer.Holder = s.holder
+	s.syncer.Node = s.cluster.Node
+	s.syncer.Cluster = s.cluster
+	s.syncer.Closing = s.closing
+	s.syncer.Stats = s.holder.Stats.WithTags("HolderSyncer")
+
 	// Start background monitoring.
 	s.wg.Add(3)
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
@@ -370,12 +391,22 @@ func (s *Server) loadNodeID() string {
 	return nodeID
 }
 
+// SyncData manually invokes the anti entropy process which makes sure that this
+// node has the data from all replicas across the cluster.
+func (s *Server) SyncData() error {
+	return errors.Wrap(s.syncer.SyncHolder(), "syncing holder")
+}
+
 func (s *Server) monitorAntiEntropy() {
+	if s.antiEntropyInterval == 0 {
+		return // anti entropy disabled
+	}
 	ticker := time.NewTicker(s.antiEntropyInterval)
 	defer ticker.Stop()
 
 	s.logger.Printf("holder sync monitor initializing (%s interval)", s.antiEntropyInterval)
 
+	// Initialize syncer with local holder and remote client.
 	for {
 		// Wait for tick or a close.
 		select {
@@ -385,18 +416,10 @@ func (s *Server) monitorAntiEntropy() {
 			s.holder.Stats.Count("AntiEntropy", 1, 1.0)
 		}
 		t := time.Now()
-		s.logger.Printf("holder sync beginning")
-
-		// Initialize syncer with local holder and remote client.
-		var syncer HolderSyncer
-		syncer.Holder = s.holder
-		syncer.Node = s.cluster.Node
-		syncer.Cluster = s.cluster
-		syncer.Closing = s.closing
-		syncer.Stats = s.holder.Stats.WithTags("HolderSyncer")
 
 		// Sync holders.
-		if err := syncer.SyncHolder(); err != nil {
+		s.logger.Printf("holder sync beginning")
+		if err := s.syncer.SyncHolder(); err != nil {
 			s.logger.Printf("holder sync error: err=%s", err)
 			continue
 		}
