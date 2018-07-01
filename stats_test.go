@@ -86,8 +86,9 @@ func TestMultiStatClient_Expvar(t *testing.T) {
 }
 
 func TestStatsCount_TopN(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
 
 	hldr.SetBit("d", "f", 0, 0)
 	hldr.SetBit("d", "f", 0, 1)
@@ -96,8 +97,7 @@ func TestStatsCount_TopN(t *testing.T) {
 
 	// Execute query.
 	called := false
-	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
-	e.Holder.Stats = &MockStats{
+	hldr.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
 			if name != "TopN" {
 				t.Errorf("Expected TopN, Results %s", name)
@@ -110,7 +110,7 @@ func TestStatsCount_TopN(t *testing.T) {
 			called = true
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", test.MustParse(`TopN(field=f, n=2)`), nil, nil); err != nil {
+	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `TopN(field=f, n=2)`}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -119,14 +119,14 @@ func TestStatsCount_TopN(t *testing.T) {
 }
 
 func TestStatsCount_Bitmap(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
 
 	hldr.SetBit("d", "f", 0, 0)
 	hldr.SetBit("d", "f", 0, 1)
 	called := false
-	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
-	e.Holder.Stats = &MockStats{
+	hldr.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
 			if name != "Row" {
 				t.Errorf("Expected Row, Results %s", name)
@@ -139,7 +139,7 @@ func TestStatsCount_Bitmap(t *testing.T) {
 			called = true
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", test.MustParse(`Row(f=0)`), nil, nil); err != nil {
+	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `Row(f=0)`}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -148,15 +148,15 @@ func TestStatsCount_Bitmap(t *testing.T) {
 }
 
 func TestStatsCount_SetColumnAttrs(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
 
 	hldr.SetBit("d", "f", 10, 0)
 	hldr.SetBit("d", "f", 10, 1)
 
 	called := false
-	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
-	field := e.Holder.Field("d", "f")
+	field := hldr.Field("d", "f")
 	if field == nil {
 		t.Fatal("field not found")
 	}
@@ -169,7 +169,7 @@ func TestStatsCount_SetColumnAttrs(t *testing.T) {
 			called = true
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetRowAttrs(f, 10, foo="bar")`), nil, nil); err != nil {
+	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `SetRowAttrs(f, 10, foo="bar")`}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -178,15 +178,15 @@ func TestStatsCount_SetColumnAttrs(t *testing.T) {
 }
 
 func TestStatsCount_SetProfileAttrs(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
 
 	hldr.SetBit("d", "f", 10, 0)
 	hldr.SetBit("d", "f", 10, 1)
 
 	called := false
-	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
-	idx := e.Holder.Index("d")
+	idx := hldr.Holder.Index("d")
 	if idx == nil {
 		t.Fatal("idex not found")
 	}
@@ -200,7 +200,7 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 			called = true
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetColumnAttrs(10, foo="bar")`), nil, nil); err != nil {
+	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `SetColumnAttrs(10, foo="bar")`}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
