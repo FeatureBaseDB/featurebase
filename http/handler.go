@@ -578,19 +578,14 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 
 	resp := successResponse{}
 
-	err := func() error {
-		// Decode request.
-		var req postIndexRequest
-		err := json.NewDecoder(r.Body).Decode(&req)
-		if err == io.EOF {
-			// If no data was provided (EOF), we still create the index
-			// with default values.
-		} else if err != nil {
-			return err
-		}
-		_, err = h.API.CreateIndex(r.Context(), indexName, req.Options)
-		return err
-	}()
+	// Decode request.
+	var req postIndexRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil && err != io.EOF {
+		resp.write(w, err)
+		return
+	}
+	_, err = h.API.CreateIndex(r.Context(), indexName, req.Options)
 
 	resp.write(w, err)
 }
@@ -647,42 +642,34 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 
 	resp := successResponse{}
 
-	err := func() error {
-		// Decode request.
-		var req postFieldRequest
-		dec := json.NewDecoder(r.Body)
-		dec.DisallowUnknownFields()
-		err := dec.Decode(&req)
-		if err == io.EOF {
-			// If no data was provided (EOF), we still create the field
-			// with default values.
-		} else if err != nil {
-			return err
-		}
+	// Decode request.
+	var req postFieldRequest
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	err := dec.Decode(&req)
+	if err != nil && err != io.EOF {
+		resp.write(w, err)
+		return
+	}
 
-		// Validate field options.
-		if err := req.Options.validate(); err != nil {
-			return err
-		}
+	// Validate field options.
+	if err := req.Options.validate(); err != nil {
+		resp.write(w, err)
+		return
+	}
 
-		// Convert json options into functional options.
-		var fos pilosa.FieldOption
-		switch req.Options.Type {
-		case pilosa.FieldTypeSet:
-			fos = pilosa.OptFieldTypeSet(*req.Options.CacheType, *req.Options.CacheSize)
-		case pilosa.FieldTypeInt:
-			fos = pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max)
-		case pilosa.FieldTypeTime:
-			fos = pilosa.OptFieldTypeTime(*req.Options.TimeQuantum)
-		}
+	// Convert json options into functional options.
+	var fos pilosa.FieldOption
+	switch req.Options.Type {
+	case pilosa.FieldTypeSet:
+		fos = pilosa.OptFieldTypeSet(*req.Options.CacheType, *req.Options.CacheSize)
+	case pilosa.FieldTypeInt:
+		fos = pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max)
+	case pilosa.FieldTypeTime:
+		fos = pilosa.OptFieldTypeTime(*req.Options.TimeQuantum)
+	}
 
-		_, err = h.API.CreateField(r.Context(), indexName, fieldName, fos)
-		if err != nil {
-			return err
-		}
-		return nil
-	}()
-
+	_, err = h.API.CreateField(r.Context(), indexName, fieldName, fos)
 	resp.write(w, err)
 }
 

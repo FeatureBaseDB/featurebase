@@ -14,8 +14,6 @@
 
 package http
 
-import "bytes"
-
 // Error defines a standard application error.
 type Error struct {
 	// Machine-readable error code.
@@ -27,7 +25,5 @@ type Error struct {
 
 // Error returns the string representation of the error message.
 func (e *Error) Error() string {
-	var buf bytes.Buffer
-	buf.WriteString(e.Message)
-	return buf.String()
+	return e.Message
 }
