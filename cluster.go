@@ -1150,7 +1150,7 @@ func (c *cluster) generateResizeJobByAction(nodeAction nodeAction) (*resizeJob, 
 			Node:          EncodeNode(toCluster.unprotectedNodeByID(id)),
 			Coordinator:   EncodeNode(c.coordinatorNode()),
 			Sources:       sources,
-			Schema:        c.holder.EncodeSchema(), // Include the schema to ensure it's in sync on the receiving node.
+			Schema:        c.holder.encodeSchema(), // Include the schema to ensure it's in sync on the receiving node.
 			ClusterStatus: c.Status(),
 		}
 		j.Instructions = append(j.Instructions, instr)
@@ -1205,7 +1205,7 @@ func (c *cluster) followResizeInstruction(instr *internal.ResizeInstruction) err
 
 			// Sync the schema received in the resize instruction.
 			c.logger.Printf("Holder ApplySchema")
-			if err := c.holder.ApplySchema(instr.Schema); err != nil {
+			if err := c.holder.applySchema(instr.Schema); err != nil {
 				return errors.Wrap(err, "applying schema")
 			}
 

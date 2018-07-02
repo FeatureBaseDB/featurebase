@@ -360,7 +360,7 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstructi
 		destCluster := t.clusterByID(instrNode.ID)
 
 		// Sync the schema received in the resize instruction.
-		if err := destCluster.holder.ApplySchema(instr.Schema); err != nil {
+		if err := destCluster.holder.applySchema(instr.Schema); err != nil {
 			return err
 		}
 

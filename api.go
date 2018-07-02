@@ -697,7 +697,7 @@ func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest
 
 // MaxShards returns the maximum shard number for each index in a map.
 func (api *API) MaxShards(ctx context.Context) map[string]uint64 {
-	return api.holder.MaxShards()
+	return api.holder.maxShards()
 }
 
 // StatsWithTags returns an instance of whatever implementation of StatsClient
