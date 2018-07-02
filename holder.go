@@ -36,8 +36,8 @@ const (
 	// defaultCacheFlushInterval is the default value for Fragment.CacheFlushInterval.
 	defaultCacheFlushInterval = 1 * time.Minute
 
-	// FileLimit is the maximum open file limit (ulimit -n) to automatically set.
-	FileLimit = 262144 // (512^2)
+	// fileLimit is the maximum open file limit (ulimit -n) to automatically set.
+	fileLimit = 262144 // (512^2)
 )
 
 // Holder represents a container for indexes.
@@ -50,7 +50,7 @@ type Holder struct {
 	// opened channel is closed once Open() completes.
 	opened chan struct{}
 
-	Broadcaster broadcaster
+	broadcaster broadcaster
 
 	NewAttrStore func(string) AttrStore
 
@@ -65,7 +65,7 @@ type Holder struct {
 	Path string
 
 	// The interval at which the cached row ids are persisted to disk.
-	CacheFlushInterval time.Duration
+	cacheFlushInterval time.Duration
 
 	Logger Logger
 }
@@ -78,12 +78,12 @@ func NewHolder() *Holder {
 
 		opened: make(chan struct{}),
 
-		Broadcaster: NopBroadcaster,
+		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
 
 		NewAttrStore: newNopAttrStore,
 
-		CacheFlushInterval: defaultCacheFlushInterval,
+		cacheFlushInterval: defaultCacheFlushInterval,
 
 		Logger: NopLogger,
 	}
@@ -200,8 +200,8 @@ func (h *Holder) HasData() (bool, error) {
 	return false, nil
 }
 
-// MaxShards returns MaxShard map for all indexes.
-func (h *Holder) MaxShards() map[string]uint64 {
+// maxShards returns MaxShard map for all indexes.
+func (h *Holder) maxShards() map[string]uint64 {
 	a := make(map[string]uint64)
 	for _, index := range h.Indexes() {
 		a[index.Name()] = index.MaxShard()
@@ -229,8 +229,8 @@ func (h *Holder) Schema() []*IndexInfo {
 	return a
 }
 
-// ApplySchema applies an internal Schema to Holder.
-func (h *Holder) ApplySchema(schema *internal.Schema) error {
+// applySchema applies an internal Schema to Holder.
+func (h *Holder) applySchema(schema *internal.Schema) error {
 	// Create indexes that don't exist.
 	for _, index := range schema.Indexes {
 		opt := IndexOptions{}
@@ -257,15 +257,15 @@ func (h *Holder) ApplySchema(schema *internal.Schema) error {
 	return nil
 }
 
-// EncodeMaxShards creates and internal representation of max shards.
-func (h *Holder) EncodeMaxShards() *internal.MaxShards {
+// encodeMaxShards creates and internal representation of max shards.
+func (h *Holder) encodeMaxShards() *internal.MaxShards {
 	return &internal.MaxShards{
-		Standard: h.MaxShards(),
+		Standard: h.maxShards(),
 	}
 }
 
-// EncodeSchema creates an internal representation of schema.
-func (h *Holder) EncodeSchema() *internal.Schema {
+// encodeSchema creates an internal representation of schema.
+func (h *Holder) encodeSchema() *internal.Schema {
 	return &internal.Schema{
 		Indexes: EncodeIndexes(h.Indexes()),
 	}
@@ -360,7 +360,7 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	}
 	index.Logger = h.Logger
 	index.Stats = h.Stats.WithTags(fmt.Sprintf("index:%s", index.Name()))
-	index.broadcaster = h.Broadcaster
+	index.broadcaster = h.broadcaster
 	index.NewAttrStore = h.NewAttrStore
 	index.columnAttrStore = h.NewAttrStore(filepath.Join(index.path, ".data"))
 	return index, nil
@@ -402,8 +402,8 @@ func (h *Holder) Field(index, name string) *Field {
 	return idx.Field(name)
 }
 
-// View returns the view for an index, field, and name.
-func (h *Holder) View(index, field, name string) *View {
+// view returns the view for an index, field, and name.
+func (h *Holder) view(index, field, name string) *View {
 	f := h.Field(index, field)
 	if f == nil {
 		return nil
@@ -411,9 +411,9 @@ func (h *Holder) View(index, field, name string) *View {
 	return f.view(name)
 }
 
-// Fragment returns the fragment for an index, field & shard.
-func (h *Holder) Fragment(index, field, view string, shard uint64) *Fragment {
-	v := h.View(index, field, view)
+// fragment returns the fragment for an index, field & shard.
+func (h *Holder) fragment(index, field, view string, shard uint64) *Fragment {
+	v := h.view(index, field, view)
 	if v == nil {
 		return nil
 	}
@@ -423,7 +423,7 @@ func (h *Holder) Fragment(index, field, view string, shard uint64) *Fragment {
 // monitorCacheFlush periodically flushes all fragment caches sequentially.
 // This is run in a goroutine.
 func (h *Holder) monitorCacheFlush() {
-	ticker := time.NewTicker(h.CacheFlushInterval)
+	ticker := time.NewTicker(h.cacheFlushInterval)
 	defer ticker.Stop()
 
 	for {
@@ -476,11 +476,11 @@ func (h *Holder) setFileLimit() {
 		return
 	}
 	// If the soft limit is lower than the FileLimit constant, we will try to change it.
-	if oldLimit.Cur < FileLimit {
-		newLimit.Cur = FileLimit
+	if oldLimit.Cur < fileLimit {
+		newLimit.Cur = fileLimit
 		// If the hard limit is not high enough, we will try to change it too.
-		if oldLimit.Max < FileLimit {
-			newLimit.Max = FileLimit
+		if oldLimit.Max < fileLimit {
+			newLimit.Max = fileLimit
 		} else {
 			newLimit.Max = oldLimit.Max
 		}
@@ -508,8 +508,8 @@ func (h *Holder) setFileLimit() {
 		if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, oldLimit); err != nil {
 			h.Logger.Printf("ERROR checking open file limit: %s", err)
 		} else {
-			if oldLimit.Cur < FileLimit {
-				h.Logger.Printf("WARNING: Tried to set open file limit to %d, but it is %d. You may consider running \"sudo ulimit -n %d\" before starting Pilosa to avoid \"too many open files\" error. See https://www.pilosa.com/docs/administration/#open-file-limits for more information.", FileLimit, oldLimit.Cur, FileLimit)
+			if oldLimit.Cur < fileLimit {
+				h.Logger.Printf("WARNING: Tried to set open file limit to %d, but it is %d. You may consider running \"sudo ulimit -n %d\" before starting Pilosa to avoid \"too many open files\" error. See https://www.pilosa.com/docs/administration/#open-file-limits for more information.", fileLimit, oldLimit.Cur, fileLimit)
 			}
 		}
 	}
@@ -561,9 +561,9 @@ func (h *Holder) logStartup() error {
 	return nil
 }
 
-// HolderSyncer is an active anti-entropy tool that compares the local holder
+// holderSyncer is an active anti-entropy tool that compares the local holder
 // with a remote holder based on block checksums and resolves differences.
-type HolderSyncer struct {
+type holderSyncer struct {
 	mu sync.Mutex
 
 	Holder *Holder
@@ -579,7 +579,7 @@ type HolderSyncer struct {
 }
 
 // IsClosing returns true if the syncer has been marked to close.
-func (s *HolderSyncer) IsClosing() bool {
+func (s *holderSyncer) IsClosing() bool {
 	select {
 	case <-s.Closing:
 		return true
@@ -589,7 +589,7 @@ func (s *HolderSyncer) IsClosing() bool {
 }
 
 // SyncHolder compares the holder on host with the local holder and resolves differences.
-func (s *HolderSyncer) SyncHolder() error {
+func (s *holderSyncer) SyncHolder() error {
 	s.mu.Lock() // only allow one instance of SyncHolder to be running at a time
 	defer s.mu.Unlock()
 	ti := time.Now()
@@ -651,7 +651,7 @@ func (s *HolderSyncer) SyncHolder() error {
 }
 
 // syncIndex synchronizes index attributes with the rest of the cluster.
-func (s *HolderSyncer) syncIndex(index string) error {
+func (s *holderSyncer) syncIndex(index string) error {
 	// Retrieve index reference.
 	idx := s.Holder.Index(index)
 	if idx == nil {
@@ -694,7 +694,7 @@ func (s *HolderSyncer) syncIndex(index string) error {
 }
 
 // syncField synchronizes field attributes with the rest of the cluster.
-func (s *HolderSyncer) syncField(index, name string) error {
+func (s *holderSyncer) syncField(index, name string) error {
 	// Retrieve field reference.
 	f := s.Holder.Field(index, name)
 	if f == nil {
@@ -740,7 +740,7 @@ func (s *HolderSyncer) syncField(index, name string) error {
 }
 
 // syncFragment synchronizes a fragment with the rest of the cluster.
-func (s *HolderSyncer) syncFragment(index, field, view string, shard uint64) error {
+func (s *holderSyncer) syncFragment(index, field, view string, shard uint64) error {
 	// Retrieve local field.
 	f := s.Holder.Field(index, field)
 	if f == nil {
@@ -773,8 +773,8 @@ func (s *HolderSyncer) syncFragment(index, field, view string, shard uint64) err
 	return nil
 }
 
-// HolderCleaner removes fragments and data files that are no longer used.
-type HolderCleaner struct {
+// holderCleaner removes fragments and data files that are no longer used.
+type holderCleaner struct {
 	Node *Node
 
 	Holder  *Holder
@@ -785,7 +785,7 @@ type HolderCleaner struct {
 }
 
 // IsClosing returns true if the cleaner has been marked to close.
-func (c *HolderCleaner) IsClosing() bool {
+func (c *holderCleaner) IsClosing() bool {
 	select {
 	case <-c.Closing:
 		return true
@@ -796,7 +796,7 @@ func (c *HolderCleaner) IsClosing() bool {
 
 // CleanHolder compares the holder with the cluster state and removes
 // any unnecessary fragments and files.
-func (c *HolderCleaner) CleanHolder() error {
+func (c *holderCleaner) CleanHolder() error {
 	for _, index := range c.Holder.Indexes() {
 		// Verify cleaner has not closed.
 		if c.IsClosing() {

@@ -360,7 +360,7 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstructi
 		destCluster := t.clusterByID(instrNode.ID)
 
 		// Sync the schema received in the resize instruction.
-		if err := destCluster.holder.ApplySchema(instr.Schema); err != nil {
+		if err := destCluster.holder.applySchema(instr.Schema); err != nil {
 			return err
 		}
 
@@ -368,8 +368,8 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstructi
 			srcNode := DecodeNode(src.Node)
 			srcCluster := t.clusterByID(srcNode.ID)
 
-			srcFragment := srcCluster.holder.Fragment(src.Index, src.Field, src.View, src.Shard)
-			destFragment := destCluster.holder.Fragment(src.Index, src.Field, src.View, src.Shard)
+			srcFragment := srcCluster.holder.fragment(src.Index, src.Field, src.View, src.Shard)
+			destFragment := destCluster.holder.fragment(src.Index, src.Field, src.View, src.Shard)
 			if destFragment == nil {
 				// Create fragment on destination if it doesn't exist.
 				f := destCluster.holder.Field(src.Index, src.Field)

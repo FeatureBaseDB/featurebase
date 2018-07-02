@@ -337,7 +337,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 	}
 
 	// Find the fragment.
-	f := api.holder.Fragment(indexName, fieldName, ViewStandard, shard)
+	f := api.holder.fragment(indexName, fieldName, ViewStandard, shard)
 	if f == nil {
 		return ErrFragmentNotFound
 	}
@@ -379,7 +379,7 @@ func (api *API) MarshalFragment(ctx context.Context, indexName string, fieldName
 	}
 
 	// Retrieve fragment from holder.
-	f := api.holder.Fragment(indexName, fieldName, ViewStandard, shard)
+	f := api.holder.fragment(indexName, fieldName, ViewStandard, shard)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -437,7 +437,7 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 	}
 
 	// Retrieve fragment from holder.
-	f := api.holder.Fragment(req.Index, req.Field, ViewStandard, req.Shard)
+	f := api.holder.fragment(req.Index, req.Field, ViewStandard, req.Shard)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -461,7 +461,7 @@ func (api *API) FragmentBlocks(ctx context.Context, indexName string, fieldName 
 	}
 
 	// Retrieve fragment from holder.
-	f := api.holder.Fragment(indexName, fieldName, ViewStandard, shard)
+	f := api.holder.fragment(indexName, fieldName, ViewStandard, shard)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -697,7 +697,7 @@ func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest
 
 // MaxShards returns the maximum shard number for each index in a map.
 func (api *API) MaxShards(ctx context.Context) map[string]uint64 {
-	return api.holder.MaxShards()
+	return api.holder.maxShards()
 }
 
 // StatsWithTags returns an instance of whatever implementation of StatsClient

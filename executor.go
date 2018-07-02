@@ -427,7 +427,7 @@ func (e *executor) executeSumCountShard(ctx context.Context, index string, c *pq
 		return ValCount{}, nil
 	}
 
-	fragment := e.Holder.Fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
+	fragment := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
 	if fragment == nil {
 		return ValCount{}, nil
 	}
@@ -465,7 +465,7 @@ func (e *executor) executeMinShard(ctx context.Context, index string, c *pql.Cal
 		return ValCount{}, nil
 	}
 
-	fragment := e.Holder.Fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
+	fragment := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
 	if fragment == nil {
 		return ValCount{}, nil
 	}
@@ -503,7 +503,7 @@ func (e *executor) executeMaxShard(ctx context.Context, index string, c *pql.Cal
 		return ValCount{}, nil
 	}
 
-	fragment := e.Holder.Fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
+	fragment := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
 	if fragment == nil {
 		return ValCount{}, nil
 	}
@@ -623,7 +623,7 @@ func (e *executor) executeTopNShard(ctx context.Context, index string, c *pql.Ca
 		field = defaultField
 	}
 
-	f := e.Holder.Fragment(index, field, ViewStandard, shard)
+	f := e.Holder.fragment(index, field, ViewStandard, shard)
 	if f == nil {
 		return nil, nil
 	}
@@ -693,7 +693,7 @@ func (e *executor) executeBitmapShard(ctx context.Context, index string, c *pql.
 		return nil, fmt.Errorf("Row() must specify %v", rowLabel)
 	}
 
-	frag := e.Holder.Fragment(index, fieldName, ViewStandard, shard)
+	frag := e.Holder.fragment(index, fieldName, ViewStandard, shard)
 	if frag == nil {
 		return NewRow(), nil
 	}
@@ -785,7 +785,7 @@ func (e *executor) executeRangeShard(ctx context.Context, index string, c *pql.C
 	// Union bitmaps across all time-based views.
 	row := &Row{}
 	for _, view := range viewsByTimeRange(ViewStandard, startTime, endTime, q) {
-		f := e.Holder.Fragment(index, fieldName, view, shard)
+		f := e.Holder.fragment(index, fieldName, view, shard)
 		if f == nil {
 			continue
 		}
@@ -836,7 +836,7 @@ func (e *executor) executeBSIGroupRangeShard(ctx context.Context, index string, 
 		}
 
 		// Retrieve fragment.
-		frag := e.Holder.Fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
+		frag := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
 		if frag == nil {
 			return NewRow(), nil
 		}
@@ -871,7 +871,7 @@ func (e *executor) executeBSIGroupRangeShard(ctx context.Context, index string, 
 		}
 
 		// Retrieve fragment.
-		frag := e.Holder.Fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
+		frag := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
 		if frag == nil {
 			return NewRow(), nil
 		}
@@ -904,7 +904,7 @@ func (e *executor) executeBSIGroupRangeShard(ctx context.Context, index string, 
 		}
 
 		// Retrieve fragment.
-		frag := e.Holder.Fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
+		frag := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
 		if frag == nil {
 			return NewRow(), nil
 		}

@@ -70,7 +70,7 @@ type Server struct {
 	diagnosticInterval  time.Duration
 	maxWritesPerRequest int
 	isCoordinator       bool
-	syncer              HolderSyncer
+	syncer              holderSyncer
 
 	primaryTranslateStore TranslateStore
 
@@ -298,7 +298,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
 	s.cluster.broadcaster = s
 	s.cluster.maxWritesPerRequest = s.maxWritesPerRequest
-	s.holder.Broadcaster = s
+	s.holder.broadcaster = s
 
 	err = s.cluster.setup()
 	if err != nil {
@@ -572,8 +572,8 @@ func (s *Server) LocalStatus() (proto.Message, error) {
 
 	ns := internal.NodeStatus{
 		Node:      EncodeNode(s.cluster.Node),
-		MaxShards: s.holder.EncodeMaxShards(),
-		Schema:    s.holder.EncodeSchema(),
+		MaxShards: s.holder.encodeMaxShards(),
+		Schema:    s.holder.encodeSchema(),
 	}
 
 	return &ns, nil
@@ -606,12 +606,12 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 	}
 
 	// Sync schema.
-	if err := s.holder.ApplySchema(ns.Schema); err != nil {
+	if err := s.holder.applySchema(ns.Schema); err != nil {
 		return errors.Wrap(err, "applying schema")
 	}
 
 	// Sync maxShards.
-	oldmaxshards := s.holder.MaxShards()
+	oldmaxshards := s.holder.maxShards()
 	for index, newMax := range ns.MaxShards.Standard {
 		localIndex := s.holder.Index(index)
 		// if we don't know about an index locally, log an error because

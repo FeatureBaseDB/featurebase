@@ -306,7 +306,9 @@ func TestClient_FragmentBlocks(t *testing.T) {
 	}
 
 	// Verify data matches local blocks.
-	if a := hldr.Fragment("i", "f", pilosa.ViewStandard, 0).Blocks(); !reflect.DeepEqual(a, blocks) {
+	if a, err := cmd.API.FragmentBlocks(context.Background(), "i", "f", 0); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(a, blocks) {
 		t.Fatalf("blocks mismatch:\n\nexp=%s\n\ngot=%s\n\n", spew.Sdump(a), spew.Sdump(blocks))
 	}
 }
