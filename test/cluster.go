@@ -14,50 +14,7 @@
 
 package test
 
-import (
-	"fmt"
-	"io/ioutil"
-
-	"github.com/pilosa/pilosa"
-)
-
 // modHasher represents a simple, mod-based hashing.
 type ModHasher struct{}
 
 func (*ModHasher) Hash(key uint64, n int) int { return int(key) % n }
-
-// NewCluster returns a cluster with n nodes and uses a mod-based hasher.
-func NewCluster(n int) *pilosa.Cluster {
-	path, err := ioutil.TempDir("", "pilosa-cluster-")
-	if err != nil {
-		panic(err)
-	}
-
-	c := pilosa.NewCluster()
-	c.ReplicaN = 1
-	c.Hasher = &ModHasher{}
-	c.Path = path
-	c.Topology = pilosa.NewTopology()
-
-	for i := 0; i < n; i++ {
-		c.Nodes = append(c.Nodes, &pilosa.Node{
-			ID:  fmt.Sprintf("node%d", i),
-			URI: newURI("http", fmt.Sprintf("host%d", i), uint16(0)),
-		})
-	}
-
-	c.Node = c.Nodes[0]
-	c.Coordinator = c.Nodes[0].ID
-	c.SetState(pilosa.ClusterStateNormal)
-
-	return c
-}
-
-// newURI is a test URI creator that intentionally swallows errors.
-func newURI(scheme, host string, port uint16) pilosa.URI {
-	uri := pilosa.DefaultURI()
-	uri.SetScheme(scheme)
-	uri.SetHost(host)
-	uri.SetPort(port)
-	return *uri
-}

@@ -1307,9 +1307,9 @@ func TestExecutor_SetColumnAttrs_ExcludeField(t *testing.T) {
 }
 
 func TestExecutor_Time_Clear_Quantums(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-	e := test.NewExecutor(hldr.Holder, pilosa.NewTestCluster(1))
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
 
 	var rangeTests = []struct {
 		quantum  pilosa.TimeQuantum
@@ -1326,7 +1326,7 @@ func TestExecutor_Time_Clear_Quantums(t *testing.T) {
 		{quantum: "MDH", expected: []uint64{3, 4, 5, 6, 7}},
 		{quantum: "DH", expected: []uint64{3, 4, 5, 6, 7}},
 	}
-	populateBatch := test.MustParse(`
+	populateBatch := `
 				  Set(2, f=1, 1999-12-31T00:00)
 				  Set(3, f=1, 2000-01-01T00:00)
 				  Set(4, f=1, 2000-01-02T00:00)
@@ -1336,9 +1336,9 @@ func TestExecutor_Time_Clear_Quantums(t *testing.T) {
 				  Set(2, f=1, 1999-12-30T00:00)
 				  Set(2, f=1, 2002-02-01T00:00)
 				  Set(2, f=10, 2001-01-01T00:00)
-			`)
-	clearColumn := test.MustParse(`Clear( 2, f=1)`)
-	rangeCheckQuery := test.MustParse(`Range(f=1, 1999-12-31T00:00, 2002-01-01T03:00)`)
+			`
+	clearColumn := `Clear( 2, f=1)`
+	rangeCheckQuery := `Range(f=1, 1999-12-31T00:00, 2002-01-01T03:00)`
 
 	for i, tt := range rangeTests {
 		t.Run(fmt.Sprintf("#%d Quantum %s", i+1, tt.quantum), func(t *testing.T) {
@@ -1353,15 +1353,15 @@ func TestExecutor_Time_Clear_Quantums(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Populate
-			if _, err := e.Execute(context.Background(), indexName, populateBatch, nil, nil); err != nil {
+			if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: indexName, Query: populateBatch}); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := e.Execute(context.Background(), indexName, clearColumn, nil, nil); err != nil {
+			if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: indexName, Query: clearColumn}); err != nil {
 				t.Fatal(err)
 			}
-			if res, err := e.Execute(context.Background(), indexName, rangeCheckQuery, nil, nil); err != nil {
+			if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: indexName, Query: rangeCheckQuery}); err != nil {
 				t.Fatal(err)
-			} else if columns := res[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, tt.expected) {
+			} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, tt.expected) {
 				t.Fatalf("unexpected columns: %+v", columns)
 			}
 
