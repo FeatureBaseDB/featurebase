@@ -195,8 +195,6 @@ func NewRouter(handler *Handler) *mux.Router {
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET").Name("GetExport")
-	router.HandleFunc("/import", handler.handlePostImport).Methods("POST")
-	router.HandleFunc("/import-value", handler.handlePostImportValue).Methods("POST")
 	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET")
 	router.HandleFunc("/index/{index}", handler.handleGetIndex).Methods("GET")
 	router.HandleFunc("/index/{index}", handler.handlePostIndex).Methods("POST")
@@ -204,6 +202,7 @@ func NewRouter(handler *Handler) *mux.Router {
 	//router.HandleFunc("/index/{index}/field", handler.handleGetFields).Methods("GET") // Not implemented.
 	router.HandleFunc("/index/{index}/field/{field}", handler.handlePostField).Methods("POST")
 	router.HandleFunc("/index/{index}/field/{field}", handler.handleDeleteField).Methods("DELETE")
+	router.HandleFunc("/index/{index}/field/{field}/import", handler.handlePostImport).Methods("POST")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
 	router.HandleFunc("/info", handler.handleGetInfo).Methods("GET")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
@@ -886,57 +885,21 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
 		return
 	}
+	indexName := mux.Vars(r)["index"]
+	fieldName := mux.Vars(r)["field"]
 
-	// Read entire body.
-	body, err := ioutil.ReadAll(r.Body)
+	// Get index and field type to determine how to handle the
+	// import data.
+	field, err := h.API.Field(r.Context(), indexName, fieldName)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Marshal into request object.
-	var req internal.ImportRequest
-	if err := proto.Unmarshal(body, &req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err := h.API.Import(r.Context(), req); err != nil {
 		switch errors.Cause(err) {
 		case pilosa.ErrIndexNotFound:
 			fallthrough
 		case pilosa.ErrFieldNotFound:
 			http.Error(w, err.Error(), http.StatusNotFound)
-		case pilosa.ErrClusterDoesNotOwnShard:
-			http.Error(w, err.Error(), http.StatusPreconditionFailed)
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		return
-	}
-
-	// Marshal response object.
-	buf, e := proto.Marshal(&internal.ImportResponse{Err: errorString(err)})
-	if e != nil {
-		http.Error(w, fmt.Sprintf("marshal import response: %s", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Write response.
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-	w.Write(buf)
-}
-
-// handlePostImportValue handles /import-value requests.
-func (h *Handler) handlePostImportValue(w http.ResponseWriter, r *http.Request) {
-	// Verify that request is only communicating over protobufs.
-	if r.Header.Get("Content-Type") != "application/x-protobuf" {
-		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
-		return
-	} else if r.Header.Get("Accept") != "application/x-protobuf" {
-		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
 		return
 	}
 
@@ -947,38 +910,53 @@ func (h *Handler) handlePostImportValue(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Marshal into request object.
-	var req internal.ImportValueRequest
-	if err := proto.Unmarshal(body, &req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err = h.API.ImportValue(r.Context(), req); err != nil {
-		switch errors.Cause(err) {
-		case pilosa.ErrIndexNotFound:
-			fallthrough
-		case pilosa.ErrFieldNotFound:
-			http.Error(w, err.Error(), http.StatusNotFound)
-		case pilosa.ErrClusterDoesNotOwnShard:
-			http.Error(w, err.Error(), http.StatusPreconditionFailed)
-		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+	// Unmarshal request based on field type.
+	if field.Type() == pilosa.FieldTypeInt {
+		// Field type: Int
+		// Marshal into request object.
+		var req internal.ImportValueRequest
+		if err := proto.Unmarshal(body, &req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
 		}
-		return
+
+		if err := h.API.ImportValue(r.Context(), req); err != nil {
+			switch errors.Cause(err) {
+			case pilosa.ErrClusterDoesNotOwnShard:
+				http.Error(w, err.Error(), http.StatusPreconditionFailed)
+			default:
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+	} else {
+		// Field type: Set, Time
+		// Marshal into request object.
+		var req internal.ImportRequest
+		if err := proto.Unmarshal(body, &req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if err := h.API.Import(r.Context(), req); err != nil {
+			switch errors.Cause(err) {
+			case pilosa.ErrClusterDoesNotOwnShard:
+				http.Error(w, err.Error(), http.StatusPreconditionFailed)
+			default:
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
 	}
 
 	// Marshal response object.
-	buf, e := proto.Marshal(&internal.ImportResponse{Err: errorString(err)})
+	buf, e := proto.Marshal(&internal.ImportResponse{Err: ""})
 	if e != nil {
-		http.Error(w, fmt.Sprintf("marshal import response: %s", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("marshal import response"), http.StatusInternalServerError)
 		return
 	}
 
 	// Write response.
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-	}
 	w.Write(buf)
 }
 

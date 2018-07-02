@@ -4,9 +4,9 @@ package pilosa
 
 import "strconv"
 
-const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFieldAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiMarshalFragmentapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiSetCoordinatorapiShardNodesapiUnmarshalFragmentapiViews"
+const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFieldapiFieldAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiMarshalFragmentapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiSetCoordinatorapiShardNodesapiUnmarshalFragmentapiViews"
 
-var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 73, 86, 98, 118, 135, 151, 160, 174, 182, 198, 216, 224, 244, 257, 271, 288, 301, 321, 329}
+var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 73, 86, 98, 118, 135, 143, 159, 168, 182, 190, 206, 224, 232, 252, 265, 279, 296, 309, 329, 337}
 
 func (i apiMethod) String() string {
 	if i < 0 || i >= apiMethod(len(_apiMethod_index)-1) {

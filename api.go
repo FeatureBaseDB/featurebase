@@ -277,6 +277,19 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 	return field, nil
 }
 
+// Field retrieves the named field.
+func (api *API) Field(ctx context.Context, indexName, fieldName string) (*Field, error) {
+	if err := api.validate(apiField); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
+	}
+
+	field := api.holder.Field(indexName, fieldName)
+	if field == nil {
+		return nil, NewNotFoundError(ErrFieldNotFound)
+	}
+	return field, nil
+}
+
 // DeleteField removes the named field from the named index. If the index is not
 // found, an error is returned. If the field is not found, it is ignored and no
 // action is taken.
@@ -866,6 +879,7 @@ const (
 	apiExportCSV
 	apiFragmentBlockData
 	apiFragmentBlocks
+	apiField
 	apiFieldAttrDiff
 	//apiHosts // not implemented
 	apiImport
@@ -909,6 +923,7 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiExportCSV:         struct{}{},
 	apiFragmentBlockData: struct{}{},
 	apiFragmentBlocks:    struct{}{},
+	apiField:             struct{}{},
 	apiFieldAttrDiff:     struct{}{},
 	apiImport:            struct{}{},
 	apiImportValue:       struct{}{},
