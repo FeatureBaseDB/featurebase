@@ -402,8 +402,8 @@ func (h *Holder) Field(index, name string) *Field {
 	return idx.Field(name)
 }
 
-// View returns the view for an index, field, and name.
-func (h *Holder) View(index, field, name string) *View {
+// view returns the view for an index, field, and name.
+func (h *Holder) view(index, field, name string) *View {
 	f := h.Field(index, field)
 	if f == nil {
 		return nil
@@ -413,7 +413,7 @@ func (h *Holder) View(index, field, name string) *View {
 
 // Fragment returns the fragment for an index, field & shard.
 func (h *Holder) Fragment(index, field, view string, shard uint64) *Fragment {
-	v := h.View(index, field, view)
+	v := h.view(index, field, view)
 	if v == nil {
 		return nil
 	}

@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -55,6 +56,43 @@ func newHolder() *tHolder {
 	h := &tHolder{Holder: NewHolder()}
 	h.Path = path
 	return h
+}
+
+// MustCreateFieldIfNotExists returns a given field. Panic on error.
+func (h *tHolder) MustCreateFieldIfNotExists(index, field string) *Field {
+	f, err := h.MustCreateIndexIfNotExists(index, IndexOptions{}).CreateFieldIfNotExists(field, FieldOptions{})
+	if err != nil {
+		panic(err)
+	}
+	return f
+}
+
+// MustCreateIndexIfNotExists returns a given index. Panic on error.
+func (h *tHolder) MustCreateIndexIfNotExists(index string, opt IndexOptions) *Index {
+	idx, err := h.Holder.CreateIndexIfNotExists(index, opt)
+	if err != nil {
+		panic(err)
+	}
+	return idx
+}
+
+// SetBit clears a bit on the given field.
+func (h *tHolder) SetBit(index, field string, rowID, columnID uint64) {
+	f := h.MustCreateFieldIfNotExists(index, field)
+	_, err := f.SetBit(rowID, columnID, nil)
+	if err != nil {
+		panic(err)
+	}
+}
+
+// Row returns a Row for a given field.
+func (h *tHolder) Row(index, field string, rowID uint64) *Row {
+	f := h.MustCreateFieldIfNotExists(index, field)
+	row, err := f.Row(rowID)
+	if err != nil {
+		panic(err)
+	}
+	return row
 }
 
 func TestHolder_Optn(t *testing.T) {
@@ -136,4 +174,118 @@ func TestHolder_Optn(t *testing.T) {
 		}
 	})
 
+}
+
+// Ensure holder can clean up orphaned fragments.
+func TestHolderCleaner_CleanHolder(t *testing.T) {
+	cluster := NewTestCluster(2)
+
+	// Create a local holder.
+	hldr0 := newHolder()
+	defer hldr0.Close()
+
+	// Mock 2-node, fully replicated cluster.
+	cluster.ReplicaN = 2
+
+	cluster.Nodes[0].URI = NewTestURIFromHostPort("localhost", 0)
+
+	// Create fields on nodes.
+	for _, hldr := range []*tHolder{hldr0} {
+		hldr.MustCreateFieldIfNotExists("i", "f")
+		hldr.MustCreateFieldIfNotExists("i", "f0")
+		hldr.MustCreateFieldIfNotExists("y", "z")
+	}
+
+	// Set data on the local holder.
+	hldr0.SetBit("i", "f", 0, 10)
+	hldr0.SetBit("i", "f", 0, 4000)
+	hldr0.SetBit("i", "f", 2, 20)
+	hldr0.SetBit("i", "f", 3, 10)
+	hldr0.SetBit("i", "f", 120, 10)
+	hldr0.SetBit("i", "f", 200, 4)
+
+	hldr0.SetBit("i", "f0", 9, ShardWidth+5)
+
+	hldr0.SetBit("y", "z", 10, (2*ShardWidth)+4)
+	hldr0.SetBit("y", "z", 10, (2*ShardWidth)+5)
+	hldr0.SetBit("y", "z", 10, (2*ShardWidth)+7)
+
+	// Set highest shard.
+	hldr0.Index("i").SetRemoteMaxShard(1)
+	hldr0.Index("y").SetRemoteMaxShard(2)
+
+	// Keep replication the same and ensure we get the expected results.
+	cluster.ReplicaN = 2
+
+	// Set up cleaner for replication 2.
+	cleaner2 := HolderCleaner{
+		Node:    cluster.Nodes[0],
+		Holder:  hldr0.Holder,
+		Cluster: cluster,
+	}
+
+	if err := cleaner2.CleanHolder(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify data is the same on both nodes.
+	for i, hldr := range []*tHolder{hldr0} {
+		if a := hldr.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
+			t.Fatalf("unexpected columns(%d/0): %+v", i, a)
+		} else if a := hldr.Row("i", "f", 2).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
+			t.Fatalf("unexpected columns(%d/2): %+v", i, a)
+		} else if a := hldr.Row("i", "f", 3).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+			t.Fatalf("unexpected columns(%d/3): %+v", i, a)
+		} else if a := hldr.Row("i", "f", 120).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+			t.Fatalf("unexpected columns(%d/120): %+v", i, a)
+		} else if a := hldr.Row("i", "f", 200).Columns(); !reflect.DeepEqual(a, []uint64{4}) {
+			t.Fatalf("unexpected columns(%d/200): %+v", i, a)
+		}
+
+		if a := hldr.Row("i", "f0", 9).Columns(); !reflect.DeepEqual(a, []uint64{ShardWidth + 5}) {
+			t.Fatalf("unexpected columns(%d/d/f0): %+v", i, a)
+		}
+
+		if a := hldr.Row("y", "z", 10).Columns(); !reflect.DeepEqual(a, []uint64{(2 * ShardWidth) + 4, (2 * ShardWidth) + 5, (2 * ShardWidth) + 7}) {
+			t.Fatalf("unexpected columns(%d/y/z): %+v", i, a)
+		}
+	}
+
+	// Change replication factor to ensure we have fragments to remove.
+	cluster.ReplicaN = 1
+
+	// Set up cleaner for replication 1.
+	cleaner1 := HolderCleaner{
+		Node:    cluster.Nodes[0],
+		Holder:  hldr0.Holder,
+		Cluster: cluster,
+	}
+
+	if err := cleaner1.CleanHolder(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify data is the same on both nodes.
+	for i, hldr := range []*tHolder{hldr0} {
+		if a := hldr.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{10, 4000}) {
+			t.Fatalf("unexpected columns(%d/0): %+v", i, a)
+		} else if a := hldr.Row("i", "f", 2).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
+			t.Fatalf("unexpected columns(%d/2): %+v", i, a)
+		} else if a := hldr.Row("i", "f", 3).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+			t.Fatalf("unexpected columns(%d/3): %+v", i, a)
+		} else if a := hldr.Row("i", "f", 120).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+			t.Fatalf("unexpected columns(%d/120): %+v", i, a)
+		} else if a := hldr.Row("i", "f", 200).Columns(); !reflect.DeepEqual(a, []uint64{4}) {
+			t.Fatalf("unexpected columns(%d/200): %+v", i, a)
+		}
+
+		f := hldr.Fragment("i", "f0", ViewStandard, 1)
+		if f != nil {
+			t.Fatalf("expected fragment to be deleted: (%d/i/f0): %+v", i, f)
+		}
+
+		if a := hldr.Row("y", "z", 10).Columns(); !reflect.DeepEqual(a, []uint64{(2 * ShardWidth) + 4, (2 * ShardWidth) + 5, (2 * ShardWidth) + 7}) {
+			t.Fatalf("unexpected columns(%d/y/z): %+v", i, a)
+		}
+	}
 }
