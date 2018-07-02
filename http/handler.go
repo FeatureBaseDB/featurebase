@@ -189,47 +189,44 @@ func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
 func NewRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
 	router.HandleFunc("/", handler.handleHome).Methods("GET")
-	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
-	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
-
-	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
-	router.HandleFunc("/cluster/message", handler.handlePostClusterMessage).Methods("POST")
-	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST")
-	router.HandleFunc("/shards/max", handler.handleGetShardsMax).Methods("GET") // TODO: deprecate, but it's being used by the client
-	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
-	router.HandleFunc("/info", handler.handleGetInfo).Methods("GET")
-	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
-
 	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST")
-
 	router.HandleFunc("/cluster/resize/remove-node", handler.handlePostClusterResizeRemoveNode).Methods("POST")
+	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET").Name("GetExport")
-	router.HandleFunc("/fragment/block/data", handler.handleGetFragmentBlockData).Methods("GET")
-	router.HandleFunc("/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET").Name("GetFragmentBlocks")
-	router.HandleFunc("/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET").Name("GetFragmentNodes")
 	router.HandleFunc("/import", handler.handlePostImport).Methods("POST")
 	router.HandleFunc("/import-value", handler.handlePostImportValue).Methods("POST")
 	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET")
 	router.HandleFunc("/index/{index}", handler.handleGetIndex).Methods("GET")
 	router.HandleFunc("/index/{index}", handler.handlePostIndex).Methods("POST")
 	router.HandleFunc("/index/{index}", handler.handleDeleteIndex).Methods("DELETE")
-	router.HandleFunc("/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST")
 	//router.HandleFunc("/index/{index}/field", handler.handleGetFields).Methods("GET") // Not implemented.
 	router.HandleFunc("/index/{index}/field/{field}", handler.handlePostField).Methods("POST")
 	router.HandleFunc("/index/{index}/field/{field}", handler.handleDeleteField).Methods("DELETE")
-	router.HandleFunc("/index/{index}/field/{field}/attr/diff", handler.handlePostFieldAttrDiff).Methods("POST")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
+	router.HandleFunc("/info", handler.handleGetInfo).Methods("GET")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
+	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
+	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
+	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
+
+	// /internal endpoints are for internal use only; they may change at any time.
+	// DO NOT rely on these for external applications!
+	router.HandleFunc("/internal/cluster/message", handler.handlePostClusterMessage).Methods("POST")
+	router.HandleFunc("/internal/fragment/block/data", handler.handleGetFragmentBlockData).Methods("GET")
+	router.HandleFunc("/internal/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET").Name("GetFragmentBlocks")
+	router.HandleFunc("/internal/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET").Name("GetFragmentNodes")
+	router.HandleFunc("/internal/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST")
+	router.HandleFunc("/internal/index/{index}/field/{field}/attr/diff", handler.handlePostFieldAttrDiff).Methods("POST")
+	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET") // TODO: deprecate, but it's being used by the client
+	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET")
 
 	// TODO: Apply MethodNotAllowed statuses to all endpoints.
 	// Ideally this would be automatic, as described in this (wontfix) ticket:
 	// https://github.com/gorilla/mux/issues/6
 	// For now we just do it for the most commonly used handler, /query
 	router.HandleFunc("/index/{index}/query", handler.methodNotAllowedHandler).Methods("GET")
-
-	router.HandleFunc("/translate/data", handler.handleGetTranslateData).Methods("GET")
 
 	router.Use(handler.queryArgValidator)
 	return router
@@ -441,7 +438,7 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleGetShardsMax handles GET /shards/max requests.
+// handleGetShardsMax handles GET /internal/shards/max requests.
 func (h *Handler) handleGetShardsMax(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
@@ -590,7 +587,7 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 	resp.write(w, err)
 }
 
-// handlePostIndexAttrDiff handles POST /index/attr/diff requests.
+// handlePostIndexAttrDiff handles POST /internal/index/attr/diff requests.
 func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
@@ -760,7 +757,7 @@ func (h *Handler) handleDeleteField(w http.ResponseWriter, r *http.Request) {
 	resp.write(w, err)
 }
 
-// handlePostFieldAttrDiff handles POST /field/attr/diff requests.
+// handlePostFieldAttrDiff handles POST /internal/field/attr/diff requests.
 func (h *Handler) handlePostFieldAttrDiff(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
@@ -1019,7 +1016,7 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleGetFragmentNodes handles /fragment/nodes requests.
+// handleGetFragmentNodes handles /internal/fragment/nodes requests.
 func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
@@ -1048,7 +1045,7 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// handleGetFragmentBlockData handles GET /fragment/block/data requests.
+// handleGetFragmentBlockData handles GET /internal/fragment/block/data requests.
 func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Request) {
 	buf, err := h.API.FragmentBlockData(r.Context(), r.Body)
 	if err != nil {
@@ -1068,7 +1065,7 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 	w.Write(buf)
 }
 
-// handleGetFragmentBlocks handles GET /fragment/blocks requests.
+// handleGetFragmentBlocks handles GET /internal/fragment/blocks requests.
 func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
