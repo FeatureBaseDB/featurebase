@@ -133,7 +133,7 @@ func NewField(path, index, name string, options FieldOptions) (*Field, error) {
 
 		views: make(map[string]*View),
 
-		rowAttrStore: NopAttrStore,
+		rowAttrStore: nopStore,
 
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,

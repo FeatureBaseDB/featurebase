@@ -81,7 +81,7 @@ func NewHolder() *Holder {
 		Broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
 
-		NewAttrStore: NewNopAttrStore,
+		NewAttrStore: newNopAttrStore,
 
 		CacheFlushInterval: defaultCacheFlushInterval,
 

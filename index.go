@@ -66,8 +66,8 @@ func NewIndex(path, name string) (*Index, error) {
 
 		remoteMaxShard: 0,
 
-		NewAttrStore:    NewNopAttrStore,
-		columnAttrStore: NopAttrStore,
+		NewAttrStore:    newNopAttrStore,
+		columnAttrStore: nopStore,
 
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
