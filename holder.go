@@ -217,7 +217,7 @@ func (h *Holder) Schema() []*IndexInfo {
 		for _, field := range index.Fields() {
 			fi := &FieldInfo{Name: field.Name(), Options: field.Options()}
 			for _, view := range field.views() {
-				fi.Views = append(fi.Views, &ViewInfo{Name: view.name})
+				fi.Views = append(fi.Views, &viewInfo{Name: view.name})
 			}
 			sort.Sort(viewInfoSlice(fi.Views))
 			di.Fields = append(di.Fields, fi)
@@ -403,7 +403,7 @@ func (h *Holder) Field(index, name string) *Field {
 }
 
 // view returns the view for an index, field, and name.
-func (h *Holder) view(index, field, name string) *View {
+func (h *Holder) view(index, field, name string) *view {
 	f := h.Field(index, field)
 	if f == nil {
 		return nil

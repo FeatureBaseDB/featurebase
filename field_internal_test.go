@@ -156,7 +156,7 @@ func TestField_DeleteView(t *testing.T) {
 	f := MustOpenField(FieldOptions{})
 	defer f.Close()
 
-	viewName := ViewStandard + "_v"
+	viewName := viewStandard + "_v"
 
 	// Create view.
 	view, err := f.createViewIfNotExists(viewName)

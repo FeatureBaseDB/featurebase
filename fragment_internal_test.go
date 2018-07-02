@@ -36,7 +36,7 @@ var (
 
 // Ensure a fragment can set a bit and retrieve it.
 func TestFragment_SetBit(t *testing.T) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
 	defer f.Close()
 
 	// Set bits on the fragment.
@@ -67,7 +67,7 @@ func TestFragment_SetBit(t *testing.T) {
 
 // Ensure a fragment can clear a set bit.
 func TestFragment_ClearBit(t *testing.T) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
 	defer f.Close()
 
 	// Set and then clear bits on the fragment.
@@ -95,7 +95,7 @@ func TestFragment_ClearBit(t *testing.T) {
 // Ensure a fragment can set & read a value.
 func TestFragment_SetValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
-		f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
 		defer f.Close()
 
 		// Set value.
@@ -123,7 +123,7 @@ func TestFragment_SetValue(t *testing.T) {
 	})
 
 	t.Run("Overwrite", func(t *testing.T) {
-		f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
 		defer f.Close()
 
 		// Set value.
@@ -151,7 +151,7 @@ func TestFragment_SetValue(t *testing.T) {
 	})
 
 	t.Run("NotExists", func(t *testing.T) {
-		f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
 		defer f.Close()
 
 		// Set value.
@@ -181,7 +181,7 @@ func TestFragment_SetValue(t *testing.T) {
 				values[i] = values[i] % (1 << bitDepth)
 			}
 
-			f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+			f := mustOpenFragment("i", "f", viewStandard, 0, "")
 			defer f.Close()
 
 			// Set values.
@@ -219,7 +219,7 @@ func TestFragment_SetValue(t *testing.T) {
 func TestFragment_Sum(t *testing.T) {
 	const bitDepth = 16
 
-	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
 	defer f.Close()
 
 	// Set values.
@@ -258,7 +258,7 @@ func TestFragment_Sum(t *testing.T) {
 func TestFragment_MinMax(t *testing.T) {
 	const bitDepth = 16
 
-	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
 	defer f.Close()
 
 	// Set values.
@@ -332,7 +332,7 @@ func TestFragment_Range(t *testing.T) {
 	const bitDepth = 16
 
 	t.Run("EQ", func(t *testing.T) {
-		f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
 		defer f.Close()
 
 		// Set values.
@@ -355,7 +355,7 @@ func TestFragment_Range(t *testing.T) {
 	})
 
 	t.Run("NEQ", func(t *testing.T) {
-		f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
 		defer f.Close()
 
 		// Set values.
@@ -378,7 +378,7 @@ func TestFragment_Range(t *testing.T) {
 	})
 
 	t.Run("LT", func(t *testing.T) {
-		f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
 		defer f.Close()
 
 		// Set values.
@@ -426,7 +426,7 @@ func TestFragment_Range(t *testing.T) {
 	})
 
 	t.Run("GT", func(t *testing.T) {
-		f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
 		defer f.Close()
 
 		// Set values.
@@ -474,7 +474,7 @@ func TestFragment_Range(t *testing.T) {
 	})
 
 	t.Run("BETWEEN", func(t *testing.T) {
-		f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
 		defer f.Close()
 
 		// Set values.
@@ -524,7 +524,7 @@ func TestFragment_Range(t *testing.T) {
 
 // Ensure a fragment can snapshot correctly.
 func TestFragment_Snapshot(t *testing.T) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
 	defer f.Close()
 
 	// Set and then clear bits on the fragment.
@@ -553,7 +553,7 @@ func TestFragment_Snapshot(t *testing.T) {
 
 // Ensure a fragment can iterate over all bits in order.
 func TestFragment_ForEachBit(t *testing.T) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
 	defer f.Close()
 
 	// Set bits on the fragment.
@@ -582,7 +582,7 @@ func TestFragment_ForEachBit(t *testing.T) {
 
 // Ensure a fragment can return the top n results.
 func TestFragment_Top(t *testing.T) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, CacheTypeRanked)
+	f := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeRanked)
 	defer f.Close()
 	// Set bits on the rows 100, 101, & 102.
 	f.mustSetBits(100, 1, 3, 200)
@@ -604,7 +604,7 @@ func TestFragment_Top(t *testing.T) {
 
 // Ensure a fragment can filter rows when retrieving the top n rows.
 func TestFragment_Top_Filter(t *testing.T) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, CacheTypeRanked)
+	f := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeRanked)
 	defer f.Close()
 
 	// Set bits on the rows 100, 101, & 102.
@@ -634,7 +634,7 @@ func TestFragment_Top_Filter(t *testing.T) {
 
 // Ensure a fragment can return top rows that intersect with an input row.
 func TestFragment_TopN_Intersect(t *testing.T) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, CacheTypeRanked)
+	f := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeRanked)
 	defer f.Close()
 
 	// Create an intersecting input row.
@@ -665,7 +665,7 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 		t.Skip("short mode")
 	}
 
-	f := mustOpenFragment("i", "f", ViewStandard, 0, CacheTypeRanked)
+	f := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeRanked)
 	defer f.Close()
 
 	// Create an intersecting input row.
@@ -703,7 +703,7 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 
 // Ensure a fragment can return top rows when specified by ID.
 func TestFragment_TopN_IDs(t *testing.T) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, CacheTypeRanked)
+	f := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeRanked)
 	defer f.Close()
 
 	// Set bits on various rows.
@@ -724,7 +724,7 @@ func TestFragment_TopN_IDs(t *testing.T) {
 
 // Ensure a fragment return none if CacheTypeNone is set
 func TestFragment_TopN_NopCache(t *testing.T) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, CacheTypeNone)
+	f := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeNone)
 	defer f.Close()
 
 	// Set bits on various rows.
@@ -756,7 +756,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	}
 
 	// Create view.
-	view, err := field.createViewIfNotExists(ViewStandard)
+	view, err := field.createViewIfNotExists(viewStandard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -805,7 +805,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 
 // Ensure fragment can return a checksum for its blocks.
 func TestFragment_Checksum(t *testing.T) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
 	defer f.Close()
 
 	// Retrieve checksum and set bits.
@@ -824,7 +824,7 @@ func TestFragment_Checksum(t *testing.T) {
 
 // Ensure fragment can return a checksum for a given block.
 func TestFragment_Blocks(t *testing.T) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
 	defer f.Close()
 
 	// Retrieve initial checksum.
@@ -862,7 +862,7 @@ func TestFragment_Blocks(t *testing.T) {
 
 // Ensure fragment returns an empty checksum if no data exists for a block.
 func TestFragment_Blocks_Empty(t *testing.T) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
 	defer f.Close()
 
 	// Set bits on a different block.
@@ -880,7 +880,7 @@ func TestFragment_Blocks_Empty(t *testing.T) {
 
 // Ensure a fragment's cache can be persisted between restarts.
 func TestFragment_LRUCache_Persistence(t *testing.T) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, CacheTypeLRU)
+	f := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeLRU)
 	defer f.Close()
 
 	// Set bits on the fragment.
@@ -922,7 +922,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 	}
 
 	// Create view.
-	view, err := field.createViewIfNotExists(ViewStandard)
+	view, err := field.createViewIfNotExists(viewStandard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -953,7 +953,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 	}
 
 	// Re-fetch fragment.
-	f = index.Field("f").view(ViewStandard).Fragment(0)
+	f = index.Field("f").view(viewStandard).Fragment(0)
 
 	// Re-verify correct cache type and size.
 	if cache, ok := f.cache.(*rankCache); !ok {
@@ -965,7 +965,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 
 // Ensure a fragment can be copied to another fragment.
 func TestFragment_WriteTo_ReadFrom(t *testing.T) {
-	f0 := mustOpenFragment("i", "f", ViewStandard, 0, "")
+	f0 := mustOpenFragment("i", "f", viewStandard, 0, "")
 	defer f0.Close()
 
 	// Set and then clear bits on the fragment.
@@ -990,7 +990,7 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	}
 
 	// Read into another fragment.
-	f1 := mustOpenFragment("i", "f", ViewStandard, 0, "")
+	f1 := mustOpenFragment("i", "f", viewStandard, 0, "")
 	if rn, err := f1.ReadFrom(&buf); err != nil {
 		t.Fatal(err)
 	} else if wn != rn {
@@ -1023,7 +1023,7 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 	}
 
 	// Open the fragment specified by the path.
-	f := newFragment(*FragmentPath, "i", "f", ViewStandard, 0)
+	f := newFragment(*FragmentPath, "i", "f", viewStandard, 0)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
@@ -1039,7 +1039,7 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 }
 
 func BenchmarkFragment_IntersectionCount(b *testing.B) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
 	defer f.Close()
 	f.MaxOpN = math.MaxInt32
 
@@ -1070,7 +1070,7 @@ func BenchmarkFragment_IntersectionCount(b *testing.B) {
 }
 
 func TestFragment_Tanimoto(t *testing.T) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, CacheTypeRanked)
+	f := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeRanked)
 	defer f.Close()
 
 	src := NewRow(1, 2, 3)
@@ -1093,7 +1093,7 @@ func TestFragment_Tanimoto(t *testing.T) {
 }
 
 func TestFragment_Zero_Tanimoto(t *testing.T) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, CacheTypeRanked)
+	f := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeRanked)
 	defer f.Close()
 
 	src := NewRow(1, 2, 3)
@@ -1118,7 +1118,7 @@ func TestFragment_Zero_Tanimoto(t *testing.T) {
 }
 
 func TestFragment_Snapshot_Run(t *testing.T) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
 	defer f.Close()
 
 	// Set bits on the fragment.
@@ -1150,7 +1150,7 @@ func BenchmarkFragment_Snapshot(b *testing.B) {
 
 	b.ReportAllocs()
 	// Open the fragment specified by the path.
-	f := newFragment(*FragmentPath, "i", "f", ViewStandard, 0)
+	f := newFragment(*FragmentPath, "i", "f", viewStandard, 0)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
@@ -1169,7 +1169,7 @@ func BenchmarkFragment_Snapshot(b *testing.B) {
 }
 
 func BenchmarkFragment_FullSnapshot(b *testing.B) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
 	defer f.Close()
 	// Generate some intersecting data.
 	maxX := 1048576 / 2
@@ -1206,7 +1206,7 @@ func BenchmarkFragment_FullSnapshot(b *testing.B) {
 }
 
 func BenchmarkFragment_Import(b *testing.B) {
-	f := mustOpenFragment("i", "f", ViewStandard, 0, "")
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
 	defer f.Close()
 	maxX := 1048576 * 5 * 2
 	sz := maxX

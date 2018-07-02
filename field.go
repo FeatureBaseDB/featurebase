@@ -59,7 +59,7 @@ type Field struct {
 	index string
 	name  string
 
-	viewMap map[string]*View
+	viewMap map[string]*view
 
 	// Row attribute storage and cache
 	rowAttrStore AttrStore
@@ -131,7 +131,7 @@ func NewField(path, index, name string, options FieldOptions) (*Field, error) {
 		index: index,
 		name:  name,
 
-		viewMap: make(map[string]*View),
+		viewMap: make(map[string]*view),
 
 		rowAttrStore: nopStore,
 
@@ -279,7 +279,7 @@ func (f *Field) openViews() error {
 		if err := view.open(); err != nil {
 			return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
 		}
-		view.RowAttrStore = f.rowAttrStore
+		view.rowAttrStore = f.rowAttrStore
 		f.viewMap[view.name] = view
 	}
 
@@ -404,7 +404,7 @@ func (f *Field) Close() error {
 			return err
 		}
 	}
-	f.viewMap = make(map[string]*View)
+	f.viewMap = make(map[string]*view)
 
 	return nil
 }
@@ -541,7 +541,7 @@ func (f *Field) RowTime(rowID uint64, time time.Time, quantum string) (*Row, err
 	if !TimeQuantum(quantum).Valid() {
 		return nil, ErrInvalidTimeQuantum
 	}
-	viewname := viewsByTime(ViewStandard, time, TimeQuantum(quantum[len(quantum)-1:]))[0]
+	viewname := viewsByTime(viewStandard, time, TimeQuantum(quantum[len(quantum)-1:]))[0]
 	view := f.view(viewname)
 	if view == nil {
 		return nil, errors.Errorf("view with quantum %v not found.", quantum)
@@ -555,20 +555,20 @@ func (f *Field) ViewPath(name string) string {
 }
 
 // view returns a view in the field by name.
-func (f *Field) view(name string) *View {
+func (f *Field) view(name string) *view {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.unprotectedView(name)
 }
 
-func (f *Field) unprotectedView(name string) *View { return f.viewMap[name] }
+func (f *Field) unprotectedView(name string) *view { return f.viewMap[name] }
 
 // views returns a list of all views in the field.
-func (f *Field) views() []*View {
+func (f *Field) views() []*view {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
-	other := make([]*View, 0, len(f.viewMap))
+	other := make([]*view, 0, len(f.viewMap))
 	for _, view := range f.viewMap {
 		other = append(other, view)
 	}
@@ -596,7 +596,7 @@ func (f *Field) RecalculateCaches() {
 
 // createViewIfNotExists returns the named view, creating it if necessary.
 // Additionally, a CreateViewMessage is sent to the cluster.
-func (f *Field) createViewIfNotExists(name string) (*View, error) {
+func (f *Field) createViewIfNotExists(name string) (*view, error) {
 	view, created, err := f.createViewIfNotExistsBase(name)
 	if err != nil {
 		return nil, err
@@ -620,7 +620,7 @@ func (f *Field) createViewIfNotExists(name string) (*View, error) {
 
 // createViewIfNotExistsBase returns the named view, creating it if necessary.
 // The returned bool indicates whether the view was created or not.
-func (f *Field) createViewIfNotExistsBase(name string) (*View, bool, error) {
+func (f *Field) createViewIfNotExistsBase(name string) (*view, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -632,17 +632,17 @@ func (f *Field) createViewIfNotExistsBase(name string) (*View, bool, error) {
 	if err := view.open(); err != nil {
 		return nil, false, errors.Wrap(err, "opening view")
 	}
-	view.RowAttrStore = f.rowAttrStore
+	view.rowAttrStore = f.rowAttrStore
 	f.viewMap[view.name] = view
 
 	return view, true, nil
 }
 
-func (f *Field) newView(path, name string) *View {
-	view := NewView(path, f.index, f.name, name, f.options.CacheSize)
+func (f *Field) newView(path, name string) *view {
+	view := newView(path, f.index, f.name, name, f.options.CacheSize)
 	view.cacheType = f.options.CacheType
-	view.Logger = f.Logger
-	view.RowAttrStore = f.rowAttrStore
+	view.logger = f.Logger
+	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats.WithTags(fmt.Sprintf("view:%s", name))
 	view.broadcaster = f.broadcaster
 	return view
@@ -675,7 +675,7 @@ func (f *Field) Row(rowID uint64) (*Row, error) {
 	if f.Type() != FieldTypeSet {
 		return nil, errors.Errorf("row method unsupported for field type: %s", f.Type())
 	}
-	view := f.view(ViewStandard)
+	view := f.view(viewStandard)
 	if view == nil {
 		return nil, ErrInvalidView
 	}
@@ -684,7 +684,7 @@ func (f *Field) Row(rowID uint64) (*Row, error) {
 
 // SetBit sets a bit on a view within the field.
 func (f *Field) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err error) {
-	viewName := ViewStandard
+	viewName := viewStandard
 
 	// Retrieve view. Exit if it doesn't exist.
 	view, err := f.createViewIfNotExists(viewName)
@@ -723,7 +723,7 @@ func (f *Field) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err err
 
 // ClearBit clears a bit within the field.
 func (f *Field) ClearBit(rowID, colID uint64) (changed bool, err error) {
-	viewName := ViewStandard
+	viewName := viewStandard
 
 	// Retrieve view. Exit if it doesn't exist.
 	view, present := f.viewMap[viewName]
@@ -777,10 +777,10 @@ func groupCompare(a, b string, offset int) (lt, eq bool) {
 	return v < 0, v == 0
 }
 
-func (f *Field) allTimeViewsSortedByQuantum() (me []*View) {
-	me = make([]*View, len(f.viewMap), len(f.viewMap))
-	prefix := ViewStandard + "_"
-	offset := len(ViewStandard) + 1
+func (f *Field) allTimeViewsSortedByQuantum() (me []*view) {
+	me = make([]*view, len(f.viewMap), len(f.viewMap))
+	prefix := viewStandard + "_"
+	offset := len(viewStandard) + 1
 	i := 0
 	for _, v := range f.viewMap {
 		if len(v.name) > offset && strings.Compare(v.name[:offset], prefix) == 0 { // skip non-time views
@@ -978,12 +978,12 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 
 		var standard []string
 		if timestamp == nil {
-			standard = []string{ViewStandard}
+			standard = []string{viewStandard}
 		} else {
-			standard = viewsByTime(ViewStandard, *timestamp, q)
+			standard = viewsByTime(viewStandard, *timestamp, q)
 			// In order to match the logic of `SetBit()`, we want bits
 			// with timestamps to write to both time and standard views.
-			standard = append(standard, ViewStandard)
+			standard = append(standard, viewStandard)
 		}
 
 		// Attach bit to each standard view.
@@ -1102,7 +1102,7 @@ func (p fieldSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 type FieldInfo struct {
 	Name    string       `json:"name"`
 	Options FieldOptions `json:"options"`
-	Views   []*ViewInfo  `json:"views,omitempty"`
+	Views   []*viewInfo  `json:"views,omitempty"`
 }
 
 type fieldInfoSlice []*FieldInfo

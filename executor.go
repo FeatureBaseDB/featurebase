@@ -623,7 +623,7 @@ func (e *executor) executeTopNShard(ctx context.Context, index string, c *pql.Ca
 		field = defaultField
 	}
 
-	f := e.Holder.fragment(index, field, ViewStandard, shard)
+	f := e.Holder.fragment(index, field, viewStandard, shard)
 	if f == nil {
 		return nil, nil
 	}
@@ -693,7 +693,7 @@ func (e *executor) executeBitmapShard(ctx context.Context, index string, c *pql.
 		return nil, fmt.Errorf("Row() must specify %v", rowLabel)
 	}
 
-	frag := e.Holder.fragment(index, fieldName, ViewStandard, shard)
+	frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
 	if frag == nil {
 		return NewRow(), nil
 	}
@@ -784,7 +784,7 @@ func (e *executor) executeRangeShard(ctx context.Context, index string, c *pql.C
 
 	// Union bitmaps across all time-based views.
 	row := &Row{}
-	for _, view := range viewsByTimeRange(ViewStandard, startTime, endTime, q) {
+	for _, view := range viewsByTimeRange(viewStandard, startTime, endTime, q) {
 		f := e.Holder.fragment(index, fieldName, view, shard)
 		if f == nil {
 			continue

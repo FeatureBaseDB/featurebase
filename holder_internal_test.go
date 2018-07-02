@@ -107,7 +107,7 @@ func TestHolder_Optn(t *testing.T) {
 			t.Fatal(err)
 		} else if field, err := idx.CreateField("bar", FieldOptions{}); err != nil {
 			t.Fatal(err)
-		} else if _, err := field.createViewIfNotExists(ViewStandard); err != nil {
+		} else if _, err := field.createViewIfNotExists(viewStandard); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
@@ -131,7 +131,7 @@ func TestHolder_Optn(t *testing.T) {
 			t.Fatal(err)
 		} else if field, err := idx.CreateField("bar", FieldOptions{}); err != nil {
 			t.Fatal(err)
-		} else if _, err := field.createViewIfNotExists(ViewStandard); err != nil {
+		} else if _, err := field.createViewIfNotExists(viewStandard); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
@@ -156,7 +156,7 @@ func TestHolder_Optn(t *testing.T) {
 			t.Fatal(err)
 		} else if field, err := idx.CreateField("bar", FieldOptions{}); err != nil {
 			t.Fatal(err)
-		} else if view, err := field.createViewIfNotExists(ViewStandard); err != nil {
+		} else if view, err := field.createViewIfNotExists(viewStandard); err != nil {
 			t.Fatal(err)
 		} else if _, err := field.SetBit(0, 0, nil); err != nil {
 			t.Fatal(err)
@@ -279,7 +279,7 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 			t.Fatalf("unexpected columns(%d/200): %+v", i, a)
 		}
 
-		f := hldr.fragment("i", "f0", ViewStandard, 1)
+		f := hldr.fragment("i", "f0", viewStandard, 1)
 		if f != nil {
 			t.Fatalf("expected fragment to be deleted: (%d/i/f0): %+v", i, f)
 		}
