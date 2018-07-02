@@ -46,7 +46,7 @@ type View struct {
 
 	// Fragments by shard.
 	cacheType string // passed in by field
-	fragments map[uint64]*Fragment
+	fragments map[uint64]*fragment
 
 	// maxShard maintains this view's max shard in order to
 	// prevent sending multiple `CreateShardMessage` messages
@@ -68,7 +68,7 @@ func NewView(path, index, field, name string, cacheSize uint32) *View {
 		cacheSize: cacheSize,
 
 		cacheType: DefaultCacheType,
-		fragments: make(map[uint64]*Fragment),
+		fragments: make(map[uint64]*fragment),
 
 		broadcaster: NopBroadcaster,
 		stats:       NopStatsClient,
@@ -153,7 +153,7 @@ func (v *View) close() error {
 			return errors.Wrap(err, "closing fragment")
 		}
 	}
-	v.fragments = make(map[uint64]*Fragment)
+	v.fragments = make(map[uint64]*fragment)
 
 	return nil
 }
@@ -179,20 +179,20 @@ func (v *View) fragmentPath(shard uint64) string {
 }
 
 // Fragment returns a fragment in the view by shard.
-func (v *View) Fragment(shard uint64) *Fragment {
+func (v *View) Fragment(shard uint64) *fragment {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 	return v.fragment(shard)
 }
 
-func (v *View) fragment(shard uint64) *Fragment { return v.fragments[shard] }
+func (v *View) fragment(shard uint64) *fragment { return v.fragments[shard] }
 
 // allFragments returns a list of all fragments in the view.
-func (v *View) allFragments() []*Fragment {
+func (v *View) allFragments() []*fragment {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	other := make([]*Fragment, 0, len(v.fragments))
+	other := make([]*fragment, 0, len(v.fragments))
 	for _, fragment := range v.fragments {
 		other = append(other, fragment)
 	}
@@ -207,13 +207,13 @@ func (v *View) recalculateCaches() {
 }
 
 // CreateFragmentIfNotExists returns a fragment in the view by shard.
-func (v *View) CreateFragmentIfNotExists(shard uint64) (*Fragment, error) {
+func (v *View) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	return v.createFragmentIfNotExists(shard)
 }
 
-func (v *View) createFragmentIfNotExists(shard uint64) (*Fragment, error) {
+func (v *View) createFragmentIfNotExists(shard uint64) (*fragment, error) {
 	// Find fragment in cache first.
 	if frag := v.fragments[shard]; frag != nil {
 		return frag, nil
@@ -246,8 +246,8 @@ func (v *View) createFragmentIfNotExists(shard uint64) (*Fragment, error) {
 	return frag, nil
 }
 
-func (v *View) newFragment(path string, shard uint64) *Fragment {
-	frag := NewFragment(path, v.index, v.field, v.name, shard)
+func (v *View) newFragment(path string, shard uint64) *fragment {
+	frag := newFragment(path, v.index, v.field, v.name, shard)
 	frag.CacheType = v.cacheType
 	frag.CacheSize = v.cacheSize
 	frag.Logger = v.Logger

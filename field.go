@@ -670,6 +670,7 @@ func (f *Field) Row(rowID uint64) (*Row, error) {
 
 // ViewRow returns a row for a view and shard.
 // TODO: unexport this with views (it's only used in tests).
+// TODO we need some blessed interface to get rows directly off of time fields. Field.RowTime(rowID, timestamp, quantum), maybe
 func (f *Field) ViewRow(viewName string, rowID uint64) (*Row, error) {
 	view := f.view(viewName)
 	if view == nil {

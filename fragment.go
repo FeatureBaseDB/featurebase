@@ -63,8 +63,8 @@ const (
 	defaultFragmentMaxOpN = 2000
 )
 
-// Fragment represents the intersection of a field and shard in an index.
-type Fragment struct {
+// fragment represents the intersection of a field and shard in an index.
+type fragment struct {
 	mu sync.RWMutex
 
 	// Composite identifiers
@@ -109,9 +109,9 @@ type Fragment struct {
 	stats StatsClient
 }
 
-// NewFragment returns a new instance of Fragment.
-func NewFragment(path, index, field, view string, shard uint64) *Fragment {
-	return &Fragment{
+// newFragment returns a new instance of Fragment.
+func newFragment(path, index, field, view string, shard uint64) *fragment {
+	return &fragment{
 		path:      path,
 		index:     index,
 		field:     field,
@@ -128,10 +128,10 @@ func NewFragment(path, index, field, view string, shard uint64) *Fragment {
 }
 
 // cachePath returns the path to the fragment's cache data.
-func (f *Fragment) cachePath() string { return f.path + cacheExt }
+func (f *fragment) cachePath() string { return f.path + cacheExt }
 
 // Open opens the underlying storage.
-func (f *Fragment) Open() error {
+func (f *fragment) Open() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -164,7 +164,7 @@ func (f *Fragment) Open() error {
 }
 
 // openStorage opens the storage bitmap.
-func (f *Fragment) openStorage() error {
+func (f *fragment) openStorage() error {
 	// Create a roaring bitmap to serve as storage for the shard.
 	if f.storage == nil {
 		f.storage = roaring.NewFileBitmap()
@@ -224,7 +224,7 @@ func (f *Fragment) openStorage() error {
 }
 
 // openCache initializes the cache from row ids persisted to disk.
-func (f *Fragment) openCache() error {
+func (f *fragment) openCache() error {
 	// Determine cache type from field name.
 	switch f.CacheType {
 	case CacheTypeRanked:
@@ -266,13 +266,13 @@ func (f *Fragment) openCache() error {
 }
 
 // Close flushes the underlying storage, closes the file and unlocks it.
-func (f *Fragment) Close() error {
+func (f *fragment) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.close()
 }
 
-func (f *Fragment) close() error {
+func (f *fragment) close() error {
 	// Flush cache if closing gracefully.
 	if err := f.flushCache(); err != nil {
 		f.Logger.Printf("fragment: error flushing cache on close: err=%s, path=%s", err, f.path)
@@ -291,7 +291,7 @@ func (f *Fragment) close() error {
 	return nil
 }
 
-func (f *Fragment) closeStorage() error {
+func (f *fragment) closeStorage() error {
 	// Clear the storage bitmap so it doesn't access the closed mmap.
 
 	//f.storage = roaring.NewBitmap()
@@ -321,13 +321,13 @@ func (f *Fragment) closeStorage() error {
 }
 
 // row returns a row by ID.
-func (f *Fragment) row(rowID uint64) *Row {
+func (f *fragment) row(rowID uint64) *Row {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.unprotectedRow(rowID, true, true)
 }
 
-func (f *Fragment) unprotectedRow(rowID uint64, checkRowCache bool, updateRowCache bool) *Row {
+func (f *fragment) unprotectedRow(rowID uint64, checkRowCache bool, updateRowCache bool) *Row {
 	if checkRowCache {
 		r, ok := f.rowCache.Fetch(rowID)
 		if ok && r != nil {
@@ -360,13 +360,13 @@ func (f *Fragment) unprotectedRow(rowID uint64, checkRowCache bool, updateRowCac
 
 // setBit sets a bit for a given column & row within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
-func (f *Fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
+func (f *fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.unprotectedSetBit(rowID, columnID)
 }
 
-func (f *Fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err error) {
+func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err error) {
 	changed = false
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(rowID, columnID)
@@ -412,13 +412,13 @@ func (f *Fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 
 // clearBit clears a bit for a given column & row within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
-func (f *Fragment) clearBit(rowID, columnID uint64) (bool, error) {
+func (f *fragment) clearBit(rowID, columnID uint64) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.unprotectedClearBit(rowID, columnID)
 }
 
-func (f *Fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, err error) {
+func (f *fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, err error) {
 	changed = false
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(rowID, columnID)
@@ -456,7 +456,7 @@ func (f *Fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, er
 	return changed, nil
 }
 
-func (f *Fragment) bit(rowID, columnID uint64) (bool, error) {
+func (f *fragment) bit(rowID, columnID uint64) (bool, error) {
 	pos, err := f.pos(rowID, columnID)
 	if err != nil {
 		return false, err
@@ -465,7 +465,7 @@ func (f *Fragment) bit(rowID, columnID uint64) (bool, error) {
 }
 
 // value uses a column of bits to read a multi-bit value.
-func (f *Fragment) value(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
+func (f *fragment) value(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -489,7 +489,7 @@ func (f *Fragment) value(columnID uint64, bitDepth uint) (value uint64, exists b
 }
 
 // setValue uses a column of bits to set a multi-bit value.
-func (f *Fragment) setValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+func (f *fragment) setValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -520,7 +520,7 @@ func (f *Fragment) setValue(columnID uint64, bitDepth uint, value uint64) (chang
 }
 
 // importSetValue is a more efficient SetValue just for imports.
-func (f *Fragment) importSetValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
 
 	for i := uint(0); i < bitDepth; i++ {
 		if value&(1<<i) != 0 {
@@ -562,7 +562,7 @@ func (f *Fragment) importSetValue(columnID uint64, bitDepth uint, value uint64) 
 
 // sum returns the sum of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *Fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
+func (f *fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
 	// Compute count based on the existence row.
 	row := f.row(uint64(bitDepth))
 	if filter != nil {
@@ -594,7 +594,7 @@ func (f *Fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error
 
 // min returns the min of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *Fragment) min(filter *Row, bitDepth uint) (min, count uint64, err error) {
+func (f *fragment) min(filter *Row, bitDepth uint) (min, count uint64, err error) {
 
 	consider := f.row(uint64(bitDepth))
 	if filter != nil {
@@ -627,7 +627,7 @@ func (f *Fragment) min(filter *Row, bitDepth uint) (min, count uint64, err error
 
 // max returns the max of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *Fragment) max(filter *Row, bitDepth uint) (max, count uint64, err error) {
+func (f *fragment) max(filter *Row, bitDepth uint) (max, count uint64, err error) {
 
 	consider := f.row(uint64(bitDepth))
 	if filter != nil {
@@ -657,7 +657,7 @@ func (f *Fragment) max(filter *Row, bitDepth uint) (max, count uint64, err error
 }
 
 // rangeOp returns bitmaps with a bsiGroup value encoding matching the predicate.
-func (f *Fragment) rangeOp(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
+func (f *fragment) rangeOp(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
 	switch op {
 	case pql.EQ:
 		return f.rangeEQ(bitDepth, predicate)
@@ -672,7 +672,7 @@ func (f *Fragment) rangeOp(op pql.Token, bitDepth uint, predicate uint64) (*Row,
 	}
 }
 
-func (f *Fragment) rangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
+func (f *fragment) rangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	// Start with set of columns with values set.
 	b := f.row(uint64(bitDepth))
 
@@ -691,7 +691,7 @@ func (f *Fragment) rangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	return b, nil
 }
 
-func (f *Fragment) rangeNEQ(bitDepth uint, predicate uint64) (*Row, error) {
+func (f *fragment) rangeNEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	// Start with set of columns with values set.
 	b := f.row(uint64(bitDepth))
 
@@ -707,7 +707,7 @@ func (f *Fragment) rangeNEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	return b, nil
 }
 
-func (f *Fragment) rangeLT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
+func (f *fragment) rangeLT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
 	keep := NewRow()
 
 	// Start with set of columns with values set.
@@ -755,7 +755,7 @@ func (f *Fragment) rangeLT(bitDepth uint, predicate uint64, allowEquality bool) 
 	return b, nil
 }
 
-func (f *Fragment) rangeGT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
+func (f *fragment) rangeGT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
 	b := f.row(uint64(bitDepth))
 	keep := NewRow()
 
@@ -791,12 +791,12 @@ func (f *Fragment) rangeGT(bitDepth uint, predicate uint64, allowEquality bool) 
 }
 
 // notNull returns the not-null row (stored at bitDepth).
-func (f *Fragment) notNull(bitDepth uint) (*Row, error) {
+func (f *fragment) notNull(bitDepth uint) (*Row, error) {
 	return f.row(uint64(bitDepth)), nil
 }
 
 // rangeBetween returns bitmaps with a bsiGroup value encoding matching any value between predicateMin and predicateMax.
-func (f *Fragment) rangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
+func (f *fragment) rangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
 	b := f.row(uint64(bitDepth))
 	keep1 := NewRow() // GTE
 	keep2 := NewRow() // LTE
@@ -836,7 +836,7 @@ func (f *Fragment) rangeBetween(bitDepth uint, predicateMin, predicateMax uint64
 }
 
 // pos translates the row ID and column ID into a position in the storage bitmap.
-func (f *Fragment) pos(rowID, columnID uint64) (uint64, error) {
+func (f *fragment) pos(rowID, columnID uint64) (uint64, error) {
 	// Return an error if the column ID is out of the range of the fragment's shard.
 	minColumnID := f.shard * ShardWidth
 	if columnID < minColumnID || columnID >= minColumnID+ShardWidth {
@@ -847,7 +847,7 @@ func (f *Fragment) pos(rowID, columnID uint64) (uint64, error) {
 
 // forEachBit executes fn for every bit set in the fragment.
 // Errors returned from fn are passed through.
-func (f *Fragment) forEachBit(fn func(rowID, columnID uint64) error) error {
+func (f *fragment) forEachBit(fn func(rowID, columnID uint64) error) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -867,7 +867,7 @@ func (f *Fragment) forEachBit(fn func(rowID, columnID uint64) error) error {
 // top returns the top rows from the fragment.
 // If opt.Src is specified then only rows which intersect src are returned.
 // If opt.FilterValues exist then the row attribute specified by field is matched.
-func (f *Fragment) top(opt TopOptions) ([]Pair, error) {
+func (f *fragment) top(opt topOptions) ([]Pair, error) {
 	// Retrieve pairs. If no row ids specified then return from cache.
 	pairs := f.topBitmapPairs(opt.RowIDs)
 
@@ -1001,7 +1001,7 @@ func (f *Fragment) top(opt TopOptions) ([]Pair, error) {
 	return r, nil
 }
 
-func (f *Fragment) topBitmapPairs(rowIDs []uint64) []BitmapPair {
+func (f *fragment) topBitmapPairs(rowIDs []uint64) []BitmapPair {
 	// Don't retrieve from storage if CacheTypeNone.
 	if f.CacheType == CacheTypeNone {
 		return f.cache.Top()
@@ -1039,8 +1039,8 @@ func (f *Fragment) topBitmapPairs(rowIDs []uint64) []BitmapPair {
 	return pairs
 }
 
-// TopOptions represents options passed into the Top() function.
-type TopOptions struct {
+// topOptions represents options passed into the Top() function.
+type topOptions struct {
 	// Number of rows to return.
 	N int
 
@@ -1059,7 +1059,7 @@ type TopOptions struct {
 
 // Checksum returns a checksum for the entire fragment.
 // If two fragments have the same checksum then they have the same data.
-func (f *Fragment) Checksum() []byte {
+func (f *fragment) Checksum() []byte {
 	h := xxhash.New()
 	for _, block := range f.Blocks() {
 		h.Write(block.Checksum)
@@ -1068,14 +1068,14 @@ func (f *Fragment) Checksum() []byte {
 }
 
 // InvalidateChecksums clears all cached block checksums.
-func (f *Fragment) InvalidateChecksums() {
+func (f *fragment) InvalidateChecksums() {
 	f.mu.Lock()
 	f.checksums = make(map[int][]byte)
 	f.mu.Unlock()
 }
 
 // Blocks returns info for all blocks containing data.
-func (f *Fragment) Blocks() []FragmentBlock {
+func (f *fragment) Blocks() []FragmentBlock {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -1141,7 +1141,7 @@ func (f *Fragment) Blocks() []FragmentBlock {
 }
 
 // readContiguousChecksums appends multiple checksums in a row and returns the count added.
-func (f *Fragment) readContiguousChecksums(a *[]FragmentBlock, blockID int) (n int) {
+func (f *fragment) readContiguousChecksums(a *[]FragmentBlock, blockID int) (n int) {
 	for i := 0; ; i++ {
 		chksum := f.checksums[blockID+i]
 		if chksum == nil {
@@ -1156,7 +1156,7 @@ func (f *Fragment) readContiguousChecksums(a *[]FragmentBlock, blockID int) (n i
 }
 
 // blockData returns bits in a block as row & column ID pairs.
-func (f *Fragment) blockData(id int) (rowIDs, columnIDs []uint64) {
+func (f *fragment) blockData(id int) (rowIDs, columnIDs []uint64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -1173,7 +1173,7 @@ func (f *Fragment) blockData(id int) (rowIDs, columnIDs []uint64) {
 // For example, if 3 blocks are compared and two have a set bit and one has a
 // cleared bit then the bit is considered cleared. The function returns the
 // diff per incoming block so that all can be in sync.
-func (f *Fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, err error) {
+func (f *fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, err error) {
 	// Ensure that all pair sets are of equal length.
 	for i := range data {
 		if len(data[i].rowIDs) != len(data[i].columnIDs) {
@@ -1295,7 +1295,7 @@ func (f *Fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, e
 
 // bulkImport bulk imports a set of bits and then snapshots the storage.
 // This does not affect the fragment's cache.
-func (f *Fragment) bulkImport(rowIDs, columnIDs []uint64) error {
+func (f *fragment) bulkImport(rowIDs, columnIDs []uint64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	// Verify that there are an equal number of row ids and column ids.
@@ -1364,7 +1364,7 @@ func (f *Fragment) bulkImport(rowIDs, columnIDs []uint64) error {
 }
 
 // importValue bulk imports a set of range-encoded values.
-func (f *Fragment) importValue(columnIDs, values []uint64, bitDepth uint) error {
+func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	// Verify that there are an equal number of column ids and values.
@@ -1398,7 +1398,7 @@ func (f *Fragment) importValue(columnIDs, values []uint64, bitDepth uint) error 
 
 // incrementOpN increase the operation count by one.
 // If the count exceeds the maximum allowed then a snapshot is performed.
-func (f *Fragment) incrementOpN() error {
+func (f *fragment) incrementOpN() error {
 	f.opN++
 	if f.opN <= f.MaxOpN {
 		return nil
@@ -1411,7 +1411,7 @@ func (f *Fragment) incrementOpN() error {
 }
 
 // Snapshot writes the storage bitmap to disk and reopens it.
-func (f *Fragment) Snapshot() error {
+func (f *fragment) Snapshot() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.snapshot()
@@ -1422,7 +1422,7 @@ func track(start time.Time, message string, stats StatsClient, logger Logger) {
 	stats.Histogram("snapshot", elapsed.Seconds(), 1.0)
 }
 
-func (f *Fragment) snapshot() error {
+func (f *fragment) snapshot() error {
 	f.Logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	start := time.Now()
@@ -1468,20 +1468,20 @@ func (f *Fragment) snapshot() error {
 }
 
 // RecalculateCache rebuilds the cache regardless of invalidate time delay.
-func (f *Fragment) RecalculateCache() {
+func (f *fragment) RecalculateCache() {
 	f.mu.Lock()
 	f.cache.Recalculate()
 	f.mu.Unlock()
 }
 
 // FlushCache writes the cache data to disk.
-func (f *Fragment) FlushCache() error {
+func (f *fragment) FlushCache() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.flushCache()
 }
 
-func (f *Fragment) flushCache() error {
+func (f *fragment) flushCache() error {
 	if f.cache == nil {
 		return nil
 	}
@@ -1508,7 +1508,7 @@ func (f *Fragment) flushCache() error {
 }
 
 // WriteTo writes the fragment's data to w.
-func (f *Fragment) WriteTo(w io.Writer) (n int64, err error) {
+func (f *fragment) WriteTo(w io.Writer) (n int64, err error) {
 	// Force cache flush.
 	if err := f.FlushCache(); err != nil {
 		return 0, errors.Wrap(err, "flushing cache")
@@ -1525,7 +1525,7 @@ func (f *Fragment) WriteTo(w io.Writer) (n int64, err error) {
 	return 0, nil
 }
 
-func (f *Fragment) writeStorageToArchive(tw *tar.Writer) error {
+func (f *fragment) writeStorageToArchive(tw *tar.Writer) error {
 	// Open separate file descriptor to read from.
 	file, err := os.Open(f.path)
 	if err != nil {
@@ -1569,7 +1569,7 @@ func (f *Fragment) writeStorageToArchive(tw *tar.Writer) error {
 	return nil
 }
 
-func (f *Fragment) writeCacheToArchive(tw *tar.Writer) error {
+func (f *fragment) writeCacheToArchive(tw *tar.Writer) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -1599,7 +1599,7 @@ func (f *Fragment) writeCacheToArchive(tw *tar.Writer) error {
 }
 
 // ReadFrom reads a data file from r and loads it into the fragment.
-func (f *Fragment) ReadFrom(r io.Reader) (n int64, err error) {
+func (f *fragment) ReadFrom(r io.Reader) (n int64, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -1631,7 +1631,7 @@ func (f *Fragment) ReadFrom(r io.Reader) (n int64, err error) {
 	return 0, nil
 }
 
-func (f *Fragment) readStorageFromArchive(r io.Reader) error {
+func (f *fragment) readStorageFromArchive(r io.Reader) error {
 	// Create a temporary file to copy into.
 	path := f.path + copyExt
 	file, err := os.Create(path)
@@ -1663,7 +1663,7 @@ func (f *Fragment) readStorageFromArchive(r io.Reader) error {
 	return nil
 }
 
-func (f *Fragment) readCacheFromArchive(r io.Reader) error {
+func (f *fragment) readCacheFromArchive(r io.Reader) error {
 	// Slurp data from reader and write to disk.
 	buf, err := ioutil.ReadAll(r)
 	if err != nil {
@@ -1712,9 +1712,9 @@ func (h *blockHasher) WriteValue(v uint64) {
 	h.hash.Write(h.buf[:])
 }
 
-// FragmentSyncer syncs a local fragment to one on a remote host.
-type FragmentSyncer struct {
-	Fragment *Fragment
+// fragmentSyncer syncs a local fragment to one on a remote host.
+type fragmentSyncer struct {
+	Fragment *fragment
 
 	Node    *Node
 	Cluster *cluster
@@ -1723,7 +1723,7 @@ type FragmentSyncer struct {
 }
 
 // isClosing returns true if the closing channel is closed.
-func (s *FragmentSyncer) isClosing() bool {
+func (s *fragmentSyncer) isClosing() bool {
 	select {
 	case <-s.Closing:
 		return true
@@ -1734,7 +1734,7 @@ func (s *FragmentSyncer) isClosing() bool {
 
 // syncFragment compares checksums for the local and remote fragments and
 // then merges any blocks which have differences.
-func (s *FragmentSyncer) syncFragment() error {
+func (s *fragmentSyncer) syncFragment() error {
 	// Determine replica set.
 	nodes := s.Cluster.shardNodes(s.Fragment.index, s.Fragment.shard)
 	if len(nodes) == 1 {
@@ -1811,7 +1811,7 @@ func (s *FragmentSyncer) syncFragment() error {
 
 // syncBlock sends and receives all rows for a given block.
 // Returns an error if any remote hosts are unreachable.
-func (s *FragmentSyncer) syncBlock(id int) error {
+func (s *fragmentSyncer) syncBlock(id int) error {
 	f := s.Fragment
 
 	// Read pairs from each remote block.
