@@ -569,7 +569,7 @@ type HolderSyncer struct {
 	Holder *Holder
 
 	Node    *Node
-	Cluster *Cluster
+	Cluster *cluster
 
 	// Stats
 	Stats StatsClient
@@ -778,7 +778,7 @@ type HolderCleaner struct {
 	Node *Node
 
 	Holder  *Holder
-	Cluster *Cluster
+	Cluster *cluster
 
 	// Signals that the sync should stop.
 	Closing <-chan struct{}

@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -1002,5 +1001,3 @@ func UvarintSize(x uint64) (i int) {
 	}
 	return i + 1
 }
-
-func hexdump(b []byte) { os.Stderr.Write([]byte(hex.Dump(b))) }

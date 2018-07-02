@@ -28,7 +28,7 @@ import (
 )
 
 // NewTestCluster returns a cluster with n nodes and uses a mod-based hasher.
-func NewTestCluster(n int) *Cluster {
+func NewTestCluster(n int) *cluster {
 	path, err := ioutil.TempDir("", "pilosa-cluster-")
 	if err != nil {
 		panic(err)
@@ -82,7 +82,7 @@ func (*TestModHasher) Hash(key uint64, n int) int { return int(key) % n }
 // has a Cluster.
 // ClusterCluster implements Broadcaster interface.
 type ClusterCluster struct {
-	Clusters []*Cluster
+	Clusters []*cluster
 
 	common *commonClusterSettings
 
@@ -141,7 +141,7 @@ func (t *ClusterCluster) SetBit(index, field string, rowID, colID uint64, x *tim
 	return nil
 }
 
-func (t *ClusterCluster) clusterByID(id string) *Cluster {
+func (t *ClusterCluster) clusterByID(id string) *cluster {
 	for _, c := range t.Clusters {
 		if c.Node.ID == id {
 			return c
@@ -194,7 +194,7 @@ func (t *ClusterCluster) WriteTopology(path string, top *Topology) error {
 	return nil
 }
 
-func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*Cluster, error) {
+func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) {
 
 	id := fmt.Sprintf("node%d", i)
 	uri := NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0))
