@@ -50,7 +50,7 @@ type Holder struct {
 	// opened channel is closed once Open() completes.
 	opened chan struct{}
 
-	Broadcaster Broadcaster
+	Broadcaster broadcaster
 
 	NewAttrStore func(string) AttrStore
 

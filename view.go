@@ -52,7 +52,7 @@ type View struct {
 	// prevent sending multiple `CreateShardMessage` messages
 	maxShard uint64
 
-	broadcaster  Broadcaster
+	broadcaster  broadcaster
 	stats        StatsClient
 	RowAttrStore AttrStore
 	Logger       Logger

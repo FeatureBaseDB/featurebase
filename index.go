@@ -46,7 +46,7 @@ type Index struct {
 	// Column attribute storage and cache.
 	columnAttrStore AttrStore
 
-	broadcaster Broadcaster
+	broadcaster broadcaster
 	Stats       StatsClient
 
 	Logger Logger

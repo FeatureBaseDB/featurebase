@@ -64,7 +64,7 @@ type Field struct {
 	// Row attribute storage and cache
 	rowAttrStore AttrStore
 
-	broadcaster Broadcaster
+	broadcaster broadcaster
 	Stats       StatsClient
 
 	// Field options.

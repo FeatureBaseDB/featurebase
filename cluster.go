@@ -240,7 +240,7 @@ type cluster struct {
 	state       string
 	Coordinator string
 	holder      *Holder
-	broadcaster Broadcaster
+	broadcaster broadcaster
 
 	joiningLeavingNodes chan nodeAction
 
@@ -1310,7 +1310,7 @@ type resizeJob struct {
 	ID           int64
 	IDs          map[string]bool
 	Instructions []*internal.ResizeInstruction
-	Broadcaster  Broadcaster
+	Broadcaster  broadcaster
 
 	action string
 	result chan string
