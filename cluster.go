@@ -839,8 +839,8 @@ type Hasher interface {
 	Hash(key uint64, n int) int
 }
 
-// NewHasher returns a new instance of the default hasher.
-func NewHasher() Hasher { return &jmphasher{} }
+// newHasher returns a new instance of the default hasher.
+func newHasher() Hasher { return &jmphasher{} }
 
 // jmphasher represents an implementation of jmphash. Implements Hasher.
 type jmphasher struct{}
