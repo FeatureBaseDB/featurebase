@@ -279,6 +279,62 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// successResponse is a general success/error struct for http responses.
+type successResponse struct {
+	Success bool   `json:"success"`
+	Error   *Error `json:"error,omitempty"`
+}
+
+// check determines success or failure based on the error.
+// It also returns the corresponding http status code.
+func (r *successResponse) check(err error) (statusCode int) {
+	if err == nil {
+		r.Success = true
+		return
+	}
+
+	cause := errors.Cause(err)
+
+	// Determine HTTP status code based on the error type.
+	switch cause.(type) {
+	case pilosa.BadRequestError:
+		statusCode = http.StatusBadRequest
+	case pilosa.ConflictError:
+		statusCode = http.StatusConflict
+	case pilosa.NotFoundError:
+		statusCode = http.StatusNotFound
+	default:
+		statusCode = http.StatusInternalServerError
+	}
+
+	r.Success = false
+	r.Error = &Error{Message: cause.Error()}
+
+	return
+}
+
+// write sends a response to the http.ResponseWriter based on the success
+// status and the error.
+func (r *successResponse) write(w http.ResponseWriter, err error) {
+	// Apply the error and get the status code.
+	statusCode := r.check(err)
+
+	// Marshal the json response.
+	msg, err := json.Marshal(r)
+	if err != nil {
+		http.Error(w, string(msg), http.StatusInternalServerError)
+		return
+	}
+
+	// Write the response.
+	if statusCode == 0 {
+		w.Write(msg)
+		w.Write([]byte("\n"))
+	} else {
+		http.Error(w, string(msg), statusCode)
+	}
+}
+
 func (h *Handler) handleHome(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information.", http.StatusNotFound)
 }
@@ -498,29 +554,19 @@ func foundItem(items []string, item string) bool {
 	return false
 }
 
-type postIndexResponse struct{}
-
 // handleDeleteIndex handles DELETE /index request.
 func (h *Handler) handleDeleteIndex(w http.ResponseWriter, r *http.Request) {
 	if !validHeaderAcceptJSON(r.Header) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
+
 	indexName := mux.Vars(r)["index"]
+
+	resp := successResponse{}
 	err := h.API.DeleteIndex(r.Context(), indexName)
-	if err != nil {
-		h.Logger.Printf("problem deleting index: %s", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Encode response.
-	if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
+	resp.write(w, err)
 }
-
-type deleteIndexResponse struct{}
 
 // handlePostIndex handles POST /index request.
 func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
@@ -530,30 +576,18 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	indexName := mux.Vars(r)["index"]
 
+	resp := successResponse{}
+
 	// Decode request.
 	var req postIndexRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
-	if err == io.EOF {
-		// If no data was provided (EOF), we still create the index
-		// with default values.
-	} else if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if err != nil && err != io.EOF {
+		resp.write(w, err)
 		return
 	}
-
 	_, err = h.API.CreateIndex(r.Context(), indexName, req.Options)
-	if errors.Cause(err) == pilosa.ErrIndexExists {
-		http.Error(w, err.Error(), http.StatusConflict)
-		return
-	} else if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 
-	// Encode response.
-	if err := json.NewEncoder(w).Encode(postIndexResponse{}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
+	resp.write(w, err)
 }
 
 // handlePostIndexAttrDiff handles POST /index/attr/diff requests.
@@ -606,22 +640,21 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	fieldName := mux.Vars(r)["field"]
 
+	resp := successResponse{}
+
 	// Decode request.
 	var req postFieldRequest
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	err := dec.Decode(&req)
-	if err == io.EOF {
-		// If no data was provided (EOF), we still create the field
-		// with default values.
-	} else if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	if err != nil && err != io.EOF {
+		resp.write(w, err)
 		return
 	}
 
 	// Validate field options.
 	if err := req.Options.validate(); err != nil {
-		http.Error(w, err.Error(), http.StatusNotAcceptable)
+		resp.write(w, err)
 		return
 	}
 
@@ -637,28 +670,12 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = h.API.CreateField(r.Context(), indexName, fieldName, fos)
-	if err != nil {
-		switch errors.Cause(err) {
-		case pilosa.ErrIndexNotFound:
-			http.Error(w, err.Error(), http.StatusNotFound)
-		case pilosa.ErrFieldExists:
-			http.Error(w, err.Error(), http.StatusConflict)
-		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-	// Encode response.
-	if err := json.NewEncoder(w).Encode(postFieldResponse{}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
+	resp.write(w, err)
 }
 
 type postFieldRequest struct {
 	Options fieldOptions `json:"options"`
 }
-
-type postFieldResponse struct{}
 
 // fieldOptions tracks pilosa.FieldOptions. It is made up of pointers to values,
 // and used for input validation.
@@ -692,35 +709,35 @@ func (o *fieldOptions) validate() error {
 			o.CacheSize = &defaultCacheSize
 		}
 		if o.Min != nil {
-			return errors.New("min does not apply to field type set")
+			return pilosa.NewBadRequestError(errors.New("min does not apply to field type set"))
 		} else if o.Max != nil {
-			return errors.New("max does not apply to field type set")
+			return pilosa.NewBadRequestError(errors.New("max does not apply to field type set"))
 		} else if o.TimeQuantum != nil {
-			return errors.New("timeQuantum does not apply to field type set")
+			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type set"))
 		}
 	case pilosa.FieldTypeInt:
 		if o.CacheType != nil {
-			return errors.New("cacheType does not apply to field type int")
+			return pilosa.NewBadRequestError(errors.New("cacheType does not apply to field type int"))
 		} else if o.CacheSize != nil {
-			return errors.New("cacheSize does not apply to field type int")
+			return pilosa.NewBadRequestError(errors.New("cacheSize does not apply to field type int"))
 		} else if o.Min == nil {
-			return errors.New("min is required for field type int")
+			return pilosa.NewBadRequestError(errors.New("min is required for field type int"))
 		} else if o.Max == nil {
-			return errors.New("max is required for field type int")
+			return pilosa.NewBadRequestError(errors.New("max is required for field type int"))
 		} else if o.TimeQuantum != nil {
-			return errors.New("timeQuantum does not apply to field type int")
+			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type int"))
 		}
 	case pilosa.FieldTypeTime:
 		if o.CacheType != nil {
-			return errors.New("cacheType does not apply to field type time")
+			return pilosa.NewBadRequestError(errors.New("cacheType does not apply to field type time"))
 		} else if o.CacheSize != nil {
-			return errors.New("cacheSize does not apply to field type time")
+			return pilosa.NewBadRequestError(errors.New("cacheSize does not apply to field type time"))
 		} else if o.Min != nil {
-			return errors.New("min does not apply to field type time")
+			return pilosa.NewBadRequestError(errors.New("min does not apply to field type time"))
 		} else if o.Max != nil {
-			return errors.New("max does not apply to field type time")
+			return pilosa.NewBadRequestError(errors.New("max does not apply to field type time"))
 		} else if o.TimeQuantum == nil {
-			return errors.New("timeQuantum is required for field type time")
+			return pilosa.NewBadRequestError(errors.New("timeQuantum is required for field type time"))
 		}
 	default:
 		return errors.Errorf("invalid field type: %s", o.Type)
@@ -738,25 +755,10 @@ func (h *Handler) handleDeleteField(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	fieldName := mux.Vars(r)["field"]
 
+	resp := successResponse{}
 	err := h.API.DeleteField(r.Context(), indexName, fieldName)
-	if err != nil {
-		if errors.Cause(err) == pilosa.ErrIndexNotFound {
-			if err := json.NewEncoder(w).Encode(deleteIndexResponse{}); err != nil {
-				h.Logger.Printf("response encoding error: %s", err)
-			}
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Encode response.
-	if err := json.NewEncoder(w).Encode(deleteFieldResponse{}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
-	}
+	resp.write(w, err)
 }
-
-type deleteFieldResponse struct{}
 
 // handlePostFieldAttrDiff handles POST /field/attr/diff requests.
 func (h *Handler) handlePostFieldAttrDiff(w http.ResponseWriter, r *http.Request) {

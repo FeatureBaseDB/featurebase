@@ -328,7 +328,7 @@ func (c *InternalClient) ImportK(ctx context.Context, index, field string, colum
 
 func (c *InternalClient) EnsureIndex(ctx context.Context, name string, options pilosa.IndexOptions) error {
 	err := c.CreateIndex(ctx, name, options)
-	if err == nil || err == pilosa.ErrIndexExists {
+	if err == nil || errors.Cause(err) == pilosa.ErrIndexExists {
 		return nil
 	}
 	return err
@@ -336,7 +336,7 @@ func (c *InternalClient) EnsureIndex(ctx context.Context, name string, options p
 
 func (c *InternalClient) EnsureField(ctx context.Context, indexName string, fieldName string) error {
 	err := c.CreateField(ctx, indexName, fieldName)
-	if err == nil || err == pilosa.ErrFieldExists {
+	if err == nil || errors.Cause(err) == pilosa.ErrFieldExists {
 		return nil
 	}
 	return err
