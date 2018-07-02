@@ -275,7 +275,7 @@ func (f *Field) openViews() error {
 		}
 
 		name := filepath.Base(fi.Name())
-		view := f.newView(f.ViewPath(name), name)
+		view := f.newView(f.viewPath(name), name)
 		if err := view.open(); err != nil {
 			return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
 		}
@@ -549,8 +549,8 @@ func (f *Field) RowTime(rowID uint64, time time.Time, quantum string) (*Row, err
 	return view.row(rowID), nil
 }
 
-// ViewPath returns the path to a view in the field.
-func (f *Field) ViewPath(name string) string {
+// viewPath returns the path to a view in the field.
+func (f *Field) viewPath(name string) string {
 	return filepath.Join(f.path, "views", name)
 }
 
@@ -627,7 +627,7 @@ func (f *Field) createViewIfNotExistsBase(name string) (*view, bool, error) {
 	if view := f.viewMap[name]; view != nil {
 		return view, false, nil
 	}
-	view := f.newView(f.ViewPath(name), name)
+	view := f.newView(f.viewPath(name), name)
 
 	if err := view.open(); err != nil {
 		return nil, false, errors.Wrap(err, "opening view")
