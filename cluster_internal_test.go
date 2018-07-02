@@ -172,8 +172,8 @@ func TestFragSources(t *testing.T) {
 	}
 
 	tests := []struct {
-		from     *Cluster
-		to       *Cluster
+		from     *cluster
+		to       *cluster
 		idx      *Index
 		expected map[string][]*internal.ResizeSource
 		err      string
@@ -316,7 +316,7 @@ func TestResizeJob(t *testing.T) {
 
 // Ensure the cluster can fairly distribute partitions across the nodes.
 func TestCluster_Owners(t *testing.T) {
-	c := Cluster{
+	c := cluster{
 		Nodes: []*Node{
 			{URI: NewTestURIFromHostPort("serverA", 1000)},
 			{URI: NewTestURIFromHostPort("serverB", 1000)},
