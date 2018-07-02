@@ -59,7 +59,7 @@ type Field struct {
 	index string
 	name  string
 
-	views map[string]*View
+	viewMap map[string]*View
 
 	// Row attribute storage and cache
 	rowAttrStore AttrStore
@@ -131,7 +131,7 @@ func NewField(path, index, name string, options FieldOptions) (*Field, error) {
 		index: index,
 		name:  name,
 
-		views: make(map[string]*View),
+		viewMap: make(map[string]*View),
 
 		rowAttrStore: nopStore,
 
@@ -163,7 +163,7 @@ func (f *Field) MaxShard() uint64 {
 	defer f.mu.RUnlock()
 
 	var max uint64
-	for _, view := range f.views {
+	for _, view := range f.viewMap {
 		if viewMaxShard := view.calculateMaxShard(); viewMaxShard > max {
 			max = viewMaxShard
 		}
@@ -280,7 +280,7 @@ func (f *Field) openViews() error {
 			return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
 		}
 		view.RowAttrStore = f.rowAttrStore
-		f.views[view.name] = view
+		f.viewMap[view.name] = view
 	}
 
 	return nil
@@ -399,12 +399,12 @@ func (f *Field) Close() error {
 	}
 
 	// Close all views.
-	for _, view := range f.views {
+	for _, view := range f.viewMap {
 		if err := view.close(); err != nil {
 			return err
 		}
 	}
-	f.views = make(map[string]*View)
+	f.viewMap = make(map[string]*View)
 
 	return nil
 }
@@ -482,8 +482,8 @@ func (f *Field) deleteBSIGroupAndView(name string) error {
 
 	// Remove views.
 	viewName := viewBSIGroupPrefix + name
-	if view := f.views[viewName]; view != nil {
-		delete(f.views, viewName)
+	if view := f.viewMap[viewName]; view != nil {
+		delete(f.viewMap, viewName)
 
 		if err := view.close(); err != nil {
 			return errors.Wrap(err, "closing view")
@@ -540,22 +540,22 @@ func (f *Field) ViewPath(name string) string {
 	return filepath.Join(f.path, "views", name)
 }
 
-// View returns a view in the field by name.
-func (f *Field) View(name string) *View {
+// view returns a view in the field by name.
+func (f *Field) view(name string) *View {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	return f.view(name)
+	return f.unprotectedView(name)
 }
 
-func (f *Field) view(name string) *View { return f.views[name] }
+func (f *Field) unprotectedView(name string) *View { return f.viewMap[name] }
 
-// Views returns a list of all views in the field.
-func (f *Field) Views() []*View {
+// views returns a list of all views in the field.
+func (f *Field) views() []*View {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
-	other := make([]*View, 0, len(f.views))
-	for _, view := range f.views {
+	other := make([]*View, 0, len(f.viewMap))
+	for _, view := range f.viewMap {
 		other = append(other, view)
 	}
 	return other
@@ -566,8 +566,8 @@ func (f *Field) viewNames() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	other := make([]string, 0, len(f.views))
-	for viewName, _ := range f.views {
+	other := make([]string, 0, len(f.viewMap))
+	for viewName, _ := range f.viewMap {
 		other = append(other, viewName)
 	}
 	return other
@@ -575,14 +575,14 @@ func (f *Field) viewNames() []string {
 
 // RecalculateCaches recalculates caches on every view in the field.
 func (f *Field) RecalculateCaches() {
-	for _, view := range f.Views() {
+	for _, view := range f.views() {
 		view.recalculateCaches()
 	}
 }
 
-// CreateViewIfNotExists returns the named view, creating it if necessary.
+// createViewIfNotExists returns the named view, creating it if necessary.
 // Additionally, a CreateViewMessage is sent to the cluster.
-func (f *Field) CreateViewIfNotExists(name string) (*View, error) {
+func (f *Field) createViewIfNotExists(name string) (*View, error) {
 	view, created, err := f.createViewIfNotExistsBase(name)
 	if err != nil {
 		return nil, err
@@ -610,7 +610,7 @@ func (f *Field) createViewIfNotExistsBase(name string) (*View, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if view := f.views[name]; view != nil {
+	if view := f.viewMap[name]; view != nil {
 		return view, false, nil
 	}
 	view := f.newView(f.ViewPath(name), name)
@@ -619,7 +619,7 @@ func (f *Field) createViewIfNotExistsBase(name string) (*View, bool, error) {
 		return nil, false, errors.Wrap(err, "opening view")
 	}
 	view.RowAttrStore = f.rowAttrStore
-	f.views[view.name] = view
+	f.viewMap[view.name] = view
 
 	return view, true, nil
 }
@@ -634,9 +634,9 @@ func (f *Field) newView(path, name string) *View {
 	return view
 }
 
-// DeleteView removes the view from the field.
-func (f *Field) DeleteView(name string) error {
-	view := f.views[name]
+// deleteView removes the view from the field.
+func (f *Field) deleteView(name string) error {
+	view := f.viewMap[name]
 	if view == nil {
 		return ErrInvalidView
 	}
@@ -651,7 +651,7 @@ func (f *Field) DeleteView(name string) error {
 		return errors.Wrap(err, "deleting directory")
 	}
 
-	delete(f.views, name)
+	delete(f.viewMap, name)
 
 	return nil
 }
@@ -661,7 +661,7 @@ func (f *Field) Row(rowID uint64) (*Row, error) {
 	if f.Type() != FieldTypeSet {
 		return nil, errors.Errorf("row method unsupported for field type: %s", f.Type())
 	}
-	view := f.View(ViewStandard)
+	view := f.view(ViewStandard)
 	if view == nil {
 		return nil, ErrInvalidView
 	}
@@ -671,7 +671,7 @@ func (f *Field) Row(rowID uint64) (*Row, error) {
 // ViewRow returns a row for a view and shard.
 // TODO: unexport this with views (it's only used in tests).
 func (f *Field) ViewRow(viewName string, rowID uint64) (*Row, error) {
-	view := f.View(viewName)
+	view := f.view(viewName)
 	if view == nil {
 		return nil, ErrInvalidView
 	}
@@ -683,7 +683,7 @@ func (f *Field) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err err
 	viewName := ViewStandard
 
 	// Retrieve view. Exit if it doesn't exist.
-	view, err := f.CreateViewIfNotExists(viewName)
+	view, err := f.createViewIfNotExists(viewName)
 	if err != nil {
 		return changed, errors.Wrap(err, "creating view")
 	}
@@ -702,7 +702,7 @@ func (f *Field) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err err
 
 	// If a timestamp is specified then set bits across all views for the quantum.
 	for _, subname := range viewsByTime(viewName, *t, f.TimeQuantum()) {
-		view, err := f.CreateViewIfNotExists(subname)
+		view, err := f.createViewIfNotExists(subname)
 		if err != nil {
 			return changed, errors.Wrapf(err, "creating view %s", subname)
 		}
@@ -722,7 +722,7 @@ func (f *Field) ClearBit(rowID, colID uint64) (changed bool, err error) {
 	viewName := ViewStandard
 
 	// Retrieve view. Exit if it doesn't exist.
-	view, present := f.views[viewName]
+	view, present := f.viewMap[viewName]
 	if !present {
 		return changed, errors.Wrap(err, "clearing missing view")
 
@@ -734,7 +734,7 @@ func (f *Field) ClearBit(rowID, colID uint64) (changed bool, err error) {
 	} else if v {
 		changed = v
 	}
-	if len(f.views) == 1 { // assuming no time views
+	if len(f.viewMap) == 1 { // assuming no time views
 		return changed, nil
 	}
 	lastViewNameSize := 0
@@ -774,11 +774,11 @@ func groupCompare(a, b string, offset int) (lt, eq bool) {
 }
 
 func (f *Field) allTimeViewsSortedByQuantum() (me []*View) {
-	me = make([]*View, len(f.views), len(f.views))
+	me = make([]*View, len(f.viewMap), len(f.viewMap))
 	prefix := ViewStandard + "_"
 	offset := len(ViewStandard) + 1
 	i := 0
-	for _, v := range f.views {
+	for _, v := range f.viewMap {
 		if len(v.name) > offset && strings.Compare(v.name[:offset], prefix) == 0 { // skip non-time views
 			me[i] = v
 			i++
@@ -811,7 +811,7 @@ func (f *Field) Value(columnID uint64) (value int64, exists bool, err error) {
 	}
 
 	// Fetch target view.
-	view := f.View(viewBSIGroupPrefix + f.name)
+	view := f.view(viewBSIGroupPrefix + f.name)
 	if view == nil {
 		return 0, false, nil
 	}
@@ -838,7 +838,7 @@ func (f *Field) SetValue(columnID uint64, value int64) (changed bool, err error)
 	}
 
 	// Fetch target view.
-	view, err := f.CreateViewIfNotExists(viewBSIGroupPrefix + f.name)
+	view, err := f.createViewIfNotExists(viewBSIGroupPrefix + f.name)
 	if err != nil {
 		return false, errors.Wrap(err, "creating view")
 	}
@@ -857,7 +857,7 @@ func (f *Field) Sum(filter *Row, name string) (sum, count int64, err error) {
 		return 0, 0, ErrBSIGroupNotFound
 	}
 
-	view := f.View(viewBSIGroupPrefix + name)
+	view := f.view(viewBSIGroupPrefix + name)
 	if view == nil {
 		return 0, 0, nil
 	}
@@ -877,7 +877,7 @@ func (f *Field) Min(filter *Row, name string) (min, count int64, err error) {
 		return 0, 0, ErrBSIGroupNotFound
 	}
 
-	view := f.View(viewBSIGroupPrefix + name)
+	view := f.view(viewBSIGroupPrefix + name)
 	if view == nil {
 		return 0, 0, nil
 	}
@@ -897,7 +897,7 @@ func (f *Field) Max(filter *Row, name string) (max, count int64, err error) {
 		return 0, 0, ErrBSIGroupNotFound
 	}
 
-	view := f.View(viewBSIGroupPrefix + name)
+	view := f.view(viewBSIGroupPrefix + name)
 	if view == nil {
 		return 0, 0, nil
 	}
@@ -919,7 +919,7 @@ func (f *Field) Range(name string, op pql.Token, predicate int64) (*Row, error) 
 	}
 
 	// Retrieve bsiGroup's view.
-	view := f.View(viewBSIGroupPrefix + name)
+	view := f.view(viewBSIGroupPrefix + name)
 	if view == nil {
 		return nil, nil
 	}
@@ -942,7 +942,7 @@ func (f *Field) RangeBetween(name string, predicateMin, predicateMax int64) (*Ro
 	}
 
 	// Retrieve bsiGroup's view.
-	view := f.View(viewBSIGroupPrefix + name)
+	view := f.view(viewBSIGroupPrefix + name)
 	if view == nil {
 		return nil, nil
 	}
@@ -994,7 +994,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 
 	// Import into each fragment.
 	for key, data := range dataByFragment {
-		view, err := f.CreateViewIfNotExists(key.View)
+		view, err := f.createViewIfNotExists(key.View)
 		if err != nil {
 			return errors.Wrap(err, "creating view")
 		}
@@ -1046,7 +1046,7 @@ func (f *Field) ImportValue(columnIDs []uint64, values []int64) error {
 
 		// The view must already exist (i.e. we can't create it)
 		// because we need to know bitDepth (based on min/max value).
-		view, err := f.CreateViewIfNotExists(key.View)
+		view, err := f.createViewIfNotExists(key.View)
 		if err != nil {
 			return errors.Wrap(err, "creating view")
 		}

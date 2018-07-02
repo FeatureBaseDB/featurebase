@@ -22,52 +22,6 @@ import (
 	"github.com/pilosa/pilosa/test"
 )
 
-// Ensure field can open and retrieve a view.
-func TestField_CreateViewIfNotExists(t *testing.T) {
-	f := test.MustOpenField(pilosa.FieldOptions{})
-	defer f.Close()
-
-	// Create view.
-	view, err := f.CreateViewIfNotExists("v")
-	if err != nil {
-		t.Fatal(err)
-	} else if view == nil {
-		t.Fatal("expected view")
-	}
-
-	// Retrieve existing view.
-	view2, err := f.CreateViewIfNotExists("v")
-	if err != nil {
-		t.Fatal(err)
-	} else if view != view2 {
-		t.Fatal("view mismatch")
-	}
-
-	if view != f.View("v") {
-		t.Fatal("view mismatch")
-	}
-}
-
-// Ensure field can set its time quantum.
-func TestField_SetTimeQuantum(t *testing.T) {
-	f := test.MustOpenField(pilosa.FieldOptions{Type: pilosa.FieldTypeTime})
-	defer f.Close()
-
-	// Set & retrieve time quantum.
-	if err := f.SetTimeQuantum(pilosa.TimeQuantum("YMDH")); err != nil {
-		t.Fatal(err)
-	} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
-		t.Fatalf("unexpected quantum: %s", q)
-	}
-
-	// Reload field and verify that it is persisted.
-	if err := f.Reopen(); err != nil {
-		t.Fatal(err)
-	} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
-		t.Fatalf("unexpected quantum (reopen): %s", q)
-	}
-}
-
 // Ensure a field can set & read a bsiGroup value.
 func TestField_SetValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
@@ -247,38 +201,5 @@ func TestField_NameValidation(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected error on field name: %s", name)
 		}
-	}
-}
-
-// Ensure field can open and retrieve a view.
-func TestField_DeleteView(t *testing.T) {
-	f := test.MustOpenField(pilosa.FieldOptions{})
-	defer f.Close()
-
-	viewName := pilosa.ViewStandard + "_v"
-
-	// Create view.
-	view, err := f.CreateViewIfNotExists(viewName)
-	if err != nil {
-		t.Fatal(err)
-	} else if view == nil {
-		t.Fatal("expected view")
-	}
-
-	err = f.DeleteView(viewName)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if f.View(viewName) != nil {
-		t.Fatal("view still exists in field")
-	}
-
-	// Recreate view with same name, verify that the old view was not reused.
-	view2, err := f.CreateViewIfNotExists(viewName)
-	if err != nil {
-		t.Fatal(err)
-	} else if view == view2 {
-		t.Fatal("failed to create new view")
 	}
 }

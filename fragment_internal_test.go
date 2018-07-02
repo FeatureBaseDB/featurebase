@@ -756,7 +756,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	}
 
 	// Create view.
-	view, err := field.CreateViewIfNotExists(ViewStandard)
+	view, err := field.createViewIfNotExists(ViewStandard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -922,7 +922,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 	}
 
 	// Create view.
-	view, err := field.CreateViewIfNotExists(ViewStandard)
+	view, err := field.createViewIfNotExists(ViewStandard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -953,7 +953,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 	}
 
 	// Re-fetch fragment.
-	f = index.Field("f").View(ViewStandard).Fragment(0)
+	f = index.Field("f").view(ViewStandard).Fragment(0)
 
 	// Re-verify correct cache type and size.
 	if cache, ok := f.cache.(*RankCache); !ok {

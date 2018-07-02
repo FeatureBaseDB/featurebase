@@ -216,7 +216,7 @@ func (h *Holder) Schema() []*IndexInfo {
 		di := &IndexInfo{Name: index.Name()}
 		for _, field := range index.Fields() {
 			fi := &FieldInfo{Name: field.Name(), Options: field.Options()}
-			for _, view := range field.Views() {
+			for _, view := range field.views() {
 				fi.Views = append(fi.Views, &ViewInfo{Name: view.name})
 			}
 			sort.Sort(viewInfoSlice(fi.Views))
@@ -247,7 +247,7 @@ func (h *Holder) ApplySchema(schema *internal.Schema) error {
 			}
 			// Create views that don't exist.
 			for _, v := range f.Views {
-				_, err := field.CreateViewIfNotExists(v)
+				_, err := field.createViewIfNotExists(v)
 				if err != nil {
 					return errors.Wrap(err, "creating view")
 				}
@@ -408,7 +408,7 @@ func (h *Holder) View(index, field, name string) *View {
 	if f == nil {
 		return nil
 	}
-	return f.View(name)
+	return f.view(name)
 }
 
 // Fragment returns the fragment for an index, field & shard.
@@ -439,7 +439,7 @@ func (h *Holder) monitorCacheFlush() {
 func (h *Holder) flushCaches() {
 	for _, index := range h.Indexes() {
 		for _, field := range index.Fields() {
-			for _, view := range field.Views() {
+			for _, view := range field.views() {
 				for _, fragment := range view.allFragments() {
 					select {
 					case <-h.closing:
@@ -748,7 +748,7 @@ func (s *HolderSyncer) syncFragment(index, field, view string, shard uint64) err
 	}
 
 	// Ensure view exists locally.
-	v, err := f.CreateViewIfNotExists(view)
+	v, err := f.createViewIfNotExists(view)
 	if err != nil {
 		return errors.Wrap(err, "creating view")
 	}
@@ -808,7 +808,7 @@ func (c *HolderCleaner) CleanHolder() error {
 
 		// Get the fragments registered in memory.
 		for _, field := range index.Fields() {
-			for _, view := range field.Views() {
+			for _, view := range field.views() {
 				for _, fragment := range view.allFragments() {
 					fragShard := fragment.shard
 					// Ignore fragments that should be present.

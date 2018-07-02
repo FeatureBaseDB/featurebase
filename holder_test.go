@@ -148,55 +148,6 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 
-	t.Run("ErrViewPermission", func(t *testing.T) {
-		if os.Geteuid() == 0 {
-			t.Skip("Skipping permissions test since user is root.")
-		}
-		h := test.MustOpenHolder()
-		defer h.Close()
-
-		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
-			t.Fatal(err)
-		} else if field, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
-			t.Fatal(err)
-		} else if _, err := field.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
-			t.Fatal(err)
-		} else if err := h.Holder.Close(); err != nil {
-			t.Fatal(err)
-		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard"), 0000); err != nil {
-			t.Fatal(err)
-		}
-		defer os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard"), 0777)
-
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
-			t.Fatalf("unexpected error: %s", err)
-		}
-	})
-	t.Run("ErrViewFragmentsMkdir", func(t *testing.T) {
-		if os.Geteuid() == 0 {
-			t.Skip("Skipping permissions test since user is root.")
-		}
-		h := test.MustOpenHolder()
-		defer h.Close()
-
-		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
-			t.Fatal(err)
-		} else if field, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
-			t.Fatal(err)
-		} else if _, err := field.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
-			t.Fatal(err)
-		} else if err := h.Holder.Close(); err != nil {
-			t.Fatal(err)
-		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments"), 0000); err != nil {
-			t.Fatal(err)
-		}
-		defer os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments"), 0777)
-
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
-			t.Fatalf("unexpected error: %s", err)
-		}
-	})
-
 	t.Run("ErrFragmentStoragePermission", func(t *testing.T) {
 		if os.Geteuid() == 0 {
 			t.Skip("Skipping permissions test since user is root.")
@@ -242,34 +193,6 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 
-	t.Run("ErrFragmentCachePermission", func(t *testing.T) {
-		if os.Geteuid() == 0 {
-			t.Skip("Skipping permissions test since user is root.")
-		}
-		h := test.MustOpenHolder()
-		defer h.Close()
-
-		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
-			t.Fatal(err)
-		} else if field, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
-			t.Fatal(err)
-		} else if view, err := field.CreateViewIfNotExists(pilosa.ViewStandard); err != nil {
-			t.Fatal(err)
-		} else if _, err := field.SetBit(0, 0, nil); err != nil {
-			t.Fatal(err)
-		} else if err := view.Fragment(0).FlushCache(); err != nil {
-			t.Fatal(err)
-		} else if err := h.Holder.Close(); err != nil {
-			t.Fatal(err)
-		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0.cache"), 0000); err != nil {
-			t.Fatal(err)
-		}
-		defer os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0.cache"), 0666)
-
-		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
-			t.Fatalf("unexpected error: %s", err)
-		}
-	})
 }
 
 func TestHolder_HasData(t *testing.T) {
