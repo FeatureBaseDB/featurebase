@@ -31,8 +31,8 @@ const (
 	thresholdFactor = 1.1
 )
 
-// Cache represents a cache of counts.
-type Cache interface {
+// cache represents a cache of counts.
+type cache interface {
 	Add(id uint64, n uint64)
 	BulkAdd(id uint64, n uint64)
 	Get(id uint64) uint64
@@ -48,22 +48,22 @@ type Cache interface {
 	Recalculate()
 
 	// Returns an ordered list of the top ranked bitmaps.
-	Top() []BitmapPair
+	Top() []bitmapPair
 
 	// SetStats defines the stats client used in the cache.
 	SetStats(s StatsClient)
 }
 
-// LRUCache represents a least recently used Cache implementation.
-type LRUCache struct {
+// lruCache represents a least recently used Cache implementation.
+type lruCache struct {
 	cache  *lru.Cache
 	counts map[uint64]uint64
 	stats  StatsClient
 }
 
-// NewLRUCache returns a new instance of LRUCache.
-func NewLRUCache(maxEntries uint32) *LRUCache {
-	c := &LRUCache{
+// newLRUCache returns a new instance of LRUCache.
+func newLRUCache(maxEntries uint32) *lruCache {
+	c := &lruCache{
 		cache:  lru.New(int(maxEntries)),
 		counts: make(map[uint64]uint64),
 		stats:  NopStatsClient,
@@ -73,34 +73,34 @@ func NewLRUCache(maxEntries uint32) *LRUCache {
 }
 
 // BulkAdd adds a count to the cache unsorted. You should Invalidate after completion.
-func (c *LRUCache) BulkAdd(id, n uint64) {
+func (c *lruCache) BulkAdd(id, n uint64) {
 	c.Add(id, n)
 }
 
 // Add adds a count to the cache.
-func (c *LRUCache) Add(id, n uint64) {
+func (c *lruCache) Add(id, n uint64) {
 	c.cache.Add(id, n)
 	c.counts[id] = n
 }
 
 // Get returns a count for a given id.
-func (c *LRUCache) Get(id uint64) uint64 {
+func (c *lruCache) Get(id uint64) uint64 {
 	n, _ := c.cache.Get(id)
 	nn, _ := n.(uint64)
 	return nn
 }
 
 // Len returns the number of items in the cache.
-func (c *LRUCache) Len() int { return c.cache.Len() }
+func (c *lruCache) Len() int { return c.cache.Len() }
 
 // Invalidate is a no-op.
-func (c *LRUCache) Invalidate() {}
+func (c *lruCache) Invalidate() {}
 
 // Recalculate is a no-op.
-func (c *LRUCache) Recalculate() {}
+func (c *lruCache) Recalculate() {}
 
 // IDs returns a list of all IDs in the cache.
-func (c *LRUCache) IDs() []uint64 {
+func (c *lruCache) IDs() []uint64 {
 	a := make([]uint64, 0, len(c.counts))
 	for id := range c.counts {
 		a = append(a, id)
@@ -110,33 +110,33 @@ func (c *LRUCache) IDs() []uint64 {
 }
 
 // Top returns all counts in the cache.
-func (c *LRUCache) Top() []BitmapPair {
-	a := make([]BitmapPair, 0, len(c.counts))
+func (c *lruCache) Top() []bitmapPair {
+	a := make([]bitmapPair, 0, len(c.counts))
 	for id, n := range c.counts {
-		a = append(a, BitmapPair{
+		a = append(a, bitmapPair{
 			ID:    id,
 			Count: uint64(n),
 		})
 	}
-	sort.Sort(BitmapPairs(a))
+	sort.Sort(bitmapPairs(a))
 	return a
 }
 
 // SetStats defines the stats client used in the cache.
-func (c *LRUCache) SetStats(s StatsClient) {
+func (c *lruCache) SetStats(s StatsClient) {
 	c.stats = s
 }
 
-func (c *LRUCache) onEvicted(key lru.Key, _ interface{}) { delete(c.counts, key.(uint64)) }
+func (c *lruCache) onEvicted(key lru.Key, _ interface{}) { delete(c.counts, key.(uint64)) }
 
 // Ensure LRUCache implements Cache.
-var _ Cache = &LRUCache{}
+var _ cache = &lruCache{}
 
-// RankCache represents a cache with sorted entries.
-type RankCache struct {
+// rankCache represents a cache with sorted entries.
+type rankCache struct {
 	mu       sync.Mutex
 	entries  map[uint64]uint64
-	rankings []BitmapPair // cached, ordered list
+	rankings []bitmapPair // cached, ordered list
 
 	updateN    int
 	updateTime time.Time
@@ -155,8 +155,8 @@ type RankCache struct {
 }
 
 // NewRankCache returns a new instance of RankCache.
-func NewRankCache(maxEntries uint32) *RankCache {
-	return &RankCache{
+func NewRankCache(maxEntries uint32) *rankCache {
+	return &rankCache{
 		maxEntries:      maxEntries,
 		thresholdBuffer: int(thresholdFactor * float64(maxEntries)),
 		entries:         make(map[uint64]uint64),
@@ -165,7 +165,7 @@ func NewRankCache(maxEntries uint32) *RankCache {
 }
 
 // Add adds a count to the cache.
-func (c *RankCache) Add(id uint64, n uint64) {
+func (c *rankCache) Add(id uint64, n uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// Ignore if the column count is below the threshold.
@@ -179,7 +179,7 @@ func (c *RankCache) Add(id uint64, n uint64) {
 }
 
 // BulkAdd adds a count to the cache unsorted. You should Invalidate after completion.
-func (c *RankCache) BulkAdd(id uint64, n uint64) {
+func (c *rankCache) BulkAdd(id uint64, n uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if n < c.thresholdValue {
@@ -190,21 +190,21 @@ func (c *RankCache) BulkAdd(id uint64, n uint64) {
 }
 
 // Get returns a count for a given id.
-func (c *RankCache) Get(id uint64) uint64 {
+func (c *rankCache) Get(id uint64) uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.entries[id]
 }
 
 // Len returns the number of items in the cache.
-func (c *RankCache) Len() int {
+func (c *rankCache) Len() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.entries)
 }
 
 // IDs returns a list of all IDs in the cache.
-func (c *RankCache) IDs() []uint64 {
+func (c *rankCache) IDs() []uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	a := make([]uint64, 0, len(c.entries))
@@ -216,21 +216,21 @@ func (c *RankCache) IDs() []uint64 {
 }
 
 // Invalidate recalculates the entries by rank.
-func (c *RankCache) Invalidate() {
+func (c *rankCache) Invalidate() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.invalidate()
 }
 
 // Recalculate rebuilds the cache.
-func (c *RankCache) Recalculate() {
+func (c *rankCache) Recalculate() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.stats.Count("cache.recalculate", 1, 1.0)
 	c.recalculate()
 }
 
-func (c *RankCache) invalidate() {
+func (c *rankCache) invalidate() {
 	// Don't invalidate more than once every X seconds.
 	// TODO: consider making this configurable.
 	if time.Since(c.updateTime).Seconds() < 10 {
@@ -240,23 +240,23 @@ func (c *RankCache) invalidate() {
 	c.recalculate()
 }
 
-func (c *RankCache) recalculate() {
+func (c *rankCache) recalculate() {
 	// Convert cache to a sorted list.
-	rankings := make([]BitmapPair, 0, len(c.entries))
+	rankings := make([]bitmapPair, 0, len(c.entries))
 	for id, cnt := range c.entries {
-		rankings = append(rankings, BitmapPair{
+		rankings = append(rankings, bitmapPair{
 			ID:    id,
 			Count: cnt,
 		})
 	}
-	sort.Sort(BitmapPairs(rankings))
+	sort.Sort(bitmapPairs(rankings))
 
 	// Store the count of the item at the threshold index.
 	c.rankings = rankings
 	length := len(c.rankings)
 	c.stats.Gauge("RankCache", float64(length), 1.0)
 
-	var removeItems []BitmapPair // cached, ordered list
+	var removeItems []bitmapPair // cached, ordered list
 	if length > int(c.maxEntries) {
 		c.thresholdValue = rankings[c.maxEntries].Count
 		removeItems = c.rankings[c.maxEntries:]
@@ -278,38 +278,38 @@ func (c *RankCache) recalculate() {
 }
 
 // SetStats defines the stats client used in the cache.
-func (c *RankCache) SetStats(s StatsClient) {
+func (c *rankCache) SetStats(s StatsClient) {
 	c.stats = s
 }
 
 // Top returns an ordered list of pairs.
-func (c *RankCache) Top() []BitmapPair { return c.rankings }
+func (c *rankCache) Top() []bitmapPair { return c.rankings }
 
 // WriteTo writes the cache to w.
-func (c *RankCache) WriteTo(w io.Writer) (n int64, err error) {
+func (c *rankCache) WriteTo(w io.Writer) (n int64, err error) {
 	panic("FIXME: TODO")
 }
 
 // ReadFrom read from r into the cache.
-func (c *RankCache) ReadFrom(r io.Reader) (n int64, err error) {
+func (c *rankCache) ReadFrom(r io.Reader) (n int64, err error) {
 	panic("FIXME: TODO")
 }
 
 // Ensure RankCache implements Cache.
-var _ Cache = &RankCache{}
+var _ cache = &rankCache{}
 
-// BitmapPair represents a id/count pair with an associated identifier.
-type BitmapPair struct {
+// bitmapPair represents a id/count pair with an associated identifier.
+type bitmapPair struct {
 	ID    uint64
 	Count uint64
 }
 
-// BitmapPairs is a sortable list of BitmapPair objects.
-type BitmapPairs []BitmapPair
+// bitmapPairs is a sortable list of BitmapPair objects.
+type bitmapPairs []bitmapPair
 
-func (p BitmapPairs) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
-func (p BitmapPairs) Len() int           { return len(p) }
-func (p BitmapPairs) Less(i, j int) bool { return p[i].Count > p[j].Count }
+func (p bitmapPairs) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p bitmapPairs) Len() int           { return len(p) }
+func (p bitmapPairs) Less(i, j int) bool { return p[i].Count > p[j].Count }
 
 // Pair holds an id/count pair.
 type Pair struct {
@@ -341,14 +341,14 @@ func (p Pairs) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p Pairs) Len() int           { return len(p) }
 func (p Pairs) Less(i, j int) bool { return p[i].Count > p[j].Count }
 
-// PairHeap is a heap implementation over a group of Pairs.
-type PairHeap struct {
+// pairHeap is a heap implementation over a group of Pairs.
+type pairHeap struct {
 	Pairs
 }
 
 // Less implemets the Sort interface.
 // reports whether the element with index i should sort before the element with index j.
-func (p PairHeap) Less(i, j int) bool { return p.Pairs[i].Count < p.Pairs[j].Count }
+func (p pairHeap) Less(i, j int) bool { return p.Pairs[i].Count < p.Pairs[j].Count }
 
 // Push appends the element onto the Pair slice.
 func (p *Pairs) Push(x interface{}) {
@@ -461,60 +461,60 @@ func (p uint64Slice) merge(other []uint64) []uint64 {
 	return ret
 }
 
-// BitmapCache provides an interface for caching full bitmaps.
-type BitmapCache interface {
+// bitmapCache provides an interface for caching full bitmaps.
+type bitmapCache interface {
 	Fetch(id uint64) (*Row, bool)
 	Add(id uint64, b *Row)
 }
 
-// SimpleCache implements BitmapCache
+// simpleCache implements BitmapCache
 // it is meant to be a short-lived cache for cases where writes are continuing to access
 // the same row within a short time frame (i.e. good for write-heavy loads)
 // A read-heavy use case would cause the cache to get bigger, potentially causing the
 // node to run out of memory.
-type SimpleCache struct {
+type simpleCache struct {
 	cache map[uint64]*Row
 }
 
 // Fetch retrieves the bitmap at the id in the cache.
-func (s *SimpleCache) Fetch(id uint64) (*Row, bool) {
+func (s *simpleCache) Fetch(id uint64) (*Row, bool) {
 	m, ok := s.cache[id]
 	return m, ok
 }
 
 // Add adds the bitmap to the cache, keyed on the id.
-func (s *SimpleCache) Add(id uint64, b *Row) {
+func (s *simpleCache) Add(id uint64, b *Row) {
 	s.cache[id] = b
 }
 
-// NopCache represents a no-op Cache implementation.
-type NopCache struct {
+// nopCache represents a no-op Cache implementation.
+type nopCache struct {
 	stats StatsClient
 }
 
 // Ensure NopCache implements Cache.
-var _ Cache = &NopCache{}
+var _ cache = &nopCache{}
 
-// NewNopCache returns a new instance of NopCache.
-func NewNopCache() *NopCache {
-	return &NopCache{
+// newNopCache returns a new instance of NopCache.
+func newNopCache() *nopCache {
+	return &nopCache{
 		stats: NopStatsClient,
 	}
 }
 
-func (c *NopCache) Add(id uint64, n uint64)     {}
-func (c *NopCache) BulkAdd(id uint64, n uint64) {}
-func (c *NopCache) Get(id uint64) uint64        { return 0 }
-func (c *NopCache) IDs() []uint64               { return make([]uint64, 0) }
+func (c *nopCache) Add(id uint64, n uint64)     {}
+func (c *nopCache) BulkAdd(id uint64, n uint64) {}
+func (c *nopCache) Get(id uint64) uint64        { return 0 }
+func (c *nopCache) IDs() []uint64               { return make([]uint64, 0) }
 
-func (c *NopCache) Invalidate() {}
-func (c *NopCache) Len() int    { return 0 }
-func (c *NopCache) Recalculate() {
+func (c *nopCache) Invalidate() {}
+func (c *nopCache) Len() int    { return 0 }
+func (c *nopCache) Recalculate() {
 }
-func (c *NopCache) SetStats(s StatsClient) {
+func (c *nopCache) SetStats(s StatsClient) {
 	c.stats = s
 }
 
-func (c *NopCache) Top() []BitmapPair {
-	return []BitmapPair{}
+func (c *nopCache) Top() []bitmapPair {
+	return []bitmapPair{}
 }
