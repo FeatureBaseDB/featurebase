@@ -19,6 +19,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/pilosa/pilosa/pql"
 )
@@ -235,6 +236,15 @@ func (f *TestField) Reopen() error {
 	return nil
 }
 
+func (f *TestField) MustSetBit(row, col uint64, ts ...time.Time) {
+	for _, t := range ts {
+		_, err := f.Field.SetBit(row, col, &t)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
 // Ensure field can open and retrieve a view.
 func TestField_CreateViewIfNotExists(t *testing.T) {
 	f := MustOpenField(FieldOptions{})
@@ -278,4 +288,50 @@ func TestField_SetTimeQuantum(t *testing.T) {
 	} else if q := f.TimeQuantum(); q != TimeQuantum("YMDH") {
 		t.Fatalf("unexpected quantum (reopen): %s", q)
 	}
+}
+
+func TestField_RowTime(t *testing.T) {
+	f := MustOpenField(FieldOptions{Type: FieldTypeTime})
+	defer f.Close()
+
+	if err := f.SetTimeQuantum(TimeQuantum("YMDH")); err != nil {
+		t.Fatal(err)
+	}
+
+	f.MustSetBit(1, 1, time.Date(2010, time.January, 5, 12, 0, 0, 0, time.UTC))
+	f.MustSetBit(1, 2, time.Date(2011, time.January, 5, 12, 0, 0, 0, time.UTC))
+	f.MustSetBit(1, 3, time.Date(2010, time.February, 5, 12, 0, 0, 0, time.UTC))
+	f.MustSetBit(1, 4, time.Date(2010, time.January, 6, 12, 0, 0, 0, time.UTC))
+	f.MustSetBit(1, 5, time.Date(2010, time.January, 5, 13, 0, 0, 0, time.UTC))
+
+	if r, err := f.RowTime(1, time.Date(2010, time.November, 5, 12, 0, 0, 0, time.UTC), "Y"); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(r.Columns(), []uint64{1, 3, 4, 5}) {
+		t.Fatalf("wrong columns: %#v", r.Columns())
+	}
+
+	if r, err := f.RowTime(1, time.Date(2010, time.February, 7, 13, 0, 0, 0, time.UTC), "YM"); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(r.Columns(), []uint64{3}) {
+		t.Fatalf("wrong columns: %#v", r.Columns())
+	}
+
+	if r, err := f.RowTime(1, time.Date(2010, time.February, 7, 13, 0, 0, 0, time.UTC), "M"); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(r.Columns(), []uint64{3}) {
+		t.Fatalf("wrong columns: %#v", r.Columns())
+	}
+
+	if r, err := f.RowTime(1, time.Date(2010, time.January, 5, 12, 0, 0, 0, time.UTC), "MD"); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(r.Columns(), []uint64{1, 5}) {
+		t.Fatalf("wrong columns: %#v", r.Columns())
+	}
+
+	if r, err := f.RowTime(1, time.Date(2010, time.January, 5, 13, 0, 0, 0, time.UTC), "MDH"); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(r.Columns(), []uint64{5}) {
+		t.Fatalf("wrong columns: %#v", r.Columns())
+	}
+
 }

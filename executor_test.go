@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/go-cmp/cmp"
@@ -1190,8 +1191,8 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 			t.Fatalf("quuerying remote: %v", err)
 		}
 
-		if !reflect.DeepEqual(hldr1.ViewRow("i", "z", "standard_2010", 5).Columns(), []uint64{1500000}) {
-			t.Fatalf("unexpected cols from row 7: %v", hldr1.ViewRow("i", "z", "standard_2010", 5).Columns())
+		if !reflect.DeepEqual(hldr1.RowTime("i", "z", 5, time.Date(2010, time.January, 1, 0, 0, 0, 0, time.UTC), "Y").Columns(), []uint64{1500000}) {
+			t.Fatalf("unexpected cols from row 7: %v", hldr1.RowTime("i", "z", 5, time.Date(2010, time.January, 1, 0, 0, 0, 0, time.UTC), "Y").Columns())
 		}
 	})
 

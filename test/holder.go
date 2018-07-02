@@ -17,6 +17,7 @@ package test
 import (
 	"io/ioutil"
 	"os"
+	"time"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/boltdb"
@@ -112,14 +113,13 @@ func (h *Holder) RowAttrStore(index, field string) pilosa.AttrStore {
 	return f.RowAttrStore()
 }
 
-// ViewRow returns a Row for a given field and view.
-func (h *Holder) ViewRow(index, field, view string, rowID uint64) *pilosa.Row {
+func (h *Holder) RowTime(index, field string, rowID uint64, t time.Time, quantum string) *pilosa.Row {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
 	f, err := idx.CreateFieldIfNotExists(field, pilosa.FieldOptions{})
 	if err != nil {
 		panic(err)
 	}
-	row, err := f.ViewRow(view, rowID)
+	row, err := f.RowTime(rowID, t, quantum)
 	if err != nil {
 		panic(err)
 	}

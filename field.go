@@ -535,6 +535,20 @@ func (f *Field) SetTimeQuantum(q TimeQuantum) error {
 	return nil
 }
 
+// RowTime gets the row at the particular time with the granularity specified by
+// the quantum.
+func (f *Field) RowTime(rowID uint64, time time.Time, quantum string) (*Row, error) {
+	if !TimeQuantum(quantum).Valid() {
+		return nil, ErrInvalidTimeQuantum
+	}
+	viewname := viewsByTime(ViewStandard, time, TimeQuantum(quantum[len(quantum)-1:]))[0]
+	view := f.view(viewname)
+	if view == nil {
+		return nil, errors.Errorf("view with quantum %v not found.", quantum)
+	}
+	return view.row(rowID), nil
+}
+
 // ViewPath returns the path to a view in the field.
 func (f *Field) ViewPath(name string) string {
 	return filepath.Join(f.path, "views", name)
@@ -662,17 +676,6 @@ func (f *Field) Row(rowID uint64) (*Row, error) {
 		return nil, errors.Errorf("row method unsupported for field type: %s", f.Type())
 	}
 	view := f.view(ViewStandard)
-	if view == nil {
-		return nil, ErrInvalidView
-	}
-	return view.row(rowID), nil
-}
-
-// ViewRow returns a row for a view and shard.
-// TODO: unexport this with views (it's only used in tests).
-// TODO we need some blessed interface to get rows directly off of time fields. Field.RowTime(rowID, timestamp, quantum), maybe
-func (f *Field) ViewRow(viewName string, rowID uint64) (*Row, error) {
-	view := f.view(viewName)
 	if view == nil {
 		return nil, ErrInvalidView
 	}
