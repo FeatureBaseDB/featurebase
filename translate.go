@@ -24,11 +24,7 @@ const (
 )
 
 const (
-	DefaultReplicationRetryInterval = 1 * time.Second
-)
-
-const (
-	ReplicationBufferSize = 65536
+	defaultReplicationRetryInterval = 1 * time.Second
 )
 
 var (
@@ -90,7 +86,7 @@ func NewTranslateFile() *TranslateFile {
 
 		MapSize: DefaultMapSize,
 
-		ReplicationRetryInterval: DefaultReplicationRetryInterval,
+		ReplicationRetryInterval: defaultReplicationRetryInterval,
 	}
 }
 

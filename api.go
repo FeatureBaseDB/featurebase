@@ -788,8 +788,8 @@ func (api *API) ResizeAbort() error {
 	return errors.Wrap(err, "complete current job")
 }
 
-// TranslateStoreBufferSize is the buffer size used for streaming data.
-const TranslateStoreBufferSize = 65536
+// translateStoreBufferSize is the buffer size used for streaming data.
+const translateStoreBufferSize = 65536
 
 func (api *API) GetTranslateData(ctx context.Context, w io.WriteCloser, offset int64) error {
 	rc, err := api.server.primaryTranslateStore.Reader(ctx, offset)
@@ -804,7 +804,7 @@ func (api *API) GetTranslateData(ctx context.Context, w io.WriteCloser, offset i
 		defer rc.Close()
 		defer w.Close()
 
-		buf := make([]byte, TranslateStoreBufferSize)
+		buf := make([]byte, translateStoreBufferSize)
 
 		// Copy from reader to client until store or client disconnect.
 		for {
