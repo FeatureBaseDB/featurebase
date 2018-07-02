@@ -70,7 +70,7 @@ type Server struct {
 	diagnosticInterval  time.Duration
 	maxWritesPerRequest int
 	isCoordinator       bool
-	syncer              HolderSyncer
+	syncer              holderSyncer
 
 	primaryTranslateStore TranslateStore
 

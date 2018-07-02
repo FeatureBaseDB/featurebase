@@ -218,7 +218,7 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 	cluster.ReplicaN = 2
 
 	// Set up cleaner for replication 2.
-	cleaner2 := HolderCleaner{
+	cleaner2 := holderCleaner{
 		Node:    cluster.Nodes[0],
 		Holder:  hldr0.Holder,
 		Cluster: cluster,
@@ -255,7 +255,7 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 	cluster.ReplicaN = 1
 
 	// Set up cleaner for replication 1.
-	cleaner1 := HolderCleaner{
+	cleaner1 := holderCleaner{
 		Node:    cluster.Nodes[0],
 		Holder:  hldr0.Holder,
 		Cluster: cluster,
@@ -279,7 +279,7 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 			t.Fatalf("unexpected columns(%d/200): %+v", i, a)
 		}
 
-		f := hldr.Fragment("i", "f0", ViewStandard, 1)
+		f := hldr.fragment("i", "f0", ViewStandard, 1)
 		if f != nil {
 			t.Fatalf("expected fragment to be deleted: (%d/i/f0): %+v", i, f)
 		}

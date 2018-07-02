@@ -411,8 +411,8 @@ func (h *Holder) view(index, field, name string) *View {
 	return f.view(name)
 }
 
-// Fragment returns the fragment for an index, field & shard.
-func (h *Holder) Fragment(index, field, view string, shard uint64) *Fragment {
+// fragment returns the fragment for an index, field & shard.
+func (h *Holder) fragment(index, field, view string, shard uint64) *Fragment {
 	v := h.view(index, field, view)
 	if v == nil {
 		return nil
@@ -561,9 +561,9 @@ func (h *Holder) logStartup() error {
 	return nil
 }
 
-// HolderSyncer is an active anti-entropy tool that compares the local holder
+// holderSyncer is an active anti-entropy tool that compares the local holder
 // with a remote holder based on block checksums and resolves differences.
-type HolderSyncer struct {
+type holderSyncer struct {
 	mu sync.Mutex
 
 	Holder *Holder
@@ -579,7 +579,7 @@ type HolderSyncer struct {
 }
 
 // IsClosing returns true if the syncer has been marked to close.
-func (s *HolderSyncer) IsClosing() bool {
+func (s *holderSyncer) IsClosing() bool {
 	select {
 	case <-s.Closing:
 		return true
@@ -589,7 +589,7 @@ func (s *HolderSyncer) IsClosing() bool {
 }
 
 // SyncHolder compares the holder on host with the local holder and resolves differences.
-func (s *HolderSyncer) SyncHolder() error {
+func (s *holderSyncer) SyncHolder() error {
 	s.mu.Lock() // only allow one instance of SyncHolder to be running at a time
 	defer s.mu.Unlock()
 	ti := time.Now()
@@ -651,7 +651,7 @@ func (s *HolderSyncer) SyncHolder() error {
 }
 
 // syncIndex synchronizes index attributes with the rest of the cluster.
-func (s *HolderSyncer) syncIndex(index string) error {
+func (s *holderSyncer) syncIndex(index string) error {
 	// Retrieve index reference.
 	idx := s.Holder.Index(index)
 	if idx == nil {
@@ -694,7 +694,7 @@ func (s *HolderSyncer) syncIndex(index string) error {
 }
 
 // syncField synchronizes field attributes with the rest of the cluster.
-func (s *HolderSyncer) syncField(index, name string) error {
+func (s *holderSyncer) syncField(index, name string) error {
 	// Retrieve field reference.
 	f := s.Holder.Field(index, name)
 	if f == nil {
@@ -740,7 +740,7 @@ func (s *HolderSyncer) syncField(index, name string) error {
 }
 
 // syncFragment synchronizes a fragment with the rest of the cluster.
-func (s *HolderSyncer) syncFragment(index, field, view string, shard uint64) error {
+func (s *holderSyncer) syncFragment(index, field, view string, shard uint64) error {
 	// Retrieve local field.
 	f := s.Holder.Field(index, field)
 	if f == nil {
@@ -773,8 +773,8 @@ func (s *HolderSyncer) syncFragment(index, field, view string, shard uint64) err
 	return nil
 }
 
-// HolderCleaner removes fragments and data files that are no longer used.
-type HolderCleaner struct {
+// holderCleaner removes fragments and data files that are no longer used.
+type holderCleaner struct {
 	Node *Node
 
 	Holder  *Holder
@@ -785,7 +785,7 @@ type HolderCleaner struct {
 }
 
 // IsClosing returns true if the cleaner has been marked to close.
-func (c *HolderCleaner) IsClosing() bool {
+func (c *holderCleaner) IsClosing() bool {
 	select {
 	case <-c.Closing:
 		return true
@@ -796,7 +796,7 @@ func (c *HolderCleaner) IsClosing() bool {
 
 // CleanHolder compares the holder with the cluster state and removes
 // any unnecessary fragments and files.
-func (c *HolderCleaner) CleanHolder() error {
+func (c *holderCleaner) CleanHolder() error {
 	for _, index := range c.Holder.Indexes() {
 		// Verify cleaner has not closed.
 		if c.IsClosing() {

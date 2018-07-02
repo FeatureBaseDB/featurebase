@@ -450,7 +450,7 @@ func (c *cluster) setState(state string) {
 	// been removed.
 	// It's safe to do a cleanup after state changes back to normal.
 	if doCleanup {
-		var cleaner HolderCleaner
+		var cleaner holderCleaner
 		cleaner.Node = c.Node
 		cleaner.Holder = c.holder
 		cleaner.Cluster = c
