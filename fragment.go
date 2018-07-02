@@ -232,7 +232,7 @@ func (f *fragment) openCache() error {
 	case CacheTypeLRU:
 		f.cache = newLRUCache(f.CacheSize)
 	case CacheTypeNone:
-		f.cache = newNopCache()
+		f.cache = globalNopCache
 		return nil
 	default:
 		return ErrInvalidCacheType

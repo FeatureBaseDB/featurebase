@@ -493,28 +493,20 @@ type nopCache struct {
 }
 
 // Ensure NopCache implements Cache.
-var _ cache = &nopCache{}
-
-// newNopCache returns a new instance of NopCache.
-func newNopCache() *nopCache {
-	return &nopCache{
-		stats: NopStatsClient,
-	}
+var globalNopCache cache = nopCache{
+	stats: NopStatsClient,
 }
 
-func (c *nopCache) Add(id uint64, n uint64)     {}
-func (c *nopCache) BulkAdd(id uint64, n uint64) {}
-func (c *nopCache) Get(id uint64) uint64        { return 0 }
-func (c *nopCache) IDs() []uint64               { return make([]uint64, 0) }
+func (c nopCache) Add(uint64, uint64)     {}
+func (c nopCache) BulkAdd(uint64, uint64) {}
+func (c nopCache) Get(uint64) uint64      { return 0 }
+func (c nopCache) IDs() []uint64          { return []uint64{} }
 
-func (c *nopCache) Invalidate() {}
-func (c *nopCache) Len() int    { return 0 }
-func (c *nopCache) Recalculate() {
-}
-func (c *nopCache) SetStats(s StatsClient) {
-	c.stats = s
-}
+func (c nopCache) Invalidate()          {}
+func (c nopCache) Len() int             { return 0 }
+func (c nopCache) Recalculate()         {}
+func (c nopCache) SetStats(StatsClient) {}
 
-func (c *nopCache) Top() []bitmapPair {
+func (c nopCache) Top() []bitmapPair {
 	return []bitmapPair{}
 }
