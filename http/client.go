@@ -81,7 +81,7 @@ func (c *InternalClient) MaxShardByIndex(ctx context.Context) (map[string]uint64
 // maxShardByIndex returns the number of shards on a server by index.
 func (c *InternalClient) maxShardByIndex(ctx context.Context) (map[string]uint64, error) {
 	// Execute request against the host.
-	u := uriPathToURL(c.defaultURI, "/shards/max")
+	u := uriPathToURL(c.defaultURI, "/internal/shards/max")
 
 	// Build request.
 	req, err := http.NewRequest("GET", u.String(), nil)
@@ -187,7 +187,7 @@ func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilo
 // FragmentNodes returns a list of nodes that own a shard.
 func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard uint64) ([]*pilosa.Node, error) {
 	// Execute request against the host.
-	u := uriPathToURL(c.defaultURI, "/fragment/nodes")
+	u := uriPathToURL(c.defaultURI, "/internal/fragment/nodes")
 	u.RawQuery = (url.Values{"index": {index}, "shard": {strconv.FormatUint(shard, 10)}}).Encode()
 
 	// Build request.
@@ -675,7 +675,7 @@ func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, in
 	if uri == nil {
 		uri = c.defaultURI
 	}
-	u := uriPathToURL(uri, "/fragment/blocks")
+	u := uriPathToURL(uri, "/internal/fragment/blocks")
 	u.RawQuery = url.Values{
 		"index": {index},
 		"field": {field},
@@ -730,7 +730,7 @@ func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, 
 		return nil, nil, errors.Wrap(err, "marshaling")
 	}
 
-	u := uriPathToURL(uri, "/fragment/block/data")
+	u := uriPathToURL(uri, "/internal/fragment/block/data")
 	req, err := http.NewRequest("GET", u.String(), bytes.NewReader(buf))
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "creating request")
@@ -770,7 +770,7 @@ func (c *InternalClient) ColumnAttrDiff(ctx context.Context, uri *pilosa.URI, in
 	if uri == nil {
 		uri = c.defaultURI
 	}
-	u := uriPathToURL(uri, fmt.Sprintf("/index/%s/attr/diff", index))
+	u := uriPathToURL(uri, fmt.Sprintf("/internal/index/%s/attr/diff", index))
 
 	// Encode request.
 	buf, err := json.Marshal(postIndexAttrDiffRequest{Blocks: blks})
@@ -814,7 +814,7 @@ func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, index
 	if uri == nil {
 		uri = c.defaultURI
 	}
-	u := uriPathToURL(uri, fmt.Sprintf("/index/%s/field/%s/attr/diff", index, field))
+	u := uriPathToURL(uri, fmt.Sprintf("/internal/index/%s/field/%s/attr/diff", index, field))
 
 	// Encode request.
 	buf, err := json.Marshal(postFieldAttrDiffRequest{Blocks: blks})
@@ -862,7 +862,7 @@ func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, pb pr
 		return fmt.Errorf("marshaling message: %v", err)
 	}
 
-	u := uriPathToURL(uri, "/cluster/message")
+	u := uriPathToURL(uri, "/internal/cluster/message")
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(msg))
 	if err != nil {
 		return errors.Wrap(err, "making new request")
