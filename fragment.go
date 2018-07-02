@@ -82,14 +82,14 @@ type fragment struct {
 
 	// Cache for row counts.
 	CacheType string // passed in by field
-	cache     Cache
+	cache     cache
 	CacheSize uint32
 
 	// Stats reporting.
 	maxRowID uint64
 
 	// Cache containing full rows (not just counts).
-	rowCache BitmapCache
+	rowCache bitmapCache
 
 	// Cached checksums for each block.
 	checksums map[int][]byte
@@ -217,7 +217,7 @@ func (f *fragment) openStorage() error {
 
 	// Attach the file to the bitmap to act as a write-ahead log.
 	f.storage.OpWriter = f.file
-	f.rowCache = &SimpleCache{make(map[uint64]*Row)}
+	f.rowCache = &simpleCache{make(map[uint64]*Row)}
 
 	return nil
 
@@ -230,9 +230,9 @@ func (f *fragment) openCache() error {
 	case CacheTypeRanked:
 		f.cache = NewRankCache(f.CacheSize)
 	case CacheTypeLRU:
-		f.cache = NewLRUCache(f.CacheSize)
+		f.cache = newLRUCache(f.CacheSize)
 	case CacheTypeNone:
-		f.cache = NewNopCache()
+		f.cache = globalNopCache
 		return nil
 	default:
 		return ErrInvalidCacheType
@@ -897,7 +897,7 @@ func (f *fragment) top(opt topOptions) ([]Pair, error) {
 	}
 
 	// Iterate over rankings and add to results until we have enough.
-	results := &PairHeap{}
+	results := &pairHeap{}
 	for _, pair := range pairs {
 		rowID, cnt := pair.ID, pair.Count
 
@@ -1001,7 +1001,7 @@ func (f *fragment) top(opt topOptions) ([]Pair, error) {
 	return r, nil
 }
 
-func (f *fragment) topBitmapPairs(rowIDs []uint64) []BitmapPair {
+func (f *fragment) topBitmapPairs(rowIDs []uint64) []bitmapPair {
 	// Don't retrieve from storage if CacheTypeNone.
 	if f.CacheType == CacheTypeNone {
 		return f.cache.Top()
@@ -1015,11 +1015,11 @@ func (f *fragment) topBitmapPairs(rowIDs []uint64) []BitmapPair {
 	}
 
 	// Otherwise retrieve specific rows.
-	pairs := make([]BitmapPair, 0, len(rowIDs))
+	pairs := make([]bitmapPair, 0, len(rowIDs))
 	for _, rowID := range rowIDs {
 		// Look up cache first, if available.
 		if n := f.cache.Get(rowID); n > 0 {
-			pairs = append(pairs, BitmapPair{
+			pairs = append(pairs, bitmapPair{
 				ID:    rowID,
 				Count: n,
 			})
@@ -1029,13 +1029,13 @@ func (f *fragment) topBitmapPairs(rowIDs []uint64) []BitmapPair {
 		row := f.row(rowID)
 		if row.Count() > 0 {
 			// Otherwise load from storage.
-			pairs = append(pairs, BitmapPair{
+			pairs = append(pairs, bitmapPair{
 				ID:    rowID,
 				Count: row.Count(),
 			})
 		}
 	}
-	sort.Sort(BitmapPairs(pairs))
+	sort.Sort(bitmapPairs(pairs))
 	return pairs
 }
 
@@ -1193,18 +1193,18 @@ func (f *fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, e
 	maxColumnID := uint64(ShardWidth)
 
 	// Create buffered iterator for local block.
-	itrs := make([]*BufIterator, 1, len(data)+1)
-	itrs[0] = NewBufIterator(
-		NewLimitIterator(
-			NewRoaringIterator(f.storage.Iterator()), maxRowID, maxColumnID,
+	itrs := make([]*bufIterator, 1, len(data)+1)
+	itrs[0] = newBufIterator(
+		newLimitIterator(
+			newRoaringIterator(f.storage.Iterator()), maxRowID, maxColumnID,
 		),
 	)
 
 	// Append buffered iterators for each incoming block.
 	for i := range data {
-		var itr Iterator = NewSliceIterator(data[i].rowIDs, data[i].columnIDs)
-		itr = NewLimitIterator(itr, maxRowID, maxColumnID)
-		itrs = append(itrs, NewBufIterator(itr))
+		var itr iterator = newSliceIterator(data[i].rowIDs, data[i].columnIDs)
+		itr = newLimitIterator(itr, maxRowID, maxColumnID)
+		itrs = append(itrs, newBufIterator(itr))
 	}
 
 	// Seek to initial pair.

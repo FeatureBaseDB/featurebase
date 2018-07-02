@@ -891,7 +891,7 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 	}
 
 	// Verify correct cache type and size.
-	if cache, ok := f.cache.(*LRUCache); !ok {
+	if cache, ok := f.cache.(*lruCache); !ok {
 		t.Fatalf("unexpected cache: %T", f.cache)
 	} else if cache.Len() != 1000 {
 		t.Fatalf("unexpected cache len: %d", cache.Len())
@@ -903,7 +903,7 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 	}
 
 	// Re-verify correct cache type and size.
-	if cache, ok := f.cache.(*LRUCache); !ok {
+	if cache, ok := f.cache.(*lruCache); !ok {
 		t.Fatalf("unexpected cache: %T", f.cache)
 	} else if cache.Len() != 1000 {
 		t.Fatalf("unexpected cache len: %d", cache.Len())
@@ -941,7 +941,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 	}
 
 	// Verify correct cache type and size.
-	if cache, ok := f.cache.(*RankCache); !ok {
+	if cache, ok := f.cache.(*rankCache); !ok {
 		t.Fatalf("unexpected cache: %T", f.cache)
 	} else if cache.Len() != 1000 {
 		t.Fatalf("unexpected cache len: %d", cache.Len())
@@ -956,7 +956,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 	f = index.Field("f").view(ViewStandard).Fragment(0)
 
 	// Re-verify correct cache type and size.
-	if cache, ok := f.cache.(*RankCache); !ok {
+	if cache, ok := f.cache.(*rankCache); !ok {
 		t.Fatalf("unexpected cache: %T", f.cache)
 	} else if cache.Len() != 1000 {
 		t.Fatalf("unexpected cache len: %d", cache.Len())

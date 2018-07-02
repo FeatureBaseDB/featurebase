@@ -12,19 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pilosa_test
+package pilosa
 
 import (
 	"reflect"
 	"testing"
-
-	"github.com/pilosa/pilosa"
 )
 
 // Ensure slice iterator and iterate over a set of pairs.
 func TestSliceIterator(t *testing.T) {
 	// Initialize iterator.
-	itr := pilosa.NewSliceIterator(
+	itr := newSliceIterator(
 		[]uint64{0, 0, 2, 4},
 		[]uint64{0, 1, 0, 10},
 	)
@@ -48,7 +46,7 @@ func TestSliceIterator(t *testing.T) {
 
 // Ensure buffered iterator can unread values on to the buffer.
 func TestBufIterator(t *testing.T) {
-	itr := pilosa.NewBufIterator(pilosa.NewSliceIterator(
+	itr := newBufIterator(newSliceIterator(
 		[]uint64{0, 0, 1, 2},
 		[]uint64{1, 3, 0, 100},
 	))
@@ -77,7 +75,7 @@ func TestBufIterator_DoubleFillPanic(t *testing.T) {
 	func() {
 		defer func() { v = recover() }()
 
-		itr := pilosa.NewBufIterator(pilosa.NewSliceIterator(nil, nil))
+		itr := newBufIterator(newSliceIterator(nil, nil))
 		itr.Unread()
 		itr.Unread()
 	}()

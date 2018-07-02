@@ -75,66 +75,62 @@ var _ InternalQueryClient = NewNopInternalQueryClient()
 
 type NopInternalClient struct{}
 
-func NewNopInternalClient() *NopInternalClient {
-	return &NopInternalClient{}
+func NewNopInternalClient() NopInternalClient {
+	return NopInternalClient{}
 }
 
 var _ InternalClient = NewNopInternalClient()
 
-func (n *NopInternalClient) MaxShardByIndex(ctx context.Context) (map[string]uint64, error) {
+func (n NopInternalClient) MaxShardByIndex(context.Context) (map[string]uint64, error) {
 	return nil, nil
 }
-func (n *NopInternalClient) Schema(ctx context.Context) ([]*IndexInfo, error) {
+func (n NopInternalClient) Schema(ctx context.Context) ([]*IndexInfo, error) { return nil, nil }
+func (n NopInternalClient) CreateIndex(ctx context.Context, index string, opt IndexOptions) error {
+	return nil
+}
+func (n NopInternalClient) FragmentNodes(ctx context.Context, index string, shard uint64) ([]*Node, error) {
 	return nil, nil
 }
-func (n *NopInternalClient) CreateIndex(ctx context.Context, index string, opt IndexOptions) error {
-	return nil
-}
-func (n *NopInternalClient) FragmentNodes(ctx context.Context, index string, shard uint64) ([]*Node, error) {
+func (n NopInternalClient) Query(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
 	return nil, nil
 }
-func (n *NopInternalClient) Query(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
+func (n NopInternalClient) QueryNode(ctx context.Context, uri *URI, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
 	return nil, nil
 }
-func (n *NopInternalClient) QueryNode(ctx context.Context, uri *URI, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
+func (n NopInternalClient) Import(ctx context.Context, index, field string, shard uint64, bits []Bit) error {
+	return nil
+}
+func (n NopInternalClient) ImportK(ctx context.Context, index, field string, bits []Bit) error {
+	return nil
+}
+func (n NopInternalClient) EnsureIndex(ctx context.Context, name string, options IndexOptions) error {
+	return nil
+}
+func (n NopInternalClient) EnsureField(ctx context.Context, indexName string, fieldName string) error {
+	return nil
+}
+func (n NopInternalClient) ImportValue(ctx context.Context, index, field string, shard uint64, vals []FieldValue) error {
+	return nil
+}
+func (n NopInternalClient) ExportCSV(ctx context.Context, index, field string, shard uint64, w io.Writer) error {
+	return nil
+}
+func (n NopInternalClient) CreateField(ctx context.Context, index, field string) error { return nil }
+func (n NopInternalClient) FragmentBlocks(ctx context.Context, uri *URI, index, field string, shard uint64) ([]FragmentBlock, error) {
 	return nil, nil
 }
-func (n *NopInternalClient) Import(ctx context.Context, index, field string, shard uint64, bits []Bit) error {
-	return nil
-}
-func (n *NopInternalClient) ImportK(ctx context.Context, index, field string, bits []Bit) error {
-	return nil
-}
-func (n *NopInternalClient) EnsureIndex(ctx context.Context, name string, options IndexOptions) error {
-	return nil
-}
-func (n *NopInternalClient) EnsureField(ctx context.Context, indexName string, fieldName string) error {
-	return nil
-}
-func (n *NopInternalClient) ImportValue(ctx context.Context, index, field string, shard uint64, vals []FieldValue) error {
-	return nil
-}
-func (n *NopInternalClient) ExportCSV(ctx context.Context, index, field string, shard uint64, w io.Writer) error {
-	return nil
-}
-func (n *NopInternalClient) CreateField(ctx context.Context, index, field string) error {
-	return nil
-}
-func (n *NopInternalClient) FragmentBlocks(ctx context.Context, uri *URI, index, field string, shard uint64) ([]FragmentBlock, error) {
-	return nil, nil
-}
-func (n *NopInternalClient) BlockData(ctx context.Context, uri *URI, index, field string, shard uint64, block int) ([]uint64, []uint64, error) {
+func (n NopInternalClient) BlockData(ctx context.Context, uri *URI, index, field string, shard uint64, block int) ([]uint64, []uint64, error) {
 	return nil, nil, nil
 }
-func (n *NopInternalClient) ColumnAttrDiff(ctx context.Context, uri *URI, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
+func (n NopInternalClient) ColumnAttrDiff(ctx context.Context, uri *URI, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	return nil, nil
 }
-func (n *NopInternalClient) RowAttrDiff(ctx context.Context, uri *URI, index, field string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
+func (n NopInternalClient) RowAttrDiff(ctx context.Context, uri *URI, index, field string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	return nil, nil
 }
-func (n *NopInternalClient) SendMessage(ctx context.Context, uri *URI, pb proto.Message) error {
+func (n NopInternalClient) SendMessage(ctx context.Context, uri *URI, pb proto.Message) error {
 	return nil
 }
-func (n *NopInternalClient) RetrieveShardFromURI(ctx context.Context, index, field string, shard uint64, uri URI) (io.ReadCloser, error) {
+func (n NopInternalClient) RetrieveShardFromURI(ctx context.Context, index, field string, shard uint64, uri URI) (io.ReadCloser, error) {
 	return nil, nil
 }
