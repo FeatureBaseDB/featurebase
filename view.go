@@ -34,11 +34,6 @@ const (
 	viewBSIGroupPrefix = "bsig_"
 )
 
-// isValidView returns true if name is valid.
-func isValidView(name string) bool {
-	return name == ViewStandard
-}
-
 // View represents a container for field data.
 type View struct {
 	mu    sync.RWMutex
