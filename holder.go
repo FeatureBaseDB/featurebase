@@ -412,7 +412,7 @@ func (h *Holder) view(index, field, name string) *View {
 }
 
 // fragment returns the fragment for an index, field & shard.
-func (h *Holder) fragment(index, field, view string, shard uint64) *Fragment {
+func (h *Holder) fragment(index, field, view string, shard uint64) *fragment {
 	v := h.view(index, field, view)
 	if v == nil {
 		return nil
@@ -760,7 +760,7 @@ func (s *holderSyncer) syncFragment(index, field, view string, shard uint64) err
 	}
 
 	// Sync fragments together.
-	fs := FragmentSyncer{
+	fs := fragmentSyncer{
 		Fragment: frag,
 		Node:     s.Node,
 		Cluster:  s.Cluster,

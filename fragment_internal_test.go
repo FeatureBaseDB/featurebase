@@ -591,7 +591,7 @@ func TestFragment_Top(t *testing.T) {
 	f.RecalculateCache()
 
 	// Retrieve top rows.
-	if pairs, err := f.top(TopOptions{N: 2}); err != nil {
+	if pairs, err := f.top(topOptions{N: 2}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) != 2 {
 		t.Fatalf("unexpected count: %d", len(pairs))
@@ -617,7 +617,7 @@ func TestFragment_Top_Filter(t *testing.T) {
 	f.RowAttrStore.SetAttrs(102, map[string]interface{}{"x": int64(20)})
 
 	// Retrieve top rows.
-	if pairs, err := f.top(TopOptions{
+	if pairs, err := f.top(topOptions{
 		N:            2,
 		FilterName:   "x",
 		FilterValues: []interface{}{int64(10), int64(15), int64(20)},
@@ -648,7 +648,7 @@ func TestFragment_TopN_Intersect(t *testing.T) {
 	f.RecalculateCache()
 
 	// Retrieve top rows.
-	if pairs, err := f.top(TopOptions{N: 3, Src: src}); err != nil {
+	if pairs, err := f.top(topOptions{N: 3, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []Pair{
 		{ID: 101, Count: 3},
@@ -683,7 +683,7 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 	f.RecalculateCache()
 
 	// Retrieve top rows.
-	if pairs, err := f.top(TopOptions{N: 10, Src: src}); err != nil {
+	if pairs, err := f.top(topOptions{N: 10, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []Pair{
 		{ID: 999, Count: 19},
@@ -712,7 +712,7 @@ func TestFragment_TopN_IDs(t *testing.T) {
 	f.mustSetBits(102, 8, 9, 10, 11, 12)
 
 	// Retrieve top rows.
-	if pairs, err := f.top(TopOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
+	if pairs, err := f.top(topOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []Pair{
 		{ID: 101, Count: 4},
@@ -733,7 +733,7 @@ func TestFragment_TopN_NopCache(t *testing.T) {
 	f.mustSetBits(102, 8, 9, 10, 11, 12)
 
 	// Retrieve top rows.
-	if pairs, err := f.top(TopOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
+	if pairs, err := f.top(topOptions{RowIDs: []uint64{100, 101, 200}}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(pairs, []Pair{}) {
 		t.Fatalf("unexpected pairs: %s", spew.Sdump(pairs))
@@ -792,7 +792,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	}
 
 	// Retrieve top rows.
-	if pairs, err := f.top(TopOptions{N: 5}); err != nil {
+	if pairs, err := f.top(topOptions{N: 5}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) > int(cacheSize) {
 		t.Fatalf("TopN count cannot exceed cache size: %d", cacheSize)
@@ -1023,7 +1023,7 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 	}
 
 	// Open the fragment specified by the path.
-	f := NewFragment(*FragmentPath, "i", "f", ViewStandard, 0)
+	f := newFragment(*FragmentPath, "i", "f", ViewStandard, 0)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
@@ -1081,7 +1081,7 @@ func TestFragment_Tanimoto(t *testing.T) {
 	f.mustSetBits(102, 1, 2, 10, 12)
 	f.RecalculateCache()
 
-	if pairs, err := f.top(TopOptions{TanimotoThreshold: 50, Src: src}); err != nil {
+	if pairs, err := f.top(topOptions{TanimotoThreshold: 50, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) != 2 {
 		t.Fatalf("unexpected count: %d", len(pairs))
@@ -1104,7 +1104,7 @@ func TestFragment_Zero_Tanimoto(t *testing.T) {
 	f.mustSetBits(102, 1, 2, 10, 12)
 	f.RecalculateCache()
 
-	if pairs, err := f.top(TopOptions{TanimotoThreshold: 0, Src: src}); err != nil {
+	if pairs, err := f.top(topOptions{TanimotoThreshold: 0, Src: src}); err != nil {
 		t.Fatal(err)
 	} else if len(pairs) != 3 {
 		t.Fatalf("unexpected count: %d", len(pairs))
@@ -1150,7 +1150,7 @@ func BenchmarkFragment_Snapshot(b *testing.B) {
 
 	b.ReportAllocs()
 	// Open the fragment specified by the path.
-	f := NewFragment(*FragmentPath, "i", "f", ViewStandard, 0)
+	f := newFragment(*FragmentPath, "i", "f", ViewStandard, 0)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
@@ -1237,7 +1237,7 @@ func BenchmarkFragment_Import(b *testing.B) {
 /////////////////////////////////////////////////////////////////////
 
 // mustOpenFragment returns a new instance of Fragment with a temporary path.
-func mustOpenFragment(index, field, view string, shard uint64, cacheType string) *Fragment {
+func mustOpenFragment(index, field, view string, shard uint64, cacheType string) *fragment {
 	file, err := ioutil.TempFile("", "pilosa-fragment-")
 	if err != nil {
 		panic(err)
@@ -1248,7 +1248,7 @@ func mustOpenFragment(index, field, view string, shard uint64, cacheType string)
 		cacheType = DefaultCacheType
 	}
 
-	f := NewFragment(file.Name(), index, field, view, shard)
+	f := newFragment(file.Name(), index, field, view, shard)
 	f.CacheType = cacheType
 	f.RowAttrStore = newMemAttrStore()
 
@@ -1259,7 +1259,7 @@ func mustOpenFragment(index, field, view string, shard uint64, cacheType string)
 }
 
 // Reopen closes the fragment and reopens it as a new instance.
-func (f *Fragment) reopen() error {
+func (f *fragment) reopen() error {
 	if err := f.Close(); err != nil {
 		return err
 	}
@@ -1271,7 +1271,7 @@ func (f *Fragment) reopen() error {
 
 // mustSetBits sets columns on a row. Panic on error.
 // This function does not accept a timestamp or quantum.
-func (f *Fragment) mustSetBits(rowID uint64, columnIDs ...uint64) {
+func (f *fragment) mustSetBits(rowID uint64, columnIDs ...uint64) {
 	for _, columnID := range columnIDs {
 		if _, err := f.setBit(rowID, columnID); err != nil {
 			panic(err)

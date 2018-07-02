@@ -635,7 +635,7 @@ func (e *executor) executeTopNShard(ctx context.Context, index string, c *pql.Ca
 	if tanimotoThreshold > 100 {
 		return nil, errors.New("Tanimoto Threshold is from 1 to 100 only")
 	}
-	return f.top(TopOptions{
+	return f.top(topOptions{
 		N:                 int(n),
 		Src:               src,
 		RowIDs:            rowIDs,
