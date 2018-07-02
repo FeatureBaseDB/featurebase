@@ -262,8 +262,8 @@ type cluster struct {
 	InternalClient InternalClient
 }
 
-// NewCluster returns a new instance of Cluster with defaults.
-func NewCluster() *cluster {
+// newCluster returns a new instance of Cluster with defaults.
+func newCluster() *cluster {
 	return &cluster{
 		Hasher:     &jmphasher{},
 		partitionN: DefaultPartitionN,
@@ -708,7 +708,7 @@ func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*internal.R
 	// require that a replica fragment be the source data.
 	srcCluster := c
 	if action == resizeJobActionAdd && c.ReplicaN > 1 {
-		srcCluster = NewCluster()
+		srcCluster = newCluster()
 		srcCluster.Nodes = Nodes(c.Nodes).Clone()
 		srcCluster.Hasher = c.Hasher
 		srcCluster.partitionN = c.partitionN
@@ -1109,7 +1109,7 @@ func (c *cluster) generateResizeJobByAction(nodeAction nodeAction) (*resizeJob, 
 	j.Broadcaster = c.broadcaster
 
 	// toCluster is a clone of Cluster with the new node added/removed for comparison.
-	toCluster := NewCluster()
+	toCluster := newCluster()
 	toCluster.Nodes = Nodes(c.Nodes).Clone()
 	toCluster.Hasher = c.Hasher
 	toCluster.partitionN = c.partitionN

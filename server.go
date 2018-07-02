@@ -228,7 +228,7 @@ func OptServerClusterHasher(h Hasher) ServerOption {
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
 		closing:     make(chan struct{}),
-		cluster:     NewCluster(),
+		cluster:     newCluster(),
 		holder:      NewHolder(),
 		diagnostics: NewDiagnosticsCollector(DefaultDiagnosticServer),
 		systemInfo:  NewNopSystemInfo(),

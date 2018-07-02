@@ -104,7 +104,7 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	if err != nil {
 		return resp, errors.Wrap(err, "parsing")
 	}
-	execOpts := &ExecOptions{
+	execOpts := &execOptions{
 		Remote:          req.Remote,
 		ExcludeRowAttrs: req.ExcludeRowAttrs,
 		ExcludeColumns:  req.ExcludeColumns,

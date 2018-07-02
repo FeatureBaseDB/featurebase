@@ -34,7 +34,7 @@ func NewTestCluster(n int) *cluster {
 		panic(err)
 	}
 
-	c := NewCluster()
+	c := newCluster()
 	c.ReplicaN = 1
 	c.Hasher = NewTestModHasher()
 	c.Path = path
@@ -222,7 +222,7 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	h.Path = path
 
 	// cluster
-	c := NewCluster()
+	c := newCluster()
 	c.ReplicaN = 1
 	c.Hasher = NewTestModHasher()
 	c.Path = path

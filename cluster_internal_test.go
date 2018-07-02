@@ -43,7 +43,7 @@ func TestFragCombos(t *testing.T) {
 	node0 := &Node{ID: "node0", URI: *uri0}
 	node1 := &Node{ID: "node1", URI: *uri1}
 
-	c := NewCluster()
+	c := newCluster()
 	c.addNodeBasicSorted(node0)
 	c.addNodeBasicSorted(node1)
 
@@ -120,29 +120,29 @@ func TestFragSources(t *testing.T) {
 	node2 := &Node{ID: "node2", URI: *uri2}
 	node3 := &Node{ID: "node3", URI: *uri3}
 
-	c1 := NewCluster()
+	c1 := newCluster()
 	c1.ReplicaN = 1
 	c1.addNodeBasicSorted(node0)
 	c1.addNodeBasicSorted(node1)
 
-	c2 := NewCluster()
+	c2 := newCluster()
 	c2.ReplicaN = 1
 	c2.addNodeBasicSorted(node0)
 	c2.addNodeBasicSorted(node1)
 	c2.addNodeBasicSorted(node2)
 
-	c3 := NewCluster()
+	c3 := newCluster()
 	c3.ReplicaN = 2
 	c3.addNodeBasicSorted(node0)
 	c3.addNodeBasicSorted(node1)
 
-	c4 := NewCluster()
+	c4 := newCluster()
 	c4.ReplicaN = 2
 	c4.addNodeBasicSorted(node0)
 	c4.addNodeBasicSorted(node1)
 	c4.addNodeBasicSorted(node2)
 
-	c5 := NewCluster()
+	c5 := newCluster()
 	c5.ReplicaN = 2
 	c5.addNodeBasicSorted(node0)
 	c5.addNodeBasicSorted(node1)
@@ -340,7 +340,7 @@ func TestCluster_Owners(t *testing.T) {
 // Ensure the partitioner can assign a fragment to a partition.
 func TestCluster_Partition(t *testing.T) {
 	if err := quick.Check(func(index string, shard uint64, partitionN int) bool {
-		c := NewCluster()
+		c := newCluster()
 		c.partitionN = partitionN
 
 		partitionID := c.partition(index, shard)
@@ -457,10 +457,10 @@ func TestCluster_Coordinator(t *testing.T) {
 	node1 := &Node{ID: "node1", URI: uri1}
 	node2 := &Node{ID: "node2", URI: uri2}
 
-	c1 := *NewCluster()
+	c1 := *newCluster()
 	c1.Node = node1
 	c1.Coordinator = node1.ID
-	c2 := *NewCluster()
+	c2 := *newCluster()
 	c2.Node = node2
 	c2.Coordinator = node1.ID
 
