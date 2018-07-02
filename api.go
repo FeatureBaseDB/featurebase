@@ -36,7 +36,7 @@ import (
 // wrapped by a handler which provides an external interface (e.g. HTTP).
 type API struct {
 	Holder  *Holder
-	Cluster *Cluster
+	Cluster *cluster
 	server  *Server
 }
 

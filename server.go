@@ -51,7 +51,7 @@ type Server struct {
 
 	// Internal
 	holder          *Holder
-	cluster         *Cluster
+	cluster         *cluster
 	translateFile   *TranslateFile
 	diagnostics     *DiagnosticsCollector
 	executor        *Executor

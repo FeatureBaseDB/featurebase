@@ -1717,7 +1717,7 @@ type FragmentSyncer struct {
 	Fragment *Fragment
 
 	Node    *Node
-	Cluster *Cluster
+	Cluster *cluster
 
 	Closing <-chan struct{}
 }

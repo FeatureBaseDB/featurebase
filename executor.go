@@ -43,7 +43,7 @@ type Executor struct {
 
 	// Local hostname & cluster configuration.
 	Node    *Node
-	Cluster *Cluster
+	Cluster *cluster
 
 	// Client used for remote requests.
 	client InternalQueryClient
