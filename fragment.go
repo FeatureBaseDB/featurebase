@@ -1193,18 +1193,18 @@ func (f *fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, e
 	maxColumnID := uint64(ShardWidth)
 
 	// Create buffered iterator for local block.
-	itrs := make([]*BufIterator, 1, len(data)+1)
-	itrs[0] = NewBufIterator(
-		NewLimitIterator(
-			NewRoaringIterator(f.storage.Iterator()), maxRowID, maxColumnID,
+	itrs := make([]*bufIterator, 1, len(data)+1)
+	itrs[0] = newBufIterator(
+		newLimitIterator(
+			newRoaringIterator(f.storage.Iterator()), maxRowID, maxColumnID,
 		),
 	)
 
 	// Append buffered iterators for each incoming block.
 	for i := range data {
-		var itr Iterator = NewSliceIterator(data[i].rowIDs, data[i].columnIDs)
-		itr = NewLimitIterator(itr, maxRowID, maxColumnID)
-		itrs = append(itrs, NewBufIterator(itr))
+		var itr iterator = newSliceIterator(data[i].rowIDs, data[i].columnIDs)
+		itr = newLimitIterator(itr, maxRowID, maxColumnID)
+		itrs = append(itrs, newBufIterator(itr))
 	}
 
 	// Seek to initial pair.
