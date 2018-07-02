@@ -15,6 +15,8 @@
 package pilosa
 
 import (
+	"io/ioutil"
+	"os"
 	"reflect"
 	"testing"
 
@@ -146,4 +148,134 @@ func TestBSIGroup_BaseValue(t *testing.T) {
 			}
 		}
 	})
+}
+
+// Ensure field can open and retrieve a view.
+func TestField_DeleteView(t *testing.T) {
+	f := MustOpenField(FieldOptions{})
+	defer f.Close()
+
+	viewName := ViewStandard + "_v"
+
+	// Create view.
+	view, err := f.createViewIfNotExists(viewName)
+	if err != nil {
+		t.Fatal(err)
+	} else if view == nil {
+		t.Fatal("expected view")
+	}
+
+	err = f.deleteView(viewName)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if f.view(viewName) != nil {
+		t.Fatal("view still exists in field")
+	}
+
+	// Recreate view with same name, verify that the old view was not reused.
+	view2, err := f.createViewIfNotExists(viewName)
+	if err != nil {
+		t.Fatal(err)
+	} else if view == view2 {
+		t.Fatal("failed to create new view")
+	}
+}
+
+// TestField represents a test wrapper for Field.
+type TestField struct {
+	*Field
+}
+
+// NewTestField returns a new instance of TestField d/0.
+func NewTestField(options FieldOptions) *TestField {
+	path, err := ioutil.TempDir("", "pilosa-field-")
+	if err != nil {
+		panic(err)
+	}
+	field, err := NewField(path, "i", "f", options)
+	if err != nil {
+		panic(err)
+	}
+	return &TestField{Field: field}
+}
+
+// MustOpenField returns a new, opened field at a temporary path. Panic on error.
+func MustOpenField(options FieldOptions) *TestField {
+	f := NewTestField(options)
+	if err := f.Open(); err != nil {
+		panic(err)
+	}
+	return f
+}
+
+// Close closes the field and removes the underlying data.
+func (f *TestField) Close() error {
+	defer os.RemoveAll(f.Path())
+	return f.Field.Close()
+}
+
+// Reopen closes the index and reopens it.
+func (f *TestField) Reopen() error {
+	var err error
+	if err := f.Field.Close(); err != nil {
+		return err
+	}
+
+	path, index, name := f.Path(), f.Index(), f.Name()
+	f.Field, err = NewField(path, index, name, FieldOptions{})
+	if err != nil {
+		return err
+	}
+
+	if err := f.Open(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Ensure field can open and retrieve a view.
+func TestField_CreateViewIfNotExists(t *testing.T) {
+	f := MustOpenField(FieldOptions{})
+	defer f.Close()
+
+	// Create view.
+	view, err := f.createViewIfNotExists("v")
+	if err != nil {
+		t.Fatal(err)
+	} else if view == nil {
+		t.Fatal("expected view")
+	}
+
+	// Retrieve existing view.
+	view2, err := f.createViewIfNotExists("v")
+	if err != nil {
+		t.Fatal(err)
+	} else if view != view2 {
+		t.Fatal("view mismatch")
+	}
+
+	if view != f.view("v") {
+		t.Fatal("view mismatch")
+	}
+}
+
+func TestField_SetTimeQuantum(t *testing.T) {
+	f := MustOpenField(FieldOptions{Type: FieldTypeTime})
+	defer f.Close()
+
+	// Set & retrieve time quantum.
+	if err := f.SetTimeQuantum(TimeQuantum("YMDH")); err != nil {
+		t.Fatal(err)
+	} else if q := f.TimeQuantum(); q != TimeQuantum("YMDH") {
+		t.Fatalf("unexpected quantum: %s", q)
+	}
+
+	// Reload field and verify that it is persisted.
+	if err := f.Reopen(); err != nil {
+		t.Fatal(err)
+	} else if q := f.TimeQuantum(); q != TimeQuantum("YMDH") {
+		t.Fatalf("unexpected quantum (reopen): %s", q)
+	}
 }

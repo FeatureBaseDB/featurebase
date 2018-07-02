@@ -479,7 +479,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if f == nil {
 			return fmt.Errorf("Local Field not found: %s", obj.Field)
 		}
-		err := f.DeleteView(obj.View)
+		err := f.deleteView(obj.View)
 		if err != nil {
 			return err
 		}

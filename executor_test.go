@@ -531,9 +531,10 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).RecalculateCache()
-		hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).RecalculateCache()
-		hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 5).RecalculateCache()
+		err := c[0].RecalculateCaches()
+		if err != nil {
+			t.Fatalf("recalculating caches: %v", err)
+		}
 
 		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err != nil {
 			t.Fatal(err)
@@ -571,7 +572,10 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).RecalculateCache()
+		err := c[0].RecalculateCaches()
+		if err != nil {
+			t.Fatalf("recalculating caches: %v", err)
+		}
 
 		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err != nil {
 			t.Fatal(err)
@@ -664,9 +668,10 @@ func TestExecutor_Execute_TopN_Src(t *testing.T) {
 	hldr.SetBit("i", "other", 100, ShardWidth+1)
 	hldr.SetBit("i", "other", 100, ShardWidth+2)
 
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 0).RecalculateCache()
-	hldr.MustCreateRankedFragmentIfNotExists("i", "f", pilosa.ViewStandard, 1).RecalculateCache()
-	hldr.MustCreateRankedFragmentIfNotExists("i", "other", pilosa.ViewStandard, 1).RecalculateCache()
+	err := c[0].RecalculateCaches()
+	if err != nil {
+		t.Fatalf("recalculating caches: %v", err)
+	}
 
 	// Execute query.
 	if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, Row(other=100), n=3)`}); err != nil {

@@ -618,7 +618,7 @@ func (c *cluster) fragsByHost(idx *Index) fragsByHost {
 	fieldViews := make(viewsByField)
 
 	for _, field := range idx.Fields() {
-		for _, view := range field.Views() {
+		for _, view := range field.views() {
 			fieldViews.addView(field.Name(), view.name)
 
 		}
@@ -1222,7 +1222,7 @@ func (c *cluster) followResizeInstruction(instr *internal.ResizeInstruction) err
 				}
 
 				// Create view.
-				v, err := f.CreateViewIfNotExists(src.View)
+				v, err := f.createViewIfNotExists(src.View)
 				if err != nil {
 					return errors.Wrap(err, "creating view")
 				}

@@ -373,7 +373,7 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstructi
 			if destFragment == nil {
 				// Create fragment on destination if it doesn't exist.
 				f := destCluster.holder.Field(src.Index, src.Field)
-				v := f.View(src.View)
+				v := f.view(src.View)
 				var err error
 				destFragment, err = v.CreateFragmentIfNotExists(src.Shard)
 				if err != nil {

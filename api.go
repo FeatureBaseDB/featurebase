@@ -388,7 +388,7 @@ func (api *API) UnmarshalFragment(ctx context.Context, indexName string, fieldNa
 	}
 
 	// Retrieve view.
-	view, err := f.CreateViewIfNotExists(ViewStandard)
+	view, err := f.createViewIfNotExists(ViewStandard)
 	if err != nil {
 		return errors.Wrap(err, "creating view")
 	}
@@ -528,7 +528,7 @@ func (api *API) Views(ctx context.Context, indexName string, fieldName string) (
 	}
 
 	// Fetch views.
-	views := f.Views()
+	views := f.views()
 	return views, nil
 }
 
@@ -545,7 +545,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, fieldName stri
 	}
 
 	// Delete the view.
-	if err := f.DeleteView(viewName); err != nil {
+	if err := f.deleteView(viewName); err != nil {
 		// Ignore this error because views do not exist on all nodes due to shard distribution.
 		if err != ErrInvalidView {
 			return errors.Wrap(err, "deleting view")
