@@ -304,7 +304,7 @@ func (h *Holder) CreateIndex(name string, opt IndexOptions) (*Index, error) {
 
 	// Ensure index doesn't already exist.
 	if h.indexes[name] != nil {
-		return nil, ConflictError{ErrIndexExists}
+		return nil, NewConflictError(ErrIndexExists)
 	}
 	return h.createIndex(name, opt)
 }
@@ -374,7 +374,7 @@ func (h *Holder) DeleteIndex(name string) error {
 	// Confirm index exists.
 	index := h.index(name)
 	if index == nil {
-		return NotFoundError{ErrIndexNotFound}
+		return NewNotFoundError(ErrIndexNotFound)
 	}
 
 	// Close index.
