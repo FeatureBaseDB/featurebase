@@ -54,7 +54,7 @@ type Server struct {
 	cluster         *cluster
 	translateFile   *TranslateFile
 	diagnostics     *DiagnosticsCollector
-	executor        *Executor
+	executor        *executor
 	hosts           []string
 	clusterDisabled bool
 
@@ -158,7 +158,7 @@ func OptServerGCNotifier(gcn GCNotifier) ServerOption {
 
 func OptServerInternalClient(c InternalClient) ServerOption {
 	return func(s *Server) error {
-		s.executor = NewExecutor(OptExecutorInternalQueryClient(c))
+		s.executor = newExecutor(optExecutorInternalQueryClient(c))
 		s.defaultClient = c
 		s.cluster.InternalClient = c
 		return nil
