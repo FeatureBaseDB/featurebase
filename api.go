@@ -89,7 +89,7 @@ func (api *API) validate(f apiMethod) error {
 	if _, ok := validAPIMethods[state][f]; ok {
 		return nil
 	}
-	return ApiMethodNotAllowedError{errors.Errorf("api method %s not allowed in state %s", f, state)}
+	return NewApiMethodNotAllowedError(errors.Errorf("api method %s not allowed in state %s", f, state))
 }
 
 // Query parses a PQL query out of the request and executes it.
@@ -205,7 +205,7 @@ func (api *API) Index(ctx context.Context, indexName string) (*Index, error) {
 
 	index := api.holder.Index(indexName)
 	if index == nil {
-		return nil, ErrIndexNotFound
+		return nil, NewNotFoundError(ErrIndexNotFound)
 	}
 	return index, nil
 }
@@ -253,7 +253,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 	// Find index.
 	index := api.holder.Index(indexName)
 	if index == nil {
-		return nil, ErrIndexNotFound
+		return nil, NewNotFoundError(ErrIndexNotFound)
 	}
 
 	// Create field.
@@ -288,7 +288,7 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 	// Find index.
 	index := api.holder.Index(indexName)
 	if index == nil {
-		return ErrIndexNotFound
+		return NewNotFoundError(ErrIndexNotFound)
 	}
 
 	// Delete field from the index.
@@ -416,11 +416,11 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 
 	reqBytes, err := ioutil.ReadAll(body)
 	if err != nil {
-		return nil, BadRequestError{errors.Wrap(err, "read body error")}
+		return nil, NewBadRequestError(errors.Wrap(err, "read body error"))
 	}
 	var req internal.BlockDataRequest
 	if err := proto.Unmarshal(reqBytes, &req); err != nil {
-		return nil, BadRequestError{errors.Wrap(err, "unmarshal body error")}
+		return nil, NewBadRequestError(errors.Wrap(err, "unmarshal body error"))
 	}
 
 	// Retrieve fragment from holder.
@@ -575,7 +575,7 @@ func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []At
 	// Retrieve index from holder.
 	index := api.holder.Index(indexName)
 	if index == nil {
-		return nil, ErrIndexNotFound
+		return nil, NewNotFoundError(ErrIndexNotFound)
 	}
 
 	// Retrieve local blocks.
@@ -717,7 +717,7 @@ func (api *API) indexField(indexName string, fieldName string, shard uint64) (*I
 	index := api.holder.Index(indexName)
 	if index == nil {
 		api.server.logger.Printf("fragment error: index=%s, field=%s, shard=%d, err=%s", indexName, fieldName, shard, ErrIndexNotFound.Error())
-		return nil, nil, ErrIndexNotFound
+		return nil, nil, NewNotFoundError(ErrIndexNotFound)
 	}
 
 	// Retrieve field.

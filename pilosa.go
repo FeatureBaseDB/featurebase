@@ -71,11 +71,44 @@ type ApiMethodNotAllowedError struct {
 	error
 }
 
+// NewApiMethodNotAllowedError returns err wrapped in an ApiMethodNotAllowedError.
+func NewApiMethodNotAllowedError(err error) ApiMethodNotAllowedError {
+	return ApiMethodNotAllowedError{err}
+}
+
 // BadRequestError wraps an error value to signify that a request could not be
 // read, decoded, or parsed such that in an HTTP scenario, http.StatusBadRequest
 // would be returned.
 type BadRequestError struct {
 	error
+}
+
+// NewBadRequestError returns err wrapped in a BadRequestError.
+func NewBadRequestError(err error) BadRequestError {
+	return BadRequestError{err}
+}
+
+// ConflictError wraps an error value to signify that a conflict with an
+// existing resource occurred such that in an HTTP scenario, http.StatusConflict
+// would be returned.
+type ConflictError struct {
+	error
+}
+
+// NewConflictError returns err wrapped in a ConflictError.
+func NewConflictError(err error) ConflictError {
+	return ConflictError{err}
+}
+
+// NotFoundError wraps an error value to signify that a resource was not found
+// such that in an HTTP scenario, http.StatusNotFound would be returned.
+type NotFoundError struct {
+	error
+}
+
+// NewNotFoundError returns err wrapped in a NotFoundError.
+func NewNotFoundError(err error) NotFoundError {
+	return NotFoundError{err}
 }
 
 // Regular expression to validate index and field names.

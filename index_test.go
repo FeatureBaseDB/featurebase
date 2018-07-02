@@ -21,6 +21,7 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/test"
+	"github.com/pkg/errors"
 )
 
 // ShardWidth is a helper reference to use when testing.
@@ -194,13 +195,14 @@ func TestIndex_DeleteField(t *testing.T) {
 		t.Fatal("expected nil field")
 	}
 
-	// Delete again to make sure it doesn't error.
-	if err := index.DeleteField("f"); err != nil {
-		t.Fatal(err)
+	// Delete again to make sure it errors.
+	err := index.DeleteField("f")
+	if !isNotFoundError(err) {
+		t.Fatalf("expected 'field not found' error, got: %#v", err)
 	}
 }
 
-// Ensure index can delete a field.
+// Ensure index can validate its name.
 func TestIndex_InvalidName(t *testing.T) {
 	path, err := ioutil.TempDir("", "pilosa-index-")
 	if err != nil {
@@ -213,4 +215,10 @@ func TestIndex_InvalidName(t *testing.T) {
 	if index != nil {
 		t.Fatalf("unexpected index name %v", index)
 	}
+}
+
+func isNotFoundError(err error) bool {
+	root := errors.Cause(err)
+	_, ok := root.(pilosa.NotFoundError)
+	return ok
 }
