@@ -293,7 +293,7 @@ func (c *InternalClient) Import(ctx context.Context, index, field string, shard 
 
 	// Import to each node.
 	for _, node := range nodes {
-		if err := c.importNode(ctx, node, buf); err != nil {
+		if err := c.importNode(ctx, node, index, field, buf); err != nil {
 			return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
 		}
 	}
@@ -319,7 +319,7 @@ func (c *InternalClient) ImportK(ctx context.Context, index, field string, colum
 	}
 
 	// Import to node.
-	if err := c.importNode(ctx, node, buf); err != nil {
+	if err := c.importNode(ctx, node, index, field, buf); err != nil {
 		return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
 	}
 
@@ -386,9 +386,10 @@ func marshalImportPayloadK(index, field string, bits []pilosa.Bit) ([]byte, erro
 }
 
 // importNode sends a pre-marshaled import request to a node.
-func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, buf []byte) error {
+func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, index, field string, buf []byte) error {
 	// Create URL & HTTP request.
-	u := nodePathToURL(node, "/import")
+	path := fmt.Sprintf("/index/%s/field/%s/import", index, field)
+	u := nodePathToURL(node, path)
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
 	if err != nil {
 		return errors.Wrap(err, "creating request")
@@ -444,7 +445,7 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 
 	// Import to each node.
 	for _, node := range nodes {
-		if err := c.importValueNode(ctx, node, buf); err != nil {
+		if err := c.importNode(ctx, node, index, field, buf); err != nil {
 			return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
 		}
 	}
@@ -470,44 +471,6 @@ func marshalImportValuePayload(index, field string, shard uint64, vals []pilosa.
 		return nil, fmt.Errorf("marshal import request: %s", err)
 	}
 	return buf, nil
-}
-
-// importValueNode sends a pre-marshaled import request to a node.
-func (c *InternalClient) importValueNode(ctx context.Context, node *pilosa.Node, buf []byte) error {
-	// Create URL & HTTP request.
-	u := nodePathToURL(node, "/import-value")
-	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
-	if err != nil {
-		return errors.Wrap(err, "creating request")
-	}
-	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
-	req.Header.Set("Content-Type", "application/x-protobuf")
-	req.Header.Set("Accept", "application/x-protobuf")
-	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
-
-	// Execute request against the host.
-	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
-	if err != nil {
-		return errors.Wrap(err, "executing request")
-	}
-	defer resp.Body.Close()
-
-	// Read body and unmarshal response.
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return errors.Wrap(err, "reading")
-	} else if resp.StatusCode != http.StatusOK {
-		return errors.New(string(body))
-	}
-
-	var isresp internal.ImportResponse
-	if err := proto.Unmarshal(body, &isresp); err != nil {
-		return fmt.Errorf("unmarshal import response: %s", err)
-	} else if s := isresp.Err; s != "" {
-		return errors.New(s)
-	}
-
-	return nil
 }
 
 // ExportCSV bulk exports data for a single shard from a host to CSV format.
