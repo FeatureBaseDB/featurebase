@@ -23,8 +23,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Broadcaster is an interface for broadcasting messages.
-type Broadcaster interface {
+// broadcaster is an interface for broadcasting messages.
+type broadcaster interface {
 	SendSync(pb proto.Message) error
 	SendAsync(pb proto.Message) error
 	SendTo(to *Node, pb proto.Message) error
@@ -35,24 +35,18 @@ func init() {
 }
 
 // NopBroadcaster represents a Broadcaster that doesn't do anything.
-var NopBroadcaster Broadcaster
+var NopBroadcaster broadcaster
 
 type nopBroadcaster struct{}
 
 // SendSync A no-op implementation of Broadcaster SendSync method.
-func (n *nopBroadcaster) SendSync(pb proto.Message) error {
-	return nil
-}
+func (n nopBroadcaster) SendSync(pb proto.Message) error { return nil }
 
 // SendAsync A no-op implementation of Broadcaster SendAsync method.
-func (n *nopBroadcaster) SendAsync(pb proto.Message) error {
-	return nil
-}
+func (n nopBroadcaster) SendAsync(pb proto.Message) error { return nil }
 
 // SendTo is a no-op implementation of Broadcaster SendTo method.
-func (c *nopBroadcaster) SendTo(to *Node, pb proto.Message) error {
-	return nil
-}
+func (c nopBroadcaster) SendTo(to *Node, pb proto.Message) error { return nil }
 
 // Broadcast message types.
 const (

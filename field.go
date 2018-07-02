@@ -64,7 +64,7 @@ type Field struct {
 	// Row attribute storage and cache
 	rowAttrStore AttrStore
 
-	broadcaster Broadcaster
+	broadcaster broadcaster
 	Stats       StatsClient
 
 	// Field options.
@@ -133,7 +133,7 @@ func NewField(path, index, name string, options FieldOptions) (*Field, error) {
 
 		views: make(map[string]*View),
 
-		rowAttrStore: NopAttrStore,
+		rowAttrStore: nopStore,
 
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,

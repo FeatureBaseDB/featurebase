@@ -80,7 +80,7 @@ func newExecutor(opts ...executorOption) *executor {
 }
 
 // Execute executes a PQL query.
-func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *ExecOptions) ([]interface{}, error) {
+func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *execOptions) ([]interface{}, error) {
 	// Verify that an index is set.
 	if index == "" {
 		return nil, ErrIndexRequired
@@ -98,7 +98,7 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 
 	// Default options.
 	if opt == nil {
-		opt = &ExecOptions{}
+		opt = &execOptions{}
 	}
 
 	// Translate query keys to ids, if necessary.
@@ -123,7 +123,7 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	return results, nil
 }
 
-func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *ExecOptions) ([]interface{}, error) {
+func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *execOptions) ([]interface{}, error) {
 	// Don't bother calculating shards for query types that don't require it.
 	needsShards := needsShards(q.Calls)
 
@@ -162,7 +162,7 @@ func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shar
 }
 
 // executeCall executes a call.
-func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (interface{}, error) {
+func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (interface{}, error) {
 	if err := e.validateCallArgs(c); err != nil {
 		return nil, errors.Wrap(err, "validating args")
 	}
@@ -220,7 +220,7 @@ func (e *executor) validateCallArgs(c *pql.Call) error {
 }
 
 // executeSum executes a Sum() call.
-func (e *executor) executeSum(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (ValCount, error) {
+func (e *executor) executeSum(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (ValCount, error) {
 	if field := c.Args["field"]; field == "" {
 		return ValCount{}, errors.New("Sum(): field required")
 	}
@@ -253,7 +253,7 @@ func (e *executor) executeSum(ctx context.Context, index string, c *pql.Call, sh
 }
 
 // executeMin executes a Min() call.
-func (e *executor) executeMin(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (ValCount, error) {
+func (e *executor) executeMin(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (ValCount, error) {
 	if field := c.Args["field"]; field == "" {
 		return ValCount{}, errors.New("Min(): field required")
 	}
@@ -286,7 +286,7 @@ func (e *executor) executeMin(ctx context.Context, index string, c *pql.Call, sh
 }
 
 // executeMax executes a Max() call.
-func (e *executor) executeMax(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (ValCount, error) {
+func (e *executor) executeMax(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (ValCount, error) {
 	if field := c.Args["field"]; field == "" {
 		return ValCount{}, errors.New("Max(): field required")
 	}
@@ -319,7 +319,7 @@ func (e *executor) executeMax(ctx context.Context, index string, c *pql.Call, sh
 }
 
 // executeBitmapCall executes a call that returns a bitmap.
-func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (*Row, error) {
+func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (*Row, error) {
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(shard uint64) (interface{}, error) {
 		return e.executeBitmapCallShard(ctx, index, c, shard)
@@ -521,7 +521,7 @@ func (e *executor) executeMaxShard(ctx context.Context, index string, c *pql.Cal
 // executeTopN executes a TopN() call.
 // This first performs the TopN() to determine the top results and then
 // requeries to retrieve the full counts for each of the top results.
-func (e *executor) executeTopN(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *ExecOptions) ([]Pair, error) {
+func (e *executor) executeTopN(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) ([]Pair, error) {
 	idsArg, _, err := c.UintSliceArg("ids")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopN: %v", err)
@@ -560,7 +560,7 @@ func (e *executor) executeTopN(ctx context.Context, index string, c *pql.Call, s
 	return trimmedList, nil
 }
 
-func (e *executor) executeTopNShards(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *ExecOptions) ([]Pair, error) {
+func (e *executor) executeTopNShards(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) ([]Pair, error) {
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(shard uint64) (interface{}, error) {
 		return e.executeTopNShard(ctx, index, c, shard)
@@ -964,7 +964,7 @@ func (e *executor) executeXorShard(ctx context.Context, index string, c *pql.Cal
 }
 
 // executeCount executes a count() call.
-func (e *executor) executeCount(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *ExecOptions) (uint64, error) {
+func (e *executor) executeCount(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (uint64, error) {
 	if len(c.Children) == 0 {
 		return 0, errors.New("Count() requires an input bitmap")
 	} else if len(c.Children) > 1 {
@@ -996,7 +996,7 @@ func (e *executor) executeCount(ctx context.Context, index string, c *pql.Call, 
 }
 
 // executeClearBit executes a Clear() call.
-func (e *executor) executeClearBit(ctx context.Context, index string, c *pql.Call, opt *ExecOptions) (bool, error) {
+func (e *executor) executeClearBit(ctx context.Context, index string, c *pql.Call, opt *execOptions) (bool, error) {
 	fieldName, err := c.FieldArg()
 	if err != nil {
 		return false, errors.New("Clear() argument required: field")
@@ -1031,7 +1031,7 @@ func (e *executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 }
 
 // executeClearBitField executes a Clear() call for a single view.
-func (e *executor) executeClearBitField(ctx context.Context, index string, c *pql.Call, f *Field, colID, rowID uint64, opt *ExecOptions) (bool, error) {
+func (e *executor) executeClearBitField(ctx context.Context, index string, c *pql.Call, f *Field, colID, rowID uint64, opt *execOptions) (bool, error) {
 	shard := colID / ShardWidth
 	ret := false
 	for _, node := range e.Cluster.shardNodes(index, shard) {
@@ -1061,7 +1061,7 @@ func (e *executor) executeClearBitField(ctx context.Context, index string, c *pq
 }
 
 // executeSetBit executes a Set() call.
-func (e *executor) executeSetBit(ctx context.Context, index string, c *pql.Call, opt *ExecOptions) (bool, error) {
+func (e *executor) executeSetBit(ctx context.Context, index string, c *pql.Call, opt *execOptions) (bool, error) {
 	fieldName, err := c.FieldArg()
 	if err != nil {
 		return false, errors.New("Set() argument required: field")
@@ -1106,7 +1106,7 @@ func (e *executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 }
 
 // executeSetBitField executes a Set() call for a specific view.
-func (e *executor) executeSetBitField(ctx context.Context, index string, c *pql.Call, f *Field, colID, rowID uint64, timestamp *time.Time, opt *ExecOptions) (bool, error) {
+func (e *executor) executeSetBitField(ctx context.Context, index string, c *pql.Call, f *Field, colID, rowID uint64, timestamp *time.Time, opt *execOptions) (bool, error) {
 	shard := colID / ShardWidth
 	ret := false
 
@@ -1138,7 +1138,7 @@ func (e *executor) executeSetBitField(ctx context.Context, index string, c *pql.
 }
 
 // executeSetValue executes a SetValue() call.
-func (e *executor) executeSetValue(ctx context.Context, index string, c *pql.Call, opt *ExecOptions) error {
+func (e *executor) executeSetValue(ctx context.Context, index string, c *pql.Call, opt *execOptions) error {
 	// Parse labels.
 	columnID, ok, err := c.UintArg(columnLabel)
 	if err != nil {
@@ -1198,7 +1198,7 @@ func (e *executor) executeSetValue(ctx context.Context, index string, c *pql.Cal
 }
 
 // executeSetRowAttrs executes a SetRowAttrs() call.
-func (e *executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.Call, opt *ExecOptions) error {
+func (e *executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.Call, opt *execOptions) error {
 	fieldName, ok := c.Args["_field"].(string)
 	if !ok {
 		return errors.New("SetRowAttrs() field required")
@@ -1255,7 +1255,7 @@ func (e *executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 }
 
 // executeBulkSetRowAttrs executes a set of SetRowAttrs() calls.
-func (e *executor) executeBulkSetRowAttrs(ctx context.Context, index string, calls []*pql.Call, opt *ExecOptions) ([]interface{}, error) {
+func (e *executor) executeBulkSetRowAttrs(ctx context.Context, index string, calls []*pql.Call, opt *execOptions) ([]interface{}, error) {
 	// Collect attributes by field/id.
 	m := make(map[string]map[uint64]map[string]interface{})
 	for _, c := range calls {
@@ -1342,7 +1342,7 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 }
 
 // executeSetColumnAttrs executes a SetColumnAttrs() call.
-func (e *executor) executeSetColumnAttrs(ctx context.Context, index string, c *pql.Call, opt *ExecOptions) error {
+func (e *executor) executeSetColumnAttrs(ctx context.Context, index string, c *pql.Call, opt *execOptions) error {
 	// Retrieve index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
@@ -1390,7 +1390,7 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 }
 
 // exec executes a PQL query remotely for a set of shards on a node.
-func (e *executor) remoteExec(ctx context.Context, node *Node, index string, q *pql.Query, shards []uint64, opt *ExecOptions) (results []interface{}, err error) {
+func (e *executor) remoteExec(ctx context.Context, node *Node, index string, q *pql.Query, shards []uint64, opt *execOptions) (results []interface{}, err error) {
 	// Encode request object.
 	pbreq := &internal.QueryRequest{
 		Query:  q.String(),
@@ -1461,7 +1461,7 @@ loop:
 //
 // If a mapping of shards to a node fails then the shards are resplit across
 // secondary nodes and retried. This continues to occur until all nodes are exhausted.
-func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64, c *pql.Call, opt *ExecOptions, mapFn mapFunc, reduceFn reduceFunc) (interface{}, error) {
+func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64, c *pql.Call, opt *execOptions, mapFn mapFunc, reduceFn reduceFunc) (interface{}, error) {
 	ch := make(chan mapResponse)
 
 	// Wrap context with a cancel to kill goroutines on exit.
@@ -1520,7 +1520,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 	}
 }
 
-func (e *executor) mapper(ctx context.Context, ch chan mapResponse, nodes []*Node, index string, shards []uint64, c *pql.Call, opt *ExecOptions, mapFn mapFunc, reduceFn reduceFunc) error {
+func (e *executor) mapper(ctx context.Context, ch chan mapResponse, nodes []*Node, index string, shards []uint64, c *pql.Call, opt *execOptions, mapFn mapFunc, reduceFn reduceFunc) error {
 	// Group shards together by nodes.
 	m, err := e.shardsByNode(nodes, index, shards)
 	if err != nil {
@@ -1710,8 +1710,8 @@ type mapResponse struct {
 	err    error
 }
 
-// ExecOptions represents an execution context for a single Execute() call.
-type ExecOptions struct {
+// execOptions represents an execution context for a single Execute() call.
+type execOptions struct {
 	Remote          bool
 	ExcludeRowAttrs bool
 	ExcludeColumns  bool

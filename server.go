@@ -40,7 +40,7 @@ const (
 )
 
 // Ensure Server implements interfaces.
-var _ Broadcaster = &Server{}
+var _ broadcaster = &Server{}
 var _ MemberServer = &Server{}
 
 // Server represents a holder wrapped by a running HTTP server.
@@ -228,7 +228,7 @@ func OptServerClusterHasher(h Hasher) ServerOption {
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
 		closing:     make(chan struct{}),
-		cluster:     NewCluster(),
+		cluster:     newCluster(),
 		holder:      NewHolder(),
 		diagnostics: NewDiagnosticsCollector(DefaultDiagnosticServer),
 		systemInfo:  NewNopSystemInfo(),

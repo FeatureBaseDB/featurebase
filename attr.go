@@ -42,57 +42,39 @@ type AttrStore interface {
 	BlockData(i uint64) (map[uint64]map[string]interface{}, error)
 }
 
-func init() {
-	NopAttrStore = &nopAttrStore{}
-}
+// nopStore represents an AttrStore that doesn't do anything.
+var nopStore AttrStore = nopAttrStore{}
 
-// NopAttrStore represents an AttrStore that doesn't do anything.
-var NopAttrStore AttrStore
-
-func NewNopAttrStore(string) AttrStore {
-	return &nopAttrStore{}
-}
+// newNopAttrStore returns an attr store which does nothing. It returns a global
+// object to avoid unecessary allocations.
+func newNopAttrStore(string) AttrStore { return nopStore }
 
 // nopAttrStore represents a no-op implementation of the AttrStore interface.
 type nopAttrStore struct{}
 
 // Path is a no-op implementation of AttrStore Path method.
-func (s *nopAttrStore) Path() string { return "" }
+func (s nopAttrStore) Path() string { return "" }
 
 // Open is a no-op implementation of AttrStore Open method.
-func (s *nopAttrStore) Open() error {
-	return nil
-}
+func (s nopAttrStore) Open() error { return nil }
 
 // Close is a no-op implementation of AttrStore Close method.
-func (s *nopAttrStore) Close() error {
-	return nil
-}
+func (s nopAttrStore) Close() error { return nil }
 
 // Attrs is a no-op implementation of AttrStore Attrs method.
-func (s *nopAttrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
-	return nil, nil
-}
+func (s nopAttrStore) Attrs(id uint64) (m map[string]interface{}, err error) { return nil, nil }
 
 // SetAttrs is a no-op implementation of AttrStore SetAttrs method.
-func (s *nopAttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
-	return nil
-}
+func (s nopAttrStore) SetAttrs(id uint64, m map[string]interface{}) error { return nil }
 
 // SetBulkAttrs is a no-op implementation of AttrStore SetBulkAttrs method.
-func (s *nopAttrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
-	return nil
-}
+func (s nopAttrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error { return nil }
 
 // Blocks is a no-op implementation of AttrStore Blocks method.
-func (s *nopAttrStore) Blocks() ([]AttrBlock, error) {
-	return nil, nil
-}
+func (s nopAttrStore) Blocks() ([]AttrBlock, error) { return nil, nil }
 
 // BlockData is a no-op implementation of AttrStore BlockData method.
-func (s *nopAttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) {
-	return nil, nil
-}
+func (s nopAttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) { return nil, nil }
 
 // AttrBlock represents a checksummed block of the attribute store.
 type AttrBlock struct {

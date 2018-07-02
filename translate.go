@@ -24,11 +24,7 @@ const (
 )
 
 const (
-	DefaultReplicationRetryInterval = 1 * time.Second
-)
-
-const (
-	ReplicationBufferSize = 65536
+	defaultReplicationRetryInterval = 1 * time.Second
 )
 
 var (
@@ -90,7 +86,7 @@ func NewTranslateFile() *TranslateFile {
 
 		MapSize: DefaultMapSize,
 
-		ReplicationRetryInterval: DefaultReplicationRetryInterval,
+		ReplicationRetryInterval: defaultReplicationRetryInterval,
 	}
 }
 
@@ -216,7 +212,7 @@ func (s *TranslateFile) applyEntry(entry *LogEntry, offset int64) error {
 		key := entry.Keys[i]
 
 		// Determine key offset based on ID size.
-		sz := int64(UvarintSize(id))
+		sz := int64(uVarintSize(id))
 		idx.insert(id, offset+sz)
 
 		// Move sequence forward.
@@ -225,7 +221,7 @@ func (s *TranslateFile) applyEntry(entry *LogEntry, offset int64) error {
 		}
 
 		// Move offset forward.
-		offset += sz + int64(UvarintSize(uint64(len(key)))) + int64(len(key))
+		offset += sz + int64(uVarintSize(uint64(len(key)))) + int64(len(key))
 	}
 
 	return nil
@@ -564,11 +560,11 @@ type LogEntry struct {
 
 // HeaderSize returns the number of bytes required for size, type, index, frame, & pair count.
 func (e *LogEntry) HeaderSize() int64 {
-	sz := UvarintSize(e.Length) + // total entry length
+	sz := uVarintSize(e.Length) + // total entry length
 		1 + // type
-		UvarintSize(uint64(len(e.Index))) + len(e.Index) + // Index length and data
-		UvarintSize(uint64(len(e.Frame))) + len(e.Frame) + // Frame length and data
-		UvarintSize(uint64(len(e.IDs))) // ID/Key pair count
+		uVarintSize(uint64(len(e.Index))) + len(e.Index) + // Index length and data
+		uVarintSize(uint64(len(e.Frame))) + len(e.Frame) + // Frame length and data
+		uVarintSize(uint64(len(e.IDs))) // ID/Key pair count
 	return int64(sz)
 }
 
@@ -578,13 +574,13 @@ func (e *LogEntry) ReadFrom(r io.Reader) (_ int64, err error) {
 
 	// Read the entry length.
 	if e.Length, err = binary.ReadUvarint(br); err != nil {
-		return int64(UvarintSize(e.Length)), err
+		return int64(uVarintSize(e.Length)), err
 	}
 
 	// Slurp entire entry and replace reader.
 	buf := make([]byte, e.Length)
 	n, err := io.ReadFull(r, buf)
-	n64 := int64(n + UvarintSize(e.Length))
+	n64 := int64(n + uVarintSize(e.Length))
 	if err != nil {
 		return n64, err
 	}
@@ -710,8 +706,8 @@ func (e *LogEntry) WriteTo(w io.Writer) (_ int64, err error) {
 	return int64(sz) + n, err
 }
 
-// ValidLogEntriesLen returns the maximum length of p that contains valid entries.
-func ValidLogEntriesLen(p []byte) (n int) {
+// validLogEntriesLen returns the maximum length of p that contains valid entries.
+func validLogEntriesLen(p []byte) (n int) {
 	r := bytes.NewReader(p)
 	for {
 		if sz, err := binary.ReadUvarint(r); err != nil {
@@ -988,13 +984,13 @@ func (r *TranslateFileReader) read(p []byte) (n int, err error) {
 	// Read data from file at offset.
 	// Limit the number of bytes read to only whole entries.
 	n, err = r.file.ReadAt(p, r.offset)
-	n = ValidLogEntriesLen(p[:n])
+	n = validLogEntriesLen(p[:n])
 	r.offset += int64(n)
 	return n, err
 }
 
 // Copied & modified from encoding/binary.
-func UvarintSize(x uint64) (i int) {
+func uVarintSize(x uint64) (i int) {
 	for x >= 0x80 {
 		x >>= 7
 		i++

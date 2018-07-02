@@ -46,7 +46,7 @@ type Index struct {
 	// Column attribute storage and cache.
 	columnAttrStore AttrStore
 
-	broadcaster Broadcaster
+	broadcaster broadcaster
 	Stats       StatsClient
 
 	Logger Logger
@@ -66,8 +66,8 @@ func NewIndex(path, name string) (*Index, error) {
 
 		remoteMaxShard: 0,
 
-		NewAttrStore:    NewNopAttrStore,
-		columnAttrStore: NopAttrStore,
+		NewAttrStore:    newNopAttrStore,
+		columnAttrStore: nopStore,
 
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
