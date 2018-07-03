@@ -237,6 +237,12 @@ func (f *TestField) Reopen() error {
 }
 
 func (f *TestField) MustSetBit(row, col uint64, ts ...time.Time) {
+	if len(ts) == 0 {
+		_, err := f.Field.SetBit(row, col, nil)
+		if err != nil {
+			panic(err)
+		}
+	}
 	for _, t := range ts {
 		_, err := f.Field.SetBit(row, col, &t)
 		if err != nil {

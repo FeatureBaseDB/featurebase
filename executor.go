@@ -135,7 +135,7 @@ func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shar
 		if idx == nil {
 			return nil, ErrIndexNotFound
 		}
-		maxShard := idx.MaxShard()
+		maxShard := idx.maxShard()
 
 		// Generate a slice of all shards.
 		shards = make([]uint64, maxShard+1)
