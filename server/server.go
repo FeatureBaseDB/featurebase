@@ -139,7 +139,7 @@ func (m *Command) Start() (err error) {
 		return errors.Wrap(err, "opening server")
 	}
 
-	m.logger.Printf("Listening as %s\n", m.Server.URI)
+	m.logger.Printf("Listening as %s\n", m.API.Node().URI)
 
 	return nil
 }
@@ -309,7 +309,7 @@ func (m *Command) SetupNetworking() error {
 	}
 
 	// get the host portion of addr to use for binding
-	gossipHost := m.Server.URI.Host()
+	gossipHost := m.API.Node().URI.Host()
 	m.gossipTransport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
 	if err != nil {
 		return errors.Wrap(err, "getting transport")
@@ -317,7 +317,7 @@ func (m *Command) SetupNetworking() error {
 
 	gossipMemberSet, err := gossip.NewGossipMemberSet(
 		m.Config.Gossip,
-		m.Server,
+		m.API,
 		gossip.WithLogger(m.logger.Logger()),
 		gossip.WithTransport(m.gossipTransport),
 	)
