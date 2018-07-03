@@ -44,7 +44,7 @@ func TestMain_Set_Quick(t *testing.T) {
 		defer m.Close()
 
 		// Create client.
-		client, err := http.NewInternalClient(m.Server.URI.HostPort(), http.GetHTTPClient(nil))
+		client, err := http.NewInternalClient(m.API.Node().URI.HostPort(), http.GetHTTPClient(nil))
 		if err != nil {
 			t.Fatal(err)
 		}

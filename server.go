@@ -36,12 +36,11 @@ import (
 
 // Default server settings.
 const (
-	DefaultDiagnosticServer = "https://diagnostics.pilosa.com/v0/diagnostics"
+	defaultDiagnosticServer = "https://diagnostics.pilosa.com/v0/diagnostics"
 )
 
 // Ensure Server implements interfaces.
 var _ broadcaster = &Server{}
-var _ MemberServer = &Server{}
 
 // Server represents a holder wrapped by a running HTTP server.
 type Server struct {
@@ -64,7 +63,7 @@ type Server struct {
 	logger     Logger
 
 	nodeID              string
-	URI                 URI
+	uri                 URI
 	antiEntropyInterval time.Duration
 	metricInterval      time.Duration
 	diagnosticInterval  time.Duration
@@ -188,7 +187,7 @@ func OptServerDiagnosticsInterval(dur time.Duration) ServerOption {
 
 func OptServerURI(uri *URI) ServerOption {
 	return func(s *Server) error {
-		s.URI = *uri
+		s.uri = *uri
 		return nil
 	}
 }
@@ -230,7 +229,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		closing:     make(chan struct{}),
 		cluster:     newCluster(),
 		holder:      NewHolder(),
-		diagnostics: NewDiagnosticsCollector(DefaultDiagnosticServer),
+		diagnostics: NewDiagnosticsCollector(defaultDiagnosticServer),
 		systemInfo:  NewNopSystemInfo(),
 
 		gcNotifier: NopGCNotifier,
@@ -277,7 +276,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	// Set Cluster Node.
 	node := &Node{
 		ID:            s.nodeID,
-		URI:           s.URI,
+		URI:           s.uri,
 		IsCoordinator: s.cluster.Coordinator == s.nodeID,
 	}
 	s.cluster.Node = node
@@ -431,8 +430,8 @@ func (s *Server) monitorAntiEntropy() {
 	}
 }
 
-// ReceiveMessage represents an implementation of BroadcastHandler.
-func (s *Server) ReceiveMessage(pb proto.Message) error {
+// receiveMessage represents an implementation of BroadcastHandler.
+func (s *Server) receiveMessage(pb proto.Message) error {
 	switch obj := pb.(type) {
 	case *internal.CreateShardMessage:
 		idx := s.holder.Index(obj.Index)
@@ -512,7 +511,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 	case *internal.NodeEventMessage:
 		s.cluster.ReceiveEvent(DecodeNodeEvent(obj))
 	case *internal.NodeStatus:
-		s.HandleRemoteStatus(pb)
+		s.handleRemoteStatus(pb)
 	}
 
 	return nil
@@ -525,7 +524,7 @@ func (s *Server) SendSync(pb proto.Message) error {
 		node := node
 		s.logger.Printf("SendSync to: %s", node.URI)
 		// Don't forward the message to ourselves.
-		if s.URI == node.URI {
+		if s.uri == node.URI {
 			continue
 		}
 
@@ -548,44 +547,17 @@ func (s *Server) SendTo(to *Node, pb proto.Message) error {
 	return s.defaultClient.SendMessage(context.Background(), &to.URI, pb)
 }
 
-// Node returns the pilosa.Node object. It is used by membership protocols to
+// node returns the pilosa.node object. It is used by membership protocols to
 // get this node's name(ID), location(URI), and coordinator status.
-func (s *Server) Node() *Node {
-	return s.cluster.Node
+func (s *Server) node() Node {
+	return *s.cluster.Node
 }
 
-// Server implements StatusHandler.
-// LocalStatus is used to periodically sync information
-// between nodes. Under normal conditions, nodes should
-// remain in sync through Broadcast messages. For cases
-// where a node fails to receive a Broadcast message, or
-// when a new (empty) node needs to get in sync with the
-// rest of the cluster, two things are shared via gossip:
-// - MaxShard by Index
-// - Schema
-// In a gossip implementation, memberlist.Delegate.LocalState() uses this.
-func (s *Server) LocalStatus() (proto.Message, error) {
-	if s.cluster == nil {
-		return nil, errors.New("Server.Cluster is nil")
-	}
-	if s.holder == nil {
-		return nil, errors.New("Server.Holder is nil")
-	}
-
-	ns := internal.NodeStatus{
-		Node:      EncodeNode(s.cluster.Node),
-		MaxShards: s.holder.encodeMaxShards(),
-		Schema:    s.holder.encodeSchema(),
-	}
-
-	return &ns, nil
-}
-
-// HandleRemoteStatus receives incoming NodeStatus from remote nodes.
-func (s *Server) HandleRemoteStatus(pb proto.Message) error {
+// handleRemoteStatus receives incoming NodeStatus from remote nodes.
+func (s *Server) handleRemoteStatus(pb proto.Message) {
 	// Ignore NodeStatus messages until the cluster is in a Normal state.
 	if s.cluster.State() != ClusterStateNormal {
-		return nil
+		return
 	}
 
 	go func() {
@@ -597,8 +569,6 @@ func (s *Server) HandleRemoteStatus(pb proto.Message) error {
 			s.logger.Printf("merge remote status: %s", err)
 		}
 	}()
-
-	return nil
 }
 
 func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
@@ -643,7 +613,7 @@ func (s *Server) monitorDiagnostics() {
 
 	s.diagnostics.Logger = s.logger
 	s.diagnostics.SetVersion(Version)
-	s.diagnostics.Set("Host", s.URI.host)
+	s.diagnostics.Set("Host", s.uri.host)
 	s.diagnostics.Set("Cluster", strings.Join(s.cluster.nodeIDs(), ","))
 	s.diagnostics.Set("NumNodes", len(s.cluster.Nodes))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
@@ -757,11 +727,4 @@ func expandDirName(path string) (string, error) {
 		return filepath.Join(HomeDir, strings.TrimPrefix(path, prefix)), nil
 	}
 	return path, nil
-}
-
-type MemberServer interface {
-	ReceiveMessage(proto.Message) error
-	LocalStatus() (proto.Message, error)
-	HandleRemoteStatus(proto.Message) error
-	Node() *Node
 }

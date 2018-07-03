@@ -477,8 +477,10 @@ func (api *API) Hosts(ctx context.Context) []*Node {
 	return api.cluster.Nodes
 }
 
+// Node gets the ID, URI and coordinator status for this particular node.
 func (api *API) Node() *Node {
-	return api.server.Node()
+	node := api.server.node()
+	return &node
 }
 
 // RecalculateCaches forces all TopN caches to be updated. Used mainly for integration tests.
@@ -515,7 +517,7 @@ func (api *API) ClusterMessage(ctx context.Context, reqBody io.Reader) error {
 	}
 
 	// Forward the error message.
-	if err := api.server.ReceiveMessage(pb); err != nil {
+	if err := api.server.receiveMessage(pb); err != nil {
 		return errors.Wrap(err, "receiving message")
 	}
 	return nil
