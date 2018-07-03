@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -73,6 +74,22 @@ func NewIndex(path, name string) (*Index, error) {
 		Stats:       NopStatsClient,
 		logger:      NopLogger,
 	}, nil
+}
+
+func (i *Index) MarshalJSON() ([]byte, error) {
+	fields := make([]*Field, 0, len(i.fields))
+	for _, f := range i.fields {
+
+		fields = append(fields, f)
+	}
+	thing := struct {
+		Name   string
+		Fields []*Field
+	}{
+		Name:   i.name,
+		Fields: fields,
+	}
+	return json.Marshal(thing)
 }
 
 // Name returns name of the index.
@@ -386,8 +403,8 @@ func (p indexInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p indexInfoSlice) Len() int           { return len(p) }
 func (p indexInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
-// encodeIndexes converts a into its internal representation.
-func encodeIndexes(a []*Index) []*internal.Index {
+// EncodeIndexes converts a into its internal representation.
+func EncodeIndexes(a []*Index) []*internal.Index {
 	other := make([]*internal.Index, len(a))
 	for i := range a {
 		other[i] = encodeIndex(a[i])

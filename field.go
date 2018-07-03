@@ -1073,6 +1073,21 @@ func (f *Field) ImportValue(columnIDs []uint64, values []int64) error {
 	return nil
 }
 
+func (f *Field) MarshalJSON() ([]byte, error) {
+	thing := struct {
+		Name    string
+		Options FieldOptions
+		Views   []*viewInfo
+	}{
+		Name:    f.Name(),
+		Options: f.Options(),
+	}
+	for _, viewname := range f.viewNames() {
+		thing.Views = append(thing.Views, &viewInfo{Name: viewname})
+	}
+	return json.Marshal(thing)
+}
+
 // encodeFields converts a into its internal representation.
 func encodeFields(a []*Field) []*internal.Field {
 	other := make([]*internal.Field, len(a))

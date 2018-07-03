@@ -331,8 +331,8 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 	}
 
 	// Validate that this handler owns the shard.
-	if !api.cluster.ownsShard(api.LocalID(), indexName, shard) {
-		api.server.logger.Printf("node %s does not own shard %d of index %s", api.LocalID(), shard, indexName)
+	if !api.cluster.ownsShard(api.Node().ID, indexName, shard) {
+		api.server.logger.Printf("node %s does not own shard %d of index %s", api.Node().ID, shard, indexName)
 		return ErrClusterDoesNotOwnShard
 	}
 
@@ -477,6 +477,10 @@ func (api *API) Hosts(ctx context.Context) []*Node {
 	return api.cluster.Nodes
 }
 
+func (api *API) Node() *Node {
+	return api.server.Node()
+}
+
 // RecalculateCaches forces all TopN caches to be updated. Used mainly for integration tests.
 func (api *API) RecalculateCaches(ctx context.Context) error {
 	if err := api.validate(apiRecalculateCaches); err != nil {
@@ -517,15 +521,10 @@ func (api *API) ClusterMessage(ctx context.Context, reqBody io.Reader) error {
 	return nil
 }
 
-// LocalID returns the current node's ID.
-func (api *API) LocalID() string {
-	return api.cluster.Node.ID
-}
-
 // Schema returns information about each index in Pilosa including which fields
 // and views they contain.
-func (api *API) Schema(ctx context.Context) []*IndexInfo {
-	return api.holder.Schema()
+func (api *API) Schema(ctx context.Context) []*Index {
+	return api.holder.Indexes()
 }
 
 // Views returns the views in the given field.
@@ -720,8 +719,8 @@ func (api *API) LongQueryTime() time.Duration {
 
 func (api *API) indexField(indexName string, fieldName string, shard uint64) (*Index, *Field, error) {
 	// Validate that this handler owns the shard.
-	if !api.cluster.ownsShard(api.LocalID(), indexName, shard) {
-		api.server.logger.Printf("node %s does not own shard %d of index %s", api.LocalID(), shard, indexName)
+	if !api.cluster.ownsShard(api.Node().ID, indexName, shard) {
+		api.server.logger.Printf("node %s does not own shard %d of index %s", api.Node().ID, shard, indexName)
 		return nil, nil, ErrClusterDoesNotOwnShard
 	}
 
@@ -755,7 +754,7 @@ func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode
 	}
 
 	// If the new coordinator is this node, do the SetCoordinator directly.
-	if newNode.ID == api.LocalID() {
+	if newNode.ID == api.Node().ID {
 		return oldNode, newNode, api.cluster.setCoordinator(newNode)
 	}
 

@@ -511,6 +511,8 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		s.holder.RecalculateCaches()
 	case *internal.NodeEventMessage:
 		s.cluster.ReceiveEvent(DecodeNodeEvent(obj))
+	case *internal.NodeStatus:
+		s.HandleRemoteStatus(pb)
 	}
 
 	return nil

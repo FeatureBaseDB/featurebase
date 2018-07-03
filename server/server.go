@@ -317,7 +317,7 @@ func (m *Command) SetupNetworking() error {
 
 	gossipMemberSet, err := gossip.NewGossipMemberSet(
 		m.Config.Gossip,
-		m.Server,
+		m.API,
 		gossip.WithLogger(m.logger.Logger()),
 		gossip.WithTransport(m.gossipTransport),
 	)
