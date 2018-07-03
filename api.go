@@ -337,7 +337,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 	}
 
 	// Find the fragment.
-	f := api.holder.fragment(indexName, fieldName, ViewStandard, shard)
+	f := api.holder.fragment(indexName, fieldName, viewStandard, shard)
 	if f == nil {
 		return ErrFragmentNotFound
 	}
@@ -379,7 +379,7 @@ func (api *API) MarshalFragment(ctx context.Context, indexName string, fieldName
 	}
 
 	// Retrieve fragment from holder.
-	f := api.holder.fragment(indexName, fieldName, ViewStandard, shard)
+	f := api.holder.fragment(indexName, fieldName, viewStandard, shard)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -401,7 +401,7 @@ func (api *API) UnmarshalFragment(ctx context.Context, indexName string, fieldNa
 	}
 
 	// Retrieve view.
-	view, err := f.createViewIfNotExists(ViewStandard)
+	view, err := f.createViewIfNotExists(viewStandard)
 	if err != nil {
 		return errors.Wrap(err, "creating view")
 	}
@@ -437,7 +437,7 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 	}
 
 	// Retrieve fragment from holder.
-	f := api.holder.fragment(req.Index, req.Field, ViewStandard, req.Shard)
+	f := api.holder.fragment(req.Index, req.Field, viewStandard, req.Shard)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -461,7 +461,7 @@ func (api *API) FragmentBlocks(ctx context.Context, indexName string, fieldName 
 	}
 
 	// Retrieve fragment from holder.
-	f := api.holder.fragment(indexName, fieldName, ViewStandard, shard)
+	f := api.holder.fragment(indexName, fieldName, viewStandard, shard)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -529,7 +529,7 @@ func (api *API) Schema(ctx context.Context) []*IndexInfo {
 }
 
 // Views returns the views in the given field.
-func (api *API) Views(ctx context.Context, indexName string, fieldName string) ([]*View, error) {
+func (api *API) Views(ctx context.Context, indexName string, fieldName string) ([]*view, error) {
 	if err := api.validate(apiViews); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}

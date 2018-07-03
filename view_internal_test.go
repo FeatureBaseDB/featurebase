@@ -20,17 +20,17 @@ import (
 )
 
 // mustOpenView returns a new instance of View with a temporary path.
-func mustOpenView(index, field, name string) *View {
+func mustOpenView(index, field, name string) *view {
 	path, err := ioutil.TempDir("", "pilosa-view-")
 	if err != nil {
 		panic(err)
 	}
 
-	v := NewView(path, index, field, name, DefaultCacheSize)
+	v := newView(path, index, field, name, DefaultCacheSize)
 	if err := v.open(); err != nil {
 		panic(err)
 	}
-	v.RowAttrStore = newMemAttrStore()
+	v.rowAttrStore = newMemAttrStore()
 	return v
 }
 
