@@ -23,11 +23,9 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/server"
-	"github.com/pilosa/pilosa/toml"
 	"github.com/pkg/errors"
 )
 
@@ -41,13 +39,6 @@ type Command struct {
 	Stdin  bytes.Buffer
 	Stdout bytes.Buffer
 	Stderr bytes.Buffer
-}
-
-func OptAntiEntropyInterval(dur time.Duration) server.CommandOption {
-	return func(m *server.Command) error {
-		m.Config.AntiEntropy.Interval = toml.Duration(dur)
-		return nil
-	}
 }
 
 func OptAllowedOrigins(origins []string) server.CommandOption {
