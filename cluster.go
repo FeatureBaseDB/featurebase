@@ -623,7 +623,7 @@ func (c *cluster) fragsByHost(idx *Index) fragsByHost {
 
 		}
 	}
-	return c.fragCombos(idx.Name(), idx.MaxShard(), fieldViews)
+	return c.fragCombos(idx.Name(), idx.maxShard(), fieldViews)
 }
 
 // fragCombos returns a map (by uri) of lists of fragments for a given index

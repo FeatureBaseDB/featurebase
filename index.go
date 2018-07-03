@@ -41,15 +41,15 @@ type Index struct {
 	// Max shard on any node in the cluster, according to this node.
 	remoteMaxShard uint64
 
-	NewAttrStore func(string) AttrStore
+	newAttrStore func(string) AttrStore
 
 	// Column attribute storage and cache.
-	columnAttrStore AttrStore
+	columnAttrs AttrStore
 
 	broadcaster broadcaster
 	Stats       StatsClient
 
-	Logger Logger
+	logger Logger
 }
 
 // NewIndex returns a new instance of Index.
@@ -66,12 +66,12 @@ func NewIndex(path, name string) (*Index, error) {
 
 		remoteMaxShard: 0,
 
-		NewAttrStore:    newNopAttrStore,
-		columnAttrStore: nopStore,
+		newAttrStore: newNopAttrStore,
+		columnAttrs:  nopStore,
 
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
-		Logger:      NopLogger,
+		logger:      NopLogger,
 	}, nil
 }
 
@@ -85,7 +85,7 @@ func (i *Index) Path() string { return i.path }
 func (i *Index) Keys() bool { return i.keys }
 
 // ColumnAttrStore returns the storage for column attributes.
-func (i *Index) ColumnAttrStore() AttrStore { return i.columnAttrStore }
+func (i *Index) ColumnAttrStore() AttrStore { return i.columnAttrs }
 
 // Options returns all options for this index.
 func (i *Index) Options() IndexOptions {
@@ -114,7 +114,7 @@ func (i *Index) Open() error {
 		return errors.Wrap(err, "opening fields")
 	}
 
-	if err := i.columnAttrStore.Open(); err != nil {
+	if err := i.columnAttrs.Open(); err != nil {
 		return errors.Wrap(err, "opening attrstore")
 	}
 
@@ -197,7 +197,7 @@ func (i *Index) Close() error {
 	defer i.mu.Unlock()
 
 	// Close the attribute store.
-	i.columnAttrStore.Close()
+	i.columnAttrs.Close()
 
 	// Close all fields.
 	for _, f := range i.fields {
@@ -210,8 +210,8 @@ func (i *Index) Close() error {
 	return nil
 }
 
-// MaxShard returns the max shard in the index according to this node.
-func (i *Index) MaxShard() uint64 {
+// maxShard returns the max shard in the index according to this node.
+func (i *Index) maxShard() uint64 {
 	if i == nil {
 		return 0
 	}
@@ -229,8 +229,8 @@ func (i *Index) MaxShard() uint64 {
 	return max
 }
 
-// SetRemoteMaxShard sets the remote max shard value received from another node.
-func (i *Index) SetRemoteMaxShard(newmax uint64) {
+// setRemoteMaxShard sets the remote max shard value received from another node.
+func (i *Index) setRemoteMaxShard(newmax uint64) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.remoteMaxShard = newmax
@@ -334,10 +334,10 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	if err != nil {
 		return nil, err
 	}
-	f.Logger = i.Logger
+	f.Logger = i.logger
 	f.Stats = i.Stats.WithTags(fmt.Sprintf("field:%s", name))
 	f.broadcaster = i.broadcaster
-	f.rowAttrStore = i.NewAttrStore(filepath.Join(f.path, ".data"))
+	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
 	return f, nil
 }
 
@@ -386,8 +386,8 @@ func (p indexInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p indexInfoSlice) Len() int           { return len(p) }
 func (p indexInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
-// EncodeIndexes converts a into its internal representation.
-func EncodeIndexes(a []*Index) []*internal.Index {
+// encodeIndexes converts a into its internal representation.
+func encodeIndexes(a []*Index) []*internal.Index {
 	other := make([]*internal.Index, len(a))
 	for i := range a {
 		other[i] = encodeIndex(a[i])

@@ -204,7 +204,7 @@ func (h *Holder) HasData() (bool, error) {
 func (h *Holder) maxShards() map[string]uint64 {
 	a := make(map[string]uint64)
 	for _, index := range h.Indexes() {
-		a[index.Name()] = index.MaxShard()
+		a[index.Name()] = index.maxShard()
 	}
 	return a
 }
@@ -267,7 +267,7 @@ func (h *Holder) encodeMaxShards() *internal.MaxShards {
 // encodeSchema creates an internal representation of schema.
 func (h *Holder) encodeSchema() *internal.Schema {
 	return &internal.Schema{
-		Indexes: EncodeIndexes(h.Indexes()),
+		Indexes: encodeIndexes(h.Indexes()),
 	}
 }
 
@@ -358,11 +358,11 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	if err != nil {
 		return nil, err
 	}
-	index.Logger = h.Logger
+	index.logger = h.Logger
 	index.Stats = h.Stats.WithTags(fmt.Sprintf("index:%s", index.Name()))
 	index.broadcaster = h.broadcaster
-	index.NewAttrStore = h.NewAttrStore
-	index.columnAttrStore = h.NewAttrStore(filepath.Join(index.path, ".data"))
+	index.newAttrStore = h.NewAttrStore
+	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ".data"))
 	return index, nil
 }
 
@@ -623,7 +623,7 @@ func (s *holderSyncer) SyncHolder() error {
 					return nil
 				}
 
-				for shard := uint64(0); shard <= s.Holder.Index(di.Name).MaxShard(); shard++ {
+				for shard := uint64(0); shard <= s.Holder.Index(di.Name).maxShard(); shard++ {
 					// Ignore shards that this host doesn't own.
 					if !s.Cluster.ownsShard(s.Node.ID, di.Name, shard) {
 						continue
@@ -804,7 +804,7 @@ func (c *holderCleaner) CleanHolder() error {
 		}
 
 		// Get the fragments that node is responsible for (based on hash(index, node)).
-		containedShards := c.Cluster.containsShards(index.Name(), index.MaxShard(), c.Node)
+		containedShards := c.Cluster.containsShards(index.Name(), index.maxShard(), c.Node)
 
 		// Get the fragments registered in memory.
 		for _, field := range index.Fields() {

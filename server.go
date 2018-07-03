@@ -439,7 +439,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
-		idx.SetRemoteMaxShard(obj.Shard)
+		idx.setRemoteMaxShard(obj.Shard)
 	case *internal.CreateIndexMessage:
 		opt := IndexOptions{}
 		_, err := s.holder.CreateIndex(obj.Index, opt)
@@ -622,7 +622,7 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 		}
 		if newMax > oldmaxshards[index] {
 			oldmaxshards[index] = newMax
-			localIndex.SetRemoteMaxShard(newMax)
+			localIndex.setRemoteMaxShard(newMax)
 		}
 	}
 
