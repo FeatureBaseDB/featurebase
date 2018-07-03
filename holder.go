@@ -267,7 +267,7 @@ func (h *Holder) encodeMaxShards() *internal.MaxShards {
 // encodeSchema creates an internal representation of schema.
 func (h *Holder) encodeSchema() *internal.Schema {
 	return &internal.Schema{
-		Indexes: encodeIndexes(h.Indexes()),
+		Indexes: EncodeIndexes(h.Indexes()),
 	}
 }
 
