@@ -358,9 +358,7 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	}
 
 	schema := h.API.Schema(r.Context())
-	if err := json.NewEncoder(w).Encode(getSchemaResponse{
-		Indexes: schema,
-	}); err != nil {
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"indexes": schema}); err != nil {
 		h.Logger.Printf("write schema response error: %s", err)
 	}
 }
@@ -374,7 +372,7 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	status := getStatusResponse{
 		State:   h.API.State(),
 		Nodes:   h.API.Hosts(r.Context()),
-		LocalID: h.API.LocalID(),
+		LocalID: h.API.Node().ID,
 	}
 	if err := json.NewEncoder(w).Encode(status); err != nil {
 		h.Logger.Printf("write status response error: %s", err)
@@ -467,7 +465,7 @@ func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	indexName := mux.Vars(r)["index"]
 	for _, idx := range h.API.Schema(r.Context()) {
-		if idx.Name == indexName {
+		if idx.Name() == indexName {
 			if err := json.NewEncoder(w).Encode(idx); err != nil {
 				h.Logger.Printf("write response error: %s", err)
 			}

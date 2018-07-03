@@ -130,11 +130,11 @@ func (m *Command) Reopen() error {
 }
 
 // URL returns the base URL string for accessing the running program.
-func (m *Command) URL() string { return m.Server.URI.String() }
+func (m *Command) URL() string { return m.API.Node().URI.String() }
 
 // Client returns a client to connect to the program.
 func (m *Command) Client() *http.InternalClient {
-	client, err := http.NewInternalClient(m.Server.URI.HostPort(), http.GetHTTPClient(nil))
+	client, err := http.NewInternalClient(m.API.Node().URI.HostPort(), http.GetHTTPClient(nil))
 	if err != nil {
 		panic(err)
 	}
