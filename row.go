@@ -283,8 +283,8 @@ func EncodeRow(r *Row) *internal.Row {
 	}
 }
 
-// DecodeRow converts r from its internal representation.
-func DecodeRow(pr *internal.Row) *Row {
+// decodeRow converts r from its internal representation.
+func decodeRow(pr *internal.Row) *Row {
 	if pr == nil {
 		return nil
 	}

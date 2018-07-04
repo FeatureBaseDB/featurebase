@@ -1428,7 +1428,7 @@ func (e *executor) remoteExec(ctx context.Context, node *Node, index string, q *
 		case "SetRowAttrs":
 		case "SetColumnAttrs":
 		default:
-			v, err = DecodeRow(pb.Results[i].GetRow()), nil
+			v, err = decodeRow(pb.Results[i].GetRow()), nil
 		}
 		if err != nil {
 			return nil, err
