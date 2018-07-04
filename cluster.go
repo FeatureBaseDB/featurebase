@@ -36,8 +36,8 @@ import (
 )
 
 const (
-	// DefaultPartitionN is the default number of partitions in a cluster.
-	DefaultPartitionN = 256
+	// defaultPartitionN is the default number of partitions in a cluster.
+	defaultPartitionN = 256
 
 	// ClusterState represents the state returned in the /status endpoint.
 	clusterStateStarting = "STARTING"
@@ -266,7 +266,7 @@ type cluster struct {
 func newCluster() *cluster {
 	return &cluster{
 		Hasher:     &jmphasher{},
-		partitionN: DefaultPartitionN,
+		partitionN: defaultPartitionN,
 		ReplicaN:   1,
 
 		joiningLeavingNodes: make(chan nodeAction, 10), // buffered channel
