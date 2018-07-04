@@ -41,7 +41,7 @@ type ImportCommand struct {
 	Field string `json:"field"`
 
 	// Options for index & field to be created if they don't exist
-	IndexOptions pilosa.IndexOptions
+	indexOptions pilosa.IndexOptions
 
 	// CreateSchema ensures the schema exists before import
 	CreateSchema bool
@@ -130,7 +130,7 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 }
 
 func (cmd *ImportCommand) ensureSchema(ctx context.Context) error {
-	err := cmd.Client.EnsureIndex(ctx, cmd.Index, cmd.IndexOptions)
+	err := cmd.Client.EnsureIndex(ctx, cmd.Index, cmd.indexOptions)
 	if err != nil {
 		return fmt.Errorf("Error Creating Index: %s", err)
 	}
