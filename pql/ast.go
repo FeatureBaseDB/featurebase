@@ -116,7 +116,7 @@ func (q *Query) addVal(val interface{}) {
 		call.Args[q.lastField] = append(list, val)
 		return
 	}
-	if q.lastCond != ILLEGAL {
+	if q.lastCond != iLLEGAL {
 		call.Args[q.lastField] = &Condition{
 			Op:    q.lastCond,
 			Value: val,
@@ -125,7 +125,7 @@ func (q *Query) addVal(val interface{}) {
 		call.Args[q.lastField] = val
 	}
 	q.lastField = ""
-	q.lastCond = ILLEGAL
+	q.lastCond = iLLEGAL
 }
 
 func (q *Query) addNumVal(val string) {
@@ -144,7 +144,7 @@ func (q *Query) addNumVal(val string) {
 	}
 	call := q.callStack[len(q.callStack)-1]
 	if q.inList {
-		if q.lastCond != ILLEGAL {
+		if q.lastCond != iLLEGAL {
 			list := call.Args[q.lastField].(*Condition).Value.([]interface{})
 			call.Args[q.lastField] = &Condition{
 				Op:    q.lastCond,
@@ -155,7 +155,7 @@ func (q *Query) addNumVal(val string) {
 			call.Args[q.lastField] = append(list, ival)
 		}
 		return
-	} else if q.lastCond != ILLEGAL {
+	} else if q.lastCond != iLLEGAL {
 		call.Args[q.lastField] = &Condition{
 			Op:    q.lastCond,
 			Value: ival,
@@ -164,12 +164,12 @@ func (q *Query) addNumVal(val string) {
 		call.Args[q.lastField] = ival
 	}
 	q.lastField = ""
-	q.lastCond = ILLEGAL
+	q.lastCond = iLLEGAL
 }
 
 func (q *Query) startList() {
 	call := q.callStack[len(q.callStack)-1]
-	if q.lastCond != ILLEGAL {
+	if q.lastCond != iLLEGAL {
 		call.Args[q.lastField] = &Condition{
 			Op:    q.lastCond,
 			Value: make([]interface{}, 0),
@@ -183,7 +183,7 @@ func (q *Query) startList() {
 func (q *Query) endList() {
 	q.inList = false
 	q.lastField = ""
-	q.lastCond = ILLEGAL
+	q.lastCond = iLLEGAL
 }
 
 func (q *Query) addGT() {
