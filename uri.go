@@ -133,8 +133,8 @@ func (u *URI) HostPort() string {
 	return s
 }
 
-// Normalize returns the address in a form usable by a HTTP client.
-func (u *URI) Normalize() string {
+// normalize returns the address in a form usable by a HTTP client.
+func (u *URI) normalize() string {
 	scheme := u.scheme
 	index := strings.Index(scheme, "+")
 	if index >= 0 {
@@ -158,7 +158,7 @@ func (u URI) equals(other *URI) bool {
 
 // Path returns URI with path
 func (u *URI) Path(path string) string {
-	return fmt.Sprintf("%s%s", u.Normalize(), path)
+	return fmt.Sprintf("%s%s", u.normalize(), path)
 }
 
 // The following methods are required to implement pflag Value interface.
