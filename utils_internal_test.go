@@ -356,7 +356,7 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstructi
 
 		// figure out which node it was meant for, then call the operation on that cluster
 		// basically need to mimic this: client.RetrieveShardFromURI(context.Background(), src.Index, src.Field, src.View, src.Shard, srcURI)
-		instrNode := DecodeNode(instr.Node)
+		instrNode := decodeNode(instr.Node)
 		destCluster := t.clusterByID(instrNode.ID)
 
 		// Sync the schema received in the resize instruction.
@@ -365,7 +365,7 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstructi
 		}
 
 		for _, src := range instr.Sources {
-			srcNode := DecodeNode(src.Node)
+			srcNode := decodeNode(src.Node)
 			srcCluster := t.clusterByID(srcNode.ID)
 
 			srcFragment := srcCluster.holder.fragment(src.Index, src.Field, src.View, src.Shard)
@@ -405,6 +405,6 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstructi
 		complete.Error = err.Error()
 	}
 
-	node := DecodeNode(instr.Coordinator)
+	node := decodeNode(instr.Coordinator)
 	return t.SendTo(node, complete)
 }

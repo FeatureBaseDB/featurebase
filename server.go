@@ -498,9 +498,9 @@ func (s *Server) receiveMessage(pb proto.Message) error {
 			return err
 		}
 	case *internal.SetCoordinatorMessage:
-		s.cluster.setCoordinator(DecodeNode(obj.New))
+		s.cluster.setCoordinator(decodeNode(obj.New))
 	case *internal.UpdateCoordinatorMessage:
-		s.cluster.updateCoordinator(DecodeNode(obj.New))
+		s.cluster.updateCoordinator(decodeNode(obj.New))
 	case *internal.NodeStateMessage:
 		err := s.cluster.receiveNodeState(obj.NodeID, obj.State)
 		if err != nil {
@@ -573,7 +573,7 @@ func (s *Server) handleRemoteStatus(pb proto.Message) {
 
 func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 	// Ignore status updates from self.
-	if s.nodeID == DecodeNode(ns.Node).ID {
+	if s.nodeID == decodeNode(ns.Node).ID {
 		return nil
 	}
 

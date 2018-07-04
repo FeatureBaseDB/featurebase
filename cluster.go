@@ -94,13 +94,13 @@ func DecodeNodes(a []*internal.Node) []*Node {
 	}
 	other := make([]*Node, len(a))
 	for i := range a {
-		other[i] = DecodeNode(a[i])
+		other[i] = decodeNode(a[i])
 	}
 	return other
 }
 
-// DecodeNode converts a proto message into a Node.
-func DecodeNode(node *internal.Node) *Node {
+// decodeNode converts a proto message into a Node.
+func decodeNode(node *internal.Node) *Node {
 	return &Node{
 		ID:            node.ID,
 		URI:           decodeURI(node.URI),
@@ -111,7 +111,7 @@ func DecodeNode(node *internal.Node) *Node {
 func DecodeNodeEvent(ne *internal.NodeEventMessage) *nodeEvent {
 	return &nodeEvent{
 		Event: NodeEventType(ne.Event),
-		Node:  DecodeNode(ne.Node),
+		Node:  decodeNode(ne.Node),
 	}
 }
 
@@ -1265,7 +1265,7 @@ func (c *cluster) followResizeInstruction(instr *internal.ResizeInstruction) err
 			complete.Error = err.Error()
 		}
 
-		if err := c.sendTo(DecodeNode(instr.Coordinator), complete); err != nil {
+		if err := c.sendTo(decodeNode(instr.Coordinator), complete); err != nil {
 			c.logger.Printf("sending resizeInstructionComplete error: err=%s", err)
 		}
 	}()
