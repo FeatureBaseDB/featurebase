@@ -279,8 +279,8 @@ func (i *Index) Fields() []*Field {
 	return a
 }
 
-// RecalculateCaches recalculates caches on every field in the index.
-func (i *Index) RecalculateCaches() {
+// recalculateCaches recalculates caches on every field in the index.
+func (i *Index) recalculateCaches() {
 	for _, field := range i.Fields() {
 		field.recalculateCaches()
 	}
