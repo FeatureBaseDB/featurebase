@@ -267,7 +267,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 		&internal.CreateFieldMessage{
 			Index: indexName,
 			Field: fieldName,
-			Meta:  fo.Encode(),
+			Meta:  fo.encode(),
 		})
 	if err != nil {
 		api.server.logger.Printf("problem sending CreateField message: %s", err)

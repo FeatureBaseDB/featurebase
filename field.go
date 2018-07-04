@@ -318,7 +318,7 @@ func (f *Field) loadMeta() error {
 func (f *Field) saveMeta() error {
 	// Marshal metadata.
 	fo := f.options
-	buf, err := proto.Marshal(fo.Encode())
+	buf, err := proto.Marshal(fo.encode())
 	if err != nil {
 		return errors.Wrap(err, "marshaling")
 	}
@@ -1102,7 +1102,7 @@ func encodeField(f *Field) *internal.Field {
 	fo := f.options
 	return &internal.Field{
 		Name:  f.name,
-		Meta:  fo.Encode(),
+		Meta:  fo.encode(),
 		Views: f.viewNames(),
 	}
 }
@@ -1150,8 +1150,8 @@ func applyDefaultOptions(o FieldOptions) FieldOptions {
 	return o
 }
 
-// Encode converts o into its internal representation.
-func (o *FieldOptions) Encode() *internal.FieldOptions {
+// encode converts o into its internal representation.
+func (o *FieldOptions) encode() *internal.FieldOptions {
 	return encodeFieldOptions(o)
 }
 
