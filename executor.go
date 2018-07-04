@@ -270,7 +270,7 @@ func (e *executor) executeMin(ctx context.Context, index string, c *pql.Call, sh
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
 		other, _ := prev.(ValCount)
-		return other.Smaller(v.(ValCount))
+		return other.smaller(v.(ValCount))
 	}
 
 	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -1785,8 +1785,8 @@ func decodeValCount(pb *internal.ValCount) ValCount {
 	}
 }
 
-// Smaller returns the smaller of the two ValCounts.
-func (vc *ValCount) Smaller(other ValCount) ValCount {
+// smaller returns the smaller of the two ValCounts.
+func (vc *ValCount) smaller(other ValCount) ValCount {
 	if vc.Count == 0 || (other.Val < vc.Val && other.Count > 0) {
 		return other
 	}
