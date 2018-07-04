@@ -70,8 +70,8 @@ func (q TimeQuantum) Type() string {
 	return "TimeQuantum"
 }
 
-// ParseTimeQuantum parses v into a time quantum.
-func ParseTimeQuantum(v string) (TimeQuantum, error) {
+// parseTimeQuantum parses v into a time quantum.
+func parseTimeQuantum(v string) (TimeQuantum, error) {
 	q := TimeQuantum(strings.ToUpper(v))
 	if !q.Valid() {
 		return "", ErrInvalidTimeQuantum
