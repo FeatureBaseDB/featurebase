@@ -34,44 +34,44 @@ const (
 )
 
 // Ensure client implements interface.
-var _ pilosa.StatsClient = &StatsClient{}
+var _ pilosa.StatsClient = &statsClient{}
 
-// StatsClient represents a StatsD implementation of pilosa.StatsClient.
-type StatsClient struct {
+// statsClient represents a StatsD implementation of pilosa.statsClient.
+type statsClient struct {
 	client *statsd.Client
 	tags   []string
 	logger pilosa.Logger
 }
 
 // NewStatsClient returns a new instance of StatsClient.
-func NewStatsClient(host string) (*StatsClient, error) {
+func NewStatsClient(host string) (*statsClient, error) {
 	c, err := statsd.NewBuffered(host, bufferLen)
 	if err != nil {
 		return nil, err
 	}
 
-	return &StatsClient{
+	return &statsClient{
 		client: c,
 		logger: pilosa.NopLogger,
 	}, nil
 }
 
 // Open no-op
-func (c *StatsClient) Open() {}
+func (c *statsClient) Open() {}
 
 // Close closes the connection to the agent.
-func (c *StatsClient) Close() error {
+func (c *statsClient) Close() error {
 	return c.client.Close()
 }
 
 // Tags returns a sorted list of tags on the client.
-func (c *StatsClient) Tags() []string {
+func (c *statsClient) Tags() []string {
 	return c.tags
 }
 
 // WithTags returns a new client with additional tags appended.
-func (c *StatsClient) WithTags(tags ...string) pilosa.StatsClient {
-	return &StatsClient{
+func (c *statsClient) WithTags(tags ...string) pilosa.StatsClient {
+	return &statsClient{
 		client: c.client,
 		tags:   unionStringSlice(c.tags, tags),
 		logger: c.logger,
@@ -79,14 +79,14 @@ func (c *StatsClient) WithTags(tags ...string) pilosa.StatsClient {
 }
 
 // Count tracks the number of times something occurs per second.
-func (c *StatsClient) Count(name string, value int64, rate float64) {
+func (c *statsClient) Count(name string, value int64, rate float64) {
 	if err := c.client.Count(prefix+name, value, c.tags, rate); err != nil {
 		c.logger.Printf("statsd.StatsClient.Count error: %s", err)
 	}
 }
 
 // CountWithCustomTags tracks the number of times something occurs per second with custom tags.
-func (c *StatsClient) CountWithCustomTags(name string, value int64, rate float64, t []string) {
+func (c *statsClient) CountWithCustomTags(name string, value int64, rate float64, t []string) {
 	tags := append(c.tags, t...)
 	if err := c.client.Count(prefix+name, value, tags, rate); err != nil {
 		c.logger.Printf("statsd.StatsClient.Count error: %s", err)
@@ -94,35 +94,35 @@ func (c *StatsClient) CountWithCustomTags(name string, value int64, rate float64
 }
 
 // Gauge sets the value of a metric.
-func (c *StatsClient) Gauge(name string, value float64, rate float64) {
+func (c *statsClient) Gauge(name string, value float64, rate float64) {
 	if err := c.client.Gauge(prefix+name, value, c.tags, rate); err != nil {
 		c.logger.Printf("statsd.StatsClient.Gauge error: %s", err)
 	}
 }
 
 // Histogram tracks statistical distribution of a metric.
-func (c *StatsClient) Histogram(name string, value float64, rate float64) {
+func (c *statsClient) Histogram(name string, value float64, rate float64) {
 	if err := c.client.Histogram(prefix+name, value, c.tags, rate); err != nil {
 		c.logger.Printf("statsd.StatsClient.Histogram error: %s", err)
 	}
 }
 
 // Set tracks number of unique elements.
-func (c *StatsClient) Set(name string, value string, rate float64) {
+func (c *statsClient) Set(name string, value string, rate float64) {
 	if err := c.client.Set(prefix+name, value, c.tags, rate); err != nil {
 		c.logger.Printf("statsd.StatsClient.Set error: %s", err)
 	}
 }
 
 // Timing tracks timing information for a metric.
-func (c *StatsClient) Timing(name string, value time.Duration, rate float64) {
+func (c *statsClient) Timing(name string, value time.Duration, rate float64) {
 	if err := c.client.Timing(prefix+name, value, c.tags, rate); err != nil {
 		c.logger.Printf("statsd.StatsClient.Timing error: %s", err)
 	}
 }
 
 // SetLogger sets the logger for client.
-func (c *StatsClient) SetLogger(logger pilosa.Logger) {
+func (c *statsClient) SetLogger(logger pilosa.Logger) {
 	c.logger = logger
 }
 
