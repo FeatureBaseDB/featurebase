@@ -68,7 +68,7 @@ func NewAPI(opts ...APIOption) (*API, error) {
 // validAPIMethods specifies the api methods that are valid for each
 // cluster state.
 var validAPIMethods = map[string]map[apiMethod]struct{}{
-	ClusterStateStarting: methodsCommon,
+	clusterStateStarting: methodsCommon,
 	ClusterStateNormal:   appendMap(methodsCommon, methodsNormal),
 	clusterStateResizing: appendMap(methodsCommon, methodsResizing),
 }

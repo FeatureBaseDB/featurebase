@@ -659,8 +659,8 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Ensure that node is in state STARTING before the other node joins.
-		if node0.State() != ClusterStateStarting {
-			t.Errorf("expected node0 state: %v, but got: %v", ClusterStateStarting, node0.State())
+		if node0.State() != clusterStateStarting {
+			t.Errorf("expected node0 state: %v, but got: %v", clusterStateStarting, node0.State())
 		}
 
 		// Expect an error by adding a node not in the topology.
