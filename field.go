@@ -84,7 +84,7 @@ func OptFieldTypeSet(cacheType string, cacheSize uint32) FieldOption {
 			return errors.Errorf("field type is already set to: %s", fo.Type)
 		}
 		fo.Type = FieldTypeSet
-		fo.CacheType = cacheType
+		fo.cacheType = cacheType
 		fo.CacheSize = cacheSize
 		return nil
 	}
@@ -182,7 +182,7 @@ func (f *Field) Type() string {
 func (f *Field) cacheType() string {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	return f.options.CacheType
+	return f.options.cacheType
 }
 
 // SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
@@ -304,7 +304,7 @@ func (f *Field) loadMeta() error {
 
 	// Copy metadata fields.
 	f.options.Type = pb.Type
-	f.options.CacheType = pb.CacheType
+	f.options.cacheType = pb.CacheType
 	f.options.CacheSize = pb.CacheSize
 	f.options.Min = pb.Min
 	f.options.Max = pb.Max
@@ -336,8 +336,8 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 	switch opt.Type {
 	case FieldTypeSet, "":
 		f.options.Type = FieldTypeSet
-		if opt.CacheType != "" {
-			f.options.CacheType = opt.CacheType
+		if opt.cacheType != "" {
+			f.options.cacheType = opt.cacheType
 		}
 		if opt.CacheSize != 0 {
 			f.options.CacheSize = opt.CacheSize
@@ -348,7 +348,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Keys = opt.Keys
 	case FieldTypeInt:
 		f.options.Type = opt.Type
-		f.options.CacheType = cacheTypeNone
+		f.options.cacheType = cacheTypeNone
 		f.options.CacheSize = 0
 		f.options.Min = opt.Min
 		f.options.Max = opt.Max
@@ -371,7 +371,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		}
 	case FieldTypeTime:
 		f.options.Type = opt.Type
-		f.options.CacheType = cacheTypeNone
+		f.options.cacheType = cacheTypeNone
 		f.options.CacheSize = 0
 		f.options.Min = 0
 		f.options.Max = 0
@@ -640,7 +640,7 @@ func (f *Field) createViewIfNotExistsBase(name string) (*view, bool, error) {
 
 func (f *Field) newView(path, name string) *view {
 	view := newView(path, f.index, f.name, name, f.options.CacheSize)
-	view.cacheType = f.options.CacheType
+	view.cacheType = f.options.cacheType
 	view.logger = f.logger
 	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats.WithTags(fmt.Sprintf("view:%s", name))
@@ -1129,7 +1129,7 @@ func (p fieldInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 // FieldOptions represents options to set when initializing a field.
 type FieldOptions struct {
 	Type        string      `json:"type,omitempty"`
-	CacheType   string      `json:"cacheType,omitempty"`
+	cacheType   string      `json:"cacheType,omitempty"`
 	CacheSize   uint32      `json:"cacheSize,omitempty"`
 	Min         int64       `json:"min,omitempty"`
 	Max         int64       `json:"max,omitempty"`
@@ -1143,7 +1143,7 @@ func applyDefaultOptions(o FieldOptions) FieldOptions {
 	if o.Type == "" {
 		return FieldOptions{
 			Type:      DefaultFieldType,
-			CacheType: DefaultCacheType,
+			cacheType: DefaultCacheType,
 			CacheSize: DefaultCacheSize,
 		}
 	}
@@ -1161,7 +1161,7 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 	}
 	return &internal.FieldOptions{
 		Type:        o.Type,
-		CacheType:   o.CacheType,
+		CacheType:   o.cacheType,
 		CacheSize:   o.CacheSize,
 		Min:         o.Min,
 		Max:         o.Max,
@@ -1176,7 +1176,7 @@ func decodeFieldOptions(options *internal.FieldOptions) *FieldOptions {
 	}
 	return &FieldOptions{
 		Type:        options.Type,
-		CacheType:   options.CacheType,
+		cacheType:   options.CacheType,
 		CacheSize:   options.CacheSize,
 		Min:         options.Min,
 		Max:         options.Max,
@@ -1194,7 +1194,7 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			CacheSize uint32 `json:"cacheSize"`
 		}{
 			o.Type,
-			o.CacheType,
+			o.cacheType,
 			o.CacheSize,
 		})
 	case FieldTypeInt:

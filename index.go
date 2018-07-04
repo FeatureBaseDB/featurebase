@@ -314,7 +314,7 @@ func (i *Index) CreateFieldIfNotExists(name string, opt FieldOptions) (*Field, e
 func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 	if name == "" {
 		return nil, errors.New("field name required")
-	} else if opt.CacheType != "" && !isValidCacheType(opt.CacheType) {
+	} else if opt.cacheType != "" && !isValidCacheType(opt.cacheType) {
 		return nil, ErrInvalidCacheType
 	}
 
