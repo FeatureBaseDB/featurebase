@@ -1113,14 +1113,14 @@ func (p fieldSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p fieldSlice) Len() int           { return len(p) }
 func (p fieldSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
-// FieldInfo represents schema information for a field.
-type FieldInfo struct {
+// fieldInfo represents schema information for a field.
+type fieldInfo struct {
 	Name    string       `json:"name"`
 	Options FieldOptions `json:"options"`
 	Views   []*viewInfo  `json:"views,omitempty"`
 }
 
-type fieldInfoSlice []*FieldInfo
+type fieldInfoSlice []*fieldInfo
 
 func (p fieldInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p fieldInfoSlice) Len() int           { return len(p) }
