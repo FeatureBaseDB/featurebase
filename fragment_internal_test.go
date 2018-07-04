@@ -724,7 +724,7 @@ func TestFragment_TopN_IDs(t *testing.T) {
 
 // Ensure a fragment return none if CacheTypeNone is set
 func TestFragment_TopN_NopCache(t *testing.T) {
-	f := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeNone)
+	f := mustOpenFragment("i", "f", viewStandard, 0, cacheTypeNone)
 	defer f.Close()
 
 	// Set bits on various rows.
@@ -750,7 +750,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	defer index.Close()
 
 	// Create field.
-	field, err := index.CreateFieldIfNotExists("f", FieldOptions{CacheType: CacheTypeRanked, CacheSize: cacheSize})
+	field, err := index.CreateFieldIfNotExists("f", FieldOptions{cacheType: CacheTypeRanked, cacheSize: cacheSize})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -880,7 +880,7 @@ func TestFragment_Blocks_Empty(t *testing.T) {
 
 // Ensure a fragment's cache can be persisted between restarts.
 func TestFragment_LRUCache_Persistence(t *testing.T) {
-	f := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeLRU)
+	f := mustOpenFragment("i", "f", viewStandard, 0, cacheTypeLRU)
 	defer f.Close()
 
 	// Set bits on the fragment.
@@ -916,7 +916,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 	defer index.Close()
 
 	// Create field.
-	field, err := index.CreateFieldIfNotExists("f", FieldOptions{CacheType: CacheTypeRanked})
+	field, err := index.CreateFieldIfNotExists("f", FieldOptions{cacheType: CacheTypeRanked})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1063,7 +1063,7 @@ func BenchmarkFragment_IntersectionCount(b *testing.B) {
 	// Start benchmark
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if n := f.row(1).IntersectionCount(f.row(2)); n == 0 {
+		if n := f.row(1).intersectionCount(f.row(2)); n == 0 {
 			b.Fatalf("unexpected count: %d", n)
 		}
 	}

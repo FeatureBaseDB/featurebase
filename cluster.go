@@ -36,17 +36,17 @@ import (
 )
 
 const (
-	// DefaultPartitionN is the default number of partitions in a cluster.
-	DefaultPartitionN = 256
+	// defaultPartitionN is the default number of partitions in a cluster.
+	defaultPartitionN = 256
 
 	// ClusterState represents the state returned in the /status endpoint.
-	ClusterStateStarting = "STARTING"
+	clusterStateStarting = "STARTING"
 	ClusterStateNormal   = "NORMAL"
-	ClusterStateResizing = "RESIZING"
+	clusterStateResizing = "RESIZING"
 
 	// NodeState represents the state of a node during startup.
-	NodeStateLoading = "LOADING"
-	NodeStateReady   = "READY"
+	nodeStateLoading = "LOADING"
+	nodeStateReady   = "READY"
 
 	// resizeJob states.
 	resizeJobStateRunning = "RUNNING"
@@ -65,12 +65,12 @@ type Node struct {
 	IsCoordinator bool   `json:"isCoordinator"`
 }
 
-func (n Node) String() string {
+func (n Node) string() string {
 	return fmt.Sprintf("Node: %s", n.ID)
 }
 
-// EncodeNodes converts a slice of Nodes into its internal representation.
-func EncodeNodes(a []*Node) []*internal.Node {
+// encodeNodes converts a slice of Nodes into its internal representation.
+func encodeNodes(a []*Node) []*internal.Node {
 	other := make([]*internal.Node, len(a))
 	for i := range a {
 		other[i] = EncodeNode(a[i])
@@ -82,25 +82,25 @@ func EncodeNodes(a []*Node) []*internal.Node {
 func EncodeNode(n *Node) *internal.Node {
 	return &internal.Node{
 		ID:            n.ID,
-		URI:           n.URI.Encode(),
+		URI:           n.URI.encode(),
 		IsCoordinator: n.IsCoordinator,
 	}
 }
 
-// DecodeNodes converts a proto message into a slice of Nodes.
-func DecodeNodes(a []*internal.Node) []*Node {
+// decodeNodes converts a proto message into a slice of Nodes.
+func decodeNodes(a []*internal.Node) []*Node {
 	if len(a) == 0 {
 		return nil
 	}
 	other := make([]*Node, len(a))
 	for i := range a {
-		other[i] = DecodeNode(a[i])
+		other[i] = decodeNode(a[i])
 	}
 	return other
 }
 
-// DecodeNode converts a proto message into a Node.
-func DecodeNode(node *internal.Node) *Node {
+// decodeNode converts a proto message into a Node.
+func decodeNode(node *internal.Node) *Node {
 	return &Node{
 		ID:            node.ID,
 		URI:           decodeURI(node.URI),
@@ -108,10 +108,10 @@ func DecodeNode(node *internal.Node) *Node {
 	}
 }
 
-func DecodeNodeEvent(ne *internal.NodeEventMessage) *nodeEvent {
+func decodeNodeEvent(ne *internal.NodeEventMessage) *nodeEvent {
 	return &nodeEvent{
 		Event: NodeEventType(ne.Event),
-		Node:  DecodeNode(ne.Node),
+		Node:  decodeNode(ne.Node),
 	}
 }
 
@@ -266,7 +266,7 @@ type cluster struct {
 func newCluster() *cluster {
 	return &cluster{
 		Hasher:     &jmphasher{},
-		partitionN: DefaultPartitionN,
+		partitionN: defaultPartitionN,
 		ReplicaN:   1,
 
 		joiningLeavingNodes: make(chan nodeAction, 10), // buffered channel
@@ -274,7 +274,7 @@ func newCluster() *cluster {
 		closing:             make(chan struct{}),
 		joining:             make(chan struct{}),
 
-		InternalClient: NewNopInternalClient(),
+		InternalClient: newNopInternalClient(),
 
 		logger: NopLogger,
 	}
@@ -370,7 +370,7 @@ func (c *cluster) addNode(node *Node) error {
 	if c.Topology == nil {
 		return fmt.Errorf("Cluster.Topology is nil")
 	}
-	if !c.Topology.AddID(node.ID) {
+	if !c.Topology.addID(node.ID) {
 		return nil
 	}
 
@@ -390,7 +390,7 @@ func (c *cluster) removeNode(node *Node) error {
 	if c.Topology == nil {
 		return fmt.Errorf("Cluster.Topology is nil")
 	}
-	if !c.Topology.RemoveID(node.ID) {
+	if !c.Topology.removeID(node.ID) {
 		return nil
 	}
 
@@ -411,7 +411,7 @@ func (c *cluster) setID(id string) {
 	c.id = id
 
 	// Make sure the Topology is updated.
-	c.Topology.ClusterID = c.id
+	c.Topology.clusterID = c.id
 }
 
 func (c *cluster) State() string {
@@ -439,7 +439,7 @@ func (c *cluster) setState(state string) {
 	switch state {
 	case ClusterStateNormal:
 		// If state is RESIZING -> NORMAL then run cleanup.
-		if c.state == ClusterStateResizing {
+		if c.state == clusterStateResizing {
 			doCleanup = true
 		}
 	}
@@ -491,7 +491,7 @@ func (c *cluster) receiveNodeState(nodeID string, state string) error {
 	}
 
 	// This method is really only useful during initial startup.
-	if c.State() != ClusterStateStarting {
+	if c.State() != clusterStateStarting {
 		return nil
 	}
 
@@ -511,7 +511,7 @@ func (c *cluster) Status() *internal.ClusterStatus {
 	return &internal.ClusterStatus{
 		ClusterID: c.id,
 		State:     c.state,
-		Nodes:     EncodeNodes(c.Nodes),
+		Nodes:     encodeNodes(c.Nodes),
 	}
 }
 
@@ -858,14 +858,14 @@ func (h *jmphasher) Hash(key uint64, n int) int {
 
 func (c *cluster) setup() error {
 	// Cluster always comes up in state STARTING until cluster membership is determined.
-	c.state = ClusterStateStarting
+	c.state = clusterStateStarting
 
 	// Load topology file if it exists.
 	if err := c.loadTopology(); err != nil {
 		return errors.Wrap(err, "loading topology")
 	}
 
-	c.id = c.Topology.ClusterID
+	c.id = c.Topology.clusterID
 
 	// Only the coordinator needs to consider the .topology file.
 	if c.isCoordinator() {
@@ -935,22 +935,22 @@ func (c *cluster) markAsJoined() {
 }
 
 func (c *cluster) needTopologyAgreement() bool {
-	return c.State() == ClusterStateStarting && !stringSlicesAreEqual(c.Topology.NodeIDs, c.nodeIDs())
+	return c.State() == clusterStateStarting && !stringSlicesAreEqual(c.Topology.nodeIDs, c.nodeIDs())
 }
 
 func (c *cluster) haveTopologyAgreement() bool {
 	if c.Static {
 		return true
 	}
-	return stringSlicesAreEqual(c.Topology.NodeIDs, c.nodeIDs())
+	return stringSlicesAreEqual(c.Topology.nodeIDs, c.nodeIDs())
 }
 
 func (c *cluster) allNodesReady() bool {
 	if c.Static {
 		return true
 	}
-	for _, uri := range c.Topology.NodeIDs {
-		if c.Topology.nodeStates[uri] != NodeStateReady {
+	for _, uri := range c.Topology.nodeIDs {
+		if c.Topology.nodeStates[uri] != nodeStateReady {
 			return false
 		}
 	}
@@ -1265,7 +1265,7 @@ func (c *cluster) followResizeInstruction(instr *internal.ResizeInstruction) err
 			complete.Error = err.Error()
 		}
 
-		if err := c.sendTo(DecodeNode(instr.Coordinator), complete); err != nil {
+		if err := c.sendTo(decodeNode(instr.Coordinator), complete); err != nil {
 			c.logger.Printf("sending resizeInstructionComplete error: err=%s", err)
 		}
 	}()
@@ -1422,14 +1422,14 @@ func (j *resizeJob) distributeResizeInstructions() error {
 	return nil
 }
 
-type NodeIDs []string
+type nodeIDs []string
 
-func (n NodeIDs) Len() int           { return len(n) }
-func (n NodeIDs) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
-func (n NodeIDs) Less(i, j int) bool { return n[i] < n[j] }
+func (n nodeIDs) Len() int           { return len(n) }
+func (n nodeIDs) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
+func (n nodeIDs) Less(i, j int) bool { return n[i] < n[j] }
 
 // ContainsID returns true if idi matches one of the nodesets's IDs.
-func (n NodeIDs) ContainsID(id string) bool {
+func (n nodeIDs) ContainsID(id string) bool {
 	for _, nid := range n {
 		if nid == id {
 			return true
@@ -1441,16 +1441,16 @@ func (n NodeIDs) ContainsID(id string) bool {
 // Topology represents the list of hosts in the cluster.
 type Topology struct {
 	mu      sync.RWMutex
-	NodeIDs []string
+	nodeIDs []string
 
-	ClusterID string
+	clusterID string
 
 	// nodeStates holds the state of each node according to
 	// the coordinator. Used during startup and data load.
 	nodeStates map[string]string
 }
 
-func NewTopology() *Topology {
+func newTopology() *Topology {
 	return &Topology{
 		nodeStates: make(map[string]string),
 	}
@@ -1464,11 +1464,11 @@ func (t *Topology) ContainsID(id string) bool {
 }
 
 func (t *Topology) containsID(id string) bool {
-	return NodeIDs(t.NodeIDs).ContainsID(id)
+	return nodeIDs(t.nodeIDs).ContainsID(id)
 }
 
 func (t *Topology) positionByID(nodeID string) int {
-	for i, tid := range t.NodeIDs {
+	for i, tid := range t.nodeIDs {
 		if tid == nodeID {
 			return i
 		}
@@ -1476,25 +1476,25 @@ func (t *Topology) positionByID(nodeID string) int {
 	return -1
 }
 
-// AddID adds the node ID to the topology and returns true if added.
-func (t *Topology) AddID(nodeID string) bool {
+// addID adds the node ID to the topology and returns true if added.
+func (t *Topology) addID(nodeID string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.containsID(nodeID) {
 		return false
 	}
-	t.NodeIDs = append(t.NodeIDs, nodeID)
+	t.nodeIDs = append(t.nodeIDs, nodeID)
 
-	sort.Slice(t.NodeIDs,
+	sort.Slice(t.nodeIDs,
 		func(i, j int) bool {
-			return t.NodeIDs[i] < t.NodeIDs[j]
+			return t.nodeIDs[i] < t.nodeIDs[j]
 		})
 
 	return true
 }
 
-// RemoveID removes the node ID from the topology and returns true if removed.
-func (t *Topology) RemoveID(nodeID string) bool {
+// removeID removes the node ID from the topology and returns true if removed.
+func (t *Topology) removeID(nodeID string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -1503,15 +1503,15 @@ func (t *Topology) RemoveID(nodeID string) bool {
 		return false
 	}
 
-	copy(t.NodeIDs[i:], t.NodeIDs[i+1:])
-	t.NodeIDs[len(t.NodeIDs)-1] = ""
-	t.NodeIDs = t.NodeIDs[:len(t.NodeIDs)-1]
+	copy(t.nodeIDs[i:], t.nodeIDs[i+1:])
+	t.nodeIDs[len(t.nodeIDs)-1] = ""
+	t.nodeIDs = t.nodeIDs[:len(t.nodeIDs)-1]
 
 	return true
 }
 
-// Encode converts t into its internal representation.
-func (t *Topology) Encode() *internal.Topology {
+// encode converts t into its internal representation.
+func (t *Topology) encode() *internal.Topology {
 	return encodeTopology(t)
 }
 
@@ -1519,7 +1519,7 @@ func (t *Topology) Encode() *internal.Topology {
 func (c *cluster) loadTopology() error {
 	buf, err := ioutil.ReadFile(filepath.Join(c.Path, ".topology"))
 	if os.IsNotExist(err) {
-		c.Topology = NewTopology()
+		c.Topology = newTopology()
 		return nil
 	} else if err != nil {
 		return errors.Wrap(err, "reading file")
@@ -1558,8 +1558,8 @@ func encodeTopology(topology *Topology) *internal.Topology {
 		return nil
 	}
 	return &internal.Topology{
-		ClusterID: topology.ClusterID,
-		NodeIDs:   topology.NodeIDs,
+		ClusterID: topology.clusterID,
+		NodeIDs:   topology.nodeIDs,
 	}
 }
 
@@ -1568,12 +1568,12 @@ func decodeTopology(topology *internal.Topology) (*Topology, error) {
 		return nil, nil
 	}
 
-	t := NewTopology()
-	t.ClusterID = topology.ClusterID
-	t.NodeIDs = topology.NodeIDs
-	sort.Slice(t.NodeIDs,
+	t := newTopology()
+	t.clusterID = topology.ClusterID
+	t.nodeIDs = topology.NodeIDs
+	sort.Slice(t.nodeIDs,
 		func(i, j int) bool {
-			return t.NodeIDs[i] < t.NodeIDs[j]
+			return t.nodeIDs[i] < t.nodeIDs[j]
 		})
 
 	return t, nil
@@ -1584,7 +1584,7 @@ func (c *cluster) considerTopology() error {
 	if c.id == "" {
 		u := uuid.NewV4()
 		c.id = u.String()
-		c.Topology.ClusterID = c.id
+		c.Topology.clusterID = c.id
 	}
 
 	if c.Static {
@@ -1592,13 +1592,13 @@ func (c *cluster) considerTopology() error {
 	}
 
 	// If there is no .topology file, it's safe to proceed.
-	if len(c.Topology.NodeIDs) == 0 {
+	if len(c.Topology.nodeIDs) == 0 {
 		return nil
 	}
 
 	// The local node (coordinator) must be in the .topology.
 	if !c.Topology.ContainsID(c.Node.ID) {
-		return fmt.Errorf("coordinator %s is not in topology: %v", c.Node.ID, c.Topology.NodeIDs)
+		return fmt.Errorf("coordinator %s is not in topology: %v", c.Node.ID, c.Topology.nodeIDs)
 	}
 
 	// If local node is the only thing in .topology, continue.
@@ -1690,7 +1690,7 @@ func (c *cluster) nodeJoin(node *Node) error {
 
 	// If the cluster has data, we need to change to RESIZING and
 	// kick off the resizing process.
-	if err := c.setStateAndBroadcast(ClusterStateResizing); err != nil {
+	if err := c.setStateAndBroadcast(clusterStateResizing); err != nil {
 		return errors.Wrap(err, "broadcasting state")
 	}
 	c.joiningLeavingNodes <- nodeAction{node, resizeJobActionAdd}
@@ -1744,7 +1744,7 @@ func (c *cluster) nodeLeave(node *Node) error {
 
 	// If the cluster has data then change state to RESIZING and
 	// kick off the resizing process.
-	if err := c.setStateAndBroadcast(ClusterStateResizing); err != nil {
+	if err := c.setStateAndBroadcast(clusterStateResizing); err != nil {
 		return errors.Wrap(err, "broadcasting state")
 	}
 	c.joiningLeavingNodes <- nodeAction{n, resizeJobActionRemove}
@@ -1764,7 +1764,7 @@ func (c *cluster) mergeClusterStatus(cs *internal.ClusterStatus) error {
 	// Set ClusterID.
 	c.setID(cs.ClusterID)
 
-	officialNodes := DecodeNodes(cs.Nodes)
+	officialNodes := decodeNodes(cs.Nodes)
 
 	// Add all nodes from the coordinator.
 	for _, node := range officialNodes {

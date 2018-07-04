@@ -65,15 +65,15 @@ var (
 	ErrNotImplemented = errors.New("not implemented")
 )
 
-// ApiMethodNotAllowedError wraps an error value indicating that a particular
+// apiMethodNotAllowedError wraps an error value indicating that a particular
 // API method is not allowed in the current cluster state.
-type ApiMethodNotAllowedError struct {
+type apiMethodNotAllowedError struct {
 	error
 }
 
 // NewApiMethodNotAllowedError returns err wrapped in an ApiMethodNotAllowedError.
-func NewApiMethodNotAllowedError(err error) ApiMethodNotAllowedError {
-	return ApiMethodNotAllowedError{err}
+func NewApiMethodNotAllowedError(err error) apiMethodNotAllowedError {
+	return apiMethodNotAllowedError{err}
 }
 
 // BadRequestError wraps an error value to signify that a request could not be
@@ -114,25 +114,25 @@ func NewNotFoundError(err error) NotFoundError {
 // Regular expression to validate index and field names.
 var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 
-// ColumnAttrSet represents a set of attributes for a vertical column in an index.
+// columnAttrSet represents a set of attributes for a vertical column in an index.
 // Can have a set of attributes attached to it.
-type ColumnAttrSet struct {
+type columnAttrSet struct {
 	ID    uint64                 `json:"id"`
 	Key   string                 `json:"key,omitempty"`
 	Attrs map[string]interface{} `json:"attrs,omitempty"`
 }
 
 // EncodeColumnAttrSets converts a into its internal representation.
-func EncodeColumnAttrSets(a []*ColumnAttrSet) []*internal.ColumnAttrSet {
+func EncodeColumnAttrSets(a []*columnAttrSet) []*internal.ColumnAttrSet {
 	other := make([]*internal.ColumnAttrSet, len(a))
 	for i := range a {
-		other[i] = EncodeColumnAttrSet(a[i])
+		other[i] = encodeColumnAttrSet(a[i])
 	}
 	return other
 }
 
-// EncodeColumnAttrSet converts set into its internal representation.
-func EncodeColumnAttrSet(set *ColumnAttrSet) *internal.ColumnAttrSet {
+// encodeColumnAttrSet converts set into its internal representation.
+func encodeColumnAttrSet(set *columnAttrSet) *internal.ColumnAttrSet {
 	return &internal.ColumnAttrSet{
 		ID:    set.ID,
 		Attrs: encodeAttrs(set.Attrs),
@@ -178,7 +178,7 @@ func stringSlicesAreEqual(a, b []string) bool {
 // using defaults when necessary.
 func AddressWithDefaults(addr string) (*URI, error) {
 	if addr == "" {
-		return DefaultURI(), nil
+		return defaultURI(), nil
 	} else {
 		return NewURIFromAddress(addr)
 	}

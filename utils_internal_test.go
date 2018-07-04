@@ -38,7 +38,7 @@ func NewTestCluster(n int) *cluster {
 	c.ReplicaN = 1
 	c.Hasher = NewTestModHasher()
 	c.Path = path
-	c.Topology = NewTopology()
+	c.Topology = newTopology()
 
 	for i := 0; i < n; i++ {
 		c.Nodes = append(c.Nodes, &Node{
@@ -56,16 +56,16 @@ func NewTestCluster(n int) *cluster {
 
 // NewTestURI is a test URI creator that intentionally swallows errors.
 func NewTestURI(scheme, host string, port uint16) URI {
-	uri := DefaultURI()
-	uri.SetScheme(scheme)
-	uri.SetHost(host)
+	uri := defaultURI()
+	uri.setScheme(scheme)
+	uri.setHost(host)
 	uri.SetPort(port)
 	return *uri
 }
 
 func NewTestURIFromHostPort(host string, port uint16) URI {
-	uri := DefaultURI()
-	uri.SetHost(host)
+	uri := defaultURI()
+	uri.setHost(host)
 	uri.SetPort(port)
 	return *uri
 }
@@ -186,7 +186,7 @@ func (t *ClusterCluster) addNode() error {
 
 // WriteTopology writes the given topology to disk.
 func (t *ClusterCluster) WriteTopology(path string, top *Topology) error {
-	if buf, err := proto.Marshal(top.Encode()); err != nil {
+	if buf, err := proto.Marshal(top.encode()); err != nil {
 		return err
 	} else if err := ioutil.WriteFile(filepath.Join(path, ".topology"), buf, 0666); err != nil {
 		return err
@@ -226,7 +226,7 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	c.ReplicaN = 1
 	c.Hasher = NewTestModHasher()
 	c.Path = path
-	c.Topology = NewTopology()
+	c.Topology = newTopology()
 	c.holder = h
 	c.Node = node
 	c.Coordinator = t.common.Nodes[0].ID // the first node is the coordinator
@@ -278,7 +278,7 @@ func (t *ClusterCluster) Open() error {
 		if err := c.holder.Open(); err != nil {
 			return err
 		}
-		if err := c.setNodeState(NodeStateReady); err != nil {
+		if err := c.setNodeState(nodeStateReady); err != nil {
 			return err
 		}
 	}
@@ -356,7 +356,7 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstructi
 
 		// figure out which node it was meant for, then call the operation on that cluster
 		// basically need to mimic this: client.RetrieveShardFromURI(context.Background(), src.Index, src.Field, src.View, src.Shard, srcURI)
-		instrNode := DecodeNode(instr.Node)
+		instrNode := decodeNode(instr.Node)
 		destCluster := t.clusterByID(instrNode.ID)
 
 		// Sync the schema received in the resize instruction.
@@ -365,7 +365,7 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstructi
 		}
 
 		for _, src := range instr.Sources {
-			srcNode := DecodeNode(src.Node)
+			srcNode := decodeNode(src.Node)
 			srcCluster := t.clusterByID(srcNode.ID)
 
 			srcFragment := srcCluster.holder.fragment(src.Index, src.Field, src.View, src.Shard)
@@ -405,6 +405,6 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *internal.ResizeInstructi
 		complete.Error = err.Error()
 	}
 
-	node := DecodeNode(instr.Coordinator)
+	node := decodeNode(instr.Coordinator)
 	return t.SendTo(node, complete)
 }

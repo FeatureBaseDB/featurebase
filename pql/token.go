@@ -19,9 +19,9 @@ type Token int
 
 const (
 	// Special tokens
-	ILLEGAL Token = iota
+	iLLEGAL Token = iota
 
-	ASSIGN  // =
+	aSSIGN  // =
 	EQ      // ==
 	NEQ     // !=
 	LT      // <
@@ -32,9 +32,9 @@ const (
 )
 
 var tokens = [...]string{
-	ILLEGAL: "ILLEGAL",
+	iLLEGAL: "ILLEGAL",
 
-	ASSIGN:  "=",
+	aSSIGN:  "=",
 	EQ:      "==",
 	NEQ:     "!=",
 	LT:      "<",

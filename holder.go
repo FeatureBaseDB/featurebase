@@ -209,13 +209,13 @@ func (h *Holder) maxShards() map[string]uint64 {
 	return a
 }
 
-// Schema returns schema information for all indexes, fields, and views.
-func (h *Holder) Schema() []*IndexInfo {
+// schema returns schema information for all indexes, fields, and views.
+func (h *Holder) schema() []*IndexInfo {
 	var a []*IndexInfo
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{Name: index.Name()}
 		for _, field := range index.Fields() {
-			fi := &FieldInfo{Name: field.Name(), Options: field.Options()}
+			fi := &fieldInfo{Name: field.Name(), Options: field.Options()}
 			for _, view := range field.views() {
 				fi.Views = append(fi.Views, &viewInfo{Name: view.name})
 			}
@@ -456,13 +456,13 @@ func (h *Holder) flushCaches() {
 	}
 }
 
-// RecalculateCaches recalculates caches on every index in the holder. This is
+// recalculateCaches recalculates caches on every index in the holder. This is
 // probably not practical to call in real-world workloads, but makes writing
 // integration tests much eaiser, since one doesn't have to wait 10 seconds
 // after setting bits to get expected response.
-func (h *Holder) RecalculateCaches() {
+func (h *Holder) recalculateCaches() {
 	for _, index := range h.Indexes() {
-		index.RecalculateCaches()
+		index.recalculateCaches()
 	}
 }
 
@@ -594,7 +594,7 @@ func (s *holderSyncer) SyncHolder() error {
 	defer s.mu.Unlock()
 	ti := time.Now()
 	// Iterate over schema in sorted order.
-	for _, di := range s.Holder.Schema() {
+	for _, di := range s.Holder.schema() {
 		// Verify syncer has not closed.
 		if s.IsClosing() {
 			return nil

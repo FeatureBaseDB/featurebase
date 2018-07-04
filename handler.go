@@ -37,7 +37,7 @@ type QueryResponse struct {
 	Results []interface{}
 
 	// Set of column attribute objects matching IDs returned in Result.
-	ColumnAttrSets []*ColumnAttrSet
+	ColumnAttrSets []*columnAttrSet
 
 	// Error during parsing or execution.
 	Err error
@@ -47,7 +47,7 @@ type QueryResponse struct {
 func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 	var output struct {
 		Results        []interface{}    `json:"results,omitempty"`
-		ColumnAttrSets []*ColumnAttrSet `json:"columnAttrs,omitempty"`
+		ColumnAttrSets []*columnAttrSet `json:"columnAttrs,omitempty"`
 		Err            string           `json:"error,omitempty"`
 	}
 	output.Results = resp.Results

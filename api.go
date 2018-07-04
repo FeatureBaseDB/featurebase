@@ -68,9 +68,9 @@ func NewAPI(opts ...APIOption) (*API, error) {
 // validAPIMethods specifies the api methods that are valid for each
 // cluster state.
 var validAPIMethods = map[string]map[apiMethod]struct{}{
-	ClusterStateStarting: methodsCommon,
+	clusterStateStarting: methodsCommon,
 	ClusterStateNormal:   appendMap(methodsCommon, methodsNormal),
-	ClusterStateResizing: appendMap(methodsCommon, methodsResizing),
+	clusterStateResizing: appendMap(methodsCommon, methodsResizing),
 }
 
 func appendMap(a, b map[apiMethod]struct{}) map[apiMethod]struct{} {
@@ -150,12 +150,12 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 }
 
 // readColumnAttrSets returns a list of column attribute objects by id.
-func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet, error) {
+func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*columnAttrSet, error) {
 	if index == nil {
 		return nil, nil
 	}
 
-	ax := make([]*ColumnAttrSet, 0, len(ids))
+	ax := make([]*columnAttrSet, 0, len(ids))
 	for _, id := range ids {
 		// Read attributes for column. Skip column if empty.
 		attrs, err := index.ColumnAttrStore().Attrs(id)
@@ -166,7 +166,7 @@ func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet
 		}
 
 		// Append column with attributes.
-		ax = append(ax, &ColumnAttrSet{ID: id, Attrs: attrs})
+		ax = append(ax, &columnAttrSet{ID: id, Attrs: attrs})
 	}
 
 	return ax, nil
@@ -187,7 +187,7 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	err = api.server.SendSync(
 		&internal.CreateIndexMessage{
 			Index: indexName,
-			Meta:  options.Encode(),
+			Meta:  options.encode(),
 		})
 	if err != nil {
 		api.server.logger.Printf("problem sending CreateIndex message: %s", err)
@@ -197,8 +197,8 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	return index, nil
 }
 
-// Index retrieves the named index.
-func (api *API) Index(ctx context.Context, indexName string) (*Index, error) {
+// index retrieves the named index.
+func (api *API) index(ctx context.Context, indexName string) (*Index, error) {
 	if err := api.validate(apiIndex); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -267,7 +267,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 		&internal.CreateFieldMessage{
 			Index: indexName,
 			Field: fieldName,
-			Meta:  fo.Encode(),
+			Meta:  fo.encode(),
 		})
 	if err != nil {
 		api.server.logger.Printf("problem sending CreateField message: %s", err)
@@ -370,10 +370,10 @@ func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) 
 	return api.cluster.shardNodes(indexName, shard), nil
 }
 
-// MarshalFragment returns an object which can write the specified fragment's data
+// marshalFragment returns an object which can write the specified fragment's data
 // to an io.Writer. The serialized data can be read back into a fragment with
 // the UnmarshalFragment API call.
-func (api *API) MarshalFragment(ctx context.Context, indexName string, fieldName string, shard uint64) (io.WriterTo, error) {
+func (api *API) marshalFragment(ctx context.Context, indexName string, fieldName string, shard uint64) (io.WriterTo, error) {
 	if err := api.validate(apiMarshalFragment); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -386,10 +386,10 @@ func (api *API) MarshalFragment(ctx context.Context, indexName string, fieldName
 	return f, nil
 }
 
-// UnmarshalFragment creates a new fragment (if necessary) and reads data from a
+// unmarshalFragment creates a new fragment (if necessary) and reads data from a
 // Reader which was previously written by MarshalFragment to populate the
 // fragment's data.
-func (api *API) UnmarshalFragment(ctx context.Context, indexName string, fieldName string, shard uint64, reader io.ReadCloser) error {
+func (api *API) unmarshalFragment(ctx context.Context, indexName string, fieldName string, shard uint64, reader io.ReadCloser) error {
 	if err := api.validate(apiUnmarshalFragment); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -493,7 +493,7 @@ func (api *API) RecalculateCaches(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "broacasting message")
 	}
-	api.holder.RecalculateCaches()
+	api.holder.recalculateCaches()
 	return nil
 }
 
@@ -529,8 +529,8 @@ func (api *API) Schema(ctx context.Context) []*Index {
 	return api.holder.Indexes()
 }
 
-// Views returns the views in the given field.
-func (api *API) Views(ctx context.Context, indexName string, fieldName string) ([]*view, error) {
+// views returns the views in the given field.
+func (api *API) views(ctx context.Context, indexName string, fieldName string) ([]*view, error) {
 	if err := api.validate(apiViews); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -546,8 +546,8 @@ func (api *API) Views(ctx context.Context, indexName string, fieldName string) (
 	return views, nil
 }
 
-// DeleteView removes the given view.
-func (api *API) DeleteView(ctx context.Context, indexName string, fieldName string, viewName string) error {
+// deleteView removes the given view.
+func (api *API) deleteView(ctx context.Context, indexName string, fieldName string, viewName string) error {
 	if err := api.validate(apiDeleteView); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -600,7 +600,7 @@ func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []At
 
 	// Read all attributes from all mismatched blocks.
 	attrs := make(map[uint64]map[string]interface{})
-	for _, blockID := range AttrBlocks(localBlocks).Diff(blocks) {
+	for _, blockID := range attrBlocks(localBlocks).Diff(blocks) {
 		// Retrieve block data.
 		m, err := index.ColumnAttrStore().BlockData(blockID)
 		if err != nil {
@@ -634,7 +634,7 @@ func (api *API) FieldAttrDiff(ctx context.Context, indexName string, fieldName s
 
 	// Read all attributes from all mismatched blocks.
 	attrs := make(map[uint64]map[string]interface{})
-	for _, blockID := range AttrBlocks(localBlocks).Diff(blocks) {
+	for _, blockID := range attrBlocks(localBlocks).Diff(blocks) {
 		// Retrieve block data.
 		m, err := f.RowAttrStore().BlockData(blockID)
 		if err != nil {
@@ -689,7 +689,7 @@ func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest
 		return errors.Wrap(err, "getting field")
 	}
 	// Import into fragment.
-	err = field.ImportValue(req.ColumnIDs, req.Values)
+	err = field.importValue(req.ColumnIDs, req.Values)
 	if err != nil {
 		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 	}

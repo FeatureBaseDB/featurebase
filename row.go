@@ -25,7 +25,7 @@ import (
 // Row is a set of integers (the associated columns), and attributes which are
 // arbitrary key/value pairs storing metadata about what the row represents.
 type Row struct {
-	segments []RowSegment
+	segments []rowSegment
 
 	// String keys translated to/from segment columns.
 	Keys []string
@@ -38,14 +38,14 @@ type Row struct {
 func NewRow(columns ...uint64) *Row {
 	r := &Row{}
 	for _, i := range columns {
-		r.SetBit(i)
+		r.setBit(i)
 	}
 	return r
 }
 
 // Merge merges data from other into r.
 func (r *Row) Merge(other *Row) {
-	var segments []RowSegment
+	var segments []rowSegment
 
 	itr := newMergeSegmentIterator(r.segments, other.segments)
 	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
@@ -64,11 +64,11 @@ func (r *Row) Merge(other *Row) {
 	}
 
 	r.segments = segments
-	r.InvalidateCount()
+	r.invalidateCount()
 }
 
-// IntersectionCount returns the number of intersections between r and other.
-func (r *Row) IntersectionCount(other *Row) uint64 {
+// intersectionCount returns the number of intersections between r and other.
+func (r *Row) intersectionCount(other *Row) uint64 {
 	var n uint64
 
 	itr := newMergeSegmentIterator(r.segments, other.segments)
@@ -83,9 +83,9 @@ func (r *Row) IntersectionCount(other *Row) uint64 {
 	return n
 }
 
-// Intersect returns the itersection of r and other.
-func (r *Row) Intersect(other *Row) *Row {
-	var segments []RowSegment
+// intersect returns the itersection of r and other.
+func (r *Row) intersect(other *Row) *Row {
+	var segments []rowSegment
 
 	itr := newMergeSegmentIterator(r.segments, other.segments)
 	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
@@ -101,7 +101,7 @@ func (r *Row) Intersect(other *Row) *Row {
 
 // Xor returns the xor of r and other.
 func (r *Row) Xor(other *Row) *Row {
-	var segments []RowSegment
+	var segments []rowSegment
 
 	itr := newMergeSegmentIterator(r.segments, other.segments)
 	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
@@ -121,7 +121,7 @@ func (r *Row) Xor(other *Row) *Row {
 
 // Union returns the bitwise union of r and other.
 func (r *Row) Union(other *Row) *Row {
-	var segments []RowSegment
+	var segments []rowSegment
 	itr := newMergeSegmentIterator(r.segments, other.segments)
 	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
 		if s1 == nil {
@@ -139,7 +139,7 @@ func (r *Row) Union(other *Row) *Row {
 
 // Difference returns the diff of r and other.
 func (r *Row) Difference(other *Row) *Row {
-	var segments []RowSegment
+	var segments []rowSegment
 
 	itr := newMergeSegmentIterator(r.segments, other.segments)
 	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
@@ -155,13 +155,13 @@ func (r *Row) Difference(other *Row) *Row {
 	return &Row{segments: segments}
 }
 
-// SetBit sets the i-th column of the row.
-func (r *Row) SetBit(i uint64) (changed bool) {
+// setBit sets the i-th column of the row.
+func (r *Row) setBit(i uint64) (changed bool) {
 	return r.createSegmentIfNotExists(i / ShardWidth).SetBit(i)
 }
 
-// ClearBit clears the i-th column of the row.
-func (r *Row) ClearBit(i uint64) (changed bool) {
+// clearBit clears the i-th column of the row.
+func (r *Row) clearBit(i uint64) (changed bool) {
 	s := r.segment(i / ShardWidth)
 	if s == nil {
 		return false
@@ -170,13 +170,13 @@ func (r *Row) ClearBit(i uint64) (changed bool) {
 }
 
 // Segments returns a list of all segments in the row.
-func (r *Row) Segments() []RowSegment {
+func (r *Row) Segments() []rowSegment {
 	return r.segments
 }
 
 // segment returns a segment for a given shard.
 // Returns nil if segment does not exist.
-func (r *Row) segment(shard uint64) *RowSegment {
+func (r *Row) segment(shard uint64) *rowSegment {
 	if i := sort.Search(len(r.segments), func(i int) bool {
 		return r.segments[i].shard >= shard
 	}); i < len(r.segments) && r.segments[i].shard == shard {
@@ -185,7 +185,7 @@ func (r *Row) segment(shard uint64) *RowSegment {
 	return nil
 }
 
-func (r *Row) createSegmentIfNotExists(shard uint64) *RowSegment {
+func (r *Row) createSegmentIfNotExists(shard uint64) *rowSegment {
 	i := sort.Search(len(r.segments), func(i int) bool {
 		return r.segments[i].shard >= shard
 	})
@@ -196,11 +196,11 @@ func (r *Row) createSegmentIfNotExists(shard uint64) *RowSegment {
 	}
 
 	// Insert new segment.
-	r.segments = append(r.segments, RowSegment{data: *roaring.NewBitmap()})
+	r.segments = append(r.segments, rowSegment{data: *roaring.NewBitmap()})
 	if i < len(r.segments) {
 		copy(r.segments[i+1:], r.segments[i:])
 	}
-	r.segments[i] = RowSegment{
+	r.segments[i] = rowSegment{
 		data:     *roaring.NewBitmap(),
 		shard:    shard,
 		writable: true,
@@ -209,15 +209,15 @@ func (r *Row) createSegmentIfNotExists(shard uint64) *RowSegment {
 	return &r.segments[i]
 }
 
-// InvalidateCount updates the cached count in the row.
-func (r *Row) InvalidateCount() {
+// invalidateCount updates the cached count in the row.
+func (r *Row) invalidateCount() {
 	for i := range r.segments {
 		r.segments[i].InvalidateCount()
 	}
 }
 
-// IncrementCount increments the row cached counter, note this is an optimization that assumes that the caller is aware the size increased.
-func (r *Row) IncrementCount(i uint64) {
+// incrementCount increments the row cached counter, note this is an optimization that assumes that the caller is aware the size increased.
+func (r *Row) incrementCount(i uint64) {
 	seg := r.segment(i / ShardWidth)
 	if seg != nil {
 		seg.n++
@@ -225,8 +225,8 @@ func (r *Row) IncrementCount(i uint64) {
 
 }
 
-// DecrementCount decrements the row cached counter.
-func (r *Row) DecrementCount(i uint64) {
+// decrementCount decrements the row cached counter.
+func (r *Row) decrementCount(i uint64) {
 	seg := r.segment(i / ShardWidth)
 	if seg != nil {
 		if seg.n > 0 {
@@ -283,8 +283,8 @@ func EncodeRow(r *Row) *internal.Row {
 	}
 }
 
-// DecodeRow converts r from its internal representation.
-func DecodeRow(pr *internal.Row) *Row {
+// decodeRow converts r from its internal representation.
+func decodeRow(pr *internal.Row) *Row {
 	if pr == nil {
 		return nil
 	}
@@ -292,13 +292,13 @@ func DecodeRow(pr *internal.Row) *Row {
 	r := NewRow()
 	r.Attrs = decodeAttrs(pr.Attrs)
 	for _, v := range pr.Columns {
-		r.SetBit(v)
+		r.setBit(v)
 	}
 	return r
 }
 
-// Union performs a union on a slice of rows.
-func Union(rows []*Row) *Row {
+// union performs a union on a slice of rows.
+func union(rows []*Row) *Row {
 	other := rows[0]
 	for _, r := range rows[1:] {
 		other = other.Union(r)
@@ -306,10 +306,10 @@ func Union(rows []*Row) *Row {
 	return other
 }
 
-// RowSegment holds a subset of a row.
+// rowSegment holds a subset of a row.
 // This could point to a mmapped roaring bitmap or an in-memory bitmap. The
 // width of the segment will always match the shard width.
-type RowSegment struct {
+type rowSegment struct {
 	// Shard this segment belongs to
 	shard uint64
 
@@ -325,7 +325,7 @@ type RowSegment struct {
 
 // Merge adds chunks from other to s.
 // Chunks in s are overwritten if they exist in other.
-func (s *RowSegment) Merge(other *RowSegment) {
+func (s *rowSegment) Merge(other *rowSegment) {
 	s.ensureWritable()
 
 	itr := other.data.Iterator()
@@ -335,15 +335,15 @@ func (s *RowSegment) Merge(other *RowSegment) {
 }
 
 // IntersectionCount returns the number of intersections between s and other.
-func (s *RowSegment) IntersectionCount(other *RowSegment) uint64 {
+func (s *rowSegment) IntersectionCount(other *rowSegment) uint64 {
 	return s.data.IntersectionCount(&other.data)
 }
 
 // Intersect returns the itersection of s and other.
-func (s *RowSegment) Intersect(other *RowSegment) *RowSegment {
+func (s *rowSegment) Intersect(other *rowSegment) *rowSegment {
 	data := s.data.Intersect(&other.data)
 
-	return &RowSegment{
+	return &rowSegment{
 		data:  *data,
 		shard: s.shard,
 		n:     data.Count(),
@@ -351,10 +351,10 @@ func (s *RowSegment) Intersect(other *RowSegment) *RowSegment {
 }
 
 // Union returns the bitwise union of s and other.
-func (s *RowSegment) Union(other *RowSegment) *RowSegment {
+func (s *rowSegment) Union(other *rowSegment) *rowSegment {
 	data := s.data.Union(&other.data)
 
-	return &RowSegment{
+	return &rowSegment{
 		data:  *data,
 		shard: s.shard,
 		n:     data.Count(),
@@ -362,10 +362,10 @@ func (s *RowSegment) Union(other *RowSegment) *RowSegment {
 }
 
 // Difference returns the diff of s and other.
-func (s *RowSegment) Difference(other *RowSegment) *RowSegment {
+func (s *rowSegment) Difference(other *rowSegment) *rowSegment {
 	data := s.data.Difference(&other.data)
 
-	return &RowSegment{
+	return &rowSegment{
 		data:  *data,
 		shard: s.shard,
 		n:     data.Count(),
@@ -373,10 +373,10 @@ func (s *RowSegment) Difference(other *RowSegment) *RowSegment {
 }
 
 // Xor returns the xor of s and other.
-func (s *RowSegment) Xor(other *RowSegment) *RowSegment {
+func (s *rowSegment) Xor(other *rowSegment) *rowSegment {
 	data := s.data.Xor(&other.data)
 
-	return &RowSegment{
+	return &rowSegment{
 		data:  *data,
 		shard: s.shard,
 		n:     data.Count(),
@@ -384,7 +384,7 @@ func (s *RowSegment) Xor(other *RowSegment) *RowSegment {
 }
 
 // SetBit sets the i-th column of the row.
-func (s *RowSegment) SetBit(i uint64) (changed bool) {
+func (s *rowSegment) SetBit(i uint64) (changed bool) {
 	s.ensureWritable()
 	changed, _ = s.data.Add(i)
 	if changed {
@@ -394,7 +394,7 @@ func (s *RowSegment) SetBit(i uint64) (changed bool) {
 }
 
 // ClearBit clears the i-th column of the row.
-func (s *RowSegment) ClearBit(i uint64) (changed bool) {
+func (s *rowSegment) ClearBit(i uint64) (changed bool) {
 	s.ensureWritable()
 
 	changed, _ = s.data.Remove(i)
@@ -405,12 +405,12 @@ func (s *RowSegment) ClearBit(i uint64) (changed bool) {
 }
 
 // InvalidateCount updates the cached count in the row.
-func (s *RowSegment) InvalidateCount() {
+func (s *rowSegment) InvalidateCount() {
 	s.n = s.data.Count()
 }
 
 // Columns returns a list of all columns set in the segment.
-func (s *RowSegment) Columns() []uint64 {
+func (s *rowSegment) Columns() []uint64 {
 	a := make([]uint64, 0, s.Count())
 	itr := s.data.Iterator()
 	for v, eof := itr.Next(); !eof; v, eof = itr.Next() {
@@ -420,10 +420,10 @@ func (s *RowSegment) Columns() []uint64 {
 }
 
 // Count returns the number of set columns in the row.
-func (s *RowSegment) Count() uint64 { return s.n }
+func (s *rowSegment) Count() uint64 { return s.n }
 
 // ensureWritable clones the segment if it is pointing to non-writable data.
-func (s *RowSegment) ensureWritable() {
+func (s *rowSegment) ensureWritable() {
 	if s.writable {
 		return
 	}
@@ -434,16 +434,16 @@ func (s *RowSegment) ensureWritable() {
 
 // mergeSegmentIterator produces an iterator that loops through two sets of segments.
 type mergeSegmentIterator struct {
-	a0, a1 []RowSegment
+	a0, a1 []rowSegment
 }
 
 // newMergeSegmentIterator returns a new instance of mergeSegmentIterator.
-func newMergeSegmentIterator(a0, a1 []RowSegment) mergeSegmentIterator {
+func newMergeSegmentIterator(a0, a1 []rowSegment) mergeSegmentIterator {
 	return mergeSegmentIterator{a0: a0, a1: a1}
 }
 
 // next returns the next set of segments.
-func (itr *mergeSegmentIterator) next() (s0, s1 *RowSegment) {
+func (itr *mergeSegmentIterator) next() (s0, s1 *rowSegment) {
 	// Find current segments.
 	if len(itr.a0) > 0 {
 		s0 = &itr.a0[0]

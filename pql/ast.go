@@ -116,7 +116,7 @@ func (q *Query) addVal(val interface{}) {
 		call.Args[q.lastField] = append(list, val)
 		return
 	}
-	if q.lastCond != ILLEGAL {
+	if q.lastCond != iLLEGAL {
 		call.Args[q.lastField] = &Condition{
 			Op:    q.lastCond,
 			Value: val,
@@ -125,7 +125,7 @@ func (q *Query) addVal(val interface{}) {
 		call.Args[q.lastField] = val
 	}
 	q.lastField = ""
-	q.lastCond = ILLEGAL
+	q.lastCond = iLLEGAL
 }
 
 func (q *Query) addNumVal(val string) {
@@ -144,7 +144,7 @@ func (q *Query) addNumVal(val string) {
 	}
 	call := q.callStack[len(q.callStack)-1]
 	if q.inList {
-		if q.lastCond != ILLEGAL {
+		if q.lastCond != iLLEGAL {
 			list := call.Args[q.lastField].(*Condition).Value.([]interface{})
 			call.Args[q.lastField] = &Condition{
 				Op:    q.lastCond,
@@ -155,7 +155,7 @@ func (q *Query) addNumVal(val string) {
 			call.Args[q.lastField] = append(list, ival)
 		}
 		return
-	} else if q.lastCond != ILLEGAL {
+	} else if q.lastCond != iLLEGAL {
 		call.Args[q.lastField] = &Condition{
 			Op:    q.lastCond,
 			Value: ival,
@@ -164,12 +164,12 @@ func (q *Query) addNumVal(val string) {
 		call.Args[q.lastField] = ival
 	}
 	q.lastField = ""
-	q.lastCond = ILLEGAL
+	q.lastCond = iLLEGAL
 }
 
 func (q *Query) startList() {
 	call := q.callStack[len(q.callStack)-1]
-	if q.lastCond != ILLEGAL {
+	if q.lastCond != iLLEGAL {
 		call.Args[q.lastField] = &Condition{
 			Op:    q.lastCond,
 			Value: make([]interface{}, 0),
@@ -183,7 +183,7 @@ func (q *Query) startList() {
 func (q *Query) endList() {
 	q.inList = false
 	q.lastField = ""
-	q.lastCond = ILLEGAL
+	q.lastCond = iLLEGAL
 }
 
 func (q *Query) addGT() {
@@ -325,8 +325,8 @@ func (c *Call) StringArg(key string) (string, bool, error) {
 	}
 }
 
-// Keys returns a list of argument keys in sorted order.
-func (c *Call) Keys() []string {
+// keys returns a list of argument keys in sorted order.
+func (c *Call) keys() []string {
 	a := make([]string, 0, len(c.Args))
 	for k := range c.Args {
 		a = append(a, k)
@@ -382,7 +382,7 @@ func (c *Call) String() string {
 	}
 
 	// Write arguments in key order.
-	for i, key := range c.Keys() {
+	for i, key := range c.keys() {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
@@ -390,9 +390,9 @@ func (c *Call) String() string {
 		// the equal sign in the string representation.
 		switch v := c.Args[key].(type) {
 		case *Condition:
-			fmt.Fprintf(&buf, "%v %s", key, v.String())
+			fmt.Fprintf(&buf, "%v %s", key, v.string())
 		default:
-			fmt.Fprintf(&buf, "%v=%s", key, FormatValue(v))
+			fmt.Fprintf(&buf, "%v=%s", key, formatValue(v))
 		}
 	}
 
@@ -419,9 +419,9 @@ type Condition struct {
 	Value interface{}
 }
 
-// String returns the string representation of the condition.
-func (cond *Condition) String() string {
-	return fmt.Sprintf("%s %s", cond.Op.String(), FormatValue(cond.Value))
+// string returns the string representation of the condition.
+func (cond *Condition) string() string {
+	return fmt.Sprintf("%s %s", cond.Op.String(), formatValue(cond.Value))
 }
 
 // IntSliceValue reads cond.Value as a slice of uint64.
@@ -449,7 +449,7 @@ func (cond *Condition) IntSliceValue() ([]int64, error) {
 	}
 }
 
-func FormatValue(v interface{}) string {
+func formatValue(v interface{}) string {
 	switch v := v.(type) {
 	case string:
 		return fmt.Sprintf("%q", v)
@@ -458,9 +458,9 @@ func FormatValue(v interface{}) string {
 	case []uint64:
 		return fmt.Sprintf("%s", joinUint64Slice(v))
 	case time.Time:
-		return fmt.Sprintf("\"%s\"", v.Format(TimeFormat))
+		return fmt.Sprintf("\"%s\"", v.Format(timeFormat))
 	case *Condition:
-		return v.String()
+		return v.string()
 	default:
 		return fmt.Sprintf("%v", v)
 	}

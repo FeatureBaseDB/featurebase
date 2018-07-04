@@ -35,7 +35,7 @@ package pilosa
 import "testing"
 
 func TestDefaultURI(t *testing.T) {
-	uri := DefaultURI()
+	uri := defaultURI()
 	compare(t, uri, "http", "localhost", 10101)
 }
 
@@ -78,7 +78,7 @@ func TestNormalizedAddress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Can't parse address")
 	}
-	if uri.Normalize() != "http://big-data.pilosa.com:6888" {
+	if uri.normalize() != "http://big-data.pilosa.com:6888" {
 		t.Fatalf("Normalized address is not normal")
 	}
 }
@@ -95,19 +95,19 @@ func TestURIPath(t *testing.T) {
 }
 
 func TestEquals(t *testing.T) {
-	uri1 := DefaultURI()
-	if uri1.Equals(nil) {
+	uri1 := defaultURI()
+	if uri1.equals(nil) {
 		t.Fatalf("URI should not be equal to nil")
 	}
-	if !uri1.Equals(DefaultURI()) {
+	if !uri1.equals(defaultURI()) {
 		t.Fatalf("URI should be equal to another URI with the same scheme, host and port")
 	}
 }
 
 func TestSetScheme(t *testing.T) {
-	uri := DefaultURI()
+	uri := defaultURI()
 	target := "fun"
-	err := uri.SetScheme(target)
+	err := uri.setScheme(target)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,9 +117,9 @@ func TestSetScheme(t *testing.T) {
 }
 
 func TestSetHost(t *testing.T) {
-	uri := DefaultURI()
+	uri := defaultURI()
 	target := "10.20.30.40"
-	err := uri.SetHost(target)
+	err := uri.setHost(target)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestSetHost(t *testing.T) {
 }
 
 func TestSetPort(t *testing.T) {
-	uri := DefaultURI()
+	uri := defaultURI()
 	target := uint16(9999)
 	uri.SetPort(target)
 	if uri.Port() != target {
@@ -138,16 +138,16 @@ func TestSetPort(t *testing.T) {
 }
 
 func TestSetInvalidScheme(t *testing.T) {
-	uri := DefaultURI()
-	err := uri.SetScheme("?invalid")
+	uri := defaultURI()
+	err := uri.setScheme("?invalid")
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
 }
 
 func TestSetInvalidHost(t *testing.T) {
-	uri := DefaultURI()
-	err := uri.SetHost("index?.pilosa.com")
+	uri := defaultURI()
+	err := uri.setHost("index?.pilosa.com")
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}

@@ -72,7 +72,7 @@ type Field struct {
 
 	bsiGroups []*bsiGroup
 
-	Logger Logger
+	logger Logger
 }
 
 // FieldOption is a functional option type for pilosa.FieldOptions.
@@ -84,8 +84,8 @@ func OptFieldTypeSet(cacheType string, cacheSize uint32) FieldOption {
 			return errors.Errorf("field type is already set to: %s", fo.Type)
 		}
 		fo.Type = FieldTypeSet
-		fo.CacheType = cacheType
-		fo.CacheSize = cacheSize
+		fo.cacheType = cacheType
+		fo.cacheSize = cacheSize
 		return nil
 	}
 }
@@ -140,7 +140,7 @@ func NewField(path, index, name string, options FieldOptions) (*Field, error) {
 
 		options: applyDefaultOptions(options),
 
-		Logger: NopLogger,
+		logger: NopLogger,
 	}
 	return f, nil
 }
@@ -178,11 +178,11 @@ func (f *Field) Type() string {
 	return f.options.Type
 }
 
-// CacheType returns the caching mode for the field.
-func (f *Field) CacheType() string {
+// cacheType returns the caching mode for the field.
+func (f *Field) cacheType() string {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	return f.options.CacheType
+	return f.options.cacheType
 }
 
 // SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
@@ -192,12 +192,12 @@ func (f *Field) SetCacheSize(v uint32) error {
 	defer f.mu.Unlock()
 
 	// Ignore if no change occurred.
-	if v == 0 || f.options.CacheSize == v {
+	if v == 0 || f.options.cacheSize == v {
 		return nil
 	}
 
 	// Persist meta data to disk on change.
-	f.options.CacheSize = v
+	f.options.cacheSize = v
 	if err := f.saveMeta(); err != nil {
 		return errors.Wrap(err, "saving")
 	}
@@ -208,7 +208,7 @@ func (f *Field) SetCacheSize(v uint32) error {
 // CacheSize returns the ranked field cache size.
 func (f *Field) CacheSize() uint32 {
 	f.mu.RLock()
-	v := f.options.CacheSize
+	v := f.options.cacheSize
 	f.mu.RUnlock()
 	return v
 }
@@ -304,8 +304,8 @@ func (f *Field) loadMeta() error {
 
 	// Copy metadata fields.
 	f.options.Type = pb.Type
-	f.options.CacheType = pb.CacheType
-	f.options.CacheSize = pb.CacheSize
+	f.options.cacheType = pb.CacheType
+	f.options.cacheSize = pb.CacheSize
 	f.options.Min = pb.Min
 	f.options.Max = pb.Max
 	f.options.TimeQuantum = TimeQuantum(pb.TimeQuantum)
@@ -318,7 +318,7 @@ func (f *Field) loadMeta() error {
 func (f *Field) saveMeta() error {
 	// Marshal metadata.
 	fo := f.options
-	buf, err := proto.Marshal(fo.Encode())
+	buf, err := proto.Marshal(fo.encode())
 	if err != nil {
 		return errors.Wrap(err, "marshaling")
 	}
@@ -336,11 +336,11 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 	switch opt.Type {
 	case FieldTypeSet, "":
 		f.options.Type = FieldTypeSet
-		if opt.CacheType != "" {
-			f.options.CacheType = opt.CacheType
+		if opt.cacheType != "" {
+			f.options.cacheType = opt.cacheType
 		}
-		if opt.CacheSize != 0 {
-			f.options.CacheSize = opt.CacheSize
+		if opt.cacheSize != 0 {
+			f.options.cacheSize = opt.cacheSize
 		}
 		f.options.Min = 0
 		f.options.Max = 0
@@ -348,8 +348,8 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Keys = opt.Keys
 	case FieldTypeInt:
 		f.options.Type = opt.Type
-		f.options.CacheType = CacheTypeNone
-		f.options.CacheSize = 0
+		f.options.cacheType = cacheTypeNone
+		f.options.cacheSize = 0
 		f.options.Min = opt.Min
 		f.options.Max = opt.Max
 		f.options.TimeQuantum = ""
@@ -371,13 +371,13 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		}
 	case FieldTypeTime:
 		f.options.Type = opt.Type
-		f.options.CacheType = CacheTypeNone
-		f.options.CacheSize = 0
+		f.options.cacheType = cacheTypeNone
+		f.options.cacheSize = 0
 		f.options.Min = 0
 		f.options.Max = 0
 		f.options.Keys = opt.Keys
 		// Set the time quantum.
-		if err := f.SetTimeQuantum(opt.TimeQuantum); err != nil {
+		if err := f.setTimeQuantum(opt.TimeQuantum); err != nil {
 			f.Close()
 			return errors.Wrap(err, "setting time quantum")
 		}
@@ -514,8 +514,8 @@ func (f *Field) TimeQuantum() TimeQuantum {
 	return f.options.TimeQuantum
 }
 
-// SetTimeQuantum sets the time quantum for the field.
-func (f *Field) SetTimeQuantum(q TimeQuantum) error {
+// setTimeQuantum sets the time quantum for the field.
+func (f *Field) setTimeQuantum(q TimeQuantum) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -587,8 +587,8 @@ func (f *Field) viewNames() []string {
 	return other
 }
 
-// RecalculateCaches recalculates caches on every view in the field.
-func (f *Field) RecalculateCaches() {
+// recalculateCaches recalculates caches on every view in the field.
+func (f *Field) recalculateCaches() {
 	for _, view := range f.views() {
 		view.recalculateCaches()
 	}
@@ -639,9 +639,9 @@ func (f *Field) createViewIfNotExistsBase(name string) (*view, bool, error) {
 }
 
 func (f *Field) newView(path, name string) *view {
-	view := newView(path, f.index, f.name, name, f.options.CacheSize)
-	view.cacheType = f.options.CacheType
-	view.logger = f.Logger
+	view := newView(path, f.index, f.name, name, f.options.cacheSize)
+	view.cacheType = f.options.cacheType
+	view.logger = f.logger
 	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats.WithTags(fmt.Sprintf("view:%s", name))
 	view.broadcaster = f.broadcaster
@@ -936,7 +936,7 @@ func (f *Field) Range(name string, op pql.Token, predicate int64) (*Row, error) 
 	return view.rangeOp(op, bsig.BitDepth(), baseValue)
 }
 
-func (f *Field) RangeBetween(name string, predicateMin, predicateMax int64) (*Row, error) {
+func (f *Field) rangeBetween(name string, predicateMin, predicateMax int64) (*Row, error) {
 	// Retrieve and validate bsiGroup.
 	bsig := f.bsiGroup(name)
 	if bsig == nil {
@@ -1016,8 +1016,8 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 	return nil
 }
 
-// ImportValue bulk imports range-encoded value data.
-func (f *Field) ImportValue(columnIDs []uint64, values []int64) error {
+// importValue bulk imports range-encoded value data.
+func (f *Field) importValue(columnIDs []uint64, values []int64) error {
 	viewName := viewBSIGroupPrefix + f.name
 	// Get the bsiGroup so we know bitDepth.
 	bsig := f.bsiGroup(f.name)
@@ -1102,7 +1102,7 @@ func encodeField(f *Field) *internal.Field {
 	fo := f.options
 	return &internal.Field{
 		Name:  f.name,
-		Meta:  fo.Encode(),
+		Meta:  fo.encode(),
 		Views: f.viewNames(),
 	}
 }
@@ -1113,14 +1113,14 @@ func (p fieldSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p fieldSlice) Len() int           { return len(p) }
 func (p fieldSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
-// FieldInfo represents schema information for a field.
-type FieldInfo struct {
+// fieldInfo represents schema information for a field.
+type fieldInfo struct {
 	Name    string       `json:"name"`
 	Options FieldOptions `json:"options"`
 	Views   []*viewInfo  `json:"views,omitempty"`
 }
 
-type fieldInfoSlice []*FieldInfo
+type fieldInfoSlice []*fieldInfo
 
 func (p fieldInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p fieldInfoSlice) Len() int           { return len(p) }
@@ -1129,8 +1129,8 @@ func (p fieldInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 // FieldOptions represents options to set when initializing a field.
 type FieldOptions struct {
 	Type        string      `json:"type,omitempty"`
-	CacheType   string      `json:"cacheType,omitempty"`
-	CacheSize   uint32      `json:"cacheSize,omitempty"`
+	cacheType   string      `json:"cacheType,omitempty"`
+	cacheSize   uint32      `json:"cacheSize,omitempty"`
 	Min         int64       `json:"min,omitempty"`
 	Max         int64       `json:"max,omitempty"`
 	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
@@ -1143,15 +1143,15 @@ func applyDefaultOptions(o FieldOptions) FieldOptions {
 	if o.Type == "" {
 		return FieldOptions{
 			Type:      DefaultFieldType,
-			CacheType: DefaultCacheType,
-			CacheSize: DefaultCacheSize,
+			cacheType: DefaultCacheType,
+			cacheSize: DefaultCacheSize,
 		}
 	}
 	return o
 }
 
-// Encode converts o into its internal representation.
-func (o *FieldOptions) Encode() *internal.FieldOptions {
+// encode converts o into its internal representation.
+func (o *FieldOptions) encode() *internal.FieldOptions {
 	return encodeFieldOptions(o)
 }
 
@@ -1161,8 +1161,8 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 	}
 	return &internal.FieldOptions{
 		Type:        o.Type,
-		CacheType:   o.CacheType,
-		CacheSize:   o.CacheSize,
+		CacheType:   o.cacheType,
+		CacheSize:   o.cacheSize,
 		Min:         o.Min,
 		Max:         o.Max,
 		TimeQuantum: string(o.TimeQuantum),
@@ -1176,8 +1176,8 @@ func decodeFieldOptions(options *internal.FieldOptions) *FieldOptions {
 	}
 	return &FieldOptions{
 		Type:        options.Type,
-		CacheType:   options.CacheType,
-		CacheSize:   options.CacheSize,
+		cacheType:   options.CacheType,
+		cacheSize:   options.CacheSize,
 		Min:         options.Min,
 		Max:         options.Max,
 		TimeQuantum: TimeQuantum(options.TimeQuantum),
@@ -1194,8 +1194,8 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			CacheSize uint32 `json:"cacheSize"`
 		}{
 			o.Type,
-			o.CacheType,
-			o.CacheSize,
+			o.cacheType,
+			o.cacheSize,
 		})
 	case FieldTypeInt:
 		return json.Marshal(struct {
@@ -1318,15 +1318,15 @@ func (b *bsiGroup) validate() error {
 
 // Cache types.
 const (
-	CacheTypeLRU    = "lru"
+	cacheTypeLRU    = "lru"
 	CacheTypeRanked = "ranked"
-	CacheTypeNone   = "none"
+	cacheTypeNone   = "none"
 )
 
 // isValidCacheType returns true if v is a valid cache type.
 func isValidCacheType(v string) bool {
 	switch v {
-	case CacheTypeLRU, CacheTypeRanked, CacheTypeNone:
+	case cacheTypeLRU, CacheTypeRanked, cacheTypeNone:
 		return true
 	default:
 		return false

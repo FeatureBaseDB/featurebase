@@ -156,7 +156,7 @@ func (i *Index) openFields() error {
 			continue
 		}
 
-		fld, err := i.newField(i.FieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		fld, err := i.newField(i.fieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 		if err != nil {
 			return ErrName
 		}
@@ -253,8 +253,8 @@ func (i *Index) setRemoteMaxShard(newmax uint64) {
 	i.remoteMaxShard = newmax
 }
 
-// FieldPath returns the path to a field in the index.
-func (i *Index) FieldPath(name string) string { return filepath.Join(i.path, name) }
+// fieldPath returns the path to a field in the index.
+func (i *Index) fieldPath(name string) string { return filepath.Join(i.path, name) }
 
 // Field returns a field in the index by name.
 func (i *Index) Field(name string) *Field {
@@ -279,10 +279,10 @@ func (i *Index) Fields() []*Field {
 	return a
 }
 
-// RecalculateCaches recalculates caches on every field in the index.
-func (i *Index) RecalculateCaches() {
+// recalculateCaches recalculates caches on every field in the index.
+func (i *Index) recalculateCaches() {
 	for _, field := range i.Fields() {
-		field.RecalculateCaches()
+		field.recalculateCaches()
 	}
 }
 
@@ -314,12 +314,12 @@ func (i *Index) CreateFieldIfNotExists(name string, opt FieldOptions) (*Field, e
 func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 	if name == "" {
 		return nil, errors.New("field name required")
-	} else if opt.CacheType != "" && !isValidCacheType(opt.CacheType) {
+	} else if opt.cacheType != "" && !isValidCacheType(opt.cacheType) {
 		return nil, ErrInvalidCacheType
 	}
 
 	// Initialize field.
-	f, err := i.newField(i.FieldPath(name), name)
+	f, err := i.newField(i.fieldPath(name), name)
 	if err != nil {
 		return nil, errors.Wrap(err, "initializing")
 	}
@@ -351,7 +351,7 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	if err != nil {
 		return nil, err
 	}
-	f.Logger = i.logger
+	f.logger = i.logger
 	f.Stats = i.Stats.WithTags(fmt.Sprintf("field:%s", name))
 	f.broadcaster = i.broadcaster
 	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
@@ -375,7 +375,7 @@ func (i *Index) DeleteField(name string) error {
 	}
 
 	// Delete field directory.
-	if err := os.RemoveAll(i.FieldPath(name)); err != nil {
+	if err := os.RemoveAll(i.fieldPath(name)); err != nil {
 		return errors.Wrap(err, "removing directory")
 	}
 
@@ -394,7 +394,7 @@ func (p indexSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 // IndexInfo represents schema information for an index.
 type IndexInfo struct {
 	Name   string       `json:"name"`
-	Fields []*FieldInfo `json:"fields"`
+	Fields []*fieldInfo `json:"fields"`
 }
 
 type indexInfoSlice []*IndexInfo
@@ -425,8 +425,8 @@ type IndexOptions struct {
 	Keys bool `json:"keys"`
 }
 
-// Encode converts i into its internal representation.
-func (i *IndexOptions) Encode() *internal.IndexMeta {
+// encode converts i into its internal representation.
+func (i *IndexOptions) encode() *internal.IndexMeta {
 	return &internal.IndexMeta{
 		Keys: i.Keys,
 	}

@@ -48,8 +48,8 @@ type URI struct {
 	port   uint16 `json:"port"`
 }
 
-// DefaultURI creates and returns the default URI.
-func DefaultURI() *URI {
+// defaultURI creates and returns the default URI.
+func defaultURI() *URI {
 	return &URI{
 		scheme: "http",
 		host:   "localhost",
@@ -69,8 +69,8 @@ func (u URIs) HostPortStrings() []string {
 
 // NewURIFromHostPort returns a URI with specified host and port.
 func NewURIFromHostPort(host string, port uint16) (*URI, error) {
-	uri := DefaultURI()
-	err := uri.SetHost(host)
+	uri := defaultURI()
+	err := uri.setHost(host)
 	if err != nil {
 		return nil, errors.Wrap(err, "setting uri host")
 	}
@@ -88,8 +88,8 @@ func (u *URI) Scheme() string {
 	return u.scheme
 }
 
-// SetScheme sets the scheme of this URI.
-func (u *URI) SetScheme(scheme string) error {
+// setScheme sets the scheme of this URI.
+func (u *URI) setScheme(scheme string) error {
 	m := schemeRegexp.FindStringSubmatch(scheme)
 	if m == nil {
 		return errors.New("invalid scheme")
@@ -103,8 +103,8 @@ func (u *URI) Host() string {
 	return u.host
 }
 
-// SetHost sets the host of this URI.
-func (u *URI) SetHost(host string) error {
+// setHost sets the host of this URI.
+func (u *URI) setHost(host string) error {
 	m := hostRegexp.FindStringSubmatch(host)
 	if m == nil {
 		return errors.New("invalid host")
@@ -133,8 +133,8 @@ func (u *URI) HostPort() string {
 	return s
 }
 
-// Normalize returns the address in a form usable by a HTTP client.
-func (u *URI) Normalize() string {
+// normalize returns the address in a form usable by a HTTP client.
+func (u *URI) normalize() string {
 	scheme := u.scheme
 	index := strings.Index(scheme, "+")
 	if index >= 0 {
@@ -148,8 +148,8 @@ func (u URI) String() string {
 	return fmt.Sprintf("%s://%s:%d", u.scheme, u.host, u.port)
 }
 
-// Equals returns true if the checked URI is equivalent to this URI.
-func (u URI) Equals(other *URI) bool {
+// equals returns true if the checked URI is equivalent to this URI.
+func (u URI) equals(other *URI) bool {
 	if other == nil {
 		return false
 	}
@@ -158,13 +158,13 @@ func (u URI) Equals(other *URI) bool {
 
 // Path returns URI with path
 func (u *URI) Path(path string) string {
-	return fmt.Sprintf("%s%s", u.Normalize(), path)
+	return fmt.Sprintf("%s%s", u.normalize(), path)
 }
 
 // The following methods are required to implement pflag Value interface.
 
-// Set sets the time quantum value.
-func (u *URI) Set(value string) error {
+// set sets the time quantum value.
+func (u *URI) set(value string) error {
 	uri, err := NewURIFromAddress(value)
 	if err != nil {
 		return err
@@ -206,8 +206,8 @@ func parseAddress(address string) (uri *URI, err error) {
 	return uri, nil
 }
 
-// Encode converts o into its internal representation.
-func (u URI) Encode() *internal.URI {
+// encode converts o into its internal representation.
+func (u URI) encode() *internal.URI {
 	return encodeURI(u)
 }
 
