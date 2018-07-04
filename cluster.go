@@ -45,7 +45,7 @@ const (
 	clusterStateResizing = "RESIZING"
 
 	// NodeState represents the state of a node during startup.
-	NodeStateLoading = "LOADING"
+	nodeStateLoading = "LOADING"
 	NodeStateReady   = "READY"
 
 	// resizeJob states.
