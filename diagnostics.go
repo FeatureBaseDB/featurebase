@@ -56,8 +56,8 @@ type diagnosticsCollector struct {
 	server *Server
 }
 
-// NewDiagnosticsCollector returns a new DiagnosticsCollector given an addr in the format "hostname:port".
-func NewDiagnosticsCollector(host string) *diagnosticsCollector {
+// newDiagnosticsCollector returns a new DiagnosticsCollector given an addr in the format "hostname:port".
+func newDiagnosticsCollector(host string) *diagnosticsCollector {
 	return &diagnosticsCollector{
 		host:       host,
 		VersionURL: defaultVersionCheckURL,
