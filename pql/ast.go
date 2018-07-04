@@ -390,7 +390,7 @@ func (c *Call) String() string {
 		// the equal sign in the string representation.
 		switch v := c.Args[key].(type) {
 		case *Condition:
-			fmt.Fprintf(&buf, "%v %s", key, v.String())
+			fmt.Fprintf(&buf, "%v %s", key, v.string())
 		default:
 			fmt.Fprintf(&buf, "%v=%s", key, formatValue(v))
 		}
@@ -419,8 +419,8 @@ type Condition struct {
 	Value interface{}
 }
 
-// String returns the string representation of the condition.
-func (cond *Condition) String() string {
+// string returns the string representation of the condition.
+func (cond *Condition) string() string {
 	return fmt.Sprintf("%s %s", cond.Op.String(), formatValue(cond.Value))
 }
 
@@ -460,7 +460,7 @@ func formatValue(v interface{}) string {
 	case time.Time:
 		return fmt.Sprintf("\"%s\"", v.Format(timeFormat))
 	case *Condition:
-		return v.String()
+		return v.string()
 	default:
 		return fmt.Sprintf("%v", v)
 	}
