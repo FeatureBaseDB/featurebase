@@ -370,10 +370,10 @@ func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) 
 	return api.cluster.shardNodes(indexName, shard), nil
 }
 
-// MarshalFragment returns an object which can write the specified fragment's data
+// marshalFragment returns an object which can write the specified fragment's data
 // to an io.Writer. The serialized data can be read back into a fragment with
 // the UnmarshalFragment API call.
-func (api *API) MarshalFragment(ctx context.Context, indexName string, fieldName string, shard uint64) (io.WriterTo, error) {
+func (api *API) marshalFragment(ctx context.Context, indexName string, fieldName string, shard uint64) (io.WriterTo, error) {
 	if err := api.validate(apiMarshalFragment); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
