@@ -64,25 +64,25 @@ func (s *standardLogger) Logger() *log.Logger {
 	return s.logger
 }
 
-// VerboseLogger is an implementation of pilosa.Logger which includes debug messages.
-type VerboseLogger struct {
+// verboseLogger is an implementation of pilosa.Logger which includes debug messages.
+type verboseLogger struct {
 	logger *log.Logger
 }
 
-func NewVerboseLogger(w io.Writer) *VerboseLogger {
-	return &VerboseLogger{
+func NewVerboseLogger(w io.Writer) *verboseLogger {
+	return &verboseLogger{
 		logger: log.New(w, "", log.LstdFlags),
 	}
 }
 
-func (vb *VerboseLogger) Printf(format string, v ...interface{}) {
+func (vb *verboseLogger) Printf(format string, v ...interface{}) {
 	vb.logger.Printf(format, v...)
 }
 
-func (vb *VerboseLogger) Debugf(format string, v ...interface{}) {
+func (vb *verboseLogger) Debugf(format string, v ...interface{}) {
 	vb.logger.Printf(format, v...)
 }
 
-func (vb *VerboseLogger) Logger() *log.Logger {
+func (vb *verboseLogger) Logger() *log.Logger {
 	return vb.logger
 }
