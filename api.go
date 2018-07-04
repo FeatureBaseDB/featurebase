@@ -197,8 +197,8 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	return index, nil
 }
 
-// Index retrieves the named index.
-func (api *API) Index(ctx context.Context, indexName string) (*Index, error) {
+// index retrieves the named index.
+func (api *API) index(ctx context.Context, indexName string) (*Index, error) {
 	if err := api.validate(apiIndex); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
