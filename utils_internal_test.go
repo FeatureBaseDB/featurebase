@@ -56,7 +56,7 @@ func NewTestCluster(n int) *cluster {
 
 // NewTestURI is a test URI creator that intentionally swallows errors.
 func NewTestURI(scheme, host string, port uint16) URI {
-	uri := DefaultURI()
+	uri := defaultURI()
 	uri.SetScheme(scheme)
 	uri.SetHost(host)
 	uri.SetPort(port)
@@ -64,7 +64,7 @@ func NewTestURI(scheme, host string, port uint16) URI {
 }
 
 func NewTestURIFromHostPort(host string, port uint16) URI {
-	uri := DefaultURI()
+	uri := defaultURI()
 	uri.SetHost(host)
 	uri.SetPort(port)
 	return *uri
