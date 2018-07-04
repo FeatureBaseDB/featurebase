@@ -27,7 +27,7 @@ import (
 
 var inspector *ctl.InspectCommand
 
-func NewInspectCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+func newInspectCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	inspector = ctl.NewInspectCommand(os.Stdin, os.Stdout, os.Stderr)
 
 	inspectCmd := &cobra.Command{
@@ -53,5 +53,5 @@ Inspects a data file and provides stats.
 }
 
 func init() {
-	subcommandFns["inspect"] = NewInspectCommand
+	subcommandFns["inspect"] = newInspectCommand
 }
