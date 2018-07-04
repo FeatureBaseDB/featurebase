@@ -82,7 +82,7 @@ func encodeNodes(a []*Node) []*internal.Node {
 func EncodeNode(n *Node) *internal.Node {
 	return &internal.Node{
 		ID:            n.ID,
-		URI:           n.URI.Encode(),
+		URI:           n.URI.encode(),
 		IsCoordinator: n.IsCoordinator,
 	}
 }

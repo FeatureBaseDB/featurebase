@@ -206,8 +206,8 @@ func parseAddress(address string) (uri *URI, err error) {
 	return uri, nil
 }
 
-// Encode converts o into its internal representation.
-func (u URI) Encode() *internal.URI {
+// encode converts o into its internal representation.
+func (u URI) encode() *internal.URI {
 	return encodeURI(u)
 }
 
