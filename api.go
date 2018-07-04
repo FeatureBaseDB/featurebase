@@ -386,10 +386,10 @@ func (api *API) marshalFragment(ctx context.Context, indexName string, fieldName
 	return f, nil
 }
 
-// UnmarshalFragment creates a new fragment (if necessary) and reads data from a
+// unmarshalFragment creates a new fragment (if necessary) and reads data from a
 // Reader which was previously written by MarshalFragment to populate the
 // fragment's data.
-func (api *API) UnmarshalFragment(ctx context.Context, indexName string, fieldName string, shard uint64, reader io.ReadCloser) error {
+func (api *API) unmarshalFragment(ctx context.Context, indexName string, fieldName string, shard uint64, reader io.ReadCloser) error {
 	if err := api.validate(apiUnmarshalFragment); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
