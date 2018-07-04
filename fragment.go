@@ -229,7 +229,7 @@ func (f *fragment) openCache() error {
 	switch f.CacheType {
 	case CacheTypeRanked:
 		f.cache = NewRankCache(f.CacheSize)
-	case CacheTypeLRU:
+	case cacheTypeLRU:
 		f.cache = newLRUCache(f.CacheSize)
 	case CacheTypeNone:
 		f.cache = globalNopCache

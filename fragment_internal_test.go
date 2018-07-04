@@ -880,7 +880,7 @@ func TestFragment_Blocks_Empty(t *testing.T) {
 
 // Ensure a fragment's cache can be persisted between restarts.
 func TestFragment_LRUCache_Persistence(t *testing.T) {
-	f := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeLRU)
+	f := mustOpenFragment("i", "f", viewStandard, 0, cacheTypeLRU)
 	defer f.Close()
 
 	// Set bits on the fragment.

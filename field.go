@@ -1318,7 +1318,7 @@ func (b *bsiGroup) validate() error {
 
 // Cache types.
 const (
-	CacheTypeLRU    = "lru"
+	cacheTypeLRU    = "lru"
 	CacheTypeRanked = "ranked"
 	CacheTypeNone   = "none"
 )
@@ -1326,7 +1326,7 @@ const (
 // isValidCacheType returns true if v is a valid cache type.
 func isValidCacheType(v string) bool {
 	switch v {
-	case CacheTypeLRU, CacheTypeRanked, CacheTypeNone:
+	case cacheTypeLRU, CacheTypeRanked, CacheTypeNone:
 		return true
 	default:
 		return false
