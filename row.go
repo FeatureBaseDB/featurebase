@@ -297,8 +297,8 @@ func decodeRow(pr *internal.Row) *Row {
 	return r
 }
 
-// Union performs a union on a slice of rows.
-func Union(rows []*Row) *Row {
+// union performs a union on a slice of rows.
+func union(rows []*Row) *Row {
 	other := rows[0]
 	for _, r := range rows[1:] {
 		other = other.Union(r)
