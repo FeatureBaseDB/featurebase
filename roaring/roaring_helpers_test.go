@@ -240,7 +240,7 @@ func doContainer(containerType byte, data interface{}) *Container {
 		c.array = data.([]uint16)
 	case containerBitmap:
 		c.bitmap = data.([]uint64)
-	case ContainerRun:
+	case containerRun:
 		c.runs = data.([]interval16)
 	}
 	c.n = c.count()
@@ -281,17 +281,17 @@ func setupContainerTests() map[byte]map[string]*Container {
 	}
 
 	// run containers
-	cts[ContainerRun] = map[string]*Container{
-		"empty":         doContainer(ContainerRun, runEmpty()),
-		"full":          doContainer(ContainerRun, runFull()),
-		"firstBitSet":   doContainer(ContainerRun, runFirstBitSet()),
-		"lastBitSet":    doContainer(ContainerRun, runLastBitSet()),
-		"firstBitUnset": doContainer(ContainerRun, runFirstBitUnset()),
-		"lastBitUnset":  doContainer(ContainerRun, runLastBitUnset()),
-		"innerBitsSet":  doContainer(ContainerRun, runInnerBitsSet()),
-		"outerBitsSet":  doContainer(ContainerRun, runOuterBitsSet()),
-		"oddBitsSet":    doContainer(ContainerRun, runOddBitsSet()),
-		"evenBitsSet":   doContainer(ContainerRun, runEvenBitsSet()),
+	cts[containerRun] = map[string]*Container{
+		"empty":         doContainer(containerRun, runEmpty()),
+		"full":          doContainer(containerRun, runFull()),
+		"firstBitSet":   doContainer(containerRun, runFirstBitSet()),
+		"lastBitSet":    doContainer(containerRun, runLastBitSet()),
+		"firstBitUnset": doContainer(containerRun, runFirstBitUnset()),
+		"lastBitUnset":  doContainer(containerRun, runLastBitUnset()),
+		"innerBitsSet":  doContainer(containerRun, runInnerBitsSet()),
+		"outerBitsSet":  doContainer(containerRun, runOuterBitsSet()),
+		"oddBitsSet":    doContainer(containerRun, runOddBitsSet()),
+		"evenBitsSet":   doContainer(containerRun, runEvenBitsSet()),
 	}
 
 	return cts
