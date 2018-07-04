@@ -225,8 +225,8 @@ func (r *Row) IncrementCount(i uint64) {
 
 }
 
-// DecrementCount decrements the row cached counter.
-func (r *Row) DecrementCount(i uint64) {
+// decrementCount decrements the row cached counter.
+func (r *Row) decrementCount(i uint64) {
 	seg := r.segment(i / ShardWidth)
 	if seg != nil {
 		if seg.n > 0 {
