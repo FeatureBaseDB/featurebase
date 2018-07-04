@@ -25,8 +25,8 @@ import (
 
 var Importer *ctl.ImportCommand
 
-// NewImportCommand runs the Pilosa import subcommand for ingesting bulk data.
-func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+// newImportCommand runs the Pilosa import subcommand for ingesting bulk data.
+func newImportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	Importer = ctl.NewImportCommand(stdin, stdout, stderr)
 	importCmd := &cobra.Command{
 		Use:   "import",
@@ -67,5 +67,5 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 }
 
 func init() {
-	subcommandFns["import"] = NewImportCommand
+	subcommandFns["import"] = newImportCommand
 }
