@@ -87,8 +87,8 @@ func EncodeNode(n *Node) *internal.Node {
 	}
 }
 
-// DecodeNodes converts a proto message into a slice of Nodes.
-func DecodeNodes(a []*internal.Node) []*Node {
+// decodeNodes converts a proto message into a slice of Nodes.
+func decodeNodes(a []*internal.Node) []*Node {
 	if len(a) == 0 {
 		return nil
 	}
@@ -1764,7 +1764,7 @@ func (c *cluster) mergeClusterStatus(cs *internal.ClusterStatus) error {
 	// Set ClusterID.
 	c.setID(cs.ClusterID)
 
-	officialNodes := DecodeNodes(cs.Nodes)
+	officialNodes := decodeNodes(cs.Nodes)
 
 	// Add all nodes from the coordinator.
 	for _, node := range officialNodes {
