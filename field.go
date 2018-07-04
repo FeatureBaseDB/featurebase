@@ -85,7 +85,7 @@ func OptFieldTypeSet(cacheType string, cacheSize uint32) FieldOption {
 		}
 		fo.Type = FieldTypeSet
 		fo.cacheType = cacheType
-		fo.CacheSize = cacheSize
+		fo.cacheSize = cacheSize
 		return nil
 	}
 }
@@ -192,12 +192,12 @@ func (f *Field) SetCacheSize(v uint32) error {
 	defer f.mu.Unlock()
 
 	// Ignore if no change occurred.
-	if v == 0 || f.options.CacheSize == v {
+	if v == 0 || f.options.cacheSize == v {
 		return nil
 	}
 
 	// Persist meta data to disk on change.
-	f.options.CacheSize = v
+	f.options.cacheSize = v
 	if err := f.saveMeta(); err != nil {
 		return errors.Wrap(err, "saving")
 	}
@@ -208,7 +208,7 @@ func (f *Field) SetCacheSize(v uint32) error {
 // CacheSize returns the ranked field cache size.
 func (f *Field) CacheSize() uint32 {
 	f.mu.RLock()
-	v := f.options.CacheSize
+	v := f.options.cacheSize
 	f.mu.RUnlock()
 	return v
 }
@@ -305,7 +305,7 @@ func (f *Field) loadMeta() error {
 	// Copy metadata fields.
 	f.options.Type = pb.Type
 	f.options.cacheType = pb.CacheType
-	f.options.CacheSize = pb.CacheSize
+	f.options.cacheSize = pb.CacheSize
 	f.options.Min = pb.Min
 	f.options.Max = pb.Max
 	f.options.TimeQuantum = TimeQuantum(pb.TimeQuantum)
@@ -339,8 +339,8 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		if opt.cacheType != "" {
 			f.options.cacheType = opt.cacheType
 		}
-		if opt.CacheSize != 0 {
-			f.options.CacheSize = opt.CacheSize
+		if opt.cacheSize != 0 {
+			f.options.cacheSize = opt.cacheSize
 		}
 		f.options.Min = 0
 		f.options.Max = 0
@@ -349,7 +349,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 	case FieldTypeInt:
 		f.options.Type = opt.Type
 		f.options.cacheType = cacheTypeNone
-		f.options.CacheSize = 0
+		f.options.cacheSize = 0
 		f.options.Min = opt.Min
 		f.options.Max = opt.Max
 		f.options.TimeQuantum = ""
@@ -372,7 +372,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 	case FieldTypeTime:
 		f.options.Type = opt.Type
 		f.options.cacheType = cacheTypeNone
-		f.options.CacheSize = 0
+		f.options.cacheSize = 0
 		f.options.Min = 0
 		f.options.Max = 0
 		f.options.Keys = opt.Keys
@@ -639,7 +639,7 @@ func (f *Field) createViewIfNotExistsBase(name string) (*view, bool, error) {
 }
 
 func (f *Field) newView(path, name string) *view {
-	view := newView(path, f.index, f.name, name, f.options.CacheSize)
+	view := newView(path, f.index, f.name, name, f.options.cacheSize)
 	view.cacheType = f.options.cacheType
 	view.logger = f.logger
 	view.rowAttrStore = f.rowAttrStore
@@ -1130,7 +1130,7 @@ func (p fieldInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 type FieldOptions struct {
 	Type        string      `json:"type,omitempty"`
 	cacheType   string      `json:"cacheType,omitempty"`
-	CacheSize   uint32      `json:"cacheSize,omitempty"`
+	cacheSize   uint32      `json:"cacheSize,omitempty"`
 	Min         int64       `json:"min,omitempty"`
 	Max         int64       `json:"max,omitempty"`
 	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
@@ -1144,7 +1144,7 @@ func applyDefaultOptions(o FieldOptions) FieldOptions {
 		return FieldOptions{
 			Type:      DefaultFieldType,
 			cacheType: DefaultCacheType,
-			CacheSize: DefaultCacheSize,
+			cacheSize: DefaultCacheSize,
 		}
 	}
 	return o
@@ -1162,7 +1162,7 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 	return &internal.FieldOptions{
 		Type:        o.Type,
 		CacheType:   o.cacheType,
-		CacheSize:   o.CacheSize,
+		CacheSize:   o.cacheSize,
 		Min:         o.Min,
 		Max:         o.Max,
 		TimeQuantum: string(o.TimeQuantum),
@@ -1177,7 +1177,7 @@ func decodeFieldOptions(options *internal.FieldOptions) *FieldOptions {
 	return &FieldOptions{
 		Type:        options.Type,
 		cacheType:   options.CacheType,
-		CacheSize:   options.CacheSize,
+		cacheSize:   options.CacheSize,
 		Min:         options.Min,
 		Max:         options.Max,
 		TimeQuantum: TimeQuantum(options.TimeQuantum),
@@ -1195,7 +1195,7 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 		}{
 			o.Type,
 			o.cacheType,
-			o.CacheSize,
+			o.cacheSize,
 		})
 	case FieldTypeInt:
 		return json.Marshal(struct {

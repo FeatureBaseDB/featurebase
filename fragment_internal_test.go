@@ -750,7 +750,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	defer index.Close()
 
 	// Create field.
-	field, err := index.CreateFieldIfNotExists("f", FieldOptions{cacheType: CacheTypeRanked, CacheSize: cacheSize})
+	field, err := index.CreateFieldIfNotExists("f", FieldOptions{cacheType: CacheTypeRanked, cacheSize: cacheSize})
 	if err != nil {
 		t.Fatal(err)
 	}
