@@ -216,8 +216,8 @@ func (r *Row) InvalidateCount() {
 	}
 }
 
-// IncrementCount increments the row cached counter, note this is an optimization that assumes that the caller is aware the size increased.
-func (r *Row) IncrementCount(i uint64) {
+// incrementCount increments the row cached counter, note this is an optimization that assumes that the caller is aware the size increased.
+func (r *Row) incrementCount(i uint64) {
 	seg := r.segment(i / ShardWidth)
 	if seg != nil {
 		seg.n++
