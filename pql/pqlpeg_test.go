@@ -228,6 +228,13 @@ func TestPEGWorking(t *testing.T) {
 			name:   "Dashed Frame",
 			input:  "Set(1, my-frame=9)",
 			ncalls: 1},
+		{
+			name: "newlines",
+			input: `Set(
+1,
+my-frame
+=9)`,
+			ncalls: 1},
 	}
 
 	for i, test := range tests {
