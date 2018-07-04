@@ -546,8 +546,8 @@ func (api *API) Views(ctx context.Context, indexName string, fieldName string) (
 	return views, nil
 }
 
-// DeleteView removes the given view.
-func (api *API) DeleteView(ctx context.Context, indexName string, fieldName string, viewName string) error {
+// deleteView removes the given view.
+func (api *API) deleteView(ctx context.Context, indexName string, fieldName string, viewName string) error {
 	if err := api.validate(apiDeleteView); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
