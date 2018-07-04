@@ -394,7 +394,7 @@ func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 
 	// Get the row from row cache or fragment.storage.
 	row := f.unprotectedRow(rowID, true, true)
-	row.SetBit(columnID)
+	row.setBit(columnID)
 
 	// Update the cache.
 	f.cache.Add(rowID, row.Count())

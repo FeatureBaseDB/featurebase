@@ -38,7 +38,7 @@ type Row struct {
 func NewRow(columns ...uint64) *Row {
 	r := &Row{}
 	for _, i := range columns {
-		r.SetBit(i)
+		r.setBit(i)
 	}
 	return r
 }
@@ -155,8 +155,8 @@ func (r *Row) Difference(other *Row) *Row {
 	return &Row{segments: segments}
 }
 
-// SetBit sets the i-th column of the row.
-func (r *Row) SetBit(i uint64) (changed bool) {
+// setBit sets the i-th column of the row.
+func (r *Row) setBit(i uint64) (changed bool) {
 	return r.createSegmentIfNotExists(i / ShardWidth).SetBit(i)
 }
 
@@ -292,7 +292,7 @@ func decodeRow(pr *internal.Row) *Row {
 	r := NewRow()
 	r.Attrs = decodeAttrs(pr.Attrs)
 	for _, v := range pr.Columns {
-		r.SetBit(v)
+		r.setBit(v)
 	}
 	return r
 }
