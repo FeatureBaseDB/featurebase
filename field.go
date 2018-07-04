@@ -348,7 +348,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Keys = opt.Keys
 	case FieldTypeInt:
 		f.options.Type = opt.Type
-		f.options.CacheType = CacheTypeNone
+		f.options.CacheType = cacheTypeNone
 		f.options.CacheSize = 0
 		f.options.Min = opt.Min
 		f.options.Max = opt.Max
@@ -371,7 +371,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		}
 	case FieldTypeTime:
 		f.options.Type = opt.Type
-		f.options.CacheType = CacheTypeNone
+		f.options.CacheType = cacheTypeNone
 		f.options.CacheSize = 0
 		f.options.Min = 0
 		f.options.Max = 0
@@ -1320,13 +1320,13 @@ func (b *bsiGroup) validate() error {
 const (
 	cacheTypeLRU    = "lru"
 	CacheTypeRanked = "ranked"
-	CacheTypeNone   = "none"
+	cacheTypeNone   = "none"
 )
 
 // isValidCacheType returns true if v is a valid cache type.
 func isValidCacheType(v string) bool {
 	switch v {
-	case cacheTypeLRU, CacheTypeRanked, CacheTypeNone:
+	case cacheTypeLRU, CacheTypeRanked, cacheTypeNone:
 		return true
 	default:
 		return false

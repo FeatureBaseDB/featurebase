@@ -724,7 +724,7 @@ func TestFragment_TopN_IDs(t *testing.T) {
 
 // Ensure a fragment return none if CacheTypeNone is set
 func TestFragment_TopN_NopCache(t *testing.T) {
-	f := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeNone)
+	f := mustOpenFragment("i", "f", viewStandard, 0, cacheTypeNone)
 	defer f.Close()
 
 	// Set bits on various rows.

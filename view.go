@@ -81,7 +81,7 @@ func (v *view) open() error {
 
 	// Never keep a cache for field views.
 	if strings.HasPrefix(v.name, viewBSIGroupPrefix) {
-		v.cacheType = CacheTypeNone
+		v.cacheType = cacheTypeNone
 	}
 
 	if err := func() error {

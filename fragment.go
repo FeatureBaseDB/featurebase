@@ -231,7 +231,7 @@ func (f *fragment) openCache() error {
 		f.cache = NewRankCache(f.CacheSize)
 	case cacheTypeLRU:
 		f.cache = newLRUCache(f.CacheSize)
-	case CacheTypeNone:
+	case cacheTypeNone:
 		f.cache = globalNopCache
 		return nil
 	default:
@@ -1003,7 +1003,7 @@ func (f *fragment) top(opt topOptions) ([]Pair, error) {
 
 func (f *fragment) topBitmapPairs(rowIDs []uint64) []bitmapPair {
 	// Don't retrieve from storage if CacheTypeNone.
-	if f.CacheType == CacheTypeNone {
+	if f.CacheType == cacheTypeNone {
 		return f.cache.Top()
 	}
 	// If no specific rows are requested, retrieve top rows.
@@ -1486,7 +1486,7 @@ func (f *fragment) flushCache() error {
 		return nil
 	}
 
-	if f.CacheType == CacheTypeNone {
+	if f.CacheType == cacheTypeNone {
 		return nil
 	}
 
