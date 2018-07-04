@@ -69,52 +69,6 @@ func (n Node) String() string {
 	return fmt.Sprintf("Node: %s", n.ID)
 }
 
-// EncodeNodes converts a slice of Nodes into its internal representation.
-func EncodeNodes(a []*Node) []*internal.Node {
-	other := make([]*internal.Node, len(a))
-	for i := range a {
-		other[i] = EncodeNode(a[i])
-	}
-	return other
-}
-
-// EncodeNode converts a Node into its internal representation.
-func EncodeNode(n *Node) *internal.Node {
-	return &internal.Node{
-		ID:            n.ID,
-		URI:           n.URI.Encode(),
-		IsCoordinator: n.IsCoordinator,
-	}
-}
-
-// DecodeNodes converts a proto message into a slice of Nodes.
-func DecodeNodes(a []*internal.Node) []*Node {
-	if len(a) == 0 {
-		return nil
-	}
-	other := make([]*Node, len(a))
-	for i := range a {
-		other[i] = DecodeNode(a[i])
-	}
-	return other
-}
-
-// DecodeNode converts a proto message into a Node.
-func DecodeNode(node *internal.Node) *Node {
-	return &Node{
-		ID:            node.ID,
-		URI:           decodeURI(node.URI),
-		IsCoordinator: node.IsCoordinator,
-	}
-}
-
-func DecodeNodeEvent(ne *internal.NodeEventMessage) *nodeEvent {
-	return &nodeEvent{
-		Event: NodeEventType(ne.Event),
-		Node:  DecodeNode(ne.Node),
-	}
-}
-
 // Nodes represents a list of nodes.
 type Nodes []*Node
 
@@ -1176,7 +1130,7 @@ func (c *cluster) completeCurrentJob(state string) error {
 }
 
 // followResizeInstruction is run by any node that receives a ResizeInstruction.
-func (c *cluster) followResizeInstruction(instr *internal.ResizeInstruction) error {
+func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 	c.logger.Printf("follow resize instruction on %s", c.Node.ID)
 	// Make sure the cluster status on this node agrees with the Coordinator
 	// before attempting a resize.
@@ -1553,32 +1507,6 @@ func (c *cluster) saveTopology() error {
 	return nil
 }
 
-func encodeTopology(topology *Topology) *internal.Topology {
-	if topology == nil {
-		return nil
-	}
-	return &internal.Topology{
-		ClusterID: topology.ClusterID,
-		NodeIDs:   topology.NodeIDs,
-	}
-}
-
-func decodeTopology(topology *internal.Topology) (*Topology, error) {
-	if topology == nil {
-		return nil, nil
-	}
-
-	t := NewTopology()
-	t.ClusterID = topology.ClusterID
-	t.NodeIDs = topology.NodeIDs
-	sort.Slice(t.NodeIDs,
-		func(i, j int) bool {
-			return t.NodeIDs[i] < t.NodeIDs[j]
-		})
-
-	return t, nil
-}
-
 func (c *cluster) considerTopology() error {
 	// Create ClusterID if one does not already exist.
 	if c.id == "" {
@@ -1752,7 +1680,7 @@ func (c *cluster) nodeLeave(node *Node) error {
 	return nil
 }
 
-func (c *cluster) mergeClusterStatus(cs *internal.ClusterStatus) error {
+func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.logger.Printf("merge cluster status: %v", cs)
@@ -1764,7 +1692,7 @@ func (c *cluster) mergeClusterStatus(cs *internal.ClusterStatus) error {
 	// Set ClusterID.
 	c.setID(cs.ClusterID)
 
-	officialNodes := DecodeNodes(cs.Nodes)
+	officialNodes := cs.Nodes
 
 	// Add all nodes from the coordinator.
 	for _, node := range officialNodes {
@@ -1812,4 +1740,232 @@ func (c *cluster) setStatic(hosts []string) error {
 		c.Nodes = append(c.Nodes, &Node{URI: *uri})
 	}
 	return nil
+}
+
+type ClusterStatus struct {
+	ClusterID string
+	State     string
+	Nodes     []*Node
+}
+
+type ResizeInstruction struct {
+	JobID         int64
+	Node          *Node
+	Coordinator   *Node
+	Sources       []*ResizeSource
+	Schema        *Schema
+	ClusterStatus *ClusterStatus
+}
+
+func decodeResizeInstruction(ri *internal.ResizeInstruction) ResizeInstruction {
+	return &ResizeInstruction{
+		JobID:         ri.JobID,
+		Node:          DecodeNode(ri.Node),
+		Coordinator:   DecodeNode(ri.Coordinator),
+		Sources:       decodeResizeSources(ri.Sources),
+		Schema:        decodeSchema(ri.Schema),
+		ClusterStatus: decodeClusterStatus(ri.ClusterStatus),
+	}
+}
+
+type ResizeSource struct {
+	Node  *Node  `protobuf:"bytes,1,opt,name=Node" json:"Node,omitempty"`
+	Index string `protobuf:"bytes,2,opt,name=Index,proto3" json:"Index,omitempty"`
+	Field string `protobuf:"bytes,3,opt,name=Field,proto3" json:"Field,omitempty"`
+	View  string `protobuf:"bytes,4,opt,name=View,proto3" json:"View,omitempty"`
+	Shard uint64 `protobuf:"varint,5,opt,name=Shard,proto3" json:"Shard,omitempty"`
+}
+
+func decodeResizeSources(srcs []*internal.ResizeSource) []*ResizeSource {
+	new := make([]*ResizeSource, 0, len(srcs))
+	for _, src := range srcs {
+		new = append(new, decodeResizeSource(src))
+	}
+	return new
+}
+
+func decodeResizeSource(rs *internal.ResizeSource) *ResizeSource {
+	return &ResizeSource{
+		Node:  DecodeNode(rs.Node),
+		Index: rs.Index,
+		Field: rs.Field,
+		View:  rs.View,
+		Shard: rs.Shard,
+	}
+}
+
+// Schema is a schema
+type Schema struct {
+	Indexes []*IndexInfo
+}
+
+func decodeSchema(s *internal.Schema) *Schema {
+	return &Schema{
+		Indexes: decodeIndexes(s.Indexes),
+	}
+}
+
+func decodeIndexes(idxs []*internal.Index) []*IndexInfo {
+	new := make([]*IndexInfo, 0, len(idxs))
+	for _, idx := range idxs {
+		new = append(new, decodeIndex(idx))
+	}
+	return new
+}
+
+func decodeIndex(idx *internal.Index) *IndexInfo {
+	return &IndexInfo{
+		Name:   idx.Name,
+		Fields: decodeFields(idx.Fields),
+	}
+}
+
+func decodeFields(fs []*internal.Field) []*FieldInfo {
+	new := make([]*FieldInfo, 0, len(fs))
+	for _, f := range fs {
+		new = append(new, decodeField(f))
+	}
+	return new
+}
+
+func decodeField(f *internal.Field) *FieldInfo {
+	fi := &FieldInfo{
+		Name:    f.Name,
+		Options: *decodeFieldOptions(f.Meta),
+		Views:   make([]*viewInfo, 0, len(f.Views)),
+	}
+	for _, viewname := range f.Views {
+		fi.Views = append(fi.Views, &viewInfo{Name: viewname})
+	}
+	return fi
+}
+
+// EncodeNodes converts a slice of Nodes into its internal representation.
+func EncodeNodes(a []*Node) []*internal.Node {
+	other := make([]*internal.Node, len(a))
+	for i := range a {
+		other[i] = EncodeNode(a[i])
+	}
+	return other
+}
+
+// EncodeNode converts a Node into its internal representation.
+func EncodeNode(n *Node) *internal.Node {
+	return &internal.Node{
+		ID:            n.ID,
+		URI:           n.URI.Encode(),
+		IsCoordinator: n.IsCoordinator,
+	}
+}
+
+// DecodeNodes converts a proto message into a slice of Nodes.
+func DecodeNodes(a []*internal.Node) []*Node {
+	if len(a) == 0 {
+		return nil
+	}
+	other := make([]*Node, len(a))
+	for i := range a {
+		other[i] = DecodeNode(a[i])
+	}
+	return other
+}
+
+func decodeClusterStatus(cs *internal.ClusterStatus) *ClusterStatus {
+	return &ClusterStatus{
+		State:     cs.State,
+		ClusterID: cs.ClusterID,
+		Nodes:     DecodeNodes(cs.Nodes),
+	}
+}
+
+// DecodeNode converts a proto message into a Node.
+func DecodeNode(node *internal.Node) *Node {
+	return &Node{
+		ID:            node.ID,
+		URI:           decodeURI(node.URI),
+		IsCoordinator: node.IsCoordinator,
+	}
+}
+
+func DecodeNodeEvent(ne *internal.NodeEventMessage) *nodeEvent {
+	return &nodeEvent{
+		Event: NodeEventType(ne.Event),
+		Node:  DecodeNode(ne.Node),
+	}
+}
+
+func encodeTopology(topology *Topology) *internal.Topology {
+	if topology == nil {
+		return nil
+	}
+	return &internal.Topology{
+		ClusterID: topology.ClusterID,
+		NodeIDs:   topology.NodeIDs,
+	}
+}
+
+func decodeTopology(topology *internal.Topology) (*Topology, error) {
+	if topology == nil {
+		return nil, nil
+	}
+
+	t := NewTopology()
+	t.ClusterID = topology.ClusterID
+	t.NodeIDs = topology.NodeIDs
+	sort.Slice(t.NodeIDs,
+		func(i, j int) bool {
+			return t.NodeIDs[i] < t.NodeIDs[j]
+		})
+
+	return t, nil
+}
+
+type CreateShardMessage struct {
+	Index string
+	Shard uint64
+}
+
+func encodeCreateShardMessage(m *CreateShardMessage) *internal.CreateShardMessage {
+	return &internal.CreateShardMessage{
+		Index: m.Index,
+		Shard: m.Shard,
+	}
+}
+
+func decodeCreateShardMessage(pb *internal.CreateShardMessage) *CreateShardMessage {
+	return &CreateShardMessage{
+		Index: pb.Index,
+		Shard: pb.Shard,
+	}
+}
+
+type CreateIndexMessage struct {
+	Index string
+	Meta  *IndexOptions
+}
+
+func encodeCreateIndexMessage(m *CreateIndexMessage) *internal.CreateIndexMessage {
+	return &internal.CreateIndexMessage{
+		Index: m.Index,
+		Meta:  encodeIndexMeta(m.Meta),
+	}
+}
+
+func decodeCreateIndexMessage(pb *internal.CreateIndexMessage) *CreateIndexMessage {
+	return &CreateIndexMessage{
+		Index: pb.Index,
+		Meta:  decodeIndexMeta(pb.Meta),
+	}
+}
+
+func encodeIndexMeta(m *IndexOptions) *internal.IndexMeta {
+	return &internal.IndexMeta{
+		Keys: m.Keys,
+	}
+}
+
+func decodeIndexMeta(pb *internal.IndexMeta) *IndexOptions {
+	return &IndexOptions{
+		Keys: pb.Keys,
+	}
 }

@@ -483,12 +483,12 @@ func (s *Server) receiveMessage(pb proto.Message) error {
 			return err
 		}
 	case *internal.ClusterStatus:
-		err := s.cluster.mergeClusterStatus(obj)
+		err := s.cluster.mergeClusterStatus(decodeClusterStatus(obj))
 		if err != nil {
 			return err
 		}
 	case *internal.ResizeInstruction:
-		err := s.cluster.followResizeInstruction(obj)
+		err := s.cluster.followResizeInstruction(decodeResizeInstruction(obj))
 		if err != nil {
 			return err
 		}
@@ -518,7 +518,7 @@ func (s *Server) receiveMessage(pb proto.Message) error {
 }
 
 // SendSync represents an implementation of Broadcaster.
-func (s *Server) SendSync(pb proto.Message) error {
+func (s *Server) SendSync(m Message) error {
 	var eg errgroup.Group
 	for _, node := range s.cluster.Nodes {
 		node := node

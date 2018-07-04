@@ -25,10 +25,14 @@ import (
 
 // broadcaster is an interface for broadcasting messages.
 type broadcaster interface {
-	SendSync(pb proto.Message) error
-	SendAsync(pb proto.Message) error
-	SendTo(to *Node, pb proto.Message) error
+	SendSync(Message) error
+	SendAsync(Message) error
+	SendTo(*Node, Message) error
 }
+
+// Message is the interface implemented by all core pilosa types which can be serialized to messages.
+// TODO add at least a single "isMessage()" method.
+type Message interface{}
 
 func init() {
 	NopBroadcaster = &nopBroadcaster{}
@@ -40,13 +44,13 @@ var NopBroadcaster broadcaster
 type nopBroadcaster struct{}
 
 // SendSync A no-op implementation of Broadcaster SendSync method.
-func (n nopBroadcaster) SendSync(pb proto.Message) error { return nil }
+func (nopBroadcaster) SendSync(Message) error { return nil }
 
 // SendAsync A no-op implementation of Broadcaster SendAsync method.
-func (n nopBroadcaster) SendAsync(pb proto.Message) error { return nil }
+func (nopBroadcaster) SendAsync(Message) error { return nil }
 
 // SendTo is a no-op implementation of Broadcaster SendTo method.
-func (c nopBroadcaster) SendTo(to *Node, pb proto.Message) error { return nil }
+func (nopBroadcaster) SendTo(*Node, Message) error { return nil }
 
 // Broadcast message types.
 const (
@@ -69,7 +73,8 @@ const (
 )
 
 // MarshalMessage encodes the protobuf message into a byte slice.
-func MarshalMessage(m proto.Message) ([]byte, error) {
+func MarshalMessage(pm Message) ([]byte, error) {
+	m := encode(pm)
 	var typ uint8
 	switch obj := m.(type) {
 	case *internal.CreateShardMessage:
@@ -114,8 +119,20 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 	return append([]byte{typ}, buf...), nil
 }
 
+func encode(m Message) proto.Message {
+	var pm proto.Message
+	switch mt := m.(type) {
+	case *CreateShardMessage:
+		return encodeCreateShardMessage(mt)
+	case *CreateIndexMessage:
+		return encodeCreateIndexMessage(mt)
+		// TODO, the rest
+	}
+	return nil
+}
+
 // UnmarshalMessage decodes the byte slice into a protobuf message.
-func UnmarshalMessage(buf []byte) (proto.Message, error) {
+func UnmarshalMessage(buf []byte) (Message, error) {
 	typ, buf := buf[0], buf[1:]
 	var m proto.Message
 	switch typ {
