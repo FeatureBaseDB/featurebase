@@ -268,50 +268,50 @@ type SystemInfo interface {
 }
 
 // newNopSystemInfo creates a no-op implementation of SystemInfo.
-func newNopSystemInfo() *NopSystemInfo {
-	return &NopSystemInfo{}
+func newNopSystemInfo() *nopSystemInfo {
+	return &nopSystemInfo{}
 }
 
-// NopSystemInfo is a no-op implementation of SystemInfo.
-type NopSystemInfo struct {
+// nopSystemInfo is a no-op implementation of SystemInfo.
+type nopSystemInfo struct {
 }
 
 // Uptime is a no-op implementation of SystemInfo.Uptime.
-func (n *NopSystemInfo) Uptime() (uint64, error) {
+func (n *nopSystemInfo) Uptime() (uint64, error) {
 	return 0, nil
 }
 
 // Platform is a no-op implementation of SystemInfo.Platform.
-func (n *NopSystemInfo) Platform() (string, error) {
+func (n *nopSystemInfo) Platform() (string, error) {
 	return "", nil
 }
 
 // Family is a no-op implementation of SystemInfo.Family.
-func (n *NopSystemInfo) Family() (string, error) {
+func (n *nopSystemInfo) Family() (string, error) {
 	return "", nil
 }
 
 // OSVersion is a no-op implementation of SystemInfo.OSVersion.
-func (n *NopSystemInfo) OSVersion() (string, error) {
+func (n *nopSystemInfo) OSVersion() (string, error) {
 	return "", nil
 }
 
 // KernelVersion is a no-op implementation of SystemInfo.KernelVersion.
-func (n *NopSystemInfo) KernelVersion() (string, error) {
+func (n *nopSystemInfo) KernelVersion() (string, error) {
 	return "", nil
 }
 
 // MemFree is a no-op implementation of SystemInfo.MemFree.
-func (n *NopSystemInfo) MemFree() (uint64, error) {
+func (n *nopSystemInfo) MemFree() (uint64, error) {
 	return 0, nil
 }
 
 // MemTotal is a no-op implementation of SystemInfo.MemTotal.
-func (n *NopSystemInfo) MemTotal() (uint64, error) {
+func (n *nopSystemInfo) MemTotal() (uint64, error) {
 	return 0, nil
 }
 
 // MemUsed is a no-op implementation of SystemInfo.MemUsed.
-func (n *NopSystemInfo) MemUsed() (uint64, error) {
+func (n *nopSystemInfo) MemUsed() (uint64, error) {
 	return 0, nil
 }
