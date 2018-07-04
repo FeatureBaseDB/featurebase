@@ -27,7 +27,7 @@ import (
 
 var conf *ctl.ConfigCommand
 
-func NewConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+func newConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	conf = ctl.NewConfigCommand(os.Stdin, os.Stdout, os.Stderr)
 	Server := server.NewCommand(stdin, stdout, stderr)
 	confCmd := &cobra.Command{
@@ -51,5 +51,5 @@ func NewConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command 
 }
 
 func init() {
-	subcommandFns["config"] = NewConfigCommand
+	subcommandFns["config"] = newConfigCommand
 }
