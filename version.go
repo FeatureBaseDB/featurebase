@@ -14,13 +14,13 @@
 
 package pilosa
 
-var Enterprise = "0"
+var enterprise = "0"
 var EnterpriseEnabled = false
 var Version = "v0.0.0"
 var BuildTime = "not recorded"
 
 func init() {
-	if Enterprise == "1" {
+	if enterprise == "1" {
 		EnterpriseEnabled = true
 	}
 }
