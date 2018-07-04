@@ -150,12 +150,12 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 }
 
 // readColumnAttrSets returns a list of column attribute objects by id.
-func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet, error) {
+func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*columnAttrSet, error) {
 	if index == nil {
 		return nil, nil
 	}
 
-	ax := make([]*ColumnAttrSet, 0, len(ids))
+	ax := make([]*columnAttrSet, 0, len(ids))
 	for _, id := range ids {
 		// Read attributes for column. Skip column if empty.
 		attrs, err := index.ColumnAttrStore().Attrs(id)
@@ -166,7 +166,7 @@ func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet
 		}
 
 		// Append column with attributes.
-		ax = append(ax, &ColumnAttrSet{ID: id, Attrs: attrs})
+		ax = append(ax, &columnAttrSet{ID: id, Attrs: attrs})
 	}
 
 	return ax, nil
