@@ -178,8 +178,8 @@ func (f *Field) Type() string {
 	return f.options.Type
 }
 
-// CacheType returns the caching mode for the field.
-func (f *Field) CacheType() string {
+// cacheType returns the caching mode for the field.
+func (f *Field) cacheType() string {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.options.CacheType
