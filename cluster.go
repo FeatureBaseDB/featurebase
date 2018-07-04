@@ -69,8 +69,8 @@ func (n Node) String() string {
 	return fmt.Sprintf("Node: %s", n.ID)
 }
 
-// EncodeNodes converts a slice of Nodes into its internal representation.
-func EncodeNodes(a []*Node) []*internal.Node {
+// encodeNodes converts a slice of Nodes into its internal representation.
+func encodeNodes(a []*Node) []*internal.Node {
 	other := make([]*internal.Node, len(a))
 	for i := range a {
 		other[i] = EncodeNode(a[i])
@@ -511,7 +511,7 @@ func (c *cluster) Status() *internal.ClusterStatus {
 	return &internal.ClusterStatus{
 		ClusterID: c.id,
 		State:     c.state,
-		Nodes:     EncodeNodes(c.Nodes),
+		Nodes:     encodeNodes(c.Nodes),
 	}
 }
 
