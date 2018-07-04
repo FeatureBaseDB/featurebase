@@ -25,10 +25,10 @@ import (
 	"github.com/pilosa/pilosa/ctl"
 )
 
-var Checker *ctl.CheckCommand
+var checker *ctl.CheckCommand
 
 func NewCheckCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	Checker = ctl.NewCheckCommand(os.Stdin, os.Stdout, os.Stderr)
+	checker = ctl.NewCheckCommand(os.Stdin, os.Stdout, os.Stderr)
 	checkCmd := &cobra.Command{
 		Use:   "check <path> [path2]...",
 		Short: "Do a consistency check on a pilosa data file.",
@@ -39,8 +39,8 @@ Performs a consistency check on data files.
 			if len(args) == 0 {
 				return fmt.Errorf("path required")
 			}
-			Checker.Paths = args
-			if err := Checker.Run(context.Background()); err != nil {
+			checker.Paths = args
+			if err := checker.Run(context.Background()); err != nil {
 				return err
 			}
 			return nil
