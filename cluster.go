@@ -65,7 +65,7 @@ type Node struct {
 	IsCoordinator bool   `json:"isCoordinator"`
 }
 
-func (n Node) String() string {
+func (n Node) string() string {
 	return fmt.Sprintf("Node: %s", n.ID)
 }
 
