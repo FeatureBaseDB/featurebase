@@ -507,7 +507,7 @@ func (s *Server) receiveMessage(pb proto.Message) error {
 			return err
 		}
 	case *internal.RecalculateCaches:
-		s.holder.RecalculateCaches()
+		s.holder.recalculateCaches()
 	case *internal.NodeEventMessage:
 		s.cluster.ReceiveEvent(decodeNodeEvent(obj))
 	case *internal.NodeStatus:

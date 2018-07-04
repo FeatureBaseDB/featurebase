@@ -493,7 +493,7 @@ func (api *API) RecalculateCaches(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "broacasting message")
 	}
-	api.holder.RecalculateCaches()
+	api.holder.recalculateCaches()
 	return nil
 }
 
