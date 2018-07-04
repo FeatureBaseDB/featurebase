@@ -163,8 +163,8 @@ func (u *URI) Path(path string) string {
 
 // The following methods are required to implement pflag Value interface.
 
-// Set sets the time quantum value.
-func (u *URI) Set(value string) error {
+// set sets the time quantum value.
+func (u *URI) set(value string) error {
 	uri, err := NewURIFromAddress(value)
 	if err != nil {
 		return err
