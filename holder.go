@@ -230,7 +230,7 @@ func (h *Holder) Schema() []*IndexInfo {
 }
 
 // applySchema applies an internal Schema to Holder.
-func (h *Holder) applySchema(schema *internal.Schema) error {
+func (h *Holder) applySchema(schema *Schema) error {
 	// Create indexes that don't exist.
 	for _, index := range schema.Indexes {
 		opt := IndexOptions{}
@@ -240,14 +240,13 @@ func (h *Holder) applySchema(schema *internal.Schema) error {
 		}
 		// Create fields that don't exist.
 		for _, f := range index.Fields {
-			opt := decodeFieldOptions(f.Meta)
-			field, err := idx.CreateFieldIfNotExists(f.Name, *opt)
+			field, err := idx.CreateFieldIfNotExists(f.Name, f.Options)
 			if err != nil {
 				return errors.Wrap(err, "creating field")
 			}
 			// Create views that don't exist.
 			for _, v := range f.Views {
-				_, err := field.createViewIfNotExists(v)
+				_, err := field.createViewIfNotExists(v.Name)
 				if err != nil {
 					return errors.Wrap(err, "creating view")
 				}

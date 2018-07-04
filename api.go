@@ -517,7 +517,7 @@ func (api *API) ClusterMessage(ctx context.Context, reqBody io.Reader) error {
 	}
 
 	// Forward the error message.
-	if err := api.server.receiveMessage(pb); err != nil {
+	if err := api.server.receiveMessage(decode(pb)); err != nil {
 		return errors.Wrap(err, "receiving message")
 	}
 	return nil

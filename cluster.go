@@ -268,8 +268,8 @@ func (c *cluster) setCoordinator(n *Node) error {
 	c.mu.Unlock()
 	// Send the update coordinator message to all nodes.
 	err := c.broadcaster.SendSync(
-		&internal.UpdateCoordinatorMessage{
-			New: EncodeNode(n),
+		&UpdateCoordinatorMessage{
+			New: n,
 		})
 	if err != nil {
 		return fmt.Errorf("problem sending UpdateCoordinator message: %v", err)
@@ -423,7 +423,7 @@ func (c *cluster) setNodeState(state string) error {
 	}
 
 	// Send node state to coordinator.
-	ns := &internal.NodeStateMessage{
+	ns := &NodeStateMessage{
 		NodeID: c.Node.ID,
 		State:  state,
 	}
@@ -460,12 +460,12 @@ func (c *cluster) receiveNodeState(nodeID string, state string) error {
 	return nil
 }
 
-// Status returns the internal ClusterStatus representation.
-func (c *cluster) Status() *internal.ClusterStatus {
-	return &internal.ClusterStatus{
+// Status returns the the cluster's status including what nodes it contains, it's ID, and current state.
+func (c *cluster) Status() *ClusterStatus {
+	return &ClusterStatus{
 		ClusterID: c.id,
 		State:     c.state,
-		Nodes:     EncodeNodes(c.Nodes),
+		Nodes:     c.Nodes,
 	}
 }
 
@@ -640,8 +640,8 @@ func (c *cluster) diff(other *cluster) (action string, nodeID string, err error)
 
 // fragSources returns a list of ResizeSources - for each node in the `to` cluster -
 // required to move from cluster `c` to cluster `to`.
-func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*internal.ResizeSource, error) {
-	m := make(map[string][]*internal.ResizeSource)
+func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*ResizeSource, error) {
+	m := make(map[string][]*ResizeSource)
 
 	// Determine if a node is being added or removed.
 	action, diffNodeID, err := c.diff(to)
@@ -700,7 +700,7 @@ func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*internal.R
 
 	// Get the ResizeSource for each diff.
 	for nodeID, diff := range diffs {
-		m[nodeID] = []*internal.ResizeSource{}
+		m[nodeID] = []*ResizeSource{}
 		for _, frag := range diff {
 			// If there is no valid source node ID for a fragment,
 			// it likely means that the replica factor was not
@@ -711,8 +711,8 @@ func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*internal.R
 				return nil, errors.New("not enough data to perform resize (replica factor may need to be increased)")
 			}
 
-			src := &internal.ResizeSource{
-				Node:  EncodeNode(c.unprotectedNodeByID(srcNodeID)),
+			src := &ResizeSource{
+				Node:  c.unprotectedNodeByID(srcNodeID),
 				Index: idx.Name(),
 				Field: frag.field,
 				View:  frag.view,
@@ -856,9 +856,9 @@ func (c *cluster) waitForStarted() error {
 		// TODO: Because the normal code path already sends a NodeJoin event (via
 		// memberlist), this it a bit redundant in most cases. Perhaps determine
 		// that the node has been restarted and don't do this step.
-		msg := &internal.NodeEventMessage{
-			Event: uint32(NodeJoin),
-			Node:  EncodeNode(c.Node),
+		msg := &nodeEvent{
+			Event: NodeJoin,
+			Node:  c.Node,
 		}
 		if err := c.broadcaster.SendSync(msg); err != nil {
 			return fmt.Errorf("sending restart NodeJoin: %v", err)
@@ -968,8 +968,8 @@ func (c *cluster) setStateAndBroadcast(state string) error {
 	return c.broadcaster.SendSync(c.Status())
 }
 
-func (c *cluster) sendTo(node *Node, msg proto.Message) error {
-	if err := c.broadcaster.SendTo(node, msg); err != nil {
+func (c *cluster) sendTo(node *Node, m Message) error {
+	if err := c.broadcaster.SendTo(node, m); err != nil {
 		return errors.Wrap(err, "sending")
 	}
 	return nil
@@ -1075,7 +1075,7 @@ func (c *cluster) generateResizeJobByAction(nodeAction nodeAction) (*resizeJob, 
 	}
 
 	// multiIndex is a map of sources initialized with all the nodes in toCluster.
-	multiIndex := make(map[string][]*internal.ResizeSource)
+	multiIndex := make(map[string][]*ResizeSource)
 
 	for _, n := range toCluster.Nodes {
 		multiIndex[n.ID] = nil
@@ -1099,12 +1099,12 @@ func (c *cluster) generateResizeJobByAction(nodeAction nodeAction) (*resizeJob, 
 			j.IDs[id] = true
 			continue
 		}
-		instr := &internal.ResizeInstruction{
+		instr := &ResizeInstruction{
 			JobID:         j.ID,
-			Node:          EncodeNode(toCluster.unprotectedNodeByID(id)),
-			Coordinator:   EncodeNode(c.coordinatorNode()),
+			Node:          toCluster.unprotectedNodeByID(id),
+			Coordinator:   c.coordinatorNode(),
 			Sources:       sources,
-			Schema:        c.holder.encodeSchema(), // Include the schema to ensure it's in sync on the receiving node.
+			Schema:        &Schema{Indexes: c.holder.Schema()}, // Include the schema to ensure it's in sync on the receiving node.
 			ClusterStatus: c.Status(),
 		}
 		j.Instructions = append(j.Instructions, instr)
@@ -1148,7 +1148,7 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 		<-c.holder.opened
 
 		// Prepare the return message.
-		complete := &internal.ResizeInstructionComplete{
+		complete := &ResizeInstructionComplete{
 			JobID: instr.JobID,
 			Node:  instr.Node,
 			Error: "",
@@ -1167,7 +1167,7 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 			for _, src := range instr.Sources {
 				c.logger.Printf("get shard %d for index %s from host %s", src.Shard, src.Index, src.Node.URI)
 
-				srcURI := decodeURI(src.Node.URI)
+				srcURI := src.Node.URI
 
 				// Retrieve field.
 				f := c.holder.Field(src.Index, src.Field)
@@ -1219,14 +1219,14 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 			complete.Error = err.Error()
 		}
 
-		if err := c.sendTo(DecodeNode(instr.Coordinator), complete); err != nil {
+		if err := c.sendTo(instr.Coordinator, complete); err != nil {
 			c.logger.Printf("sending resizeInstructionComplete error: err=%s", err)
 		}
 	}()
 	return nil
 }
 
-func (c *cluster) markResizeInstructionComplete(complete *internal.ResizeInstructionComplete) error {
+func (c *cluster) markResizeInstructionComplete(complete *ResizeInstructionComplete) error {
 
 	j := c.job(complete.JobID)
 
@@ -1263,7 +1263,7 @@ func (c *cluster) job(id int64) *resizeJob {
 type resizeJob struct {
 	ID           int64
 	IDs          map[string]bool
-	Instructions []*internal.ResizeInstruction
+	Instructions []*ResizeInstruction
 	Broadcaster  broadcaster
 
 	action string
@@ -1366,7 +1366,7 @@ func (j *resizeJob) distributeResizeInstructions() error {
 		// a dummy node object to use in the SendTo() method.
 		node := &Node{
 			ID:  instr.Node.ID,
-			URI: decodeURI(instr.Node.URI),
+			URI: instr.Node.URI,
 		}
 		j.Logger.Printf("send resize instructions: %v", instr)
 		if err := j.Broadcaster.SendTo(node, instr); err != nil {
@@ -1757,7 +1757,7 @@ type ResizeInstruction struct {
 	ClusterStatus *ClusterStatus
 }
 
-func decodeResizeInstruction(ri *internal.ResizeInstruction) ResizeInstruction {
+func decodeResizeInstruction(ri *internal.ResizeInstruction) *ResizeInstruction {
 	return &ResizeInstruction{
 		JobID:         ri.JobID,
 		Node:          DecodeNode(ri.Node),
@@ -1765,6 +1765,17 @@ func decodeResizeInstruction(ri *internal.ResizeInstruction) ResizeInstruction {
 		Sources:       decodeResizeSources(ri.Sources),
 		Schema:        decodeSchema(ri.Schema),
 		ClusterStatus: decodeClusterStatus(ri.ClusterStatus),
+	}
+}
+
+func encodeResizeInstruction(m *ResizeInstruction) *internal.ResizeInstruction {
+	return &internal.ResizeInstruction{
+		JobID:         m.JobID,
+		Node:          EncodeNode(m.Node),
+		Coordinator:   EncodeNode(m.Coordinator),
+		Sources:       encodeResizeSources(m.Sources),
+		Schema:        encodeSchema(m.Schema),
+		ClusterStatus: encodeClusterStatus(m.ClusterStatus),
 	}
 }
 
@@ -1784,6 +1795,14 @@ func decodeResizeSources(srcs []*internal.ResizeSource) []*ResizeSource {
 	return new
 }
 
+func encodeResizeSources(srcs []*ResizeSource) []*internal.ResizeSource {
+	new := make([]*internal.ResizeSource, 0, len(srcs))
+	for _, src := range srcs {
+		new = append(new, encodeResizeSource(src))
+	}
+	return new
+}
+
 func decodeResizeSource(rs *internal.ResizeSource) *ResizeSource {
 	return &ResizeSource{
 		Node:  DecodeNode(rs.Node),
@@ -1791,6 +1810,16 @@ func decodeResizeSource(rs *internal.ResizeSource) *ResizeSource {
 		Field: rs.Field,
 		View:  rs.View,
 		Shard: rs.Shard,
+	}
+}
+
+func encodeResizeSource(m *ResizeSource) *internal.ResizeSource {
+	return &internal.ResizeSource{
+		Node:  EncodeNode(m.Node),
+		Index: m.Index,
+		Field: m.Field,
+		View:  m.View,
+		Shard: m.Shard,
 	}
 }
 
@@ -1805,10 +1834,24 @@ func decodeSchema(s *internal.Schema) *Schema {
 	}
 }
 
+func encodeSchema(m *Schema) *internal.Schema {
+	return &internal.Schema{
+		Indexes: encodeIndexInfos(m.Indexes),
+	}
+}
+
 func decodeIndexes(idxs []*internal.Index) []*IndexInfo {
 	new := make([]*IndexInfo, 0, len(idxs))
 	for _, idx := range idxs {
 		new = append(new, decodeIndex(idx))
+	}
+	return new
+}
+
+func encodeIndexInfos(idxs []*IndexInfo) []*internal.Index {
+	new := make([]*internal.Index, 0, len(idxs))
+	for _, idx := range idxs {
+		new = append(new, encodeIndexInfo(idx))
 	}
 	return new
 }
@@ -1820,10 +1863,25 @@ func decodeIndex(idx *internal.Index) *IndexInfo {
 	}
 }
 
+func encodeIndexInfo(idx *IndexInfo) *internal.Index {
+	return &internal.Index{
+		Name:   idx.Name,
+		Fields: encodeFieldInfos(idx.Fields),
+	}
+}
+
 func decodeFields(fs []*internal.Field) []*FieldInfo {
 	new := make([]*FieldInfo, 0, len(fs))
 	for _, f := range fs {
 		new = append(new, decodeField(f))
+	}
+	return new
+}
+
+func encodeFieldInfos(fs []*FieldInfo) []*internal.Field {
+	new := make([]*internal.Field, 0, len(fs))
+	for _, f := range fs {
+		new = append(new, encodeFieldInfo(f))
 	}
 	return new
 }
@@ -1838,6 +1896,19 @@ func decodeField(f *internal.Field) *FieldInfo {
 		fi.Views = append(fi.Views, &viewInfo{Name: viewname})
 	}
 	return fi
+}
+
+func encodeFieldInfo(f *FieldInfo) *internal.Field {
+	ifield := &internal.Field{
+		Name:  f.Name,
+		Meta:  encodeFieldOptions(&f.Options),
+		Views: make([]string, 0, len(f.Views)),
+	}
+
+	for _, viewinfo := range f.Views {
+		ifield.Views = append(ifield.Views, viewinfo.Name)
+	}
+	return ifield
 }
 
 // EncodeNodes converts a slice of Nodes into its internal representation.
@@ -1875,6 +1946,14 @@ func decodeClusterStatus(cs *internal.ClusterStatus) *ClusterStatus {
 		State:     cs.State,
 		ClusterID: cs.ClusterID,
 		Nodes:     DecodeNodes(cs.Nodes),
+	}
+}
+
+func encodeClusterStatus(m *ClusterStatus) *internal.ClusterStatus {
+	return &internal.ClusterStatus{
+		State:     m.State,
+		ClusterID: m.ClusterID,
+		Nodes:     EncodeNodes(m.Nodes),
 	}
 }
 
@@ -1968,4 +2047,224 @@ func decodeIndexMeta(pb *internal.IndexMeta) *IndexOptions {
 	return &IndexOptions{
 		Keys: pb.Keys,
 	}
+}
+
+type DeleteIndexMessage struct {
+	Index string
+}
+
+func encodeDeleteIndexMessage(m *DeleteIndexMessage) *internal.DeleteIndexMessage {
+	return &internal.DeleteIndexMessage{
+		Index: m.Index,
+	}
+}
+
+func decodeDeleteIndexMessage(pb *internal.DeleteIndexMessage) *DeleteIndexMessage {
+	return &DeleteIndexMessage{
+		Index: pb.Index,
+	}
+}
+
+type CreateFieldMessage struct {
+	Index string
+	Field string
+	Meta  *FieldOptions
+}
+
+func encodeCreateFieldMessage(m *CreateFieldMessage) *internal.CreateFieldMessage {
+	return &internal.CreateFieldMessage{
+		Index: m.Index,
+		Field: m.Field,
+		Meta:  encodeFieldOptions(m.Meta),
+	}
+}
+
+func decodeCreateFieldMessage(pb *internal.CreateFieldMessage) *CreateFieldMessage {
+	return &CreateFieldMessage{
+		Index: pb.Index,
+		Field: pb.Field,
+		Meta:  decodeFieldOptions(pb.Meta),
+	}
+}
+
+type DeleteFieldMessage struct {
+	Index string
+	Field string
+}
+
+func encodeDeleteFieldMessage(m *DeleteFieldMessage) *internal.DeleteFieldMessage {
+	return &internal.DeleteFieldMessage{
+		Index: m.Index,
+		Field: m.Field,
+	}
+}
+
+func decodeDeleteFieldMessage(pb *internal.DeleteFieldMessage) *DeleteFieldMessage {
+	return &DeleteFieldMessage{
+		Index: pb.Index,
+		Field: pb.Field,
+	}
+}
+
+type CreateViewMessage struct {
+	Index string
+	Field string
+	View  string
+}
+
+func encodeCreateViewMessage(m *CreateViewMessage) *internal.CreateViewMessage {
+	return &internal.CreateViewMessage{
+		Index: m.Index,
+		Field: m.Field,
+		View:  m.View,
+	}
+}
+
+func decodeCreateViewMessage(pb *internal.CreateViewMessage) *CreateViewMessage {
+	return &CreateViewMessage{
+		Index: pb.Index,
+		Field: pb.Field,
+		View:  pb.View,
+	}
+}
+
+type DeleteViewMessage struct {
+	Index string
+	Field string
+	View  string
+}
+
+func encodeDeleteViewMessage(m *DeleteViewMessage) *internal.DeleteViewMessage {
+	return &internal.DeleteViewMessage{
+		Index: m.Index,
+		Field: m.Field,
+		View:  m.View,
+	}
+}
+
+func decodeDeleteViewMessage(pb *internal.DeleteViewMessage) *DeleteViewMessage {
+	return &DeleteViewMessage{
+		Index: pb.Index,
+		Field: pb.Field,
+		View:  pb.View,
+	}
+}
+
+type ResizeInstructionComplete struct {
+	JobID int64
+	Node  *Node
+	Error string
+}
+
+func encodeResizeInstructionComplete(m *ResizeInstructionComplete) *internal.ResizeInstructionComplete {
+	return &internal.ResizeInstructionComplete{
+		JobID: m.JobID,
+		Node:  EncodeNode(m.Node),
+		Error: m.Error,
+	}
+}
+
+func decodeResizeInstructionComplete(pb *internal.ResizeInstructionComplete) *ResizeInstructionComplete {
+	return &ResizeInstructionComplete{
+		JobID: pb.JobID,
+		Node:  DecodeNode(pb.Node),
+		Error: pb.Error,
+	}
+}
+
+type SetCoordinatorMessage struct {
+	New *Node
+}
+
+func encodeSetCoordinatorMessage(m *SetCoordinatorMessage) *internal.SetCoordinatorMessage {
+	return &internal.SetCoordinatorMessage{
+		New: EncodeNode(m.New),
+	}
+}
+
+func decodeSetCoordinatorMessage(pb *internal.SetCoordinatorMessage) *SetCoordinatorMessage {
+	return &SetCoordinatorMessage{
+		New: DecodeNode(pb.New),
+	}
+}
+
+type UpdateCoordinatorMessage struct {
+	New *Node
+}
+
+func encodeUpdateCoordinatorMessage(m *UpdateCoordinatorMessage) *internal.UpdateCoordinatorMessage {
+	return &internal.UpdateCoordinatorMessage{
+		New: EncodeNode(m.New),
+	}
+}
+
+func decodeUpdateCoordinatorMessage(pb *internal.UpdateCoordinatorMessage) *UpdateCoordinatorMessage {
+	return &UpdateCoordinatorMessage{
+		New: DecodeNode(pb.New),
+	}
+}
+
+type NodeStateMessage struct {
+	NodeID string `protobuf:"bytes,1,opt,name=NodeID,proto3" json:"NodeID,omitempty"`
+	State  string `protobuf:"bytes,2,opt,name=State,proto3" json:"State,omitempty"`
+}
+
+func encodeNodeStateMessage(m *NodeStateMessage) *internal.NodeStateMessage {
+	return &internal.NodeStateMessage{
+		NodeID: m.NodeID,
+		State:  m.State,
+	}
+}
+
+func decodeNodeStateMessage(pb *internal.NodeStateMessage) *NodeStateMessage {
+	return &NodeStateMessage{
+		NodeID: pb.NodeID,
+		State:  pb.State,
+	}
+}
+
+func encodeNodeEventMessage(m *nodeEvent) *internal.NodeEventMessage {
+	return &internal.NodeEventMessage{
+		Event: uint32(m.Event),
+		Node:  EncodeNode(m.Node),
+	}
+}
+
+func decodeNodeEventMessage(pb *internal.NodeEventMessage) *nodeEvent {
+	return &nodeEvent{
+		Event: NodeEventType(pb.Event),
+		Node:  DecodeNode(pb.Node),
+	}
+}
+
+type NodeStatus struct {
+	Node      *Node
+	MaxShards map[string]uint64
+	Schema    *Schema
+}
+
+func encodeNodeStatus(m *NodeStatus) *internal.NodeStatus {
+	return &internal.NodeStatus{
+		Node:      EncodeNode(m.Node),
+		MaxShards: &internal.MaxShards{Standard: m.MaxShards},
+		Schema:    encodeSchema(m.Schema),
+	}
+}
+
+func decodeNodeStatus(pb *internal.NodeStatus) *NodeStatus {
+	return &NodeStatus{
+		Node:      DecodeNode(pb.Node),
+		MaxShards: pb.MaxShards.Standard,
+		Schema:    decodeSchema(pb.Schema),
+	}
+}
+
+type RecalculateCaches struct{}
+
+func decodeRecalculateCaches(pb *internal.RecalculateCaches) *RecalculateCaches {
+	return &RecalculateCaches{}
+}
+
+func encodeRecalculateCaches(*RecalculateCaches) *internal.RecalculateCaches {
+	return &internal.RecalculateCaches{}
 }
