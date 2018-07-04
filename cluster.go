@@ -108,7 +108,7 @@ func decodeNode(node *internal.Node) *Node {
 	}
 }
 
-func DecodeNodeEvent(ne *internal.NodeEventMessage) *nodeEvent {
+func decodeNodeEvent(ne *internal.NodeEventMessage) *nodeEvent {
 	return &nodeEvent{
 		Event: NodeEventType(ne.Event),
 		Node:  decodeNode(ne.Node),
