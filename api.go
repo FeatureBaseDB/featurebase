@@ -529,8 +529,8 @@ func (api *API) Schema(ctx context.Context) []*Index {
 	return api.holder.Indexes()
 }
 
-// Views returns the views in the given field.
-func (api *API) Views(ctx context.Context, indexName string, fieldName string) ([]*view, error) {
+// views returns the views in the given field.
+func (api *API) views(ctx context.Context, indexName string, fieldName string) ([]*view, error) {
 	if err := api.validate(apiViews); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
