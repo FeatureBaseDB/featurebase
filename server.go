@@ -52,7 +52,7 @@ type Server struct {
 	holder          *Holder
 	cluster         *cluster
 	translateFile   *TranslateFile
-	diagnostics     *DiagnosticsCollector
+	diagnostics     *diagnosticsCollector
 	executor        *executor
 	hosts           []string
 	clusterDisabled bool
