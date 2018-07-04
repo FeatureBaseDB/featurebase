@@ -21,7 +21,7 @@ const (
 	// Special tokens
 	ILLEGAL Token = iota
 
-	ASSIGN  // =
+	aSSIGN  // =
 	EQ      // ==
 	NEQ     // !=
 	LT      // <
@@ -34,7 +34,7 @@ const (
 var tokens = [...]string{
 	ILLEGAL: "ILLEGAL",
 
-	ASSIGN:  "=",
+	aSSIGN:  "=",
 	EQ:      "==",
 	NEQ:     "!=",
 	LT:      "<",
