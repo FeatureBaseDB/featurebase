@@ -126,13 +126,13 @@ type columnAttrSet struct {
 func EncodeColumnAttrSets(a []*columnAttrSet) []*internal.ColumnAttrSet {
 	other := make([]*internal.ColumnAttrSet, len(a))
 	for i := range a {
-		other[i] = EncodeColumnAttrSet(a[i])
+		other[i] = encodeColumnAttrSet(a[i])
 	}
 	return other
 }
 
-// EncodeColumnAttrSet converts set into its internal representation.
-func EncodeColumnAttrSet(set *columnAttrSet) *internal.ColumnAttrSet {
+// encodeColumnAttrSet converts set into its internal representation.
+func encodeColumnAttrSet(set *columnAttrSet) *internal.ColumnAttrSet {
 	return &internal.ColumnAttrSet{
 		ID:    set.ID,
 		Attrs: encodeAttrs(set.Attrs),
