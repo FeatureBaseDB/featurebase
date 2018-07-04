@@ -1063,7 +1063,7 @@ func BenchmarkFragment_IntersectionCount(b *testing.B) {
 	// Start benchmark
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if n := f.row(1).IntersectionCount(f.row(2)); n == 0 {
+		if n := f.row(1).intersectionCount(f.row(2)); n == 0 {
 			b.Fatalf("unexpected count: %d", n)
 		}
 	}
