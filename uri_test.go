@@ -96,10 +96,10 @@ func TestURIPath(t *testing.T) {
 
 func TestEquals(t *testing.T) {
 	uri1 := defaultURI()
-	if uri1.Equals(nil) {
+	if uri1.equals(nil) {
 		t.Fatalf("URI should not be equal to nil")
 	}
-	if !uri1.Equals(defaultURI()) {
+	if !uri1.equals(defaultURI()) {
 		t.Fatalf("URI should be equal to another URI with the same scheme, host and port")
 	}
 }

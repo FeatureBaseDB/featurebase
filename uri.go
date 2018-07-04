@@ -148,8 +148,8 @@ func (u URI) String() string {
 	return fmt.Sprintf("%s://%s:%d", u.scheme, u.host, u.port)
 }
 
-// Equals returns true if the checked URI is equivalent to this URI.
-func (u URI) Equals(other *URI) bool {
+// equals returns true if the checked URI is equivalent to this URI.
+func (u URI) equals(other *URI) bool {
 	if other == nil {
 		return false
 	}
