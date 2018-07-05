@@ -89,7 +89,7 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 		return errors.New("path required")
 	}
 	// Create a client to the server.
-	client, err := CommandClient(cmd)
+	client, err := commandClient(cmd)
 	if err != nil {
 		return errors.Wrap(err, "creating client")
 	}
