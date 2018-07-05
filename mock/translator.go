@@ -13,7 +13,7 @@ type TranslateStore struct {
 	translateColumnsToUint64Func func(index string, values []string) ([]uint64, error)
 	translateColumnToStringFunc  func(index string, values uint64) (string, error)
 	translateRowsToUint64Func    func(index, frame string, values []string) ([]uint64, error)
-	TranslateRowToStringFunc     func(index, frame string, values uint64) (string, error)
+	translateRowToStringFunc     func(index, frame string, values uint64) (string, error)
 	ReaderFunc                   func(ctx context.Context, off int64) (io.ReadCloser, error)
 }
 
@@ -30,7 +30,7 @@ func (s TranslateStore) TranslateRowsToUint64(index, frame string, values []stri
 }
 
 func (s TranslateStore) TranslateRowToString(index, frame string, value uint64) (string, error) {
-	return s.TranslateRowToStringFunc(index, frame, value)
+	return s.translateRowToStringFunc(index, frame, value)
 }
 
 func (s TranslateStore) Reader(ctx context.Context, off int64) (io.ReadCloser, error) {
