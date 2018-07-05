@@ -1329,7 +1329,7 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (h *Handler) GetAPI() *pilosa.API {
+func (h *Handler) getAPI() *pilosa.API {
 	return h.API
 }
 
