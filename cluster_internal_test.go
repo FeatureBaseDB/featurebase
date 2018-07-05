@@ -24,7 +24,6 @@ import (
 	"testing/quick"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pkg/errors"
 )
 
@@ -175,19 +174,19 @@ func TestFragSources(t *testing.T) {
 		from     *cluster
 		to       *cluster
 		idx      *Index
-		expected map[string][]*internal.ResizeSource
+		expected map[string][]*ResizeSource
 		err      string
 	}{
 		{
 			from: c1,
 			to:   c2,
 			idx:  idx,
-			expected: map[string][]*internal.ResizeSource{
-				"node0": []*internal.ResizeSource{},
-				"node1": []*internal.ResizeSource{},
-				"node2": []*internal.ResizeSource{
-					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(0)},
-					{&internal.Node{"node1", &internal.URI{"http", "host1", 10101}, false}, "i", "f", "standard", uint64(2)},
+			expected: map[string][]*ResizeSource{
+				"node0": []*ResizeSource{},
+				"node1": []*ResizeSource{},
+				"node2": []*ResizeSource{
+					{&Node{"node0", URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(0)},
+					{&Node{"node1", URI{"http", "host1", 10101}, false}, "i", "f", "standard", uint64(2)},
 				},
 			},
 			err: "",
@@ -196,13 +195,13 @@ func TestFragSources(t *testing.T) {
 			from: c4,
 			to:   c3,
 			idx:  idx,
-			expected: map[string][]*internal.ResizeSource{
-				"node0": []*internal.ResizeSource{
-					{&internal.Node{"node1", &internal.URI{"http", "host1", 10101}, false}, "i", "f", "standard", uint64(1)},
+			expected: map[string][]*ResizeSource{
+				"node0": []*ResizeSource{
+					{&Node{"node1", URI{"http", "host1", 10101}, false}, "i", "f", "standard", uint64(1)},
 				},
-				"node1": []*internal.ResizeSource{
-					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(0)},
-					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(2)},
+				"node1": []*ResizeSource{
+					{&Node{"node0", URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(0)},
+					{&Node{"node0", URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(2)},
 				},
 			},
 			err: "",
@@ -211,15 +210,15 @@ func TestFragSources(t *testing.T) {
 			from: c5,
 			to:   c4,
 			idx:  idx,
-			expected: map[string][]*internal.ResizeSource{
-				"node0": []*internal.ResizeSource{
-					{&internal.Node{"node2", &internal.URI{"http", "host2", 10101}, false}, "i", "f", "standard", uint64(0)},
-					{&internal.Node{"node2", &internal.URI{"http", "host2", 10101}, false}, "i", "f", "standard", uint64(2)},
+			expected: map[string][]*ResizeSource{
+				"node0": []*ResizeSource{
+					{&Node{"node2", URI{"http", "host2", 10101}, false}, "i", "f", "standard", uint64(0)},
+					{&Node{"node2", URI{"http", "host2", 10101}, false}, "i", "f", "standard", uint64(2)},
 				},
-				"node1": []*internal.ResizeSource{
-					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(3)},
+				"node1": []*ResizeSource{
+					{&Node{"node0", URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(3)},
 				},
-				"node2": []*internal.ResizeSource{},
+				"node2": []*ResizeSource{},
 			},
 			err: "",
 		},

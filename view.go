@@ -22,7 +22,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pkg/errors"
 )
@@ -232,7 +231,7 @@ func (v *view) createFragmentIfNotExists(shard uint64) (*fragment, error) {
 
 		// Send the create shard message to all nodes.
 		err := v.broadcaster.SendSync(
-			&internal.CreateShardMessage{
+			&CreateShardMessage{
 				Index: v.index,
 				Shard: shard,
 			})

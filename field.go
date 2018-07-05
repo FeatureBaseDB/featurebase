@@ -605,7 +605,7 @@ func (f *Field) createViewIfNotExists(name string) (*view, error) {
 	if created {
 		// Broadcast view creation to the cluster.
 		err = f.broadcaster.SendSync(
-			&internal.CreateViewMessage{
+			&CreateViewMessage{
 				Index: f.index,
 				Field: f.name,
 				View:  name,

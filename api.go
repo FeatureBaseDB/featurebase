@@ -185,12 +185,11 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	}
 	// Send the create index message to all nodes.
 	err = api.server.SendSync(
-		&internal.CreateIndexMessage{
+		&CreateIndexMessage{
 			Index: indexName,
-			Meta:  options.Encode(),
+			Meta:  &options,
 		})
 	if err != nil {
-		api.server.logger.Printf("problem sending CreateIndex message: %s", err)
 		return nil, errors.Wrap(err, "sending CreateIndex message")
 	}
 	api.holder.Stats.Count("createIndex", 1, 1.0)
@@ -224,7 +223,7 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 	}
 	// Send the delete index message to all nodes.
 	err = api.server.SendSync(
-		&internal.DeleteIndexMessage{
+		&DeleteIndexMessage{
 			Index: indexName,
 		})
 	if err != nil {
@@ -264,10 +263,10 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 
 	// Send the create field message to all nodes.
 	err = api.server.SendSync(
-		&internal.CreateFieldMessage{
+		&CreateFieldMessage{
 			Index: indexName,
 			Field: fieldName,
-			Meta:  fo.Encode(),
+			Meta:  &fo,
 		})
 	if err != nil {
 		api.server.logger.Printf("problem sending CreateField message: %s", err)
@@ -311,7 +310,7 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 
 	// Send the delete field message to all nodes.
 	err := api.server.SendSync(
-		&internal.DeleteFieldMessage{
+		&DeleteFieldMessage{
 			Index: indexName,
 			Field: fieldName,
 		})
@@ -489,7 +488,7 @@ func (api *API) RecalculateCaches(ctx context.Context) error {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	err := api.server.SendSync(&internal.RecalculateCaches{})
+	err := api.server.SendSync(&RecalculateCaches{})
 	if err != nil {
 		return errors.Wrap(err, "broacasting message")
 	}
@@ -568,7 +567,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, fieldName stri
 
 	// Send the delete view message to all nodes.
 	err := api.server.SendSync(
-		&internal.DeleteViewMessage{
+		&DeleteViewMessage{
 			Index: indexName,
 			Field: fieldName,
 			View:  viewName,
