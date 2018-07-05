@@ -23,6 +23,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Serializer is an interface for serializing pilosa types to bytes and back.
+type Serializer interface {
+	Marshal(Message) ([]byte, error)
+	Unmarshal([]byte, Message) error
+}
+
 // broadcaster is an interface for broadcasting messages.
 type broadcaster interface {
 	SendSync(Message) error
@@ -118,42 +124,82 @@ func MarshalMessage(m proto.Message) ([]byte, error) {
 	return append([]byte{typ}, buf...), nil
 }
 
-func encode(m Message) proto.Message {
-	switch mt := m.(type) {
-	case *CreateShardMessage:
-		return encodeCreateShardMessage(mt)
-	case *CreateIndexMessage:
-		return encodeCreateIndexMessage(mt)
-	case *DeleteIndexMessage:
-		return encodeDeleteIndexMessage(mt)
-	case *CreateFieldMessage:
-		return encodeCreateFieldMessage(mt)
-	case *DeleteFieldMessage:
-		return encodeDeleteFieldMessage(mt)
-	case *CreateViewMessage:
-		return encodeCreateViewMessage(mt)
-	case *DeleteViewMessage:
-		return encodeDeleteViewMessage(mt)
-	case *ClusterStatus:
-		return encodeClusterStatus(mt)
-	case *ResizeInstruction:
-		return encodeResizeInstruction(mt)
-	case *ResizeInstructionComplete:
-		return encodeResizeInstructionComplete(mt)
-	case *SetCoordinatorMessage:
-		return encodeSetCoordinatorMessage(mt)
-	case *UpdateCoordinatorMessage:
-		return encodeUpdateCoordinatorMessage(mt)
-	case *NodeStateMessage:
-		return encodeNodeStateMessage(mt)
-	case *RecalculateCaches:
-		return encodeRecalculateCaches(mt)
-	case *NodeEvent:
-		return encodeNodeEventMessage(mt)
-	case *NodeStatus:
-		return encodeNodeStatus(mt)
+func getMessage(typ byte) Message {
+	switch typ {
+	case messageTypeCreateShard:
+		return &CreateShardMessage{}
+	case messageTypeCreateIndex:
+		return &CreateIndexMessage{}
+	case messageTypeDeleteIndex:
+		return &DeleteIndexMessage{}
+	case messageTypeCreateField:
+		return &CreateFieldMessage{}
+	case messageTypeDeleteField:
+		return &DeleteFieldMessage{}
+	case messageTypeCreateView:
+		return &CreateViewMessage{}
+	case messageTypeDeleteView:
+		return &DeleteViewMessage{}
+	case messageTypeClusterStatus:
+		return &ClusterStatus{}
+	case messageTypeResizeInstruction:
+		return &ResizeInstruction{}
+	case messageTypeResizeInstructionComplete:
+		return &ResizeInstructionComplete{}
+	case messageTypeSetCoordinator:
+		return &SetCoordinatorMessage{}
+	case messageTypeUpdateCoordinator:
+		return &UpdateCoordinatorMessage{}
+	case messageTypeNodeState:
+		return &NodeStateMessage{}
+	case messageTypeRecalculateCaches:
+		return &RecalculateCaches{}
+	case messageTypeNodeEvent:
+		return &NodeEvent{}
+	case messageTypeNodeStatus:
+		return &NodeStatus{}
+	default:
+		panic(fmt.Sprintf("unknown message type %d", typ))
 	}
-	return nil
+}
+
+func getMessageType(m Message) byte {
+	switch m.(type) {
+	case *CreateShardMessage:
+		return messageTypeCreateShard
+	case *CreateIndexMessage:
+		return messageTypeCreateIndex
+	case *DeleteIndexMessage:
+		return messageTypeDeleteIndex
+	case *CreateFieldMessage:
+		return messageTypeCreateField
+	case *DeleteFieldMessage:
+		return messageTypeDeleteField
+	case *CreateViewMessage:
+		return messageTypeCreateView
+	case *DeleteViewMessage:
+		return messageTypeDeleteView
+	case *ClusterStatus:
+		return messageTypeClusterStatus
+	case *ResizeInstruction:
+		return messageTypeResizeInstruction
+	case *ResizeInstructionComplete:
+		return messageTypeResizeInstructionComplete
+	case *SetCoordinatorMessage:
+		return messageTypeSetCoordinator
+	case *UpdateCoordinatorMessage:
+		return messageTypeUpdateCoordinator
+	case *NodeStateMessage:
+		return messageTypeNodeState
+	case *RecalculateCaches:
+		return messageTypeRecalculateCaches
+	case *NodeEvent:
+		return messageTypeNodeEvent
+	case *NodeStatus:
+		return messageTypeNodeStatus
+	default:
+		panic(fmt.Sprintf("don't have type for message %#v", m))
+	}
 }
 
 // UnmarshalMessage decodes the byte slice into a protobuf message.

@@ -217,7 +217,7 @@ func (h *Holder) Schema() []*IndexInfo {
 		for _, field := range index.Fields() {
 			fi := &FieldInfo{Name: field.Name(), Options: field.Options()}
 			for _, view := range field.views() {
-				fi.Views = append(fi.Views, &viewInfo{Name: view.name})
+				fi.Views = append(fi.Views, &ViewInfo{Name: view.name})
 			}
 			sort.Sort(viewInfoSlice(fi.Views))
 			di.Fields = append(di.Fields, fi)

@@ -54,6 +54,7 @@ type Server struct {
 	executor        *executor
 	hosts           []string
 	clusterDisabled bool
+	serializer      Serializer
 
 	// External
 	systemInfo SystemInfo
@@ -196,6 +197,13 @@ func OptServerClusterDisabled(disabled bool, hosts []string) ServerOption {
 	return func(s *Server) error {
 		s.hosts = hosts
 		s.clusterDisabled = disabled
+		return nil
+	}
+}
+
+func OptServerSerializer(ser Serializer) ServerOption {
+	return func(s *Server) error {
+		s.serializer = ser
 		return nil
 	}
 }
@@ -517,8 +525,12 @@ func (s *Server) receiveMessage(m Message) error {
 
 // SendSync represents an implementation of Broadcaster.
 func (s *Server) SendSync(m Message) error {
-	pb := encode(m)
 	var eg errgroup.Group
+	msg, err := s.serializer.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("marshaling message: %v", err)
+	}
+	msg = append([]byte{getMessageType(m)}, msg...)
 	for _, node := range s.cluster.Nodes {
 		node := node
 		s.logger.Printf("SendSync to: %s", node.URI)
@@ -528,7 +540,7 @@ func (s *Server) SendSync(m Message) error {
 		}
 
 		eg.Go(func() error {
-			return s.defaultClient.SendMessage(context.Background(), &node.URI, pb)
+			return s.defaultClient.SendMessage(context.Background(), &node.URI, msg)
 		})
 	}
 
@@ -542,9 +554,13 @@ func (s *Server) SendAsync(m Message) error {
 
 // SendTo represents an implementation of Broadcaster.
 func (s *Server) SendTo(to *Node, m Message) error {
-	pb := encode(m)
 	s.logger.Printf("SendTo: %s", to.URI)
-	return s.defaultClient.SendMessage(context.Background(), &to.URI, pb)
+	msg, err := s.serializer.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("marshaling message: %v", err)
+	}
+	msg = append([]byte{getMessageType(m)}, msg...)
+	return s.defaultClient.SendMessage(context.Background(), &to.URI, msg)
 }
 
 // node returns the pilosa.node object. It is used by membership protocols to
@@ -613,7 +629,7 @@ func (s *Server) monitorDiagnostics() {
 
 	s.diagnostics.Logger = s.logger
 	s.diagnostics.SetVersion(Version)
-	s.diagnostics.Set("Host", s.uri.host)
+	s.diagnostics.Set("Host", s.uri.Host)
 	s.diagnostics.Set("Cluster", strings.Join(s.cluster.nodeIDs(), ","))
 	s.diagnostics.Set("NumNodes", len(s.cluster.Nodes))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())

@@ -1077,13 +1077,13 @@ func (f *Field) MarshalJSON() ([]byte, error) {
 	thing := struct {
 		Name    string
 		Options FieldOptions
-		Views   []*viewInfo
+		Views   []*ViewInfo
 	}{
 		Name:    f.Name(),
 		Options: f.Options(),
 	}
 	for _, viewname := range f.viewNames() {
-		thing.Views = append(thing.Views, &viewInfo{Name: viewname})
+		thing.Views = append(thing.Views, &ViewInfo{Name: viewname})
 	}
 	return json.Marshal(thing)
 }
@@ -1117,7 +1117,7 @@ func (p fieldSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 type FieldInfo struct {
 	Name    string       `json:"name"`
 	Options FieldOptions `json:"options"`
-	Views   []*viewInfo  `json:"views,omitempty"`
+	Views   []*ViewInfo  `json:"views,omitempty"`
 }
 
 type fieldInfoSlice []*FieldInfo

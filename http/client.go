@@ -31,6 +31,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
+	pilosaproto "github.com/pilosa/pilosa/encoding/proto"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pkg/errors"
 )
@@ -43,6 +44,7 @@ type ClientOptions struct {
 // InternalClient represents a client to the Pilosa cluster.
 type InternalClient struct {
 	defaultURI *pilosa.URI
+	serializer pilosa.Serializer
 
 	// The client to use for HTTP communication.
 	HTTPClient *http.Client
@@ -66,6 +68,7 @@ func NewInternalClient(host string, remoteClient *http.Client) (*InternalClient,
 func NewInternalClientFromURI(defaultURI *pilosa.URI, remoteClient *http.Client) *InternalClient {
 	return &InternalClient{
 		defaultURI: defaultURI,
+		serializer: pilosaproto.Serializer{},
 		HTTPClient: remoteClient,
 	}
 }
@@ -819,12 +822,7 @@ func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, index
 }
 
 // SendMessage posts a message synchronously.
-func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, pb proto.Message) error {
-	msg, err := pilosa.MarshalMessage(pb)
-	if err != nil {
-		return fmt.Errorf("marshaling message: %v", err)
-	}
-
+func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, msg []byte) error {
 	u := uriPathToURL(uri, "/internal/cluster/message")
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(msg))
 	if err != nil {
@@ -998,7 +996,7 @@ func pos(rowID, columnID uint64) uint64 {
 
 func uriPathToURL(uri *pilosa.URI, path string) url.URL {
 	return url.URL{
-		Scheme: uri.Scheme(),
+		Scheme: uri.GetScheme(),
 		Host:   uri.HostPort(),
 		Path:   path,
 	}
@@ -1006,7 +1004,7 @@ func uriPathToURL(uri *pilosa.URI, path string) url.URL {
 
 func nodePathToURL(node *pilosa.Node, path string) url.URL {
 	return url.URL{
-		Scheme: node.URI.Scheme(),
+		Scheme: node.URI.GetScheme(),
 		Host:   node.URI.HostPort(),
 		Path:   path,
 	}

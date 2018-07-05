@@ -1890,10 +1890,10 @@ func decodeField(f *internal.Field) *FieldInfo {
 	fi := &FieldInfo{
 		Name:    f.Name,
 		Options: *decodeFieldOptions(f.Meta),
-		Views:   make([]*viewInfo, 0, len(f.Views)),
+		Views:   make([]*ViewInfo, 0, len(f.Views)),
 	}
 	for _, viewname := range f.Views {
-		fi.Views = append(fi.Views, &viewInfo{Name: viewname})
+		fi.Views = append(fi.Views, &ViewInfo{Name: viewname})
 	}
 	return fi
 }

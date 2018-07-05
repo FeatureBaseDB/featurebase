@@ -421,12 +421,12 @@ func (v *view) rangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*
 	return r, nil
 }
 
-// viewInfo represents schema information for a view.
-type viewInfo struct {
+// ViewInfo represents schema information for a view.
+type ViewInfo struct {
 	Name string `json:"name"`
 }
 
-type viewInfoSlice []*viewInfo
+type viewInfoSlice []*ViewInfo
 
 func (p viewInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p viewInfoSlice) Len() int           { return len(p) }

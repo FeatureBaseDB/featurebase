@@ -93,8 +93,8 @@ func TestSetScheme(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if uri.Scheme() != target {
-		t.Fatalf("%s != %s", uri.Scheme(), target)
+	if uri.GetScheme() != target {
+		t.Fatalf("%s != %s", uri.GetScheme(), target)
 	}
 }
 
@@ -105,8 +105,8 @@ func TestSetHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if uri.Host() != target {
-		t.Fatalf("%s != %s", uri.host, target)
+	if uri.GetHost() != target {
+		t.Fatalf("%s != %s", uri.Host, target)
 	}
 }
 
@@ -114,8 +114,8 @@ func TestSetPort(t *testing.T) {
 	uri := DefaultURI()
 	target := uint16(9999)
 	uri.SetPort(target)
-	if uri.Port() != target {
-		t.Fatalf("%d != %d", uri.port, target)
+	if uri.GetPort() != target {
+		t.Fatalf("%d != %d", uri.Port, target)
 	}
 }
 
@@ -147,14 +147,14 @@ func TestHostPort(t *testing.T) {
 }
 
 func compare(t *testing.T, uri *URI, scheme string, host string, port uint16) {
-	if uri.Scheme() != scheme {
-		t.Fatalf("Scheme does not match: %s != %s", uri.scheme, scheme)
+	if uri.GetScheme() != scheme {
+		t.Fatalf("Scheme does not match: %s != %s", uri.Scheme, scheme)
 	}
-	if uri.Host() != host {
-		t.Fatalf("Host does not match: %s != %s", uri.host, host)
+	if uri.GetHost() != host {
+		t.Fatalf("Host does not match: %s != %s", uri.Host, host)
 	}
-	if uri.Port() != port {
-		t.Fatalf("Port does not match: %d != %d", uri.port, port)
+	if uri.GetPort() != port {
+		t.Fatalf("Port does not match: %d != %d", uri.Port, port)
 	}
 }
 

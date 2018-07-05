@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 )
 
@@ -49,7 +48,7 @@ type InternalClient interface {
 	BlockData(ctx context.Context, uri *URI, index, field string, shard uint64, block int) ([]uint64, []uint64, error)
 	ColumnAttrDiff(ctx context.Context, uri *URI, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
 	RowAttrDiff(ctx context.Context, uri *URI, index, field string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
-	SendMessage(ctx context.Context, uri *URI, pb proto.Message) error
+	SendMessage(ctx context.Context, uri *URI, msg []byte) error
 	RetrieveShardFromURI(ctx context.Context, index, field string, shard uint64, uri URI) (io.ReadCloser, error)
 }
 
@@ -128,7 +127,7 @@ func (n NopInternalClient) ColumnAttrDiff(ctx context.Context, uri *URI, index s
 func (n NopInternalClient) RowAttrDiff(ctx context.Context, uri *URI, index, field string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	return nil, nil
 }
-func (n NopInternalClient) SendMessage(ctx context.Context, uri *URI, pb proto.Message) error {
+func (n NopInternalClient) SendMessage(ctx context.Context, uri *URI, msg []byte) error {
 	return nil
 }
 func (n NopInternalClient) RetrieveShardFromURI(ctx context.Context, index, field string, shard uint64, uri URI) (io.ReadCloser, error) {

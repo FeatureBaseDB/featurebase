@@ -509,14 +509,15 @@ func (api *API) ClusterMessage(ctx context.Context, reqBody io.Reader) error {
 		return errors.Wrap(err, "reading body")
 	}
 
-	// Marshal into request object.
-	pb, err := UnmarshalMessage(body)
+	typ := body[0]
+	msg := getMessage(typ)
+	err = api.server.serializer.Unmarshal(body[1:], msg)
 	if err != nil {
-		return errors.Wrap(err, "unmarshaling message")
+		return errors.Wrap(err, "deserializing cluster message")
 	}
 
 	// Forward the error message.
-	if err := api.server.receiveMessage(decode(pb)); err != nil {
+	if err := api.server.receiveMessage(msg); err != nil {
 		return errors.Wrap(err, "receiving message")
 	}
 	return nil
