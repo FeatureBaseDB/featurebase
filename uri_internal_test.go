@@ -60,7 +60,7 @@ func TestNormalizedAddress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Can't parse address")
 	}
-	if uri.Normalize() != "http://big-data.pilosa.com:6888" {
+	if uri.normalize() != "http://big-data.pilosa.com:6888" {
 		t.Fatalf("Normalized address is not normal")
 	}
 }
