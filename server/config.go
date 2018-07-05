@@ -21,13 +21,6 @@ import (
 	"github.com/pilosa/pilosa/toml"
 )
 
-// Cluster types.
-const (
-	ClusterNone   = ""
-	ClusterStatic = "static"
-	ClusterGossip = "gossip"
-)
-
 // TLSConfig contains TLS configuration
 type TLSConfig struct {
 	// CertificatePath contains the path to the certificate (.crt or .pem file)

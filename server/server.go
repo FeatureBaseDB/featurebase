@@ -203,7 +203,7 @@ func (m *Command) SetupServer() error {
 
 	// Setup TLS
 	var TLSConfig *tls.Config
-	if uri.GetScheme() == "https" {
+	if uri.Scheme == "https" {
 		if m.Config.TLS.CertificatePath == "" {
 			return errors.New("certificate path is required for TLS sockets")
 		}
@@ -236,7 +236,7 @@ func (m *Command) SetupServer() error {
 	}
 
 	// If port is 0, get auto-allocated port from listener
-	if uri.GetPort() == 0 {
+	if uri.Port == 0 {
 		uri.SetPort(uint16(m.ln.Addr().(*net.TCPAddr).Port))
 	}
 
@@ -311,7 +311,7 @@ func (m *Command) SetupNetworking() error {
 	}
 
 	// get the host portion of addr to use for binding
-	gossipHost := m.API.Node().URI.GetHost()
+	gossipHost := m.API.Node().URI.Host
 	m.gossipTransport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
 	if err != nil {
 		return errors.Wrap(err, "getting transport")
@@ -368,19 +368,19 @@ func NewStatsClient(name string, host string) (pilosa.StatsClient, error) {
 // getListener gets a net.Listener based on the config.
 func getListener(uri pilosa.URI, tlsconf *tls.Config) (ln net.Listener, err error) {
 	// If bind URI has the https scheme, enable TLS
-	if uri.GetScheme() == "https" && tlsconf != nil {
+	if uri.Scheme == "https" && tlsconf != nil {
 		ln, err = tls.Listen("tcp", uri.HostPort(), tlsconf)
 		if err != nil {
 			return nil, errors.Wrap(err, "tls.Listener")
 		}
-	} else if uri.GetScheme() == "http" {
+	} else if uri.Scheme == "http" {
 		// Open HTTP listener to determine port (if specified as :0).
 		ln, err = net.Listen("tcp", uri.HostPort())
 		if err != nil {
 			return nil, errors.Wrap(err, "net.Listen")
 		}
 	} else {
-		return nil, errors.Errorf("unsupported scheme: %s", uri.GetScheme())
+		return nil, errors.Errorf("unsupported scheme: %s", uri.Scheme)
 	}
 
 	return ln, nil

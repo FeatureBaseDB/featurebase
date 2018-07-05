@@ -27,17 +27,10 @@ import (
 	"sort"
 	"strconv"
 
-	"crypto/tls"
-
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/encoding/proto"
 	"github.com/pkg/errors"
 )
-
-// ClientOptions represents the configuration for a InternalHTTPClient
-type ClientOptions struct {
-	TLS *tls.Config
-}
 
 // InternalClient represents a client to the Pilosa cluster.
 type InternalClient struct {
@@ -70,9 +63,6 @@ func NewInternalClientFromURI(defaultURI *pilosa.URI, remoteClient *http.Client)
 		HTTPClient: remoteClient,
 	}
 }
-
-// Host returns the host the client was initialized with.
-func (c *InternalClient) Host() *pilosa.URI { return c.defaultURI }
 
 // MaxShardByIndex returns the number of shards on a server by index.
 func (c *InternalClient) MaxShardByIndex(ctx context.Context) (map[string]uint64, error) {
@@ -993,7 +983,7 @@ func pos(rowID, columnID uint64) uint64 {
 
 func uriPathToURL(uri *pilosa.URI, path string) url.URL {
 	return url.URL{
-		Scheme: uri.GetScheme(),
+		Scheme: uri.Scheme,
 		Host:   uri.HostPort(),
 		Path:   path,
 	}
@@ -1001,7 +991,7 @@ func uriPathToURL(uri *pilosa.URI, path string) url.URL {
 
 func nodePathToURL(node *pilosa.Node, path string) url.URL {
 	return url.URL{
-		Scheme: node.URI.GetScheme(),
+		Scheme: node.URI.Scheme,
 		Host:   node.URI.HostPort(),
 		Path:   path,
 	}

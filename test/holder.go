@@ -81,15 +81,6 @@ func (h *Holder) MustCreateIndexIfNotExists(index string, opt pilosa.IndexOption
 	return &Index{Index: idx}
 }
 
-// MustCreateFieldIfNotExists returns a given field. Panic on error.
-func (h *Holder) MustCreateFieldIfNotExists(index, field string) *Field {
-	f, err := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{}).CreateFieldIfNotExists(field, pilosa.OptFieldTypeDefault())
-	if err != nil {
-		panic(err)
-	}
-	return f
-}
-
 // Row returns a Row for a given field.
 func (h *Holder) Row(index, field string, rowID uint64) *pilosa.Row {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})

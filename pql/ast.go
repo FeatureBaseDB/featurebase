@@ -220,23 +220,6 @@ func (q *Query) WriteCallN() int {
 	return n
 }
 
-// HasKeys returns true if any call in the query uses keys and requires translation to ids.
-func (q *Query) HasKeys() bool {
-	for _, call := range q.Calls {
-		if call.Args["col"] != nil {
-			if _, ok := call.Args["col"].(string); ok {
-				return true
-			}
-		}
-		if call.Args["row"] != nil {
-			if _, ok := call.Args["row"].(string); ok {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // String returns a string representation of the query.
 func (q *Query) String() string {
 	a := make([]string, len(q.Calls))
@@ -326,22 +309,6 @@ func (c *Call) UintSliceArg(key string) ([]uint64, bool, error) {
 		return ret, true, nil
 	default:
 		return nil, true, fmt.Errorf("unexpected type %T in UintSliceArg, val %v", tval, tval)
-	}
-}
-
-// StringArg is for reading the value at key from call.Args as a string. If the
-// key is not in Call.Args, the value of the returned bool will be false, and
-// the error will be nil. An error is returned if the value is not a string.
-func (c *Call) StringArg(key string) (string, bool, error) {
-	val, ok := c.Args[key]
-	if !ok {
-		return "", false, nil
-	}
-	switch tval := val.(type) {
-	case string:
-		return tval, true, nil
-	default:
-		return "", true, fmt.Errorf("could not convert %v of type %T to string in Call.StringArg", tval, tval)
 	}
 }
 
