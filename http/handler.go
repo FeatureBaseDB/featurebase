@@ -1105,7 +1105,7 @@ const (
 	QueryResultTypePairs
 	QueryResultTypeValCount
 	QueryResultTypeUint64
-	QueryResultTypeBool
+	queryResultTypeBool
 )
 
 func decodeQueryRequest(pb *internal.QueryRequest) *pilosa.QueryRequest {
@@ -1144,7 +1144,7 @@ func encodeQueryResponse(resp *pilosa.QueryResponse) *internal.QueryResponse {
 			pb.Results[i].Type = QueryResultTypeUint64
 			pb.Results[i].N = result
 		case bool:
-			pb.Results[i].Type = QueryResultTypeBool
+			pb.Results[i].Type = queryResultTypeBool
 			pb.Results[i].Changed = result
 		case nil:
 			pb.Results[i].Type = QueryResultTypeNil
