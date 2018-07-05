@@ -70,15 +70,6 @@ func (q TimeQuantum) Type() string {
 	return "TimeQuantum"
 }
 
-// ParseTimeQuantum parses v into a time quantum.
-func ParseTimeQuantum(v string) (TimeQuantum, error) {
-	q := TimeQuantum(strings.ToUpper(v))
-	if !q.Valid() {
-		return "", ErrInvalidTimeQuantum
-	}
-	return q, nil
-}
-
 // viewByTimeUnit returns the view name for time with a given quantum unit.
 func viewByTimeUnit(name string, t time.Time, unit rune) string {
 	switch unit {

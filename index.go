@@ -287,7 +287,7 @@ func (i *Index) RecalculateCaches() {
 }
 
 // CreateField creates a field.
-func (i *Index) CreateField(name string, opt FieldOptions) (*Field, error) {
+func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -295,11 +295,40 @@ func (i *Index) CreateField(name string, opt FieldOptions) (*Field, error) {
 	if i.fields[name] != nil {
 		return nil, NewConflictError(ErrFieldExists)
 	}
-	return i.createField(name, opt)
+
+	// Apply functional options.
+	fo := FieldOptions{}
+	for _, opt := range opts {
+		err := opt(&fo)
+		if err != nil {
+			return nil, errors.Wrap(err, "applying option")
+		}
+	}
+
+	return i.createField(name, fo)
 }
 
 // CreateFieldIfNotExists creates a field with the given options if it doesn't exist.
-func (i *Index) CreateFieldIfNotExists(name string, opt FieldOptions) (*Field, error) {
+func (i *Index) CreateFieldIfNotExists(name string, opts FieldOption) (*Field, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Find field in cache first.
+	if f := i.fields[name]; f != nil {
+		return f, nil
+	}
+
+	// Apply functional option.
+	fo := FieldOptions{}
+	err := opts(&fo)
+	if err != nil {
+		return nil, errors.Wrap(err, "applying option")
+	}
+
+	return i.createField(name, fo)
+}
+
+func (i *Index) createFieldIfNotExists(name string, opt FieldOptions) (*Field, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -347,7 +376,7 @@ func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 }
 
 func (i *Index) newField(path, name string) (*Field, error) {
-	f, err := NewField(path, i.name, name, FieldOptions{}) // TODO: NewField should be un-exported along with FieldOptions
+	f, err := NewField(path, i.name, name, OptFieldTypeDefault())
 	if err != nil {
 		return nil, err
 	}

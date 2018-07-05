@@ -28,11 +28,7 @@ func TestField_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateField("f", pilosa.FieldOptions{
-			Type: pilosa.FieldTypeInt,
-			Min:  0,
-			Max:  30,
-		})
+		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(0, 30))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -65,11 +61,7 @@ func TestField_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateField("f", pilosa.FieldOptions{
-			Type: pilosa.FieldTypeInt,
-			Min:  0,
-			Max:  30,
-		})
+		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(0, 30))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -102,9 +94,7 @@ func TestField_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateField("f", pilosa.FieldOptions{
-			Type: pilosa.FieldTypeSet,
-		})
+		f, err := idx.CreateField("f", pilosa.OptFieldTypeDefault())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -119,11 +109,7 @@ func TestField_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateField("f", pilosa.FieldOptions{
-			Type: pilosa.FieldTypeInt,
-			Min:  20,
-			Max:  30,
-		})
+		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(20, 30))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -138,11 +124,7 @@ func TestField_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateField("f", pilosa.FieldOptions{
-			Type: pilosa.FieldTypeInt,
-			Min:  20,
-			Max:  30,
-		})
+		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(20, 30))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -159,7 +141,7 @@ func TestField_NameRestriction(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	field, err := pilosa.NewField(path, "i", ".meta", pilosa.FieldOptions{})
+	field, err := pilosa.NewField(path, "i", ".meta", pilosa.OptFieldTypeDefault())
 	if field != nil {
 		t.Fatalf("unexpected field name %s", err)
 	}
@@ -191,13 +173,13 @@ func TestField_NameValidation(t *testing.T) {
 		panic(err)
 	}
 	for _, name := range validFieldNames {
-		_, err := pilosa.NewField(path, "i", name, pilosa.FieldOptions{})
+		_, err := pilosa.NewField(path, "i", name, pilosa.OptFieldTypeDefault())
 		if err != nil {
 			t.Fatalf("unexpected field name: %s %s", name, err)
 		}
 	}
 	for _, name := range invalidFieldNames {
-		_, err := pilosa.NewField(path, "i", name, pilosa.FieldOptions{})
+		_, err := pilosa.NewField(path, "i", name, pilosa.OptFieldTypeDefault())
 		if err == nil {
 			t.Fatalf("expected error on field name: %s", name)
 		}

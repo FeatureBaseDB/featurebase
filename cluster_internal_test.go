@@ -149,7 +149,7 @@ func TestFragSources(t *testing.T) {
 	c5.addNodeBasicSorted(node3)
 
 	idx := newIndexWithTempPath("i")
-	field, err := idx.CreateFieldIfNotExists("f", FieldOptions{})
+	field, err := idx.CreateFieldIfNotExists("f", OptFieldTypeDefault())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -696,7 +696,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		// Add Bit Data to node0.
-		if err := tc.CreateField("i", "f", FieldOptions{}); err != nil {
+		if err := tc.CreateField("i", "f", OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
 		}
 		tc.SetBit("i", "f", 1, 101, nil)

@@ -75,8 +75,27 @@ type Field struct {
 	Logger Logger
 }
 
-// FieldOption is a functional option type for pilosa.FieldOptions.
+// FieldOption is a functional option type for pilosa.fieldOptions.
 type FieldOption func(fo *FieldOptions) error
+
+func OptFieldKeys() FieldOption {
+	return func(fo *FieldOptions) error {
+		fo.Keys = true
+		return nil
+	}
+}
+
+func OptFieldTypeDefault() FieldOption {
+	return func(fo *FieldOptions) error {
+		if fo.Type != "" {
+			return errors.Errorf("field type is already set to: %s", fo.Type)
+		}
+		fo.Type = FieldTypeSet
+		fo.CacheType = DefaultCacheType
+		fo.CacheSize = DefaultCacheSize
+		return nil
+	}
+}
 
 func OptFieldTypeSet(cacheType string, cacheSize uint32) FieldOption {
 	return func(fo *FieldOptions) error {
@@ -120,10 +139,17 @@ func OptFieldTypeTime(timeQuantum TimeQuantum) FieldOption {
 }
 
 // NewField returns a new instance of field.
-func NewField(path, index, name string, options FieldOptions) (*Field, error) {
+func NewField(path, index, name string, opts FieldOption) (*Field, error) {
 	err := validateName(name)
 	if err != nil {
 		return nil, err
+	}
+
+	// Apply functional option.
+	fo := FieldOptions{}
+	err = opts(&fo)
+	if err != nil {
+		return nil, errors.Wrap(err, "applying option")
 	}
 
 	f := &Field{
@@ -138,7 +164,7 @@ func NewField(path, index, name string, options FieldOptions) (*Field, error) {
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
 
-		options: applyDefaultOptions(options),
+		options: applyDefaultOptions(fo),
 
 		Logger: NopLogger,
 	}
@@ -176,13 +202,6 @@ func (f *Field) Type() string {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.options.Type
-}
-
-// CacheType returns the caching mode for the field.
-func (f *Field) CacheType() string {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	return f.options.CacheType
 }
 
 // SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
