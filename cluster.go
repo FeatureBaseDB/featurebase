@@ -42,7 +42,7 @@ const (
 	// ClusterState represents the state returned in the /status endpoint.
 	ClusterStateStarting = "STARTING"
 	ClusterStateNormal   = "NORMAL"
-	ClusterStateResizing = "RESIZING"
+	clusterStateResizing = "RESIZING"
 
 	// NodeState represents the state of a node during startup.
 	NodeStateReady = "READY"
@@ -438,7 +438,7 @@ func (c *cluster) setState(state string) {
 	switch state {
 	case ClusterStateNormal:
 		// If state is RESIZING -> NORMAL then run cleanup.
-		if c.state == ClusterStateResizing {
+		if c.state == clusterStateResizing {
 			doCleanup = true
 		}
 	}
@@ -1689,7 +1689,7 @@ func (c *cluster) nodeJoin(node *Node) error {
 
 	// If the cluster has data, we need to change to RESIZING and
 	// kick off the resizing process.
-	if err := c.setStateAndBroadcast(ClusterStateResizing); err != nil {
+	if err := c.setStateAndBroadcast(clusterStateResizing); err != nil {
 		return errors.Wrap(err, "broadcasting state")
 	}
 	c.joiningLeavingNodes <- nodeAction{node, resizeJobActionAdd}
@@ -1743,7 +1743,7 @@ func (c *cluster) nodeLeave(node *Node) error {
 
 	// If the cluster has data then change state to RESIZING and
 	// kick off the resizing process.
-	if err := c.setStateAndBroadcast(ClusterStateResizing); err != nil {
+	if err := c.setStateAndBroadcast(clusterStateResizing); err != nil {
 		return errors.Wrap(err, "broadcasting state")
 	}
 	c.joiningLeavingNodes <- nodeAction{n, resizeJobActionRemove}
