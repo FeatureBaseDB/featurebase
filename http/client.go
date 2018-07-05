@@ -70,8 +70,8 @@ func NewInternalClientFromURI(defaultURI *pilosa.URI, remoteClient *http.Client)
 	}
 }
 
-// Host returns the host the client was initialized with.
-func (c *InternalClient) Host() *pilosa.URI { return c.defaultURI }
+// host returns the host the client was initialized with.
+func (c *InternalClient) host() *pilosa.URI { return c.defaultURI }
 
 // MaxShardByIndex returns the number of shards on a server by index.
 func (c *InternalClient) MaxShardByIndex(ctx context.Context) (map[string]uint64, error) {
