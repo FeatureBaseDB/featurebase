@@ -28,7 +28,6 @@ import (
 
 	"github.com/hashicorp/memberlist"
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/encoding/proto"
 	"github.com/pilosa/pilosa/toml"
 	"github.com/pkg/errors"
 )
@@ -43,9 +42,8 @@ type GossipMemberSet struct {
 
 	broadcasts *memberlist.TransmitLimitedQueue
 
-	papi       *pilosa.API
-	serializer pilosa.Serializer
-	config     *gossipConfig
+	papi   *pilosa.API
+	config *gossipConfig
 
 	Logger pilosa.Logger
 
@@ -150,9 +148,8 @@ func WithLogger(logger *log.Logger) GossipMemberSetOption {
 func NewGossipMemberSet(cfg Config, api *pilosa.API, options ...GossipMemberSetOption) (*GossipMemberSet, error) {
 	host := api.Node().URI.GetHost()
 	g := &GossipMemberSet{
-		papi:       api,
-		serializer: proto.Serializer{},
-		Logger:     pilosa.NopLogger,
+		papi:   api,
+		Logger: pilosa.NopLogger,
 	}
 
 	// options
@@ -223,7 +220,7 @@ func NewGossipMemberSet(cfg Config, api *pilosa.API, options ...GossipMemberSetO
 
 // NodeMeta implementation of the memberlist.Delegate interface.
 func (g *GossipMemberSet) NodeMeta(limit int) []byte {
-	buf, err := g.serializer.Marshal(g.papi.Node())
+	buf, err := g.papi.Serializer.Marshal(g.papi.Node())
 	if err != nil {
 		g.Logger.Printf("marshal message error: %s", err)
 		return []byte{}
@@ -256,7 +253,7 @@ func (g *GossipMemberSet) LocalState(join bool) []byte {
 	}
 
 	// Marshal nodestate data to bytes.
-	buf, err := pilosa.MarshalInternalMessage(m, g.serializer)
+	buf, err := pilosa.MarshalInternalMessage(m, g.papi.Serializer)
 	if err != nil {
 		g.Logger.Printf("error marshalling nodestate data, err=%s", err)
 		return []byte{}
@@ -279,9 +276,8 @@ func (g *GossipMemberSet) MergeRemoteState(buf []byte, join bool) {
 // Care must be taken that events are processed in a timely manner from
 // the channel, since this delegate will block until an event can be sent.
 type gossipEventReceiver struct {
-	ch         chan memberlist.NodeEvent
-	papi       *pilosa.API
-	serializer pilosa.Serializer
+	ch   chan memberlist.NodeEvent
+	papi *pilosa.API
 
 	logger *log.Logger
 }
@@ -289,10 +285,9 @@ type gossipEventReceiver struct {
 // newGossipEventReceiver returns a new instance of GossipEventReceiver.
 func newGossipEventReceiver(logger *log.Logger, papi *pilosa.API) *gossipEventReceiver {
 	ger := &gossipEventReceiver{
-		ch:         make(chan memberlist.NodeEvent, 1),
-		logger:     logger,
-		papi:       papi,
-		serializer: proto.Serializer{},
+		ch:     make(chan memberlist.NodeEvent, 1),
+		logger: logger,
+		papi:   papi,
 	}
 	go ger.listen()
 	return ger
@@ -327,7 +322,7 @@ func (g *gossipEventReceiver) listen() {
 
 		// Get the node from the event.Node meta data.
 		var n pilosa.Node
-		if err := g.serializer.Unmarshal(e.Node.Meta, &n); err != nil {
+		if err := g.papi.Serializer.Unmarshal(e.Node.Meta, &n); err != nil {
 			panic("failed to unmarshal event node meta into node")
 		}
 
@@ -335,7 +330,7 @@ func (g *gossipEventReceiver) listen() {
 			Event: nodeEventType,
 			Node:  &n,
 		}
-		buf, err := pilosa.MarshalInternalMessage(ne, g.serializer)
+		buf, err := pilosa.MarshalInternalMessage(ne, g.papi.Serializer)
 		if err != nil {
 			panic(err)
 		}

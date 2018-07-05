@@ -815,13 +815,12 @@ func (h *Handler) readProtobufQueryRequest(r *http.Request) (*pilosa.QueryReques
 		return nil, errors.Wrap(err, "reading")
 	}
 
-	// Unmarshal into object.
-	var req internal.QueryRequest
-	if err := proto.Unmarshal(body, &req); err != nil {
-		return nil, errors.Wrap(err, "unmarshalling")
+	qreq := &pilosa.QueryRequest{}
+	err = h.API.Serializer.Unmarshal(body, qreq)
+	if err != nil {
+		return nil, errors.Wrap(err, "unmarshalling query request")
 	}
-
-	return decodeQueryRequest(&req), nil
+	return qreq, nil
 }
 
 // readURLQueryRequest parses query parameters from URL parameters from r.
@@ -860,7 +859,7 @@ func (h *Handler) writeQueryResponse(w http.ResponseWriter, r *http.Request, res
 
 // writeProtobufQueryResponse writes the response from the executor to w as protobuf.
 func (h *Handler) writeProtobufQueryResponse(w http.ResponseWriter, resp *pilosa.QueryResponse) error {
-	if buf, err := proto.Marshal(encodeQueryResponse(resp)); err != nil {
+	if buf, err := h.API.Serializer.Marshal(resp); err != nil {
 		return errors.Wrap(err, "marshalling")
 	} else if _, err := w.Write(buf); err != nil {
 		return errors.Wrap(err, "writing")

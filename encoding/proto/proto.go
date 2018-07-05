@@ -2,6 +2,7 @@ package proto
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
@@ -161,6 +162,23 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		decodeNode(msg, mt)
 		return nil
+	case *pilosa.QueryRequest:
+		msg := &internal.QueryRequest{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling QueryRequest")
+		}
+		decodeQueryRequest(msg, mt)
+		return nil
+	case *pilosa.QueryResponse:
+		msg := &internal.QueryResponse{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling QueryResponse")
+		}
+		decodeQueryResponse(msg, mt)
+		return nil
+
 	default:
 		panic(fmt.Sprintf("unhandled pilosa.Message of type %T: %#v", mt, m))
 	}
@@ -202,8 +220,60 @@ func encodeToProto(m pilosa.Message) proto.Message {
 		return encodeNodeStatus(mt)
 	case *pilosa.Node:
 		return encodeNode(mt)
+	case *pilosa.QueryRequest:
+		return encodeQueryRequest(mt)
+	case *pilosa.QueryResponse:
+		return encodeQueryResponse(mt)
 	}
 	return nil
+}
+
+func encodeQueryRequest(m *pilosa.QueryRequest) *internal.QueryRequest {
+	return &internal.QueryRequest{
+		Query:           m.Query,
+		Shards:          m.Shards,
+		ColumnAttrs:     m.ColumnAttrs,
+		Remote:          m.Remote,
+		ExcludeRowAttrs: m.ExcludeRowAttrs,
+		ExcludeColumns:  m.ExcludeColumns,
+	}
+}
+
+func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
+	pb := &internal.QueryResponse{
+		Results:        make([]*internal.QueryResult, len(m.Results)),
+		ColumnAttrSets: EncodeColumnAttrSets(m.ColumnAttrSets),
+	}
+
+	for i := range m.Results {
+		pb.Results[i] = &internal.QueryResult{}
+
+		switch result := m.Results[i].(type) {
+		case *pilosa.Row:
+			pb.Results[i].Type = queryResultTypeRow
+			pb.Results[i].Row = EncodeRow(result)
+		case []pilosa.Pair:
+			pb.Results[i].Type = queryResultTypePairs
+			pb.Results[i].Pairs = EncodePairs(result)
+		case pilosa.ValCount:
+			pb.Results[i].Type = queryResultTypeValCount
+			pb.Results[i].ValCount = EncodeValCount(result)
+		case uint64:
+			pb.Results[i].Type = queryResultTypeUint64
+			pb.Results[i].N = result
+		case bool:
+			pb.Results[i].Type = queryResultTypeBool
+			pb.Results[i].Changed = result
+		case nil:
+			pb.Results[i].Type = queryResultTypeNil
+		}
+	}
+
+	if m.Err != nil {
+		pb.Err = m.Err.Error()
+	}
+
+	return pb
 }
 
 func encodeResizeInstruction(m *pilosa.ResizeInstruction) *internal.ResizeInstruction {
@@ -602,3 +672,221 @@ func decodeNodeStatus(pb *internal.NodeStatus, m *pilosa.NodeStatus) {
 }
 
 func decodeRecalculateCaches(pb *internal.RecalculateCaches, m *pilosa.RecalculateCaches) {}
+
+func decodeQueryRequest(pb *internal.QueryRequest, m *pilosa.QueryRequest) {
+	m.Query = pb.Query
+	m.Shards = pb.Shards
+	m.ColumnAttrs = pb.ColumnAttrs
+	m.Remote = pb.Remote
+	m.ExcludeRowAttrs = pb.ExcludeRowAttrs
+	m.ExcludeColumns = pb.ExcludeColumns
+}
+
+func decodeQueryResponse(pb *internal.QueryResponse, m *pilosa.QueryResponse) {
+	m.ColumnAttrSets = make([]*pilosa.ColumnAttrSet, len(pb.ColumnAttrSets))
+	decodeColumnAttrSets(pb.ColumnAttrSets, m.ColumnAttrSets)
+	m.Err = errors.New(pb.Err)
+	m.Results = make([]interface{}, len(pb.Results))
+	decodeQueryResults(pb.Results, m.Results)
+
+}
+
+func decodeColumnAttrSets(pb []*internal.ColumnAttrSet, m []*pilosa.ColumnAttrSet) {
+	for i := range pb {
+		decodeColumnAttrSet(pb[i], m[i])
+	}
+}
+
+func decodeColumnAttrSet(pb *internal.ColumnAttrSet, m *pilosa.ColumnAttrSet) {
+	m.ID = pb.ID
+	m.Key = pb.Key
+	m.Attrs = decodeAttrs(pb.Attrs)
+}
+
+func decodeQueryResults(pb []*internal.QueryResult, m []interface{}) {
+	for i := range pb {
+		m[i] = decodeQueryResult(pb[i])
+	}
+}
+
+// QueryResult types.
+const (
+	queryResultTypeNil uint32 = iota
+	queryResultTypeRow
+	queryResultTypePairs
+	queryResultTypeValCount
+	queryResultTypeUint64
+	queryResultTypeBool
+)
+
+func decodeQueryResult(pb *internal.QueryResult) interface{} {
+	switch pb.Type {
+	case queryResultTypeRow:
+		return decodeRow(pb.Row)
+	case queryResultTypePairs:
+		return decodePairs(pb.Pairs)
+	case queryResultTypeValCount:
+		return decodeValCount(pb.ValCount)
+	case queryResultTypeUint64:
+		return pb.N
+	case queryResultTypeBool:
+		return pb.Changed
+	case queryResultTypeNil:
+		return nil
+	}
+	panic(fmt.Sprintf("unknown type: %d", pb.Type))
+}
+
+// DecodeRow converts r from its internal representation.
+func decodeRow(pr *internal.Row) *pilosa.Row {
+	if pr == nil {
+		return nil
+	}
+
+	r := pilosa.NewRow()
+	r.Attrs = decodeAttrs(pr.Attrs)
+	for _, v := range pr.Columns {
+		r.SetBit(v)
+	}
+	return r
+}
+
+func decodeAttrs(pb []*internal.Attr) map[string]interface{} {
+	m := make(map[string]interface{}, len(pb))
+	for i := range pb {
+		key, value := decodeAttr(pb[i])
+		m[key] = value
+	}
+	return m
+}
+
+const (
+	attrTypeString = 1
+	attrTypeInt    = 2
+	attrTypeBool   = 3
+	attrTypeFloat  = 4
+)
+
+func decodeAttr(attr *internal.Attr) (key string, value interface{}) {
+	switch attr.Type {
+	case attrTypeString:
+		return attr.Key, attr.StringValue
+	case attrTypeInt:
+		return attr.Key, attr.IntValue
+	case attrTypeBool:
+		return attr.Key, attr.BoolValue
+	case attrTypeFloat:
+		return attr.Key, attr.FloatValue
+	default:
+		return attr.Key, nil
+	}
+}
+
+func decodePairs(a []*internal.Pair) []pilosa.Pair {
+	other := make([]pilosa.Pair, len(a))
+	for i := range a {
+		other[i] = decodePair(a[i])
+	}
+	return other
+}
+
+func decodePair(pb *internal.Pair) pilosa.Pair {
+	return pilosa.Pair{
+		ID:    pb.ID,
+		Key:   pb.Key,
+		Count: pb.Count,
+	}
+}
+
+func decodeValCount(pb *internal.ValCount) pilosa.ValCount {
+	return pilosa.ValCount{
+		Val:   pb.Val,
+		Count: pb.Count,
+	}
+}
+
+func EncodeColumnAttrSets(a []*pilosa.ColumnAttrSet) []*internal.ColumnAttrSet {
+	other := make([]*internal.ColumnAttrSet, len(a))
+	for i := range a {
+		other[i] = EncodeColumnAttrSet(a[i])
+	}
+	return other
+}
+
+func EncodeColumnAttrSet(set *pilosa.ColumnAttrSet) *internal.ColumnAttrSet {
+	return &internal.ColumnAttrSet{
+		ID:    set.ID,
+		Attrs: encodeAttrs(set.Attrs),
+	}
+}
+
+func EncodeRow(r *pilosa.Row) *internal.Row {
+	if r == nil {
+		return nil
+	}
+
+	return &internal.Row{
+		Columns: r.Columns(),
+		Attrs:   encodeAttrs(r.Attrs),
+	}
+}
+
+func EncodePairs(a pilosa.Pairs) []*internal.Pair {
+	other := make([]*internal.Pair, len(a))
+	for i := range a {
+		other[i] = encodePair(a[i])
+	}
+	return other
+}
+
+func encodePair(p pilosa.Pair) *internal.Pair {
+	return &internal.Pair{
+		ID:    p.ID,
+		Key:   p.Key,
+		Count: p.Count,
+	}
+}
+
+func EncodeValCount(vc pilosa.ValCount) *internal.ValCount {
+	return &internal.ValCount{
+		Val:   vc.Val,
+		Count: vc.Count,
+	}
+}
+
+func encodeAttrs(m map[string]interface{}) []*internal.Attr {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	a := make([]*internal.Attr, len(keys))
+	for i := range keys {
+		a[i] = encodeAttr(keys[i], m[keys[i]])
+	}
+	return a
+}
+
+// encodeAttr converts a key/value pair into an Attr internal representation.
+func encodeAttr(key string, value interface{}) *internal.Attr {
+	pb := &internal.Attr{Key: key}
+	switch value := value.(type) {
+	case string:
+		pb.Type = attrTypeString
+		pb.StringValue = value
+	case float64:
+		pb.Type = attrTypeFloat
+		pb.FloatValue = value
+	case uint64:
+		pb.Type = attrTypeInt
+		pb.IntValue = int64(value)
+	case int64:
+		pb.Type = attrTypeInt
+		pb.IntValue = value
+	case bool:
+		pb.Type = attrTypeBool
+		pb.BoolValue = value
+	}
+	return pb
+}

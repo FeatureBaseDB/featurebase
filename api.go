@@ -38,6 +38,8 @@ type API struct {
 	holder  *Holder
 	cluster *cluster
 	server  *Server
+
+	Serializer Serializer
 }
 
 // APIOption is a functional option type for pilosa.API
@@ -48,6 +50,7 @@ func OptAPIServer(s *Server) APIOption {
 		a.server = s
 		a.holder = s.holder
 		a.cluster = s.cluster
+		a.Serializer = s.serializer
 		return nil
 	}
 }
