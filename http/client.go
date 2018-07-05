@@ -27,18 +27,11 @@ import (
 	"sort"
 	"strconv"
 
-	"crypto/tls"
-
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pkg/errors"
 )
-
-// ClientOptions represents the configuration for a InternalHTTPClient
-type ClientOptions struct {
-	TLS *tls.Config
-}
 
 // InternalClient represents a client to the Pilosa cluster.
 type InternalClient struct {
@@ -69,9 +62,6 @@ func NewInternalClientFromURI(defaultURI *pilosa.URI, remoteClient *http.Client)
 		HTTPClient: remoteClient,
 	}
 }
-
-// Host returns the host the client was initialized with.
-func (c *InternalClient) Host() *pilosa.URI { return c.defaultURI }
 
 // MaxShardByIndex returns the number of shards on a server by index.
 func (c *InternalClient) MaxShardByIndex(ctx context.Context) (map[string]uint64, error) {

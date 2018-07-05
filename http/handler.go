@@ -1329,10 +1329,6 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (h *Handler) GetAPI() *pilosa.API {
-	return h.API
-}
-
 type defaultClusterMessageResponse struct{}
 
 func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request) {
