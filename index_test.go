@@ -33,7 +33,7 @@ func TestIndex_CreateFieldIfNotExists(t *testing.T) {
 	defer index.Close()
 
 	// Create field.
-	f, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{})
+	f, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeDefault())
 	if err != nil {
 		t.Fatal(err)
 	} else if f == nil {
@@ -41,7 +41,7 @@ func TestIndex_CreateFieldIfNotExists(t *testing.T) {
 	}
 
 	// Retrieve existing field.
-	other, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{})
+	other, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeDefault())
 	if err != nil {
 		t.Fatal(err)
 	} else if f.Field != other.Field {
@@ -61,10 +61,7 @@ func TestIndex_CreateField(t *testing.T) {
 			defer index.Close()
 
 			// Create field with explicit quantum.
-			f, err := index.CreateField("f", pilosa.FieldOptions{
-				Type:        pilosa.FieldTypeTime,
-				TimeQuantum: pilosa.TimeQuantum("YMDH"),
-			})
+			f, err := index.CreateField("f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
 			if err != nil {
 				t.Fatal(err)
 			} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
@@ -80,11 +77,7 @@ func TestIndex_CreateField(t *testing.T) {
 			defer index.Close()
 
 			// Create field with schema and verify it exists.
-			if f, err := index.CreateField("f", pilosa.FieldOptions{
-				Type: pilosa.FieldTypeInt,
-				Min:  10,
-				Max:  20,
-			}); err != nil {
+			if f, err := index.CreateField("f", pilosa.OptFieldTypeInt(10, 20)); err != nil {
 				t.Fatal(err)
 			} else if !reflect.DeepEqual(f.Type(), pilosa.FieldTypeInt) {
 				t.Fatalf("unexpected type: %#v", f.Type())
@@ -184,7 +177,7 @@ func TestIndex_DeleteField(t *testing.T) {
 	defer index.Close()
 
 	// Create field.
-	if _, err := index.CreateFieldIfNotExists("f", pilosa.FieldOptions{}); err != nil {
+	if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
 	}
 

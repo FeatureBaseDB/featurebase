@@ -62,17 +62,17 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
-	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.FieldOptions{}); err != nil {
+	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.FieldOptions{}); err != nil {
+	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.FieldOptions{}); err != nil {
+	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -401,7 +401,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("Field delete", func(t *testing.T) {
 		i := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		if _, err := i.CreateFieldIfNotExists("f1", pilosa.FieldOptions{}); err != nil {
+		if _, err := i.CreateFieldIfNotExists("f1", pilosa.OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
 		}
 		w := httptest.NewRecorder()
@@ -453,7 +453,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	})
 
-	meta, err := i.CreateFieldIfNotExists("meta", pilosa.FieldOptions{})
+	meta, err := i.CreateFieldIfNotExists("meta", pilosa.OptFieldTypeDefault())
 	if err != nil {
 		t.Fatal(err)
 	}
