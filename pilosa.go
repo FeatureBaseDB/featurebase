@@ -114,16 +114,16 @@ func NewNotFoundError(err error) NotFoundError {
 // Regular expression to validate index and field names.
 var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 
-// ColumnAttrSet represents a set of attributes for a vertical column in an index.
+// columnAttrSet represents a set of attributes for a vertical column in an index.
 // Can have a set of attributes attached to it.
-type ColumnAttrSet struct {
+type columnAttrSet struct {
 	ID    uint64                 `json:"id"`
 	Key   string                 `json:"key,omitempty"`
 	Attrs map[string]interface{} `json:"attrs,omitempty"`
 }
 
 // EncodeColumnAttrSets converts a into its internal representation.
-func EncodeColumnAttrSets(a []*ColumnAttrSet) []*internal.ColumnAttrSet {
+func EncodeColumnAttrSets(a []*columnAttrSet) []*internal.ColumnAttrSet {
 	other := make([]*internal.ColumnAttrSet, len(a))
 	for i := range a {
 		other[i] = EncodeColumnAttrSet(a[i])
@@ -132,7 +132,7 @@ func EncodeColumnAttrSets(a []*ColumnAttrSet) []*internal.ColumnAttrSet {
 }
 
 // EncodeColumnAttrSet converts set into its internal representation.
-func EncodeColumnAttrSet(set *ColumnAttrSet) *internal.ColumnAttrSet {
+func EncodeColumnAttrSet(set *columnAttrSet) *internal.ColumnAttrSet {
 	return &internal.ColumnAttrSet{
 		ID:    set.ID,
 		Attrs: encodeAttrs(set.Attrs),
