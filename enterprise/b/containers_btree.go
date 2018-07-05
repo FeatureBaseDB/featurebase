@@ -27,15 +27,15 @@ func cmp(a, b uint64) int {
 	return int(a - b)
 }
 
-type BTreeContainers struct {
+type bTreeContainers struct {
 	tree *Tree
 
 	lastKey       uint64
 	lastContainer *roaring.Container
 }
 
-func NewBTreeContainers() *BTreeContainers {
-	return &BTreeContainers{
+func NewBTreeContainers() *bTreeContainers {
+	return &bTreeContainers{
 		tree: TreeNew(cmp),
 	}
 }
@@ -48,7 +48,7 @@ func NewBTreeBitmap(a ...uint64) *roaring.Bitmap {
 	return b
 }
 
-func (btc *BTreeContainers) Get(key uint64) *roaring.Container {
+func (btc *bTreeContainers) Get(key uint64) *roaring.Container {
 	// Check the last* cache for same container.
 	if key == btc.lastKey && btc.lastContainer != nil {
 		return btc.lastContainer
@@ -64,7 +64,7 @@ func (btc *BTreeContainers) Get(key uint64) *roaring.Container {
 	return c
 }
 
-func (btc *BTreeContainers) Put(key uint64, c *roaring.Container) {
+func (btc *bTreeContainers) Put(key uint64, c *roaring.Container) {
 	// If a mapped container is added to the tree, reset the
 	// lastContainer cache so that the cache is not pointing
 	// at a read-only mmap.
@@ -93,16 +93,16 @@ type updater struct {
 	mapped        bool
 }
 
-func (btc *BTreeContainers) PutContainerValues(key uint64, containerType byte, n int, mapped bool) {
+func (btc *bTreeContainers) PutContainerValues(key uint64, containerType byte, n int, mapped bool) {
 	a := updater{key, containerType, n, mapped}
 	btc.tree.Put(key, a.update)
 }
 
-func (btc *BTreeContainers) Remove(key uint64) {
+func (btc *bTreeContainers) Remove(key uint64) {
 	btc.tree.Delete(key)
 }
 
-func (btc *BTreeContainers) GetOrCreate(key uint64) *roaring.Container {
+func (btc *bTreeContainers) GetOrCreate(key uint64) *roaring.Container {
 	// Check the last* cache for same container.
 	if key == btc.lastKey && btc.lastContainer != nil {
 		return btc.lastContainer
@@ -121,7 +121,7 @@ func (btc *BTreeContainers) GetOrCreate(key uint64) *roaring.Container {
 	return btc.lastContainer
 }
 
-func (btc *BTreeContainers) Count() (n uint64) {
+func (btc *bTreeContainers) Count() (n uint64) {
 	e, _ := btc.tree.Seek(0)
 	_, c, err := e.Next()
 	for err != io.EOF {
@@ -131,7 +131,7 @@ func (btc *BTreeContainers) Count() (n uint64) {
 	return
 }
 
-func (btc *BTreeContainers) Clone() roaring.Containers {
+func (btc *bTreeContainers) Clone() roaring.Containers {
 	nbtc := NewBTreeContainers()
 
 	itr, err := btc.tree.SeekFirst()
@@ -148,7 +148,7 @@ func (btc *BTreeContainers) Clone() roaring.Containers {
 	return nbtc
 }
 
-func (btc *BTreeContainers) Last() (key uint64, c *roaring.Container) {
+func (btc *bTreeContainers) Last() (key uint64, c *roaring.Container) {
 	if btc.tree.Len() == 0 {
 		return 0, nil
 	}
@@ -156,17 +156,17 @@ func (btc *BTreeContainers) Last() (key uint64, c *roaring.Container) {
 	return k, v
 }
 
-func (btc *BTreeContainers) Size() int {
+func (btc *bTreeContainers) Size() int {
 	return btc.tree.Len()
 }
 
-func (btc *BTreeContainers) Reset() {
+func (btc *bTreeContainers) Reset() {
 	btc.tree = TreeNew(cmp)
 	btc.lastKey = 0
 	btc.lastContainer = nil
 }
 
-func (btc *BTreeContainers) Iterator(key uint64) (citer roaring.ContainerIterator, found bool) {
+func (btc *bTreeContainers) Iterator(key uint64) (citer roaring.ContainerIterator, found bool) {
 	e, ok := btc.tree.Seek(key)
 	if ok {
 		found = true
