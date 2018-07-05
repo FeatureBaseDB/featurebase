@@ -36,9 +36,9 @@ type Command struct {
 
 	commandOptions []server.CommandOption
 
-	Stdin  bytes.Buffer
-	Stdout bytes.Buffer
-	Stderr bytes.Buffer
+	stdin  bytes.Buffer
+	stdout bytes.Buffer
+	stderr bytes.Buffer
 }
 
 func OptAllowedOrigins(origins []string) server.CommandOption {
@@ -48,8 +48,8 @@ func OptAllowedOrigins(origins []string) server.CommandOption {
 	}
 }
 
-// NewCommand returns a new instance of Main with a temporary data directory and random port.
-func NewCommand(opts ...server.CommandOption) *Command {
+// newCommand returns a new instance of Main with a temporary data directory and random port.
+func newCommand(opts ...server.CommandOption) *Command {
 	path, err := ioutil.TempDir("", "pilosa-")
 	if err != nil {
 		panic(err)
@@ -59,9 +59,9 @@ func NewCommand(opts ...server.CommandOption) *Command {
 	m.Config.DataDir = path
 	m.Config.Bind = "http://localhost:0"
 	m.Config.Cluster.Disabled = true
-	m.Command.Stdin = &m.Stdin
-	m.Command.Stdout = &m.Stdout
-	m.Command.Stderr = &m.Stderr
+	m.Command.Stdin = &m.stdin
+	m.Command.Stdout = &m.stdout
+	m.Command.Stderr = &m.stderr
 
 	err = m.SetupServer()
 	if err != nil {
@@ -78,7 +78,7 @@ func NewCommand(opts ...server.CommandOption) *Command {
 
 // NewCommandNode returns a new instance of Command with clustering enabled.
 func NewCommandNode(isCoordinator bool, opts ...server.CommandOption) *Command {
-	m := NewCommand(opts...)
+	m := newCommand(opts...)
 	m.Config.Cluster.Disabled = false
 	m.Config.Cluster.Coordinator = isCoordinator
 	return m
@@ -86,7 +86,7 @@ func NewCommandNode(isCoordinator bool, opts ...server.CommandOption) *Command {
 
 // MustRunCommand returns a new, running Main. Panic on error.
 func MustRunCommand() *Command {
-	m := NewCommand()
+	m := newCommand()
 	m.Config.Metric.Diagnostics = false // Disable diagnostics.
 	if err := m.Start(); err != nil {
 		panic(err)

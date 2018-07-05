@@ -40,10 +40,10 @@ type API struct {
 	server  *Server
 }
 
-// APIOption is a functional option type for pilosa.API
-type APIOption func(*API) error
+// aPIOption is a functional option type for pilosa.API
+type aPIOption func(*API) error
 
-func OptAPIServer(s *Server) APIOption {
+func OptAPIServer(s *Server) aPIOption {
 	return func(a *API) error {
 		a.server = s
 		a.holder = s.holder
@@ -53,7 +53,7 @@ func OptAPIServer(s *Server) APIOption {
 }
 
 // NewAPI returns a new API instance.
-func NewAPI(opts ...APIOption) (*API, error) {
+func NewAPI(opts ...aPIOption) (*API, error) {
 	api := &API{}
 
 	for _, opt := range opts {
@@ -68,9 +68,9 @@ func NewAPI(opts ...APIOption) (*API, error) {
 // validAPIMethods specifies the api methods that are valid for each
 // cluster state.
 var validAPIMethods = map[string]map[apiMethod]struct{}{
-	ClusterStateStarting: methodsCommon,
+	clusterStateStarting: methodsCommon,
 	ClusterStateNormal:   appendMap(methodsCommon, methodsNormal),
-	ClusterStateResizing: appendMap(methodsCommon, methodsResizing),
+	clusterStateResizing: appendMap(methodsCommon, methodsResizing),
 }
 
 func appendMap(a, b map[apiMethod]struct{}) map[apiMethod]struct{} {
@@ -89,7 +89,7 @@ func (api *API) validate(f apiMethod) error {
 	if _, ok := validAPIMethods[state][f]; ok {
 		return nil
 	}
-	return NewApiMethodNotAllowedError(errors.Errorf("api method %s not allowed in state %s", f, state))
+	return newApiMethodNotAllowedError(errors.Errorf("api method %s not allowed in state %s", f, state))
 }
 
 // Query parses a PQL query out of the request and executes it.
@@ -150,12 +150,12 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 }
 
 // readColumnAttrSets returns a list of column attribute objects by id.
-func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet, error) {
+func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*columnAttrSet, error) {
 	if index == nil {
 		return nil, nil
 	}
 
-	ax := make([]*ColumnAttrSet, 0, len(ids))
+	ax := make([]*columnAttrSet, 0, len(ids))
 	for _, id := range ids {
 		// Read attributes for column. Skip column if empty.
 		attrs, err := index.ColumnAttrStore().Attrs(id)
@@ -166,7 +166,7 @@ func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet
 		}
 
 		// Append column with attributes.
-		ax = append(ax, &ColumnAttrSet{ID: id, Attrs: attrs})
+		ax = append(ax, &columnAttrSet{ID: id, Attrs: attrs})
 	}
 
 	return ax, nil
@@ -187,7 +187,7 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	err = api.server.SendSync(
 		&internal.CreateIndexMessage{
 			Index: indexName,
-			Meta:  options.Encode(),
+			Meta:  options.encode(),
 		})
 	if err != nil {
 		api.server.logger.Printf("problem sending CreateIndex message: %s", err)
@@ -205,7 +205,7 @@ func (api *API) Index(ctx context.Context, indexName string) (*Index, error) {
 
 	index := api.holder.Index(indexName)
 	if index == nil {
-		return nil, NewNotFoundError(ErrIndexNotFound)
+		return nil, newNotFoundError(ErrIndexNotFound)
 	}
 	return index, nil
 }
@@ -255,7 +255,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 	// Find index.
 	index := api.holder.Index(indexName)
 	if index == nil {
-		return nil, NewNotFoundError(ErrIndexNotFound)
+		return nil, newNotFoundError(ErrIndexNotFound)
 	}
 
 	// Create field.
@@ -287,7 +287,7 @@ func (api *API) Field(ctx context.Context, indexName, fieldName string) (*Field,
 
 	field := api.holder.Field(indexName, fieldName)
 	if field == nil {
-		return nil, NewNotFoundError(ErrFieldNotFound)
+		return nil, newNotFoundError(ErrFieldNotFound)
 	}
 	return field, nil
 }
@@ -303,7 +303,7 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 	// Find index.
 	index := api.holder.Index(indexName)
 	if index == nil {
-		return NewNotFoundError(ErrIndexNotFound)
+		return newNotFoundError(ErrIndexNotFound)
 	}
 
 	// Delete field from the index.
@@ -446,7 +446,7 @@ func (api *API) RecalculateCaches(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "broacasting message")
 	}
-	api.holder.RecalculateCaches()
+	api.holder.recalculateCaches()
 	return nil
 }
 
@@ -542,7 +542,7 @@ func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []At
 	// Retrieve index from holder.
 	index := api.holder.Index(indexName)
 	if index == nil {
-		return nil, NewNotFoundError(ErrIndexNotFound)
+		return nil, newNotFoundError(ErrIndexNotFound)
 	}
 
 	// Retrieve local blocks.
@@ -553,7 +553,7 @@ func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []At
 
 	// Read all attributes from all mismatched blocks.
 	attrs := make(map[uint64]map[string]interface{})
-	for _, blockID := range AttrBlocks(localBlocks).Diff(blocks) {
+	for _, blockID := range attrBlocks(localBlocks).Diff(blocks) {
 		// Retrieve block data.
 		m, err := index.ColumnAttrStore().BlockData(blockID)
 		if err != nil {
@@ -587,7 +587,7 @@ func (api *API) FieldAttrDiff(ctx context.Context, indexName string, fieldName s
 
 	// Read all attributes from all mismatched blocks.
 	attrs := make(map[uint64]map[string]interface{})
-	for _, blockID := range AttrBlocks(localBlocks).Diff(blocks) {
+	for _, blockID := range attrBlocks(localBlocks).Diff(blocks) {
 		// Retrieve block data.
 		m, err := f.RowAttrStore().BlockData(blockID)
 		if err != nil {
@@ -642,7 +642,7 @@ func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest
 		return errors.Wrap(err, "getting field")
 	}
 	// Import into fragment.
-	err = field.ImportValue(req.ColumnIDs, req.Values)
+	err = field.importValue(req.ColumnIDs, req.Values)
 	if err != nil {
 		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 	}
@@ -684,7 +684,7 @@ func (api *API) indexField(indexName string, fieldName string, shard uint64) (*I
 	index := api.holder.Index(indexName)
 	if index == nil {
 		api.server.logger.Printf("fragment error: index=%s, field=%s, shard=%d, err=%s", indexName, fieldName, shard, ErrIndexNotFound.Error())
-		return nil, nil, NewNotFoundError(ErrIndexNotFound)
+		return nil, nil, newNotFoundError(ErrIndexNotFound)
 	}
 
 	// Retrieve field.

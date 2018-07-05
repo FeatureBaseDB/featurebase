@@ -9,10 +9,10 @@ import (
 )
 
 // Ensure type implements interface.
-var _ pilosa.TranslateStore = &TranslateStore{}
+var _ pilosa.TranslateStore = &translateStore{}
 
-// TranslateStore is an in-memory storage engine for translating string-to-uint64 values.
-type TranslateStore struct {
+// translateStore is an in-memory storage engine for translating string-to-uint64 values.
+type translateStore struct {
 	mu sync.RWMutex
 
 	cols map[string]*translateIndex
@@ -20,21 +20,21 @@ type TranslateStore struct {
 }
 
 // NewTranslateStore returns a new instance of TranslateStore.
-func NewTranslateStore() *TranslateStore {
-	return &TranslateStore{
+func NewTranslateStore() *translateStore {
+	return &translateStore{
 		cols: make(map[string]*translateIndex),
 		rows: make(map[frameKey]*translateIndex),
 	}
 }
 
 // Reader returns an error because it is not supported by the inmem store.
-func (s *TranslateStore) Reader(ctx context.Context, offset int64) (io.ReadCloser, error) {
+func (s *translateStore) Reader(ctx context.Context, offset int64) (io.ReadCloser, error) {
 	return nil, pilosa.ErrReplicationNotSupported
 }
 
 // TranslateColumnsToUint64 converts value to a uint64 id.
 // If value does not have an associated id then one is created.
-func (s *TranslateStore) TranslateColumnsToUint64(index string, values []string) ([]uint64, error) {
+func (s *translateStore) TranslateColumnsToUint64(index string, values []string) ([]uint64, error) {
 	ret := make([]uint64, len(values))
 
 	// Read value under read lock.
@@ -103,7 +103,7 @@ func (s *TranslateStore) TranslateColumnsToUint64(index string, values []string)
 
 // TranslateColumnToString converts a uint64 id to its associated string value.
 // If the id is not associated with a string value then a blank string is returned.
-func (s *TranslateStore) TranslateColumnToString(index string, value uint64) (string, error) {
+func (s *translateStore) TranslateColumnToString(index string, value uint64) (string, error) {
 	s.mu.RLock()
 	if idx := s.cols[index]; idx != nil {
 		if ret, ok := idx.reverse[value]; ok {
@@ -115,7 +115,7 @@ func (s *TranslateStore) TranslateColumnToString(index string, value uint64) (st
 	return "", nil
 }
 
-func (s *TranslateStore) TranslateRowsToUint64(index, frame string, values []string) ([]uint64, error) {
+func (s *translateStore) TranslateRowsToUint64(index, frame string, values []string) ([]uint64, error) {
 	key := frameKey{index, frame}
 
 	ret := make([]uint64, len(values))
@@ -184,7 +184,7 @@ func (s *TranslateStore) TranslateRowsToUint64(index, frame string, values []str
 	return ret, nil
 }
 
-func (s *TranslateStore) TranslateRowToString(index, frame string, value uint64) (string, error) {
+func (s *translateStore) TranslateRowToString(index, frame string, value uint64) (string, error) {
 	s.mu.RLock()
 	if idx := s.rows[frameKey{index, frame}]; idx != nil {
 		if ret, ok := idx.reverse[value]; ok {

@@ -82,12 +82,12 @@ type AttrBlock struct {
 	Checksum []byte `json:"checksum"`
 }
 
-// AttrBlocks represents a list of blocks.
-type AttrBlocks []AttrBlock
+// attrBlocks represents a list of blocks.
+type attrBlocks []AttrBlock
 
 // Diff returns a list of block ids that are different or are new in other.
 // Block lists must be in sorted order.
-func (a AttrBlocks) Diff(other []AttrBlock) []uint64 {
+func (a attrBlocks) Diff(other []AttrBlock) []uint64 {
 	var ids []uint64
 	for {
 		// Read next block from each list.

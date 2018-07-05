@@ -81,8 +81,8 @@ func (h *Holder) MustCreateIndexIfNotExists(index string, opt pilosa.IndexOption
 	return &Index{Index: idx}
 }
 
-// MustCreateFieldIfNotExists returns a given field. Panic on error.
-func (h *Holder) MustCreateFieldIfNotExists(index, field string) *Field {
+// mustCreateFieldIfNotExists returns a given field. Panic on error.
+func (h *Holder) mustCreateFieldIfNotExists(index, field string) *Field {
 	f, err := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{}).CreateFieldIfNotExists(field, pilosa.OptFieldTypeDefault())
 	if err != nil {
 		panic(err)

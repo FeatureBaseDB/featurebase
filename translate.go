@@ -67,13 +67,13 @@ type TranslateFile struct {
 	rows map[frameKey]*index
 
 	Path    string
-	MapSize int
+	mapSize int
 
 	// If non-nil, data is streamed from a primary and this is a read-only store.
 	PrimaryTranslateStore TranslateStore
 
 	// Delay after attempting to connect to a primary that the store will retry.
-	ReplicationRetryInterval time.Duration
+	replicationRetryInterval time.Duration
 }
 
 // NewTranslateFile returns a new instance of TranslateFile.
@@ -84,9 +84,9 @@ func NewTranslateFile() *TranslateFile {
 		cols:        make(map[string]*index),
 		rows:        make(map[frameKey]*index),
 
-		MapSize: DefaultMapSize,
+		mapSize: defaultMapSize,
 
-		ReplicationRetryInterval: defaultReplicationRetryInterval,
+		replicationRetryInterval: defaultReplicationRetryInterval,
 	}
 }
 
@@ -100,7 +100,7 @@ func (s *TranslateFile) Open() (err error) {
 	s.w = bufio.NewWriter(s.file)
 
 	// Memory map data file.
-	if s.data, err = syscall.Mmap(int(s.file.Fd()), 0, s.MapSize, syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
+	if s.data, err = syscall.Mmap(int(s.file.Fd()), 0, s.mapSize, syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
 		return err
 	}
 
@@ -142,16 +142,16 @@ func (s *TranslateFile) Closing() <-chan struct{} {
 	return s.closing
 }
 
-// Size returns the number of bytes in use in the data file.
-func (s *TranslateFile) Size() int64 {
+// size returns the number of bytes in use in the data file.
+func (s *TranslateFile) size() int64 {
 	s.mu.RLock()
 	n := s.n
 	s.mu.RUnlock()
 	return n
 }
 
-// IsReadOnly returns true if this store is being replicated from a primary store.
-func (s *TranslateFile) IsReadOnly() bool {
+// isReadOnly returns true if this store is being replicated from a primary store.
+func (s *TranslateFile) isReadOnly() bool {
 	return s.PrimaryTranslateStore != nil
 }
 
@@ -167,7 +167,7 @@ func (s *TranslateFile) appendEntry(entry *LogEntry) error {
 	offset := s.n
 
 	// Append entry to the end of the WAL.
-	n, err := entry.WriteTo(s.w)
+	n, err := entry.writeTo(s.w)
 	if err != nil {
 		return err
 	} else if err := s.w.Flush(); err != nil {
@@ -193,7 +193,7 @@ func (s *TranslateFile) appendEntry(entry *LogEntry) error {
 
 func (s *TranslateFile) applyEntry(entry *LogEntry, offset int64) error {
 	// Move offset to the start of the id/key pairs.
-	offset += entry.HeaderSize()
+	offset += entry.headerSize()
 
 	var idx *index
 	switch entry.Type {
@@ -270,14 +270,14 @@ func (s *TranslateFile) monitorReplication() {
 		select {
 		case <-s.closing:
 			return
-		case <-time.After(s.ReplicationRetryInterval):
+		case <-time.After(s.replicationRetryInterval):
 			log.Printf("pilosa: reconnecting to primary replica")
 		}
 	}
 }
 
 func (s *TranslateFile) replicate(ctx context.Context) error {
-	off := s.Size()
+	off := s.size()
 
 	// Connect to remote primary.
 	log.Printf("pilosa: replicating from offset %d", off)
@@ -351,7 +351,7 @@ func (s *TranslateFile) TranslateColumnsToUint64(index string, values []string) 
 	s.mu.RUnlock()
 
 	// Return error if not all values could be translated and this store is read-only.
-	if s.IsReadOnly() {
+	if s.isReadOnly() {
 		return ret, ErrTranslateStoreReadOnly
 	}
 
@@ -457,7 +457,7 @@ func (s *TranslateFile) TranslateRowsToUint64(index, frame string, values []stri
 	s.mu.RUnlock()
 
 	// Return error if not all values could be translated and this store is read-only.
-	if s.IsReadOnly() {
+	if s.isReadOnly() {
 		return ret, ErrTranslateStoreReadOnly
 	}
 
@@ -538,7 +538,7 @@ func (s *TranslateFile) TranslateRowToString(index, frame string, id uint64) (st
 
 // Reader returns a reader that streams the underlying data file.
 func (s *TranslateFile) Reader(ctx context.Context, offset int64) (io.ReadCloser, error) {
-	rc := NewTranslateFileReader(ctx, s, offset)
+	rc := newTranslateFileReader(ctx, s, offset)
 	if err := rc.Open(); err != nil {
 		return nil, err
 	}
@@ -558,8 +558,8 @@ type LogEntry struct {
 	Length uint64
 }
 
-// HeaderSize returns the number of bytes required for size, type, index, frame, & pair count.
-func (e *LogEntry) HeaderSize() int64 {
+// headerSize returns the number of bytes required for size, type, index, frame, & pair count.
+func (e *LogEntry) headerSize() int64 {
 	sz := uVarintSize(e.Length) + // total entry length
 		1 + // type
 		uVarintSize(uint64(len(e.Index))) + len(e.Index) + // Index length and data
@@ -645,8 +645,8 @@ func (e *LogEntry) ReadFrom(r io.Reader) (_ int64, err error) {
 	return n64, nil
 }
 
-// WriteTo serializes a LogEntry to w.
-func (e *LogEntry) WriteTo(w io.Writer) (_ int64, err error) {
+// writeTo serializes a LogEntry to w.
+func (e *LogEntry) writeTo(w io.Writer) (_ int64, err error) {
 	var buf bytes.Buffer
 	b := make([]byte, binary.MaxVarintLen64)
 
@@ -898,8 +898,8 @@ func pow2(v uint64) uint64 {
 	panic("unreachable")
 }
 
-// TranslateFileReader implements a reader that continuously streams data from a store.
-type TranslateFileReader struct {
+// translateFileReader implements a reader that continuously streams data from a store.
+type translateFileReader struct {
 	ctx    context.Context
 	store  *TranslateFile
 	file   *os.File
@@ -910,9 +910,9 @@ type TranslateFileReader struct {
 	closing chan struct{}
 }
 
-// NewTranslateFileReader returns a new instance of TranslateFileReader.
-func NewTranslateFileReader(ctx context.Context, store *TranslateFile, offset int64) *TranslateFileReader {
-	return &TranslateFileReader{
+// newTranslateFileReader returns a new instance of TranslateFileReader.
+func newTranslateFileReader(ctx context.Context, store *TranslateFile, offset int64) *translateFileReader {
+	return &translateFileReader{
 		ctx:     ctx,
 		store:   store,
 		offset:  offset,
@@ -922,7 +922,7 @@ func NewTranslateFileReader(ctx context.Context, store *TranslateFile, offset in
 }
 
 // Open initializes the reader.
-func (r *TranslateFileReader) Open() (err error) {
+func (r *translateFileReader) Open() (err error) {
 	if r.file, err = os.Open(r.store.Path); err != nil {
 		return err
 	}
@@ -930,7 +930,7 @@ func (r *TranslateFileReader) Open() (err error) {
 }
 
 // Close closes the underlying file reader.
-func (r *TranslateFileReader) Close() error {
+func (r *translateFileReader) Close() error {
 	r.once.Do(func() { close(r.closing) })
 
 	if r.file != nil {
@@ -941,7 +941,7 @@ func (r *TranslateFileReader) Close() error {
 
 // Read reads the next section of the available data to p. This should always
 // read from the start of an entry and read n bytes to the end of another entry.
-func (r *TranslateFileReader) Read(p []byte) (n int, err error) {
+func (r *translateFileReader) Read(p []byte) (n int, err error) {
 	for {
 		// Obtain notification channel before we check for new data.
 		notify := r.store.WriteNotify()
@@ -966,8 +966,8 @@ func (r *TranslateFileReader) Read(p []byte) (n int, err error) {
 }
 
 // read writes the bytes for zero or more valid entries to p.
-func (r *TranslateFileReader) read(p []byte) (n int, err error) {
-	sz := r.store.Size()
+func (r *translateFileReader) read(p []byte) (n int, err error) {
+	sz := r.store.size()
 
 	// Exit if there is no new data.
 	if sz < r.offset {

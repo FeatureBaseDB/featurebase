@@ -65,15 +65,15 @@ var (
 	ErrNotImplemented = errors.New("not implemented")
 )
 
-// ApiMethodNotAllowedError wraps an error value indicating that a particular
+// apiMethodNotAllowedError wraps an error value indicating that a particular
 // API method is not allowed in the current cluster state.
-type ApiMethodNotAllowedError struct {
+type apiMethodNotAllowedError struct {
 	error
 }
 
-// NewApiMethodNotAllowedError returns err wrapped in an ApiMethodNotAllowedError.
-func NewApiMethodNotAllowedError(err error) ApiMethodNotAllowedError {
-	return ApiMethodNotAllowedError{err}
+// newApiMethodNotAllowedError returns err wrapped in an ApiMethodNotAllowedError.
+func newApiMethodNotAllowedError(err error) apiMethodNotAllowedError {
+	return apiMethodNotAllowedError{err}
 }
 
 // BadRequestError wraps an error value to signify that a request could not be
@@ -95,8 +95,8 @@ type ConflictError struct {
 	error
 }
 
-// NewConflictError returns err wrapped in a ConflictError.
-func NewConflictError(err error) ConflictError {
+// newConflictError returns err wrapped in a ConflictError.
+func newConflictError(err error) ConflictError {
 	return ConflictError{err}
 }
 
@@ -106,24 +106,24 @@ type NotFoundError struct {
 	error
 }
 
-// NewNotFoundError returns err wrapped in a NotFoundError.
-func NewNotFoundError(err error) NotFoundError {
+// newNotFoundError returns err wrapped in a NotFoundError.
+func newNotFoundError(err error) NotFoundError {
 	return NotFoundError{err}
 }
 
 // Regular expression to validate index and field names.
 var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 
-// ColumnAttrSet represents a set of attributes for a vertical column in an index.
+// columnAttrSet represents a set of attributes for a vertical column in an index.
 // Can have a set of attributes attached to it.
-type ColumnAttrSet struct {
+type columnAttrSet struct {
 	ID    uint64                 `json:"id"`
 	Key   string                 `json:"key,omitempty"`
 	Attrs map[string]interface{} `json:"attrs,omitempty"`
 }
 
 // EncodeColumnAttrSets converts a into its internal representation.
-func EncodeColumnAttrSets(a []*ColumnAttrSet) []*internal.ColumnAttrSet {
+func EncodeColumnAttrSets(a []*columnAttrSet) []*internal.ColumnAttrSet {
 	other := make([]*internal.ColumnAttrSet, len(a))
 	for i := range a {
 		other[i] = EncodeColumnAttrSet(a[i])
@@ -132,7 +132,7 @@ func EncodeColumnAttrSets(a []*ColumnAttrSet) []*internal.ColumnAttrSet {
 }
 
 // EncodeColumnAttrSet converts set into its internal representation.
-func EncodeColumnAttrSet(set *ColumnAttrSet) *internal.ColumnAttrSet {
+func EncodeColumnAttrSet(set *columnAttrSet) *internal.ColumnAttrSet {
 	return &internal.ColumnAttrSet{
 		ID:    set.ID,
 		Attrs: encodeAttrs(set.Attrs),
@@ -178,7 +178,7 @@ func stringSlicesAreEqual(a, b []string) bool {
 // using defaults when necessary.
 func AddressWithDefaults(addr string) (*URI, error) {
 	if addr == "" {
-		return DefaultURI(), nil
+		return defaultURI(), nil
 	} else {
 		return NewURIFromAddress(addr)
 	}

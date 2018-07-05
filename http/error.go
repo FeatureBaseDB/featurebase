@@ -17,13 +17,13 @@ package http
 // Error defines a standard application error.
 type Error struct {
 	// Machine-readable error code.
-	Code string `json:"code,omitempty"`
+	code string `json:"code,omitempty"`
 
 	// Human-readable message.
 	Message string `json:"message"`
 }
 
-// Error returns the string representation of the error message.
-func (e *Error) Error() string {
+// error returns the string representation of the error message.
+func (e *Error) error() string {
 	return e.Message
 }

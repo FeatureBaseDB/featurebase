@@ -82,8 +82,8 @@ func (c *nopStatsClient) SetLogger(logger Logger)                               
 func (c *nopStatsClient) Open()                                                                     {}
 func (c *nopStatsClient) Close() error                                                              { return nil }
 
-// ExpvarStatsClient writes stats out to expvars.
-type ExpvarStatsClient struct {
+// expvarStatsClient writes stats out to expvars.
+type expvarStatsClient struct {
 	mu   sync.Mutex
 	m    *expvar.Map
 	tags []string
@@ -91,41 +91,41 @@ type ExpvarStatsClient struct {
 
 // NewExpvarStatsClient returns a new instance of ExpvarStatsClient.
 // This client points at the root of the expvar index map.
-func NewExpvarStatsClient() *ExpvarStatsClient {
-	return &ExpvarStatsClient{
+func NewExpvarStatsClient() *expvarStatsClient {
+	return &expvarStatsClient{
 		m: Expvar,
 	}
 }
 
 // Tags returns a sorted list of tags on the client.
-func (c *ExpvarStatsClient) Tags() []string {
+func (c *expvarStatsClient) Tags() []string {
 	return nil
 }
 
 // WithTags returns a new client with additional tags appended.
-func (c *ExpvarStatsClient) WithTags(tags ...string) StatsClient {
+func (c *expvarStatsClient) WithTags(tags ...string) StatsClient {
 	m := &expvar.Map{}
 	m.Init()
 	c.m.Set(strings.Join(tags, ","), m)
 
-	return &ExpvarStatsClient{
+	return &expvarStatsClient{
 		m:    m,
 		tags: unionStringSlice(c.tags, tags),
 	}
 }
 
 // Count tracks the number of times something occurs.
-func (c *ExpvarStatsClient) Count(name string, value int64, rate float64) {
+func (c *expvarStatsClient) Count(name string, value int64, rate float64) {
 	c.m.Add(name, value)
 }
 
 // CountWithCustomTags Tracks the number of times something occurs per second with custom tags
-func (c *ExpvarStatsClient) CountWithCustomTags(name string, value int64, rate float64, tags []string) {
+func (c *expvarStatsClient) CountWithCustomTags(name string, value int64, rate float64, tags []string) {
 	c.m.Add(name, value)
 }
 
 // Gauge sets the value of a metric.
-func (c *ExpvarStatsClient) Gauge(name string, value float64, rate float64) {
+func (c *expvarStatsClient) Gauge(name string, value float64, rate float64) {
 	var f expvar.Float
 	f.Set(value)
 	c.m.Set(name, &f)
@@ -133,19 +133,19 @@ func (c *ExpvarStatsClient) Gauge(name string, value float64, rate float64) {
 
 // Histogram tracks statistical distribution of a metric.
 // This works the same as gauge for this client.
-func (c *ExpvarStatsClient) Histogram(name string, value float64, rate float64) {
+func (c *expvarStatsClient) Histogram(name string, value float64, rate float64) {
 	c.Gauge(name, value, rate)
 }
 
 // Set tracks number of unique elements.
-func (c *ExpvarStatsClient) Set(name string, value string, rate float64) {
+func (c *expvarStatsClient) Set(name string, value string, rate float64) {
 	var s expvar.String
 	s.Set(value)
 	c.m.Set(name, &s)
 }
 
 // Timing tracks timing information for a metric.
-func (c *ExpvarStatsClient) Timing(name string, value time.Duration, rate float64) {
+func (c *expvarStatsClient) Timing(name string, value time.Duration, rate float64) {
 	c.mu.Lock()
 	d, _ := c.m.Get(name).(time.Duration)
 	c.m.Set(name, d+value)
@@ -153,14 +153,14 @@ func (c *ExpvarStatsClient) Timing(name string, value time.Duration, rate float6
 }
 
 // SetLogger has no logger.
-func (c *ExpvarStatsClient) SetLogger(logger Logger) {
+func (c *expvarStatsClient) SetLogger(logger Logger) {
 }
 
 // Open no-op.
-func (c *ExpvarStatsClient) Open() {}
+func (c *expvarStatsClient) Open() {}
 
 // Close no-op.
-func (c *ExpvarStatsClient) Close() error { return nil }
+func (c *expvarStatsClient) Close() error { return nil }
 
 // MultiStatsClient joins multiple stats clients together.
 type MultiStatsClient []StatsClient

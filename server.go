@@ -52,7 +52,7 @@ type Server struct {
 	holder          *Holder
 	cluster         *cluster
 	translateFile   *TranslateFile
-	diagnostics     *DiagnosticsCollector
+	diagnostics     *diagnosticsCollector
 	executor        *executor
 	hosts           []string
 	clusterDisabled bool
@@ -229,8 +229,8 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		closing:     make(chan struct{}),
 		cluster:     newCluster(),
 		holder:      NewHolder(),
-		diagnostics: NewDiagnosticsCollector(defaultDiagnosticServer),
-		systemInfo:  NewNopSystemInfo(),
+		diagnostics: newDiagnosticsCollector(defaultDiagnosticServer),
+		systemInfo:  newNopSystemInfo(),
 
 		gcNotifier: NopGCNotifier,
 
@@ -331,7 +331,7 @@ func (s *Server) Open() error {
 	if err := s.holder.Open(); err != nil {
 		return fmt.Errorf("opening Holder: %v", err)
 	}
-	if err := s.cluster.setNodeState(NodeStateReady); err != nil {
+	if err := s.cluster.setNodeState(nodeStateReady); err != nil {
 		return fmt.Errorf("setting nodeState: %v", err)
 	}
 
@@ -507,7 +507,7 @@ func (s *Server) receiveMessage(pb proto.Message) error {
 			return err
 		}
 	case *internal.RecalculateCaches:
-		s.holder.RecalculateCaches()
+		s.holder.recalculateCaches()
 	case *internal.NodeEventMessage:
 		s.cluster.ReceiveEvent(DecodeNodeEvent(obj))
 	case *internal.NodeStatus:

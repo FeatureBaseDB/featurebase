@@ -75,7 +75,7 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	}
 
 	// Create a client to the server.
-	client, err := CommandClient(cmd)
+	client, err := commandClient(cmd)
 	if err != nil {
 		return errors.Wrap(err, "creating client")
 	}

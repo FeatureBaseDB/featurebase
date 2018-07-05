@@ -20,20 +20,20 @@ import (
 	"io/ioutil"
 )
 
-// BufferLogger represents a test Logger that holds log messages
+// bufferLogger represents a test Logger that holds log messages
 // in a buffer for review.
-type BufferLogger struct {
+type bufferLogger struct {
 	buf *bytes.Buffer
 }
 
 // NewBufferLogger returns a new instance of BufferLogger.
-func NewBufferLogger() *BufferLogger {
-	return &BufferLogger{
+func NewBufferLogger() *bufferLogger {
+	return &bufferLogger{
 		buf: &bytes.Buffer{},
 	}
 }
 
-func (b *BufferLogger) Printf(format string, v ...interface{}) {
+func (b *bufferLogger) Printf(format string, v ...interface{}) {
 	s := fmt.Sprintf(format, v...)
 	_, err := b.buf.WriteString(s)
 	if err != nil {
@@ -41,8 +41,8 @@ func (b *BufferLogger) Printf(format string, v ...interface{}) {
 	}
 }
 
-func (b *BufferLogger) Debugf(format string, v ...interface{}) {}
+func (b *bufferLogger) Debugf(format string, v ...interface{}) {}
 
-func (b *BufferLogger) ReadAll() ([]byte, error) {
+func (b *bufferLogger) ReadAll() ([]byte, error) {
 	return ioutil.ReadAll(b.buf)
 }

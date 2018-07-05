@@ -343,13 +343,13 @@ func (f *fragment) unprotectedRow(rowID uint64, checkRowCache bool, updateRowCac
 	// We Clone() data because otherwise row will contains pointers to containers in storage.
 	// This causes unexpected results when we cache the row and try to use it later.
 	row := &Row{
-		segments: []RowSegment{{
+		segments: []rowSegment{{
 			data:     *data.Clone(),
 			shard:    f.shard,
 			writable: false,
 		}},
 	}
-	row.InvalidateCount()
+	row.invalidateCount()
 
 	if updateRowCache {
 		f.rowCache.Add(rowID, row)
@@ -394,7 +394,7 @@ func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 
 	// Get the row from row cache or fragment.storage.
 	row := f.unprotectedRow(rowID, true, true)
-	row.SetBit(columnID)
+	row.setBit(columnID)
 
 	// Update the cache.
 	f.cache.Add(rowID, row.Count())
@@ -446,7 +446,7 @@ func (f *fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, er
 
 	// Get the row from cache or fragment.storage.
 	row := f.unprotectedRow(rowID, true, true)
-	row.ClearBit(columnID)
+	row.clearBit(columnID)
 
 	// Update the cache.
 	f.cache.Add(rowID, row.Count())
@@ -566,7 +566,7 @@ func (f *fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error
 	// Compute count based on the existence row.
 	row := f.row(uint64(bitDepth))
 	if filter != nil {
-		count = row.IntersectionCount(filter)
+		count = row.intersectionCount(filter)
 	} else {
 		count = row.Count()
 	}
@@ -582,7 +582,7 @@ func (f *fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error
 		row := f.row(uint64(i))
 		cnt := uint64(0)
 		if filter != nil {
-			cnt = row.IntersectionCount(filter)
+			cnt = row.intersectionCount(filter)
 		} else {
 			cnt = row.Count()
 		}
@@ -598,7 +598,7 @@ func (f *fragment) min(filter *Row, bitDepth uint) (min, count uint64, err error
 
 	consider := f.row(uint64(bitDepth))
 	if filter != nil {
-		consider = consider.Intersect(filter)
+		consider = consider.intersect(filter)
 	}
 
 	// If there are no columns to consider, return early.
@@ -631,7 +631,7 @@ func (f *fragment) max(filter *Row, bitDepth uint) (max, count uint64, err error
 
 	consider := f.row(uint64(bitDepth))
 	if filter != nil {
-		consider = consider.Intersect(filter)
+		consider = consider.intersect(filter)
 	}
 
 	// If there are no columns to consider, return early.
@@ -643,7 +643,7 @@ func (f *fragment) max(filter *Row, bitDepth uint) (max, count uint64, err error
 		ii := i - 1 // allow for uint range: (bitDepth-1) to 0
 		row := f.row(uint64(ii))
 
-		x := row.Intersect(consider)
+		x := row.intersect(consider)
 		count = x.Count()
 		if count > 0 {
 			max += (1 << ii)
@@ -682,7 +682,7 @@ func (f *fragment) rangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
 		bit := (predicate >> uint(i)) & 1
 
 		if bit == 1 {
-			b = b.Intersect(row)
+			b = b.intersect(row)
 		} else {
 			b = b.Difference(row)
 		}
@@ -783,7 +783,7 @@ func (f *fragment) rangeGT(bitDepth uint, predicate uint64, allowEquality bool) 
 		// If bit is unset then add columns with set bit to keep.
 		// Don't bother to compute this on the final iteration.
 		if i > 0 {
-			keep = keep.Union(b.Intersect(row))
+			keep = keep.Union(b.intersect(row))
 		}
 	}
 
@@ -815,7 +815,7 @@ func (f *fragment) rangeBetween(bitDepth uint, predicateMin, predicateMax uint64
 			// If bit is unset then add columns with set bit to keep.
 			// Don't bother to compute this on the final iteration.
 			if i > 0 {
-				keep1 = keep1.Union(b.Intersect(row))
+				keep1 = keep1.Union(b.intersect(row))
 			}
 		}
 
@@ -938,7 +938,7 @@ func (f *fragment) top(opt topOptions) ([]Pair, error) {
 			// Calculate count and append.
 			count := cnt
 			if opt.Src != nil {
-				count = opt.Src.IntersectionCount(f.row(rowID))
+				count = opt.Src.intersectionCount(f.row(rowID))
 			}
 			if count == 0 {
 				continue
@@ -982,7 +982,7 @@ func (f *fragment) top(opt topOptions) ([]Pair, error) {
 
 		// Calculate the intersecting column count and skip if it's below our
 		// last row in our current result set.
-		count := opt.Src.IntersectionCount(f.row(rowID))
+		count := opt.Src.intersectionCount(f.row(rowID))
 		if count < threshold {
 			continue
 		}

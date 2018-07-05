@@ -43,46 +43,46 @@ func (n *nopLogger) Printf(format string, v ...interface{}) {}
 // Debugf is a no-op implementation of the Logger Debugf method.
 func (n *nopLogger) Debugf(format string, v ...interface{}) {}
 
-// StandardLogger is a basic implementation of pilosa.Logger based on log.Logger.
-type StandardLogger struct {
+// standardLogger is a basic implementation of pilosa.Logger based on log.Logger.
+type standardLogger struct {
 	logger *log.Logger
 }
 
-func NewStandardLogger(w io.Writer) *StandardLogger {
-	return &StandardLogger{
+func NewStandardLogger(w io.Writer) *standardLogger {
+	return &standardLogger{
 		logger: log.New(w, "", log.LstdFlags),
 	}
 }
 
-func (s *StandardLogger) Printf(format string, v ...interface{}) {
+func (s *standardLogger) Printf(format string, v ...interface{}) {
 	s.logger.Printf(format, v...)
 }
 
-func (s *StandardLogger) Debugf(format string, v ...interface{}) {}
+func (s *standardLogger) Debugf(format string, v ...interface{}) {}
 
-func (s *StandardLogger) Logger() *log.Logger {
+func (s *standardLogger) Logger() *log.Logger {
 	return s.logger
 }
 
-// VerboseLogger is an implementation of pilosa.Logger which includes debug messages.
-type VerboseLogger struct {
+// verboseLogger is an implementation of pilosa.Logger which includes debug messages.
+type verboseLogger struct {
 	logger *log.Logger
 }
 
-func NewVerboseLogger(w io.Writer) *VerboseLogger {
-	return &VerboseLogger{
+func NewVerboseLogger(w io.Writer) *verboseLogger {
+	return &verboseLogger{
 		logger: log.New(w, "", log.LstdFlags),
 	}
 }
 
-func (vb *VerboseLogger) Printf(format string, v ...interface{}) {
+func (vb *verboseLogger) Printf(format string, v ...interface{}) {
 	vb.logger.Printf(format, v...)
 }
 
-func (vb *VerboseLogger) Debugf(format string, v ...interface{}) {
+func (vb *verboseLogger) Debugf(format string, v ...interface{}) {
 	vb.logger.Printf(format, v...)
 }
 
-func (vb *VerboseLogger) Logger() *log.Logger {
+func (vb *verboseLogger) Logger() *log.Logger {
 	return vb.logger
 }

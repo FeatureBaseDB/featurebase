@@ -23,9 +23,9 @@ import (
 
 // Cluster types.
 const (
-	ClusterNone   = ""
-	ClusterStatic = "static"
-	ClusterGossip = "gossip"
+	clusterNone   = ""
+	clusterStatic = "static"
+	clusterGossip = "gossip"
 )
 
 // TLSConfig contains TLS configuration
