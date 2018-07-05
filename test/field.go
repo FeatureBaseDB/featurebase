@@ -27,8 +27,8 @@ type Field struct {
 	*pilosa.Field
 }
 
-// NewField returns a new instance of Field d/0.
-func NewField(opts pilosa.FieldOption) *Field {
+// newField returns a new instance of Field d/0.
+func newField(opts pilosa.FieldOption) *Field {
 	path, err := ioutil.TempDir("", "pilosa-field-")
 	if err != nil {
 		panic(err)
@@ -42,7 +42,7 @@ func NewField(opts pilosa.FieldOption) *Field {
 
 // mustOpenField returns a new, opened field at a temporary path. Panic on error.
 func mustOpenField(opts pilosa.FieldOption) *Field {
-	f := NewField(opts)
+	f := newField(opts)
 	if err := f.Open(); err != nil {
 		panic(err)
 	}
