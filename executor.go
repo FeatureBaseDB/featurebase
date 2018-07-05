@@ -664,7 +664,7 @@ func (e *executor) executeDifferenceShard(ctx context.Context, index string, c *
 			other = other.Difference(row)
 		}
 	}
-	other.InvalidateCount()
+	other.invalidateCount()
 	return other, nil
 }
 
@@ -718,7 +718,7 @@ func (e *executor) executeIntersectShard(ctx context.Context, index string, c *p
 			other = other.intersect(row)
 		}
 	}
-	other.InvalidateCount()
+	other.invalidateCount()
 	return other, nil
 }
 
@@ -940,7 +940,7 @@ func (e *executor) executeUnionShard(ctx context.Context, index string, c *pql.C
 			other = other.Union(row)
 		}
 	}
-	other.InvalidateCount()
+	other.invalidateCount()
 	return other, nil
 }
 
@@ -959,7 +959,7 @@ func (e *executor) executeXorShard(ctx context.Context, index string, c *pql.Cal
 			other = other.Xor(row)
 		}
 	}
-	other.InvalidateCount()
+	other.invalidateCount()
 	return other, nil
 }
 
