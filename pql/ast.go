@@ -220,8 +220,8 @@ func (q *Query) WriteCallN() int {
 	return n
 }
 
-// HasKeys returns true if any call in the query uses keys and requires translation to ids.
-func (q *Query) HasKeys() bool {
+// hasKeys returns true if any call in the query uses keys and requires translation to ids.
+func (q *Query) hasKeys() bool {
 	for _, call := range q.Calls {
 		if call.Args["col"] != nil {
 			if _, ok := call.Args["col"].(string); ok {
