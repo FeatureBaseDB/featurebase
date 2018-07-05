@@ -57,21 +57,21 @@ func init() {
 var (
 	btDPool = sync.Pool{New: func() interface{} { return &d{} }}
 	btEPool = btEpool{sync.Pool{New: func() interface{} { return &enumerator{} }}}
-	btTPool = btTpool{sync.Pool{New: func() interface{} { return &Tree{} }}}
+	btTPool = btTpool{sync.Pool{New: func() interface{} { return &tree{} }}}
 	btXPool = sync.Pool{New: func() interface{} { return &x{} }}
 )
 
 type btTpool struct{ sync.Pool }
 
-func (p *btTpool) get(cmp Cmp) *Tree {
-	x := p.Get().(*Tree)
+func (p *btTpool) get(cmp Cmp) *tree {
+	x := p.Get().(*tree)
 	x.cmp = cmp
 	return x
 }
 
 type btEpool struct{ sync.Pool }
 
-func (p *btEpool) get(err error, hit bool, i int, k uint64, q *d, t *Tree, ver int64) *enumerator {
+func (p *btEpool) get(err error, hit bool, i int, k uint64, q *d, t *tree, ver int64) *enumerator {
 	x := p.Get().(*enumerator)
 	x.err, x.hit, x.i, x.k, x.q, x.t, x.ver = err, hit, i, k, q, t, ver
 	return x
@@ -112,12 +112,12 @@ type (
 		i   int
 		k   uint64
 		q   *d
-		t   *Tree
+		t   *tree
 		ver int64
 	}
 
-	// Tree is a B+tree.
-	Tree struct {
+	// tree is a B+tree.
+	tree struct {
 		c     int
 		cmp   Cmp
 		first *d
@@ -142,7 +142,7 @@ var ( // R/O zero values
 	zde de
 	ze  enumerator
 	zk  uint64
-	zt  Tree
+	zt  tree
 	zx  x
 	zxe xe
 )
@@ -235,12 +235,12 @@ func (l *d) mvR(r *d, c int) {
 
 // TreeNew returns a newly created, empty Tree. The compare function is used
 // for key collation.
-func TreeNew(cmp Cmp) *Tree {
+func TreeNew(cmp Cmp) *tree {
 	return btTPool.get(cmp)
 }
 
 // Clear removes all K/V pairs from the tree.
-func (t *Tree) Clear() {
+func (t *tree) Clear() {
 	if t.r == nil {
 		return
 	}
@@ -252,13 +252,13 @@ func (t *Tree) Clear() {
 
 // Close performs Clear and recycles t to a pool for possible later reuse. No
 // references to t should exist or such references must not be used afterwards.
-func (t *Tree) Close() {
+func (t *tree) Close() {
 	t.Clear()
 	*t = zt
 	btTPool.Put(t)
 }
 
-func (t *Tree) cat(p *x, q, r *d, pi int) {
+func (t *tree) cat(p *x, q, r *d, pi int) {
 	t.ver++
 	q.mvL(r, r.c)
 	if r.n != nil {
@@ -286,7 +286,7 @@ func (t *Tree) cat(p *x, q, r *d, pi int) {
 	t.r = q
 }
 
-func (t *Tree) catX(p, q, r *x, pi int) {
+func (t *tree) catX(p, q, r *x, pi int) {
 	t.ver++
 	q.x[q.c].k = p.x[pi].k
 	copy(q.x[q.c+1:], r.x[:r.c])
@@ -320,7 +320,7 @@ func (t *Tree) catX(p, q, r *x, pi int) {
 
 // Delete removes the k's KV pair, if it exists, in which case Delete returns
 // true.
-func (t *Tree) Delete(k uint64) (ok bool) {
+func (t *tree) Delete(k uint64) (ok bool) {
 	pi := -1
 	var p *x
 	q := t.r
@@ -370,7 +370,7 @@ func (t *Tree) Delete(k uint64) (ok bool) {
 	}
 }
 
-func (t *Tree) extract(q *d, i int) { // (r *container) {
+func (t *tree) extract(q *d, i int) { // (r *container) {
 	t.ver++
 	//r = q.d[i].v // prepared for Extract
 	q.c--
@@ -381,7 +381,7 @@ func (t *Tree) extract(q *d, i int) { // (r *container) {
 	t.c--
 }
 
-func (t *Tree) find(q interface{}, k uint64) (i int, ok bool) {
+func (t *tree) find(q interface{}, k uint64) (i int, ok bool) {
 	var mk uint64
 	l := 0
 	switch x := q.(type) {
@@ -419,7 +419,7 @@ func (t *Tree) find(q interface{}, k uint64) (i int, ok bool) {
 
 // First returns the first item of the tree in the key collating order, or
 // (zero-value, zero-value) if the tree is empty.
-func (t *Tree) First() (k uint64, v *roaring.Container) {
+func (t *tree) First() (k uint64, v *roaring.Container) {
 	if q := t.first; q != nil {
 		q := &q.d[0]
 		k, v = q.k, q.v
@@ -429,7 +429,7 @@ func (t *Tree) First() (k uint64, v *roaring.Container) {
 
 // Get returns the value associated with k and true if it exists. Otherwise Get
 // returns (zero-value, false).
-func (t *Tree) Get(k uint64) (v *roaring.Container, ok bool) {
+func (t *tree) Get(k uint64) (v *roaring.Container, ok bool) {
 	q := t.r
 	if q == nil {
 		return
@@ -455,7 +455,7 @@ func (t *Tree) Get(k uint64) (v *roaring.Container, ok bool) {
 	}
 }
 
-func (t *Tree) insert(q *d, i int, k uint64, v *roaring.Container) *d {
+func (t *tree) insert(q *d, i int, k uint64, v *roaring.Container) *d {
 	t.ver++
 	c := q.c
 	if i < c {
@@ -470,7 +470,7 @@ func (t *Tree) insert(q *d, i int, k uint64, v *roaring.Container) *d {
 
 // Last returns the last item of the tree in the key collating order, or
 // (zero-value, zero-value) if the tree is empty.
-func (t *Tree) Last() (k uint64, v *roaring.Container) {
+func (t *tree) Last() (k uint64, v *roaring.Container) {
 	if q := t.last; q != nil {
 		q := &q.d[q.c-1]
 		k, v = q.k, q.v
@@ -479,11 +479,11 @@ func (t *Tree) Last() (k uint64, v *roaring.Container) {
 }
 
 // Len returns the number of items in the tree.
-func (t *Tree) Len() int {
+func (t *tree) Len() int {
 	return t.c
 }
 
-func (t *Tree) overflow(p *x, q *d, pi, i int, k uint64, v *roaring.Container) {
+func (t *tree) overflow(p *x, q *d, pi, i int, k uint64, v *roaring.Container) {
 	t.ver++
 	l, r := p.siblings(pi)
 
@@ -528,7 +528,7 @@ func (t *Tree) overflow(p *x, q *d, pi, i int, k uint64, v *roaring.Container) {
 // Seek returns an Enumerator positioned on an item such that k >= item's key.
 // ok reports if k == item.key The Enumerator's position is possibly after the
 // last item in the tree.
-func (t *Tree) Seek(k uint64) (e *enumerator, ok bool) {
+func (t *tree) Seek(k uint64) (e *enumerator, ok bool) {
 	q := t.r
 	if q == nil {
 		e = btEPool.get(nil, false, 0, k, nil, t, t.ver)
@@ -558,7 +558,7 @@ func (t *Tree) Seek(k uint64) (e *enumerator, ok bool) {
 
 // SeekFirst returns an enumerator positioned on the first KV pair in the tree,
 // if any. For an empty tree, err == io.EOF is returned and e will be nil.
-func (t *Tree) SeekFirst() (e *enumerator, err error) {
+func (t *tree) SeekFirst() (e *enumerator, err error) {
 	q := t.first
 	if q == nil {
 		return nil, io.EOF
@@ -569,7 +569,7 @@ func (t *Tree) SeekFirst() (e *enumerator, err error) {
 
 // SeekLast returns an enumerator positioned on the last KV pair in the tree,
 // if any. For an empty tree, err == io.EOF is returned and e will be nil.
-func (t *Tree) SeekLast() (e *enumerator, err error) {
+func (t *tree) SeekLast() (e *enumerator, err error) {
 	q := t.last
 	if q == nil {
 		return nil, io.EOF
@@ -579,7 +579,7 @@ func (t *Tree) SeekLast() (e *enumerator, err error) {
 }
 
 // Set sets the value associated with k.
-func (t *Tree) Set(k uint64, v *roaring.Container) {
+func (t *tree) Set(k uint64, v *roaring.Container) {
 	//dbg("--- PRE Set(%v, %v)\n%s", k, v, t.dump())
 	//defer func() {
 	//	dbg("--- POST\n%s\n====\n", t.dump())
@@ -645,7 +645,7 @@ func (t *Tree) Set(k uint64, v *roaring.Container) {
 // 	tree.Put(k, func(uint64, bool){ return v, true })
 //
 // modulo the differing return values.
-func (t *Tree) Put(k uint64, upd func(oldV *roaring.Container, exists bool) (newV *roaring.Container, write bool)) (oldV *roaring.Container, written bool) {
+func (t *tree) Put(k uint64, upd func(oldV *roaring.Container, exists bool) (newV *roaring.Container, write bool)) (oldV *roaring.Container, written bool) {
 	pi := -1
 	var p *x
 	q := t.r
@@ -712,7 +712,7 @@ func (t *Tree) Put(k uint64, upd func(oldV *roaring.Container, exists bool) (new
 	}
 }
 
-func (t *Tree) split(p *x, q *d, pi, i int, k uint64, v *roaring.Container) {
+func (t *tree) split(p *x, q *d, pi, i int, k uint64, v *roaring.Container) {
 	t.ver++
 	r := btDPool.Get().(*d)
 	if q.n != nil {
@@ -747,7 +747,7 @@ func (t *Tree) split(p *x, q *d, pi, i int, k uint64, v *roaring.Container) {
 	t.insert(q, i, k, v)
 }
 
-func (t *Tree) splitX(p *x, q *x, pi int, i int) (*x, int) {
+func (t *tree) splitX(p *x, q *x, pi int, i int) (*x, int) {
 	t.ver++
 	r := btXPool.Get().(*x)
 	copy(r.x[:], q.x[kx+1:])
@@ -771,7 +771,7 @@ func (t *Tree) splitX(p *x, q *x, pi int, i int) (*x, int) {
 	return q, i
 }
 
-func (t *Tree) underflow(p *x, q *d, pi int) {
+func (t *tree) underflow(p *x, q *d, pi int) {
 	t.ver++
 	l, r := p.siblings(pi)
 
@@ -796,7 +796,7 @@ func (t *Tree) underflow(p *x, q *d, pi int) {
 	t.cat(p, q, r, pi)
 }
 
-func (t *Tree) underflowX(p *x, q *x, pi int, i int) (*x, int) {
+func (t *tree) underflowX(p *x, q *x, pi int, i int) (*x, int) {
 	t.ver++
 	var l, r *x
 

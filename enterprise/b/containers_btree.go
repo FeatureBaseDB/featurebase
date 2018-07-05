@@ -28,7 +28,7 @@ func cmp(a, b uint64) int {
 }
 
 type bTreeContainers struct {
-	tree *Tree
+	tree *tree
 
 	lastKey       uint64
 	lastContainer *roaring.Container
