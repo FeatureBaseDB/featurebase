@@ -67,7 +67,7 @@ type TranslateFile struct {
 	rows map[frameKey]*index
 
 	Path    string
-	MapSize int
+	mapSize int
 
 	// If non-nil, data is streamed from a primary and this is a read-only store.
 	PrimaryTranslateStore TranslateStore
@@ -84,7 +84,7 @@ func NewTranslateFile() *TranslateFile {
 		cols:        make(map[string]*index),
 		rows:        make(map[frameKey]*index),
 
-		MapSize: defaultMapSize,
+		mapSize: defaultMapSize,
 
 		ReplicationRetryInterval: defaultReplicationRetryInterval,
 	}
@@ -100,7 +100,7 @@ func (s *TranslateFile) Open() (err error) {
 	s.w = bufio.NewWriter(s.file)
 
 	// Memory map data file.
-	if s.data, err = syscall.Mmap(int(s.file.Fd()), 0, s.MapSize, syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
+	if s.data, err = syscall.Mmap(int(s.file.Fd()), 0, s.mapSize, syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
 		return err
 	}
 
