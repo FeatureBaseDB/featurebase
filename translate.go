@@ -898,8 +898,8 @@ func pow2(v uint64) uint64 {
 	panic("unreachable")
 }
 
-// TranslateFileReader implements a reader that continuously streams data from a store.
-type TranslateFileReader struct {
+// translateFileReader implements a reader that continuously streams data from a store.
+type translateFileReader struct {
 	ctx    context.Context
 	store  *TranslateFile
 	file   *os.File
@@ -911,8 +911,8 @@ type TranslateFileReader struct {
 }
 
 // newTranslateFileReader returns a new instance of TranslateFileReader.
-func newTranslateFileReader(ctx context.Context, store *TranslateFile, offset int64) *TranslateFileReader {
-	return &TranslateFileReader{
+func newTranslateFileReader(ctx context.Context, store *TranslateFile, offset int64) *translateFileReader {
+	return &translateFileReader{
 		ctx:     ctx,
 		store:   store,
 		offset:  offset,
@@ -922,7 +922,7 @@ func newTranslateFileReader(ctx context.Context, store *TranslateFile, offset in
 }
 
 // Open initializes the reader.
-func (r *TranslateFileReader) Open() (err error) {
+func (r *translateFileReader) Open() (err error) {
 	if r.file, err = os.Open(r.store.Path); err != nil {
 		return err
 	}
@@ -930,7 +930,7 @@ func (r *TranslateFileReader) Open() (err error) {
 }
 
 // Close closes the underlying file reader.
-func (r *TranslateFileReader) Close() error {
+func (r *translateFileReader) Close() error {
 	r.once.Do(func() { close(r.closing) })
 
 	if r.file != nil {
@@ -941,7 +941,7 @@ func (r *TranslateFileReader) Close() error {
 
 // Read reads the next section of the available data to p. This should always
 // read from the start of an entry and read n bytes to the end of another entry.
-func (r *TranslateFileReader) Read(p []byte) (n int, err error) {
+func (r *translateFileReader) Read(p []byte) (n int, err error) {
 	for {
 		// Obtain notification channel before we check for new data.
 		notify := r.store.WriteNotify()
@@ -966,7 +966,7 @@ func (r *TranslateFileReader) Read(p []byte) (n int, err error) {
 }
 
 // read writes the bytes for zero or more valid entries to p.
-func (r *TranslateFileReader) read(p []byte) (n int, err error) {
+func (r *translateFileReader) read(p []byte) (n int, err error) {
 	sz := r.store.size()
 
 	// Exit if there is no new data.
