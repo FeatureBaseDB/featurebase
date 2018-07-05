@@ -11,7 +11,7 @@ var _ pilosa.TranslateStore = (*TranslateStore)(nil)
 
 type TranslateStore struct {
 	translateColumnsToUint64Func func(index string, values []string) ([]uint64, error)
-	TranslateColumnToStringFunc  func(index string, values uint64) (string, error)
+	translateColumnToStringFunc  func(index string, values uint64) (string, error)
 	TranslateRowsToUint64Func    func(index, frame string, values []string) ([]uint64, error)
 	TranslateRowToStringFunc     func(index, frame string, values uint64) (string, error)
 	ReaderFunc                   func(ctx context.Context, off int64) (io.ReadCloser, error)
@@ -22,7 +22,7 @@ func (s TranslateStore) TranslateColumnsToUint64(index string, values []string) 
 }
 
 func (s TranslateStore) TranslateColumnToString(index string, values uint64) (string, error) {
-	return s.TranslateColumnToStringFunc(index, values)
+	return s.translateColumnToStringFunc(index, values)
 }
 
 func (s TranslateStore) TranslateRowsToUint64(index, frame string, values []string) ([]uint64, error) {
