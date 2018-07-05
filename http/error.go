@@ -23,7 +23,7 @@ type Error struct {
 	Message string `json:"message"`
 }
 
-// Error returns the string representation of the error message.
-func (e *Error) Error() string {
+// error returns the string representation of the error message.
+func (e *Error) error() string {
 	return e.Message
 }
