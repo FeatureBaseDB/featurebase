@@ -374,7 +374,7 @@ func (h *Holder) DeleteIndex(name string) error {
 	// Confirm index exists.
 	index := h.index(name)
 	if index == nil {
-		return NewNotFoundError(ErrIndexNotFound)
+		return newNotFoundError(ErrIndexNotFound)
 	}
 
 	// Close index.

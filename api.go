@@ -205,7 +205,7 @@ func (api *API) Index(ctx context.Context, indexName string) (*Index, error) {
 
 	index := api.holder.Index(indexName)
 	if index == nil {
-		return nil, NewNotFoundError(ErrIndexNotFound)
+		return nil, newNotFoundError(ErrIndexNotFound)
 	}
 	return index, nil
 }
@@ -255,7 +255,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 	// Find index.
 	index := api.holder.Index(indexName)
 	if index == nil {
-		return nil, NewNotFoundError(ErrIndexNotFound)
+		return nil, newNotFoundError(ErrIndexNotFound)
 	}
 
 	// Create field.
@@ -287,7 +287,7 @@ func (api *API) Field(ctx context.Context, indexName, fieldName string) (*Field,
 
 	field := api.holder.Field(indexName, fieldName)
 	if field == nil {
-		return nil, NewNotFoundError(ErrFieldNotFound)
+		return nil, newNotFoundError(ErrFieldNotFound)
 	}
 	return field, nil
 }
@@ -303,7 +303,7 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 	// Find index.
 	index := api.holder.Index(indexName)
 	if index == nil {
-		return NewNotFoundError(ErrIndexNotFound)
+		return newNotFoundError(ErrIndexNotFound)
 	}
 
 	// Delete field from the index.
@@ -542,7 +542,7 @@ func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []At
 	// Retrieve index from holder.
 	index := api.holder.Index(indexName)
 	if index == nil {
-		return nil, NewNotFoundError(ErrIndexNotFound)
+		return nil, newNotFoundError(ErrIndexNotFound)
 	}
 
 	// Retrieve local blocks.
@@ -684,7 +684,7 @@ func (api *API) indexField(indexName string, fieldName string, shard uint64) (*I
 	index := api.holder.Index(indexName)
 	if index == nil {
 		api.server.logger.Printf("fragment error: index=%s, field=%s, shard=%d, err=%s", indexName, fieldName, shard, ErrIndexNotFound.Error())
-		return nil, nil, NewNotFoundError(ErrIndexNotFound)
+		return nil, nil, newNotFoundError(ErrIndexNotFound)
 	}
 
 	// Retrieve field.

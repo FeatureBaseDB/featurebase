@@ -395,7 +395,7 @@ func (i *Index) DeleteField(name string) error {
 	// Confirm field exists.
 	f := i.field(name)
 	if f == nil {
-		return NewNotFoundError(ErrFieldNotFound)
+		return newNotFoundError(ErrFieldNotFound)
 	}
 
 	// Close field.

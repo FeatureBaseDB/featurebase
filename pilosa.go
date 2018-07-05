@@ -106,8 +106,8 @@ type NotFoundError struct {
 	error
 }
 
-// NewNotFoundError returns err wrapped in a NotFoundError.
-func NewNotFoundError(err error) NotFoundError {
+// newNotFoundError returns err wrapped in a NotFoundError.
+func newNotFoundError(err error) NotFoundError {
 	return NotFoundError{err}
 }
 
