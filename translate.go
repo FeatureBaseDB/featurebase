@@ -193,7 +193,7 @@ func (s *TranslateFile) appendEntry(entry *LogEntry) error {
 
 func (s *TranslateFile) applyEntry(entry *LogEntry, offset int64) error {
 	// Move offset to the start of the id/key pairs.
-	offset += entry.HeaderSize()
+	offset += entry.headerSize()
 
 	var idx *index
 	switch entry.Type {
@@ -558,8 +558,8 @@ type LogEntry struct {
 	Length uint64
 }
 
-// HeaderSize returns the number of bytes required for size, type, index, frame, & pair count.
-func (e *LogEntry) HeaderSize() int64 {
+// headerSize returns the number of bytes required for size, type, index, frame, & pair count.
+func (e *LogEntry) headerSize() int64 {
 	sz := uVarintSize(e.Length) + // total entry length
 		1 + // type
 		uVarintSize(uint64(len(e.Index))) + len(e.Index) + // Index length and data
