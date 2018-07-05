@@ -598,7 +598,7 @@ func (f *fragment) min(filter *Row, bitDepth uint) (min, count uint64, err error
 
 	consider := f.row(uint64(bitDepth))
 	if filter != nil {
-		consider = consider.Intersect(filter)
+		consider = consider.intersect(filter)
 	}
 
 	// If there are no columns to consider, return early.
@@ -631,7 +631,7 @@ func (f *fragment) max(filter *Row, bitDepth uint) (max, count uint64, err error
 
 	consider := f.row(uint64(bitDepth))
 	if filter != nil {
-		consider = consider.Intersect(filter)
+		consider = consider.intersect(filter)
 	}
 
 	// If there are no columns to consider, return early.
@@ -643,7 +643,7 @@ func (f *fragment) max(filter *Row, bitDepth uint) (max, count uint64, err error
 		ii := i - 1 // allow for uint range: (bitDepth-1) to 0
 		row := f.row(uint64(ii))
 
-		x := row.Intersect(consider)
+		x := row.intersect(consider)
 		count = x.Count()
 		if count > 0 {
 			max += (1 << ii)
@@ -682,7 +682,7 @@ func (f *fragment) rangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
 		bit := (predicate >> uint(i)) & 1
 
 		if bit == 1 {
-			b = b.Intersect(row)
+			b = b.intersect(row)
 		} else {
 			b = b.Difference(row)
 		}
@@ -783,7 +783,7 @@ func (f *fragment) rangeGT(bitDepth uint, predicate uint64, allowEquality bool) 
 		// If bit is unset then add columns with set bit to keep.
 		// Don't bother to compute this on the final iteration.
 		if i > 0 {
-			keep = keep.Union(b.Intersect(row))
+			keep = keep.Union(b.intersect(row))
 		}
 	}
 
@@ -815,7 +815,7 @@ func (f *fragment) rangeBetween(bitDepth uint, predicateMin, predicateMax uint64
 			// If bit is unset then add columns with set bit to keep.
 			// Don't bother to compute this on the final iteration.
 			if i > 0 {
-				keep1 = keep1.Union(b.Intersect(row))
+				keep1 = keep1.Union(b.intersect(row))
 			}
 		}
 
