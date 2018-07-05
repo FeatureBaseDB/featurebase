@@ -1757,28 +1757,6 @@ type ResizeInstruction struct {
 	ClusterStatus *ClusterStatus
 }
 
-func decodeResizeInstruction(ri *internal.ResizeInstruction) *ResizeInstruction {
-	return &ResizeInstruction{
-		JobID:         ri.JobID,
-		Node:          DecodeNode(ri.Node),
-		Coordinator:   DecodeNode(ri.Coordinator),
-		Sources:       decodeResizeSources(ri.Sources),
-		Schema:        decodeSchema(ri.Schema),
-		ClusterStatus: decodeClusterStatus(ri.ClusterStatus),
-	}
-}
-
-func encodeResizeInstruction(m *ResizeInstruction) *internal.ResizeInstruction {
-	return &internal.ResizeInstruction{
-		JobID:         m.JobID,
-		Node:          EncodeNode(m.Node),
-		Coordinator:   EncodeNode(m.Coordinator),
-		Sources:       encodeResizeSources(m.Sources),
-		Schema:        encodeSchema(m.Schema),
-		ClusterStatus: encodeClusterStatus(m.ClusterStatus),
-	}
-}
-
 type ResizeSource struct {
 	Node  *Node  `protobuf:"bytes,1,opt,name=Node" json:"Node,omitempty"`
 	Index string `protobuf:"bytes,2,opt,name=Index,proto3" json:"Index,omitempty"`
@@ -1787,190 +1765,9 @@ type ResizeSource struct {
 	Shard uint64 `protobuf:"varint,5,opt,name=Shard,proto3" json:"Shard,omitempty"`
 }
 
-func decodeResizeSources(srcs []*internal.ResizeSource) []*ResizeSource {
-	new := make([]*ResizeSource, 0, len(srcs))
-	for _, src := range srcs {
-		new = append(new, decodeResizeSource(src))
-	}
-	return new
-}
-
-func encodeResizeSources(srcs []*ResizeSource) []*internal.ResizeSource {
-	new := make([]*internal.ResizeSource, 0, len(srcs))
-	for _, src := range srcs {
-		new = append(new, encodeResizeSource(src))
-	}
-	return new
-}
-
-func decodeResizeSource(rs *internal.ResizeSource) *ResizeSource {
-	return &ResizeSource{
-		Node:  DecodeNode(rs.Node),
-		Index: rs.Index,
-		Field: rs.Field,
-		View:  rs.View,
-		Shard: rs.Shard,
-	}
-}
-
-func encodeResizeSource(m *ResizeSource) *internal.ResizeSource {
-	return &internal.ResizeSource{
-		Node:  EncodeNode(m.Node),
-		Index: m.Index,
-		Field: m.Field,
-		View:  m.View,
-		Shard: m.Shard,
-	}
-}
-
 // Schema is a schema
 type Schema struct {
 	Indexes []*IndexInfo
-}
-
-func decodeSchema(s *internal.Schema) *Schema {
-	return &Schema{
-		Indexes: decodeIndexes(s.Indexes),
-	}
-}
-
-func encodeSchema(m *Schema) *internal.Schema {
-	return &internal.Schema{
-		Indexes: encodeIndexInfos(m.Indexes),
-	}
-}
-
-func decodeIndexes(idxs []*internal.Index) []*IndexInfo {
-	new := make([]*IndexInfo, 0, len(idxs))
-	for _, idx := range idxs {
-		new = append(new, decodeIndex(idx))
-	}
-	return new
-}
-
-func encodeIndexInfos(idxs []*IndexInfo) []*internal.Index {
-	new := make([]*internal.Index, 0, len(idxs))
-	for _, idx := range idxs {
-		new = append(new, encodeIndexInfo(idx))
-	}
-	return new
-}
-
-func decodeIndex(idx *internal.Index) *IndexInfo {
-	return &IndexInfo{
-		Name:   idx.Name,
-		Fields: decodeFields(idx.Fields),
-	}
-}
-
-func encodeIndexInfo(idx *IndexInfo) *internal.Index {
-	return &internal.Index{
-		Name:   idx.Name,
-		Fields: encodeFieldInfos(idx.Fields),
-	}
-}
-
-func decodeFields(fs []*internal.Field) []*FieldInfo {
-	new := make([]*FieldInfo, 0, len(fs))
-	for _, f := range fs {
-		new = append(new, decodeField(f))
-	}
-	return new
-}
-
-func encodeFieldInfos(fs []*FieldInfo) []*internal.Field {
-	new := make([]*internal.Field, 0, len(fs))
-	for _, f := range fs {
-		new = append(new, encodeFieldInfo(f))
-	}
-	return new
-}
-
-func decodeField(f *internal.Field) *FieldInfo {
-	fi := &FieldInfo{
-		Name:    f.Name,
-		Options: *decodeFieldOptions(f.Meta),
-		Views:   make([]*ViewInfo, 0, len(f.Views)),
-	}
-	for _, viewname := range f.Views {
-		fi.Views = append(fi.Views, &ViewInfo{Name: viewname})
-	}
-	return fi
-}
-
-func encodeFieldInfo(f *FieldInfo) *internal.Field {
-	ifield := &internal.Field{
-		Name:  f.Name,
-		Meta:  encodeFieldOptions(&f.Options),
-		Views: make([]string, 0, len(f.Views)),
-	}
-
-	for _, viewinfo := range f.Views {
-		ifield.Views = append(ifield.Views, viewinfo.Name)
-	}
-	return ifield
-}
-
-// EncodeNodes converts a slice of Nodes into its internal representation.
-func EncodeNodes(a []*Node) []*internal.Node {
-	other := make([]*internal.Node, len(a))
-	for i := range a {
-		other[i] = EncodeNode(a[i])
-	}
-	return other
-}
-
-// EncodeNode converts a Node into its internal representation.
-func EncodeNode(n *Node) *internal.Node {
-	return &internal.Node{
-		ID:            n.ID,
-		URI:           n.URI.Encode(),
-		IsCoordinator: n.IsCoordinator,
-	}
-}
-
-// DecodeNodes converts a proto message into a slice of Nodes.
-func DecodeNodes(a []*internal.Node) []*Node {
-	if len(a) == 0 {
-		return nil
-	}
-	other := make([]*Node, len(a))
-	for i := range a {
-		other[i] = DecodeNode(a[i])
-	}
-	return other
-}
-
-func decodeClusterStatus(cs *internal.ClusterStatus) *ClusterStatus {
-	return &ClusterStatus{
-		State:     cs.State,
-		ClusterID: cs.ClusterID,
-		Nodes:     DecodeNodes(cs.Nodes),
-	}
-}
-
-func encodeClusterStatus(m *ClusterStatus) *internal.ClusterStatus {
-	return &internal.ClusterStatus{
-		State:     m.State,
-		ClusterID: m.ClusterID,
-		Nodes:     EncodeNodes(m.Nodes),
-	}
-}
-
-// DecodeNode converts a proto message into a Node.
-func DecodeNode(node *internal.Node) *Node {
-	return &Node{
-		ID:            node.ID,
-		URI:           decodeURI(node.URI),
-		IsCoordinator: node.IsCoordinator,
-	}
-}
-
-func DecodeNodeEvent(ne *internal.NodeEventMessage) *NodeEvent {
-	return &NodeEvent{
-		Event: NodeEventType(ne.Event),
-		Node:  DecodeNode(ne.Node),
-	}
 }
 
 func encodeTopology(topology *Topology) *internal.Topology {
@@ -2004,65 +1801,13 @@ type CreateShardMessage struct {
 	Shard uint64
 }
 
-func encodeCreateShardMessage(m *CreateShardMessage) *internal.CreateShardMessage {
-	return &internal.CreateShardMessage{
-		Index: m.Index,
-		Shard: m.Shard,
-	}
-}
-
-func decodeCreateShardMessage(pb *internal.CreateShardMessage) *CreateShardMessage {
-	return &CreateShardMessage{
-		Index: pb.Index,
-		Shard: pb.Shard,
-	}
-}
-
 type CreateIndexMessage struct {
 	Index string
 	Meta  *IndexOptions
 }
 
-func encodeCreateIndexMessage(m *CreateIndexMessage) *internal.CreateIndexMessage {
-	return &internal.CreateIndexMessage{
-		Index: m.Index,
-		Meta:  encodeIndexMeta(m.Meta),
-	}
-}
-
-func decodeCreateIndexMessage(pb *internal.CreateIndexMessage) *CreateIndexMessage {
-	return &CreateIndexMessage{
-		Index: pb.Index,
-		Meta:  decodeIndexMeta(pb.Meta),
-	}
-}
-
-func encodeIndexMeta(m *IndexOptions) *internal.IndexMeta {
-	return &internal.IndexMeta{
-		Keys: m.Keys,
-	}
-}
-
-func decodeIndexMeta(pb *internal.IndexMeta) *IndexOptions {
-	return &IndexOptions{
-		Keys: pb.Keys,
-	}
-}
-
 type DeleteIndexMessage struct {
 	Index string
-}
-
-func encodeDeleteIndexMessage(m *DeleteIndexMessage) *internal.DeleteIndexMessage {
-	return &internal.DeleteIndexMessage{
-		Index: m.Index,
-	}
-}
-
-func decodeDeleteIndexMessage(pb *internal.DeleteIndexMessage) *DeleteIndexMessage {
-	return &DeleteIndexMessage{
-		Index: pb.Index,
-	}
 }
 
 type CreateFieldMessage struct {
@@ -2071,39 +1816,9 @@ type CreateFieldMessage struct {
 	Meta  *FieldOptions
 }
 
-func encodeCreateFieldMessage(m *CreateFieldMessage) *internal.CreateFieldMessage {
-	return &internal.CreateFieldMessage{
-		Index: m.Index,
-		Field: m.Field,
-		Meta:  encodeFieldOptions(m.Meta),
-	}
-}
-
-func decodeCreateFieldMessage(pb *internal.CreateFieldMessage) *CreateFieldMessage {
-	return &CreateFieldMessage{
-		Index: pb.Index,
-		Field: pb.Field,
-		Meta:  decodeFieldOptions(pb.Meta),
-	}
-}
-
 type DeleteFieldMessage struct {
 	Index string
 	Field string
-}
-
-func encodeDeleteFieldMessage(m *DeleteFieldMessage) *internal.DeleteFieldMessage {
-	return &internal.DeleteFieldMessage{
-		Index: m.Index,
-		Field: m.Field,
-	}
-}
-
-func decodeDeleteFieldMessage(pb *internal.DeleteFieldMessage) *DeleteFieldMessage {
-	return &DeleteFieldMessage{
-		Index: pb.Index,
-		Field: pb.Field,
-	}
 }
 
 type CreateViewMessage struct {
@@ -2111,43 +1826,10 @@ type CreateViewMessage struct {
 	Field string
 	View  string
 }
-
-func encodeCreateViewMessage(m *CreateViewMessage) *internal.CreateViewMessage {
-	return &internal.CreateViewMessage{
-		Index: m.Index,
-		Field: m.Field,
-		View:  m.View,
-	}
-}
-
-func decodeCreateViewMessage(pb *internal.CreateViewMessage) *CreateViewMessage {
-	return &CreateViewMessage{
-		Index: pb.Index,
-		Field: pb.Field,
-		View:  pb.View,
-	}
-}
-
 type DeleteViewMessage struct {
 	Index string
 	Field string
 	View  string
-}
-
-func encodeDeleteViewMessage(m *DeleteViewMessage) *internal.DeleteViewMessage {
-	return &internal.DeleteViewMessage{
-		Index: m.Index,
-		Field: m.Field,
-		View:  m.View,
-	}
-}
-
-func decodeDeleteViewMessage(pb *internal.DeleteViewMessage) *DeleteViewMessage {
-	return &DeleteViewMessage{
-		Index: pb.Index,
-		Field: pb.Field,
-		View:  pb.View,
-	}
 }
 
 type ResizeInstructionComplete struct {
@@ -2156,85 +1838,17 @@ type ResizeInstructionComplete struct {
 	Error string
 }
 
-func encodeResizeInstructionComplete(m *ResizeInstructionComplete) *internal.ResizeInstructionComplete {
-	return &internal.ResizeInstructionComplete{
-		JobID: m.JobID,
-		Node:  EncodeNode(m.Node),
-		Error: m.Error,
-	}
-}
-
-func decodeResizeInstructionComplete(pb *internal.ResizeInstructionComplete) *ResizeInstructionComplete {
-	return &ResizeInstructionComplete{
-		JobID: pb.JobID,
-		Node:  DecodeNode(pb.Node),
-		Error: pb.Error,
-	}
-}
-
 type SetCoordinatorMessage struct {
 	New *Node
-}
-
-func encodeSetCoordinatorMessage(m *SetCoordinatorMessage) *internal.SetCoordinatorMessage {
-	return &internal.SetCoordinatorMessage{
-		New: EncodeNode(m.New),
-	}
-}
-
-func decodeSetCoordinatorMessage(pb *internal.SetCoordinatorMessage) *SetCoordinatorMessage {
-	return &SetCoordinatorMessage{
-		New: DecodeNode(pb.New),
-	}
 }
 
 type UpdateCoordinatorMessage struct {
 	New *Node
 }
 
-func encodeUpdateCoordinatorMessage(m *UpdateCoordinatorMessage) *internal.UpdateCoordinatorMessage {
-	return &internal.UpdateCoordinatorMessage{
-		New: EncodeNode(m.New),
-	}
-}
-
-func decodeUpdateCoordinatorMessage(pb *internal.UpdateCoordinatorMessage) *UpdateCoordinatorMessage {
-	return &UpdateCoordinatorMessage{
-		New: DecodeNode(pb.New),
-	}
-}
-
 type NodeStateMessage struct {
 	NodeID string `protobuf:"bytes,1,opt,name=NodeID,proto3" json:"NodeID,omitempty"`
 	State  string `protobuf:"bytes,2,opt,name=State,proto3" json:"State,omitempty"`
-}
-
-func encodeNodeStateMessage(m *NodeStateMessage) *internal.NodeStateMessage {
-	return &internal.NodeStateMessage{
-		NodeID: m.NodeID,
-		State:  m.State,
-	}
-}
-
-func decodeNodeStateMessage(pb *internal.NodeStateMessage) *NodeStateMessage {
-	return &NodeStateMessage{
-		NodeID: pb.NodeID,
-		State:  pb.State,
-	}
-}
-
-func encodeNodeEventMessage(m *NodeEvent) *internal.NodeEventMessage {
-	return &internal.NodeEventMessage{
-		Event: uint32(m.Event),
-		Node:  EncodeNode(m.Node),
-	}
-}
-
-func decodeNodeEventMessage(pb *internal.NodeEventMessage) *NodeEvent {
-	return &NodeEvent{
-		Event: NodeEventType(pb.Event),
-		Node:  DecodeNode(pb.Node),
-	}
 }
 
 type NodeStatus struct {
@@ -2243,28 +1857,4 @@ type NodeStatus struct {
 	Schema    *Schema
 }
 
-func encodeNodeStatus(m *NodeStatus) *internal.NodeStatus {
-	return &internal.NodeStatus{
-		Node:      EncodeNode(m.Node),
-		MaxShards: &internal.MaxShards{Standard: m.MaxShards},
-		Schema:    encodeSchema(m.Schema),
-	}
-}
-
-func decodeNodeStatus(pb *internal.NodeStatus) *NodeStatus {
-	return &NodeStatus{
-		Node:      DecodeNode(pb.Node),
-		MaxShards: pb.MaxShards.Standard,
-		Schema:    decodeSchema(pb.Schema),
-	}
-}
-
 type RecalculateCaches struct{}
-
-func decodeRecalculateCaches(pb *internal.RecalculateCaches) *RecalculateCaches {
-	return &RecalculateCaches{}
-}
-
-func encodeRecalculateCaches(*RecalculateCaches) *internal.RecalculateCaches {
-	return &internal.RecalculateCaches{}
-}

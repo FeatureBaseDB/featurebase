@@ -1088,25 +1088,6 @@ func (f *Field) MarshalJSON() ([]byte, error) {
 	return json.Marshal(thing)
 }
 
-// encodeFields converts a into its internal representation.
-func encodeFields(a []*Field) []*internal.Field {
-	other := make([]*internal.Field, len(a))
-	for i := range a {
-		other[i] = encodeField(a[i])
-	}
-	return other
-}
-
-// encodeField converts f into its internal representation.
-func encodeField(f *Field) *internal.Field {
-	fo := f.options
-	return &internal.Field{
-		Name:  f.name,
-		Meta:  fo.Encode(),
-		Views: f.viewNames(),
-	}
-}
-
 type fieldSlice []*Field
 
 func (p fieldSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
@@ -1167,21 +1148,6 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 		Max:         o.Max,
 		TimeQuantum: string(o.TimeQuantum),
 		Keys:        o.Keys,
-	}
-}
-
-func decodeFieldOptions(options *internal.FieldOptions) *FieldOptions {
-	if options == nil {
-		return nil
-	}
-	return &FieldOptions{
-		Type:        options.Type,
-		CacheType:   options.CacheType,
-		CacheSize:   options.CacheSize,
-		Min:         options.Min,
-		Max:         options.Max,
-		TimeQuantum: TimeQuantum(options.TimeQuantum),
-		Keys:        options.Keys,
 	}
 }
 

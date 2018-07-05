@@ -20,7 +20,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pkg/errors"
 )
@@ -1735,20 +1734,6 @@ func (vc *ValCount) Add(other ValCount) ValCount {
 	return ValCount{
 		Val:   vc.Val + other.Val,
 		Count: vc.Count + other.Count,
-	}
-}
-
-func EncodeValCount(vc ValCount) *internal.ValCount {
-	return &internal.ValCount{
-		Val:   vc.Val,
-		Count: vc.Count,
-	}
-}
-
-func decodeValCount(pb *internal.ValCount) ValCount {
-	return ValCount{
-		Val:   pb.Val,
-		Count: pb.Count,
 	}
 }
 

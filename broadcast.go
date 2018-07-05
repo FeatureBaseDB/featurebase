@@ -17,8 +17,6 @@ package pilosa
 import (
 	"fmt"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pkg/errors"
 )
 
@@ -164,89 +162,4 @@ func getMessageType(m Message) byte {
 	default:
 		panic(fmt.Sprintf("don't have type for message %#v", m))
 	}
-}
-
-// UnmarshalMessage decodes the byte slice into a protobuf message.
-func UnmarshalMessage(buf []byte) (proto.Message, error) {
-	typ, buf := buf[0], buf[1:]
-	var m proto.Message
-	switch typ {
-	case messageTypeCreateShard:
-		m = &internal.CreateShardMessage{}
-	case messageTypeCreateIndex:
-		m = &internal.CreateIndexMessage{}
-	case messageTypeDeleteIndex:
-		m = &internal.DeleteIndexMessage{}
-	case messageTypeCreateField:
-		m = &internal.CreateFieldMessage{}
-	case messageTypeDeleteField:
-		m = &internal.DeleteFieldMessage{}
-	case messageTypeCreateView:
-		m = &internal.CreateViewMessage{}
-	case messageTypeDeleteView:
-		m = &internal.DeleteViewMessage{}
-	case messageTypeClusterStatus:
-		m = &internal.ClusterStatus{}
-	case messageTypeResizeInstruction:
-		m = &internal.ResizeInstruction{}
-	case messageTypeResizeInstructionComplete:
-		m = &internal.ResizeInstructionComplete{}
-	case messageTypeSetCoordinator:
-		m = &internal.SetCoordinatorMessage{}
-	case messageTypeUpdateCoordinator:
-		m = &internal.UpdateCoordinatorMessage{}
-	case messageTypeNodeState:
-		m = &internal.NodeStateMessage{}
-	case messageTypeRecalculateCaches:
-		m = &internal.RecalculateCaches{}
-	case messageTypeNodeEvent:
-		m = &internal.NodeEventMessage{}
-	case messageTypeNodeStatus:
-		m = &internal.NodeStatus{}
-	default:
-		return nil, fmt.Errorf("invalid message type: %d", typ)
-	}
-
-	if err := proto.Unmarshal(buf, m); err != nil {
-		return nil, errors.Wrap(err, "unmarshalling")
-	}
-	return m, nil
-}
-
-func decode(m proto.Message) Message {
-	switch mt := m.(type) {
-	case *internal.CreateShardMessage:
-		return decodeCreateShardMessage(mt)
-	case *internal.CreateIndexMessage:
-		return decodeCreateIndexMessage(mt)
-	case *internal.DeleteIndexMessage:
-		return decodeDeleteIndexMessage(mt)
-	case *internal.CreateFieldMessage:
-		return decodeCreateFieldMessage(mt)
-	case *internal.DeleteFieldMessage:
-		return decodeDeleteFieldMessage(mt)
-	case *internal.CreateViewMessage:
-		return decodeCreateViewMessage(mt)
-	case *internal.DeleteViewMessage:
-		return decodeDeleteViewMessage(mt)
-	case *internal.ClusterStatus:
-		return decodeClusterStatus(mt)
-	case *internal.ResizeInstruction:
-		return decodeResizeInstruction(mt)
-	case *internal.ResizeInstructionComplete:
-		return decodeResizeInstructionComplete(mt)
-	case *internal.SetCoordinatorMessage:
-		return decodeSetCoordinatorMessage(mt)
-	case *internal.UpdateCoordinatorMessage:
-		return decodeUpdateCoordinatorMessage(mt)
-	case *internal.NodeStateMessage:
-		return decodeNodeStateMessage(mt)
-	case *internal.RecalculateCaches:
-		return decodeRecalculateCaches(mt)
-	case *internal.NodeEventMessage:
-		return decodeNodeEventMessage(mt)
-	case *internal.NodeStatus:
-		return decodeNodeStatus(mt)
-	}
-	return nil
 }

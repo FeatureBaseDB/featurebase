@@ -21,7 +21,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pkg/errors"
 )
 
@@ -204,34 +203,6 @@ func parseAddress(address string) (uri *URI, err error) {
 		Port:   uint16(port),
 	}
 	return uri, nil
-}
-
-// Encode converts o into its internal representation.
-func (u URI) Encode() *internal.URI {
-	return encodeURI(u)
-}
-
-func encodeURI(u URI) *internal.URI {
-	return &internal.URI{
-		Scheme: u.Scheme,
-		Host:   u.Host,
-		Port:   uint32(u.Port),
-	}
-}
-
-func DecodeURI(i *internal.URI) URI {
-	return decodeURI(i)
-}
-
-func decodeURI(i *internal.URI) URI {
-	if i == nil {
-		return URI{}
-	}
-	return URI{
-		Scheme: i.Scheme,
-		Host:   i.Host,
-		Port:   uint16(i.Port),
-	}
 }
 
 // MarshalJSON marshals URI into a JSON-encoded byte slice.

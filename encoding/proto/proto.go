@@ -375,8 +375,16 @@ func EncodeNodes(a []*pilosa.Node) []*internal.Node {
 func encodeNode(n *pilosa.Node) *internal.Node {
 	return &internal.Node{
 		ID:            n.ID,
-		URI:           n.URI.Encode(),
+		URI:           encodeURI(n.URI),
 		IsCoordinator: n.IsCoordinator,
+	}
+}
+
+func encodeURI(u pilosa.URI) *internal.URI {
+	return &internal.URI{
+		Scheme: u.Scheme,
+		Host:   u.Host,
+		Port:   uint32(u.Port),
 	}
 }
 

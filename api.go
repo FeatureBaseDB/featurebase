@@ -770,8 +770,8 @@ func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode
 	// Send the set-coordinator message to new node.
 	err = api.server.SendTo(
 		newNode,
-		&internal.SetCoordinatorMessage{
-			New: EncodeNode(newNode),
+		&SetCoordinatorMessage{
+			New: newNode,
 		})
 	if err != nil {
 		return nil, nil, fmt.Errorf("problem sending SetCoordinator message: %s", err)

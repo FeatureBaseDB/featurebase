@@ -27,7 +27,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )
@@ -254,20 +253,6 @@ func (h *Holder) applySchema(schema *Schema) error {
 		}
 	}
 	return nil
-}
-
-// encodeMaxShards creates and internal representation of max shards.
-func (h *Holder) encodeMaxShards() *internal.MaxShards {
-	return &internal.MaxShards{
-		Standard: h.maxShards(),
-	}
-}
-
-// encodeSchema creates an internal representation of schema.
-func (h *Holder) encodeSchema() *internal.Schema {
-	return &internal.Schema{
-		Indexes: EncodeIndexes(h.Indexes()),
-	}
 }
 
 // IndexPath returns the path where a given index is stored.
