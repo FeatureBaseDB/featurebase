@@ -837,6 +837,7 @@ func decodeQueryResponse(pb *internal.QueryResponse, m *pilosa.QueryResponse) {
 
 func decodeColumnAttrSets(pb []*internal.ColumnAttrSet, m []*pilosa.ColumnAttrSet) {
 	for i := range pb {
+		m[i] = &pilosa.ColumnAttrSet{}
 		decodeColumnAttrSet(pb[i], m[i])
 	}
 }
