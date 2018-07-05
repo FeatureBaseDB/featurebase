@@ -392,7 +392,7 @@ func (c *Call) String() string {
 		case *Condition:
 			fmt.Fprintf(&buf, "%v %s", key, v.String())
 		default:
-			fmt.Fprintf(&buf, "%v=%s", key, FormatValue(v))
+			fmt.Fprintf(&buf, "%v=%s", key, formatValue(v))
 		}
 	}
 
@@ -421,7 +421,7 @@ type Condition struct {
 
 // String returns the string representation of the condition.
 func (cond *Condition) String() string {
-	return fmt.Sprintf("%s %s", cond.Op.String(), FormatValue(cond.Value))
+	return fmt.Sprintf("%s %s", cond.Op.String(), formatValue(cond.Value))
 }
 
 // IntSliceValue reads cond.Value as a slice of uint64.
@@ -449,7 +449,7 @@ func (cond *Condition) IntSliceValue() ([]int64, error) {
 	}
 }
 
-func FormatValue(v interface{}) string {
+func formatValue(v interface{}) string {
 	switch v := v.(type) {
 	case string:
 		return fmt.Sprintf("%q", v)
