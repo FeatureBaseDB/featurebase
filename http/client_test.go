@@ -218,15 +218,10 @@ func TestClient_ImportValue(t *testing.T) {
 	hldr := test.Holder{Holder: holder}
 
 	fldName := "f"
-	fo := pilosa.FieldOptions{
-		Type: pilosa.FieldTypeInt,
-		Min:  -100,
-		Max:  100,
-	}
 
 	// Load bitmap into cache to ensure cache gets updated.
 	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	field, err := index.CreateFieldIfNotExists(fldName, fo)
+	field, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-100, 100))
 	if err != nil {
 		t.Fatal(err)
 	}

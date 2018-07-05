@@ -257,7 +257,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 	}
 
 	// Create field.
-	field, err := index.CreateField(fieldName, fo)
+	field, err := index.CreateField(fieldName, opts)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating field")
 	}
