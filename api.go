@@ -477,8 +477,14 @@ func (api *API) ClusterMessage(ctx context.Context, reqBody io.Reader) error {
 }
 
 // Schema returns information about each index in Pilosa including which fields
+// they contain.
+func (api *API) Schema(ctx context.Context) []*IndexInfo {
+	return api.holder.Schema()
+}
+
+// Indexes returns all indexes in Pilosa including which fields
 // and views they contain.
-func (api *API) Schema(ctx context.Context) []*Index {
+func (api *API) Indexes(ctx context.Context) []*Index {
 	return api.holder.Indexes()
 }
 

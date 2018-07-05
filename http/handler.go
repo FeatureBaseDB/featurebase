@@ -465,7 +465,7 @@ func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	indexName := mux.Vars(r)["index"]
 	for _, idx := range h.API.Schema(r.Context()) {
-		if idx.Name() == indexName {
+		if idx.Name == indexName {
 			if err := json.NewEncoder(w).Encode(idx); err != nil {
 				h.Logger.Printf("write response error: %s", err)
 			}
