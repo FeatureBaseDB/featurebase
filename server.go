@@ -229,7 +229,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		closing:     make(chan struct{}),
 		cluster:     newCluster(),
 		holder:      NewHolder(),
-		diagnostics: NewDiagnosticsCollector(defaultDiagnosticServer),
+		diagnostics: newDiagnosticsCollector(defaultDiagnosticServer),
 		systemInfo:  NewNopSystemInfo(),
 
 		gcNotifier: NopGCNotifier,
