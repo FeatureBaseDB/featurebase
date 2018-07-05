@@ -26,10 +26,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/hashicorp/memberlist"
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/toml"
 	"github.com/pkg/errors"
 )
@@ -148,7 +146,7 @@ func WithLogger(logger *log.Logger) GossipMemberSetOption {
 
 // NewGossipMemberSet returns a new instance of GossipMemberSet based on options.
 func NewGossipMemberSet(cfg Config, api *pilosa.API, options ...GossipMemberSetOption) (*GossipMemberSet, error) {
-	host := api.Node().URI.Host()
+	host := api.Node().URI.GetHost()
 	g := &GossipMemberSet{
 		papi:   api,
 		Logger: pilosa.NopLogger,
@@ -193,10 +191,10 @@ func NewGossipMemberSet(cfg Config, api *pilosa.API, options ...GossipMemberSetO
 	conf := memberlist.DefaultWANConfig()
 	conf.Transport = g.transport.Net
 	conf.Name = api.Node().ID
-	conf.BindAddr = api.Node().URI.Host()
+	conf.BindAddr = api.Node().URI.GetHost()
 	conf.BindPort = port
 	conf.AdvertisePort = port
-	conf.AdvertiseAddr = hostToIP(api.Node().URI.Host())
+	conf.AdvertiseAddr = hostToIP(api.Node().URI.GetHost())
 	//
 	conf.TCPTimeout = time.Duration(cfg.StreamTimeout)
 	conf.SuspicionMult = cfg.SuspicionMult
@@ -222,7 +220,7 @@ func NewGossipMemberSet(cfg Config, api *pilosa.API, options ...GossipMemberSetO
 
 // NodeMeta implementation of the memberlist.Delegate interface.
 func (g *GossipMemberSet) NodeMeta(limit int) []byte {
-	buf, err := proto.Marshal(pilosa.EncodeNode(g.papi.Node()))
+	buf, err := g.papi.Serializer.Marshal(g.papi.Node())
 	if err != nil {
 		g.Logger.Printf("marshal message error: %s", err)
 		return []byte{}
@@ -248,14 +246,14 @@ func (g *GossipMemberSet) GetBroadcasts(overhead, limit int) [][]byte {
 // LocalState implementation of the memberlist.Delegate interface
 // sends this Node's state data.
 func (g *GossipMemberSet) LocalState(join bool) []byte {
-	pb := &internal.NodeStatus{
-		Node:      pilosa.EncodeNode(g.papi.Node()),
-		MaxShards: &internal.MaxShards{Standard: g.papi.MaxShards(context.Background())},
-		Schema:    &internal.Schema{Indexes: pilosa.EncodeIndexes(g.papi.Schema(context.Background()))},
+	m := &pilosa.NodeStatus{
+		Node:      g.papi.Node(),
+		MaxShards: g.papi.MaxShards(context.Background()),
+		Schema:    &pilosa.Schema{Indexes: g.papi.Holder().Schema()},
 	}
 
 	// Marshal nodestate data to bytes.
-	buf, err := pilosa.MarshalMessage(pb)
+	buf, err := pilosa.MarshalInternalMessage(m, g.papi.Serializer)
 	if err != nil {
 		g.Logger.Printf("error marshalling nodestate data, err=%s", err)
 		return []byte{}
@@ -323,16 +321,16 @@ func (g *gossipEventReceiver) listen() {
 		}
 
 		// Get the node from the event.Node meta data.
-		var n internal.Node
-		if err := proto.Unmarshal(e.Node.Meta, &n); err != nil {
-			panic("failed to unmarshal event node meta data")
+		var n pilosa.Node
+		if err := g.papi.Serializer.Unmarshal(e.Node.Meta, &n); err != nil {
+			panic("failed to unmarshal event node meta into node")
 		}
 
-		ne := &internal.NodeEventMessage{
-			Event: uint32(nodeEventType),
+		ne := &pilosa.NodeEvent{
+			Event: nodeEventType,
 			Node:  &n,
 		}
-		buf, err := pilosa.MarshalMessage(ne)
+		buf, err := pilosa.MarshalInternalMessage(ne, g.papi.Serializer)
 		if err != nil {
 			panic(err)
 		}

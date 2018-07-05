@@ -23,8 +23,8 @@ const (
 	NodeUpdate
 )
 
-// nodeEvent is a single event related to node activity in the cluster.
-type nodeEvent struct {
+// NodeEvent is a single event related to node activity in the cluster.
+type NodeEvent struct {
 	Event NodeEventType
 	Node  *Node
 }
