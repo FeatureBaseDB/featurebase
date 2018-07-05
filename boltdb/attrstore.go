@@ -71,8 +71,8 @@ type attrStore struct {
 	attrCache *attrCache
 }
 
-// NewAttrCache returns a new instance of AttrCache.
-func NewAttrCache() *attrCache {
+// newAttrCache returns a new instance of AttrCache.
+func newAttrCache() *attrCache {
 	return &attrCache{
 		attrs: make(map[uint64]map[string]interface{}),
 	}
@@ -82,7 +82,7 @@ func NewAttrCache() *attrCache {
 func NewAttrStore(path string) pilosa.AttrStore {
 	return &attrStore{
 		path:      path,
-		attrCache: NewAttrCache(),
+		attrCache: newAttrCache(),
 	}
 }
 
