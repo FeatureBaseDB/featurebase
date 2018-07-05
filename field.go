@@ -183,8 +183,8 @@ func (f *Field) Path() string { return f.path }
 // RowAttrStore returns the attribute storage.
 func (f *Field) RowAttrStore() AttrStore { return f.rowAttrStore }
 
-// MaxShard returns the max shard in the field.
-func (f *Field) MaxShard() uint64 {
+// maxShard returns the max shard in the field.
+func (f *Field) maxShard() uint64 {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
