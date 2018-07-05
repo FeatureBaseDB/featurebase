@@ -244,7 +244,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 	}
 
 	// Apply functional option.
-	fo := FieldOptions{}
+	fo := fieldOptions{}
 	err := opts(&fo)
 	if err != nil {
 		return nil, errors.Wrap(err, "applying option")

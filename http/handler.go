@@ -671,7 +671,7 @@ type postFieldRequest struct {
 	Options fieldOptions `json:"options"`
 }
 
-// fieldOptions tracks pilosa.FieldOptions. It is made up of pointers to values,
+// fieldOptions tracks pilosa.fieldOptions. It is made up of pointers to values,
 // and used for input validation.
 type fieldOptions struct {
 	Type        string              `json:"type,omitempty"`
