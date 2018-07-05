@@ -602,7 +602,7 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	for citer.Next() {
 		_, c := citer.Value()
 		if c.n > 0 {
-			nn, err := c.WriteTo(w)
+			nn, err := c.writeTo(w)
 			n += nn
 			if err != nil {
 				return n, err
@@ -1671,8 +1671,8 @@ func (c *Container) Clone() *Container {
 	return other
 }
 
-// WriteTo writes c to w.
-func (c *Container) WriteTo(w io.Writer) (n int64, err error) {
+// writeTo writes c to w.
+func (c *Container) writeTo(w io.Writer) (n int64, err error) {
 	if c.isArray() {
 		return c.arrayWriteTo(w)
 	} else if c.isRun() {
