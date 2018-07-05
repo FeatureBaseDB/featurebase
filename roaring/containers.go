@@ -21,7 +21,7 @@ type SliceContainers struct {
 	lastContainer *Container
 }
 
-func NewSliceContainers() *SliceContainers {
+func newSliceContainers() *SliceContainers {
 	return &SliceContainers{}
 }
 
@@ -102,7 +102,7 @@ func (sc *SliceContainers) GetOrCreate(key uint64) *Container {
 }
 
 func (sc *SliceContainers) Clone() Containers {
-	other := NewSliceContainers()
+	other := newSliceContainers()
 	other.keys = make([]uint64, len(sc.keys))
 	other.containers = make([]*Container, len(sc.containers))
 	copy(other.keys, sc.keys)
