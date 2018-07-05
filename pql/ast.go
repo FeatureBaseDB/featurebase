@@ -309,10 +309,10 @@ func (c *Call) UintSliceArg(key string) ([]uint64, bool, error) {
 	}
 }
 
-// StringArg is for reading the value at key from call.Args as a string. If the
+// stringArg is for reading the value at key from call.Args as a string. If the
 // key is not in Call.Args, the value of the returned bool will be false, and
 // the error will be nil. An error is returned if the value is not a string.
-func (c *Call) StringArg(key string) (string, bool, error) {
+func (c *Call) stringArg(key string) (string, bool, error) {
 	val, ok := c.Args[key]
 	if !ok {
 		return "", false, nil
