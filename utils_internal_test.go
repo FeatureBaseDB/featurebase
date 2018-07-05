@@ -104,13 +104,13 @@ func (t *ClusterCluster) CreateIndex(name string) error {
 	return nil
 }
 
-func (t *ClusterCluster) CreateField(index, field string, opt FieldOptions) error {
+func (t *ClusterCluster) CreateField(index, field string, opts FieldOption) error {
 	for _, c := range t.Clusters {
 		idx, err := c.holder.CreateIndexIfNotExists(index, IndexOptions{})
 		if err != nil {
 			return err
 		}
-		if _, err := idx.CreateField(field, opt); err != nil {
+		if _, err := idx.CreateField(field, opts); err != nil {
 			return err
 		}
 	}

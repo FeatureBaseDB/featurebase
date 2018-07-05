@@ -750,7 +750,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	defer index.Close()
 
 	// Create field.
-	field, err := index.CreateFieldIfNotExists("f", FieldOptions{CacheType: CacheTypeRanked, CacheSize: cacheSize})
+	field, err := index.CreateFieldIfNotExists("f", OptFieldTypeSet(CacheTypeRanked, cacheSize))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -916,7 +916,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 	defer index.Close()
 
 	// Create field.
-	field, err := index.CreateFieldIfNotExists("f", FieldOptions{CacheType: CacheTypeRanked})
+	field, err := index.CreateFieldIfNotExists("f", OptFieldTypeSet(CacheTypeRanked, DefaultCacheSize))
 	if err != nil {
 		t.Fatal(err)
 	}

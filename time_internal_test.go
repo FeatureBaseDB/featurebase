@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -23,7 +24,7 @@ import (
 // Ensure string can be parsed into time quantum.
 func TestParseTimeQuantum(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
-		if q, err := ParseTimeQuantum("YMDH"); err != nil {
+		if q, err := parseTimeQuantum("YMDH"); err != nil {
 			t.Fatalf("unexpected error: %s", err)
 		} else if q != TimeQuantum("YMDH") {
 			t.Fatalf("unexpected quantum: %#v", q)
@@ -31,7 +32,7 @@ func TestParseTimeQuantum(t *testing.T) {
 	})
 
 	t.Run("ErrInvalidTimeQuantum", func(t *testing.T) {
-		if _, err := ParseTimeQuantum("BADQUANTUM"); err != ErrInvalidTimeQuantum {
+		if _, err := parseTimeQuantum("BADQUANTUM"); err != ErrInvalidTimeQuantum {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -160,9 +161,18 @@ func mustParseTime(value string) time.Time {
 
 // mustParseTimeQuantum parses v into a time quantum. Panic on error.
 func mustParseTimeQuantum(v string) TimeQuantum {
-	q, err := ParseTimeQuantum(v)
+	q, err := parseTimeQuantum(v)
 	if err != nil {
 		panic(err)
 	}
 	return q
+}
+
+// parseTimeQuantum parses v into a time quantum.
+func parseTimeQuantum(v string) (TimeQuantum, error) {
+	q := TimeQuantum(strings.ToUpper(v))
+	if !q.Valid() {
+		return "", ErrInvalidTimeQuantum
+	}
+	return q, nil
 }

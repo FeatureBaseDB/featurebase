@@ -74,8 +74,8 @@ func (i *Index) Reopen() error {
 }
 
 // CreateField creates a field with the given options.
-func (i *Index) CreateField(name string, opt pilosa.FieldOptions) (*Field, error) {
-	f, err := i.Index.CreateField(name, opt)
+func (i *Index) CreateField(name string, opts ...pilosa.FieldOption) (*Field, error) {
+	f, err := i.Index.CreateField(name, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -83,8 +83,8 @@ func (i *Index) CreateField(name string, opt pilosa.FieldOptions) (*Field, error
 }
 
 // CreateFieldIfNotExists creates a field with the given options if it doesn't exist.
-func (i *Index) CreateFieldIfNotExists(name string, opt pilosa.FieldOptions) (*Field, error) {
-	f, err := i.Index.CreateFieldIfNotExists(name, opt)
+func (i *Index) CreateFieldIfNotExists(name string, opts pilosa.FieldOption) (*Field, error) {
+	f, err := i.Index.CreateFieldIfNotExists(name, opts)
 	if err != nil {
 		return nil, err
 	}

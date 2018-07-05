@@ -60,7 +60,7 @@ func newHolder() *tHolder {
 
 // MustCreateFieldIfNotExists returns a given field. Panic on error.
 func (h *tHolder) MustCreateFieldIfNotExists(index, field string) *Field {
-	f, err := h.MustCreateIndexIfNotExists(index, IndexOptions{}).CreateFieldIfNotExists(field, FieldOptions{})
+	f, err := h.MustCreateIndexIfNotExists(index, IndexOptions{}).CreateFieldIfNotExists(field, OptFieldTypeDefault())
 	if err != nil {
 		panic(err)
 	}
@@ -105,7 +105,7 @@ func TestHolder_Optn(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if field, err := idx.CreateField("bar", FieldOptions{}); err != nil {
+		} else if field, err := idx.CreateField("bar", OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
 		} else if _, err := field.createViewIfNotExists(viewStandard); err != nil {
 			t.Fatal(err)
@@ -129,7 +129,7 @@ func TestHolder_Optn(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if field, err := idx.CreateField("bar", FieldOptions{}); err != nil {
+		} else if field, err := idx.CreateField("bar", OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
 		} else if _, err := field.createViewIfNotExists(viewStandard); err != nil {
 			t.Fatal(err)
@@ -154,7 +154,7 @@ func TestHolder_Optn(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if field, err := idx.CreateField("bar", FieldOptions{}); err != nil {
+		} else if field, err := idx.CreateField("bar", OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
 		} else if view, err := field.createViewIfNotExists(viewStandard); err != nil {
 			t.Fatal(err)

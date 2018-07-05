@@ -241,7 +241,7 @@ func (h *Holder) applySchema(schema *internal.Schema) error {
 		// Create fields that don't exist.
 		for _, f := range index.Fields {
 			opt := decodeFieldOptions(f.Meta)
-			field, err := idx.CreateFieldIfNotExists(f.Name, *opt)
+			field, err := idx.createFieldIfNotExists(f.Name, *opt)
 			if err != nil {
 				return errors.Wrap(err, "creating field")
 			}

@@ -68,18 +68,37 @@ type Field struct {
 	Stats       StatsClient
 
 	// Field options.
-	options FieldOptions
+	options fieldOptions
 
 	bsiGroups []*bsiGroup
 
 	Logger Logger
 }
 
-// FieldOption is a functional option type for pilosa.FieldOptions.
-type FieldOption func(fo *FieldOptions) error
+// FieldOption is a functional option type for pilosa.fieldOptions.
+type FieldOption func(fo *fieldOptions) error
+
+func OptFieldKeys() FieldOption {
+	return func(fo *fieldOptions) error {
+		fo.Keys = true
+		return nil
+	}
+}
+
+func OptFieldTypeDefault() FieldOption {
+	return func(fo *fieldOptions) error {
+		if fo.Type != "" {
+			return errors.Errorf("field type is already set to: %s", fo.Type)
+		}
+		fo.Type = FieldTypeSet
+		fo.CacheType = DefaultCacheType
+		fo.CacheSize = DefaultCacheSize
+		return nil
+	}
+}
 
 func OptFieldTypeSet(cacheType string, cacheSize uint32) FieldOption {
-	return func(fo *FieldOptions) error {
+	return func(fo *fieldOptions) error {
 		if fo.Type != "" {
 			return errors.Errorf("field type is already set to: %s", fo.Type)
 		}
@@ -91,7 +110,7 @@ func OptFieldTypeSet(cacheType string, cacheSize uint32) FieldOption {
 }
 
 func OptFieldTypeInt(min, max int64) FieldOption {
-	return func(fo *FieldOptions) error {
+	return func(fo *fieldOptions) error {
 		if fo.Type != "" {
 			return errors.Errorf("field type is already set to: %s", fo.Type)
 		}
@@ -106,7 +125,7 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 }
 
 func OptFieldTypeTime(timeQuantum TimeQuantum) FieldOption {
-	return func(fo *FieldOptions) error {
+	return func(fo *fieldOptions) error {
 		if fo.Type != "" {
 			return errors.Errorf("field type is already set to: %s", fo.Type)
 		}
@@ -120,10 +139,17 @@ func OptFieldTypeTime(timeQuantum TimeQuantum) FieldOption {
 }
 
 // NewField returns a new instance of field.
-func NewField(path, index, name string, options FieldOptions) (*Field, error) {
+func NewField(path, index, name string, opts FieldOption) (*Field, error) {
 	err := validateName(name)
 	if err != nil {
 		return nil, err
+	}
+
+	// Apply functional option.
+	fo := fieldOptions{}
+	err = opts(&fo)
+	if err != nil {
+		return nil, errors.Wrap(err, "applying option")
 	}
 
 	f := &Field{
@@ -138,7 +164,7 @@ func NewField(path, index, name string, options FieldOptions) (*Field, error) {
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
 
-		options: applyDefaultOptions(options),
+		options: applyDefaultOptions(fo),
 
 		Logger: NopLogger,
 	}
@@ -178,13 +204,6 @@ func (f *Field) Type() string {
 	return f.options.Type
 }
 
-// CacheType returns the caching mode for the field.
-func (f *Field) CacheType() string {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	return f.options.CacheType
-}
-
 // SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
 // defaults to DefaultCacheSize 50000
 func (f *Field) SetCacheSize(v uint32) error {
@@ -214,7 +233,7 @@ func (f *Field) CacheSize() uint32 {
 }
 
 // Options returns all options for this field.
-func (f *Field) Options() FieldOptions {
+func (f *Field) Options() fieldOptions {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.options
@@ -332,7 +351,7 @@ func (f *Field) saveMeta() error {
 }
 
 // applyOptions configures the field based on opt.
-func (f *Field) applyOptions(opt FieldOptions) error {
+func (f *Field) applyOptions(opt fieldOptions) error {
 	switch opt.Type {
 	case FieldTypeSet, "":
 		f.options.Type = FieldTypeSet
@@ -1076,7 +1095,7 @@ func (f *Field) ImportValue(columnIDs []uint64, values []int64) error {
 func (f *Field) MarshalJSON() ([]byte, error) {
 	thing := struct {
 		Name    string
-		Options FieldOptions
+		Options fieldOptions
 		Views   []*viewInfo
 	}{
 		Name:    f.Name(),
@@ -1116,7 +1135,7 @@ func (p fieldSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 // FieldInfo represents schema information for a field.
 type FieldInfo struct {
 	Name    string       `json:"name"`
-	Options FieldOptions `json:"options"`
+	Options fieldOptions `json:"options"`
 	Views   []*viewInfo  `json:"views,omitempty"`
 }
 
@@ -1126,8 +1145,8 @@ func (p fieldInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p fieldInfoSlice) Len() int           { return len(p) }
 func (p fieldInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
-// FieldOptions represents options to set when initializing a field.
-type FieldOptions struct {
+// fieldOptions represents options to set when initializing a field.
+type fieldOptions struct {
 	Type        string      `json:"type,omitempty"`
 	CacheType   string      `json:"cacheType,omitempty"`
 	CacheSize   uint32      `json:"cacheSize,omitempty"`
@@ -1137,11 +1156,11 @@ type FieldOptions struct {
 	Keys        bool        `json:"keys,omitempty"`
 }
 
-// applyDefaultOptions returns a new FieldOptions object
+// applyDefaultOptions returns a new fieldOptions object
 // with default values if o does not contain a valid type.
-func applyDefaultOptions(o FieldOptions) FieldOptions {
+func applyDefaultOptions(o fieldOptions) fieldOptions {
 	if o.Type == "" {
-		return FieldOptions{
+		return fieldOptions{
 			Type:      DefaultFieldType,
 			CacheType: DefaultCacheType,
 			CacheSize: DefaultCacheSize,
@@ -1151,11 +1170,11 @@ func applyDefaultOptions(o FieldOptions) FieldOptions {
 }
 
 // Encode converts o into its internal representation.
-func (o *FieldOptions) Encode() *internal.FieldOptions {
+func (o *fieldOptions) Encode() *internal.FieldOptions {
 	return encodeFieldOptions(o)
 }
 
-func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
+func encodeFieldOptions(o *fieldOptions) *internal.FieldOptions {
 	if o == nil {
 		return nil
 	}
@@ -1170,11 +1189,11 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 	}
 }
 
-func decodeFieldOptions(options *internal.FieldOptions) *FieldOptions {
+func decodeFieldOptions(options *internal.FieldOptions) *fieldOptions {
 	if options == nil {
 		return nil
 	}
-	return &FieldOptions{
+	return &fieldOptions{
 		Type:        options.Type,
 		CacheType:   options.CacheType,
 		CacheSize:   options.CacheSize,
@@ -1185,7 +1204,7 @@ func decodeFieldOptions(options *internal.FieldOptions) *FieldOptions {
 	}
 }
 
-func (o *FieldOptions) MarshalJSON() ([]byte, error) {
+func (o *fieldOptions) MarshalJSON() ([]byte, error) {
 	switch o.Type {
 	case FieldTypeSet:
 		return json.Marshal(struct {

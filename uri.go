@@ -148,14 +148,6 @@ func (u URI) String() string {
 	return fmt.Sprintf("%s://%s:%d", u.scheme, u.host, u.port)
 }
 
-// Equals returns true if the checked URI is equivalent to this URI.
-func (u URI) Equals(other *URI) bool {
-	if other == nil {
-		return false
-	}
-	return u == *other
-}
-
 // Path returns URI with path
 func (u *URI) Path(path string) string {
 	return fmt.Sprintf("%s%s", u.Normalize(), path)
@@ -163,7 +155,7 @@ func (u *URI) Path(path string) string {
 
 // The following methods are required to implement pflag Value interface.
 
-// Set sets the time quantum value.
+// Set sets the uri value.
 func (u *URI) Set(value string) error {
 	uri, err := NewURIFromAddress(value)
 	if err != nil {
@@ -173,7 +165,7 @@ func (u *URI) Set(value string) error {
 	return nil
 }
 
-// Type returns the type of a time quantum value.
+// Type returns the type of a uri.
 func (u URI) Type() string {
 	return "URI"
 }
