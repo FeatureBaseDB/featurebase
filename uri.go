@@ -82,11 +82,6 @@ func NewURIFromAddress(address string) (*URI, error) {
 	return parseAddress(address)
 }
 
-// GetScheme returns the scheme of this URI.
-func (u *URI) GetScheme() string {
-	return u.Scheme
-}
-
 // SetScheme sets the scheme of this URI.
 func (u *URI) SetScheme(scheme string) error {
 	m := schemeRegexp.FindStringSubmatch(scheme)
@@ -97,11 +92,6 @@ func (u *URI) SetScheme(scheme string) error {
 	return nil
 }
 
-// GetHost returns the host of this URI.
-func (u *URI) GetHost() string {
-	return u.Host
-}
-
 // SetHost sets the host of this URI.
 func (u *URI) SetHost(host string) error {
 	m := hostRegexp.FindStringSubmatch(host)
@@ -110,11 +100,6 @@ func (u *URI) SetHost(host string) error {
 	}
 	u.Host = host
 	return nil
-}
-
-// GetPort returns the port of this URI.
-func (u *URI) GetPort() uint16 {
-	return u.Port
 }
 
 // SetPort sets the port of this URI.

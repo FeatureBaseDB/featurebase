@@ -993,7 +993,7 @@ func pos(rowID, columnID uint64) uint64 {
 
 func uriPathToURL(uri *pilosa.URI, path string) url.URL {
 	return url.URL{
-		Scheme: uri.GetScheme(),
+		Scheme: uri.Scheme,
 		Host:   uri.HostPort(),
 		Path:   path,
 	}
@@ -1001,7 +1001,7 @@ func uriPathToURL(uri *pilosa.URI, path string) url.URL {
 
 func nodePathToURL(node *pilosa.Node, path string) url.URL {
 	return url.URL{
-		Scheme: node.URI.GetScheme(),
+		Scheme: node.URI.Scheme,
 		Host:   node.URI.HostPort(),
 		Path:   path,
 	}
