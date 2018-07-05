@@ -454,8 +454,8 @@ type IndexOptions struct {
 	Keys bool `json:"keys"`
 }
 
-// Encode converts i into its internal representation.
-func (i *IndexOptions) Encode() *internal.IndexMeta {
+// encode converts i into its internal representation.
+func (i *IndexOptions) encode() *internal.IndexMeta {
 	return &internal.IndexMeta{
 		Keys: i.Keys,
 	}

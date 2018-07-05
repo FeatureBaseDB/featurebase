@@ -187,7 +187,7 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	err = api.server.SendSync(
 		&internal.CreateIndexMessage{
 			Index: indexName,
-			Meta:  options.Encode(),
+			Meta:  options.encode(),
 		})
 	if err != nil {
 		api.server.logger.Printf("problem sending CreateIndex message: %s", err)
