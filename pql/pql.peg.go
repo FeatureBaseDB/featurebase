@@ -287,7 +287,7 @@ func (t *tokens32) Tokens() []token32 {
 	return t.tree
 }
 
-type PQL struct {
+type pQL struct {
 	Query
 
 	Buffer string
@@ -299,11 +299,11 @@ type PQL struct {
 	tokens32
 }
 
-func (p *PQL) Parse(rule ...int) error {
+func (p *pQL) Parse(rule ...int) error {
 	return p.parse(rule...)
 }
 
-func (p *PQL) Reset() {
+func (p *pQL) Reset() {
 	p.reset()
 }
 
@@ -339,7 +339,7 @@ search:
 }
 
 type parseError struct {
-	p   *PQL
+	p   *pQL
 	max token32
 }
 
@@ -367,7 +367,7 @@ func (e *parseError) Error() string {
 	return error
 }
 
-func (p *PQL) PrintSyntaxTree() {
+func (p *pQL) PrintSyntaxTree() {
 	if p.Pretty {
 		p.tokens32.PrettyPrintSyntaxTree(p.Buffer)
 	} else {
@@ -375,7 +375,7 @@ func (p *PQL) PrintSyntaxTree() {
 	}
 }
 
-func (p *PQL) Execute() {
+func (p *pQL) Execute() {
 	buffer, _buffer, text, begin, end := p.Buffer, p.buffer, "", 0, 0
 	for _, token := range p.Tokens() {
 		switch token.pegRule {
@@ -478,7 +478,7 @@ func (p *PQL) Execute() {
 	_, _, _, _, _ = buffer, _buffer, text, begin, end
 }
 
-func (p *PQL) Init() {
+func (p *pQL) Init() {
 	var (
 		max                  token32
 		position, tokenIndex uint32
