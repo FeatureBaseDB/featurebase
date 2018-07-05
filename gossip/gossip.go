@@ -251,7 +251,7 @@ func (g *GossipMemberSet) LocalState(join bool) []byte {
 	pb := &internal.NodeStatus{
 		Node:      pilosa.EncodeNode(g.papi.Node()),
 		MaxShards: &internal.MaxShards{Standard: g.papi.MaxShards(context.Background())},
-		Schema:    &internal.Schema{Indexes: pilosa.EncodeIndexes(g.papi.Schema(context.Background()))},
+		Schema:    &internal.Schema{Indexes: pilosa.EncodeIndexes(g.papi.Indexes(context.Background()))},
 	}
 
 	// Marshal nodestate data to bytes.

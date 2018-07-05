@@ -209,8 +209,24 @@ func (h *Holder) maxShards() map[string]uint64 {
 	return a
 }
 
-// Schema returns schema information for all indexes, fields, and views.
+// Schema returns schema information for all indexes and fields.
 func (h *Holder) Schema() []*IndexInfo {
+	var a []*IndexInfo
+	for _, index := range h.Indexes() {
+		di := &IndexInfo{Name: index.Name()}
+		for _, field := range index.Fields() {
+			fi := &FieldInfo{Name: field.Name(), Options: field.Options()}
+			di.Fields = append(di.Fields, fi)
+		}
+		sort.Sort(fieldInfoSlice(di.Fields))
+		a = append(a, di)
+	}
+	sort.Sort(indexInfoSlice(a))
+	return a
+}
+
+// internalSchema returns schema information for all indexes, fields, and views.
+func (h *Holder) internalSchema() []*IndexInfo {
 	var a []*IndexInfo
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{Name: index.Name()}
@@ -594,7 +610,7 @@ func (s *holderSyncer) SyncHolder() error {
 	defer s.mu.Unlock()
 	ti := time.Now()
 	// Iterate over schema in sorted order.
-	for _, di := range s.Holder.Schema() {
+	for _, di := range s.Holder.internalSchema() {
 		// Verify syncer has not closed.
 		if s.IsClosing() {
 			return nil
