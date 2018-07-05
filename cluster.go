@@ -40,7 +40,7 @@ const (
 	DefaultPartitionN = 256
 
 	// ClusterState represents the state returned in the /status endpoint.
-	ClusterStateStarting = "STARTING"
+	clusterStateStarting = "STARTING"
 	ClusterStateNormal   = "NORMAL"
 	clusterStateResizing = "RESIZING"
 
@@ -490,7 +490,7 @@ func (c *cluster) receiveNodeState(nodeID string, state string) error {
 	}
 
 	// This method is really only useful during initial startup.
-	if c.State() != ClusterStateStarting {
+	if c.State() != clusterStateStarting {
 		return nil
 	}
 
@@ -857,7 +857,7 @@ func (h *jmphasher) Hash(key uint64, n int) int {
 
 func (c *cluster) setup() error {
 	// Cluster always comes up in state STARTING until cluster membership is determined.
-	c.state = ClusterStateStarting
+	c.state = clusterStateStarting
 
 	// Load topology file if it exists.
 	if err := c.loadTopology(); err != nil {
@@ -934,7 +934,7 @@ func (c *cluster) markAsJoined() {
 }
 
 func (c *cluster) needTopologyAgreement() bool {
-	return c.State() == ClusterStateStarting && !stringSlicesAreEqual(c.Topology.NodeIDs, c.nodeIDs())
+	return c.State() == clusterStateStarting && !stringSlicesAreEqual(c.Topology.NodeIDs, c.nodeIDs())
 }
 
 func (c *cluster) haveTopologyAgreement() bool {
