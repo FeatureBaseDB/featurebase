@@ -184,7 +184,7 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeCount(ctx, index, c, shards, opt)
 	case "Set":
-		return e.executeSetBit(ctx, index, c, opt)
+		return e.executeSet(ctx, index, c, opt)
 	case "SetRowAttrs":
 		return nil, e.executeSetRowAttrs(ctx, index, c, opt)
 	case "SetColumnAttrs":
@@ -1058,8 +1058,8 @@ func (e *executor) executeClearBitField(ctx context.Context, index string, c *pq
 	return ret, nil
 }
 
-// executeSetBit executes a Set() call.
-func (e *executor) executeSetBit(ctx context.Context, index string, c *pql.Call, opt *execOptions) (bool, error) {
+// executeSet executes a Set() call.
+func (e *executor) executeSet(ctx context.Context, index string, c *pql.Call, opt *execOptions) (bool, error) {
 	fieldName, err := c.FieldArg()
 	if err != nil {
 		return false, errors.New("Set() argument required: field")
