@@ -184,9 +184,7 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeCount(ctx, index, c, shards, opt)
 	case "Set":
-		return e.executeSetBit(ctx, index, c, opt)
-	case "SetValue":
-		return nil, e.executeSetValue(ctx, index, c, opt)
+		return e.executeSet(ctx, index, c, opt)
 	case "SetRowAttrs":
 		return nil, e.executeSetRowAttrs(ctx, index, c, opt)
 	case "SetColumnAttrs":
@@ -1060,8 +1058,8 @@ func (e *executor) executeClearBitField(ctx context.Context, index string, c *pq
 	return ret, nil
 }
 
-// executeSetBit executes a Set() call.
-func (e *executor) executeSetBit(ctx context.Context, index string, c *pql.Call, opt *execOptions) (bool, error) {
+// executeSet executes a Set() call.
+func (e *executor) executeSet(ctx context.Context, index string, c *pql.Call, opt *execOptions) (bool, error) {
 	fieldName, err := c.FieldArg()
 	if err != nil {
 		return false, errors.New("Set() argument required: field")
@@ -1077,14 +1075,7 @@ func (e *executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 		return false, ErrFieldNotFound
 	}
 
-	// Read fields using labels.
-	rowID, ok, err := c.UintArg(fieldName)
-	if err != nil {
-		return false, fmt.Errorf("reading Set() row: %v", err)
-	} else if !ok {
-		return false, fmt.Errorf("Set() row argument '%v' required", rowLabel)
-	}
-
+	// Read colID using labels.
 	colID, ok, err := c.UintArg("_" + columnLabel)
 	if err != nil {
 		return false, fmt.Errorf("reading Set() column: %v", err)
@@ -1092,20 +1083,40 @@ func (e *executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 		return false, fmt.Errorf("Set() column argument '%v' required", columnLabel)
 	}
 
-	var timestamp *time.Time
-	sTimestamp, ok := c.Args["_timestamp"].(string)
-	if ok {
-		t, err := time.Parse(TimeFormat, sTimestamp)
+	if f.Type() == FieldTypeInt {
+		// Read remaining fields using labels.
+		rowVal, ok, err := c.IntArg(fieldName)
 		if err != nil {
-			return false, fmt.Errorf("invalid date: %s", sTimestamp)
+			return false, fmt.Errorf("reading Set() row: %v", err)
+		} else if !ok {
+			return false, fmt.Errorf("Set() row argument '%v' required", rowLabel)
 		}
-		timestamp = &t
-	}
 
-	return e.executeSetBitField(ctx, index, c, f, colID, rowID, timestamp, opt)
+		return e.executeSetValueField(ctx, index, c, f, colID, rowVal, opt)
+	} else {
+		// Read remaining fields using labels.
+		rowID, ok, err := c.UintArg(fieldName)
+		if err != nil {
+			return false, fmt.Errorf("reading Set() row: %v", err)
+		} else if !ok {
+			return false, fmt.Errorf("Set() row argument '%v' required", rowLabel)
+		}
+
+		var timestamp *time.Time
+		sTimestamp, ok := c.Args["_timestamp"].(string)
+		if ok {
+			t, err := time.Parse(TimeFormat, sTimestamp)
+			if err != nil {
+				return false, fmt.Errorf("invalid date: %s", sTimestamp)
+			}
+			timestamp = &t
+		}
+
+		return e.executeSetBitField(ctx, index, c, f, colID, rowID, timestamp, opt)
+	}
 }
 
-// executeSetBitField executes a Set() call for a specific view.
+// executeSetBitField executes a Set() call for a specific field.
 func (e *executor) executeSetBitField(ctx context.Context, index string, c *pql.Call, f *Field, colID, rowID uint64, timestamp *time.Time, opt *execOptions) (bool, error) {
 	shard := colID / ShardWidth
 	ret := false
@@ -1137,64 +1148,36 @@ func (e *executor) executeSetBitField(ctx context.Context, index string, c *pql.
 	return ret, nil
 }
 
-// executeSetValue executes a SetValue() call.
-func (e *executor) executeSetValue(ctx context.Context, index string, c *pql.Call, opt *execOptions) error {
-	// Parse labels.
-	columnID, ok, err := c.UintArg(columnLabel)
-	if err != nil {
-		return fmt.Errorf("reading SetValue() column: %v", err)
-	} else if !ok {
-		return fmt.Errorf("SetValue() column field '%v' required", columnLabel)
-	}
+// executeSetValueField executes a Set() call for a specific int field.
+func (e *executor) executeSetValueField(ctx context.Context, index string, c *pql.Call, f *Field, colID uint64, value int64, opt *execOptions) (bool, error) {
+	shard := colID / ShardWidth
+	ret := false
 
-	// Copy args and remove reserved fields.
-	args := pql.CopyArgs(c.Args)
-	// While field could technically work as a ColumnAttr argument, we are treating it as a reserved word primarily to avoid confusion.
-	// Also, if we ever need to make ColumnAttrs field-specific, then having this reserved word prevents backward incompatibility.
-	delete(args, columnLabel)
-
-	// Set values.
-	for name, value := range args {
-		// Retrieve field.
-		field := e.Holder.Field(index, name)
-		if field == nil {
-			return ErrFieldNotFound
-		}
-
-		switch value := value.(type) {
-		case int64:
-			if _, err := field.SetValue(columnID, value); err != nil {
-				return err
+	for _, node := range e.Cluster.shardNodes(index, shard) {
+		// Update locally if host matches.
+		if node.ID == e.Node.ID {
+			val, err := f.SetValue(colID, value)
+			if err != nil {
+				return false, err
+			} else if val {
+				ret = true
 			}
-		default:
-			return ErrInvalidBSIGroupValueType
+			continue
 		}
-		field.Stats.Count("SetValue", 1, 1.0)
-	}
 
-	// Do not forward call if this is already being forwarded.
-	if opt.Remote {
-		return nil
-	}
+		// Do not forward call if this is already being forwarded.
+		if opt.Remote {
+			continue
+		}
 
-	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.Nodes).FilterID(e.Node.ID)
-	resp := make(chan error, len(nodes))
-	for _, node := range nodes {
-		go func(node *Node) {
-			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt)
-			resp <- err
-		}(node)
-	}
-
-	// Return first error.
-	for range nodes {
-		if err := <-resp; err != nil {
-			return err
+		// Forward call to remote node otherwise.
+		if res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt); err != nil {
+			return false, err
+		} else {
+			ret = res[0].(bool)
 		}
 	}
-
-	return nil
+	return ret, nil
 }
 
 // executeSetRowAttrs executes a SetRowAttrs() call.
