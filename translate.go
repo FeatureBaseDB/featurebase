@@ -73,7 +73,7 @@ type TranslateFile struct {
 	PrimaryTranslateStore TranslateStore
 
 	// Delay after attempting to connect to a primary that the store will retry.
-	ReplicationRetryInterval time.Duration
+	replicationRetryInterval time.Duration
 }
 
 // NewTranslateFile returns a new instance of TranslateFile.
@@ -86,7 +86,7 @@ func NewTranslateFile() *TranslateFile {
 
 		mapSize: defaultMapSize,
 
-		ReplicationRetryInterval: defaultReplicationRetryInterval,
+		replicationRetryInterval: defaultReplicationRetryInterval,
 	}
 }
 
@@ -270,7 +270,7 @@ func (s *TranslateFile) monitorReplication() {
 		select {
 		case <-s.closing:
 			return
-		case <-time.After(s.ReplicationRetryInterval):
+		case <-time.After(s.replicationRetryInterval):
 			log.Printf("pilosa: reconnecting to primary replica")
 		}
 	}
