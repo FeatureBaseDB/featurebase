@@ -35,8 +35,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ClientOptions represents the configuration for a InternalHTTPClient
-type ClientOptions struct {
+// clientOptions represents the configuration for a InternalHTTPClient
+type clientOptions struct {
 	TLS *tls.Config
 }
 
