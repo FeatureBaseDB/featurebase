@@ -55,8 +55,8 @@ func (f *Field) close() error {
 	return f.Field.Close()
 }
 
-// Reopen closes the index and reopens it.
-func (f *Field) Reopen() error {
+// reopen closes the index and reopens it.
+func (f *Field) reopen() error {
 	var err error
 	if err := f.Field.Close(); err != nil {
 		return err
@@ -88,7 +88,7 @@ func TestField_SetCacheSize(t *testing.T) {
 	}
 
 	// Reload field and verify that it is persisted.
-	if err := f.Reopen(); err != nil {
+	if err := f.reopen(); err != nil {
 		t.Fatal(err)
 	} else if q := f.CacheSize(); q != cacheSize {
 		t.Fatalf("unexpected field cache size (reopen): %d", q)
