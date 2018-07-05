@@ -1100,7 +1100,7 @@ func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 
 // QueryResult types.
 const (
-	QueryResultTypeNil uint32 = iota
+	queryResultTypeNil uint32 = iota
 	QueryResultTypeRow
 	QueryResultTypePairs
 	QueryResultTypeValCount
@@ -1147,7 +1147,7 @@ func encodeQueryResponse(resp *pilosa.QueryResponse) *internal.QueryResponse {
 			pb.Results[i].Type = queryResultTypeBool
 			pb.Results[i].Changed = result
 		case nil:
-			pb.Results[i].Type = QueryResultTypeNil
+			pb.Results[i].Type = queryResultTypeNil
 		}
 	}
 
