@@ -6,7 +6,7 @@ nav = [
     "Index",
     "Column",
     "Row",
-    "Frame",
+    "Field",
     "Time Quantum",
     "Attribute",
     "Slice",
@@ -22,7 +22,7 @@ The central component of Pilosa's data model is a boolean matrix. Each cell in t
 
 Rows and columns can represent anything (they could even represent the same set of things - a [bigraph](https://en.wikipedia.org/wiki/Bigraph)). Pilosa can associate arbitrary key/value pairs (referred to as attributes) to rows and columns, but queries and storage are optimized around the core matrix.
 
-Pilosa lays out data first in rows, so queries which get all the set bits in one or many rows, or compute a combining operation on multiple rows such as Intersect or Union are the fastest. Pilosa categorizes rows into different *fields* and quickly retrieves the top rows in a field sorted by the number of bits set in each row.
+Pilosa lays out data first in rows, so queries which get all the set bits in one or many rows, or compute a combining operation on multiple rows such as Intersect or Union are the fastest. Pilosa categorizes rows into different *fields* and quickly retrieves the top rows in a field sorted by the number of columns set in each row.
 
 Please note that Pilosa is most performant when row and column IDs are sequential starting from 0. You can deviate from this to some degree, but setting a bit with column ID 2<sup>63</sup> on a single-node cluster, for example, will not work well due to memory limitations.
 
@@ -43,11 +43,13 @@ Row ids are sequential increasing integers namespaced to each Field within an In
 
 ### Field
 
-Fields are used to segment rows within an index, for example to define different functional groups. A Pilosa field might correspond to a single field in a relational table, where each row in a standard Pilosa field represents a single possible value of the relational field. Similarly, a field with BSI values could represent all possible integer values of a relational field.
+Fields are used to segment rows within an index, for example to define different functional groups. A Pilosa field might correspond to a single field in a relational table, where each row in a standard Pilosa field represents a single possible value of the relational field. Similarly, an integer field could represent all possible integer values of a relational field.
 
 #### Relational Analogy
 
 The Pilosa index is a flexible structure; it can represent any sort of high-cardinality binary matrix. We have explored a number of modeling patterns in Pilosa use cases; one accessible example is a direct analogy to the relational model, summarized here.
+
+TODO diagram showing a few rows of a relational table and corresponding pilosa index
 
 Entities:
 
@@ -64,9 +66,9 @@ Simple queries:
 
  Relational                                  | Pilosa
 ---------------------------------------------|------------------------------------
- `select ID from People where Name = 'Bob'`  | `Bitmap(frame=Name, row=[Bob])`
- `select ID from People where Age > 30`      | `Range(frame=Default, Age > 30)`
- `select ID from People where Member = true` | `Bitmap(frame=Member, row=[true])`
+ `select ID from People where Name = 'Bob'`  | `Row(Name="Bob")`
+ `select ID from People where Age > 30`      | `Range(Age > 30)`
+ `select ID from People where Member = true` | `Row(Member=0)`  # TODO this is unfortunate
 
 In the relational model, joins are often necessary. Because Pilosa supports extremely high cardinality in both rows and columns, many types of joins are accomplished with basic Pilosa queries across multiple fields. For example, this SQL join:
 
@@ -80,7 +82,7 @@ where c.Make = 'Ford'
 can be accomplished with a Pilosa query like this (note that [Sum](../query-language/#sum) returns a json object containing both the sum and count, from which the average is easily computed):
 
 ```pql
-Sum(Bitmap(frame="Car-Make", row=[Ford]), frame=Default, field=Age)
+Sum(Row(Car-Make="Ford"), field=Age)
 ```
 
 This is one major component of Pilosa's ability to combine relationships from multiple data stores.
@@ -125,11 +127,11 @@ The standard View contains the same Row/Column format as the input data.
 
 #### Time Quantums
 
-If a Field has a time quantum, then Views are generated for each of the defined time segments. For example, for a field with a time quantum of `YMD`, the following `SetBit()` queries will result in the data described in the diagram below:
+If a Field has a time quantum, then Views are generated for each of the defined time segments. For example, for a field with a time quantum of `YMD`, the following `Set()` queries will result in the data described in the diagram below:
 
 ```
-SetBit(frame="A", row=8, col=3, timestamp="2017-05-18T00:00")
-SetBit(frame="A", row=8, col=3, timestamp="2017-05-19T00:00")
+Set(3, A=8, 2017-05-18T00:00)
+Set(3, A=8, 2017-05-19T00:00)
 ```
 
 ![time quantum field diagram](/img/docs/field-time-quantum.svg)
@@ -141,15 +143,15 @@ Bit-Sliced Indexing (BSI) is the storage method Pilosa uses to represent multi-b
 
 Internally Pilosa stores each BSI (TODO!!!!!) `field` as a `view` within a `frame`. The rows of the `view` contain the base-2 representations of the integer values. Pilosa manages the base-2 offset and translation that efficiently packs the integer value within the minimum set of rows.
 
-For example, the following `SetFieldValue()` queries will result in the data described in the diagram below:
+For example, the following `Set()` queries executed against BSI fields will result in the data described in the diagram below:
 
 ```
-SetFieldValue(col=1, frame="A", field0=1)
-SetFieldValue(col=2, frame="A", field0=2)
-SetFieldValue(col=3, frame="A", field0=3)
-SetFieldValue(col=4, frame="A", field0=7)
-SetFieldValue(col=2, frame="A", field1=1)
-SetFieldValue(col=3, frame="A", field1=6)
+Set(1, A=1)
+Set(2, A=2)
+Set(3, A=3)
+Set(4, A=7)
+Set(2, B=1)
+Set(3, B=6)
 ```
 
 ![BSI field diagram](/img/docs/field-bsi.svg)

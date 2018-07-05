@@ -24,19 +24,19 @@ Pilosa holds all row/column bitmap data in main memory. While this data is compr
 
 #### CPUs
 
-Pilosa is a concurrent application written in Go and can take full advantage of multicore machines. The main unit of parallelism is the [slice](../data-model/#slice), so a single query will only use a number of cores up to the number of slices stored on that host. Multiple queries can still take advantage of multiple cores as well though, so tuning in this area is dependent on the expected workload.
+Pilosa is a concurrent application written in Go and can take full advantage of multicore machines. The main unit of parallelism is the [shard](../data-model/#shard), so a single query will only use a number of cores up to the number of shards stored on that host. Multiple queries can still take advantage of multiple cores as well, so tuning in this area is dependent upon the expected workload.
 
 #### Disk
 
-Even though the main dataset is in memory Pilosa does back up to disk frequently. We recommend SSDs—especially if you have a write heavy application.
+Even though the main dataset is in memory Pilosa backs up to disk frequently. We recommend SSDs—especially if you have a write-heavy application.
 
 #### Network
 
-Pilosa is designed to be a distributed application, with data replication shared across the cluster. As such every write and read needs to communicate with several nodes. Therefore fast internode communication is essential. If using a service like AWS we recommend that all node exist in the same region and availability zone. The inherent latency of spreading a Pilosa cluster across physical regions it not usually worth the redundancy protection. Since Pilosa is designed to be an indexing service there already should be a system of record, or ability to rebuild a cluster quickly from backups.
+Pilosa is designed to be a distributed application, with data replication replicated across the cluster. As such, every write and read needs to communicate with several nodes. Therefore fast internode communication is essential. If using a service like AWS we recommend that all nodes exist in the same region and availability zone. The inherent latency of spreading a Pilosa cluster across physical regions is not usually worth the redundancy protection. Since Pilosa is designed to be an indexing service there should already be a system of record, or ability to rebuild a cluster quickly from backups.
 
 #### Overview
 
-While Pilosa does have some high system requirements it is not a best practice to set up a cluster with the fewest, largest machines available. You want an evenly distributed load across several nodes in a cluster to easily recover from a single node failure, and have the resource capacity to handle a missing node until it's repaired or replaced. Nor is it advisable to have many small machines. The internode network traffic will become a bottleneck. You can always add nodes later, but that does require some down time.
+While Pilosa does have some high system requirements it is not a best practice to set up a cluster with the fewest, largest machines available. You want an evenly distributed load across several nodes in a cluster to easily recover from a single node failure, and have the resource capacity to handle a missing node until it's repaired or replaced. Nor is it advisable to have many small machines, as the internode network traffic will become a bottleneck. You can always add nodes later, but that does require some down time.
 
 ### Open File Limits
 
@@ -56,23 +56,23 @@ When importing large datasets remember it is much faster to pre sort the data by
 pilosa import --sort -i project -f stargazer project-stargazer.csv
 ```
 
-##### Importing Field Values
+##### Importing Integer Values
 
-If you are using [BSI Range-Encoding](../data-model/#bsi-range-encoding) field values, you can import field values for a single frame and single field using `--field`. The CSV file should be in the format `Column,Value`.
+If you are using [integer](../data-model/#bsi-range-encoding) field values, the CSV file should be in the format `Column,Value`.
 
 ```
-pilosa import -i project -f stargazer --field star_count project-stargazer-counts.csv
+pilosa import -i project -f stargazer-counts project-stargazer-counts.csv
 ```
 
 <div class="note">
-    <p>Note that you must first create a frame and a field. View <a href="../api-reference/#create-frame">Create Frame</a> for more details.</p>
+    <p>Note that you must first create a field. View <a href="../api-reference/#create-field">Create Field</a> for more details. The `-e` flag can create the necessary schema when using a field of type "set".</p>
 </div>
 
 #### Exporting
 
-Exporting data to csv can be performed on a live instance of Pilosa. You need to specify the index and the frame. The API also expects the slice number, but the `pilosa export` sub command will export all slices within a Frame. The data will be in csv format `Row,Column` and sorted by column.
+Exporting data to csv can be performed on a live instance of Pilosa. You need to specify the index and the field. The API also expects the slice number, but the `pilosa export` sub command will export all slices within a field. The data will be in csv format `Row,Column` and sorted by column.
 ```request
-curl "http://localhost:10101/export?index=repository&frame=stargazer&slice=0" \
+curl "http://localhost:10101/export?index=repository&field=stargazer&slice=0" \
      --header "Accept: text/csv"
 ```
 ```response
@@ -132,8 +132,8 @@ Pilosa v0.9 adds two new files to the data directory, an `.id` file and a `.topo
 **Application changes**:
 
 1. Row and column labels were deprecated in Pilosa v0.8, and removed in Pilosa v0.9. Make sure that your application does not attempt to use a custom row or column label, as they are no longer supported.
-2. If your application relies on the implicit creation of [time quantums](../glossary/#time-quantum) by inheriting the time-quantum setting of the index, you must begin explicitly enabling the time quantum per-frame, as index-level time-quantums have been removed.
-3. Inverse frames have been deprecated, removed from docs, and will be unsupported in the next release.
+2. If your application relies on the implicit creation of [time quantums](../glossary/#time-quantum) by inheriting the time-quantum setting of the index, you must begin explicitly enabling the time quantum per-field, as index-level time-quantums have been removed.
+3. Inverse fields have been deprecated, removed from docs, and will be unsupported in the next release.
 
 ### Resizing the Cluster
 
@@ -211,7 +211,7 @@ curl localhost:10101/cluster/resize/set-coordinator \
 
 ### Backup/restore
 
-Pilosa continuously writes out the in-memory bitmap data to disk. This data is organized by Index->Frame->Views->Fragment->numbered slice files. These data files can be routinely backed up to restore nodes in a cluster.
+Pilosa continuously writes out the in-memory bitmap data to disk. This data is organized by Index->Field->Views->Fragment->numbered slice files. These data files can be routinely backed up to restore nodes in a cluster.
 
 Depending on the size of your data you have two options. For a small dataset you can rely on the periodic anti-entropy sync process to replicate existing data back to this node.
 
@@ -230,11 +230,11 @@ Note: This will only work when the replication factor is >= 2
 
 - To accomplish this you will first need:
   - List of all indexes on your cluster
-  - List of all frames in your indexes
+  - List of all fields in your indexes
   - Max slice per index, listed in the `/slices/max` endpoint
 - With this information you can query the `/internal/fragment/nodes` endpoint and iterate over each slice
 - Using the list of slices owned by this node you will then need to manually:
-  - setup a directory structure similar to the other nodes with a path for each Index/Frame
+  - setup a directory structure similar to the other nodes with a path for each Index/Field
   - copy each owned slice for an existing node to this new node
 - Modify the cluster config file to replace the previous node address with the new node address.
 - Restart the cluster
@@ -249,10 +249,10 @@ Each Pilosa cluster is configured by default to share anonymous usage details wi
 - **Cluster:** List of nodes in the cluster.
 - **NumNodes:** Number of nodes in the cluster.
 - **NumCPU:** Number of cores per node
-- **BSIEnabled:** Bit Slice Index Frames in use.
-- **TimeQuantumEnabled:** Time Quantum Frames in use.
+- **BSIEnabled:** Bit Sliced Index Fields in use.
+- **TimeQuantumEnabled:** Time Quantum Fields in use.
 - **NumIndexes:** Number of indexes in the Cluster.
-- **NumFrames:** Number of frames in the Cluster.
+- **NumFields:** Number of fields in the Cluster.
 - **NumSlices:** Number of slices in the Cluster.
 - **NumViews:** Number of views in the Cluster.
 - **OpenFiles:** Open file handle count.
@@ -274,7 +274,7 @@ StatsD Tags adhere to the DataDog format (key:value), and we tag the following:
 
 - NodeID
 - Index
-- Frame
+- Field
 - View
 - Slice
 
@@ -282,7 +282,7 @@ StatsD Tags adhere to the DataDog format (key:value), and we tag the following:
 We currently track the following events
 
 - **Index:** The creation of a new index.
-- **Frame:** The creation of a new frame.
+- **Field:** The creation of a new field.
 - **MaxSlice:** The creation of a new Slice.
 - **SetBit:** Count of set bits.
 - **ClearBit:** Count of cleared bits.
