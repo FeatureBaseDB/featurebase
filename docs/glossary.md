@@ -6,11 +6,11 @@ nav = []
 
 ## Glossary
 
-<strong id="anti-entropy">[Anti-entropy](../configuration/#anti-entropy-interval):</strong> A periodic process that compares each [slice](#slice) and its [replicas](#replica) across the [cluster](#cluster) to repair inconsistencies.
+<strong id="anti-entropy">[Anti-entropy](../configuration/#anti-entropy-interval):</strong> A periodic process that compares each [shard](#shard) and its [replicas](#replica) across the [cluster](#cluster) to repair inconsistencies.
 
 <strong id="attribute">[Attribute](../data-model/#attribute):</strong> Attributes can be associated to both [rows](#row) and [columns](#column). This metadata is kept separately from the core binary matrix in a [BoltDB](https://github.com/boltdb/bolt) store.
 
-<strong id="bit">[Bit](../data-model/#overview):</strong> Bits are the fundamental unit of data in Pilosa. A bit lives in a [frame](#frame), at the intersection of a [row](#row) and [column](#column).
+<strong id="bit">[Bit](../data-model/#overview):</strong> Bits are the fundamental unit of data in Pilosa. A bit lives in a [field](#field), at the intersection of a [row](#row) and [column](#column).
 
 <strong id="bitmap">[Bitmap](../data-model/#overview):</strong> The on-disk and in-memory representation of a [row](#row). Implemented with [Roaring](#roaring-bitmap). `Bitmap` is also the basic [PQL](#pql) query for reading a Bitmap.
 
@@ -18,13 +18,15 @@ nav = []
 
 <strong id="cluster">Cluster:</strong> A cluster consists of one or more [nodes](#node) which share a cluster configuration. The cluster also defines how data is [replicated](#replica) throughout and how internode communication is coordinated. Pilosa does not have a leader node, all data is evenly distributed, and any node can respond to queries.
 
-<strong id="column">[Column](../data-model/#column):</strong> Columns are the fundamental horizontal data axis within Pilosa. Columns are global to all [frames](#frame) within an [index](#index).
+<strong id="column">[Column](../data-model/#column):</strong> Columns are the fundamental horizontal data axis within Pilosa. Columns are global to all [fields](#field) within an [index](#index).
 
 <strong id="field">[Field](../data-model/#bsi-range-encoding):</strong> A group of rows used to store integer values with [BSI](#bsi), for use in [Range](#range-bsi) and [Sum](#sum) queries.
 
-<strong id="fragment">Fragment:</strong> A Fragment is the intersection of a [frame](#frame) and a [slice](#slice) in an [index](#index).
+<strong id="fragment">Fragment:</strong> A Fragment is the intersection of a [field](#field) and a [shard](#shard) in an [index](#index).
 
-<strong id="frame">[Frame](../data-model/#frame):</strong> Frames are used to group [rows](#row) into different categories. Row IDs are namespaced by frame such that the same row ID in a different frame refers to a different row. For [ranked](#topn) frames, rows are kept in sorted order within the frame.
+<strong id="field">[Field](../data-model/#field):</strong> Fields are used to group [rows](#row) into different categories. Row IDs are namespaced by field such that the same row ID in a different field refers to a different row. For [ranked](#topn) fields, rows are kept in sorted order within the field.
+
+<strong id="frame">[Frame](../data-model/#field):</strong> Prior to Pilosa 1.0, fields were known as frames.
 
 <strong id="gossip">[Gossip](https://en.wikipedia.org/wiki/Gossip_protocol):</strong> A protocol used by Pilosa for internal communication.
 
@@ -34,7 +36,7 @@ nav = []
 
 <strong id="max">[Max](../query-language/#max):</strong> A [PQL](#pql) query that returns the maximum integer value stored in [BSI](#bsi) [fields](#field).
 
-<strong id="maxslice">MaxSlice:</strong> The total number of [slices](#slice) allocated to handle the current set of [columns](#column). This value is important for all [nodes](#node) to efficiently distribute queries.
+<strong id="maxshard">MaxShard:</strong> The total number of [shards](#shard) allocated to handle the current set of [columns](#column). This value is important for all [nodes](#node) to efficiently distribute queries.
 
 <strong id="min">[Min](../query-language/#min):</strong> A [PQL](#pql) query that returns the minimum integer value stored in [BSI](#bsi) [fields](#field).
 
@@ -54,11 +56,13 @@ nav = []
 
 <strong id="roaring-bitmap">[Roaring Bitmap](http://roaringbitmap.org):</strong> the compressed bitmap format which Pilosa uses to [implement bitmaps](../architecture/#roaring-bitmap-storage-format), for both storage and logical query operations.
 
-<strong id="row">[Row](../data-model/#row):</strong> Rows are the fundamental vertical data axis within Pilosa. They are namespaced to each [frame](#frame) within an [index](#index). Represented as a [Bitmap](#bitmap).
+<strong id="row">[Row](../data-model/#row):</strong> Rows are the fundamental vertical data axis within Pilosa. They are namespaced to each [field](#field) within an [index](#index). Represented as a [Bitmap](#bitmap).
 
-<strong id="slice">[Slice](../data-model/#slice):</strong> [Columns](#column) are sharded on a preset [width](#slicewidth). Each shard is referred to as a slice in Pilosa. Slices are operated on in parallel and are evenly distributed across the cluster via a [consistent hash](#jump-consistent-hash).
+<strong id="slice">[Slice](../data-model/#slice):</strong> Prior to Pilosa 1.0, shards were known as slices.
 
-<strong id="slicewidth">SliceWidth:</strong> This is the number of [columns](#column) in a [slice](#slice). `SliceWidth` defaults to 2<sup>20</sup> or about one million. It can be modified, but only at compile time, and before ingesting any data.
+<strong id="shard">[Shard](../data-model/#shard):</strong> [Columns](#column) are [sharded](https://en.wikipedia.org/wiki/Shard_(database_architecture)) on a preset [width](#shardwidth). Shards are operated on in parallel and are evenly distributed across the cluster via a [consistent hash](#jump-consistent-hash).
+
+<strong id="shardwidth">ShardWidth:</strong> This is the number of [columns](#column) in a [shard](#shard). `ShardWidth` defaults to 2<sup>20</sup> or about one million. It can be modified, but only at compile time, and before ingesting any data.
 
 <strong id="sum">[Sum](../query-language/#sum):</strong> A [PQL](#pql) query that returns the sum of integers stored in [BSI](#bsi) [fields](#field).
 
@@ -68,6 +72,6 @@ nav = []
 
 <strong id="toml">[TOML](https://github.com/toml-lang/toml):</strong> the language used for Pilosa's [configuration file](../configuration/).
 
-<strong id="topn">[TopN](../query-language/#topn):</strong> A [PQL](#pql) query that returns a list of row IDs, sorted by the count of [bits](#bit) set in the [row](#row), within a specified [frame](#frame).
+<strong id="topn">[TopN](../query-language/#topn):</strong> A [PQL](#pql) query that returns a list of row IDs, sorted by the count of [bits](#bit) set in the [row](#row), within a specified [field](#field).
 
-<strong id="view">[View](../data-model/#view):</strong> Views separate the different data layouts within a [Frame](#frame). The primary view is standard, which represents the typical [row](#row)/[column](#column) data. Time based frame views are automatically generated for each [time quantum](#time-quantum). Views are internally managed by Pilosa, and never exposed directly via the API. This simplifies the functional interface by separating it from the physical data representation.
+<strong id="view">[View](../data-model/#view):</strong> Views separate the different data layouts within a [Field](#field). The primary view is standard, which represents the typical [row](#row)/[column](#column) data. Time based field views are automatically generated for each [time quantum](#time-quantum). Views are internally managed by Pilosa, and never exposed directly via the API. This simplifies the functional interface by separating it from the physical data representation.
