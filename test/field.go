@@ -75,7 +75,7 @@ func (f *Field) reopen() error {
 }
 
 // Ensure field can set its cache
-func TestField_SetCacheSize(t *testing.T) {
+func testField_SetCacheSize(t *testing.T) {
 	f := mustOpenField(pilosa.OptFieldTypeDefault())
 	defer f.close()
 	cacheSize := uint32(100)
