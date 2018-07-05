@@ -26,7 +26,7 @@ import (
 
 var generateConf *ctl.GenerateConfigCommand
 
-func NewGenerateConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+func newGenerateConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	generateConf = ctl.NewGenerateConfigCommand(os.Stdin, os.Stdout, os.Stderr)
 	confCmd := &cobra.Command{
 		Use:   "generate-config",
@@ -45,5 +45,5 @@ func NewGenerateConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.
 }
 
 func init() {
-	subcommandFns["generate-config"] = NewGenerateConfigCommand
+	subcommandFns["generate-config"] = newGenerateConfigCommand
 }
