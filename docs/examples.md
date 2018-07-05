@@ -3,7 +3,6 @@ title = "Examples"
 weight = 4
 nav = [
     "Transportation",
-    "Chemical similarity search",
 ]
 +++
 

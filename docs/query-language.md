@@ -58,7 +58,7 @@ curl localhost:10101/index/repository/query \
 **Spec:**
 
 ```
-Set(<COLUMN>, field=<ROW>, [TIMESTAMP])
+Set(<COLUMN>, <FIELD>=<ROW>, [TIMESTAMP])
 ```
 
 **Description:**
@@ -202,12 +202,12 @@ SetColumnAttrs(10, url=null)
 {"results":[null]}
 ```
 
-#### ClearBit
+#### Clear
 
 **Spec:**
 
 ```
-Clear(<COLUMN>, field=<ROW>)
+Clear(<COLUMN>, <FIELD>=<ROW>)
 ```
 
 **Description:**
@@ -241,7 +241,7 @@ This represents removing the relationship between the user with id=1 and the rep
 **Spec:**
 
 ```
-Row(field=<ROW>)
+Row(<FIELD>=<ROW>)
 ```
 
 **Description:**
@@ -425,7 +425,7 @@ TopN([ROW_CALL], <FIELD>, [n=UINT],
 
 **Description:**
 
-Return the id and count of the top `n` bitmaps (by count of bits) in the field.
+Return the id and count of the top `n` rows (by count of bits) in the field.
 The `attrName` and `attrValues` arguments work together to only return rows which
 have the attribute specified by `attrName` with one of the values specified in
 `attrValues`.
@@ -434,11 +434,11 @@ have the attribute specified by `attrName` with one of the values specified in
 
 **Caveats:**
 
-* Performing a TopN() query on a field with cache type ranked will return the top bitmaps sorted by count in descending order.
-* Fields with cache type lru will maintain an LRU (Least Recently Used replacement policy) cache, thus a TopN query on this type of field will return bitmaps sorted in order of most recently set bit.
-* The field's cache size determines the number of sorted bitmaps to maintain in the cache for purposes of TopN queries. There is a tradeoff between performance and accuracy; increasing the cache size will improve accuracy of results at the cost of performance.
-* Once full, the cache will truncate the set of bitmaps according to the field option CacheSize. Bitmaps that straddle the limit and have the same count will be truncated in no particular order.
-* The TopN query's attribute filter is applied to the existing sorted cache of bitmaps. Bitmaps that fall outside of the sorted cache range, even if they would normally pass the filter, are ignored.
+* Performing a TopN() query on a field with cache type ranked will return the top rows sorted by count in descending order.
+* Fields with cache type lru will maintain an LRU (Least Recently Used replacement policy) cache, thus a TopN query on this type of field will return rows sorted in order of most recently set bit.
+* The field's cache size determines the number of sorted rows to maintain in the cache for purposes of TopN queries. There is a tradeoff between performance and accuracy; increasing the cache size will improve accuracy of results at the cost of performance.
+* Once full, the cache will truncate the set of rows according to the field option CacheSize. Rows that straddle the limit and have the same count will be truncated in no particular order.
+* The TopN query's attribute filter is applied to the existing sorted cache of rows. Rows that fall outside of the sorted cache range, even if they would normally pass the filter, are ignored.
 
 See [field creation](../api-reference/#create-field) for more information about the cache.
 
@@ -466,7 +466,7 @@ TopN(stargazer, n=2)
 
 * Results are the top two rows (users) sorted by number of bits set (repositories they've starred) in descending order.
 
-Filter based on an existing Bitmap:
+Filter based on an existing row:
 ```request
 TopN(Row(language=1), stargazer, n=2)
 ```
@@ -491,7 +491,7 @@ TopN(stargazer, n=2, attrName=active, attrValues=[true])
 **Spec:**
 
 ```
-Range(field=<ROW>, <TIMESTAMP>, <TIMESTAMP>)
+Range(<FIELD>=<ROW>, <TIMESTAMP>, <TIMESTAMP>)
 ```
 
 **Description:**
@@ -632,7 +632,7 @@ Sum([ROW_CALL], field=<FIELD>)
 
 Returns the count and computed sum of all BSI integer values in the `field`. If the optional `Row` call is supplied, columns with set bits are summed, otherwise the sum is across all columns.
 
-**Result Type:** object with the computed sum and count of the bitmap field.
+**Result Type:** object with the computed sum and count of the values in the integer field.
 
 **Examples:**
 

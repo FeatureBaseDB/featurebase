@@ -78,10 +78,10 @@ In order to send protobuf binaries in the request and response, set `Content-Typ
 
 The response doesn't include column attributes by default. To return them, set the `columnAttrs` query argument to `true`.
 
-The query is executed for all [slices](../data-model/#slice) by default. To use specified slices only, set the `slices` query argument to a comma-separated list of slice indices.
+The query is executed for all [shards](../data-model/#shard) by default. To use specified shards only, set the `shards` query argument to a comma-separated list of slice indices.
 
 ``` request
-curl "localhost:10101/index/user/query?columnAttrs=true&slices=0,1" \
+curl "localhost:10101/index/user/query?columnAttrs=true&shards=0,1" \
      -X POST \
      -d 'Row(language=5)'
 ```
