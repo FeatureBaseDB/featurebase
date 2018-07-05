@@ -372,55 +372,6 @@ func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) 
 	return api.cluster.shardNodes(indexName, shard), nil
 }
 
-// MarshalFragment returns an object which can write the specified fragment's data
-// to an io.Writer. The serialized data can be read back into a fragment with
-// the UnmarshalFragment API call.
-func (api *API) MarshalFragment(ctx context.Context, indexName string, fieldName string, shard uint64) (io.WriterTo, error) {
-	if err := api.validate(apiMarshalFragment); err != nil {
-		return nil, errors.Wrap(err, "validating api method")
-	}
-
-	// Retrieve fragment from holder.
-	f := api.holder.fragment(indexName, fieldName, viewStandard, shard)
-	if f == nil {
-		return nil, ErrFragmentNotFound
-	}
-	return f, nil
-}
-
-// UnmarshalFragment creates a new fragment (if necessary) and reads data from a
-// Reader which was previously written by MarshalFragment to populate the
-// fragment's data.
-func (api *API) UnmarshalFragment(ctx context.Context, indexName string, fieldName string, shard uint64, reader io.ReadCloser) error {
-	if err := api.validate(apiUnmarshalFragment); err != nil {
-		return errors.Wrap(err, "validating api method")
-	}
-
-	// Retrieve field.
-	f := api.holder.Field(indexName, fieldName)
-	if f == nil {
-		return ErrFieldNotFound
-	}
-
-	// Retrieve view.
-	view, err := f.createViewIfNotExists(viewStandard)
-	if err != nil {
-		return errors.Wrap(err, "creating view")
-	}
-
-	// Retrieve fragment from field.
-	frag, err := view.CreateFragmentIfNotExists(shard)
-	if err != nil {
-		return errors.Wrap(err, "creating fragment")
-	}
-
-	// Read fragment in from request body.
-	if _, err := frag.ReadFrom(reader); err != nil {
-		return errors.Wrap(err, "reading fragment")
-	}
-	return nil
-}
-
 // FragmentBlockData is an endpoint for internal usage. It is not guaranteed to
 // return anything useful. Currently it returns protobuf encoded row and column
 // ids from a "block" which is a subdivision of a fragment.
@@ -891,7 +842,6 @@ const (
 	apiIndexAttrDiff
 	//apiLocalID // not implemented
 	//apiLongQueryTime // not implemented
-	apiMarshalFragment
 	//apiMaxShards // not implemented
 	apiQuery
 	apiRecalculateCaches
@@ -902,15 +852,13 @@ const (
 	apiShardNodes
 	//apiState // not implemented
 	//apiStatsWithTags // not implemented
-	apiUnmarshalFragment
 	//apiVersion // not implemented
 	apiViews
 )
 
 var methodsCommon = map[apiMethod]struct{}{
-	apiClusterMessage:  struct{}{},
-	apiMarshalFragment: struct{}{},
-	apiSetCoordinator:  struct{}{},
+	apiClusterMessage: struct{}{},
+	apiSetCoordinator: struct{}{},
 }
 
 var methodsResizing = map[apiMethod]struct{}{
@@ -936,6 +884,5 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiRecalculateCaches: struct{}{},
 	apiRemoveNode:        struct{}{},
 	apiShardNodes:        struct{}{},
-	apiUnmarshalFragment: struct{}{},
 	apiViews:             struct{}{},
 }

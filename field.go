@@ -204,13 +204,6 @@ func (f *Field) Type() string {
 	return f.options.Type
 }
 
-// CacheType returns the caching mode for the field.
-func (f *Field) CacheType() string {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	return f.options.CacheType
-}
-
 // SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
 // defaults to DefaultCacheSize 50000
 func (f *Field) SetCacheSize(v uint32) error {
