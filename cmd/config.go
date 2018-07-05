@@ -25,10 +25,10 @@ import (
 	"github.com/pilosa/pilosa/server"
 )
 
-var Conf *ctl.ConfigCommand
+var conf *ctl.ConfigCommand
 
 func NewConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	Conf = ctl.NewConfigCommand(os.Stdin, os.Stdout, os.Stderr)
+	conf = ctl.NewConfigCommand(os.Stdin, os.Stdout, os.Stderr)
 	Server := server.NewCommand(stdin, stdout, stderr)
 	confCmd := &cobra.Command{
 		Use:   "config",
@@ -36,8 +36,8 @@ func NewConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command 
 		Long:  `config prints the current configuration to stdout`,
 
 		RunE: func(cmd *cobra.Command, args []string) error {
-			Conf.Config = Server.Config
-			if err := Conf.Run(context.Background()); err != nil {
+			conf.Config = Server.Config
+			if err := conf.Run(context.Background()); err != nil {
 				return err
 			}
 			return nil
