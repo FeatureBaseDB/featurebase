@@ -3,8 +3,6 @@ package pilosa
 import (
 	"context"
 	"io"
-
-	"github.com/pilosa/pilosa/internal"
 )
 
 // Bit represents the intersection of a row and a column. It can be specifed by
@@ -35,8 +33,8 @@ type InternalClient interface {
 	Schema(ctx context.Context) ([]*IndexInfo, error)
 	CreateIndex(ctx context.Context, index string, opt IndexOptions) error
 	FragmentNodes(ctx context.Context, index string, shard uint64) ([]*Node, error)
-	Query(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error)
-	QueryNode(ctx context.Context, uri *URI, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error)
+	Query(ctx context.Context, index string, queryRequest *QueryRequest) (*QueryResponse, error)
+	QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error)
 	Import(ctx context.Context, index, field string, shard uint64, bits []Bit) error
 	ImportK(ctx context.Context, index, field string, bits []Bit) error
 	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
@@ -55,12 +53,12 @@ type InternalClient interface {
 //===============
 
 type InternalQueryClient interface {
-	QueryNode(ctx context.Context, uri *URI, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error)
+	QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error)
 }
 
 type NopInternalQueryClient struct{}
 
-func (n *NopInternalQueryClient) QueryNode(ctx context.Context, uri *URI, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
+func (n *NopInternalQueryClient) QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
 	return nil, nil
 }
 
@@ -90,10 +88,10 @@ func (n NopInternalClient) CreateIndex(ctx context.Context, index string, opt In
 func (n NopInternalClient) FragmentNodes(ctx context.Context, index string, shard uint64) ([]*Node, error) {
 	return nil, nil
 }
-func (n NopInternalClient) Query(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
+func (n NopInternalClient) Query(ctx context.Context, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
 	return nil, nil
 }
-func (n NopInternalClient) QueryNode(ctx context.Context, uri *URI, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
+func (n NopInternalClient) QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
 	return nil, nil
 }
 func (n NopInternalClient) Import(ctx context.Context, index, field string, shard uint64, bits []Bit) error {

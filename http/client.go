@@ -220,22 +220,21 @@ func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard 
 }
 
 // Query executes query against the index.
-func (c *InternalClient) Query(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
+func (c *InternalClient) Query(ctx context.Context, index string, queryRequest *pilosa.QueryRequest) (*pilosa.QueryResponse, error) {
 	return c.QueryNode(ctx, c.defaultURI, index, queryRequest)
 }
 
 // QueryNode executes query against the index, sending the request to the node specified.
-func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
+func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index string, queryRequest *pilosa.QueryRequest) (*pilosa.QueryResponse, error) {
 	if index == "" {
 		return nil, pilosa.ErrIndexRequired
 	} else if queryRequest.Query == "" {
 		return nil, pilosa.ErrQueryRequired
 	}
 
-	// Encode request object.
-	buf, err := proto.Marshal(queryRequest)
+	buf, err := c.serializer.Marshal(queryRequest)
 	if err != nil {
-		return nil, errors.Wrap(err, "marshaling")
+		return nil, errors.Wrap(err, "marshaling queryRequest")
 	}
 
 	// Create HTTP request.
@@ -265,11 +264,11 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index s
 		return nil, errors.New(string(body))
 	}
 
-	qresp := &internal.QueryResponse{}
-	if err := proto.Unmarshal(body, qresp); err != nil {
+	qresp := &pilosa.QueryResponse{}
+	if err := c.serializer.Unmarshal(body, qresp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %s", err)
-	} else if s := qresp.Err; s != "" {
-		return nil, errors.New(s)
+	} else if qresp.Err != nil {
+		return nil, qresp.Err
 	}
 
 	return qresp, nil

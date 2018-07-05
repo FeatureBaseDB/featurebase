@@ -385,7 +385,7 @@ func TestExecutor_Execute_OldPQL(t *testing.T) {
 	hldr.SetBit("i", "f", 1, 0)
 
 	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetBit(frame=f, row=11, col=1)`}); err == nil || errors.Cause(err).Error() != "unknown call: SetBit" {
-		t.Fatalf("Expected error: 'unknown call: SetBit', got: %v", errors.Cause(err))
+		t.Fatalf("Expected error: 'unknown call: SetBit', got: %v. Full: %v", errors.Cause(err), err)
 	}
 }
 

@@ -337,7 +337,7 @@ func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "map reduce")
 	}
 
 	// Attach attributes for Row() calls.
@@ -1392,7 +1392,7 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 // exec executes a PQL query remotely for a set of shards on a node.
 func (e *executor) remoteExec(ctx context.Context, node *Node, index string, q *pql.Query, shards []uint64, opt *execOptions) (results []interface{}, err error) {
 	// Encode request object.
-	pbreq := &internal.QueryRequest{
+	pbreq := &QueryRequest{
 		Query:  q.String(),
 		Shards: shards,
 		Remote: true,
@@ -1403,40 +1403,7 @@ func (e *executor) remoteExec(ctx context.Context, node *Node, index string, q *
 		return nil, err
 	}
 
-	// Return an error, if specified on response.
-	if err := decodeError(pb.Err); err != nil {
-		return nil, err
-	}
-
-	// Return appropriate data for the query.
-	results = make([]interface{}, len(q.Calls))
-	for i, call := range q.Calls {
-		var v interface{}
-		var err error
-
-		switch call.Name {
-		case "Average", "Sum":
-			v, err = decodeValCount(pb.Results[i].GetValCount()), nil
-		case "TopN":
-			v, err = decodePairs(pb.Results[i].GetPairs()), nil
-		case "Count":
-			v, err = pb.Results[i].N, nil
-		case "Set":
-			v, err = pb.Results[i].Changed, nil
-		case "Clear":
-			v, err = pb.Results[i].Changed, nil
-		case "SetRowAttrs":
-		case "SetColumnAttrs":
-		default:
-			v, err = DecodeRow(pb.Results[i].GetRow()), nil
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		results[i] = v
-	}
-	return results, nil
+	return pb.Results, pb.Err
 }
 
 // shardsByNode returns a mapping of nodes to shards.
@@ -1490,7 +1457,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, errors.Wrap(ctx.Err(), "context done")
 		case resp := <-ch:
 			// On error retry against remaining nodes. If an error returns then
 			// the context will cancel and cause all open goroutines to return.
@@ -1500,10 +1467,10 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 				nodes = Nodes(nodes).Filter(resp.node)
 
 				// Begin mapper against secondary nodes.
-				if err := e.mapper(ctx, ch, nodes, index, resp.shards, c, opt, mapFn, reduceFn); err == errShardUnavailable {
+				if err := e.mapper(ctx, ch, nodes, index, resp.shards, c, opt, mapFn, reduceFn); errors.Cause(err) == errShardUnavailable {
 					return nil, resp.err
 				} else if err != nil {
-					return nil, err
+					return nil, errors.Wrap(err, "calling mapper")
 				}
 				continue
 			}
@@ -1524,7 +1491,7 @@ func (e *executor) mapper(ctx context.Context, ch chan mapResponse, nodes []*Nod
 	// Group shards together by nodes.
 	m, err := e.shardsByNode(nodes, index, shards)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "shards by node")
 	}
 
 	// Execute each node in a separate goroutine.

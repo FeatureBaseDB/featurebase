@@ -685,7 +685,11 @@ func decodeQueryRequest(pb *internal.QueryRequest, m *pilosa.QueryRequest) {
 func decodeQueryResponse(pb *internal.QueryResponse, m *pilosa.QueryResponse) {
 	m.ColumnAttrSets = make([]*pilosa.ColumnAttrSet, len(pb.ColumnAttrSets))
 	decodeColumnAttrSets(pb.ColumnAttrSets, m.ColumnAttrSets)
-	m.Err = errors.New(pb.Err)
+	if pb.Err == "" {
+		m.Err = nil
+	} else {
+		m.Err = errors.New(pb.Err)
+	}
 	m.Results = make([]interface{}, len(pb.Results))
 	decodeQueryResults(pb.Results, m.Results)
 

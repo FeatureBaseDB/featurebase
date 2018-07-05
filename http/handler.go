@@ -1102,56 +1102,6 @@ const (
 	QueryResultTypeBool
 )
 
-func decodeQueryRequest(pb *internal.QueryRequest) *pilosa.QueryRequest {
-	req := &pilosa.QueryRequest{
-		Query:           pb.Query,
-		Shards:          pb.Shards,
-		ColumnAttrs:     pb.ColumnAttrs,
-		Remote:          pb.Remote,
-		ExcludeRowAttrs: pb.ExcludeRowAttrs,
-		ExcludeColumns:  pb.ExcludeColumns,
-	}
-
-	return req
-}
-
-func encodeQueryResponse(resp *pilosa.QueryResponse) *internal.QueryResponse {
-	pb := &internal.QueryResponse{
-		Results:        make([]*internal.QueryResult, len(resp.Results)),
-		ColumnAttrSets: pilosa.EncodeColumnAttrSets(resp.ColumnAttrSets),
-	}
-
-	for i := range resp.Results {
-		pb.Results[i] = &internal.QueryResult{}
-
-		switch result := resp.Results[i].(type) {
-		case *pilosa.Row:
-			pb.Results[i].Type = QueryResultTypeRow
-			pb.Results[i].Row = pilosa.EncodeRow(result)
-		case []pilosa.Pair:
-			pb.Results[i].Type = QueryResultTypePairs
-			pb.Results[i].Pairs = pilosa.EncodePairs(result)
-		case pilosa.ValCount:
-			pb.Results[i].Type = QueryResultTypeValCount
-			pb.Results[i].ValCount = pilosa.EncodeValCount(result)
-		case uint64:
-			pb.Results[i].Type = QueryResultTypeUint64
-			pb.Results[i].N = result
-		case bool:
-			pb.Results[i].Type = QueryResultTypeBool
-			pb.Results[i].Changed = result
-		case nil:
-			pb.Results[i].Type = QueryResultTypeNil
-		}
-	}
-
-	if resp.Err != nil {
-		pb.Err = resp.Err.Error()
-	}
-
-	return pb
-}
-
 // parseUint64Slice returns a slice of uint64s from a comma-delimited string.
 func parseUint64Slice(s string) ([]uint64, error) {
 	var a []uint64
