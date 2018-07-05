@@ -14,18 +14,18 @@
 
 package roaring
 
-type SliceContainers struct {
+type sliceContainers struct {
 	keys          []uint64
 	containers    []*Container
 	lastKey       uint64
 	lastContainer *Container
 }
 
-func newSliceContainers() *SliceContainers {
-	return &SliceContainers{}
+func newSliceContainers() *sliceContainers {
+	return &sliceContainers{}
 }
 
-func (sc *SliceContainers) Get(key uint64) *Container {
+func (sc *sliceContainers) Get(key uint64) *Container {
 	i := search64(sc.keys, key)
 	if i < 0 {
 		return nil
@@ -33,7 +33,7 @@ func (sc *SliceContainers) Get(key uint64) *Container {
 	return sc.containers[i]
 }
 
-func (sc *SliceContainers) Put(key uint64, c *Container) {
+func (sc *sliceContainers) Put(key uint64, c *Container) {
 	i := search64(sc.keys, key)
 
 	// If index is negative then there's not an exact match
@@ -46,7 +46,7 @@ func (sc *SliceContainers) Put(key uint64, c *Container) {
 
 }
 
-func (sc *SliceContainers) PutContainerValues(key uint64, containerType byte, n int, mapped bool) {
+func (sc *sliceContainers) PutContainerValues(key uint64, containerType byte, n int, mapped bool) {
 	i := search64(sc.keys, key)
 	if i < 0 {
 		c := NewContainer()
@@ -63,7 +63,7 @@ func (sc *SliceContainers) PutContainerValues(key uint64, containerType byte, n 
 
 }
 
-func (sc *SliceContainers) Remove(key uint64) {
+func (sc *sliceContainers) Remove(key uint64) {
 	i := search64(sc.keys, key)
 	if i < 0 {
 		return
@@ -72,7 +72,7 @@ func (sc *SliceContainers) Remove(key uint64) {
 	sc.containers = append(sc.containers[:i], sc.containers[i+1:]...)
 
 }
-func (sc *SliceContainers) insertAt(key uint64, c *Container, i int) {
+func (sc *sliceContainers) insertAt(key uint64, c *Container, i int) {
 	sc.keys = append(sc.keys, 0)
 	copy(sc.keys[i+1:], sc.keys[i:])
 	sc.keys[i] = key
@@ -82,7 +82,7 @@ func (sc *SliceContainers) insertAt(key uint64, c *Container, i int) {
 	sc.containers[i] = c
 }
 
-func (sc *SliceContainers) GetOrCreate(key uint64) *Container {
+func (sc *sliceContainers) GetOrCreate(key uint64) *Container {
 	// Check the last* cache for same container.
 	if key == sc.lastKey && sc.lastContainer != nil {
 		return sc.lastContainer
@@ -101,7 +101,7 @@ func (sc *SliceContainers) GetOrCreate(key uint64) *Container {
 	return sc.lastContainer
 }
 
-func (sc *SliceContainers) Clone() Containers {
+func (sc *sliceContainers) Clone() Containers {
 	other := newSliceContainers()
 	other.keys = make([]uint64, len(sc.keys))
 	other.containers = make([]*Container, len(sc.containers))
@@ -112,19 +112,19 @@ func (sc *SliceContainers) Clone() Containers {
 	return other
 }
 
-func (sc *SliceContainers) Last() (key uint64, c *Container) {
+func (sc *sliceContainers) Last() (key uint64, c *Container) {
 	if len(sc.keys) == 0 {
 		return 0, nil
 	}
 	return sc.keys[len(sc.keys)-1], sc.containers[len(sc.keys)-1]
 }
 
-func (sc *SliceContainers) Size() int {
+func (sc *sliceContainers) Size() int {
 	return len(sc.keys)
 
 }
 
-func (sc *SliceContainers) Count() uint64 {
+func (sc *sliceContainers) Count() uint64 {
 	n := uint64(0)
 	for i := range sc.containers {
 		n += uint64(sc.containers[i].n)
@@ -132,14 +132,14 @@ func (sc *SliceContainers) Count() uint64 {
 	return n
 }
 
-func (sc *SliceContainers) Reset() {
+func (sc *sliceContainers) Reset() {
 	sc.keys = sc.keys[:0]
 	sc.containers = sc.containers[:0]
 	sc.lastContainer = nil
 	sc.lastKey = 0
 }
 
-func (sc *SliceContainers) seek(key uint64) (int, bool) {
+func (sc *sliceContainers) seek(key uint64) (int, bool) {
 	i := search64(sc.keys, key)
 	found := true
 	if i < 0 {
@@ -149,13 +149,13 @@ func (sc *SliceContainers) seek(key uint64) (int, bool) {
 	return i, found
 }
 
-func (sc *SliceContainers) Iterator(key uint64) (citer ContainerIterator, found bool) {
+func (sc *sliceContainers) Iterator(key uint64) (citer ContainerIterator, found bool) {
 	i, found := sc.seek(key)
 	return &SliceIterator{e: sc, i: i}, found
 }
 
 type SliceIterator struct {
-	e     *SliceContainers
+	e     *sliceContainers
 	i     int
 	key   uint64
 	value *Container
