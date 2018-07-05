@@ -29,8 +29,8 @@ const (
 	// Prefix is appended to each metric event name
 	Prefix = "pilosa."
 
-	// BufferLen Stats lient buffer size.
-	BufferLen = 1024
+	// bufferLen Stats lient buffer size.
+	bufferLen = 1024
 )
 
 // Ensure client implements interface.
@@ -45,7 +45,7 @@ type StatsClient struct {
 
 // NewStatsClient returns a new instance of StatsClient.
 func NewStatsClient(host string) (*StatsClient, error) {
-	c, err := statsd.NewBuffered(host, BufferLen)
+	c, err := statsd.NewBuffered(host, bufferLen)
 	if err != nil {
 		return nil, err
 	}
