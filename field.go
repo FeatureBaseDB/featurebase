@@ -955,7 +955,7 @@ func (f *Field) Range(name string, op pql.Token, predicate int64) (*Row, error) 
 	return view.rangeOp(op, bsig.BitDepth(), baseValue)
 }
 
-func (f *Field) RangeBetween(name string, predicateMin, predicateMax int64) (*Row, error) {
+func (f *Field) rangeBetween(name string, predicateMin, predicateMax int64) (*Row, error) {
 	// Retrieve and validate bsiGroup.
 	bsig := f.bsiGroup(name)
 	if bsig == nil {
