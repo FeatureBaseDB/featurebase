@@ -72,7 +72,7 @@ type Field struct {
 
 	bsiGroups []*bsiGroup
 
-	Logger Logger
+	logger Logger
 }
 
 // FieldOption is a functional option type for pilosa.fieldOptions.
@@ -166,7 +166,7 @@ func NewField(path, index, name string, opts FieldOption) (*Field, error) {
 
 		options: applyDefaultOptions(fo),
 
-		Logger: NopLogger,
+		logger: NopLogger,
 	}
 	return f, nil
 }
@@ -660,7 +660,7 @@ func (f *Field) createViewIfNotExistsBase(name string) (*view, bool, error) {
 func (f *Field) newView(path, name string) *view {
 	view := newView(path, f.index, f.name, name, f.options.CacheSize)
 	view.cacheType = f.options.CacheType
-	view.logger = f.Logger
+	view.logger = f.logger
 	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats.WithTags(fmt.Sprintf("view:%s", name))
 	view.broadcaster = f.broadcaster

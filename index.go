@@ -380,7 +380,7 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	if err != nil {
 		return nil, err
 	}
-	f.Logger = i.logger
+	f.logger = i.logger
 	f.Stats = i.Stats.WithTags(fmt.Sprintf("field:%s", name))
 	f.broadcaster = i.broadcaster
 	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
