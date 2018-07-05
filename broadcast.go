@@ -148,7 +148,7 @@ func encode(m Message) proto.Message {
 		return encodeNodeStateMessage(mt)
 	case *RecalculateCaches:
 		return encodeRecalculateCaches(mt)
-	case *nodeEvent:
+	case *NodeEvent:
 		return encodeNodeEventMessage(mt)
 	case *NodeStatus:
 		return encodeNodeStatus(mt)

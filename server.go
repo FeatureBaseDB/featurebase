@@ -506,7 +506,7 @@ func (s *Server) receiveMessage(m Message) error {
 		}
 	case *RecalculateCaches:
 		s.holder.RecalculateCaches()
-	case *nodeEvent:
+	case *NodeEvent:
 		s.cluster.ReceiveEvent(obj)
 	case *NodeStatus:
 		s.handleRemoteStatus(obj)

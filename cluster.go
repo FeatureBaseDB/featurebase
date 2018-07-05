@@ -856,7 +856,7 @@ func (c *cluster) waitForStarted() error {
 		// TODO: Because the normal code path already sends a NodeJoin event (via
 		// memberlist), this it a bit redundant in most cases. Perhaps determine
 		// that the node has been restarted and don't do this step.
-		msg := &nodeEvent{
+		msg := &NodeEvent{
 			Event: NodeJoin,
 			Node:  c.Node,
 		}
@@ -1540,7 +1540,7 @@ func (c *cluster) considerTopology() error {
 }
 
 // ReceiveEvent represents an implementation of EventHandler.
-func (c *cluster) ReceiveEvent(e *nodeEvent) error {
+func (c *cluster) ReceiveEvent(e *NodeEvent) error {
 	// Ignore events sent from this node.
 	if e.Node.ID == c.Node.ID {
 		return nil
@@ -1966,8 +1966,8 @@ func DecodeNode(node *internal.Node) *Node {
 	}
 }
 
-func DecodeNodeEvent(ne *internal.NodeEventMessage) *nodeEvent {
-	return &nodeEvent{
+func DecodeNodeEvent(ne *internal.NodeEventMessage) *NodeEvent {
+	return &NodeEvent{
 		Event: NodeEventType(ne.Event),
 		Node:  DecodeNode(ne.Node),
 	}
@@ -2223,15 +2223,15 @@ func decodeNodeStateMessage(pb *internal.NodeStateMessage) *NodeStateMessage {
 	}
 }
 
-func encodeNodeEventMessage(m *nodeEvent) *internal.NodeEventMessage {
+func encodeNodeEventMessage(m *NodeEvent) *internal.NodeEventMessage {
 	return &internal.NodeEventMessage{
 		Event: uint32(m.Event),
 		Node:  EncodeNode(m.Node),
 	}
 }
 
-func decodeNodeEventMessage(pb *internal.NodeEventMessage) *nodeEvent {
-	return &nodeEvent{
+func decodeNodeEventMessage(pb *internal.NodeEventMessage) *NodeEvent {
+	return &NodeEvent{
 		Event: NodeEventType(pb.Event),
 		Node:  DecodeNode(pb.Node),
 	}

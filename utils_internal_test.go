@@ -161,7 +161,7 @@ func (t *ClusterCluster) addNode() error {
 	// Send NodeJoin event to coordinator.
 	if id > 0 {
 		coord := t.Clusters[0]
-		ev := &nodeEvent{
+		ev := &NodeEvent{
 			Event: NodeJoin,
 			Node:  c.Node,
 		}
