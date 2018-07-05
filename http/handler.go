@@ -1103,7 +1103,7 @@ const (
 	queryResultTypeNil uint32 = iota
 	QueryResultTypeRow
 	QueryResultTypePairs
-	QueryResultTypeValCount
+	queryResultTypeValCount
 	QueryResultTypeUint64
 	queryResultTypeBool
 )
@@ -1138,7 +1138,7 @@ func encodeQueryResponse(resp *pilosa.QueryResponse) *internal.QueryResponse {
 			pb.Results[i].Type = QueryResultTypePairs
 			pb.Results[i].Pairs = pilosa.EncodePairs(result)
 		case pilosa.ValCount:
-			pb.Results[i].Type = QueryResultTypeValCount
+			pb.Results[i].Type = queryResultTypeValCount
 			pb.Results[i].ValCount = pilosa.EncodeValCount(result)
 		case uint64:
 			pb.Results[i].Type = QueryResultTypeUint64
