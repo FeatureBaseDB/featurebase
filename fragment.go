@@ -343,7 +343,7 @@ func (f *fragment) unprotectedRow(rowID uint64, checkRowCache bool, updateRowCac
 	// We Clone() data because otherwise row will contains pointers to containers in storage.
 	// This causes unexpected results when we cache the row and try to use it later.
 	row := &Row{
-		segments: []RowSegment{{
+		segments: []rowSegment{{
 			data:     *data.Clone(),
 			shard:    f.shard,
 			writable: false,
