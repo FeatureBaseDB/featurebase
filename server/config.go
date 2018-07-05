@@ -23,7 +23,7 @@ import (
 
 // Cluster types.
 const (
-	ClusterNone   = ""
+	clusterNone   = ""
 	ClusterStatic = "static"
 	clusterGossip = "gossip"
 )
