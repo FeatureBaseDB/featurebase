@@ -167,7 +167,7 @@ func (s *TranslateFile) appendEntry(entry *LogEntry) error {
 	offset := s.n
 
 	// Append entry to the end of the WAL.
-	n, err := entry.WriteTo(s.w)
+	n, err := entry.writeTo(s.w)
 	if err != nil {
 		return err
 	} else if err := s.w.Flush(); err != nil {
@@ -645,8 +645,8 @@ func (e *LogEntry) ReadFrom(r io.Reader) (_ int64, err error) {
 	return n64, nil
 }
 
-// WriteTo serializes a LogEntry to w.
-func (e *LogEntry) WriteTo(w io.Writer) (_ int64, err error) {
+// writeTo serializes a LogEntry to w.
+func (e *LogEntry) writeTo(w io.Writer) (_ int64, err error) {
 	var buf bytes.Buffer
 	b := make([]byte, binary.MaxVarintLen64)
 
