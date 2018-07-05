@@ -26,8 +26,8 @@ type Index struct {
 	*pilosa.Index
 }
 
-// NewIndex returns a new instance of Index.
-func NewIndex() *Index {
+// newIndex returns a new instance of Index.
+func newIndex() *Index {
 	path, err := ioutil.TempDir("", "pilosa-index-")
 	if err != nil {
 		panic(err)
@@ -41,7 +41,7 @@ func NewIndex() *Index {
 
 // MustOpenIndex returns a new, opened index at a temporary path. Panic on error.
 func MustOpenIndex() *Index {
-	index := NewIndex()
+	index := newIndex()
 	if err := index.Open(); err != nil {
 		panic(err)
 	}
