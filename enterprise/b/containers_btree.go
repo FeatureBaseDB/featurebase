@@ -178,7 +178,7 @@ func (btc *bTreeContainers) Iterator(key uint64) (citer roaring.ContainerIterato
 }
 
 type bTCIterator struct {
-	e   *Enumerator
+	e   *enumerator
 	key uint64
 	val *roaring.Container
 }

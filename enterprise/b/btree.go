@@ -56,7 +56,7 @@ func init() {
 
 var (
 	btDPool = sync.Pool{New: func() interface{} { return &d{} }}
-	btEPool = btEpool{sync.Pool{New: func() interface{} { return &Enumerator{} }}}
+	btEPool = btEpool{sync.Pool{New: func() interface{} { return &enumerator{} }}}
 	btTPool = btTpool{sync.Pool{New: func() interface{} { return &Tree{} }}}
 	btXPool = sync.Pool{New: func() interface{} { return &x{} }}
 )
@@ -71,8 +71,8 @@ func (p *btTpool) get(cmp Cmp) *Tree {
 
 type btEpool struct{ sync.Pool }
 
-func (p *btEpool) get(err error, hit bool, i int, k uint64, q *d, t *Tree, ver int64) *Enumerator {
-	x := p.Get().(*Enumerator)
+func (p *btEpool) get(err error, hit bool, i int, k uint64, q *d, t *Tree, ver int64) *enumerator {
+	x := p.Get().(*enumerator)
 	x.err, x.hit, x.i, x.k, x.q, x.t, x.ver = err, hit, i, k, q, t, ver
 	return x
 }
@@ -98,15 +98,15 @@ type (
 		v *roaring.Container
 	}
 
-	// Enumerator captures the state of enumerating a tree. It is returned
+	// enumerator captures the state of enumerating a tree. It is returned
 	// from the Seek* methods. The enumerator is aware of any mutations
 	// made to the tree in the process of enumerating it and automatically
 	// resumes the enumeration at the proper key, if possible.
 	//
-	// However, once an Enumerator returns io.EOF to signal "no more
+	// However, once an enumerator returns io.EOF to signal "no more
 	// items", it does no more attempt to "resync" on tree mutation(s).  In
-	// other words, io.EOF from an Enumerator is "sticky" (idempotent).
-	Enumerator struct {
+	// other words, io.EOF from an enumerator is "sticky" (idempotent).
+	enumerator struct {
 		err error
 		hit bool
 		i   int
@@ -140,7 +140,7 @@ type (
 var ( // R/O zero values
 	zd  d
 	zde de
-	ze  Enumerator
+	ze  enumerator
 	zk  uint64
 	zt  Tree
 	zx  x
@@ -528,7 +528,7 @@ func (t *Tree) overflow(p *x, q *d, pi, i int, k uint64, v *roaring.Container) {
 // Seek returns an Enumerator positioned on an item such that k >= item's key.
 // ok reports if k == item.key The Enumerator's position is possibly after the
 // last item in the tree.
-func (t *Tree) Seek(k uint64) (e *Enumerator, ok bool) {
+func (t *Tree) Seek(k uint64) (e *enumerator, ok bool) {
 	q := t.r
 	if q == nil {
 		e = btEPool.get(nil, false, 0, k, nil, t, t.ver)
@@ -558,7 +558,7 @@ func (t *Tree) Seek(k uint64) (e *Enumerator, ok bool) {
 
 // SeekFirst returns an enumerator positioned on the first KV pair in the tree,
 // if any. For an empty tree, err == io.EOF is returned and e will be nil.
-func (t *Tree) SeekFirst() (e *Enumerator, err error) {
+func (t *Tree) SeekFirst() (e *enumerator, err error) {
 	q := t.first
 	if q == nil {
 		return nil, io.EOF
@@ -569,7 +569,7 @@ func (t *Tree) SeekFirst() (e *Enumerator, err error) {
 
 // SeekLast returns an enumerator positioned on the last KV pair in the tree,
 // if any. For an empty tree, err == io.EOF is returned and e will be nil.
-func (t *Tree) SeekLast() (e *Enumerator, err error) {
+func (t *Tree) SeekLast() (e *enumerator, err error) {
 	q := t.last
 	if q == nil {
 		return nil, io.EOF
@@ -850,7 +850,7 @@ func (t *Tree) underflowX(p *x, q *x, pi int, i int) (*x, int) {
 
 // Close recycles e to a pool for possible later reuse. No references to e
 // should exist or such references must not be used afterwards.
-func (e *Enumerator) Close() {
+func (e *enumerator) Close() {
 	*e = ze
 	btEPool.Put(e)
 }
@@ -858,7 +858,7 @@ func (e *Enumerator) Close() {
 // Next returns the currently enumerated item, if it exists and moves to the
 // next item in the key collation order. If there is no item to return, err ==
 // io.EOF is returned.
-func (e *Enumerator) Next() (k uint64, v *roaring.Container, err error) {
+func (e *enumerator) Next() (k uint64, v *roaring.Container, err error) {
 	if err = e.err; err != nil {
 		return
 	}
@@ -886,7 +886,7 @@ func (e *Enumerator) Next() (k uint64, v *roaring.Container, err error) {
 	return
 }
 
-func (e *Enumerator) next() error {
+func (e *enumerator) next() error {
 	if e.q == nil {
 		e.err = io.EOF
 		return io.EOF
@@ -906,7 +906,7 @@ func (e *Enumerator) next() error {
 // Prev returns the currently enumerated item, if it exists and moves to the
 // previous item in the key collation order. If there is no item to return, err
 // == io.EOF is returned.
-func (e *Enumerator) Prev() (k uint64, v *roaring.Container, err error) {
+func (e *enumerator) Prev() (k uint64, v *roaring.Container, err error) {
 	if err = e.err; err != nil {
 		return
 	}
@@ -941,7 +941,7 @@ func (e *Enumerator) Prev() (k uint64, v *roaring.Container, err error) {
 	return
 }
 
-func (e *Enumerator) prev() error {
+func (e *enumerator) prev() error {
 	if e.q == nil {
 		e.err = io.EOF
 		return io.EOF
