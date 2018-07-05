@@ -33,11 +33,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/internal"
 
 	"github.com/pkg/errors"
 )
@@ -911,8 +909,8 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	if field.Type() == pilosa.FieldTypeInt {
 		// Field type: Int
 		// Marshal into request object.
-		var req internal.ImportValueRequest
-		if err := proto.Unmarshal(body, &req); err != nil {
+		req := &pilosa.ImportValueRequest{}
+		if err := h.API.Serializer.Unmarshal(body, req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -929,8 +927,8 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Field type: Set, Time
 		// Marshal into request object.
-		var req internal.ImportRequest
-		if err := proto.Unmarshal(body, &req); err != nil {
+		req := &pilosa.ImportRequest{}
+		if err := h.API.Serializer.Unmarshal(body, req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -947,7 +945,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Marshal response object.
-	buf, e := proto.Marshal(&internal.ImportResponse{Err: ""})
+	buf, e := h.API.Serializer.Marshal(&pilosa.ImportResponse{Err: ""})
 	if e != nil {
 		http.Error(w, fmt.Sprintf("marshal import response"), http.StatusInternalServerError)
 		return

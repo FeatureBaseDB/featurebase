@@ -29,10 +29,8 @@ import (
 
 	"crypto/tls"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
-	pilosaproto "github.com/pilosa/pilosa/encoding/proto"
-	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/encoding/proto"
 	"github.com/pkg/errors"
 )
 
@@ -68,7 +66,7 @@ func NewInternalClient(host string, remoteClient *http.Client) (*InternalClient,
 func NewInternalClientFromURI(defaultURI *pilosa.URI, remoteClient *http.Client) *InternalClient {
 	return &InternalClient{
 		defaultURI: defaultURI,
-		serializer: pilosaproto.Serializer{},
+		serializer: proto.Serializer{},
 		HTTPClient: remoteClient,
 	}
 }
@@ -282,7 +280,7 @@ func (c *InternalClient) Import(ctx context.Context, index, field string, shard 
 		return pilosa.ErrFieldRequired
 	}
 
-	buf, err := marshalImportPayload(index, field, shard, bits)
+	buf, err := c.marshalImportPayload(index, field, shard, bits)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
@@ -311,7 +309,7 @@ func (c *InternalClient) ImportK(ctx context.Context, index, field string, colum
 		return pilosa.ErrFieldRequired
 	}
 
-	buf, err := marshalImportPayloadK(index, field, columns)
+	buf, err := c.marshalImportPayloadK(index, field, columns)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
@@ -345,14 +343,14 @@ func (c *InternalClient) EnsureField(ctx context.Context, indexName string, fiel
 }
 
 // marshalImportPayload marshalls the import parameters into a protobuf byte slice.
-func marshalImportPayload(index, field string, shard uint64, bits []pilosa.Bit) ([]byte, error) {
+func (c *InternalClient) marshalImportPayload(index, field string, shard uint64, bits []pilosa.Bit) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
 	rowIDs := Bits(bits).RowIDs()
 	columnIDs := Bits(bits).ColumnIDs()
 	timestamps := Bits(bits).Timestamps()
 
 	// Marshal data to protobuf.
-	buf, err := proto.Marshal(&internal.ImportRequest{
+	buf, err := c.serializer.Marshal(&pilosa.ImportRequest{
 		Index:      index,
 		Field:      field,
 		Shard:      shard,
@@ -367,14 +365,14 @@ func marshalImportPayload(index, field string, shard uint64, bits []pilosa.Bit) 
 }
 
 // marshalImportPayloadK marshalls the import parameters into a protobuf byte slice.
-func marshalImportPayloadK(index, field string, bits []pilosa.Bit) ([]byte, error) {
+func (c *InternalClient) marshalImportPayloadK(index, field string, bits []pilosa.Bit) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
 	rowKeys := Bits(bits).RowKeys()
 	columnKeys := Bits(bits).ColumnKeys()
 	timestamps := Bits(bits).Timestamps()
 
 	// Marshal data to protobuf.
-	buf, err := proto.Marshal(&internal.ImportRequest{
+	buf, err := c.serializer.Marshal(&pilosa.ImportRequest{
 		Index:      index,
 		Field:      field,
 		RowKeys:    rowKeys,
@@ -416,8 +414,8 @@ func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, inde
 		return errors.New(string(body))
 	}
 
-	var isresp internal.ImportResponse
-	if err := proto.Unmarshal(body, &isresp); err != nil {
+	var isresp pilosa.ImportResponse
+	if err := c.serializer.Unmarshal(body, &isresp); err != nil {
 		return fmt.Errorf("unmarshal import response: %s", err)
 	} else if s := isresp.Err; s != "" {
 		return errors.New(s)
@@ -434,7 +432,7 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 		return pilosa.ErrFieldRequired
 	}
 
-	buf, err := marshalImportValuePayload(index, field, shard, vals)
+	buf, err := c.marshalImportValuePayload(index, field, shard, vals)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
@@ -456,13 +454,13 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 }
 
 // marshalImportValuePayload marshalls the import parameters into a protobuf byte slice.
-func marshalImportValuePayload(index, field string, shard uint64, vals []pilosa.FieldValue) ([]byte, error) {
+func (c *InternalClient) marshalImportValuePayload(index, field string, shard uint64, vals []pilosa.FieldValue) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
 	columnIDs := FieldValues(vals).ColumnIDs()
 	values := FieldValues(vals).Values()
 
 	// Marshal data to protobuf.
-	buf, err := proto.Marshal(&internal.ImportValueRequest{
+	buf, err := c.serializer.Marshal(&pilosa.ImportValueRequest{
 		Index:     index,
 		Field:     field,
 		Shard:     shard,
@@ -685,7 +683,7 @@ func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, 
 	if uri == nil {
 		panic("need to pass a URI to BlockData")
 	}
-	buf, err := proto.Marshal(&internal.BlockDataRequest{
+	buf, err := c.serializer.Marshal(&pilosa.BlockDataRequest{
 		Index: index,
 		Field: field,
 		Shard: shard,
@@ -721,10 +719,10 @@ func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, 
 	}
 
 	// Decode response object.
-	var rsp internal.BlockDataResponse
+	var rsp pilosa.BlockDataResponse
 	if body, err := ioutil.ReadAll(resp.Body); err != nil {
 		return nil, nil, errors.Wrap(err, "reading")
-	} else if err := proto.Unmarshal(body, &rsp); err != nil {
+	} else if err := c.serializer.Unmarshal(body, &rsp); err != nil {
 		return nil, nil, errors.Wrap(err, "unmarshalling")
 	}
 	return rsp.RowIDs, rsp.ColumnIDs, nil

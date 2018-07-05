@@ -26,8 +26,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pkg/errors"
 )
@@ -437,8 +435,8 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 	if err != nil {
 		return nil, NewBadRequestError(errors.Wrap(err, "read body error"))
 	}
-	var req internal.BlockDataRequest
-	if err := proto.Unmarshal(reqBytes, &req); err != nil {
+	var req BlockDataRequest
+	if err := api.Serializer.Unmarshal(reqBytes, &req); err != nil {
 		return nil, NewBadRequestError(errors.Wrap(err, "unmarshal body error"))
 	}
 
@@ -448,11 +446,11 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 		return nil, ErrFragmentNotFound
 	}
 
-	var resp = internal.BlockDataResponse{}
+	var resp = BlockDataResponse{}
 	resp.RowIDs, resp.ColumnIDs = f.blockData(int(req.Block))
 
 	// Encode response.
-	buf, err := proto.Marshal(&resp)
+	buf, err := api.Serializer.Marshal(&resp)
 	if err != nil {
 		return nil, errors.Wrap(err, "merge block response encoding error")
 	}
@@ -657,7 +655,7 @@ func (api *API) FieldAttrDiff(ctx context.Context, indexName string, fieldName s
 }
 
 // Import bulk imports data into a particular index,field,shard.
-func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
+func (api *API) Import(ctx context.Context, req *ImportRequest) error {
 	if err := api.validate(apiImport); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -686,7 +684,7 @@ func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 }
 
 // ImportValue bulk imports values into a particular field.
-func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest) error {
+func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest) error {
 	if err := api.validate(apiImportValue); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}

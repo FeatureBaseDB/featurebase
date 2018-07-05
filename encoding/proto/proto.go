@@ -178,7 +178,46 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		decodeQueryResponse(msg, mt)
 		return nil
-
+	case *pilosa.ImportRequest:
+		msg := &internal.ImportRequest{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling ImportRequest")
+		}
+		decodeImportRequest(msg, mt)
+		return nil
+	case *pilosa.ImportValueRequest:
+		msg := &internal.ImportValueRequest{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling ImportValueRequest")
+		}
+		decodeImportValueRequest(msg, mt)
+		return nil
+	case *pilosa.ImportResponse:
+		msg := &internal.ImportResponse{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling ImportResponse")
+		}
+		decodeImportResponse(msg, mt)
+		return nil
+	case *pilosa.BlockDataRequest:
+		msg := &internal.BlockDataRequest{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling BlockDataRequest")
+		}
+		decodeBlockDataRequest(msg, mt)
+		return nil
+	case *pilosa.BlockDataResponse:
+		msg := &internal.BlockDataResponse{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling BlockDataResponse")
+		}
+		decodeBlockDataResponse(msg, mt)
+		return nil
 	default:
 		panic(fmt.Sprintf("unhandled pilosa.Message of type %T: %#v", mt, m))
 	}
@@ -224,8 +263,64 @@ func encodeToProto(m pilosa.Message) proto.Message {
 		return encodeQueryRequest(mt)
 	case *pilosa.QueryResponse:
 		return encodeQueryResponse(mt)
+	case *pilosa.ImportRequest:
+		return encodeImportRequest(mt)
+	case *pilosa.ImportValueRequest:
+		return encodeImportValueRequest(mt)
+	case *pilosa.ImportResponse:
+		return encodeImportResponse(mt)
+	case *pilosa.BlockDataRequest:
+		return encodeBlockDataRequest(mt)
+	case *pilosa.BlockDataResponse:
+		return encodeBlockDataResponse(mt)
 	}
 	return nil
+}
+
+func encodeBlockDataRequest(m *pilosa.BlockDataRequest) *internal.BlockDataRequest {
+	return &internal.BlockDataRequest{
+		Index: m.Index,
+		Field: m.Field,
+		View:  m.View,
+		Shard: m.Shard,
+		Block: m.Block,
+	}
+}
+func encodeBlockDataResponse(m *pilosa.BlockDataResponse) *internal.BlockDataResponse {
+	return &internal.BlockDataResponse{
+		RowIDs:    m.RowIDs,
+		ColumnIDs: m.ColumnIDs,
+	}
+}
+
+func encodeImportResponse(m *pilosa.ImportResponse) *internal.ImportResponse {
+	return &internal.ImportResponse{
+		Err: m.Err,
+	}
+}
+
+func encodeImportRequest(m *pilosa.ImportRequest) *internal.ImportRequest {
+	return &internal.ImportRequest{
+		Index:      m.Index,
+		Field:      m.Field,
+		Shard:      m.Shard,
+		RowIDs:     m.RowIDs,
+		ColumnIDs:  m.ColumnIDs,
+		RowKeys:    m.RowKeys,
+		ColumnKeys: m.ColumnKeys,
+		Timestamps: m.Timestamps,
+	}
+}
+
+func encodeImportValueRequest(m *pilosa.ImportValueRequest) *internal.ImportValueRequest {
+	return &internal.ImportValueRequest{
+		Index:      m.Index,
+		Field:      m.Field,
+		Shard:      m.Shard,
+		ColumnIDs:  m.ColumnIDs,
+		ColumnKeys: m.ColumnKeys,
+		Values:     m.Values,
+	}
 }
 
 func encodeQueryRequest(m *pilosa.QueryRequest) *internal.QueryRequest {
@@ -688,6 +783,43 @@ func decodeQueryRequest(pb *internal.QueryRequest, m *pilosa.QueryRequest) {
 	m.Remote = pb.Remote
 	m.ExcludeRowAttrs = pb.ExcludeRowAttrs
 	m.ExcludeColumns = pb.ExcludeColumns
+}
+
+func decodeImportRequest(pb *internal.ImportRequest, m *pilosa.ImportRequest) {
+	m.Index = pb.Index
+	m.Field = pb.Field
+	m.Shard = pb.Shard
+	m.RowIDs = pb.RowIDs
+	m.ColumnIDs = pb.ColumnIDs
+	m.RowKeys = pb.RowKeys
+	m.ColumnKeys = pb.ColumnKeys
+	m.Timestamps = pb.Timestamps
+}
+
+func decodeImportValueRequest(pb *internal.ImportValueRequest, m *pilosa.ImportValueRequest) {
+	m.Index = pb.Index
+	m.Field = pb.Field
+	m.Shard = pb.Shard
+	m.ColumnIDs = pb.ColumnIDs
+	m.ColumnKeys = pb.ColumnKeys
+	m.Values = pb.Values
+}
+
+func decodeImportResponse(pb *internal.ImportResponse, m *pilosa.ImportResponse) {
+	m.Err = pb.Err
+}
+
+func decodeBlockDataRequest(pb *internal.BlockDataRequest, m *pilosa.BlockDataRequest) {
+	m.Index = pb.Index
+	m.Field = pb.Field
+	m.View = pb.View
+	m.Shard = pb.Shard
+	m.Block = pb.Block
+}
+
+func decodeBlockDataResponse(pb *internal.BlockDataResponse, m *pilosa.BlockDataResponse) {
+	m.RowIDs = pb.RowIDs
+	m.ColumnIDs = pb.ColumnIDs
 }
 
 func decodeQueryResponse(pb *internal.QueryResponse, m *pilosa.QueryResponse) {
