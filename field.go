@@ -606,8 +606,8 @@ func (f *Field) viewNames() []string {
 	return other
 }
 
-// RecalculateCaches recalculates caches on every view in the field.
-func (f *Field) RecalculateCaches() {
+// recalculateCaches recalculates caches on every view in the field.
+func (f *Field) recalculateCaches() {
 	for _, view := range f.views() {
 		view.recalculateCaches()
 	}
