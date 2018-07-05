@@ -268,6 +268,26 @@ func (c *Call) UintArg(key string) (uint64, bool, error) {
 	}
 }
 
+// IntArg is for reading the value at key from call.Args as an int64. If the
+// key is not in Call.Args, the value of the returned bool will be false, and
+// the error will be nil. The value is assumed to be a unt64 or an int64 and
+// then cast to an int64. An error is returned if the value is not an int64 or
+// uint64.
+func (c *Call) IntArg(key string) (int64, bool, error) {
+	val, ok := c.Args[key]
+	if !ok {
+		return 0, false, nil
+	}
+	switch tval := val.(type) {
+	case int64:
+		return tval, true, nil
+	case uint64:
+		return int64(tval), true, nil
+	default:
+		return 0, true, fmt.Errorf("could not convert %v of type %T to int64 in Call.IntArg", tval, tval)
+	}
+}
+
 // UintSliceArg reads the value at key from call.Args as a slice of uint64. If
 // the key is not in Call.Args, the value of the returned bool will be false,
 // and the error will be nil. If the value is a slice of int64 it will convert

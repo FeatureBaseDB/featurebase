@@ -17,8 +17,6 @@ package pilosa
 import (
 	"errors"
 	"regexp"
-
-	"github.com/pilosa/pilosa/internal"
 )
 
 // System errors.
@@ -120,23 +118,6 @@ type ColumnAttrSet struct {
 	ID    uint64                 `json:"id"`
 	Key   string                 `json:"key,omitempty"`
 	Attrs map[string]interface{} `json:"attrs,omitempty"`
-}
-
-// EncodeColumnAttrSets converts a into its internal representation.
-func EncodeColumnAttrSets(a []*ColumnAttrSet) []*internal.ColumnAttrSet {
-	other := make([]*internal.ColumnAttrSet, len(a))
-	for i := range a {
-		other[i] = EncodeColumnAttrSet(a[i])
-	}
-	return other
-}
-
-// EncodeColumnAttrSet converts set into its internal representation.
-func EncodeColumnAttrSet(set *ColumnAttrSet) *internal.ColumnAttrSet {
-	return &internal.ColumnAttrSet{
-		ID:    set.ID,
-		Attrs: encodeAttrs(set.Attrs),
-	}
 }
 
 // TimeFormat is the go-style time format used to parse string dates.

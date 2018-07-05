@@ -21,7 +21,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pkg/errors"
 )
 
@@ -43,17 +42,17 @@ var addressRegexp = regexp.MustCompile(`^(([+a-z]+):\/\/)?([0-9a-z.-]+|\[[:0-9a-
 // 	localhost
 // 	:10101
 type URI struct {
-	scheme string `json:"scheme"`
-	host   string `json:"host"`
-	port   uint16 `json:"port"`
+	Scheme string `json:"scheme"`
+	Host   string `json:"host"`
+	Port   uint16 `json:"port"`
 }
 
 // DefaultURI creates and returns the default URI.
 func DefaultURI() *URI {
 	return &URI{
-		scheme: "http",
-		host:   "localhost",
-		port:   10101,
+		Scheme: "http",
+		Host:   "localhost",
+		Port:   10101,
 	}
 }
 
@@ -83,24 +82,14 @@ func NewURIFromAddress(address string) (*URI, error) {
 	return parseAddress(address)
 }
 
-// Scheme returns the scheme of this URI.
-func (u *URI) Scheme() string {
-	return u.scheme
-}
-
 // SetScheme sets the scheme of this URI.
 func (u *URI) SetScheme(scheme string) error {
 	m := schemeRegexp.FindStringSubmatch(scheme)
 	if m == nil {
 		return errors.New("invalid scheme")
 	}
-	u.scheme = scheme
+	u.Scheme = scheme
 	return nil
-}
-
-// Host returns the host of this URI.
-func (u *URI) Host() string {
-	return u.host
 }
 
 // SetHost sets the host of this URI.
@@ -109,18 +98,13 @@ func (u *URI) SetHost(host string) error {
 	if m == nil {
 		return errors.New("invalid host")
 	}
-	u.host = host
+	u.Host = host
 	return nil
-}
-
-// Port returns the port of this URI.
-func (u *URI) Port() uint16 {
-	return u.port
 }
 
 // SetPort sets the port of this URI.
 func (u *URI) SetPort(port uint16) {
-	u.port = port
+	u.Port = port
 }
 
 // HostPort returns `Host:Port`
@@ -129,23 +113,23 @@ func (u *URI) HostPort() string {
 	if u == nil {
 		return ""
 	}
-	s := fmt.Sprintf("%s:%d", u.host, u.port)
+	s := fmt.Sprintf("%s:%d", u.Host, u.Port)
 	return s
 }
 
 // Normalize returns the address in a form usable by a HTTP client.
 func (u *URI) Normalize() string {
-	scheme := u.scheme
+	scheme := u.Scheme
 	index := strings.Index(scheme, "+")
 	if index >= 0 {
 		scheme = scheme[:index]
 	}
-	return fmt.Sprintf("%s://%s:%d", scheme, u.host, u.port)
+	return fmt.Sprintf("%s://%s:%d", scheme, u.Host, u.Port)
 }
 
 // String returns the address as a string.
 func (u URI) String() string {
-	return fmt.Sprintf("%s://%s:%d", u.scheme, u.host, u.port)
+	return fmt.Sprintf("%s://%s:%d", u.Scheme, u.Host, u.Port)
 }
 
 // Path returns URI with path
@@ -191,39 +175,11 @@ func parseAddress(address string) (uri *URI, err error) {
 		}
 	}
 	uri = &URI{
-		scheme: scheme,
-		host:   host,
-		port:   uint16(port),
+		Scheme: scheme,
+		Host:   host,
+		Port:   uint16(port),
 	}
 	return uri, nil
-}
-
-// Encode converts o into its internal representation.
-func (u URI) Encode() *internal.URI {
-	return encodeURI(u)
-}
-
-func encodeURI(u URI) *internal.URI {
-	return &internal.URI{
-		Scheme: u.scheme,
-		Host:   u.host,
-		Port:   uint32(u.port),
-	}
-}
-
-func DecodeURI(i *internal.URI) URI {
-	return decodeURI(i)
-}
-
-func decodeURI(i *internal.URI) URI {
-	if i == nil {
-		return URI{}
-	}
-	return URI{
-		scheme: i.Scheme,
-		host:   i.Host,
-		port:   uint16(i.Port),
-	}
 }
 
 // MarshalJSON marshals URI into a JSON-encoded byte slice.
@@ -233,9 +189,9 @@ func (u *URI) MarshalJSON() ([]byte, error) {
 		Host   string `json:"host,omitempty"`
 		Port   uint16 `json:"port,omitempty"`
 	}
-	output.Scheme = u.scheme
-	output.Host = u.host
-	output.Port = u.port
+	output.Scheme = u.Scheme
+	output.Host = u.Host
+	output.Port = u.Port
 
 	return json.Marshal(output)
 }
@@ -249,8 +205,8 @@ func (u *URI) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &input); err != nil {
 		return err
 	}
-	u.scheme = input.Scheme
-	u.host = input.Host
-	u.port = input.Port
+	u.Scheme = input.Scheme
+	u.Host = input.Host
+	u.Port = input.Port
 	return nil
 }

@@ -1889,7 +1889,7 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 			}
 
 			// Execute query.
-			queryRequest := &internal.QueryRequest{
+			queryRequest := &QueryRequest{
 				Query:  buffers[k].String(),
 				Remote: true,
 			}

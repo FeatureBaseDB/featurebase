@@ -26,8 +26,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pkg/errors"
 )
@@ -38,6 +36,8 @@ type API struct {
 	holder  *Holder
 	cluster *cluster
 	server  *Server
+
+	Serializer Serializer
 }
 
 // APIOption is a functional option type for pilosa.API
@@ -48,6 +48,7 @@ func OptAPIServer(s *Server) APIOption {
 		a.server = s
 		a.holder = s.holder
 		a.cluster = s.cluster
+		a.Serializer = s.serializer
 		return nil
 	}
 }
@@ -149,6 +150,10 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	return resp, nil
 }
 
+func (api *API) Holder() *Holder {
+	return api.server.Holder()
+}
+
 // readColumnAttrSets returns a list of column attribute objects by id.
 func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet, error) {
 	if index == nil {
@@ -185,12 +190,11 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	}
 	// Send the create index message to all nodes.
 	err = api.server.SendSync(
-		&internal.CreateIndexMessage{
+		&CreateIndexMessage{
 			Index: indexName,
-			Meta:  options.Encode(),
+			Meta:  &options,
 		})
 	if err != nil {
-		api.server.logger.Printf("problem sending CreateIndex message: %s", err)
 		return nil, errors.Wrap(err, "sending CreateIndex message")
 	}
 	api.holder.Stats.Count("createIndex", 1, 1.0)
@@ -224,7 +228,7 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 	}
 	// Send the delete index message to all nodes.
 	err = api.server.SendSync(
-		&internal.DeleteIndexMessage{
+		&DeleteIndexMessage{
 			Index: indexName,
 		})
 	if err != nil {
@@ -244,7 +248,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 	}
 
 	// Apply functional options.
-	fo := fieldOptions{}
+	fo := FieldOptions{}
 	for _, opt := range opts {
 		err := opt(&fo)
 		if err != nil {
@@ -266,10 +270,10 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 
 	// Send the create field message to all nodes.
 	err = api.server.SendSync(
-		&internal.CreateFieldMessage{
+		&CreateFieldMessage{
 			Index: indexName,
 			Field: fieldName,
-			Meta:  fo.Encode(),
+			Meta:  &fo,
 		})
 	if err != nil {
 		api.server.logger.Printf("problem sending CreateField message: %s", err)
@@ -313,7 +317,7 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 
 	// Send the delete field message to all nodes.
 	err := api.server.SendSync(
-		&internal.DeleteFieldMessage{
+		&DeleteFieldMessage{
 			Index: indexName,
 			Field: fieldName,
 		})
@@ -384,8 +388,8 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 	if err != nil {
 		return nil, NewBadRequestError(errors.Wrap(err, "read body error"))
 	}
-	var req internal.BlockDataRequest
-	if err := proto.Unmarshal(reqBytes, &req); err != nil {
+	var req BlockDataRequest
+	if err := api.Serializer.Unmarshal(reqBytes, &req); err != nil {
 		return nil, NewBadRequestError(errors.Wrap(err, "unmarshal body error"))
 	}
 
@@ -395,11 +399,11 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 		return nil, ErrFragmentNotFound
 	}
 
-	var resp = internal.BlockDataResponse{}
+	var resp = BlockDataResponse{}
 	resp.RowIDs, resp.ColumnIDs = f.blockData(int(req.Block))
 
 	// Encode response.
-	buf, err := proto.Marshal(&resp)
+	buf, err := api.Serializer.Marshal(&resp)
 	if err != nil {
 		return nil, errors.Wrap(err, "merge block response encoding error")
 	}
@@ -442,7 +446,7 @@ func (api *API) RecalculateCaches(ctx context.Context) error {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	err := api.server.SendSync(&internal.RecalculateCaches{})
+	err := api.server.SendSync(&RecalculateCaches{})
 	if err != nil {
 		return errors.Wrap(err, "broacasting message")
 	}
@@ -463,14 +467,15 @@ func (api *API) ClusterMessage(ctx context.Context, reqBody io.Reader) error {
 		return errors.Wrap(err, "reading body")
 	}
 
-	// Marshal into request object.
-	pb, err := UnmarshalMessage(body)
+	typ := body[0]
+	msg := getMessage(typ)
+	err = api.server.serializer.Unmarshal(body[1:], msg)
 	if err != nil {
-		return errors.Wrap(err, "unmarshaling message")
+		return errors.Wrap(err, "deserializing cluster message")
 	}
 
 	// Forward the error message.
-	if err := api.server.receiveMessage(pb); err != nil {
+	if err := api.server.receiveMessage(msg); err != nil {
 		return errors.Wrap(err, "receiving message")
 	}
 	return nil
@@ -521,7 +526,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, fieldName stri
 
 	// Send the delete view message to all nodes.
 	err := api.server.SendSync(
-		&internal.DeleteViewMessage{
+		&DeleteViewMessage{
 			Index: indexName,
 			Field: fieldName,
 			View:  viewName,
@@ -603,7 +608,7 @@ func (api *API) FieldAttrDiff(ctx context.Context, indexName string, fieldName s
 }
 
 // Import bulk imports data into a particular index,field,shard.
-func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
+func (api *API) Import(ctx context.Context, req *ImportRequest) error {
 	if err := api.validate(apiImport); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -632,7 +637,7 @@ func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 }
 
 // ImportValue bulk imports values into a particular field.
-func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest) error {
+func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest) error {
 	if err := api.validate(apiImportValue); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -716,8 +721,8 @@ func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode
 	// Send the set-coordinator message to new node.
 	err = api.server.SendTo(
 		newNode,
-		&internal.SetCoordinatorMessage{
-			New: EncodeNode(newNode),
+		&SetCoordinatorMessage{
+			New: newNode,
 		})
 	if err != nil {
 		return nil, nil, fmt.Errorf("problem sending SetCoordinator message: %s", err)

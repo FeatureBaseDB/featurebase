@@ -297,7 +297,7 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 	}
 
 	// Apply functional options.
-	fo := fieldOptions{}
+	fo := FieldOptions{}
 	for _, opt := range opts {
 		err := opt(&fo)
 		if err != nil {
@@ -319,7 +319,7 @@ func (i *Index) CreateFieldIfNotExists(name string, opts FieldOption) (*Field, e
 	}
 
 	// Apply functional option.
-	fo := fieldOptions{}
+	fo := FieldOptions{}
 	err := opts(&fo)
 	if err != nil {
 		return nil, errors.Wrap(err, "applying option")
@@ -328,7 +328,7 @@ func (i *Index) CreateFieldIfNotExists(name string, opts FieldOption) (*Field, e
 	return i.createField(name, fo)
 }
 
-func (i *Index) createFieldIfNotExists(name string, opt fieldOptions) (*Field, error) {
+func (i *Index) createFieldIfNotExists(name string, opt FieldOptions) (*Field, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -340,7 +340,7 @@ func (i *Index) createFieldIfNotExists(name string, opt fieldOptions) (*Field, e
 	return i.createField(name, opt)
 }
 
-func (i *Index) createField(name string, opt fieldOptions) (*Field, error) {
+func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 	if name == "" {
 		return nil, errors.New("field name required")
 	} else if opt.CacheType != "" && !isValidCacheType(opt.CacheType) {
@@ -432,33 +432,9 @@ func (p indexInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p indexInfoSlice) Len() int           { return len(p) }
 func (p indexInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
-// EncodeIndexes converts a into its internal representation.
-func EncodeIndexes(a []*Index) []*internal.Index {
-	other := make([]*internal.Index, len(a))
-	for i := range a {
-		other[i] = encodeIndex(a[i])
-	}
-	return other
-}
-
-// encodeIndex converts d into its internal representation.
-func encodeIndex(d *Index) *internal.Index {
-	return &internal.Index{
-		Name:   d.name,
-		Fields: encodeFields(d.Fields()),
-	}
-}
-
 // IndexOptions represents options to set when initializing an index.
 type IndexOptions struct {
 	Keys bool `json:"keys"`
-}
-
-// Encode converts i into its internal representation.
-func (i *IndexOptions) Encode() *internal.IndexMeta {
-	return &internal.IndexMeta{
-		Keys: i.Keys,
-	}
 }
 
 // hasTime returns true if a contains a non-nil time.
