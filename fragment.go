@@ -446,7 +446,7 @@ func (f *fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, er
 
 	// Get the row from cache or fragment.storage.
 	row := f.unprotectedRow(rowID, true, true)
-	row.ClearBit(columnID)
+	row.clearBit(columnID)
 
 	// Update the cache.
 	f.cache.Add(rowID, row.Count())
