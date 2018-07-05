@@ -84,7 +84,7 @@ func NewTranslateFile() *TranslateFile {
 		cols:        make(map[string]*index),
 		rows:        make(map[frameKey]*index),
 
-		MapSize: DefaultMapSize,
+		MapSize: defaultMapSize,
 
 		ReplicationRetryInterval: defaultReplicationRetryInterval,
 	}
