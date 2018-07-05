@@ -653,17 +653,22 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Convert json options into functional options.
-	var fos pilosa.FieldOption
+	var fos []pilosa.FieldOption
 	switch req.Options.Type {
 	case pilosa.FieldTypeSet:
-		fos = pilosa.OptFieldTypeSet(*req.Options.CacheType, *req.Options.CacheSize)
+		fos = append(fos, pilosa.OptFieldTypeSet(*req.Options.CacheType, *req.Options.CacheSize))
 	case pilosa.FieldTypeInt:
-		fos = pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max)
+		fos = append(fos, pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max))
 	case pilosa.FieldTypeTime:
-		fos = pilosa.OptFieldTypeTime(*req.Options.TimeQuantum)
+		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum))
+	}
+	if req.Options.Keys != nil {
+		if *req.Options.Keys {
+			fos = append(fos, pilosa.OptFieldKeys())
+		}
 	}
 
-	_, err = h.API.CreateField(r.Context(), indexName, fieldName, fos)
+	_, err = h.API.CreateField(r.Context(), indexName, fieldName, fos...)
 	resp.write(w, err)
 }
 
@@ -671,7 +676,7 @@ type postFieldRequest struct {
 	Options fieldOptions `json:"options"`
 }
 
-// fieldOptions tracks pilosa.FieldOptions. It is made up of pointers to values,
+// fieldOptions tracks pilosa.fieldOptions. It is made up of pointers to values,
 // and used for input validation.
 type fieldOptions struct {
 	Type        string              `json:"type,omitempty"`

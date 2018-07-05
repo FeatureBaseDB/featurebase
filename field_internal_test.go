@@ -153,7 +153,7 @@ func TestBSIGroup_BaseValue(t *testing.T) {
 
 // Ensure field can open and retrieve a view.
 func TestField_DeleteView(t *testing.T) {
-	f := MustOpenField(FieldOptions{})
+	f := MustOpenField(OptFieldTypeDefault())
 	defer f.Close()
 
 	viewName := viewStandard + "_v"
@@ -190,12 +190,12 @@ type TestField struct {
 }
 
 // NewTestField returns a new instance of TestField d/0.
-func NewTestField(options FieldOptions) *TestField {
+func NewTestField(opts FieldOption) *TestField {
 	path, err := ioutil.TempDir("", "pilosa-field-")
 	if err != nil {
 		panic(err)
 	}
-	field, err := NewField(path, "i", "f", options)
+	field, err := NewField(path, "i", "f", opts)
 	if err != nil {
 		panic(err)
 	}
@@ -203,8 +203,8 @@ func NewTestField(options FieldOptions) *TestField {
 }
 
 // MustOpenField returns a new, opened field at a temporary path. Panic on error.
-func MustOpenField(options FieldOptions) *TestField {
-	f := NewTestField(options)
+func MustOpenField(opts FieldOption) *TestField {
+	f := NewTestField(opts)
 	if err := f.Open(); err != nil {
 		panic(err)
 	}
@@ -225,7 +225,7 @@ func (f *TestField) Reopen() error {
 	}
 
 	path, index, name := f.Path(), f.Index(), f.Name()
-	f.Field, err = NewField(path, index, name, FieldOptions{})
+	f.Field, err = NewField(path, index, name, OptFieldTypeDefault())
 	if err != nil {
 		return err
 	}
@@ -253,7 +253,7 @@ func (f *TestField) MustSetBit(row, col uint64, ts ...time.Time) {
 
 // Ensure field can open and retrieve a view.
 func TestField_CreateViewIfNotExists(t *testing.T) {
-	f := MustOpenField(FieldOptions{})
+	f := MustOpenField(OptFieldTypeDefault())
 	defer f.Close()
 
 	// Create view.
@@ -278,7 +278,7 @@ func TestField_CreateViewIfNotExists(t *testing.T) {
 }
 
 func TestField_SetTimeQuantum(t *testing.T) {
-	f := MustOpenField(FieldOptions{Type: FieldTypeTime})
+	f := MustOpenField(OptFieldTypeTime(TimeQuantum("")))
 	defer f.Close()
 
 	// Set & retrieve time quantum.
@@ -297,7 +297,7 @@ func TestField_SetTimeQuantum(t *testing.T) {
 }
 
 func TestField_RowTime(t *testing.T) {
-	f := MustOpenField(FieldOptions{Type: FieldTypeTime})
+	f := MustOpenField(OptFieldTypeTime(TimeQuantum("")))
 	defer f.Close()
 
 	if err := f.SetTimeQuantum(TimeQuantum("YMDH")); err != nil {

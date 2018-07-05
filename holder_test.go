@@ -98,7 +98,7 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if _, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
+		} else if _, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
@@ -117,7 +117,7 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if _, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
+		} else if _, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
@@ -135,7 +135,7 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if _, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
+		} else if _, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
@@ -157,7 +157,7 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if field, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
+		} else if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
 		} else if _, err := field.SetBit(0, 0, nil); err != nil {
 			t.Fatal(err)
@@ -178,7 +178,7 @@ func TestHolder_Open(t *testing.T) {
 
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if field, err := idx.CreateField("bar", pilosa.FieldOptions{}); err != nil {
+		} else if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
 		} else if _, err := field.SetBit(0, 0, nil); err != nil {
 			t.Fatal(err)
