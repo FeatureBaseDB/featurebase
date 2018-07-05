@@ -127,11 +127,11 @@ type gossipConfig struct {
 	memberlistConfig *memberlist.Config
 }
 
-// GossipMemberSetOption describes a functional option for GossipMemberSet.
-type GossipMemberSetOption func(*gossipMemberSet) error
+// gossipMemberSetOption describes a functional option for GossipMemberSet.
+type gossipMemberSetOption func(*gossipMemberSet) error
 
 // WithTransport is a functional option for providing a transport to NewGossipMemberSet.
-func WithTransport(transport *Transport) GossipMemberSetOption {
+func WithTransport(transport *Transport) gossipMemberSetOption {
 	return func(g *gossipMemberSet) error {
 		g.transport = transport
 		return nil
@@ -139,7 +139,7 @@ func WithTransport(transport *Transport) GossipMemberSetOption {
 }
 
 // WithLogger is a functional option for providing a logger to NewGossipMemberSet.
-func WithLogger(logger *log.Logger) GossipMemberSetOption {
+func WithLogger(logger *log.Logger) gossipMemberSetOption {
 	return func(g *gossipMemberSet) error {
 		g.logger = logger
 		return nil
@@ -147,7 +147,7 @@ func WithLogger(logger *log.Logger) GossipMemberSetOption {
 }
 
 // NewGossipMemberSet returns a new instance of GossipMemberSet based on options.
-func NewGossipMemberSet(cfg Config, api *pilosa.API, options ...GossipMemberSetOption) (*gossipMemberSet, error) {
+func NewGossipMemberSet(cfg Config, api *pilosa.API, options ...gossipMemberSetOption) (*gossipMemberSet, error) {
 	host := api.Node().URI.Host()
 	g := &gossipMemberSet{
 		papi:   api,
