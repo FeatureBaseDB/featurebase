@@ -412,18 +412,25 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.API.Query(r.Context(), req)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		switch errors.Cause(resp.Err) {
+		case pilosa.ErrTooManyWrites:
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+		}
 		h.writeQueryResponse(w, r, &pilosa.QueryResponse{Err: err})
 		return
 	}
 
-	// Set appropriate status code, if there is an error.
+	// Set appropriate status code, if there is an error. It doesn't appear that
+	// resp.Err could ever be set in API.Query, so this code block is probably
+	// doing nothing right now.
 	if resp.Err != nil {
-		switch resp.Err {
+		switch errors.Cause(resp.Err) {
 		case pilosa.ErrTooManyWrites:
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
 		default:
-			w.WriteHeader(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusBadRequest)
 		}
 	}
 
