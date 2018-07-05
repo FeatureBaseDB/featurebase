@@ -459,7 +459,7 @@ func (c *cluster) receiveNodeState(nodeID string, state string) error {
 	return nil
 }
 
-// Status returns the the cluster's status including what nodes it contains, it's ID, and current state.
+// Status returns the the cluster's status including what nodes it contains, its ID, and current state.
 func (c *cluster) Status() *ClusterStatus {
 	return &ClusterStatus{
 		ClusterID: c.id,
@@ -1764,7 +1764,7 @@ type ResizeSource struct {
 	Shard uint64 `protobuf:"varint,5,opt,name=Shard,proto3" json:"Shard,omitempty"`
 }
 
-// Schema is a schema
+// Schema contains information about indexes and their configuration.
 type Schema struct {
 	Indexes []*IndexInfo
 }

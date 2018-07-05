@@ -364,8 +364,7 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *ResizeInstruction) error
 		}
 
 		for _, src := range instr.Sources {
-			srcNode := src.Node
-			srcCluster := t.clusterByID(srcNode.ID)
+			srcCluster := t.clusterByID(src.Node.ID)
 
 			srcFragment := srcCluster.holder.fragment(src.Index, src.Field, src.View, src.Shard)
 			destFragment := destCluster.holder.fragment(src.Index, src.Field, src.View, src.Shard)
