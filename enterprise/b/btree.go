@@ -233,9 +233,9 @@ func (l *d) mvR(r *d, c int) {
 
 // ----------------------------------------------------------------------- Tree
 
-// TreeNew returns a newly created, empty Tree. The compare function is used
+// treeNew returns a newly created, empty Tree. The compare function is used
 // for key collation.
-func TreeNew(cmp Cmp) *tree {
+func treeNew(cmp Cmp) *tree {
 	return btTPool.get(cmp)
 }
 

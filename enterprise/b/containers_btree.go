@@ -36,7 +36,7 @@ type bTreeContainers struct {
 
 func newBTreeContainers() *bTreeContainers {
 	return &bTreeContainers{
-		tree: TreeNew(cmp),
+		tree: treeNew(cmp),
 	}
 }
 
@@ -161,7 +161,7 @@ func (btc *bTreeContainers) Size() int {
 }
 
 func (btc *bTreeContainers) Reset() {
-	btc.tree = TreeNew(cmp)
+	btc.tree = treeNew(cmp)
 	btc.lastKey = 0
 	btc.lastContainer = nil
 }
