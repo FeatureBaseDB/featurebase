@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"sort"
 
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/roaring"
 )
 
@@ -250,41 +249,6 @@ func (r *Row) Columns() []uint64 {
 		a = append(a, r.segments[i].Columns()...)
 	}
 	return a
-}
-
-// Union performs a union on a slice of rows.
-func Union(rows []*Row) *Row {
-	other := rows[0]
-	for _, r := range rows[1:] {
-		other = other.Union(r)
-	}
-	return other
-}
-
-// EncodeRow converts r into its internal representation.
-func EncodeRow(r *Row) *internal.Row {
-	if r == nil {
-		return nil
-	}
-
-	return &internal.Row{
-		Columns: r.Columns(),
-		Attrs:   encodeAttrs(r.Attrs),
-	}
-}
-
-// DecodeRow converts r from its internal representation.
-func DecodeRow(pr *internal.Row) *Row {
-	if pr == nil {
-		return nil
-	}
-
-	r := NewRow()
-	r.Attrs = decodeAttrs(pr.Attrs)
-	for _, v := range pr.Columns {
-		r.SetBit(v)
-	}
-	return r
 }
 
 // RowSegment holds a subset of a row.
