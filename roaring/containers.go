@@ -151,17 +151,17 @@ func (sc *sliceContainers) seek(key uint64) (int, bool) {
 
 func (sc *sliceContainers) Iterator(key uint64) (citer ContainerIterator, found bool) {
 	i, found := sc.seek(key)
-	return &SliceIterator{e: sc, i: i}, found
+	return &sliceIterator{e: sc, i: i}, found
 }
 
-type SliceIterator struct {
+type sliceIterator struct {
 	e     *sliceContainers
 	i     int
 	key   uint64
 	value *Container
 }
 
-func (si *SliceIterator) Next() bool {
+func (si *sliceIterator) Next() bool {
 	if si.e == nil || si.i > len(si.e.keys)-1 {
 		return false
 	}
@@ -172,6 +172,6 @@ func (si *SliceIterator) Next() bool {
 	return true
 }
 
-func (si *SliceIterator) Value() (uint64, *Container) {
+func (si *sliceIterator) Value() (uint64, *Container) {
 	return si.key, si.value
 }
