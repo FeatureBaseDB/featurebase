@@ -21,9 +21,9 @@ import "container/list"
 
 // Cache is an LRU cache. It is not safe for concurrent access.
 type Cache struct {
-	// MaxEntries is the maximum number of cache entries before
+	// maxEntries is the maximum number of cache entries before
 	// an item is evicted. Zero means no limit.
-	MaxEntries int
+	maxEntries int
 
 	// OnEvicted optionally specificies a callback function to be
 	// executed when an entry is purged from the cache.
@@ -46,7 +46,7 @@ type entry struct {
 // that eviction is done by the caller.
 func New(maxEntries int) *Cache {
 	return &Cache{
-		MaxEntries: maxEntries,
+		maxEntries: maxEntries,
 		ll:         list.New(),
 		cache:      make(map[interface{}]*list.Element),
 	}
@@ -65,7 +65,7 @@ func (c *Cache) Add(key Key, value interface{}) {
 	}
 	ele := c.ll.PushFront(&entry{key, value})
 	c.cache[key] = ele
-	if c.MaxEntries != 0 && c.ll.Len() > c.MaxEntries {
+	if c.maxEntries != 0 && c.ll.Len() > c.maxEntries {
 		c.removeOldest()
 	}
 }
