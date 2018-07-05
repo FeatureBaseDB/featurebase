@@ -149,6 +149,10 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	return resp, nil
 }
 
+func (api *API) Holder() *Holder {
+	return api.server.Holder()
+}
+
 // readColumnAttrSets returns a list of column attribute objects by id.
 func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet, error) {
 	if index == nil {

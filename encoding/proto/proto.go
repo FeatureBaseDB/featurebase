@@ -153,6 +153,14 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		decodeNodeStatus(msg, mt)
 		return nil
+	case *pilosa.Node:
+		msg := &internal.Node{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling Node")
+		}
+		decodeNode(msg, mt)
+		return nil
 	default:
 		panic(fmt.Sprintf("unhandled pilosa.Message of type %T: %#v", mt, m))
 	}
@@ -192,6 +200,8 @@ func encodeToProto(m pilosa.Message) proto.Message {
 		return encodeNodeEventMessage(mt)
 	case *pilosa.NodeStatus:
 		return encodeNodeStatus(mt)
+	case *pilosa.Node:
+		return encodeNode(mt)
 	}
 	return nil
 }
@@ -199,8 +209,8 @@ func encodeToProto(m pilosa.Message) proto.Message {
 func encodeResizeInstruction(m *pilosa.ResizeInstruction) *internal.ResizeInstruction {
 	return &internal.ResizeInstruction{
 		JobID:         m.JobID,
-		Node:          EncodeNode(m.Node),
-		Coordinator:   EncodeNode(m.Coordinator),
+		Node:          encodeNode(m.Node),
+		Coordinator:   encodeNode(m.Coordinator),
 		Sources:       encodeResizeSources(m.Sources),
 		Schema:        encodeSchema(m.Schema),
 		ClusterStatus: encodeClusterStatus(m.ClusterStatus),
@@ -217,7 +227,7 @@ func encodeResizeSources(srcs []*pilosa.ResizeSource) []*internal.ResizeSource {
 
 func encodeResizeSource(m *pilosa.ResizeSource) *internal.ResizeSource {
 	return &internal.ResizeSource{
-		Node:  EncodeNode(m.Node),
+		Node:  encodeNode(m.Node),
 		Index: m.Index,
 		Field: m.Field,
 		View:  m.View,
@@ -286,13 +296,13 @@ func encodeFieldOptions(o *pilosa.FieldOptions) *internal.FieldOptions {
 func EncodeNodes(a []*pilosa.Node) []*internal.Node {
 	other := make([]*internal.Node, len(a))
 	for i := range a {
-		other[i] = EncodeNode(a[i])
+		other[i] = encodeNode(a[i])
 	}
 	return other
 }
 
-// EncodeNode converts a Node into its internal representation.
-func EncodeNode(n *pilosa.Node) *internal.Node {
+// encodeNode converts a Node into its internal representation.
+func encodeNode(n *pilosa.Node) *internal.Node {
 	return &internal.Node{
 		ID:            n.ID,
 		URI:           n.URI.Encode(),
@@ -368,20 +378,20 @@ func encodeDeleteViewMessage(m *pilosa.DeleteViewMessage) *internal.DeleteViewMe
 func encodeResizeInstructionComplete(m *pilosa.ResizeInstructionComplete) *internal.ResizeInstructionComplete {
 	return &internal.ResizeInstructionComplete{
 		JobID: m.JobID,
-		Node:  EncodeNode(m.Node),
+		Node:  encodeNode(m.Node),
 		Error: m.Error,
 	}
 }
 
 func encodeSetCoordinatorMessage(m *pilosa.SetCoordinatorMessage) *internal.SetCoordinatorMessage {
 	return &internal.SetCoordinatorMessage{
-		New: EncodeNode(m.New),
+		New: encodeNode(m.New),
 	}
 }
 
 func encodeUpdateCoordinatorMessage(m *pilosa.UpdateCoordinatorMessage) *internal.UpdateCoordinatorMessage {
 	return &internal.UpdateCoordinatorMessage{
-		New: EncodeNode(m.New),
+		New: encodeNode(m.New),
 	}
 }
 
@@ -395,13 +405,13 @@ func encodeNodeStateMessage(m *pilosa.NodeStateMessage) *internal.NodeStateMessa
 func encodeNodeEventMessage(m *pilosa.NodeEvent) *internal.NodeEventMessage {
 	return &internal.NodeEventMessage{
 		Event: uint32(m.Event),
-		Node:  EncodeNode(m.Node),
+		Node:  encodeNode(m.Node),
 	}
 }
 
 func encodeNodeStatus(m *pilosa.NodeStatus) *internal.NodeStatus {
 	return &internal.NodeStatus{
-		Node:      EncodeNode(m.Node),
+		Node:      encodeNode(m.Node),
 		MaxShards: &internal.MaxShards{Standard: m.MaxShards},
 		Schema:    encodeSchema(m.Schema),
 	}

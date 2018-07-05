@@ -16,7 +16,6 @@ package pilosa
 
 import (
 	"fmt"
-	"reflect"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
@@ -78,48 +77,13 @@ const (
 	messageTypeNodeStatus
 )
 
-// MarshalMessage encodes the protobuf message into a byte slice.
-func MarshalMessage(m proto.Message) ([]byte, error) {
-	var typ uint8
-	switch obj := m.(type) {
-	case *internal.CreateShardMessage:
-		typ = messageTypeCreateShard
-	case *internal.CreateIndexMessage:
-		typ = messageTypeCreateIndex
-	case *internal.DeleteIndexMessage:
-		typ = messageTypeDeleteIndex
-	case *internal.CreateFieldMessage:
-		typ = messageTypeCreateField
-	case *internal.DeleteFieldMessage:
-		typ = messageTypeDeleteField
-	case *internal.CreateViewMessage:
-		typ = messageTypeCreateView
-	case *internal.DeleteViewMessage:
-		typ = messageTypeDeleteView
-	case *internal.ClusterStatus:
-		typ = messageTypeClusterStatus
-	case *internal.ResizeInstruction:
-		typ = messageTypeResizeInstruction
-	case *internal.ResizeInstructionComplete:
-		typ = messageTypeResizeInstructionComplete
-	case *internal.SetCoordinatorMessage:
-		typ = messageTypeSetCoordinator
-	case *internal.UpdateCoordinatorMessage:
-		typ = messageTypeUpdateCoordinator
-	case *internal.NodeStateMessage:
-		typ = messageTypeNodeState
-	case *internal.RecalculateCaches:
-		typ = messageTypeRecalculateCaches
-	case *internal.NodeEventMessage:
-		typ = messageTypeNodeEvent
-	case *internal.NodeStatus:
-		typ = messageTypeNodeStatus
-	default:
-		return nil, fmt.Errorf("message type not implemented for marshalling: %s", reflect.TypeOf(obj))
-	}
-	buf, err := proto.Marshal(m)
+// MarshalInternalMessage serializes the pilosa message and adds pilosa internal
+// type info which is used by the internal messaging stuff.
+func MarshalInternalMessage(m Message, s Serializer) ([]byte, error) {
+	typ := getMessageType(m)
+	buf, err := s.Marshal(m)
 	if err != nil {
-		return nil, errors.Wrap(err, "marshalling")
+		return nil, errors.Wrap(err, "marshaling")
 	}
 	return append([]byte{typ}, buf...), nil
 }
