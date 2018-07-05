@@ -285,10 +285,10 @@ func (c *Call) UintArg(key string) (uint64, bool, error) {
 	}
 }
 
-// IntArg is for reading the value at key from call.Args as a uint64. If the
+// IntArg is for reading the value at key from call.Args as an int64. If the
 // key is not in Call.Args, the value of the returned bool will be false, and
-// the error will be nil. The value is assumed to be a uint64 or an int64 and
-// then cast to a uint64. An error is returned if the value is not an int64 or
+// the error will be nil. The value is assumed to be a unt64 or an int64 and
+// then cast to an int64. An error is returned if the value is not an int64 or
 // uint64.
 func (c *Call) IntArg(key string) (int64, bool, error) {
 	val, ok := c.Args[key]
@@ -301,7 +301,7 @@ func (c *Call) IntArg(key string) (int64, bool, error) {
 	case uint64:
 		return int64(tval), true, nil
 	default:
-		return 0, true, fmt.Errorf("could not convert %v of type %T to uint64 in Call.IntArg", tval, tval)
+		return 0, true, fmt.Errorf("could not convert %v of type %T to int64 in Call.IntArg", tval, tval)
 	}
 }
 
