@@ -40,10 +40,10 @@ type API struct {
 	server  *Server
 }
 
-// APIOption is a functional option type for pilosa.API
-type APIOption func(*API) error
+// aPIOption is a functional option type for pilosa.API
+type aPIOption func(*API) error
 
-func OptAPIServer(s *Server) APIOption {
+func OptAPIServer(s *Server) aPIOption {
 	return func(a *API) error {
 		a.server = s
 		a.holder = s.holder
@@ -53,7 +53,7 @@ func OptAPIServer(s *Server) APIOption {
 }
 
 // NewAPI returns a new API instance.
-func NewAPI(opts ...APIOption) (*API, error) {
+func NewAPI(opts ...aPIOption) (*API, error) {
 	api := &API{}
 
 	for _, opt := range opts {
