@@ -2,7 +2,7 @@
 
 package pilosa
 
-// DefaultMapSize is the default size of mapped memory for the translate store.
+// defaultMapSize is the default size of mapped memory for the translate store.
 // It is passed as an int to syscall.Mmap and so can only be larger than 2^31 on
 // 64bit systems.
-const DefaultMapSize = 10 * (1 << 30) // 10GB
+const defaultMapSize = 10 * (1 << 30) // 10GB
