@@ -33,14 +33,14 @@ import (
 // attrBlockSize is the size of attribute blocks for anti-entropy.
 const attrBlockSize = 100
 
-// AttrCache represents a cache for attributes.
-type AttrCache struct {
+// attrCache represents a cache for attributes.
+type attrCache struct {
 	mu    sync.RWMutex
 	attrs map[uint64]map[string]interface{}
 }
 
 // Get returns the cached attributes for a given id.
-func (c *AttrCache) Get(id uint64) map[string]interface{} {
+func (c *attrCache) Get(id uint64) map[string]interface{} {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	attrs := c.attrs[id]
@@ -57,7 +57,7 @@ func (c *AttrCache) Get(id uint64) map[string]interface{} {
 }
 
 // Set updates the cached attributes for a given id.
-func (c *AttrCache) Set(id uint64, attrs map[string]interface{}) {
+func (c *attrCache) Set(id uint64, attrs map[string]interface{}) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.attrs[id] = attrs
@@ -68,12 +68,12 @@ type AttrStore struct {
 	mu        sync.RWMutex
 	path      string
 	db        *bolt.DB
-	attrCache *AttrCache
+	attrCache *attrCache
 }
 
 // NewAttrCache returns a new instance of AttrCache.
-func NewAttrCache() *AttrCache {
-	return &AttrCache{
+func NewAttrCache() *attrCache {
+	return &attrCache{
 		attrs: make(map[uint64]map[string]interface{}),
 	}
 }
