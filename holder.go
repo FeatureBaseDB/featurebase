@@ -304,7 +304,7 @@ func (h *Holder) CreateIndex(name string, opt IndexOptions) (*Index, error) {
 
 	// Ensure index doesn't already exist.
 	if h.indexes[name] != nil {
-		return nil, NewConflictError(ErrIndexExists)
+		return nil, newConflictError(ErrIndexExists)
 	}
 	return h.createIndex(name, opt)
 }

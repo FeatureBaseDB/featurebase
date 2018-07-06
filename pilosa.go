@@ -93,8 +93,8 @@ type ConflictError struct {
 	error
 }
 
-// NewConflictError returns err wrapped in a ConflictError.
-func NewConflictError(err error) ConflictError {
+// newConflictError returns err wrapped in a ConflictError.
+func newConflictError(err error) ConflictError {
 	return ConflictError{err}
 }
 
