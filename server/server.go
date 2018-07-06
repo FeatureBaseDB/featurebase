@@ -225,7 +225,7 @@ func (m *Command) SetupServer() error {
 		diagnosticsInterval = time.Duration(defaultDiagnosticsInterval)
 	}
 
-	statsClient, err := NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
+	statsClient, err := newStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
 	if err != nil {
 		return errors.Wrap(err, "new stats client")
 	}
@@ -351,8 +351,8 @@ func (m *Command) Close() error {
 	return nil
 }
 
-// NewStatsClient creates a stats client from the config
-func NewStatsClient(name string, host string) (pilosa.StatsClient, error) {
+// newStatsClient creates a stats client from the config
+func newStatsClient(name string, host string) (pilosa.StatsClient, error) {
 	switch name {
 	case "expvar":
 		return pilosa.NewExpvarStatsClient(), nil
