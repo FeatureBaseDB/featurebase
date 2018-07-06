@@ -300,7 +300,7 @@ func (e *executor) executeMax(ctx context.Context, index string, c *pql.Call, sh
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
 		other, _ := prev.(ValCount)
-		return other.Larger(v.(ValCount))
+		return other.larger(v.(ValCount))
 	}
 
 	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -1731,8 +1731,8 @@ func (vc *ValCount) Smaller(other ValCount) ValCount {
 	}
 }
 
-// Larger returns the larger of the two ValCounts.
-func (vc *ValCount) Larger(other ValCount) ValCount {
+// larger returns the larger of the two ValCounts.
+func (vc *ValCount) larger(other ValCount) ValCount {
 	if vc.Count == 0 || (other.Val > vc.Val && other.Count > 0) {
 		return other
 	}
