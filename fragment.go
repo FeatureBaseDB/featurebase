@@ -349,7 +349,7 @@ func (f *fragment) unprotectedRow(rowID uint64, checkRowCache bool, updateRowCac
 			writable: false,
 		}},
 	}
-	row.InvalidateCount()
+	row.invalidateCount()
 
 	if updateRowCache {
 		f.rowCache.Add(rowID, row)

@@ -63,7 +63,7 @@ func (r *Row) Merge(other *Row) {
 	}
 
 	r.segments = segments
-	r.InvalidateCount()
+	r.invalidateCount()
 }
 
 // intersectionCount returns the number of intersections between r and other.
@@ -208,8 +208,8 @@ func (r *Row) createSegmentIfNotExists(shard uint64) *RowSegment {
 	return &r.segments[i]
 }
 
-// InvalidateCount updates the cached count in the row.
-func (r *Row) InvalidateCount() {
+// invalidateCount updates the cached count in the row.
+func (r *Row) invalidateCount() {
 	for i := range r.segments {
 		r.segments[i].InvalidateCount()
 	}
