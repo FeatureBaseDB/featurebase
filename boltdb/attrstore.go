@@ -30,17 +30,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-// AttrBlockSize is the size of attribute blocks for anti-entropy.
-const AttrBlockSize = 100
+// attrBlockSize is the size of attribute blocks for anti-entropy.
+const attrBlockSize = 100
 
-// AttrCache represents a cache for attributes.
-type AttrCache struct {
+// attrCache represents a cache for attributes.
+type attrCache struct {
 	mu    sync.RWMutex
 	attrs map[uint64]map[string]interface{}
 }
 
 // Get returns the cached attributes for a given id.
-func (c *AttrCache) Get(id uint64) map[string]interface{} {
+func (c *attrCache) Get(id uint64) map[string]interface{} {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	attrs := c.attrs[id]
@@ -57,40 +57,40 @@ func (c *AttrCache) Get(id uint64) map[string]interface{} {
 }
 
 // Set updates the cached attributes for a given id.
-func (c *AttrCache) Set(id uint64, attrs map[string]interface{}) {
+func (c *attrCache) Set(id uint64, attrs map[string]interface{}) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.attrs[id] = attrs
 }
 
-// AttrStore represents a storage layer for attributes.
-type AttrStore struct {
+// attrStore represents a storage layer for attributes.
+type attrStore struct {
 	mu        sync.RWMutex
 	path      string
 	db        *bolt.DB
-	attrCache *AttrCache
+	attrCache *attrCache
 }
 
-// NewAttrCache returns a new instance of AttrCache.
-func NewAttrCache() *AttrCache {
-	return &AttrCache{
+// newAttrCache returns a new instance of AttrCache.
+func newAttrCache() *attrCache {
+	return &attrCache{
 		attrs: make(map[uint64]map[string]interface{}),
 	}
 }
 
 // NewAttrStore returns a new instance of AttrStore.
 func NewAttrStore(path string) pilosa.AttrStore {
-	return &AttrStore{
+	return &attrStore{
 		path:      path,
-		attrCache: NewAttrCache(),
+		attrCache: newAttrCache(),
 	}
 }
 
 // Path returns path to the store's data file.
-func (s *AttrStore) Path() string { return s.path }
+func (s *attrStore) Path() string { return s.path }
 
 // Open opens and initializes the store.
-func (s *AttrStore) Open() error {
+func (s *attrStore) Open() error {
 	// Open storage.
 	db, err := bolt.Open(s.path, 0666, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
@@ -112,7 +112,7 @@ func (s *AttrStore) Open() error {
 }
 
 // Close closes the store.
-func (s *AttrStore) Close() error {
+func (s *attrStore) Close() error {
 	if s.db != nil {
 		s.db.Close()
 	}
@@ -120,7 +120,7 @@ func (s *AttrStore) Close() error {
 }
 
 // Attrs returns a set of attributes by ID.
-func (s *AttrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
+func (s *attrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -147,7 +147,7 @@ func (s *AttrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
 }
 
 // SetAttrs sets attribute values for a given ID.
-func (s *AttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
+func (s *attrStore) SetAttrs(id uint64, m map[string]interface{}) error {
 	// Ignore empty maps.
 	if len(m) == 0 {
 		return nil
@@ -184,7 +184,7 @@ func (s *AttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
 }
 
 // SetBulkAttrs sets attribute values for a set of ids.
-func (s *AttrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
+func (s *attrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -220,7 +220,7 @@ func (s *AttrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
 }
 
 // Blocks returns a list of all blocks in the store.
-func (s *AttrStore) Blocks() ([]pilosa.AttrBlock, error) {
+func (s *attrStore) Blocks() ([]pilosa.AttrBlock, error) {
 	tx, err := s.db.Begin(false)
 	if err != nil {
 		return nil, errors.Wrap(err, "starting transaction")
@@ -228,7 +228,7 @@ func (s *AttrStore) Blocks() ([]pilosa.AttrBlock, error) {
 	defer tx.Rollback()
 
 	// Wrap cursor to segment by block.
-	cur := newBlockCursor(tx.Bucket([]byte("attrs")).Cursor(), AttrBlockSize)
+	cur := newBlockCursor(tx.Bucket([]byte("attrs")).Cursor(), attrBlockSize)
 
 	// Iterate over each block.
 	var blocks []pilosa.AttrBlock
@@ -251,7 +251,7 @@ func (s *AttrStore) Blocks() ([]pilosa.AttrBlock, error) {
 }
 
 // BlockData returns all data for a single block.
-func (s *AttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) {
+func (s *attrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) {
 	m := make(map[uint64]map[string]interface{})
 
 	// Start read-only transaction.
@@ -262,8 +262,8 @@ func (s *AttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, erro
 	defer tx.Rollback()
 
 	// Move to the start of the block.
-	min := u64tob(uint64(i) * AttrBlockSize)
-	max := u64tob(uint64(i+1) * AttrBlockSize)
+	min := u64tob(uint64(i) * attrBlockSize)
+	max := u64tob(uint64(i+1) * attrBlockSize)
 	cur := tx.Bucket([]byte("attrs")).Cursor()
 	for k, v := cur.Seek(min); k != nil; k, v = cur.Next() {
 		// Exit if we're past the end of the block.

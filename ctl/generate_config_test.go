@@ -34,7 +34,7 @@ func TestGenerateConfigCommand_Run(t *testing.T) {
 	io.Copy(&buf, r)
 	if err != nil {
 		t.Fatalf("Config Run doesn't work: %s", err)
-	} else if !strings.Contains(buf.String(), "localhost:10101") {
+	} else if !strings.Contains(buf.String(), ":10101") {
 		t.Fatalf("Unexpected config: %s", buf.String())
 	}
 }

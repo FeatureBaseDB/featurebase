@@ -22,54 +22,6 @@ import (
 	_ "github.com/pilosa/pilosa/test"
 )
 
-func TestValidateName(t *testing.T) {
-	names := []string{
-		"a", "ab", "ab1", "b-c", "d_e",
-		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-	}
-	for _, name := range names {
-		if pilosa.ValidateName(name) != nil {
-			t.Fatalf("Should be valid index name: %s", name)
-		}
-	}
-}
-
-func TestValidateNameInvalid(t *testing.T) {
-	names := []string{
-		"", "'", "^", "/", "\\", "A", "*", "a:b", "valid?no", "yüce", "1", "_", "-",
-		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
-	}
-	for _, name := range names {
-		if pilosa.ValidateName(name) == nil {
-			t.Fatalf("Should be invalid index name: %s", name)
-		}
-	}
-}
-
-func TestStringInSlice(t *testing.T) {
-	list := []string{"localhost:10101", "localhost:10102", "localhost:10103"}
-	substr := "localhost:10101"
-	if !pilosa.StringInSlice(substr, list) {
-		t.Fatalf("Expected substring %s in %v", substr, list)
-	}
-	substr = "10101"
-	if pilosa.StringInSlice(substr, list) {
-		t.Fatalf("Expected substring %s not in %v", substr, list)
-	}
-}
-
-func TestContainsSubstring(t *testing.T) {
-	list := []string{"localhost:10101", "localhost:10102", "localhost:10103"}
-	substr := "10101"
-	if !pilosa.ContainsSubstring(substr, list) {
-		t.Fatalf("Expected substring %s contained in %v", substr, list)
-	}
-	substr = "4000"
-	if pilosa.ContainsSubstring(substr, list) {
-		t.Fatalf("Expected substring %s in not contained in %v", substr, list)
-	}
-}
-
 func TestAddressWithDefaults(t *testing.T) {
 	tests := []struct {
 		addr     string

@@ -16,11 +16,7 @@ package pilosa
 
 import (
 	"errors"
-	"net"
 	"regexp"
-	"strings"
-
-	"github.com/pilosa/pilosa/internal"
 )
 
 // System errors.
@@ -31,26 +27,26 @@ var (
 	ErrIndexExists   = errors.New("index already exists")
 	ErrIndexNotFound = errors.New("index not found")
 
-	// ErrFrameRequired is returned when no frame is specified.
-	ErrFrameRequired = errors.New("frame required")
-	ErrFrameExists   = errors.New("frame already exists")
-	ErrFrameNotFound = errors.New("frame not found")
+	// ErrFieldRequired is returned when no field is specified.
+	ErrFieldRequired = errors.New("field required")
+	ErrFieldExists   = errors.New("field already exists")
+	ErrFieldNotFound = errors.New("field not found")
 
-	ErrFieldNotFound         = errors.New("field not found")
-	ErrFieldExists           = errors.New("field already exists")
-	ErrFieldNameRequired     = errors.New("field name required")
-	ErrInvalidFieldType      = errors.New("invalid field type")
-	ErrInvalidFieldRange     = errors.New("invalid field range")
-	ErrInvalidFieldValueType = errors.New("invalid field value type")
-	ErrFieldValueTooLow      = errors.New("field value too low")
-	ErrFieldValueTooHigh     = errors.New("field value too high")
-	ErrInvalidRangeOperation = errors.New("invalid range operation")
-	ErrInvalidBetweenValue   = errors.New("invalid value for between operation")
+	ErrBSIGroupNotFound         = errors.New("bsigroup not found")
+	ErrBSIGroupExists           = errors.New("bsigroup already exists")
+	ErrBSIGroupNameRequired     = errors.New("bsigroup name required")
+	ErrInvalidBSIGroupType      = errors.New("invalid bsigroup type")
+	ErrInvalidBSIGroupRange     = errors.New("invalid bsigroup range")
+	ErrInvalidBSIGroupValueType = errors.New("invalid bsigroup value type")
+	ErrBSIGroupValueTooLow      = errors.New("bsigroup value too low")
+	ErrBSIGroupValueTooHigh     = errors.New("bsigroup value too high")
+	ErrInvalidRangeOperation    = errors.New("invalid range operation")
+	ErrInvalidBetweenValue      = errors.New("invalid value for between operation")
 
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")
 
-	ErrName  = errors.New("invalid index or frame's name, must match [a-z0-9_-]")
+	ErrName  = errors.New("invalid index or field name, must match [a-z0-9_-]")
 	ErrLabel = errors.New("invalid row or column label, must match [A-Za-z0-9_-]")
 
 	// ErrFragmentNotFound is returned when a fragment does not exist.
@@ -58,17 +54,24 @@ var (
 	ErrQueryRequired    = errors.New("query required")
 	ErrTooManyWrites    = errors.New("too many write commands")
 
-	ErrClusterDoesNotOwnSlice = errors.New("cluster does not own slice")
+	ErrClusterDoesNotOwnShard = errors.New("cluster does not own shard")
 
 	ErrNodeIDNotExists    = errors.New("node with provided ID does not exist")
 	ErrNodeNotCoordinator = errors.New("node is not the coordinator")
 	ErrResizeNotRunning   = errors.New("no resize job currently running")
+
+	ErrNotImplemented = errors.New("not implemented")
 )
 
-// ApiMethodNotAllowedError wraps an error value indicating that a particular
+// apiMethodNotAllowedError wraps an error value indicating that a particular
 // API method is not allowed in the current cluster state.
-type ApiMethodNotAllowedError struct {
+type apiMethodNotAllowedError struct {
 	error
+}
+
+// newApiMethodNotAllowedError returns err wrapped in an ApiMethodNotAllowedError.
+func newApiMethodNotAllowedError(err error) apiMethodNotAllowedError {
+	return apiMethodNotAllowedError{err}
 }
 
 // BadRequestError wraps an error value to signify that a request could not be
@@ -78,56 +81,58 @@ type BadRequestError struct {
 	error
 }
 
-// Regular expression to validate index and frame names.
+// NewBadRequestError returns err wrapped in a BadRequestError.
+func NewBadRequestError(err error) BadRequestError {
+	return BadRequestError{err}
+}
+
+// ConflictError wraps an error value to signify that a conflict with an
+// existing resource occurred such that in an HTTP scenario, http.StatusConflict
+// would be returned.
+type ConflictError struct {
+	error
+}
+
+// newConflictError returns err wrapped in a ConflictError.
+func newConflictError(err error) ConflictError {
+	return ConflictError{err}
+}
+
+// NotFoundError wraps an error value to signify that a resource was not found
+// such that in an HTTP scenario, http.StatusNotFound would be returned.
+type NotFoundError struct {
+	error
+}
+
+// newNotFoundError returns err wrapped in a NotFoundError.
+func newNotFoundError(err error) NotFoundError {
+	return NotFoundError{err}
+}
+
+// Regular expression to validate index and field names.
 var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 
 // ColumnAttrSet represents a set of attributes for a vertical column in an index.
 // Can have a set of attributes attached to it.
 type ColumnAttrSet struct {
 	ID    uint64                 `json:"id"`
+	Key   string                 `json:"key,omitempty"`
 	Attrs map[string]interface{} `json:"attrs,omitempty"`
-}
-
-// encodeColumnAttrSets converts a into its internal representation.
-func encodeColumnAttrSets(a []*ColumnAttrSet) []*internal.ColumnAttrSet {
-	other := make([]*internal.ColumnAttrSet, len(a))
-	for i := range a {
-		other[i] = encodeColumnAttrSet(a[i])
-	}
-	return other
-}
-
-// encodeColumnAttrSet converts set into its internal representation.
-func encodeColumnAttrSet(set *ColumnAttrSet) *internal.ColumnAttrSet {
-	return &internal.ColumnAttrSet{
-		ID:    set.ID,
-		Attrs: encodeAttrs(set.Attrs),
-	}
 }
 
 // TimeFormat is the go-style time format used to parse string dates.
 const TimeFormat = "2006-01-02T15:04"
 
-// ValidateName ensures that the name is a valid format.
-func ValidateName(name string) error {
+// validateName ensures that the name is a valid format.
+func validateName(name string) error {
 	if !nameRegexp.Match([]byte(name)) {
 		return ErrName
 	}
 	return nil
 }
 
-// StringInSlice checks for substring a in the slice.
-func StringInSlice(a string, list []string) bool {
-	for _, b := range list {
-		if b == a {
-			return true
-		}
-	}
-	return false
-}
-
-// StringSlicesAreEqual determines if two string slices are equal.
-func StringSlicesAreEqual(a, b []string) bool {
+// stringSlicesAreEqual determines if two string slices are equal.
+func stringSlicesAreEqual(a, b []string) bool {
 
 	if a == nil && b == nil {
 		return true
@@ -150,59 +155,11 @@ func StringSlicesAreEqual(a, b []string) bool {
 	return true
 }
 
-// SliceDiff returns the difference between two uint64 slices.
-func SliceDiff(a, b []uint64) []uint64 {
-	m := make(map[uint64]uint64)
-
-	for _, y := range b {
-		m[y]++
-	}
-
-	var ret []uint64
-	for _, x := range a {
-		if m[x] > 0 {
-			m[x]--
-			continue
-		}
-		ret = append(ret, x)
-	}
-
-	return ret
-}
-
-// ContainsSubstring checks to see if substring a is contained in any string in the slice.
-func ContainsSubstring(a string, list []string) bool {
-	for _, b := range list {
-		if strings.Contains(b, a) {
-			return true
-		}
-	}
-	return false
-}
-
-// HostToIP converts host to an IP4 address based on net.LookupIP().
-func HostToIP(host string) string {
-	// if host is not an IP addr, check net.LookupIP()
-	if net.ParseIP(host) == nil {
-		hosts, err := net.LookupIP(host)
-		if err != nil {
-			return host
-		}
-		for _, h := range hosts {
-			// this restricts pilosa to IP4
-			if h.To4() != nil {
-				return h.String()
-			}
-		}
-	}
-	return host
-}
-
 // AddressWithDefaults converts addr into a valid address,
 // using defaults when necessary.
 func AddressWithDefaults(addr string) (*URI, error) {
 	if addr == "" {
-		return DefaultURI(), nil
+		return defaultURI(), nil
 	} else {
 		return NewURIFromAddress(addr)
 	}

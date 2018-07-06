@@ -28,32 +28,33 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Index represents a container for frames.
+// Index represents a container for fields.
 type Index struct {
 	mu   sync.RWMutex
 	path string
 	name string
+	keys bool // use string keys
 
-	// Frames by name.
-	frames map[string]*Frame
+	// Fields by name.
+	fields map[string]*Field
 
-	// Max Slice on any node in the cluster, according to this node.
-	remoteMaxSlice uint64
+	// Max shard on any node in the cluster, according to this node.
+	remoteMaxShard uint64
 
-	NewAttrStore func(string) AttrStore
+	newAttrStore func(string) AttrStore
 
 	// Column attribute storage and cache.
-	columnAttrStore AttrStore
+	columnAttrs AttrStore
 
-	broadcaster Broadcaster
+	broadcaster broadcaster
 	Stats       StatsClient
 
-	Logger Logger
+	logger Logger
 }
 
 // NewIndex returns a new instance of Index.
 func NewIndex(path, name string) (*Index, error) {
-	err := ValidateName(name)
+	err := validateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
 	}
@@ -61,16 +62,16 @@ func NewIndex(path, name string) (*Index, error) {
 	return &Index{
 		path:   path,
 		name:   name,
-		frames: make(map[string]*Frame),
+		fields: make(map[string]*Field),
 
-		remoteMaxSlice: 0,
+		remoteMaxShard: 0,
 
-		NewAttrStore:    NewNopAttrStore,
-		columnAttrStore: NopAttrStore,
+		newAttrStore: newNopAttrStore,
+		columnAttrs:  nopStore,
 
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
-		Logger:      NopLogger,
+		logger:      NopLogger,
 	}, nil
 }
 
@@ -80,8 +81,11 @@ func (i *Index) Name() string { return i.name }
 // Path returns the path the index was initialized with.
 func (i *Index) Path() string { return i.path }
 
+// Keys returns true if the index uses string keys.
+func (i *Index) Keys() bool { return i.keys }
+
 // ColumnAttrStore returns the storage for column attributes.
-func (i *Index) ColumnAttrStore() AttrStore { return i.columnAttrStore }
+func (i *Index) ColumnAttrStore() AttrStore { return i.columnAttrs }
 
 // Options returns all options for this index.
 func (i *Index) Options() IndexOptions {
@@ -106,19 +110,19 @@ func (i *Index) Open() error {
 		return errors.Wrap(err, "loading meta file")
 	}
 
-	if err := i.openFrames(); err != nil {
-		return errors.Wrap(err, "opening frames")
+	if err := i.openFields(); err != nil {
+		return errors.Wrap(err, "opening fields")
 	}
 
-	if err := i.columnAttrStore.Open(); err != nil {
+	if err := i.columnAttrs.Open(); err != nil {
 		return errors.Wrap(err, "opening attrstore")
 	}
 
 	return nil
 }
 
-// openFrames opens and initializes the frames inside the index.
-func (i *Index) openFrames() error {
+// openFields opens and initializes the fields inside the index.
+func (i *Index) openFields() error {
 	f, err := os.Open(i.path)
 	if err != nil {
 		return errors.Wrap(err, "opening directory")
@@ -135,14 +139,14 @@ func (i *Index) openFrames() error {
 			continue
 		}
 
-		fr, err := i.newFrame(i.FramePath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		fld, err := i.newField(i.fieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 		if err != nil {
 			return ErrName
 		}
-		if err := fr.Open(); err != nil {
-			return fmt.Errorf("open frame: name=%s, err=%s", fr.Name(), err)
+		if err := fld.Open(); err != nil {
+			return fmt.Errorf("open field: name=%s, err=%s", fld.Name(), err)
 		}
-		i.frames[fr.Name()] = fr
+		i.fields[fld.Name()] = fld
 	}
 	return nil
 }
@@ -164,18 +168,17 @@ func (i *Index) loadMeta() error {
 	}
 
 	// Copy metadata fields.
+	i.keys = pb.Keys
 
 	return nil
 }
 
-// NOTE: Until we introduce new attributes to store in the index .meta file,
-// we don't need to actually write the file. The code related to index.options
-// and the index meta file are left in place for future use.
-/*
 // saveMeta writes meta data for the index.
 func (i *Index) saveMeta() error {
 	// Marshal metadata.
-	buf, err := proto.Marshal(&internal.IndexMeta{})
+	buf, err := proto.Marshal(&internal.IndexMeta{
+		Keys: i.keys,
+	})
 	if err != nil {
 		return errors.Wrap(err, "marshalling")
 	}
@@ -187,201 +190,209 @@ func (i *Index) saveMeta() error {
 
 	return nil
 }
-*/
 
-// Close closes the index and its frames.
+// Close closes the index and its fields.
 func (i *Index) Close() error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
 	// Close the attribute store.
-	i.columnAttrStore.Close()
+	i.columnAttrs.Close()
 
-	// Close all frames.
-	for _, f := range i.frames {
+	// Close all fields.
+	for _, f := range i.fields {
 		if err := f.Close(); err != nil {
-			return errors.Wrap(err, "closing frame")
+			return errors.Wrap(err, "closing field")
 		}
 	}
-	i.frames = make(map[string]*Frame)
+	i.fields = make(map[string]*Field)
 
 	return nil
 }
 
-// MaxSlice returns the max slice in the index according to this node.
-func (i *Index) MaxSlice() uint64 {
+// maxShard returns the max shard in the index according to this node.
+func (i *Index) maxShard() uint64 {
 	if i == nil {
 		return 0
 	}
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 
-	max := i.remoteMaxSlice
-	for _, f := range i.frames {
-		if slice := f.MaxSlice(); slice > max {
-			max = slice
+	max := i.remoteMaxShard
+	for _, f := range i.fields {
+		if shard := f.maxShard(); shard > max {
+			max = shard
 		}
 	}
 
-	i.Stats.Gauge("maxSlice", float64(max), 1.0)
+	i.Stats.Gauge("maxShard", float64(max), 1.0)
 	return max
 }
 
-// SetRemoteMaxSlice sets the remote max slice value received from another node.
-func (i *Index) SetRemoteMaxSlice(newmax uint64) {
+// setRemoteMaxShard sets the remote max shard value received from another node.
+func (i *Index) setRemoteMaxShard(newmax uint64) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	i.remoteMaxSlice = newmax
+	i.remoteMaxShard = newmax
 }
 
-// FramePath returns the path to a frame in the index.
-func (i *Index) FramePath(name string) string { return filepath.Join(i.path, name) }
+// fieldPath returns the path to a field in the index.
+func (i *Index) fieldPath(name string) string { return filepath.Join(i.path, name) }
 
-// Frame returns a frame in the index by name.
-func (i *Index) Frame(name string) *Frame {
+// Field returns a field in the index by name.
+func (i *Index) Field(name string) *Field {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
-	return i.frame(name)
+	return i.field(name)
 }
 
-func (i *Index) frame(name string) *Frame { return i.frames[name] }
+func (i *Index) field(name string) *Field { return i.fields[name] }
 
-// Frames returns a list of all frames in the index.
-func (i *Index) Frames() []*Frame {
+// Fields returns a list of all fields in the index.
+func (i *Index) Fields() []*Field {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 
-	a := make([]*Frame, 0, len(i.frames))
-	for _, f := range i.frames {
+	a := make([]*Field, 0, len(i.fields))
+	for _, f := range i.fields {
 		a = append(a, f)
 	}
-	sort.Sort(frameSlice(a))
+	sort.Sort(fieldSlice(a))
 
 	return a
 }
 
-// RecalculateCaches recalculates caches on every frame in the index.
-func (i *Index) RecalculateCaches() {
-	for _, frame := range i.Frames() {
-		frame.RecalculateCaches()
+// recalculateCaches recalculates caches on every field in the index.
+func (i *Index) recalculateCaches() {
+	for _, field := range i.Fields() {
+		field.recalculateCaches()
 	}
 }
 
-// CreateFrame creates a frame.
-func (i *Index) CreateFrame(name string, opt FrameOptions) (*Frame, error) {
+// CreateField creates a field.
+func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	// Ensure frame doesn't already exist.
-	if i.frames[name] != nil {
-		return nil, ErrFrameExists
-	}
-	return i.createFrame(name, opt)
-}
-
-// CreateFrameIfNotExists creates a frame with the given options if it doesn't exist.
-func (i *Index) CreateFrameIfNotExists(name string, opt FrameOptions) (*Frame, error) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	// Find frame in cache first.
-	if f := i.frames[name]; f != nil {
-		return f, nil
+	// Ensure field doesn't already exist.
+	if i.fields[name] != nil {
+		return nil, newConflictError(ErrFieldExists)
 	}
 
-	return i.createFrame(name, opt)
-}
-
-func (i *Index) createFrame(name string, opt FrameOptions) (*Frame, error) {
-	if name == "" {
-		return nil, errors.New("frame name required")
-	} else if opt.CacheType != "" && !IsValidCacheType(opt.CacheType) {
-		return nil, ErrInvalidCacheType
-	}
-
-	// Validate fields.
-	for _, field := range opt.Fields {
-		if err := ValidateField(field); err != nil {
-			return nil, err
+	// Apply functional options.
+	fo := FieldOptions{}
+	for _, opt := range opts {
+		err := opt(&fo)
+		if err != nil {
+			return nil, errors.Wrap(err, "applying option")
 		}
 	}
 
-	// Initialize frame.
-	f, err := i.newFrame(i.FramePath(name), name)
+	return i.createField(name, fo)
+}
+
+// CreateFieldIfNotExists creates a field with the given options if it doesn't exist.
+func (i *Index) CreateFieldIfNotExists(name string, opts FieldOption) (*Field, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Find field in cache first.
+	if f := i.fields[name]; f != nil {
+		return f, nil
+	}
+
+	// Apply functional option.
+	fo := FieldOptions{}
+	err := opts(&fo)
+	if err != nil {
+		return nil, errors.Wrap(err, "applying option")
+	}
+
+	return i.createField(name, fo)
+}
+
+func (i *Index) createFieldIfNotExists(name string, opt FieldOptions) (*Field, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Find field in cache first.
+	if f := i.fields[name]; f != nil {
+		return f, nil
+	}
+
+	return i.createField(name, opt)
+}
+
+func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
+	if name == "" {
+		return nil, errors.New("field name required")
+	} else if opt.CacheType != "" && !isValidCacheType(opt.CacheType) {
+		return nil, ErrInvalidCacheType
+	}
+
+	// Initialize field.
+	f, err := i.newField(i.fieldPath(name), name)
 	if err != nil {
 		return nil, errors.Wrap(err, "initializing")
 	}
 
-	// Open frame.
+	// Open field.
 	if err := f.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")
 	}
 
-	// Set the time quantum.
-	if err := f.SetTimeQuantum(opt.TimeQuantum); err != nil {
+	// Apply field options.
+	if err := f.applyOptions(opt); err != nil {
 		f.Close()
-		return nil, errors.Wrap(err, "setting time quantum")
+		return nil, errors.Wrap(err, "applying options")
 	}
-
-	// Set cache type.
-	if opt.CacheType == "" {
-		opt.CacheType = DefaultCacheType
-	}
-	f.cacheType = opt.CacheType
-
-	if opt.CacheSize != 0 {
-		f.cacheSize = opt.CacheSize
-	}
-
-	// Set fields.
-	f.fields = opt.Fields
 
 	if err := f.saveMeta(); err != nil {
 		f.Close()
 		return nil, errors.Wrap(err, "saving meta")
 	}
 
-	// Add to index's frame lookup.
-	i.frames[name] = f
+	// Add to index's field lookup.
+	i.fields[name] = f
 
 	return f, nil
 }
 
-func (i *Index) newFrame(path, name string) (*Frame, error) {
-	f, err := NewFrame(path, i.name, name)
+func (i *Index) newField(path, name string) (*Field, error) {
+	f, err := NewField(path, i.name, name, OptFieldTypeDefault())
 	if err != nil {
 		return nil, err
 	}
-	f.Logger = i.Logger
-	f.Stats = i.Stats.WithTags(fmt.Sprintf("frame:%s", name))
+	f.logger = i.logger
+	f.Stats = i.Stats.WithTags(fmt.Sprintf("field:%s", name))
 	f.broadcaster = i.broadcaster
-	f.rowAttrStore = i.NewAttrStore(filepath.Join(f.path, ".data"))
+	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
 	return f, nil
 }
 
-// DeleteFrame removes a frame from the index.
-func (i *Index) DeleteFrame(name string) error {
+// DeleteField removes a field from the index.
+func (i *Index) DeleteField(name string) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	// Ignore if frame doesn't exist.
-	f := i.frame(name)
+	// Confirm field exists.
+	f := i.field(name)
 	if f == nil {
-		return nil
+		return newNotFoundError(ErrFieldNotFound)
 	}
 
-	// Close frame.
+	// Close field.
 	if err := f.Close(); err != nil {
 		return errors.Wrap(err, "closing")
 	}
 
-	// Delete frame directory.
-	if err := os.RemoveAll(i.FramePath(name)); err != nil {
+	// Delete field directory.
+	if err := os.RemoveAll(i.fieldPath(name)); err != nil {
 		return errors.Wrap(err, "removing directory")
 	}
 
 	// Remove reference.
-	delete(i.frames, name)
+	delete(i.fields, name)
 
 	return nil
 }
@@ -394,8 +405,9 @@ func (p indexSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
 // IndexInfo represents schema information for an index.
 type IndexInfo struct {
-	Name   string       `json:"name"`
-	Frames []*FrameInfo `json:"frames"`
+	Name    string       `json:"name"`
+	options IndexOptions `json:"options"`
+	Fields  []*FieldInfo `json:"fields"`
 }
 
 type indexInfoSlice []*IndexInfo
@@ -404,29 +416,9 @@ func (p indexInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p indexInfoSlice) Len() int           { return len(p) }
 func (p indexInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
-// EncodeIndexes converts a into its internal representation.
-func EncodeIndexes(a []*Index) []*internal.Index {
-	other := make([]*internal.Index, len(a))
-	for i := range a {
-		other[i] = encodeIndex(a[i])
-	}
-	return other
-}
-
-// encodeIndex converts d into its internal representation.
-func encodeIndex(d *Index) *internal.Index {
-	return &internal.Index{
-		Name:   d.name,
-		Frames: encodeFrames(d.Frames()),
-	}
-}
-
 // IndexOptions represents options to set when initializing an index.
-type IndexOptions struct{}
-
-// Encode converts i into its internal representation.
-func (i *IndexOptions) Encode() *internal.IndexMeta {
-	return &internal.IndexMeta{}
+type IndexOptions struct {
+	Keys bool `json:"keys"`
 }
 
 // hasTime returns true if a contains a non-nil time.
@@ -441,7 +433,7 @@ func hasTime(a []*time.Time) bool {
 
 type importKey struct {
 	View  string
-	Slice uint64
+	Shard uint64
 }
 
 type importData struct {

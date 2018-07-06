@@ -26,7 +26,7 @@ import (
 
 var Exporter *ctl.ExportCommand
 
-func NewExportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+func newExportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	Exporter = ctl.NewExportCommand(os.Stdin, os.Stdout, os.Stderr)
 	exportCmd := &cobra.Command{
 		Use:   "export",
@@ -52,7 +52,7 @@ The file does not contain any headers.
 
 	flags.StringVarP(&Exporter.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
 	flags.StringVarP(&Exporter.Index, "index", "i", "", "Pilosa index to export")
-	flags.StringVarP(&Exporter.Frame, "frame", "f", "", "Frame to export")
+	flags.StringVarP(&Exporter.Field, "field", "f", "", "Field to export")
 	flags.StringVarP(&Exporter.Path, "output-file", "o", "", "File to write export to - default stdout")
 	ctl.SetTLSConfig(flags, &Exporter.TLS.CertificatePath, &Exporter.TLS.CertificateKeyPath, &Exporter.TLS.SkipVerify)
 
@@ -60,5 +60,5 @@ The file does not contain any headers.
 }
 
 func init() {
-	subcommandFns["export"] = NewExportCommand
+	subcommandFns["export"] = newExportCommand
 }

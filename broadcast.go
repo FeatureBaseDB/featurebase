@@ -16,223 +16,150 @@ package pilosa
 
 import (
 	"fmt"
-	"reflect"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pkg/errors"
 )
 
-// MemberSet represents an interface for Node membership and inter-node communication.
-type MemberSet interface {
-	// Open starts any network activity implemented by the MemberSet
-	// Node is the local node, used for membership broadcasts.
-	Open(n *Node) error
+// Serializer is an interface for serializing pilosa types to bytes and back.
+type Serializer interface {
+	Marshal(Message) ([]byte, error)
+	Unmarshal([]byte, Message) error
 }
 
-// StaticMemberSet represents a basic MemberSet for testing.
-type StaticMemberSet struct {
-	nodes []*Node
+// broadcaster is an interface for broadcasting messages.
+type broadcaster interface {
+	SendSync(Message) error
+	SendAsync(Message) error
+	SendTo(*Node, Message) error
 }
 
-// NewStaticMemberSet creates a statically defined MemberSet.
-func NewStaticMemberSet(nodes []*Node) *StaticMemberSet {
-	return &StaticMemberSet{
-		nodes: nodes,
-	}
-}
-
-// Open implements the MemberSet interface to start network activity, but for a static MemberSet it does nothing.
-func (s *StaticMemberSet) Open(n *Node) error {
-	return nil
-}
-
-// Broadcaster is an interface for broadcasting messages.
-type Broadcaster interface {
-	SendSync(pb proto.Message) error
-	SendAsync(pb proto.Message) error
-	SendTo(to *Node, pb proto.Message) error
-}
+// Message is the interface implemented by all core pilosa types which can be serialized to messages.
+// TODO add at least a single "isMessage()" method.
+type Message interface{}
 
 func init() {
 	NopBroadcaster = &nopBroadcaster{}
-	NopGossiper = &nopGossiper{}
 }
 
 // NopBroadcaster represents a Broadcaster that doesn't do anything.
-var NopBroadcaster Broadcaster
+var NopBroadcaster broadcaster
 
 type nopBroadcaster struct{}
 
 // SendSync A no-op implementation of Broadcaster SendSync method.
-func (n *nopBroadcaster) SendSync(pb proto.Message) error {
-	return nil
-}
+func (nopBroadcaster) SendSync(Message) error { return nil }
 
 // SendAsync A no-op implementation of Broadcaster SendAsync method.
-func (n *nopBroadcaster) SendAsync(pb proto.Message) error {
-	return nil
-}
+func (nopBroadcaster) SendAsync(Message) error { return nil }
 
 // SendTo is a no-op implementation of Broadcaster SendTo method.
-func (c *nopBroadcaster) SendTo(to *Node, pb proto.Message) error {
-	return nil
-}
-
-// BroadcastHandler is the interface for the pilosa object which knows how to
-// handle broadcast messages. (Hint: this is implemented by pilosa.Server)
-type BroadcastHandler interface {
-	ReceiveMessage(pb proto.Message) error
-}
-
-// BroadcastReceiver is the interface for the object which will listen for and
-// decode broadcast messages before passing them to pilosa to handle. The
-// implementation of this could be an http server which listens for messages,
-// gets the protobuf payload, and then passes it to
-// BroadcastHandler.ReceiveMessage.
-type BroadcastReceiver interface {
-	// Start starts listening for broadcast messages - it should return
-	// immediately, spawning a goroutine if necessary.
-	Start(BroadcastHandler) error
-}
-
-type nopBroadcastReceiver struct{}
-
-func (n *nopBroadcastReceiver) Start(b BroadcastHandler) error { return nil }
-
-// NopBroadcastReceiver is a no-op implementation of the BroadcastReceiver.
-var NopBroadcastReceiver = &nopBroadcastReceiver{}
-
-// Gossiper is an interface for sharing messages via gossip.
-type Gossiper interface {
-	SendAsync(pb proto.Message) error
-}
-
-// NopBroadcaster represents a Broadcaster that doesn't do anything.
-var NopGossiper Gossiper
-
-type nopGossiper struct{}
-
-// SendAsync A no-op implementation of Gossiper SendAsync method.
-func (n *nopGossiper) SendAsync(pb proto.Message) error {
-	return nil
-}
+func (nopBroadcaster) SendTo(*Node, Message) error { return nil }
 
 // Broadcast message types.
 const (
-	MessageTypeCreateSlice = iota
-	MessageTypeCreateIndex
-	MessageTypeDeleteIndex
-	MessageTypeCreateFrame
-	MessageTypeDeleteFrame
-	MessageTypeCreateView
-	MessageTypeDeleteView
-	MessageTypeCreateField
-	MessageTypeDeleteField
-	MessageTypeClusterStatus
-	MessageTypeResizeInstruction
-	MessageTypeResizeInstructionComplete
-	MessageTypeSetCoordinator
-	MessageTypeUpdateCoordinator
-	MessageTypeNodeState
-	MessageTypeRecalculateCaches
-	MessageTypeNodeEvent
+	messageTypeCreateShard = iota
+	messageTypeCreateIndex
+	messageTypeDeleteIndex
+	messageTypeCreateField
+	messageTypeDeleteField
+	messageTypeCreateView
+	messageTypeDeleteView
+	messageTypeClusterStatus
+	messageTypeResizeInstruction
+	messageTypeResizeInstructionComplete
+	messageTypeSetCoordinator
+	messageTypeUpdateCoordinator
+	messageTypeNodeState
+	messageTypeRecalculateCaches
+	messageTypeNodeEvent
+	messageTypeNodeStatus
 )
 
-// MarshalMessage encodes the protobuf message into a byte slice.
-func MarshalMessage(m proto.Message) ([]byte, error) {
-	var typ uint8
-	switch obj := m.(type) {
-	case *internal.CreateSliceMessage:
-		typ = MessageTypeCreateSlice
-	case *internal.CreateIndexMessage:
-		typ = MessageTypeCreateIndex
-	case *internal.DeleteIndexMessage:
-		typ = MessageTypeDeleteIndex
-	case *internal.CreateFrameMessage:
-		typ = MessageTypeCreateFrame
-	case *internal.DeleteFrameMessage:
-		typ = MessageTypeDeleteFrame
-	case *internal.CreateViewMessage:
-		typ = MessageTypeCreateView
-	case *internal.DeleteViewMessage:
-		typ = MessageTypeDeleteView
-	case *internal.CreateFieldMessage:
-		typ = MessageTypeCreateField
-	case *internal.DeleteFieldMessage:
-		typ = MessageTypeDeleteField
-	case *internal.ClusterStatus:
-		typ = MessageTypeClusterStatus
-	case *internal.ResizeInstruction:
-		typ = MessageTypeResizeInstruction
-	case *internal.ResizeInstructionComplete:
-		typ = MessageTypeResizeInstructionComplete
-	case *internal.SetCoordinatorMessage:
-		typ = MessageTypeSetCoordinator
-	case *internal.UpdateCoordinatorMessage:
-		typ = MessageTypeUpdateCoordinator
-	case *internal.NodeStateMessage:
-		typ = MessageTypeNodeState
-	case *internal.RecalculateCaches:
-		typ = MessageTypeRecalculateCaches
-	case *internal.NodeEventMessage:
-		typ = MessageTypeNodeEvent
-	default:
-		return nil, fmt.Errorf("message type not implemented for marshalling: %s", reflect.TypeOf(obj))
-	}
-	buf, err := proto.Marshal(m)
+// MarshalInternalMessage serializes the pilosa message and adds pilosa internal
+// type info which is used by the internal messaging stuff.
+func MarshalInternalMessage(m Message, s Serializer) ([]byte, error) {
+	typ := getMessageType(m)
+	buf, err := s.Marshal(m)
 	if err != nil {
-		return nil, errors.Wrap(err, "marshalling")
+		return nil, errors.Wrap(err, "marshaling")
 	}
 	return append([]byte{typ}, buf...), nil
 }
 
-// UnmarshalMessage decodes the byte slice into a protobuf message.
-func UnmarshalMessage(buf []byte) (proto.Message, error) {
-	typ, buf := buf[0], buf[1:]
-
-	var m proto.Message
+func getMessage(typ byte) Message {
 	switch typ {
-	case MessageTypeCreateSlice:
-		m = &internal.CreateSliceMessage{}
-	case MessageTypeCreateIndex:
-		m = &internal.CreateIndexMessage{}
-	case MessageTypeDeleteIndex:
-		m = &internal.DeleteIndexMessage{}
-	case MessageTypeCreateFrame:
-		m = &internal.CreateFrameMessage{}
-	case MessageTypeDeleteFrame:
-		m = &internal.DeleteFrameMessage{}
-	case MessageTypeCreateView:
-		m = &internal.CreateViewMessage{}
-	case MessageTypeDeleteView:
-		m = &internal.DeleteViewMessage{}
-	case MessageTypeCreateField:
-		m = &internal.CreateFieldMessage{}
-	case MessageTypeDeleteField:
-		m = &internal.DeleteFieldMessage{}
-	case MessageTypeClusterStatus:
-		m = &internal.ClusterStatus{}
-	case MessageTypeResizeInstruction:
-		m = &internal.ResizeInstruction{}
-	case MessageTypeResizeInstructionComplete:
-		m = &internal.ResizeInstructionComplete{}
-	case MessageTypeSetCoordinator:
-		m = &internal.SetCoordinatorMessage{}
-	case MessageTypeUpdateCoordinator:
-		m = &internal.UpdateCoordinatorMessage{}
-	case MessageTypeNodeState:
-		m = &internal.NodeStateMessage{}
-	case MessageTypeRecalculateCaches:
-		m = &internal.RecalculateCaches{}
-	case MessageTypeNodeEvent:
-		m = &internal.NodeEventMessage{}
+	case messageTypeCreateShard:
+		return &CreateShardMessage{}
+	case messageTypeCreateIndex:
+		return &CreateIndexMessage{}
+	case messageTypeDeleteIndex:
+		return &DeleteIndexMessage{}
+	case messageTypeCreateField:
+		return &CreateFieldMessage{}
+	case messageTypeDeleteField:
+		return &DeleteFieldMessage{}
+	case messageTypeCreateView:
+		return &CreateViewMessage{}
+	case messageTypeDeleteView:
+		return &DeleteViewMessage{}
+	case messageTypeClusterStatus:
+		return &ClusterStatus{}
+	case messageTypeResizeInstruction:
+		return &ResizeInstruction{}
+	case messageTypeResizeInstructionComplete:
+		return &ResizeInstructionComplete{}
+	case messageTypeSetCoordinator:
+		return &SetCoordinatorMessage{}
+	case messageTypeUpdateCoordinator:
+		return &UpdateCoordinatorMessage{}
+	case messageTypeNodeState:
+		return &NodeStateMessage{}
+	case messageTypeRecalculateCaches:
+		return &RecalculateCaches{}
+	case messageTypeNodeEvent:
+		return &NodeEvent{}
+	case messageTypeNodeStatus:
+		return &NodeStatus{}
 	default:
-		return nil, fmt.Errorf("invalid message type: %d", typ)
+		panic(fmt.Sprintf("unknown message type %d", typ))
 	}
+}
 
-	if err := proto.Unmarshal(buf, m); err != nil {
-		return nil, errors.Wrap(err, "unmarshalling")
+func getMessageType(m Message) byte {
+	switch m.(type) {
+	case *CreateShardMessage:
+		return messageTypeCreateShard
+	case *CreateIndexMessage:
+		return messageTypeCreateIndex
+	case *DeleteIndexMessage:
+		return messageTypeDeleteIndex
+	case *CreateFieldMessage:
+		return messageTypeCreateField
+	case *DeleteFieldMessage:
+		return messageTypeDeleteField
+	case *CreateViewMessage:
+		return messageTypeCreateView
+	case *DeleteViewMessage:
+		return messageTypeDeleteView
+	case *ClusterStatus:
+		return messageTypeClusterStatus
+	case *ResizeInstruction:
+		return messageTypeResizeInstruction
+	case *ResizeInstructionComplete:
+		return messageTypeResizeInstructionComplete
+	case *SetCoordinatorMessage:
+		return messageTypeSetCoordinator
+	case *UpdateCoordinatorMessage:
+		return messageTypeUpdateCoordinator
+	case *NodeStateMessage:
+		return messageTypeNodeState
+	case *RecalculateCaches:
+		return messageTypeRecalculateCaches
+	case *NodeEvent:
+		return messageTypeNodeEvent
+	case *NodeStatus:
+		return messageTypeNodeStatus
+	default:
+		panic(fmt.Sprintf("don't have type for message %#v", m))
 	}
-	return m, nil
 }

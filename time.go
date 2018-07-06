@@ -70,17 +70,8 @@ func (q TimeQuantum) Type() string {
 	return "TimeQuantum"
 }
 
-// ParseTimeQuantum parses v into a time quantum.
-func ParseTimeQuantum(v string) (TimeQuantum, error) {
-	q := TimeQuantum(strings.ToUpper(v))
-	if !q.Valid() {
-		return "", ErrInvalidTimeQuantum
-	}
-	return q, nil
-}
-
-// ViewByTimeUnit returns the view name for time with a given quantum unit.
-func ViewByTimeUnit(name string, t time.Time, unit rune) string {
+// viewByTimeUnit returns the view name for time with a given quantum unit.
+func viewByTimeUnit(name string, t time.Time, unit rune) string {
 	switch unit {
 	case 'Y':
 		return fmt.Sprintf("%s_%s", name, t.Format("2006"))
@@ -95,11 +86,11 @@ func ViewByTimeUnit(name string, t time.Time, unit rune) string {
 	}
 }
 
-// ViewsByTime returns a list of views for a given timestamp.
-func ViewsByTime(name string, t time.Time, q TimeQuantum) []string {
+// viewsByTime returns a list of views for a given timestamp.
+func viewsByTime(name string, t time.Time, q TimeQuantum) []string {
 	a := make([]string, 0, len(q))
 	for _, unit := range q {
-		view := ViewByTimeUnit(name, t, unit)
+		view := viewByTimeUnit(name, t, unit)
 		if view == "" {
 			continue
 		}
@@ -108,8 +99,8 @@ func ViewsByTime(name string, t time.Time, q TimeQuantum) []string {
 	return a
 }
 
-// ViewsByTimeRange returns a list of views to traverse to query a time range.
-func ViewsByTimeRange(name string, start, end time.Time, q TimeQuantum) []string {
+// viewsByTimeRange returns a list of views to traverse to query a time range.
+func viewsByTimeRange(name string, start, end time.Time, q TimeQuantum) []string {
 	t := start
 
 	// Save flags for performance.
@@ -127,7 +118,7 @@ func ViewsByTimeRange(name string, start, end time.Time, q TimeQuantum) []string
 				if !nextDayGTE(t, end) {
 					break
 				} else if t.Hour() != 0 {
-					results = append(results, ViewByTimeUnit(name, t, 'H'))
+					results = append(results, viewByTimeUnit(name, t, 'H'))
 					t = t.Add(time.Hour)
 					continue
 				}
@@ -138,7 +129,7 @@ func ViewsByTimeRange(name string, start, end time.Time, q TimeQuantum) []string
 				if !nextMonthGTE(t, end) {
 					break
 				} else if t.Day() != 1 {
-					results = append(results, ViewByTimeUnit(name, t, 'D'))
+					results = append(results, viewByTimeUnit(name, t, 'D'))
 					t = t.AddDate(0, 0, 1)
 					continue
 				}
@@ -148,7 +139,7 @@ func ViewsByTimeRange(name string, start, end time.Time, q TimeQuantum) []string
 				if !nextYearGTE(t, end) {
 					break
 				} else if t.Month() != 1 {
-					results = append(results, ViewByTimeUnit(name, t, 'M'))
+					results = append(results, viewByTimeUnit(name, t, 'M'))
 					t = t.AddDate(0, 1, 0)
 					continue
 				}
@@ -164,16 +155,16 @@ func ViewsByTimeRange(name string, start, end time.Time, q TimeQuantum) []string
 	// Walk back down from largest units to smallest units.
 	for t.Before(end) {
 		if hasYear && nextYearGTE(t, end) {
-			results = append(results, ViewByTimeUnit(name, t, 'Y'))
+			results = append(results, viewByTimeUnit(name, t, 'Y'))
 			t = t.AddDate(1, 0, 0)
 		} else if hasMonth && nextMonthGTE(t, end) {
-			results = append(results, ViewByTimeUnit(name, t, 'M'))
+			results = append(results, viewByTimeUnit(name, t, 'M'))
 			t = t.AddDate(0, 1, 0)
 		} else if hasDay && nextDayGTE(t, end) {
-			results = append(results, ViewByTimeUnit(name, t, 'D'))
+			results = append(results, viewByTimeUnit(name, t, 'D'))
 			t = t.AddDate(0, 0, 1)
 		} else if hasHour {
-			results = append(results, ViewByTimeUnit(name, t, 'H'))
+			results = append(results, viewByTimeUnit(name, t, 'H'))
 			t = t.Add(time.Hour)
 		} else {
 			break

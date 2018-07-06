@@ -18,9 +18,11 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 
+	"github.com/pelletier/go-toml"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/server"
+	"github.com/pkg/errors"
 )
 
 // GenerateConfigCommand represents a command for printing a default config.
@@ -37,28 +39,11 @@ func NewGenerateConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *Genera
 
 // Run prints out the default config.
 func (cmd *GenerateConfigCommand) Run(ctx context.Context) error {
-	fmt.Fprintln(cmd.Stdout, strings.TrimSpace(`
-data-dir = "~/.pilosa"
-bind = "localhost:10101"
-max-writes-per-request = 5000
-
-[cluster]
-  replicas = 1
-  hosts = [
-    "localhost:10101",
-  ]
-
-[anti-entropy]
-  interval = "10m0s"
-
-[profile]
-  cpu = ""
-  cpu-time = "30s"
-
-[metric]
-  service = "statsd"
-  host = "127.0.0.1:8125"
-  poll-interval = "0m15s"
-`)+"\n")
+	conf := server.NewConfig()
+	ret, err := toml.Marshal(*conf)
+	if err != nil {
+		return errors.Wrap(err, "unmarshaling default config")
+	}
+	fmt.Fprintf(cmd.Stdout, "%s\n", ret)
 	return nil
 }

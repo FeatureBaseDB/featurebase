@@ -17,6 +17,7 @@ package test
 import (
 	"io/ioutil"
 	"os"
+	"time"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/boltdb"
@@ -80,47 +81,72 @@ func (h *Holder) MustCreateIndexIfNotExists(index string, opt pilosa.IndexOption
 	return &Index{Index: idx}
 }
 
-// MustCreateFrameIfNotExists returns a given frame. Panic on error.
-func (h *Holder) MustCreateFrameIfNotExists(index, frame string) *Frame {
-	f, err := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{}).CreateFrameIfNotExists(frame, pilosa.FrameOptions{})
+// Row returns a Row for a given field.
+func (h *Holder) Row(index, field string, rowID uint64) *pilosa.Row {
+	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeDefault())
 	if err != nil {
 		panic(err)
 	}
-	return f
+	row, err := f.Row(rowID)
+	if err != nil {
+		panic(err)
+	}
+	return row
 }
 
-// MustCreateFragmentIfNotExists returns a given fragment. Panic on error.
-func (h *Holder) MustCreateFragmentIfNotExists(index, frame, view string, slice uint64) *Fragment {
+func (h *Holder) RowAttrStore(index, field string) pilosa.AttrStore {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := idx.CreateFrameIfNotExists(frame, pilosa.FrameOptions{})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeDefault())
 	if err != nil {
 		panic(err)
 	}
-	v, err := f.CreateViewIfNotExists(view)
-	if err != nil {
-		panic(err)
-	}
-	frag, err := v.CreateFragmentIfNotExists(slice)
-	if err != nil {
-		panic(err)
-	}
-	return &Fragment{Fragment: frag}
+	return f.RowAttrStore()
 }
 
-// MustCreateRankedFragmentIfNotExists returns a given fragment with a ranked cache. Panic on error.
-func (h *Holder) MustCreateRankedFragmentIfNotExists(index, frame, view string, slice uint64) *Fragment {
+func (h *Holder) RowTime(index, field string, rowID uint64, t time.Time, quantum string) *pilosa.Row {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
-	f, err := idx.CreateFrameIfNotExists(frame, pilosa.FrameOptions{CacheType: pilosa.CacheTypeRanked})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeDefault())
 	if err != nil {
 		panic(err)
 	}
-	v, err := f.CreateViewIfNotExists(view)
+	row, err := f.RowTime(rowID, t, quantum)
 	if err != nil {
 		panic(err)
 	}
-	frag, err := v.CreateFragmentIfNotExists(slice)
+	return row
+}
+
+// SetBit clears a bit on the given field.
+func (h *Holder) SetBit(index, field string, rowID, columnID uint64) {
+	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeDefault())
 	if err != nil {
 		panic(err)
 	}
-	return &Fragment{Fragment: frag}
+	_, err = f.SetBit(rowID, columnID, nil)
+	if err != nil {
+		panic(err)
+	}
+}
+
+// ClearBit clears a bit on the given field.
+func (h *Holder) ClearBit(index, field string, rowID, columnID uint64) {
+	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeDefault())
+	if err != nil {
+		panic(err)
+	}
+	_, err = f.ClearBit(rowID, columnID)
+	if err != nil {
+		panic(err)
+	}
+}
+
+// MustSetBits sets columns on a row. Panic on error.
+// This function does not accept a timestamp or quantum.
+func (h *Holder) MustSetBits(index, field string, rowID uint64, columnIDs ...uint64) {
+	for _, columnID := range columnIDs {
+		h.SetBit(index, field, rowID, columnID)
+	}
 }

@@ -1,0 +1,74 @@
+package pql
+
+type PQL Peg {
+     Query
+}
+
+
+Calls <- sp (Call sp)* !.
+Call <-  'Set' {p.startCall("Set")} open col comma args (comma timestamp)? close {p.endCall()}
+       / 'SetRowAttrs' {p.startCall("SetRowAttrs")} open posfield comma uintrow comma args close {p.endCall()}
+       / 'SetColumnAttrs' {p.startCall("SetColumnAttrs")} open col comma args close {p.endCall()}
+       / 'Clear' {p.startCall("Clear")} open col comma args close {p.endCall()}
+       / 'TopN' {p.startCall("TopN")} open posfield (comma allargs)? close {p.endCall()}
+       / 'Range' {p.startCall("Range")} open (timerange / conditional / arg) close {p.endCall()}
+       / < IDENT > { p.startCall(buffer[begin:end] ) } open allargs comma? close { p.endCall() }
+allargs <- Call (comma Call)* (comma args)? / args / sp
+args <- arg (comma args)? sp
+arg <- (   field sp '=' sp value
+         / field sp COND sp value
+         )
+COND <- ( '><' { p.addBTWN() }
+        / '<=' { p.addLTE() }
+        / '>=' { p.addGTE() }
+        / '==' { p.addEQ() }
+        / '!=' { p.addNEQ() }
+        / '<' { p.addLT() }
+        / '>' { p.addGT() }
+        )
+conditional <- {p.startConditional()} condint condLT condfield condLT condint {p.endConditional()}
+condint <- <'-'? [1-9] [0-9]* / '0'> sp {p.condAdd(buffer[begin:end])}
+condLT <- <('<=' / '<')> sp {p.condAdd(buffer[begin:end])}
+condfield <- <fieldExpr> sp {p.condAdd(buffer[begin:end])}
+
+timerange <- field sp '=' sp value comma <timestampfmt> {p.addPosStr("_start", buffer[begin:end])} comma <timestampfmt> {p.addPosStr("_end", buffer[begin:end])}
+
+value <- ( item
+         / lbrack { p.startList() } list rbrack { p.endList() }
+         )
+list <- item (comma list)?
+item <- ( 'null' &(comma / sp close) { p.addVal(nil) }
+         / 'true' &(comma / sp close) { p.addVal(true) }
+         / 'false' &(comma / sp close) { p.addVal(false) }
+         / < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(buffer[begin:end]) }
+         / < '-'? '.'[0-9]+ > { p.addNumVal(buffer[begin:end]) }
+         / < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > { p.addVal(buffer[begin:end]) }
+         / '"' < doublequotedstring > '"' { p.addVal(buffer[begin:end]) }
+         / '\'' < singlequotedstring > '\'' { p.addVal(buffer[begin:end]) }
+         )
+
+doublequotedstring <- ( [^"\\\n] / '\\n' / '\\\"' / '\\\'' / '\\\\' )*
+singlequotedstring <- ( [^'\\\n] / '\\n' / '\\\"' / '\\\'' / '\\\\' )*
+
+fieldExpr <- [[A-Z]] ( [[A-Z]] / [0-9] / '_' / '-' )*
+field <- <fieldExpr / reserved> { p.addField(buffer[begin:end]) }
+reserved <- ('_row' / '_col' / '_start' / '_end' / '_timestamp' / '_field')
+posfield <- <fieldExpr> { p.addPosStr("_field", buffer[begin:end]) }
+uint <- [1-9] [0-9]* / '0'
+uintrow <- <uint>{p.addPosNum("_row", buffer[begin:end])}
+col <- ( <uint> {p.addPosNum("_col", buffer[begin:end])}
+        / '"' <doublequotedstring> '"' {p.addPosStr("_col", buffer[begin:end])}
+        )
+
+open <- '(' sp
+close <- ')' sp
+sp <- ( ' ' / '\t' / '\n' )*
+comma <- sp ',' sp
+lbrack <- '[' sp
+rbrack <- sp ']' sp
+IDENT <- [[A-Z]] ([[A-Z]] / [0-9])*
+
+
+timestampbasicfmt <- [0-9][0-9][0-9][0-9]'-'[01][0-9]'-'[0-3][0-9]'T'[0-9][0-9]':'[0-9][0-9]
+timestampfmt <- '"' timestampbasicfmt '"' / '\'' timestampbasicfmt '\'' / timestampbasicfmt
+timestamp <- <timestampfmt> {p.addPosStr("_timestamp", buffer[begin:end])}

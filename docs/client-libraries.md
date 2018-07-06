@@ -46,16 +46,16 @@ func main() {
 		panic(err)
 	}
 
-	// We need to refer to indexes and frames before we can use them in a query.
+	// We need to refer to indexes and fields before we can use them in a query.
 	repository, _ := schema.Index("repository")
-	stargazer, _ := repository.Frame("stargazer")
-	language, _ := repository.Frame("language")
+	stargazer, _ := repository.Field("stargazer")
+	language, _ := repository.Field("language")
 
 	var response *pilosa.QueryResponse
 
 	// Which repositories did user 14 star:
-	response, _ = client.Query(stargazer.Bitmap(14))
-	fmt.Println("User 14 starred: ", response.Result().Bitmap().Bits)
+	response, _ = client.Query(stargazer.Row(14))
+	fmt.Println("User 14 starred: ", response.Result().Row().Columns)
 
 	// What are the top 5 languages in the sample data?
 	response, err = client.Query(language.TopN(5))
@@ -68,29 +68,29 @@ func main() {
 	// Which repositories were starred by both user 14 and 19:
 	response, _ = client.Query(
 		repository.Intersect(
-			stargazer.Bitmap(14),
-			stargazer.Bitmap(19)))
-	fmt.Println("Both user 14 and 19 starred:", response.Result().Bitmap().Bits)
+			stargazer.Row(14),
+			stargazer.Row(19)))
+	fmt.Println("Both user 14 and 19 starred:", response.Result().Row().Columns)
 
 	// Which repositories were starred by user 14 or 19:
 	response, _ = client.Query(
 		repository.Union(
-			stargazer.Bitmap(14),
-			stargazer.Bitmap(19)))
-	fmt.Println("User 14 or 19 starred:", response.Result().Bitmap().Bits)
+			stargazer.Row(14),
+			stargazer.Row(19)))
+	fmt.Println("User 14 or 19 starred:", response.Result().Row().Columns)
 
 	// Which repositories were starred by user 14 or 19 and were written in language 1:
 	response, _ = client.Query(
 		repository.Intersect(
 			repository.Union(
-				stargazer.Bitmap(14),
-				stargazer.Bitmap(19),
+				stargazer.Row(14),
+				stargazer.Row(19),
 			),
-			language.Bitmap(1)))
-	fmt.Println("User 14 or 19 starred, written in language 1:", response.Result().Bitmap().Bits)
+			language.Row(1)))
+	fmt.Println("User 14 or 19 starred, written in language 1:", response.Result().Row().Columns)
 
 	// Set user 99999 as a stargazer for repository 77777?
-	client.Query(stargazer.SetBit(99999, 77777))
+	client.Query(stargazer.Set(99999, 77777))
 }
 ```
 
@@ -112,6 +112,7 @@ We are going to use the index you have created in the [Getting Started](../getti
 Error handling has been omitted in the example below for brevity.
 
 ```python
+from __future__ import print_function
 from pilosa import Index, Client, PilosaError, TimeQuantum
 
 # We will just use the default client which assumes the server is at http://localhost:10101
@@ -122,8 +123,8 @@ client = Client()
 # and the stargazer data should be imported.
 # See the Getting Started repository: https://github.com/pilosa/getting-started/
 
-# Let's create Index and Frame objects, which will contain the settings
-# for the corresponding indexes and frames.
+# Let's create Index and Field objects, which will contain the settings
+# for the corresponding indexes and fields.
 try:
     schema = client.schema()
 except PilosaError as e:
@@ -132,13 +133,13 @@ except PilosaError as e:
     # We will just terminate the program in this case.
     raise SystemExit(e)
 
-# We need to refer to indexes and frames before we can use them in a query.
+# We need to refer to indexes and fields before we can use them in a query.
 repository = schema.index("repository")
-stargazer = repository.frame("stargazer")
-language = repository.frame("language")
+stargazer = repository.field("stargazer")
+language = repository.field("language")
 
 # Which repositories did user 8 star:
-repository_ids = client.query(stargazer.bitmap(14)).result.bitmap.bits
+repository_ids = client.query(stargazer.row(14)).result.row.columns
 print("User 8 starred: ", repository_ids)
 
 # What are the top 5 languages in the sample data:
@@ -147,33 +148,33 @@ print("Top 5 languages: ", [item.id for item in top_languages])
 
 # Which repositories were starred by both user 14 and 19:
 query = repository.intersect(
-    stargazer.bitmap(14),
-    stargazer.bitmap(19)
+    stargazer.row(14),
+    stargazer.row(19)
 )
-mutually_starred = client.query(query).result.bitmap.bits
+mutually_starred = client.query(query).result.row.columns
 print("Both user 14 and 19 starred:", mutually_starred)
 
 # Which repositories were starred by user 14 or 19:
 query = repository.union(
-    stargazer.bitmap(14),
-    stargazer.bitmap(19)
+    stargazer.row(14),
+    stargazer.row(19)
 )
-either_starred = client.query(query).result.bitmap.bits
+either_starred = client.query(query).result.row.columns
 print("User 14 or 19 starred:", either_starred)
 
 # Which repositories were starred by user 14 or 19 and were written in language 1:
 query = repository.intersect(
     repository.union(
-        stargazer.bitmap(14),
-        stargazer.bitmap(19)
+        stargazer.row(14),
+        stargazer.row(19)
     ),
-    language.bitmap(1)
+    language.row(1)
 )
-mutually_starred = client.query(query).result.bitmap.bits
+mutually_starred = client.query(query).result.row.columns
 print("User 14 or 19 starred, written in language 1:", mutually_starred)
 
 # Set user 99999 as a stargazer for repository 77777
-client.query(stargazer.setbit(99999, 77777))
+client.query(stargazer.set(99999, 77777))
 ```
 
 Running the above program should produce output like this:
@@ -218,10 +219,10 @@ public class StarTrace {
             throw new RuntimeException(ex);
         }
 
-        // We need to refer to indexes and frames before we can use them in a query.
+        // We need to refer to indexes and fields before we can use them in a query.
         Index repository = schema.index("repository");
-        Frame stargazer = repository.frame("stargazer");
-        Frame language = repository.frame("language");
+        Field stargazer = repository.field("stargazer");
+        Field language = repository.field("language");
 
         QueryResponse response;
         QueryResult result;
@@ -229,8 +230,8 @@ public class StarTrace {
         List<Long> repositoryIDs;
 
         // Which repositories did user 14 star:
-        response = client.query(stargazer.bitmap(14));
-        repositoryIDs = response.getResult().getBitmap().getBits();
+        response = client.query(stargazer.row(14));
+        repositoryIDs = response.getResult().getRow().getColumns();
         System.out.println("User 14 starred: " + repositoryIDs);
 
         // What are the top 5 languages in the sample data:
@@ -245,36 +246,36 @@ public class StarTrace {
 
         // Which repositories were starred by both user 14 and 19:
         query = repository.intersect(
-                stargazer.bitmap(14),
-                stargazer.bitmap(19)
+                stargazer.row(14),
+                stargazer.row(19)
         );
         response = client.query(query);
-        repositoryIDs = response.getResult().getBitmap().getBits();
+        repositoryIDs = response.getResult().getRow().getColumns();
         System.out.println("Both user 14 and 19 starred: " + repositoryIDs);
 
         // Which repositories were starred by user 14 or 19:
         query = repository.union(
-                stargazer.bitmap(14),
-                stargazer.bitmap(19)
+                stargazer.row(14),
+                stargazer.row(19)
         );
         response = client.query(query);
-        repositoryIDs = response.getResult().getBitmap().getBits();
+        repositoryIDs = response.getResult().getRow().getColumns();
         System.out.println("User 14 or 19 starred: " + repositoryIDs);
 
         // Which repositories were starred by user 14 or 19 and were written in language 1:
         query = repository.intersect(
                 repository.union(
-                        stargazer.bitmap(14),
-                        stargazer.bitmap(19)
+                        stargazer.row(14),
+                        stargazer.row(19)
                 ),
-                language.bitmap(1)
+                language.row(1)
         );
         response = client.query(query);
-        repositoryIDs = response.getResult().getBitmap().getBits();
+        repositoryIDs = response.getResult().getRow().getColumns();
         System.out.println("User 14 or 19 starred, written in language 1: " + repositoryIDs);
 
         // Set user 99999 as a stargazer for repository 77777:
-        client.query(stargazer.setBit(99999, 77777));
+        client.query(stargazer.set(99999, 77777));
     }
 }
 ```

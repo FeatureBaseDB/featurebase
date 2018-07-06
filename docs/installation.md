@@ -49,7 +49,6 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
       pilosa [command]
 
     Available Commands:
-      bench           Benchmark operations.
       check           Do a consistency check on a pilosa data file.
       config          Print the current configuration.
       export          Export data from pilosa.
@@ -108,7 +107,6 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
       pilosa [command]
 
     Available Commands:
-      bench           Benchmark operations.
       check           Do a consistency check on a pilosa data file.
       config          Print the current configuration.
       export          Export data from pilosa.
@@ -144,11 +142,10 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
     git clone https://github.com/pilosa/pilosa.git
     ```
 
-3. Build the Pilosa repo (the `make generate-statik` line isn't necessary but builds a nice [webUI](../webui/) into Pilosa):
+3. Build the Pilosa repo:
     ```
     cd $GOPATH/src/github.com/pilosa/pilosa
     make install-build-deps
-    make generate-statik
     make install
     ```
 
@@ -173,7 +170,6 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
       pilosa [command]
 
     Available Commands:
-      bench           Benchmark operations.
       check           Do a consistency check on a pilosa data file.
       config          Print the current configuration.
       export          Export data from pilosa.
@@ -262,7 +258,6 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
       pilosa [command]
 
     Available Commands:
-      bench           Benchmark operations.
       check           Do a consistency check on a pilosa data file.
       config          Print the current configuration.
       export          Export data from pilosa.
@@ -298,11 +293,10 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
     git clone https://github.com/pilosa/pilosa.git
     ```
 
-3. Build the Pilosa repo (the `make generate-statik` line isn't necessary but builds a nice [webUI](../webui/) into Pilosa):
+3. Build the Pilosa repo:
     ```
     cd $GOPATH/src/github.com/pilosa/pilosa
     make install-build-deps
-    make generate-statik
     make install
     ```
 
@@ -327,7 +321,6 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
       pilosa [command]
 
     Available Commands:
-      bench           Benchmark operations.
       check           Do a consistency check on a pilosa data file.
       config          Print the current configuration.
       export          Export data from pilosa.

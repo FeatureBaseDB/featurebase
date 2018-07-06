@@ -37,8 +37,8 @@ type versionResponse struct {
 	Message string `json:"message"`
 }
 
-// DiagnosticsCollector represents a collector/sender of diagnostics data.
-type DiagnosticsCollector struct {
+// diagnosticsCollector represents a collector/sender of diagnostics data.
+type diagnosticsCollector struct {
 	mu          sync.Mutex
 	host        string
 	VersionURL  string
@@ -56,9 +56,9 @@ type DiagnosticsCollector struct {
 	server *Server
 }
 
-// NewDiagnosticsCollector returns a new DiagnosticsCollector given an addr in the format "hostname:port".
-func NewDiagnosticsCollector(host string) *DiagnosticsCollector {
-	return &DiagnosticsCollector{
+// newDiagnosticsCollector returns a new DiagnosticsCollector given an addr in the format "hostname:port".
+func newDiagnosticsCollector(host string) *diagnosticsCollector {
+	return &diagnosticsCollector{
 		host:       host,
 		VersionURL: defaultVersionCheckURL,
 		startTime:  time.Now().Unix(),
@@ -70,13 +70,13 @@ func NewDiagnosticsCollector(host string) *DiagnosticsCollector {
 }
 
 // SetVersion of locally running Pilosa Cluster to check against master.
-func (d *DiagnosticsCollector) SetVersion(v string) {
+func (d *diagnosticsCollector) SetVersion(v string) {
 	d.version = v
 	d.Set("Version", v)
 }
 
 // Flush sends the current metrics.
-func (d *DiagnosticsCollector) Flush() error {
+func (d *diagnosticsCollector) Flush() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.metrics["Uptime"] = (time.Now().Unix() - d.startTime)
@@ -99,7 +99,7 @@ func (d *DiagnosticsCollector) Flush() error {
 }
 
 // CheckVersion of the local build against Pilosa master.
-func (d *DiagnosticsCollector) CheckVersion() error {
+func (d *diagnosticsCollector) CheckVersion() error {
 	var rsp versionResponse
 	req, err := http.NewRequest("GET", d.VersionURL, nil)
 	if err != nil {
@@ -131,7 +131,7 @@ func (d *DiagnosticsCollector) CheckVersion() error {
 }
 
 // compareVersion check version strings.
-func (d *DiagnosticsCollector) compareVersion(value string) error {
+func (d *diagnosticsCollector) compareVersion(value string) error {
 	currentVersion := versionSegments(value)
 	localVersion := versionSegments(d.version)
 
@@ -147,12 +147,12 @@ func (d *DiagnosticsCollector) compareVersion(value string) error {
 }
 
 // Encode metrics maps into the json message format.
-func (d *DiagnosticsCollector) encode() ([]byte, error) {
+func (d *diagnosticsCollector) encode() ([]byte, error) {
 	return json.Marshal(d.metrics)
 }
 
 // Set adds a key value metric.
-func (d *DiagnosticsCollector) Set(name string, value interface{}) {
+func (d *diagnosticsCollector) Set(name string, value interface{}) {
 	switch v := value.(type) {
 	case string:
 		if v == "" {
@@ -166,7 +166,7 @@ func (d *DiagnosticsCollector) Set(name string, value interface{}) {
 }
 
 // logErr logs the error and returns true if an error exists
-func (d *DiagnosticsCollector) logErr(err error) bool {
+func (d *diagnosticsCollector) logErr(err error) bool {
 	if err != nil {
 		d.Logger.Printf("%v", err)
 		return true
@@ -175,7 +175,7 @@ func (d *DiagnosticsCollector) logErr(err error) bool {
 }
 
 // EnrichWithOSInfo adds OS information to the diagnostics payload.
-func (d *DiagnosticsCollector) EnrichWithOSInfo() {
+func (d *diagnosticsCollector) EnrichWithOSInfo() {
 	uptime, err := d.server.systemInfo.Uptime()
 	if !d.logErr(err) {
 		d.Set("HostUptime", uptime)
@@ -199,7 +199,7 @@ func (d *DiagnosticsCollector) EnrichWithOSInfo() {
 }
 
 // EnrichWithMemoryInfo adds memory information to the diagnostics payload.
-func (d *DiagnosticsCollector) EnrichWithMemoryInfo() {
+func (d *diagnosticsCollector) EnrichWithMemoryInfo() {
 	memFree, err := d.server.systemInfo.MemFree()
 	if !d.logErr(err) {
 		d.Set("MemFree", memFree)
@@ -215,30 +215,30 @@ func (d *DiagnosticsCollector) EnrichWithMemoryInfo() {
 }
 
 // EnrichWithSchemaProperties adds schema info to the diagnostics payload.
-func (d *DiagnosticsCollector) EnrichWithSchemaProperties() {
-	var numSlices uint64
-	numFrames := 0
+func (d *diagnosticsCollector) EnrichWithSchemaProperties() {
+	var numShards uint64
+	numFields := 0
 	numIndexes := 0
 	bsiFieldCount := 0
 	timeQuantumEnabled := false
 
-	for _, index := range d.server.Holder.Indexes() {
-		numSlices += index.MaxSlice() + 1
+	for _, index := range d.server.holder.Indexes() {
+		numShards += index.maxShard() + 1
 		numIndexes += 1
-		for _, frame := range index.Frames() {
-			numFrames += 1
-			if fields, err := frame.GetFields(); err == nil {
-				bsiFieldCount += len(fields)
+		for _, field := range index.Fields() {
+			numFields += 1
+			if field.Type() == FieldTypeInt {
+				bsiFieldCount += 1
 			}
-			if frame.TimeQuantum() != "" {
+			if field.TimeQuantum() != "" {
 				timeQuantumEnabled = true
 			}
 		}
 	}
 
 	d.Set("NumIndexes", numIndexes)
-	d.Set("NumFrames", numFrames)
-	d.Set("NumSlices", numSlices)
+	d.Set("NumFields", numFields)
+	d.Set("NumShards", numShards)
 	d.Set("BSIFieldCount", bsiFieldCount)
 	d.Set("TimeQuantumEnabled", timeQuantumEnabled)
 }
@@ -267,51 +267,51 @@ type SystemInfo interface {
 	MemUsed() (uint64, error)
 }
 
-// NewNopSystemInfo creates a no-op implementation of SystemInfo.
-func NewNopSystemInfo() *NopSystemInfo {
-	return &NopSystemInfo{}
+// newNopSystemInfo creates a no-op implementation of SystemInfo.
+func newNopSystemInfo() *nopSystemInfo {
+	return &nopSystemInfo{}
 }
 
-// NopSystemInfo is a no-op implementation of SystemInfo.
-type NopSystemInfo struct {
+// nopSystemInfo is a no-op implementation of SystemInfo.
+type nopSystemInfo struct {
 }
 
 // Uptime is a no-op implementation of SystemInfo.Uptime.
-func (n *NopSystemInfo) Uptime() (uint64, error) {
+func (n *nopSystemInfo) Uptime() (uint64, error) {
 	return 0, nil
 }
 
 // Platform is a no-op implementation of SystemInfo.Platform.
-func (n *NopSystemInfo) Platform() (string, error) {
+func (n *nopSystemInfo) Platform() (string, error) {
 	return "", nil
 }
 
 // Family is a no-op implementation of SystemInfo.Family.
-func (n *NopSystemInfo) Family() (string, error) {
+func (n *nopSystemInfo) Family() (string, error) {
 	return "", nil
 }
 
 // OSVersion is a no-op implementation of SystemInfo.OSVersion.
-func (n *NopSystemInfo) OSVersion() (string, error) {
+func (n *nopSystemInfo) OSVersion() (string, error) {
 	return "", nil
 }
 
 // KernelVersion is a no-op implementation of SystemInfo.KernelVersion.
-func (n *NopSystemInfo) KernelVersion() (string, error) {
+func (n *nopSystemInfo) KernelVersion() (string, error) {
 	return "", nil
 }
 
 // MemFree is a no-op implementation of SystemInfo.MemFree.
-func (n *NopSystemInfo) MemFree() (uint64, error) {
+func (n *nopSystemInfo) MemFree() (uint64, error) {
 	return 0, nil
 }
 
 // MemTotal is a no-op implementation of SystemInfo.MemTotal.
-func (n *NopSystemInfo) MemTotal() (uint64, error) {
+func (n *nopSystemInfo) MemTotal() (uint64, error) {
 	return 0, nil
 }
 
 // MemUsed is a no-op implementation of SystemInfo.MemUsed.
-func (n *NopSystemInfo) MemUsed() (uint64, error) {
+func (n *nopSystemInfo) MemUsed() (uint64, error) {
 	return 0, nil
 }

@@ -38,31 +38,25 @@ func TestExportCommand_Validation(t *testing.T) {
 
 	cm.Index = "i"
 	err = cm.Run(context.Background())
-	if err != pilosa.ErrFrameRequired {
-		t.Fatalf("Command not working, expect: %s, actual: '%s'", pilosa.ErrFrameRequired, err)
+	if err != pilosa.ErrFieldRequired {
+		t.Fatalf("Command not working, expect: %s, actual: '%s'", pilosa.ErrFieldRequired, err)
 	}
 }
 
 func TestExportCommand_Run(t *testing.T) {
+	cmd := test.MustRunCluster(t, 1)[0]
+
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewExportCommand(stdin, stdout, stderr)
+	hostport := cmd.API.Node().URI.HostPort()
+	cm.Host = hostport
 
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-	s := test.NewServer()
-	defer s.Close()
-
-	s.Handler.API.Cluster = test.NewCluster(1)
-	s.Handler.API.Cluster.Nodes[0].URI = s.HostURI()
-	s.Handler.API.Holder = hldr.Holder
-	cm.Host = s.Host()
-
-	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", s.URL+"/index/i", strings.NewReader("")))
-	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", s.URL+"/index/i/frame/f", strings.NewReader("")))
+	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", "http://"+hostport+"/index/i", strings.NewReader("")))
+	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", "http://"+hostport+"/index/i/field/f", strings.NewReader("")))
 
 	cm.Index = "i"
-	cm.Frame = "f"
+	cm.Field = "f"
 	if err := cm.Run(context.Background()); err != nil {
 		t.Fatalf("Export Run doesn't work: %s", err)
 	}
