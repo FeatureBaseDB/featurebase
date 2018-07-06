@@ -150,8 +150,8 @@ func (s *TranslateFile) Size() int64 {
 	return n
 }
 
-// IsReadOnly returns true if this store is being replicated from a primary store.
-func (s *TranslateFile) IsReadOnly() bool {
+// isReadOnly returns true if this store is being replicated from a primary store.
+func (s *TranslateFile) isReadOnly() bool {
 	return s.PrimaryTranslateStore != nil
 }
 
@@ -351,7 +351,7 @@ func (s *TranslateFile) TranslateColumnsToUint64(index string, values []string) 
 	s.mu.RUnlock()
 
 	// Return error if not all values could be translated and this store is read-only.
-	if s.IsReadOnly() {
+	if s.isReadOnly() {
 		return ret, ErrTranslateStoreReadOnly
 	}
 
@@ -457,7 +457,7 @@ func (s *TranslateFile) TranslateRowsToUint64(index, frame string, values []stri
 	s.mu.RUnlock()
 
 	// Return error if not all values could be translated and this store is read-only.
-	if s.IsReadOnly() {
+	if s.isReadOnly() {
 		return ret, ErrTranslateStoreReadOnly
 	}
 
