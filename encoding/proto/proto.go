@@ -352,7 +352,7 @@ func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
 			pb.Results[i].Pairs = encodePairs(result)
 		case pilosa.ValCount:
 			pb.Results[i].Type = queryResultTypeValCount
-			pb.Results[i].ValCount = EncodeValCount(result)
+			pb.Results[i].ValCount = encodeValCount(result)
 		case uint64:
 			pb.Results[i].Type = queryResultTypeUint64
 			pb.Results[i].N = result
@@ -992,7 +992,7 @@ func encodePair(p pilosa.Pair) *internal.Pair {
 	}
 }
 
-func EncodeValCount(vc pilosa.ValCount) *internal.ValCount {
+func encodeValCount(vc pilosa.ValCount) *internal.ValCount {
 	return &internal.ValCount{
 		Val:   vc.Val,
 		Count: vc.Count,
