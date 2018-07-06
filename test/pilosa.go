@@ -37,7 +37,7 @@ type Command struct {
 	commandOptions []server.CommandOption
 
 	stdin  bytes.Buffer
-	Stdout bytes.Buffer
+	stdout bytes.Buffer
 	Stderr bytes.Buffer
 }
 
@@ -60,7 +60,7 @@ func NewCommand(opts ...server.CommandOption) *Command {
 	m.Config.Bind = "http://localhost:0"
 	m.Config.Cluster.Disabled = true
 	m.Command.Stdin = &m.stdin
-	m.Command.Stdout = &m.Stdout
+	m.Command.Stdout = &m.stdout
 	m.Command.Stderr = &m.Stderr
 
 	if testing.Verbose() {
