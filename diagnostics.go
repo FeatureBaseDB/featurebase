@@ -267,8 +267,8 @@ type SystemInfo interface {
 	MemUsed() (uint64, error)
 }
 
-// NewNopSystemInfo creates a no-op implementation of SystemInfo.
-func NewNopSystemInfo() *NopSystemInfo {
+// newNopSystemInfo creates a no-op implementation of SystemInfo.
+func newNopSystemInfo() *NopSystemInfo {
 	return &NopSystemInfo{}
 }
 

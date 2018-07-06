@@ -236,7 +236,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		cluster:     newCluster(),
 		holder:      NewHolder(),
 		diagnostics: newDiagnosticsCollector(defaultDiagnosticServer),
-		systemInfo:  NewNopSystemInfo(),
+		systemInfo:  newNopSystemInfo(),
 
 		gcNotifier: NopGCNotifier,
 
