@@ -54,8 +54,8 @@ const (
 	//containerArray indicates a container of bit position values
 	containerArray = byte(1)
 
-	//ContainerBitmap indicates a container of bits packed in a uint64 array block
-	ContainerBitmap = byte(2)
+	//containerBitmap indicates a container of bits packed in a uint64 array block
+	containerBitmap = byte(2)
 
 	//ContainerRun  indicates a container of run encoded bits
 	ContainerRun = byte(3)
@@ -668,7 +668,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 			c.bitmap = nil
 			c.array = (*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[offset]))[:c.n]
 			opsOffset = int(offset) + len(c.array)*2 // sizeof(uint32)
-		case ContainerBitmap:
+		case containerBitmap:
 			c.array = nil
 			c.runs = nil
 			c.bitmap = (*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN]
@@ -1048,7 +1048,7 @@ func (c *Container) isArray() bool {
 
 // isBitmap returns true if the container is a bitmap container.
 func (c *Container) isBitmap() bool {
-	return c.containerType == ContainerBitmap
+	return c.containerType == containerBitmap
 }
 
 // isRun returns true if the container is a run-length-encoded container.
@@ -1070,7 +1070,7 @@ func (c *Container) unmap() {
 		tmp := make([]uint16, len(c.array))
 		copy(tmp, c.array)
 		c.array = tmp
-	case ContainerBitmap:
+	case containerBitmap:
 		tmp := make([]uint64, len(c.bitmap))
 		copy(tmp, c.bitmap)
 		c.bitmap = tmp
@@ -1329,12 +1329,12 @@ func (c *Container) optimize() {
 	} else if c.n < ArrayMaxSize {
 		newType = containerArray
 	} else {
-		newType = ContainerBitmap
+		newType = containerBitmap
 	}
 
 	// Then convert accordingly.
 	if c.isArray() {
-		if newType == ContainerBitmap {
+		if newType == containerBitmap {
 			c.arrayToBitmap()
 		} else if newType == ContainerRun {
 			c.arrayToRun()
@@ -1346,7 +1346,7 @@ func (c *Container) optimize() {
 			c.bitmapToRun()
 		}
 	} else if c.isRun() {
-		if newType == ContainerBitmap {
+		if newType == containerBitmap {
 			c.runToBitmap()
 		} else if newType == containerArray {
 			c.runToArray()
@@ -1510,7 +1510,7 @@ func (c *Container) bitmapToArray() {
 // arrayToBitmap converts from array format to bitmap format.
 func (c *Container) arrayToBitmap() {
 	c.bitmap = make([]uint64, bitmapN)
-	c.containerType = ContainerBitmap
+	c.containerType = containerBitmap
 
 	// return early if empty
 	if c.n == 0 {
@@ -1529,7 +1529,7 @@ func (c *Container) arrayToBitmap() {
 // runToBitmap converts from RLE format to bitmap format.
 func (c *Container) runToBitmap() {
 	c.bitmap = make([]uint64, bitmapN)
-	c.containerType = ContainerBitmap
+	c.containerType = containerBitmap
 
 	// return early if empty
 	if c.n == 0 {
@@ -1661,7 +1661,7 @@ func (c *Container) Clone() *Container {
 	case containerArray:
 		other.array = make([]uint16, len(c.array))
 		copy(other.array, c.array)
-	case ContainerBitmap:
+	case containerBitmap:
 		other.bitmap = make([]uint64, len(c.bitmap))
 		copy(other.bitmap, c.bitmap)
 	case ContainerRun:
@@ -1816,7 +1816,7 @@ func flipArray(b *Container) *Container {
 }
 
 func flipBitmap(b *Container) *Container {
-	other := &Container{bitmap: make([]uint64, bitmapN), containerType: ContainerBitmap}
+	other := &Container{bitmap: make([]uint64, bitmapN), containerType: containerBitmap}
 
 	for i, bitmap := range b.bitmap {
 		other.bitmap[i] = ^bitmap
@@ -2078,7 +2078,7 @@ func intersectBitmapRun(a, b *Container) *Container {
 		// the bitmap which are between runs.
 		output = &Container{
 			bitmap:        make([]uint64, bitmapN),
-			containerType: ContainerBitmap,
+			containerType: containerBitmap,
 		}
 		for j := 0; j < len(b.runs); j++ {
 			vb := b.runs[j]
@@ -2134,7 +2134,7 @@ func intersectArrayBitmap(a, b *Container) *Container {
 }
 
 func intersectBitmapBitmap(a, b *Container) *Container {
-	output := &Container{bitmap: make([]uint64, bitmapN), containerType: ContainerBitmap}
+	output := &Container{bitmap: make([]uint64, bitmapN), containerType: containerBitmap}
 
 	for i := range a.bitmap {
 		v := a.bitmap[i] & b.bitmap[i]
@@ -2396,7 +2396,7 @@ func (c *Container) equals(c2 *Container) bool {
 				return false
 			}
 		}
-	} else if c.containerType == ContainerBitmap {
+	} else if c.containerType == containerBitmap {
 		if len(c.bitmap) != len(c2.bitmap) {
 			return false
 		}
@@ -2434,7 +2434,7 @@ func unionArrayBitmap(a, b *Container) *Container {
 func unionBitmapBitmap(a, b *Container) *Container {
 	output := &Container{
 		bitmap:        make([]uint64, bitmapN),
-		containerType: ContainerBitmap,
+		containerType: containerBitmap,
 	}
 
 	for i := 0; i < bitmapN; i++ {
@@ -2778,7 +2778,7 @@ func differenceBitmapArray(a, b *Container) *Container {
 }
 
 func differenceBitmapBitmap(a, b *Container) *Container {
-	output := &Container{bitmap: make([]uint64, bitmapN), containerType: ContainerBitmap}
+	output := &Container{bitmap: make([]uint64, bitmapN), containerType: containerBitmap}
 
 	for i := range a.bitmap {
 		v := a.bitmap[i] & (^b.bitmap[i])
@@ -2861,7 +2861,7 @@ func xorArrayBitmap(a, b *Container) *Container {
 
 	// It's possible that output was converted from bitmap to array in output.remove()
 	// so we only do this conversion if output is still a bitmap container.
-	if output.containerType == ContainerBitmap && output.count() < ArrayMaxSize {
+	if output.containerType == containerBitmap && output.count() < ArrayMaxSize {
 		output.bitmapToArray()
 	}
 
@@ -2871,7 +2871,7 @@ func xorArrayBitmap(a, b *Container) *Container {
 func xorBitmapBitmap(a, b *Container) *Container {
 	output := &Container{
 		bitmap:        make([]uint64, bitmapN),
-		containerType: ContainerBitmap,
+		containerType: containerBitmap,
 	}
 	for i := 0; i < bitmapN; i++ {
 		v := a.bitmap[i] ^ b.bitmap[i]
