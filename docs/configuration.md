@@ -106,7 +106,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 
 #### Max Writes Per Request
 
-* Description: Maximum number of mutating commands allowed per request. This includes SetBit, ClearBit, SetRowAttrs, SetColumnAttrs, and SetFieldValue.
+* Description: Maximum number of mutating commands allowed per request. This includes Set, Clear, SetRowAttrs, and SetColumnAttrs.
 * Flag: `--max-writes-per-request=5000`
 * Env: `PILOSA_MAX_WRITES_PER_REQUEST=5000`
 * Config:

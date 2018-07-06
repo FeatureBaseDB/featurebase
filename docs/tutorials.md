@@ -407,37 +407,65 @@ curl localhost:10101/index/patients \
      -X POST 
 ```
 ``` response
-{}
+{"success":true}
 ```
 
-In addition to storing rows of bits, a frame can also contain fields that store integer values. The next step creates three fields (`age`, `weight`, `tcells`) in the `measurements` frame.
+In addition to storing rows of bits, a frame can also contain fields that store integer values. The next steps creates three fields (`age`, `weight`, `tcells`) in the `measurements` frame.
 ``` request
-curl localhost:10101/index/patients/frame/measurements \
+curl localhost:10101/index/patients/field/age \
      -X POST \
-     -d '{"options":{
-              "fields": [
-                  {"name": "age", "type": "int", "min": 0, "max": 120},
-                  {"name": "weight", "type": "int", "min": 0, "max": 500},
-                  {"name": "tcells", "type": "int", "min": 0, "max": 2000}
-              ]
-         }}'
+     -d '{"options":{"type": "int", "min": 0, "max": 120}}'
 ```
 ``` response
-{}
+{"success":true}
 ```
 
-If you need to, you can add fields to an existing frame by posting to the [Create Field endpoint](../api-reference/#create-field).
+``` request
+curl localhost:10101/index/patients/field/weight \
+     -X POST \
+     -d '{"options":{"type": "int", "min": 0, "max": 500}}'
+```
+``` response
+{"success":true}
+```
+
+``` request
+curl localhost:10101/index/patients/field/tcells \
+     -X POST \
+     -d '{"options":{"type": "int", "min": 0, "max": 2000}}'
+```
+``` response
+{"success":true}
+```
 
 Next, let's populate our fields with data. There are two ways to get data into fields: use the `SetFieldValue()` PQL function to set fields individually, or use the `pilosa import` command to import many values at once. First, let's set some field data using PQL.
 
-This query sets the age, weight, and t-cell count for the patient with ID `1` in our system:
+The following queries set the age, weight, and t-cell count for the patient with ID `1` in our system:
 ``` request
 curl localhost:10101/index/patients/query \
      -X POST \
-     -d 'SetFieldValue(col=1, frame="measurements", age=34, weight=128, tcells=1145)'
+     -d 'Set(1, age=34)'
 ```
 ``` response
-{"results":[null]}
+{"results":[true]}
+```
+
+``` request
+curl localhost:10101/index/patients/query \
+     -X POST \
+     -d 'Set(1, weight=128)'
+```
+``` response
+{"results":[true]}
+```
+
+``` request
+curl localhost:10101/index/patients/query \
+     -X POST \
+     -d 'Set(1, tcells=1145)'
+```
+``` response
+{"results":[true]}
 ```
 
 In the case where we need to load a lot of data at once, we can use the `pilosa import` command. This method lets us import data into Pilosa from a CSV file.
@@ -454,7 +482,7 @@ Assuming we have a file called `ages.csv` that is structured like this:
 8,33
 9,63
 ```
-where the first column of the CSV represents the patient `ID` and the second column represents the patient's`age`, then we can import the data into our `age` field by running this command:
+where the first column of the CSV represents the patient `ID` and the second column represents the patient's `age`, then we can import the data into our `age` field by running this command:
 ```
 pilosa import -i patients -f measurements --field age ages.csv
 ```
@@ -465,10 +493,10 @@ In order to find all patients over the age of 40, then simply run a `Range` quer
 ``` request
 curl localhost:10101/index/patients/query \
      -X POST \
-     -d 'Range(frame="measurements", age > 40)'
+     -d 'Range(age > 40)'
 ```
 ``` response
-{"results":[{"attrs":{},"bits":[2,6,9]}]}
+{"results":[{"attrs":{},"columns":[2,6,9]}]}
 ```
 
 You can find a list of supported range operators in the [Range Query](../query-language/#range-bsi) documentation.
@@ -477,21 +505,21 @@ To find the average age of all patients, run a `Sum` query:
 ``` request
 curl localhost:10101/index/patients/query \
      -X POST \
-     -d 'Sum(frame="measurements", field="age")'
+     -d 'Sum(field="age")'
 ```
 ``` response
-{"results":[{"sum":377,"count":9}]}
+{"results":[{"value":377,"count":9}]}
 ```
-The results you get from the `Sum` query contain the `sum` of all values as well as the `count` of columns with a value. To get the average you can just divide `sum` by `count`.
+The results you get from the `Sum` query contain the sum of all values as well as the `count` of columns with a value. To get the average you can just divide `value` by `count`.
 
 You can also provide a filter to the `Sum()` function to find the average age of all patients over 40.
 ``` request
 curl localhost:10101/index/patients/query \
      -X POST \
-     -d 'Sum(Range(frame="measurements", age > 40), frame="measurements", field="age")'
+     -d 'Sum(Range(age > 40), field="age")'
 ```
 ``` response
-{"results":[{"sum":191,"count":3}]}
+{"results":[{"value":191,"count":3}]}
 ```
 Notice in this case that the count is only `3` because of the `age > 40` filter applied to the query.
 
@@ -499,42 +527,42 @@ To find the minimum age of all patients, run a `Min` query:
 ``` request
 curl localhost:10101/index/patients/query \
      -X POST \
-     -d 'Min(frame="measurements", field="age")'
+     -d 'Min(field="age")'
 ```
 ``` response
-{"results":[{"min":19,"count":1}]}
+{"results":[{"value":19,"count":1}]}
 ```
-The results you get from the `Min` query contain the `min` of all values as well as the `count` of columns with that value.
+The results you get from the `Min` query contain the minimum `value` of all values as well as the `count` of columns with that value.
 
 You can also provide a filter to the `Min()` function to find the minimum age of all patients over 40.
 ``` request
 curl localhost:10101/index/patients/query \
      -X POST \
-     -d 'Min(Range(frame="measurements", age > 40), frame="measurements", field="age")'
+     -d 'Min(Range(age > 40), field="age")'
 ```
 ``` response
-{"results":[{"min":57,"count":1}]}
+{"results":[{"value":57,"count":1}]}
 ```
 
 To find the maximum age of all patients, run a `Max` query:
 ``` request
 curl localhost:10101/index/patients/query \
      -X POST \
-     -d 'Max(frame="measurements", field="age")'
+     -d 'Max(field="age")'
 ```
 ``` response
-{"results":[{"max":71,"count":1}]}
+{"results":[{"value":71,"count":1}]}
 ```
-The results you get from the `Max` query contain the `max` of all values as well as the `count` of columns with that value.
+The results you get from the `Max` query contain the maximum `value` of all values as well as the `count` of columns with that value.
 
 You can also provide a filter to the `Max()` function to find the maximum age of all patients under 40.
 ``` request
 curl localhost:10101/index/patients/query \
      -X POST \
-     -d 'Max(Range(frame="measurements", age < 40), frame="measurements", field="age")'
+     -d 'Max(Range(age < 40), field="age")'
 ```
 ``` response
-{"results":[{"max":34,"count":1}]}
+{"results":[{"value":34,"count":1}]}
 ```
 
 ### Storing Row and Column Attributes
@@ -549,28 +577,28 @@ curl localhost:10101/index/books \
      -X POST
 ```
 ``` response
-{}
+{"success":true}
 ```
 
-Next, create a frame in the `books` index called `members` which will represent library members who have read books.
+Next, create a field in the `books` index called `members` which will represent library members who have read books.
 ``` request
-curl localhost:10101/index/books/frame/members \
+curl localhost:10101/index/books/field/members \
      -X POST \
      -d '{}'
 ```
 ``` response
-{}
+{"success":true}
 ```
 
 Now, let's add some books to our index.
 ``` request
 curl localhost:10101/index/books/query \
      -X POST \
-     -d 'SetColumnAttrs(col=1, name="To Kill a Mockingbird", year=1960)
-         SetColumnAttrs(col=2, name="No Name in the Street", year=1972)
-         SetColumnAttrs(col=3, name="The Tipping Point", year=2000)
-         SetColumnAttrs(col=4, name="Out Stealing Horses", year=2003)
-         SetColumnAttrs(col=5, name="The Forever War", year=2008)'
+     -d 'SetColumnAttrs(1, name="To Kill a Mockingbird", year=1960)
+         SetColumnAttrs(2, name="No Name in the Street", year=1972)
+         SetColumnAttrs(3, name="The Tipping Point", year=2000)
+         SetColumnAttrs(4, name="Out Stealing Horses", year=2003)
+         SetColumnAttrs(5, name="The Forever War", year=2008)'
 ```
 ``` response
 {"results":[null,null,null,null,null]}
@@ -580,11 +608,11 @@ And add some members.
 ``` request
 curl localhost:10101/index/books/query \
      -X POST \
-     -d 'SetRowAttrs(frame="members", row=10001, fullName="John Smith")
-         SetRowAttrs(frame="members", row=10002, fullName="Sue Perkins")
-         SetRowAttrs(frame="members", row=10003, fullName="Jennifer Hawks")
-         SetRowAttrs(frame="members", row=10004, fullName="Pedro Vazquez")
-         SetRowAttrs(frame="members", row=10005, fullName="Pat Washington")'
+     -d 'SetRowAttrs(members, 10001, fullName="John Smith")
+         SetRowAttrs(members, 10002, fullName="Sue Perkins")
+         SetRowAttrs(members, 10003, fullName="Jennifer Hawks")
+         SetRowAttrs(members, 10004, fullName="Pedro Vazquez")
+         SetRowAttrs(members, 10005, fullName="Pat Washington")'
 ```
 ``` response
 {"results":[null,null,null,null,null]}
@@ -594,29 +622,29 @@ At this point we can query one of the `member` records by querying that row.
 ``` request
 curl localhost:10101/index/books/query \
      -X POST \
-     -d 'Bitmap(frame="members", row=10002)'
+     -d 'Row(members=10002)'
 ```
 ``` response
-{"results":[{"attrs":{"fullName":"Sue Perkins"},"bits":[]}]}
+{"results":[{"attrs":{"fullName":"Sue Perkins"},"columns":[]}]}
 ```
 
 Now let's add some data to the matrix such that each pair represents a member who has read that book.
 ``` request
 curl localhost:10101/index/books/query \
      -X POST \
-     -d 'SetBit(frame="members", row=10001, col=3)
-         SetBit(frame="members", row=10001, col=5)
-         SetBit(frame="members", row=10002, col=1)
-         SetBit(frame="members", row=10002, col=2)
-         SetBit(frame="members", row=10002, col=4)
-         SetBit(frame="members", row=10003, col=3)
-         SetBit(frame="members", row=10004, col=4)
-         SetBit(frame="members", row=10004, col=5)
-         SetBit(frame="members", row=10005, col=1)
-         SetBit(frame="members", row=10005, col=2)
-         SetBit(frame="members", row=10005, col=3)
-         SetBit(frame="members", row=10005, col=4)
-         SetBit(frame="members", row=10005, col=5)'
+     -d 'Set(3, members=10001)
+         Set(5, members=10001)
+         Set(1, members=10002)
+         Set(2, members=10002)
+         Set(4, members=10002)
+         Set(3, members=10003)
+         Set(4, members=10004)
+         Set(5, members=10004)
+         Set(1, members=10005)
+         Set(2, members=10005)
+         Set(3, members=10005)
+         Set(4, members=10005)
+         Set(5, members=10005)'
 ```
 ``` response
 {"results":[true,true,true,true,true,true,true,true,true,true,true,true,true]}
@@ -626,22 +654,22 @@ Now pull the record for `Sue Perkins` again.
 ``` request
 curl localhost:10101/index/books/query \
      -X POST \
-     -d 'Bitmap(frame="members", row=10002)'
+     -d 'Row(members=10002)'
 ```
 ``` response
-{"results":[{"attrs":{"fullName":"Sue Perkins"},"bits":[1,2,4]}]}
+{"results":[{"attrs":{"fullName":"Sue Perkins"},"columns":[1,2,4]}]}
 ```
-Notice that the result set now contains a list of integers in the `bits` attribute. These integers match the column IDs of the books that Sue has read.
+Notice that the result set now contains a list of integers in the `columns` attribute. These integers match the column IDs of the books that Sue has read.
 
 In order to retrieve the attribute information that we stored for each book, we need to add a URL parameter `columnAttrs=true` to the query.
 ``` request
 curl localhost:10101/index/books/query?columnAttrs=true \
      -X POST \
-     -d 'Bitmap(frame="members", row=10002)'
+     -d 'Row(members=10002)'
 ```
 ``` response
 {
-  "results":[{"attrs":{"fullName":"Sue Perkins"},"bits":[1,2,4]}],
+  "results":[{"attrs":{"fullName":"Sue Perkins"},"columns":[1,2,4]}],
   "columnAttrs":[
     {"id":1,"attrs":{"name":"To Kill a Mockingbird","year":1960}},
     {"id":2,"attrs":{"name":"No Name in the Street","year":1972}},
@@ -655,11 +683,11 @@ Finally, if we want to find out which books were read by both `Sue` and `Pedro`,
 ``` request
 curl localhost:10101/index/books/query?columnAttrs=true \
      -X POST \
-     -d 'Intersect(Bitmap(frame="members", row=10002), Bitmap(frame="members", row=10004))'
+     -d 'Intersect(Row(members=10002), Row(members=10004))'
 ```
 ``` response
 {
-  "results":[{"attrs":{},"bits":[4]}],
+  "results":[{"attrs":{},"columns":[4]}],
   "columnAttrs":[
     {"id":4,"attrs":{"name":"Out Stealing Horses","year":2003}}
   ]

@@ -15,7 +15,6 @@
 package pilosa
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -74,24 +73,6 @@ func NewIndex(path, name string) (*Index, error) {
 		Stats:       NopStatsClient,
 		logger:      NopLogger,
 	}, nil
-}
-
-func (i *Index) MarshalJSON() ([]byte, error) {
-	fields := make([]*Field, 0, len(i.fields))
-	for _, f := range i.fields {
-
-		fields = append(fields, f)
-	}
-	thing := struct {
-		Name    string       `json:"name"`
-		Options IndexOptions `json:"options"`
-		Fields  []*Field     `json:"fields"`
-	}{
-		Name:    i.name,
-		Options: i.Options(),
-		Fields:  fields,
-	}
-	return json.Marshal(thing)
 }
 
 // Name returns name of the index.

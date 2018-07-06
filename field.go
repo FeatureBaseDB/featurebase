@@ -1092,21 +1092,6 @@ func (f *Field) ImportValue(columnIDs []uint64, values []int64) error {
 	return nil
 }
 
-func (f *Field) MarshalJSON() ([]byte, error) {
-	thing := struct {
-		Name    string       `json:"name"`
-		Options FieldOptions `json:"options"`
-		Views   []*ViewInfo  `json:"views"`
-	}{
-		Name:    f.Name(),
-		Options: f.Options(),
-	}
-	for _, viewname := range f.viewNames() {
-		thing.Views = append(thing.Views, &ViewInfo{Name: viewname})
-	}
-	return json.Marshal(thing)
-}
-
 type fieldSlice []*Field
 
 func (p fieldSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
