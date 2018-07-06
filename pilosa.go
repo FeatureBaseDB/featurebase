@@ -63,15 +63,15 @@ var (
 	ErrNotImplemented = errors.New("not implemented")
 )
 
-// ApiMethodNotAllowedError wraps an error value indicating that a particular
+// apiMethodNotAllowedError wraps an error value indicating that a particular
 // API method is not allowed in the current cluster state.
-type ApiMethodNotAllowedError struct {
+type apiMethodNotAllowedError struct {
 	error
 }
 
 // NewApiMethodNotAllowedError returns err wrapped in an ApiMethodNotAllowedError.
-func NewApiMethodNotAllowedError(err error) ApiMethodNotAllowedError {
-	return ApiMethodNotAllowedError{err}
+func NewApiMethodNotAllowedError(err error) apiMethodNotAllowedError {
+	return apiMethodNotAllowedError{err}
 }
 
 // BadRequestError wraps an error value to signify that a request could not be
