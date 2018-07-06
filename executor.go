@@ -1577,7 +1577,7 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 		if field == nil {
 			return ErrFieldNotFound
 		}
-		if field.Keys() {
+		if field.keys() {
 			if c.Args[rowKey] != nil && !isString(c.Args[rowKey]) {
 				return errors.New("row value must be a string when field 'keys' option enabled")
 			}
@@ -1628,7 +1628,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 			if field == nil {
 				return nil, ErrFieldNotFound
 			}
-			if field.Keys() {
+			if field.keys() {
 				other := make([]Pair, len(result))
 				for i := range result {
 					key, err := e.TranslateStore.TranslateRowToString(index, fieldName, result[i].ID)

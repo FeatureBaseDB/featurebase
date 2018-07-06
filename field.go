@@ -428,8 +428,8 @@ func (f *Field) Close() error {
 	return nil
 }
 
-// Keys returns true if the field uses string keys.
-func (f *Field) Keys() bool {
+// keys returns true if the field uses string keys.
+func (f *Field) keys() bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.options.Keys
