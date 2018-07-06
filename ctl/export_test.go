@@ -49,7 +49,7 @@ func TestExportCommand_Run(t *testing.T) {
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewExportCommand(stdin, stdout, stderr)
-	hostport := cmd.Server.URI.HostPort()
+	hostport := cmd.API.Node().URI.HostPort()
 	cm.Host = hostport
 
 	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", "http://"+hostport+"/index/i", strings.NewReader("")))

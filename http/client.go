@@ -27,22 +27,15 @@ import (
 	"sort"
 	"strconv"
 
-	"crypto/tls"
-
-	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/encoding/proto"
 	"github.com/pkg/errors"
 )
-
-// ClientOptions represents the configuration for a InternalHTTPClient
-type ClientOptions struct {
-	TLS *tls.Config
-}
 
 // InternalClient represents a client to the Pilosa cluster.
 type InternalClient struct {
 	defaultURI *pilosa.URI
+	serializer pilosa.Serializer
 
 	// The client to use for HTTP communication.
 	HTTPClient *http.Client
@@ -66,12 +59,10 @@ func NewInternalClient(host string, remoteClient *http.Client) (*InternalClient,
 func NewInternalClientFromURI(defaultURI *pilosa.URI, remoteClient *http.Client) *InternalClient {
 	return &InternalClient{
 		defaultURI: defaultURI,
+		serializer: proto.Serializer{},
 		HTTPClient: remoteClient,
 	}
 }
-
-// Host returns the host the client was initialized with.
-func (c *InternalClient) Host() *pilosa.URI { return c.defaultURI }
 
 // MaxShardByIndex returns the number of shards on a server by index.
 func (c *InternalClient) MaxShardByIndex(ctx context.Context) (map[string]uint64, error) {
@@ -217,22 +208,21 @@ func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard 
 }
 
 // Query executes query against the index.
-func (c *InternalClient) Query(ctx context.Context, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
+func (c *InternalClient) Query(ctx context.Context, index string, queryRequest *pilosa.QueryRequest) (*pilosa.QueryResponse, error) {
 	return c.QueryNode(ctx, c.defaultURI, index, queryRequest)
 }
 
 // QueryNode executes query against the index, sending the request to the node specified.
-func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index string, queryRequest *internal.QueryRequest) (*internal.QueryResponse, error) {
+func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index string, queryRequest *pilosa.QueryRequest) (*pilosa.QueryResponse, error) {
 	if index == "" {
 		return nil, pilosa.ErrIndexRequired
 	} else if queryRequest.Query == "" {
 		return nil, pilosa.ErrQueryRequired
 	}
 
-	// Encode request object.
-	buf, err := proto.Marshal(queryRequest)
+	buf, err := c.serializer.Marshal(queryRequest)
 	if err != nil {
-		return nil, errors.Wrap(err, "marshaling")
+		return nil, errors.Wrap(err, "marshaling queryRequest")
 	}
 
 	// Create HTTP request.
@@ -262,11 +252,11 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index s
 		return nil, errors.New(string(body))
 	}
 
-	qresp := &internal.QueryResponse{}
-	if err := proto.Unmarshal(body, qresp); err != nil {
+	qresp := &pilosa.QueryResponse{}
+	if err := c.serializer.Unmarshal(body, qresp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %s", err)
-	} else if s := qresp.Err; s != "" {
-		return nil, errors.New(s)
+	} else if qresp.Err != nil {
+		return nil, qresp.Err
 	}
 
 	return qresp, nil
@@ -280,7 +270,7 @@ func (c *InternalClient) Import(ctx context.Context, index, field string, shard 
 		return pilosa.ErrFieldRequired
 	}
 
-	buf, err := marshalImportPayload(index, field, shard, bits)
+	buf, err := c.marshalImportPayload(index, field, shard, bits)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
@@ -309,7 +299,7 @@ func (c *InternalClient) ImportK(ctx context.Context, index, field string, colum
 		return pilosa.ErrFieldRequired
 	}
 
-	buf, err := marshalImportPayloadK(index, field, columns)
+	buf, err := c.marshalImportPayloadK(index, field, columns)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
@@ -343,14 +333,14 @@ func (c *InternalClient) EnsureField(ctx context.Context, indexName string, fiel
 }
 
 // marshalImportPayload marshalls the import parameters into a protobuf byte slice.
-func marshalImportPayload(index, field string, shard uint64, bits []pilosa.Bit) ([]byte, error) {
+func (c *InternalClient) marshalImportPayload(index, field string, shard uint64, bits []pilosa.Bit) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
 	rowIDs := Bits(bits).RowIDs()
 	columnIDs := Bits(bits).ColumnIDs()
 	timestamps := Bits(bits).Timestamps()
 
 	// Marshal data to protobuf.
-	buf, err := proto.Marshal(&internal.ImportRequest{
+	buf, err := c.serializer.Marshal(&pilosa.ImportRequest{
 		Index:      index,
 		Field:      field,
 		Shard:      shard,
@@ -365,14 +355,14 @@ func marshalImportPayload(index, field string, shard uint64, bits []pilosa.Bit) 
 }
 
 // marshalImportPayloadK marshalls the import parameters into a protobuf byte slice.
-func marshalImportPayloadK(index, field string, bits []pilosa.Bit) ([]byte, error) {
+func (c *InternalClient) marshalImportPayloadK(index, field string, bits []pilosa.Bit) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
 	rowKeys := Bits(bits).RowKeys()
 	columnKeys := Bits(bits).ColumnKeys()
 	timestamps := Bits(bits).Timestamps()
 
 	// Marshal data to protobuf.
-	buf, err := proto.Marshal(&internal.ImportRequest{
+	buf, err := c.serializer.Marshal(&pilosa.ImportRequest{
 		Index:      index,
 		Field:      field,
 		RowKeys:    rowKeys,
@@ -414,8 +404,8 @@ func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, inde
 		return errors.New(string(body))
 	}
 
-	var isresp internal.ImportResponse
-	if err := proto.Unmarshal(body, &isresp); err != nil {
+	var isresp pilosa.ImportResponse
+	if err := c.serializer.Unmarshal(body, &isresp); err != nil {
 		return fmt.Errorf("unmarshal import response: %s", err)
 	} else if s := isresp.Err; s != "" {
 		return errors.New(s)
@@ -432,7 +422,7 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 		return pilosa.ErrFieldRequired
 	}
 
-	buf, err := marshalImportValuePayload(index, field, shard, vals)
+	buf, err := c.marshalImportValuePayload(index, field, shard, vals)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
@@ -454,13 +444,13 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 }
 
 // marshalImportValuePayload marshalls the import parameters into a protobuf byte slice.
-func marshalImportValuePayload(index, field string, shard uint64, vals []pilosa.FieldValue) ([]byte, error) {
+func (c *InternalClient) marshalImportValuePayload(index, field string, shard uint64, vals []pilosa.FieldValue) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
 	columnIDs := FieldValues(vals).ColumnIDs()
 	values := FieldValues(vals).Values()
 
 	// Marshal data to protobuf.
-	buf, err := proto.Marshal(&internal.ImportValueRequest{
+	buf, err := c.serializer.Marshal(&pilosa.ImportValueRequest{
 		Index:     index,
 		Field:     field,
 		Shard:     shard,
@@ -683,7 +673,7 @@ func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, 
 	if uri == nil {
 		panic("need to pass a URI to BlockData")
 	}
-	buf, err := proto.Marshal(&internal.BlockDataRequest{
+	buf, err := c.serializer.Marshal(&pilosa.BlockDataRequest{
 		Index: index,
 		Field: field,
 		Shard: shard,
@@ -719,10 +709,10 @@ func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, 
 	}
 
 	// Decode response object.
-	var rsp internal.BlockDataResponse
+	var rsp pilosa.BlockDataResponse
 	if body, err := ioutil.ReadAll(resp.Body); err != nil {
 		return nil, nil, errors.Wrap(err, "reading")
-	} else if err := proto.Unmarshal(body, &rsp); err != nil {
+	} else if err := c.serializer.Unmarshal(body, &rsp); err != nil {
 		return nil, nil, errors.Wrap(err, "unmarshalling")
 	}
 	return rsp.RowIDs, rsp.ColumnIDs, nil
@@ -819,12 +809,7 @@ func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, index
 }
 
 // SendMessage posts a message synchronously.
-func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, pb proto.Message) error {
-	msg, err := pilosa.MarshalMessage(pb)
-	if err != nil {
-		return fmt.Errorf("marshaling message: %v", err)
-	}
-
+func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, msg []byte) error {
 	u := uriPathToURL(uri, "/internal/cluster/message")
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(msg))
 	if err != nil {
@@ -998,7 +983,7 @@ func pos(rowID, columnID uint64) uint64 {
 
 func uriPathToURL(uri *pilosa.URI, path string) url.URL {
 	return url.URL{
-		Scheme: uri.Scheme(),
+		Scheme: uri.Scheme,
 		Host:   uri.HostPort(),
 		Path:   path,
 	}
@@ -1006,7 +991,7 @@ func uriPathToURL(uri *pilosa.URI, path string) url.URL {
 
 func nodePathToURL(node *pilosa.Node, path string) url.URL {
 	return url.URL{
-		Scheme: node.URI.Scheme(),
+		Scheme: node.URI.Scheme,
 		Host:   node.URI.HostPort(),
 		Path:   path,
 	}

@@ -75,3 +75,40 @@ func (n nopHandler) Close() error {
 }
 
 var NopHandler Handler = nopHandler{}
+
+type ImportValueRequest struct {
+	Index      string
+	Field      string
+	Shard      uint64
+	ColumnIDs  []uint64
+	ColumnKeys []string
+	Values     []int64
+}
+
+type ImportRequest struct {
+	Index      string
+	Field      string
+	Shard      uint64
+	RowIDs     []uint64
+	ColumnIDs  []uint64
+	RowKeys    []string
+	ColumnKeys []string
+	Timestamps []int64
+}
+
+type ImportResponse struct {
+	Err string
+}
+
+type BlockDataRequest struct {
+	Index string
+	Field string
+	View  string
+	Shard uint64
+	Block uint64
+}
+
+type BlockDataResponse struct {
+	RowIDs    []uint64
+	ColumnIDs []uint64
+}

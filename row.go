@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"sort"
 
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/roaring"
 )
 
@@ -216,25 +215,6 @@ func (r *Row) InvalidateCount() {
 	}
 }
 
-// IncrementCount increments the row cached counter, note this is an optimization that assumes that the caller is aware the size increased.
-func (r *Row) IncrementCount(i uint64) {
-	seg := r.segment(i / ShardWidth)
-	if seg != nil {
-		seg.n++
-	}
-
-}
-
-// DecrementCount decrements the row cached counter.
-func (r *Row) DecrementCount(i uint64) {
-	seg := r.segment(i / ShardWidth)
-	if seg != nil {
-		if seg.n > 0 {
-			seg.n--
-		}
-	}
-}
-
 // Count returns the number of columns in the row.
 func (r *Row) Count() uint64 {
 	var n uint64
@@ -269,41 +249,6 @@ func (r *Row) Columns() []uint64 {
 		a = append(a, r.segments[i].Columns()...)
 	}
 	return a
-}
-
-// EncodeRow converts r into its internal representation.
-func EncodeRow(r *Row) *internal.Row {
-	if r == nil {
-		return nil
-	}
-
-	return &internal.Row{
-		Columns: r.Columns(),
-		Attrs:   encodeAttrs(r.Attrs),
-	}
-}
-
-// DecodeRow converts r from its internal representation.
-func DecodeRow(pr *internal.Row) *Row {
-	if pr == nil {
-		return nil
-	}
-
-	r := NewRow()
-	r.Attrs = decodeAttrs(pr.Attrs)
-	for _, v := range pr.Columns {
-		r.SetBit(v)
-	}
-	return r
-}
-
-// Union performs a union on a slice of rows.
-func Union(rows []*Row) *Row {
-	other := rows[0]
-	for _, r := range rows[1:] {
-		other = other.Union(r)
-	}
-	return other
 }
 
 // RowSegment holds a subset of a row.

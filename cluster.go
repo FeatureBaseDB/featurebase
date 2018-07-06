@@ -45,8 +45,7 @@ const (
 	ClusterStateResizing = "RESIZING"
 
 	// NodeState represents the state of a node during startup.
-	NodeStateLoading = "LOADING"
-	NodeStateReady   = "READY"
+	NodeStateReady = "READY"
 
 	// resizeJob states.
 	resizeJobStateRunning = "RUNNING"
@@ -67,52 +66,6 @@ type Node struct {
 
 func (n Node) String() string {
 	return fmt.Sprintf("Node: %s", n.ID)
-}
-
-// EncodeNodes converts a slice of Nodes into its internal representation.
-func EncodeNodes(a []*Node) []*internal.Node {
-	other := make([]*internal.Node, len(a))
-	for i := range a {
-		other[i] = EncodeNode(a[i])
-	}
-	return other
-}
-
-// EncodeNode converts a Node into its internal representation.
-func EncodeNode(n *Node) *internal.Node {
-	return &internal.Node{
-		ID:            n.ID,
-		URI:           n.URI.Encode(),
-		IsCoordinator: n.IsCoordinator,
-	}
-}
-
-// DecodeNodes converts a proto message into a slice of Nodes.
-func DecodeNodes(a []*internal.Node) []*Node {
-	if len(a) == 0 {
-		return nil
-	}
-	other := make([]*Node, len(a))
-	for i := range a {
-		other[i] = DecodeNode(a[i])
-	}
-	return other
-}
-
-// DecodeNode converts a proto message into a Node.
-func DecodeNode(node *internal.Node) *Node {
-	return &Node{
-		ID:            node.ID,
-		URI:           decodeURI(node.URI),
-		IsCoordinator: node.IsCoordinator,
-	}
-}
-
-func DecodeNodeEvent(ne *internal.NodeEventMessage) *nodeEvent {
-	return &nodeEvent{
-		Event: NodeEventType(ne.Event),
-		Node:  DecodeNode(ne.Node),
-	}
 }
 
 // Nodes represents a list of nodes.
@@ -314,8 +267,8 @@ func (c *cluster) setCoordinator(n *Node) error {
 	c.mu.Unlock()
 	// Send the update coordinator message to all nodes.
 	err := c.broadcaster.SendSync(
-		&internal.UpdateCoordinatorMessage{
-			New: EncodeNode(n),
+		&UpdateCoordinatorMessage{
+			New: n,
 		})
 	if err != nil {
 		return fmt.Errorf("problem sending UpdateCoordinator message: %v", err)
@@ -469,7 +422,7 @@ func (c *cluster) setNodeState(state string) error {
 	}
 
 	// Send node state to coordinator.
-	ns := &internal.NodeStateMessage{
+	ns := &NodeStateMessage{
 		NodeID: c.Node.ID,
 		State:  state,
 	}
@@ -506,12 +459,12 @@ func (c *cluster) receiveNodeState(nodeID string, state string) error {
 	return nil
 }
 
-// Status returns the internal ClusterStatus representation.
-func (c *cluster) Status() *internal.ClusterStatus {
-	return &internal.ClusterStatus{
+// Status returns the the cluster's status including what nodes it contains, its ID, and current state.
+func (c *cluster) Status() *ClusterStatus {
+	return &ClusterStatus{
 		ClusterID: c.id,
 		State:     c.state,
-		Nodes:     EncodeNodes(c.Nodes),
+		Nodes:     c.Nodes,
 	}
 }
 
@@ -686,8 +639,8 @@ func (c *cluster) diff(other *cluster) (action string, nodeID string, err error)
 
 // fragSources returns a list of ResizeSources - for each node in the `to` cluster -
 // required to move from cluster `c` to cluster `to`.
-func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*internal.ResizeSource, error) {
-	m := make(map[string][]*internal.ResizeSource)
+func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*ResizeSource, error) {
+	m := make(map[string][]*ResizeSource)
 
 	// Determine if a node is being added or removed.
 	action, diffNodeID, err := c.diff(to)
@@ -746,7 +699,7 @@ func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*internal.R
 
 	// Get the ResizeSource for each diff.
 	for nodeID, diff := range diffs {
-		m[nodeID] = []*internal.ResizeSource{}
+		m[nodeID] = []*ResizeSource{}
 		for _, frag := range diff {
 			// If there is no valid source node ID for a fragment,
 			// it likely means that the replica factor was not
@@ -757,8 +710,8 @@ func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*internal.R
 				return nil, errors.New("not enough data to perform resize (replica factor may need to be increased)")
 			}
 
-			src := &internal.ResizeSource{
-				Node:  EncodeNode(c.unprotectedNodeByID(srcNodeID)),
+			src := &ResizeSource{
+				Node:  c.unprotectedNodeByID(srcNodeID),
 				Index: idx.Name(),
 				Field: frag.field,
 				View:  frag.view,
@@ -902,9 +855,9 @@ func (c *cluster) waitForStarted() error {
 		// TODO: Because the normal code path already sends a NodeJoin event (via
 		// memberlist), this it a bit redundant in most cases. Perhaps determine
 		// that the node has been restarted and don't do this step.
-		msg := &internal.NodeEventMessage{
-			Event: uint32(NodeJoin),
-			Node:  EncodeNode(c.Node),
+		msg := &NodeEvent{
+			Event: NodeJoin,
+			Node:  c.Node,
 		}
 		if err := c.broadcaster.SendSync(msg); err != nil {
 			return fmt.Errorf("sending restart NodeJoin: %v", err)
@@ -1014,8 +967,8 @@ func (c *cluster) setStateAndBroadcast(state string) error {
 	return c.broadcaster.SendSync(c.Status())
 }
 
-func (c *cluster) sendTo(node *Node, msg proto.Message) error {
-	if err := c.broadcaster.SendTo(node, msg); err != nil {
+func (c *cluster) sendTo(node *Node, m Message) error {
+	if err := c.broadcaster.SendTo(node, m); err != nil {
 		return errors.Wrap(err, "sending")
 	}
 	return nil
@@ -1121,7 +1074,7 @@ func (c *cluster) generateResizeJobByAction(nodeAction nodeAction) (*resizeJob, 
 	}
 
 	// multiIndex is a map of sources initialized with all the nodes in toCluster.
-	multiIndex := make(map[string][]*internal.ResizeSource)
+	multiIndex := make(map[string][]*ResizeSource)
 
 	for _, n := range toCluster.Nodes {
 		multiIndex[n.ID] = nil
@@ -1145,12 +1098,12 @@ func (c *cluster) generateResizeJobByAction(nodeAction nodeAction) (*resizeJob, 
 			j.IDs[id] = true
 			continue
 		}
-		instr := &internal.ResizeInstruction{
+		instr := &ResizeInstruction{
 			JobID:         j.ID,
-			Node:          EncodeNode(toCluster.unprotectedNodeByID(id)),
-			Coordinator:   EncodeNode(c.coordinatorNode()),
+			Node:          toCluster.unprotectedNodeByID(id),
+			Coordinator:   c.coordinatorNode(),
 			Sources:       sources,
-			Schema:        c.holder.encodeSchema(), // Include the schema to ensure it's in sync on the receiving node.
+			Schema:        &Schema{Indexes: c.holder.Schema()}, // Include the schema to ensure it's in sync on the receiving node.
 			ClusterStatus: c.Status(),
 		}
 		j.Instructions = append(j.Instructions, instr)
@@ -1176,7 +1129,7 @@ func (c *cluster) completeCurrentJob(state string) error {
 }
 
 // followResizeInstruction is run by any node that receives a ResizeInstruction.
-func (c *cluster) followResizeInstruction(instr *internal.ResizeInstruction) error {
+func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 	c.logger.Printf("follow resize instruction on %s", c.Node.ID)
 	// Make sure the cluster status on this node agrees with the Coordinator
 	// before attempting a resize.
@@ -1194,7 +1147,7 @@ func (c *cluster) followResizeInstruction(instr *internal.ResizeInstruction) err
 		<-c.holder.opened
 
 		// Prepare the return message.
-		complete := &internal.ResizeInstructionComplete{
+		complete := &ResizeInstructionComplete{
 			JobID: instr.JobID,
 			Node:  instr.Node,
 			Error: "",
@@ -1213,7 +1166,7 @@ func (c *cluster) followResizeInstruction(instr *internal.ResizeInstruction) err
 			for _, src := range instr.Sources {
 				c.logger.Printf("get shard %d for index %s from host %s", src.Shard, src.Index, src.Node.URI)
 
-				srcURI := decodeURI(src.Node.URI)
+				srcURI := src.Node.URI
 
 				// Retrieve field.
 				f := c.holder.Field(src.Index, src.Field)
@@ -1265,14 +1218,14 @@ func (c *cluster) followResizeInstruction(instr *internal.ResizeInstruction) err
 			complete.Error = err.Error()
 		}
 
-		if err := c.sendTo(DecodeNode(instr.Coordinator), complete); err != nil {
+		if err := c.sendTo(instr.Coordinator, complete); err != nil {
 			c.logger.Printf("sending resizeInstructionComplete error: err=%s", err)
 		}
 	}()
 	return nil
 }
 
-func (c *cluster) markResizeInstructionComplete(complete *internal.ResizeInstructionComplete) error {
+func (c *cluster) markResizeInstructionComplete(complete *ResizeInstructionComplete) error {
 
 	j := c.job(complete.JobID)
 
@@ -1309,7 +1262,7 @@ func (c *cluster) job(id int64) *resizeJob {
 type resizeJob struct {
 	ID           int64
 	IDs          map[string]bool
-	Instructions []*internal.ResizeInstruction
+	Instructions []*ResizeInstruction
 	Broadcaster  broadcaster
 
 	action string
@@ -1412,7 +1365,7 @@ func (j *resizeJob) distributeResizeInstructions() error {
 		// a dummy node object to use in the SendTo() method.
 		node := &Node{
 			ID:  instr.Node.ID,
-			URI: decodeURI(instr.Node.URI),
+			URI: instr.Node.URI,
 		}
 		j.Logger.Printf("send resize instructions: %v", instr)
 		if err := j.Broadcaster.SendTo(node, instr); err != nil {
@@ -1553,32 +1506,6 @@ func (c *cluster) saveTopology() error {
 	return nil
 }
 
-func encodeTopology(topology *Topology) *internal.Topology {
-	if topology == nil {
-		return nil
-	}
-	return &internal.Topology{
-		ClusterID: topology.ClusterID,
-		NodeIDs:   topology.NodeIDs,
-	}
-}
-
-func decodeTopology(topology *internal.Topology) (*Topology, error) {
-	if topology == nil {
-		return nil, nil
-	}
-
-	t := NewTopology()
-	t.ClusterID = topology.ClusterID
-	t.NodeIDs = topology.NodeIDs
-	sort.Slice(t.NodeIDs,
-		func(i, j int) bool {
-			return t.NodeIDs[i] < t.NodeIDs[j]
-		})
-
-	return t, nil
-}
-
 func (c *cluster) considerTopology() error {
 	// Create ClusterID if one does not already exist.
 	if c.id == "" {
@@ -1612,7 +1539,7 @@ func (c *cluster) considerTopology() error {
 }
 
 // ReceiveEvent represents an implementation of EventHandler.
-func (c *cluster) ReceiveEvent(e *nodeEvent) error {
+func (c *cluster) ReceiveEvent(e *NodeEvent) error {
 	// Ignore events sent from this node.
 	if e.Node.ID == c.Node.ID {
 		return nil
@@ -1752,7 +1679,7 @@ func (c *cluster) nodeLeave(node *Node) error {
 	return nil
 }
 
-func (c *cluster) mergeClusterStatus(cs *internal.ClusterStatus) error {
+func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.logger.Printf("merge cluster status: %v", cs)
@@ -1764,7 +1691,7 @@ func (c *cluster) mergeClusterStatus(cs *internal.ClusterStatus) error {
 	// Set ClusterID.
 	c.setID(cs.ClusterID)
 
-	officialNodes := DecodeNodes(cs.Nodes)
+	officialNodes := cs.Nodes
 
 	// Add all nodes from the coordinator.
 	for _, node := range officialNodes {
@@ -1813,3 +1740,120 @@ func (c *cluster) setStatic(hosts []string) error {
 	}
 	return nil
 }
+
+type ClusterStatus struct {
+	ClusterID string
+	State     string
+	Nodes     []*Node
+}
+
+type ResizeInstruction struct {
+	JobID         int64
+	Node          *Node
+	Coordinator   *Node
+	Sources       []*ResizeSource
+	Schema        *Schema
+	ClusterStatus *ClusterStatus
+}
+
+type ResizeSource struct {
+	Node  *Node  `protobuf:"bytes,1,opt,name=Node" json:"Node,omitempty"`
+	Index string `protobuf:"bytes,2,opt,name=Index,proto3" json:"Index,omitempty"`
+	Field string `protobuf:"bytes,3,opt,name=Field,proto3" json:"Field,omitempty"`
+	View  string `protobuf:"bytes,4,opt,name=View,proto3" json:"View,omitempty"`
+	Shard uint64 `protobuf:"varint,5,opt,name=Shard,proto3" json:"Shard,omitempty"`
+}
+
+// Schema contains information about indexes and their configuration.
+type Schema struct {
+	Indexes []*IndexInfo
+}
+
+func encodeTopology(topology *Topology) *internal.Topology {
+	if topology == nil {
+		return nil
+	}
+	return &internal.Topology{
+		ClusterID: topology.ClusterID,
+		NodeIDs:   topology.NodeIDs,
+	}
+}
+
+func decodeTopology(topology *internal.Topology) (*Topology, error) {
+	if topology == nil {
+		return nil, nil
+	}
+
+	t := NewTopology()
+	t.ClusterID = topology.ClusterID
+	t.NodeIDs = topology.NodeIDs
+	sort.Slice(t.NodeIDs,
+		func(i, j int) bool {
+			return t.NodeIDs[i] < t.NodeIDs[j]
+		})
+
+	return t, nil
+}
+
+type CreateShardMessage struct {
+	Index string
+	Shard uint64
+}
+
+type CreateIndexMessage struct {
+	Index string
+	Meta  *IndexOptions
+}
+
+type DeleteIndexMessage struct {
+	Index string
+}
+
+type CreateFieldMessage struct {
+	Index string
+	Field string
+	Meta  *FieldOptions
+}
+
+type DeleteFieldMessage struct {
+	Index string
+	Field string
+}
+
+type CreateViewMessage struct {
+	Index string
+	Field string
+	View  string
+}
+type DeleteViewMessage struct {
+	Index string
+	Field string
+	View  string
+}
+
+type ResizeInstructionComplete struct {
+	JobID int64
+	Node  *Node
+	Error string
+}
+
+type SetCoordinatorMessage struct {
+	New *Node
+}
+
+type UpdateCoordinatorMessage struct {
+	New *Node
+}
+
+type NodeStateMessage struct {
+	NodeID string `protobuf:"bytes,1,opt,name=NodeID,proto3" json:"NodeID,omitempty"`
+	State  string `protobuf:"bytes,2,opt,name=State,proto3" json:"State,omitempty"`
+}
+
+type NodeStatus struct {
+	Node      *Node
+	MaxShards map[string]uint64
+	Schema    *Schema
+}
+
+type RecalculateCaches struct{}

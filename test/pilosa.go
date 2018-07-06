@@ -63,11 +63,6 @@ func NewCommand(opts ...server.CommandOption) *Command {
 	m.Command.Stdout = &m.Stdout
 	m.Command.Stderr = &m.Stderr
 
-	err = m.SetupServer()
-	if err != nil {
-		panic(err)
-	}
-
 	if testing.Verbose() {
 		m.Command.Stdout = io.MultiWriter(os.Stdout, m.Command.Stdout)
 		m.Command.Stderr = io.MultiWriter(os.Stderr, m.Command.Stderr)
@@ -117,10 +112,6 @@ func (m *Command) Reopen() error {
 	config := m.Command.Config
 	m.Command = server.NewCommand(os.Stdin, os.Stdout, os.Stderr, m.commandOptions...)
 	m.Command.Config = config
-	err := m.SetupServer()
-	if err != nil {
-		return errors.Wrap(err, "setting up server")
-	}
 
 	// Run new program.
 	if err := m.Start(); err != nil {
@@ -130,11 +121,11 @@ func (m *Command) Reopen() error {
 }
 
 // URL returns the base URL string for accessing the running program.
-func (m *Command) URL() string { return m.Server.URI.String() }
+func (m *Command) URL() string { return m.API.Node().URI.String() }
 
 // Client returns a client to connect to the program.
 func (m *Command) Client() *http.InternalClient {
-	client, err := http.NewInternalClient(m.Server.URI.HostPort(), http.GetHTTPClient(nil))
+	client, err := http.NewInternalClient(m.API.Node().URI.HostPort(), http.GetHTTPClient(nil))
 	if err != nil {
 		panic(err)
 	}

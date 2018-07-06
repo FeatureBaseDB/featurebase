@@ -27,7 +27,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )
@@ -217,7 +216,7 @@ func (h *Holder) Schema() []*IndexInfo {
 		for _, field := range index.Fields() {
 			fi := &FieldInfo{Name: field.Name(), Options: field.Options()}
 			for _, view := range field.views() {
-				fi.Views = append(fi.Views, &viewInfo{Name: view.name})
+				fi.Views = append(fi.Views, &ViewInfo{Name: view.name})
 			}
 			sort.Sort(viewInfoSlice(fi.Views))
 			di.Fields = append(di.Fields, fi)
@@ -229,8 +228,24 @@ func (h *Holder) Schema() []*IndexInfo {
 	return a
 }
 
+// limitedSchema returns schema information for all indexes and fields.
+func (h *Holder) limitedSchema() []*IndexInfo {
+	var a []*IndexInfo
+	for _, index := range h.Indexes() {
+		di := &IndexInfo{Name: index.Name()}
+		for _, field := range index.Fields() {
+			fi := &FieldInfo{Name: field.Name(), Options: field.Options()}
+			di.Fields = append(di.Fields, fi)
+		}
+		sort.Sort(fieldInfoSlice(di.Fields))
+		a = append(a, di)
+	}
+	sort.Sort(indexInfoSlice(a))
+	return a
+}
+
 // applySchema applies an internal Schema to Holder.
-func (h *Holder) applySchema(schema *internal.Schema) error {
+func (h *Holder) applySchema(schema *Schema) error {
 	// Create indexes that don't exist.
 	for _, index := range schema.Indexes {
 		opt := IndexOptions{}
@@ -240,14 +255,13 @@ func (h *Holder) applySchema(schema *internal.Schema) error {
 		}
 		// Create fields that don't exist.
 		for _, f := range index.Fields {
-			opt := decodeFieldOptions(f.Meta)
-			field, err := idx.CreateFieldIfNotExists(f.Name, *opt)
+			field, err := idx.createFieldIfNotExists(f.Name, f.Options)
 			if err != nil {
 				return errors.Wrap(err, "creating field")
 			}
 			// Create views that don't exist.
 			for _, v := range f.Views {
-				_, err := field.createViewIfNotExists(v)
+				_, err := field.createViewIfNotExists(v.Name)
 				if err != nil {
 					return errors.Wrap(err, "creating view")
 				}
@@ -255,20 +269,6 @@ func (h *Holder) applySchema(schema *internal.Schema) error {
 		}
 	}
 	return nil
-}
-
-// encodeMaxShards creates and internal representation of max shards.
-func (h *Holder) encodeMaxShards() *internal.MaxShards {
-	return &internal.MaxShards{
-		Standard: h.maxShards(),
-	}
-}
-
-// encodeSchema creates an internal representation of schema.
-func (h *Holder) encodeSchema() *internal.Schema {
-	return &internal.Schema{
-		Indexes: encodeIndexes(h.Indexes()),
-	}
 }
 
 // IndexPath returns the path where a given index is stored.

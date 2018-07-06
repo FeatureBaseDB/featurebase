@@ -75,8 +75,27 @@ type Field struct {
 	Logger Logger
 }
 
-// FieldOption is a functional option type for pilosa.FieldOptions.
+// FieldOption is a functional option type for pilosa.fieldOptions.
 type FieldOption func(fo *FieldOptions) error
+
+func OptFieldKeys() FieldOption {
+	return func(fo *FieldOptions) error {
+		fo.Keys = true
+		return nil
+	}
+}
+
+func OptFieldTypeDefault() FieldOption {
+	return func(fo *FieldOptions) error {
+		if fo.Type != "" {
+			return errors.Errorf("field type is already set to: %s", fo.Type)
+		}
+		fo.Type = FieldTypeSet
+		fo.CacheType = DefaultCacheType
+		fo.CacheSize = DefaultCacheSize
+		return nil
+	}
+}
 
 func OptFieldTypeSet(cacheType string, cacheSize uint32) FieldOption {
 	return func(fo *FieldOptions) error {
@@ -120,10 +139,17 @@ func OptFieldTypeTime(timeQuantum TimeQuantum) FieldOption {
 }
 
 // NewField returns a new instance of field.
-func NewField(path, index, name string, options FieldOptions) (*Field, error) {
+func NewField(path, index, name string, opts FieldOption) (*Field, error) {
 	err := validateName(name)
 	if err != nil {
 		return nil, err
+	}
+
+	// Apply functional option.
+	fo := FieldOptions{}
+	err = opts(&fo)
+	if err != nil {
+		return nil, errors.Wrap(err, "applying option")
 	}
 
 	f := &Field{
@@ -138,7 +164,7 @@ func NewField(path, index, name string, options FieldOptions) (*Field, error) {
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
 
-		options: applyDefaultOptions(options),
+		options: applyDefaultOptions(fo),
 
 		Logger: NopLogger,
 	}
@@ -176,13 +202,6 @@ func (f *Field) Type() string {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.options.Type
-}
-
-// CacheType returns the caching mode for the field.
-func (f *Field) CacheType() string {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	return f.options.CacheType
 }
 
 // SetCacheSize sets the cache size for ranked fames. Persists to meta file on update.
@@ -605,7 +624,7 @@ func (f *Field) createViewIfNotExists(name string) (*view, error) {
 	if created {
 		// Broadcast view creation to the cluster.
 		err = f.broadcaster.SendSync(
-			&internal.CreateViewMessage{
+			&CreateViewMessage{
 				Index: f.index,
 				Field: f.name,
 				View:  name,
@@ -1073,25 +1092,6 @@ func (f *Field) ImportValue(columnIDs []uint64, values []int64) error {
 	return nil
 }
 
-// encodeFields converts a into its internal representation.
-func encodeFields(a []*Field) []*internal.Field {
-	other := make([]*internal.Field, len(a))
-	for i := range a {
-		other[i] = encodeField(a[i])
-	}
-	return other
-}
-
-// encodeField converts f into its internal representation.
-func encodeField(f *Field) *internal.Field {
-	fo := f.options
-	return &internal.Field{
-		Name:  f.name,
-		Meta:  fo.Encode(),
-		Views: f.viewNames(),
-	}
-}
-
 type fieldSlice []*Field
 
 func (p fieldSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
@@ -1102,7 +1102,7 @@ func (p fieldSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 type FieldInfo struct {
 	Name    string       `json:"name"`
 	Options FieldOptions `json:"options"`
-	Views   []*viewInfo  `json:"views,omitempty"`
+	Views   []*ViewInfo  `json:"views,omitempty"`
 }
 
 type fieldInfoSlice []*FieldInfo
@@ -1119,7 +1119,7 @@ type FieldOptions struct {
 	Min         int64       `json:"min,omitempty"`
 	Max         int64       `json:"max,omitempty"`
 	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
-	Keys        bool        `json:"keys,omitempty"`
+	Keys        bool        `json:"keys"`
 }
 
 // applyDefaultOptions returns a new FieldOptions object
@@ -1155,21 +1155,6 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 	}
 }
 
-func decodeFieldOptions(options *internal.FieldOptions) *FieldOptions {
-	if options == nil {
-		return nil
-	}
-	return &FieldOptions{
-		Type:        options.Type,
-		CacheType:   options.CacheType,
-		CacheSize:   options.CacheSize,
-		Min:         options.Min,
-		Max:         options.Max,
-		TimeQuantum: TimeQuantum(options.TimeQuantum),
-		Keys:        options.Keys,
-	}
-}
-
 func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 	switch o.Type {
 	case FieldTypeSet:
@@ -1177,28 +1162,34 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			Type      string `json:"type"`
 			CacheType string `json:"cacheType"`
 			CacheSize uint32 `json:"cacheSize"`
+			Keys      bool   `json:"keys"`
 		}{
 			o.Type,
 			o.CacheType,
 			o.CacheSize,
+			o.Keys,
 		})
 	case FieldTypeInt:
 		return json.Marshal(struct {
 			Type string `json:"type"`
 			Min  int64  `json:"min"`
 			Max  int64  `json:"max"`
+			Keys bool   `json:"keys"`
 		}{
 			o.Type,
 			o.Min,
 			o.Max,
+			o.Keys,
 		})
 	case FieldTypeTime:
 		return json.Marshal(struct {
 			Type        string      `json:"type"`
 			TimeQuantum TimeQuantum `json:"timeQuantum"`
+			Keys        bool        `json:"keys"`
 		}{
 			o.Type,
 			o.TimeQuantum,
+			o.Keys,
 		})
 	}
 	return nil, errors.New("invalid field type")

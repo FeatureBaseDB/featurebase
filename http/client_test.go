@@ -24,7 +24,6 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/http"
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
@@ -131,7 +130,7 @@ func TestClient_MultiNode(t *testing.T) {
 	client[2] = MustNewClient(c[2].URL(), defaultClient)
 
 	topN := 4
-	queryRequest := &internal.QueryRequest{
+	queryRequest := &pilosa.QueryRequest{
 		Query:  fmt.Sprintf(`TopN(f, n=%d)`, topN),
 		Remote: false,
 	}
@@ -147,17 +146,17 @@ func TestClient_MultiNode(t *testing.T) {
 	}
 
 	// Test must return exactly N results.
-	if len(result.Results[0].Pairs) != topN {
+	if len(result.Results[0].([]pilosa.Pair)) != topN {
 		t.Fatalf("unexpected number of TopN results: %s", spew.Sdump(result))
 	}
-	p := []*internal.Pair{
+	p := []pilosa.Pair{
 		{ID: 100, Count: 12},
 		{ID: 22, Count: 10},
 		{ID: 98, Count: 8},
 		{ID: 99, Count: 7}}
 
 	// Valdidate the Top 4 result counts.
-	if !reflect.DeepEqual(result.Results[0].Pairs, p) {
+	if !reflect.DeepEqual(result.Results[0].([]pilosa.Pair), p) {
 		t.Fatalf("Invalid TopN result set: %s", spew.Sdump(result))
 	}
 
@@ -218,15 +217,10 @@ func TestClient_ImportValue(t *testing.T) {
 	hldr := test.Holder{Holder: holder}
 
 	fldName := "f"
-	fo := pilosa.FieldOptions{
-		Type: pilosa.FieldTypeInt,
-		Min:  -100,
-		Max:  100,
-	}
 
 	// Load bitmap into cache to ensure cache gets updated.
 	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	field, err := index.CreateFieldIfNotExists(fldName, fo)
+	field, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-100, 100))
 	if err != nil {
 		t.Fatal(err)
 	}

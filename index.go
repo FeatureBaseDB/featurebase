@@ -270,7 +270,7 @@ func (i *Index) RecalculateCaches() {
 }
 
 // CreateField creates a field.
-func (i *Index) CreateField(name string, opt FieldOptions) (*Field, error) {
+func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -278,11 +278,40 @@ func (i *Index) CreateField(name string, opt FieldOptions) (*Field, error) {
 	if i.fields[name] != nil {
 		return nil, NewConflictError(ErrFieldExists)
 	}
-	return i.createField(name, opt)
+
+	// Apply functional options.
+	fo := FieldOptions{}
+	for _, opt := range opts {
+		err := opt(&fo)
+		if err != nil {
+			return nil, errors.Wrap(err, "applying option")
+		}
+	}
+
+	return i.createField(name, fo)
 }
 
 // CreateFieldIfNotExists creates a field with the given options if it doesn't exist.
-func (i *Index) CreateFieldIfNotExists(name string, opt FieldOptions) (*Field, error) {
+func (i *Index) CreateFieldIfNotExists(name string, opts FieldOption) (*Field, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	// Find field in cache first.
+	if f := i.fields[name]; f != nil {
+		return f, nil
+	}
+
+	// Apply functional option.
+	fo := FieldOptions{}
+	err := opts(&fo)
+	if err != nil {
+		return nil, errors.Wrap(err, "applying option")
+	}
+
+	return i.createField(name, fo)
+}
+
+func (i *Index) createFieldIfNotExists(name string, opt FieldOptions) (*Field, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -330,7 +359,7 @@ func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 }
 
 func (i *Index) newField(path, name string) (*Field, error) {
-	f, err := NewField(path, i.name, name, FieldOptions{}) // TODO: NewField should be un-exported along with FieldOptions
+	f, err := NewField(path, i.name, name, OptFieldTypeDefault())
 	if err != nil {
 		return nil, err
 	}
@@ -376,8 +405,9 @@ func (p indexSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
 // IndexInfo represents schema information for an index.
 type IndexInfo struct {
-	Name   string       `json:"name"`
-	Fields []*FieldInfo `json:"fields"`
+	Name    string       `json:"name"`
+	Options IndexOptions `json:"options"`
+	Fields  []*FieldInfo `json:"fields"`
 }
 
 type indexInfoSlice []*IndexInfo
@@ -386,33 +416,9 @@ func (p indexInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p indexInfoSlice) Len() int           { return len(p) }
 func (p indexInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
-// encodeIndexes converts a into its internal representation.
-func encodeIndexes(a []*Index) []*internal.Index {
-	other := make([]*internal.Index, len(a))
-	for i := range a {
-		other[i] = encodeIndex(a[i])
-	}
-	return other
-}
-
-// encodeIndex converts d into its internal representation.
-func encodeIndex(d *Index) *internal.Index {
-	return &internal.Index{
-		Name:   d.name,
-		Fields: encodeFields(d.Fields()),
-	}
-}
-
 // IndexOptions represents options to set when initializing an index.
 type IndexOptions struct {
 	Keys bool `json:"keys"`
-}
-
-// Encode converts i into its internal representation.
-func (i *IndexOptions) Encode() *internal.IndexMeta {
-	return &internal.IndexMeta{
-		Keys: i.Keys,
-	}
 }
 
 // hasTime returns true if a contains a non-nil time.

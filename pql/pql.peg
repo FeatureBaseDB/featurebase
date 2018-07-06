@@ -5,7 +5,7 @@ type PQL Peg {
 }
 
 
-Calls <- whitesp (Call whitesp)* !.
+Calls <- sp (Call sp)* !.
 Call <-  'Set' {p.startCall("Set")} open col comma args (comma timestamp)? close {p.endCall()}
        / 'SetRowAttrs' {p.startCall("SetRowAttrs")} open posfield comma uintrow comma args close {p.endCall()}
        / 'SetColumnAttrs' {p.startCall("SetColumnAttrs")} open col comma args close {p.endCall()}
@@ -62,11 +62,10 @@ col <- ( <uint> {p.addPosNum("_col", buffer[begin:end])}
 
 open <- '(' sp
 close <- ')' sp
-sp <- ( ' ' / '\t' )*
-comma <- sp ',' whitesp
+sp <- ( ' ' / '\t' / '\n' )*
+comma <- sp ',' sp
 lbrack <- '[' sp
 rbrack <- sp ']' sp
-whitesp <- ( ' ' / '\t' / '\n' )*
 IDENT <- [[A-Z]] ([[A-Z]] / [0-9])*
 
 

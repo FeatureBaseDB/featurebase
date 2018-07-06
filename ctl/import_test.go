@@ -62,7 +62,7 @@ func TestImportCommand_Run(t *testing.T) {
 	}
 
 	cmd := test.MustRunCluster(t, 1)[0]
-	cm.Host = cmd.Server.URI.HostPort()
+	cm.Host = cmd.API.Node().URI.HostPort()
 
 	cm.Index = "i"
 	cm.Field = "f"
@@ -87,7 +87,7 @@ func TestImportCommand_RunValue(t *testing.T) {
 	}
 
 	cmd := test.MustRunCluster(t, 1)[0]
-	cm.Host = cmd.Server.URI.HostPort()
+	cm.Host = cmd.API.Node().URI.HostPort()
 
 	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader("")))
 	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i/field/f", strings.NewReader(`{"options":{"type": "int", "min": 0, "max": 100}}`)))
@@ -107,7 +107,7 @@ func TestImportCommand_InvalidFile(t *testing.T) {
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
 	cm := NewImportCommand(stdin, stdout, stderr)
-	cm.Host = cmd.Server.URI.HostPort()
+	cm.Host = cmd.API.Node().URI.HostPort()
 	cm.Index = "i"
 	cm.Field = "f"
 	file, err := ioutil.TempFile("", "import.csv")
@@ -188,7 +188,7 @@ func TestImportCommand_BugOverwriteValue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cm.Host = cmd.Server.URI.HostPort()
+	cm.Host = cmd.API.Node().URI.HostPort()
 
 	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader("")))
 	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i/field/f", strings.NewReader(`{"options":{"type": "int", "min": 0, "max":2147483648 }}`)))

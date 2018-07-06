@@ -27,8 +27,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pkg/errors"
 
 	"golang.org/x/sync/errgroup"
@@ -36,12 +34,11 @@ import (
 
 // Default server settings.
 const (
-	DefaultDiagnosticServer = "https://diagnostics.pilosa.com/v0/diagnostics"
+	defaultDiagnosticServer = "https://diagnostics.pilosa.com/v0/diagnostics"
 )
 
 // Ensure Server implements interfaces.
 var _ broadcaster = &Server{}
-var _ MemberServer = &Server{}
 
 // Server represents a holder wrapped by a running HTTP server.
 type Server struct {
@@ -57,6 +54,7 @@ type Server struct {
 	executor        *executor
 	hosts           []string
 	clusterDisabled bool
+	serializer      Serializer
 
 	// External
 	systemInfo SystemInfo
@@ -64,7 +62,7 @@ type Server struct {
 	logger     Logger
 
 	nodeID              string
-	URI                 URI
+	uri                 URI
 	antiEntropyInterval time.Duration
 	metricInterval      time.Duration
 	diagnosticInterval  time.Duration
@@ -188,7 +186,7 @@ func OptServerDiagnosticsInterval(dur time.Duration) ServerOption {
 
 func OptServerURI(uri *URI) ServerOption {
 	return func(s *Server) error {
-		s.URI = *uri
+		s.uri = *uri
 		return nil
 	}
 }
@@ -199,6 +197,13 @@ func OptServerClusterDisabled(disabled bool, hosts []string) ServerOption {
 	return func(s *Server) error {
 		s.hosts = hosts
 		s.clusterDisabled = disabled
+		return nil
+	}
+}
+
+func OptServerSerializer(ser Serializer) ServerOption {
+	return func(s *Server) error {
+		s.serializer = ser
 		return nil
 	}
 }
@@ -230,7 +235,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		closing:     make(chan struct{}),
 		cluster:     newCluster(),
 		holder:      NewHolder(),
-		diagnostics: NewDiagnosticsCollector(DefaultDiagnosticServer),
+		diagnostics: NewDiagnosticsCollector(defaultDiagnosticServer),
 		systemInfo:  NewNopSystemInfo(),
 
 		gcNotifier: NopGCNotifier,
@@ -277,7 +282,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	// Set Cluster Node.
 	node := &Node{
 		ID:            s.nodeID,
-		URI:           s.URI,
+		URI:           s.uri,
 		IsCoordinator: s.cluster.Coordinator == s.nodeID,
 	}
 	s.cluster.Node = node
@@ -431,41 +436,41 @@ func (s *Server) monitorAntiEntropy() {
 	}
 }
 
-// ReceiveMessage represents an implementation of BroadcastHandler.
-func (s *Server) ReceiveMessage(pb proto.Message) error {
-	switch obj := pb.(type) {
-	case *internal.CreateShardMessage:
+// receiveMessage represents an implementation of BroadcastHandler.
+func (s *Server) receiveMessage(m Message) error {
+	switch obj := m.(type) {
+	case *CreateShardMessage:
 		idx := s.holder.Index(obj.Index)
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
 		idx.setRemoteMaxShard(obj.Shard)
-	case *internal.CreateIndexMessage:
+	case *CreateIndexMessage:
 		opt := IndexOptions{}
 		_, err := s.holder.CreateIndex(obj.Index, opt)
 		if err != nil {
 			return err
 		}
-	case *internal.DeleteIndexMessage:
+	case *DeleteIndexMessage:
 		if err := s.holder.DeleteIndex(obj.Index); err != nil {
 			return err
 		}
-	case *internal.CreateFieldMessage:
+	case *CreateFieldMessage:
 		idx := s.holder.Index(obj.Index)
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
-		opt := decodeFieldOptions(obj.Meta)
-		_, err := idx.CreateField(obj.Field, *opt)
+		opt := obj.Meta
+		_, err := idx.createField(obj.Field, *opt)
 		if err != nil {
 			return err
 		}
-	case *internal.DeleteFieldMessage:
+	case *DeleteFieldMessage:
 		idx := s.holder.Index(obj.Index)
 		if err := idx.DeleteField(obj.Field); err != nil {
 			return err
 		}
-	case *internal.CreateViewMessage:
+	case *CreateViewMessage:
 		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
 			return fmt.Errorf("Local Field not found: %s", obj.Field)
@@ -474,7 +479,7 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if err != nil {
 			return err
 		}
-	case *internal.DeleteViewMessage:
+	case *DeleteViewMessage:
 		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
 			return fmt.Errorf("Local Field not found: %s", obj.Field)
@@ -483,52 +488,59 @@ func (s *Server) ReceiveMessage(pb proto.Message) error {
 		if err != nil {
 			return err
 		}
-	case *internal.ClusterStatus:
+	case *ClusterStatus:
 		err := s.cluster.mergeClusterStatus(obj)
 		if err != nil {
 			return err
 		}
-	case *internal.ResizeInstruction:
+	case *ResizeInstruction:
 		err := s.cluster.followResizeInstruction(obj)
 		if err != nil {
 			return err
 		}
-	case *internal.ResizeInstructionComplete:
+	case *ResizeInstructionComplete:
 		err := s.cluster.markResizeInstructionComplete(obj)
 		if err != nil {
 			return err
 		}
-	case *internal.SetCoordinatorMessage:
-		s.cluster.setCoordinator(DecodeNode(obj.New))
-	case *internal.UpdateCoordinatorMessage:
-		s.cluster.updateCoordinator(DecodeNode(obj.New))
-	case *internal.NodeStateMessage:
+	case *SetCoordinatorMessage:
+		s.cluster.setCoordinator(obj.New)
+	case *UpdateCoordinatorMessage:
+		s.cluster.updateCoordinator(obj.New)
+	case *NodeStateMessage:
 		err := s.cluster.receiveNodeState(obj.NodeID, obj.State)
 		if err != nil {
 			return err
 		}
-	case *internal.RecalculateCaches:
+	case *RecalculateCaches:
 		s.holder.RecalculateCaches()
-	case *internal.NodeEventMessage:
-		s.cluster.ReceiveEvent(DecodeNodeEvent(obj))
+	case *NodeEvent:
+		s.cluster.ReceiveEvent(obj)
+	case *NodeStatus:
+		s.handleRemoteStatus(obj)
 	}
 
 	return nil
 }
 
 // SendSync represents an implementation of Broadcaster.
-func (s *Server) SendSync(pb proto.Message) error {
+func (s *Server) SendSync(m Message) error {
 	var eg errgroup.Group
+	msg, err := s.serializer.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("marshaling message: %v", err)
+	}
+	msg = append([]byte{getMessageType(m)}, msg...)
 	for _, node := range s.cluster.Nodes {
 		node := node
 		s.logger.Printf("SendSync to: %s", node.URI)
 		// Don't forward the message to ourselves.
-		if s.URI == node.URI {
+		if s.uri == node.URI {
 			continue
 		}
 
 		eg.Go(func() error {
-			return s.defaultClient.SendMessage(context.Background(), &node.URI, pb)
+			return s.defaultClient.SendMessage(context.Background(), &node.URI, msg)
 		})
 	}
 
@@ -536,72 +548,48 @@ func (s *Server) SendSync(pb proto.Message) error {
 }
 
 // SendAsync represents an implementation of Broadcaster.
-func (s *Server) SendAsync(pb proto.Message) error {
+func (s *Server) SendAsync(m Message) error {
 	return ErrNotImplemented
 }
 
 // SendTo represents an implementation of Broadcaster.
-func (s *Server) SendTo(to *Node, pb proto.Message) error {
+func (s *Server) SendTo(to *Node, m Message) error {
 	s.logger.Printf("SendTo: %s", to.URI)
-	return s.defaultClient.SendMessage(context.Background(), &to.URI, pb)
+	msg, err := s.serializer.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("marshaling message: %v", err)
+	}
+	msg = append([]byte{getMessageType(m)}, msg...)
+	return s.defaultClient.SendMessage(context.Background(), &to.URI, msg)
 }
 
-// Node returns the pilosa.Node object. It is used by membership protocols to
+// node returns the pilosa.node object. It is used by membership protocols to
 // get this node's name(ID), location(URI), and coordinator status.
-func (s *Server) Node() *Node {
-	return s.cluster.Node
+func (s *Server) node() Node {
+	return *s.cluster.Node
 }
 
-// Server implements StatusHandler.
-// LocalStatus is used to periodically sync information
-// between nodes. Under normal conditions, nodes should
-// remain in sync through Broadcast messages. For cases
-// where a node fails to receive a Broadcast message, or
-// when a new (empty) node needs to get in sync with the
-// rest of the cluster, two things are shared via gossip:
-// - MaxShard by Index
-// - Schema
-// In a gossip implementation, memberlist.Delegate.LocalState() uses this.
-func (s *Server) LocalStatus() (proto.Message, error) {
-	if s.cluster == nil {
-		return nil, errors.New("Server.Cluster is nil")
-	}
-	if s.holder == nil {
-		return nil, errors.New("Server.Holder is nil")
-	}
-
-	ns := internal.NodeStatus{
-		Node:      EncodeNode(s.cluster.Node),
-		MaxShards: s.holder.encodeMaxShards(),
-		Schema:    s.holder.encodeSchema(),
-	}
-
-	return &ns, nil
-}
-
-// HandleRemoteStatus receives incoming NodeStatus from remote nodes.
-func (s *Server) HandleRemoteStatus(pb proto.Message) error {
+// handleRemoteStatus receives incoming NodeStatus from remote nodes.
+func (s *Server) handleRemoteStatus(pb Message) {
 	// Ignore NodeStatus messages until the cluster is in a Normal state.
 	if s.cluster.State() != ClusterStateNormal {
-		return nil
+		return
 	}
 
 	go func() {
 		// Make sure the holder has opened.
 		<-s.holder.opened
 
-		err := s.mergeRemoteStatus(pb.(*internal.NodeStatus))
+		err := s.mergeRemoteStatus(pb.(*NodeStatus))
 		if err != nil {
 			s.logger.Printf("merge remote status: %s", err)
 		}
 	}()
-
-	return nil
 }
 
-func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
+func (s *Server) mergeRemoteStatus(ns *NodeStatus) error {
 	// Ignore status updates from self.
-	if s.nodeID == DecodeNode(ns.Node).ID {
+	if s.nodeID == ns.Node.ID {
 		return nil
 	}
 
@@ -612,7 +600,7 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 
 	// Sync maxShards.
 	oldmaxshards := s.holder.maxShards()
-	for index, newMax := range ns.MaxShards.Standard {
+	for index, newMax := range ns.MaxShards {
 		localIndex := s.holder.Index(index)
 		// if we don't know about an index locally, log an error because
 		// indexes should be created and synced prior to shard creation
@@ -641,7 +629,7 @@ func (s *Server) monitorDiagnostics() {
 
 	s.diagnostics.Logger = s.logger
 	s.diagnostics.SetVersion(Version)
-	s.diagnostics.Set("Host", s.URI.host)
+	s.diagnostics.Set("Host", s.uri.Host)
 	s.diagnostics.Set("Cluster", strings.Join(s.cluster.nodeIDs(), ","))
 	s.diagnostics.Set("NumNodes", len(s.cluster.Nodes))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
@@ -755,11 +743,4 @@ func expandDirName(path string) (string, error) {
 		return filepath.Join(HomeDir, strings.TrimPrefix(path, prefix)), nil
 	}
 	return path, nil
-}
-
-type MemberServer interface {
-	ReceiveMessage(proto.Message) error
-	LocalStatus() (proto.Message, error)
-	HandleRemoteStatus(proto.Message) error
-	Node() *Node
 }

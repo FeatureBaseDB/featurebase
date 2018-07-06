@@ -33,11 +33,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/internal"
 
 	"github.com/pkg/errors"
 )
@@ -358,9 +356,7 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	}
 
 	schema := h.API.Schema(r.Context())
-	if err := json.NewEncoder(w).Encode(getSchemaResponse{
-		Indexes: schema,
-	}); err != nil {
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"indexes": schema}); err != nil {
 		h.Logger.Printf("write schema response error: %s", err)
 	}
 }
@@ -374,7 +370,7 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	status := getStatusResponse{
 		State:   h.API.State(),
 		Nodes:   h.API.Hosts(r.Context()),
-		LocalID: h.API.LocalID(),
+		LocalID: h.API.Node().ID,
 	}
 	if err := json.NewEncoder(w).Encode(status); err != nil {
 		h.Logger.Printf("write status response error: %s", err)
@@ -416,18 +412,25 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.API.Query(r.Context(), req)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		switch errors.Cause(resp.Err) {
+		case pilosa.ErrTooManyWrites:
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+		}
 		h.writeQueryResponse(w, r, &pilosa.QueryResponse{Err: err})
 		return
 	}
 
-	// Set appropriate status code, if there is an error.
+	// Set appropriate status code, if there is an error. It doesn't appear that
+	// resp.Err could ever be set in API.Query, so this code block is probably
+	// doing nothing right now.
 	if resp.Err != nil {
-		switch resp.Err {
+		switch errors.Cause(resp.Err) {
 		case pilosa.ErrTooManyWrites:
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
 		default:
-			w.WriteHeader(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusBadRequest)
 		}
 	}
 
@@ -655,17 +658,22 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Convert json options into functional options.
-	var fos pilosa.FieldOption
+	var fos []pilosa.FieldOption
 	switch req.Options.Type {
 	case pilosa.FieldTypeSet:
-		fos = pilosa.OptFieldTypeSet(*req.Options.CacheType, *req.Options.CacheSize)
+		fos = append(fos, pilosa.OptFieldTypeSet(*req.Options.CacheType, *req.Options.CacheSize))
 	case pilosa.FieldTypeInt:
-		fos = pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max)
+		fos = append(fos, pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max))
 	case pilosa.FieldTypeTime:
-		fos = pilosa.OptFieldTypeTime(*req.Options.TimeQuantum)
+		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum))
+	}
+	if req.Options.Keys != nil {
+		if *req.Options.Keys {
+			fos = append(fos, pilosa.OptFieldKeys())
+		}
 	}
 
-	_, err = h.API.CreateField(r.Context(), indexName, fieldName, fos)
+	_, err = h.API.CreateField(r.Context(), indexName, fieldName, fos...)
 	resp.write(w, err)
 }
 
@@ -817,13 +825,12 @@ func (h *Handler) readProtobufQueryRequest(r *http.Request) (*pilosa.QueryReques
 		return nil, errors.Wrap(err, "reading")
 	}
 
-	// Unmarshal into object.
-	var req internal.QueryRequest
-	if err := proto.Unmarshal(body, &req); err != nil {
-		return nil, errors.Wrap(err, "unmarshalling")
+	qreq := &pilosa.QueryRequest{}
+	err = h.API.Serializer.Unmarshal(body, qreq)
+	if err != nil {
+		return nil, errors.Wrap(err, "unmarshalling query request")
 	}
-
-	return decodeQueryRequest(&req), nil
+	return qreq, nil
 }
 
 // readURLQueryRequest parses query parameters from URL parameters from r.
@@ -862,7 +869,7 @@ func (h *Handler) writeQueryResponse(w http.ResponseWriter, r *http.Request, res
 
 // writeProtobufQueryResponse writes the response from the executor to w as protobuf.
 func (h *Handler) writeProtobufQueryResponse(w http.ResponseWriter, resp *pilosa.QueryResponse) error {
-	if buf, err := proto.Marshal(encodeQueryResponse(resp)); err != nil {
+	if buf, err := h.API.Serializer.Marshal(resp); err != nil {
 		return errors.Wrap(err, "marshalling")
 	} else if _, err := w.Write(buf); err != nil {
 		return errors.Wrap(err, "writing")
@@ -914,8 +921,8 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	if field.Type() == pilosa.FieldTypeInt {
 		// Field type: Int
 		// Marshal into request object.
-		var req internal.ImportValueRequest
-		if err := proto.Unmarshal(body, &req); err != nil {
+		req := &pilosa.ImportValueRequest{}
+		if err := h.API.Serializer.Unmarshal(body, req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -932,8 +939,8 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Field type: Set, Time
 		// Marshal into request object.
-		var req internal.ImportRequest
-		if err := proto.Unmarshal(body, &req); err != nil {
+		req := &pilosa.ImportRequest{}
+		if err := h.API.Serializer.Unmarshal(body, req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -950,7 +957,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Marshal response object.
-	buf, e := proto.Marshal(&internal.ImportResponse{Err: ""})
+	buf, e := h.API.Serializer.Marshal(&pilosa.ImportResponse{Err: ""})
 	if e != nil {
 		http.Error(w, fmt.Sprintf("marshal import response"), http.StatusInternalServerError)
 		return
@@ -1104,56 +1111,6 @@ const (
 	QueryResultTypeUint64
 	QueryResultTypeBool
 )
-
-func decodeQueryRequest(pb *internal.QueryRequest) *pilosa.QueryRequest {
-	req := &pilosa.QueryRequest{
-		Query:           pb.Query,
-		Shards:          pb.Shards,
-		ColumnAttrs:     pb.ColumnAttrs,
-		Remote:          pb.Remote,
-		ExcludeRowAttrs: pb.ExcludeRowAttrs,
-		ExcludeColumns:  pb.ExcludeColumns,
-	}
-
-	return req
-}
-
-func encodeQueryResponse(resp *pilosa.QueryResponse) *internal.QueryResponse {
-	pb := &internal.QueryResponse{
-		Results:        make([]*internal.QueryResult, len(resp.Results)),
-		ColumnAttrSets: pilosa.EncodeColumnAttrSets(resp.ColumnAttrSets),
-	}
-
-	for i := range resp.Results {
-		pb.Results[i] = &internal.QueryResult{}
-
-		switch result := resp.Results[i].(type) {
-		case *pilosa.Row:
-			pb.Results[i].Type = QueryResultTypeRow
-			pb.Results[i].Row = pilosa.EncodeRow(result)
-		case []pilosa.Pair:
-			pb.Results[i].Type = QueryResultTypePairs
-			pb.Results[i].Pairs = pilosa.EncodePairs(result)
-		case pilosa.ValCount:
-			pb.Results[i].Type = QueryResultTypeValCount
-			pb.Results[i].ValCount = pilosa.EncodeValCount(result)
-		case uint64:
-			pb.Results[i].Type = QueryResultTypeUint64
-			pb.Results[i].N = result
-		case bool:
-			pb.Results[i].Type = QueryResultTypeBool
-			pb.Results[i].Changed = result
-		case nil:
-			pb.Results[i].Type = QueryResultTypeNil
-		}
-	}
-
-	if resp.Err != nil {
-		pb.Err = resp.Err.Error()
-	}
-
-	return pb
-}
 
 // parseUint64Slice returns a slice of uint64s from a comma-delimited string.
 func parseUint64Slice(s string) ([]uint64, error) {
@@ -1324,10 +1281,6 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 	if err := json.NewEncoder(w).Encode(defaultClusterMessageResponse{}); err != nil {
 		h.Logger.Printf("response encoding error: %s", err)
 	}
-}
-
-func (h *Handler) GetAPI() *pilosa.API {
-	return h.API
 }
 
 type defaultClusterMessageResponse struct{}

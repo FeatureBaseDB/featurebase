@@ -26,8 +26,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pkg/errors"
 )
@@ -38,6 +36,8 @@ type API struct {
 	holder  *Holder
 	cluster *cluster
 	server  *Server
+
+	Serializer Serializer
 }
 
 // APIOption is a functional option type for pilosa.API
@@ -48,6 +48,7 @@ func OptAPIServer(s *Server) APIOption {
 		a.server = s
 		a.holder = s.holder
 		a.cluster = s.cluster
+		a.Serializer = s.serializer
 		return nil
 	}
 }
@@ -149,6 +150,10 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	return resp, nil
 }
 
+func (api *API) Holder() *Holder {
+	return api.server.Holder()
+}
+
 // readColumnAttrSets returns a list of column attribute objects by id.
 func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet, error) {
 	if index == nil {
@@ -185,12 +190,11 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	}
 	// Send the create index message to all nodes.
 	err = api.server.SendSync(
-		&internal.CreateIndexMessage{
+		&CreateIndexMessage{
 			Index: indexName,
-			Meta:  options.Encode(),
+			Meta:  &options,
 		})
 	if err != nil {
-		api.server.logger.Printf("problem sending CreateIndex message: %s", err)
 		return nil, errors.Wrap(err, "sending CreateIndex message")
 	}
 	api.holder.Stats.Count("createIndex", 1, 1.0)
@@ -224,7 +228,7 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 	}
 	// Send the delete index message to all nodes.
 	err = api.server.SendSync(
-		&internal.DeleteIndexMessage{
+		&DeleteIndexMessage{
 			Index: indexName,
 		})
 	if err != nil {
@@ -238,16 +242,18 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 // CreateField makes the named field in the named index with the given options.
 // This method currently only takes a single functional option, but that may be
 // changed in the future to support multiple options.
-func (api *API) CreateField(ctx context.Context, indexName string, fieldName string, opts FieldOption) (*Field, error) {
+func (api *API) CreateField(ctx context.Context, indexName string, fieldName string, opts ...FieldOption) (*Field, error) {
 	if err := api.validate(apiCreateField); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	// Apply functional option.
+	// Apply functional options.
 	fo := FieldOptions{}
-	err := opts(&fo)
-	if err != nil {
-		return nil, errors.Wrap(err, "applying option")
+	for _, opt := range opts {
+		err := opt(&fo)
+		if err != nil {
+			return nil, errors.Wrap(err, "applying option")
+		}
 	}
 
 	// Find index.
@@ -257,17 +263,17 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 	}
 
 	// Create field.
-	field, err := index.CreateField(fieldName, fo)
+	field, err := index.CreateField(fieldName, opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating field")
 	}
 
 	// Send the create field message to all nodes.
 	err = api.server.SendSync(
-		&internal.CreateFieldMessage{
+		&CreateFieldMessage{
 			Index: indexName,
 			Field: fieldName,
-			Meta:  fo.Encode(),
+			Meta:  &fo,
 		})
 	if err != nil {
 		api.server.logger.Printf("problem sending CreateField message: %s", err)
@@ -311,7 +317,7 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 
 	// Send the delete field message to all nodes.
 	err := api.server.SendSync(
-		&internal.DeleteFieldMessage{
+		&DeleteFieldMessage{
 			Index: indexName,
 			Field: fieldName,
 		})
@@ -331,8 +337,8 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 	}
 
 	// Validate that this handler owns the shard.
-	if !api.cluster.ownsShard(api.LocalID(), indexName, shard) {
-		api.server.logger.Printf("node %s does not own shard %d of index %s", api.LocalID(), shard, indexName)
+	if !api.cluster.ownsShard(api.Node().ID, indexName, shard) {
+		api.server.logger.Printf("node %s does not own shard %d of index %s", api.Node().ID, shard, indexName)
 		return ErrClusterDoesNotOwnShard
 	}
 
@@ -370,55 +376,6 @@ func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) 
 	return api.cluster.shardNodes(indexName, shard), nil
 }
 
-// MarshalFragment returns an object which can write the specified fragment's data
-// to an io.Writer. The serialized data can be read back into a fragment with
-// the UnmarshalFragment API call.
-func (api *API) MarshalFragment(ctx context.Context, indexName string, fieldName string, shard uint64) (io.WriterTo, error) {
-	if err := api.validate(apiMarshalFragment); err != nil {
-		return nil, errors.Wrap(err, "validating api method")
-	}
-
-	// Retrieve fragment from holder.
-	f := api.holder.fragment(indexName, fieldName, viewStandard, shard)
-	if f == nil {
-		return nil, ErrFragmentNotFound
-	}
-	return f, nil
-}
-
-// UnmarshalFragment creates a new fragment (if necessary) and reads data from a
-// Reader which was previously written by MarshalFragment to populate the
-// fragment's data.
-func (api *API) UnmarshalFragment(ctx context.Context, indexName string, fieldName string, shard uint64, reader io.ReadCloser) error {
-	if err := api.validate(apiUnmarshalFragment); err != nil {
-		return errors.Wrap(err, "validating api method")
-	}
-
-	// Retrieve field.
-	f := api.holder.Field(indexName, fieldName)
-	if f == nil {
-		return ErrFieldNotFound
-	}
-
-	// Retrieve view.
-	view, err := f.createViewIfNotExists(viewStandard)
-	if err != nil {
-		return errors.Wrap(err, "creating view")
-	}
-
-	// Retrieve fragment from field.
-	frag, err := view.CreateFragmentIfNotExists(shard)
-	if err != nil {
-		return errors.Wrap(err, "creating fragment")
-	}
-
-	// Read fragment in from request body.
-	if _, err := frag.ReadFrom(reader); err != nil {
-		return errors.Wrap(err, "reading fragment")
-	}
-	return nil
-}
-
 // FragmentBlockData is an endpoint for internal usage. It is not guaranteed to
 // return anything useful. Currently it returns protobuf encoded row and column
 // ids from a "block" which is a subdivision of a fragment.
@@ -431,8 +388,8 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 	if err != nil {
 		return nil, NewBadRequestError(errors.Wrap(err, "read body error"))
 	}
-	var req internal.BlockDataRequest
-	if err := proto.Unmarshal(reqBytes, &req); err != nil {
+	var req BlockDataRequest
+	if err := api.Serializer.Unmarshal(reqBytes, &req); err != nil {
 		return nil, NewBadRequestError(errors.Wrap(err, "unmarshal body error"))
 	}
 
@@ -442,11 +399,11 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 		return nil, ErrFragmentNotFound
 	}
 
-	var resp = internal.BlockDataResponse{}
+	var resp = BlockDataResponse{}
 	resp.RowIDs, resp.ColumnIDs = f.blockData(int(req.Block))
 
 	// Encode response.
-	buf, err := proto.Marshal(&resp)
+	buf, err := api.Serializer.Marshal(&resp)
 	if err != nil {
 		return nil, errors.Wrap(err, "merge block response encoding error")
 	}
@@ -477,13 +434,19 @@ func (api *API) Hosts(ctx context.Context) []*Node {
 	return api.cluster.Nodes
 }
 
+// Node gets the ID, URI and coordinator status for this particular node.
+func (api *API) Node() *Node {
+	node := api.server.node()
+	return &node
+}
+
 // RecalculateCaches forces all TopN caches to be updated. Used mainly for integration tests.
 func (api *API) RecalculateCaches(ctx context.Context) error {
 	if err := api.validate(apiRecalculateCaches); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	err := api.server.SendSync(&internal.RecalculateCaches{})
+	err := api.server.SendSync(&RecalculateCaches{})
 	if err != nil {
 		return errors.Wrap(err, "broacasting message")
 	}
@@ -504,28 +467,24 @@ func (api *API) ClusterMessage(ctx context.Context, reqBody io.Reader) error {
 		return errors.Wrap(err, "reading body")
 	}
 
-	// Marshal into request object.
-	pb, err := UnmarshalMessage(body)
+	typ := body[0]
+	msg := getMessage(typ)
+	err = api.server.serializer.Unmarshal(body[1:], msg)
 	if err != nil {
-		return errors.Wrap(err, "unmarshaling message")
+		return errors.Wrap(err, "deserializing cluster message")
 	}
 
 	// Forward the error message.
-	if err := api.server.ReceiveMessage(pb); err != nil {
+	if err := api.server.receiveMessage(msg); err != nil {
 		return errors.Wrap(err, "receiving message")
 	}
 	return nil
 }
 
-// LocalID returns the current node's ID.
-func (api *API) LocalID() string {
-	return api.cluster.Node.ID
-}
-
 // Schema returns information about each index in Pilosa including which fields
-// and views they contain.
+// they contain.
 func (api *API) Schema(ctx context.Context) []*IndexInfo {
-	return api.holder.Schema()
+	return api.holder.limitedSchema()
 }
 
 // Views returns the views in the given field.
@@ -567,7 +526,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, fieldName stri
 
 	// Send the delete view message to all nodes.
 	err := api.server.SendSync(
-		&internal.DeleteViewMessage{
+		&DeleteViewMessage{
 			Index: indexName,
 			Field: fieldName,
 			View:  viewName,
@@ -649,7 +608,7 @@ func (api *API) FieldAttrDiff(ctx context.Context, indexName string, fieldName s
 }
 
 // Import bulk imports data into a particular index,field,shard.
-func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
+func (api *API) Import(ctx context.Context, req *ImportRequest) error {
 	if err := api.validate(apiImport); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -678,7 +637,7 @@ func (api *API) Import(ctx context.Context, req internal.ImportRequest) error {
 }
 
 // ImportValue bulk imports values into a particular field.
-func (api *API) ImportValue(ctx context.Context, req internal.ImportValueRequest) error {
+func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest) error {
 	if err := api.validate(apiImportValue); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -720,8 +679,8 @@ func (api *API) LongQueryTime() time.Duration {
 
 func (api *API) indexField(indexName string, fieldName string, shard uint64) (*Index, *Field, error) {
 	// Validate that this handler owns the shard.
-	if !api.cluster.ownsShard(api.LocalID(), indexName, shard) {
-		api.server.logger.Printf("node %s does not own shard %d of index %s", api.LocalID(), shard, indexName)
+	if !api.cluster.ownsShard(api.Node().ID, indexName, shard) {
+		api.server.logger.Printf("node %s does not own shard %d of index %s", api.Node().ID, shard, indexName)
 		return nil, nil, ErrClusterDoesNotOwnShard
 	}
 
@@ -755,15 +714,15 @@ func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode
 	}
 
 	// If the new coordinator is this node, do the SetCoordinator directly.
-	if newNode.ID == api.LocalID() {
+	if newNode.ID == api.Node().ID {
 		return oldNode, newNode, api.cluster.setCoordinator(newNode)
 	}
 
 	// Send the set-coordinator message to new node.
 	err = api.server.SendTo(
 		newNode,
-		&internal.SetCoordinatorMessage{
-			New: EncodeNode(newNode),
+		&SetCoordinatorMessage{
+			New: newNode,
 		})
 	if err != nil {
 		return nil, nil, fmt.Errorf("problem sending SetCoordinator message: %s", err)
@@ -888,7 +847,6 @@ const (
 	apiIndexAttrDiff
 	//apiLocalID // not implemented
 	//apiLongQueryTime // not implemented
-	apiMarshalFragment
 	//apiMaxShards // not implemented
 	apiQuery
 	apiRecalculateCaches
@@ -899,15 +857,13 @@ const (
 	apiShardNodes
 	//apiState // not implemented
 	//apiStatsWithTags // not implemented
-	apiUnmarshalFragment
 	//apiVersion // not implemented
 	apiViews
 )
 
 var methodsCommon = map[apiMethod]struct{}{
-	apiClusterMessage:  struct{}{},
-	apiMarshalFragment: struct{}{},
-	apiSetCoordinator:  struct{}{},
+	apiClusterMessage: struct{}{},
+	apiSetCoordinator: struct{}{},
 }
 
 var methodsResizing = map[apiMethod]struct{}{
@@ -933,6 +889,5 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiRecalculateCaches: struct{}{},
 	apiRemoveNode:        struct{}{},
 	apiShardNodes:        struct{}{},
-	apiUnmarshalFragment: struct{}{},
 	apiViews:             struct{}{},
 }

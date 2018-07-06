@@ -27,10 +27,8 @@ import (
 
 	gohttp "net/http"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/http"
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
@@ -62,17 +60,17 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
-	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.FieldOptions{}); err != nil {
+	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.FieldOptions{}); err != nil {
+	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
 	} else if _, err := f.SetBit(0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.FieldOptions{}); err != nil {
+	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -144,7 +142,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("Shards args protobuf", func(t *testing.T) {
 		// Generate request body.
-		reqBody, err := proto.Marshal(&internal.QueryRequest{
+		reqBody, err := cmd.API.Serializer.Marshal(&pilosa.QueryRequest{
 			Query:  "Count(Row(f0=30))",
 			Shards: []uint64{0, 1},
 		})
@@ -196,13 +194,11 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 
-		var resp internal.QueryResponse
-		if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		var resp pilosa.QueryResponse
+		if err := cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 			t.Fatal(err)
-		} else if rt := resp.Results[0].Type; rt != http.QueryResultTypeUint64 {
-			t.Fatalf("unexpected response type: %d", resp.Results[0].Type)
-		} else if n := resp.Results[0].N; n != 3 {
-			t.Fatalf("unexpected n: %d", n)
+		} else if rt, ok := resp.Results[0].(uint64); !ok || rt != 3 {
+			t.Fatalf("unexpected response type: %#v", resp.Results[0])
 		}
 	})
 
@@ -244,27 +240,25 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 
-		var resp internal.QueryResponse
-		if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		var resp pilosa.QueryResponse
+		if err := cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 			t.Fatal(err)
-		} else if rt := resp.Results[0].Type; rt != http.QueryResultTypeRow {
-			t.Fatalf("unexpected response type: %d", resp.Results[0].Type)
-		} else if columns := resp.Results[0].Row.Columns; !reflect.DeepEqual(columns, []uint64{pilosa.ShardWidth + 1, pilosa.ShardWidth + 2, (3 * pilosa.ShardWidth) + 4}) {
+		} else if columns := resp.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{pilosa.ShardWidth + 1, pilosa.ShardWidth + 2, (3 * pilosa.ShardWidth) + 4}) {
 			t.Fatalf("unexpected columns: %+v", columns)
-		} else if attrs := resp.Results[0].Row.Attrs; len(attrs) != 3 {
+		} else if attrs := resp.Results[0].(*pilosa.Row).Attrs; len(attrs) != 3 {
 			t.Fatalf("unexpected attr length: %d", len(attrs))
-		} else if k, v := attrs[0].Key, attrs[0].StringValue; k != "a" || v != "b" {
-			t.Fatalf("unexpected attr[0]: %s=%v", k, v)
-		} else if k, v := attrs[1].Key, attrs[1].IntValue; k != "c" || v != int64(1) {
-			t.Fatalf("unexpected attr[1]: %s=%v", k, v)
-		} else if k, v := attrs[2].Key, attrs[2].BoolValue; k != "d" || !v {
-			t.Fatalf("unexpected attr[2]: %s=%v", k, v)
+		} else if attrs["a"] != "b" {
+			t.Fatalf("unexpected attr[a]: %v", attrs["a"])
+		} else if attrs["c"] != int64(1) {
+			t.Fatalf("unexpected attr[c]: %v", attrs["c"])
+		} else if !attrs["d"].(bool) {
+			t.Fatalf("unexpected attr[d]: %v", attrs["d"])
 		}
 	})
 
 	t.Run("Row columnattrs protobuf", func(t *testing.T) {
 		// Encode request body.
-		buf, err := proto.Marshal(&internal.QueryRequest{
+		buf, err := cmd.API.Serializer.Marshal(&pilosa.QueryRequest{
 			Query:       "Row(f0=30)",
 			ColumnAttrs: true,
 		})
@@ -281,22 +275,22 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 
-		var resp internal.QueryResponse
-		if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		var resp pilosa.QueryResponse
+		if err := cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 			t.Fatal(err)
 		}
-		if columns := resp.Results[0].Row.Columns; !reflect.DeepEqual(columns, []uint64{pilosa.ShardWidth + 1, pilosa.ShardWidth + 2, (3 * pilosa.ShardWidth) + 4}) {
+		if columns := resp.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{pilosa.ShardWidth + 1, pilosa.ShardWidth + 2, (3 * pilosa.ShardWidth) + 4}) {
 			t.Fatalf("unexpected columns: %+v", columns)
-		} else if rt := resp.Results[0].Type; rt != http.QueryResultTypeRow {
-			t.Fatalf("unexpected response type: %d", resp.Results[0].Type)
-		} else if attrs := resp.Results[0].Row.Attrs; len(attrs) != 3 {
+		} else if _, ok := resp.Results[0].(*pilosa.Row); !ok {
+			t.Fatalf("unexpected response type: %#v", resp.Results[0])
+		} else if attrs := resp.Results[0].(*pilosa.Row).Attrs; len(attrs) != 3 {
 			t.Fatalf("unexpected attr length: %d", len(attrs))
-		} else if k, v := attrs[0].Key, attrs[0].StringValue; k != "a" || v != "b" {
-			t.Fatalf("unexpected attr[0]: %s=%v", k, v)
-		} else if k, v := attrs[1].Key, attrs[1].IntValue; k != "c" || v != int64(1) {
-			t.Fatalf("unexpected attr[1]: %s=%v", k, v)
-		} else if k, v := attrs[2].Key, attrs[2].BoolValue; k != "d" || !v {
-			t.Fatalf("unexpected attr[2]: %s=%v", k, v)
+		} else if attrs["a"] != "b" {
+			t.Fatalf("unexpected attr[a]: %v", attrs["a"])
+		} else if attrs["c"] != int64(1) {
+			t.Fatalf("unexpected attr[c]: %v", attrs["c"])
+		} else if !attrs["d"].(bool) {
+			t.Fatalf("unexpected attr[d]: %v", attrs["d"])
 		}
 
 		if a := resp.ColumnAttrSets; len(a) != 2 {
@@ -305,8 +299,8 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected id: %d", a[0].ID)
 		} else if len(a[0].Attrs) != 1 {
 			t.Fatalf("unexpected column attr length: %d", len(a))
-		} else if k, v := a[0].Attrs[0].Key, a[0].Attrs[0].StringValue; k != "x" || v != "y" {
-			t.Fatalf("unexpected attr[0]: %s=%v", k, v)
+		} else if a[0].Attrs["x"] != "y" {
+			t.Fatalf("unexpected attr[x]: %v", a[0].Attrs["x"])
 		}
 	})
 
@@ -329,12 +323,10 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 
-		var resp internal.QueryResponse
-		if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		var resp pilosa.QueryResponse
+		if err := cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 			t.Fatal(err)
-		} else if rt := resp.Results[0].Type; rt != http.QueryResultTypePairs {
-			t.Fatalf("unexpected response type: %d", resp.Results[0].Type)
-		} else if a := resp.Results[0].GetPairs(); len(a) != 2 {
+		} else if a := resp.Results[0].([]pilosa.Pair); len(a) != 2 {
 			t.Fatalf("unexpected pair length: %d", len(a))
 		}
 	})
@@ -358,10 +350,10 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 
-		var resp internal.QueryResponse
-		if err := proto.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		var resp pilosa.QueryResponse
+		if err := cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 			t.Fatal(err)
-		} else if s := resp.Err; s != `executing: field not found` {
+		} else if s := resp.Err.Error(); s != `executing: field not found` {
 			t.Fatalf("unexpected error: %s", s)
 		}
 	})
@@ -401,7 +393,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("Field delete", func(t *testing.T) {
 		i := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		if _, err := i.CreateFieldIfNotExists("f1", pilosa.FieldOptions{}); err != nil {
+		if _, err := i.CreateFieldIfNotExists("f1", pilosa.OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
 		}
 		w := httptest.NewRecorder()
@@ -453,7 +445,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	})
 
-	meta, err := i.CreateFieldIfNotExists("meta", pilosa.FieldOptions{})
+	meta, err := i.CreateFieldIfNotExists("meta", pilosa.OptFieldTypeDefault())
 	if err != nil {
 		t.Fatal(err)
 	}
