@@ -220,7 +220,7 @@ func (i *Index) maxShard() uint64 {
 
 	max := i.remoteMaxShard
 	for _, f := range i.fields {
-		if shard := f.MaxShard(); shard > max {
+		if shard := f.maxShard(); shard > max {
 			max = shard
 		}
 	}
