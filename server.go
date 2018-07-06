@@ -337,7 +337,7 @@ func (s *Server) Open() error {
 	if err := s.holder.Open(); err != nil {
 		return fmt.Errorf("opening Holder: %v", err)
 	}
-	if err := s.cluster.setNodeState(NodeStateReady); err != nil {
+	if err := s.cluster.setNodeState(nodeStateReady); err != nil {
 		return fmt.Errorf("setting nodeState: %v", err)
 	}
 

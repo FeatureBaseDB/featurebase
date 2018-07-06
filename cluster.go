@@ -45,7 +45,7 @@ const (
 	ClusterStateResizing = "RESIZING"
 
 	// NodeState represents the state of a node during startup.
-	NodeStateReady = "READY"
+	nodeStateReady = "READY"
 
 	// resizeJob states.
 	resizeJobStateRunning = "RUNNING"
@@ -903,7 +903,7 @@ func (c *cluster) allNodesReady() bool {
 		return true
 	}
 	for _, uri := range c.Topology.NodeIDs {
-		if c.Topology.nodeStates[uri] != NodeStateReady {
+		if c.Topology.nodeStates[uri] != nodeStateReady {
 			return false
 		}
 	}

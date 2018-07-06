@@ -277,7 +277,7 @@ func (t *ClusterCluster) Open() error {
 		if err := c.holder.Open(); err != nil {
 			return err
 		}
-		if err := c.setNodeState(NodeStateReady); err != nil {
+		if err := c.setNodeState(nodeStateReady); err != nil {
 			return err
 		}
 	}
