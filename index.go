@@ -139,7 +139,7 @@ func (i *Index) openFields() error {
 			continue
 		}
 
-		fld, err := i.newField(i.FieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		fld, err := i.newField(i.fieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 		if err != nil {
 			return ErrName
 		}
@@ -236,8 +236,8 @@ func (i *Index) setRemoteMaxShard(newmax uint64) {
 	i.remoteMaxShard = newmax
 }
 
-// FieldPath returns the path to a field in the index.
-func (i *Index) FieldPath(name string) string { return filepath.Join(i.path, name) }
+// fieldPath returns the path to a field in the index.
+func (i *Index) fieldPath(name string) string { return filepath.Join(i.path, name) }
 
 // Field returns a field in the index by name.
 func (i *Index) Field(name string) *Field {
@@ -331,7 +331,7 @@ func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 	}
 
 	// Initialize field.
-	f, err := i.newField(i.FieldPath(name), name)
+	f, err := i.newField(i.fieldPath(name), name)
 	if err != nil {
 		return nil, errors.Wrap(err, "initializing")
 	}
@@ -387,7 +387,7 @@ func (i *Index) DeleteField(name string) error {
 	}
 
 	// Delete field directory.
-	if err := os.RemoveAll(i.FieldPath(name)); err != nil {
+	if err := os.RemoveAll(i.fieldPath(name)); err != nil {
 		return errors.Wrap(err, "removing directory")
 	}
 
