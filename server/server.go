@@ -124,7 +124,7 @@ func (m *Command) Start() (err error) {
 	}
 
 	// SetupNetworking
-	err = m.SetupNetworking()
+	err = m.setupNetworking()
 	if err != nil {
 		return errors.Wrap(err, "setting up networking")
 	}
@@ -299,8 +299,8 @@ func (m *Command) SetupServer() error {
 
 }
 
-// SetupNetworking sets up internode communication based on the configuration.
-func (m *Command) SetupNetworking() error {
+// setupNetworking sets up internode communication based on the configuration.
+func (m *Command) setupNetworking() error {
 	if m.Config.Cluster.Disabled {
 		return nil
 	}
