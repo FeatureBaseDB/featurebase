@@ -337,7 +337,7 @@ func encodeQueryRequest(m *pilosa.QueryRequest) *internal.QueryRequest {
 func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
 	pb := &internal.QueryResponse{
 		Results:        make([]*internal.QueryResult, len(m.Results)),
-		ColumnAttrSets: EncodeColumnAttrSets(m.ColumnAttrSets),
+		ColumnAttrSets: encodeColumnAttrSets(m.ColumnAttrSets),
 	}
 
 	for i := range m.Results {
@@ -346,13 +346,13 @@ func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
 		switch result := m.Results[i].(type) {
 		case *pilosa.Row:
 			pb.Results[i].Type = queryResultTypeRow
-			pb.Results[i].Row = EncodeRow(result)
+			pb.Results[i].Row = encodeRow(result)
 		case []pilosa.Pair:
 			pb.Results[i].Type = queryResultTypePairs
-			pb.Results[i].Pairs = EncodePairs(result)
+			pb.Results[i].Pairs = encodePairs(result)
 		case pilosa.ValCount:
 			pb.Results[i].Type = queryResultTypeValCount
-			pb.Results[i].ValCount = EncodeValCount(result)
+			pb.Results[i].ValCount = encodeValCount(result)
 		case uint64:
 			pb.Results[i].Type = queryResultTypeUint64
 			pb.Results[i].N = result
@@ -457,8 +457,8 @@ func encodeFieldOptions(o *pilosa.FieldOptions) *internal.FieldOptions {
 	}
 }
 
-// EncodeNodes converts a slice of Nodes into its internal representation.
-func EncodeNodes(a []*pilosa.Node) []*internal.Node {
+// encodeNodes converts a slice of Nodes into its internal representation.
+func encodeNodes(a []*pilosa.Node) []*internal.Node {
 	other := make([]*internal.Node, len(a))
 	for i := range a {
 		other[i] = encodeNode(a[i])
@@ -487,7 +487,7 @@ func encodeClusterStatus(m *pilosa.ClusterStatus) *internal.ClusterStatus {
 	return &internal.ClusterStatus{
 		State:     m.State,
 		ClusterID: m.ClusterID,
-		Nodes:     EncodeNodes(m.Nodes),
+		Nodes:     encodeNodes(m.Nodes),
 	}
 }
 
@@ -950,22 +950,22 @@ func decodeValCount(pb *internal.ValCount) pilosa.ValCount {
 	}
 }
 
-func EncodeColumnAttrSets(a []*pilosa.ColumnAttrSet) []*internal.ColumnAttrSet {
+func encodeColumnAttrSets(a []*pilosa.ColumnAttrSet) []*internal.ColumnAttrSet {
 	other := make([]*internal.ColumnAttrSet, len(a))
 	for i := range a {
-		other[i] = EncodeColumnAttrSet(a[i])
+		other[i] = encodeColumnAttrSet(a[i])
 	}
 	return other
 }
 
-func EncodeColumnAttrSet(set *pilosa.ColumnAttrSet) *internal.ColumnAttrSet {
+func encodeColumnAttrSet(set *pilosa.ColumnAttrSet) *internal.ColumnAttrSet {
 	return &internal.ColumnAttrSet{
 		ID:    set.ID,
 		Attrs: encodeAttrs(set.Attrs),
 	}
 }
 
-func EncodeRow(r *pilosa.Row) *internal.Row {
+func encodeRow(r *pilosa.Row) *internal.Row {
 	if r == nil {
 		return nil
 	}
@@ -976,7 +976,7 @@ func EncodeRow(r *pilosa.Row) *internal.Row {
 	}
 }
 
-func EncodePairs(a pilosa.Pairs) []*internal.Pair {
+func encodePairs(a pilosa.Pairs) []*internal.Pair {
 	other := make([]*internal.Pair, len(a))
 	for i := range a {
 		other[i] = encodePair(a[i])
@@ -992,7 +992,7 @@ func encodePair(p pilosa.Pair) *internal.Pair {
 	}
 }
 
-func EncodeValCount(vc pilosa.ValCount) *internal.ValCount {
+func encodeValCount(vc pilosa.ValCount) *internal.ValCount {
 	return &internal.ValCount{
 		Val:   vc.Val,
 		Count: vc.Count,

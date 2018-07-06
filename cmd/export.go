@@ -26,7 +26,7 @@ import (
 
 var Exporter *ctl.ExportCommand
 
-func NewExportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+func newExportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	Exporter = ctl.NewExportCommand(os.Stdin, os.Stdout, os.Stderr)
 	exportCmd := &cobra.Command{
 		Use:   "export",
@@ -60,5 +60,5 @@ The file does not contain any headers.
 }
 
 func init() {
-	subcommandFns["export"] = NewExportCommand
+	subcommandFns["export"] = newExportCommand
 }

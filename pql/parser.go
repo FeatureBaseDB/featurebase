@@ -22,19 +22,19 @@ import (
 	"github.com/pkg/errors"
 )
 
-// TimeFormat is the go-style time format used to parse string dates.
-const TimeFormat = "2006-01-02T15:04"
+// timeFormat is the go-style time format used to parse string dates.
+const timeFormat = "2006-01-02T15:04"
 
-// Parser represents a parser for the PQL language.
-type Parser struct {
+// parser represents a parser for the PQL language.
+type parser struct {
 	r io.Reader
 	//scanner *bufScanner
 	PQL
 }
 
 // NewParser returns a new instance of Parser.
-func NewParser(r io.Reader) *Parser {
-	return &Parser{
+func NewParser(r io.Reader) *parser {
+	return &parser{
 		r: r,
 		//		scanner: newBufScanner(r),
 	}
@@ -46,7 +46,7 @@ func ParseString(s string) (*Query, error) {
 }
 
 // Parse parses the next node in the query.
-func (p *Parser) Parse() (*Query, error) {
+func (p *parser) Parse() (*Query, error) {
 	buf, err := ioutil.ReadAll(p.r)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading buffer to parse")

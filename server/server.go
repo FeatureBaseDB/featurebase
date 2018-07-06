@@ -124,7 +124,7 @@ func (m *Command) Start() (err error) {
 	}
 
 	// SetupNetworking
-	err = m.SetupNetworking()
+	err = m.setupNetworking()
 	if err != nil {
 		return errors.Wrap(err, "setting up networking")
 	}
@@ -222,10 +222,10 @@ func (m *Command) SetupServer() error {
 
 	diagnosticsInterval := time.Duration(0)
 	if m.Config.Metric.Diagnostics {
-		diagnosticsInterval = time.Duration(DefaultDiagnosticsInterval)
+		diagnosticsInterval = time.Duration(defaultDiagnosticsInterval)
 	}
 
-	statsClient, err := NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
+	statsClient, err := newStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
 	if err != nil {
 		return errors.Wrap(err, "new stats client")
 	}
@@ -299,8 +299,8 @@ func (m *Command) SetupServer() error {
 
 }
 
-// SetupNetworking sets up internode communication based on the configuration.
-func (m *Command) SetupNetworking() error {
+// setupNetworking sets up internode communication based on the configuration.
+func (m *Command) setupNetworking() error {
 	if m.Config.Cluster.Disabled {
 		return nil
 	}
@@ -351,8 +351,8 @@ func (m *Command) Close() error {
 	return nil
 }
 
-// NewStatsClient creates a stats client from the config
-func NewStatsClient(name string, host string) (pilosa.StatsClient, error) {
+// newStatsClient creates a stats client from the config
+func newStatsClient(name string, host string) (pilosa.StatsClient, error) {
 	switch name {
 	case "expvar":
 		return pilosa.NewExpvarStatsClient(), nil

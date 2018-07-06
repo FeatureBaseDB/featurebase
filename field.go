@@ -72,7 +72,7 @@ type Field struct {
 
 	bsiGroups []*bsiGroup
 
-	Logger Logger
+	logger Logger
 }
 
 // FieldOption is a functional option type for pilosa.fieldOptions.
@@ -166,7 +166,7 @@ func NewField(path, index, name string, opts FieldOption) (*Field, error) {
 
 		options: applyDefaultOptions(fo),
 
-		Logger: NopLogger,
+		logger: NopLogger,
 	}
 	return f, nil
 }
@@ -183,8 +183,8 @@ func (f *Field) Path() string { return f.path }
 // RowAttrStore returns the attribute storage.
 func (f *Field) RowAttrStore() AttrStore { return f.rowAttrStore }
 
-// MaxShard returns the max shard in the field.
-func (f *Field) MaxShard() uint64 {
+// maxShard returns the max shard in the field.
+func (f *Field) maxShard() uint64 {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
@@ -337,7 +337,7 @@ func (f *Field) loadMeta() error {
 func (f *Field) saveMeta() error {
 	// Marshal metadata.
 	fo := f.options
-	buf, err := proto.Marshal(fo.Encode())
+	buf, err := proto.Marshal(fo.encode())
 	if err != nil {
 		return errors.Wrap(err, "marshaling")
 	}
@@ -396,7 +396,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Max = 0
 		f.options.Keys = opt.Keys
 		// Set the time quantum.
-		if err := f.SetTimeQuantum(opt.TimeQuantum); err != nil {
+		if err := f.setTimeQuantum(opt.TimeQuantum); err != nil {
 			f.Close()
 			return errors.Wrap(err, "setting time quantum")
 		}
@@ -428,8 +428,8 @@ func (f *Field) Close() error {
 	return nil
 }
 
-// Keys returns true if the field uses string keys.
-func (f *Field) Keys() bool {
+// keys returns true if the field uses string keys.
+func (f *Field) keys() bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.options.Keys
@@ -533,8 +533,8 @@ func (f *Field) TimeQuantum() TimeQuantum {
 	return f.options.TimeQuantum
 }
 
-// SetTimeQuantum sets the time quantum for the field.
-func (f *Field) SetTimeQuantum(q TimeQuantum) error {
+// setTimeQuantum sets the time quantum for the field.
+func (f *Field) setTimeQuantum(q TimeQuantum) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -606,8 +606,8 @@ func (f *Field) viewNames() []string {
 	return other
 }
 
-// RecalculateCaches recalculates caches on every view in the field.
-func (f *Field) RecalculateCaches() {
+// recalculateCaches recalculates caches on every view in the field.
+func (f *Field) recalculateCaches() {
 	for _, view := range f.views() {
 		view.recalculateCaches()
 	}
@@ -660,7 +660,7 @@ func (f *Field) createViewIfNotExistsBase(name string) (*view, bool, error) {
 func (f *Field) newView(path, name string) *view {
 	view := newView(path, f.index, f.name, name, f.options.CacheSize)
 	view.cacheType = f.options.CacheType
-	view.logger = f.Logger
+	view.logger = f.logger
 	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats.WithTags(fmt.Sprintf("view:%s", name))
 	view.broadcaster = f.broadcaster
@@ -955,7 +955,7 @@ func (f *Field) Range(name string, op pql.Token, predicate int64) (*Row, error) 
 	return view.rangeOp(op, bsig.BitDepth(), baseValue)
 }
 
-func (f *Field) RangeBetween(name string, predicateMin, predicateMax int64) (*Row, error) {
+func (f *Field) rangeBetween(name string, predicateMin, predicateMax int64) (*Row, error) {
 	// Retrieve and validate bsiGroup.
 	bsig := f.bsiGroup(name)
 	if bsig == nil {
@@ -1035,8 +1035,8 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 	return nil
 }
 
-// ImportValue bulk imports range-encoded value data.
-func (f *Field) ImportValue(columnIDs []uint64, values []int64) error {
+// importValue bulk imports range-encoded value data.
+func (f *Field) importValue(columnIDs []uint64, values []int64) error {
 	viewName := viewBSIGroupPrefix + f.name
 	// Get the bsiGroup so we know bitDepth.
 	bsig := f.bsiGroup(f.name)
@@ -1135,8 +1135,8 @@ func applyDefaultOptions(o FieldOptions) FieldOptions {
 	return o
 }
 
-// Encode converts o into its internal representation.
-func (o *FieldOptions) Encode() *internal.FieldOptions {
+// encode converts o into its internal representation.
+func (o *FieldOptions) encode() *internal.FieldOptions {
 	return encodeFieldOptions(o)
 }
 

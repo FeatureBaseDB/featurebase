@@ -27,8 +27,8 @@ type Field struct {
 	*pilosa.Field
 }
 
-// NewField returns a new instance of Field d/0.
-func NewField(opts pilosa.FieldOption) *Field {
+// newField returns a new instance of Field d/0.
+func newField(opts pilosa.FieldOption) *Field {
 	path, err := ioutil.TempDir("", "pilosa-field-")
 	if err != nil {
 		panic(err)
@@ -40,23 +40,23 @@ func NewField(opts pilosa.FieldOption) *Field {
 	return &Field{Field: field}
 }
 
-// MustOpenField returns a new, opened field at a temporary path. Panic on error.
-func MustOpenField(opts pilosa.FieldOption) *Field {
-	f := NewField(opts)
+// mustOpenField returns a new, opened field at a temporary path. Panic on error.
+func mustOpenField(opts pilosa.FieldOption) *Field {
+	f := newField(opts)
 	if err := f.Open(); err != nil {
 		panic(err)
 	}
 	return f
 }
 
-// Close closes the field and removes the underlying data.
-func (f *Field) Close() error {
+// close closes the field and removes the underlying data.
+func (f *Field) close() error {
 	defer os.RemoveAll(f.Path())
 	return f.Field.Close()
 }
 
-// Reopen closes the index and reopens it.
-func (f *Field) Reopen() error {
+// reopen closes the index and reopens it.
+func (f *Field) reopen() error {
 	var err error
 	if err := f.Field.Close(); err != nil {
 		return err
@@ -76,8 +76,8 @@ func (f *Field) Reopen() error {
 
 // Ensure field can set its cache
 func TestField_SetCacheSize(t *testing.T) {
-	f := MustOpenField(pilosa.OptFieldTypeDefault())
-	defer f.Close()
+	f := mustOpenField(pilosa.OptFieldTypeDefault())
+	defer f.close()
 	cacheSize := uint32(100)
 
 	// Set & retrieve field cache size.
@@ -88,7 +88,7 @@ func TestField_SetCacheSize(t *testing.T) {
 	}
 
 	// Reload field and verify that it is persisted.
-	if err := f.Reopen(); err != nil {
+	if err := f.reopen(); err != nil {
 		t.Fatal(err)
 	} else if q := f.CacheSize(); q != cacheSize {
 		t.Fatalf("unexpected field cache size (reopen): %d", q)

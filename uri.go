@@ -47,8 +47,8 @@ type URI struct {
 	Port   uint16 `json:"port"`
 }
 
-// DefaultURI creates and returns the default URI.
-func DefaultURI() *URI {
+// defaultURI creates and returns the default URI.
+func defaultURI() *URI {
 	return &URI{
 		Scheme: "http",
 		Host:   "localhost",
@@ -68,8 +68,8 @@ func (u URIs) HostPortStrings() []string {
 
 // NewURIFromHostPort returns a URI with specified host and port.
 func NewURIFromHostPort(host string, port uint16) (*URI, error) {
-	uri := DefaultURI()
-	err := uri.SetHost(host)
+	uri := defaultURI()
+	err := uri.setHost(host)
 	if err != nil {
 		return nil, errors.Wrap(err, "setting uri host")
 	}
@@ -82,8 +82,8 @@ func NewURIFromAddress(address string) (*URI, error) {
 	return parseAddress(address)
 }
 
-// SetScheme sets the scheme of this URI.
-func (u *URI) SetScheme(scheme string) error {
+// setScheme sets the scheme of this URI.
+func (u *URI) setScheme(scheme string) error {
 	m := schemeRegexp.FindStringSubmatch(scheme)
 	if m == nil {
 		return errors.New("invalid scheme")
@@ -92,8 +92,8 @@ func (u *URI) SetScheme(scheme string) error {
 	return nil
 }
 
-// SetHost sets the host of this URI.
-func (u *URI) SetHost(host string) error {
+// setHost sets the host of this URI.
+func (u *URI) setHost(host string) error {
 	m := hostRegexp.FindStringSubmatch(host)
 	if m == nil {
 		return errors.New("invalid host")
@@ -117,8 +117,8 @@ func (u *URI) HostPort() string {
 	return s
 }
 
-// Normalize returns the address in a form usable by a HTTP client.
-func (u *URI) Normalize() string {
+// normalize returns the address in a form usable by a HTTP client.
+func (u *URI) normalize() string {
 	scheme := u.Scheme
 	index := strings.Index(scheme, "+")
 	if index >= 0 {
@@ -134,7 +134,7 @@ func (u URI) String() string {
 
 // Path returns URI with path
 func (u *URI) Path(path string) string {
-	return fmt.Sprintf("%s%s", u.Normalize(), path)
+	return fmt.Sprintf("%s%s", u.normalize(), path)
 }
 
 // The following methods are required to implement pflag Value interface.

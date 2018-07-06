@@ -139,7 +139,7 @@ func (i *Index) openFields() error {
 			continue
 		}
 
-		fld, err := i.newField(i.FieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		fld, err := i.newField(i.fieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 		if err != nil {
 			return ErrName
 		}
@@ -220,7 +220,7 @@ func (i *Index) maxShard() uint64 {
 
 	max := i.remoteMaxShard
 	for _, f := range i.fields {
-		if shard := f.MaxShard(); shard > max {
+		if shard := f.maxShard(); shard > max {
 			max = shard
 		}
 	}
@@ -236,8 +236,8 @@ func (i *Index) setRemoteMaxShard(newmax uint64) {
 	i.remoteMaxShard = newmax
 }
 
-// FieldPath returns the path to a field in the index.
-func (i *Index) FieldPath(name string) string { return filepath.Join(i.path, name) }
+// fieldPath returns the path to a field in the index.
+func (i *Index) fieldPath(name string) string { return filepath.Join(i.path, name) }
 
 // Field returns a field in the index by name.
 func (i *Index) Field(name string) *Field {
@@ -262,10 +262,10 @@ func (i *Index) Fields() []*Field {
 	return a
 }
 
-// RecalculateCaches recalculates caches on every field in the index.
-func (i *Index) RecalculateCaches() {
+// recalculateCaches recalculates caches on every field in the index.
+func (i *Index) recalculateCaches() {
 	for _, field := range i.Fields() {
-		field.RecalculateCaches()
+		field.recalculateCaches()
 	}
 }
 
@@ -276,7 +276,7 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 
 	// Ensure field doesn't already exist.
 	if i.fields[name] != nil {
-		return nil, NewConflictError(ErrFieldExists)
+		return nil, newConflictError(ErrFieldExists)
 	}
 
 	// Apply functional options.
@@ -331,7 +331,7 @@ func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 	}
 
 	// Initialize field.
-	f, err := i.newField(i.FieldPath(name), name)
+	f, err := i.newField(i.fieldPath(name), name)
 	if err != nil {
 		return nil, errors.Wrap(err, "initializing")
 	}
@@ -363,7 +363,7 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	if err != nil {
 		return nil, err
 	}
-	f.Logger = i.logger
+	f.logger = i.logger
 	f.Stats = i.Stats.WithTags(fmt.Sprintf("field:%s", name))
 	f.broadcaster = i.broadcaster
 	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
@@ -378,7 +378,7 @@ func (i *Index) DeleteField(name string) error {
 	// Confirm field exists.
 	f := i.field(name)
 	if f == nil {
-		return NewNotFoundError(ErrFieldNotFound)
+		return newNotFoundError(ErrFieldNotFound)
 	}
 
 	// Close field.
@@ -387,7 +387,7 @@ func (i *Index) DeleteField(name string) error {
 	}
 
 	// Delete field directory.
-	if err := os.RemoveAll(i.FieldPath(name)); err != nil {
+	if err := os.RemoveAll(i.fieldPath(name)); err != nil {
 		return errors.Wrap(err, "removing directory")
 	}
 
@@ -406,7 +406,7 @@ func (p indexSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 // IndexInfo represents schema information for an index.
 type IndexInfo struct {
 	Name    string       `json:"name"`
-	Options IndexOptions `json:"options"`
+	options IndexOptions `json:"options"`
 	Fields  []*FieldInfo `json:"fields"`
 }
 

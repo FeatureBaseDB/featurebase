@@ -536,12 +536,12 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		expectedTop := &Topology{
-			NodeIDs: []string{node.Node.ID},
+			nodeIDs: []string{node.Node.ID},
 		}
 
 		// Verify topology file.
-		if !reflect.DeepEqual(node.Topology.NodeIDs, expectedTop.NodeIDs) {
-			t.Errorf("expected topology: %v, but got: %v", expectedTop.NodeIDs, node.Topology.NodeIDs)
+		if !reflect.DeepEqual(node.Topology.nodeIDs, expectedTop.nodeIDs) {
+			t.Errorf("expected topology: %v, but got: %v", expectedTop.nodeIDs, node.Topology.nodeIDs)
 		}
 
 		// Close TestCluster.
@@ -558,7 +558,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		// write topology to data file
 		top := &Topology{
-			NodeIDs: []string{node.Node.ID},
+			nodeIDs: []string{node.Node.ID},
 		}
 		tc.WriteTopology(node.Path, top)
 
@@ -586,7 +586,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		// write topology to data file
 		top := &Topology{
-			NodeIDs: []string{"some-other-host"},
+			nodeIDs: []string{"some-other-host"},
 		}
 		tc.WriteTopology(node.Path, top)
 
@@ -625,14 +625,14 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		expectedTop := &Topology{
-			NodeIDs: []string{node0.Node.ID, node1.Node.ID},
+			nodeIDs: []string{node0.Node.ID, node1.Node.ID},
 		}
 
 		// Verify topology file.
-		if !reflect.DeepEqual(node0.Topology.NodeIDs, expectedTop.NodeIDs) {
-			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop.NodeIDs, node0.Topology.NodeIDs)
-		} else if !reflect.DeepEqual(node1.Topology.NodeIDs, expectedTop.NodeIDs) {
-			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.NodeIDs, node1.Topology.NodeIDs)
+		if !reflect.DeepEqual(node0.Topology.nodeIDs, expectedTop.nodeIDs) {
+			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop.nodeIDs, node0.Topology.nodeIDs)
+		} else if !reflect.DeepEqual(node1.Topology.nodeIDs, expectedTop.nodeIDs) {
+			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.nodeIDs, node1.Topology.nodeIDs)
 		}
 
 		// Close TestCluster.
@@ -648,7 +648,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		// write topology to data file
 		top := &Topology{
-			NodeIDs: []string{"node0", "node2"},
+			nodeIDs: []string{"node0", "node2"},
 		}
 		tc.WriteTopology(node0.Path, top)
 
@@ -721,14 +721,14 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		expectedTop := &Topology{
-			NodeIDs: []string{node0.Node.ID, node1.Node.ID},
+			nodeIDs: []string{node0.Node.ID, node1.Node.ID},
 		}
 
 		// Verify topology file.
-		if !reflect.DeepEqual(node0.Topology.NodeIDs, expectedTop.NodeIDs) {
-			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop.NodeIDs, node0.Topology.NodeIDs)
-		} else if !reflect.DeepEqual(node1.Topology.NodeIDs, expectedTop.NodeIDs) {
-			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.NodeIDs, node1.Topology.NodeIDs)
+		if !reflect.DeepEqual(node0.Topology.nodeIDs, expectedTop.nodeIDs) {
+			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop.nodeIDs, node0.Topology.nodeIDs)
+		} else if !reflect.DeepEqual(node1.Topology.nodeIDs, expectedTop.nodeIDs) {
+			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.nodeIDs, node1.Topology.nodeIDs)
 		}
 
 		// Bits

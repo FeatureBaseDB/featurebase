@@ -20,5 +20,5 @@ package server
 
 import "time"
 
-// DefaultDiagnosticsInterval is the default sync frequency diagnostic metrics.
-const DefaultDiagnosticsInterval = 1 * time.Hour
+// defaultDiagnosticsInterval is the default sync frequency diagnostic metrics.
+const defaultDiagnosticsInterval = 1 * time.Hour

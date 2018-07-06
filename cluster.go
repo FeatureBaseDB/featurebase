@@ -36,8 +36,8 @@ import (
 )
 
 const (
-	// DefaultPartitionN is the default number of partitions in a cluster.
-	DefaultPartitionN = 256
+	// defaultPartitionN is the default number of partitions in a cluster.
+	defaultPartitionN = 256
 
 	// ClusterState represents the state returned in the /status endpoint.
 	ClusterStateStarting = "STARTING"
@@ -45,7 +45,7 @@ const (
 	ClusterStateResizing = "RESIZING"
 
 	// NodeState represents the state of a node during startup.
-	NodeStateReady = "READY"
+	nodeStateReady = "READY"
 
 	// resizeJob states.
 	resizeJobStateRunning = "RUNNING"
@@ -219,7 +219,7 @@ type cluster struct {
 func newCluster() *cluster {
 	return &cluster{
 		Hasher:     &jmphasher{},
-		partitionN: DefaultPartitionN,
+		partitionN: defaultPartitionN,
 		ReplicaN:   1,
 
 		joiningLeavingNodes: make(chan nodeAction, 10), // buffered channel
@@ -227,7 +227,7 @@ func newCluster() *cluster {
 		closing:             make(chan struct{}),
 		joining:             make(chan struct{}),
 
-		InternalClient: NewNopInternalClient(),
+		InternalClient: newNopInternalClient(),
 
 		logger: NopLogger,
 	}
@@ -323,7 +323,7 @@ func (c *cluster) addNode(node *Node) error {
 	if c.Topology == nil {
 		return fmt.Errorf("Cluster.Topology is nil")
 	}
-	if !c.Topology.AddID(node.ID) {
+	if !c.Topology.addID(node.ID) {
 		return nil
 	}
 
@@ -343,7 +343,7 @@ func (c *cluster) removeNode(node *Node) error {
 	if c.Topology == nil {
 		return fmt.Errorf("Cluster.Topology is nil")
 	}
-	if !c.Topology.RemoveID(node.ID) {
+	if !c.Topology.removeID(node.ID) {
 		return nil
 	}
 
@@ -364,7 +364,7 @@ func (c *cluster) setID(id string) {
 	c.id = id
 
 	// Make sure the Topology is updated.
-	c.Topology.ClusterID = c.id
+	c.Topology.clusterID = c.id
 }
 
 func (c *cluster) State() string {
@@ -818,7 +818,7 @@ func (c *cluster) setup() error {
 		return errors.Wrap(err, "loading topology")
 	}
 
-	c.id = c.Topology.ClusterID
+	c.id = c.Topology.clusterID
 
 	// Only the coordinator needs to consider the .topology file.
 	if c.isCoordinator() {
@@ -888,22 +888,22 @@ func (c *cluster) markAsJoined() {
 }
 
 func (c *cluster) needTopologyAgreement() bool {
-	return c.State() == ClusterStateStarting && !stringSlicesAreEqual(c.Topology.NodeIDs, c.nodeIDs())
+	return c.State() == ClusterStateStarting && !stringSlicesAreEqual(c.Topology.nodeIDs, c.nodeIDs())
 }
 
 func (c *cluster) haveTopologyAgreement() bool {
 	if c.Static {
 		return true
 	}
-	return stringSlicesAreEqual(c.Topology.NodeIDs, c.nodeIDs())
+	return stringSlicesAreEqual(c.Topology.nodeIDs, c.nodeIDs())
 }
 
 func (c *cluster) allNodesReady() bool {
 	if c.Static {
 		return true
 	}
-	for _, uri := range c.Topology.NodeIDs {
-		if c.Topology.nodeStates[uri] != NodeStateReady {
+	for _, uri := range c.Topology.nodeIDs {
+		if c.Topology.nodeStates[uri] != nodeStateReady {
 			return false
 		}
 	}
@@ -1375,14 +1375,14 @@ func (j *resizeJob) distributeResizeInstructions() error {
 	return nil
 }
 
-type NodeIDs []string
+type nodeIDs []string
 
-func (n NodeIDs) Len() int           { return len(n) }
-func (n NodeIDs) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
-func (n NodeIDs) Less(i, j int) bool { return n[i] < n[j] }
+func (n nodeIDs) Len() int           { return len(n) }
+func (n nodeIDs) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
+func (n nodeIDs) Less(i, j int) bool { return n[i] < n[j] }
 
 // ContainsID returns true if idi matches one of the nodesets's IDs.
-func (n NodeIDs) ContainsID(id string) bool {
+func (n nodeIDs) ContainsID(id string) bool {
 	for _, nid := range n {
 		if nid == id {
 			return true
@@ -1394,16 +1394,16 @@ func (n NodeIDs) ContainsID(id string) bool {
 // Topology represents the list of hosts in the cluster.
 type Topology struct {
 	mu      sync.RWMutex
-	NodeIDs []string
+	nodeIDs []string
 
-	ClusterID string
+	clusterID string
 
 	// nodeStates holds the state of each node according to
 	// the coordinator. Used during startup and data load.
 	nodeStates map[string]string
 }
 
-func NewTopology() *Topology {
+func newTopology() *Topology {
 	return &Topology{
 		nodeStates: make(map[string]string),
 	}
@@ -1417,11 +1417,11 @@ func (t *Topology) ContainsID(id string) bool {
 }
 
 func (t *Topology) containsID(id string) bool {
-	return NodeIDs(t.NodeIDs).ContainsID(id)
+	return nodeIDs(t.nodeIDs).ContainsID(id)
 }
 
 func (t *Topology) positionByID(nodeID string) int {
-	for i, tid := range t.NodeIDs {
+	for i, tid := range t.nodeIDs {
 		if tid == nodeID {
 			return i
 		}
@@ -1429,25 +1429,25 @@ func (t *Topology) positionByID(nodeID string) int {
 	return -1
 }
 
-// AddID adds the node ID to the topology and returns true if added.
-func (t *Topology) AddID(nodeID string) bool {
+// addID adds the node ID to the topology and returns true if added.
+func (t *Topology) addID(nodeID string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.containsID(nodeID) {
 		return false
 	}
-	t.NodeIDs = append(t.NodeIDs, nodeID)
+	t.nodeIDs = append(t.nodeIDs, nodeID)
 
-	sort.Slice(t.NodeIDs,
+	sort.Slice(t.nodeIDs,
 		func(i, j int) bool {
-			return t.NodeIDs[i] < t.NodeIDs[j]
+			return t.nodeIDs[i] < t.nodeIDs[j]
 		})
 
 	return true
 }
 
-// RemoveID removes the node ID from the topology and returns true if removed.
-func (t *Topology) RemoveID(nodeID string) bool {
+// removeID removes the node ID from the topology and returns true if removed.
+func (t *Topology) removeID(nodeID string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -1456,15 +1456,15 @@ func (t *Topology) RemoveID(nodeID string) bool {
 		return false
 	}
 
-	copy(t.NodeIDs[i:], t.NodeIDs[i+1:])
-	t.NodeIDs[len(t.NodeIDs)-1] = ""
-	t.NodeIDs = t.NodeIDs[:len(t.NodeIDs)-1]
+	copy(t.nodeIDs[i:], t.nodeIDs[i+1:])
+	t.nodeIDs[len(t.nodeIDs)-1] = ""
+	t.nodeIDs = t.nodeIDs[:len(t.nodeIDs)-1]
 
 	return true
 }
 
-// Encode converts t into its internal representation.
-func (t *Topology) Encode() *internal.Topology {
+// encode converts t into its internal representation.
+func (t *Topology) encode() *internal.Topology {
 	return encodeTopology(t)
 }
 
@@ -1472,7 +1472,7 @@ func (t *Topology) Encode() *internal.Topology {
 func (c *cluster) loadTopology() error {
 	buf, err := ioutil.ReadFile(filepath.Join(c.Path, ".topology"))
 	if os.IsNotExist(err) {
-		c.Topology = NewTopology()
+		c.Topology = newTopology()
 		return nil
 	} else if err != nil {
 		return errors.Wrap(err, "reading file")
@@ -1511,7 +1511,7 @@ func (c *cluster) considerTopology() error {
 	if c.id == "" {
 		u := uuid.NewV4()
 		c.id = u.String()
-		c.Topology.ClusterID = c.id
+		c.Topology.clusterID = c.id
 	}
 
 	if c.Static {
@@ -1519,13 +1519,13 @@ func (c *cluster) considerTopology() error {
 	}
 
 	// If there is no .topology file, it's safe to proceed.
-	if len(c.Topology.NodeIDs) == 0 {
+	if len(c.Topology.nodeIDs) == 0 {
 		return nil
 	}
 
 	// The local node (coordinator) must be in the .topology.
 	if !c.Topology.ContainsID(c.Node.ID) {
-		return fmt.Errorf("coordinator %s is not in topology: %v", c.Node.ID, c.Topology.NodeIDs)
+		return fmt.Errorf("coordinator %s is not in topology: %v", c.Node.ID, c.Topology.nodeIDs)
 	}
 
 	// If local node is the only thing in .topology, continue.
@@ -1774,8 +1774,8 @@ func encodeTopology(topology *Topology) *internal.Topology {
 		return nil
 	}
 	return &internal.Topology{
-		ClusterID: topology.ClusterID,
-		NodeIDs:   topology.NodeIDs,
+		ClusterID: topology.clusterID,
+		NodeIDs:   topology.nodeIDs,
 	}
 }
 
@@ -1784,12 +1784,12 @@ func decodeTopology(topology *internal.Topology) (*Topology, error) {
 		return nil, nil
 	}
 
-	t := NewTopology()
-	t.ClusterID = topology.ClusterID
-	t.NodeIDs = topology.NodeIDs
-	sort.Slice(t.NodeIDs,
+	t := newTopology()
+	t.clusterID = topology.ClusterID
+	t.nodeIDs = topology.NodeIDs
+	sort.Slice(t.nodeIDs,
 		func(i, j int) bool {
-			return t.NodeIDs[i] < t.NodeIDs[j]
+			return t.nodeIDs[i] < t.nodeIDs[j]
 		})
 
 	return t, nil

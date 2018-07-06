@@ -27,8 +27,8 @@ import (
 // Server is global so that tests can control and verify it.
 var Server *server.Command
 
-// NewServeCmd creates a pilosa server and runs it with command line flags.
-func NewServeCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+// newServeCmd creates a pilosa server and runs it with command line flags.
+func newServeCmd(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	Server = server.NewCommand(stdin, stdout, stderr)
 	serveCmd := &cobra.Command{
 		Use:   "server",
@@ -52,5 +52,5 @@ on the configured port.`,
 }
 
 func init() {
-	subcommandFns["server"] = NewServeCmd
+	subcommandFns["server"] = newServeCmd
 }

@@ -20,25 +20,25 @@ import (
 )
 
 // Ensure ActiveGCNotifier implements interface.
-var _ pilosa.GCNotifier = &ActiveGCNotifier{}
+var _ pilosa.GCNotifier = &activeGCNotifier{}
 
-type ActiveGCNotifier struct {
+type activeGCNotifier struct {
 	gcn *gcnotifier.GCNotifier
 }
 
 // NewActiveGCNotifier creates an active GCNotifier.
-func NewActiveGCNotifier() *ActiveGCNotifier {
-	return &ActiveGCNotifier{
+func NewActiveGCNotifier() *activeGCNotifier {
+	return &activeGCNotifier{
 		gcn: gcnotifier.New(),
 	}
 }
 
 // Close implements the GCNotifier interface.
-func (n *ActiveGCNotifier) Close() {
+func (n *activeGCNotifier) Close() {
 	n.gcn.Close()
 }
 
 // AfterGC implements the GCNotifier interface.
-func (n *ActiveGCNotifier) AfterGC() <-chan struct{} {
+func (n *activeGCNotifier) AfterGC() <-chan struct{} {
 	return n.gcn.AfterGC()
 }

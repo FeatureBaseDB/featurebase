@@ -38,7 +38,7 @@ type InternalClient struct {
 	serializer pilosa.Serializer
 
 	// The client to use for HTTP communication.
-	HTTPClient *http.Client
+	httpClient *http.Client
 }
 
 // NewInternalClient returns a new instance of InternalClient to connect to host.
@@ -60,7 +60,7 @@ func NewInternalClientFromURI(defaultURI *pilosa.URI, remoteClient *http.Client)
 	return &InternalClient{
 		defaultURI: defaultURI,
 		serializer: proto.Serializer{},
-		HTTPClient: remoteClient,
+		httpClient: remoteClient,
 	}
 }
 
@@ -84,7 +84,7 @@ func (c *InternalClient) maxShardByIndex(ctx context.Context) (map[string]uint64
 	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
-	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, errors.Wrap(err, "executing request")
 	}
@@ -115,7 +115,7 @@ func (c *InternalClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error
 	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
-	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, errors.Wrap(err, "executing request")
 	}
@@ -152,7 +152,7 @@ func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilo
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
-	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return errors.Wrap(err, "executing request")
 	}
@@ -191,7 +191,7 @@ func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard 
 	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
-	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, errors.Wrap(err, "executing request")
 	}
@@ -238,7 +238,7 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index s
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
-	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, errors.Wrap(err, "executing request")
 	}
@@ -390,7 +390,7 @@ func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, inde
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
-	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return errors.Wrap(err, "executing request")
 	}
@@ -512,7 +512,7 @@ func (c *InternalClient) exportNodeCSV(ctx context.Context, node *pilosa.Node, i
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
-	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return errors.Wrap(err, "executing request")
 	}
@@ -555,7 +555,7 @@ func (c *InternalClient) backupShardNode(ctx context.Context, index, field strin
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request.
-	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, errors.Wrap(err, "executing request")
 	}
@@ -599,7 +599,7 @@ func (c *InternalClient) CreateField(ctx context.Context, index, field string) e
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
-	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return errors.Wrap(err, "executing request")
 	}
@@ -645,7 +645,7 @@ func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, in
 	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
-	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, errors.Wrap(err, "executing request")
 	}
@@ -693,7 +693,7 @@ func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, 
 	req.Header.Set("Accept", "application/protobuf")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
-	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "executing request")
 	}
@@ -741,7 +741,7 @@ func (c *InternalClient) ColumnAttrDiff(ctx context.Context, uri *pilosa.URI, in
 	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
-	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, errors.Wrap(err, "executing request")
 	}
@@ -785,7 +785,7 @@ func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, index
 	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
-	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, errors.Wrap(err, "executing request")
 	}
@@ -820,7 +820,7 @@ func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, msg [
 	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
-	resp, err := c.HTTPClient.Do(req.WithContext(ctx))
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return fmt.Errorf("executing http request: %v", err)
 	}

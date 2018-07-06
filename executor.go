@@ -67,7 +67,7 @@ func optExecutorInternalQueryClient(c InternalQueryClient) executorOption {
 // newExecutor returns a new instance of Executor.
 func newExecutor(opts ...executorOption) *executor {
 	e := &executor{
-		client: NewNopInternalQueryClient(),
+		client: newNopInternalQueryClient(),
 	}
 	for _, opt := range opts {
 		err := opt(e)
@@ -234,7 +234,7 @@ func (e *executor) executeSum(ctx context.Context, index string, c *pql.Call, sh
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
 		other, _ := prev.(ValCount)
-		return other.Add(v.(ValCount))
+		return other.add(v.(ValCount))
 	}
 
 	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -267,7 +267,7 @@ func (e *executor) executeMin(ctx context.Context, index string, c *pql.Call, sh
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
 		other, _ := prev.(ValCount)
-		return other.Smaller(v.(ValCount))
+		return other.smaller(v.(ValCount))
 	}
 
 	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -300,7 +300,7 @@ func (e *executor) executeMax(ctx context.Context, index string, c *pql.Call, sh
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
 		other, _ := prev.(ValCount)
-		return other.Larger(v.(ValCount))
+		return other.larger(v.(ValCount))
 	}
 
 	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -375,7 +375,7 @@ func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 	}
 
 	if opt.ExcludeColumns {
-		row.segments = []RowSegment{}
+		row.segments = []rowSegment{}
 	}
 
 	return row, nil
@@ -661,7 +661,7 @@ func (e *executor) executeDifferenceShard(ctx context.Context, index string, c *
 			other = other.Difference(row)
 		}
 	}
-	other.InvalidateCount()
+	other.invalidateCount()
 	return other, nil
 }
 
@@ -712,10 +712,10 @@ func (e *executor) executeIntersectShard(ctx context.Context, index string, c *p
 		if i == 0 {
 			other = row
 		} else {
-			other = other.Intersect(row)
+			other = other.intersect(row)
 		}
 	}
-	other.InvalidateCount()
+	other.invalidateCount()
 	return other, nil
 }
 
@@ -937,7 +937,7 @@ func (e *executor) executeUnionShard(ctx context.Context, index string, c *pql.C
 			other = other.Union(row)
 		}
 	}
-	other.InvalidateCount()
+	other.invalidateCount()
 	return other, nil
 }
 
@@ -956,7 +956,7 @@ func (e *executor) executeXorShard(ctx context.Context, index string, c *pql.Cal
 			other = other.Xor(row)
 		}
 	}
-	other.InvalidateCount()
+	other.invalidateCount()
 	return other, nil
 }
 
@@ -1577,7 +1577,7 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 		if field == nil {
 			return ErrFieldNotFound
 		}
-		if field.Keys() {
+		if field.keys() {
 			if c.Args[rowKey] != nil && !isString(c.Args[rowKey]) {
 				return errors.New("row value must be a string when field 'keys' option enabled")
 			}
@@ -1628,7 +1628,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 			if field == nil {
 				return nil, ErrFieldNotFound
 			}
-			if field.Keys() {
+			if field.keys() {
 				other := make([]Pair, len(result))
 				for i := range result {
 					key, err := e.TranslateStore.TranslateRowToString(index, fieldName, result[i].ID)
@@ -1713,15 +1713,15 @@ type ValCount struct {
 	Count int64 `json:"count"`
 }
 
-func (vc *ValCount) Add(other ValCount) ValCount {
+func (vc *ValCount) add(other ValCount) ValCount {
 	return ValCount{
 		Val:   vc.Val + other.Val,
 		Count: vc.Count + other.Count,
 	}
 }
 
-// Smaller returns the smaller of the two ValCounts.
-func (vc *ValCount) Smaller(other ValCount) ValCount {
+// smaller returns the smaller of the two ValCounts.
+func (vc *ValCount) smaller(other ValCount) ValCount {
 	if vc.Count == 0 || (other.Val < vc.Val && other.Count > 0) {
 		return other
 	}
@@ -1731,8 +1731,8 @@ func (vc *ValCount) Smaller(other ValCount) ValCount {
 	}
 }
 
-// Larger returns the larger of the two ValCounts.
-func (vc *ValCount) Larger(other ValCount) ValCount {
+// larger returns the larger of the two ValCounts.
+func (vc *ValCount) larger(other ValCount) ValCount {
 	if vc.Count == 0 || (other.Val > vc.Val && other.Count > 0) {
 		return other
 	}
