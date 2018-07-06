@@ -343,7 +343,7 @@ func (c *cluster) removeNode(node *Node) error {
 	if c.Topology == nil {
 		return fmt.Errorf("Cluster.Topology is nil")
 	}
-	if !c.Topology.RemoveID(node.ID) {
+	if !c.Topology.removeID(node.ID) {
 		return nil
 	}
 
@@ -1446,8 +1446,8 @@ func (t *Topology) addID(nodeID string) bool {
 	return true
 }
 
-// RemoveID removes the node ID from the topology and returns true if removed.
-func (t *Topology) RemoveID(nodeID string) bool {
+// removeID removes the node ID from the topology and returns true if removed.
+func (t *Topology) removeID(nodeID string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
