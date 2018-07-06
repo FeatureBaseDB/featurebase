@@ -90,7 +90,7 @@ func main() {
 	fmt.Println("User 14 or 19 starred, written in language 1:", response.Result().Row().Columns)
 
 	// Set user 99999 as a stargazer for repository 77777?
-	client.Query(stargazer.SetBit(99999, 77777))
+	client.Query(stargazer.Set(99999, 77777))
 }
 ```
 
@@ -174,7 +174,7 @@ mutually_starred = client.query(query).result.row.columns
 print("User 14 or 19 starred, written in language 1:", mutually_starred)
 
 # Set user 99999 as a stargazer for repository 77777
-client.query(stargazer.setbit(99999, 77777))
+client.query(stargazer.set(99999, 77777))
 ```
 
 Running the above program should produce output like this:
@@ -275,7 +275,7 @@ public class StarTrace {
         System.out.println("User 14 or 19 starred, written in language 1: " + repositoryIDs);
 
         // Set user 99999 as a stargazer for repository 77777:
-        client.query(stargazer.setBit(99999, 77777));
+        client.query(stargazer.set(99999, 77777));
     }
 }
 ```

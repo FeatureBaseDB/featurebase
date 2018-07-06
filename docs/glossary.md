@@ -56,7 +56,7 @@ nav = []
 
 <strong id="row">[Row](../data-model/#row):</strong> Rows are the fundamental vertical data axis within Pilosa. They are namespaced to each [field](#field) within an [index](#index). Represented as a [Bitmap](#bitmap).
 
-<strong id="slice">[Slice](../data-model/#slice):</strong> Prior to Pilosa 1.0, shards were known as slices.
+<strong id="slice">[Slice](../data-model/#shard):</strong> Prior to Pilosa 1.0, shards were known as slices.
 
 <strong id="shard">[Shard](../data-model/#shard):</strong> [Columns](#column) are [sharded](https://en.wikipedia.org/wiki/Shard_(database_architecture)) on a preset [width](#shardwidth). Shards are operated on in parallel and are evenly distributed across the cluster via a [consistent hash](#jump-consistent-hash).
 

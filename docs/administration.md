@@ -70,9 +70,9 @@ pilosa import -i project -f stargazer-counts project-stargazer-counts.csv
 
 #### Exporting
 
-Exporting data to csv can be performed on a live instance of Pilosa. You need to specify the index and the field. The API also expects the slice number, but the `pilosa export` sub command will export all slices within a field. The data will be in csv format `Row,Column` and sorted by column.
+Exporting data to csv can be performed on a live instance of Pilosa. You need to specify the index and the field. The API also expects the shard number, but the `pilosa export` sub command will export all shards within a field. The data will be in csv format `Row,Column` and sorted by column.
 ```request
-curl "http://localhost:10101/export?index=repository&field=stargazer&slice=0" \
+curl "http://localhost:10101/export?index=repository&field=stargazer&shard=0" \
      --header "Accept: text/csv"
 ```
 ```response
@@ -122,7 +122,7 @@ Pilosa v0.9 introduces a few compatibility changes that need to be addressed.
 
 Pilosa v0.9 adds two new files to the data directory, an `.id` file and a `.topology` file. Due to the way Pilosa internally shards indices, upgrading a Pilosa cluster will result in data loss if an existing cluster is brought up without these files. New clusters will generate them automatically, but you may migrate an existing cluster by using a tool we called [`topology-generator`](https://github.com/pilosa/upgrade-utils/tree/master/v0.9/topology-generator):
 
-1. Observe the `cluster.hosts` configuration value in Pilosa v0.8. The ordering of the nodes in the config file is significant, as it determines shard (AKA slice) ownership. Pilosa v0.9 uses UUIDs for each node, and the ordering is alphabetical.
+1. Observe the `cluster.hosts` configuration value in Pilosa v0.8. The ordering of the nodes in the config file is significant, as it determines shard ownership. Pilosa v0.9 uses UUIDs for each node, and the ordering is alphabetical.
 2. Install the `topology-generator`: `go get github.com/pilosa/upgrade-utils/v0.9/topology-generator`.
 3. Run the `topology-generator`. There are two arguments: the number of nodes and the output directory. For this example, we'll assume a 3-node cluster and place the files in the current working directory: `topology-generator 3 .`.
 4. This tool will generate a file, `topology`, and multiple id files, called `nodeX.id`, X being the node index position.
@@ -211,7 +211,7 @@ curl localhost:10101/cluster/resize/set-coordinator \
 
 ### Backup/restore
 
-Pilosa continuously writes out the in-memory bitmap data to disk. This data is organized by Index->Field->Views->Fragment->numbered slice files. These data files can be routinely backed up to restore nodes in a cluster.
+Pilosa continuously writes out the in-memory bitmap data to disk. This data is organized by Index->Field->Views->Fragment->numbered shard files. These data files can be routinely backed up to restore nodes in a cluster.
 
 Depending on the size of your data you have two options. For a small dataset you can rely on the periodic anti-entropy sync process to replicate existing data back to this node.
 
@@ -231,11 +231,11 @@ Note: This will only work when the replication factor is >= 2
 - To accomplish this you will first need:
   - List of all indexes on your cluster
   - List of all fields in your indexes
-  - Max slice per index, listed in the `/slices/max` endpoint
-- With this information you can query the `/internal/fragment/nodes` endpoint and iterate over each slice
-- Using the list of slices owned by this node you will then need to manually:
+  - Max shard per index, listed in the `/internal/shards/max` endpoint
+- With this information you can query the `/internal/fragment/nodes` endpoint and iterate over each shard
+- Using the list of shards owned by this node you will then need to manually:
   - setup a directory structure similar to the other nodes with a path for each Index/Field
-  - copy each owned slice for an existing node to this new node
+  - copy each owned shard for an existing node to this new node
 - Modify the cluster config file to replace the previous node address with the new node address.
 - Restart the cluster
 - Wait for the first sync (10 minutes) to validate Index connections
@@ -253,7 +253,7 @@ Each Pilosa cluster is configured by default to share anonymous usage details wi
 - **TimeQuantumEnabled:** Time Quantum Fields in use.
 - **NumIndexes:** Number of indexes in the Cluster.
 - **NumFields:** Number of fields in the Cluster.
-- **NumSlices:** Number of slices in the Cluster.
+- **NumShards:** Number of shards in the Cluster.
 - **NumViews:** Number of views in the Cluster.
 - **OpenFiles:** Open file handle count.
 - **GoRoutines:** Go routine count.
@@ -276,14 +276,14 @@ StatsD Tags adhere to the DataDog format (key:value), and we tag the following:
 - Index
 - Field
 - View
-- Slice
+- Shard
 
 #### Events
 We currently track the following events
 
 - **Index:** The creation of a new index.
 - **Field:** The creation of a new field.
-- **MaxSlice:** The creation of a new Slice.
+- **MaxShard:** The creation of a new Shard.
 - **SetBit:** Count of set bits.
 - **ClearBit:** Count of cleared bits.
 - **ImportBit:** During a bulk data import this represents the count of bits created.
