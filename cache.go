@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/lru"
 )
 
@@ -318,22 +317,6 @@ type Pair struct {
 	Count uint64 `json:"count"`
 }
 
-func encodePair(p Pair) *internal.Pair {
-	return &internal.Pair{
-		ID:    p.ID,
-		Key:   p.Key,
-		Count: p.Count,
-	}
-}
-
-func decodePair(pb *internal.Pair) Pair {
-	return Pair{
-		ID:    pb.ID,
-		Key:   pb.Key,
-		Count: pb.Count,
-	}
-}
-
 // Pairs is a sortable slice of Pair objects.
 type Pairs []Pair
 
@@ -407,22 +390,6 @@ func (p Pairs) String() string {
 	}
 	buf.WriteString(")")
 	return buf.String()
-}
-
-func EncodePairs(a Pairs) []*internal.Pair {
-	other := make([]*internal.Pair, len(a))
-	for i := range a {
-		other[i] = encodePair(a[i])
-	}
-	return other
-}
-
-func decodePairs(a []*internal.Pair) []Pair {
-	other := make([]Pair, len(a))
-	for i := range a {
-		other[i] = decodePair(a[i])
-	}
-	return other
 }
 
 // uint64Slice represents a sortable slice of uint64 numbers.

@@ -35,6 +35,7 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/boltdb"
+	"github.com/pilosa/pilosa/encoding/proto"
 	"github.com/pilosa/pilosa/gcnotify"
 	"github.com/pilosa/pilosa/gopsutil"
 	"github.com/pilosa/pilosa/gossip"
@@ -123,7 +124,7 @@ func (m *Command) Start() (err error) {
 	}
 
 	// SetupNetworking
-	err = m.SetupNetworking()
+	err = m.setupNetworking()
 	if err != nil {
 		return errors.Wrap(err, "setting up networking")
 	}
@@ -202,7 +203,7 @@ func (m *Command) SetupServer() error {
 
 	// Setup TLS
 	var TLSConfig *tls.Config
-	if uri.Scheme() == "https" {
+	if uri.Scheme == "https" {
 		if m.Config.TLS.CertificatePath == "" {
 			return errors.New("certificate path is required for TLS sockets")
 		}
@@ -221,10 +222,10 @@ func (m *Command) SetupServer() error {
 
 	diagnosticsInterval := time.Duration(0)
 	if m.Config.Metric.Diagnostics {
-		diagnosticsInterval = time.Duration(DefaultDiagnosticsInterval)
+		diagnosticsInterval = time.Duration(defaultDiagnosticsInterval)
 	}
 
-	statsClient, err := NewStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
+	statsClient, err := newStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)
 	if err != nil {
 		return errors.Wrap(err, "new stats client")
 	}
@@ -235,7 +236,7 @@ func (m *Command) SetupServer() error {
 	}
 
 	// If port is 0, get auto-allocated port from listener
-	if uri.Port() == 0 {
+	if uri.Port == 0 {
 		uri.SetPort(uint16(m.ln.Addr().(*net.TCPAddr).Port))
 	}
 
@@ -271,6 +272,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 		pilosa.OptServerPrimaryTranslateStore(primaryTranslateStore),
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
+		pilosa.OptServerSerializer(proto.Serializer{}),
 		coordinatorOpt,
 	}
 
@@ -297,8 +299,8 @@ func (m *Command) SetupServer() error {
 
 }
 
-// SetupNetworking sets up internode communication based on the configuration.
-func (m *Command) SetupNetworking() error {
+// setupNetworking sets up internode communication based on the configuration.
+func (m *Command) setupNetworking() error {
 	if m.Config.Cluster.Disabled {
 		return nil
 	}
@@ -309,7 +311,7 @@ func (m *Command) SetupNetworking() error {
 	}
 
 	// get the host portion of addr to use for binding
-	gossipHost := m.API.Node().URI.Host()
+	gossipHost := m.API.Node().URI.Host
 	m.gossipTransport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
 	if err != nil {
 		return errors.Wrap(err, "getting transport")
@@ -349,8 +351,8 @@ func (m *Command) Close() error {
 	return nil
 }
 
-// NewStatsClient creates a stats client from the config
-func NewStatsClient(name string, host string) (pilosa.StatsClient, error) {
+// newStatsClient creates a stats client from the config
+func newStatsClient(name string, host string) (pilosa.StatsClient, error) {
 	switch name {
 	case "expvar":
 		return pilosa.NewExpvarStatsClient(), nil
@@ -366,19 +368,19 @@ func NewStatsClient(name string, host string) (pilosa.StatsClient, error) {
 // getListener gets a net.Listener based on the config.
 func getListener(uri pilosa.URI, tlsconf *tls.Config) (ln net.Listener, err error) {
 	// If bind URI has the https scheme, enable TLS
-	if uri.Scheme() == "https" && tlsconf != nil {
+	if uri.Scheme == "https" && tlsconf != nil {
 		ln, err = tls.Listen("tcp", uri.HostPort(), tlsconf)
 		if err != nil {
 			return nil, errors.Wrap(err, "tls.Listener")
 		}
-	} else if uri.Scheme() == "http" {
+	} else if uri.Scheme == "http" {
 		// Open HTTP listener to determine port (if specified as :0).
 		ln, err = net.Listen("tcp", uri.HostPort())
 		if err != nil {
 			return nil, errors.Wrap(err, "net.Listen")
 		}
 	} else {
-		return nil, errors.Errorf("unsupported scheme: %s", uri.Scheme())
+		return nil, errors.Errorf("unsupported scheme: %s", uri.Scheme)
 	}
 
 	return ln, nil

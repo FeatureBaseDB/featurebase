@@ -43,14 +43,14 @@ In addition to standard PQL, the console supports a few special commands, prefix
 - `:create index <indexname>`
 - `:delete index <indexname>`
 - `:use <indexname>`
-- `:create frame <framename>`
-- `:delete frame <framename>`
+- `:create field <fieldname>`
+- `:delete field <fieldname>`
 
-Frame creation also supports options like `timeQuantum`. When creating a new frame, add options by using the keys documented in [API reference](../api-reference/#create-frame).
+Field creation also supports options like `timeQuantum`. When creating a new field, add options by using the keys documented in [API reference](../api-reference/#create-field).
 
-- `:create frame <framename> cacheSize=10000`
+- `:create field <fieldname> cacheSize=10000`
 
 
 ### Cluster Admin
 
-Use the Cluster Admin tab to view the current status of your cluster. This contains information on each node in the cluster, plus the list of Indexes and Frames.
+Use the Cluster Admin tab to view the current status of your cluster. This contains information on each node in the cluster, plus the list of Indexes and Fields.

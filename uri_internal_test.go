@@ -17,7 +17,7 @@ package pilosa
 import "testing"
 
 func TestDefaultURI(t *testing.T) {
-	uri := DefaultURI()
+	uri := defaultURI()
 	compare(t, uri, "http", "localhost", 10101)
 }
 
@@ -60,7 +60,7 @@ func TestNormalizedAddress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Can't parse address")
 	}
-	if uri.Normalize() != "http://big-data.pilosa.com:6888" {
+	if uri.normalize() != "http://big-data.pilosa.com:6888" {
 		t.Fatalf("Normalized address is not normal")
 	}
 }
@@ -77,49 +77,49 @@ func TestURIPath(t *testing.T) {
 }
 
 func TestSetScheme(t *testing.T) {
-	uri := DefaultURI()
+	uri := defaultURI()
 	target := "fun"
-	err := uri.SetScheme(target)
+	err := uri.setScheme(target)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if uri.Scheme() != target {
-		t.Fatalf("%s != %s", uri.Scheme(), target)
+	if uri.Scheme != target {
+		t.Fatalf("%s != %s", uri.Scheme, target)
 	}
 }
 
 func TestSetHost(t *testing.T) {
-	uri := DefaultURI()
+	uri := defaultURI()
 	target := "10.20.30.40"
-	err := uri.SetHost(target)
+	err := uri.setHost(target)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if uri.Host() != target {
-		t.Fatalf("%s != %s", uri.host, target)
+	if uri.Host != target {
+		t.Fatalf("%s != %s", uri.Host, target)
 	}
 }
 
 func TestSetPort(t *testing.T) {
-	uri := DefaultURI()
+	uri := defaultURI()
 	target := uint16(9999)
 	uri.SetPort(target)
-	if uri.Port() != target {
-		t.Fatalf("%d != %d", uri.port, target)
+	if uri.Port != target {
+		t.Fatalf("%d != %d", uri.Port, target)
 	}
 }
 
 func TestSetInvalidScheme(t *testing.T) {
-	uri := DefaultURI()
-	err := uri.SetScheme("?invalid")
+	uri := defaultURI()
+	err := uri.setScheme("?invalid")
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
 }
 
 func TestSetInvalidHost(t *testing.T) {
-	uri := DefaultURI()
-	err := uri.SetHost("index?.pilosa.com")
+	uri := defaultURI()
+	err := uri.setHost("index?.pilosa.com")
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
@@ -137,14 +137,14 @@ func TestHostPort(t *testing.T) {
 }
 
 func compare(t *testing.T, uri *URI, scheme string, host string, port uint16) {
-	if uri.Scheme() != scheme {
-		t.Fatalf("Scheme does not match: %s != %s", uri.scheme, scheme)
+	if uri.Scheme != scheme {
+		t.Fatalf("Scheme does not match: %s != %s", uri.Scheme, scheme)
 	}
-	if uri.Host() != host {
-		t.Fatalf("Host does not match: %s != %s", uri.host, host)
+	if uri.Host != host {
+		t.Fatalf("Host does not match: %s != %s", uri.Host, host)
 	}
-	if uri.Port() != port {
-		t.Fatalf("Port does not match: %d != %d", uri.port, port)
+	if uri.Port != port {
+		t.Fatalf("Port does not match: %d != %d", uri.Port, port)
 	}
 }
 

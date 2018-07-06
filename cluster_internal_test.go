@@ -24,7 +24,6 @@ import (
 	"testing/quick"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pkg/errors"
 )
 
@@ -175,19 +174,19 @@ func TestFragSources(t *testing.T) {
 		from     *cluster
 		to       *cluster
 		idx      *Index
-		expected map[string][]*internal.ResizeSource
+		expected map[string][]*ResizeSource
 		err      string
 	}{
 		{
 			from: c1,
 			to:   c2,
 			idx:  idx,
-			expected: map[string][]*internal.ResizeSource{
-				"node0": []*internal.ResizeSource{},
-				"node1": []*internal.ResizeSource{},
-				"node2": []*internal.ResizeSource{
-					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(0)},
-					{&internal.Node{"node1", &internal.URI{"http", "host1", 10101}, false}, "i", "f", "standard", uint64(2)},
+			expected: map[string][]*ResizeSource{
+				"node0": []*ResizeSource{},
+				"node1": []*ResizeSource{},
+				"node2": []*ResizeSource{
+					{&Node{"node0", URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(0)},
+					{&Node{"node1", URI{"http", "host1", 10101}, false}, "i", "f", "standard", uint64(2)},
 				},
 			},
 			err: "",
@@ -196,13 +195,13 @@ func TestFragSources(t *testing.T) {
 			from: c4,
 			to:   c3,
 			idx:  idx,
-			expected: map[string][]*internal.ResizeSource{
-				"node0": []*internal.ResizeSource{
-					{&internal.Node{"node1", &internal.URI{"http", "host1", 10101}, false}, "i", "f", "standard", uint64(1)},
+			expected: map[string][]*ResizeSource{
+				"node0": []*ResizeSource{
+					{&Node{"node1", URI{"http", "host1", 10101}, false}, "i", "f", "standard", uint64(1)},
 				},
-				"node1": []*internal.ResizeSource{
-					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(0)},
-					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(2)},
+				"node1": []*ResizeSource{
+					{&Node{"node0", URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(0)},
+					{&Node{"node0", URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(2)},
 				},
 			},
 			err: "",
@@ -211,15 +210,15 @@ func TestFragSources(t *testing.T) {
 			from: c5,
 			to:   c4,
 			idx:  idx,
-			expected: map[string][]*internal.ResizeSource{
-				"node0": []*internal.ResizeSource{
-					{&internal.Node{"node2", &internal.URI{"http", "host2", 10101}, false}, "i", "f", "standard", uint64(0)},
-					{&internal.Node{"node2", &internal.URI{"http", "host2", 10101}, false}, "i", "f", "standard", uint64(2)},
+			expected: map[string][]*ResizeSource{
+				"node0": []*ResizeSource{
+					{&Node{"node2", URI{"http", "host2", 10101}, false}, "i", "f", "standard", uint64(0)},
+					{&Node{"node2", URI{"http", "host2", 10101}, false}, "i", "f", "standard", uint64(2)},
 				},
-				"node1": []*internal.ResizeSource{
-					{&internal.Node{"node0", &internal.URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(3)},
+				"node1": []*ResizeSource{
+					{&Node{"node0", URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(3)},
 				},
-				"node2": []*internal.ResizeSource{},
+				"node2": []*ResizeSource{},
 			},
 			err: "",
 		},
@@ -537,12 +536,12 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		expectedTop := &Topology{
-			NodeIDs: []string{node.Node.ID},
+			nodeIDs: []string{node.Node.ID},
 		}
 
 		// Verify topology file.
-		if !reflect.DeepEqual(node.Topology.NodeIDs, expectedTop.NodeIDs) {
-			t.Errorf("expected topology: %v, but got: %v", expectedTop.NodeIDs, node.Topology.NodeIDs)
+		if !reflect.DeepEqual(node.Topology.nodeIDs, expectedTop.nodeIDs) {
+			t.Errorf("expected topology: %v, but got: %v", expectedTop.nodeIDs, node.Topology.nodeIDs)
 		}
 
 		// Close TestCluster.
@@ -559,7 +558,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		// write topology to data file
 		top := &Topology{
-			NodeIDs: []string{node.Node.ID},
+			nodeIDs: []string{node.Node.ID},
 		}
 		tc.WriteTopology(node.Path, top)
 
@@ -587,7 +586,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		// write topology to data file
 		top := &Topology{
-			NodeIDs: []string{"some-other-host"},
+			nodeIDs: []string{"some-other-host"},
 		}
 		tc.WriteTopology(node.Path, top)
 
@@ -626,14 +625,14 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		expectedTop := &Topology{
-			NodeIDs: []string{node0.Node.ID, node1.Node.ID},
+			nodeIDs: []string{node0.Node.ID, node1.Node.ID},
 		}
 
 		// Verify topology file.
-		if !reflect.DeepEqual(node0.Topology.NodeIDs, expectedTop.NodeIDs) {
-			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop.NodeIDs, node0.Topology.NodeIDs)
-		} else if !reflect.DeepEqual(node1.Topology.NodeIDs, expectedTop.NodeIDs) {
-			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.NodeIDs, node1.Topology.NodeIDs)
+		if !reflect.DeepEqual(node0.Topology.nodeIDs, expectedTop.nodeIDs) {
+			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop.nodeIDs, node0.Topology.nodeIDs)
+		} else if !reflect.DeepEqual(node1.Topology.nodeIDs, expectedTop.nodeIDs) {
+			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.nodeIDs, node1.Topology.nodeIDs)
 		}
 
 		// Close TestCluster.
@@ -649,7 +648,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		// write topology to data file
 		top := &Topology{
-			NodeIDs: []string{"node0", "node2"},
+			nodeIDs: []string{"node0", "node2"},
 		}
 		tc.WriteTopology(node0.Path, top)
 
@@ -722,14 +721,14 @@ func TestCluster_ResizeStates(t *testing.T) {
 		}
 
 		expectedTop := &Topology{
-			NodeIDs: []string{node0.Node.ID, node1.Node.ID},
+			nodeIDs: []string{node0.Node.ID, node1.Node.ID},
 		}
 
 		// Verify topology file.
-		if !reflect.DeepEqual(node0.Topology.NodeIDs, expectedTop.NodeIDs) {
-			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop.NodeIDs, node0.Topology.NodeIDs)
-		} else if !reflect.DeepEqual(node1.Topology.NodeIDs, expectedTop.NodeIDs) {
-			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.NodeIDs, node1.Topology.NodeIDs)
+		if !reflect.DeepEqual(node0.Topology.nodeIDs, expectedTop.nodeIDs) {
+			t.Errorf("expected node0 topology: %v, but got: %v", expectedTop.nodeIDs, node0.Topology.nodeIDs)
+		} else if !reflect.DeepEqual(node1.Topology.nodeIDs, expectedTop.nodeIDs) {
+			t.Errorf("expected node1 topology: %v, but got: %v", expectedTop.nodeIDs, node1.Topology.nodeIDs)
 		}
 
 		// Bits

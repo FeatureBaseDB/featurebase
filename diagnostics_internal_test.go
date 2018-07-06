@@ -29,7 +29,7 @@ func TestDiagnosticsClient(t *testing.T) {
 	server := httptest.NewServer(nil)
 
 	// Create a new client.
-	d := NewDiagnosticsCollector(server.URL)
+	d := newDiagnosticsCollector(server.URL)
 
 	d.Set("gg", 10)
 	d.Set("ss", "ss")
@@ -76,7 +76,7 @@ func TestDiagnosticsVersion_Parse(t *testing.T) {
 }
 
 func TestDiagnosticsVersion_Compare(t *testing.T) {
-	d := NewDiagnosticsCollector("localhost:10101")
+	d := newDiagnosticsCollector("localhost:10101")
 
 	version := "v0.1.1"
 	d.SetVersion(version)
@@ -118,7 +118,7 @@ func TestDiagnosticsVersion_Check(t *testing.T) {
 	}))
 
 	// Create a new client.
-	d := NewDiagnosticsCollector("localhost:10101")
+	d := newDiagnosticsCollector("localhost:10101")
 
 	version := "0.1.1"
 	d.SetVersion(version)
@@ -143,7 +143,7 @@ func BenchmarkDiagnostics(b *testing.B) {
 	server := httptest.NewServer(nil)
 
 	// Create a new client.
-	d := NewDiagnosticsCollector(server.URL)
+	d := newDiagnosticsCollector(server.URL)
 
 	prev := runtime.GOMAXPROCS(4)
 	defer runtime.GOMAXPROCS(prev)

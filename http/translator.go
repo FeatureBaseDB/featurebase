@@ -14,41 +14,41 @@ import (
 )
 
 // Ensure implementation implements inteface.
-var _ pilosa.TranslateStore = (*TranslateStore)(nil)
+var _ pilosa.TranslateStore = (*translateStore)(nil)
 
-// TranslateStore represents an implementation of TranslateStore that
+// translateStore represents an implementation of translateStore that
 // communicates over HTTP. This is used with the TranslateHandler.
-type TranslateStore struct {
+type translateStore struct {
 	URL string
 }
 
 // NewTranslateStore returns a new instance of TranslateStore.
-func NewTranslateStore(rawurl string) *TranslateStore {
-	return &TranslateStore{URL: rawurl}
+func NewTranslateStore(rawurl string) *translateStore {
+	return &translateStore{URL: rawurl}
 }
 
 // TranslateColumnsToUint64 is not currently implemented.
-func (s *TranslateStore) TranslateColumnsToUint64(index string, values []string) ([]uint64, error) {
+func (s *translateStore) TranslateColumnsToUint64(index string, values []string) ([]uint64, error) {
 	return nil, pilosa.ErrNotImplemented
 }
 
 // TranslateColumnToString is not currently implemented.
-func (s *TranslateStore) TranslateColumnToString(index string, values uint64) (string, error) {
+func (s *translateStore) TranslateColumnToString(index string, values uint64) (string, error) {
 	return "", pilosa.ErrNotImplemented
 }
 
 // TranslateRowsToUint64 is not currently implemented.
-func (s *TranslateStore) TranslateRowsToUint64(index, frame string, values []string) ([]uint64, error) {
+func (s *translateStore) TranslateRowsToUint64(index, frame string, values []string) ([]uint64, error) {
 	return nil, pilosa.ErrNotImplemented
 }
 
 // TranslateRowToString is not currently implemented.
-func (s *TranslateStore) TranslateRowToString(index, frame string, values uint64) (string, error) {
+func (s *translateStore) TranslateRowToString(index, frame string, values uint64) (string, error) {
 	return "", pilosa.ErrNotImplemented
 }
 
 // Reader returns a reader that can stream data from a remote store.
-func (s *TranslateStore) Reader(ctx context.Context, off int64) (io.ReadCloser, error) {
+func (s *translateStore) Reader(ctx context.Context, off int64) (io.ReadCloser, error) {
 	// Generate remote URL.
 	u, err := url.Parse(s.URL)
 	if err != nil {

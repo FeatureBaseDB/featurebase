@@ -20,7 +20,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pkg/errors"
 )
@@ -68,7 +67,7 @@ func optExecutorInternalQueryClient(c InternalQueryClient) executorOption {
 // newExecutor returns a new instance of Executor.
 func newExecutor(opts ...executorOption) *executor {
 	e := &executor{
-		client: NewNopInternalQueryClient(),
+		client: newNopInternalQueryClient(),
 	}
 	for _, opt := range opts {
 		err := opt(e)
@@ -184,9 +183,7 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeCount(ctx, index, c, shards, opt)
 	case "Set":
-		return e.executeSetBit(ctx, index, c, opt)
-	case "SetValue":
-		return nil, e.executeSetValue(ctx, index, c, opt)
+		return e.executeSet(ctx, index, c, opt)
 	case "SetRowAttrs":
 		return nil, e.executeSetRowAttrs(ctx, index, c, opt)
 	case "SetColumnAttrs":
@@ -237,7 +234,7 @@ func (e *executor) executeSum(ctx context.Context, index string, c *pql.Call, sh
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
 		other, _ := prev.(ValCount)
-		return other.Add(v.(ValCount))
+		return other.add(v.(ValCount))
 	}
 
 	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -270,7 +267,7 @@ func (e *executor) executeMin(ctx context.Context, index string, c *pql.Call, sh
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
 		other, _ := prev.(ValCount)
-		return other.Smaller(v.(ValCount))
+		return other.smaller(v.(ValCount))
 	}
 
 	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -303,7 +300,7 @@ func (e *executor) executeMax(ctx context.Context, index string, c *pql.Call, sh
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
 		other, _ := prev.(ValCount)
-		return other.Larger(v.(ValCount))
+		return other.larger(v.(ValCount))
 	}
 
 	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -337,7 +334,7 @@ func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "map reduce")
 	}
 
 	// Attach attributes for Row() calls.
@@ -378,7 +375,7 @@ func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 	}
 
 	if opt.ExcludeColumns {
-		row.segments = []RowSegment{}
+		row.segments = []rowSegment{}
 	}
 
 	return row, nil
@@ -664,7 +661,7 @@ func (e *executor) executeDifferenceShard(ctx context.Context, index string, c *
 			other = other.Difference(row)
 		}
 	}
-	other.InvalidateCount()
+	other.invalidateCount()
 	return other, nil
 }
 
@@ -715,10 +712,10 @@ func (e *executor) executeIntersectShard(ctx context.Context, index string, c *p
 		if i == 0 {
 			other = row
 		} else {
-			other = other.Intersect(row)
+			other = other.intersect(row)
 		}
 	}
-	other.InvalidateCount()
+	other.invalidateCount()
 	return other, nil
 }
 
@@ -940,7 +937,7 @@ func (e *executor) executeUnionShard(ctx context.Context, index string, c *pql.C
 			other = other.Union(row)
 		}
 	}
-	other.InvalidateCount()
+	other.invalidateCount()
 	return other, nil
 }
 
@@ -959,7 +956,7 @@ func (e *executor) executeXorShard(ctx context.Context, index string, c *pql.Cal
 			other = other.Xor(row)
 		}
 	}
-	other.InvalidateCount()
+	other.invalidateCount()
 	return other, nil
 }
 
@@ -1060,8 +1057,8 @@ func (e *executor) executeClearBitField(ctx context.Context, index string, c *pq
 	return ret, nil
 }
 
-// executeSetBit executes a Set() call.
-func (e *executor) executeSetBit(ctx context.Context, index string, c *pql.Call, opt *execOptions) (bool, error) {
+// executeSet executes a Set() call.
+func (e *executor) executeSet(ctx context.Context, index string, c *pql.Call, opt *execOptions) (bool, error) {
 	fieldName, err := c.FieldArg()
 	if err != nil {
 		return false, errors.New("Set() argument required: field")
@@ -1077,14 +1074,7 @@ func (e *executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 		return false, ErrFieldNotFound
 	}
 
-	// Read fields using labels.
-	rowID, ok, err := c.UintArg(fieldName)
-	if err != nil {
-		return false, fmt.Errorf("reading Set() row: %v", err)
-	} else if !ok {
-		return false, fmt.Errorf("Set() row argument '%v' required", rowLabel)
-	}
-
+	// Read colID using labels.
 	colID, ok, err := c.UintArg("_" + columnLabel)
 	if err != nil {
 		return false, fmt.Errorf("reading Set() column: %v", err)
@@ -1092,20 +1082,40 @@ func (e *executor) executeSetBit(ctx context.Context, index string, c *pql.Call,
 		return false, fmt.Errorf("Set() column argument '%v' required", columnLabel)
 	}
 
-	var timestamp *time.Time
-	sTimestamp, ok := c.Args["_timestamp"].(string)
-	if ok {
-		t, err := time.Parse(TimeFormat, sTimestamp)
+	if f.Type() == FieldTypeInt {
+		// Read remaining fields using labels.
+		rowVal, ok, err := c.IntArg(fieldName)
 		if err != nil {
-			return false, fmt.Errorf("invalid date: %s", sTimestamp)
+			return false, fmt.Errorf("reading Set() row: %v", err)
+		} else if !ok {
+			return false, fmt.Errorf("Set() row argument '%v' required", rowLabel)
 		}
-		timestamp = &t
-	}
 
-	return e.executeSetBitField(ctx, index, c, f, colID, rowID, timestamp, opt)
+		return e.executeSetValueField(ctx, index, c, f, colID, rowVal, opt)
+	} else {
+		// Read remaining fields using labels.
+		rowID, ok, err := c.UintArg(fieldName)
+		if err != nil {
+			return false, fmt.Errorf("reading Set() row: %v", err)
+		} else if !ok {
+			return false, fmt.Errorf("Set() row argument '%v' required", rowLabel)
+		}
+
+		var timestamp *time.Time
+		sTimestamp, ok := c.Args["_timestamp"].(string)
+		if ok {
+			t, err := time.Parse(TimeFormat, sTimestamp)
+			if err != nil {
+				return false, fmt.Errorf("invalid date: %s", sTimestamp)
+			}
+			timestamp = &t
+		}
+
+		return e.executeSetBitField(ctx, index, c, f, colID, rowID, timestamp, opt)
+	}
 }
 
-// executeSetBitField executes a Set() call for a specific view.
+// executeSetBitField executes a Set() call for a specific field.
 func (e *executor) executeSetBitField(ctx context.Context, index string, c *pql.Call, f *Field, colID, rowID uint64, timestamp *time.Time, opt *execOptions) (bool, error) {
 	shard := colID / ShardWidth
 	ret := false
@@ -1137,64 +1147,36 @@ func (e *executor) executeSetBitField(ctx context.Context, index string, c *pql.
 	return ret, nil
 }
 
-// executeSetValue executes a SetValue() call.
-func (e *executor) executeSetValue(ctx context.Context, index string, c *pql.Call, opt *execOptions) error {
-	// Parse labels.
-	columnID, ok, err := c.UintArg(columnLabel)
-	if err != nil {
-		return fmt.Errorf("reading SetValue() column: %v", err)
-	} else if !ok {
-		return fmt.Errorf("SetValue() column field '%v' required", columnLabel)
-	}
+// executeSetValueField executes a Set() call for a specific int field.
+func (e *executor) executeSetValueField(ctx context.Context, index string, c *pql.Call, f *Field, colID uint64, value int64, opt *execOptions) (bool, error) {
+	shard := colID / ShardWidth
+	ret := false
 
-	// Copy args and remove reserved fields.
-	args := pql.CopyArgs(c.Args)
-	// While field could technically work as a ColumnAttr argument, we are treating it as a reserved word primarily to avoid confusion.
-	// Also, if we ever need to make ColumnAttrs field-specific, then having this reserved word prevents backward incompatibility.
-	delete(args, columnLabel)
-
-	// Set values.
-	for name, value := range args {
-		// Retrieve field.
-		field := e.Holder.Field(index, name)
-		if field == nil {
-			return ErrFieldNotFound
-		}
-
-		switch value := value.(type) {
-		case int64:
-			if _, err := field.SetValue(columnID, value); err != nil {
-				return err
+	for _, node := range e.Cluster.shardNodes(index, shard) {
+		// Update locally if host matches.
+		if node.ID == e.Node.ID {
+			val, err := f.SetValue(colID, value)
+			if err != nil {
+				return false, err
+			} else if val {
+				ret = true
 			}
-		default:
-			return ErrInvalidBSIGroupValueType
+			continue
 		}
-		field.Stats.Count("SetValue", 1, 1.0)
-	}
 
-	// Do not forward call if this is already being forwarded.
-	if opt.Remote {
-		return nil
-	}
+		// Do not forward call if this is already being forwarded.
+		if opt.Remote {
+			continue
+		}
 
-	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.Nodes).FilterID(e.Node.ID)
-	resp := make(chan error, len(nodes))
-	for _, node := range nodes {
-		go func(node *Node) {
-			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt)
-			resp <- err
-		}(node)
-	}
-
-	// Return first error.
-	for range nodes {
-		if err := <-resp; err != nil {
-			return err
+		// Forward call to remote node otherwise.
+		if res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt); err != nil {
+			return false, err
+		} else {
+			ret = res[0].(bool)
 		}
 	}
-
-	return nil
+	return ret, nil
 }
 
 // executeSetRowAttrs executes a SetRowAttrs() call.
@@ -1392,7 +1374,7 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 // exec executes a PQL query remotely for a set of shards on a node.
 func (e *executor) remoteExec(ctx context.Context, node *Node, index string, q *pql.Query, shards []uint64, opt *execOptions) (results []interface{}, err error) {
 	// Encode request object.
-	pbreq := &internal.QueryRequest{
+	pbreq := &QueryRequest{
 		Query:  q.String(),
 		Shards: shards,
 		Remote: true,
@@ -1403,40 +1385,7 @@ func (e *executor) remoteExec(ctx context.Context, node *Node, index string, q *
 		return nil, err
 	}
 
-	// Return an error, if specified on response.
-	if err := decodeError(pb.Err); err != nil {
-		return nil, err
-	}
-
-	// Return appropriate data for the query.
-	results = make([]interface{}, len(q.Calls))
-	for i, call := range q.Calls {
-		var v interface{}
-		var err error
-
-		switch call.Name {
-		case "Average", "Sum":
-			v, err = decodeValCount(pb.Results[i].GetValCount()), nil
-		case "TopN":
-			v, err = decodePairs(pb.Results[i].GetPairs()), nil
-		case "Count":
-			v, err = pb.Results[i].N, nil
-		case "Set":
-			v, err = pb.Results[i].Changed, nil
-		case "Clear":
-			v, err = pb.Results[i].Changed, nil
-		case "SetRowAttrs":
-		case "SetColumnAttrs":
-		default:
-			v, err = DecodeRow(pb.Results[i].GetRow()), nil
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		results[i] = v
-	}
-	return results, nil
+	return pb.Results, pb.Err
 }
 
 // shardsByNode returns a mapping of nodes to shards.
@@ -1490,7 +1439,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, errors.Wrap(ctx.Err(), "context done")
 		case resp := <-ch:
 			// On error retry against remaining nodes. If an error returns then
 			// the context will cancel and cause all open goroutines to return.
@@ -1500,10 +1449,10 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 				nodes = Nodes(nodes).Filter(resp.node)
 
 				// Begin mapper against secondary nodes.
-				if err := e.mapper(ctx, ch, nodes, index, resp.shards, c, opt, mapFn, reduceFn); err == errShardUnavailable {
+				if err := e.mapper(ctx, ch, nodes, index, resp.shards, c, opt, mapFn, reduceFn); errors.Cause(err) == errShardUnavailable {
 					return nil, resp.err
 				} else if err != nil {
-					return nil, err
+					return nil, errors.Wrap(err, "calling mapper")
 				}
 				continue
 			}
@@ -1524,7 +1473,7 @@ func (e *executor) mapper(ctx context.Context, ch chan mapResponse, nodes []*Nod
 	// Group shards together by nodes.
 	m, err := e.shardsByNode(nodes, index, shards)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "shards by node")
 	}
 
 	// Execute each node in a separate goroutine.
@@ -1628,7 +1577,7 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 		if field == nil {
 			return ErrFieldNotFound
 		}
-		if field.Keys() {
+		if field.keys() {
 			if c.Args[rowKey] != nil && !isString(c.Args[rowKey]) {
 				return errors.New("row value must be a string when field 'keys' option enabled")
 			}
@@ -1679,7 +1628,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 			if field == nil {
 				return nil, ErrFieldNotFound
 			}
-			if field.Keys() {
+			if field.keys() {
 				other := make([]Pair, len(result))
 				for i := range result {
 					key, err := e.TranslateStore.TranslateRowToString(index, fieldName, result[i].ID)
@@ -1764,29 +1713,15 @@ type ValCount struct {
 	Count int64 `json:"count"`
 }
 
-func (vc *ValCount) Add(other ValCount) ValCount {
+func (vc *ValCount) add(other ValCount) ValCount {
 	return ValCount{
 		Val:   vc.Val + other.Val,
 		Count: vc.Count + other.Count,
 	}
 }
 
-func EncodeValCount(vc ValCount) *internal.ValCount {
-	return &internal.ValCount{
-		Val:   vc.Val,
-		Count: vc.Count,
-	}
-}
-
-func decodeValCount(pb *internal.ValCount) ValCount {
-	return ValCount{
-		Val:   pb.Val,
-		Count: pb.Count,
-	}
-}
-
-// Smaller returns the smaller of the two ValCounts.
-func (vc *ValCount) Smaller(other ValCount) ValCount {
+// smaller returns the smaller of the two ValCounts.
+func (vc *ValCount) smaller(other ValCount) ValCount {
 	if vc.Count == 0 || (other.Val < vc.Val && other.Count > 0) {
 		return other
 	}
@@ -1796,8 +1731,8 @@ func (vc *ValCount) Smaller(other ValCount) ValCount {
 	}
 }
 
-// Larger returns the larger of the two ValCounts.
-func (vc *ValCount) Larger(other ValCount) ValCount {
+// larger returns the larger of the two ValCounts.
+func (vc *ValCount) larger(other ValCount) ValCount {
 	if vc.Count == 0 || (other.Val > vc.Val && other.Count > 0) {
 		return other
 	}

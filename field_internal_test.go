@@ -282,7 +282,7 @@ func TestField_SetTimeQuantum(t *testing.T) {
 	defer f.Close()
 
 	// Set & retrieve time quantum.
-	if err := f.SetTimeQuantum(TimeQuantum("YMDH")); err != nil {
+	if err := f.setTimeQuantum(TimeQuantum("YMDH")); err != nil {
 		t.Fatal(err)
 	} else if q := f.TimeQuantum(); q != TimeQuantum("YMDH") {
 		t.Fatalf("unexpected quantum: %s", q)
@@ -300,7 +300,7 @@ func TestField_RowTime(t *testing.T) {
 	f := MustOpenField(OptFieldTypeTime(TimeQuantum("")))
 	defer f.Close()
 
-	if err := f.SetTimeQuantum(TimeQuantum("YMDH")); err != nil {
+	if err := f.setTimeQuantum(TimeQuantum("YMDH")); err != nil {
 		t.Fatal(err)
 	}
 

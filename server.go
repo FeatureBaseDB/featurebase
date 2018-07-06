@@ -27,8 +27,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pkg/errors"
 
 	"golang.org/x/sync/errgroup"
@@ -52,10 +50,11 @@ type Server struct {
 	holder          *Holder
 	cluster         *cluster
 	translateFile   *TranslateFile
-	diagnostics     *DiagnosticsCollector
+	diagnostics     *diagnosticsCollector
 	executor        *executor
 	hosts           []string
 	clusterDisabled bool
+	serializer      Serializer
 
 	// External
 	systemInfo SystemInfo
@@ -202,6 +201,13 @@ func OptServerClusterDisabled(disabled bool, hosts []string) ServerOption {
 	}
 }
 
+func OptServerSerializer(ser Serializer) ServerOption {
+	return func(s *Server) error {
+		s.serializer = ser
+		return nil
+	}
+}
+
 func OptServerIsCoordinator(is bool) ServerOption {
 	return func(s *Server) error {
 		s.isCoordinator = is
@@ -229,8 +235,8 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		closing:     make(chan struct{}),
 		cluster:     newCluster(),
 		holder:      NewHolder(),
-		diagnostics: NewDiagnosticsCollector(defaultDiagnosticServer),
-		systemInfo:  NewNopSystemInfo(),
+		diagnostics: newDiagnosticsCollector(defaultDiagnosticServer),
+		systemInfo:  newNopSystemInfo(),
 
 		gcNotifier: NopGCNotifier,
 
@@ -331,7 +337,7 @@ func (s *Server) Open() error {
 	if err := s.holder.Open(); err != nil {
 		return fmt.Errorf("opening Holder: %v", err)
 	}
-	if err := s.cluster.setNodeState(NodeStateReady); err != nil {
+	if err := s.cluster.setNodeState(nodeStateReady); err != nil {
 		return fmt.Errorf("setting nodeState: %v", err)
 	}
 
@@ -431,40 +437,40 @@ func (s *Server) monitorAntiEntropy() {
 }
 
 // receiveMessage represents an implementation of BroadcastHandler.
-func (s *Server) receiveMessage(pb proto.Message) error {
-	switch obj := pb.(type) {
-	case *internal.CreateShardMessage:
+func (s *Server) receiveMessage(m Message) error {
+	switch obj := m.(type) {
+	case *CreateShardMessage:
 		idx := s.holder.Index(obj.Index)
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
 		idx.setRemoteMaxShard(obj.Shard)
-	case *internal.CreateIndexMessage:
+	case *CreateIndexMessage:
 		opt := IndexOptions{}
 		_, err := s.holder.CreateIndex(obj.Index, opt)
 		if err != nil {
 			return err
 		}
-	case *internal.DeleteIndexMessage:
+	case *DeleteIndexMessage:
 		if err := s.holder.DeleteIndex(obj.Index); err != nil {
 			return err
 		}
-	case *internal.CreateFieldMessage:
+	case *CreateFieldMessage:
 		idx := s.holder.Index(obj.Index)
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
-		opt := decodeFieldOptions(obj.Meta)
+		opt := obj.Meta
 		_, err := idx.createField(obj.Field, *opt)
 		if err != nil {
 			return err
 		}
-	case *internal.DeleteFieldMessage:
+	case *DeleteFieldMessage:
 		idx := s.holder.Index(obj.Index)
 		if err := idx.DeleteField(obj.Field); err != nil {
 			return err
 		}
-	case *internal.CreateViewMessage:
+	case *CreateViewMessage:
 		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
 			return fmt.Errorf("Local Field not found: %s", obj.Field)
@@ -473,7 +479,7 @@ func (s *Server) receiveMessage(pb proto.Message) error {
 		if err != nil {
 			return err
 		}
-	case *internal.DeleteViewMessage:
+	case *DeleteViewMessage:
 		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
 			return fmt.Errorf("Local Field not found: %s", obj.Field)
@@ -482,44 +488,49 @@ func (s *Server) receiveMessage(pb proto.Message) error {
 		if err != nil {
 			return err
 		}
-	case *internal.ClusterStatus:
+	case *ClusterStatus:
 		err := s.cluster.mergeClusterStatus(obj)
 		if err != nil {
 			return err
 		}
-	case *internal.ResizeInstruction:
+	case *ResizeInstruction:
 		err := s.cluster.followResizeInstruction(obj)
 		if err != nil {
 			return err
 		}
-	case *internal.ResizeInstructionComplete:
+	case *ResizeInstructionComplete:
 		err := s.cluster.markResizeInstructionComplete(obj)
 		if err != nil {
 			return err
 		}
-	case *internal.SetCoordinatorMessage:
-		s.cluster.setCoordinator(DecodeNode(obj.New))
-	case *internal.UpdateCoordinatorMessage:
-		s.cluster.updateCoordinator(DecodeNode(obj.New))
-	case *internal.NodeStateMessage:
+	case *SetCoordinatorMessage:
+		s.cluster.setCoordinator(obj.New)
+	case *UpdateCoordinatorMessage:
+		s.cluster.updateCoordinator(obj.New)
+	case *NodeStateMessage:
 		err := s.cluster.receiveNodeState(obj.NodeID, obj.State)
 		if err != nil {
 			return err
 		}
-	case *internal.RecalculateCaches:
-		s.holder.RecalculateCaches()
-	case *internal.NodeEventMessage:
-		s.cluster.ReceiveEvent(DecodeNodeEvent(obj))
-	case *internal.NodeStatus:
-		s.handleRemoteStatus(pb)
+	case *RecalculateCaches:
+		s.holder.recalculateCaches()
+	case *NodeEvent:
+		s.cluster.ReceiveEvent(obj)
+	case *NodeStatus:
+		s.handleRemoteStatus(obj)
 	}
 
 	return nil
 }
 
 // SendSync represents an implementation of Broadcaster.
-func (s *Server) SendSync(pb proto.Message) error {
+func (s *Server) SendSync(m Message) error {
 	var eg errgroup.Group
+	msg, err := s.serializer.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("marshaling message: %v", err)
+	}
+	msg = append([]byte{getMessageType(m)}, msg...)
 	for _, node := range s.cluster.Nodes {
 		node := node
 		s.logger.Printf("SendSync to: %s", node.URI)
@@ -529,7 +540,7 @@ func (s *Server) SendSync(pb proto.Message) error {
 		}
 
 		eg.Go(func() error {
-			return s.defaultClient.SendMessage(context.Background(), &node.URI, pb)
+			return s.defaultClient.SendMessage(context.Background(), &node.URI, msg)
 		})
 	}
 
@@ -537,14 +548,19 @@ func (s *Server) SendSync(pb proto.Message) error {
 }
 
 // SendAsync represents an implementation of Broadcaster.
-func (s *Server) SendAsync(pb proto.Message) error {
+func (s *Server) SendAsync(m Message) error {
 	return ErrNotImplemented
 }
 
 // SendTo represents an implementation of Broadcaster.
-func (s *Server) SendTo(to *Node, pb proto.Message) error {
+func (s *Server) SendTo(to *Node, m Message) error {
 	s.logger.Printf("SendTo: %s", to.URI)
-	return s.defaultClient.SendMessage(context.Background(), &to.URI, pb)
+	msg, err := s.serializer.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("marshaling message: %v", err)
+	}
+	msg = append([]byte{getMessageType(m)}, msg...)
+	return s.defaultClient.SendMessage(context.Background(), &to.URI, msg)
 }
 
 // node returns the pilosa.node object. It is used by membership protocols to
@@ -554,7 +570,7 @@ func (s *Server) node() Node {
 }
 
 // handleRemoteStatus receives incoming NodeStatus from remote nodes.
-func (s *Server) handleRemoteStatus(pb proto.Message) {
+func (s *Server) handleRemoteStatus(pb Message) {
 	// Ignore NodeStatus messages until the cluster is in a Normal state.
 	if s.cluster.State() != ClusterStateNormal {
 		return
@@ -564,16 +580,16 @@ func (s *Server) handleRemoteStatus(pb proto.Message) {
 		// Make sure the holder has opened.
 		<-s.holder.opened
 
-		err := s.mergeRemoteStatus(pb.(*internal.NodeStatus))
+		err := s.mergeRemoteStatus(pb.(*NodeStatus))
 		if err != nil {
 			s.logger.Printf("merge remote status: %s", err)
 		}
 	}()
 }
 
-func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
+func (s *Server) mergeRemoteStatus(ns *NodeStatus) error {
 	// Ignore status updates from self.
-	if s.nodeID == DecodeNode(ns.Node).ID {
+	if s.nodeID == ns.Node.ID {
 		return nil
 	}
 
@@ -584,7 +600,7 @@ func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
 
 	// Sync maxShards.
 	oldmaxshards := s.holder.maxShards()
-	for index, newMax := range ns.MaxShards.Standard {
+	for index, newMax := range ns.MaxShards {
 		localIndex := s.holder.Index(index)
 		// if we don't know about an index locally, log an error because
 		// indexes should be created and synced prior to shard creation
@@ -613,7 +629,7 @@ func (s *Server) monitorDiagnostics() {
 
 	s.diagnostics.Logger = s.logger
 	s.diagnostics.SetVersion(Version)
-	s.diagnostics.Set("Host", s.uri.host)
+	s.diagnostics.Set("Host", s.uri.Host)
 	s.diagnostics.Set("Cluster", strings.Join(s.cluster.nodeIDs(), ","))
 	s.diagnostics.Set("NumNodes", len(s.cluster.Nodes))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())

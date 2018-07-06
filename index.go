@@ -15,7 +15,6 @@
 package pilosa
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -74,22 +73,6 @@ func NewIndex(path, name string) (*Index, error) {
 		Stats:       NopStatsClient,
 		logger:      NopLogger,
 	}, nil
-}
-
-func (i *Index) MarshalJSON() ([]byte, error) {
-	fields := make([]*Field, 0, len(i.fields))
-	for _, f := range i.fields {
-
-		fields = append(fields, f)
-	}
-	thing := struct {
-		Name   string
-		Fields []*Field
-	}{
-		Name:   i.name,
-		Fields: fields,
-	}
-	return json.Marshal(thing)
 }
 
 // Name returns name of the index.
@@ -156,7 +139,7 @@ func (i *Index) openFields() error {
 			continue
 		}
 
-		fld, err := i.newField(i.FieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+		fld, err := i.newField(i.fieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 		if err != nil {
 			return ErrName
 		}
@@ -237,7 +220,7 @@ func (i *Index) maxShard() uint64 {
 
 	max := i.remoteMaxShard
 	for _, f := range i.fields {
-		if shard := f.MaxShard(); shard > max {
+		if shard := f.maxShard(); shard > max {
 			max = shard
 		}
 	}
@@ -253,8 +236,8 @@ func (i *Index) setRemoteMaxShard(newmax uint64) {
 	i.remoteMaxShard = newmax
 }
 
-// FieldPath returns the path to a field in the index.
-func (i *Index) FieldPath(name string) string { return filepath.Join(i.path, name) }
+// fieldPath returns the path to a field in the index.
+func (i *Index) fieldPath(name string) string { return filepath.Join(i.path, name) }
 
 // Field returns a field in the index by name.
 func (i *Index) Field(name string) *Field {
@@ -279,10 +262,10 @@ func (i *Index) Fields() []*Field {
 	return a
 }
 
-// RecalculateCaches recalculates caches on every field in the index.
-func (i *Index) RecalculateCaches() {
+// recalculateCaches recalculates caches on every field in the index.
+func (i *Index) recalculateCaches() {
 	for _, field := range i.Fields() {
-		field.RecalculateCaches()
+		field.recalculateCaches()
 	}
 }
 
@@ -293,11 +276,11 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 
 	// Ensure field doesn't already exist.
 	if i.fields[name] != nil {
-		return nil, NewConflictError(ErrFieldExists)
+		return nil, newConflictError(ErrFieldExists)
 	}
 
 	// Apply functional options.
-	fo := fieldOptions{}
+	fo := FieldOptions{}
 	for _, opt := range opts {
 		err := opt(&fo)
 		if err != nil {
@@ -319,7 +302,7 @@ func (i *Index) CreateFieldIfNotExists(name string, opts FieldOption) (*Field, e
 	}
 
 	// Apply functional option.
-	fo := fieldOptions{}
+	fo := FieldOptions{}
 	err := opts(&fo)
 	if err != nil {
 		return nil, errors.Wrap(err, "applying option")
@@ -328,7 +311,7 @@ func (i *Index) CreateFieldIfNotExists(name string, opts FieldOption) (*Field, e
 	return i.createField(name, fo)
 }
 
-func (i *Index) createFieldIfNotExists(name string, opt fieldOptions) (*Field, error) {
+func (i *Index) createFieldIfNotExists(name string, opt FieldOptions) (*Field, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -340,7 +323,7 @@ func (i *Index) createFieldIfNotExists(name string, opt fieldOptions) (*Field, e
 	return i.createField(name, opt)
 }
 
-func (i *Index) createField(name string, opt fieldOptions) (*Field, error) {
+func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 	if name == "" {
 		return nil, errors.New("field name required")
 	} else if opt.CacheType != "" && !isValidCacheType(opt.CacheType) {
@@ -348,7 +331,7 @@ func (i *Index) createField(name string, opt fieldOptions) (*Field, error) {
 	}
 
 	// Initialize field.
-	f, err := i.newField(i.FieldPath(name), name)
+	f, err := i.newField(i.fieldPath(name), name)
 	if err != nil {
 		return nil, errors.Wrap(err, "initializing")
 	}
@@ -380,7 +363,7 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	if err != nil {
 		return nil, err
 	}
-	f.Logger = i.logger
+	f.logger = i.logger
 	f.Stats = i.Stats.WithTags(fmt.Sprintf("field:%s", name))
 	f.broadcaster = i.broadcaster
 	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
@@ -395,7 +378,7 @@ func (i *Index) DeleteField(name string) error {
 	// Confirm field exists.
 	f := i.field(name)
 	if f == nil {
-		return NewNotFoundError(ErrFieldNotFound)
+		return newNotFoundError(ErrFieldNotFound)
 	}
 
 	// Close field.
@@ -404,7 +387,7 @@ func (i *Index) DeleteField(name string) error {
 	}
 
 	// Delete field directory.
-	if err := os.RemoveAll(i.FieldPath(name)); err != nil {
+	if err := os.RemoveAll(i.fieldPath(name)); err != nil {
 		return errors.Wrap(err, "removing directory")
 	}
 
@@ -422,8 +405,9 @@ func (p indexSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
 // IndexInfo represents schema information for an index.
 type IndexInfo struct {
-	Name   string       `json:"name"`
-	Fields []*FieldInfo `json:"fields"`
+	Name    string       `json:"name"`
+	options IndexOptions `json:"options"`
+	Fields  []*FieldInfo `json:"fields"`
 }
 
 type indexInfoSlice []*IndexInfo
@@ -432,33 +416,9 @@ func (p indexInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p indexInfoSlice) Len() int           { return len(p) }
 func (p indexInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
-// EncodeIndexes converts a into its internal representation.
-func EncodeIndexes(a []*Index) []*internal.Index {
-	other := make([]*internal.Index, len(a))
-	for i := range a {
-		other[i] = encodeIndex(a[i])
-	}
-	return other
-}
-
-// encodeIndex converts d into its internal representation.
-func encodeIndex(d *Index) *internal.Index {
-	return &internal.Index{
-		Name:   d.name,
-		Fields: encodeFields(d.Fields()),
-	}
-}
-
 // IndexOptions represents options to set when initializing an index.
 type IndexOptions struct {
 	Keys bool `json:"keys"`
-}
-
-// Encode converts i into its internal representation.
-func (i *IndexOptions) Encode() *internal.IndexMeta {
-	return &internal.IndexMeta{
-		Keys: i.Keys,
-	}
 }
 
 // hasTime returns true if a contains a non-nil time.

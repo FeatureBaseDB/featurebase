@@ -33,11 +33,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/internal"
 
 	"github.com/pkg/errors"
 )
@@ -46,14 +44,14 @@ import (
 type Handler struct {
 	Handler http.Handler
 
-	Logger pilosa.Logger
+	logger pilosa.Logger
 
 	// Keeps the query argument validators for each handler
 	validators map[string]*queryValidationSpec
 
-	API *pilosa.API
+	api *pilosa.API
 
-	AllowedOrigins []string
+	allowedOrigins []string
 
 	ln net.Listener
 
@@ -77,10 +75,10 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
-// HandlerOption is a functional option type for pilosa.Handler
-type HandlerOption func(s *Handler) error
+// handlerOption is a functional option type for pilosa.Handler
+type handlerOption func(s *Handler) error
 
-func OptHandlerAllowedOrigins(origins []string) HandlerOption {
+func OptHandlerAllowedOrigins(origins []string) handlerOption {
 	return func(h *Handler) error {
 		h.Handler = handlers.CORS(
 			handlers.AllowedOrigins(origins),
@@ -90,21 +88,21 @@ func OptHandlerAllowedOrigins(origins []string) HandlerOption {
 	}
 }
 
-func OptHandlerAPI(api *pilosa.API) HandlerOption {
+func OptHandlerAPI(api *pilosa.API) handlerOption {
 	return func(h *Handler) error {
-		h.API = api
+		h.api = api
 		return nil
 	}
 }
 
-func OptHandlerLogger(logger pilosa.Logger) HandlerOption {
+func OptHandlerLogger(logger pilosa.Logger) handlerOption {
 	return func(h *Handler) error {
-		h.Logger = logger
+		h.logger = logger
 		return nil
 	}
 }
 
-func OptHandlerListener(ln net.Listener) HandlerOption {
+func OptHandlerListener(ln net.Listener) handlerOption {
 	return func(h *Handler) error {
 		h.ln = ln
 		return nil
@@ -112,11 +110,11 @@ func OptHandlerListener(ln net.Listener) HandlerOption {
 }
 
 // NewHandler returns a new instance of Handler with a default logger.
-func NewHandler(opts ...HandlerOption) (*Handler, error) {
+func NewHandler(opts ...handlerOption) (*Handler, error) {
 	handler := &Handler{
-		Logger: pilosa.NopLogger,
+		logger: pilosa.NopLogger,
 	}
-	handler.Handler = NewRouter(handler)
+	handler.Handler = newRouter(handler)
 	handler.populateValidators()
 
 	for _, opt := range opts {
@@ -126,7 +124,7 @@ func NewHandler(opts ...HandlerOption) (*Handler, error) {
 		}
 	}
 
-	if handler.API == nil {
+	if handler.api == nil {
 		return nil, errors.New("must pass OptHandlerAPI")
 	}
 
@@ -142,7 +140,7 @@ func NewHandler(opts ...HandlerOption) (*Handler, error) {
 func (h *Handler) Serve() error {
 	err := h.server.Serve(h.ln)
 	if err != nil && err.Error() != "http: Server closed" {
-		h.Logger.Printf("HTTP handler terminated with error: %s\n", err)
+		h.logger.Printf("HTTP handler terminated with error: %s\n", err)
 		return errors.Wrap(err, "serve http")
 	}
 	return nil
@@ -185,8 +183,8 @@ func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
 	})
 }
 
-// NewRouter creates a new mux http router.
-func NewRouter(handler *Handler) *mux.Router {
+// newRouter creates a new mux http router.
+func newRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
 	router.HandleFunc("/", handler.handleHome).Methods("GET")
 	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST")
@@ -242,7 +240,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			stack := debug.Stack()
 			msg := "PANIC: %s\n%s"
-			h.Logger.Printf(msg, err, stack)
+			h.logger.Printf(msg, err, stack)
 			fmt.Fprintf(w, msg, err, stack)
 		}
 	}()
@@ -254,9 +252,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Calculate per request StatsD metrics when the handler is fully configured.
 	statsTags := make([]string, 0, 3)
 
-	longQueryTime := h.API.LongQueryTime()
+	longQueryTime := h.api.LongQueryTime()
 	if longQueryTime > 0 && dif > longQueryTime {
-		h.Logger.Printf("%s %s %v", r.Method, r.URL.String(), dif)
+		h.logger.Printf("%s %s %v", r.Method, r.URL.String(), dif)
 		statsTags = append(statsTags, "slow_query")
 	}
 
@@ -269,7 +267,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// useragent tag identifies internal/external endpoints
 	statsTags = append(statsTags, "useragent:"+r.UserAgent())
-	stats := h.API.StatsWithTags(statsTags)
+	stats := h.api.StatsWithTags(statsTags)
 	if stats != nil {
 		stats.Histogram("http."+endpointName, float64(dif), 0.1)
 	}
@@ -357,9 +355,9 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	schema := h.API.Schema(r.Context())
+	schema := h.api.Schema(r.Context())
 	if err := json.NewEncoder(w).Encode(map[string]interface{}{"indexes": schema}); err != nil {
-		h.Logger.Printf("write schema response error: %s", err)
+		h.logger.Printf("write schema response error: %s", err)
 	}
 }
 
@@ -370,12 +368,12 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status := getStatusResponse{
-		State:   h.API.State(),
-		Nodes:   h.API.Hosts(r.Context()),
-		LocalID: h.API.Node().ID,
+		State:   h.api.State(),
+		Nodes:   h.api.Hosts(r.Context()),
+		LocalID: h.api.Node().ID,
 	}
 	if err := json.NewEncoder(w).Encode(status); err != nil {
-		h.Logger.Printf("write status response error: %s", err)
+		h.logger.Printf("write status response error: %s", err)
 	}
 }
 
@@ -384,9 +382,9 @@ func (h *Handler) handleGetInfo(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
-	info := h.API.Info()
+	info := h.api.Info()
 	if err := json.NewEncoder(w).Encode(info); err != nil {
-		h.Logger.Printf("write info response error: %s", err)
+		h.logger.Printf("write info response error: %s", err)
 	}
 }
 
@@ -412,26 +410,33 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	// TODO: Remove
 	req.Index = mux.Vars(r)["index"]
 
-	resp, err := h.API.Query(r.Context(), req)
+	resp, err := h.api.Query(r.Context(), req)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		switch errors.Cause(resp.Err) {
+		case pilosa.ErrTooManyWrites:
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+		}
 		h.writeQueryResponse(w, r, &pilosa.QueryResponse{Err: err})
 		return
 	}
 
-	// Set appropriate status code, if there is an error.
+	// Set appropriate status code, if there is an error. It doesn't appear that
+	// resp.Err could ever be set in API.Query, so this code block is probably
+	// doing nothing right now.
 	if resp.Err != nil {
-		switch resp.Err {
+		switch errors.Cause(resp.Err) {
 		case pilosa.ErrTooManyWrites:
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
 		default:
-			w.WriteHeader(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusBadRequest)
 		}
 	}
 
 	// Write response back to client.
 	if err := h.writeQueryResponse(w, r, &resp); err != nil {
-		h.Logger.Printf("write query response error: %s", err)
+		h.logger.Printf("write query response error: %s", err)
 	}
 }
 
@@ -442,9 +447,9 @@ func (h *Handler) handleGetShardsMax(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := json.NewEncoder(w).Encode(getShardsMaxResponse{
-		Standard: h.API.MaxShards(r.Context()),
+		Standard: h.api.MaxShards(r.Context()),
 	}); err != nil {
-		h.Logger.Printf("write shards-max response error: %s", err)
+		h.logger.Printf("write shards-max response error: %s", err)
 	}
 }
 
@@ -464,10 +469,10 @@ func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	indexName := mux.Vars(r)["index"]
-	for _, idx := range h.API.Schema(r.Context()) {
-		if idx.Name() == indexName {
+	for _, idx := range h.api.Schema(r.Context()) {
+		if idx.Name == indexName {
 			if err := json.NewEncoder(w).Encode(idx); err != nil {
-				h.Logger.Printf("write response error: %s", err)
+				h.logger.Printf("write response error: %s", err)
 			}
 			return
 		}
@@ -558,7 +563,7 @@ func (h *Handler) handleDeleteIndex(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 
 	resp := successResponse{}
-	err := h.API.DeleteIndex(r.Context(), indexName)
+	err := h.api.DeleteIndex(r.Context(), indexName)
 	resp.write(w, err)
 }
 
@@ -579,7 +584,7 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 		resp.write(w, err)
 		return
 	}
-	_, err = h.API.CreateIndex(r.Context(), indexName, req.Options)
+	_, err = h.api.CreateIndex(r.Context(), indexName, req.Options)
 
 	resp.write(w, err)
 }
@@ -599,7 +604,7 @@ func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	attrs, err := h.API.IndexAttrDiff(r.Context(), indexName, req.Blocks)
+	attrs, err := h.api.IndexAttrDiff(r.Context(), indexName, req.Blocks)
 	if err != nil {
 		if errors.Cause(err) == pilosa.ErrIndexNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -613,7 +618,7 @@ func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request
 	if err := json.NewEncoder(w).Encode(postIndexAttrDiffResponse{
 		Attrs: attrs,
 	}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
+		h.logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -668,7 +673,7 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	_, err = h.API.CreateField(r.Context(), indexName, fieldName, fos...)
+	_, err = h.api.CreateField(r.Context(), indexName, fieldName, fos...)
 	resp.write(w, err)
 }
 
@@ -676,7 +681,7 @@ type postFieldRequest struct {
 	Options fieldOptions `json:"options"`
 }
 
-// fieldOptions tracks pilosa.fieldOptions. It is made up of pointers to values,
+// fieldOptions tracks pilosa.FieldOptions. It is made up of pointers to values,
 // and used for input validation.
 type fieldOptions struct {
 	Type        string              `json:"type,omitempty"`
@@ -755,7 +760,7 @@ func (h *Handler) handleDeleteField(w http.ResponseWriter, r *http.Request) {
 	fieldName := mux.Vars(r)["field"]
 
 	resp := successResponse{}
-	err := h.API.DeleteField(r.Context(), indexName, fieldName)
+	err := h.api.DeleteField(r.Context(), indexName, fieldName)
 	resp.write(w, err)
 }
 
@@ -775,7 +780,7 @@ func (h *Handler) handlePostFieldAttrDiff(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	attrs, err := h.API.FieldAttrDiff(r.Context(), indexName, fieldName, req.Blocks)
+	attrs, err := h.api.FieldAttrDiff(r.Context(), indexName, fieldName, req.Blocks)
 	if err != nil {
 		switch errors.Cause(err) {
 		case pilosa.ErrFragmentNotFound:
@@ -790,7 +795,7 @@ func (h *Handler) handlePostFieldAttrDiff(w http.ResponseWriter, r *http.Request
 	if err := json.NewEncoder(w).Encode(postFieldAttrDiffResponse{
 		Attrs: attrs,
 	}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
+		h.logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -820,13 +825,12 @@ func (h *Handler) readProtobufQueryRequest(r *http.Request) (*pilosa.QueryReques
 		return nil, errors.Wrap(err, "reading")
 	}
 
-	// Unmarshal into object.
-	var req internal.QueryRequest
-	if err := proto.Unmarshal(body, &req); err != nil {
-		return nil, errors.Wrap(err, "unmarshalling")
+	qreq := &pilosa.QueryRequest{}
+	err = h.api.Serializer.Unmarshal(body, qreq)
+	if err != nil {
+		return nil, errors.Wrap(err, "unmarshalling query request")
 	}
-
-	return decodeQueryRequest(&req), nil
+	return qreq, nil
 }
 
 // readURLQueryRequest parses query parameters from URL parameters from r.
@@ -865,7 +869,7 @@ func (h *Handler) writeQueryResponse(w http.ResponseWriter, r *http.Request, res
 
 // writeProtobufQueryResponse writes the response from the executor to w as protobuf.
 func (h *Handler) writeProtobufQueryResponse(w http.ResponseWriter, resp *pilosa.QueryResponse) error {
-	if buf, err := proto.Marshal(encodeQueryResponse(resp)); err != nil {
+	if buf, err := h.api.Serializer.Marshal(resp); err != nil {
 		return errors.Wrap(err, "marshalling")
 	} else if _, err := w.Write(buf); err != nil {
 		return errors.Wrap(err, "writing")
@@ -893,7 +897,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 
 	// Get index and field type to determine how to handle the
 	// import data.
-	field, err := h.API.Field(r.Context(), indexName, fieldName)
+	field, err := h.api.Field(r.Context(), indexName, fieldName)
 	if err != nil {
 		switch errors.Cause(err) {
 		case pilosa.ErrIndexNotFound:
@@ -917,13 +921,13 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	if field.Type() == pilosa.FieldTypeInt {
 		// Field type: Int
 		// Marshal into request object.
-		var req internal.ImportValueRequest
-		if err := proto.Unmarshal(body, &req); err != nil {
+		req := &pilosa.ImportValueRequest{}
+		if err := h.api.Serializer.Unmarshal(body, req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		if err := h.API.ImportValue(r.Context(), req); err != nil {
+		if err := h.api.ImportValue(r.Context(), req); err != nil {
 			switch errors.Cause(err) {
 			case pilosa.ErrClusterDoesNotOwnShard:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
@@ -935,13 +939,13 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Field type: Set, Time
 		// Marshal into request object.
-		var req internal.ImportRequest
-		if err := proto.Unmarshal(body, &req); err != nil {
+		req := &pilosa.ImportRequest{}
+		if err := h.api.Serializer.Unmarshal(body, req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		if err := h.API.Import(r.Context(), req); err != nil {
+		if err := h.api.Import(r.Context(), req); err != nil {
 			switch errors.Cause(err) {
 			case pilosa.ErrClusterDoesNotOwnShard:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
@@ -953,7 +957,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Marshal response object.
-	buf, e := proto.Marshal(&internal.ImportResponse{Err: ""})
+	buf, e := h.api.Serializer.Marshal(&pilosa.ImportResponse{Err: ""})
 	if e != nil {
 		http.Error(w, fmt.Sprintf("marshal import response"), http.StatusInternalServerError)
 		return
@@ -984,7 +988,7 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = h.API.ExportCSV(r.Context(), index, field, shard, w); err != nil {
+	if err = h.api.ExportCSV(r.Context(), index, field, shard, w); err != nil {
 		switch errors.Cause(err) {
 		case pilosa.ErrFragmentNotFound:
 			break
@@ -1014,7 +1018,7 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Retrieve fragment owner nodes.
-	nodes, err := h.API.ShardNodes(r.Context(), index, shard)
+	nodes, err := h.api.ShardNodes(r.Context(), index, shard)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -1022,13 +1026,13 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 
 	// Write to response.
 	if err := json.NewEncoder(w).Encode(nodes); err != nil {
-		h.Logger.Printf("json write error: %s", err)
+		h.logger.Printf("json write error: %s", err)
 	}
 }
 
 // handleGetFragmentBlockData handles GET /internal/fragment/block/data requests.
 func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Request) {
-	buf, err := h.API.FragmentBlockData(r.Context(), r.Body)
+	buf, err := h.api.FragmentBlockData(r.Context(), r.Body)
 	if err != nil {
 		if _, ok := err.(pilosa.BadRequestError); ok {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1060,7 +1064,7 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	blocks, err := h.API.FragmentBlocks(r.Context(), q.Get("index"), q.Get("field"), shard)
+	blocks, err := h.api.FragmentBlocks(r.Context(), q.Get("index"), q.Get("field"), shard)
 	if err != nil {
 		if errors.Cause(err) == pilosa.ErrFragmentNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -1074,7 +1078,7 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 	if err := json.NewEncoder(w).Encode(getFragmentBlocksResponse{
 		Blocks: blocks,
 	}); err != nil {
-		h.Logger.Printf("block response encoding error: %s", err)
+		h.logger.Printf("block response encoding error: %s", err)
 	}
 }
 
@@ -1091,72 +1095,22 @@ func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 	err := json.NewEncoder(w).Encode(struct {
 		Version string `json:"version"`
 	}{
-		Version: h.API.Version(),
+		Version: h.api.Version(),
 	})
 	if err != nil {
-		h.Logger.Printf("write version response error: %s", err)
+		h.logger.Printf("write version response error: %s", err)
 	}
 }
 
 // QueryResult types.
 const (
-	QueryResultTypeNil uint32 = iota
+	queryResultTypeNil uint32 = iota
 	QueryResultTypeRow
 	QueryResultTypePairs
-	QueryResultTypeValCount
+	queryResultTypeValCount
 	QueryResultTypeUint64
-	QueryResultTypeBool
+	queryResultTypeBool
 )
-
-func decodeQueryRequest(pb *internal.QueryRequest) *pilosa.QueryRequest {
-	req := &pilosa.QueryRequest{
-		Query:           pb.Query,
-		Shards:          pb.Shards,
-		ColumnAttrs:     pb.ColumnAttrs,
-		Remote:          pb.Remote,
-		ExcludeRowAttrs: pb.ExcludeRowAttrs,
-		ExcludeColumns:  pb.ExcludeColumns,
-	}
-
-	return req
-}
-
-func encodeQueryResponse(resp *pilosa.QueryResponse) *internal.QueryResponse {
-	pb := &internal.QueryResponse{
-		Results:        make([]*internal.QueryResult, len(resp.Results)),
-		ColumnAttrSets: pilosa.EncodeColumnAttrSets(resp.ColumnAttrSets),
-	}
-
-	for i := range resp.Results {
-		pb.Results[i] = &internal.QueryResult{}
-
-		switch result := resp.Results[i].(type) {
-		case *pilosa.Row:
-			pb.Results[i].Type = QueryResultTypeRow
-			pb.Results[i].Row = pilosa.EncodeRow(result)
-		case []pilosa.Pair:
-			pb.Results[i].Type = QueryResultTypePairs
-			pb.Results[i].Pairs = pilosa.EncodePairs(result)
-		case pilosa.ValCount:
-			pb.Results[i].Type = QueryResultTypeValCount
-			pb.Results[i].ValCount = pilosa.EncodeValCount(result)
-		case uint64:
-			pb.Results[i].Type = QueryResultTypeUint64
-			pb.Results[i].N = result
-		case bool:
-			pb.Results[i].Type = QueryResultTypeBool
-			pb.Results[i].Changed = result
-		case nil:
-			pb.Results[i].Type = QueryResultTypeNil
-		}
-	}
-
-	if resp.Err != nil {
-		pb.Err = resp.Err.Error()
-	}
-
-	return pb
-}
 
 // parseUint64Slice returns a slice of uint64s from a comma-delimited string.
 func parseUint64Slice(s string) ([]uint64, error) {
@@ -1198,7 +1152,7 @@ func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r
 		return
 	}
 
-	oldNode, newNode, err := h.API.SetCoordinator(r.Context(), req.ID)
+	oldNode, newNode, err := h.api.SetCoordinator(r.Context(), req.ID)
 	if err != nil {
 		if errors.Cause(err) == pilosa.ErrNodeIDNotExists {
 			http.Error(w, "setting new coordinator: "+err.Error(), http.StatusNotFound)
@@ -1212,7 +1166,7 @@ func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r
 		Old: oldNode,
 		New: newNode,
 	}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
+		h.logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -1239,7 +1193,7 @@ func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *ht
 		return
 	}
 
-	removeNode, err := h.API.RemoveNode(req.ID)
+	removeNode, err := h.api.RemoveNode(req.ID)
 	if err != nil {
 		if errors.Cause(err) == pilosa.ErrNodeIDNotExists {
 			http.Error(w, "removing node: "+err.Error(), http.StatusNotFound)
@@ -1253,7 +1207,7 @@ func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *ht
 	if err := json.NewEncoder(w).Encode(removeNodeResponse{
 		Remove: removeNode,
 	}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
+		h.logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -1271,7 +1225,7 @@ func (h *Handler) handlePostClusterResizeAbort(w http.ResponseWriter, r *http.Re
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
-	err := h.API.ResizeAbort()
+	err := h.api.ResizeAbort()
 	var msg string
 	if err != nil {
 		switch errors.Cause(err) {
@@ -1289,7 +1243,7 @@ func (h *Handler) handlePostClusterResizeAbort(w http.ResponseWriter, r *http.Re
 	if err := json.NewEncoder(w).Encode(clusterResizeAbortResponse{
 		Info: msg,
 	}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
+		h.logger.Printf("response encoding error: %s", err)
 	}
 }
 
@@ -1298,7 +1252,7 @@ type clusterResizeAbortResponse struct {
 }
 
 func (h *Handler) handleRecalculateCaches(w http.ResponseWriter, r *http.Request) {
-	err := h.API.RecalculateCaches(r.Context())
+	err := h.api.RecalculateCaches(r.Context())
 	if err != nil {
 		http.Error(w, "recalculating caches: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -1318,19 +1272,15 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	err := h.API.ClusterMessage(r.Context(), r.Body)
+	err := h.api.ClusterMessage(r.Context(), r.Body)
 	if err != nil {
 		// TODO this was the previous behavior, but perhaps not everything is a bad request
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 
 	if err := json.NewEncoder(w).Encode(defaultClusterMessageResponse{}); err != nil {
-		h.Logger.Printf("response encoding error: %s", err)
+		h.logger.Printf("response encoding error: %s", err)
 	}
-}
-
-func (h *Handler) GetAPI() *pilosa.API {
-	return h.API
 }
 
 type defaultClusterMessageResponse struct{}
@@ -1341,7 +1291,7 @@ func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request)
 
 	pipeR, pipeW := io.Pipe()
 
-	err := h.API.GetTranslateData(r.Context(), pipeW, offset)
+	err := h.api.GetTranslateData(r.Context(), pipeW, offset)
 
 	if err != nil {
 		if errors.Cause(err) == pilosa.ErrNotImplemented {

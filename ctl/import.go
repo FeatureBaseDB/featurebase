@@ -41,7 +41,7 @@ type ImportCommand struct {
 	Field string `json:"field"`
 
 	// Options for index & field to be created if they don't exist
-	IndexOptions pilosa.IndexOptions
+	indexOptions pilosa.IndexOptions
 
 	// CreateSchema ensures the schema exists before import
 	CreateSchema bool
@@ -59,7 +59,7 @@ type ImportCommand struct {
 	Sort bool `json:"sort"`
 
 	// Reusable client.
-	Client pilosa.InternalClient `json:"-"`
+	client pilosa.InternalClient `json:"-"`
 
 	// Standard input/output
 	*pilosa.CmdIO
@@ -89,11 +89,11 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 		return errors.New("path required")
 	}
 	// Create a client to the server.
-	client, err := CommandClient(cmd)
+	client, err := commandClient(cmd)
 	if err != nil {
 		return errors.Wrap(err, "creating client")
 	}
-	cmd.Client = client
+	cmd.client = client
 
 	if cmd.CreateSchema {
 		err := cmd.ensureSchema(ctx)
@@ -104,7 +104,7 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 
 	// Determine the field type in order to correctly handle the input data.
 	fieldType := pilosa.DefaultFieldType
-	schema, err := cmd.Client.Schema(ctx)
+	schema, err := cmd.client.Schema(ctx)
 	if err != nil {
 		return errors.Wrap(err, "getting schema")
 	}
@@ -130,11 +130,11 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 }
 
 func (cmd *ImportCommand) ensureSchema(ctx context.Context) error {
-	err := cmd.Client.EnsureIndex(ctx, cmd.Index, cmd.IndexOptions)
+	err := cmd.client.EnsureIndex(ctx, cmd.Index, cmd.indexOptions)
 	if err != nil {
 		return fmt.Errorf("Error Creating Index: %s", err)
 	}
-	err = cmd.Client.EnsureField(ctx, cmd.Index, cmd.Field)
+	err = cmd.client.EnsureField(ctx, cmd.Index, cmd.Field)
 	if err != nil {
 		return fmt.Errorf("Error Creating Field: %s", err)
 	}
@@ -254,7 +254,7 @@ func (cmd *ImportCommand) importBits(ctx context.Context, bits []pilosa.Bit) err
 		}
 
 		logger.Printf("importing shard: %d, n=%d", shard, len(chunk))
-		if err := cmd.Client.Import(ctx, cmd.Index, cmd.Field, shard, chunk); err != nil {
+		if err := cmd.client.Import(ctx, cmd.Index, cmd.Field, shard, chunk); err != nil {
 			return errors.Wrap(err, "importing")
 		}
 	}
@@ -351,7 +351,7 @@ func (cmd *ImportCommand) importBitsK(ctx context.Context, bits []pilosa.Bit) er
 	// TODO: does it help to sort the rowKeys?
 
 	logger.Printf("importing keys: n=%d", len(bits))
-	if err := cmd.Client.ImportK(ctx, cmd.Index, cmd.Field, bits); err != nil {
+	if err := cmd.client.ImportK(ctx, cmd.Index, cmd.Field, bits); err != nil {
 		return errors.Wrap(err, "importing keys")
 	}
 
@@ -448,7 +448,7 @@ func (cmd *ImportCommand) importValues(ctx context.Context, vals []pilosa.FieldV
 		}
 
 		logger.Printf("importing shard: %d, n=%d", shard, len(vals))
-		if err := cmd.Client.ImportValue(ctx, cmd.Index, cmd.Field, shard, vals); err != nil {
+		if err := cmd.client.ImportValue(ctx, cmd.Index, cmd.Field, shard, vals); err != nil {
 			return errors.Wrap(err, "importing values")
 		}
 	}
