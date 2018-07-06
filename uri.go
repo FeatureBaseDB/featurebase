@@ -69,7 +69,7 @@ func (u URIs) HostPortStrings() []string {
 // NewURIFromHostPort returns a URI with specified host and port.
 func NewURIFromHostPort(host string, port uint16) (*URI, error) {
 	uri := defaultURI()
-	err := uri.SetHost(host)
+	err := uri.setHost(host)
 	if err != nil {
 		return nil, errors.Wrap(err, "setting uri host")
 	}
@@ -92,8 +92,8 @@ func (u *URI) SetScheme(scheme string) error {
 	return nil
 }
 
-// SetHost sets the host of this URI.
-func (u *URI) SetHost(host string) error {
+// setHost sets the host of this URI.
+func (u *URI) setHost(host string) error {
 	m := hostRegexp.FindStringSubmatch(host)
 	if m == nil {
 		return errors.New("invalid host")

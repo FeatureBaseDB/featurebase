@@ -57,14 +57,14 @@ func NewTestCluster(n int) *cluster {
 func NewTestURI(scheme, host string, port uint16) URI {
 	uri := defaultURI()
 	uri.SetScheme(scheme)
-	uri.SetHost(host)
+	uri.setHost(host)
 	uri.SetPort(port)
 	return *uri
 }
 
 func NewTestURIFromHostPort(host string, port uint16) URI {
 	uri := defaultURI()
-	uri.SetHost(host)
+	uri.setHost(host)
 	uri.SetPort(port)
 	return *uri
 }

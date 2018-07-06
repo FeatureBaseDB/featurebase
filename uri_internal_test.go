@@ -91,7 +91,7 @@ func TestSetScheme(t *testing.T) {
 func TestSetHost(t *testing.T) {
 	uri := defaultURI()
 	target := "10.20.30.40"
-	err := uri.SetHost(target)
+	err := uri.setHost(target)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestSetInvalidScheme(t *testing.T) {
 
 func TestSetInvalidHost(t *testing.T) {
 	uri := defaultURI()
-	err := uri.SetHost("index?.pilosa.com")
+	err := uri.setHost("index?.pilosa.com")
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}
