@@ -142,8 +142,8 @@ func (s *TranslateFile) Closing() <-chan struct{} {
 	return s.closing
 }
 
-// Size returns the number of bytes in use in the data file.
-func (s *TranslateFile) Size() int64 {
+// size returns the number of bytes in use in the data file.
+func (s *TranslateFile) size() int64 {
 	s.mu.RLock()
 	n := s.n
 	s.mu.RUnlock()
@@ -277,7 +277,7 @@ func (s *TranslateFile) monitorReplication() {
 }
 
 func (s *TranslateFile) replicate(ctx context.Context) error {
-	off := s.Size()
+	off := s.size()
 
 	// Connect to remote primary.
 	log.Printf("pilosa: replicating from offset %d", off)
@@ -967,7 +967,7 @@ func (r *TranslateFileReader) Read(p []byte) (n int, err error) {
 
 // read writes the bytes for zero or more valid entries to p.
 func (r *TranslateFileReader) read(p []byte) (n int, err error) {
-	sz := r.store.Size()
+	sz := r.store.size()
 
 	// Exit if there is no new data.
 	if sz < r.offset {
