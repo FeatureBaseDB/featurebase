@@ -500,7 +500,7 @@ func (b *Bitmap) Optimize() {
 	citer, _ := b.Containers.Iterator(0)
 	for citer.Next() {
 		_, c := citer.Value()
-		c.Optimize()
+		c.optimize()
 	}
 }
 
@@ -1315,9 +1315,9 @@ func (c *Container) countRuns() (r int) {
 	return 0
 }
 
-// Optimize converts the container to the type which will take up the least
+// optimize converts the container to the type which will take up the least
 // amount of space.
-func (c *Container) Optimize() {
+func (c *Container) optimize() {
 	if c.n == 0 {
 		return
 	}
@@ -2142,7 +2142,7 @@ func intersectBitmapBitmap(a, b *Container) *Container {
 		output.n += int(popcount(v))
 
 	}
-	output.Optimize()
+	output.optimize()
 	return output
 }
 
@@ -2621,7 +2621,7 @@ RUNLOOP:
 			output.n += int(run.last - start + 1)
 		}
 	}
-	output.Optimize()
+	output.optimize()
 	return output
 }
 
