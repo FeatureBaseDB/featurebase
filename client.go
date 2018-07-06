@@ -62,11 +62,11 @@ func (n *NopInternalQueryClient) QueryNode(ctx context.Context, uri *URI, index 
 	return nil, nil
 }
 
-func NewNopInternalQueryClient() *NopInternalQueryClient {
+func newNopInternalQueryClient() *NopInternalQueryClient {
 	return &NopInternalQueryClient{}
 }
 
-var _ InternalQueryClient = NewNopInternalQueryClient()
+var _ InternalQueryClient = newNopInternalQueryClient()
 
 //===============
 

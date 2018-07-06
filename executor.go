@@ -67,7 +67,7 @@ func optExecutorInternalQueryClient(c InternalQueryClient) executorOption {
 // newExecutor returns a new instance of Executor.
 func newExecutor(opts ...executorOption) *executor {
 	e := &executor{
-		client: NewNopInternalQueryClient(),
+		client: newNopInternalQueryClient(),
 	}
 	for _, opt := range opts {
 		err := opt(e)
