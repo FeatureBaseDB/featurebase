@@ -445,7 +445,7 @@ func formatValue(v interface{}) string {
 	case []uint64:
 		return fmt.Sprintf("%s", joinUint64Slice(v))
 	case time.Time:
-		return fmt.Sprintf("\"%s\"", v.Format(TimeFormat))
+		return fmt.Sprintf("\"%s\"", v.Format(timeFormat))
 	case *Condition:
 		return v.String()
 	default:
