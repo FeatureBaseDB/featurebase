@@ -48,8 +48,8 @@ func OptAllowedOrigins(origins []string) server.CommandOption {
 	}
 }
 
-// NewCommand returns a new instance of Main with a temporary data directory and random port.
-func NewCommand(opts ...server.CommandOption) *Command {
+// newCommand returns a new instance of Main with a temporary data directory and random port.
+func newCommand(opts ...server.CommandOption) *Command {
 	path, err := ioutil.TempDir("", "pilosa-")
 	if err != nil {
 		panic(err)
@@ -73,7 +73,7 @@ func NewCommand(opts ...server.CommandOption) *Command {
 
 // NewCommandNode returns a new instance of Command with clustering enabled.
 func NewCommandNode(isCoordinator bool, opts ...server.CommandOption) *Command {
-	m := NewCommand(opts...)
+	m := newCommand(opts...)
 	m.Config.Cluster.Disabled = false
 	m.Config.Cluster.Coordinator = isCoordinator
 	return m
@@ -81,7 +81,7 @@ func NewCommandNode(isCoordinator bool, opts ...server.CommandOption) *Command {
 
 // MustRunCommand returns a new, running Main. Panic on error.
 func MustRunCommand() *Command {
-	m := NewCommand()
+	m := newCommand()
 	m.Config.Metric.Diagnostics = false // Disable diagnostics.
 	if err := m.Start(); err != nil {
 		panic(err)
