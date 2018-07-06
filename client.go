@@ -56,14 +56,14 @@ type InternalQueryClient interface {
 	QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error)
 }
 
-type NopInternalQueryClient struct{}
+type nopInternalQueryClient struct{}
 
-func (n *NopInternalQueryClient) QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
+func (n *nopInternalQueryClient) QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
 	return nil, nil
 }
 
-func newNopInternalQueryClient() *NopInternalQueryClient {
-	return &NopInternalQueryClient{}
+func newNopInternalQueryClient() *nopInternalQueryClient {
+	return &nopInternalQueryClient{}
 }
 
 var _ InternalQueryClient = newNopInternalQueryClient()
