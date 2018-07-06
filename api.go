@@ -643,7 +643,7 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest) error 
 		return errors.Wrap(err, "getting field")
 	}
 	// Import into fragment.
-	err = field.ImportValue(req.ColumnIDs, req.Values)
+	err = field.importValue(req.ColumnIDs, req.Values)
 	if err != nil {
 		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 	}

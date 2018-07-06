@@ -1035,8 +1035,8 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 	return nil
 }
 
-// ImportValue bulk imports range-encoded value data.
-func (f *Field) ImportValue(columnIDs []uint64, values []int64) error {
+// importValue bulk imports range-encoded value data.
+func (f *Field) importValue(columnIDs []uint64, values []int64) error {
 	viewName := viewBSIGroupPrefix + f.name
 	// Get the bsiGroup so we know bitDepth.
 	bsig := f.bsiGroup(f.name)
