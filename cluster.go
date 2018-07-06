@@ -1375,14 +1375,14 @@ func (j *resizeJob) distributeResizeInstructions() error {
 	return nil
 }
 
-type NodeIDs []string
+type nodeIDs []string
 
-func (n NodeIDs) Len() int           { return len(n) }
-func (n NodeIDs) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
-func (n NodeIDs) Less(i, j int) bool { return n[i] < n[j] }
+func (n nodeIDs) Len() int           { return len(n) }
+func (n nodeIDs) Swap(i, j int)      { n[i], n[j] = n[j], n[i] }
+func (n nodeIDs) Less(i, j int) bool { return n[i] < n[j] }
 
 // ContainsID returns true if idi matches one of the nodesets's IDs.
-func (n NodeIDs) ContainsID(id string) bool {
+func (n nodeIDs) ContainsID(id string) bool {
 	for _, nid := range n {
 		if nid == id {
 			return true
@@ -1417,7 +1417,7 @@ func (t *Topology) ContainsID(id string) bool {
 }
 
 func (t *Topology) containsID(id string) bool {
-	return NodeIDs(t.NodeIDs).ContainsID(id)
+	return nodeIDs(t.NodeIDs).ContainsID(id)
 }
 
 func (t *Topology) positionByID(nodeID string) int {
