@@ -346,7 +346,7 @@ func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
 		switch result := m.Results[i].(type) {
 		case *pilosa.Row:
 			pb.Results[i].Type = queryResultTypeRow
-			pb.Results[i].Row = EncodeRow(result)
+			pb.Results[i].Row = encodeRow(result)
 		case []pilosa.Pair:
 			pb.Results[i].Type = queryResultTypePairs
 			pb.Results[i].Pairs = encodePairs(result)
@@ -965,7 +965,7 @@ func encodeColumnAttrSet(set *pilosa.ColumnAttrSet) *internal.ColumnAttrSet {
 	}
 }
 
-func EncodeRow(r *pilosa.Row) *internal.Row {
+func encodeRow(r *pilosa.Row) *internal.Row {
 	if r == nil {
 		return nil
 	}
