@@ -725,8 +725,8 @@ func (b *Bitmap) Iterator() *Iterator {
 }
 
 // Info returns stats for the bitmap.
-func (b *Bitmap) Info() BitmapInfo {
-	info := BitmapInfo{
+func (b *Bitmap) Info() bitmapInfo {
+	info := bitmapInfo{
 		OpN:        b.opN,
 		Containers: make([]ContainerInfo, 0, b.Containers.Size()),
 	}
@@ -788,8 +788,8 @@ func (b *Bitmap) Flip(start, end uint64) *Bitmap {
 	return result
 }
 
-// BitmapInfo represents a point-in-time snapshot of bitmap stats.
-type BitmapInfo struct {
+// bitmapInfo represents a point-in-time snapshot of bitmap stats.
+type bitmapInfo struct {
 	OpN        int
 	Containers []ContainerInfo
 }
