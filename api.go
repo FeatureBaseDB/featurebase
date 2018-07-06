@@ -90,7 +90,7 @@ func (api *API) validate(f apiMethod) error {
 	if _, ok := validAPIMethods[state][f]; ok {
 		return nil
 	}
-	return NewApiMethodNotAllowedError(errors.Errorf("api method %s not allowed in state %s", f, state))
+	return newApiMethodNotAllowedError(errors.Errorf("api method %s not allowed in state %s", f, state))
 }
 
 // Query parses a PQL query out of the request and executes it.
