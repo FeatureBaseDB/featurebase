@@ -953,12 +953,12 @@ func decodeValCount(pb *internal.ValCount) pilosa.ValCount {
 func EncodeColumnAttrSets(a []*pilosa.ColumnAttrSet) []*internal.ColumnAttrSet {
 	other := make([]*internal.ColumnAttrSet, len(a))
 	for i := range a {
-		other[i] = EncodeColumnAttrSet(a[i])
+		other[i] = encodeColumnAttrSet(a[i])
 	}
 	return other
 }
 
-func EncodeColumnAttrSet(set *pilosa.ColumnAttrSet) *internal.ColumnAttrSet {
+func encodeColumnAttrSet(set *pilosa.ColumnAttrSet) *internal.ColumnAttrSet {
 	return &internal.ColumnAttrSet{
 		ID:    set.ID,
 		Attrs: encodeAttrs(set.Attrs),
