@@ -49,8 +49,8 @@ func MustOpenField(opts pilosa.FieldOption) *Field {
 	return f
 }
 
-// Close closes the field and removes the underlying data.
-func (f *Field) Close() error {
+// close closes the field and removes the underlying data.
+func (f *Field) close() error {
 	defer os.RemoveAll(f.Path())
 	return f.Field.Close()
 }
@@ -77,7 +77,7 @@ func (f *Field) Reopen() error {
 // Ensure field can set its cache
 func TestField_SetCacheSize(t *testing.T) {
 	f := MustOpenField(pilosa.OptFieldTypeDefault())
-	defer f.Close()
+	defer f.close()
 	cacheSize := uint32(100)
 
 	// Set & retrieve field cache size.
