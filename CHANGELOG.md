@@ -42,7 +42,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Remove backup/restore stuff ([#1339](https://github.com/pilosa/pilosa/pull/1339), [#1341](https://github.com/pilosa/pilosa/pull/1341))
 - Remove inverse frame functionality ([#1335](https://github.com/pilosa/pilosa/pull/1335))
 - Remove rangeEnabled option ([#1332](https://github.com/pilosa/pilosa/pull/1332))
-- Remove Holder from API ([#1469](https://github.com/pilosa/pilosa/pull/1469))
 - Remove index and field MarshalJSON ([#1468](https://github.com/pilosa/pilosa/pull/1468))
 
 ### Fixed
