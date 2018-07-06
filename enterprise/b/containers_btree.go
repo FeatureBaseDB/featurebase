@@ -172,18 +172,18 @@ func (btc *BTreeContainers) Iterator(key uint64) (citer roaring.ContainerIterato
 		found = true
 	}
 
-	return &BTCIterator{
+	return &btcIterator{
 		e: e,
 	}, found
 }
 
-type BTCIterator struct {
+type btcIterator struct {
 	e   *Enumerator
 	key uint64
 	val *roaring.Container
 }
 
-func (i *BTCIterator) Next() bool {
+func (i *btcIterator) Next() bool {
 
 	k, v, err := i.e.Next()
 	if err == io.EOF {
@@ -194,7 +194,7 @@ func (i *BTCIterator) Next() bool {
 	return true
 }
 
-func (i *BTCIterator) Value() (uint64, *roaring.Container) {
+func (i *btcIterator) Value() (uint64, *roaring.Container) {
 	if i.val == nil {
 		return 0, nil
 	}
