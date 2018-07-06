@@ -349,7 +349,7 @@ func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
 			pb.Results[i].Row = EncodeRow(result)
 		case []pilosa.Pair:
 			pb.Results[i].Type = queryResultTypePairs
-			pb.Results[i].Pairs = EncodePairs(result)
+			pb.Results[i].Pairs = encodePairs(result)
 		case pilosa.ValCount:
 			pb.Results[i].Type = queryResultTypeValCount
 			pb.Results[i].ValCount = EncodeValCount(result)
@@ -976,7 +976,7 @@ func EncodeRow(r *pilosa.Row) *internal.Row {
 	}
 }
 
-func EncodePairs(a pilosa.Pairs) []*internal.Pair {
+func encodePairs(a pilosa.Pairs) []*internal.Pair {
 	other := make([]*internal.Pair, len(a))
 	for i := range a {
 		other[i] = encodePair(a[i])
