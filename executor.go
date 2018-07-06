@@ -712,7 +712,7 @@ func (e *executor) executeIntersectShard(ctx context.Context, index string, c *p
 		if i == 0 {
 			other = row
 		} else {
-			other = other.Intersect(row)
+			other = other.intersect(row)
 		}
 	}
 	other.InvalidateCount()

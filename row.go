@@ -82,8 +82,8 @@ func (r *Row) IntersectionCount(other *Row) uint64 {
 	return n
 }
 
-// Intersect returns the itersection of r and other.
-func (r *Row) Intersect(other *Row) *Row {
+// intersect returns the itersection of r and other.
+func (r *Row) intersect(other *Row) *Row {
 	var segments []RowSegment
 
 	itr := newMergeSegmentIterator(r.segments, other.segments)
