@@ -159,8 +159,8 @@ func (r *Row) SetBit(i uint64) (changed bool) {
 	return r.createSegmentIfNotExists(i / ShardWidth).SetBit(i)
 }
 
-// ClearBit clears the i-th column of the row.
-func (r *Row) ClearBit(i uint64) (changed bool) {
+// clearBit clears the i-th column of the row.
+func (r *Row) clearBit(i uint64) (changed bool) {
 	s := r.segment(i / ShardWidth)
 	if s == nil {
 		return false
