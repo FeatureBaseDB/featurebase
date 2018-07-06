@@ -728,7 +728,7 @@ func (b *Bitmap) Iterator() *Iterator {
 func (b *Bitmap) Info() bitmapInfo {
 	info := bitmapInfo{
 		OpN:        b.opN,
-		Containers: make([]ContainerInfo, 0, b.Containers.Size()),
+		Containers: make([]containerInfo, 0, b.Containers.Size()),
 	}
 
 	citer, _ := b.Containers.Iterator(0)
@@ -791,7 +791,7 @@ func (b *Bitmap) Flip(start, end uint64) *Bitmap {
 // bitmapInfo represents a point-in-time snapshot of bitmap stats.
 type bitmapInfo struct {
 	OpN        int
-	Containers []ContainerInfo
+	Containers []containerInfo
 }
 
 // Iterator represents an iterator over a Bitmap.
@@ -1730,8 +1730,8 @@ func (c *Container) size() int {
 }
 
 // info returns the current stats about the container.
-func (c *Container) info() ContainerInfo {
-	info := ContainerInfo{N: c.n}
+func (c *Container) info() containerInfo {
+	info := containerInfo{N: c.n}
 
 	if c.isArray() {
 		info.Type = "array"
@@ -1787,8 +1787,8 @@ func (c *Container) check() error {
 	return a
 }
 
-// ContainerInfo represents a point-in-time snapshot of container stats.
-type ContainerInfo struct {
+// containerInfo represents a point-in-time snapshot of container stats.
+type containerInfo struct {
 	Key     uint64         // container key
 	Type    string         // container type (array, bitmap, or run)
 	N       int            // number of bits
