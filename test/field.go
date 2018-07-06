@@ -40,8 +40,8 @@ func NewField(opts pilosa.FieldOption) *Field {
 	return &Field{Field: field}
 }
 
-// MustOpenField returns a new, opened field at a temporary path. Panic on error.
-func MustOpenField(opts pilosa.FieldOption) *Field {
+// mustOpenField returns a new, opened field at a temporary path. Panic on error.
+func mustOpenField(opts pilosa.FieldOption) *Field {
 	f := NewField(opts)
 	if err := f.Open(); err != nil {
 		panic(err)
@@ -76,7 +76,7 @@ func (f *Field) reopen() error {
 
 // Ensure field can set its cache
 func TestField_SetCacheSize(t *testing.T) {
-	f := MustOpenField(pilosa.OptFieldTypeDefault())
+	f := mustOpenField(pilosa.OptFieldTypeDefault())
 	defer f.close()
 	cacheSize := uint32(100)
 
