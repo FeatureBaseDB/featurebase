@@ -176,7 +176,7 @@ func NewGossipMemberSet(cfg Config, api *pilosa.API, options ...gossipMemberSetO
 		g.transport = transport
 	}
 
-	port := g.transport.Net.GetAutoBindPort()
+	port := g.transport.net.GetAutoBindPort()
 
 	var gossipKey []byte
 	var err error
@@ -189,7 +189,7 @@ func NewGossipMemberSet(cfg Config, api *pilosa.API, options ...gossipMemberSetO
 
 	// memberlist config
 	conf := memberlist.DefaultWANConfig()
-	conf.Transport = g.transport.Net
+	conf.Transport = g.transport.net
 	conf.Name = api.Node().ID
 	conf.BindAddr = api.Node().URI.Host
 	conf.BindPort = port
@@ -343,7 +343,7 @@ func (g *gossipEventReceiver) listen() {
 // Transport is a gossip transport for binding to a port.
 type Transport struct {
 	//memberlist.Transport
-	Net *memberlist.NetTransport
+	net *memberlist.NetTransport
 	URI *pilosa.URI
 }
 
@@ -370,7 +370,7 @@ func NewTransport(host string, port int, logger *log.Logger) (*Transport, error)
 	}
 
 	return &Transport{
-		Net: net,
+		net: net,
 		URI: uri,
 	}, nil
 }
