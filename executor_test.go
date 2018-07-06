@@ -440,7 +440,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		}
 
 		t.Run("ErrColumnBSIGroupRequired", func(t *testing.T) {
-			if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(invalid_column_name=10, f=100)`}); err == nil || errors.Cause(err).Error() != `field not found` {
+			if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(invalid_column_name=10, f=100)`}); err == nil || errors.Cause(err).Error() != `Set() column argument 'col' required` {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
