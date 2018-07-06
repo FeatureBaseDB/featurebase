@@ -1579,7 +1579,7 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 		if field == nil {
 			// Instead of returning ErrFieldNotFound here,
 			// we just return, and don't attempt the translation.
-			// The assumption is that the non-existant field
+			// The assumption is that the non-existent field
 			// will raise an error downstream when it's used.
 			return nil
 		}
