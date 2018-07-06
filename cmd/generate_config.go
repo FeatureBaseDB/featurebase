@@ -24,17 +24,17 @@ import (
 	"github.com/pilosa/pilosa/ctl"
 )
 
-var GenerateConf *ctl.GenerateConfigCommand
+var generateConf *ctl.GenerateConfigCommand
 
 func NewGenerateConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	GenerateConf = ctl.NewGenerateConfigCommand(os.Stdin, os.Stdout, os.Stderr)
+	generateConf = ctl.NewGenerateConfigCommand(os.Stdin, os.Stdout, os.Stderr)
 	confCmd := &cobra.Command{
 		Use:   "generate-config",
 		Short: "Print the default configuration.",
 		Long: `generate-config prints the default configuration to stdout
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := GenerateConf.Run(context.Background()); err != nil {
+			if err := generateConf.Run(context.Background()); err != nil {
 				return err
 			}
 			return nil
