@@ -51,7 +51,7 @@ type Handler struct {
 
 	api *pilosa.API
 
-	AllowedOrigins []string
+	allowedOrigins []string
 
 	ln net.Listener
 
