@@ -120,8 +120,8 @@ func (c *Cache) Len() int {
 	return c.ll.Len()
 }
 
-// Clear purges all stored items from the cache.
-func (c *Cache) Clear() {
+// clear purges all stored items from the cache.
+func (c *Cache) clear() {
 	if c.OnEvicted != nil {
 		for _, e := range c.cache {
 			kv := e.Value.(*entry)
