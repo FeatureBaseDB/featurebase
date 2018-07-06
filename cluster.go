@@ -227,7 +227,7 @@ func newCluster() *cluster {
 		closing:             make(chan struct{}),
 		joining:             make(chan struct{}),
 
-		InternalClient: NewNopInternalClient(),
+		InternalClient: newNopInternalClient(),
 
 		logger: NopLogger,
 	}

@@ -72,11 +72,11 @@ var _ InternalQueryClient = NewNopInternalQueryClient()
 
 type NopInternalClient struct{}
 
-func NewNopInternalClient() NopInternalClient {
+func newNopInternalClient() NopInternalClient {
 	return NopInternalClient{}
 }
 
-var _ InternalClient = NewNopInternalClient()
+var _ InternalClient = newNopInternalClient()
 
 func (n NopInternalClient) MaxShardByIndex(context.Context) (map[string]uint64, error) {
 	return nil, nil
