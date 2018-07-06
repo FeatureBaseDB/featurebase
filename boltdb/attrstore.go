@@ -30,8 +30,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// AttrBlockSize is the size of attribute blocks for anti-entropy.
-const AttrBlockSize = 100
+// attrBlockSize is the size of attribute blocks for anti-entropy.
+const attrBlockSize = 100
 
 // AttrCache represents a cache for attributes.
 type AttrCache struct {
@@ -228,7 +228,7 @@ func (s *AttrStore) Blocks() ([]pilosa.AttrBlock, error) {
 	defer tx.Rollback()
 
 	// Wrap cursor to segment by block.
-	cur := newBlockCursor(tx.Bucket([]byte("attrs")).Cursor(), AttrBlockSize)
+	cur := newBlockCursor(tx.Bucket([]byte("attrs")).Cursor(), attrBlockSize)
 
 	// Iterate over each block.
 	var blocks []pilosa.AttrBlock
@@ -262,8 +262,8 @@ func (s *AttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, erro
 	defer tx.Rollback()
 
 	// Move to the start of the block.
-	min := u64tob(uint64(i) * AttrBlockSize)
-	max := u64tob(uint64(i+1) * AttrBlockSize)
+	min := u64tob(uint64(i) * attrBlockSize)
+	max := u64tob(uint64(i+1) * attrBlockSize)
 	cur := tx.Bucket([]byte("attrs")).Cursor()
 	for k, v := cur.Seek(min); k != nil; k, v = cur.Next() {
 		// Exit if we're past the end of the block.
