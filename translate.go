@@ -538,7 +538,7 @@ func (s *TranslateFile) TranslateRowToString(index, frame string, id uint64) (st
 
 // Reader returns a reader that streams the underlying data file.
 func (s *TranslateFile) Reader(ctx context.Context, offset int64) (io.ReadCloser, error) {
-	rc := NewTranslateFileReader(ctx, s, offset)
+	rc := newTranslateFileReader(ctx, s, offset)
 	if err := rc.Open(); err != nil {
 		return nil, err
 	}
@@ -910,8 +910,8 @@ type TranslateFileReader struct {
 	closing chan struct{}
 }
 
-// NewTranslateFileReader returns a new instance of TranslateFileReader.
-func NewTranslateFileReader(ctx context.Context, store *TranslateFile, offset int64) *TranslateFileReader {
+// newTranslateFileReader returns a new instance of TranslateFileReader.
+func newTranslateFileReader(ctx context.Context, store *TranslateFile, offset int64) *TranslateFileReader {
 	return &TranslateFileReader{
 		ctx:     ctx,
 		store:   store,
