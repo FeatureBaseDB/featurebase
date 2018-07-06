@@ -47,7 +47,7 @@ Although Pilosa doesn't keep the data in a tabular format, we still use the term
 #### Create the Schema
 
 Note:
-The queries in this section which are used to set up the indexes in Pilosa just return the empty object on success: `{}` - if you would like to verify that a query worked as you expected, you can request the schema as follows:
+If at any time you want to verify the data structure, you can request the schema as follows:
 
 ``` request
 curl localhost:10101/schema
@@ -61,7 +61,7 @@ Before we can import data or run queries, we need to create our indexes and the 
 curl localhost:10101/index/repository -X POST
 ```
 ``` response
-{}
+{"success":true}
 ```
 
 Let's create the `stargazer` field which has user IDs of stargazers as its rows:
@@ -71,10 +71,10 @@ curl localhost:10101/index/repository/field/stargazer \
      -d '{"options": {"type": "time", "timeQuantum": "YMD"}}'
 ```
 ``` response
-{}
+{"success":true}
 ```
 
-Since our data contains time stamps for the time users starred repos, we set the field type to `time`. Time quantum is the resolution of the time we want to use, and we set it to `YMD` (year, month, day) for `stargazer`.
+Since our data contains time stamps whcih represent the time users starred repos, we set the field type to `time`. Time quantum is the resolution of the time we want to use, and we set it to `YMD` (year, month, day) for `stargazer`.
 
 Next up is the `language` field, which will contain IDs for programming languages:
 ``` request
@@ -82,7 +82,7 @@ curl localhost:10101/index/repository/field/language \
      -X POST
 ```
 ``` response
-{}
+{"success":true}
 ```
 
 The `language` is a `set` field, but since the default field type is `set`, we didn't specify it in field options.
@@ -119,7 +119,7 @@ Which repositories did user 14 star:
 ``` request
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'Bitmap(field="stargazer", row=14)'
+     -d 'Row(stargazer=14)'
 ```
 ``` response
 {
@@ -136,7 +136,7 @@ What are the top 5 languages in the sample data:
 ``` request
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'TopN(field="language", n=5)'
+     -d 'TopN(language, n=5)'
 ```
 ``` response
 {
@@ -157,8 +157,8 @@ Which repositories were starred by user 14 and 19:
 curl localhost:10101/index/repository/query \
      -X POST \
      -d 'Intersect(
-            Bitmap(field="stargazer", row=14), 
-            Bitmap(field="stargazer", row=19)
+            Row(stargazer=14), 
+            Row(stargazer=19)
         )'
 ```
 ``` response
@@ -177,8 +177,8 @@ Which repositories were starred by user 14 or 19:
 curl localhost:10101/index/repository/query \
      -X POST \
      -d 'Union(
-            Bitmap(field="stargazer", row=14),
-            Bitmap(field="stargazer", row=19)
+            Row(stargazer=14), 
+            Row(stargazer=19)
         )'
 ```
 ``` response
@@ -197,9 +197,9 @@ Which repositories were starred by user 14 and 19 and also were written in langu
 curl localhost:10101/index/repository/query \
      -X POST \
      -d 'Intersect(
-            Bitmap(field="stargazer", row=14),
-            Bitmap(field="stargazer", row=19),
-            Bitmap(field="language", row=1)
+            Row(stargazer=14), 
+            Row(stargazer=19),
+            Row(language=1)
         )'
 ```
 ``` response
@@ -217,7 +217,7 @@ Set user 99999 as a stargazer for repository 77777:
 ``` request
 curl localhost:10101/index/repository/query \
      -X POST \
-     -d 'SetBit(field="stargazer", col=77777, row=99999)'
+     -d 'Set(77777, stargazer=99999)'
 ```
 ``` response
 {"results":[true]}
