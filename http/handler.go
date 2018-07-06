@@ -1107,7 +1107,7 @@ const (
 	queryResultTypeNil uint32 = iota
 	QueryResultTypeRow
 	QueryResultTypePairs
-	QueryResultTypeValCount
+	queryResultTypeValCount
 	QueryResultTypeUint64
 	queryResultTypeBool
 )
