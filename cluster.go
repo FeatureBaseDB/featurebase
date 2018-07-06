@@ -1403,7 +1403,7 @@ type Topology struct {
 	nodeStates map[string]string
 }
 
-func NewTopology() *Topology {
+func newTopology() *Topology {
 	return &Topology{
 		nodeStates: make(map[string]string),
 	}
@@ -1472,7 +1472,7 @@ func (t *Topology) Encode() *internal.Topology {
 func (c *cluster) loadTopology() error {
 	buf, err := ioutil.ReadFile(filepath.Join(c.Path, ".topology"))
 	if os.IsNotExist(err) {
-		c.Topology = NewTopology()
+		c.Topology = newTopology()
 		return nil
 	} else if err != nil {
 		return errors.Wrap(err, "reading file")
@@ -1784,7 +1784,7 @@ func decodeTopology(topology *internal.Topology) (*Topology, error) {
 		return nil, nil
 	}
 
-	t := NewTopology()
+	t := newTopology()
 	t.ClusterID = topology.ClusterID
 	t.NodeIDs = topology.NodeIDs
 	sort.Slice(t.NodeIDs,

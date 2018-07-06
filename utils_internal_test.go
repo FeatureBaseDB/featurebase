@@ -37,7 +37,7 @@ func NewTestCluster(n int) *cluster {
 	c.ReplicaN = 1
 	c.Hasher = NewTestModHasher()
 	c.Path = path
-	c.Topology = NewTopology()
+	c.Topology = newTopology()
 
 	for i := 0; i < n; i++ {
 		c.Nodes = append(c.Nodes, &Node{
@@ -225,7 +225,7 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	c.ReplicaN = 1
 	c.Hasher = NewTestModHasher()
 	c.Path = path
-	c.Topology = NewTopology()
+	c.Topology = newTopology()
 	c.holder = h
 	c.Node = node
 	c.Coordinator = t.common.Nodes[0].ID // the first node is the coordinator
