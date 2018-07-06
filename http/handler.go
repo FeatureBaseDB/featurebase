@@ -1104,7 +1104,7 @@ func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 
 // QueryResult types.
 const (
-	QueryResultTypeNil uint32 = iota
+	queryResultTypeNil uint32 = iota
 	QueryResultTypeRow
 	QueryResultTypePairs
 	QueryResultTypeValCount
