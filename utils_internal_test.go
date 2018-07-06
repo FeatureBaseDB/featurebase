@@ -185,7 +185,7 @@ func (t *ClusterCluster) addNode() error {
 
 // WriteTopology writes the given topology to disk.
 func (t *ClusterCluster) WriteTopology(path string, top *Topology) error {
-	if buf, err := proto.Marshal(top.Encode()); err != nil {
+	if buf, err := proto.Marshal(top.encode()); err != nil {
 		return err
 	} else if err := ioutil.WriteFile(filepath.Join(path, ".topology"), buf, 0666); err != nil {
 		return err

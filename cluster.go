@@ -1463,8 +1463,8 @@ func (t *Topology) RemoveID(nodeID string) bool {
 	return true
 }
 
-// Encode converts t into its internal representation.
-func (t *Topology) Encode() *internal.Topology {
+// encode converts t into its internal representation.
+func (t *Topology) encode() *internal.Topology {
 	return encodeTopology(t)
 }
 
