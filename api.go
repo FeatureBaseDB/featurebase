@@ -554,7 +554,7 @@ func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []At
 
 	// Read all attributes from all mismatched blocks.
 	attrs := make(map[uint64]map[string]interface{})
-	for _, blockID := range AttrBlocks(localBlocks).Diff(blocks) {
+	for _, blockID := range attrBlocks(localBlocks).Diff(blocks) {
 		// Retrieve block data.
 		m, err := index.ColumnAttrStore().BlockData(blockID)
 		if err != nil {
@@ -588,7 +588,7 @@ func (api *API) FieldAttrDiff(ctx context.Context, indexName string, fieldName s
 
 	// Read all attributes from all mismatched blocks.
 	attrs := make(map[uint64]map[string]interface{})
-	for _, blockID := range AttrBlocks(localBlocks).Diff(blocks) {
+	for _, blockID := range attrBlocks(localBlocks).Diff(blocks) {
 		// Retrieve block data.
 		m, err := f.RowAttrStore().BlockData(blockID)
 		if err != nil {
