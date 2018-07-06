@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## [v1.0.0] - 2018-07-05
+## [v1.0.0] - 2018-07-06
 
 ### Added
 
@@ -14,26 +14,27 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Changed
 
-- HTTP handler updates ([#1408](https://github.com/pilosa/pilosa/pull/1408), [#1399](https://github.com/pilosa/pilosa/pull/1399), [#1441](https://github.com/pilosa/pilosa/pull/1441), [#1375](https://github.com/pilosa/pilosa/pull/1375), [#1433](https://github.com/pilosa/pilosa/pull/1433), [#1444](https://github.com/pilosa/pilosa/pull/1444), [#1388](https://github.com/pilosa/pilosa/pull/1388), [#1309](https://github.com/pilosa/pilosa/pull/1309), [#1302](https://github.com/pilosa/pilosa/pull/1302), [#1304](https://github.com/pilosa/pilosa/pull/1304))
+- HTTP handler updates ([#1408](https://github.com/pilosa/pilosa/pull/1408), [#1399](https://github.com/pilosa/pilosa/pull/1399), [#1441](https://github.com/pilosa/pilosa/pull/1441), [#1375](https://github.com/pilosa/pilosa/pull/1375), [#1433](https://github.com/pilosa/pilosa/pull/1433), [#1444](https://github.com/pilosa/pilosa/pull/1444), [#1388](https://github.com/pilosa/pilosa/pull/1388), [#1309](https://github.com/pilosa/pilosa/pull/1309), [#1302](https://github.com/pilosa/pilosa/pull/1302), [#1304](https://github.com/pilosa/pilosa/pull/1304), [#1465](https://github.com/pilosa/pilosa/pull/1465), [#1466](https://github.com/pilosa/pilosa/pull/1466))
 - Refactor/improve tests ([#1437](https://github.com/pilosa/pilosa/pull/1437), [#1434](https://github.com/pilosa/pilosa/pull/1434), [#1435](https://github.com/pilosa/pilosa/pull/1435), [#1425](https://github.com/pilosa/pilosa/pull/1425), [#1418](https://github.com/pilosa/pilosa/pull/1418), [#1419](https://github.com/pilosa/pilosa/pull/1419), [#1413](https://github.com/pilosa/pilosa/pull/1413), [#1394](https://github.com/pilosa/pilosa/pull/1394), [#1387](https://github.com/pilosa/pilosa/pull/1387), [#1386](https://github.com/pilosa/pilosa/pull/1386), [#1378](https://github.com/pilosa/pilosa/pull/1378), [#1364](https://github.com/pilosa/pilosa/pull/1364), [#1348](https://github.com/pilosa/pilosa/pull/1348), [#1340](https://github.com/pilosa/pilosa/pull/1340), [#1297](https://github.com/pilosa/pilosa/pull/1297))
 - Simplify inter-node communication ([#1428](https://github.com/pilosa/pilosa/pull/1428), [#1427](https://github.com/pilosa/pilosa/pull/1427), [#1412](https://github.com/pilosa/pilosa/pull/1412), [#1398](https://github.com/pilosa/pilosa/pull/1398), [#1391](https://github.com/pilosa/pilosa/pull/1391), [#1389](https://github.com/pilosa/pilosa/pull/1389))
 - Make gossip's interface to Pilosa the API struct ([#1452](https://github.com/pilosa/pilosa/pull/1452))
 - Rename slice to shard ([#1426](https://github.com/pilosa/pilosa/pull/1426))
 - Clearbit for time fields ([#1424](https://github.com/pilosa/pilosa/pull/1424))
-- Update docs ([#1390](https://github.com/pilosa/pilosa/pull/1390), [#1329](https://github.com/pilosa/pilosa/pull/1329), [#1305](https://github.com/pilosa/pilosa/pull/1305), [#1296](https://github.com/pilosa/pilosa/pull/1296))
+- Update docs ([#1390](https://github.com/pilosa/pilosa/pull/1390), [#1329](https://github.com/pilosa/pilosa/pull/1329), [#1305](https://github.com/pilosa/pilosa/pull/1305), [#1296](https://github.com/pilosa/pilosa/pull/1296), [#1461](https://github.com/pilosa/pilosa/pull/1461))
 - Simplify server setup ([#1417](https://github.com/pilosa/pilosa/pull/1417), [#1393](https://github.com/pilosa/pilosa/pull/1393),[#1451](https://github.com/pilosa/pilosa/pull/1451))
 - Refactor API ([#1407](https://github.com/pilosa/pilosa/pull/1407))
-- Modify PQL ([#1382](https://github.com/pilosa/pilosa/pull/1382), [#1402](https://github.com/pilosa/pilosa/pull/1402), [#1354](https://github.com/pilosa/pilosa/pull/1354))
+- Rewrite PQL parser and add various improvements/simplifications ([#1382](https://github.com/pilosa/pilosa/pull/1382), [#1402](https://github.com/pilosa/pilosa/pull/1402), [#1354](https://github.com/pilosa/pilosa/pull/1354), [#1463](https://github.com/pilosa/pilosa/pull/1463))
 - Rename "frame" to "field" ([#1395](https://github.com/pilosa/pilosa/pull/1395), [#1362](https://github.com/pilosa/pilosa/pull/1362), [#1360](https://github.com/pilosa/pilosa/pull/1360), [#1358](https://github.com/pilosa/pilosa/pull/1358), [#1357](https://github.com/pilosa/pilosa/pull/1357), [#1355](https://github.com/pilosa/pilosa/pull/1355))
 - Optimize count ([#1365](https://github.com/pilosa/pilosa/pull/1365))
 - Simplify bitmap max function ([#1333](https://github.com/pilosa/pilosa/pull/1333))
 - Rename "bit" to "column" for clarity ([#1326](https://github.com/pilosa/pilosa/pull/1326))
 - Rename pilosa.Bitmap to Row ([#1311](https://github.com/pilosa/pilosa/pull/1311))
+- Invert encoding/decoding and remove internal references ([#1454](https://github.com/pilosa/pilosa/pull/1454))
 
 ### Removed
 
 - Rename (unexport) many items to reduce public API footprint prior to 1.0 release ([#1470](https://github.com/pilosa/pilosa/pull/1470), [#1458](https://github.com/pilosa/pilosa/pull/1458), [#1450](https://github.com/pilosa/pilosa/pull/1450), [#1449](https://github.com/pilosa/pilosa/pull/1449), [#1448](https://github.com/pilosa/pilosa/pull/1448), [#1447](https://github.com/pilosa/pilosa/pull/1447), [#1446](https://github.com/pilosa/pilosa/pull/1446), [#1438](https://github.com/pilosa/pilosa/pull/1438), [#1443](https://github.com/pilosa/pilosa/pull/1443), [#1440](https://github.com/pilosa/pilosa/pull/1440), [#1439](https://github.com/pilosa/pilosa/pull/1439), [#1409](https://github.com/pilosa/pilosa/pull/1409), [#1392](https://github.com/pilosa/pilosa/pull/1392), [#1374](https://github.com/pilosa/pilosa/pull/1374), [#1372](https://github.com/pilosa/pilosa/pull/1372), [#1369](https://github.com/pilosa/pilosa/pull/1369), [#1367](https://github.com/pilosa/pilosa/pull/1367), [#1366](https://github.com/pilosa/pilosa/pull/1366), [#1351](https://github.com/pilosa/pilosa/pull/1351), [#1420](https://github.com/pilosa/pilosa/pull/1420), [#1416](https://github.com/pilosa/pilosa/pull/1416), [#1397](https://github.com/pilosa/pilosa/pull/1397))
-- Remove dead code ([#1432](https://github.com/pilosa/pilosa/pull/1432), [#1457](https://github.com/pilosa/pilosa/pull/1457), [#1421](https://github.com/pilosa/pilosa/pull/1421), [#1411](https://github.com/pilosa/pilosa/pull/1411), [#1377](https://github.com/pilosa/pilosa/pull/1377), [#1393](https://github.com/pilosa/pilosa/pull/1393))
+- Remove dead code ([#1432](https://github.com/pilosa/pilosa/pull/1432), [#1457](https://github.com/pilosa/pilosa/pull/1457), [#1421](https://github.com/pilosa/pilosa/pull/1421), [#1411](https://github.com/pilosa/pilosa/pull/1411), [#1377](https://github.com/pilosa/pilosa/pull/1377), [#1393](https://github.com/pilosa/pilosa/pull/1393), [#1462](https://github.com/pilosa/pilosa/pull/1462))
 - Remove view argument from Field.SetBit and Field.ClearBit ([#1396](https://github.com/pilosa/pilosa/pull/1396))
 - Remove WebUI (now contained in a separate package) ([#1363](https://github.com/pilosa/pilosa/pull/1363))
 - Remove bench command ([#1347](https://github.com/pilosa/pilosa/pull/1347))
@@ -41,6 +42,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Remove backup/restore stuff ([#1339](https://github.com/pilosa/pilosa/pull/1339), [#1341](https://github.com/pilosa/pilosa/pull/1341))
 - Remove inverse frame functionality ([#1335](https://github.com/pilosa/pilosa/pull/1335))
 - Remove rangeEnabled option ([#1332](https://github.com/pilosa/pilosa/pull/1332))
+- Remove Holder from API ([#1469](https://github.com/pilosa/pilosa/pull/1469))
+- Remove index and field MarshalJSON ([#1468](https://github.com/pilosa/pilosa/pull/1468))
 
 ### Fixed
 
