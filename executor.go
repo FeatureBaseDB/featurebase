@@ -375,7 +375,7 @@ func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 	}
 
 	if opt.ExcludeColumns {
-		row.segments = []RowSegment{}
+		row.segments = []rowSegment{}
 	}
 
 	return row, nil
