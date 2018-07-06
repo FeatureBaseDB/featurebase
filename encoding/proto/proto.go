@@ -337,7 +337,7 @@ func encodeQueryRequest(m *pilosa.QueryRequest) *internal.QueryRequest {
 func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
 	pb := &internal.QueryResponse{
 		Results:        make([]*internal.QueryResult, len(m.Results)),
-		ColumnAttrSets: EncodeColumnAttrSets(m.ColumnAttrSets),
+		ColumnAttrSets: encodeColumnAttrSets(m.ColumnAttrSets),
 	}
 
 	for i := range m.Results {
@@ -950,7 +950,7 @@ func decodeValCount(pb *internal.ValCount) pilosa.ValCount {
 	}
 }
 
-func EncodeColumnAttrSets(a []*pilosa.ColumnAttrSet) []*internal.ColumnAttrSet {
+func encodeColumnAttrSets(a []*pilosa.ColumnAttrSet) []*internal.ColumnAttrSet {
 	other := make([]*internal.ColumnAttrSet, len(a))
 	for i := range a {
 		other[i] = encodeColumnAttrSet(a[i])
