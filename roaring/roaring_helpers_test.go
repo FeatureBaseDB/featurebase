@@ -236,7 +236,7 @@ func doContainer(containerType byte, data interface{}) *Container {
 	}
 
 	switch containerType {
-	case ContainerArray:
+	case containerArray:
 		c.array = data.([]uint16)
 	case ContainerBitmap:
 		c.bitmap = data.([]uint64)
@@ -253,17 +253,17 @@ func setupContainerTests() map[byte]map[string]*Container {
 	cts := make(map[byte]map[string]*Container)
 
 	// array containers
-	cts[ContainerArray] = map[string]*Container{
-		"empty":         doContainer(ContainerArray, arrayEmpty()),
-		"full":          doContainer(ContainerArray, arrayFull()),
-		"firstBitSet":   doContainer(ContainerArray, arrayFirstBitSet()),
-		"lastBitSet":    doContainer(ContainerArray, arrayLastBitSet()),
-		"firstBitUnset": doContainer(ContainerArray, arrayFirstBitUnset()),
-		"lastBitUnset":  doContainer(ContainerArray, arrayLastBitUnset()),
-		"innerBitsSet":  doContainer(ContainerArray, arrayInnerBitsSet()),
-		"outerBitsSet":  doContainer(ContainerArray, arrayOuterBitsSet()),
-		"oddBitsSet":    doContainer(ContainerArray, arrayOddBitsSet()),
-		"evenBitsSet":   doContainer(ContainerArray, arrayEvenBitsSet()),
+	cts[containerArray] = map[string]*Container{
+		"empty":         doContainer(containerArray, arrayEmpty()),
+		"full":          doContainer(containerArray, arrayFull()),
+		"firstBitSet":   doContainer(containerArray, arrayFirstBitSet()),
+		"lastBitSet":    doContainer(containerArray, arrayLastBitSet()),
+		"firstBitUnset": doContainer(containerArray, arrayFirstBitUnset()),
+		"lastBitUnset":  doContainer(containerArray, arrayLastBitUnset()),
+		"innerBitsSet":  doContainer(containerArray, arrayInnerBitsSet()),
+		"outerBitsSet":  doContainer(containerArray, arrayOuterBitsSet()),
+		"oddBitsSet":    doContainer(containerArray, arrayOddBitsSet()),
+		"evenBitsSet":   doContainer(containerArray, arrayEvenBitsSet()),
 	}
 
 	// bitmap containers
