@@ -312,8 +312,8 @@ func (c *Call) UintSliceArg(key string) ([]uint64, bool, error) {
 	}
 }
 
-// Keys returns a list of argument keys in sorted order.
-func (c *Call) Keys() []string {
+// keys returns a list of argument keys in sorted order.
+func (c *Call) keys() []string {
 	a := make([]string, 0, len(c.Args))
 	for k := range c.Args {
 		a = append(a, k)
@@ -369,7 +369,7 @@ func (c *Call) String() string {
 	}
 
 	// Write arguments in key order.
-	for i, key := range c.Keys() {
+	for i, key := range c.keys() {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
