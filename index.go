@@ -83,11 +83,13 @@ func (i *Index) MarshalJSON() ([]byte, error) {
 		fields = append(fields, f)
 	}
 	thing := struct {
-		Name   string
-		Fields []*Field
+		Name    string       `json:"name"`
+		Options IndexOptions `json:"options"`
+		Fields  []*Field     `json:"fields"`
 	}{
-		Name:   i.name,
-		Fields: fields,
+		Name:    i.name,
+		Options: i.Options(),
+		Fields:  fields,
 	}
 	return json.Marshal(thing)
 }
@@ -422,8 +424,9 @@ func (p indexSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
 // IndexInfo represents schema information for an index.
 type IndexInfo struct {
-	Name   string       `json:"name"`
-	Fields []*FieldInfo `json:"fields"`
+	Name    string       `json:"name"`
+	Options IndexOptions `json:"options"`
+	Fields  []*FieldInfo `json:"fields"`
 }
 
 type indexInfoSlice []*IndexInfo

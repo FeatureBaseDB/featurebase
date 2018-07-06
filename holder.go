@@ -228,6 +228,22 @@ func (h *Holder) Schema() []*IndexInfo {
 	return a
 }
 
+// limitedSchema returns schema information for all indexes and fields.
+func (h *Holder) limitedSchema() []*IndexInfo {
+	var a []*IndexInfo
+	for _, index := range h.Indexes() {
+		di := &IndexInfo{Name: index.Name()}
+		for _, field := range index.Fields() {
+			fi := &FieldInfo{Name: field.Name(), Options: field.Options()}
+			di.Fields = append(di.Fields, fi)
+		}
+		sort.Sort(fieldInfoSlice(di.Fields))
+		a = append(a, di)
+	}
+	sort.Sort(indexInfoSlice(a))
+	return a
+}
+
 // applySchema applies an internal Schema to Holder.
 func (h *Holder) applySchema(schema *Schema) error {
 	// Create indexes that don't exist.

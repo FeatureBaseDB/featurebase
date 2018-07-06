@@ -1094,9 +1094,9 @@ func (f *Field) ImportValue(columnIDs []uint64, values []int64) error {
 
 func (f *Field) MarshalJSON() ([]byte, error) {
 	thing := struct {
-		Name    string
-		Options FieldOptions
-		Views   []*ViewInfo
+		Name    string       `json:"name"`
+		Options FieldOptions `json:"options"`
+		Views   []*ViewInfo  `json:"views"`
 	}{
 		Name:    f.Name(),
 		Options: f.Options(),
@@ -1134,7 +1134,7 @@ type FieldOptions struct {
 	Min         int64       `json:"min,omitempty"`
 	Max         int64       `json:"max,omitempty"`
 	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
-	Keys        bool        `json:"keys,omitempty"`
+	Keys        bool        `json:"keys"`
 }
 
 // applyDefaultOptions returns a new FieldOptions object
@@ -1177,28 +1177,34 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			Type      string `json:"type"`
 			CacheType string `json:"cacheType"`
 			CacheSize uint32 `json:"cacheSize"`
+			Keys      bool   `json:"keys"`
 		}{
 			o.Type,
 			o.CacheType,
 			o.CacheSize,
+			o.Keys,
 		})
 	case FieldTypeInt:
 		return json.Marshal(struct {
 			Type string `json:"type"`
 			Min  int64  `json:"min"`
 			Max  int64  `json:"max"`
+			Keys bool   `json:"keys"`
 		}{
 			o.Type,
 			o.Min,
 			o.Max,
+			o.Keys,
 		})
 	case FieldTypeTime:
 		return json.Marshal(struct {
 			Type        string      `json:"type"`
 			TimeQuantum TimeQuantum `json:"timeQuantum"`
+			Keys        bool        `json:"keys"`
 		}{
 			o.Type,
 			o.TimeQuantum,
+			o.Keys,
 		})
 	}
 	return nil, errors.New("invalid field type")
