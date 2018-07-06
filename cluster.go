@@ -364,7 +364,7 @@ func (c *cluster) setID(id string) {
 	c.id = id
 
 	// Make sure the Topology is updated.
-	c.Topology.ClusterID = c.id
+	c.Topology.clusterID = c.id
 }
 
 func (c *cluster) State() string {
@@ -818,7 +818,7 @@ func (c *cluster) setup() error {
 		return errors.Wrap(err, "loading topology")
 	}
 
-	c.id = c.Topology.ClusterID
+	c.id = c.Topology.clusterID
 
 	// Only the coordinator needs to consider the .topology file.
 	if c.isCoordinator() {
@@ -1396,7 +1396,7 @@ type Topology struct {
 	mu      sync.RWMutex
 	nodeIDs []string
 
-	ClusterID string
+	clusterID string
 
 	// nodeStates holds the state of each node according to
 	// the coordinator. Used during startup and data load.
@@ -1511,7 +1511,7 @@ func (c *cluster) considerTopology() error {
 	if c.id == "" {
 		u := uuid.NewV4()
 		c.id = u.String()
-		c.Topology.ClusterID = c.id
+		c.Topology.clusterID = c.id
 	}
 
 	if c.Static {
@@ -1774,7 +1774,7 @@ func encodeTopology(topology *Topology) *internal.Topology {
 		return nil
 	}
 	return &internal.Topology{
-		ClusterID: topology.ClusterID,
+		ClusterID: topology.clusterID,
 		NodeIDs:   topology.nodeIDs,
 	}
 }
@@ -1785,7 +1785,7 @@ func decodeTopology(topology *internal.Topology) (*Topology, error) {
 	}
 
 	t := newTopology()
-	t.ClusterID = topology.ClusterID
+	t.clusterID = topology.ClusterID
 	t.nodeIDs = topology.NodeIDs
 	sort.Slice(t.nodeIDs,
 		func(i, j int) bool {
