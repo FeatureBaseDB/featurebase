@@ -337,7 +337,7 @@ func (f *Field) loadMeta() error {
 func (f *Field) saveMeta() error {
 	// Marshal metadata.
 	fo := f.options
-	buf, err := proto.Marshal(fo.Encode())
+	buf, err := proto.Marshal(fo.encode())
 	if err != nil {
 		return errors.Wrap(err, "marshaling")
 	}
@@ -1135,8 +1135,8 @@ func applyDefaultOptions(o FieldOptions) FieldOptions {
 	return o
 }
 
-// Encode converts o into its internal representation.
-func (o *FieldOptions) Encode() *internal.FieldOptions {
+// encode converts o into its internal representation.
+func (o *FieldOptions) encode() *internal.FieldOptions {
 	return encodeFieldOptions(o)
 }
 
