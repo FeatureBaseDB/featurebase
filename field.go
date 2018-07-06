@@ -396,7 +396,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Max = 0
 		f.options.Keys = opt.Keys
 		// Set the time quantum.
-		if err := f.SetTimeQuantum(opt.TimeQuantum); err != nil {
+		if err := f.setTimeQuantum(opt.TimeQuantum); err != nil {
 			f.Close()
 			return errors.Wrap(err, "setting time quantum")
 		}
@@ -533,8 +533,8 @@ func (f *Field) TimeQuantum() TimeQuantum {
 	return f.options.TimeQuantum
 }
 
-// SetTimeQuantum sets the time quantum for the field.
-func (f *Field) SetTimeQuantum(q TimeQuantum) error {
+// setTimeQuantum sets the time quantum for the field.
+func (f *Field) setTimeQuantum(q TimeQuantum) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
