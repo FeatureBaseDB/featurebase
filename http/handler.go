@@ -1109,7 +1109,7 @@ const (
 	QueryResultTypePairs
 	QueryResultTypeValCount
 	QueryResultTypeUint64
-	QueryResultTypeBool
+	queryResultTypeBool
 )
 
 // parseUint64Slice returns a slice of uint64s from a comma-delimited string.
