@@ -114,7 +114,7 @@ func NewHandler(opts ...handlerOption) (*Handler, error) {
 	handler := &Handler{
 		logger: pilosa.NopLogger,
 	}
-	handler.Handler = NewRouter(handler)
+	handler.Handler = newRouter(handler)
 	handler.populateValidators()
 
 	for _, opt := range opts {
@@ -183,8 +183,8 @@ func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
 	})
 }
 
-// NewRouter creates a new mux http router.
-func NewRouter(handler *Handler) *mux.Router {
+// newRouter creates a new mux http router.
+func newRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
 	router.HandleFunc("/", handler.handleHome).Methods("GET")
 	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST")
