@@ -3,7 +3,6 @@ title = "Examples"
 weight = 4
 nav = [
     "Transportation",
-    "Chemical similarity search",
 ]
 +++
 
@@ -33,9 +32,9 @@ The NYC taxi data is comprised of a number of csv files listed here: http://www.
 * Dropoff time: timestamp
 * Pickup time: timestamp
 
-We import these fields, creating one or more Pilosa frames from each of them:
+We import these fields, creating one or more Pilosa fields from each of them:
 
-frame	|mapping
+field	|mapping
 ------------|---------------------
 cab_type	|direct map of enum int → row ID
 dist_miles	|round(dist) → row ID
@@ -52,24 +51,24 @@ pickup_month	|month(timestamp) → row ID
 pickup_day	|day(timestamp) → row ID
 pickup_time	|time of day mapped to one of 48 half-hour buckets → row ID
 
-We also created two extra frames that represent the duration and average speed of each ride:
+We also created two extra fields that represent the duration and average speed of each ride:
 
-frame	|mapping
+field	|mapping
 --------------------|-------------
 duration_minutes	|round(drop_timestamp - pickup_timestamp) → row ID
 speed_mph	|round(dist_miles / (drop_timestamp - pickup_timestamp)) → row ID
 
 #### Mapping
 
-Each column that we want to use must be mapped to a combination of frames and row IDs according to some rule. There are many ways to approach this mapping, and the taxi dataset gives us a good overview of possibilities.
+Each column that we want to use must be mapped to a combination of fields and row IDs according to some rule. There are many ways to approach this mapping, and the taxi dataset gives us a good overview of possibilities.
 
-##### 0 columns → 1 frame
+##### 0 columns → 1 field
 
-**cab_type**: contains one row for each type of cab. Each column, representing one ride, has a bit set in exactly one row of this frame. The mapping is a simple enumeration, for example yellow=0, green=1, etc. The values of the bits in this frame are determined by the source of the data. That is, we're importing data from several disparate sources: NYC yellow taxi cabs, NYC green taxi cabs, and Uber cars. For each source, the single row to be set in the cab_type frame is constant.
+**cab_type**: contains one row for each type of cab. Each column, representing one ride, has a bit set in exactly one row of this field. The mapping is a simple enumeration, for example yellow=0, green=1, etc. The values of the bits in this field are determined by the source of the data. That is, we're importing data from several disparate sources: NYC yellow taxi cabs, NYC green taxi cabs, and Uber cars. For each source, the single row to be set in the cab_type field is constant.
 
-##### 1 column → 1 frame
+##### 1 column → 1 field
 
-The following three frames are mapped in a simple direct way from single columns of the original data.
+The following three fields are mapped in a simple direct way from single columns of the original data.
 
 **dist_miles:** each row represents rides of a certain distance. The mapping is simple: as an example, row 1 represents rides with a distance in the interval [0.5, 1.5]. That is, we round the floating point value of distance to an integer, and use that as the row ID directly. Generally, the mapping from a floating point value to a row ID could be arbitrary. The rounding mapping is concise to implement, which simplifies importing and analysis. As an added bonus, it's human-readable. We'll see this pattern used several times.
 
@@ -84,7 +83,7 @@ lfm := pdk.LinearFloatMapper{
 
 `Min` and `Max` define the linear function, and `Res` determines the maximum allowed value for the output row ID - we chose these values to produce a “round to nearest integer” behavior. Other predefined mappers have their own specific parameters, usually two or three.
 
-This mapper function is the core operation, but we need a few other pieces to define the overall process, which is encapsulated in the BitMapper object. This object defines which field(s) of the input data source to use (`Fields`), how to parse them (`Parsers`), what mapping to use (`Mapper`), and the name of the frame to use (`Frame`).
+This mapper function is the core operation, but we need a few other pieces to define the overall process, which is encapsulated in the BitMapper object. This object defines which field(s) of the input data source to use (`Fields`), how to parse them (`Parsers`), what mapping to use (`Mapper`), and the name of the field to use (`Frame`).  TODO update so this makes sense
 ```go
 pdk.BitMapper{
     Frame:   "dist_miles",
@@ -129,27 +128,27 @@ Here, we define a list of Mappers, each including a name, which we use to refer 
 
 **passenger_count:** This column contains small integers, so we use one of the simplest possible mappings: the column value is the row ID.
 
-##### 1 column → multiple frames
+##### 1 column → multiple fields
 
 When working with a composite data type like a timestamp, there are plenty of mapping options. In this case, we expect to see interesting periodic trends, so we want to encode the cyclic components of time in a way that allows us to look at them independently during analysis.
 
-We do this by storing time data in four separate frames for each timestamp: one each for the year, month, day, and time of day. The first three are mapped directly. For example, a ride with a date of 2015/06/24 will have a bit set in row 2015 of frame "year", row 6 of frame "month", and row 24 of frame "day". 
+We do this by storing time data in four separate fields for each timestamp: one each for the year, month, day, and time of day. The first three are mapped directly. For example, a ride with a date of 2015/06/24 will have a bit set in row 2015 of field "year", row 6 of field "month", and row 24 of field "day". 
 
-We might continue this pattern with hours, minutes, and seconds, but we don't have much use for that level of precision here, so instead we use a "bucketing" approach. That is, we pick a resolution (30 minutes), divide the day into buckets of that size, and create a row for each one. So a ride with a time of 6:45AM has a bit set in row 13 of frame "time_of_day".
+We might continue this pattern with hours, minutes, and seconds, but we don't have much use for that level of precision here, so instead we use a "bucketing" approach. That is, we pick a resolution (30 minutes), divide the day into buckets of that size, and create a row for each one. So a ride with a time of 6:45AM has a bit set in row 13 of field "time_of_day".
 
-We do all of this for each timestamp of interest, one for pickup time and one for dropoff time. That gives us eight total frames for two timestamps: pickup_year, pickup_month, pickup_day, pickup_time, drop_year, drop_month, drop_day, drop_time.
+We do all of this for each timestamp of interest, one for pickup time and one for dropoff time. That gives us eight total fields for two timestamps: pickup_year, pickup_month, pickup_day, pickup_time, drop_year, drop_month, drop_day, drop_time.
 
-##### Multiple columns → 1 frame
+##### Multiple columns → 1 field
 
 The ride data also contains geolocation data: latitude and longitude for both pickup and dropoff. We just want to be able to produce a rough overview heatmap of ride locations, so we use a grid mapping. We divide the area of interest into a 100x100 grid in latitude-longitude space, label each cell in this grid with a single integer, and use that integer as the row ID.
 
-We do all of this for each location of interest, one for pickup and one for dropoff. That gives us two frames for two locations: pickup_grid_id, drop_grid_id.
+We do all of this for each location of interest, one for pickup and one for dropoff. That gives us two fields for two locations: pickup_grid_id, drop_grid_id.
 
 Again, there are many mapping options for location data. For example, we might convert to a different coordinate system, apply a projection, or aggregate locations into real-world regions such as neighborhoods. Here, the simple approach is sufficient.
 
 ##### Complex mappings
 
-We also anticipate looking for trends in ride duration and speed, so we want to capture this information during the import process. For the frame `duration_minutes`, we compute a row ID as `round((drop_timestamp - pickup_timestamp).minutes)`. For the frame `speed_mph`, we compute row ID as `round(dist_miles / (drop_timestamp - pickup_timestamp).minutes)`. These mapping calculations are straightforward, but because they require arithmetic operations on multiple columns, they are a bit too complex to capture in the basic mappers available in PDK. Instead, we define custom mappers to do the work:
+We also anticipate looking for trends in ride duration and speed, so we want to capture this information during the import process. For the field `duration_minutes`, we compute a row ID as `round((drop_timestamp - pickup_timestamp).minutes)`. For the field `speed_mph`, we compute row ID as `round(dist_miles / (drop_timestamp - pickup_timestamp).minutes)`. These mapping calculations are straightforward, but because they require arithmetic operations on multiple columns, they are a bit too complex to capture in the basic mappers available in PDK. Instead, we define custom mappers to do the work:
 ```go
 durm := pdk.CustomMapper{
     Func: func(fields ...interface{}) interface{} {
@@ -172,7 +171,7 @@ Now we can run some example queries.
 Count per cab type can be retrieved, sorted, with a single PQL call.
 
 ```request
-TopN(frame=cab_type)
+TopN(cab_type)
 ```
 ```response
 {"results":[[{"id":1,"count":1992943},{"id":0,"count":7057}]]}
@@ -181,7 +180,7 @@ TopN(frame=cab_type)
 High traffic location IDs can be retrieved with a similar call. These IDs correspond to latitude, longitude pairs, which can be recovered from the mapping that generates the IDs.
 
 ```request
-TopN(frame=pickup_grid_id)
+TopN(pickup_grid_id)
 ```
 ```response
 {"results":[[{"id":5060,"count":40620},{"id":4861,"count":38145},{"id":4962,"count":35268},...]]}
@@ -193,7 +192,7 @@ Average of `total_amount` per `passenger_count` can be computed with some postpr
 queries = ''
 pcounts = range(10)
 for i in pcounts:
-    queries += "TopN(Bitmap(id=%d, frame='passenger_count'), frame=total_amount_dollars)" % i
+    queries += "TopN(Row(passenger_count=%d), total_amount_dollars)" % i
 resp = requests.post(qurl, data=queries)
 
 average_amounts = []
@@ -208,6 +207,8 @@ Note that the <a href="../data-model/#bsi-range-encoding">BSI</a>-powered <a hre
 </div>
 
 For more examples and details, see this [ipython notebook](https://github.com/pilosa/notebooks/blob/master/taxi-use-case.ipynb).
+
+<!--
 
 ### Chemical similarity search
 
@@ -326,3 +327,6 @@ python benchmarks.py -id 6223
 As Matt Swain’s blog post also did a great job using mongoDB for chemical similarity search, we compared benchmark on 500000 molecules between mongoDB aggregation framework with Pilosa.
 
 Both using the same molecule, Morgan fingerprint folded to fixed lengths of 4096 bits and were run on a MacBook Pro with a 2.8 GHz 2-core Intel Core i7 processor, memory of 16 GB 1600 MHz DDR3, single host cluster
+
+
+-->

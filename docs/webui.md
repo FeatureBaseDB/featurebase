@@ -9,13 +9,27 @@ nav = [
 
 ## WebUI
 
-The Pilosa server comes packaged with in-browser WebUI. When you run a local Pilosa server on the default host, you can access it at [localhost:10101](http://localhost:10101).
+A web-based app called Pilosa WebUI is available in a separate package. This can be used for constructing queries and viewing the cluster status.
 
-This can be used for constructing queries and viewing the cluster status.
+### Installation
+
+Releases are [available on Github](https://github.com/pilosa/webui/releases) as well as on [Homebrew](https://brew.sh/) for Mac.
+
+Installing on a Mac with Homebrew is simple; just run:
+
+```
+brew install pilosa-webui
+```
+
+You may also build from source by checking out the [repo on Github](https://github.com/pilosa/webui) and running:
+
+```
+make install
+```
 
 ### Console
 
-The [Console view](http://localhost:10101/#console) allows you to enter [PQL](../query-language/) queries and run them against your locally running server. First you must select an Index with the Select index dropdown.
+The Console view allows you to enter [PQL](../query-language/) queries and run them against your locally running server. First you must select an Index with the Select index dropdown.
 
 Each query's result will be displayed in the Output section along with the query time. 
 
@@ -29,14 +43,14 @@ In addition to standard PQL, the console supports a few special commands, prefix
 - `:create index <indexname>`
 - `:delete index <indexname>`
 - `:use <indexname>`
-- `:create frame <framename>`
-- `:delete frame <framename>`
+- `:create field <fieldname>`
+- `:delete field <fieldname>`
 
-Frame creation also supports options like `timeQuantum`. When creating a new frame, add options by using the keys documented in [API reference](../api-reference/#create-frame).
+Field creation also supports options like `timeQuantum`. When creating a new field, add options by using the keys documented in [API reference](../api-reference/#create-field).
 
-- `:create frame <framename> cacheSize=10000`
+- `:create field <fieldname> cacheSize=10000`
 
 
 ### Cluster Admin
 
-Use the [Cluster Admin tab](http://localhost:10101/#admin) to view the current status of your cluster. This contains information on each node in the cluster, plus the list of Indexes and Frames.
+Use the Cluster Admin tab to view the current status of your cluster. This contains information on each node in the cluster, plus the list of Indexes and Fields.

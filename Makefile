@@ -1,4 +1,4 @@
-.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-statik install install-build-deps install-dep install-protoc install-protoc-gen-gofast install-statik prerelease prerelease-build prerelease-upload release release-build require-dep require-protoc require-protoc-gen-gofast require-statik test
+.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-pql install install-build-deps install-dep install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-build prerelease-upload release release-build require-dep require-protoc require-protoc-gen-gofast require-peg test
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
@@ -48,8 +48,8 @@ build: vendor
 # Create a single release build under the build directory
 release-build: vendor
 	$(MAKE) $(if $(DOCKER_BUILD),docker-)build FLAGS="-o build/pilosa-$(VERSION_ID)/pilosa" RELEASE=1
-	cp NOTICE LICENSE README.md build/pilosa-$(VERSION_ID)
-	$(if $(ENTERPRISE_ENABLED),cp enterprise/COPYING build/pilosa-$(VERSION_ID))
+	cp NOTICE README.md build/pilosa-$(VERSION_ID)
+	$(if $(ENTERPRISE_ENABLED),cp enterprise/COPYING build/pilosa-$(VERSION_ID),cp LICENSE build/pilosa-$(VERSION_ID))
 	tar -cvz -C build -f build/pilosa-$(VERSION_ID).tar.gz pilosa-$(VERSION_ID)/
 	@echo Created release build: build/pilosa-$(VERSION_ID).tar.gz
 
@@ -88,16 +88,15 @@ install: vendor
 generate-protoc: require-protoc require-protoc-gen-gofast
 	go generate github.com/pilosa/pilosa/internal
 
-# `go generate` statik assets (WebUI)
-generate-statik: require-statik
-	go generate github.com/pilosa/pilosa/statik
-
 # `go generate` stringers
 generate-stringer:
 	go generate github.com/pilosa/pilosa
 
+generate-pql: require-peg
+	cd pql && peg -inline pql.peg && cd ..
+
 # `go generate` all needed packages
-generate: generate-protoc generate-statik generate-stringer
+generate: generate-protoc generate-stringer generate-pql
 
 # Create Docker image from Dockerfile
 docker:
@@ -126,22 +125,19 @@ endef
 require-dep:
 	$(call require,dep)
 
-require-statik:
-	$(call require,statik)
-
 require-protoc-gen-gofast:
 	$(call require,protoc-gen-gofast)
 
 require-protoc:
 	$(call require,protoc)
 
-install-build-deps: install-dep install-statik install-protoc-gen-gofast install-protoc install-stringer
+require-peg:
+	$(call require,peg)
+
+install-build-deps: install-dep install-protoc-gen-gofast install-protoc install-stringer install-peg
 
 install-dep:
 	go get -u github.com/golang/dep/cmd/dep
-
-install-statik:
-	go get -u github.com/rakyll/statik
 
 install-stringer:
 	go get -u golang.org/x/tools/cmd/stringer
@@ -151,3 +147,6 @@ install-protoc-gen-gofast:
 
 install-protoc:
 	@echo This tool cannot automatically install protoc. Please download and install protoc from https://google.github.io/proto-lens/installing-protoc.html
+
+install-peg:
+	go get github.com/pointlander/peg

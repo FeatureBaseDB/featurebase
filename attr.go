@@ -24,10 +24,10 @@ import (
 
 // Attribute data type enum.
 const (
-	AttrTypeString = 1
-	AttrTypeInt    = 2
-	AttrTypeBool   = 3
-	AttrTypeFloat  = 4
+	attrTypeString = 1
+	attrTypeInt    = 2
+	attrTypeBool   = 3
+	attrTypeFloat  = 4
 )
 
 // AttrStore represents an interface for handling row/column attributes.
@@ -42,57 +42,39 @@ type AttrStore interface {
 	BlockData(i uint64) (map[uint64]map[string]interface{}, error)
 }
 
-func init() {
-	NopAttrStore = &nopAttrStore{}
-}
+// nopStore represents an AttrStore that doesn't do anything.
+var nopStore AttrStore = nopAttrStore{}
 
-// NopAttrStore represents an AttrStore that doesn't do anything.
-var NopAttrStore AttrStore
-
-func NewNopAttrStore(string) AttrStore {
-	return &nopAttrStore{}
-}
+// newNopAttrStore returns an attr store which does nothing. It returns a global
+// object to avoid unecessary allocations.
+func newNopAttrStore(string) AttrStore { return nopStore }
 
 // nopAttrStore represents a no-op implementation of the AttrStore interface.
 type nopAttrStore struct{}
 
 // Path is a no-op implementation of AttrStore Path method.
-func (s *nopAttrStore) Path() string { return "" }
+func (s nopAttrStore) Path() string { return "" }
 
 // Open is a no-op implementation of AttrStore Open method.
-func (s *nopAttrStore) Open() error {
-	return nil
-}
+func (s nopAttrStore) Open() error { return nil }
 
 // Close is a no-op implementation of AttrStore Close method.
-func (s *nopAttrStore) Close() error {
-	return nil
-}
+func (s nopAttrStore) Close() error { return nil }
 
 // Attrs is a no-op implementation of AttrStore Attrs method.
-func (s *nopAttrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
-	return nil, nil
-}
+func (s nopAttrStore) Attrs(id uint64) (m map[string]interface{}, err error) { return nil, nil }
 
 // SetAttrs is a no-op implementation of AttrStore SetAttrs method.
-func (s *nopAttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
-	return nil
-}
+func (s nopAttrStore) SetAttrs(id uint64, m map[string]interface{}) error { return nil }
 
 // SetBulkAttrs is a no-op implementation of AttrStore SetBulkAttrs method.
-func (s *nopAttrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
-	return nil
-}
+func (s nopAttrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error { return nil }
 
 // Blocks is a no-op implementation of AttrStore Blocks method.
-func (s *nopAttrStore) Blocks() ([]AttrBlock, error) {
-	return nil, nil
-}
+func (s nopAttrStore) Blocks() ([]AttrBlock, error) { return nil, nil }
 
 // BlockData is a no-op implementation of AttrStore BlockData method.
-func (s *nopAttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) {
-	return nil, nil
-}
+func (s nopAttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) { return nil, nil }
 
 // AttrBlock represents a checksummed block of the attribute store.
 type AttrBlock struct {
@@ -100,12 +82,12 @@ type AttrBlock struct {
 	Checksum []byte `json:"checksum"`
 }
 
-// AttrBlocks represents a list of blocks.
-type AttrBlocks []AttrBlock
+// attrBlocks represents a list of blocks.
+type attrBlocks []AttrBlock
 
 // Diff returns a list of block ids that are different or are new in other.
 // Block lists must be in sorted order.
-func (a AttrBlocks) Diff(other []AttrBlock) []uint64 {
+func (a attrBlocks) Diff(other []AttrBlock) []uint64 {
 	var ids []uint64
 	for {
 		// Read next block from each list.
@@ -165,19 +147,19 @@ func encodeAttr(key string, value interface{}) *internal.Attr {
 	pb := &internal.Attr{Key: key}
 	switch value := value.(type) {
 	case string:
-		pb.Type = AttrTypeString
+		pb.Type = attrTypeString
 		pb.StringValue = value
 	case float64:
-		pb.Type = AttrTypeFloat
+		pb.Type = attrTypeFloat
 		pb.FloatValue = value
 	case uint64:
-		pb.Type = AttrTypeInt
+		pb.Type = attrTypeInt
 		pb.IntValue = int64(value)
 	case int64:
-		pb.Type = AttrTypeInt
+		pb.Type = attrTypeInt
 		pb.IntValue = value
 	case bool:
-		pb.Type = AttrTypeBool
+		pb.Type = attrTypeBool
 		pb.BoolValue = value
 	}
 	return pb
@@ -186,13 +168,13 @@ func encodeAttr(key string, value interface{}) *internal.Attr {
 // decodeAttr converts from an Attr internal representation to a key/value pair.
 func decodeAttr(attr *internal.Attr) (key string, value interface{}) {
 	switch attr.Type {
-	case AttrTypeString:
+	case attrTypeString:
 		return attr.Key, attr.StringValue
-	case AttrTypeInt:
+	case attrTypeInt:
 		return attr.Key, attr.IntValue
-	case AttrTypeBool:
+	case attrTypeBool:
 		return attr.Key, attr.BoolValue
-	case AttrTypeFloat:
+	case attrTypeFloat:
 		return attr.Key, attr.FloatValue
 	default:
 		return attr.Key, nil
@@ -221,3 +203,31 @@ func DecodeAttrs(v []byte) (map[string]interface{}, error) {
 	}
 	return decodeAttrs(pb.GetAttrs()), nil
 }
+
+func newMemAttrStore() AttrStore {
+	return &memAttrStore{
+		store: make(map[uint64]map[string]interface{}),
+	}
+}
+
+// memAttrStore represents an in-memory implementation of the AttrStore interface.
+type memAttrStore struct {
+	store map[uint64]map[string]interface{}
+}
+
+func (s *memAttrStore) Path() string                                          { return "" }
+func (s *memAttrStore) Open() error                                           { return nil }
+func (s *memAttrStore) Close() error                                          { return nil }
+func (s *memAttrStore) Attrs(id uint64) (m map[string]interface{}, err error) { return s.store[id], nil }
+func (s *memAttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
+	s.store[id] = m
+	return nil
+}
+func (s *memAttrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
+	for id, v := range m {
+		s.store[id] = v
+	}
+	return nil
+}
+func (s *memAttrStore) Blocks() ([]AttrBlock, error)                                  { return nil, nil }
+func (s *memAttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) { return nil, nil }

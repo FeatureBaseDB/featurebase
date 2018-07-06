@@ -20,20 +20,19 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/ctl"
 )
 
 var Importer *ctl.ImportCommand
 
-// NewImportCommand runs the Pilosa import subcommand for ingesting bulk data.
-func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+// newImportCommand runs the Pilosa import subcommand for ingesting bulk data.
+func newImportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	Importer = ctl.NewImportCommand(stdin, stdout, stderr)
 	importCmd := &cobra.Command{
 		Use:   "import",
 		Short: "Bulk load data into pilosa.",
-		Long: `Bulk imports one or more CSV files to a host's index and frame. The data
-of the CSV file are grouped by slice for the most efficient import.
+		Long: `Bulk imports one or more CSV files to a host's index and field. The data
+of the CSV file are grouped by shard for the most efficient import.
 
 The format of the CSV file is:
 
@@ -54,20 +53,19 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 	flags := importCmd.Flags()
 	flags.StringVarP(&Importer.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
 	flags.StringVarP(&Importer.Index, "index", "i", "", "Pilosa index to import into.")
-	flags.StringVarP(&Importer.Frame, "frame", "f", "", "Frame to import into.")
-	flags.StringVarP(&Importer.Field, "field", "", "", "Field to import into.")
+	flags.StringVarP(&Importer.Field, "field", "f", "", "Field to import into.")
 	flags.BoolVar(&Importer.StringKeys, "string-keys", false, "Treat payload as string keys.")
 	flags.IntVarP(&Importer.BufferSize, "buffer-size", "s", 10000000, "Number of bits to buffer/sort before importing.")
 	flags.BoolVarP(&Importer.Sort, "sort", "", false, "Enables sorting before import.")
 	flags.BoolVarP(&Importer.CreateSchema, "create", "e", false, "Create the schema if it does not exist before import.")
-	flags.Var(&Importer.FrameOptions.TimeQuantum, "frame-time-quantum", "Time quantum for the frame")
-	flags.StringVar(&Importer.FrameOptions.CacheType, "frame-cache-type", pilosa.CacheTypeRanked, "Cache type for the frame; valid values: none, lru, ranked")
-	flags.Uint32Var(&Importer.FrameOptions.CacheSize, "frame-cache-size", 50000, "Cache size for the frame")
+	//flags.Var(&Importer.FieldOptions.TimeQuantum, "field-time-quantum", "Time quantum for the field")
+	//flags.StringVar(&Importer.FieldOptions.CacheType, "field-cache-type", pilosa.CacheTypeRanked, "Cache type for the field; valid values: none, lru, ranked")
+	//flags.Uint32Var(&Importer.FieldOptions.CacheSize, "field-cache-size", 50000, "Cache size for the field")
 	ctl.SetTLSConfig(flags, &Importer.TLS.CertificatePath, &Importer.TLS.CertificateKeyPath, &Importer.TLS.SkipVerify)
 
 	return importCmd
 }
 
 func init() {
-	subcommandFns["import"] = NewImportCommand
+	subcommandFns["import"] = newImportCommand
 }

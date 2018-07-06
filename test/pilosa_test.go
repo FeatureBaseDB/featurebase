@@ -15,8 +15,10 @@
 package test_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa"
@@ -25,19 +27,29 @@ import (
 
 func TestNewCluster(t *testing.T) {
 	numNodes := 3
-	cluster := test.MustRunMainWithCluster(t, numNodes)
-	coordinator := cluster[0].Server.Cluster.Coordinator
+	cluster := test.MustRunCluster(t, numNodes)
+
+	coordinator := getCoordinator(cluster[0])
 	for i := 1; i < numNodes; i++ {
-		if coordi := cluster[i].Server.Cluster.Coordinator; coordi != coordinator {
+		if coordi := getCoordinator(cluster[i]); coordi != coordinator {
 			t.Fatalf("node %d does not have the same coordinator as node 0. '%v' and '%v' respectively", i, coordi, coordinator)
 		}
 	}
+	req, err := http.NewRequest(
+		"GET",
+		cluster[0].URL()+"/status",
+		strings.NewReader(""),
+	)
 
-	response, err := http.Get("http://" + cluster[0].Server.Addr().String() + "/status")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("getting schema: %v", err)
+		t.Fatalf("sending request: %v", err)
 	}
-	dec := json.NewDecoder(response.Body)
+	defer resp.Body.Close()
+
+	dec := json.NewDecoder(resp.Body)
 	body := struct {
 		State string
 		Nodes []struct {
@@ -64,4 +76,14 @@ func TestNewCluster(t *testing.T) {
 	if body.State != pilosa.ClusterStateNormal {
 		t.Fatalf("cluster state should be %s but is %s", pilosa.ClusterStateNormal, body.State)
 	}
+}
+
+func getCoordinator(m *test.Command) string {
+	hosts := m.API.Hosts(context.Background())
+	for _, host := range hosts {
+		if host.IsCoordinator {
+			return host.ID
+		}
+	}
+	panic("no coordinator in cluster")
 }

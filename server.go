@@ -18,8 +18,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,8 +27,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/internal"
 	"github.com/pkg/errors"
 
 	"golang.org/x/sync/errgroup"
@@ -38,13 +34,11 @@ import (
 
 // Default server settings.
 const (
-	DefaultDiagnosticServer = "https://diagnostics.pilosa.com/v0/diagnostics"
+	defaultDiagnosticServer = "https://diagnostics.pilosa.com/v0/diagnostics"
 )
 
 // Ensure Server implements interfaces.
-var _ Broadcaster = &Server{}
-var _ BroadcastHandler = &Server{}
-var _ StatusHandler = &Server{}
+var _ broadcaster = &Server{}
 
 // Server represents a holder wrapped by a running HTTP server.
 type Server struct {
@@ -53,32 +47,38 @@ type Server struct {
 	closing chan struct{}
 
 	// Internal
-	Holder      *Holder
-	Cluster     *Cluster
-	diagnostics *DiagnosticsCollector
-	executor    *Executor
+	holder          *Holder
+	cluster         *cluster
+	translateFile   *TranslateFile
+	diagnostics     *diagnosticsCollector
+	executor        *executor
+	hosts           []string
+	clusterDisabled bool
+	serializer      Serializer
 
 	// External
-	handler           *Handler
-	Broadcaster       Broadcaster
-	BroadcastReceiver BroadcastReceiver
-	Gossiper          Gossiper
-	remoteClient      *http.Client
-	systemInfo        SystemInfo
-	gcNotifier        GCNotifier
-	NewAttrStore      func(string) AttrStore
-	logger            Logger
-	ln                net.Listener
+	systemInfo SystemInfo
+	gcNotifier GCNotifier
+	logger     Logger
 
-	NodeID              string
-	URI                 URI
+	nodeID              string
+	uri                 URI
 	antiEntropyInterval time.Duration
 	metricInterval      time.Duration
 	diagnosticInterval  time.Duration
 	maxWritesPerRequest int
+	isCoordinator       bool
+	syncer              holderSyncer
+
+	primaryTranslateStore TranslateStore
 
 	defaultClient InternalClient
 	dataDir       string
+}
+
+// TODO: have this return an interface for Holder instead of concrete object?
+func (s *Server) Holder() *Holder {
+	return s.holder
 }
 
 // ServerOption is a functional option type for pilosa.Server
@@ -93,7 +93,7 @@ func OptServerLogger(l Logger) ServerOption {
 
 func OptServerReplicaN(n int) ServerOption {
 	return func(s *Server) error {
-		s.Cluster.ReplicaN = n
+		s.cluster.ReplicaN = n
 		return nil
 	}
 }
@@ -107,8 +107,7 @@ func OptServerDataDir(dir string) ServerOption {
 
 func OptServerAttrStoreFunc(af func(string) AttrStore) ServerOption {
 	return func(s *Server) error {
-		s.NewAttrStore = af
-		s.Holder.NewAttrStore = af
+		s.holder.NewAttrStore = af
 		return nil
 	}
 }
@@ -122,14 +121,7 @@ func OptServerAntiEntropyInterval(interval time.Duration) ServerOption {
 
 func OptServerLongQueryTime(dur time.Duration) ServerOption {
 	return func(s *Server) error {
-		s.Cluster.LongQueryTime = dur
-		return nil
-	}
-}
-
-func OptServerHandler(h *Handler) ServerOption {
-	return func(s *Server) error {
-		s.handler = h
+		s.cluster.longQueryTime = dur
 		return nil
 	}
 }
@@ -162,19 +154,25 @@ func OptServerGCNotifier(gcn GCNotifier) ServerOption {
 	}
 }
 
-func OptServerRemoteClient(c *http.Client) ServerOption {
+func OptServerInternalClient(c InternalClient) ServerOption {
 	return func(s *Server) error {
-		s.executor = NewExecutor(c)
-		s.remoteClient = c
-		s.defaultClient = NewInternalHTTPClientFromURI(nil, c)
-		s.Cluster.RemoteClient = c
+		s.executor = newExecutor(optExecutorInternalQueryClient(c))
+		s.defaultClient = c
+		s.cluster.InternalClient = c
+		return nil
+	}
+}
+
+func OptServerPrimaryTranslateStore(store TranslateStore) ServerOption {
+	return func(s *Server) error {
+		s.primaryTranslateStore = store
 		return nil
 	}
 }
 
 func OptServerStatsClient(sc StatsClient) ServerOption {
 	return func(s *Server) error {
-		s.Holder.Stats = sc
+		s.holder.Stats = sc
 		return nil
 	}
 }
@@ -186,40 +184,61 @@ func OptServerDiagnosticsInterval(dur time.Duration) ServerOption {
 	}
 }
 
-func OptServerListener(ln net.Listener) ServerOption {
+func OptServerURI(uri *URI) ServerOption {
 	return func(s *Server) error {
-		s.ln = ln
-
+		s.uri = *uri
 		return nil
 	}
 }
 
-func OptServerURI(uri *URI) ServerOption {
+// OptClusterDisabled tells the server whether to use a static cluster with the
+// defined hosts. Mostly used for testing.
+func OptServerClusterDisabled(disabled bool, hosts []string) ServerOption {
 	return func(s *Server) error {
-		s.URI = *uri
+		s.hosts = hosts
+		s.clusterDisabled = disabled
+		return nil
+	}
+}
+
+func OptServerSerializer(ser Serializer) ServerOption {
+	return func(s *Server) error {
+		s.serializer = ser
+		return nil
+	}
+}
+
+func OptServerIsCoordinator(is bool) ServerOption {
+	return func(s *Server) error {
+		s.isCoordinator = is
+		return nil
+	}
+}
+
+func OptServerNodeID(nodeID string) ServerOption {
+	return func(s *Server) error {
+		s.nodeID = nodeID
+		return nil
+	}
+}
+
+func OptServerClusterHasher(h Hasher) ServerOption {
+	return func(s *Server) error {
+		s.cluster.Hasher = h
 		return nil
 	}
 }
 
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
-	handler, err := NewHandler()
-	if err != nil {
-		return nil, errors.Wrap(err, "initializing handler")
-	}
 	s := &Server{
-		closing:           make(chan struct{}),
-		Cluster:           NewCluster(),
-		Holder:            NewHolder(),
-		handler:           handler,
-		Broadcaster:       NopBroadcaster,
-		BroadcastReceiver: NopBroadcastReceiver,
-		diagnostics:       NewDiagnosticsCollector(DefaultDiagnosticServer),
-		systemInfo:        NewNopSystemInfo(),
+		closing:     make(chan struct{}),
+		cluster:     newCluster(),
+		holder:      NewHolder(),
+		diagnostics: newDiagnosticsCollector(defaultDiagnosticServer),
+		systemInfo:  newNopSystemInfo(),
 
 		gcNotifier: NopGCNotifier,
-
-		NewAttrStore: NewNopAttrStore,
 
 		antiEntropyInterval: time.Minute * 10,
 		metricInterval:      0,
@@ -241,34 +260,55 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		return nil, err
 	}
 
-	s.Holder.Path = path
-	s.Holder.Logger = s.logger
-	s.Holder.Stats.SetLogger(s.logger)
+	s.holder.Path = path
+	s.holder.Logger = s.logger
+	s.holder.Stats.SetLogger(s.logger)
 
-	s.Cluster.Path = path
-	s.Cluster.Logger = s.logger
-	s.Cluster.Holder = s.Holder
+	s.cluster.Path = path
+	s.cluster.logger = s.logger
+	s.cluster.holder = s.holder
 
-	// update URI port with actual listener port. TODO this should probably be done outside of here.
-	if s.URI.Port() == 0 {
-		s.URI.SetPort(uint16(s.ln.Addr().(*net.TCPAddr).Port))
+	// Initialize translation database.
+	s.translateFile = NewTranslateFile()
+	s.translateFile.Path = filepath.Join(path, ".keys")
+	s.translateFile.PrimaryTranslateStore = s.primaryTranslateStore
+
+	// Get or create NodeID.
+	s.nodeID = s.loadNodeID()
+	if s.isCoordinator {
+		s.cluster.Coordinator = s.nodeID
 	}
 
-	s.NodeID = s.LoadNodeID()
 	// Set Cluster Node.
 	node := &Node{
-		ID:            s.NodeID,
-		URI:           s.URI,
-		IsCoordinator: s.Cluster.Coordinator == s.NodeID,
+		ID:            s.nodeID,
+		URI:           s.uri,
+		IsCoordinator: s.cluster.Coordinator == s.nodeID,
 	}
-	s.Cluster.Node = node
-	s.Holder.Stats = s.Holder.Stats.WithTags(fmt.Sprintf("NodeID:%s", s.NodeID))
+	s.cluster.Node = node
+	if s.clusterDisabled {
+		err := s.cluster.setStatic(s.hosts)
+		if err != nil {
+			return nil, errors.Wrap(err, "setting cluster static")
+		}
+	}
 
-	s.executor.Holder = s.Holder
+	// Append the NodeID tag to stats.
+	s.holder.Stats = s.holder.Stats.WithTags(fmt.Sprintf("NodeID:%s", s.nodeID))
+
+	s.executor.Holder = s.holder
 	s.executor.Node = node
-	s.executor.Cluster = s.Cluster
+	s.executor.Cluster = s.cluster
+	s.executor.TranslateStore = s.translateFile
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
-	s.handler.API.Executor = s.executor
+	s.cluster.broadcaster = s
+	s.cluster.maxWritesPerRequest = s.maxWritesPerRequest
+	s.holder.broadcaster = s
+
+	err = s.cluster.setup()
+	if err != nil {
+		return nil, errors.Wrap(err, "setting up cluster")
+	}
 
 	return s, nil
 }
@@ -276,67 +316,28 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 // Open opens and initializes the server.
 func (s *Server) Open() error {
 	s.logger.Printf("open server")
-	// s.ln can be configured prior to Open() via s.OpenListener().
-	if s.ln == nil {
-		return errors.New("Must pass a listener option to NewServer")
-	}
 
 	// Log startup
-	err := s.Holder.logStartup()
+	err := s.holder.logStartup()
 	if err != nil {
 		log.Println(errors.Wrap(err, "logging startup"))
 	}
 
-	// Get or create NodeID.
-
-	// Append the NodeID tag to stats.
-
-	// Create default HTTP client
-
-	// Create executor for executing queries.
-
-	// Cluster settings.
-	s.Cluster.Broadcaster = s.Broadcaster
-	s.Cluster.MaxWritesPerRequest = s.maxWritesPerRequest
-
-	// Initialize HTTP handler.
-	s.handler.API.Holder = s.Holder
-	s.handler.API.Broadcaster = s.Broadcaster
-	s.handler.API.BroadcastHandler = s
-	s.handler.API.StatusHandler = s
-	s.handler.API.Cluster = s.Cluster
-
-	// Initialize Holder.
-	s.Holder.Broadcaster = s.Broadcaster
-
-	// Serve HTTP.
-	go func() {
-		server := &http.Server{Handler: s.handler}
-		go func() {
-			<-s.closing
-			server.Close()
-		}()
-		err := server.Serve(s.ln)
-		if err != nil && err.Error() != "http: Server closed" {
-			s.logger.Printf("HTTP handler terminated with error: %s\n", err)
-		}
-	}()
-
-	// Start the BroadcastReceiver.
-	if err := s.BroadcastReceiver.Start(s); err != nil {
-		return fmt.Errorf("starting BroadcastReceiver: %v", err)
+	// Initialize id-key storage.
+	if err := s.translateFile.Open(); err != nil {
+		return err
 	}
 
 	// Open Cluster management.
-	if err := s.Cluster.Open(); err != nil {
+	if err := s.cluster.waitForStarted(); err != nil {
 		return fmt.Errorf("opening Cluster: %v", err)
 	}
 
 	// Open holder.
-	if err := s.Holder.Open(); err != nil {
+	if err := s.holder.Open(); err != nil {
 		return fmt.Errorf("opening Holder: %v", err)
 	}
-	if err := s.Cluster.SetNodeState(NodeStateReady); err != nil {
+	if err := s.cluster.setNodeState(nodeStateReady); err != nil {
 		return fmt.Errorf("setting nodeState: %v", err)
 	}
 
@@ -345,7 +346,13 @@ func (s *Server) Open() error {
 	// the cluster without waiting for data to load on the coordinator. Before
 	// this starts, the joins are queued up in the Cluster.joiningLeavingNodes
 	// buffered channel.
-	s.Cluster.ListenForJoins()
+	s.cluster.listenForJoins()
+
+	s.syncer.Holder = s.holder
+	s.syncer.Node = s.cluster.Node
+	s.syncer.Cluster = s.cluster
+	s.syncer.Closing = s.closing
+	s.syncer.Stats = s.holder.Stats.WithTags("HolderSyncer")
 
 	// Start background monitoring.
 	s.wg.Add(3)
@@ -362,69 +369,62 @@ func (s *Server) Close() error {
 	close(s.closing)
 	s.wg.Wait()
 
-	if s.ln != nil {
-		s.ln.Close()
+	if s.cluster != nil {
+		s.cluster.close()
 	}
-	if s.Cluster != nil {
-		s.Cluster.Close()
+	if s.holder != nil {
+		s.holder.Close()
 	}
-	if s.Holder != nil {
-		s.Holder.Close()
+	if s.translateFile != nil {
+		s.translateFile.Close()
 	}
 
 	return nil
 }
 
-// LoadNodeID gets NodeID from disk, or creates a new value.
+// loadNodeID gets NodeID from disk, or creates a new value.
 // If server.NodeID is already set, a new ID is not created.
-func (s *Server) LoadNodeID() string {
-	if s.NodeID != "" {
-		return s.NodeID
+func (s *Server) loadNodeID() string {
+	if s.nodeID != "" {
+		return s.nodeID
 	}
-	nodeID, err := s.Holder.loadNodeID()
+	nodeID, err := s.holder.loadNodeID()
 	if err != nil {
 		s.logger.Printf("loading NodeID: %v", err)
-		return s.NodeID
+		return s.nodeID
 	}
 	return nodeID
 }
 
-// Addr returns the address of the listener.
-func (s *Server) Addr() net.Addr {
-	if s.ln == nil {
-		return nil
-	}
-	return s.ln.Addr()
+// SyncData manually invokes the anti entropy process which makes sure that this
+// node has the data from all replicas across the cluster.
+func (s *Server) SyncData() error {
+	return errors.Wrap(s.syncer.SyncHolder(), "syncing holder")
 }
 
 func (s *Server) monitorAntiEntropy() {
+	if s.antiEntropyInterval == 0 {
+		return // anti entropy disabled
+	}
 	ticker := time.NewTicker(s.antiEntropyInterval)
 	defer ticker.Stop()
 
 	s.logger.Printf("holder sync monitor initializing (%s interval)", s.antiEntropyInterval)
 
+	// Initialize syncer with local holder and remote client.
 	for {
 		// Wait for tick or a close.
 		select {
 		case <-s.closing:
 			return
 		case <-ticker.C:
-			s.Holder.Stats.Count("AntiEntropy", 1, 1.0)
+			s.holder.Stats.Count("AntiEntropy", 1, 1.0)
 		}
 		t := time.Now()
-		s.logger.Printf("holder sync beginning")
-
-		// Initialize syncer with local holder and remote client.
-		var syncer HolderSyncer
-		syncer.Holder = s.Holder
-		syncer.Node = s.Cluster.Node
-		syncer.Cluster = s.Cluster
-		syncer.Closing = s.closing
-		syncer.RemoteClient = s.remoteClient
-		syncer.Stats = s.Holder.Stats.WithTags("HolderSyncer")
 
 		// Sync holders.
-		if err := syncer.SyncHolder(); err != nil {
+		s.logger.Printf("holder sync beginning")
+		if err := s.syncer.SyncHolder(); err != nil {
 			s.logger.Printf("holder sync error: err=%s", err)
 			continue
 		}
@@ -432,119 +432,115 @@ func (s *Server) monitorAntiEntropy() {
 		// Record successful sync in log.
 		s.logger.Printf("holder sync complete")
 		dif := time.Since(t)
-		s.Holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
+		s.holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
 	}
 }
 
-// ReceiveMessage represents an implementation of BroadcastHandler.
-func (s *Server) ReceiveMessage(pb proto.Message) error {
-	switch obj := pb.(type) {
-	case *internal.CreateSliceMessage:
-		idx := s.Holder.Index(obj.Index)
+// receiveMessage represents an implementation of BroadcastHandler.
+func (s *Server) receiveMessage(m Message) error {
+	switch obj := m.(type) {
+	case *CreateShardMessage:
+		idx := s.holder.Index(obj.Index)
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
-		idx.SetRemoteMaxSlice(obj.Slice)
-	case *internal.CreateIndexMessage:
+		idx.setRemoteMaxShard(obj.Shard)
+	case *CreateIndexMessage:
 		opt := IndexOptions{}
-		_, err := s.Holder.CreateIndex(obj.Index, opt)
+		_, err := s.holder.CreateIndex(obj.Index, opt)
 		if err != nil {
 			return err
 		}
-	case *internal.DeleteIndexMessage:
-		if err := s.Holder.DeleteIndex(obj.Index); err != nil {
+	case *DeleteIndexMessage:
+		if err := s.holder.DeleteIndex(obj.Index); err != nil {
 			return err
 		}
-	case *internal.CreateFrameMessage:
-		idx := s.Holder.Index(obj.Index)
+	case *CreateFieldMessage:
+		idx := s.holder.Index(obj.Index)
 		if idx == nil {
 			return fmt.Errorf("Local Index not found: %s", obj.Index)
 		}
-		opt := decodeFrameOptions(obj.Meta)
-		_, err := idx.CreateFrame(obj.Frame, *opt)
+		opt := obj.Meta
+		_, err := idx.createField(obj.Field, *opt)
 		if err != nil {
 			return err
 		}
-	case *internal.DeleteFrameMessage:
-		idx := s.Holder.Index(obj.Index)
-		if err := idx.DeleteFrame(obj.Frame); err != nil {
+	case *DeleteFieldMessage:
+		idx := s.holder.Index(obj.Index)
+		if err := idx.DeleteField(obj.Field); err != nil {
 			return err
 		}
-	case *internal.CreateFieldMessage:
-		f := s.Holder.Frame(obj.Index, obj.Frame)
-		field := decodeField(obj.Field)
-		if err := f.CreateField(field); err != nil {
-			return err
-		}
-	case *internal.DeleteFieldMessage:
-		f := s.Holder.Frame(obj.Index, obj.Frame)
-		if err := f.DeleteField(obj.Field); err != nil {
-			return err
-		}
-	case *internal.CreateViewMessage:
-		f := s.Holder.Frame(obj.Index, obj.Frame)
+	case *CreateViewMessage:
+		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
-			return fmt.Errorf("Local Frame not found: %s", obj.Frame)
+			return fmt.Errorf("Local Field not found: %s", obj.Field)
 		}
 		_, _, err := f.createViewIfNotExistsBase(obj.View)
 		if err != nil {
 			return err
 		}
-	case *internal.DeleteViewMessage:
-		f := s.Holder.Frame(obj.Index, obj.Frame)
+	case *DeleteViewMessage:
+		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
-			return fmt.Errorf("Local Frame not found: %s", obj.Frame)
+			return fmt.Errorf("Local Field not found: %s", obj.Field)
 		}
-		err := f.DeleteView(obj.View)
+		err := f.deleteView(obj.View)
 		if err != nil {
 			return err
 		}
-	case *internal.ClusterStatus:
-		err := s.Cluster.MergeClusterStatus(obj)
+	case *ClusterStatus:
+		err := s.cluster.mergeClusterStatus(obj)
 		if err != nil {
 			return err
 		}
-	case *internal.ResizeInstruction:
-		err := s.Cluster.FollowResizeInstruction(obj)
+	case *ResizeInstruction:
+		err := s.cluster.followResizeInstruction(obj)
 		if err != nil {
 			return err
 		}
-	case *internal.ResizeInstructionComplete:
-		err := s.Cluster.MarkResizeInstructionComplete(obj)
+	case *ResizeInstructionComplete:
+		err := s.cluster.markResizeInstructionComplete(obj)
 		if err != nil {
 			return err
 		}
-	case *internal.SetCoordinatorMessage:
-		s.Cluster.SetCoordinator(DecodeNode(obj.New))
-	case *internal.UpdateCoordinatorMessage:
-		s.Cluster.UpdateCoordinator(DecodeNode(obj.New))
-	case *internal.NodeStateMessage:
-		err := s.Cluster.ReceiveNodeState(obj.NodeID, obj.State)
+	case *SetCoordinatorMessage:
+		s.cluster.setCoordinator(obj.New)
+	case *UpdateCoordinatorMessage:
+		s.cluster.updateCoordinator(obj.New)
+	case *NodeStateMessage:
+		err := s.cluster.receiveNodeState(obj.NodeID, obj.State)
 		if err != nil {
 			return err
 		}
-	case *internal.RecalculateCaches:
-		s.Holder.RecalculateCaches()
-	case *internal.NodeEventMessage:
-		s.Cluster.ReceiveEvent(DecodeNodeEvent(obj))
+	case *RecalculateCaches:
+		s.holder.recalculateCaches()
+	case *NodeEvent:
+		s.cluster.ReceiveEvent(obj)
+	case *NodeStatus:
+		s.handleRemoteStatus(obj)
 	}
 
 	return nil
 }
 
 // SendSync represents an implementation of Broadcaster.
-func (s *Server) SendSync(pb proto.Message) error {
+func (s *Server) SendSync(m Message) error {
 	var eg errgroup.Group
-	for _, node := range s.Cluster.Nodes {
+	msg, err := s.serializer.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("marshaling message: %v", err)
+	}
+	msg = append([]byte{getMessageType(m)}, msg...)
+	for _, node := range s.cluster.Nodes {
 		node := node
 		s.logger.Printf("SendSync to: %s", node.URI)
 		// Don't forward the message to ourselves.
-		if s.URI == node.URI {
+		if s.uri == node.URI {
 			continue
 		}
 
 		eg.Go(func() error {
-			return s.defaultClient.SendMessage(context.Background(), &node.URI, pb)
+			return s.defaultClient.SendMessage(context.Background(), &node.URI, msg)
 		})
 	}
 
@@ -552,92 +548,69 @@ func (s *Server) SendSync(pb proto.Message) error {
 }
 
 // SendAsync represents an implementation of Broadcaster.
-func (s *Server) SendAsync(pb proto.Message) error {
-	return s.Gossiper.SendAsync(pb)
+func (s *Server) SendAsync(m Message) error {
+	return ErrNotImplemented
 }
 
 // SendTo represents an implementation of Broadcaster.
-func (s *Server) SendTo(to *Node, pb proto.Message) error {
+func (s *Server) SendTo(to *Node, m Message) error {
 	s.logger.Printf("SendTo: %s", to.URI)
-	return s.defaultClient.SendMessage(context.Background(), &to.URI, pb)
+	msg, err := s.serializer.Marshal(m)
+	if err != nil {
+		return fmt.Errorf("marshaling message: %v", err)
+	}
+	msg = append([]byte{getMessageType(m)}, msg...)
+	return s.defaultClient.SendMessage(context.Background(), &to.URI, msg)
 }
 
-// Server implements StatusHandler.
-// LocalStatus is used to periodically sync information
-// between nodes. Under normal conditions, nodes should
-// remain in sync through Broadcast messages. For cases
-// where a node fails to receive a Broadcast message, or
-// when a new (empty) node needs to get in sync with the
-// rest of the cluster, two things are shared via gossip:
-// - MaxSlice by Index
-// - Schema
-// In a gossip implementation, memberlist.Delegate.LocalState() uses this.
-func (s *Server) LocalStatus() (proto.Message, error) {
-	if s.Cluster == nil {
-		return nil, errors.New("Server.Cluster is nil")
-	}
-	if s.Holder == nil {
-		return nil, errors.New("Server.Holder is nil")
-	}
-
-	ns := internal.NodeStatus{
-		Node:      EncodeNode(s.Cluster.Node),
-		MaxSlices: s.Holder.EncodeMaxSlices(),
-		Schema:    s.Holder.EncodeSchema(),
-	}
-
-	return &ns, nil
+// node returns the pilosa.node object. It is used by membership protocols to
+// get this node's name(ID), location(URI), and coordinator status.
+func (s *Server) node() Node {
+	return *s.cluster.Node
 }
 
-// ClusterStatus returns the ClusterState and NodeSet for the cluster.
-func (s *Server) ClusterStatus() (proto.Message, error) {
-	return s.Cluster.Status(), nil
-}
-
-// HandleRemoteStatus receives incoming NodeStatus from remote nodes.
-func (s *Server) HandleRemoteStatus(pb proto.Message) error {
+// handleRemoteStatus receives incoming NodeStatus from remote nodes.
+func (s *Server) handleRemoteStatus(pb Message) {
 	// Ignore NodeStatus messages until the cluster is in a Normal state.
-	if s.Cluster.State() != ClusterStateNormal {
-		return nil
+	if s.cluster.State() != ClusterStateNormal {
+		return
 	}
 
 	go func() {
 		// Make sure the holder has opened.
-		<-s.Holder.opened
+		<-s.holder.opened
 
-		err := s.mergeRemoteStatus(pb.(*internal.NodeStatus))
+		err := s.mergeRemoteStatus(pb.(*NodeStatus))
 		if err != nil {
 			s.logger.Printf("merge remote status: %s", err)
 		}
 	}()
-
-	return nil
 }
 
-func (s *Server) mergeRemoteStatus(ns *internal.NodeStatus) error {
+func (s *Server) mergeRemoteStatus(ns *NodeStatus) error {
 	// Ignore status updates from self.
-	if s.NodeID == DecodeNode(ns.Node).ID {
+	if s.nodeID == ns.Node.ID {
 		return nil
 	}
 
 	// Sync schema.
-	if err := s.Holder.ApplySchema(ns.Schema); err != nil {
+	if err := s.holder.applySchema(ns.Schema); err != nil {
 		return errors.Wrap(err, "applying schema")
 	}
 
-	// Sync maxSlices.
-	oldmaxslices := s.Holder.MaxSlices()
-	for index, newMax := range ns.MaxSlices.Standard {
-		localIndex := s.Holder.Index(index)
+	// Sync maxShards.
+	oldmaxshards := s.holder.maxShards()
+	for index, newMax := range ns.MaxShards {
+		localIndex := s.holder.Index(index)
 		// if we don't know about an index locally, log an error because
-		// indexes should be created and synced prior to slice creation
+		// indexes should be created and synced prior to shard creation
 		if localIndex == nil {
 			s.logger.Printf("Local Index not found: %s", index)
 			continue
 		}
-		if newMax > oldmaxslices[index] {
-			oldmaxslices[index] = newMax
-			localIndex.SetRemoteMaxSlice(newMax)
+		if newMax > oldmaxshards[index] {
+			oldmaxshards[index] = newMax
+			localIndex.setRemoteMaxShard(newMax)
 		}
 	}
 
@@ -656,17 +629,17 @@ func (s *Server) monitorDiagnostics() {
 
 	s.diagnostics.Logger = s.logger
 	s.diagnostics.SetVersion(Version)
-	s.diagnostics.Set("Host", s.URI.host)
-	s.diagnostics.Set("Cluster", strings.Join(s.Cluster.NodeIDs(), ","))
-	s.diagnostics.Set("NumNodes", len(s.Cluster.Nodes))
+	s.diagnostics.Set("Host", s.uri.Host)
+	s.diagnostics.Set("Cluster", strings.Join(s.cluster.nodeIDs(), ","))
+	s.diagnostics.Set("NumNodes", len(s.cluster.Nodes))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
-	s.diagnostics.Set("NodeID", s.NodeID)
-	s.diagnostics.Set("ClusterID", s.Cluster.ID)
+	s.diagnostics.Set("NodeID", s.nodeID)
+	s.diagnostics.Set("ClusterID", s.cluster.id)
 	s.diagnostics.EnrichWithOSInfo()
 
 	// Flush the diagnostics metrics at startup, then on each tick interval
 	flush := func() {
-		openFiles, err := CountOpenFiles()
+		openFiles, err := countOpenFiles()
 		if err == nil {
 			s.diagnostics.Set("OpenFiles", openFiles)
 		}
@@ -716,31 +689,31 @@ func (s *Server) monitorRuntime() {
 			return
 		case <-s.gcNotifier.AfterGC():
 			// GC just ran.
-			s.Holder.Stats.Count("garbage_collection", 1, 1.0)
+			s.holder.Stats.Count("garbage_collection", 1, 1.0)
 		case <-ticker.C:
 		}
 
 		// Record the number of go routines.
-		s.Holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
+		s.holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
 
-		openFiles, err := CountOpenFiles()
+		openFiles, err := countOpenFiles()
 		// Open File handles.
 		if err == nil {
-			s.Holder.Stats.Gauge("OpenFiles", float64(openFiles), 1.0)
+			s.holder.Stats.Gauge("OpenFiles", float64(openFiles), 1.0)
 		}
 
 		// Runtime memory metrics.
 		runtime.ReadMemStats(&m)
-		s.Holder.Stats.Gauge("HeapAlloc", float64(m.HeapAlloc), 1.0)
-		s.Holder.Stats.Gauge("HeapInuse", float64(m.HeapInuse), 1.0)
-		s.Holder.Stats.Gauge("StackInuse", float64(m.StackInuse), 1.0)
-		s.Holder.Stats.Gauge("Mallocs", float64(m.Mallocs), 1.0)
-		s.Holder.Stats.Gauge("Frees", float64(m.Frees), 1.0)
+		s.holder.Stats.Gauge("HeapAlloc", float64(m.HeapAlloc), 1.0)
+		s.holder.Stats.Gauge("HeapInuse", float64(m.HeapInuse), 1.0)
+		s.holder.Stats.Gauge("StackInuse", float64(m.StackInuse), 1.0)
+		s.holder.Stats.Gauge("Mallocs", float64(m.Mallocs), 1.0)
+		s.holder.Stats.Gauge("Frees", float64(m.Frees), 1.0)
 	}
 }
 
-// CountOpenFiles on operating systems that support lsof.
-func CountOpenFiles() (int, error) {
+// countOpenFiles on operating systems that support lsof.
+func countOpenFiles() (int, error) {
 	switch runtime.GOOS {
 	case "darwin", "linux", "unix", "freebsd":
 		// -b option avoid kernel blocks
@@ -754,19 +727,10 @@ func CountOpenFiles() (int, error) {
 		return len(lines), nil
 	case "windows":
 		// TODO: count open file handles on windows
-		return 0, errors.New("CountOpenFiles() on Windows is not supported")
+		return 0, errors.New("countOpenFiles() on Windows is not supported")
 	default:
-		return 0, errors.New("CountOpenFiles() on this OS is not supported")
+		return 0, errors.New("countOpenFiles() on this OS is not supported")
 	}
-}
-
-// StatusHandler specifies the methods which an object must implement to share
-// state in the cluster. These are used by the GossipMemberSet to implement the
-// LocalState and MergeRemoteState methods of memberlist.Delegate
-type StatusHandler interface {
-	LocalStatus() (proto.Message, error)
-	ClusterStatus() (proto.Message, error)
-	HandleRemoteStatus(proto.Message) error
 }
 
 func expandDirName(path string) (string, error) {

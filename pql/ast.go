@@ -26,6 +26,186 @@ import (
 // Query represents a PQL query.
 type Query struct {
 	Calls []*Call
+
+	lastField string
+	lastCond  Token
+	inList    bool
+	callStack []*Call
+
+	conditional []string
+}
+
+func (q *Query) startCall(name string) {
+	newCall := &Call{Name: name}
+	q.callStack = append(q.callStack, newCall)
+
+	if len(q.callStack) == 1 {
+		q.Calls = append(q.Calls, newCall)
+	} else {
+		calls := q.callStack[len(q.callStack)-2].Children
+		q.callStack[len(q.callStack)-2].Children = append(calls, newCall)
+	}
+}
+
+func (q *Query) endCall() {
+	q.callStack = q.callStack[:len(q.callStack)-1]
+}
+
+func (q *Query) addPosNum(key, value string) {
+	q.addField(key)
+	q.addNumVal(value)
+}
+
+func (q *Query) addPosStr(key, value string) {
+	q.addField(key)
+	q.addVal(value)
+}
+
+func (q *Query) startConditional() {
+	q.conditional = make([]string, 0)
+	call := q.callStack[len(q.callStack)-1]
+	if call.Args == nil {
+		call.Args = make(map[string]interface{})
+	}
+}
+
+func (q *Query) condAdd(val string) {
+	q.conditional = append(q.conditional, val)
+}
+
+func (q *Query) endConditional() {
+	// do stuff
+	if len(q.conditional) != 5 {
+		panic(fmt.Sprintf("conditional of wrong length: %#v", q.conditional))
+	}
+	low, _ := strconv.ParseInt(q.conditional[0], 10, 64)
+	field := q.conditional[2]
+	high, _ := strconv.ParseInt(q.conditional[4], 10, 64)
+
+	if q.conditional[1] == "<" {
+		low++
+	}
+	if q.conditional[3] == "<=" {
+		high++
+	}
+
+	call := q.callStack[len(q.callStack)-1]
+	call.Args[field] = &Condition{Op: BETWEEN, Value: []interface{}{low, high}}
+
+	q.conditional = nil
+}
+
+func (q *Query) addField(field string) {
+	if q.lastField != "" {
+		panic(fmt.Sprintf("addField called with '%s' while field is not empty, it's: %s", field, q.lastField))
+	}
+	q.lastField = field
+	call := q.callStack[len(q.callStack)-1]
+	if call.Args == nil {
+		call.Args = make(map[string]interface{})
+	}
+}
+
+func (q *Query) addVal(val interface{}) {
+	if q.lastField == "" {
+		panic(fmt.Sprintf("addVal called with '%s' when lastField is empty", val))
+	}
+	call := q.callStack[len(q.callStack)-1]
+	if q.inList {
+		list := call.Args[q.lastField].([]interface{})
+		call.Args[q.lastField] = append(list, val)
+		return
+	}
+	if q.lastCond != ILLEGAL {
+		call.Args[q.lastField] = &Condition{
+			Op:    q.lastCond,
+			Value: val,
+		}
+	} else {
+		call.Args[q.lastField] = val
+	}
+	q.lastField = ""
+	q.lastCond = ILLEGAL
+}
+
+func (q *Query) addNumVal(val string) {
+	if q.lastField == "" {
+		panic(fmt.Sprintf("addIntVal called with '%s' when lastField is empty", val))
+	}
+	var ival interface{}
+	var err error
+	if strings.Contains(val, ".") {
+		ival, err = strconv.ParseFloat(val, 64)
+	} else {
+		ival, err = strconv.ParseInt(val, 10, 64)
+	}
+	if err != nil {
+		panic(err)
+	}
+	call := q.callStack[len(q.callStack)-1]
+	if q.inList {
+		if q.lastCond != ILLEGAL {
+			list := call.Args[q.lastField].(*Condition).Value.([]interface{})
+			call.Args[q.lastField] = &Condition{
+				Op:    q.lastCond,
+				Value: append(list, ival),
+			}
+		} else {
+			list := call.Args[q.lastField].([]interface{})
+			call.Args[q.lastField] = append(list, ival)
+		}
+		return
+	} else if q.lastCond != ILLEGAL {
+		call.Args[q.lastField] = &Condition{
+			Op:    q.lastCond,
+			Value: ival,
+		}
+	} else {
+		call.Args[q.lastField] = ival
+	}
+	q.lastField = ""
+	q.lastCond = ILLEGAL
+}
+
+func (q *Query) startList() {
+	call := q.callStack[len(q.callStack)-1]
+	if q.lastCond != ILLEGAL {
+		call.Args[q.lastField] = &Condition{
+			Op:    q.lastCond,
+			Value: make([]interface{}, 0),
+		}
+	} else {
+		call.Args[q.lastField] = make([]interface{}, 0)
+	}
+	q.inList = true
+}
+
+func (q *Query) endList() {
+	q.inList = false
+	q.lastField = ""
+	q.lastCond = ILLEGAL
+}
+
+func (q *Query) addGT() {
+	q.lastCond = GT
+}
+func (q *Query) addLT() {
+	q.lastCond = LT
+}
+func (q *Query) addGTE() {
+	q.lastCond = GTE
+}
+func (q *Query) addLTE() {
+	q.lastCond = LTE
+}
+func (q *Query) addEQ() {
+	q.lastCond = EQ
+}
+func (q *Query) addNEQ() {
+	q.lastCond = NEQ
+}
+func (q *Query) addBTWN() {
+	q.lastCond = BETWEEN
 }
 
 // WriteCallN returns the number of mutating calls.
@@ -33,7 +213,7 @@ func (q *Query) WriteCallN() int {
 	var n int
 	for _, call := range q.Calls {
 		switch call.Name {
-		case "SetBit", "ClearBit", "SetRowAttrs", "SetColumnAttrs":
+		case "Set", "Clear", "SetRowAttrs", "SetColumnAttrs":
 			n++
 		}
 	}
@@ -56,6 +236,18 @@ type Call struct {
 	Children []*Call
 }
 
+// FieldArg determines which key-value pair contains the field and rowID,
+// in the case of arguments like Set(colID, field=rowID).
+// Returns the field as a string if present, or an error if not.
+func (c *Call) FieldArg() (string, error) {
+	for arg := range c.Args {
+		if !strings.HasPrefix(arg, "_") {
+			return arg, nil
+		}
+	}
+	return "", fmt.Errorf("No field argument specified")
+}
+
 // UintArg is for reading the value at key from call.Args as a uint64. If the
 // key is not in Call.Args, the value of the returned bool will be false, and
 // the error will be nil. The value is assumed to be a uint64 or an int64 and
@@ -73,6 +265,26 @@ func (c *Call) UintArg(key string) (uint64, bool, error) {
 		return tval, true, nil
 	default:
 		return 0, true, fmt.Errorf("could not convert %v of type %T to uint64 in Call.UintArg", tval, tval)
+	}
+}
+
+// IntArg is for reading the value at key from call.Args as an int64. If the
+// key is not in Call.Args, the value of the returned bool will be false, and
+// the error will be nil. The value is assumed to be a unt64 or an int64 and
+// then cast to an int64. An error is returned if the value is not an int64 or
+// uint64.
+func (c *Call) IntArg(key string) (int64, bool, error) {
+	val, ok := c.Args[key]
+	if !ok {
+		return 0, false, nil
+	}
+	switch tval := val.(type) {
+	case int64:
+		return tval, true, nil
+	case uint64:
+		return int64(tval), true, nil
+	default:
+		return 0, true, fmt.Errorf("could not convert %v of type %T to int64 in Call.IntArg", tval, tval)
 	}
 }
 
@@ -100,8 +312,8 @@ func (c *Call) UintSliceArg(key string) ([]uint64, bool, error) {
 	}
 }
 
-// Keys returns a list of argument keys in sorted order.
-func (c *Call) Keys() []string {
+// keys returns a list of argument keys in sorted order.
+func (c *Call) keys() []string {
 	a := make([]string, 0, len(c.Args))
 	for k := range c.Args {
 		a = append(a, k)
@@ -157,7 +369,7 @@ func (c *Call) String() string {
 	}
 
 	// Write arguments in key order.
-	for i, key := range c.Keys() {
+	for i, key := range c.keys() {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
@@ -167,7 +379,7 @@ func (c *Call) String() string {
 		case *Condition:
 			fmt.Fprintf(&buf, "%v %s", key, v.String())
 		default:
-			fmt.Fprintf(&buf, "%v=%s", key, FormatValue(v))
+			fmt.Fprintf(&buf, "%v=%s", key, formatValue(v))
 		}
 	}
 
@@ -196,7 +408,7 @@ type Condition struct {
 
 // String returns the string representation of the condition.
 func (cond *Condition) String() string {
-	return fmt.Sprintf("%s %s", cond.Op.String(), FormatValue(cond.Value))
+	return fmt.Sprintf("%s %s", cond.Op.String(), formatValue(cond.Value))
 }
 
 // IntSliceValue reads cond.Value as a slice of uint64.
@@ -224,7 +436,7 @@ func (cond *Condition) IntSliceValue() ([]int64, error) {
 	}
 }
 
-func FormatValue(v interface{}) string {
+func formatValue(v interface{}) string {
 	switch v := v.(type) {
 	case string:
 		return fmt.Sprintf("%q", v)
@@ -233,7 +445,7 @@ func FormatValue(v interface{}) string {
 	case []uint64:
 		return fmt.Sprintf("%s", joinUint64Slice(v))
 	case time.Time:
-		return fmt.Sprintf("\"%s\"", v.Format(TimeFormat))
+		return fmt.Sprintf("\"%s\"", v.Format(timeFormat))
 	case *Condition:
 		return v.String()
 	default:

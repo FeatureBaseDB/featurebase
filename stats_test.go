@@ -16,12 +16,13 @@ package pilosa_test
 
 import (
 	"context"
-	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -36,45 +37,45 @@ func TestMultiStatClient_Expvar(t *testing.T) {
 	ms[0] = c
 	hldr.Stats = ms
 
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth+2)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).ClearBit(0, 1)
+	hldr.SetBit("d", "f", 0, 0)
+	hldr.SetBit("d", "f", 0, 1)
+	hldr.SetBit("d", "f", 0, ShardWidth)
+	hldr.SetBit("d", "f", 0, ShardWidth+2)
+	hldr.ClearBit("d", "f", 0, 1)
 
-	if pilosa.Expvar.String() != `{"index:d": {"frame:f": {"view:standard": {"slice:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "slice:1": {"rows": 0, "setBit": 2}}}}}` {
+	if pilosa.Expvar.String() != `{"index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}}` {
 		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
 	}
 
 	hldr.Stats.CountWithCustomTags("cc", 1, 1.0, []string{"foo:bar"})
-	if pilosa.Expvar.String() != `{"cc": 1, "index:d": {"frame:f": {"view:standard": {"slice:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "slice:1": {"rows": 0, "setBit": 2}}}}}` {
+	if pilosa.Expvar.String() != `{"cc": 1, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}}` {
 		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
 	}
 
 	// Gauge creates a unique key, subsequent Gauge calls will overwrite
 	hldr.Stats.Gauge("g", 5, 1.0)
 	hldr.Stats.Gauge("g", 8, 1.0)
-	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"frame:f": {"view:standard": {"slice:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "slice:1": {"rows": 0, "setBit": 2}}}}}` {
+	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}}` {
 		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
 	}
 
 	// Set creates a unique key, subsequent sets will overwrite
 	hldr.Stats.Set("s", "4", 1.0)
 	hldr.Stats.Set("s", "7", 1.0)
-	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"frame:f": {"view:standard": {"slice:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "slice:1": {"rows": 0, "setBit": 2}}}}, "s": "7"}` {
+	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}, "s": "7"}` {
 		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
 	}
 
 	// Record timing duration and a uniquely Set key/value
 	dur, _ := time.ParseDuration("123us")
 	hldr.Stats.Timing("tt", dur, 1.0)
-	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"frame:f": {"view:standard": {"slice:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "slice:1": {"rows": 0, "setBit": 2}}}}, "s": "7", "tt": 123µs}` {
+	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}, "s": "7", "tt": 123µs}` {
 		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
 	}
 
 	// Expvar histogram is implemented as a gauge
 	hldr.Stats.Histogram("hh", 3, 1.0)
-	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "hh": 3, "index:d": {"frame:f": {"view:standard": {"slice:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "slice:1": {"rows": 0, "setBit": 2}}}}, "s": "7", "tt": 123µs}` {
+	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "hh": 3, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}, "s": "7", "tt": 123µs}` {
 		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
 	}
 
@@ -85,18 +86,18 @@ func TestMultiStatClient_Expvar(t *testing.T) {
 }
 
 func TestStatsCount_TopN(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
 
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 1).SetBit(0, SliceWidth+2)
+	hldr.SetBit("d", "f", 0, 0)
+	hldr.SetBit("d", "f", 0, 1)
+	hldr.SetBit("d", "f", 0, ShardWidth)
+	hldr.SetBit("d", "f", 0, ShardWidth+2)
 
 	// Execute query.
 	called := false
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-	e.Holder.Stats = &MockStats{
+	hldr.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
 			if name != "TopN" {
 				t.Errorf("Expected TopN, Results %s", name)
@@ -109,7 +110,7 @@ func TestStatsCount_TopN(t *testing.T) {
 			called = true
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", test.MustParse(`TopN(frame=f, n=2)`), nil, nil); err != nil {
+	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `TopN(field=f, n=2)`}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -118,17 +119,17 @@ func TestStatsCount_TopN(t *testing.T) {
 }
 
 func TestStatsCount_Bitmap(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
 
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 0)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(0, 1)
+	hldr.SetBit("d", "f", 0, 0)
+	hldr.SetBit("d", "f", 0, 1)
 	called := false
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-	e.Holder.Stats = &MockStats{
+	hldr.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
-			if name != "Bitmap" {
-				t.Errorf("Expected Bitmap, Results %s", name)
+			if name != "Row" {
+				t.Errorf("Expected Row, Results %s", name)
 			}
 
 			if tags[0] != "index:d" {
@@ -138,7 +139,7 @@ func TestStatsCount_Bitmap(t *testing.T) {
 			called = true
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", test.MustParse(`Bitmap(frame=f, row=0)`), nil, nil); err != nil {
+	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `Row(f=0)`}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -147,20 +148,20 @@ func TestStatsCount_Bitmap(t *testing.T) {
 }
 
 func TestStatsCount_SetColumnAttrs(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
 
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 0)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 1)
+	hldr.SetBit("d", "f", 10, 0)
+	hldr.SetBit("d", "f", 10, 1)
 
 	called := false
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-	frame := e.Holder.Frame("d", "f")
-	if frame == nil {
-		t.Fatal("frame not found")
+	field := hldr.Field("d", "f")
+	if field == nil {
+		t.Fatal("field not found")
 	}
 
-	frame.Stats = &MockStats{
+	field.Stats = &MockStats{
 		mockCount: func(name string, value int64, rate float64) {
 			if name != "SetRowAttrs" {
 				t.Errorf("Expected SetRowAttrs, Results %s", name)
@@ -168,7 +169,7 @@ func TestStatsCount_SetColumnAttrs(t *testing.T) {
 			called = true
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetRowAttrs(row=10, frame=f, foo="bar")`), nil, nil); err != nil {
+	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `SetRowAttrs(f, 10, foo="bar")`}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -177,15 +178,15 @@ func TestStatsCount_SetColumnAttrs(t *testing.T) {
 }
 
 func TestStatsCount_SetProfileAttrs(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
 
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 0)
-	hldr.MustCreateFragmentIfNotExists("d", "f", pilosa.ViewStandard, 0).SetBit(10, 1)
+	hldr.SetBit("d", "f", 10, 0)
+	hldr.SetBit("d", "f", 10, 1)
 
 	called := false
-	e := test.NewExecutor(hldr.Holder, test.NewCluster(1))
-	idx := e.Holder.Index("d")
+	idx := hldr.Holder.Index("d")
 	if idx == nil {
 		t.Fatal("idex not found")
 	}
@@ -199,7 +200,7 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 			called = true
 		},
 	}
-	if _, err := e.Execute(context.Background(), "d", test.MustParse(`SetColumnAttrs(col=10, frame=f, foo="bar")`), nil, nil); err != nil {
+	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "d", Query: `SetColumnAttrs(10, foo="bar")`}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -207,116 +208,89 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 	}
 }
 
-func TestStatsCount_CreateIndex(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-	s := test.NewServer()
-	s.Handler.API.Holder = hldr.Holder
-	defer s.Close()
-	called := false
-	s.Handler.API.Holder.Stats = &MockStats{
-		mockCount: func(name string, value int64, rate float64) {
-			if name != "createIndex" {
-				t.Errorf("Expected createIndex, Results %s", name)
-			}
+func TestStatsCount_APICalls(t *testing.T) {
+	cmd := test.MustRunCluster(t, 1)[0]
+	h := cmd.Handler.(*http.Handler).Handler
+	holder := cmd.Server.Holder()
+	hldr := test.Holder{Holder: holder}
 
-			called = true
-		},
-	}
-	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", s.URL+"/index/i", nil))
-	if !called {
-		t.Error("Count isn't called")
-	}
-}
+	t.Run("create index", func(t *testing.T) {
+		called := false
+		hldr.Stats = &MockStats{
+			mockCount: func(name string, value int64, rate float64) {
+				if name != "createIndex" {
+					t.Errorf("Expected createIndex, Results %s", name)
+				}
+				called = true
+			},
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i", strings.NewReader("")))
+		if !called {
+			t.Error("Count isn't called")
+		}
+	})
 
-func TestStatsCount_DeleteIndex(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
+	t.Run("create field", func(t *testing.T) {
+		called := false
+		hldr.Stats = &MockStats{
+			mockCountWithTags: func(name string, value int64, rate float64, index []string) {
+				if name != "createField" {
+					t.Errorf("Expected createField, Results %s", name)
+				}
+				if index[0] != "index:i" {
+					t.Errorf("Expected index:i, Results %s", index)
+				}
 
-	s := test.NewServer()
-	s.Handler.API.Holder = hldr.Holder
-	defer s.Close()
+				called = true
+			},
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i/field/f", strings.NewReader("")))
+		if !called {
+			t.Error("Count isn't called")
+		}
+	})
 
-	// Create index.
-	if _, err := hldr.CreateIndexIfNotExists("i", pilosa.IndexOptions{}); err != nil {
-		t.Fatal(err)
-	}
-	called := false
-	s.Handler.API.Holder.Stats = &MockStats{
-		mockCount: func(name string, value int64, rate float64) {
-			if name != "deleteIndex" {
-				t.Errorf("Expected deleteIndex, Results %s", name)
-			}
+	t.Run("delete field", func(t *testing.T) {
+		called := false
+		hldr.Stats = &MockStats{
+			mockCountWithTags: func(name string, value int64, rate float64, index []string) {
+				if name != "deleteField" {
+					t.Errorf("Expected deleteField, Results %s", name)
+				}
+				if index[0] != "index:i" {
+					t.Errorf("Expected index:i, Results %s", index)
+				}
 
-			called = true
-		},
-	}
-	http.DefaultClient.Do(test.MustNewHTTPRequest("DELETE", s.URL+"/index/i", strings.NewReader("")))
-	if !called {
-		t.Error("Count isn't called")
-	}
-}
+				called = true
+			},
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i/field/f", strings.NewReader("")))
+		if !called {
+			t.Error("Count isn't called")
+		}
+	})
 
-func TestStatsCount_CreateFrame(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
+	t.Run("delete index", func(t *testing.T) {
+		called := false
+		hldr.Stats = &MockStats{
+			mockCount: func(name string, value int64, rate float64) {
+				if name != "deleteIndex" {
+					t.Errorf("Expected deleteIndex, Results %s", name)
+				}
 
-	s := test.NewServer()
-	s.Handler.API.Holder = hldr.Holder
-	defer s.Close()
+				called = true
+			},
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i", strings.NewReader("")))
+		if !called {
+			t.Error("Count isn't called")
+		}
+	})
 
-	// Create index.
-	if _, err := hldr.CreateIndexIfNotExists("i", pilosa.IndexOptions{}); err != nil {
-		t.Fatal(err)
-	}
-	called := false
-	s.Handler.API.Holder.Stats = &MockStats{
-		mockCountWithTags: func(name string, value int64, rate float64, index []string) {
-			if name != "createFrame" {
-				t.Errorf("Expected createFrame, Results %s", name)
-			}
-			if index[0] != "index:i" {
-				t.Errorf("Expected index:i, Results %s", index)
-			}
-
-			called = true
-		},
-	}
-	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", s.URL+"/index/i/frame/f", nil))
-	if !called {
-		t.Error("Count isn't called")
-	}
-}
-
-func TestStatsCount_DeleteFrame(t *testing.T) {
-	hldr := test.MustOpenHolder()
-	defer hldr.Close()
-
-	s := test.NewServer()
-	s.Handler.API.Holder = hldr.Holder
-	defer s.Close()
-	called := false
-	// Create index.
-	indx, _ := hldr.CreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	if _, err := indx.CreateFrameIfNotExists("test", pilosa.FrameOptions{}); err != nil {
-		t.Fatal(err)
-	}
-	s.Handler.API.Holder.Stats = &MockStats{
-		mockCountWithTags: func(name string, value int64, rate float64, index []string) {
-			if name != "deleteFrame" {
-				t.Errorf("Expected deleteFrame, Results %s", name)
-			}
-			if index[0] != "index:i" {
-				t.Errorf("Expected index:i, Results %s", index)
-			}
-
-			called = true
-		},
-	}
-	http.DefaultClient.Do(test.MustNewHTTPRequest("DELETE", s.URL+"/index/i/frame/f", strings.NewReader("")))
-	if !called {
-		t.Error("Count isn't called")
-	}
 }
 
 type MockStats struct {

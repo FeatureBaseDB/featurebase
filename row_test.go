@@ -30,7 +30,7 @@ func TestRow_Merge(t *testing.T) {
 		exp uint64
 	}{
 		{
-			r1:  pilosa.NewRow(1, 2, 3, SliceWidth+1, 2*SliceWidth),
+			r1:  pilosa.NewRow(1, 2, 3, ShardWidth+1, 2*ShardWidth),
 			r2:  pilosa.NewRow(3, 4, 5),
 			exp: 7,
 		},
@@ -56,9 +56,9 @@ func TestRow_Merge(t *testing.T) {
 
 // Ensure a row can Xor'ed
 func TestRow_Xor(t *testing.T) {
-	r1 := pilosa.NewRow(0, 1, SliceWidth)
-	r2 := pilosa.NewRow(0, 2*SliceWidth)
-	exp := []uint64{1, SliceWidth, 2 * SliceWidth}
+	r1 := pilosa.NewRow(0, 1, ShardWidth)
+	r2 := pilosa.NewRow(0, 2*ShardWidth)
+	exp := []uint64{1, ShardWidth, 2 * ShardWidth}
 
 	res := r1.Xor(r2)
 	if res.Count() != 3 {
@@ -78,9 +78,9 @@ func TestRow_Xor(t *testing.T) {
 
 }
 func TestRow_Union_Segment(t *testing.T) {
-	r1 := pilosa.NewRow(0, 1, SliceWidth)
-	r2 := pilosa.NewRow(0, 2*SliceWidth)
-	exp := []uint64{0, 1, SliceWidth, 2 * SliceWidth}
+	r1 := pilosa.NewRow(0, 1, ShardWidth)
+	r2 := pilosa.NewRow(0, 2*ShardWidth)
+	exp := []uint64{0, 1, ShardWidth, 2 * ShardWidth}
 	res := r1.Union(r2)
 
 	if res.Count() != 4 {
@@ -99,9 +99,9 @@ func TestRow_Union_Segment(t *testing.T) {
 }
 
 func TestRow_Difference_Segment(t *testing.T) {
-	r1 := pilosa.NewRow(0, 1, SliceWidth)
-	r2 := pilosa.NewRow(0, 2*SliceWidth)
-	exp := []uint64{1, SliceWidth}
+	r1 := pilosa.NewRow(0, 1, ShardWidth)
+	r2 := pilosa.NewRow(0, 2*ShardWidth)
+	exp := []uint64{1, ShardWidth}
 	res := r1.Difference(r2)
 
 	if res.Count() != 2 {

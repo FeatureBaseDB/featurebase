@@ -26,8 +26,8 @@ type Index struct {
 	*pilosa.Index
 }
 
-// NewIndex returns a new instance of Index.
-func NewIndex() *Index {
+// newIndex returns a new instance of Index.
+func newIndex() *Index {
 	path, err := ioutil.TempDir("", "pilosa-index-")
 	if err != nil {
 		panic(err)
@@ -41,7 +41,7 @@ func NewIndex() *Index {
 
 // MustOpenIndex returns a new, opened index at a temporary path. Panic on error.
 func MustOpenIndex() *Index {
-	index := NewIndex()
+	index := newIndex()
 	if err := index.Open(); err != nil {
 		panic(err)
 	}
@@ -73,20 +73,20 @@ func (i *Index) Reopen() error {
 	return nil
 }
 
-// CreateFrame creates a frame with the given options.
-func (i *Index) CreateFrame(name string, opt pilosa.FrameOptions) (*Frame, error) {
-	f, err := i.Index.CreateFrame(name, opt)
+// CreateField creates a field with the given options.
+func (i *Index) CreateField(name string, opts ...pilosa.FieldOption) (*Field, error) {
+	f, err := i.Index.CreateField(name, opts...)
 	if err != nil {
 		return nil, err
 	}
-	return &Frame{Frame: f}, nil
+	return &Field{Field: f}, nil
 }
 
-// CreateFrameIfNotExists creates a frame with the given options if it doesn't exist.
-func (i *Index) CreateFrameIfNotExists(name string, opt pilosa.FrameOptions) (*Frame, error) {
-	f, err := i.Index.CreateFrameIfNotExists(name, opt)
+// CreateFieldIfNotExists creates a field with the given options if it doesn't exist.
+func (i *Index) CreateFieldIfNotExists(name string, opts pilosa.FieldOption) (*Field, error) {
+	f, err := i.Index.CreateFieldIfNotExists(name, opts)
 	if err != nil {
 		return nil, err
 	}
-	return &Frame{Frame: f}, nil
+	return &Field{Field: f}, nil
 }

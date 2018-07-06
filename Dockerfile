@@ -3,7 +3,7 @@ FROM golang:1.10.2 as builder
 COPY . /go/src/github.com/pilosa/pilosa/
 
 RUN cd /go/src/github.com/pilosa/pilosa \
-    && CGO_ENABLED=0 make install-dep install-statik install FLAGS="-a"
+    && CGO_ENABLED=0 make install-dep install FLAGS="-a"
 
 FROM scratch
 

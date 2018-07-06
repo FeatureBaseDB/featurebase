@@ -21,13 +21,6 @@ import (
 	"github.com/pilosa/pilosa/toml"
 )
 
-// Cluster types.
-const (
-	ClusterNone   = ""
-	ClusterStatic = "static"
-	ClusterGossip = "gossip"
-)
-
 // TLSConfig contains TLS configuration
 type TLSConfig struct {
 	// CertificatePath contains the path to the certificate (.crt or .pem file)
@@ -47,7 +40,7 @@ type Config struct {
 	Bind string `toml:"bind"`
 
 	// MaxWritesPerRequest limits the number of mutating commands that can be in
-	// a single request to the server. This includes SetBit, ClearBit,
+	// a single request to the server. This includes Set, Clear,
 	// SetRowAttrs & SetColumnAttrs.
 	MaxWritesPerRequest int `toml:"max-writes-per-request"`
 
@@ -61,7 +54,7 @@ type Config struct {
 	Handler struct {
 		// CORS Allowed Origins
 		AllowedOrigins []string `toml:"allowed-origins"`
-	}
+	} `toml:"handler"`
 
 	// TLS
 	TLS TLSConfig `toml:"tls"`
@@ -77,6 +70,11 @@ type Config struct {
 
 	// Gossip config is based around memberlist.Config.
 	Gossip gossip.Config `toml:"gossip"`
+
+	// Translation config supports translation store replication.
+	Translation struct {
+		PrimaryURL string `toml:"primary-url"`
+	}
 
 	AntiEntropy struct {
 		Interval toml.Duration `toml:"interval"`

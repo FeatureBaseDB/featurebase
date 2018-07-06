@@ -17,7 +17,7 @@ Returns the schema of all indexes in JSON.
 curl -XGET localhost:10101/index
 ```
 ``` response
-{"indexes":[{"name":"user","frames":[{"name":"collab"}]}]}
+{"indexes":[{"name":"user","fields":[{"name":"collab"}]}]}
 ```
 
 ### List index schema
@@ -30,7 +30,7 @@ Returns the schema of the specified index in JSON.
 curl -XGET localhost:10101/index/user
 ```
 ``` response
-{"index":{"name":"user"}, "frames":[{"name":"collab"}]}]}
+{"name":"user", "fields":[{"name":"collab"}]}
 ```
 
 ### Create index
@@ -43,7 +43,7 @@ Creates an index with the given name.
 curl -XPOST localhost:10101/index/user
 ```
 ``` response
-{}
+{"success":true}
 ```
 
 ### Remove index
@@ -56,7 +56,7 @@ Removes the given index.
 curl -XDELETE localhost:10101/index/user
 ```
 ``` response
-{}
+{"success":true}
 ```
 
 ### Query index
@@ -68,102 +68,81 @@ Sends a [query](../query-language/) to the Pilosa server with the given index. T
 ``` request
 curl localhost:10101/index/user/query \
      -X POST \
-     -d 'Bitmap(frame="language", row=5)'
+     -d 'Row(language=5)'
 ```
 ``` response
-{"results":[{"attrs":{},"bits":[100]}]}
+{"results":[{"attrs":{},"columns":[100]}]}
 ```
 
 In order to send protobuf binaries in the request and response, set `Content-Type` and `Accept` headers to: `application/x-protobuf`.
 
 The response doesn't include column attributes by default. To return them, set the `columnAttrs` query argument to `true`.
 
-The query is executed for all [slices](../data-model/#slice) by default. To use specified slices only, set the `slices` query argument to a comma-separated list of slice indices.
+The query is executed for all [shards](../data-model/#shard) by default. To use specified shards only, set the `shards` query argument to a comma-separated list of slice indices.
 
 ``` request
-curl "localhost:10101/index/user/query?columnAttrs=true&slices=0,1" \
+curl "localhost:10101/index/user/query?columnAttrs=true&shards=0,1" \
      -X POST \
-     -d 'Bitmap(frame="language", row=5)'
+     -d 'Row(language=5)'
 ```
 ``` response
 {
-  "results":[{"attrs":{},"bits":[100]}],
+  "results":[{"attrs":{},"columns":[100]}],
   "columnAttrs":[{"id":100,"attrs":{"name":"Klingon"}}]
 }
 ```
 
-By default, all bits and attributes (*for `Bitmap` queries only*) are returned. In order to suppress returning bits, set `excludeBits` query argument to `true`; to suppress returning attributes, set `excludeAttrs` query argument to `true`.
+By default, all bits and attributes (*for `Row` queries only*) are returned. In order to suppress returning bits, set `excludeBits` query argument to `true`; to suppress returning attributes, set `excludeAttrs` query argument to `true`.
 
-### Create frame
+### Create field
 
-`POST /index/<index-name>/frame/<frame-name>`
+`POST /index/<index-name>/field/<field-name>`
 
-Creates a frame in the given index with the given name.
+Creates a field in the given index with the given name.
 
 The request payload is in JSON, and may contain the `options` field. The `options` field is a JSON object which may contain the following fields:
 
-* `timeQuantum` (string): [Time Quantum](../data-model/#time-quantum) for this frame.
-* `cacheType` (string): [ranked](../data-model/#ranked) or [LRU](../data-model/#lru) caching on this frame. Default is `lru`.
+* `timeQuantum` (string): [Time Quantum](../data-model/#time-quantum) for this field.
+* `cacheType` (string): [ranked](../data-model/#ranked) or [LRU](../data-model/#lru) caching on this field. Default is `lru`.
 * `cacheSize` (int): Number of rows to keep in the cache. Default 50,000.
 * `fields` (array): List of range-encoded [fields](../data-model/#bsi-range-encoding).
 
 Each individual `field` contains the following:
 
 * `name` (string): Field name.
-* `type` (string): Field type, currently only "int" is supported.
+* `type` (string): Field type, "set", "int" or "time".
 * `min` (int): Minimum value allowed for this field.
 * `max` (int): Maximum value allowed for this field.
 
 Integer fields are stored as n-bit range-encoded values. Pilosa supports 63-bit, signed integers with values between `min` and `max`.
 
 ``` request
-curl localhost:10101/index/user/frame/language -X POST
+curl localhost:10101/index/user/field/language -X POST
 ```
 ``` response
-{}
+{"success":true}
 ```
 
 ``` request
-curl localhost:10101/index/repository/frame/stats \
+curl localhost:10101/index/repository/field/stats \
     -X POST \
     -d '{"fields": [{"name": "pullrequests", "type": "int", "min": 0, "max": 1000000}]}'
 ```
 ``` response
-{}
+{"success":true}
 ```
 
-### Remove frame
+### Remove field
 
-`DELETE /index/<index-name>/frame/<frame-name>`
+`DELETE /index/<index-name>/field/<field-name>`
 
-Removes the given frame.
+Removes the given field.
 
 ``` request
-curl -XDELETE localhost:10101/index/user/frame/language
+curl -XDELETE localhost:10101/index/user/field/language
 ```
 ``` response
-{}
-```
-
-### Create Field
-
-`POST /index/<index-name>/frame/<frame-name>/field/<field-name>`
-
-Creates a new field to store integer values in the given frame.
-
-The request payload is JSON, and it must contain the fields `type`, `min`, `max`.
-
-* `type` (string): Field type, currently only "int" is supported.
-* `min` (int): Minimum value allowed for this field.
-* `max` (int): Maximum value allowed for this field.
-
-``` request
-curl localhost:10101/index/repository/frame/stats/field/pullrequests \
-    -X POST \
-    -d '{"type": "int", "min": 0, "max": 1000000}'
-```
-``` response
-{}
+{"success":true}
 ```
 
 ### Get version
@@ -191,7 +170,7 @@ in a multi-node cluster, the cache is only recalculated on the node
 that receives the request.
 
 ``` request
-curl -XGET localhost:10101/recalculate-caches
+curl -XPOST localhost:10101/recalculate-caches
 ```
 
 Response: `204 No Content`
