@@ -462,7 +462,7 @@ func (h *Holder) flushCaches() {
 // after setting bits to get expected response.
 func (h *Holder) recalculateCaches() {
 	for _, index := range h.Indexes() {
-		index.RecalculateCaches()
+		index.recalculateCaches()
 	}
 }
 
