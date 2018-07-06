@@ -75,10 +75,10 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
-// HandlerOption is a functional option type for pilosa.Handler
-type HandlerOption func(s *Handler) error
+// handlerOption is a functional option type for pilosa.Handler
+type handlerOption func(s *Handler) error
 
-func OptHandlerAllowedOrigins(origins []string) HandlerOption {
+func OptHandlerAllowedOrigins(origins []string) handlerOption {
 	return func(h *Handler) error {
 		h.Handler = handlers.CORS(
 			handlers.AllowedOrigins(origins),
@@ -88,21 +88,21 @@ func OptHandlerAllowedOrigins(origins []string) HandlerOption {
 	}
 }
 
-func OptHandlerAPI(api *pilosa.API) HandlerOption {
+func OptHandlerAPI(api *pilosa.API) handlerOption {
 	return func(h *Handler) error {
 		h.api = api
 		return nil
 	}
 }
 
-func OptHandlerLogger(logger pilosa.Logger) HandlerOption {
+func OptHandlerLogger(logger pilosa.Logger) handlerOption {
 	return func(h *Handler) error {
 		h.logger = logger
 		return nil
 	}
 }
 
-func OptHandlerListener(ln net.Listener) HandlerOption {
+func OptHandlerListener(ln net.Listener) handlerOption {
 	return func(h *Handler) error {
 		h.ln = ln
 		return nil
@@ -110,7 +110,7 @@ func OptHandlerListener(ln net.Listener) HandlerOption {
 }
 
 // NewHandler returns a new instance of Handler with a default logger.
-func NewHandler(opts ...HandlerOption) (*Handler, error) {
+func NewHandler(opts ...handlerOption) (*Handler, error) {
 	handler := &Handler{
 		logger: pilosa.NopLogger,
 	}
