@@ -38,7 +38,7 @@ type Command struct {
 
 	stdin  bytes.Buffer
 	stdout bytes.Buffer
-	Stderr bytes.Buffer
+	stderr bytes.Buffer
 }
 
 func OptAllowedOrigins(origins []string) server.CommandOption {
@@ -61,7 +61,7 @@ func NewCommand(opts ...server.CommandOption) *Command {
 	m.Config.Cluster.Disabled = true
 	m.Command.Stdin = &m.stdin
 	m.Command.Stdout = &m.stdout
-	m.Command.Stderr = &m.Stderr
+	m.Command.Stderr = &m.stderr
 
 	if testing.Verbose() {
 		m.Command.Stdout = io.MultiWriter(os.Stdout, m.Command.Stdout)
