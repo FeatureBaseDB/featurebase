@@ -34,7 +34,7 @@ type bTreeContainers struct {
 	lastContainer *roaring.Container
 }
 
-func NewBTreeContainers() *bTreeContainers {
+func newBTreeContainers() *bTreeContainers {
 	return &bTreeContainers{
 		tree: TreeNew(cmp),
 	}
@@ -42,7 +42,7 @@ func NewBTreeContainers() *bTreeContainers {
 
 func NewBTreeBitmap(a ...uint64) *roaring.Bitmap {
 	b := &roaring.Bitmap{
-		Containers: NewBTreeContainers(),
+		Containers: newBTreeContainers(),
 	}
 	b.Add(a...)
 	return b
@@ -132,7 +132,7 @@ func (btc *bTreeContainers) Count() (n uint64) {
 }
 
 func (btc *bTreeContainers) Clone() roaring.Containers {
-	nbtc := NewBTreeContainers()
+	nbtc := newBTreeContainers()
 
 	itr, err := btc.tree.SeekFirst()
 	if err == io.EOF {
