@@ -79,7 +79,7 @@ func TestURIPath(t *testing.T) {
 func TestSetScheme(t *testing.T) {
 	uri := defaultURI()
 	target := "fun"
-	err := uri.SetScheme(target)
+	err := uri.setScheme(target)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestSetPort(t *testing.T) {
 
 func TestSetInvalidScheme(t *testing.T) {
 	uri := defaultURI()
-	err := uri.SetScheme("?invalid")
+	err := uri.setScheme("?invalid")
 	if err == nil {
 		t.Fatalf("Should have failed")
 	}

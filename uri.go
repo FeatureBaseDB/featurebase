@@ -82,8 +82,8 @@ func NewURIFromAddress(address string) (*URI, error) {
 	return parseAddress(address)
 }
 
-// SetScheme sets the scheme of this URI.
-func (u *URI) SetScheme(scheme string) error {
+// setScheme sets the scheme of this URI.
+func (u *URI) setScheme(scheme string) error {
 	m := schemeRegexp.FindStringSubmatch(scheme)
 	if m == nil {
 		return errors.New("invalid scheme")
