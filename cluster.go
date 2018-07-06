@@ -888,21 +888,21 @@ func (c *cluster) markAsJoined() {
 }
 
 func (c *cluster) needTopologyAgreement() bool {
-	return c.State() == ClusterStateStarting && !stringSlicesAreEqual(c.Topology.NodeIDs, c.nodeIDs())
+	return c.State() == ClusterStateStarting && !stringSlicesAreEqual(c.Topology.nodeIDs, c.nodeIDs())
 }
 
 func (c *cluster) haveTopologyAgreement() bool {
 	if c.Static {
 		return true
 	}
-	return stringSlicesAreEqual(c.Topology.NodeIDs, c.nodeIDs())
+	return stringSlicesAreEqual(c.Topology.nodeIDs, c.nodeIDs())
 }
 
 func (c *cluster) allNodesReady() bool {
 	if c.Static {
 		return true
 	}
-	for _, uri := range c.Topology.NodeIDs {
+	for _, uri := range c.Topology.nodeIDs {
 		if c.Topology.nodeStates[uri] != nodeStateReady {
 			return false
 		}
@@ -1394,7 +1394,7 @@ func (n nodeIDs) ContainsID(id string) bool {
 // Topology represents the list of hosts in the cluster.
 type Topology struct {
 	mu      sync.RWMutex
-	NodeIDs []string
+	nodeIDs []string
 
 	ClusterID string
 
@@ -1417,11 +1417,11 @@ func (t *Topology) ContainsID(id string) bool {
 }
 
 func (t *Topology) containsID(id string) bool {
-	return nodeIDs(t.NodeIDs).ContainsID(id)
+	return nodeIDs(t.nodeIDs).ContainsID(id)
 }
 
 func (t *Topology) positionByID(nodeID string) int {
-	for i, tid := range t.NodeIDs {
+	for i, tid := range t.nodeIDs {
 		if tid == nodeID {
 			return i
 		}
@@ -1436,11 +1436,11 @@ func (t *Topology) addID(nodeID string) bool {
 	if t.containsID(nodeID) {
 		return false
 	}
-	t.NodeIDs = append(t.NodeIDs, nodeID)
+	t.nodeIDs = append(t.nodeIDs, nodeID)
 
-	sort.Slice(t.NodeIDs,
+	sort.Slice(t.nodeIDs,
 		func(i, j int) bool {
-			return t.NodeIDs[i] < t.NodeIDs[j]
+			return t.nodeIDs[i] < t.nodeIDs[j]
 		})
 
 	return true
@@ -1456,9 +1456,9 @@ func (t *Topology) removeID(nodeID string) bool {
 		return false
 	}
 
-	copy(t.NodeIDs[i:], t.NodeIDs[i+1:])
-	t.NodeIDs[len(t.NodeIDs)-1] = ""
-	t.NodeIDs = t.NodeIDs[:len(t.NodeIDs)-1]
+	copy(t.nodeIDs[i:], t.nodeIDs[i+1:])
+	t.nodeIDs[len(t.nodeIDs)-1] = ""
+	t.nodeIDs = t.nodeIDs[:len(t.nodeIDs)-1]
 
 	return true
 }
@@ -1519,13 +1519,13 @@ func (c *cluster) considerTopology() error {
 	}
 
 	// If there is no .topology file, it's safe to proceed.
-	if len(c.Topology.NodeIDs) == 0 {
+	if len(c.Topology.nodeIDs) == 0 {
 		return nil
 	}
 
 	// The local node (coordinator) must be in the .topology.
 	if !c.Topology.ContainsID(c.Node.ID) {
-		return fmt.Errorf("coordinator %s is not in topology: %v", c.Node.ID, c.Topology.NodeIDs)
+		return fmt.Errorf("coordinator %s is not in topology: %v", c.Node.ID, c.Topology.nodeIDs)
 	}
 
 	// If local node is the only thing in .topology, continue.
@@ -1775,7 +1775,7 @@ func encodeTopology(topology *Topology) *internal.Topology {
 	}
 	return &internal.Topology{
 		ClusterID: topology.ClusterID,
-		NodeIDs:   topology.NodeIDs,
+		NodeIDs:   topology.nodeIDs,
 	}
 }
 
@@ -1786,10 +1786,10 @@ func decodeTopology(topology *internal.Topology) (*Topology, error) {
 
 	t := newTopology()
 	t.ClusterID = topology.ClusterID
-	t.NodeIDs = topology.NodeIDs
-	sort.Slice(t.NodeIDs,
+	t.nodeIDs = topology.NodeIDs
+	sort.Slice(t.nodeIDs,
 		func(i, j int) bool {
-			return t.NodeIDs[i] < t.NodeIDs[j]
+			return t.nodeIDs[i] < t.nodeIDs[j]
 		})
 
 	return t, nil
