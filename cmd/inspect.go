@@ -25,10 +25,10 @@ import (
 	"github.com/pilosa/pilosa/ctl"
 )
 
-var Inspector *ctl.InspectCommand
+var inspector *ctl.InspectCommand
 
 func NewInspectCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	Inspector = ctl.NewInspectCommand(os.Stdin, os.Stdout, os.Stderr)
+	inspector = ctl.NewInspectCommand(os.Stdin, os.Stdout, os.Stderr)
 
 	inspectCmd := &cobra.Command{
 		Use:   "inspect",
@@ -42,8 +42,8 @@ Inspects a data file and provides stats.
 			} else if len(args) > 1 {
 				return fmt.Errorf("only one path allowed")
 			}
-			Inspector.Path = args[0]
-			if err := Inspector.Run(context.Background()); err != nil {
+			inspector.Path = args[0]
+			if err := inspector.Run(context.Background()); err != nil {
 				return err
 			}
 			return nil
