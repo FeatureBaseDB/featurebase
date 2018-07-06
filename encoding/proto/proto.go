@@ -457,8 +457,8 @@ func encodeFieldOptions(o *pilosa.FieldOptions) *internal.FieldOptions {
 	}
 }
 
-// EncodeNodes converts a slice of Nodes into its internal representation.
-func EncodeNodes(a []*pilosa.Node) []*internal.Node {
+// encodeNodes converts a slice of Nodes into its internal representation.
+func encodeNodes(a []*pilosa.Node) []*internal.Node {
 	other := make([]*internal.Node, len(a))
 	for i := range a {
 		other[i] = encodeNode(a[i])
@@ -487,7 +487,7 @@ func encodeClusterStatus(m *pilosa.ClusterStatus) *internal.ClusterStatus {
 	return &internal.ClusterStatus{
 		State:     m.State,
 		ClusterID: m.ClusterID,
-		Nodes:     EncodeNodes(m.Nodes),
+		Nodes:     encodeNodes(m.Nodes),
 	}
 }
 
