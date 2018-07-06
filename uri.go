@@ -47,8 +47,8 @@ type URI struct {
 	Port   uint16 `json:"port"`
 }
 
-// DefaultURI creates and returns the default URI.
-func DefaultURI() *URI {
+// defaultURI creates and returns the default URI.
+func defaultURI() *URI {
 	return &URI{
 		Scheme: "http",
 		Host:   "localhost",
@@ -68,7 +68,7 @@ func (u URIs) HostPortStrings() []string {
 
 // NewURIFromHostPort returns a URI with specified host and port.
 func NewURIFromHostPort(host string, port uint16) (*URI, error) {
-	uri := DefaultURI()
+	uri := defaultURI()
 	err := uri.SetHost(host)
 	if err != nil {
 		return nil, errors.Wrap(err, "setting uri host")

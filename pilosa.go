@@ -159,7 +159,7 @@ func stringSlicesAreEqual(a, b []string) bool {
 // using defaults when necessary.
 func AddressWithDefaults(addr string) (*URI, error) {
 	if addr == "" {
-		return DefaultURI(), nil
+		return defaultURI(), nil
 	} else {
 		return NewURIFromAddress(addr)
 	}

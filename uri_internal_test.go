@@ -17,7 +17,7 @@ package pilosa
 import "testing"
 
 func TestDefaultURI(t *testing.T) {
-	uri := DefaultURI()
+	uri := defaultURI()
 	compare(t, uri, "http", "localhost", 10101)
 }
 
@@ -77,7 +77,7 @@ func TestURIPath(t *testing.T) {
 }
 
 func TestSetScheme(t *testing.T) {
-	uri := DefaultURI()
+	uri := defaultURI()
 	target := "fun"
 	err := uri.SetScheme(target)
 	if err != nil {
@@ -89,7 +89,7 @@ func TestSetScheme(t *testing.T) {
 }
 
 func TestSetHost(t *testing.T) {
-	uri := DefaultURI()
+	uri := defaultURI()
 	target := "10.20.30.40"
 	err := uri.SetHost(target)
 	if err != nil {
@@ -101,7 +101,7 @@ func TestSetHost(t *testing.T) {
 }
 
 func TestSetPort(t *testing.T) {
-	uri := DefaultURI()
+	uri := defaultURI()
 	target := uint16(9999)
 	uri.SetPort(target)
 	if uri.Port != target {
@@ -110,7 +110,7 @@ func TestSetPort(t *testing.T) {
 }
 
 func TestSetInvalidScheme(t *testing.T) {
-	uri := DefaultURI()
+	uri := defaultURI()
 	err := uri.SetScheme("?invalid")
 	if err == nil {
 		t.Fatalf("Should have failed")
@@ -118,7 +118,7 @@ func TestSetInvalidScheme(t *testing.T) {
 }
 
 func TestSetInvalidHost(t *testing.T) {
-	uri := DefaultURI()
+	uri := defaultURI()
 	err := uri.SetHost("index?.pilosa.com")
 	if err == nil {
 		t.Fatalf("Should have failed")
