@@ -323,7 +323,7 @@ func (c *cluster) addNode(node *Node) error {
 	if c.Topology == nil {
 		return fmt.Errorf("Cluster.Topology is nil")
 	}
-	if !c.Topology.AddID(node.ID) {
+	if !c.Topology.addID(node.ID) {
 		return nil
 	}
 
@@ -1429,8 +1429,8 @@ func (t *Topology) positionByID(nodeID string) int {
 	return -1
 }
 
-// AddID adds the node ID to the topology and returns true if added.
-func (t *Topology) AddID(nodeID string) bool {
+// addID adds the node ID to the topology and returns true if added.
+func (t *Topology) addID(nodeID string) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.containsID(nodeID) {
