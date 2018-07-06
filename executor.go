@@ -234,7 +234,7 @@ func (e *executor) executeSum(ctx context.Context, index string, c *pql.Call, sh
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
 		other, _ := prev.(ValCount)
-		return other.Add(v.(ValCount))
+		return other.add(v.(ValCount))
 	}
 
 	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -1713,7 +1713,7 @@ type ValCount struct {
 	Count int64 `json:"count"`
 }
 
-func (vc *ValCount) Add(other ValCount) ValCount {
+func (vc *ValCount) add(other ValCount) ValCount {
 	return ValCount{
 		Val:   vc.Val + other.Val,
 		Count: vc.Count + other.Count,
