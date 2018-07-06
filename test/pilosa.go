@@ -36,7 +36,7 @@ type Command struct {
 
 	commandOptions []server.CommandOption
 
-	Stdin  bytes.Buffer
+	stdin  bytes.Buffer
 	Stdout bytes.Buffer
 	Stderr bytes.Buffer
 }
@@ -59,7 +59,7 @@ func NewCommand(opts ...server.CommandOption) *Command {
 	m.Config.DataDir = path
 	m.Config.Bind = "http://localhost:0"
 	m.Config.Cluster.Disabled = true
-	m.Command.Stdin = &m.Stdin
+	m.Command.Stdin = &m.stdin
 	m.Command.Stdout = &m.Stdout
 	m.Command.Stderr = &m.Stderr
 
