@@ -987,8 +987,8 @@ func (itr *Iterator) peek() uint64 {
 // ArrayMaxSize represents the maximum size of array containers.
 const ArrayMaxSize = 4096
 
-// RunMaxSize represents the maximum size of run length encoded containers.
-const RunMaxSize = 2048
+// runMaxSize represents the maximum size of run length encoded containers.
+const runMaxSize = 2048
 
 // Container represents a Container for uint16 integers.
 //
@@ -1324,7 +1324,7 @@ func (c *Container) optimize() {
 	runs := c.countRuns()
 
 	var newType byte
-	if runs <= RunMaxSize && runs <= c.n/2 {
+	if runs <= runMaxSize && runs <= c.n/2 {
 		newType = containerRun
 	} else if c.n < ArrayMaxSize {
 		newType = containerArray
@@ -2047,7 +2047,7 @@ func intersectRunRun(a, b *Container) *Container {
 	}
 	if output.n < ArrayMaxSize && len(output.runs) > output.n/2 {
 		output.runToArray()
-	} else if len(output.runs) > RunMaxSize {
+	} else if len(output.runs) > runMaxSize {
 		output.runToBitmap()
 	}
 	return output
@@ -2232,7 +2232,7 @@ func unionArrayRun(a, b *Container) *Container {
 	}
 	if output.n < ArrayMaxSize {
 		output.runToArray()
-	} else if len(output.runs) > RunMaxSize {
+	} else if len(output.runs) > runMaxSize {
 		output.runToBitmap()
 	}
 	return output
@@ -2292,7 +2292,7 @@ func unionRunRun(a, b *Container) *Container {
 			j++
 		}
 	}
-	if len(output.runs) > RunMaxSize {
+	if len(output.runs) > runMaxSize {
 		output.runToBitmap()
 	}
 	return output
@@ -2676,7 +2676,7 @@ func differenceRunBitmap(a, b *Container) *Container {
 
 	if output.n < ArrayMaxSize && len(output.runs) > output.n/2 {
 		output.runToArray()
-	} else if len(output.runs) > RunMaxSize {
+	} else if len(output.runs) > runMaxSize {
 		output.runToBitmap()
 	}
 	return output
@@ -3135,7 +3135,7 @@ func xorArrayRun(a, b *Container) *Container {
 	}
 	if output.n < ArrayMaxSize {
 		output.runToArray()
-	} else if len(output.runs) > RunMaxSize {
+	} else if len(output.runs) > runMaxSize {
 		output.runToBitmap()
 	}
 	return output
@@ -3281,7 +3281,7 @@ func xorRunRun(a, b *Container) *Container {
 
 	if output.n < ArrayMaxSize && len(output.runs) > output.n/2 {
 		output.runToArray()
-	} else if len(output.runs) > RunMaxSize {
+	} else if len(output.runs) > runMaxSize {
 		output.runToBitmap()
 	}
 	return output
@@ -3296,7 +3296,7 @@ func xorBitmapRun(a, b *Container) *Container {
 
 	if output.n < ArrayMaxSize && len(output.runs) > output.n/2 {
 		output.runToArray()
-	} else if len(output.runs) > RunMaxSize {
+	} else if len(output.runs) > runMaxSize {
 		output.runToBitmap()
 	}
 	return output
