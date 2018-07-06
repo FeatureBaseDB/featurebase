@@ -82,8 +82,8 @@ func (c *Cache) Get(key Key) (value interface{}, ok bool) {
 	return
 }
 
-// Remove removes the provided key from the cache.
-func (c *Cache) Remove(key Key) {
+// remove removes the provided key from the cache.
+func (c *Cache) remove(key Key) {
 	if c.cache == nil {
 		return
 	}
