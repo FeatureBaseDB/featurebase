@@ -566,7 +566,7 @@ func (f *fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error
 	// Compute count based on the existence row.
 	row := f.row(uint64(bitDepth))
 	if filter != nil {
-		count = row.IntersectionCount(filter)
+		count = row.intersectionCount(filter)
 	} else {
 		count = row.Count()
 	}
@@ -582,7 +582,7 @@ func (f *fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error
 		row := f.row(uint64(i))
 		cnt := uint64(0)
 		if filter != nil {
-			cnt = row.IntersectionCount(filter)
+			cnt = row.intersectionCount(filter)
 		} else {
 			cnt = row.Count()
 		}
@@ -938,7 +938,7 @@ func (f *fragment) top(opt topOptions) ([]Pair, error) {
 			// Calculate count and append.
 			count := cnt
 			if opt.Src != nil {
-				count = opt.Src.IntersectionCount(f.row(rowID))
+				count = opt.Src.intersectionCount(f.row(rowID))
 			}
 			if count == 0 {
 				continue
@@ -982,7 +982,7 @@ func (f *fragment) top(opt topOptions) ([]Pair, error) {
 
 		// Calculate the intersecting column count and skip if it's below our
 		// last row in our current result set.
-		count := opt.Src.IntersectionCount(f.row(rowID))
+		count := opt.Src.intersectionCount(f.row(rowID))
 		if count < threshold {
 			continue
 		}

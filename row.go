@@ -66,8 +66,8 @@ func (r *Row) Merge(other *Row) {
 	r.InvalidateCount()
 }
 
-// IntersectionCount returns the number of intersections between r and other.
-func (r *Row) IntersectionCount(other *Row) uint64 {
+// intersectionCount returns the number of intersections between r and other.
+func (r *Row) intersectionCount(other *Row) uint64 {
 	var n uint64
 
 	itr := newMergeSegmentIterator(r.segments, other.segments)
