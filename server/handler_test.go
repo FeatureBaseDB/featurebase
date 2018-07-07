@@ -336,7 +336,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader(`Row(row=30)`)))
 		if w.Code != gohttp.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if body := w.Body.String(); body != `{"error":"executing: field not found"}`+"\n" {
+		} else if body := w.Body.String(); body != `{"error":"executing: map reduce: field not found"}`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
 		}
 	})
@@ -353,7 +353,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		var resp pilosa.QueryResponse
 		if err := cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 			t.Fatal(err)
-		} else if s := resp.Err.Error(); s != `executing: field not found` {
+		} else if s := resp.Err.Error(); s != `executing: map reduce: field not found` {
 			t.Fatalf("unexpected error: %s", s)
 		}
 	})
