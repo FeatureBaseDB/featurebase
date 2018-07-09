@@ -69,6 +69,14 @@ func TestPEGWorking(t *testing.T) {
 			input:  "Set(2, f=10)",
 			ncalls: 1},
 		{
+			name:   "SetWithColKeySingleQuote",
+			input:  `Set('foo', f=10)`,
+			ncalls: 1},
+		{
+			name:   "SetWithColKeyDoubleQuote",
+			input:  `Set("foo", f=10)`,
+			ncalls: 1},
+		{
 			name:   "SetTime",
 			input:  "Set(2, f=1, 1999-12-31T00:00)",
 			ncalls: 1},
