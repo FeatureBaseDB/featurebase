@@ -33,28 +33,28 @@ import (
 )
 
 // Ensure GossipMemberSet implements interfaces.
-var _ memberlist.Delegate = &gossipMemberSet{}
+var _ memberlist.Delegate = &memberSet{}
 
-// gossipMemberSet represents a gossip implementation of MemberSet using memberlist.
-type gossipMemberSet struct {
+// memberSet represents a gossip implementation of MemberSet using memberlist.
+type memberSet struct {
 	mu         sync.RWMutex
 	memberlist *memberlist.Memberlist
 
 	broadcasts *memberlist.TransmitLimitedQueue
 
 	papi   *pilosa.API
-	config *gossipConfig
+	config *config
 
 	Logger pilosa.Logger
 
 	logger    *log.Logger
 	transport *Transport
 
-	gossipEventReceiver *gossipEventReceiver
+	eventReceiver *eventReceiver
 }
 
 // Open implements the MemberSet interface to start network activity.
-func (g *gossipMemberSet) Open() (err error) {
+func (g *memberSet) Open() (err error) {
 	g.mu.Lock()
 	g.memberlist, err = memberlist.Create(g.config.memberlistConfig)
 	g.mu.Unlock()
@@ -94,7 +94,7 @@ func (g *gossipMemberSet) Open() (err error) {
 }
 
 // joinWithRetry wraps the standard memberlist Join function in a retry.
-func (g *gossipMemberSet) joinWithRetry(hosts []string) error {
+func (g *memberSet) joinWithRetry(hosts []string) error {
 	err := retry(60, 2*time.Second, func() error {
 		_, err := g.memberlist.Join(hosts)
 		return err
@@ -120,34 +120,34 @@ func retry(attempts int, sleep time.Duration, fn func() error) (err error) {
 
 ////////////////////////////////////////////////////////////////
 
-type gossipConfig struct {
+type config struct {
 	gossipSeeds      []string
 	memberlistConfig *memberlist.Config
 }
 
-// gossipMemberSetOption describes a functional option for GossipMemberSet.
-type gossipMemberSetOption func(*gossipMemberSet) error
+// memberSetOption describes a functional option for GossipMemberSet.
+type memberSetOption func(*memberSet) error
 
-// WithTransport is a functional option for providing a transport to NewGossipMemberSet.
-func WithTransport(transport *Transport) gossipMemberSetOption {
-	return func(g *gossipMemberSet) error {
+// WithTransport is a functional option for providing a transport to NewMemberSet.
+func WithTransport(transport *Transport) memberSetOption {
+	return func(g *memberSet) error {
 		g.transport = transport
 		return nil
 	}
 }
 
-// WithLogger is a functional option for providing a logger to NewGossipMemberSet.
-func WithLogger(logger *log.Logger) gossipMemberSetOption {
-	return func(g *gossipMemberSet) error {
+// WithLogger is a functional option for providing a logger to NewMemberSet.
+func WithLogger(logger *log.Logger) memberSetOption {
+	return func(g *memberSet) error {
 		g.logger = logger
 		return nil
 	}
 }
 
-// NewGossipMemberSet returns a new instance of GossipMemberSet based on options.
-func NewGossipMemberSet(cfg Config, api *pilosa.API, options ...gossipMemberSetOption) (*gossipMemberSet, error) {
+// NewMemberSet returns a new instance of GossipMemberSet based on options.
+func NewMemberSet(cfg Config, api *pilosa.API, options ...memberSetOption) (*memberSet, error) {
 	host := api.Node().URI.Host
-	g := &gossipMemberSet{
+	g := &memberSet{
 		papi:   api,
 		Logger: pilosa.NopLogger,
 	}
@@ -158,8 +158,8 @@ func NewGossipMemberSet(cfg Config, api *pilosa.API, options ...gossipMemberSetO
 			return nil, errors.Wrap(err, "executing option")
 		}
 	}
-	ger := newGossipEventReceiver(g.logger, api)
-	g.gossipEventReceiver = ger
+	ger := newEventReceiver(g.logger, api)
+	g.eventReceiver = ger
 
 	if g.transport == nil {
 		port, err := strconv.Atoi(cfg.Port)
@@ -210,7 +210,7 @@ func NewGossipMemberSet(cfg Config, api *pilosa.API, options ...gossipMemberSetO
 	conf.Events = ger
 	conf.Logger = g.logger
 
-	g.config = &gossipConfig{
+	g.config = &config{
 		memberlistConfig: conf,
 		gossipSeeds:      cfg.Seeds,
 	}
@@ -219,7 +219,7 @@ func NewGossipMemberSet(cfg Config, api *pilosa.API, options ...gossipMemberSetO
 }
 
 // NodeMeta implementation of the memberlist.Delegate interface.
-func (g *gossipMemberSet) NodeMeta(limit int) []byte {
+func (g *memberSet) NodeMeta(limit int) []byte {
 	buf, err := g.papi.Serializer.Marshal(g.papi.Node())
 	if err != nil {
 		g.Logger.Printf("marshal message error: %s", err)
@@ -230,7 +230,7 @@ func (g *gossipMemberSet) NodeMeta(limit int) []byte {
 
 // NotifyMsg implementation of the memberlist.Delegate interface
 // called when a user-data message is received.
-func (g *gossipMemberSet) NotifyMsg(b []byte) {
+func (g *memberSet) NotifyMsg(b []byte) {
 	err := g.papi.ClusterMessage(context.Background(), bytes.NewBuffer(b))
 	if err != nil {
 		g.Logger.Printf("cluster message error: %s", err)
@@ -239,13 +239,13 @@ func (g *gossipMemberSet) NotifyMsg(b []byte) {
 
 // GetBroadcasts implementation of the memberlist.Delegate interface
 // called when user data messages can be broadcast.
-func (g *gossipMemberSet) GetBroadcasts(overhead, limit int) [][]byte {
+func (g *memberSet) GetBroadcasts(overhead, limit int) [][]byte {
 	return g.broadcasts.GetBroadcasts(overhead, limit)
 }
 
 // LocalState implementation of the memberlist.Delegate interface
 // sends this Node's state data.
-func (g *gossipMemberSet) LocalState(join bool) []byte {
+func (g *memberSet) LocalState(join bool) []byte {
 	m := &pilosa.NodeStatus{
 		Node:      g.papi.Node(),
 		MaxShards: g.papi.MaxShards(context.Background()),
@@ -263,28 +263,28 @@ func (g *gossipMemberSet) LocalState(join bool) []byte {
 
 // MergeRemoteState implementation of the memberlist.Delegate interface
 // receive and process the remote side's LocalState.
-func (g *gossipMemberSet) MergeRemoteState(buf []byte, join bool) {
+func (g *memberSet) MergeRemoteState(buf []byte, join bool) {
 	err := g.papi.ClusterMessage(context.Background(), bytes.NewBuffer(buf))
 	if err != nil {
 		g.Logger.Printf("merge state error: %s", err)
 	}
 }
 
-// gossipEventReceiver is used to enable an application to receive
+// eventReceiver is used to enable an application to receive
 // events about joins and leaves over a channel.
 //
 // Care must be taken that events are processed in a timely manner from
 // the channel, since this delegate will block until an event can be sent.
-type gossipEventReceiver struct {
+type eventReceiver struct {
 	ch   chan memberlist.NodeEvent
 	papi *pilosa.API
 
 	logger *log.Logger
 }
 
-// newGossipEventReceiver returns a new instance of GossipEventReceiver.
-func newGossipEventReceiver(logger *log.Logger, papi *pilosa.API) *gossipEventReceiver {
-	ger := &gossipEventReceiver{
+// newEventReceiver returns a new instance of GossipEventReceiver.
+func newEventReceiver(logger *log.Logger, papi *pilosa.API) *eventReceiver {
+	ger := &eventReceiver{
 		ch:     make(chan memberlist.NodeEvent, 1),
 		logger: logger,
 		papi:   papi,
@@ -293,19 +293,19 @@ func newGossipEventReceiver(logger *log.Logger, papi *pilosa.API) *gossipEventRe
 	return ger
 }
 
-func (g *gossipEventReceiver) NotifyJoin(n *memberlist.Node) {
+func (g *eventReceiver) NotifyJoin(n *memberlist.Node) {
 	g.ch <- memberlist.NodeEvent{memberlist.NodeJoin, n}
 }
 
-func (g *gossipEventReceiver) NotifyLeave(n *memberlist.Node) {
+func (g *eventReceiver) NotifyLeave(n *memberlist.Node) {
 	g.ch <- memberlist.NodeEvent{memberlist.NodeLeave, n}
 }
 
-func (g *gossipEventReceiver) NotifyUpdate(n *memberlist.Node) {
+func (g *eventReceiver) NotifyUpdate(n *memberlist.Node) {
 	g.ch <- memberlist.NodeEvent{memberlist.NodeUpdate, n}
 }
 
-func (g *gossipEventReceiver) listen() {
+func (g *eventReceiver) listen() {
 	var nodeEventType pilosa.NodeEventType
 	for {
 		e := <-g.ch
