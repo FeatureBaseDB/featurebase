@@ -1059,6 +1059,16 @@ func (e *executor) executeClearBitField(ctx context.Context, index string, c *pq
 
 // executeSet executes a Set() call.
 func (e *executor) executeSet(ctx context.Context, index string, c *pql.Call, opt *execOptions) (bool, error) {
+
+	// Read colID.
+	colID, ok, err := c.UintArg("_" + columnLabel)
+	if err != nil {
+		return false, fmt.Errorf("reading Set() column: %v", err)
+	} else if !ok {
+		return false, fmt.Errorf("Set() column argument '%v' required", columnLabel)
+	}
+
+	// Read field name.
 	fieldName, err := c.FieldArg()
 	if err != nil {
 		return false, errors.New("Set() argument required: field")
@@ -1072,14 +1082,6 @@ func (e *executor) executeSet(ctx context.Context, index string, c *pql.Call, op
 	f := idx.Field(fieldName)
 	if f == nil {
 		return false, ErrFieldNotFound
-	}
-
-	// Read colID using labels.
-	colID, ok, err := c.UintArg("_" + columnLabel)
-	if err != nil {
-		return false, fmt.Errorf("reading Set() column: %v", err)
-	} else if !ok {
-		return false, fmt.Errorf("Set() column argument '%v' required", columnLabel)
 	}
 
 	if f.Type() == FieldTypeInt {
@@ -1575,7 +1577,11 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 	if fieldName != "" {
 		field := idx.Field(fieldName)
 		if field == nil {
-			return ErrFieldNotFound
+			// Instead of returning ErrFieldNotFound here,
+			// we just return, and don't attempt the translation.
+			// The assumption is that the non-existent field
+			// will raise an error downstream when it's used.
+			return nil
 		}
 		if field.keys() {
 			if c.Args[rowKey] != nil && !isString(c.Args[rowKey]) {
