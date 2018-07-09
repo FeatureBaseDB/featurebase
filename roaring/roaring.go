@@ -93,7 +93,9 @@ type Containers interface {
 	// return the first container at or after key. found will be true if a
 	// container is found at key.
 	Iterator(key uint64) (citer ContainerIterator, found bool)
+
 	Count() uint64
+
 	//Reset will clear the containers collection to allow for recycling during snapshot
 	Reset()
 }
