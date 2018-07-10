@@ -317,7 +317,7 @@ func (m *Command) setupNetworking() error {
 		return errors.Wrap(err, "getting transport")
 	}
 
-	gossipMemberSet, err := gossip.NewGossipMemberSet(
+	gossipMemberSet, err := gossip.NewMemberSet(
 		m.Config.Gossip,
 		m.API,
 		gossip.WithLogger(m.logger.Logger()),
