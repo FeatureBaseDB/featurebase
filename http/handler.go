@@ -55,6 +55,8 @@ type Handler struct {
 
 	ln net.Listener
 
+	closeTimeout time.Duration
+
 	server *http.Server
 }
 
@@ -109,10 +111,20 @@ func OptHandlerListener(ln net.Listener) handlerOption {
 	}
 }
 
+// OptHandlerCloseTimeout controls how long we'll wait for the http Server to
+// shutdown cleanly before forcibly destroying it. Default is 30 seconds.
+func OptHandlerCloseTimeout(d time.Duration) handlerOption {
+	return func(h *Handler) error {
+		h.closeTimeout = d
+		return nil
+	}
+}
+
 // NewHandler returns a new instance of Handler with a default logger.
 func NewHandler(opts ...handlerOption) (*Handler, error) {
 	handler := &Handler{
-		logger: pilosa.NopLogger,
+		logger:       pilosa.NopLogger,
+		closeTimeout: time.Second * 30,
 	}
 	handler.Handler = newRouter(handler)
 	handler.populateValidators()
@@ -146,10 +158,16 @@ func (h *Handler) Serve() error {
 	return nil
 }
 
+// Close tries to cleanly shutdown the HTTP server, and failing that, after a
+// timeout, calls Server.Close.
 func (h *Handler) Close() error {
-	// TODO: timeout?
-	err := h.server.Shutdown(context.Background())
-	return errors.Wrap(err, "shutdown http server")
+	deadlineCtx, cancelFunc := context.WithDeadline(context.Background(), time.Now().Add(h.closeTimeout))
+	defer cancelFunc()
+	err := h.server.Shutdown(deadlineCtx)
+	if err != nil {
+		err = h.server.Close()
+	}
+	return errors.Wrap(err, "shutdown/close http server")
 }
 
 func (h *Handler) populateValidators() {
