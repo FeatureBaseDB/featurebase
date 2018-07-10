@@ -386,7 +386,7 @@ func (s *Server) Close() error {
 	// some way to combine all the errors, but probably not important enough to
 	// warrant the extra complexity.
 	if errh != nil {
-		return errors.Wrap(errh, "closing handler")
+		return errors.Wrap(errh, "closing holder")
 	} else if errt != nil {
 		return errors.Wrap(errt, "closing translateFile")
 	}
