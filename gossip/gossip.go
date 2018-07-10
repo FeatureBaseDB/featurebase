@@ -93,7 +93,7 @@ func (g *memberSet) Open() (err error) {
 	return nil
 }
 
-// Close attempts to gracefully leaves the cluster, and finally calls shutdown
+// Close attempts to gracefully leave the cluster, and finally calls shutdown
 // after (at most) a timeout period.
 func (g *memberSet) Close() error {
 	leaveErr := g.memberlist.Leave(5 * time.Second)
