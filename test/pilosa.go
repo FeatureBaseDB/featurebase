@@ -57,9 +57,9 @@ func newCommand(opts ...server.CommandOption) *Command {
 	}
 
 	// set aggressive close timeout by default to avoid hanging tests. This was
-	// a probably with PDK tests which used go-pilosa as well. We put it at the
-	// beginning of the option slice so that it can be overridden by an
-	// user-passed options.
+	// a problem with PDK tests which used go-pilosa as well. We put it at the
+	// beginning of the option slice so that it can be overridden by user-passed
+	// options.
 	opts = append([]server.CommandOption{server.OptCommandCloseTimeout(time.Millisecond * 2)}, opts...)
 	m := &Command{Command: server.NewCommand(os.Stdin, os.Stdout, os.Stderr, opts...), commandOptions: opts}
 	m.Config.DataDir = path

@@ -111,7 +111,7 @@ func OptHandlerListener(ln net.Listener) handlerOption {
 	}
 }
 
-// OptHandlerCloseTimeout controls how long we'll wait for the http Server to
+// OptHandlerCloseTimeout controls how long to wait for the http Server to
 // shutdown cleanly before forcibly destroying it. Default is 30 seconds.
 func OptHandlerCloseTimeout(d time.Duration) handlerOption {
 	return func(h *Handler) error {

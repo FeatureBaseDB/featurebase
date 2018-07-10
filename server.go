@@ -381,14 +381,14 @@ func (s *Server) Close() error {
 	if s.translateFile != nil {
 		errt = s.translateFile.Close()
 	}
-	// prefer to return handler error over translateFile error over cluster
+	// prefer to return holder error over translateFile error over cluster
 	// error. This order is somewhat arbitrary. It would be better if we had
 	// some way to combine all the errors, but probably not important enough to
 	// warrant the extra complexity.
 	if errh != nil {
 		return errors.Wrap(errh, "closing handler")
 	} else if errt != nil {
-		return errors.Wrap(errt, "closing translatFile")
+		return errors.Wrap(errt, "closing translateFile")
 	}
 	return errors.Wrap(errc, "closing cluster")
 }
