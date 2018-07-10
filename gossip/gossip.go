@@ -93,6 +93,16 @@ func (g *memberSet) Open() (err error) {
 	return nil
 }
 
+// Close implements the Closer interface.
+func (g *memberSet) Close() error {
+	leaveErr := g.memberlist.Leave(5 * time.Second)
+	shutdownErr := g.memberlist.Shutdown()
+	if leaveErr != nil || shutdownErr != nil {
+		return fmt.Errorf("leaving: '%v', shutting down: '%v'", leaveErr, shutdownErr)
+	}
+	return nil
+}
+
 // joinWithRetry wraps the standard memberlist Join function in a retry.
 func (g *memberSet) joinWithRetry(hosts []string) error {
 	err := retry(60, 2*time.Second, func() error {

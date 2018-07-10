@@ -62,6 +62,7 @@ type Command struct {
 
 	// Gossip transport
 	gossipTransport *gossip.Transport
+	gossipMemberSet io.Closer
 
 	// Standard input/output
 	*pilosa.CmdIO
@@ -326,6 +327,8 @@ func (m *Command) setupNetworking() error {
 	if err != nil {
 		return errors.Wrap(err, "getting memberset")
 	}
+	m.gossipMemberSet = gossipMemberSet
+
 	return errors.Wrap(gossipMemberSet.Open(), "opening gossip memberset")
 }
 
@@ -341,12 +344,16 @@ func (m *Command) Close() error {
 	var logErr error
 	handlerErr := m.Handler.Close()
 	serveErr := m.Server.Close()
+	var gossipErr error
+	if m.gossipMemberSet != nil {
+		gossipErr = m.gossipMemberSet.Close()
+	}
 	if closer, ok := m.logOutput.(io.Closer); ok {
 		logErr = closer.Close()
 	}
 	close(m.done)
-	if serveErr != nil || logErr != nil || handlerErr != nil {
-		return fmt.Errorf("closing server: '%v', closing logs: '%v', closing handler: '%v'", serveErr, logErr, handlerErr)
+	if serveErr != nil || logErr != nil || handlerErr != nil || gossipErr != nil {
+		return fmt.Errorf("closing server: '%v', closing logs: '%v', closing handler: '%v', closing gossip: '%v'", serveErr, logErr, handlerErr, gossipErr)
 	}
 	return nil
 }
