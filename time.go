@@ -140,7 +140,7 @@ func viewsByTimeRange(name string, start, end time.Time, q TimeQuantum) []string
 					break
 				} else if t.Month() != 1 {
 					results = append(results, viewByTimeUnit(name, t, 'M'))
-					t = t.AddDate(0, 1, 0)
+					t = addMonth(t)
 					continue
 				}
 			}
@@ -159,7 +159,7 @@ func viewsByTimeRange(name string, start, end time.Time, q TimeQuantum) []string
 			t = t.AddDate(1, 0, 0)
 		} else if hasMonth && nextMonthGTE(t, end) {
 			results = append(results, viewByTimeUnit(name, t, 'M'))
-			t = t.AddDate(0, 1, 0)
+			t = addMonth(t)
 		} else if hasDay && nextDayGTE(t, end) {
 			results = append(results, viewByTimeUnit(name, t, 'D'))
 			t = t.AddDate(0, 0, 1)
@@ -172,6 +172,19 @@ func viewsByTimeRange(name string, start, end time.Time, q TimeQuantum) []string
 	}
 
 	return results
+}
+
+// addMonth adds a month similar to time.AddDate(0, 1, 0), but
+// in certain edge cases it doesn't normalize for days late in the month.
+// In the "YM" case where t.Day is greater than 28, there are
+// edge cases where using time.AddDate() to add a month will result
+// in two "months" being added (Jan 31 + 1mo = March 2).
+func addMonth(t time.Time) time.Time {
+	if t.Day() > 28 {
+		t = time.Date(t.Year(), t.Month(), 1, t.Hour(), 0, 0, 0, t.Location())
+	}
+	t = t.AddDate(0, 1, 0)
+	return t
 }
 
 func nextYearGTE(t time.Time, end time.Time) bool {
