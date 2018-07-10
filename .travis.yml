@@ -1,6 +1,5 @@
 language: go
 go:
-  - 1.9
   - "1.10" # Use string, as 1.10==1.1 if interpreted as float.
   - master
 env:
@@ -31,12 +30,6 @@ matrix:
   fast_finish: true
   allow_failures:
     - go: master
-    - go: 1.9
-  exclude:
-    - go: 1.9
-      env: GOARCH=386
-    - go: 1.9
-      env: GOARCH=amd64
 notifications:
   slack:
     secure: "SceWannxoGzeSu9PlEhl6icQFGuTmwax870k20nB2ZGYLjo77UEcwYoFwWvFsdYPa/HCo3JorMTYvMJ15VDJcnKEfzDr+kyXbHWBzUumclIOU/Im3ArEN6waQgyGbbWUQhvJjy4ATaxiOlmCyDV+KhKC9P3+WB33/OQtM3ngjAdTXYHAkfEcpeoOP75um+KsQgbi+hlnqfZdgDa6yIkFjaS3KZEJW1vmcOYYzNsXOA1Ip8j1NY6AjjWZlQorZJ/SYFqdhIv8ST3+a6cQk12u3t6TwZdcr3wmm1qmiW/SaK7UesWlT/YfElIuK8BBq9w1oZHxNKoAmLWTOe7MMisdItmtwgA14eMGl1rvNFlVf9sjsxs4AAzFvSZBZdDfx9XeLCBU5I2WUc/PKUgNQBPMVChxA7gEhtZLndsDdye7LsZASD2yYqjlVlgoZpzRexee/cJgCqUcNKDBHF39ZJYxV4KtZ0prjcSnVmLvuapplzTV4LZ+LyFapCyhiuM/oMJvxgmd7jTtFb5e5EkaHBPN1XwQWZw87yCjKsunTlTe1f1a5qoH/xvJHNpqE/jxOHU3DTLDgTxhb+FwC1Qj9a8bp+UYLw5F4P46ZnHlBGc2O74klv17EqvUMn3JhzASUtyxLGOgJulJ+o83rxJvhSiWt3GQIfkExVPzmz11641ElJI="
