@@ -359,6 +359,9 @@ func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
 		case bool:
 			pb.Results[i].Type = queryResultTypeBool
 			pb.Results[i].Changed = result
+		case pilosa.RowIDs:
+			pb.Results[i].Type = queryResultTypeRowIDs
+			pb.Results[i].RowIDs = result
 		case nil:
 			pb.Results[i].Type = queryResultTypeNil
 		}
@@ -862,6 +865,7 @@ const (
 	queryResultTypeValCount
 	queryResultTypeUint64
 	queryResultTypeBool
+	queryResultTypeRowIDs
 )
 
 func decodeQueryResult(pb *internal.QueryResult) interface{} {

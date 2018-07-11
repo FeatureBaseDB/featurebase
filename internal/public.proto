@@ -64,8 +64,9 @@ message QueryResult {
 	Row Row = 1;
 	uint64 N = 2;
 	repeated Pair Pairs = 3;
-	ValCount ValCount = 5;
 	bool Changed = 4;
+	ValCount ValCount = 5;
+	repeated uint64 RowIDs = 7;
 }
 
 message ImportRequest {

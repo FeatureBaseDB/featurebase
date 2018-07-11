@@ -191,6 +191,9 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "TopN":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeTopN(ctx, index, c, shards, opt)
+	case "Rows":
+		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		return e.executeIterateRows(ctx, index, c, shards, opt)
 	default:
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeBitmapCall(ctx, index, c, shards, opt)
@@ -665,6 +668,110 @@ func (e *executor) executeDifferenceShard(ctx context.Context, index string, c *
 	return other, nil
 }
 
+type RowIDs []uint64
+
+func (r RowIDs) Merge(other RowIDs) RowIDs {
+	i, j := 0, 0
+	result := make(RowIDs, 0)
+	for i < len(r) && j < len(other) {
+		av, bv := r[i], other[j]
+		if av < bv {
+			result = append(result, av)
+			i++
+		} else if av > bv {
+			result = append(result, bv)
+			j++
+		} else {
+			result = append(result, bv)
+			i++
+			j++
+		}
+
+	}
+	for i < len(r) {
+		result = append(result, r[i])
+		i++
+	}
+	for j < len(other) {
+		result = append(result, other[j])
+		j++
+	}
+	return result
+}
+
+func (e *executor) executeIterateRows(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeIterateRowShard(ctx, index, c, shard)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		other, _ := prev.(RowIDs)
+		return RowIDs(other).Merge(v.(RowIDs))
+	}
+
+	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return nil, err
+	}
+	results, _ := other.(RowIDs)
+	limit, hasLimit, err := c.UintArg("limit")
+	if err != nil {
+		return nil, err
+	}
+	offset, hasOffset, err := c.UintArg("offset")
+	if err != nil {
+		return nil, err
+	}
+	if hasOffset {
+		if int(offset) < len(results) {
+			results = results[offset:]
+		}
+	}
+
+	if hasLimit {
+		if int(limit) < len(results) {
+			results = results[:limit]
+		}
+	}
+	return results, nil
+}
+
+func (e *executor) executeIterateRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (RowIDs, error) {
+	// Fetch column label from index.
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	}
+
+	// Fetch field & row label based on argument.
+	fieldName, ok := c.Args["field"]
+
+	if !ok {
+		return nil, errors.New("Rows() argument required: field")
+	}
+	f := e.Holder.Field(index, fieldName.(string))
+	if f == nil {
+		return nil, ErrFieldNotFound
+	}
+
+	frag := e.Holder.fragment(index, fieldName.(string), viewStandard, shard)
+	if frag == nil {
+		return make(RowIDs, 0), nil
+	}
+	//TODO add column filter next
+	columnID, ok, err := c.UintArg("column")
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return frag.RowsForColumn(columnID), nil
+	}
+
+	return frag.Rows(), nil
+
+}
 func (e *executor) executeBitmapShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
 	// Fetch column label from index.
 	idx := e.Holder.Index(index)
@@ -1703,7 +1810,7 @@ func needsShards(calls []*pql.Call) bool {
 		switch call.Name {
 		case "Clear", "Set", "SetRowAttrs", "SetColumnAttrs":
 			continue
-		case "Count", "TopN":
+		case "Count", "TopN", "Rows":
 			return true
 		// default catches Bitmap calls
 		default:

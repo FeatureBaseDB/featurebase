@@ -1679,10 +1679,10 @@ func (f *fragment) readCacheFromArchive(r io.Reader) error {
 	return nil
 }
 
-func (f *fragment) Rows() []uint64 {
+func (f *fragment) Rows() RowIDs {
 	c, _ := f.storage.Containers.Iterator(0)
 	curRow := uint64(0)
-	rows := make([]uint64, 0)
+	rows := make(RowIDs, 0)
 	for c.Next() {
 		key, _ := c.Value()
 		for key > (curRow >> 16) {
@@ -1703,13 +1703,13 @@ func (f *fragment) Rows() []uint64 {
 //func highbits(v uint64) uint64 { return v >> 16 }
 //func lowbits(v uint64) uint16  { return uint16(v & 0xFFFF) }
 
-func (f *fragment) RowsForColumn(columnID uint64) []uint64 {
+func (f *fragment) RowsForColumn(columnID uint64) RowIDs {
 	columnID = columnID % ShardWidth
 	i, _ := f.storage.Containers.Iterator(0)
 	curRow := uint64(0)
 	ckey := uint64(0)
 	cval := uint16(columnID & 0xFFFF)
-	rows := make([]uint64, 0)
+	rows := make(RowIDs, 0)
 	for i.Next() {
 		key, c := i.Value()
 		for key > (curRow >> 16) {
