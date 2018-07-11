@@ -8,7 +8,7 @@ nav = []
 ## Introduction
 
 
-Pilosa is an open source, distributed bitmap index.
+Pilosa is an open source, distributed index.
 
 [//]: # (TODO insert a graphic here?)
 

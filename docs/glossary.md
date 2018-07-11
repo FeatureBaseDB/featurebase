@@ -14,7 +14,7 @@ nav = []
 
 <strong id="bitmap">[Bitmap](../data-model/#overview):</strong> The on-disk and in-memory representation of a [row](#row). Implemented with [Roaring](#roaring-bitmap).
 
-<strong id="bsi">[BSI](../data-model/#bsi-range-encoding)</strong> Bit-sliced indexing is the method Pilosa uses to represent multi-bit integers. Integer values are stored in [fields](#field), and can be used for [Range](#range-bsi), [Min](#min), [Max](#max), and [Sum](#sum) queries.
+<strong id="bsi">[BSI](../data-model/#bsi-range-encoding)</strong> Bit-sliced indexing is the method Pilosa uses to represent multi-bit integers. Integer values are stored in `int` [fields](#field), and can be used for [Range](#range-bsi), [Min](#min), [Max](#max), and [Sum](#sum) queries.
 
 <strong id="cluster">Cluster:</strong> A cluster consists of one or more [nodes](#node) which share a cluster configuration. The cluster also defines how data is [replicated](#replica) and how internode communication is coordinated. Pilosa does not have a leader node, all data is evenly distributed, and any node can respond to queries.
 
