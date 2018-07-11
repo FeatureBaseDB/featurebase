@@ -1708,7 +1708,6 @@ func (f *fragment) rows() []uint64 {
 		lastRow = vRow
 	}
 	return rows
-
 }
 
 func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
