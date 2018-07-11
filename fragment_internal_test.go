@@ -1278,3 +1278,32 @@ func (f *fragment) mustSetBits(rowID uint64, columnIDs ...uint64) {
 		}
 	}
 }
+
+// Ensure an empty bitmap returns false if checking for existence.
+func TestFragment_RowsIteration(t *testing.T) {
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
+	defer f.Close()
+	expected1 := make([]uint64, 0)
+	expected2 := make([]uint64, 0)
+	for i := uint64(100); i < uint64(200); i++ {
+		if _, err := f.setBit(i, i%2); err != nil {
+			t.Fatal(err)
+		}
+		expected1 = append(expected1, i)
+		if i%2 == 1 {
+			expected2 = append(expected2, i)
+		}
+	}
+
+	ids := f.Rows()
+	if !reflect.DeepEqual(expected1, ids) {
+		t.Fatalf("Do not match %v %v", expected1, ids)
+
+	}
+
+	ids = f.RowsForColumn(1)
+	if !reflect.DeepEqual(expected2, ids) {
+		t.Fatalf("Do not match %v %v", expected2, ids)
+	}
+
+}
