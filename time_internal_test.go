@@ -97,6 +97,24 @@ func TestViewsByTimeRange(t *testing.T) {
 			t.Fatalf("unexpected fields: %#v", a)
 		}
 	})
+	t.Run("YM31up", func(t *testing.T) {
+		a := viewsByTimeRange("F", mustParseTime("2001-10-31 00:00"), mustParseTime("2003-04-01 00:00"), mustParseTimeQuantum("YM"))
+		if !reflect.DeepEqual(a, []string{"F_200110", "F_200111", "F_200112", "F_2002", "F_200301", "F_200302", "F_200303"}) {
+			t.Fatalf("unexpected fields: %#v", a)
+		}
+	})
+	t.Run("YM31mid", func(t *testing.T) {
+		a := viewsByTimeRange("F", mustParseTime("1999-12-31 00:00"), mustParseTime("2000-04-01 00:00"), mustParseTimeQuantum("YM"))
+		if !reflect.DeepEqual(a, []string{"F_199912", "F_200001", "F_200002", "F_200003"}) {
+			t.Fatalf("unexpected fields: %#v", a)
+		}
+	})
+	t.Run("YM31down", func(t *testing.T) {
+		a := viewsByTimeRange("F", mustParseTime("2000-01-31 00:00"), mustParseTime("2001-04-01 00:00"), mustParseTimeQuantum("YM"))
+		if !reflect.DeepEqual(a, []string{"F_2000", "F_200101", "F_200102", "F_200103"}) {
+			t.Fatalf("unexpected fields: %#v", a)
+		}
+	})
 	t.Run("YMD", func(t *testing.T) {
 		a := viewsByTimeRange("F", mustParseTime("2000-11-28 00:00"), mustParseTime("2003-03-02 00:00"), mustParseTimeQuantum("YMD"))
 		if !reflect.DeepEqual(a, []string{"F_20001128", "F_20001129", "F_20001130", "F_200012", "F_2001", "F_2002", "F_200301", "F_200302", "F_20030301"}) {

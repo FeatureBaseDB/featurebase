@@ -1279,7 +1279,7 @@ func TestExecutor_Time_Clear_Quantums(t *testing.T) {
 		expected []uint64
 	}{
 		{quantum: "Y", expected: []uint64{3, 4, 5, 6}},
-		{quantum: "M", expected: []uint64{3, 4, 6}},
+		{quantum: "M", expected: []uint64{3, 4, 5, 6}},
 		{quantum: "D", expected: []uint64{3, 4, 5, 6}},
 		{quantum: "H", expected: []uint64{3, 4, 5, 6, 7}},
 		{quantum: "YM", expected: []uint64{3, 4, 5, 6}},
