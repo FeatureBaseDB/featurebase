@@ -1,42 +1,44 @@
 +++
-title = "WebUI"
+title = "Console"
 weight = 9
 nav = [
-    "Console",
+    "Installation",
+    "Query",
     "Cluster Admin",
 ]
 +++
 
-## WebUI
+## Console
 
-A web-based app called Pilosa WebUI is available in a separate package. This can be used for constructing queries and viewing the cluster status.
+A web-based app called Pilosa Console is available in a separate package. This can be used for constructing queries and viewing the cluster status.
 
 ### Installation
 
-Releases are [available on Github](https://github.com/pilosa/webui/releases) as well as on [Homebrew](https://brew.sh/) for Mac.
+Releases are [available on Github](https://github.com/pilosa/console/releases) as well as on [Homebrew](https://brew.sh/) for Mac.
 
 Installing on a Mac with Homebrew is simple; just run:
 
 ```
-brew install pilosa-webui
+brew tap pilosa/homebrew-pilosa
+brew install pilosa-console
 ```
 
-You may also build from source by checking out the [repo on Github](https://github.com/pilosa/webui) and running:
+You may also build from source by checking out the [repo on Github](https://github.com/pilosa/console) and running:
 
 ```
 make install
 ```
 
-### Console
+### Query
 
-The Console view allows you to enter [PQL](../query-language/) queries and run them against your locally running server. First you must select an Index with the Select index dropdown.
+The Query tab allows you to enter [PQL](../query-language/) queries and run them against your locally running server. First you must select an Index with the Select index dropdown.
 
 Each query's result will be displayed in the Output section along with the query time. 
 
 The Console will keep a record of each query and its result with the latest query on top.
 
 ![webUI console screenshot](/img/docs/webui-console.png)
-*WebUI console screenshot*
+*Console query screenshot*
 
 In addition to standard PQL, the console supports a few special commands, prefixed with `:`.
 
