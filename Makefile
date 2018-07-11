@@ -25,7 +25,7 @@ clean:
 # Set up vendor directory using `dep`
 vendor: Gopkg.toml
 	$(MAKE) require-dep
-	dep ensure
+	dep ensure -vendor-only
 	touch vendor
 
 # Run test suite
