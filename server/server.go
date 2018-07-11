@@ -20,7 +20,7 @@
 package server
 
 import (
-	"fmt"
+	"crypto/tls"
 	"io"
 	"log"
 	"math/rand"
@@ -31,7 +31,7 @@ import (
 	"syscall"
 	"time"
 
-	"crypto/tls"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/boltdb"
@@ -62,6 +62,7 @@ type Command struct {
 
 	// Gossip transport
 	gossipTransport *gossip.Transport
+	gossipMemberSet io.Closer
 
 	// Standard input/output
 	*pilosa.CmdIO
@@ -75,9 +76,10 @@ type Command struct {
 	logOutput io.Writer
 	logger    loggerLogger
 
-	Handler pilosa.Handler
-	API     *pilosa.API
-	ln      net.Listener
+	Handler      pilosa.Handler
+	API          *pilosa.API
+	ln           net.Listener
+	closeTimeout time.Duration
 
 	serverOptions []pilosa.ServerOption
 }
@@ -87,6 +89,13 @@ type CommandOption func(c *Command) error
 func OptCommandServerOptions(opts ...pilosa.ServerOption) CommandOption {
 	return func(c *Command) error {
 		c.serverOptions = append(c.serverOptions, opts...)
+		return nil
+	}
+}
+
+func OptCommandCloseTimeout(d time.Duration) CommandOption {
+	return func(c *Command) error {
+		c.closeTimeout = d
 		return nil
 	}
 }
@@ -294,6 +303,7 @@ func (m *Command) SetupServer() error {
 		http.OptHandlerAPI(m.API),
 		http.OptHandlerLogger(m.logger),
 		http.OptHandlerListener(m.ln),
+		http.OptHandlerCloseTimeout(m.closeTimeout),
 	)
 	return errors.Wrap(err, "new handler")
 
@@ -317,7 +327,7 @@ func (m *Command) setupNetworking() error {
 		return errors.Wrap(err, "getting transport")
 	}
 
-	gossipMemberSet, err := gossip.NewGossipMemberSet(
+	gossipMemberSet, err := gossip.NewMemberSet(
 		m.Config.Gossip,
 		m.API,
 		gossip.WithLogger(m.logger.Logger()),
@@ -326,6 +336,8 @@ func (m *Command) setupNetworking() error {
 	if err != nil {
 		return errors.Wrap(err, "getting memberset")
 	}
+	m.gossipMemberSet = gossipMemberSet
+
 	return errors.Wrap(gossipMemberSet.Open(), "opening gossip memberset")
 }
 
@@ -338,17 +350,18 @@ func (m *Command) GossipTransport() *gossip.Transport {
 
 // Close shuts down the server.
 func (m *Command) Close() error {
-	var logErr error
-	handlerErr := m.Handler.Close()
-	serveErr := m.Server.Close()
+	defer close(m.done)
+	eg := errgroup.Group{}
+	eg.Go(m.Handler.Close)
+	eg.Go(m.Server.Close)
+	if m.gossipMemberSet != nil {
+		eg.Go(m.gossipMemberSet.Close)
+	}
 	if closer, ok := m.logOutput.(io.Closer); ok {
-		logErr = closer.Close()
+		eg.Go(closer.Close)
 	}
-	close(m.done)
-	if serveErr != nil || logErr != nil || handlerErr != nil {
-		return fmt.Errorf("closing server: '%v', closing logs: '%v', closing handler: '%v'", serveErr, logErr, handlerErr)
-	}
-	return nil
+	err := eg.Wait()
+	return errors.Wrap(err, "closing everything")
 }
 
 // newStatsClient creates a stats client from the config
