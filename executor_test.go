@@ -1329,3 +1329,42 @@ func TestExecutor_Time_Clear_Quantums(t *testing.T) {
 	}
 
 }
+
+func TestExecutor_Execute_Rows(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
+	hldr.SetBit("i", "general", 10, 0)
+	hldr.SetBit("i", "general", 10, ShardWidth+1)
+	hldr.SetBit("i", "general", 10, ShardWidth+2)
+
+	hldr.SetBit("i", "general", 11, 2)
+	hldr.SetBit("i", "general", 11, ShardWidth+2)
+
+	hldr.SetBit("i", "general", 12, 2)
+	hldr.SetBit("i", "general", 12, ShardWidth+2)
+
+	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=general)`}); err != nil {
+		t.Fatal(err)
+	} else if columns := res.Results[0].(pilosa.RowIDs); !reflect.DeepEqual(columns, pilosa.RowIDs{10, 11, 12}) {
+		t.Fatalf("unexpected columns: %+v", columns)
+	}
+
+	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=general, limit=2)`}); err != nil {
+		t.Fatal(err)
+	} else if columns := res.Results[0].(pilosa.RowIDs); !reflect.DeepEqual(columns, pilosa.RowIDs{10, 11}) {
+		t.Fatalf("unexpected columns: %+v", columns)
+	}
+
+	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=general, offset=1,limit=2)`}); err != nil {
+		t.Fatal(err)
+	} else if columns := res.Results[0].(pilosa.RowIDs); !reflect.DeepEqual(columns, pilosa.RowIDs{11, 12}) {
+		t.Fatalf("unexpected columns: %+v", columns)
+	}
+
+	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=general, column=2)`}); err != nil {
+		t.Fatal(err)
+	} else if columns := res.Results[0].(pilosa.RowIDs); !reflect.DeepEqual(columns, pilosa.RowIDs{11, 12}) {
+		t.Fatalf("unexpected columns: %+v", columns)
+	}
+}
