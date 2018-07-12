@@ -961,6 +961,7 @@ func encodeColumnAttrSets(a []*pilosa.ColumnAttrSet) []*internal.ColumnAttrSet {
 func encodeColumnAttrSet(set *pilosa.ColumnAttrSet) *internal.ColumnAttrSet {
 	return &internal.ColumnAttrSet{
 		ID:    set.ID,
+		Key:   set.Key,
 		Attrs: encodeAttrs(set.Attrs),
 	}
 }
@@ -972,6 +973,7 @@ func encodeRow(r *pilosa.Row) *internal.Row {
 
 	return &internal.Row{
 		Columns: r.Columns(),
+		Keys:    r.Keys,
 		Attrs:   encodeAttrs(r.Attrs),
 	}
 }

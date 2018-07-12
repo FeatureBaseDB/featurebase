@@ -369,17 +369,28 @@ func (s *Server) Close() error {
 	close(s.closing)
 	s.wg.Wait()
 
+	var errh error
+	var errt error
+	var errc error
 	if s.cluster != nil {
-		s.cluster.close()
+		errc = s.cluster.close()
 	}
 	if s.holder != nil {
-		s.holder.Close()
+		errh = s.holder.Close()
 	}
 	if s.translateFile != nil {
-		s.translateFile.Close()
+		errt = s.translateFile.Close()
 	}
-
-	return nil
+	// prefer to return holder error over translateFile error over cluster
+	// error. This order is somewhat arbitrary. It would be better if we had
+	// some way to combine all the errors, but probably not important enough to
+	// warrant the extra complexity.
+	if errh != nil {
+		return errors.Wrap(errh, "closing holder")
+	} else if errt != nil {
+		return errors.Wrap(errt, "closing translateFile")
+	}
+	return errors.Wrap(errc, "closing cluster")
 }
 
 // loadNodeID gets NodeID from disk, or creates a new value.
