@@ -1712,7 +1712,6 @@ func (f *fragment) rows() []uint64 {
 
 func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
 	var colKey uint64
-
 	colID := columnID % ShardWidth
 	i, _ := f.storage.Containers.Iterator(0)
 

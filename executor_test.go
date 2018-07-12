@@ -1336,7 +1336,6 @@ func TestExecutor_Execute_Rows(t *testing.T) {
 	hldr := test.Holder{Holder: c[0].Server.Holder()}
 	hldr.SetBit("i", "general", 10, 0)
 	hldr.SetBit("i", "general", 10, ShardWidth+1)
-	hldr.SetBit("i", "general", 10, ShardWidth+2)
 
 	hldr.SetBit("i", "general", 11, 2)
 	hldr.SetBit("i", "general", 11, ShardWidth+2)
@@ -1363,6 +1362,12 @@ func TestExecutor_Execute_Rows(t *testing.T) {
 	}
 
 	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=general, column=2)`}); err != nil {
+		t.Fatal(err)
+	} else if columns := res.Results[0].(pilosa.RowIDs); !reflect.DeepEqual(columns, pilosa.RowIDs{11, 12}) {
+		t.Fatalf("unexpected columns: %+v", columns)
+	}
+
+	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(Row(general=11),field=general )`}); err != nil {
 		t.Fatal(err)
 	} else if columns := res.Results[0].(pilosa.RowIDs); !reflect.DeepEqual(columns, pilosa.RowIDs{11, 12}) {
 		t.Fatalf("unexpected columns: %+v", columns)
