@@ -760,6 +760,14 @@ func (e *executor) executeIterateRowShard(ctx context.Context, index string, c *
 	if frag == nil {
 		return make(RowIDs, 0), nil
 	}
+	//
+	if len(c.Children) > 0 {
+		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
+		if err != nil {
+			return nil, err
+		}
+		return frag.RowsForRow(row), nil
+	}
 	//TODO add column filter next
 	columnID, ok, err := c.UintArg("column")
 	if err != nil {

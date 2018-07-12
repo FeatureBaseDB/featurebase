@@ -1279,12 +1279,12 @@ func (f *fragment) mustSetBits(rowID uint64, columnIDs ...uint64) {
 	}
 }
 
-// Ensure an empty bitmap returns false if checking for existence.
+// Test Various methods of retrieving RowIDs
 func TestFragment_RowsIteration(t *testing.T) {
 	f := mustOpenFragment("i", "f", viewStandard, 0, "")
 	defer f.Close()
-	expected1 := make([]uint64, 0)
-	expected2 := make([]uint64, 0)
+	expected1 := make(RowIDs, 0)
+	expected2 := make(RowIDs, 0)
 	for i := uint64(100); i < uint64(200); i++ {
 		if _, err := f.setBit(i, i%2); err != nil {
 			t.Fatal(err)
@@ -1305,5 +1305,9 @@ func TestFragment_RowsIteration(t *testing.T) {
 	if !reflect.DeepEqual(expected2, ids) {
 		t.Fatalf("Do not match %v %v", expected2, ids)
 	}
-
+	row := f.row(101)
+	ids = f.RowsForRow(row)
+	if !reflect.DeepEqual(expected2, ids) {
+		t.Fatalf("Do not match %v %v", expected2, ids)
+	}
 }

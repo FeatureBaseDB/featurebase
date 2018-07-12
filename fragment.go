@@ -1683,25 +1683,71 @@ func (f *fragment) Rows() RowIDs {
 	c, _ := f.storage.Containers.Iterator(0)
 	curRow := uint64(0)
 	rows := make(RowIDs, 0)
+	looking := true
 	for c.Next() {
 		key, _ := c.Value()
 		for key > (curRow >> 16) {
 			//TODO optimize skip to that row
 			curRow += ShardWidth
+			looking = true
 		}
-		if key == (curRow >> 16) {
-			rows = append(rows, curRow/ShardWidth)
+		if looking {
+			if key == (curRow >> 16) {
+				rows = append(rows, curRow/ShardWidth)
+				looking = false
+			}
 		}
 		if key%(ShardWidth>>16) == 0 {
 			curRow += ShardWidth
+			looking = true
 		}
 	}
 	return rows
 
 }
 
-//func highbits(v uint64) uint64 { return v >> 16 }
-//func lowbits(v uint64) uint16  { return uint16(v & 0xFFFF) }
+func (f *fragment) RowsForRow(row *Row) RowIDs {
+	x := row.Columns()
+	for i := range x {
+		x[i] = x[i] % ShardWidth
+	}
+	i, _ := f.storage.Containers.Iterator(0)
+	rows := make(RowIDs, 0)
+	looking := true
+	curRow := uint64(0)
+	for i.Next() {
+		key, c := i.Value()
+		for key > (curRow >> 16) {
+			curRow += ShardWidth
+			looking = true
+		}
+		if looking {
+			key_found := false
+			for _, col := range x {
+				if key == (curRow+col)>>16 {
+					key_found = true
+					break
+				}
+			}
+			if key_found {
+				for _, col := range x {
+					if c.Contains(uint16(col & 0xFFFF)) {
+						rows = append(rows, curRow/ShardWidth) //add the current row and skip to next row
+						looking = false
+						break
+					}
+				}
+			}
+		}
+
+		if key%(ShardWidth>>16) == 0 {
+			curRow += ShardWidth
+			looking = true
+		}
+	}
+
+	return rows
+}
 
 func (f *fragment) RowsForColumn(columnID uint64) RowIDs {
 	columnID = columnID % ShardWidth
@@ -1710,20 +1756,26 @@ func (f *fragment) RowsForColumn(columnID uint64) RowIDs {
 	ckey := uint64(0)
 	cval := uint16(columnID & 0xFFFF)
 	rows := make(RowIDs, 0)
+	looking := true
 	for i.Next() {
 		key, c := i.Value()
 		for key > (curRow >> 16) {
 			curRow += ShardWidth
+			looking = true
 		}
-		if key == ckey {
-			if c.Contains(cval) {
-				rows = append(rows, curRow/ShardWidth)
+		if looking {
+			if key == ckey {
+				if c.Contains(cval) {
+					rows = append(rows, curRow/ShardWidth)
+					looking = false
+				}
 			}
 		}
 		if key%(ShardWidth>>16) == 0 {
 			curRow += ShardWidth
 			ckey = (curRow + columnID) >> 16
 			cval = uint16((curRow + columnID) & 0xFFFF)
+			looking = true
 		}
 	}
 	return rows
