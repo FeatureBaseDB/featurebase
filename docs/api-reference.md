@@ -17,7 +17,7 @@ Returns the schema of all indexes in JSON.
 curl -XGET localhost:10101/index
 ```
 ``` response
-{"indexes":[{"name":"user","fields":[{"name":"collab"}]}]}
+{"indexes":[{"name":"user","fields":[{"name":"event","options":{"type":"time","timeQuantum":"YMD","keys":false}}]}]}
 ```
 
 ### List index schema
@@ -30,7 +30,7 @@ Returns the schema of the specified index in JSON.
 curl -XGET localhost:10101/index/user
 ```
 ``` response
-{"name":"user", "fields":[{"name":"collab"}]}
+{"name":"user","fields":[{"name":"event","options":{"type":"time","timeQuantum":"YMD","keys":false}}]}
 ```
 
 ### Create index
@@ -100,19 +100,27 @@ By default, all bits and attributes (*for `Row` queries only*) are returned. In 
 
 Creates a field in the given index with the given name.
 
-The request payload is in JSON, and may contain the `options` field. The `options` field is a JSON object which may contain the following fields:
+The request payload is in JSON, and may contain the `options` field. The `options` field is a JSON object which must contain a `type` along with the corresponding configuration options. 
 
-* `timeQuantum` (string): [Time Quantum](../data-model/#time-quantum) for this field.
-* `cacheType` (string): [ranked](../data-model/#ranked) or [LRU](../data-model/#lru) caching on this field. Default is `lru`.
-* `cacheSize` (int): Number of rows to keep in the cache. Default 50,000.
-* `fields` (array): List of range-encoded [fields](../data-model/#bsi-range-encoding).
+* `set`
+    * `cacheType` (string): [ranked](../data-model/#ranked) or [LRU](../data-model/#lru) caching on this field. Default is `lru`.
+    * `cacheSize` (int): Number of rows to keep in the cache. Default 50,000.
+* `int`
+    * `min` (int): Minimum integer value allowed for the field.
+    * `max` (int): Maximum integer value allowed for the field.
+* `time`
+    * `timeQuantum` (string): [Time Quantum](../data-model/#time-quantum) for this field.
 
-Each individual `field` contains the following:
+The following example creates an `int` field called "quantity" capable of storing values from -1000 to 2000:
 
-* `name` (string): Field name.
-* `type` (string): Field type, "set", "int" or "time".
-* `min` (int): Minimum value allowed for this field.
-* `max` (int): Maximum value allowed for this field.
+``` request
+curl localhost:10101/index/user/field/quantity \
+     -X POST \
+     -d '{"options": {"type": "int", "min": -1000, "max":2000}}'
+```
+``` response
+{"success":true}
+```
 
 Integer fields are stored as n-bit range-encoded values. Pilosa supports 63-bit, signed integers with values between `min` and `max`.
 
