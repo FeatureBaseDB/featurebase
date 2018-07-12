@@ -25,7 +25,7 @@ Some of our tutorials work better as standalone repos, since you can <code>git c
 
 #### Introduction
 
-Pilosa supports encrypting the communication between and to nodes in a cluster using TLS. In this tutorial, we will be setting up a three node Pilosa cluster running on the same computer. The same steps can be used for a multi-computer cluster but that requires setting up firewalls and other platform-specific configuration which is out of the scope of this tutorial.
+Pilosa supports encrypting all communication with nodes in a cluster using TLS. In this tutorial, we will be setting up a three node Pilosa cluster running on the same computer. The same steps can be used for a multi-computer cluster but that requires setting up firewalls and other platform-specific configuration which is beyond the scope of this tutorial.
 
 This tutorial assumes that you are using a UNIX-like system, such as Linux or MacOS. [Windows Subsystem for Linux (WSL)](https://msdn.microsoft.com/en-us/commandline/wsl/about) works equally well on Windows 10 systems.
 
@@ -34,11 +34,41 @@ This tutorial assumes that you are using a UNIX-like system, such as Linux or Ma
 If you haven't already done so, install Pilosa server on your computer. For Linux and WSL (Windows Subsystem for Linux) use the [Installing on Linux](../installation/#installing-on-linux) instructions. For MacOS use the [Installing on MacOS](../installation/#installing-on-macos). We do not support precompiled releases for other platforms, but you can always compile it yourself from source. See [Build from Source](../installation/#build-from-source).
 
 After installing Pilosa, you may have to add it to your `$PATH`. Check that you can run Pilosa from the command line:
-```
+``` request
 pilosa --help
 ```
+``` response
+Pilosa is a fast index to turbocharge your database.
 
-Let's create a directory for the tutorial to put all of our files and switch to that directory:
+This binary contains Pilosa itself, as well as common
+tools for administering pilosa, importing/exporting data,
+backing up, and more. Complete documentation is available
+at https://www.pilosa.com/docs/.
+
+Version: v1.0.0
+Build Time: 2018-05-14T22:14:01+0000
+
+Usage:
+  pilosa [command]
+
+Available Commands:
+  check           Do a consistency check on a pilosa data file.
+  config          Print the current configuration.
+  export          Export data from pilosa.
+  generate-config Print the default configuration.
+  help            Help about any command
+  import          Bulk load data into pilosa.
+  inspect         Get stats on a pilosa data file.
+  server          Run Pilosa.
+
+Flags:
+  -c, --config string   Configuration file to read from.
+  -h, --help            help for pilosa
+
+Use "pilosa [command] --help" for more information about a command.
+```
+
+First, create a directory in which to put all of the files for this tutorial. Then switch to that directory:
 ```
 mkdir $HOME/pilosa-tls-tutorial && cd $_
 ```
@@ -47,9 +77,9 @@ mkdir $HOME/pilosa-tls-tutorial && cd $_
 
 Securing a Pilosa cluster consists of securing the communication between nodes using TLS and Gossip encryption. [Pilosa Enterprise](https://www.pilosa.com/enterprise/) additionally supports authentication and other security features, but those are not covered in this tutorial.
 
-The first step is acquiring an SSL certificate. You can buy a commercial certificate or retrieve a Let's Encrypt certificate but we will be using a self signed certificate for practical reasons. Using self-signed certificates is not recommended in production, since it makes man in the middle attacks easy.
+The first step is acquiring an SSL certificate. You can buy a commercial certificate or retrieve a [Let's Encrypt](https://letsencrypt.org/) certificate, but we will be using a self signed certificate for practical reasons. Using self-signed certificates is not recommended in production since it makes man-in-the-middle attacks easy.
 
-The following command creates a 2048bit self-signed wildcard certificate for `*.pilosa.local` which expires 10 years later.
+The following command creates a 2048-bit, self-signed wildcard certificate for `*.pilosa.local` which expires 10 years later.
 
 ```
 openssl req -x509 -newkey rsa:2048 -keyout pilosa.local.key -out pilosa.local.crt -days 3650 -nodes -subj "/C=US/ST=Texas/L=Austin/O=Pilosa/OU=Com/CN=*.pilosa.local"
@@ -60,16 +90,16 @@ The command above creates two files in the current directory:
 * `pilosa.local.crt` is the SSL certificate.
 * `pilosa.local.key` is the private key file which must be kept as secret.
 
-Having created the SSL certificate, we can now create the gossip encryption key. Gossip encryption key file must be exactly 16, 24, or 32 bytes to select one of AES-128, AES-192, or AES-256 encryption. Reading random bytes from cryptographically secure `/dev/random` serves our purpose very well:
+Having created the SSL certificate, we can now create the gossip encryption key. The gossip encryption key file must be exactly 16, 24, or 32 bytes to select one of AES-128, AES-192, or AES-256 encryption. Reading random bytes from cryptographically secure `/dev/random` serves our purpose very well:
 ```
 head -c 32 /dev/random > pilosa.local.gossip32
 ```
 
-We now should have `pilosa.local.gossip32` in the current directory with 32 random bytes.
+We now have a file called `pilosa.local.gossip32` in the current directory which contains 32 random bytes.
 
 #### Creating the Configuration Files
 
-Pilosa supports passing configuration items using the command line, environment variables or a configuration file. We will use the last option in this tutorial and create three configuration files for our three nodes.
+Pilosa supports passing configuration items using command line options, environment variables, or a configuration file. For this tutorial, we will use three configuration files; one configuration file for each of our three nodes.
 
 One of the nodes in the cluster must be chosen as the *coordinator*. We choose the first node as the coordinator in this tutorial. The coordinator is only important during cluster resizing operations, and otherwise acts like any other node in the cluster. In the future, the coordinator will be chosen transparently by distributed consensus, and this option will be deprecated.
 
@@ -139,7 +169,7 @@ Here is some explanation of the configuration items:
 * `bind` is the address to which the server listens for incoming requests. The address is composed of three parts: scheme, host, and port. The default scheme is `http` so we explicitly specify `https` to use the HTTPS protocol for communication between nodes.
 * `[cluster]` section contains the settings for a cluster. We set `coordinator = true` for only the first node to choose that as the coordinator node. See [Cluster Configuration](../configuration/#cluster-coordinator) for other settings.
 * `[tls]` section contains the TLS settings, including the path to the SSL certificate and the corresponding key. Set `skip-verify` to `true` in order to disable host name verification and other security measures. Do not set `skip-verify` to `true` on production servers.
-* `[gossip]` section contains settings for the Gossip protocol. `seeds` contain the seed nodes which other nodes gather cluster topology. There must be at least one gossip seed. The `port` setting is the gossip listen address for the node. It should be different for each node, if the cluster is running on the same computer, otherwise you can set it to the same value. Finally, the `key` points to the gossip encryption key we created before.
+* `[gossip]` section contains settings for the gossip protocol. `seeds` contains the list of nodes from which to seed cluster membership. There must be at least one gossip seed. The `port` setting is the gossip listen address for the node. If all nodes of the cluster are running on the same computer, the gossip listen address should be different for each node. Otherwise, it can be set to the same value. Finally, the `key` points to the gossip encryption key we created earlier.
 
 #### Final Touches Before Running the Cluster
 
@@ -159,7 +189,7 @@ If any of the commands above return `ping: unknown host`, make sure your `/etc/h
 
 #### Running the Cluster
 
-Let's open three terminal windows and run each node in its window. This will enable us to better observe what's happening on which node.
+Let's open three terminal windows and run each node in its own window. This will enable us to better observe what's happening on each node.
 
 Switch to the first terminal window, change to the project directory and start the first node:
 ```
@@ -180,59 +210,72 @@ pilosa server -c node3.config.toml
 ```
 
 Let's ensure that all three Pilosa servers are running and they are connected:
-```
+``` request
 curl -k --ipv4 https://01.pilosa.local:10501/status
 ```
-
-The `-k` flag is used to tell curl that it shouldn't bother with checking the certificate the server provides and `--ipv4` workarounds an issue on MacOS where the curl requests take a long time if the address resolves to `127.0.0.1`. You can leave it out on Linux and WSL.
-
-All nodes should be in the `NORMAL` state:
 ``` response
 {"state":"NORMAL","nodes":[{"id":"98ebd177-c082-4c54-8d48-7e7c75857b52","uri":{"scheme":"https","host":"02.pilosa.local","port":10502},"isCoordinator":false},{"id":"a33dc0d6-c35f-4559-984a-e582bf032a21","uri":{"scheme":"https","host":"03.pilosa.local","port":10503},"isCoordinator":false},{"id":"e24ac014-ee2f-4cb0-b565-74df6c551f0a","uri":{"scheme":"https","host":"01.pilosa.local","port":10501},"isCoordinator":true}]}
 ```
 
+The `-k` flag is used to tell curl that it shouldn't bother checking the certificate the server provides, and the `--ipv4` flag avoids an issue on MacOS where the curl request takes a long time if the address resolves to `127.0.0.1`. You can leave it out on Linux and WSL.
+
+If everything is set up correctly, the cluster state should be `NORMAL`.
+
 #### Running Queries
 
-Having confirmed that our cluster is running OK, let's run a few queries. But before that, we need to create an index and a frame:
+Having confirmed that our cluster is running normally, let's perform a few queries. First, we need to create an index and a field:
 ``` request
-curl -k --ipv4 https://01.pilosa.local:10501/index/sample-index -d ''
+curl https://01.pilosa.local:10501/index/sample-index \
+     -k --ipv4 \
+     -X POST
 ```
 ``` response
-{}
+{"success":true}
 ```
 
-This will create index `sample-index` with default options. Let's create the frame now:
+This will create index `sample-index` with default options. Let's create the field now:
 ``` request
-curl -k --ipv4 https://01.pilosa.local:10501/index/sample-index/frame/sample-frame -d ''
+curl https://01.pilosa.local:10501/index/sample-index/field/sample-field \
+     -k --ipv4 \
+     -X POST
 ```
 ``` response
-{}
+{"success":true}
 ```
 
-We just created frame `sample-frame` with default options.
+We just created field `sample-field` with default options.
 
-Let's run a `SetBit` query:
+Let's run a `Set` query:
 ``` request
-curl -k --ipv4 https://01.pilosa.local:10501/index/sample-index/query -d 'SetBit(frame="sample-frame", row=1, col=100)'
+curl https://01.pilosa.local:10501/index/sample-index/query \
+     -k --ipv4 \
+     -X POST \
+     -d 'Set(100, sample-field=1)'
 ```
 ``` response
 {"results":[true]}
 ```
 
-Confirm that the bit was indeed set:
+Confirm that the value was indeed set:
 ``` request
-curl -k --ipv4 https://01.pilosa.local:10501/index/sample-index/query -d 'Bitmap(frame="sample-frame", row=1)'
+curl https://01.pilosa.local:10501/index/sample-index/query \
+     -k --ipv4 \
+     -X POST \
+     -d 'Row(sample-field=1)'
 ```
 ``` response
-{"results":[{"attrs":{},"bits":[100]}]}
+{"results":[{"attrs":{},"columns":[100]}]}
 ```
 
 The same response should be returned when querying other nodes in the cluster:
 ``` request
-curl -k --ipv4 https://02.pilosa.local:10502/index/sample-index/query -d 'Bitmap(frame="sample-frame", row=1)'
+curl https://02.pilosa.local:10501/index/sample-index/query \
+     -k --ipv4 \
+     -X POST \
+     -d 'Row(sample-field=1)'
 ```
 ``` response
-{"results":[{"attrs":{},"bits":[100]}]}
+{"results":[{"attrs":{},"columns":[100]}]}
 ```
 
 #### What's Next?
@@ -265,7 +308,7 @@ docker run -it --rm --name pilosa1 -p 10101:10101 --network=pilosanet pilosa/pil
 
 Let's run the second Pilosa node and attach it to the virtual network as well. Note that we set the address of the gossip seed to the address of the first node:
 ```
-docker run -it --rm --name pilosa2 --network=pilosanet pilosa/pilosa:latest server --bind pilosa2 --gossip.seeds=pilosa1:14000
+docker run -it --rm --name pilosa2 -p 10102:10101 --network=pilosanet pilosa/pilosa:latest server --bind pilosa2 --gossip.seeds=pilosa1:14000
 ```
 
 Let's test that the nodes in the cluster connected with each other:
@@ -273,7 +316,7 @@ Let's test that the nodes in the cluster connected with each other:
 curl localhost:10101/status
 ```
 ``` response
-{"state":"NORMAL","nodes":[{"id":"2e8332d0-1fee-44dd-a359-e0d6ecbcefc1","uri":{"scheme":"http","host":"pilosa1","port":10101},"isCoordinator":true},{"id":"8c0dbcdc-9503-4265-8ad2-ba85a4bb10fa","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false}]}
+{"state":"NORMAL","nodes":[{"id":"2e8332d0-1fee-44dd-a359-e0d6ecbcefc1","uri":{"scheme":"http","host":"pilosa1","port":10101},"isCoordinator":true},{"id":"8c0dbcdc-9503-4265-8ad2-ba85a4bb10fa","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false}],"localID":"2e8332d0-1fee-44dd-a359-e0d6ecbcefc1"}
 ```
 
 And similarly for the second node:
@@ -281,7 +324,7 @@ And similarly for the second node:
 curl localhost:10102/status
 ```
 ``` response
-{"state":"NORMAL","nodes":[{"id":"2e8332d0-1fee-44dd-a359-e0d6ecbcefc1","uri":{"scheme":"http","host":"pilosa1","port":10101},"isCoordinator":true},{"id":"8c0dbcdc-9503-4265-8ad2-ba85a4bb10fa","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false}]}
+{"state":"NORMAL","nodes":[{"id":"2e8332d0-1fee-44dd-a359-e0d6ecbcefc1","uri":{"scheme":"http","host":"pilosa1","port":10101},"isCoordinator":true},{"id":"8c0dbcdc-9503-4265-8ad2-ba85a4bb10fa","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false}],"localID":"2e8332d0-1fee-44dd-a359-e0d6ecbcefc1"}
 ```
 The corresponding [Docker Compose](https://docs.docker.com/compose/) file is below:
 
@@ -304,6 +347,8 @@ services:
       - "pilosa1:10101"
   pilosa2:
     image: pilosa/pilosa:latest
+    ports:
+      - "10102:10101"
     environment:
       - PILOSA_GOSSIP_SEEDS=pilosa1:14000
     networks:
@@ -319,13 +364,13 @@ networks:
 
 #### Running a Docker Swarm
 
-It is very easy to run a Pilosa Cluster on different servers using [Docker Swarm mode](https://docs.docker.com/engine/swarm/). All we have to do is creating an overlay network instead of the bridge network.
+It is very easy to run a Pilosa Cluster on different servers using [Docker Swarm mode](https://docs.docker.com/engine/swarm/). All we have to do is create an overlay network instead of a bridge network.
 
-The instructions in this section require Docker 17.06 and better. Although it is possible to run a Docker swarm on MacOS or Windows, it is easiest to run it on Linux. So we assume you are trying these instructions on Linux, probably on the cloud.
+The instructions in this section require Docker 17.06 or newer. Although it is possible to run a Docker swarm on MacOS or Windows, it is easiest to run it on Linux. The following instructions assume you are running on Linux.
 
 We are going to use two servers: the manager node runs in the first server and a worker node in the second server.
 
-Docker nodes require some ports to be accesible from outside. Before carrying on, make sure the following ports are open on all nodes: TCP/2377, TCP/7946, UDP/7946, UDP/4789.
+Docker nodes require some ports to be accesible from the outside. Before proceeding, make sure the following ports are open on all nodes: TCP/2377, TCP/7946, UDP/7946, UDP/4789.
 
 Let's initialize the swarm first. Run the following on the manager:
 ```
@@ -383,10 +428,10 @@ These were the same commands we used in the previous section except the port map
 docker run -it --rm --network=pilosanet --name shell alpine wget -q -O- pilosa1:10101/status
 ```
 ``` response
-{"state":"NORMAL","nodes":[{"id":"3e3b0abd-1945-441a-a01f-5a28272972f5","uri":{"scheme":"http","host":"pilosa1","port":10101},"isCoordinator":true},{"id":"71ed27cc-9443-4f41-88fb-1c22f92bf695","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false}]}
+{"state":"NORMAL","nodes":[{"id":"3e3b0abd-1945-441a-a01f-5a28272972f5","uri":{"scheme":"http","host":"pilosa1","port":10101},"isCoordinator":true},{"id":"71ed27cc-9443-4f41-88fb-1c22f92bf695","uri":{"scheme":"http","host":"pilosa2","port":10101},"isCoordinator":false}],"localID":"3e3b0abd-1945-441a-a01f-5a28272972f5"}
 ```
 
-You can add as many as worker nodes to both the swarm and the Pilosa cluster using the steps above.
+You can add additional worker nodes to both the swarm and the Pilosa cluster using the steps above.
 
 #### What's Next?
 
@@ -410,7 +455,7 @@ curl localhost:10101/index/patients \
 {"success":true}
 ```
 
-In addition to storing rows of bits, a frame can also contain fields that store integer values. The next steps creates three fields (`age`, `weight`, `tcells`) in the `measurements` frame.
+In addition to storing rows of bits, a field can also store integer values. The next steps creates three fields (`age`, `weight`, `tcells`) in the `measurements` field.
 ``` request
 curl localhost:10101/index/patients/field/age \
      -X POST \

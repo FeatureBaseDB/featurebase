@@ -18,11 +18,11 @@ nav = [
 
 ### Overview
 
-The central component of Pilosa's data model is a boolean matrix. Each cell in the matrix is a single bit - if the bit is set, it indicates that a relationship exists between that particular row and column.
+The central component of Pilosa's data model is a boolean matrix. Each cell in the matrix is a single bit; if the bit is set, it indicates that a relationship exists between that particular row and column.
 
-Rows and columns can represent anything (they could even represent the same set of things - a [bigraph](https://en.wikipedia.org/wiki/Bigraph)). Pilosa can associate arbitrary key/value pairs (referred to as attributes) to rows and columns, but queries and storage are optimized around the core matrix.
+Rows and columns can represent anything (they could even represent the same set of things as in a [bigraph](https://en.wikipedia.org/wiki/Bigraph)). Pilosa can associate arbitrary key/value pairs (referred to as attributes) to rows and columns, but queries and storage are optimized around the core matrix.
 
-Pilosa lays out data first in rows, so queries which get all the set bits in one or many rows, or compute a combining operation on multiple rows such as Intersect or Union are the fastest. Pilosa categorizes rows into different *fields* and quickly retrieves the top rows in a field sorted by the number of columns set in each row.
+Pilosa lays out data first in rows, so queries which get all the set bits in one or many rows, or compute a combining operation—such as Intersect or Union—on multiple rows, are the fastest. Pilosa categorizes rows into different *fields* and quickly retrieves the top rows in a field sorted by the number of columns set in each row.
 
 Please note that Pilosa is most performant when row and column IDs are sequential starting from 0. You can deviate from this to some degree, but setting a bit with column ID 2<sup>63</sup> on a single-node cluster, for example, will not work well due to memory limitations.
 
@@ -35,11 +35,11 @@ The purpose of the Index is to represent a data namespace. You cannot perform cr
 
 ### Column
 
-Column ids are sequential increasing integers and are common to all Fields within an Index. A single column often corresponds to a record in a relational table, although other configurations are possible, and sometimes preferable.
+Column ids are sequential, increasing integers and they are common to all Fields within an Index. A single column often corresponds to a record in a relational table, although other configurations are possible, and sometimes preferable.
 
 ### Row
 
-Row ids are sequential increasing integers namespaced to each Field within an Index.
+Row ids are sequential, increasing integers namespaced to each Field within an Index.
 
 ### Field
 
@@ -48,8 +48,6 @@ Fields are used to segment rows within an index, for example to define different
 #### Relational Analogy
 
 The Pilosa index is a flexible structure; it can represent any sort of high-cardinality binary matrix. We have explored a number of modeling patterns in Pilosa use cases; one accessible example is a direct analogy to the relational model, summarized here.
-
-TODO diagram showing a few rows of a relational table and corresponding pilosa index
 
 Entities:
 
@@ -103,7 +101,7 @@ The LRU cache maintains the most recently accessed Rows.
 
 ### Time Quantum
 
-Setting a time quantum on a field creates extra views which allow Range queries down to the time interval specified. For example - if the time quantum is set to `YMD`, Range queries down to the granularity of a day are supported.
+Setting a time quantum on a field creates extra views which allow Range queries down to the time interval specified. For example, if the time quantum is set to `YMD`, Range queries down to the granularity of a day are supported.
 
 ### Attribute
 
@@ -117,27 +115,36 @@ Indexes are segmented into groups of columns called shards (previously known as 
 
 Query operations run in parallel, and they are evenly distributed across a cluster via a consistent hash algorithm.
 
-### View
+### Field Type
 
-Views represent the various data layouts within a Field. The primary View is called Standard, and it contains the typical Row and Column data. Time-based Views are automatically generated for each time quantum. Views are internally managed by Pilosa, and never exposed directly via the API.
+Upon creation, fields are configured to be of a certain type. Pilosa supports three field types: `set`, `int`, and `time`.
 
-#### Standard
+#### Set
 
-The standard View contains the same Row/Column format as the input data. 
+Set is the default field type in Pilosa. Set fields represent a standard, binary matrix of rows and columns where each row key represents a possible field value. The following example creates a `set` field called "info" with a ranked cache containing up to 100,000 records.
 
-#### Time Quantums
-
-If a Field has a time quantum, then Views are generated for each of the defined time segments. For example, for a field with a time quantum of `YMD`, the following `Set()` queries will result in the data described in the diagram below:
-
+``` request
+curl localhost:10101/index/repository/field/info \
+     -X POST \
+     -d '{"options": {"type": "set", "cacheType": "ranked", "cacheSize":100000}}'
 ```
-Set(3, A=8, 2017-05-18T00:00)
-Set(3, A=8, 2017-05-19T00:00)
+``` response
+{"success":true}
 ```
 
-![time quantum field diagram](/img/docs/field-time-quantum.svg)
-*Time quantum fueld diagram*
+#### Int
+Fields of type `int` are used to store integer values. Integer fields share the same columns as the other fields in the index, but values for the field must be integers that fall between the `min` and `max` values specified when creating the field. The following example creates an `int` field called "quantity" capable of storing values from -1000 to 2000:
 
-#### BSI Range-Encoding
+``` request
+curl localhost:10101/index/repository/field/quantity \
+     -X POST \
+     -d '{"options": {"type": "int", "min": -1000, "max":2000}}'
+```
+``` response
+{"success":true}
+```
+
+##### BSI Range-Encoding
 
 Bit-Sliced Indexing (BSI) is the storage method Pilosa uses to represent multi-bit integers in a bitmap index. Integers are stored as n-bit, range-encoded bit-sliced indexes of base-2, along with an additional row indicating "not null". This means that a 16-bit integer will require 17 rows: one for each 0-bit of the 16 bit-slice components (the 1-bit does not need to be stored because with range-encoding the highest bit position is always 1) and one for the non-null row. Pilosa can evaluate `Range`, `Min`, `Max`, and `Sum` queries on these BSI integers. The result of a `Sum` query includes a count, which can be used to compute an average with no other overhead.
 
@@ -158,3 +165,26 @@ Set(3, B=6)
 *BSI field diagram*
 
 Check out this [blog post](/blog/range-encoded-bitmaps/) for some more details about BSI in Pilosa.
+
+#### Time
+
+Time fields are similar to `set` fields, but in addition to row and column information, they also store a per-bit time value down to a defined granularity. The following example creates a `time` field called "event" which stores timestamp information down to a day granularity.
+
+``` request
+curl localhost:10101/index/repository/field/event \
+     -X POST \
+     -d '{"options": {"type": "time", "timeQuantum": "YMD"}}'
+```
+``` response
+{"success":true}
+```
+
+With `time` fields, data views are generated for each of the defined time segments. For example, for a field with a time quantum of `YMD`, the following `Set()` queries will result in the data described in the diagram below:
+
+```
+Set(3, A=8, 2017-05-18T00:00)
+Set(3, A=8, 2017-05-19T00:00)
+```
+
+![time quantum field diagram](/img/docs/field-time-quantum.svg)
+*Time quantum fueld diagram*
