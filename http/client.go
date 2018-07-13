@@ -336,7 +336,9 @@ func (c *InternalClient) EnsureField(ctx context.Context, indexName string, fiel
 func (c *InternalClient) marshalImportPayload(index, field string, shard uint64, bits []pilosa.Bit) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
 	rowIDs := Bits(bits).RowIDs()
+	rowKeys := Bits(bits).RowKeys()
 	columnIDs := Bits(bits).ColumnIDs()
+	columnKeys := Bits(bits).ColumnKeys()
 	timestamps := Bits(bits).Timestamps()
 
 	// Marshal data to protobuf.
@@ -345,7 +347,9 @@ func (c *InternalClient) marshalImportPayload(index, field string, shard uint64,
 		Field:      field,
 		Shard:      shard,
 		RowIDs:     rowIDs,
+		RowKeys:    rowKeys,
 		ColumnIDs:  columnIDs,
+		ColumnKeys: columnKeys,
 		Timestamps: timestamps,
 	})
 	if err != nil {
@@ -447,15 +451,17 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 func (c *InternalClient) marshalImportValuePayload(index, field string, shard uint64, vals []pilosa.FieldValue) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
 	columnIDs := FieldValues(vals).ColumnIDs()
+	columnKeys := FieldValues(vals).ColumnKeys()
 	values := FieldValues(vals).Values()
 
 	// Marshal data to protobuf.
 	buf, err := c.serializer.Marshal(&pilosa.ImportValueRequest{
-		Index:     index,
-		Field:     field,
-		Shard:     shard,
-		ColumnIDs: columnIDs,
-		Values:    values,
+		Index:      index,
+		Field:      field,
+		Shard:      shard,
+		ColumnIDs:  columnIDs,
+		ColumnKeys: columnKeys,
+		Values:     values,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal import request: %s", err)
@@ -858,8 +864,31 @@ func (p Bits) Less(i, j int) bool {
 	return p[i].RowID < p[j].RowID
 }
 
+// HasRowKeys returns true if any values use a row key.
+func (p Bits) HasRowKeys() bool {
+	for i := range p {
+		if p[i].RowKey != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// HasColumnKeys returns true if any values use a column key.
+func (p Bits) HasColumnKeys() bool {
+	for i := range p {
+		if p[i].ColumnKey != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // RowIDs returns a slice of all the row IDs.
 func (p Bits) RowIDs() []uint64 {
+	if p.HasRowKeys() {
+		return nil
+	}
 	other := make([]uint64, len(p))
 	for i := range p {
 		other[i] = p[i].RowID
@@ -869,6 +898,9 @@ func (p Bits) RowIDs() []uint64 {
 
 // ColumnIDs returns a slice of all the column IDs.
 func (p Bits) ColumnIDs() []uint64 {
+	if p.HasColumnKeys() {
+		return nil
+	}
 	other := make([]uint64, len(p))
 	for i := range p {
 		other[i] = p[i].ColumnID
@@ -878,6 +910,9 @@ func (p Bits) ColumnIDs() []uint64 {
 
 // RowKeys returns a slice of all the row keys.
 func (p Bits) RowKeys() []string {
+	if !p.HasRowKeys() {
+		return nil
+	}
 	other := make([]string, len(p))
 	for i := range p {
 		other[i] = p[i].RowKey
@@ -887,6 +922,9 @@ func (p Bits) RowKeys() []string {
 
 // ColumnKeys returns a slice of all the column keys.
 func (p Bits) ColumnKeys() []string {
+	if !p.HasColumnKeys() {
+		return nil
+	}
 	other := make([]string, len(p))
 	for i := range p {
 		other[i] = p[i].ColumnKey
@@ -929,11 +967,36 @@ func (p FieldValues) Less(i, j int) bool {
 	return p[i].ColumnID < p[j].ColumnID
 }
 
+// HasColumnKeys returns true if any values use a column key.
+func (p FieldValues) HasColumnKeys() bool {
+	for i := range p {
+		if p[i].ColumnKey != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // ColumnIDs returns a slice of all the column IDs.
 func (p FieldValues) ColumnIDs() []uint64 {
+	if p.HasColumnKeys() {
+		return nil
+	}
 	other := make([]uint64, len(p))
 	for i := range p {
 		other[i] = p[i].ColumnID
+	}
+	return other
+}
+
+// ColumnKeys returns a slice of all the column keys.
+func (p FieldValues) ColumnKeys() []string {
+	if !p.HasColumnKeys() {
+		return nil
+	}
+	other := make([]string, len(p))
+	for i := range p {
+		other[i] = p[i].ColumnKey
 	}
 	return other
 }
