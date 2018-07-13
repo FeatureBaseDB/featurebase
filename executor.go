@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/pilosa/pilosa/pql"
@@ -194,6 +196,9 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "Rows":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeIterateRows(ctx, index, c, shards, opt)
+	case "GroupBy":
+		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		return e.executeGroupBy(ctx, index, c, shards, opt)
 	default:
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeBitmapCall(ctx, index, c, shards, opt)
@@ -697,6 +702,170 @@ func (r RowIDs) Merge(other RowIDs) RowIDs {
 		j++
 	}
 	return result
+}
+
+func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (GroupByCounts, error) {
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeGroupByShard(ctx, index, c, shard)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		other, _ := prev.(GroupByCounts)
+		return GroupByCounts(other).Merge(v.(GroupByCounts))
+	}
+
+	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return nil, err
+	}
+	results, _ := other.(GroupByCounts)
+	limit, hasLimit, err := c.UintArg("limit")
+	if err != nil {
+		return nil, err
+	}
+	offset, hasOffset, err := c.UintArg("offset")
+	if err != nil {
+		return nil, err
+	}
+	if hasOffset {
+		if int(offset) < len(results) {
+			results = results[offset:]
+		}
+	}
+
+	if hasLimit {
+		if int(limit) < len(results) {
+			results = results[:limit]
+		}
+	}
+	return results, nil
+}
+
+type gbi struct {
+	row       *Row
+	fieldName string
+	rowID     uint64
+}
+
+func product(params ...[]gbi) chan []gbi {
+	c := make(chan []gbi)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	iterate(&wg, c, []gbi{}, params...)
+	go func() { wg.Wait(); close(c) }()
+	return c
+}
+
+func iterate(wg *sync.WaitGroup, channel chan []gbi, result []gbi, params ...[]gbi) {
+	defer wg.Done()
+	if len(params) == 0 {
+		channel <- result
+		return
+	}
+	p, params := params[0], params[1:]
+	for i := 0; i < len(p); i++ {
+		wg.Add(1)
+		resultCopy := append([]gbi{}, result...)
+		go iterate(wg, channel, append(resultCopy, p[i]), params...)
+	}
+}
+
+type GroupLine struct {
+	Groups []string
+	Total  uint64
+}
+
+type GroupByCounts []GroupLine
+
+func (gbc GroupByCounts) Merge(other GroupByCounts) GroupByCounts {
+	m1 := make(map[string]struct {
+		i     int
+		total uint64
+	})
+	for i := range gbc {
+		m1[strings.Join(gbc[i].Groups, "-")] = struct {
+			i     int
+			total uint64
+		}{total: gbc[i].Total, i: i}
+
+	}
+
+	for i := range other {
+		key := strings.Join(other[i].Groups, "-")
+		o, found := m1[key]
+		if found {
+			gbc[o.i].Total += other[i].Total
+		} else {
+			gbc = append(gbc, other[i])
+		}
+	}
+	return gbc
+}
+
+func makeGroup(parts []gbi) GroupLine {
+	var other *Row
+	line := GroupLine{}
+	for i, o := range parts {
+		if i == 0 {
+			other = o.row
+		} else {
+			other = other.intersect(o.row)
+		}
+		line.Groups = append(line.Groups, o.fieldName)
+	}
+	line.Total = other.Count()
+	return line
+}
+
+func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql.Call, shard uint64) (GroupByCounts, error) {
+	// Fetch column label from index.
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	}
+
+	// Fetch field & row label based on argument.
+	fieldNames, ok := c.Args["fields"]
+
+	if !ok {
+		return nil, errors.New("GroupBy() argument required: fields")
+	}
+
+	for _, fieldName := range fieldNames.([]interface{}) { //check if the fields exist
+		f := e.Holder.Field(index, fieldName.(string))
+		if f == nil {
+			return nil, ErrFieldNotFound
+		}
+	}
+
+	results := make(GroupByCounts, 0)
+	var work [][]gbi
+
+	for _, fieldName := range fieldNames.([]interface{}) {
+		frag := e.Holder.fragment(index, fieldName.(string), viewStandard, shard)
+		if frag == nil { //that means this whole shard doesn't have all need to continue
+			return results, nil
+		}
+		set := make([]gbi, 0)
+		for _, rowID := range frag.Rows() {
+			set = append(set, gbi{
+				row:       frag.row(rowID),
+				rowID:     rowID,
+				fieldName: fmt.Sprintf("%s.%d", fieldName.(string), rowID),
+			})
+		}
+		work = append(work, set)
+	}
+
+	for item := range product(work...) {
+		group := makeGroup(item)
+		if group.Total > 0 {
+			results = append(results, group)
+		}
+	}
+	return results, nil
 }
 
 func (e *executor) executeIterateRows(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {

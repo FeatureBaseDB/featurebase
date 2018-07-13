@@ -362,6 +362,9 @@ func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
 		case pilosa.RowIDs:
 			pb.Results[i].Type = queryResultTypeRowIDs
 			pb.Results[i].RowIDs = result
+		case pilosa.GroupByCounts:
+			pb.Results[i].Type = queryResultTypeGroupByCounts
+			pb.Results[i].GroupByCounts = encodeGroupByCount(result)
 		case nil:
 			pb.Results[i].Type = queryResultTypeNil
 		}
@@ -866,6 +869,7 @@ const (
 	queryResultTypeUint64
 	queryResultTypeBool
 	queryResultTypeRowIDs
+	queryResultTypeGroupByCounts
 )
 
 func decodeQueryResult(pb *internal.QueryResult) interface{} {
@@ -978,6 +982,14 @@ func encodeRow(r *pilosa.Row) *internal.Row {
 		Columns: r.Columns(),
 		Attrs:   encodeAttrs(r.Attrs),
 	}
+}
+
+func encodeGroupByCount(counts pilosa.GroupByCounts) []*internal.GroupLine {
+	result := make([]*internal.GroupLine, len(counts))
+	for i := range counts {
+		result[i] = &internal.GroupLine{Groups: counts[i].Groups, Total: counts[i].Total}
+	}
+	return result
 }
 
 func encodePairs(a pilosa.Pairs) []*internal.Pair {

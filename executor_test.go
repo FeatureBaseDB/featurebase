@@ -1373,3 +1373,56 @@ func TestExecutor_Execute_Rows(t *testing.T) {
 		t.Fatalf("unexpected columns: %+v", columns)
 	}
 }
+
+func TestExecutor_Execute_GroupBy(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
+	hldr.SetBit("i", "general", 10, 0)
+	hldr.SetBit("i", "general", 10, 1)
+	hldr.SetBit("i", "general", 10, ShardWidth+1)
+
+	hldr.SetBit("i", "general", 11, 2)
+	hldr.SetBit("i", "general", 11, ShardWidth+2)
+
+	hldr.SetBit("i", "general", 12, 2)
+	hldr.SetBit("i", "general", 12, ShardWidth+2)
+
+	hldr.SetBit("i", "sub", 10, 0)
+	hldr.SetBit("i", "sub", 10, 1)
+	hldr.SetBit("i", "sub", 10, 3)
+
+	hldr.SetBit("i", "sub", 11, 2)
+	hldr.SetBit("i", "sub", 11, 0)
+	expected := pilosa.GroupByCounts{
+		{Groups: []string{"general.10", "sub.11"}, Total: 1},
+		{Groups: []string{"general.11", "sub.11"}, Total: 1},
+		{Groups: []string{"general.12", "sub.11"}, Total: 1},
+		{Groups: []string{"general.10", "sub.10"}, Total: 2},
+	}
+
+	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(fields=[general,sub])`}); err != nil {
+		t.Fatal(err)
+	} else {
+		results := res.Results[0].(pilosa.GroupByCounts)
+		if len(results) != len(expected) {
+			t.Fatalf("number of  groupings mismatch: \n%+v\n%+v\n", results, expected)
+		}
+		for _, result := range results {
+			if notIn(result, expected) {
+				t.Fatalf("unexpected grouping: \n%+v\n%+v\n", result, expected)
+			}
+		}
+	}
+}
+
+func notIn(item pilosa.GroupLine, expected pilosa.GroupByCounts) bool {
+	for i := range expected {
+		if item.Total == expected[i].Total {
+			if reflect.DeepEqual(item.Groups, expected[i].Groups) {
+				return false
+			}
+		}
+	}
+	return true
+}
