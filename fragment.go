@@ -113,6 +113,10 @@ type fragment struct {
 	// This is set by the parent field unless overridden for testing.
 	RowAttrStore AttrStore
 
+	// mutexVector is used for mutex field types. It's checked for an
+	// existing value (to clear) prior to setting a new value.
+	mutexVector vector
+
 	stats StatsClient
 }
 
@@ -369,7 +373,27 @@ func (f *fragment) unprotectedRow(rowID uint64, checkRowCache bool, updateRowCac
 func (f *fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	// handle mutux field type
+	if f.mutexVector != nil {
+		if err := f.handleMutex(rowID, columnID); err != nil {
+			return changed, errors.Wrap(err, "handling mutex")
+		}
+	}
+
 	return f.unprotectedSetBit(rowID, columnID)
+}
+
+// handleMutex will clear an existing row and store the new row
+// in the vector.
+func (f *fragment) handleMutex(rowID, columnID uint64) error {
+	if existingRowID, found := f.mutexVector.Get(columnID); found && existingRowID != rowID {
+		if _, err := f.unprotectedClearBit(existingRowID, columnID); err != nil {
+			return errors.Wrap(err, "clearing mutex value")
+		}
+	}
+	f.mutexVector.Set(columnID, rowID)
+	return nil
 }
 
 func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err error) {
@@ -1996,4 +2020,41 @@ func byteSlicesEqual(a [][]byte) bool {
 // pos returns the row position of a row/column pair.
 func pos(rowID, columnID uint64) uint64 {
 	return (rowID * ShardWidth) + (columnID % ShardWidth)
+}
+
+// vector stores the mapping of colID to rowID.
+// It's used for a mutex field type.
+type vector interface {
+	Get(colID uint64) (uint64, bool)
+	Set(colID, rowID uint64)
+}
+
+// mapVector implements the vector interface using a map.
+type mapVector struct {
+	mu sync.RWMutex
+	m  map[uint64]uint64
+}
+
+// newMapVector returns a mapVector.
+func newMapVector() *mapVector {
+	return &mapVector{
+		m: make(map[uint64]uint64),
+	}
+}
+
+// Get returns the rowID associated to the given colID.
+// Additionaly, it returns true if a value was found,
+// otherwise it returns false.
+func (m *mapVector) Get(colID uint64) (uint64, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	rowID, ok := m.m[colID]
+	return rowID, ok
+}
+
+// Set sets the value for colID to rowID.
+func (m *mapVector) Set(colID, rowID uint64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.m[colID] = rowID
 }

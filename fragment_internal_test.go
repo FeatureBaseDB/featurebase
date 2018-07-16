@@ -1143,6 +1143,38 @@ func TestFragment_Snapshot_Run(t *testing.T) {
 	}
 }
 
+// Ensure a fragment can set mutually exclusive values.
+func TestFragment_SetMutex(t *testing.T) {
+	f := mustOpenMutexFragment("i", "f", viewStandard, 0, "")
+	defer f.Close()
+
+	var cols []uint64
+
+	// Set a value on column 100.
+	if _, err := f.setBit(1, 100); err != nil {
+		t.Fatal(err)
+	}
+	// Verify the value was set.
+	cols = f.row(1).Columns()
+	if !reflect.DeepEqual(cols, []uint64{100}) {
+		t.Fatalf("mutex unexpected columns: %v", cols)
+	}
+
+	// Set a different value on column 100.
+	if _, err := f.setBit(2, 100); err != nil {
+		t.Fatal(err)
+	}
+	// Verify that value (row 1) was replaced (by row 2).
+	cols = f.row(1).Columns()
+	if !reflect.DeepEqual(cols, []uint64{}) {
+		t.Fatalf("mutex unexpected columns: %v", cols)
+	}
+	cols = f.row(2).Columns()
+	if !reflect.DeepEqual(cols, []uint64{100}) {
+		t.Fatalf("mutex unexpected columns: %v", cols)
+	}
+}
+
 func BenchmarkFragment_Snapshot(b *testing.B) {
 	if *FragmentPath == "" {
 		b.Skip("no fragment specified")
@@ -1258,6 +1290,13 @@ func mustOpenFragment(index, field, view string, shard uint64, cacheType string)
 		panic(err)
 	}
 	return f
+}
+
+// mustOpenMutexFragment returns a new instance of Fragment for a mutex field.
+func mustOpenMutexFragment(index, field, view string, shard uint64, cacheType string) *fragment {
+	frag := mustOpenFragment(index, field, view, shard, cacheType)
+	frag.mutexVector = newMapVector()
+	return frag
 }
 
 // Reopen closes the fragment and reopens it as a new instance.
