@@ -1688,7 +1688,6 @@ func (f *fragment) readCacheFromArchive(r io.Reader) error {
 func (f *fragment) rows() []uint64 {
 	i, _ := f.storage.Containers.Iterator(0)
 	rows := make([]uint64, 0)
-
 	var lastRow uint64
 	lastRow = math.MaxUint64
 
@@ -1708,6 +1707,7 @@ func (f *fragment) rows() []uint64 {
 		lastRow = vRow
 	}
 	return rows
+
 }
 
 func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
@@ -1725,7 +1725,6 @@ func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
 
 		// virtual row for the current container
 		vRow := key >> containersPerRowSegment
-
 		// column container key for virtual row
 		colKey = ((vRow * ShardWidth) + colID) >> 16
 

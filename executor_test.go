@@ -1382,12 +1382,6 @@ func TestExecutor_Execute_Rows(t *testing.T) {
 	} else if columns := res.Results[0].(pilosa.RowIDs); !reflect.DeepEqual(columns, pilosa.RowIDs{11, 12}) {
 		t.Fatalf("unexpected columns: %+v", columns)
 	}
-
-	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(Row(general=11),field=general )`}); err != nil {
-		t.Fatal(err)
-	} else if columns := res.Results[0].(pilosa.RowIDs); !reflect.DeepEqual(columns, pilosa.RowIDs{11, 12}) {
-		t.Fatalf("unexpected columns: %+v", columns)
-	}
 }
 
 func TestExecutor_Execute_GroupBy(t *testing.T) {
