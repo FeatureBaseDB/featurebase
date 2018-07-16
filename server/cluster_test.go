@@ -38,7 +38,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 
 	// Expected indexes and Fields
 	expected := map[string][]string{
-		"i": []string{"f"},
+		"i": {"f"},
 	}
 
 	// Create a client for each node.

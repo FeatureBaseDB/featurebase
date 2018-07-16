@@ -1,10 +1,9 @@
 package test
 
 import (
-	"testing"
 	"github.com/pilosa/pilosa/pql"
+	"testing"
 )
-
 
 func TestPQL_Generator(t *testing.T) {
 	t.Run("pql.Query generator", func(t *testing.T) {
