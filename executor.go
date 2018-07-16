@@ -852,7 +852,7 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 			return results, nil
 		}
 		set := make([]gbi, 0)
-		for _, rowID := range frag.Rows() {
+		for _, rowID := range frag.rows() {
 			set = append(set, gbi{
 				row:       frag.row(rowID),
 				rowID:     rowID,
@@ -932,24 +932,16 @@ func (e *executor) executeIterateRowShard(ctx context.Context, index string, c *
 	if frag == nil {
 		return make(RowIDs, 0), nil
 	}
-	//
-	if len(c.Children) > 0 {
-		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
-		if err != nil {
-			return nil, err
-		}
-		return frag.RowsForRow(row), nil
-	}
 	//TODO add column filter next
 	columnID, ok, err := c.UintArg("column")
 	if err != nil {
 		return nil, err
 	}
 	if ok {
-		return frag.RowsForColumn(columnID), nil
+		return frag.rowsForColumn(columnID), nil
 	}
 
-	return frag.Rows(), nil
+	return frag.rows(), nil
 
 }
 func (e *executor) executeBitmapShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {

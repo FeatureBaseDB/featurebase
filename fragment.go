@@ -1679,103 +1679,57 @@ func (f *fragment) readCacheFromArchive(r io.Reader) error {
 	return nil
 }
 
-func (f *fragment) Rows() RowIDs {
-	c, _ := f.storage.Containers.Iterator(0)
-	curRow := uint64(0)
+func (f *fragment) rows() RowIDs {
+	i, _ := f.storage.Containers.Iterator(0)
 	rows := make(RowIDs, 0)
-	looking := true
-	for c.Next() {
-		key, _ := c.Value()
-		for key > (curRow >> 16) {
-			//TODO optimize skip to that row
-			curRow += ShardWidth
-			looking = true
+
+	var lastRow uint64
+	lastRow = math.MaxUint64
+
+	// Loop over the existing containers.
+	for i.Next() {
+		key, _ := i.Value()
+
+		// virtual row for the current container
+		vRow := key >> 4
+
+		// skip dups
+		if vRow == lastRow {
+			continue
 		}
-		if looking {
-			if key == (curRow >> 16) {
-				rows = append(rows, curRow/ShardWidth)
-				looking = false
-			}
-		}
-		if key%(ShardWidth>>16) == 0 {
-			curRow += ShardWidth
-			looking = true
-		}
+
+		rows = append(rows, vRow)
+		lastRow = vRow
 	}
 	return rows
 
 }
 
-func (f *fragment) RowsForRow(row *Row) RowIDs {
-	x := row.Columns()
-	for i := range x {
-		x[i] = x[i] % ShardWidth
-	}
+func (f *fragment) rowsForColumn(columnID uint64) RowIDs {
+	colID := columnID % ShardWidth
 	i, _ := f.storage.Containers.Iterator(0)
+
+	colKey := uint64(0)
+	colVal := uint16(colID & 0xFFFF)
+
 	rows := make(RowIDs, 0)
-	looking := true
-	curRow := uint64(0)
+
+	// Loop over the existing containers.
 	for i.Next() {
 		key, c := i.Value()
-		for key > (curRow >> 16) {
-			curRow += ShardWidth
-			looking = true
-		}
-		if looking {
-			key_found := false
-			for _, col := range x {
-				if key == (curRow+col)>>16 {
-					key_found = true
-					break
-				}
-			}
-			if key_found {
-				for _, col := range x {
-					if c.Contains(uint16(col & 0xFFFF)) {
-						rows = append(rows, curRow/ShardWidth) //add the current row and skip to next row
-						looking = false
-						break
-					}
-				}
-			}
+
+		// virtual row for the current container
+		vRow := key >> 4
+
+		// column container key for virtual row
+		colKey = ((vRow * ShardWidth) + colID) >> 16
+
+		if colKey != key {
+			continue
 		}
 
-		if key%(ShardWidth>>16) == 0 {
-			curRow += ShardWidth
-			looking = true
-		}
-	}
-
-	return rows
-}
-
-func (f *fragment) RowsForColumn(columnID uint64) RowIDs {
-	columnID = columnID % ShardWidth
-	i, _ := f.storage.Containers.Iterator(0)
-	curRow := uint64(0)
-	ckey := uint64(0)
-	cval := uint16(columnID & 0xFFFF)
-	rows := make(RowIDs, 0)
-	looking := true
-	for i.Next() {
-		key, c := i.Value()
-		for key > (curRow >> 16) {
-			curRow += ShardWidth
-			looking = true
-		}
-		if looking {
-			if key == ckey {
-				if c.Contains(cval) {
-					rows = append(rows, curRow/ShardWidth)
-					looking = false
-				}
-			}
-		}
-		if key%(ShardWidth>>16) == 0 {
-			curRow += ShardWidth
-			ckey = (curRow + columnID) >> 16
-			cval = uint16((curRow + columnID) & 0xFFFF)
-			looking = true
+		if c.Contains(colVal) {
+			rows = append(rows, vRow)
 		}
 	}
 	return rows
