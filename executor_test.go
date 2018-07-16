@@ -1211,6 +1211,7 @@ Set(4500001, fn=4)
 		} else {
 			expected := pilosa.GroupByCounts{
 				{Groups: []string{"f.10"}, Total: 4},
+				{Groups: []string{"f.7"}, Total: 1},
 			}
 			results := res.Results[0].(pilosa.GroupByCounts)
 			checkGroupBy(expected, results, t)
