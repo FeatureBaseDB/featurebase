@@ -886,6 +886,8 @@ func decodeQueryResult(pb *internal.QueryResult) interface{} {
 		return pb.Changed
 	case queryResultTypeNil:
 		return nil
+	case queryResultTypeGroupByCounts:
+		return decodeGroupByCounts(pb.GroupByCounts)
 	}
 	panic(fmt.Sprintf("unknown type: %d", pb.Type))
 }
@@ -933,6 +935,15 @@ func decodeAttr(attr *internal.Attr) (key string, value interface{}) {
 	default:
 		return attr.Key, nil
 	}
+}
+
+func decodeGroupByCounts(a []*internal.GroupLine) pilosa.GroupByCounts {
+	gbc := make(pilosa.GroupByCounts, 0)
+	for i := range a {
+		gbc = append(gbc, pilosa.GroupLine{a[i].Groups, a[i].Total})
+	}
+	return gbc
+
 }
 
 func decodePairs(a []*internal.Pair) []pilosa.Pair {
