@@ -830,19 +830,22 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 	fieldNames, ok := c.Args["fields"]
 
 	if !ok {
-		return nil, errors.New("GroupBy() argument required: fields")
+		return nil, errors.Wrap(ErrFieldsArgumentRequired, "executeGroupBy")
+	}
+
+	if _, ok := fieldNames.([]interface{}); !ok {
+		return nil, errors.Wrap(ErrExpectedFieldListArgument, "executeGroupBy")
+
 	}
 
 	for _, fieldName := range fieldNames.([]interface{}) { //check if the fields exist
 		f := e.Holder.Field(index, fieldName.(string))
 		if f == nil {
-			return nil, ErrFieldNotFound
+			return nil, errors.Wrap(ErrFieldNotFound, fmt.Sprintf("executeGroupBy:%s", fieldName.(string)))
 		}
 	}
-
 	results := make(GroupByCounts, 0)
 	var work [][]gbi
-
 	for _, fieldName := range fieldNames.([]interface{}) {
 		frag := e.Holder.fragment(index, fieldName.(string), viewStandard, shard)
 		if frag == nil { //that means this whole shard doesn't have all need to continue
