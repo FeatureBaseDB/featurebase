@@ -11,20 +11,39 @@ env:
     - GOARCH=386 ENTERPRISE=1
     - GOARCH=amd64
     - GOARCH=amd64 ENTERPRISE=1
+cache:
+  directories:
+    vendor
 install:
-  - make install-dep vendor
-script:
-  - make test
-before_deploy:
-  - pip install awscli --user `whoami`
-deploy:
-  - provider: script
-    script: make prerelease-upload GOOS=linux GOARCH=amd64
-    skip_cleanup: true
-    on:
-      all_branches: true
+  - make -B install-dep vendor
+script: make test
+jobs:
+  include:
+    - stage: metalinter
+      install:
+        - make -B install-dep vendor
+        - go get -u github.com/alecthomas/gometalinter
+        - gometalinter --install
+      script: make metalinter
+      env:
+        - GOARCH=amd64
+    - stage: deploy
+      script: skip
       go: "1.10"
-      condition: $GOARCH = amd64
+      env:
+        - GOARCH=amd64
+      deploy:
+        - provider: script
+          script: pip install awscli --user `whoami` && make -B prerelease
+          skip_cleanup: true
+          on:
+            all_branches: true
+            repo: pilosa/pilosa
+            tags: false
+stages:
+  - metalinter
+  - test
+  - deploy
 matrix:
   # Excluding or allowing failures on non-primary matrix configurations due to long running times.
   fast_finish: true
