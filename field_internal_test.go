@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -340,4 +341,68 @@ func TestField_RowTime(t *testing.T) {
 		t.Fatalf("wrong columns: %#v", r.Columns())
 	}
 
+}
+
+func Test_Product(t *testing.T) {
+	flatten := func(p []gbi) string {
+		r := ""
+		for i, o := range p {
+			if i != 0 {
+				r += "x"
+			}
+			r += o.fieldName
+		}
+
+		return r
+	}
+	t.Run("product", func(t *testing.T) {
+		work := [][]gbi{
+			{
+				{rowID: uint64(1), fieldName: "A.1"},
+				{rowID: uint64(2), fieldName: "A.2"},
+				{rowID: uint64(3), fieldName: "A.3"},
+			},
+			{
+				{rowID: uint64(1), fieldName: "B.1"},
+				{rowID: uint64(2), fieldName: "B.2"},
+				{rowID: uint64(3), fieldName: "B.3"},
+			},
+			{
+				{rowID: uint64(8), fieldName: "C.8"},
+				{rowID: uint64(9), fieldName: "C.9"},
+			},
+		}
+		expected := []string{
+			"A.1xB.1xC.8",
+			"A.1xB.2xC.8",
+			"A.1xB.3xC.8",
+			"A.1xB.1xC.9",
+			"A.1xB.2xC.9",
+			"A.1xB.3xC.9",
+			"A.2xB.1xC.8",
+			"A.2xB.2xC.8",
+			"A.2xB.3xC.8",
+			"A.2xB.1xC.9",
+			"A.2xB.2xC.9",
+			"A.2xB.3xC.9",
+			"A.3xB.1xC.8",
+			"A.3xB.2xC.8",
+			"A.3xB.3xC.8",
+			"A.3xB.1xC.9",
+			"A.3xB.2xC.9",
+			"A.3xB.3xC.9",
+		}
+		sort.Strings(expected)
+		results := make([]string, 0)
+		for line := range product(work...) {
+			results = append(results, flatten(line))
+		}
+		sort.Strings(results)
+		for i := range expected {
+			if expected[i] != results[i] {
+				t.Fatalf(" %#v != %#v", expected, results)
+			}
+		}
+
+	})
 }

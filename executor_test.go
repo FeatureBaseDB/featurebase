@@ -1201,6 +1201,22 @@ Set(4500001, fn=4)
 			t.Fatalf("wrong attrs: %v", attrst)
 		}
 	})
+
+	t.Run("remote groupBy", func(t *testing.T) {
+		if res, err := c[1].API.Query(context.Background(), &pilosa.QueryRequest{
+			Index: "i",
+			Query: `GroupBy(fields=[f])`,
+		}); err != nil {
+			t.Fatalf("GroupBy querying: %v", err)
+		} else {
+			expected := pilosa.GroupByCounts{
+				{Groups: []string{"f.10"}, Total: 4},
+			}
+			results := res.Results[0].(pilosa.GroupByCounts)
+			checkGroupBy(expected, results, t)
+		}
+	})
+
 }
 
 // Ensure executor returns an error if too many writes are in a single request.
@@ -1375,6 +1391,7 @@ func TestExecutor_Execute_Rows(t *testing.T) {
 }
 
 func TestExecutor_Execute_GroupBy(t *testing.T) {
+
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 	hldr := test.Holder{Holder: c[0].Server.Holder()}
@@ -1400,29 +1417,58 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 		{Groups: []string{"general.12", "sub.11"}, Total: 1},
 		{Groups: []string{"general.10", "sub.10"}, Total: 2},
 	}
-
-	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(fields=[general,sub])`}); err != nil {
-		t.Fatal(err)
-	} else {
-		results := res.Results[0].(pilosa.GroupByCounts)
-		if len(results) != len(expected) {
-			t.Fatalf("number of  groupings mismatch: \n%+v\n%+v\n", results, expected)
-		}
-		for _, result := range results {
-			if notIn(result, expected) {
-				t.Fatalf("unexpected grouping: \n%+v\n%+v\n", result, expected)
+	t.Run("No Field List Arguments", func(t *testing.T) {
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy()`}); err != nil {
+			if errors.Cause(err) != pilosa.ErrFieldsArgumentRequired {
+				t.Fatalf("unexpected error\n\"%s\" not returned instead \n\"%s\"", pilosa.ErrFieldsArgumentRequired, err)
 			}
 		}
-	}
+	})
+
+	t.Run("Unknown Field ", func(t *testing.T) {
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(fields=[missing])`}); err != nil {
+			if errors.Cause(err) != pilosa.ErrFieldNotFound {
+				t.Fatalf("unexpected error\n\"%s\" not returned instead \n\"%s\"", pilosa.ErrFieldNotFound, err)
+			}
+		}
+	})
+
+	t.Run("Bad Field Format", func(t *testing.T) {
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(fields=missing)`}); err != nil {
+			if errors.Cause(err) != pilosa.ErrExpectedFieldListArgument {
+				t.Fatalf("unexpected error\n\"%s\" not returned instead \n\"%s\"", pilosa.ErrExpectedFieldListArgument, err)
+			}
+		}
+	})
+
+	t.Run("Basic", func(t *testing.T) {
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(fields=[general,sub])`}); err != nil {
+			t.Fatal(err)
+		} else {
+			results := res.Results[0].(pilosa.GroupByCounts)
+			checkGroupBy(expected, results, t)
+		}
+
+	})
 }
 
-func notIn(item pilosa.GroupLine, expected pilosa.GroupByCounts) bool {
-	for i := range expected {
-		if item.Total == expected[i].Total {
-			if reflect.DeepEqual(item.Groups, expected[i].Groups) {
-				return false
+func checkGroupBy(expected, results pilosa.GroupByCounts, t *testing.T) {
+	notIn := func(item pilosa.GroupLine, expected pilosa.GroupByCounts) bool {
+		for i := range expected {
+			if item.Total == expected[i].Total {
+				if reflect.DeepEqual(item.Groups, expected[i].Groups) {
+					return false
+				}
 			}
 		}
+		return true
 	}
-	return true
+	if len(results) != len(expected) {
+		t.Fatalf("number of  groupings mismatch: \n%+v\n%+v\n", results, expected)
+	}
+	for _, result := range results {
+		if notIn(result, expected) {
+			t.Fatalf("unexpected grouping: \n%+v\n%+v\n", result, expected)
+		}
+	}
 }
