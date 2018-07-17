@@ -47,6 +47,13 @@ const (
 	// ShardWidth is the number of column IDs in a shard.
 	ShardWidth = 1048576
 
+	// containersPerRowSegment is dependent upon ShardWidth,
+	// and it represents the number of containers per shard row
+	// (or rowSegment). Since containers are set in roaring
+	// to be 2^16, then this const should be ShardWidth / 2^16.
+	// It is represented as the exponent n of 2^n.
+	containersPerRowSegment = 4
+
 	// snapshotExt is the file extension used for an in-process snapshot.
 	snapshotExt = ".snapshotting"
 
@@ -1691,7 +1698,7 @@ func (f *fragment) rows() []uint64 {
 		key, _ := i.Value()
 
 		// virtual row for the current container
-		vRow := key >> 4
+		vRow := key >> containersPerRowSegment
 
 		// skip dups
 		if vRow == lastRow {
@@ -1719,7 +1726,7 @@ func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
 		key, c := i.Value()
 
 		// virtual row for the current container
-		vRow := key >> 4
+		vRow := key >> containersPerRowSegment
 
 		// column container key for virtual row
 		colKey = ((vRow * ShardWidth) + colID) >> 16
