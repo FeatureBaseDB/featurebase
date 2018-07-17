@@ -174,7 +174,7 @@ func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet
 }
 
 // CreateIndex makes a new Pilosa index.
-func (api *API) CreateIndex(ctx context.Context, indexName string, options IndexOptions) (*Index, error) {
+func (api *API) CreateIndex(_ context.Context, indexName string, options IndexOptions) (*Index, error) {
 	if err := api.validate(apiCreateIndex); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -198,7 +198,7 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 }
 
 // Index retrieves the named index.
-func (api *API) Index(ctx context.Context, indexName string) (*Index, error) {
+func (api *API) Index(_ context.Context, indexName string) (*Index, error) {
 	if err := api.validate(apiIndex); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -212,7 +212,7 @@ func (api *API) Index(ctx context.Context, indexName string) (*Index, error) {
 
 // DeleteIndex removes the named index. If the index is not found it does
 // nothing and returns no error.
-func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
+func (api *API) DeleteIndex(_ context.Context, indexName string) error {
 	if err := api.validate(apiDeleteIndex); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -238,7 +238,7 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 // CreateField makes the named field in the named index with the given options.
 // This method currently only takes a single functional option, but that may be
 // changed in the future to support multiple options.
-func (api *API) CreateField(ctx context.Context, indexName string, fieldName string, opts ...FieldOption) (*Field, error) {
+func (api *API) CreateField(_ context.Context, indexName string, fieldName string, opts ...FieldOption) (*Field, error) {
 	if err := api.validate(apiCreateField); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -280,7 +280,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 }
 
 // Field retrieves the named field.
-func (api *API) Field(ctx context.Context, indexName, fieldName string) (*Field, error) {
+func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, error) {
 	if err := api.validate(apiField); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -295,7 +295,7 @@ func (api *API) Field(ctx context.Context, indexName, fieldName string) (*Field,
 // DeleteField removes the named field from the named index. If the index is not
 // found, an error is returned. If the field is not found, it is ignored and no
 // action is taken.
-func (api *API) DeleteField(ctx context.Context, indexName string, fieldName string) error {
+func (api *API) DeleteField(_ context.Context, indexName string, fieldName string) error {
 	if err := api.validate(apiDeleteField); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -327,7 +327,7 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 
 // ExportCSV encodes the fragment designated by the index,field,shard as
 // CSV of the form <row>,<col>
-func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName string, shard uint64, w io.Writer) error {
+func (api *API) ExportCSV(_ context.Context, indexName string, fieldName string, shard uint64, w io.Writer) error {
 	if err := api.validate(apiExportCSV); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -364,7 +364,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 }
 
 // ShardNodes returns the node and all replicas which should contain a shard's data.
-func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) ([]*Node, error) {
+func (api *API) ShardNodes(_ context.Context, indexName string, shard uint64) ([]*Node, error) {
 	if err := api.validate(apiShardNodes); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -375,7 +375,7 @@ func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) 
 // FragmentBlockData is an endpoint for internal usage. It is not guaranteed to
 // return anything useful. Currently it returns protobuf encoded row and column
 // ids from a "block" which is a subdivision of a fragment.
-func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, error) {
+func (api *API) FragmentBlockData(_ context.Context, body io.Reader) ([]byte, error) {
 	if err := api.validate(apiFragmentBlockData); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -408,7 +408,7 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 }
 
 // FragmentBlocks returns the checksums and block ids for all blocks in the specified fragment.
-func (api *API) FragmentBlocks(ctx context.Context, indexName string, fieldName string, shard uint64) ([]FragmentBlock, error) {
+func (api *API) FragmentBlocks(_ context.Context, indexName string, fieldName string, shard uint64) ([]FragmentBlock, error) {
 	if err := api.validate(apiFragmentBlocks); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -426,7 +426,7 @@ func (api *API) FragmentBlocks(ctx context.Context, indexName string, fieldName 
 
 // Hosts returns a list of the hosts in the cluster including their ID,
 // URL, and which is the coordinator.
-func (api *API) Hosts(ctx context.Context) []*Node {
+func (api *API) Hosts(_ context.Context) []*Node {
 	return api.cluster.Nodes
 }
 
@@ -437,7 +437,7 @@ func (api *API) Node() *Node {
 }
 
 // RecalculateCaches forces all TopN caches to be updated. Used mainly for integration tests.
-func (api *API) RecalculateCaches(ctx context.Context) error {
+func (api *API) RecalculateCaches(_ context.Context) error {
 	if err := api.validate(apiRecalculateCaches); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -452,7 +452,7 @@ func (api *API) RecalculateCaches(ctx context.Context) error {
 
 // PostClusterMessage is for internal use. It decodes a protobuf message out of
 // the body and forwards it to the BroadcastHandler.
-func (api *API) ClusterMessage(ctx context.Context, reqBody io.Reader) error {
+func (api *API) ClusterMessage(_ context.Context, reqBody io.Reader) error {
 	if err := api.validate(apiClusterMessage); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -479,12 +479,12 @@ func (api *API) ClusterMessage(ctx context.Context, reqBody io.Reader) error {
 
 // Schema returns information about each index in Pilosa including which fields
 // they contain.
-func (api *API) Schema(ctx context.Context) []*IndexInfo {
+func (api *API) Schema(_ context.Context) []*IndexInfo {
 	return api.holder.limitedSchema()
 }
 
 // Views returns the views in the given field.
-func (api *API) Views(ctx context.Context, indexName string, fieldName string) ([]*view, error) {
+func (api *API) Views(_ context.Context, indexName string, fieldName string) ([]*view, error) {
 	if err := api.validate(apiViews); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -501,7 +501,7 @@ func (api *API) Views(ctx context.Context, indexName string, fieldName string) (
 }
 
 // DeleteView removes the given view.
-func (api *API) DeleteView(ctx context.Context, indexName string, fieldName string, viewName string) error {
+func (api *API) DeleteView(_ context.Context, indexName string, fieldName string, viewName string) error {
 	if err := api.validate(apiDeleteView); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -535,7 +535,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, fieldName stri
 }
 
 // IndexAttrDiff
-func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []AttrBlock) (map[uint64]map[string]interface{}, error) {
+func (api *API) IndexAttrDiff(_ context.Context, indexName string, blocks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	if err := api.validate(apiIndexAttrDiff); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -569,7 +569,7 @@ func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []At
 	return attrs, nil
 }
 
-func (api *API) FieldAttrDiff(ctx context.Context, indexName string, fieldName string, blocks []AttrBlock) (map[uint64]map[string]interface{}, error) {
+func (api *API) FieldAttrDiff(_ context.Context, indexName string, fieldName string, blocks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	if err := api.validate(apiFieldAttrDiff); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
@@ -604,12 +604,12 @@ func (api *API) FieldAttrDiff(ctx context.Context, indexName string, fieldName s
 }
 
 // Import bulk imports data into a particular index,field,shard.
-func (api *API) Import(ctx context.Context, req *ImportRequest) error {
+func (api *API) Import(_ context.Context, req *ImportRequest) error {
 	if err := api.validate(apiImport); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	_, field, err := api.indexField(req.Index, req.Field, req.Shard)
+	field, err := api.indexField(req.Index, req.Field, req.Shard)
 	if err != nil {
 		return errors.Wrap(err, "getting field")
 	}
@@ -633,12 +633,12 @@ func (api *API) Import(ctx context.Context, req *ImportRequest) error {
 }
 
 // ImportValue bulk imports values into a particular field.
-func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest) error {
+func (api *API) ImportValue(_ context.Context, req *ImportValueRequest) error {
 	if err := api.validate(apiImportValue); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
 
-	_, field, err := api.indexField(req.Index, req.Field, req.Shard)
+	field, err := api.indexField(req.Index, req.Field, req.Shard)
 	if err != nil {
 		return errors.Wrap(err, "getting field")
 	}
@@ -651,7 +651,7 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest) error 
 }
 
 // MaxShards returns the maximum shard number for each index in a map.
-func (api *API) MaxShards(ctx context.Context) map[string]uint64 {
+func (api *API) MaxShards(_ context.Context) map[string]uint64 {
 	return api.holder.maxShards()
 }
 
@@ -673,11 +673,11 @@ func (api *API) LongQueryTime() time.Duration {
 	return api.cluster.longQueryTime
 }
 
-func (api *API) indexField(indexName string, fieldName string, shard uint64) (*Index, *Field, error) {
+func (api *API) indexField(indexName string, fieldName string, shard uint64) (*Field, error) {
 	// Validate that this handler owns the shard.
 	if !api.cluster.ownsShard(api.Node().ID, indexName, shard) {
 		api.server.logger.Printf("node %s does not own shard %d of index %s", api.Node().ID, shard, indexName)
-		return nil, nil, ErrClusterDoesNotOwnShard
+		return nil, ErrClusterDoesNotOwnShard
 	}
 
 	// Find the Index.
@@ -685,20 +685,20 @@ func (api *API) indexField(indexName string, fieldName string, shard uint64) (*I
 	index := api.holder.Index(indexName)
 	if index == nil {
 		api.server.logger.Printf("fragment error: index=%s, field=%s, shard=%d, err=%s", indexName, fieldName, shard, ErrIndexNotFound.Error())
-		return nil, nil, newNotFoundError(ErrIndexNotFound)
+		return nil, newNotFoundError(ErrIndexNotFound)
 	}
 
 	// Retrieve field.
 	field := index.Field(fieldName)
 	if field == nil {
 		api.server.logger.Printf("field error: index=%s, field=%s, shard=%d, err=%s", indexName, fieldName, shard, ErrFieldNotFound.Error())
-		return nil, nil, ErrFieldNotFound
+		return nil, ErrFieldNotFound
 	}
-	return index, field, nil
+	return field, nil
 }
 
 // SetCoordinator makes a new Node the cluster coordinator.
-func (api *API) SetCoordinator(ctx context.Context, id string) (oldNode, newNode *Node, err error) {
+func (api *API) SetCoordinator(_ context.Context, id string) (oldNode, newNode *Node, err error) {
 	if err := api.validate(apiSetCoordinator); err != nil {
 		return nil, nil, errors.Wrap(err, "validating api method")
 	}

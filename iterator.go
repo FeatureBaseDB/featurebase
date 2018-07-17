@@ -88,7 +88,7 @@ type limitIterator struct {
 }
 
 // newLimitIterator returns a new LimitIterator.
-func newLimitIterator(itr iterator, maxRowID, maxColumnID uint64) *limitIterator {
+func newLimitIterator(itr iterator, maxRowID, maxColumnID uint64) *limitIterator { // nolint: unparam
 	return &limitIterator{
 		itr:         itr,
 		maxRowID:    maxRowID,
