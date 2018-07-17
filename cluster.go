@@ -233,8 +233,8 @@ func newCluster() *cluster {
 	}
 }
 
-// coordinatorNode returns the coordinator node.
-func (c *cluster) coordinatorNode() *Node {
+// unprotectedCoordinatorNode returns the coordinator node.
+func (c *cluster) unprotectedCoordinatorNode() *Node {
 	return c.unprotectedNodeByID(c.Coordinator)
 }
 
@@ -428,7 +428,7 @@ func (c *cluster) setNodeState(state string) error { // nolint: unparam
 	}
 
 	c.logger.Printf("Sending State %s (%s)", state, c.Coordinator)
-	if err := c.sendTo(c.coordinatorNode(), ns); err != nil {
+	if err := c.sendTo(c.unprotectedCoordinatorNode(), ns); err != nil {
 		return fmt.Errorf("sending node state error: err=%s", err)
 	}
 
@@ -1101,7 +1101,7 @@ func (c *cluster) generateResizeJobByAction(nodeAction nodeAction) (*resizeJob, 
 		instr := &ResizeInstruction{
 			JobID:         j.ID,
 			Node:          toCluster.unprotectedNodeByID(id),
-			Coordinator:   c.coordinatorNode(),
+			Coordinator:   c.unprotectedCoordinatorNode(),
 			Sources:       sources,
 			Schema:        &Schema{Indexes: c.holder.Schema()}, // Include the schema to ensure it's in sync on the receiving node.
 			ClusterStatus: c.Status(),
@@ -1629,7 +1629,7 @@ func (c *cluster) nodeJoin(node *Node) error {
 func (c *cluster) nodeLeave(node *Node) error {
 	// Refuse the request if this is not the coordinator.
 	if !c.isCoordinator() {
-		return fmt.Errorf("node removal requests are only valid on the coordinator node: %s", c.coordinatorNode().ID)
+		return fmt.Errorf("node removal requests are only valid on the coordinator node: %s", c.unprotectedCoordinatorNode().ID)
 	}
 
 	if c.State() != ClusterStateNormal {
