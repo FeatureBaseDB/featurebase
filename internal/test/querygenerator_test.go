@@ -1,8 +1,9 @@
 package test
 
 import (
-	"github.com/pilosa/pilosa/pql"
 	"testing"
+
+	"github.com/pilosa/pilosa/pql"
 )
 
 func TestPQL_Generator(t *testing.T) {
