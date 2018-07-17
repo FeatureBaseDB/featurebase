@@ -177,7 +177,7 @@ func (b *Bitmap) Contains(v uint64) bool {
 	if c == nil {
 		return false
 	}
-	return c.contains(lowbits(v))
+	return c.Contains(lowbits(v))
 }
 
 // Remove removes values from the bitmap.
@@ -1272,8 +1272,8 @@ func (c *Container) runAdd(v uint16) bool {
 	return true
 }
 
-// contains returns true if v is in the container.
-func (c *Container) contains(v uint16) bool {
+// Contains returns true if v is in the container.
+func (c *Container) Contains(v uint16) bool {
 	if c.isArray() {
 		return c.arrayContains(v)
 	} else if c.isRun() {

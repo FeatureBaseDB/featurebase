@@ -153,7 +153,6 @@ func (f *fragment) Open() error {
 		pos := f.storage.Max()
 		f.maxRowID = pos / ShardWidth
 		f.stats.Gauge("rows", float64(f.maxRowID), 1.0)
-
 		return nil
 	}(); err != nil {
 		f.close()
@@ -1678,6 +1677,62 @@ func (f *fragment) readCacheFromArchive(r io.Reader) error {
 	}
 
 	return nil
+}
+
+func (f *fragment) rows() []uint64 {
+	i, _ := f.storage.Containers.Iterator(0)
+	rows := make([]uint64, 0)
+
+	var lastRow uint64
+	lastRow = math.MaxUint64
+
+	// Loop over the existing containers.
+	for i.Next() {
+		key, _ := i.Value()
+
+		// virtual row for the current container
+		vRow := key >> 4
+
+		// skip dups
+		if vRow == lastRow {
+			continue
+		}
+
+		rows = append(rows, vRow)
+		lastRow = vRow
+	}
+	return rows
+
+}
+
+func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
+	colID := columnID % ShardWidth
+	i, _ := f.storage.Containers.Iterator(0)
+
+	colKey := uint64(0)
+	colVal := uint16(colID & 0xFFFF)
+
+	rows := make([]uint64, 0)
+
+	// Loop over the existing containers.
+	for i.Next() {
+		key, c := i.Value()
+
+		// virtual row for the current container
+		vRow := key >> 4
+
+		// column container key for virtual row
+		colKey = ((vRow * ShardWidth) + colID) >> 16
+
+		if colKey != key {
+			continue
+		}
+
+		if c.Contains(colVal) {
+			rows = append(rows, vRow)
+		}
+	}
+	return rows
 }
 
 // FragmentBlock represents info about a subsection of the rows in a block.
