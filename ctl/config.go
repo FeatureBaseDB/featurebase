@@ -38,7 +38,7 @@ func NewConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *ConfigCommand 
 }
 
 // Run prints out the default config.
-func (cmd *ConfigCommand) Run(ctx context.Context) error {
+func (cmd *ConfigCommand) Run(_ context.Context) error {
 	buf, err := toml.Marshal(*cmd.Config)
 	if err != nil {
 		return err

@@ -889,7 +889,7 @@ func hashKey(key []byte) uint64 {
 	return h
 }
 
-func pow2(v uint64) uint64 {
+func pow2(v uint64) uint64 { // nolint: unparam
 	for i := uint64(2); i < 1<<62; i *= 2 {
 		if i >= v {
 			return i

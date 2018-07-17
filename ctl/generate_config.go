@@ -38,7 +38,7 @@ func NewGenerateConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *Genera
 }
 
 // Run prints out the default config.
-func (cmd *GenerateConfigCommand) Run(ctx context.Context) error {
+func (cmd *GenerateConfigCommand) Run(_ context.Context) error {
 	conf := server.NewConfig()
 	ret, err := toml.Marshal(*conf)
 	if err != nil {

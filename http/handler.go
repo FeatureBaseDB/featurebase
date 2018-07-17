@@ -247,7 +247,7 @@ func newRouter(handler *Handler) *mux.Router {
 	return router
 }
 
-func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, _ *http.Request) {
 	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 }
 
@@ -347,7 +347,7 @@ func (r *successResponse) write(w http.ResponseWriter, err error) {
 	}
 }
 
-func (h *Handler) handleHome(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleHome(w http.ResponseWriter, _ *http.Request) {
 	http.Error(w, "Welcome. Pilosa is running. Visit https://www.pilosa.com/docs/ for more information.", http.StatusNotFound)
 }
 

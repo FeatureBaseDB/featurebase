@@ -160,7 +160,7 @@ func (r *Row) SetBit(i uint64) (changed bool) {
 }
 
 // clearBit clears the i-th column of the row.
-func (r *Row) clearBit(i uint64) (changed bool) {
+func (r *Row) clearBit(i uint64) (changed bool) { // nolint: unparam
 	s := r.segment(i / ShardWidth)
 	if s == nil {
 		return false
