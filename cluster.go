@@ -282,7 +282,7 @@ func (c *cluster) setCoordinator(n *Node) error {
 // changing the corresponding node's IsCoordinator value
 // to true, and sets all other nodes to false. Returns true if the value
 // changed.
-func (c *cluster) updateCoordinator(n *Node) bool {
+func (c *cluster) updateCoordinator(n *Node) bool { // nolint: unparam
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.unprotectedUpdateCoordinator(n)
@@ -416,7 +416,7 @@ func (c *cluster) setState(state string) {
 	}
 }
 
-func (c *cluster) setNodeState(state string) error {
+func (c *cluster) setNodeState(state string) error { // nolint: unparam
 	if c.isCoordinator() {
 		return c.receiveNodeState(c.Node.ID, state)
 	}

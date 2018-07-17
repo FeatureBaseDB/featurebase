@@ -412,7 +412,7 @@ type blockCursor struct {
 }
 
 // newBlockCursor returns a new block cursor that wraps cur using n sized blocks.
-func newBlockCursor(c *bolt.Cursor, n int) blockCursor {
+func newBlockCursor(c *bolt.Cursor, n int) blockCursor { // nolint: unparam
 	cur := blockCursor{
 		cur: c,
 		n:   uint64(n),

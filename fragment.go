@@ -520,7 +520,7 @@ func (f *fragment) setValue(columnID uint64, bitDepth uint, value uint64) (chang
 }
 
 // importSetValue is a more efficient SetValue just for imports.
-func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) { // nolint: unparam
 
 	for i := uint(0); i < bitDepth; i++ {
 		if value&(1<<i) != 0 {
@@ -1903,7 +1903,7 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 	return nil
 }
 
-func madvise(b []byte, advice int) (err error) {
+func madvise(b []byte, advice int) (err error) { // nolint: unparam
 	_, _, e1 := syscall.Syscall(syscall.SYS_MADVISE, uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), uintptr(advice))
 	if e1 != 0 {
 		err = e1

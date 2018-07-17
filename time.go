@@ -87,7 +87,7 @@ func viewByTimeUnit(name string, t time.Time, unit rune) string {
 }
 
 // viewsByTime returns a list of views for a given timestamp.
-func viewsByTime(name string, t time.Time, q TimeQuantum) []string {
+func viewsByTime(name string, t time.Time, q TimeQuantum) []string { // nolint: unparam
 	a := make([]string, 0, len(q))
 	for _, unit := range q {
 		view := viewByTimeUnit(name, t, unit)
@@ -100,7 +100,7 @@ func viewsByTime(name string, t time.Time, q TimeQuantum) []string {
 }
 
 // viewsByTimeRange returns a list of views to traverse to query a time range.
-func viewsByTimeRange(name string, start, end time.Time, q TimeQuantum) []string {
+func viewsByTimeRange(name string, start, end time.Time, q TimeQuantum) []string { // nolint: unparam
 	t := start
 
 	// Save flags for performance.

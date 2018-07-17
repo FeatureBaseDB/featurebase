@@ -46,7 +46,7 @@ type AttrStore interface {
 var nopStore AttrStore = nopAttrStore{}
 
 // newNopAttrStore returns an attr store which does nothing. It returns a global
-// object to avoid unecessary allocations.
+// object to avoid unnecessary allocations.
 func newNopAttrStore(string) AttrStore { return nopStore }
 
 // nopAttrStore represents a no-op implementation of the AttrStore interface.

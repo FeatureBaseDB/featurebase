@@ -86,7 +86,7 @@ Build Time: ` + pilosa.BuildTime + "\n",
 // setAllConfig looks for environment variables which are capitalized versions
 // of the flag names with dashes replaced by underscores, and prefixed with
 // envPrefix plus an underscore.
-func setAllConfig(v *viper.Viper, flags *pflag.FlagSet, envPrefix string) error {
+func setAllConfig(v *viper.Viper, flags *pflag.FlagSet, envPrefix string) error { // nolint: unparam
 	// add cmd line flag def to viper
 	err := v.BindPFlags(flags)
 	if err != nil {

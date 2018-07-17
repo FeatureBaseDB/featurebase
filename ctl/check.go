@@ -44,7 +44,7 @@ func NewCheckCommand(stdin io.Reader, stdout, stderr io.Writer) *CheckCommand {
 }
 
 // Run executes the check command.
-func (cmd *CheckCommand) Run(ctx context.Context) error {
+func (cmd *CheckCommand) Run(_ context.Context) error {
 	for _, path := range cmd.Paths {
 		switch filepath.Ext(path) {
 		case "":

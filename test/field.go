@@ -50,7 +50,7 @@ func mustOpenField(opts pilosa.FieldOption) *Field {
 }
 
 // close closes the field and removes the underlying data.
-func (f *Field) close() error {
+func (f *Field) close() error { // nolint: unparam
 	defer os.RemoveAll(f.Path())
 	return f.Field.Close()
 }

@@ -494,7 +494,7 @@ func (t *tree) overflow(p *x, q *d, pi, i int, k uint64, v *roaring.Container) {
 	// data items up to the index of the new data item.
 	if l != nil && l.c < 2*kd && i != 0 {
 		s := (2*kd-l.c)/2 + 1 // half plus one
-		//s := 2*kd - l.c // all avaiable
+		//s := 2*kd - l.c // all available
 		if i < s {
 			s = i
 		}
