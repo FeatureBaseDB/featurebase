@@ -311,7 +311,7 @@ func (c *cluster) unprotectedUpdateCoordinator(n *Node) bool {
 }
 
 // addNode adds a node to the Cluster and updates and saves the
-// new topology.
+// new topology. unprotected.
 func (c *cluster) addNode(node *Node) error {
 	c.logger.Printf("add node %s to cluster on %s", node, c.Node)
 
@@ -338,7 +338,7 @@ func (c *cluster) addNode(node *Node) error {
 }
 
 // removeNode removes a node from the Cluster and updates and saves the
-// new topology.
+// new topology. unprotected.
 func (c *cluster) removeNode(node *Node) error {
 	// remove from cluster
 	if !c.removeNodeBasicSorted(node) {
@@ -362,7 +362,7 @@ func (c *cluster) nodeIDs() []string {
 	return Nodes(c.Nodes).IDs()
 }
 
-func (c *cluster) setID(id string) {
+func (c *cluster) unprotectedSetID(id string) {
 	// Don't overwrite ClusterID.
 	if c.id != "" {
 		return
@@ -500,8 +500,8 @@ func (c *cluster) nodePositionByID(nodeID string) int {
 	return -1
 }
 
-// addNodeBasicSorted adds a node to the cluster, sorted by id.
-// Returns a pointer to the node and true if the node was added.
+// addNodeBasicSorted adds a node to the cluster, sorted by id. Returns a
+// pointer to the node and true if the node was added. unprotected.
 func (c *cluster) addNodeBasicSorted(node *Node) bool {
 	n := c.unprotectedNodeByID(node.ID)
 	if n != nil {
@@ -516,8 +516,8 @@ func (c *cluster) addNodeBasicSorted(node *Node) bool {
 	return true
 }
 
-// removeNodeBasicSorted removes a node from the cluster, maintaining
-// the sort order. Returns true if the node was removed.
+// removeNodeBasicSorted removes a node from the cluster, maintaining the sort
+// order. Returns true if the node was removed. unprotected.
 func (c *cluster) removeNodeBasicSorted(node *Node) bool {
 	i := c.nodePositionByID(node.ID)
 	if i < 0 {
@@ -1696,7 +1696,7 @@ func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 	}
 
 	// Set ClusterID.
-	c.setID(cs.ClusterID)
+	c.unprotectedSetID(cs.ClusterID)
 
 	officialNodes := cs.Nodes
 
