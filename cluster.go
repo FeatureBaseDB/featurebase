@@ -381,11 +381,11 @@ func (c *cluster) State() string {
 
 func (c *cluster) SetState(state string) {
 	c.mu.Lock()
-	c.setState(state)
+	c.unprotectedSetState(state)
 	c.mu.Unlock()
 }
 
-func (c *cluster) setState(state string) {
+func (c *cluster) unprotectedSetState(state string) {
 	// Ignore cases where the state hasn't changed.
 	if state == c.state {
 		return
@@ -964,7 +964,7 @@ func (c *cluster) handleNodeAction(nodeAction nodeAction) error {
 }
 
 func (c *cluster) unprotectedSetStateAndBroadcast(state string) error {
-	c.setState(state)
+	c.unprotectedSetState(state)
 	if c.Static {
 		return nil
 	}
@@ -1728,7 +1728,7 @@ func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 		}
 	}
 
-	c.setState(cs.State)
+	c.unprotectedSetState(cs.State)
 
 	c.markAsJoined()
 
