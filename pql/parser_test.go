@@ -47,8 +47,8 @@ func TestParser_Parse(t *testing.T) {
 			&pql.Call{
 				Name: "Union",
 				Children: []*pql.Call{
-					&pql.Call{Name: "Bitmap"},
-					&pql.Call{Name: "Count"},
+					{Name: "Bitmap"},
+					{Name: "Count"},
 				},
 			},
 		) {

@@ -600,7 +600,7 @@ func (f *Field) viewNames() []string {
 	defer f.mu.Unlock()
 
 	other := make([]string, 0, len(f.viewMap))
-	for viewName, _ := range f.viewMap {
+	for viewName := range f.viewMap {
 		other = append(other, viewName)
 	}
 	return other
