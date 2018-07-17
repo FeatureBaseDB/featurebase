@@ -445,12 +445,14 @@ func (c *cluster) setNodeState(state string) error { // nolint: unparam
 // Coordinator to keep track of, during startup, which nodes have
 // finished opening their Holder.
 func (c *cluster) receiveNodeState(nodeID string, state string) error {
-	if !c.isCoordinator() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.unprotectedIsCoordinator() {
 		return nil
 	}
 
 	// This method is really only useful during initial startup.
-	if c.State() != ClusterStateStarting {
+	if c.state != ClusterStateStarting {
 		return nil
 	}
 
@@ -897,6 +899,7 @@ func (c *cluster) needTopologyAgreement() bool {
 	return c.State() == ClusterStateStarting && !stringSlicesAreEqual(c.Topology.nodeIDs, c.nodeIDs())
 }
 
+// haveTopologyAgreement is unprotected.
 func (c *cluster) haveTopologyAgreement() bool {
 	if c.Static {
 		return true
@@ -904,6 +907,7 @@ func (c *cluster) haveTopologyAgreement() bool {
 	return stringSlicesAreEqual(c.Topology.nodeIDs, c.nodeIDs())
 }
 
+// allNodesReady is unprotected.
 func (c *cluster) allNodesReady() bool {
 	if c.Static {
 		return true
@@ -961,6 +965,12 @@ func (c *cluster) handleNodeAction(nodeAction nodeAction) error {
 		}
 	}
 	return nil
+}
+
+func (c *cluster) setStateAndBroadcast(state string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.unprotectedSetStateAndBroadcast(state)
 }
 
 func (c *cluster) unprotectedSetStateAndBroadcast(state string) error {
