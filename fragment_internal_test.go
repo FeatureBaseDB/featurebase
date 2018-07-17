@@ -1281,28 +1281,78 @@ func (f *fragment) mustSetBits(rowID uint64, columnIDs ...uint64) {
 
 // Test Various methods of retrieving RowIDs
 func TestFragment_RowsIteration(t *testing.T) {
-	f := mustOpenFragment("i", "f", viewStandard, 0, "")
-	defer f.Close()
-	expected1 := make([]uint64, 0)
-	expected2 := make([]uint64, 0)
-	for i := uint64(100); i < uint64(200); i++ {
-		if _, err := f.setBit(i, i%2); err != nil {
+	t.Run("firstContainer", func(t *testing.T) {
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
+		defer f.Close()
+
+		expectedAll := make([]uint64, 0)
+		expectedOdd := make([]uint64, 0)
+		for i := uint64(100); i < uint64(200); i++ {
+			if _, err := f.setBit(i, i%2); err != nil {
+				t.Fatal(err)
+			}
+			expectedAll = append(expectedAll, i)
+			if i%2 == 1 {
+				expectedOdd = append(expectedOdd, i)
+			}
+		}
+
+		ids := f.rows()
+		if !reflect.DeepEqual(expectedAll, ids) {
+			t.Fatalf("Do not match %v %v", expectedAll, ids)
+		}
+
+		ids = f.rowsForColumn(1)
+		if !reflect.DeepEqual(expectedOdd, ids) {
+			t.Fatalf("Do not match %v %v", expectedOdd, ids)
+		}
+	})
+
+	t.Run("secondRow", func(t *testing.T) {
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
+		defer f.Close()
+
+		expected := []uint64{1, 2}
+		if _, err := f.setBit(1, 66000); err != nil {
+			t.Fatal(err)
+		} else if _, err := f.setBit(2, 66000); err != nil {
+			t.Fatal(err)
+		} else if _, err := f.setBit(2, 166000); err != nil {
 			t.Fatal(err)
 		}
-		expected1 = append(expected1, i)
-		if i%2 == 1 {
-			expected2 = append(expected2, i)
+
+		ids := f.rows()
+		if !reflect.DeepEqual(expected, ids) {
+			t.Fatalf("Do not match %v %v", expected, ids)
 		}
-	}
 
-	ids := f.rows()
-	if !reflect.DeepEqual(expected1, ids) {
-		t.Fatalf("Do not match %v %v", expected1, ids)
+		ids = f.rowsForColumn(66000)
+		if !reflect.DeepEqual(expected, ids) {
+			t.Fatalf("Do not match %v %v", expected, ids)
+		}
+	})
 
-	}
+	t.Run("combinations", func(t *testing.T) {
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
+		defer f.Close()
 
-	ids = f.rowsForColumn(1)
-	if !reflect.DeepEqual(expected2, ids) {
-		t.Fatalf("Do not match %v %v", expected2, ids)
-	}
+		expectedRows := make([]uint64, 0)
+		for r := uint64(1); r < uint64(10000); r += 100 {
+			expectedRows = append(expectedRows, r)
+			for c := uint64(1); c < uint64(ShardWidth-1); c += 10000 {
+				if _, err := f.setBit(r, c); err != nil {
+					t.Fatal(err)
+				}
+
+				ids := f.rows()
+				if !reflect.DeepEqual(expectedRows, ids) {
+					t.Fatalf("Do not match %v %v", expectedRows, ids)
+				}
+				ids = f.rowsForColumn(c)
+				if !reflect.DeepEqual(expectedRows, ids) {
+					t.Fatalf("Do not match %v %v", expectedRows, ids)
+				}
+			}
+		}
+	})
 }
