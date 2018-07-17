@@ -5,7 +5,7 @@ import (
 	"io"
 )
 
-// Bit represents the intersection of a row and a column. It can be specifed by
+// Bit represents the intersection of a row and a column. It can be specified by
 // integer ids or string keys.
 type Bit struct {
 	RowID     uint64
