@@ -114,7 +114,7 @@ func (g *memberSet) joinWithRetry(hosts []string) error {
 }
 
 // retry periodically retries function fn a specified number of attempts.
-func retry(attempts int, sleep time.Duration, fn func() error) (err error) {
+func retry(attempts int, sleep time.Duration, fn func() error) (err error) { // nolint: unparam
 	for i := 0; ; i++ {
 		err = fn()
 		if err == nil {

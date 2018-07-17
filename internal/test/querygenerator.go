@@ -100,7 +100,7 @@ func Xor(args ...*pql.Call) *pql.Call {
 	return &pql.Call{Name: "Xor", Args: kvargs, Children: children}
 }
 
-func Between(frame string, min, max int) *pql.Call {
+func Between(_ string, min, max int) *pql.Call {
 	return &pql.Call{
 		Name: "Range",
 		Args: Args{
@@ -109,7 +109,7 @@ func Between(frame string, min, max int) *pql.Call {
 		},
 	}
 }
-func Lt(frame string, column int) *pql.Call {
+func Lt(_ string, column int) *pql.Call {
 	return &pql.Call{
 		Name: "Range",
 		Args: Args{
@@ -118,7 +118,7 @@ func Lt(frame string, column int) *pql.Call {
 		},
 	}
 }
-func Lte(frame string, column int) *pql.Call {
+func Lte(_ string, column int) *pql.Call {
 	return &pql.Call{
 		Name: "Range",
 		Args: Args{
@@ -127,7 +127,7 @@ func Lte(frame string, column int) *pql.Call {
 		},
 	}
 }
-func Gt(frame string, column int) *pql.Call {
+func Gt(_ string, column int) *pql.Call {
 	return &pql.Call{
 		Name: "Range",
 		Args: Args{
@@ -137,7 +137,7 @@ func Gt(frame string, column int) *pql.Call {
 	}
 }
 
-func Gte(frame string, column int) *pql.Call {
+func Gte(_ string, column int) *pql.Call {
 	return &pql.Call{
 		Name: "Range",
 		Args: Args{

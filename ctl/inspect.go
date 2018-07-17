@@ -46,7 +46,7 @@ func NewInspectCommand(stdin io.Reader, stdout, stderr io.Writer) *InspectComman
 }
 
 // Run executes the inspect command.
-func (cmd *InspectCommand) Run(ctx context.Context) error {
+func (cmd *InspectCommand) Run(_ context.Context) error {
 	// Open file handle.
 	f, err := os.Open(cmd.Path)
 	if err != nil {

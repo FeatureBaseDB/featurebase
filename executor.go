@@ -665,7 +665,7 @@ func (e *executor) executeDifferenceShard(ctx context.Context, index string, c *
 	return other, nil
 }
 
-func (e *executor) executeBitmapShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
+func (e *executor) executeBitmapShard(_ context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
 	// Fetch column label from index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
@@ -793,7 +793,7 @@ func (e *executor) executeRangeShard(ctx context.Context, index string, c *pql.C
 }
 
 // executeBSIGroupRangeShard executes a range(bsiGroup) call for a local shard.
-func (e *executor) executeBSIGroupRangeShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
+func (e *executor) executeBSIGroupRangeShard(_ context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
 	// Only one conditional should be present.
 	if len(c.Args) == 0 {
 		return nil, errors.New("Range(): condition required")
@@ -1048,7 +1048,7 @@ func (e *executor) executeClearBitField(ctx context.Context, index string, c *pq
 		}
 
 		// Forward call to remote node otherwise.
-		if res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt); err != nil {
+		if res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil); err != nil {
 			return false, err
 		} else {
 			ret = res[0].(bool)
@@ -1140,7 +1140,7 @@ func (e *executor) executeSetBitField(ctx context.Context, index string, c *pql.
 		}
 
 		// Forward call to remote node otherwise.
-		if res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt); err != nil {
+		if res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil); err != nil {
 			return false, err
 		} else {
 			ret = res[0].(bool)
@@ -1172,7 +1172,7 @@ func (e *executor) executeSetValueField(ctx context.Context, index string, c *pq
 		}
 
 		// Forward call to remote node otherwise.
-		if res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt); err != nil {
+		if res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil); err != nil {
 			return false, err
 		} else {
 			ret = res[0].(bool)
@@ -1223,7 +1223,7 @@ func (e *executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
-			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt)
+			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil)
 			resp <- err
 		}(node)
 	}
@@ -1309,7 +1309,7 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
-			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: calls}, nil, opt)
+			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: calls}, nil)
 			resp <- err
 		}(node)
 	}
@@ -1358,7 +1358,7 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
-			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, opt)
+			_, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil)
 			resp <- err
 		}(node)
 	}
@@ -1374,7 +1374,7 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 }
 
 // exec executes a PQL query remotely for a set of shards on a node.
-func (e *executor) remoteExec(ctx context.Context, node *Node, index string, q *pql.Query, shards []uint64, opt *execOptions) (results []interface{}, err error) {
+func (e *executor) remoteExec(ctx context.Context, node *Node, index string, q *pql.Query, shards []uint64) (results []interface{}, err error) {
 	// Encode request object.
 	pbreq := &QueryRequest{
 		Query:  q.String(),
@@ -1487,7 +1487,7 @@ func (e *executor) mapper(ctx context.Context, ch chan mapResponse, nodes []*Nod
 			if n.ID == e.Node.ID {
 				resp.result, resp.err = e.mapperLocal(ctx, nodeShards, mapFn, reduceFn)
 			} else if !opt.Remote {
-				results, err := e.remoteExec(ctx, n, index, &pql.Query{Calls: []*pql.Call{c}}, nodeShards, opt)
+				results, err := e.remoteExec(ctx, n, index, &pql.Query{Calls: []*pql.Call{c}}, nodeShards)
 				if len(results) > 0 {
 					resp.result = results[0]
 				}
