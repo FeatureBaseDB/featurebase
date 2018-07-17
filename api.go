@@ -858,32 +858,32 @@ const (
 )
 
 var methodsCommon = map[apiMethod]struct{}{
-	apiClusterMessage: struct{}{},
-	apiSetCoordinator: struct{}{},
+	apiClusterMessage: {},
+	apiSetCoordinator: {},
 }
 
 var methodsResizing = map[apiMethod]struct{}{
-	apiResizeAbort: struct{}{},
+	apiResizeAbort: {},
 }
 
 var methodsNormal = map[apiMethod]struct{}{
-	apiCreateField:       struct{}{},
-	apiCreateIndex:       struct{}{},
-	apiDeleteField:       struct{}{},
-	apiDeleteIndex:       struct{}{},
-	apiDeleteView:        struct{}{},
-	apiExportCSV:         struct{}{},
-	apiFragmentBlockData: struct{}{},
-	apiFragmentBlocks:    struct{}{},
-	apiField:             struct{}{},
-	apiFieldAttrDiff:     struct{}{},
-	apiImport:            struct{}{},
-	apiImportValue:       struct{}{},
-	apiIndex:             struct{}{},
-	apiIndexAttrDiff:     struct{}{},
-	apiQuery:             struct{}{},
-	apiRecalculateCaches: struct{}{},
-	apiRemoveNode:        struct{}{},
-	apiShardNodes:        struct{}{},
-	apiViews:             struct{}{},
+	apiCreateField:       {},
+	apiCreateIndex:       {},
+	apiDeleteField:       {},
+	apiDeleteIndex:       {},
+	apiDeleteView:        {},
+	apiExportCSV:         {},
+	apiFragmentBlockData: {},
+	apiFragmentBlocks:    {},
+	apiField:             {},
+	apiFieldAttrDiff:     {},
+	apiImport:            {},
+	apiImportValue:       {},
+	apiIndex:             {},
+	apiIndexAttrDiff:     {},
+	apiQuery:             {},
+	apiRecalculateCaches: {},
+	apiRemoveNode:        {},
+	apiShardNodes:        {},
+	apiViews:             {},
 }

@@ -158,7 +158,7 @@ func (ct *commandTest) setupCommand(t *testing.T) *cobra.Command {
 
 // reset the environment after setup/run of a commandTest.
 func (ct *commandTest) reset() {
-	for name, _ := range ct.env {
+	for name := range ct.env {
 		os.Setenv(name, "")
 	}
 }

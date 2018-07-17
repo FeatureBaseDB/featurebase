@@ -182,9 +182,9 @@ func TestFragSources(t *testing.T) {
 			to:   c2,
 			idx:  idx,
 			expected: map[string][]*ResizeSource{
-				"node0": []*ResizeSource{},
-				"node1": []*ResizeSource{},
-				"node2": []*ResizeSource{
+				"node0": {},
+				"node1": {},
+				"node2": {
 					{&Node{"node0", URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(0)},
 					{&Node{"node1", URI{"http", "host1", 10101}, false}, "i", "f", "standard", uint64(2)},
 				},
@@ -196,10 +196,10 @@ func TestFragSources(t *testing.T) {
 			to:   c3,
 			idx:  idx,
 			expected: map[string][]*ResizeSource{
-				"node0": []*ResizeSource{
+				"node0": {
 					{&Node{"node1", URI{"http", "host1", 10101}, false}, "i", "f", "standard", uint64(1)},
 				},
-				"node1": []*ResizeSource{
+				"node1": {
 					{&Node{"node0", URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(0)},
 					{&Node{"node0", URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(2)},
 				},
@@ -211,14 +211,14 @@ func TestFragSources(t *testing.T) {
 			to:   c4,
 			idx:  idx,
 			expected: map[string][]*ResizeSource{
-				"node0": []*ResizeSource{
+				"node0": {
 					{&Node{"node2", URI{"http", "host2", 10101}, false}, "i", "f", "standard", uint64(0)},
 					{&Node{"node2", URI{"http", "host2", 10101}, false}, "i", "f", "standard", uint64(2)},
 				},
-				"node1": []*ResizeSource{
+				"node1": {
 					{&Node{"node0", URI{"http", "host0", 10101}, false}, "i", "f", "standard", uint64(3)},
 				},
-				"node2": []*ResizeSource{},
+				"node2": {},
 			},
 			err: "",
 		},
