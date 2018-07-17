@@ -233,6 +233,12 @@ func newCluster() *cluster {
 	}
 }
 
+func (c *cluster) coordinatorNode() *Node {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.unprotectedCoordinatorNode()
+}
+
 // unprotectedCoordinatorNode returns the coordinator node.
 func (c *cluster) unprotectedCoordinatorNode() *Node {
 	return c.unprotectedNodeByID(c.Coordinator)
@@ -428,7 +434,7 @@ func (c *cluster) setNodeState(state string) error { // nolint: unparam
 	}
 
 	c.logger.Printf("Sending State %s (%s)", state, c.Coordinator)
-	if err := c.sendTo(c.unprotectedCoordinatorNode(), ns); err != nil {
+	if err := c.sendTo(c.coordinatorNode(), ns); err != nil {
 		return fmt.Errorf("sending node state error: err=%s", err)
 	}
 
@@ -453,7 +459,7 @@ func (c *cluster) receiveNodeState(nodeID string, state string) error {
 
 	// Set cluster state to NORMAL.
 	if c.haveTopologyAgreement() && c.allNodesReady() {
-		return c.setStateAndBroadcast(ClusterStateNormal)
+		return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
 	}
 
 	return nil
@@ -914,7 +920,7 @@ func (c *cluster) handleNodeAction(nodeAction nodeAction) error {
 	j, err := c.generateResizeJob(nodeAction)
 	if err != nil {
 		c.logger.Printf("generateResizeJob error: err=%s", err)
-		if err := c.setStateAndBroadcast(ClusterStateNormal); err != nil {
+		if err := c.unprotectedSetStateAndBroadcast(ClusterStateNormal); err != nil {
 			c.logger.Printf("setStateAndBroadcast error: err=%s", err)
 		}
 		return errors.Wrap(err, "setting state")
@@ -957,14 +963,15 @@ func (c *cluster) handleNodeAction(nodeAction nodeAction) error {
 	return nil
 }
 
-func (c *cluster) setStateAndBroadcast(state string) error {
-	c.SetState(state)
+func (c *cluster) unprotectedSetStateAndBroadcast(state string) error {
+	c.setState(state)
 	if c.Static {
 		return nil
 	}
 	// Broadcast cluster status changes to the cluster.
 	c.logger.Printf("broadcasting ClusterStatus: %s", state)
-	return c.broadcaster.SendSync(c.Status())
+	return c.broadcaster.SendSync(c.Status()) // TODO fix c.Status
+
 }
 
 func (c *cluster) sendTo(node *Node, m Message) error {
@@ -1005,7 +1012,7 @@ func (c *cluster) listenForJoins() {
 			// Only change state to NORMAL if we have successfully added at least one host.
 			if setNormal {
 				// Put the cluster back to state NORMAL and broadcast.
-				if err := c.setStateAndBroadcast(ClusterStateNormal); err != nil {
+				if err := c.unprotectedSetStateAndBroadcast(ClusterStateNormal); err != nil {
 					c.logger.Printf("setStateAndBroadcast error: err=%s", err)
 				}
 			}
@@ -1035,7 +1042,7 @@ func (c *cluster) generateResizeJob(nodeAction nodeAction) (*resizeJob, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	j, err := c.generateResizeJobByAction(nodeAction)
+	j, err := c.unprotectedGenerateResizeJobByAction(nodeAction)
 	if err != nil {
 		return nil, errors.Wrap(err, "generating job")
 	}
@@ -1053,11 +1060,11 @@ func (c *cluster) generateResizeJob(nodeAction nodeAction) (*resizeJob, error) {
 	return j, nil
 }
 
-// generateResizeJobByAction returns a resizeJob with instructions based on
+// unprotectedGenerateResizeJobByAction returns a resizeJob with instructions based on
 // the difference between Cluster and a new Cluster with/without uri.
 // Broadcaster is associated to the resizeJob here for use in broadcasting
 // the resize instructions to other nodes in the cluster.
-func (c *cluster) generateResizeJobByAction(nodeAction nodeAction) (*resizeJob, error) {
+func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*resizeJob, error) {
 	j := newResizeJob(c.Nodes, nodeAction.node, nodeAction.action)
 	j.Broadcaster = c.broadcaster
 
@@ -1582,7 +1589,7 @@ func (c *cluster) nodeJoin(node *Node) error {
 			// If the result of the previous AddNode completed the joining of nodes
 			// in the topology, then change the state to NORMAL.
 			if c.haveTopologyAgreement() {
-				return c.setStateAndBroadcast(ClusterStateNormal)
+				return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
 			}
 			return nil
 		} else if err != nil {
@@ -1590,7 +1597,7 @@ func (c *cluster) nodeJoin(node *Node) error {
 		}
 
 		if c.haveTopologyAgreement() && c.allNodesReady() {
-			return c.setStateAndBroadcast(ClusterStateNormal)
+			return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
 		} else {
 			// Send the status to the remote node. This lets the remote node
 			// know that it can proceed with opening its Holder.
@@ -1610,14 +1617,14 @@ func (c *cluster) nodeJoin(node *Node) error {
 		if err := c.addNode(node); err != nil {
 			return errors.Wrap(err, "adding node")
 		}
-		return c.setStateAndBroadcast(ClusterStateNormal)
+		return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
 	} else if err != nil {
 		return errors.Wrap(err, "checking if holder has data2")
 	}
 
 	// If the cluster has data, we need to change to RESIZING and
 	// kick off the resizing process.
-	if err := c.setStateAndBroadcast(ClusterStateResizing); err != nil {
+	if err := c.unprotectedSetStateAndBroadcast(ClusterStateResizing); err != nil {
 		return errors.Wrap(err, "broadcasting state")
 	}
 	c.joiningLeavingNodes <- nodeAction{node, resizeJobActionAdd}
@@ -1628,7 +1635,7 @@ func (c *cluster) nodeJoin(node *Node) error {
 // nodeLeave initiates the removal of a node from the cluster.
 func (c *cluster) nodeLeave(node *Node) error {
 	// Refuse the request if this is not the coordinator.
-	if !c.isCoordinator() {
+	if !c.unprotectedIsCoordinator() {
 		return fmt.Errorf("node removal requests are only valid on the coordinator node: %s", c.unprotectedCoordinatorNode().ID)
 	}
 
@@ -1647,7 +1654,7 @@ func (c *cluster) nodeLeave(node *Node) error {
 	}
 
 	// See if resize job can be generated
-	if _, err := c.generateResizeJobByAction(nodeAction{c.unprotectedNodeByID(node.ID), resizeJobActionRemove}); err != nil {
+	if _, err := c.unprotectedGenerateResizeJobByAction(nodeAction{c.unprotectedNodeByID(node.ID), resizeJobActionRemove}); err != nil {
 		return errors.Wrap(err, "generating job")
 	}
 
@@ -1664,14 +1671,14 @@ func (c *cluster) nodeLeave(node *Node) error {
 		if err := c.removeNode(n); err != nil {
 			return errors.Wrap(err, "removing node")
 		}
-		return c.setStateAndBroadcast(ClusterStateNormal)
+		return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
 	} else if err != nil {
 		return errors.Wrap(err, "checking if holder has data")
 	}
 
 	// If the cluster has data then change state to RESIZING and
 	// kick off the resizing process.
-	if err := c.setStateAndBroadcast(ClusterStateResizing); err != nil {
+	if err := c.unprotectedSetStateAndBroadcast(ClusterStateResizing); err != nil {
 		return errors.Wrap(err, "broadcasting state")
 	}
 	c.joiningLeavingNodes <- nodeAction{n, resizeJobActionRemove}
