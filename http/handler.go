@@ -878,7 +878,7 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*pilosa.QueryRequest, er
 }
 
 // writeQueryResponse writes the response from the executor to w.
-func (h *Handler) writeQueryResponse(w http.ResponseWriter, r *http.Request, resp *pilosa.QueryResponse) error {
+func (h *Handler) writeQueryResponse(w io.Writer, r *http.Request, resp *pilosa.QueryResponse) error {
 	if !validHeaderAcceptJSON(r.Header) {
 		return h.writeProtobufQueryResponse(w, resp)
 	}
@@ -886,7 +886,7 @@ func (h *Handler) writeQueryResponse(w http.ResponseWriter, r *http.Request, res
 }
 
 // writeProtobufQueryResponse writes the response from the executor to w as protobuf.
-func (h *Handler) writeProtobufQueryResponse(w http.ResponseWriter, resp *pilosa.QueryResponse) error {
+func (h *Handler) writeProtobufQueryResponse(w io.Writer, resp *pilosa.QueryResponse) error {
 	if buf, err := h.api.Serializer.Marshal(resp); err != nil {
 		return errors.Wrap(err, "marshalling")
 	} else if _, err := w.Write(buf); err != nil {
@@ -896,7 +896,7 @@ func (h *Handler) writeProtobufQueryResponse(w http.ResponseWriter, resp *pilosa
 }
 
 // writeJSONQueryResponse writes the response from the executor to w as JSON.
-func (h *Handler) writeJSONQueryResponse(w http.ResponseWriter, resp *pilosa.QueryResponse) error {
+func (h *Handler) writeJSONQueryResponse(w io.Writer, resp *pilosa.QueryResponse) error {
 	return json.NewEncoder(w).Encode(resp)
 }
 

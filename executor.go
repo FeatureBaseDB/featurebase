@@ -1374,7 +1374,7 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 }
 
 // exec executes a PQL query remotely for a set of shards on a node.
-func (e *executor) remoteExec(ctx context.Context, node *Node, index string, q *pql.Query, shards []uint64, opt *execOptions) (results []interface{}, err error) {
+func (e *executor) remoteExec(ctx context.Context, node *Node, index string, q *pql.Query, shards []uint64, opt *execOptions) (results []interface{}, err error) { // nolint: interfacer
 	// Encode request object.
 	pbreq := &QueryRequest{
 		Query:  q.String(),
