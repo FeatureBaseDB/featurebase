@@ -243,6 +243,9 @@ func MustDo(method, urlStr string, body string) *httpResponse {
 		urlStr,
 		strings.NewReader(body),
 	)
+	if err != nil {
+		panic(err)
+	}
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")

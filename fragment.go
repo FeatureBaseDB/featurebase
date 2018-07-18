@@ -584,9 +584,9 @@ func (f *fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error
 	//
 	//   10*(2^0) + 4*(2^1) + 3*(2^2) = 30
 	//
+	var cnt uint64
 	for i := uint(0); i < bitDepth; i++ {
 		row := f.row(uint64(i))
-		cnt := uint64(0)
 		if filter != nil {
 			cnt = row.intersectionCount(filter)
 		} else {
@@ -1713,10 +1713,11 @@ func (f *fragment) rows() []uint64 {
 }
 
 func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
+	var colKey uint64
+
 	colID := columnID % ShardWidth
 	i, _ := f.storage.Containers.Iterator(0)
 
-	colKey := uint64(0)
 	colVal := uint16(colID & 0xFFFF)
 
 	rows := make([]uint64, 0)

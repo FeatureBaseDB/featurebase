@@ -40,6 +40,9 @@ func TestNewCluster(t *testing.T) {
 		cluster[0].URL()+"/status",
 		strings.NewReader(""),
 	)
+	if err != nil {
+		t.Fatalf("creating http request: %v", err)
+	}
 
 	req.Header.Set("Accept", "application/json")
 
