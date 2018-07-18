@@ -118,6 +118,7 @@ gometalinter: require-gometalinter
 	    --enable=goimports \
 	    --enable=gotype \
 	    --enable=gotypex \
+	    --enable=ineffassign \
 	    --enable=interfacer \
 	    --enable=misspell \
 	    --enable=unparam \

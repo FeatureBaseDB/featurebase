@@ -203,6 +203,9 @@ func TestImportCommand_BugOverwriteValue(t *testing.T) {
 
 	file.Close()
 	file, err = ioutil.TempFile("", "import-value2.csv")
+	if err != nil {
+		t.Fatalf("Error creating tempfile: %s", err)
+	}
 	file.Write([]byte("0,16\n"))
 	cm.Paths = []string{file.Name()}
 	err = cm.Run(ctx)
@@ -212,6 +215,9 @@ func TestImportCommand_BugOverwriteValue(t *testing.T) {
 
 	file.Close()
 	file, err = ioutil.TempFile("", "import-value3.csv")
+	if err != nil {
+		t.Fatalf("Error creating tempfile: %s", err)
+	}
 	file.Write([]byte("0,19\n"))
 	cm.Paths = []string{file.Name()}
 	err = cm.Run(ctx)
