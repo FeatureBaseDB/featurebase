@@ -22,10 +22,6 @@ import (
 	"time"
 )
 
-func init() {
-	NopStatsClient = &nopStatsClient{}
-}
-
 // Expvar global expvar map.
 var Expvar = expvar.NewMap("index")
 
@@ -66,7 +62,7 @@ type StatsClient interface {
 }
 
 // NopStatsClient represents a client that doesn't do anything.
-var NopStatsClient StatsClient
+var NopStatsClient StatsClient = &nopStatsClient{}
 
 type nopStatsClient struct{}
 

@@ -65,7 +65,3 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 
 	return importCmd
 }
-
-func init() {
-	subcommandFns["import"] = newImportCommand
-}

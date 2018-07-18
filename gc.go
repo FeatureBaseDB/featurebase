@@ -23,12 +23,8 @@ type GCNotifier interface {
 	AfterGC() <-chan struct{}
 }
 
-func init() {
-	NopGCNotifier = &nopGCNotifier{}
-}
-
 // NopGCNotifier represents a GCNotifier that doesn't do anything.
-var NopGCNotifier GCNotifier
+var NopGCNotifier GCNotifier = &nopGCNotifier{}
 
 type nopGCNotifier struct{}
 

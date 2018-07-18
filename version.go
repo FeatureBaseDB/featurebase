@@ -19,7 +19,9 @@ var EnterpriseEnabled = false
 var Version = "v0.0.0"
 var BuildTime = "not recorded"
 
-func init() {
+// init sets the EnterpriseEnabled bool, based on the Enterprise string.
+// This is needed because bools cannot be set with ldflags.
+func init() { // nolint: gochecknoinits
 	if Enterprise == "1" {
 		EnterpriseEnabled = true
 	}

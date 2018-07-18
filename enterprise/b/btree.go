@@ -32,7 +32,6 @@
 package b
 
 import (
-	"fmt"
 	"io"
 	"sync"
 
@@ -40,19 +39,11 @@ import (
 )
 
 const (
+	// kx must be >= 2
 	kx = 128 //TODO benchmark tune this number if using custom key/value type(s).
+	// kd must be >= 1
 	kd = 128 //TODO benchmark tune this number if using custom key/value type(s).
 )
-
-func init() {
-	if kd < 1 {
-		panic(fmt.Errorf("kd %d: out of range", kd))
-	}
-
-	if kx < 2 {
-		panic(fmt.Errorf("kx %d: out of range", kx))
-	}
-}
 
 var (
 	btDPool = sync.Pool{New: func() interface{} { return &d{} }}
