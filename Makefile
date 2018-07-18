@@ -1,4 +1,4 @@
-.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-pql install install-build-deps install-dep install-protoc install-protoc-gen-gofast install-peg metalinter prerelease prerelease-upload release release-build require-dep require-protoc require-protoc-gen-gofast require-peg test
+.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-pql gometalinter install install-build-deps install-dep install-gometalinter install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build require-dep require-gometalinter require-protoc require-protoc-gen-gofast require-peg test
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
@@ -108,8 +108,21 @@ docker-build:
 docker-test:
 	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) go test -tags='$(BUILD_TAGS)' $(TESTFLAGS) ./...
 
-metalinter:
-	gometalinter --vendor --disable-all --enable=gotype --enable=gotypex --enable=gofmt --enable=goimports --enable=interfacer --enable=misspell --enable=unparam --deadline=60s --exclude "^internal/.*\.pb\.go" ./...
+# Run gometalinter with custom flags
+gometalinter: require-gometalinter
+	gometalinter --vendor --disable-all \
+	    --deadline=60s \
+	    --enable=deadcode \
+	    --enable=gofmt \
+	    --enable=goimports \
+	    --enable=gotype \
+	    --enable=gotypex \
+	    --enable=interfacer \
+	    --enable=misspell \
+	    --enable=unparam \
+	    --exclude "^internal/.*\.pb\.go" \
+	    --exclude "^pql/pql.peg.go" \
+	    ./...
 
 ######################
 # Build dependencies #
@@ -134,6 +147,9 @@ require-protoc:
 require-peg:
 	$(call require,peg)
 
+require-gometalinter:
+	$(call require,gometalinter)
+
 install-build-deps: install-dep install-protoc-gen-gofast install-protoc install-stringer install-peg
 
 install-dep:
@@ -150,3 +166,8 @@ install-protoc:
 
 install-peg:
 	go get github.com/pointlander/peg
+
+install-gometalinter:
+	go get -u github.com/alecthomas/gometalinter
+	gometalinter --install
+	go get github.com/remyoudompheng/go-misc/deadcode

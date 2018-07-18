@@ -1800,7 +1800,7 @@ type containerInfo struct {
 
 // flip returns a new container containing the inverse of all
 // bits in a.
-func flip(a *Container) *Container {
+func flip(a *Container) *Container { // nolint: deadcode
 	if a.isArray() {
 		return flipArray(a)
 	} else if a.isRun() {
@@ -3304,7 +3304,7 @@ func xorBitmapRun(a, b *Container) *Container {
 	return output
 }
 
-func bitmapsEqual(b, c *Bitmap) error {
+func bitmapsEqual(b, c *Bitmap) error { // nolint: deadcode
 	if b.OpWriter != c.OpWriter {
 		return errors.New("opWriters not equal")
 	}
@@ -3336,42 +3336,10 @@ func popcount(x uint64) uint64 {
 	return uint64(bits.OnesCount64(x))
 }
 
-func popcountSlice(s []uint64) uint64 {
-	cnt := uint64(0)
-	for _, x := range s {
-		cnt += popcount(x)
-	}
-	return cnt
-}
-
-func popcountMaskSlice(s, m []uint64) uint64 {
-	cnt := uint64(0)
-	for i := range s {
-		cnt += popcount(s[i] &^ m[i])
-	}
-	return cnt
-}
-
 func popcountAndSlice(s, m []uint64) uint64 {
 	cnt := uint64(0)
 	for i := range s {
 		cnt += popcount(s[i] & m[i])
-	}
-	return cnt
-}
-
-func popcountOrSlice(s, m []uint64) uint64 {
-	cnt := uint64(0)
-	for i := range s {
-		cnt += popcount(s[i] | m[i])
-	}
-	return cnt
-}
-
-func popcountXorSlice(s, m []uint64) uint64 {
-	cnt := uint64(0)
-	for i := range s {
-		cnt += popcount(s[i] ^ m[i])
 	}
 	return cnt
 }

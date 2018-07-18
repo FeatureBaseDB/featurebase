@@ -1250,7 +1250,9 @@ func mustOpenFragment(index, field, view string, shard uint64, cacheType string)
 
 	f := newFragment(file.Name(), index, field, view, shard)
 	f.CacheType = cacheType
-	f.RowAttrStore = newMemAttrStore()
+	f.RowAttrStore = &memAttrStore{
+		store: make(map[uint64]map[string]interface{}),
+	}
 
 	if err := f.Open(); err != nil {
 		panic(err)

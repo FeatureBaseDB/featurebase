@@ -1122,12 +1122,9 @@ func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 
 // QueryResult types.
 const (
-	queryResultTypeNil uint32 = iota
-	QueryResultTypeRow
+	QueryResultTypeRow uint32 = iota
 	QueryResultTypePairs
-	queryResultTypeValCount
 	QueryResultTypeUint64
-	queryResultTypeBool
 )
 
 // parseUint64Slice returns a slice of uint64s from a comma-delimited string.
@@ -1147,14 +1144,6 @@ func parseUint64Slice(s string) ([]uint64, error) {
 		a = append(a, num)
 	}
 	return a, nil
-}
-
-// errorString returns the string representation of err.
-func errorString(err error) string {
-	if err == nil {
-		return ""
-	}
-	return err.Error()
 }
 
 func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r *http.Request) {

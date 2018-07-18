@@ -372,7 +372,8 @@ func TestHasher(t *testing.T) {
 		{0x0ddc0ffeebadf00d, []int{0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15}},
 	} {
 		for i, v := range tt.bucket {
-			if got := newHasher().Hash(tt.key, i+1); got != v {
+			hasher := &jmphasher{}
+			if got := hasher.Hash(tt.key, i+1); got != v {
 				t.Errorf("hash(%v,%v)=%v, want %v", tt.key, i+1, got, v)
 			}
 		}

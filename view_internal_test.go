@@ -30,7 +30,9 @@ func mustOpenView(index, field, name string) *view {
 	if err := v.open(); err != nil {
 		panic(err)
 	}
-	v.rowAttrStore = newMemAttrStore()
+	v.rowAttrStore = &memAttrStore{
+		store: make(map[uint64]map[string]interface{}),
+	}
 	return v
 }
 
