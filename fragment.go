@@ -2043,7 +2043,7 @@ func newMapVector() *mapVector {
 }
 
 // Get returns the rowID associated to the given colID.
-// Additionaly, it returns true if a value was found,
+// Additionally, it returns true if a value was found,
 // otherwise it returns false.
 func (m *mapVector) Get(colID uint64) (uint64, bool) {
 	m.mu.RLock()
@@ -2073,7 +2073,7 @@ func newRowsVector(f *fragment) *rowsVector {
 }
 
 // Get returns the rowID associated to the given colID.
-// Additionaly, it returns true if a value was found,
+// Additionally, it returns true if a value was found,
 // otherwise it returns false.
 func (v *rowsVector) Get(colID uint64) (uint64, bool) {
 	rows := v.f.rowsForColumn(colID)
