@@ -28,12 +28,8 @@ type Logger interface {
 	Debugf(format string, v ...interface{})
 }
 
-func init() {
-	NopLogger = &nopLogger{}
-}
-
 // NopLogger represents a Logger that doesn't do anything.
-var NopLogger Logger
+var NopLogger Logger = &nopLogger{}
 
 type nopLogger struct{}
 

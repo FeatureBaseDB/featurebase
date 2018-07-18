@@ -37,12 +37,8 @@ type broadcaster interface {
 // TODO add at least a single "isMessage()" method.
 type Message interface{}
 
-func init() {
-	NopBroadcaster = &nopBroadcaster{}
-}
-
 // NopBroadcaster represents a Broadcaster that doesn't do anything.
-var NopBroadcaster broadcaster
+var NopBroadcaster broadcaster = &nopBroadcaster{}
 
 type nopBroadcaster struct{}
 

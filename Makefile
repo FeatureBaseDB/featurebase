@@ -113,6 +113,7 @@ gometalinter: require-gometalinter
 	gometalinter --vendor --disable-all \
 	    --deadline=60s \
 	    --enable=deadcode \
+	    --enable=gochecknoinits \
 	    --enable=gofmt \
 	    --enable=goimports \
 	    --enable=gotype \
