@@ -1295,7 +1295,7 @@ func mustOpenFragment(index, field, view string, shard uint64, cacheType string)
 // mustOpenMutexFragment returns a new instance of Fragment for a mutex field.
 func mustOpenMutexFragment(index, field, view string, shard uint64, cacheType string) *fragment {
 	frag := mustOpenFragment(index, field, view, shard, cacheType)
-	frag.mutexVector = newMapVector()
+	frag.mutexVector = newRowsVector(frag)
 	return frag
 }
 

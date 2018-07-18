@@ -255,7 +255,7 @@ func (v *view) newFragment(path string, shard uint64) *fragment {
 	frag.Logger = v.logger
 	frag.stats = v.stats.WithTags(fmt.Sprintf("shard:%d", shard))
 	if v.fieldType == FieldTypeMutex {
-		frag.mutexVector = newMapVector()
+		frag.mutexVector = newRowsVector(frag)
 	}
 	return frag
 }

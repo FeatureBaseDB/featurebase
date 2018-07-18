@@ -2058,3 +2058,30 @@ func (m *mapVector) Set(colID, rowID uint64) {
 	defer m.mu.Unlock()
 	m.m[colID] = rowID
 }
+
+// rowsVector implements the vector interface by looking
+// at row data as needed.
+type rowsVector struct {
+	f *fragment
+}
+
+// newRowsVector returns a rowsVector for a given fragment.
+func newRowsVector(f *fragment) *rowsVector {
+	return &rowsVector{
+		f: f,
+	}
+}
+
+// Get returns the rowID associated to the given colID.
+// Additionaly, it returns true if a value was found,
+// otherwise it returns false.
+func (v *rowsVector) Get(colID uint64) (uint64, bool) {
+	rows := v.f.rowsForColumn(colID)
+	if len(rows) == 1 {
+		return rows[0], true
+	}
+	return 0, false
+}
+
+// Set is not used for rowsVector.
+func (v *rowsVector) Set(colID, rowID uint64) {}
