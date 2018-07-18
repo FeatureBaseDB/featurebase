@@ -26,7 +26,7 @@ import (
 	"github.com/pilosa/pilosa/roaring"
 )
 
-func init() {
+func init() { // nolint: gochecknoinits
 	// Replace Bitmap constructor with B+Tree implementation
 	roaring.NewFileBitmap = b.NewBTreeBitmap
 }

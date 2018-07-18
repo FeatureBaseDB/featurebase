@@ -44,10 +44,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-func init() {
-	rand.Seed(time.Now().UTC().UnixNano())
-}
-
 type loggerLogger interface {
 	pilosa.Logger
 	Logger() *log.Logger
@@ -125,6 +121,9 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer, opts ...CommandOption
 // Start starts the pilosa server - it returns once the server is running.
 func (m *Command) Start() (err error) {
 	defer close(m.Started)
+
+	// Seed random number generator
+	rand.Seed(time.Now().UTC().UnixNano())
 
 	// SetupServer
 	err = m.SetupServer()
