@@ -193,7 +193,8 @@ func (q *x) insert(i int, k uint64, ch interface{}) *x {
 	return q
 }
 
-func (q *x) siblings(i int) (l, r *d) {
+func (q *x) siblings(i int) (*d, *d) {
+	var l, r *d
 	if i >= 0 {
 		if i > 0 {
 			l = q.x[i-1].ch.(*d)
@@ -202,7 +203,7 @@ func (q *x) siblings(i int) (l, r *d) {
 			r = q.x[i+1].ch.(*d)
 		}
 	}
-	return
+	return l, r
 }
 
 // -------------------------------------------------------------------------- d
@@ -419,12 +420,14 @@ func (t *tree) find(q interface{}, k uint64) (i int, ok bool) {
 
 // First returns the first item of the tree in the key collating order, or
 // (zero-value, zero-value) if the tree is empty.
-func (t *tree) First() (k uint64, v *roaring.Container) {
+func (t *tree) First() (uint64, *roaring.Container) {
+	var k uint64
+	var v *roaring.Container
 	if q := t.first; q != nil {
 		q := &q.d[0]
 		k, v = q.k, q.v
 	}
-	return
+	return k, v
 }
 
 // Get returns the value associated with k and true if it exists. Otherwise Get
@@ -470,12 +473,14 @@ func (t *tree) insert(q *d, i int, k uint64, v *roaring.Container) *d {
 
 // Last returns the last item of the tree in the key collating order, or
 // (zero-value, zero-value) if the tree is empty.
-func (t *tree) Last() (k uint64, v *roaring.Container) {
+func (t *tree) Last() (uint64, *roaring.Container) {
+	var k uint64
+	var v *roaring.Container
 	if q := t.last; q != nil {
 		q := &q.d[q.c-1]
 		k, v = q.k, q.v
 	}
-	return
+	return k, v
 }
 
 // Len returns the number of items in the tree.
@@ -858,9 +863,12 @@ func (e *enumerator) Close() {
 // Next returns the currently enumerated item, if it exists and moves to the
 // next item in the key collation order. If there is no item to return, err ==
 // io.EOF is returned.
-func (e *enumerator) Next() (k uint64, v *roaring.Container, err error) {
+func (e *enumerator) Next() (uint64, *roaring.Container, error) {
+	var k uint64
+	var v *roaring.Container
+	var err error
 	if err = e.err; err != nil {
-		return
+		return 0, nil, err
 	}
 
 	if e.ver != e.t.ver {
@@ -870,12 +878,12 @@ func (e *enumerator) Next() (k uint64, v *roaring.Container, err error) {
 	}
 	if e.q == nil {
 		e.err, err = io.EOF, io.EOF
-		return
+		return 0, nil, err
 	}
 
 	if e.i >= e.q.c {
 		if err = e.next(); err != nil {
-			return
+			return 0, nil, err
 		}
 	}
 
@@ -883,7 +891,7 @@ func (e *enumerator) Next() (k uint64, v *roaring.Container, err error) {
 	k, v = i.k, i.v
 	e.k, e.hit = k, true
 	e.next()
-	return
+	return k, v, nil
 }
 
 func (e *enumerator) next() error {
@@ -906,9 +914,13 @@ func (e *enumerator) next() error {
 // Prev returns the currently enumerated item, if it exists and moves to the
 // previous item in the key collation order. If there is no item to return, err
 // == io.EOF is returned.
-func (e *enumerator) Prev() (k uint64, v *roaring.Container, err error) {
+func (e *enumerator) Prev() (uint64, *roaring.Container, error) {
+	var k uint64
+	var v *roaring.Container
+	var err error
+
 	if err = e.err; err != nil {
-		return
+		return 0, nil, err
 	}
 
 	if e.ver != e.t.ver {
@@ -918,19 +930,19 @@ func (e *enumerator) Prev() (k uint64, v *roaring.Container, err error) {
 	}
 	if e.q == nil {
 		e.err, err = io.EOF, io.EOF
-		return
+		return 0, nil, err
 	}
 
 	if !e.hit {
 		// move to previous because Seek overshoots if there's no hit
 		if err = e.prev(); err != nil {
-			return
+			return 0, nil, err
 		}
 	}
 
 	if e.i >= e.q.c {
 		if err = e.prev(); err != nil {
-			return
+			return 0, nil, err
 		}
 	}
 
@@ -938,7 +950,7 @@ func (e *enumerator) Prev() (k uint64, v *roaring.Container, err error) {
 	k, v = i.k, i.v
 	e.k, e.hit = k, true
 	e.prev()
-	return
+	return k, v, err
 }
 
 func (e *enumerator) prev() error {

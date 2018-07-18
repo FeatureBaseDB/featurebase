@@ -299,10 +299,12 @@ type successResponse struct {
 
 // check determines success or failure based on the error.
 // It also returns the corresponding http status code.
-func (r *successResponse) check(err error) (statusCode int) {
+func (r *successResponse) check(err error) int {
+	var statusCode int
+
 	if err == nil {
 		r.Success = true
-		return
+		return 0
 	}
 
 	cause := errors.Cause(err)
@@ -322,7 +324,7 @@ func (r *successResponse) check(err error) (statusCode int) {
 	r.Success = false
 	r.Error = &Error{Message: cause.Error()}
 
-	return
+	return statusCode
 }
 
 // write sends a response to the http.ResponseWriter based on the success

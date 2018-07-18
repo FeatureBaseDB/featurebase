@@ -796,8 +796,8 @@ func groupCompare(a, b string, offset int) (lt, eq bool) {
 	return v < 0, v == 0
 }
 
-func (f *Field) allTimeViewsSortedByQuantum() (me []*view) {
-	me = make([]*view, len(f.viewMap), len(f.viewMap))
+func (f *Field) allTimeViewsSortedByQuantum() []*view {
+	me := make([]*view, len(f.viewMap), len(f.viewMap))
 	prefix := viewStandard + "_"
 	offset := len(viewStandard) + 1
 	i := 0
@@ -811,8 +811,8 @@ func (f *Field) allTimeViewsSortedByQuantum() (me []*view) {
 	year := strings.Index(me[0].name, "_") + 4
 	month := year + 2
 	day := month + 2
-	sort.Slice(me, func(i, j int) (lt bool) {
-		var eq bool
+	sort.Slice(me, func(i, j int) bool {
+		var eq, lt bool
 		// group by quantum from year to hour
 		if lt, eq = groupCompare(me[i].name, me[j].name, year); eq {
 			if lt, eq = groupCompare(me[i].name, me[j].name, month); eq {
@@ -821,9 +821,9 @@ func (f *Field) allTimeViewsSortedByQuantum() (me []*view) {
 				}
 			}
 		}
-		return
+		return lt
 	})
-	return
+	return me
 }
 
 // Value reads a field value for a column.

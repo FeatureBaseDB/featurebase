@@ -71,15 +71,15 @@ func (c *Cache) Add(key Key, value interface{}) {
 }
 
 // Get looks up a key's value from the cache.
-func (c *Cache) Get(key Key) (value interface{}, ok bool) {
+func (c *Cache) Get(key Key) (interface{}, bool) {
 	if c.cache == nil {
-		return
+		return nil, false
 	}
 	if ele, hit := c.cache[key]; hit {
 		c.ll.MoveToFront(ele)
 		return ele.Value.(*entry).value, true
 	}
-	return
+	return nil, false
 }
 
 // remove removes the provided key from the cache.

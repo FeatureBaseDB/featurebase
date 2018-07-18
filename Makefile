@@ -119,6 +119,7 @@ gometalinter: require-gometalinter
 	    --enable=gotypex \
 	    --enable=interfacer \
 	    --enable=misspell \
+	    --enable=nakedret \
 	    --enable=unparam \
 	    --exclude "^internal/.*\.pb\.go" \
 	    --exclude "^pql/pql.peg.go" \
