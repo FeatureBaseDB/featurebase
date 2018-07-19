@@ -1500,7 +1500,7 @@ func (t *Topology) encode() *internal.Topology {
 	return encodeTopology(t)
 }
 
-// loadTopology reads the topology for the node.
+// loadTopology reads the topology for the node. unprotected.
 func (c *cluster) loadTopology() error {
 	buf, err := ioutil.ReadFile(filepath.Join(c.Path, ".topology"))
 	if os.IsNotExist(err) {
@@ -1523,7 +1523,7 @@ func (c *cluster) loadTopology() error {
 	return nil
 }
 
-// saveTopology writes the current topology to disk.
+// saveTopology writes the current topology to disk. unprotected.
 func (c *cluster) saveTopology() error {
 
 	if err := os.MkdirAll(c.Path, 0777); err != nil {
@@ -1765,6 +1765,8 @@ func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 	return nil
 }
 
+// setStatic is unprotected, but only called before the cluster has been started
+// (and therefore not concurrently).
 func (c *cluster) setStatic(hosts []string) error {
 	c.Static = true
 	c.Coordinator = c.Node.ID
