@@ -164,7 +164,7 @@ type nodeAction struct {
 }
 
 // cluster represents a collection of nodes.
-type cluster struct {
+type cluster struct { // nolint: maligned
 	id    string
 	Node  *Node
 	Nodes []*Node // TODO phase this out?

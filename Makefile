@@ -120,6 +120,7 @@ gometalinter: require-gometalinter
 	    --enable=gotypex \
 	    --enable=ineffassign \
 	    --enable=interfacer \
+	    --enable=maligned \
 	    --enable=misspell \
 	    --enable=nakedret \
 	    --enable=unparam \

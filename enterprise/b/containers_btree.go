@@ -88,13 +88,13 @@ func (u updater) update(oldV *roaring.Container, exists bool) (*roaring.Containe
 // this struct is added to prevent the closure locals from being escaped out to the heap
 type updater struct {
 	key           uint64
-	containerType byte
 	n             int
+	containerType byte
 	mapped        bool
 }
 
 func (btc *bTreeContainers) PutContainerValues(key uint64, containerType byte, n int, mapped bool) {
-	a := updater{key, containerType, n, mapped}
+	a := updater{key, n, containerType, mapped}
 	btc.tree.Put(key, a.update)
 }
 

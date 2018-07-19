@@ -41,7 +41,7 @@ const (
 var _ broadcaster = &Server{}
 
 // Server represents a holder wrapped by a running HTTP server.
-type Server struct {
+type Server struct { // nolint: maligned
 	// Close management.
 	wg      sync.WaitGroup
 	closing chan struct{}
