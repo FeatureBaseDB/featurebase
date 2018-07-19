@@ -1594,7 +1594,6 @@ func (c *cluster) ReceiveEvent(e *NodeEvent) error {
 	return nil
 }
 
-// nodeJoin is unprotected.
 func (c *cluster) nodeJoin(node *Node) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
