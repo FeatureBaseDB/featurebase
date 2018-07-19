@@ -748,31 +748,6 @@ type gbi struct {
 	rowID     uint64
 }
 
-/*
-func product(params ...[]gbi) chan []gbi {
-	c := make(chan []gbi)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	iterate(&wg, c, []gbi{}, params...)
-	go func() { wg.Wait(); close(c) }()
-	return c
-}
-
-func iterate(wg *sync.WaitGroup, channel chan []gbi, result []gbi, params ...[]gbi) {
-	defer wg.Done()
-	if len(params) == 0 {
-		channel <- result
-		return
-	}
-	p, params := params[0], params[1:]
-	for i := 0; i < len(p); i++ {
-		wg.Add(1)
-		resultCopy := append([]gbi{}, result...)
-		go iterate(wg, channel, append(resultCopy, p[i]), params...)
-	}
-}
-*/
-
 type GroupLine struct {
 	Groups []string
 	Total  uint64
