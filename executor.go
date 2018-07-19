@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/pilosa/pilosa/pql"
@@ -673,6 +672,319 @@ func (e *executor) executeDifferenceShard(ctx context.Context, index string, c *
 	return other, nil
 }
 
+type RowIDs []uint64
+
+func (r RowIDs) Merge(other RowIDs) RowIDs {
+	i, j := 0, 0
+	result := make(RowIDs, 0)
+	for i < len(r) && j < len(other) {
+		av, bv := r[i], other[j]
+		if av < bv {
+			result = append(result, av)
+			i++
+		} else if av > bv {
+			result = append(result, bv)
+			j++
+		} else {
+			result = append(result, bv)
+			i++
+			j++
+		}
+
+	}
+	for i < len(r) {
+		result = append(result, r[i])
+		i++
+	}
+	for j < len(other) {
+		result = append(result, other[j])
+		j++
+	}
+	return result
+}
+
+func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (GroupByCounts, error) {
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeGroupByShard(ctx, index, c, shard)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		other, _ := prev.(GroupByCounts)
+		return GroupByCounts(other).Merge(v.(GroupByCounts))
+	}
+
+	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return nil, err
+	}
+	results, _ := other.(GroupByCounts)
+	limit, hasLimit, err := c.UintArg("limit")
+	if err != nil {
+		return nil, err
+	}
+	offset, hasOffset, err := c.UintArg("offset")
+	if err != nil {
+		return nil, err
+	}
+	if hasOffset {
+		if int(offset) < len(results) {
+			results = results[offset:]
+		}
+	}
+
+	if hasLimit {
+		if int(limit) < len(results) {
+			results = results[:limit]
+		}
+	}
+	return results, nil
+}
+
+type gbi struct {
+	row       *Row
+	fieldName string
+	rowID     uint64
+}
+
+/*
+func product(params ...[]gbi) chan []gbi {
+	c := make(chan []gbi)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	iterate(&wg, c, []gbi{}, params...)
+	go func() { wg.Wait(); close(c) }()
+	return c
+}
+
+func iterate(wg *sync.WaitGroup, channel chan []gbi, result []gbi, params ...[]gbi) {
+	defer wg.Done()
+	if len(params) == 0 {
+		channel <- result
+		return
+	}
+	p, params := params[0], params[1:]
+	for i := 0; i < len(p); i++ {
+		wg.Add(1)
+		resultCopy := append([]gbi{}, result...)
+		go iterate(wg, channel, append(resultCopy, p[i]), params...)
+	}
+}
+*/
+
+type GroupLine struct {
+	Groups []string
+	Total  uint64
+}
+
+type GroupByCounts []GroupLine
+
+func (gbc GroupByCounts) Merge(other GroupByCounts) GroupByCounts {
+	m1 := make(map[string]struct {
+		i     int
+		total uint64
+	})
+	for i := range gbc {
+		m1[strings.Join(gbc[i].Groups, "-")] = struct {
+			i     int
+			total uint64
+		}{total: gbc[i].Total, i: i}
+
+	}
+
+	for i := range other {
+		key := strings.Join(other[i].Groups, "-")
+		o, found := m1[key]
+		if found {
+			gbc[o.i].Total += other[i].Total
+		} else {
+			gbc = append(gbc, other[i])
+		}
+	}
+	return gbc
+}
+
+func makeGroup(parts []gbi) GroupLine {
+	var other *Row
+	line := GroupLine{}
+	for i, o := range parts {
+		if i == 0 {
+			other = o.row
+		} else {
+			other = other.Intersect(o.row)
+		}
+		line.Groups = append(line.Groups, o.fieldName)
+	}
+	line.Total = other.Count()
+	return line
+}
+
+func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql.Call, shard uint64) (GroupByCounts, error) {
+	// Fetch column label from index.
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	}
+
+	// Fetch field & row label based on argument.
+	fieldNames, ok := c.Args["fields"]
+
+	if !ok {
+		return nil, errors.Wrap(ErrFieldsArgumentRequired, "executeGroupBy")
+	}
+
+	if _, ok := fieldNames.([]interface{}); !ok {
+		return nil, errors.Wrap(ErrExpectedFieldListArgument, "executeGroupBy")
+
+	}
+
+	for _, fieldName := range fieldNames.([]interface{}) { //check if the fields exist
+		f := e.Holder.Field(index, fieldName.(string))
+		if f == nil {
+			return nil, errors.Wrap(ErrFieldNotFound, fmt.Sprintf("executeGroupBy:%s", fieldName.(string)))
+		}
+	}
+	results := make(GroupByCounts, 0)
+	var work listOfLists
+	for _, fieldName := range fieldNames.([]interface{}) {
+		frag := e.Holder.fragment(index, fieldName.(string), viewStandard, shard)
+		if frag == nil { //that means this whole shard doesn't have all need to continue
+			return results, nil
+		}
+		set := make(list, 0)
+		for _, rowID := range frag.rows() {
+			set = append(set, gbi{
+				row:       frag.row(rowID),
+				rowID:     rowID,
+				fieldName: fmt.Sprintf("%s.%d", fieldName.(string), rowID),
+			})
+		}
+		work = append(work, set)
+	}
+
+	for _, group := range product(work) {
+		group.gl.Total = group.row.Count()
+		if group.gl.Total > 0 {
+			results = append(results, group.gl)
+		}
+	}
+	return results, nil
+}
+
+type list []gbi
+type listOfLists []list
+
+//product process items
+type pi struct {
+	row *Row
+	gl  GroupLine
+}
+type listOfPis []pi
+
+// product generates the cartiesian product of the input
+// using tail recursion
+func product(input listOfLists) listOfPis {
+	res := make(listOfPis, 0)
+	if len(input) == 0 { //base return empty list
+		res = append(res, pi{gl: GroupLine{Groups: make([]string, 0)}})
+	} else {
+		res = productHelper(input, res)
+	}
+	return res
+}
+
+func productHelper(lists listOfLists, res listOfPis) listOfPis {
+	head := lists[0]           //take first element of the list
+	tail := product(lists[1:]) //invoke product on remaining element
+	for h := range head {      // for each head
+		for t := range tail { //iterate over the tail
+			s := pi{gl: GroupLine{Groups: make([]string, 0)}}
+			s.gl.Groups = append([]string{head[h].fieldName}, tail[t].gl.Groups...) //had to insert at the front to match input order
+			if tail[t].row != nil {                                                 //first time around nothing to intersect
+				s.row = head[h].row.Intersect(tail[t].row)
+			} else {
+				s.row = head[h].row
+			}
+			res = append(res, s)
+		}
+	}
+	return res
+}
+
+func (e *executor) executeIterateRows(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeIterateRowShard(ctx, index, c, shard)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		other, _ := prev.(RowIDs)
+		return RowIDs(other).Merge(v.(RowIDs))
+	}
+
+	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return nil, err
+	}
+	results, _ := other.(RowIDs)
+	limit, hasLimit, err := c.UintArg("limit")
+	if err != nil {
+		return nil, err
+	}
+	offset, hasOffset, err := c.UintArg("offset")
+	if err != nil {
+		return nil, err
+	}
+	if hasOffset {
+		if int(offset) < len(results) {
+			results = results[offset:]
+		}
+	}
+
+	if hasLimit {
+		if int(limit) < len(results) {
+			results = results[:limit]
+		}
+	}
+	return results, nil
+}
+
+func (e *executor) executeIterateRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (RowIDs, error) {
+	// Fetch column label from index.
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	}
+
+	// Fetch field & row label based on argument.
+	fieldName, ok := c.Args["field"]
+
+	if !ok {
+		return nil, errors.New("Rows() argument required: field")
+	}
+	f := e.Holder.Field(index, fieldName.(string))
+	if f == nil {
+		return nil, ErrFieldNotFound
+	}
+
+	frag := e.Holder.fragment(index, fieldName.(string), viewStandard, shard)
+	if frag == nil {
+		return make(RowIDs, 0), nil
+	}
+	//TODO add column filter next
+	columnID, ok, err := c.UintArg("column")
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return frag.rowsForColumn(columnID), nil
+	}
+
+	return frag.rows(), nil
+
+}
 func (e *executor) executeBitmapShard(_ context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
 	// Fetch column label from index.
 	idx := e.Holder.Index(index)
