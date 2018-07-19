@@ -229,7 +229,7 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	c.holder = h
 	c.Node = node
 	c.Coordinator = t.common.Nodes[0].ID // the first node is the coordinator
-	c.broadcaster = t
+	c.broadcaster = t.broadcaster(c)
 
 	// add nodes
 	if saveTopology {
@@ -302,39 +302,51 @@ func (t *ClusterCluster) Close() error {
 	return nil
 }
 
-// SendSync is a test implemenetation of Broadcaster SendSync method.
-func (t *ClusterCluster) SendSync(m Message) error {
+type bcast struct {
+	t *ClusterCluster
+	c *cluster
+}
+
+func (b bcast) SendSync(m Message) error {
 	switch obj := m.(type) {
 	case *ClusterStatus:
 		// Apply the send message to all nodes (except the coordinator).
-		for _, c := range t.Clusters {
-			c.mergeClusterStatus(obj)
+		for _, c := range b.t.Clusters {
+			if c != b.c {
+				c.mergeClusterStatus(obj)
+			}
 		}
-		t.mu.RLock()
-		if obj.State == ClusterStateNormal && t.resizing {
-			close(t.resizeDone)
+		b.t.mu.RLock()
+		if obj.State == ClusterStateNormal && b.t.resizing {
+			close(b.t.resizeDone)
 		}
-		t.mu.RUnlock()
+		b.t.mu.RUnlock()
 	}
-
 	return nil
 }
 
+func (t *ClusterCluster) broadcaster(c *cluster) broadcaster {
+	return bcast{
+		t: t,
+		c: c,
+	}
+}
+
 // SendAsync is a test implemenetation of Broadcaster SendAsync method.
-func (t *ClusterCluster) SendAsync(Message) error {
+func (bcast) SendAsync(Message) error {
 	return nil
 }
 
 // SendTo is a test implemenetation of Broadcaster SendTo method.
-func (t *ClusterCluster) SendTo(to *Node, m Message) error {
+func (b bcast) SendTo(to *Node, m Message) error {
 	switch obj := m.(type) {
 	case *ResizeInstruction:
-		err := t.FollowResizeInstruction(obj)
+		err := b.t.FollowResizeInstruction(obj)
 		if err != nil {
 			return err
 		}
 	case *ResizeInstructionComplete:
-		coord := t.clusterByID(to.ID)
+		coord := b.t.clusterByID(to.ID)
 		go coord.markResizeInstructionComplete(obj)
 	}
 	return nil
@@ -404,5 +416,5 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *ResizeInstruction) error
 	}
 
 	node := instr.Coordinator
-	return t.SendTo(node, complete)
+	return bcast{t: t}.SendTo(node, complete)
 }

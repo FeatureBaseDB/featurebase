@@ -233,8 +233,14 @@ func newCluster() *cluster {
 	}
 }
 
-// coordinatorNode returns the coordinator node.
 func (c *cluster) coordinatorNode() *Node {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.unprotectedCoordinatorNode()
+}
+
+// unprotectedCoordinatorNode returns the coordinator node.
+func (c *cluster) unprotectedCoordinatorNode() *Node {
 	return c.unprotectedNodeByID(c.Coordinator)
 }
 
@@ -275,7 +281,7 @@ func (c *cluster) setCoordinator(n *Node) error {
 	}
 
 	// Broadcast cluster status.
-	return c.broadcaster.SendSync(c.Status())
+	return c.broadcaster.SendSync(c.status())
 }
 
 // updateCoordinator updates this nodes Coordinator value as well as
@@ -305,7 +311,7 @@ func (c *cluster) unprotectedUpdateCoordinator(n *Node) bool {
 }
 
 // addNode adds a node to the Cluster and updates and saves the
-// new topology.
+// new topology. unprotected.
 func (c *cluster) addNode(node *Node) error {
 	c.logger.Printf("add node %s to cluster on %s", node, c.Node)
 
@@ -332,7 +338,7 @@ func (c *cluster) addNode(node *Node) error {
 }
 
 // removeNode removes a node from the Cluster and updates and saves the
-// new topology.
+// new topology. unprotected.
 func (c *cluster) removeNode(node *Node) error {
 	// remove from cluster
 	if !c.removeNodeBasicSorted(node) {
@@ -356,7 +362,7 @@ func (c *cluster) nodeIDs() []string {
 	return Nodes(c.Nodes).IDs()
 }
 
-func (c *cluster) setID(id string) {
+func (c *cluster) unprotectedSetID(id string) {
 	// Don't overwrite ClusterID.
 	if c.id != "" {
 		return
@@ -375,11 +381,11 @@ func (c *cluster) State() string {
 
 func (c *cluster) SetState(state string) {
 	c.mu.Lock()
-	c.setState(state)
+	c.unprotectedSetState(state)
 	c.mu.Unlock()
 }
 
-func (c *cluster) setState(state string) {
+func (c *cluster) unprotectedSetState(state string) {
 	// Ignore cases where the state hasn't changed.
 	if state == c.state {
 		return
@@ -439,28 +445,38 @@ func (c *cluster) setNodeState(state string) error { // nolint: unparam
 // Coordinator to keep track of, during startup, which nodes have
 // finished opening their Holder.
 func (c *cluster) receiveNodeState(nodeID string, state string) error {
-	if !c.isCoordinator() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.unprotectedIsCoordinator() {
 		return nil
 	}
 
 	// This method is really only useful during initial startup.
-	if c.State() != ClusterStateStarting {
+	if c.state != ClusterStateStarting {
 		return nil
 	}
 
+	c.Topology.mu.Lock()
 	c.Topology.nodeStates[nodeID] = state
+	c.Topology.mu.Unlock()
 	c.logger.Printf("received state %s (%s)", state, nodeID)
 
 	// Set cluster state to NORMAL.
 	if c.haveTopologyAgreement() && c.allNodesReady() {
-		return c.setStateAndBroadcast(ClusterStateNormal)
+		return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
 	}
 
 	return nil
 }
 
-// Status returns the the cluster's status including what nodes it contains, its ID, and current state.
-func (c *cluster) Status() *ClusterStatus {
+func (c *cluster) status() *ClusterStatus {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.unprotectedStatus()
+}
+
+// unprotectedStatus returns the the cluster's status including what nodes it contains, its ID, and current state.
+func (c *cluster) unprotectedStatus() *ClusterStatus {
 	return &ClusterStatus{
 		ClusterID: c.id,
 		State:     c.state,
@@ -494,8 +510,8 @@ func (c *cluster) nodePositionByID(nodeID string) int {
 	return -1
 }
 
-// addNodeBasicSorted adds a node to the cluster, sorted by id.
-// Returns a pointer to the node and true if the node was added.
+// addNodeBasicSorted adds a node to the cluster, sorted by id. Returns a
+// pointer to the node and true if the node was added. unprotected.
 func (c *cluster) addNodeBasicSorted(node *Node) bool {
 	n := c.unprotectedNodeByID(node.ID)
 	if n != nil {
@@ -510,8 +526,8 @@ func (c *cluster) addNodeBasicSorted(node *Node) bool {
 	return true
 }
 
-// removeNodeBasicSorted removes a node from the cluster, maintaining
-// the sort order. Returns true if the node was removed.
+// removeNodeBasicSorted removes a node from the cluster, maintaining the sort
+// order. Returns true if the node was removed. unprotected.
 func (c *cluster) removeNodeBasicSorted(node *Node) bool {
 	i := c.nodePositionByID(node.ID)
 	if i < 0 {
@@ -599,7 +615,7 @@ func (c *cluster) fragCombos(idx string, maxShard uint64, fieldViews viewsByFiel
 
 // diff compares c with another cluster and determines if a node is being
 // added or removed. An error is returned for any case other than where
-// exactly one node is added or removed.
+// exactly one node is added or removed. unprotected.
 func (c *cluster) diff(other *cluster) (action string, nodeID string, err error) {
 	lenFrom := len(c.Nodes)
 	lenTo := len(other.Nodes)
@@ -638,7 +654,7 @@ func (c *cluster) diff(other *cluster) (action string, nodeID string, err error)
 }
 
 // fragSources returns a list of ResizeSources - for each node in the `to` cluster -
-// required to move from cluster `c` to cluster `to`.
+// required to move from cluster `c` to cluster `to`. unprotected.
 func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*ResizeSource, error) {
 	m := make(map[string][]*ResizeSource)
 
@@ -737,7 +753,7 @@ func (c *cluster) partition(index string, shard uint64) int {
 	return int(h.Sum64() % uint64(c.partitionN))
 }
 
-// shardNodes returns a list of nodes that own a fragment.
+// shardNodes returns a list of nodes that own a fragment. unprotected
 func (c *cluster) shardNodes(index string, shard uint64) []*Node {
 	return c.partitionNodes(c.partition(index, shard))
 }
@@ -747,7 +763,7 @@ func (c *cluster) ownsShard(nodeID string, index string, shard uint64) bool {
 	return Nodes(c.shardNodes(index, shard)).ContainsID(nodeID)
 }
 
-// partitionNodes returns a list of nodes that own a partition.
+// partitionNodes returns a list of nodes that own a partition. unprotected.
 func (c *cluster) partitionNodes(partitionID int) []*Node {
 	// Default replica count to between one and the number of nodes.
 	// The replica count can be zero if there are no nodes.
@@ -884,10 +900,12 @@ func (c *cluster) markAsJoined() {
 	}
 }
 
+// needTopologyAgreement is unprotected.
 func (c *cluster) needTopologyAgreement() bool {
-	return c.State() == ClusterStateStarting && !stringSlicesAreEqual(c.Topology.nodeIDs, c.nodeIDs())
+	return c.state == ClusterStateStarting && !stringSlicesAreEqual(c.Topology.nodeIDs, c.nodeIDs())
 }
 
+// haveTopologyAgreement is unprotected.
 func (c *cluster) haveTopologyAgreement() bool {
 	if c.Static {
 		return true
@@ -895,6 +913,7 @@ func (c *cluster) haveTopologyAgreement() bool {
 	return stringSlicesAreEqual(c.Topology.nodeIDs, c.nodeIDs())
 }
 
+// allNodesReady is unprotected.
 func (c *cluster) allNodesReady() bool {
 	if c.Static {
 		return true
@@ -908,7 +927,10 @@ func (c *cluster) allNodesReady() bool {
 }
 
 func (c *cluster) handleNodeAction(nodeAction nodeAction) error {
-	j, err := c.generateResizeJob(nodeAction)
+
+	c.mu.Lock()
+	j, err := c.unprotectedGenerateResizeJob(nodeAction)
+	c.mu.Unlock()
 	if err != nil {
 		c.logger.Printf("generateResizeJob error: err=%s", err)
 		if err := c.setStateAndBroadcast(ClusterStateNormal); err != nil {
@@ -942,8 +964,12 @@ func (c *cluster) handleNodeAction(nodeAction nodeAction) error {
 		}
 		// Add/remove uri to/from the cluster.
 		if j.action == resizeJobActionRemove {
+			c.mu.Lock()
+			defer c.mu.Unlock()
 			return c.removeNode(nodeAction.node)
 		} else if j.action == resizeJobActionAdd {
+			c.mu.Lock()
+			defer c.mu.Unlock()
 			return c.addNode(nodeAction.node)
 		}
 	case resizeJobStateAborted:
@@ -954,14 +980,21 @@ func (c *cluster) handleNodeAction(nodeAction nodeAction) error {
 	return nil
 }
 
-func (c *cluster) setStateAndBroadcast(state string) error {
-	c.SetState(state)
+func (c *cluster) setStateAndBroadcast(state string) error { // nolint: unparam
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.unprotectedSetStateAndBroadcast(state)
+}
+
+func (c *cluster) unprotectedSetStateAndBroadcast(state string) error {
+	c.unprotectedSetState(state)
 	if c.Static {
 		return nil
 	}
 	// Broadcast cluster status changes to the cluster.
 	c.logger.Printf("broadcasting ClusterStatus: %s", state)
-	return c.broadcaster.SendSync(c.Status())
+	return c.broadcaster.SendSync(c.unprotectedStatus()) // TODO fix c.Status
+
 }
 
 func (c *cluster) sendTo(node *Node, m Message) error {
@@ -1024,15 +1057,13 @@ func (c *cluster) listenForJoins() {
 	}()
 }
 
-// generateResizeJob creates a new resizeJob based on the new node being
+// unprotectedGenerateResizeJob creates a new resizeJob based on the new node being
 // added/removed. It also saves a reference to the resizeJob in the `jobs` map
 // for future lookup by JobID.
-func (c *cluster) generateResizeJob(nodeAction nodeAction) (*resizeJob, error) {
+func (c *cluster) unprotectedGenerateResizeJob(nodeAction nodeAction) (*resizeJob, error) {
 	c.logger.Printf("generateResizeJob: %v", nodeAction)
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
-	j, err := c.generateResizeJobByAction(nodeAction)
+	j, err := c.unprotectedGenerateResizeJobByAction(nodeAction)
 	if err != nil {
 		return nil, errors.Wrap(err, "generating job")
 	}
@@ -1050,11 +1081,11 @@ func (c *cluster) generateResizeJob(nodeAction nodeAction) (*resizeJob, error) {
 	return j, nil
 }
 
-// generateResizeJobByAction returns a resizeJob with instructions based on
+// unprotectedGenerateResizeJobByAction returns a resizeJob with instructions based on
 // the difference between Cluster and a new Cluster with/without uri.
 // Broadcaster is associated to the resizeJob here for use in broadcasting
 // the resize instructions to other nodes in the cluster.
-func (c *cluster) generateResizeJobByAction(nodeAction nodeAction) (*resizeJob, error) {
+func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*resizeJob, error) {
 	j := newResizeJob(c.Nodes, nodeAction.node, nodeAction.action)
 	j.Broadcaster = c.broadcaster
 
@@ -1098,10 +1129,10 @@ func (c *cluster) generateResizeJobByAction(nodeAction nodeAction) (*resizeJob, 
 		instr := &ResizeInstruction{
 			JobID:         j.ID,
 			Node:          toCluster.unprotectedNodeByID(id),
-			Coordinator:   c.coordinatorNode(),
+			Coordinator:   c.unprotectedCoordinatorNode(),
 			Sources:       sources,
 			Schema:        &Schema{Indexes: c.holder.Schema()}, // Include the schema to ensure it's in sync on the receiving node.
-			ClusterStatus: c.Status(),
+			ClusterStatus: c.unprotectedStatus(),
 		}
 		j.Instructions = append(j.Instructions, instr)
 	}
@@ -1114,6 +1145,10 @@ func (c *cluster) generateResizeJobByAction(nodeAction nodeAction) (*resizeJob, 
 func (c *cluster) completeCurrentJob(state string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return c.unprotectedCompleteCurrentJob(state)
+}
+
+func (c *cluster) unprotectedCompleteCurrentJob(state string) error {
 	if !c.unprotectedIsCoordinator() {
 		return ErrNodeNotCoordinator
 	}
@@ -1465,7 +1500,7 @@ func (t *Topology) encode() *internal.Topology {
 	return encodeTopology(t)
 }
 
-// loadTopology reads the topology for the node.
+// loadTopology reads the topology for the node. unprotected.
 func (c *cluster) loadTopology() error {
 	buf, err := ioutil.ReadFile(filepath.Join(c.Path, ".topology"))
 	if os.IsNotExist(err) {
@@ -1488,7 +1523,7 @@ func (c *cluster) loadTopology() error {
 	return nil
 }
 
-// saveTopology writes the current topology to disk.
+// saveTopology writes the current topology to disk. unprotected.
 func (c *cluster) saveTopology() error {
 
 	if err := os.MkdirAll(c.Path, 0777); err != nil {
@@ -1560,6 +1595,8 @@ func (c *cluster) ReceiveEvent(e *NodeEvent) error {
 }
 
 func (c *cluster) nodeJoin(node *Node) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.needTopologyAgreement() {
 		// A host that is not part of the topology can't be added to the STARTING cluster.
 		if !c.Topology.ContainsID(node.ID) {
@@ -1579,7 +1616,7 @@ func (c *cluster) nodeJoin(node *Node) error {
 			// If the result of the previous AddNode completed the joining of nodes
 			// in the topology, then change the state to NORMAL.
 			if c.haveTopologyAgreement() {
-				return c.setStateAndBroadcast(ClusterStateNormal)
+				return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
 			}
 			return nil
 		} else if err != nil {
@@ -1587,11 +1624,11 @@ func (c *cluster) nodeJoin(node *Node) error {
 		}
 
 		if c.haveTopologyAgreement() && c.allNodesReady() {
-			return c.setStateAndBroadcast(ClusterStateNormal)
+			return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
 		} else {
 			// Send the status to the remote node. This lets the remote node
 			// know that it can proceed with opening its Holder.
-			return c.sendTo(node, c.Status())
+			return c.sendTo(node, c.unprotectedStatus())
 		}
 	}
 
@@ -1599,7 +1636,7 @@ func (c *cluster) nodeJoin(node *Node) error {
 	// This is useful in the case where a node is restarted or temporarily leaves
 	// the cluster.
 	if node := c.unprotectedNodeByID(node.ID); node != nil {
-		return c.sendTo(node, c.Status())
+		return c.sendTo(node, c.unprotectedStatus())
 	}
 
 	// If the holder does not yet contain data, go ahead and add the node.
@@ -1607,14 +1644,14 @@ func (c *cluster) nodeJoin(node *Node) error {
 		if err := c.addNode(node); err != nil {
 			return errors.Wrap(err, "adding node")
 		}
-		return c.setStateAndBroadcast(ClusterStateNormal)
+		return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
 	} else if err != nil {
 		return errors.Wrap(err, "checking if holder has data2")
 	}
 
 	// If the cluster has data, we need to change to RESIZING and
 	// kick off the resizing process.
-	if err := c.setStateAndBroadcast(ClusterStateResizing); err != nil {
+	if err := c.unprotectedSetStateAndBroadcast(ClusterStateResizing); err != nil {
 		return errors.Wrap(err, "broadcasting state")
 	}
 	c.joiningLeavingNodes <- nodeAction{node, resizeJobActionAdd}
@@ -1624,13 +1661,15 @@ func (c *cluster) nodeJoin(node *Node) error {
 
 // nodeLeave initiates the removal of a node from the cluster.
 func (c *cluster) nodeLeave(node *Node) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	// Refuse the request if this is not the coordinator.
-	if !c.isCoordinator() {
-		return fmt.Errorf("node removal requests are only valid on the coordinator node: %s", c.coordinatorNode().ID)
+	if !c.unprotectedIsCoordinator() {
+		return fmt.Errorf("node removal requests are only valid on the coordinator node: %s", c.unprotectedCoordinatorNode().ID)
 	}
 
-	if c.State() != ClusterStateNormal {
-		return fmt.Errorf("Cluster must be in state %s to remove a node. Current state: %s", ClusterStateNormal, c.State())
+	if c.state != ClusterStateNormal {
+		return fmt.Errorf("Cluster must be in state %s to remove a node. Current state: %s", ClusterStateNormal, c.state)
 	}
 
 	// Ensure that node is in the cluster.
@@ -1644,7 +1683,7 @@ func (c *cluster) nodeLeave(node *Node) error {
 	}
 
 	// See if resize job can be generated
-	if _, err := c.generateResizeJobByAction(nodeAction{c.unprotectedNodeByID(node.ID), resizeJobActionRemove}); err != nil {
+	if _, err := c.unprotectedGenerateResizeJobByAction(nodeAction{c.unprotectedNodeByID(node.ID), resizeJobActionRemove}); err != nil {
 		return errors.Wrap(err, "generating job")
 	}
 
@@ -1661,14 +1700,14 @@ func (c *cluster) nodeLeave(node *Node) error {
 		if err := c.removeNode(n); err != nil {
 			return errors.Wrap(err, "removing node")
 		}
-		return c.setStateAndBroadcast(ClusterStateNormal)
+		return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
 	} else if err != nil {
 		return errors.Wrap(err, "checking if holder has data")
 	}
 
 	// If the cluster has data then change state to RESIZING and
 	// kick off the resizing process.
-	if err := c.setStateAndBroadcast(ClusterStateResizing); err != nil {
+	if err := c.unprotectedSetStateAndBroadcast(ClusterStateResizing); err != nil {
 		return errors.Wrap(err, "broadcasting state")
 	}
 	c.joiningLeavingNodes <- nodeAction{n, resizeJobActionRemove}
@@ -1686,7 +1725,7 @@ func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 	}
 
 	// Set ClusterID.
-	c.setID(cs.ClusterID)
+	c.unprotectedSetID(cs.ClusterID)
 
 	officialNodes := cs.Nodes
 
@@ -1718,13 +1757,15 @@ func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 		}
 	}
 
-	c.setState(cs.State)
+	c.unprotectedSetState(cs.State)
 
 	c.markAsJoined()
 
 	return nil
 }
 
+// setStatic is unprotected, but only called before the cluster has been started
+// (and therefore not concurrently).
 func (c *cluster) setStatic(hosts []string) error {
 	c.Static = true
 	c.Coordinator = c.Node.ID
