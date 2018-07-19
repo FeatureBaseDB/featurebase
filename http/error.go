@@ -16,9 +16,6 @@ package http
 
 // Error defines a standard application error.
 type Error struct {
-	// Machine-readable error code.
-	code string `json:"code,omitempty"`
-
 	// Human-readable message.
 	Message string `json:"message"`
 }
