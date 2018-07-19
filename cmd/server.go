@@ -50,7 +50,3 @@ on the configured port.`,
 	ctl.BuildServerFlags(serveCmd, Server)
 	return serveCmd
 }
-
-func init() {
-	subcommandFns["server"] = newServeCmd
-}

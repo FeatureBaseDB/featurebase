@@ -49,7 +49,3 @@ func newConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command 
 
 	return confCmd
 }
-
-func init() {
-	subcommandFns["config"] = newConfigCommand
-}

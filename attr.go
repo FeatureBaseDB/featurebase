@@ -204,12 +204,6 @@ func DecodeAttrs(v []byte) (map[string]interface{}, error) {
 	return decodeAttrs(pb.GetAttrs()), nil
 }
 
-func newMemAttrStore() AttrStore {
-	return &memAttrStore{
-		store: make(map[uint64]map[string]interface{}),
-	}
-}
-
 // memAttrStore represents an in-memory implementation of the AttrStore interface.
 type memAttrStore struct {
 	store map[uint64]map[string]interface{}

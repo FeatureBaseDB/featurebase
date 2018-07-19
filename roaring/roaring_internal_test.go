@@ -2276,7 +2276,7 @@ func TestIteratorRuns(t *testing.T) {
 		t.Fatalf("iterator did not seek correctly in multiple containers: %v\n", itr)
 	}
 
-	val, eof = itr.Next()
+	itr.Next()
 	val, eof = itr.Next()
 	if !(val == 0 && eof) {
 		t.Fatalf("iterator did not eof correctly: %d, %v\n", val, eof)

@@ -21,10 +21,8 @@ jobs:
   include:
     - stage: metalinter
       install:
-        - make -B install-dep vendor
-        - go get -u github.com/alecthomas/gometalinter
-        - gometalinter --install
-      script: make metalinter
+        - make -B install-dep vendor install-gometalinter
+      script: make gometalinter
       env:
         - GOARCH=amd64
     - stage: deploy

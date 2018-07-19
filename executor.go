@@ -1672,15 +1672,6 @@ type execOptions struct {
 	ExcludeColumns  bool
 }
 
-// decodeError returns an error representation of s if s is non-blank.
-// Returns nil if s is blank.
-func decodeError(s string) error {
-	if s == "" {
-		return nil
-	}
-	return errors.New(s)
-}
-
 // hasOnlySetRowAttrs returns true if calls only contains SetRowAttrs() calls.
 func hasOnlySetRowAttrs(calls []*pql.Call) bool {
 	if len(calls) == 0 {

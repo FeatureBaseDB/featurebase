@@ -821,9 +821,9 @@ func (f *Field) allTimeViewsSortedByQuantum() (me []*view) {
 				}
 			}
 		}
-		return
+		return lt
 	})
-	return
+	return me
 }
 
 // Value reads a field value for a column.

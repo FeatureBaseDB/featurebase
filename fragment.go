@@ -47,6 +47,13 @@ const (
 	// ShardWidth is the number of column IDs in a shard.
 	ShardWidth = 1048576
 
+	// containersPerRowSegment is dependent upon ShardWidth,
+	// and it represents the number of containers per shard row
+	// (or rowSegment). Since containers are set in roaring
+	// to be 2^16, then this const should be ShardWidth / 2^16.
+	// It is represented as the exponent n of 2^n.
+	containersPerRowSegment = 4
+
 	// snapshotExt is the file extension used for an in-process snapshot.
 	snapshotExt = ".snapshotting"
 
@@ -153,7 +160,6 @@ func (f *fragment) Open() error {
 		pos := f.storage.Max()
 		f.maxRowID = pos / ShardWidth
 		f.stats.Gauge("rows", float64(f.maxRowID), 1.0)
-
 		return nil
 	}(); err != nil {
 		f.close()
@@ -578,9 +584,9 @@ func (f *fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error
 	//
 	//   10*(2^0) + 4*(2^1) + 3*(2^2) = 30
 	//
+	var cnt uint64
 	for i := uint(0); i < bitDepth; i++ {
 		row := f.row(uint64(i))
-		cnt := uint64(0)
 		if filter != nil {
 			cnt = row.intersectionCount(filter)
 		} else {
@@ -1159,12 +1165,11 @@ func (f *fragment) readContiguousChecksums(a *[]FragmentBlock, blockID int) (n i
 func (f *fragment) blockData(id int) (rowIDs, columnIDs []uint64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-
 	f.storage.ForEachRange(uint64(id)*HashBlockSize*ShardWidth, (uint64(id)+1)*HashBlockSize*ShardWidth, func(i uint64) {
 		rowIDs = append(rowIDs, i/ShardWidth)
 		columnIDs = append(columnIDs, i%ShardWidth)
 	})
-	return
+	return rowIDs, columnIDs
 }
 
 // mergeBlock compares the block's bits and computes a diff with another set of block bits.
@@ -1680,6 +1685,63 @@ func (f *fragment) readCacheFromArchive(r io.Reader) error {
 	return nil
 }
 
+func (f *fragment) rows() []uint64 {
+	i, _ := f.storage.Containers.Iterator(0)
+	rows := make([]uint64, 0)
+
+	var lastRow uint64
+	lastRow = math.MaxUint64
+
+	// Loop over the existing containers.
+	for i.Next() {
+		key, _ := i.Value()
+
+		// virtual row for the current container
+		vRow := key >> containersPerRowSegment
+
+		// skip dups
+		if vRow == lastRow {
+			continue
+		}
+
+		rows = append(rows, vRow)
+		lastRow = vRow
+	}
+	return rows
+
+}
+
+func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
+	var colKey uint64
+
+	colID := columnID % ShardWidth
+	i, _ := f.storage.Containers.Iterator(0)
+
+	colVal := uint16(colID & 0xFFFF)
+
+	rows := make([]uint64, 0)
+
+	// Loop over the existing containers.
+	for i.Next() {
+		key, c := i.Value()
+
+		// virtual row for the current container
+		vRow := key >> containersPerRowSegment
+
+		// column container key for virtual row
+		colKey = ((vRow * ShardWidth) + colID) >> 16
+
+		if colKey != key {
+			continue
+		}
+
+		if c.Contains(colVal) {
+			rows = append(rows, vRow)
+		}
+	}
+	return rows
+}
+
 // FragmentBlock represents info about a subsection of the rows in a block.
 // This is used for comparing data in remote blocks for active anti-entropy.
 type FragmentBlock struct {
@@ -1903,12 +1965,12 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 	return nil
 }
 
-func madvise(b []byte, advice int) (err error) { // nolint: unparam
-	_, _, e1 := syscall.Syscall(syscall.SYS_MADVISE, uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), uintptr(advice))
-	if e1 != 0 {
-		err = e1
+func madvise(b []byte, advice int) error { // nolint: unparam
+	_, _, err := syscall.Syscall(syscall.SYS_MADVISE, uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), uintptr(advice))
+	if err != 0 {
+		return err
 	}
-	return
+	return nil
 }
 
 // pairSet is a list of equal length row and column id lists.

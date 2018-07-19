@@ -128,7 +128,7 @@ func (btc *bTreeContainers) Count() (n uint64) {
 		n += uint64(c.N())
 		_, c, err = e.Next()
 	}
-	return
+	return n
 }
 
 func (btc *bTreeContainers) Clone() roaring.Containers {
