@@ -2029,36 +2029,6 @@ type vector interface {
 	Set(colID, rowID uint64)
 }
 
-// mapVector implements the vector interface using a map.
-type mapVector struct {
-	mu sync.RWMutex
-	m  map[uint64]uint64
-}
-
-// newMapVector returns a mapVector.
-func newMapVector() *mapVector {
-	return &mapVector{
-		m: make(map[uint64]uint64),
-	}
-}
-
-// Get returns the rowID associated to the given colID.
-// Additionally, it returns true if a value was found,
-// otherwise it returns false.
-func (m *mapVector) Get(colID uint64) (uint64, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	rowID, ok := m.m[colID]
-	return rowID, ok
-}
-
-// Set sets the value for colID to rowID.
-func (m *mapVector) Set(colID, rowID uint64) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.m[colID] = rowID
-}
-
 // rowsVector implements the vector interface by looking
 // at row data as needed.
 type rowsVector struct {
