@@ -32,7 +32,7 @@ import (
 )
 
 // ImportCommand represents a command for bulk importing data.
-type ImportCommand struct {
+type ImportCommand struct { // nolint: maligned
 	// Destination host and port.
 	Host string `json:"host"`
 

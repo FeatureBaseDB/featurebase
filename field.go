@@ -1113,13 +1113,13 @@ func (p fieldInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
 // FieldOptions represents options to set when initializing a field.
 type FieldOptions struct {
-	Type        string      `json:"type,omitempty"`
-	CacheType   string      `json:"cacheType,omitempty"`
-	CacheSize   uint32      `json:"cacheSize,omitempty"`
 	Min         int64       `json:"min,omitempty"`
 	Max         int64       `json:"max,omitempty"`
-	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
 	Keys        bool        `json:"keys"`
+	CacheSize   uint32      `json:"cacheSize,omitempty"`
+	CacheType   string      `json:"cacheType,omitempty"`
+	Type        string      `json:"type,omitempty"`
+	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
 }
 
 // applyDefaultOptions returns a new FieldOptions object
