@@ -143,7 +143,7 @@ func (s *attrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
 	// Add to cache.
 	s.attrCache.Set(id, m)
 
-	return
+	return m, nil
 }
 
 // SetAttrs sets attribute values for a given ID.

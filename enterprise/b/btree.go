@@ -193,7 +193,7 @@ func (q *x) siblings(i int) (l, r *d) {
 			r = q.x[i+1].ch.(*d)
 		}
 	}
-	return
+	return l, r
 }
 
 // -------------------------------------------------------------------------- d
@@ -415,7 +415,7 @@ func (t *tree) First() (k uint64, v *roaring.Container) {
 		q := &q.d[0]
 		k, v = q.k, q.v
 	}
-	return
+	return k, v
 }
 
 // Get returns the value associated with k and true if it exists. Otherwise Get
@@ -466,7 +466,7 @@ func (t *tree) Last() (k uint64, v *roaring.Container) {
 		q := &q.d[q.c-1]
 		k, v = q.k, q.v
 	}
-	return
+	return k, v
 }
 
 // Len returns the number of items in the tree.
@@ -851,7 +851,7 @@ func (e *enumerator) Close() {
 // io.EOF is returned.
 func (e *enumerator) Next() (k uint64, v *roaring.Container, err error) {
 	if err = e.err; err != nil {
-		return
+		return 0, nil, err
 	}
 
 	if e.ver != e.t.ver {
@@ -861,12 +861,12 @@ func (e *enumerator) Next() (k uint64, v *roaring.Container, err error) {
 	}
 	if e.q == nil {
 		e.err, err = io.EOF, io.EOF
-		return
+		return 0, nil, err
 	}
 
 	if e.i >= e.q.c {
 		if err = e.next(); err != nil {
-			return
+			return 0, nil, err
 		}
 	}
 
@@ -874,7 +874,7 @@ func (e *enumerator) Next() (k uint64, v *roaring.Container, err error) {
 	k, v = i.k, i.v
 	e.k, e.hit = k, true
 	e.next()
-	return
+	return k, v, nil
 }
 
 func (e *enumerator) next() error {
@@ -899,7 +899,7 @@ func (e *enumerator) next() error {
 // == io.EOF is returned.
 func (e *enumerator) Prev() (k uint64, v *roaring.Container, err error) {
 	if err = e.err; err != nil {
-		return
+		return 0, nil, err
 	}
 
 	if e.ver != e.t.ver {
@@ -909,19 +909,19 @@ func (e *enumerator) Prev() (k uint64, v *roaring.Container, err error) {
 	}
 	if e.q == nil {
 		e.err, err = io.EOF, io.EOF
-		return
+		return 0, nil, err
 	}
 
 	if !e.hit {
 		// move to previous because Seek overshoots if there's no hit
 		if err = e.prev(); err != nil {
-			return
+			return 0, nil, err
 		}
 	}
 
 	if e.i >= e.q.c {
 		if err = e.prev(); err != nil {
-			return
+			return 0, nil, err
 		}
 	}
 
@@ -929,7 +929,7 @@ func (e *enumerator) Prev() (k uint64, v *roaring.Container, err error) {
 	k, v = i.k, i.v
 	e.k, e.hit = k, true
 	e.prev()
-	return
+	return k, v, err
 }
 
 func (e *enumerator) prev() error {

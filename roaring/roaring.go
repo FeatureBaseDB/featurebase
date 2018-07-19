@@ -1923,7 +1923,7 @@ func intersectionCountRunRun(a, b *Container) (n int) {
 			i++
 		}
 	}
-	return
+	return n
 }
 
 func intersectionCountBitmapRun(a, b *Container) (n int) {
@@ -3149,17 +3149,13 @@ func xorCompare(x *xorstm) (r1 interval16, hasData bool) {
 	if !x.vaValid || !x.vbValid {
 		if x.vbValid {
 			x.vbValid = false
-			r1 = x.vb
-			hasData = true
-			return
+			return x.vb, true
 		}
 		if x.vaValid {
 			x.vaValid = false
-			r1 = x.va
-			hasData = true
-			return
+			return x.va, true
 		}
-		return
+		return r1, false
 	}
 
 	if x.va.last < x.vb.start { //va  before
@@ -3232,7 +3228,7 @@ func xorCompare(x *xorstm) (r1 interval16, hasData bool) {
 			}
 		}
 	}
-	return
+	return r1, hasData
 }
 
 //stm  is state machine used to "xor" iterate over runs.

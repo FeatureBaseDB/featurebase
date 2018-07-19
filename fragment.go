@@ -1165,12 +1165,11 @@ func (f *fragment) readContiguousChecksums(a *[]FragmentBlock, blockID int) (n i
 func (f *fragment) blockData(id int) (rowIDs, columnIDs []uint64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-
 	f.storage.ForEachRange(uint64(id)*HashBlockSize*ShardWidth, (uint64(id)+1)*HashBlockSize*ShardWidth, func(i uint64) {
 		rowIDs = append(rowIDs, i/ShardWidth)
 		columnIDs = append(columnIDs, i%ShardWidth)
 	})
-	return
+	return rowIDs, columnIDs
 }
 
 // mergeBlock compares the block's bits and computes a diff with another set of block bits.
@@ -1966,12 +1965,12 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 	return nil
 }
 
-func madvise(b []byte, advice int) (err error) { // nolint: unparam
-	_, _, e1 := syscall.Syscall(syscall.SYS_MADVISE, uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), uintptr(advice))
-	if e1 != 0 {
-		err = e1
+func madvise(b []byte, advice int) error { // nolint: unparam
+	_, _, err := syscall.Syscall(syscall.SYS_MADVISE, uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), uintptr(advice))
+	if err != 0 {
+		return err
 	}
-	return
+	return nil
 }
 
 // pairSet is a list of equal length row and column id lists.
