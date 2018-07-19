@@ -71,7 +71,7 @@ func (c *Cache) Add(key Key, value interface{}) {
 }
 
 // Get looks up a key's value from the cache.
-func (c *Cache) Get(key Key) (interface{}, bool) {
+func (c *Cache) Get(key Key) (value interface{}, ok bool) {
 	if c.cache == nil {
 		return nil, false
 	}

@@ -299,9 +299,7 @@ type successResponse struct {
 
 // check determines success or failure based on the error.
 // It also returns the corresponding http status code.
-func (r *successResponse) check(err error) int {
-	var statusCode int
-
+func (r *successResponse) check(err error) (statusCode int) {
 	if err == nil {
 		r.Success = true
 		return 0

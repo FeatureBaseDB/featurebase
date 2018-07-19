@@ -1895,8 +1895,7 @@ func intersectionCountArrayRun(a, b *Container) (n int) {
 	return n
 }
 
-func intersectionCountRunRun(a, b *Container) int {
-	var n int
+func intersectionCountRunRun(a, b *Container) (n int) {
 	na, nb := len(a.runs), len(b.runs)
 	for i, j := 0, 0; i < na && j < nb; {
 		va, vb := a.runs[i], b.runs[j]
@@ -3145,10 +3144,8 @@ func xorArrayRun(a, b *Container) *Container {
 }
 
 // xorCompare computes first exclusive run between two runs.
-func xorCompare(x *xorstm) (interval16, bool) {
-	var r1 interval16
-	var hasData bool
-
+func xorCompare(x *xorstm) (r1 interval16, hasData bool) {
+	hasData = false
 	if !x.vaValid || !x.vbValid {
 		if x.vbValid {
 			x.vbValid = false

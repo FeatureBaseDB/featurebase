@@ -120,11 +120,9 @@ func (s *attrStore) Close() error {
 }
 
 // Attrs returns a set of attributes by ID.
-func (s *attrStore) Attrs(id uint64) (map[string]interface{}, error) {
+func (s *attrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	var m map[string]interface{}
 
 	// Check cache for map.
 	if m = s.attrCache.Get(id); m != nil {
@@ -132,8 +130,7 @@ func (s *attrStore) Attrs(id uint64) (map[string]interface{}, error) {
 	}
 
 	// Find attributes from storage.
-	if err := s.db.View(func(tx *bolt.Tx) error {
-		var err error
+	if err = s.db.View(func(tx *bolt.Tx) error {
 		m, err = txAttrs(tx, id)
 		if err != nil {
 			return err

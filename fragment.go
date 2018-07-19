@@ -1162,11 +1162,9 @@ func (f *fragment) readContiguousChecksums(a *[]FragmentBlock, blockID int) (n i
 }
 
 // blockData returns bits in a block as row & column ID pairs.
-func (f *fragment) blockData(id int) ([]uint64, []uint64) {
+func (f *fragment) blockData(id int) (rowIDs, columnIDs []uint64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	rowIDs := make([]uint64, 0)
-	columnIDs := make([]uint64, 0)
 	f.storage.ForEachRange(uint64(id)*HashBlockSize*ShardWidth, (uint64(id)+1)*HashBlockSize*ShardWidth, func(i uint64) {
 		rowIDs = append(rowIDs, i/ShardWidth)
 		columnIDs = append(columnIDs, i%ShardWidth)

@@ -184,8 +184,7 @@ func (q *x) insert(i int, k uint64, ch interface{}) *x {
 	return q
 }
 
-func (q *x) siblings(i int) (*d, *d) {
-	var l, r *d
+func (q *x) siblings(i int) (l, r *d) {
 	if i >= 0 {
 		if i > 0 {
 			l = q.x[i-1].ch.(*d)
@@ -411,9 +410,7 @@ func (t *tree) find(q interface{}, k uint64) (i int, ok bool) {
 
 // First returns the first item of the tree in the key collating order, or
 // (zero-value, zero-value) if the tree is empty.
-func (t *tree) First() (uint64, *roaring.Container) {
-	var k uint64
-	var v *roaring.Container
+func (t *tree) First() (k uint64, v *roaring.Container) {
 	if q := t.first; q != nil {
 		q := &q.d[0]
 		k, v = q.k, q.v
@@ -464,9 +461,7 @@ func (t *tree) insert(q *d, i int, k uint64, v *roaring.Container) *d {
 
 // Last returns the last item of the tree in the key collating order, or
 // (zero-value, zero-value) if the tree is empty.
-func (t *tree) Last() (uint64, *roaring.Container) {
-	var k uint64
-	var v *roaring.Container
+func (t *tree) Last() (k uint64, v *roaring.Container) {
 	if q := t.last; q != nil {
 		q := &q.d[q.c-1]
 		k, v = q.k, q.v
@@ -854,10 +849,7 @@ func (e *enumerator) Close() {
 // Next returns the currently enumerated item, if it exists and moves to the
 // next item in the key collation order. If there is no item to return, err ==
 // io.EOF is returned.
-func (e *enumerator) Next() (uint64, *roaring.Container, error) {
-	var k uint64
-	var v *roaring.Container
-	var err error
+func (e *enumerator) Next() (k uint64, v *roaring.Container, err error) {
 	if err = e.err; err != nil {
 		return 0, nil, err
 	}
@@ -905,11 +897,7 @@ func (e *enumerator) next() error {
 // Prev returns the currently enumerated item, if it exists and moves to the
 // previous item in the key collation order. If there is no item to return, err
 // == io.EOF is returned.
-func (e *enumerator) Prev() (uint64, *roaring.Container, error) {
-	var k uint64
-	var v *roaring.Container
-	var err error
-
+func (e *enumerator) Prev() (k uint64, v *roaring.Container, err error) {
 	if err = e.err; err != nil {
 		return 0, nil, err
 	}
