@@ -31,6 +31,7 @@ func TestPostIndexRequestUnmarshalJSON(t *testing.T) {
 		err      string
 	}{
 		{json: `{"options": {}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{}}},
+		{json: `{"options": {"keys": true}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{true}}},
 		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"option": {}}`, err: "Unknown key: option:map[]"},
 		{json: `{"options": {"badKey": "test"}}`, err: "Unknown key: badKey:test"},
