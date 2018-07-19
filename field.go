@@ -47,9 +47,10 @@ const (
 
 // Field types.
 const (
-	FieldTypeSet  = "set"
-	FieldTypeInt  = "int"
-	FieldTypeTime = "time"
+	FieldTypeSet   = "set"
+	FieldTypeInt   = "int"
+	FieldTypeTime  = "time"
+	FieldTypeMutex = "mutex"
 )
 
 // Field represents a container for views.
@@ -134,6 +135,18 @@ func OptFieldTypeTime(timeQuantum TimeQuantum) FieldOption {
 		}
 		fo.Type = FieldTypeTime
 		fo.TimeQuantum = timeQuantum
+		return nil
+	}
+}
+
+func OptFieldTypeMutex(cacheType string, cacheSize uint32) FieldOption {
+	return func(fo *FieldOptions) error {
+		if fo.Type != "" {
+			return errors.Errorf("field type is already set to: %s", fo.Type)
+		}
+		fo.Type = FieldTypeMutex
+		fo.CacheType = cacheType
+		fo.CacheSize = cacheSize
 		return nil
 	}
 }
@@ -400,6 +413,18 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 			f.Close()
 			return errors.Wrap(err, "setting time quantum")
 		}
+	case FieldTypeMutex:
+		f.options.Type = FieldTypeMutex
+		if opt.CacheType != "" {
+			f.options.CacheType = opt.CacheType
+		}
+		if opt.CacheSize != 0 {
+			f.options.CacheSize = opt.CacheSize
+		}
+		f.options.Min = 0
+		f.options.Max = 0
+		f.options.TimeQuantum = ""
+		f.options.Keys = opt.Keys
 	default:
 		return errors.New("invalid field type")
 	}
@@ -658,8 +683,7 @@ func (f *Field) createViewIfNotExistsBase(name string) (*view, bool, error) {
 }
 
 func (f *Field) newView(path, name string) *view {
-	view := newView(path, f.index, f.name, name, f.options.CacheSize)
-	view.cacheType = f.options.CacheType
+	view := newView(path, f.index, f.name, name, f.options)
 	view.logger = f.logger
 	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats.WithTags(fmt.Sprintf("view:%s", name))
@@ -1189,6 +1213,18 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 		}{
 			o.Type,
 			o.TimeQuantum,
+			o.Keys,
+		})
+	case FieldTypeMutex:
+		return json.Marshal(struct {
+			Type      string `json:"type"`
+			CacheType string `json:"cacheType"`
+			CacheSize uint32 `json:"cacheSize"`
+			Keys      bool   `json:"keys"`
+		}{
+			o.Type,
+			o.CacheType,
+			o.CacheSize,
 			o.Keys,
 		})
 	}

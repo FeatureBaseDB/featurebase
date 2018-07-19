@@ -305,15 +305,15 @@ func newEventReceiver(logger *log.Logger, papi *pilosa.API) *eventReceiver {
 }
 
 func (g *eventReceiver) NotifyJoin(n *memberlist.Node) {
-	g.ch <- memberlist.NodeEvent{memberlist.NodeJoin, n}
+	g.ch <- memberlist.NodeEvent{Event: memberlist.NodeJoin, Node: n}
 }
 
 func (g *eventReceiver) NotifyLeave(n *memberlist.Node) {
-	g.ch <- memberlist.NodeEvent{memberlist.NodeLeave, n}
+	g.ch <- memberlist.NodeEvent{Event: memberlist.NodeLeave, Node: n}
 }
 
 func (g *eventReceiver) NotifyUpdate(n *memberlist.Node) {
-	g.ch <- memberlist.NodeEvent{memberlist.NodeUpdate, n}
+	g.ch <- memberlist.NodeEvent{Event: memberlist.NodeUpdate, Node: n}
 }
 
 func (g *eventReceiver) listen() {
