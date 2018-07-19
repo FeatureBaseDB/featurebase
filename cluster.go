@@ -980,7 +980,7 @@ func (c *cluster) handleNodeAction(nodeAction nodeAction) error {
 	return nil
 }
 
-func (c *cluster) setStateAndBroadcast(state string) error {
+func (c *cluster) setStateAndBroadcast(state string) error { // nolint: unparam
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.unprotectedSetStateAndBroadcast(state)
