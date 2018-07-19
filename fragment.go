@@ -113,6 +113,10 @@ type fragment struct {
 	// This is set by the parent field unless overridden for testing.
 	RowAttrStore AttrStore
 
+	// mutexVector is used for mutex field types. It's checked for an
+	// existing value (to clear) prior to setting a new value.
+	mutexVector vector
+
 	stats StatsClient
 }
 
@@ -369,7 +373,27 @@ func (f *fragment) unprotectedRow(rowID uint64, checkRowCache bool, updateRowCac
 func (f *fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	// handle mutux field type
+	if f.mutexVector != nil {
+		if err := f.handleMutex(rowID, columnID); err != nil {
+			return changed, errors.Wrap(err, "handling mutex")
+		}
+	}
+
 	return f.unprotectedSetBit(rowID, columnID)
+}
+
+// handleMutex will clear an existing row and store the new row
+// in the vector.
+func (f *fragment) handleMutex(rowID, columnID uint64) error {
+	if existingRowID, found := f.mutexVector.Get(columnID); found && existingRowID != rowID {
+		if _, err := f.unprotectedClearBit(existingRowID, columnID); err != nil {
+			return errors.Wrap(err, "clearing mutex value")
+		}
+	}
+	f.mutexVector.Set(columnID, rowID)
+	return nil
 }
 
 func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err error) {
@@ -1997,3 +2021,37 @@ func byteSlicesEqual(a [][]byte) bool {
 func pos(rowID, columnID uint64) uint64 {
 	return (rowID * ShardWidth) + (columnID % ShardWidth)
 }
+
+// vector stores the mapping of colID to rowID.
+// It's used for a mutex field type.
+type vector interface {
+	Get(colID uint64) (uint64, bool)
+	Set(colID, rowID uint64)
+}
+
+// rowsVector implements the vector interface by looking
+// at row data as needed.
+type rowsVector struct {
+	f *fragment
+}
+
+// newRowsVector returns a rowsVector for a given fragment.
+func newRowsVector(f *fragment) *rowsVector {
+	return &rowsVector{
+		f: f,
+	}
+}
+
+// Get returns the rowID associated to the given colID.
+// Additionally, it returns true if a value was found,
+// otherwise it returns false.
+func (v *rowsVector) Get(colID uint64) (uint64, bool) {
+	rows := v.f.rowsForColumn(colID)
+	if len(rows) == 1 {
+		return rows[0], true
+	}
+	return 0, false
+}
+
+// Set is not used for rowsVector.
+func (v *rowsVector) Set(colID, rowID uint64) {}
