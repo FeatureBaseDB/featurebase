@@ -103,13 +103,16 @@ Creates a field in the given index with the given name.
 The request payload is in JSON, and may contain the `options` field. The `options` field is a JSON object which must contain a `type` along with the corresponding configuration options. 
 
 * `set`
-    * `cacheType` (string): [ranked](../data-model/#ranked) or [LRU](../data-model/#lru) caching on this field. Default is `lru`.
-    * `cacheSize` (int): Number of rows to keep in the cache. Default 50,000.
+    * `cacheType` (string): [ranked](../data-model/#ranked) or [LRU](../data-model/#lru) caching on this field. Default is `ranked`.
+    * `cacheSize` (int): Number of rows to keep in the cache. Default is 50,000.
 * `int`
     * `min` (int): Minimum integer value allowed for the field.
     * `max` (int): Maximum integer value allowed for the field.
 * `time`
     * `timeQuantum` (string): [Time Quantum](../data-model/#time-quantum) for this field.
+* `mutex`
+    * `cacheType` (string): [ranked](../data-model/#ranked) or [LRU](../data-model/#lru) caching on this field. Default is `ranked`.
+    * `cacheSize` (int): Number of rows to keep in the cache. Default is 50,000.
 
 The following example creates an `int` field called "quantity" capable of storing values from -1000 to 2000:
 

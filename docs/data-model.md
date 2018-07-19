@@ -117,7 +117,7 @@ Query operations run in parallel, and they are evenly distributed across a clust
 
 ### Field Type
 
-Upon creation, fields are configured to be of a certain type. Pilosa supports three field types: `set`, `int`, and `time`.
+Upon creation, fields are configured to be of a certain type. Pilosa supports the following field types: `set`, `int`, `time`, and `mutex`.
 
 #### Set
 
@@ -188,3 +188,7 @@ Set(3, A=8, 2017-05-19T00:00)
 
 ![time quantum field diagram](/img/docs/field-time-quantum.svg)
 *Time quantum fueld diagram*
+
+#### Mutex
+
+Mutex fields are similar to `set` fields, with the distinction of requiring the row value for each column to be mutually exclusive. In other words, each column can only have a single value for the field. If the field value for a column is updated on a `mutex` field, then the previous field value for that column will be cleared. This field type is like a field in an RDBMS table where every record contains a single value for a particular field.

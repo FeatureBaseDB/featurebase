@@ -684,6 +684,8 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 		fos = append(fos, pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max))
 	case pilosa.FieldTypeTime:
 		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum))
+	case pilosa.FieldTypeMutex:
+		fos = append(fos, pilosa.OptFieldTypeMutex(*req.Options.CacheType, *req.Options.CacheSize))
 	}
 	if req.Options.Keys != nil {
 		if *req.Options.Keys {
@@ -760,6 +762,20 @@ func (o *fieldOptions) validate() error {
 			return pilosa.NewBadRequestError(errors.New("max does not apply to field type time"))
 		} else if o.TimeQuantum == nil {
 			return pilosa.NewBadRequestError(errors.New("timeQuantum is required for field type time"))
+		}
+	case pilosa.FieldTypeMutex:
+		if o.CacheType == nil {
+			o.CacheType = &defaultCacheType
+		}
+		if o.CacheSize == nil {
+			o.CacheSize = &defaultCacheSize
+		}
+		if o.Min != nil {
+			return pilosa.NewBadRequestError(errors.New("min does not apply to field type mutex"))
+		} else if o.Max != nil {
+			return pilosa.NewBadRequestError(errors.New("max does not apply to field type mutex"))
+		} else if o.TimeQuantum != nil {
+			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type mutex"))
 		}
 	default:
 		return errors.Errorf("invalid field type: %s", o.Type)
