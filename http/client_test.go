@@ -29,13 +29,6 @@ import (
 	"github.com/pilosa/pilosa/test"
 )
 
-var defaultClient *gohttp.Client
-
-func init() {
-	defaultClient = http.GetHTTPClient(nil)
-
-}
-
 // Test distributed TopN Row count across 3 nodes.
 func TestClient_MultiNode(t *testing.T) {
 	c := test.MustRunCluster(t, 3,
@@ -125,9 +118,9 @@ func TestClient_MultiNode(t *testing.T) {
 
 	// Connect to each node to compare results.
 	client := make([]*Client, 3)
-	client[0] = MustNewClient(c[0].URL(), defaultClient)
-	client[1] = MustNewClient(c[1].URL(), defaultClient)
-	client[2] = MustNewClient(c[2].URL(), defaultClient)
+	client[0] = MustNewClient(c[0].URL(), http.GetHTTPClient(nil))
+	client[1] = MustNewClient(c[1].URL(), http.GetHTTPClient(nil))
+	client[2] = MustNewClient(c[2].URL(), http.GetHTTPClient(nil))
 
 	topN := 4
 	queryRequest := &pilosa.QueryRequest{
@@ -191,7 +184,7 @@ func TestClient_Import(t *testing.T) {
 	hldr.Row("i", "f", 0)
 
 	// Send import request.
-	c := MustNewClient(host, defaultClient)
+	c := MustNewClient(host, http.GetHTTPClient(nil))
 	if err := c.Import(context.Background(), "i", "f", 0, []pilosa.Bit{
 		{RowID: 0, ColumnID: 1},
 		{RowID: 0, ColumnID: 5},
@@ -226,7 +219,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Send import request.
-	c := MustNewClient(host, defaultClient)
+	c := MustNewClient(host, http.GetHTTPClient(nil))
 	if err := c.ImportValue(context.Background(), "i", "f", 0, []pilosa.FieldValue{
 		{ColumnID: 1, Value: -10},
 		{ColumnID: 2, Value: 20},
@@ -287,7 +280,7 @@ func TestClient_FragmentBlocks(t *testing.T) {
 
 	// Set a bit on a different shard.
 	hldr.SetBit("i", "f", 0, 1)
-	c := MustNewClient(cmd.URL(), defaultClient)
+	c := MustNewClient(cmd.URL(), http.GetHTTPClient(nil))
 	blocks, err := c.FragmentBlocks(context.Background(), nil, "i", "f", 0)
 	if err != nil {
 		t.Fatal(err)

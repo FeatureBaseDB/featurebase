@@ -31,6 +31,9 @@ func TestInspectCommand_Run(t *testing.T) {
 
 	cm := NewInspectCommand(stdin, w, w)
 	file, err := ioutil.TempFile("", "inspectTest")
+	if err != nil {
+		t.Fatalf("Error creating tempfile: %s", err)
+	}
 	file.Write([]byte("12358267538963"))
 	file.Close()
 	cm.Path = file.Name()

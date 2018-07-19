@@ -26,7 +26,7 @@ import (
 
 var Exporter *ctl.ExportCommand
 
-func newExportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+func newExportCommand(_ io.Reader, _, _ io.Writer) *cobra.Command {
 	Exporter = ctl.NewExportCommand(os.Stdin, os.Stdout, os.Stderr)
 	exportCmd := &cobra.Command{
 		Use:   "export",
@@ -57,8 +57,4 @@ The file does not contain any headers.
 	ctl.SetTLSConfig(flags, &Exporter.TLS.CertificatePath, &Exporter.TLS.CertificateKeyPath, &Exporter.TLS.SkipVerify)
 
 	return exportCmd
-}
-
-func init() {
-	subcommandFns["export"] = newExportCommand
 }
