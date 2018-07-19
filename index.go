@@ -95,7 +95,7 @@ func (i *Index) Options() IndexOptions {
 }
 
 func (i *Index) options() IndexOptions {
-	return IndexOptions{i.keys}
+	return IndexOptions{Keys: i.keys}
 }
 
 // Open opens and initializes the index.
