@@ -116,16 +116,15 @@ gometalinter: require-gometalinter
 	    --enable=gochecknoinits \
 	    --enable=gofmt \
 	    --enable=goimports \
-	    --enable=gosimple \
 	    --enable=gotype \
 	    --enable=gotypex \
 	    --enable=ineffassign \
 	    --enable=interfacer \
 	    --enable=maligned \
+	    --enable=megacheck \
 	    --enable=misspell \
 	    --enable=nakedret \
 	    --enable=unparam \
-	    --enable=unused \
 	    --enable=vet \
 	    --exclude "^internal/.*\.pb\.go" \
 	    --exclude "^pql/pql.peg.go" \

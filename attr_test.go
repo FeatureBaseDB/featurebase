@@ -164,18 +164,25 @@ func BenchmarkAttrStore_Duplicate(b *testing.B) {
 	// Update attributes with an existing subset.
 	cpuN := runtime.GOMAXPROCS(0)
 	var wg sync.WaitGroup
+	errchan := make(chan error)
 	for i := 0; i < cpuN; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for j := 0; j < b.N/cpuN; j++ {
 				if err := s.SetAttrs(uint64(j%n), map[string]interface{}{"A": int64(100), "B": "foo", "D": 100.2}); err != nil {
-					b.Fatal(err)
+					errchan <- err
 				}
 			}
 		}()
 	}
-	wg.Wait()
+	go func() {
+		wg.Wait()
+		close(errchan)
+	}()
+	if err := <-errchan; err != nil {
+		b.Fatal(err)
+	}
 }
 
 // MustOpenAttrStore returns a new, opened attribute store at a temporary path. Panic on error.
