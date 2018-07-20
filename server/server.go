@@ -230,7 +230,7 @@ func (m *Command) SetupServer() error {
 
 	diagnosticsInterval := time.Duration(0)
 	if m.Config.Metric.Diagnostics {
-		diagnosticsInterval = time.Duration(defaultDiagnosticsInterval)
+		diagnosticsInterval = defaultDiagnosticsInterval
 	}
 
 	statsClient, err := newStatsClient(m.Config.Metric.Service, m.Config.Metric.Host)

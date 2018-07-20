@@ -123,6 +123,7 @@ gometalinter: require-gometalinter
 	    --enable=maligned \
 	    --enable=misspell \
 	    --enable=nakedret \
+	    --enable=unconvert \
 	    --enable=unparam \
 	    --enable=vet \
 	    --exclude "^internal/.*\.pb\.go" \

@@ -262,8 +262,8 @@ func (s *attrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, erro
 	defer tx.Rollback()
 
 	// Move to the start of the block.
-	min := u64tob(uint64(i) * attrBlockSize)
-	max := u64tob(uint64(i+1) * attrBlockSize)
+	min := u64tob(i * attrBlockSize)
+	max := u64tob((i + 1) * attrBlockSize)
 	cur := tx.Bucket([]byte("attrs")).Cursor()
 	for k, v := cur.Seek(min); k != nil; k, v = cur.Next() {
 		// Exit if we're past the end of the block.

@@ -1072,9 +1072,9 @@ func (f *Field) importValue(columnIDs []uint64, values []int64) error {
 	dataByFragment := make(map[importKey]importValueData)
 	for i := range columnIDs {
 		columnID, value := columnIDs[i], values[i]
-		if int64(value) > bsig.Max {
+		if value > bsig.Max {
 			return fmt.Errorf("%v, columnID=%v, value=%v", ErrBSIGroupValueTooHigh, columnID, value)
-		} else if int64(value) < bsig.Min {
+		} else if value < bsig.Min {
 			return fmt.Errorf("%v, columnID=%v, value=%v", ErrBSIGroupValueTooLow, columnID, value)
 		}
 
