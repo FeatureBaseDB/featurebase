@@ -923,10 +923,8 @@ func newTranslateFileReader(ctx context.Context, store *TranslateFile, offset in
 
 // Open initializes the reader.
 func (r *translateFileReader) Open() (err error) {
-	if r.file, err = os.Open(r.store.Path); err != nil {
-		return err
-	}
-	return nil
+	r.file, err = os.Open(r.store.Path)
+	return err
 }
 
 // Close closes the underlying file reader.

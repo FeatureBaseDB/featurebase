@@ -568,10 +568,7 @@ func (s *TranslateFile) Reopen() error {
 	s.lock.Unlock()
 	s.Path = prev.Path
 	s.PrimaryTranslateStore = prev.PrimaryTranslateStore
-	if err := s.Open(); err != nil {
-		return err
-	}
-	return nil
+	return s.Open()
 }
 
 // retryFor executes fn every 100ms until d time passes or until fn return nil.

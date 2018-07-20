@@ -821,7 +821,7 @@ func groupCompare(a, b string, offset int) (lt, eq bool) {
 }
 
 func (f *Field) allTimeViewsSortedByQuantum() (me []*view) {
-	me = make([]*view, len(f.viewMap), len(f.viewMap))
+	me = make([]*view, len(f.viewMap))
 	prefix := viewStandard + "_"
 	offset := len(viewStandard) + 1
 	i := 0

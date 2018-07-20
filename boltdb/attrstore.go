@@ -100,10 +100,8 @@ func (s *attrStore) Open() error {
 
 	// Initialize database.
 	if err := s.db.Update(func(tx *bolt.Tx) error {
-		if _, err := tx.CreateBucketIfNotExists([]byte("attrs")); err != nil {
-			return err
-		}
-		return nil
+		_, err := tx.CreateBucketIfNotExists([]byte("attrs"))
+		return err
 	}); err != nil {
 		return errors.Wrap(err, "initializing")
 	}
@@ -132,10 +130,7 @@ func (s *attrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
 	// Find attributes from storage.
 	if err = s.db.View(func(tx *bolt.Tx) error {
 		m, err = txAttrs(tx, id)
-		if err != nil {
-			return err
-		}
-		return nil
+		return err
 	}); err != nil {
 		return nil, errors.Wrap(err, "finding attributes")
 	}

@@ -116,6 +116,7 @@ gometalinter: require-gometalinter
 	    --enable=gochecknoinits \
 	    --enable=gofmt \
 	    --enable=goimports \
+	    --enable=gosimple \
 	    --enable=gotype \
 	    --enable=gotypex \
 	    --enable=ineffassign \
