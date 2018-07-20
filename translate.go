@@ -875,12 +875,6 @@ type elem struct {
 	hash   uint64
 }
 
-func (e *elem) reset() {
-	e.offset = 0
-	e.id = 0
-	e.hash = 0
-}
-
 func hashKey(key []byte) uint64 {
 	h := xxhash.Sum64(key)
 	if h == 0 {

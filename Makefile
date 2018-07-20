@@ -125,6 +125,7 @@ gometalinter: require-gometalinter
 	    --enable=misspell \
 	    --enable=nakedret \
 	    --enable=unparam \
+	    --enable=unused \
 	    --enable=vet \
 	    --exclude "^internal/.*\.pb\.go" \
 	    --exclude "^pql/pql.peg.go" \
