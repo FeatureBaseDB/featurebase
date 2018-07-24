@@ -1685,7 +1685,13 @@ func (f *fragment) readCacheFromArchive(r io.Reader) error {
 	return nil
 }
 
+type rowFilter func(rowid uint64) bool
+
 func (f *fragment) rows() []uint64 {
+	return f.rowsWithFilter(func(rowid uint64) bool { return true })
+}
+
+func (f *fragment) rowsWithFilter(filter rowFilter) []uint64 {
 	i, _ := f.storage.Containers.Iterator(0)
 	rows := make([]uint64, 0)
 	var lastRow uint64
@@ -1702,8 +1708,9 @@ func (f *fragment) rows() []uint64 {
 		if vRow == lastRow {
 			continue
 		}
-
-		rows = append(rows, vRow)
+		if filter(vRow) {
+			rows = append(rows, vRow)
+		}
 		lastRow = vRow
 	}
 	return rows
@@ -1711,6 +1718,14 @@ func (f *fragment) rows() []uint64 {
 }
 
 func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
+	return f.rowsForColumnWithFilter(
+		columnID,
+		func(rowid uint64) bool {
+			return true
+		})
+}
+
+func (f *fragment) rowsForColumnWithFilter(columnID uint64, filter rowFilter) []uint64 {
 	var colKey uint64
 	colID := columnID % ShardWidth
 	i, _ := f.storage.Containers.Iterator(0)
@@ -1733,7 +1748,9 @@ func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
 		}
 
 		if c.Contains(colVal) {
-			rows = append(rows, vRow)
+			if filter(vRow) {
+				rows = append(rows, vRow)
+			}
 		}
 	}
 	return rows
