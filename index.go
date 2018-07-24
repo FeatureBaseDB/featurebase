@@ -95,7 +95,7 @@ func (i *Index) Options() IndexOptions {
 }
 
 func (i *Index) options() IndexOptions {
-	return IndexOptions{}
+	return IndexOptions{Keys: i.keys}
 }
 
 // Open opens and initializes the index.
@@ -406,7 +406,7 @@ func (p indexSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 // IndexInfo represents schema information for an index.
 type IndexInfo struct {
 	Name    string       `json:"name"`
-	options IndexOptions `json:"options"`
+	Options IndexOptions `json:"options"`
 	Fields  []*FieldInfo `json:"fields"`
 }
 

@@ -46,9 +46,6 @@ type ImportCommand struct {
 	// CreateSchema ensures the schema exists before import
 	CreateSchema bool
 
-	// Indicates that the payload should be treated as string keys.
-	StringKeys bool `json:"StringKeys"`
-
 	// Filenames to import from.
 	Paths []string `json:"paths"`
 
@@ -108,10 +105,14 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "getting schema")
 	}
+
+	var useColumnKeys, useRowKeys bool
 	for _, index := range schema {
 		if index.Name == cmd.Index {
+			useColumnKeys = index.Options.Keys
 			for _, field := range index.Fields {
 				if field.Name == cmd.Field {
+					useRowKeys = field.Options.Keys
 					fieldType = field.Options.Type
 				}
 			}
@@ -121,7 +122,7 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 	// Import each path and import by shard.
 	for _, path := range cmd.Paths {
 		logger.Printf("parsing: %s", path)
-		if err := cmd.importPath(ctx, fieldType, path); err != nil {
+		if err := cmd.importPath(ctx, fieldType, useColumnKeys, useRowKeys, path); err != nil {
 			return err
 		}
 	}
@@ -142,21 +143,16 @@ func (cmd *ImportCommand) ensureSchema(ctx context.Context) error {
 }
 
 // importPath parses a path into bits and imports it to the server.
-func (cmd *ImportCommand) importPath(ctx context.Context, fieldType, path string) error {
+func (cmd *ImportCommand) importPath(ctx context.Context, fieldType string, useColumnKeys, useRowKeys bool, path string) error {
 	// If fieldType is `int`, treat the import data as values to be range-encoded.
 	if fieldType == pilosa.FieldTypeInt {
-		return cmd.bufferValues(ctx, path)
-	} else {
-		if cmd.StringKeys {
-			return cmd.bufferBitsK(ctx, path)
-		} else {
-			return cmd.bufferBits(ctx, path)
-		}
+		return cmd.bufferValues(ctx, useColumnKeys, path)
 	}
+	return cmd.bufferBits(ctx, useColumnKeys, useRowKeys, path)
 }
 
 // bufferBits buffers slices of bits to be imported as a batch.
-func (cmd *ImportCommand) bufferBits(ctx context.Context, path string) error {
+func (cmd *ImportCommand) bufferBits(ctx context.Context, useColumnKeys, useRowKeys bool, path string) error {
 	a := make([]pilosa.Bit, 0, cmd.BufferSize)
 
 	var r *csv.Reader
@@ -198,18 +194,22 @@ func (cmd *ImportCommand) bufferBits(ctx context.Context, path string) error {
 		var bit pilosa.Bit
 
 		// Parse row id.
-		rowID, err := strconv.ParseUint(record[0], 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid row id on row %d: %q", rnum, record[0])
+		if useRowKeys {
+			bit.RowKey = record[0]
+		} else {
+			if bit.RowID, err = strconv.ParseUint(record[0], 10, 64); err != nil {
+				return fmt.Errorf("invalid row id on row %d: %q", rnum, record[0])
+			}
 		}
-		bit.RowID = rowID
 
 		// Parse column id.
-		columnID, err := strconv.ParseUint(record[1], 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid column id on row %d: %q", rnum, record[1])
+		if useColumnKeys {
+			bit.ColumnKey = record[1]
+		} else {
+			if bit.ColumnID, err = strconv.ParseUint(record[1], 10, 64); err != nil {
+				return fmt.Errorf("invalid column id on row %d: %q", rnum, record[1])
+			}
 		}
-		bit.ColumnID = columnID
 
 		// Parse time, if exists.
 		if len(record) > 2 && record[2] != "" {
@@ -359,7 +359,7 @@ func (cmd *ImportCommand) importBitsK(ctx context.Context, bits []pilosa.Bit) er
 }
 
 // bufferValues buffers slices of FieldValues to be imported as a batch.
-func (cmd *ImportCommand) bufferValues(ctx context.Context, path string) error {
+func (cmd *ImportCommand) bufferValues(ctx context.Context, useColumnKeys bool, path string) error {
 	a := make([]pilosa.FieldValue, 0, cmd.BufferSize)
 
 	var r *csv.Reader
@@ -401,11 +401,13 @@ func (cmd *ImportCommand) bufferValues(ctx context.Context, path string) error {
 		var val pilosa.FieldValue
 
 		// Parse column id.
-		columnID, err := strconv.ParseUint(record[0], 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid column id on row %d: %q", rnum, record[0])
+		if useColumnKeys {
+			val.ColumnKey = record[0]
+		} else {
+			if val.ColumnID, err = strconv.ParseUint(record[0], 10, 64); err != nil {
+				return fmt.Errorf("invalid column id on row %d: %q", rnum, record[0])
+			}
 		}
-		val.ColumnID = columnID
 
 		// Parse FieldValue.
 		value, err := strconv.ParseInt(record[1], 10, 64)
