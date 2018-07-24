@@ -457,8 +457,8 @@ func (s *Server) receiveMessage(m Message) error {
 		}
 		idx.setRemoteMaxShard(obj.Shard)
 	case *CreateIndexMessage:
-		opt := IndexOptions{}
-		_, err := s.holder.CreateIndex(obj.Index, opt)
+		opt := obj.Meta
+		_, err := s.holder.CreateIndex(obj.Index, *opt)
 		if err != nil {
 			return err
 		}
