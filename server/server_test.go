@@ -274,7 +274,6 @@ func TestMain_RecalculateHashes(t *testing.T) {
 	if err := client0.CreateField(context.Background(), "i", "f"); err != nil {
 		t.Fatal("create field:", err)
 	}
-	return
 
 	// Set some columns
 	data := []string{}

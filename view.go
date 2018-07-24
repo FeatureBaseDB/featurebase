@@ -41,10 +41,11 @@ type view struct {
 	field string
 	name  string
 
+	fieldType string
+	cacheType string
 	cacheSize uint32
 
 	// Fragments by shard.
-	cacheType string // passed in by field
 	fragments map[uint64]*fragment
 
 	// maxShard maintains this view's max shard in order to
@@ -58,15 +59,17 @@ type view struct {
 }
 
 // newView returns a new instance of View.
-func newView(path, index, field, name string, cacheSize uint32) *view {
+func newView(path, index, field, name string, fieldOptions FieldOptions) *view {
 	return &view{
-		path:      path,
-		index:     index,
-		field:     field,
-		name:      name,
-		cacheSize: cacheSize,
+		path:  path,
+		index: index,
+		field: field,
+		name:  name,
 
-		cacheType: DefaultCacheType,
+		fieldType: fieldOptions.Type,
+		cacheType: fieldOptions.CacheType,
+		cacheSize: fieldOptions.CacheSize,
+
 		fragments: make(map[uint64]*fragment),
 
 		broadcaster: NopBroadcaster,
@@ -251,6 +254,9 @@ func (v *view) newFragment(path string, shard uint64) *fragment {
 	frag.CacheSize = v.cacheSize
 	frag.Logger = v.logger
 	frag.stats = v.stats.WithTags(fmt.Sprintf("shard:%d", shard))
+	if v.fieldType == FieldTypeMutex {
+		frag.mutexVector = newRowsVector(frag)
+	}
 	return frag
 }
 

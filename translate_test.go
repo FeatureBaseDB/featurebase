@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"os"
 	"reflect"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -356,6 +358,24 @@ func TestTranslateFile_Reader(t *testing.T) {
 	})
 }
 
+func TestPrintTranslateFile(t *testing.T) {
+	// I think this is related to the mmap in s.Open.
+	t.Skip("causes fatal error: fault")
+	f, err := ioutil.TempFile("", "")
+	if err != nil {
+		panic(err)
+	}
+	f.Close()
+
+	s := pilosa.NewTranslateFile()
+	s.Path = f.Name()
+	err = s.Open()
+	if err != nil {
+		t.Fatalf("opening : %v", err)
+	}
+	fmt.Println("blah ", s)
+}
+
 func TestTranslateFile_PrimaryTranslateStore(t *testing.T) {
 	// Create a primary store that accepts writes.
 	primary := MustOpenTranslateFile()
@@ -495,6 +515,7 @@ func BenchmarkTranslateFile_TranslateColumnToString(b *testing.B) {
 }
 
 type TranslateFile struct {
+	lock sync.Mutex
 	*pilosa.TranslateFile
 }
 
@@ -508,6 +529,12 @@ func NewTranslateFile() *TranslateFile {
 	s := &TranslateFile{TranslateFile: pilosa.NewTranslateFile()}
 	s.Path = f.Name()
 	return s
+}
+
+func (t *TranslateFile) Reader(ctx context.Context, offset int64) (io.ReadCloser, error) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	return t.TranslateFile.Reader(ctx, offset)
 }
 
 func MustOpenTranslateFile() *TranslateFile {
@@ -536,7 +563,9 @@ func (s *TranslateFile) Reopen() error {
 		return err
 	}
 
+	s.lock.Lock()
 	s.TranslateFile = pilosa.NewTranslateFile()
+	s.lock.Unlock()
 	s.Path = prev.Path
 	s.PrimaryTranslateStore = prev.PrimaryTranslateStore
 	if err := s.Open(); err != nil {
