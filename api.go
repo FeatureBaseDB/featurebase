@@ -135,9 +135,9 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 		}
 
 		// Translate column attributes, if necessary.
-		if api.server.primaryTranslateStore != nil {
+		if api.server.translateFile != nil {
 			for _, col := range resp.ColumnAttrSets {
-				v, err := api.server.primaryTranslateStore.TranslateColumnToString(req.Index, col.ID)
+				v, err := api.server.translateFile.TranslateColumnToString(req.Index, col.ID)
 				if err != nil {
 					return resp, err
 				}
@@ -760,7 +760,7 @@ func (api *API) ResizeAbort() error {
 const translateStoreBufferSize = 65536
 
 func (api *API) GetTranslateData(ctx context.Context, w io.WriteCloser, offset int64) error {
-	rc, err := api.server.primaryTranslateStore.Reader(ctx, offset)
+	rc, err := api.server.translateFile.Reader(ctx, offset)
 	if err != nil {
 		return errors.Wrap(err, "read from translate store")
 	}
