@@ -16,7 +16,7 @@ import (
 // Ensure implementation implements inteface.
 var _ pilosa.TranslateStore = (*translateStore)(nil)
 
-// translateStore represents an implementation of translateStore that
+// translateStore represents an implementation of pilosa.TranslateStore that
 // communicates over HTTP. This is used with the TranslateHandler.
 type translateStore struct {
 	URL string

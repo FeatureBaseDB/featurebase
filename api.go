@@ -756,46 +756,17 @@ func (api *API) ResizeAbort() error {
 	return errors.Wrap(err, "complete current job")
 }
 
-// translateStoreBufferSize is the buffer size used for streaming data.
-const translateStoreBufferSize = 65536
-
-func (api *API) GetTranslateData(ctx context.Context, w io.WriteCloser, offset int64) error {
+// GetTranslateData provides a reader for key translation logs starting at offset.
+func (api *API) GetTranslateData(ctx context.Context, offset int64) (io.ReadCloser, error) {
 	rc, err := api.server.translateFile.Reader(ctx, offset)
 	if err != nil {
-		return errors.Wrap(err, "read from translate store")
+		return nil, errors.Wrap(err, "read from translate store")
 	}
 
 	// Ensure reader is closed when the client disconnects.
 	go func() { <-ctx.Done(); rc.Close() }()
 
-	go func() {
-		defer rc.Close()
-		defer w.Close()
-
-		buf := make([]byte, translateStoreBufferSize)
-
-		// Copy from reader to client until store or client disconnect.
-		for {
-			// Read from store.
-			n, err := rc.Read(buf)
-			if err == io.EOF {
-				return
-			} else if err != nil {
-				api.server.logger.Printf("api: translate store read error: %s", err)
-				return
-			} else if n == 0 {
-				continue
-			}
-
-			// Write to response & flush.
-			if _, err := w.Write(buf[:n]); err != nil {
-				api.server.logger.Printf("api: translate store response write error: %s", err)
-				return
-			}
-		}
-	}()
-
-	return nil
+	return rc, nil
 }
 
 // State returns the cluster state which is usually "NORMAL", but could be

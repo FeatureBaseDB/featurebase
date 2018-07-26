@@ -136,42 +136,42 @@ func TestTranslateFile_TranslateRow(t *testing.T) {
 	defer s.MustClose()
 
 	// First translation should start id at zero.
-	if ids, err := s.TranslateRowsToUint64("IDX0", "FRAME0", []string{"foo"}); err != nil {
+	if ids, err := s.TranslateRowsToUint64("IDX0", "FIELD0", []string{"foo"}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(ids, []uint64{1}) {
 		t.Fatalf("unexpected id: %#v", ids)
 	}
 
 	// Next translation on the same index should move to one.
-	if ids, err := s.TranslateRowsToUint64("IDX0", "FRAME0", []string{"bar"}); err != nil {
+	if ids, err := s.TranslateRowsToUint64("IDX0", "FIELD0", []string{"bar"}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(ids, []uint64{2}) {
 		t.Fatalf("unexpected id: %#v", ids)
 	}
 
 	// Translation on a different index restarts at 0.
-	if ids, err := s.TranslateRowsToUint64("IDX1", "FRAME0", []string{"bar"}); err != nil {
+	if ids, err := s.TranslateRowsToUint64("IDX1", "FIELD0", []string{"bar"}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(ids, []uint64{1}) {
 		t.Fatalf("unexpected id: %#v", ids)
 	}
 
-	// Translation on a different frame restarts at 0.
-	if ids, err := s.TranslateRowsToUint64("IDX0", "FRAME1", []string{"bar"}); err != nil {
+	// Translation on a different field restarts at 0.
+	if ids, err := s.TranslateRowsToUint64("IDX0", "FIELD1", []string{"bar"}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(ids, []uint64{1}) {
 		t.Fatalf("unexpected id: %#v", ids)
 	}
 
 	// Ensure that string values can be looked up by ID.
-	if value, err := s.TranslateRowToString("IDX0", "FRAME0", 2); err != nil {
+	if value, err := s.TranslateRowToString("IDX0", "FIELD0", 2); err != nil {
 		t.Fatal(err)
 	} else if value != "bar" {
 		t.Fatalf("unexpected value: %s", value)
 	}
 
 	// Ensure that non-existent values return blank.
-	if value, err := s.TranslateRowToString("IDX0", "FRAME0", 1000); err != nil {
+	if value, err := s.TranslateRowToString("IDX0", "FIELD0", 1000); err != nil {
 		t.Fatal(err)
 	} else if value != "" {
 		t.Fatalf("unexpected value: %s", value)
@@ -182,22 +182,22 @@ func TestTranslateFile_TranslateRow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Translation on a different frame restarts at 0.
-	if ids, err := s.TranslateRowsToUint64("IDX0", "FRAME1", []string{"bar"}); err != nil {
+	// Translation on a different field restarts at 0.
+	if ids, err := s.TranslateRowsToUint64("IDX0", "FIELD1", []string{"bar"}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(ids, []uint64{1}) {
 		t.Fatalf("unexpected id: %#v", ids)
 	}
 
 	// Ensure that string values can be looked up by ID.
-	if value, err := s.TranslateRowToString("IDX0", "FRAME0", 2); err != nil {
+	if value, err := s.TranslateRowToString("IDX0", "FIELD0", 2); err != nil {
 		t.Fatal(err)
 	} else if value != "bar" {
 		t.Fatalf("unexpected value: %s", value)
 	}
 
 	// Translate new row and increment sequence.
-	if ids, err := s.TranslateRowsToUint64("IDX0", "FRAME0", []string{"baz"}); err != nil {
+	if ids, err := s.TranslateRowsToUint64("IDX0", "FIELD0", []string{"baz"}); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(ids, []uint64{3}) {
 		t.Fatalf("unexpected id: %#v", ids)
@@ -215,7 +215,7 @@ func TestTranslateFile_TranslateRow_Large(t *testing.T) {
 			keys[j] = strconv.Itoa(i + j + 1)
 		}
 
-		ids, err := s.TranslateRowsToUint64("IDX0", "FRAME0", keys)
+		ids, err := s.TranslateRowsToUint64("IDX0", "FIELD0", keys)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -230,7 +230,7 @@ func TestTranslateFile_TranslateRow_Large(t *testing.T) {
 	// Verify values can be returned.
 	for i := 0; i < 1000000; i++ {
 		exp := strconv.Itoa(i + 1)
-		if key, err := s.TranslateRowToString("IDX0", "FRAME0", uint64(i+1)); err != nil {
+		if key, err := s.TranslateRowToString("IDX0", "FIELD0", uint64(i+1)); err != nil {
 			t.Fatal(err)
 		} else if key != exp {
 			t.Fatalf("unexpected key: got=%q, exp=%q", key, exp)
@@ -243,7 +243,7 @@ func TestTranslateFile_TranslateRow_Large(t *testing.T) {
 	}
 	for i := 0; i < 1000000; i++ {
 		exp := strconv.Itoa(i + 1)
-		if key, err := s.TranslateRowToString("IDX0", "FRAME0", uint64(i+1)); err != nil {
+		if key, err := s.TranslateRowToString("IDX0", "FIELD0", uint64(i+1)); err != nil {
 			t.Fatal(err)
 		} else if key != exp {
 			t.Fatalf("unexpected key: got=%q, exp=%q", key, exp)
@@ -257,7 +257,7 @@ func TestTranslateFile_Reader(t *testing.T) {
 		defer s.MustClose()
 		if _, err := s.TranslateColumnsToUint64("IDX0", []string{"foo"}); err != nil {
 			t.Fatal(err)
-		} else if _, err := s.TranslateRowsToUint64("IDX0", "FRAME0", []string{"bar", "baz"}); err != nil {
+		} else if _, err := s.TranslateRowsToUint64("IDX0", "FIELD0", []string{"bar", "baz"}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -290,7 +290,7 @@ func TestTranslateFile_Reader(t *testing.T) {
 		} else if diff := cmp.Diff(entry, pilosa.LogEntry{
 			Type:   pilosa.LogEntryTypeInsertRow,
 			Index:  []byte("IDX0"),
-			Frame:  []byte("FRAME0"),
+			Field:  []byte("FIELD0"),
 			IDs:    []uint64{1, 2},
 			Keys:   [][]byte{[]byte("bar"), []byte("baz")},
 			Length: 24,
@@ -329,7 +329,7 @@ func TestTranslateFile_Reader(t *testing.T) {
 		defer s.MustClose()
 		if _, err := s.TranslateColumnsToUint64("IDX0", []string{"foo"}); err != nil {
 			t.Fatal(err)
-		} else if _, err := s.TranslateRowsToUint64("IDX0", "FRAME0", []string{"bar", "baz"}); err != nil {
+		} else if _, err := s.TranslateRowsToUint64("IDX0", "FIELD0", []string{"bar", "baz"}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -348,7 +348,7 @@ func TestTranslateFile_Reader(t *testing.T) {
 		} else if diff := cmp.Diff(entry, pilosa.LogEntry{
 			Type:   pilosa.LogEntryTypeInsertRow,
 			Index:  []byte("IDX0"),
-			Frame:  []byte("FRAME0"),
+			Field:  []byte("FIELD0"),
 			IDs:    []uint64{1, 2},
 			Keys:   [][]byte{[]byte("bar"), []byte("baz")},
 			Length: 24,
@@ -392,7 +392,7 @@ func TestTranslateFile_PrimaryTranslateStore(t *testing.T) {
 	// Write to the primary.
 	if _, err := primary.TranslateColumnsToUint64("IDX0", []string{"foo"}); err != nil {
 		t.Fatal(err)
-	} else if _, err := primary.TranslateRowsToUint64("IDX0", "FRAME0", []string{"bar", "baz"}); err != nil {
+	} else if _, err := primary.TranslateRowsToUint64("IDX0", "FIELD0", []string{"bar", "baz"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -405,13 +405,13 @@ func TestTranslateFile_PrimaryTranslateStore(t *testing.T) {
 			return fmt.Errorf("unexpected column 1 value: %s", value)
 		}
 
-		if value, err := replica.TranslateRowToString("IDX0", "FRAME0", 1); err != nil {
+		if value, err := replica.TranslateRowToString("IDX0", "FIELD0", 1); err != nil {
 			return err
 		} else if value != "bar" {
 			return fmt.Errorf("unexpected row 1 value: %s", value)
 		}
 
-		if value, err := replica.TranslateRowToString("IDX0", "FRAME0", 2); err != nil {
+		if value, err := replica.TranslateRowToString("IDX0", "FIELD0", 2); err != nil {
 			return err
 		} else if value != "baz" {
 			return fmt.Errorf("unexpected row 2 value: %s", value)
