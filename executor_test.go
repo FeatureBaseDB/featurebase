@@ -512,12 +512,6 @@ func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(kf="row10")`})
-		if err != nil {
-			t.Fatal(err)
-		}
-		spew.Dump(result)
-
 		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(kf="row10")`}); err != nil {
 			t.Fatal(err)
 		} else if attrs := result.Results[0].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": int64(123), "bat": true}) {
