@@ -161,12 +161,28 @@ func TestPEGWorking(t *testing.T) {
 			input:  "SetRowAttrs(blah, 9, a=47, b=bval)",
 			ncalls: 1},
 		{
+			name:   "SetRowAttrsWithRowKeySingleQuote",
+			input:  "SetRowAttrs(blah, 'rowKey', a=47)",
+			ncalls: 1},
+		{
+			name:   "SetRowAttrsWithRowKeyDoubleQuote",
+			input:  `SetRowAttrs(blah, "rowKey", a=47)`,
+			ncalls: 1},
+		{
 			name:   "SetColumnAttrs",
 			input:  "SetColumnAttrs(9, a=47)",
 			ncalls: 1},
 		{
 			name:   "SetColumnAttrs2args",
 			input:  "SetColumnAttrs(9, a=47, b=bval)",
+			ncalls: 1},
+		{
+			name:   "SetColumnAttrsWithColKeySingleQuote",
+			input:  "SetColumnAttrs('colKey', a=47)",
+			ncalls: 1},
+		{
+			name:   "SetColumnAttrsWithColKeyDoubleQuote",
+			input:  `SetColumnAttrs("colKey", a=47)`,
 			ncalls: 1},
 		{
 			name:   "Clear",
@@ -331,6 +347,28 @@ func TestPQLDeepEquality(t *testing.T) {
 				},
 			}},
 		{
+			name: "SetRowAttrsWithRowKeySingleQuote",
+			call: "SetRowAttrs(myfield, 'rowKey', z=4)",
+			exp: &Call{
+				Name: "SetRowAttrs",
+				Args: map[string]interface{}{
+					"z":      int64(4),
+					"_field": "myfield",
+					"_row":   "rowKey",
+				},
+			}},
+		{
+			name: "SetRowAttrsWithRowKeyDoubleQuote",
+			call: `SetRowAttrs(myfield, "rowKey", z=4)`,
+			exp: &Call{
+				Name: "SetRowAttrs",
+				Args: map[string]interface{}{
+					"z":      int64(4),
+					"_field": "myfield",
+					"_row":   "rowKey",
+				},
+			}},
+		{
 			name: "SetColumnAttrs",
 			call: "SetColumnAttrs(9, z=4)",
 			exp: &Call{
@@ -338,6 +376,26 @@ func TestPQLDeepEquality(t *testing.T) {
 				Args: map[string]interface{}{
 					"z":    int64(4),
 					"_col": int64(9),
+				},
+			}},
+		{
+			name: "SetColumnAttrsWithColKeySingleQuote",
+			call: "SetColumnAttrs('colKey', z=4)",
+			exp: &Call{
+				Name: "SetColumnAttrs",
+				Args: map[string]interface{}{
+					"z":    int64(4),
+					"_col": "colKey",
+				},
+			}},
+		{
+			name: "SetColumnAttrsWithColKeyDoubleQuote",
+			call: `SetColumnAttrs("colKey", z=4)`,
+			exp: &Call{
+				Name: "SetColumnAttrs",
+				Args: map[string]interface{}{
+					"z":    int64(4),
+					"_col": "colKey",
 				},
 			}},
 		{
