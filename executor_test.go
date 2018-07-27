@@ -471,29 +471,59 @@ func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 		t.Fatal(err)
 	} else if _, err := index.CreateFieldIfNotExists("xxx", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
-	}
-
-	// Set two attrs on f/10.
-	// Also set attrs on other bitmaps and fields to test isolation.
-	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(f, 10, foo="bar")`}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(f, 200, YYY=1)`}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(xxx, 10, YYY=1)`}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(f, 10, baz=123, bat=true)`}); err != nil {
+	} else if _, err := index.CreateFieldIfNotExists("kf", pilosa.OptFieldTypeDefault(), pilosa.OptFieldKeys()); err != nil {
 		t.Fatal(err)
 	}
 
-	f := hldr.Field("i", "f")
-	if m, err := f.RowAttrStore().Attrs(10); err != nil {
-		t.Fatal(err)
-	} else if !reflect.DeepEqual(m, map[string]interface{}{"foo": "bar", "baz": int64(123), "bat": true}) {
-		t.Fatalf("unexpected bitmap attr: %#v", m)
-	}
+	t.Run("rowID", func(t *testing.T) {
+		// Set two attrs on f/10.
+		// Also set attrs on other bitmaps and fields to test isolation.
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(f, 10, foo="bar")`}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(f, 200, YYY=1)`}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(xxx, 10, YYY=1)`}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(f, 10, baz=123, bat=true)`}); err != nil {
+			t.Fatal(err)
+		}
+
+		f := hldr.Field("i", "f")
+		if m, err := f.RowAttrStore().Attrs(10); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(m, map[string]interface{}{"foo": "bar", "baz": int64(123), "bat": true}) {
+			t.Fatalf("unexpected bitmap attr: %#v", m)
+		}
+	})
+
+	t.Run("rowKey", func(t *testing.T) {
+		// Set two attrs on f/10.
+		// Also set attrs on other bitmaps and fields to test isolation.
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(kf, "row10", foo="bar")`}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(kf, "row200", YYY=1)`}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(kf, "row10", baz=123, bat=true)`}); err != nil {
+			t.Fatal(err)
+		}
+
+		result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(kf="row10")`})
+		if err != nil {
+			t.Fatal(err)
+		}
+		spew.Dump(result)
+
+		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(kf="row10")`}); err != nil {
+			t.Fatal(err)
+		} else if attrs := result.Results[0].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar", "baz": int64(123), "bat": true}) {
+			t.Fatalf("unexpected attrs: %+v", attrs)
+		}
+	})
 }
 
 // Ensure a TopN() query can be executed.
