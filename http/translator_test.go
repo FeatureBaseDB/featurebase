@@ -48,6 +48,9 @@ func TestTranslateStore_Reader(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			// Wait to ensure writes make it to translate store
+			time.Sleep(100 * time.Millisecond)
+
 			// Connect to server and stream all available data.
 			store := http.NewTranslateStore(primary.URL())
 
