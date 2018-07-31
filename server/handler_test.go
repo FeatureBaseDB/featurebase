@@ -681,6 +681,25 @@ func TestClusterTranslator(t *testing.T) {
 	if result0 != result1 {
 		t.Fatalf("`%s` != `%s`", result0, result1)
 	}
+
+	for _, i := range []string{result0, result1} {
+		var resp map[string]interface{}
+		err := json.Unmarshal([]byte(i), &resp)
+		if err != nil {
+			t.Fatalf("json unmarshal error: %s", err)
+		}
+		if results, ok := resp["results"].([]interface{}); ok {
+			if result, ok := results[0].(map[string]interface{}); ok {
+				if keys, ok := result["keys"].([]interface{}); ok {
+					if key, ok := keys[0].(string); ok {
+						if key != "foo" {
+							t.Fatalf("Key is %s but should be 'foo'", key)
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 func mustJSONDecode(t *testing.T, r io.Reader) (ret map[string]interface{}) {
