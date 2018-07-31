@@ -7,7 +7,7 @@ type PQL Peg {
 
 Calls <- sp (Call sp)* !.
 Call <-  'Set' {p.startCall("Set")} open col comma args (comma timestamp)? close {p.endCall()}
-       / 'SetRowAttrs' {p.startCall("SetRowAttrs")} open posfield comma uintrow comma args close {p.endCall()}
+       / 'SetRowAttrs' {p.startCall("SetRowAttrs")} open posfield comma row comma args close {p.endCall()}
        / 'SetColumnAttrs' {p.startCall("SetColumnAttrs")} open col comma args close {p.endCall()}
        / 'Clear' {p.startCall("Clear")} open col comma args close {p.endCall()}
        / 'TopN' {p.startCall("TopN")} open posfield (comma allargs)? close {p.endCall()}
@@ -59,6 +59,10 @@ uintrow <- <uint>{p.addPosNum("_row", buffer[begin:end])}
 col <- ( <uint> {p.addPosNum("_col", buffer[begin:end])}
         / '\'' <singlequotedstring> '\'' {p.addPosStr("_col", buffer[begin:end])}
         / '"' <doublequotedstring> '"' {p.addPosStr("_col", buffer[begin:end])}
+        )
+row <- ( <uint> {p.addPosNum("_row", buffer[begin:end])}
+        / '\'' <singlequotedstring> '\'' {p.addPosStr("_row", buffer[begin:end])}
+        / '"' <doublequotedstring> '"' {p.addPosStr("_row", buffer[begin:end])}
         )
 
 open <- '(' sp

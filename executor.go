@@ -101,9 +101,12 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	}
 
 	// Translate query keys to ids, if necessary.
-	for i := range q.Calls {
-		if err := e.translateCall(index, idx, q.Calls[i]); err != nil {
-			return nil, err
+	// No need to translate a remote call.
+	if !opt.Remote {
+		for i := range q.Calls {
+			if err := e.translateCall(index, idx, q.Calls[i]); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -113,10 +116,13 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	}
 
 	// Translate response objects from ids to keys, if necessary.
-	for i := range results {
-		results[i], err = e.translateResult(index, idx, q.Calls[i], results[i])
-		if err != nil {
-			return nil, err
+	// No need to translate a remote call.
+	if !opt.Remote {
+		for i := range results {
+			results[i], err = e.translateResult(index, idx, q.Calls[i], results[i])
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	return results, nil
@@ -1256,7 +1262,7 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 
 		rowID, ok, err := c.UintArg("_" + rowLabel)
 		if err != nil {
-			return nil, fmt.Errorf("reading SetRowAttrs() row: %v", rowLabel)
+			return nil, errors.Wrap(err, "reading SetRowAttrs() row")
 		} else if !ok {
 			return nil, fmt.Errorf("SetRowAttrs row field '%v' required", rowLabel)
 		}
@@ -1550,6 +1556,10 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 		colKey = "_" + columnLabel
 		fieldName, _ = c.FieldArg()
 		rowKey = fieldName
+	} else if c.Name == "SetRowAttrs" {
+		// Positional args in new PQL syntax require special handling here.
+		rowKey = "_" + rowLabel
+		fieldName = callArgString(c, "_field")
 	} else {
 		colKey = "col"
 		fieldName = callArgString(c, "field")
