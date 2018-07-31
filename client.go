@@ -18,8 +18,9 @@ type Bit struct {
 // FieldValue represents the value for a column within a
 // range-encoded field.
 type FieldValue struct {
-	ColumnID uint64
-	Value    int64
+	ColumnID  uint64
+	ColumnKey string
+	Value     int64
 }
 
 // InternalClient should be implemented by any struct that enables any transport between nodes

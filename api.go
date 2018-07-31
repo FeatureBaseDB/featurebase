@@ -609,9 +609,34 @@ func (api *API) Import(_ context.Context, req *ImportRequest) error {
 		return errors.Wrap(err, "validating api method")
 	}
 
+	index := api.holder.Index(req.Index)
+	if index == nil {
+		return newNotFoundError(ErrIndexNotFound)
+	}
+
 	field, err := api.indexField(req.Index, req.Field, req.Shard)
 	if err != nil {
 		return errors.Wrap(err, "getting field")
+	}
+
+	// Translate row keys.
+	if field.keys() {
+		if len(req.RowIDs) != 0 {
+			return errors.New("row ids cannot be used because field uses string keys")
+		}
+		if req.RowIDs, err = api.server.translateFile.TranslateRowsToUint64(index.Name(), field.Name(), req.RowKeys); err != nil {
+			return errors.Wrap(err, "translating rows")
+		}
+	}
+
+	// Translate column keys.
+	if index.Keys() {
+		if len(req.ColumnIDs) != 0 {
+			return errors.New("column ids cannot be used because index uses string keys")
+		}
+		if req.ColumnIDs, err = api.server.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
+			return errors.Wrap(err, "translating columns")
+		}
 	}
 
 	// Convert timestamps to time.Time.
