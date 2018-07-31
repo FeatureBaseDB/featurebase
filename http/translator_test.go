@@ -48,11 +48,11 @@ func TestTranslateStore_Reader(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Wait to ensure writes make it to translate store
-			time.Sleep(100 * time.Millisecond)
-
 			// Connect to server and stream all available data.
 			store := http.NewTranslateStore(primary.URL())
+
+			// Wait to ensure writes make it to translate store
+			time.Sleep(100 * time.Millisecond)
 
 			rc, err := store.Reader(context.Background(), 11) // offset=11 skips the first entry: \n\x01\x01i\x00\x01\x01\x03foo
 
