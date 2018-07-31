@@ -31,7 +31,7 @@ var (
 	ErrTranslateStoreClosed       = errors.New("pilosa: translate store closed")
 	ErrTranslateStoreReaderClosed = errors.New("pilosa: translate store reader closed")
 	ErrReplicationNotSupported    = errors.New("pilosa: replication not supported")
-	ErrTranslateStoreReadOnly     = errors.New("pilosa: operation not supported, translate store read only")
+	ErrTranslateStoreReadOnly     = errors.New("pilosa: translate store could not find or create key, translate store read only")
 )
 
 // TranslateStore is the storage for translation string-to-uint64 values.
