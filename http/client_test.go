@@ -215,7 +215,7 @@ func TestClient_ImportKeys(t *testing.T) {
 	cmd.MustCreateField(t, "unkeyed", "keyedf", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000), pilosa.OptFieldKeys())
 
 	// Send import request.
-	c := MustNewClient(host, defaultClient)
+	c := MustNewClient(host, http.GetHTTPClient(nil))
 
 	t.Run("Import keyed,keyed", func(t *testing.T) {
 		if err := c.Import(context.Background(), "keyed", "keyedf", 0, []pilosa.Bit{
@@ -236,9 +236,9 @@ func TestClient_ImportKeys(t *testing.T) {
 		if pairs, ok := resp.Results[0].([]pilosa.Pair); !ok {
 			t.Fatal("unexpected response type %T", resp.Results[0])
 		} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
-			pilosa.Pair{Key: "green", Count: 3},
-			pilosa.Pair{Key: "blue", Count: 2},
-			pilosa.Pair{Key: "purple", Count: 1},
+			{Key: "green", Count: 3},
+			{Key: "blue", Count: 2},
+			{Key: "purple", Count: 1},
 		}) {
 			t.Fatalf("unexpected topn result: %v", pairs)
 		}
@@ -263,9 +263,9 @@ func TestClient_ImportKeys(t *testing.T) {
 		if pairs, ok := resp.Results[0].([]pilosa.Pair); !ok {
 			t.Fatal("unexpected response type %T", resp.Results[0])
 		} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
-			pilosa.Pair{ID: 1, Count: 3},
-			pilosa.Pair{ID: 2, Count: 2},
-			pilosa.Pair{ID: 3, Count: 1},
+			{ID: 1, Count: 3},
+			{ID: 2, Count: 2},
+			{ID: 3, Count: 1},
 		}) {
 			t.Fatalf("unexpected topn result: %v", pairs)
 		}
@@ -290,9 +290,9 @@ func TestClient_ImportKeys(t *testing.T) {
 		if pairs, ok := resp.Results[0].([]pilosa.Pair); !ok {
 			t.Fatal("unexpected response type %T", resp.Results[0])
 		} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
-			pilosa.Pair{Key: "green", Count: 3},
-			pilosa.Pair{Key: "blue", Count: 2},
-			pilosa.Pair{Key: "purple", Count: 1},
+			{Key: "green", Count: 3},
+			{Key: "blue", Count: 2},
+			{Key: "purple", Count: 1},
 		}) {
 			t.Fatalf("unexpected topn result: %v", pairs)
 		}
