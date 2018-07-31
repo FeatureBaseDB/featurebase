@@ -3339,3 +3339,167 @@ func popcountAndSlice(s, m []uint64) uint64 {
 	}
 	return cnt
 }
+
+// Stuff i needed from the roaring project
+const ( //taken from  roaring/util.go
+	serialCookieNoRunContainer = 12346 // only arrays and bitmaps
+	serialCookie               = 12347 // runs, arrays, and bitmaps
+	noOffsetThreshold          = 4
+)
+
+//end roaring stuff
+
+func readStandardHeader(buf []byte) (size uint32, containerTyper func(index uint, card int) byte, header, pos int, err error, haveRuns bool) {
+	if len(buf) < 8 {
+		err = fmt.Errorf("buffer too small, expecting at least 8 bytes, was %d", len(buf))
+		return
+	}
+	cf := func(index uint, card int) (newType byte) {
+		newType = containerBitmap
+		if card < ArrayMaxSize {
+			newType = containerArray
+		}
+		return
+	}
+	containerTyper = cf
+	cookie := binary.LittleEndian.Uint32(buf)
+	pos += 4
+
+	// cookie header
+	if cookie == serialCookieNoRunContainer {
+		size = binary.LittleEndian.Uint32(buf[pos:])
+		pos += 4
+	} else if cookie&0x0000FFFF == serialCookie {
+		haveRuns = true
+		size = uint32(uint16(cookie>>16) + 1) // number of containers
+
+		// create is-run-container bitmap
+		isRunBitmapSize := (int(size) + 7) / 8
+		if pos+isRunBitmapSize > len(buf) {
+			err = fmt.Errorf("malformed bitmap, is-run bitmap overruns buffer at %d", pos+isRunBitmapSize)
+			return
+		}
+
+		isRunBitmap := buf[pos : pos+isRunBitmapSize]
+		pos += isRunBitmapSize
+		containerTyper = func(index uint, card int) byte {
+			if isRunBitmap[index/8]&(1<<(index%8)) != 0 {
+				return containerRun
+			}
+			return cf(index, card)
+		}
+	} else {
+		err = fmt.Errorf("did not find expected serialCookie in header")
+		return
+	}
+
+	header = pos
+	if size > (1 << 16) {
+		err = fmt.Errorf("It is logically impossible to have more than (1<<16) containers.")
+		return
+	}
+
+	// descriptive header
+	if pos+2*2*int(size) > len(buf) {
+		err = fmt.Errorf("malformed bitmap, key-cardinality slice overruns buffer at %d", pos+2*2*int(size))
+		return
+	}
+	pos += 2 * 2 * int(size) //moving pos past keycount
+	return
+}
+
+func unmarshalStandardRoaring(data []byte) (*Bitmap, error) {
+
+	b := NewBitmap()
+	keyN, containerTyper, header, pos, err, haveRuns := readStandardHeader(data)
+	if err != nil {
+		return nil, err
+	}
+
+	b.Containers.Reset()
+	// Descriptive header section: Read container keys and cardinalities.
+	for i, buf := uint(0), data[header:]; i < uint(keyN); i, buf = i+1, buf[4:] {
+		card := int(binary.LittleEndian.Uint16(buf[2:4])) + 1
+		b.Containers.PutContainerValues(
+			uint64(binary.LittleEndian.Uint16(buf[0:2])),
+			containerTyper(i, card), /// container type voodo with isRunBitmap
+			card,
+			true)
+	}
+
+	// Read container offsets and attach data.
+	if haveRuns {
+		readWithRuns(b, data, pos, keyN)
+	} else {
+		readOffsets(b, data, pos, keyN)
+	}
+	return b, nil
+}
+
+func readOffsets(b *Bitmap, data []byte, pos int, keyN uint32) (err error) {
+
+	citer, _ := b.Containers.Iterator(0)
+	for i, buf := 0, data[pos:]; i < int(keyN); i, buf = i+1, buf[4:] {
+		offset := binary.LittleEndian.Uint32(buf[0:4])
+		// Verify the offset is within the bounds of the input data.
+		if int(offset) >= len(data) {
+			err = fmt.Errorf("offset out of bounds: off=%d, len=%d", offset, len(data))
+			return
+		}
+
+		// Map byte slice directly to the container data.
+		citer.Next()
+		_, c := citer.Value()
+		switch c.containerType {
+		case containerArray:
+			c.runs = nil
+			c.bitmap = nil
+			c.array = (*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[offset]))[:c.n]
+		case containerBitmap:
+			c.array = nil
+			c.runs = nil
+			c.bitmap = (*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN]
+		default:
+			err = fmt.Errorf("unsupported container type %d", c.containerType)
+			return
+		}
+	}
+	return
+
+}
+
+func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) (err error) {
+
+	citer, _ := b.Containers.Iterator(0)
+	for i := 0; i < int(keyN); i++ {
+		citer.Next()
+		_, c := citer.Value()
+		switch c.containerType {
+		case containerRun:
+			c.array = nil
+			c.bitmap = nil
+			runCount := binary.LittleEndian.Uint16(data[pos : pos+runCountHeaderSize])
+			c.runs = (*[0xFFFFFFF]interval16)(unsafe.Pointer(&data[pos+runCountHeaderSize]))[:runCount]
+
+			for o := range c.runs { //need to convert to start:end vs start:length :(
+				r := c.runs[o]
+				r.last = r.start + r.last
+				c.runs[o] = r
+
+			}
+			pos += int((runCount * interval16Size) + runCountHeaderSize)
+		case containerArray:
+			c.runs = nil
+			c.bitmap = nil
+			c.array = (*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[pos]))[:c.n]
+			pos += c.n * 2
+		case containerBitmap:
+			c.array = nil
+			c.runs = nil
+			c.bitmap = (*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[pos]))[:bitmapN]
+			pos += bitmapN * 8
+		}
+	}
+	return
+
+}
