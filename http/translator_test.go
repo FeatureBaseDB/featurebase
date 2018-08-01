@@ -52,7 +52,7 @@ func TestTranslateStore_Reader(t *testing.T) {
 			store := http.NewTranslateStore(primary.URL())
 
 			// Wait to ensure writes make it to translate store
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 
 			rc, err := store.Reader(context.Background(), 11) // offset=11 skips the first entry: \n\x01\x01i\x00\x01\x01\x03foo
 
