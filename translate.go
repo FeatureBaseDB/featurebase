@@ -942,22 +942,30 @@ func (r *translateFileReader) Close() error {
 // Read reads the next section of the available data to p. This should always
 // read from the start of an entry and read n bytes to the end of another entry.
 func (r *translateFileReader) Read(p []byte) (n int, err error) {
+	fmt.Println("translateFileReader.Read()")
 	for {
 		// Obtain notification channel before we check for new data.
+		fmt.Println("obtain notify")
 		notify := r.store.WriteNotify()
+		fmt.Println("got notify")
 
 		// Exit if we can read one or more valid entries or we receive an error.
 		if n, err = r.read(p); n > 0 || err != nil {
+			fmt.Println("read-return:", n, err)
 			return n, err
 		}
+		fmt.Println("n, err:", n, err)
 
 		// Wait for new data or close.
 		select {
 		case <-r.ctx.Done():
+			fmt.Println("return ctx.Done()")
 			return 0, r.ctx.Err()
 		case <-r.closing:
+			fmt.Println("return r.closing")
 			return 0, ErrTranslateStoreReaderClosed
 		case <-r.store.Closing():
+			fmt.Println("return r.store.closing")
 			return 0, ErrTranslateStoreClosed
 		case <-notify:
 			continue

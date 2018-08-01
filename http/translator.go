@@ -49,6 +49,7 @@ func (s *translateStore) TranslateRowToString(index, frame string, values uint64
 
 // Reader returns a reader that can stream data from a remote store.
 func (s *translateStore) Reader(ctx context.Context, off int64) (io.ReadCloser, error) {
+	fmt.Println("translateStore.Reader()")
 	// Generate remote URL.
 	u, err := url.Parse(s.URL)
 	if err != nil {
@@ -75,6 +76,7 @@ func (s *translateStore) Reader(ctx context.Context, off int64) (io.ReadCloser, 
 	// Handle error codes or return body as stream.
 	switch resp.StatusCode {
 	case http.StatusOK:
+		fmt.Println("return resp.Body")
 		return resp.Body, nil
 	case http.StatusNotImplemented:
 		resp.Body.Close()

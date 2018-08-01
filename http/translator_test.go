@@ -30,10 +30,6 @@ func TestTranslateStore_Reader(t *testing.T) {
 	// Ensure client can connect and stream the translate store data.
 	t.Run("OK", func(t *testing.T) {
 		t.Run("ServerDisconnect", func(t *testing.T) {
-			// This test is currently flawed, breaking intermittently with message:
-			// "translator_test.go:65: unexpected EOF"
-			t.Skip()
-
 			primary := test.MustRunCluster(t, 1)[0]
 
 			hldr := test.Holder{Holder: primary.Server.Holder()}
@@ -54,14 +50,11 @@ func TestTranslateStore_Reader(t *testing.T) {
 
 			// Connect to server and stream all available data.
 			store := http.NewTranslateStore(primary.URL())
-
-			// Wait to ensure writes make it to translate store
-			time.Sleep(500 * time.Millisecond)
-
 			rc, err := store.Reader(context.Background(), 11) // offset=11 skips the first entry: \n\x01\x01i\x00\x01\x01\x03foo
 
 			// Close the primary to disconnect reader.
 			primary.Close()
+			fmt.Println("primary.Close()")
 
 			if err != nil {
 				t.Fatal(err)
