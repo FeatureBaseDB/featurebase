@@ -419,7 +419,7 @@ Count(Row(stargazer=1))
 **Spec:**
 
 ```
-TopN([ROW_CALL], <FIELD>, [n=UINT],
+TopN(<FIELD>, [ROW_CALL], [n=UINT],
      [attrName=<ATTR_NAME>, attrValues=<[]ATTR_VALUE>])
 ```
 
@@ -468,7 +468,7 @@ TopN(stargazer, n=2)
 
 Filter based on an existing row:
 ```request
-TopN(Row(language=1), stargazer, n=2)
+TopN(stargazer, Row(language=1), n=2)
 ```
 ```response
 {"results":[[{"id":1240,"count":35},{"id":7508,"count":32}]]}
