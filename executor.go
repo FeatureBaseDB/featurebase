@@ -101,9 +101,12 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	}
 
 	// Translate query keys to ids, if necessary.
-	for i := range q.Calls {
-		if err := e.translateCall(index, idx, q.Calls[i]); err != nil {
-			return nil, err
+	// No need to translate a remote call.
+	if !opt.Remote {
+		for i := range q.Calls {
+			if err := e.translateCall(index, idx, q.Calls[i]); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -113,10 +116,13 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	}
 
 	// Translate response objects from ids to keys, if necessary.
-	for i := range results {
-		results[i], err = e.translateResult(index, idx, q.Calls[i], results[i])
-		if err != nil {
-			return nil, err
+	// No need to translate a remote call.
+	if !opt.Remote {
+		for i := range results {
+			results[i], err = e.translateResult(index, idx, q.Calls[i], results[i])
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	return results, nil

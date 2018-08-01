@@ -24,6 +24,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	gohttp "net/http"
 
@@ -653,6 +654,56 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected body: %q", w.Body.String())
 		}
 	})
+}
+
+func TestClusterTranslator(t *testing.T) {
+	cluster := make(test.Cluster, 2)
+	cluster[0] = test.NewCommandNode(true)
+	cluster[0].Config.Gossip.Port = "0"
+	cluster[0].Start()
+	httpTranslateStore := http.NewTranslateStore(cluster[0].URL())
+	cluster[1] = test.NewCommandNode(false,
+		server.OptCommandServerOptions(
+			pilosa.OptServerPrimaryTranslateStore(httpTranslateStore),
+		),
+	)
+	cluster[1].Config.Gossip.Port = "0"
+	cluster[1].Config.Gossip.Seeds = []string{cluster[0].GossipAddress()}
+	cluster[1].Start()
+
+	test.MustDo("POST", cluster[0].URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
+	test.MustDo("POST", cluster[0].URL()+"/index/i0/field/f0", "{\"options\": {\"keys\": true}}")
+
+	test.MustDo("POST", cluster[0].URL()+"/index/i0/query", "Set(\"foo\", f0=\"bar\")")
+
+	// wait for key to replicate to second node
+	time.Sleep(100 * time.Millisecond)
+
+	result0 := test.MustDo("POST", cluster[0].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
+	result1 := test.MustDo("POST", cluster[1].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
+
+	if result0 != result1 {
+		t.Fatalf("`%s` != `%s`", result0, result1)
+	}
+
+	for _, i := range []string{result0, result1} {
+		var resp map[string]interface{}
+		err := json.Unmarshal([]byte(i), &resp)
+		if err != nil {
+			t.Fatalf("json unmarshal error: %s", err)
+		}
+		if results, ok := resp["results"].([]interface{}); ok {
+			if result, ok := results[0].(map[string]interface{}); ok {
+				if keys, ok := result["keys"].([]interface{}); ok {
+					if key, ok := keys[0].(string); ok {
+						if key != "foo" {
+							t.Fatalf("Key is %s but should be 'foo'", key)
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 func mustJSONDecode(t *testing.T, r io.Reader) (ret map[string]interface{}) {
