@@ -19,7 +19,7 @@ Any HTTP tool can be used to interact with the Pilosa server. The examples in th
 
 ### Starting Pilosa
 
-Follow the steps in the [Install](../installation/) document to install Pilosa.
+Follow the steps in the [Installation](../installation/) document to install Pilosa.
 Execute the following in a terminal to run Pilosa with the default configuration (Pilosa will be available at [localhost:10101](http://localhost:10101)):
 ```
 pilosa server
