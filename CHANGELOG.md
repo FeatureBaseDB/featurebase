@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [v1.0.2] - 2018-08-01
+
+This version contains 11 contributions from 3 contributors. There are 30 files changed, 1,569 insertions, and 1,215 deletions.
+
+### Fixed
+
+- Fix documentation ([#1503](https://github.com/pilosa/pilosa/pull/1503), [#1495](https://github.com/pilosa/pilosa/pull/1495), [#1551](https://github.com/pilosa/pilosa/pull/1551))
+- Fix places where empty IndexOptions were being used ([#1547](https://github.com/pilosa/pilosa/pull/1547))
+- Fix translator syncing bug in cluster environments ([#1552](https://github.com/pilosa/pilosa/pull/1552))
+- Fix race condition in translate_test ([#1541](https://github.com/pilosa/pilosa/pull/1541))
+- Add IndexOptions to IndexInfo json response ([#1547](https://github.com/pilosa/pilosa/pull/1547))
+- Add proper locking to cluster code to prevent races ([#1533](https://github.com/pilosa/pilosa/pull/1533))
+- Re-export erroneously unexported func Row.Intersect ([#1502](https://github.com/pilosa/pilosa/pull/1502))
+- Update parser to handle row keys on SetRowAttrs() ([#1555](https://github.com/pilosa/pilosa/pull/1555))
+
 ## [v1.0.1] - 2018-07-11
 
 This version contains 12 contributions from 4 contributors. There are 11 files changed, 133 insertions, and 39 deletions.
