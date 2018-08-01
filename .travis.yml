@@ -8,9 +8,7 @@ env:
     - secure: "U4fpHWDVOG4viqZsiVgUDW7OW1JW60uPOZy0q9pfbs86iHvmZq0PaScsZ+YdlYaN2GETVr7endDf6DCcZs1PWfg0F6VQfkOXcShX8HVS9O58lUZA5tyvbDVql9DQs4PbnkZo+ktz+Z0YaXqq2RdtMDOUz4bgZwspLPMA14if+N6w0tqCFpB7bEtpptTGsdbIQPG1n07yvSeNmK4mvrEEs77tWmhulN5iilpOqhpIvD39bJvtCYVALuJpzLd/OjLTPV9l/fl+hJkMXSj+X5ilO1DHINAcCM648iEX2phXAIWmi0O0Rbg2cI4kV9T5ysOIw8ux+YCm9bZDGTCt+VGBW5Fg+Z5iaXXexyKYCGiHleOJ7kCj9kXxh2u8NiYVNgb19dGJV5/HgQ6pcGWjeVEqr8yY1546zMjpTX+SYGQF+XZe+uggEjeAsk53ueXa0pyZTrlrqSvR7BBtWPx47s/dTg2L19FQYv3XpGMxEXLw92RplExQKi1h7QgihRxFpjGgURHhrt7d9eiNiNqBt3ZsHjmh2AkXZHnaDjlgSnFFWaMqP3UtDBWIuO+2BMbZUJVfP+gpQGBZ4gtpUSmV2JDCHgZgX5OAnLD4usxh+ATQ4rvUXF/tf8nMqEKHlGKd8hxpYSyMX21BoqfSfY4/IA0ejVE9BITqlrvqewqkP1yxe7o="
   matrix:
     - GOARCH=386
-    - GOARCH=386 ENTERPRISE=1
     - GOARCH=amd64
-    - GOARCH=amd64 ENTERPRISE=1
 cache:
   directories:
     vendor
@@ -39,9 +37,7 @@ jobs:
             repo: pilosa/pilosa
             tags: false
 stages:
-  - metalinter
   - test
-  - deploy
 matrix:
   # Excluding or allowing failures on non-primary matrix configurations due to long running times.
   fast_finish: true

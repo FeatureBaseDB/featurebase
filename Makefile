@@ -30,7 +30,8 @@ vendor: Gopkg.toml
 
 # Run test suite
 test: vendor
-	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS)
+	#go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS)
+	go test -v ./http -tags='$(BUILD_TAGS)' -run TestTranslateStore_Reader/OK/ServerDisconnect
 
 # Run test suite with coverage enabled
 cover: vendor
