@@ -677,7 +677,7 @@ func TestClusterTranslator(t *testing.T) {
 	test.MustDo("POST", cluster[0].URL()+"/index/i0/query", "Set(\"foo\", f0=\"bar\")")
 
 	// wait for key to replicate to second node
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 
 	result0 := test.MustDo("POST", cluster[0].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
 	result1 := test.MustDo("POST", cluster[1].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
