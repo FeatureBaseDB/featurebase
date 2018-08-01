@@ -1314,6 +1314,7 @@ const translateStoreBufferSize = 65536
 func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	offset, _ := strconv.ParseInt(q.Get("offset"), 10, 64)
+	fmt.Println("handleGetTranslateData with offset:", offset)
 
 	rdr, err := h.api.GetTranslateData(r.Context(), offset)
 	if err != nil {
@@ -1335,8 +1336,10 @@ func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request)
 	buf := make([]byte, translateStoreBufferSize)
 	for {
 		// Read from store.
+		fmt.Println("read from store")
 		n, err := rdr.Read(buf)
 		if err == io.EOF {
+			fmt.Println("return: EOF")
 			return
 		} else if err != nil {
 			h.logger.Printf("http: translate store read error: %s", err)

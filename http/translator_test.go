@@ -54,6 +54,7 @@ func TestTranslateStore_Reader(t *testing.T) {
 
 			// Close the primary to disconnect reader.
 			primary.Close()
+			fmt.Println("primary.Close()")
 
 			if err != nil {
 				t.Fatal(err)
