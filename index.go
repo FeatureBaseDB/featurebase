@@ -292,7 +292,7 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 }
 
 // CreateFieldIfNotExists creates a field with the given options if it doesn't exist.
-func (i *Index) CreateFieldIfNotExists(name string, opts FieldOption) (*Field, error) {
+func (i *Index) CreateFieldIfNotExists(name string, opts ...FieldOption) (*Field, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -301,11 +301,13 @@ func (i *Index) CreateFieldIfNotExists(name string, opts FieldOption) (*Field, e
 		return f, nil
 	}
 
-	// Apply functional option.
+	// Apply functional options.
 	fo := FieldOptions{}
-	err := opts(&fo)
-	if err != nil {
-		return nil, errors.Wrap(err, "applying option")
+	for _, opt := range opts {
+		err := opt(&fo)
+		if err != nil {
+			return nil, errors.Wrap(err, "applying option")
+		}
 	}
 
 	return i.createField(name, fo)

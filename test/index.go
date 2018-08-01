@@ -83,8 +83,8 @@ func (i *Index) CreateField(name string, opts ...pilosa.FieldOption) (*Field, er
 }
 
 // CreateFieldIfNotExists creates a field with the given options if it doesn't exist.
-func (i *Index) CreateFieldIfNotExists(name string, opts pilosa.FieldOption) (*Field, error) {
-	f, err := i.Index.CreateFieldIfNotExists(name, opts)
+func (i *Index) CreateFieldIfNotExists(name string, opts ...pilosa.FieldOption) (*Field, error) {
+	f, err := i.Index.CreateFieldIfNotExists(name, opts...)
 	if err != nil {
 		return nil, err
 	}

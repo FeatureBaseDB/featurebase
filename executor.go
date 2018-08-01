@@ -1256,7 +1256,7 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 
 		rowID, ok, err := c.UintArg("_" + rowLabel)
 		if err != nil {
-			return nil, fmt.Errorf("reading SetRowAttrs() row: %v", rowLabel)
+			return nil, errors.Wrap(err, "reading SetRowAttrs() row")
 		} else if !ok {
 			return nil, fmt.Errorf("SetRowAttrs row field '%v' required", rowLabel)
 		}
@@ -1550,6 +1550,10 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 		colKey = "_" + columnLabel
 		fieldName, _ = c.FieldArg()
 		rowKey = fieldName
+	} else if c.Name == "SetRowAttrs" {
+		// Positional args in new PQL syntax require special handling here.
+		rowKey = "_" + rowLabel
+		fieldName = callArgString(c, "_field")
 	} else {
 		colKey = "col"
 		fieldName = callArgString(c, "field")
