@@ -54,6 +54,9 @@ func TestDuration(t *testing.T) {
 	}
 
 	err = d.UnmarshalText([]byte("3m2s"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	v, _ = d.MarshalText()
 	if !reflect.DeepEqual(b, v) {
 		t.Fatalf("Unexpected marshalled value %v", v)

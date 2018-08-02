@@ -40,11 +40,7 @@ func (h *tHolder) Reopen() error {
 	h.Holder = NewHolder()
 	h.Holder.Path = path
 	h.Holder.Logger = logger
-	if err := h.Holder.Open(); err != nil {
-		return err
-	}
-
-	return nil
+	return h.Holder.Open()
 }
 
 func newHolder() *tHolder {

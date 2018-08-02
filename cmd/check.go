@@ -40,10 +40,7 @@ Performs a consistency check on data files.
 				return fmt.Errorf("path required")
 			}
 			checker.Paths = args
-			if err := checker.Run(context.Background()); err != nil {
-				return err
-			}
-			return nil
+			return checker.Run(context.Background())
 		},
 	}
 	return checkCmd

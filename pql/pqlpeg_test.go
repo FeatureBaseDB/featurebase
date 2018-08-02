@@ -31,7 +31,7 @@ SetBit(Union(Zitmap(row==4), Intersect(Qitmap(blah>4), Ritmap(field="http://zoo9
 		t.Fatalf("Failed, got: %s", q)
 	}
 
-	q, err = ParseString("C(a=falsen0)")
+	_, err = ParseString("C(a=falsen0)")
 	if err != nil {
 		t.Fatalf("falsen0 should have been parsed as a string")
 	}

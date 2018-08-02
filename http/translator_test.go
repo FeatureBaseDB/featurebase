@@ -15,17 +15,6 @@ import (
 	"github.com/pilosa/pilosa/test"
 )
 
-func newMockReadCloser() *mock.ReadCloser {
-	return &mock.ReadCloser{
-		ReadFunc: func(p []byte) (int, error) {
-			return 0, io.EOF
-		},
-		CloseFunc: func() error {
-			return nil
-		},
-	}
-}
-
 func TestTranslateStore_Reader(t *testing.T) {
 	// Ensure client can connect and stream the translate store data.
 	t.Run("OK", func(t *testing.T) {

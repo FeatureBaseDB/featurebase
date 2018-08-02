@@ -875,12 +875,6 @@ type elem struct {
 	hash   uint64
 }
 
-func (e *elem) reset() {
-	e.offset = 0
-	e.id = 0
-	e.hash = 0
-}
-
 func hashKey(key []byte) uint64 {
 	h := xxhash.Sum64(key)
 	if h == 0 {
@@ -923,10 +917,8 @@ func newTranslateFileReader(ctx context.Context, store *TranslateFile, offset in
 
 // Open initializes the reader.
 func (r *translateFileReader) Open() (err error) {
-	if r.file, err = os.Open(r.store.Path); err != nil {
-		return err
-	}
-	return nil
+	r.file, err = os.Open(r.store.Path)
+	return err
 }
 
 // Close closes the underlying file reader.

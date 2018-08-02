@@ -232,11 +232,7 @@ func (cmd *ImportCommand) bufferBits(ctx context.Context, path string) error {
 	}
 
 	// If there are still bits in the buffer then flush them.
-	if err := cmd.importBits(ctx, a); err != nil {
-		return err
-	}
-
-	return nil
+	return cmd.importBits(ctx, a)
 }
 
 // importBits sends batches of bits to the server.
@@ -337,11 +333,7 @@ func (cmd *ImportCommand) bufferBitsK(ctx context.Context, path string) error {
 	}
 
 	// If there are still bitKs in the buffer then flush them.
-	if err := cmd.importBitsK(ctx, a); err != nil {
-		return err
-	}
-
-	return nil
+	return cmd.importBitsK(ctx, a)
 }
 
 // importBitsK sends batches of bitKs to the server.
@@ -426,11 +418,7 @@ func (cmd *ImportCommand) bufferValues(ctx context.Context, path string) error {
 	}
 
 	// If there are still values in the buffer then flush them.
-	if err := cmd.importValues(ctx, a); err != nil {
-		return err
-	}
-
-	return nil
+	return cmd.importValues(ctx, a)
 }
 
 // importValues sends batches of FieldValues to the server.

@@ -51,8 +51,6 @@ type Handler struct {
 
 	api *pilosa.API
 
-	allowedOrigins []string
-
 	ln net.Listener
 
 	closeTimeout time.Duration
