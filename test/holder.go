@@ -65,11 +65,7 @@ func (h *Holder) Reopen() error {
 	h.Holder.Path = path
 	h.Holder.Logger = logger
 	h.Holder.NewAttrStore = boltdb.NewAttrStore
-	if err := h.Holder.Open(); err != nil {
-		return err
-	}
-
-	return nil
+	return h.Holder.Open()
 }
 
 // MustCreateIndexIfNotExists returns a given index. Panic on error.

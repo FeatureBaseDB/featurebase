@@ -31,7 +31,7 @@ var (
 	ErrTranslateStoreClosed       = errors.New("pilosa: translate store closed")
 	ErrTranslateStoreReaderClosed = errors.New("pilosa: translate store reader closed")
 	ErrReplicationNotSupported    = errors.New("pilosa: replication not supported")
-	ErrTranslateStoreReadOnly     = errors.New("pilosa: operation not supported, translate store read only")
+	ErrTranslateStoreReadOnly     = errors.New("pilosa: translate store could not find or create key, translate store read only")
 )
 
 // TranslateStore is the storage for translation string-to-uint64 values.
@@ -39,8 +39,8 @@ type TranslateStore interface {
 	TranslateColumnsToUint64(index string, values []string) ([]uint64, error)
 	TranslateColumnToString(index string, values uint64) (string, error)
 
-	TranslateRowsToUint64(index, frame string, values []string) ([]uint64, error)
-	TranslateRowToString(index, frame string, values uint64) (string, error)
+	TranslateRowsToUint64(index, field string, values []string) ([]uint64, error)
+	TranslateRowToString(index, field string, values uint64) (string, error)
 
 	// Returns a reader from the given offset of the raw data file.
 	// The returned reader must be closed by the caller when done.
@@ -64,7 +64,7 @@ type TranslateFile struct {
 	closing chan struct{}
 
 	cols map[string]*index
-	rows map[frameKey]*index
+	rows map[fieldKey]*index
 
 	Path    string
 	mapSize int
@@ -82,7 +82,7 @@ func NewTranslateFile() *TranslateFile {
 		writeNotify: make(chan struct{}),
 		closing:     make(chan struct{}),
 		cols:        make(map[string]*index),
-		rows:        make(map[frameKey]*index),
+		rows:        make(map[fieldKey]*index),
 
 		mapSize: defaultMapSize,
 
@@ -201,7 +201,7 @@ func (s *TranslateFile) applyEntry(entry *LogEntry, offset int64) error {
 		idx = s.col(string(entry.Index))
 
 	case LogEntryTypeInsertRow:
-		idx = s.row(string(entry.Index), string(entry.Frame))
+		idx = s.row(string(entry.Index), string(entry.Field))
 
 	default:
 		return fmt.Errorf("enterprise.TranslateFile.applyEntry(): unknown log entry type: 0x%20x", entry.Type)
@@ -318,11 +318,11 @@ func (s *TranslateFile) col(index string) *index {
 	return idx
 }
 
-func (s *TranslateFile) row(index, frame string) *index {
-	idx := s.rows[frameKey{index, frame}]
+func (s *TranslateFile) row(index, field string) *index {
+	idx := s.rows[fieldKey{index, field}]
 	if idx == nil {
 		idx = newIndex(s.data)
-		s.rows[frameKey{index, frame}] = idx
+		s.rows[fieldKey{index, field}] = idx
 	}
 	return idx
 }
@@ -433,8 +433,8 @@ func (s *TranslateFile) TranslateColumnToString(index string, value uint64) (str
 	return "", nil
 }
 
-func (s *TranslateFile) TranslateRowsToUint64(index, frame string, values []string) ([]uint64, error) {
-	key := frameKey{index, frame}
+func (s *TranslateFile) TranslateRowsToUint64(index, field string, values []string) ([]uint64, error) {
+	key := fieldKey{index, field}
 
 	ret := make([]uint64, len(values))
 
@@ -495,7 +495,7 @@ func (s *TranslateFile) TranslateRowsToUint64(index, frame string, values []stri
 	entry := &LogEntry{
 		Type:  LogEntryTypeInsertRow,
 		Index: []byte(index),
-		Frame: []byte(frame),
+		Field: []byte(field),
 		IDs:   make([]uint64, 0, len(values)),
 		Keys:  make([][]byte, 0, len(values)),
 	}
@@ -524,9 +524,9 @@ func (s *TranslateFile) TranslateRowsToUint64(index, frame string, values []stri
 	return ret, nil
 }
 
-func (s *TranslateFile) TranslateRowToString(index, frame string, id uint64) (string, error) {
+func (s *TranslateFile) TranslateRowToString(index, field string, id uint64) (string, error) {
 	s.mu.RLock()
-	if idx := s.rows[frameKey{index, frame}]; idx != nil {
+	if idx := s.rows[fieldKey{index, field}]; idx != nil {
 		if ret, ok := idx.keyByID(id); ok {
 			s.mu.RUnlock()
 			return string(ret), nil
@@ -548,7 +548,7 @@ func (s *TranslateFile) Reader(ctx context.Context, offset int64) (io.ReadCloser
 type LogEntry struct {
 	Type  uint8
 	Index []byte
-	Frame []byte
+	Field []byte
 
 	IDs  []uint64
 	Keys [][]byte
@@ -558,12 +558,12 @@ type LogEntry struct {
 	Length uint64
 }
 
-// headerSize returns the number of bytes required for size, type, index, frame, & pair count.
+// headerSize returns the number of bytes required for size, type, index, field, & pair count.
 func (e *LogEntry) headerSize() int64 {
 	sz := uVarintSize(e.Length) + // total entry length
 		1 + // type
 		uVarintSize(uint64(len(e.Index))) + len(e.Index) + // Index length and data
-		uVarintSize(uint64(len(e.Frame))) + len(e.Frame) + // Frame length and data
+		uVarintSize(uint64(len(e.Field))) + len(e.Field) + // Field length and data
 		uVarintSize(uint64(len(e.IDs))) // ID/Key pair count
 	return int64(sz)
 }
@@ -604,14 +604,14 @@ func (e *LogEntry) ReadFrom(r io.Reader) (_ int64, err error) {
 		}
 	}
 
-	// Read frame name.
+	// Read field name.
 	if sz, err := binary.ReadUvarint(br); err != nil {
 		return n64, err
 	} else if sz == 0 {
-		e.Frame = nil
+		e.Field = nil
 	} else {
-		e.Frame = make([]byte, sz)
-		if _, err := io.ReadFull(r, e.Frame); err != nil {
+		e.Field = make([]byte, sz)
+		if _, err := io.ReadFull(r, e.Field); err != nil {
 			return n64, err
 		}
 	}
@@ -663,11 +663,11 @@ func (e *LogEntry) WriteTo(w io.Writer) (_ int64, err error) {
 		return 0, err
 	}
 
-	// Write frame name.
-	sz = binary.PutUvarint(b, uint64(len(e.Frame)))
+	// Write field name.
+	sz = binary.PutUvarint(b, uint64(len(e.Field)))
 	if _, err := buf.Write(b[:sz]); err != nil {
 		return 0, err
-	} else if _, err := buf.Write(e.Frame); err != nil {
+	} else if _, err := buf.Write(e.Field); err != nil {
 		return 0, err
 	}
 
@@ -722,9 +722,9 @@ func validLogEntriesLen(p []byte) (n int) {
 	}
 }
 
-type frameKey struct {
+type fieldKey struct {
 	index string
-	frame string
+	field string
 }
 
 const defaultLoadFactor = 90
@@ -875,12 +875,6 @@ type elem struct {
 	hash   uint64
 }
 
-func (e *elem) reset() {
-	e.offset = 0
-	e.id = 0
-	e.hash = 0
-}
-
 func hashKey(key []byte) uint64 {
 	h := xxhash.Sum64(key)
 	if h == 0 {
@@ -910,7 +904,7 @@ type translateFileReader struct {
 	closing chan struct{}
 }
 
-// newTranslateFileReader returns a new instance of TranslateFileReader.
+// newTranslateFileReader returns a new instance of translateFileReader.
 func newTranslateFileReader(ctx context.Context, store *TranslateFile, offset int64) *translateFileReader {
 	return &translateFileReader{
 		ctx:     ctx,
@@ -923,10 +917,8 @@ func newTranslateFileReader(ctx context.Context, store *TranslateFile, offset in
 
 // Open initializes the reader.
 func (r *translateFileReader) Open() (err error) {
-	if r.file, err = os.Open(r.store.Path); err != nil {
-		return err
-	}
-	return nil
+	r.file, err = os.Open(r.store.Path)
+	return err
 }
 
 // Close closes the underlying file reader.

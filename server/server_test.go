@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"reflect"
 	"sort"
@@ -251,15 +250,6 @@ func TestConfig_Parse_DataDir(t *testing.T) {
 	} else if c.DataDir != "/tmp/foo" {
 		t.Fatalf("unexpected data dir: %s", c.DataDir)
 	}
-}
-
-// tempMkdir makes a temporary directory
-func tempMkdir(t *testing.T) string {
-	dir, err := ioutil.TempDir("", "pilosatemp")
-	if err != nil {
-		t.Fatalf("failed to create test directory: %s", err)
-	}
-	return dir
 }
 
 func TestMain_RecalculateHashes(t *testing.T) {

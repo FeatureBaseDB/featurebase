@@ -43,10 +43,7 @@ Inspects a data file and provides stats.
 				return fmt.Errorf("only one path allowed")
 			}
 			inspector.Path = args[0]
-			if err := inspector.Run(context.Background()); err != nil {
-				return err
-			}
-			return nil
+			return inspector.Run(context.Background())
 		},
 	}
 	return inspectCmd
