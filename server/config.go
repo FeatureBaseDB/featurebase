@@ -74,7 +74,7 @@ type Config struct {
 	// Translation config supports translation store replication.
 	Translation struct {
 		PrimaryURL string `toml:"primary-url"`
-	}
+	} `toml:"translation"`
 
 	AntiEntropy struct {
 		Interval toml.Duration `toml:"interval"`

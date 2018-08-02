@@ -248,8 +248,7 @@ func (h *Holder) limitedSchema() []*IndexInfo {
 func (h *Holder) applySchema(schema *Schema) error {
 	// Create indexes that don't exist.
 	for _, index := range schema.Indexes {
-		opt := IndexOptions{}
-		idx, err := h.CreateIndexIfNotExists(index.Name, opt)
+		idx, err := h.CreateIndexIfNotExists(index.Name, index.Options)
 		if err != nil {
 			return errors.Wrap(err, "creating index")
 		}

@@ -1306,14 +1306,14 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 
 type defaultClusterMessageResponse struct{}
 
+// translateStoreBufferSize is the buffer size used for streaming data.
+const translateStoreBufferSize = 65536
+
 func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	offset, _ := strconv.ParseInt(q.Get("offset"), 10, 64)
 
-	pipeR, pipeW := io.Pipe()
-
-	err := h.api.GetTranslateData(r.Context(), pipeW, offset)
-
+	rdr, err := h.api.GetTranslateData(r.Context(), offset)
 	if err != nil {
 		if errors.Cause(err) == pilosa.ErrNotImplemented {
 			http.Error(w, err.Error(), http.StatusNotImplemented)
@@ -1329,7 +1329,28 @@ func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request)
 		w.Flush()
 	}
 
-	io.Copy(w, pipeR)
+	// Copy from reader to client until store or client disconnect.
+	buf := make([]byte, translateStoreBufferSize)
+	for {
+		// Read from store.
+		n, err := rdr.Read(buf)
+		if err == io.EOF {
+			return
+		} else if err != nil {
+			h.logger.Printf("http: translate store read error: %s", err)
+			return
+		} else if n == 0 {
+			continue
+		}
+
+		// Write to response & flush.
+		if _, err := w.Write(buf[:n]); err != nil {
+			h.logger.Printf("http: translate store response write error: %s", err)
+			return
+		} else if w, ok := w.(http.Flusher); ok {
+			w.Flush()
+		}
+	}
 }
 
 type queryValidationSpec struct {
