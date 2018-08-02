@@ -124,6 +124,7 @@ gometalinter: require-gometalinter
 	    --enable=megacheck \
 	    --enable=misspell \
 	    --enable=nakedret \
+	    --enable=unconvert \
 	    --enable=unparam \
 	    --enable=vet \
 	    --exclude "^internal/.*\.pb\.go" \

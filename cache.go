@@ -114,7 +114,7 @@ func (c *lruCache) Top() []bitmapPair {
 	for id, n := range c.counts {
 		a = append(a, bitmapPair{
 			ID:    id,
-			Count: uint64(n),
+			Count: n,
 		})
 	}
 	sort.Sort(bitmapPairs(a))

@@ -862,7 +862,7 @@ func (idx *index) lookupKey(offset int64) []byte {
 func (idx *index) alloc(capacity uint64) {
 	idx.elems = make([]elem, capacity)
 	idx.threshold = (capacity * uint64(idx.loadFactor)) / 100
-	idx.mask = uint64(capacity - 1)
+	idx.mask = capacity - 1
 }
 
 func (idx *index) dist(hash, i uint64) uint64 {
