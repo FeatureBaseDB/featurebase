@@ -3408,7 +3408,7 @@ func readStandardHeader(buf []byte) (size uint32, containerTyper func(index uint
 	return
 }
 
-func unmarshalStandardRoaring(data []byte) (*Bitmap, error) {
+func UnmarshalStandardRoaring(data []byte) (*Bitmap, error) {
 
 	b := NewBitmap()
 	keyN, containerTyper, header, pos, err, haveRuns := readStandardHeader(data)
@@ -3482,10 +3482,7 @@ func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) (err error) {
 			c.runs = (*[0xFFFFFFF]interval16)(unsafe.Pointer(&data[pos+runCountHeaderSize]))[:runCount]
 
 			for o := range c.runs { //need to convert to start:end vs start:length :(
-				r := c.runs[o]
-				r.last = r.start + r.last
-				c.runs[o] = r
-
+				c.runs[o].last = c.runs[o].start + c.runs[o].last
 			}
 			pos += int((runCount * interval16Size) + runCountHeaderSize)
 		case containerArray:
