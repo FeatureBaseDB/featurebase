@@ -179,6 +179,7 @@ func (h *Handler) populateValidators() {
 	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "field", "shard")
 	h.validators["PostFragmentData"] = queryValidationSpecRequired("index", "field", "shard")
 	h.validators["GetFragmentBlocks"] = queryValidationSpecRequired("index", "field", "shard")
+	h.validators["ImportRoaringBitmap"] = queryValidationSpecRequired("index", "field", "shard")
 }
 
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
@@ -219,6 +220,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/field/{field}", handler.handlePostField).Methods("POST")
 	router.HandleFunc("/index/{index}/field/{field}", handler.handleDeleteField).Methods("DELETE")
 	router.HandleFunc("/index/{index}/field/{field}/import", handler.handlePostImport).Methods("POST")
+	router.HandleFunc("/index/{index}/field/{field}/importroaring/{shard}", handler.handlePostRoaringImport).Methods("POST")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
 	router.HandleFunc("/info", handler.handleGetInfo).Methods("GET")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
@@ -1390,4 +1392,50 @@ func GetHTTPClient(t *tls.Config) *http.Client {
 		transport.TLSClientConfig = t
 	}
 	return &http.Client{Transport: transport}
+}
+
+// handlPostRoaringImport
+func (h *Handler) handlePostRoaringImport(w http.ResponseWriter, r *http.Request) {
+	// Verify that request is only communicating over protobufs.
+	if r.Header.Get("Content-Type") != "application/x-binary" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	} /*else if validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
+	}*/
+
+	indexName := mux.Vars(r)["index"]
+	fieldName := mux.Vars(r)["field"]
+	shardName := mux.Vars(r)["shard"]
+	_, noForward := r.URL.Query()["noforward"]
+
+	// Read entire body.
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	shard, err := strconv.ParseUint(shardName, 10, 64)
+	if err != nil {
+		http.Error(w, "shard should be an unsigned integer", http.StatusBadRequest)
+		return
+	}
+	//TODO give meaningful stats for import
+	err = h.api.ImportRoaringBytes(r.Context(), body, indexName, fieldName, shard, !noForward)
+
+	// Marshal response object.
+	msg := string("")
+	if err != nil {
+		msg = err.Error()
+	}
+	buf, e := h.api.Serializer.Marshal(&pilosa.ImportResponse{Err: msg})
+	if e != nil {
+		http.Error(w, fmt.Sprintf("marshal import response"), http.StatusInternalServerError)
+		return
+	}
+
+	// Write response.
+	w.Write(buf)
 }

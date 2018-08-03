@@ -443,6 +443,45 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 	return nil
 }
 
+// ImportRoaringBytes fast import of raw bits in roaring standard format
+func (c *InternalClient) ImportRoaringBytes(ctx context.Context, node *pilosa.Node, index, field string, shard uint64, roaringBytes []byte, forward bool) error {
+	if index == "" {
+		return pilosa.ErrIndexRequired
+	} else if field == "" {
+		return pilosa.ErrFieldRequired
+	}
+	endpoint := fmt.Sprintf("/index/%s/field/%s/importroaring/%d", index, field, shard)
+
+	// Create URL.
+	u := nodePathToURL(node, endpoint)
+	if forward {
+		v := url.Values{}
+		v.Set("noforward", "y")
+		u.RawQuery = v.Encode()
+	}
+	// Generate HTTP request.
+	req, err := http.NewRequest("POST", u.String(), bytes.NewBuffer(roaringBytes))
+	if err != nil {
+		return errors.Wrap(err, "creating request")
+	}
+	req.Header.Set("Accept", "application/x-binary")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	// Execute request against the host.
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return errors.Wrap(err, "executing request")
+	}
+	defer resp.Body.Close()
+
+	// Validate status code.
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("invalid status: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
 // marshalImportValuePayload marshalls the import parameters into a protobuf byte slice.
 func (c *InternalClient) marshalImportValuePayload(index, field string, shard uint64, vals []pilosa.FieldValue) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
@@ -581,7 +620,7 @@ func (c *InternalClient) CreateField(ctx context.Context, index, field string) e
 	// TODO: remove buf completely? (depends on whether importer needs to create specific field types)
 	// Encode query request.
 	buf, err := json.Marshal(&postFieldRequest{
-		//Options: opt,
+	//Options: opt,
 	})
 	if err != nil {
 		return errors.Wrap(err, "marshaling")

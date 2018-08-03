@@ -1,4 +1,3 @@
-// Copyright 2017 Pilosa Corp.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,6 +23,7 @@ import (
 	"io/ioutil"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pilosa/pilosa/pql"
@@ -290,6 +290,42 @@ func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, e
 		return nil, newNotFoundError(ErrFieldNotFound)
 	}
 	return field, nil
+}
+
+// ImportRoaringBytes fast loading of standard roaring format
+func (api *API) ImportRoaringBytes(ctx context.Context, roaringBytes []byte, indexName, fieldName string, shard uint64, forward bool) (err error) {
+	if err = api.validate(apiField); err != nil {
+		err = errors.Wrap(err, "validating api method")
+		return
+	}
+	nodes := api.cluster.shardNodes(indexName, shard)
+	var wg sync.WaitGroup
+
+	for _, node := range nodes {
+		if node.ID == api.server.nodeID {
+			field := api.holder.Field(indexName, fieldName)
+			if field == nil {
+				err = newNotFoundError(ErrFieldNotFound)
+				return
+			}
+			wg.Add(1)
+			go func(node *Node) {
+				err = field.importRoaringBytes(roaringBytes, shard)
+				wg.Done()
+			}(node)
+		} else if forward {
+			wg.Add(1)
+			//forward it on
+			go func(node *Node) {
+				//execute on node
+				err = api.server.defaultClient.ImportRoaringBytes(ctx, node, indexName, fieldName, shard, roaringBytes, forward)
+				wg.Done()
+			}(node)
+		}
+
+	}
+	wg.Wait()
+	return
 }
 
 // DeleteField removes the named field from the named index. If the index is not

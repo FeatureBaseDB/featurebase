@@ -1327,69 +1327,66 @@ func (f *fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, e
 func (f *fragment) bulkImport(rowIDs, columnIDs []uint64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
 	// Verify that there are an equal number of row ids and column ids.
 	if len(rowIDs) != len(columnIDs) {
 		return fmt.Errorf("mismatch of row/column len: %d != %d", len(rowIDs), len(columnIDs))
 	}
 
 	// Disconnect op writer so we don't append updates.
-	f.storage.OpWriter = nil
-
+	localBitmap := roaring.NewBitmap()
+	localBitmap.OpWriter = nil
 	// Process every bit.
 	// If an error occurs then reopen the storage.
 	lastID := uint64(0)
-	if err := func() error {
-		set := make(map[uint64]struct{})
-		for i := range rowIDs {
-			rowID, columnID := rowIDs[i], columnIDs[i]
+	set := make(map[uint64]struct{})
+	for i := range rowIDs {
+		rowID, columnID := rowIDs[i], columnIDs[i]
 
-			// Determine the position of the bit in the storage.
-			pos, err := f.pos(rowID, columnID)
-			if err != nil {
-				return errors.Wrap(err, "getting bit pos")
-			}
-
-			// Write to storage.
-			_, err = f.storage.Add(pos)
-			if err != nil {
-				return errors.Wrap(err, "writing")
-			}
-			// Reduce the StatsD rate for high volume stats
-			f.stats.Count("ImportBit", 1, 0.0001)
-			// import optimization to avoid linear foreach calls
-			// slight risk of concurrent cache counter being off but
-			// no real danger
-			if i == 0 || rowID != lastID {
-				lastID = rowID
-				set[rowID] = struct{}{}
-			}
-
-			// Invalidate block checksum.
-			delete(f.checksums, int(rowID/HashBlockSize))
+		// Determine the position of the bit in the storage.
+		pos, err := f.pos(rowID, columnID)
+		if err != nil {
+			return err
 		}
 
-		// Update cache counts for all rows.
-		for rowID := range set {
-			// Import should ALWAYS have row() load a new row from fragment.storage
-			// because the row that's in rowCache hasn't been updated with
-			// this import's data.
-			f.cache.BulkAdd(rowID, f.unprotectedRow(rowID, false, false).Count())
+		// Write to storage.
+		_, err = localBitmap.Add(pos)
+		if err != nil {
+			return err
+		}
+		// Reduce the StatsD rate for high volume stats
+		f.stats.Count("ImportBit", 1, 0.0001)
+		// import optimization to avoid linear foreach calls
+		// slight risk of concurrent cache counter being off but
+		// no real danger
+		if i == 0 || rowID != lastID {
+			lastID = rowID
+			set[rowID] = struct{}{}
 		}
 
-		f.cache.Invalidate()
-		return nil
-	}(); err != nil {
-		_ = f.closeStorage()
-		_ = f.openStorage()
-		return err
+		// Invalidate block checksum.
+		delete(f.checksums, int(rowID/HashBlockSize))
 	}
 
-	// Write the storage to disk and reload.
-	if err := f.snapshot(); err != nil {
-		return errors.Wrap(err, "snapshotting")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	//f.storage.Unmmap()
+	// Update cache counts for all rows.
+	var results *roaring.Bitmap
+	if f.storage.Count() > 0 {
+		results = f.storage.Union(localBitmap)
+	} else {
+		results = localBitmap
 	}
 
-	return nil
+	for rowID := range set {
+		n := results.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
+		f.cache.BulkAdd(rowID, n)
+	}
+
+	f.cache.Invalidate()
+	return snapshot(f, results)
 }
 
 // importValue bulk imports a set of range-encoded values.
@@ -1425,6 +1422,19 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint) error 
 	return nil
 }
 
+// importRoaringBytes imports from standard roaring data format defined at
+// https://github.com/RoaringBitmap/RoaringFormatSpec
+func (f *fragment) importRoaringBytes(roaringBytes []byte) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	bm, err := roaring.UnmarshalStandardRoaring(roaringBytes)
+	if err != nil {
+		return err
+	}
+	err = snapshot(f, bm)
+	return err
+}
+
 // incrementOpN increase the operation count by one.
 // If the count exceeds the maximum allowed then a snapshot is performed.
 func (f *fragment) incrementOpN() error {
@@ -1452,6 +1462,11 @@ func track(start time.Time, message string, stats StatsClient, logger Logger) {
 }
 
 func (f *fragment) snapshot() error {
+	return snapshot(f, f.storage)
+}
+
+func snapshot(f *fragment, bm *roaring.Bitmap) error {
+
 	f.Logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	start := time.Now()
@@ -1467,7 +1482,7 @@ func (f *fragment) snapshot() error {
 
 	// Write storage to snapshot.
 	bw := bufio.NewWriter(file)
-	if _, err := f.storage.WriteTo(bw); err != nil {
+	if _, err := bm.WriteTo(bw); err != nil {
 		return fmt.Errorf("snapshot write to: %s", err)
 	}
 
