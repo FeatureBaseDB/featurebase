@@ -34,10 +34,7 @@ func newGenerateConfigCommand(_ io.Reader, _, _ io.Writer) *cobra.Command {
 		Long: `generate-config prints the default configuration to stdout
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := generateConf.Run(context.Background()); err != nil {
-				return err
-			}
-			return nil
+			return generateConf.Run(context.Background())
 		},
 	}
 

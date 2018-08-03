@@ -574,15 +574,11 @@ func TestIntersectBitmapRunBitmap(t *testing.T) {
 		},
 	}
 	for i, test := range tests {
-		for i, v := range test.bitmap {
-			a.bitmap[i] = v
-		}
+		copy(a.bitmap, test.bitmap)
 		b.runs = test.runs
 		b.n = 4097 // ;)
 		exp := make([]uint64, bitmapN)
-		for i, v := range test.exp {
-			exp[i] = v
-		}
+		copy(exp, test.exp)
 		a.containerType = containerBitmap
 		b.containerType = containerRun
 		ret := intersectBitmapRun(a, b)
@@ -640,9 +636,7 @@ func TestIntersectBitmapRunArray(t *testing.T) {
 		},
 	}
 	for i, test := range tests {
-		for i, v := range test.bitmap {
-			a.bitmap[i] = v
-		}
+		copy(a.bitmap, test.bitmap)
 		b.runs = test.runs
 		a.containerType = containerBitmap
 		b.containerType = containerRun
@@ -964,9 +958,7 @@ func TestBitmapSetRange(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		for i, v := range test.bitmap {
-			c.bitmap[i] = v
-		}
+		copy(c.bitmap, test.bitmap)
 		c.n = c.countRange(0, 65535)
 		c.bitmapSetRange(test.start, test.last+1)
 		if !reflect.DeepEqual(c.bitmap[:len(test.exp)], test.exp) {
@@ -996,9 +988,7 @@ func TestArrayToBitmap(t *testing.T) {
 
 	for i, test := range tests {
 		exp := make([]uint64, bitmapN)
-		for i, v := range test.exp {
-			exp[i] = v
-		}
+		copy(exp, test.exp)
 
 		a.array = test.array
 		a.n = len(test.array)
@@ -1086,7 +1076,7 @@ func TestRunToBitmap(t *testing.T) {
 }
 
 func getFullBitmap() []uint64 {
-	x := make([]uint64, 1024, 1024)
+	x := make([]uint64, 1024)
 	for i := range x {
 		x[i] = uint64(0xFFFFFFFFFFFFFFFF)
 	}
@@ -1266,9 +1256,7 @@ func TestBitmapZeroRange(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		for i, v := range test.bitmap {
-			c.bitmap[i] = v
-		}
+		copy(c.bitmap, test.bitmap)
 		c.n = c.countRange(0, 65535)
 		c.bitmapZeroRange(test.start, test.last+1)
 		if !reflect.DeepEqual(c.bitmap[:len(test.exp)], test.exp) {
@@ -1301,9 +1289,7 @@ func TestUnionBitmapRun(t *testing.T) {
 		},
 	}
 	for i, test := range tests {
-		for i, v := range test.bitmap {
-			a.bitmap[i] = v
-		}
+		copy(a.bitmap, test.bitmap)
 		a.n = a.bitmapCountRange(0, 65535)
 		b.runs = test.runs
 		b.n = b.runCountRange(0, 65535)
@@ -1348,9 +1334,7 @@ func TestBitmapCountRuns(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		for j, v := range test.bitmap {
-			c.bitmap[j] = v
-		}
+		copy(c.bitmap, test.bitmap)
 
 		ret := c.bitmapCountRuns()
 		if ret != test.exp {
@@ -1506,12 +1490,8 @@ func TestDifferenceRunArray(t *testing.T) {
 	}
 }
 func MakeBitmap(start []uint64) []uint64 {
-
 	b := make([]uint64, bitmapN)
-	for i, v := range start {
-		b[i] = v
-
-	}
+	copy(b, start)
 	return b
 }
 func MakeLastBitSet() []uint64 {
@@ -1573,9 +1553,7 @@ func TestDifferenceRunBitmap(t *testing.T) {
 	for i, test := range tests {
 		a.runs = test.runs
 		a.n = a.runCountRange(0, 65536)
-		for i, v := range test.bitmap {
-			b.bitmap[i] = v
-		}
+		copy(b.bitmap, test.bitmap)
 		b.n = b.bitmapCountRange(0, 65536)
 		ret := differenceRunBitmap(a, b)
 		if !reflect.DeepEqual(ret.runs, test.exp) {
@@ -1654,9 +1632,7 @@ func TestDifferenceBitmapRun(t *testing.T) {
 		},
 	}
 	for i, test := range tests {
-		for i, v := range test.bitmap {
-			a.bitmap[i] = v
-		}
+		copy(a.bitmap, test.bitmap)
 		a.n = a.bitmapCountRange(0, 65536)
 		b.runs = test.runs
 		b.n = b.runCountRange(0, 65536)
@@ -2080,9 +2056,7 @@ func TestBitmapXorRange(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		for i, v := range test.bitmap {
-			c.bitmap[i] = v
-		}
+		copy(c.bitmap, test.bitmap)
 		c.n = c.countRange(0, 65535)
 		c.bitmapXorRange(test.start, test.last+1)
 		if !reflect.DeepEqual(c.bitmap[:len(test.exp)], test.exp) {
@@ -2597,9 +2571,7 @@ func TestIntersectArrayBitmap(t *testing.T) {
 	for i, test := range tests {
 		a.array = test.array
 		a.containerType = containerArray
-		for i, bmval := range test.bitmap {
-			b.bitmap[i] = bmval
-		}
+		copy(b.bitmap, test.bitmap)
 		b.containerType = containerBitmap
 		ret := intersectArrayBitmap(a, b).array
 		if len(ret) == 0 && len(test.exp) == 0 {
@@ -3259,7 +3231,7 @@ func runContainerFunc(f interface{}, c ...*Container) *Container {
 func TestUnmarshalStdRoaring(t *testing.T) {
 	//generated serialize image from java(clojure) with arrays
 	_2arrayContainer, _ := hex.DecodeString("3A300000020000000000020001000000180000001E0000000100020003000100")
-	bm, er := unmarshalStandardRoaring(_2arrayContainer)
+	bm, er := UnmarshalStandardRoaring(_2arrayContainer)
 	if er != nil {
 		t.Fatalf("unmarshalStandardRoaring %s", er)
 	}
@@ -3268,7 +3240,7 @@ func TestUnmarshalStdRoaring(t *testing.T) {
 	}
 	//generated serialize image from java(clojure) with a run and array
 	_rle_array_container, _ := hex.DecodeString("3B3001000100000900010000000100010009000100")
-	bm, er = unmarshalStandardRoaring(_rle_array_container)
+	bm, er = UnmarshalStandardRoaring(_rle_array_container)
 	if er != nil {
 		t.Fatalf("unmarshalStandardRoaring %s", er)
 	}
@@ -3276,8 +3248,9 @@ func TestUnmarshalStdRoaring(t *testing.T) {
 		t.Fatalf("unexpected bitmap %v expected bits [1 2 3 4 5 6 7 8 9 10 65537]", bm.Slice())
 	}
 	//had to use an external file because emacs was barfing on the long line :()
+	// the bitmap is bits 1->9999,65537
 	_bitmap_array_container, _ := ioutil.ReadFile("./bitmapcontainer.roaringbitmap")
-	bm, er = unmarshalStandardRoaring(_bitmap_array_container)
+	bm, er = UnmarshalStandardRoaring(_bitmap_array_container)
 	if er != nil {
 		t.Fatalf("unmarshalStandardRoaring %s", er)
 	}

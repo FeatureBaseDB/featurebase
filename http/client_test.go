@@ -128,12 +128,12 @@ func TestClient_MultiNode(t *testing.T) {
 		Remote: false,
 	}
 
-	result, err := client[0].Query(context.Background(), "i", queryRequest)
+	_, err = client[0].Query(context.Background(), "i", queryRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	result, err = client[0].Query(context.Background(), "i", queryRequest)
+	result, err := client[0].Query(context.Background(), "i", queryRequest)
 	if err != nil {
 		t.Fatal(err)
 	}

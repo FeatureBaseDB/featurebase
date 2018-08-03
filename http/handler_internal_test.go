@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa"
@@ -68,7 +69,7 @@ func TestPostFieldRequestUnmarshalJSON(t *testing.T) {
 		err      string
 	}{
 		{json: `{"options": {}}`, expected: postFieldRequest{}},
-		{json: `{"options": 4}`, err: "json: cannot unmarshal number into Go struct field postFieldRequest.options of type http.fieldOptions"},
+		{json: `{"options": 4}`, err: "json: cannot unmarshal number"},
 		{json: `{"option": {}}`, err: `json: unknown field "option"`},
 		{json: `{"options": {"badKey": "test"}}`, err: `json: unknown field "badKey"`},
 		{json: `{"options": {"inverseEnabled": true}}`, err: `json: unknown field "inverseEnabled"`},
@@ -81,7 +82,7 @@ func TestPostFieldRequestUnmarshalJSON(t *testing.T) {
 		dec.DisallowUnknownFields()
 		err := dec.Decode(actual)
 		if err != nil {
-			if test.err == "" || test.err != err.Error() {
+			if test.err == "" || !strings.HasPrefix(err.Error(), test.err) {
 				t.Errorf("test %d: expected error: %v, but got result: %v", i, test.err, err)
 			}
 		}

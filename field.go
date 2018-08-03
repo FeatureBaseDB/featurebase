@@ -514,43 +514,6 @@ func (f *Field) addBSIGroup(bsig *bsiGroup) error {
 	return nil
 }
 
-// deleteBSIGroupAndView deletes an existing bsiGroup on the schema.
-func (f *Field) deleteBSIGroupAndView(name string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	// Remove bsiGroup.
-	if err := f.deleteBSIGroup(name); err != nil {
-		return err
-	}
-
-	// Remove views.
-	viewName := viewBSIGroupPrefix + name
-	if view := f.viewMap[viewName]; view != nil {
-		delete(f.viewMap, viewName)
-
-		if err := view.close(); err != nil {
-			return errors.Wrap(err, "closing view")
-		} else if err := os.RemoveAll(view.path); err != nil {
-			return errors.Wrap(err, "deleting directory")
-		}
-	}
-
-	return nil
-}
-
-// deleteBSIGroup removes a single bsiGroup from bsiGroups.
-func (f *Field) deleteBSIGroup(name string) error {
-	for i, bsig := range f.bsiGroups {
-		if bsig.Name == name {
-			copy(f.bsiGroups[i:], f.bsiGroups[i+1:])
-			f.bsiGroups, f.bsiGroups[len(f.bsiGroups)-1] = f.bsiGroups[:len(f.bsiGroups)-1], nil
-			return nil
-		}
-	}
-	return ErrBSIGroupNotFound
-}
-
 // TimeQuantum returns the time quantum for the field.
 func (f *Field) TimeQuantum() TimeQuantum {
 	f.mu.Lock()
@@ -615,18 +578,6 @@ func (f *Field) views() []*view {
 	other := make([]*view, 0, len(f.viewMap))
 	for _, view := range f.viewMap {
 		other = append(other, view)
-	}
-	return other
-}
-
-// viewNames returns a list of all views (as a string) in the field.
-func (f *Field) viewNames() []string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	other := make([]string, 0, len(f.viewMap))
-	for viewName := range f.viewMap {
-		other = append(other, viewName)
 	}
 	return other
 }
@@ -821,7 +772,7 @@ func groupCompare(a, b string, offset int) (lt, eq bool) {
 }
 
 func (f *Field) allTimeViewsSortedByQuantum() (me []*view) {
-	me = make([]*view, len(f.viewMap), len(f.viewMap))
+	me = make([]*view, len(f.viewMap))
 	prefix := viewStandard + "_"
 	offset := len(viewStandard) + 1
 	i := 0
@@ -979,29 +930,6 @@ func (f *Field) Range(name string, op pql.Token, predicate int64) (*Row, error) 
 	return view.rangeOp(op, bsig.BitDepth(), baseValue)
 }
 
-func (f *Field) rangeBetween(name string, predicateMin, predicateMax int64) (*Row, error) {
-	// Retrieve and validate bsiGroup.
-	bsig := f.bsiGroup(name)
-	if bsig == nil {
-		return nil, ErrBSIGroupNotFound
-	} else if predicateMin > predicateMax {
-		return nil, ErrInvalidBetweenValue
-	}
-
-	// Retrieve bsiGroup's view.
-	view := f.view(viewBSIGroupPrefix + name)
-	if view == nil {
-		return nil, nil
-	}
-
-	baseValueMin, baseValueMax, outOfRange := bsig.baseValueBetween(predicateMin, predicateMax)
-	if outOfRange {
-		return NewRow(), nil
-	}
-
-	return view.rangeBetween(bsig.BitDepth(), baseValueMin, baseValueMax)
-}
-
 // Import bulk imports data.
 func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) error {
 	// Determine quantum if timestamps are set.
@@ -1072,9 +1000,9 @@ func (f *Field) importValue(columnIDs []uint64, values []int64) error {
 	dataByFragment := make(map[importKey]importValueData)
 	for i := range columnIDs {
 		columnID, value := columnIDs[i], values[i]
-		if int64(value) > bsig.Max {
+		if value > bsig.Max {
 			return fmt.Errorf("%v, columnID=%v, value=%v", ErrBSIGroupValueTooHigh, columnID, value)
-		} else if int64(value) < bsig.Min {
+		} else if value < bsig.Min {
 			return fmt.Errorf("%v, columnID=%v, value=%v", ErrBSIGroupValueTooLow, columnID, value)
 		}
 

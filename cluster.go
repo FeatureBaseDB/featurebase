@@ -569,13 +569,6 @@ func fragsDiff(a, b []frag) []frag {
 
 type fragsByHost map[string][]frag
 
-func (a fragsByHost) add(b fragsByHost) fragsByHost {
-	for k, v := range b {
-		a[k] = append(a[k], v...)
-	}
-	return a
-}
-
 type viewsByField map[string][]string
 
 func (a viewsByField) addView(field, view string) {

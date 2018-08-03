@@ -42,10 +42,7 @@ The format of the CSV file is:
 The file does not contain any headers.
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := Exporter.Run(context.Background()); err != nil {
-				return err
-			}
-			return nil
+			return Exporter.Run(context.Background())
 		},
 	}
 	flags := exportCmd.Flags()

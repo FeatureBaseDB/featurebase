@@ -413,20 +413,6 @@ func (v *view) rangeOp(op pql.Token, bitDepth uint, predicate uint64) (*Row, err
 	return r, nil
 }
 
-// rangeBetween returns bitmaps with a field value encoding matching any
-// value between predicateMin and predicateMax.
-func (v *view) rangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
-	r := NewRow()
-	for _, frag := range v.allFragments() {
-		other, err := frag.rangeBetween(bitDepth, predicateMin, predicateMax)
-		if err != nil {
-			return nil, err
-		}
-		r = r.Union(other)
-	}
-	return r, nil
-}
-
 // ViewInfo represents schema information for a view.
 type ViewInfo struct {
 	Name string `json:"name"`

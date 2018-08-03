@@ -120,10 +120,7 @@ func (m *Command) Reopen() error {
 	m.Command.Config = config
 
 	// Run new program.
-	if err := m.Start(); err != nil {
-		return err
-	}
-	return nil
+	return m.Start()
 }
 
 // URL returns the base URL string for accessing the running program.

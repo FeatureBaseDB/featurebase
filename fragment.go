@@ -1733,8 +1733,7 @@ func (f *fragment) rows() []uint64 {
 func (f *fragment) rowsWithFilter(filter rowFilter) []uint64 {
 	i, _ := f.storage.Containers.Iterator(0)
 	rows := make([]uint64, 0)
-	var lastRow uint64
-	lastRow = math.MaxUint64
+	var lastRow uint64 = math.MaxUint64
 
 	// Loop over the existing containers.
 	for i.Next() {

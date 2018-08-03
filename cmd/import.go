@@ -43,10 +43,7 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			Importer.Paths = args
-			if err := Importer.Run(context.Background()); err != nil {
-				return err
-			}
-			return nil
+			return Importer.Run(context.Background())
 		},
 	}
 

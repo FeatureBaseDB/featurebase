@@ -111,7 +111,7 @@ docker-test:
 # Run gometalinter with custom flags
 gometalinter: require-gometalinter
 	gometalinter --vendor --disable-all \
-	    --deadline=60s \
+	    --deadline=120s \
 	    --enable=deadcode \
 	    --enable=gochecknoinits \
 	    --enable=gofmt \
@@ -121,8 +121,10 @@ gometalinter: require-gometalinter
 	    --enable=ineffassign \
 	    --enable=interfacer \
 	    --enable=maligned \
+	    --enable=megacheck \
 	    --enable=misspell \
 	    --enable=nakedret \
+	    --enable=unconvert \
 	    --enable=unparam \
 	    --enable=vet \
 	    --exclude "^internal/.*\.pb\.go" \

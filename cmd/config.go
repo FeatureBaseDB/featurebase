@@ -37,10 +37,7 @@ func newConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command 
 
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conf.Config = Server.Config
-			if err := conf.Run(context.Background()); err != nil {
-				return err
-			}
-			return nil
+			return conf.Run(context.Background())
 		},
 	}
 

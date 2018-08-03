@@ -100,10 +100,8 @@ func (s *attrStore) Open() error {
 
 	// Initialize database.
 	if err := s.db.Update(func(tx *bolt.Tx) error {
-		if _, err := tx.CreateBucketIfNotExists([]byte("attrs")); err != nil {
-			return err
-		}
-		return nil
+		_, err := tx.CreateBucketIfNotExists([]byte("attrs"))
+		return err
 	}); err != nil {
 		return errors.Wrap(err, "initializing")
 	}
@@ -132,10 +130,7 @@ func (s *attrStore) Attrs(id uint64) (m map[string]interface{}, err error) {
 	// Find attributes from storage.
 	if err = s.db.View(func(tx *bolt.Tx) error {
 		m, err = txAttrs(tx, id)
-		if err != nil {
-			return err
-		}
-		return nil
+		return err
 	}); err != nil {
 		return nil, errors.Wrap(err, "finding attributes")
 	}
@@ -195,7 +190,7 @@ func (s *attrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
 		for id := range m {
 			ids = append(ids, id)
 		}
-		sort.Sort(uint64Slice(ids))
+		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 
 		// Update attributes for each id.
 		for _, id := range ids {
@@ -262,8 +257,8 @@ func (s *attrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, erro
 	defer tx.Rollback()
 
 	// Move to the start of the block.
-	min := u64tob(uint64(i) * attrBlockSize)
-	max := u64tob(uint64(i+1) * attrBlockSize)
+	min := u64tob(i * attrBlockSize)
+	max := u64tob((i + 1) * attrBlockSize)
 	cur := tx.Bucket([]byte("attrs")).Cursor()
 	for k, v := cur.Seek(min); k != nil; k, v = cur.Next() {
 		// Exit if we're past the end of the block.
@@ -360,42 +355,6 @@ func mapContains(m, subset map[string]interface{}) bool {
 		}
 	}
 	return true
-}
-
-// uint64Slice represents a sortable slice of uint64 numbers.
-type uint64Slice []uint64
-
-func (p uint64Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
-func (p uint64Slice) Len() int           { return len(p) }
-func (p uint64Slice) Less(i, j int) bool { return p[i] < p[j] }
-
-// merge combines p and other to a unique sorted set of values.
-// p and other must both have unique sets and be sorted.
-func (p uint64Slice) merge(other []uint64) []uint64 {
-	ret := make([]uint64, 0, len(p))
-
-	i, j := 0, 0
-	for i < len(p) && j < len(other) {
-		a, b := p[i], other[j]
-		if a == b {
-			ret = append(ret, a)
-			i, j = i+1, j+1
-		} else if a < b {
-			ret = append(ret, a)
-			i++
-		} else {
-			ret = append(ret, b)
-			j++
-		}
-	}
-
-	if i < len(p) {
-		ret = append(ret, p[i:]...)
-	} else if j < len(other) {
-		ret = append(ret, other[j:]...)
-	}
-
-	return ret
 }
 
 // blockCursor represents a cursor for iterating over blocks of a bolt bucket.
