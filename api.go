@@ -734,13 +734,18 @@ func (api *API) RemoveNode(id string) (*Node, error) {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
-	removeNode := api.cluster.unprotectedNodeByID(id)
+	removeNode := api.cluster.nodeByID(id)
 	if removeNode == nil {
-		return nil, errors.Wrap(ErrNodeIDNotExists, "finding node to remove")
+		if !api.cluster.topologyContainsNode(id) {
+			return nil, errors.Wrap(ErrNodeIDNotExists, "finding node to remove")
+		}
+		removeNode = &Node{
+			ID: id,
+		}
 	}
 
 	// Start the resize process (similar to NodeJoin)
-	err := api.cluster.nodeLeave(removeNode)
+	err := api.cluster.nodeLeave(id)
 	if err != nil {
 		return removeNode, errors.Wrap(err, "calling node leave")
 	}

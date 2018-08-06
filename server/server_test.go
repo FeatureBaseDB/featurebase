@@ -396,7 +396,7 @@ func TestClusteringNodesReplica1(t *testing.T) {
 		t.Fatalf("closing third node: %v", err)
 	}
 
-	// TODO: confirm that cluster stops accepting queries after one node closes
+	// confirm that cluster stops accepting queries after one node closes
 	if _, err := cluster[0].API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
 		t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
 	}
@@ -456,12 +456,12 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("expected state to be DEGRADED, but got %s", cluster[0].API.State())
 	}
 
-	// TODO: implement and confirm that cluster keeps accepting queries if replication > 1
+	// confirm that cluster keeps accepting queries if replication > 1
 	if _, err := cluster[0].API.CreateIndex(context.Background(), "anewindex", pilosa.IndexOptions{}); err != nil {
 		t.Fatalf("got unexpected error creating index: %v", err)
 	}
 
-	// TODO: confirm that cluster stops accepting queries if 2 nodes fail and replication == 2
+	// confirm that cluster stops accepting queries if 2 nodes fail and replication == 2
 	if err := cluster[1].Command.Close(); err != nil {
 		t.Fatalf("closing 2nd node: %v", err)
 	}
@@ -516,3 +516,48 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 }
+
+func TestRemoveNodeAfterItDies(t *testing.T) {
+	cluster := test.MustNewCluster(t, 3)
+	for _, c := range cluster {
+		c.Config.Cluster.ReplicaN = 2
+	}
+	err := cluster.Start()
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
+	}
+
+	var wait = true
+	for wait {
+		wait = false
+		for _, node := range cluster {
+			if node.API.State() != pilosa.ClusterStateNormal {
+				wait = true
+			}
+		}
+		time.Sleep(time.Millisecond * 1)
+	}
+
+	if err := cluster[2].Command.Close(); err != nil {
+		t.Fatalf("closing third node: %v", err)
+	}
+
+	if cluster[0].API.State() != pilosa.ClusterStateDegraded {
+		t.Fatalf("expected state to be DEGRADED, but got %s", cluster[0].API.State())
+	}
+
+	if _, err := cluster[0].API.RemoveNode(cluster[2].API.Node().ID); err != nil {
+		t.Fatalf("removing failed node: %v", err)
+	}
+
+	if cluster[0].API.State() != pilosa.ClusterStateNormal {
+		t.Fatalf("expected state to be DEGRADED, but got %s", cluster[0].API.State())
+	}
+
+	hosts := cluster[0].API.Hosts(context.Background())
+	if len(hosts) != 2 {
+		t.Fatalf("unexpected hosts: %v", hosts)
+	}
+}
+
+// TODO: confirm that things keep working if a node is hard-closed (no nodeLeave event) and immediately restarted with a different address.
