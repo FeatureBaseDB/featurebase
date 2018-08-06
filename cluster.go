@@ -474,7 +474,7 @@ func (c *cluster) determineClusterState() (clusterState string) {
 	if c.haveTopologyAgreement() && c.allNodesReady() {
 		return ClusterStateNormal
 	}
-	if len(c.nodeIDs())-len(c.Topology.nodeIDs) >= c.ReplicaN && c.allNodesReady() {
+	if len(c.Topology.nodeIDs)-len(c.nodeIDs()) < c.ReplicaN && c.allNodesReady() {
 		return ClusterStateDegraded
 	}
 	return ClusterStateStarting
