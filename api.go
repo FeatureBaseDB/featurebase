@@ -71,6 +71,7 @@ func NewAPI(opts ...apiOption) (*API, error) {
 var validAPIMethods = map[string]map[apiMethod]struct{}{
 	ClusterStateStarting: methodsCommon,
 	ClusterStateNormal:   appendMap(methodsCommon, methodsNormal),
+	ClusterStateDegraded: appendMap(methodsCommon, methodsNormal),
 	ClusterStateResizing: appendMap(methodsCommon, methodsResizing),
 }
 

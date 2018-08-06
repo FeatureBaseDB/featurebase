@@ -41,11 +41,13 @@ const (
 
 	// ClusterState represents the state returned in the /status endpoint.
 	ClusterStateStarting = "STARTING"
+	ClusterStateDegraded = "DEGRADED" // cluster is running but we've lost some # of hosts >0 but < replicaN
 	ClusterStateNormal   = "NORMAL"
 	ClusterStateResizing = "RESIZING"
 
 	// NodeState represents the state of a node during startup.
 	nodeStateReady = "READY"
+	nodeStateDown  = "DOWN"
 
 	// resizeJob states.
 	resizeJobStateRunning = "RUNNING"
@@ -396,7 +398,7 @@ func (c *cluster) unprotectedSetState(state string) {
 	var doCleanup bool
 
 	switch state {
-	case ClusterStateNormal:
+	case ClusterStateNormal, ClusterStateDegraded:
 		// If state is RESIZING -> NORMAL then run cleanup.
 		if c.state == ClusterStateResizing {
 			doCleanup = true
@@ -451,11 +453,6 @@ func (c *cluster) receiveNodeState(nodeID string, state string) error {
 		return nil
 	}
 
-	// This method is really only useful during initial startup.
-	if c.state != ClusterStateStarting {
-		return nil
-	}
-
 	c.Topology.mu.Lock()
 	c.Topology.nodeStates[nodeID] = state
 	c.Topology.mu.Unlock()
@@ -467,6 +464,20 @@ func (c *cluster) receiveNodeState(nodeID string, state string) error {
 	}
 
 	return nil
+}
+
+// determineClusterState is unprotected.
+func (c *cluster) determineClusterState() (clusterState string) {
+	if c.state == ClusterStateResizing {
+		return ClusterStateResizing
+	}
+	if c.haveTopologyAgreement() && c.allNodesReady() {
+		return ClusterStateNormal
+	}
+	if len(c.nodeIDs())-len(c.Topology.nodeIDs) >= c.ReplicaN && c.allNodesReady() {
+		return ClusterStateDegraded
+	}
+	return ClusterStateStarting
 }
 
 func (c *cluster) status() *ClusterStatus {
@@ -907,12 +918,12 @@ func (c *cluster) haveTopologyAgreement() bool {
 }
 
 // allNodesReady is unprotected.
-func (c *cluster) allNodesReady() bool {
+func (c *cluster) allNodesReady() (ret bool) {
 	if c.Static {
 		return true
 	}
-	for _, uri := range c.Topology.nodeIDs {
-		if c.Topology.nodeStates[uri] != nodeStateReady {
+	for _, id := range c.nodeIDs() {
+		if c.Topology.nodeStates[id] != nodeStateReady {
 			return false
 		}
 	}
@@ -1564,7 +1575,7 @@ func (c *cluster) considerTopology() error {
 }
 
 // ReceiveEvent represents an implementation of EventHandler.
-func (c *cluster) ReceiveEvent(e *NodeEvent) error {
+func (c *cluster) ReceiveEvent(e *NodeEvent) (err error) {
 	// Ignore events sent from this node.
 	if e.Node.ID == c.Node.ID {
 		return nil
@@ -1579,14 +1590,31 @@ func (c *cluster) ReceiveEvent(e *NodeEvent) error {
 		}
 		return c.nodeJoin(e.Node)
 	case NodeLeave:
-		// Automatic nodeLeave is intentionally not implemented.
+		c.logger.Printf("received node leave on %s: %s, uri: %v", c.Node, e.Node, e.Node.URI)
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if c.unprotectedIsCoordinator() {
+			// if removeNodeBasicSorted succeeds, that means that the node was
+			// not already removed by a removeNode request. We treat this as the
+			// host being temporarily unavailable, and expect it to come back
+			// up.
+			if c.removeNodeBasicSorted(e.Node) {
+				c.Topology.nodeStates[e.Node.ID] = nodeStateDown
+				// put the cluster into STARTING if we've lost a number of nodes
+				// equal to or greater than ReplicaN
+				err = c.unprotectedSetStateAndBroadcast(c.determineClusterState())
+			}
+		}
+		c.logger.Printf("finished node leave on %s: %s, uri: %v", c.Node, e.Node, e.Node.URI)
 	case NodeUpdate:
+		c.logger.Printf("received node update event: id: %v, string: %v, uri: %v", e.Node.ID, e.Node.String(), e.Node.URI)
 		// NodeUpdate is intentionally not implemented.
 	}
 
-	return nil
+	return err
 }
 
+// nodeJoin should only be called by the coordinator.
 func (c *cluster) nodeJoin(node *Node) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -1628,8 +1656,12 @@ func (c *cluster) nodeJoin(node *Node) error {
 	// If the cluster already contains the node, just send it the cluster status.
 	// This is useful in the case where a node is restarted or temporarily leaves
 	// the cluster.
-	if node := c.unprotectedNodeByID(node.ID); node != nil {
-		return c.sendTo(node, c.unprotectedStatus())
+	if cnode := c.unprotectedNodeByID(node.ID); cnode != nil {
+		if cnode.URI != node.URI {
+			c.logger.Printf("Node: %v changed URI from %s to %s", cnode.ID, cnode.URI, node.URI)
+			cnode.URI = node.URI
+		}
+		return c.unprotectedSetStateAndBroadcast(c.determineClusterState())
 	}
 
 	// If the holder does not yet contain data, go ahead and add the node.

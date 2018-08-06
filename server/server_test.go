@@ -24,6 +24,7 @@ import (
 	"strings"
 	"testing"
 	"testing/quick"
+	"time"
 
 	"github.com/pelletier/go-toml"
 	"github.com/pilosa/pilosa"
@@ -374,3 +375,52 @@ type uint64Slice []uint64
 func (p uint64Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p uint64Slice) Len() int           { return len(p) }
 func (p uint64Slice) Less(i, j int) bool { return p[i] < p[j] }
+
+func TestClusteringNodes(t *testing.T) {
+	cluster := test.MustRunCluster(t, 3)
+	defer cluster.Close()
+
+	var wait = true
+	for wait {
+		wait = false
+		for _, node := range cluster {
+			if node.API.State() != pilosa.ClusterStateNormal {
+				wait = true
+			}
+		}
+		time.Sleep(time.Millisecond * 1)
+	}
+
+	if err := cluster[2].Command.Close(); err != nil {
+		t.Fatalf("closing third node: %v", err)
+	}
+
+	// TODO: confirm that cluster stops accepting queries after one node closes
+	// TODO: implement and confirm that cluster keeps accepting queries if replication > 1
+	// TODO: confirm that cluster stops accepting queries if 2 nodes fail and replication == 2
+	// TODO: confirm that things keep working if a node is hard-closed (no nodeLeave event) and immediately restarted with a different address.
+	// TODO: confirm that a node can be removed using the remove endpoint after it has left teh cluster
+	// TODO: confirm that cluster still operates properly in state DEGRADED
+
+	// Create new main with the same config.
+	config := cluster[2].Command.Config
+	// config.Bind = cluster[2].API.Node().URI.HostPort()
+	// config.Gossip.Port = strconv.Itoa(int(cluster[2].Command.GossipTransport().URI.Port))
+	cluster[2].Command = server.NewCommand(cluster[2].Stdin, cluster[2].Stdout, cluster[2].Stderr)
+	cluster[2].Command.Config = config
+
+	// Run new program.
+	if err := cluster[2].Start(); err != nil {
+		t.Fatalf("restarting node 2: %v", err)
+	}
+
+	for wait {
+		wait = false
+		for _, node := range cluster {
+			if node.API.State() != pilosa.ClusterStateNormal {
+				wait = true
+			}
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
