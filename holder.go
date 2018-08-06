@@ -46,6 +46,10 @@ type Holder struct {
 	// Indexes by name.
 	indexes map[string]*Index
 
+	// Key/ID translation
+	translateFile            *TranslateFile
+	NewPrimaryTranslateStore func(*Node) TranslateStore
+
 	// opened channel is closed once Open() completes.
 	opened chan struct{}
 
@@ -76,6 +80,9 @@ func NewHolder() *Holder {
 		closing: make(chan struct{}),
 
 		opened: make(chan struct{}),
+
+		translateFile:            NewTranslateFile(),
+		NewPrimaryTranslateStore: newNopTranslateStore,
 
 		broadcaster: NopBroadcaster,
 		Stats:       NopStatsClient,
@@ -160,6 +167,13 @@ func (h *Holder) Close() error {
 			return errors.Wrap(err, "closing index")
 		}
 	}
+
+	if h.translateFile != nil {
+		if err := h.translateFile.Close(); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -558,6 +572,14 @@ func (h *Holder) logStartup() error {
 	}
 
 	return nil
+}
+
+func (h *Holder) setPrimaryTranslateStore(node *Node) {
+	var nodeID string
+	if node != nil {
+		nodeID = node.ID
+	}
+	h.translateFile.SetPrimaryStore(nodeID, h.NewPrimaryTranslateStore(node))
 }
 
 // holderSyncer is an active anti-entropy tool that compares the local holder

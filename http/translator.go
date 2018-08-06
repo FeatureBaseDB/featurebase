@@ -19,12 +19,17 @@ var _ pilosa.TranslateStore = (*translateStore)(nil)
 // translateStore represents an implementation of pilosa.TranslateStore that
 // communicates over HTTP. This is used with the TranslateHandler.
 type translateStore struct {
-	URL string
+	node *pilosa.Node
 }
 
-// NewTranslateStore returns a new instance of TranslateStore.
-func NewTranslateStore(rawurl string) *translateStore {
-	return &translateStore{URL: rawurl}
+// DEPRECATED: NewTranslateStore returns a new instance of translateStore.
+func NewTranslateStore(rawurl string) *translateStore { // nolint: unparam
+	return &translateStore{node: nil}
+}
+
+// NewNodeTranslateStore returns a new instance of TranslateStore based on node.
+func NewNodeTranslateStore(node *pilosa.Node) pilosa.TranslateStore {
+	return &translateStore{node: node}
 }
 
 // TranslateColumnsToUint64 is not currently implemented.
@@ -50,7 +55,7 @@ func (s *translateStore) TranslateRowToString(index, frame string, values uint64
 // Reader returns a reader that can stream data from a remote store.
 func (s *translateStore) Reader(ctx context.Context, off int64) (io.ReadCloser, error) {
 	// Generate remote URL.
-	u, err := url.Parse(s.URL)
+	u, err := url.Parse(s.node.URI.String())
 	if err != nil {
 		return nil, err
 	}

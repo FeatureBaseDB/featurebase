@@ -49,7 +49,6 @@ type Server struct { // nolint: maligned
 	// Internal
 	holder          *Holder
 	cluster         *cluster
-	translateFile   *TranslateFile
 	diagnostics     *diagnosticsCollector
 	executor        *executor
 	hosts           []string
@@ -69,8 +68,6 @@ type Server struct { // nolint: maligned
 	maxWritesPerRequest int
 	isCoordinator       bool
 	syncer              holderSyncer
-
-	primaryTranslateStore TranslateStore
 
 	defaultClient InternalClient
 	dataDir       string
@@ -163,9 +160,17 @@ func OptServerInternalClient(c InternalClient) ServerOption {
 	}
 }
 
+// DEPRECATED
 func OptServerPrimaryTranslateStore(store TranslateStore) ServerOption {
 	return func(s *Server) error {
-		s.primaryTranslateStore = store
+		s.logger.Printf("DEPRECATED: OptServerPrimaryTranslateStore")
+		return nil
+	}
+}
+
+func OptServerPrimaryTranslateStoreFunc(tf func(*Node) TranslateStore) ServerOption {
+	return func(s *Server) error {
+		s.holder.NewPrimaryTranslateStore = tf
 		return nil
 	}
 }
@@ -261,17 +266,13 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	s.holder.Path = path
+	s.holder.translateFile.Path = filepath.Join(path, ".keys")
 	s.holder.Logger = s.logger
 	s.holder.Stats.SetLogger(s.logger)
 
 	s.cluster.Path = path
 	s.cluster.logger = s.logger
 	s.cluster.holder = s.holder
-
-	// Initialize translation database.
-	s.translateFile = NewTranslateFile()
-	s.translateFile.Path = filepath.Join(path, ".keys")
-	s.translateFile.PrimaryTranslateStore = s.primaryTranslateStore
 
 	// Get or create NodeID.
 	s.nodeID = s.loadNodeID()
@@ -299,7 +300,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.executor.Holder = s.holder
 	s.executor.Node = node
 	s.executor.Cluster = s.cluster
-	s.executor.TranslateStore = s.translateFile
+	s.executor.TranslateStore = s.holder.translateFile
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
 	s.cluster.broadcaster = s
 	s.cluster.maxWritesPerRequest = s.maxWritesPerRequest
@@ -324,7 +325,7 @@ func (s *Server) Open() error {
 	}
 
 	// Initialize id-key storage.
-	if err := s.translateFile.Open(); err != nil {
+	if err := s.holder.translateFile.Open(); err != nil {
 		return err
 	}
 
@@ -370,7 +371,6 @@ func (s *Server) Close() error {
 	s.wg.Wait()
 
 	var errh error
-	var errt error
 	var errc error
 	if s.cluster != nil {
 		errc = s.cluster.close()
@@ -378,17 +378,12 @@ func (s *Server) Close() error {
 	if s.holder != nil {
 		errh = s.holder.Close()
 	}
-	if s.translateFile != nil {
-		errt = s.translateFile.Close()
-	}
-	// prefer to return holder error over translateFile error over cluster
+	// prefer to return holder error over cluster
 	// error. This order is somewhat arbitrary. It would be better if we had
 	// some way to combine all the errors, but probably not important enough to
 	// warrant the extra complexity.
 	if errh != nil {
 		return errors.Wrap(errh, "closing holder")
-	} else if errt != nil {
-		return errors.Wrap(errt, "closing translateFile")
 	}
 	return errors.Wrap(errc, "closing cluster")
 }

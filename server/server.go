@@ -250,10 +250,9 @@ func (m *Command) SetupServer() error {
 
 	c := http.GetHTTPClient(TLSConfig)
 
-	// Setup connection to primary store if this is a replica.
-	var primaryTranslateStore pilosa.TranslateStore
+	// Primary store configuration is handled automatically now.
 	if m.Config.Translation.PrimaryURL != "" {
-		primaryTranslateStore = http.NewTranslateStore(m.Config.Translation.PrimaryURL)
+		m.logger.Printf("DEPRECATED: The primary-url configuration option is no longer used.")
 	}
 
 	// Set Coordinator.
@@ -278,7 +277,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerStatsClient(statsClient),
 		pilosa.OptServerURI(uri),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
-		pilosa.OptServerPrimaryTranslateStore(primaryTranslateStore),
+		pilosa.OptServerPrimaryTranslateStoreFunc(http.NewNodeTranslateStore),
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
 		pilosa.OptServerSerializer(proto.Serializer{}),
 		coordinatorOpt,

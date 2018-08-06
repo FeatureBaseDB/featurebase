@@ -383,7 +383,7 @@ func TestTranslateFile_PrimaryTranslateStore(t *testing.T) {
 
 	// Create a replica that accepts writes from primary.
 	replica := NewTranslateFile()
-	replica.PrimaryTranslateStore = primary
+	replica.SetPrimaryStore("primary", primary)
 	if err := replica.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -567,7 +567,7 @@ func (s *TranslateFile) Reopen() error {
 	s.TranslateFile = pilosa.NewTranslateFile()
 	s.lock.Unlock()
 	s.Path = prev.Path
-	s.PrimaryTranslateStore = prev.PrimaryTranslateStore
+	s.SetPrimaryStore("restored-primary", prev.PrimaryTranslateStore)
 	return s.Open()
 }
 

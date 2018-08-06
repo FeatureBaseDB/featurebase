@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -71,6 +72,10 @@ type TranslateFile struct {
 
 	// If non-nil, data is streamed from a primary and this is a read-only store.
 	PrimaryTranslateStore TranslateStore
+	primaryID             string // unique ID used to identify the primary store
+	replicationClosing    chan struct{}
+	primaryStoreEvents    chan primaryStoreEvent
+	repWG                 sync.WaitGroup
 
 	// Delay after attempting to connect to a primary that the store will retry.
 	replicationRetryInterval time.Duration
@@ -85,6 +90,9 @@ func NewTranslateFile() *TranslateFile {
 		rows:        make(map[fieldKey]*index),
 
 		mapSize: defaultMapSize,
+
+		replicationClosing: make(chan struct{}),
+		primaryStoreEvents: make(chan primaryStoreEvent),
 
 		replicationRetryInterval: defaultReplicationRetryInterval,
 	}
@@ -109,10 +117,65 @@ func (s *TranslateFile) Open() (err error) {
 		return err
 	}
 
-	// Stream from primary, if available.
+	// Listen to primaryStoreEvents channel.
+	s.wg.Add(1)
+	go func() { defer s.wg.Done(); s.monitorPrimaryStoreEvents() }()
+
+	return nil
+}
+
+// primaryStoreEvent is used to set/change the primary translate store.
+// It contains a TranslateStore along with an associated string ID which
+// is used to determine whether the primary needs to be changed from the
+// current value.
+type primaryStoreEvent struct {
+	id string
+	ts TranslateStore
+}
+
+// SetPrimaryStore sets the translate files's primary translate store.
+// The id value is used to determine whether the primary needs to be changed
+// from the current value (i.e. calling this multiple times with the same
+// input values will no-op on all subsequent calls).
+func (s *TranslateFile) SetPrimaryStore(id string, ts TranslateStore) {
+	go func() {
+		s.primaryStoreEvents <- primaryStoreEvent{
+			id: id,
+			ts: ts,
+		}
+	}()
+}
+
+// handlePrimaryStoreEvent changes the PrimaryTranslateStore
+// used for replication by TranslateFile.
+func (s *TranslateFile) handlePrimaryStoreEvent(ev primaryStoreEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if ev.id == s.primaryID {
+		return nil
+	}
+
+	// Stop translate store replication.
+	log.Printf("stop monitor replication")
+	close(s.replicationClosing)
+	s.repWG.Wait()
+
+	// Set the primary node for translate store replication.
+	log.Printf("set primary translate store to %s", ev.id)
+	s.primaryID = ev.id
+	if ev.id == "" {
+		s.PrimaryTranslateStore = nil
+	} else {
+		s.PrimaryTranslateStore = ev.ts
+	}
+
+	// Start translate store replication. Stream from primary, if available.
+	log.Printf("start monitor replication")
 	if s.PrimaryTranslateStore != nil {
-		s.wg.Add(1)
-		go func() { defer s.wg.Done(); s.monitorReplication() }()
+		s.replicationClosing = make(chan struct{})
+		s.repWG.Add(1)
+		go func() { defer s.repWG.Done(); s.monitorReplication() }()
 	}
 
 	return nil
@@ -259,7 +322,13 @@ func (s *TranslateFile) replayEntries() error {
 func (s *TranslateFile) monitorReplication() {
 	// Create context that will cancel on close.
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() { <-s.closing; cancel() }()
+	go func() {
+		select {
+		case <-s.closing:
+		case <-s.replicationClosing:
+		}
+		cancel()
+	}()
 
 	// Keep attempting to replicate until the store closes.
 	for {
@@ -270,8 +339,27 @@ func (s *TranslateFile) monitorReplication() {
 		select {
 		case <-s.closing:
 			return
+		case <-s.replicationClosing:
+			return
 		case <-time.After(s.replicationRetryInterval):
 			log.Printf("pilosa: reconnecting to primary replica")
+		}
+	}
+}
+
+// monitorPrimaryStoreEvents is executed in a separate goroutine and listens for changes
+// to the primary store assignment.
+func (s *TranslateFile) monitorPrimaryStoreEvents() {
+	log.Printf("monitor primary store events")
+	// Keep handling events until the store closes.
+	for {
+		select {
+		case <-s.closing:
+			return
+		case ev := <-s.primaryStoreEvents:
+			if err := s.handlePrimaryStoreEvent(ev); err != nil {
+				log.Printf("handle primary store event")
+			}
 		}
 	}
 }
@@ -988,4 +1076,39 @@ func uVarintSize(x uint64) (i int) {
 		i++
 	}
 	return i + 1
+}
+
+// nopTStore represents a TranslateStore that doesn't do anything.
+var nopTStore TranslateStore = nopTranslateStore{}
+
+// newNopTranslateStore returns a translate store which does nothing. It returns a global
+// object to avoid unnecessary allocations.
+func newNopTranslateStore(*Node) TranslateStore { return nopTStore }
+
+// nopTranslateStore represents a no-op implementation of the TranslateStore interface.
+type nopTranslateStore struct{}
+
+// TranslateColumnsToUint64 is a no-op implementation of the TranslateStore TranslateColumnsToUint64 method.
+func (s nopTranslateStore) TranslateColumnsToUint64(index string, values []string) ([]uint64, error) {
+	return []uint64{}, nil
+}
+
+// TranslateColumnToString is a no-op implementation of the TranslateStore TranslateColumnToString method.
+func (s nopTranslateStore) TranslateColumnToString(index string, values uint64) (string, error) {
+	return "", nil
+}
+
+// TranslateRowsToUint64 is a no-op implementation of the TranslateStore TranslateRowsToUint64 method.
+func (s nopTranslateStore) TranslateRowsToUint64(index, field string, values []string) ([]uint64, error) {
+	return []uint64{}, nil
+}
+
+// TranslateRowToString is a no-op implementation of the TranslateStore TranslateRowToString method.
+func (s nopTranslateStore) TranslateRowToString(index, field string, values uint64) (string, error) {
+	return "", nil
+}
+
+// Reader is a no-op implementation of the TranslateStore Reader method.
+func (s nopTranslateStore) Reader(ctx context.Context, off int64) (io.ReadCloser, error) {
+	return ioutil.NopCloser(bytes.NewReader(nil)), nil
 }
