@@ -577,8 +577,11 @@ type holderSyncer struct {
 	Closing <-chan struct{}
 }
 
-// IsClosing returns true if the syncer has been marked to close.
+// IsClosing returns true if the syncer has been asked to close.
 func (s *holderSyncer) IsClosing() bool {
+	if s.Cluster.abortAntiEntropyQ() {
+		return true
+	}
 	select {
 	case <-s.Closing:
 		return true

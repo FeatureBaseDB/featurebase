@@ -204,6 +204,8 @@ type cluster struct { // nolint: maligned
 	joining chan struct{}
 	joined  bool
 
+	abortAntiEntropyCh chan struct{}
+
 	mu         sync.RWMutex
 	jobs       map[int64]*resizeJob
 	currentJob *resizeJob
@@ -232,6 +234,33 @@ func newCluster() *cluster {
 		InternalClient: newNopInternalClient(),
 
 		logger: NopLogger,
+	}
+}
+
+// initializeAntiEntropy is called by the anti entropy routine when it starts.
+// If the AE channel is created without a routine reading from it, cluster will
+// block indefinitely when calling abortAntiEntropy().
+func (c *cluster) initializeAntiEntropy() {
+	c.mu.Lock()
+	c.abortAntiEntropyCh = make(chan struct{})
+	c.mu.Unlock()
+}
+
+// abortAntiEntropyQ checks whether the cluster wants to abort the anti entropy
+// process (so that it can resize). It does not block.
+func (c *cluster) abortAntiEntropyQ() bool {
+	select {
+	case <-c.abortAntiEntropyCh:
+		return true
+	default:
+		return false
+	}
+}
+
+// abortAntiEntropy blocks until the anti-entropy routine calls abortAntiEntropyQ
+func (c *cluster) abortAntiEntropy() {
+	if c.abortAntiEntropyCh != nil {
+		c.abortAntiEntropyCh <- struct{}{}
 	}
 }
 
@@ -404,6 +433,10 @@ func (c *cluster) unprotectedSetState(state string) {
 	}
 
 	c.state = state
+
+	if state == ClusterStateResizing {
+		c.abortAntiEntropy()
+	}
 
 	// TODO: consider NOT running cleanup on an active node that has
 	// been removed.

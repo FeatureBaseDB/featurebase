@@ -417,6 +417,8 @@ func (s *Server) monitorAntiEntropy() {
 	if s.antiEntropyInterval == 0 {
 		return // anti entropy disabled
 	}
+	s.cluster.initializeAntiEntropy()
+
 	ticker := time.NewTicker(s.antiEntropyInterval)
 	defer ticker.Stop()
 
@@ -428,11 +430,17 @@ func (s *Server) monitorAntiEntropy() {
 		select {
 		case <-s.closing:
 			return
+		case <-s.cluster.abortAntiEntropyCh: // receive here so we don't block resizing
+			continue
 		case <-ticker.C:
 			s.holder.Stats.Count("AntiEntropy", 1, 1.0)
 		}
 		t := time.Now()
-
+		if s.cluster.State() == ClusterStateResizing {
+			continue // don't launch anti-entropy during resize.
+			// the cluster sets its state to resizing and *then* sends to
+			// abortAntiEntropyCh before starting to resize
+		}
 		// Sync holders.
 		s.logger.Printf("holder sync beginning")
 		if err := s.syncer.SyncHolder(); err != nil {
@@ -444,6 +452,18 @@ func (s *Server) monitorAntiEntropy() {
 		s.logger.Printf("holder sync complete")
 		dif := time.Since(t)
 		s.holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
+
+		// Drain tick channel since we just finished anti-entropy. If the AE
+		// process took a long time, we don't want them to pile up on each
+		// other.
+		for {
+			select {
+			case <-ticker.C:
+				continue
+			default:
+			}
+			break
+		}
 	}
 }
 
