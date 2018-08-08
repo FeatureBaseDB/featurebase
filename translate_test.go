@@ -398,7 +398,7 @@ func TestTranslateFile_PrimaryTranslateStore(t *testing.T) {
 
 	// Attempt to read replica until writes appear.
 	if err := retryFor(2*time.Second, func() error {
-		// Verify that replica have received writes.
+		// Verify that replica has received writes.
 		if value, err := replica.TranslateColumnToString("IDX0", 1); err != nil {
 			return err
 		} else if value != "foo" {
@@ -429,7 +429,7 @@ func TestTranslateFile_PrimaryTranslateStore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Attempt to read replica until write appear.
+	// Attempt to read replica until writes appear.
 	if err := retryFor(2*time.Second, func() error {
 		if value, err := replica.TranslateColumnToString("IDX0", 2); err != nil {
 			return err
@@ -448,7 +448,7 @@ func TestTranslateFile_PrimaryTranslateStore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Attempt to read replica until write appear.
+	// Attempt to read replica until writes appear.
 	if err := retryFor(2*time.Second, func() error {
 		if value, err := replica.TranslateColumnToString("IDX0", 3); err != nil {
 			return err
@@ -459,6 +459,289 @@ func TestTranslateFile_PrimaryTranslateStore(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestTranslateFile_ReassignPrimaryTranslateStore(t *testing.T) {
+	t.Run("AddNode", func(t *testing.T) {
+		// Create a primary store that accepts writes.
+		primary := MustOpenTranslateFile()
+		defer primary.MustClose()
+
+		// Create replica1 that accepts writes from primary.
+		replica1 := NewTranslateFile()
+		replica1.SetPrimaryStore("primary", primary)
+		if err := replica1.Open(); err != nil {
+			t.Fatal(err)
+		}
+		defer replica1.MustClose()
+
+		// Write to the primary.
+		if _, err := primary.TranslateColumnsToUint64("IDX0", []string{"foo"}); err != nil {
+			t.Fatal(err)
+		} else if _, err := primary.TranslateRowsToUint64("IDX0", "FIELD0", []string{"bar", "baz"}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Attempt to read replica1 until writes appear.
+		if err := retryFor(2*time.Second, func() error {
+			// Verify that replica1 has received writes.
+			if value, err := replica1.TranslateColumnToString("IDX0", 1); err != nil {
+				return err
+			} else if value != "foo" {
+				return fmt.Errorf("unexpected column 1 value: %s", value)
+			}
+
+			if value, err := replica1.TranslateRowToString("IDX0", "FIELD0", 1); err != nil {
+				return err
+			} else if value != "bar" {
+				return fmt.Errorf("unexpected row 1 value: %s", value)
+			}
+
+			if value, err := replica1.TranslateRowToString("IDX0", "FIELD0", 2); err != nil {
+				return err
+			} else if value != "baz" {
+				return fmt.Errorf("unexpected row 2 value: %s", value)
+			}
+
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create replica2 that accepts writes from primary,
+		// and change replica1's primary to be replica2.
+		// From: P <- R1
+		//   To: P <- R2 <- R1
+		// Momentarily, replica1 should be ahead of replica2, so we will see log
+		// messages like "translate store reader past file size: sz=0 off=39"
+		// But eventually it should get in sync and new writes will be available
+		// on replica1.
+		replica2 := NewTranslateFile()
+		replica2.SetPrimaryStore("primary", primary)
+		replica1.SetPrimaryStore("replica2", replica2)
+
+		if err := replica2.Open(); err != nil {
+			t.Fatal(err)
+		}
+		defer replica2.MustClose()
+
+		// Attempt to read replica2 until writes appear.
+		if err := retryFor(2*time.Second, func() error {
+			// Verify that replica2 have received writes.
+			if value, err := replica2.TranslateColumnToString("IDX0", 1); err != nil {
+				return err
+			} else if value != "foo" {
+				return fmt.Errorf("unexpected column 1 value: %s", value)
+			}
+
+			if value, err := replica2.TranslateRowToString("IDX0", "FIELD0", 1); err != nil {
+				return err
+			} else if value != "bar" {
+				return fmt.Errorf("unexpected row 1 value: %s", value)
+			}
+
+			if value, err := replica2.TranslateRowToString("IDX0", "FIELD0", 2); err != nil {
+				return err
+			} else if value != "baz" {
+				return fmt.Errorf("unexpected row 2 value: %s", value)
+			}
+
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Add more data to the primary and ensure that replica1 receives the
+		// data (via replica2).
+		if _, err := primary.TranslateColumnsToUint64("IDX0", []string{"baz"}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Attempt to read replica1 until writes appear.
+		if err := retryFor(2*time.Second, func() error {
+			if value, err := replica1.TranslateColumnToString("IDX0", 2); err != nil {
+				return err
+			} else if value != "baz" {
+				return fmt.Errorf("unexpected column 2 value: %s", value)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("RemoveNode", func(t *testing.T) {
+		// Create a primary store that accepts writes.
+		primary := MustOpenTranslateFile()
+		defer primary.MustClose()
+
+		// Create two replicas that accepts writes from the primary
+		// in a daisy-chain configuration.
+		// P <- R1 <- R2
+
+		// Create replica1.
+		replica1 := NewTranslateFile()
+		replica1.SetPrimaryStore("primary", primary)
+		if err := replica1.Open(); err != nil {
+			t.Fatal(err)
+		}
+		defer replica1.MustClose()
+
+		// Create replica2.
+		replica2 := NewTranslateFile()
+		replica2.SetPrimaryStore("replica1", replica1)
+		if err := replica2.Open(); err != nil {
+			t.Fatal(err)
+		}
+		defer replica2.MustClose()
+
+		// Write to the primary.
+		if _, err := primary.TranslateColumnsToUint64("IDX0", []string{"foo"}); err != nil {
+			t.Fatal(err)
+		} else if _, err := primary.TranslateRowsToUint64("IDX0", "FIELD0", []string{"bar", "baz"}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Attempt to read replica2 until writes appear.
+		if err := retryFor(2*time.Second, func() error {
+			// Verify that replica2 has received writes.
+			if value, err := replica2.TranslateColumnToString("IDX0", 1); err != nil {
+				return err
+			} else if value != "foo" {
+				return fmt.Errorf("unexpected column 1 value: %s", value)
+			}
+
+			if value, err := replica2.TranslateRowToString("IDX0", "FIELD0", 1); err != nil {
+				return err
+			} else if value != "bar" {
+				return fmt.Errorf("unexpected row 1 value: %s", value)
+			}
+
+			if value, err := replica2.TranslateRowToString("IDX0", "FIELD0", 2); err != nil {
+				return err
+			} else if value != "baz" {
+				return fmt.Errorf("unexpected row 2 value: %s", value)
+			}
+
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Remove replica1 from the replication chain.
+		// From: P <- R1 <- R2
+		//   To: P <- R2
+		replica1.SetPrimaryStore("", nil)
+
+		// Add more data to the primary and ensure that replica2 receives the
+		// data (after replica1 is removed).
+		if _, err := primary.TranslateColumnsToUint64("IDX0", []string{"baz"}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Set replica2 to replicate from primary.
+		replica2.SetPrimaryStore("primary", primary)
+
+		// Attempt to read replica2 until writes appear.
+		if err := retryFor(2*time.Second, func() error {
+			if value, err := replica2.TranslateColumnToString("IDX0", 2); err != nil {
+				return err
+			} else if value != "baz" {
+				return fmt.Errorf("unexpected column 2 value: %s", value)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("ChangePrimaryWriter", func(t *testing.T) {
+		// Create a primary store that accepts writes.
+		primary := MustOpenTranslateFile()
+		defer primary.MustClose()
+
+		// Create two replicas that accepts writes from the primary
+		// in a daisy-chain configuration.
+		// P <- R1 <- R2
+
+		// Create replica1.
+		replica1 := NewTranslateFile()
+		replica1.SetPrimaryStore("primary", primary)
+		if err := replica1.Open(); err != nil {
+			t.Fatal(err)
+		}
+		defer replica1.MustClose()
+
+		// Create replica2.
+		replica2 := NewTranslateFile()
+		replica2.SetPrimaryStore("replica1", replica1)
+		if err := replica2.Open(); err != nil {
+			t.Fatal(err)
+		}
+		defer replica2.MustClose()
+
+		// Write to the primary.
+		if _, err := primary.TranslateColumnsToUint64("IDX0", []string{"foo"}); err != nil {
+			t.Fatal(err)
+		} else if _, err := primary.TranslateRowsToUint64("IDX0", "FIELD0", []string{"bar", "baz"}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Attempt to read replica2 until writes appear.
+		if err := retryFor(2*time.Second, func() error {
+			// Verify that replica2 has received writes.
+			if value, err := replica2.TranslateColumnToString("IDX0", 1); err != nil {
+				return err
+			} else if value != "foo" {
+				return fmt.Errorf("unexpected column 1 value: %s", value)
+			}
+
+			if value, err := replica2.TranslateRowToString("IDX0", "FIELD0", 1); err != nil {
+				return err
+			} else if value != "bar" {
+				return fmt.Errorf("unexpected row 1 value: %s", value)
+			}
+
+			if value, err := replica2.TranslateRowToString("IDX0", "FIELD0", 2); err != nil {
+				return err
+			} else if value != "baz" {
+				return fmt.Errorf("unexpected row 2 value: %s", value)
+			}
+
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Change replica1 to be the primary writer.
+		// From: P <- R1 <- R2
+		//   To: R1 <- R2 <- P
+		replica1.SetPrimaryStore("", nil)
+
+		// SetPrimaryStore is asynchronous, so we need to wait before writing new data.
+		time.Sleep(200 * time.Millisecond)
+
+		// Add more data to the primary (now replica1) and ensure that primary (now a read-only replica)
+		// receives the data.
+		if _, err := replica1.TranslateColumnsToUint64("IDX0", []string{"baz"}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Set primary to replicate from replica2.
+		primary.SetPrimaryStore("replica2", replica2)
+
+		// Attempt to read primary until writes appear.
+		if err := retryFor(2*time.Second, func() error {
+			if value, err := primary.TranslateColumnToString("IDX0", 2); err != nil {
+				return err
+			} else if value != "baz" {
+				return fmt.Errorf("unexpected column 2 value: %s", value)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 func BenchmarkTranslateFile_TranslateColumnsToUint64(b *testing.B) {
