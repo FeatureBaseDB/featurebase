@@ -751,6 +751,64 @@ func TestCluster_ResizeStates(t *testing.T) {
 	})
 }
 
+func TestAE(t *testing.T) {
+	t.Run("AbortDoesn'tBlockUninitialized", func(t *testing.T) {
+		c := newCluster()
+		ch := make(chan struct{})
+		go func() {
+			c.abortAntiEntropy()
+			close(ch)
+		}()
+		select {
+		case <-ch:
+			return
+		case <-time.After(time.Second):
+			t.Fatalf("aborting anti entropy on a new cluster blocked")
+		}
+	})
+
+	t.Run("AbortBlocksInitialized", func(t *testing.T) {
+		c := newCluster()
+		c.initializeAntiEntropy()
+		ch := make(chan struct{})
+		go func() {
+			c.abortAntiEntropy()
+			close(ch)
+		}()
+		select {
+		case <-ch:
+			t.Fatalf("aborting anti entropy on an initialized didn't block")
+		case <-time.After(time.Microsecond * 100):
+		}
+	})
+
+	t.Run("AbortAntiEntropyQ", func(t *testing.T) {
+		c := newCluster()
+		c.initializeAntiEntropy()
+		if c.abortAntiEntropyQ() {
+			t.Fatalf("abortAntiEntropyQ should report false when abort not called")
+		}
+		go func() {
+			for {
+				if c.abortAntiEntropyQ() {
+					break
+				}
+			}
+		}()
+		ch := make(chan struct{})
+		go func() {
+			c.abortAntiEntropy()
+			close(ch)
+		}()
+		select {
+		case <-ch:
+		case <-time.After(time.Second):
+			t.Fatalf("abort should not have blocked this long")
+		}
+	})
+
+}
+
 // Ensures that coordinator can be changed.
 func TestCluster_UpdateCoordinator(t *testing.T) {
 	t.Run("UpdateCoordinator", func(t *testing.T) {
