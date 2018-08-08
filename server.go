@@ -562,7 +562,7 @@ func (s *Server) SendSync(m Message) error {
 		return fmt.Errorf("marshaling message: %v", err)
 	}
 	msg = append([]byte{getMessageType(m)}, msg...)
-	for _, node := range s.cluster.Nodes {
+	for _, node := range s.cluster.nodes {
 		node := node
 		s.logger.Printf("SendSync to: %s", node.URI)
 		// Don't forward the message to ourselves.
@@ -662,7 +662,7 @@ func (s *Server) monitorDiagnostics() {
 	s.diagnostics.SetVersion(Version)
 	s.diagnostics.Set("Host", s.uri.Host)
 	s.diagnostics.Set("Cluster", strings.Join(s.cluster.nodeIDs(), ","))
-	s.diagnostics.Set("NumNodes", len(s.cluster.Nodes))
+	s.diagnostics.Set("NumNodes", len(s.cluster.nodes))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
 	s.diagnostics.Set("NodeID", s.nodeID)
 	s.diagnostics.Set("ClusterID", s.cluster.id)

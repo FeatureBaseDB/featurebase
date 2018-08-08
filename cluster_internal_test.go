@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 	"testing/quick"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pkg/errors"
@@ -316,7 +317,7 @@ func TestResizeJob(t *testing.T) {
 // Ensure the cluster can fairly distribute partitions across the nodes.
 func TestCluster_Owners(t *testing.T) {
 	c := cluster{
-		Nodes: []*Node{
+		nodes: []*Node{
 			{URI: NewTestURIFromHostPort("serverA", 1000)},
 			{URI: NewTestURIFromHostPort("serverB", 1000)},
 			{URI: NewTestURIFromHostPort("serverC", 1000)},
@@ -326,12 +327,12 @@ func TestCluster_Owners(t *testing.T) {
 	}
 
 	// Verify nodes are distributed.
-	if a := c.partitionNodes(0); !reflect.DeepEqual(a, []*Node{c.Nodes[0], c.Nodes[1]}) {
+	if a := c.partitionNodes(0); !reflect.DeepEqual(a, []*Node{c.nodes[0], c.nodes[1]}) {
 		t.Fatalf("unexpected owners: %s", spew.Sdump(a))
 	}
 
 	// Verify nodes go around the ring.
-	if a := c.partitionNodes(2); !reflect.DeepEqual(a, []*Node{c.Nodes[2], c.Nodes[0]}) {
+	if a := c.partitionNodes(2); !reflect.DeepEqual(a, []*Node{c.nodes[2], c.nodes[0]}) {
 		t.Fatalf("unexpected owners: %s", spew.Sdump(a))
 	}
 }
@@ -384,7 +385,7 @@ func TestHasher(t *testing.T) {
 func TestCluster_ContainsShards(t *testing.T) {
 	c := NewTestCluster(5)
 	c.ReplicaN = 3
-	shards := c.containsShards("test", 10, c.Nodes[2])
+	shards := c.containsShards("test", 10, c.nodes[2])
 
 	if !reflect.DeepEqual(shards, []uint64{0, 2, 3, 5, 6, 9, 10}) {
 		t.Fatalf("unexpected shars for node's index: %v", shards)
@@ -755,8 +756,8 @@ func TestCluster_UpdateCoordinator(t *testing.T) {
 	t.Run("UpdateCoordinator", func(t *testing.T) {
 		c := NewTestCluster(2)
 
-		oldNode := c.Nodes[0]
-		newNode := c.Nodes[1]
+		oldNode := c.nodes[0]
+		newNode := c.nodes[1]
 
 		// Update coordinator to the same value.
 		if c.updateCoordinator(oldNode) {

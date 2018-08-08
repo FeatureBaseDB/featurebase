@@ -669,7 +669,7 @@ func (s *holderSyncer) syncIndex(index string) error {
 	s.Stats.CountWithCustomTags("ColumnAttrStoreBlocks", int64(len(blks)), 1.0, []string{indexTag})
 
 	// Sync with every other host.
-	for _, node := range Nodes(s.Cluster.Nodes).FilterID(s.Node.ID) {
+	for _, node := range Nodes(s.Cluster.nodes).FilterID(s.Node.ID) {
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
 		m, err := s.Cluster.InternalClient.ColumnAttrDiff(context.Background(), &node.URI, index, blks)
@@ -713,7 +713,7 @@ func (s *holderSyncer) syncField(index, name string) error {
 	s.Stats.CountWithCustomTags("RowAttrStoreBlocks", int64(len(blks)), 1.0, []string{indexTag, fieldTag})
 
 	// Sync with every other host.
-	for _, node := range Nodes(s.Cluster.Nodes).FilterID(s.Node.ID) {
+	for _, node := range Nodes(s.Cluster.nodes).FilterID(s.Node.ID) {
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
 		m, err := s.Cluster.InternalClient.RowAttrDiff(context.Background(), &node.URI, index, name, blks)

@@ -169,7 +169,7 @@ type nodeAction struct {
 type cluster struct { // nolint: maligned
 	id    string
 	Node  *Node
-	Nodes []*Node // TODO phase this out?
+	nodes []*Node // TODO phase this out?
 
 	// Hashing algorithm used to assign partitions to nodes.
 	Hasher Hasher
@@ -331,7 +331,7 @@ func (c *cluster) unprotectedUpdateCoordinator(n *Node) bool {
 		c.Coordinator = n.ID
 		changed = true
 	}
-	for _, node := range c.Nodes {
+	for _, node := range c.nodes {
 		if node.ID == n.ID {
 			node.IsCoordinator = true
 		} else {
@@ -388,7 +388,7 @@ func (c *cluster) removeNode(nodeID string) error {
 
 // nodeIDs returns the list of IDs in the cluster.
 func (c *cluster) nodeIDs() []string {
-	return Nodes(c.Nodes).IDs()
+	return Nodes(c.nodes).IDs()
 }
 
 func (c *cluster) unprotectedSetID(id string) {
@@ -522,7 +522,7 @@ func (c *cluster) unprotectedStatus() *ClusterStatus {
 	return &ClusterStatus{
 		ClusterID: c.id,
 		State:     c.state,
-		Nodes:     c.Nodes,
+		Nodes:     c.nodes,
 	}
 }
 
@@ -534,7 +534,7 @@ func (c *cluster) nodeByID(id string) *Node {
 
 // unprotectedNodeByID returns a node reference by ID.
 func (c *cluster) unprotectedNodeByID(id string) *Node {
-	for _, n := range c.Nodes {
+	for _, n := range c.nodes {
 		if n.ID == id {
 			return n
 		}
@@ -555,7 +555,7 @@ func (c *cluster) topologyContainsNode(id string) bool {
 
 // nodePositionByID returns the position of the node in slice c.Nodes.
 func (c *cluster) nodePositionByID(nodeID string) int {
-	for i, n := range c.Nodes {
+	for i, n := range c.nodes {
 		if n.ID == nodeID {
 			return i
 		}
@@ -571,12 +571,22 @@ func (c *cluster) addNodeBasicSorted(node *Node) bool {
 		return false
 	}
 
-	c.Nodes = append(c.Nodes, node)
+	c.nodes = append(c.nodes, node)
 
 	// All hosts must be merged in the same order on all nodes in the cluster.
-	sort.Sort(byID(c.Nodes))
+	sort.Sort(byID(c.nodes))
 
 	return true
+}
+
+// Nodes returns a copy of the slice of nodes in the cluster. Safe for
+// concurrent use, result may be modified.
+func (c *cluster) Nodes() []*Node {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	ret := make([]*Node, len(c.nodes))
+	copy(ret, c.nodes)
+	return ret
 }
 
 // removeNodeBasicSorted removes a node from the cluster, maintaining the sort
@@ -587,9 +597,9 @@ func (c *cluster) removeNodeBasicSorted(nodeID string) bool {
 		return false
 	}
 
-	copy(c.Nodes[i:], c.Nodes[i+1:])
-	c.Nodes[len(c.Nodes)-1] = nil
-	c.Nodes = c.Nodes[:len(c.Nodes)-1]
+	copy(c.nodes[i:], c.nodes[i+1:])
+	c.nodes[len(c.nodes)-1] = nil
+	c.nodes = c.nodes[:len(c.nodes)-1]
 
 	return true
 }
@@ -663,8 +673,8 @@ func (c *cluster) fragCombos(idx string, maxShard uint64, fieldViews viewsByFiel
 // added or removed. An error is returned for any case other than where
 // exactly one node is added or removed. unprotected.
 func (c *cluster) diff(other *cluster) (action string, nodeID string, err error) {
-	lenFrom := len(c.Nodes)
-	lenTo := len(other.Nodes)
+	lenFrom := len(c.nodes)
+	lenTo := len(other.nodes)
 	// Determine if a node is being added or removed.
 	if lenFrom == lenTo {
 		return "", "", errors.New("clusters are the same size")
@@ -676,7 +686,7 @@ func (c *cluster) diff(other *cluster) (action string, nodeID string, err error)
 		}
 		action = resizeJobActionAdd
 		// Determine the node ID that is being added.
-		for _, n := range other.Nodes {
+		for _, n := range other.nodes {
 			if c.unprotectedNodeByID(n.ID) == nil {
 				nodeID = n.ID
 				break
@@ -689,7 +699,7 @@ func (c *cluster) diff(other *cluster) (action string, nodeID string, err error)
 		}
 		action = resizeJobActionRemove
 		// Determine the node ID that is being removed.
-		for _, n := range c.Nodes {
+		for _, n := range c.nodes {
 			if other.unprotectedNodeByID(n.ID) == nil {
 				nodeID = n.ID
 				break
@@ -711,7 +721,7 @@ func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*ResizeSour
 	}
 
 	// Initialize the map with all the nodes in `to`.
-	for _, n := range to.Nodes {
+	for _, n := range to.nodes {
 		m[n.ID] = nil
 	}
 
@@ -724,7 +734,7 @@ func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*ResizeSour
 	srcCluster := c
 	if action == resizeJobActionAdd && c.ReplicaN > 1 {
 		srcCluster = newCluster()
-		srcCluster.Nodes = Nodes(c.Nodes).Clone()
+		srcCluster.nodes = Nodes(c.nodes).Clone()
 		srcCluster.Hasher = c.Hasher
 		srcCluster.partitionN = c.partitionN
 		srcCluster.ReplicaN = 1
@@ -814,19 +824,19 @@ func (c *cluster) partitionNodes(partitionID int) []*Node {
 	// Default replica count to between one and the number of nodes.
 	// The replica count can be zero if there are no nodes.
 	replicaN := c.ReplicaN
-	if replicaN > len(c.Nodes) {
-		replicaN = len(c.Nodes)
+	if replicaN > len(c.nodes) {
+		replicaN = len(c.nodes)
 	} else if replicaN == 0 {
 		replicaN = 1
 	}
 
 	// Determine primary owner node.
-	nodeIndex := c.Hasher.Hash(uint64(partitionID), len(c.Nodes))
+	nodeIndex := c.Hasher.Hash(uint64(partitionID), len(c.nodes))
 
 	// Collect nodes around the ring.
 	nodes := make([]*Node, replicaN)
 	for i := 0; i < replicaN; i++ {
-		nodes[i] = c.Nodes[(nodeIndex+i)%len(c.Nodes)]
+		nodes[i] = c.nodes[(nodeIndex+i)%len(c.nodes)]
 	}
 
 	return nodes
@@ -1132,12 +1142,12 @@ func (c *cluster) unprotectedGenerateResizeJob(nodeAction nodeAction) (*resizeJo
 // Broadcaster is associated to the resizeJob here for use in broadcasting
 // the resize instructions to other nodes in the cluster.
 func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*resizeJob, error) {
-	j := newResizeJob(c.Nodes, nodeAction.node, nodeAction.action)
+	j := newResizeJob(c.nodes, nodeAction.node, nodeAction.action)
 	j.Broadcaster = c.broadcaster
 
 	// toCluster is a clone of Cluster with the new node added/removed for comparison.
 	toCluster := newCluster()
-	toCluster.Nodes = Nodes(c.Nodes).Clone()
+	toCluster.nodes = Nodes(c.nodes).Clone()
 	toCluster.Hasher = c.Hasher
 	toCluster.partitionN = c.partitionN
 	toCluster.ReplicaN = c.ReplicaN
@@ -1150,7 +1160,7 @@ func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*
 	// multiIndex is a map of sources initialized with all the nodes in toCluster.
 	multiIndex := make(map[string][]*ResizeSource)
 
-	for _, n := range toCluster.Nodes {
+	for _, n := range toCluster.nodes {
 		multiIndex[n.ID] = nil
 	}
 
@@ -1805,7 +1815,7 @@ func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 	// except for self. Generate a list to remove first
 	// so that nodes aren't removed mid-loop.
 	nodeIDsToRemove := []string{}
-	for _, node := range c.Nodes {
+	for _, node := range c.nodes {
 		// Don't remove this node.
 		if node.ID == c.Node.ID {
 			continue
@@ -1839,7 +1849,7 @@ func (c *cluster) setStatic(hosts []string) error {
 		if err != nil {
 			return errors.Wrap(err, "getting URI")
 		}
-		c.Nodes = append(c.Nodes, &Node{URI: *uri})
+		c.nodes = append(c.nodes, &Node{URI: *uri})
 	}
 	return nil
 }
