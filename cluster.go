@@ -41,11 +41,13 @@ const (
 
 	// ClusterState represents the state returned in the /status endpoint.
 	ClusterStateStarting = "STARTING"
+	ClusterStateDegraded = "DEGRADED" // cluster is running but we've lost some # of hosts >0 but < replicaN
 	ClusterStateNormal   = "NORMAL"
 	ClusterStateResizing = "RESIZING"
 
 	// NodeState represents the state of a node during startup.
 	nodeStateReady = "READY"
+	nodeStateDown  = "DOWN"
 
 	// resizeJob states.
 	resizeJobStateRunning = "RUNNING"
@@ -339,17 +341,15 @@ func (c *cluster) addNode(node *Node) error {
 
 // removeNode removes a node from the Cluster and updates and saves the
 // new topology. unprotected.
-func (c *cluster) removeNode(node *Node) error {
+func (c *cluster) removeNode(nodeID string) error {
 	// remove from cluster
-	if !c.removeNodeBasicSorted(node) {
-		return nil
-	}
+	c.removeNodeBasicSorted(nodeID)
 
 	// remove from topology
 	if c.Topology == nil {
 		return fmt.Errorf("Cluster.Topology is nil")
 	}
-	if !c.Topology.removeID(node.ID) {
+	if !c.Topology.removeID(nodeID) {
 		return nil
 	}
 
@@ -396,7 +396,7 @@ func (c *cluster) unprotectedSetState(state string) {
 	var doCleanup bool
 
 	switch state {
-	case ClusterStateNormal:
+	case ClusterStateNormal, ClusterStateDegraded:
 		// If state is RESIZING -> NORMAL then run cleanup.
 		if c.state == ClusterStateResizing {
 			doCleanup = true
@@ -451,22 +451,26 @@ func (c *cluster) receiveNodeState(nodeID string, state string) error {
 		return nil
 	}
 
-	// This method is really only useful during initial startup.
-	if c.state != ClusterStateStarting {
-		return nil
-	}
-
 	c.Topology.mu.Lock()
 	c.Topology.nodeStates[nodeID] = state
 	c.Topology.mu.Unlock()
 	c.logger.Printf("received state %s (%s)", state, nodeID)
 
-	// Set cluster state to NORMAL.
-	if c.haveTopologyAgreement() && c.allNodesReady() {
-		return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
-	}
+	return c.unprotectedSetStateAndBroadcast(c.determineClusterState())
+}
 
-	return nil
+// determineClusterState is unprotected.
+func (c *cluster) determineClusterState() (clusterState string) {
+	if c.state == ClusterStateResizing {
+		return ClusterStateResizing
+	}
+	if c.haveTopologyAgreement() && c.allNodesReady() {
+		return ClusterStateNormal
+	}
+	if len(c.Topology.nodeIDs)-len(c.nodeIDs()) < c.ReplicaN && c.allNodesReady() {
+		return ClusterStateDegraded
+	}
+	return ClusterStateStarting
 }
 
 func (c *cluster) status() *ClusterStatus {
@@ -500,6 +504,17 @@ func (c *cluster) unprotectedNodeByID(id string) *Node {
 	return nil
 }
 
+func (c *cluster) topologyContainsNode(id string) bool {
+	c.Topology.mu.RLock()
+	defer c.Topology.mu.RUnlock()
+	for _, nid := range c.Topology.nodeIDs {
+		if id == nid {
+			return true
+		}
+	}
+	return false
+}
+
 // nodePositionByID returns the position of the node in slice c.Nodes.
 func (c *cluster) nodePositionByID(nodeID string) int {
 	for i, n := range c.Nodes {
@@ -528,8 +543,8 @@ func (c *cluster) addNodeBasicSorted(node *Node) bool {
 
 // removeNodeBasicSorted removes a node from the cluster, maintaining the sort
 // order. Returns true if the node was removed. unprotected.
-func (c *cluster) removeNodeBasicSorted(node *Node) bool {
-	i := c.nodePositionByID(node.ID)
+func (c *cluster) removeNodeBasicSorted(nodeID string) bool {
+	i := c.nodePositionByID(nodeID)
 	if i < 0 {
 		return false
 	}
@@ -907,12 +922,12 @@ func (c *cluster) haveTopologyAgreement() bool {
 }
 
 // allNodesReady is unprotected.
-func (c *cluster) allNodesReady() bool {
+func (c *cluster) allNodesReady() (ret bool) {
 	if c.Static {
 		return true
 	}
-	for _, uri := range c.Topology.nodeIDs {
-		if c.Topology.nodeStates[uri] != nodeStateReady {
+	for _, id := range c.nodeIDs() {
+		if c.Topology.nodeStates[id] != nodeStateReady {
 			return false
 		}
 	}
@@ -959,7 +974,7 @@ func (c *cluster) handleNodeAction(nodeAction nodeAction) error {
 		if j.action == resizeJobActionRemove {
 			c.mu.Lock()
 			defer c.mu.Unlock()
-			return c.removeNode(nodeAction.node)
+			return c.removeNode(nodeAction.node.ID)
 		} else if j.action == resizeJobActionAdd {
 			c.mu.Lock()
 			defer c.mu.Unlock()
@@ -1089,7 +1104,7 @@ func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*
 	toCluster.partitionN = c.partitionN
 	toCluster.ReplicaN = c.ReplicaN
 	if nodeAction.action == resizeJobActionRemove {
-		toCluster.removeNodeBasicSorted(nodeAction.node)
+		toCluster.removeNodeBasicSorted(nodeAction.node.ID)
 	} else if nodeAction.action == resizeJobActionAdd {
 		toCluster.addNodeBasicSorted(nodeAction.node)
 	}
@@ -1553,18 +1568,13 @@ func (c *cluster) considerTopology() error {
 		return fmt.Errorf("coordinator %s is not in topology: %v", c.Node.ID, c.Topology.nodeIDs)
 	}
 
-	// If local node is the only thing in .topology, continue.
-	//if len(c.Topology.NodeIDs) == 1 {
-	//	return nil
-	//}
-
 	// Keep the cluster in state "STARTING" until hearing from all nodes.
 	// Topology contains 2+ hosts.
 	return nil
 }
 
 // ReceiveEvent represents an implementation of EventHandler.
-func (c *cluster) ReceiveEvent(e *NodeEvent) error {
+func (c *cluster) ReceiveEvent(e *NodeEvent) (err error) {
 	// Ignore events sent from this node.
 	if e.Node.ID == c.Node.ID {
 		return nil
@@ -1579,14 +1589,31 @@ func (c *cluster) ReceiveEvent(e *NodeEvent) error {
 		}
 		return c.nodeJoin(e.Node)
 	case NodeLeave:
-		// Automatic nodeLeave is intentionally not implemented.
+		c.logger.Printf("received node leave on %s: %s, uri: %v", c.Node, e.Node, e.Node.URI)
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if c.unprotectedIsCoordinator() {
+			// if removeNodeBasicSorted succeeds, that means that the node was
+			// not already removed by a removeNode request. We treat this as the
+			// host being temporarily unavailable, and expect it to come back
+			// up.
+			if c.removeNodeBasicSorted(e.Node.ID) {
+				c.Topology.nodeStates[e.Node.ID] = nodeStateDown
+				// put the cluster into STARTING if we've lost a number of nodes
+				// equal to or greater than ReplicaN
+				err = c.unprotectedSetStateAndBroadcast(c.determineClusterState())
+			}
+		}
+		c.logger.Printf("finished node leave on %s: %s, uri: %v", c.Node, e.Node, e.Node.URI)
 	case NodeUpdate:
+		c.logger.Printf("received node update event: id: %v, string: %v, uri: %v", e.Node.ID, e.Node.String(), e.Node.URI)
 		// NodeUpdate is intentionally not implemented.
 	}
 
-	return nil
+	return err
 }
 
+// nodeJoin should only be called by the coordinator.
 func (c *cluster) nodeJoin(node *Node) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -1628,8 +1655,12 @@ func (c *cluster) nodeJoin(node *Node) error {
 	// If the cluster already contains the node, just send it the cluster status.
 	// This is useful in the case where a node is restarted or temporarily leaves
 	// the cluster.
-	if node := c.unprotectedNodeByID(node.ID); node != nil {
-		return c.sendTo(node, c.unprotectedStatus())
+	if cnode := c.unprotectedNodeByID(node.ID); cnode != nil {
+		if cnode.URI != node.URI {
+			c.logger.Printf("Node: %v changed URI from %s to %s", cnode.ID, cnode.URI, node.URI)
+			cnode.URI = node.URI
+		}
+		return c.unprotectedSetStateAndBroadcast(c.determineClusterState())
 	}
 
 	// If the holder does not yet contain data, go ahead and add the node.
@@ -1653,47 +1684,45 @@ func (c *cluster) nodeJoin(node *Node) error {
 }
 
 // nodeLeave initiates the removal of a node from the cluster.
-func (c *cluster) nodeLeave(node *Node) error {
+func (c *cluster) nodeLeave(nodeID string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// Refuse the request if this is not the coordinator.
 	if !c.unprotectedIsCoordinator() {
-		return fmt.Errorf("node removal requests are only valid on the coordinator node: %s", c.unprotectedCoordinatorNode().ID)
+		return fmt.Errorf("node removal requests are only valid on the coordinator node: %s",
+			c.unprotectedCoordinatorNode().ID)
 	}
 
-	if c.state != ClusterStateNormal {
-		return fmt.Errorf("Cluster must be in state %s to remove a node. Current state: %s", ClusterStateNormal, c.state)
+	if c.state != ClusterStateNormal && c.state != ClusterStateDegraded {
+		return fmt.Errorf("Cluster must be in state %s to remove a node. Current state: %s",
+			ClusterStateNormal, c.state)
 	}
 
 	// Ensure that node is in the cluster.
-	if c.unprotectedNodeByID(node.ID) == nil {
-		return fmt.Errorf("Node is not a member of the cluster: %s", node.ID)
+	if !c.topologyContainsNode(nodeID) {
+		return fmt.Errorf("Node is not a member of the cluster: %s", nodeID)
 	}
 
 	// Prevent removing the coordinator node (this node).
-	if node.ID == c.Node.ID {
+	if nodeID == c.Node.ID {
 		return fmt.Errorf("coordinator cannot be removed; first, make a different node the new coordinator.")
 	}
 
 	// See if resize job can be generated
-	if _, err := c.unprotectedGenerateResizeJobByAction(nodeAction{c.unprotectedNodeByID(node.ID), resizeJobActionRemove}); err != nil {
+	if _, err := c.unprotectedGenerateResizeJobByAction(
+		nodeAction{
+			node:   &Node{ID: nodeID},
+			action: resizeJobActionRemove},
+	); err != nil {
 		return errors.Wrap(err, "generating job")
-	}
-
-	// Get the actual node in the local cluster.
-	n := c.unprotectedNodeByID(node.ID)
-
-	// Don't do anything else if the cluster doesn't contain the node.
-	if n == nil {
-		return nil
 	}
 
 	// If the holder does not yet contain data, go ahead and remove the node.
 	if ok, err := c.holder.HasData(); !ok && err == nil {
-		if err := c.removeNode(n); err != nil {
+		if err := c.removeNode(nodeID); err != nil {
 			return errors.Wrap(err, "removing node")
 		}
-		return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
+		return c.unprotectedSetStateAndBroadcast(c.determineClusterState())
 	} else if err != nil {
 		return errors.Wrap(err, "checking if holder has data")
 	}
@@ -1703,7 +1732,7 @@ func (c *cluster) nodeLeave(node *Node) error {
 	if err := c.unprotectedSetStateAndBroadcast(ClusterStateResizing); err != nil {
 		return errors.Wrap(err, "broadcasting state")
 	}
-	c.joiningLeavingNodes <- nodeAction{n, resizeJobActionRemove}
+	c.joiningLeavingNodes <- nodeAction{node: &Node{ID: nodeID}, action: resizeJobActionRemove}
 
 	return nil
 }
@@ -1745,7 +1774,7 @@ func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 	}
 
 	for _, nodeID := range nodeIDsToRemove {
-		if err := c.removeNode(c.unprotectedNodeByID(nodeID)); err != nil {
+		if err := c.removeNode(nodeID); err != nil {
 			return errors.Wrap(err, "removing node")
 		}
 	}
