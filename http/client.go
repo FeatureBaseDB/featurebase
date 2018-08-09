@@ -557,6 +557,7 @@ func (c *InternalClient) ImportRoaringBytes(ctx context.Context, node *pilosa.No
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("invalid status: %d", resp.StatusCode)
 	}
+	io.Copy(ioutil.Discard, resp.Body)
 
 	return nil
 }
