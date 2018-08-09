@@ -21,6 +21,8 @@ import (
 	"io/ioutil"
 	gohttp "net/http"
 	"os"
+	"path"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -204,6 +206,10 @@ func newCluster(size int, opts ...[]server.CommandOption) (Cluster, error) {
 			commandOpts = opts[i%len(opts)]
 		}
 		m := NewCommandNode(i == 0, commandOpts...)
+		err := ioutil.WriteFile(path.Join(m.Config.DataDir, ".id"), []byte("node"+strconv.Itoa(i)), 0600)
+		if err != nil {
+			return nil, errors.Wrap(err, "writing node id")
+		}
 		cluster[i] = m
 	}
 

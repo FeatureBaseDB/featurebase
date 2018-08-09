@@ -16,3 +16,7 @@
   # Recommended: the version constraint to enforce for the project.
   # Only one of "branch", "version" or "revision" can be specified.
   branch = "master"
+
+[[constraint]]
+  name = "github.com/gorilla/handlers"
+  version = "=1.3.0"
