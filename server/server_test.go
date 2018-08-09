@@ -489,6 +489,10 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("restarting node 2: %v", err)
 	}
 
+	if cluster[0].API.State() != pilosa.ClusterStateDegraded {
+		t.Fatalf("expected state to be DEGRADED, but got %s", cluster[0].API.State())
+	}
+
 	// Create new main with the same config.
 	config = cluster[1].Command.Config
 	// config.Bind = cluster[1].API.Node().URI.HostPort()

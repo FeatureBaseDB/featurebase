@@ -456,12 +456,7 @@ func (c *cluster) receiveNodeState(nodeID string, state string) error {
 	c.Topology.mu.Unlock()
 	c.logger.Printf("received state %s (%s)", state, nodeID)
 
-	// Set cluster state to NORMAL.
-	if c.haveTopologyAgreement() && c.allNodesReady() {
-		return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
-	}
-
-	return nil
+	return c.unprotectedSetStateAndBroadcast(c.determineClusterState())
 }
 
 // determineClusterState is unprotected.
@@ -1572,11 +1567,6 @@ func (c *cluster) considerTopology() error {
 	if !c.Topology.ContainsID(c.Node.ID) {
 		return fmt.Errorf("coordinator %s is not in topology: %v", c.Node.ID, c.Topology.nodeIDs)
 	}
-
-	// If local node is the only thing in .topology, continue.
-	//if len(c.Topology.NodeIDs) == 1 {
-	//	return nil
-	//}
 
 	// Keep the cluster in state "STARTING" until hearing from all nodes.
 	// Topology contains 2+ hosts.
