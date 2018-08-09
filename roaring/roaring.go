@@ -3409,8 +3409,14 @@ func readStandardHeader(buf []byte) (size uint32, containerTyper func(index uint
 }
 
 func UnmarshalStandardRoaring(data []byte) (*Bitmap, error) {
-
 	b := NewBitmap()
+
+	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
+	if fileMagic == magicNumber { //if pilosa roaring
+		err := b.UnmarshalBinary(data)
+		return b, err
+	}
+
 	keyN, containerTyper, header, pos, err, haveRuns := readStandardHeader(data)
 	if err != nil {
 		return nil, err
