@@ -232,11 +232,12 @@ func OptServerClusterHasher(h Hasher) ServerOption {
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
-		closing:     make(chan struct{}),
-		cluster:     newCluster(),
-		holder:      NewHolder(),
-		diagnostics: newDiagnosticsCollector(defaultDiagnosticServer),
-		systemInfo:  newNopSystemInfo(),
+		closing:       make(chan struct{}),
+		cluster:       newCluster(),
+		holder:        NewHolder(),
+		diagnostics:   newDiagnosticsCollector(defaultDiagnosticServer),
+		systemInfo:    newNopSystemInfo(),
+		defaultClient: nopInternalClient{},
 
 		gcNotifier: NopGCNotifier,
 
@@ -246,6 +247,9 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 		logger: NopLogger,
 	}
+	s.executor = newExecutor(optExecutorInternalQueryClient(s.defaultClient))
+	s.cluster.InternalClient = s.defaultClient
+
 	s.diagnostics.server = s
 
 	for _, opt := range opts {
