@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -819,9 +820,14 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 		return nil, errors.Wrap(ErrExpectedFieldListArgument, "executeGroupBy")
 
 	}
+	getFieldName := func(s string) string {
+		parts := strings.Split(s, ":")
+		return parts[0]
+	}
 
 	for _, fieldName := range fieldNames.([]interface{}) { //check if the fields exist
-		f := e.Holder.Field(index, fieldName.(string))
+		fn := getFieldName(fieldName.(string))
+		f := e.Holder.Field(index, fn)
 		if f == nil {
 			return nil, errors.Wrap(ErrFieldNotFound, fmt.Sprintf("executeGroupBy:%s", fieldName.(string)))
 		}
@@ -829,16 +835,21 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 	results := make(GroupByCounts, 0)
 	var work listOfLists
 	for _, fieldName := range fieldNames.([]interface{}) {
-		frag := e.Holder.fragment(index, fieldName.(string), viewStandard, shard)
+		fn := getFieldName(fieldName.(string))
+		frag := e.Holder.fragment(index, fn, viewStandard, shard)
 		if frag == nil { //that means this whole shard doesn't have all need to continue
 			return results, nil
 		}
+		filter, err := getGroupByFilterFunction(frag, fieldName.(string))
+		if err != nil {
+			return nil, err
+		}
 		set := make(list, 0)
-		for _, rowID := range frag.rows() {
+		for _, rowID := range frag.rowsWithFilter(filter) {
 			set = append(set, gbi{
 				row:       frag.row(rowID),
 				rowID:     rowID,
-				fieldName: fmt.Sprintf("%s.%d", fieldName.(string), rowID),
+				fieldName: fmt.Sprintf("%s.%d", fn, rowID),
 			})
 		}
 		work = append(work, set)
@@ -962,10 +973,75 @@ func (e *executor) executeIterateRowShard(ctx context.Context, index string, c *
 	if ok {
 		return frag.rowsForColumn(columnID), nil
 	}
-
-	return frag.rows(), nil
+	filter := getFilterFunction(frag, c)
+	return frag.rowsWithFilter(filter), nil
 
 }
+
+func getGroupByFilterFunction(frag *fragment, fieldName string) (rowFilter, error) {
+	parts := strings.Split(fieldName, ":")
+	hasLimit := false
+	hasOffset := false
+	limit := uint64(0)
+	offset := uint64(0)
+	var err error
+
+	if len(parts) == 1 {
+		return func(rowid uint64) bool { return true }, nil
+	} else if len(parts) == 2 {
+		hasLimit = true
+		limit, err = strconv.ParseUint(parts[1], 10, 64)
+		if err != nil {
+			return nil, errors.Wrap(err, "getting groupby field limit only value")
+		}
+	} else {
+		hasOffset = true
+		offset, err = strconv.ParseUint(parts[1], 10, 64)
+		if err != nil {
+			return nil, errors.Wrap(err, "getting groupby field offset value")
+		}
+		if parts[2] != "" {
+			hasLimit = true
+			limit, err = strconv.ParseUint(parts[2], 10, 64)
+			if err != nil {
+				return nil, errors.Wrap(err, "getting groupby field limit value")
+			}
+		}
+
+	}
+
+	if hasOffset {
+		if hasLimit {
+			f := filterWithOffsetLimit{offset: offset, limit: limit}
+			return f.filter, nil
+		}
+		f := filterWithOffset{offset: offset}
+		return f.filter, nil
+	}
+	f := filterWithLimit{limit: limit}
+	return f.filter, nil
+
+}
+
+func getFilterFunction(f *fragment, c *pql.Call) rowFilter {
+	offset, hasOffset, _ := c.UintArg("shardoffset")
+	limit, hasLimit, _ := c.UintArg("shardlimit")
+	if hasOffset {
+		if hasLimit {
+			f := filterWithOffsetLimit{offset: offset, limit: limit}
+			return f.filter
+		}
+		f := filterWithOffset{offset: offset}
+		return f.filter
+	} else if hasLimit {
+		f := filterWithLimit{limit: limit}
+		return f.filter
+	}
+
+	return func(rowid uint64) bool { return true }
+
+}
+
 func (e *executor) executeBitmapShard(_ context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
 	// Fetch column label from index.
 	idx := e.Holder.Index(index)
@@ -2056,4 +2132,39 @@ func callArgString(call *pql.Call, key string) string {
 func isString(v interface{}) bool {
 	_, ok := v.(string)
 	return ok
+}
+
+// filters to be used with RowsWithFilter queries;W
+type filterWithOffsetLimit struct {
+	offset, limit uint64
+}
+
+func (fol *filterWithOffsetLimit) filter(colid uint64) bool {
+	if colid >= fol.offset {
+		if fol.limit > 0 {
+			fol.limit--
+			return true
+		}
+	}
+	return false
+}
+
+type filterWithOffset struct {
+	offset uint64
+}
+
+func (fo *filterWithOffset) filter(colid uint64) bool {
+	return colid >= fo.offset
+}
+
+type filterWithLimit struct {
+	limit uint64
+}
+
+func (fl *filterWithLimit) filter(colid uint64) bool {
+	if fl.limit > 0 {
+		fl.limit--
+		return true
+	}
+	return false
 }

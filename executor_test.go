@@ -1469,6 +1469,33 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 		}
 
 	})
+
+	expected = pilosa.GroupByCounts{
+		{Groups: []string{"general.11"}, Total: 2},
+		{Groups: []string{"general.12"}, Total: 2},
+	}
+	t.Run("check field offset no limit", func(t *testing.T) {
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(fields=[general:11:])`}); err != nil {
+			t.Fatal(err)
+		} else {
+			results := res.Results[0].(pilosa.GroupByCounts)
+			checkGroupBy(expected, results, t)
+		}
+
+	})
+
+	expected = pilosa.GroupByCounts{
+		{Groups: []string{"general.11"}, Total: 2},
+	}
+	t.Run("check field offset limit", func(t *testing.T) {
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(fields=[general:11:1])`}); err != nil {
+			t.Fatal(err)
+		} else {
+			results := res.Results[0].(pilosa.GroupByCounts)
+			checkGroupBy(expected, results, t)
+		}
+
+	})
 }
 
 func checkGroupBy(expected, results pilosa.GroupByCounts, t *testing.T) {
@@ -1487,7 +1514,7 @@ func checkGroupBy(expected, results pilosa.GroupByCounts, t *testing.T) {
 	}
 	for _, result := range results {
 		if notIn(result, expected) {
-			t.Fatalf("unexpected grouping: \n%+v\n%+v\n", result, expected)
+			t.Fatalf("unexpected grouping: \n%+v\n\n\n%+v\n", result, expected)
 		}
 	}
 }
