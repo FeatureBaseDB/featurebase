@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pkg/errors"
 )
 
 // Ensure implementation implements inteface.
@@ -22,14 +24,28 @@ type translateStore struct {
 	node *pilosa.Node
 }
 
-// DEPRECATED: NewTranslateStore returns a new instance of translateStore.
-func NewTranslateStore(rawurl string) *translateStore { // nolint: unparam
-	return &translateStore{node: nil}
-}
-
-// NewNodeTranslateStore returns a new instance of TranslateStore based on node.
-func NewNodeTranslateStore(node *pilosa.Node) pilosa.TranslateStore {
-	return &translateStore{node: node}
+// NewTranslateStore returns a new instance of TranslateStore based on node.
+// DEPRECATED: Providing a string url to this function is being deprecated. Instead,
+// provide a *pilosa.Node.
+func NewTranslateStore(node interface{}) pilosa.TranslateStore {
+	var n *pilosa.Node
+	switch v := node.(type) {
+	case string:
+		log.Printf("WARNING: providing a string url to NewTranslateStore() has been deprecated.")
+		if uri, err := pilosa.NewURIFromAddress(v); err != nil {
+			log.Println(errors.Wrap(err, "creating uri"))
+		} else {
+			n = &pilosa.Node{
+				ID:  v,
+				URI: *uri,
+			}
+		}
+	case *pilosa.Node:
+		n = v
+	default:
+		log.Printf("WARNING: a *pilosa.Node is the only type supported by NewTranslateStore().")
+	}
+	return &translateStore{node: n}
 }
 
 // TranslateColumnsToUint64 is not currently implemented.

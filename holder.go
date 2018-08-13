@@ -48,7 +48,7 @@ type Holder struct {
 
 	// Key/ID translation
 	translateFile            *TranslateFile
-	NewPrimaryTranslateStore func(*Node) TranslateStore
+	NewPrimaryTranslateStore func(interface{}) TranslateStore
 
 	// opened channel is closed once Open() completes.
 	opened chan struct{}

@@ -277,7 +277,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerStatsClient(statsClient),
 		pilosa.OptServerURI(uri),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
-		pilosa.OptServerPrimaryTranslateStoreFunc(http.NewNodeTranslateStore),
+		pilosa.OptServerPrimaryTranslateStoreFunc(http.NewTranslateStore),
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
 		pilosa.OptServerSerializer(proto.Serializer{}),
 		coordinatorOpt,

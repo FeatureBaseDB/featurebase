@@ -168,7 +168,7 @@ func OptServerPrimaryTranslateStore(store TranslateStore) ServerOption {
 	}
 }
 
-func OptServerPrimaryTranslateStoreFunc(tf func(*Node) TranslateStore) ServerOption {
+func OptServerPrimaryTranslateStoreFunc(tf func(interface{}) TranslateStore) ServerOption {
 	return func(s *Server) error {
 		s.holder.NewPrimaryTranslateStore = tf
 		return nil
