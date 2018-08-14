@@ -987,7 +987,7 @@ func getGroupByFilterFunction(frag *fragment, fieldName string) (rowFilter, erro
 	var err error
 
 	if len(parts) == 1 {
-		return func(rowid uint64) bool { return true }, nil
+		return func(rowid uint64) (bool,bool) { return true,false }, nil
 	} else if len(parts) == 2 {
 		hasLimit = true
 		limit, err = strconv.ParseUint(parts[1], 10, 64)
@@ -1038,7 +1038,7 @@ func getFilterFunction(f *fragment, c *pql.Call) rowFilter {
 		return f.filter
 	}
 
-	return func(rowid uint64) bool { return true }
+	return func(rowid uint64) (bool,bool) { return true,false }
 
 }
 
@@ -2139,32 +2139,32 @@ type filterWithOffsetLimit struct {
 	offset, limit uint64
 }
 
-func (fol *filterWithOffsetLimit) filter(colid uint64) bool {
+func (fol *filterWithOffsetLimit) filter(colid uint64) (bool,bool) {
 	if colid >= fol.offset {
 		if fol.limit > 0 {
 			fol.limit--
-			return true
+			return true,false
 		}
 	}
-	return false
+	return false,true
 }
 
 type filterWithOffset struct {
 	offset uint64
 }
 
-func (fo *filterWithOffset) filter(colid uint64) bool {
-	return colid >= fo.offset
+func (fo *filterWithOffset) filter(colid uint64) (bool,bool) {
+	return colid >= fo.offset,false
 }
 
 type filterWithLimit struct {
 	limit uint64
 }
 
-func (fl *filterWithLimit) filter(colid uint64) bool {
+func (fl *filterWithLimit) filter(colid uint64) (bool,bool) {
 	if fl.limit > 0 {
 		fl.limit--
-		return true
+		return true,false
 	}
-	return false
+	return false,true
 }
