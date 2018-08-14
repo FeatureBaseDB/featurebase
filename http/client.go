@@ -473,6 +473,38 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 	return nil
 }
 
+// ImportValueK bulk imports keyed field values to a host.
+func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, vals []pilosa.FieldValue) error {
+	if index == "" {
+		return pilosa.ErrIndexRequired
+	} else if field == "" {
+		return pilosa.ErrFieldRequired
+	}
+
+	buf, err := c.marshalImportValuePayload(index, field, 0, vals)
+	if err != nil {
+		return fmt.Errorf("Error Creating Payload: %s", err)
+	}
+
+	// Get the coordinator node; all bits are sent to the
+	// primary translate store (i.e. coordinator).
+	nodes, err := c.Nodes(ctx)
+	if err != nil {
+		return fmt.Errorf("getting nodes: %s", err)
+	}
+	coord := getCoordinatorNode(nodes)
+	if coord == nil {
+		return fmt.Errorf("could not find the coordinator node")
+	}
+
+	// Import to node.
+	if err := c.importNode(ctx, coord, index, field, buf); err != nil {
+		return fmt.Errorf("import node: host=%s, err=%s", coord.URI, err)
+	}
+
+	return nil
+}
+
 // marshalImportValuePayload marshalls the import parameters into a protobuf byte slice.
 func (c *InternalClient) marshalImportValuePayload(index, field string, shard uint64, vals []pilosa.FieldValue) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.

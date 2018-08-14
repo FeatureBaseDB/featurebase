@@ -42,6 +42,7 @@ type InternalClient interface {
 	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
 	EnsureField(ctx context.Context, indexName string, fieldName string) error
 	ImportValue(ctx context.Context, index, field string, shard uint64, vals []FieldValue) error
+	ImportValueK(ctx context.Context, index, field string, vals []FieldValue) error
 	ExportCSV(ctx context.Context, index, field string, shard uint64, w io.Writer) error
 	CreateField(ctx context.Context, index, field string) error
 	FragmentBlocks(ctx context.Context, uri *URI, index, field string, shard uint64) ([]FragmentBlock, error)
@@ -112,6 +113,9 @@ func (n nopInternalClient) EnsureField(ctx context.Context, indexName string, fi
 	return nil
 }
 func (n nopInternalClient) ImportValue(ctx context.Context, index, field string, shard uint64, vals []FieldValue) error {
+	return nil
+}
+func (n nopInternalClient) ImportValueK(ctx context.Context, index, field string, vals []FieldValue) error {
 	return nil
 }
 func (n nopInternalClient) ExportCSV(ctx context.Context, index, field string, shard uint64, w io.Writer) error {
