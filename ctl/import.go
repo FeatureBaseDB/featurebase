@@ -114,8 +114,10 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 				if field.Name == cmd.Field {
 					useRowKeys = field.Options.Keys
 					fieldType = field.Options.Type
+					break
 				}
 			}
+			break
 		}
 	}
 

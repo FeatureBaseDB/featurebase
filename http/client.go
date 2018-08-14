@@ -352,7 +352,7 @@ func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits 
 	}
 	coord := getCoordinatorNode(nodes)
 	if coord == nil {
-		return fmt.Errorf("could not find coordinator node")
+		return fmt.Errorf("could not find the coordinator node")
 	}
 
 	// Import to node.
