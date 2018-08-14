@@ -1325,9 +1325,6 @@ func (f *fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, e
 // bulkImport bulk imports a set of bits and then snapshots the storage.
 // This does not affect the fragment's cache.
 func (f *fragment) bulkImport(rowIDs, columnIDs []uint64) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	// Verify that there are an equal number of row ids and column ids.
 	if len(rowIDs) != len(columnIDs) {
 		return fmt.Errorf("mismatch of row/column len: %d != %d", len(rowIDs), len(columnIDs))
