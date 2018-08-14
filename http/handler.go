@@ -232,6 +232,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET").Name("GetFragmentNodes")
 	router.HandleFunc("/internal/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST")
 	router.HandleFunc("/internal/index/{index}/field/{field}/attr/diff", handler.handlePostFieldAttrDiff).Methods("POST")
+	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET") // TODO: deprecate, but it's being used by the client
 	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET")
 
@@ -1055,6 +1056,22 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	// Write to response.
+	if err := json.NewEncoder(w).Encode(nodes); err != nil {
+		h.logger.Printf("json write error: %s", err)
+	}
+}
+
+// handleGetNodes handles /internal/nodes requests.
+func (h *Handler) handleGetNodes(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	// Retrieve all nodes.
+	nodes := h.api.Hosts(r.Context())
 
 	// Write to response.
 	if err := json.NewEncoder(w).Encode(nodes); err != nil {

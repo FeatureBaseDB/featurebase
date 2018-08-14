@@ -207,6 +207,37 @@ func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard 
 	return a, nil
 }
 
+// Nodes returns a list of all nodes.
+func (c *InternalClient) Nodes(ctx context.Context) ([]*pilosa.Node, error) {
+	// Execute request against the host.
+	u := uriPathToURL(c.defaultURI, "/internal/nodes")
+
+	// Build request.
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/json")
+
+	// Execute request.
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, errors.Wrap(err, "executing request")
+	}
+	defer resp.Body.Close()
+
+	var a []*pilosa.Node
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
+	} else if err := json.NewDecoder(resp.Body).Decode(&a); err != nil {
+		return nil, fmt.Errorf("json decode: %s", err)
+	}
+
+	return a, nil
+}
+
 // Query executes query against the index.
 func (c *InternalClient) Query(ctx context.Context, index string, queryRequest *pilosa.QueryRequest) (*pilosa.QueryResponse, error) {
 	return c.QueryNode(ctx, c.defaultURI, index, queryRequest)
@@ -291,26 +322,42 @@ func (c *InternalClient) Import(ctx context.Context, index, field string, shard 
 	return nil
 }
 
+func getCoordinatorNode(nodes []*pilosa.Node) *pilosa.Node {
+	for _, node := range nodes {
+		if node.IsCoordinator {
+			return node
+		}
+	}
+	return nil
+}
+
 // ImportK bulk imports bits specified by string keys to a host.
-func (c *InternalClient) ImportK(ctx context.Context, index, field string, columns []pilosa.Bit) error {
+func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits []pilosa.Bit) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
 		return pilosa.ErrFieldRequired
 	}
 
-	buf, err := c.marshalImportPayloadK(index, field, columns)
+	buf, err := c.marshalImportPayload(index, field, 0, bits)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
 
-	node := &pilosa.Node{
-		URI: *c.defaultURI,
+	// Get the coordinator node; all bits are sent to the
+	// primary translate store (i.e. coordinator).
+	nodes, err := c.Nodes(ctx)
+	if err != nil {
+		return fmt.Errorf("getting nodes: %s", err)
+	}
+	coord := getCoordinatorNode(nodes)
+	if coord == nil {
+		return fmt.Errorf("could not find coordinator node")
 	}
 
 	// Import to node.
-	if err := c.importNode(ctx, node, index, field, buf); err != nil {
-		return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
+	if err := c.importNode(ctx, coord, index, field, buf); err != nil {
+		return fmt.Errorf("import node: host=%s, err=%s", coord.URI, err)
 	}
 
 	return nil
@@ -349,27 +396,6 @@ func (c *InternalClient) marshalImportPayload(index, field string, shard uint64,
 		RowIDs:     rowIDs,
 		RowKeys:    rowKeys,
 		ColumnIDs:  columnIDs,
-		ColumnKeys: columnKeys,
-		Timestamps: timestamps,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshal import request: %s", err)
-	}
-	return buf, nil
-}
-
-// marshalImportPayloadK marshalls the import parameters into a protobuf byte slice.
-func (c *InternalClient) marshalImportPayloadK(index, field string, bits []pilosa.Bit) ([]byte, error) {
-	// Separate row and column IDs to reduce allocations.
-	rowKeys := Bits(bits).RowKeys()
-	columnKeys := Bits(bits).ColumnKeys()
-	timestamps := Bits(bits).Timestamps()
-
-	// Marshal data to protobuf.
-	buf, err := c.serializer.Marshal(&pilosa.ImportRequest{
-		Index:      index,
-		Field:      field,
-		RowKeys:    rowKeys,
 		ColumnKeys: columnKeys,
 		Timestamps: timestamps,
 	})

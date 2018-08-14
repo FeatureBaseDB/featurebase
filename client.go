@@ -34,6 +34,7 @@ type InternalClient interface {
 	Schema(ctx context.Context) ([]*IndexInfo, error)
 	CreateIndex(ctx context.Context, index string, opt IndexOptions) error
 	FragmentNodes(ctx context.Context, index string, shard uint64) ([]*Node, error)
+	Nodes(ctx context.Context) ([]*Node, error)
 	Query(ctx context.Context, index string, queryRequest *QueryRequest) (*QueryResponse, error)
 	QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error)
 	Import(ctx context.Context, index, field string, shard uint64, bits []Bit) error
@@ -87,6 +88,9 @@ func (n nopInternalClient) CreateIndex(ctx context.Context, index string, opt In
 	return nil
 }
 func (n nopInternalClient) FragmentNodes(ctx context.Context, index string, shard uint64) ([]*Node, error) {
+	return nil, nil
+}
+func (n nopInternalClient) Nodes(ctx context.Context) ([]*Node, error) {
 	return nil, nil
 }
 func (n nopInternalClient) Query(ctx context.Context, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
