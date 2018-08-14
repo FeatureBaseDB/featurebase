@@ -145,6 +145,9 @@ func (cmd *ImportCommand) ensureSchema(ctx context.Context) error {
 func (cmd *ImportCommand) importPath(ctx context.Context, fieldType, path string) error {
 	// If fieldType is `int`, treat the import data as values to be range-encoded.
 	if fieldType == pilosa.FieldTypeInt {
+		if cmd.StringKeys {
+			return cmd.bufferValuesK(ctx, path)
+		}
 		return cmd.bufferValues(ctx, path)
 	} else {
 		if cmd.StringKeys {
@@ -398,6 +401,72 @@ func (cmd *ImportCommand) bufferValues(ctx context.Context, path string) error {
 			return fmt.Errorf("invalid column id on row %d: %q", rnum, record[0])
 		}
 		val.ColumnID = columnID
+
+		// Parse FieldValue.
+		value, err := strconv.ParseInt(record[1], 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid value on row %d: %q", rnum, record[1])
+		}
+		val.Value = value
+
+		a = append(a, val)
+
+		// If we've reached the buffer size then import FieldValues.
+		if len(a) == cmd.BufferSize {
+			if err := cmd.importValues(ctx, a); err != nil {
+				return err
+			}
+			a = a[:0]
+		}
+	}
+
+	// If there are still values in the buffer then flush them.
+	return cmd.importValues(ctx, a)
+}
+
+// bufferValuesK buffers slices of FieldValues to be imported as a batch.
+func (cmd *ImportCommand) bufferValuesK(ctx context.Context, path string) error {
+	a := make([]pilosa.FieldValue, 0, cmd.BufferSize)
+
+	var r *csv.Reader
+
+	if path != "-" {
+		// Open file for reading.
+		f, err := os.Open(path)
+		if err != nil {
+			return errors.Wrap(err, "opening file")
+		}
+		defer f.Close()
+
+		// Read rows as bits.
+		r = csv.NewReader(f)
+	} else {
+		r = csv.NewReader(cmd.Stdin)
+	}
+
+	r.FieldsPerRecord = -1
+	rnum := 0
+	for {
+		rnum++
+
+		// Read CSV row.
+		record, err := r.Read()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return errors.Wrap(err, "reading")
+		}
+
+		// Ignore blank rows.
+		if record[0] == "" {
+			continue
+		} else if len(record) < 2 {
+			return fmt.Errorf("bad column count on row %d: col=%d", rnum, len(record))
+		}
+
+		var val pilosa.FieldValue
+
+		val.ColumnKey = record[0]
 
 		// Parse FieldValue.
 		value, err := strconv.ParseInt(record[1], 10, 64)
