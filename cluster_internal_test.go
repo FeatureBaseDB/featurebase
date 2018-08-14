@@ -449,6 +449,60 @@ func TestCluster_Nodes(t *testing.T) {
 	})
 }
 
+func TestCluster_PreviousNode(t *testing.T) {
+	node0 := &Node{ID: "node0"}
+	node1 := &Node{ID: "node1"}
+	node2 := &Node{ID: "node2"}
+
+	t.Run("OneNode", func(t *testing.T) {
+		c := newCluster()
+		c.addNodeBasicSorted(node0)
+
+		c.Node = node0
+		if prev := c.unprotectedPreviousNode(); prev != nil {
+			t.Errorf("expected: nil, but got: %v", prev)
+		}
+	})
+
+	t.Run("TwoNode", func(t *testing.T) {
+		c := newCluster()
+		c.addNodeBasicSorted(node0)
+		c.addNodeBasicSorted(node1)
+
+		c.Node = node0
+		if prev := c.unprotectedPreviousNode(); prev != node1 {
+			t.Errorf("expected: node1, but got: %v", prev)
+		}
+
+		c.Node = node1
+		if prev := c.unprotectedPreviousNode(); prev != node0 {
+			t.Errorf("expected: node0, but got: %v", prev)
+		}
+	})
+
+	t.Run("ThreeNode", func(t *testing.T) {
+		c := newCluster()
+		c.addNodeBasicSorted(node0)
+		c.addNodeBasicSorted(node1)
+		c.addNodeBasicSorted(node2)
+
+		c.Node = node0
+		if prev := c.unprotectedPreviousNode(); prev != node2 {
+			t.Errorf("expected: node2, but got: %v", prev)
+		}
+
+		c.Node = node1
+		if prev := c.unprotectedPreviousNode(); prev != node0 {
+			t.Errorf("expected: node0, but got: %v", prev)
+		}
+
+		c.Node = node2
+		if prev := c.unprotectedPreviousNode(); prev != node1 {
+			t.Errorf("expected: node1, but got: %v", prev)
+		}
+	})
+}
+
 // NEXT: move this test to internal and unexport IsCoordinator
 func TestCluster_Coordinator(t *testing.T) {
 	uri1 := NewTestURIFromHostPort("node1", 0)

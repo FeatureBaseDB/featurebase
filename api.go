@@ -136,9 +136,9 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 		}
 
 		// Translate column attributes, if necessary.
-		if api.server.translateFile != nil {
+		if api.holder.translateFile != nil {
 			for _, col := range resp.ColumnAttrSets {
-				v, err := api.server.translateFile.TranslateColumnToString(req.Index, col.ID)
+				v, err := api.holder.translateFile.TranslateColumnToString(req.Index, col.ID)
 				if err != nil {
 					return resp, err
 				}
@@ -800,7 +800,7 @@ func (api *API) ResizeAbort() error {
 
 // GetTranslateData provides a reader for key translation logs starting at offset.
 func (api *API) GetTranslateData(ctx context.Context, offset int64) (io.ReadCloser, error) {
-	rc, err := api.server.translateFile.Reader(ctx, offset)
+	rc, err := api.holder.translateFile.Reader(ctx, offset)
 	if err != nil {
 		return nil, errors.Wrap(err, "read from translate store")
 	}
