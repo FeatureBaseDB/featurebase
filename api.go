@@ -625,7 +625,7 @@ func (api *API) Import(_ context.Context, req *ImportRequest) error {
 		if len(req.RowIDs) != 0 {
 			return errors.New("row ids cannot be used because field uses string keys")
 		}
-		if req.RowIDs, err = api.server.translateFile.TranslateRowsToUint64(index.Name(), field.Name(), req.RowKeys); err != nil {
+		if req.RowIDs, err = api.holder.translateFile.TranslateRowsToUint64(index.Name(), field.Name(), req.RowKeys); err != nil {
 			return errors.Wrap(err, "translating rows")
 		}
 	}
@@ -635,7 +635,7 @@ func (api *API) Import(_ context.Context, req *ImportRequest) error {
 		if len(req.ColumnIDs) != 0 {
 			return errors.New("column ids cannot be used because index uses string keys")
 		}
-		if req.ColumnIDs, err = api.server.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
+		if req.ColumnIDs, err = api.holder.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
 			return errors.Wrap(err, "translating columns")
 		}
 	}
