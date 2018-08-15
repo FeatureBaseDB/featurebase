@@ -236,7 +236,7 @@ func TestClient_ImportKeys(t *testing.T) {
 				Query: "TopN(keyedf)",
 			})
 			if pairs, ok := resp.Results[0].([]pilosa.Pair); !ok {
-				t.Fatal("unexpected response type %T", resp.Results[0])
+				t.Fatalf("unexpected response type %T", resp.Results[0])
 			} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
 				{Key: "green", Count: 3},
 				{Key: "blue", Count: 2},
@@ -263,7 +263,7 @@ func TestClient_ImportKeys(t *testing.T) {
 				Query: "TopN(unkeyedf)",
 			})
 			if pairs, ok := resp.Results[0].([]pilosa.Pair); !ok {
-				t.Fatal("unexpected response type %T", resp.Results[0])
+				t.Fatalf("unexpected response type %T", resp.Results[0])
 			} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
 				{ID: 1, Count: 3},
 				{ID: 2, Count: 2},
@@ -290,7 +290,7 @@ func TestClient_ImportKeys(t *testing.T) {
 				Query: "TopN(keyedf)",
 			})
 			if pairs, ok := resp.Results[0].([]pilosa.Pair); !ok {
-				t.Fatal("unexpected response type %T", resp.Results[0])
+				t.Fatalf("unexpected response type %T", resp.Results[0])
 			} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
 				{Key: "green", Count: 3},
 				{Key: "blue", Count: 2},
@@ -334,7 +334,7 @@ func TestClient_ImportKeys(t *testing.T) {
 				Query: "TopN(keyedf0)",
 			})
 			if pairs, ok := resp.Results[0].([]pilosa.Pair); !ok {
-				t.Fatal("unexpected response type %T", resp.Results[0])
+				t.Fatalf("unexpected response type %T", resp.Results[0])
 			} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
 				{Key: "green", Count: 3},
 				{Key: "blue", Count: 2},
@@ -366,7 +366,7 @@ func TestClient_ImportKeys(t *testing.T) {
 				Query: "TopN(keyedf1)",
 			})
 			if pairs, ok := resp.Results[0].([]pilosa.Pair); !ok {
-				t.Fatal("unexpected response type %T", resp.Results[0])
+				t.Fatalf("unexpected response type %T", resp.Results[0])
 			} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
 				{Key: "green", Count: 3},
 				{Key: "blue", Count: 2},
