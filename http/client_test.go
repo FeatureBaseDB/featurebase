@@ -20,6 +20,7 @@ import (
 	gohttp "net/http"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa"
@@ -200,6 +201,181 @@ func TestClient_Import(t *testing.T) {
 	if a := hldr.Row("i", "f", 200).Columns(); !reflect.DeepEqual(a, []uint64{6}) {
 		t.Fatalf("unexpected columns: %+v", a)
 	}
+}
+
+// Ensure client can bulk import data.
+func TestClient_ImportKeys(t *testing.T) {
+	t.Run("SingleNode", func(t *testing.T) {
+		cmd := test.MustRunCluster(t, 1)[0]
+		host := cmd.URL()
+
+		cmd.MustCreateIndex(t, "keyed", pilosa.IndexOptions{Keys: true})
+		cmd.MustCreateIndex(t, "unkeyed", pilosa.IndexOptions{Keys: false})
+
+		cmd.MustCreateField(t, "keyed", "keyedf", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000), pilosa.OptFieldKeys())
+		cmd.MustCreateField(t, "keyed", "unkeyedf", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000))
+		cmd.MustCreateField(t, "unkeyed", "keyedf", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000), pilosa.OptFieldKeys())
+
+		// Send import request.
+		c := MustNewClient(host, http.GetHTTPClient(nil))
+
+		t.Run("Import keyed,keyed", func(t *testing.T) {
+			if err := c.Import(context.Background(), "keyed", "keyedf", 0, []pilosa.Bit{
+				{RowKey: "green", ColumnKey: "eve"},
+				{RowKey: "green", ColumnKey: "alice"},
+				{RowKey: "green", ColumnKey: "bob"},
+				{RowKey: "blue", ColumnKey: "eve"},
+				{RowKey: "blue", ColumnKey: "alice"},
+				{RowKey: "purple", ColumnKey: "eve"},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			cmd.MustRecalculateCaches(t)
+			resp := cmd.MustQuery(t, &pilosa.QueryRequest{
+				Index: "keyed",
+				Query: "TopN(keyedf)",
+			})
+			if pairs, ok := resp.Results[0].([]pilosa.Pair); !ok {
+				t.Fatalf("unexpected response type %T", resp.Results[0])
+			} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
+				{Key: "green", Count: 3},
+				{Key: "blue", Count: 2},
+				{Key: "purple", Count: 1},
+			}) {
+				t.Fatalf("unexpected topn result: %v", pairs)
+			}
+		})
+
+		t.Run("Import keyed,unkeyedf", func(t *testing.T) {
+			if err := c.Import(context.Background(), "keyed", "unkeyedf", 0, []pilosa.Bit{
+				{RowID: 1, ColumnKey: "eve"},
+				{RowID: 1, ColumnKey: "alice"},
+				{RowID: 1, ColumnKey: "bob"},
+				{RowID: 2, ColumnKey: "eve"},
+				{RowID: 2, ColumnKey: "alice"},
+				{RowID: 3, ColumnKey: "eve"},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			cmd.MustRecalculateCaches(t)
+			resp := cmd.MustQuery(t, &pilosa.QueryRequest{
+				Index: "keyed",
+				Query: "TopN(unkeyedf)",
+			})
+			if pairs, ok := resp.Results[0].([]pilosa.Pair); !ok {
+				t.Fatalf("unexpected response type %T", resp.Results[0])
+			} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
+				{ID: 1, Count: 3},
+				{ID: 2, Count: 2},
+				{ID: 3, Count: 1},
+			}) {
+				t.Fatalf("unexpected topn result: %v", pairs)
+			}
+		})
+
+		t.Run("Import unkeyed,keyed", func(t *testing.T) {
+			if err := c.Import(context.Background(), "unkeyed", "keyedf", 0, []pilosa.Bit{
+				{RowKey: "green", ColumnID: 1},
+				{RowKey: "green", ColumnID: 2},
+				{RowKey: "green", ColumnID: 3},
+				{RowKey: "blue", ColumnID: 1},
+				{RowKey: "blue", ColumnID: 2},
+				{RowKey: "purple", ColumnID: 1},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			cmd.MustRecalculateCaches(t)
+			resp := cmd.MustQuery(t, &pilosa.QueryRequest{
+				Index: "unkeyed",
+				Query: "TopN(keyedf)",
+			})
+			if pairs, ok := resp.Results[0].([]pilosa.Pair); !ok {
+				t.Fatalf("unexpected response type %T", resp.Results[0])
+			} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
+				{Key: "green", Count: 3},
+				{Key: "blue", Count: 2},
+				{Key: "purple", Count: 1},
+			}) {
+				t.Fatalf("unexpected topn result: %v", pairs)
+			}
+		})
+	})
+
+	t.Run("MultiNode", func(t *testing.T) {
+		cluster := test.MustRunCluster(t, 2)
+		cmd0 := cluster[0]
+		cmd1 := cluster[1]
+		host0 := cmd0.URL()
+		host1 := cmd1.URL()
+
+		cmd0.MustCreateIndex(t, "keyed", pilosa.IndexOptions{Keys: true})
+		cmd0.MustCreateField(t, "keyed", "keyedf0", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000), pilosa.OptFieldKeys())
+		cmd0.MustCreateField(t, "keyed", "keyedf1", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000), pilosa.OptFieldKeys())
+
+		// Send import request.
+		c0 := MustNewClient(host0, http.GetHTTPClient(nil))
+		c1 := MustNewClient(host1, http.GetHTTPClient(nil))
+
+		// Import to node0.
+		t.Run("Import node0", func(t *testing.T) {
+			if err := c0.ImportK(context.Background(), "keyed", "keyedf0", []pilosa.Bit{
+				{RowKey: "green", ColumnKey: "eve"},
+				{RowKey: "green", ColumnKey: "alice"},
+				{RowKey: "green", ColumnKey: "bob"},
+				{RowKey: "blue", ColumnKey: "eve"},
+				{RowKey: "blue", ColumnKey: "alice"},
+				{RowKey: "purple", ColumnKey: "eve"},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			cmd0.MustRecalculateCaches(t)
+			resp := cmd0.MustQuery(t, &pilosa.QueryRequest{
+				Index: "keyed",
+				Query: "TopN(keyedf0)",
+			})
+			if pairs, ok := resp.Results[0].([]pilosa.Pair); !ok {
+				t.Fatalf("unexpected response type %T", resp.Results[0])
+			} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
+				{Key: "green", Count: 3},
+				{Key: "blue", Count: 2},
+				{Key: "purple", Count: 1},
+			}) {
+				t.Fatalf("unexpected topn result: %v", pairs)
+			}
+		})
+
+		// Import to node1 (ensure import is routed to coordinator for translation).
+		t.Run("Import node1", func(t *testing.T) {
+			if err := c1.ImportK(context.Background(), "keyed", "keyedf1", []pilosa.Bit{
+				{RowKey: "green", ColumnKey: "eve"},
+				{RowKey: "green", ColumnKey: "alice"},
+				{RowKey: "green", ColumnKey: "bob"},
+				{RowKey: "blue", ColumnKey: "eve"},
+				{RowKey: "blue", ColumnKey: "alice"},
+				{RowKey: "purple", ColumnKey: "eve"},
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			// Wait for translation replication.
+			time.Sleep(500 * time.Millisecond)
+
+			cmd1.MustRecalculateCaches(t)
+			resp := cmd1.MustQuery(t, &pilosa.QueryRequest{
+				Index: "keyed",
+				Query: "TopN(keyedf1)",
+			})
+			if pairs, ok := resp.Results[0].([]pilosa.Pair); !ok {
+				t.Fatalf("unexpected response type %T", resp.Results[0])
+			} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
+				{Key: "green", Count: 3},
+				{Key: "blue", Count: 2},
+				{Key: "purple", Count: 1},
+			}) {
+				t.Fatalf("unexpected topn result: %v", pairs)
+			}
+		})
+	})
 }
 
 // Ensure client can bulk import value data.

@@ -18,8 +18,9 @@ type Bit struct {
 // FieldValue represents the value for a column within a
 // range-encoded field.
 type FieldValue struct {
-	ColumnID uint64
-	Value    int64
+	ColumnID  uint64
+	ColumnKey string
+	Value     int64
 }
 
 // InternalClient should be implemented by any struct that enables any transport between nodes
@@ -33,6 +34,7 @@ type InternalClient interface {
 	Schema(ctx context.Context) ([]*IndexInfo, error)
 	CreateIndex(ctx context.Context, index string, opt IndexOptions) error
 	FragmentNodes(ctx context.Context, index string, shard uint64) ([]*Node, error)
+	Nodes(ctx context.Context) ([]*Node, error)
 	Query(ctx context.Context, index string, queryRequest *QueryRequest) (*QueryResponse, error)
 	QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error)
 	Import(ctx context.Context, index, field string, shard uint64, bits []Bit) error
@@ -86,6 +88,9 @@ func (n nopInternalClient) CreateIndex(ctx context.Context, index string, opt In
 	return nil
 }
 func (n nopInternalClient) FragmentNodes(ctx context.Context, index string, shard uint64) ([]*Node, error) {
+	return nil, nil
+}
+func (n nopInternalClient) Nodes(ctx context.Context) ([]*Node, error) {
 	return nil, nil
 }
 func (n nopInternalClient) Query(ctx context.Context, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
