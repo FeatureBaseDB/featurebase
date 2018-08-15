@@ -128,6 +128,33 @@ func TestImportCommand_RunKeys(t *testing.T) {
 	}
 }
 
+// Ensure that integer import with keys runs.
+func TestImportCommand_RunValueKeys(t *testing.T) {
+	buf := bytes.Buffer{}
+	stdin, stdout, stderr := GetIO(buf)
+	cm := NewImportCommand(stdin, stdout, stderr)
+	file, err := ioutil.TempFile("", "import-key.csv")
+	file.Write([]byte("foo1,2\nfoo3,4\nfoo5,6"))
+	ctx := context.Background()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := test.MustRunCluster(t, 1)[0]
+	cm.Host = cmd.API.Node().URI.HostPort()
+
+	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader(`{"options":{"keys": true}}`)))
+	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i/field/f", strings.NewReader(`{"options":{"type": "int", "min": 0, "max": 100}}`)))
+
+	cm.Index = "i"
+	cm.Field = "f"
+	cm.Paths = []string{file.Name()}
+	err = cm.Run(ctx)
+	if err != nil {
+		t.Fatalf("Import Run with keys doesn't work: %s", err)
+	}
+}
+
 func TestImportCommand_InvalidFile(t *testing.T) {
 	cmd := test.MustRunCluster(t, 1)[0]
 
