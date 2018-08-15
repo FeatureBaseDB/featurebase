@@ -129,11 +129,6 @@ func TestClient_MultiNode(t *testing.T) {
 		Remote: false,
 	}
 
-	_, err = client[0].Query(context.Background(), "i", queryRequest)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	result, err := client[0].Query(context.Background(), "i", queryRequest)
 	if err != nil {
 		t.Fatal(err)
@@ -375,6 +370,56 @@ func TestClient_ImportKeys(t *testing.T) {
 				t.Fatalf("unexpected topn result: %v", pairs)
 			}
 		})
+	})
+
+	t.Run("IntegerFieldSingleNode", func(t *testing.T) {
+		cmd := test.MustRunCluster(t, 1)[0]
+		host := cmd.URL()
+		holder := cmd.Server.Holder()
+		hldr := test.Holder{Holder: holder}
+
+		fldName := "f"
+
+		// Load bitmap into cache to ensure cache gets updated.
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{Keys: true})
+		field, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-100, 100))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Send import request.
+		c := MustNewClient(host, http.GetHTTPClient(nil))
+		if err := c.ImportValue(context.Background(), "i", "f", 0, []pilosa.FieldValue{
+			{ColumnKey: "col1", Value: -10},
+			{ColumnKey: "col2", Value: 20},
+			{ColumnKey: "col3", Value: 40},
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify Sum.
+		sum, cnt, err := field.Sum(nil, fldName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sum != 50 || cnt != 3 {
+			t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=50, cnt=3", sum, cnt)
+		}
+
+		// Verify Range
+		queryRequest := &pilosa.QueryRequest{
+			Query:  fmt.Sprintf(`Range(%s>10)`, fldName),
+			Remote: false,
+		}
+
+		result, err := c.Query(context.Background(), "i", queryRequest)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !reflect.DeepEqual(result.Results[0].(*pilosa.Row).Keys, []string{"col2", "col3"}) {
+			t.Fatalf("unexpected column keys: %s", spew.Sdump(result))
+		}
 	})
 }
 

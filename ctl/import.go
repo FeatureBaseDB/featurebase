@@ -340,7 +340,7 @@ func (cmd *ImportCommand) bufferValues(ctx context.Context, useColumnKeys bool, 
 
 		// If we've reached the buffer size then import FieldValues.
 		if len(a) == cmd.BufferSize {
-			if err := cmd.importValues(ctx, a); err != nil {
+			if err := cmd.importValues(ctx, useColumnKeys, a); err != nil {
 				return err
 			}
 			a = a[:0]
@@ -348,12 +348,21 @@ func (cmd *ImportCommand) bufferValues(ctx context.Context, useColumnKeys bool, 
 	}
 
 	// If there are still values in the buffer then flush them.
-	return cmd.importValues(ctx, a)
+	return cmd.importValues(ctx, useColumnKeys, a)
 }
 
 // importValues sends batches of FieldValues to the server.
-func (cmd *ImportCommand) importValues(ctx context.Context, vals []pilosa.FieldValue) error {
+func (cmd *ImportCommand) importValues(ctx context.Context, useColumnKeys bool, vals []pilosa.FieldValue) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
+
+	// If keys are used, all values are sent to the primary translate store (i.e. coordinator).
+	if useColumnKeys {
+		logger.Printf("importing keyed values: n=%d", len(vals))
+		if err := cmd.client.ImportValueK(ctx, cmd.Index, cmd.Field, vals); err != nil {
+			return errors.Wrap(err, "importing keys")
+		}
+		return nil
+	}
 
 	// Group vals by shard.
 	logger.Printf("grouping %d vals", len(vals))
