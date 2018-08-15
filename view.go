@@ -23,6 +23,7 @@ import (
 	"sync"
 
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
 )
 
@@ -47,10 +48,6 @@ type view struct {
 
 	// Fragments by shard.
 	fragments map[uint64]*fragment
-
-	// maxShard maintains this view's max shard in order to
-	// prevent sending multiple `CreateShardMessage` messages
-	maxShard uint64
 
 	broadcaster  broadcaster
 	stats        StatsClient
@@ -160,19 +157,16 @@ func (v *view) close() error {
 	return nil
 }
 
-// calculateMaxShard returns the max shard in the view.
-func (v *view) calculateMaxShard() uint64 {
+// availableShards returns a bitmap of shards which contain data.
+func (v *view) availableShards() *roaring.Bitmap {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 
-	var max uint64
+	b := roaring.NewBitmap()
 	for shard := range v.fragments {
-		if shard > max {
-			max = shard
-		}
+		b.Add(shard) // ignore error, no writer attached
 	}
-
-	return max
+	return b
 }
 
 // fragmentPath returns the path to a fragment in the view.
@@ -229,18 +223,12 @@ func (v *view) createFragmentIfNotExists(shard uint64) (*fragment, error) {
 	frag.RowAttrStore = v.rowAttrStore
 
 	// Broadcast a message that a new max shard was just created.
-	if shard > v.maxShard {
-		v.maxShard = shard
-
-		// Send the create shard message to all nodes.
-		err := v.broadcaster.SendSync(
-			&CreateShardMessage{
-				Index: v.index,
-				Shard: shard,
-			})
-		if err != nil {
-			return nil, errors.Wrap(err, "sending createshard message")
-		}
+	if err := v.broadcaster.SendSync(&CreateShardMessage{
+		Index: v.index,
+		Field: v.field,
+		Shard: shard,
+	}); err != nil {
+		return nil, errors.Wrap(err, "sending createshard message")
 	}
 
 	// Save to lookup.

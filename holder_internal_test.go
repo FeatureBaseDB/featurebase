@@ -21,6 +21,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/pilosa/pilosa/roaring"
 )
 
 type tHolder struct {
@@ -207,8 +209,8 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 	hldr0.SetBit("y", "z", 10, (2*ShardWidth)+7)
 
 	// Set highest shard.
-	hldr0.Index("i").setRemoteMaxShard(1)
-	hldr0.Index("y").setRemoteMaxShard(2)
+	hldr0.Field("i", "f").addRemoteAvailableShards(roaring.NewBitmap(0, 1))
+	hldr0.Field("y", "z").addRemoteAvailableShards(roaring.NewBitmap(0, 1, 2))
 
 	// Keep replication the same and ensure we get the expected results.
 	cluster.ReplicaN = 2

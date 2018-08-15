@@ -27,8 +27,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
-
 	"golang.org/x/sync/errgroup"
 )
 
@@ -470,11 +470,11 @@ func (s *Server) monitorAntiEntropy() {
 func (s *Server) receiveMessage(m Message) error {
 	switch obj := m.(type) {
 	case *CreateShardMessage:
-		idx := s.holder.Index(obj.Index)
-		if idx == nil {
-			return fmt.Errorf("Local Index not found: %s", obj.Index)
+		f := s.holder.Field(obj.Index, obj.Field)
+		if f == nil {
+			return fmt.Errorf("Local field not found: %s/%s", obj.Index, obj.Field)
 		}
-		idx.setRemoteMaxShard(obj.Shard)
+		f.addRemoteAvailableShards(roaring.NewBitmap(obj.Shard))
 	case *CreateIndexMessage:
 		opt := obj.Meta
 		_, err := s.holder.CreateIndex(obj.Index, *opt)
@@ -628,19 +628,18 @@ func (s *Server) mergeRemoteStatus(ns *NodeStatus) error {
 		return errors.Wrap(err, "applying schema")
 	}
 
-	// Sync maxShards.
-	oldmaxshards := s.holder.maxShards()
-	for index, newMax := range ns.MaxShards {
-		localIndex := s.holder.Index(index)
-		// if we don't know about an index locally, log an error because
-		// indexes should be created and synced prior to shard creation
-		if localIndex == nil {
-			s.logger.Printf("Local Index not found: %s", index)
-			continue
-		}
-		if newMax > oldmaxshards[index] {
-			oldmaxshards[index] = newMax
-			localIndex.setRemoteMaxShard(newMax)
+	// Sync available shards.
+	for _, is := range ns.Indexes {
+		for _, fs := range is.Fields {
+			f := s.holder.Field(is.Name, fs.Name)
+
+			// if we don't know about an field locally, log a error because
+			// fields should be created and synced prior to shard creation
+			if f == nil {
+				s.logger.Printf("Local Field not found: %s/%s", is.Name, fs.Name)
+				continue
+			}
+			f.addRemoteAvailableShards(fs.AvailableShards)
 		}
 	}
 

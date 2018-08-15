@@ -28,6 +28,7 @@ import (
 
 	"github.com/hashicorp/memberlist"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/roaring"
 	"github.com/pilosa/pilosa/toml"
 	"github.com/pkg/errors"
 )
@@ -258,9 +259,22 @@ func (g *memberSet) GetBroadcasts(overhead, limit int) [][]byte {
 // sends this Node's state data.
 func (g *memberSet) LocalState(join bool) []byte {
 	m := &pilosa.NodeStatus{
-		Node:      g.papi.Node(),
-		MaxShards: g.papi.MaxShards(context.Background()),
-		Schema:    &pilosa.Schema{Indexes: g.papi.Schema(context.Background())},
+		Node:   g.papi.Node(),
+		Schema: &pilosa.Schema{Indexes: g.papi.Schema(context.Background())},
+	}
+	for _, idx := range m.Schema.Indexes {
+		is := &pilosa.IndexStatus{Name: idx.Name}
+		for _, f := range idx.Fields {
+			availableShards := roaring.NewBitmap()
+			if field, _ := g.papi.Field(context.Background(), idx.Name, f.Name); field != nil {
+				availableShards = field.AvailableShards()
+			}
+			is.Fields = append(is.Fields, &pilosa.FieldStatus{
+				Name:            f.Name,
+				AvailableShards: availableShards,
+			})
+		}
+		m.Indexes = append(m.Indexes, is)
 	}
 
 	// Marshal nodestate data to bytes.

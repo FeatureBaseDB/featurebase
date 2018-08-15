@@ -31,6 +31,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )
@@ -640,17 +641,17 @@ func (c *cluster) fragsByHost(idx *Index) fragsByHost {
 	for _, field := range idx.Fields() {
 		for _, view := range field.views() {
 			fieldViews.addView(field.Name(), view.name)
-
 		}
 	}
-	return c.fragCombos(idx.Name(), idx.maxShard(), fieldViews)
+	return c.fragCombos(idx.Name(), idx.AvailableShards(), fieldViews)
 }
 
 // fragCombos returns a map (by uri) of lists of fragments for a given index
-// by creating every combination of field/view specified in `fieldViews` up to maxShard.
-func (c *cluster) fragCombos(idx string, maxShard uint64, fieldViews viewsByField) fragsByHost {
+// by creating every combination of field/view specified in `fieldViews` up
+// for the given set of shards with data.
+func (c *cluster) fragCombos(idx string, availableShards *roaring.Bitmap, fieldViews viewsByField) fragsByHost {
 	t := make(fragsByHost)
-	for i := uint64(0); i <= maxShard; i++ {
+	availableShards.ForEach(func(i uint64) {
 		nodes := c.shardNodes(idx, i)
 		for _, n := range nodes {
 			// for each field/view combination:
@@ -660,7 +661,7 @@ func (c *cluster) fragCombos(idx string, maxShard uint64, fieldViews viewsByFiel
 				}
 			}
 		}
-	}
+	})
 	return t
 }
 
@@ -838,9 +839,9 @@ func (c *cluster) partitionNodes(partitionID int) []*Node {
 }
 
 // containsShards is like OwnsShards, but it includes replicas.
-func (c *cluster) containsShards(index string, maxShard uint64, node *Node) []uint64 {
+func (c *cluster) containsShards(index string, availableShards *roaring.Bitmap, node *Node) []uint64 {
 	var shards []uint64
-	for i := uint64(0); i <= maxShard; i++ {
+	availableShards.ForEach(func(i uint64) {
 		p := c.partition(index, i)
 		// Determine the nodes for partition.
 		nodes := c.partitionNodes(p)
@@ -849,7 +850,7 @@ func (c *cluster) containsShards(index string, maxShard uint64, node *Node) []ui
 				shards = append(shards, i)
 			}
 		}
-	}
+	})
 	return shards
 }
 
@@ -1921,6 +1922,7 @@ func decodeTopology(topology *internal.Topology) (*Topology, error) {
 
 type CreateShardMessage struct {
 	Index string
+	Field string
 	Shard uint64
 }
 
@@ -1975,9 +1977,19 @@ type NodeStateMessage struct {
 }
 
 type NodeStatus struct {
-	Node      *Node
-	MaxShards map[string]uint64
-	Schema    *Schema
+	Node    *Node
+	Indexes []*IndexStatus
+	Schema  *Schema
+}
+
+type IndexStatus struct {
+	Name   string
+	Fields []*FieldStatus
+}
+
+type FieldStatus struct {
+	Name            string
+	AvailableShards *roaring.Bitmap
 }
 
 type RecalculateCaches struct{}
