@@ -20,6 +20,7 @@ import (
 	gohttp "net/http"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa"
@@ -355,6 +356,10 @@ func TestClient_ImportKeys(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
+
+			// Wait for translation replication.
+			time.Sleep(500 * time.Millisecond)
+
 			cmd1.MustRecalculateCaches(t)
 			resp := cmd1.MustQuery(t, &pilosa.QueryRequest{
 				Index: "keyed",
