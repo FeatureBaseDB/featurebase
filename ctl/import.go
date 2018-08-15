@@ -46,7 +46,8 @@ type ImportCommand struct { // nolint: maligned
 	// CreateSchema ensures the schema exists before import
 	CreateSchema bool
 
-	// DEPRECATED: Indicates that the payload should be treated as string keys.
+	// REMOVED: Indicates that the payload should be treated as string keys.
+	// TODO: remove this in a future release
 	StringKeys bool `json:"StringKeys"`
 
 	// Filenames to import from.
@@ -79,9 +80,9 @@ func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *ImportCommand 
 func (cmd *ImportCommand) Run(ctx context.Context) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
-	// DEPRECATED: warning that --string-keys flag has been deprecated.
+	// REMOVED: warning that --string-keys flag has been deprecated.
 	if cmd.StringKeys {
-		logger.Printf("DEPRECATED: The string-keys flag is no longer used.")
+		logger.Printf("REMOVED: The string-keys flag is no longer used.")
 	}
 
 	// Validate arguments.
