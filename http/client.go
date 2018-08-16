@@ -688,7 +688,7 @@ func (c *InternalClient) CreateField(ctx context.Context, index, field string) e
 
 // FragmentBlocks returns a list of block checksums for a fragment on a host.
 // Only returns blocks which contain data.
-func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64) ([]pilosa.FragmentBlock, error) {
+func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, index, field, view string, shard uint64) ([]pilosa.FragmentBlock, error) {
 	if uri == nil {
 		uri = c.defaultURI
 	}
@@ -696,6 +696,7 @@ func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, in
 	u.RawQuery = url.Values{
 		"index": {index},
 		"field": {field},
+		"view":  {view},
 		"shard": {strconv.FormatUint(shard, 10)},
 	}.Encode()
 
@@ -733,13 +734,14 @@ func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, in
 }
 
 // BlockData returns row/column id pairs for a block.
-func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64, block int) ([]uint64, []uint64, error) {
+func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, field, view string, shard uint64, block int) ([]uint64, []uint64, error) {
 	if uri == nil {
 		panic("need to pass a URI to BlockData")
 	}
 	buf, err := c.serializer.Marshal(&pilosa.BlockDataRequest{
 		Index: index,
 		Field: field,
+		View:  view,
 		Shard: shard,
 		Block: uint64(block),
 	})

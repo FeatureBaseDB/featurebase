@@ -502,7 +502,7 @@ func TestClient_FragmentBlocks(t *testing.T) {
 	// Set a bit on a different shard.
 	hldr.SetBit("i", "f", 0, 1)
 	c := MustNewClient(cmd.URL(), http.GetHTTPClient(nil))
-	blocks, err := c.FragmentBlocks(context.Background(), nil, "i", "f", 0)
+	blocks, err := c.FragmentBlocks(context.Background(), nil, "i", "f", "standard", 0)
 	if err != nil {
 		t.Fatal(err)
 	} else if len(blocks) != 2 {
@@ -514,7 +514,7 @@ func TestClient_FragmentBlocks(t *testing.T) {
 	}
 
 	// Verify data matches local blocks.
-	if a, err := cmd.API.FragmentBlocks(context.Background(), "i", "f", 0); err != nil {
+	if a, err := cmd.API.FragmentBlocks(context.Background(), "i", "f", "standard", 0); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(a, blocks) {
 		t.Fatalf("blocks mismatch:\n\nexp=%s\n\ngot=%s\n\n", spew.Sdump(a), spew.Sdump(blocks))

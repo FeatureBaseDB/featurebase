@@ -45,8 +45,8 @@ type InternalClient interface {
 	ImportValueK(ctx context.Context, index, field string, vals []FieldValue) error
 	ExportCSV(ctx context.Context, index, field string, shard uint64, w io.Writer) error
 	CreateField(ctx context.Context, index, field string) error
-	FragmentBlocks(ctx context.Context, uri *URI, index, field string, shard uint64) ([]FragmentBlock, error)
-	BlockData(ctx context.Context, uri *URI, index, field string, shard uint64, block int) ([]uint64, []uint64, error)
+	FragmentBlocks(ctx context.Context, uri *URI, index, field, view string, shard uint64) ([]FragmentBlock, error)
+	BlockData(ctx context.Context, uri *URI, index, field, view string, shard uint64, block int) ([]uint64, []uint64, error)
 	ColumnAttrDiff(ctx context.Context, uri *URI, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
 	RowAttrDiff(ctx context.Context, uri *URI, index, field string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
 	SendMessage(ctx context.Context, uri *URI, msg []byte) error
@@ -122,10 +122,10 @@ func (n nopInternalClient) ExportCSV(ctx context.Context, index, field string, s
 	return nil
 }
 func (n nopInternalClient) CreateField(ctx context.Context, index, field string) error { return nil }
-func (n nopInternalClient) FragmentBlocks(ctx context.Context, uri *URI, index, field string, shard uint64) ([]FragmentBlock, error) {
+func (n nopInternalClient) FragmentBlocks(ctx context.Context, uri *URI, index, field, view string, shard uint64) ([]FragmentBlock, error) {
 	return nil, nil
 }
-func (n nopInternalClient) BlockData(ctx context.Context, uri *URI, index, field string, shard uint64, block int) ([]uint64, []uint64, error) {
+func (n nopInternalClient) BlockData(ctx context.Context, uri *URI, index, field, view string, shard uint64, block int) ([]uint64, []uint64, error) {
 	return nil, nil, nil
 }
 func (n nopInternalClient) ColumnAttrDiff(ctx context.Context, uri *URI, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {
