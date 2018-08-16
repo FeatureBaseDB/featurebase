@@ -391,7 +391,7 @@ func (api *API) FragmentBlockData(_ context.Context, body io.Reader) ([]byte, er
 	}
 
 	// Retrieve fragment from holder.
-	f := api.holder.fragment(req.Index, req.Field, viewStandard, req.Shard)
+	f := api.holder.fragment(req.Index, req.Field, req.View, req.Shard)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -409,13 +409,13 @@ func (api *API) FragmentBlockData(_ context.Context, body io.Reader) ([]byte, er
 }
 
 // FragmentBlocks returns the checksums and block ids for all blocks in the specified fragment.
-func (api *API) FragmentBlocks(_ context.Context, indexName string, fieldName string, shard uint64) ([]FragmentBlock, error) {
+func (api *API) FragmentBlocks(_ context.Context, indexName, fieldName, viewName string, shard uint64) ([]FragmentBlock, error) {
 	if err := api.validate(apiFragmentBlocks); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	// Retrieve fragment from holder.
-	f := api.holder.fragment(indexName, fieldName, viewStandard, shard)
+	f := api.holder.fragment(indexName, fieldName, viewName, shard)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}

@@ -657,7 +657,7 @@ func (s *holderSyncer) SyncHolder() error {
 
 					// Sync fragment if own it.
 					if err := s.syncFragment(di.Name, fi.Name, vi.Name, shard); err != nil {
-						return fmt.Errorf("fragment sync error: index=%s, field=%s, shard=%d, err=%s", di.Name, fi.Name, shard, err)
+						return fmt.Errorf("fragment sync error: index=%s, field=%s, view=%s, shard=%d, err=%s", di.Name, fi.Name, vi.Name, shard, err)
 					}
 				}
 			}
