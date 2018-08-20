@@ -428,7 +428,7 @@ func (api *API) FragmentBlocks(_ context.Context, indexName, fieldName, viewName
 // Hosts returns a list of the hosts in the cluster including their ID,
 // URL, and which is the coordinator.
 func (api *API) Hosts(_ context.Context) []*Node {
-	return api.cluster.Nodes
+	return api.cluster.Nodes()
 }
 
 // Node gets the ID, URI and coordinator status for this particular node.

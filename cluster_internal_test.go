@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 	"testing/quick"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pkg/errors"
@@ -316,7 +317,7 @@ func TestResizeJob(t *testing.T) {
 // Ensure the cluster can fairly distribute partitions across the nodes.
 func TestCluster_Owners(t *testing.T) {
 	c := cluster{
-		Nodes: []*Node{
+		nodes: []*Node{
 			{URI: NewTestURIFromHostPort("serverA", 1000)},
 			{URI: NewTestURIFromHostPort("serverB", 1000)},
 			{URI: NewTestURIFromHostPort("serverC", 1000)},
@@ -326,12 +327,12 @@ func TestCluster_Owners(t *testing.T) {
 	}
 
 	// Verify nodes are distributed.
-	if a := c.partitionNodes(0); !reflect.DeepEqual(a, []*Node{c.Nodes[0], c.Nodes[1]}) {
+	if a := c.partitionNodes(0); !reflect.DeepEqual(a, []*Node{c.nodes[0], c.nodes[1]}) {
 		t.Fatalf("unexpected owners: %s", spew.Sdump(a))
 	}
 
 	// Verify nodes go around the ring.
-	if a := c.partitionNodes(2); !reflect.DeepEqual(a, []*Node{c.Nodes[2], c.Nodes[0]}) {
+	if a := c.partitionNodes(2); !reflect.DeepEqual(a, []*Node{c.nodes[2], c.nodes[0]}) {
 		t.Fatalf("unexpected owners: %s", spew.Sdump(a))
 	}
 }
@@ -384,7 +385,7 @@ func TestHasher(t *testing.T) {
 func TestCluster_ContainsShards(t *testing.T) {
 	c := NewTestCluster(5)
 	c.ReplicaN = 3
-	shards := c.containsShards("test", 10, c.Nodes[2])
+	shards := c.containsShards("test", 10, c.nodes[2])
 
 	if !reflect.DeepEqual(shards, []uint64{0, 2, 3, 5, 6, 9, 10}) {
 		t.Fatalf("unexpected shars for node's index: %v", shards)
@@ -804,13 +805,71 @@ func TestCluster_ResizeStates(t *testing.T) {
 	})
 }
 
+func TestAE(t *testing.T) {
+	t.Run("AbortDoesn'tBlockUninitialized", func(t *testing.T) {
+		c := newCluster()
+		ch := make(chan struct{})
+		go func() {
+			c.abortAntiEntropy()
+			close(ch)
+		}()
+		select {
+		case <-ch:
+			return
+		case <-time.After(time.Second):
+			t.Fatalf("aborting anti entropy on a new cluster blocked")
+		}
+	})
+
+	t.Run("AbortBlocksInitialized", func(t *testing.T) {
+		c := newCluster()
+		c.initializeAntiEntropy()
+		ch := make(chan struct{})
+		go func() {
+			c.abortAntiEntropy()
+			close(ch)
+		}()
+		select {
+		case <-ch:
+			t.Fatalf("aborting anti entropy on an initialized cluster didn't block")
+		case <-time.After(time.Microsecond * 100):
+		}
+	})
+
+	t.Run("AbortAntiEntropyQ", func(t *testing.T) {
+		c := newCluster()
+		c.initializeAntiEntropy()
+		if c.abortAntiEntropyQ() {
+			t.Fatalf("abortAntiEntropyQ should report false when abort not called")
+		}
+		go func() {
+			for {
+				if c.abortAntiEntropyQ() {
+					break
+				}
+			}
+		}()
+		ch := make(chan struct{})
+		go func() {
+			c.abortAntiEntropy()
+			close(ch)
+		}()
+		select {
+		case <-ch:
+		case <-time.After(time.Second):
+			t.Fatalf("abort should not have blocked this long")
+		}
+	})
+
+}
+
 // Ensures that coordinator can be changed.
 func TestCluster_UpdateCoordinator(t *testing.T) {
 	t.Run("UpdateCoordinator", func(t *testing.T) {
 		c := NewTestCluster(2)
 
-		oldNode := c.Nodes[0]
-		newNode := c.Nodes[1]
+		oldNode := c.nodes[0]
+		newNode := c.nodes[1]
 
 		// Update coordinator to the same value.
 		if c.updateCoordinator(oldNode) {

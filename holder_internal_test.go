@@ -183,7 +183,7 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 	// Mock 2-node, fully replicated cluster.
 	cluster.ReplicaN = 2
 
-	cluster.Nodes[0].URI = NewTestURIFromHostPort("localhost", 0)
+	cluster.nodes[0].URI = NewTestURIFromHostPort("localhost", 0)
 
 	// Create fields on nodes.
 	for _, hldr := range []*tHolder{hldr0} {
@@ -215,7 +215,7 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 
 	// Set up cleaner for replication 2.
 	cleaner2 := holderCleaner{
-		Node:    cluster.Nodes[0],
+		Node:    cluster.nodes[0],
 		Holder:  hldr0.Holder,
 		Cluster: cluster,
 	}
@@ -252,7 +252,7 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 
 	// Set up cleaner for replication 1.
 	cleaner1 := holderCleaner{
-		Node:    cluster.Nodes[0],
+		Node:    cluster.nodes[0],
 		Holder:  hldr0.Holder,
 		Cluster: cluster,
 	}

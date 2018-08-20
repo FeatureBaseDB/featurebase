@@ -40,14 +40,14 @@ func NewTestCluster(n int) *cluster {
 	c.Topology = newTopology()
 
 	for i := 0; i < n; i++ {
-		c.Nodes = append(c.Nodes, &Node{
+		c.nodes = append(c.nodes, &Node{
 			ID:  fmt.Sprintf("node%d", i),
 			URI: NewTestURI("http", fmt.Sprintf("host%d", i), uint16(0)),
 		})
 	}
 
-	c.Node = c.Nodes[0]
-	c.Coordinator = c.Nodes[0].ID
+	c.Node = c.nodes[0]
+	c.Coordinator = c.nodes[0].ID
 	c.SetState(ClusterStateNormal)
 
 	return c
