@@ -15,6 +15,8 @@
 package http_test
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	gohttp "net/http"
@@ -166,6 +168,169 @@ func TestClient_MultiNode(t *testing.T) {
 	if !reflect.DeepEqual(result, result2) {
 		t.Fatalf("TopN result should be the same on node0 and node2: %s", spew.Sdump(result2))
 	}
+}
+
+// Ensure client can export data.
+func TestClient_Export(t *testing.T) {
+	cmd := test.MustRunCluster(t, 1)[0]
+	host := cmd.URL()
+
+	cmd.MustCreateIndex(t, "keyed", pilosa.IndexOptions{Keys: true})
+	cmd.MustCreateIndex(t, "unkeyed", pilosa.IndexOptions{Keys: false})
+
+	cmd.MustCreateField(t, "keyed", "keyedf", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000), pilosa.OptFieldKeys())
+	cmd.MustCreateField(t, "keyed", "unkeyedf", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000))
+	cmd.MustCreateField(t, "unkeyed", "keyedf", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000), pilosa.OptFieldKeys())
+	cmd.MustCreateField(t, "unkeyed", "unkeyedf", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 1000))
+
+	c := MustNewClient(host, http.GetHTTPClient(nil))
+
+	data := []pilosa.Bit{
+		{RowID: 1, ColumnID: 100, RowKey: "row1", ColumnKey: "col100"},
+		{RowID: 1, ColumnID: 101, RowKey: "row1", ColumnKey: "col101"},
+		{RowID: 1, ColumnID: 102, RowKey: "row1", ColumnKey: "col102"},
+		{RowID: 1, ColumnID: 103, RowKey: "row1", ColumnKey: "col103"},
+		{RowID: 2, ColumnID: 200, RowKey: "row2", ColumnKey: "col200"},
+		{RowID: 2, ColumnID: 201, RowKey: "row2", ColumnKey: "col201"},
+		{RowID: 2, ColumnID: 202, RowKey: "row2", ColumnKey: "col202"},
+		{RowID: 2, ColumnID: 203, RowKey: "row2", ColumnKey: "col203"},
+	}
+
+	t.Run("Import unkeyed,unkeyedf", func(t *testing.T) {
+		// Populate data.
+		for _, bit := range data {
+			_, err := c.Query(context.Background(), "unkeyed", &pilosa.QueryRequest{
+				Query:  fmt.Sprintf(`Set(%d, unkeyedf=%d)`, bit.ColumnID, bit.RowID),
+				Remote: false,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		buf := bytes.NewBuffer(nil)
+		bw := bufio.NewWriter(buf)
+
+		// Send export request.
+		if err := c.ExportCSV(context.Background(), "unkeyed", "unkeyedf", 0, bw); err != nil {
+			t.Fatal(err)
+		}
+
+		got := buf.String()
+
+		// Expected output.
+		exp := ""
+		for _, bit := range data {
+			exp += fmt.Sprintf("%d,%d\n", bit.RowID, bit.ColumnID)
+		}
+
+		// Verify data.
+		if got != exp {
+			t.Fatalf("unexpected export data: %s", got)
+		}
+	})
+
+	t.Run("Import unkeyed,keyedf", func(t *testing.T) {
+		// Populate data.
+		for _, bit := range data {
+			_, err := c.Query(context.Background(), "unkeyed", &pilosa.QueryRequest{
+				Query:  fmt.Sprintf(`Set(%d, keyedf=%s)`, bit.ColumnID, bit.RowKey),
+				Remote: false,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		buf := bytes.NewBuffer(nil)
+		bw := bufio.NewWriter(buf)
+
+		// Send export request.
+		if err := c.ExportCSV(context.Background(), "unkeyed", "keyedf", 0, bw); err != nil {
+			t.Fatal(err)
+		}
+
+		got := buf.String()
+
+		// Expected output.
+		exp := ""
+		for _, bit := range data {
+			exp += fmt.Sprintf("%s,%d\n", bit.RowKey, bit.ColumnID)
+		}
+
+		// Verify data.
+		if got != exp {
+			t.Fatalf("unexpected export data: %s", got)
+		}
+	})
+
+	t.Run("Import keyed,unkeyedf", func(t *testing.T) {
+		// Populate data.
+		for _, bit := range data {
+			_, err := c.Query(context.Background(), "keyed", &pilosa.QueryRequest{
+				Query:  fmt.Sprintf(`Set("%s", unkeyedf=%d)`, bit.ColumnKey, bit.RowID),
+				Remote: false,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		buf := bytes.NewBuffer(nil)
+		bw := bufio.NewWriter(buf)
+
+		// Send export request.
+		if err := c.ExportCSV(context.Background(), "keyed", "unkeyedf", 0, bw); err != nil {
+			t.Fatal(err)
+		}
+
+		got := buf.String()
+
+		// Expected output.
+		exp := ""
+		for _, bit := range data {
+			exp += fmt.Sprintf("%d,%s\n", bit.RowID, bit.ColumnKey)
+		}
+
+		// Verify data.
+		if got != exp {
+			t.Fatalf("unexpected export data: %s", got)
+		}
+	})
+
+	t.Run("Import keyed,keyedf", func(t *testing.T) {
+		// Populate data.
+		for _, bit := range data {
+			_, err := c.Query(context.Background(), "keyed", &pilosa.QueryRequest{
+				Query:  fmt.Sprintf(`Set("%s", keyedf=%s)`, bit.ColumnKey, bit.RowKey),
+				Remote: false,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		buf := bytes.NewBuffer(nil)
+		bw := bufio.NewWriter(buf)
+
+		// Send export request.
+		if err := c.ExportCSV(context.Background(), "keyed", "keyedf", 0, bw); err != nil {
+			t.Fatal(err)
+		}
+
+		got := buf.String()
+
+		// Expected output.
+		exp := ""
+		for _, bit := range data {
+			exp += fmt.Sprintf("%s,%s\n", bit.RowKey, bit.ColumnKey)
+		}
+
+		// Verify data.
+		if got != exp {
+			t.Fatalf("unexpected export data: %s", got)
+		}
+	})
 }
 
 // Ensure client can bulk import data.

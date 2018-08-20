@@ -339,6 +339,18 @@ func (api *API) ExportCSV(_ context.Context, indexName string, fieldName string,
 		return ErrClusterDoesNotOwnShard
 	}
 
+	// Find index.
+	index := api.holder.Index(indexName)
+	if index == nil {
+		return newNotFoundError(ErrIndexNotFound)
+	}
+
+	// Find field from the index.
+	field := index.Field(fieldName)
+	if field == nil {
+		return newNotFoundError(ErrFieldNotFound)
+	}
+
 	// Find the fragment.
 	f := api.holder.fragment(indexName, fieldName, viewStandard, shard)
 	if f == nil {
@@ -348,13 +360,34 @@ func (api *API) ExportCSV(_ context.Context, indexName string, fieldName string,
 	// Wrap writer with a CSV writer.
 	cw := csv.NewWriter(w)
 
+	// Define the function to write each bit as a string,
+	// translating to keys where necessary.
+	fn := func(rowID, columnID uint64) error {
+		var rowStr string
+		var colStr string
+		var err error
+
+		if field.keys() {
+			if rowStr, err = api.holder.translateFile.TranslateRowToString(index.Name(), field.Name(), rowID); err != nil {
+				return errors.Wrap(err, "translating row")
+			}
+		} else {
+			rowStr = strconv.FormatUint(rowID, 10)
+		}
+
+		if index.Keys() {
+			if colStr, err = api.holder.translateFile.TranslateColumnToString(index.Name(), columnID); err != nil {
+				return errors.Wrap(err, "translating column")
+			}
+		} else {
+			colStr = strconv.FormatUint(columnID, 10)
+		}
+
+		return cw.Write([]string{rowStr, colStr})
+	}
+
 	// Iterate over each column.
-	if err := f.forEachBit(func(rowID, columnID uint64) error {
-		return cw.Write([]string{
-			strconv.FormatUint(rowID, 10),
-			strconv.FormatUint(columnID, 10),
-		})
-	}); err != nil {
+	if err := f.forEachBit(fn); err != nil {
 		return errors.Wrap(err, "writing CSV")
 	}
 
