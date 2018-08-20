@@ -207,6 +207,37 @@ func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard 
 	return a, nil
 }
 
+// Nodes returns a list of all nodes.
+func (c *InternalClient) Nodes(ctx context.Context) ([]*pilosa.Node, error) {
+	// Execute request against the host.
+	u := uriPathToURL(c.defaultURI, "/internal/nodes")
+
+	// Build request.
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/json")
+
+	// Execute request.
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, errors.Wrap(err, "executing request")
+	}
+	defer resp.Body.Close()
+
+	var a []*pilosa.Node
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
+	} else if err := json.NewDecoder(resp.Body).Decode(&a); err != nil {
+		return nil, fmt.Errorf("json decode: %s", err)
+	}
+
+	return a, nil
+}
+
 // Query executes query against the index.
 func (c *InternalClient) Query(ctx context.Context, index string, queryRequest *pilosa.QueryRequest) (*pilosa.QueryResponse, error) {
 	return c.QueryNode(ctx, c.defaultURI, index, queryRequest)
@@ -291,26 +322,42 @@ func (c *InternalClient) Import(ctx context.Context, index, field string, shard 
 	return nil
 }
 
+func getCoordinatorNode(nodes []*pilosa.Node) *pilosa.Node {
+	for _, node := range nodes {
+		if node.IsCoordinator {
+			return node
+		}
+	}
+	return nil
+}
+
 // ImportK bulk imports bits specified by string keys to a host.
-func (c *InternalClient) ImportK(ctx context.Context, index, field string, columns []pilosa.Bit) error {
+func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits []pilosa.Bit) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
 		return pilosa.ErrFieldRequired
 	}
 
-	buf, err := c.marshalImportPayloadK(index, field, columns)
+	buf, err := c.marshalImportPayload(index, field, 0, bits)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
 
-	node := &pilosa.Node{
-		URI: *c.defaultURI,
+	// Get the coordinator node; all bits are sent to the
+	// primary translate store (i.e. coordinator).
+	nodes, err := c.Nodes(ctx)
+	if err != nil {
+		return fmt.Errorf("getting nodes: %s", err)
+	}
+	coord := getCoordinatorNode(nodes)
+	if coord == nil {
+		return fmt.Errorf("could not find the coordinator node")
 	}
 
 	// Import to node.
-	if err := c.importNode(ctx, node, index, field, buf); err != nil {
-		return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
+	if err := c.importNode(ctx, coord, index, field, buf); err != nil {
+		return fmt.Errorf("import node: host=%s, err=%s", coord.URI, err)
 	}
 
 	return nil
@@ -336,7 +383,9 @@ func (c *InternalClient) EnsureField(ctx context.Context, indexName string, fiel
 func (c *InternalClient) marshalImportPayload(index, field string, shard uint64, bits []pilosa.Bit) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
 	rowIDs := Bits(bits).RowIDs()
+	rowKeys := Bits(bits).RowKeys()
 	columnIDs := Bits(bits).ColumnIDs()
+	columnKeys := Bits(bits).ColumnKeys()
 	timestamps := Bits(bits).Timestamps()
 
 	// Marshal data to protobuf.
@@ -345,27 +394,8 @@ func (c *InternalClient) marshalImportPayload(index, field string, shard uint64,
 		Field:      field,
 		Shard:      shard,
 		RowIDs:     rowIDs,
-		ColumnIDs:  columnIDs,
-		Timestamps: timestamps,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("marshal import request: %s", err)
-	}
-	return buf, nil
-}
-
-// marshalImportPayloadK marshalls the import parameters into a protobuf byte slice.
-func (c *InternalClient) marshalImportPayloadK(index, field string, bits []pilosa.Bit) ([]byte, error) {
-	// Separate row and column IDs to reduce allocations.
-	rowKeys := Bits(bits).RowKeys()
-	columnKeys := Bits(bits).ColumnKeys()
-	timestamps := Bits(bits).Timestamps()
-
-	// Marshal data to protobuf.
-	buf, err := c.serializer.Marshal(&pilosa.ImportRequest{
-		Index:      index,
-		Field:      field,
 		RowKeys:    rowKeys,
+		ColumnIDs:  columnIDs,
 		ColumnKeys: columnKeys,
 		Timestamps: timestamps,
 	})
@@ -443,19 +473,53 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 	return nil
 }
 
+// ImportValueK bulk imports keyed field values to a host.
+func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, vals []pilosa.FieldValue) error {
+	if index == "" {
+		return pilosa.ErrIndexRequired
+	} else if field == "" {
+		return pilosa.ErrFieldRequired
+	}
+
+	buf, err := c.marshalImportValuePayload(index, field, 0, vals)
+	if err != nil {
+		return fmt.Errorf("Error Creating Payload: %s", err)
+	}
+
+	// Get the coordinator node; all bits are sent to the
+	// primary translate store (i.e. coordinator).
+	nodes, err := c.Nodes(ctx)
+	if err != nil {
+		return fmt.Errorf("getting nodes: %s", err)
+	}
+	coord := getCoordinatorNode(nodes)
+	if coord == nil {
+		return fmt.Errorf("could not find the coordinator node")
+	}
+
+	// Import to node.
+	if err := c.importNode(ctx, coord, index, field, buf); err != nil {
+		return fmt.Errorf("import node: host=%s, err=%s", coord.URI, err)
+	}
+
+	return nil
+}
+
 // marshalImportValuePayload marshalls the import parameters into a protobuf byte slice.
 func (c *InternalClient) marshalImportValuePayload(index, field string, shard uint64, vals []pilosa.FieldValue) ([]byte, error) {
 	// Separate row and column IDs to reduce allocations.
 	columnIDs := FieldValues(vals).ColumnIDs()
+	columnKeys := FieldValues(vals).ColumnKeys()
 	values := FieldValues(vals).Values()
 
 	// Marshal data to protobuf.
 	buf, err := c.serializer.Marshal(&pilosa.ImportValueRequest{
-		Index:     index,
-		Field:     field,
-		Shard:     shard,
-		ColumnIDs: columnIDs,
-		Values:    values,
+		Index:      index,
+		Field:      field,
+		Shard:      shard,
+		ColumnIDs:  columnIDs,
+		ColumnKeys: columnKeys,
+		Values:     values,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal import request: %s", err)
@@ -624,7 +688,7 @@ func (c *InternalClient) CreateField(ctx context.Context, index, field string) e
 
 // FragmentBlocks returns a list of block checksums for a fragment on a host.
 // Only returns blocks which contain data.
-func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64) ([]pilosa.FragmentBlock, error) {
+func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, index, field, view string, shard uint64) ([]pilosa.FragmentBlock, error) {
 	if uri == nil {
 		uri = c.defaultURI
 	}
@@ -632,6 +696,7 @@ func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, in
 	u.RawQuery = url.Values{
 		"index": {index},
 		"field": {field},
+		"view":  {view},
 		"shard": {strconv.FormatUint(shard, 10)},
 	}.Encode()
 
@@ -669,13 +734,14 @@ func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, in
 }
 
 // BlockData returns row/column id pairs for a block.
-func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64, block int) ([]uint64, []uint64, error) {
+func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, field, view string, shard uint64, block int) ([]uint64, []uint64, error) {
 	if uri == nil {
 		panic("need to pass a URI to BlockData")
 	}
 	buf, err := c.serializer.Marshal(&pilosa.BlockDataRequest{
 		Index: index,
 		Field: field,
+		View:  view,
 		Shard: shard,
 		Block: uint64(block),
 	})
@@ -858,8 +924,31 @@ func (p Bits) Less(i, j int) bool {
 	return p[i].RowID < p[j].RowID
 }
 
+// HasRowKeys returns true if any values use a row key.
+func (p Bits) HasRowKeys() bool {
+	for i := range p {
+		if p[i].RowKey != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// HasColumnKeys returns true if any values use a column key.
+func (p Bits) HasColumnKeys() bool {
+	for i := range p {
+		if p[i].ColumnKey != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // RowIDs returns a slice of all the row IDs.
 func (p Bits) RowIDs() []uint64 {
+	if p.HasRowKeys() {
+		return nil
+	}
 	other := make([]uint64, len(p))
 	for i := range p {
 		other[i] = p[i].RowID
@@ -869,6 +958,9 @@ func (p Bits) RowIDs() []uint64 {
 
 // ColumnIDs returns a slice of all the column IDs.
 func (p Bits) ColumnIDs() []uint64 {
+	if p.HasColumnKeys() {
+		return nil
+	}
 	other := make([]uint64, len(p))
 	for i := range p {
 		other[i] = p[i].ColumnID
@@ -878,6 +970,9 @@ func (p Bits) ColumnIDs() []uint64 {
 
 // RowKeys returns a slice of all the row keys.
 func (p Bits) RowKeys() []string {
+	if !p.HasRowKeys() {
+		return nil
+	}
 	other := make([]string, len(p))
 	for i := range p {
 		other[i] = p[i].RowKey
@@ -887,6 +982,9 @@ func (p Bits) RowKeys() []string {
 
 // ColumnKeys returns a slice of all the column keys.
 func (p Bits) ColumnKeys() []string {
+	if !p.HasColumnKeys() {
+		return nil
+	}
 	other := make([]string, len(p))
 	for i := range p {
 		other[i] = p[i].ColumnKey
@@ -929,11 +1027,36 @@ func (p FieldValues) Less(i, j int) bool {
 	return p[i].ColumnID < p[j].ColumnID
 }
 
+// HasColumnKeys returns true if any values use a column key.
+func (p FieldValues) HasColumnKeys() bool {
+	for i := range p {
+		if p[i].ColumnKey != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // ColumnIDs returns a slice of all the column IDs.
 func (p FieldValues) ColumnIDs() []uint64 {
+	if p.HasColumnKeys() {
+		return nil
+	}
 	other := make([]uint64, len(p))
 	for i := range p {
 		other[i] = p[i].ColumnID
+	}
+	return other
+}
+
+// ColumnKeys returns a slice of all the column keys.
+func (p FieldValues) ColumnKeys() []string {
+	if !p.HasColumnKeys() {
+		return nil
+	}
+	other := make([]string, len(p))
+	for i := range p {
+		other[i] = p[i].ColumnKey
 	}
 	return other
 }

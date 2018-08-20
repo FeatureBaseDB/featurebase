@@ -154,10 +154,10 @@
   revision = "ef8a98b0bbce4a65b5aa4c368430a80ddc533168"
 
 [[projects]]
-  branch = "master"
   name = "github.com/hashicorp/memberlist"
   packages = ["."]
-  revision = "2288bf30e9c8d7b5f6549bf62e07120d72fd4b6c"
+  revision = "ce8abaa0c60c2d6bee7219f5ddf500e0a1457b28"
+  version = "v0.1.0"
 
 [[projects]]
   name = "github.com/inconshreveable/mousetrap"
@@ -324,6 +324,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "6ae38dc521f55a89507ec21c575e0b65505de9514d1db6255a1b9b99fcf19ab3"
+  inputs-digest = "8290156ce8b4066c46ab83d743f4c81df0a17e148415bb1ee8409a51ac4c3ba4"
   solver-name = "gps-cdcl"
   solver-version = 1

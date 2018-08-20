@@ -890,6 +890,7 @@ func decodeRow(pr *internal.Row) *pilosa.Row {
 
 	r := pilosa.NewRow()
 	r.Attrs = decodeAttrs(pr.Attrs)
+	r.Keys = pr.Keys
 	for _, v := range pr.Columns {
 		r.SetBit(v)
 	}

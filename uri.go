@@ -173,6 +173,9 @@ func parseAddress(address string) (uri *URI, err error) {
 		if err != nil {
 			return nil, errors.New("converting port string to int")
 		}
+		if port > 65535 {
+			return nil, errors.New("port must be in range 0 - 65535")
+		}
 	}
 	uri = &URI{
 		Scheme: scheme,

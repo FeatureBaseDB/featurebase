@@ -136,9 +136,9 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 		}
 
 		// Translate column attributes, if necessary.
-		if api.server.translateFile != nil {
+		if api.holder.translateFile != nil {
 			for _, col := range resp.ColumnAttrSets {
-				v, err := api.server.translateFile.TranslateColumnToString(req.Index, col.ID)
+				v, err := api.holder.translateFile.TranslateColumnToString(req.Index, col.ID)
 				if err != nil {
 					return resp, err
 				}
@@ -391,7 +391,7 @@ func (api *API) FragmentBlockData(_ context.Context, body io.Reader) ([]byte, er
 	}
 
 	// Retrieve fragment from holder.
-	f := api.holder.fragment(req.Index, req.Field, viewStandard, req.Shard)
+	f := api.holder.fragment(req.Index, req.Field, req.View, req.Shard)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -409,13 +409,13 @@ func (api *API) FragmentBlockData(_ context.Context, body io.Reader) ([]byte, er
 }
 
 // FragmentBlocks returns the checksums and block ids for all blocks in the specified fragment.
-func (api *API) FragmentBlocks(_ context.Context, indexName string, fieldName string, shard uint64) ([]FragmentBlock, error) {
+func (api *API) FragmentBlocks(_ context.Context, indexName, fieldName, viewName string, shard uint64) ([]FragmentBlock, error) {
 	if err := api.validate(apiFragmentBlocks); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	// Retrieve fragment from holder.
-	f := api.holder.fragment(indexName, fieldName, viewStandard, shard)
+	f := api.holder.fragment(indexName, fieldName, viewName, shard)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -610,9 +610,34 @@ func (api *API) Import(_ context.Context, req *ImportRequest) error {
 		return errors.Wrap(err, "validating api method")
 	}
 
+	index := api.holder.Index(req.Index)
+	if index == nil {
+		return newNotFoundError(ErrIndexNotFound)
+	}
+
 	field, err := api.indexField(req.Index, req.Field, req.Shard)
 	if err != nil {
 		return errors.Wrap(err, "getting field")
+	}
+
+	// Translate row keys.
+	if field.keys() {
+		if len(req.RowIDs) != 0 {
+			return errors.New("row ids cannot be used because field uses string keys")
+		}
+		if req.RowIDs, err = api.holder.translateFile.TranslateRowsToUint64(index.Name(), field.Name(), req.RowKeys); err != nil {
+			return errors.Wrap(err, "translating rows")
+		}
+	}
+
+	// Translate column keys.
+	if index.Keys() {
+		if len(req.ColumnIDs) != 0 {
+			return errors.New("column ids cannot be used because index uses string keys")
+		}
+		if req.ColumnIDs, err = api.holder.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
+			return errors.Wrap(err, "translating columns")
+		}
 	}
 
 	// Convert timestamps to time.Time.
@@ -639,10 +664,26 @@ func (api *API) ImportValue(_ context.Context, req *ImportValueRequest) error {
 		return errors.Wrap(err, "validating api method")
 	}
 
+	index := api.holder.Index(req.Index)
+	if index == nil {
+		return newNotFoundError(ErrIndexNotFound)
+	}
+
 	field, err := api.indexField(req.Index, req.Field, req.Shard)
 	if err != nil {
 		return errors.Wrap(err, "getting field")
 	}
+
+	// Translate column keys.
+	if index.Keys() {
+		if len(req.ColumnIDs) != 0 {
+			return errors.New("column ids cannot be used because index uses string keys")
+		}
+		if req.ColumnIDs, err = api.holder.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
+			return errors.Wrap(err, "translating columns")
+		}
+	}
+
 	// Import into fragment.
 	err = field.importValue(req.ColumnIDs, req.Values)
 	if err != nil {
@@ -764,7 +805,7 @@ func (api *API) ResizeAbort() error {
 
 // GetTranslateData provides a reader for key translation logs starting at offset.
 func (api *API) GetTranslateData(ctx context.Context, offset int64) (io.ReadCloser, error) {
-	rc, err := api.server.translateFile.Reader(ctx, offset)
+	rc, err := api.holder.translateFile.Reader(ctx, offset)
 	if err != nil {
 		return nil, errors.Wrap(err, "read from translate store")
 	}

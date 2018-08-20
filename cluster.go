@@ -169,7 +169,7 @@ type nodeAction struct {
 type cluster struct { // nolint: maligned
 	id    string
 	Node  *Node
-	nodes []*Node // TODO phase this out?
+	nodes []*Node
 
 	// Hashing algorithm used to assign partitions to nodes.
 	Hasher Hasher
@@ -489,12 +489,7 @@ func (c *cluster) receiveNodeState(nodeID string, state string) error {
 	c.Topology.mu.Unlock()
 	c.logger.Printf("received state %s (%s)", state, nodeID)
 
-	// Set cluster state to NORMAL.
-	if c.haveTopologyAgreement() && c.allNodesReady() {
-		return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
-	}
-
-	return nil
+	return c.unprotectedSetStateAndBroadcast(c.determineClusterState())
 }
 
 // determineClusterState is unprotected.
@@ -983,7 +978,6 @@ func (c *cluster) allNodesReady() (ret bool) {
 }
 
 func (c *cluster) handleNodeAction(nodeAction nodeAction) error {
-
 	c.mu.Lock()
 	j, err := c.unprotectedGenerateResizeJob(nodeAction)
 	c.mu.Unlock()
@@ -1007,7 +1001,7 @@ func (c *cluster) handleNodeAction(nodeAction nodeAction) error {
 	c.logger.Printf("wait for jobResult")
 	jobResult := <-j.result
 
-	// Make sure j.Run() didn't return an error.
+	// Make sure j.run() didn't return an error.
 	if eg.Wait() != nil {
 		return errors.Wrap(err, "running job")
 	}
@@ -1616,11 +1610,6 @@ func (c *cluster) considerTopology() error {
 		return fmt.Errorf("coordinator %s is not in topology: %v", c.Node.ID, c.Topology.nodeIDs)
 	}
 
-	// If local node is the only thing in .topology, continue.
-	//if len(c.Topology.NodeIDs) == 1 {
-	//	return nil
-	//}
-
 	// Keep the cluster in state "STARTING" until hearing from all nodes.
 	// Topology contains 2+ hosts.
 	return nil
@@ -1832,11 +1821,33 @@ func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 		}
 	}
 
+	// If the cluster membership has changed, reset the primary for
+	// translate store replication.
+	c.holder.setPrimaryTranslateStore(c.unprotectedPreviousNode())
+
 	c.unprotectedSetState(cs.State)
 
 	c.markAsJoined()
 
 	return nil
+}
+
+// unprotectedPreviousNode returns the node listed before the current node in c.Nodes.
+// If there is only one node in the cluster, returns nil.
+// If the current node is the first node in the list, returns the last node.
+func (c *cluster) unprotectedPreviousNode() *Node {
+	if len(c.nodes) <= 1 {
+		return nil
+	}
+
+	pos := c.nodePositionByID(c.Node.ID)
+	if pos == -1 {
+		return nil
+	} else if pos == 0 {
+		return c.nodes[len(c.nodes)-1]
+	} else {
+		return c.nodes[pos-1]
+	}
 }
 
 // setStatic is unprotected, but only called before the cluster has been started

@@ -18,10 +18,5 @@
   branch = "master"
 
 [[constraint]]
-  name = "github.com/hashicorp/memberlist"
-  branch = "master"
-
-
-[[constraint]]
   name = "github.com/gorilla/handlers"
   version = "=1.3.0"
