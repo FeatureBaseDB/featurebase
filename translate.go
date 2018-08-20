@@ -337,9 +337,7 @@ func (s *TranslateFile) monitorReplication() {
 		}
 
 		select {
-		case <-s.closing:
-			return
-		case <-s.replicationClosing:
+		case <-ctx.Done():
 			return
 		case <-time.After(s.replicationRetryInterval):
 			log.Printf("pilosa: reconnecting to primary replica")

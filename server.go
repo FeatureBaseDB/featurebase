@@ -237,11 +237,12 @@ func OptServerClusterHasher(h Hasher) ServerOption {
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
-		closing:     make(chan struct{}),
-		cluster:     newCluster(),
-		holder:      NewHolder(),
-		diagnostics: newDiagnosticsCollector(defaultDiagnosticServer),
-		systemInfo:  newNopSystemInfo(),
+		closing:       make(chan struct{}),
+		cluster:       newCluster(),
+		holder:        NewHolder(),
+		diagnostics:   newDiagnosticsCollector(defaultDiagnosticServer),
+		systemInfo:    newNopSystemInfo(),
+		defaultClient: nopInternalClient{},
 
 		gcNotifier: NopGCNotifier,
 
@@ -251,6 +252,9 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 		logger: NopLogger,
 	}
+	s.executor = newExecutor(optExecutorInternalQueryClient(s.defaultClient))
+	s.cluster.InternalClient = s.defaultClient
+
 	s.diagnostics.server = s
 
 	for _, opt := range opts {
@@ -412,6 +416,8 @@ func (s *Server) monitorAntiEntropy() {
 	if s.antiEntropyInterval == 0 {
 		return // anti entropy disabled
 	}
+	s.cluster.initializeAntiEntropy()
+
 	ticker := time.NewTicker(s.antiEntropyInterval)
 	defer ticker.Stop()
 
@@ -423,11 +429,17 @@ func (s *Server) monitorAntiEntropy() {
 		select {
 		case <-s.closing:
 			return
+		case <-s.cluster.abortAntiEntropyCh: // receive here so we don't block resizing
+			continue
 		case <-ticker.C:
 			s.holder.Stats.Count("AntiEntropy", 1, 1.0)
 		}
 		t := time.Now()
-
+		if s.cluster.State() == ClusterStateResizing {
+			continue // don't launch anti-entropy during resize.
+			// the cluster sets its state to resizing and *then* sends to
+			// abortAntiEntropyCh before starting to resize
+		}
 		// Sync holders.
 		s.logger.Printf("holder sync beginning")
 		if err := s.syncer.SyncHolder(); err != nil {
@@ -439,6 +451,18 @@ func (s *Server) monitorAntiEntropy() {
 		s.logger.Printf("holder sync complete")
 		dif := time.Since(t)
 		s.holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
+
+		// Drain tick channel since we just finished anti-entropy. If the AE
+		// process took a long time, we don't want them to pile up on each
+		// other.
+		for {
+			select {
+			case <-ticker.C:
+				continue
+			default:
+			}
+			break
+		}
 	}
 }
 
@@ -537,7 +561,7 @@ func (s *Server) SendSync(m Message) error {
 		return fmt.Errorf("marshaling message: %v", err)
 	}
 	msg = append([]byte{getMessageType(m)}, msg...)
-	for _, node := range s.cluster.Nodes {
+	for _, node := range s.cluster.nodes {
 		node := node
 		s.logger.Printf("SendSync to: %s", node.URI)
 		// Don't forward the message to ourselves.
@@ -637,7 +661,7 @@ func (s *Server) monitorDiagnostics() {
 	s.diagnostics.SetVersion(Version)
 	s.diagnostics.Set("Host", s.uri.Host)
 	s.diagnostics.Set("Cluster", strings.Join(s.cluster.nodeIDs(), ","))
-	s.diagnostics.Set("NumNodes", len(s.cluster.Nodes))
+	s.diagnostics.Set("NumNodes", len(s.cluster.nodes))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
 	s.diagnostics.Set("NodeID", s.nodeID)
 	s.diagnostics.Set("ClusterID", s.cluster.id)

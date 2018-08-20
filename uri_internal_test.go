@@ -172,5 +172,5 @@ func validFixture() []uriItem {
 }
 
 func invalidFixture() []string {
-	return []string{"foo:bar", "http://foo:", "foo:", ":bar", "http://pilosa.com:129999999999999999999999993", "fd42:4201:f86b:7e09:216:3eff:fefa:ed80"}
+	return []string{"foo:bar", "http://foo:", "foo:", ":bar", "http://pilosa.com:129999999999999999999999993", "fd42:4201:f86b:7e09:216:3eff:fefa:ed80", ":65536"}
 }

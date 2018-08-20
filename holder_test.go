@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/test"
@@ -359,6 +360,59 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 
 		if a := hldr.Row("y", "z", 10).Columns(); !reflect.DeepEqual(a, []uint64{(3 * ShardWidth) + 4, (3 * ShardWidth) + 5, (3 * ShardWidth) + 7}) {
 			t.Errorf("unexpected columns(%d/y/z): %+v", i, a)
+		}
+	}
+}
+
+// Ensure holder can sync time quantum views with a remote holder.
+func TestHolderSyncer_TimeQuantum(t *testing.T) {
+	c := test.MustNewCluster(t, 2)
+	c[0].Config.Cluster.ReplicaN = 2
+	c[0].Config.AntiEntropy.Interval = 0
+	c[1].Config.Cluster.ReplicaN = 2
+	c[1].Config.AntiEntropy.Interval = 0
+	err := c.Start()
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
+	}
+	defer c.Close()
+
+	quantum := "D"
+
+	_, err = c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatalf("creating index i: %v", err)
+	}
+	_, err = c[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum(quantum)))
+	if err != nil {
+		t.Fatalf("creating field f: %v", err)
+	}
+
+	hldr0 := &test.Holder{Holder: c[0].Server.Holder()}
+	hldr1 := &test.Holder{Holder: c[1].Server.Holder()}
+
+	// Set data on the local holder.
+	t1 := time.Date(2018, 8, 1, 12, 30, 0, 0, time.UTC)
+	t2 := time.Date(2018, 8, 2, 12, 30, 0, 0, time.UTC)
+	hldr0.SetBitTime("i", "f", 0, 1, &t1)
+	hldr0.SetBitTime("i", "f", 0, 2, &t2)
+
+	err = c[0].Server.SyncData()
+	if err != nil {
+		t.Fatalf("syncing node 0: %v", err)
+	}
+	err = c[1].Server.SyncData()
+	if err != nil {
+		t.Fatalf("syncing node 1: %v", err)
+	}
+
+	// Verify data is the same on both nodes.
+	for i, hldr := range []*test.Holder{hldr0, hldr1} {
+		if a := hldr.RowTime("i", "f", 0, t1, quantum).Columns(); !reflect.DeepEqual(a, []uint64{1}) {
+			t.Errorf("unexpected columns(%d/0): %+v", i, a)
+		}
+		if a := hldr.RowTime("i", "f", 0, t2, quantum).Columns(); !reflect.DeepEqual(a, []uint64{2}) {
+			t.Errorf("unexpected columns(%d/0): %+v", i, a)
 		}
 	}
 }

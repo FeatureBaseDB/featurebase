@@ -18,8 +18,9 @@ type Bit struct {
 // FieldValue represents the value for a column within a
 // range-encoded field.
 type FieldValue struct {
-	ColumnID uint64
-	Value    int64
+	ColumnID  uint64
+	ColumnKey string
+	Value     int64
 }
 
 // InternalClient should be implemented by any struct that enables any transport between nodes
@@ -33,6 +34,7 @@ type InternalClient interface {
 	Schema(ctx context.Context) ([]*IndexInfo, error)
 	CreateIndex(ctx context.Context, index string, opt IndexOptions) error
 	FragmentNodes(ctx context.Context, index string, shard uint64) ([]*Node, error)
+	Nodes(ctx context.Context) ([]*Node, error)
 	Query(ctx context.Context, index string, queryRequest *QueryRequest) (*QueryResponse, error)
 	QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error)
 	Import(ctx context.Context, index, field string, shard uint64, bits []Bit) error
@@ -40,10 +42,11 @@ type InternalClient interface {
 	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
 	EnsureField(ctx context.Context, indexName string, fieldName string) error
 	ImportValue(ctx context.Context, index, field string, shard uint64, vals []FieldValue) error
+	ImportValueK(ctx context.Context, index, field string, vals []FieldValue) error
 	ExportCSV(ctx context.Context, index, field string, shard uint64, w io.Writer) error
 	CreateField(ctx context.Context, index, field string) error
-	FragmentBlocks(ctx context.Context, uri *URI, index, field string, shard uint64) ([]FragmentBlock, error)
-	BlockData(ctx context.Context, uri *URI, index, field string, shard uint64, block int) ([]uint64, []uint64, error)
+	FragmentBlocks(ctx context.Context, uri *URI, index, field, view string, shard uint64) ([]FragmentBlock, error)
+	BlockData(ctx context.Context, uri *URI, index, field, view string, shard uint64, block int) ([]uint64, []uint64, error)
 	ColumnAttrDiff(ctx context.Context, uri *URI, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
 	RowAttrDiff(ctx context.Context, uri *URI, index, field string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
 	SendMessage(ctx context.Context, uri *URI, msg []byte) error
@@ -89,6 +92,9 @@ func (n nopInternalClient) CreateIndex(ctx context.Context, index string, opt In
 func (n nopInternalClient) FragmentNodes(ctx context.Context, index string, shard uint64) ([]*Node, error) {
 	return nil, nil
 }
+func (n nopInternalClient) Nodes(ctx context.Context) ([]*Node, error) {
+	return nil, nil
+}
 func (n nopInternalClient) Query(ctx context.Context, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
 	return nil, nil
 }
@@ -113,14 +119,17 @@ func (n nopInternalClient) EnsureField(ctx context.Context, indexName string, fi
 func (n nopInternalClient) ImportValue(ctx context.Context, index, field string, shard uint64, vals []FieldValue) error {
 	return nil
 }
+func (n nopInternalClient) ImportValueK(ctx context.Context, index, field string, vals []FieldValue) error {
+	return nil
+}
 func (n nopInternalClient) ExportCSV(ctx context.Context, index, field string, shard uint64, w io.Writer) error {
 	return nil
 }
 func (n nopInternalClient) CreateField(ctx context.Context, index, field string) error { return nil }
-func (n nopInternalClient) FragmentBlocks(ctx context.Context, uri *URI, index, field string, shard uint64) ([]FragmentBlock, error) {
+func (n nopInternalClient) FragmentBlocks(ctx context.Context, uri *URI, index, field, view string, shard uint64) ([]FragmentBlock, error) {
 	return nil, nil
 }
-func (n nopInternalClient) BlockData(ctx context.Context, uri *URI, index, field string, shard uint64, block int) ([]uint64, []uint64, error) {
+func (n nopInternalClient) BlockData(ctx context.Context, uri *URI, index, field, view string, shard uint64, block int) ([]uint64, []uint64, error) {
 	return nil, nil, nil
 }
 func (n nopInternalClient) ColumnAttrDiff(ctx context.Context, uri *URI, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error) {

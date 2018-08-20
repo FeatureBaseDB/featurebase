@@ -176,8 +176,8 @@ func (h *Handler) populateValidators() {
 	h.validators["GetExport"] = queryValidationSpecRequired("index", "field", "shard")
 	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "field", "shard")
 	h.validators["PostFragmentData"] = queryValidationSpecRequired("index", "field", "shard")
-	h.validators["GetFragmentBlocks"] = queryValidationSpecRequired("index", "field", "shard")
 	h.validators["ImportRoaringBitmap"] = queryValidationSpecRequired("index", "field", "shard")
+	h.validators["GetFragmentBlocks"] = queryValidationSpecRequired("index", "field", "view", "shard")
 }
 
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
@@ -234,6 +234,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET").Name("GetFragmentNodes")
 	router.HandleFunc("/internal/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST")
 	router.HandleFunc("/internal/index/{index}/field/{field}/attr/diff", handler.handlePostFieldAttrDiff).Methods("POST")
+	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET") // TODO: deprecate, but it's being used by the client
 	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET")
 
@@ -1064,6 +1065,22 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+// handleGetNodes handles /internal/nodes requests.
+func (h *Handler) handleGetNodes(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	// Retrieve all nodes.
+	nodes := h.api.Hosts(r.Context())
+
+	// Write to response.
+	if err := json.NewEncoder(w).Encode(nodes); err != nil {
+		h.logger.Printf("json write error: %s", err)
+	}
+}
+
 // handleGetFragmentBlockData handles GET /internal/fragment/block/data requests.
 func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Request) {
 	buf, err := h.api.FragmentBlockData(r.Context(), r.Body)
@@ -1098,7 +1115,7 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	blocks, err := h.api.FragmentBlocks(r.Context(), q.Get("index"), q.Get("field"), shard)
+	blocks, err := h.api.FragmentBlocks(r.Context(), q.Get("index"), q.Get("field"), q.Get("view"), shard)
 	if err != nil {
 		if errors.Cause(err) == pilosa.ErrFragmentNotFound {
 			http.Error(w, err.Error(), http.StatusNotFound)

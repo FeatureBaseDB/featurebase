@@ -427,7 +427,7 @@ func (api *API) FragmentBlockData(_ context.Context, body io.Reader) ([]byte, er
 	}
 
 	// Retrieve fragment from holder.
-	f := api.holder.fragment(req.Index, req.Field, viewStandard, req.Shard)
+	f := api.holder.fragment(req.Index, req.Field, req.View, req.Shard)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -445,13 +445,13 @@ func (api *API) FragmentBlockData(_ context.Context, body io.Reader) ([]byte, er
 }
 
 // FragmentBlocks returns the checksums and block ids for all blocks in the specified fragment.
-func (api *API) FragmentBlocks(_ context.Context, indexName string, fieldName string, shard uint64) ([]FragmentBlock, error) {
+func (api *API) FragmentBlocks(_ context.Context, indexName, fieldName, viewName string, shard uint64) ([]FragmentBlock, error) {
 	if err := api.validate(apiFragmentBlocks); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
 
 	// Retrieve fragment from holder.
-	f := api.holder.fragment(indexName, fieldName, viewStandard, shard)
+	f := api.holder.fragment(indexName, fieldName, viewName, shard)
 	if f == nil {
 		return nil, ErrFragmentNotFound
 	}
@@ -464,7 +464,7 @@ func (api *API) FragmentBlocks(_ context.Context, indexName string, fieldName st
 // Hosts returns a list of the hosts in the cluster including their ID,
 // URL, and which is the coordinator.
 func (api *API) Hosts(_ context.Context) []*Node {
-	return api.cluster.Nodes
+	return api.cluster.Nodes()
 }
 
 // Node gets the ID, URI and coordinator status for this particular node.
@@ -646,9 +646,34 @@ func (api *API) Import(_ context.Context, req *ImportRequest) error {
 		return errors.Wrap(err, "validating api method")
 	}
 
+	index := api.holder.Index(req.Index)
+	if index == nil {
+		return newNotFoundError(ErrIndexNotFound)
+	}
+
 	field, err := api.indexField(req.Index, req.Field, req.Shard)
 	if err != nil {
 		return errors.Wrap(err, "getting field")
+	}
+
+	// Translate row keys.
+	if field.keys() {
+		if len(req.RowIDs) != 0 {
+			return errors.New("row ids cannot be used because field uses string keys")
+		}
+		if req.RowIDs, err = api.holder.translateFile.TranslateRowsToUint64(index.Name(), field.Name(), req.RowKeys); err != nil {
+			return errors.Wrap(err, "translating rows")
+		}
+	}
+
+	// Translate column keys.
+	if index.Keys() {
+		if len(req.ColumnIDs) != 0 {
+			return errors.New("column ids cannot be used because index uses string keys")
+		}
+		if req.ColumnIDs, err = api.holder.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
+			return errors.Wrap(err, "translating columns")
+		}
 	}
 
 	// Convert timestamps to time.Time.
@@ -675,10 +700,26 @@ func (api *API) ImportValue(_ context.Context, req *ImportValueRequest) error {
 		return errors.Wrap(err, "validating api method")
 	}
 
+	index := api.holder.Index(req.Index)
+	if index == nil {
+		return newNotFoundError(ErrIndexNotFound)
+	}
+
 	field, err := api.indexField(req.Index, req.Field, req.Shard)
 	if err != nil {
 		return errors.Wrap(err, "getting field")
 	}
+
+	// Translate column keys.
+	if index.Keys() {
+		if len(req.ColumnIDs) != 0 {
+			return errors.New("column ids cannot be used because index uses string keys")
+		}
+		if req.ColumnIDs, err = api.holder.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
+			return errors.Wrap(err, "translating columns")
+		}
+	}
+
 	// Import into fragment.
 	err = field.importValue(req.ColumnIDs, req.Values)
 	if err != nil {

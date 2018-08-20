@@ -15,8 +15,10 @@
 package pilosa
 
 import (
+	"io/ioutil"
 	"runtime"
 	"testing"
+	"time"
 )
 
 // Ensure the file handle count is working
@@ -31,5 +33,30 @@ func TestCountOpenFiles(t *testing.T) {
 	}
 	if count == 0 {
 		t.Error("countOpenFiles returned invalid value 0.")
+	}
+}
+
+func TestMonitorAntiEntropyZero(t *testing.T) {
+
+	td, err := ioutil.TempDir("", "")
+	if err != nil {
+		t.Fatalf("getting temp dir: %v", err)
+	}
+	s, err := NewServer(OptServerDataDir(td),
+		OptServerAntiEntropyInterval(0))
+	if err != nil {
+		t.Fatalf("making new server: %v", err)
+	}
+
+	ch := make(chan struct{})
+	go func() {
+		s.monitorAntiEntropy()
+		close(ch)
+	}()
+
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		t.Fatalf("monitorAntiEntropy should have returned immediately with duration 0")
 	}
 }

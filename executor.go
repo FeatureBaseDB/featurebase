@@ -1596,7 +1596,7 @@ func (e *executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.Nodes).FilterID(e.Node.ID)
+	nodes := Nodes(e.Cluster.nodes).FilterID(e.Node.ID)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
@@ -1682,7 +1682,7 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.Nodes).FilterID(e.Node.ID)
+	nodes := Nodes(e.Cluster.nodes).FilterID(e.Node.ID)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
@@ -1731,7 +1731,7 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 	}
 
 	// Execute on remote nodes in parallel.
-	nodes := Nodes(e.Cluster.Nodes).FilterID(e.Node.ID)
+	nodes := Nodes(e.Cluster.nodes).FilterID(e.Node.ID)
 	resp := make(chan error, len(nodes))
 	for _, node := range nodes {
 		go func(node *Node) {
@@ -1802,7 +1802,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 	// processing should be done locally so we start with just the local node.
 	var nodes []*Node
 	if !opt.Remote {
-		nodes = Nodes(e.Cluster.Nodes).Clone()
+		nodes = Nodes(e.Cluster.nodes).Clone()
 	} else {
 		nodes = []*Node{e.Cluster.unprotectedNodeByID(e.Node.ID)}
 	}
@@ -2145,8 +2145,9 @@ func (fol *filterWithOffsetLimit) filter(colid uint64) (bool,bool) {
 			fol.limit--
 			return true,false
 		}
+		return false,true
 	}
-	return false,true
+	return false,false
 }
 
 type filterWithOffset struct {
