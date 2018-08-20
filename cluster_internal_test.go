@@ -831,7 +831,7 @@ func TestAE(t *testing.T) {
 		}()
 		select {
 		case <-ch:
-			t.Fatalf("aborting anti entropy on an initialized didn't block")
+			t.Fatalf("aborting anti entropy on an initialized cluster didn't block")
 		case <-time.After(time.Microsecond * 100):
 		}
 	})
