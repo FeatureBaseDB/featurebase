@@ -721,37 +721,39 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 		return other.Merge(v.(GroupByCounts))
 	}
 
+	// Get full result set.
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
 	if err != nil {
 		return nil, err
 	}
 	results, _ := other.(GroupByCounts)
-	limit, hasLimit, err := c.UintArg("limit")
-	if err != nil {
+
+	// Apply offset.
+	if offset, hasOffset, err := c.UintArg("offset"); err != nil {
 		return nil, err
-	}
-	offset, hasOffset, err := c.UintArg("offset")
-	if err != nil {
-		return nil, err
-	}
-	if hasOffset {
+	} else if hasOffset {
 		if int(offset) < len(results) {
 			results = results[offset:]
 		}
 	}
 
-	if hasLimit {
+	// Apply limit.
+	if limit, hasLimit, err := c.UintArg("limit"); err != nil {
+		return nil, err
+	} else if hasLimit {
 		if int(limit) < len(results) {
 			results = results[:limit]
 		}
 	}
+
 	return results, nil
 }
 
+// gbi is a groupBy item.
 type gbi struct {
-	row       *Row
-	fieldName string
-	rowID     uint64
+	row      *Row
+	fieldKey string
+	rowID    uint64
 }
 
 type GroupLine struct {
@@ -762,12 +764,12 @@ type GroupLine struct {
 type GroupByCounts []GroupLine
 
 func (gbc GroupByCounts) Merge(other GroupByCounts) GroupByCounts {
-	m1 := make(map[string]struct {
+	m := make(map[string]struct {
 		i     int
 		total uint64
 	})
 	for i := range gbc {
-		m1[strings.Join(gbc[i].Groups, "-")] = struct {
+		m[strings.Join(gbc[i].Groups, "-")] = struct {
 			i     int
 			total uint64
 		}{total: gbc[i].Total, i: i}
@@ -776,7 +778,7 @@ func (gbc GroupByCounts) Merge(other GroupByCounts) GroupByCounts {
 
 	for i := range other {
 		key := strings.Join(other[i].Groups, "-")
-		o, found := m1[key]
+		o, found := m[key]
 		if found {
 			gbc[o.i].Total += other[i].Total
 		} else {
@@ -795,7 +797,7 @@ func makeGroup(parts []gbi) GroupLine {
 		} else {
 			other = other.Intersect(o.row)
 		}
-		line.Groups = append(line.Groups, o.fieldName)
+		line.Groups = append(line.Groups, o.fieldKey)
 	}
 	line.Total = other.Count()
 	return line
@@ -808,49 +810,60 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 		return nil, ErrIndexNotFound
 	}
 
-	// Fetch field name from argument.
-	fieldNames, ok := c.Args["fields"]
+	// fieldDirective is a combination of field
+	// instructions, represented as a string with
+	// the form [fieldName:offset:limit] or
+	// [fieldName:limit].
+	fieldDirectives, ok := c.Args["fields"]
 	if !ok {
 		return nil, errors.Wrap(ErrFieldsArgumentRequired, "executeGroupBy")
 	}
 
-	// Ensure that fieldNames is a list of names.
-	if _, ok := fieldNames.([]interface{}); !ok {
+	// Ensure that fieldDirectives is a list.
+	if _, ok := fieldDirectives.([]interface{}); !ok {
 		return nil, errors.Wrap(ErrExpectedFieldListArgument, "executeGroupBy")
 
 	}
 
+	// getFieldName extracts the fieldName portion of the
+	// fieldDirective.
 	getFieldName := func(s string) string {
 		parts := strings.Split(s, ":")
 		return parts[0]
 	}
 
-	for _, fieldName := range fieldNames.([]interface{}) { // check that the fields exists
-		fn := getFieldName(fieldName.(string))
-		f := e.Holder.Field(index, fn)
+	// Ensure that all of the fields exist.
+	for _, fieldDirective := range fieldDirectives.([]interface{}) {
+		fieldName := getFieldName(fieldDirective.(string))
+		f := e.Holder.Field(index, fieldName)
 		if f == nil {
-			return nil, errors.Wrap(ErrFieldNotFound, fmt.Sprintf("executeGroupBy:%s", fieldName.(string)))
+			return nil, errors.Wrap(ErrFieldNotFound, fmt.Sprintf("executeGroupBy: %s", fieldDirective.(string)))
 		}
 	}
 
 	results := make(GroupByCounts, 0)
-	var work listOfLists
-	for _, fieldName := range fieldNames.([]interface{}) {
-		fn := getFieldName(fieldName.(string))
-		frag := e.Holder.fragment(index, fn, viewStandard, shard)
+	var work listOfGBILists
+	for _, fieldDirective := range fieldDirectives.([]interface{}) {
+		fieldName := getFieldName(fieldDirective.(string))
+
+		// Fetch fragment.
+		frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
 		if frag == nil { // this means this whole shard doesn't have all it needs to continue
 			return results, nil
 		}
-		filter, err := getGroupByFilterFunction(frag, fieldName.(string))
+
+		// Get filter based on the field directive.
+		filter, err := getGroupByFilterFunction(fieldDirective.(string))
 		if err != nil {
 			return nil, err
 		}
-		set := make(list, 0)
+
+		set := make(gbiList, 0)
 		for _, rowID := range frag.rowsWithFilter(filter) {
 			set = append(set, gbi{
-				row:       frag.row(rowID),
-				rowID:     rowID,
-				fieldName: fmt.Sprintf("%s.%d", fn, rowID),
+				row:      frag.row(rowID),
+				rowID:    rowID,
+				fieldKey: fmt.Sprintf("%s.%d", fieldName, rowID),
 			})
 		}
 		work = append(work, set)
@@ -865,20 +878,20 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 	return results, nil
 }
 
-type list []gbi
-type listOfLists []list
+type gbiList []gbi
+type listOfGBILists []gbiList
 
-//product process items
+// pi is a product process item.
 type pi struct {
 	row *Row
 	gl  GroupLine
 }
-type listOfPis []pi
+type piList []pi
 
 // product generates the cartiesian product of the input
 // using tail recursion
-func product(input listOfLists) listOfPis {
-	res := make(listOfPis, 0)
+func product(input listOfGBILists) piList {
+	res := make(piList, 0)
 	if len(input) == 0 { //base return empty list
 		res = append(res, pi{gl: GroupLine{Groups: make([]string, 0)}})
 	} else {
@@ -887,14 +900,14 @@ func product(input listOfLists) listOfPis {
 	return res
 }
 
-func productHelper(lists listOfLists, res listOfPis) listOfPis {
+func productHelper(lists listOfGBILists, res piList) piList {
 	head := lists[0]           //take first element of the list
 	tail := product(lists[1:]) //invoke product on remaining element
 	for h := range head {      // for each head
 		for t := range tail { //iterate over the tail
 			s := pi{gl: GroupLine{Groups: make([]string, 0)}}
-			s.gl.Groups = append([]string{head[h].fieldName}, tail[t].gl.Groups...) //had to insert at the front to match input order
-			if tail[t].row != nil {                                                 //first time around nothing to intersect
+			s.gl.Groups = append([]string{head[h].fieldKey}, tail[t].gl.Groups...) //had to insert at the front to match input order
+			if tail[t].row != nil {                                                //first time around nothing to intersect
 				s.row = head[h].row.Intersect(tail[t].row)
 			} else {
 				s.row = head[h].row
@@ -980,49 +993,56 @@ func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Ca
 	return frag.rowsWithFilter(filter), nil
 }
 
-func getGroupByFilterFunction(frag *fragment, fieldName string) (rowFilter, error) {
-	parts := strings.Split(fieldName, ":")
+// getGroupByFilterFunction returns a rowFilter based on the
+// field directive provided.
+func getGroupByFilterFunction(fieldDirective string) (rowFilter, error) {
+	parts := strings.Split(fieldDirective, ":")
+
 	hasLimit := false
 	hasOffset := false
 	limit := uint64(0)
 	offset := uint64(0)
 	var err error
 
+	// fieldDirective can have one of the following forms:
+	// [fieldName]
+	// [fieldName:limit]
+	// [fieldName:offset:limit]
+	//
+	// Note that a field directive with the form
+	// [fieldName:offset:limit:extra] will be treated as
+	// [fieldName:offset:limit] (i.e. `extra` is ignored).
+
 	if len(parts) == 1 {
-		return func(rowid uint64) (bool, bool) { return true, false }, nil
+		return noFilter, nil
 	} else if len(parts) == 2 {
 		hasLimit = true
-		limit, err = strconv.ParseUint(parts[1], 10, 64)
-		if err != nil {
+		if limit, err = strconv.ParseUint(parts[1], 10, 64); err != nil {
 			return nil, errors.Wrap(err, "getting groupby field limit only value")
 		}
 	} else {
 		hasOffset = true
-		offset, err = strconv.ParseUint(parts[1], 10, 64)
-		if err != nil {
+		if offset, err = strconv.ParseUint(parts[1], 10, 64); err != nil {
 			return nil, errors.Wrap(err, "getting groupby field offset value")
 		}
 		if parts[2] != "" {
 			hasLimit = true
-			limit, err = strconv.ParseUint(parts[2], 10, 64)
-			if err != nil {
+			if limit, err = strconv.ParseUint(parts[2], 10, 64); err != nil {
 				return nil, errors.Wrap(err, "getting groupby field limit value")
 			}
 		}
-
 	}
 
-	if hasOffset {
-		if hasLimit {
-			f := filterWithOffsetLimit{offset: offset, limit: limit}
-			return f.filter, nil
-		}
-		f := filterWithOffset{offset: offset}
+	if hasOffset && hasLimit {
+		f := filterWithOffsetLimit{offset: offset, limit: limit}
+		return f.filter, nil
+	} else if hasLimit {
+		f := filterWithLimit{limit: limit}
 		return f.filter, nil
 	}
-	f := filterWithLimit{limit: limit}
-	return f.filter, nil
 
+	f := filterWithOffset{offset: offset}
+	return f.filter, nil
 }
 
 func getFilterFunction(c *pql.Call) rowFilter {
@@ -1040,8 +1060,7 @@ func getFilterFunction(c *pql.Call) rowFilter {
 		return f.filter
 	}
 
-	return func(rowid uint64) (bool, bool) { return true, false }
-
+	return noFilter
 }
 
 func (e *executor) executeBitmapShard(_ context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
