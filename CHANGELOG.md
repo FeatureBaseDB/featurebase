@@ -5,9 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [v1.1.0] - 2018-08-21
+
+This version contains 32 contributions from 5 contributors. There are 89 files changed; 2,752 insertions; and 1,013 deletions.
+
+### Added
+
+- Add CircleCI ([#1610](https://github.com/pilosa/pilosa/pull/1610))
+- Add key translation to exports ([#1608](https://github.com/pilosa/pilosa/pull/1608))
+- Support importing key values ([#1599](https://github.com/pilosa/pilosa/pull/1599), [#1601](https://github.com/pilosa/pilosa/pull/1601))
+- Treat coordinator as primary translate store ([#1582](https://github.com/pilosa/pilosa/pull/1582))
+- Add DEGRADED cluster state and handle gossip NodeLeave events correctly ([#1584](https://github.com/pilosa/pilosa/pull/1584))
+- Add linters to gometalinter and fix related issues ([#1544](https://github.com/pilosa/pilosa/pull/1544), [#1543](https://github.com/pilosa/pilosa/pull/1543), [#1540](https://github.com/pilosa/pilosa/pull/1540), [#1539](https://github.com/pilosa/pilosa/pull/1539), [#1537](https://github.com/pilosa/pilosa/pull/1537), [#1536](https://github.com/pilosa/pilosa/pull/1536), [#1535](https://github.com/pilosa/pilosa/pull/1535), [#1534](https://github.com/pilosa/pilosa/pull/1534), [#1530](https://github.com/pilosa/pilosa/pull/1530), [#1529](https://github.com/pilosa/pilosa/pull/1529), [#1528](https://github.com/pilosa/pilosa/pull/1528), [#1526](https://github.com/pilosa/pilosa/pull/1526), [#1527](https://github.com/pilosa/pilosa/pull/1527))
+- Add mutex field type ([#1524](https://github.com/pilosa/pilosa/pull/1524))
+- Fragment rows() and rowsForColumn() ([#1532](https://github.com/pilosa/pilosa/pull/1532))
+
+### Fixed
+
+- Fix race on replicationClosing channel ([#1607](https://github.com/pilosa/pilosa/pull/1607))
+- Prevent anti-entropy and cluster resize from running simultaneously ([#1586](https://github.com/pilosa/pilosa/pull/1586))
+- Require a valid port that isn't greater than 65,535 ([#1603](https://github.com/pilosa/pilosa/pull/1603))
+- Add view parameter to sync logic for syncing time fields ([#1602](https://github.com/pilosa/pilosa/pull/1602))
+- Fix translator in cluster environment ([#1552](https://github.com/pilosa/pilosa/pull/1552))
+- Use string prefix instead of equality so json error message will pass on all Go versions ([#1558](https://github.com/pilosa/pilosa/pull/1558))
+
+## [v1.0.2] - 2018-08-01
+
+This version contains 11 contributions from 3 contributors. There are 30 files changed; 1,569 insertions; and 1,215 deletions.
+
+### Fixed
+
+- Fix documentation ([#1503](https://github.com/pilosa/pilosa/pull/1503), [#1495](https://github.com/pilosa/pilosa/pull/1495), [#1551](https://github.com/pilosa/pilosa/pull/1551))
+- Fix places where empty IndexOptions were being used ([#1547](https://github.com/pilosa/pilosa/pull/1547))
+- Fix translator syncing bug in cluster environments ([#1552](https://github.com/pilosa/pilosa/pull/1552))
+- Fix race condition in translate_test ([#1541](https://github.com/pilosa/pilosa/pull/1541))
+- Add IndexOptions to IndexInfo json response ([#1542](https://github.com/pilosa/pilosa/pull/1542))
+- Add proper locking to cluster code to prevent races ([#1533](https://github.com/pilosa/pilosa/pull/1533))
+- Re-export erroneously unexported func Row.Intersect ([#1502](https://github.com/pilosa/pilosa/pull/1502))
+- Update parser to handle row keys on SetRowAttrs() ([#1555](https://github.com/pilosa/pilosa/pull/1555))
+
+## [v1.0.1] - 2018-07-11
+
+This version contains 12 contributions from 4 contributors. There are 11 files changed; 133 insertions; and 39 deletions.
+
+### Fixed
+
+- Use `dep ensure -vendor-only` for build repeatability ([#1491](https://github.com/pilosa/pilosa/pull/1491))
+- Make sure time range views are calculated correctly across months ([#1485](https://github.com/pilosa/pilosa/pull/1485))
+- Fix up error handling, add a configurable timeout to http handler closing ([#1486](https://github.com/pilosa/pilosa/pull/1486))
+- Add gossip Closer ([#1483](https://github.com/pilosa/pilosa/pull/1483))
+- Update docs references to WebUI naming (console) and installation ([#1493](https://github.com/pilosa/pilosa/pull/1493))
+
 ## [v1.0.0] - 2018-07-09
 
-This version contains 218 contributions from 7 contributors. There are 184 files changed, 21,769 insertions, and 20,275 deletions.
+This version contains 218 contributions from 7 contributors. There are 184 files changed; 21,769 insertions; and 20,275 deletions.
 
 ### Added
 
@@ -55,7 +106,7 @@ This version contains 218 contributions from 7 contributors. There are 184 files
 
 ## [v0.10.0] - 2018-05-15
 
-This version contains 93 contribution from 8 contributors. There are 93 files changed, 4,495 insertions, and 5,392 deletions.
+This version contains 93 contributions from 8 contributors. There are 93 files changed; 4,495 insertions; and 5,392 deletions.
 
 ### Added
 
@@ -86,7 +137,7 @@ This version contains 93 contribution from 8 contributors. There are 93 files ch
 
 ## [v0.9.0] - 2018-05-04
 
-This version contains 188 contribution from 12 contributors. There are 141 files changed, 17,832 insertions, and 7,503 deletions.
+This version contains 188 contributions from 12 contributors. There are 141 files changed; 17,832 insertions; and 7,503 deletions.
 
 *Please see special [upgrading instructions](https://www.pilosa.com/docs/latest/administration/#version-0-9) for this release.*
 
@@ -168,7 +219,7 @@ This version contains 188 contribution from 12 contributors. There are 141 files
 
 ## [0.8.8] - 2018-02-19
 
-This version contains 1 contribution from 2 contributors. There are 4 files changed, 1,153 insertions, and 618 deletions.
+This version contains 1 contribution from 2 contributors. There are 4 files changed; 1,153 insertions; and 618 deletions.
 
 ### Fixed
 
@@ -176,7 +227,7 @@ This version contains 1 contribution from 2 contributors. There are 4 files chan
 
 ## [0.8.7] - 2018-02-12
 
-This version contains 1 contribution from 1 contributors. There are 2 files changed, 84 insertions, and 4 deletions.
+This version contains 1 contribution from 1 contributors. There are 2 files changed; 84 insertions; and 4 deletions.
 
 ### Fixed
 
@@ -184,7 +235,7 @@ This version contains 1 contribution from 1 contributors. There are 2 files chan
 
 ## [0.8.6] - 2018-02-09
 
-This version contains 2 contributions from 2 contributors. There are 3 files changed, 171 insertions, and 6 deletions.
+This version contains 2 contributions from 2 contributors. There are 3 files changed; 171 insertions; and 6 deletions.
 
 ### Fixed
 
@@ -193,7 +244,7 @@ This version contains 2 contributions from 2 contributors. There are 3 files cha
 
 ## [0.8.5] - 2018-01-18
 
-This version contains 1 contribution from 1 contributor. There is 1 file changed, 1 insertion, and 0 deletions.
+This version contains 1 contribution from 1 contributor. There is 1 file changed; 1 insertion, and 0 deletions.
 
 ### Fixed
 
@@ -201,7 +252,7 @@ This version contains 1 contribution from 1 contributor. There is 1 file changed
 
 ## [0.8.4] - 2018-01-10
 
-This version contains 4 contributions from 3 contributors. There are 17 files changed, 974 insertions, and 221 deletions.
+This version contains 4 contributions from 3 contributors. There are 17 files changed; 974 insertions; and 221 deletions.
 
 ### Fixed
 
@@ -215,7 +266,7 @@ This version contains 4 contributions from 3 contributors. There are 17 files ch
 
 ## [0.8.3] - 2017-12-12
 
-This version contains 1 contribution from 1 contributor. There are 2 files changed, 59 insertions, and 42 deletions.
+This version contains 1 contribution from 1 contributor. There are 2 files changed; 59 insertions; and 42 deletions.
 
 ### Fixed
 
@@ -223,7 +274,7 @@ This version contains 1 contribution from 1 contributor. There are 2 files chang
 
 ## [0.8.2] - 2017-12-05
 
-This version contains 1 contribution from 1 contributor. There are 15 files changed, 127 insertions, and 98 deletions.
+This version contains 1 contribution from 1 contributor. There are 15 files changed; 127 insertions; and 98 deletions.
 
 ### Fixed
 
@@ -231,7 +282,7 @@ This version contains 1 contribution from 1 contributor. There are 15 files chan
 
 ## [0.8.1] - 2017-11-15
 
-This version contains 2 contributions from 2 contributors. There are 4 files changed, 27 insertions, and 14 deletions.
+This version contains 2 contributions from 2 contributors. There are 4 files changed; 27 insertions; and 14 deletions.
 
 ### Fixed
 
@@ -240,7 +291,7 @@ This version contains 2 contributions from 2 contributors. There are 4 files cha
 
 ## [0.8.0] - 2017-11-15
 
-This version contains 31 contributions from 8 contributors. There are 84 files changed, 3,732 insertions, and 1,428 deletions.
+This version contains 31 contributions from 8 contributors. There are 84 files changed; 3,732 insertions; and 1,428 deletions.
 
 ### Added
 
@@ -277,7 +328,7 @@ This version contains 31 contributions from 8 contributors. There are 84 files c
 
 ## [0.7.2] - 2017-11-15
 
-This version contains 1 contribution from 1 contributor. There is 1 file changed, 16 insertions, and 1 deletion.
+This version contains 1 contribution from 1 contributor. There is 1 file changed; 16 insertions; and 1 deletion.
 
 ### Changed
 
@@ -285,7 +336,7 @@ This version contains 1 contribution from 1 contributor. There is 1 file changed
 
 ## [0.7.1] - 2017-10-09
 
-This version contains 3 contributions from 3 contributors. There are 14 files changed, 221 insertions, and 52 deletions.
+This version contains 3 contributions from 3 contributors. There are 14 files changed; 221 insertions; and 52 deletions.
 
 ### Changed
 
@@ -297,7 +348,7 @@ This version contains 3 contributions from 3 contributors. There are 14 files ch
 
 ## [0.7.0] - 2017-10-03
 
-This version contains 59 contributions from 9 contributors. There are 61 files changed, 5207 insertions, and 1054 deletions.
+This version contains 59 contributions from 9 contributors. There are 61 files changed; 5207 insertions; and 1054 deletions.
 
 ### Added
 
@@ -342,7 +393,7 @@ This version contains 59 contributions from 9 contributors. There are 61 files c
 
 ## [0.6.0] - 2017-08-11
 
-This version contains 14 contributions from 5 contributors. There are 28 files changed, 4,936 insertions, and 692 deletions.
+This version contains 14 contributions from 5 contributors. There are 28 files changed; 4,936 insertions; and 692 deletions.
 
 ### Added
 
@@ -359,7 +410,7 @@ This version contains 14 contributions from 5 contributors. There are 28 files c
 
 ## [0.5.0] - 2017-08-02
 
-This version contains 65 contributions from 8 contributors (including 1 volunteer contributor). There are 79 files changed, 7,972 insertions, and 2,800 deletions.
+This version contains 65 contributions from 8 contributors (including 1 volunteer contributor). There are 79 files changed; 7,972 insertions; and 2,800 deletions.
 
 ### Added
 
@@ -390,7 +441,7 @@ This version contains 65 contributions from 8 contributors (including 1 voluntee
 
 ## [0.4.0] - 2017-06-08
 
-This version contains 53 contributions from 13 contributors (including 4 volunteer contributors). There are 96 files changed, 6373 insertions, and 770 deletions.
+This version contains 53 contributions from 13 contributors (including 4 volunteer contributors). There are 96 files changed; 6373 insertions; and 770 deletions.
 
 *Note that data files created in Pilosa < 0.4.0 are not compatible with Pilosa 0.4.0 as a result of [#520](https://github.com/pilosa/pilosa/pull/520).*
 
@@ -447,3 +498,4 @@ This version contains 53 contributions from 13 contributors (including 4 volunte
 [0.9.0]: https://github.com/pilosa/pilosa/compare/v0.8...v0.9
 [0.10.0]: https://github.com/pilosa/pilosa/compare/v0.9...v0.10
 [1.0.0]: https://github.com/pilosa/pilosa/compare/v0.10...v1.0
+[1.1.0]: https://github.com/pilosa/pilosa/compare/v1.0...v1.1

@@ -42,7 +42,7 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
     backing up, and more. Complete documentation is available
     at https://www.pilosa.com/docs/.
 
-    Version: v1.0.0
+    Version: v1.1.0
     Build Time: 2018-05-14T22:14:01+0000
 
     Usage:
@@ -71,19 +71,19 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
 
 1. Download the latest release:
     ```
-    curl -L -O https://github.com/pilosa/pilosa/releases/download/v1.0.0/pilosa-v1.0.0-darwin-amd64.tar.gz
+    curl -L -O https://github.com/pilosa/pilosa/releases/download/v1.1.0/pilosa-v1.1.0-darwin-amd64.tar.gz
     ```
 
     Other releases can be downloaded from our Releases page on Github.
 
 2. Extract the binary:
     ```
-    tar xfz pilosa-v1.0.0-darwin-amd64.tar.gz
+    tar xfz pilosa-v1.1.0-darwin-amd64.tar.gz
     ```
 
 3. Move the binary into your PATH so you can run `pilosa` from any shell:
     ```
-    cp -i pilosa-v1.0.0-darwin-amd64/pilosa /usr/local/bin
+    cp -i pilosa-v1.1.0-darwin-amd64/pilosa /usr/local/bin
     ```
 
 4. Make sure Pilosa is installed successfully:
@@ -100,7 +100,7 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
     backing up, and more. Complete documentation is available
     at https://www.pilosa.com/docs/.
 
-    Version: v1.0.0
+    Version: v1.1.0
     Build Time: 2018-05-14T22:14:01+0000
 
     Usage:
@@ -163,7 +163,7 @@ There are four ways to install Pilosa on MacOS: Use [Homebrew](https://brew.sh/)
     backing up, and more. Complete documentation is available
     at https://www.pilosa.com/docs/.
 
-    Version: v1.0.0
+    Version: v1.1.0
     Build Time: 2018-05-14T22:14:01+0000
 
     Usage:
@@ -222,19 +222,19 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
 
 1. To install the latest version of Pilosa, download the latest release:
     ```
-    curl -L -O https://github.com/pilosa/pilosa/releases/download/v1.0.0/pilosa-v1.0.0-linux-amd64.tar.gz
+    curl -L -O https://github.com/pilosa/pilosa/releases/download/v1.1.0/pilosa-v1.1.0-linux-amd64.tar.gz
     ```
 
     Note: This assumes you are using an `amd64` compatible architecture. Other releases can be downloaded from our Releases page on Github.
 
 2. Extract the binary:
     ```
-    tar xfz pilosa-v1.0.0-linux-amd64.tar.gz
+    tar xfz pilosa-v1.1.0-linux-amd64.tar.gz
     ```
 
 3. Move the binary into your PATH so you can run `pilosa` from any shell:
     ```
-    cp -i pilosa-v1.0.0-linux-amd64/pilosa /usr/local/bin
+    cp -i pilosa-v1.1.0-linux-amd64/pilosa /usr/local/bin
     ```
 
 4. Make sure Pilosa is installed successfully:
@@ -251,7 +251,7 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
     backing up, and more. Complete documentation is available
     at https://www.pilosa.com/docs/.
 
-    Version: v1.0.0
+    Version: v1.1.0
     Build Time: 2018-05-14T22:14:01+0000
 
     Usage:
@@ -314,7 +314,7 @@ There are three ways to install Pilosa on Linux: download the binary (recommende
     backing up, and more. Complete documentation is available
     at https://www.pilosa.com/docs/.
 
-    Version: v1.0.0
+    Version: v1.1.0
     Build Time: 2018-05-14T22:14:01+0000
 
     Usage:
