@@ -719,7 +719,7 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
 		other, _ := prev.(GroupByCounts)
-		return GroupByCounts(other).Merge(v.(GroupByCounts))
+		return other.Merge(v.(GroupByCounts))
 	}
 
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -913,7 +913,7 @@ func (e *executor) executeIterateRows(ctx context.Context, index string, c *pql.
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
 		other, _ := prev.(RowIDs)
-		return RowIDs(other).Merge(v.(RowIDs))
+		return other.Merge(v.(RowIDs))
 	}
 
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -973,7 +973,7 @@ func (e *executor) executeIterateRowShard(ctx context.Context, index string, c *
 	if ok {
 		return frag.rowsForColumn(columnID), nil
 	}
-	filter := getFilterFunction(frag, c)
+	filter := getFilterFunction(c)
 	return frag.rowsWithFilter(filter), nil
 
 }
@@ -1023,7 +1023,7 @@ func getGroupByFilterFunction(frag *fragment, fieldName string) (rowFilter, erro
 
 }
 
-func getFilterFunction(f *fragment, c *pql.Call) rowFilter {
+func getFilterFunction(c *pql.Call) rowFilter {
 	offset, hasOffset, _ := c.UintArg("shardoffset")
 	limit, hasLimit, _ := c.UintArg("shardlimit")
 	if hasOffset {
@@ -2134,13 +2134,13 @@ func isString(v interface{}) bool {
 	return ok
 }
 
-// filters to be used with RowsWithFilter queries;W
+// Filters to be used with RowsWithFilter queries.
 type filterWithOffsetLimit struct {
 	offset, limit uint64
 }
 
-func (fol *filterWithOffsetLimit) filter(colid uint64) (bool, bool) {
-	if colid >= fol.offset {
+func (fol *filterWithOffsetLimit) filter(rowID uint64) (bool, bool) {
+	if rowID >= fol.offset {
 		if fol.limit > 0 {
 			fol.limit--
 			return true, false
@@ -2154,15 +2154,15 @@ type filterWithOffset struct {
 	offset uint64
 }
 
-func (fo *filterWithOffset) filter(colid uint64) (bool, bool) {
-	return colid >= fo.offset, false
+func (fo *filterWithOffset) filter(rowID uint64) (bool, bool) {
+	return rowID >= fo.offset, false
 }
 
 type filterWithLimit struct {
 	limit uint64
 }
 
-func (fl *filterWithLimit) filter(colid uint64) (bool, bool) {
+func (fl *filterWithLimit) filter(rowID uint64) (bool, bool) { // nolint: unparam
 	if fl.limit > 0 {
 		fl.limit--
 		return true, false
