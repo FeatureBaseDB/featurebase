@@ -498,3 +498,4 @@ This version contains 53 contributions from 13 contributors (including 4 volunte
 [0.9.0]: https://github.com/pilosa/pilosa/compare/v0.8...v0.9
 [0.10.0]: https://github.com/pilosa/pilosa/compare/v0.9...v0.10
 [1.0.0]: https://github.com/pilosa/pilosa/compare/v0.10...v1.0
+[1.1.0]: https://github.com/pilosa/pilosa/compare/v1.0...v1.1
