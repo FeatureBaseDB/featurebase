@@ -475,7 +475,6 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 
 // ImportRoaringBytes fast import of raw bits in roaring standard format
 func (c *InternalClient) ImportRoaringBytes(ctx context.Context, node *pilosa.Node, index, field string, shard uint64, roaringBytes []byte, forward bool) error {
-// ImportValueK bulk imports keyed field values to a host.
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
@@ -684,7 +683,7 @@ func (c *InternalClient) CreateField(ctx context.Context, index, field string) e
 	// TODO: remove buf completely? (depends on whether importer needs to create specific field types)
 	// Encode query request.
 	buf, err := json.Marshal(&postFieldRequest{
-	//Options: opt,
+		//Options: opt,
 	})
 	if err != nil {
 		return errors.Wrap(err, "marshaling")
