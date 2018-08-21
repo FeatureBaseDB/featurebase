@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [v1.0.2] - 2018-08-01
+
+This version contains 11 contributions from 3 contributors. There are 30 files changed, 1,569 insertions, and 1,215 deletions.
+
+### Fixed
+
+- Fix documentation ([#1503](https://github.com/pilosa/pilosa/pull/1503), [#1495](https://github.com/pilosa/pilosa/pull/1495), [#1551](https://github.com/pilosa/pilosa/pull/1551))
+- Fix places where empty IndexOptions were being used ([#1547](https://github.com/pilosa/pilosa/pull/1547))
+- Fix translator syncing bug in cluster environments ([#1552](https://github.com/pilosa/pilosa/pull/1552))
+- Fix race condition in translate_test ([#1541](https://github.com/pilosa/pilosa/pull/1541))
+- Add IndexOptions to IndexInfo json response ([#1547](https://github.com/pilosa/pilosa/pull/1547))
+- Add proper locking to cluster code to prevent races ([#1533](https://github.com/pilosa/pilosa/pull/1533))
+- Re-export erroneously unexported func Row.Intersect ([#1502](https://github.com/pilosa/pilosa/pull/1502))
+- Update parser to handle row keys on SetRowAttrs() ([#1555](https://github.com/pilosa/pilosa/pull/1555))
+
+## [v1.0.1] - 2018-07-11
+
+This version contains 12 contributions from 4 contributors. There are 11 files changed, 133 insertions, and 39 deletions.
+
+### Fixed
+
+- Use `dep ensure -vendor-only` for build repeatability ([#1491](https://github.com/pilosa/pilosa/pull/1491))
+- Make sure time range views are calculated correctly across months ([#1485](https://github.com/pilosa/pilosa/pull/1485))
+- Fix up error handling, add a configurable timeout to http handler closing ([#1486](https://github.com/pilosa/pilosa/pull/1486))
+- Add gossip Closer ([#1483](https://github.com/pilosa/pilosa/pull/1483))
+- Update docs references to WebUI naming (console) and installation ([#1493](https://github.com/pilosa/pilosa/pull/1493))
+
 ## [v1.0.0] - 2018-07-09
 
 This version contains 218 contributions from 7 contributors. There are 184 files changed, 21,769 insertions, and 20,275 deletions.
@@ -55,7 +82,7 @@ This version contains 218 contributions from 7 contributors. There are 184 files
 
 ## [v0.10.0] - 2018-05-15
 
-This version contains 93 contribution from 8 contributors. There are 93 files changed, 4,495 insertions, and 5,392 deletions.
+This version contains 93 contributions from 8 contributors. There are 93 files changed, 4,495 insertions, and 5,392 deletions.
 
 ### Added
 
@@ -86,7 +113,7 @@ This version contains 93 contribution from 8 contributors. There are 93 files ch
 
 ## [v0.9.0] - 2018-05-04
 
-This version contains 188 contribution from 12 contributors. There are 141 files changed, 17,832 insertions, and 7,503 deletions.
+This version contains 188 contributions from 12 contributors. There are 141 files changed, 17,832 insertions, and 7,503 deletions.
 
 *Please see special [upgrading instructions](https://www.pilosa.com/docs/latest/administration/#version-0-9) for this release.*
 
