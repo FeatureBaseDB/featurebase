@@ -1721,10 +1721,21 @@ func (f *fragment) readCacheFromArchive(r io.Reader) error {
 	return nil
 }
 
-type rowFilter func(rowid uint64) (bool, bool)
+// rowFilter is a filter function which takes a rowID
+// and determines if that row should be included in
+// the result set. Additionally, it signals whether
+// to halt processing any more rows. The two bool
+// returned are (1) include row, (2) break further
+// processing.
+type rowFilter func(rowID uint64) (bool, bool)
 
+// noFilter is a filter function which has no restrictions.
+var noFilter = func(rowID uint64) (bool, bool) { return true, false }
+
+// rows returns all rows by calling rowsWithFilter()
+// with a completely unrestrictive filter.
 func (f *fragment) rows() []uint64 {
-	return f.rowsWithFilter(func(rowid uint64) (bool, bool) { return true, false })
+	return f.rowsWithFilter(noFilter)
 }
 
 func (f *fragment) rowsWithFilter(filter rowFilter) []uint64 {
@@ -1743,35 +1754,34 @@ func (f *fragment) rowsWithFilter(filter rowFilter) []uint64 {
 		if vRow == lastRow {
 			continue
 		}
-		addRow, breakOut := filter(vRow)
-		if breakOut {
+
+		// apply filter
+		if addRow, breakOut := filter(vRow); breakOut {
 			break
-		}
-		if addRow {
+		} else if addRow {
 			rows = append(rows, vRow)
 		}
+
 		lastRow = vRow
 	}
 	return rows
 
 }
 
+// rowsForColumn is similar to the rows method, but isolated
+// to a single column.
 func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
-	return f.rowsForColumnWithFilter(
-		columnID,
-		func(rowid uint64) (bool, bool) {
-			return true, false
-		})
+	return f.rowsForColumnWithFilter(columnID, noFilter)
 }
 
 func (f *fragment) rowsForColumnWithFilter(columnID uint64, filter rowFilter) []uint64 {
-	var colKey uint64
-	colID := columnID % ShardWidth
 	i, _ := f.storage.Containers.Iterator(0)
-
-	colVal := uint16(colID & 0xFFFF)
-
 	rows := make([]uint64, 0)
+
+	colID := columnID % ShardWidth
+	colVal := uint16(colID & 0xFFFF) // columnID within the container
+
+	var colKey uint64
 
 	// Loop over the existing containers.
 	for i.Next() {
@@ -1779,6 +1789,7 @@ func (f *fragment) rowsForColumnWithFilter(columnID uint64, filter rowFilter) []
 
 		// virtual row for the current container
 		vRow := key >> containersPerRowSegment
+
 		// column container key for virtual row
 		colKey = ((vRow * ShardWidth) + colID) >> 16
 
@@ -1786,12 +1797,11 @@ func (f *fragment) rowsForColumnWithFilter(columnID uint64, filter rowFilter) []
 			continue
 		}
 
+		// apply filter
 		if c.Contains(colVal) {
-			addRow, breakOut := filter(vRow)
-			if breakOut {
+			if addRow, breakOut := filter(vRow); breakOut {
 				break
-			}
-			if addRow {
+			} else if addRow {
 				rows = append(rows, vRow)
 			}
 		}
