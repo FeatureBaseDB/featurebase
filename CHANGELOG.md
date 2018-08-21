@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [v1.1.0] - 2018-08-21
+
+This version contains 32 contributions from 5 contributors. There are 89 files changed, 2,752 insertions, and 1,013 deletions.
+
+### Added
+
+- Add CircleCI ([#1610](https://github.com/pilosa/pilosa/pull/1610))
+- Add key translation to exports ([#1608](https://github.com/pilosa/pilosa/pull/1608))
+- Support importing key values ([#1599](https://github.com/pilosa/pilosa/pull/1599), [#1601](https://github.com/pilosa/pilosa/pull/1601))
+- Treat coordinator as primary translate store ([#1582](https://github.com/pilosa/pilosa/pull/1582))
+- Add DEGRADED cluster state and handle gossip NodeLeave events correctly ([#1584](https://github.com/pilosa/pilosa/pull/1584))
+- Add linters to gometalinter and fix related issues ([#1544](https://github.com/pilosa/pilosa/pull/1544), [#1543](https://github.com/pilosa/pilosa/pull/1543), [#1540](https://github.com/pilosa/pilosa/pull/1540), [#1539](https://github.com/pilosa/pilosa/pull/1539), [#1537](https://github.com/pilosa/pilosa/pull/1537), [#1536](https://github.com/pilosa/pilosa/pull/1536), [#1535](https://github.com/pilosa/pilosa/pull/1535), [#1534](https://github.com/pilosa/pilosa/pull/1534), [#1530](https://github.com/pilosa/pilosa/pull/1530), [#1529](https://github.com/pilosa/pilosa/pull/1529), [#1528](https://github.com/pilosa/pilosa/pull/1528), [#1526](https://github.com/pilosa/pilosa/pull/1526), [#1527](https://github.com/pilosa/pilosa/pull/1527))
+- Add mutex field type ([#1524](https://github.com/pilosa/pilosa/pull/1524))
+- Fragment rows() and rowsForColumn() ([#1532](https://github.com/pilosa/pilosa/pull/1532))
+
+### Fixed
+
+- Fix race on replicationClosing channel ([#1607](https://github.com/pilosa/pilosa/pull/1607))
+- Prevent anti-entropy and cluster resize from running simultaneously ([#1586](https://github.com/pilosa/pilosa/pull/1586))
+- Require a valid port that isn't greater than 65,535 ([#1603](https://github.com/pilosa/pilosa/pull/1603))
+- Add view parameter to sync logic for syncing time fields ([#1602](https://github.com/pilosa/pilosa/pull/1602))
+- Fix translator in cluster environment ([#1552](https://github.com/pilosa/pilosa/pull/1552))
+- Use string prefix instead of equality so json error message will pass on all Go versions ([#1558](https://github.com/pilosa/pilosa/pull/1558))
+
 ## [v1.0.2] - 2018-08-01
 
 This version contains 11 contributions from 3 contributors. There are 30 files changed, 1,569 insertions, and 1,215 deletions.
@@ -15,7 +39,7 @@ This version contains 11 contributions from 3 contributors. There are 30 files c
 - Fix places where empty IndexOptions were being used ([#1547](https://github.com/pilosa/pilosa/pull/1547))
 - Fix translator syncing bug in cluster environments ([#1552](https://github.com/pilosa/pilosa/pull/1552))
 - Fix race condition in translate_test ([#1541](https://github.com/pilosa/pilosa/pull/1541))
-- Add IndexOptions to IndexInfo json response ([#1547](https://github.com/pilosa/pilosa/pull/1547))
+- Add IndexOptions to IndexInfo json response ([#1542](https://github.com/pilosa/pilosa/pull/1542))
 - Add proper locking to cluster code to prevent races ([#1533](https://github.com/pilosa/pilosa/pull/1533))
 - Re-export erroneously unexported func Row.Intersect ([#1502](https://github.com/pilosa/pilosa/pull/1502))
 - Update parser to handle row keys on SetRowAttrs() ([#1555](https://github.com/pilosa/pilosa/pull/1555))
