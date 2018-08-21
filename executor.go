@@ -201,7 +201,7 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return e.executeTopN(ctx, index, c, shards, opt)
 	case "Rows":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
-		return e.executeIterateRows(ctx, index, c, shards, opt)
+		return e.executeRows(ctx, index, c, shards, opt)
 	case "GroupBy":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeGroupBy(ctx, index, c, shards, opt)
@@ -719,7 +719,7 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
 		other, _ := prev.(GroupByCounts)
-		return GroupByCounts(other).Merge(v.(GroupByCounts))
+		return other.Merge(v.(GroupByCounts))
 	}
 
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -803,41 +803,43 @@ func makeGroup(parts []gbi) GroupLine {
 }
 
 func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql.Call, shard uint64) (GroupByCounts, error) {
-	// Fetch column label from index.
+	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
 		return nil, ErrIndexNotFound
 	}
 
-	// Fetch field & row label based on argument.
+	// Fetch field name from argument.
 	fieldNames, ok := c.Args["fields"]
-
 	if !ok {
 		return nil, errors.Wrap(ErrFieldsArgumentRequired, "executeGroupBy")
 	}
 
+	// Ensure that fieldNames is a list of names.
 	if _, ok := fieldNames.([]interface{}); !ok {
 		return nil, errors.Wrap(ErrExpectedFieldListArgument, "executeGroupBy")
 
 	}
+
 	getFieldName := func(s string) string {
 		parts := strings.Split(s, ":")
 		return parts[0]
 	}
 
-	for _, fieldName := range fieldNames.([]interface{}) { //check if the fields exist
+	for _, fieldName := range fieldNames.([]interface{}) { // check that the fields exists
 		fn := getFieldName(fieldName.(string))
 		f := e.Holder.Field(index, fn)
 		if f == nil {
 			return nil, errors.Wrap(ErrFieldNotFound, fmt.Sprintf("executeGroupBy:%s", fieldName.(string)))
 		}
 	}
+
 	results := make(GroupByCounts, 0)
 	var work listOfLists
 	for _, fieldName := range fieldNames.([]interface{}) {
 		fn := getFieldName(fieldName.(string))
 		frag := e.Holder.fragment(index, fn, viewStandard, shard)
-		if frag == nil { //that means this whole shard doesn't have all need to continue
+		if frag == nil { // this means this whole shard doesn't have all it needs to continue
 			return results, nil
 		}
 		filter, err := getGroupByFilterFunction(frag, fieldName.(string))
@@ -904,16 +906,16 @@ func productHelper(lists listOfLists, res listOfPis) listOfPis {
 	return res
 }
 
-func (e *executor) executeIterateRows(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
+func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(shard uint64) (interface{}, error) {
-		return e.executeIterateRowShard(ctx, index, c, shard)
+		return e.executeRowsShard(ctx, index, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
 		other, _ := prev.(RowIDs)
-		return RowIDs(other).Merge(v.(RowIDs))
+		return other.Merge(v.(RowIDs))
 	}
 
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -943,14 +945,14 @@ func (e *executor) executeIterateRows(ctx context.Context, index string, c *pql.
 	return results, nil
 }
 
-func (e *executor) executeIterateRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (RowIDs, error) {
-	// Fetch column label from index.
+func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Call, shard uint64) (RowIDs, error) {
+	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
 		return nil, ErrIndexNotFound
 	}
 
-	// Fetch field & row label based on argument.
+	// Fetch field name from argument.
 	fieldName, ok := c.Args["field"]
 
 	if !ok {
@@ -965,15 +967,15 @@ func (e *executor) executeIterateRowShard(ctx context.Context, index string, c *
 	if frag == nil {
 		return make(RowIDs, 0), nil
 	}
-	//TODO add column filter next
-	columnID, ok, err := c.UintArg("column")
-	if err != nil {
+
+	if columnID, ok, err := c.UintArg("column"); err != nil {
 		return nil, err
-	}
-	if ok {
+	} else if ok {
+		// TODO: it's possible that filters could be applied here, so this returns too early.
 		return frag.rowsForColumn(columnID), nil
 	}
-	filter := getFilterFunction(frag, c)
+
+	filter := getFilterFunction(c)
 	return frag.rowsWithFilter(filter), nil
 
 }
@@ -987,7 +989,7 @@ func getGroupByFilterFunction(frag *fragment, fieldName string) (rowFilter, erro
 	var err error
 
 	if len(parts) == 1 {
-		return func(rowid uint64) (bool,bool) { return true,false }, nil
+		return func(rowid uint64) (bool, bool) { return true, false }, nil
 	} else if len(parts) == 2 {
 		hasLimit = true
 		limit, err = strconv.ParseUint(parts[1], 10, 64)
@@ -1023,7 +1025,7 @@ func getGroupByFilterFunction(frag *fragment, fieldName string) (rowFilter, erro
 
 }
 
-func getFilterFunction(f *fragment, c *pql.Call) rowFilter {
+func getFilterFunction(c *pql.Call) rowFilter {
 	offset, hasOffset, _ := c.UintArg("shardoffset")
 	limit, hasLimit, _ := c.UintArg("shardlimit")
 	if hasOffset {
@@ -1038,18 +1040,18 @@ func getFilterFunction(f *fragment, c *pql.Call) rowFilter {
 		return f.filter
 	}
 
-	return func(rowid uint64) (bool,bool) { return true,false }
+	return func(rowid uint64) (bool, bool) { return true, false }
 
 }
 
 func (e *executor) executeBitmapShard(_ context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
-	// Fetch column label from index.
+	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
 		return nil, ErrIndexNotFound
 	}
 
-	// Fetch field & row label based on argument.
+	// Fetch field name from argument.
 	fieldName, err := c.FieldArg()
 	if err != nil {
 		return nil, errors.New("Row() argument required: field")
@@ -2134,38 +2136,38 @@ func isString(v interface{}) bool {
 	return ok
 }
 
-// filters to be used with RowsWithFilter queries;W
+// Filters to be used with RowsWithFilter queries.
 type filterWithOffsetLimit struct {
 	offset, limit uint64
 }
 
-func (fol *filterWithOffsetLimit) filter(colid uint64) (bool,bool) {
-	if colid >= fol.offset {
+func (fol *filterWithOffsetLimit) filter(rowID uint64) (bool, bool) {
+	if rowID >= fol.offset {
 		if fol.limit > 0 {
 			fol.limit--
-			return true,false
+			return true, false
 		}
-		return false,true
+		return false, true
 	}
-	return false,false
+	return false, false
 }
 
 type filterWithOffset struct {
 	offset uint64
 }
 
-func (fo *filterWithOffset) filter(colid uint64) (bool,bool) {
-	return colid >= fo.offset,false
+func (fo *filterWithOffset) filter(rowID uint64) (bool, bool) {
+	return rowID >= fo.offset, false
 }
 
 type filterWithLimit struct {
 	limit uint64
 }
 
-func (fl *filterWithLimit) filter(colid uint64) (bool,bool) {
+func (fl *filterWithLimit) filter(rowID uint64) (bool, bool) { // nolint: unparam
 	if fl.limit > 0 {
 		fl.limit--
-		return true,false
+		return true, false
 	}
-	return false,true
+	return false, true
 }

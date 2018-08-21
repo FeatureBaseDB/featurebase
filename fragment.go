@@ -1721,10 +1721,10 @@ func (f *fragment) readCacheFromArchive(r io.Reader) error {
 	return nil
 }
 
-type rowFilter func(rowid uint64) (bool,bool)
+type rowFilter func(rowid uint64) (bool, bool)
 
 func (f *fragment) rows() []uint64 {
-	return f.rowsWithFilter(func(rowid uint64)(bool,bool){ return true,false })
+	return f.rowsWithFilter(func(rowid uint64) (bool, bool) { return true, false })
 }
 
 func (f *fragment) rowsWithFilter(filter rowFilter) []uint64 {
@@ -1743,7 +1743,7 @@ func (f *fragment) rowsWithFilter(filter rowFilter) []uint64 {
 		if vRow == lastRow {
 			continue
 		}
-		addRow,breakOut:=filter(vRow) 
+		addRow, breakOut := filter(vRow)
 		if breakOut {
 			break
 		}
@@ -1759,8 +1759,8 @@ func (f *fragment) rowsWithFilter(filter rowFilter) []uint64 {
 func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
 	return f.rowsForColumnWithFilter(
 		columnID,
-		func(rowid uint64) (bool,bool) {
-			return true,false
+		func(rowid uint64) (bool, bool) {
+			return true, false
 		})
 }
 
@@ -1787,7 +1787,7 @@ func (f *fragment) rowsForColumnWithFilter(columnID uint64, filter rowFilter) []
 		}
 
 		if c.Contains(colVal) {
-			addRow,breakOut:=filter(vRow) 
+			addRow, breakOut := filter(vRow)
 			if breakOut {
 				break
 			}
