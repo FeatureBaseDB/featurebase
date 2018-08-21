@@ -370,7 +370,6 @@ func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 				} else if err != nil {
 					return nil, err
 				} else {
-					// field, _ := c.Args["field"].(string)
 					fieldName, _ := c.FieldArg()
 					if fr := idx.Field(fieldName); fr != nil {
 						rowID, _, err := c.UintArg(fieldName)
@@ -918,30 +917,31 @@ func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, s
 		return other.Merge(v.(RowIDs))
 	}
 
+	// Get full result set.
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
 	if err != nil {
 		return nil, err
 	}
 	results, _ := other.(RowIDs)
-	limit, hasLimit, err := c.UintArg("limit")
-	if err != nil {
+
+	// Apply offset.
+	if offset, hasOffset, err := c.UintArg("offset"); err != nil {
 		return nil, err
-	}
-	offset, hasOffset, err := c.UintArg("offset")
-	if err != nil {
-		return nil, err
-	}
-	if hasOffset {
+	} else if hasOffset {
 		if int(offset) < len(results) {
 			results = results[offset:]
 		}
 	}
 
-	if hasLimit {
+	// Apply limit.
+	if limit, hasLimit, err := c.UintArg("limit"); err != nil {
+		return nil, err
+	} else if hasLimit {
 		if int(limit) < len(results) {
 			results = results[:limit]
 		}
 	}
+
 	return results, nil
 }
 
@@ -953,17 +953,18 @@ func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Ca
 	}
 
 	// Fetch field name from argument.
-	fieldName, ok := c.Args["field"]
-
+	fieldName, ok := c.Args["field"].(string)
 	if !ok {
 		return nil, errors.New("Rows() argument required: field")
 	}
-	f := e.Holder.Field(index, fieldName.(string))
+
+	// Fetch field.
+	f := e.Holder.Field(index, fieldName)
 	if f == nil {
 		return nil, ErrFieldNotFound
 	}
 
-	frag := e.Holder.fragment(index, fieldName.(string), viewStandard, shard)
+	frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
 	if frag == nil {
 		return make(RowIDs, 0), nil
 	}
@@ -977,7 +978,6 @@ func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Ca
 
 	filter := getFilterFunction(c)
 	return frag.rowsWithFilter(filter), nil
-
 }
 
 func getGroupByFilterFunction(frag *fragment, fieldName string) (rowFilter, error) {
@@ -1028,11 +1028,11 @@ func getGroupByFilterFunction(frag *fragment, fieldName string) (rowFilter, erro
 func getFilterFunction(c *pql.Call) rowFilter {
 	offset, hasOffset, _ := c.UintArg("shardoffset")
 	limit, hasLimit, _ := c.UintArg("shardlimit")
-	if hasOffset {
-		if hasLimit {
-			f := filterWithOffsetLimit{offset: offset, limit: limit}
-			return f.filter
-		}
+
+	if hasOffset && hasLimit {
+		f := filterWithOffsetLimit{offset: offset, limit: limit}
+		return f.filter
+	} else if hasOffset {
 		f := filterWithOffset{offset: offset}
 		return f.filter
 	} else if hasLimit {

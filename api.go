@@ -1,3 +1,4 @@
+// Copyright 2017 Pilosa Corp.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -293,7 +294,7 @@ func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, e
 	return field, nil
 }
 
-// ImportRoaringBytes fast loading of standard roaring format
+// ImportRoaringBytes enables fast loading of the standard roaring format.
 func (api *API) ImportRoaringBytes(ctx context.Context, roaringBytes []byte, indexName, fieldName string, shard uint64, forward bool) (err error) {
 	if err = api.validate(apiField); err != nil {
 		err = errors.Wrap(err, "validating api method")
