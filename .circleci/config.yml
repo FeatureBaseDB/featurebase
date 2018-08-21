@@ -1,0 +1,106 @@
+version: 2
+defaults: &defaults
+  working_directory: /go/src/github.com/pilosa/pilosa
+  docker:
+    - image: circleci/golang:1.10
+fast-checkout: &fast-checkout
+  attach_workspace:
+    at: .
+jobs:
+  build:
+    <<: *defaults
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - vendor-cache-{{ checksum "Gopkg.lock" }}
+      - run: "[ -d vendor ] || make vendor"
+      - save_cache:
+          key: vendor-cache-{{ checksum "Gopkg.lock" }}
+          paths:
+            - vendor
+      - persist_to_workspace:
+          root: .
+          paths: "*"
+  linter:
+    <<: *defaults
+    steps:
+      - *fast-checkout
+      - run: go get -u github.com/alecthomas/gometalinter
+      - run: gometalinter --install
+      - run: go get github.com/remyoudompheng/go-misc/deadcode
+      - run: make gometalinter
+  test-golang-1.10: &base-test
+    <<: *defaults
+    steps:
+      - *fast-checkout
+      - run: sudo apt-get install lsof
+      - run: make test
+  test-golang-1.11-rc:
+    <<: *base-test
+    docker:
+      - image: circleci/golang:1.11-rc
+  test-golang-1.10-386:
+    <<: *base-test
+    environment:
+      GOARCH: 386
+  prerelease:
+    <<: *base-test
+    steps:
+      - *fast-checkout
+      - run: make prerelease
+      - store_artifacts:
+          path: build
+      - persist_to_workspace:
+          root: .
+          paths: build
+  release:
+    <<: *defaults
+    steps:
+      - *fast-checkout
+      - run: make release
+      - store_artifacts:
+          path: build
+      - persist_to_workspace:
+          root: .
+          paths: build
+  prerelease-upload:
+    docker:
+      - image: circleci/python:2.7-jessie
+    steps:
+      - *fast-checkout
+      - run: sudo pip install awscli
+      - run: make prerelease-upload
+workflows:
+  version: 2
+  test:
+    jobs:
+      - build
+      - linter:
+          requires:
+            - build
+      - test-golang-1.10:
+          requires:
+            - build
+      - test-golang-1.11-rc:
+          requires:
+            - build
+      - test-golang-1.10-386:
+          requires:
+            - build
+      - prerelease:
+          requires:
+            - linter
+            - test-golang-1.10
+      - release:
+          requires:
+            - linter
+            - test-golang-1.10
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - prerelease-upload:
+          requires:
+            - prerelease
