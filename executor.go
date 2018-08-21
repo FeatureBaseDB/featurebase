@@ -201,7 +201,7 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return e.executeTopN(ctx, index, c, shards, opt)
 	case "Rows":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
-		return e.executeIterateRows(ctx, index, c, shards, opt)
+		return e.executeRows(ctx, index, c, shards, opt)
 	case "GroupBy":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeGroupBy(ctx, index, c, shards, opt)
@@ -904,10 +904,10 @@ func productHelper(lists listOfLists, res listOfPis) listOfPis {
 	return res
 }
 
-func (e *executor) executeIterateRows(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
+func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(shard uint64) (interface{}, error) {
-		return e.executeIterateRowShard(ctx, index, c, shard)
+		return e.executeRowsShard(ctx, index, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
@@ -943,7 +943,7 @@ func (e *executor) executeIterateRows(ctx context.Context, index string, c *pql.
 	return results, nil
 }
 
-func (e *executor) executeIterateRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (RowIDs, error) {
+func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Call, shard uint64) (RowIDs, error) {
 	// Fetch column label from index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
