@@ -803,41 +803,43 @@ func makeGroup(parts []gbi) GroupLine {
 }
 
 func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql.Call, shard uint64) (GroupByCounts, error) {
-	// Fetch column label from index.
+	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
 		return nil, ErrIndexNotFound
 	}
 
-	// Fetch field & row label based on argument.
+	// Fetch field name from argument.
 	fieldNames, ok := c.Args["fields"]
-
 	if !ok {
 		return nil, errors.Wrap(ErrFieldsArgumentRequired, "executeGroupBy")
 	}
 
+	// Ensure that fieldNames is a list of names.
 	if _, ok := fieldNames.([]interface{}); !ok {
 		return nil, errors.Wrap(ErrExpectedFieldListArgument, "executeGroupBy")
 
 	}
+
 	getFieldName := func(s string) string {
 		parts := strings.Split(s, ":")
 		return parts[0]
 	}
 
-	for _, fieldName := range fieldNames.([]interface{}) { //check if the fields exist
+	for _, fieldName := range fieldNames.([]interface{}) { // check that the fields exists
 		fn := getFieldName(fieldName.(string))
 		f := e.Holder.Field(index, fn)
 		if f == nil {
 			return nil, errors.Wrap(ErrFieldNotFound, fmt.Sprintf("executeGroupBy:%s", fieldName.(string)))
 		}
 	}
+
 	results := make(GroupByCounts, 0)
 	var work listOfLists
 	for _, fieldName := range fieldNames.([]interface{}) {
 		fn := getFieldName(fieldName.(string))
 		frag := e.Holder.fragment(index, fn, viewStandard, shard)
-		if frag == nil { //that means this whole shard doesn't have all need to continue
+		if frag == nil { // this means this whole shard doesn't have all it needs to continue
 			return results, nil
 		}
 		filter, err := getGroupByFilterFunction(frag, fieldName.(string))
@@ -944,13 +946,13 @@ func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, s
 }
 
 func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Call, shard uint64) (RowIDs, error) {
-	// Fetch column label from index.
+	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
 		return nil, ErrIndexNotFound
 	}
 
-	// Fetch field & row label based on argument.
+	// Fetch field name from argument.
 	fieldName, ok := c.Args["field"]
 
 	if !ok {
@@ -965,14 +967,14 @@ func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Ca
 	if frag == nil {
 		return make(RowIDs, 0), nil
 	}
-	//TODO add column filter next
-	columnID, ok, err := c.UintArg("column")
-	if err != nil {
+
+	if columnID, ok, err := c.UintArg("column"); err != nil {
 		return nil, err
-	}
-	if ok {
+	} else if ok {
+		// TODO: it's possible that filters could be applied here, so this returns too early.
 		return frag.rowsForColumn(columnID), nil
 	}
+
 	filter := getFilterFunction(c)
 	return frag.rowsWithFilter(filter), nil
 
@@ -1043,13 +1045,13 @@ func getFilterFunction(c *pql.Call) rowFilter {
 }
 
 func (e *executor) executeBitmapShard(_ context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
-	// Fetch column label from index.
+	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
 		return nil, ErrIndexNotFound
 	}
 
-	// Fetch field & row label based on argument.
+	// Fetch field name from argument.
 	fieldName, err := c.FieldArg()
 	if err != nil {
 		return nil, errors.New("Row() argument required: field")
