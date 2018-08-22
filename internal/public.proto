@@ -14,9 +14,14 @@ message Pair {
 	uint64 Count = 2;
 }
 
+message FieldRow{
+	string Field = 1;
+	uint64 RowID = 2;
+}
+
 message GroupLine{
-	repeated string Groups = 1;
-   uint64 Total=2;
+	repeated FieldRow Groups = 1;
+	uint64 Total = 2;
 }
 
 message ValCount {

@@ -1234,11 +1234,11 @@ Set(4500001, fn=4)
 			t.Fatalf("GroupBy querying: %v", err)
 		} else {
 			expected := pilosa.GroupByCounts{
-				{Groups: []string{"f.10"}, Total: 4},
-				{Groups: []string{"f.7"}, Total: 1},
+				{Groups: []pilosa.FieldRow{{Field: "f", RowID: 10}}, Total: 4},
+				{Groups: []pilosa.FieldRow{{Field: "f", RowID: 7}}, Total: 1},
 			}
 			results := res.Results[0].(pilosa.GroupByCounts)
-			checkGroupBy(expected, results, t)
+			checkGroupBy(t, expected, results)
 		}
 	})
 }
@@ -1681,17 +1681,15 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 	hldr.SetBit("i", "general", 11, ShardWidth+2)
 	hldr.SetBit("i", "general", 12, 2)
 	hldr.SetBit("i", "general", 12, ShardWidth+2)
-	hldr.SetBit("i", "sub", 10, 0)
-	hldr.SetBit("i", "sub", 10, 1)
-	hldr.SetBit("i", "sub", 10, 3)
-	hldr.SetBit("i", "sub", 11, 2)
-	hldr.SetBit("i", "sub", 11, 0)
-	expected := pilosa.GroupByCounts{
-		{Groups: []string{"general.10", "sub.11"}, Total: 1},
-		{Groups: []string{"general.11", "sub.11"}, Total: 1},
-		{Groups: []string{"general.12", "sub.11"}, Total: 1},
-		{Groups: []string{"general.10", "sub.10"}, Total: 2},
-	}
+
+	hldr.SetBit("i", "sub", 100, 0)
+	hldr.SetBit("i", "sub", 100, 1)
+	hldr.SetBit("i", "sub", 100, 3)
+	hldr.SetBit("i", "sub", 100, ShardWidth+1)
+
+	hldr.SetBit("i", "sub", 110, 2)
+	hldr.SetBit("i", "sub", 110, 0)
+
 	t.Run("No Field List Arguments", func(t *testing.T) {
 		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy()`}); err != nil {
 			if errors.Cause(err) != pilosa.ErrFieldsArgumentRequired {
@@ -1714,38 +1712,50 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 		}
 	})
 	t.Run("Basic", func(t *testing.T) {
+		expected := pilosa.GroupByCounts{
+			{Groups: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 110}}, Total: 1},
+			{Groups: []pilosa.FieldRow{{Field: "general", RowID: 11}, {Field: "sub", RowID: 110}}, Total: 1},
+			{Groups: []pilosa.FieldRow{{Field: "general", RowID: 12}, {Field: "sub", RowID: 110}}, Total: 1},
+			{Groups: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 100}}, Total: 3},
+		}
+
 		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(fields=[general,sub])`}); err != nil {
 			t.Fatal(err)
 		} else {
 			results := res.Results[0].(pilosa.GroupByCounts)
-			checkGroupBy(expected, results, t)
+			checkGroupBy(t, expected, results)
 		}
 	})
-	expected = pilosa.GroupByCounts{
-		{Groups: []string{"general.11"}, Total: 2},
-		{Groups: []string{"general.12"}, Total: 2},
-	}
+
 	t.Run("check field offset no limit", func(t *testing.T) {
+		expected := pilosa.GroupByCounts{
+			{Groups: []pilosa.FieldRow{{Field: "general", RowID: 11}}, Total: 2},
+			{Groups: []pilosa.FieldRow{{Field: "general", RowID: 12}}, Total: 2},
+		}
+
 		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(fields=[general:11:])`}); err != nil {
 			t.Fatal(err)
 		} else {
 			results := res.Results[0].(pilosa.GroupByCounts)
-			checkGroupBy(expected, results, t)
+			checkGroupBy(t, expected, results)
 		}
 	})
-	expected = pilosa.GroupByCounts{
-		{Groups: []string{"general.11"}, Total: 2},
-	}
+
 	t.Run("check field offset limit", func(t *testing.T) {
+		expected := pilosa.GroupByCounts{
+			{Groups: []pilosa.FieldRow{{Field: "general", RowID: 11}}, Total: 2},
+		}
+
 		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(fields=[general:11:1])`}); err != nil {
 			t.Fatal(err)
 		} else {
 			results := res.Results[0].(pilosa.GroupByCounts)
-			checkGroupBy(expected, results, t)
+			checkGroupBy(t, expected, results)
 		}
 	})
 }
-func checkGroupBy(expected, results pilosa.GroupByCounts, t *testing.T) {
+
+func checkGroupBy(t *testing.T, expected, results pilosa.GroupByCounts) {
 	notIn := func(item pilosa.GroupLine, expected pilosa.GroupByCounts) bool {
 		for i := range expected {
 			if item.Total == expected[i].Total {

@@ -786,16 +786,37 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 	return results, nil
 }
 
+// FieldRow is used to distinguish rows in a group by result.
+type FieldRow struct {
+	Field  string
+	RowID  uint64
+	RowKey string
+}
+
+func (fr FieldRow) String() string {
+	return fmt.Sprintf("%s.%d", fr.Field, fr.RowID)
+}
+
+// TODO: we shouldn't need to string this
+func uniqueGroupString(fr []FieldRow) string {
+	s := []string{}
+	for _, f := range fr {
+		s = append(s, f.String())
+	}
+	return strings.Join(s, "-")
+}
+
 // gbi is a groupBy item.
 type gbi struct {
 	row      *Row
-	fieldKey string
-	rowID    uint64
+	fieldRow FieldRow
 }
 type GroupLine struct {
-	Groups []string
+	Groups []FieldRow
 	Total  uint64
 }
+
+// GroupByCounts is the return type for GroupBy queries.
 type GroupByCounts []GroupLine
 
 func (gbc GroupByCounts) Merge(other GroupByCounts) GroupByCounts {
@@ -804,14 +825,13 @@ func (gbc GroupByCounts) Merge(other GroupByCounts) GroupByCounts {
 		total uint64
 	})
 	for i := range gbc {
-		m[strings.Join(gbc[i].Groups, "-")] = struct {
+		m[uniqueGroupString(gbc[i].Groups)] = struct {
 			i     int
 			total uint64
-		}{total: gbc[i].Total, i: i}
+		}{i, gbc[i].Total}
 	}
 	for i := range other {
-		key := strings.Join(other[i].Groups, "-")
-		o, found := m[key]
+		o, found := m[uniqueGroupString(other[i].Groups)]
 		if found {
 			gbc[o.i].Total += other[i].Total
 		} else {
@@ -820,20 +840,7 @@ func (gbc GroupByCounts) Merge(other GroupByCounts) GroupByCounts {
 	}
 	return gbc
 }
-func makeGroup(parts []gbi) GroupLine {
-	var other *Row
-	line := GroupLine{}
-	for i, o := range parts {
-		if i == 0 {
-			other = o.row
-		} else {
-			other = other.Intersect(o.row)
-		}
-		line.Groups = append(line.Groups, o.fieldKey)
-	}
-	line.Total = other.Count()
-	return line
-}
+
 func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql.Call, shard uint64) (GroupByCounts, error) {
 	// Fetch index.
 	idx := e.Holder.Index(index)
@@ -867,7 +874,7 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 		}
 	}
 	results := make(GroupByCounts, 0)
-	var work listOfGBILists
+	var work [][]gbi
 	for _, fieldDirective := range fieldDirectives.([]interface{}) {
 		fieldName := getFieldName(fieldDirective.(string))
 		// Fetch fragment.
@@ -880,12 +887,15 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 		if err != nil {
 			return nil, err
 		}
-		set := make(gbiList, 0)
+
+		set := make([]gbi, 0)
 		for _, rowID := range frag.rowsWithFilter(filter) {
 			set = append(set, gbi{
-				row:      frag.row(rowID),
-				rowID:    rowID,
-				fieldKey: fmt.Sprintf("%s.%d", fieldName, rowID),
+				row: frag.row(rowID),
+				fieldRow: FieldRow{
+					Field: fieldName,
+					RowID: rowID,
+				},
 			})
 		}
 		work = append(work, set)
@@ -899,35 +909,29 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 	return results, nil
 }
 
-type gbiList []gbi
-type listOfGBILists []gbiList
-
-// pi is a product process item.
-type pi struct {
+// ppi is a product process item.
+type ppi struct {
 	row *Row
 	gl  GroupLine
 }
-type piList []pi
 
-// product generates the cartiesian product of the input
-// using tail recursion
-func product(input listOfGBILists) piList {
-	res := make(piList, 0)
-	if len(input) == 0 { //base return empty list
-		res = append(res, pi{gl: GroupLine{Groups: make([]string, 0)}})
-	} else {
-		res = productHelper(input, res)
+// product generates the cartesian product of the input
+// using tail recursion.
+func product(input [][]gbi) []ppi {
+	if len(input) == 0 { // base return empty list
+		return []ppi{
+			{gl: GroupLine{Groups: make([]FieldRow, 0)}},
+		}
 	}
-	return res
-}
-func productHelper(lists listOfGBILists, res piList) piList {
-	head := lists[0]           //take first element of the list
-	tail := product(lists[1:]) //invoke product on remaining element
+
+	res := make([]ppi, 0)
+	head := input[0]           // take first element of the list
+	tail := product(input[1:]) // invoke product on remaining element
 	for h := range head {      // for each head
-		for t := range tail { //iterate over the tail
-			s := pi{gl: GroupLine{Groups: make([]string, 0)}}
-			s.gl.Groups = append([]string{head[h].fieldKey}, tail[t].gl.Groups...) //had to insert at the front to match input order
-			if tail[t].row != nil {                                                //first time around nothing to intersect
+		for t := range tail { // iterate over the tail
+			s := ppi{gl: GroupLine{Groups: make([]FieldRow, 0)}}
+			s.gl.Groups = append([]FieldRow{head[h].fieldRow}, tail[t].gl.Groups...) // had to insert at the front to match input order
+			if tail[t].row != nil {                                                  // first time around nothing to intersect
 				s.row = head[h].row.Intersect(tail[t].row)
 			} else {
 				s.row = head[h].row
