@@ -788,9 +788,9 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 
 // FieldRow is used to distinguish rows in a group by result.
 type FieldRow struct {
-	Field  string
-	RowID  uint64
-	RowKey string
+	Field  string `json:"field"`
+	RowID  uint64 `json:"rowID"`
+	RowKey string `json:"rowKey,omitempty"`
 }
 
 func (fr FieldRow) String() string {
@@ -812,8 +812,8 @@ type gbi struct {
 	fieldRow FieldRow
 }
 type GroupLine struct {
-	Groups []FieldRow
-	Total  uint64
+	Group []FieldRow `json:"group"`
+	Count uint64     `json:"count"`
 }
 
 // GroupByCounts is the return type for GroupBy queries.
@@ -825,15 +825,15 @@ func (gbc GroupByCounts) Merge(other GroupByCounts) GroupByCounts {
 		total uint64
 	})
 	for i := range gbc {
-		m[uniqueGroupString(gbc[i].Groups)] = struct {
+		m[uniqueGroupString(gbc[i].Group)] = struct {
 			i     int
 			total uint64
 		}{i, gbc[i].Total}
 	}
 	for i := range other {
-		o, found := m[uniqueGroupString(other[i].Groups)]
+		o, found := m[uniqueGroupString(other[i].Group)]
 		if found {
-			gbc[o.i].Total += other[i].Total
+			gbc[o.i].Count += other[i].Count
 		} else {
 			gbc = append(gbc, other[i])
 		}
@@ -901,8 +901,8 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 		work = append(work, set)
 	}
 	for _, group := range product(work) {
-		group.gl.Total = group.row.Count()
-		if group.gl.Total > 0 {
+		group.gl.Count = group.row.Count()
+		if group.gl.Count > 0 {
 			results = append(results, group.gl)
 		}
 	}
@@ -920,7 +920,7 @@ type ppi struct {
 func product(input [][]gbi) []ppi {
 	if len(input) == 0 { // base return empty list
 		return []ppi{
-			{gl: GroupLine{Groups: make([]FieldRow, 0)}},
+			{gl: GroupLine{Group: make([]FieldRow, 0)}},
 		}
 	}
 
@@ -929,9 +929,9 @@ func product(input [][]gbi) []ppi {
 	tail := product(input[1:]) // invoke product on remaining element
 	for h := range head {      // for each head
 		for t := range tail { // iterate over the tail
-			s := ppi{gl: GroupLine{Groups: make([]FieldRow, 0)}}
-			s.gl.Groups = append([]FieldRow{head[h].fieldRow}, tail[t].gl.Groups...) // had to insert at the front to match input order
-			if tail[t].row != nil {                                                  // first time around nothing to intersect
+			s := ppi{gl: GroupLine{Group: make([]FieldRow, 0)}}
+			s.gl.Group = append([]FieldRow{head[h].fieldRow}, tail[t].gl.Group...) // had to insert at the front to match input order
+			if tail[t].row != nil {                                                // first time around nothing to intersect
 				s.row = head[h].row.Intersect(tail[t].row)
 			} else {
 				s.row = head[h].row
@@ -2091,7 +2091,37 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 				return other, nil
 			}
 		}
+
+	case GroupByCounts:
+		other := make([]GroupLine, 0)
+		for _, gl := range result {
+
+			group := make([]FieldRow, len(gl.Group))
+			for i, g := range gl.Group {
+				group[i] = g
+
+				// TODO: It may be useful to cache this field lookup.
+				field := idx.Field(g.Field)
+				if field == nil {
+					return nil, ErrFieldNotFound
+				}
+				if field.keys() {
+					key, err := e.TranslateStore.TranslateRowToString(index, g.Field, g.RowID)
+					if err != nil {
+						return nil, err
+					}
+					group[i].RowKey = key
+				}
+			}
+
+			other = append(other, GroupLine{
+				Group: group,
+				Count: gl.Count,
+			})
+		}
+		return other, nil
 	}
+
 	return result, nil
 }
 

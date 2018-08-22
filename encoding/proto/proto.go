@@ -1002,8 +1002,8 @@ func decodeGroupByCounts(a []*internal.GroupLine) pilosa.GroupByCounts {
 	other := make([]pilosa.GroupLine, len(a))
 	for i := range a {
 		other[i] = pilosa.GroupLine{
-			decodeFieldRows(a[i].Groups),
-			a[i].Total,
+			decodeFieldRows(a[i].Group),
+			a[i].Count,
 		}
 	}
 	return pilosa.GroupByCounts(other)
@@ -1073,8 +1073,8 @@ func encodeGroupByCount(counts pilosa.GroupByCounts) []*internal.GroupLine {
 	result := make([]*internal.GroupLine, len(counts))
 	for i := range counts {
 		result[i] = &internal.GroupLine{
-			Groups: encodeFieldRows(counts[i].Groups),
-			Total:  counts[i].Total,
+			Group: encodeFieldRows(counts[i].Group),
+			Count: counts[i].Count,
 		}
 	}
 	return result

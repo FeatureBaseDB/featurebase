@@ -20,8 +20,8 @@ message FieldRow{
 }
 
 message GroupLine{
-	repeated FieldRow Groups = 1;
-	uint64 Total = 2;
+	repeated FieldRow Group = 1;
+	uint64 Count = 2;
 }
 
 message ValCount {
