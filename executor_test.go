@@ -474,7 +474,6 @@ func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 	} else if _, err := index.CreateFieldIfNotExists("kf", pilosa.OptFieldTypeDefault(), pilosa.OptFieldKeys()); err != nil {
 		t.Fatal(err)
 	}
-
 	t.Run("rowID", func(t *testing.T) {
 		// Set two attrs on f/10.
 		// Also set attrs on other bitmaps and fields to test isolation.

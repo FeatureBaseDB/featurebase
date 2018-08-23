@@ -25,6 +25,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
 )
 
@@ -37,9 +38,6 @@ type Index struct {
 
 	// Fields by name.
 	fields map[string]*Field
-
-	// Max shard on any node in the cluster, according to this node.
-	remoteMaxShard uint64
 
 	newAttrStore func(string) AttrStore
 
@@ -63,8 +61,6 @@ func NewIndex(path, name string) (*Index, error) {
 		path:   path,
 		name:   name,
 		fields: make(map[string]*Field),
-
-		remoteMaxShard: 0,
 
 		newAttrStore: newNopAttrStore,
 		columnAttrs:  nopStore,
@@ -210,30 +206,22 @@ func (i *Index) Close() error {
 	return nil
 }
 
-// maxShard returns the max shard in the index according to this node.
-func (i *Index) maxShard() uint64 {
+// AvailableShards returns a bitmap of all shards with data in the index.
+func (i *Index) AvailableShards() *roaring.Bitmap {
 	if i == nil {
-		return 0
+		return roaring.NewBitmap()
 	}
+
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 
-	max := i.remoteMaxShard
+	b := roaring.NewBitmap()
 	for _, f := range i.fields {
-		if shard := f.maxShard(); shard > max {
-			max = shard
-		}
+		b = b.Union(f.AvailableShards())
 	}
 
-	i.Stats.Gauge("maxShard", float64(max), 1.0)
-	return max
-}
-
-// setRemoteMaxShard sets the remote max shard value received from another node.
-func (i *Index) setRemoteMaxShard(newmax uint64) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-	i.remoteMaxShard = newmax
+	i.Stats.Gauge("maxShard", float64(b.Max()), 1.0)
+	return b
 }
 
 // fieldPath returns the path to a field in the index.

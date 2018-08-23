@@ -223,7 +223,7 @@ func (d *diagnosticsCollector) EnrichWithSchemaProperties() {
 	timeQuantumEnabled := false
 
 	for _, index := range d.server.holder.Indexes() {
-		numShards += index.maxShard() + 1
+		numShards += index.AvailableShards().Count()
 		numIndexes += 1
 		for _, field := range index.Fields() {
 			numFields += 1

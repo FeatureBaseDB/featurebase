@@ -43,6 +43,7 @@ message MaxShards {
 
 message CreateShardMessage {
     string Index = 1;
+    string Field = 3;
     uint64 Shard = 2;
 }
 
@@ -105,8 +106,18 @@ message NodeEventMessage {
 
 message NodeStatus {
     Node Node = 1;
-    MaxShards MaxShards = 2;
     Schema Schema = 3;
+    repeated IndexStatus Indexes = 4;
+}
+
+message IndexStatus {
+    string Name = 1;
+    repeated FieldStatus Fields = 2;
+}
+
+message FieldStatus {
+    string Name = 1;
+    repeated uint64 AvailableShards = 2;
 }
 
 message ClusterStatus {

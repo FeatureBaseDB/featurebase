@@ -28,6 +28,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
 )
 
@@ -72,6 +73,9 @@ type Field struct {
 	options FieldOptions
 
 	bsiGroups []*bsiGroup
+
+	// Shards with data on any node in the cluster, according to this node.
+	remoteAvailableShards *roaring.Bitmap
 
 	logger Logger
 }
@@ -179,6 +183,8 @@ func NewField(path, index, name string, opts FieldOption) (*Field, error) {
 
 		options: applyDefaultOptions(fo),
 
+		remoteAvailableShards: roaring.NewBitmap(),
+
 		logger: NopLogger,
 	}
 	return f, nil
@@ -196,18 +202,23 @@ func (f *Field) Path() string { return f.path }
 // RowAttrStore returns the attribute storage.
 func (f *Field) RowAttrStore() AttrStore { return f.rowAttrStore }
 
-// maxShard returns the max shard in the field.
-func (f *Field) maxShard() uint64 {
+// AvailableShards returns a bitmap of shards that contain data.
+func (f *Field) AvailableShards() *roaring.Bitmap {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
-	var max uint64
+	b := f.remoteAvailableShards.Clone()
 	for _, view := range f.viewMap {
-		if viewMaxShard := view.calculateMaxShard(); viewMaxShard > max {
-			max = viewMaxShard
-		}
+		b = b.Union(view.availableShards())
 	}
-	return max
+	return b
+}
+
+// addRemoteAvailableShards merges the set of available shards into the current known set.
+func (f *Field) addRemoteAvailableShards(b *roaring.Bitmap) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.remoteAvailableShards = f.remoteAvailableShards.Union(b)
 }
 
 // Type returns the field type.

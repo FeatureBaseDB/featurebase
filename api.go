@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
 )
 
@@ -727,7 +728,16 @@ func (api *API) ImportValue(_ context.Context, req *ImportValueRequest) error {
 
 // MaxShards returns the maximum shard number for each index in a map.
 func (api *API) MaxShards(_ context.Context) map[string]uint64 {
-	return api.holder.maxShards()
+	m := make(map[string]uint64)
+	for k, v := range api.holder.availableShardsByIndex() {
+		m[k] = v.Max()
+	}
+	return m
+}
+
+// AvailableShardsByIndex returns bitmaps of shards with available by index name.
+func (api *API) AvailableShardsByIndex(_ context.Context) map[string]*roaring.Bitmap {
+	return api.holder.availableShardsByIndex()
 }
 
 // StatsWithTags returns an instance of whatever implementation of StatsClient

@@ -25,12 +25,12 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
 )
 
 // Ensure that fragCombos creates the correct fragment mapping.
 func TestFragCombos(t *testing.T) {
-
 	uri0, err := NewURIFromAddress("host0")
 	if err != nil {
 		t.Fatal(err)
@@ -48,24 +48,24 @@ func TestFragCombos(t *testing.T) {
 	c.addNodeBasicSorted(node1)
 
 	tests := []struct {
-		idx        string
-		maxShard   uint64
-		fieldViews viewsByField
-		expected   fragsByHost
+		idx             string
+		availableShards *roaring.Bitmap
+		fieldViews      viewsByField
+		expected        fragsByHost
 	}{
 		{
-			idx:        "i",
-			maxShard:   uint64(2),
-			fieldViews: viewsByField{"f": []string{"v1", "v2"}},
+			idx:             "i",
+			availableShards: roaring.NewBitmap(0, 1, 2),
+			fieldViews:      viewsByField{"f": []string{"v1", "v2"}},
 			expected: fragsByHost{
 				"node0": []frag{{"f", "v1", uint64(0)}, {"f", "v2", uint64(0)}},
 				"node1": []frag{{"f", "v1", uint64(1)}, {"f", "v2", uint64(1)}, {"f", "v1", uint64(2)}, {"f", "v2", uint64(2)}},
 			},
 		},
 		{
-			idx:        "foo",
-			maxShard:   uint64(3),
-			fieldViews: viewsByField{"f": []string{"v0"}},
+			idx:             "foo",
+			availableShards: roaring.NewBitmap(0, 1, 2, 3),
+			fieldViews:      viewsByField{"f": []string{"v0"}},
 			expected: fragsByHost{
 				"node0": []frag{{"f", "v0", uint64(1)}, {"f", "v0", uint64(2)}},
 				"node1": []frag{{"f", "v0", uint64(0)}, {"f", "v0", uint64(3)}},
@@ -73,8 +73,7 @@ func TestFragCombos(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-
-		actual := c.fragCombos(test.idx, test.maxShard, test.fieldViews)
+		actual := c.fragCombos(test.idx, test.availableShards, test.fieldViews)
 		if !reflect.DeepEqual(actual, test.expected) {
 			t.Errorf("expected: %v, but got: %v", test.expected, actual)
 		}
@@ -385,7 +384,7 @@ func TestHasher(t *testing.T) {
 func TestCluster_ContainsShards(t *testing.T) {
 	c := NewTestCluster(5)
 	c.ReplicaN = 3
-	shards := c.containsShards("test", 10, c.nodes[2])
+	shards := c.containsShards("test", roaring.NewBitmap(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10), c.nodes[2])
 
 	if !reflect.DeepEqual(shards, []uint64{0, 2, 3, 5, 6, 9, 10}) {
 		t.Fatalf("unexpected shars for node's index: %v", shards)

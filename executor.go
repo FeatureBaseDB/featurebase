@@ -140,12 +140,9 @@ func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shar
 		if idx == nil {
 			return nil, ErrIndexNotFound
 		}
-		maxShard := idx.maxShard()
-
-		// Generate a slice of all shards.
-		shards = make([]uint64, maxShard+1)
-		for i := range shards {
-			shards[i] = uint64(i)
+		shards = idx.AvailableShards().Slice()
+		if len(shards) == 0 {
+			shards = []uint64{0}
 		}
 	}
 
@@ -1443,7 +1440,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 
 	// Iterate over all map responses and reduce.
 	var result interface{}
-	var maxShard int
+	var shardN int
 	for {
 		select {
 		case <-ctx.Done():
@@ -1469,8 +1466,8 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 			result = reduceFn(result, resp.result)
 
 			// If all shards have been processed then return.
-			maxShard += len(resp.shards)
-			if maxShard >= len(shards) {
+			shardN += len(resp.shards)
+			if shardN >= len(shards) {
 				return result, nil
 			}
 		}

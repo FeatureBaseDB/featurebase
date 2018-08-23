@@ -7,6 +7,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
 )
 
@@ -494,6 +495,7 @@ func encodeClusterStatus(m *pilosa.ClusterStatus) *internal.ClusterStatus {
 func encodeCreateShardMessage(m *pilosa.CreateShardMessage) *internal.CreateShardMessage {
 	return &internal.CreateShardMessage{
 		Index: m.Index,
+		Field: m.Field,
 		Shard: m.Shard,
 	}
 }
@@ -584,10 +586,40 @@ func encodeNodeEventMessage(m *pilosa.NodeEvent) *internal.NodeEventMessage {
 
 func encodeNodeStatus(m *pilosa.NodeStatus) *internal.NodeStatus {
 	return &internal.NodeStatus{
-		Node:      encodeNode(m.Node),
-		MaxShards: &internal.MaxShards{Standard: m.MaxShards},
-		Schema:    encodeSchema(m.Schema),
+		Node:    encodeNode(m.Node),
+		Indexes: encodeIndexStatuses(m.Indexes),
+		Schema:  encodeSchema(m.Schema),
 	}
+}
+
+func encodeIndexStatus(m *pilosa.IndexStatus) *internal.IndexStatus {
+	return &internal.IndexStatus{
+		Name:   m.Name,
+		Fields: encodeFieldStatuses(m.Fields),
+	}
+}
+
+func encodeIndexStatuses(a []*pilosa.IndexStatus) []*internal.IndexStatus {
+	other := make([]*internal.IndexStatus, len(a))
+	for i := range a {
+		other[i] = encodeIndexStatus(a[i])
+	}
+	return other
+}
+
+func encodeFieldStatus(m *pilosa.FieldStatus) *internal.FieldStatus {
+	return &internal.FieldStatus{
+		Name:            m.Name,
+		AvailableShards: m.AvailableShards.Slice(),
+	}
+}
+
+func encodeFieldStatuses(a []*pilosa.FieldStatus) []*internal.FieldStatus {
+	other := make([]*internal.FieldStatus, len(a))
+	for i := range a {
+		other[i] = encodeFieldStatus(a[i])
+	}
+	return other
 }
 
 func encodeRecalculateCaches(*pilosa.RecalculateCaches) *internal.RecalculateCaches {
@@ -697,6 +729,7 @@ func decodeURI(i *internal.URI, m *pilosa.URI) {
 
 func decodeCreateShardMessage(pb *internal.CreateShardMessage, m *pilosa.CreateShardMessage) {
 	m.Index = pb.Index
+	m.Field = pb.Field
 	m.Shard = pb.Shard
 }
 
@@ -768,10 +801,35 @@ func decodeNodeEventMessage(pb *internal.NodeEventMessage, m *pilosa.NodeEvent) 
 
 func decodeNodeStatus(pb *internal.NodeStatus, m *pilosa.NodeStatus) {
 	m.Node = &pilosa.Node{}
-	decodeNode(pb.Node, m.Node)
-	m.MaxShards = pb.MaxShards.Standard
+	decodeIndexStatuses(pb.Indexes, m.Indexes)
 	m.Schema = &pilosa.Schema{}
 	decodeSchema(pb.Schema, m.Schema)
+}
+
+func decodeIndexStatuses(a []*internal.IndexStatus, m []*pilosa.IndexStatus) {
+	m = m[:0]
+	for i := range a {
+		m = append(m, &pilosa.IndexStatus{})
+		decodeIndexStatus(a[i], m[i])
+	}
+}
+
+func decodeIndexStatus(pb *internal.IndexStatus, m *pilosa.IndexStatus) {
+	m.Name = pb.Name
+	decodeFieldStatuses(pb.Fields, m.Fields)
+}
+
+func decodeFieldStatuses(a []*internal.FieldStatus, m []*pilosa.FieldStatus) {
+	m = m[:0]
+	for i := range a {
+		m = append(m, &pilosa.FieldStatus{})
+		decodeFieldStatus(a[i], m[i])
+	}
+}
+
+func decodeFieldStatus(pb *internal.FieldStatus, m *pilosa.FieldStatus) {
+	m.Name = pb.Name
+	m.AvailableShards = roaring.NewBitmap(pb.AvailableShards...)
 }
 
 func decodeRecalculateCaches(pb *internal.RecalculateCaches, m *pilosa.RecalculateCaches) {}
