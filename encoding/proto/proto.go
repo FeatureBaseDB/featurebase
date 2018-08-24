@@ -1012,16 +1012,10 @@ func decodeGroupByCounts(a []*internal.GroupLine) pilosa.GroupByCounts {
 func decodeFieldRows(a []*internal.FieldRow) []pilosa.FieldRow {
 	other := make([]pilosa.FieldRow, len(a))
 	for i := range a {
-		other[i] = decodeFieldRow(a[i])
+		other[i].Field = a[i].Field
+		other[i].RowID = a[i].RowID
 	}
 	return other
-}
-
-func decodeFieldRow(pb *internal.FieldRow) pilosa.FieldRow {
-	return pilosa.FieldRow{
-		Field: pb.Field,
-		RowID: pb.RowID,
-	}
 }
 
 func decodePairs(a []*internal.Pair) []pilosa.Pair {
@@ -1089,16 +1083,12 @@ func encodeGroupByCount(counts pilosa.GroupByCounts) []*internal.GroupLine {
 func encodeFieldRows(a []pilosa.FieldRow) []*internal.FieldRow {
 	other := make([]*internal.FieldRow, len(a))
 	for i := range a {
-		other[i] = encodeFieldRow(a[i])
+		other[i] = &internal.FieldRow{
+			Field: a[i].Field,
+			RowID: a[i].RowID,
+		}
 	}
 	return other
-}
-
-func encodeFieldRow(p pilosa.FieldRow) *internal.FieldRow {
-	return &internal.FieldRow{
-		Field: p.Field,
-		RowID: p.RowID,
-	}
 }
 
 func encodePairs(a pilosa.Pairs) []*internal.Pair {
