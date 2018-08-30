@@ -32,6 +32,7 @@ jobs:
       - run: gometalinter --install
       - run: go get github.com/remyoudompheng/go-misc/deadcode
       - run: make gometalinter
+    environment: {} # unset GO111MODULE (breaks metalinter install for some reason)
   test-golang-1.11: &base-test
     <<: *defaults
     steps:
