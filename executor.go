@@ -822,13 +822,13 @@ type GroupByCounts []GroupLine
 func (gbc GroupByCounts) Merge(other GroupByCounts) GroupByCounts {
 	m := make(map[string]struct {
 		i     int
-		total uint64
+		count uint64
 	})
 	for i := range gbc {
 		m[uniqueGroupString(gbc[i].Group)] = struct {
 			i     int
-			total uint64
-		}{i, gbc[i].Total}
+			count uint64
+		}{i, gbc[i].Count}
 	}
 	for i := range other {
 		o, found := m[uniqueGroupString(other[i].Group)]
