@@ -2,7 +2,9 @@ version: 2
 defaults: &defaults
   working_directory: /go/src/github.com/pilosa/pilosa
   docker:
-    - image: circleci/golang:1.10
+    - image: circleci/golang:1.11
+  environment:
+    GO111MODULE: on
 fast-checkout: &fast-checkout
   attach_workspace:
     at: .
@@ -13,12 +15,12 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - vendor-cache-{{ checksum "Gopkg.lock" }}
-      - run: "[ -d vendor ] || make vendor"
+            - mod-cache-{{ checksum "go.sum" }}
+      - run: "go mod download"
       - save_cache:
-          key: vendor-cache-{{ checksum "Gopkg.lock" }}
+          key: mod-cache-{{ checksum "go.sum" }}
           paths:
-            - vendor
+            - /go/pkg/mod/
       - persist_to_workspace:
           root: .
           paths: "*"
@@ -30,19 +32,16 @@ jobs:
       - run: gometalinter --install
       - run: go get github.com/remyoudompheng/go-misc/deadcode
       - run: make gometalinter
-  test-golang-1.10: &base-test
+  test-golang-1.11: &base-test
     <<: *defaults
     steps:
       - *fast-checkout
       - run: sudo apt-get install lsof
       - run: make test
-  test-golang-1.11-rc:
-    <<: *base-test
-    docker:
-      - image: circleci/golang:1.11-rc
-  test-golang-1.10-386:
+  test-golang-1.11-386:
     <<: *base-test
     environment:
+      GO111MODULE: on
       GOARCH: 386
   prerelease:
     <<: *base-test
@@ -90,23 +89,20 @@ workflows:
       - linter:
           requires:
             - build
-      - test-golang-1.10:
+      - test-golang-1.11:
           requires:
             - build
-      - test-golang-1.11-rc:
-          requires:
-            - build
-      - test-golang-1.10-386:
+      - test-golang-1.11-386:
           requires:
             - build
       - prerelease:
           requires:
             - linter
-            - test-golang-1.10
+            - test-golang-1.11
       - release:
           requires:
             - linter
-            - test-golang-1.10
+            - test-golang-1.11
           filters:
             tags:
               only: /^v.*/

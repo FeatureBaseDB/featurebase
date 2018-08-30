@@ -18,22 +18,16 @@ BUILD_TAGS += $(if $(RELEASE_ENABLED),release)
 # Run tests and compile Pilosa
 default: test build
 
-# Remove vendor and build directories
+# Remove build directories
 clean:
-	rm -rf vendor build
-
-# Set up vendor directory using `dep`
-vendor: Gopkg.toml
-	$(MAKE) require-dep
-	dep ensure -vendor-only
-	touch vendor
+	rm -rf build
 
 # Run test suite
-test: vendor
+test:
 	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS)
 
 # Run test suite with coverage enabled
-cover: vendor
+cover:
 	mkdir -p build
 	$(MAKE) test TESTFLAGS="-coverprofile=build/coverage.out"
 
@@ -42,11 +36,11 @@ cover-viz: cover
 	go tool cover -html=build/coverage.out
 
 # Compile Pilosa
-build: vendor
+build:
 	go build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
 
 # Create a single release build under the build directory
-release-build: vendor
+release-build:
 	$(MAKE) $(if $(DOCKER_BUILD),docker-)build FLAGS="-o build/pilosa-$(VERSION_ID)/pilosa" RELEASE=1
 	cp NOTICE README.md build/pilosa-$(VERSION_ID)
 	$(if $(ENTERPRISE_ENABLED),cp enterprise/COPYING build/pilosa-$(VERSION_ID),cp LICENSE build/pilosa-$(VERSION_ID))
@@ -69,7 +63,7 @@ release: check-clean
 	$(MAKE) release-build GOOS=linux GOARCH=386 ENTERPRISE=1
 
 # Create prerelease builds
-prerelease: vendor
+prerelease:
 	$(MAKE) release-build GOOS=linux GOARCH=amd64 VERSION_ID=$$\(BRANCH_ID\)
 	$(if $(shell git describe --tags --exact-match HEAD),$(MAKE) release)
 
@@ -77,7 +71,7 @@ prerelease-upload:
 	aws s3 sync build/ s3://build.pilosa.com/ --exclude "*" --include "*.tar.gz" --acl public-read
 
 # Install Pilosa
-install: vendor
+install:
 	go install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
 
 # `go generate` protocol buffers
