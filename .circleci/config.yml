@@ -4,7 +4,7 @@ defaults: &defaults
   docker:
     - image: circleci/golang:1.11
   environment:
-    GO111MODULE: on
+    GO111MODULE: "on"
 fast-checkout: &fast-checkout
   attach_workspace:
     at: .
@@ -41,7 +41,7 @@ jobs:
   test-golang-1.11-386:
     <<: *base-test
     environment:
-      GO111MODULE: on
+      GO111MODULE: "on"
       GOARCH: 386
   prerelease:
     <<: *base-test
