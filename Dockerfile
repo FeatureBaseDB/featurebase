@@ -1,9 +1,8 @@
-FROM golang:1.11.4 as builder
+FROM golang:1.11.5 as builder
 
-COPY . /go/src/github.com/pilosa/pilosa/
+COPY . pilosa
 
-RUN cd /go/src/github.com/pilosa/pilosa \
-    && CGO_ENABLED=0 make install-dep install FLAGS="-a"
+RUN cd pilosa && CGO_ENABLED=0 make install FLAGS="-a"
 
 FROM alpine:3.8
 
