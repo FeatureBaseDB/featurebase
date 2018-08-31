@@ -83,6 +83,7 @@ install: vendor
 # `go generate` protocol buffers
 generate-protoc: require-protoc require-protoc-gen-gofast
 	go generate github.com/pilosa/pilosa/internal
+	go generate github.com/pilosa/pilosa/pbuf
 
 # `go generate` stringers
 generate-stringer:

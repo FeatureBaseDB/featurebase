@@ -22,7 +22,6 @@ import (
 )
 
 //go:generate protoc --gofast_out=. private.proto
-//go:generate protoc --gofast_out=. public.proto
 
 type Request proto.Message
 

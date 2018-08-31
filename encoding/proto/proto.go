@@ -7,6 +7,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/pbuf"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
 )
@@ -164,7 +165,7 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		decodeNode(msg, mt)
 		return nil
 	case *pilosa.QueryRequest:
-		msg := &internal.QueryRequest{}
+		msg := &pbuf.QueryRequest{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling QueryRequest")
@@ -172,7 +173,7 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		decodeQueryRequest(msg, mt)
 		return nil
 	case *pilosa.QueryResponse:
-		msg := &internal.QueryResponse{}
+		msg := &pbuf.QueryResponse{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling QueryResponse")
@@ -180,7 +181,7 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		decodeQueryResponse(msg, mt)
 		return nil
 	case *pilosa.ImportRequest:
-		msg := &internal.ImportRequest{}
+		msg := &pbuf.ImportRequest{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling ImportRequest")
@@ -188,7 +189,7 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		decodeImportRequest(msg, mt)
 		return nil
 	case *pilosa.ImportValueRequest:
-		msg := &internal.ImportValueRequest{}
+		msg := &pbuf.ImportValueRequest{}
 		err := proto.Unmarshal(buf, msg)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling ImportValueRequest")
@@ -300,8 +301,8 @@ func encodeImportResponse(m *pilosa.ImportResponse) *internal.ImportResponse {
 	}
 }
 
-func encodeImportRequest(m *pilosa.ImportRequest) *internal.ImportRequest {
-	return &internal.ImportRequest{
+func encodeImportRequest(m *pilosa.ImportRequest) *pbuf.ImportRequest {
+	return &pbuf.ImportRequest{
 		Index:      m.Index,
 		Field:      m.Field,
 		Shard:      m.Shard,
@@ -313,8 +314,8 @@ func encodeImportRequest(m *pilosa.ImportRequest) *internal.ImportRequest {
 	}
 }
 
-func encodeImportValueRequest(m *pilosa.ImportValueRequest) *internal.ImportValueRequest {
-	return &internal.ImportValueRequest{
+func encodeImportValueRequest(m *pilosa.ImportValueRequest) *pbuf.ImportValueRequest {
+	return &pbuf.ImportValueRequest{
 		Index:      m.Index,
 		Field:      m.Field,
 		Shard:      m.Shard,
@@ -324,8 +325,8 @@ func encodeImportValueRequest(m *pilosa.ImportValueRequest) *internal.ImportValu
 	}
 }
 
-func encodeQueryRequest(m *pilosa.QueryRequest) *internal.QueryRequest {
-	return &internal.QueryRequest{
+func encodeQueryRequest(m *pilosa.QueryRequest) *pbuf.QueryRequest {
+	return &pbuf.QueryRequest{
 		Query:           m.Query,
 		Shards:          m.Shards,
 		ColumnAttrs:     m.ColumnAttrs,
@@ -335,41 +336,41 @@ func encodeQueryRequest(m *pilosa.QueryRequest) *internal.QueryRequest {
 	}
 }
 
-func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
-	pb := &internal.QueryResponse{
-		Results:        make([]*internal.QueryResult, len(m.Results)),
+func encodeQueryResponse(m *pilosa.QueryResponse) *pbuf.QueryResponse {
+	qr := &pbuf.QueryResponse{
+		Results:        make([]*pbuf.QueryResult, len(m.Results)),
 		ColumnAttrSets: encodeColumnAttrSets(m.ColumnAttrSets),
 	}
 
 	for i := range m.Results {
-		pb.Results[i] = &internal.QueryResult{}
+		qr.Results[i] = &pbuf.QueryResult{}
 
 		switch result := m.Results[i].(type) {
 		case *pilosa.Row:
-			pb.Results[i].Type = queryResultTypeRow
-			pb.Results[i].Row = encodeRow(result)
+			qr.Results[i].Type = queryResultTypeRow
+			qr.Results[i].Row = encodeRow(result)
 		case []pilosa.Pair:
-			pb.Results[i].Type = queryResultTypePairs
-			pb.Results[i].Pairs = encodePairs(result)
+			qr.Results[i].Type = queryResultTypePairs
+			qr.Results[i].Pairs = encodePairs(result)
 		case pilosa.ValCount:
-			pb.Results[i].Type = queryResultTypeValCount
-			pb.Results[i].ValCount = encodeValCount(result)
+			qr.Results[i].Type = queryResultTypeValCount
+			qr.Results[i].ValCount = encodeValCount(result)
 		case uint64:
-			pb.Results[i].Type = queryResultTypeUint64
-			pb.Results[i].N = result
+			qr.Results[i].Type = queryResultTypeUint64
+			qr.Results[i].N = result
 		case bool:
-			pb.Results[i].Type = queryResultTypeBool
-			pb.Results[i].Changed = result
+			qr.Results[i].Type = queryResultTypeBool
+			qr.Results[i].Changed = result
 		case nil:
-			pb.Results[i].Type = queryResultTypeNil
+			qr.Results[i].Type = queryResultTypeNil
 		}
 	}
 
 	if m.Err != nil {
-		pb.Err = m.Err.Error()
+		qr.Err = m.Err.Error()
 	}
 
-	return pb
+	return qr
 }
 
 func encodeResizeInstruction(m *pilosa.ResizeInstruction) *internal.ResizeInstruction {
@@ -834,7 +835,7 @@ func decodeFieldStatus(pb *internal.FieldStatus, m *pilosa.FieldStatus) {
 
 func decodeRecalculateCaches(pb *internal.RecalculateCaches, m *pilosa.RecalculateCaches) {}
 
-func decodeQueryRequest(pb *internal.QueryRequest, m *pilosa.QueryRequest) {
+func decodeQueryRequest(pb *pbuf.QueryRequest, m *pilosa.QueryRequest) {
 	m.Query = pb.Query
 	m.Shards = pb.Shards
 	m.ColumnAttrs = pb.ColumnAttrs
@@ -843,7 +844,7 @@ func decodeQueryRequest(pb *internal.QueryRequest, m *pilosa.QueryRequest) {
 	m.ExcludeColumns = pb.ExcludeColumns
 }
 
-func decodeImportRequest(pb *internal.ImportRequest, m *pilosa.ImportRequest) {
+func decodeImportRequest(pb *pbuf.ImportRequest, m *pilosa.ImportRequest) {
 	m.Index = pb.Index
 	m.Field = pb.Field
 	m.Shard = pb.Shard
@@ -854,7 +855,7 @@ func decodeImportRequest(pb *internal.ImportRequest, m *pilosa.ImportRequest) {
 	m.Timestamps = pb.Timestamps
 }
 
-func decodeImportValueRequest(pb *internal.ImportValueRequest, m *pilosa.ImportValueRequest) {
+func decodeImportValueRequest(pb *pbuf.ImportValueRequest, m *pilosa.ImportValueRequest) {
 	m.Index = pb.Index
 	m.Field = pb.Field
 	m.Shard = pb.Shard
@@ -880,7 +881,7 @@ func decodeBlockDataResponse(pb *internal.BlockDataResponse, m *pilosa.BlockData
 	m.ColumnIDs = pb.ColumnIDs
 }
 
-func decodeQueryResponse(pb *internal.QueryResponse, m *pilosa.QueryResponse) {
+func decodeQueryResponse(pb *pbuf.QueryResponse, m *pilosa.QueryResponse) {
 	m.ColumnAttrSets = make([]*pilosa.ColumnAttrSet, len(pb.ColumnAttrSets))
 	decodeColumnAttrSets(pb.ColumnAttrSets, m.ColumnAttrSets)
 	if pb.Err == "" {
@@ -893,20 +894,20 @@ func decodeQueryResponse(pb *internal.QueryResponse, m *pilosa.QueryResponse) {
 
 }
 
-func decodeColumnAttrSets(pb []*internal.ColumnAttrSet, m []*pilosa.ColumnAttrSet) {
+func decodeColumnAttrSets(pb []*pbuf.ColumnAttrSet, m []*pilosa.ColumnAttrSet) {
 	for i := range pb {
 		m[i] = &pilosa.ColumnAttrSet{}
 		decodeColumnAttrSet(pb[i], m[i])
 	}
 }
 
-func decodeColumnAttrSet(pb *internal.ColumnAttrSet, m *pilosa.ColumnAttrSet) {
+func decodeColumnAttrSet(pb *pbuf.ColumnAttrSet, m *pilosa.ColumnAttrSet) {
 	m.ID = pb.ID
 	m.Key = pb.Key
 	m.Attrs = decodeAttrs(pb.Attrs)
 }
 
-func decodeQueryResults(pb []*internal.QueryResult, m []interface{}) {
+func decodeQueryResults(pb []*pbuf.QueryResult, m []interface{}) {
 	for i := range pb {
 		m[i] = decodeQueryResult(pb[i])
 	}
@@ -922,7 +923,7 @@ const (
 	queryResultTypeBool
 )
 
-func decodeQueryResult(pb *internal.QueryResult) interface{} {
+func decodeQueryResult(pb *pbuf.QueryResult) interface{} {
 	switch pb.Type {
 	case queryResultTypeRow:
 		return decodeRow(pb.Row)
@@ -941,7 +942,7 @@ func decodeQueryResult(pb *internal.QueryResult) interface{} {
 }
 
 // DecodeRow converts r from its internal representation.
-func decodeRow(pr *internal.Row) *pilosa.Row {
+func decodeRow(pr *pbuf.Row) *pilosa.Row {
 	if pr == nil {
 		return nil
 	}
@@ -955,7 +956,7 @@ func decodeRow(pr *internal.Row) *pilosa.Row {
 	return r
 }
 
-func decodeAttrs(pb []*internal.Attr) map[string]interface{} {
+func decodeAttrs(pb []*pbuf.Attr) map[string]interface{} {
 	m := make(map[string]interface{}, len(pb))
 	for i := range pb {
 		key, value := decodeAttr(pb[i])
@@ -971,7 +972,7 @@ const (
 	attrTypeFloat  = 4
 )
 
-func decodeAttr(attr *internal.Attr) (key string, value interface{}) {
+func decodeAttr(attr *pbuf.Attr) (key string, value interface{}) {
 	switch attr.Type {
 	case attrTypeString:
 		return attr.Key, attr.StringValue
@@ -986,7 +987,7 @@ func decodeAttr(attr *internal.Attr) (key string, value interface{}) {
 	}
 }
 
-func decodePairs(a []*internal.Pair) []pilosa.Pair {
+func decodePairs(a []*pbuf.Pair) []pilosa.Pair {
 	other := make([]pilosa.Pair, len(a))
 	for i := range a {
 		other[i] = decodePair(a[i])
@@ -994,7 +995,7 @@ func decodePairs(a []*internal.Pair) []pilosa.Pair {
 	return other
 }
 
-func decodePair(pb *internal.Pair) pilosa.Pair {
+func decodePair(pb *pbuf.Pair) pilosa.Pair {
 	return pilosa.Pair{
 		ID:    pb.ID,
 		Key:   pb.Key,
@@ -1002,72 +1003,72 @@ func decodePair(pb *internal.Pair) pilosa.Pair {
 	}
 }
 
-func decodeValCount(pb *internal.ValCount) pilosa.ValCount {
+func decodeValCount(pb *pbuf.ValCount) pilosa.ValCount {
 	return pilosa.ValCount{
 		Val:   pb.Val,
 		Count: pb.Count,
 	}
 }
 
-func encodeColumnAttrSets(a []*pilosa.ColumnAttrSet) []*internal.ColumnAttrSet {
-	other := make([]*internal.ColumnAttrSet, len(a))
+func encodeColumnAttrSets(a []*pilosa.ColumnAttrSet) []*pbuf.ColumnAttrSet {
+	other := make([]*pbuf.ColumnAttrSet, len(a))
 	for i := range a {
 		other[i] = encodeColumnAttrSet(a[i])
 	}
 	return other
 }
 
-func encodeColumnAttrSet(set *pilosa.ColumnAttrSet) *internal.ColumnAttrSet {
-	return &internal.ColumnAttrSet{
+func encodeColumnAttrSet(set *pilosa.ColumnAttrSet) *pbuf.ColumnAttrSet {
+	return &pbuf.ColumnAttrSet{
 		ID:    set.ID,
 		Key:   set.Key,
 		Attrs: encodeAttrs(set.Attrs),
 	}
 }
 
-func encodeRow(r *pilosa.Row) *internal.Row {
+func encodeRow(r *pilosa.Row) *pbuf.Row {
 	if r == nil {
 		return nil
 	}
 
-	return &internal.Row{
+	return &pbuf.Row{
 		Columns: r.Columns(),
 		Keys:    r.Keys,
 		Attrs:   encodeAttrs(r.Attrs),
 	}
 }
 
-func encodePairs(a pilosa.Pairs) []*internal.Pair {
-	other := make([]*internal.Pair, len(a))
+func encodePairs(a pilosa.Pairs) []*pbuf.Pair {
+	other := make([]*pbuf.Pair, len(a))
 	for i := range a {
 		other[i] = encodePair(a[i])
 	}
 	return other
 }
 
-func encodePair(p pilosa.Pair) *internal.Pair {
-	return &internal.Pair{
+func encodePair(p pilosa.Pair) *pbuf.Pair {
+	return &pbuf.Pair{
 		ID:    p.ID,
 		Key:   p.Key,
 		Count: p.Count,
 	}
 }
 
-func encodeValCount(vc pilosa.ValCount) *internal.ValCount {
-	return &internal.ValCount{
+func encodeValCount(vc pilosa.ValCount) *pbuf.ValCount {
+	return &pbuf.ValCount{
 		Val:   vc.Val,
 		Count: vc.Count,
 	}
 }
 
-func encodeAttrs(m map[string]interface{}) []*internal.Attr {
+func encodeAttrs(m map[string]interface{}) []*pbuf.Attr {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
-	a := make([]*internal.Attr, len(keys))
+	a := make([]*pbuf.Attr, len(keys))
 	for i := range keys {
 		a[i] = encodeAttr(keys[i], m[keys[i]])
 	}
@@ -1075,8 +1076,8 @@ func encodeAttrs(m map[string]interface{}) []*internal.Attr {
 }
 
 // encodeAttr converts a key/value pair into an Attr internal representation.
-func encodeAttr(key string, value interface{}) *internal.Attr {
-	pb := &internal.Attr{Key: key}
+func encodeAttr(key string, value interface{}) *pbuf.Attr {
+	pb := &pbuf.Attr{Key: key}
 	switch value := value.(type) {
 	case string:
 		pb.Type = attrTypeString
