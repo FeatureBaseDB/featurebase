@@ -2136,15 +2136,26 @@ func intersectArrayBitmap(a, b *Container) *Container {
 }
 
 func intersectBitmapBitmap(a, b *Container) *Container {
-	output := &Container{bitmap: make([]uint64, bitmapN), containerType: containerBitmap}
+	var (
 
-	for i := range a.bitmap {
-		v := a.bitmap[i] & b.bitmap[i]
-		output.bitmap[i] = v
-		output.n += int(popcount(v))
+	ab = a.bitmap[:bitmapN]
+	bb = b.bitmap[:bitmapN]
+	buf = make([]uint64, bitmapN)
+	ob =buf[:bitmapN]
 
+	n int
+)
+	for i := 0; i < bitmapN; i++ {
+		v := ab[i] & bb[i]
+		ob[i] = v
+		n += int(popcount(v))
 	}
-	output.optimize()
+
+	output := &Container{
+		bitmap: ob,
+		n:      n,
+		containerType: containerBitmap,
+	}
 	return output
 }
 
@@ -2434,17 +2445,26 @@ func unionArrayBitmap(a, b *Container) *Container {
 }
 
 func unionBitmapBitmap(a, b *Container) *Container {
-	output := &Container{
-		bitmap:        make([]uint64, bitmapN),
-		containerType: containerBitmap,
-	}
+	var (
+		ab = a.bitmap[:bitmapN]
+		bb = b.bitmap[:bitmapN]
+		buf = make([]uint64, bitmapN)
+		ob =buf[:bitmapN]
+
+		n int
+	)
 
 	for i := 0; i < bitmapN; i++ {
-		v := a.bitmap[i] | b.bitmap[i]
-		output.bitmap[i] = v
-		output.n += int(popcount(v))
+		v := ab[i] | bb[i]
+		ob[i] = v
+		n += int(popcount(v))
 	}
 
+	output := &Container{
+		bitmap: ob,
+		n:      n,
+		containerType: containerBitmap,
+	}
 	return output
 }
 
@@ -2780,13 +2800,25 @@ func differenceBitmapArray(a, b *Container) *Container {
 }
 
 func differenceBitmapBitmap(a, b *Container) *Container {
-	output := &Container{bitmap: make([]uint64, bitmapN), containerType: containerBitmap}
+	var (
+		ab = a.bitmap[:bitmapN]
+		bb = b.bitmap[:bitmapN]
+		buf = make([]uint64, bitmapN)
+		ob =buf[:bitmapN]
 
-	for i := range a.bitmap {
-		v := a.bitmap[i] & (^b.bitmap[i])
-		output.bitmap[i] = v
-		output.n += int(popcount(v))
+		n int
+	)
 
+	for i := 0; i < bitmapN; i++ {
+		v := ab[i] & (^bb[i])
+		ob[i] = v
+		n += int(popcount(v))
+	}
+
+	output := &Container{
+		bitmap: ob,
+		n:      n,
+		containerType: containerBitmap,
 	}
 	if output.n < ArrayMaxSize {
 		output.bitmapToArray()
@@ -2871,16 +2903,26 @@ func xorArrayBitmap(a, b *Container) *Container {
 }
 
 func xorBitmapBitmap(a, b *Container) *Container {
-	output := &Container{
-		bitmap:        make([]uint64, bitmapN),
-		containerType: containerBitmap,
-	}
+	var (
+		ab = a.bitmap[:bitmapN]
+		bb = b.bitmap[:bitmapN]
+		buf = make([]uint64, bitmapN)
+		ob =buf[:bitmapN]
+
+		n int
+	)
+
 	for i := 0; i < bitmapN; i++ {
-		v := a.bitmap[i] ^ b.bitmap[i]
-		output.bitmap[i] = v
-		output.n += int(popcount(v))
+		v := ab[i] ^ bb[i]
+		ob[i] = v
+		n += int(popcount(v))
 	}
 
+	output := &Container{
+		bitmap: ob,
+		n:      n,
+		containerType: containerBitmap,
+	}
 	if output.count() < ArrayMaxSize {
 		output.bitmapToArray()
 	}
@@ -3333,9 +3375,16 @@ func popcount(x uint64) uint64 {
 }
 
 func popcountAndSlice(s, m []uint64) uint64 {
+	var (
+		a=s[:bitmapN]
+		b=m[:bitmapN]
+	)
+	_ = a[bitmapN-1]
+	_ = b[bitmapN-1]
+	
 	cnt := uint64(0)
-	for i := range s {
-		cnt += popcount(s[i] & m[i])
+	for i:=0;i<bitmapN ;i++ {
+		cnt += popcount(a[i] & b[i])
 	}
 	return cnt
 }
