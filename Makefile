@@ -129,6 +129,7 @@ gometalinter: require-gometalinter
 	    --enable=vet \
 	    --exclude "^internal/.*\.pb\.go" \
 	    --exclude "^pql/pql.peg.go" \
+	    --exclude "^pbuf/.*\.pb\.go" \
 	    ./...
 
 ######################
