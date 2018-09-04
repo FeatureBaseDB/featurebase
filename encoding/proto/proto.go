@@ -363,9 +363,9 @@ func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
 		case pilosa.RowIDs:
 			pb.Results[i].Type = queryResultTypeRowIDs
 			pb.Results[i].RowIDs = result
-		case pilosa.GroupByCounts:
-			pb.Results[i].Type = queryResultTypeGroupByCounts
-			pb.Results[i].GroupByCounts = encodeGroupByCount(result)
+		case []pilosa.GroupCount:
+			pb.Results[i].Type = queryResultTypeGroupCounts
+			pb.Results[i].GroupCounts = encodeGroupCounts(result)
 		case nil:
 			pb.Results[i].Type = queryResultTypeNil
 		}
@@ -929,7 +929,7 @@ const (
 	queryResultTypeUint64
 	queryResultTypeBool
 	queryResultTypeRowIDs
-	queryResultTypeGroupByCounts
+	queryResultTypeGroupCounts
 )
 
 func decodeQueryResult(pb *internal.QueryResult) interface{} {
@@ -946,8 +946,8 @@ func decodeQueryResult(pb *internal.QueryResult) interface{} {
 		return pb.Changed
 	case queryResultTypeNil:
 		return nil
-	case queryResultTypeGroupByCounts:
-		return decodeGroupByCounts(pb.GroupByCounts)
+	case queryResultTypeGroupCounts:
+		return decodeGroupCounts(pb.GroupCounts)
 	}
 	panic(fmt.Sprintf("unknown type: %d", pb.Type))
 }
@@ -998,15 +998,15 @@ func decodeAttr(attr *internal.Attr) (key string, value interface{}) {
 	}
 }
 
-func decodeGroupByCounts(a []*internal.GroupLine) pilosa.GroupByCounts {
-	other := make([]pilosa.GroupLine, len(a))
+func decodeGroupCounts(a []*internal.GroupCount) []pilosa.GroupCount {
+	other := make([]pilosa.GroupCount, len(a))
 	for i := range a {
-		other[i] = pilosa.GroupLine{
+		other[i] = pilosa.GroupCount{
 			decodeFieldRows(a[i].Group),
 			a[i].Count,
 		}
 	}
-	return pilosa.GroupByCounts(other)
+	return other
 }
 
 func decodeFieldRows(a []*internal.FieldRow) []pilosa.FieldRow {
@@ -1069,10 +1069,10 @@ func encodeRow(r *pilosa.Row) *internal.Row {
 	}
 }
 
-func encodeGroupByCount(counts pilosa.GroupByCounts) []*internal.GroupLine {
-	result := make([]*internal.GroupLine, len(counts))
+func encodeGroupCounts(counts []pilosa.GroupCount) []*internal.GroupCount {
+	result := make([]*internal.GroupCount, len(counts))
 	for i := range counts {
-		result[i] = &internal.GroupLine{
+		result[i] = &internal.GroupCount{
 			Group: encodeFieldRows(counts[i].Group),
 			Count: counts[i].Count,
 		}
