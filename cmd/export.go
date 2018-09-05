@@ -17,7 +17,6 @@ package cmd
 import (
 	"context"
 	"io"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -27,7 +26,7 @@ import (
 var Exporter *ctl.ExportCommand
 
 func newExportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	Exporter = ctl.NewExportCommand(os.Stdin, os.Stdout, os.Stderr)
+	Exporter = ctl.NewExportCommand(stdin, stdout, stderr)
 	exportCmd := &cobra.Command{
 		Use:   "export",
 		Short: "Export data from pilosa.",
