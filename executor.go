@@ -196,9 +196,9 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "TopN":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeTopN(ctx, index, c, shards, opt)
-	case "Rows":
+	case "RowIDs":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
-		return e.executeRows(ctx, index, c, shards, opt)
+		return e.executeRowIDs(ctx, index, c, shards, opt)
 	case "GroupBy":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeGroupBy(ctx, index, c, shards, opt)
@@ -722,9 +722,23 @@ func (e *executor) executeDifferenceShard(ctx context.Context, index string, c *
 	return other, nil
 }
 
+// RowIdentifiers is a return type for a list of
+// row ids or row keys. The names `Rows` and `Keys`
+// are meant to follow the same convention as the
+// Row query which returns `Columns` and `Keys`.
+// TODO: Rename this to something better. Anything.
+type RowIdentifiers struct {
+	Rows []uint64 `json:"rows"`
+	Keys []string `json:"keys,omitempty"`
+}
+
+// RowIDs is a query return type for just uint64 row ids.
+// It should only be used internally (since RowIdentifiers
+// is the external return type), but it is exported because
+// the proto package needs access to it.
 type RowIDs []uint64
 
-func (r RowIDs) Merge(other RowIDs) RowIDs {
+func (r RowIDs) merge(other RowIDs) RowIDs {
 	i, j := 0, 0
 	result := make(RowIDs, 0)
 	for i < len(r) && j < len(other) {
@@ -942,15 +956,16 @@ func product(input [][]gbi) []ppi {
 	}
 	return res
 }
-func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
+
+func (e *executor) executeRowIDs(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(shard uint64) (interface{}, error) {
-		return e.executeRowsShard(ctx, index, c, shard)
+		return e.executeRowIDsShard(ctx, index, c, shard)
 	}
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
 		other, _ := prev.(RowIDs)
-		return other.Merge(v.(RowIDs))
+		return other.merge(v.(RowIDs))
 	}
 	// Get full result set.
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -976,7 +991,8 @@ func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, s
 	}
 	return results, nil
 }
-func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Call, shard uint64) (RowIDs, error) {
+
+func (e *executor) executeRowIDsShard(ctx context.Context, index string, c *pql.Call, shard uint64) (RowIDs, error) {
 	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
@@ -985,7 +1001,7 @@ func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Ca
 	// Fetch field name from argument.
 	fieldName, ok := c.Args["field"].(string)
 	if !ok {
-		return nil, errors.New("Rows() argument required: field")
+		return nil, errors.New("RowIDs() argument required: field")
 	}
 	// Fetch field.
 	f := e.Holder.Field(index, fieldName)
@@ -2121,6 +2137,31 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 			})
 		}
 		return other, nil
+
+	case RowIDs:
+		other := RowIdentifiers{}
+
+		fieldName := callArgString(call, "field")
+		if fieldName == "" {
+			return nil, ErrFieldNotFound
+		}
+
+		if field := idx.Field(fieldName); field == nil {
+			return nil, ErrFieldNotFound
+		} else if field.keys() {
+			other.Keys = make([]string, len(result))
+			for i, id := range result {
+				key, err := e.TranslateStore.TranslateRowToString(index, fieldName, id)
+				if err != nil {
+					return nil, err
+				}
+				other.Keys[i] = key
+			}
+		} else {
+			other.Rows = result
+		}
+
+		return other, nil
 	}
 
 	return result, nil
@@ -2171,7 +2212,7 @@ func needsShards(calls []*pql.Call) bool {
 		switch call.Name {
 		case "Clear", "Set", "SetRowAttrs", "SetColumnAttrs":
 			continue
-		case "Count", "TopN", "Rows":
+		case "Count", "TopN", "RowIDs":
 			return true
 		// default catches Bitmap calls
 		default:

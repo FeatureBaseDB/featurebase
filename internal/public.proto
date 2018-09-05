@@ -8,6 +8,12 @@ message Row {
 	repeated Attr Attrs = 2;
 }
 
+message RowIdentifiers {
+	repeated uint64 Rows = 1;
+	repeated string Keys = 2;
+	//repeated Attr Attrs = 3;
+}
+
 message Pair {
 	uint64 ID = 1;
 	string Key = 3;
@@ -78,6 +84,7 @@ message QueryResult {
   ValCount ValCount = 5;
 	repeated uint64 RowIDs = 7;
 	repeated GroupCount GroupCounts = 8;
+	RowIdentifiers RowIdentifiers = 9;
 }
 
 message ImportRequest {
