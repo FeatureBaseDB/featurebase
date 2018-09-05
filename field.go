@@ -230,9 +230,9 @@ func (f *Field) AvailableShards() *roaring.Bitmap {
 	return b
 }
 
-// addRemoteAvailableShards merges the set of available shards into the current known set
+// AddRemoteAvailableShards merges the set of available shards into the current known set
 // and saves the set to a file.
-func (f *Field) addRemoteAvailableShards(b *roaring.Bitmap) error {
+func (f *Field) AddRemoteAvailableShards(b *roaring.Bitmap) error {
 	f.mergeRemoteAvailableShards(b)
 
 	// Save the updated bitmap to the data store.
@@ -244,6 +244,22 @@ func (f *Field) mergeRemoteAvailableShards(b *roaring.Bitmap) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.remoteAvailableShards = f.remoteAvailableShards.Union(b)
+}
+
+// RemoveAvailableShard removes a shard from the bitmap cache.
+//
+// NOTE: This can be overridden on the next sync so all nodes should be updated.
+func (f *Field) RemoveAvailableShard(v uint64) error {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	b := f.remoteAvailableShards.Clone()
+	if _, err := b.Remove(v); err != nil {
+		return err
+	}
+	f.remoteAvailableShards = b
+
+	return f.saveAvailableShards()
 }
 
 // Type returns the field type.

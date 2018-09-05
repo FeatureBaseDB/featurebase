@@ -255,6 +255,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET").Name("GetFragmentNodes")
 	router.HandleFunc("/internal/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST").Name("PostIndexAttrDiff")
 	router.HandleFunc("/internal/index/{index}/field/{field}/attr/diff", handler.handlePostFieldAttrDiff).Methods("POST").Name("PostFieldAttrDiff")
+	router.HandleFunc("/internal/index/{index}/field/{field}/remote-available-shards/{shardID}", handler.handleDeleteRemoteAvailableShard).Methods("DELETE")
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
 	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET").Name("GetTranslateData")
@@ -843,6 +844,22 @@ func (h *Handler) handleDeleteField(w http.ResponseWriter, r *http.Request) {
 
 	resp := successResponse{}
 	err := h.api.DeleteField(r.Context(), indexName, fieldName)
+	resp.write(w, err)
+}
+
+// handleDeleteRemoteAvailableShard handles DELETE /field/{field}/available-shards/{shardID} request.
+func (h *Handler) handleDeleteRemoteAvailableShard(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	indexName := mux.Vars(r)["index"]
+	fieldName := mux.Vars(r)["field"]
+	shardID, _ := strconv.ParseUint(mux.Vars(r)["shardID"], 10, 64)
+
+	resp := successResponse{}
+	err := h.api.DeleteAvailableShard(r.Context(), indexName, fieldName, shardID)
 	resp.write(w, err)
 }
 
