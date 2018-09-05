@@ -17,7 +17,6 @@ package cmd
 import (
 	"context"
 	"io"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -26,8 +25,8 @@ import (
 
 var generateConf *ctl.GenerateConfigCommand
 
-func newGenerateConfigCommand(_ io.Reader, _, _ io.Writer) *cobra.Command {
-	generateConf = ctl.NewGenerateConfigCommand(os.Stdin, os.Stdout, os.Stderr)
+func newGenerateConfigCommand(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
+	generateConf = ctl.NewGenerateConfigCommand(stdin, stdout, stderr)
 	confCmd := &cobra.Command{
 		Use:   "generate-config",
 		Short: "Print the default configuration.",

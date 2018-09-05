@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -27,8 +26,8 @@ import (
 
 var checker *ctl.CheckCommand
 
-func newCheckCommand(_ io.Reader, _, _ io.Writer) *cobra.Command {
-	checker = ctl.NewCheckCommand(os.Stdin, os.Stdout, os.Stderr)
+func newCheckCommand(stdin io.Reader, stdout io.Writer, stderr io.Writer) *cobra.Command {
+	checker = ctl.NewCheckCommand(stdin, stdout, stderr)
 	checkCmd := &cobra.Command{
 		Use:   "check <path> [path2]...",
 		Short: "Do a consistency check on a pilosa data file.",

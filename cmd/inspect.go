@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -27,8 +26,8 @@ import (
 
 var inspector *ctl.InspectCommand
 
-func newInspectCommand(_ io.Reader, _, _ io.Writer) *cobra.Command {
-	inspector = ctl.NewInspectCommand(os.Stdin, os.Stdout, os.Stderr)
+func newInspectCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+	inspector = ctl.NewInspectCommand(stdin, stdout, stderr)
 
 	inspectCmd := &cobra.Command{
 		Use:   "inspect",
