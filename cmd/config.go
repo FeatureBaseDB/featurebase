@@ -17,7 +17,6 @@ package cmd
 import (
 	"context"
 	"io"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -28,7 +27,7 @@ import (
 var conf *ctl.ConfigCommand
 
 func newConfigCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	conf = ctl.NewConfigCommand(os.Stdin, os.Stdout, os.Stderr)
+	conf = ctl.NewConfigCommand(stdin, stdout, stderr)
 	Server := server.NewCommand(stdin, stdout, stderr)
 	confCmd := &cobra.Command{
 		Use:   "config",
