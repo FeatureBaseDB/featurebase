@@ -49,10 +49,6 @@ type ImportCommand struct { // nolint: maligned
 	// CreateSchema ensures the schema exists before import
 	CreateSchema bool
 
-	// REMOVED: Indicates that the payload should be treated as string keys.
-	// TODO: remove this in a future release
-	StringKeys bool `json:"StringKeys"`
-
 	// IndexKeys makes the import command use keys=true when creating an index
 	IndexKeys bool `json:"indexKeys"`
 
@@ -88,11 +84,6 @@ func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *ImportCommand 
 // Run executes the main program execution.
 func (cmd *ImportCommand) Run(ctx context.Context) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
-
-	// REMOVED: warning that --string-keys flag has been deprecated.
-	if cmd.StringKeys {
-		logger.Printf("REMOVED: The string-keys flag is no longer used.")
-	}
 
 	// Validate arguments.
 	// Index and field are validated early before the files are parsed.
