@@ -26,7 +26,7 @@ import (
 
 var Exporter *ctl.ExportCommand
 
-func newExportCommand(_ io.Reader, _, _ io.Writer) *cobra.Command {
+func newExportCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 	Exporter = ctl.NewExportCommand(os.Stdin, os.Stdout, os.Stderr)
 	exportCmd := &cobra.Command{
 		Use:   "export",
