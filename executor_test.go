@@ -33,8 +33,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Ensure a bitmap query can be executed.
-func TestExecutor_Execute_Bitmap(t *testing.T) {
+// Ensure a row query can be executed.
+func TestExecutor_Execute_Row(t *testing.T) {
 	t.Run("Row", func(t *testing.T) {
 		c := test.MustRunCluster(t, 1)
 		defer c.Close()
@@ -283,7 +283,7 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 		t.Run("OK", func(t *testing.T) {
 			hldr.ClearBit("i", "f", 11, 1)
 			if n := hldr.Row("i", "f", 11).Count(); n != 0 {
-				t.Fatalf("unexpected bitmap count: %d", n)
+				t.Fatalf("unexpected row count: %d", n)
 			}
 
 			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1, f=11)`}); err != nil {
@@ -295,7 +295,7 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 			}
 
 			if n := hldr.Row("i", "f", 11).Count(); n != 1 {
-				t.Fatalf("unexpected bitmap count: %d", n)
+				t.Fatalf("unexpected row count: %d", n)
 			}
 			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1, f=11)`}); err != nil {
 				t.Fatal(err)
@@ -328,7 +328,7 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 		t.Run("OK", func(t *testing.T) {
 			hldr.SetBit("i", "f", 1, 0)
 			if n := hldr.Row("i", "f", 11).Count(); n != 0 {
-				t.Fatalf("unexpected bitmap count: %d", n)
+				t.Fatalf("unexpected row count: %d", n)
 			}
 
 			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("foo", f=11)`}); err != nil {
@@ -340,7 +340,7 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 			}
 
 			if n := hldr.Row("i", "f", 11).Count(); n != 1 {
-				t.Fatalf("unexpected bitmap count: %d", n)
+				t.Fatalf("unexpected row count: %d", n)
 			}
 			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("foo", f=11)`}); err != nil {
 				t.Fatal(err)
@@ -477,7 +477,7 @@ func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 	}
 	t.Run("rowID", func(t *testing.T) {
 		// Set two attrs on f/10.
-		// Also set attrs on other bitmaps and fields to test isolation.
+		// Also set attrs on other rows and fields to test isolation.
 		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(f, 10, foo="bar")`}); err != nil {
 			t.Fatal(err)
 		}
@@ -495,13 +495,13 @@ func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 		if m, err := f.RowAttrStore().Attrs(10); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(m, map[string]interface{}{"foo": "bar", "baz": int64(123), "bat": true}) {
-			t.Fatalf("unexpected bitmap attr: %#v", m)
+			t.Fatalf("unexpected row attr: %#v", m)
 		}
 	})
 
 	t.Run("rowKey", func(t *testing.T) {
 		// Set two attrs on f/10.
-		// Also set attrs on other bitmaps and fields to test isolation.
+		// Also set attrs on other rows and fields to test isolation.
 		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(kf, "row10", foo="bar")`}); err != nil {
 			t.Fatal(err)
 		}
@@ -664,7 +664,7 @@ func TestExecutor_Execute_TopN_fill_small(t *testing.T) {
 	}
 }
 
-// Ensure a TopN() query with a source bitmap can be executed.
+// Ensure a TopN() query with a source row can be executed.
 func TestExecutor_Execute_TopN_Src(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
@@ -724,7 +724,7 @@ func TestExecutor_Execute_TopN_Attr(t *testing.T) {
 
 }
 
-//Ensure TopN handles Attribute filters with source bitmap
+//Ensure TopN handles Attribute filters with source row
 func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
