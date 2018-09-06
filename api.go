@@ -296,7 +296,7 @@ func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, e
 }
 
 // ImportRoaringBytes fast loading of standard roaring format
-func (api *API) ImportRoaringBytes(ctx context.Context, roaringBytes []byte, indexName, fieldName string, shard uint64, forward bool) (err error) {
+func (api *API) ImportRoaringBytes(ctx context.Context, roaringBytes []byte, indexName, fieldName string, shard uint64 ) (err error) {
 	if err = api.validate(apiField); err != nil {
 		err = errors.Wrap(err, "validating api method")
 		return
@@ -316,12 +316,12 @@ func (api *API) ImportRoaringBytes(ctx context.Context, roaringBytes []byte, ind
 				err = field.importRoaringBytes(roaringBytes, shard)
 				wg.Done()
 			}(node)
-		} else if forward {
+		} else {
 			wg.Add(1)
 			//forward it on
 			go func(node *Node) {
 				//execute on node
-				err = api.server.defaultClient.ImportRoaringBytes(ctx, node, indexName, fieldName, shard, roaringBytes, forward)
+				err = api.server.defaultClient.ImportRoaringBytes(ctx, node, indexName, fieldName, shard, roaringBytes)
 				wg.Done()
 			}(node)
 		}

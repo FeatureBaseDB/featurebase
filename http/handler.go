@@ -1444,7 +1444,6 @@ func (h *Handler) handlePostRoaringImport(w http.ResponseWriter, r *http.Request
 	indexName := mux.Vars(r)["index"]
 	fieldName := mux.Vars(r)["field"]
 	shardName := mux.Vars(r)["shard"]
-	_, noForward := r.URL.Query()["noforward"]
 
 	// Read entire body.
 	body, err := ioutil.ReadAll(r.Body)
@@ -1459,7 +1458,7 @@ func (h *Handler) handlePostRoaringImport(w http.ResponseWriter, r *http.Request
 		return
 	}
 	//TODO give meaningful stats for import
-	err = h.api.ImportRoaringBytes(r.Context(), body, indexName, fieldName, shard, !noForward)
+	err = h.api.ImportRoaringBytes(r.Context(), body, indexName, fieldName, shard )
 
 	// Marshal response object.
 	msg := string("")

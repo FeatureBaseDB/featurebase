@@ -3340,7 +3340,7 @@ func popcountAndSlice(s, m []uint64) uint64 {
 	return cnt
 }
 
-// Stuff i needed from the roaring project
+// constants from github.com/RoaringBitmap/roaring
 const ( //taken from  roaring/util.go
 	serialCookieNoRunContainer = 12346 // only arrays and bitmaps
 	serialCookie               = 12347 // runs, arrays, and bitmaps
@@ -3404,7 +3404,7 @@ func readStandardHeader(buf []byte) (size uint32, containerTyper func(index uint
 		err = fmt.Errorf("malformed bitmap, key-cardinality slice overruns buffer at %d", pos+2*2*int(size))
 		return
 	}
-	pos += 2 * 2 * int(size) //moving pos past keycount
+	pos += 2 * 2 * int(size) // moving pos past keycount
 	return
 }
 
