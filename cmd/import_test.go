@@ -50,15 +50,47 @@ field = "f1"
 			},
 		},
 		{
-			args: []string{"import", "--index", "i1", "--field", "f1", "--field-keys", "--field-max", "100"},
+			args: []string{"import", "--index", "i1", "--field", "f1", "--field-keys", "--field-min", "-10", "--field-max", "100"},
 			env:  map[string]string{},
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Importer.Index, "i1")
 				v.Check(cmd.Importer.Field, "f1")
 				v.Check(cmd.Importer.FieldOptions, pilosa.FieldOptions{
-					Keys: true,
-					Max:  100,
+					Keys:      true,
+					Max:       100,
+					Min:       -10,
+					CacheType: pilosa.CacheTypeRanked,
+					CacheSize: 50000,
+				})
+				return v.Error()
+			},
+		},
+		{
+			args: []string{"import", "--index", "i1", "--field", "f1", "--field-time-quantum", "YMD"},
+			env:  map[string]string{},
+			validation: func() error {
+				v := validator{}
+				v.Check(cmd.Importer.Index, "i1")
+				v.Check(cmd.Importer.Field, "f1")
+				v.Check(cmd.Importer.FieldOptions, pilosa.FieldOptions{
+					TimeQuantum: "YMD",
+					CacheType:   pilosa.CacheTypeRanked,
+					CacheSize:   50000,
+				})
+				return v.Error()
+			},
+		},
+		{
+			args: []string{"import", "--index", "i1", "--field", "f1", "--field-cache-type", "lru", "--field-cache-size", "100"},
+			env:  map[string]string{},
+			validation: func() error {
+				v := validator{}
+				v.Check(cmd.Importer.Index, "i1")
+				v.Check(cmd.Importer.Field, "f1")
+				v.Check(cmd.Importer.FieldOptions, pilosa.FieldOptions{
+					CacheType: "lru",
+					CacheSize: 100,
 				})
 				return v.Error()
 			},
