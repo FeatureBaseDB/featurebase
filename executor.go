@@ -1131,6 +1131,13 @@ func (e *executor) executeSet(ctx context.Context, index string, c *pql.Call, op
 		return false, ErrFieldNotFound
 	}
 
+	// Set column on not-null field.
+	if nnf := idx.unprotectedNotNullField(); nnf != nil {
+		if _, err := nnf.SetBit(0, colID, nil); err != nil {
+			return false, errors.Wrap(err, "setting not-null column")
+		}
+	}
+
 	if f.Type() == FieldTypeInt {
 		// Read remaining fields using labels.
 		rowVal, ok, err := c.IntArg(fieldName)

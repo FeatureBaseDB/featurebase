@@ -17,6 +17,7 @@ package pilosa_test
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"strconv"
 	"strings"
@@ -1495,3 +1496,31 @@ func TestExecutor_QueryCall(t *testing.T) {
 		}
 	})
 }
+
+func benchmarkNotNull(nn bool, b *testing.B) {
+	c := test.MustRunCluster(b, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+	indexName := "i"
+	fieldName := "f"
+
+	index := hldr.MustCreateIndexIfNotExists(indexName, pilosa.IndexOptions{TrackNotNull: nn})
+	// Create field.
+	if _, err := index.CreateFieldIfNotExists(fieldName); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		colID := uint64(rand.Intn(1 << 20))
+		rowID := uint64(rand.Intn(100000))
+		qry := fmt.Sprintf(`Set(%d, %s=%d)`, colID, fieldName, rowID)
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: indexName, Query: qry}); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkExecutor_NotNull_True(b *testing.B)  { benchmarkNotNull(true, b) }
+func BenchmarkExecutor_NotNull_False(b *testing.B) { benchmarkNotNull(false, b) }

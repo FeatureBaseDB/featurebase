@@ -36,6 +36,10 @@ type Index struct {
 	name string
 	keys bool // use string keys
 
+	// Not-null tracking.
+	trackNotNull bool
+	notNullField *Field
+
 	// Fields by name.
 	fields map[string]*Field
 
@@ -91,7 +95,10 @@ func (i *Index) Options() IndexOptions {
 }
 
 func (i *Index) options() IndexOptions {
-	return IndexOptions{Keys: i.keys}
+	return IndexOptions{
+		Keys:         i.keys,
+		TrackNotNull: i.trackNotNull,
+	}
 }
 
 // Open opens and initializes the index.
@@ -108,6 +115,12 @@ func (i *Index) Open() error {
 
 	if err := i.openFields(); err != nil {
 		return errors.Wrap(err, "opening fields")
+	}
+
+	if i.trackNotNull {
+		if err := i.openNotNullField(); err != nil {
+			return errors.Wrap(err, "opening not-null field")
+		}
 	}
 
 	if err := i.columnAttrs.Open(); err != nil {
@@ -147,6 +160,16 @@ func (i *Index) openFields() error {
 	return nil
 }
 
+// openNotNullField gets or creates the not-null field and associates it to the index.
+func (i *Index) openNotNullField() error {
+	f, err := i.createFieldIfNotExists(notNullFieldName, FieldOptions{CacheType: CacheTypeNone, CacheSize: 0})
+	if err != nil {
+		return errors.Wrap(err, "creating not-null field")
+	}
+	i.notNullField = f
+	return nil
+}
+
 // loadMeta reads meta data for the index, if any.
 func (i *Index) loadMeta() error {
 	var pb internal.IndexMeta
@@ -165,6 +188,7 @@ func (i *Index) loadMeta() error {
 
 	// Copy metadata fields.
 	i.keys = pb.Keys
+	i.trackNotNull = pb.TrackNotNull
 
 	return nil
 }
@@ -173,7 +197,8 @@ func (i *Index) loadMeta() error {
 func (i *Index) saveMeta() error {
 	// Marshal metadata.
 	buf, err := proto.Marshal(&internal.IndexMeta{
-		Keys: i.keys,
+		Keys:         i.keys,
+		TrackNotNull: i.trackNotNull,
 	})
 	if err != nil {
 		return errors.Wrap(err, "marshalling")
@@ -248,6 +273,11 @@ func (i *Index) Fields() []*Field {
 	sort.Sort(fieldSlice(a))
 
 	return a
+}
+
+// unprotectedNotNullField returns the internal field used to track not-null columns.
+func (i *Index) unprotectedNotNullField() *Field {
+	return i.notNullField
 }
 
 // recalculateCaches recalculates caches on every field in the index.
@@ -408,7 +438,8 @@ func (p indexInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
 // IndexOptions represents options to set when initializing an index.
 type IndexOptions struct {
-	Keys bool `json:"keys"`
+	Keys         bool `json:"keys"`
+	TrackNotNull bool `json:"trackNotNull"`
 }
 
 // hasTime returns true if a contains a non-nil time.
