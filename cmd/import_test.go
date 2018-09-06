@@ -18,6 +18,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pilosa/pilosa"
+
 	"github.com/pilosa/pilosa/cmd"
 )
 
@@ -44,6 +46,20 @@ field = "f1"
 				v.Check(cmd.Importer.Host, "localhost:12345")
 				v.Check(cmd.Importer.Index, "myindex")
 				v.Check(cmd.Importer.Field, "f1")
+				return v.Error()
+			},
+		},
+		{
+			args: []string{"import", "--index", "i1", "--field", "f1", "--field-keys", "--field-max", "100"},
+			env:  map[string]string{},
+			validation: func() error {
+				v := validator{}
+				v.Check(cmd.Importer.Index, "i1")
+				v.Check(cmd.Importer.Field, "f1")
+				v.Check(cmd.Importer.FieldOptions, pilosa.FieldOptions{
+					Keys: true,
+					Max:  100,
+				})
 				return v.Error()
 			},
 		},
