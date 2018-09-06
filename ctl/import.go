@@ -40,15 +40,20 @@ type ImportCommand struct { // nolint: maligned
 	Index string `json:"index"`
 	Field string `json:"field"`
 
-	// Options for index & field to be created if they don't exist
+	// Options for the index to be created if it doesn't exist
 	indexOptions pilosa.IndexOptions
+
+	// Options for the field to be created if it doesn't exist
+	fieldOptions pilosa.FieldOptions
 
 	// CreateSchema ensures the schema exists before import
 	CreateSchema bool
 
-	// REMOVED: Indicates that the payload should be treated as string keys.
-	// TODO: remove this in a future release
-	StringKeys bool `json:"StringKeys"`
+	// IndexKeys makes the import command use keys=true when creating an index
+	IndexKeys bool `json:"indexKeys"`
+
+	// FieldKeys makes the import command use keys=true when creating a field
+	FieldKeys bool `json:"fieldKeys"`
 
 	// Filenames to import from.
 	Paths []string `json:"paths"`
@@ -80,11 +85,6 @@ func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *ImportCommand 
 func (cmd *ImportCommand) Run(ctx context.Context) error {
 	logger := log.New(cmd.Stderr, "", log.LstdFlags)
 
-	// REMOVED: warning that --string-keys flag has been deprecated.
-	if cmd.StringKeys {
-		logger.Printf("REMOVED: The string-keys flag is no longer used.")
-	}
-
 	// Validate arguments.
 	// Index and field are validated early before the files are parsed.
 	if cmd.Index == "" {
@@ -102,6 +102,12 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 	cmd.client = client
 
 	if cmd.CreateSchema {
+		cmd.indexOptions = pilosa.IndexOptions{
+			Keys: cmd.IndexKeys,
+		}
+		cmd.fieldOptions = pilosa.FieldOptions{
+			Keys: cmd.FieldKeys,
+		}
 		err := cmd.ensureSchema(ctx)
 		if err != nil {
 			return errors.Wrap(err, "ensuring schema")
@@ -146,7 +152,7 @@ func (cmd *ImportCommand) ensureSchema(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("Error Creating Index: %s", err)
 	}
-	err = cmd.client.EnsureField(ctx, cmd.Index, cmd.Field)
+	err = cmd.client.EnsureFieldWithOptions(ctx, cmd.Index, cmd.Field, cmd.fieldOptions)
 	if err != nil {
 		return fmt.Errorf("Error Creating Field: %s", err)
 	}
