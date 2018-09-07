@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pilosa/pilosa/pql"
@@ -194,6 +196,12 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "TopN":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeTopN(ctx, index, c, shards, opt)
+	case "Rows":
+		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		return e.executeRows(ctx, index, c, shards, opt)
+	case "GroupBy":
+		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		return e.executeGroupBy(ctx, index, c, shards, opt)
 	default:
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeBitmapCall(ctx, index, c, shards, opt)
@@ -359,7 +367,6 @@ func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 				} else if err != nil {
 					return nil, err
 				} else {
-					// field, _ := c.Args["field"].(string)
 					fieldName, _ := c.FieldArg()
 					if fr := idx.Field(fieldName); fr != nil {
 						rowID, _, err := c.UintArg(fieldName)
@@ -668,14 +675,399 @@ func (e *executor) executeDifferenceShard(ctx context.Context, index string, c *
 	return other, nil
 }
 
-func (e *executor) executeBitmapShard(_ context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
-	// Fetch column label from index.
+type RowIDs []uint64
+
+func (r RowIDs) Merge(other RowIDs) RowIDs {
+	i, j := 0, 0
+	result := make(RowIDs, 0)
+	for i < len(r) && j < len(other) {
+		av, bv := r[i], other[j]
+		if av < bv {
+			result = append(result, av)
+			i++
+		} else if av > bv {
+			result = append(result, bv)
+			j++
+		} else {
+			result = append(result, bv)
+			i++
+			j++
+		}
+
+	}
+	for i < len(r) {
+		result = append(result, r[i])
+		i++
+	}
+	for j < len(other) {
+		result = append(result, other[j])
+		j++
+	}
+	return result
+}
+
+func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (GroupByCounts, error) {
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeGroupByShard(ctx, index, c, shard)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		other, _ := prev.(GroupByCounts)
+		return other.Merge(v.(GroupByCounts))
+	}
+
+	// Get full result set.
+	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return nil, err
+	}
+	results, _ := other.(GroupByCounts)
+
+	// Apply offset.
+	if offset, hasOffset, err := c.UintArg("offset"); err != nil {
+		return nil, err
+	} else if hasOffset {
+		if int(offset) < len(results) {
+			results = results[offset:]
+		}
+	}
+
+	// Apply limit.
+	if limit, hasLimit, err := c.UintArg("limit"); err != nil {
+		return nil, err
+	} else if hasLimit {
+		if int(limit) < len(results) {
+			results = results[:limit]
+		}
+	}
+
+	return results, nil
+}
+
+// gbi is a groupBy item.
+type gbi struct {
+	row      *Row
+	fieldKey string
+	rowID    uint64
+}
+
+type GroupLine struct {
+	Groups []string
+	Total  uint64
+}
+
+type GroupByCounts []GroupLine
+
+func (gbc GroupByCounts) Merge(other GroupByCounts) GroupByCounts {
+	m := make(map[string]struct {
+		i     int
+		total uint64
+	})
+	for i := range gbc {
+		m[strings.Join(gbc[i].Groups, "-")] = struct {
+			i     int
+			total uint64
+		}{total: gbc[i].Total, i: i}
+
+	}
+
+	for i := range other {
+		key := strings.Join(other[i].Groups, "-")
+		o, found := m[key]
+		if found {
+			gbc[o.i].Total += other[i].Total
+		} else {
+			gbc = append(gbc, other[i])
+		}
+	}
+	return gbc
+}
+
+func makeGroup(parts []gbi) GroupLine {
+	var other *Row
+	line := GroupLine{}
+	for i, o := range parts {
+		if i == 0 {
+			other = o.row
+		} else {
+			other = other.Intersect(o.row)
+		}
+		line.Groups = append(line.Groups, o.fieldKey)
+	}
+	line.Total = other.Count()
+	return line
+}
+
+func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql.Call, shard uint64) (GroupByCounts, error) {
+	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
 		return nil, ErrIndexNotFound
 	}
 
-	// Fetch field & row label based on argument.
+	// fieldDirective is a combination of field
+	// instructions, represented as a string with
+	// the form [fieldName:offset:limit] or
+	// [fieldName:limit].
+	fieldDirectives, ok := c.Args["fields"]
+	if !ok {
+		return nil, errors.Wrap(ErrFieldsArgumentRequired, "executeGroupBy")
+	}
+
+	// Ensure that fieldDirectives is a list.
+	if _, ok := fieldDirectives.([]interface{}); !ok {
+		return nil, errors.Wrap(ErrExpectedFieldListArgument, "executeGroupBy")
+
+	}
+
+	// getFieldName extracts the fieldName portion of the
+	// fieldDirective.
+	getFieldName := func(s string) string {
+		parts := strings.Split(s, ":")
+		return parts[0]
+	}
+
+	// Ensure that all of the fields exist.
+	for _, fieldDirective := range fieldDirectives.([]interface{}) {
+		fieldName := getFieldName(fieldDirective.(string))
+		f := e.Holder.Field(index, fieldName)
+		if f == nil {
+			return nil, errors.Wrap(ErrFieldNotFound, fmt.Sprintf("executeGroupBy: %s", fieldDirective.(string)))
+		}
+	}
+
+	results := make(GroupByCounts, 0)
+	var work listOfGBILists
+	for _, fieldDirective := range fieldDirectives.([]interface{}) {
+		fieldName := getFieldName(fieldDirective.(string))
+
+		// Fetch fragment.
+		frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
+		if frag == nil { // this means this whole shard doesn't have all it needs to continue
+			return results, nil
+		}
+
+		// Get filter based on the field directive.
+		filter, err := getGroupByFilterFunction(fieldDirective.(string))
+		if err != nil {
+			return nil, err
+		}
+
+		set := make(gbiList, 0)
+		for _, rowID := range frag.rowsWithFilter(filter) {
+			set = append(set, gbi{
+				row:      frag.row(rowID),
+				rowID:    rowID,
+				fieldKey: fmt.Sprintf("%s.%d", fieldName, rowID),
+			})
+		}
+		work = append(work, set)
+	}
+
+	for _, group := range product(work) {
+		group.gl.Total = group.row.Count()
+		if group.gl.Total > 0 {
+			results = append(results, group.gl)
+		}
+	}
+	return results, nil
+}
+
+type gbiList []gbi
+type listOfGBILists []gbiList
+
+// pi is a product process item.
+type pi struct {
+	row *Row
+	gl  GroupLine
+}
+type piList []pi
+
+// product generates the cartiesian product of the input
+// using tail recursion
+func product(input listOfGBILists) piList {
+	res := make(piList, 0)
+	if len(input) == 0 { //base return empty list
+		res = append(res, pi{gl: GroupLine{Groups: make([]string, 0)}})
+	} else {
+		res = productHelper(input, res)
+	}
+	return res
+}
+
+func productHelper(lists listOfGBILists, res piList) piList {
+	head := lists[0]           //take first element of the list
+	tail := product(lists[1:]) //invoke product on remaining element
+	for h := range head {      // for each head
+		for t := range tail { //iterate over the tail
+			s := pi{gl: GroupLine{Groups: make([]string, 0)}}
+			s.gl.Groups = append([]string{head[h].fieldKey}, tail[t].gl.Groups...) //had to insert at the front to match input order
+			if tail[t].row != nil {                                                //first time around nothing to intersect
+				s.row = head[h].row.Intersect(tail[t].row)
+			} else {
+				s.row = head[h].row
+			}
+			res = append(res, s)
+		}
+	}
+	return res
+}
+
+func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeRowsShard(ctx, index, c, shard)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		other, _ := prev.(RowIDs)
+		return other.Merge(v.(RowIDs))
+	}
+
+	// Get full result set.
+	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return nil, err
+	}
+	results, _ := other.(RowIDs)
+
+	// Apply offset.
+	if offset, hasOffset, err := c.UintArg("offset"); err != nil {
+		return nil, err
+	} else if hasOffset {
+		if int(offset) < len(results) {
+			results = results[offset:]
+		}
+	}
+
+	// Apply limit.
+	if limit, hasLimit, err := c.UintArg("limit"); err != nil {
+		return nil, err
+	} else if hasLimit {
+		if int(limit) < len(results) {
+			results = results[:limit]
+		}
+	}
+
+	return results, nil
+}
+
+func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Call, shard uint64) (RowIDs, error) {
+	// Fetch index.
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	}
+
+	// Fetch field name from argument.
+	fieldName, ok := c.Args["field"].(string)
+	if !ok {
+		return nil, errors.New("Rows() argument required: field")
+	}
+
+	// Fetch field.
+	f := e.Holder.Field(index, fieldName)
+	if f == nil {
+		return nil, ErrFieldNotFound
+	}
+
+	frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
+	if frag == nil {
+		return make(RowIDs, 0), nil
+	}
+
+	if columnID, ok, err := c.UintArg("column"); err != nil {
+		return nil, err
+	} else if ok {
+		// TODO: it's possible that filters could be applied here, so this returns too early.
+		return frag.rowsForColumn(columnID), nil
+	}
+
+	filter := getFilterFunction(c)
+	return frag.rowsWithFilter(filter), nil
+}
+
+// getGroupByFilterFunction returns a rowFilter based on the
+// field directive provided.
+func getGroupByFilterFunction(fieldDirective string) (rowFilter, error) {
+	parts := strings.Split(fieldDirective, ":")
+
+	hasLimit := false
+	hasOffset := false
+	limit := uint64(0)
+	offset := uint64(0)
+	var err error
+
+	// fieldDirective can have one of the following forms:
+	// [fieldName]
+	// [fieldName:limit]
+	// [fieldName:offset:limit]
+	//
+	// Note that a field directive with the form
+	// [fieldName:offset:limit:extra] will be treated as
+	// [fieldName:offset:limit] (i.e. `extra` is ignored).
+
+	if len(parts) == 1 {
+		return noFilter, nil
+	} else if len(parts) == 2 {
+		hasLimit = true
+		if limit, err = strconv.ParseUint(parts[1], 10, 64); err != nil {
+			return nil, errors.Wrap(err, "getting groupby field limit only value")
+		}
+	} else {
+		hasOffset = true
+		if offset, err = strconv.ParseUint(parts[1], 10, 64); err != nil {
+			return nil, errors.Wrap(err, "getting groupby field offset value")
+		}
+		if parts[2] != "" {
+			hasLimit = true
+			if limit, err = strconv.ParseUint(parts[2], 10, 64); err != nil {
+				return nil, errors.Wrap(err, "getting groupby field limit value")
+			}
+		}
+	}
+
+	if hasOffset && hasLimit {
+		f := filterWithOffsetLimit{offset: offset, limit: limit}
+		return f.filter, nil
+	} else if hasLimit {
+		f := filterWithLimit{limit: limit}
+		return f.filter, nil
+	}
+
+	f := filterWithOffset{offset: offset}
+	return f.filter, nil
+}
+
+func getFilterFunction(c *pql.Call) rowFilter {
+	offset, hasOffset, _ := c.UintArg("shardoffset")
+	limit, hasLimit, _ := c.UintArg("shardlimit")
+
+	if hasOffset && hasLimit {
+		f := filterWithOffsetLimit{offset: offset, limit: limit}
+		return f.filter
+	} else if hasOffset {
+		f := filterWithOffset{offset: offset}
+		return f.filter
+	} else if hasLimit {
+		f := filterWithLimit{limit: limit}
+		return f.filter
+	}
+
+	return noFilter
+}
+
+func (e *executor) executeBitmapShard(_ context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
+	// Fetch index.
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	}
+
+	// Fetch field name from argument.
 	fieldName, err := c.FieldArg()
 	if err != nil {
 		return nil, errors.New("Row() argument required: field")
@@ -1701,7 +2093,7 @@ func needsShards(calls []*pql.Call) bool {
 		switch call.Name {
 		case "Clear", "Set", "SetRowAttrs", "SetColumnAttrs":
 			continue
-		case "Count", "TopN":
+		case "Count", "TopN", "Rows":
 			return true
 		// default catches Bitmap calls
 		default:
@@ -1758,4 +2150,40 @@ func callArgString(call *pql.Call, key string) string {
 func isString(v interface{}) bool {
 	_, ok := v.(string)
 	return ok
+}
+
+// Filters to be used with RowsWithFilter queries.
+type filterWithOffsetLimit struct {
+	offset, limit uint64
+}
+
+func (fol *filterWithOffsetLimit) filter(rowID uint64) (bool, bool) {
+	if rowID >= fol.offset {
+		if fol.limit > 0 {
+			fol.limit--
+			return true, false
+		}
+		return false, true
+	}
+	return false, false
+}
+
+type filterWithOffset struct {
+	offset uint64
+}
+
+func (fo *filterWithOffset) filter(rowID uint64) (bool, bool) {
+	return rowID >= fo.offset, false
+}
+
+type filterWithLimit struct {
+	limit uint64
+}
+
+func (fl *filterWithLimit) filter(rowID uint64) (bool, bool) { // nolint: unparam
+	if fl.limit > 0 {
+		fl.limit--
+		return true, false
+	}
+	return false, true
 }

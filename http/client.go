@@ -477,6 +477,45 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 	return nil
 }
 
+// ImportRoaringBytes fast import of raw bits in roaring standard format
+func (c *InternalClient) ImportRoaringBytes(ctx context.Context, node *pilosa.Node, index, field string, shard uint64, roaringBytes []byte, forward bool) error {
+	if index == "" {
+		return pilosa.ErrIndexRequired
+	} else if field == "" {
+		return pilosa.ErrFieldRequired
+	}
+	endpoint := fmt.Sprintf("/index/%s/field/%s/importroaring/%d", index, field, shard)
+
+	// Create URL.
+	u := nodePathToURL(node, endpoint)
+	if forward {
+		v := url.Values{}
+		v.Set("noforward", "y")
+		u.RawQuery = v.Encode()
+	}
+	// Generate HTTP request.
+	req, err := http.NewRequest("POST", u.String(), bytes.NewBuffer(roaringBytes))
+	if err != nil {
+		return errors.Wrap(err, "creating request")
+	}
+	req.Header.Set("Accept", "application/x-binary")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	// Execute request against the host.
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return errors.Wrap(err, "executing request")
+	}
+	defer resp.Body.Close()
+
+	// Validate status code.
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("invalid status: %d", resp.StatusCode)
+	}
+	io.Copy(ioutil.Discard, resp.Body)
+	return nil
+}
+
 // ImportValueK bulk imports keyed field values to a host.
 func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, vals []pilosa.FieldValue) error {
 	if index == "" {
@@ -505,7 +544,6 @@ func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, 
 	if err := c.importNode(ctx, coord, index, field, buf); err != nil {
 		return fmt.Errorf("import node: host=%s, err=%s", coord.URI, err)
 	}
-
 	return nil
 }
 
