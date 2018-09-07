@@ -747,8 +747,7 @@ func importNotNullColumns(index *Index, columnIDs []uint64) error {
 	}
 
 	notNullRowIDs := make([]uint64, len(columnIDs))
-	notNullTimestamps := make([]*time.Time, len(columnIDs))
-	return nnf.Import(notNullRowIDs, columnIDs, notNullTimestamps)
+	return nnf.Import(notNullRowIDs, columnIDs, nil)
 }
 
 // MaxShards returns the maximum shard number for each index in a map.
