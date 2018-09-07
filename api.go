@@ -686,6 +686,12 @@ func (api *API) Import(_ context.Context, req *ImportRequest) error {
 		timestamps[i] = &t
 	}
 
+	// Import columnIDs into notnull field.
+	if err := importNotNullColumns(index, req.ColumnIDs); err != nil {
+		api.server.logger.Printf("import notnull error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+		return errors.Wrap(err, "importing notnull columns")
+	}
+
 	// Import into fragment.
 	err = field.Import(req.RowIDs, req.ColumnIDs, timestamps)
 	if err != nil {
@@ -720,12 +726,29 @@ func (api *API) ImportValue(_ context.Context, req *ImportValueRequest) error {
 		}
 	}
 
+	// Import columnIDs into notnull field.
+	if err := importNotNullColumns(index, req.ColumnIDs); err != nil {
+		api.server.logger.Printf("import notnull error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+		return errors.Wrap(err, "importing notnull columns")
+	}
+
 	// Import into fragment.
 	err = field.importValue(req.ColumnIDs, req.Values)
 	if err != nil {
 		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 	}
 	return errors.Wrap(err, "importing")
+}
+
+func importNotNullColumns(index *Index, columnIDs []uint64) error {
+	nnf := index.unprotectedNotNullField()
+	if nnf == nil {
+		return nil
+	}
+
+	notNullRowIDs := make([]uint64, len(columnIDs))
+	notNullTimestamps := make([]*time.Time, len(columnIDs))
+	return nnf.Import(notNullRowIDs, columnIDs, notNullTimestamps)
 }
 
 // MaxShards returns the maximum shard number for each index in a map.
