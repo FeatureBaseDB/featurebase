@@ -1497,6 +1497,52 @@ func TestExecutor_QueryCall(t *testing.T) {
 	})
 }
 
+// Ensure a notnull field is maintained.
+func TestExecutor_Execute_NotNull(t *testing.T) {
+	t.Run("Row", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackNotNull: true})
+		_, err := index.CreateField("f", pilosa.OptFieldTypeDefault())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Set bits.
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `` +
+			fmt.Sprintf("Set(%d, f=%d)\n", 3, 10) +
+			fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+1, 10) +
+			fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+2, 20),
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f=10)`}); err != nil {
+			t.Fatal(err)
+		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth + 1}) {
+			t.Fatalf("unexpected columns: %+v", bits)
+		}
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(notnull=0)`}); err != nil {
+			t.Fatal(err)
+		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth + 1, ShardWidth + 2}) {
+			t.Fatalf("unexpected notnull columns: %+v", bits)
+		}
+
+		// Reopen cluster to ensure not-null is reloaded.
+		if err := c[0].Reopen(); err != nil {
+			t.Fatal(err)
+		}
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(notnull=0)`}); err != nil {
+			t.Fatal(err)
+		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth + 1, ShardWidth + 2}) {
+			t.Fatalf("unexpected notnull columns after reopen: %+v", bits)
+		}
+	})
+}
+
 func benchmarkNotNull(nn bool, b *testing.B) {
 	c := test.MustRunCluster(b, 1)
 	defer c.Close()
