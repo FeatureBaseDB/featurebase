@@ -421,6 +421,18 @@ func (i *Index) DeleteField(name string) error {
 		return errors.Wrap(err, "removing directory")
 	}
 
+	// If the field being deleted is the existence field,
+	// turn off existence tracking on the index.
+	if name == existenceFieldName {
+		i.trackExistence = false
+		i.existenceField = nil
+
+		// Update meta data on disk.
+		if err := i.saveMeta(); err != nil {
+			return errors.Wrap(err, "saving existence meta data")
+		}
+	}
+
 	// Remove reference.
 	delete(i.fields, name)
 
