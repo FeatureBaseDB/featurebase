@@ -289,6 +289,11 @@ func (i *Index) recalculateCaches() {
 
 // CreateField creates a field.
 func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
+	err := validateName(name)
+	if err != nil {
+		return nil, errors.Wrap(err, "validating name")
+	}
+
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -311,6 +316,11 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 
 // CreateFieldIfNotExists creates a field with the given options if it doesn't exist.
 func (i *Index) CreateFieldIfNotExists(name string, opts ...FieldOption) (*Field, error) {
+	err := validateName(name)
+	if err != nil {
+		return nil, errors.Wrap(err, "validating name")
+	}
+
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -379,7 +389,7 @@ func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 }
 
 func (i *Index) newField(path, name string) (*Field, error) {
-	f, err := NewField(path, i.name, name, OptFieldTypeDefault())
+	f, err := newField(path, i.name, name, OptFieldTypeDefault())
 	if err != nil {
 		return nil, err
 	}
