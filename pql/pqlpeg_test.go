@@ -595,6 +595,23 @@ func TestPQLDeepEquality(t *testing.T) {
 					{Name: "Row"},
 				},
 			}},
+		{
+			name: "QueryWrapper",
+			call: "Query(Row(f1=123), excludeRowAttrs=true)",
+			exp: &Call{
+				Name: "Query",
+				Args: map[string]interface{}{
+					"excludeRowAttrs": true,
+				},
+				Children: []*Call{
+					{
+						Name: "Row",
+						Args: map[string]interface{}{
+							"f1": int64(123),
+						},
+					},
+				},
+			}},
 	}
 
 	for i, test := range tests {

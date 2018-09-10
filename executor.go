@@ -194,6 +194,8 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "TopN":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeTopN(ctx, index, c, shards, opt)
+	case "Query":
+		return e.executeQueryCall(ctx, index, c, shards, opt)
 	default:
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeBitmapCall(ctx, index, c, shards, opt)
@@ -217,6 +219,42 @@ func (e *executor) validateCallArgs(c *pql.Call) error {
 		}
 	}
 	return nil
+}
+
+func (e *executor) executeQueryCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (interface{}, error) {
+	optCopy := &execOptions{}
+	*optCopy = *opt
+	if arg, ok := c.Args["excludeRowAttrs"]; ok {
+		if value, ok := arg.(bool); ok {
+			optCopy.ExcludeRowAttrs = value
+		} else {
+			return nil, errors.New("Query(): excludeRowAttrs must be a bool")
+		}
+	}
+	if arg, ok := c.Args["excludeColumns"]; ok {
+		if value, ok := arg.(bool); ok {
+			optCopy.ExcludeColumns = value
+		} else {
+			return nil, errors.New("Query(): excludeColumns must be a bool")
+		}
+	}
+	if arg, ok := c.Args["shards"]; ok {
+		if optShards, ok := arg.([]interface{}); ok {
+			shards = []uint64{}
+			for _, s := range optShards {
+				if shard, ok := s.(int64); ok {
+					shards = append(shards, uint64(shard))
+				} else {
+					return nil, errors.New("Query(): shards must be a list of unsigned integers")
+				}
+
+			}
+		} else {
+			return nil, errors.New("Query(): shards must be a list of unsigned integers")
+		}
+
+	}
+	return e.executeCall(ctx, index, c.Children[0], shards, optCopy)
 }
 
 // executeSum executes a Sum() call.
