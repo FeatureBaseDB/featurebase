@@ -91,6 +91,20 @@ func (h *Holder) Row(index, field string, rowID uint64) *pilosa.Row {
 	return row
 }
 
+// ReadRow returns a Row for a given field. If the field does not exist,
+// it panics rather than creating the field.
+func (h *Holder) ReadRow(index, field string, rowID uint64) *pilosa.Row {
+	f := h.Holder.Field(index, field)
+	if f == nil {
+		panic(pilosa.ErrFieldNotFound)
+	}
+	row, err := f.Row(rowID)
+	if err != nil {
+		panic(err)
+	}
+	return row
+}
+
 func (h *Holder) RowAttrStore(index, field string) pilosa.AttrStore {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
 	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeDefault())

@@ -686,10 +686,10 @@ func (api *API) Import(_ context.Context, req *ImportRequest) error {
 		timestamps[i] = &t
 	}
 
-	// Import columnIDs into notnull field.
-	if err := importNotNullColumns(index, req.ColumnIDs); err != nil {
-		api.server.logger.Printf("import notnull error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
-		return errors.Wrap(err, "importing notnull columns")
+	// Import columnIDs into existence field.
+	if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
+		api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+		return errors.Wrap(err, "importing existence columns")
 	}
 
 	// Import into fragment.
@@ -726,10 +726,10 @@ func (api *API) ImportValue(_ context.Context, req *ImportValueRequest) error {
 		}
 	}
 
-	// Import columnIDs into notnull field.
-	if err := importNotNullColumns(index, req.ColumnIDs); err != nil {
-		api.server.logger.Printf("import notnull error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
-		return errors.Wrap(err, "importing notnull columns")
+	// Import columnIDs into existence field.
+	if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
+		api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+		return errors.Wrap(err, "importing existence columns")
 	}
 
 	// Import into fragment.
@@ -740,14 +740,14 @@ func (api *API) ImportValue(_ context.Context, req *ImportValueRequest) error {
 	return errors.Wrap(err, "importing")
 }
 
-func importNotNullColumns(index *Index, columnIDs []uint64) error {
-	nnf := index.unprotectedNotNullField()
+func importExistenceColumns(index *Index, columnIDs []uint64) error {
+	nnf := index.unprotectedExistenceField()
 	if nnf == nil {
 		return nil
 	}
 
-	notNullRowIDs := make([]uint64, len(columnIDs))
-	return nnf.Import(notNullRowIDs, columnIDs, nil)
+	existenceRowIDs := make([]uint64, len(columnIDs))
+	return nnf.Import(existenceRowIDs, columnIDs, nil)
 }
 
 // MaxShards returns the maximum shard number for each index in a map.

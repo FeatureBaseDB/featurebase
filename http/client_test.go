@@ -655,8 +655,8 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 }
 
-// Ensure client can bulk import data while tracking notnull.
-func TestClient_ImportNotNull(t *testing.T) {
+// Ensure client can bulk import data while tracking existence.
+func TestClient_ImportExistence(t *testing.T) {
 	cmd := test.MustRunCluster(t, 1)[0]
 	host := cmd.URL()
 	holder := cmd.Server.Holder()
@@ -666,7 +666,7 @@ func TestClient_ImportNotNull(t *testing.T) {
 		idxName := "iset"
 		fldName := "fset"
 
-		index := hldr.MustCreateIndexIfNotExists(idxName, pilosa.IndexOptions{TrackNotNull: true})
+		index := hldr.MustCreateIndexIfNotExists(idxName, pilosa.IndexOptions{TrackExistence: true})
 		_, err := index.CreateFieldIfNotExists(fldName)
 		if err != nil {
 			t.Fatal(err)
@@ -690,9 +690,9 @@ func TestClient_ImportNotNull(t *testing.T) {
 			t.Fatalf("unexpected columns: %+v", a)
 		}
 
-		// Verify notnull.
-		if a := hldr.Row(idxName, "notnull", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 5, 6}) {
-			t.Fatalf("unexpected notnull columns: %+v", a)
+		// Verify existence.
+		if a := hldr.ReadRow(idxName, "exists", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 5, 6}) {
+			t.Fatalf("unexpected existence columns: %+v", a)
 		}
 	})
 
@@ -700,7 +700,7 @@ func TestClient_ImportNotNull(t *testing.T) {
 		idxName := "iint"
 		fldName := "fint"
 
-		index := hldr.MustCreateIndexIfNotExists(idxName, pilosa.IndexOptions{TrackNotNull: true})
+		index := hldr.MustCreateIndexIfNotExists(idxName, pilosa.IndexOptions{TrackExistence: true})
 		field, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-100, 100))
 		if err != nil {
 			t.Fatal(err)
@@ -725,9 +725,9 @@ func TestClient_ImportNotNull(t *testing.T) {
 			t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=50, cnt=3", sum, cnt)
 		}
 
-		// Verify notnull.
-		if a := hldr.Row(idxName, "notnull", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 2, 3}) {
-			t.Fatalf("unexpected notnull columns: %+v", a)
+		// Verify existence.
+		if a := hldr.ReadRow(idxName, "exists", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 2, 3}) {
+			t.Fatalf("unexpected existence columns: %+v", a)
 		}
 	})
 }

@@ -1497,13 +1497,13 @@ func TestExecutor_QueryCall(t *testing.T) {
 	})
 }
 
-// Ensure a notnull field is maintained.
-func TestExecutor_Execute_NotNull(t *testing.T) {
+// Ensure an existence field is maintained.
+func TestExecutor_Execute_Existence(t *testing.T) {
 	t.Run("Row", func(t *testing.T) {
 		c := test.MustRunCluster(t, 1)
 		defer c.Close()
 		hldr := test.Holder{Holder: c[0].Server.Holder()}
-		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackNotNull: true})
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackExistence: true})
 		_, err := index.CreateField("f", pilosa.OptFieldTypeDefault())
 		if err != nil {
 			t.Fatal(err)
@@ -1524,26 +1524,26 @@ func TestExecutor_Execute_NotNull(t *testing.T) {
 			t.Fatalf("unexpected columns: %+v", bits)
 		}
 
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(notnull=0)`}); err != nil {
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(exists=0)`}); err != nil {
 			t.Fatal(err)
 		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth + 1, ShardWidth + 2}) {
-			t.Fatalf("unexpected notnull columns: %+v", bits)
+			t.Fatalf("unexpected existence columns: %+v", bits)
 		}
 
-		// Reopen cluster to ensure not-null is reloaded.
+		// Reopen cluster to ensure existence field is reloaded.
 		if err := c[0].Reopen(); err != nil {
 			t.Fatal(err)
 		}
 
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(notnull=0)`}); err != nil {
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(exists=0)`}); err != nil {
 			t.Fatal(err)
 		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth + 1, ShardWidth + 2}) {
-			t.Fatalf("unexpected notnull columns after reopen: %+v", bits)
+			t.Fatalf("unexpected existence columns after reopen: %+v", bits)
 		}
 	})
 }
 
-func benchmarkNotNull(nn bool, b *testing.B) {
+func benchmarkExistence(nn bool, b *testing.B) {
 	c := test.MustRunCluster(b, 1)
 	defer c.Close()
 	hldr := test.Holder{Holder: c[0].Server.Holder()}
@@ -1551,7 +1551,7 @@ func benchmarkNotNull(nn bool, b *testing.B) {
 	indexName := "i"
 	fieldName := "f"
 
-	index := hldr.MustCreateIndexIfNotExists(indexName, pilosa.IndexOptions{TrackNotNull: nn})
+	index := hldr.MustCreateIndexIfNotExists(indexName, pilosa.IndexOptions{TrackExistence: nn})
 	// Create field.
 	if _, err := index.CreateFieldIfNotExists(fieldName); err != nil {
 		b.Fatal(err)
@@ -1568,5 +1568,5 @@ func benchmarkNotNull(nn bool, b *testing.B) {
 	}
 }
 
-func BenchmarkExecutor_NotNull_True(b *testing.B)  { benchmarkNotNull(true, b) }
-func BenchmarkExecutor_NotNull_False(b *testing.B) { benchmarkNotNull(false, b) }
+func BenchmarkExecutor_Existence_True(b *testing.B)  { benchmarkExistence(true, b) }
+func BenchmarkExecutor_Existence_False(b *testing.B) { benchmarkExistence(false, b) }

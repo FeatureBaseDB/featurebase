@@ -509,8 +509,8 @@ func encodeCreateIndexMessage(m *pilosa.CreateIndexMessage) *internal.CreateInde
 
 func encodeIndexMeta(m *pilosa.IndexOptions) *internal.IndexMeta {
 	return &internal.IndexMeta{
-		Keys:         m.Keys,
-		TrackNotNull: m.TrackNotNull,
+		Keys:           m.Keys,
+		TrackExistence: m.TrackExistence,
 	}
 }
 
@@ -742,7 +742,7 @@ func decodeCreateIndexMessage(pb *internal.CreateIndexMessage, m *pilosa.CreateI
 
 func decodeIndexMeta(pb *internal.IndexMeta, m *pilosa.IndexOptions) {
 	m.Keys = pb.Keys
-	m.TrackNotNull = pb.TrackNotNull
+	m.TrackExistence = pb.TrackExistence
 }
 
 func decodeDeleteIndexMessage(pb *internal.DeleteIndexMessage, m *pilosa.DeleteIndexMessage) {

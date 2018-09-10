@@ -39,8 +39,8 @@ const (
 	// fileLimit is the maximum open file limit (ulimit -n) to automatically set.
 	fileLimit = 262144 // (512^2)
 
-	// notNullFieldName is the name of the internal field used to store not-null values.
-	notNullFieldName = "notnull" // TODO: use a name less likely to collide?
+	// existenceFieldName is the name of the internal field used to store existence values.
+	existenceFieldName = "exists"
 )
 
 // Holder represents a container for indexes.
@@ -357,7 +357,7 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	}
 
 	index.keys = opt.Keys
-	index.trackNotNull = opt.TrackNotNull
+	index.trackExistence = opt.TrackExistence
 
 	if err := index.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")

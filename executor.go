@@ -1131,10 +1131,10 @@ func (e *executor) executeSet(ctx context.Context, index string, c *pql.Call, op
 		return false, ErrFieldNotFound
 	}
 
-	// Set column on not-null field.
-	if nnf := idx.unprotectedNotNullField(); nnf != nil {
+	// Set column on existence field.
+	if nnf := idx.unprotectedExistenceField(); nnf != nil {
 		if _, err := nnf.SetBit(0, colID, nil); err != nil {
-			return false, errors.Wrap(err, "setting not-null column")
+			return false, errors.Wrap(err, "setting existence column")
 		}
 	}
 
