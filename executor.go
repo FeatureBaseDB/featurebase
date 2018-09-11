@@ -194,8 +194,8 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "TopN":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeTopN(ctx, index, c, shards, opt)
-	case "Opt":
-		return e.executeOptCall(ctx, index, c, shards, opt)
+	case "Options":
+		return e.executeOptionsCall(ctx, index, c, shards, opt)
 	default:
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeBitmapCall(ctx, index, c, shards, opt)
@@ -221,7 +221,7 @@ func (e *executor) validateCallArgs(c *pql.Call) error {
 	return nil
 }
 
-func (e *executor) executeOptCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (interface{}, error) {
+func (e *executor) executeOptionsCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (interface{}, error) {
 	optCopy := &execOptions{}
 	*optCopy = *opt
 	if arg, ok := c.Args["columnAttrs"]; ok {
