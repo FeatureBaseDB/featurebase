@@ -36,6 +36,10 @@ type Index struct {
 	name string
 	keys bool // use string keys
 
+	// Existence tracking.
+	trackExistence bool
+	existenceFld   *Field
+
 	// Fields by name.
 	fields map[string]*Field
 
@@ -91,7 +95,10 @@ func (i *Index) Options() IndexOptions {
 }
 
 func (i *Index) options() IndexOptions {
-	return IndexOptions{Keys: i.keys}
+	return IndexOptions{
+		Keys:           i.keys,
+		TrackExistence: i.trackExistence,
+	}
 }
 
 // Open opens and initializes the index.
@@ -108,6 +115,12 @@ func (i *Index) Open() error {
 
 	if err := i.openFields(); err != nil {
 		return errors.Wrap(err, "opening fields")
+	}
+
+	if i.trackExistence {
+		if err := i.openExistenceField(); err != nil {
+			return errors.Wrap(err, "opening existence field")
+		}
 	}
 
 	if err := i.columnAttrs.Open(); err != nil {
@@ -147,6 +160,16 @@ func (i *Index) openFields() error {
 	return nil
 }
 
+// openExistenceField gets or creates the existence field and associates it to the index.
+func (i *Index) openExistenceField() error {
+	f, err := i.createFieldIfNotExists(existenceFieldName, FieldOptions{CacheType: CacheTypeNone, CacheSize: 0})
+	if err != nil {
+		return errors.Wrap(err, "creating existence field")
+	}
+	i.existenceFld = f
+	return nil
+}
+
 // loadMeta reads meta data for the index, if any.
 func (i *Index) loadMeta() error {
 	var pb internal.IndexMeta
@@ -165,6 +188,7 @@ func (i *Index) loadMeta() error {
 
 	// Copy metadata fields.
 	i.keys = pb.Keys
+	i.trackExistence = pb.TrackExistence
 
 	return nil
 }
@@ -173,7 +197,8 @@ func (i *Index) loadMeta() error {
 func (i *Index) saveMeta() error {
 	// Marshal metadata.
 	buf, err := proto.Marshal(&internal.IndexMeta{
-		Keys: i.keys,
+		Keys:           i.keys,
+		TrackExistence: i.trackExistence,
 	})
 	if err != nil {
 		return errors.Wrap(err, "marshalling")
@@ -250,6 +275,14 @@ func (i *Index) Fields() []*Field {
 	return a
 }
 
+// existenceField returns the internal field used to track column existence.
+func (i *Index) existenceField() *Field {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+
+	return i.existenceFld
+}
+
 // recalculateCaches recalculates caches on every field in the index.
 func (i *Index) recalculateCaches() {
 	for _, field := range i.Fields() {
@@ -259,6 +292,11 @@ func (i *Index) recalculateCaches() {
 
 // CreateField creates a field.
 func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
+	err := validateName(name)
+	if err != nil {
+		return nil, errors.Wrap(err, "validating name")
+	}
+
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -281,6 +319,11 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 
 // CreateFieldIfNotExists creates a field with the given options if it doesn't exist.
 func (i *Index) CreateFieldIfNotExists(name string, opts ...FieldOption) (*Field, error) {
+	err := validateName(name)
+	if err != nil {
+		return nil, errors.Wrap(err, "validating name")
+	}
+
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -349,7 +392,7 @@ func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 }
 
 func (i *Index) newField(path, name string) (*Field, error) {
-	f, err := NewField(path, i.name, name, OptFieldTypeDefault())
+	f, err := newField(path, i.name, name, OptFieldTypeDefault())
 	if err != nil {
 		return nil, err
 	}
@@ -381,6 +424,18 @@ func (i *Index) DeleteField(name string) error {
 		return errors.Wrap(err, "removing directory")
 	}
 
+	// If the field being deleted is the existence field,
+	// turn off existence tracking on the index.
+	if name == existenceFieldName {
+		i.trackExistence = false
+		i.existenceFld = nil
+
+		// Update meta data on disk.
+		if err := i.saveMeta(); err != nil {
+			return errors.Wrap(err, "saving existence meta data")
+		}
+	}
+
 	// Remove reference.
 	delete(i.fields, name)
 
@@ -408,7 +463,8 @@ func (p indexInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
 // IndexOptions represents options to set when initializing an index.
 type IndexOptions struct {
-	Keys bool `json:"keys"`
+	Keys           bool `json:"keys"`
+	TrackExistence bool `json:"trackExistence"`
 }
 
 // hasTime returns true if a contains a non-nil time.

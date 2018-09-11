@@ -1131,6 +1131,13 @@ func (e *executor) executeSet(ctx context.Context, index string, c *pql.Call, op
 		return false, ErrFieldNotFound
 	}
 
+	// Set column on existence field.
+	if ef := idx.existenceField(); ef != nil {
+		if _, err := ef.SetBit(0, colID, nil); err != nil {
+			return false, errors.Wrap(err, "setting existence column")
+		}
+	}
+
 	if f.Type() == FieldTypeInt {
 		// Read remaining fields using labels.
 		rowVal, ok, err := c.IntArg(fieldName)

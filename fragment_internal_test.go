@@ -746,7 +746,7 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	cacheSize := uint32(3)
 
 	// Create Index.
-	index := mustOpenIndex()
+	index := mustOpenIndex(IndexOptions{})
 	defer index.Close()
 
 	// Create field.
@@ -912,7 +912,7 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 
 // Ensure a fragment's cache can be persisted between restarts.
 func TestFragment_RankCache_Persistence(t *testing.T) {
-	index := mustOpenIndex()
+	index := mustOpenIndex(IndexOptions{})
 	defer index.Close()
 
 	// Create field.

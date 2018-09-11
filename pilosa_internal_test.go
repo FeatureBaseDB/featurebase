@@ -34,6 +34,7 @@ func TestValidateNameInvalid(t *testing.T) {
 	names := []string{
 		"", "'", "^", "/", "\\", "A", "*", "a:b", "valid?no", "yüce", "1", "_", "-",
 		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
+		"exists",
 	}
 	for _, name := range names {
 		if validateName(name) == nil {

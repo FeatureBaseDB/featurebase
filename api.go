@@ -686,6 +686,12 @@ func (api *API) Import(_ context.Context, req *ImportRequest) error {
 		timestamps[i] = &t
 	}
 
+	// Import columnIDs into existence field.
+	if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
+		api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+		return errors.Wrap(err, "importing existence columns")
+	}
+
 	// Import into fragment.
 	err = field.Import(req.RowIDs, req.ColumnIDs, timestamps)
 	if err != nil {
@@ -720,12 +726,28 @@ func (api *API) ImportValue(_ context.Context, req *ImportValueRequest) error {
 		}
 	}
 
+	// Import columnIDs into existence field.
+	if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
+		api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+		return errors.Wrap(err, "importing existence columns")
+	}
+
 	// Import into fragment.
 	err = field.importValue(req.ColumnIDs, req.Values)
 	if err != nil {
 		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 	}
 	return errors.Wrap(err, "importing")
+}
+
+func importExistenceColumns(index *Index, columnIDs []uint64) error {
+	ef := index.existenceField()
+	if ef == nil {
+		return nil
+	}
+
+	existenceRowIDs := make([]uint64, len(columnIDs))
+	return ef.Import(existenceRowIDs, columnIDs, nil)
 }
 
 // MaxShards returns the maximum shard number for each index in a map.
