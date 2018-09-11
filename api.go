@@ -109,8 +109,9 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	}
 	execOpts := &execOptions{
 		Remote:          req.Remote,
-		ExcludeRowAttrs: req.ExcludeRowAttrs,
-		ExcludeColumns:  req.ExcludeColumns,
+		ExcludeRowAttrs: req.ExcludeRowAttrs, // NOTE: Kept for Pilosa 1.x compat.
+		ExcludeColumns:  req.ExcludeColumns,  // NOTE: Kept for Pilosa 1.x compat.
+		ColumnAttrs:     req.ColumnAttrs,     // NOTE: Kept for Pilosa 1.x compat.
 	}
 	results, err := api.server.executor.Execute(ctx, req.Index, q, req.Shards, execOpts)
 	if err != nil {
@@ -119,7 +120,8 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	resp.Results = results
 
 	// Fill column attributes if requested.
-	if req.ColumnAttrs && !req.ExcludeColumns {
+	// execOpts.ColumnAttrs and execOpts.ExcludeColumns are out params from api.server.executor.Execute
+	if execOpts.ColumnAttrs && !execOpts.ExcludeColumns {
 		// Consolidate all column ids across all calls.
 		var columnIDs []uint64
 		for _, result := range results {

@@ -224,9 +224,17 @@ func (e *executor) validateCallArgs(c *pql.Call) error {
 func (e *executor) executeQueryCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (interface{}, error) {
 	optCopy := &execOptions{}
 	*optCopy = *opt
+	if arg, ok := c.Args["columnAttrs"]; ok {
+		if value, ok := arg.(bool); ok {
+			opt.ColumnAttrs = value
+		} else {
+			return nil, errors.New("Query(): columnAttrs must be a bool")
+		}
+	}
 	if arg, ok := c.Args["excludeRowAttrs"]; ok {
 		if value, ok := arg.(bool); ok {
 			optCopy.ExcludeRowAttrs = value
+			opt.ExcludeRowAttrs = value
 		} else {
 			return nil, errors.New("Query(): excludeRowAttrs must be a bool")
 		}
@@ -234,6 +242,7 @@ func (e *executor) executeQueryCall(ctx context.Context, index string, c *pql.Ca
 	if arg, ok := c.Args["excludeColumns"]; ok {
 		if value, ok := arg.(bool); ok {
 			optCopy.ExcludeColumns = value
+			opt.ExcludeColumns = value
 		} else {
 			return nil, errors.New("Query(): excludeColumns must be a bool")
 		}
@@ -1715,6 +1724,7 @@ type execOptions struct {
 	Remote          bool
 	ExcludeRowAttrs bool
 	ExcludeColumns  bool
+	ColumnAttrs     bool
 }
 
 // hasOnlySetRowAttrs returns true if calls only contains SetRowAttrs() calls.
