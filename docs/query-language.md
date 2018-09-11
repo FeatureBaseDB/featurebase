@@ -662,8 +662,8 @@ Options(<CALL>, columnAttrs=<BOOL>, excludeColumns=<BOOL>, excludeRowAttrs=<BOOL
 
 Modifies the given query as follows:
 * `columnAttrs`: Include column attributes in the result (Default: `false`).
-* `excludeColumns`: Include column IDs in the result (Default: `false`).
-* `excludeRowAttrs`: Include row attributes in the result (Default: `false`).
+* `excludeColumns`: Exclude column IDs in the result (Default: `false`).
+* `excludeRowAttrs`: Exclude row attributes in the result (Default: `false`).
 * `shards`: Run the query using only the data from the given shards. By default, the entire data set (i.e. data from all shards) is used.
 
 **Result Type:** Same result type as <CALL>.
