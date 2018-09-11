@@ -661,18 +661,18 @@ Options(<CALL>, columnAttrs=<BOOL>, excludeColumns=<BOOL>, excludeRowAttrs=<BOOL
 **Description:**
 
 Modifies the given query as follows:
-* `columnAttrs`: The result includes column attributes (Default: `false`).
-* `excludeColumns`: Column IDs are not included in the result (Default: `false`).
-* `excludeRowAttrs`: Row attributes are not included in the result (Default: `false`).
-* `shards`: Runs the query only for the given shards. By default, the query is executed for all shards.
+* `columnAttrs`: Include column attributes in the result (Default: `false`).
+* `excludeColumns`: Include column IDs in the result (Default: `false`).
+* `excludeRowAttrs`: Include row attributes in the result (Default: `false`).
+* `shards`: Run the query using only the data from the given shards. By default, the entire data set (i.e. data from all shards) is used.
 
-**Result Type:** Result type of the given query.
+**Result Type:** Same result type as <CALL>.
 
 **Examples:**
 
 Return column attributes:
 ```request
-Query(Row(f1=10), columnAttrs=true)
+Options(Row(f1=10), columnAttrs=true)
 ```
 ```response
 {"attrs":{},"columns":[100]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}
@@ -680,7 +680,7 @@ Query(Row(f1=10), columnAttrs=true)
 
 Run the query against shards 0 and 2 only:
 ```request
-Query(Row(f1=10), shards=[0, 2])
+Options(Row(f1=10), shards=[0, 2])
 ```
 ```response
 {"attrs":{},"columns":[100, 2097152]}
