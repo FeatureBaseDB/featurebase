@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	gohttp "net/http"
 	"os"
@@ -40,10 +39,6 @@ type Command struct {
 	*server.Command
 
 	commandOptions []server.CommandOption
-
-	stdin  bytes.Buffer
-	stdout bytes.Buffer
-	stderr bytes.Buffer
 }
 
 func OptAllowedOrigins(origins []string) server.CommandOption {
@@ -65,17 +60,15 @@ func newCommand(opts ...server.CommandOption) *Command {
 	// beginning of the option slice so that it can be overridden by user-passed
 	// options.
 	opts = append([]server.CommandOption{server.OptCommandCloseTimeout(time.Millisecond * 2)}, opts...)
-	m := &Command{Command: server.NewCommand(os.Stdin, os.Stdout, os.Stderr, opts...), commandOptions: opts}
+	m := &Command{commandOptions: opts}
+	m.Command = server.NewCommand(bytes.NewReader(nil), ioutil.Discard, ioutil.Discard, opts...)
 	m.Config.DataDir = path
 	m.Config.Bind = "http://localhost:0"
 	m.Config.Cluster.Disabled = true
-	m.Command.Stdin = &m.stdin
-	m.Command.Stdout = &m.stdout
-	m.Command.Stderr = &m.stderr
 
 	if testing.Verbose() {
-		m.Command.Stdout = io.MultiWriter(os.Stdout, m.Command.Stdout)
-		m.Command.Stderr = io.MultiWriter(os.Stderr, m.Command.Stderr)
+		m.Command.Stdout = os.Stdout
+		m.Command.Stderr = os.Stderr
 	}
 
 	return m
@@ -120,7 +113,7 @@ func (m *Command) Reopen() error {
 
 	// Create new main with the same config.
 	config := m.Command.Config
-	m.Command = server.NewCommand(os.Stdin, os.Stdout, os.Stderr, m.commandOptions...)
+	m.Command = server.NewCommand(bytes.NewReader(nil), ioutil.Discard, ioutil.Discard, m.commandOptions...)
 	m.Command.Config = config
 
 	// Run new program.
