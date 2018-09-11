@@ -294,6 +294,8 @@ We currently track the following events
 - **Union:** Count of Union queries.
 - **Intersection:** Count of Intersection queries.
 - **Difference:** Count of Difference queries.
+- **Xor:** Count of Xor queries.
+- **Not:** Count of Not queries.
 - **Count:** Count of Count queries.
 - **Range:** Count of Range queries.
 - **Snapshot:** Event count when the snapshot process is triggered.
