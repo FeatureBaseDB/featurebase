@@ -1132,8 +1132,8 @@ func (e *executor) executeSet(ctx context.Context, index string, c *pql.Call, op
 	}
 
 	// Set column on existence field.
-	if nnf := idx.unprotectedExistenceField(); nnf != nil {
-		if _, err := nnf.SetBit(0, colID, nil); err != nil {
+	if ef := idx.existenceField(); ef != nil {
+		if _, err := ef.SetBit(0, colID, nil); err != nil {
 			return false, errors.Wrap(err, "setting existence column")
 		}
 	}

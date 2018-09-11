@@ -62,7 +62,7 @@ func TestIndex_Existence_Delete(t *testing.T) {
 		t.Fatalf("expected field to have been created: %s", existenceFieldName)
 	} else if !index.trackExistence {
 		t.Fatalf("expected index.trackExistence to be true")
-	} else if index.existenceField == nil {
+	} else if index.existenceFld == nil {
 		t.Fatalf("expected index.existenceField to be non-nil")
 	}
 
@@ -82,7 +82,7 @@ func TestIndex_Existence_Delete(t *testing.T) {
 		t.Fatalf("expected field to have been deleted: %s", existenceFieldName)
 	} else if index.trackExistence {
 		t.Fatalf("expected index.trackExistence to be false")
-	} else if index.existenceField != nil {
+	} else if index.existenceFld != nil {
 		t.Fatalf("expected index.existenceField to be nil")
 	}
 }

@@ -36,9 +36,9 @@ type Index struct {
 	name string
 	keys bool // use string keys
 
-	// Not-null tracking.
+	// Existence tracking.
 	trackExistence bool
-	existenceField *Field
+	existenceFld   *Field
 
 	// Fields by name.
 	fields map[string]*Field
@@ -166,7 +166,7 @@ func (i *Index) openExistenceField() error {
 	if err != nil {
 		return errors.Wrap(err, "creating existence field")
 	}
-	i.existenceField = f
+	i.existenceFld = f
 	return nil
 }
 
@@ -275,9 +275,12 @@ func (i *Index) Fields() []*Field {
 	return a
 }
 
-// unprotectedExistenceField returns the internal field used to track column existence.
-func (i *Index) unprotectedExistenceField() *Field {
-	return i.existenceField
+// existenceField returns the internal field used to track column existence.
+func (i *Index) existenceField() *Field {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+
+	return i.existenceFld
 }
 
 // recalculateCaches recalculates caches on every field in the index.
@@ -425,7 +428,7 @@ func (i *Index) DeleteField(name string) error {
 	// turn off existence tracking on the index.
 	if name == existenceFieldName {
 		i.trackExistence = false
-		i.existenceField = nil
+		i.existenceFld = nil
 
 		// Update meta data on disk.
 		if err := i.saveMeta(); err != nil {

@@ -741,13 +741,13 @@ func (api *API) ImportValue(_ context.Context, req *ImportValueRequest) error {
 }
 
 func importExistenceColumns(index *Index, columnIDs []uint64) error {
-	nnf := index.unprotectedExistenceField()
-	if nnf == nil {
+	ef := index.existenceField()
+	if ef == nil {
 		return nil
 	}
 
 	existenceRowIDs := make([]uint64, len(columnIDs))
-	return nnf.Import(existenceRowIDs, columnIDs, nil)
+	return ef.Import(existenceRowIDs, columnIDs, nil)
 }
 
 // MaxShards returns the maximum shard number for each index in a map.
