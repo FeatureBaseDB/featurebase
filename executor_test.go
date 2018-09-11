@@ -1371,7 +1371,7 @@ func TestExecutor_QueryCall(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Query(Row(f=10), excludeRowAttrs=true)`}); err != nil {
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Opt(Row(f=10), excludeRowAttrs=true)`}); err != nil {
 			t.Fatal(err)
 		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{100}) {
 			t.Fatalf("unexpected columns: %+v", bits)
@@ -1397,7 +1397,7 @@ func TestExecutor_QueryCall(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Query(Row(f=10), excludeColumns=true)`}); err != nil {
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Opt(Row(f=10), excludeColumns=true)`}); err != nil {
 			t.Fatal(err)
 		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{}) {
 			t.Fatalf("unexpected columns: %+v", bits)
@@ -1427,7 +1427,7 @@ func TestExecutor_QueryCall(t *testing.T) {
 			{ID: 100, Attrs: map[string]interface{}{"foo": "bar"}},
 		}
 
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Query(Row(f=10), columnAttrs=true)`}); err != nil {
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Opt(Row(f=10), columnAttrs=true)`}); err != nil {
 			t.Fatal(err)
 		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{100}) {
 			t.Fatalf("unexpected columns: %+v", bits)
@@ -1454,10 +1454,44 @@ func TestExecutor_QueryCall(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Query(Row(f=10), shards=[0, 2])`}); err != nil {
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Opt(Row(f=10), shards=[0, 2])`}); err != nil {
 			t.Fatal(err)
 		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{100, ShardWidth * 2}) {
 			t.Fatalf("unexpected columns: %+v", bits)
+		}
+	})
+
+	t.Run("multipleOpt", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		// Set columns for rows 0, 10, & 20 across two shards.
+		if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault()); err != nil {
+			t.Fatal(err)
+		} else if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+				Set(100, f=10)
+				SetRowAttrs(f, 10, foo="bar")
+			`}); err != nil {
+			t.Fatal(err)
+		}
+
+		req := &pilosa.QueryRequest{
+			Index: "i",
+			Query: `Opt(Row(f=10), excludeColumns=true)Opt(Row(f=10), excludeRowAttrs=true)`,
+		}
+		if res, err := c[0].API.Query(context.Background(), req); err != nil {
+			t.Fatal(err)
+		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{}) {
+			t.Fatalf("unexpected columns: %+v", bits)
+		} else if attrs := res.Results[0].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar"}) {
+			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
+		} else if bits := res.Results[1].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{100}) {
+			t.Fatalf("unexpected columns: %+v", bits)
+		} else if attrs := res.Results[1].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{}) {
+			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
 		}
 	})
 }

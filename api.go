@@ -121,7 +121,7 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 
 	// Fill column attributes if requested.
 	// execOpts.ColumnAttrs and execOpts.ExcludeColumns are out params from api.server.executor.Execute
-	if execOpts.ColumnAttrs && !execOpts.ExcludeColumns {
+	if execOpts.ColumnAttrs {
 		// Consolidate all column ids across all calls.
 		var columnIDs []uint64
 		for _, result := range results {

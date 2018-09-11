@@ -194,8 +194,8 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "TopN":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeTopN(ctx, index, c, shards, opt)
-	case "Query":
-		return e.executeQueryCall(ctx, index, c, shards, opt)
+	case "Opt":
+		return e.executeOptCall(ctx, index, c, shards, opt)
 	default:
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeBitmapCall(ctx, index, c, shards, opt)
@@ -221,7 +221,7 @@ func (e *executor) validateCallArgs(c *pql.Call) error {
 	return nil
 }
 
-func (e *executor) executeQueryCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (interface{}, error) {
+func (e *executor) executeOptCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (interface{}, error) {
 	optCopy := &execOptions{}
 	*optCopy = *opt
 	if arg, ok := c.Args["columnAttrs"]; ok {
@@ -234,7 +234,6 @@ func (e *executor) executeQueryCall(ctx context.Context, index string, c *pql.Ca
 	if arg, ok := c.Args["excludeRowAttrs"]; ok {
 		if value, ok := arg.(bool); ok {
 			optCopy.ExcludeRowAttrs = value
-			opt.ExcludeRowAttrs = value
 		} else {
 			return nil, errors.New("Query(): excludeRowAttrs must be a bool")
 		}
@@ -242,7 +241,6 @@ func (e *executor) executeQueryCall(ctx context.Context, index string, c *pql.Ca
 	if arg, ok := c.Args["excludeColumns"]; ok {
 		if value, ok := arg.(bool); ok {
 			optCopy.ExcludeColumns = value
-			opt.ExcludeColumns = value
 		} else {
 			return nil, errors.New("Query(): excludeColumns must be a bool")
 		}
@@ -261,7 +259,6 @@ func (e *executor) executeQueryCall(ctx context.Context, index string, c *pql.Ca
 		} else {
 			return nil, errors.New("Query(): shards must be a list of unsigned integers")
 		}
-
 	}
 	return e.executeCall(ctx, index, c.Children[0], shards, optCopy)
 }
