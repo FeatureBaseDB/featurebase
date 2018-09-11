@@ -120,7 +120,7 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	resp.Results = results
 
 	// Fill column attributes if requested.
-	// execOpts.ColumnAttrs is an out param from api.server.executor.Execute
+	// execOpts.ColumnAttrs may be set by the Execute method if any of the Calls use Options(columnAttrs=true)
 	if execOpts.ColumnAttrs {
 		// Consolidate all column ids across all calls.
 		var columnIDs []uint64
