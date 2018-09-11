@@ -1424,7 +1424,7 @@ func TestExecutor_QueryCall(t *testing.T) {
 		}
 
 		targetColAttrSets := []*pilosa.ColumnAttrSet{
-			&pilosa.ColumnAttrSet{ID: 100, Attrs: map[string]interface{}{"foo": "bar"}},
+			{ID: 100, Attrs: map[string]interface{}{"foo": "bar"}},
 		}
 
 		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Query(Row(f=10), columnAttrs=true)`}); err != nil {
