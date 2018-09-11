@@ -196,7 +196,7 @@ func TestClient_Export(t *testing.T) {
 		{RowID: 2, ColumnID: 203, RowKey: "row2", ColumnKey: "col203"},
 	}
 
-	t.Run("Import unkeyed,unkeyedf", func(t *testing.T) {
+	t.Run("Export unkeyed,unkeyedf", func(t *testing.T) {
 		// Populate data.
 		for _, bit := range data {
 			_, err := c.Query(context.Background(), "unkeyed", &pilosa.QueryRequest{
@@ -230,7 +230,7 @@ func TestClient_Export(t *testing.T) {
 		}
 	})
 
-	t.Run("Import unkeyed,keyedf", func(t *testing.T) {
+	t.Run("Export unkeyed,keyedf", func(t *testing.T) {
 		// Populate data.
 		for _, bit := range data {
 			_, err := c.Query(context.Background(), "unkeyed", &pilosa.QueryRequest{
@@ -264,7 +264,7 @@ func TestClient_Export(t *testing.T) {
 		}
 	})
 
-	t.Run("Import keyed,unkeyedf", func(t *testing.T) {
+	t.Run("Export keyed,unkeyedf", func(t *testing.T) {
 		// Populate data.
 		for _, bit := range data {
 			_, err := c.Query(context.Background(), "keyed", &pilosa.QueryRequest{
@@ -298,7 +298,7 @@ func TestClient_Export(t *testing.T) {
 		}
 	})
 
-	t.Run("Import keyed,keyedf", func(t *testing.T) {
+	t.Run("Export keyed,keyedf", func(t *testing.T) {
 		// Populate data.
 		for _, bit := range data {
 			_, err := c.Query(context.Background(), "keyed", &pilosa.QueryRequest{
@@ -653,6 +653,83 @@ func TestClient_ImportValue(t *testing.T) {
 	if max != 40 || cnt != 1 {
 		t.Fatalf("unexpected values: got max=%v, count=%v; expected max=40, cnt=1", max, cnt)
 	}
+}
+
+// Ensure client can bulk import data while tracking existence.
+func TestClient_ImportExistence(t *testing.T) {
+	cmd := test.MustRunCluster(t, 1)[0]
+	host := cmd.URL()
+	holder := cmd.Server.Holder()
+	hldr := test.Holder{Holder: holder}
+
+	t.Run("Set", func(t *testing.T) {
+		idxName := "iset"
+		fldName := "fset"
+
+		index := hldr.MustCreateIndexIfNotExists(idxName, pilosa.IndexOptions{TrackExistence: true})
+		_, err := index.CreateFieldIfNotExists(fldName)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Send import request.
+		c := MustNewClient(host, http.GetHTTPClient(nil))
+		if err := c.Import(context.Background(), idxName, fldName, 0, []pilosa.Bit{
+			{RowID: 0, ColumnID: 1},
+			{RowID: 0, ColumnID: 5},
+			{RowID: 200, ColumnID: 6},
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify data.
+		if a := hldr.Row(idxName, fldName, 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 5}) {
+			t.Fatalf("unexpected columns: %+v", a)
+		}
+		if a := hldr.Row(idxName, fldName, 200).Columns(); !reflect.DeepEqual(a, []uint64{6}) {
+			t.Fatalf("unexpected columns: %+v", a)
+		}
+
+		// Verify existence.
+		if a := hldr.ReadRow(idxName, "exists", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 5, 6}) {
+			t.Fatalf("unexpected existence columns: %+v", a)
+		}
+	})
+
+	t.Run("Int", func(t *testing.T) {
+		idxName := "iint"
+		fldName := "fint"
+
+		index := hldr.MustCreateIndexIfNotExists(idxName, pilosa.IndexOptions{TrackExistence: true})
+		field, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-100, 100))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Send import request.
+		c := MustNewClient(host, http.GetHTTPClient(nil))
+		if err := c.ImportValue(context.Background(), idxName, fldName, 0, []pilosa.FieldValue{
+			{ColumnID: 1, Value: -10},
+			{ColumnID: 2, Value: 20},
+			{ColumnID: 3, Value: 40},
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify Sum.
+		sum, cnt, err := field.Sum(nil, fldName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sum != 50 || cnt != 3 {
+			t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=50, cnt=3", sum, cnt)
+		}
+
+		// Verify existence.
+		if a := hldr.ReadRow(idxName, "exists", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 2, 3}) {
+			t.Fatalf("unexpected existence columns: %+v", a)
+		}
+	})
 }
 
 // Ensure client can retrieve a list of all checksums for blocks in a fragment.
