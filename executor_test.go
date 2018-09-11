@@ -1557,12 +1557,22 @@ func benchmarkExistence(nn bool, b *testing.B) {
 		b.Fatal(err)
 	}
 
+	bitCount := 10000
+	req := &pilosa.ImportRequest{
+		Index:     indexName,
+		Field:     fieldName,
+		Shard:     0,
+		RowIDs:    make([]uint64, bitCount),
+		ColumnIDs: make([]uint64, bitCount),
+	}
+	for i := 0; i < bitCount; i++ {
+		req.RowIDs[i] = uint64(rand.Intn(100000))
+		req.ColumnIDs[i] = uint64(rand.Intn(1 << 20))
+	}
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		colID := uint64(rand.Intn(1 << 20))
-		rowID := uint64(rand.Intn(100000))
-		qry := fmt.Sprintf(`Set(%d, %s=%d)`, colID, fieldName, rowID)
-		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: indexName, Query: qry}); err != nil {
+		if err := c[0].API.Import(context.Background(), req); err != nil {
 			b.Fatal(err)
 		}
 	}
