@@ -314,8 +314,7 @@ func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, e
 // in one long bitmap.
 func (api *API) ImportRoaringBytes(ctx context.Context, roaringBytes []byte, indexName, fieldName string, shard uint64) (err error) {
 	if err = api.validate(apiField); err != nil {
-		err = errors.Wrap(err, "validating api method")
-		return
+		return errors.Wrap(err, "validating api method")
 	}
 	nodes := api.cluster.shardNodes(indexName, shard)
 	var wg sync.WaitGroup
@@ -324,8 +323,7 @@ func (api *API) ImportRoaringBytes(ctx context.Context, roaringBytes []byte, ind
 		if node.ID == api.server.nodeID {
 			field := api.holder.Field(indexName, fieldName)
 			if field == nil {
-				err = newNotFoundError(ErrFieldNotFound)
-				return
+				return newNotFoundError(ErrFieldNotFound)
 			}
 			wg.Add(1)
 			go func(node *Node) {
@@ -344,7 +342,7 @@ func (api *API) ImportRoaringBytes(ctx context.Context, roaringBytes []byte, ind
 
 	}
 	wg.Wait()
-	return
+	return err
 }
 
 // DeleteField removes the named field from the named index. If the index is not

@@ -3434,10 +3434,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 
 	// Read container offsets and attach data.
 	if haveRuns {
-		err := readWithRuns(b, data, pos, keyN)
-		if err != nil {
-			return errors.Wrap(err, "reading runs from standard roaring format")
-		}
+		readWithRuns(b, data, pos, keyN)
 	} else {
 		err := readOffsets(b, data, pos, keyN)
 		if err != nil {
@@ -3447,7 +3444,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-func readOffsets(b *Bitmap, data []byte, pos int, keyN uint32) (err error) {
+func readOffsets(b *Bitmap, data []byte, pos int, keyN uint32) error {
 
 	citer, _ := b.Containers.Iterator(0)
 	for i, buf := 0, data[pos:]; i < int(keyN); i, buf = i+1, buf[4:] {
@@ -3473,11 +3470,10 @@ func readOffsets(b *Bitmap, data []byte, pos int, keyN uint32) (err error) {
 			return fmt.Errorf("unsupported container type %d", c.containerType)
 		}
 	}
-	return
+	return nil
 }
 
-func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) (err error) {
-
+func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) {
 	citer, _ := b.Containers.Iterator(0)
 	for i := 0; i < int(keyN); i++ {
 		citer.Next()
@@ -3505,6 +3501,4 @@ func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) (err error) {
 			pos += bitmapN * 8
 		}
 	}
-	return
-
 }
