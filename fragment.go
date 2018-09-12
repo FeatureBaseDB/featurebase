@@ -1327,7 +1327,7 @@ func (f *fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, e
 }
 
 // bulkImport bulk imports a set of bits and then snapshots the storage.
-// This does not affect the fragment's cache.
+// The cache is updated to reflect the new data.
 func (f *fragment) bulkImport(rowIDs, columnIDs []uint64) error {
 	// Verify that there are an equal number of row ids and column ids.
 	if len(rowIDs) != len(columnIDs) {
@@ -1425,7 +1425,7 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint) error 
 
 // importRoaringBytes imports from standard roaring data format defined at
 // https://github.com/RoaringBitmap/RoaringFormatSpec or from pilosa's version
-// of the roaring format.
+// of the roaring format. The cache is updated to reflect the new data.
 func (f *fragment) importRoaringBytes(roaringBytes []byte) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
