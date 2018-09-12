@@ -3343,15 +3343,13 @@ func popcountAndSlice(s, m []uint64) uint64 {
 }
 
 // constants from github.com/RoaringBitmap/roaring
-const ( //taken from  roaring/util.go
+// taken from  roaring/util.go
+const (
 	serialCookieNoRunContainer = 12346 // only arrays and bitmaps
 	serialCookie               = 12347 // runs, arrays, and bitmaps
-	noOffsetThreshold          = 4
 )
 
-//end roaring stuff
-
-func readStandardHeader(buf []byte) (size uint32, containerTyper func(index uint, card int) byte, header, pos int, err error, haveRuns bool) {
+func readStandardHeader(buf []byte) (size uint32, containerTyper func(index uint, card int) byte, header, pos int, haveRuns bool, err error) {
 	if len(buf) < 8 {
 		err = fmt.Errorf("buffer too small, expecting at least 8 bytes, was %d", len(buf))
 		return
@@ -3418,7 +3416,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		return errors.Wrap(b.unmarshalPilosaRoaring(data), "unmarshaling as pilosa roaring")
 	}
 
-	keyN, containerTyper, header, pos, err, haveRuns := readStandardHeader(data)
+	keyN, containerTyper, header, pos, haveRuns, err := readStandardHeader(data)
 	if err != nil {
 		return errors.Wrap(err, "reading roaring header")
 	}

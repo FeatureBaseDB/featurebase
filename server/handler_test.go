@@ -568,7 +568,8 @@ func TestHandler_Endpoints(t *testing.T) {
 		if result.StatusCode != 200 {
 			t.Fatalf("CORS preflight status should be 200, but is %v", result.StatusCode)
 		}
-		if w.HeaderMap["Access-Control-Allow-Origin"][0] != "http://test/" {
+
+		if result.Header["Access-Control-Allow-Origin"][0] != "http://test/" {
 			t.Fatal("CORS header not present")
 		}
 	})
