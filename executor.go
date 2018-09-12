@@ -443,6 +443,8 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, index string, c *
 		return e.executeUnionShard(ctx, index, c, shard)
 	case "Xor":
 		return e.executeXorShard(ctx, index, c, shard)
+	case "Not":
+		return e.executeNotShard(ctx, index, c, shard)
 	default:
 		return nil, fmt.Errorf("unknown call: %s", c.Name)
 	}
@@ -1005,6 +1007,38 @@ func (e *executor) executeXorShard(ctx context.Context, index string, c *pql.Cal
 	}
 	other.invalidateCount()
 	return other, nil
+}
+
+// executeNotShard executes a not() call for a local shard.
+func (e *executor) executeNotShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
+	if len(c.Children) == 0 {
+		return nil, errors.New("Not() requires an input row")
+	} else if len(c.Children) > 1 {
+		return nil, errors.New("Not() only accepts a single row input")
+	}
+
+	// Make sure the index supports existence tracking.
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	} else if idx.existenceField() == nil {
+		return nil, errors.Errorf("index does not support existence tracking: %s", index)
+	}
+
+	var existenceRow *Row
+	existenceFrag := e.Holder.fragment(index, existenceFieldName, viewStandard, shard)
+	if existenceFrag == nil {
+		existenceRow = NewRow()
+	} else {
+		existenceRow = existenceFrag.row(0)
+	}
+
+	row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
+	if err != nil {
+		return nil, err
+	}
+
+	return existenceRow.Difference(row), nil
 }
 
 // executeCount executes a count() call.

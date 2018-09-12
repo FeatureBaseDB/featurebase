@@ -50,7 +50,7 @@ curl localhost:10101/index/repository/query \
 * `ATTR_NAME` Must be a valid identifier `[A-Za-z][A-Za-z0-9._-]*`
 * `ATTR_VALUE` Can be a string, float, integer, or bool.
 * `CALL` Any query
-* `ROW_CALL` Any query which returns a row, such as `Row`, `Union`, `Difference`, `Xor`, `Intersect`, `Range`
+* `ROW_CALL` Any query which returns a row, such as `Row`, `Union`, `Difference`, `Xor`, `Intersect`, `Range`, `Not`
 * `[]ATTR_VALUE` Denotes an array of `ATTR_VALUE`s. (e.g. `["a", "b", "c"]`)
 
 ### Write Operations
@@ -96,7 +96,7 @@ Set(10, stargazer=1, 2016-01-01T00:00)
 
 Set multiple bits in a single request:
 ```request
-Set(1, stargazer=10) Set(2, stargazer=10) Set(1, stargazer=20) Set(2, stargazer=30)
+Set(10, stargazer=1) Set(20, stargazer=1) Set(10, stargazer=2) Set(30, stargazer=2)
 ```
 ```response
 {"results":[false,true,true,true]}
@@ -360,7 +360,7 @@ Difference(Row(stargazer=2), Row(stargazer=1))
 {"attrs":{},"columns":[30]}
 ```
 
-* columnss are repositories that were starred by user 2 BUT NOT user 1
+* columns are repositories that were starred by user 2 BUT NOT user 1
 
 #### Xor
 
@@ -386,10 +386,38 @@ Query columns with a bit set in exactly one of two rows (repositories that are s
 Xor(Row(stargazer=2), Row(stargazer=1))
 ```
 ```response
-{"results":[{"attrs":{},"columns":[10,20,30]}]}
+{"results":[{"attrs":{},"columns":[20,30]}]}
 ```
 
 * columns are repositories that were starred by user 1 XOR user 2 (user 1 or user 2, but not both)
+
+#### Not
+
+**Spec:**
+
+```
+Not(<ROW_CALL>)
+```
+
+**Description:**
+
+Not returns the inverse of all of the bits from the `ROW_CALL` argument. The Not query requires that `trackExistence` has been enabled on the Index.
+
+**Result Type:** object with attrs and columns
+
+attrs will always be empty
+
+**Examples:**
+
+Query existing columns that do not have a bit set in the given row.
+```request
+Not(Row(stargazer=1))
+```
+```response
+{"results":[{"attrs":{},"columns":[30]}]}
+```
+
+* columns are repositories that were not starred by user 1
 
 #### Count
 **Spec:**
