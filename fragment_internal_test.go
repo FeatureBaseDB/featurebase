@@ -1579,13 +1579,13 @@ func calcExpected(inputs ...[]uint64) [][]uint64 {
 
 	// initialize ret slice
 	ret := make([][]uint64, maxrow+1)
-	for i, _ := range ret {
+	for i := range ret {
 		ret[i] = make([]uint64, 0)
 	}
 
 	// populate ret slices from rows map
 	for row, vals := range rows {
-		for val, _ := range vals {
+		for val := range vals {
 			ret[row] = append(ret[row], val)
 		}
 	}
