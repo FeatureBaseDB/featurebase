@@ -1496,7 +1496,7 @@ func (f *fragment) snapshot() error {
 
 // snapshot writes the fragment f with bm as the data. It is unprotected, and
 // f.mu must be locked when calling it.
-func snapshot(f *fragment, bm *roaring.Bitmap) error {
+func snapshot(f *fragment, bm *roaring.Bitmap) error { // nolint: interfacer
 
 	f.Logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
