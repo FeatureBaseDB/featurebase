@@ -44,15 +44,19 @@ import (
 )
 
 const (
-	// ShardWidth is the number of column IDs in a shard.
-	ShardWidth = 1048576
+	// ShardWidth is the number of column IDs in a shard. It must be a power of 2 greater than or equal to 16.
+	shardWidthExponent = 20
+	ShardWidth         = 1 << shardWidthExponent
 
-	// containersPerRowSegment is dependent upon ShardWidth,
-	// and it represents the number of containers per shard row
-	// (or rowSegment). Since containers are set in roaring
-	// to be 2^16, then this const should be ShardWidth / 2^16.
-	// It is represented as the exponent n of 2^n.
-	containersPerRowSegment = 4
+	// shardVsContainerExponent is the power of 2 of ShardWith minus the power
+	// of two of roaring container width (which is 16).
+	// 2^shardVsContainerExponent is the number of containers in a shard row.
+	//
+	// It is represented in this rather awkward way because calculating the row
+	// which a given container is in means dividing by the number of rows per
+	// container which is performantly expressed as a right shift by this
+	// exponent.
+	shardVsContainerExponent = shardWidthExponent - 16
 
 	// snapshotExt is the file extension used for an in-process snapshot.
 	snapshotExt = ".snapshotting"
@@ -1432,21 +1436,21 @@ func (f *fragment) importRoaringBytes(roaringBytes []byte) error {
 	}
 
 	// get a list of keys in order to update the cache
-	i, _ := bm.Containers.Iterator(0)
-	set := make([]uint64, 0)
+	iter, _ := bm.Containers.Iterator(0)
+	rowsInData := make([]uint64, 0)
 	var lastRow uint64 = math.MaxUint64
 
-	for i.Next() {
-		key, _ := i.Value()
+	for iter.Next() {
+		key, _ := iter.Value()
 
 		// virtual row for the current container
-		vRow := key >> containersPerRowSegment
+		vRow := key >> shardVsContainerExponent
 
 		// skip dups
 		if vRow == lastRow {
 			continue
 		}
-			set = append(set, vRow)
+		rowsInData = append(rowsInData, vRow)
 		lastRow = vRow
 	}
 
@@ -1454,7 +1458,7 @@ func (f *fragment) importRoaringBytes(roaringBytes []byte) error {
 		bm = f.storage.Union(bm)
 	}
 
-	for _,rowID := range set {
+	for _, rowID := range rowsInData {
 		n := bm.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
 		f.cache.BulkAdd(rowID, n)
 	}
@@ -1493,6 +1497,8 @@ func (f *fragment) snapshot() error {
 	return snapshot(f, f.storage)
 }
 
+// snapshot writes the fragment f with bm as the data. It is unprotected, and
+// f.mu must be locked when calling it.
 func snapshot(f *fragment, bm *roaring.Bitmap) error {
 
 	f.Logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
@@ -1763,7 +1769,7 @@ func (f *fragment) rows() []uint64 {
 		key, _ := i.Value()
 
 		// virtual row for the current container
-		vRow := key >> containersPerRowSegment
+		vRow := key >> shardVsContainerExponent
 
 		// skip dups
 		if vRow == lastRow {
@@ -1792,7 +1798,7 @@ func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
 		key, c := i.Value()
 
 		// virtual row for the current container
-		vRow := key >> containersPerRowSegment
+		vRow := key >> shardVsContainerExponent
 
 		// column container key for virtual row
 		colKey = ((vRow * ShardWidth) + colID) >> 16

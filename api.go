@@ -297,8 +297,8 @@ func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, e
 
 // ImportRoaringBytes is a low level interface for importing data to Pilosa when
 // extremely high throughput is desired. The data must be encoded in a
-// particular way which may be unintuitive (discussed below), and overwrites any
-// existing data in the particular fragment into which it is being loaded.
+// particular way which may be unintuitive (discussed below). The data is merged
+// with existing data.
 //
 // It takes as input a roaring bitmap which it uses as the data for the
 // indicated index, field, and shard. The bitmap may be encoded according to the
