@@ -409,7 +409,7 @@ attrs will always be empty
 
 **Examples:**
 
-Query columns with a bit set in one row and not another (repositories that are starred by one user and not another):
+Query existing columns that do not have a bit set in the given row.
 ```request
 Not(Row(stargazer=1))
 ```
