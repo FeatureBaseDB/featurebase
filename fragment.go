@@ -338,15 +338,13 @@ func (f *fragment) closeStorage() error {
 func (f *fragment) row(rowID uint64) *Row {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.unprotectedRow(rowID, true, true)
+	return f.unprotectedRow(rowID)
 }
 
-func (f *fragment) unprotectedRow(rowID uint64, checkRowCache bool, updateRowCache bool) *Row {
-	if checkRowCache {
-		r, ok := f.rowCache.Fetch(rowID)
-		if ok && r != nil {
-			return r
-		}
+func (f *fragment) unprotectedRow(rowID uint64) *Row {
+	r, ok := f.rowCache.Fetch(rowID)
+	if ok && r != nil {
+		return r
 	}
 
 	// Only use a subset of the containers.
@@ -365,9 +363,7 @@ func (f *fragment) unprotectedRow(rowID uint64, checkRowCache bool, updateRowCac
 	}
 	row.invalidateCount()
 
-	if updateRowCache {
-		f.rowCache.Add(rowID, row)
-	}
+	f.rowCache.Add(rowID, row)
 
 	return row
 }
@@ -427,7 +423,7 @@ func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 	}
 
 	// Get the row from row cache or fragment.storage.
-	row := f.unprotectedRow(rowID, true, true)
+	row := f.unprotectedRow(rowID)
 	row.SetBit(columnID)
 
 	// Update the cache.
@@ -479,7 +475,7 @@ func (f *fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, er
 	}
 
 	// Get the row from cache or fragment.storage.
-	row := f.unprotectedRow(rowID, true, true)
+	row := f.unprotectedRow(rowID)
 	row.clearBit(columnID)
 
 	// Update the cache.
