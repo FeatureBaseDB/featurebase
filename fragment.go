@@ -1462,6 +1462,7 @@ func (f *fragment) importRoaringBytes(roaringBytes []byte) error {
 		n := bm.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
 		f.cache.BulkAdd(rowID, n)
 	}
+	f.cache.Invalidate()
 
 	err = snapshot(f, bm)
 	return err

@@ -1447,6 +1447,113 @@ func TestFragment_RoaringImport(t *testing.T) {
 	}
 }
 
+// Test Importing roaring data.
+func TestFragment_RoaringImportTopN(t *testing.T) {
+	tests := []struct {
+		rowIDs  []uint64
+		colIDs  []uint64
+		rowIDs2 []uint64
+		colIDs2 []uint64
+		roaring []uint64
+	}{
+		{
+			rowIDs:  []uint64{4, 4, 4, 4},
+			colIDs:  []uint64{0, 1, 2, 3},
+			rowIDs2: []uint64{5, 5, 5, 5, 5},
+			colIDs2: []uint64{0, 1, 2, 3, 4},
+			roaring: []uint64{0, 65535, 65536, 1<<20 + 1, 1<<20 + 2, 1<<20*2 + 1},
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("importroaring%d", i), func(t *testing.T) {
+			f := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeRanked)
+			defer f.Close()
+
+			err := f.bulkImport(test.rowIDs, test.colIDs)
+			if err != nil {
+				t.Fatalf("bulk importing ids: %v", err)
+			}
+			expPairs := calcTop(test.rowIDs, test.colIDs)
+			pairs, err := f.top(topOptions{})
+			if err != nil {
+				t.Fatalf("executing top after bulk import: %v", err)
+			}
+			if !reflect.DeepEqual(expPairs, pairs) {
+				t.Fatalf("post bulk import:\n  exp: %v\n  got: %v\n", expPairs, pairs)
+			}
+
+			err = f.bulkImport(test.rowIDs2, test.colIDs2)
+			if err != nil {
+				t.Fatalf("bulk importing ids: %v", err)
+			}
+			test.rowIDs = append(test.rowIDs, test.rowIDs2...)
+			test.colIDs = append(test.colIDs, test.colIDs2...)
+			expPairs = calcTop(test.rowIDs, test.colIDs)
+			pairs, err = f.top(topOptions{})
+			if err != nil {
+				t.Fatalf("executing top after bulk import: %v", err)
+			}
+			if !reflect.DeepEqual(expPairs, pairs) {
+				t.Fatalf("post bulk import2:\n  exp: %v\n  got: %v\n", expPairs, pairs)
+			}
+
+			buf := &bytes.Buffer{}
+			bm := roaring.NewBitmap(test.roaring...)
+			_, err = bm.WriteTo(buf)
+			if err != nil {
+				t.Fatalf("writing to buffer: %v", err)
+			}
+			f.importRoaringBytes(buf.Bytes())
+			rows, cols := toRowsCols(test.roaring)
+			expPairs = calcTop(append(test.rowIDs, rows...), append(test.colIDs, cols...))
+			pairs, err = f.top(topOptions{})
+			if err != nil {
+				t.Fatalf("executing top after roaring import: %v", err)
+			}
+			if !reflect.DeepEqual(expPairs, pairs) {
+				t.Fatalf("post Roaring:\n  exp: %v\n  got: %v\n", expPairs, pairs)
+			}
+		})
+	}
+}
+
+func toRowsCols(roaring []uint64) (rowIDs, colIDs []uint64) {
+	rowIDs, colIDs = make([]uint64, len(roaring)), make([]uint64, len(roaring))
+	for i, bit := range roaring {
+		rowIDs[i] = bit / ShardWidth
+		colIDs[i] = bit % ShardWidth
+	}
+	return rowIDs, colIDs
+}
+
+func calcTop(rowIDs, colIDs []uint64) []Pair {
+	if len(rowIDs) != len(colIDs) {
+		panic("row and col ids must be of equal len")
+	}
+	// make map of rowID to colID set in order to dedup
+	counts := make(map[uint64]map[uint64]struct{})
+	for i := 0; i < len(rowIDs); i++ {
+		row, col := rowIDs[i], colIDs[i]
+		m, ok := counts[row]
+		if !ok {
+			m = make(map[uint64]struct{})
+			counts[row] = m
+		}
+		m[col] = struct{}{}
+	}
+
+	// build slice of pairs from map
+	ret := make([]Pair, 0)
+	for row, cols := range counts {
+		ret = append(ret, Pair{ID: row, Count: uint64(len(cols))})
+	}
+
+	// reverse sort by count
+	sort.Slice(ret, func(i, j int) bool { return ret[i].Count > ret[j].Count })
+	return ret
+}
+
 // calcExpected takes a number of slices of uint64 represented data to be added
 // to a fragment. It calculates which rows and bits set in each row would be
 // expected after importing that data, and returns a [][]uint64 where the index
