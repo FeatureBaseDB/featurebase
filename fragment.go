@@ -1386,7 +1386,7 @@ func (f *fragment) bulkImport(rowIDs, columnIDs []uint64) error {
 		f.cache.BulkAdd(rowID, n)
 	}
 
-	f.cache.Invalidate()
+	f.cache.Recalculate()
 	return snapshot(f, results)
 }
 
@@ -1462,7 +1462,7 @@ func (f *fragment) importRoaringBytes(roaringBytes []byte) error {
 		n := bm.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
 		f.cache.BulkAdd(rowID, n)
 	}
-	f.cache.Invalidate()
+	f.cache.Recalculate()
 
 	err = snapshot(f, bm)
 	return err
