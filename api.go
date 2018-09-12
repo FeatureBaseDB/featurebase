@@ -296,7 +296,7 @@ func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, e
 }
 
 // ImportRoaringBytes fast loading of standard roaring format
-func (api *API) ImportRoaringBytes(ctx context.Context, roaringBytes []byte, indexName, fieldName string, shard uint64 ) (err error) {
+func (api *API) ImportRoaringBytes(ctx context.Context, roaringBytes []byte, indexName, fieldName string, shard uint64) (err error) {
 	if err = api.validate(apiField); err != nil {
 		err = errors.Wrap(err, "validating api method")
 		return
