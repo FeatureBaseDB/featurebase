@@ -3436,9 +3436,15 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 
 	// Read container offsets and attach data.
 	if haveRuns {
-		readWithRuns(b, data, pos, keyN)
+		err := readWithRuns(b, data, pos, keyN)
+		if err != nil {
+			return errors.Wrap(err, "reading runs from standard roaring format")
+		}
 	} else {
-		readOffsets(b, data, pos, keyN)
+		err := readOffsets(b, data, pos, keyN)
+		if err != nil {
+			return errors.Wrap(err, "reading offsets from standard roaring format")
+		}
 	}
 	return nil
 }
@@ -3450,8 +3456,7 @@ func readOffsets(b *Bitmap, data []byte, pos int, keyN uint32) (err error) {
 		offset := binary.LittleEndian.Uint32(buf[0:4])
 		// Verify the offset is within the bounds of the input data.
 		if int(offset) >= len(data) {
-			err = fmt.Errorf("offset out of bounds: off=%d, len=%d", offset, len(data))
-			return
+			return fmt.Errorf("offset out of bounds: off=%d, len=%d", offset, len(data))
 		}
 
 		// Map byte slice directly to the container data.
@@ -3467,12 +3472,10 @@ func readOffsets(b *Bitmap, data []byte, pos int, keyN uint32) (err error) {
 			c.runs = nil
 			c.bitmap = (*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN]
 		default:
-			err = fmt.Errorf("unsupported container type %d", c.containerType)
-			return
+			return fmt.Errorf("unsupported container type %d", c.containerType)
 		}
 	}
 	return
-
 }
 
 func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) (err error) {

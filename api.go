@@ -295,7 +295,23 @@ func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, e
 	return field, nil
 }
 
-// ImportRoaringBytes fast loading of standard roaring format
+// ImportRoaringBytes is a low level interface for importing data to Pilosa when
+// extremely high throughput is desired. The data must be encoded in a
+// particular way which may be unintuitive (discussed below), and overwrites any
+// existing data in the particular fragment into which it is being loaded.
+//
+// It takes as input a roaring bitmap which it uses as the data for the
+// indicated index, field, and shard. The bitmap may be encoded according to the
+// standard roaring spec (https://github.com/RoaringBitmap/RoaringFormatSpec),
+// or to the pilosa roaring spec which supports 64 bit integers
+// (https://www.pilosa.com/docs/latest/architecture/#roaring-bitmap-storage-format).
+//
+// The data, roaringBytes, should be encoded the same way that Pilosa stores
+// fragments internally. A bit "i" being set in the input bitmap indicates that
+// the bit is set in Pilosa row "i/sliceWidth", and in column
+// (shard*sliceWidth)+(i%sliceWidth). That is to say that roaringBytes
+// represents all of the rows in this shard of this field concatenated together
+// in one long bitmap.
 func (api *API) ImportRoaringBytes(ctx context.Context, roaringBytes []byte, indexName, fieldName string, shard uint64) (err error) {
 	if err = api.validate(apiField); err != nil {
 		err = errors.Wrap(err, "validating api method")

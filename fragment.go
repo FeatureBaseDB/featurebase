@@ -1420,7 +1420,8 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint) error 
 }
 
 // importRoaringBytes imports from standard roaring data format defined at
-// https://github.com/RoaringBitmap/RoaringFormatSpec
+// https://github.com/RoaringBitmap/RoaringFormatSpec or from pilosa's version
+// of the roaring format.
 func (f *fragment) importRoaringBytes(roaringBytes []byte) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
