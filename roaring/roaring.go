@@ -3352,14 +3352,14 @@ const (
 func readStandardHeader(buf []byte) (size uint32, containerTyper func(index uint, card int) byte, header, pos int, haveRuns bool, err error) {
 	if len(buf) < 8 {
 		err = fmt.Errorf("buffer too small, expecting at least 8 bytes, was %d", len(buf))
-		return
+		return size, containerTyper, header, pos, haveRuns, err
 	}
 	cf := func(index uint, card int) (newType byte) {
 		newType = containerBitmap
 		if card < ArrayMaxSize {
 			newType = containerArray
 		}
-		return
+		return newType
 	}
 	containerTyper = cf
 	cookie := binary.LittleEndian.Uint32(buf)
@@ -3377,7 +3377,7 @@ func readStandardHeader(buf []byte) (size uint32, containerTyper func(index uint
 		isRunBitmapSize := (int(size) + 7) / 8
 		if pos+isRunBitmapSize > len(buf) {
 			err = fmt.Errorf("malformed bitmap, is-run bitmap overruns buffer at %d", pos+isRunBitmapSize)
-			return
+			return size, containerTyper, header, pos, haveRuns, err
 		}
 
 		isRunBitmap := buf[pos : pos+isRunBitmapSize]
@@ -3390,22 +3390,22 @@ func readStandardHeader(buf []byte) (size uint32, containerTyper func(index uint
 		}
 	} else {
 		err = fmt.Errorf("did not find expected serialCookie in header")
-		return
+		return size, containerTyper, header, pos, haveRuns, err
 	}
 
 	header = pos
 	if size > (1 << 16) {
 		err = fmt.Errorf("It is logically impossible to have more than (1<<16) containers.")
-		return
+		return size, containerTyper, header, pos, haveRuns, err
 	}
 
 	// descriptive header
 	if pos+2*2*int(size) > len(buf) {
 		err = fmt.Errorf("malformed bitmap, key-cardinality slice overruns buffer at %d", pos+2*2*int(size))
-		return
+		return size, containerTyper, header, pos, haveRuns, err
 	}
 	pos += 2 * 2 * int(size) // moving pos past keycount
-	return
+	return size, containerTyper, header, pos, haveRuns, err
 }
 
 // UnmarshalBinary decodes b from a binary-encoded byte slice. data can be in
