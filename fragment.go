@@ -1430,6 +1430,35 @@ func (f *fragment) importRoaringBytes(roaringBytes []byte) error {
 	if err != nil {
 		return err
 	}
+
+	// get a list of keys in order to update the cache
+	i, _ := bm.Containers.Iterator(0)
+	set := make([]uint64, 0)
+	var lastRow uint64 = math.MaxUint64
+
+	for i.Next() {
+		key, _ := i.Value()
+
+		// virtual row for the current container
+		vRow := key >> containersPerRowSegment
+
+		// skip dups
+		if vRow == lastRow {
+			continue
+		}
+			set = append(set, vRow)
+		lastRow = vRow
+	}
+
+	if f.storage.Count() > 0 {
+		bm = f.storage.Union(bm)
+	}
+
+	for _,rowID := range set {
+		n := bm.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
+		f.cache.BulkAdd(rowID, n)
+	}
+
 	err = snapshot(f, bm)
 	return err
 }
