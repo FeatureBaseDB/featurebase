@@ -46,8 +46,10 @@ curl localhost:10101/index/repository/query \
 * `field` The field specifies on which Pilosa [field](../glossary/#field) the query will operate. Valid field names are lower case strings; they start with an alphanumeric character, and contain only alphanumeric characters and `_-`. They must be 64 characters or less in length.
 * `TIMESTAMP` This is a timestamp in the following format `YYYY-MM-DDTHH:MM` (e.g. 2006-01-02T15:04)
 * `UINT` An unsigned integer (e.g. 42839)
+* `BOOL` A boolean value, `true` or `false`
 * `ATTR_NAME` Must be a valid identifier `[A-Za-z][A-Za-z0-9._-]*`
 * `ATTR_VALUE` Can be a string, float, integer, or bool.
+* `CALL` Any query
 * `ROW_CALL` Any query which returns a row, such as `Row`, `Union`, `Difference`, `Xor`, `Intersect`, `Range`, `Not`
 * `[]ATTR_VALUE` Denotes an array of `ATTR_VALUE`s. (e.g. `["a", "b", "c"]`)
 
@@ -112,8 +114,8 @@ Set(10, pullrequests=2)
 **Spec:**
 
 ```
-SetRowAttrs(<FIELD>, <ROW>, 
-            <ATTR_NAME=ATTR_VALUE>, 
+SetRowAttrs(<FIELD>, <ROW>,
+            <ATTR_NAME=ATTR_VALUE>,
             [ATTR_NAME=ATTR_VALUE ...])
 ```
 
@@ -150,8 +152,8 @@ SetRowAttrs(stargazer, 10, username=null)
 **Spec:**
 
 ```
-SetColumnAttrs(<COLUMN>, 
-               <ATTR_NAME=ATTR_VALUE>, 
+SetColumnAttrs(<COLUMN>,
+               <ATTR_NAME=ATTR_VALUE>,
                [ATTR_NAME=ATTR_VALUE ...])
 ```
 
@@ -262,7 +264,7 @@ Row(stargazer=1)
 {"attrs":{"username":"mrpi","active":true},"columns":[10, 20]}
 ```
 
-* attrs are the attributes for user 1 
+* attrs are the attributes for user 1
 * columns are the repositories which user 1 has starred.
 
 #### Union
@@ -525,7 +527,7 @@ Range(<FIELD>=<ROW>, <TIMESTAMP>, <TIMESTAMP>)
 **Description:**
 
 Similar to `Row`, but only returns bits which were set with timestamps
-between the given `start` (first) and `end` (second) timestamps. 
+between the given `start` (first) and `end` (second) timestamps.
 
 **Result Type:** object with attrs and bits
 
@@ -576,14 +578,14 @@ Range(commitactivity > 100)
 
 BSI range queries support the following operators:
 
- Operator | Name                          | Value              
+ Operator | Name                          | Value
 ----------|-------------------------------|--------------------
- `>`      | greater-than, GT              | integer            
- `<`      | less-than, LT                 | integer            
- `<=`     | less-than-or-equal-to, LTE    | integer            
- `>=`     | greater-than-or-equal-to, GTE | integer            
- `==`     | equal-to, EQ                  | integer            
- `!=`     | not-equal-to, NEQ             | integer or `null`  
+ `>`      | greater-than, GT              | integer
+ `<`      | less-than, LT                 | integer
+ `<=`     | less-than-or-equal-to, LTE    | integer
+ `>=`     | greater-than-or-equal-to, GTE | integer
+ `==`     | equal-to, EQ                  | integer
+ `!=`     | not-equal-to, NEQ             | integer or `null`
 
 `<`, and `<=` can be chained together to represent a bounded interval. For example:
 
@@ -673,3 +675,41 @@ Sum(field="diskusage")
 ```
 
 * Result is the sum of all values (total size of all repositories in kilobytes, here), plus the count of columns.
+
+### Other Operations
+
+#### Options
+
+**Spec:**
+
+```
+Options(<CALL>, columnAttrs=<BOOL>, excludeColumns=<BOOL>, excludeRowAttrs=<BOOL>, shards=[UINT ...])
+```
+
+**Description:**
+
+Modifies the given query as follows:
+* `columnAttrs`: Include column attributes in the result (Default: `false`).
+* `excludeColumns`: Exclude column IDs from the result (Default: `false`).
+* `excludeRowAttrs`: Exclude row attributes from the result (Default: `false`).
+* `shards`: Run the query using only the data from the given shards. By default, the entire data set (i.e. data from all shards) is used.
+
+**Result Type:** Same result type as <CALL>.
+
+**Examples:**
+
+Return column attributes:
+```request
+Options(Row(f1=10), columnAttrs=true)
+```
+```response
+{"attrs":{},"columns":[100]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}
+```
+
+Run the query against shards 0 and 2 only:
+```request
+Options(Row(f1=10), shards=[0, 2])
+```
+```response
+{"attrs":{},"columns":[100, 2097152]}
+```
