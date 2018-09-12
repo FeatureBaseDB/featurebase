@@ -17,13 +17,14 @@ package roaring
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
 	"math/bits"
 	"sort"
 	"unsafe"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -614,8 +615,9 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	return n, nil
 }
 
-// UnmarshalBinary decodes b from a binary-encoded byte slice.
-func (b *Bitmap) UnmarshalBinary(data []byte) error {
+// unmarshalPilosaRoaring treats data as being encoded in Pilosa's 64 bit
+// roaring format and decodes it into b.
+func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 	if len(data) < headerBaseSize {
 		return errors.New("data too small")
 	}
@@ -3408,18 +3410,17 @@ func readStandardHeader(buf []byte) (size uint32, containerTyper func(index uint
 	return
 }
 
-func UnmarshalStandardRoaring(data []byte) (*Bitmap, error) {
-	b := NewBitmap()
-
+// UnmarshalBinary decodes b from a binary-encoded byte slice. data can be in
+// either standard roaring format or Pilosa's roaring format.
+func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
-	if fileMagic == magicNumber { //if pilosa roaring
-		err := b.UnmarshalBinary(data)
-		return b, err
+	if fileMagic == magicNumber { // if pilosa roaring
+		return errors.Wrap(b.unmarshalPilosaRoaring(data), "unmarshaling as pilosa roaring")
 	}
 
 	keyN, containerTyper, header, pos, err, haveRuns := readStandardHeader(data)
 	if err != nil {
-		return nil, err
+		return errors.Wrap(err, "reading roaring header")
 	}
 
 	b.Containers.Reset()
@@ -3439,7 +3440,7 @@ func UnmarshalStandardRoaring(data []byte) (*Bitmap, error) {
 	} else {
 		readOffsets(b, data, pos, keyN)
 	}
-	return b, nil
+	return nil
 }
 
 func readOffsets(b *Bitmap, data []byte, pos int, keyN uint32) (err error) {

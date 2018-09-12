@@ -1424,7 +1424,8 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint) error 
 func (f *fragment) importRoaringBytes(roaringBytes []byte) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	bm, err := roaring.UnmarshalStandardRoaring(roaringBytes)
+	bm := roaring.NewBitmap()
+	err := bm.UnmarshalBinary(roaringBytes)
 	if err != nil {
 		return err
 	}

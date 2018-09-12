@@ -3231,7 +3231,8 @@ func runContainerFunc(f interface{}, c ...*Container) *Container {
 func TestUnmarshalStdRoaring(t *testing.T) {
 	//generated serialize image from java(clojure) with arrays
 	rbContainerWithTwoArrays, _ := hex.DecodeString("3A300000020000000000020001000000180000001E0000000100020003000100")
-	bm, er := UnmarshalStandardRoaring(rbContainerWithTwoArrays)
+	bm := NewBitmap()
+	er := bm.UnmarshalBinary(rbContainerWithTwoArrays)
 	if er != nil {
 		t.Fatalf("UnmarshalStandardRoaring %s", er)
 	}
@@ -3240,7 +3241,8 @@ func TestUnmarshalStdRoaring(t *testing.T) {
 	}
 	//generated serialize image from java(clojure) with a run and array
 	rbContainerWithRLEandArray, _ := hex.DecodeString("3B3001000100000900010000000100010009000100")
-	bm, er = UnmarshalStandardRoaring(rbContainerWithRLEandArray)
+	bm = NewBitmap()
+	er = bm.UnmarshalBinary(rbContainerWithRLEandArray)
 	if er != nil {
 		t.Fatalf("UnmarshalStandardRoaring %s", er)
 	}
@@ -3249,7 +3251,8 @@ func TestUnmarshalStdRoaring(t *testing.T) {
 	}
 	//had to use an external file because emacs was barfing on the long line :()
 	_bitmap_array_container, _ := ioutil.ReadFile("testdata/bitmapcontainer.roaringbitmap")
-	bm, er = UnmarshalStandardRoaring(_bitmap_array_container)
+	bm = NewBitmap()
+	er = bm.UnmarshalBinary(_bitmap_array_container)
 	if er != nil {
 		t.Fatalf("UnmarshalStandardRoaring %s", er)
 	}
