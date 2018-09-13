@@ -312,7 +312,7 @@ func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, e
 // (shard*ShardWidth)+(i%ShardWidth). That is to say that "data" represents all
 // of the rows in this shard of this field concatenated together in one long
 // bitmap.
-func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, shard uint64, data []byte) (err error) {
+func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, shard uint64, remote bool, data []byte) (err error) {
 	if err = api.validate(apiField); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -326,15 +326,18 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 				return newNotFoundError(ErrFieldNotFound)
 			}
 			wg.Add(1)
+			// must make a copy of data to operate on locally. field.importRoaring changes data
+			d2 := make([]byte, len(data))
+			copy(d2, data)
 			go func(node *Node) {
-				err = field.importRoaring(data, shard)
+				err = field.importRoaring(d2, shard)
 				wg.Done()
 			}(node)
-		} else {
+		} else if !remote { // if remote == true we don't forward to other nodes
 			wg.Add(1)
 			// forward it on
 			go func(node *Node) {
-				err = api.server.defaultClient.ImportRoaring(ctx, node, indexName, fieldName, shard, data)
+				err = api.server.defaultClient.ImportRoaring(ctx, &node.URI, indexName, fieldName, shard, true, data)
 				wg.Done()
 			}(node)
 		}

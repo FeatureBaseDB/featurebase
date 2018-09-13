@@ -1436,6 +1436,12 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
 		return
 	}
+	q := r.URL.Query()
+	remoteStr := q.Get("remote")
+	var remote bool
+	if remoteStr == "true" {
+		remote = true
+	}
 
 	// Read entire body.
 	body, err := ioutil.ReadAll(r.Body)
@@ -1452,7 +1458,7 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 	}
 
 	// TODO give meaningful stats for import
-	err = h.api.ImportRoaring(r.Context(), urlVars["index"], urlVars["field"], shard, body)
+	err = h.api.ImportRoaring(r.Context(), urlVars["index"], urlVars["field"], shard, remote, body)
 	resp := &pilosa.ImportResponse{}
 	if err != nil {
 		resp.Err = err.Error()

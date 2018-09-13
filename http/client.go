@@ -527,23 +527,24 @@ func (c *InternalClient) marshalImportValuePayload(index, field string, shard ui
 
 // ImportRoaring does fast import of raw bits in roaring format (pilosa or
 // official format, see API.ImportRoaring).
-func (c *InternalClient) ImportRoaring(ctx context.Context, node *pilosa.Node, index, field string, shard uint64, data []byte) error {
+func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64, remote bool, data []byte) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
 		return pilosa.ErrFieldRequired
 	}
+	if uri == nil {
+		uri = c.defaultURI
+	}
 
-	endpoint := fmt.Sprintf("/index/%s/field/%s/import-roaring/%d", index, field, shard)
+	url := fmt.Sprintf("%s/index/%s/field/%s/import-roaring/%d?remote=%v", uri, index, field, shard, remote)
 
-	// Create URL.
-	u := nodePathToURL(node, endpoint)
 	// Generate HTTP request.
-	req, err := http.NewRequest("POST", u.String(), bytes.NewBuffer(data))
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
 	if err != nil {
 		return errors.Wrap(err, "creating request")
 	}
-	req.Header.Set("Accept", "application/x-binary")
+	req.Header.Set("Content-Type", "application/x-binary")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
@@ -557,8 +558,13 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, node *pilosa.Node, i
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("invalid status: %d", resp.StatusCode)
 	}
-	io.Copy(ioutil.Discard, resp.Body)
 
+	dec := json.NewDecoder(resp.Body)
+	rbody := &pilosa.ImportResponse{}
+	dec.Decode(rbody)
+	if rbody.Err != "" {
+		return errors.Errorf("importing roaring: %v", rbody.Err)
+	}
 	return nil
 }
 
