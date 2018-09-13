@@ -1,3 +1,16 @@
+// Frame layout
+|-----------------------------+---+---+---+---|
+| a_data_ptr                  |   |   |   |   |
+| a_len                       |   |   |   |   |
+| a_cap                       |   |   |   |   |
+| b_data_ptr                  |   |   |   |   |
+| b_len                       |   |   |   |   |
+| b_cap                       |   |   |   |   |
+| c_data_ptr                  |   |   |   |   |
+| c_len                       |   |   |   |   |
+| c_cap                       |   |   |   |   |
+| function return value (int) |   |   |   |   |
+|                             |   |   |   |   |
 // func asmAnd(a,b,c []int64)int
 TEXT ·asmAnd(SB),7,$0
     MOVQ    $0,SI
