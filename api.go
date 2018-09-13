@@ -312,7 +312,7 @@ func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, e
 // (shard*ShardWidth)+(i%ShardWidth). That is to say that roaringBytes
 // represents all of the rows in this shard of this field concatenated together
 // in one long bitmap.
-func (api *API) ImportRoaringBytes(ctx context.Context, roaringBytes []byte, indexName, fieldName string, shard uint64) (err error) {
+func (api *API) ImportRoaringBytes(ctx context.Context, indexName, fieldName string, shard uint64, roaringBytes []byte) (err error) {
 	if err = api.validate(apiField); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}

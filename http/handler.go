@@ -1458,7 +1458,7 @@ func (h *Handler) handlePostRoaringImport(w http.ResponseWriter, r *http.Request
 		return
 	}
 	//TODO give meaningful stats for import
-	err = h.api.ImportRoaringBytes(r.Context(), body, indexName, fieldName, shard)
+	err = h.api.ImportRoaringBytes(r.Context(), indexName, fieldName, shard, body)
 
 	// Marshal response object.
 	msg := string("")
