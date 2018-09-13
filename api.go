@@ -24,12 +24,12 @@ import (
 	"io/ioutil"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // API provides the top level programmatic interface to Pilosa. It is usually
@@ -317,33 +317,31 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 		return errors.Wrap(err, "validating api method")
 	}
 	nodes := api.cluster.shardNodes(indexName, shard)
-	var wg sync.WaitGroup
+	var eg errgroup.Group
 
 	for _, node := range nodes {
+		node := node
 		if node.ID == api.server.nodeID {
 			field := api.holder.Field(indexName, fieldName)
 			if field == nil {
 				return newNotFoundError(ErrFieldNotFound)
 			}
-			wg.Add(1)
 			// must make a copy of data to operate on locally. field.importRoaring changes data
 			d2 := make([]byte, len(data))
 			copy(d2, data)
+			eg.Go(func() error {
+				return field.importRoaring(d2, shard)
+			})
 			go func(node *Node) {
-				err = field.importRoaring(d2, shard)
-				wg.Done()
 			}(node)
 		} else if !remote { // if remote == true we don't forward to other nodes
-			wg.Add(1)
 			// forward it on
-			go func(node *Node) {
-				err = api.server.defaultClient.ImportRoaring(ctx, &node.URI, indexName, fieldName, shard, true, data)
-				wg.Done()
-			}(node)
+			eg.Go(func() error {
+				return api.server.defaultClient.ImportRoaring(ctx, &node.URI, indexName, fieldName, shard, true, data)
+			})
 		}
 	}
-	wg.Wait()
-	return err
+	return eg.Wait()
 }
 
 // DeleteField removes the named field from the named index. If the index is not
