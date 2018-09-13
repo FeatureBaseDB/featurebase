@@ -1422,7 +1422,7 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint) error 
 	return nil
 }
 
-// importRoaring imports from standard roaring data format defined at
+// importRoaring imports from the official roaring data format defined at
 // https://github.com/RoaringBitmap/RoaringFormatSpec or from pilosa's version
 // of the roaring format. The cache is updated to reflect the new data.
 func (f *fragment) importRoaring(data []byte) error {

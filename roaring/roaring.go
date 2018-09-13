@@ -3349,7 +3349,7 @@ const (
 	serialCookie               = 12347 // runs, arrays, and bitmaps
 )
 
-func readStandardHeader(buf []byte) (size uint32, containerTyper func(index uint, card int) byte, header, pos int, haveRuns bool, err error) {
+func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint, card int) byte, header, pos int, haveRuns bool, err error) {
 	if len(buf) < 8 {
 		err = fmt.Errorf("buffer too small, expecting at least 8 bytes, was %d", len(buf))
 		return size, containerTyper, header, pos, haveRuns, err
@@ -3409,14 +3409,14 @@ func readStandardHeader(buf []byte) (size uint32, containerTyper func(index uint
 }
 
 // UnmarshalBinary decodes b from a binary-encoded byte slice. data can be in
-// either standard roaring format or Pilosa's roaring format.
+// either official roaring format or Pilosa's roaring format.
 func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
 	if fileMagic == magicNumber { // if pilosa roaring
 		return errors.Wrap(b.unmarshalPilosaRoaring(data), "unmarshaling as pilosa roaring")
 	}
 
-	keyN, containerTyper, header, pos, haveRuns, err := readStandardHeader(data)
+	keyN, containerTyper, header, pos, haveRuns, err := readOfficialHeader(data)
 	if err != nil {
 		return errors.Wrap(err, "reading roaring header")
 	}
@@ -3438,7 +3438,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	} else {
 		err := readOffsets(b, data, pos, keyN)
 		if err != nil {
-			return errors.Wrap(err, "reading offsets from standard roaring format")
+			return errors.Wrap(err, "reading offsets from official roaring format")
 		}
 	}
 	return nil

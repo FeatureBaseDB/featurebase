@@ -525,7 +525,8 @@ func (c *InternalClient) marshalImportValuePayload(index, field string, shard ui
 	return buf, nil
 }
 
-// ImportRoaring fast import of raw bits in roaring standard format
+// ImportRoaring does fast import of raw bits in roaring format (pilosa or
+// official format, see API.ImportRoaring).
 func (c *InternalClient) ImportRoaring(ctx context.Context, node *pilosa.Node, index, field string, shard uint64, data []byte) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired

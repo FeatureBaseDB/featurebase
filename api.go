@@ -302,7 +302,7 @@ func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, e
 //
 // It takes as input a roaring bitmap which it uses as the data for the
 // indicated index, field, and shard. The bitmap may be encoded according to the
-// standard roaring spec (https://github.com/RoaringBitmap/RoaringFormatSpec),
+// official roaring spec (https://github.com/RoaringBitmap/RoaringFormatSpec),
 // or to the pilosa roaring spec which supports 64 bit integers
 // (https://www.pilosa.com/docs/latest/architecture/#roaring-bitmap-storage-format).
 //

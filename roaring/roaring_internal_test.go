@@ -3228,13 +3228,13 @@ func runContainerFunc(f interface{}, c ...*Container) *Container {
 	return nil
 }
 
-func TestUnmarshalStdRoaring(t *testing.T) {
+func TestUnmarshalOfficialRoaring(t *testing.T) {
 	//generated serialize image from java(clojure) with arrays
 	rbContainerWithTwoArrays, _ := hex.DecodeString("3A300000020000000000020001000000180000001E0000000100020003000100")
 	bm := NewBitmap()
 	er := bm.UnmarshalBinary(rbContainerWithTwoArrays)
 	if er != nil {
-		t.Fatalf("UnmarshalStandardRoaring %s", er)
+		t.Fatalf("UnmarshalOfficialRoaring %s", er)
 	}
 	if bm.Count() != 4 {
 		t.Fatalf("unexpected bitmap %v expected bits [1 2 3 65537]", bm.Slice())
@@ -3244,7 +3244,7 @@ func TestUnmarshalStdRoaring(t *testing.T) {
 	bm = NewBitmap()
 	er = bm.UnmarshalBinary(rbContainerWithRLEandArray)
 	if er != nil {
-		t.Fatalf("UnmarshalStandardRoaring %s", er)
+		t.Fatalf("UnmarshalOfficialRoaring %s", er)
 	}
 	if bm.Count() != 11 {
 		t.Fatalf("unexpected bitmap %v expected bits [1 2 3 4 5 6 7 8 9 10 65537]", bm.Slice())
@@ -3254,7 +3254,7 @@ func TestUnmarshalStdRoaring(t *testing.T) {
 	bm = NewBitmap()
 	er = bm.UnmarshalBinary(_bitmap_array_container)
 	if er != nil {
-		t.Fatalf("UnmarshalStandardRoaring %s", er)
+		t.Fatalf("UnmarshalOfficialRoaring %s", er)
 	}
 	if bm.Count() != 10000 {
 		t.Fatalf("expecting X got %d", bm.Count())
