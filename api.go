@@ -308,8 +308,8 @@ func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, e
 //
 // The data, roaringBytes, should be encoded the same way that Pilosa stores
 // fragments internally. A bit "i" being set in the input bitmap indicates that
-// the bit is set in Pilosa row "i/sliceWidth", and in column
-// (shard*sliceWidth)+(i%sliceWidth). That is to say that roaringBytes
+// the bit is set in Pilosa row "i/ShardWidth", and in column
+// (shard*ShardWidth)+(i%ShardWidth). That is to say that roaringBytes
 // represents all of the rows in this shard of this field concatenated together
 // in one long bitmap.
 func (api *API) ImportRoaringBytes(ctx context.Context, roaringBytes []byte, indexName, fieldName string, shard uint64) (err error) {
