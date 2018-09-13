@@ -4,6 +4,7 @@ package internal;
 
 message IndexMeta {
 	bool Keys = 3;
+	bool TrackExistence = 4;
 }
 
 message FieldOptions {

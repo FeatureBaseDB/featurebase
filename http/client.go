@@ -372,7 +372,11 @@ func (c *InternalClient) EnsureIndex(ctx context.Context, name string, options p
 }
 
 func (c *InternalClient) EnsureField(ctx context.Context, indexName string, fieldName string) error {
-	err := c.CreateField(ctx, indexName, fieldName)
+	return c.EnsureFieldWithOptions(ctx, indexName, fieldName, pilosa.FieldOptions{})
+}
+
+func (c *InternalClient) EnsureFieldWithOptions(ctx context.Context, indexName string, fieldName string, opt pilosa.FieldOptions) error {
+	err := c.CreateFieldWithOptions(ctx, indexName, fieldName, opt)
 	if err == nil || errors.Cause(err) == pilosa.ErrFieldExists {
 		return nil
 	}
@@ -636,16 +640,35 @@ func (c *InternalClient) backupShardNode(ctx context.Context, index, field strin
 	return resp.Body, nil
 }
 
-// CreateField creates a new field on the server.
 func (c *InternalClient) CreateField(ctx context.Context, index, field string) error {
+	return c.CreateFieldWithOptions(ctx, index, field, pilosa.FieldOptions{})
+}
+
+// CreateField creates a new field on the server.
+func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, field string, opt pilosa.FieldOptions) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
+	}
+
+	// convert pilosa.FieldOptions to fieldOptions
+	fieldOpt := fieldOptions{
+		Type: opt.Type,
+		Keys: &opt.Keys,
+	}
+	if fieldOpt.Type == "set" {
+		fieldOpt.CacheType = &opt.CacheType
+		fieldOpt.CacheSize = &opt.CacheSize
+	} else if fieldOpt.Type == "int" {
+		fieldOpt.Min = &opt.Min
+		fieldOpt.Max = &opt.Max
+	} else if fieldOpt.Type == "time" {
+		fieldOpt.TimeQuantum = &opt.TimeQuantum
 	}
 
 	// TODO: remove buf completely? (depends on whether importer needs to create specific field types)
 	// Encode query request.
 	buf, err := json.Marshal(&postFieldRequest{
-		//Options: opt,
+		Options: fieldOpt,
 	})
 	if err != nil {
 		return errors.Wrap(err, "marshaling")

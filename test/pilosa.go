@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	gohttp "net/http"
 	"os"
@@ -40,10 +39,6 @@ type Command struct {
 	*server.Command
 
 	commandOptions []server.CommandOption
-
-	stdin  bytes.Buffer
-	stdout bytes.Buffer
-	stderr bytes.Buffer
 }
 
 func OptAllowedOrigins(origins []string) server.CommandOption {
@@ -65,17 +60,15 @@ func newCommand(opts ...server.CommandOption) *Command {
 	// beginning of the option slice so that it can be overridden by user-passed
 	// options.
 	opts = append([]server.CommandOption{server.OptCommandCloseTimeout(time.Millisecond * 2)}, opts...)
-	m := &Command{Command: server.NewCommand(os.Stdin, os.Stdout, os.Stderr, opts...), commandOptions: opts}
+	m := &Command{commandOptions: opts}
+	m.Command = server.NewCommand(bytes.NewReader(nil), ioutil.Discard, ioutil.Discard, opts...)
 	m.Config.DataDir = path
 	m.Config.Bind = "http://localhost:0"
 	m.Config.Cluster.Disabled = true
-	m.Command.Stdin = &m.stdin
-	m.Command.Stdout = &m.stdout
-	m.Command.Stderr = &m.stderr
 
 	if testing.Verbose() {
-		m.Command.Stdout = io.MultiWriter(os.Stdout, m.Command.Stdout)
-		m.Command.Stderr = io.MultiWriter(os.Stderr, m.Command.Stderr)
+		m.Command.Stdout = os.Stdout
+		m.Command.Stderr = os.Stderr
 	}
 
 	return m
@@ -120,7 +113,7 @@ func (m *Command) Reopen() error {
 
 	// Create new main with the same config.
 	config := m.Command.Config
-	m.Command = server.NewCommand(os.Stdin, os.Stdout, os.Stderr, m.commandOptions...)
+	m.Command = server.NewCommand(bytes.NewReader(nil), ioutil.Discard, ioutil.Discard, m.commandOptions...)
 	m.Command.Config = config
 
 	// Run new program.
@@ -129,40 +122,40 @@ func (m *Command) Reopen() error {
 
 // MustCreateIndex uses this command's API to create an index and fails the test
 // if there is an error.
-func (m *Command) MustCreateIndex(t *testing.T, name string, opts pilosa.IndexOptions) *pilosa.Index {
+func (m *Command) MustCreateIndex(tb testing.TB, name string, opts pilosa.IndexOptions) *pilosa.Index {
 	idx, err := m.API.CreateIndex(context.Background(), name, opts)
 	if err != nil {
-		t.Fatalf("creating index: %v with options: %v, err: %v", name, opts, err)
+		tb.Fatalf("creating index: %v with options: %v, err: %v", name, opts, err)
 	}
 	return idx
 }
 
 // MustCreateField uses this command's API to create the field. The index must
 // already exist - it fails the test if there is an error.
-func (m *Command) MustCreateField(t *testing.T, index, field string, opts ...pilosa.FieldOption) *pilosa.Field {
+func (m *Command) MustCreateField(tb testing.TB, index, field string, opts ...pilosa.FieldOption) *pilosa.Field {
 	f, err := m.API.CreateField(context.Background(), index, field, opts...)
 	if err != nil {
-		t.Fatalf("creating field: %s in index: %s err: %v", field, index, err)
+		tb.Fatalf("creating field: %s in index: %s err: %v", field, index, err)
 	}
 	return f
 }
 
 // MustQuery uses this command's API to execute the given query request, failing
 // if Query returns a non-nil error, otherwise returning the QueryResponse.
-func (m *Command) MustQuery(t *testing.T, req *pilosa.QueryRequest) pilosa.QueryResponse {
+func (m *Command) MustQuery(tb testing.TB, req *pilosa.QueryRequest) pilosa.QueryResponse {
 	resp, err := m.API.Query(context.Background(), req)
 	if err != nil {
-		t.Fatalf("making query: %v, err: %v", req, err)
+		tb.Fatalf("making query: %v, err: %v", req, err)
 	}
 	return resp
 }
 
 // MustRecalculateCaches calls RecalculateCaches on the command's API, and fails
 // if there is an error.
-func (m *Command) MustRecalculateCaches(t *testing.T) {
+func (m *Command) MustRecalculateCaches(tb testing.TB) {
 	err := m.API.RecalculateCaches(context.Background())
 	if err != nil {
-		t.Fatalf("recalcluating caches: %v", err)
+		tb.Fatalf("recalcluating caches: %v", err)
 	}
 }
 
@@ -224,10 +217,10 @@ func (c Cluster) Close() error {
 }
 
 // MustNewCluster creates a new cluster
-func MustNewCluster(t *testing.T, size int, opts ...[]server.CommandOption) Cluster {
+func MustNewCluster(tb testing.TB, size int, opts ...[]server.CommandOption) Cluster {
 	c, err := newCluster(size, opts...)
 	if err != nil {
-		t.Fatalf("new cluster: %v", err)
+		tb.Fatalf("new cluster: %v", err)
 	}
 	return c
 }
@@ -271,10 +264,10 @@ func runCluster(size int, opts ...[]server.CommandOption) (Cluster, error) {
 }
 
 // MustRunCluster creates and starts a new cluster
-func MustRunCluster(t *testing.T, size int, opts ...[]server.CommandOption) Cluster {
+func MustRunCluster(tb testing.TB, size int, opts ...[]server.CommandOption) Cluster {
 	c, err := runCluster(size, opts...)
 	if err != nil {
-		t.Fatalf("run cluster: %v", err)
+		tb.Fatalf("run cluster: %v", err)
 	}
 	return c
 }
