@@ -24,6 +24,8 @@ import (
 	"math/bits"
 	"sort"
 	"unsafe"
+	"golang.org/x/sys/cpu"
+
 )
 
 const (
@@ -2134,16 +2136,72 @@ func intersectArrayBitmap(a, b *Container) *Container {
 	output.n = len(output.array)
 	return output
 }
+var bitmapAnd func(a,b,c []uint64)int
+var bitmapOr func(a,b,c []uint64)int
+var bitmapXor func(a,b,c []uint64)int
+var bitmapAndN func(a,b,c []uint64)int
+
+func goAnd(a,b,c[]uint64)int{
+	n:=0
+	for i := range a {
+		v := a[i] & b[i]
+		c[i] = v
+		n += int(popcount(v))
+
+	}
+	return n
+}
+
+func goOr(a,b,c[]uint64)int{
+	n:=0
+	for i := range a {
+		v := a[i] | b[i]
+		c[i] = v
+		n += int(popcount(v))
+
+	}
+	return n
+}
+
+func goXor(a,b,c[]uint64)int{
+	n:=0
+	for i := range a {
+		v := a[i] ^ b[i]
+		c[i] = v
+		n += int(popcount(v))
+
+	}
+	return n
+}
+func goAndN(a,b,c[]uint64)int{
+	n:=0
+	for i := range a {
+		v := a[i] & ^b[i]
+		c[i] = v
+		n += int(popcount(v))
+
+	}
+	return n
+}
+
+func init(){
+if cpu.X86.HasAVX2 &&cpu.X86.HasSSE41  {
+	bitmapAnd=asmAnd
+	bitmapOr=asmOr
+	bitmapAndN=asmAndN
+	bitmapXor=asmXor
+}else{
+	bitmapAnd=goAnd
+	bitmapOr=goOr
+	bitmapXor=goXor
+	bitmapAndN=goAndN
+}
+}
+
 
 func intersectBitmapBitmap(a, b *Container) *Container {
 	output := &Container{bitmap: make([]uint64, bitmapN), containerType: containerBitmap}
-
-	for i := range a.bitmap {
-		v := a.bitmap[i] & b.bitmap[i]
-		output.bitmap[i] = v
-		output.n += int(popcount(v))
-
-	}
+	output.n = bitmapAnd(a.bitmap,b.bitmap,output.bitmap)
 	output.optimize()
 	return output
 }
@@ -2438,12 +2496,7 @@ func unionBitmapBitmap(a, b *Container) *Container {
 		bitmap:        make([]uint64, bitmapN),
 		containerType: containerBitmap,
 	}
-
-	for i := 0; i < bitmapN; i++ {
-		v := a.bitmap[i] | b.bitmap[i]
-		output.bitmap[i] = v
-		output.n += int(popcount(v))
-	}
+	output.n = bitmapOr(a.bitmap,b.bitmap,output.bitmap)
 
 	return output
 }
@@ -2781,13 +2834,8 @@ func differenceBitmapArray(a, b *Container) *Container {
 
 func differenceBitmapBitmap(a, b *Container) *Container {
 	output := &Container{bitmap: make([]uint64, bitmapN), containerType: containerBitmap}
+	output.n = bitmapAndN(a.bitmap,b.bitmap,output.bitmap)
 
-	for i := range a.bitmap {
-		v := a.bitmap[i] & (^b.bitmap[i])
-		output.bitmap[i] = v
-		output.n += int(popcount(v))
-
-	}
 	if output.n < ArrayMaxSize {
 		output.bitmapToArray()
 	}
@@ -2875,12 +2923,7 @@ func xorBitmapBitmap(a, b *Container) *Container {
 		bitmap:        make([]uint64, bitmapN),
 		containerType: containerBitmap,
 	}
-	for i := 0; i < bitmapN; i++ {
-		v := a.bitmap[i] ^ b.bitmap[i]
-		output.bitmap[i] = v
-		output.n += int(popcount(v))
-	}
-
+	output.n = bitmapXor(a.bitmap,b.bitmap,output.bitmap)
 	if output.count() < ArrayMaxSize {
 		output.bitmapToArray()
 	}

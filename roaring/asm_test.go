@@ -18,40 +18,17 @@ import (
 	"testing"
 )
 
-func BenchmarkBitmap_AVXUnion(b *testing.B) {
-        a := &Container{
-                bitmap : bitmapFull(),
-                n : 65536,
-                containerType : containerBitmap,
-        }
-        b.ResetTimer()
-        for x := 0; x < b.N; x++ {
-                _=And(a.bitmap, a.bitmap)
-        }
-}
 	
-func BenchmarkBitmap_Union(b *testing.B) {
+	
+func BenchmarkBitmap_ASMIntersect(b *testing.B) {
         a := &Container{
                 bitmap : bitmapFull(),
                 n : 65536,
                 containerType : containerBitmap,
         }
+	results:= make ([]uint64,bitmapN)
         b.ResetTimer()
         for x := 0; x < b.N; x++ {
-                _=intersectBitmapBitmap(a, a)
+                _=asmAnd(a.bitmap, a.bitmap,results)
         }
-}
-
-
-func TestAvx(t *testing.T) {
-	a := getFullBitmap()
-	b := getFullBitmap()
-	c:=And(a,b)
-	for i:=range a{
-		if a[i] != c[1]{
-			                t.Fatalf("Values don't match ")
-		}
-	}
-
-
 }
