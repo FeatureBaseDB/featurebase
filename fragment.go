@@ -1330,9 +1330,12 @@ func (f *fragment) bulkImport(rowIDs, columnIDs []uint64) error {
 		return fmt.Errorf("mismatch of row/column len: %d != %d", len(rowIDs), len(columnIDs))
 	}
 
-	// Disconnect op writer so we don't append updates.
+	// Create a temporary bitmap which will be populated by rowIDs and columnIDs
+	// and then merged into the existing fragment's bitmap.
 	localBitmap := roaring.NewBitmap()
+	// Disconnect op writer so we don't append updates.
 	localBitmap.OpWriter = nil
+
 	// Process every bit.
 	// If an error occurs then reopen the storage.
 	lastID := uint64(0)
