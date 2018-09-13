@@ -3485,7 +3485,7 @@ func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) {
 			runCount := binary.LittleEndian.Uint16(data[pos : pos+runCountHeaderSize])
 			c.runs = (*[0xFFFFFFF]interval16)(unsafe.Pointer(&data[pos+runCountHeaderSize]))[:runCount]
 
-			for o := range c.runs { //need to convert to start:end vs start:length :(
+			for o := range c.runs { // must convert from start:length to start:end :(
 				c.runs[o].last = c.runs[o].start + c.runs[o].last
 			}
 			pos += int((runCount * interval16Size) + runCountHeaderSize)
