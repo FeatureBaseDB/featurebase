@@ -332,14 +332,12 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 			}(node)
 		} else {
 			wg.Add(1)
-			//forward it on
+			// forward it on
 			go func(node *Node) {
-				//execute on node
 				err = api.server.defaultClient.ImportRoaring(ctx, node, indexName, fieldName, shard, data)
 				wg.Done()
 			}(node)
 		}
-
 	}
 	wg.Wait()
 	return err

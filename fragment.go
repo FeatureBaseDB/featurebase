@@ -1371,7 +1371,6 @@ func (f *fragment) bulkImport(rowIDs, columnIDs []uint64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	//f.storage.Unmmap()
 	// Merge localBitmap into fragment's existing data.
 	var results *roaring.Bitmap
 	if f.storage.Count() > 0 {

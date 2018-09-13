@@ -16,6 +16,8 @@ package server_test
 
 import (
 	"bytes"
+	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -84,6 +86,22 @@ func TestHandler_Endpoints(t *testing.T) {
 		} else if body := w.Body.String(); body != `{"indexes":[{"name":"i0","fields":[{"name":"f0","options":{"cacheType":"ranked","cacheSize":50000}},{"name":"f1","options":{"cacheType":"ranked","cacheSize":50000},"views":[{"name":"standard"}]}]},{"name":"i1","fields":[{"name":"f0","options":{"cacheType":"ranked","cacheSize":50000},"views":[{"name":"standard"}]}]}]}`+"\n" {
 			t.Fatalf("unexpected body: %s", body)
 		}
+	})
+
+	t.Run("ImportRoaring", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		roaringData, _ := hex.DecodeString("3B3001000100000900010000000100010009000100")
+		req := test.MustNewHTTPRequest("POST", "/index/i0/field/f1/import-roaring/0", bytes.NewBuffer(roaringData))
+		req.Header.Set("Content-Type", "application/x-binary")
+		h.ServeHTTP(w, req)
+		resp, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i0", Query: "TopN(f1)"})
+		if err != nil {
+			t.Fatalf("querying: %v", err)
+		}
+		if !reflect.DeepEqual(resp.Results[0], []pilosa.Pair{{Count: 12, ID: 0}}) {
+			t.Fatalf("Unexpected result %v", resp.Results[0])
+		}
+
 	})
 
 	t.Run("Status", func(t *testing.T) {
