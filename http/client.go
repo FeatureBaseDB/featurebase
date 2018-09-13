@@ -525,20 +525,20 @@ func (c *InternalClient) marshalImportValuePayload(index, field string, shard ui
 	return buf, nil
 }
 
-// ImportRoaringBytes fast import of raw bits in roaring standard format
-func (c *InternalClient) ImportRoaringBytes(ctx context.Context, node *pilosa.Node, index, field string, shard uint64, roaringBytes []byte) error {
+// ImportRoaring fast import of raw bits in roaring standard format
+func (c *InternalClient) ImportRoaring(ctx context.Context, node *pilosa.Node, index, field string, shard uint64, data []byte) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
 		return pilosa.ErrFieldRequired
 	}
 
-	endpoint := fmt.Sprintf("/index/%s/field/%s/importroaring/%d", index, field, shard)
+	endpoint := fmt.Sprintf("/index/%s/field/%s/import-roaring/%d", index, field, shard)
 
 	// Create URL.
 	u := nodePathToURL(node, endpoint)
 	// Generate HTTP request.
-	req, err := http.NewRequest("POST", u.String(), bytes.NewBuffer(roaringBytes))
+	req, err := http.NewRequest("POST", u.String(), bytes.NewBuffer(data))
 	if err != nil {
 		return errors.Wrap(err, "creating request")
 	}

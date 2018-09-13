@@ -295,7 +295,7 @@ func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, e
 	return field, nil
 }
 
-// ImportRoaringBytes is a low level interface for importing data to Pilosa when
+// ImportRoaring is a low level interface for importing data to Pilosa when
 // extremely high throughput is desired. The data must be encoded in a
 // particular way which may be unintuitive (discussed below). The data is merged
 // with existing data.
@@ -306,13 +306,13 @@ func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, e
 // or to the pilosa roaring spec which supports 64 bit integers
 // (https://www.pilosa.com/docs/latest/architecture/#roaring-bitmap-storage-format).
 //
-// The data, roaringBytes, should be encoded the same way that Pilosa stores
-// fragments internally. A bit "i" being set in the input bitmap indicates that
-// the bit is set in Pilosa row "i/ShardWidth", and in column
-// (shard*ShardWidth)+(i%ShardWidth). That is to say that roaringBytes
-// represents all of the rows in this shard of this field concatenated together
-// in one long bitmap.
-func (api *API) ImportRoaringBytes(ctx context.Context, indexName, fieldName string, shard uint64, roaringBytes []byte) (err error) {
+// The data should be encoded the same way that Pilosa stores fragments
+// internally. A bit "i" being set in the input bitmap indicates that the bit is
+// set in Pilosa row "i/ShardWidth", and in column
+// (shard*ShardWidth)+(i%ShardWidth). That is to say that "data" represents all
+// of the rows in this shard of this field concatenated together in one long
+// bitmap.
+func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, shard uint64, data []byte) (err error) {
 	if err = api.validate(apiField); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -327,7 +327,7 @@ func (api *API) ImportRoaringBytes(ctx context.Context, indexName, fieldName str
 			}
 			wg.Add(1)
 			go func(node *Node) {
-				err = field.importRoaringBytes(roaringBytes, shard)
+				err = field.importRoaring(data, shard)
 				wg.Done()
 			}(node)
 		} else {
@@ -335,7 +335,7 @@ func (api *API) ImportRoaringBytes(ctx context.Context, indexName, fieldName str
 			//forward it on
 			go func(node *Node) {
 				//execute on node
-				err = api.server.defaultClient.ImportRoaringBytes(ctx, node, indexName, fieldName, shard, roaringBytes)
+				err = api.server.defaultClient.ImportRoaring(ctx, node, indexName, fieldName, shard, data)
 				wg.Done()
 			}(node)
 		}

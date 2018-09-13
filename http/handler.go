@@ -218,7 +218,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/field/{field}", handler.handlePostField).Methods("POST")
 	router.HandleFunc("/index/{index}/field/{field}", handler.handleDeleteField).Methods("DELETE")
 	router.HandleFunc("/index/{index}/field/{field}/import", handler.handlePostImport).Methods("POST")
-	router.HandleFunc("/index/{index}/field/{field}/importroaring/{shard}", handler.handlePostRoaringImport).Methods("POST")
+	router.HandleFunc("/index/{index}/field/{field}/import-roaring/{shard}", handler.handlePostRoaringImport).Methods("POST")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
 	router.HandleFunc("/info", handler.handleGetInfo).Methods("GET")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
@@ -1458,7 +1458,7 @@ func (h *Handler) handlePostRoaringImport(w http.ResponseWriter, r *http.Request
 		return
 	}
 	//TODO give meaningful stats for import
-	err = h.api.ImportRoaringBytes(r.Context(), indexName, fieldName, shard, body)
+	err = h.api.ImportRoaring(r.Context(), indexName, fieldName, shard, body)
 
 	// Marshal response object.
 	msg := string("")

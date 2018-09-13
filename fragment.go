@@ -1423,14 +1423,14 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint) error 
 	return nil
 }
 
-// importRoaringBytes imports from standard roaring data format defined at
+// importRoaring imports from standard roaring data format defined at
 // https://github.com/RoaringBitmap/RoaringFormatSpec or from pilosa's version
 // of the roaring format. The cache is updated to reflect the new data.
-func (f *fragment) importRoaringBytes(roaringBytes []byte) error {
+func (f *fragment) importRoaring(data []byte) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	bm := roaring.NewBitmap()
-	err := bm.UnmarshalBinary(roaringBytes)
+	err := bm.UnmarshalBinary(data)
 	if err != nil {
 		return err
 	}
