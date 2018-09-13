@@ -1339,7 +1339,7 @@ func (f *fragment) bulkImport(rowIDs, columnIDs []uint64) error {
 	// Process every bit.
 	// If an error occurs then reopen the storage.
 	lastID := uint64(0)
-	set := make(map[uint64]struct{})
+	rowSet := make(map[uint64]struct{})
 	for i := range rowIDs {
 		rowID, columnID := rowIDs[i], columnIDs[i]
 
@@ -1361,7 +1361,7 @@ func (f *fragment) bulkImport(rowIDs, columnIDs []uint64) error {
 		// no real danger
 		if i == 0 || rowID != lastID {
 			lastID = rowID
-			set[rowID] = struct{}{}
+			rowSet[rowID] = struct{}{}
 		}
 
 		// Invalidate block checksum.
@@ -1372,7 +1372,7 @@ func (f *fragment) bulkImport(rowIDs, columnIDs []uint64) error {
 	defer f.mu.Unlock()
 
 	//f.storage.Unmmap()
-	// Update cache counts for all rows.
+	// Merge localBitmap into fragment's existing data.
 	var results *roaring.Bitmap
 	if f.storage.Count() > 0 {
 		results = f.storage.Union(localBitmap)
@@ -1380,13 +1380,14 @@ func (f *fragment) bulkImport(rowIDs, columnIDs []uint64) error {
 		results = localBitmap
 	}
 
-	for rowID := range set {
+	// Update cache counts for all affected rows.
+	for rowID := range rowSet {
 		n := results.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
 		f.cache.BulkAdd(rowID, n)
 	}
 
 	f.cache.Recalculate()
-	return snapshot(f, results)
+	return unprotectedWriteToFragment(f, results)
 }
 
 // importValue bulk imports a set of range-encoded values.
@@ -1436,7 +1437,7 @@ func (f *fragment) importRoaringBytes(roaringBytes []byte) error {
 
 	// get a list of keys in order to update the cache
 	iter, _ := bm.Containers.Iterator(0)
-	rowsInData := make([]uint64, 0)
+	rowSet := make([]uint64, 0)
 	var lastRow uint64 = math.MaxUint64
 
 	for iter.Next() {
@@ -1449,7 +1450,7 @@ func (f *fragment) importRoaringBytes(roaringBytes []byte) error {
 		if vRow == lastRow {
 			continue
 		}
-		rowsInData = append(rowsInData, vRow)
+		rowSet = append(rowSet, vRow)
 		lastRow = vRow
 	}
 
@@ -1457,13 +1458,13 @@ func (f *fragment) importRoaringBytes(roaringBytes []byte) error {
 		bm = f.storage.Union(bm)
 	}
 
-	for _, rowID := range rowsInData {
+	for _, rowID := range rowSet {
 		n := bm.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
 		f.cache.BulkAdd(rowID, n)
 	}
 	f.cache.Recalculate()
 
-	err = snapshot(f, bm)
+	err = unprotectedWriteToFragment(f, bm)
 	return err
 }
 
@@ -1494,12 +1495,12 @@ func track(start time.Time, message string, stats StatsClient, logger Logger) {
 }
 
 func (f *fragment) snapshot() error {
-	return snapshot(f, f.storage)
+	return unprotectedWriteToFragment(f, f.storage)
 }
 
-// snapshot writes the fragment f with bm as the data. It is unprotected, and
+// unprotectedWriteToFragment writes the fragment f with bm as the data. It is unprotected, and
 // f.mu must be locked when calling it.
-func snapshot(f *fragment, bm *roaring.Bitmap) error { // nolint: interfacer
+func unprotectedWriteToFragment(f *fragment, bm *roaring.Bitmap) error { // nolint: interfacer
 
 	f.Logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
