@@ -264,6 +264,9 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "GroupBy":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeGroupBy(ctx, index, c, shards, opt)
+	case "TopXor":
+		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		return e.executeTopXor(ctx, index, c, shards, opt)
 	case "Options":
 		return e.executeOptionsCall(ctx, index, c, shards, opt)
 	case "IndexRow":
@@ -776,6 +779,92 @@ func (e *executor) executeTopNShard(ctx context.Context, index string, c *pql.Ca
 		FilterValues:      attrValues,
 		MinThreshold:      minThreshold,
 		TanimotoThreshold: tanimotoThreshold,
+	})
+}
+
+// executeTopXor executes a TopXor() call.
+func (e *executor) executeTopXor(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) ([]Pair, error) {
+	n, _, err := c.UintArg("n")
+	if err != nil {
+		return nil, fmt.Errorf("executeTopXor: %v", err)
+	}
+
+	// Execute original query.
+	pairs, err := e.executeTopXorShards(ctx, index, c, shards, opt)
+	if err != nil {
+		return nil, errors.Wrap(err, "finding top results")
+	}
+
+	// TODO: review the refetch logic for TopXor below, but
+	// for now we don't do any refetching.
+	if n != 0 && int(n) < len(pairs) {
+		pairs = pairs[0:n]
+	}
+	return pairs, nil
+}
+
+func (e *executor) executeTopXorShards(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) ([]Pair, error) {
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeTopXorShard(ctx, index, c, shard)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		other, _ := prev.([]Pair)
+		return Pairs(other).Add(v.([]Pair))
+	}
+
+	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return nil, err
+	}
+	results, _ := other.([]Pair)
+
+	// Sort final merged results.
+	sort.Sort(sort.Reverse(Pairs(results)))
+
+	return results, nil
+}
+
+// executeTopXorShard executes a TopXor call for a single shard.
+func (e *executor) executeTopXorShard(ctx context.Context, index string, c *pql.Call, shard uint64) ([]Pair, error) {
+	field, _ := c.Args["_field"].(string)
+	n, _, err := c.UintArg("n")
+	if err != nil {
+		return nil, errors.Wrap(err, "getting n argument")
+	}
+	rowIDs, _, err := c.UintSliceArg("ids")
+	if err != nil {
+		return nil, errors.Wrap(err, "getting ids argument")
+	}
+
+	// Retrieve bitmap used to xor.
+	var src *Row
+	if len(c.Children) == 1 {
+		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
+		if err != nil {
+			return nil, err
+		}
+		src = row
+	} else if len(c.Children) > 1 {
+		return nil, errors.New("TopXor() can only have one input bitmap")
+	}
+
+	// Set default field.
+	if field == "" {
+		field = defaultField
+	}
+
+	f := e.Holder.fragment(index, field, viewStandard, shard)
+	if f == nil {
+		return nil, nil
+	}
+
+	return f.topXor(topOptions{
+		N:      int(n),
+		Src:    src,
+		RowIDs: rowIDs,
 	})
 }
 

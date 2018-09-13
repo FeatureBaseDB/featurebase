@@ -82,6 +82,22 @@ func (r *Row) intersectionCount(other *Row) uint64 {
 	return n
 }
 
+// xorCount returns the number of bits in the xor of r and other.
+func (r *Row) xorCount(other *Row) uint64 {
+	var n uint64
+
+	itr := newMergeSegmentIterator(r.segments, other.segments)
+	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
+		// Ignore non-overlapping segments.
+		if s0 == nil || s1 == nil {
+			continue
+		}
+
+		n += s0.XorCount(s1)
+	}
+	return n
+}
+
 // Intersect returns the itersection of r and other.
 func (r *Row) Intersect(other *Row) *Row {
 	var segments []rowSegment
@@ -282,6 +298,11 @@ func (s *rowSegment) Merge(other *rowSegment) {
 // IntersectionCount returns the number of intersections between s and other.
 func (s *rowSegment) IntersectionCount(other *rowSegment) uint64 {
 	return s.data.IntersectionCount(&other.data)
+}
+
+// XorCount returns the number of bits in the xor between s and other.
+func (s *rowSegment) XorCount(other *rowSegment) uint64 {
+	return s.data.XorCount(&other.data)
 }
 
 // Intersect returns the itersection of s and other.

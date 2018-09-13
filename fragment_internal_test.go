@@ -909,6 +909,71 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	}
 }
 
+// Ensure a fragment can return top rows that xor with an input row.
+func TestFragment_TopXor_All(t *testing.T) {
+	f := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeRanked)
+	defer f.Close()
+
+	// Create an input row.
+	src := NewRow(1, 2, 3)
+
+	// Set bits on various rows.
+	f.mustSetBits(100, 1, 10, 11, 12)    // xor = 5
+	f.mustSetBits(101, 1, 2, 3, 4)       // xor = 1
+	f.mustSetBits(102, 1, 2, 4, 5, 6)    // xor = 4
+	f.mustSetBits(103, 1000, 1001, 1002) // xor = 6
+	f.RecalculateCache()
+
+	// Retrieve top rows.
+	// TODO: normally this would test that only 3 records were returned
+	// and that they were in ascending order like:
+	/*
+		if !reflect.DeepEqual(pairs, []Pair{
+			{ID: 101, Count: 1},
+			{ID: 102, Count: 4},
+			{ID: 100, Count: 5},
+		})
+	*/
+	// but because we currently do the sorting and trimming in the
+	// executor (until we can implement a sorted pairHeap in
+	// fragment.topXor()) then this is just testing that the fragment
+	// returns all rows with the correct count.
+	if pairs, err := f.topXor(topOptions{N: 3, Src: src}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(pairs, []Pair{
+		{ID: 103, Count: 6},
+		{ID: 100, Count: 5},
+		{ID: 102, Count: 4},
+		{ID: 101, Count: 1},
+	}) {
+		t.Fatalf("unexpected pairs: %s", spew.Sdump(pairs))
+	}
+}
+
+// Ensure a fragment can return top xor rows when specified by ID.
+func TestFragment_TopXor_IDs(t *testing.T) {
+	f := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeRanked)
+	defer f.Close()
+
+	// Create an input row.
+	src := NewRow(1, 2, 3)
+
+	// Set bits on various rows.
+	f.mustSetBits(100, 1, 2, 3)
+	f.mustSetBits(101, 4, 5, 6, 7)
+	f.mustSetBits(102, 8, 9, 10, 11, 12)
+
+	// Retrieve top rows.
+	if pairs, err := f.topXor(topOptions{Src: src, RowIDs: []uint64{100, 101, 200}}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(pairs, []Pair{
+		{ID: 101, Count: 7},
+		{ID: 100, Count: 0},
+	}) {
+		t.Fatalf("unexpected pairs: %s", spew.Sdump(pairs))
+	}
+}
+
 // Ensure fragment can return a checksum for its blocks.
 func TestFragment_Checksum(t *testing.T) {
 	f := mustOpenFragment("i", "f", viewStandard, 0, "")
