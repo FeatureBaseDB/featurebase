@@ -17,6 +17,7 @@ package pilosa_test
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"strconv"
 	"strings"
@@ -32,8 +33,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Ensure a bitmap query can be executed.
-func TestExecutor_Execute_Bitmap(t *testing.T) {
+// Ensure a row query can be executed.
+func TestExecutor_Execute_Row(t *testing.T) {
 	t.Run("Row", func(t *testing.T) {
 		c := test.MustRunCluster(t, 1)
 		defer c.Close()
@@ -282,7 +283,7 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 		t.Run("OK", func(t *testing.T) {
 			hldr.ClearBit("i", "f", 11, 1)
 			if n := hldr.Row("i", "f", 11).Count(); n != 0 {
-				t.Fatalf("unexpected bitmap count: %d", n)
+				t.Fatalf("unexpected row count: %d", n)
 			}
 
 			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1, f=11)`}); err != nil {
@@ -294,7 +295,7 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 			}
 
 			if n := hldr.Row("i", "f", 11).Count(); n != 1 {
-				t.Fatalf("unexpected bitmap count: %d", n)
+				t.Fatalf("unexpected row count: %d", n)
 			}
 			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1, f=11)`}); err != nil {
 				t.Fatal(err)
@@ -327,7 +328,7 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 		t.Run("OK", func(t *testing.T) {
 			hldr.SetBit("i", "f", 1, 0)
 			if n := hldr.Row("i", "f", 11).Count(); n != 0 {
-				t.Fatalf("unexpected bitmap count: %d", n)
+				t.Fatalf("unexpected row count: %d", n)
 			}
 
 			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("foo", f=11)`}); err != nil {
@@ -339,7 +340,7 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 			}
 
 			if n := hldr.Row("i", "f", 11).Count(); n != 1 {
-				t.Fatalf("unexpected bitmap count: %d", n)
+				t.Fatalf("unexpected row count: %d", n)
 			}
 			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("foo", f=11)`}); err != nil {
 				t.Fatal(err)
@@ -476,7 +477,7 @@ func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 	}
 	t.Run("rowID", func(t *testing.T) {
 		// Set two attrs on f/10.
-		// Also set attrs on other bitmaps and fields to test isolation.
+		// Also set attrs on other rows and fields to test isolation.
 		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(f, 10, foo="bar")`}); err != nil {
 			t.Fatal(err)
 		}
@@ -494,13 +495,13 @@ func TestExecutor_Execute_SetRowAttrs(t *testing.T) {
 		if m, err := f.RowAttrStore().Attrs(10); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(m, map[string]interface{}{"foo": "bar", "baz": int64(123), "bat": true}) {
-			t.Fatalf("unexpected bitmap attr: %#v", m)
+			t.Fatalf("unexpected row attr: %#v", m)
 		}
 	})
 
 	t.Run("rowKey", func(t *testing.T) {
 		// Set two attrs on f/10.
-		// Also set attrs on other bitmaps and fields to test isolation.
+		// Also set attrs on other rows and fields to test isolation.
 		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `SetRowAttrs(kf, "row10", foo="bar")`}); err != nil {
 			t.Fatal(err)
 		}
@@ -663,7 +664,7 @@ func TestExecutor_Execute_TopN_fill_small(t *testing.T) {
 	}
 }
 
-// Ensure a TopN() query with a source bitmap can be executed.
+// Ensure a TopN() query with a source row can be executed.
 func TestExecutor_Execute_TopN_Src(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
@@ -723,7 +724,7 @@ func TestExecutor_Execute_TopN_Attr(t *testing.T) {
 
 }
 
-//Ensure TopN handles Attribute filters with source bitmap
+//Ensure TopN handles Attribute filters with source row
 func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
@@ -1352,3 +1353,272 @@ func TestExecutor_Time_Clear_Quantums(t *testing.T) {
 	}
 
 }
+
+func TestExecutor_QueryCall(t *testing.T) {
+	t.Run("excludeRowAttrs", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		// Set columns for rows 0, 10, & 20 across two shards.
+		if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault()); err != nil {
+			t.Fatal(err)
+		} else if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+				Set(100, f=10)
+				SetRowAttrs(f, 10, foo="bar")
+			`}); err != nil {
+			t.Fatal(err)
+		}
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Options(Row(f=10), excludeRowAttrs=true)`}); err != nil {
+			t.Fatal(err)
+		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{100}) {
+			t.Fatalf("unexpected columns: %+v", bits)
+		} else if attrs := res.Results[0].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{}) {
+			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
+		}
+	})
+
+	t.Run("excludeColumns", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		// Set columns for rows 0, 10, & 20 across two shards.
+		if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault()); err != nil {
+			t.Fatal(err)
+		} else if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+				Set(100, f=10)
+				SetRowAttrs(f, 10, foo="bar")
+			`}); err != nil {
+			t.Fatal(err)
+		}
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Options(Row(f=10), excludeColumns=true)`}); err != nil {
+			t.Fatal(err)
+		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{}) {
+			t.Fatalf("unexpected columns: %+v", bits)
+		} else if attrs := res.Results[0].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar"}) {
+			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
+		}
+	})
+
+	t.Run("columnAttrs", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		// Set columns for rows 0, 10, & 20 across two shards.
+		if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault()); err != nil {
+			t.Fatal(err)
+		} else if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+			Set(100, f=10)
+			SetColumnAttrs(100, foo="bar")
+		`}); err != nil {
+			t.Fatal(err)
+		}
+
+		targetColAttrSets := []*pilosa.ColumnAttrSet{
+			{ID: 100, Attrs: map[string]interface{}{"foo": "bar"}},
+		}
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Options(Row(f=10), columnAttrs=true)`}); err != nil {
+			t.Fatal(err)
+		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{100}) {
+			t.Fatalf("unexpected columns: %+v", bits)
+		} else if attrs := res.ColumnAttrSets; !reflect.DeepEqual(attrs, targetColAttrSets) {
+			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
+		}
+	})
+
+	t.Run("shards", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		// Set columns for rows 0, 10, & 20 across two shards.
+		if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault()); err != nil {
+			t.Fatal(err)
+		} else if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: fmt.Sprintf(`
+				Set(100, f=10)
+				Set(%d, f=10)
+				Set(%d, f=10)
+			`, ShardWidth, ShardWidth*2)}); err != nil {
+			t.Fatal(err)
+		}
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Options(Row(f=10), shards=[0, 2])`}); err != nil {
+			t.Fatal(err)
+		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{100, ShardWidth * 2}) {
+			t.Fatalf("unexpected columns: %+v", bits)
+		}
+	})
+
+	t.Run("multipleOpt", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		// Set columns for rows 0, 10, & 20 across two shards.
+		if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault()); err != nil {
+			t.Fatal(err)
+		} else if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+				Set(100, f=10)
+				SetRowAttrs(f, 10, foo="bar")
+			`}); err != nil {
+			t.Fatal(err)
+		}
+
+		req := &pilosa.QueryRequest{
+			Index: "i",
+			Query: `Options(Row(f=10), excludeColumns=true)Options(Row(f=10), excludeRowAttrs=true)`,
+		}
+		if res, err := c[0].API.Query(context.Background(), req); err != nil {
+			t.Fatal(err)
+		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{}) {
+			t.Fatalf("unexpected columns: %+v", bits)
+		} else if attrs := res.Results[0].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{"foo": "bar"}) {
+			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
+		} else if bits := res.Results[1].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{100}) {
+			t.Fatalf("unexpected columns: %+v", bits)
+		} else if attrs := res.Results[1].(*pilosa.Row).Attrs; !reflect.DeepEqual(attrs, map[string]interface{}{}) {
+			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
+		}
+	})
+}
+
+// Ensure an existence field is maintained.
+func TestExecutor_Execute_Existence(t *testing.T) {
+	t.Run("Row", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackExistence: true})
+		_, err := index.CreateField("f", pilosa.OptFieldTypeDefault())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Set bits.
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `` +
+			fmt.Sprintf("Set(%d, f=%d)\n", 3, 10) +
+			fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+1, 10) +
+			fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+2, 20),
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f=10)`}); err != nil {
+			t.Fatal(err)
+		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth + 1}) {
+			t.Fatalf("unexpected columns: %+v", bits)
+		}
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(exists=0)`}); err != nil {
+			t.Fatal(err)
+		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth + 1, ShardWidth + 2}) {
+			t.Fatalf("unexpected existence columns: %+v", bits)
+		}
+
+		// Reopen cluster to ensure existence field is reloaded.
+		if err := c[0].Reopen(); err != nil {
+			t.Fatal(err)
+		}
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(exists=0)`}); err != nil {
+			t.Fatal(err)
+		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth + 1, ShardWidth + 2}) {
+			t.Fatalf("unexpected existence columns after reopen: %+v", bits)
+		}
+	})
+}
+
+// Ensure a not query can be executed.
+func TestExecutor_Execute_Not(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
+	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackExistence: true})
+	_, err := index.CreateField("f", pilosa.OptFieldTypeDefault())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Set bits.
+	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `` +
+		fmt.Sprintf("Set(%d, f=%d)\n", 3, 10) +
+		fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+1, 10) +
+		fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+2, 20),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Populated row.
+	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Not(Row(f=20))`}); err != nil {
+		t.Fatal(err)
+	} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth + 1}) {
+		t.Fatalf("unexpected columns: %+v", bits)
+	}
+
+	// Populated row.
+	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Not(Row(f=0))`}); err != nil {
+		t.Fatal(err)
+	} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth + 1, ShardWidth + 2}) {
+		t.Fatalf("unexpected columns: %+v", bits)
+	}
+
+	// All existing.
+	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Not(Union(Row(f=10), Row(f=20)))`}); err != nil {
+		t.Fatal(err)
+	} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{}) {
+		t.Fatalf("unexpected columns: %+v", bits)
+	}
+}
+
+func benchmarkExistence(nn bool, b *testing.B) {
+	c := test.MustRunCluster(b, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+	indexName := "i"
+	fieldName := "f"
+
+	index := hldr.MustCreateIndexIfNotExists(indexName, pilosa.IndexOptions{TrackExistence: nn})
+	// Create field.
+	if _, err := index.CreateFieldIfNotExists(fieldName); err != nil {
+		b.Fatal(err)
+	}
+
+	bitCount := 10000
+	req := &pilosa.ImportRequest{
+		Index:     indexName,
+		Field:     fieldName,
+		Shard:     0,
+		RowIDs:    make([]uint64, bitCount),
+		ColumnIDs: make([]uint64, bitCount),
+	}
+	for i := 0; i < bitCount; i++ {
+		req.RowIDs[i] = uint64(rand.Intn(100000))
+		req.ColumnIDs[i] = uint64(rand.Intn(1 << 20))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := c[0].API.Import(context.Background(), req); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkExecutor_Existence_True(b *testing.B)  { benchmarkExistence(true, b) }
+func BenchmarkExecutor_Existence_False(b *testing.B) { benchmarkExistence(false, b) }

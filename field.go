@@ -159,12 +159,17 @@ func OptFieldTypeMutex(cacheType string, cacheSize uint32) FieldOption {
 func NewField(path, index, name string, opts FieldOption) (*Field, error) {
 	err := validateName(name)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "validating name")
 	}
 
+	return newField(path, index, name, opts)
+}
+
+// newField returns a new instance of field (without name validation).
+func newField(path, index, name string, opts FieldOption) (*Field, error) {
 	// Apply functional option.
 	fo := FieldOptions{}
-	err = opts(&fo)
+	err := opts(&fo)
 	if err != nil {
 		return nil, errors.Wrap(err, "applying option")
 	}

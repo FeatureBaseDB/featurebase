@@ -18,6 +18,8 @@ import (
 	"context"
 	"io"
 
+	"github.com/pilosa/pilosa"
+
 	"github.com/spf13/cobra"
 
 	"github.com/pilosa/pilosa/ctl"
@@ -51,14 +53,16 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 	flags.StringVarP(&Importer.Host, "host", "", "localhost:10101", "host:port of Pilosa.")
 	flags.StringVarP(&Importer.Index, "index", "i", "", "Pilosa index to import into.")
 	flags.StringVarP(&Importer.Field, "field", "f", "", "Field to import into.")
-	flags.BoolVar(&Importer.IndexKeys, "index-keys", false, "use keys=true when creating an index")
-	flags.BoolVar(&Importer.FieldKeys, "field-keys", false, "use keys=true when creating a field")
+	flags.BoolVar(&Importer.IndexOptions.Keys, "index-keys", false, "Specify keys=true when creating an index")
+	flags.BoolVar(&Importer.FieldOptions.Keys, "field-keys", false, "Specify keys=true when creating a field")
+	flags.Int64Var(&Importer.FieldOptions.Min, "field-min", 0, "Specify the minimum for an int field on creation")
+	flags.Int64Var(&Importer.FieldOptions.Max, "field-max", 0, "Specify the maximum for an int field on creation")
+	flags.StringVar(&Importer.FieldOptions.CacheType, "field-cache-type", pilosa.CacheTypeRanked, "Specify the cache type for a set field on creation. One of: none, lru, ranked")
+	flags.Uint32Var(&Importer.FieldOptions.CacheSize, "field-cache-size", 50000, "Specify the cache size for a set field on creation")
+	flags.Var(&Importer.FieldOptions.TimeQuantum, "field-time-quantum", "Specify the time quantum for a time field on creation. One of: D, DH, H, M, MD, MDH, Y, YM, YMD, YMDH")
 	flags.IntVarP(&Importer.BufferSize, "buffer-size", "s", 10000000, "Number of bits to buffer/sort before importing.")
 	flags.BoolVarP(&Importer.Sort, "sort", "", false, "Enables sorting before import.")
 	flags.BoolVarP(&Importer.CreateSchema, "create", "e", false, "Create the schema if it does not exist before import.")
-	//flags.Var(&Importer.FieldOptions.TimeQuantum, "field-time-quantum", "Time quantum for the field")
-	//flags.StringVar(&Importer.FieldOptions.CacheType, "field-cache-type", pilosa.CacheTypeRanked, "Cache type for the field; valid values: none, lru, ranked")
-	//flags.Uint32Var(&Importer.FieldOptions.CacheSize, "field-cache-size", 50000, "Cache size for the field")
 	ctl.SetTLSConfig(flags, &Importer.TLS.CertificatePath, &Importer.TLS.CertificateKeyPath, &Importer.TLS.SkipVerify)
 
 	return importCmd

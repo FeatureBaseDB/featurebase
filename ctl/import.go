@@ -41,19 +41,13 @@ type ImportCommand struct { // nolint: maligned
 	Field string `json:"field"`
 
 	// Options for the index to be created if it doesn't exist
-	indexOptions pilosa.IndexOptions
+	IndexOptions pilosa.IndexOptions
 
 	// Options for the field to be created if it doesn't exist
-	fieldOptions pilosa.FieldOptions
+	FieldOptions pilosa.FieldOptions
 
 	// CreateSchema ensures the schema exists before import
 	CreateSchema bool
-
-	// IndexKeys makes the import command use keys=true when creating an index
-	IndexKeys bool `json:"indexKeys"`
-
-	// FieldKeys makes the import command use keys=true when creating a field
-	FieldKeys bool `json:"fieldKeys"`
 
 	// Filenames to import from.
 	Paths []string `json:"paths"`
@@ -102,11 +96,13 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 	cmd.client = client
 
 	if cmd.CreateSchema {
-		cmd.indexOptions = pilosa.IndexOptions{
-			Keys: cmd.IndexKeys,
-		}
-		cmd.fieldOptions = pilosa.FieldOptions{
-			Keys: cmd.FieldKeys,
+		// set the correct type for the field
+		if cmd.FieldOptions.TimeQuantum != "" {
+			cmd.FieldOptions.Type = "time"
+		} else if cmd.FieldOptions.Min != 0 || cmd.FieldOptions.Max != 0 {
+			cmd.FieldOptions.Type = "int"
+		} else {
+			cmd.FieldOptions.Type = "set"
 		}
 		err := cmd.ensureSchema(ctx)
 		if err != nil {
@@ -148,11 +144,11 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 }
 
 func (cmd *ImportCommand) ensureSchema(ctx context.Context) error {
-	err := cmd.client.EnsureIndex(ctx, cmd.Index, cmd.indexOptions)
+	err := cmd.client.EnsureIndex(ctx, cmd.Index, cmd.IndexOptions)
 	if err != nil {
 		return fmt.Errorf("Error Creating Index: %s", err)
 	}
-	err = cmd.client.EnsureFieldWithOptions(ctx, cmd.Index, cmd.Field, cmd.fieldOptions)
+	err = cmd.client.EnsureFieldWithOptions(ctx, cmd.Index, cmd.Field, cmd.FieldOptions)
 	if err != nil {
 		return fmt.Errorf("Error Creating Field: %s", err)
 	}
