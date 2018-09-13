@@ -1175,6 +1175,43 @@ func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
 	}
 }
 
+// Ensure a TopXor() query with a source row can be executed.
+func TestExecutor_Execute_TopXor_Src(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+	// Set columns for rows 0, 10, & 20 across two shards.
+	hldr.SetBit("i", "f", 0, 0)
+	hldr.SetBit("i", "f", 0, 1)
+	hldr.SetBit("i", "f", 0, ShardWidth)
+	hldr.SetBit("i", "f", 10, ShardWidth)
+	hldr.SetBit("i", "f", 10, ShardWidth+1)
+	hldr.SetBit("i", "f", 20, ShardWidth)
+	hldr.SetBit("i", "f", 20, ShardWidth+1)
+	hldr.SetBit("i", "f", 20, ShardWidth+2)
+
+	// Create an intersecting row.
+	hldr.SetBit("i", "other", 100, ShardWidth)
+	hldr.SetBit("i", "other", 100, ShardWidth+1)
+	hldr.SetBit("i", "other", 100, ShardWidth+2)
+
+	err := c[0].RecalculateCaches()
+	if err != nil {
+		t.Fatalf("recalculating caches: %v", err)
+	}
+
+	// Execute query.
+	if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopXor(f, Row(other=100), n=2)`}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(result.Results, []interface{}{[]pilosa.Pair{
+		{ID: 20, Count: 0},
+		{ID: 10, Count: 1},
+	}}) {
+		t.Fatalf("unexpected result: %s", spew.Sdump(result))
+	}
+}
+
 // Ensure Min()  and Max() queries can be executed.
 func TestExecutor_Execute_MinMax(t *testing.T) {
 	t.Run("ColumnID", func(t *testing.T) {

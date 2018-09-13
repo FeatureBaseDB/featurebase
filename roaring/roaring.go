@@ -370,6 +370,12 @@ func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
 	return n
 }
 
+// XorCount returns the number of set bits that would result in an
+// xor between b and other.
+func (b *Bitmap) XorCount(other *Bitmap) uint64 {
+	return (b.Xor(other)).Count()
+}
+
 // Intersect returns the intersection of b and other.
 func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 	output := NewBitmap()
