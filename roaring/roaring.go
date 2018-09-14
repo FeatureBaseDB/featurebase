@@ -2459,7 +2459,7 @@ func unionBitmapBitmap(a, b *Container) *Container {
 	)
 
 	for i := 0; i < bitmapN; i++ {
-		ob[i] =ab[i] | bb[i] 
+		ob[i] = ab[i] | bb[i]
 		n += int(popcount(ob[i]))
 	}
 
