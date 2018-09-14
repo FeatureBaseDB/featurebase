@@ -2148,9 +2148,8 @@ func intersectBitmapBitmap(a, b *Container) *Container {
 		n   int
 	)
 	for i := 0; i < bitmapN; i++ {
-		v := ab[i] & bb[i]
-		ob[i] = v
-		n += int(popcount(v))
+		ob[i] = ab[i] & bb[i]
+		n += int(popcount(ob[i]))
 	}
 
 	output := &Container{
@@ -2460,9 +2459,8 @@ func unionBitmapBitmap(a, b *Container) *Container {
 	)
 
 	for i := 0; i < bitmapN; i++ {
-		v := ab[i] | bb[i]
-		ob[i] = v
-		n += int(popcount(v))
+		ob[i] =ab[i] | bb[i] 
+		n += int(popcount(ob[i]))
 	}
 
 	output := &Container{
@@ -2818,9 +2816,8 @@ func differenceBitmapBitmap(a, b *Container) *Container {
 	)
 
 	for i := 0; i < bitmapN; i++ {
-		v := ab[i] & (^bb[i])
-		ob[i] = v
-		n += int(popcount(v))
+		ob[i] = ab[i] & (^bb[i])
+		n += int(popcount(ob[i]))
 	}
 
 	output := &Container{
@@ -2924,9 +2921,8 @@ func xorBitmapBitmap(a, b *Container) *Container {
 	)
 
 	for i := 0; i < bitmapN; i++ {
-		v := ab[i] ^ bb[i]
-		ob[i] = v
-		n += int(popcount(v))
+		ob[i] = ab[i] ^ bb[i]
+		n += int(popcount(ob[i]))
 	}
 
 	output := &Container{
