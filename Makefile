@@ -110,7 +110,7 @@ docker-test:
 # Run gometalinter with custom flags
 gometalinter: require-gometalinter
 	gometalinter --vendor --disable-all \
-	    --deadline=120s \
+	    --deadline=300s \
 	    --enable=deadcode \
 	    --enable=gochecknoinits \
 	    --enable=gofmt \

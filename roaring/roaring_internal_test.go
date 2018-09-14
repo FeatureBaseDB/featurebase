@@ -16,7 +16,9 @@ package roaring
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
+	"io/ioutil"
 	"reflect"
 	"runtime"
 	"strings"
@@ -3224,4 +3226,38 @@ func runContainerFunc(f interface{}, c ...*Container) *Container {
 		return f.(func(a, b *Container) *Container)(c[0], c[1])
 	}
 	return nil
+}
+
+func TestUnmarshalOfficialRoaring(t *testing.T) {
+	//generated serialize image from java(clojure) with arrays
+	rbContainerWithTwoArrays, _ := hex.DecodeString("3A300000020000000000020001000000180000001E0000000100020003000100")
+	bm := NewBitmap()
+	er := bm.UnmarshalBinary(rbContainerWithTwoArrays)
+	if er != nil {
+		t.Fatalf("UnmarshalOfficialRoaring %s", er)
+	}
+	if bm.Count() != 4 {
+		t.Fatalf("unexpected bitmap %v expected bits [1 2 3 65537]", bm.Slice())
+	}
+	//generated serialize image from java(clojure) with a run and array
+	rbContainerWithRLEandArray, _ := hex.DecodeString("3B3001000100000900010000000100010009000100")
+	bm = NewBitmap()
+	er = bm.UnmarshalBinary(rbContainerWithRLEandArray)
+	if er != nil {
+		t.Fatalf("UnmarshalOfficialRoaring %s", er)
+	}
+	if bm.Count() != 11 {
+		t.Fatalf("unexpected bitmap %v expected bits [1 2 3 4 5 6 7 8 9 10 65537]", bm.Slice())
+	}
+	//had to use an external file because emacs was barfing on the long line :()
+	_bitmap_array_container, _ := ioutil.ReadFile("testdata/bitmapcontainer.roaringbitmap")
+	bm = NewBitmap()
+	er = bm.UnmarshalBinary(_bitmap_array_container)
+	if er != nil {
+		t.Fatalf("UnmarshalOfficialRoaring %s", er)
+	}
+	if bm.Count() != 10000 {
+		t.Fatalf("expecting X got %d", bm.Count())
+	}
+
 }

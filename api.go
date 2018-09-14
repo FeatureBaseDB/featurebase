@@ -29,6 +29,7 @@ import (
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // API provides the top level programmatic interface to Pilosa. It is usually
@@ -109,8 +110,9 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	}
 	execOpts := &execOptions{
 		Remote:          req.Remote,
-		ExcludeRowAttrs: req.ExcludeRowAttrs,
-		ExcludeColumns:  req.ExcludeColumns,
+		ExcludeRowAttrs: req.ExcludeRowAttrs, // NOTE: Kept for Pilosa 1.x compat.
+		ExcludeColumns:  req.ExcludeColumns,  // NOTE: Kept for Pilosa 1.x compat.
+		ColumnAttrs:     req.ColumnAttrs,     // NOTE: Kept for Pilosa 1.x compat.
 	}
 	results, err := api.server.executor.Execute(ctx, req.Index, q, req.Shards, execOpts)
 	if err != nil {
@@ -119,7 +121,8 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	resp.Results = results
 
 	// Fill column attributes if requested.
-	if req.ColumnAttrs && !req.ExcludeColumns {
+	// execOpts.ColumnAttrs may be set by the Execute method if any of the Calls use Options(columnAttrs=true)
+	if execOpts.ColumnAttrs {
 		// Consolidate all column ids across all calls.
 		var columnIDs []uint64
 		for _, result := range results {
@@ -292,6 +295,55 @@ func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, e
 		return nil, newNotFoundError(ErrFieldNotFound)
 	}
 	return field, nil
+}
+
+// ImportRoaring is a low level interface for importing data to Pilosa when
+// extremely high throughput is desired. The data must be encoded in a
+// particular way which may be unintuitive (discussed below). The data is merged
+// with existing data.
+//
+// It takes as input a roaring bitmap which it uses as the data for the
+// indicated index, field, and shard. The bitmap may be encoded according to the
+// official roaring spec (https://github.com/RoaringBitmap/RoaringFormatSpec),
+// or to the pilosa roaring spec which supports 64 bit integers
+// (https://www.pilosa.com/docs/latest/architecture/#roaring-bitmap-storage-format).
+//
+// The data should be encoded the same way that Pilosa stores fragments
+// internally. A bit "i" being set in the input bitmap indicates that the bit is
+// set in Pilosa row "i/ShardWidth", and in column
+// (shard*ShardWidth)+(i%ShardWidth). That is to say that "data" represents all
+// of the rows in this shard of this field concatenated together in one long
+// bitmap.
+func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, shard uint64, remote bool, data []byte) (err error) {
+	if err = api.validate(apiField); err != nil {
+		return errors.Wrap(err, "validating api method")
+	}
+	nodes := api.cluster.shardNodes(indexName, shard)
+	var eg errgroup.Group
+
+	for _, node := range nodes {
+		node := node
+		if node.ID == api.server.nodeID {
+			field := api.holder.Field(indexName, fieldName)
+			if field == nil {
+				return newNotFoundError(ErrFieldNotFound)
+			}
+			// must make a copy of data to operate on locally. field.importRoaring changes data
+			d2 := make([]byte, len(data))
+			copy(d2, data)
+			eg.Go(func() error {
+				return field.importRoaring(d2, shard)
+			})
+			go func(node *Node) {
+			}(node)
+		} else if !remote { // if remote == true we don't forward to other nodes
+			// forward it on
+			eg.Go(func() error {
+				return api.server.defaultClient.ImportRoaring(ctx, &node.URI, indexName, fieldName, shard, true, data)
+			})
+		}
+	}
+	return eg.Wait()
 }
 
 // DeleteField removes the named field from the named index. If the index is not
@@ -684,6 +736,12 @@ func (api *API) Import(_ context.Context, req *ImportRequest) error {
 		timestamps[i] = &t
 	}
 
+	// Import columnIDs into existence field.
+	if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
+		api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+		return errors.Wrap(err, "importing existence columns")
+	}
+
 	// Import into fragment.
 	err = field.Import(req.RowIDs, req.ColumnIDs, timestamps)
 	if err != nil {
@@ -718,12 +776,28 @@ func (api *API) ImportValue(_ context.Context, req *ImportValueRequest) error {
 		}
 	}
 
+	// Import columnIDs into existence field.
+	if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
+		api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+		return errors.Wrap(err, "importing existence columns")
+	}
+
 	// Import into fragment.
 	err = field.importValue(req.ColumnIDs, req.Values)
 	if err != nil {
 		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 	}
 	return errors.Wrap(err, "importing")
+}
+
+func importExistenceColumns(index *Index, columnIDs []uint64) error {
+	ef := index.existenceField()
+	if ef == nil {
+		return nil
+	}
+
+	existenceRowIDs := make([]uint64, len(columnIDs))
+	return ef.Import(existenceRowIDs, columnIDs, nil)
 }
 
 // MaxShards returns the maximum shard number for each index in a map.

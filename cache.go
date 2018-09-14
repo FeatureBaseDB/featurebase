@@ -40,10 +40,10 @@ type cache interface {
 	// Returns a list of all IDs.
 	IDs() []uint64
 
-	// Updates the cache, if necessary.
+	// Soft ask for the cache to be rebuilt - may not if it has been done recently.
 	Invalidate()
 
-	// Rebuilds the cache
+	// Rebuilds the cache.
 	Recalculate()
 
 	// Returns an ordered list of the top ranked bitmaps.

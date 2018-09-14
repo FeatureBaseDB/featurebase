@@ -38,6 +38,9 @@ const (
 
 	// fileLimit is the maximum open file limit (ulimit -n) to automatically set.
 	fileLimit = 262144 // (512^2)
+
+	// existenceFieldName is the name of the internal field used to store existence values.
+	existenceFieldName = "exists"
 )
 
 // Holder represents a container for indexes.
@@ -354,6 +357,7 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	}
 
 	index.keys = opt.Keys
+	index.trackExistence = opt.TrackExistence
 
 	if err := index.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")

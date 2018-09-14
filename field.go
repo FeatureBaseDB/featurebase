@@ -159,12 +159,17 @@ func OptFieldTypeMutex(cacheType string, cacheSize uint32) FieldOption {
 func NewField(path, index, name string, opts FieldOption) (*Field, error) {
 	err := validateName(name)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "validating name")
 	}
 
+	return newField(path, index, name, opts)
+}
+
+// newField returns a new instance of field (without name validation).
+func newField(path, index, name string, opts FieldOption) (*Field, error) {
 	// Apply functional option.
 	fo := FieldOptions{}
-	err = opts(&fo)
+	err := opts(&fo)
 	if err != nil {
 		return nil, errors.Wrap(err, "applying option")
 	}
@@ -1050,6 +1055,26 @@ func (f *Field) importValue(columnIDs []uint64, values []int64) error {
 		if err := frag.importValue(data.ColumnIDs, baseValues, bsig.BitDepth()); err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func (f *Field) importRoaring(data []byte, shard uint64) error {
+	viewName := viewStandard
+
+	view, err := f.createViewIfNotExists(viewName)
+	if err != nil {
+		return errors.Wrap(err, "creating view")
+	}
+
+	frag, err := view.CreateFragmentIfNotExists(shard)
+	if err != nil {
+		return errors.Wrap(err, "creating fragment")
+	}
+
+	if err := frag.importRoaring(data); err != nil {
+		return err
 	}
 
 	return nil

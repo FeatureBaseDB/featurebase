@@ -47,9 +47,9 @@ func main() {
 	}
 
 	// We need to refer to indexes and fields before we can use them in a query.
-	repository, _ := schema.Index("repository")
-	stargazer, _ := repository.Field("stargazer")
-	language, _ := repository.Field("language")
+	repository := schema.Index("repository")
+	stargazer := repository.Field("stargazer")
+	language := repository.Field("language")
 
 	var response *pilosa.QueryResponse
 
