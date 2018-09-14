@@ -17,15 +17,15 @@ package roaring
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
 	"math/bits"
 	"sort"
 	"unsafe"
-	"golang.org/x/sys/cpu"
 
+	"golang.org/x/sys/cpu"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -616,8 +616,9 @@ func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	return n, nil
 }
 
-// UnmarshalBinary decodes b from a binary-encoded byte slice.
-func (b *Bitmap) UnmarshalBinary(data []byte) error {
+// unmarshalPilosaRoaring treats data as being encoded in Pilosa's 64 bit
+// roaring format and decodes it into b.
+func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 	if len(data) < headerBaseSize {
 		return errors.New("data too small")
 	}
@@ -2136,72 +2137,96 @@ func intersectArrayBitmap(a, b *Container) *Container {
 	output.n = len(output.array)
 	return output
 }
-var bitmapAnd func(a,b,c []uint64)int
-var bitmapOr func(a,b,c []uint64)int
-var bitmapXor func(a,b,c []uint64)int
-var bitmapAndN func(a,b,c []uint64)int
 
-func goAnd(a,b,c[]uint64)int{
-	n:=0
-	for i := range a {
-		v := a[i] & b[i]
-		c[i] = v
+var bitmapAnd func(a, b, c []uint64) int
+var bitmapOr func(a, b, c []uint64) int
+var bitmapXor func(a, b, c []uint64) int
+var bitmapAndN func(a, b, c []uint64) int
+
+func goAnd(a, b, c []uint64) int {
+	// local variables added to prevent BCE checks in loop
+	// see https://go101.org/article/bounds-check-elimination.html
+	var (
+		ab = a[:bitmapN]
+		bb = b[:bitmapN]
+		ob = c[:bitmapN]
+		n  int
+	)
+	for i := 0; i < bitmapN; i++ {
+		v := ab[i] & bb[i]
+		ob[i] = v
 		n += int(popcount(v))
-
 	}
 	return n
 }
 
-func goOr(a,b,c[]uint64)int{
-	n:=0
-	for i := range a {
-		v := a[i] | b[i]
-		c[i] = v
+func goOr(a, b, c []uint64) int {
+	// local variables added to prevent BCE checks in loop
+	// see https://go101.org/article/bounds-check-elimination.html
+	var (
+		ab = a[:bitmapN]
+		bb = b[:bitmapN]
+		ob = c[:bitmapN]
+		n  int
+	)
+	for i := 0; i < bitmapN; i++ {
+		v := ab[i] | bb[i]
+		ob[i] = v
 		n += int(popcount(v))
-
 	}
 	return n
 }
 
-func goXor(a,b,c[]uint64)int{
-	n:=0
-	for i := range a {
-		v := a[i] ^ b[i]
-		c[i] = v
+func goXor(a, b, c []uint64) int {
+	// local variables added to prevent BCE checks in loop
+	// see https://go101.org/article/bounds-check-elimination.html
+	var (
+		ab = a[:bitmapN]
+		bb = b[:bitmapN]
+		ob = c[:bitmapN]
+		n  int
+	)
+	for i := 0; i < bitmapN; i++ {
+		v := ab[i] ^ bb[i]
+		ob[i] = v
 		n += int(popcount(v))
-
 	}
 	return n
 }
-func goAndN(a,b,c[]uint64)int{
-	n:=0
-	for i := range a {
-		v := a[i] & ^b[i]
-		c[i] = v
+func goAndN(a, b, c []uint64) int {
+	// local variables added to prevent BCE checks in loop
+	// see https://go101.org/article/bounds-check-elimination.html
+	var (
+		ab = a[:bitmapN]
+		bb = b[:bitmapN]
+		ob = c[:bitmapN]
+		n  int
+	)
+	for i := 0; i < bitmapN; i++ {
+		v := ab[i] & ^bb[i]
+		ob[i] = v
 		n += int(popcount(v))
-
 	}
 	return n
 }
 
-func init(){
-if cpu.X86.HasAVX2 &&cpu.X86.HasSSE41  {
-	bitmapAnd=asmAnd
-	bitmapOr=asmOr
-	bitmapAndN=asmAndN
-	bitmapXor=asmXor
-}else{
-	bitmapAnd=goAnd
-	bitmapOr=goOr
-	bitmapXor=goXor
-	bitmapAndN=goAndN
+func init() {
+	if cpu.X86.HasAVX2 && cpu.X86.HasSSE41 {
+		bitmapAnd = asmAnd
+		bitmapOr = asmOr
+		bitmapAndN = asmAndN
+		bitmapXor = asmXor
+	} else {
+		bitmapAnd = goAnd
+		bitmapOr = goOr
+		bitmapXor = goXor
+		bitmapAndN = goAndN
+	}
 }
-}
-
 
 func intersectBitmapBitmap(a, b *Container) *Container {
 	output := &Container{bitmap: make([]uint64, bitmapN), containerType: containerBitmap}
-	output.n = bitmapAnd(a.bitmap,b.bitmap,output.bitmap)
+	output.n = bitmapAnd(a.bitmap, b.bitmap, output.bitmap)
 	output.optimize()
 	return output
 }
@@ -2496,7 +2521,7 @@ func unionBitmapBitmap(a, b *Container) *Container {
 		bitmap:        make([]uint64, bitmapN),
 		containerType: containerBitmap,
 	}
-	output.n = bitmapOr(a.bitmap,b.bitmap,output.bitmap)
+	output.n = bitmapOr(a.bitmap, b.bitmap, output.bitmap)
 
 	return output
 }
@@ -2834,7 +2859,7 @@ func differenceBitmapArray(a, b *Container) *Container {
 
 func differenceBitmapBitmap(a, b *Container) *Container {
 	output := &Container{bitmap: make([]uint64, bitmapN), containerType: containerBitmap}
-	output.n = bitmapAndN(a.bitmap,b.bitmap,output.bitmap)
+	output.n = bitmapAndN(a.bitmap, b.bitmap, output.bitmap)
 
 	if output.n < ArrayMaxSize {
 		output.bitmapToArray()
@@ -2923,7 +2948,7 @@ func xorBitmapBitmap(a, b *Container) *Container {
 		bitmap:        make([]uint64, bitmapN),
 		containerType: containerBitmap,
 	}
-	output.n = bitmapXor(a.bitmap,b.bitmap,output.bitmap)
+	output.n = bitmapXor(a.bitmap, b.bitmap, output.bitmap)
 	if output.count() < ArrayMaxSize {
 		output.bitmapToArray()
 	}
@@ -3381,4 +3406,165 @@ func popcountAndSlice(s, m []uint64) uint64 {
 		cnt += popcount(s[i] & m[i])
 	}
 	return cnt
+}
+
+// constants from github.com/RoaringBitmap/roaring
+// taken from  roaring/util.go
+const (
+	serialCookieNoRunContainer = 12346 // only arrays and bitmaps
+	serialCookie               = 12347 // runs, arrays, and bitmaps
+)
+
+func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint, card int) byte, header, pos int, haveRuns bool, err error) {
+	if len(buf) < 8 {
+		err = fmt.Errorf("buffer too small, expecting at least 8 bytes, was %d", len(buf))
+		return size, containerTyper, header, pos, haveRuns, err
+	}
+	cf := func(index uint, card int) (newType byte) {
+		newType = containerBitmap
+		if card < ArrayMaxSize {
+			newType = containerArray
+		}
+		return newType
+	}
+	containerTyper = cf
+	cookie := binary.LittleEndian.Uint32(buf)
+	pos += 4
+
+	// cookie header
+	if cookie == serialCookieNoRunContainer {
+		size = binary.LittleEndian.Uint32(buf[pos:])
+		pos += 4
+	} else if cookie&0x0000FFFF == serialCookie {
+		haveRuns = true
+		size = uint32(uint16(cookie>>16) + 1) // number of containers
+
+		// create is-run-container bitmap
+		isRunBitmapSize := (int(size) + 7) / 8
+		if pos+isRunBitmapSize > len(buf) {
+			err = fmt.Errorf("malformed bitmap, is-run bitmap overruns buffer at %d", pos+isRunBitmapSize)
+			return size, containerTyper, header, pos, haveRuns, err
+		}
+
+		isRunBitmap := buf[pos : pos+isRunBitmapSize]
+		pos += isRunBitmapSize
+		containerTyper = func(index uint, card int) byte {
+			if isRunBitmap[index/8]&(1<<(index%8)) != 0 {
+				return containerRun
+			}
+			return cf(index, card)
+		}
+	} else {
+		err = fmt.Errorf("did not find expected serialCookie in header")
+		return size, containerTyper, header, pos, haveRuns, err
+	}
+
+	header = pos
+	if size > (1 << 16) {
+		err = fmt.Errorf("It is logically impossible to have more than (1<<16) containers.")
+		return size, containerTyper, header, pos, haveRuns, err
+	}
+
+	// descriptive header
+	if pos+2*2*int(size) > len(buf) {
+		err = fmt.Errorf("malformed bitmap, key-cardinality slice overruns buffer at %d", pos+2*2*int(size))
+		return size, containerTyper, header, pos, haveRuns, err
+	}
+	pos += 2 * 2 * int(size) // moving pos past keycount
+	return size, containerTyper, header, pos, haveRuns, err
+}
+
+// UnmarshalBinary decodes b from a binary-encoded byte slice. data can be in
+// either official roaring format or Pilosa's roaring format.
+func (b *Bitmap) UnmarshalBinary(data []byte) error {
+	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
+	if fileMagic == magicNumber { // if pilosa roaring
+		return errors.Wrap(b.unmarshalPilosaRoaring(data), "unmarshaling as pilosa roaring")
+	}
+
+	keyN, containerTyper, header, pos, haveRuns, err := readOfficialHeader(data)
+	if err != nil {
+		return errors.Wrap(err, "reading roaring header")
+	}
+
+	b.Containers.Reset()
+	// Descriptive header section: Read container keys and cardinalities.
+	for i, buf := uint(0), data[header:]; i < uint(keyN); i, buf = i+1, buf[4:] {
+		card := int(binary.LittleEndian.Uint16(buf[2:4])) + 1
+		b.Containers.PutContainerValues(
+			uint64(binary.LittleEndian.Uint16(buf[0:2])),
+			containerTyper(i, card), /// container type voodo with isRunBitmap
+			card,
+			true)
+	}
+
+	// Read container offsets and attach data.
+	if haveRuns {
+		readWithRuns(b, data, pos, keyN)
+	} else {
+		err := readOffsets(b, data, pos, keyN)
+		if err != nil {
+			return errors.Wrap(err, "reading offsets from official roaring format")
+		}
+	}
+	return nil
+}
+
+func readOffsets(b *Bitmap, data []byte, pos int, keyN uint32) error {
+
+	citer, _ := b.Containers.Iterator(0)
+	for i, buf := 0, data[pos:]; i < int(keyN); i, buf = i+1, buf[4:] {
+		offset := binary.LittleEndian.Uint32(buf[0:4])
+		// Verify the offset is within the bounds of the input data.
+		if int(offset) >= len(data) {
+			return fmt.Errorf("offset out of bounds: off=%d, len=%d", offset, len(data))
+		}
+
+		// Map byte slice directly to the container data.
+		citer.Next()
+		_, c := citer.Value()
+		switch c.containerType {
+		case containerArray:
+			c.runs = nil
+			c.bitmap = nil
+			c.array = (*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[offset]))[:c.n]
+		case containerBitmap:
+			c.array = nil
+			c.runs = nil
+			c.bitmap = (*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN]
+		default:
+			return fmt.Errorf("unsupported container type %d", c.containerType)
+		}
+	}
+	return nil
+}
+
+func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) {
+	citer, _ := b.Containers.Iterator(0)
+	for i := 0; i < int(keyN); i++ {
+		citer.Next()
+		_, c := citer.Value()
+		switch c.containerType {
+		case containerRun:
+			c.array = nil
+			c.bitmap = nil
+			runCount := binary.LittleEndian.Uint16(data[pos : pos+runCountHeaderSize])
+			c.runs = (*[0xFFFFFFF]interval16)(unsafe.Pointer(&data[pos+runCountHeaderSize]))[:runCount]
+
+			for o := range c.runs { // must convert from start:length to start:end :(
+				c.runs[o].last = c.runs[o].start + c.runs[o].last
+			}
+			pos += int((runCount * interval16Size) + runCountHeaderSize)
+		case containerArray:
+			c.runs = nil
+			c.bitmap = nil
+			c.array = (*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[pos]))[:c.n]
+			pos += c.n * 2
+		case containerBitmap:
+			c.array = nil
+			c.runs = nil
+			c.bitmap = (*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[pos]))[:bitmapN]
+			pos += bitmapN * 8
+		}
+	}
 }

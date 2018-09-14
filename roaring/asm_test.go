@@ -18,8 +18,6 @@ import (
 	"testing"
 )
 
-	
-	
 func BenchmarkBitmap_ASMIntersect(b *testing.B) {
 	a:= bitmapFull()
 	results:= make ([]uint64,bitmapN)
@@ -28,12 +26,11 @@ func BenchmarkBitmap_ASMIntersect(b *testing.B) {
                 _=asmAnd(a, a,results)
         }
 }
-	
 func BenchmarkBitmap_GOIntersect(b *testing.B) {
 	a:= bitmapFull()
-	results:= make ([]uint64,bitmapN)
-        b.ResetTimer()
-        for x := 0; x < b.N; x++ {
-                _=goAnd(a, a,results)
-        }
+	results := make([]uint64, bitmapN)
+	b.ResetTimer()
+	for x := 0; x < b.N; x++ {
+		_ = goAnd(a, a, results)
+	}
 }
