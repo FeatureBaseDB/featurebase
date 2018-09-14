@@ -2136,15 +2136,15 @@ func intersectArrayBitmap(a, b *Container) *Container {
 }
 
 func intersectBitmapBitmap(a, b *Container) *Container {
+	// local variables added to prevent BCE checks in loop
+	// see https://go101.org/article/bounds-check-elimination.html
 	var (
-
-	ab = a.bitmap[:bitmapN]
-	bb = b.bitmap[:bitmapN]
-	buf = make([]uint64, bitmapN)
-	ob =buf[:bitmapN]
-
-	n int
-)
+		ab  = a.bitmap[:bitmapN]
+		bb  = b.bitmap[:bitmapN]
+		buf = make([]uint64, bitmapN)
+		ob  = buf[:bitmapN]
+		n   int
+	)
 	for i := 0; i < bitmapN; i++ {
 		v := ab[i] & bb[i]
 		ob[i] = v
@@ -2152,8 +2152,8 @@ func intersectBitmapBitmap(a, b *Container) *Container {
 	}
 
 	output := &Container{
-		bitmap: ob,
-		n:      n,
+		bitmap:        ob,
+		n:             n,
 		containerType: containerBitmap,
 	}
 	return output
@@ -2445,11 +2445,14 @@ func unionArrayBitmap(a, b *Container) *Container {
 }
 
 func unionBitmapBitmap(a, b *Container) *Container {
+	// local variables added to prevent BCE checks in loop
+	// see https://go101.org/article/bounds-check-elimination.html
+
 	var (
-		ab = a.bitmap[:bitmapN]
-		bb = b.bitmap[:bitmapN]
+		ab  = a.bitmap[:bitmapN]
+		bb  = b.bitmap[:bitmapN]
 		buf = make([]uint64, bitmapN)
-		ob =buf[:bitmapN]
+		ob  = buf[:bitmapN]
 
 		n int
 	)
@@ -2461,8 +2464,8 @@ func unionBitmapBitmap(a, b *Container) *Container {
 	}
 
 	output := &Container{
-		bitmap: ob,
-		n:      n,
+		bitmap:        ob,
+		n:             n,
 		containerType: containerBitmap,
 	}
 	return output
@@ -2800,11 +2803,14 @@ func differenceBitmapArray(a, b *Container) *Container {
 }
 
 func differenceBitmapBitmap(a, b *Container) *Container {
+	// local variables added to prevent BCE checks in loop
+	// see https://go101.org/article/bounds-check-elimination.html
+
 	var (
-		ab = a.bitmap[:bitmapN]
-		bb = b.bitmap[:bitmapN]
+		ab  = a.bitmap[:bitmapN]
+		bb  = b.bitmap[:bitmapN]
 		buf = make([]uint64, bitmapN)
-		ob =buf[:bitmapN]
+		ob  = buf[:bitmapN]
 
 		n int
 	)
@@ -2816,8 +2822,8 @@ func differenceBitmapBitmap(a, b *Container) *Container {
 	}
 
 	output := &Container{
-		bitmap: ob,
-		n:      n,
+		bitmap:        ob,
+		n:             n,
 		containerType: containerBitmap,
 	}
 	if output.n < ArrayMaxSize {
@@ -2903,11 +2909,14 @@ func xorArrayBitmap(a, b *Container) *Container {
 }
 
 func xorBitmapBitmap(a, b *Container) *Container {
+	// local variables added to prevent BCE checks in loop
+	// see https://go101.org/article/bounds-check-elimination.html
+
 	var (
-		ab = a.bitmap[:bitmapN]
-		bb = b.bitmap[:bitmapN]
+		ab  = a.bitmap[:bitmapN]
+		bb  = b.bitmap[:bitmapN]
 		buf = make([]uint64, bitmapN)
-		ob =buf[:bitmapN]
+		ob  = buf[:bitmapN]
 
 		n int
 	)
@@ -2919,8 +2928,8 @@ func xorBitmapBitmap(a, b *Container) *Container {
 	}
 
 	output := &Container{
-		bitmap: ob,
-		n:      n,
+		bitmap:        ob,
+		n:             n,
 		containerType: containerBitmap,
 	}
 	if output.count() < ArrayMaxSize {
@@ -3376,14 +3385,14 @@ func popcount(x uint64) uint64 {
 
 func popcountAndSlice(s, m []uint64) uint64 {
 	var (
-		a=s[:bitmapN]
-		b=m[:bitmapN]
+		a = s[:bitmapN]
+		b = m[:bitmapN]
 	)
 	_ = a[bitmapN-1]
 	_ = b[bitmapN-1]
-	
+
 	cnt := uint64(0)
-	for i:=0;i<bitmapN ;i++ {
+	for i := 0; i < bitmapN; i++ {
 		cnt += popcount(a[i] & b[i])
 	}
 	return cnt
