@@ -1060,6 +1060,26 @@ func (f *Field) importValue(columnIDs []uint64, values []int64) error {
 	return nil
 }
 
+func (f *Field) importRoaring(data []byte, shard uint64) error {
+	viewName := viewStandard
+
+	view, err := f.createViewIfNotExists(viewName)
+	if err != nil {
+		return errors.Wrap(err, "creating view")
+	}
+
+	frag, err := view.CreateFragmentIfNotExists(shard)
+	if err != nil {
+		return errors.Wrap(err, "creating fragment")
+	}
+
+	if err := frag.importRoaring(data); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 type fieldSlice []*Field
 
 func (p fieldSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }

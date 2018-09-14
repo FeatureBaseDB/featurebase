@@ -29,6 +29,7 @@ import (
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // API provides the top level programmatic interface to Pilosa. It is usually
@@ -294,6 +295,55 @@ func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, e
 		return nil, newNotFoundError(ErrFieldNotFound)
 	}
 	return field, nil
+}
+
+// ImportRoaring is a low level interface for importing data to Pilosa when
+// extremely high throughput is desired. The data must be encoded in a
+// particular way which may be unintuitive (discussed below). The data is merged
+// with existing data.
+//
+// It takes as input a roaring bitmap which it uses as the data for the
+// indicated index, field, and shard. The bitmap may be encoded according to the
+// official roaring spec (https://github.com/RoaringBitmap/RoaringFormatSpec),
+// or to the pilosa roaring spec which supports 64 bit integers
+// (https://www.pilosa.com/docs/latest/architecture/#roaring-bitmap-storage-format).
+//
+// The data should be encoded the same way that Pilosa stores fragments
+// internally. A bit "i" being set in the input bitmap indicates that the bit is
+// set in Pilosa row "i/ShardWidth", and in column
+// (shard*ShardWidth)+(i%ShardWidth). That is to say that "data" represents all
+// of the rows in this shard of this field concatenated together in one long
+// bitmap.
+func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, shard uint64, remote bool, data []byte) (err error) {
+	if err = api.validate(apiField); err != nil {
+		return errors.Wrap(err, "validating api method")
+	}
+	nodes := api.cluster.shardNodes(indexName, shard)
+	var eg errgroup.Group
+
+	for _, node := range nodes {
+		node := node
+		if node.ID == api.server.nodeID {
+			field := api.holder.Field(indexName, fieldName)
+			if field == nil {
+				return newNotFoundError(ErrFieldNotFound)
+			}
+			// must make a copy of data to operate on locally. field.importRoaring changes data
+			d2 := make([]byte, len(data))
+			copy(d2, data)
+			eg.Go(func() error {
+				return field.importRoaring(d2, shard)
+			})
+			go func(node *Node) {
+			}(node)
+		} else if !remote { // if remote == true we don't forward to other nodes
+			// forward it on
+			eg.Go(func() error {
+				return api.server.defaultClient.ImportRoaring(ctx, &node.URI, indexName, fieldName, shard, true, data)
+			})
+		}
+	}
+	return eg.Wait()
 }
 
 // DeleteField removes the named field from the named index. If the index is not

@@ -479,12 +479,6 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 
 // ImportValueK bulk imports keyed field values to a host.
 func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, vals []pilosa.FieldValue) error {
-	if index == "" {
-		return pilosa.ErrIndexRequired
-	} else if field == "" {
-		return pilosa.ErrFieldRequired
-	}
-
 	buf, err := c.marshalImportValuePayload(index, field, 0, vals)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
@@ -529,6 +523,49 @@ func (c *InternalClient) marshalImportValuePayload(index, field string, shard ui
 		return nil, fmt.Errorf("marshal import request: %s", err)
 	}
 	return buf, nil
+}
+
+// ImportRoaring does fast import of raw bits in roaring format (pilosa or
+// official format, see API.ImportRoaring).
+func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64, remote bool, data []byte) error {
+	if index == "" {
+		return pilosa.ErrIndexRequired
+	} else if field == "" {
+		return pilosa.ErrFieldRequired
+	}
+	if uri == nil {
+		uri = c.defaultURI
+	}
+
+	url := fmt.Sprintf("%s/index/%s/field/%s/import-roaring/%d?remote=%v", uri, index, field, shard, remote)
+
+	// Generate HTTP request.
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
+	if err != nil {
+		return errors.Wrap(err, "creating request")
+	}
+	req.Header.Set("Content-Type", "application/x-binary")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	// Execute request against the host.
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return errors.Wrap(err, "executing request")
+	}
+	defer resp.Body.Close()
+
+	// Validate status code.
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("invalid status: %d", resp.StatusCode)
+	}
+
+	dec := json.NewDecoder(resp.Body)
+	rbody := &pilosa.ImportResponse{}
+	dec.Decode(rbody)
+	if rbody.Err != "" {
+		return errors.Errorf("importing roaring: %v", rbody.Err)
+	}
+	return nil
 }
 
 // ExportCSV bulk exports data for a single shard from a host to CSV format.
