@@ -85,7 +85,7 @@ func TestCheckCommand_Run(t *testing.T) {
 	var buf bytes.Buffer
 	io.Copy(&buf, r)
 
-	if !strings.HasPrefix(err.Error(), "checking bitmap: unmarshalling: invalid roaring file") {
+	if !strings.HasPrefix(err.Error(), "checking bitmap: unmarshalling: reading roaring header:") {
 		t.Fatalf("expect error: invalid roaring file, actual: '%s'", err)
 	}
 	//	Todo: need correct roaring file for happy path

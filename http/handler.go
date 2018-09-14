@@ -182,6 +182,7 @@ func (h *Handler) populateValidators() {
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := mux.CurrentRoute(r).GetName()
+
 		if validator, ok := h.validators[key]; ok {
 			if err := validator.validate(r.URL.Query()); err != nil {
 				// TODO: Return the response depending on the Accept header
@@ -217,6 +218,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/field/{field}", handler.handlePostField).Methods("POST")
 	router.HandleFunc("/index/{index}/field/{field}", handler.handleDeleteField).Methods("DELETE")
 	router.HandleFunc("/index/{index}/field/{field}/import", handler.handlePostImport).Methods("POST")
+	router.HandleFunc("/index/{index}/field/{field}/import-roaring/{shard}", handler.handlePostImportRoaring).Methods("POST")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
 	router.HandleFunc("/info", handler.handleGetInfo).Methods("GET")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
@@ -1426,4 +1428,51 @@ func GetHTTPClient(t *tls.Config) *http.Client {
 		transport.TLSClientConfig = t
 	}
 	return &http.Client{Transport: transport}
+}
+
+// handlPostRoaringImport
+func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Content-Type") != "application/x-binary" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	}
+	q := r.URL.Query()
+	remoteStr := q.Get("remote")
+	var remote bool
+	if remoteStr == "true" {
+		remote = true
+	}
+
+	// Read entire body.
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	urlVars := mux.Vars(r)
+	shard, err := strconv.ParseUint(urlVars["shard"], 10, 64)
+	if err != nil {
+		http.Error(w, "shard should be an unsigned integer", http.StatusBadRequest)
+		return
+	}
+
+	// TODO give meaningful stats for import
+	err = h.api.ImportRoaring(r.Context(), urlVars["index"], urlVars["field"], shard, remote, body)
+	resp := &pilosa.ImportResponse{}
+	if err != nil {
+		resp.Err = err.Error()
+	}
+	// Marshal response object.
+	buf, err := h.api.Serializer.Marshal(resp)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("marshal import response: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Write response.
+	_, err = w.Write(buf)
+	if err != nil {
+		h.logger.Printf("writing import-roaring response: %v", err)
+	}
 }

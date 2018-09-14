@@ -2,7 +2,7 @@
 
 package pilosa
 
-import "fmt"
+import "strconv"
 
 const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFieldapiFieldAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiSetCoordinatorapiShardNodesapiViews"
 
@@ -10,7 +10,7 @@ var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 73, 86, 98, 118, 135, 143,
 
 func (i apiMethod) String() string {
 	if i < 0 || i >= apiMethod(len(_apiMethod_index)-1) {
-		return fmt.Sprintf("apiMethod(%d)", i)
+		return "apiMethod(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 	return _apiMethod_name[_apiMethod_index[i]:_apiMethod_index[i+1]]
 }
