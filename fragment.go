@@ -490,6 +490,45 @@ func (f *fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, er
 	return changed, nil
 }
 
+// ClearRow clears a row for a given rowID within the fragment.
+// This updates both the on-disk storage and the in-cache bitmap.
+func (f *fragment) clearRow(rowID uint64) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.unprotectedClearRow(rowID)
+}
+
+func (f *fragment) unprotectedClearRow(rowID uint64) (changed bool, err error) {
+	changed = false
+
+	// First container of the row in storage.
+	headContainerKey := rowID << shardVsContainerExponent
+
+	// Remove every container in the row.
+	for i := uint64(0); i < (1 << shardVsContainerExponent); i++ {
+		k := headContainerKey + i
+		// Technically we could bypass the Get() call and only
+		// call Remove(), but the Get() gives us the ability
+		// to return true if any existing data was removed.
+		if cont := f.storage.Containers.Get(k); cont != nil {
+			f.storage.Containers.Remove(k)
+			changed = true
+		}
+	}
+
+	// Clear the row in cache.
+	f.cache.Add(rowID, 0)
+
+	// Snapshot storage.
+	if err := f.snapshot(); err != nil {
+		return false, errors.Wrap(err, "snapshotting")
+	}
+
+	f.stats.Count("clearRow", 1, 1.0)
+
+	return changed, nil
+}
+
 func (f *fragment) bit(rowID, columnID uint64) (bool, error) {
 	pos, err := f.pos(rowID, columnID)
 	if err != nil {
@@ -2182,6 +2221,12 @@ func pos(rowID, columnID uint64) uint64 {
 type vector interface {
 	Get(colID uint64) (uint64, bool)
 	Set(colID, rowID uint64)
+	// TODO: Clear(colID, rowID uint64)
+	// Set() and Clear() are required for implementations
+	// where the vector data is maintained independently
+	// from the fragment data. In those cases, the Set()
+	// and Clear() would also need to address the ranked
+	// cache as well as the effects of ClearRow().
 }
 
 // rowsVector implements the vector interface by looking
