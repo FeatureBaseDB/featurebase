@@ -168,11 +168,7 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 }
 
 // DirectAdd adds a value to the bitmap by bypassing the op log.
-func (b *Bitmap) DirectAdd(value uint64) bool {
-	return b.add(value)
-}
-
-func (b *Bitmap) add(v uint64) bool {
+func (b *Bitmap) DirectAdd(v uint64) bool {
 	cont := b.Containers.GetOrCreate(highbits(v))
 	return cont.add(lowbits(v))
 }
@@ -776,22 +772,22 @@ func (b *Bitmap) Flip(start, end uint64) *Bitmap {
 	v, eof := itr.Next()
 	//copy over previous bits.
 	for v < start && !eof {
-		result.add(v)
+		result.DirectAdd(v)
 		v, eof = itr.Next()
 	}
 	//flip bits in range .
 	for i := start; i <= end; i++ {
 		if eof {
-			result.add(i)
+			result.DirectAdd(i)
 		} else if v == i {
 			v, eof = itr.Next()
 		} else {
-			result.add(i)
+			result.DirectAdd(i)
 		}
 	}
 	//add remaining.
 	for !eof {
-		result.add(v)
+		result.DirectAdd(v)
 		v, eof = itr.Next()
 	}
 	return result
@@ -2912,7 +2908,7 @@ type op struct {
 func (op *op) apply(b *Bitmap) bool {
 	switch op.typ {
 	case opTypeAdd:
-		return b.add(op.value)
+		return b.DirectAdd(op.value)
 	case opTypeRemove:
 		return b.remove(op.value)
 	default:
