@@ -26,11 +26,71 @@ func BenchmarkBitmap_ASMIntersect(b *testing.B) {
                 _=asmAnd(a, a,results)
         }
 }
+
 func BenchmarkBitmap_GOIntersect(b *testing.B) {
-	a:= bitmapFull()
+	a := bitmapFull()
+	c := bitmapEvenBitsSet()
 	results := make([]uint64, bitmapN)
 	b.ResetTimer()
 	for x := 0; x < b.N; x++ {
-		_ = goAnd(a, a, results)
+		_ = goAnd(a, c, results)
+	}
+}
+
+func goAndNoBCE(a, b, c []uint64) (n int) {
+	for i := 0; i < bitmapN; i++ {
+		c[i] = a[i] & b[i]
+		n += int(popcount(c[i]))
+	}
+	return n
+}
+
+func BenchmarkBitmap_GoAndNoBCE(b *testing.B) {
+	a := bitmapFull()
+	c := bitmapEvenBitsSet()
+	results := make([]uint64, bitmapN)
+	b.ResetTimer()
+	for x := 0; x < b.N; x++ {
+		_ = goAndNoBCE(a, c, results)
+	}
+}
+
+func BenchmarkBitmap_GOIntersectUnroll4(b *testing.B) {
+	a := bitmapFull()
+	c := bitmapEvenBitsSet()
+	results := make([]uint64, bitmapN)
+	b.ResetTimer()
+	for x := 0; x < b.N; x++ {
+		_ = goAndUnroll4(a, c, results)
+	}
+}
+
+func BenchmarkBitmap_GOIntersectUnroll8(b *testing.B) {
+	a := bitmapFull()
+	c := bitmapEvenBitsSet()
+	results := make([]uint64, bitmapN)
+	b.ResetTimer()
+	for x := 0; x < b.N; x++ {
+		_ = goAndUnroll8(a, c, results)
+	}
+}
+
+func BenchmarkBitmap_GOIntersectUnroll16(b *testing.B) {
+	a := bitmapFull()
+	c := bitmapEvenBitsSet()
+	results := make([]uint64, bitmapN)
+	b.ResetTimer()
+	for x := 0; x < b.N; x++ {
+		_ = goAndUnroll16(a, c, results)
+	}
+}
+
+func BenchmarkBitmap_GOIntersectUnroll1024(b *testing.B) {
+	a := bitmapFull()
+	c := bitmapEvenBitsSet()
+	results := make([]uint64, bitmapN)
+	b.ResetTimer()
+	for x := 0; x < b.N; x++ {
+		_ = goAndUnroll1024(a, c, results)
 	}
 }
