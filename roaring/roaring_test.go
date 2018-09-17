@@ -334,8 +334,8 @@ func TestBitmap_ArrayCountRange(t *testing.T) {
 func TestBitmap_DirectAdd(t *testing.T) {
 	bits := []uint64{0, 1, 2, 3, 4, 5, 12, 13, 14, 15, 16, 17, 1000000, 1000002, 1000003, 1000004, 1000005, 1000006, 1000010, 1000011, 1000012, 1000013, 1000014}
 	bm := roaring.NewBitmap()
-	bm.DirectAdd([]uint64{0, 1, 2, 3, 4, 5, 12, 13, 14, 15, 16, 17})
-	bm.DirectAdd([]uint64{1000000, 1000002, 1000003, 1000004, 1000005, 1000006, 1000010, 1000011, 1000012, 1000013, 1000014})
+	bm.DirectAdd(0, 1, 2, 3, 4, 5, 12, 13, 14, 15, 16, 17)
+	bm.DirectAdd(1000000, 1000002, 1000003, 1000004, 1000005, 1000006, 1000010, 1000011, 1000012, 1000013, 1000014)
 	if len(bits) != int(bm.Count()) {
 		t.Fatalf("count %d != %d", len(bits), bm.Count())
 	}

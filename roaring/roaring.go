@@ -168,7 +168,7 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 }
 
 // DirectAdd adds values to the bitmap by bypassing the op log.
-func (b *Bitmap) DirectAdd(values []uint64) {
+func (b *Bitmap) DirectAdd(values ...uint64) {
 	for _, value := range values {
 		b.add(value)
 	}
