@@ -24,8 +24,8 @@ import (
 	"sort"
 	"unsafe"
 
-	"golang.org/x/sys/cpu"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/cpu"
 )
 
 const (
@@ -2153,9 +2153,8 @@ func goAnd(a, b, c []uint64) int {
 		n  int
 	)
 	for i := 0; i < bitmapN; i++ {
-		v := ab[i] & bb[i]
-		ob[i] = v
-		n += int(popcount(v))
+		ob[i] = ab[i] & bb[i]
+		n += int(popcount(ob[i]))
 	}
 	return n
 }
