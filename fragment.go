@@ -1758,10 +1758,27 @@ func (f *fragment) readCacheFromArchive(r io.Reader) error {
 	return nil
 }
 
+// rowFilter is a filter function which takes a rowID
+// and determines if that row should be included in
+// the result set. Additionally, it signals whether
+// to halt processing any more rows. The two bool
+// returned are (1) include row, (2) break further
+// processing.
+type rowFilter func(rowID uint64) (bool, bool)
+
+// noFilter is a filter function which has no restrictions.
+var noFilter = func(rowID uint64) (bool, bool) { return true, false }
+
+// rows returns all rows by calling rowsWithFilter()
+// with a completely unrestrictive filter.
+
 func (f *fragment) rows() []uint64 {
+	return f.rowsWithFilter(noFilter)
+}
+
+func (f *fragment) rowsWithFilter(filter rowFilter) []uint64 {
 	i, _ := f.storage.Containers.Iterator(0)
 	rows := make([]uint64, 0)
-
 	var lastRow uint64 = math.MaxUint64
 
 	// Loop over the existing containers.
@@ -1776,22 +1793,33 @@ func (f *fragment) rows() []uint64 {
 			continue
 		}
 
-		rows = append(rows, vRow)
+		// apply filter
+		if addRow, breakOut := filter(vRow); breakOut {
+			break
+		} else if addRow {
+			rows = append(rows, vRow)
+		}
+
 		lastRow = vRow
 	}
 	return rows
 
 }
 
+// rowsForColumn is similar to the rows method, but isolated
+// to a single column.
 func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
-	var colKey uint64
+	return f.rowsForColumnWithFilter(columnID, noFilter)
+}
+
+func (f *fragment) rowsForColumnWithFilter(columnID uint64, filter rowFilter) []uint64 {
+	i, _ := f.storage.Containers.Iterator(0)
+	rows := make([]uint64, 0)
 
 	colID := columnID % ShardWidth
-	i, _ := f.storage.Containers.Iterator(0)
+	colVal := uint16(colID & 0xFFFF) // columnID within the container
 
-	colVal := uint16(colID & 0xFFFF)
-
-	rows := make([]uint64, 0)
+	var colKey uint64
 
 	// Loop over the existing containers.
 	for i.Next() {
@@ -1807,8 +1835,13 @@ func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
 			continue
 		}
 
+		// apply filter
 		if c.Contains(colVal) {
-			rows = append(rows, vRow)
+			if addRow, breakOut := filter(vRow); breakOut {
+				break
+			} else if addRow {
+				rows = append(rows, vRow)
+			}
 		}
 	}
 	return rows

@@ -62,7 +62,9 @@ var (
 	ErrNodeNotCoordinator = errors.New("node is not the coordinator")
 	ErrResizeNotRunning   = errors.New("no resize job currently running")
 
-	ErrNotImplemented = errors.New("not implemented")
+	ErrNotImplemented            = errors.New("not implemented")
+	ErrFieldsArgumentRequired    = errors.New("fields argument required")
+	ErrExpectedFieldListArgument = errors.New("expected field list argument")
 )
 
 // apiMethodNotAllowedError wraps an error value indicating that a particular
