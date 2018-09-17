@@ -167,8 +167,10 @@ func NewRankCache(maxEntries uint32) *rankCache {
 func (c *rankCache) Add(id uint64, n uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// Ignore if the column count is below the threshold.
-	if n < c.thresholdValue {
+	// Ignore if the column count is below the threshold,
+	// unless the count is 0, which is effectively used
+	// to clear the cache value.
+	if n < c.thresholdValue && n > 0 {
 		return
 	}
 

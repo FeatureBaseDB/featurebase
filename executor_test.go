@@ -1841,6 +1841,76 @@ func TestExecutor_Execute_ClearRow(t *testing.T) {
 			t.Fatal("expected clear row to return an error")
 		}
 	})
+	t.Run("TopN", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackExistence: true})
+		_, err := index.CreateField("f", pilosa.OptFieldTypeDefault())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		cc := `
+			Set(2, f=1)
+			Set(3, f=1)
+			Set(4, f=1)
+			Set(5, f=1)
+			Set(6, f=1)
+			Set(7, f=1)
+			Set(8, f=1)
+
+			Set(2, f=2)
+			Set(3, f=2)
+			Set(4, f=2)
+			Set(5, f=2)
+			Set(6, f=2)
+			Set(7, f=2)
+
+			Set(2, f=3)
+			Set(3, f=3)
+			Set(4, f=3)
+			Set(5, f=3)
+			Set(6, f=3)
+		`
+
+		// Set bits.
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: cc}); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := c[0].RecalculateCaches(); err != nil {
+			t.Fatalf("recalculating caches: %v", err)
+		}
+
+		// Check the TopN results.
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=5)`}); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(res.Results, []interface{}{[]pilosa.Pair{
+			{ID: 1, Count: 7},
+			{ID: 2, Count: 6},
+			{ID: 3, Count: 5},
+		}}) {
+			t.Fatalf("topn wrong results: %v", res.Results)
+		}
+
+		// Clear the row and ensure we get a `true` response.
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `ClearRow(f=2)`}); err != nil {
+			t.Fatal(err)
+		} else if res := res.Results[0].(bool); !res {
+			t.Fatalf("unexpected clear row result: %+v", res)
+		}
+
+		// Ensure that the cleared row doesn't show up in TopN (i.e. it was removed from the cache).
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=5)`}); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(res.Results, []interface{}{[]pilosa.Pair{
+			{ID: 1, Count: 7},
+			{ID: 3, Count: 5},
+		}}) {
+			t.Fatalf("topn wrong results: %v", res.Results)
+		}
+	})
 }
 
 func benchmarkExistence(nn bool, b *testing.B) {
