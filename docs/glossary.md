@@ -22,7 +22,7 @@ nav = []
 
 <strong id="fragment">Fragment:</strong> A Fragment is the intersection of a [field](#field) and a [shard](#shard) in an [index](#index).
 
-<strong id="field">[Field](../data-model/#field):</strong> Fields are used to group [rows](#row) into different categories. Row IDs are namespaced by field such that the same row ID in a different field refers to a different row. For [ranked](#topn) fields, rows are kept in sorted order within the field. Fields are one of four types: set, [int](#bsi), time, and mutex. For more information, see [data model](../data-model/) and [Creating fields](../api-reference/#create-field).
+<strong id="field">[Field](../data-model/#field):</strong> Fields are used to group [rows](#row) into different categories. Row IDs are namespaced by field such that the same row ID in a different field refers to a different row. For [ranked](#topn) fields, rows are kept in sorted order within the field. Fields are one of four types: set, [int](#bsi), bool, time, and mutex. For more information, see [data model](../data-model/) and [Creating fields](../api-reference/#create-field).
 
 <strong id="frame">[Frame](../data-model/#field):</strong> Prior to Pilosa 1.0, fields were known as frames.
 

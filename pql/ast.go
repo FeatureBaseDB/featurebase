@@ -248,6 +248,23 @@ func (c *Call) FieldArg() (string, error) {
 	return "", fmt.Errorf("No field argument specified")
 }
 
+// BoolArg is for reading the value at key from call.Args as a bool. If the
+// key is not in Call.Args, the value of the returned bool will be false, and
+// the error will be nil. The value is assumed to be a bool. An error is
+// returned if the value is not a bool.
+func (c *Call) BoolArg(key string) (bool, bool, error) {
+	val, ok := c.Args[key]
+	if !ok {
+		return false, false, nil
+	}
+	switch tval := val.(type) {
+	case bool:
+		return tval, true, nil
+	default:
+		return false, true, fmt.Errorf("could not convert %v of type %T to bool in Call.BoolArg", tval, tval)
+	}
+}
+
 // UintArg is for reading the value at key from call.Args as a uint64. If the
 // key is not in Call.Args, the value of the returned bool will be false, and
 // the error will be nil. The value is assumed to be a uint64 or an int64 and

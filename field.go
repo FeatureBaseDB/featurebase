@@ -52,6 +52,7 @@ const (
 	FieldTypeInt   = "int"
 	FieldTypeTime  = "time"
 	FieldTypeMutex = "mutex"
+	FieldTypeBool  = "bool"
 )
 
 // Field represents a container for views.
@@ -151,6 +152,16 @@ func OptFieldTypeMutex(cacheType string, cacheSize uint32) FieldOption {
 		fo.Type = FieldTypeMutex
 		fo.CacheType = cacheType
 		fo.CacheSize = cacheSize
+		return nil
+	}
+}
+
+func OptFieldTypeBool() FieldOption {
+	return func(fo *FieldOptions) error {
+		if fo.Type != "" {
+			return errors.Errorf("field type is already set to: %s", fo.Type)
+		}
+		fo.Type = FieldTypeBool
 		return nil
 	}
 }
@@ -441,6 +452,14 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Max = 0
 		f.options.TimeQuantum = ""
 		f.options.Keys = opt.Keys
+	case FieldTypeBool:
+		f.options.Type = FieldTypeBool
+		f.options.CacheType = CacheTypeNone
+		f.options.CacheSize = 0
+		f.options.Min = 0
+		f.options.Max = 0
+		f.options.TimeQuantum = ""
+		f.options.Keys = false
 	default:
 		return errors.New("invalid field type")
 	}
@@ -681,6 +700,10 @@ func (f *Field) deleteView(name string) error {
 }
 
 // Row returns a row of the standard view.
+// It seems this method is only being used by the test
+// package, and the fact that it's only allowed on
+// `set` fields is odd. This may be considered for
+// deprecation in a future version.
 func (f *Field) Row(rowID uint64) (*Row, error) {
 	if f.Type() != FieldTypeSet {
 		return nil, errors.Errorf("row method unsupported for field type: %s", f.Type())
@@ -1190,6 +1213,12 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			o.CacheType,
 			o.CacheSize,
 			o.Keys,
+		})
+	case FieldTypeBool:
+		return json.Marshal(struct {
+			Type string `json:"type"`
+		}{
+			o.Type,
 		})
 	}
 	return nil, errors.New("invalid field type")
