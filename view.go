@@ -244,6 +244,8 @@ func (v *view) newFragment(path string, shard uint64) *fragment {
 	frag.stats = v.stats.WithTags(fmt.Sprintf("shard:%d", shard))
 	if v.fieldType == FieldTypeMutex {
 		frag.mutexVector = newRowsVector(frag)
+	} else if v.fieldType == FieldTypeBool {
+		frag.mutexVector = newBoolVector(frag)
 	}
 	return frag
 }

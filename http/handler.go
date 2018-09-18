@@ -687,6 +687,8 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum))
 	case pilosa.FieldTypeMutex:
 		fos = append(fos, pilosa.OptFieldTypeMutex(*req.Options.CacheType, *req.Options.CacheSize))
+	case pilosa.FieldTypeBool:
+		fos = append(fos, pilosa.OptFieldTypeBool())
 	}
 	if req.Options.Keys != nil {
 		if *req.Options.Keys {
@@ -777,6 +779,20 @@ func (o *fieldOptions) validate() error {
 			return pilosa.NewBadRequestError(errors.New("max does not apply to field type mutex"))
 		} else if o.TimeQuantum != nil {
 			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type mutex"))
+		}
+	case pilosa.FieldTypeBool:
+		if o.CacheType != nil {
+			return pilosa.NewBadRequestError(errors.New("cacheType does not apply to field type bool"))
+		} else if o.CacheSize != nil {
+			return pilosa.NewBadRequestError(errors.New("cacheSize does not apply to field type bool"))
+		} else if o.Min != nil {
+			return pilosa.NewBadRequestError(errors.New("min does not apply to field type bool"))
+		} else if o.Max != nil {
+			return pilosa.NewBadRequestError(errors.New("max does not apply to field type bool"))
+		} else if o.TimeQuantum != nil {
+			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type bool"))
+		} else if o.Keys != nil {
+			return pilosa.NewBadRequestError(errors.New("keys does not apply to field type bool"))
 		}
 	default:
 		return errors.Errorf("invalid field type: %s", o.Type)
