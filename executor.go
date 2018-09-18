@@ -834,20 +834,13 @@ type GroupCount struct {
 }
 
 func mergeGroupCounts(gc, other []GroupCount) []GroupCount {
-	m := make(map[string]struct {
-		i     int
-		count uint64
-	})
+	m := make(map[string]int)
 	for i := range gc {
-		m[uniqueGroupString(gc[i].Group)] = struct {
-			i     int
-			count uint64
-		}{i, gc[i].Count}
+		m[uniqueGroupString(gc[i].Group)] = i
 	}
 	for i := range other {
-		o, found := m[uniqueGroupString(other[i].Group)]
-		if found {
-			gc[o.i].Count += other[i].Count
+		if idx, found := m[uniqueGroupString(other[i].Group)]; found {
+			gc[idx].Count += other[i].Count
 		} else {
 			gc = append(gc, other[i])
 		}
