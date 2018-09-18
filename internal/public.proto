@@ -8,15 +8,26 @@ message Row {
 	repeated Attr Attrs = 2;
 }
 
+message RowIdentifiers {
+	repeated uint64 Rows = 1;
+	repeated string Keys = 2;
+	//repeated Attr Attrs = 3;
+}
+
 message Pair {
 	uint64 ID = 1;
 	string Key = 3;
 	uint64 Count = 2;
 }
 
-message GroupLine{
-	repeated string Groups = 1;
-   uint64 Total=2;
+message FieldRow{
+	string Field = 1;
+	uint64 RowID = 2;
+}
+
+message GroupCount{
+	repeated FieldRow Group = 1;
+	uint64 Count = 2;
 }
 
 message ValCount {
@@ -72,7 +83,8 @@ message QueryResult {
 	bool Changed = 4;
   ValCount ValCount = 5;
 	repeated uint64 RowIDs = 7;
-	repeated GroupLine GroupByCounts = 8;
+	repeated GroupCount GroupCounts = 8;
+	RowIdentifiers RowIdentifiers = 9;
 }
 
 message ImportRequest {

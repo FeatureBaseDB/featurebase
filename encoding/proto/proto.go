@@ -363,9 +363,12 @@ func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
 		case pilosa.RowIDs:
 			pb.Results[i].Type = queryResultTypeRowIDs
 			pb.Results[i].RowIDs = result
-		case pilosa.GroupByCounts:
-			pb.Results[i].Type = queryResultTypeGroupByCounts
-			pb.Results[i].GroupByCounts = encodeGroupByCount(result)
+		case []pilosa.GroupCount:
+			pb.Results[i].Type = queryResultTypeGroupCounts
+			pb.Results[i].GroupCounts = encodeGroupCounts(result)
+		case pilosa.RowIdentifiers:
+			pb.Results[i].Type = queryResultTypeRowIdentifiers
+			pb.Results[i].RowIdentifiers = encodeRowIdentifiers(result)
 		case nil:
 			pb.Results[i].Type = queryResultTypeNil
 		}
@@ -898,7 +901,6 @@ func decodeQueryResponse(pb *internal.QueryResponse, m *pilosa.QueryResponse) {
 	}
 	m.Results = make([]interface{}, len(pb.Results))
 	decodeQueryResults(pb.Results, m.Results)
-
 }
 
 func decodeColumnAttrSets(pb []*internal.ColumnAttrSet, m []*pilosa.ColumnAttrSet) {
@@ -929,7 +931,8 @@ const (
 	queryResultTypeUint64
 	queryResultTypeBool
 	queryResultTypeRowIDs
-	queryResultTypeGroupByCounts
+	queryResultTypeGroupCounts
+	queryResultTypeRowIdentifiers
 )
 
 func decodeQueryResult(pb *internal.QueryResult) interface{} {
@@ -946,8 +949,8 @@ func decodeQueryResult(pb *internal.QueryResult) interface{} {
 		return pb.Changed
 	case queryResultTypeNil:
 		return nil
-	case queryResultTypeGroupByCounts:
-		return decodeGroupByCounts(pb.GroupByCounts)
+	case queryResultTypeGroupCounts:
+		return decodeGroupCounts(pb.GroupCounts)
 	}
 	panic(fmt.Sprintf("unknown type: %d", pb.Type))
 }
@@ -998,12 +1001,24 @@ func decodeAttr(attr *internal.Attr) (key string, value interface{}) {
 	}
 }
 
-func decodeGroupByCounts(a []*internal.GroupLine) pilosa.GroupByCounts {
-	gbc := make(pilosa.GroupByCounts, 0)
+func decodeGroupCounts(a []*internal.GroupCount) []pilosa.GroupCount {
+	other := make([]pilosa.GroupCount, len(a))
 	for i := range a {
-		gbc = append(gbc, pilosa.GroupLine{a[i].Groups, a[i].Total})
+		other[i] = pilosa.GroupCount{
+			decodeFieldRows(a[i].Group),
+			a[i].Count,
+		}
 	}
-	return gbc
+	return other
+}
+
+func decodeFieldRows(a []*internal.FieldRow) []pilosa.FieldRow {
+	other := make([]pilosa.FieldRow, len(a))
+	for i := range a {
+		other[i].Field = a[i].Field
+		other[i].RowID = a[i].RowID
+	}
+	return other
 }
 
 func decodePairs(a []*internal.Pair) []pilosa.Pair {
@@ -1057,12 +1072,34 @@ func encodeRow(r *pilosa.Row) *internal.Row {
 	}
 }
 
-func encodeGroupByCount(counts pilosa.GroupByCounts) []*internal.GroupLine {
-	result := make([]*internal.GroupLine, len(counts))
+func encodeRowIdentifiers(r pilosa.RowIdentifiers) *internal.RowIdentifiers {
+	return &internal.RowIdentifiers{
+		Rows: r.Rows,
+		Keys: r.Keys,
+		//Attrs:   encodeAttrs(r.Attrs),
+	}
+}
+
+func encodeGroupCounts(counts []pilosa.GroupCount) []*internal.GroupCount {
+	result := make([]*internal.GroupCount, len(counts))
 	for i := range counts {
-		result[i] = &internal.GroupLine{Groups: counts[i].Groups, Total: counts[i].Total}
+		result[i] = &internal.GroupCount{
+			Group: encodeFieldRows(counts[i].Group),
+			Count: counts[i].Count,
+		}
 	}
 	return result
+}
+
+func encodeFieldRows(a []pilosa.FieldRow) []*internal.FieldRow {
+	other := make([]*internal.FieldRow, len(a))
+	for i := range a {
+		other[i] = &internal.FieldRow{
+			Field: a[i].Field,
+			RowID: a[i].RowID,
+		}
+	}
+	return other
 }
 
 func encodePairs(a pilosa.Pairs) []*internal.Pair {
