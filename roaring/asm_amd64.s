@@ -39,7 +39,7 @@ loop_begin0:
 	VMOVDQA (BX), Y0
 	VMOVDQA (DX), Y1
 	VPAND   Y0, Y1, Y0
-	VMOVUPS Y0, (R15)
+	VMOVDQU Y0, (R15)
 
 	POPCNTQ (R15), BP
 	ADDQ    BP, SI
@@ -70,7 +70,7 @@ loop_begin1:
 	VMOVDQA (BX), Y0
 	VMOVDQA (DX), Y1
 	VPOR    Y0, Y1, Y0
-	VMOVUPS Y0, (R15)
+	VMOVDQU Y0, (R15)
 
 	POPCNTQ (R15), BP
 	ADDQ    BP, SI
@@ -102,7 +102,7 @@ loop_begin2:
 	VMOVDQA (BX), Y0
 	VMOVDQA (DX), Y1
 	VPXOR   Y0, Y1, Y0
-	VMOVUPS Y0, (R15)
+	VMOVDQU Y0, (R15)
 
 	POPCNTQ (R15), BP
 	ADDQ    BP, SI
@@ -134,7 +134,7 @@ loop_begin3:
 	VMOVDQA (BX), Y0
 	VMOVDQA (DX), Y1
 	VPANDN  Y0, Y1, Y0
-	VMOVUPS Y0, (R15)
+	VMOVDQU Y0, (R15)
 
 	POPCNTQ (R15), BP
 	ADDQ    BP, SI
