@@ -234,6 +234,18 @@ func OptServerClusterHasher(h Hasher) ServerOption {
 	}
 }
 
+func OptServerHolderOptions(opts ...HolderOption) ServerOption {
+	return func(s *Server) error {
+		for _, opt := range opts {
+			err := opt(s.holder)
+			if err != nil {
+				return errors.Wrap(err, "applying option")
+			}
+		}
+		return nil
+	}
+}
+
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{

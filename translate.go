@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cespare/xxhash"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -81,9 +81,26 @@ type TranslateFile struct {
 	replicationRetryInterval time.Duration
 }
 
+// TranslateFileOption is a functional option type for pilosa.TranslateFile
+type TranslateFileOption func(f *TranslateFile) error
+
+func OptTranslateFileMapSize(mapSize int) TranslateFileOption {
+	return func(f *TranslateFile) error {
+		f.mapSize = mapSize
+		return nil
+	}
+}
+
 // NewTranslateFile returns a new instance of TranslateFile.
-func NewTranslateFile() *TranslateFile {
-	return &TranslateFile{
+func NewTranslateFile(opts ...TranslateFileOption) *TranslateFile {
+	// 10GB default map size
+	defaultMapSize := 10 * (1 << 30)
+	// Use 2GB default map size on 32-bit systems
+	if 32<<(^uint(0)>>32&1) == 32 {
+		defaultMapSize = (1 << 31) - 1 // 2GB
+	}
+
+	f := &TranslateFile{
 		writeNotify: make(chan struct{}),
 		closing:     make(chan struct{}),
 		cols:        make(map[string]*index),
@@ -96,6 +113,16 @@ func NewTranslateFile() *TranslateFile {
 
 		replicationRetryInterval: defaultReplicationRetryInterval,
 	}
+
+	for _, opt := range opts {
+		err := opt(f)
+		if err != nil {
+			// TODO (2.0): Change func signature to return error
+			panic(errors.Wrap(err, "applying option"))
+		}
+	}
+
+	return f
 }
 
 func (s *TranslateFile) Open() (err error) {

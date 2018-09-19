@@ -77,9 +77,19 @@ type Holder struct {
 	Logger Logger
 }
 
+// HolderOption is a functional option type for pilosa.Holder
+type HolderOption func(f *Holder) error
+
+func OptHolderTranslateFileMapSize(mapSize int) HolderOption {
+	return func(h *Holder) error {
+		h.translateFile = NewTranslateFile(OptTranslateFileMapSize(mapSize))
+		return nil
+	}
+}
+
 // NewHolder returns a new instance of Holder.
-func NewHolder() *Holder {
-	return &Holder{
+func NewHolder(opts ...HolderOption) *Holder {
+	h := &Holder{
 		indexes: make(map[string]*Index),
 		closing: make(chan struct{}),
 
@@ -97,6 +107,15 @@ func NewHolder() *Holder {
 
 		Logger: NopLogger,
 	}
+
+	for _, opt := range opts {
+		err := opt(h)
+		if err != nil {
+			// TODO (2.0): Change func signature to return error
+			panic(errors.Wrap(err, "applying option"))
+		}
+	}
+	return h
 }
 
 // Open initializes the root data directory for the holder.
