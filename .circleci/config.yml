@@ -68,6 +68,7 @@ jobs:
     docker:
       - image: circleci/python:2.7-jessie
     steps:
+      - run: '[[ -v CIRCLE_PR_NUMBER ]] && circleci step halt || true' # Skip job if this is a PR
       - *fast-checkout
       - run: sudo pip install awscli
       - run: make prerelease-upload
