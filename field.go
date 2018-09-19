@@ -977,10 +977,18 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 		return errors.New("time quantum not set in field")
 	}
 
+	fieldType := f.Type()
+
 	// Split import data by fragment.
 	dataByFragment := make(map[importKey]importData)
 	for i := range rowIDs {
 		rowID, columnID := rowIDs[i], columnIDs[i]
+
+		// Bool-specific data validation.
+		if fieldType == FieldTypeBool && rowID > 1 {
+			return errors.New("bool field imports only support values 0 and 1")
+		}
+
 		var timestamp *time.Time
 		if len(timestamps) > i {
 			timestamp = timestamps[i]
