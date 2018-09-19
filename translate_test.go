@@ -367,7 +367,7 @@ func TestPrintTranslateFile(t *testing.T) {
 	}
 	f.Close()
 
-	s := pilosa.NewTranslateFile()
+	s := pilosa.NewTranslateFile(pilosa.OptTranslateFileMapSize(2 << 25))
 	s.Path = f.Name()
 	err = s.Open()
 	if err != nil {
@@ -809,7 +809,7 @@ func NewTranslateFile() *TranslateFile {
 	}
 	f.Close()
 
-	s := &TranslateFile{TranslateFile: pilosa.NewTranslateFile()}
+	s := &TranslateFile{TranslateFile: pilosa.NewTranslateFile(pilosa.OptTranslateFileMapSize(2 << 25))}
 	s.Path = f.Name()
 	return s
 }
@@ -847,7 +847,7 @@ func (s *TranslateFile) Reopen() error {
 	}
 
 	s.lock.Lock()
-	s.TranslateFile = pilosa.NewTranslateFile()
+	s.TranslateFile = pilosa.NewTranslateFile(pilosa.OptTranslateFileMapSize(2 << 25))
 	s.lock.Unlock()
 	s.Path = prev.Path
 	s.SetPrimaryStore("restored-primary", prev.PrimaryTranslateStore)

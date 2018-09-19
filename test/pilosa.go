@@ -66,7 +66,7 @@ func newCommand(opts ...server.CommandOption) *Command {
 		server.OptCommandServerOptions(
 			pilosa.OptServerHolderOptions(
 				pilosa.OptHolderTranslateFileMapSize(
-					2 << 26,
+					2 << 25,
 				),
 			),
 		),

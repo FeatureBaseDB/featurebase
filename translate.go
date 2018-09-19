@@ -93,11 +93,15 @@ func OptTranslateFileMapSize(mapSize int) TranslateFileOption {
 
 // NewTranslateFile returns a new instance of TranslateFile.
 func NewTranslateFile(opts ...TranslateFileOption) *TranslateFile {
-	// 10GB default map size
-	defaultMapSize := 10 * (1 << 30)
-	// Use 2GB default map size on 32-bit systems
-	if 32<<(^uint(0)>>32&1) == 32 {
-		defaultMapSize = (1 << 31) - 1 // 2GB
+	var defaultMapSize64 int64 = 1 << 33
+	var defaultMapSize int
+
+	if ^uint(0)>>32 > 0 {
+		// 10GB default map size
+		defaultMapSize = int(defaultMapSize64)
+	} else {
+		// Use 2GB default map size on 32-bit systems
+		defaultMapSize = (1 << 31) - 1
 	}
 
 	f := &TranslateFile{
