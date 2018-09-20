@@ -784,11 +784,11 @@ func TestDifferenceMixed(t *testing.T) {
 		t.Fatalf("test #3 expected empty but got %v", res.runs)
 	}
 
-	c.bitmap = []uint64{0x64}
+	c.bitmap = MakeBitmap([]uint64{0x64})
 	c.n = c.countRange(0, 100)
 	c.containerType = containerBitmap
 	res = difference(c, a)
-	if !reflect.DeepEqual(res.bitmap, []uint64{0x4}) {
+	if !reflect.DeepEqual(res.bitmap, MakeBitmap([]uint64{0x4})) {
 		t.Fatalf("test #4 expected %v, but got %v", []uint16{4}, res.bitmap)
 	}
 
