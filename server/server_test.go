@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"reflect"
 	"sort"
@@ -564,6 +565,59 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 	hosts := cluster[0].API.Hosts(context.Background())
 	if len(hosts) != 2 {
 		t.Fatalf("unexpected hosts: %v", hosts)
+	}
+}
+
+// Ensure program imports timestamps as UTC.
+func TestMain_ImportTimestamp(t *testing.T) {
+	m := test.MustRunCommand()
+	defer m.Close()
+
+	indexName := "i"
+	fieldName := "f"
+
+	// Create index.
+	if _, err := m.API.CreateIndex(context.Background(), indexName, pilosa.IndexOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create field.
+	if _, err := m.API.CreateField(context.Background(), indexName, fieldName, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"))); err != nil {
+		t.Fatal(err)
+	}
+
+	data := pilosa.ImportRequest{
+		Index:      indexName,
+		Field:      fieldName,
+		Shard:      0,
+		RowIDs:     []uint64{1, 2},
+		ColumnIDs:  []uint64{1, 2},
+		Timestamps: []int64{1514764800000000000, 1577833200000000000}, // 2018-01-01T00:00, 2019-12-31T23:00
+	}
+
+	// Import data.
+	if err := m.API.Import(context.Background(), &data); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure the correct views were created.
+	dir := fmt.Sprintf("%s/%s/%s/views", m.Config.DataDir, indexName, fieldName)
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	exp := []string{
+		"standard", "standard_2018", "standard_201801", "standard_20180101",
+		"standard_2019", "standard_201912", "standard_20191231",
+	}
+	got := []string{}
+	for _, f := range files {
+		got = append(got, f.Name())
+	}
+
+	if !reflect.DeepEqual(got, exp) {
+		t.Fatalf("expected %v, but got %v", exp, got)
 	}
 }
 

@@ -46,7 +46,7 @@ const (
 	// at the beginning of every serialized run container.
 	runCountHeaderSize = 2
 
-	// interval32Size is the size of a single run in a container.runs.
+	// interval16Size is the size of a single run in a container.runs.
 	interval16Size = 4
 
 	// bitmapN is the number of values in a container.bitmap.
@@ -1698,7 +1698,7 @@ func (c *Container) arrayWriteTo(w io.Writer) (n int64, err error) {
 	//	assert(lowbits(uint64(v)) == v, "cannot write array value out of range: %d", v)
 	//}
 
-	// Write sizeof(uint32) * cardinality bytes.
+	// Write sizeof(uint16) * cardinality bytes.
 	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&c.array[0]))[:2*c.n])
 	return int64(nn), err
 }
