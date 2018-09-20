@@ -55,11 +55,20 @@ func newCommand(opts ...server.CommandOption) *Command {
 		panic(err)
 	}
 
-	// set aggressive close timeout by default to avoid hanging tests. This was
+	// Set aggressive close timeout by default to avoid hanging tests. This was
 	// a problem with PDK tests which used go-pilosa as well. We put it at the
 	// beginning of the option slice so that it can be overridden by user-passed
 	// options.
-	opts = append([]server.CommandOption{server.OptCommandCloseTimeout(time.Millisecond * 2)}, opts...)
+	// Also set TranslateFile MapSize to a smaller number so memory allocation
+	// does not fail on 32-bit systems.
+	opts = append([]server.CommandOption{
+		server.OptCommandCloseTimeout(time.Millisecond * 2),
+		server.OptCommandServerOptions(
+			pilosa.OptServerTranslateFileMapSize(
+				2 << 25,
+			),
+		),
+	}, opts...)
 	m := &Command{commandOptions: opts}
 	m.Command = server.NewCommand(bytes.NewReader(nil), ioutil.Discard, ioutil.Discard, opts...)
 	m.Config.DataDir = path
