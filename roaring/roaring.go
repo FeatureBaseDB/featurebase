@@ -46,7 +46,7 @@ const (
 	// at the beginning of every serialized run container.
 	runCountHeaderSize = 2
 
-	// interval32Size is the size of a single run in a container.runs.
+	// interval16Size is the size of a single run in a container.runs.
 	interval16Size = 4
 
 	// bitmapN is the number of values in a container.bitmap.
@@ -167,7 +167,8 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 	return changed, nil
 }
 
-func (b *Bitmap) add(v uint64) bool {
+// DirectAdd adds a value to the bitmap by bypassing the op log.
+func (b *Bitmap) DirectAdd(v uint64) bool {
 	cont := b.Containers.GetOrCreate(highbits(v))
 	return cont.add(lowbits(v))
 }
@@ -771,22 +772,22 @@ func (b *Bitmap) Flip(start, end uint64) *Bitmap {
 	v, eof := itr.Next()
 	//copy over previous bits.
 	for v < start && !eof {
-		result.add(v)
+		result.DirectAdd(v)
 		v, eof = itr.Next()
 	}
 	//flip bits in range .
 	for i := start; i <= end; i++ {
 		if eof {
-			result.add(i)
+			result.DirectAdd(i)
 		} else if v == i {
 			v, eof = itr.Next()
 		} else {
-			result.add(i)
+			result.DirectAdd(i)
 		}
 	}
 	//add remaining.
 	for !eof {
-		result.add(v)
+		result.DirectAdd(v)
 		v, eof = itr.Next()
 	}
 	return result
@@ -1697,7 +1698,7 @@ func (c *Container) arrayWriteTo(w io.Writer) (n int64, err error) {
 	//	assert(lowbits(uint64(v)) == v, "cannot write array value out of range: %d", v)
 	//}
 
-	// Write sizeof(uint32) * cardinality bytes.
+	// Write sizeof(uint16) * cardinality bytes.
 	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&c.array[0]))[:2*c.n])
 	return int64(nn), err
 }
@@ -2954,7 +2955,7 @@ type op struct {
 func (op *op) apply(b *Bitmap) bool {
 	switch op.typ {
 	case opTypeAdd:
-		return b.add(op.value)
+		return b.DirectAdd(op.value)
 	case opTypeRemove:
 		return b.remove(op.value)
 	default:
