@@ -64,10 +64,8 @@ func newCommand(opts ...server.CommandOption) *Command {
 	opts = append([]server.CommandOption{
 		server.OptCommandCloseTimeout(time.Millisecond * 2),
 		server.OptCommandServerOptions(
-			pilosa.OptServerHolderOptions(
-				pilosa.OptHolderTranslateFileMapSize(
-					2 << 25,
-				),
+			pilosa.OptServerTranslateFileMapSize(
+				2 << 25,
 			),
 		),
 	}, opts...)

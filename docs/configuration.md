@@ -307,6 +307,18 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
     skip-verify = true
     ```
 
+#### Translation Map Size
+
+* Description: Size in bytes of mmap to allocate for key translation
+* Flag: `translation.map-size`
+* Env: `PILOSA_TRANSLATION_MAP_SIZE`
+* Config:
+
+    ```toml
+    [translation]
+    map-size = 10737418240
+    ```
+
 ### Example Cluster Configuration
 
 A three node cluster running on different hosts could be minimally configured as follows:

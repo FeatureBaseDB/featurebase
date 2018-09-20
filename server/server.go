@@ -286,10 +286,8 @@ func (m *Command) SetupServer() error {
 	if m.Config.Translation.MapSize > 0 {
 		serverOptions = append(
 			serverOptions,
-			pilosa.OptServerHolderOptions(
-				pilosa.OptHolderTranslateFileMapSize(
-					m.Config.Translation.MapSize,
-				),
+			pilosa.OptServerTranslateFileMapSize(
+				m.Config.Translation.MapSize,
 			),
 		)
 	}

@@ -234,14 +234,9 @@ func OptServerClusterHasher(h Hasher) ServerOption {
 	}
 }
 
-func OptServerHolderOptions(opts ...HolderOption) ServerOption {
+func OptServerTranslateFileMapSize(mapSize int) ServerOption {
 	return func(s *Server) error {
-		for _, opt := range opts {
-			err := opt(s.holder)
-			if err != nil {
-				return errors.Wrap(err, "applying option")
-			}
-		}
+		s.holder.translateFile = NewTranslateFile(OptTranslateFileMapSize(mapSize))
 		return nil
 	}
 }
