@@ -3387,8 +3387,6 @@ func popcountAndSlice(s, m []uint64) uint64 {
 		a = s[:bitmapN]
 		b = m[:bitmapN]
 	)
-	_ = a[bitmapN-1]
-	_ = b[bitmapN-1]
 
 	cnt := uint64(0)
 	for i := 0; i < bitmapN; i++ {
