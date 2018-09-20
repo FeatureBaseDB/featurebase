@@ -1178,6 +1178,76 @@ func TestFragment_SetMutex(t *testing.T) {
 	}
 }
 
+// Ensure a fragment can import mutually exclusive values.
+func TestFragment_ImportMutex(t *testing.T) {
+	tests := []struct {
+		rowIDs []uint64
+		colIDs []uint64
+		exp    map[uint64][]uint64
+	}{
+		{
+			[]uint64{1, 1, 1, 1},
+			[]uint64{0, 1, 2, 3},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+			},
+		},
+		{
+			[]uint64{1, 1, 1, 1, 2, 2, 2, 2},
+			[]uint64{0, 1, 2, 3, 0, 1, 2, 3},
+			map[uint64][]uint64{
+				1: {},
+				2: {0, 1, 2, 3},
+			},
+		},
+		{
+			[]uint64{1, 1, 1, 1, 2},
+			[]uint64{0, 1, 2, 3, 1},
+			map[uint64][]uint64{
+				1: {0, 2, 3},
+				2: {1},
+			},
+		},
+		{
+			[]uint64{1, 1, 1, 1, 2, 2, 1},
+			[]uint64{0, 1, 2, 3, 1, 8, 1},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+				2: {8},
+			},
+		},
+		{
+			[]uint64{1, 2, 3},
+			[]uint64{8, 8, 8},
+			map[uint64][]uint64{
+				1: {},
+				2: {},
+				3: {8},
+			},
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("importmutex%d", i), func(t *testing.T) {
+			f := mustOpenMutexFragment("i", "f", viewStandard, 0, "")
+			defer f.Close()
+
+			err := f.bulkImport(test.rowIDs, test.colIDs)
+			if err != nil {
+				t.Fatalf("bulk importing ids: %v", err)
+			}
+
+			// Check for expected results.
+			for k, v := range test.exp {
+				cols := f.row(k).Columns()
+				if !reflect.DeepEqual(cols, v) {
+					t.Fatalf("expected: %v, but got: %v", v, cols)
+				}
+			}
+		})
+	}
+}
+
 func BenchmarkFragment_Snapshot(b *testing.B) {
 	if *FragmentPath == "" {
 		b.Skip("no fragment specified")
