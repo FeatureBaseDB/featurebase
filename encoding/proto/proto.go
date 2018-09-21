@@ -803,30 +803,32 @@ func decodeNodeEventMessage(pb *internal.NodeEventMessage, m *pilosa.NodeEvent) 
 
 func decodeNodeStatus(pb *internal.NodeStatus, m *pilosa.NodeStatus) {
 	m.Node = &pilosa.Node{}
-	decodeIndexStatuses(pb.Indexes, m.Indexes)
+	m.Indexes = decodeIndexStatuses(pb.Indexes)
 	m.Schema = &pilosa.Schema{}
 	decodeSchema(pb.Schema, m.Schema)
 }
 
-func decodeIndexStatuses(a []*internal.IndexStatus, m []*pilosa.IndexStatus) {
-	m = m[:0]
+func decodeIndexStatuses(a []*internal.IndexStatus) []*pilosa.IndexStatus {
+	m := make([]*pilosa.IndexStatus, 0)
 	for i := range a {
 		m = append(m, &pilosa.IndexStatus{})
 		decodeIndexStatus(a[i], m[i])
 	}
+	return m
 }
 
 func decodeIndexStatus(pb *internal.IndexStatus, m *pilosa.IndexStatus) {
 	m.Name = pb.Name
-	decodeFieldStatuses(pb.Fields, m.Fields)
+	m.Fields = decodeFieldStatuses(pb.Fields)
 }
 
-func decodeFieldStatuses(a []*internal.FieldStatus, m []*pilosa.FieldStatus) {
-	m = m[:0]
+func decodeFieldStatuses(a []*internal.FieldStatus) []*pilosa.FieldStatus {
+	m := make([]*pilosa.FieldStatus, 0)
 	for i := range a {
 		m = append(m, &pilosa.FieldStatus{})
 		decodeFieldStatus(a[i], m[i])
 	}
+	return m
 }
 
 func decodeFieldStatus(pb *internal.FieldStatus, m *pilosa.FieldStatus) {
