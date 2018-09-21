@@ -108,6 +108,8 @@ The request payload is in JSON, and may contain the `options` field. The `option
 * `int`
     * `min` (int): Minimum integer value allowed for the field.
     * `max` (int): Maximum integer value allowed for the field.
+* `bool`
+    * (boolean fields take no arguments)
 * `time`
     * `timeQuantum` (string): [Time Quantum](../data-model/#time-quantum) for this field.
 * `mutex`

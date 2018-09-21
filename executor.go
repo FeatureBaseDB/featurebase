@@ -734,8 +734,7 @@ func (e *executor) executeBitmapShard(_ context.Context, index string, c *pql.Ca
 	rowID, rowOK, rowErr := c.UintArg(fieldName)
 	if rowErr != nil {
 		return nil, fmt.Errorf("Row() error with arg for row: %v", rowErr)
-	}
-	if !rowOK {
+	} else if !rowOK {
 		return nil, fmt.Errorf("Row() must specify %v", rowLabel)
 	}
 
@@ -1140,7 +1139,6 @@ func (e *executor) executeClearBitField(ctx context.Context, index string, c *pq
 
 // executeSet executes a Set() call.
 func (e *executor) executeSet(ctx context.Context, index string, c *pql.Call, opt *execOptions) (bool, error) {
-
 	// Read colID.
 	colID, ok, err := c.UintArg("_" + columnLabel)
 	if err != nil {
@@ -1172,8 +1170,9 @@ func (e *executor) executeSet(ctx context.Context, index string, c *pql.Call, op
 		}
 	}
 
+	// Int field.
 	if f.Type() == FieldTypeInt {
-		// Read remaining fields using labels.
+		// Read row value.
 		rowVal, ok, err := c.IntArg(fieldName)
 		if err != nil {
 			return false, fmt.Errorf("reading Set() row: %v", err)
@@ -1182,27 +1181,27 @@ func (e *executor) executeSet(ctx context.Context, index string, c *pql.Call, op
 		}
 
 		return e.executeSetValueField(ctx, index, c, f, colID, rowVal, opt)
-	} else {
-		// Read remaining fields using labels.
-		rowID, ok, err := c.UintArg(fieldName)
-		if err != nil {
-			return false, fmt.Errorf("reading Set() row: %v", err)
-		} else if !ok {
-			return false, fmt.Errorf("Set() row argument '%v' required", rowLabel)
-		}
-
-		var timestamp *time.Time
-		sTimestamp, ok := c.Args["_timestamp"].(string)
-		if ok {
-			t, err := time.Parse(TimeFormat, sTimestamp)
-			if err != nil {
-				return false, fmt.Errorf("invalid date: %s", sTimestamp)
-			}
-			timestamp = &t
-		}
-
-		return e.executeSetBitField(ctx, index, c, f, colID, rowID, timestamp, opt)
 	}
+
+	// Read row ID.
+	rowID, ok, err := c.UintArg(fieldName)
+	if err != nil {
+		return false, fmt.Errorf("reading Set() row: %v", err)
+	} else if !ok {
+		return false, fmt.Errorf("Set() row argument '%v' required", rowLabel)
+	}
+
+	var timestamp *time.Time
+	sTimestamp, ok := c.Args["_timestamp"].(string)
+	if ok {
+		t, err := time.Parse(TimeFormat, sTimestamp)
+		if err != nil {
+			return false, fmt.Errorf("invalid date: %s", sTimestamp)
+		}
+		timestamp = &t
+	}
+
+	return e.executeSetBitField(ctx, index, c, f, colID, rowID, timestamp, opt)
 }
 
 // executeSetBitField executes a Set() call for a specific field.
@@ -1675,7 +1674,21 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 			// will raise an error downstream when it's used.
 			return nil
 		}
-		if field.keys() {
+
+		// Bool field keys do not use the translator because there
+		// are only two possible values. Instead, they are handled
+		// directly.
+		if field.Type() == FieldTypeBool {
+			boolVal, err := callArgBool(c, rowKey)
+			if err != nil {
+				return errors.Wrap(err, "getting bool key")
+			}
+			rowID := falseRowID
+			if boolVal {
+				rowID = trueRowID
+			}
+			c.Args[rowKey] = rowID
+		} else if field.keys() {
 			if c.Args[rowKey] != nil && !isString(c.Args[rowKey]) {
 				return errors.New("row value must be a string when field 'keys' option enabled")
 			}
@@ -1830,6 +1843,18 @@ func (vc *ValCount) larger(other ValCount) ValCount {
 		Val:   vc.Val,
 		Count: vc.Count,
 	}
+}
+
+func callArgBool(call *pql.Call, key string) (bool, error) {
+	value, ok := call.Args[key]
+	if !ok {
+		return false, errors.New("missing bool argument")
+	}
+	b, ok := value.(bool)
+	if !ok {
+		return false, fmt.Errorf("invalid bool argument type: %T", value)
+	}
+	return b, nil
 }
 
 func callArgString(call *pql.Call, key string) string {

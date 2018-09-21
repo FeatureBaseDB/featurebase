@@ -72,6 +72,10 @@ const (
 
 	// defaultFragmentMaxOpN is the default value for Fragment.MaxOpN.
 	defaultFragmentMaxOpN = 2000
+
+	// Row ids used for boolean fields.
+	falseRowID = uint64(0)
+	trueRowID  = uint64(1)
 )
 
 // fragment represents the intersection of a field and shard in an index.
@@ -2206,3 +2210,33 @@ func (v *rowsVector) Get(colID uint64) (uint64, bool) {
 
 // Set is not used for rowsVector.
 func (v *rowsVector) Set(colID, rowID uint64) {}
+
+// boolVector implements the vector interface by looking
+// at data in rows 0 and 1.
+type boolVector struct {
+	f *fragment
+}
+
+// newBoolVector returns a boolVector for a given fragment.
+func newBoolVector(f *fragment) *boolVector {
+	return &boolVector{
+		f: f,
+	}
+}
+
+// Get returns the rowID associated to the given colID.
+// Additionally, it returns true if a value was found,
+// otherwise it returns false.
+func (v *boolVector) Get(colID uint64) (uint64, bool) {
+	rows := v.f.rowsForColumn(colID)
+	if len(rows) == 1 {
+		switch rows[0] {
+		case falseRowID, trueRowID:
+			return rows[0], true
+		}
+	}
+	return 0, false
+}
+
+// Set is not used for boolVector.
+func (v *boolVector) Set(colID, rowID uint64) {}
