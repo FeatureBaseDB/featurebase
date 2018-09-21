@@ -553,6 +553,8 @@ func (s *Server) receiveMessage(m Message) error {
 		s.holder.recalculateCaches()
 	case *NodeEvent:
 		s.cluster.ReceiveEvent(obj)
+	case *Instruction:
+		s.handleInstruction(obj)
 	case *NodeStatus:
 		s.handleRemoteStatus(obj)
 	}
@@ -604,6 +606,21 @@ func (s *Server) SendTo(to *Node, m Message) error {
 // get this node's name(ID), location(URI), and coordinator status.
 func (s *Server) node() Node {
 	return *s.cluster.Node
+}
+
+// handleInstruction receives incoming Instruction from remote nodes.
+func (s *Server) handleInstruction(pb Message) {
+	instruction, ok := pb.(*Instruction)
+	if !ok {
+		s.logger.Printf("invalid message type: %T", pb)
+	}
+
+	switch instruction.Type {
+	case "ShareNodeStatus":
+		if err := s.cluster.shareNodeStatus(); err != nil {
+			s.logger.Printf("error sharing node status: %s", err)
+		}
+	}
 }
 
 // handleRemoteStatus receives incoming NodeStatus from remote nodes.

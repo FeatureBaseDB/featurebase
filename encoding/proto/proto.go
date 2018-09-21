@@ -147,6 +147,14 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		decodeNodeEventMessage(msg, mt)
 		return nil
+	case *pilosa.Instruction:
+		msg := &internal.Instruction{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling Instruction")
+		}
+		decodeInstruction(msg, mt)
+		return nil
 	case *pilosa.NodeStatus:
 		msg := &internal.NodeStatus{}
 		err := proto.Unmarshal(buf, msg)
@@ -256,6 +264,8 @@ func encodeToProto(m pilosa.Message) proto.Message {
 		return encodeRecalculateCaches(mt)
 	case *pilosa.NodeEvent:
 		return encodeNodeEventMessage(mt)
+	case *pilosa.Instruction:
+		return encodeInstruction(mt)
 	case *pilosa.NodeStatus:
 		return encodeNodeStatus(mt)
 	case *pilosa.Node:
@@ -585,6 +595,12 @@ func encodeNodeEventMessage(m *pilosa.NodeEvent) *internal.NodeEventMessage {
 	}
 }
 
+func encodeInstruction(m *pilosa.Instruction) *internal.Instruction {
+	return &internal.Instruction{
+		Type: m.Type,
+	}
+}
+
 func encodeNodeStatus(m *pilosa.NodeStatus) *internal.NodeStatus {
 	return &internal.NodeStatus{
 		Node:    encodeNode(m.Node),
@@ -799,6 +815,10 @@ func decodeNodeEventMessage(pb *internal.NodeEventMessage, m *pilosa.NodeEvent) 
 	m.Event = pilosa.NodeEventType(pb.Event)
 	m.Node = &pilosa.Node{}
 	decodeNode(pb.Node, m.Node)
+}
+
+func decodeInstruction(pb *internal.Instruction, m *pilosa.Instruction) {
+	m.Type = pb.Type
 }
 
 func decodeNodeStatus(pb *internal.NodeStatus, m *pilosa.NodeStatus) {

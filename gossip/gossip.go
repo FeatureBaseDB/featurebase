@@ -277,10 +277,10 @@ func (g *memberSet) LocalState(join bool) []byte {
 		m.Indexes = append(m.Indexes, is)
 	}
 
-	// Marshal nodestate data to bytes.
+	// Marshal node status data to bytes.
 	buf, err := pilosa.MarshalInternalMessage(m, g.papi.Serializer)
 	if err != nil {
-		g.Logger.Printf("error marshalling nodestate data, err=%s", err)
+		g.Logger.Printf("error marshalling node status data, err=%s", err)
 		return []byte{}
 	}
 	return buf
