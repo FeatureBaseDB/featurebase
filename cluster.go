@@ -1044,8 +1044,56 @@ func (c *cluster) unprotectedSetStateAndBroadcast(state string) error {
 	}
 	// Broadcast cluster status changes to the cluster.
 	c.logger.Printf("broadcasting ClusterStatus: %s", state)
-	return c.broadcaster.SendSync(c.unprotectedStatus()) // TODO fix c.Status
+	if err := c.broadcaster.SendSync(c.unprotectedStatus()); err != nil {
+		return errors.Wrap(err, "broadcasting cluster status")
+	}
 
+	// If the coordinator has just put the cluster into state NORMAL,
+	// send a message to all nodes instructing them to share their
+	// NodeStatus with the cluster. This is to ensure that things
+	// like availableShards are synced immediately, as opposed to
+	// waiting for the next push/pull event.
+	if state == ClusterStateNormal {
+		if err := c.unprotectedShareNodeStatus(); err != nil {
+			return errors.Wrap(err, "sharing node status")
+		}
+		return c.broadcaster.SendSync(&Instruction{Type: "ShareNodeStatus"})
+	}
+
+	return nil
+}
+
+func (c *cluster) shareNodeStatus() error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.unprotectedShareNodeStatus()
+}
+
+func (c *cluster) unprotectedShareNodeStatus() error {
+	m := &NodeStatus{
+		Node:   c.Node,
+		Schema: &Schema{Indexes: c.holder.limitedSchema()},
+	}
+	for _, idx := range m.Schema.Indexes {
+		is := &IndexStatus{Name: idx.Name}
+		for _, f := range idx.Fields {
+			availableShards := roaring.NewBitmap()
+			if field := c.holder.Field(idx.Name, f.Name); field != nil {
+				availableShards = field.AvailableShards()
+			}
+			is.Fields = append(is.Fields, &FieldStatus{
+				Name:            f.Name,
+				AvailableShards: availableShards,
+			})
+		}
+		m.Indexes = append(m.Indexes, is)
+	}
+
+	go func() {
+		c.broadcaster.SendSync(m)
+	}()
+
+	return nil
 }
 
 func (c *cluster) sendTo(node *Node, m Message) error {
@@ -1974,6 +2022,10 @@ type UpdateCoordinatorMessage struct {
 type NodeStateMessage struct {
 	NodeID string `protobuf:"bytes,1,opt,name=NodeID,proto3" json:"NodeID,omitempty"`
 	State  string `protobuf:"bytes,2,opt,name=State,proto3" json:"State,omitempty"`
+}
+
+type Instruction struct {
+	Type string
 }
 
 type NodeStatus struct {

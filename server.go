@@ -553,6 +553,8 @@ func (s *Server) receiveMessage(m Message) error {
 		s.holder.recalculateCaches()
 	case *NodeEvent:
 		s.cluster.ReceiveEvent(obj)
+	case *Instruction:
+		s.handleInstruction(obj)
 	case *NodeStatus:
 		s.handleRemoteStatus(obj)
 	}
@@ -606,6 +608,21 @@ func (s *Server) node() Node {
 	return *s.cluster.Node
 }
 
+// handleInstruction receives incoming Instruction from remote nodes.
+func (s *Server) handleInstruction(pb Message) {
+	instruction, ok := pb.(*Instruction)
+	if !ok {
+		s.logger.Printf("invalid message type: %T", pb)
+	}
+
+	switch instruction.Type {
+	case "ShareNodeStatus":
+		if err := s.cluster.shareNodeStatus(); err != nil {
+			s.logger.Printf("error sharing node status: %s", err)
+		}
+	}
+}
+
 // handleRemoteStatus receives incoming NodeStatus from remote nodes.
 func (s *Server) handleRemoteStatus(pb Message) {
 	// Ignore NodeStatus messages until the cluster is in a Normal state.
@@ -640,7 +657,7 @@ func (s *Server) mergeRemoteStatus(ns *NodeStatus) error {
 		for _, fs := range is.Fields {
 			f := s.holder.Field(is.Name, fs.Name)
 
-			// if we don't know about an field locally, log a error because
+			// if we don't know about a field locally, log an error because
 			// fields should be created and synced prior to shard creation
 			if f == nil {
 				s.logger.Printf("Local Field not found: %s/%s", is.Name, fs.Name)

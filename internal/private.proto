@@ -105,6 +105,10 @@ message NodeEventMessage {
     Node Node = 2;
 }
 
+message Instruction {
+    string Type = 1;
+}
+
 message NodeStatus {
     Node Node = 1;
     Schema Schema = 3;

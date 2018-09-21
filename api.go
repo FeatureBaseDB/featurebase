@@ -801,6 +801,8 @@ func importExistenceColumns(index *Index, columnIDs []uint64) error {
 }
 
 // MaxShards returns the maximum shard number for each index in a map.
+// TODO (2.0): This method has been deprecated. Instead, use
+// AvailableShardsByIndex.
 func (api *API) MaxShards(_ context.Context) map[string]uint64 {
 	m := make(map[string]uint64)
 	for k, v := range api.holder.availableShardsByIndex() {

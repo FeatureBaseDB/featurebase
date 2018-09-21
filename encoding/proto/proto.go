@@ -147,6 +147,14 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		decodeNodeEventMessage(msg, mt)
 		return nil
+	case *pilosa.Instruction:
+		msg := &internal.Instruction{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling Instruction")
+		}
+		decodeInstruction(msg, mt)
+		return nil
 	case *pilosa.NodeStatus:
 		msg := &internal.NodeStatus{}
 		err := proto.Unmarshal(buf, msg)
@@ -256,6 +264,8 @@ func encodeToProto(m pilosa.Message) proto.Message {
 		return encodeRecalculateCaches(mt)
 	case *pilosa.NodeEvent:
 		return encodeNodeEventMessage(mt)
+	case *pilosa.Instruction:
+		return encodeInstruction(mt)
 	case *pilosa.NodeStatus:
 		return encodeNodeStatus(mt)
 	case *pilosa.Node:
@@ -585,6 +595,12 @@ func encodeNodeEventMessage(m *pilosa.NodeEvent) *internal.NodeEventMessage {
 	}
 }
 
+func encodeInstruction(m *pilosa.Instruction) *internal.Instruction {
+	return &internal.Instruction{
+		Type: m.Type,
+	}
+}
+
 func encodeNodeStatus(m *pilosa.NodeStatus) *internal.NodeStatus {
 	return &internal.NodeStatus{
 		Node:    encodeNode(m.Node),
@@ -801,32 +817,38 @@ func decodeNodeEventMessage(pb *internal.NodeEventMessage, m *pilosa.NodeEvent) 
 	decodeNode(pb.Node, m.Node)
 }
 
+func decodeInstruction(pb *internal.Instruction, m *pilosa.Instruction) {
+	m.Type = pb.Type
+}
+
 func decodeNodeStatus(pb *internal.NodeStatus, m *pilosa.NodeStatus) {
 	m.Node = &pilosa.Node{}
-	decodeIndexStatuses(pb.Indexes, m.Indexes)
+	m.Indexes = decodeIndexStatuses(pb.Indexes)
 	m.Schema = &pilosa.Schema{}
 	decodeSchema(pb.Schema, m.Schema)
 }
 
-func decodeIndexStatuses(a []*internal.IndexStatus, m []*pilosa.IndexStatus) {
-	m = m[:0]
+func decodeIndexStatuses(a []*internal.IndexStatus) []*pilosa.IndexStatus {
+	m := make([]*pilosa.IndexStatus, 0)
 	for i := range a {
 		m = append(m, &pilosa.IndexStatus{})
 		decodeIndexStatus(a[i], m[i])
 	}
+	return m
 }
 
 func decodeIndexStatus(pb *internal.IndexStatus, m *pilosa.IndexStatus) {
 	m.Name = pb.Name
-	decodeFieldStatuses(pb.Fields, m.Fields)
+	m.Fields = decodeFieldStatuses(pb.Fields)
 }
 
-func decodeFieldStatuses(a []*internal.FieldStatus, m []*pilosa.FieldStatus) {
-	m = m[:0]
+func decodeFieldStatuses(a []*internal.FieldStatus) []*pilosa.FieldStatus {
+	m := make([]*pilosa.FieldStatus, 0)
 	for i := range a {
 		m = append(m, &pilosa.FieldStatus{})
 		decodeFieldStatus(a[i], m[i])
 	}
+	return m
 }
 
 func decodeFieldStatus(pb *internal.FieldStatus, m *pilosa.FieldStatus) {

@@ -68,6 +68,7 @@ const (
 	messageTypeNodeState
 	messageTypeRecalculateCaches
 	messageTypeNodeEvent
+	messageTypeInstruction
 	messageTypeNodeStatus
 )
 
@@ -114,6 +115,8 @@ func getMessage(typ byte) Message {
 		return &RecalculateCaches{}
 	case messageTypeNodeEvent:
 		return &NodeEvent{}
+	case messageTypeInstruction:
+		return &Instruction{}
 	case messageTypeNodeStatus:
 		return &NodeStatus{}
 	default:
@@ -153,6 +156,8 @@ func getMessageType(m Message) byte {
 		return messageTypeRecalculateCaches
 	case *NodeEvent:
 		return messageTypeNodeEvent
+	case *Instruction:
+		return messageTypeInstruction
 	case *NodeStatus:
 		return messageTypeNodeStatus
 	default:
