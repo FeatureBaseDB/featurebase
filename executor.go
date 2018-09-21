@@ -1675,7 +1675,7 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 			return nil
 		}
 
-		// Bool field keys do not use the translater because there
+		// Bool field keys do not use the translator because there
 		// are only two possible values. Instead, they are handled
 		// directly.
 		if field.Type() == FieldTypeBool {
