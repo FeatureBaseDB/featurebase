@@ -64,6 +64,20 @@ If you are using [integer](../data-model/#bsi-range-encoding) field values, the 
 pilosa import -i project -f stargazer-counts project-stargazer-counts.csv
 ```
 
+##### Importing Boolean Values
+
+If you are using a [boolean](../data-model/#boolean) field, the CSV file should be in the format `Boolean,Value`, where `Boolean` is either `0` (false) or `1` (true).
+
+For example, importing a file with the following contents will result in columns 3 and 9 being set in the `false` row, and columns 1, 2, 4, and 8 being set in the `true` row.
+```
+0,3
+0,9
+1,1
+1,2
+1,4
+1,8
+```
+
 <div class="note">
     <p>Note that you must first create a field. View <a href="../api-reference/#create-field">Create Field</a> for more details. The `-e` flag can create the necessary schema when using a field of type "set".</p>
 </div>

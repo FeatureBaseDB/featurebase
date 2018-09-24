@@ -376,6 +376,78 @@ func TestExecutor_Execute_SetBit(t *testing.T) {
 	})
 }
 
+// Ensure a set query can be executed on a bool field.
+func TestExecutor_Execute_SetBool(t *testing.T) {
+	t.Run("Basic", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		// Create fields.
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+		if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeBool()); err != nil {
+			t.Fatal(err)
+		}
+
+		// Set a true bit.
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(100, f=true)`}); err != nil {
+			t.Fatal(err)
+		} else if !res.Results[0].(bool) {
+			t.Fatalf("expected column changed")
+		}
+
+		// Set the same bit to true again verify nothing changed.
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(100, f=true)`}); err != nil {
+			t.Fatal(err)
+		} else if res.Results[0].(bool) {
+			t.Fatalf("expected column to be unchanged")
+		}
+
+		// Set the same bit to false.
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(100, f=false)`}); err != nil {
+			t.Fatal(err)
+		} else if !res.Results[0].(bool) {
+			t.Fatalf("expected column changed")
+		}
+
+		// Ensure that the false row is set.
+		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f=false)`}); err != nil {
+			t.Fatal(err)
+		} else if columns := result.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{100}) {
+			t.Fatalf("unexpected colums: %+v", columns)
+		}
+
+		// Ensure that the true row is empty.
+		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f=true)`}); err != nil {
+			t.Fatal(err)
+		} else if columns := result.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{}) {
+			t.Fatalf("unexpected colums: %+v", columns)
+		}
+	})
+	t.Run("Error", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		// Create fields.
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+		if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeBool()); err != nil {
+			t.Fatal(err)
+		}
+
+		// Set bool using a string value.
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(100, f="true")`}); err == nil {
+			t.Fatalf("expected invalid bool type error")
+		}
+
+		// Set bool using an integer.
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(100, f=1)`}); err == nil {
+			t.Fatalf("expected invalid bool type error")
+		}
+
+	})
+}
+
 // Ensure old PQL syntax doesn't break anything too badly.
 func TestExecutor_Execute_OldPQL(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
@@ -397,7 +469,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		defer c.Close()
 		hldr := test.Holder{Holder: c[0].Server.Holder()}
 
-		// Create felds.
+		// Create fields.
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
 		if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeInt(0, 50)); err != nil {
 			t.Fatal(err)

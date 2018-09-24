@@ -234,6 +234,13 @@ func OptServerClusterHasher(h Hasher) ServerOption {
 	}
 }
 
+func OptServerTranslateFileMapSize(mapSize int) ServerOption {
+	return func(s *Server) error {
+		s.holder.translateFile = NewTranslateFile(OptTranslateFileMapSize(mapSize))
+		return nil
+	}
+}
+
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
