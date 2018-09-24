@@ -1150,8 +1150,12 @@ func (e *executor) executeClearRow(ctx context.Context, index string, c *pql.Cal
 	if field == nil {
 		return false, ErrFieldNotFound
 	}
-	if field.Type() == FieldTypeInt {
-		return false, errors.New("ClearRow() is not supported on `int` fields")
+
+	switch field.Type() {
+	case FieldTypeSet, FieldTypeTime, FieldTypeMutex, FieldTypeBool:
+		// These field types support ClearRow().
+	default:
+		return false, fmt.Errorf("ClearRow() is not supported on %s field types", field.Type())
 	}
 
 	// Execute calls in bulk on each remote node and merge.
