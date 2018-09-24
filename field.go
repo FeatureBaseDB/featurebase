@@ -15,7 +15,6 @@
 package pilosa
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -505,20 +504,18 @@ func (f *Field) loadAvailableShards() error {
 
 // saveAvailableShards writes remoteAvailableShards data for the field.
 func (f *Field) saveAvailableShards() error {
+	// Open or create file.
+	file, err := os.OpenFile(filepath.Join(f.path, ".available.shards"), os.O_WRONLY|os.O_CREATE, 0666)
+	if err != nil {
+		return errors.Wrap(err, "opening available shards file")
+	}
+
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
-	// Write available shards to buffer.
-	var buf bytes.Buffer
-	if n, err := f.remoteAvailableShards.WriteTo(&buf); err != nil {
+	// Write available shards to file.
+	if _, err := f.remoteAvailableShards.WriteTo(file); err != nil {
 		return errors.Wrap(err, "writing bitmap to buffer")
-	} else if n != int64(buf.Len()) {
-		return fmt.Errorf("buffer size mismatch: %d != %d", n, buf.Len())
-	}
-
-	// Write buffer to file.
-	if err := ioutil.WriteFile(filepath.Join(f.path, ".available.shards"), buf.Bytes(), 0666); err != nil {
-		return errors.Wrap(err, "writing available shards")
 	}
 
 	return nil
