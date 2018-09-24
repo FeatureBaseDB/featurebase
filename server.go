@@ -640,7 +640,7 @@ func (s *Server) mergeRemoteStatus(ns *NodeStatus) error {
 		for _, fs := range is.Fields {
 			f := s.holder.Field(is.Name, fs.Name)
 
-			// if we don't know about an field locally, log a error because
+			// if we don't know about a field locally, log an error because
 			// fields should be created and synced prior to shard creation
 			if f == nil {
 				s.logger.Printf("Local Field not found: %s/%s", is.Name, fs.Name)
