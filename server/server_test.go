@@ -621,4 +621,75 @@ func TestMain_ImportTimestamp(t *testing.T) {
 	}
 }
 
+func TestClusterQueriesAfterRestart(t *testing.T) {
+	cluster := test.MustRunCluster(t, 3)
+	defer cluster.Close()
+	cmd1 := cluster[1]
+
+	cmd1.MustCreateIndex(t, "testidx", pilosa.IndexOptions{})
+	cmd1.MustCreateField(t, "testidx", "testfield", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 10))
+
+	// build a query to set the first bit in 100 shards
+	query := strings.Builder{}
+	for i := 0; i < 100; i++ {
+		query.WriteString(fmt.Sprintf("Set(%d, testfield=0)", i*pilosa.ShardWidth))
+	}
+	_, err := cmd1.API.Query(context.Background(), &pilosa.QueryRequest{
+		Index: "testidx",
+		Query: query.String(),
+	})
+	if err != nil {
+		t.Fatalf("setting 100 bits in 100 shards: %v", err)
+	}
+
+	results, err := cmd1.API.Query(context.Background(), &pilosa.QueryRequest{
+		Index: "testidx",
+		Query: "Count(Row(testfield=0))",
+	})
+	if err != nil {
+		t.Fatalf("counting row: %v", err)
+	}
+	if results.Results[0].(uint64) != 100 {
+		t.Fatalf("Count should be 100, but got %v of type %[1]T", results.Results[0])
+	}
+
+	err = cmd1.Command.Close()
+	if err != nil {
+		t.Fatalf("closing node0: %v", err)
+	}
+
+	// confirm that cluster stops accepting queries after one node closes
+	if _, err := cluster[0].API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
+		t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
+	}
+
+	// Create new main with the same config.
+	config := cmd1.Command.Config
+	config.Bind = cmd1.API.Node().URI.HostPort()
+
+	// this isn't necessary, but makes the test run way faster
+	config.Gossip.Port = strconv.Itoa(int(cmd1.Command.GossipTransport().URI.Port))
+	cmd1.Command = server.NewCommand(cmd1.Stdin, cmd1.Stdout, cmd1.Stderr)
+	cmd1.Command.Config = config
+	err = cmd1.Start()
+	if err != nil {
+		t.Fatalf("reopening node 0: %v", err)
+	}
+
+	for cmd1.API.State() != pilosa.ClusterStateNormal {
+		time.Sleep(time.Millisecond)
+	}
+
+	results, err = cmd1.API.Query(context.Background(), &pilosa.QueryRequest{
+		Index: "testidx",
+		Query: "Count(Row(testfield=0))",
+	})
+	if err != nil {
+		t.Fatalf("counting row: %v", err)
+	}
+	if results.Results[0].(uint64) != 100 {
+		t.Fatalf("Count should be 100, but got %v of type %[1]T", results.Results[0])
+	}
+}
+
 // TODO: confirm that things keep working if a node is hard-closed (no nodeLeave event) and immediately restarted with a different address.
