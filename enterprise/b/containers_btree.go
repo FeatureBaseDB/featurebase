@@ -93,8 +93,8 @@ type updater struct {
 	mapped        bool
 }
 
-func (btc *bTreeContainers) PutContainerValues(key uint64, containerType byte, n int32, mapped bool) {
-	a := updater{key, n, containerType, mapped}
+func (btc *bTreeContainers) PutContainerValues(key uint64, containerType byte, n int, mapped bool) {
+	a := updater{key, int32(n), containerType, mapped}
 	btc.tree.Put(key, a.update)
 }
 

@@ -73,7 +73,7 @@ type Containers interface {
 
 	// PutContainerValues updates an existing container at key.
 	// If a container does not exist for key, a new one is allocated.
-	PutContainerValues(key uint64, containerType byte, n int32, mapped bool)
+	PutContainerValues(key uint64, containerType byte, n int, mapped bool)
 
 	// Remove takes the container at key out.
 	Remove(key uint64)
@@ -644,7 +644,7 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 		b.Containers.PutContainerValues(
 			binary.LittleEndian.Uint64(buf[0:8]),
 			byte(binary.LittleEndian.Uint16(buf[8:10])),
-			int32(binary.LittleEndian.Uint16(buf[10:12]))+1,
+			int(binary.LittleEndian.Uint16(buf[10:12]))+1,
 			true)
 	}
 	opsOffset := headerSize + int(keyN)*12
@@ -1103,7 +1103,7 @@ func (c *Container) countRange(start, end int32) (n int32) {
 }
 
 func (c *Container) arrayCountRange(start, end int32) (n int32) {
-	i := int32(sort.Search(int(len(c.array)), func(i int) bool { return int32(c.array[i]) >= start }))
+	i := int32(sort.Search(len(c.array), func(i int) bool { return int32(c.array[i]) >= start }))
 	for ; i < int32(len(c.array)); i++ {
 		v := int32(c.array[i])
 		if v >= end {
@@ -3481,7 +3481,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		b.Containers.PutContainerValues(
 			uint64(binary.LittleEndian.Uint16(buf[0:2])),
 			containerTyper(i, card), /// container type voodo with isRunBitmap
-			int32(card),
+			card,
 			true)
 	}
 
