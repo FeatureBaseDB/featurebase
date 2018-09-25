@@ -352,11 +352,11 @@ func (f *fragment) unprotectedRow(rowID uint64) *Row {
 	}
 
 	// Only use a subset of the containers.
-	// NOTE: The start & end ranges must be divisible by
+	// NOTE: The start & end ranges must be divisible by container width.
 	data := f.storage.OffsetRange(f.shard*ShardWidth, rowID*ShardWidth, (rowID+1)*ShardWidth)
 
 	// Reference bitmap subrange in storage.
-	// We Clone() data because otherwise row will contains pointers to containers in storage.
+	// We Clone() data because otherwise row will contain pointers to containers in storage.
 	// This causes unexpected results when we cache the row and try to use it later.
 	row := &Row{
 		segments: []rowSegment{{
@@ -487,6 +487,56 @@ func (f *fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, er
 	f.cache.Add(rowID, row.Count())
 
 	f.stats.Count("clearBit", 1, 1.0)
+
+	return changed, nil
+}
+
+// setRow replaces an existing row (specified by rowID) with the given
+// Row. This updates both the on-disk storage and the in-cache bitmap.
+func (f *fragment) setRow(row *Row, rowID uint64) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.unprotectedSetRow(row, rowID)
+}
+
+func (f *fragment) unprotectedSetRow(row *Row, rowID uint64) (changed bool, err error) {
+	// TODO: In order to return `changed`, we need to first compare
+	// the existing row with the given row. Determine if the overhead
+	// of this is worth having `changed`.
+	// For now we will assume changed is always true.
+	changed = true
+
+	// First container of the row in storage.
+	headContainerKey := rowID << shardVsContainerExponent
+
+	// Remove every existing container in the row.
+	for i := uint64(0); i < (1 << shardVsContainerExponent); i++ {
+		f.storage.Containers.Remove(headContainerKey + i)
+	}
+
+	// From the given row, get the rowSegment for this shard.
+	seg := row.segment(f.shard)
+	if seg == nil {
+		return changed, nil
+	}
+
+	// Put each container from rowSegment to fragment storage.
+	citer, _ := seg.data.Containers.Iterator(f.shard << shardVsContainerExponent)
+	for citer.Next() {
+		k, c := citer.Value()
+		f.storage.Containers.Put(headContainerKey+(k%(1<<shardVsContainerExponent)), c)
+	}
+
+	// Update the row in cache.
+	n := f.storage.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
+	f.cache.BulkAdd(rowID, n)
+
+	// Snapshot storage.
+	if err := f.snapshot(); err != nil {
+		return false, errors.Wrap(err, "snapshotting")
+	}
+
+	f.stats.Count("setRow", 1, 1.0)
 
 	return changed, nil
 }
