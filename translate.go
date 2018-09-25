@@ -144,7 +144,7 @@ func (s *TranslateFile) Open() (err error) {
 
 	// Replay the log.
 	if err := s.replayEntries(); err != nil {
-		return errors.Wrap(err, "replay log")
+		return errors.Wrap(err, "replaying log entries")
 	}
 
 	// Listen to primaryStoreEvents channel.
