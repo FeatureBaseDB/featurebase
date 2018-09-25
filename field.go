@@ -230,8 +230,17 @@ func (f *Field) AvailableShards() *roaring.Bitmap {
 	return b
 }
 
-// addRemoteAvailableShards merges the set of available shards into the current known set.
-func (f *Field) addRemoteAvailableShards(b *roaring.Bitmap) {
+// addRemoteAvailableShards merges the set of available shards into the current known set
+// and saves the set to a file.
+func (f *Field) addRemoteAvailableShards(b *roaring.Bitmap) error {
+	f.mergeRemoteAvailableShards(b)
+
+	// Save the updated bitmap to the data store.
+	return f.saveAvailableShards()
+}
+
+// mergeRemoteAvailableShards merges the set of available shards into the current known set.
+func (f *Field) mergeRemoteAvailableShards(b *roaring.Bitmap) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.remoteAvailableShards = f.remoteAvailableShards.Union(b)
@@ -289,6 +298,10 @@ func (f *Field) Open() error {
 
 		if err := f.loadMeta(); err != nil {
 			return errors.Wrap(err, "loading meta")
+		}
+
+		if err := f.loadAvailableShards(); err != nil {
+			return errors.Wrap(err, "loading available shards")
 		}
 
 		// Apply the field options loaded from meta.
@@ -462,6 +475,47 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Keys = false
 	default:
 		return errors.New("invalid field type")
+	}
+
+	return nil
+}
+
+// loadAvailableShards reads remoteAvailableShards data for the field, if any.
+func (f *Field) loadAvailableShards() error {
+	bm := roaring.NewBitmap()
+
+	// Read data from meta file.
+	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".available.shards"))
+	if os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return errors.Wrap(err, "reading available shards")
+	} else {
+		if err := bm.UnmarshalBinary(buf); err != nil {
+			return errors.Wrap(err, "unmarshaling")
+		}
+	}
+
+	// Merge bitmap from file into field.
+	f.mergeRemoteAvailableShards(bm)
+
+	return nil
+}
+
+// saveAvailableShards writes remoteAvailableShards data for the field.
+func (f *Field) saveAvailableShards() error {
+	// Open or create file.
+	file, err := os.OpenFile(filepath.Join(f.path, ".available.shards"), os.O_WRONLY|os.O_CREATE, 0666)
+	if err != nil {
+		return errors.Wrap(err, "opening available shards file")
+	}
+
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	// Write available shards to file.
+	if _, err := f.remoteAvailableShards.WriteTo(file); err != nil {
+		return errors.Wrap(err, "writing bitmap to buffer")
 	}
 
 	return nil
