@@ -46,7 +46,7 @@ func (sc *sliceContainers) Put(key uint64, c *Container) {
 
 }
 
-func (sc *sliceContainers) PutContainerValues(key uint64, containerType byte, n int, mapped bool) {
+func (sc *sliceContainers) PutContainerValues(key uint64, containerType byte, n int32, mapped bool) {
 	i := search64(sc.keys, key)
 	if i < 0 {
 		c := NewContainer()

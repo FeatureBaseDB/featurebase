@@ -39,7 +39,7 @@ func TestRunAppendInterval(t *testing.T) {
 	tests := []struct {
 		base []interval16
 		app  interval16
-		exp  int
+		exp  int32
 	}{
 		{
 			base: []interval16{},
@@ -207,10 +207,10 @@ func TestRunContains(t *testing.T) {
 func TestBitmapCountRange(t *testing.T) {
 	c := Container{containerType: containerBitmap}
 	tests := []struct {
-		start  int
-		end    int
+		start  int32
+		end    int32
 		bitmap []uint64
-		exp    int
+		exp    int32
 	}{
 		{start: 0, end: 1, bitmap: []uint64{1}, exp: 1},
 		{start: 2, end: 7, bitmap: []uint64{0xFFFFFFFFFFFFFF18}, exp: 2},
@@ -251,7 +251,7 @@ func TestIntersectionCountArrayBitmap3(t *testing.T) {
 	b.bitmapToRun()
 	res = intersectRunRun(a, b)
 	n := intersectionCountRunRun(a, b)
-	if res.n != res.count() || res.n != maxContainerVal+1 || res.n != int(n) {
+	if res.n != res.count() || res.n != maxContainerVal+1 || res.n != int32(n) {
 		t.Fatalf("test #3 intersectCountRunRun fail orig: %v new: %v exp: %v", res.n, res.count(), maxContainerVal+1)
 	}
 }
@@ -261,7 +261,7 @@ func TestIntersectionCountArrayBitmap2(t *testing.T) {
 	tests := []struct {
 		array  []uint16
 		bitmap []uint64
-		exp    int
+		exp    int32
 	}{
 		{
 			array:  []uint16{0},
@@ -384,7 +384,7 @@ func TestIntersectionCountRunRun(t *testing.T) {
 	tests := []struct {
 		aruns []interval16
 		bruns []interval16
-		exp   int
+		exp   int32
 	}{
 		{
 			aruns: []interval16{},
@@ -478,7 +478,7 @@ func TestIntersectRunRun(t *testing.T) {
 		aruns []interval16
 		bruns []interval16
 		exp   []interval16
-		expN  int
+		expN  int32
 	}{
 		{
 			aruns: []interval16{},
@@ -540,7 +540,7 @@ func TestIntersectBitmapRunBitmap(t *testing.T) {
 		bitmap []uint64
 		runs   []interval16
 		exp    []uint64
-		expN   int
+		expN   int32
 	}{
 		{
 			bitmap: []uint64{1},
@@ -602,7 +602,7 @@ func TestIntersectBitmapRunArray(t *testing.T) {
 		bitmap []uint64
 		runs   []interval16
 		exp    []uint16
-		expN   int
+		expN   int32
 	}{
 		{
 			bitmap: []uint64{1},
@@ -761,11 +761,11 @@ func TestDifferenceMixed(t *testing.T) {
 	a.containerType = containerRun
 
 	b.array = []uint16{0, 2, 4, 6, 8, 10, 12}
-	b.n = len(b.array)
+	b.n = int32(len(b.array))
 	b.containerType = containerArray
 
 	d.array = []uint16{1, 3, 5, 7, 9, 11, 12}
-	d.n = len(d.array)
+	d.n = int32(len(d.array))
 	d.containerType = containerArray
 
 	res := difference(a, b)
@@ -939,7 +939,7 @@ func TestBitmapSetRange(t *testing.T) {
 		start  uint64
 		last   uint64
 		exp    []uint64
-		expN   int
+		expN   int32
 	}{
 		{
 			bitmap: []uint64{0x0000000000FFF900},
@@ -991,7 +991,7 @@ func TestArrayToBitmap(t *testing.T) {
 		copy(exp, test.exp)
 
 		a.array = test.array
-		a.n = len(test.array)
+		a.n = int32(len(test.array))
 		a.arrayToBitmap()
 		if !reflect.DeepEqual(a.bitmap, exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, exp, a.bitmap)
@@ -1016,10 +1016,10 @@ func TestBitmapToArray(t *testing.T) {
 	}
 	for i, test := range tests {
 		a.bitmap = make([]uint64, bitmapN)
-		n := 0
+		n := int32(0)
 		for i, v := range test.bitmap {
 			a.bitmap[i] = v
-			n += int(popcount(v))
+			n += int32(popcount(v))
 		}
 		a.n = n
 
@@ -1067,7 +1067,7 @@ func TestRunToBitmap(t *testing.T) {
 		}
 
 		a.runs = test.runs
-		a.n = n
+		a.n = int32(n)
 		a.runToBitmap()
 		if !reflect.DeepEqual(a.bitmap, exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, exp, a.bitmap)
@@ -1149,7 +1149,7 @@ func TestBitmapToRun(t *testing.T) {
 			a.bitmap[i] = v
 			n += int(popcount(v))
 		}
-		a.n = n
+		a.n = int32(n)
 		x := a.bitmap
 		a.bitmapToRun()
 		if !reflect.DeepEqual(a.runs, test.exp) {
@@ -1188,7 +1188,7 @@ func TestArrayToRun(t *testing.T) {
 
 	for i, test := range tests {
 		a.array = test.array
-		a.n = int(len(test.array))
+		a.n = int32(len(test.array))
 		a.arrayToRun()
 		if !reflect.DeepEqual(a.runs, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, a.runs)
@@ -1222,7 +1222,7 @@ func TestRunToArray(t *testing.T) {
 
 	for i, test := range tests {
 		a.runs = test.runs
-		a.n = len(test.exp)
+		a.n = int32(len(test.exp))
 		a.runToArray()
 		if !reflect.DeepEqual(a.array, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, a.array)
@@ -1237,7 +1237,7 @@ func TestBitmapZeroRange(t *testing.T) {
 		start  uint64
 		last   uint64
 		exp    []uint64
-		expN   int
+		expN   int32
 	}{
 		{
 			bitmap: []uint64{0x0000000000FFFF00},
@@ -1279,7 +1279,7 @@ func TestUnionBitmapRun(t *testing.T) {
 		bitmap []uint64
 		runs   []interval16
 		exp    []uint64
-		expN   int
+		expN   int32
 	}{
 		{
 			bitmap: []uint64{2},
@@ -1313,7 +1313,7 @@ func TestBitmapCountRuns(t *testing.T) {
 	c := &Container{containerType: containerBitmap, bitmap: make([]uint64, bitmapN)}
 	tests := []struct {
 		bitmap []uint64
-		exp    int
+		exp    int32
 	}{
 		{
 			bitmap: []uint64{0xFF00FF00},
@@ -1361,7 +1361,7 @@ func TestArrayCountRuns(t *testing.T) {
 	c := &Container{containerType: containerArray}
 	tests := []struct {
 		array []uint16
-		exp   int
+		exp   int32
 	}{
 		{
 			array: []uint16{},
@@ -1414,7 +1414,7 @@ func TestDifferenceArrayRun(t *testing.T) {
 	}
 	for i, test := range tests {
 		a.array = test.array
-		a.n = len(a.array)
+		a.n = int32(len(a.array))
 		b.runs = test.runs
 		b.n = b.runCountRange(0, 100)
 		ret := differenceArrayRun(a, b)
@@ -1482,7 +1482,7 @@ func TestDifferenceRunArray(t *testing.T) {
 		a.runs = test.runs
 		a.n = a.runCountRange(0, 100)
 		b.array = test.array
-		b.n = len(b.array)
+		b.n = int32(len(b.array))
 		ret := differenceRunArray(a, b)
 		if !reflect.DeepEqual(ret.runs, test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs)
@@ -1730,7 +1730,7 @@ func TestDifferenceRunRun(t *testing.T) {
 		aruns []interval16
 		bruns []interval16
 		exp   []interval16
-		expn  int
+		expn  int32
 	}{
 		{
 			// this tests all six overlap combinations
@@ -2009,7 +2009,7 @@ func TestBitmapXorRange(t *testing.T) {
 		start  uint64
 		last   uint64
 		exp    []uint64
-		expN   int
+		expN   int32
 	}{
 		{
 			bitmap: []uint64{0x0000000000000000},
@@ -2302,7 +2302,7 @@ func TestRunBinSearchContains(t *testing.T) {
 		runs  []interval16
 		index uint16
 		exp   struct {
-			index int
+			index int32
 			found bool
 		}
 	}{
@@ -2310,7 +2310,7 @@ func TestRunBinSearchContains(t *testing.T) {
 			runs:  []interval16{{start: 0, last: 10}},
 			index: uint16(3),
 			exp: struct {
-				index int
+				index int32
 				found bool
 			}{index: 0, found: true},
 		},
@@ -2318,7 +2318,7 @@ func TestRunBinSearchContains(t *testing.T) {
 			runs:  []interval16{{start: 0, last: 10}},
 			index: uint16(13),
 			exp: struct {
-				index int
+				index int32
 				found bool
 			}{index: 0, found: false},
 		},
@@ -2326,7 +2326,7 @@ func TestRunBinSearchContains(t *testing.T) {
 			runs:  []interval16{{start: 0, last: 10}, {start: 20, last: 30}},
 			index: uint16(13),
 			exp: struct {
-				index int
+				index int32
 				found bool
 			}{index: 0, found: false},
 		},
@@ -2334,7 +2334,7 @@ func TestRunBinSearchContains(t *testing.T) {
 			runs:  []interval16{{start: 0, last: 10}, {start: 20, last: 30}},
 			index: uint16(36),
 			exp: struct {
-				index int
+				index int32
 				found bool
 			}{index: 1, found: false},
 		},
@@ -2355,7 +2355,7 @@ func TestRunBinSearch(t *testing.T) {
 		runs   []interval16
 		search uint16
 		exp    bool
-		expi   int
+		expi   int32
 	}{
 		{
 			runs:   []interval16{{2, 10}, {50, 60}, {80, 90}},
