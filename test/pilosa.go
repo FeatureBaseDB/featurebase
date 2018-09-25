@@ -63,17 +63,13 @@ func newCommand(opts ...server.CommandOption) *Command {
 	// does not fail on 32-bit systems.
 	opts = append([]server.CommandOption{
 		server.OptCommandCloseTimeout(time.Millisecond * 2),
-		server.OptCommandServerOptions(
-			pilosa.OptServerTranslateFileMapSize(
-				2 << 25,
-			),
-		),
 	}, opts...)
 	m := &Command{commandOptions: opts}
 	m.Command = server.NewCommand(bytes.NewReader(nil), ioutil.Discard, ioutil.Discard, opts...)
 	m.Config.DataDir = path
 	m.Config.Bind = "http://localhost:0"
 	m.Config.Cluster.Disabled = true
+	m.Config.Translation.MapSize = 100000
 
 	if testing.Verbose() {
 		m.Command.Stdout = os.Stdout
