@@ -236,6 +236,36 @@ Clear(10, stargazer=1)
 
 This represents removing the relationship between the user with id=1 and the repository with id=10.
 
+#### ClearRow
+
+**Spec:**
+
+```
+ClearRow(<FIELD>=<ROW>)
+```
+
+**Description:**
+
+`ClearRow` sets all bits to 0 in a given row of the binary matrix, thus disassociating the given row in the given field from all columns.
+
+**Result Type:** boolean
+
+A return value of `true` indicates that at least one column was toggled from 1 to 0.
+
+A return value of `false` indicates that all bits in the row were already 0 and nothing changed.
+
+**Examples:**
+
+Clear all bit in row 1 in the stargazer field:
+```request
+ClearRow(stargazer=1)
+```
+```response
+{"results":[true]}
+```
+
+This represents removing the relationship between the user with id=1 and all repositories.
+
 ### Read Operations
 
 #### Row

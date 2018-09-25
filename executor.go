@@ -182,6 +182,8 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return e.executeMax(ctx, index, c, shards, opt)
 	case "Clear":
 		return e.executeClearBit(ctx, index, c, opt)
+	case "ClearRow":
+		return e.executeClearRow(ctx, index, c, shards, opt)
 	case "Count":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeCount(ctx, index, c, shards, opt)
@@ -1107,7 +1109,7 @@ func (e *executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 	return e.executeClearBitField(ctx, index, c, f, colID, rowID, opt)
 }
 
-// executeClearBitField executes a Clear() call for a single view.
+// executeClearBitField executes a Clear() call for a field.
 func (e *executor) executeClearBitField(ctx context.Context, index string, c *pql.Call, f *Field, colID, rowID uint64, opt *execOptions) (bool, error) {
 	shard := colID / ShardWidth
 	ret := false
@@ -1135,6 +1137,80 @@ func (e *executor) executeClearBitField(ctx context.Context, index string, c *pq
 		}
 	}
 	return ret, nil
+}
+
+// executeClearRow executes a ClearRow() call.
+func (e *executor) executeClearRow(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (bool, error) {
+	// Ensure the field type supports ClearRow().
+	fieldName, err := c.FieldArg()
+	if err != nil {
+		return false, errors.New("ClearRow() argument required: field")
+	}
+	field := e.Holder.Field(index, fieldName)
+	if field == nil {
+		return false, ErrFieldNotFound
+	}
+
+	switch field.Type() {
+	case FieldTypeSet, FieldTypeTime, FieldTypeMutex, FieldTypeBool:
+		// These field types support ClearRow().
+	default:
+		return false, fmt.Errorf("ClearRow() is not supported on %s field types", field.Type())
+	}
+
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeClearRowShard(ctx, index, c, shard)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		val := v.(bool)
+		if prev == nil {
+			return val
+		}
+		return val || prev.(bool)
+	}
+
+	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	return result.(bool), err
+}
+
+// executeClearRowShard executes a ClearRow() call for a single shard.
+func (e *executor) executeClearRowShard(_ context.Context, index string, c *pql.Call, shard uint64) (bool, error) {
+	fieldName, err := c.FieldArg()
+	if err != nil {
+		return false, errors.New("ClearRow() argument required: field")
+	}
+
+	// Read fields using labels.
+	rowID, ok, err := c.UintArg(fieldName)
+	if err != nil {
+		return false, fmt.Errorf("reading ClearRow() row: %v", err)
+	} else if !ok {
+		return false, fmt.Errorf("ClearRow() row argument '%v' required", rowLabel)
+	}
+
+	field := e.Holder.Field(index, fieldName)
+	if field == nil {
+		return false, ErrFieldNotFound
+	}
+
+	// Remove the row from all views.
+	changed := false
+	for _, view := range field.views() {
+		fragment := e.Holder.fragment(index, fieldName, view.name, shard)
+		if fragment == nil {
+			continue
+		}
+		cleared, err := fragment.clearRow(rowID)
+		if err != nil {
+			return false, errors.Wrapf(err, "clearing row %d on view %s shard %d", rowID, view.name, shard)
+		}
+		changed = changed || cleared
+	}
+
+	return changed, nil
 }
 
 // executeSet executes a Set() call.
