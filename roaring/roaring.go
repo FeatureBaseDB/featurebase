@@ -73,6 +73,7 @@ type Containers interface {
 
 	// PutContainerValues updates an existing container at key.
 	// If a container does not exist for key, a new one is allocated.
+	// TODO(2.0) make n  int32
 	PutContainerValues(key uint64, containerType byte, n int, mapped bool)
 
 	// Remove takes the container at key out.
