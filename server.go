@@ -481,7 +481,9 @@ func (s *Server) receiveMessage(m Message) error {
 		if f == nil {
 			return fmt.Errorf("Local field not found: %s/%s", obj.Index, obj.Field)
 		}
-		f.addRemoteAvailableShards(roaring.NewBitmap(obj.Shard))
+		if err := f.addRemoteAvailableShards(roaring.NewBitmap(obj.Shard)); err != nil {
+			return errors.Wrap(err, "adding remote available shards")
+		}
 	case *CreateIndexMessage:
 		opt := obj.Meta
 		_, err := s.holder.CreateIndex(obj.Index, *opt)
@@ -646,7 +648,9 @@ func (s *Server) mergeRemoteStatus(ns *NodeStatus) error {
 				s.logger.Printf("Local Field not found: %s/%s", is.Name, fs.Name)
 				continue
 			}
-			f.addRemoteAvailableShards(fs.AvailableShards)
+			if err := f.addRemoteAvailableShards(fs.AvailableShards); err != nil {
+				return errors.Wrap(err, "adding remote available shards")
+			}
 		}
 	}
 
