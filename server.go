@@ -337,20 +337,20 @@ func (s *Server) Open() error {
 
 	// Initialize id-key storage.
 	if err := s.holder.translateFile.Open(); err != nil {
-		return err
+		return errors.Wrap(err, "opening TranslateFile")
 	}
 
 	// Open Cluster management.
 	if err := s.cluster.waitForStarted(); err != nil {
-		return fmt.Errorf("opening Cluster: %v", err)
+		return errors.Wrap(err, "opening Cluster")
 	}
 
 	// Open holder.
 	if err := s.holder.Open(); err != nil {
-		return fmt.Errorf("opening Holder: %v", err)
+		return errors.Wrap(err, "opening Holder")
 	}
 	if err := s.cluster.setNodeState(nodeStateReady); err != nil {
-		return fmt.Errorf("setting nodeState: %v", err)
+		return errors.Wrap(err, "setting nodeState")
 	}
 
 	// Listen for joining nodes.

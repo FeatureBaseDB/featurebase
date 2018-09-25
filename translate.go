@@ -131,20 +131,20 @@ func NewTranslateFile(opts ...TranslateFileOption) *TranslateFile {
 func (s *TranslateFile) Open() (err error) {
 	// Open writer & buffered writer.
 	if err := os.MkdirAll(filepath.Dir(s.Path), 0777); err != nil {
-		return err
+		return errors.Wrapf(err, "mkdir %s", filepath.Dir(s.Path))
 	} else if s.file, err = os.OpenFile(s.Path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666); err != nil {
-		return err
+		return errors.Wrapf(err, "open file %s", s.Path)
 	}
 	s.w = bufio.NewWriter(s.file)
 
 	// Memory map data file.
 	if s.data, err = syscall.Mmap(int(s.file.Fd()), 0, s.mapSize, syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
-		return err
+		return errors.Wrapf(err, "creating Mmap (size: %d)", s.mapSize)
 	}
 
 	// Replay the log.
 	if err := s.replayEntries(); err != nil {
-		return err
+		return errors.Wrap(err, "replaying log entries")
 	}
 
 	// Listen to primaryStoreEvents channel.
