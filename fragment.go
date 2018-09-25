@@ -391,12 +391,13 @@ func (f *fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 // handleMutex will clear an existing row and store the new row
 // in the vector.
 func (f *fragment) handleMutex(rowID, columnID uint64) error {
-	if existingRowID, found := f.mutexVector.Get(columnID); found && existingRowID != rowID {
+	if existingRowID, found, err := f.mutexVector.Get(columnID); err != nil {
+		return errors.Wrap(err, "getting mutex vector data")
+	} else if found && existingRowID != rowID {
 		if _, err := f.unprotectedClearBit(existingRowID, columnID); err != nil {
 			return errors.Wrap(err, "clearing mutex value")
 		}
 	}
-	f.mutexVector.Set(columnID, rowID)
 	return nil
 }
 
@@ -486,6 +487,45 @@ func (f *fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, er
 	f.cache.Add(rowID, row.Count())
 
 	f.stats.Count("clearBit", 1, 1.0)
+
+	return changed, nil
+}
+
+// ClearRow clears a row for a given rowID within the fragment.
+// This updates both the on-disk storage and the in-cache bitmap.
+func (f *fragment) clearRow(rowID uint64) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.unprotectedClearRow(rowID)
+}
+
+func (f *fragment) unprotectedClearRow(rowID uint64) (changed bool, err error) {
+	changed = false
+
+	// First container of the row in storage.
+	headContainerKey := rowID << shardVsContainerExponent
+
+	// Remove every container in the row.
+	for i := uint64(0); i < (1 << shardVsContainerExponent); i++ {
+		k := headContainerKey + i
+		// Technically we could bypass the Get() call and only
+		// call Remove(), but the Get() gives us the ability
+		// to return true if any existing data was removed.
+		if cont := f.storage.Containers.Get(k); cont != nil {
+			f.storage.Containers.Remove(k)
+			changed = true
+		}
+	}
+
+	// Clear the row in cache.
+	f.cache.Add(rowID, 0)
+
+	// Snapshot storage.
+	if err := f.snapshot(); err != nil {
+		return false, errors.Wrap(err, "snapshotting")
+	}
+
+	f.stats.Count("clearRow", 1, 1.0)
 
 	return changed, nil
 }
@@ -1430,7 +1470,9 @@ func (f *fragment) bulkImportMutex(rowIDs, columnIDs []uint64) error {
 			rowID, columnID := rowIDs[i], columnIDs[i]
 
 			// Handle mutex vector (i.e. clear an existing row).
-			if existingRowID, found := f.mutexVector.Get(columnID); found && existingRowID != rowID {
+			if existingRowID, found, err := f.mutexVector.Get(columnID); err != nil {
+				return errors.Wrap(err, "getting mutex vector data")
+			} else if found && existingRowID != rowID {
 				// Determine the position of the bit in the storage.
 				pos, err := f.pos(existingRowID, columnID)
 				if err != nil {
@@ -2180,8 +2222,7 @@ func pos(rowID, columnID uint64) uint64 {
 // vector stores the mapping of colID to rowID.
 // It's used for a mutex field type.
 type vector interface {
-	Get(colID uint64) (uint64, bool)
-	Set(colID, rowID uint64)
+	Get(colID uint64) (uint64, bool, error)
 }
 
 // rowsVector implements the vector interface by looking
@@ -2200,16 +2241,15 @@ func newRowsVector(f *fragment) *rowsVector {
 // Get returns the rowID associated to the given colID.
 // Additionally, it returns true if a value was found,
 // otherwise it returns false.
-func (v *rowsVector) Get(colID uint64) (uint64, bool) {
+func (v *rowsVector) Get(colID uint64) (uint64, bool, error) {
 	rows := v.f.rowsForColumn(colID)
-	if len(rows) == 1 {
-		return rows[0], true
+	if len(rows) > 1 {
+		return 0, false, errors.New("found multiple row values for column")
+	} else if len(rows) == 1 {
+		return rows[0], true, nil
 	}
-	return 0, false
+	return 0, false, nil
 }
-
-// Set is not used for rowsVector.
-func (v *rowsVector) Set(colID, rowID uint64) {}
 
 // boolVector implements the vector interface by looking
 // at data in rows 0 and 1.
@@ -2227,16 +2267,17 @@ func newBoolVector(f *fragment) *boolVector {
 // Get returns the rowID associated to the given colID.
 // Additionally, it returns true if a value was found,
 // otherwise it returns false.
-func (v *boolVector) Get(colID uint64) (uint64, bool) {
+func (v *boolVector) Get(colID uint64) (uint64, bool, error) {
 	rows := v.f.rowsForColumn(colID)
-	if len(rows) == 1 {
+	if len(rows) > 1 {
+		return 0, false, errors.New("found multiple row values for column")
+	} else if len(rows) == 1 {
 		switch rows[0] {
 		case falseRowID, trueRowID:
-			return rows[0], true
+			return rows[0], true, nil
+		default:
+			return 0, false, errors.New("found non-boolean value")
 		}
 	}
-	return 0, false
+	return 0, false, nil
 }
-
-// Set is not used for boolVector.
-func (v *boolVector) Set(colID, rowID uint64) {}

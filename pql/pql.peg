@@ -10,6 +10,7 @@ Call <-  'Set' {p.startCall("Set")} open col comma args (comma timestamp)? close
        / 'SetRowAttrs' {p.startCall("SetRowAttrs")} open posfield comma row comma args close {p.endCall()}
        / 'SetColumnAttrs' {p.startCall("SetColumnAttrs")} open col comma args close {p.endCall()}
        / 'Clear' {p.startCall("Clear")} open col comma args close {p.endCall()}
+       / 'ClearRow' {p.startCall("ClearRow")} open arg close {p.endCall()}
        / 'TopN' {p.startCall("TopN")} open posfield (comma allargs)? close {p.endCall()}
        / 'Range' {p.startCall("Range")} open (timerange / conditional / arg) close {p.endCall()}
        / < IDENT > { p.startCall(buffer[begin:end] ) } open allargs comma? close { p.endCall() }

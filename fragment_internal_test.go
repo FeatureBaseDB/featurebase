@@ -95,6 +95,33 @@ func TestFragment_ClearBit(t *testing.T) {
 	}
 }
 
+// Ensure a fragment can clear a row.
+func TestFragment_ClearRow(t *testing.T) {
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
+	defer f.Close()
+
+	// Set and then clear bits on the fragment.
+	if _, err := f.setBit(1000, 1); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.setBit(1000, 65536); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.unprotectedClearRow(1000); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify count on row.
+	if n := f.row(1000).Count(); n != 0 {
+		t.Fatalf("unexpected count: %d", n)
+	}
+
+	// Close and reopen the fragment & verify the data.
+	if err := f.reopen(); err != nil {
+		t.Fatal(err)
+	} else if n := f.row(1000).Count(); n != 0 {
+		t.Fatalf("unexpected count (reopen): %d", n)
+	}
+}
+
 // Ensure a fragment can set & read a value.
 func TestFragment_SetValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
