@@ -1226,11 +1226,7 @@ func (e *executor) executeSetRow(ctx context.Context, index string, c *pql.Call,
 	if field == nil {
 		return false, ErrFieldNotFound
 	}
-
-	switch field.Type() {
-	case FieldTypeSet:
-		// These field types support SetRow().
-	default:
+	if field.Type() != FieldTypeSet {
 		return false, fmt.Errorf("SetRow() is not supported on %s field types", field.Type())
 	}
 
@@ -1298,11 +1294,11 @@ func (e *executor) executeSetRowShard(ctx context.Context, index string, c *pql.
 			return false, errors.Wrapf(err, "creating fragment: %d", shard)
 		}
 	}
-	cleared, err := fragment.setRow(src, rowID)
+	set, err := fragment.setRow(src, rowID)
 	if err != nil {
 		return false, errors.Wrapf(err, "setting row %d on view %s shard %d", rowID, viewStandard, shard)
 	}
-	changed = changed || cleared
+	changed = changed || set
 
 	return changed, nil
 }
