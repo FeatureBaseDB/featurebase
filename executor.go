@@ -198,7 +198,7 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return e.executeTopN(ctx, index, c, shards, opt)
 	case "RowIDs":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
-		return e.executeRowIDs(ctx, index, c, shards, opt)
+		return e.executeRows(ctx, index, c, shards, opt)
 	case "GroupBy":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeGroupBy(ctx, index, c, shards, opt)
@@ -950,10 +950,10 @@ func product(input [][]gbi) []ppi {
 	return res
 }
 
-func (e *executor) executeRowIDs(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
+func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(shard uint64) (interface{}, error) {
-		return e.executeRowIDsShard(ctx, index, c, shard)
+		return e.executeRowsShard(ctx, index, c, shard)
 	}
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
@@ -985,7 +985,7 @@ func (e *executor) executeRowIDs(ctx context.Context, index string, c *pql.Call,
 	return results, nil
 }
 
-func (e *executor) executeRowIDsShard(ctx context.Context, index string, c *pql.Call, shard uint64) (RowIDs, error) {
+func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Call, shard uint64) (RowIDs, error) {
 	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
