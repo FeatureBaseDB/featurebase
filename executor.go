@@ -196,7 +196,7 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "TopN":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeTopN(ctx, index, c, shards, opt)
-	case "RowIDs":
+	case "Rows":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeRows(ctx, index, c, shards, opt)
 	case "GroupBy":
@@ -994,7 +994,7 @@ func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Ca
 	// Fetch field name from argument.
 	fieldName, ok := c.Args["field"].(string)
 	if !ok {
-		return nil, errors.New("RowIDs() argument required: field")
+		return nil, errors.New("Rows() argument required: field")
 	}
 	// Fetch field.
 	f := e.Holder.Field(index, fieldName)
@@ -2205,7 +2205,7 @@ func needsShards(calls []*pql.Call) bool {
 		switch call.Name {
 		case "Clear", "Set", "SetRowAttrs", "SetColumnAttrs":
 			continue
-		case "Count", "TopN", "RowIDs":
+		case "Count", "TopN", "Rows":
 			return true
 		// default catches Bitmap calls
 		default:
