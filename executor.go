@@ -738,10 +738,10 @@ type RowIdentifiers struct {
 // the proto package needs access to it.
 type RowIDs []uint64
 
-func (r RowIDs) merge(other RowIDs) RowIDs {
+func (r RowIDs) merge(other RowIDs, limit int) RowIDs {
 	i, j := 0, 0
 	result := make(RowIDs, 0)
-	for i < len(r) && j < len(other) {
+	for i < len(r) && j < len(other) && len(result) < limit {
 		av, bv := r[i], other[j]
 		if av < bv {
 			result = append(result, av)
@@ -755,11 +755,11 @@ func (r RowIDs) merge(other RowIDs) RowIDs {
 			j++
 		}
 	}
-	for i < len(r) {
+	for i < len(r) && len(result) < limit {
 		result = append(result, r[i])
 		i++
 	}
-	for j < len(other) {
+	for j < len(other) && len(result) < limit {
 		result = append(result, other[j])
 		j++
 	}
@@ -897,7 +897,7 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 		}
 
 		set := make([]gbi, 0)
-		for _, rowID := range frag.rowsWithFilter(filter) {
+		for _, rowID := range frag.rowsWithFilter(0, filter) {
 			set = append(set, gbi{
 				row: frag.row(rowID),
 				fieldRow: FieldRow{
@@ -955,10 +955,19 @@ func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, s
 	mapFn := func(shard uint64) (interface{}, error) {
 		return e.executeRowsShard(ctx, index, c, shard)
 	}
+
+	// Determine limit so we can use it when reducing.
+	limit := int(^uint(0) >> 1)
+	if lim, hasLimit, err := c.UintArg("limit"); err != nil {
+		return nil, err
+	} else if hasLimit {
+		limit = int(lim)
+	}
+
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
 		other, _ := prev.(RowIDs)
-		return other.merge(v.(RowIDs))
+		return other.merge(v.(RowIDs), limit)
 	}
 	// Get full result set.
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -966,22 +975,6 @@ func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, s
 		return nil, err
 	}
 	results, _ := other.(RowIDs)
-	// Apply offset.
-	if offset, hasOffset, err := c.UintArg("offset"); err != nil {
-		return nil, err
-	} else if hasOffset {
-		if int(offset) < len(results) {
-			results = results[offset:]
-		}
-	}
-	// Apply limit.
-	if limit, hasLimit, err := c.UintArg("limit"); err != nil {
-		return nil, err
-	} else if hasLimit {
-		if int(limit) < len(results) {
-			results = results[:limit]
-		}
-	}
 	return results, nil
 }
 
@@ -1005,14 +998,29 @@ func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Ca
 	if frag == nil {
 		return make(RowIDs, 0), nil
 	}
+
+	start := uint64(0)
+	if previous, ok, err := c.UintArg("previous"); err != nil {
+		return nil, errors.Wrap(err, "getting previous")
+	} else if ok {
+		start = previous + 1
+	}
+	fmt.Println("calculated start is", start)
+
+	filter := noFilter
+	if limit, hasLimit, err := c.UintArg("limit"); err != nil {
+		return nil, errors.Wrap(err, "getting limit")
+	} else if hasLimit {
+		filter = (&filterWithLimit{limit: limit}).filter
+	}
+
 	if columnID, ok, err := c.UintArg("column"); err != nil {
 		return nil, err
 	} else if ok {
-		// TODO: it's possible that filters could be applied here, so this returns too early.
-		return frag.rowsForColumn(columnID), nil
+		return frag.rowsForColumnWithFilter(start, columnID, filter), nil
+	} else {
+		return frag.rowsWithFilter(start, filter), nil
 	}
-	filter := getFilterFunction(c)
-	return frag.rowsWithFilter(filter), nil
 }
 
 // getGroupByFilterFunction returns a rowFilter based on the
@@ -1060,21 +1068,6 @@ func getGroupByFilterFunction(fieldDirective string) (rowFilter, error) {
 	}
 	f := filterWithOffset{offset: offset}
 	return f.filter, nil
-}
-func getFilterFunction(c *pql.Call) rowFilter {
-	offset, hasOffset, _ := c.UintArg("shardoffset")
-	limit, hasLimit, _ := c.UintArg("shardlimit")
-	if hasOffset && hasLimit {
-		f := filterWithOffsetLimit{offset: offset, limit: limit}
-		return f.filter
-	} else if hasOffset {
-		f := filterWithOffset{offset: offset}
-		return f.filter
-	} else if hasLimit {
-		f := filterWithLimit{limit: limit}
-		return f.filter
-	}
-	return noFilter
 }
 
 func (e *executor) executeBitmapShard(_ context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
@@ -2005,6 +1998,9 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 		// Positional args in new PQL syntax require special handling here.
 		rowKey = "_" + rowLabel
 		fieldName = callArgString(c, "_field")
+	} else if c.Name == "Rows" {
+		fieldName = callArgString(c, "field")
+		rowKey = "previous"
 	} else {
 		colKey = "col"
 		fieldName = callArgString(c, "field")

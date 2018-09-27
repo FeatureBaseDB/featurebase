@@ -1639,7 +1639,7 @@ func benchmarkExistence(nn bool, b *testing.B) {
 func BenchmarkExecutor_Existence_True(b *testing.B)  { benchmarkExistence(true, b) }
 func BenchmarkExecutor_Existence_False(b *testing.B) { benchmarkExistence(false, b) }
 
-func TestExecutor_Execute_RowIDs(t *testing.T) {
+func TestExecutor_Execute_Rows(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 	hldr := test.Holder{Holder: c[0].Server.Holder()}
@@ -1662,7 +1662,7 @@ func TestExecutor_Execute_RowIDs(t *testing.T) {
 		t.Fatalf("unexpected columns: %+v", columns)
 	}
 
-	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=general, offset=1,limit=2)`}); err != nil {
+	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=general, previous=10,limit=2)`}); err != nil {
 		t.Fatal(err)
 	} else if columns := res.Results[0].(pilosa.RowIdentifiers); !reflect.DeepEqual(columns, pilosa.RowIdentifiers{Rows: []uint64{11, 12}}) {
 		t.Fatalf("unexpected columns: %+v", columns)

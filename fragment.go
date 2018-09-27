@@ -58,6 +58,9 @@ const (
 	// exponent.
 	shardVsContainerExponent = shardWidthExponent - 16
 
+	// width of roaring containers is 2^16
+	containerWidth = 1 << 16
+
 	// snapshotExt is the file extension used for an in-process snapshot.
 	snapshotExt = ".snapshotting"
 
@@ -1772,12 +1775,13 @@ var noFilter = func(rowID uint64) (bool, bool) { return true, false }
 // rows returns all rows by calling rowsWithFilter()
 // with a completely unrestrictive filter.
 
-func (f *fragment) rows() []uint64 {
-	return f.rowsWithFilter(noFilter)
+func (f *fragment) rows(start uint64) []uint64 {
+	return f.rowsWithFilter(start, noFilter)
 }
 
-func (f *fragment) rowsWithFilter(filter rowFilter) []uint64 {
-	i, _ := f.storage.Containers.Iterator(0)
+func (f *fragment) rowsWithFilter(start uint64, filter rowFilter) []uint64 {
+	startKey := rowToKey(start)
+	i, _ := f.storage.Containers.Iterator(startKey)
 	rows := make([]uint64, 0)
 	var lastRow uint64 = math.MaxUint64
 
@@ -1806,14 +1810,13 @@ func (f *fragment) rowsWithFilter(filter rowFilter) []uint64 {
 
 }
 
-// rowsForColumn is similar to the rows method, but isolated
-// to a single column.
 func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
-	return f.rowsForColumnWithFilter(columnID, noFilter)
+	return f.rowsForColumnWithFilter(0, columnID, noFilter)
 }
 
-func (f *fragment) rowsForColumnWithFilter(columnID uint64, filter rowFilter) []uint64 {
-	i, _ := f.storage.Containers.Iterator(0)
+func (f *fragment) rowsForColumnWithFilter(start, columnID uint64, filter rowFilter) []uint64 {
+	startKey := rowToKey(start)
+	i, _ := f.storage.Containers.Iterator(startKey)
 	rows := make([]uint64, 0)
 
 	colID := columnID % ShardWidth
@@ -2136,3 +2139,10 @@ func (v *rowsVector) Get(colID uint64) (uint64, bool) {
 
 // Set is not used for rowsVector.
 func (v *rowsVector) Set(colID, rowID uint64) {}
+
+// rowToKey converts a Pilosa row ID to the key of the container which starts
+// that row in the bitmap which represents this entire fragment. A fragment is
+// all the rows within a shard within a field concatenated together.
+func rowToKey(rowID uint64) (key uint64) {
+	return rowID * (ShardWidth / containerWidth)
+}

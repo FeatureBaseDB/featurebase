@@ -1341,7 +1341,7 @@ func TestFragment_RowsIteration(t *testing.T) {
 			}
 		}
 
-		ids := f.rows()
+		ids := f.rows(0)
 		if !reflect.DeepEqual(expectedAll, ids) {
 			t.Fatalf("Do not match %v %v", expectedAll, ids)
 		}
@@ -1365,7 +1365,7 @@ func TestFragment_RowsIteration(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		ids := f.rows()
+		ids := f.rows(0)
 		if !reflect.DeepEqual(expected, ids) {
 			t.Fatalf("Do not match %v %v", expected, ids)
 		}
@@ -1388,7 +1388,7 @@ func TestFragment_RowsIteration(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				ids := f.rows()
+				ids := f.rows(0)
 				if !reflect.DeepEqual(expectedRows, ids) {
 					t.Fatalf("Do not match %v %v", expectedRows, ids)
 				}
