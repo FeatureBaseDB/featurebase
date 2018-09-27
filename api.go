@@ -750,16 +750,26 @@ func (api *API) Import(ctx context.Context, req *ImportRequest) error {
 		}
 		return errors.Wrap(err, "importing")
 	}
-
+	//if here need to forward to the correct node
 	bits := make([]Bit, len(req.ColumnIDs), len(req.ColumnIDs))
 	for i := range req.ColumnIDs {
-		bits[i] = Bit{
-			RowID:     req.RowIDs[i],
-			ColumnID:  req.ColumnIDs[i],
-			RowKey:    req.RowKeys[i],
-			ColumnKey: req.ColumnKeys[i],
-			Timestamp: req.Timestamps[i],
+		bit := Bit{}
+		if len(req.RowIDs) > 0 {
+			bit.RowID = req.RowIDs[i]
 		}
+		if len(req.ColumnIDs) > 0 {
+			bit.ColumnID = req.ColumnIDs[i]
+		}
+		if len(req.RowKeys) > 0 {
+			bit.RowKey = req.RowKeys[i]
+		}
+		if len(req.ColumnKeys) > 0 {
+			bit.ColumnKey = req.ColumnKeys[i]
+		}
+		if len(req.Timestamps) > 0 {
+			bit.Timestamp = req.Timestamps[i]
+		}
+		bits[i] = bit
 	}
 	if err := api.server.defaultClient.Import(ctx, req.Index, req.Field, req.Shard, bits); err != nil {
 		return errors.Wrap(err, "importing forward")
