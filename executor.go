@@ -951,6 +951,12 @@ func product(input [][]gbi) []ppi {
 }
 
 func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
+	if columnID, ok, err := c.UintArg("column"); err != nil {
+		return nil, errors.Wrap(err, "getting column")
+	} else if ok {
+		shards = []uint64{columnID / ShardWidth}
+	}
+
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(shard uint64) (interface{}, error) {
 		return e.executeRowsShard(ctx, index, c, shard)
@@ -1005,7 +1011,6 @@ func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Ca
 	} else if ok {
 		start = previous + 1
 	}
-	fmt.Println("calculated start is", start)
 
 	filter := noFilter
 	if limit, hasLimit, err := c.UintArg("limit"); err != nil {
@@ -1017,7 +1022,10 @@ func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Ca
 	if columnID, ok, err := c.UintArg("column"); err != nil {
 		return nil, err
 	} else if ok {
-		return frag.rowsForColumnWithFilter(start, columnID, filter), nil
+		if columnID/ShardWidth == shard {
+			return frag.rowsForColumnWithFilter(start, columnID%ShardWidth, filter), nil
+		}
+		return RowIDs{}, nil
 	} else {
 		return frag.rowsWithFilter(start, filter), nil
 	}

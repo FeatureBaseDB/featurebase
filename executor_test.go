@@ -1675,6 +1675,128 @@ func TestExecutor_Execute_Rows(t *testing.T) {
 	}
 }
 
+func TestExecutor_Execute_Rows_Keys(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+
+	_, err := c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+
+	_, err = c[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldKeys())
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
+
+	// setup some data. 10 bits in each of shards 0 through 9. starting at
+	// row/col shardNum and progressing to row/col shardNum+10. Also set the
+	// previous 2 for each bit if row >0.
+	query := strings.Builder{}
+	for shard := 0; shard < 10; shard++ {
+		for i := shard; i < shard+10; i++ {
+			for row := i; row >= 0 && row > i-3; row-- {
+				query.WriteString(fmt.Sprintf("Set(%d, f=\"%d\")", shard*pilosa.ShardWidth+i, row))
+
+			}
+
+		}
+	}
+	_, err = c[0].API.Query(context.Background(), &pilosa.QueryRequest{
+		Index: "i",
+		Query: query.String(),
+	})
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+
+	tests := []struct {
+		q   string
+		exp []string
+	}{
+		{
+			q:   `Rows(field=f)`,
+			exp: []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18"},
+		},
+		{
+			q:   `Rows(field=f, limit=2)`,
+			exp: []string{"0", "1"},
+		},
+		{
+			q:   `Rows(field=f, previous="15")`,
+			exp: []string{"16", "17", "18"},
+		},
+		{
+			q:   `Rows(field=f, previous="11", limit=2)`,
+			exp: []string{"12", "13"},
+		},
+		{
+			q:   `Rows(field=f, previous="11", limit=2)`,
+			exp: []string{"12", "13"},
+		},
+		{
+			q:   `Rows(field=f, previous="17", limit=5)`,
+			exp: []string{"18"},
+		},
+		{
+			q:   `Rows(field=f, previous="18")`,
+			exp: []string{},
+		},
+		{
+			q:   `Rows(field=f, previous="1", limit=0)`,
+			exp: []string{},
+		},
+		{
+			q:   `Rows(field=f, column=1)`,
+			exp: []string{"0", "1"},
+		},
+		{
+			q:   `Rows(field=f, column=2)`,
+			exp: []string{"0", "1", "2"},
+		},
+		{
+			q:   `Rows(field=f, column=3)`,
+			exp: []string{"1", "2", "3"},
+		},
+		{
+			q:   `Rows(field=f, limit=2, column=3)`,
+			exp: []string{"1", "2"},
+		},
+		{
+			q:   fmt.Sprintf(`Rows(field=f, previous="15", column=%d)`, ShardWidth*9+17),
+			exp: []string{"16", "17"},
+		},
+		{
+			q:   fmt.Sprintf(`Rows(field=f, previous="11", limit=2, column=%d)`, ShardWidth*5+14),
+			exp: []string{"12", "13"},
+		},
+		{
+			q:   fmt.Sprintf(`Rows(field=f, previous="17", limit=5, column=%d)`, ShardWidth*9+18),
+			exp: []string{"18"},
+		},
+		{
+			q:   `Rows(field=f, previous="18", column=19)`,
+			exp: []string{},
+		},
+		{
+			q:   `Rows(field=f, previous="1", limit=0, column=0)`,
+			exp: []string{},
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("#%d_%s", i, test.q), func(t *testing.T) {
+			if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: test.q}); err != nil {
+				t.Fatal(err)
+			} else if rows := res.Results[0].(pilosa.RowIdentifiers); !reflect.DeepEqual(
+				rows, pilosa.RowIdentifiers{Keys: test.exp}) {
+				t.Fatalf("\ngot: %+v\nexp: %+v", rows, pilosa.RowIdentifiers{Keys: test.exp})
+			}
+		})
+	}
+
+}
+
 func TestExecutor_Execute_GroupBy(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
