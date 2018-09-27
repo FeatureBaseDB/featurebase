@@ -1652,28 +1652,29 @@ func TestExecutor_Execute_Rows(t *testing.T) {
 
 	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=general)`}); err != nil {
 		t.Fatal(err)
-	} else if columns := res.Results[0].(pilosa.RowIdentifiers); !reflect.DeepEqual(columns, pilosa.RowIdentifiers{Rows: []uint64{10, 11, 12}}) {
-		t.Fatalf("unexpected columns: %+v", columns)
+	} else if rows := res.Results[0].(pilosa.RowIdentifiers); !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{10, 11, 12}}) {
+		t.Fatalf("unexpected rows: %+v", rows)
 	}
 
 	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=general, limit=2)`}); err != nil {
 		t.Fatal(err)
-	} else if columns := res.Results[0].(pilosa.RowIdentifiers); !reflect.DeepEqual(columns, pilosa.RowIdentifiers{Rows: []uint64{10, 11}}) {
-		t.Fatalf("unexpected columns: %+v", columns)
+	} else if rows := res.Results[0].(pilosa.RowIdentifiers); !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{10, 11}}) {
+		t.Fatalf("unexpected rows: %+v", rows)
 	}
 
 	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=general, previous=10,limit=2)`}); err != nil {
 		t.Fatal(err)
-	} else if columns := res.Results[0].(pilosa.RowIdentifiers); !reflect.DeepEqual(columns, pilosa.RowIdentifiers{Rows: []uint64{11, 12}}) {
-		t.Fatalf("unexpected columns: %+v", columns)
+	} else if rows := res.Results[0].(pilosa.RowIdentifiers); !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{11, 12}}) {
+		t.Fatalf("unexpected rows: %+v", rows)
 	}
 
 	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=general, column=2)`}); err != nil {
 		t.Fatal(err)
-	} else if columns := res.Results[0].(pilosa.RowIdentifiers); !reflect.DeepEqual(columns, pilosa.RowIdentifiers{Rows: []uint64{11, 12}}) {
-		t.Fatalf("unexpected columns: %+v", columns)
+	} else if rows := res.Results[0].(pilosa.RowIdentifiers); !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{11, 12}}) {
+		t.Fatalf("unexpected rows: %+v", rows)
 	}
 }
+
 func TestExecutor_Execute_GroupBy(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
