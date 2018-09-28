@@ -751,7 +751,7 @@ func (api *API) Import(ctx context.Context, req *ImportRequest) error {
 		return errors.Wrap(err, "importing")
 	}
 	//if here need to forward to the correct node
-	bits := make([]Bit, len(req.ColumnIDs), len(req.ColumnIDs))
+	bits := make([]Bit, len(req.ColumnIDs))
 	for i := range req.ColumnIDs {
 		bit := Bit{}
 		if len(req.RowIDs) > 0 {
