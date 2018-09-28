@@ -1815,6 +1815,11 @@ func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
 }
 
 func (f *fragment) rowsForColumnWithFilter(start, columnID uint64, filter rowFilter) []uint64 {
+	if columnID/ShardWidth != f.shard {
+		panic(fmt.Sprintln("fragment.rowsForColumn should never be called with a columnID which is not in the fragment's shard",
+			columnID, columnID/ShardWidth, f.shard))
+	}
+
 	startKey := rowToKey(start)
 	i, _ := f.storage.Containers.Iterator(startKey)
 	rows := make([]uint64, 0)

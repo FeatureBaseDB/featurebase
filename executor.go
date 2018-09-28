@@ -1023,7 +1023,7 @@ func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Ca
 		return nil, err
 	} else if ok {
 		if columnID/ShardWidth == shard {
-			return frag.rowsForColumnWithFilter(start, columnID%ShardWidth, filter), nil
+			return frag.rowsForColumnWithFilter(start, columnID, filter), nil
 		}
 		return RowIDs{}, nil
 	} else {
