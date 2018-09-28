@@ -2006,6 +2006,8 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 	} else if c.Name == "Rows" {
 		fieldName = callArgString(c, "field")
 		rowKey = "previous"
+	} else if c.Name == "GroupBy" {
+		return errors.Wrap(e.translateGroupByCall(index, idx, c), "translating GroupBy")
 	} else {
 		colKey = "col"
 		fieldName = callArgString(c, "field")
@@ -2064,6 +2066,61 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 		}
 	}
 
+	return nil
+}
+
+func (e *executor) translateGroupByCall(index string, idx *Index, c *pql.Call) error {
+	if c.Name != "GroupBy" {
+		panic("translateGroupByCall called with '" + c.Name + "'")
+	}
+
+	for _, child := range c.Children {
+		if err := e.translateCall(index, idx, child); err != nil {
+			return errors.Wrapf(err, "translating %s", child)
+		}
+	}
+
+	prev, ok := c.Args["previous"]
+	if !ok {
+		return nil // nothing else to be translated
+	}
+	previous, ok := prev.([]interface{})
+	if !ok {
+		return errors.Errorf("'previous' argument must be list, but got %T", prev)
+	}
+	if len(c.Children) != len(previous) {
+		return errors.Errorf("mismatched lengths for previous: %d and children: %d in %s", len(previous), len(c.Children), c)
+	}
+
+	fields := make([]*Field, len(c.Children))
+	for i, child := range c.Children {
+		fieldname := callArgString(child, "field")
+		field := idx.Field(fieldname)
+		if field == nil {
+			return errors.Wrapf(ErrFieldNotFound, "getting field '%s' from '%s'", fieldname, child)
+		}
+		fields[i] = field
+	}
+
+	for i, field := range fields {
+		prev := previous[i]
+		if field.keys() {
+			prevStr, ok := prev.(string)
+			if !ok {
+				return errors.New("prev value must be a string when field 'keys' option enabled")
+			}
+			ids, err := e.TranslateStore.TranslateRowsToUint64(index, field.Name(), []string{prevStr})
+			if err != nil {
+				return errors.Wrapf(err, "translating row key '%s'", prevStr)
+			}
+			previous[i] = ids[0]
+		} else {
+			if prevStr, ok := prev.(string); ok {
+				return errors.Errorf("got string row val '%s' in 'previous' for field %s which doesn't use string keys", prevStr, field.Name())
+			}
+		}
+
+	}
 	return nil
 }
 
