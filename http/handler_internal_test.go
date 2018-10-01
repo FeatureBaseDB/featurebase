@@ -31,8 +31,9 @@ func TestPostIndexRequestUnmarshalJSON(t *testing.T) {
 		expected postIndexRequest
 		err      string
 	}{
-		{json: `{"options": {}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{}}},
-		{json: `{"options": {"keys": true}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{Keys: true}}},
+		{json: `{"options": {}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{TrackExistence: true}}},
+		{json: `{"options": {"trackExistence": false}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{TrackExistence: false}}},
+		{json: `{"options": {"keys": true}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{Keys: true, TrackExistence: true}}},
 		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"option": {}}`, err: "Unknown key: option:map[]"},
 		{json: `{"options": {"badKey": "test"}}`, err: "Unknown key: badKey:test"},
@@ -53,7 +54,7 @@ func TestPostIndexRequestUnmarshalJSON(t *testing.T) {
 
 		if test.err == "" {
 			if !reflect.DeepEqual(*actual, test.expected) {
-				t.Errorf("expected: %v, but got: %v", test.expected, *actual)
+				t.Errorf("expected: %v, but got: %v for JSON: %s", test.expected, *actual, test.json)
 			}
 		}
 
