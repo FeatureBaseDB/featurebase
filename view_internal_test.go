@@ -16,7 +16,10 @@ package pilosa
 
 import (
 	"io/ioutil"
+	"strings"
 	"testing"
+
+	"github.com/pkg/errors"
 )
 
 // mustOpenView returns a new instance of View with a temporary path.
@@ -72,4 +75,46 @@ func TestView_DeleteFragment(t *testing.T) {
 	} else if fragment == fragment2 {
 		t.Fatal("failed to create new fragment")
 	}
+}
+
+// Ensure view closes fragment after failed shard broadcast.
+func TestView_CreateFragmentError(t *testing.T) {
+	v := mustOpenView("i", "f", "v")
+	defer v.close()
+
+	// Use a broadcaster which intentionally fails.
+	v.broadcaster = errorBroadcaster{}
+
+	shard := uint64(0)
+
+	// Create fragment (with error on broadcast).
+	fragment, err := v.CreateFragmentIfNotExists(shard)
+	if !strings.Contains(err.Error(), "intentional error") {
+		if err != nil {
+			t.Fatal(err)
+		} else if fragment == nil {
+			t.Fatal("expected fragment")
+		} else {
+			t.Fatal("expected intentional error")
+		}
+	}
+
+	// Set the broadcaster back to no-op.
+	v.broadcaster = nopBroadcaster{}
+
+	// Try to create the fragment again.
+	_, err = v.CreateFragmentIfNotExists(shard)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// errorBroadcaster is a broadcaster which always returns an error.
+type errorBroadcaster struct {
+	nopBroadcaster
+}
+
+// SendSync is an implementation of Broadcaster SendSync which always returns an error.
+func (errorBroadcaster) SendSync(Message) error {
+	return errors.New("intentional error")
 }

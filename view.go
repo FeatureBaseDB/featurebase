@@ -228,6 +228,7 @@ func (v *view) createFragmentIfNotExists(shard uint64) (*fragment, error) {
 		Field: v.field,
 		Shard: shard,
 	}); err != nil {
+		frag.close()
 		return nil, errors.Wrap(err, "sending createshard message")
 	}
 
