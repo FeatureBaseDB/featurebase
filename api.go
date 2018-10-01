@@ -327,7 +327,7 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 	}
 
 	// only set fields are supported
-	if field.Type() != "set" {
+	if field.Type() != FieldTypeSet {
 		return NewBadRequestError(errors.New("roaring import is only supported for set fields"))
 	}
 
