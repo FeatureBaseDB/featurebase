@@ -69,7 +69,7 @@ type TranslateFile struct {
 
 	Path    string
 	mapSize int
-
+	logger  Logger
 	// If non-nil, data is streamed from a primary and this is a read-only store.
 	PrimaryTranslateStore TranslateStore
 	primaryID             string // unique ID used to identify the primary store
@@ -87,6 +87,12 @@ type TranslateFileOption func(f *TranslateFile) error
 func OptTranslateFileMapSize(mapSize int) TranslateFileOption {
 	return func(f *TranslateFile) error {
 		f.mapSize = mapSize
+		return nil
+	}
+}
+func OptTranslateFileLogger(l Logger) TranslateFileOption {
+	return func(s *TranslateFile) error {
+		s.logger = l
 		return nil
 	}
 }
@@ -110,6 +116,8 @@ func NewTranslateFile(opts ...TranslateFileOption) *TranslateFile {
 		rows:        make(map[fieldKey]*index),
 
 		mapSize: defaultMapSize,
+
+		logger: NopLogger,
 
 		replicationClosing: make(chan struct{}),
 		primaryStoreEvents: make(chan primaryStoreEvent),
@@ -187,12 +195,12 @@ func (s *TranslateFile) handlePrimaryStoreEvent(ev primaryStoreEvent) error {
 	}
 
 	// Stop translate store replication.
-	log.Printf("stop monitor replication")
+	s.logger.Printf("stop monitor replication")
 	close(s.replicationClosing)
 	s.repWG.Wait()
 
 	// Set the primary node for translate store replication.
-	log.Printf("set primary translate store to %s", ev.id)
+	s.logger.Printf("set primary translate store to %s", ev.id)
 	s.primaryID = ev.id
 	if ev.id == "" {
 		s.PrimaryTranslateStore = nil
@@ -201,7 +209,7 @@ func (s *TranslateFile) handlePrimaryStoreEvent(ev primaryStoreEvent) error {
 	}
 
 	// Start translate store replication. Stream from primary, if available.
-	log.Printf("start monitor replication")
+	s.logger.Printf("start monitor replication")
 	if s.PrimaryTranslateStore != nil {
 		s.replicationClosing = make(chan struct{})
 		s.repWG.Add(1)
