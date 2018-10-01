@@ -321,13 +321,19 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 	nodes := api.cluster.shardNodes(indexName, shard)
 	var eg errgroup.Group
 
+	field := api.holder.Field(indexName, fieldName)
+	if field == nil {
+		return newNotFoundError(ErrFieldNotFound)
+	}
+
+	// only set fields are supported
+	if field.Type() != "set" {
+		return NewBadRequestError(errors.New("roaring import is only supported for set fields"))
+	}
+
 	for _, node := range nodes {
 		node := node
 		if node.ID == api.server.nodeID {
-			field := api.holder.Field(indexName, fieldName)
-			if field == nil {
-				return newNotFoundError(ErrFieldNotFound)
-			}
 			// must make a copy of data to operate on locally. field.importRoaring changes data
 			d2 := make([]byte, len(data))
 			copy(d2, data)
