@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -371,14 +370,14 @@ func (s *TranslateFile) monitorReplication() {
 	// Keep attempting to replicate until the store closes.
 	for {
 		if err := s.replicate(ctx); err != nil {
-			log.Printf("pilosa: replication error: %s", err)
+			s.logger.Printf("pilosa: replication error: %s", err)
 		}
 
 		select {
 		case <-ctx.Done():
 			return
 		case <-time.After(s.replicationRetryInterval):
-			log.Printf("pilosa: reconnecting to primary replica")
+			s.logger.Printf("pilosa: reconnecting to primary replica")
 		}
 	}
 }
@@ -386,7 +385,7 @@ func (s *TranslateFile) monitorReplication() {
 // monitorPrimaryStoreEvents is executed in a separate goroutine and listens for changes
 // to the primary store assignment.
 func (s *TranslateFile) monitorPrimaryStoreEvents() {
-	log.Printf("monitor primary store events")
+	s.logger.Printf("monitor primary store events")
 	// Keep handling events until the store closes.
 	for {
 		select {
@@ -394,7 +393,7 @@ func (s *TranslateFile) monitorPrimaryStoreEvents() {
 			return
 		case ev := <-s.primaryStoreEvents:
 			if err := s.handlePrimaryStoreEvent(ev); err != nil {
-				log.Printf("handle primary store event")
+				s.logger.Printf("handle primary store event")
 			}
 		}
 	}
@@ -404,7 +403,7 @@ func (s *TranslateFile) replicate(ctx context.Context) error {
 	off := s.size()
 
 	// Connect to remote primary.
-	log.Printf("pilosa: replicating from offset %d", off)
+	s.logger.Printf("pilosa: replicating from offset %d", off)
 	rc, err := s.PrimaryTranslateStore.Reader(ctx, off)
 	if err != nil {
 		return err
@@ -1119,7 +1118,7 @@ var nopTStore TranslateStore = nopTranslateStore{}
 
 // newNopTranslateStore returns a translate store which does nothing. It returns a global
 // object to avoid unnecessary allocations.
-func newNopTranslateStore(interface{}) TranslateStore { return nopTStore }
+func newNopTranslateStore(interface{}) (TranslateStore, error) { return nopTStore, nil }
 
 // nopTranslateStore represents a no-op implementation of the TranslateStore interface.
 type nopTranslateStore struct{}

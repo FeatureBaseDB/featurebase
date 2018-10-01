@@ -52,7 +52,7 @@ type Holder struct {
 
 	// Key/ID translation
 	translateFile            *TranslateFile
-	NewPrimaryTranslateStore func(interface{}) TranslateStore
+	NewPrimaryTranslateStore func(interface{}) (TranslateStore, error)
 
 	// opened channel is closed once Open() completes.
 	opened chan struct{}
@@ -584,7 +584,11 @@ func (h *Holder) setPrimaryTranslateStore(node *Node) {
 	if node != nil {
 		nodeID = node.ID
 	}
-	h.translateFile.SetPrimaryStore(nodeID, h.NewPrimaryTranslateStore(node))
+	ts, err := h.NewPrimaryTranslateStore(node)
+	if err != nil {
+		h.Logger.Printf("setPrimaryTranslateStore: %s", err)
+	}
+	h.translateFile.SetPrimaryStore(nodeID, ts)
 }
 
 // holderSyncer is an active anti-entropy tool that compares the local holder

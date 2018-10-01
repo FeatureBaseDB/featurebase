@@ -42,7 +42,7 @@ func TestTranslateStore_Reader(t *testing.T) {
 			}
 
 			// Connect to server and stream all available data.
-			store := http.NewTranslateStore(primary.URL())
+			store, _ := http.NewTranslateStore(primary.URL())
 
 			// Wait to ensure writes make it to translate store
 			time.Sleep(500 * time.Millisecond)
@@ -96,7 +96,7 @@ func TestTranslateStore_Reader(t *testing.T) {
 
 			// Connect to server and begin streaming.
 			ctx, cancel := context.WithCancel(context.Background())
-			store := http.NewTranslateStore(primary.URL())
+			store, _ := http.NewTranslateStore(primary.URL())
 			if _, err := store.Reader(ctx, 0); err != nil {
 				t.Fatal(err)
 			}
@@ -124,7 +124,11 @@ func TestTranslateStore_Reader(t *testing.T) {
 		primary := test.MustRunCluster(t, 1, []server.CommandOption{opts})[0]
 		defer primary.Close()
 
-		_, err := http.NewTranslateStore(primary.URL()).Reader(context.Background(), 0)
+		ts, err := http.NewTranslateStore(primary.URL())
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
+		_, err = ts.Reader(context.Background(), 0)
 		if err != pilosa.ErrNotImplemented {
 			t.Fatalf("unexpected error: %s", err)
 		}
