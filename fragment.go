@@ -1769,17 +1769,14 @@ func (f *fragment) readCacheFromArchive(r io.Reader) error {
 // processing.
 type rowFilter func(rowID uint64) (bool, bool)
 
-// noFilter is a filter function which has no restrictions.
-var noFilter = func(rowID uint64) (bool, bool) { return true, false }
-
 // rows returns all rows by calling rowsWithFilter()
 // with a completely unrestrictive filter.
 
-func (f *fragment) rows(start uint64) []uint64 {
-	return f.rowsWithFilter(start, noFilter)
+func (f *fragment) rows(start uint64, filters ...rowFilter) []uint64 {
+	return f.rowsWithFilter(start, filters...)
 }
 
-func (f *fragment) rowsWithFilter(start uint64, filter rowFilter) []uint64 {
+func (f *fragment) rowsWithFilter(start uint64, filters ...rowFilter) []uint64 {
 	startKey := rowToKey(start)
 	i, _ := f.storage.Containers.Iterator(startKey)
 	rows := make([]uint64, 0)
@@ -1797,24 +1794,32 @@ func (f *fragment) rowsWithFilter(start uint64, filter rowFilter) []uint64 {
 			continue
 		}
 
-		// apply filter
-		if addRow, breakOut := filter(vRow); breakOut {
-			break
-		} else if addRow {
+		// apply filters
+		addRow := true
+		for _, filter := range filters {
+			add, done := filter(vRow)
+			if done {
+				return rows
+			}
+			addRow = add && addRow
+			if !addRow {
+				break
+			}
+		}
+		if addRow {
 			rows = append(rows, vRow)
 		}
 
 		lastRow = vRow
 	}
 	return rows
-
 }
 
 func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
-	return f.rowsForColumnWithFilter(0, columnID, noFilter)
+	return f.rowsForColumnWithFilter(0, columnID)
 }
 
-func (f *fragment) rowsForColumnWithFilter(start, columnID uint64, filter rowFilter) []uint64 {
+func (f *fragment) rowsForColumnWithFilter(start, columnID uint64, filters ...rowFilter) []uint64 {
 	if columnID/ShardWidth != f.shard {
 		panic(fmt.Sprintln("fragment.rowsForColumn should never be called with a columnID which is not in the fragment's shard",
 			columnID, columnID/ShardWidth, f.shard))
@@ -1845,9 +1850,18 @@ func (f *fragment) rowsForColumnWithFilter(start, columnID uint64, filter rowFil
 
 		// apply filter
 		if c.Contains(colVal) {
-			if addRow, breakOut := filter(vRow); breakOut {
-				break
-			} else if addRow {
+			addRow := true
+			for _, filter := range filters {
+				add, done := filter(vRow)
+				if done {
+					return rows
+				}
+				addRow = add && addRow
+				if !addRow {
+					break
+				}
+			}
+			if addRow {
 				rows = append(rows, vRow)
 			}
 		}

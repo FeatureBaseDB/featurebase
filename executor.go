@@ -891,13 +891,13 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 			return results, nil
 		}
 		// Get filter based on the field directive.
-		filter, err := getGroupByFilterFunction(fieldDirective.(string))
+		filters, err := getGroupByFilterFunction(fieldDirective.(string))
 		if err != nil {
 			return nil, err
 		}
 
 		set := make([]gbi, 0)
-		for _, rowID := range frag.rowsWithFilter(0, filter) {
+		for _, rowID := range frag.rows(0, filters...) {
 			set = append(set, gbi{
 				row: frag.row(rowID),
 				fieldRow: FieldRow{
@@ -1012,31 +1012,30 @@ func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Ca
 		start = previous + 1
 	}
 
-	filter := noFilter
+	filters := []rowFilter{}
 	if limit, hasLimit, err := c.UintArg("limit"); err != nil {
 		return nil, errors.Wrap(err, "getting limit")
 	} else if hasLimit {
-		filter = (&filterWithLimit{limit: limit}).filter
+		filters = append(filters, (&filterWithLimit{limit: limit}).filter)
 	}
 
 	if columnID, ok, err := c.UintArg("column"); err != nil {
 		return nil, err
 	} else if ok {
-		return frag.rowsForColumnWithFilter(start, columnID, filter), nil
+		return frag.rowsForColumnWithFilter(start, columnID, filters...), nil
 	} else {
-		return frag.rowsWithFilter(start, filter), nil
+		return frag.rows(start, filters...), nil
 	}
 }
 
 // getGroupByFilterFunction returns a rowFilter based on the
 // field directive provided.
-func getGroupByFilterFunction(fieldDirective string) (rowFilter, error) {
+func getGroupByFilterFunction(fieldDirective string) (ret []rowFilter, err error) {
 	parts := strings.Split(fieldDirective, ":")
 	hasLimit := false
 	hasOffset := false
 	limit := uint64(0)
 	offset := uint64(0)
-	var err error
 	// fieldDirective can have one of the following forms:
 	// [fieldName]
 	// [fieldName:limit]
@@ -1046,33 +1045,31 @@ func getGroupByFilterFunction(fieldDirective string) (rowFilter, error) {
 	// [fieldName:offset:limit:extra] will be treated as
 	// [fieldName:offset:limit] (i.e. `extra` is ignored).
 	if len(parts) == 1 {
-		return noFilter, nil
+		return ret, nil
 	} else if len(parts) == 2 {
 		hasLimit = true
 		if limit, err = strconv.ParseUint(parts[1], 10, 64); err != nil {
-			return nil, errors.Wrap(err, "getting groupby field limit only value")
+			return ret, errors.Wrap(err, "getting groupby field limit only value")
 		}
 	} else {
 		hasOffset = true
 		if offset, err = strconv.ParseUint(parts[1], 10, 64); err != nil {
-			return nil, errors.Wrap(err, "getting groupby field offset value")
+			return ret, errors.Wrap(err, "getting groupby field offset value")
 		}
 		if parts[2] != "" {
 			hasLimit = true
 			if limit, err = strconv.ParseUint(parts[2], 10, 64); err != nil {
-				return nil, errors.Wrap(err, "getting groupby field limit value")
+				return ret, errors.Wrap(err, "getting groupby field limit value")
 			}
 		}
 	}
-	if hasOffset && hasLimit {
-		f := filterWithOffsetLimit{offset: offset, limit: limit}
-		return f.filter, nil
-	} else if hasLimit {
-		f := filterWithLimit{limit: limit}
-		return f.filter, nil
+	if hasOffset {
+		ret = append(ret, (&filterWithOffset{offset: offset}).filter)
 	}
-	f := filterWithOffset{offset: offset}
-	return f.filter, nil
+	if hasLimit {
+		ret = append(ret, (&filterWithLimit{limit: limit}).filter)
+	}
+	return ret, nil
 }
 
 func (e *executor) executeBitmapShard(_ context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
@@ -2320,22 +2317,6 @@ func callArgString(call *pql.Call, key string) string {
 func isString(v interface{}) bool {
 	_, ok := v.(string)
 	return ok
-}
-
-// Filters to be used with RowsWithFilter queries.
-type filterWithOffsetLimit struct {
-	offset, limit uint64
-}
-
-func (fol *filterWithOffsetLimit) filter(rowID uint64) (bool, bool) {
-	if rowID >= fol.offset {
-		if fol.limit > 0 {
-			fol.limit--
-			return true, false
-		}
-		return false, true
-	}
-	return false, false
 }
 
 type filterWithOffset struct {
