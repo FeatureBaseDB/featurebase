@@ -1022,7 +1022,7 @@ func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Ca
 	if columnID, ok, err := c.UintArg("column"); err != nil {
 		return nil, err
 	} else if ok {
-		return frag.rowsForColumnWithFilter(start, columnID, filters...), nil
+		return frag.rowsForColumn(start, columnID, filters...), nil
 	} else {
 		return frag.rows(start, filters...), nil
 	}

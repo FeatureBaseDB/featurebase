@@ -1771,12 +1771,7 @@ type rowFilter func(rowID uint64) (bool, bool)
 
 // rows returns all rows by calling rowsWithFilter()
 // with a completely unrestrictive filter.
-
 func (f *fragment) rows(start uint64, filters ...rowFilter) []uint64 {
-	return f.rowsWithFilter(start, filters...)
-}
-
-func (f *fragment) rowsWithFilter(start uint64, filters ...rowFilter) []uint64 {
 	startKey := rowToKey(start)
 	i, _ := f.storage.Containers.Iterator(startKey)
 	rows := make([]uint64, 0)
@@ -1815,11 +1810,7 @@ func (f *fragment) rowsWithFilter(start uint64, filters ...rowFilter) []uint64 {
 	return rows
 }
 
-func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
-	return f.rowsForColumnWithFilter(0, columnID)
-}
-
-func (f *fragment) rowsForColumnWithFilter(start, columnID uint64, filters ...rowFilter) []uint64 {
+func (f *fragment) rowsForColumn(start, columnID uint64, filters ...rowFilter) []uint64 {
 	if columnID/ShardWidth != f.shard {
 		panic(fmt.Sprintln("fragment.rowsForColumn should never be called with a columnID which is not in the fragment's shard",
 			columnID, columnID/ShardWidth, f.shard))
@@ -2149,7 +2140,7 @@ func newRowsVector(f *fragment) *rowsVector {
 // Additionally, it returns true if a value was found,
 // otherwise it returns false.
 func (v *rowsVector) Get(colID uint64) (uint64, bool) {
-	rows := v.f.rowsForColumn(colID)
+	rows := v.f.rowsForColumn(0, colID)
 	if len(rows) == 1 {
 		return rows[0], true
 	}
