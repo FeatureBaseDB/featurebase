@@ -15,6 +15,8 @@
 package gopsutil
 
 import (
+	"runtime"
+
 	"github.com/pilosa/pilosa"
 	"github.com/shirou/gopsutil/host"
 	"github.com/shirou/gopsutil/mem"
@@ -107,6 +109,11 @@ func (s *systemInfo) MemUsed() (uint64, error) {
 // KernelVersion returns the kernel version as a string.
 func (s *systemInfo) KernelVersion() (string, error) {
 	return host.KernelVersion()
+}
+
+// CPUArch returns the CPU architecture, such as amd64
+func (s *systemInfo) CPUArch() string {
+	return runtime.GOARCH
 }
 
 // NewSystemInfo is a constructor for the gopsutil implementation of SystemInfo.
