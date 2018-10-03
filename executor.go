@@ -79,20 +79,21 @@ func newExecutor(opts ...executorOption) *executor {
 }
 
 // Execute executes a PQL query.
-func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *execOptions) ([]interface{}, error) {
+func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *execOptions) (QueryResponse, error) {
+	resp := QueryResponse{}
 	// Verify that an index is set.
 	if index == "" {
-		return nil, ErrIndexRequired
+		return resp, ErrIndexRequired
 	}
 
 	idx := e.Holder.Index(index)
 	if idx == nil {
-		return nil, ErrIndexNotFound
+		return resp, ErrIndexNotFound
 	}
 
 	// Verify that the number of writes do not exceed the maximum.
 	if e.MaxWritesPerRequest > 0 && q.WriteCallN() > e.MaxWritesPerRequest {
-		return nil, ErrTooManyWrites
+		return resp, ErrTooManyWrites
 	}
 
 	// Default options.
@@ -105,15 +106,17 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	if !opt.Remote {
 		for i := range q.Calls {
 			if err := e.translateCall(index, idx, q.Calls[i]); err != nil {
-				return nil, err
+				return resp, err
 			}
 		}
 	}
 
 	results, err := e.execute(ctx, index, q, shards, opt)
 	if err != nil {
-		return nil, err
+		return resp, err
 	}
+
+	resp.Results = results
 
 	// Translate response objects from ids to keys, if necessary.
 	// No need to translate a remote call.
@@ -121,11 +124,67 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 		for i := range results {
 			results[i], err = e.translateResult(index, idx, q.Calls[i], results[i])
 			if err != nil {
-				return nil, err
+				return resp, err
 			}
 		}
 	}
-	return results, nil
+
+	// Fill column attributes if requested.
+	if opt.ColumnAttrs {
+		// Consolidate all column ids across all calls.
+		var columnIDs []uint64
+		for _, result := range results {
+			bm, ok := result.(*Row)
+			if !ok {
+				continue
+			}
+			columnIDs = uint64Slice(columnIDs).merge(bm.Columns())
+		}
+
+		// Retrieve column attributes across all calls.
+		columnAttrSets, err := e.readColumnAttrSets(e.Holder.Index(index), columnIDs)
+		if err != nil {
+			return resp, errors.Wrap(err, "reading column attrs")
+		}
+
+		// Translate column attributes, if necessary.
+		if e.Holder.translateFile != nil {
+			for _, col := range resp.ColumnAttrSets {
+				v, err := e.Holder.translateFile.TranslateColumnToString(index, col.ID)
+				if err != nil {
+					return resp, err
+				}
+				col.Key, col.ID = v, 0
+			}
+		}
+
+		resp.ColumnAttrSets = columnAttrSets
+	}
+
+	return resp, nil
+}
+
+// readColumnAttrSets returns a list of column attribute objects by id.
+func (e *executor) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet, error) {
+	if index == nil {
+		return nil, nil
+	}
+
+	ax := make([]*ColumnAttrSet, 0, len(ids))
+	for _, id := range ids {
+		// Read attributes for column. Skip column if empty.
+		attrs, err := index.ColumnAttrStore().Attrs(id)
+		if err != nil {
+			return nil, errors.Wrap(err, "getting attrs")
+		} else if len(attrs) == 0 {
+			continue
+		}
+
+		// Append column with attributes.
+		ax = append(ax, &ColumnAttrSet{ID: id, Attrs: attrs})
+	}
+
+	return ax, nil
 }
 
 func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *execOptions) ([]interface{}, error) {
