@@ -675,6 +675,7 @@ func (s *Server) monitorDiagnostics() {
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
 	s.diagnostics.Set("NodeID", s.nodeID)
 	s.diagnostics.Set("ClusterID", s.cluster.id)
+	s.diagnostics.EnrichWithCPUInfo()
 	s.diagnostics.EnrichWithOSInfo()
 
 	// Flush the diagnostics metrics at startup, then on each tick interval
