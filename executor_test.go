@@ -1020,6 +1020,58 @@ func TestExecutor_Execute_Range(t *testing.T) {
 	})
 }
 
+// Ensure a range query with keys can be executed.
+func TestExecutor_Execute_Range_WithKeys(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+	// Create index.
+	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+
+	// Create field.
+	if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")), pilosa.OptFieldKeys()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set columns.
+	cc := `
+        Set(2, f="foo", 1999-12-31T00:00)
+        Set(3, f="foo", 2000-01-01T00:00)
+        Set(4, f="foo", 2000-01-02T00:00)
+        Set(5, f="foo", 2000-02-01T00:00)
+        Set(6, f="foo", 2001-01-01T00:00)
+        Set(7, f="foo", 2002-01-01T02:00)
+
+        Set(2, f="foo", 1999-12-30T00:00)
+        Set(2, f="foo", 2002-02-01T00:00)
+        Set(2, f="bar", 2001-01-01T00:00)
+	`
+	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: cc}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("Standard", func(t *testing.T) {
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Range(f="foo", 1999-12-31T00:00, 2002-01-01T03:00)`}); err != nil {
+			t.Fatal(err)
+		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{2, 3, 4, 5, 6, 7}) {
+			t.Fatalf("unexpected columns: %+v", columns)
+		}
+	})
+
+	t.Run("Clear", func(t *testing.T) {
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Clear( 2, f="foo")`}); err != nil {
+			t.Fatal(err)
+		}
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Range(f="foo", 1999-12-31T00:00, 2002-01-01T03:00)`}); err != nil {
+			t.Fatal(err)
+		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{3, 4, 5, 6, 7}) {
+			t.Fatalf("unexpected columns: %+v", columns)
+		}
+	})
+}
+
 // Ensure a Range(bsiGroup) query can be executed.
 func TestExecutor_Execute_BSIGroupRange(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
