@@ -1494,11 +1494,16 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	resp := &pilosa.ImportResponse{}
 	// TODO give meaningful stats for import
 	err = h.api.ImportRoaring(r.Context(), urlVars["index"], urlVars["field"], shard, remote, body)
-	resp := &pilosa.ImportResponse{}
 	if err != nil {
 		resp.Err = err.Error()
+		if _, ok := err.(pilosa.BadRequestError); ok {
+			w.WriteHeader(http.StatusBadRequest)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
 	}
 	// Marshal response object.
 	buf, err := h.api.Serializer.Marshal(resp)
