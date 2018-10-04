@@ -292,6 +292,14 @@ Store(Row(stargazer=1), stargazer=2)
 {"results":[true]}
 ```
 
+Store the results of the intersection of stargazer rows 10 and 11 into stargazer row 20.
+```request
+Store(Intersect(Row(stargazer=10), Row(stargazer=11)), stargazer=20)
+```
+```response
+{"results":[true]}
+```
+
 ### Read Operations
 
 #### Row
