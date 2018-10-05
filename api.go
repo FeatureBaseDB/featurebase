@@ -697,63 +697,90 @@ func (api *API) FieldAttrDiff(_ context.Context, indexName string, fieldName str
 }
 
 // Import bulk imports data into a particular index,field,shard.
-func (api *API) Import(_ context.Context, req *ImportRequest) error {
+func (api *API) Import(ctx context.Context, req *ImportRequest) error {
 	if err := api.validate(apiImport); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
+	if api.cluster.ownsShard(api.Node().ID, req.Index, req.Shard) {
 
-	index := api.holder.Index(req.Index)
-	if index == nil {
-		return newNotFoundError(ErrIndexNotFound)
-	}
-
-	field, err := api.indexField(req.Index, req.Field, req.Shard)
-	if err != nil {
-		return errors.Wrap(err, "getting field")
-	}
-
-	// Translate row keys.
-	if field.keys() {
-		if len(req.RowIDs) != 0 {
-			return errors.New("row ids cannot be used because field uses string keys")
+		index := api.holder.Index(req.Index)
+		if index == nil {
+			return newNotFoundError(ErrIndexNotFound)
 		}
-		if req.RowIDs, err = api.holder.translateFile.TranslateRowsToUint64(index.Name(), field.Name(), req.RowKeys); err != nil {
-			return errors.Wrap(err, "translating rows")
-		}
-	}
 
-	// Translate column keys.
-	if index.Keys() {
-		if len(req.ColumnIDs) != 0 {
-			return errors.New("column ids cannot be used because index uses string keys")
+		field, err := api.indexField(req.Index, req.Field, req.Shard)
+		if err != nil {
+			return errors.Wrap(err, "getting field")
 		}
-		if req.ColumnIDs, err = api.holder.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
-			return errors.Wrap(err, "translating columns")
+
+		// Translate row keys.
+		if field.keys() {
+			if len(req.RowIDs) != 0 {
+				return errors.New("row ids cannot be used because field uses string keys")
+			}
+			if req.RowIDs, err = api.holder.translateFile.TranslateRowsToUint64(index.Name(), field.Name(), req.RowKeys); err != nil {
+				return errors.Wrap(err, "translating rows")
+			}
 		}
-	}
 
-	// Convert timestamps to time.Time.
-	timestamps := make([]*time.Time, len(req.Timestamps))
-	for i, ts := range req.Timestamps {
-		if ts == 0 {
-			continue
+		// Translate column keys.
+		if index.Keys() {
+			if len(req.ColumnIDs) != 0 {
+				return errors.New("column ids cannot be used because index uses string keys")
+			}
+			if req.ColumnIDs, err = api.holder.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
+				return errors.Wrap(err, "translating columns")
+			}
 		}
-		t := time.Unix(0, ts).UTC()
-		timestamps[i] = &t
-	}
 
-	// Import columnIDs into existence field.
-	if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
-		api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
-		return errors.Wrap(err, "importing existence columns")
-	}
+		// Convert timestamps to time.Time.
+		timestamps := make([]*time.Time, len(req.Timestamps))
+		for i, ts := range req.Timestamps {
+			if ts == 0 {
+				continue
+			}
+			t := time.Unix(0, ts).UTC()
+			timestamps[i] = &t
+		}
 
-	// Import into fragment.
-	err = field.Import(req.RowIDs, req.ColumnIDs, timestamps)
-	if err != nil {
-		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+		// Import columnIDs into existence field.
+		if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
+			api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+			return errors.Wrap(err, "importing existence columns")
+		}
+
+		// Import into fragment.
+		err = field.Import(req.RowIDs, req.ColumnIDs, timestamps)
+		if err != nil {
+			api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+		}
+		return errors.Wrap(err, "importing")
 	}
-	return errors.Wrap(err, "importing")
+	//if here need to forward to the correct node
+	bits := make([]Bit, len(req.ColumnIDs))
+	for i := range req.ColumnIDs {
+		bit := Bit{}
+		if len(req.RowIDs) > 0 {
+			bit.RowID = req.RowIDs[i]
+		}
+		if len(req.ColumnIDs) > 0 {
+			bit.ColumnID = req.ColumnIDs[i]
+		}
+		if len(req.RowKeys) > 0 {
+			bit.RowKey = req.RowKeys[i]
+		}
+		if len(req.ColumnKeys) > 0 {
+			bit.ColumnKey = req.ColumnKeys[i]
+		}
+		if len(req.Timestamps) > 0 {
+			bit.Timestamp = req.Timestamps[i]
+		}
+		bits[i] = bit
+	}
+	if err := api.server.defaultClient.Import(ctx, req.Index, req.Field, req.Shard, bits); err != nil {
+		return errors.Wrap(err, "importing forward")
+	}
+	return nil
 }
 
 // ImportValue bulk imports values into a particular field.
