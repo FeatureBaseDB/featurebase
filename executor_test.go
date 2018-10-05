@@ -1561,6 +1561,36 @@ func TestExecutor_QueryCall(t *testing.T) {
 		}
 	})
 
+	t.Run("columnAttrsWithKeys", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		// Set columns for rows 0, 10, & 20 across two shards.
+		if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{Keys: true}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateField("f", pilosa.OptFieldKeys()); err != nil {
+			t.Fatal(err)
+		} else if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+			Set("one-hundred", f="ten")
+			SetColumnAttrs("one-hundred", foo="bar")
+		`}); err != nil {
+			t.Fatal(err)
+		}
+
+		targetColAttrSets := []*pilosa.ColumnAttrSet{
+			{Key: "one-hundred", Attrs: map[string]interface{}{"foo": "bar"}},
+		}
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Options(Row(f="ten"), columnAttrs=true)`}); err != nil {
+			t.Fatal(err)
+		} else if keys := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"one-hundred"}) {
+			t.Fatalf("unexpected keys: %+v", keys)
+		} else if attrs := res.ColumnAttrSets; !reflect.DeepEqual(attrs, targetColAttrSets) {
+			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
+		}
+	})
+
 	t.Run("shards", func(t *testing.T) {
 		c := test.MustRunCluster(t, 1)
 		defer c.Close()
