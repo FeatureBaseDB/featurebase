@@ -1766,10 +1766,10 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 }
 
 var translateCallCol = map[string]struct{}{
-	"Set":            struct{}{},
-	"Clear":          struct{}{},
-	"Row":            struct{}{},
-	"SetColumnAttrs": struct{}{},
+	"Set":            {},
+	"Clear":          {},
+	"Row":            {},
+	"SetColumnAttrs": {},
 }
 
 func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
