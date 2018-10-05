@@ -1798,16 +1798,17 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 
 func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 	var colKey, rowKey, fieldName string
-	if c.Name == "Set" || c.Name == "Clear" || c.Name == "Row" {
+	switch c.Name {
+	case "Set", "Clear", "Row", "Range":
 		// Positional args in new PQL syntax require special handling here.
 		colKey = "_" + columnLabel
 		fieldName, _ = c.FieldArg()
 		rowKey = fieldName
-	} else if c.Name == "SetRowAttrs" {
+	case "SetRowAttrs":
 		// Positional args in new PQL syntax require special handling here.
 		rowKey = "_" + rowLabel
 		fieldName = callArgString(c, "_field")
-	} else {
+	default:
 		colKey = "col"
 		fieldName = callArgString(c, "field")
 		rowKey = "row"
