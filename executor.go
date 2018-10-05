@@ -243,6 +243,8 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return e.executeClearBit(ctx, index, c, opt)
 	case "ClearRow":
 		return e.executeClearRow(ctx, index, c, shards, opt)
+	case "Store":
+		return e.executeSetRow(ctx, index, c, shards, opt)
 	case "Count":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeCount(ctx, index, c, shards, opt)
@@ -1272,6 +1274,94 @@ func (e *executor) executeClearRowShard(_ context.Context, index string, c *pql.
 	return changed, nil
 }
 
+// executeSetRow executes a SetRow() call.
+func (e *executor) executeSetRow(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (bool, error) {
+	// Ensure the field type supports SetRow().
+	fieldName, err := c.FieldArg()
+	if err != nil {
+		return false, errors.New("SetRow() argument required: field")
+	}
+	field := e.Holder.Field(index, fieldName)
+	if field == nil {
+		return false, ErrFieldNotFound
+	}
+	if field.Type() != FieldTypeSet {
+		return false, fmt.Errorf("SetRow() is not supported on %s field types", field.Type())
+	}
+
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeSetRowShard(ctx, index, c, shard)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		val := v.(bool)
+		if prev == nil {
+			return val
+		}
+		return val || prev.(bool)
+	}
+
+	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	return result.(bool), err
+}
+
+// executeSetRowShard executes a SetRow() call for a single shard.
+func (e *executor) executeSetRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (bool, error) {
+	fieldName, err := c.FieldArg()
+	if err != nil {
+		return false, errors.New("SetRow() argument required: field")
+	}
+
+	// Read fields using labels.
+	rowID, ok, err := c.UintArg(fieldName)
+	if err != nil {
+		return false, fmt.Errorf("reading SetRow() row: %v", err)
+	} else if !ok {
+		return false, fmt.Errorf("SetRow() row argument '%v' required", rowLabel)
+	}
+
+	field := e.Holder.Field(index, fieldName)
+	if field == nil {
+		return false, ErrFieldNotFound
+	}
+
+	// Retrieve source row.
+	var src *Row
+	if len(c.Children) == 1 {
+		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
+		if err != nil {
+			return false, errors.Wrap(err, "getting source row")
+		}
+		src = row
+	} else {
+		return false, errors.New("SetRow() requires a source row")
+	}
+
+	// Set the row on the standard view.
+	changed := false
+	fragment := e.Holder.fragment(index, fieldName, viewStandard, shard)
+	if fragment == nil {
+		// Since the destination fragment doesn't exist, create one.
+		view, err := field.createViewIfNotExists(viewStandard)
+		if err != nil {
+			return false, errors.Wrap(err, "creating view")
+		}
+		fragment, err = view.createFragmentIfNotExists(shard)
+		if err != nil {
+			return false, errors.Wrapf(err, "creating fragment: %d", shard)
+		}
+	}
+	set, err := fragment.setRow(src, rowID)
+	if err != nil {
+		return false, errors.Wrapf(err, "setting row %d on view %s shard %d", rowID, viewStandard, shard)
+	}
+	changed = changed || set
+
+	return changed, nil
+}
+
 // executeSet executes a Set() call.
 func (e *executor) executeSet(ctx context.Context, index string, c *pql.Call, opt *execOptions) (bool, error) {
 	// Read colID.
@@ -1765,25 +1855,19 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 	}
 }
 
-var translateCallCol = map[string]struct{}{
-	"Set":            {},
-	"Clear":          {},
-	"Row":            {},
-	"SetColumnAttrs": {},
-}
-
 func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 	var colKey, rowKey, fieldName string
-	if _, ok := translateCallCol[c.Name]; ok {
+	switch c.Name {
+	case "Set", "Clear", "Row", "Range", "SetColumnAttrs":
 		// Positional args in new PQL syntax require special handling here.
 		colKey = "_" + columnLabel
 		fieldName, _ = c.FieldArg()
 		rowKey = fieldName
-	} else if c.Name == "SetRowAttrs" {
+	case "SetRowAttrs":
 		// Positional args in new PQL syntax require special handling here.
 		rowKey = "_" + rowLabel
 		fieldName = callArgString(c, "_field")
-	} else {
+	default:
 		colKey = "col"
 		fieldName = callArgString(c, "field")
 		rowKey = "row"

@@ -266,6 +266,40 @@ ClearRow(stargazer=1)
 
 This represents removing the relationship between the user with id=1 and all repositories.
 
+#### Store
+
+**Spec:**
+
+```
+Store(<ROW_CALL>, <FIELD>=<ROW>)
+```
+
+**Description:**
+
+`Store` writes the results of <ROW_CALL> to the specified row. If the row already exists, it will be replaced. The destination field must be of field type `set`.
+
+**Result Type:** boolean
+
+Upon success, this method always returns `true`. A future version of Pilosa may use this boolean result to indicate whether or not the data in the destination row was changed by the `Store` call.
+
+**Examples:**
+
+Store the contents of stargazer row 1 into stargazer row 2:
+```request
+Store(Row(stargazer=1), stargazer=2)
+```
+```response
+{"results":[true]}
+```
+
+Store the results of the intersection of stargazer rows 10 and 11 into stargazer row 20.
+```request
+Store(Intersect(Row(stargazer=10), Row(stargazer=11)), stargazer=20)
+```
+```response
+{"results":[true]}
+```
+
 ### Read Operations
 
 #### Row
