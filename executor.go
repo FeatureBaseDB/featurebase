@@ -118,17 +118,6 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 
 	resp.Results = results
 
-	// Translate response objects from ids to keys, if necessary.
-	// No need to translate a remote call.
-	if !opt.Remote {
-		for i := range results {
-			results[i], err = e.translateResult(index, idx, q.Calls[i], results[i])
-			if err != nil {
-				return resp, err
-			}
-		}
-	}
-
 	// Fill column attributes if requested.
 	if opt.ColumnAttrs {
 		// Consolidate all column ids across all calls.
@@ -148,8 +137,8 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 		}
 
 		// Translate column attributes, if necessary.
-		if e.Holder.translateFile != nil {
-			for _, col := range resp.ColumnAttrSets {
+		if idx.Keys() {
+			for _, col := range columnAttrSets {
 				v, err := e.Holder.translateFile.TranslateColumnToString(index, col.ID)
 				if err != nil {
 					return resp, err
@@ -159,6 +148,17 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 		}
 
 		resp.ColumnAttrSets = columnAttrSets
+	}
+
+	// Translate response objects from ids to keys, if necessary.
+	// No need to translate a remote call.
+	if !opt.Remote {
+		for i := range results {
+			results[i], err = e.translateResult(index, idx, q.Calls[i], results[i])
+			if err != nil {
+				return resp, err
+			}
+		}
 	}
 
 	return resp, nil
@@ -1765,9 +1765,16 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 	}
 }
 
+var translateCallCol = map[string]struct{}{
+	"Set":            struct{}{},
+	"Clear":          struct{}{},
+	"Row":            struct{}{},
+	"SetColumnAttrs": struct{}{},
+}
+
 func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 	var colKey, rowKey, fieldName string
-	if c.Name == "Set" || c.Name == "Clear" || c.Name == "Row" {
+	if _, ok := translateCallCol[c.Name]; ok {
 		// Positional args in new PQL syntax require special handling here.
 		colKey = "_" + columnLabel
 		fieldName, _ = c.FieldArg()
