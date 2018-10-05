@@ -170,13 +170,34 @@ func (h *Handler) Close() error {
 
 func (h *Handler) populateValidators() {
 	h.validators = map[string]*queryValidationSpec{}
-	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("shard", "index")
-	h.validators["GetShardMax"] = queryValidationSpecRequired()
-	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("shards", "columnAttrs", "excludeRowAttrs", "excludeColumns")
+	h.validators["Home"] = queryValidationSpecRequired()
+	h.validators["PostClusterResizeAbort"] = queryValidationSpecRequired()
+	h.validators["PostClusterResizeRemoveNode"] = queryValidationSpecRequired()
+	h.validators["PostClusterResizeSetCoordinator"] = queryValidationSpecRequired()
 	h.validators["GetExport"] = queryValidationSpecRequired("index", "field", "shard")
-	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "field", "shard")
-	h.validators["PostFragmentData"] = queryValidationSpecRequired("index", "field", "shard")
+	h.validators["GetIndexes"] = queryValidationSpecRequired()
+	h.validators["GetIndex"] = queryValidationSpecRequired()
+	h.validators["PostIndex"] = queryValidationSpecRequired()
+	h.validators["DeleteIndex"] = queryValidationSpecRequired()
+	h.validators["PostField"] = queryValidationSpecRequired()
+	h.validators["DeleteField"] = queryValidationSpecRequired()
+	h.validators["PostImport"] = queryValidationSpecRequired()
+	h.validators["PostImportRoaring"] = queryValidationSpecRequired().Optional("remote")
+	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("shards", "columnAttrs", "excludeRowAttrs", "excludeColumns")
+	h.validators["GetInfo"] = queryValidationSpecRequired()
+	h.validators["RecalculateCaches"] = queryValidationSpecRequired()
+	h.validators["GetSchema"] = queryValidationSpecRequired()
+	h.validators["GetStatus"] = queryValidationSpecRequired()
+	h.validators["GetVersion"] = queryValidationSpecRequired()
+	h.validators["PostClusterMessage"] = queryValidationSpecRequired()
+	h.validators["GetFragmentBlockData"] = queryValidationSpecRequired()
 	h.validators["GetFragmentBlocks"] = queryValidationSpecRequired("index", "field", "view", "shard")
+	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("shard", "index")
+	h.validators["PostIndexAttrDiff"] = queryValidationSpecRequired()
+	h.validators["PostFieldAttrDiff"] = queryValidationSpecRequired()
+	h.validators["GetNodes"] = queryValidationSpecRequired()
+	h.validators["GetShardMax"] = queryValidationSpecRequired()
+	h.validators["GetTranslateData"] = queryValidationSpecRequired("offset")
 }
 
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
@@ -203,40 +224,40 @@ func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
 // newRouter creates a new mux http router.
 func newRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
-	router.HandleFunc("/", handler.handleHome).Methods("GET")
-	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST")
-	router.HandleFunc("/cluster/resize/remove-node", handler.handlePostClusterResizeRemoveNode).Methods("POST")
-	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST")
+	router.HandleFunc("/", handler.handleHome).Methods("GET").Name("Home")
+	router.HandleFunc("/cluster/resize/abort", handler.handlePostClusterResizeAbort).Methods("POST").Name("PostClusterResizeAbort")
+	router.HandleFunc("/cluster/resize/remove-node", handler.handlePostClusterResizeRemoveNode).Methods("POST").Name("PostClusterResizeRemoveNode")
+	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST").Name("PostClusterResizeSetCoordinator")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET").Name("GetExport")
-	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET")
-	router.HandleFunc("/index/{index}", handler.handleGetIndex).Methods("GET")
-	router.HandleFunc("/index/{index}", handler.handlePostIndex).Methods("POST")
-	router.HandleFunc("/index/{index}", handler.handleDeleteIndex).Methods("DELETE")
+	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET").Name("GetIndexes")
+	router.HandleFunc("/index/{index}", handler.handleGetIndex).Methods("GET").Name("GetIndex")
+	router.HandleFunc("/index/{index}", handler.handlePostIndex).Methods("POST").Name("PostIndex")
+	router.HandleFunc("/index/{index}", handler.handleDeleteIndex).Methods("DELETE").Name("DeleteIndex")
 	//router.HandleFunc("/index/{index}/field", handler.handleGetFields).Methods("GET") // Not implemented.
-	router.HandleFunc("/index/{index}/field/{field}", handler.handlePostField).Methods("POST")
-	router.HandleFunc("/index/{index}/field/{field}", handler.handleDeleteField).Methods("DELETE")
-	router.HandleFunc("/index/{index}/field/{field}/import", handler.handlePostImport).Methods("POST")
-	router.HandleFunc("/index/{index}/field/{field}/import-roaring/{shard}", handler.handlePostImportRoaring).Methods("POST")
+	router.HandleFunc("/index/{index}/field/{field}", handler.handlePostField).Methods("POST").Name("PostField")
+	router.HandleFunc("/index/{index}/field/{field}", handler.handleDeleteField).Methods("DELETE").Name("DeleteField")
+	router.HandleFunc("/index/{index}/field/{field}/import", handler.handlePostImport).Methods("POST").Name("PostImport")
+	router.HandleFunc("/index/{index}/field/{field}/import-roaring/{shard}", handler.handlePostImportRoaring).Methods("POST").Name("PostImportRoaring")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
-	router.HandleFunc("/info", handler.handleGetInfo).Methods("GET")
-	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST")
-	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET")
-	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET")
-	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET")
+	router.HandleFunc("/info", handler.handleGetInfo).Methods("GET").Name("GetInfo")
+	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST").Name("RecalculateCaches")
+	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET").Name("GetSchema")
+	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET").Name("GetStatus")
+	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET").Name("GetVersion")
 
 	// /internal endpoints are for internal use only; they may change at any time.
 	// DO NOT rely on these for external applications!
-	router.HandleFunc("/internal/cluster/message", handler.handlePostClusterMessage).Methods("POST")
-	router.HandleFunc("/internal/fragment/block/data", handler.handleGetFragmentBlockData).Methods("GET")
+	router.HandleFunc("/internal/cluster/message", handler.handlePostClusterMessage).Methods("POST").Name("PostClusterMessage")
+	router.HandleFunc("/internal/fragment/block/data", handler.handleGetFragmentBlockData).Methods("GET").Name("GetFragmentBlockData")
 	router.HandleFunc("/internal/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET").Name("GetFragmentBlocks")
 	router.HandleFunc("/internal/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET").Name("GetFragmentNodes")
-	router.HandleFunc("/internal/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST")
-	router.HandleFunc("/internal/index/{index}/field/{field}/attr/diff", handler.handlePostFieldAttrDiff).Methods("POST")
+	router.HandleFunc("/internal/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST").Name("PostIndexAttrDiff")
+	router.HandleFunc("/internal/index/{index}/field/{field}/attr/diff", handler.handlePostFieldAttrDiff).Methods("POST").Name("PostFieldAttrDiff")
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
-	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET") // TODO: deprecate, but it's being used by the client
-	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET")
+	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
+	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET").Name("GetTranslateData")
 
 	// TODO: Apply MethodNotAllowed statuses to all endpoints.
 	// Ideally this would be automatic, as described in this (wontfix) ticket:
@@ -521,7 +542,12 @@ func (p *postIndexRequest) UnmarshalJSON(b []byte) error {
 		return err
 	}
 	// Unmarshal expected values.
-	var _p _postIndexRequest
+	_p := _postIndexRequest{
+		Options: pilosa.IndexOptions{
+			Keys:           false,
+			TrackExistence: true,
+		},
+	}
 	if err := json.Unmarshal(b, &_p); err != nil {
 		return errors.Wrap(err, "unmarshalling expected values")
 	}
@@ -597,7 +623,12 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 	resp := successResponse{}
 
 	// Decode request.
-	var req postIndexRequest
+	req := postIndexRequest{
+		Options: pilosa.IndexOptions{
+			Keys:           false,
+			TrackExistence: true,
+		},
+	}
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil && err != io.EOF {
 		resp.write(w, err)
@@ -1473,11 +1504,16 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	resp := &pilosa.ImportResponse{}
 	// TODO give meaningful stats for import
 	err = h.api.ImportRoaring(r.Context(), urlVars["index"], urlVars["field"], shard, remote, body)
-	resp := &pilosa.ImportResponse{}
 	if err != nil {
 		resp.Err = err.Error()
+		if _, ok := err.(pilosa.BadRequestError); ok {
+			w.WriteHeader(http.StatusBadRequest)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
 	}
 	// Marshal response object.
 	buf, err := h.api.Serializer.Marshal(resp)
