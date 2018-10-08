@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
 )
 
@@ -1013,19 +1014,18 @@ func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Ca
 	}
 
 	filters := []rowFilter{}
-	if limit, hasLimit, err := c.UintArg("limit"); err != nil {
-		return nil, errors.Wrap(err, "getting limit")
-	} else if hasLimit {
-		filters = append(filters, (&filterWithLimit{limit: limit}).filter)
-	}
-
 	if columnID, ok, err := c.UintArg("column"); err != nil {
 		return nil, err
 	} else if ok {
-		return frag.rowsForColumn(start, columnID, filters...), nil
-	} else {
-		return frag.rows(start, filters...), nil
+		filters = append(filters, filterColumn(columnID))
 	}
+	if limit, hasLimit, err := c.UintArg("limit"); err != nil {
+		return nil, errors.Wrap(err, "getting limit")
+	} else if hasLimit {
+		filters = append(filters, filterWithLimit(limit))
+	}
+
+	return frag.rows(start, filters...), nil
 }
 
 // getGroupByFilterFunction returns a rowFilter based on the
@@ -1064,10 +1064,10 @@ func getGroupByFilterFunction(fieldDirective string) (ret []rowFilter, err error
 		}
 	}
 	if hasOffset {
-		ret = append(ret, (&filterWithOffset{offset: offset}).filter)
+		ret = append(ret, filterWithOffset(offset))
 	}
 	if hasLimit {
-		ret = append(ret, (&filterWithLimit{limit: limit}).filter)
+		ret = append(ret, filterWithLimit(limit))
 	}
 	return ret, nil
 }
@@ -2319,22 +2319,31 @@ func isString(v interface{}) bool {
 	return ok
 }
 
-type filterWithOffset struct {
-	offset uint64
-}
-
-func (fo *filterWithOffset) filter(rowID uint64) (bool, bool) {
-	return rowID >= fo.offset, false
-}
-
-type filterWithLimit struct {
-	limit uint64
-}
-
-func (fl *filterWithLimit) filter(rowID uint64) (bool, bool) { // nolint: unparam
-	if fl.limit > 0 {
-		fl.limit--
-		return true, false
+func filterWithOffset(offset uint64) rowFilter {
+	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
+		return rowID >= offset, false
 	}
-	return false, true
+}
+
+// filterWithLimit returns a filter which will only allow a limited number of
+// rows to be returned. It should be applied last so that it is only called (and
+// therefore only updates its internal state) if the row is being included by
+// every other filter.
+func filterWithLimit(limit uint64) rowFilter {
+	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
+		if limit > 0 {
+			limit--
+			return true, false
+		}
+		return false, true
+	}
+}
+
+func filterColumn(col uint64) rowFilter {
+	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
+		colID := col % ShardWidth
+		colKey := ((rowID * ShardWidth) + colID) >> 16
+		colVal := uint16(colID & 0xFFFF) // columnID within the container
+		return colKey == key && c.Contains(colVal), false
+	}
 }

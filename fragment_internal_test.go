@@ -1346,7 +1346,7 @@ func TestFragment_RowsIteration(t *testing.T) {
 			t.Fatalf("Do not match %v %v", expectedAll, ids)
 		}
 
-		ids = f.rowsForColumn(0, 1)
+		ids = f.rows(0, filterColumn(1))
 		if !reflect.DeepEqual(expectedOdd, ids) {
 			t.Fatalf("Do not match %v %v", expectedOdd, ids)
 		}
@@ -1370,7 +1370,7 @@ func TestFragment_RowsIteration(t *testing.T) {
 			t.Fatalf("Do not match %v %v", expected, ids)
 		}
 
-		ids = f.rowsForColumn(0, 66000)
+		ids = f.rows(0, filterColumn(66000))
 		if !reflect.DeepEqual(expected, ids) {
 			t.Fatalf("Do not match %v %v", expected, ids)
 		}
@@ -1392,7 +1392,7 @@ func TestFragment_RowsIteration(t *testing.T) {
 				if !reflect.DeepEqual(expectedRows, ids) {
 					t.Fatalf("Do not match %v %v", expectedRows, ids)
 				}
-				ids = f.rowsForColumn(0, c)
+				ids = f.rows(0, filterColumn(c))
 				if !reflect.DeepEqual(expectedRows, ids) {
 					t.Fatalf("Do not match %v %v", expectedRows, ids)
 				}

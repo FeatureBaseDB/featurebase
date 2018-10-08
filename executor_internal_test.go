@@ -120,3 +120,21 @@ func isInt(a interface{}) bool {
 		return false
 	}
 }
+
+func TestFilterWithLimit(t *testing.T) {
+	f := filterWithLimit(5)
+
+	for i := uint64(0); i < 5; i++ {
+		include, done := f(i, i*(1<<shardVsContainerExponent), nil)
+		if done {
+			t.Fatalf("limit filter ended early on iteration %d", i)
+		}
+		if !include {
+			t.Fatalf("limit filter should always include until done")
+		}
+	}
+	inc, done := f(5, 5*(1<<shardVsContainerExponent)+1, nil)
+	if !done {
+		t.Fatalf("limit filter should have been done, but got inc: %v done: %v", inc, done)
+	}
+}
