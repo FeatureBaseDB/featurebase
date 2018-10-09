@@ -1229,7 +1229,7 @@ Set(4500001, fn=4)
 	t.Run("remote groupBy", func(t *testing.T) {
 		if res, err := c[1].API.Query(context.Background(), &pilosa.QueryRequest{
 			Index: "i",
-			Query: `GroupBy(fields=[f])`,
+			Query: `GroupBy(Rows(field=f))`,
 		}); err != nil {
 			t.Fatalf("GroupBy querying: %v", err)
 		} else {
@@ -1819,22 +1819,15 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 
 	t.Run("No Field List Arguments", func(t *testing.T) {
 		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy()`}); err != nil {
-			if errors.Cause(err) != pilosa.ErrFieldsArgumentRequired {
-				t.Fatalf("unexpected error\n\"%s\" not returned instead \n\"%s\"", pilosa.ErrFieldsArgumentRequired, err)
+			if !strings.Contains(err.Error(), "need at least one child call") {
+				t.Fatalf("unexpected error: \"%v\"", err)
 			}
 		}
 	})
 	t.Run("Unknown Field ", func(t *testing.T) {
-		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(fields=[missing])`}); err != nil {
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(Rows(field=missing))`}); err != nil {
 			if errors.Cause(err) != pilosa.ErrFieldNotFound {
 				t.Fatalf("unexpected error\n\"%s\" not returned instead \n\"%s\"", pilosa.ErrFieldNotFound, err)
-			}
-		}
-	})
-	t.Run("Bad Field Format", func(t *testing.T) {
-		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(fields=missing)`}); err != nil {
-			if errors.Cause(err) != pilosa.ErrExpectedFieldListArgument {
-				t.Fatalf("unexpected error\n\"%s\" not returned instead \n\"%s\"", pilosa.ErrExpectedFieldListArgument, err)
 			}
 		}
 	})
@@ -1846,7 +1839,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 100}}, Count: 3},
 		}
 
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(fields=[general,sub])`}); err != nil {
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(Rows(field=general), Rows(field=sub))`}); err != nil {
 			t.Fatal(err)
 		} else {
 			results := res.Results[0].([]pilosa.GroupCount)
@@ -1860,7 +1853,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			{Group: []pilosa.FieldRow{{Field: "general", RowID: 12}}, Count: 2},
 		}
 
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(fields=[general:11:])`}); err != nil {
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(Rows(field=general, previous=10))`}); err != nil {
 			t.Fatal(err)
 		} else {
 			results := res.Results[0].([]pilosa.GroupCount)
@@ -1873,7 +1866,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			{Group: []pilosa.FieldRow{{Field: "general", RowID: 11}}, Count: 2},
 		}
 
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(fields=[general:11:1])`}); err != nil {
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(Rows(field=general, previous=10, limit=1))`}); err != nil {
 			t.Fatal(err)
 		} else {
 			results := res.Results[0].([]pilosa.GroupCount)

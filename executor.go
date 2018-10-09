@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -768,9 +767,40 @@ func (r RowIDs) merge(other RowIDs, limit int) RowIDs {
 }
 
 func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) ([]GroupCount, error) {
+	// validate call
+	if len(c.Children) == 0 {
+		return nil, errors.New("need at least one child call")
+	}
+	// get limit
+	gbLimit := int(^uint(0) >> 1) // largest signed int
+	if limit, hasLimit, err := c.UintArg("limit"); err != nil {
+		return nil, err
+	} else if hasLimit {
+		gbLimit = int(limit)
+	}
+	// perform Rows queries - TODO, call async? run per shard in
+	// executeGroupByShard? (note: can only do this for Rows queries which do
+	// not include "column" arg)
+	childRows := make([]RowIDs, len(c.Children))
+	for i, child := range c.Children {
+		if child.Name != "Rows" {
+			return nil, errors.Errorf("'%s' is not a valid child query for GroupBy, must be 'Rows'", c.Name)
+		}
+		if limit, hasLimit, err := child.UintArg("limit"); err != nil {
+			return nil, err
+		} else if hasLimit && int(limit) > gbLimit {
+			child.Args["limit"] = uint64(gbLimit)
+		}
+		var err error
+		childRows[i], err = e.executeRows(ctx, index, child, shards, opt)
+		if err != nil {
+			return nil, errors.Wrap(err, "getting rows for ")
+		}
+	}
+
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(shard uint64) (interface{}, error) {
-		return e.executeGroupByShard(ctx, index, c, shard)
+		return e.executeGroupByShard(ctx, index, c, shard, childRows)
 	}
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
@@ -849,66 +879,39 @@ func mergeGroupCounts(gc, other []GroupCount) []GroupCount {
 	return gc
 }
 
-func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql.Call, shard uint64) ([]GroupCount, error) {
+func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql.Call, shard uint64, childRows []RowIDs) ([]GroupCount, error) {
 	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
 		return nil, ErrIndexNotFound
 	}
-	// fieldDirective is a combination of field
-	// instructions, represented as a string with
-	// the form [fieldName:offset:limit] or
-	// [fieldName:limit].
-	fieldDirectives, ok := c.Args["fields"]
-	if !ok {
-		return nil, errors.Wrap(ErrFieldsArgumentRequired, "executeGroupBy")
-	}
-	// Ensure that fieldDirectives is a list.
-	if _, ok := fieldDirectives.([]interface{}); !ok {
-		return nil, errors.Wrap(ErrExpectedFieldListArgument, "executeGroupBy")
-	}
-	// getFieldName extracts the fieldName portion of the
-	// fieldDirective.
-	getFieldName := func(s string) string {
-		parts := strings.Split(s, ":")
-		return parts[0]
-	}
-	// Ensure that all of the fields exist.
-	for _, fieldDirective := range fieldDirectives.([]interface{}) {
-		fieldName := getFieldName(fieldDirective.(string))
-		f := e.Holder.Field(index, fieldName)
-		if f == nil {
-			return nil, errors.Wrap(ErrFieldNotFound, fmt.Sprintf("executeGroupBy: %s", fieldDirective.(string)))
-		}
-	}
 
-	results := make([]GroupCount, 0)
 	var work [][]gbi
-	for _, fieldDirective := range fieldDirectives.([]interface{}) {
-		fieldName := getFieldName(fieldDirective.(string))
+	for i, rowIDs := range childRows {
+		fieldName := c.Children[i].Args["field"].(string) // this has already been validated by this point
 		// Fetch fragment.
 		frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
 		if frag == nil { // this means this whole shard doesn't have all it needs to continue
-			return results, nil
-		}
-		// Get filter based on the field directive.
-		filters, err := getGroupByFilterFunction(fieldDirective.(string))
-		if err != nil {
-			return nil, err
+			return []GroupCount{}, nil
 		}
 
 		set := make([]gbi, 0)
-		for _, rowID := range frag.rows(0, filters...) {
-			set = append(set, gbi{
-				row: frag.row(rowID),
-				fieldRow: FieldRow{
-					Field: fieldName,
-					RowID: rowID,
-				},
-			})
+		for _, rowID := range rowIDs {
+			rs := frag.rows(rowID, filterWithLimit(1))
+			if len(rs) > 0 && rs[0] == rowID {
+				set = append(set, gbi{
+					row: frag.row(rowID),
+					fieldRow: FieldRow{
+						Field: fieldName,
+						RowID: rowID,
+					},
+				})
+			}
 		}
 		work = append(work, set)
 	}
+
+	results := make([]GroupCount, 0)
 	for _, group := range product(work) {
 		group.gCnt.Count = group.row.Count()
 		if group.gCnt.Count > 0 {
@@ -1017,6 +1020,10 @@ func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Ca
 	if columnID, ok, err := c.UintArg("column"); err != nil {
 		return nil, err
 	} else if ok {
+		colShard := columnID >> shardWidthExponent
+		if colShard != shard {
+			return RowIDs{}, nil
+		}
 		filters = append(filters, filterColumn(columnID))
 	}
 	if limit, hasLimit, err := c.UintArg("limit"); err != nil {
@@ -1026,50 +1033,6 @@ func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Ca
 	}
 
 	return frag.rows(start, filters...), nil
-}
-
-// getGroupByFilterFunction returns a rowFilter based on the
-// field directive provided.
-func getGroupByFilterFunction(fieldDirective string) (ret []rowFilter, err error) {
-	parts := strings.Split(fieldDirective, ":")
-	hasLimit := false
-	hasOffset := false
-	limit := uint64(0)
-	offset := uint64(0)
-	// fieldDirective can have one of the following forms:
-	// [fieldName]
-	// [fieldName:limit]
-	// [fieldName:offset:limit]
-	//
-	// Note that a field directive with the form
-	// [fieldName:offset:limit:extra] will be treated as
-	// [fieldName:offset:limit] (i.e. `extra` is ignored).
-	if len(parts) == 1 {
-		return ret, nil
-	} else if len(parts) == 2 {
-		hasLimit = true
-		if limit, err = strconv.ParseUint(parts[1], 10, 64); err != nil {
-			return ret, errors.Wrap(err, "getting groupby field limit only value")
-		}
-	} else {
-		hasOffset = true
-		if offset, err = strconv.ParseUint(parts[1], 10, 64); err != nil {
-			return ret, errors.Wrap(err, "getting groupby field offset value")
-		}
-		if parts[2] != "" {
-			hasLimit = true
-			if limit, err = strconv.ParseUint(parts[2], 10, 64); err != nil {
-				return ret, errors.Wrap(err, "getting groupby field limit value")
-			}
-		}
-	}
-	if hasOffset {
-		ret = append(ret, filterWithOffset(offset))
-	}
-	if hasLimit {
-		ret = append(ret, filterWithLimit(limit))
-	}
-	return ret, nil
 }
 
 func (e *executor) executeBitmapShard(_ context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
@@ -2317,12 +2280,6 @@ func callArgString(call *pql.Call, key string) string {
 func isString(v interface{}) bool {
 	_, ok := v.(string)
 	return ok
-}
-
-func filterWithOffset(offset uint64) rowFilter {
-	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
-		return rowID >= offset, false
-	}
 }
 
 // filterWithLimit returns a filter which will only allow a limited number of

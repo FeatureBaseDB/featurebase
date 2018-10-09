@@ -949,6 +949,10 @@ func decodeQueryResult(pb *internal.QueryResult) interface{} {
 		return pb.Changed
 	case queryResultTypeNil:
 		return nil
+	case queryResultTypeRowIDs:
+		return pilosa.RowIDs(pb.RowIDs)
+	case queryResultTypeRowIdentifiers:
+		return decodeRowIdentifiers(pb.RowIdentifiers)
 	case queryResultTypeGroupCounts:
 		return decodeGroupCounts(pb.GroupCounts)
 	}
@@ -998,6 +1002,13 @@ func decodeAttr(attr *internal.Attr) (key string, value interface{}) {
 		return attr.Key, attr.FloatValue
 	default:
 		return attr.Key, nil
+	}
+}
+
+func decodeRowIdentifiers(a *internal.RowIdentifiers) *pilosa.RowIdentifiers {
+	return &pilosa.RowIdentifiers{
+		Rows: a.Rows,
+		Keys: a.Keys,
 	}
 }
 
