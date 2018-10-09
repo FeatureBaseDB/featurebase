@@ -2189,37 +2189,36 @@ func BenchmarkExecutor_Existence_True(b *testing.B)  { benchmarkExistence(true, 
 func BenchmarkExecutor_Existence_False(b *testing.B) { benchmarkExistence(false, b) }
 
 func TestExecutor_Execute_Rows(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
+	c := test.MustRunCluster(t, 3)
 	defer c.Close()
-	hldr := test.Holder{Holder: c[0].Server.Holder()}
-	hldr.SetBit("i", "general", 10, 0)
-	hldr.SetBit("i", "general", 10, ShardWidth+1)
-	hldr.SetBit("i", "general", 11, 2)
-	hldr.SetBit("i", "general", 11, ShardWidth+2)
-	hldr.SetBit("i", "general", 12, 2)
-	hldr.SetBit("i", "general", 12, ShardWidth+2)
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "general")
+	c.ImportBits(t, "i", "general", [][2]uint64{
+		{10, 0},
+		{10, ShardWidth + 1},
+		{11, 2},
+		{11, ShardWidth + 2},
+		{12, 2},
+		{12, ShardWidth + 2},
+		{13, 3},
+	})
 
-	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=general)`}); err != nil {
-		t.Fatal(err)
-	} else if rows := res.Results[0].(pilosa.RowIdentifiers); !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{10, 11, 12}}) {
+	rows := c.Query(t, "i", `Rows(field=general)`).Results[0].(pilosa.RowIdentifiers)
+	if !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{10, 11, 12, 13}}) {
 		t.Fatalf("unexpected rows: %+v", rows)
 	}
 
-	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=general, limit=2)`}); err != nil {
-		t.Fatal(err)
-	} else if rows := res.Results[0].(pilosa.RowIdentifiers); !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{10, 11}}) {
+	rows = c.Query(t, "i", `Rows(field=general, limit=2)`).Results[0].(pilosa.RowIdentifiers)
+	if !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{10, 11}}) {
 		t.Fatalf("unexpected rows: %+v", rows)
 	}
 
-	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=general, previous=10,limit=2)`}); err != nil {
-		t.Fatal(err)
-	} else if rows := res.Results[0].(pilosa.RowIdentifiers); !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{11, 12}}) {
+	rows = c.Query(t, "i", `Rows(field=general, previous=10,limit=2)`).Results[0].(pilosa.RowIdentifiers)
+	if !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{11, 12}}) {
 		t.Fatalf("unexpected rows: %+v", rows)
 	}
 
-	if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=general, column=2)`}); err != nil {
-		t.Fatal(err)
-	} else if rows := res.Results[0].(pilosa.RowIdentifiers); !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{11, 12}}) {
+	rows = c.Query(t, "i", `Rows(field=general, column=2)`).Results[0].(pilosa.RowIdentifiers)
+	if !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{11, 12}}) {
 		t.Fatalf("unexpected rows: %+v", rows)
 	}
 }
