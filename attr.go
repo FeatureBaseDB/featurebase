@@ -203,25 +203,3 @@ func DecodeAttrs(v []byte) (map[string]interface{}, error) {
 	}
 	return decodeAttrs(pb.GetAttrs()), nil
 }
-
-// memAttrStore represents an in-memory implementation of the AttrStore interface.
-type memAttrStore struct {
-	store map[uint64]map[string]interface{}
-}
-
-func (s *memAttrStore) Path() string                                          { return "" }
-func (s *memAttrStore) Open() error                                           { return nil }
-func (s *memAttrStore) Close() error                                          { return nil }
-func (s *memAttrStore) Attrs(id uint64) (m map[string]interface{}, err error) { return s.store[id], nil }
-func (s *memAttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
-	s.store[id] = m
-	return nil
-}
-func (s *memAttrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
-	for id, v := range m {
-		s.store[id] = v
-	}
-	return nil
-}
-func (s *memAttrStore) Blocks() ([]AttrBlock, error)                                  { return nil, nil }
-func (s *memAttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) { return nil, nil }

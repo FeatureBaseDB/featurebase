@@ -68,4 +68,8 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVarP(&srv.Config.Metric.Host, "metric.host", "", srv.Config.Metric.Host, "Default URI to send metrics.")
 	flags.DurationVarP((*time.Duration)(&srv.Config.Metric.PollInterval), "metric.poll-interval", "", (time.Duration)(srv.Config.Metric.PollInterval), "Polling interval metrics.")
 	flags.BoolVarP((&srv.Config.Metric.Diagnostics), "metric.diagnostics", "", srv.Config.Metric.Diagnostics, "Enabled diagnostics reporting.")
+
+	// Tracing
+	flags.StringVarP(&srv.Config.Tracing.SamplerType, "tracing.sampler-type", "", srv.Config.Tracing.SamplerType, "Jaeger sampler type.")
+	flags.Float64VarP(&srv.Config.Tracing.SamplerParam, "tracing.sampler-param", "", srv.Config.Tracing.SamplerParam, "Jaeger sampler parameter.")
 }

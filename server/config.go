@@ -19,6 +19,7 @@ import (
 
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/toml"
+	"github.com/uber/jaeger-client-go"
 )
 
 // TLSConfig contains TLS configuration
@@ -91,6 +92,16 @@ type Config struct {
 		// Pilosa's developers.
 		Diagnostics bool `toml:"diagnostics"`
 	} `toml:"metric"`
+
+	Tracing struct {
+		// SamplerType is the type of sampler to use.
+		SamplerType string `toml:"sampler-type"`
+		// SamplerParam is the parameter passed to the tracing sampler.
+		// Its meaning is dependent on the type of sampler.
+		SamplerParam float64 `toml:"sampler-param"`
+		// AgentHostPort is the host:port of the local agent.
+		AgentHostPort string `toml:"agent-host-port"`
+	} `toml:"tracing"`
 }
 
 // NewConfig returns an instance of Config with default options.
@@ -132,6 +143,10 @@ func NewConfig() *Config {
 	// c.Metric.Host = ""
 	c.Metric.PollInterval = toml.Duration(0 * time.Minute)
 	c.Metric.Diagnostics = true
+
+	// Tracing config.
+	c.Tracing.SamplerType = jaeger.SamplerTypeRemote
+	c.Tracing.SamplerParam = 0.001
 
 	return c
 }
