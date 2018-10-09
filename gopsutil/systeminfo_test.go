@@ -15,7 +15,6 @@
 package gopsutil_test
 
 import (
-	"log"
 	"testing"
 
 	"github.com/pilosa/pilosa"
@@ -25,15 +24,6 @@ import (
 func TestSystemInfo(t *testing.T) {
 	var systemInfo pilosa.SystemInfo = gopsutil.NewSystemInfo()
 
-	//	Uptime()(uint64, error)
-	//	Platform()(string, error)
-	//	Family()(string, error)
-	//	OSVersion()(string, error)
-	//	KernelVersion()(string, error)
-	//	MemFree()(uint64, error)
-	//	MemTotal()(uint64, error)
-	//	MemUsed()(uint64, error)
-	//
 	uptime, err := systemInfo.Uptime()
 	if err != nil || uptime == 0 {
 		t.Fatalf("Error collecting uptime (error: %v)", err)
@@ -70,8 +60,12 @@ func TestSystemInfo(t *testing.T) {
 	}
 
 	memtotal, err := systemInfo.MemTotal()
-	log.Println(memtotal)
 	if err != nil {
 		t.Fatalf("Error getting memtotal. (memtotal: %v, error: %v)", memtotal, err)
+	}
+
+	cpuArch := systemInfo.CPUArch()
+	if cpuArch == "" {
+		t.Fatalf("Error getting CPU arch.")
 	}
 }

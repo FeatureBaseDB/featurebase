@@ -42,7 +42,7 @@ func TestServerConfig(t *testing.T) {
 	tests := []commandTest{
 		// TEST 0
 		{
-			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "localhost:10111,localhost:10110", "--bind", "localhost:10111"},
+			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "localhost:10111,localhost:10110", "--bind", "localhost:10111", "--translation.map-size", "100000"},
 			env:  map[string]string{"PILOSA_DATA_DIR": "/tmp/myEnvDatadir", "PILOSA_CLUSTER_LONG_QUERY_TIME": "1m30s", "PILOSA_MAX_WRITES_PER_REQUEST": "2000"},
 			cfgFileContent: `
 	data-dir = "/tmp/myFileDatadir"
@@ -65,13 +65,14 @@ func TestServerConfig(t *testing.T) {
 				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"localhost:10111", "localhost:10110"})
 				v.Check(cmd.Server.Config.Cluster.LongQueryTime, toml.Duration(time.Second*90))
 				v.Check(cmd.Server.Config.MaxWritesPerRequest, 2000)
+				v.Check(cmd.Server.Config.Translation.MapSize, 100000)
 				return v.Error()
 			},
 		},
 		// TEST 1
 		{
 			args: []string{"server", "--anti-entropy.interval", "9m0s"},
-			env:  map[string]string{"PILOSA_CLUSTER_HOSTS": "localhost:1110,localhost:1111", "PILOSA_BIND": "localhost:1110"},
+			env:  map[string]string{"PILOSA_CLUSTER_HOSTS": "localhost:1110,localhost:1111", "PILOSA_BIND": "localhost:1110", "PILOSA_TRANSLATION_MAP_SIZE": "100000"},
 			cfgFileContent: `
 	bind = "localhost:0"
 	data-dir = "` + actualDataDir + `"
@@ -85,12 +86,13 @@ func TestServerConfig(t *testing.T) {
 				v := validator{}
 				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"localhost:1110", "localhost:1111"})
 				v.Check(cmd.Server.Config.AntiEntropy.Interval, toml.Duration(time.Minute*9))
+				v.Check(cmd.Server.Config.Translation.MapSize, 100000)
 				return v.Error()
 			},
 		},
 		// TEST 2
 		{
-			args: []string{"server", "--log-path", logFile.Name(), "--cluster.disabled", "true"},
+			args: []string{"server", "--log-path", logFile.Name(), "--cluster.disabled", "true", "--translation.map-size", "100000"},
 			env:  map[string]string{},
 			cfgFileContent: `
 	bind = "localhost:19444"

@@ -51,13 +51,13 @@ func (sc *sliceContainers) PutContainerValues(key uint64, containerType byte, n 
 	if i < 0 {
 		c := NewContainer()
 		c.containerType = containerType
-		c.n = n
+		c.n = int32(n)
 		c.mapped = mapped
 		sc.insertAt(key, c, -i-1)
 	} else {
 		c := sc.containers[i]
 		c.containerType = containerType
-		c.n = n
+		c.n = int32(n)
 		c.mapped = mapped
 	}
 

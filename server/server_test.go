@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"reflect"
 	"sort"
@@ -403,6 +404,7 @@ func TestClusteringNodesReplica1(t *testing.T) {
 
 	// Create new main with the same config.
 	config := cluster[2].Command.Config
+	config.Translation.MapSize = 100000
 	// config.Bind = cluster[2].API.Node().URI.HostPort()
 
 	// this isn't necessary, but makes the test run way faster
@@ -476,6 +478,7 @@ func TestClusteringNodesReplica2(t *testing.T) {
 
 	// Create new main with the same config.
 	config := cluster[2].Command.Config
+	config.Translation.MapSize = 100000
 	// config.Bind = cluster[2].API.Node().URI.HostPort()
 
 	// this isn't necessary, but makes the test run way faster
@@ -496,6 +499,7 @@ func TestClusteringNodesReplica2(t *testing.T) {
 	// Create new main with the same config.
 	config = cluster[1].Command.Config
 	// config.Bind = cluster[1].API.Node().URI.HostPort()
+	config.Translation.MapSize = 100000
 
 	// this isn't necessary, but makes the test run way faster
 	config.Gossip.Port = strconv.Itoa(int(cluster[1].Command.GossipTransport().URI.Port))
@@ -561,6 +565,130 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 	hosts := cluster[0].API.Hosts(context.Background())
 	if len(hosts) != 2 {
 		t.Fatalf("unexpected hosts: %v", hosts)
+	}
+}
+
+// Ensure program imports timestamps as UTC.
+func TestMain_ImportTimestamp(t *testing.T) {
+	m := test.MustRunCommand()
+	defer m.Close()
+
+	indexName := "i"
+	fieldName := "f"
+
+	// Create index.
+	if _, err := m.API.CreateIndex(context.Background(), indexName, pilosa.IndexOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create field.
+	if _, err := m.API.CreateField(context.Background(), indexName, fieldName, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"))); err != nil {
+		t.Fatal(err)
+	}
+
+	data := pilosa.ImportRequest{
+		Index:      indexName,
+		Field:      fieldName,
+		Shard:      0,
+		RowIDs:     []uint64{1, 2},
+		ColumnIDs:  []uint64{1, 2},
+		Timestamps: []int64{1514764800000000000, 1577833200000000000}, // 2018-01-01T00:00, 2019-12-31T23:00
+	}
+
+	// Import data.
+	if err := m.API.Import(context.Background(), &data); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure the correct views were created.
+	dir := fmt.Sprintf("%s/%s/%s/views", m.Config.DataDir, indexName, fieldName)
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	exp := []string{
+		"standard", "standard_2018", "standard_201801", "standard_20180101",
+		"standard_2019", "standard_201912", "standard_20191231",
+	}
+	got := []string{}
+	for _, f := range files {
+		got = append(got, f.Name())
+	}
+
+	if !reflect.DeepEqual(got, exp) {
+		t.Fatalf("expected %v, but got %v", exp, got)
+	}
+}
+
+func TestClusterQueriesAfterRestart(t *testing.T) {
+	cluster := test.MustRunCluster(t, 3)
+	defer cluster.Close()
+	cmd1 := cluster[1]
+
+	cmd1.MustCreateIndex(t, "testidx", pilosa.IndexOptions{})
+	cmd1.MustCreateField(t, "testidx", "testfield", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 10))
+
+	// build a query to set the first bit in 100 shards
+	query := strings.Builder{}
+	for i := 0; i < 100; i++ {
+		query.WriteString(fmt.Sprintf("Set(%d, testfield=0)", i*pilosa.ShardWidth))
+	}
+	_, err := cmd1.API.Query(context.Background(), &pilosa.QueryRequest{
+		Index: "testidx",
+		Query: query.String(),
+	})
+	if err != nil {
+		t.Fatalf("setting 100 bits in 100 shards: %v", err)
+	}
+
+	results, err := cmd1.API.Query(context.Background(), &pilosa.QueryRequest{
+		Index: "testidx",
+		Query: "Count(Row(testfield=0))",
+	})
+	if err != nil {
+		t.Fatalf("counting row: %v", err)
+	}
+	if results.Results[0].(uint64) != 100 {
+		t.Fatalf("Count should be 100, but got %v of type %[1]T", results.Results[0])
+	}
+
+	err = cmd1.Command.Close()
+	if err != nil {
+		t.Fatalf("closing node0: %v", err)
+	}
+
+	// confirm that cluster stops accepting queries after one node closes
+	if _, err := cluster[0].API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
+		t.Fatalf("got unexpected error querying an incomplete cluster: %v", err)
+	}
+
+	// Create new main with the same config.
+	config := cmd1.Command.Config
+	config.Bind = cmd1.API.Node().URI.HostPort()
+
+	// this isn't necessary, but makes the test run way faster
+	config.Gossip.Port = strconv.Itoa(int(cmd1.Command.GossipTransport().URI.Port))
+	cmd1.Command = server.NewCommand(cmd1.Stdin, cmd1.Stdout, cmd1.Stderr)
+	cmd1.Command.Config = config
+	err = cmd1.Start()
+	if err != nil {
+		t.Fatalf("reopening node 0: %v", err)
+	}
+
+	for cmd1.API.State() != pilosa.ClusterStateNormal {
+		time.Sleep(time.Millisecond)
+	}
+
+	results, err = cmd1.API.Query(context.Background(), &pilosa.QueryRequest{
+		Index: "testidx",
+		Query: "Count(Row(testfield=0))",
+	})
+	if err != nil {
+		t.Fatalf("counting row: %v", err)
+	}
+	if results.Results[0].(uint64) != 100 {
+		t.Fatalf("Count should be 100, but got %v of type %[1]T", results.Results[0])
 	}
 }
 

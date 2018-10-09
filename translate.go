@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cespare/xxhash"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -81,9 +81,29 @@ type TranslateFile struct {
 	replicationRetryInterval time.Duration
 }
 
+// TranslateFileOption is a functional option type for pilosa.TranslateFile
+type TranslateFileOption func(f *TranslateFile) error
+
+func OptTranslateFileMapSize(mapSize int) TranslateFileOption {
+	return func(f *TranslateFile) error {
+		f.mapSize = mapSize
+		return nil
+	}
+}
+
 // NewTranslateFile returns a new instance of TranslateFile.
-func NewTranslateFile() *TranslateFile {
-	return &TranslateFile{
+func NewTranslateFile(opts ...TranslateFileOption) *TranslateFile {
+	var defaultMapSize64 int64 = 10 * (1 << 30)
+	var defaultMapSize int
+
+	if ^uint(0)>>32 > 0 {
+		// 10GB default map size
+		defaultMapSize = int(defaultMapSize64)
+	} else {
+		// Use 2GB default map size on 32-bit systems
+		defaultMapSize = (1 << 31) - 1
+	}
+	f := &TranslateFile{
 		writeNotify: make(chan struct{}),
 		closing:     make(chan struct{}),
 		cols:        make(map[string]*index),
@@ -96,25 +116,35 @@ func NewTranslateFile() *TranslateFile {
 
 		replicationRetryInterval: defaultReplicationRetryInterval,
 	}
+
+	for _, opt := range opts {
+		err := opt(f)
+		if err != nil {
+			// TODO (2.0): Change func signature to return error
+			panic(errors.Wrap(err, "applying option"))
+		}
+	}
+
+	return f
 }
 
 func (s *TranslateFile) Open() (err error) {
 	// Open writer & buffered writer.
 	if err := os.MkdirAll(filepath.Dir(s.Path), 0777); err != nil {
-		return err
+		return errors.Wrapf(err, "mkdir %s", filepath.Dir(s.Path))
 	} else if s.file, err = os.OpenFile(s.Path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666); err != nil {
-		return err
+		return errors.Wrapf(err, "open file %s", s.Path)
 	}
 	s.w = bufio.NewWriter(s.file)
 
 	// Memory map data file.
 	if s.data, err = syscall.Mmap(int(s.file.Fd()), 0, s.mapSize, syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
-		return err
+		return errors.Wrapf(err, "creating Mmap (size: %d)", s.mapSize)
 	}
 
 	// Replay the log.
 	if err := s.replayEntries(); err != nil {
-		return err
+		return errors.Wrap(err, "replaying log entries")
 	}
 
 	// Listen to primaryStoreEvents channel.

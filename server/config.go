@@ -71,8 +71,9 @@ type Config struct {
 	// Gossip config is based around memberlist.Config.
 	Gossip gossip.Config `toml:"gossip"`
 
-	// DEPRECATED: Translation config supports translation store replication.
 	Translation struct {
+		MapSize int `toml:"map-size"`
+		// DEPRECATED: Translation config supports translation store replication.
 		PrimaryURL string `toml:"primary-url"`
 	} `toml:"translation"`
 

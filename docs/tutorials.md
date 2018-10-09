@@ -483,7 +483,7 @@ curl localhost:10101/index/patients/field/tcells \
 {"success":true}
 ```
 
-Next, let's populate our fields with data. There are two ways to get data into fields: use the `SetFieldValue()` PQL function to set fields individually, or use the `pilosa import` command to import many values at once. First, let's set some field data using PQL.
+Next, let's populate our fields with data. There are two ways to get data into fields: use the `Set()` PQL function to set fields individually, or use the `pilosa import` command to import many values at once. First, let's set some field data using PQL.
 
 The following queries set the age, weight, and t-cell count for the patient with ID `1` in our system:
 ``` request

@@ -75,6 +75,10 @@ const (
 
 	// defaultFragmentMaxOpN is the default value for Fragment.MaxOpN.
 	defaultFragmentMaxOpN = 2000
+
+	// Row ids used for boolean fields.
+	falseRowID = uint64(0)
+	trueRowID  = uint64(1)
 )
 
 // fragment represents the intersection of a field and shard in an index.
@@ -351,11 +355,11 @@ func (f *fragment) unprotectedRow(rowID uint64) *Row {
 	}
 
 	// Only use a subset of the containers.
-	// NOTE: The start & end ranges must be divisible by
+	// NOTE: The start & end ranges must be divisible by container width.
 	data := f.storage.OffsetRange(f.shard*ShardWidth, rowID*ShardWidth, (rowID+1)*ShardWidth)
 
 	// Reference bitmap subrange in storage.
-	// We Clone() data because otherwise row will contains pointers to containers in storage.
+	// We Clone() data because otherwise row will contain pointers to containers in storage.
 	// This causes unexpected results when we cache the row and try to use it later.
 	row := &Row{
 		segments: []rowSegment{{
@@ -390,12 +394,13 @@ func (f *fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 // handleMutex will clear an existing row and store the new row
 // in the vector.
 func (f *fragment) handleMutex(rowID, columnID uint64) error {
-	if existingRowID, found := f.mutexVector.Get(columnID); found && existingRowID != rowID {
+	if existingRowID, found, err := f.mutexVector.Get(columnID); err != nil {
+		return errors.Wrap(err, "getting mutex vector data")
+	} else if found && existingRowID != rowID {
 		if _, err := f.unprotectedClearBit(existingRowID, columnID); err != nil {
 			return errors.Wrap(err, "clearing mutex value")
 		}
 	}
-	f.mutexVector.Set(columnID, rowID)
 	return nil
 }
 
@@ -485,6 +490,95 @@ func (f *fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, er
 	f.cache.Add(rowID, row.Count())
 
 	f.stats.Count("clearBit", 1, 1.0)
+
+	return changed, nil
+}
+
+// setRow replaces an existing row (specified by rowID) with the given
+// Row. This updates both the on-disk storage and the in-cache bitmap.
+func (f *fragment) setRow(row *Row, rowID uint64) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.unprotectedSetRow(row, rowID)
+}
+
+func (f *fragment) unprotectedSetRow(row *Row, rowID uint64) (changed bool, err error) {
+	// TODO: In order to return `changed`, we need to first compare
+	// the existing row with the given row. Determine if the overhead
+	// of this is worth having `changed`.
+	// For now we will assume changed is always true.
+	changed = true
+
+	// First container of the row in storage.
+	headContainerKey := rowID << shardVsContainerExponent
+
+	// Remove every existing container in the row.
+	for i := uint64(0); i < (1 << shardVsContainerExponent); i++ {
+		f.storage.Containers.Remove(headContainerKey + i)
+	}
+
+	// From the given row, get the rowSegment for this shard.
+	seg := row.segment(f.shard)
+	if seg == nil {
+		return changed, nil
+	}
+
+	// Put each container from rowSegment to fragment storage.
+	citer, _ := seg.data.Containers.Iterator(f.shard << shardVsContainerExponent)
+	for citer.Next() {
+		k, c := citer.Value()
+		f.storage.Containers.Put(headContainerKey+(k%(1<<shardVsContainerExponent)), c)
+	}
+
+	// Update the row in cache.
+	n := f.storage.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
+	f.cache.BulkAdd(rowID, n)
+
+	// Snapshot storage.
+	if err := f.snapshot(); err != nil {
+		return false, errors.Wrap(err, "snapshotting")
+	}
+
+	f.stats.Count("setRow", 1, 1.0)
+
+	return changed, nil
+}
+
+// ClearRow clears a row for a given rowID within the fragment.
+// This updates both the on-disk storage and the in-cache bitmap.
+func (f *fragment) clearRow(rowID uint64) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.unprotectedClearRow(rowID)
+}
+
+func (f *fragment) unprotectedClearRow(rowID uint64) (changed bool, err error) {
+	changed = false
+
+	// First container of the row in storage.
+	headContainerKey := rowID << shardVsContainerExponent
+
+	// Remove every container in the row.
+	for i := uint64(0); i < (1 << shardVsContainerExponent); i++ {
+		k := headContainerKey + i
+		// Technically we could bypass the Get() call and only
+		// call Remove(), but the Get() gives us the ability
+		// to return true if any existing data was removed.
+		if cont := f.storage.Containers.Get(k); cont != nil {
+			f.storage.Containers.Remove(k)
+			changed = true
+		}
+	}
+
+	// Clear the row in cache.
+	f.cache.Add(rowID, 0)
+
+	// Snapshot storage.
+	if err := f.snapshot(); err != nil {
+		return false, errors.Wrap(err, "snapshotting")
+	}
+
+	f.stats.Count("clearRow", 1, 1.0)
 
 	return changed, nil
 }
@@ -1333,16 +1427,29 @@ func (f *fragment) bulkImport(rowIDs, columnIDs []uint64) error {
 		return fmt.Errorf("mismatch of row/column len: %d != %d", len(rowIDs), len(columnIDs))
 	}
 
+	if f.mutexVector != nil {
+		return f.bulkImportMutex(rowIDs, columnIDs)
+	}
+	return f.bulkImportStandard(rowIDs, columnIDs)
+}
+
+// bulkImportStandard performs a bulk import on a standard fragment.
+func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64) error {
 	// Create a temporary bitmap which will be populated by rowIDs and columnIDs
 	// and then merged into the existing fragment's bitmap.
 	localBitmap := roaring.NewBitmap()
+
 	// Disconnect op writer so we don't append updates.
 	localBitmap.OpWriter = nil
 
-	// Process every bit.
-	// If an error occurs then reopen the storage.
-	lastID := uint64(0)
+	// rowSet maintains the set of rowIDs present in this import.
+	// It allows the cache to be updated once per row, instead of once
+	// per bit.
 	rowSet := make(map[uint64]struct{})
+	lastRowID := uint64(0)
+
+	// Process every bit by writing to a local bitmap,
+	// to be merged with fragment storage next.
 	for i := range rowIDs {
 		rowID, columnID := rowIDs[i], columnIDs[i]
 
@@ -1352,18 +1459,18 @@ func (f *fragment) bulkImport(rowIDs, columnIDs []uint64) error {
 			return err
 		}
 
-		// Write to storage.
+		// Write to local storage.
 		_, err = localBitmap.Add(pos)
 		if err != nil {
 			return err
 		}
+
 		// Reduce the StatsD rate for high volume stats
 		f.stats.Count("ImportBit", 1, 0.0001)
-		// import optimization to avoid linear foreach calls
-		// slight risk of concurrent cache counter being off but
-		// no real danger
-		if i == 0 || rowID != lastID {
-			lastID = rowID
+
+		// Add row to rowSet.
+		if i == 0 || rowID != lastRowID {
+			lastRowID = rowID
 			rowSet[rowID] = struct{}{}
 		}
 
@@ -1390,6 +1497,98 @@ func (f *fragment) bulkImport(rowIDs, columnIDs []uint64) error {
 
 	f.cache.Recalculate()
 	return unprotectedWriteToFragment(f, results)
+}
+
+// bulkImportMutex performs a bulk import on a fragment while ensuring
+// mutex restrictions. Because the mutex requirements must be checked
+// against storage, this method must acquire a write lock on the fragment
+// during the entire process, and it handles every bit independently.
+func (f *fragment) bulkImportMutex(rowIDs, columnIDs []uint64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Disconnect op writer so we don't append updates.
+	f.storage.OpWriter = nil
+
+	// If an error occurs then reopen the storage.
+	if err := func() error {
+		// rowSet maintains the set of rowIDs present in this import.
+		// It allows the cache to be updated once per row, instead of once
+		// per bit.
+		rowSet := make(map[uint64]struct{})
+		lastRowID := uint64(0)
+
+		// Process every bit.
+		for i := range rowIDs {
+			rowID, columnID := rowIDs[i], columnIDs[i]
+
+			// Handle mutex vector (i.e. clear an existing row).
+			if existingRowID, found, err := f.mutexVector.Get(columnID); err != nil {
+				return errors.Wrap(err, "getting mutex vector data")
+			} else if found && existingRowID != rowID {
+				// Determine the position of the bit in the storage.
+				pos, err := f.pos(existingRowID, columnID)
+				if err != nil {
+					return err
+				}
+
+				// Clear storage.
+				_, err = f.storage.Remove(pos)
+				if err != nil {
+					return err
+				}
+
+				rowSet[existingRowID] = struct{}{}
+			}
+
+			// Determine the position of the bit in the storage.
+			pos, err := f.pos(rowID, columnID)
+			if err != nil {
+				return err
+			}
+
+			// Write to storage.
+			_, err = f.storage.Add(pos)
+			if err != nil {
+				return err
+			}
+
+			// Reduce the StatsD rate for high volume stats
+			f.stats.Count("ImportBit", 1, 0.0001)
+
+			// Add row to rowSet.
+			if i == 0 || rowID != lastRowID {
+				lastRowID = rowID
+				rowSet[rowID] = struct{}{}
+			}
+
+			// Invalidate block checksum.
+			delete(f.checksums, int(rowID/HashBlockSize))
+		}
+
+		// Update cache counts for all rows.
+		for rowID := range rowSet {
+			// Import should ALWAYS have row() load a new bm from fragment.storage
+			// because the row that's in rowCache hasn't been updated with
+			// this import's data.
+			f.cache.BulkAdd(rowID, f.unprotectedRow(rowID).Count())
+		}
+
+		f.cache.Invalidate()
+
+		return nil
+	}(); err != nil {
+		_ = f.closeStorage()
+		_ = f.openStorage()
+		return err
+	}
+
+	// Write the storage to disk and reload.
+	if err := f.snapshot(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // importValue bulk imports a set of range-encoded values.
@@ -2073,8 +2272,7 @@ func pos(rowID, columnID uint64) uint64 {
 // vector stores the mapping of colID to rowID.
 // It's used for a mutex field type.
 type vector interface {
-	Get(colID uint64) (uint64, bool)
-	Set(colID, rowID uint64)
+	Get(colID uint64) (uint64, bool, error)
 }
 
 // rowsVector implements the vector interface by looking
@@ -2093,20 +2291,50 @@ func newRowsVector(f *fragment) *rowsVector {
 // Get returns the rowID associated to the given colID.
 // Additionally, it returns true if a value was found,
 // otherwise it returns false.
-func (v *rowsVector) Get(colID uint64) (uint64, bool) {
+func (v *rowsVector) Get(colID uint64) (uint64, bool, error) {
 	rows := v.f.rows(0, filterColumn(colID))
-	if len(rows) == 1 {
-		return rows[0], true
+	if len(rows) > 1 {
+		return 0, false, errors.New("found multiple row values for column")
+	} else if len(rows) == 1 {
+		return rows[0], true, nil
 	}
-	return 0, false
+	return 0, false, nil
 }
-
-// Set is not used for rowsVector.
-func (v *rowsVector) Set(colID, rowID uint64) {}
 
 // rowToKey converts a Pilosa row ID to the key of the container which starts
 // that row in the bitmap which represents this entire fragment. A fragment is
 // all the rows within a shard within a field concatenated together.
 func rowToKey(rowID uint64) (key uint64) {
 	return rowID * (ShardWidth / containerWidth)
+}
+
+// boolVector implements the vector interface by looking
+// at data in rows 0 and 1.
+type boolVector struct {
+	f *fragment
+}
+
+// newBoolVector returns a boolVector for a given fragment.
+func newBoolVector(f *fragment) *boolVector {
+	return &boolVector{
+		f: f,
+	}
+}
+
+// Get returns the rowID associated to the given colID.
+// Additionally, it returns true if a value was found,
+// otherwise it returns false.
+func (v *boolVector) Get(colID uint64) (uint64, bool, error) {
+	rows := v.f.rows(0, filterColumn(colID))
+	if len(rows) > 1 {
+		return 0, false, errors.New("found multiple row values for column")
+	} else if len(rows) == 1 {
+		switch rows[0] {
+		case falseRowID, trueRowID:
+			return rows[0], true, nil
+		default:
+			return 0, false, errors.New("found non-boolean value")
+		}
+	}
+	return 0, false, nil
 }

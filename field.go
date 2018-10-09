@@ -52,6 +52,7 @@ const (
 	FieldTypeInt   = "int"
 	FieldTypeTime  = "time"
 	FieldTypeMutex = "mutex"
+	FieldTypeBool  = "bool"
 )
 
 // Field represents a container for views.
@@ -155,6 +156,16 @@ func OptFieldTypeMutex(cacheType string, cacheSize uint32) FieldOption {
 	}
 }
 
+func OptFieldTypeBool() FieldOption {
+	return func(fo *FieldOptions) error {
+		if fo.Type != "" {
+			return errors.Errorf("field type is already set to: %s", fo.Type)
+		}
+		fo.Type = FieldTypeBool
+		return nil
+	}
+}
+
 // NewField returns a new instance of field.
 func NewField(path, index, name string, opts FieldOption) (*Field, error) {
 	err := validateName(name)
@@ -219,8 +230,17 @@ func (f *Field) AvailableShards() *roaring.Bitmap {
 	return b
 }
 
-// addRemoteAvailableShards merges the set of available shards into the current known set.
-func (f *Field) addRemoteAvailableShards(b *roaring.Bitmap) {
+// addRemoteAvailableShards merges the set of available shards into the current known set
+// and saves the set to a file.
+func (f *Field) addRemoteAvailableShards(b *roaring.Bitmap) error {
+	f.mergeRemoteAvailableShards(b)
+
+	// Save the updated bitmap to the data store.
+	return f.saveAvailableShards()
+}
+
+// mergeRemoteAvailableShards merges the set of available shards into the current known set.
+func (f *Field) mergeRemoteAvailableShards(b *roaring.Bitmap) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.remoteAvailableShards = f.remoteAvailableShards.Union(b)
@@ -278,6 +298,10 @@ func (f *Field) Open() error {
 
 		if err := f.loadMeta(); err != nil {
 			return errors.Wrap(err, "loading meta")
+		}
+
+		if err := f.loadAvailableShards(); err != nil {
+			return errors.Wrap(err, "loading available shards")
 		}
 
 		// Apply the field options loaded from meta.
@@ -441,8 +465,57 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Max = 0
 		f.options.TimeQuantum = ""
 		f.options.Keys = opt.Keys
+	case FieldTypeBool:
+		f.options.Type = FieldTypeBool
+		f.options.CacheType = CacheTypeNone
+		f.options.CacheSize = 0
+		f.options.Min = 0
+		f.options.Max = 0
+		f.options.TimeQuantum = ""
+		f.options.Keys = false
 	default:
 		return errors.New("invalid field type")
+	}
+
+	return nil
+}
+
+// loadAvailableShards reads remoteAvailableShards data for the field, if any.
+func (f *Field) loadAvailableShards() error {
+	bm := roaring.NewBitmap()
+
+	// Read data from meta file.
+	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".available.shards"))
+	if os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return errors.Wrap(err, "reading available shards")
+	} else {
+		if err := bm.UnmarshalBinary(buf); err != nil {
+			return errors.Wrap(err, "unmarshaling")
+		}
+	}
+
+	// Merge bitmap from file into field.
+	f.mergeRemoteAvailableShards(bm)
+
+	return nil
+}
+
+// saveAvailableShards writes remoteAvailableShards data for the field.
+func (f *Field) saveAvailableShards() error {
+	// Open or create file.
+	file, err := os.OpenFile(filepath.Join(f.path, ".available.shards"), os.O_WRONLY|os.O_CREATE, 0666)
+	if err != nil {
+		return errors.Wrap(err, "opening available shards file")
+	}
+
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	// Write available shards to file.
+	if _, err := f.remoteAvailableShards.WriteTo(file); err != nil {
+		return errors.Wrap(err, "writing bitmap to buffer")
 	}
 
 	return nil
@@ -681,6 +754,10 @@ func (f *Field) deleteView(name string) error {
 }
 
 // Row returns a row of the standard view.
+// It seems this method is only being used by the test
+// package, and the fact that it's only allowed on
+// `set` fields is odd. This may be considered for
+// deprecation in a future version.
 func (f *Field) Row(rowID uint64) (*Row, error) {
 	if f.Type() != FieldTypeSet {
 		return nil, errors.Errorf("row method unsupported for field type: %s", f.Type())
@@ -954,10 +1031,18 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 		return errors.New("time quantum not set in field")
 	}
 
+	fieldType := f.Type()
+
 	// Split import data by fragment.
 	dataByFragment := make(map[importKey]importData)
 	for i := range rowIDs {
 		rowID, columnID := rowIDs[i], columnIDs[i]
+
+		// Bool-specific data validation.
+		if fieldType == FieldTypeBool && rowID > 1 {
+			return errors.New("bool field imports only support values 0 and 1")
+		}
+
 		var timestamp *time.Time
 		if len(timestamps) > i {
 			timestamp = timestamps[i]
@@ -1190,6 +1275,12 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			o.CacheType,
 			o.CacheSize,
 			o.Keys,
+		})
+	case FieldTypeBool:
+		return json.Marshal(struct {
+			Type string `json:"type"`
+		}{
+			o.Type,
 		})
 	}
 	return nil, errors.New("invalid field type")

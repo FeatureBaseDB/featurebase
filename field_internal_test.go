@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/roaring"
 )
 
 // Ensure a bsiGroup can adjust to its baseValue.
@@ -338,6 +339,25 @@ func TestField_RowTime(t *testing.T) {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(r.Columns(), []uint64{5}) {
 		t.Fatalf("wrong columns: %#v", r.Columns())
+	}
+
+}
+
+func TestField_PersistAvailableShards(t *testing.T) {
+	f := MustOpenField(OptFieldTypeDefault())
+
+	// bm represents remote available shards.
+	bm := roaring.NewBitmap(1, 2, 3)
+
+	if err := f.addRemoteAvailableShards(bm); err != nil {
+		t.Fatal(err)
+	}
+
+	// Reload field and verify that shard data is persisted.
+	if err := f.Reopen(); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(f.remoteAvailableShards.Slice(), bm.Slice()) {
+		t.Fatalf("unexpected available shards (reopen). expected: %v, but got: %v", bm.Slice(), f.remoteAvailableShards.Slice())
 	}
 
 }

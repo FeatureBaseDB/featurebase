@@ -279,3 +279,49 @@ func TestImportCommand_BugOverwriteValue(t *testing.T) {
 		t.Fatalf("Import Run with values doesn't work: %s", err)
 	}
 }
+
+// Ensure that import into bool field runs.
+func TestImportCommand_RunBool(t *testing.T) {
+	buf := bytes.Buffer{}
+	stdin, stdout, stderr := GetIO(buf)
+	cm := NewImportCommand(stdin, stdout, stderr)
+	ctx := context.Background()
+
+	cmd := test.MustRunCluster(t, 1)[0]
+	cm.Host = cmd.API.Node().URI.HostPort()
+
+	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader("")))
+	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i/field/f", strings.NewReader(`{"options":{"type": "bool"}}`)))
+
+	cm.Index = "i"
+	cm.Field = "f"
+
+	t.Run("Valid", func(t *testing.T) {
+		file, err := ioutil.TempFile("", "import-bool.csv")
+		if err != nil {
+			t.Fatal(err)
+		}
+		file.Write([]byte("0,1\n1,2\n1,3"))
+
+		cm.Paths = []string{file.Name()}
+		err = cm.Run(ctx)
+		if err != nil {
+			t.Fatalf("Import Run to bool field doesn't work: %s", err)
+		}
+	})
+
+	// Ensure that invalid bool values return an error.
+	t.Run("Invalid", func(t *testing.T) {
+		file, err := ioutil.TempFile("", "import-invalid-bool.csv")
+		if err != nil {
+			t.Fatal(err)
+		}
+		file.Write([]byte("0,1\n1,2\n1,3\n2,4"))
+
+		cm.Paths = []string{file.Name()}
+		err = cm.Run(ctx)
+		if !strings.Contains(err.Error(), "bool field imports only support values 0 and 1") {
+			t.Fatalf("expect error: bool field imports only support values 0 and 1, actual: %s", err)
+		}
+	})
+}

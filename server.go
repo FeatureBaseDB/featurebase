@@ -234,6 +234,13 @@ func OptServerClusterHasher(h Hasher) ServerOption {
 	}
 }
 
+func OptServerTranslateFileMapSize(mapSize int) ServerOption {
+	return func(s *Server) error {
+		s.holder.translateFile = NewTranslateFile(OptTranslateFileMapSize(mapSize))
+		return nil
+	}
+}
+
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	s := &Server{
@@ -330,20 +337,20 @@ func (s *Server) Open() error {
 
 	// Initialize id-key storage.
 	if err := s.holder.translateFile.Open(); err != nil {
-		return err
+		return errors.Wrap(err, "opening TranslateFile")
 	}
 
 	// Open Cluster management.
 	if err := s.cluster.waitForStarted(); err != nil {
-		return fmt.Errorf("opening Cluster: %v", err)
+		return errors.Wrap(err, "opening Cluster")
 	}
 
 	// Open holder.
 	if err := s.holder.Open(); err != nil {
-		return fmt.Errorf("opening Holder: %v", err)
+		return errors.Wrap(err, "opening Holder")
 	}
 	if err := s.cluster.setNodeState(nodeStateReady); err != nil {
-		return fmt.Errorf("setting nodeState: %v", err)
+		return errors.Wrap(err, "setting nodeState")
 	}
 
 	// Listen for joining nodes.
@@ -474,7 +481,9 @@ func (s *Server) receiveMessage(m Message) error {
 		if f == nil {
 			return fmt.Errorf("Local field not found: %s/%s", obj.Index, obj.Field)
 		}
-		f.addRemoteAvailableShards(roaring.NewBitmap(obj.Shard))
+		if err := f.addRemoteAvailableShards(roaring.NewBitmap(obj.Shard)); err != nil {
+			return errors.Wrap(err, "adding remote available shards")
+		}
 	case *CreateIndexMessage:
 		opt := obj.Meta
 		_, err := s.holder.CreateIndex(obj.Index, *opt)
@@ -633,13 +642,15 @@ func (s *Server) mergeRemoteStatus(ns *NodeStatus) error {
 		for _, fs := range is.Fields {
 			f := s.holder.Field(is.Name, fs.Name)
 
-			// if we don't know about an field locally, log a error because
+			// if we don't know about a field locally, log an error because
 			// fields should be created and synced prior to shard creation
 			if f == nil {
 				s.logger.Printf("Local Field not found: %s/%s", is.Name, fs.Name)
 				continue
 			}
-			f.addRemoteAvailableShards(fs.AvailableShards)
+			if err := f.addRemoteAvailableShards(fs.AvailableShards); err != nil {
+				return errors.Wrap(err, "adding remote available shards")
+			}
 		}
 	}
 
@@ -664,6 +675,7 @@ func (s *Server) monitorDiagnostics() {
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
 	s.diagnostics.Set("NodeID", s.nodeID)
 	s.diagnostics.Set("ClusterID", s.cluster.id)
+	s.diagnostics.EnrichWithCPUInfo()
 	s.diagnostics.EnrichWithOSInfo()
 
 	// Flush the diagnostics metrics at startup, then on each tick interval
