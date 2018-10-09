@@ -1808,7 +1808,7 @@ func (f *fragment) rows(start uint64, filters ...rowFilter) []uint64 {
 		}
 		if addRow {
 			lastRow = vRow
-			rows = append(rows, key>>shardVsContainerExponent)
+			rows = append(rows, vRow)
 		}
 	}
 	return rows
