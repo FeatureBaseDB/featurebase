@@ -1795,8 +1795,9 @@ func (f *fragment) rows(start uint64, filters ...rowFilter) []uint64 {
 		}
 
 		// apply filters
-		addRow, done := true, false
+		addRow := true
 		for _, filter := range filters {
+			var done bool
 			addRow, done = filter(vRow, key, c)
 			if done {
 				return rows

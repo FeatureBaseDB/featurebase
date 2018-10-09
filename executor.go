@@ -879,7 +879,7 @@ func mergeGroupCounts(gc, other []GroupCount) []GroupCount {
 	return gc
 }
 
-func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql.Call, shard uint64, childRows []RowIDs) ([]GroupCount, error) {
+func (e *executor) executeGroupByShard(_ context.Context, index string, c *pql.Call, shard uint64, childRows []RowIDs) ([]GroupCount, error) {
 	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
@@ -988,7 +988,7 @@ func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, s
 	return results, nil
 }
 
-func (e *executor) executeRowsShard(ctx context.Context, index string, c *pql.Call, shard uint64) (RowIDs, error) {
+func (e *executor) executeRowsShard(_ context.Context, index string, c *pql.Call, shard uint64) (RowIDs, error) {
 	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {

@@ -1016,8 +1016,8 @@ func decodeGroupCounts(a []*internal.GroupCount) []pilosa.GroupCount {
 	other := make([]pilosa.GroupCount, len(a))
 	for i := range a {
 		other[i] = pilosa.GroupCount{
-			decodeFieldRows(a[i].Group),
-			a[i].Count,
+			Group: decodeFieldRows(a[i].Group),
+			Count: a[i].Count,
 		}
 	}
 	return other
