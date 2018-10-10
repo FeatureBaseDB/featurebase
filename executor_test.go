@@ -2274,128 +2274,81 @@ func TestExecutor_Execute_Not(t *testing.T) {
 
 // Ensure a row can be cleared.
 func TestExecutor_Execute_ClearRow(t *testing.T) {
+	// Set and Mutex tests use the same data and queries
+	writeQuery := `` +
+		fmt.Sprintf("Set(%d, f=%d)\n", 3, 10) +
+		fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth-1, 10) +
+		fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+1, 10) +
+		fmt.Sprintf("Set(%d, f=%d)\n", 1, 20) +
+		fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+1, 20)
+
+	readQueries := []string{
+		`Row(f=10)`,
+		`ClearRow(f=10)`,
+		`ClearRow(f=10)`,
+		`Row(f=10)`,
+		`Row(f=20)`,
+	}
+
 	t.Run("Set", func(t *testing.T) {
-		c := test.MustRunCluster(t, 1)
-		defer c.Close()
-		hldr := test.Holder{Holder: c[0].Server.Holder()}
-		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackExistence: true})
-		_, err := index.CreateField("f", pilosa.OptFieldTypeDefault())
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Set bits.
-		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `` +
-			fmt.Sprintf("Set(%d, f=%d)\n", 3, 10) +
-			fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth-1, 10) +
-			fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+1, 10) +
-			fmt.Sprintf("Set(%d, f=%d)\n", 1, 20) +
-			fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+1, 20),
-		}); err != nil {
-			t.Fatal(err)
-		}
-
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f=10)`}); err != nil {
-			t.Fatal(err)
-		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth - 1, ShardWidth + 1}) {
+		responses := runCallTest(t, writeQuery, readQueries,
+			&pilosa.IndexOptions{TrackExistence: true})
+		if bits := responses[0].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth - 1, ShardWidth + 1}) {
 			t.Fatalf("unexpected columns: %+v", bits)
 		}
 
 		// Clear the row and ensure we get a `true` response.
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `ClearRow(f=10)`}); err != nil {
-			t.Fatal(err)
-		} else if res := res.Results[0].(bool); !res {
+		if res := responses[1].Results[0].(bool); !res {
 			t.Fatalf("unexpected clear row result: %+v", res)
 		}
 
 		// Clear the row again and ensure we get a `false` response.
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `ClearRow(f=10)`}); err != nil {
-			t.Fatal(err)
-		} else if res := res.Results[0].(bool); res {
+		if res := responses[2].Results[0].(bool); res {
 			t.Fatalf("unexpected clear row result: %+v", res)
 		}
 
 		// Ensure the row is empty.
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f=10)`}); err != nil {
-			t.Fatal(err)
-		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{}) {
+		if bits := responses[3].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{}) {
 			t.Fatalf("unexpected columns: %+v", bits)
 		}
 
 		// Ensure other rows were not affected.
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f=20)`}); err != nil {
-			t.Fatal(err)
-		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{1, ShardWidth + 1}) {
+		if bits := responses[4].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{1, ShardWidth + 1}) {
 			t.Fatalf("unexpected columns: %+v", bits)
 		}
 	})
+
 	t.Run("Mutex", func(t *testing.T) {
-		c := test.MustRunCluster(t, 1)
-		defer c.Close()
-		hldr := test.Holder{Holder: c[0].Server.Holder()}
-		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackExistence: true})
-		_, err := index.CreateField("f", pilosa.OptFieldTypeMutex("none", 0))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Set bits.
-		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `` +
-			fmt.Sprintf("Set(%d, f=%d)\n", 3, 10) +
-			fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth-1, 10) +
-			fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+1, 10) +
-			fmt.Sprintf("Set(%d, f=%d)\n", 1, 20) +
-			fmt.Sprintf("Set(%d, f=%d)\n", ShardWidth+1, 20),
-		}); err != nil {
-			t.Fatal(err)
-		}
-
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f=10)`}); err != nil {
-			t.Fatal(err)
-		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth - 1}) {
+		responses := runCallTest(t, writeQuery, readQueries,
+			&pilosa.IndexOptions{TrackExistence: true},
+			pilosa.OptFieldTypeMutex("none", 0))
+		if bits := responses[0].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth - 1}) {
 			t.Fatalf("unexpected columns: %+v", bits)
 		}
 
 		// Clear the row and ensure we get a `true` response.
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `ClearRow(f=10)`}); err != nil {
-			t.Fatal(err)
-		} else if res := res.Results[0].(bool); !res {
+		if res := responses[1].Results[0].(bool); !res {
 			t.Fatalf("unexpected clear row result: %+v", res)
 		}
 
 		// Clear the row again and ensure we get a `false` response.
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `ClearRow(f=10)`}); err != nil {
-			t.Fatal(err)
-		} else if res := res.Results[0].(bool); res {
+		if res := responses[2].Results[0].(bool); res {
 			t.Fatalf("unexpected clear row result: %+v", res)
 		}
 
 		// Ensure the row is empty.
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f=10)`}); err != nil {
-			t.Fatal(err)
-		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{}) {
+		if bits := responses[3].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{}) {
 			t.Fatalf("unexpected columns: %+v", bits)
 		}
 
 		// Ensure other rows were not affected.
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f=20)`}); err != nil {
-			t.Fatal(err)
-		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{1, ShardWidth + 1}) {
+		if bits := responses[4].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{1, ShardWidth + 1}) {
 			t.Fatalf("unexpected columns: %+v", bits)
 		}
 	})
-	t.Run("Time", func(t *testing.T) {
-		c := test.MustRunCluster(t, 1)
-		defer c.Close()
-		hldr := test.Holder{Holder: c[0].Server.Holder()}
-		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackExistence: true})
-		_, err := index.CreateField("f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD")))
-		if err != nil {
-			t.Fatal(err)
-		}
 
-		// Set columns.
-		cc := `
+	t.Run("Time", func(t *testing.T) {
+		writeQuery := `
 			Set(2, f=1, 1999-12-31T00:00)
 			Set(3, f=1, 2000-01-01T00:00)
 			Set(4, f=1, 2000-01-02T00:00)
@@ -2405,42 +2358,36 @@ func TestExecutor_Execute_ClearRow(t *testing.T) {
 
 			Set(2, f=1, 1999-12-30T00:00)
 			Set(2, f=1, 2002-02-01T00:00)
-			Set(2, f=10, 2001-01-01T00:00)
-		`
-		rangeCheckQuery1 := `Range(f=1, 1999-12-31T00:00, 2003-01-01T03:00)`
-		rangeCheckQuery10 := `Range(f=10, 1999-12-31T00:00, 2003-01-01T03:00)`
-
-		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: cc}); err != nil {
-			t.Fatal(err)
+			Set(2, f=10, 2001-01-01T00:00)`
+		readQueries := []string{
+			`Range(f=1, 1999-12-31T00:00, 2003-01-01T03:00)`,
+			`ClearRow(f=1)`,
+			`Range(f=1, 1999-12-31T00:00, 2003-01-01T03:00)`,
+			`Range(f=10, 1999-12-31T00:00, 2003-01-01T03:00)`,
 		}
-
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: rangeCheckQuery1}); err != nil {
-			t.Fatal(err)
-		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{2, 3, 4, 5, 6, 7}) {
+		responses := runCallTest(t, writeQuery, readQueries,
+			&pilosa.IndexOptions{TrackExistence: true},
+			pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD")))
+		if columns := responses[0].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{2, 3, 4, 5, 6, 7}) {
 			t.Fatalf("unexpected columns: %+v", columns)
 		}
 
 		// Clear the row and ensure we get a `true` response.
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `ClearRow(f=1)`}); err != nil {
-			t.Fatal(err)
-		} else if res := res.Results[0].(bool); !res {
+		if res := responses[1].Results[0].(bool); !res {
 			t.Fatalf("unexpected clear row result: %+v", res)
 		}
 
 		// Ensure the row is empty.
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: rangeCheckQuery1}); err != nil {
-			t.Fatal(err)
-		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{}) {
+		if columns := responses[2].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{}) {
 			t.Fatalf("unexpected columns: %+v", columns)
 		}
 
 		// Ensure other rows were not affected.
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: rangeCheckQuery10}); err != nil {
-			t.Fatal(err)
-		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{2}) {
+		if columns := responses[3].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{2}) {
 			t.Fatalf("unexpected columns: %+v", columns)
 		}
 	})
+
 	t.Run("Int", func(t *testing.T) {
 		c := test.MustRunCluster(t, 1)
 		defer c.Close()
@@ -2456,6 +2403,7 @@ func TestExecutor_Execute_ClearRow(t *testing.T) {
 			t.Fatal("expected clear row to return an error")
 		}
 	})
+
 	t.Run("TopN", func(t *testing.T) {
 		c := test.MustRunCluster(t, 1)
 		defer c.Close()
