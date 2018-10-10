@@ -3,6 +3,7 @@ package pilosa
 import (
 	"context"
 	"io"
+	"net/http"
 )
 
 // Bit represents the intersection of a row and a column. It can be specified by
@@ -54,6 +55,7 @@ type InternalClient interface {
 	SendMessage(ctx context.Context, uri *URI, msg []byte) error
 	RetrieveShardFromURI(ctx context.Context, index, field string, shard uint64, uri URI) (io.ReadCloser, error)
 	ImportRoaring(ctx context.Context, uri *URI, index, field string, shard uint64, remote bool, data []byte) error
+	Forward(ctx context.Context, w http.ResponseWriter, r *http.Request, scheme, hostport string) error
 }
 
 //===============
@@ -151,4 +153,8 @@ func (n nopInternalClient) SendMessage(ctx context.Context, uri *URI, msg []byte
 }
 func (n nopInternalClient) RetrieveShardFromURI(ctx context.Context, index, field string, shard uint64, uri URI) (io.ReadCloser, error) {
 	return nil, nil
+}
+
+func (n nopInternalClient) Forward(ctx context.Context, w http.ResponseWriter, r *http.Request, scheme, hostport string) error {
+	return nil
 }

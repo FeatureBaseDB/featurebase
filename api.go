@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -958,6 +959,60 @@ func (api *API) Info() serverInfo {
 	return serverInfo{
 		ShardWidth: ShardWidth,
 	}
+}
+
+//if not the destination forward on to correct for execution
+func (api *API) EnsureOperatingNode(indexName string, w http.ResponseWriter, r *http.Request) bool {
+
+	values := r.URL.Query()
+
+	if _, keyImport := values["keyImport"]; keyImport {
+		// if not coordinator..forward on
+		if !api.Node().IsCoordinator {
+			api.forwardTo(w, r, api.getCoordinator())
+			return true
+		}
+		return false
+	}
+
+	if shardS, hasShard := values["shard"]; hasShard {
+		shard, err := strconv.ParseUint(shardS[0], 10, 64)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return true
+		}
+		if forwardNode, ownsShard := api.ownsShard(indexName, shard); !ownsShard {
+			api.forwardTo(w, r, forwardNode)
+			return true
+		}
+
+	}
+	return false
+}
+
+func (api *API) ownsShard(indexName string, shard uint64) (node *Node, owner bool) {
+	nodes := api.cluster.shardNodes(indexName, shard)
+	for i := range nodes {
+		if nodes[i].ID == api.Node().ID {
+			owner = true
+			return
+		}
+		node = nodes[i]
+	}
+	return
+}
+
+func (api *API) forwardTo(w http.ResponseWriter, r *http.Request, node *Node) {
+	api.server.defaultClient.Forward(r.Context(), w, r, node.URI.Scheme, node.URI.HostPort())
+}
+
+func (api *API) getCoordinator() *Node {
+	for _, node := range api.cluster.nodes {
+		if node.IsCoordinator {
+			return node
+		}
+	}
+	return nil
 }
 
 type serverInfo struct {

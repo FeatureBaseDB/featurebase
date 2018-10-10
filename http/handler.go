@@ -992,6 +992,11 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//if not the destination forward on to correct for execution
+	if h.api.EnsureOperatingNode(indexName, w, r) {
+		return
+	}
+
 	// Read entire body.
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {

@@ -409,6 +409,39 @@ func (c *InternalClient) marshalImportPayload(index, field string, shard uint64,
 	return buf, nil
 }
 
+// Forward the request to the new host in request
+func (c *InternalClient) Forward(ctx context.Context, w http.ResponseWriter, req *http.Request, scheme, host string) error {
+
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return nil
+	}
+
+	req.Body = ioutil.NopCloser(bytes.NewReader(body))
+	url := fmt.Sprintf("%s://%s%s", scheme, host, req.RequestURI)
+
+	forReq, err := http.NewRequest(req.Method, url, bytes.NewReader(body))
+	forReq.Header = make(http.Header)
+	for h, val := range req.Header {
+		forReq.Header[h] = val
+	}
+
+	resp, err := c.httpClient.Do(forReq.WithContext(ctx))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, "Forward Failed", resp.StatusCode)
+		return nil
+	}
+	defer resp.Body.Close()
+	_, err = io.Copy(w, resp.Body)
+	return err
+
+}
+
 // importNode sends a pre-marshaled import request to a node.
 func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, index, field string, buf []byte) error {
 	// Create URL & HTTP request.
