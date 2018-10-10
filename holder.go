@@ -101,6 +101,9 @@ func NewHolder() *Holder {
 
 // Open initializes the root data directory for the holder.
 func (h *Holder) Open() error {
+	// Reset closing in case Holder is being reopened.
+	h.closing = make(chan struct{})
+
 	h.setFileLimit()
 
 	h.Logger.Printf("open holder path: %s", h.Path)
@@ -177,6 +180,9 @@ func (h *Holder) Close() error {
 			return err
 		}
 	}
+
+	// Reset opened in case Holder needs to be reopened.
+	h.opened = make(chan struct{})
 
 	return nil
 }
