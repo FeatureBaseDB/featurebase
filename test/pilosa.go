@@ -249,8 +249,13 @@ func (c Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uint
 // CreateField creates the index (if necessary) and field specified.
 func (c Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOptions, field string, fopts ...pilosa.FieldOption) *pilosa.Field {
 	idx, err := c[0].API.CreateIndex(context.Background(), index, iopts)
-	if err != nil && errors.Cause(err) != pilosa.ErrIndexExists {
+	if err != nil && !strings.Contains(err.Error(), "index already exists") {
 		t.Fatalf("creating index: %v", err)
+	} else if err != nil { // index exists
+		idx, err = c[0].API.Index(context.Background(), index)
+		if err != nil {
+			t.Fatalf("getting index: %v", err)
+		}
 	}
 	if idx.Options() != iopts {
 		t.Logf("existing index options:\n%v\ndon't match given opts:\n%v\n in pilosa/test.Cluster.CreateField", idx.Options(), iopts)

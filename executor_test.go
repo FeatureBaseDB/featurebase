@@ -2348,22 +2348,26 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 func TestExecutor_Execute_GroupBy(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
-	hldr := test.Holder{Holder: c[0].Server.Holder()}
-	hldr.SetBit("i", "general", 10, 0)
-	hldr.SetBit("i", "general", 10, 1)
-	hldr.SetBit("i", "general", 10, ShardWidth+1)
-	hldr.SetBit("i", "general", 11, 2)
-	hldr.SetBit("i", "general", 11, ShardWidth+2)
-	hldr.SetBit("i", "general", 12, 2)
-	hldr.SetBit("i", "general", 12, ShardWidth+2)
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "general")
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "sub")
+	c.ImportBits(t, "i", "general", [][2]uint64{
+		{10, 0},
+		{10, 1},
+		{10, ShardWidth + 1},
+		{11, 2},
+		{11, ShardWidth + 2},
+		{12, 2},
+		{12, ShardWidth + 2},
+	})
+	c.ImportBits(t, "i", "sub", [][2]uint64{
+		{100, 0},
+		{100, 1},
+		{100, 3},
+		{100, ShardWidth + 1},
 
-	hldr.SetBit("i", "sub", 100, 0)
-	hldr.SetBit("i", "sub", 100, 1)
-	hldr.SetBit("i", "sub", 100, 3)
-	hldr.SetBit("i", "sub", 100, ShardWidth+1)
-
-	hldr.SetBit("i", "sub", 110, 2)
-	hldr.SetBit("i", "sub", 110, 0)
+		{110, 2},
+		{110, 0},
+	})
 
 	t.Run("No Field List Arguments", func(t *testing.T) {
 		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy()`}); err != nil {
@@ -2372,6 +2376,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			}
 		}
 	})
+
 	t.Run("Unknown Field ", func(t *testing.T) {
 		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(Rows(field=missing))`}); err != nil {
 			if errors.Cause(err) != pilosa.ErrFieldNotFound {
@@ -2379,6 +2384,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			}
 		}
 	})
+
 	t.Run("Basic", func(t *testing.T) {
 		expected := []pilosa.GroupCount{
 			{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 110}}, Count: 1},
@@ -2387,12 +2393,8 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 100}}, Count: 3},
 		}
 
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(Rows(field=general), Rows(field=sub))`}); err != nil {
-			t.Fatal(err)
-		} else {
-			results := res.Results[0].([]pilosa.GroupCount)
-			checkGroupBy(t, expected, results)
-		}
+		results := c.Query(t, "i", `GroupBy(Rows(field=general), Rows(field=sub))`).Results[0].([]pilosa.GroupCount)
+		checkGroupBy(t, expected, results)
 	})
 
 	t.Run("check field offset no limit", func(t *testing.T) {
@@ -2401,12 +2403,8 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			{Group: []pilosa.FieldRow{{Field: "general", RowID: 12}}, Count: 2},
 		}
 
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(Rows(field=general, previous=10))`}); err != nil {
-			t.Fatal(err)
-		} else {
-			results := res.Results[0].([]pilosa.GroupCount)
-			checkGroupBy(t, expected, results)
-		}
+		results := c.Query(t, "i", `GroupBy(Rows(field=general, previous=10))`).Results[0].([]pilosa.GroupCount)
+		checkGroupBy(t, expected, results)
 	})
 
 	t.Run("check field offset limit", func(t *testing.T) {
@@ -2414,12 +2412,9 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			{Group: []pilosa.FieldRow{{Field: "general", RowID: 11}}, Count: 2},
 		}
 
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(Rows(field=general, previous=10, limit=1))`}); err != nil {
-			t.Fatal(err)
-		} else {
-			results := res.Results[0].([]pilosa.GroupCount)
-			checkGroupBy(t, expected, results)
-		}
+		results := c.Query(t, "i", `GroupBy(Rows(field=general, previous=10, limit=1))`).Results[0].([]pilosa.GroupCount)
+		checkGroupBy(t, expected, results)
+
 	})
 }
 
