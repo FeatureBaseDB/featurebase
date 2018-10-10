@@ -851,7 +851,7 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 		}
 		if limit, hasLimit, err := child.UintArg("limit"); err != nil {
 			return nil, err
-		} else if hasLimit && int(limit) > gbLimit {
+		} else if !hasLimit || int(limit) > gbLimit {
 			child.Args["limit"] = uint64(gbLimit)
 		}
 		var err error

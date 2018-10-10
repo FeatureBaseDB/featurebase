@@ -2416,6 +2416,26 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 		checkGroupBy(t, expected, results)
 
 	})
+
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "a")
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "b")
+	c.ImportBits(t, "i", "a", [][2]uint64{
+		{0, 1},
+		{1, ShardWidth + 1},
+	})
+	c.ImportBits(t, "i", "b", [][2]uint64{
+		{0, ShardWidth + 1},
+		{1, 1},
+	})
+
+	t.Run("tricky data", func(t *testing.T) {
+		expected := []pilosa.GroupCount{
+			{Group: []pilosa.FieldRow{{Field: "a", RowID: 0}, {Field: "b", RowID: 1}}, Count: 1},
+		}
+
+		results := c.Query(t, "i", `GroupBy(Rows(field=a), Rows(field=b), limit=1)`).Results[0].([]pilosa.GroupCount)
+		checkGroupBy(t, expected, results)
+	})
 }
 
 func checkGroupBy(t *testing.T, expected, results []pilosa.GroupCount) {
@@ -2434,7 +2454,7 @@ func checkGroupBy(t *testing.T, expected, results []pilosa.GroupCount) {
 	}
 	for _, result := range results {
 		if notIn(result, expected) {
-			t.Fatalf("unexpected grouping: \n%+v\n\n\n%+v\n", result, expected)
+			t.Fatalf("unexpected results: \n got:%+v\nwant:%+v\n", results, expected)
 		}
 	}
 }
