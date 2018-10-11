@@ -1819,3 +1819,122 @@ func calcExpected(inputs ...[]uint64) [][]uint64 {
 
 	return ret
 }
+
+func TestFragmentRowIterator(t *testing.T) {
+	t.Run("basic", func(t *testing.T) {
+		f := mustOpenFragment("i", "f", "v", 0, CacheTypeRanked)
+		f.mustSetBits(0, 0)
+		f.mustSetBits(1, 0)
+		f.mustSetBits(2, 0)
+		f.mustSetBits(3, 0)
+
+		iter := f.rowIterator(false)
+		for i := uint64(0); i < 4; i++ {
+			row, id, wrapped := iter.Next()
+			if id != i {
+				t.Fatalf("expected row %d but got %d", i, id)
+			}
+			if wrapped != false {
+				t.Fatalf("shouldn't have wrapped")
+			}
+			if !reflect.DeepEqual(row.Columns(), []uint64{0}) {
+				t.Fatalf("got wrong columns back on iteration %d - should just be 0 but %v", i, row.Columns())
+			}
+		}
+		row, id, wrapped := iter.Next()
+		if row != nil {
+			t.Fatalf("row should be nil after iterator is exhausted, got %v", row.Columns())
+		}
+		if id != 0 {
+			t.Fatalf("id should be 0 after iterator is exhausted, got %d", id)
+		}
+		if wrapped != true {
+			t.Fatalf("wrapped should be true after iterator is exhausted")
+		}
+		f.Close()
+	})
+
+	t.Run("skipped rows", func(t *testing.T) {
+		f := mustOpenFragment("i", "f", "v", 0, CacheTypeRanked)
+		f.mustSetBits(1, 0)
+		f.mustSetBits(3, 0)
+		f.mustSetBits(5, 0)
+		f.mustSetBits(7, 0)
+
+		iter := f.rowIterator(false)
+		for i := uint64(1); i < 8; i += 2 {
+			row, id, wrapped := iter.Next()
+			if id != i {
+				t.Fatalf("expected row %d but got %d", i, id)
+			}
+			if wrapped != false {
+				t.Fatalf("shouldn't have wrapped")
+			}
+			if !reflect.DeepEqual(row.Columns(), []uint64{0}) {
+				t.Fatalf("got wrong columns back on iteration %d - should just be 0 but %v", i, row.Columns())
+			}
+		}
+		row, id, wrapped := iter.Next()
+		if row != nil {
+			t.Fatalf("row should be nil after iterator is exhausted, got %v", row.Columns())
+		}
+		if id != 0 {
+			t.Fatalf("id should be 0 after iterator is exhausted, got %d", id)
+		}
+		if wrapped != true {
+			t.Fatalf("wrapped should be true after iterator is exhausted")
+		}
+		f.Close()
+	})
+
+	t.Run("basic wrapped", func(t *testing.T) {
+		f := mustOpenFragment("i", "f", "v", 0, CacheTypeRanked)
+		f.mustSetBits(0, 0)
+		f.mustSetBits(1, 0)
+		f.mustSetBits(2, 0)
+		f.mustSetBits(3, 0)
+
+		iter := f.rowIterator(true)
+		for i := uint64(0); i < 5; i++ {
+			row, id, wrapped := iter.Next()
+			if id != i%4 {
+				t.Fatalf("expected row %d but got %d", i%4, id)
+			}
+			if wrapped && i < 4 {
+				t.Fatalf("shouldn't have wrapped")
+			} else if !wrapped && i >= 4 {
+				t.Fatalf("should have wrapped")
+			}
+			if !reflect.DeepEqual(row.Columns(), []uint64{0}) {
+				t.Fatalf("got wrong columns back on iteration %d - should just be 0 but %v", i, row.Columns())
+			}
+		}
+		f.Close()
+	})
+
+	t.Run("skipped rows wrapped", func(t *testing.T) {
+		f := mustOpenFragment("i", "f", "v", 0, CacheTypeRanked)
+		f.mustSetBits(1, 0)
+		f.mustSetBits(3, 0)
+		f.mustSetBits(5, 0)
+		f.mustSetBits(7, 0)
+
+		iter := f.rowIterator(true)
+		for i := uint64(1); i < 10; i += 2 {
+			row, id, wrapped := iter.Next()
+			if id != i%8 {
+				t.Errorf("expected row %d but got %d", i%8, id)
+			}
+			if wrapped && i < 8 {
+				t.Errorf("shouldn't have wrapped")
+			} else if !wrapped && i >= 8 {
+				t.Errorf("should have wrapped")
+			}
+			if !reflect.DeepEqual(row.Columns(), []uint64{0}) {
+				t.Fatalf("got wrong columns back on iteration %d - should just be 0 but %v", i, row.Columns())
+			}
+		}
+		f.Close()
+	})
+
+}

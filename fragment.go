@@ -2013,6 +2013,42 @@ func (f *fragment) rows(start uint64, filters ...rowFilter) []uint64 {
 	return rows
 }
 
+type rowIterator struct {
+	f      *fragment
+	rowIDs []uint64
+	cur    int
+	wrap   bool
+}
+
+func (f *fragment) rowIterator(wrap bool, filters ...rowFilter) *rowIterator {
+	return &rowIterator{
+		f:      f,
+		rowIDs: f.rows(0, filters...), // TODO: this may be memory intensive in high cardinality cases
+		wrap:   wrap,
+	}
+}
+
+func (ri *rowIterator) Seek(rowID uint64) {
+	idx := sort.Search(len(ri.rowIDs), func(i int) bool {
+		return ri.rowIDs[i] >= rowID
+	})
+	ri.cur = idx
+}
+
+func (ri *rowIterator) Next() (r *Row, rowID uint64, wrapped bool) {
+	if ri.cur >= len(ri.rowIDs) {
+		if !ri.wrap || len(ri.rowIDs) == 0 {
+			return nil, 0, true
+		}
+		ri.Seek(0)
+		wrapped = true
+	}
+	rowID = ri.rowIDs[ri.cur]
+	r = ri.f.row(rowID)
+	ri.cur += 1
+	return r, rowID, wrapped
+}
+
 // FragmentBlock represents info about a subsection of the rows in a block.
 // This is used for comparing data in remote blocks for active anti-entropy.
 type FragmentBlock struct {

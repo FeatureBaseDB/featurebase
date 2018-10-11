@@ -943,7 +943,7 @@ func mergeGroupCounts(gc, other []GroupCount) []GroupCount {
 }
 
 func (e *executor) executeGroupByShard(_ context.Context, index string, c *pql.Call, shard uint64, childRows []RowIDs) ([]GroupCount, error) {
-	iter := newGroupByIterator(childRows, c.Children, index, shard, e.Holder)
+	iter := newGroupByIterator2(childRows, c.Children, index, shard, e.Holder)
 	if iter == nil {
 		return []GroupCount{}, nil
 	}
@@ -2596,10 +2596,122 @@ func filterWithRows(rows []uint64) rowFilter {
 	}
 }
 
+type groupByIterator2 struct {
+	rowIters []*rowIterator
+	rows     []struct {
+		row *Row
+		id  uint64
+	}
+	done   bool
+	fields []FieldRow
+}
+
+func newGroupByIterator2(rowIDs []RowIDs, children []*pql.Call, index string, shard uint64, holder *Holder) *groupByIterator2 {
+	gbi := &groupByIterator2{
+		rowIters: make([]*rowIterator, len(children)),
+		rows: make([]struct {
+			row *Row
+			id  uint64
+		}, len(children)),
+		fields: make([]FieldRow, len(children)),
+	}
+
+	ignorePrev := false
+	for i, call := range children {
+		fieldName := call.Args["field"].(string) // this has already been validated by this point
+		gbi.fields[i].Field = fieldName
+		// Fetch fragment.
+		frag := holder.fragment(index, fieldName, viewStandard, shard)
+		if frag == nil { // this means this whole shard doesn't have all it needs to continue
+			return nil
+		}
+		filters := []rowFilter{}
+		if len(rowIDs[i]) > 0 {
+			filters = append(filters, filterWithRows(rowIDs[i]))
+		}
+		gbi.rowIters[i] = frag.rowIterator(i != 0, filters...)
+
+		prev, hasPrev, err := call.UintArg("previous")
+		if err != nil {
+			panic("getting prev")
+		} else if hasPrev && !ignorePrev {
+			if i == len(children)-1 {
+				prev += 1
+			}
+			gbi.rowIters[i].Seek(prev)
+		}
+		nextRow, rowID, wrapped := gbi.rowIters[i].Next()
+		if nextRow == nil {
+			gbi.done = true
+			return gbi
+		}
+		gbi.rows[i].row = nextRow
+		gbi.rows[i].id = rowID
+		if hasPrev && rowID != prev {
+			ignorePrev = true
+		}
+		if wrapped {
+			for j := i - 1; j >= 0; j-- {
+				nextRow, rowID, wrapped := gbi.rowIters[j].Next()
+				if nextRow == nil {
+					gbi.done = true
+					return gbi
+				}
+				gbi.rows[j].row = nextRow
+				gbi.rows[j].id = rowID
+				if !wrapped {
+					break
+				}
+			}
+		}
+	}
+
+	for i := 1; i < len(gbi.rows); i++ {
+		gbi.rows[i].row = gbi.rows[i].row.Intersect(gbi.rows[i-1].row)
+	}
+
+	return gbi
+}
+
+func (gbi *groupByIterator2) nextAtIdx(i int) {
+	nr, rowID, wrapped := gbi.rowIters[i].Next()
+	if nr == nil {
+		gbi.done = true
+		return
+	}
+	if wrapped && i != 0 {
+		gbi.nextAtIdx(i - 1)
+	}
+	if i != 0 {
+		gbi.rows[i].row = nr.Intersect(gbi.rows[i-1].row)
+	} else {
+		gbi.rows[i].row = nr
+	}
+	gbi.rows[i].id = rowID
+}
+
+func (gbi *groupByIterator2) Next() (ret ppi, done bool) {
+	if gbi.done {
+		return ret, true
+	}
+	ret.row = gbi.rows[len(gbi.rows)-1].row
+	ret.gCnt.Count = ret.row.Count()
+	ret.gCnt.Group = make([]FieldRow, len(gbi.rows))
+	copy(ret.gCnt.Group, gbi.fields)
+	for i, r := range gbi.rows {
+		ret.gCnt.Group[i].RowID = r.id
+	}
+
+	// set up for next call
+	gbi.nextAtIdx(len(gbi.rows) - 1)
+
+	return ret, false
+}
+
 type groupByIterator struct {
 	fragments []*fragment
 	current   []uint64
-	rows      []RowIDs
+	rowIDs    []RowIDs
 	fields    []FieldRow
 }
 
@@ -2607,7 +2719,7 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, index string, sha
 	gbi := &groupByIterator{
 		fragments: make([]*fragment, len(rowIDs)),
 		current:   make([]uint64, len(rowIDs)),
-		rows:      rowIDs,
+		rowIDs:    rowIDs,
 		fields:    make([]FieldRow, len(rowIDs)),
 	}
 	for i, call := range children {
@@ -2645,16 +2757,16 @@ func (gbi *groupByIterator) Next() (ret ppi, done bool) {
 		}
 		frag := gbi.fragments[i]
 		filters := []rowFilter{}
-		if len(gbi.rows[i]) > 0 {
-			filters = append(filters, filterWithRows(gbi.rows[i]))
+		if len(gbi.rowIDs[i]) > 0 {
+			filters = append(filters, filterWithRows(gbi.rowIDs[i]))
 		}
 		filters = append(filters, filterWithLimit(1))
 		rowIDs := frag.rows(gbi.current[i], filters...)
 		if len(rowIDs) == 0 && i != 0 { // wrap around
 			wrap = true
 			gbi.current[i] = 0
-			if len(gbi.rows[i]) > 0 {
-				gbi.current[i] = gbi.rows[i][0]
+			if len(gbi.rowIDs[i]) > 0 {
+				gbi.current[i] = gbi.rowIDs[i][0]
 			}
 			rowIDs = frag.rows(gbi.current[i], filters...)
 		}
