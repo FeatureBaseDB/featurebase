@@ -412,7 +412,7 @@ func (c *InternalClient) marshalImportPayload(index, field string, shard uint64,
 // Forward the request to the new host in request
 func (c *InternalClient) Forward(ctx context.Context, w http.ResponseWriter, req *http.Request, scheme, host string) error {
 
-	body, err := ioutil.ReadAll(req.Body)
+	body, err := ioutil.ReadAll(req.Body) // it appears I must consume the
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return nil

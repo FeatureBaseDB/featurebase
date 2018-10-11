@@ -181,7 +181,7 @@ func (h *Handler) populateValidators() {
 	h.validators["DeleteIndex"] = queryValidationSpecRequired()
 	h.validators["PostField"] = queryValidationSpecRequired()
 	h.validators["DeleteField"] = queryValidationSpecRequired()
-	h.validators["PostImport"] = queryValidationSpecRequired()
+	h.validators["PostImport"] = queryValidationSpecRequired().Optional("shard", "keyImport")
 	h.validators["PostImportRoaring"] = queryValidationSpecRequired().Optional("remote")
 	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("shards", "columnAttrs", "excludeRowAttrs", "excludeColumns")
 	h.validators["GetInfo"] = queryValidationSpecRequired()
@@ -992,7 +992,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//if not the destination forward on to correct for execution
+	//if not the execution destination forward on to correct for execution
 	if h.api.EnsureOperatingNode(indexName, w, r) {
 		return
 	}
