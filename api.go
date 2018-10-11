@@ -102,11 +102,9 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 		return QueryResponse{}, errors.Wrap(err, "validating api method")
 	}
 
-	resp := QueryResponse{}
-
 	q, err := pql.NewParser(strings.NewReader(req.Query)).Parse()
 	if err != nil {
-		return resp, errors.Wrap(err, "parsing")
+		return QueryResponse{}, errors.Wrap(err, "parsing")
 	}
 	execOpts := &execOptions{
 		Remote:          req.Remote,
@@ -114,68 +112,12 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 		ExcludeColumns:  req.ExcludeColumns,  // NOTE: Kept for Pilosa 1.x compat.
 		ColumnAttrs:     req.ColumnAttrs,     // NOTE: Kept for Pilosa 1.x compat.
 	}
-	results, err := api.server.executor.Execute(ctx, req.Index, q, req.Shards, execOpts)
+	resp, err := api.server.executor.Execute(ctx, req.Index, q, req.Shards, execOpts)
 	if err != nil {
-		return resp, errors.Wrap(err, "executing")
+		return QueryResponse{}, errors.Wrap(err, "executing")
 	}
-	resp.Results = results
 
-	// Fill column attributes if requested.
-	// execOpts.ColumnAttrs may be set by the Execute method if any of the Calls use Options(columnAttrs=true)
-	if execOpts.ColumnAttrs {
-		// Consolidate all column ids across all calls.
-		var columnIDs []uint64
-		for _, result := range results {
-			bm, ok := result.(*Row)
-			if !ok {
-				continue
-			}
-			columnIDs = uint64Slice(columnIDs).merge(bm.Columns())
-		}
-
-		// Retrieve column attributes across all calls.
-		columnAttrSets, err := api.readColumnAttrSets(api.holder.Index(req.Index), columnIDs)
-		if err != nil {
-			return resp, errors.Wrap(err, "reading column attrs")
-		}
-
-		// Translate column attributes, if necessary.
-		if api.holder.translateFile != nil {
-			for _, col := range resp.ColumnAttrSets {
-				v, err := api.holder.translateFile.TranslateColumnToString(req.Index, col.ID)
-				if err != nil {
-					return resp, err
-				}
-				col.Key, col.ID = v, 0
-			}
-		}
-
-		resp.ColumnAttrSets = columnAttrSets
-	}
 	return resp, nil
-}
-
-// readColumnAttrSets returns a list of column attribute objects by id.
-func (api *API) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttrSet, error) {
-	if index == nil {
-		return nil, nil
-	}
-
-	ax := make([]*ColumnAttrSet, 0, len(ids))
-	for _, id := range ids {
-		// Read attributes for column. Skip column if empty.
-		attrs, err := index.ColumnAttrStore().Attrs(id)
-		if err != nil {
-			return nil, errors.Wrap(err, "getting attrs")
-		} else if len(attrs) == 0 {
-			continue
-		}
-
-		// Append column with attributes.
-		ax = append(ax, &ColumnAttrSet{ID: id, Attrs: attrs})
-	}
-
-	return ax, nil
 }
 
 // CreateIndex makes a new Pilosa index.
@@ -321,13 +263,19 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 	nodes := api.cluster.shardNodes(indexName, shard)
 	var eg errgroup.Group
 
+	field := api.holder.Field(indexName, fieldName)
+	if field == nil {
+		return newNotFoundError(ErrFieldNotFound)
+	}
+
+	// only set fields are supported
+	if field.Type() != FieldTypeSet {
+		return NewBadRequestError(errors.New("roaring import is only supported for set fields"))
+	}
+
 	for _, node := range nodes {
 		node := node
 		if node.ID == api.server.nodeID {
-			field := api.holder.Field(indexName, fieldName)
-			if field == nil {
-				return newNotFoundError(ErrFieldNotFound)
-			}
 			// must make a copy of data to operate on locally. field.importRoaring changes data
 			d2 := make([]byte, len(data))
 			copy(d2, data)
