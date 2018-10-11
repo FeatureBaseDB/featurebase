@@ -287,3 +287,13 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 		}
 	}
 }
+
+// Ensure holder can reopen.
+func TestHolderCleaner_Reopen(t *testing.T) {
+	h := NewHolder()
+	h.Path = "path"
+	h.Open()
+	h.Close()
+	h.Open()
+	h.Close()
+}
