@@ -2480,6 +2480,56 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 
 }
 
+func BenchmarkGroupBy(b *testing.B) {
+	c := test.MustRunCluster(b, 1)
+	defer c.Close()
+	c.CreateField(b, "i", pilosa.IndexOptions{}, "a")
+	c.CreateField(b, "i", pilosa.IndexOptions{}, "b")
+	c.CreateField(b, "i", pilosa.IndexOptions{}, "c")
+	// Set up identical representative data in 3 fields. In each row, we'll set
+	// a certain bit pattern for 100 bits, then skip 1000 up to ShardWidth.
+	bits := make([][2]uint64, 0)
+	for i := uint64(0); i < ShardWidth; i++ {
+		// row 0 has 100 bit runs
+		bits = append(bits, [2]uint64{0, i})
+		if i%2 == 1 {
+			// row 1 has odd bits set
+			bits = append(bits, [2]uint64{1, i})
+		}
+		if i%2 == 0 {
+			// row 2 has even bits set
+			bits = append(bits, [2]uint64{2, i})
+		}
+		if i%27 == 0 {
+			// row 3 has every 27th bit set
+			bits = append(bits, [2]uint64{3, i})
+		}
+		if i%100 == 99 {
+			i += 1000
+		}
+	}
+	c.ImportBits(b, "i", "a", bits)
+	c.ImportBits(b, "i", "b", bits)
+	c.ImportBits(b, "i", "c", bits)
+
+	b.Run("single shard group by", func(b *testing.B) {
+		b.ResetTimer()
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			c.Query(b, "i", `GroupBy(Rows(field=a), Rows(field=b), Rows(field=c))`)
+		}
+	})
+
+	b.Run("single shard with limit", func(b *testing.B) {
+		b.ResetTimer()
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			c.Query(b, "i", `GroupBy(Rows(field=a), Rows(field=b), Rows(field=c), limit=4)`)
+		}
+	})
+
+}
+
 func checkGroupBy(t *testing.T, expected, results []pilosa.GroupCount) {
 	notIn := func(item pilosa.GroupCount, expected []pilosa.GroupCount) bool {
 		for i := range expected {
