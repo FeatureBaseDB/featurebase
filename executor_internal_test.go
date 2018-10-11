@@ -138,3 +138,58 @@ func TestFilterWithLimit(t *testing.T) {
 		t.Fatalf("limit filter should have been done, but got inc: %v done: %v", inc, done)
 	}
 }
+
+func TestFilterWithRows(t *testing.T) {
+	tests := []struct {
+		rows     []uint64
+		callWith []uint64
+		expect   [][2]bool
+	}{
+		{
+			rows:     []uint64{},
+			callWith: []uint64{0},
+			expect:   [][2]bool{{false, true}},
+		},
+		{
+			rows:     []uint64{0},
+			callWith: []uint64{0},
+			expect:   [][2]bool{{true, true}},
+		},
+		{
+			rows:     []uint64{1},
+			callWith: []uint64{0, 2},
+			expect:   [][2]bool{{false, false}, {false, true}},
+		},
+		{
+			rows:     []uint64{0},
+			callWith: []uint64{1, 2},
+			expect:   [][2]bool{{false, true}, {false, true}},
+		},
+		{
+			rows:     []uint64{3, 9},
+			callWith: []uint64{1, 2, 3, 10},
+			expect:   [][2]bool{{false, false}, {false, false}, {true, false}, {false, true}},
+		},
+		{
+			rows:     []uint64{0, 1, 2},
+			callWith: []uint64{0, 1, 2},
+			expect:   [][2]bool{{true, false}, {true, false}, {true, true}},
+		},
+	}
+
+	for num, test := range tests {
+		t.Run(fmt.Sprintf("%d_%v_with_%v", num, test.rows, test.callWith), func(t *testing.T) {
+			if len(test.callWith) != len(test.expect) {
+				t.Fatalf("Badly specified test - must expect the same number of values as calls.")
+			}
+			f := filterWithRows(test.rows)
+			for i, id := range test.callWith {
+				inc, done := f(id, 0, nil)
+				if inc != test.expect[i][0] || done != test.expect[i][1] {
+					t.Fatalf("Calling with %d\nexp: %v,%v\ngot: %v,%v", id, test.expect[i][0], test.expect[i][1], inc, done)
+				}
+			}
+		})
+	}
+
+}

@@ -2412,7 +2412,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			{Group: []pilosa.FieldRow{{Field: "general", RowID: 11}}, Count: 2},
 		}
 
-		results := c.Query(t, "i", `GroupBy(Rows(field=general, previous=10, limit=1))`).Results[0].([]pilosa.GroupCount)
+		results := c.Query(t, "i", `GroupBy(Rows(field=general, previous=10), limit=1)`).Results[0].([]pilosa.GroupCount)
 		checkGroupBy(t, expected, results)
 
 	})
@@ -2436,6 +2436,48 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 		results := c.Query(t, "i", `GroupBy(Rows(field=a), Rows(field=b), limit=1)`).Results[0].([]pilosa.GroupCount)
 		checkGroupBy(t, expected, results)
 	})
+
+	// set the same bits in a single shard in three fields
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "wa")
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "wb")
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "wc")
+	c.ImportBits(t, "i", "wa", [][2]uint64{
+		{0, 0}, {0, 1}, {0, 2}, // all
+		{1, 1},         // odds
+		{2, 0}, {2, 2}, // evens
+		{3, 3}, // no overlap
+	})
+	c.ImportBits(t, "i", "wb", [][2]uint64{
+		{0, 0}, {0, 1}, {0, 2},
+		{1, 1},
+		{2, 0}, {2, 2},
+		{3, 3},
+	})
+	c.ImportBits(t, "i", "wc", [][2]uint64{
+		{0, 0}, {0, 1}, {0, 2},
+		{1, 1},
+		{2, 0}, {2, 2},
+		{3, 3},
+	})
+
+	t.Run("test wrapping with previous", func(t *testing.T) {
+		results := c.Query(t, "i", `GroupBy(Rows(field=wa), Rows(field=wb), Rows(field=wc, previous=1), limit=3)`).Results[0].([]pilosa.GroupCount)
+		expected := []pilosa.GroupCount{
+			{Group: []pilosa.FieldRow{{Field: "wa", RowID: 0}, {Field: "wb", RowID: 0}, {Field: "wc", RowID: 2}}, Count: 2},
+			{Group: []pilosa.FieldRow{{Field: "wa", RowID: 0}, {Field: "wb", RowID: 1}, {Field: "wc", RowID: 0}}, Count: 1},
+			{Group: []pilosa.FieldRow{{Field: "wa", RowID: 0}, {Field: "wb", RowID: 1}, {Field: "wc", RowID: 1}}, Count: 1},
+		}
+		checkGroupBy(t, expected, results)
+	})
+
+	t.Run("test wrapping multiple", func(t *testing.T) {
+		results := c.Query(t, "i", `GroupBy(Rows(field=wa), Rows(field=wb, previous=2), Rows(field=wc, previous=2), limit=1)`).Results[0].([]pilosa.GroupCount)
+		expected := []pilosa.GroupCount{
+			{Group: []pilosa.FieldRow{{Field: "wa", RowID: 1}, {Field: "wb", RowID: 0}, {Field: "wc", RowID: 0}}, Count: 1},
+		}
+		checkGroupBy(t, expected, results)
+	})
+
 }
 
 func checkGroupBy(t *testing.T, expected, results []pilosa.GroupCount) {
@@ -2450,7 +2492,7 @@ func checkGroupBy(t *testing.T, expected, results []pilosa.GroupCount) {
 		return true
 	}
 	if len(results) != len(expected) {
-		t.Fatalf("number of  groupings mismatch: \n%+v\n%+v\n", results, expected)
+		t.Fatalf("number of  groupings mismatch:\n got:%+v\nwant:%+v\n", results, expected)
 	}
 	for _, result := range results {
 		if notIn(result, expected) {
