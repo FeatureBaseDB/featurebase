@@ -2022,8 +2022,9 @@ func filterWithRows(rows []uint64) rowFilter {
 // included, there must be one container in that row where all filters return
 // true. For a row to be skipped, at least one filter must return false for each
 // container in that row (it need not be the same filter for each). Any filter
-// returning done == true will cause processing to stop and the rows accumulated
-// so far will be returned.
+// returning done == true will cause processing to stop after all filters for
+// this container have been processed. The rows accumulated up to this point
+// (including this row if all filters passed) will be returned.
 func (f *fragment) rows(start uint64, filters ...rowFilter) []uint64 {
 	startKey := rowToKey(start)
 	i, _ := f.storage.Containers.Iterator(startKey)
@@ -2043,13 +2044,11 @@ func (f *fragment) rows(start uint64, filters ...rowFilter) []uint64 {
 		}
 
 		// apply filters
-		addRow := true
+		addRow, done := true, false
 		for _, filter := range filters {
-			var done bool
-			addRow, done = filter(vRow, key, c)
-			if done {
-				return rows
-			}
+			var d bool
+			addRow, d = filter(vRow, key, c)
+			done = done || d
 			if !addRow {
 				break
 			}
@@ -2057,6 +2056,9 @@ func (f *fragment) rows(start uint64, filters ...rowFilter) []uint64 {
 		if addRow {
 			lastRow = vRow
 			rows = append(rows, vRow)
+		}
+		if done {
+			return rows
 		}
 	}
 	return rows
