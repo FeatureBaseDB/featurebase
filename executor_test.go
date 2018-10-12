@@ -2387,10 +2387,10 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 
 	t.Run("Basic", func(t *testing.T) {
 		expected := []pilosa.GroupCount{
+			{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 100}}, Count: 3},
 			{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 110}}, Count: 1},
 			{Group: []pilosa.FieldRow{{Field: "general", RowID: 11}, {Field: "sub", RowID: 110}}, Count: 1},
 			{Group: []pilosa.FieldRow{{Field: "general", RowID: 12}, {Field: "sub", RowID: 110}}, Count: 1},
-			{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 100}}, Count: 3},
 		}
 
 		results := c.Query(t, "i", `GroupBy(Rows(field=general), Rows(field=sub))`).Results[0].([]pilosa.GroupCount)
@@ -2480,6 +2480,33 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 
 	// TODO test multiple shards with distinct results (different rows) and same
 	// rows to ensure ordering, limit behavior and correctness
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "ma")
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "mb")
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "mc")
+	c.ImportBits(t, "i", "ma", [][2]uint64{
+		{0, 0},
+		{1, ShardWidth},
+		{2, 0},
+		{3, ShardWidth},
+	})
+	c.ImportBits(t, "i", "mb", [][2]uint64{
+		{0, 0},
+		{1, ShardWidth},
+		{2, 0},
+		{3, ShardWidth},
+	})
+	t.Run("distinct rows in different shards", func(t *testing.T) {
+		results := c.Query(t, "i", `GroupBy(Rows(field=ma), Rows(field=mb), limit=5)`).Results[0].([]pilosa.GroupCount)
+		expected := []pilosa.GroupCount{
+			{Group: []pilosa.FieldRow{{Field: "ma", RowID: 0}, {Field: "mb", RowID: 0}}, Count: 1},
+			{Group: []pilosa.FieldRow{{Field: "ma", RowID: 0}, {Field: "mb", RowID: 2}}, Count: 1},
+			{Group: []pilosa.FieldRow{{Field: "ma", RowID: 1}, {Field: "mb", RowID: 1}}, Count: 1},
+			{Group: []pilosa.FieldRow{{Field: "ma", RowID: 1}, {Field: "mb", RowID: 3}}, Count: 1},
+			{Group: []pilosa.FieldRow{{Field: "ma", RowID: 2}, {Field: "mb", RowID: 0}}, Count: 1},
+		}
+		checkGroupBy(t, expected, results)
+
+	})
 
 	// TODO test column queries to row call (also with multiple shards)
 
@@ -2544,22 +2571,12 @@ func BenchmarkGroupBy(b *testing.B) {
 }
 
 func checkGroupBy(t *testing.T, expected, results []pilosa.GroupCount) {
-	notIn := func(item pilosa.GroupCount, expected []pilosa.GroupCount) bool {
-		for i := range expected {
-			if item.Count == expected[i].Count {
-				if reflect.DeepEqual(item.Group, expected[i].Group) {
-					return false
-				}
-			}
-		}
-		return true
-	}
 	if len(results) != len(expected) {
 		t.Fatalf("number of  groupings mismatch:\n got:%+v\nwant:%+v\n", results, expected)
 	}
-	for _, result := range results {
-		if notIn(result, expected) {
-			t.Fatalf("unexpected results: \n got:%+v\nwant:%+v\n", results, expected)
+	for i, result := range results {
+		if !reflect.DeepEqual(expected[i], result) {
+			t.Fatalf("unexpected result at %d: \n got:%+v\nwant:%+v\n", i, result, expected[i])
 		}
 	}
 }
