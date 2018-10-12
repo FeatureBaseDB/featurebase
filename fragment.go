@@ -1967,6 +1967,55 @@ func (f *fragment) readCacheFromArchive(r io.Reader) error {
 // continue.
 type rowFilter func(rowID, key uint64, c *roaring.Container) (include, done bool)
 
+// filterWithLimit returns a filter which will only allow a limited number of
+// rows to be returned. It should be applied last so that it is only called (and
+// therefore only updates its internal state) if the row is being included by
+// every other filter.
+func filterWithLimit(limit uint64) rowFilter {
+	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
+		if limit > 0 {
+			limit--
+			return true, false
+		}
+		return false, true
+	}
+}
+
+func filterColumn(col uint64) rowFilter {
+	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
+		colID := col % ShardWidth
+		colKey := ((rowID * ShardWidth) + colID) >> 16
+		colVal := uint16(colID & 0xFFFF) // columnID within the container
+		return colKey == key && c.Contains(colVal), false
+	}
+}
+
+// TODO: this works, but it would be more performant if the fragment could seek to the
+// next row in the rows list rather than asking the filter for each container
+// serially.
+func filterWithRows(rows []uint64) rowFilter {
+	loc := 0
+	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
+		if loc >= len(rows) {
+			return false, true
+		}
+		i := sort.Search(len(rows[loc:]), func(i int) bool {
+			return rows[loc+i] >= rowID
+		})
+		loc += i
+		if loc >= len(rows) {
+			return false, true
+		}
+		if rows[loc] == rowID {
+			if loc == len(rows)-1 {
+				done = true
+			}
+			return true, done
+		}
+		return false, false
+	}
+}
+
 // rows returns all rows starting from 'start'. Filters will be applied in
 // order. All filters must return true to include the row. Once a row is
 // included, further containers in that row will be skipped. So, for a row to be

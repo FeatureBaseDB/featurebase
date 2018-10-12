@@ -18,11 +18,9 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/pilosa/pilosa/pql"
-	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
 )
 
@@ -834,6 +832,13 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 	if len(c.Children) == 0 {
 		return nil, errors.New("need at least one child call")
 	}
+	limit := int(^uint(0) >> 1)
+	if lim, hasLimit, err := c.UintArg("limit"); err != nil {
+		return nil, err
+	} else if hasLimit {
+		limit = int(lim)
+	}
+
 	// perform Rows queries - TODO, call async? run per shard in
 	// executeGroupByShard? (note: can only do this for Rows queries which do
 	// not include "column" arg)
@@ -868,7 +873,7 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
 		other, _ := prev.([]GroupCount)
-		return mergeGroupCounts(other, v.([]GroupCount))
+		return mergeGroupCounts(other, v.([]GroupCount), limit)
 	}
 	// Get full result set.
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -907,71 +912,62 @@ func (fr FieldRow) String() string {
 	return fmt.Sprintf("%s.%d", fr.Field, fr.RowID)
 }
 
-// TODO: we shouldn't need to string this
-func uniqueGroupString(fr []FieldRow) string {
-	s := []string{}
-	for _, f := range fr {
-		s = append(s, f.String())
-	}
-	return strings.Join(s, "-")
-}
-
-// gbi is a groupBy item.
-type gbi struct {
-	row      *Row
-	fieldRow FieldRow
-}
-
 type GroupCount struct {
 	Group []FieldRow `json:"group"`
 	Count uint64     `json:"count"`
 }
 
-func mergeGroupCounts(gc, other []GroupCount) []GroupCount {
-	m := make(map[string]int)
-	for i := range gc {
-		m[uniqueGroupString(gc[i].Group)] = i
+// mergeGroupCounts merges two slices of GroupCounts throwing away any that go
+// beyond the limit. It assume that the two slices are sorted by the row ids in
+// the fields of the group counts. It may modify its arguments.
+func mergeGroupCounts(a, b []GroupCount, limit int) []GroupCount {
+	if limit > len(a)+len(b) {
+		limit = len(a) + len(b)
 	}
-	for i := range other {
-		if idx, found := m[uniqueGroupString(other[i].Group)]; found {
-			gc[idx].Count += other[i].Count
-		} else {
-			gc = append(gc, other[i])
+	ret := make([]GroupCount, 0, limit)
+	i, j := 0, 0
+	for i < len(a) && j < len(b) && len(ret) < limit {
+		switch a[i].Compare(b[j]) {
+		case -1:
+			ret = append(ret, a[i])
+			i++
+		case 0:
+			a[i].Count += b[j].Count
+			ret = append(ret, a[i])
+			i++
+			j++
+		case 1:
+			ret = append(ret, b[j])
+			j++
 		}
 	}
-	return gc
+	for ; i < len(a) && len(ret) < limit; i++ {
+		ret = append(ret, a[i])
+	}
+	for ; j < len(b) && len(ret) < limit; j++ {
+		ret = append(ret, b[j])
+	}
+	return ret
+}
+
+func (g GroupCount) Compare(o GroupCount) int {
+	for i := range g.Group {
+		if g.Group[i].RowID < o.Group[i].RowID {
+			return -1
+		}
+		if g.Group[i].RowID > o.Group[i].RowID {
+			return 1
+		}
+	}
+	return 0
 }
 
 func (e *executor) executeGroupByShard(_ context.Context, index string, c *pql.Call, shard uint64, childRows []RowIDs) ([]GroupCount, error) {
-	iter := newGroupByIterator2(childRows, c.Children, index, shard, e.Holder)
+	iter := newGroupByIterator(childRows, c.Children, index, shard, e.Holder)
 	if iter == nil {
 		return []GroupCount{}, nil
 	}
 
-	// var work [][]gbi
-	// for i, rowIDs := range childRows {
-	// 	fieldName := c.Children[i].Args["field"].(string) // this has already been validated by this point
-	// 	// Fetch fragment.
-	// 	frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
-	// 	if frag == nil { // this means this whole shard doesn't have all it needs to continue
-	// 		return []GroupCount{}, nil
-	// 	}
-
-	// 	set := make([]gbi, 0)
-	// 	for _, rowID := range rowIDs {
-	// 		rs := frag.rows(rowID, filterWithLimit(1))
-	// 		if len(rs) > 0 && rs[0] == rowID {
-	// 			set = append(set, gbi{
-	// 				row: frag.row(rowID),
-	// 				fieldRow: FieldRow{
-	// 					Field: fieldName,
-	// 					RowID: rowID,
-	// 				},
-	// 			})
-	// 		}
-	// 	}
-	// 	work = append(work, set)
-	// }
 	limit := int(^uint(0) >> 1)
 	if lim, hasLimit, err := c.UintArg("limit"); err != nil {
 		return nil, err
@@ -989,47 +985,14 @@ func (e *executor) executeGroupByShard(_ context.Context, index string, c *pql.C
 		}
 	}
 
-	// for _, group := range product(work) {
-	// 	group.gCnt.Count = group.row.Count()
-	// 	if group.gCnt.Count > 0 {
-	// 		results = append(results, group.gCnt)
-	// 	}
-	// }
 	return results, nil
 }
 
-// ppi is a product process item.
+// ppi is a product process item. TODO: rename
 type ppi struct {
 	row  *Row
 	gCnt GroupCount
 }
-
-// // product generates the cartesian product of the input
-// // using tail recursion.
-// func product(input [][]gbi) []ppi {
-// 	if len(input) == 0 { // base return empty list
-// 		return []ppi{
-// 			{gCnt: GroupCount{Group: make([]FieldRow, 0)}},
-// 		}
-// 	}
-
-// 	res := make([]ppi, 0)
-// 	head := input[0]           // take first element of the list
-// 	tail := product(input[1:]) // invoke product on remaining element
-// 	for h := range head {      // for each head
-// 		for t := range tail { // iterate over the tail
-// 			s := ppi{gCnt: GroupCount{Group: make([]FieldRow, 0)}}
-// 			s.gCnt.Group = append([]FieldRow{head[h].fieldRow}, tail[t].gCnt.Group...) // had to insert at the front to match input order
-// 			if tail[t].row != nil {                                                    // first time around nothing to intersect
-// 				s.row = head[h].row.Intersect(tail[t].row)
-// 			} else {
-// 				s.row = head[h].row
-// 			}
-// 			res = append(res, s)
-// 		}
-// 	}
-// 	return res
-// }
 
 func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
 	if columnID, ok, err := c.UintArg("column"); err != nil {
@@ -2547,56 +2510,7 @@ func isString(v interface{}) bool {
 	return ok
 }
 
-// filterWithLimit returns a filter which will only allow a limited number of
-// rows to be returned. It should be applied last so that it is only called (and
-// therefore only updates its internal state) if the row is being included by
-// every other filter.
-func filterWithLimit(limit uint64) rowFilter {
-	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
-		if limit > 0 {
-			limit--
-			return true, false
-		}
-		return false, true
-	}
-}
-
-func filterColumn(col uint64) rowFilter {
-	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
-		colID := col % ShardWidth
-		colKey := ((rowID * ShardWidth) + colID) >> 16
-		colVal := uint16(colID & 0xFFFF) // columnID within the container
-		return colKey == key && c.Contains(colVal), false
-	}
-}
-
-// TODO: this works, but it would be more performant if the fragment could seek to the
-// next row in the rows list rather than asking the filter for each container
-// serially.
-func filterWithRows(rows []uint64) rowFilter {
-	loc := 0
-	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
-		if loc >= len(rows) {
-			return false, true
-		}
-		i := sort.Search(len(rows[loc:]), func(i int) bool {
-			return rows[loc+i] >= rowID
-		})
-		loc += i
-		if loc >= len(rows) {
-			return false, true
-		}
-		if rows[loc] == rowID {
-			if loc == len(rows)-1 {
-				done = true
-			}
-			return true, done
-		}
-		return false, false
-	}
-}
-
-type groupByIterator2 struct {
+type groupByIterator struct {
 	rowIters []*rowIterator
 	rows     []struct {
 		row *Row
@@ -2606,8 +2520,8 @@ type groupByIterator2 struct {
 	fields []FieldRow
 }
 
-func newGroupByIterator2(rowIDs []RowIDs, children []*pql.Call, index string, shard uint64, holder *Holder) *groupByIterator2 {
-	gbi := &groupByIterator2{
+func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, index string, shard uint64, holder *Holder) *groupByIterator {
+	gbi := &groupByIterator{
 		rowIters: make([]*rowIterator, len(children)),
 		rows: make([]struct {
 			row *Row
@@ -2673,7 +2587,7 @@ func newGroupByIterator2(rowIDs []RowIDs, children []*pql.Call, index string, sh
 	return gbi
 }
 
-func (gbi *groupByIterator2) nextAtIdx(i int) {
+func (gbi *groupByIterator) nextAtIdx(i int) {
 	nr, rowID, wrapped := gbi.rowIters[i].Next()
 	if nr == nil {
 		gbi.done = true
@@ -2690,7 +2604,7 @@ func (gbi *groupByIterator2) nextAtIdx(i int) {
 	gbi.rows[i].id = rowID
 }
 
-func (gbi *groupByIterator2) Next() (ret ppi, done bool) {
+func (gbi *groupByIterator) Next() (ret ppi, done bool) {
 	if gbi.done {
 		return ret, true
 	}
@@ -2705,86 +2619,5 @@ func (gbi *groupByIterator2) Next() (ret ppi, done bool) {
 	// set up for next call
 	gbi.nextAtIdx(len(gbi.rows) - 1)
 
-	return ret, false
-}
-
-type groupByIterator struct {
-	fragments []*fragment
-	current   []uint64
-	rowIDs    []RowIDs
-	fields    []FieldRow
-}
-
-func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, index string, shard uint64, holder *Holder) *groupByIterator {
-	gbi := &groupByIterator{
-		fragments: make([]*fragment, len(rowIDs)),
-		current:   make([]uint64, len(rowIDs)),
-		rowIDs:    rowIDs,
-		fields:    make([]FieldRow, len(rowIDs)),
-	}
-	for i, call := range children {
-		fieldName := call.Args["field"].(string) // this has already been validated by this point
-		gbi.fields[i].Field = fieldName
-		// Fetch fragment.
-		frag := holder.fragment(index, fieldName, viewStandard, shard)
-		if frag == nil { // this means this whole shard doesn't have all it needs to continue
-			return nil
-		}
-		gbi.fragments[i] = frag
-		if prev, hasPrev, err := call.UintArg("previous"); err != nil {
-			panic("getting prev")
-		} else if hasPrev {
-			gbi.current[i] = prev
-			if i == len(children)-1 {
-				gbi.current[i] += 1
-			}
-		}
-	}
-	return gbi
-}
-
-func (gbi *groupByIterator) Next() (ret ppi, done bool) {
-	rows := make([]*Row, len(gbi.current))
-	ret.gCnt.Group = make([]FieldRow, len(gbi.current))
-	copy(ret.gCnt.Group, gbi.fields)
-	wrap := false
-
-	// build rows slice
-	for i := len(gbi.current) - 1; i >= 0; i-- {
-		if wrap {
-			gbi.current[i] += 1
-			wrap = false
-		}
-		frag := gbi.fragments[i]
-		filters := []rowFilter{}
-		if len(gbi.rowIDs[i]) > 0 {
-			filters = append(filters, filterWithRows(gbi.rowIDs[i]))
-		}
-		filters = append(filters, filterWithLimit(1))
-		rowIDs := frag.rows(gbi.current[i], filters...)
-		if len(rowIDs) == 0 && i != 0 { // wrap around
-			wrap = true
-			gbi.current[i] = 0
-			if len(gbi.rowIDs[i]) > 0 {
-				gbi.current[i] = gbi.rowIDs[i][0]
-			}
-			rowIDs = frag.rows(gbi.current[i], filters...)
-		}
-		if len(rowIDs) != 0 {
-			rows[i] = frag.row(rowIDs[0])
-			gbi.current[i] = rowIDs[0]
-			ret.gCnt.Group[i].RowID = rowIDs[0]
-		} else {
-			return ppi{}, true
-		}
-	}
-	gbi.current[len(gbi.current)-1] += 1
-
-	// build ppi from rows
-	ret.row = rows[0]
-	for _, row := range rows[1:] {
-		ret.row = ret.row.Intersect(row)
-	}
-	ret.gCnt.Count = ret.row.Count()
 	return ret, false
 }
