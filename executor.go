@@ -839,9 +839,10 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 		limit = int(lim)
 	}
 
-	// perform Rows queries - TODO, call async? run per shard in
-	// executeGroupByShard? (note: can only do this for Rows queries which do
-	// not include "column" arg)
+	// perform necessary Rows queries (any that have limit or columns args) -
+	// TODO, call async? would only help if multiple Rows queries had a column
+	// or limit arg.
+	// TODO support TopN in here would be really cool - and pretty easy I think.
 	childRows := make([]RowIDs, len(c.Children))
 	for i, child := range c.Children {
 		if child.Name != "Rows" {

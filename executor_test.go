@@ -2518,6 +2518,17 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			checkGroupBy(t, expected, results)
 		})
 
+		t.Run("distinct rows in different shards with column arg", func(t *testing.T) {
+			results := c.Query(t, "i", fmt.Sprintf(`GroupBy(Rows(field=ma), Rows(field=mb, column=%d), limit=5)`, ShardWidth)).Results[0].([]pilosa.GroupCount)
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 1}, {Field: "mb", RowID: 1}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 1}, {Field: "mb", RowID: 3}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 3}, {Field: "mb", RowID: 1}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 3}, {Field: "mb", RowID: 3}}, Count: 1},
+			}
+			checkGroupBy(t, expected, results)
+		})
+
 		c.CreateField(t, "i", pilosa.IndexOptions{}, "na")
 		c.CreateField(t, "i", pilosa.IndexOptions{}, "nb")
 		c.ImportBits(t, "i", "na", [][2]uint64{
@@ -2543,8 +2554,6 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			checkGroupBy(t, expected, results)
 
 		})
-
-		// TODO test column queries to row call (also with multiple shards)
 
 		// test paging over results using previous. set the same bits in three
 		// fields
