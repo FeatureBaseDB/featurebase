@@ -2478,6 +2478,15 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 		checkGroupBy(t, expected, results)
 	})
 
+	// TODO test multiple shards with distinct results (different rows) and same
+	// rows to ensure ordering, limit behavior and correctness
+
+	// TODO test column queries to row call (also with multiple shards)
+
+	// TODO test limit query to Rows calls
+
+	// TODO test paging over results using previous.
+
 }
 
 func BenchmarkGroupBy(b *testing.B) {
@@ -2527,6 +2536,10 @@ func BenchmarkGroupBy(b *testing.B) {
 			c.Query(b, "i", `GroupBy(Rows(field=a), Rows(field=b), Rows(field=c), limit=4)`)
 		}
 	})
+
+	// TODO benchmark over multiple shards
+
+	// TODO benchmark paging over large numbers of rows
 
 }
 

@@ -978,20 +978,14 @@ func (e *executor) executeGroupByShard(_ context.Context, index string, c *pql.C
 	results := make([]GroupCount, 0)
 
 	num := 0
-	for pp, done := iter.Next(); !done && num < limit; pp, done = iter.Next() {
-		if pp.gCnt.Count > 0 {
+	for gc, done := iter.Next(); !done && num < limit; gc, done = iter.Next() {
+		if gc.Count > 0 {
 			num++
-			results = append(results, pp.gCnt)
+			results = append(results, gc)
 		}
 	}
 
 	return results, nil
-}
-
-// ppi is a product process item. TODO: rename
-type ppi struct {
-	row  *Row
-	gCnt GroupCount
 }
 
 func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
@@ -2510,16 +2504,27 @@ func isString(v interface{}) bool {
 	return ok
 }
 
+// groupByIterator contains several slices. Each slice contains a number of
+// elements equal to the number of fields in the group by (the number of Rows
+// calls).
 type groupByIterator struct {
+	// rowIters contains a rowIterator for each of the fields in the Group By.
 	rowIters []*rowIterator
-	rows     []struct {
+	// rows contains the current row data for each of the fields in the Group
+	// By. Each row is the intersection of itself and the rows of the fields
+	// with an index lower than its own. This is a performance optimization so
+	// that the expected common case of getting the next row in the furthest
+	// field to the right require only a single intersect with the row of the
+	// previous field to determine the count of the new group.
+	rows []struct {
 		row *Row
 		id  uint64
 	}
-	done   bool
 	fields []FieldRow
+	done   bool
 }
 
+// newGroupByIterator initializes a new groupByIterator.
 func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, index string, shard uint64, holder *Holder) *groupByIterator {
 	gbi := &groupByIterator{
 		rowIters: make([]*rowIterator, len(children)),
@@ -2580,13 +2585,15 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, index string, sha
 		}
 	}
 
-	for i := 1; i < len(gbi.rows); i++ {
+	for i := 1; i < len(gbi.rows)-1; i++ {
 		gbi.rows[i].row = gbi.rows[i].row.Intersect(gbi.rows[i-1].row)
 	}
 
 	return gbi
 }
 
+// nextAtIdx is a recursive helper method for getting the next row for the field
+// at index i, and then updating the rows in the "higher" fields if it wraps.
 func (gbi *groupByIterator) nextAtIdx(i int) {
 	nr, rowID, wrapped := gbi.rowIters[i].Next()
 	if nr == nil {
@@ -2596,24 +2603,31 @@ func (gbi *groupByIterator) nextAtIdx(i int) {
 	if wrapped && i != 0 {
 		gbi.nextAtIdx(i - 1)
 	}
-	if i != 0 {
+	if i != 0 && i != len(gbi.rows)-1 {
 		gbi.rows[i].row = nr.Intersect(gbi.rows[i-1].row)
+	} else if i == len(gbi.rows)-1 {
+		gbi.rows[i].row = nr
 	} else {
 		gbi.rows[i].row = nr
 	}
 	gbi.rows[i].id = rowID
 }
 
-func (gbi *groupByIterator) Next() (ret ppi, done bool) {
+// Next returns a ppi representing the next group by record. When there are no
+// more records it will return an empty ppi and done==true.
+func (gbi *groupByIterator) Next() (ret GroupCount, done bool) {
 	if gbi.done {
 		return ret, true
 	}
-	ret.row = gbi.rows[len(gbi.rows)-1].row
-	ret.gCnt.Count = ret.row.Count()
-	ret.gCnt.Group = make([]FieldRow, len(gbi.rows))
-	copy(ret.gCnt.Group, gbi.fields)
+	if len(gbi.rows) == 1 {
+		ret.Count = gbi.rows[len(gbi.rows)-1].row.Count()
+	} else {
+		ret.Count = gbi.rows[len(gbi.rows)-1].row.intersectionCount(gbi.rows[len(gbi.rows)-2].row)
+	}
+	ret.Group = make([]FieldRow, len(gbi.rows))
+	copy(ret.Group, gbi.fields)
 	for i, r := range gbi.rows {
-		ret.gCnt.Group[i].RowID = r.id
+		ret.Group[i].RowID = r.id
 	}
 
 	// set up for next call
