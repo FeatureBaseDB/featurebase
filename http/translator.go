@@ -25,6 +25,7 @@ type translateStore struct {
 // NewTranslateStore returns a new instance of TranslateStore based on node.
 // DEPRECATED: Providing a string url to this function is being deprecated. Instead,
 // provide a *pilosa.Node.
+// TODO (2.0) Refactor to avoid panic
 func NewTranslateStore(node interface{}) pilosa.TranslateStore {
 	var n *pilosa.Node
 	switch v := node.(type) {
