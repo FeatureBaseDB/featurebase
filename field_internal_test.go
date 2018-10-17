@@ -349,7 +349,7 @@ func TestField_PersistAvailableShards(t *testing.T) {
 	// bm represents remote available shards.
 	bm := roaring.NewBitmap(1, 2, 3)
 
-	if err := f.addRemoteAvailableShards(bm); err != nil {
+	if err := f.AddRemoteAvailableShards(bm); err != nil {
 		t.Fatal(err)
 	}
 
@@ -371,7 +371,7 @@ func TestField_PersistAvailableShardsTaxiBug(t *testing.T) {
 		bm.Add(i)
 	}
 
-	if err := f.addRemoteAvailableShards(bm); err != nil {
+	if err := f.AddRemoteAvailableShards(bm); err != nil {
 		t.Fatal(err)
 	}
 
@@ -387,7 +387,7 @@ func TestField_PersistAvailableShardsTaxiBug(t *testing.T) {
 		bm1.Add(i)
 	}
 
-	if err := f.addRemoteAvailableShards(bm1); err != nil {
+	if err := f.AddRemoteAvailableShards(bm1); err != nil {
 		t.Fatal(err)
 	}
 
