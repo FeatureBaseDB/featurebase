@@ -269,9 +269,13 @@ func (f *Field) loadAvailableShards() error {
 
 // saveAvailableShards writes remoteAvailableShards data for the field.
 func (f *Field) saveAvailableShards() error {
-	// Open or create file.
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	return f.unprotectedSaveAvailableShards()
+}
+
+func (f *Field) unprotectedSaveAvailableShards() error {
+	// Open or create file.
 	path := filepath.Join(f.path, ".available.shards")
 
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
@@ -294,8 +298,8 @@ func (f *Field) saveAvailableShards() error {
 //
 // NOTE: This can be overridden on the next sync so all nodes should be updated.
 func (f *Field) RemoveAvailableShard(v uint64) error {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
 	b := f.remoteAvailableShards.Clone()
 	if _, err := b.Remove(v); err != nil {
@@ -303,7 +307,7 @@ func (f *Field) RemoveAvailableShard(v uint64) error {
 	}
 	f.remoteAvailableShards = b
 
-	return f.saveAvailableShards()
+	return f.unprotectedSaveAvailableShards()
 }
 
 // Type returns the field type.
