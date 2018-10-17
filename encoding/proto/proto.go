@@ -81,6 +81,14 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		decodeDeleteFieldMessage(msg, mt)
 		return nil
+	case *pilosa.DeleteAvailableShardMessage:
+		msg := &internal.DeleteAvailableShardMessage{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling DeleteAvailableShardMessage")
+		}
+		decodeDeleteAvailableShardMessage(msg, mt)
+		return nil
 	case *pilosa.CreateViewMessage:
 		msg := &internal.CreateViewMessage{}
 		err := proto.Unmarshal(buf, msg)
@@ -250,6 +258,8 @@ func encodeToProto(m pilosa.Message) proto.Message {
 		return encodeCreateFieldMessage(mt)
 	case *pilosa.DeleteFieldMessage:
 		return encodeDeleteFieldMessage(mt)
+	case *pilosa.DeleteAvailableShardMessage:
+		return encodeDeleteAvailableShardMessage(mt)
 	case *pilosa.CreateViewMessage:
 		return encodeCreateViewMessage(mt)
 	case *pilosa.DeleteViewMessage:
@@ -549,6 +559,14 @@ func encodeDeleteFieldMessage(m *pilosa.DeleteFieldMessage) *internal.DeleteFiel
 	}
 }
 
+func encodeDeleteAvailableShardMessage(m *pilosa.DeleteAvailableShardMessage) *internal.DeleteAvailableShardMessage {
+	return &internal.DeleteAvailableShardMessage{
+		Index:   m.Index,
+		Field:   m.Field,
+		ShardID: m.ShardID,
+	}
+}
+
 func encodeCreateViewMessage(m *pilosa.CreateViewMessage) *internal.CreateViewMessage {
 	return &internal.CreateViewMessage{
 		Index: m.Index,
@@ -773,6 +791,12 @@ func decodeCreateFieldMessage(pb *internal.CreateFieldMessage, m *pilosa.CreateF
 func decodeDeleteFieldMessage(pb *internal.DeleteFieldMessage, m *pilosa.DeleteFieldMessage) {
 	m.Index = pb.Index
 	m.Field = pb.Field
+}
+
+func decodeDeleteAvailableShardMessage(pb *internal.DeleteAvailableShardMessage, m *pilosa.DeleteAvailableShardMessage) {
+	m.Index = pb.Index
+	m.Field = pb.Field
+	m.ShardID = pb.ShardID
 }
 
 func decodeCreateViewMessage(pb *internal.CreateViewMessage, m *pilosa.CreateViewMessage) {
