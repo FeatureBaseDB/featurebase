@@ -361,3 +361,42 @@ func TestField_PersistAvailableShards(t *testing.T) {
 	}
 
 }
+
+func TestField_PersistAvailableShardsTaxiBug(t *testing.T) {
+	f := MustOpenField(OptFieldTypeDefault())
+
+	// bm represents remote available shards.
+	bm := roaring.NewBitmap()
+	for i := uint64(0); i < 1204; i += 2 {
+		bm.Add(i)
+	}
+
+	if err := f.addRemoteAvailableShards(bm); err != nil {
+		t.Fatal(err)
+	}
+
+	// Reload field and verify that shard data is persisted.
+	if err := f.Reopen(); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(f.remoteAvailableShards.Slice(), bm.Slice()) {
+		t.Fatalf("unexpected available shards (reopen). expected: %v, but got: %v", bm.Slice(), f.remoteAvailableShards.Slice())
+	}
+
+	bm1 := roaring.NewBitmap()
+	for i := uint64(1); i < 1204; i += 2 {
+		bm1.Add(i)
+	}
+
+	if err := f.addRemoteAvailableShards(bm1); err != nil {
+		t.Fatal(err)
+	}
+
+	// Reload field and verify that shard data is persisted.
+	result := bm.Union(bm1)
+	if err := f.Reopen(); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(f.remoteAvailableShards.Slice(), result.Slice()) {
+		t.Fatalf("unexpected available shards (reopen). expected: %v, but got: %v", bm.Slice(), f.remoteAvailableShards.Slice())
+	}
+
+}
