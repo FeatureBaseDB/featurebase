@@ -362,7 +362,9 @@ func TestField_PersistAvailableShards(t *testing.T) {
 
 }
 
-func TestField_PersistAvailableShardsTaxiBug(t *testing.T) {
+// Ensure that persisting available shards having a smaller footprint (for example,
+// when going from a bitmap to a smaller, RLE representation) succeeds.
+func TestField_PersistAvailableShardsFootprint(t *testing.T) {
 	f := MustOpenField(OptFieldTypeDefault())
 
 	// bm represents remote available shards.
