@@ -237,7 +237,7 @@ func OptServerClusterHasher(h Hasher) ServerOption {
 
 func OptServerTranslateFileMapSize(mapSize int) ServerOption {
 	return func(s *Server) error {
-		s.holder.translateFile = NewTranslateFile( OptTranslateFileMapSize(mapSize))
+		s.holder.translateFile = NewTranslateFile(OptTranslateFileMapSize(mapSize))
 		return nil
 	}
 }
