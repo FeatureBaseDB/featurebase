@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -234,7 +235,6 @@ func (f *Field) AvailableShards() *roaring.Bitmap {
 // and saves the set to a file.
 func (f *Field) AddRemoteAvailableShards(b *roaring.Bitmap) error {
 	f.mergeRemoteAvailableShards(b)
-
 	// Save the updated bitmap to the data store.
 	return f.saveAvailableShards()
 }
@@ -246,12 +246,60 @@ func (f *Field) mergeRemoteAvailableShards(b *roaring.Bitmap) {
 	f.remoteAvailableShards = f.remoteAvailableShards.Union(b)
 }
 
+// loadAvailableShards reads remoteAvailableShards data for the field, if any.
+func (f *Field) loadAvailableShards() error {
+	bm := roaring.NewBitmap()
+	// Read data from meta file.
+	path := filepath.Join(f.path, ".available.shards")
+	buf, err := ioutil.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return errors.Wrap(err, "reading available shards")
+	} else {
+		if err := bm.UnmarshalBinary(buf); err != nil {
+			return errors.Wrap(err, "unmarshaling")
+		}
+	}
+	// Merge bitmap from file into field.
+	f.mergeRemoteAvailableShards(bm)
+
+	return nil
+}
+
+// saveAvailableShards writes remoteAvailableShards data for the field.
+func (f *Field) saveAvailableShards() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.unprotectedSaveAvailableShards()
+}
+
+func (f *Field) unprotectedSaveAvailableShards() error {
+	// Open or create file.
+	path := filepath.Join(f.path, ".available.shards")
+
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+	if err != nil {
+		return errors.Wrap(err, "opening available shards file")
+	}
+	defer file.Close()
+
+	// Write available shards to file.
+	bw := bufio.NewWriter(file)
+	if _, err = f.remoteAvailableShards.WriteTo(bw); err != nil {
+		return errors.Wrap(err, "writing bitmap to buffer")
+	}
+	bw.Flush()
+
+	return nil
+}
+
 // RemoveAvailableShard removes a shard from the bitmap cache.
 //
 // NOTE: This can be overridden on the next sync so all nodes should be updated.
 func (f *Field) RemoveAvailableShard(v uint64) error {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
 	b := f.remoteAvailableShards.Clone()
 	if _, err := b.Remove(v); err != nil {
@@ -259,7 +307,7 @@ func (f *Field) RemoveAvailableShard(v uint64) error {
 	}
 	f.remoteAvailableShards = b
 
-	return f.saveAvailableShards()
+	return f.unprotectedSaveAvailableShards()
 }
 
 // Type returns the field type.
@@ -491,47 +539,6 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Keys = false
 	default:
 		return errors.New("invalid field type")
-	}
-
-	return nil
-}
-
-// loadAvailableShards reads remoteAvailableShards data for the field, if any.
-func (f *Field) loadAvailableShards() error {
-	bm := roaring.NewBitmap()
-
-	// Read data from meta file.
-	buf, err := ioutil.ReadFile(filepath.Join(f.path, ".available.shards"))
-	if os.IsNotExist(err) {
-		return nil
-	} else if err != nil {
-		return errors.Wrap(err, "reading available shards")
-	} else {
-		if err := bm.UnmarshalBinary(buf); err != nil {
-			return errors.Wrap(err, "unmarshaling")
-		}
-	}
-
-	// Merge bitmap from file into field.
-	f.mergeRemoteAvailableShards(bm)
-
-	return nil
-}
-
-// saveAvailableShards writes remoteAvailableShards data for the field.
-func (f *Field) saveAvailableShards() error {
-	// Open or create file.
-	file, err := os.OpenFile(filepath.Join(f.path, ".available.shards"), os.O_WRONLY|os.O_CREATE, 0666)
-	if err != nil {
-		return errors.Wrap(err, "opening available shards file")
-	}
-
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-
-	// Write available shards to file.
-	if _, err := f.remoteAvailableShards.WriteTo(file); err != nil {
-		return errors.Wrap(err, "writing bitmap to buffer")
 	}
 
 	return nil
