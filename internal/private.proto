@@ -68,6 +68,12 @@ message DeleteFieldMessage {
     string Field = 2;
 }
 
+message DeleteAvailableShardMessage {
+    string Index = 1;
+    string Field = 2;
+    uint64 ShardID = 3;
+}
+
 message Field {
     string Name = 1;
     FieldOptions Meta = 2;
