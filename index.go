@@ -69,9 +69,10 @@ func NewIndex(path, name string) (*Index, error) {
 		newAttrStore: newNopAttrStore,
 		columnAttrs:  nopStore,
 
-		broadcaster: NopBroadcaster,
-		Stats:       NopStatsClient,
-		logger:      NopLogger,
+		broadcaster:    NopBroadcaster,
+		Stats:          NopStatsClient,
+		logger:         NopLogger,
+		trackExistence: true,
 	}, nil
 }
 

@@ -104,6 +104,22 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	})
 
+	t.Run("ImportRoaringFieldTypeFail", func(t *testing.T) {
+		// Roaring import into a non-set field should fail.
+		if _, err := i0.CreateFieldIfNotExists("int-field", pilosa.OptFieldTypeInt(0, 1)); err != nil {
+			t.Fatal(err)
+		}
+		w := httptest.NewRecorder()
+		roaringData, _ := hex.DecodeString("3B3001000100000900010000000100010009000100")
+		req := test.MustNewHTTPRequest("POST", "/index/i0/field/int-field/import-roaring/0", bytes.NewBuffer(roaringData))
+		req.Header.Set("Content-Type", "application/x-binary")
+		h.ServeHTTP(w, req)
+		if w.Code != gohttp.StatusBadRequest {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+
+	})
+
 	t.Run("Status", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/status", nil))

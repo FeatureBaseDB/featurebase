@@ -481,7 +481,7 @@ func (s *Server) receiveMessage(m Message) error {
 		if f == nil {
 			return fmt.Errorf("Local field not found: %s/%s", obj.Index, obj.Field)
 		}
-		if err := f.addRemoteAvailableShards(roaring.NewBitmap(obj.Shard)); err != nil {
+		if err := f.AddRemoteAvailableShards(roaring.NewBitmap(obj.Shard)); err != nil {
 			return errors.Wrap(err, "adding remote available shards")
 		}
 	case *CreateIndexMessage:
@@ -507,6 +507,11 @@ func (s *Server) receiveMessage(m Message) error {
 	case *DeleteFieldMessage:
 		idx := s.holder.Index(obj.Index)
 		if err := idx.DeleteField(obj.Field); err != nil {
+			return err
+		}
+	case *DeleteAvailableShardMessage:
+		f := s.holder.Field(obj.Index, obj.Field)
+		if err := f.RemoveAvailableShard(obj.ShardID); err != nil {
 			return err
 		}
 	case *CreateViewMessage:
@@ -648,7 +653,7 @@ func (s *Server) mergeRemoteStatus(ns *NodeStatus) error {
 				s.logger.Printf("Local Field not found: %s/%s", is.Name, fs.Name)
 				continue
 			}
-			if err := f.addRemoteAvailableShards(fs.AvailableShards); err != nil {
+			if err := f.AddRemoteAvailableShards(fs.AvailableShards); err != nil {
 				return errors.Wrap(err, "adding remote available shards")
 			}
 		}
@@ -675,6 +680,7 @@ func (s *Server) monitorDiagnostics() {
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())
 	s.diagnostics.Set("NodeID", s.nodeID)
 	s.diagnostics.Set("ClusterID", s.cluster.id)
+	s.diagnostics.EnrichWithCPUInfo()
 	s.diagnostics.EnrichWithOSInfo()
 
 	// Flush the diagnostics metrics at startup, then on each tick interval

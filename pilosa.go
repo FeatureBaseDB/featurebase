@@ -117,7 +117,7 @@ var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 // ColumnAttrSet represents a set of attributes for a vertical column in an index.
 // Can have a set of attributes attached to it.
 type ColumnAttrSet struct {
-	ID    uint64                 `json:"id"`
+	ID    uint64                 `json:"id,omitempty"`
 	Key   string                 `json:"key,omitempty"`
 	Attrs map[string]interface{} `json:"attrs,omitempty"`
 }

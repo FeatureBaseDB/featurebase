@@ -122,6 +122,54 @@ func TestFragment_ClearRow(t *testing.T) {
 	}
 }
 
+// Ensure a fragment can set a row.
+func TestFragment_SetRow(t *testing.T) {
+	f := mustOpenFragment("i", "f", viewStandard, 7, "")
+	defer f.Close()
+
+	rowID := uint64(1000)
+
+	// Set bits on the fragment.
+	if _, err := f.setBit(rowID, 8000001); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.setBit(rowID, 8065536); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify data on row.
+	if cols := f.row(rowID).Columns(); !reflect.DeepEqual(cols, []uint64{8000001, 8065536}) {
+		t.Fatalf("unexpected columns: %+v", cols)
+	}
+	// Verify count on row.
+	if n := f.row(rowID).Count(); n != 2 {
+		t.Fatalf("unexpected count: %d", n)
+	}
+
+	// Set row (overwrite existing data).
+	row := NewRow(8000002, 8065537, 8131074)
+	if changed, err := f.unprotectedSetRow(row, rowID); err != nil {
+		t.Fatal(err)
+	} else if !changed {
+		t.Fatalf("expected changed value: %v", changed)
+	}
+
+	// Verify data on row.
+	if cols := f.row(rowID).Columns(); !reflect.DeepEqual(cols, []uint64{8000002, 8065537, 8131074}) {
+		t.Fatalf("unexpected columns after set row: %+v", cols)
+	}
+	// Verify count on row.
+	if n := f.row(rowID).Count(); n != 3 {
+		t.Fatalf("unexpected count after set row: %d", n)
+	}
+
+	// Close and reopen the fragment & verify the data.
+	if err := f.reopen(); err != nil {
+		t.Fatal(err)
+	} else if n := f.row(rowID).Count(); n != 3 {
+		t.Fatalf("unexpected count (reopen): %d", n)
+	}
+}
+
 // Ensure a fragment can set & read a value.
 func TestFragment_SetValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
