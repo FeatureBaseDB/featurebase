@@ -169,6 +169,7 @@ func OptServerPrimaryTranslateStore(store TranslateStore) ServerOption {
 }
 
 func OptServerPrimaryTranslateStoreFunc(tf func(interface{}) TranslateStore) ServerOption {
+
 	return func(s *Server) error {
 		s.holder.NewPrimaryTranslateStore = tf
 		return nil
@@ -270,6 +271,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 			return nil, errors.Wrap(err, "applying option")
 		}
 	}
+	s.holder.translateFile.logger = s.logger
 
 	path, err := expandDirName(s.dataDir)
 	if err != nil {

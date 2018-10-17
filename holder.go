@@ -590,7 +590,8 @@ func (h *Holder) setPrimaryTranslateStore(node *Node) {
 	if node != nil {
 		nodeID = node.ID
 	}
-	h.translateFile.SetPrimaryStore(nodeID, h.NewPrimaryTranslateStore(node))
+	ts := h.NewPrimaryTranslateStore(node)
+	h.translateFile.SetPrimaryStore(nodeID, ts)
 }
 
 // holderSyncer is an active anti-entropy tool that compares the local holder
