@@ -2730,10 +2730,6 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 			exp: []string{"12", "13"},
 		},
 		{
-			q:   `Rows(field=f, previous="11", limit=2)`,
-			exp: []string{"12", "13"},
-		},
-		{
 			q:   `Rows(field=f, previous="17", limit=5)`,
 			exp: []string{"18"},
 		},

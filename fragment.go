@@ -1990,9 +1990,11 @@ func filterColumn(col uint64) rowFilter {
 	}
 }
 
-// TODO: this works, but it would be more performant if the fragment could seek to the
-// next row in the rows list rather than asking the filter for each container
-// serially.
+// TODO: this works, but it would be more performant if the fragment could seek
+// to the next row in the rows list rather than asking the filter for each
+// container serially. The container iterator would need to expose a seek
+// method, and the rowFilter would need some way of communicating to
+// fragment.rows what the next rowID to seek to is.
 func filterWithRows(rows []uint64) rowFilter {
 	loc := 0
 	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {

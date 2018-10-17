@@ -964,7 +964,10 @@ func (g GroupCount) Compare(o GroupCount) int {
 }
 
 func (e *executor) executeGroupByShard(_ context.Context, index string, c *pql.Call, shard uint64, childRows []RowIDs) ([]GroupCount, error) {
-	iter := newGroupByIterator(childRows, c.Children, index, shard, e.Holder)
+	iter, err := newGroupByIterator(childRows, c.Children, index, shard, e.Holder)
+	if err != nil {
+		return errors.Wrapf(err, "getting group by iterator for shard %d", shard)
+	}
 	if iter == nil {
 		return []GroupCount{}, nil
 	}
@@ -2521,12 +2524,16 @@ type groupByIterator struct {
 		row *Row
 		id  uint64
 	}
+
+	// fields helps with the construction of GroupCount results by holding all
+	// the field names that are being grouped by. Each results makes a copy of
+	// fields and then sets the row ids.
 	fields []FieldRow
 	done   bool
 }
 
 // newGroupByIterator initializes a new groupByIterator.
-func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, index string, shard uint64, holder *Holder) *groupByIterator {
+func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, index string, shard uint64, holder *Holder) (*groupByIterator, error) {
 	gbi := &groupByIterator{
 		rowIters: make([]*rowIterator, len(children)),
 		rows: make([]struct {
@@ -2543,7 +2550,7 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, index string, sha
 		// Fetch fragment.
 		frag := holder.fragment(index, fieldName, viewStandard, shard)
 		if frag == nil { // this means this whole shard doesn't have all it needs to continue
-			return nil
+			return nil, nil
 		}
 		filters := []rowFilter{}
 		if len(rowIDs[i]) > 0 {
@@ -2553,7 +2560,7 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, index string, sha
 
 		prev, hasPrev, err := call.UintArg("previous")
 		if err != nil {
-			panic("getting prev")
+			return nil, errors.Wrap(err, "getting previous")
 		} else if hasPrev && !ignorePrev {
 			if i == len(children)-1 {
 				prev += 1
@@ -2563,19 +2570,25 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, index string, sha
 		nextRow, rowID, wrapped := gbi.rowIters[i].Next()
 		if nextRow == nil {
 			gbi.done = true
-			return gbi
+			return gbi, nil
 		}
 		gbi.rows[i].row = nextRow
 		gbi.rows[i].id = rowID
 		if hasPrev && rowID != prev {
+			// ignorePrev signals that we didn't find a previous row, so all
+			// Rows queries "deeper" than it need to ignore the previous
+			// argument and start at the beginning.
 			ignorePrev = true
 		}
 		if wrapped {
+			// if a field has wrapped, we need to get the next row for the
+			// previous field, and if that one wraps we need to keep going
+			// backward.
 			for j := i - 1; j >= 0; j-- {
 				nextRow, rowID, wrapped := gbi.rowIters[j].Next()
 				if nextRow == nil {
 					gbi.done = true
-					return gbi
+					return gbi, nil
 				}
 				gbi.rows[j].row = nextRow
 				gbi.rows[j].id = rowID
@@ -2606,8 +2619,6 @@ func (gbi *groupByIterator) nextAtIdx(i int) {
 	}
 	if i != 0 && i != len(gbi.rows)-1 {
 		gbi.rows[i].row = nr.Intersect(gbi.rows[i-1].row)
-	} else if i == len(gbi.rows)-1 {
-		gbi.rows[i].row = nr
 	} else {
 		gbi.rows[i].row = nr
 	}
@@ -2625,6 +2636,7 @@ func (gbi *groupByIterator) Next() (ret GroupCount, done bool) {
 	} else {
 		ret.Count = gbi.rows[len(gbi.rows)-1].row.intersectionCount(gbi.rows[len(gbi.rows)-2].row)
 	}
+
 	ret.Group = make([]FieldRow, len(gbi.rows))
 	copy(ret.Group, gbi.fields)
 	for i, r := range gbi.rows {
