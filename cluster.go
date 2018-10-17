@@ -1946,6 +1946,12 @@ type DeleteFieldMessage struct {
 	Field string
 }
 
+type DeleteAvailableShardMessage struct {
+	Index   string
+	Field   string
+	ShardID uint64
+}
+
 type CreateViewMessage struct {
 	Index string
 	Field string
