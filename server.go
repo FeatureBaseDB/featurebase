@@ -237,9 +237,7 @@ func OptServerClusterHasher(h Hasher) ServerOption {
 
 func OptServerTranslateFileMapSize(mapSize int) ServerOption {
 	return func(s *Server) error {
-		s.holder.translateFile = NewTranslateFile(
-			OptTranslateFileMapSize(mapSize),
-			OptTranslateFileLogger(s.logger))
+		s.holder.translateFile = NewTranslateFile( OptTranslateFileMapSize(mapSize))
 		return nil
 	}
 }
@@ -273,6 +271,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 			return nil, errors.Wrap(err, "applying option")
 		}
 	}
+	s.holder.translateFile.logger = s.logger
 
 	path, err := expandDirName(s.dataDir)
 	if err != nil {
