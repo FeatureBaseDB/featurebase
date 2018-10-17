@@ -364,7 +364,10 @@ func (m *Command) Close() error {
 		eg.Go(m.gossipMemberSet.Close)
 	}
 	if closer, ok := m.logOutput.(io.Closer); ok {
-		eg.Go(closer.Close)
+		// If closer is os.Stdout or os.Stderr, don't close it.
+		if closer != os.Stdout && closer != os.Stderr {
+			eg.Go(closer.Close)
+		}
 	}
 	err := eg.Wait()
 	return errors.Wrap(err, "closing everything")
