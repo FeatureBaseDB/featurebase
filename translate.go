@@ -1118,7 +1118,7 @@ var nopTStore TranslateStore = nopTranslateStore{}
 
 // newNopTranslateStore returns a translate store which does nothing. It returns a global
 // object to avoid unnecessary allocations.
-func newNopTranslateStore(interface{}) (TranslateStore, error) { return nopTStore, nil }
+func newNopTranslateStore(interface{}) TranslateStore { return nopTStore }
 
 // nopTranslateStore represents a no-op implementation of the TranslateStore interface.
 type nopTranslateStore struct{}

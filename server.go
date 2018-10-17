@@ -168,7 +168,7 @@ func OptServerPrimaryTranslateStore(store TranslateStore) ServerOption {
 	}
 }
 
-func OptServerPrimaryTranslateStoreFunc(tf func(interface{}) (TranslateStore, error)) ServerOption {
+func OptServerPrimaryTranslateStoreFunc(tf func(interface{}) TranslateStore) ServerOption {
 
 	return func(s *Server) error {
 		s.holder.NewPrimaryTranslateStore = tf
@@ -237,7 +237,9 @@ func OptServerClusterHasher(h Hasher) ServerOption {
 
 func OptServerTranslateFileMapSize(mapSize int) ServerOption {
 	return func(s *Server) error {
-		s.holder.translateFile = NewTranslateFile(OptTranslateFileMapSize(mapSize))
+		s.holder.translateFile = NewTranslateFile(
+			OptTranslateFileMapSize(mapSize),
+			OptTranslateFileLogger(s.logger))
 		return nil
 	}
 }

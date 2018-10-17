@@ -696,7 +696,7 @@ func TestClusterTranslator(t *testing.T) {
 	cluster[0] = test.NewCommandNode(true)
 	cluster[0].Config.Gossip.Port = "0"
 	cluster[0].Start()
-	httpTranslateStore, _ := http.NewTranslateStore(cluster[0].URL())
+	httpTranslateStore := http.NewTranslateStore(cluster[0].URL())
 	cluster[1] = test.NewCommandNode(false,
 		server.OptCommandServerOptions(
 			pilosa.OptServerPrimaryTranslateStore(httpTranslateStore),

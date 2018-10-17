@@ -52,7 +52,7 @@ type Holder struct {
 
 	// Key/ID translation
 	translateFile            *TranslateFile
-	NewPrimaryTranslateStore func(interface{}) (TranslateStore, error)
+	NewPrimaryTranslateStore func(interface{}) TranslateStore
 
 	// opened channel is closed once Open() completes.
 	opened chan struct{}
@@ -590,10 +590,7 @@ func (h *Holder) setPrimaryTranslateStore(node *Node) {
 	if node != nil {
 		nodeID = node.ID
 	}
-	ts, err := h.NewPrimaryTranslateStore(node)
-	if err != nil {
-		h.Logger.Printf("setPrimaryTranslateStore: %s", err)
-	}
+	ts := h.NewPrimaryTranslateStore(node)
 	h.translateFile.SetPrimaryStore(nodeID, ts)
 }
 
