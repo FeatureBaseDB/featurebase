@@ -966,7 +966,7 @@ func (g GroupCount) Compare(o GroupCount) int {
 func (e *executor) executeGroupByShard(_ context.Context, index string, c *pql.Call, shard uint64, childRows []RowIDs) ([]GroupCount, error) {
 	iter, err := newGroupByIterator(childRows, c.Children, index, shard, e.Holder)
 	if err != nil {
-		return errors.Wrapf(err, "getting group by iterator for shard %d", shard)
+		return nil, errors.Wrapf(err, "getting group by iterator for shard %d", shard)
 	}
 	if iter == nil {
 		return []GroupCount{}, nil
@@ -2603,7 +2603,7 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, index string, sha
 		gbi.rows[i].row = gbi.rows[i].row.Intersect(gbi.rows[i-1].row)
 	}
 
-	return gbi
+	return gbi, nil
 }
 
 // nextAtIdx is a recursive helper method for getting the next row for the field
