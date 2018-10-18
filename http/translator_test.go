@@ -124,7 +124,8 @@ func TestTranslateStore_Reader(t *testing.T) {
 		primary := test.MustRunCluster(t, 1, []server.CommandOption{opts})[0]
 		defer primary.Close()
 
-		_, err := http.NewTranslateStore(primary.URL()).Reader(context.Background(), 0)
+		ts := http.NewTranslateStore(primary.URL())
+		_, err := ts.Reader(context.Background(), 0)
 		if err != pilosa.ErrNotImplemented {
 			t.Fatalf("unexpected error: %s", err)
 		}
