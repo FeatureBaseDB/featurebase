@@ -362,6 +362,22 @@ func TestClient_Import(t *testing.T) {
 	if a := hldr.Row("i", "f", 200).Columns(); !reflect.DeepEqual(a, []uint64{6}) {
 		t.Fatalf("unexpected columns: %+v", a)
 	}
+
+	// Clear some data.
+	if err := c.Import(context.Background(), "i", "f", 0, []pilosa.Bit{
+		{RowID: 0, ColumnID: 5},
+		{RowID: 200, ColumnID: 6},
+	}, pilosa.OptImportOptionsClear(true)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify data.
+	if a := hldr.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{1}) {
+		t.Fatalf("unexpected columns: %+v", a)
+	}
+	if a := hldr.Row("i", "f", 200).Columns(); !reflect.DeepEqual(a, []uint64{}) {
+		t.Fatalf("unexpected columns: %+v", a)
+	}
 }
 
 // Ensure client can bulk import data.
@@ -638,6 +654,37 @@ func TestClient_ImportKeys(t *testing.T) {
 		if !reflect.DeepEqual(result.Results[0].(*pilosa.Row).Keys, []string{"col2", "col3"}) {
 			t.Fatalf("unexpected column keys: %s", spew.Sdump(result))
 		}
+
+		// Clear data.
+		if err := c.ImportValue(context.Background(), "i", "f", 0, []pilosa.FieldValue{
+			{ColumnKey: "col2", Value: 20},
+		}, pilosa.OptImportOptionsClear(true)); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify Sum.
+		sum, cnt, err = field.Sum(nil, fldName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sum != 30 || cnt != 2 {
+			t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=30, cnt=2", sum, cnt)
+		}
+
+		// Verify Range
+		queryRequest = &pilosa.QueryRequest{
+			Query:  fmt.Sprintf(`Range(%s>10)`, fldName),
+			Remote: false,
+		}
+
+		result, err = c.Query(context.Background(), "i", queryRequest)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !reflect.DeepEqual(result.Results[0].(*pilosa.Row).Keys, []string{"col3"}) {
+			t.Fatalf("unexpected column keys: %s", spew.Sdump(result))
+		}
 	})
 }
 
@@ -705,6 +752,45 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 	if max != 40 || cnt != 1 {
 		t.Fatalf("unexpected values: got max=%v, count=%v; expected max=40, cnt=1", max, cnt)
+	}
+
+	// Send import request.
+	if err := c.ImportValue(context.Background(), "i", "f", 0, []pilosa.FieldValue{
+		{ColumnID: 1, Value: -10},
+		{ColumnID: 3, Value: 40},
+	}, pilosa.OptImportOptionsClear(true)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify Sum.
+	sum, cnt, err = field.Sum(nil, fldName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum != 20 || cnt != 1 {
+		t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=20, cnt=1", sum, cnt)
+	}
+
+	// Verify Min with Filter.
+	filter, err = field.Range(fldName, pql.GT, 40)
+	if err != nil {
+		t.Fatal(err)
+	}
+	min, cnt, err = field.Min(filter, fldName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if min != -100 || cnt != 0 {
+		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=-100, cnt=0", min, cnt)
+	}
+
+	// Verify Max.
+	max, cnt, err = field.Max(nil, fldName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if max != 20 || cnt != 1 {
+		t.Fatalf("unexpected values: got max=%v, count=%v; expected max=20, cnt=1", max, cnt)
 	}
 }
 
