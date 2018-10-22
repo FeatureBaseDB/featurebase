@@ -11,47 +11,7 @@ nav = []
 
 `GET /index`
 
-Returns the schema of all indexes in JSON.
-
-``` request
-curl -XGET localhost:10101/index
-```
-``` response
-{
-    "indexes": [
-        {
-            "fields": [
-                {
-                    "name": "event",
-                    "options": {
-                        "keys": false,
-                        "timeQuantum": "YMD",
-                        "type": "time"
-                    }
-                },
-                {
-                    "name": "language",
-                    "options": {
-                        "cacheSize": 50000,
-                        "cacheType": "ranked",
-                        "keys": false,
-                        "type": "set"
-                    }
-                }
-            ],
-            "name": "user",
-            "options": {
-                "keys": false,
-                "trackExistence": true
-            }
-        }
-    ]
-}
-```
-
-`GET /schema`
-
-Is equivalent to `GET /index` and returns the same response.
+Is equivalent to `GET /schema` and returns the same response.
 
 ### List index schema
 
@@ -91,7 +51,7 @@ Creates an index with the given name.
 The request payload is in JSON, and may contain the `options` field. The `options` field is a JSON object with the following options:
 
 * `keys` (bool): Enables using column keys instead of column IDs.
-* `trackExistence` (bool): Enables or disables existence tracking on the index. Required for [Not](../query-language/#not) queries. It is `true` by default. Note that disabling track existence improves query performance.
+* `trackExistence` (bool): Enables or disables existence tracking on the index. Required for [Not](../query-language/#not) queries. It is `true` by default.
 
 ``` request
 curl -XPOST localhost:10101/index/user -d '{"options":{"keys":true}}'
@@ -177,10 +137,10 @@ By default, all bits and attributes (*for `Row` queries only*) are returned. In 
 
 Creates a field in the given index with the given name.
 
-The request payload is in JSON, and may contain the `options` field. The `options` field is a JSON object which must contain a `type` and optionally the `keys`:
+The request payload is in JSON, and may contain the `options` field. The `options` field is a JSON object which must contain a `type`:
 
-* `keys` (bool): Enables using column keys instead of column IDs.
 * `type` (string): Sets the field type and type options.
+* `keys` (bool): Enables using column keys instead of column IDs (optional).
 
 Valid `type`s and correspondonding options are listed below:
 
@@ -240,6 +200,48 @@ curl -XDELETE localhost:10101/index/user/field/language
 {"success":true}
 ```
 
+### List all index schemas
+
+`GET /schema`
+
+Returns the schema of all indexes in JSON.
+
+``` request
+curl -XGET localhost:10101/index
+```
+``` response
+{
+    "indexes": [
+        {
+            "fields": [
+                {
+                    "name": "event",
+                    "options": {
+                        "keys": false,
+                        "timeQuantum": "YMD",
+                        "type": "time"
+                    }
+                },
+                {
+                    "name": "language",
+                    "options": {
+                        "cacheSize": 50000,
+                        "cacheType": "ranked",
+                        "keys": false,
+                        "type": "set"
+                    }
+                }
+            ],
+            "name": "user",
+            "options": {
+                "keys": false,
+                "trackExistence": true
+            }
+        }
+    ]
+}
+```
+
 ### Get version
 
 `GET /version`
@@ -257,7 +259,7 @@ curl -XGET localhost:10101/version
 
 `GET /status`
 
-Returns the status of nodes in a Pilosa cluster.
+Returns the status of the cluster.
 
 ```request
 curl -XGET localhost:10101/status
