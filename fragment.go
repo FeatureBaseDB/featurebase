@@ -1651,7 +1651,7 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 // importRoaring imports from the official roaring data format defined at
 // https://github.com/RoaringBitmap/RoaringFormatSpec or from pilosa's version
 // of the roaring format. The cache is updated to reflect the new data.
-func (f *fragment) importRoaring(data []byte) error {
+func (f *fragment) importRoaring(data []byte, clear bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	bm := roaring.NewBitmap()
@@ -1679,8 +1679,12 @@ func (f *fragment) importRoaring(data []byte) error {
 		lastRow = vRow
 	}
 
-	if f.storage.Count() > 0 {
-		bm = f.storage.Union(bm)
+	if clear {
+		bm = f.storage.Difference(bm)
+	} else {
+		if f.storage.Count() > 0 {
+			bm = f.storage.Union(bm)
+		}
 	}
 
 	for _, rowID := range rowSet {

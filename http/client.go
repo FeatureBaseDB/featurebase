@@ -569,7 +569,7 @@ func (c *InternalClient) marshalImportValuePayload(index, field string, shard ui
 
 // ImportRoaring does fast import of raw bits in roaring format (pilosa or
 // official format, see API.ImportRoaring).
-func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64, remote bool, data []byte) error {
+func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64, remote bool, data []byte, opts ...pilosa.ImportOption) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
@@ -579,7 +579,19 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, ind
 		uri = c.defaultURI
 	}
 
+	// Set up import options.
+	options := &pilosa.ImportOptions{}
+	for _, opt := range opts {
+		err := opt(options)
+		if err != nil {
+			return errors.Wrap(err, "applying option")
+		}
+	}
+
 	url := fmt.Sprintf("%s/index/%s/field/%s/import-roaring/%d?remote=%v", uri, index, field, shard, remote)
+	if options.Clear {
+		url += "&clear=true"
+	}
 
 	// Generate HTTP request.
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))

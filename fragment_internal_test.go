@@ -1900,7 +1900,7 @@ func TestFragment_RoaringImport(t *testing.T) {
 				if err != nil {
 					t.Fatalf("writing to buffer: %v", err)
 				}
-				f.importRoaring(buf.Bytes())
+				f.importRoaring(buf.Bytes(), false)
 				exp := calcExpected(test[:num+1]...)
 				for row, expCols := range exp {
 					cols := f.row(uint64(row)).Columns()
@@ -1972,7 +1972,7 @@ func TestFragment_RoaringImportTopN(t *testing.T) {
 			if err != nil {
 				t.Fatalf("writing to buffer: %v", err)
 			}
-			f.importRoaring(buf.Bytes())
+			f.importRoaring(buf.Bytes(), false)
 			rows, cols := toRowsCols(test.roaring)
 			expPairs = calcTop(append(test.rowIDs, rows...), append(test.colIDs, cols...))
 			pairs, err = f.top(topOptions{})

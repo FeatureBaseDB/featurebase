@@ -1182,7 +1182,7 @@ func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportO
 	return nil
 }
 
-func (f *Field) importRoaring(data []byte, shard uint64) error {
+func (f *Field) importRoaring(data []byte, shard uint64, clear bool) error {
 	viewName := viewStandard
 
 	view, err := f.createViewIfNotExists(viewName)
@@ -1195,7 +1195,7 @@ func (f *Field) importRoaring(data []byte, shard uint64) error {
 		return errors.Wrap(err, "creating fragment")
 	}
 
-	if err := frag.importRoaring(data); err != nil {
+	if err := frag.importRoaring(data, clear); err != nil {
 		return err
 	}
 
