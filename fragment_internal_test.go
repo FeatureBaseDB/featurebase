@@ -228,6 +228,34 @@ func TestFragment_SetValue(t *testing.T) {
 		}
 	})
 
+	t.Run("Clear", func(t *testing.T) {
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
+		defer f.Close()
+
+		// Set value.
+		if changed, err := f.setValue(100, 16, 3829); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		// Clear value should overwrite all bits, and set not-null to 0.
+		if changed, err := f.clearValue(100, 16, 2028); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		// Read value.
+		if value, exists, err := f.value(100, 16); err != nil {
+			t.Fatal(err)
+		} else if value != 0 {
+			t.Fatalf("unexpected value: %d", value)
+		} else if exists {
+			t.Fatal("expected to not exist")
+		}
+	})
+
 	t.Run("NotExists", func(t *testing.T) {
 		f := mustOpenFragment("i", "f", viewStandard, 0, "")
 		defer f.Close()

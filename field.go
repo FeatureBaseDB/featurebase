@@ -1126,7 +1126,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time, opts
 }
 
 // importValue bulk imports range-encoded value data.
-func (f *Field) importValue(columnIDs []uint64, values []int64) error {
+func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportOptions) error {
 	viewName := viewBSIGroupPrefix + f.name
 	// Get the bsiGroup so we know bitDepth.
 	bsig := f.bsiGroup(f.name)
@@ -1174,7 +1174,7 @@ func (f *Field) importValue(columnIDs []uint64, values []int64) error {
 			baseValues[i] = uint64(value - bsig.Min)
 		}
 
-		if err := frag.importValue(data.ColumnIDs, baseValues, bsig.BitDepth()); err != nil {
+		if err := frag.importValue(data.ColumnIDs, baseValues, bsig.BitDepth(), options.Clear); err != nil {
 			return err
 		}
 	}

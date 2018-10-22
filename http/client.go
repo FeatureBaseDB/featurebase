@@ -473,11 +473,20 @@ func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, inde
 }
 
 // ImportValue bulk imports field values for a single shard to a host.
-func (c *InternalClient) ImportValue(ctx context.Context, index, field string, shard uint64, vals []pilosa.FieldValue) error {
+func (c *InternalClient) ImportValue(ctx context.Context, index, field string, shard uint64, vals []pilosa.FieldValue, opts ...pilosa.ImportOption) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
 		return pilosa.ErrFieldRequired
+	}
+
+	// Set up import options.
+	options := &pilosa.ImportOptions{}
+	for _, opt := range opts {
+		err := opt(options)
+		if err != nil {
+			return errors.Wrap(err, "applying option")
+		}
 	}
 
 	buf, err := c.marshalImportValuePayload(index, field, shard, vals)
@@ -491,9 +500,6 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 		return fmt.Errorf("shard nodes: %s", err)
 	}
 
-	// Set up import options.
-	options := &pilosa.ImportOptions{}
-
 	// Import to each node.
 	for _, node := range nodes {
 		if err := c.importNode(ctx, node, index, field, buf, options); err != nil {
@@ -505,10 +511,19 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 }
 
 // ImportValueK bulk imports keyed field values to a host.
-func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, vals []pilosa.FieldValue) error {
+func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, vals []pilosa.FieldValue, opts ...pilosa.ImportOption) error {
 	buf, err := c.marshalImportValuePayload(index, field, 0, vals)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
+	}
+
+	// Set up import options.
+	options := &pilosa.ImportOptions{}
+	for _, opt := range opts {
+		err := opt(options)
+		if err != nil {
+			return errors.Wrap(err, "applying option")
+		}
 	}
 
 	// Get the coordinator node; all bits are sent to the
@@ -521,9 +536,6 @@ func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, 
 	if coord == nil {
 		return fmt.Errorf("could not find the coordinator node")
 	}
-
-	// Set up import options.
-	options := &pilosa.ImportOptions{}
 
 	// Import to node.
 	if err := c.importNode(ctx, coord, index, field, buf, options); err != nil {

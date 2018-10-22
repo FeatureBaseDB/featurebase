@@ -42,8 +42,8 @@ type InternalClient interface {
 	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
 	EnsureField(ctx context.Context, indexName string, fieldName string) error
 	EnsureFieldWithOptions(ctx context.Context, index, field string, opt FieldOptions) error
-	ImportValue(ctx context.Context, index, field string, shard uint64, vals []FieldValue) error
-	ImportValueK(ctx context.Context, index, field string, vals []FieldValue) error
+	ImportValue(ctx context.Context, index, field string, shard uint64, vals []FieldValue, opts ...ImportOption) error
+	ImportValueK(ctx context.Context, index, field string, vals []FieldValue, opts ...ImportOption) error
 	ExportCSV(ctx context.Context, index, field string, shard uint64, w io.Writer) error
 	CreateField(ctx context.Context, index, field string) error
 	CreateFieldWithOptions(ctx context.Context, index, field string, opt FieldOptions) error
@@ -121,10 +121,10 @@ func (n nopInternalClient) EnsureField(ctx context.Context, indexName string, fi
 func (n nopInternalClient) EnsureFieldWithOptions(ctx context.Context, index, field string, opt FieldOptions) error {
 	return nil
 }
-func (n nopInternalClient) ImportValue(ctx context.Context, index, field string, shard uint64, vals []FieldValue) error {
+func (n nopInternalClient) ImportValue(ctx context.Context, index, field string, shard uint64, vals []FieldValue, opts ...ImportOption) error {
 	return nil
 }
-func (n nopInternalClient) ImportValueK(ctx context.Context, index, field string, vals []FieldValue) error {
+func (n nopInternalClient) ImportValueK(ctx context.Context, index, field string, vals []FieldValue, opts ...ImportOption) error {
 	return nil
 }
 func (n nopInternalClient) ExportCSV(ctx context.Context, index, field string, shard uint64, w io.Writer) error {

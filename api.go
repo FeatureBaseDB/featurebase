@@ -757,9 +757,18 @@ func (api *API) Import(_ context.Context, req *ImportRequest, opts ...ImportOpti
 }
 
 // ImportValue bulk imports values into a particular field.
-func (api *API) ImportValue(_ context.Context, req *ImportValueRequest) error {
+func (api *API) ImportValue(_ context.Context, req *ImportValueRequest, opts ...ImportOption) error {
 	if err := api.validate(apiImportValue); err != nil {
 		return errors.Wrap(err, "validating api method")
+	}
+
+	// Set up import options.
+	options := &ImportOptions{}
+	for _, opt := range opts {
+		err := opt(options)
+		if err != nil {
+			return errors.Wrap(err, "applying option")
+		}
 	}
 
 	index := api.holder.Index(req.Index)
@@ -783,13 +792,15 @@ func (api *API) ImportValue(_ context.Context, req *ImportValueRequest) error {
 	}
 
 	// Import columnIDs into existence field.
-	if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
-		api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
-		return errors.Wrap(err, "importing existence columns")
+	if !options.Clear {
+		if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
+			api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+			return errors.Wrap(err, "importing existence columns")
+		}
 	}
 
 	// Import into fragment.
-	err = field.importValue(req.ColumnIDs, req.Values)
+	err = field.importValue(req.ColumnIDs, req.Values, options)
 	if err != nil {
 		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 	}

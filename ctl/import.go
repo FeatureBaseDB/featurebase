@@ -380,7 +380,7 @@ func (cmd *ImportCommand) importValues(ctx context.Context, useColumnKeys bool, 
 		}
 
 		logger.Printf("importing shard: %d, n=%d", shard, len(vals))
-		if err := cmd.client.ImportValue(ctx, cmd.Index, cmd.Field, shard, vals); err != nil {
+		if err := cmd.client.ImportValue(ctx, cmd.Index, cmd.Field, shard, vals, pilosa.OptImportOptionsClear(cmd.Clear)); err != nil {
 			return errors.Wrap(err, "importing values")
 		}
 	}

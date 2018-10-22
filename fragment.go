@@ -612,8 +612,17 @@ func (f *fragment) value(columnID uint64, bitDepth uint) (value uint64, exists b
 	return value, true, nil
 }
 
+// clearValue uses a column of bits to clear a multi-bit value.
+func (f *fragment) clearValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+	return f.setValueBase(columnID, bitDepth, value, true)
+}
+
 // setValue uses a column of bits to set a multi-bit value.
 func (f *fragment) setValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+	return f.setValueBase(columnID, bitDepth, value, false)
+}
+
+func (f *fragment) setValueBase(columnID uint64, bitDepth uint, value uint64, clear bool) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -633,19 +642,26 @@ func (f *fragment) setValue(columnID uint64, bitDepth uint, value uint64) (chang
 		}
 	}
 
-	// Mark value as set.
-	if c, err := f.unprotectedSetBit(uint64(bitDepth), columnID); err != nil {
-		return changed, errors.Wrap(err, "marking not-null")
-	} else if c {
-		changed = true
+	// Mark value as set (or cleared).
+	if clear {
+		if c, err := f.unprotectedClearBit(uint64(bitDepth), columnID); err != nil {
+			return changed, errors.Wrap(err, "clearing not-null")
+		} else if c {
+			changed = true
+		}
+	} else {
+		if c, err := f.unprotectedSetBit(uint64(bitDepth), columnID); err != nil {
+			return changed, errors.Wrap(err, "marking not-null")
+		} else if c {
+			changed = true
+		}
 	}
 
 	return changed, nil
 }
 
 // importSetValue is a more efficient SetValue just for imports.
-func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) { // nolint: unparam
-
+func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value uint64, clear bool) (changed bool, err error) { // nolint: unparam
 	for i := uint(0); i < bitDepth; i++ {
 		if value&(1<<i) != 0 {
 			bit, err := f.pos(uint64(i), columnID)
@@ -673,12 +689,20 @@ func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value uint64) 
 	// Mark value as set.
 	p, err := f.pos(uint64(bitDepth), columnID)
 	if err != nil {
-		return changed, errors.Wrap(err, "marking not-null")
+		return changed, errors.Wrap(err, "getting not-null pos")
 	}
-	if c, err := f.storage.Add(p); err != nil {
-		return changed, errors.Wrap(err, "adding to storage")
-	} else if c {
-		changed = true
+	if clear {
+		if c, err := f.storage.Remove(p); err != nil {
+			return changed, errors.Wrap(err, "removing not-null from storage")
+		} else if c {
+			changed = true
+		}
+	} else {
+		if c, err := f.storage.Add(p); err != nil {
+			return changed, errors.Wrap(err, "adding not-null to storage")
+		} else if c {
+			changed = true
+		}
 	}
 
 	return changed, nil
@@ -688,12 +712,11 @@ func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value uint64) 
 // A bitmap can be passed in to optionally filter the computed columns.
 func (f *fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
 	// Compute count based on the existence row.
-	row := f.row(uint64(bitDepth))
+	consider := f.row(uint64(bitDepth))
 	if filter != nil {
-		count = row.intersectionCount(filter)
-	} else {
-		count = row.Count()
+		consider = consider.Intersect(filter)
 	}
+	count = consider.Count()
 
 	// Compute the sum based on the bit count of each row multiplied by the
 	// place value of each row. For example, 10 bits in the 1's place plus
@@ -705,11 +728,7 @@ func (f *fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error
 	var cnt uint64
 	for i := uint(0); i < bitDepth; i++ {
 		row := f.row(uint64(i))
-		if filter != nil {
-			cnt = row.intersectionCount(filter)
-		} else {
-			cnt = row.Count()
-		}
+		cnt = row.intersectionCount(consider)
 		sum += (1 << i) * cnt
 	}
 
@@ -1425,7 +1444,7 @@ func (f *fragment) bulkImport(rowIDs, columnIDs []uint64, options *ImportOptions
 	}
 
 	if f.mutexVector != nil && !options.Clear {
-		return f.bulkImportMutex(rowIDs, columnIDs, options)
+		return f.bulkImportMutex(rowIDs, columnIDs)
 	}
 	return f.bulkImportStandard(rowIDs, columnIDs, options)
 }
@@ -1508,7 +1527,7 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 // mutex restrictions. Because the mutex requirements must be checked
 // against storage, this method must acquire a write lock on the fragment
 // during the entire process, and it handles every bit independently.
-func (f *fragment) bulkImportMutex(rowIDs, columnIDs []uint64, options *ImportOptions) error {
+func (f *fragment) bulkImportMutex(rowIDs, columnIDs []uint64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -1597,7 +1616,7 @@ func (f *fragment) bulkImportMutex(rowIDs, columnIDs []uint64, options *ImportOp
 }
 
 // importValue bulk imports a set of range-encoded values.
-func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint) error {
+func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	// Verify that there are an equal number of column ids and values.
@@ -1612,7 +1631,7 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint) error 
 		for i := range columnIDs {
 			columnID, value := columnIDs[i], values[i]
 
-			_, err := f.importSetValue(columnID, bitDepth, value)
+			_, err := f.importSetValue(columnID, bitDepth, value, clear)
 			if err != nil {
 				return errors.Wrap(err, "setting")
 			}

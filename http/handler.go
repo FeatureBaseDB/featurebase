@@ -1030,7 +1030,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := h.api.ImportValue(r.Context(), req); err != nil {
+		if err := h.api.ImportValue(r.Context(), req, pilosa.OptImportOptionsClear(doClear)); err != nil {
 			switch errors.Cause(err) {
 			case pilosa.ErrClusterDoesNotOwnShard:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
