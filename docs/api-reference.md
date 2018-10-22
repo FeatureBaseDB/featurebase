@@ -17,8 +17,41 @@ Returns the schema of all indexes in JSON.
 curl -XGET localhost:10101/index
 ```
 ``` response
-{"indexes":[{"name":"user","fields":[{"name":"event","options":{"type":"time","timeQuantum":"YMD","keys":false}}]}]}
+{
+    "indexes": [
+        {
+            "fields": [
+                {
+                    "name": "event",
+                    "options": {
+                        "keys": false,
+                        "timeQuantum": "YMD",
+                        "type": "time"
+                    }
+                },
+                {
+                    "name": "language",
+                    "options": {
+                        "cacheSize": 50000,
+                        "cacheType": "ranked",
+                        "keys": false,
+                        "type": "set"
+                    }
+                }
+            ],
+            "name": "user",
+            "options": {
+                "keys": false,
+                "trackExistence": true
+            }
+        }
+    ]
+}
 ```
+
+`GET /schema`
+
+Is equivalent to `GET /index` and returns the same response.
 
 ### List index schema
 
@@ -30,7 +63,23 @@ Returns the schema of the specified index in JSON.
 curl -XGET localhost:10101/index/user
 ```
 ``` response
-{"name":"user","fields":[{"name":"event","options":{"type":"time","timeQuantum":"YMD","keys":false}}]}
+{
+    "fields": [
+        {
+            "name": "event",
+            "options": {
+                "keys": false,
+                "timeQuantum": "YMD",
+                "type": "time"
+            }
+        }
+    ],
+    "name": "user",
+    "options": {
+        "keys": false,
+        "trackExistence": true
+    }
+}
 ```
 
 ### Create index
@@ -39,8 +88,13 @@ curl -XGET localhost:10101/index/user
 
 Creates an index with the given name.
 
+The request payload is in JSON, and may contain the `options` field. The `options` field is a JSON object with the following options:
+
+* `keys` (bool): Enables using column keys instead of column IDs.
+* `trackExistence` (bool): Enables or disables existence tracking on the index. Required for [Not](../query-language/#not) queries. It is `true` by default. Note that disabling track existence improves query performance.
+
 ``` request
-curl -XPOST localhost:10101/index/user
+curl -XPOST localhost:10101/index/user -d '{"options":{"keys":true}}'
 ```
 ``` response
 {"success":true}
@@ -71,7 +125,16 @@ curl localhost:10101/index/user/query \
      -d 'Row(language=5)'
 ```
 ``` response
-{"results":[{"attrs":{},"columns":[100]}]}
+{
+    "results": [
+        {
+            "attrs": {},
+            "columns": [
+                100
+            ]
+        }
+    ]
+}
 ```
 
 In order to send protobuf binaries in the request and response, set `Content-Type` and `Accept` headers to: `application/x-protobuf`.
@@ -87,8 +150,22 @@ curl "localhost:10101/index/user/query?columnAttrs=true&shards=0,1" \
 ```
 ``` response
 {
-  "results":[{"attrs":{},"columns":[100]}],
-  "columnAttrs":[{"id":100,"attrs":{"name":"Klingon"}}]
+    "columnAttrs": [
+        {
+            "attrs": {
+                "name": "Klingon"
+            },
+            "id": 100
+        }
+    ],
+    "results": [
+        {
+            "attrs": {},
+            "columns": [
+                100
+            ]
+        }
+    ]
 }
 ```
 
@@ -100,7 +177,12 @@ By default, all bits and attributes (*for `Row` queries only*) are returned. In 
 
 Creates a field in the given index with the given name.
 
-The request payload is in JSON, and may contain the `options` field. The `options` field is a JSON object which must contain a `type` along with the corresponding configuration options. 
+The request payload is in JSON, and may contain the `options` field. The `options` field is a JSON object which must contain a `type` and optionally the `keys`:
+
+* `keys` (bool): Enables using column keys instead of column IDs.
+* `type` (string): Sets the field type and type options.
+
+Valid `type`s and correspondonding options are listed below:
 
 * `set`
     * `cacheType` (string): [ranked](../data-model/#ranked) or [LRU](../data-model/#lru) caching on this field. Default is `ranked`.
@@ -171,6 +253,33 @@ curl -XGET localhost:10101/version
 {"version":"v0.6.0"}
 ```
 
+### Get status
+
+`GET /status`
+
+Returns the status of nodes in a Pilosa cluster.
+
+```request
+curl -XGET localhost:10101/status
+```
+```response
+{
+    "localID": "d3369125-29d8-4305-a351-b4474d14a542",
+    "nodes": [
+        {
+            "id": "d3369125-29d8-4305-a351-b4474d14a542",
+            "isCoordinator": true,
+            "uri": {
+                "host": "localhost",
+                "port": 10101,
+                "scheme": "http"
+            }
+        }
+    ],
+    "state": "NORMAL"
+}
+```
+
 ### Recalculate Caches
 
 `POST /recalculate-caches`
@@ -187,4 +296,3 @@ curl -XPOST localhost:10101/recalculate-caches
 ```
 
 Response: `204 No Content`
-
