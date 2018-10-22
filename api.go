@@ -328,6 +328,38 @@ func (api *API) DeleteField(_ context.Context, indexName string, fieldName strin
 	return nil
 }
 
+// DeleteAvailableShard a shard ID from the available shard set cache.
+func (api *API) DeleteAvailableShard(_ context.Context, indexName, fieldName string, shardID uint64) error {
+	if err := api.validate(apiDeleteAvailableShard); err != nil {
+		return errors.Wrap(err, "validating api method")
+	}
+
+	// Find field.
+	field := api.holder.Field(indexName, fieldName)
+	if field == nil {
+		return newNotFoundError(ErrFieldNotFound)
+	}
+
+	// Delete shard from the cache.
+	if err := field.RemoveAvailableShard(shardID); err != nil {
+		return errors.Wrap(err, "deleting available shard")
+	}
+
+	// Send the delete shard message to all nodes.
+	err := api.server.SendSync(
+		&DeleteAvailableShardMessage{
+			Index:   indexName,
+			Field:   fieldName,
+			ShardID: shardID,
+		})
+	if err != nil {
+		api.server.logger.Printf("problem sending DeleteAvailableShard message: %s", err)
+		return errors.Wrap(err, "sending DeleteAvailableShard message")
+	}
+	api.holder.Stats.CountWithCustomTags("deleteAvailableShard", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName), fmt.Sprintf("field:%s", fieldName)})
+	return nil
+}
+
 // ExportCSV encodes the fragment designated by the index,field,shard as
 // CSV of the form <row>,<col>
 func (api *API) ExportCSV(_ context.Context, indexName string, fieldName string, shard uint64, w io.Writer) error {
@@ -969,6 +1001,7 @@ const (
 	apiCreateField
 	apiCreateIndex
 	apiDeleteField
+	apiDeleteAvailableShard
 	apiDeleteIndex
 	apiDeleteView
 	apiExportCSV
@@ -1007,23 +1040,24 @@ var methodsResizing = map[apiMethod]struct{}{
 }
 
 var methodsNormal = map[apiMethod]struct{}{
-	apiCreateField:       {},
-	apiCreateIndex:       {},
-	apiDeleteField:       {},
-	apiDeleteIndex:       {},
-	apiDeleteView:        {},
-	apiExportCSV:         {},
-	apiFragmentBlockData: {},
-	apiFragmentBlocks:    {},
-	apiField:             {},
-	apiFieldAttrDiff:     {},
-	apiImport:            {},
-	apiImportValue:       {},
-	apiIndex:             {},
-	apiIndexAttrDiff:     {},
-	apiQuery:             {},
-	apiRecalculateCaches: {},
-	apiRemoveNode:        {},
-	apiShardNodes:        {},
-	apiViews:             {},
+	apiCreateField:          {},
+	apiCreateIndex:          {},
+	apiDeleteField:          {},
+	apiDeleteAvailableShard: {},
+	apiDeleteIndex:          {},
+	apiDeleteView:           {},
+	apiExportCSV:            {},
+	apiFragmentBlockData:    {},
+	apiFragmentBlocks:       {},
+	apiField:                {},
+	apiFieldAttrDiff:        {},
+	apiImport:               {},
+	apiImportValue:          {},
+	apiIndex:                {},
+	apiIndexAttrDiff:        {},
+	apiQuery:                {},
+	apiRecalculateCaches:    {},
+	apiRemoveNode:           {},
+	apiShardNodes:           {},
+	apiViews:                {},
 }

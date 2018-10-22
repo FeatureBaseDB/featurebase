@@ -18,7 +18,9 @@ import (
 	"io/ioutil"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/roaring"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -183,5 +185,41 @@ func TestField_NameValidation(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected error on field name: %s", name)
 		}
+	}
+}
+
+// Ensure can update and delete available shards.
+func TestField_AvailableShards(t *testing.T) {
+	idx := test.MustOpenIndex()
+	defer idx.Close()
+
+	f, err := idx.CreateField("f", pilosa.OptFieldTypeDefault())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Set values on shards 0 & 2, and verify.
+	if _, err := f.SetBit(0, 100, nil); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.SetBit(0, ShardWidth*2, nil); err != nil {
+		t.Fatal(err)
+	} else if diff := cmp.Diff(f.AvailableShards().Slice(), []uint64{0, 2}); diff != "" {
+		t.Fatal(diff)
+	}
+
+	// Set remote shards and verify.
+	f.AddRemoteAvailableShards(roaring.NewBitmap(1, 2, 4))
+	if diff := cmp.Diff(f.AvailableShards().Slice(), []uint64{0, 1, 2, 4}); diff != "" {
+		t.Fatal(diff)
+	}
+
+	// Delete shards; only local shards should remain.
+	f.RemoveAvailableShard(0)
+	f.RemoveAvailableShard(1)
+	f.RemoveAvailableShard(2)
+	f.RemoveAvailableShard(3)
+	f.RemoveAvailableShard(4)
+	if diff := cmp.Diff(f.AvailableShards().Slice(), []uint64{0, 2}); diff != "" {
+		t.Fatal(diff)
 	}
 }
