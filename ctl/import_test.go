@@ -50,28 +50,55 @@ func TestImportCommand_Validation(t *testing.T) {
 	}
 }
 
-func TestImportCommand_Run(t *testing.T) {
-	buf := bytes.Buffer{}
-	stdin, stdout, stderr := GetIO(buf)
-	cm := NewImportCommand(stdin, stdout, stderr)
-	file, err := ioutil.TempFile("", "import.csv")
-	file.Write([]byte("1,2\n3,4\n5,6"))
-	ctx := context.Background()
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestImportCommand_Basic(t *testing.T) {
+	t.Run("set", func(t *testing.T) {
+		buf := bytes.Buffer{}
+		stdin, stdout, stderr := GetIO(buf)
+		cm := NewImportCommand(stdin, stdout, stderr)
+		file, err := ioutil.TempFile("", "import.csv")
+		file.Write([]byte("1,2\n3,4\n5,6"))
+		ctx := context.Background()
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	cmd := test.MustRunCluster(t, 1)[0]
-	cm.Host = cmd.API.Node().URI.HostPort()
+		cmd := test.MustRunCluster(t, 1)[0]
+		cm.Host = cmd.API.Node().URI.HostPort()
 
-	cm.Index = "i"
-	cm.Field = "f"
-	cm.CreateSchema = true
-	cm.Paths = []string{file.Name()}
-	err = cm.Run(ctx)
-	if err != nil {
-		t.Fatalf("Import Run doesn't work: %s", err)
-	}
+		cm.Index = "i"
+		cm.Field = "f"
+		cm.CreateSchema = true
+		cm.Paths = []string{file.Name()}
+		err = cm.Run(ctx)
+		if err != nil {
+			t.Fatalf("Import Run doesn't work: %s", err)
+		}
+	})
+
+	t.Run("clear", func(t *testing.T) {
+		buf := bytes.Buffer{}
+		stdin, stdout, stderr := GetIO(buf)
+		cm := NewImportCommand(stdin, stdout, stderr)
+		file, err := ioutil.TempFile("", "import.csv")
+		file.Write([]byte("1,2\n3,4\n5,6"))
+		ctx := context.Background()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		cmd := test.MustRunCluster(t, 1)[0]
+		cm.Host = cmd.API.Node().URI.HostPort()
+
+		cm.Index = "i"
+		cm.Field = "f"
+		cm.CreateSchema = true
+		cm.Clear = true
+		cm.Paths = []string{file.Name()}
+		err = cm.Run(ctx)
+		if err != nil {
+			t.Fatalf("Import Run clear doesn't work: %s", err)
+		}
+	})
 }
 
 // Ensure that the ImportValue path runs.

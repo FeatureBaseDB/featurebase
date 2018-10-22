@@ -670,10 +670,34 @@ func (api *API) FieldAttrDiff(_ context.Context, indexName string, fieldName str
 	return attrs, nil
 }
 
+// ImportOptions holds the options for the API.Import method.
+type ImportOptions struct {
+	Clear bool
+}
+
+// ImportOption is a functional option type for API.Import
+type ImportOption func(*ImportOptions) error
+
+func OptImportOptionsClear(c bool) ImportOption {
+	return func(o *ImportOptions) error {
+		o.Clear = c
+		return nil
+	}
+}
+
 // Import bulk imports data into a particular index,field,shard.
-func (api *API) Import(_ context.Context, req *ImportRequest) error {
+func (api *API) Import(_ context.Context, req *ImportRequest, opts ...ImportOption) error {
 	if err := api.validate(apiImport); err != nil {
 		return errors.Wrap(err, "validating api method")
+	}
+
+	// Set up import options.
+	options := &ImportOptions{}
+	for _, opt := range opts {
+		err := opt(options)
+		if err != nil {
+			return errors.Wrap(err, "applying option")
+		}
 	}
 
 	index := api.holder.Index(req.Index)
@@ -717,13 +741,15 @@ func (api *API) Import(_ context.Context, req *ImportRequest) error {
 	}
 
 	// Import columnIDs into existence field.
-	if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
-		api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
-		return errors.Wrap(err, "importing existence columns")
+	if !options.Clear {
+		if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
+			api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+			return errors.Wrap(err, "importing existence columns")
+		}
 	}
 
 	// Import into fragment.
-	err = field.Import(req.RowIDs, req.ColumnIDs, timestamps)
+	err = field.Import(req.RowIDs, req.ColumnIDs, timestamps, opts...)
 	if err != nil {
 		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 	}

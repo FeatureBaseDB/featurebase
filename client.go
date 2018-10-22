@@ -37,8 +37,8 @@ type InternalClient interface {
 	Nodes(ctx context.Context) ([]*Node, error)
 	Query(ctx context.Context, index string, queryRequest *QueryRequest) (*QueryResponse, error)
 	QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error)
-	Import(ctx context.Context, index, field string, shard uint64, bits []Bit) error
-	ImportK(ctx context.Context, index, field string, bits []Bit) error
+	Import(ctx context.Context, index, field string, shard uint64, bits []Bit, opts ...ImportOption) error
+	ImportK(ctx context.Context, index, field string, bits []Bit, opts ...ImportOption) error
 	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
 	EnsureField(ctx context.Context, indexName string, fieldName string) error
 	EnsureFieldWithOptions(ctx context.Context, index, field string, opt FieldOptions) error
@@ -103,10 +103,10 @@ func (n nopInternalClient) Query(ctx context.Context, index string, queryRequest
 func (n nopInternalClient) QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
 	return nil, nil
 }
-func (n nopInternalClient) Import(ctx context.Context, index, field string, shard uint64, bits []Bit) error {
+func (n nopInternalClient) Import(ctx context.Context, index, field string, shard uint64, bits []Bit, opts ...ImportOption) error {
 	return nil
 }
-func (n nopInternalClient) ImportK(ctx context.Context, index, field string, bits []Bit) error {
+func (n nopInternalClient) ImportK(ctx context.Context, index, field string, bits []Bit, opts ...ImportOption) error {
 	return nil
 }
 func (n nopInternalClient) ImportRoaring(ctx context.Context, uri *URI, index, field string, shard uint64, remote bool, data []byte) error {

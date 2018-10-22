@@ -1047,11 +1047,25 @@ func (f *Field) Range(name string, op pql.Token, predicate int64) (*Row, error) 
 }
 
 // Import bulk imports data.
-func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) error {
+func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time, opts ...ImportOption) error {
+
+	// Set up import options.
+	options := &ImportOptions{}
+	for _, opt := range opts {
+		err := opt(options)
+		if err != nil {
+			return errors.Wrap(err, "applying option")
+		}
+	}
+
 	// Determine quantum if timestamps are set.
 	q := f.TimeQuantum()
-	if hasTime(timestamps) && q == "" {
-		return errors.New("time quantum not set in field")
+	if hasTime(timestamps) {
+		if q == "" {
+			return errors.New("time quantum not set in field")
+		} else if options.Clear {
+			return errors.New("import clear is not supported with timestamps")
+		}
 	}
 
 	fieldType := f.Type()
@@ -1103,7 +1117,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 			return errors.Wrap(err, "creating view")
 		}
 
-		if err := frag.bulkImport(data.RowIDs, data.ColumnIDs); err != nil {
+		if err := frag.bulkImport(data.RowIDs, data.ColumnIDs, options); err != nil {
 			return err
 		}
 	}

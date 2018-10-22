@@ -294,11 +294,20 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index s
 }
 
 // Import bulk imports bits for a single shard to a host.
-func (c *InternalClient) Import(ctx context.Context, index, field string, shard uint64, bits []pilosa.Bit) error {
+func (c *InternalClient) Import(ctx context.Context, index, field string, shard uint64, bits []pilosa.Bit, opts ...pilosa.ImportOption) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
 		return pilosa.ErrFieldRequired
+	}
+
+	// Set up import options.
+	options := &pilosa.ImportOptions{}
+	for _, opt := range opts {
+		err := opt(options)
+		if err != nil {
+			return errors.Wrap(err, "applying option")
+		}
 	}
 
 	buf, err := c.marshalImportPayload(index, field, shard, bits)
@@ -314,7 +323,7 @@ func (c *InternalClient) Import(ctx context.Context, index, field string, shard 
 
 	// Import to each node.
 	for _, node := range nodes {
-		if err := c.importNode(ctx, node, index, field, buf); err != nil {
+		if err := c.importNode(ctx, node, index, field, buf, options); err != nil {
 			return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
 		}
 	}
@@ -332,11 +341,20 @@ func getCoordinatorNode(nodes []*pilosa.Node) *pilosa.Node {
 }
 
 // ImportK bulk imports bits specified by string keys to a host.
-func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits []pilosa.Bit) error {
+func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits []pilosa.Bit, opts ...pilosa.ImportOption) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
 		return pilosa.ErrFieldRequired
+	}
+
+	// Set up import options.
+	options := &pilosa.ImportOptions{}
+	for _, opt := range opts {
+		err := opt(options)
+		if err != nil {
+			return errors.Wrap(err, "applying option")
+		}
 	}
 
 	buf, err := c.marshalImportPayload(index, field, 0, bits)
@@ -356,7 +374,7 @@ func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits 
 	}
 
 	// Import to node.
-	if err := c.importNode(ctx, coord, index, field, buf); err != nil {
+	if err := c.importNode(ctx, coord, index, field, buf, options); err != nil {
 		return fmt.Errorf("import node: host=%s, err=%s", coord.URI, err)
 	}
 
@@ -410,11 +428,17 @@ func (c *InternalClient) marshalImportPayload(index, field string, shard uint64,
 }
 
 // importNode sends a pre-marshaled import request to a node.
-func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, index, field string, buf []byte) error {
+func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, index, field string, buf []byte, opts *pilosa.ImportOptions) error {
 	// Create URL & HTTP request.
 	path := fmt.Sprintf("/index/%s/field/%s/import", index, field)
 	u := nodePathToURL(node, path)
-	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
+
+	url := u.String()
+	if opts.Clear {
+		url += "?clear=true"
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewReader(buf))
 	if err != nil {
 		return errors.Wrap(err, "creating request")
 	}
@@ -467,9 +491,12 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 		return fmt.Errorf("shard nodes: %s", err)
 	}
 
+	// Set up import options.
+	options := &pilosa.ImportOptions{}
+
 	// Import to each node.
 	for _, node := range nodes {
-		if err := c.importNode(ctx, node, index, field, buf); err != nil {
+		if err := c.importNode(ctx, node, index, field, buf, options); err != nil {
 			return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
 		}
 	}
@@ -495,8 +522,11 @@ func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, 
 		return fmt.Errorf("could not find the coordinator node")
 	}
 
+	// Set up import options.
+	options := &pilosa.ImportOptions{}
+
 	// Import to node.
-	if err := c.importNode(ctx, coord, index, field, buf); err != nil {
+	if err := c.importNode(ctx, coord, index, field, buf, options); err != nil {
 		return fmt.Errorf("import node: host=%s, err=%s", coord.URI, err)
 	}
 

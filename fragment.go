@@ -1418,20 +1418,20 @@ func (f *fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, e
 
 // bulkImport bulk imports a set of bits and then snapshots the storage.
 // The cache is updated to reflect the new data.
-func (f *fragment) bulkImport(rowIDs, columnIDs []uint64) error {
+func (f *fragment) bulkImport(rowIDs, columnIDs []uint64, options *ImportOptions) error {
 	// Verify that there are an equal number of row ids and column ids.
 	if len(rowIDs) != len(columnIDs) {
 		return fmt.Errorf("mismatch of row/column len: %d != %d", len(rowIDs), len(columnIDs))
 	}
 
-	if f.mutexVector != nil {
-		return f.bulkImportMutex(rowIDs, columnIDs)
+	if f.mutexVector != nil && !options.Clear {
+		return f.bulkImportMutex(rowIDs, columnIDs, options)
 	}
-	return f.bulkImportStandard(rowIDs, columnIDs)
+	return f.bulkImportStandard(rowIDs, columnIDs, options)
 }
 
 // bulkImportStandard performs a bulk import on a standard fragment.
-func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64) error {
+func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *ImportOptions) error {
 	// Create a temporary bitmap which will be populated by rowIDs and columnIDs
 	// and then merged into the existing fragment's bitmap.
 	localBitmap := roaring.NewBitmap()
@@ -1480,10 +1480,18 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64) error {
 
 	// Merge localBitmap into fragment's existing data.
 	var results *roaring.Bitmap
-	if f.storage.Count() > 0 {
-		results = f.storage.Union(localBitmap)
+	if options.Clear {
+		if f.storage.Count() > 0 {
+			results = f.storage.Difference(localBitmap)
+		} else {
+			results = roaring.NewBitmap()
+		}
 	} else {
-		results = localBitmap
+		if f.storage.Count() > 0 {
+			results = f.storage.Union(localBitmap)
+		} else {
+			results = localBitmap
+		}
 	}
 
 	// Update cache counts for all affected rows.
@@ -1500,7 +1508,7 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64) error {
 // mutex restrictions. Because the mutex requirements must be checked
 // against storage, this method must acquire a write lock on the fragment
 // during the entire process, and it handles every bit independently.
-func (f *fragment) bulkImportMutex(rowIDs, columnIDs []uint64) error {
+func (f *fragment) bulkImportMutex(rowIDs, columnIDs []uint64, options *ImportOptions) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 

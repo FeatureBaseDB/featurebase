@@ -1253,16 +1253,142 @@ func TestFragment_SetMutex(t *testing.T) {
 	}
 }
 
-// Ensure a fragment can import mutually exclusive values.
-func TestFragment_ImportMutex(t *testing.T) {
+// Ensure a fragment can import into set fields.
+func TestFragment_ImportSet(t *testing.T) {
 	tests := []struct {
-		rowIDs []uint64
-		colIDs []uint64
-		exp    map[uint64][]uint64
+		setRowIDs   []uint64
+		setColIDs   []uint64
+		setExp      map[uint64][]uint64
+		clearRowIDs []uint64
+		clearColIDs []uint64
+		clearExp    map[uint64][]uint64
 	}{
 		{
 			[]uint64{1, 1, 1, 1},
 			[]uint64{0, 1, 2, 3},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+			},
+			[]uint64{},
+			[]uint64{},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+			},
+		},
+		{
+			[]uint64{1, 1, 1, 1, 2, 2, 2, 2},
+			[]uint64{0, 1, 2, 3, 0, 1, 2, 3},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+				2: {0, 1, 2, 3},
+			},
+			[]uint64{1, 1, 2},
+			[]uint64{1, 2, 3},
+			map[uint64][]uint64{
+				1: {0, 3},
+				2: {0, 1, 2},
+			},
+		},
+		{
+			[]uint64{1, 1, 1, 1, 2},
+			[]uint64{0, 1, 2, 3, 1},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+				2: {1},
+			},
+			[]uint64{1, 1, 1, 1},
+			[]uint64{0, 1, 2, 3},
+			map[uint64][]uint64{
+				1: {},
+				2: {1},
+			},
+		},
+		{
+			[]uint64{1, 1, 1, 1, 2, 2, 1},
+			[]uint64{0, 1, 2, 3, 1, 8, 1},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+				2: {1, 8},
+			},
+			[]uint64{1, 1},
+			[]uint64{0, 0},
+			map[uint64][]uint64{
+				1: {1, 2, 3},
+				2: {1, 8},
+			},
+		},
+		{
+			[]uint64{1, 2, 3},
+			[]uint64{8, 8, 8},
+			map[uint64][]uint64{
+				1: {8},
+				2: {8},
+				3: {8},
+			},
+			[]uint64{1, 2, 3},
+			[]uint64{9, 9, 9},
+			map[uint64][]uint64{
+				1: {8},
+				2: {8},
+				3: {8},
+			},
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("importset%d", i), func(t *testing.T) {
+			f := mustOpenFragment("i", "f", viewStandard, 0, "")
+			defer f.Close()
+
+			// Set import.
+			err := f.bulkImport(test.setRowIDs, test.setColIDs, &ImportOptions{})
+			if err != nil {
+				t.Fatalf("bulk importing ids: %v", err)
+			}
+
+			// Check for expected results.
+			for k, v := range test.setExp {
+				cols := f.row(k).Columns()
+				if !reflect.DeepEqual(cols, v) {
+					t.Fatalf("expected: %v, but got: %v", v, cols)
+				}
+			}
+
+			// Clear import.
+			err = f.bulkImport(test.clearRowIDs, test.clearColIDs, &ImportOptions{Clear: true})
+			if err != nil {
+				t.Fatalf("bulk clearing ids: %v", err)
+			}
+
+			// Check for expected results.
+			for k, v := range test.clearExp {
+				cols := f.row(k).Columns()
+				if !reflect.DeepEqual(cols, v) {
+					t.Fatalf("expected: %v, but got: %v", v, cols)
+				}
+			}
+		})
+	}
+}
+
+// Ensure a fragment can import mutually exclusive values.
+func TestFragment_ImportMutex(t *testing.T) {
+	tests := []struct {
+		setRowIDs   []uint64
+		setColIDs   []uint64
+		setExp      map[uint64][]uint64
+		clearRowIDs []uint64
+		clearColIDs []uint64
+		clearExp    map[uint64][]uint64
+	}{
+		{
+			[]uint64{1, 1, 1, 1},
+			[]uint64{0, 1, 2, 3},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+			},
+			[]uint64{},
+			[]uint64{},
 			map[uint64][]uint64{
 				1: {0, 1, 2, 3},
 			},
@@ -1274,12 +1400,24 @@ func TestFragment_ImportMutex(t *testing.T) {
 				1: {},
 				2: {0, 1, 2, 3},
 			},
+			[]uint64{1, 1, 2},
+			[]uint64{1, 2, 3},
+			map[uint64][]uint64{
+				1: {},
+				2: {0, 1, 2},
+			},
 		},
 		{
 			[]uint64{1, 1, 1, 1, 2},
 			[]uint64{0, 1, 2, 3, 1},
 			map[uint64][]uint64{
 				1: {0, 2, 3},
+				2: {1},
+			},
+			[]uint64{1, 1, 1, 1},
+			[]uint64{0, 1, 2, 3},
+			map[uint64][]uint64{
+				1: {},
 				2: {1},
 			},
 		},
@@ -1290,10 +1428,23 @@ func TestFragment_ImportMutex(t *testing.T) {
 				1: {0, 1, 2, 3},
 				2: {8},
 			},
+			[]uint64{1, 1},
+			[]uint64{0, 0},
+			map[uint64][]uint64{
+				1: {1, 2, 3},
+				2: {8},
+			},
 		},
 		{
 			[]uint64{1, 2, 3},
 			[]uint64{8, 8, 8},
+			map[uint64][]uint64{
+				1: {},
+				2: {},
+				3: {8},
+			},
+			[]uint64{1, 2, 3},
+			[]uint64{9, 9, 9},
 			map[uint64][]uint64{
 				1: {},
 				2: {},
@@ -1307,13 +1458,28 @@ func TestFragment_ImportMutex(t *testing.T) {
 			f := mustOpenMutexFragment("i", "f", viewStandard, 0, "")
 			defer f.Close()
 
-			err := f.bulkImport(test.rowIDs, test.colIDs)
+			// Set import.
+			err := f.bulkImport(test.setRowIDs, test.setColIDs, &ImportOptions{})
 			if err != nil {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
 
 			// Check for expected results.
-			for k, v := range test.exp {
+			for k, v := range test.setExp {
+				cols := f.row(k).Columns()
+				if !reflect.DeepEqual(cols, v) {
+					t.Fatalf("expected: %v, but got: %v", v, cols)
+				}
+			}
+
+			// Clear import.
+			err = f.bulkImport(test.clearRowIDs, test.clearColIDs, &ImportOptions{Clear: true})
+			if err != nil {
+				t.Fatalf("bulk clearing ids: %v", err)
+			}
+
+			// Check for expected results.
+			for k, v := range test.clearExp {
 				cols := f.row(k).Columns()
 				if !reflect.DeepEqual(cols, v) {
 					t.Fatalf("expected: %v, but got: %v", v, cols)
@@ -1326,13 +1492,21 @@ func TestFragment_ImportMutex(t *testing.T) {
 // Ensure a fragment can import bool values.
 func TestFragment_ImportBool(t *testing.T) {
 	tests := []struct {
-		rowIDs []uint64
-		colIDs []uint64
-		exp    map[uint64][]uint64
+		setRowIDs   []uint64
+		setColIDs   []uint64
+		setExp      map[uint64][]uint64
+		clearRowIDs []uint64
+		clearColIDs []uint64
+		clearExp    map[uint64][]uint64
 	}{
 		{
 			[]uint64{1, 1, 1, 1},
 			[]uint64{0, 1, 2, 3},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+			},
+			[]uint64{},
+			[]uint64{},
 			map[uint64][]uint64{
 				1: {0, 1, 2, 3},
 			},
@@ -1344,6 +1518,13 @@ func TestFragment_ImportBool(t *testing.T) {
 				0: {},
 				1: {0, 1, 2, 3},
 			},
+			[]uint64{1, 1, 2},
+			[]uint64{1, 2, 3},
+			map[uint64][]uint64{
+				0: {},
+				1: {0, 3},
+				2: {},
+			},
 		},
 		{
 			[]uint64{0, 0, 0, 0, 1},
@@ -1352,6 +1533,12 @@ func TestFragment_ImportBool(t *testing.T) {
 				0: {0, 2, 3},
 				1: {1},
 			},
+			[]uint64{1, 1, 1, 1},
+			[]uint64{0, 1, 2, 3},
+			map[uint64][]uint64{
+				0: {0, 2, 3},
+				1: {},
+			},
 		},
 		{
 			[]uint64{1, 1, 1, 1, 0, 0, 1},
@@ -1359,6 +1546,12 @@ func TestFragment_ImportBool(t *testing.T) {
 			map[uint64][]uint64{
 				0: {8},
 				1: {0, 1, 2, 3},
+			},
+			[]uint64{1, 1},
+			[]uint64{0, 0},
+			map[uint64][]uint64{
+				0: {8},
+				1: {1, 2, 3},
 			},
 		},
 		{
@@ -1369,6 +1562,13 @@ func TestFragment_ImportBool(t *testing.T) {
 				1: {}, // This isn't {8} because fragment doesn't validate bool values.
 				2: {8},
 			},
+			[]uint64{1, 2, 3},
+			[]uint64{9, 9, 9},
+			map[uint64][]uint64{
+				0: {},
+				1: {},
+				2: {8},
+			},
 		},
 	}
 
@@ -1377,13 +1577,28 @@ func TestFragment_ImportBool(t *testing.T) {
 			f := mustOpenBoolFragment("i", "f", viewStandard, 0, "")
 			defer f.Close()
 
-			err := f.bulkImport(test.rowIDs, test.colIDs)
+			// Set import.
+			err := f.bulkImport(test.setRowIDs, test.setColIDs, &ImportOptions{})
 			if err != nil {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
 
 			// Check for expected results.
-			for k, v := range test.exp {
+			for k, v := range test.setExp {
+				cols := f.row(k).Columns()
+				if !reflect.DeepEqual(cols, v) {
+					t.Fatalf("expected: %v, but got: %v", v, cols)
+				}
+			}
+
+			// Clear import.
+			err = f.bulkImport(test.clearRowIDs, test.clearColIDs, &ImportOptions{Clear: true})
+			if err != nil {
+				t.Fatalf("bulk importing ids: %v", err)
+			}
+
+			// Check for expected results.
+			for k, v := range test.clearExp {
 				cols := f.row(k).Columns()
 				if !reflect.DeepEqual(cols, v) {
 					t.Fatalf("expected: %v, but got: %v", v, cols)
@@ -1427,6 +1642,7 @@ func BenchmarkFragment_FullSnapshot(b *testing.B) {
 	rows := make([]uint64, sz)
 	cols := make([]uint64, sz)
 
+	options := &ImportOptions{}
 	max := 0
 	for row := 0; row < 100; row++ {
 		val := 1
@@ -1437,7 +1653,7 @@ func BenchmarkFragment_FullSnapshot(b *testing.B) {
 			val += 2
 			i++
 		}
-		if err := f.bulkImport(rows, cols); err != nil {
+		if err := f.bulkImport(rows, cols, options); err != nil {
 			b.Fatalf("Error Building Sample: %s", err)
 		}
 		if row > max {
@@ -1477,8 +1693,9 @@ func BenchmarkFragment_Import(b *testing.B) {
 	}
 	b.ResetTimer()
 	b.ReportAllocs()
+	options := &ImportOptions{}
 	for i := 0; i < b.N; i++ {
-		if err := f.bulkImport(rows, cols); err != nil {
+		if err := f.bulkImport(rows, cols, options); err != nil {
 			b.Fatalf("Error Building Sample: %s", err)
 		}
 	}
@@ -1692,7 +1909,8 @@ func TestFragment_RoaringImportTopN(t *testing.T) {
 			f := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeRanked)
 			defer f.Close()
 
-			err := f.bulkImport(test.rowIDs, test.colIDs)
+			options := &ImportOptions{}
+			err := f.bulkImport(test.rowIDs, test.colIDs, options)
 			if err != nil {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
@@ -1705,7 +1923,7 @@ func TestFragment_RoaringImportTopN(t *testing.T) {
 				t.Fatalf("post bulk import:\n  exp: %v\n  got: %v\n", expPairs, pairs)
 			}
 
-			err = f.bulkImport(test.rowIDs2, test.colIDs2)
+			err = f.bulkImport(test.rowIDs2, test.colIDs2, options)
 			if err != nil {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
