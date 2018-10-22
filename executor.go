@@ -2166,6 +2166,7 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 	case "Rows":
 		fieldName = callArgString(c, "field")
 		rowKey = "previous"
+		colKey = "column"
 	case "GroupBy":
 		return errors.Wrap(e.translateGroupByCall(index, idx, c), "translating GroupBy")
 	default:
