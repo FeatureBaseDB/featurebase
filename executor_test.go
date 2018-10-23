@@ -2678,7 +2678,7 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 
-	_, err := c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	_, err := c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{Keys: true})
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
@@ -2695,7 +2695,7 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 	for shard := 0; shard < 10; shard++ {
 		for i := shard; i < shard+10; i++ {
 			for row := i; row >= 0 && row > i-3; row-- {
-				query.WriteString(fmt.Sprintf("Set(%d, f=\"%d\")", shard*pilosa.ShardWidth+i, row))
+				query.WriteString(fmt.Sprintf("Set(\"%d\", f=\"%d\")", shard*pilosa.ShardWidth+i, row))
 
 			}
 
@@ -2742,39 +2742,39 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 			exp: []string{},
 		},
 		{
-			q:   `Rows(field=f, column=1)`,
+			q:   `Rows(field=f, column="1")`,
 			exp: []string{"0", "1"},
 		},
 		{
-			q:   `Rows(field=f, column=2)`,
+			q:   `Rows(field=f, column="2")`,
 			exp: []string{"0", "1", "2"},
 		},
 		{
-			q:   `Rows(field=f, column=3)`,
+			q:   `Rows(field=f, column="3")`,
 			exp: []string{"1", "2", "3"},
 		},
 		{
-			q:   `Rows(field=f, limit=2, column=3)`,
+			q:   `Rows(field=f, limit=2, column="3")`,
 			exp: []string{"1", "2"},
 		},
 		{
-			q:   fmt.Sprintf(`Rows(field=f, previous="15", column=%d)`, ShardWidth*9+17),
+			q:   fmt.Sprintf(`Rows(field=f, previous="15", column="%d")`, ShardWidth*9+17),
 			exp: []string{"16", "17"},
 		},
 		{
-			q:   fmt.Sprintf(`Rows(field=f, previous="11", limit=2, column=%d)`, ShardWidth*5+14),
+			q:   fmt.Sprintf(`Rows(field=f, previous="11", limit=2, column="%d")`, ShardWidth*5+14),
 			exp: []string{"12", "13"},
 		},
 		{
-			q:   fmt.Sprintf(`Rows(field=f, previous="17", limit=5, column=%d)`, ShardWidth*9+18),
+			q:   fmt.Sprintf(`Rows(field=f, previous="17", limit=5, column="%d")`, ShardWidth*9+18),
 			exp: []string{"18"},
 		},
 		{
-			q:   `Rows(field=f, previous="18", column=19)`,
+			q:   `Rows(field=f, previous="18", column="19")`,
 			exp: []string{},
 		},
 		{
-			q:   `Rows(field=f, previous="1", limit=0, column=0)`,
+			q:   `Rows(field=f, previous="1", limit=0, column="0")`,
 			exp: []string{},
 		},
 	}
