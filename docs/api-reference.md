@@ -131,6 +131,40 @@ curl "localhost:10101/index/user/query?columnAttrs=true&shards=0,1" \
 
 By default, all bits and attributes (*for `Row` queries only*) are returned. In order to suppress returning bits, set `excludeBits` query argument to `true`; to suppress returning attributes, set `excludeAttrs` query argument to `true`.
 
+### Import Data
+
+`POST /index/<index-name>/field/<field-name>/import`
+
+Supports high-rate data ingest to a particular shard of a particular field. The
+official client libraries use this endpoint for their import functionality - it
+is not usually necessary to use this endpoint directly. See the documentation for
+imports for
+<a href="https://github.com/pilosa/go-pilosa/blob/master/docs/imports-exports.md">Go</a>,
+<a href="https://github.com/pilosa/java-pilosa/blob/master/docs/imports.md">Java</a>,
+and <a href="https://github.com/pilosa/python-pilosa/tree/master/docs/imports.md">Python</a>.
+
+The request payload is protobuf encoded with the following schema. The RowKeys
+and/or ColumnKeys fields are used if the pilosa field or index are configured
+for keys respectively. Otherwise, the RowIDs and ColumnIDs fields are used. They
+must have the same number of items, and each index into those two lists
+represents a particular bit to be set. Timestamps are optional, but if they
+exist must also contain the same number of items as rows and columns. The
+column IDs must all be in the shard specified in the request.
+
+```
+message ImportRequest {
+	string Index = 1;
+	string Field = 2;
+	uint64 Shard = 3;
+	repeated uint64 RowIDs = 4;
+	repeated uint64 ColumnIDs = 5;
+	repeated string RowKeys = 7;
+	repeated string ColumnKeys = 8;
+	repeated int64 Timestamps = 6;
+}
+```
+
+
 ### Create field
 
 `POST /index/<index-name>/field/<field-name>`
