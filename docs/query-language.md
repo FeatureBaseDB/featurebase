@@ -67,6 +67,10 @@ Set(<COLUMN>, <FIELD>=<ROW>, [TIMESTAMP])
 
 `Set` assigns a value of 1 to a bit in the binary matrix, thus associating the given row (the `<ROW>` value) in the given field with the given column.
 
+<div class="note">
+    <p>While using "Set" in PQL is a convenient way to get familiar with Pilosa, it's almost always better to use the import functionality in the <a href="https://github.com/pilosa/go-pilosa/blob/master/docs/imports-exports.md">Go</a>, <a href="https://github.com/pilosa/java-pilosa/blob/master/docs/imports.md">Java</a>, and <a href="https://github.com/pilosa/python-pilosa/tree/master/docs/imports.md">Python</a> clients to ingest lots of data. </p>
+</div>
+
 **Result Type:** boolean
 
 A return value of `true` indicates that the bit was changed to 1.

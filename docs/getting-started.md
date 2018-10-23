@@ -89,6 +89,11 @@ The `language` is a `set` field, but since the default field type is `set`, we d
 
 #### Import Data From CSV Files
 
+<div class="note">
+    <p>For demonstration purposes, we're using Pilosa's built in utility to import specially formatted CSV files. For more general usage, see how the various client libraries expose the bulk import functionality in <a href="https://github.com/pilosa/go-pilosa/blob/master/docs/imports-exports.md">Go</a>, <a href="https://github.com/pilosa/java-pilosa/blob/master/docs/imports.md">Java</a>, and <a href="https://github.com/pilosa/python-pilosa/tree/master/docs/imports.md">Python</a>. </p>
+</div>
+
+
 Download the `stargazer.csv` and `language.csv` files here:
 
 ```
