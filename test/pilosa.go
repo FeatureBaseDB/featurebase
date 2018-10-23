@@ -19,11 +19,13 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	gohttp "net/http"
 	"os"
 	"path"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,7 +33,36 @@ import (
 	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pkg/errors"
+
+	"github.com/Shopify/toxiproxy"
+	tox "github.com/Shopify/toxiproxy/client"
 )
+
+type portAllocator struct {
+	port *uint32
+}
+
+var ports *portAllocator
+
+// Next generates a new port and returns it
+func (n *portAllocator) Next() (nextPort uint32) {
+	return atomic.AddUint32(n.port, 1)
+}
+
+var proxy string
+
+func init() {
+	r := rand.New(rand.NewSource(int64(time.Now().Nanosecond())))
+	p := uint32(r.Uint32()%40000 + 20000)
+	ports = &portAllocator{
+		port: &p,
+	}
+
+	tport := strconv.Itoa(int(ports.Next()))
+	proxy = "localhost:" + tport
+	go toxiproxy.NewServer().Listen("localhost", tport)
+
+}
 
 ////////////////////////////////////////////////////////////////////////////////////
 // Command represents a test wrapper for server.Command.
@@ -232,6 +263,8 @@ func MustNewCluster(tb testing.TB, size int, opts ...[]server.CommandOption) Clu
 
 // newCluster creates a new cluster
 func newCluster(size int, opts ...[]server.CommandOption) (Cluster, error) {
+	tclient := tox.NewClient(proxy)
+
 	if size == 0 {
 		return nil, errors.New("cluster must contain at least one node")
 	}
@@ -245,8 +278,24 @@ func newCluster(size int, opts ...[]server.CommandOption) (Cluster, error) {
 		if len(opts) > 0 {
 			commandOpts = opts[i%len(opts)]
 		}
+		aport := strconv.Itoa(int(ports.Next()))
+		name := "node" + strconv.Itoa(i)
 		m := NewCommandNode(i == 0, commandOpts...)
-		err := ioutil.WriteFile(path.Join(m.Config.DataDir, ".id"), []byte("node"+strconv.Itoa(i)), 0600)
+		m.Config.Bind = "localhost:" + strconv.Itoa(int(ports.Next()))
+		m.Config.Advertise = "localhost:" + aport
+		p, err := tclient.CreateProxy(name+aport, m.Config.Advertise, m.Config.Bind)
+		if err != nil {
+			return nil, errors.Wrap(err, "setting up toxiproxy")
+		}
+		m.Config.Gossip.Port = strconv.Itoa(int(ports.Next()))
+		aport = strconv.Itoa(int(ports.Next()))
+		m.Config.Gossip.AdvertisePort = aport
+		p, err = tclient.CreateProxy(name+"-gossip"+aport, "localhost:"+m.Config.Gossip.AdvertisePort, "localhost:"+m.Config.Gossip.Port)
+		if err != nil {
+			return nil, errors.Wrap(err, "setting up toxiproxy for gossip")
+		}
+		fmt.Println(p)
+		err = ioutil.WriteFile(path.Join(m.Config.DataDir, ".id"), []byte(name), 0600)
 		if err != nil {
 			return nil, errors.Wrap(err, "writing node id")
 		}

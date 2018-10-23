@@ -405,13 +405,14 @@ func TestClusteringNodesReplica1(t *testing.T) {
 	// Create new main with the same config.
 	config := cluster[2].Command.Config
 	config.Translation.MapSize = 100000
-	// config.Bind = cluster[2].API.Node().URI.HostPort()
 
 	// this isn't necessary, but makes the test run way faster
 	config.Gossip.Port = strconv.Itoa(int(cluster[2].Command.GossipTransport().URI.Port))
 
 	cluster[2].Command = server.NewCommand(cluster[2].Stdin, cluster[2].Stdout, cluster[2].Stderr)
 	cluster[2].Command.Config = config
+
+	time.Sleep(time.Second * 40)
 
 	// Run new program.
 	if err := cluster[2].Start(); err != nil {

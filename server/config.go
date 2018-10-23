@@ -36,8 +36,14 @@ type Config struct {
 	// DataDir is the directory where Pilosa stores both indexed data and
 	// running state such as cluster topology information.
 	DataDir string `toml:"data-dir"`
+
 	// Bind is the host:port on which Pilosa will listen.
 	Bind string `toml:"bind"`
+
+	// Advertise is the host:port that this node will report as its address to
+	// others. If left blank (the default), this will be set to the bind address
+	// once it is listening.
+	Advertise string `toml:"advertise"`
 
 	// MaxWritesPerRequest limits the number of mutating commands that can be in
 	// a single request to the server. This includes Set, Clear,
