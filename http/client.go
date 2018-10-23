@@ -433,10 +433,11 @@ func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, inde
 	path := fmt.Sprintf("/index/%s/field/%s/import", index, field)
 	u := nodePathToURL(node, path)
 
-	url := u.String()
+	vals := url.Values{}
 	if opts.Clear {
-		url += "?clear=true"
+		vals.Set("clear", "true")
 	}
+	url := fmt.Sprintf("%s?%s", u.String(), vals.Encode())
 
 	req, err := http.NewRequest("POST", url, bytes.NewReader(buf))
 	if err != nil {
@@ -588,10 +589,12 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, ind
 		}
 	}
 
-	url := fmt.Sprintf("%s/index/%s/field/%s/import-roaring/%d?remote=%v", uri, index, field, shard, remote)
+	vals := url.Values{}
+	vals.Set("remote", strconv.FormatBool(remote))
 	if options.Clear {
-		url += "&clear=true"
+		vals.Set("clear", "true")
 	}
+	url := fmt.Sprintf("%s/index/%s/field/%s/import-roaring/%d?%s", uri, index, field, shard, vals.Encode())
 
 	// Generate HTTP request.
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))

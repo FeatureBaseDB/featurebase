@@ -239,6 +239,17 @@ func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, e
 	return field, nil
 }
 
+func setUpImportOptions(opts ...ImportOption) (*ImportOptions, error) {
+	options := &ImportOptions{}
+	for _, opt := range opts {
+		err := opt(options)
+		if err != nil {
+			return nil, errors.Wrap(err, "applying option")
+		}
+	}
+	return options, nil
+}
+
 // ImportRoaring is a low level interface for importing data to Pilosa when
 // extremely high throughput is desired. The data must be encoded in a
 // particular way which may be unintuitive (discussed below). The data is merged
@@ -262,12 +273,9 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 	}
 
 	// Set up import options.
-	options := &ImportOptions{}
-	for _, opt := range opts {
-		err := opt(options)
-		if err != nil {
-			return errors.Wrap(err, "applying option")
-		}
+	options, err := setUpImportOptions(opts...)
+	if err != nil {
+		return errors.Wrap(err, "setting up import options")
 	}
 
 	nodes := api.cluster.shardNodes(indexName, shard)
@@ -685,7 +693,7 @@ type ImportOptions struct {
 	Clear bool
 }
 
-// ImportOption is a functional option type for API.Import
+// ImportOption is a functional option type for API.Import.
 type ImportOption func(*ImportOptions) error
 
 func OptImportOptionsClear(c bool) ImportOption {
@@ -702,12 +710,9 @@ func (api *API) Import(_ context.Context, req *ImportRequest, opts ...ImportOpti
 	}
 
 	// Set up import options.
-	options := &ImportOptions{}
-	for _, opt := range opts {
-		err := opt(options)
-		if err != nil {
-			return errors.Wrap(err, "applying option")
-		}
+	options, err := setUpImportOptions(opts...)
+	if err != nil {
+		return errors.Wrap(err, "setting up import options")
 	}
 
 	index := api.holder.Index(req.Index)
@@ -773,12 +778,9 @@ func (api *API) ImportValue(_ context.Context, req *ImportValueRequest, opts ...
 	}
 
 	// Set up import options.
-	options := &ImportOptions{}
-	for _, opt := range opts {
-		err := opt(options)
-		if err != nil {
-			return errors.Wrap(err, "applying option")
-		}
+	options, err := setUpImportOptions(opts...)
+	if err != nil {
+		return errors.Wrap(err, "setting up import options")
 	}
 
 	index := api.holder.Index(req.Index)

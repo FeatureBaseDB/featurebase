@@ -640,7 +640,7 @@ func TestClient_ImportKeys(t *testing.T) {
 			t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=50, cnt=3", sum, cnt)
 		}
 
-		// Verify Range
+		// Verify Range.
 		queryRequest := &pilosa.QueryRequest{
 			Query:  fmt.Sprintf(`Range(%s>10)`, fldName),
 			Remote: false,
@@ -671,7 +671,7 @@ func TestClient_ImportKeys(t *testing.T) {
 			t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=30, cnt=2", sum, cnt)
 		}
 
-		// Verify Range
+		// Verify Range.
 		queryRequest = &pilosa.QueryRequest{
 			Query:  fmt.Sprintf(`Range(%s>10)`, fldName),
 			Remote: false,
