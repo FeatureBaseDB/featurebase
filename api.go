@@ -935,7 +935,7 @@ func (api *API) Info() serverInfo {
 	}
 }
 
-//if not the destination forward on to correct for execution
+// EnsureOperatingNode determine if the current node is the destination for execution if not forward on to correct node
 func (api *API) EnsureOperatingNode(indexName string, w http.ResponseWriter, r *http.Request) bool {
 
 	values := r.URL.Query()
