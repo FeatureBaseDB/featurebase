@@ -408,13 +408,13 @@ func TestClient_ImportRoaring(t *testing.T) {
 	// Send import request.
 	host := cluster[0].URL()
 	c := MustNewClient(host, http.GetHTTPClient(nil))
-	roaringData, _ := hex.DecodeString("3B3001000100000900010000000100010009000100")
+	roaringData, _ := hex.DecodeString("3B3001000100000900010000000100010009000100") // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537]
 	if err := c.ImportRoaring(context.Background(), &cluster[0].API.Node().URI, "i", "f", 0, false, roaringData); err != nil {
 		t.Fatal(err)
 	}
 
 	hldr := test.Holder{Holder: cluster[0].Server.Holder()}
-	// Verify data.
+	// Verify data on node 0.
 	if a := hldr.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537}) {
 		t.Fatalf("unexpected columns: %+v", a)
 	}
@@ -423,12 +423,78 @@ func TestClient_ImportRoaring(t *testing.T) {
 	}
 
 	hldr2 := test.Holder{Holder: cluster[1].Server.Holder()}
-	// Verify data.
+	// Verify data on node 1.
 	if a := hldr2.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537}) {
 		t.Fatalf("unexpected columns: %+v", a)
 	}
 	if a := hldr2.Row("i", "f", 1).Columns(); !reflect.DeepEqual(a, []uint64{0}) {
 		t.Fatalf("unexpected columns: %+v", a)
+	}
+
+	// Ensure that sending a roaring import with the clear flag works as expected.
+	roaringDataClear, _ := hex.DecodeString("3A30000001000000010001001000000003000400") // [65539, 65540]
+	if err := c.ImportRoaring(context.Background(), &cluster[0].API.Node().URI, "i", "f", 0, false, roaringDataClear, pilosa.OptImportOptionsClear(true)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify data on node 0.
+	if a := hldr.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537}) {
+		t.Fatalf("unexpected clear columns: %+v", a)
+	}
+	if a := hldr.Row("i", "f", 1).Columns(); !reflect.DeepEqual(a, []uint64{0}) {
+		t.Fatalf("unexpected clear columns: %+v", a)
+	}
+
+	// Verify data on node 1.
+	if a := hldr2.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537}) {
+		t.Fatalf("unexpected clear columns: %+v", a)
+	}
+	if a := hldr2.Row("i", "f", 1).Columns(); !reflect.DeepEqual(a, []uint64{0}) {
+		t.Fatalf("unexpected clear columns: %+v", a)
+	}
+
+	// Ensure that sending a roaring import with the clear flag works as expected.
+	roaringDataClear, _ = hex.DecodeString("3A300000020000000000010001000100180000001C0000000400060001000300") // [4, 6, 65537, 65539]
+	if err := c.ImportRoaring(context.Background(), &cluster[0].API.Node().URI, "i", "f", 0, false, roaringDataClear, pilosa.OptImportOptionsClear(true)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify data on node 0.
+	if a := hldr.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 2, 3, 5, 7, 8, 9, 10}) {
+		t.Fatalf("unexpected clear columns: %+v", a)
+	}
+	if a := hldr.Row("i", "f", 1).Columns(); !reflect.DeepEqual(a, []uint64{0}) {
+		t.Fatalf("unexpected clear columns: %+v", a)
+	}
+
+	// Verify data on node 1.
+	if a := hldr2.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 2, 3, 5, 7, 8, 9, 10}) {
+		t.Fatalf("unexpected clear columns: %+v", a)
+	}
+	if a := hldr2.Row("i", "f", 1).Columns(); !reflect.DeepEqual(a, []uint64{0}) {
+		t.Fatalf("unexpected clear columns: %+v", a)
+	}
+
+	// Ensure that sending a roaring import with the clear flag works as expected.
+	roaringDataClear, _ = hex.DecodeString("3B3001000100000900010000000100010009000100") // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537]
+	if err := c.ImportRoaring(context.Background(), &cluster[0].API.Node().URI, "i", "f", 0, false, roaringDataClear, pilosa.OptImportOptionsClear(true)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify data on node 0.
+	if a := hldr.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{}) {
+		t.Fatalf("unexpected clear columns: %+v", a)
+	}
+	if a := hldr.Row("i", "f", 1).Columns(); !reflect.DeepEqual(a, []uint64{0}) {
+		t.Fatalf("unexpected clear columns: %+v", a)
+	}
+
+	// Verify data on node 1.
+	if a := hldr2.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{}) {
+		t.Fatalf("unexpected clear columns: %+v", a)
+	}
+	if a := hldr2.Row("i", "f", 1).Columns(); !reflect.DeepEqual(a, []uint64{0}) {
+		t.Fatalf("unexpected clear columns: %+v", a)
 	}
 }
 

@@ -1511,6 +1511,9 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 		remote = true
 	}
 
+	// If the clear flag is true, treat the import as clear bits.
+	doClear := q.Get("clear") == "true"
+
 	// Read entire body.
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -1527,7 +1530,7 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 
 	resp := &pilosa.ImportResponse{}
 	// TODO give meaningful stats for import
-	err = h.api.ImportRoaring(r.Context(), urlVars["index"], urlVars["field"], shard, remote, body)
+	err = h.api.ImportRoaring(r.Context(), urlVars["index"], urlVars["field"], shard, remote, body, pilosa.OptImportOptionsClear(doClear))
 	if err != nil {
 		resp.Err = err.Error()
 		if _, ok := err.(pilosa.BadRequestError); ok {
