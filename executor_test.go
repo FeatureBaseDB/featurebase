@@ -2918,6 +2918,13 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			checkGroupBy(t, expected, results)
 		})
 
+		t.Run("test previous is last result", func(t *testing.T) {
+			results := c.Query(t, "i", `GroupBy(Rows(field=wa, previous=3), Rows(field=wb, previous=3), Rows(field=wc, previous=3), limit=3)`).Results[0].([]pilosa.GroupCount)
+			if len(results) > 0 {
+				t.Fatalf("expected no results because previous specified last result")
+			}
+		})
+
 		t.Run("test wrapping multiple", func(t *testing.T) {
 			results := c.Query(t, "i", `GroupBy(Rows(field=wa), Rows(field=wb, previous=2), Rows(field=wc, previous=2), limit=1)`).Results[0].([]pilosa.GroupCount)
 			expected := []pilosa.GroupCount{

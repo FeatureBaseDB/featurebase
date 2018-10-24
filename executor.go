@@ -2371,7 +2371,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 				if field.keys() {
 					key, err := e.TranslateStore.TranslateRowToString(index, g.Field, g.RowID)
 					if err != nil {
-						return nil, err
+						return nil, errors.Wrap(err, "translating row ID in Group")
 					}
 					group[i].RowKey = key
 				}
@@ -2399,7 +2399,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 			for i, id := range result {
 				key, err := e.TranslateStore.TranslateRowToString(index, fieldName, id)
 				if err != nil {
-					return nil, err
+					return nil, errors.Wrap(err, "translating row ID")
 				}
 				other.Keys[i] = key
 			}
@@ -2646,8 +2646,8 @@ func (gbi *groupByIterator) nextAtIdx(i int) {
 	gbi.rows[i].id = rowID
 }
 
-// Next returns a ppi representing the next group by record. When there are no
-// more records it will return an empty ppi and done==true.
+// Next returns a GroupCount representing the next group by record. When there
+// are no more records it will return an empty GroupCount and done==true.
 func (gbi *groupByIterator) Next() (ret GroupCount, done bool) {
 	if gbi.done {
 		return ret, true
