@@ -181,8 +181,8 @@ func (h *Handler) populateValidators() {
 	h.validators["DeleteIndex"] = queryValidationSpecRequired()
 	h.validators["PostField"] = queryValidationSpecRequired()
 	h.validators["DeleteField"] = queryValidationSpecRequired()
-	h.validators["PostImport"] = queryValidationSpecRequired()
-	h.validators["PostImportRoaring"] = queryValidationSpecRequired().Optional("remote")
+	h.validators["PostImport"] = queryValidationSpecRequired().Optional("clear")
+	h.validators["PostImportRoaring"] = queryValidationSpecRequired().Optional("remote", "clear")
 	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("shards", "columnAttrs", "excludeRowAttrs", "excludeColumns")
 	h.validators["GetInfo"] = queryValidationSpecRequired()
 	h.validators["RecalculateCaches"] = queryValidationSpecRequired()
@@ -994,6 +994,10 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	fieldName := mux.Vars(r)["field"]
 
+	// If the clear flag is true, treat the import as clear bits.
+	q := r.URL.Query()
+	doClear := q.Get("clear") == "true"
+
 	// Get index and field type to determine how to handle the
 	// import data.
 	field, err := h.api.Field(r.Context(), indexName, fieldName)
@@ -1026,7 +1030,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := h.api.ImportValue(r.Context(), req); err != nil {
+		if err := h.api.ImportValue(r.Context(), req, pilosa.OptImportOptionsClear(doClear)); err != nil {
 			switch errors.Cause(err) {
 			case pilosa.ErrClusterDoesNotOwnShard:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
@@ -1044,7 +1048,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := h.api.Import(r.Context(), req); err != nil {
+		if err := h.api.Import(r.Context(), req, pilosa.OptImportOptionsClear(doClear)); err != nil {
 			switch errors.Cause(err) {
 			case pilosa.ErrClusterDoesNotOwnShard:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
@@ -1507,6 +1511,9 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 		remote = true
 	}
 
+	// If the clear flag is true, treat the import as clear bits.
+	doClear := q.Get("clear") == "true"
+
 	// Read entire body.
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -1523,7 +1530,7 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 
 	resp := &pilosa.ImportResponse{}
 	// TODO give meaningful stats for import
-	err = h.api.ImportRoaring(r.Context(), urlVars["index"], urlVars["field"], shard, remote, body)
+	err = h.api.ImportRoaring(r.Context(), urlVars["index"], urlVars["field"], shard, remote, body, pilosa.OptImportOptionsClear(doClear))
 	if err != nil {
 		resp.Err = err.Error()
 		if _, ok := err.(pilosa.BadRequestError); ok {
