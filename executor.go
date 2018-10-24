@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
@@ -907,6 +908,25 @@ type FieldRow struct {
 	Field  string `json:"field"`
 	RowID  uint64 `json:"rowID"`
 	RowKey string `json:"rowKey,omitempty"`
+}
+
+func (fr FieldRow) MarshalJSON() ([]byte, error) {
+	if fr.RowKey != "" {
+		return json.Marshal(struct {
+			Field  string `json:"field"`
+			RowKey string `json:"rowKey"`
+		}{
+			Field:  fr.Field,
+			RowKey: fr.RowKey,
+		})
+	}
+	return json.Marshal(struct {
+		Field string `json:"field"`
+		RowID uint64 `json:"rowID"`
+	}{
+		Field: fr.Field,
+		RowID: fr.RowID,
+	})
 }
 
 func (fr FieldRow) String() string {

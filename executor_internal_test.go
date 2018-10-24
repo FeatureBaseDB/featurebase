@@ -1,6 +1,7 @@
 package pilosa
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"strings"
@@ -192,4 +193,32 @@ func TestFilterWithRows(t *testing.T) {
 		})
 	}
 
+}
+
+func TestFieldRowMarshalJSON(t *testing.T) {
+	fr := FieldRow{
+		Field:  "blah",
+		RowID:  0,
+		RowKey: "ha",
+	}
+	b, err := json.Marshal(fr)
+	if err != nil {
+		t.Fatalf("marshalling fieldrow: %v", err)
+	}
+	if string(b) != `{"field":"blah","rowKey":"ha"}` {
+		t.Fatalf("unexpected json: %s", b)
+	}
+
+	fr = FieldRow{
+		Field:  "blah",
+		RowID:  2,
+		RowKey: "",
+	}
+	b, err = json.Marshal(fr)
+	if err != nil {
+		t.Fatalf("marshalling fieldrow: %v", err)
+	}
+	if string(b) != `{"field":"blah","rowID":2}` {
+		t.Fatalf("unexpected json: %s", b)
+	}
 }
