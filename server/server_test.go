@@ -407,7 +407,9 @@ func TestClusteringNodesReplica1(t *testing.T) {
 	config.Translation.MapSize = 100000
 
 	// this isn't necessary, but makes the test run way faster
+	fmt.Println("!!!!!!!!!!", config.Gossip.Port)
 	config.Gossip.Port = strconv.Itoa(int(cluster[2].Command.GossipTransport().URI.Port))
+	fmt.Println("!!!!!!!!!!!!!!!!", config.Gossip.Port)
 
 	cluster[2].Command = server.NewCommand(cluster[2].Stdin, cluster[2].Stdout, cluster[2].Stderr)
 	cluster[2].Command.Config = config

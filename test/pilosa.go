@@ -34,8 +34,8 @@ import (
 	"github.com/pilosa/pilosa/server"
 	"github.com/pkg/errors"
 
-	"github.com/Shopify/toxiproxy"
-	tox "github.com/Shopify/toxiproxy/client"
+	"github.com/jaffee/toxiproxy"
+	tox "github.com/jaffee/toxiproxy/client"
 )
 
 type portAllocator struct {
@@ -283,18 +283,22 @@ func newCluster(size int, opts ...[]server.CommandOption) (Cluster, error) {
 		m := NewCommandNode(i == 0, commandOpts...)
 		m.Config.Bind = "localhost:" + strconv.Itoa(int(ports.Next()))
 		m.Config.Advertise = "localhost:" + aport
-		p, err := tclient.CreateProxy(name+aport, m.Config.Advertise, m.Config.Bind)
+		_, err := tclient.CreateProxy(name+aport, m.Config.Advertise, m.Config.Bind)
 		if err != nil {
 			return nil, errors.Wrap(err, "setting up toxiproxy")
 		}
-		m.Config.Gossip.Port = strconv.Itoa(int(ports.Next()))
-		aport = strconv.Itoa(int(ports.Next()))
+		gossipBindPort := strconv.Itoa(int(ports.Next()))
+		m.Config.Gossip.Port = gossipBindPort
+		gossipAdvertPort := strconv.Itoa(int(ports.Next()))
 		m.Config.Gossip.AdvertisePort = aport
-		p, err = tclient.CreateProxy(name+"-gossip"+aport, "localhost:"+m.Config.Gossip.AdvertisePort, "localhost:"+m.Config.Gossip.Port)
+		_, err = tclient.CreateProxy(name+"-gossip"+gossipAdvertPort, "localhost:"+m.Config.Gossip.AdvertisePort, "localhost:"+m.Config.Gossip.Port)
 		if err != nil {
 			return nil, errors.Wrap(err, "setting up toxiproxy for gossip")
 		}
-		fmt.Println(p)
+		_, err = tclient.CreateProxy(name+"-gossipudp"+gossipAdvertPort, "localhost:"+m.Config.Gossip.AdvertisePort, "localhost:"+m.Config.Gossip.Port, tox.CreateWithProtocol("udp"))
+		if err != nil {
+			return nil, errors.Wrap(err, "setting up toxiproxy for udp gossip")
+		}
 		err = ioutil.WriteFile(path.Join(m.Config.DataDir, ".id"), []byte(name), 0600)
 		if err != nil {
 			return nil, errors.Wrap(err, "writing node id")
