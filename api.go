@@ -240,6 +240,17 @@ func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, e
 	return field, nil
 }
 
+func setUpImportOptions(opts ...ImportOption) (*ImportOptions, error) {
+	options := &ImportOptions{}
+	for _, opt := range opts {
+		err := opt(options)
+		if err != nil {
+			return nil, errors.Wrap(err, "applying option")
+		}
+	}
+	return options, nil
+}
+
 // ImportRoaring is a low level interface for importing data to Pilosa when
 // extremely high throughput is desired. The data must be encoded in a
 // particular way which may be unintuitive (discussed below). The data is merged
@@ -257,10 +268,17 @@ func (api *API) Field(_ context.Context, indexName, fieldName string) (*Field, e
 // (shard*ShardWidth)+(i%ShardWidth). That is to say that "data" represents all
 // of the rows in this shard of this field concatenated together in one long
 // bitmap.
-func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, shard uint64, remote bool, data []byte) (err error) {
+func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, shard uint64, remote bool, data []byte, opts ...ImportOption) (err error) {
 	if err = api.validate(apiField); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
+
+	// Set up import options.
+	options, err := setUpImportOptions(opts...)
+	if err != nil {
+		return errors.Wrap(err, "setting up import options")
+	}
+
 	nodes := api.cluster.shardNodes(indexName, shard)
 	var eg errgroup.Group
 
@@ -281,14 +299,14 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 			d2 := make([]byte, len(data))
 			copy(d2, data)
 			eg.Go(func() error {
-				return field.importRoaring(d2, shard)
+				return field.importRoaring(d2, shard, options.Clear)
 			})
 			go func(node *Node) {
 			}(node)
 		} else if !remote { // if remote == true we don't forward to other nodes
 			// forward it on
 			eg.Go(func() error {
-				return api.server.defaultClient.ImportRoaring(ctx, &node.URI, indexName, fieldName, shard, true, data)
+				return api.server.defaultClient.ImportRoaring(ctx, &node.URI, indexName, fieldName, shard, true, data, opts...)
 			})
 		}
 	}
@@ -671,10 +689,31 @@ func (api *API) FieldAttrDiff(_ context.Context, indexName string, fieldName str
 	return attrs, nil
 }
 
+// ImportOptions holds the options for the API.Import method.
+type ImportOptions struct {
+	Clear bool
+}
+
+// ImportOption is a functional option type for API.Import.
+type ImportOption func(*ImportOptions) error
+
+func OptImportOptionsClear(c bool) ImportOption {
+	return func(o *ImportOptions) error {
+		o.Clear = c
+		return nil
+	}
+}
+
 // Import bulk imports data into a particular index,field,shard.
-func (api *API) Import(_ context.Context, req *ImportRequest) error {
+func (api *API) Import(_ context.Context, req *ImportRequest, opts ...ImportOption) error {
 	if err := api.validate(apiImport); err != nil {
 		return errors.Wrap(err, "validating api method")
+	}
+
+	// Set up import options.
+	options, err := setUpImportOptions(opts...)
+	if err != nil {
+		return errors.Wrap(err, "setting up import options")
 	}
 
 	index := api.holder.Index(req.Index)
@@ -718,13 +757,15 @@ func (api *API) Import(_ context.Context, req *ImportRequest) error {
 	}
 
 	// Import columnIDs into existence field.
-	if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
-		api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
-		return errors.Wrap(err, "importing existence columns")
+	if !options.Clear {
+		if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
+			api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+			return errors.Wrap(err, "importing existence columns")
+		}
 	}
 
 	// Import into fragment.
-	err = field.Import(req.RowIDs, req.ColumnIDs, timestamps)
+	err = field.Import(req.RowIDs, req.ColumnIDs, timestamps, opts...)
 	if err != nil {
 		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 	}
@@ -732,9 +773,15 @@ func (api *API) Import(_ context.Context, req *ImportRequest) error {
 }
 
 // ImportValue bulk imports values into a particular field.
-func (api *API) ImportValue(_ context.Context, req *ImportValueRequest) error {
+func (api *API) ImportValue(_ context.Context, req *ImportValueRequest, opts ...ImportOption) error {
 	if err := api.validate(apiImportValue); err != nil {
 		return errors.Wrap(err, "validating api method")
+	}
+
+	// Set up import options.
+	options, err := setUpImportOptions(opts...)
+	if err != nil {
+		return errors.Wrap(err, "setting up import options")
 	}
 
 	index := api.holder.Index(req.Index)
@@ -758,13 +805,15 @@ func (api *API) ImportValue(_ context.Context, req *ImportValueRequest) error {
 	}
 
 	// Import columnIDs into existence field.
-	if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
-		api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
-		return errors.Wrap(err, "importing existence columns")
+	if !options.Clear {
+		if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
+			api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+			return errors.Wrap(err, "importing existence columns")
+		}
 	}
 
 	// Import into fragment.
-	err = field.importValue(req.ColumnIDs, req.Values)
+	err = field.importValue(req.ColumnIDs, req.Values, options)
 	if err != nil {
 		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 	}

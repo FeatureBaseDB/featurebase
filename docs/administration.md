@@ -82,6 +82,18 @@ For example, importing a file with the following contents will result in columns
     <p>Note that you must first create a field. View <a href="../api-reference/#create-field">Create Field</a> for more details. The `-e` flag can create the necessary schema when using a field of type "set".</p>
 </div>
 
+#### Clearing Data via Import
+
+By using the `--clear` flag with the import command, Pilosa will clear the values provided in the import payload.
+
+For example, importing a file with the following contents along with the `--clear` flag will result in data being cleared from row 0, column 9; row 1, columns 2 and 8; and row 3, column 12. Clearing a value that doesn't exists is allowed.
+```
+0,9
+1,2
+1,8
+3,12
+```
+
 #### Exporting
 
 Exporting data to csv can be performed on a live instance of Pilosa. You need to specify the index and the field. The API also expects the shard number, but the `pilosa export` sub command will export all shards within a field. The data will be in csv format `Row,Column` and sorted by column.
