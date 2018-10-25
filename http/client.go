@@ -440,6 +440,11 @@ func (c *InternalClient) Forward(ctx context.Context, w http.ResponseWriter, req
 	url := fmt.Sprintf("%s://%s%s", scheme, host, req.RequestURI)
 
 	forReq, err := http.NewRequest(req.Method, url, bytes.NewReader(body))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return nil
+	}
+
 	forReq.Header = make(http.Header)
 	for h, val := range req.Header {
 		forReq.Header[h] = val
