@@ -266,6 +266,8 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return e.executeGroupBy(ctx, index, c, shards, opt)
 	case "Options":
 		return e.executeOptionsCall(ctx, index, c, shards, opt)
+	case "IndexRow":
+		return e.executeIndexRow(ctx, index, c, shards, opt)
 	default:
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeBitmapCall(ctx, index, c, shards, opt)
@@ -430,6 +432,11 @@ func (e *executor) executeMax(ctx context.Context, index string, c *pql.Call, sh
 		return ValCount{}, nil
 	}
 	return other, nil
+}
+
+func (e *executor) executeIndexRow(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (*Row, error) {
+	otherIndex := c.Args["index"].(string)
+	return e.executeBitmapCall(ctx, otherIndex, c, shards, opt)
 }
 
 // executeBitmapCall executes a call that returns a bitmap.
