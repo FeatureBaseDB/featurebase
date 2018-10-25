@@ -1894,6 +1894,22 @@ Set(4500001, fn=4)
 			t.Fatalf("wrong attrs: %v", attrst)
 		}
 	})
+
+	t.Run("remote groupBy", func(t *testing.T) {
+		if res, err := c[1].API.Query(context.Background(), &pilosa.QueryRequest{
+			Index: "i",
+			Query: `GroupBy(Rows(field=f))`,
+		}); err != nil {
+			t.Fatalf("GroupBy querying: %v", err)
+		} else {
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "f", RowID: 7}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "f", RowID: 10}}, Count: 4},
+			}
+			results := res.Results[0].([]pilosa.GroupCount)
+			checkGroupBy(t, expected, results)
+		}
+	})
 }
 
 // Ensure executor returns an error if too many writes are in a single request.
@@ -2622,6 +2638,492 @@ func benchmarkExistence(nn bool, b *testing.B) {
 
 func BenchmarkExecutor_Existence_True(b *testing.B)  { benchmarkExistence(true, b) }
 func BenchmarkExecutor_Existence_False(b *testing.B) { benchmarkExistence(false, b) }
+
+func TestExecutor_Execute_Rows(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "general")
+	c.ImportBits(t, "i", "general", [][2]uint64{
+		{10, 0},
+		{10, ShardWidth + 1},
+		{11, 2},
+		{11, ShardWidth + 2},
+		{12, 2},
+		{12, ShardWidth + 2},
+		{13, 3},
+	})
+
+	rows := c.Query(t, "i", `Rows(field=general)`).Results[0].(pilosa.RowIdentifiers)
+	if !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{10, 11, 12, 13}}) {
+		t.Fatalf("unexpected rows: %+v", rows)
+	}
+
+	rows = c.Query(t, "i", `Rows(field=general, limit=2)`).Results[0].(pilosa.RowIdentifiers)
+	if !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{10, 11}}) {
+		t.Fatalf("unexpected rows: %+v", rows)
+	}
+
+	rows = c.Query(t, "i", `Rows(field=general, previous=10,limit=2)`).Results[0].(pilosa.RowIdentifiers)
+	if !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{11, 12}}) {
+		t.Fatalf("unexpected rows: %+v", rows)
+	}
+
+	rows = c.Query(t, "i", `Rows(field=general, column=2)`).Results[0].(pilosa.RowIdentifiers)
+	if !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{11, 12}}) {
+		t.Fatalf("unexpected rows: %+v", rows)
+	}
+}
+
+func TestExecutor_Execute_Rows_Keys(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+
+	_, err := c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{Keys: true})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+
+	_, err = c[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldKeys())
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
+
+	// setup some data. 10 bits in each of shards 0 through 9. starting at
+	// row/col shardNum and progressing to row/col shardNum+10. Also set the
+	// previous 2 for each bit if row >0.
+	query := strings.Builder{}
+	for shard := 0; shard < 10; shard++ {
+		for i := shard; i < shard+10; i++ {
+			for row := i; row >= 0 && row > i-3; row-- {
+				query.WriteString(fmt.Sprintf("Set(\"%d\", f=\"%d\")", shard*pilosa.ShardWidth+i, row))
+
+			}
+
+		}
+	}
+	_, err = c[0].API.Query(context.Background(), &pilosa.QueryRequest{
+		Index: "i",
+		Query: query.String(),
+	})
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+
+	tests := []struct {
+		q   string
+		exp []string
+	}{
+		{
+			q:   `Rows(field=f)`,
+			exp: []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18"},
+		},
+		{
+			q:   `Rows(field=f, limit=2)`,
+			exp: []string{"0", "1"},
+		},
+		{
+			q:   `Rows(field=f, previous="15")`,
+			exp: []string{"16", "17", "18"},
+		},
+		{
+			q:   `Rows(field=f, previous="11", limit=2)`,
+			exp: []string{"12", "13"},
+		},
+		{
+			q:   `Rows(field=f, previous="17", limit=5)`,
+			exp: []string{"18"},
+		},
+		{
+			q:   `Rows(field=f, previous="18")`,
+			exp: []string{},
+		},
+		{
+			q:   `Rows(field=f, previous="1", limit=0)`,
+			exp: []string{},
+		},
+		{
+			q:   `Rows(field=f, column="1")`,
+			exp: []string{"0", "1"},
+		},
+		{
+			q:   `Rows(field=f, column="2")`,
+			exp: []string{"0", "1", "2"},
+		},
+		{
+			q:   `Rows(field=f, column="3")`,
+			exp: []string{"1", "2", "3"},
+		},
+		{
+			q:   `Rows(field=f, limit=2, column="3")`,
+			exp: []string{"1", "2"},
+		},
+		{
+			q:   fmt.Sprintf(`Rows(field=f, previous="15", column="%d")`, ShardWidth*9+17),
+			exp: []string{"16", "17"},
+		},
+		{
+			q:   fmt.Sprintf(`Rows(field=f, previous="11", limit=2, column="%d")`, ShardWidth*5+14),
+			exp: []string{"12", "13"},
+		},
+		{
+			q:   fmt.Sprintf(`Rows(field=f, previous="17", limit=5, column="%d")`, ShardWidth*9+18),
+			exp: []string{"18"},
+		},
+		{
+			q:   `Rows(field=f, previous="18", column="19")`,
+			exp: []string{},
+		},
+		{
+			q:   `Rows(field=f, previous="1", limit=0, column="0")`,
+			exp: []string{},
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("#%d_%s", i, test.q), func(t *testing.T) {
+			if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: test.q}); err != nil {
+				t.Fatal(err)
+			} else if rows := res.Results[0].(pilosa.RowIdentifiers); !reflect.DeepEqual(
+				rows, pilosa.RowIdentifiers{Keys: test.exp}) {
+				t.Fatalf("\ngot: %+v\nexp: %+v", rows, pilosa.RowIdentifiers{Keys: test.exp})
+			}
+		})
+	}
+
+}
+
+func TestExecutor_Execute_GroupBy(t *testing.T) {
+	groupByTest := func(t *testing.T, clusterSize int) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		c.CreateField(t, "i", pilosa.IndexOptions{}, "general")
+		c.CreateField(t, "i", pilosa.IndexOptions{}, "sub")
+		c.ImportBits(t, "i", "general", [][2]uint64{
+			{10, 0},
+			{10, 1},
+			{10, ShardWidth + 1},
+			{11, 2},
+			{11, ShardWidth + 2},
+			{12, 2},
+			{12, ShardWidth + 2},
+		})
+		c.ImportBits(t, "i", "sub", [][2]uint64{
+			{100, 0},
+			{100, 1},
+			{100, 3},
+			{100, ShardWidth + 1},
+
+			{110, 2},
+			{110, 0},
+		})
+
+		t.Run("No Field List Arguments", func(t *testing.T) {
+			if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy()`}); err != nil {
+				if !strings.Contains(err.Error(), "need at least one child call") {
+					t.Fatalf("unexpected error: \"%v\"", err)
+				}
+			}
+		})
+
+		t.Run("Unknown Field ", func(t *testing.T) {
+			if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy(Rows(field=missing))`}); err != nil {
+				if errors.Cause(err) != pilosa.ErrFieldNotFound {
+					t.Fatalf("unexpected error\n\"%s\" not returned instead \n\"%s\"", pilosa.ErrFieldNotFound, err)
+				}
+			}
+		})
+
+		t.Run("Basic", func(t *testing.T) {
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 100}}, Count: 3},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 110}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 11}, {Field: "sub", RowID: 110}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 12}, {Field: "sub", RowID: 110}}, Count: 1},
+			}
+
+			results := c.Query(t, "i", `GroupBy(Rows(field=general), Rows(field=sub))`).Results[0].([]pilosa.GroupCount)
+			checkGroupBy(t, expected, results)
+		})
+
+		t.Run("check field offset no limit", func(t *testing.T) {
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 11}}, Count: 2},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 12}}, Count: 2},
+			}
+
+			results := c.Query(t, "i", `GroupBy(Rows(field=general, previous=10))`).Results[0].([]pilosa.GroupCount)
+			checkGroupBy(t, expected, results)
+		})
+
+		t.Run("check field offset limit", func(t *testing.T) {
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 11}}, Count: 2},
+			}
+
+			results := c.Query(t, "i", `GroupBy(Rows(field=general, previous=10), limit=1)`).Results[0].([]pilosa.GroupCount)
+			checkGroupBy(t, expected, results)
+
+		})
+
+		c.CreateField(t, "i", pilosa.IndexOptions{}, "a")
+		c.CreateField(t, "i", pilosa.IndexOptions{}, "b")
+		c.ImportBits(t, "i", "a", [][2]uint64{
+			{0, 1},
+			{1, ShardWidth + 1},
+		})
+		c.ImportBits(t, "i", "b", [][2]uint64{
+			{0, ShardWidth + 1},
+			{1, 1},
+		})
+
+		t.Run("tricky data", func(t *testing.T) {
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "a", RowID: 0}, {Field: "b", RowID: 1}}, Count: 1},
+			}
+
+			results := c.Query(t, "i", `GroupBy(Rows(field=a), Rows(field=b), limit=1)`).Results[0].([]pilosa.GroupCount)
+			checkGroupBy(t, expected, results)
+		})
+
+		// set the same bits in a single shard in three fields
+		c.CreateField(t, "i", pilosa.IndexOptions{}, "wa")
+		c.CreateField(t, "i", pilosa.IndexOptions{}, "wb")
+		c.CreateField(t, "i", pilosa.IndexOptions{}, "wc")
+		c.ImportBits(t, "i", "wa", [][2]uint64{
+			{0, 0}, {0, 1}, {0, 2}, // all
+			{1, 1},         // odds
+			{2, 0}, {2, 2}, // evens
+			{3, 3}, // no overlap
+		})
+		c.ImportBits(t, "i", "wb", [][2]uint64{
+			{0, 0}, {0, 1}, {0, 2},
+			{1, 1},
+			{2, 0}, {2, 2},
+			{3, 3},
+		})
+		c.ImportBits(t, "i", "wc", [][2]uint64{
+			{0, 0}, {0, 1}, {0, 2},
+			{1, 1},
+			{2, 0}, {2, 2},
+			{3, 3},
+		})
+
+		t.Run("test wrapping with previous", func(t *testing.T) {
+			results := c.Query(t, "i", `GroupBy(Rows(field=wa), Rows(field=wb), Rows(field=wc, previous=1), limit=3)`).Results[0].([]pilosa.GroupCount)
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "wa", RowID: 0}, {Field: "wb", RowID: 0}, {Field: "wc", RowID: 2}}, Count: 2},
+				{Group: []pilosa.FieldRow{{Field: "wa", RowID: 0}, {Field: "wb", RowID: 1}, {Field: "wc", RowID: 0}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "wa", RowID: 0}, {Field: "wb", RowID: 1}, {Field: "wc", RowID: 1}}, Count: 1},
+			}
+			checkGroupBy(t, expected, results)
+		})
+
+		t.Run("test previous is last result", func(t *testing.T) {
+			results := c.Query(t, "i", `GroupBy(Rows(field=wa, previous=3), Rows(field=wb, previous=3), Rows(field=wc, previous=3), limit=3)`).Results[0].([]pilosa.GroupCount)
+			if len(results) > 0 {
+				t.Fatalf("expected no results because previous specified last result")
+			}
+		})
+
+		t.Run("test wrapping multiple", func(t *testing.T) {
+			results := c.Query(t, "i", `GroupBy(Rows(field=wa), Rows(field=wb, previous=2), Rows(field=wc, previous=2), limit=1)`).Results[0].([]pilosa.GroupCount)
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "wa", RowID: 1}, {Field: "wb", RowID: 0}, {Field: "wc", RowID: 0}}, Count: 1},
+			}
+			checkGroupBy(t, expected, results)
+		})
+
+		// test multiple shards with distinct results (different rows) and same
+		// rows to ensure ordering, limit behavior and correctness
+		c.CreateField(t, "i", pilosa.IndexOptions{}, "ma")
+		c.CreateField(t, "i", pilosa.IndexOptions{}, "mb")
+		c.ImportBits(t, "i", "ma", [][2]uint64{
+			{0, 0},
+			{1, ShardWidth},
+			{2, 0},
+			{3, ShardWidth},
+		})
+		c.ImportBits(t, "i", "mb", [][2]uint64{
+			{0, 0},
+			{1, ShardWidth},
+			{2, 0},
+			{3, ShardWidth},
+		})
+		t.Run("distinct rows in different shards", func(t *testing.T) {
+			results := c.Query(t, "i", `GroupBy(Rows(field=ma), Rows(field=mb), limit=5)`).Results[0].([]pilosa.GroupCount)
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 0}, {Field: "mb", RowID: 0}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 0}, {Field: "mb", RowID: 2}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 1}, {Field: "mb", RowID: 1}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 1}, {Field: "mb", RowID: 3}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 2}, {Field: "mb", RowID: 0}}, Count: 1},
+			}
+			checkGroupBy(t, expected, results)
+		})
+
+		t.Run("distinct rows in different shards with row limit", func(t *testing.T) {
+			results := c.Query(t, "i", `GroupBy(Rows(field=ma), Rows(field=mb, limit=2), limit=5)`).Results[0].([]pilosa.GroupCount)
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 0}, {Field: "mb", RowID: 0}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 1}, {Field: "mb", RowID: 1}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 2}, {Field: "mb", RowID: 0}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 3}, {Field: "mb", RowID: 1}}, Count: 1},
+			}
+			checkGroupBy(t, expected, results)
+		})
+
+		t.Run("distinct rows in different shards with column arg", func(t *testing.T) {
+			results := c.Query(t, "i", fmt.Sprintf(`GroupBy(Rows(field=ma), Rows(field=mb, column=%d), limit=5)`, ShardWidth)).Results[0].([]pilosa.GroupCount)
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 1}, {Field: "mb", RowID: 1}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 1}, {Field: "mb", RowID: 3}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 3}, {Field: "mb", RowID: 1}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 3}, {Field: "mb", RowID: 3}}, Count: 1},
+			}
+			checkGroupBy(t, expected, results)
+		})
+
+		c.CreateField(t, "i", pilosa.IndexOptions{}, "na")
+		c.CreateField(t, "i", pilosa.IndexOptions{}, "nb")
+		c.ImportBits(t, "i", "na", [][2]uint64{
+			{0, 0},
+			{0, ShardWidth},
+			{1, 0},
+			{1, ShardWidth},
+		})
+		c.ImportBits(t, "i", "nb", [][2]uint64{
+			{0, 0},
+			{0, ShardWidth},
+			{1, 0},
+			{1, ShardWidth},
+		})
+		t.Run("same rows in different shards", func(t *testing.T) {
+			results := c.Query(t, "i", `GroupBy(Rows(field=na), Rows(field=nb))`).Results[0].([]pilosa.GroupCount)
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "na", RowID: 0}, {Field: "nb", RowID: 0}}, Count: 2},
+				{Group: []pilosa.FieldRow{{Field: "na", RowID: 0}, {Field: "nb", RowID: 1}}, Count: 2},
+				{Group: []pilosa.FieldRow{{Field: "na", RowID: 1}, {Field: "nb", RowID: 0}}, Count: 2},
+				{Group: []pilosa.FieldRow{{Field: "na", RowID: 1}, {Field: "nb", RowID: 1}}, Count: 2},
+			}
+			checkGroupBy(t, expected, results)
+
+		})
+
+		// test paging over results using previous. set the same bits in three
+		// fields
+		c.CreateField(t, "i", pilosa.IndexOptions{}, "ppa")
+		c.CreateField(t, "i", pilosa.IndexOptions{}, "ppb")
+		c.CreateField(t, "i", pilosa.IndexOptions{}, "ppc")
+		c.ImportBits(t, "i", "ppa", [][2]uint64{
+			{0, 0},
+			{1, 0},
+			{2, 0},
+			{3, 0}, {3, 91000}, {3, ShardWidth}, {3, ShardWidth * 2}, {3, ShardWidth * 3},
+		})
+		c.ImportBits(t, "i", "ppb", [][2]uint64{
+			{0, 0},
+			{1, 0},
+			{2, 0},
+			{3, 0}, {3, 91000}, {3, ShardWidth}, {3, ShardWidth * 2}, {3, ShardWidth * 3},
+		})
+		c.ImportBits(t, "i", "ppc", [][2]uint64{
+			{0, 0},
+			{1, 0},
+			{2, 0},
+			{3, 0}, {3, 91000}, {3, ShardWidth}, {3, ShardWidth * 2}, {3, ShardWidth * 3},
+		})
+
+		t.Run("test wrapping with previous", func(t *testing.T) {
+			totalResults := make([]pilosa.GroupCount, 0)
+			results := c.Query(t, "i", `GroupBy(Rows(field=ppa), Rows(field=ppb), Rows(field=ppc), limit=3)`).Results[0].([]pilosa.GroupCount)
+			totalResults = append(totalResults, results...)
+			for len(totalResults) < 64 {
+				lastGroup := results[len(results)-1].Group
+				query := fmt.Sprintf("GroupBy(Rows(field=ppa, previous=%d), Rows(field=ppb, previous=%d), Rows(field=ppc, previous=%d), limit=3)", lastGroup[0].RowID, lastGroup[1].RowID, lastGroup[2].RowID)
+				results = c.Query(t, "i", query).Results[0].([]pilosa.GroupCount)
+				totalResults = append(totalResults, results...)
+			}
+
+			expected := make([]pilosa.GroupCount, 64)
+			for i := 0; i < 64; i++ {
+				expected[i] = pilosa.GroupCount{Group: []pilosa.FieldRow{{Field: "ppa", RowID: uint64(i / 16)}, {Field: "ppb", RowID: uint64((i % 16) / 4)}, {Field: "ppc", RowID: uint64(i % 4)}}, Count: 1}
+			}
+			expected[63].Count = 5
+
+			checkGroupBy(t, expected, totalResults)
+		})
+	}
+	for size := range []int{1, 3} {
+		t.Run(fmt.Sprintf("%d_nodes", size), func(t *testing.T) {
+			groupByTest(t, size)
+		})
+	}
+}
+
+func BenchmarkGroupBy(b *testing.B) {
+	c := test.MustRunCluster(b, 1)
+	defer c.Close()
+	c.CreateField(b, "i", pilosa.IndexOptions{}, "a")
+	c.CreateField(b, "i", pilosa.IndexOptions{}, "b")
+	c.CreateField(b, "i", pilosa.IndexOptions{}, "c")
+	// Set up identical representative data in 3 fields. In each row, we'll set
+	// a certain bit pattern for 100 bits, then skip 1000 up to ShardWidth.
+	bits := make([][2]uint64, 0)
+	for i := uint64(0); i < ShardWidth; i++ {
+		// row 0 has 100 bit runs
+		bits = append(bits, [2]uint64{0, i})
+		if i%2 == 1 {
+			// row 1 has odd bits set
+			bits = append(bits, [2]uint64{1, i})
+		}
+		if i%2 == 0 {
+			// row 2 has even bits set
+			bits = append(bits, [2]uint64{2, i})
+		}
+		if i%27 == 0 {
+			// row 3 has every 27th bit set
+			bits = append(bits, [2]uint64{3, i})
+		}
+		if i%100 == 99 {
+			i += 1000
+		}
+	}
+	c.ImportBits(b, "i", "a", bits)
+	c.ImportBits(b, "i", "b", bits)
+	c.ImportBits(b, "i", "c", bits)
+
+	b.Run("single shard group by", func(b *testing.B) {
+		b.ResetTimer()
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			c.Query(b, "i", `GroupBy(Rows(field=a), Rows(field=b), Rows(field=c))`)
+		}
+	})
+
+	b.Run("single shard with limit", func(b *testing.B) {
+		b.ResetTimer()
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			c.Query(b, "i", `GroupBy(Rows(field=a), Rows(field=b), Rows(field=c), limit=4)`)
+		}
+	})
+
+	// TODO benchmark over multiple shards
+
+	// TODO benchmark paging over large numbers of rows
+
+}
+
+func checkGroupBy(t *testing.T, expected, results []pilosa.GroupCount) {
+	if len(results) != len(expected) {
+		t.Fatalf("number of  groupings mismatch:\n got:%+v\nwant:%+v\n", results, expected)
+	}
+	for i, result := range results {
+		if !reflect.DeepEqual(expected[i], result) {
+			t.Fatalf("unexpected result at %d: \n got:%+v\nwant:%+v\n", i, result, expected[i])
+		}
+	}
+}
 
 func runCallTest(t *testing.T, writeQuery string, readQueries []string, indexOptions *pilosa.IndexOptions, fieldOption ...pilosa.FieldOption) []pilosa.QueryResponse {
 	if indexOptions == nil {
