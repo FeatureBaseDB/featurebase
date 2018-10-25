@@ -58,6 +58,9 @@ const (
 	// exponent.
 	shardVsContainerExponent = shardWidthExponent - 16
 
+	// width of roaring containers is 2^16
+	containerWidth = 1 << 16
+
 	// snapshotExt is the file extension used for an in-process snapshot.
 	snapshotExt = ".snapshotting"
 
@@ -1988,15 +1991,82 @@ func (f *fragment) readCacheFromArchive(r io.Reader) error {
 	return nil
 }
 
-func (f *fragment) rows() []uint64 {
-	i, _ := f.storage.Containers.Iterator(0)
-	rows := make([]uint64, 0)
+// rowFilter is a function signature for controlling iteration over containers
+// in a fragment. It will be invoked on each container found and returns two
+// booleans. The first is whether the row this container is in should be
+// included or skipped, and the second is whether to stop processing or
+// continue.
+type rowFilter func(rowID, key uint64, c *roaring.Container) (include, done bool)
 
+// filterWithLimit returns a filter which will only allow a limited number of
+// rows to be returned. It should be applied last so that it is only called (and
+// therefore only updates its internal state) if the row is being included by
+// every other filter.
+func filterWithLimit(limit uint64) rowFilter {
+	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
+		if limit > 0 {
+			limit--
+			return true, false
+		}
+		return false, true
+	}
+}
+
+func filterColumn(col uint64) rowFilter {
+	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
+		colID := col % ShardWidth
+		colKey := ((rowID * ShardWidth) + colID) >> 16
+		colVal := uint16(colID & 0xFFFF) // columnID within the container
+		return colKey == key && c.Contains(colVal), false
+	}
+}
+
+// TODO: this works, but it would be more performant if the fragment could seek
+// to the next row in the rows list rather than asking the filter for each
+// container serially. The container iterator would need to expose a seek
+// method, and the rowFilter would need some way of communicating to
+// fragment.rows what the next rowID to seek to is.
+func filterWithRows(rows []uint64) rowFilter {
+	loc := 0
+	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
+		if loc >= len(rows) {
+			return false, true
+		}
+		i := sort.Search(len(rows[loc:]), func(i int) bool {
+			return rows[loc+i] >= rowID
+		})
+		loc += i
+		if loc >= len(rows) {
+			return false, true
+		}
+		if rows[loc] == rowID {
+			if loc == len(rows)-1 {
+				done = true
+			}
+			return true, done
+		}
+		return false, false
+	}
+}
+
+// rows returns all rows starting from 'start'. Filters will be applied in
+// order. All filters must return true to include the row. Once a row is
+// included, further containers in that row will be skipped. So, for a row to be
+// included, there must be one container in that row where all filters return
+// true. For a row to be skipped, at least one filter must return false for each
+// container in that row (it need not be the same filter for each). Any filter
+// returning done == true will cause processing to stop after all filters for
+// this container have been processed. The rows accumulated up to this point
+// (including this row if all filters passed) will be returned.
+func (f *fragment) rows(start uint64, filters ...rowFilter) []uint64 {
+	startKey := rowToKey(start)
+	i, _ := f.storage.Containers.Iterator(startKey)
+	rows := make([]uint64, 0)
 	var lastRow uint64 = math.MaxUint64
 
 	// Loop over the existing containers.
 	for i.Next() {
-		key, _ := i.Value()
+		key, c := i.Value()
 
 		// virtual row for the current container
 		vRow := key >> shardVsContainerExponent
@@ -2006,42 +2076,61 @@ func (f *fragment) rows() []uint64 {
 			continue
 		}
 
-		rows = append(rows, vRow)
-		lastRow = vRow
-	}
-	return rows
-
-}
-
-func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
-	var colKey uint64
-
-	colID := columnID % ShardWidth
-	i, _ := f.storage.Containers.Iterator(0)
-
-	colVal := uint16(colID & 0xFFFF)
-
-	rows := make([]uint64, 0)
-
-	// Loop over the existing containers.
-	for i.Next() {
-		key, c := i.Value()
-
-		// virtual row for the current container
-		vRow := key >> shardVsContainerExponent
-
-		// column container key for virtual row
-		colKey = ((vRow * ShardWidth) + colID) >> 16
-
-		if colKey != key {
-			continue
+		// apply filters
+		addRow, done := true, false
+		for _, filter := range filters {
+			var d bool
+			addRow, d = filter(vRow, key, c)
+			done = done || d
+			if !addRow {
+				break
+			}
 		}
-
-		if c.Contains(colVal) {
+		if addRow {
+			lastRow = vRow
 			rows = append(rows, vRow)
 		}
+		if done {
+			return rows
+		}
 	}
 	return rows
+}
+
+type rowIterator struct {
+	f      *fragment
+	rowIDs []uint64
+	cur    int
+	wrap   bool
+}
+
+func (f *fragment) rowIterator(wrap bool, filters ...rowFilter) *rowIterator {
+	return &rowIterator{
+		f:      f,
+		rowIDs: f.rows(0, filters...), // TODO: this may be memory intensive in high cardinality cases
+		wrap:   wrap,
+	}
+}
+
+func (ri *rowIterator) Seek(rowID uint64) {
+	idx := sort.Search(len(ri.rowIDs), func(i int) bool {
+		return ri.rowIDs[i] >= rowID
+	})
+	ri.cur = idx
+}
+
+func (ri *rowIterator) Next() (r *Row, rowID uint64, wrapped bool) {
+	if ri.cur >= len(ri.rowIDs) {
+		if !ri.wrap || len(ri.rowIDs) == 0 {
+			return nil, 0, true
+		}
+		ri.Seek(0)
+		wrapped = true
+	}
+	rowID = ri.rowIDs[ri.cur]
+	r = ri.f.row(rowID)
+	ri.cur += 1
+	return r, rowID, wrapped
 }
 
 // FragmentBlock represents info about a subsection of the rows in a block.
@@ -2323,13 +2412,20 @@ func newRowsVector(f *fragment) *rowsVector {
 // Additionally, it returns true if a value was found,
 // otherwise it returns false.
 func (v *rowsVector) Get(colID uint64) (uint64, bool, error) {
-	rows := v.f.rowsForColumn(colID)
+	rows := v.f.rows(0, filterColumn(colID))
 	if len(rows) > 1 {
 		return 0, false, errors.New("found multiple row values for column")
 	} else if len(rows) == 1 {
 		return rows[0], true, nil
 	}
 	return 0, false, nil
+}
+
+// rowToKey converts a Pilosa row ID to the key of the container which starts
+// that row in the bitmap which represents this entire fragment. A fragment is
+// all the rows within a shard within a field concatenated together.
+func rowToKey(rowID uint64) (key uint64) {
+	return rowID * (ShardWidth / containerWidth)
 }
 
 // boolVector implements the vector interface by looking
@@ -2349,7 +2445,7 @@ func newBoolVector(f *fragment) *boolVector {
 // Additionally, it returns true if a value was found,
 // otherwise it returns false.
 func (v *boolVector) Get(colID uint64) (uint64, bool, error) {
-	rows := v.f.rowsForColumn(colID)
+	rows := v.f.rows(0, filterColumn(colID))
 	if len(rows) > 1 {
 		return 0, false, errors.New("found multiple row values for column")
 	} else if len(rows) == 1 {
