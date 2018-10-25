@@ -294,11 +294,20 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index s
 }
 
 // Import bulk imports bits for a single shard to a host.
-func (c *InternalClient) Import(ctx context.Context, index, field string, shard uint64, bits []pilosa.Bit) error {
+func (c *InternalClient) Import(ctx context.Context, index, field string, shard uint64, bits []pilosa.Bit, opts ...pilosa.ImportOption) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
 		return pilosa.ErrFieldRequired
+	}
+
+	// Set up import options.
+	options := &pilosa.ImportOptions{}
+	for _, opt := range opts {
+		err := opt(options)
+		if err != nil {
+			return errors.Wrap(err, "applying option")
+		}
 	}
 
 	buf, err := c.marshalImportPayload(index, field, shard, bits)
@@ -314,7 +323,7 @@ func (c *InternalClient) Import(ctx context.Context, index, field string, shard 
 
 	// Import to each node.
 	for _, node := range nodes {
-		if err := c.importNode(ctx, node, index, field, buf); err != nil {
+		if err := c.importNode(ctx, node, index, field, buf, options); err != nil {
 			return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
 		}
 	}
@@ -332,11 +341,20 @@ func getCoordinatorNode(nodes []*pilosa.Node) *pilosa.Node {
 }
 
 // ImportK bulk imports bits specified by string keys to a host.
-func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits []pilosa.Bit) error {
+func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits []pilosa.Bit, opts ...pilosa.ImportOption) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
 		return pilosa.ErrFieldRequired
+	}
+
+	// Set up import options.
+	options := &pilosa.ImportOptions{}
+	for _, opt := range opts {
+		err := opt(options)
+		if err != nil {
+			return errors.Wrap(err, "applying option")
+		}
 	}
 
 	buf, err := c.marshalImportPayload(index, field, 0, bits)
@@ -356,7 +374,7 @@ func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits 
 	}
 
 	// Import to node.
-	if err := c.importNode(ctx, coord, index, field, buf); err != nil {
+	if err := c.importNode(ctx, coord, index, field, buf, options); err != nil {
 		return fmt.Errorf("import node: host=%s, err=%s", coord.URI, err)
 	}
 
@@ -410,11 +428,18 @@ func (c *InternalClient) marshalImportPayload(index, field string, shard uint64,
 }
 
 // importNode sends a pre-marshaled import request to a node.
-func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, index, field string, buf []byte) error {
+func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, index, field string, buf []byte, opts *pilosa.ImportOptions) error {
 	// Create URL & HTTP request.
 	path := fmt.Sprintf("/index/%s/field/%s/import", index, field)
 	u := nodePathToURL(node, path)
-	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
+
+	vals := url.Values{}
+	if opts.Clear {
+		vals.Set("clear", "true")
+	}
+	url := fmt.Sprintf("%s?%s", u.String(), vals.Encode())
+
+	req, err := http.NewRequest("POST", url, bytes.NewReader(buf))
 	if err != nil {
 		return errors.Wrap(err, "creating request")
 	}
@@ -449,11 +474,20 @@ func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, inde
 }
 
 // ImportValue bulk imports field values for a single shard to a host.
-func (c *InternalClient) ImportValue(ctx context.Context, index, field string, shard uint64, vals []pilosa.FieldValue) error {
+func (c *InternalClient) ImportValue(ctx context.Context, index, field string, shard uint64, vals []pilosa.FieldValue, opts ...pilosa.ImportOption) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
 		return pilosa.ErrFieldRequired
+	}
+
+	// Set up import options.
+	options := &pilosa.ImportOptions{}
+	for _, opt := range opts {
+		err := opt(options)
+		if err != nil {
+			return errors.Wrap(err, "applying option")
+		}
 	}
 
 	buf, err := c.marshalImportValuePayload(index, field, shard, vals)
@@ -469,7 +503,7 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 
 	// Import to each node.
 	for _, node := range nodes {
-		if err := c.importNode(ctx, node, index, field, buf); err != nil {
+		if err := c.importNode(ctx, node, index, field, buf, options); err != nil {
 			return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
 		}
 	}
@@ -478,10 +512,19 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 }
 
 // ImportValueK bulk imports keyed field values to a host.
-func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, vals []pilosa.FieldValue) error {
+func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, vals []pilosa.FieldValue, opts ...pilosa.ImportOption) error {
 	buf, err := c.marshalImportValuePayload(index, field, 0, vals)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
+	}
+
+	// Set up import options.
+	options := &pilosa.ImportOptions{}
+	for _, opt := range opts {
+		err := opt(options)
+		if err != nil {
+			return errors.Wrap(err, "applying option")
+		}
 	}
 
 	// Get the coordinator node; all bits are sent to the
@@ -496,7 +539,7 @@ func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, 
 	}
 
 	// Import to node.
-	if err := c.importNode(ctx, coord, index, field, buf); err != nil {
+	if err := c.importNode(ctx, coord, index, field, buf, options); err != nil {
 		return fmt.Errorf("import node: host=%s, err=%s", coord.URI, err)
 	}
 
@@ -527,7 +570,7 @@ func (c *InternalClient) marshalImportValuePayload(index, field string, shard ui
 
 // ImportRoaring does fast import of raw bits in roaring format (pilosa or
 // official format, see API.ImportRoaring).
-func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64, remote bool, data []byte) error {
+func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64, remote bool, data []byte, opts ...pilosa.ImportOption) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
@@ -537,7 +580,21 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, ind
 		uri = c.defaultURI
 	}
 
-	url := fmt.Sprintf("%s/index/%s/field/%s/import-roaring/%d?remote=%v", uri, index, field, shard, remote)
+	// Set up import options.
+	options := &pilosa.ImportOptions{}
+	for _, opt := range opts {
+		err := opt(options)
+		if err != nil {
+			return errors.Wrap(err, "applying option")
+		}
+	}
+
+	vals := url.Values{}
+	vals.Set("remote", strconv.FormatBool(remote))
+	if options.Clear {
+		vals.Set("clear", "true")
+	}
+	url := fmt.Sprintf("%s/index/%s/field/%s/import-roaring/%d?%s", uri, index, field, shard, vals.Encode())
 
 	// Generate HTTP request.
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))

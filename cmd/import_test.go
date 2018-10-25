@@ -95,6 +95,17 @@ field = "f1"
 				return v.Error()
 			},
 		},
+		{
+			args: []string{"import", "--index", "i1", "--field", "f1", "--clear", "true"},
+			env:  map[string]string{},
+			validation: func() error {
+				v := validator{}
+				v.Check(cmd.Importer.Index, "i1")
+				v.Check(cmd.Importer.Field, "f1")
+				v.Check(cmd.Importer.Clear, true)
+				return v.Error()
+			},
+		},
 	}
 	executeDry(t, tests)
 }
