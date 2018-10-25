@@ -267,7 +267,7 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "Options":
 		return e.executeOptionsCall(ctx, index, c, shards, opt)
 	case "IndexRow":
-		return e.executeIndexRow(ctx, index, c, shards, opt)
+		return e.executeIndexRow(ctx, index, c, opt)
 	default:
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeBitmapCall(ctx, index, c, shards, opt)
@@ -434,9 +434,19 @@ func (e *executor) executeMax(ctx context.Context, index string, c *pql.Call, sh
 	return other, nil
 }
 
-func (e *executor) executeIndexRow(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (*Row, error) {
+func (e *executor) executeIndexRow(ctx context.Context, index string, c *pql.Call, opt *execOptions) (*Row, error) {
+	// Round up the number of shards.
 	otherIndex := c.Args["index"].(string)
-	return e.executeBitmapCall(ctx, otherIndex, c, shards, opt)
+	idx := e.Holder.Index(otherIndex)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	}
+	otherShards := idx.AvailableShards().Slice()
+	if len(otherShards) == 0 {
+		otherShards = []uint64{0}
+	}
+
+	return e.executeBitmapCall(ctx, otherIndex, c, otherShards, opt)
 }
 
 // executeBitmapCall executes a call that returns a bitmap.
