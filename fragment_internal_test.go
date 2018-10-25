@@ -2080,7 +2080,7 @@ func TestFragmentRowIterator(t *testing.T) {
 			if id != i {
 				t.Fatalf("expected row %d but got %d", i, id)
 			}
-			if wrapped != false {
+			if wrapped {
 				t.Fatalf("shouldn't have wrapped")
 			}
 			if !reflect.DeepEqual(row.Columns(), []uint64{0}) {
@@ -2094,7 +2094,7 @@ func TestFragmentRowIterator(t *testing.T) {
 		if id != 0 {
 			t.Fatalf("id should be 0 after iterator is exhausted, got %d", id)
 		}
-		if wrapped != true {
+		if !wrapped {
 			t.Fatalf("wrapped should be true after iterator is exhausted")
 		}
 		f.Close()
@@ -2113,7 +2113,7 @@ func TestFragmentRowIterator(t *testing.T) {
 			if id != i {
 				t.Fatalf("expected row %d but got %d", i, id)
 			}
-			if wrapped != false {
+			if wrapped {
 				t.Fatalf("shouldn't have wrapped")
 			}
 			if !reflect.DeepEqual(row.Columns(), []uint64{0}) {
@@ -2127,7 +2127,7 @@ func TestFragmentRowIterator(t *testing.T) {
 		if id != 0 {
 			t.Fatalf("id should be 0 after iterator is exhausted, got %d", id)
 		}
-		if wrapped != true {
+		if !wrapped {
 			t.Fatalf("wrapped should be true after iterator is exhausted")
 		}
 		f.Close()

@@ -3035,8 +3035,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 
 		t.Run("test wrapping with previous", func(t *testing.T) {
 			totalResults := make([]pilosa.GroupCount, 0)
-			var results []pilosa.GroupCount
-			results = c.Query(t, "i", `GroupBy(Rows(field=ppa), Rows(field=ppb), Rows(field=ppc), limit=3)`).Results[0].([]pilosa.GroupCount)
+			results := c.Query(t, "i", `GroupBy(Rows(field=ppa), Rows(field=ppb), Rows(field=ppc), limit=3)`).Results[0].([]pilosa.GroupCount)
 			totalResults = append(totalResults, results...)
 			for len(totalResults) < 64 {
 				lastGroup := results[len(results)-1].Group
