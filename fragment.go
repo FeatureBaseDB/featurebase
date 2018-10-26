@@ -1147,6 +1147,44 @@ func (f *fragment) top(opt topOptions) ([]Pair, error) {
 	return r, nil
 }
 
+// topXor returns the rows with the lowest XorCount from the fragment.
+// The XorCount opteration is applied against each row and opt.Src.
+func (f *fragment) topXor(opt topOptions) ([]Pair, error) {
+	// Ensure that a source row was provided.
+	if opt.Src == nil {
+		return nil, errors.New("topXor requires a source row")
+	}
+
+	// Retrieve pairs.
+	pairs := f.topBitmapPairs(opt.RowIDs)
+
+	// Iterate over rankings and add to results until we have enough.
+	results := &pairHeap{}
+	for _, pair := range pairs {
+		rowID := pair.ID
+
+		// Calculate count and append.
+		count := opt.Src.xorCount(f.row(rowID))
+		heap.Push(results, Pair{ID: rowID, Count: count})
+
+		// Threshold logic doesn't work here because the heap
+		// isn't sorted in the case of xor (it is sorted in the
+		// intersect case because the cache itself is sorted
+		// by the number of bits set per row.
+		//threshold := results.Pairs[0].Count
+	}
+
+	// Pop all elements off of the heap.
+	r := make(Pairs, results.Len())
+	x := results.Len()
+	i := 1
+	for results.Len() > 0 {
+		r[x-i] = heap.Pop(results).(Pair)
+		i++
+	}
+	return r, nil
+}
+
 func (f *fragment) topBitmapPairs(rowIDs []uint64) []bitmapPair {
 	// Don't retrieve from storage if CacheTypeNone.
 	if f.CacheType == CacheTypeNone {
@@ -1172,9 +1210,9 @@ func (f *fragment) topBitmapPairs(rowIDs []uint64) []bitmapPair {
 			continue
 		}
 
+		// Otherwise load from storage.
 		row := f.row(rowID)
 		if row.Count() > 0 {
-			// Otherwise load from storage.
 			pairs = append(pairs, bitmapPair{
 				ID:    rowID,
 				Count: row.Count(),

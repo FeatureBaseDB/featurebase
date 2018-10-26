@@ -13,6 +13,7 @@ Call <-  'Set' {p.startCall("Set")} open col comma args (comma timestamp)? close
        / 'ClearRow' {p.startCall("ClearRow")} open arg close {p.endCall()}
        / 'Store' {p.startCall("Store")} open Call comma arg close {p.endCall()}
        / 'TopN' {p.startCall("TopN")} open posfield (comma allargs)? close {p.endCall()}
+       / 'TopXor' {p.startCall("TopXor")} open posfield comma Call (comma allargs)? close {p.endCall()}
        / 'Range' {p.startCall("Range")} open (timerange / conditional / arg) close {p.endCall()}
        / < IDENT > { p.startCall(buffer[begin:end] ) } open allargs comma? close { p.endCall() }
 allargs <- Call (comma Call)* (comma args)? / args / sp
