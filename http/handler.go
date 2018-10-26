@@ -198,6 +198,7 @@ func (h *Handler) populateValidators() {
 	h.validators["GetNodes"] = queryValidationSpecRequired()
 	h.validators["GetShardMax"] = queryValidationSpecRequired()
 	h.validators["GetTranslateData"] = queryValidationSpecRequired("offset")
+	h.validators["PostTranslateColumnKeys"] = queryValidationSpecRequired()
 }
 
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
@@ -259,6 +260,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
 	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET").Name("GetTranslateData")
+	router.HandleFunc("/internal/translate/column-keys", handler.handlePostTranslateColumnKeys).Methods("POST").Name("PostTranslateColumnKeys")
 
 	router.Use(handler.queryArgValidator)
 	return router
@@ -1434,6 +1436,40 @@ func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request)
 			w.Flush()
 		}
 	}
+}
+
+type postTranslateColumnKeysRequest struct {
+	Index string   `json:"index"`
+	Keys  []string `json:"keys"`
+}
+
+type postTranslateColumnKeysResponse struct {
+	IDs []uint64 `json:"ids"`
+}
+
+func (h *Handler) handlePostTranslateColumnKeys(w http.ResponseWriter, r *http.Request) {
+	req := postTranslateColumnKeysRequest{}
+
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil && err != io.EOF {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	ids, err := h.api.TranslateColumnKeysToIDs(context.Background(), req.Index, req.Keys)
+	if err != nil {
+		h.logger.Printf("http: translate store response write error: %s", err)
+		return
+	}
+
+	// Write response.
+	resp := postTranslateColumnKeysResponse{
+		IDs: ids,
+	}
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		h.logger.Printf("write ids response error: %s", err)
+	}
+
 }
 
 type queryValidationSpec struct {
