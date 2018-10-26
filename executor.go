@@ -270,7 +270,7 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "Options":
 		return e.executeOptionsCall(ctx, index, c, shards, opt)
 	case "IndexRow":
-		return e.executeIndexRow(ctx, index, c, opt)
+		return e.executeIndexRow(ctx, c, opt)
 	default:
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeBitmapCall(ctx, index, c, shards, opt)
@@ -437,7 +437,7 @@ func (e *executor) executeMax(ctx context.Context, index string, c *pql.Call, sh
 	return other, nil
 }
 
-func (e *executor) executeIndexRow(ctx context.Context, index string, c *pql.Call, opt *execOptions) (*Row, error) {
+func (e *executor) executeIndexRow(ctx context.Context, c *pql.Call, opt *execOptions) (*Row, error) {
 	// Round up the number of shards.
 	otherIndex := c.Args["index"].(string)
 	idx := e.Holder.Index(otherIndex)
@@ -536,7 +536,7 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, index string, c *
 	case "Not":
 		return e.executeNotShard(ctx, index, c, shard)
 	case "IndexRow":
-		return e.executeIndexRowShard(ctx, index, c, shard)
+		return e.executeIndexRowShard(ctx, c, shard)
 	default:
 		return nil, fmt.Errorf("unknown call: %s", c.Name)
 	}
@@ -1201,7 +1201,7 @@ func (e *executor) executeRowsShard(_ context.Context, index string, c *pql.Call
 	return frag.rows(start, filters...), nil
 }
 
-func (e *executor) executeIndexRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
+func (e *executor) executeIndexRowShard(ctx context.Context, c *pql.Call, shard uint64) (*Row, error) {
 	iName, present := c.Args["index"].(string)
 	if !present {
 		return nil, ErrIndexNotFound
