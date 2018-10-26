@@ -379,7 +379,11 @@ func (p uint64Slice) Len() int           { return len(p) }
 func (p uint64Slice) Less(i, j int) bool { return p[i] < p[j] }
 
 func TestClusteringNodesReplica1(t *testing.T) {
-	cluster := test.MustRunCluster(t, 3)
+	cluster := test.MustNewCluster(t, 3)
+	err := cluster.Start()
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
+	}
 	defer cluster.Close()
 
 	var wait = true
@@ -407,14 +411,10 @@ func TestClusteringNodesReplica1(t *testing.T) {
 	config.Translation.MapSize = 100000
 
 	// this isn't necessary, but makes the test run way faster
-	fmt.Println("!!!!!!!!!!", config.Gossip.Port)
 	config.Gossip.Port = strconv.Itoa(int(cluster[2].Command.GossipTransport().URI.Port))
-	fmt.Println("!!!!!!!!!!!!!!!!", config.Gossip.Port)
 
 	cluster[2].Command = server.NewCommand(cluster[2].Stdin, cluster[2].Stdout, cluster[2].Stderr)
 	cluster[2].Command.Config = config
-
-	time.Sleep(time.Second * 40)
 
 	// Run new program.
 	if err := cluster[2].Start(); err != nil {
@@ -696,3 +696,12 @@ func TestClusterQueriesAfterRestart(t *testing.T) {
 }
 
 // TODO: confirm that things keep working if a node is hard-closed (no nodeLeave event) and immediately restarted with a different address.
+
+func TestClusterPartitioning(t *testing.T) {
+	cluster := test.MustNewClusterWithProxy(t, 3)
+	err := cluster.Start()
+	if err != nil {
+		t.Fatalf("starting cluster with proxy: %v", err)
+	}
+
+}
