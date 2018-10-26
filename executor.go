@@ -449,7 +449,7 @@ func (e *executor) executeIndexRow(ctx context.Context, index string, c *pql.Cal
 		otherShards = []uint64{0}
 	}
 
-	return e.executeBitmapCall(ctx, otherIndex, c, otherShards, opt)
+	return e.executeBitmapCall(ctx, otherIndex, c.Children[0], otherShards, opt)
 }
 
 // executeBitmapCall executes a call that returns a bitmap.
@@ -535,6 +535,8 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, index string, c *
 		return e.executeXorShard(ctx, index, c, shard)
 	case "Not":
 		return e.executeNotShard(ctx, index, c, shard)
+	case "IndexRow":
+		return e.executeIndexRowShard(ctx, index, c, shard)
 	default:
 		return nil, fmt.Errorf("unknown call: %s", c.Name)
 	}
@@ -1197,6 +1199,18 @@ func (e *executor) executeRowsShard(_ context.Context, index string, c *pql.Call
 	}
 
 	return frag.rows(start, filters...), nil
+}
+
+func (e *executor) executeIndexRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
+	iName, present := c.Args["index"].(string)
+	if !present {
+		return nil, ErrIndexNotFound
+	}
+	if len(c.Children) == 0 {
+		return nil, ErrExpectedBitmapArgument
+	}
+
+	return e.executeBitmapCallShard(ctx, iName, c.Children[0], shard)
 }
 
 func (e *executor) executeBitmapShard(_ context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
