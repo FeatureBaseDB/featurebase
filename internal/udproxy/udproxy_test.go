@@ -35,6 +35,16 @@ func TestUDProxy(t *testing.T) {
 		if err != nil {
 			return errors.Wrap(err, "reading from proxy")
 		}
+		p.Drop()
+		_, err = conn.Write([]byte("hello2"))
+		if err != nil {
+			return errors.Wrap(err, "writing to dropping proxy")
+		}
+		p.Undrop()
+		_, err = conn.Write([]byte("hello3"))
+		if err != nil {
+			return errors.Wrap(err, "writing to undropping proxy")
+		}
 		return nil
 	})
 
@@ -50,10 +60,20 @@ func TestUDProxy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("writing response: %v", err)
 	}
+
+	_, _, err = uc.ReadFrom(req)
+	if err != nil {
+		t.Fatalf("upstream reading from proxy: %v", err)
+	}
+	if string(req[:6]) != "hello3" {
+		t.Fatalf("got unexpected request %s", req)
+	}
+
 	eg.Wait()
 	if string(resp[:7]) != "goodbye" {
 		t.Fatalf("got unexpected response '%v", resp)
 	}
+
 	err = p.Close()
 	if err != nil {
 		t.Fatalf("err closing proxy: '%v'", err)

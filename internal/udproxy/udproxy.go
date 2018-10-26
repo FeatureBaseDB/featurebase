@@ -47,12 +47,18 @@ func New(listenIP string, listenPort int, upstreamIP string, upstreamPort int) (
 }
 
 func (p *Proxy) Drop() {
+	// sleep to attempt to ensure all traffic that was supposed to pass, did
+	// pass.
+	time.Sleep(time.Millisecond * 3)
 	p.dropLock.Lock()
 	p.drop = true
 	p.dropLock.Unlock()
 }
 
 func (p *Proxy) Undrop() {
+	// this sleep is a cheap attempt to ensure everything that was supposed to
+	// be dropped was.
+	time.Sleep(time.Millisecond * 3)
 	p.dropLock.Lock()
 	p.drop = false
 	p.dropLock.Unlock()
@@ -73,7 +79,7 @@ func (p *Proxy) run() error {
 			return nil
 		default:
 		}
-		err := p.conn.SetReadDeadline(time.Now().Add(time.Millisecond * 10))
+		err := p.conn.SetReadDeadline(time.Now().Add(time.Millisecond))
 		if err != nil {
 			return errors.Wrap(err, "setting read deadline (run)")
 		}
@@ -111,7 +117,7 @@ func (p *Proxy) proxyBack(to *net.UDPAddr, from *net.UDPConn) error {
 			return nil
 		default:
 		}
-		err := from.SetReadDeadline(time.Now().Add(time.Millisecond * 10))
+		err := from.SetReadDeadline(time.Now().Add(time.Millisecond))
 		if err != nil {
 			return errors.Wrap(err, "setting read deadline (proxyBack)")
 		}
