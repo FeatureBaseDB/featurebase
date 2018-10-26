@@ -1047,11 +1047,25 @@ func (f *Field) Range(name string, op pql.Token, predicate int64) (*Row, error) 
 }
 
 // Import bulk imports data.
-func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) error {
+func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time, opts ...ImportOption) error {
+
+	// Set up import options.
+	options := &ImportOptions{}
+	for _, opt := range opts {
+		err := opt(options)
+		if err != nil {
+			return errors.Wrap(err, "applying option")
+		}
+	}
+
 	// Determine quantum if timestamps are set.
 	q := f.TimeQuantum()
-	if hasTime(timestamps) && q == "" {
-		return errors.New("time quantum not set in field")
+	if hasTime(timestamps) {
+		if q == "" {
+			return errors.New("time quantum not set in field")
+		} else if options.Clear {
+			return errors.New("import clear is not supported with timestamps")
+		}
 	}
 
 	fieldType := f.Type()
@@ -1103,7 +1117,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 			return errors.Wrap(err, "creating view")
 		}
 
-		if err := frag.bulkImport(data.RowIDs, data.ColumnIDs); err != nil {
+		if err := frag.bulkImport(data.RowIDs, data.ColumnIDs, options); err != nil {
 			return err
 		}
 	}
@@ -1112,7 +1126,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time) erro
 }
 
 // importValue bulk imports range-encoded value data.
-func (f *Field) importValue(columnIDs []uint64, values []int64) error {
+func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportOptions) error {
 	viewName := viewBSIGroupPrefix + f.name
 	// Get the bsiGroup so we know bitDepth.
 	bsig := f.bsiGroup(f.name)
@@ -1160,7 +1174,7 @@ func (f *Field) importValue(columnIDs []uint64, values []int64) error {
 			baseValues[i] = uint64(value - bsig.Min)
 		}
 
-		if err := frag.importValue(data.ColumnIDs, baseValues, bsig.BitDepth()); err != nil {
+		if err := frag.importValue(data.ColumnIDs, baseValues, bsig.BitDepth(), options.Clear); err != nil {
 			return err
 		}
 	}
@@ -1168,7 +1182,7 @@ func (f *Field) importValue(columnIDs []uint64, values []int64) error {
 	return nil
 }
 
-func (f *Field) importRoaring(data []byte, shard uint64) error {
+func (f *Field) importRoaring(data []byte, shard uint64, clear bool) error {
 	viewName := viewStandard
 
 	view, err := f.createViewIfNotExists(viewName)
@@ -1181,7 +1195,7 @@ func (f *Field) importRoaring(data []byte, shard uint64) error {
 		return errors.Wrap(err, "creating fragment")
 	}
 
-	if err := frag.importRoaring(data); err != nil {
+	if err := frag.importRoaring(data, clear); err != nil {
 		return err
 	}
 

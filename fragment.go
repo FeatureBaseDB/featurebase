@@ -58,6 +58,9 @@ const (
 	// exponent.
 	shardVsContainerExponent = shardWidthExponent - 16
 
+	// width of roaring containers is 2^16
+	containerWidth = 1 << 16
+
 	// snapshotExt is the file extension used for an in-process snapshot.
 	snapshotExt = ".snapshotting"
 
@@ -612,8 +615,17 @@ func (f *fragment) value(columnID uint64, bitDepth uint) (value uint64, exists b
 	return value, true, nil
 }
 
+// clearValue uses a column of bits to clear a multi-bit value.
+func (f *fragment) clearValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+	return f.setValueBase(columnID, bitDepth, value, true)
+}
+
 // setValue uses a column of bits to set a multi-bit value.
 func (f *fragment) setValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+	return f.setValueBase(columnID, bitDepth, value, false)
+}
+
+func (f *fragment) setValueBase(columnID uint64, bitDepth uint, value uint64, clear bool) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -633,19 +645,26 @@ func (f *fragment) setValue(columnID uint64, bitDepth uint, value uint64) (chang
 		}
 	}
 
-	// Mark value as set.
-	if c, err := f.unprotectedSetBit(uint64(bitDepth), columnID); err != nil {
-		return changed, errors.Wrap(err, "marking not-null")
-	} else if c {
-		changed = true
+	// Mark value as set (or cleared).
+	if clear {
+		if c, err := f.unprotectedClearBit(uint64(bitDepth), columnID); err != nil {
+			return changed, errors.Wrap(err, "clearing not-null")
+		} else if c {
+			changed = true
+		}
+	} else {
+		if c, err := f.unprotectedSetBit(uint64(bitDepth), columnID); err != nil {
+			return changed, errors.Wrap(err, "marking not-null")
+		} else if c {
+			changed = true
+		}
 	}
 
 	return changed, nil
 }
 
 // importSetValue is a more efficient SetValue just for imports.
-func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) { // nolint: unparam
-
+func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value uint64, clear bool) (changed bool, err error) { // nolint: unparam
 	for i := uint(0); i < bitDepth; i++ {
 		if value&(1<<i) != 0 {
 			bit, err := f.pos(uint64(i), columnID)
@@ -673,12 +692,20 @@ func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value uint64) 
 	// Mark value as set.
 	p, err := f.pos(uint64(bitDepth), columnID)
 	if err != nil {
-		return changed, errors.Wrap(err, "marking not-null")
+		return changed, errors.Wrap(err, "getting not-null pos")
 	}
-	if c, err := f.storage.Add(p); err != nil {
-		return changed, errors.Wrap(err, "adding to storage")
-	} else if c {
-		changed = true
+	if clear {
+		if c, err := f.storage.Remove(p); err != nil {
+			return changed, errors.Wrap(err, "removing not-null from storage")
+		} else if c {
+			changed = true
+		}
+	} else {
+		if c, err := f.storage.Add(p); err != nil {
+			return changed, errors.Wrap(err, "adding not-null to storage")
+		} else if c {
+			changed = true
+		}
 	}
 
 	return changed, nil
@@ -688,12 +715,11 @@ func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value uint64) 
 // A bitmap can be passed in to optionally filter the computed columns.
 func (f *fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
 	// Compute count based on the existence row.
-	row := f.row(uint64(bitDepth))
+	consider := f.row(uint64(bitDepth))
 	if filter != nil {
-		count = row.intersectionCount(filter)
-	} else {
-		count = row.Count()
+		consider = consider.Intersect(filter)
 	}
+	count = consider.Count()
 
 	// Compute the sum based on the bit count of each row multiplied by the
 	// place value of each row. For example, 10 bits in the 1's place plus
@@ -705,11 +731,7 @@ func (f *fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error
 	var cnt uint64
 	for i := uint(0); i < bitDepth; i++ {
 		row := f.row(uint64(i))
-		if filter != nil {
-			cnt = row.intersectionCount(filter)
-		} else {
-			cnt = row.Count()
-		}
+		cnt = row.intersectionCount(consider)
 		sum += (1 << i) * cnt
 	}
 
@@ -1418,20 +1440,20 @@ func (f *fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, e
 
 // bulkImport bulk imports a set of bits and then snapshots the storage.
 // The cache is updated to reflect the new data.
-func (f *fragment) bulkImport(rowIDs, columnIDs []uint64) error {
+func (f *fragment) bulkImport(rowIDs, columnIDs []uint64, options *ImportOptions) error {
 	// Verify that there are an equal number of row ids and column ids.
 	if len(rowIDs) != len(columnIDs) {
 		return fmt.Errorf("mismatch of row/column len: %d != %d", len(rowIDs), len(columnIDs))
 	}
 
-	if f.mutexVector != nil {
+	if f.mutexVector != nil && !options.Clear {
 		return f.bulkImportMutex(rowIDs, columnIDs)
 	}
-	return f.bulkImportStandard(rowIDs, columnIDs)
+	return f.bulkImportStandard(rowIDs, columnIDs, options)
 }
 
 // bulkImportStandard performs a bulk import on a standard fragment.
-func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64) error {
+func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *ImportOptions) error {
 	// Create a temporary bitmap which will be populated by rowIDs and columnIDs
 	// and then merged into the existing fragment's bitmap.
 	localBitmap := roaring.NewBitmap()
@@ -1480,10 +1502,18 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64) error {
 
 	// Merge localBitmap into fragment's existing data.
 	var results *roaring.Bitmap
-	if f.storage.Count() > 0 {
-		results = f.storage.Union(localBitmap)
+	if options.Clear {
+		if f.storage.Count() > 0 {
+			results = f.storage.Difference(localBitmap)
+		} else {
+			results = roaring.NewBitmap()
+		}
 	} else {
-		results = localBitmap
+		if f.storage.Count() > 0 {
+			results = f.storage.Union(localBitmap)
+		} else {
+			results = localBitmap
+		}
 	}
 
 	// Update cache counts for all affected rows.
@@ -1589,7 +1619,7 @@ func (f *fragment) bulkImportMutex(rowIDs, columnIDs []uint64) error {
 }
 
 // importValue bulk imports a set of range-encoded values.
-func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint) error {
+func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	// Verify that there are an equal number of column ids and values.
@@ -1604,7 +1634,7 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint) error 
 		for i := range columnIDs {
 			columnID, value := columnIDs[i], values[i]
 
-			_, err := f.importSetValue(columnID, bitDepth, value)
+			_, err := f.importSetValue(columnID, bitDepth, value, clear)
 			if err != nil {
 				return errors.Wrap(err, "setting")
 			}
@@ -1624,7 +1654,7 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint) error 
 // importRoaring imports from the official roaring data format defined at
 // https://github.com/RoaringBitmap/RoaringFormatSpec or from pilosa's version
 // of the roaring format. The cache is updated to reflect the new data.
-func (f *fragment) importRoaring(data []byte) error {
+func (f *fragment) importRoaring(data []byte, clear bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	bm := roaring.NewBitmap()
@@ -1652,8 +1682,12 @@ func (f *fragment) importRoaring(data []byte) error {
 		lastRow = vRow
 	}
 
-	if f.storage.Count() > 0 {
-		bm = f.storage.Union(bm)
+	if clear {
+		bm = f.storage.Difference(bm)
+	} else {
+		if f.storage.Count() > 0 {
+			bm = f.storage.Union(bm)
+		}
 	}
 
 	for _, rowID := range rowSet {
@@ -1957,15 +1991,82 @@ func (f *fragment) readCacheFromArchive(r io.Reader) error {
 	return nil
 }
 
-func (f *fragment) rows() []uint64 {
-	i, _ := f.storage.Containers.Iterator(0)
-	rows := make([]uint64, 0)
+// rowFilter is a function signature for controlling iteration over containers
+// in a fragment. It will be invoked on each container found and returns two
+// booleans. The first is whether the row this container is in should be
+// included or skipped, and the second is whether to stop processing or
+// continue.
+type rowFilter func(rowID, key uint64, c *roaring.Container) (include, done bool)
 
+// filterWithLimit returns a filter which will only allow a limited number of
+// rows to be returned. It should be applied last so that it is only called (and
+// therefore only updates its internal state) if the row is being included by
+// every other filter.
+func filterWithLimit(limit uint64) rowFilter {
+	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
+		if limit > 0 {
+			limit--
+			return true, false
+		}
+		return false, true
+	}
+}
+
+func filterColumn(col uint64) rowFilter {
+	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
+		colID := col % ShardWidth
+		colKey := ((rowID * ShardWidth) + colID) >> 16
+		colVal := uint16(colID & 0xFFFF) // columnID within the container
+		return colKey == key && c.Contains(colVal), false
+	}
+}
+
+// TODO: this works, but it would be more performant if the fragment could seek
+// to the next row in the rows list rather than asking the filter for each
+// container serially. The container iterator would need to expose a seek
+// method, and the rowFilter would need some way of communicating to
+// fragment.rows what the next rowID to seek to is.
+func filterWithRows(rows []uint64) rowFilter {
+	loc := 0
+	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
+		if loc >= len(rows) {
+			return false, true
+		}
+		i := sort.Search(len(rows[loc:]), func(i int) bool {
+			return rows[loc+i] >= rowID
+		})
+		loc += i
+		if loc >= len(rows) {
+			return false, true
+		}
+		if rows[loc] == rowID {
+			if loc == len(rows)-1 {
+				done = true
+			}
+			return true, done
+		}
+		return false, false
+	}
+}
+
+// rows returns all rows starting from 'start'. Filters will be applied in
+// order. All filters must return true to include the row. Once a row is
+// included, further containers in that row will be skipped. So, for a row to be
+// included, there must be one container in that row where all filters return
+// true. For a row to be skipped, at least one filter must return false for each
+// container in that row (it need not be the same filter for each). Any filter
+// returning done == true will cause processing to stop after all filters for
+// this container have been processed. The rows accumulated up to this point
+// (including this row if all filters passed) will be returned.
+func (f *fragment) rows(start uint64, filters ...rowFilter) []uint64 {
+	startKey := rowToKey(start)
+	i, _ := f.storage.Containers.Iterator(startKey)
+	rows := make([]uint64, 0)
 	var lastRow uint64 = math.MaxUint64
 
 	// Loop over the existing containers.
 	for i.Next() {
-		key, _ := i.Value()
+		key, c := i.Value()
 
 		// virtual row for the current container
 		vRow := key >> shardVsContainerExponent
@@ -1975,42 +2076,61 @@ func (f *fragment) rows() []uint64 {
 			continue
 		}
 
-		rows = append(rows, vRow)
-		lastRow = vRow
-	}
-	return rows
-
-}
-
-func (f *fragment) rowsForColumn(columnID uint64) []uint64 {
-	var colKey uint64
-
-	colID := columnID % ShardWidth
-	i, _ := f.storage.Containers.Iterator(0)
-
-	colVal := uint16(colID & 0xFFFF)
-
-	rows := make([]uint64, 0)
-
-	// Loop over the existing containers.
-	for i.Next() {
-		key, c := i.Value()
-
-		// virtual row for the current container
-		vRow := key >> shardVsContainerExponent
-
-		// column container key for virtual row
-		colKey = ((vRow * ShardWidth) + colID) >> 16
-
-		if colKey != key {
-			continue
+		// apply filters
+		addRow, done := true, false
+		for _, filter := range filters {
+			var d bool
+			addRow, d = filter(vRow, key, c)
+			done = done || d
+			if !addRow {
+				break
+			}
 		}
-
-		if c.Contains(colVal) {
+		if addRow {
+			lastRow = vRow
 			rows = append(rows, vRow)
 		}
+		if done {
+			return rows
+		}
 	}
 	return rows
+}
+
+type rowIterator struct {
+	f      *fragment
+	rowIDs []uint64
+	cur    int
+	wrap   bool
+}
+
+func (f *fragment) rowIterator(wrap bool, filters ...rowFilter) *rowIterator {
+	return &rowIterator{
+		f:      f,
+		rowIDs: f.rows(0, filters...), // TODO: this may be memory intensive in high cardinality cases
+		wrap:   wrap,
+	}
+}
+
+func (ri *rowIterator) Seek(rowID uint64) {
+	idx := sort.Search(len(ri.rowIDs), func(i int) bool {
+		return ri.rowIDs[i] >= rowID
+	})
+	ri.cur = idx
+}
+
+func (ri *rowIterator) Next() (r *Row, rowID uint64, wrapped bool) {
+	if ri.cur >= len(ri.rowIDs) {
+		if !ri.wrap || len(ri.rowIDs) == 0 {
+			return nil, 0, true
+		}
+		ri.Seek(0)
+		wrapped = true
+	}
+	rowID = ri.rowIDs[ri.cur]
+	r = ri.f.row(rowID)
+	ri.cur += 1
+	return r, rowID, wrapped
 }
 
 // FragmentBlock represents info about a subsection of the rows in a block.
@@ -2292,13 +2412,20 @@ func newRowsVector(f *fragment) *rowsVector {
 // Additionally, it returns true if a value was found,
 // otherwise it returns false.
 func (v *rowsVector) Get(colID uint64) (uint64, bool, error) {
-	rows := v.f.rowsForColumn(colID)
+	rows := v.f.rows(0, filterColumn(colID))
 	if len(rows) > 1 {
 		return 0, false, errors.New("found multiple row values for column")
 	} else if len(rows) == 1 {
 		return rows[0], true, nil
 	}
 	return 0, false, nil
+}
+
+// rowToKey converts a Pilosa row ID to the key of the container which starts
+// that row in the bitmap which represents this entire fragment. A fragment is
+// all the rows within a shard within a field concatenated together.
+func rowToKey(rowID uint64) (key uint64) {
+	return rowID * (ShardWidth / containerWidth)
 }
 
 // boolVector implements the vector interface by looking
@@ -2318,7 +2445,7 @@ func newBoolVector(f *fragment) *boolVector {
 // Additionally, it returns true if a value was found,
 // otherwise it returns false.
 func (v *boolVector) Get(colID uint64) (uint64, bool, error) {
-	rows := v.f.rowsForColumn(colID)
+	rows := v.f.rows(0, filterColumn(colID))
 	if len(rows) > 1 {
 		return 0, false, errors.New("found multiple row values for column")
 	} else if len(rows) == 1 {
