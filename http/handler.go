@@ -199,6 +199,7 @@ func (h *Handler) populateValidators() {
 	h.validators["GetShardMax"] = queryValidationSpecRequired()
 	h.validators["GetTranslateData"] = queryValidationSpecRequired("offset")
 	h.validators["PostTranslateColumnKeys"] = queryValidationSpecRequired()
+	h.validators["PostTranslateColumnIDs"] = queryValidationSpecRequired()
 }
 
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
@@ -261,6 +262,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
 	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET").Name("GetTranslateData")
 	router.HandleFunc("/internal/translate/column-keys", handler.handlePostTranslateColumnKeys).Methods("POST").Name("PostTranslateColumnKeys")
+	router.HandleFunc("/internal/translate/column-ids", handler.handlePostTranslateColumnIDs).Methods("POST").Name("PostTranslateColumnIDs")
 
 	router.Use(handler.queryArgValidator)
 	return router
@@ -1469,7 +1471,39 @@ func (h *Handler) handlePostTranslateColumnKeys(w http.ResponseWriter, r *http.R
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		h.logger.Printf("write ids response error: %s", err)
 	}
+}
 
+type postTranslateColumnIDsRequest struct {
+	Index string   `json:"index"`
+	IDs   []uint64 `json:"ids"`
+}
+
+type postTranslateColumnIDsResponse struct {
+	Keys []string `json:"keys"`
+}
+
+func (h *Handler) handlePostTranslateColumnIDs(w http.ResponseWriter, r *http.Request) {
+	req := postTranslateColumnIDsRequest{}
+
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil && err != io.EOF {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	keys, err := h.api.TranslateColumnIDsToKeys(context.Background(), req.Index, req.IDs)
+	if err != nil {
+		h.logger.Printf("http: translate store response write error: %s", err)
+		return
+	}
+
+	// Write response.
+	resp := postTranslateColumnIDsResponse{
+		Keys: keys,
+	}
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		h.logger.Printf("write keys response error: %s", err)
+	}
 }
 
 type queryValidationSpec struct {

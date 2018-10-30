@@ -1053,6 +1053,20 @@ func (api *API) TranslateColumnKeysToIDs(ctx context.Context, index string, colu
 	return api.holder.translateFile.TranslateColumnsToUint64(index, columnKeys)
 }
 
+// TranslateColumnIDsToKeys returns a list of columnKeys for an index based
+// on the provided column ids.
+func (api *API) TranslateColumnIDsToKeys(ctx context.Context, index string, columnIDs []uint64) ([]string, error) {
+	ret := make([]string, len(columnIDs))
+	for i, id := range columnIDs {
+		key, err := api.holder.translateFile.TranslateColumnToString(index, id)
+		if err != nil {
+			return []string{}, errors.Wrap(err, "translating column id to string")
+		}
+		ret[i] = key
+	}
+	return ret, nil
+}
+
 // State returns the cluster state which is usually "NORMAL", but could be
 // "STARTING", "RESIZING", or potentially others. See cluster.go for more
 // details.
