@@ -1049,13 +1049,13 @@ func (api *API) GetTranslateData(ctx context.Context, offset int64) (io.ReadClos
 
 // TranslateColumnKeysToIDs returns a list of columnIDs for an index based
 // on the provided column keys.
-func (api *API) TranslateColumnKeysToIDs(ctx context.Context, index string, columnKeys []string) ([]uint64, error) {
+func (api *API) TranslateColumnKeysToIDs(_ context.Context, index string, columnKeys []string) ([]uint64, error) {
 	return api.holder.translateFile.TranslateColumnsToUint64(index, columnKeys)
 }
 
 // TranslateColumnIDsToKeys returns a list of columnKeys for an index based
 // on the provided column ids.
-func (api *API) TranslateColumnIDsToKeys(ctx context.Context, index string, columnIDs []uint64) ([]string, error) {
+func (api *API) TranslateColumnIDsToKeys(_ context.Context, index string, columnIDs []uint64) ([]string, error) {
 	ret := make([]string, len(columnIDs))
 	for i, id := range columnIDs {
 		key, err := api.holder.translateFile.TranslateColumnToString(index, id)
@@ -1065,6 +1065,17 @@ func (api *API) TranslateColumnIDsToKeys(ctx context.Context, index string, colu
 		ret[i] = key
 	}
 	return ret, nil
+}
+
+// ColumnAttrSets returns the columnAttrs for a list of column ids.
+// on the provided column ids.
+func (api *API) ColumnAttrSets(_ context.Context, indexName string, ids []uint64) ([]*ColumnAttrSet, error) {
+	index := api.holder.Index(indexName)
+	if index == nil {
+		return nil, newNotFoundError(ErrIndexNotFound)
+	}
+
+	return api.server.executor.readColumnAttrSets(index, ids)
 }
 
 // State returns the cluster state which is usually "NORMAL", but could be

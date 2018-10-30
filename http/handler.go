@@ -200,6 +200,7 @@ func (h *Handler) populateValidators() {
 	h.validators["GetTranslateData"] = queryValidationSpecRequired("offset")
 	h.validators["PostTranslateColumnKeys"] = queryValidationSpecRequired()
 	h.validators["PostTranslateColumnIDs"] = queryValidationSpecRequired()
+	h.validators["PostColumnAttrs"] = queryValidationSpecRequired()
 }
 
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
@@ -263,6 +264,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET").Name("GetTranslateData")
 	router.HandleFunc("/internal/translate/column-keys", handler.handlePostTranslateColumnKeys).Methods("POST").Name("PostTranslateColumnKeys")
 	router.HandleFunc("/internal/translate/column-ids", handler.handlePostTranslateColumnIDs).Methods("POST").Name("PostTranslateColumnIDs")
+	router.HandleFunc("/internal/column-attrs", handler.handlePostColumnAttrs).Methods("POST").Name("PostColumnAttrs")
 
 	router.Use(handler.queryArgValidator)
 	return router
@@ -1503,6 +1505,39 @@ func (h *Handler) handlePostTranslateColumnIDs(w http.ResponseWriter, r *http.Re
 	}
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		h.logger.Printf("write keys response error: %s", err)
+	}
+}
+
+type postColumnAttrsRequest struct {
+	Index string   `json:"index"`
+	IDs   []uint64 `json:"ids"`
+}
+
+type postColumnAttrsResponse struct {
+	Attrs []*pilosa.ColumnAttrSet `json:"attrs"`
+}
+
+func (h *Handler) handlePostColumnAttrs(w http.ResponseWriter, r *http.Request) {
+	req := postColumnAttrsRequest{}
+
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil && err != io.EOF {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	attrs, err := h.api.ColumnAttrSets(context.Background(), req.Index, req.IDs)
+	if err != nil {
+		h.logger.Printf("http: get column attrs error: %s", err)
+		return
+	}
+
+	// Write response.
+	resp := postColumnAttrsResponse{
+		Attrs: attrs,
+	}
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		h.logger.Printf("write attrs response error: %s", err)
 	}
 }
 
