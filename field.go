@@ -1254,10 +1254,14 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 	if o == nil {
 		return nil
 	}
+	var cacheSize uint32
+	if o.CacheType != CacheTypeNone {
+		cacheSize = o.CacheSize
+	}
 	return &internal.FieldOptions{
 		Type:        o.Type,
 		CacheType:   o.CacheType,
-		CacheSize:   o.CacheSize,
+		CacheSize:   cacheSize,
 		Min:         o.Min,
 		Max:         o.Max,
 		TimeQuantum: string(o.TimeQuantum),
@@ -1267,16 +1271,20 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 
 func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 	switch o.Type {
-	case FieldTypeSet:
+	case FieldTypeSet, FieldTypeMutex:
+		var cacheSize uint32
+		if o.CacheType != CacheTypeNone {
+			cacheSize = o.CacheSize
+		}
 		return json.Marshal(struct {
 			Type      string `json:"type"`
 			CacheType string `json:"cacheType"`
-			CacheSize uint32 `json:"cacheSize"`
+			CacheSize uint32 `json:"cacheSize,omitempty"`
 			Keys      bool   `json:"keys"`
 		}{
 			o.Type,
 			o.CacheType,
-			o.CacheSize,
+			cacheSize,
 			o.Keys,
 		})
 	case FieldTypeInt:
@@ -1299,18 +1307,6 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 		}{
 			o.Type,
 			o.TimeQuantum,
-			o.Keys,
-		})
-	case FieldTypeMutex:
-		return json.Marshal(struct {
-			Type      string `json:"type"`
-			CacheType string `json:"cacheType"`
-			CacheSize uint32 `json:"cacheSize"`
-			Keys      bool   `json:"keys"`
-		}{
-			o.Type,
-			o.CacheType,
-			o.CacheSize,
 			o.Keys,
 		})
 	case FieldTypeBool:
