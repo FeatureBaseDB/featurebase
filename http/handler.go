@@ -260,18 +260,8 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
 	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET").Name("GetTranslateData")
 
-	// TODO: Apply MethodNotAllowed statuses to all endpoints.
-	// Ideally this would be automatic, as described in this (wontfix) ticket:
-	// https://github.com/gorilla/mux/issues/6
-	// For now we just do it for the most commonly used handler, /query
-	router.HandleFunc("/index/{index}/query", handler.methodNotAllowedHandler).Methods("GET")
-
 	router.Use(handler.queryArgValidator)
 	return router
-}
-
-func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, _ *http.Request) {
-	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 }
 
 // ServeHTTP handles an HTTP request.
