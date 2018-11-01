@@ -49,8 +49,8 @@ item <- ( 'null' &(comma / sp close) { p.addVal(nil) }
          / '\'' < singlequotedstring > '\'' { p.addVal(buffer[begin:end]) }
          )
 
-doublequotedstring <- ( [^"\\\n] / '\\n' / '\\\"' / '\\\'' / '\\\\' )*
-singlequotedstring <- ( [^'\\\n] / '\\n' / '\\\"' / '\\\'' / '\\\\' )*
+doublequotedstring <- ( [^"] / '\\n' / '\\\"' / '\\\'' / '\\\\' )*
+singlequotedstring <- ( [^'] / '\\n' / '\\\"' / '\\\'' / '\\\\' )*
 
 fieldExpr <- [[A-Z]] ( [[A-Z]] / [0-9] / '_' / '-' )*
 field <- <fieldExpr / reserved> { p.addField(buffer[begin:end]) }
