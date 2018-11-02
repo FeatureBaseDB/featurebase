@@ -58,6 +58,7 @@ func TestLongPauses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("waiting on pumba pause cmd: %v", err)
 	}
+	// TODO change the sleep to wait for status to return to NORMAL or timeout once we have Status.State support in go-pilosa
 	fmt.Println("done with pause, waiting for stability")
 	time.Sleep(time.Second * 400)
 	fmt.Println("done waiting")
@@ -79,6 +80,7 @@ func getPilosaClient(t *testing.T) *pilosa.Client {
 		time.Sleep(time.Millisecond * 40)
 	}
 	time.Sleep(time.Second * 2)
+	// TODO uncomment the following once we get the version of go-pilosa that has the State field on Status.
 	// start := time.Now()
 	// for i := 0; true; i++ {
 	// 	s, err := cli.Status()
