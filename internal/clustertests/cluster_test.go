@@ -13,7 +13,7 @@ import (
 )
 
 func TestLongPauses(t *testing.T) {
-	t.Skip()
+	t.Skip() // TODO figure out how to only run in the docker-compose environment
 	cli := getPilosaClient(t)
 
 	idx := pilosa.NewIndex("testidx")
