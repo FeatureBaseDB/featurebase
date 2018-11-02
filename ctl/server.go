@@ -49,7 +49,11 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.IntVarP(&srv.Config.Translation.MapSize, "translation.map-size", "", srv.Config.Translation.MapSize, "Size in bytes of mmap to allocate for key translation.")
 
 	// Gossip
+	flags.StringVarP(&srv.Config.Gossip.Host, "gossip.host", "", "", "Host to which pilosa should bind for internal state sharing and cluster membership.")
 	flags.StringVarP(&srv.Config.Gossip.Port, "gossip.port", "", srv.Config.Gossip.Port, "Port to which pilosa should bind for internal state sharing.")
+	flags.StringVarP(&srv.Config.Gossip.AdvertisePort, "gossip.advertise-port", "", srv.Config.Gossip.AdvertisePort, "Port on which memberlist should advertise.")
+	flags.StringVarP(&srv.Config.Gossip.AdvertiseHost, "gossip.advertise-host", "", srv.Config.Gossip.AdvertiseHost, "Host on which memberlist should advertise.")
+
 	flags.StringSliceVarP(&srv.Config.Gossip.Seeds, "gossip.seeds", "", srv.Config.Gossip.Seeds, "Host with which to seed the gossip membership.")
 	flags.StringVarP(&srv.Config.Gossip.Key, "gossip.key", "", srv.Config.Gossip.Key, "The path to file of the encryption key for gossip. The contents of the file should be either 16, 24, or 32 bytes to select AES-128, AES-192, or AES-256.")
 	flags.DurationVarP((*time.Duration)(&srv.Config.Gossip.StreamTimeout), "gossip.stream-timeout", "", (time.Duration)(srv.Config.Gossip.StreamTimeout), "Timeout for establishing a stream connection with a remote node for a full state sync.")

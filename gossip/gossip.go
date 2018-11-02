@@ -465,7 +465,7 @@ type Config struct {
 	// AdvertiseHost is the hostname or IP other nodes should use to connect to
 	// this host. If left blank, the value for Host will be used. This is useful
 	// in some proxy and NAT scenarios.
-	AdvertiseHost string `toml:"advertise-host`
+	AdvertiseHost string `toml:"advertise-host"`
 	// AdvertisePort is the port other nodes will use to connect to this one.
 	// Behaves like AdvertiseHost.
 	AdvertisePort string   `toml:"advertise-port"`
