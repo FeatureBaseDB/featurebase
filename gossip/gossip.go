@@ -205,8 +205,18 @@ func NewMemberSet(cfg Config, api *pilosa.API, options ...memberSetOption) (*mem
 	conf.Name = api.Node().ID
 	conf.BindAddr = api.Node().URI.Host
 	conf.BindPort = port
+	if cfg.AdvertisePort != "" {
+		port, err = strconv.Atoi(cfg.Port)
+		if err != nil {
+			return nil, fmt.Errorf("convert advertise port: %s", err)
+		}
+	}
 	conf.AdvertisePort = port
-	conf.AdvertiseAddr = hostToIP(api.Node().URI.Host)
+	if cfg.AdvertiseHost != "" {
+		conf.AdvertiseAddr = cfg.AdvertiseHost
+	} else {
+		conf.AdvertiseAddr = hostToIP(api.Node().URI.Host)
+	}
 	//
 	conf.TCPTimeout = time.Duration(cfg.StreamTimeout)
 	conf.SuspicionMult = cfg.SuspicionMult
@@ -447,10 +457,20 @@ func newTransport(conf *memberlist.Config) (*memberlist.NetTransport, error) {
 
 // Config holds toml-friendly memberlist configuration.
 type Config struct {
+	// Host is the host gossip will bind to. If left blank it will be set to the
+	// host from Pilosa.
+	Host string `toml:"host"`
 	// Port indicates the port to which pilosa should bind for internal state sharing.
-	Port  string   `toml:"port"`
-	Seeds []string `toml:"seeds"`
-	Key   string   `toml:"key"`
+	Port string `toml:"port"`
+	// AdvertiseHost is the hostname or IP other nodes should use to connect to
+	// this host. If left blank, the value for Host will be used. This is useful
+	// in some proxy and NAT scenarios.
+	AdvertiseHost string `toml:"advertise-host`
+	// AdvertisePort is the port other nodes will use to connect to this one.
+	// Behaves like AdvertiseHost.
+	AdvertisePort string   `toml:"advertise-port"`
+	Seeds         []string `toml:"seeds"`
+	Key           string   `toml:"key"`
 	// StreamTimeout is the timeout for establishing a stream connection with
 	// a remote node for a full state sync, and for stream read and write
 	// operations. Maps to memberlist TCPTimeout.
