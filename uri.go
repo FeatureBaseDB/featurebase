@@ -82,10 +82,6 @@ func NewURIFromAddress(address string) (*URI, error) {
 	return parseAddress(address)
 }
 
-func NewURIFromAddressWithDefault(address string, base *URI) (*URI, error) {
-	return parseAddressWithDefault(address, base)
-}
-
 // setScheme sets the scheme of this URI.
 func (u *URI) setScheme(scheme string) error {
 	m := schemeRegexp.FindStringSubmatch(scheme)
@@ -158,20 +154,20 @@ func (u URI) Type() string {
 	return "URI"
 }
 
-func parseAddressWithDefault(address string, def *URI) (uri *URI, err error) {
+func parseAddress(address string) (uri *URI, err error) {
 	m := addressRegexp.FindStringSubmatch(address)
 	if m == nil {
 		return nil, errors.New("invalid address")
 	}
-	scheme := def.Scheme
+	scheme := "http"
 	if m[2] != "" {
 		scheme = m[2]
 	}
-	host := def.Host
+	host := "localhost"
 	if m[3] != "" {
 		host = m[3]
 	}
-	var port = int(def.Port)
+	var port = 10101
 	if m[5] != "" {
 		port, err = strconv.Atoi(m[5])
 		if err != nil {
@@ -187,11 +183,6 @@ func parseAddressWithDefault(address string, def *URI) (uri *URI, err error) {
 		Port:   uint16(port),
 	}
 	return uri, nil
-}
-
-func parseAddress(address string) (uri *URI, err error) {
-	u, err := parseAddressWithDefault(address, defaultURI())
-	return u, err
 }
 
 // MarshalJSON marshals URI into a JSON-encoded byte slice.

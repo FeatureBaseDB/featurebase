@@ -62,7 +62,6 @@ type Server struct { // nolint: maligned
 
 	nodeID              string
 	uri                 URI
-	advertiseURI        URI
 	antiEntropyInterval time.Duration
 	metricInterval      time.Duration
 	diagnosticInterval  time.Duration
@@ -74,7 +73,7 @@ type Server struct { // nolint: maligned
 	dataDir       string
 }
 
-// TODO (2.0): have this return an interface for Holder instead of concrete object?
+// TODO: have this return an interface for Holder instead of concrete object?
 func (s *Server) Holder() *Holder {
 	return s.holder
 }
@@ -157,13 +156,6 @@ func OptServerInternalClient(c InternalClient) ServerOption {
 		s.executor = newExecutor(optExecutorInternalQueryClient(c))
 		s.defaultClient = c
 		s.cluster.InternalClient = c
-		return nil
-	}
-}
-
-func OptServerAdvertiseURI(u *URI) ServerOption {
-	return func(s *Server) error {
-		s.advertiseURI = *u
 		return nil
 	}
 }
@@ -304,7 +296,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	// Set Cluster Node.
 	node := &Node{
 		ID:            s.nodeID,
-		URI:           s.advertiseURI,
+		URI:           s.uri,
 		IsCoordinator: s.cluster.Coordinator == s.nodeID,
 	}
 	s.cluster.Node = node
@@ -589,7 +581,7 @@ func (s *Server) SendSync(m Message) error {
 		node := node
 		s.logger.Printf("SendSync to: %s", node.URI)
 		// Don't forward the message to ourselves.
-		if s.advertiseURI == node.URI {
+		if s.uri == node.URI {
 			continue
 		}
 
@@ -684,7 +676,7 @@ func (s *Server) monitorDiagnostics() {
 
 	s.diagnostics.Logger = s.logger
 	s.diagnostics.SetVersion(Version)
-	s.diagnostics.Set("Host", s.advertiseURI.Host)
+	s.diagnostics.Set("Host", s.uri.Host)
 	s.diagnostics.Set("Cluster", strings.Join(s.cluster.nodeIDs(), ","))
 	s.diagnostics.Set("NumNodes", len(s.cluster.nodes))
 	s.diagnostics.Set("NumCPU", runtime.NumCPU())

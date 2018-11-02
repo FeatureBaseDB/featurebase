@@ -248,11 +248,6 @@ func (m *Command) SetupServer() error {
 		uri.SetPort(uint16(m.ln.Addr().(*net.TCPAddr).Port))
 	}
 
-	advertURI, err := pilosa.NewURIFromAddressWithDefault(m.Config.Advertise, uri)
-	if err != nil {
-		return errors.Wrapf(err, "processing avertise address '%s'", m.Config.Advertise)
-	}
-
 	c := http.GetHTTPClient(TLSConfig)
 
 	// Primary store configuration is handled automatically now.
@@ -281,7 +276,6 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerGCNotifier(gcnotify.NewActiveGCNotifier()),
 		pilosa.OptServerStatsClient(statsClient),
 		pilosa.OptServerURI(uri),
-		pilosa.OptServerAdvertiseURI(advertURI),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 		pilosa.OptServerPrimaryTranslateStoreFunc(http.NewTranslateStore),
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
