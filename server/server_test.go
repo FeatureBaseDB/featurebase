@@ -379,11 +379,7 @@ func (p uint64Slice) Len() int           { return len(p) }
 func (p uint64Slice) Less(i, j int) bool { return p[i] < p[j] }
 
 func TestClusteringNodesReplica1(t *testing.T) {
-	cluster := test.MustNewCluster(t, 3)
-	err := cluster.Start()
-	if err != nil {
-		t.Fatalf("starting cluster: %v", err)
-	}
+	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 
 	var wait = true
@@ -696,12 +692,3 @@ func TestClusterQueriesAfterRestart(t *testing.T) {
 }
 
 // TODO: confirm that things keep working if a node is hard-closed (no nodeLeave event) and immediately restarted with a different address.
-
-func TestClusterPartitioning(t *testing.T) {
-	cluster := test.MustNewClusterWithProxy(t, 3)
-	err := cluster.Start()
-	if err != nil {
-		t.Fatalf("starting cluster with proxy: %v", err)
-	}
-
-}

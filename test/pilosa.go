@@ -19,98 +19,26 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	gohttp "net/http"
 	"os"
 	"path"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/http"
-	"github.com/pilosa/pilosa/internal/udproxy"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pkg/errors"
-
-	"github.com/Shopify/toxiproxy"
-	tox "github.com/Shopify/toxiproxy/client"
 )
-
-type portAllocator struct {
-	port *uint32
-}
-
-var ports *portAllocator
-
-// Next generates a new port and returns it
-func (n *portAllocator) Next() (nextPort uint32) {
-	return atomic.AddUint32(n.port, 1)
-}
-
-var proxy string
-
-func init() {
-	r := rand.New(rand.NewSource(int64(time.Now().Nanosecond())))
-	p := uint32(r.Uint32()%40000 + 20000)
-	ports = &portAllocator{
-		port: &p,
-	}
-
-	tport := strconv.Itoa(int(ports.Next()))
-	proxy = "localhost:" + tport
-	go toxiproxy.NewServer().Listen("localhost", tport)
-
-}
 
 ////////////////////////////////////////////////////////////////////////////////////
 // Command represents a test wrapper for server.Command.
 type Command struct {
 	*server.Command
 
-	proxies commandProxies
-
 	commandOptions []server.CommandOption
-}
-
-// Drop uses the proxies to drop all network traffic to/from this node.
-func (com Command) Drop(tb testing.TB) {
-	if com.proxies.http == nil {
-		tb.Fatal("can't drop traffic if cluster wasn't created with proxy support.")
-	}
-	err := com.proxies.http.Disable()
-	if err != nil {
-		tb.Fatalf("disabling http proxy: %v", err)
-	}
-	err = com.proxies.memberTCP.Disable()
-	if err != nil {
-		tb.Fatalf("disabling memberlist tcp proxy: %v", err)
-	}
-	com.proxies.memberUDP.Drop()
-}
-
-// Undrop starts forwarding traffic to/from this node after a previous drop request.
-func (com Command) Undrop(tb testing.TB) {
-	if com.proxies.http == nil {
-		tb.Fatal("can't drop traffic if cluster wasn't created with proxy support.")
-	}
-	err := com.proxies.http.Enable()
-	if err != nil {
-		tb.Fatalf("enabling http proxy: %v", err)
-	}
-	err = com.proxies.memberTCP.Enable()
-	if err != nil {
-		tb.Fatalf("enabling memberlist tcp proxy: %v", err)
-	}
-	com.proxies.memberUDP.Undrop()
-}
-
-type commandProxies struct {
-	http      *tox.Proxy
-	memberTCP *tox.Proxy
-	memberUDP *udproxy.Proxy
 }
 
 func OptAllowedOrigins(origins []string) server.CommandOption {
@@ -346,6 +274,7 @@ func (c Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOptio
 func (c Cluster) Start() error {
 	var gossipSeeds = make([]string, len(c))
 	for i, cc := range c {
+		cc.Config.Gossip.Port = "0"
 		cc.Config.Gossip.Seeds = gossipSeeds[:i]
 		if err := cc.Start(); err != nil {
 			return errors.Wrapf(err, "starting server %d", i)
@@ -367,17 +296,7 @@ func (c Cluster) Close() error {
 
 // MustNewCluster creates a new cluster
 func MustNewCluster(tb testing.TB, size int, opts ...[]server.CommandOption) Cluster {
-	c, err := newCluster(size, false, opts...)
-	if err != nil {
-		tb.Fatalf("new cluster: %v", err)
-	}
-	return c
-}
-
-// MustNewClusterWithProxy returns a test cluster which has all connections
-// going through a proxy to allow for testing network partitions.
-func MustNewClusterWithProxy(tb testing.TB, size int, opts ...[]server.CommandOption) Cluster {
-	c, err := newCluster(size, true, opts...)
+	c, err := newCluster(size, opts...)
 	if err != nil {
 		tb.Fatalf("new cluster: %v", err)
 	}
@@ -385,7 +304,7 @@ func MustNewClusterWithProxy(tb testing.TB, size int, opts ...[]server.CommandOp
 }
 
 // newCluster creates a new cluster
-func newCluster(size int, withproxy bool, opts ...[]server.CommandOption) (cluster Cluster, err error) {
+func newCluster(size int, opts ...[]server.CommandOption) (Cluster, error) {
 	if size == 0 {
 		return nil, errors.New("cluster must contain at least one node")
 	}
@@ -393,41 +312,14 @@ func newCluster(size int, withproxy bool, opts ...[]server.CommandOption) (clust
 		return nil, errors.New("Slice of CommandOptions must be of length 0, 1, or equal to the number of cluster nodes")
 	}
 
-	cluster = make(Cluster, size)
+	cluster := make(Cluster, size)
 	for i := 0; i < size; i++ {
 		var commandOpts []server.CommandOption
 		if len(opts) > 0 {
 			commandOpts = opts[i%len(opts)]
 		}
-		name := "node" + strconv.Itoa(i)
 		m := NewCommandNode(i == 0, commandOpts...)
-		m.Config.Bind = "localhost:" + strconv.Itoa(int(ports.Next()))
-		gossipBindPort := int(ports.Next())
-		m.Config.Gossip.Port = strconv.Itoa(gossipBindPort)
-
-		if withproxy {
-			tclient := tox.NewClient(proxy)
-
-			aport := strconv.Itoa(int(ports.Next()))
-			m.Config.Advertise = "localhost:" + aport
-			m.proxies.http, err = tclient.CreateProxy(name+aport, m.Config.Advertise, m.Config.Bind)
-			if err != nil {
-				return nil, errors.Wrap(err, "setting up toxiproxy")
-			}
-			gossipAdvertPort := int(ports.Next())
-			m.Config.Gossip.AdvertisePort = strconv.Itoa(gossipAdvertPort)
-			m.proxies.memberTCP, err = tclient.CreateProxy(name+"-gossip"+m.Config.Gossip.AdvertisePort, "localhost:"+m.Config.Gossip.AdvertisePort, "localhost:"+m.Config.Gossip.Port)
-			if err != nil {
-				return nil, errors.Wrap(err, "setting up toxiproxy for gossip")
-			}
-			m.proxies.memberUDP, err = udproxy.New("127.0.0.1", gossipAdvertPort, "127.0.0.1", gossipBindPort)
-			if err != nil {
-				return nil, errors.Wrap(err, "setting up proxy for udp gossip")
-			}
-
-		}
-
-		err = ioutil.WriteFile(path.Join(m.Config.DataDir, ".id"), []byte(name), 0600)
+		err := ioutil.WriteFile(path.Join(m.Config.DataDir, ".id"), []byte("node"+strconv.Itoa(i)), 0600)
 		if err != nil {
 			return nil, errors.Wrap(err, "writing node id")
 		}
@@ -438,8 +330,8 @@ func newCluster(size int, withproxy bool, opts ...[]server.CommandOption) (clust
 }
 
 // runCluster creates and starts a new cluster
-func runCluster(size int, withproxy bool, opts ...[]server.CommandOption) (Cluster, error) {
-	cluster, err := newCluster(size, withproxy, opts...)
+func runCluster(size int, opts ...[]server.CommandOption) (Cluster, error) {
+	cluster, err := newCluster(size, opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "new cluster")
 	}
@@ -451,7 +343,7 @@ func runCluster(size int, withproxy bool, opts ...[]server.CommandOption) (Clust
 
 // MustRunCluster creates and starts a new cluster
 func MustRunCluster(tb testing.TB, size int, opts ...[]server.CommandOption) Cluster {
-	c, err := runCluster(size, false, opts...)
+	c, err := runCluster(size, opts...)
 	if err != nil {
 		tb.Fatalf("run cluster: %v", err)
 	}
