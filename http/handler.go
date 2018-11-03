@@ -181,7 +181,7 @@ func (h *Handler) populateValidators() {
 	h.validators["DeleteIndex"] = queryValidationSpecRequired()
 	h.validators["PostField"] = queryValidationSpecRequired()
 	h.validators["DeleteField"] = queryValidationSpecRequired()
-	h.validators["PostImport"] = queryValidationSpecRequired().Optional("clear")
+	h.validators["PostImport"] = queryValidationSpecRequired().Optional("clear", "ignoreKeyCheck")
 	h.validators["PostImportRoaring"] = queryValidationSpecRequired().Optional("remote", "clear")
 	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("shards", "columnAttrs", "excludeRowAttrs", "excludeColumns")
 	h.validators["GetInfo"] = queryValidationSpecRequired()
@@ -987,6 +987,12 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	// If the clear flag is true, treat the import as clear bits.
 	q := r.URL.Query()
 	doClear := q.Get("clear") == "true"
+	doIgnoreKeyCheck := q.Get("ignoreKeyCheck") == "true"
+
+	opts := []pilosa.ImportOption{
+		pilosa.OptImportOptionsClear(doClear),
+		pilosa.OptImportOptionsIgnoreKeyCheck(doIgnoreKeyCheck),
+	}
 
 	// Get index and field type to determine how to handle the
 	// import data.
@@ -1020,7 +1026,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := h.api.ImportValue(r.Context(), req, pilosa.OptImportOptionsClear(doClear)); err != nil {
+		if err := h.api.ImportValue(r.Context(), req, opts...); err != nil {
 			switch errors.Cause(err) {
 			case pilosa.ErrClusterDoesNotOwnShard:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
@@ -1038,7 +1044,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := h.api.Import(r.Context(), req, pilosa.OptImportOptionsClear(doClear)); err != nil {
+		if err := h.api.Import(r.Context(), req, opts...); err != nil {
 			switch errors.Cause(err) {
 			case pilosa.ErrClusterDoesNotOwnShard:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
