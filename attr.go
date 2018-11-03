@@ -28,6 +28,7 @@ const (
 	attrTypeInt    = 2
 	attrTypeBool   = 3
 	attrTypeFloat  = 4
+	thisisa        = 5
 )
 
 // AttrStore represents an interface for handling row/column attributes.

@@ -1014,6 +1014,34 @@ func (api *API) Info() serverInfo {
 	}
 }
 
+func (api *API) BulkImportColumnAttrs(indexName string, req *BulkColumnAttrRequest) error {
+	if len(req.ColumnAttrSets)==0{
+		return nil //nothing to do
+	}
+	//assume if keys all keys else ids
+	attrs := make(map[uint64]map[string]interface{})
+	if len(req.ColumnAttrSets[0].Key) != 0 {
+		src := make([]string, len(req.ColumnAttrSets))
+
+		for i := range req.ColumnAttrSets {
+			src[i] = req.ColumnAttrSets[i].Key
+		}
+		ids, err := api.holder.translateFile.TranslateColumnsToUint64(indexName, src)
+		if err != nil {
+			return errors.Wrap(err, "translate keys")
+		}
+		for i := range req.ColumnAttrSets {
+			attrs[ids[i]] = req.ColumnAttrSets[i].Attrs
+		}
+	} else {
+		for i := range req.ColumnAttrSets {
+			attrs[req.ColumnAttrSets[i].ID] = req.ColumnAttrSets[i].Attrs
+		}
+	}
+//TODO MAKE THIS SHARD AWARE
+	return api.server.executor.bulkColumnAttrSets(indexName, attrs)
+}
+
 type serverInfo struct {
 	ShardWidth uint64 `json:"shardWidth"`
 }

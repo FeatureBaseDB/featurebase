@@ -201,6 +201,7 @@ func (h *Handler) populateValidators() {
 	h.validators["PostTranslateColumnKeys"] = queryValidationSpecRequired()
 	h.validators["PostTranslateColumnIDs"] = queryValidationSpecRequired()
 	h.validators["PostColumnAttrs"] = queryValidationSpecRequired()
+	h.validators["BulkColumnAttrs"] = queryValidationSpecRequired()
 }
 
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
@@ -239,6 +240,9 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}", handler.handlePostIndex).Methods("POST").Name("PostIndex")
 	router.HandleFunc("/index/{index}", handler.handleDeleteIndex).Methods("DELETE").Name("DeleteIndex")
 	//router.HandleFunc("/index/{index}/field", handler.handleGetFields).Methods("GET") // Not implemented.
+	router.HandleFunc("/index/{index}/bulk-column-attrs", handler.handlePostBulkColumnAttrs).Methods("POST").Name("BulkColumnAttrs")
+	
+
 	router.HandleFunc("/index/{index}/field/{field}", handler.handlePostField).Methods("POST").Name("PostField")
 	router.HandleFunc("/index/{index}/field/{field}", handler.handleDeleteField).Methods("DELETE").Name("DeleteField")
 	router.HandleFunc("/index/{index}/field/{field}/import", handler.handlePostImport).Methods("POST").Name("PostImport")
@@ -1655,5 +1659,39 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 	_, err = w.Write(buf)
 	if err != nil {
 		h.logger.Printf("writing import-roaring response: %v", err)
+	}
+}
+
+func (h *Handler) handlePostBulkColumnAttrs(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Content-Type") != "application/x-protobuf" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	}
+	indexName := mux.Vars(r)["index"]
+	body, err := ioutil.ReadAll(r.Body)
+	start := time.Now()
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+		// Decode request.
+	req:=&pilosa.BulkColumnAttrRequest{}
+
+	if err := h.api.Serializer.Unmarshal(body, req); err != nil {
+		http.Error(w, fmt.Sprintf("marshal import response: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if err := h.api.BulkImportColumnAttrs(indexName,req) ; err != nil {
+		http.Error(w, fmt.Sprintf("BulkImportColumnAttrs: %v", err), http.StatusInternalServerError)
+		return
+	}
+	mes := fmt.Sprintf("%s", time.Since(start))
+	if err := json.NewEncoder(w).Encode(struct {
+		Num int    `json:"Columns"`
+		Elapsed string `json:"Elapsed"`
+	}{len(req.ColumnAttrSets), mes}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }

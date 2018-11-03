@@ -40,6 +40,10 @@ message Bit {
 	int64 Timestamp = 3;
 }
 
+message BulkColumnAttrRequest {
+        repeated ColumnAttrSet ColAttrSets= 1; 
+}
+
 message ColumnAttrSet {
 	uint64 ID = 1;
 	string Key = 3;

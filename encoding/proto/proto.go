@@ -241,6 +241,16 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		decodeBlockDataResponse(msg, mt)
 		return nil
+
+	case *pilosa.BulkColumnAttrRequest:
+		msg := &internal.BulkColumnAttrRequest{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling BulkColumnAttrRequest")
+		}
+		
+		decodeBulkColumnAttrRequest(msg,mt) 
+		return nil
 	default:
 		panic(fmt.Sprintf("unhandled pilosa.Message of type %T: %#v", mt, m))
 	}
@@ -666,6 +676,12 @@ func encodeFieldStatuses(a []*pilosa.FieldStatus) []*internal.FieldStatus {
 
 func encodeRecalculateCaches(*pilosa.RecalculateCaches) *internal.RecalculateCaches {
 	return &internal.RecalculateCaches{}
+}
+
+func decodeBulkColumnAttrRequest(msg *internal.BulkColumnAttrRequest, m *pilosa.BulkColumnAttrRequest) {
+        m.ColumnAttrSets = make([]*pilosa.ColumnAttrSet, len(msg.ColAttrSets))
+	fmt.Println("decodeBulkColumnAttrRequest")
+	decodeColumnAttrSets(msg.ColAttrSets, m.ColumnAttrSets)
 }
 
 func decodeResizeInstruction(ri *internal.ResizeInstruction, m *pilosa.ResizeInstruction) {
