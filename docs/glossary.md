@@ -70,4 +70,4 @@ nav = []
 
 <strong id="topn">[TopN](../query-language/#topn):</strong> A [PQL](#pql) query that returns a list of rows, sorted by the count of [columns](#column) set in the [row](#row), within a specified [field](#field).
 
-<strong id="view">[View](../data-model/#view):</strong> Views separate the different data layouts within a [Field](#field). The primary view is standard, which represents the typical [row](#row)/[column](#column) data. Time based field views are automatically generated for each [time quantum](#time-quantum). Views are internally managed by Pilosa, and never exposed directly via the API. This simplifies the functional interface by separating it from the physical data representation.
+<strong id="view">View:</strong> Views separate the different data layouts within a [Field](#field). The primary view is standard, which represents the typical [row](#row)/[column](#column) data. Time based field views are automatically generated for each [time quantum](#time-quantum). Views are internally managed by Pilosa, and never exposed directly via the API. This simplifies the functional interface by separating it from the physical data representation.
