@@ -10,7 +10,6 @@ nav = [
     "Time Quantum",
     "Attribute",
     "Shard",
-    "View",
 ]
 +++
 
