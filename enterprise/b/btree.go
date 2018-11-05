@@ -75,7 +75,7 @@ type (
 	//	  0 if a == b
 	//	> 0 if a >  b
 	//
-	Cmp func(a, b uint64) int
+	Cmp func(a, b uint64) int64
 
 	d struct { // data page
 		c int
