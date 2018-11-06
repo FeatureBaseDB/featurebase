@@ -88,7 +88,7 @@ func TestParser_Parse(t *testing.T) {
 					"bool0":  true,
 					"bool1":  false,
 					"x":      nil,
-					"escape": `\" \\escape\n`,
+					"escape": "\" \\escape\n",
 				},
 			},
 		) {

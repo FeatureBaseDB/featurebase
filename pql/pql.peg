@@ -46,7 +46,7 @@ item <- ( 'null' &(comma / sp close) { p.addVal(nil) }
          / < '-'? '.'[0-9]+ > { p.addNumVal(buffer[begin:end]) }
          / < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > { p.addVal(buffer[begin:end]) }
          / < '"'  doublequotedstring '"' > { s, _ := strconv.Unquote(buffer[begin:end]); p.addVal(s) }
-         / < '\'' singlequotedstring '\'' > { s, _ := strconv.Unquote(buffer[begin:end]); p.addVal(s) }
+         / '\'' < singlequotedstring > '\'' { p.addVal(buffer[begin:end]) }
          )
 
 doublequotedstring <- ( '\\\"' / [^"] )*
