@@ -75,7 +75,7 @@ func TestParser_Parse(t *testing.T) {
 
 	// Parse with only arguments.
 	t.Run("ArgumentsOnly", func(t *testing.T) {
-		q, err := pql.ParseString("MyCall( key= value, foo='bar', age = 12 , bool0=true, bool1=false, x=null, escape='\\escape\n'  )")
+		q, err := pql.ParseString(`MyCall( key= value, foo='bar', age = 12 , bool0=true, bool1=false, x=null, escape="\" \\escape\n"  )`)
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(q.Calls[0],
@@ -88,7 +88,7 @@ func TestParser_Parse(t *testing.T) {
 					"bool0":  true,
 					"bool1":  false,
 					"x":      nil,
-					"escape": "\\escape\n",
+					"escape": `\" \\escape\n`,
 				},
 			},
 		) {
