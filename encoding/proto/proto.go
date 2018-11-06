@@ -241,6 +241,15 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		decodeBlockDataResponse(msg, mt)
 		return nil
+	case *pilosa.BulkColumnAttrRequest:
+		msg := &internal.BulkColumnAttrRequest{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling BulkColumnAttrRequest")
+		}
+
+		decodeBulkColumnAttrRequest(msg, mt)
+		return nil
 	default:
 		panic(fmt.Sprintf("unhandled pilosa.Message of type %T: %#v", mt, m))
 	}
@@ -298,6 +307,8 @@ func encodeToProto(m pilosa.Message) proto.Message {
 		return encodeBlockDataRequest(mt)
 	case *pilosa.BlockDataResponse:
 		return encodeBlockDataResponse(mt)
+	case *pilosa.BulkColumnAttrRequest:
+		return encodeBulkColumnAttrRequest(mt)
 	}
 	return nil
 }
@@ -666,6 +677,11 @@ func encodeFieldStatuses(a []*pilosa.FieldStatus) []*internal.FieldStatus {
 
 func encodeRecalculateCaches(*pilosa.RecalculateCaches) *internal.RecalculateCaches {
 	return &internal.RecalculateCaches{}
+}
+
+func decodeBulkColumnAttrRequest(msg *internal.BulkColumnAttrRequest, m *pilosa.BulkColumnAttrRequest) {
+	m.ColumnAttrSets = make([]*pilosa.ColumnAttrSet, len(msg.ColumnAttrSets))
+	decodeColumnAttrSets(msg.ColumnAttrSets, m.ColumnAttrSets)
 }
 
 func decodeResizeInstruction(ri *internal.ResizeInstruction, m *pilosa.ResizeInstruction) {
@@ -1095,9 +1111,16 @@ func decodeValCount(pb *internal.ValCount) pilosa.ValCount {
 	}
 }
 
+func encodeBulkColumnAttrRequest(a *pilosa.BulkColumnAttrRequest) *internal.BulkColumnAttrRequest {
+	return &internal.BulkColumnAttrRequest{
+		ColumnAttrSets: encodeColumnAttrSets(a.ColumnAttrSets),
+	}
+
+}
 func encodeColumnAttrSets(a []*pilosa.ColumnAttrSet) []*internal.ColumnAttrSet {
 	other := make([]*internal.ColumnAttrSet, len(a))
 	for i := range a {
+
 		other[i] = encodeColumnAttrSet(a[i])
 	}
 	return other

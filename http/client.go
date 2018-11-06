@@ -1236,3 +1236,43 @@ func nodePathToURL(node *pilosa.Node, path string) url.URL {
 		Path:   path,
 	}
 }
+
+func (c *InternalClient) BulkColumnAttributes(ctx context.Context, uri, indexName string, payload []byte, remote bool) error {
+	if indexName == "" {
+		return pilosa.ErrIndexRequired
+	}
+
+	vals := url.Values{}
+	vals.Set("remote", strconv.FormatBool(remote))
+
+	url := fmt.Sprintf("%s/index/%s/import-column-attrs?%s", uri,indexName, vals.Encode())
+
+	// Generate HTTP request.
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
+	if err != nil {
+		return errors.Wrap(err, "creating request")
+	}
+	req.Header.Set("Content-Length", strconv.Itoa(len(payload)))
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("Accept", "application/x-protobuf")
+
+	// Execute request against the host.
+	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return errors.Wrap(err, "executing request")
+	}
+	defer resp.Body.Close()
+
+	// Validate status code.
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("invalid status: %d", resp.StatusCode)
+	}
+
+	dec := json.NewDecoder(resp.Body)
+	rbody := &pilosa.ImportResponse{}
+	dec.Decode(rbody)
+	if rbody.Err != "" {
+		return errors.Errorf("bulk column import: %v", rbody.Err)
+	}
+	return nil
+}

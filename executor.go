@@ -2789,3 +2789,17 @@ func (gbi *groupByIterator) Next() (ret GroupCount, done bool) {
 
 	return ret, false
 }
+
+func (e *executor) bulkColumnAttrSets(indexName string, attrs map[uint64]map[string]interface{}) error {
+
+	idx := e.Holder.Index(indexName)
+	if idx == nil {
+		return ErrIndexNotFound
+	}
+	// Set attributes locally.
+	if err := idx.ColumnAttrStore().SetBulkAttrs(attrs); err != nil {
+		return err
+	}
+	idx.Stats.Count("bulkColumnAttrs", 1, 1.0)
+	return nil
+}
