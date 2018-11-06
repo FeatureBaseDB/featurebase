@@ -269,12 +269,6 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/translate/column-ids", handler.handlePostTranslateColumnIDs).Methods("POST").Name("PostTranslateColumnIDs")
 	router.HandleFunc("/internal/column-attrs", handler.handlePostColumnAttrs).Methods("POST").Name("PostColumnAttrs")
 
-	// TODO: Apply MethodNotAllowed statuses to all endpoints.
-	// Ideally this would be automatic, as described in this (wontfix) ticket:
-	// https://github.com/gorilla/mux/issues/6
-	// For now we just do it for the most commonly used handler, /query
-	router.HandleFunc("/index/{index}/query", handler.methodNotAllowedHandler).Methods("GET")
-
 	router.Use(handler.queryArgValidator)
 	return router
 }
