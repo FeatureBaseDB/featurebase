@@ -690,7 +690,8 @@ func (api *API) FieldAttrDiff(_ context.Context, indexName string, fieldName str
 
 // ImportOptions holds the options for the API.Import method.
 type ImportOptions struct {
-	Clear bool
+	Clear          bool
+	IgnoreKeyCheck bool
 }
 
 // ImportOption is a functional option type for API.Import.
@@ -703,8 +704,15 @@ func OptImportOptionsClear(c bool) ImportOption {
 	}
 }
 
+func OptImportOptionsIgnoreKeyCheck(b bool) ImportOption {
+	return func(o *ImportOptions) error {
+		o.IgnoreKeyCheck = b
+		return nil
+	}
+}
+
 // Import bulk imports data into a particular index,field,shard.
-func (api *API) Import(_ context.Context, req *ImportRequest, opts ...ImportOption) error {
+func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOption) error {
 	if err := api.validate(apiImport); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -715,34 +723,71 @@ func (api *API) Import(_ context.Context, req *ImportRequest, opts ...ImportOpti
 		return errors.Wrap(err, "setting up import options")
 	}
 
-	index := api.holder.Index(req.Index)
-	if index == nil {
-		return newNotFoundError(ErrIndexNotFound)
-	}
-
-	field, err := api.indexField(req.Index, req.Field, req.Shard)
+	index, field, err := api.indexField(req.Index, req.Field, req.Shard)
 	if err != nil {
-		return errors.Wrap(err, "getting field")
+		return errors.Wrap(err, "getting index and field")
 	}
 
-	// Translate row keys.
-	if field.keys() {
-		if len(req.RowIDs) != 0 {
-			return errors.New("row ids cannot be used because field uses string keys")
+	// Unless explicitly ignoring key validation (meaning keys have been
+	// translated to ids in a previous step at the coordinator node), then
+	// check to see if keys need translation.
+	if !options.IgnoreKeyCheck {
+		// Translate row keys.
+		if field.keys() {
+			if len(req.RowIDs) != 0 {
+				return errors.New("row ids cannot be used because field uses string keys")
+			}
+			if req.RowIDs, err = api.holder.translateFile.TranslateRowsToUint64(index.Name(), field.Name(), req.RowKeys); err != nil {
+				return errors.Wrap(err, "translating rows")
+			}
 		}
-		if req.RowIDs, err = api.holder.translateFile.TranslateRowsToUint64(index.Name(), field.Name(), req.RowKeys); err != nil {
-			return errors.Wrap(err, "translating rows")
+
+		// Translate column keys.
+		if index.Keys() {
+			if len(req.ColumnIDs) != 0 {
+				return errors.New("column ids cannot be used because index uses string keys")
+			}
+			if req.ColumnIDs, err = api.holder.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
+				return errors.Wrap(err, "translating columns")
+			}
+		}
+
+		// For translated data, map the columnIDs to shards. If
+		// this node does not own the shard, forward to the node that does.
+		if index.Keys() || field.keys() {
+			m := make(map[uint64][]Bit)
+
+			for i, colID := range req.ColumnIDs {
+				shard := colID / ShardWidth
+				if _, ok := m[shard]; !ok {
+					m[shard] = make([]Bit, 0)
+				}
+				m[shard] = append(m[shard], Bit{
+					RowID:     req.RowIDs[i],
+					ColumnID:  colID,
+					Timestamp: req.Timestamps[i],
+				})
+			}
+
+			// Signal to the receiving nodes to ignore checking for key translation.
+			opts = append(opts, OptImportOptionsIgnoreKeyCheck(true))
+
+			var eg errgroup.Group
+			for shard, bits := range m {
+				// TODO: if local node owns this shard we don't need to go through the client
+				shard := shard
+				bits := bits
+				eg.Go(func() error {
+					return api.server.defaultClient.Import(ctx, req.Index, req.Field, shard, bits, opts...)
+				})
+			}
+			return eg.Wait()
 		}
 	}
 
-	// Translate column keys.
-	if index.Keys() {
-		if len(req.ColumnIDs) != 0 {
-			return errors.New("column ids cannot be used because index uses string keys")
-		}
-		if req.ColumnIDs, err = api.holder.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
-			return errors.Wrap(err, "translating columns")
-		}
+	// Validate shard ownership.
+	if err := api.validateShardOwnership(req.Index, req.Shard); err != nil {
+		return errors.Wrap(err, "validating shard ownership")
 	}
 
 	// Convert timestamps to time.Time.
@@ -772,7 +817,7 @@ func (api *API) Import(_ context.Context, req *ImportRequest, opts ...ImportOpti
 }
 
 // ImportValue bulk imports values into a particular field.
-func (api *API) ImportValue(_ context.Context, req *ImportValueRequest, opts ...ImportOption) error {
+func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts ...ImportOption) error {
 	if err := api.validate(apiImportValue); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}
@@ -783,24 +828,58 @@ func (api *API) ImportValue(_ context.Context, req *ImportValueRequest, opts ...
 		return errors.Wrap(err, "setting up import options")
 	}
 
-	index := api.holder.Index(req.Index)
-	if index == nil {
-		return newNotFoundError(ErrIndexNotFound)
-	}
-
-	field, err := api.indexField(req.Index, req.Field, req.Shard)
+	index, field, err := api.indexField(req.Index, req.Field, req.Shard)
 	if err != nil {
-		return errors.Wrap(err, "getting field")
+		return errors.Wrap(err, "getting index and field")
 	}
 
-	// Translate column keys.
-	if index.Keys() {
-		if len(req.ColumnIDs) != 0 {
-			return errors.New("column ids cannot be used because index uses string keys")
+	// Unless explicitly ignoring key validation (meaning keys have been
+	// translate to ids in a previous step at the coordinator node), then
+	// check to see if keys need translation.
+	if !options.IgnoreKeyCheck {
+		// Translate column keys.
+		if index.Keys() {
+			if len(req.ColumnIDs) != 0 {
+				return errors.New("column ids cannot be used because index uses string keys")
+			}
+			if req.ColumnIDs, err = api.holder.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
+				return errors.Wrap(err, "translating columns")
+			}
+
+			// For translated data, map the columnIDs to shards. If
+			// this node does not own the shard, forward to the node that does.
+			m := make(map[uint64][]FieldValue)
+
+			for i, colID := range req.ColumnIDs {
+				shard := colID / ShardWidth
+				if _, ok := m[shard]; !ok {
+					m[shard] = make([]FieldValue, 0)
+				}
+				m[shard] = append(m[shard], FieldValue{
+					Value:    req.Values[i],
+					ColumnID: colID,
+				})
+			}
+
+			// Signal to the receiving nodes to ignore checking for key translation.
+			opts = append(opts, OptImportOptionsIgnoreKeyCheck(true))
+
+			var eg errgroup.Group
+			for shard, vals := range m {
+				// TODO: if local node owns this shard we don't need to go through the client
+				shard := shard
+				vals := vals
+				eg.Go(func() error {
+					return api.server.defaultClient.ImportValue(ctx, req.Index, req.Field, shard, vals, opts...)
+				})
+			}
+			return eg.Wait()
 		}
-		if req.ColumnIDs, err = api.holder.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
-			return errors.Wrap(err, "translating columns")
-		}
+	}
+
+	// Validate shard ownership.
+	if err := api.validateShardOwnership(req.Index, req.Shard); err != nil {
+		return errors.Wrap(err, "validating shard ownership")
 	}
 
 	// Import columnIDs into existence field.
@@ -863,28 +942,32 @@ func (api *API) LongQueryTime() time.Duration {
 	return api.cluster.longQueryTime
 }
 
-func (api *API) indexField(indexName string, fieldName string, shard uint64) (*Field, error) {
+func (api *API) validateShardOwnership(indexName string, shard uint64) error {
 	// Validate that this handler owns the shard.
 	if !api.cluster.ownsShard(api.Node().ID, indexName, shard) {
 		api.server.logger.Printf("node %s does not own shard %d of index %s", api.Node().ID, shard, indexName)
-		return nil, ErrClusterDoesNotOwnShard
+		return ErrClusterDoesNotOwnShard
 	}
+	return nil
+}
+
+func (api *API) indexField(indexName string, fieldName string, shard uint64) (*Index, *Field, error) {
+	api.server.logger.Printf("importing: %v %v %v", indexName, fieldName, shard)
 
 	// Find the Index.
-	api.server.logger.Printf("importing: %v %v %v", indexName, fieldName, shard)
 	index := api.holder.Index(indexName)
 	if index == nil {
 		api.server.logger.Printf("fragment error: index=%s, field=%s, shard=%d, err=%s", indexName, fieldName, shard, ErrIndexNotFound.Error())
-		return nil, newNotFoundError(ErrIndexNotFound)
+		return nil, nil, newNotFoundError(ErrIndexNotFound)
 	}
 
 	// Retrieve field.
 	field := index.Field(fieldName)
 	if field == nil {
 		api.server.logger.Printf("field error: index=%s, field=%s, shard=%d, err=%s", indexName, fieldName, shard, ErrFieldNotFound.Error())
-		return nil, ErrFieldNotFound
+		return nil, nil, ErrFieldNotFound
 	}
-	return field, nil
+	return index, field, nil
 }
 
 // SetCoordinator makes a new Node the cluster coordinator.

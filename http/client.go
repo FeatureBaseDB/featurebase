@@ -437,6 +437,9 @@ func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, inde
 	if opts.Clear {
 		vals.Set("clear", "true")
 	}
+	if opts.IgnoreKeyCheck {
+		vals.Set("ignoreKeyCheck", "true")
+	}
 	url := fmt.Sprintf("%s?%s", u.String(), vals.Encode())
 
 	req, err := http.NewRequest("POST", url, bytes.NewReader(buf))

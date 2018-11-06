@@ -181,7 +181,7 @@ func (h *Handler) populateValidators() {
 	h.validators["DeleteIndex"] = queryValidationSpecRequired()
 	h.validators["PostField"] = queryValidationSpecRequired()
 	h.validators["DeleteField"] = queryValidationSpecRequired()
-	h.validators["PostImport"] = queryValidationSpecRequired().Optional("clear")
+	h.validators["PostImport"] = queryValidationSpecRequired().Optional("clear", "ignoreKeyCheck")
 	h.validators["PostImportRoaring"] = queryValidationSpecRequired().Optional("remote", "clear")
 	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("shards", "columnAttrs", "excludeRowAttrs", "excludeColumns")
 	h.validators["GetInfo"] = queryValidationSpecRequired()
@@ -260,18 +260,8 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
 	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET").Name("GetTranslateData")
 
-	// TODO: Apply MethodNotAllowed statuses to all endpoints.
-	// Ideally this would be automatic, as described in this (wontfix) ticket:
-	// https://github.com/gorilla/mux/issues/6
-	// For now we just do it for the most commonly used handler, /query
-	router.HandleFunc("/index/{index}/query", handler.methodNotAllowedHandler).Methods("GET")
-
 	router.Use(handler.queryArgValidator)
 	return router
-}
-
-func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, _ *http.Request) {
-	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 }
 
 // ServeHTTP handles an HTTP request.
@@ -997,6 +987,12 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	// If the clear flag is true, treat the import as clear bits.
 	q := r.URL.Query()
 	doClear := q.Get("clear") == "true"
+	doIgnoreKeyCheck := q.Get("ignoreKeyCheck") == "true"
+
+	opts := []pilosa.ImportOption{
+		pilosa.OptImportOptionsClear(doClear),
+		pilosa.OptImportOptionsIgnoreKeyCheck(doIgnoreKeyCheck),
+	}
 
 	// Get index and field type to determine how to handle the
 	// import data.
@@ -1030,7 +1026,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := h.api.ImportValue(r.Context(), req, pilosa.OptImportOptionsClear(doClear)); err != nil {
+		if err := h.api.ImportValue(r.Context(), req, opts...); err != nil {
 			switch errors.Cause(err) {
 			case pilosa.ErrClusterDoesNotOwnShard:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
@@ -1048,7 +1044,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := h.api.Import(r.Context(), req, pilosa.OptImportOptionsClear(doClear)); err != nil {
+		if err := h.api.Import(r.Context(), req, opts...); err != nil {
 			switch errors.Cause(err) {
 			case pilosa.ErrClusterDoesNotOwnShard:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
