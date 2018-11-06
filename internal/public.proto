@@ -41,7 +41,7 @@ message Bit {
 }
 
 message BulkColumnAttrRequest {
-        repeated ColumnAttrSet ColAttrSets= 1; 
+        repeated ColumnAttrSet ColumnAttrSets= 1; 
 }
 
 message ColumnAttrSet {

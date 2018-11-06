@@ -76,8 +76,8 @@ func (n nopHandler) Close() error {
 
 var NopHandler Handler = nopHandler{}
 
-type BulkColumnAttrRequest struct{
-ColumnAttrSets	[]*ColumnAttrSet
+type BulkColumnAttrRequest struct {
+	ColumnAttrSets []*ColumnAttrSet
 }
 
 type ImportValueRequest struct {

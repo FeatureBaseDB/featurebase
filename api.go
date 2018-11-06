@@ -1014,11 +1014,28 @@ func (api *API) Info() serverInfo {
 	}
 }
 
-func (api *API) BulkImportColumnAttrs(indexName string, req *BulkColumnAttrRequest) error {
-	if len(req.ColumnAttrSets)==0{
+func (api *API) buildPayload(attrs map[uint64]map[string]interface{}) ([]byte, error) {
+	parts := make([]*ColumnAttrSet, len(attrs))
+
+	i := 0
+	for id, attr := range attrs {
+		item := &ColumnAttrSet{
+			ID:    id,
+			Attrs: attr,
+		}
+		parts[i] = item
+		i++
+	}
+	return api.Serializer.Marshal(&BulkColumnAttrRequest{
+		ColumnAttrSets: parts,
+	})
+}
+
+func (api *API) BulkImportColumnAttrs(indexName string, req *BulkColumnAttrRequest, isRemote bool) error {
+	if len(req.ColumnAttrSets) == 0 {
 		return nil //nothing to do
 	}
-	//assume if keys all keys else ids
+	// assume the request is complete keys if the first item is a key request
 	attrs := make(map[uint64]map[string]interface{})
 	if len(req.ColumnAttrSets[0].Key) != 0 {
 		src := make([]string, len(req.ColumnAttrSets))
@@ -1038,8 +1055,41 @@ func (api *API) BulkImportColumnAttrs(indexName string, req *BulkColumnAttrReque
 			attrs[req.ColumnAttrSets[i].ID] = req.ColumnAttrSets[i].Attrs
 		}
 	}
-//TODO MAKE THIS SHARD AWARE
-	return api.server.executor.bulkColumnAttrSets(indexName, attrs)
+	// copy to all nodes if the original source
+	var g errgroup.Group
+
+	if !isRemote && len(api.cluster.Nodes())>1{
+		payload, err := api.buildPayload(attrs)
+		if err != nil {
+			return errors.Wrap(err, "failure to buildPayload")
+		}
+		for _, node := range api.cluster.Nodes() {
+			fmt.Println(node.URI.String())
+			if node.ID != api.Node().ID {
+				g.Go(func() error {
+					return api.server.defaultClient.BulkColumnAttributes(context.Background(), node.URI.String(), indexName, payload, true)
+				})
+
+			}
+
+		}
+	}
+
+	err := api.server.executor.bulkColumnAttrSets(indexName, attrs)
+	if err != nil {
+		if err := g.Wait(); err != nil {
+			return errors.Wrap(err, "failure local and copying remote attributes")
+		} else {
+			return errors.Wrap(err, "failure local attributes")
+		}
+
+	}
+	if err := g.Wait(); err != nil {
+		return errors.Wrap(err, "failure copying remote attributes")
+	}
+
+	return nil
+
 }
 
 type serverInfo struct {
