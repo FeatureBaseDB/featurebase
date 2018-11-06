@@ -54,6 +54,7 @@ type InternalClient interface {
 	SendMessage(ctx context.Context, uri *URI, msg []byte) error
 	RetrieveShardFromURI(ctx context.Context, index, field string, shard uint64, uri URI) (io.ReadCloser, error)
 	ImportRoaring(ctx context.Context, uri *URI, index, field string, shard uint64, remote bool, data []byte, opts ...ImportOption) error
+	BulkColumnAttributes(ctx context.Context, uri, indexName string, payload []byte, remote bool) error
 }
 
 //===============
@@ -151,4 +152,7 @@ func (n nopInternalClient) SendMessage(ctx context.Context, uri *URI, msg []byte
 }
 func (n nopInternalClient) RetrieveShardFromURI(ctx context.Context, index, field string, shard uint64, uri URI) (io.ReadCloser, error) {
 	return nil, nil
+}
+func (n nopInternalClient) BulkColumnAttributes(ctx context.Context, uri, indexName string, payload []byte, remote bool) error {
+	return nil
 }
