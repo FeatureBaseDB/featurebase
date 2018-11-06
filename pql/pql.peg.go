@@ -483,9 +483,11 @@ func (p *PQL) Execute() {
 		case ruleAction39:
 			p.addVal(buffer[begin:end])
 		case ruleAction40:
-			p.addVal(buffer[begin:end])
+			s, _ := strconv.Unquote(buffer[begin:end])
+			p.addVal(s)
 		case ruleAction41:
-			p.addVal(buffer[begin:end])
+			s, _ := strconv.Unquote(buffer[begin:end])
+			p.addVal(s)
 		case ruleAction42:
 			p.addField(buffer[begin:end])
 		case ruleAction43:
@@ -1721,7 +1723,7 @@ func (p *PQL) Init() {
 			position, tokenIndex = position136, tokenIndex136
 			return false
 		},
-		/* 13 item <- <(('n' 'u' 'l' 'l' &(comma / (sp close)) Action34) / ('t' 'r' 'u' 'e' &(comma / (sp close)) Action35) / ('f' 'a' 'l' 's' 'e' &(comma / (sp close)) Action36) / (<('-'? [0-9]+ ('.' [0-9]*)?)> Action37) / (<('-'? '.' [0-9]+)> Action38) / (<([a-z] / [A-Z] / [0-9] / '-' / '_' / ':')+> Action39) / ('"' <doublequotedstring> '"' Action40) / ('\'' <singlequotedstring> '\'' Action41))> */
+		/* 13 item <- <(('n' 'u' 'l' 'l' &(comma / (sp close)) Action34) / ('t' 'r' 'u' 'e' &(comma / (sp close)) Action35) / ('f' 'a' 'l' 's' 'e' &(comma / (sp close)) Action36) / (<('-'? [0-9]+ ('.' [0-9]*)?)> Action37) / (<('-'? '.' [0-9]+)> Action38) / (<([a-z] / [A-Z] / [0-9] / '-' / '_' / ':')+> Action39) / (<('"' doublequotedstring '"')> Action40) / (<('\'' singlequotedstring '\'')> Action41))> */
 		func() bool {
 			position140, tokenIndex140 := position, tokenIndex
 			{
@@ -2059,42 +2061,42 @@ func (p *PQL) Init() {
 					goto l142
 				l176:
 					position, tokenIndex = position142, tokenIndex142
-					if buffer[position] != rune('"') {
-						goto l193
-					}
-					position++
 					{
 						position194 := position
+						if buffer[position] != rune('"') {
+							goto l193
+						}
+						position++
 						if !_rules[ruledoublequotedstring]() {
 							goto l193
 						}
+						if buffer[position] != rune('"') {
+							goto l193
+						}
+						position++
 						add(rulePegText, position194)
 					}
-					if buffer[position] != rune('"') {
-						goto l193
-					}
-					position++
 					{
 						add(ruleAction40, position)
 					}
 					goto l142
 				l193:
 					position, tokenIndex = position142, tokenIndex142
-					if buffer[position] != rune('\'') {
-						goto l140
-					}
-					position++
 					{
 						position196 := position
+						if buffer[position] != rune('\'') {
+							goto l140
+						}
+						position++
 						if !_rules[rulesinglequotedstring]() {
 							goto l140
 						}
+						if buffer[position] != rune('\'') {
+							goto l140
+						}
+						position++
 						add(rulePegText, position196)
 					}
-					if buffer[position] != rune('\'') {
-						goto l140
-					}
-					position++
 					{
 						add(ruleAction41, position)
 					}
@@ -2905,9 +2907,9 @@ func (p *PQL) Init() {
 		nil,
 		/* 75 Action39 <- <{ p.addVal(buffer[begin:end]) }> */
 		nil,
-		/* 76 Action40 <- <{ p.addVal(buffer[begin:end]) }> */
+		/* 76 Action40 <- <{ s, _ := strconv.Unquote(buffer[begin:end]); p.addVal(s) }> */
 		nil,
-		/* 77 Action41 <- <{ p.addVal(buffer[begin:end]) }> */
+		/* 77 Action41 <- <{ s, _ := strconv.Unquote(buffer[begin:end]); p.addVal(s) }> */
 		nil,
 		/* 78 Action42 <- <{ p.addField(buffer[begin:end]) }> */
 		nil,
