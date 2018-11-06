@@ -1141,7 +1141,7 @@ func (api *API) BulkImportColumnAttrs(indexName string, req *BulkColumnAttrReque
 	// copy to all nodes if the original source
 	var g errgroup.Group
 
-	if !isRemote && len(api.cluster.Nodes())>1{
+	if !isRemote && len(api.cluster.Nodes()) > 1 {
 		payload, err := api.buildPayload(attrs)
 		if err != nil {
 			return errors.Wrap(err, "failure to buildPayload")

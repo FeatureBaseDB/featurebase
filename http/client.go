@@ -1248,7 +1248,7 @@ func (c *InternalClient) BulkColumnAttributes(ctx context.Context, uri, indexNam
 	vals := url.Values{}
 	vals.Set("remote", strconv.FormatBool(remote))
 
-	url := fmt.Sprintf("%s/index/%s/bulk-column-attrs?%s", uri,indexName, vals.Encode())
+	url := fmt.Sprintf("%s/index/%s/import-column-attrs?%s", uri,indexName, vals.Encode())
 
 	// Generate HTTP request.
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))

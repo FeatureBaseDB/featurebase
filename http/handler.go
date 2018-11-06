@@ -202,10 +202,7 @@ func (h *Handler) populateValidators() {
 	h.validators["PostTranslateColumnKeys"] = queryValidationSpecRequired()
 	h.validators["PostTranslateColumnIDs"] = queryValidationSpecRequired()
 	h.validators["PostColumnAttrs"] = queryValidationSpecRequired()
-<<<<<<< HEAD
-=======
 	h.validators["BulkColumnAttrs"] = queryValidationSpecRequired().Optional("remote")
->>>>>>> bulk support columnattr v2
 }
 
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
@@ -244,11 +241,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}", handler.handlePostIndex).Methods("POST").Name("PostIndex")
 	router.HandleFunc("/index/{index}", handler.handleDeleteIndex).Methods("DELETE").Name("DeleteIndex")
 	//router.HandleFunc("/index/{index}/field", handler.handleGetFields).Methods("GET") // Not implemented.
-<<<<<<< HEAD
-=======
-	router.HandleFunc("/index/{index}/bulk-column-attrs", handler.handlePostBulkColumnAttrs).Methods("POST").Name("BulkColumnAttrs")
-
->>>>>>> bulk support columnattr v2
+	router.HandleFunc("/index/{index}/import-column-attrs", handler.handlePostImportColumnAttrs).Methods("POST").Name("BulkColumnAttrs")
 	router.HandleFunc("/index/{index}/field/{field}", handler.handlePostField).Methods("POST").Name("PostField")
 	router.HandleFunc("/index/{index}/field/{field}", handler.handleDeleteField).Methods("DELETE").Name("DeleteField")
 	router.HandleFunc("/index/{index}/field/{field}/import", handler.handlePostImport).Methods("POST").Name("PostImport")
@@ -275,6 +268,12 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/translate/column-keys", handler.handlePostTranslateColumnKeys).Methods("POST").Name("PostTranslateColumnKeys")
 	router.HandleFunc("/internal/translate/column-ids", handler.handlePostTranslateColumnIDs).Methods("POST").Name("PostTranslateColumnIDs")
 	router.HandleFunc("/internal/column-attrs", handler.handlePostColumnAttrs).Methods("POST").Name("PostColumnAttrs")
+
+	// TODO: Apply MethodNotAllowed statuses to all endpoints.
+	// Ideally this would be automatic, as described in this (wontfix) ticket:
+	// https://github.com/gorilla/mux/issues/6
+	// For now we just do it for the most commonly used handler, /query
+	router.HandleFunc("/index/{index}/query", handler.methodNotAllowedHandler).Methods("GET")
 
 	router.Use(handler.queryArgValidator)
 	return router
@@ -1663,10 +1662,7 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 		h.logger.Printf("writing import-roaring response: %v", err)
 	}
 }
-<<<<<<< HEAD
-=======
-
-func (h *Handler) handlePostBulkColumnAttrs(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handlePostImportColumnAttrs(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Content-Type") != "application/x-protobuf" {
 		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
 		return
@@ -1706,4 +1702,3 @@ func (h *Handler) handlePostBulkColumnAttrs(w http.ResponseWriter, r *http.Reque
 		return
 	}
 }
->>>>>>> bulk support columnattr v2

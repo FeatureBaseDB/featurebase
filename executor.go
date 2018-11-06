@@ -2800,6 +2800,6 @@ func (e *executor) bulkColumnAttrSets(indexName string, attrs map[uint64]map[str
 	if err := idx.ColumnAttrStore().SetBulkAttrs(attrs); err != nil {
 		return err
 	}
-	idx.Stats.Count("bulkjColumnAttrs", 1, 1.0)
+	idx.Stats.Count("bulkColumnAttrs", 1, 1.0)
 	return nil
 }

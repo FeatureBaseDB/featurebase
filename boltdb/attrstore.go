@@ -191,7 +191,6 @@ func (s *attrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
 			ids = append(ids, id)
 		}
 		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-
 		// Update attributes for each id.
 		for _, id := range ids {
 			attr, err := txUpdateAttrs(tx, id, m[id])
