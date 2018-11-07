@@ -14,6 +14,7 @@ RELEASE ?= 0
 RELEASE_ENABLED = $(subst 0,,$(RELEASE))
 BUILD_TAGS += $(if $(ENTERPRISE_ENABLED),enterprise)
 BUILD_TAGS += $(if $(RELEASE_ENABLED),release)
+export GO111MODULE = on
 
 # Run tests and compile Pilosa
 default: test build
@@ -103,7 +104,7 @@ docker-test:
 
 # Run gometalinter with custom flags
 gometalinter: require-gometalinter
-	gometalinter --vendor --disable-all \
+	GO111MODULE=off gometalinter --vendor --disable-all \
 	    --deadline=300s \
 	    --enable=deadcode \
 	    --enable=gochecknoinits \
@@ -168,6 +169,6 @@ install-peg:
 	go get github.com/pointlander/peg
 
 install-gometalinter:
-	go get -u github.com/alecthomas/gometalinter
-	gometalinter --install
-	go get github.com/remyoudompheng/go-misc/deadcode
+	GO111MODULE=off go get -u github.com/alecthomas/gometalinter
+	GO111MODULE=off gometalinter --install
+	GO111MODULE=off go get github.com/remyoudompheng/go-misc/deadcode
