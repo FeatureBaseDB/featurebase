@@ -932,10 +932,7 @@ func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, msg [
 
 	// Execute request.
 	_, err = c.executeRequest(req.WithContext(ctx))
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 // executeRequest executes the given request and checks the Response
