@@ -1236,11 +1236,11 @@ type FieldOptions struct {
 	Min            int64       `json:"min,omitempty"`
 	Max            int64       `json:"max,omitempty"`
 	Keys           bool        `json:"keys"`
+	NoStandardView bool        `json:"noStandardView,omitempty"`
 	CacheSize      uint32      `json:"cacheSize,omitempty"`
 	CacheType      string      `json:"cacheType,omitempty"`
 	Type           string      `json:"type,omitempty"`
 	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
-	NoStandardView bool        `json:"noStandardView,omitempty"`
 }
 
 // applyDefaultOptions returns a new FieldOptions object
