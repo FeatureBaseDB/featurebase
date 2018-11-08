@@ -802,7 +802,7 @@ func (f *Field) Row(rowID uint64) (*Row, error) {
 // SetBit sets a bit on a view within the field.
 func (f *Field) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err error) {
 	viewName := viewStandard
-	if f.options.Type == FieldTypeTime && !f.options.NoStandardView {
+	if !f.options.NoStandardView {
 		// Retrieve view. Exit if it doesn't exist.
 		view, err := f.createViewIfNotExists(viewName)
 		if err != nil {
