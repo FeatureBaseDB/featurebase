@@ -15,6 +15,7 @@ message FieldOptions {
     int64 Max = 10;
 	string TimeQuantum = 5;
     bool Keys = 11;
+    bool NoStandardView = 12;
 }
 
 message ImportResponse {
