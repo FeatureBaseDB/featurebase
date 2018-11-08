@@ -32,7 +32,8 @@ jobs:
       - run: gometalinter --install
       - run: go get github.com/remyoudompheng/go-misc/deadcode
       - run: make gometalinter
-    environment: {} # unset GO111MODULE (breaks metalinter install for some reason)
+    environment:
+      GO111MODULE: "off" # gometalinter doesn't work with modules yet
   staticcheck:
     <<: *defaults
     steps:
