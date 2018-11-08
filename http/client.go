@@ -955,7 +955,7 @@ func (c *InternalClient) executeRequest(req *http.Request) (*http.Response, erro
 		} else {
 			msg = string(buf)
 		}
-		return resp, errors.Errorf("Server error %s: '%s'", resp.Status, msg)
+		return resp, errors.Errorf("server error %s: '%s'", resp.Status, msg)
 	}
 	return resp, nil
 }
