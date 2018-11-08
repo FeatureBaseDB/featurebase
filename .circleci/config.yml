@@ -38,8 +38,7 @@ jobs:
     <<: *defaults
     steps:
       - *fast-checkout
-      - run: go get honnef.co/go/tools@f1b53a58b022
-      - run: staticcheck
+      - run: make staticcheck
   test-golang-1.11: &base-test
     <<: *defaults
     steps:

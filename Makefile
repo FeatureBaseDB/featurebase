@@ -125,6 +125,12 @@ gometalinter: require-gometalinter
 	    --exclude "^pql/pql.peg.go" \
 	    ./...
 
+# depending on 1.10/1.11 interactions, you might not have the
+# path "go get" installs into in $PATH, so the usual require-foo
+# won't work. but install is cheap if it's already present...
+staticcheck: install-staticcheck
+	eval `go env`; $$GOPATH/bin/staticcheck ./... || echo "... ignoring staticcheck failures for now"
+
 ######################
 # Build dependencies #
 ######################
@@ -172,3 +178,6 @@ install-gometalinter:
 	GO111MODULE=off go get -u github.com/alecthomas/gometalinter
 	GO111MODULE=off gometalinter --install
 	GO111MODULE=off go get github.com/remyoudompheng/go-misc/deadcode
+
+install-staticcheck:
+	go get honnef.co/go/tools@f1b53a58b022
