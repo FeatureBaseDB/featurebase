@@ -33,6 +33,12 @@ jobs:
       - run: go get github.com/remyoudompheng/go-misc/deadcode
       - run: make gometalinter
     environment: {} # unset GO111MODULE (breaks metalinter install for some reason)
+  staticcheck:
+    <<: *defaults
+    steps:
+      - *fast-checkout
+      - run: go get honnef.co/go/tools@f1b53a58b022
+      - run: staticcheck
   test-golang-1.11: &base-test
     <<: *defaults
     steps:
@@ -90,6 +96,9 @@ workflows:
       - linter:
           requires:
             - build
+      - staticcheck:
+          requires:
+            - build
       - test-golang-1.11:
           requires:
             - build
@@ -99,6 +108,7 @@ workflows:
       - prerelease:
           requires:
             - linter
+            - staticcheck
             - test-golang-1.11
       - release:
           requires:
