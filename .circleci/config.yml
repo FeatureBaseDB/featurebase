@@ -30,6 +30,8 @@ jobs:
       - run: gometalinter --install
       - run: go get github.com/remyoudompheng/go-misc/deadcode
       - run: make gometalinter
+      - run: make install-staticcheck
+      - run: make staticcheck
   test-golang-1.10: &base-test
     <<: *defaults
     steps:

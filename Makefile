@@ -130,6 +130,9 @@ gometalinter: require-gometalinter
 	    --exclude "^pql/pql.peg.go" \
 	    ./...
 
+staticcheck: require-staticcheck
+	staticcheck ./... || echo >&2 "Temporarily treating staticcheck warnings as only-warnings."
+
 ######################
 # Build dependencies #
 ######################
@@ -156,6 +159,9 @@ require-peg:
 require-gometalinter:
 	$(call require,gometalinter)
 
+require-staticcheck:
+	$(call require,staticcheck)
+
 install-build-deps: install-dep install-protoc-gen-gofast install-protoc install-stringer install-peg
 
 install-dep:
@@ -177,3 +183,6 @@ install-gometalinter:
 	go get -u github.com/alecthomas/gometalinter
 	gometalinter --install
 	go get github.com/remyoudompheng/go-misc/deadcode
+
+install-staticcheck:
+	go get -u honnef.co/go/tools/cmd/staticcheck
