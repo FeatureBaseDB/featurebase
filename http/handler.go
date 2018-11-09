@@ -570,11 +570,11 @@ func validateOptions(data map[string]interface{}, validIndexOptions []string) er
 			}
 			for kk, vv := range options {
 				if !foundItem(validIndexOptions, kk) {
-					return fmt.Errorf("Unknown key: %v:%v", kk, vv)
+					return fmt.Errorf("unknown key: %v:%v", kk, vv)
 				}
 			}
 		default:
-			return fmt.Errorf("Unknown key: %v:%v", k, v)
+			return fmt.Errorf("unknown key: %v:%v", k, v)
 		}
 	}
 	return nil

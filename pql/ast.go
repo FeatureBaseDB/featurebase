@@ -245,7 +245,7 @@ func (c *Call) FieldArg() (string, error) {
 			return arg, nil
 		}
 	}
-	return "", fmt.Errorf("No field argument specified")
+	return "", fmt.Errorf("no field argument specified")
 }
 
 // BoolArg is for reading the value at key from call.Args as a bool. If the

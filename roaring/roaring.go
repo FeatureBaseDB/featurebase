@@ -3449,7 +3449,7 @@ func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint
 
 	header = pos
 	if size > (1 << 16) {
-		err = fmt.Errorf("It is logically impossible to have more than (1<<16) containers.")
+		err = fmt.Errorf("it is logically impossible to have more than (1<<16) containers")
 		return size, containerTyper, header, pos, haveRuns, err
 	}
 

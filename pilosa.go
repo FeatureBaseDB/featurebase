@@ -73,8 +73,8 @@ type apiMethodNotAllowedError struct {
 	error
 }
 
-// newApiMethodNotAllowedError returns err wrapped in an ApiMethodNotAllowedError.
-func newApiMethodNotAllowedError(err error) apiMethodNotAllowedError {
+// newAPIMethodNotAllowedError returns err wrapped in an ApiMethodNotAllowedError.
+func newAPIMethodNotAllowedError(err error) apiMethodNotAllowedError {
 	return apiMethodNotAllowedError{err}
 }
 

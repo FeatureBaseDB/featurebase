@@ -3250,9 +3250,9 @@ func TestUnmarshalOfficialRoaring(t *testing.T) {
 		t.Fatalf("unexpected bitmap %v expected bits [1 2 3 4 5 6 7 8 9 10 65537]", bm.Slice())
 	}
 	//had to use an external file because emacs was barfing on the long line :()
-	_bitmap_array_container, _ := ioutil.ReadFile("testdata/bitmapcontainer.roaringbitmap")
+	bitmapArrayContainer, _ := ioutil.ReadFile("testdata/bitmapcontainer.roaringbitmap")
 	bm = NewBitmap()
-	er = bm.UnmarshalBinary(_bitmap_array_container)
+	er = bm.UnmarshalBinary(bitmapArrayContainer)
 	if er != nil {
 		t.Fatalf("UnmarshalOfficialRoaring %s", er)
 	}

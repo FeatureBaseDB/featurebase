@@ -1473,14 +1473,14 @@ func (e *executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 	if err != nil {
 		return false, fmt.Errorf("reading Clear() row: %v", err)
 	} else if !ok {
-		return false, fmt.Errorf("Clear() row argument '%v' required", rowLabel)
+		return false, fmt.Errorf("row argument '%v' required for Clear()", rowLabel)
 	}
 
 	colID, ok, err := c.UintArg("_" + columnLabel)
 	if err != nil {
 		return false, fmt.Errorf("reading Clear() column: %v", err)
 	} else if !ok {
-		return false, fmt.Errorf("Clear() col argument '%v' required", columnLabel)
+		return false, fmt.Errorf("col argument '%v' required for Clear()", columnLabel)
 	}
 
 	return e.executeClearBitField(ctx, index, c, f, colID, rowID, opt)

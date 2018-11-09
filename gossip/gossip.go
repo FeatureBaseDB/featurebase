@@ -439,7 +439,7 @@ func newTransport(conf *memberlist.Config) (*memberlist.NetTransport, error) {
 
 	nt, err := makeNetRetry(limit)
 	if err != nil {
-		return nil, fmt.Errorf("Could not set up network transport: %v", err)
+		return nil, fmt.Errorf("could not set up network transport: %v", err)
 	}
 
 	return nt, nil

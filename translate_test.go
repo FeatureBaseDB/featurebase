@@ -814,10 +814,10 @@ func NewTranslateFile() *TranslateFile {
 	return s
 }
 
-func (t *TranslateFile) Reader(ctx context.Context, offset int64) (io.ReadCloser, error) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	return t.TranslateFile.Reader(ctx, offset)
+func (s *TranslateFile) Reader(ctx context.Context, offset int64) (io.ReadCloser, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.TranslateFile.Reader(ctx, offset)
 }
 
 func MustOpenTranslateFile() *TranslateFile {

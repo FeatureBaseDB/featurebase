@@ -12,6 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// package ctl contains all pilosa subcommands other than 'server'. These are
+// Package ctl contains all pilosa subcommands other than 'server'. These are
 // generally administration, testing, and debugging tools.
 package ctl

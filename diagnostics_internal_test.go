@@ -82,24 +82,24 @@ func TestDiagnosticsVersion_Compare(t *testing.T) {
 	d.SetVersion(version)
 
 	err := d.compareVersion("v1.7.0")
-	if !strings.Contains(err.Error(), "A newer version") {
-		t.Fatalf("Expected a newer version is available, actual error: %s", err)
+	if !strings.Contains(err.Error(), "a newer version") {
+		t.Fatalf("expected a newer version is available, actual error: %s", err)
 	}
 	err = d.compareVersion("1.7.0")
-	if !strings.Contains(err.Error(), "A newer version") {
-		t.Fatalf("Expected a newer version is available, actual error: %s", err)
+	if !strings.Contains(err.Error(), "a newer version") {
+		t.Fatalf("expected a newer version is available, actual error: %s", err)
 	}
 	err = d.compareVersion("0.7.0")
-	if !strings.Contains(err.Error(), "The latest Minor release is") {
-		t.Fatalf("Expected Minor Version Missmatch, actual error: %s", err)
+	if !strings.Contains(err.Error(), "the latest minor release is") {
+		t.Fatalf("expected Minor Version Missmatch, actual error: %s", err)
 	}
 	err = d.compareVersion("0.1.2")
-	if !strings.Contains(err.Error(), "There is a new patch release of Pilosa") {
-		t.Fatalf("Expected Patch Version Missmatch, actual error: %s", err)
+	if !strings.Contains(err.Error(), "there is a new patch release of Pilosa") {
+		t.Fatalf("expected Patch Version Missmatch, actual error: %s", err)
 	}
 	err = d.compareVersion("0.1.1")
 	if err != nil {
-		t.Fatalf("Versions should match")
+		t.Fatalf("versions should match")
 	}
 	d.SetVersion("v1.7.0")
 	err = d.compareVersion("0.7.2")

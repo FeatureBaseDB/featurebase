@@ -298,15 +298,15 @@ type MockStats struct {
 	mockCountWithTags func(name string, value int64, rate float64, tags []string)
 }
 
-func (s *MockStats) Count(name string, value int64, rate float64) {
-	if s.mockCount != nil {
-		s.mockCount(name, value, rate)
+func (c *MockStats) Count(name string, value int64, rate float64) {
+	if c.mockCount != nil {
+		c.mockCount(name, value, rate)
 	}
 }
 
-func (s *MockStats) CountWithCustomTags(name string, value int64, rate float64, tags []string) {
-	if s.mockCountWithTags != nil {
-		s.mockCountWithTags(name, value, rate, tags)
+func (c *MockStats) CountWithCustomTags(name string, value int64, rate float64, tags []string) {
+	if c.mockCountWithTags != nil {
+		c.mockCountWithTags(name, value, rate, tags)
 	}
 }
 
