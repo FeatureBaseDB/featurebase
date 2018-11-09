@@ -41,13 +41,14 @@ services:
       - "/pilosa server --bind pilosa3:10101"
   client1:
     build:
-      context: ../..
-      dockerfile: Dockerfile-withgo
+      context: .
+    environment:
+      - ENABLE_PILOSA_CLUSTER_TESTS=1
     networks:
       - pilosanet
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command:
-      - "go test -v github.com/pilosa/pilosa/internal/clustertests"
+      - "go test -v -count=1 github.com/pilosa/pilosa/internal/clustertests"
 networks: 
   pilosanet:

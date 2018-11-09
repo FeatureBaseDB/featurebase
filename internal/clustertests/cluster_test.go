@@ -12,63 +12,77 @@ import (
 	pi "github.com/pilosa/pilosa"
 )
 
-func TestLongPauses(t *testing.T) {
-	t.Skip() // TODO figure out how to only run in the docker-compose environment
+func TestClusterStuff(t *testing.T) {
+	if os.Getenv("ENABLE_PILOSA_CLUSTER_TESTS") != "1" {
+		t.Skip()
+	}
 	cli := getPilosaClient(t)
 
-	idx := pilosa.NewIndex("testidx")
-	err := cli.CreateIndex(idx)
-	if err != nil {
-		t.Fatalf("creating index: %v", err)
-	}
-	f := idx.Field("testf", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 10))
-	err = cli.CreateField(f)
-	if err != nil {
-		t.Fatalf("creating field: %v", err)
-	}
+	t.Run("long pause", func(t *testing.T) {
+		idx := pilosa.NewIndex("testidx")
+		err := cli.CreateIndex(idx)
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+		f := idx.Field("testf", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 10))
+		err = cli.CreateField(f)
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
 
-	data := make([]pilosa.Column, 1000)
-	for i := range data {
-		data[i].RowID = 0
-		data[i].ColumnID = uint64((i/10)*pi.ShardWidth + i%10)
-	}
+		data := make([]pilosa.Column, 1000)
+		for i := range data {
+			data[i].RowID = 0
+			data[i].ColumnID = uint64((i/10)*pi.ShardWidth + i%10)
+		}
 
-	err = cli.ImportField(f, &colIterator{cols: data}, pilosa.OptImportBatchSize(1000))
-	if err != nil {
-		t.Fatalf("importing: %v", err)
-	}
+		err = cli.ImportField(f, &colIterator{cols: data}, pilosa.OptImportBatchSize(1000))
+		if err != nil {
+			t.Fatalf("importing: %v", err)
+		}
 
-	r, err := cli.Query(idx.Count(f.Row(0)))
-	if err != nil {
-		t.Fatalf("count querying: %v", err)
-	}
-	if r.Result().Count() != 1000 {
-		t.Fatalf("count after import is %d", r.Result().Count())
-	}
+		r, err := cli.Query(idx.Count(f.Row(0)))
+		if err != nil {
+			t.Fatalf("count querying: %v", err)
+		}
+		if r.Result().Count() != 1000 {
+			t.Fatalf("count after import is %d", r.Result().Count())
+		}
 
-	pcmd := exec.Command("/pumba", "pause", "clustertests_pilosa3_1", "--duration", "30s")
-	pcmd.Stdout = os.Stdout
-	pcmd.Stderr = os.Stderr
-	fmt.Println("pausing pilosa3 for 30s")
-	err = pcmd.Start()
-	if err != nil {
-		t.Fatalf("starting pumba command: %v", err)
-	}
-	err = pcmd.Wait()
-	if err != nil {
-		t.Fatalf("waiting on pumba pause cmd: %v", err)
-	}
-	// TODO change the sleep to wait for status to return to NORMAL or timeout once we have Status.State support in go-pilosa
-	fmt.Println("done with pause, waiting for stability")
-	time.Sleep(time.Second * 400)
-	fmt.Println("done waiting")
+		pcmd := exec.Command("/pumba", "pause", "clustertests_pilosa3_1", "--duration", "10s")
+		pcmd.Stdout = os.Stdout
+		pcmd.Stderr = os.Stderr
+		fmt.Println("pausing pilosa3 for 10s")
+		err = pcmd.Start()
+		if err != nil {
+			t.Fatalf("starting pumba command: %v", err)
+		}
+		err = pcmd.Wait()
+		if err != nil {
+			t.Fatalf("waiting on pumba pause cmd: %v", err)
+		}
+		// TODO change the sleep to wait for status to return to NORMAL or timeout once we have Status.State support in go-pilosa
+		fmt.Println("done with pause, waiting for stability")
+		time.Sleep(time.Second * 3)
+		fmt.Println("done waiting")
 
-	r, err = cli.Query(idx.Count(f.Row(0)))
+		r, err = cli.Query(idx.Count(f.Row(0)))
+		if err != nil {
+			t.Fatalf("count querying: %v", err)
+		} else if r.Result().Count() != 1000 {
+			t.Fatalf("count after import is %d", r.Result().Count())
+		}
+
+		fmt.Println("at the bottom")
+
+	})
+
+	down := exec.Command("/pumba", "stop", "clustertests_pilosa3_1", "clustertests_pilosa2_1", "clustertests_pilosa1_1")
+	down.Stdout = os.Stdout
+	down.Stderr = os.Stderr
+	err := down.Run()
 	if err != nil {
-		t.Fatalf("count querying: %v", err)
-	}
-	if r.Result().Count() != 1000 {
-		t.Fatalf("count after import is %d", r.Result().Count())
+		t.Logf("stopping Pilosa: %v", err)
 	}
 }
 

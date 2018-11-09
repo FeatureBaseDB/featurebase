@@ -99,6 +99,7 @@ message Node {
     string ID = 1;
     URI URI = 2;
     bool IsCoordinator = 3;
+    string State = 4;
 }
 
 message NodeStateMessage {

@@ -23,4 +23,4 @@ EXPOSE 10101
 VOLUME /data
 
 ENTRYPOINT ["bash", "-c"]
-CMD ["pilosa", "server", "--data-dir", "/data", "--bind", "http://0.0.0.0:10101"]
+CMD ["/pilosa", "server", "--data-dir", "/data", "--bind", "http://0.0.0.0:10101"]
