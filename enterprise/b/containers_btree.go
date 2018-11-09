@@ -23,8 +23,8 @@ import (
 	"github.com/pilosa/pilosa/roaring"
 )
 
-func cmp(a, b uint64) int {
-	return int(a - b)
+func cmp(a, b uint64) int64 {
+	return int64(a - b)
 }
 
 type bTreeContainers struct {

@@ -45,19 +45,18 @@ item <- ( 'null' &(comma / sp close) { p.addVal(nil) }
          / < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(buffer[begin:end]) }
          / < '-'? '.'[0-9]+ > { p.addNumVal(buffer[begin:end]) }
          / < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > { p.addVal(buffer[begin:end]) }
-         / '"' < doublequotedstring > '"' { p.addVal(buffer[begin:end]) }
+         / < '"'  doublequotedstring '"' > { s, _ := strconv.Unquote(buffer[begin:end]); p.addVal(s) }
          / '\'' < singlequotedstring > '\'' { p.addVal(buffer[begin:end]) }
          )
 
-doublequotedstring <- ( [^"\\\n] / '\\n' / '\\\"' / '\\\'' / '\\\\' )*
-singlequotedstring <- ( [^'\\\n] / '\\n' / '\\\"' / '\\\'' / '\\\\' )*
+doublequotedstring <- ( '\\"' / '\\\\' / [^"] )*
+singlequotedstring <- ( '\\\'' / '\\\\' / [^'] )*
 
 fieldExpr <- [[A-Z]] ( [[A-Z]] / [0-9] / '_' / '-' )*
 field <- <fieldExpr / reserved> { p.addField(buffer[begin:end]) }
 reserved <- ('_row' / '_col' / '_start' / '_end' / '_timestamp' / '_field')
 posfield <- <fieldExpr> { p.addPosStr("_field", buffer[begin:end]) }
 uint <- [1-9] [0-9]* / '0'
-uintrow <- <uint>{p.addPosNum("_row", buffer[begin:end])}
 col <- ( <uint> {p.addPosNum("_col", buffer[begin:end])}
         / '\'' <singlequotedstring> '\'' {p.addPosStr("_col", buffer[begin:end])}
         / '"' <doublequotedstring> '"' {p.addPosStr("_col", buffer[begin:end])}
