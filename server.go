@@ -580,7 +580,7 @@ func (s *Server) SendSync(m Message) error {
 	if err != nil {
 		return fmt.Errorf("marshaling message: %v", err)
 	}
-	msg = append([]byte{getMessageType(m)}, msg...)
+	msg = append([]byte{byte(getMessageType(m))}, msg...)
 	for _, node := range s.cluster.nodes {
 		node := node
 		s.logger.Printf("SendSync to: %s", node.URI)
@@ -604,12 +604,12 @@ func (s *Server) SendAsync(m Message) error {
 
 // SendTo represents an implementation of Broadcaster.
 func (s *Server) SendTo(to *Node, m Message) error {
-	s.logger.Printf("SendTo: %s", to.URI)
+	s.logger.Printf("SendTo: %s, type: %s", to.URI, getMessageType(m))
 	msg, err := s.serializer.Marshal(m)
 	if err != nil {
 		return fmt.Errorf("marshaling message: %v", err)
 	}
-	msg = append([]byte{getMessageType(m)}, msg...)
+	msg = append([]byte{byte(getMessageType(m))}, msg...)
 	return s.defaultClient.SendMessage(context.Background(), &to.URI, msg)
 }
 
