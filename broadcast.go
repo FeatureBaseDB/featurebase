@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate stringer -type=msgType
-
 package pilosa
 
 import (
@@ -55,7 +53,7 @@ func (nopBroadcaster) SendTo(*Node, Message) error { return nil }
 
 // Broadcast message types.
 const (
-	messageTypeCreateShard msgType = iota
+	messageTypeCreateShard = iota
 	messageTypeCreateIndex
 	messageTypeDeleteIndex
 	messageTypeCreateField
@@ -73,8 +71,6 @@ const (
 	messageTypeNodeStatus
 )
 
-type msgType byte
-
 // MarshalInternalMessage serializes the pilosa message and adds pilosa internal
 // type info which is used by the internal messaging stuff.
 func MarshalInternalMessage(m Message, s Serializer) ([]byte, error) {
@@ -83,11 +79,11 @@ func MarshalInternalMessage(m Message, s Serializer) ([]byte, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "marshaling")
 	}
-	return append([]byte{byte(typ)}, buf...), nil
+	return append([]byte{typ}, buf...), nil
 }
 
 func getMessage(typ byte) Message {
-	switch msgType(typ) {
+	switch typ {
 	case messageTypeCreateShard:
 		return &CreateShardMessage{}
 	case messageTypeCreateIndex:
@@ -125,7 +121,7 @@ func getMessage(typ byte) Message {
 	}
 }
 
-func getMessageType(m Message) msgType {
+func getMessageType(m Message) byte {
 	switch m.(type) {
 	case *CreateShardMessage:
 		return messageTypeCreateShard
