@@ -1056,19 +1056,39 @@ func TestBitmapBufIterator(t *testing.T) {
 
 }
 
-var benchmarkBitmapIntersectionCountData struct {
-	a, b, r *roaring.Bitmap
+// this data is used to test various operations across
+// different types.
+type benchmarkSampleData struct {
+	a1, a2, b, r1, r2 *roaring.Bitmap
 }
 
-func getBenchData() *struct{ a, b, r *roaring.Bitmap } {
-	data := &benchmarkBitmapIntersectionCountData
-	if data.a == nil {
+var sampleData benchmarkSampleData
+
+func isAllType(b *roaring.Bitmap, typ string) bool {
+	bi := b.Info()
+	for _, c := range bi.Containers {
+		if c.Type != typ {
+			return false
+		}
+	}
+	return true
+}
+
+func getBenchData(b *testing.B) *benchmarkSampleData {
+	data := &sampleData
+	if data.a1 == nil {
 		const max = (1 << 24) / 64
 
 		// Build bitmap with array container.
-		data.a = roaring.NewFileBitmap()
-		for i, n := 0, 2*roaring.ArrayMaxSize/3; i < n; i++ {
-			data.a.Add(uint64(rand.Intn(max)))
+		data.a1 = roaring.NewFileBitmap()
+		data.a2 = roaring.NewFileBitmap()
+		// two lists of different lengths
+		for i, n := 0, roaring.ArrayMaxSize/3; i < n; i++ {
+			data.a1.Add(uint64(rand.Intn(max)))
+			data.a2.Add(uint64(rand.Intn(max)))
+		}
+		for i, n := 0, roaring.ArrayMaxSize/3; i < n; i++ {
+			data.a1.Add(uint64(rand.Intn(max)))
 		}
 
 		// Build bitmap with bitmap container.
@@ -1078,11 +1098,41 @@ func getBenchData() *struct{ a, b, r *roaring.Bitmap } {
 		}
 
 		// build bitmap with run container
-		data.r = roaring.NewFileBitmap()
+		data.r1 = roaring.NewFileBitmap()
 		for i, n := 0, MaxContainerVal; i < n; i++ {
-			data.r.Add(uint64(i))
+			data.r1.Add(uint64(i))
 		}
+		// build bitmap with multiple runs
+		data.r2 = roaring.NewFileBitmap()
+		for i, n := 0, MaxContainerVal; i < n; i++ {
+			data.r2.Add(uint64(i))
+			// break the runs up, this should produce 16 runs, which
+			// is small enough to make RLE tempting
+			if i&0xfff == 0xfff {
+				i += 5
+			}
+		}
+		data.a1.Optimize()
+		data.a2.Optimize()
+		data.b.Optimize()
+		data.r1.Optimize()
+		data.r2.Optimize()
 
+	}
+	if !isAllType(data.a1, "array") {
+		b.Fatalf("expected data.a1 to be an array, it wasn't.")
+	}
+	if !isAllType(data.a2, "array") {
+		b.Fatalf("expected data.a2 to be an array, it wasn't.")
+	}
+	if !isAllType(data.b, "bitmap") {
+		b.Fatalf("expected data.b to be a bitmap, it wasn't.")
+	}
+	if !isAllType(data.r1, "run") {
+		b.Fatalf("expected data.r1 to be RLE, it wasn't.")
+	}
+	if !isAllType(data.r2, "run") {
+		b.Fatalf("expected data.r2 to be RLE, it wasn't.")
 	}
 	return data
 }
@@ -1138,30 +1188,65 @@ func TestBitmap_Intersect(t *testing.T) {
 	}
 }
 
+func BenchmarkGetBenchData(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		sampleData = benchmarkSampleData{}
+		getBenchData(b)
+	}
+}
+
 func BenchmarkBitmap_IntersectionCount_ArrayRun(b *testing.B) {
-	data := getBenchData()
+	data := getBenchData(b)
 	// Reset timer & benchmark.
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		data.a.IntersectionCount(data.r)
+		data.a1.IntersectionCount(data.r1)
+	}
+}
+
+func BenchmarkBitmap_IntersectionCount_ArrayRuns(b *testing.B) {
+	data := getBenchData(b)
+	// Reset timer & benchmark.
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		data.a1.IntersectionCount(data.r2)
 	}
 }
 
 func BenchmarkBitmap_IntersectionCount_BitmapRun(b *testing.B) {
-	data := getBenchData()
+	data := getBenchData(b)
 	// Reset timer & benchmark.
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		data.b.IntersectionCount(data.r)
+		data.b.IntersectionCount(data.r1)
+	}
+}
+
+func BenchmarkBitmap_IntersectionCount_BitmapRuns(b *testing.B) {
+	data := getBenchData(b)
+	// Reset timer & benchmark.
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		data.b.IntersectionCount(data.r2)
+	}
+}
+
+func BenchmarkBitmap_IntersectionCount_ArrayArray(b *testing.B) {
+	data := getBenchData(b)
+	// Reset timer & benchmark.
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		data.a1.IntersectionCount(data.a2)
+		data.a2.IntersectionCount(data.a1)
 	}
 }
 
 func BenchmarkBitmap_IntersectionCount_ArrayBitmap(b *testing.B) {
-	data := getBenchData()
+	data := getBenchData(b)
 	// Reset timer & benchmark.
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		data.a.IntersectionCount(data.b)
+		data.a1.IntersectionCount(data.b)
 	}
 }
 
