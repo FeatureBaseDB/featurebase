@@ -22,13 +22,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	gohttp "net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
-
-	gohttp "net/http"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/http"
@@ -91,9 +90,9 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("ImportRoaring", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		roaringData, _ := hex.DecodeString("3B3001000100000900010000000100010009000100")
-		req := test.MustNewHTTPRequest("POST", "/index/i0/field/f1/import-roaring/0", bytes.NewBuffer(roaringData))
-		req.Header.Set("Content-Type", "application/x-binary")
-		h.ServeHTTP(w, req)
+		httpReq := test.MustNewHTTPRequest("POST", "/index/i0/field/f1/import-roaring/0", bytes.NewBuffer(roaringData))
+		httpReq.Header.Set("Content-Type", "application/x-binary")
+		h.ServeHTTP(w, httpReq)
 		resp, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i0", Query: "TopN(f1)"})
 		if err != nil {
 			t.Fatalf("querying: %v", err)

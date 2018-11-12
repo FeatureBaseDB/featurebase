@@ -217,6 +217,14 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		decodeImportValueRequest(msg, mt)
 		return nil
+	case *pilosa.ImportRoaringRequest:
+		msg := &internal.ImportRoaringRequest{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling ImportRoaringRequest")
+		}
+		decodeImportRoaringRequest(msg, mt)
+		return nil
 	case *pilosa.ImportResponse:
 		msg := &internal.ImportResponse{}
 		err := proto.Unmarshal(buf, msg)
@@ -292,6 +300,8 @@ func encodeToProto(m pilosa.Message) proto.Message {
 		return encodeImportRequest(mt)
 	case *pilosa.ImportValueRequest:
 		return encodeImportValueRequest(mt)
+	case *pilosa.ImportRoaringRequest:
+		return encodeImportRoaringRequest(mt)
 	case *pilosa.ImportResponse:
 		return encodeImportResponse(mt)
 	case *pilosa.BlockDataRequest:
@@ -345,6 +355,24 @@ func encodeImportValueRequest(m *pilosa.ImportValueRequest) *internal.ImportValu
 		ColumnIDs:  m.ColumnIDs,
 		ColumnKeys: m.ColumnKeys,
 		Values:     m.Values,
+	}
+}
+
+func encodeImportRoaringRequestView(m *pilosa.ImportRoaringRequestView) *internal.ImportRoaringRequestView {
+	return &internal.ImportRoaringRequestView{
+		Name: m.Name,
+		Data: m.Data,
+	}
+}
+
+func encodeImportRoaringRequest(m *pilosa.ImportRoaringRequest) *internal.ImportRoaringRequest {
+	views := make([]*internal.ImportRoaringRequestView, len(m.Views))
+	for i, view := range m.Views {
+		views[i] = encodeImportRoaringRequestView(&view)
+	}
+	return &internal.ImportRoaringRequest{
+		Clear: m.Clear,
+		Views: views,
 	}
 }
 
@@ -912,6 +940,20 @@ func decodeImportValueRequest(pb *internal.ImportValueRequest, m *pilosa.ImportV
 	m.ColumnIDs = pb.ColumnIDs
 	m.ColumnKeys = pb.ColumnKeys
 	m.Values = pb.Values
+}
+
+func decodeImportRoaringRequestView(pb *internal.ImportRoaringRequestView, m *pilosa.ImportRoaringRequestView) {
+	m.Name = pb.Name
+	m.Data = pb.Data
+}
+
+func decodeImportRoaringRequest(pb *internal.ImportRoaringRequest, m *pilosa.ImportRoaringRequest) {
+	views := make([]pilosa.ImportRoaringRequestView, len(pb.Views))
+	for i, view := range pb.Views {
+		decodeImportRoaringRequestView(view, &views[i])
+	}
+	m.Clear = pb.Clear
+	m.Views = views
 }
 
 func decodeImportResponse(pb *internal.ImportResponse, m *pilosa.ImportResponse) {

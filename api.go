@@ -267,15 +267,9 @@ func setUpImportOptions(opts ...ImportOption) (*ImportOptions, error) {
 // (shard*ShardWidth)+(i%ShardWidth). That is to say that "data" represents all
 // of the rows in this shard of this field concatenated together in one long
 // bitmap.
-func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, shard uint64, remote bool, data []byte, opts ...ImportOption) (err error) {
+func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, shard uint64, remote bool, req *ImportRoaringRequest) (err error) {
 	if err = api.validate(apiField); err != nil {
 		return errors.Wrap(err, "validating api method")
-	}
-
-	// Set up import options.
-	options, err := setUpImportOptions(opts...)
-	if err != nil {
-		return errors.Wrap(err, "setting up import options")
 	}
 
 	nodes := api.cluster.shardNodes(indexName, shard)
@@ -294,18 +288,26 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 	for _, node := range nodes {
 		node := node
 		if node.ID == api.server.nodeID {
-			// must make a copy of data to operate on locally. field.importRoaring changes data
-			d2 := make([]byte, len(data))
-			copy(d2, data)
 			eg.Go(func() error {
-				return field.importRoaring(d2, shard, options.Clear)
+				var err error
+				for _, view := range req.Views {
+					// must make a copy of data to operate on locally.
+					// field.importRoaring changes data
+					data := make([]byte, len(view.Data))
+					copy(data, view.Data)
+					err = field.importRoaring(data, shard, view.Name, req.Clear)
+					if err != nil {
+						return err
+					}
+				}
+				return err
 			})
 			go func(node *Node) {
 			}(node)
 		} else if !remote { // if remote == true we don't forward to other nodes
 			// forward it on
 			eg.Go(func() error {
-				return api.server.defaultClient.ImportRoaring(ctx, &node.URI, indexName, fieldName, shard, true, data, opts...)
+				return api.server.defaultClient.ImportRoaring(ctx, &node.URI, indexName, fieldName, shard, true, req)
 			})
 		}
 	}
