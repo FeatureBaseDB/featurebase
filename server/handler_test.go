@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/encoding/proto"
 	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
@@ -90,8 +91,20 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("ImportRoaring", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		roaringData, _ := hex.DecodeString("3B3001000100000900010000000100010009000100")
-		httpReq := test.MustNewHTTPRequest("POST", "/index/i0/field/f1/import-roaring/0", bytes.NewBuffer(roaringData))
-		httpReq.Header.Set("Content-Type", "application/x-binary")
+		msg := pilosa.ImportRoaringRequest{
+			Clear: false,
+			Views: []pilosa.ImportRoaringRequestView{
+				{Name: "", Data: roaringData},
+			},
+		}
+		ser := proto.Serializer{}
+		data, err := ser.Marshal(&msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		httpReq := test.MustNewHTTPRequest("POST", "/index/i0/field/f1/import-roaring/0", bytes.NewBuffer(data))
+		httpReq.Header.Set("Content-Type", "application/x-protobuf")
+		httpReq.Header.Set("Accept", "application/x-protobuf")
 		h.ServeHTTP(w, httpReq)
 		resp, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i0", Query: "TopN(f1)"})
 		if err != nil {
@@ -110,9 +123,21 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 		w := httptest.NewRecorder()
 		roaringData, _ := hex.DecodeString("3B3001000100000900010000000100010009000100")
-		req := test.MustNewHTTPRequest("POST", "/index/i0/field/int-field/import-roaring/0", bytes.NewBuffer(roaringData))
-		req.Header.Set("Content-Type", "application/x-binary")
-		h.ServeHTTP(w, req)
+		msg := pilosa.ImportRoaringRequest{
+			Clear: false,
+			Views: []pilosa.ImportRoaringRequestView{
+				{Name: "", Data: roaringData},
+			},
+		}
+		ser := proto.Serializer{}
+		data, err := ser.Marshal(&msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		httpReq := test.MustNewHTTPRequest("POST", "/index/i0/field/int-field/import-roaring/0", bytes.NewBuffer(data))
+		httpReq.Header.Set("Content-Type", "application/x-protobuf")
+		httpReq.Header.Set("Accept", "application/x-protobuf")
+		h.ServeHTTP(w, httpReq)
 		if w.Code != gohttp.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
