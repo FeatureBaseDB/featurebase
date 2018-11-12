@@ -1,7 +1,6 @@
 package clustertest
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -19,6 +18,7 @@ func TestClusterStuff(t *testing.T) {
 	cli := getPilosaClient(t)
 
 	t.Run("long pause", func(t *testing.T) {
+
 		idx := pilosa.NewIndex("testidx")
 		err := cli.CreateIndex(idx)
 		if err != nil {
@@ -52,7 +52,7 @@ func TestClusterStuff(t *testing.T) {
 		pcmd := exec.Command("/pumba", "pause", "clustertests_pilosa3_1", "--duration", "10s")
 		pcmd.Stdout = os.Stdout
 		pcmd.Stderr = os.Stderr
-		fmt.Println("pausing pilosa3 for 10s")
+		t.Log("pausing pilosa3 for 10s")
 		err = pcmd.Start()
 		if err != nil {
 			t.Fatalf("starting pumba command: %v", err)
@@ -62,9 +62,9 @@ func TestClusterStuff(t *testing.T) {
 			t.Fatalf("waiting on pumba pause cmd: %v", err)
 		}
 		// TODO change the sleep to wait for status to return to NORMAL or timeout once we have Status.State support in go-pilosa
-		fmt.Println("done with pause, waiting for stability")
+		t.Log("done with pause, waiting for stability")
 		time.Sleep(time.Second * 3)
-		fmt.Println("done waiting")
+		t.Log("done waiting for stability")
 
 		r, err = cli.Query(idx.Count(f.Row(0)))
 		if err != nil {
@@ -72,8 +72,6 @@ func TestClusterStuff(t *testing.T) {
 		} else if r.Result().Count() != 1000 {
 			t.Fatalf("count after import is %d", r.Result().Count())
 		}
-
-		fmt.Println("at the bottom")
 
 	})
 
