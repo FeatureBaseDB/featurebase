@@ -18,7 +18,6 @@ func TestClusterStuff(t *testing.T) {
 	cli := getPilosaClient(t)
 
 	t.Run("long pause", func(t *testing.T) {
-
 		idx := pilosa.NewIndex("testidx")
 		err := cli.CreateIndex(idx)
 		if err != nil {
@@ -72,16 +71,8 @@ func TestClusterStuff(t *testing.T) {
 		} else if r.Result().Count() != 1000 {
 			t.Fatalf("count after import is %d", r.Result().Count())
 		}
-
 	})
 
-	down := exec.Command("/pumba", "stop", "clustertests_pilosa3_1", "clustertests_pilosa2_1", "clustertests_pilosa1_1")
-	down.Stdout = os.Stdout
-	down.Stderr = os.Stderr
-	err := down.Run()
-	if err != nil {
-		t.Logf("stopping Pilosa: %v", err)
-	}
 }
 
 // Utils

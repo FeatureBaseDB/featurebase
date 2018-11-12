@@ -73,16 +73,15 @@ release: check-clean
 # make changes to Pilosa, you'll want to run clustertests-build to rebuild the
 # pilosa image.
 clustertests:
-	cd internal/clustertests;\
-	docker-compose down;\
-	docker-compose up;
+	docker-compose -f internal/clustertests/docker-compose.yml down
+	docker-compose -f internal/clustertests/docker-compose.yml build client1
+	docker-compose -f internal/clustertests/docker-compose.yml up --exit-code-from=client1
 
 
 # Like clustertests, but rebuilds all images.
 clustertests-build:
-	cd internal/clustertests;\
-	docker-compose down;\
-	docker-compose up --build;
+	docker-compose -f internal/clustertests/docker-compose.yml down
+	docker-compose -f internal/clustertests/docker-compose.yml up --exit-code-from=client1 --build
 
 # Create prerelease builds
 prerelease: vendor
