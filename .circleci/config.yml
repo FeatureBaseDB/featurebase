@@ -22,7 +22,6 @@ jobs:
       - persist_to_workspace:
           root: .
           paths: "*"
-      - setup_remote_docker
   linter:
     <<: *defaults
     steps:
@@ -49,6 +48,7 @@ jobs:
     <<: *defaults
     steps:
       - *fast-checkout
+      - setup_remote_docker
       - run: make clustertests-build
   prerelease:
     <<: *base-test
@@ -103,6 +103,9 @@ workflows:
           requires:
             - build
       - test-golang-1.10-386:
+          requires:
+            - build
+      - cluster-tests:
           requires:
             - build
       - prerelease:
