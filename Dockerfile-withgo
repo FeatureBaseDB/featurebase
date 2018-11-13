@@ -11,7 +11,7 @@ RUN cd /go/src/github.com/pilosa/pilosa \
     && CGO_ENABLED=0 make install-dep install FLAGS="-a"
 
 # download pumba for fault injection
-RUN wget https://github.com/alexei-led/pumba/releases/download/0.6.0/pumba_linux_amd64 -O /pumba
+ADD https://github.com/alexei-led/pumba/releases/download/0.6.0/pumba_linux_amd64 /pumba
 RUN chmod +x /pumba
 
 RUN cp /go/bin/pilosa /pilosa
