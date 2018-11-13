@@ -411,12 +411,28 @@ func TestBitmap_Intersection_Empty(t *testing.T) {
 }
 
 func TestBitmap_IntersectArrayArray(t *testing.T) {
-	bm0 := roaring.NewFileBitmap(0, 1, 2683, 5005)
+	bm0 := roaring.NewFileBitmap(0, 1, 7, 9, 11, 2683, 5005)
 	bm1 := roaring.NewFileBitmap(0, 2683, 2684, 5000)
+	expected := []uint64{0, 2683}
 
 	result := bm0.Intersect(bm1)
 	if n := result.Count(); n != 2 {
 		t.Fatalf("unexpected n: %d", n)
+	}
+	for _, e := range expected {
+		if !result.Contains(e) {
+			t.Fatalf("missing value %d", e)
+		}
+	}
+	// confirm that it also works going the other way
+	result = bm1.Intersect(bm0)
+	if n := result.Count(); n != 2 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	for _, e := range expected {
+		if !result.Contains(e) {
+			t.Fatalf("missing value %d", e)
+		}
 	}
 }
 
@@ -689,10 +705,10 @@ func TestBitmap_Flip_After(t *testing.T) {
 
 }
 
-// Ensure bitmap can return the number of intersecting bits in two bitmaps.
+// Ensure bitmap can return the number of intersecting bits in two arrays.
 func TestBitmap_IntersectionCount_ArrayArray(t *testing.T) {
-	bm0 := roaring.NewFileBitmap(0, 1, 1000001, 1000002, 1000003)
-	bm1 := roaring.NewFileBitmap(0, 50000, 1000001, 1000002)
+	bm0 := roaring.NewFileBitmap(0, 1000001, 1000002, 1000003)
+	bm1 := roaring.NewFileBitmap(0, 50000, 999998, 999999, 1000000, 1000001, 1000002)
 
 	if n := bm0.IntersectionCount(bm1); n != 3 {
 		t.Fatalf("unexpected n: %d", n)
