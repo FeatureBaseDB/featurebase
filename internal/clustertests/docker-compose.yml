@@ -3,7 +3,7 @@ services:
   pilosa1:
     build:
       context: ../..
-      dockerfile: Dockerfile-withgo
+      dockerfile: Dockerfile-clustertests
     image: ptest
     ports:
       - "33455:10101"
@@ -17,7 +17,7 @@ services:
   pilosa2:
     build:
       context: ../..
-      dockerfile: Dockerfile-withgo
+      dockerfile: Dockerfile-clustertests
     image: ptest
     ports:
       - "33456:10101"
@@ -29,7 +29,8 @@ services:
       - "/pilosa server --bind pilosa2:10101"
   pilosa3:
     build:
-      context: .
+      context: ../..
+      dockerfile: Dockerfile-clustertests
     image: ptest
     ports:
       - "33457:10101"
