@@ -1903,16 +1903,26 @@ func intersectionCount(a, b *Container) int32 {
 
 func intersectionCountArrayArray(a, b *Container) (n int32) {
 	statsHit("intersectionCount/ArrayArray")
-	na, nb := len(a.array), len(b.array)
-	for i, j := 0, 0; i < na && j < nb; {
-		va, vb := a.array[i], b.array[j]
-		if va < vb {
-			i++
-		} else if va > vb {
-			j++
-		} else {
+	s1, s2 := a.array, b.array
+	if len(s1) == 0 || len(s2) == 0 {
+		return 0
+	}
+	if len(s1) > len(s2) {
+		s1, s2 = s2, s1
+	}
+	l2 := len(s2)
+	i2 := 0
+	v2 := s2[0]
+	for _, v1 := range s1 {
+		for v2 < v1 {
+			i2++
+			if i2 >= l2 {
+				return n
+			}
+			v2 = s2[i2]
+		}
+		if v2 == v1 {
 			n++
-			i, j = i+1, j+1
 		}
 	}
 	return n
