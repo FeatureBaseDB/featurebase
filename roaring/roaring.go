@@ -2102,12 +2102,12 @@ func intersectRunRun(a, b *Container) *Container {
 	return output
 }
 
-// intersectBitmapRun returns an array container if the run container's
-// cardinality is < ArrayMaxSize. Otherwise it returns a bitmap container.
+// intersectBitmapRun returns an array container if either container's
+// cardinality is <= ArrayMaxSize. Otherwise it returns a bitmap container.
 func intersectBitmapRun(a, b *Container) *Container {
 	statsHit("intersect/BitmapRun")
 	var output *Container
-	if b.n < ArrayMaxSize {
+	if b.n <= ArrayMaxSize || a.n <= ArrayMaxSize {
 		// output is array container
 		output = &Container{containerType: containerArray}
 		for _, iv := range b.runs {
@@ -2160,9 +2160,6 @@ func intersectBitmapRun(a, b *Container) *Container {
 				vastart = i << 6
 				valast = vastart + 63
 			}
-		}
-		if output.n < ArrayMaxSize {
-			output.bitmapToArray()
 		}
 	}
 	return output
