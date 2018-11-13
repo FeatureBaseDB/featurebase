@@ -1910,7 +1910,7 @@ func intersectionCountArrayArray(a, b *Container) (n int32) {
 	}
 	if na > nb {
 		ca, cb = cb, ca
-		na, nb = nb, na
+		na, nb = nb, na // nolint: ineffassign
 	}
 	j := 0
 	for _, va := range ca {
