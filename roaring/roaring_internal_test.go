@@ -165,8 +165,8 @@ func TestRunCountRange(t *testing.T) {
 	}
 
 	c.add(17)
-	c.add(18)
 	c.add(19)
+	c.add(18)
 
 	cnt = c.runCountRange(1, 22)
 	if cnt != 10 {
@@ -179,6 +179,11 @@ func TestRunCountRange(t *testing.T) {
 	cnt = c.runCountRange(6, 18)
 	if cnt != 9 {
 		t.Fatalf("should get 9 from multiple ranges overlapping both sides, but got: %v", cnt)
+	}
+	// verify that the disparate ops resulted in three separate runs
+	cnt = c.countRuns()
+	if cnt != 3 {
+		t.Fatalf("should get 3 total runs, but got: %v [%v]", cnt, c.runs)
 	}
 }
 
