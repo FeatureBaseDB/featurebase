@@ -22,6 +22,7 @@ jobs:
       - persist_to_workspace:
           root: .
           paths: "*"
+      - setup_remote_docker
   linter:
     <<: *defaults
     steps:
@@ -44,6 +45,11 @@ jobs:
     <<: *base-test
     environment:
       GOARCH: 386
+  cluster-tests:
+    <<: *defaults
+    sets:
+      - *fast-checkout
+      - run: make clustertests-build
   prerelease:
     <<: *base-test
     steps:
