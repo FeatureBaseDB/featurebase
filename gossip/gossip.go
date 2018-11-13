@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -49,6 +50,7 @@ type memberSet struct {
 	Logger pilosa.Logger
 
 	logger    *log.Logger
+	logOutput io.Writer
 	transport *Transport
 
 	eventReceiver *eventReceiver
@@ -156,6 +158,13 @@ func WithLogger(logger *log.Logger) memberSetOption {
 	}
 }
 
+func WithLogOutput(o io.Writer) memberSetOption {
+	return func(g *memberSet) error {
+		g.logOutput = o
+		return nil
+	}
+}
+
 // NewMemberSet returns a new instance of GossipMemberSet based on options.
 func NewMemberSet(cfg Config, api *pilosa.API, options ...memberSetOption) (*memberSet, error) {
 	host := api.Node().URI.Host
@@ -220,7 +229,11 @@ func NewMemberSet(cfg Config, api *pilosa.API, options ...memberSetOption) (*mem
 	conf.Delegate = g
 	conf.SecretKey = gossipKey
 	conf.Events = ger
-	conf.Logger = g.logger
+	if g.logOutput != nil {
+		conf.LogOutput = g.logOutput
+	} else {
+		conf.Logger = g.logger
+	}
 
 	g.config = &config{
 		memberlistConfig: conf,
