@@ -47,7 +47,7 @@ jobs:
       GOARCH: 386
   cluster-tests:
     <<: *defaults
-    sets:
+    steps:
       - *fast-checkout
       - run: make clustertests-build
   prerelease:
