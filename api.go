@@ -280,11 +280,12 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 		return newNotFoundError(ErrFieldNotFound)
 	}
 
-	// only set fields are supported
-	if field.Type() != FieldTypeSet {
-		return NewBadRequestError(errors.New("roaring import is only supported for set fields"))
+	// only set and time fields are supported
+	if field.Type() != FieldTypeSet && field.Type() != FieldTypeTime {
+		return NewBadRequestError(errors.New("roaring import is only supported for set and time fields"))
 	}
 
+	var viewName string
 	for _, node := range nodes {
 		node := node
 		if node.ID == api.server.nodeID {
@@ -295,7 +296,12 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 					// field.importRoaring changes data
 					data := make([]byte, len(view.Data))
 					copy(data, view.Data)
-					err = field.importRoaring(data, shard, view.Name, req.Clear)
+					if view.Name == "" {
+						viewName = viewStandard
+					} else {
+						viewName = fmt.Sprintf("%s_%s", viewStandard, view.Name)
+					}
+					err = field.importRoaring(data, shard, viewName, req.Clear)
 					if err != nil {
 						return err
 					}
