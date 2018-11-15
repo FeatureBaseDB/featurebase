@@ -68,6 +68,21 @@ release: check-clean
 	$(MAKE) release-build GOOS=linux GOARCH=386
 	$(MAKE) release-build GOOS=linux GOARCH=386 ENTERPRISE=1
 
+# Run cluster integration tests using docker. Requires docker daemon to be
+# running. This will catch changes to internal/clustertests/*.go, but if you
+# make changes to Pilosa, you'll want to run clustertests-build to rebuild the
+# pilosa image.
+clustertests:
+	docker-compose -f internal/clustertests/docker-compose.yml down
+	docker-compose -f internal/clustertests/docker-compose.yml build client1
+	docker-compose -f internal/clustertests/docker-compose.yml up --exit-code-from=client1
+
+
+# Like clustertests, but rebuilds all images.
+clustertests-build:
+	docker-compose -f internal/clustertests/docker-compose.yml down
+	docker-compose -f internal/clustertests/docker-compose.yml up --exit-code-from=client1 --build
+
 # Create prerelease builds
 prerelease: vendor
 	$(MAKE) release-build GOOS=linux GOARCH=amd64 VERSION_ID=$$\(BRANCH_ID\)

@@ -44,6 +44,12 @@ jobs:
     <<: *base-test
     environment:
       GOARCH: 386
+  cluster-tests:
+    <<: *defaults
+    steps:
+      - *fast-checkout
+      - setup_remote_docker
+      - run: make clustertests-build
   prerelease:
     <<: *base-test
     steps:
@@ -97,6 +103,9 @@ workflows:
           requires:
             - build
       - test-golang-1.10-386:
+          requires:
+            - build
+      - cluster-tests:
           requires:
             - build
       - prerelease:

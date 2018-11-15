@@ -298,6 +298,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		ID:            s.nodeID,
 		URI:           s.uri,
 		IsCoordinator: s.cluster.Coordinator == s.nodeID,
+		State:         nodeStateDown,
 	}
 	s.cluster.Node = node
 	if s.clusterDisabled {
@@ -561,7 +562,10 @@ func (s *Server) receiveMessage(m Message) error {
 	case *RecalculateCaches:
 		s.holder.recalculateCaches()
 	case *NodeEvent:
-		s.cluster.ReceiveEvent(obj)
+		err := s.cluster.ReceiveEvent(obj)
+		if err != nil {
+			return errors.Wrapf(err, "cluster receiving NodeEvent %v", obj)
+		}
 	case *NodeStatus:
 		s.handleRemoteStatus(obj)
 	}

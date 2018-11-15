@@ -65,10 +65,11 @@ type Node struct {
 	ID            string `json:"id"`
 	URI           URI    `json:"uri"`
 	IsCoordinator bool   `json:"isCoordinator"`
+	State         string `json:"state"`
 }
 
 func (n Node) String() string {
-	return fmt.Sprintf("Node: %s", n.ID)
+	return fmt.Sprintf("Node:%s:%s:%s", n.URI, n.State, n.ID[:6])
 }
 
 // Nodes represents a list of nodes.
@@ -456,7 +457,19 @@ func (c *cluster) unprotectedSetState(state string) {
 	}
 }
 
+func (c *cluster) setMyNodeState(state string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.Node.State = state
+	for i, n := range c.nodes {
+		if n.ID == c.Node.ID {
+			c.nodes[i].State = state
+		}
+	}
+}
+
 func (c *cluster) setNodeState(state string) error { // nolint: unparam
+	c.setMyNodeState(state)
 	if c.isCoordinator() {
 		return c.receiveNodeState(c.Node.ID, state)
 	}
@@ -486,11 +499,23 @@ func (c *cluster) receiveNodeState(nodeID string, state string) error {
 	}
 
 	c.Topology.mu.Lock()
-	c.Topology.nodeStates[nodeID] = state
+	changed := false
+	if c.Topology.nodeStates[nodeID] != state {
+		changed = true
+		c.Topology.nodeStates[nodeID] = state
+		for i, n := range c.nodes {
+			if n.ID == nodeID {
+				c.nodes[i].State = state
+			}
+		}
+	}
 	c.Topology.mu.Unlock()
 	c.logger.Printf("received state %s (%s)", state, nodeID)
 
-	return c.unprotectedSetStateAndBroadcast(c.determineClusterState())
+	if changed {
+		return c.unprotectedSetStateAndBroadcast(c.determineClusterState())
+	}
+	return nil
 }
 
 // determineClusterState is unprotected.
@@ -932,7 +957,6 @@ func (c *cluster) waitForStarted() error {
 		<-c.joining
 		c.logger.Printf("joining has completed")
 	}
-
 	return nil
 }
 
@@ -1043,8 +1067,9 @@ func (c *cluster) unprotectedSetStateAndBroadcast(state string) error {
 		return nil
 	}
 	// Broadcast cluster status changes to the cluster.
-	c.logger.Printf("broadcasting ClusterStatus: %s", state)
-	return c.broadcaster.SendSync(c.unprotectedStatus()) // TODO fix c.Status
+	status := c.unprotectedStatus()
+	c.logger.Printf("broadcasting ClusterStatus: %s", status)
+	return c.broadcaster.SendSync(status) // TODO fix c.Status
 
 }
 
@@ -1625,7 +1650,7 @@ func (c *cluster) ReceiveEvent(e *NodeEvent) (err error) {
 
 	switch e.Event {
 	case NodeJoin:
-		c.logger.Printf("received NodeJoin event: %v", e)
+		c.logger.Printf("nodeJoin of %s on %s", e.Node.URI, c.Node.URI)
 		// Ignore the event if this is not the coordinator.
 		if !c.isCoordinator() {
 			return nil
@@ -1660,6 +1685,7 @@ func (c *cluster) ReceiveEvent(e *NodeEvent) (err error) {
 func (c *cluster) nodeJoin(node *Node) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.logger.Printf("NodeJoin event on coordinator, node: %s, id: %s", node.URI, node.ID)
 	if c.needTopologyAgreement() {
 		// A host that is not part of the topology can't be added to the STARTING cluster.
 		if !c.Topology.ContainsID(node.ID) {
@@ -1688,11 +1714,10 @@ func (c *cluster) nodeJoin(node *Node) error {
 
 		if c.haveTopologyAgreement() && c.allNodesReady() {
 			return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
-		} else {
-			// Send the status to the remote node. This lets the remote node
-			// know that it can proceed with opening its Holder.
-			return c.sendTo(node, c.unprotectedStatus())
 		}
+		// Send the status to the remote node. This lets the remote node
+		// know that it can proceed with opening its Holder.
+		return c.sendTo(node, c.unprotectedStatus())
 	}
 
 	// If the cluster already contains the node, just send it the cluster status.
@@ -1796,6 +1821,10 @@ func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 
 	// Add all nodes from the coordinator.
 	for _, node := range officialNodes {
+		if node.ID == c.Node.ID && node.State != c.Node.State {
+			c.logger.Printf("mismatched state in mergeClusterStatus got %v have %v", node.State, c.Node.State)
+			go c.setNodeState(c.Node.State)
+		}
 		if err := c.addNode(node); err != nil {
 			return errors.Wrap(err, "adding node")
 		}

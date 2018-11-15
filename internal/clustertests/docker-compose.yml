@@ -1,0 +1,55 @@
+version: '2'
+services: 
+  pilosa1:
+    build:
+      context: ../..
+      dockerfile: Dockerfile-clustertests
+    image: ptest
+    ports:
+      - "33455:10101"
+    environment:
+      - PILOSA_CLUSTER_COORDINATOR=true
+      - PILOSA_GOSSIP_SEEDS=pilosa1:14000
+    networks:
+      - pilosanet
+    command:
+      - "/pilosa server --bind pilosa1:10101"
+  pilosa2:
+    build:
+      context: ../..
+      dockerfile: Dockerfile-clustertests
+    image: ptest
+    ports:
+      - "33456:10101"
+    environment:
+      - PILOSA_GOSSIP_SEEDS=pilosa1:14000
+    networks:
+      - pilosanet
+    command:
+      - "/pilosa server --bind pilosa2:10101"
+  pilosa3:
+    build:
+      context: ../..
+      dockerfile: Dockerfile-clustertests
+    image: ptest
+    ports:
+      - "33457:10101"
+    environment:
+      - PILOSA_GOSSIP_SEEDS=pilosa1:14000,pilosa2:14000
+    networks:
+      - pilosanet
+    command:
+      - "/pilosa server --bind pilosa3:10101"
+  client1:
+    build:
+      context: .
+    environment:
+      - ENABLE_PILOSA_CLUSTER_TESTS=1
+    networks:
+      - pilosanet
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command:
+      - "go test -v -count=1 github.com/pilosa/pilosa/internal/clustertests"
+networks: 
+  pilosanet:

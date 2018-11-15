@@ -4,7 +4,7 @@
     </a>
 </p>
 
-[![Build Status](https://travis-ci.org/pilosa/pilosa.svg?branch=master)](https://travis-ci.org/pilosa/pilosa)
+[![CircleCI](https://circleci.com/gh/pilosa/pilosa/tree/master.svg?style=shield)](https://circleci.com/gh/pilosa/pilosa/tree/master)
 [![GoDoc](https://godoc.org/github.com/pilosa/pilosa?status.svg)](https://godoc.org/github.com/pilosa/pilosa)
 [![Go Report Card](https://goreportcard.com/badge/github.com/pilosa/pilosa)](https://goreportcard.com/report/github.com/pilosa/pilosa)
 [![license](https://img.shields.io/github/license/pilosa/pilosa.svg)](https://github.com/pilosa/pilosa/blob/master/LICENSE)
