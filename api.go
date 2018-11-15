@@ -268,6 +268,10 @@ func setUpImportOptions(opts ...ImportOption) (*ImportOptions, error) {
 // of the rows in this shard of this field concatenated together in one long
 // bitmap.
 func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, shard uint64, remote bool, data []byte, opts ...ImportOption) (err error) {
+	if len(data) == 0 {
+		return errors.New("no data to import")
+	}
+
 	if err = api.validate(apiField); err != nil {
 		return errors.Wrap(err, "validating api method")
 	}

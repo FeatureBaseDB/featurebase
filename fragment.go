@@ -25,6 +25,7 @@ import (
 	"hash"
 	"io"
 	"io/ioutil"
+	"math"
 	"os"
 	"sort"
 	"sync"
@@ -33,9 +34,6 @@ import (
 	"unsafe"
 
 	"github.com/cespare/xxhash"
-
-	"math"
-
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/pql"

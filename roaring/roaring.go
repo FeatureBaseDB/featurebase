@@ -3465,6 +3465,10 @@ func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint
 // UnmarshalBinary decodes b from a binary-encoded byte slice. data can be in
 // either official roaring format or Pilosa's roaring format.
 func (b *Bitmap) UnmarshalBinary(data []byte) error {
+	if data == nil {
+		// Nothing to unmarshal
+		return nil
+	}
 	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
 	if fileMagic == magicNumber { // if pilosa roaring
 		return errors.Wrap(b.unmarshalPilosaRoaring(data), "unmarshaling as pilosa roaring")
