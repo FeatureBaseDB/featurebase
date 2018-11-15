@@ -29,6 +29,7 @@ import (
 
 	"github.com/hashicorp/memberlist"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pilosa/pilosa/toml"
 	"github.com/pkg/errors"
@@ -47,7 +48,7 @@ type memberSet struct {
 	papi   *pilosa.API
 	config *config
 
-	Logger pilosa.Logger
+	Logger logger.Logger
 
 	logger    *log.Logger
 	logOutput io.Writer
@@ -170,7 +171,7 @@ func NewMemberSet(cfg Config, api *pilosa.API, options ...memberSetOption) (*mem
 	host := api.Node().URI.Host
 	g := &memberSet{
 		papi:   api,
-		Logger: pilosa.NopLogger,
+		Logger: logger.NopLogger,
 	}
 
 	// options

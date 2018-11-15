@@ -27,7 +27,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/stats"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )
@@ -66,7 +68,7 @@ type Holder struct {
 	closing chan struct{}
 
 	// Stats
-	Stats StatsClient
+	Stats stats.StatsClient
 
 	// Data directory path.
 	Path string
@@ -74,7 +76,7 @@ type Holder struct {
 	// The interval at which the cached row ids are persisted to disk.
 	cacheFlushInterval time.Duration
 
-	Logger Logger
+	Logger logger.Logger
 }
 
 // NewHolder returns a new instance of Holder.
@@ -89,13 +91,13 @@ func NewHolder() *Holder {
 		NewPrimaryTranslateStore: newNopTranslateStore,
 
 		broadcaster: NopBroadcaster,
-		Stats:       NopStatsClient,
+		Stats:       stats.NopStatsClient,
 
 		NewAttrStore: newNopAttrStore,
 
 		cacheFlushInterval: defaultCacheFlushInterval,
 
-		Logger: NopLogger,
+		Logger: logger.NopLogger,
 	}
 }
 
@@ -605,7 +607,7 @@ type holderSyncer struct {
 	Cluster *cluster
 
 	// Stats
-	Stats StatsClient
+	Stats stats.StatsClient
 
 	// Signals that the sync should stop.
 	Closing <-chan struct{}

@@ -31,6 +31,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
@@ -216,7 +217,7 @@ type cluster struct { // nolint: maligned
 	wg      sync.WaitGroup
 	closing chan struct{}
 
-	logger Logger
+	logger logger.Logger
 
 	InternalClient InternalClient
 }
@@ -235,7 +236,7 @@ func newCluster() *cluster {
 
 		InternalClient: newNopInternalClient(),
 
-		logger: NopLogger,
+		logger: logger.NopLogger,
 	}
 }
 
@@ -1379,7 +1380,7 @@ type resizeJob struct {
 	mu    sync.RWMutex
 	state string
 
-	Logger Logger
+	Logger logger.Logger
 }
 
 // newResizeJob returns a new instance of resizeJob.
@@ -1411,7 +1412,7 @@ func newResizeJob(existingNodes []*Node, node *Node, action string) *resizeJob {
 		IDs:    ids,
 		action: action,
 		result: make(chan string),
-		Logger: NopLogger,
+		Logger: logger.NopLogger,
 	}
 }
 
