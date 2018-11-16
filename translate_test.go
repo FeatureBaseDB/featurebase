@@ -809,7 +809,7 @@ func NewTranslateFile() *TranslateFile {
 	}
 	f.Close()
 
-	s := &TranslateFile{TranslateFile: pilosa.NewTranslateFile(pilosa.OptTranslateFileMapSize(2 << 25))}
+	s := &TranslateFile{TranslateFile: pilosa.NewTranslateFile(pilosa.OptTranslateFileMapSize(2 << 26))}
 	s.Path = f.Name()
 	return s
 }
