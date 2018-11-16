@@ -28,6 +28,7 @@ import (
 
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/stats"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -930,7 +931,7 @@ func (api *API) AvailableShardsByIndex(_ context.Context) map[string]*roaring.Bi
 
 // StatsWithTags returns an instance of whatever implementation of StatsClient
 // pilosa is using with the given tags.
-func (api *API) StatsWithTags(tags []string) StatsClient {
+func (api *API) StatsWithTags(tags []string) stats.StatsClient {
 	if api.holder == nil || api.cluster == nil {
 		return nil
 	}

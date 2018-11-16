@@ -25,7 +25,9 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/stats"
 	"github.com/pkg/errors"
 )
 
@@ -49,9 +51,9 @@ type Index struct {
 	columnAttrs AttrStore
 
 	broadcaster broadcaster
-	Stats       StatsClient
+	Stats       stats.StatsClient
 
-	logger Logger
+	logger logger.Logger
 }
 
 // NewIndex returns a new instance of Index.
@@ -70,8 +72,8 @@ func NewIndex(path, name string) (*Index, error) {
 		columnAttrs:  nopStore,
 
 		broadcaster:    NopBroadcaster,
-		Stats:          NopStatsClient,
-		logger:         NopLogger,
+		Stats:          stats.NopStatsClient,
+		logger:         logger.NopLogger,
 		trackExistence: true,
 	}, nil
 }

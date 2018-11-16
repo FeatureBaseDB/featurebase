@@ -3261,3 +3261,26 @@ func TestUnmarshalOfficialRoaring(t *testing.T) {
 	}
 
 }
+
+/*
+// This function exercises an arcane edge case in dead code.
+// It doesn't need to be run right now.
+func TestEquals(t *testing.T) {
+	bma := NewBitmap()
+	bmr := NewBitmap()
+	for i := uint64(0); i < 30; i++ {
+		bma.Add(i)
+		bmr.Add(i)
+	}
+	bmr.Optimize()
+	bmi := bma.Intersect(bmr)
+	err := bitmapsEqual(bmi, bma)
+	if err != nil {
+		t.Fatalf("expected intersection to equal array")
+	}
+	err = bitmapsEqual(bmi, bmr)
+	if err != nil {
+		t.Fatalf("expected intersection to equal run")
+	}
+}
+*/

@@ -41,12 +41,14 @@ import (
 	"github.com/pilosa/pilosa/gopsutil"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/http"
+	"github.com/pilosa/pilosa/logger"
+	"github.com/pilosa/pilosa/stats"
 	"github.com/pilosa/pilosa/statsd"
 	"github.com/pkg/errors"
 )
 
 type loggerLogger interface {
-	pilosa.Logger
+	logger.Logger
 	Logger() *log.Logger
 }
 
@@ -185,9 +187,9 @@ func (m *Command) setupLogger() error {
 	}
 
 	if m.Config.Verbose {
-		m.logger = pilosa.NewVerboseLogger(m.logOutput)
+		m.logger = logger.NewVerboseLogger(m.logOutput)
 	} else {
-		m.logger = pilosa.NewStandardLogger(m.logOutput)
+		m.logger = logger.NewStandardLogger(m.logOutput)
 	}
 	return nil
 }
@@ -375,14 +377,14 @@ func (m *Command) Close() error {
 }
 
 // newStatsClient creates a stats client from the config
-func newStatsClient(name string, host string) (pilosa.StatsClient, error) {
+func newStatsClient(name string, host string) (stats.StatsClient, error) {
 	switch name {
 	case "expvar":
-		return pilosa.NewExpvarStatsClient(), nil
+		return stats.NewExpvarStatsClient(), nil
 	case "statsd":
 		return statsd.NewStatsClient(host)
 	case "nop", "none":
-		return pilosa.NopStatsClient, nil
+		return stats.NopStatsClient, nil
 	default:
 		return nil, errors.Errorf("'%v' not a valid stats client, choose from [expvar, statsd, none].", name)
 	}
