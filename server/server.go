@@ -176,13 +176,17 @@ func (m *Command) Wait() error {
 
 // setupLogger sets up the logger based on the configuration.
 func (m *Command) setupLogger() error {
-	var err error
 	if m.Config.LogPath == "" {
 		m.logOutput = m.Stderr
 	} else {
-		m.logOutput, err = os.OpenFile(m.Config.LogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+		f, err := os.OpenFile(m.Config.LogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 		if err != nil {
 			return errors.Wrap(err, "opening file")
+		}
+		m.logOutput = f
+		err = syscall.Dup2(int(f.Fd()), int(os.Stderr.Fd()))
+		if err != nil {
+			return errors.Wrap(err, "dup2ing stderr onto logfile")
 		}
 	}
 
