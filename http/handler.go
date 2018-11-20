@@ -704,7 +704,7 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	case pilosa.FieldTypeInt:
 		fos = append(fos, pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max))
 	case pilosa.FieldTypeTime:
-		fos = append(fos, pilosa.OptFieldTypeTimeOptions(*req.Options.TimeQuantum, req.Options.NoStandardView))
+		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum, req.Options.NoStandardView))
 	case pilosa.FieldTypeMutex:
 		fos = append(fos, pilosa.OptFieldTypeMutex(*req.Options.CacheType, *req.Options.CacheSize))
 	case pilosa.FieldTypeBool:

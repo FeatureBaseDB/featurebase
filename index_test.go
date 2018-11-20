@@ -77,7 +77,7 @@ func TestIndex_CreateField(t *testing.T) {
 			defer index.Close()
 
 			// Create field with explicit quantum with no standard view
-			f, err := index.CreateField("f", pilosa.OptFieldTypeTimeOptions(pilosa.TimeQuantum("YMDH"), true))
+			f, err := index.CreateField("f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), true))
 			if err != nil {
 				t.Fatal(err)
 			} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {

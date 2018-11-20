@@ -131,11 +131,7 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 	}
 }
 
-func OptFieldTypeTime(timeQuantum TimeQuantum) FieldOption {
-	return OptFieldTypeTimeOptions(timeQuantum, false)
-}
-
-func OptFieldTypeTimeOptions(timeQuantum TimeQuantum, noStandardView bool) FieldOption {
+func OptFieldTypeTime(timeQuantum TimeQuantum, opt ...bool) FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
 			return errors.Errorf("field type is already set to: %s", fo.Type)
@@ -145,7 +141,7 @@ func OptFieldTypeTimeOptions(timeQuantum TimeQuantum, noStandardView bool) Field
 		}
 		fo.Type = FieldTypeTime
 		fo.TimeQuantum = timeQuantum
-		fo.NoStandardView = noStandardView
+		fo.NoStandardView = len(opt) >= 1 && opt[0]
 		return nil
 	}
 }

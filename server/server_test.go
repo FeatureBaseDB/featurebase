@@ -634,7 +634,7 @@ func TestMain_ImportTimestampNoStandardView(t *testing.T) {
 	}
 
 	// Create field.
-	if _, err := m.API.CreateField(context.Background(), indexName, fieldName, pilosa.OptFieldTypeTimeOptions(pilosa.TimeQuantum("YMD"), true)); err != nil {
+	if _, err := m.API.CreateField(context.Background(), indexName, fieldName, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), true)); err != nil {
 		t.Fatal(err)
 	}
 
