@@ -3289,3 +3289,115 @@ func TestEquals(t *testing.T) {
 	}
 }
 */
+func TestShiftArray(t *testing.T) {
+	a := &Container{
+		containerType: containerArray,
+}
+	tests := []struct {
+		array []uint16
+		exp   []uint16
+	}{
+		{
+			array: []uint16{1},
+			exp:   []uint16{2},
+		},
+		{
+			array: []uint16{},
+			exp:   []uint16{},
+		},
+		{
+			array: []uint16{1, 2, 3, 4, 5, 11, 12},
+			exp:   []uint16{2, 3, 4, 5, 6, 12,13}, 
+		},
+		{
+			array: []uint16{65535},
+			exp:   []uint16{},
+		},
+	}
+
+	for i, test := range tests {
+		a.array = test.array
+		a.n = int32(len(a.array))
+		ret,_ := shiftArray(a)
+		if !reflect.DeepEqual(ret.array, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.array)
+		}
+	}
+}	
+
+
+func TestShiftBitmap(t *testing.T) {
+	a := &Container{
+		containerType: containerBitmap,
+	}
+	tests := []struct {
+		bitmap []uint64
+		exp   []uint64
+	}{
+		{
+			bitmap:bitmapFirstBitSet() ,
+			exp:   bitmapSecondBitSet(), 
+		},
+		{
+			bitmap:bitmapLastBitSet() ,
+			exp:   bitmapEmpty(), 
+		},
+		{
+			bitmap:bitmapLastBitFirstRowSet() ,
+			exp:  bitmapFirstBitSecoundRowSet (), 
+		},
+	}
+
+	for i, test := range tests {
+		a.bitmap = test.bitmap
+		a.n = 1
+		ret,_ := shiftBitmap(a)
+		if !reflect.DeepEqual(ret.bitmap, test.exp) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.bitmap)
+		}
+	}
+}	
+func TestShiftRun(t *testing.T) {
+	a := &Container{
+		containerType: containerRun,
+	}
+
+	tests := []struct {
+		runs []interval16
+		n int32
+		en int32
+		exp   []interval16
+		carry bool
+	}{
+		{
+			runs:  []interval16{{start: 5, last: 10}},
+			n:  5,
+			en: 5, 
+			exp:  []interval16{{start: 6, last: 11}},
+			carry: false,
+		},
+		{
+			runs:  []interval16{{start: 5, last:65535 }},
+			n:  65530,
+			en: 65529, 
+			exp:  []interval16{{start: 6, last: 65535}},
+			carry: true,
+		},
+		{
+			runs:  []interval16{{start: 65535, last:65535 }},
+			n:  1,
+			en: 0, 
+			exp:  []interval16{},
+			carry:  true,
+		},
+	}
+
+	for i, test := range tests {
+		a.runs = test.runs
+		a.n = test.n
+		ret,c := shiftRun(a)
+		if !reflect.DeepEqual(ret.runs, test.exp) && c == test.carry && ret.n == test.en  {
+			t.Fatalf("test #%v expected %v, but got %v %d", i, test.exp, ret.runs,ret.n)
+		}
+	}
+}	

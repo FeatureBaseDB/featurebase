@@ -3006,6 +3006,85 @@ func xorBitmapBitmap(a, b *Container) *Container {
 	return output
 }
 
+func shift(a *Container) (*Container, bool) {
+	if a.isArray() {
+		return shiftArray(a)
+	} else if a.isRun() {
+		return shiftRun(a)
+	}
+	return shiftBitmap(a)
+}
+
+func shiftArray(a *Container) (*Container, bool) {
+	statsHit("shift/Array")
+	carry := false
+	output := &Container{containerType: containerArray}
+	output.array = make([]uint16, len(a.array))
+	output.array = output.array[:0]
+	output.n = a.n
+	for _, v := range a.array {
+		fmt.Println(v,v+1)
+		if v+1 == 0 { //overflow
+			carry = true
+			output.n -= 1
+		} else {
+			output.array = append(output.array, v+1)
+		}
+	}
+	return output, carry
+}
+
+func shiftBitmap(a *Container) (*Container, bool) {
+	statsHit("shift/Bitmap")
+	carry := false
+	output := &Container{containerType: containerBitmap}
+	output.bitmap = make([]uint64, len(a.bitmap))
+	output.bitmap = output.bitmap[:0]
+	output.n = a.n
+	lastcarry:=false
+	for i, v := range a.bitmap {
+		carry = (v&(1<<63))!= 0
+		v = v << 1
+		if i != 0 {
+			if lastcarry {
+				v |= 1
+			}
+		}
+		output.bitmap = append(output.bitmap, v)
+		lastcarry = carry
+	}
+	if carry {
+		output.n -= 1
+	}
+	return output, carry
+}
+
+func shiftRun(a *Container) (*Container, bool) {
+	statsHit("shift/Run")
+	carry := false
+	output := &Container{containerType: containerRun}
+	output.runs = make([]interval16, len(a.runs))
+	output.runs = output.runs[:0]
+	for _, v := range a.runs {
+		if v.start+1 == 0 {
+			carry = true
+			output.n -= 1
+			break
+		} else if v.last+1 == 0 {
+			v.start += 1
+			carry = true
+			output.n -= 1
+		} else {
+			v.start += 1
+			v.last += 1
+			carry = false
+		}
+		output.runs = append(output.runs, v)
+	}
+
+	return output, carry
+}
+
 // opType represents a type of operation.
 type opType uint8
 
