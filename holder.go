@@ -474,7 +474,7 @@ func (h *Holder) flushCaches() {
 					}
 
 					if err := fragment.FlushCache(); err != nil {
-						h.Logger.Printf("error flushing cache: err=%s, path=%s", err, fragment.cachePath())
+						h.Logger.Printf("ERROR flushing cache: err=%s, path=%s", err, fragment.cachePath())
 					}
 				}
 			}
@@ -535,7 +535,7 @@ func (h *Holder) setFileLimit() {
 			h.Logger.Printf("ERROR checking open file limit: %s", err)
 		} else {
 			if oldLimit.Cur < fileLimit {
-				h.Logger.Printf("WARNING: Tried to set open file limit to %d, but it is %d. You may consider running \"sudo ulimit -n %d\" before starting Pilosa to avoid \"too many open files\" error. See https://www.pilosa.com/docs/administration/#open-file-limits for more information.", fileLimit, oldLimit.Cur, fileLimit)
+				h.Logger.Printf("WARNING: Tried to set open file limit to %d, but it is %d. You may consider running \"sudo ulimit -n %d\" before starting Pilosa to avoid \"too many open files\" error. See https://www.pilosa.com/docs/latest/administration/#open-file-limits for more information.", fileLimit, oldLimit.Cur, fileLimit)
 			}
 		}
 	}

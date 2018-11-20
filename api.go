@@ -957,7 +957,7 @@ func (api *API) validateShardOwnership(indexName string, shard uint64) error {
 }
 
 func (api *API) indexField(indexName string, fieldName string, shard uint64) (*Index, *Field, error) {
-	api.server.logger.Printf("importing: %v %v %v", indexName, fieldName, shard)
+	api.server.logger.Debugf("importing: %v %v %v", indexName, fieldName, shard)
 
 	// Find the Index.
 	index := api.holder.Index(indexName)
