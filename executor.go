@@ -2055,7 +2055,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 	if !opt.Remote {
 		nodes = Nodes(e.Cluster.nodes).Clone()
 	} else {
-		nodes = []*Node{e.Cluster.unprotectedNodeByID(e.Node.ID)}
+		nodes = []*Node{e.Cluster.nodeByID(e.Node.ID)}
 	}
 
 	// Start mapping across all primary owners.
