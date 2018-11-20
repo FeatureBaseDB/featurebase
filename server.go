@@ -27,7 +27,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/stats"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -58,7 +60,7 @@ type Server struct { // nolint: maligned
 	// External
 	systemInfo SystemInfo
 	gcNotifier GCNotifier
-	logger     Logger
+	logger     logger.Logger
 
 	nodeID              string
 	uri                 URI
@@ -81,7 +83,7 @@ func (s *Server) Holder() *Holder {
 // ServerOption is a functional option type for pilosa.Server
 type ServerOption func(s *Server) error
 
-func OptServerLogger(l Logger) ServerOption {
+func OptServerLogger(l logger.Logger) ServerOption {
 	return func(s *Server) error {
 		s.logger = l
 		return nil
@@ -176,7 +178,7 @@ func OptServerPrimaryTranslateStoreFunc(tf func(interface{}) TranslateStore) Ser
 	}
 }
 
-func OptServerStatsClient(sc StatsClient) ServerOption {
+func OptServerStatsClient(sc stats.StatsClient) ServerOption {
 	return func(s *Server) error {
 		s.holder.Stats = sc
 		return nil
@@ -258,7 +260,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		metricInterval:      0,
 		diagnosticInterval:  0,
 
-		logger: NopLogger,
+		logger: logger.NopLogger,
 	}
 	s.executor = newExecutor(optExecutorInternalQueryClient(s.defaultClient))
 	s.cluster.InternalClient = s.defaultClient
@@ -298,6 +300,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		ID:            s.nodeID,
 		URI:           s.uri,
 		IsCoordinator: s.cluster.Coordinator == s.nodeID,
+		State:         nodeStateDown,
 	}
 	s.cluster.Node = node
 	if s.clusterDisabled {
@@ -561,7 +564,10 @@ func (s *Server) receiveMessage(m Message) error {
 	case *RecalculateCaches:
 		s.holder.recalculateCaches()
 	case *NodeEvent:
-		s.cluster.ReceiveEvent(obj)
+		err := s.cluster.ReceiveEvent(obj)
+		if err != nil {
+			return errors.Wrapf(err, "cluster receiving NodeEvent %v", obj)
+		}
 	case *NodeStatus:
 		s.handleRemoteStatus(obj)
 	}

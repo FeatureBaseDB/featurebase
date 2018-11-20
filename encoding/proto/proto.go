@@ -506,6 +506,7 @@ func encodeNode(n *pilosa.Node) *internal.Node {
 		ID:            n.ID,
 		URI:           encodeURI(n.URI),
 		IsCoordinator: n.IsCoordinator,
+		State:         n.State,
 	}
 }
 
@@ -761,6 +762,7 @@ func decodeNode(node *internal.Node, m *pilosa.Node) {
 	m.ID = node.ID
 	decodeURI(node.URI, &m.URI)
 	m.IsCoordinator = node.IsCoordinator
+	m.State = node.State
 }
 
 func decodeURI(i *internal.URI, m *pilosa.URI) {

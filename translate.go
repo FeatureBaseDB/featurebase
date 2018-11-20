@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cespare/xxhash"
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pkg/errors"
 )
 
@@ -68,7 +69,7 @@ type TranslateFile struct {
 
 	Path    string
 	mapSize int
-	logger  Logger
+	logger  logger.Logger
 	// If non-nil, data is streamed from a primary and this is a read-only store.
 	PrimaryTranslateStore TranslateStore
 	primaryID             string // unique ID used to identify the primary store
@@ -89,7 +90,7 @@ func OptTranslateFileMapSize(mapSize int) TranslateFileOption {
 		return nil
 	}
 }
-func OptTranslateFileLogger(l Logger) TranslateFileOption {
+func OptTranslateFileLogger(l logger.Logger) TranslateFileOption {
 	return func(s *TranslateFile) error {
 		s.logger = l
 		return nil
@@ -116,7 +117,7 @@ func NewTranslateFile(opts ...TranslateFileOption) *TranslateFile {
 
 		mapSize: defaultMapSize,
 
-		logger: NopLogger,
+		logger: logger.NopLogger,
 
 		replicationClosing: make(chan struct{}),
 		primaryStoreEvents: make(chan primaryStoreEvent),

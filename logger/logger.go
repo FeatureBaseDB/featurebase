@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pilosa
+package logger
 
 import (
 	"io"
@@ -39,7 +39,7 @@ func (n *nopLogger) Printf(format string, v ...interface{}) {}
 // Debugf is a no-op implementation of the Logger Debugf method.
 func (n *nopLogger) Debugf(format string, v ...interface{}) {}
 
-// standardLogger is a basic implementation of pilosa.Logger based on log.Logger.
+// standardLogger is a basic implementation of Logger based on log.Logger.
 type standardLogger struct {
 	logger *log.Logger
 }
@@ -60,7 +60,7 @@ func (s *standardLogger) Logger() *log.Logger {
 	return s.logger
 }
 
-// verboseLogger is an implementation of pilosa.Logger which includes debug messages.
+// verboseLogger is an implementation of Logger which includes debug messages.
 type verboseLogger struct {
 	logger *log.Logger
 }

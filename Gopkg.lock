@@ -190,6 +190,15 @@
   version = "v1.2.0"
 
 [[projects]]
+  name = "github.com/pilosa/go-pilosa"
+  packages = [
+    ".",
+    "gopilosa_pbuf"
+  ]
+  revision = "4e7807f5ad779407936744057cd17332046b6c3c"
+  version = "v1.1.0"
+
+[[projects]]
   name = "github.com/pkg/errors"
   packages = ["."]
   revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
@@ -324,6 +333,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "8290156ce8b4066c46ab83d743f4c81df0a17e148415bb1ee8409a51ac4c3ba4"
+  inputs-digest = "be318fa4f2a72e7e849b2faff1ce9300deaaf2d24cf76100f4b538abed86295b"
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pilosa
+package stats
 
 import (
 	"expvar"
@@ -20,6 +20,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pilosa/pilosa/logger"
 )
 
 // Expvar global expvar map.
@@ -52,7 +54,7 @@ type StatsClient interface {
 	Timing(name string, value time.Duration, rate float64)
 
 	// SetLogger Set the logger output type
-	SetLogger(logger Logger)
+	SetLogger(logger logger.Logger)
 
 	// Starts the service
 	Open()
@@ -74,7 +76,7 @@ func (c *nopStatsClient) Gauge(name string, value float64, rate float64)        
 func (c *nopStatsClient) Histogram(name string, value float64, rate float64)                        {}
 func (c *nopStatsClient) Set(name string, value string, rate float64)                               {}
 func (c *nopStatsClient) Timing(name string, value time.Duration, rate float64)                     {}
-func (c *nopStatsClient) SetLogger(logger Logger)                                                   {}
+func (c *nopStatsClient) SetLogger(logger logger.Logger)                                            {}
 func (c *nopStatsClient) Open()                                                                     {}
 func (c *nopStatsClient) Close() error                                                              { return nil }
 
@@ -149,7 +151,7 @@ func (c *expvarStatsClient) Timing(name string, value time.Duration, rate float6
 }
 
 // SetLogger has no logger.
-func (c *expvarStatsClient) SetLogger(logger Logger) {
+func (c *expvarStatsClient) SetLogger(logger logger.Logger) {
 }
 
 // Open no-op.
@@ -221,7 +223,7 @@ func (a MultiStatsClient) Timing(name string, value time.Duration, rate float64)
 }
 
 // SetLogger Sets the StatsD logger output type.
-func (a MultiStatsClient) SetLogger(logger Logger) {
+func (a MultiStatsClient) SetLogger(logger logger.Logger) {
 	for _, c := range a {
 		c.SetLogger(logger)
 	}

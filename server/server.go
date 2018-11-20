@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+//
 // Package server contains the `pilosa server` subcommand which runs Pilosa
 // itself. The purpose of this package is to define an easily tested Command
 // object which handles interpreting configuration and setting up all the
@@ -20,6 +20,7 @@
 package server
 
 import (
+	"bytes"
 	"crypto/tls"
 	"io"
 	"log"
@@ -40,12 +41,14 @@ import (
 	"github.com/pilosa/pilosa/gopsutil"
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/http"
+	"github.com/pilosa/pilosa/logger"
+	"github.com/pilosa/pilosa/stats"
 	"github.com/pilosa/pilosa/statsd"
 	"github.com/pkg/errors"
 )
 
 type loggerLogger interface {
-	pilosa.Logger
+	logger.Logger
 	Logger() *log.Logger
 }
 
@@ -184,9 +187,9 @@ func (m *Command) setupLogger() error {
 	}
 
 	if m.Config.Verbose {
-		m.logger = pilosa.NewVerboseLogger(m.logOutput)
+		m.logger = logger.NewVerboseLogger(m.logOutput)
 	} else {
-		m.logger = pilosa.NewStandardLogger(m.logOutput)
+		m.logger = logger.NewStandardLogger(m.logOutput)
 	}
 	return nil
 }
@@ -336,7 +339,7 @@ func (m *Command) setupNetworking() error {
 	gossipMemberSet, err := gossip.NewMemberSet(
 		m.Config.Gossip,
 		m.API,
-		gossip.WithLogger(m.logger.Logger()),
+		gossip.WithLogOutput(&filteredWriter{logOutput: m.logOutput, v: m.Config.Verbose}),
 		gossip.WithTransport(m.gossipTransport),
 	)
 	if err != nil {
@@ -374,14 +377,14 @@ func (m *Command) Close() error {
 }
 
 // newStatsClient creates a stats client from the config
-func newStatsClient(name string, host string) (pilosa.StatsClient, error) {
+func newStatsClient(name string, host string) (stats.StatsClient, error) {
 	switch name {
 	case "expvar":
-		return pilosa.NewExpvarStatsClient(), nil
+		return stats.NewExpvarStatsClient(), nil
 	case "statsd":
 		return statsd.NewStatsClient(host)
 	case "nop", "none":
-		return pilosa.NopStatsClient, nil
+		return stats.NopStatsClient, nil
 	default:
 		return nil, errors.Errorf("'%v' not a valid stats client, choose from [expvar, statsd, none].", name)
 	}
@@ -406,4 +409,25 @@ func getListener(uri pilosa.URI, tlsconf *tls.Config) (ln net.Listener, err erro
 	}
 
 	return ln, nil
+}
+
+type filteredWriter struct {
+	v         bool
+	logOutput io.Writer
+}
+
+// Write forwards the write to logOutput if verbose is true, or it doesn't
+// contain [DEBUG] or [INFO]. This implementation isn't technically correct
+// since Write could be called with only part of a log line, but I don't think
+// that actually happens, so until it becomes a problem, I don't think it's
+// worth dealing with the extra complexity. (jaffee)
+func (f *filteredWriter) Write(p []byte) (n int, err error) {
+	if bytes.Contains(p, []byte("[DEBUG]")) || bytes.Contains(p, []byte("[INFO]")) {
+		if f.v {
+			return f.logOutput.Write(p)
+		}
+	} else {
+		return f.logOutput.Write(p)
+	}
+	return len(p), nil
 }
