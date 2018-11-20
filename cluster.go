@@ -1249,7 +1249,7 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 	go func() {
 
 		// Make sure the holder has opened.
-		<-c.holder.opened
+		c.holder.opened.Recv()
 
 		// Prepare the return message.
 		complete := &ResizeInstructionComplete{

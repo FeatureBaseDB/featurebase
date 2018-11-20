@@ -628,7 +628,7 @@ func (s *Server) handleRemoteStatus(pb Message) {
 
 	go func() {
 		// Make sure the holder has opened.
-		<-s.holder.opened
+		s.holder.opened.Recv()
 
 		err := s.mergeRemoteStatus(pb.(*NodeStatus))
 		if err != nil {

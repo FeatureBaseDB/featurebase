@@ -1664,7 +1664,7 @@ func (e *executor) executeSetRowShard(ctx context.Context, index string, c *pql.
 		if err != nil {
 			return false, errors.Wrap(err, "creating view")
 		}
-		fragment, err = view.createFragmentIfNotExists(shard)
+		fragment, err = view.CreateFragmentIfNotExists(shard)
 		if err != nil {
 			return false, errors.Wrapf(err, "creating fragment: %d", shard)
 		}
@@ -2055,7 +2055,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 	if !opt.Remote {
 		nodes = Nodes(e.Cluster.nodes).Clone()
 	} else {
-		nodes = []*Node{e.Cluster.unprotectedNodeByID(e.Node.ID)}
+		nodes = []*Node{e.Cluster.nodeByID(e.Node.ID)}
 	}
 
 	// Start mapping across all primary owners.
