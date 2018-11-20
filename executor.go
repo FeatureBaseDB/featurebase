@@ -1664,7 +1664,7 @@ func (e *executor) executeSetRowShard(ctx context.Context, index string, c *pql.
 		if err != nil {
 			return false, errors.Wrap(err, "creating view")
 		}
-		fragment, err = view.createFragmentIfNotExists(shard)
+		fragment, err = view.CreateFragmentIfNotExists(shard)
 		if err != nil {
 			return false, errors.Wrapf(err, "creating fragment: %d", shard)
 		}
