@@ -25,6 +25,7 @@ import (
 	"hash"
 	"io"
 	"io/ioutil"
+	"math"
 	"os"
 	"sort"
 	"sync"
@@ -33,13 +34,12 @@ import (
 	"unsafe"
 
 	"github.com/cespare/xxhash"
-
-	"math"
-
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/stats"
 	"github.com/pkg/errors"
 )
 
@@ -118,7 +118,7 @@ type fragment struct {
 	MaxOpN int
 
 	// Logger used for out-of-band log entries.
-	Logger Logger
+	Logger logger.Logger
 
 	// Row attribute storage.
 	// This is set by the parent field unless overridden for testing.
@@ -128,7 +128,7 @@ type fragment struct {
 	// existing value (to clear) prior to setting a new value.
 	mutexVector vector
 
-	stats StatsClient
+	stats stats.StatsClient
 }
 
 // newFragment returns a new instance of Fragment.
@@ -142,10 +142,10 @@ func newFragment(path, index, field, view string, shard uint64) *fragment {
 		CacheType: DefaultCacheType,
 		CacheSize: DefaultCacheSize,
 
-		Logger: NopLogger,
+		Logger: logger.NopLogger,
 		MaxOpN: defaultFragmentMaxOpN,
 
-		stats: NopStatsClient,
+		stats: stats.NopStatsClient,
 	}
 }
 
@@ -1492,9 +1492,6 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 			lastRowID = rowID
 			rowSet[rowID] = struct{}{}
 		}
-
-		// Invalidate block checksum.
-		delete(f.checksums, int(rowID/HashBlockSize))
 	}
 
 	f.mu.Lock()
@@ -1518,6 +1515,9 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 
 	// Update cache counts for all affected rows.
 	for rowID := range rowSet {
+		// Invalidate block checksum.
+		delete(f.checksums, int(rowID/HashBlockSize))
+
 		n := results.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
 		f.cache.BulkAdd(rowID, n)
 	}
@@ -1720,7 +1720,7 @@ func (f *fragment) Snapshot() error {
 	defer f.mu.Unlock()
 	return f.snapshot()
 }
-func track(start time.Time, message string, stats StatsClient, logger Logger) {
+func track(start time.Time, message string, stats stats.StatsClient, logger logger.Logger) {
 	elapsed := time.Since(start)
 	logger.Printf("%s took %s", message, elapsed)
 	stats.Histogram("snapshot", elapsed.Seconds(), 1.0)
@@ -1734,7 +1734,6 @@ func (f *fragment) snapshot() error {
 // f.mu must be locked when calling it.
 func unprotectedWriteToFragment(f *fragment, bm *roaring.Bitmap) error { // nolint: interfacer
 
-	f.Logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	start := time.Now()
 	defer track(start, completeMessage, f.stats, f.Logger)

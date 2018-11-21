@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/lru"
+	"github.com/pilosa/pilosa/stats"
 )
 
 const (
@@ -50,14 +51,14 @@ type cache interface {
 	Top() []bitmapPair
 
 	// SetStats defines the stats client used in the cache.
-	SetStats(s StatsClient)
+	SetStats(s stats.StatsClient)
 }
 
 // lruCache represents a least recently used Cache implementation.
 type lruCache struct {
 	cache  *lru.Cache
 	counts map[uint64]uint64
-	stats  StatsClient
+	stats  stats.StatsClient
 }
 
 // newLRUCache returns a new instance of LRUCache.
@@ -65,7 +66,7 @@ func newLRUCache(maxEntries uint32) *lruCache {
 	c := &lruCache{
 		cache:  lru.New(int(maxEntries)),
 		counts: make(map[uint64]uint64),
-		stats:  NopStatsClient,
+		stats:  stats.NopStatsClient,
 	}
 	c.cache.OnEvicted = c.onEvicted
 	return c
@@ -122,7 +123,7 @@ func (c *lruCache) Top() []bitmapPair {
 }
 
 // SetStats defines the stats client used in the cache.
-func (c *lruCache) SetStats(s StatsClient) {
+func (c *lruCache) SetStats(s stats.StatsClient) {
 	c.stats = s
 }
 
@@ -150,7 +151,7 @@ type rankCache struct {
 	// thresholdValue is the value of the last item in the cache
 	thresholdValue uint64
 
-	stats StatsClient
+	stats stats.StatsClient
 }
 
 // NewRankCache returns a new instance of RankCache.
@@ -159,7 +160,7 @@ func NewRankCache(maxEntries uint32) *rankCache {
 		maxEntries:      maxEntries,
 		thresholdBuffer: int(thresholdFactor * float64(maxEntries)),
 		entries:         make(map[uint64]uint64),
-		stats:           NopStatsClient,
+		stats:           stats.NopStatsClient,
 	}
 }
 
@@ -279,7 +280,7 @@ func (c *rankCache) recalculate() {
 }
 
 // SetStats defines the stats client used in the cache.
-func (c *rankCache) SetStats(s StatsClient) {
+func (c *rankCache) SetStats(s stats.StatsClient) {
 	c.stats = s
 }
 
@@ -458,12 +459,12 @@ func (s *simpleCache) Add(id uint64, b *Row) {
 
 // nopCache represents a no-op Cache implementation.
 type nopCache struct {
-	stats StatsClient
+	stats stats.StatsClient
 }
 
 // Ensure NopCache implements Cache.
 var globalNopCache cache = nopCache{
-	stats: NopStatsClient,
+	stats: stats.NopStatsClient,
 }
 
 func (c nopCache) Add(uint64, uint64)     {}
@@ -471,10 +472,10 @@ func (c nopCache) BulkAdd(uint64, uint64) {}
 func (c nopCache) Get(uint64) uint64      { return 0 }
 func (c nopCache) IDs() []uint64          { return []uint64{} }
 
-func (c nopCache) Invalidate()          {}
-func (c nopCache) Len() int             { return 0 }
-func (c nopCache) Recalculate()         {}
-func (c nopCache) SetStats(StatsClient) {}
+func (c nopCache) Invalidate()                {}
+func (c nopCache) Len() int                   { return 0 }
+func (c nopCache) Recalculate()               {}
+func (c nopCache) SetStats(stats.StatsClient) {}
 
 func (c nopCache) Top() []bitmapPair {
 	return []bitmapPair{}

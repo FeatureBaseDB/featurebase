@@ -19,7 +19,8 @@ import (
 	"time"
 
 	"github.com/DataDog/datadog-go/statsd"
-	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/logger"
+	"github.com/pilosa/pilosa/stats"
 )
 
 // StatsD protocol wrapper using the DataDog library that added Tags to the StatsD protocol
@@ -34,13 +35,13 @@ const (
 )
 
 // Ensure client implements interface.
-var _ pilosa.StatsClient = &statsClient{}
+var _ stats.StatsClient = &statsClient{}
 
 // statsClient represents a StatsD implementation of pilosa.statsClient.
 type statsClient struct {
 	client *statsd.Client
 	tags   []string
-	logger pilosa.Logger
+	logger logger.Logger
 }
 
 // NewStatsClient returns a new instance of StatsClient.
@@ -52,7 +53,7 @@ func NewStatsClient(host string) (*statsClient, error) {
 
 	return &statsClient{
 		client: c,
-		logger: pilosa.NopLogger,
+		logger: logger.NopLogger,
 	}, nil
 }
 
@@ -70,7 +71,7 @@ func (c *statsClient) Tags() []string {
 }
 
 // WithTags returns a new client with additional tags appended.
-func (c *statsClient) WithTags(tags ...string) pilosa.StatsClient {
+func (c *statsClient) WithTags(tags ...string) stats.StatsClient {
 	return &statsClient{
 		client: c.client,
 		tags:   unionStringSlice(c.tags, tags),
@@ -122,7 +123,7 @@ func (c *statsClient) Timing(name string, value time.Duration, rate float64) {
 }
 
 // SetLogger sets the logger for client.
-func (c *statsClient) SetLogger(logger pilosa.Logger) {
+func (c *statsClient) SetLogger(logger logger.Logger) {
 	c.logger = logger
 }
 

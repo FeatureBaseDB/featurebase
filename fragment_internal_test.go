@@ -25,6 +25,8 @@ import (
 	"testing"
 	"testing/quick"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
@@ -1397,6 +1399,21 @@ func TestFragment_ImportSet(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFragment_ConcurrentImport(t *testing.T) {
+	t.Run("bulkImportStandard", func(t *testing.T) {
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
+		defer f.Close()
+
+		eg := errgroup.Group{}
+		eg.Go(func() error { return f.bulkImportStandard([]uint64{1, 2}, []uint64{1, 2}, &ImportOptions{}) })
+		eg.Go(func() error { return f.bulkImportStandard([]uint64{3, 4}, []uint64{3, 4}, &ImportOptions{}) })
+		err := eg.Wait()
+		if err != nil {
+			t.Fatalf("importing data to fragment: %v", err)
+		}
+	})
 }
 
 // Ensure a fragment can import mutually exclusive values.

@@ -35,6 +35,7 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pkg/errors"
 )
 
@@ -42,7 +43,7 @@ import (
 type Handler struct {
 	Handler http.Handler
 
-	logger pilosa.Logger
+	logger logger.Logger
 
 	// Keeps the query argument validators for each handler
 	validators map[string]*queryValidationSpec
@@ -93,7 +94,7 @@ func OptHandlerAPI(api *pilosa.API) handlerOption {
 	}
 }
 
-func OptHandlerLogger(logger pilosa.Logger) handlerOption {
+func OptHandlerLogger(logger logger.Logger) handlerOption {
 	return func(h *Handler) error {
 		h.logger = logger
 		return nil
@@ -119,7 +120,7 @@ func OptHandlerCloseTimeout(d time.Duration) handlerOption {
 // NewHandler returns a new instance of Handler with a default logger.
 func NewHandler(opts ...handlerOption) (*Handler, error) {
 	handler := &Handler{
-		logger:       pilosa.NopLogger,
+		logger:       logger.NopLogger,
 		closeTimeout: time.Second * 30,
 	}
 	handler.Handler = newRouter(handler)

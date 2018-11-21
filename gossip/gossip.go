@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -28,6 +29,7 @@ import (
 
 	"github.com/hashicorp/memberlist"
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pilosa/pilosa/toml"
 	"github.com/pkg/errors"
@@ -46,9 +48,10 @@ type memberSet struct {
 	papi   *pilosa.API
 	config *config
 
-	Logger pilosa.Logger
+	Logger logger.Logger
 
 	logger    *log.Logger
+	logOutput io.Writer
 	transport *Transport
 
 	eventReceiver *eventReceiver
@@ -156,12 +159,19 @@ func WithLogger(logger *log.Logger) memberSetOption {
 	}
 }
 
+func WithLogOutput(o io.Writer) memberSetOption {
+	return func(g *memberSet) error {
+		g.logOutput = o
+		return nil
+	}
+}
+
 // NewMemberSet returns a new instance of GossipMemberSet based on options.
 func NewMemberSet(cfg Config, api *pilosa.API, options ...memberSetOption) (*memberSet, error) {
 	host := api.Node().URI.Host
 	g := &memberSet{
 		papi:   api,
-		Logger: pilosa.NopLogger,
+		Logger: logger.NopLogger,
 	}
 
 	// options
@@ -220,7 +230,11 @@ func NewMemberSet(cfg Config, api *pilosa.API, options ...memberSetOption) (*mem
 	conf.Delegate = g
 	conf.SecretKey = gossipKey
 	conf.Events = ger
-	conf.Logger = g.logger
+	if g.logOutput != nil {
+		conf.LogOutput = g.logOutput
+	} else {
+		conf.Logger = g.logger
+	}
 
 	g.config = &config{
 		memberlistConfig: conf,

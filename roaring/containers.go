@@ -64,6 +64,7 @@ func (sc *sliceContainers) PutContainerValues(key uint64, containerType byte, n 
 }
 
 func (sc *sliceContainers) Remove(key uint64) {
+	statsHit("sliceContainers/Remove")
 	i := search64(sc.keys, key)
 	if i < 0 {
 		return
@@ -73,6 +74,7 @@ func (sc *sliceContainers) Remove(key uint64) {
 
 }
 func (sc *sliceContainers) insertAt(key uint64, c *Container, i int) {
+	statsHit("sliceContainers/insertAt")
 	sc.keys = append(sc.keys, 0)
 	copy(sc.keys[i+1:], sc.keys[i:])
 	sc.keys[i] = key

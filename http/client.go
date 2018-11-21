@@ -91,9 +91,7 @@ func (c *InternalClient) maxShardByIndex(ctx context.Context) (map[string]uint64
 	defer resp.Body.Close()
 
 	var rsp getShardsMaxResponse
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
-	} else if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
 
@@ -152,7 +150,7 @@ func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilo
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		if resp.StatusCode == http.StatusConflict {
+		if resp != nil && resp.StatusCode == http.StatusConflict {
 			return pilosa.ErrIndexExists
 		}
 		return err
@@ -258,8 +256,6 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index s
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading")
-	} else if resp.StatusCode != http.StatusOK {
-		return nil, errors.New(string(body))
 	}
 
 	qresp := &pilosa.QueryResponse{}
@@ -689,7 +685,7 @@ func (c *InternalClient) backupShardNode(ctx context.Context, index, field strin
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		if resp.StatusCode == http.StatusNotFound {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
 			return nil, pilosa.ErrFragmentNotFound
 		}
 		return nil, err
@@ -746,7 +742,7 @@ func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, fiel
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		if resp.StatusCode == http.StatusConflict {
+		if resp != nil && resp.StatusCode == http.StatusConflict {
 			return pilosa.ErrFieldExists
 		}
 		return err
@@ -782,7 +778,7 @@ func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, in
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
 		// Return the appropriate error.
-		if resp.StatusCode == http.StatusNotFound {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
 			return nil, pilosa.ErrFragmentNotFound
 		}
 		return nil, err
@@ -825,7 +821,7 @@ func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, 
 
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		if resp.StatusCode == http.StatusNotFound {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
 			return nil, nil, nil
 		}
 		return nil, nil, err
@@ -904,7 +900,7 @@ func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, index
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		if resp.StatusCode == http.StatusNotFound {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
 			return nil, pilosa.ErrFieldNotFound
 		}
 		return nil, err
