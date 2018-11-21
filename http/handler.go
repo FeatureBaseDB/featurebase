@@ -1496,10 +1496,18 @@ func GetHTTPClient(t *tls.Config) *http.Client {
 
 // handlPostRoaringImport
 func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Content-Type") != "application/x-binary" {
+	// Verify that request is only communicating over protobufs.
+	if r.Header.Get("Content-Type") != "application/x-protobuf" {
 		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
 		return
+	} else if r.Header.Get("Accept") != "application/x-protobuf" {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
 	}
+
+	indexName := mux.Vars(r)["index"]
+	fieldName := mux.Vars(r)["field"]
+
 	q := r.URL.Query()
 	remoteStr := q.Get("remote")
 	var remote bool
@@ -1507,12 +1515,15 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 		remote = true
 	}
 
-	// If the clear flag is true, treat the import as clear bits.
-	doClear := q.Get("clear") == "true"
-
 	// Read entire body.
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	req := &pilosa.ImportRoaringRequest{}
+	if err := h.api.Serializer.Unmarshal(body, req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -1526,7 +1537,7 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 
 	resp := &pilosa.ImportResponse{}
 	// TODO give meaningful stats for import
-	err = h.api.ImportRoaring(r.Context(), urlVars["index"], urlVars["field"], shard, remote, body, pilosa.OptImportOptionsClear(doClear))
+	err = h.api.ImportRoaring(r.Context(), indexName, fieldName, shard, remote, req)
 	if err != nil {
 		resp.Err = err.Error()
 		if _, ok := err.(pilosa.BadRequestError); ok {
