@@ -1027,6 +1027,7 @@ func (iv interval16) runlen() int32 {
 
 // newContainer returns a new instance of container.
 func NewContainer() *Container {
+	statsHit("NewContainer")
 	return &Container{containerType: containerArray}
 }
 
@@ -1194,6 +1195,7 @@ func (c *Container) add(v uint16) (added bool) {
 func (c *Container) arrayAdd(v uint16) bool {
 	// Optimize appending to the end of an array container.
 	if c.n > 0 && c.n < ArrayMaxSize && c.isArray() && c.array[c.n-1] < v {
+		statsHit("arrayAdd/append")
 		c.unmap()
 		c.array = append(c.array, v)
 		return true
@@ -1207,11 +1209,13 @@ func (c *Container) arrayAdd(v uint16) bool {
 
 	// Convert to a bitmap container if too many values are in an array container.
 	if c.n >= ArrayMaxSize {
+		statsHit("arrayAdd/arrayToBitmap")
 		c.arrayToBitmap()
 		return c.bitmapAdd(v)
 	}
 
 	// Otherwise insert into array.
+	statsHit("arrayAdd/insert")
 	c.unmap()
 	i = -i - 1
 	c.array = append(c.array, 0)
@@ -1325,6 +1329,7 @@ func (c *Container) countRuns() (r int32) {
 // amount of space.
 func (c *Container) optimize() {
 	if c.n == 0 {
+		statsHit("optimize/empty")
 		return
 	}
 	runs := c.countRuns()
@@ -1341,21 +1346,33 @@ func (c *Container) optimize() {
 	// Then convert accordingly.
 	if c.isArray() {
 		if newType == containerBitmap {
+			statsHit("optimize/arrayToBitmap")
 			c.arrayToBitmap()
 		} else if newType == containerRun {
+			statsHit("optimize/arrayToRun")
 			c.arrayToRun()
+		} else {
+			statsHit("optimize/arrayUnchanged")
 		}
 	} else if c.isBitmap() {
 		if newType == containerArray {
+			statsHit("optimize/bitmapToArray")
 			c.bitmapToArray()
 		} else if newType == containerRun {
+			statsHit("optimize/bitmapToRun")
 			c.bitmapToRun()
+		} else {
+			statsHit("optimize/bitmapUnchanged")
 		}
 	} else if c.isRun() {
 		if newType == containerBitmap {
+			statsHit("optimize/runToBitmap")
 			c.runToBitmap()
 		} else if newType == containerArray {
+			statsHit("optimize/runToArray")
 			c.runToArray()
+		} else {
+			statsHit("optimize/runUnchanged")
 		}
 	}
 }
@@ -1425,6 +1442,7 @@ func (c *Container) bitmapRemove(v uint16) bool {
 
 	// Convert to array if we go below the threshold.
 	if c.n == ArrayMaxSize {
+		statsHit("bitmapRemove/bitmapToArray")
 		c.bitmapToArray()
 	}
 	return true
@@ -1492,6 +1510,7 @@ func (c *Container) runMax() uint16 {
 
 // bitmapToArray converts from bitmap format to array format.
 func (c *Container) bitmapToArray() {
+	statsHit("bitmapToArray")
 	c.array = make([]uint16, 0, c.n)
 	c.containerType = containerArray
 
@@ -1515,6 +1534,7 @@ func (c *Container) bitmapToArray() {
 
 // arrayToBitmap converts from array format to bitmap format.
 func (c *Container) arrayToBitmap() {
+	statsHit("arrayToBitmap")
 	c.bitmap = make([]uint64, bitmapN)
 	c.containerType = containerBitmap
 
@@ -1534,6 +1554,7 @@ func (c *Container) arrayToBitmap() {
 
 // runToBitmap converts from RLE format to bitmap format.
 func (c *Container) runToBitmap() {
+	statsHit("runToBitmap")
 	c.bitmap = make([]uint64, bitmapN)
 	c.containerType = containerBitmap
 
@@ -1557,6 +1578,7 @@ func (c *Container) runToBitmap() {
 
 // bitmapToRun converts from bitmap format to RLE format.
 func (c *Container) bitmapToRun() {
+	statsHit("bitmapToRun")
 	c.containerType = containerRun
 	// return early if empty
 	if c.n == 0 {
@@ -1613,6 +1635,7 @@ func (c *Container) bitmapToRun() {
 
 // arrayToRun converts from array format to RLE format.
 func (c *Container) arrayToRun() {
+	statsHit("arrayToRun")
 	c.containerType = containerRun
 	// return early if empty
 	if c.n == 0 {
@@ -1640,6 +1663,7 @@ func (c *Container) arrayToRun() {
 
 // runToArray converts from RLE format to array format.
 func (c *Container) runToArray() {
+	statsHit("runToArray")
 	c.containerType = containerArray
 	c.array = make([]uint16, 0, c.n)
 
@@ -1661,16 +1685,20 @@ func (c *Container) runToArray() {
 
 // Clone returns a copy of c.
 func (c *Container) Clone() *Container {
+	statsHit("Container/Clone")
 	other := &Container{n: c.n, containerType: c.containerType}
 
 	switch c.containerType {
 	case containerArray:
+		statsHit("Container/Clone/Array")
 		other.array = make([]uint16, len(c.array))
 		copy(other.array, c.array)
 	case containerBitmap:
+		statsHit("Container/Clone/Bitmap")
 		other.bitmap = make([]uint64, len(c.bitmap))
 		copy(other.bitmap, c.bitmap)
 	case containerRun:
+		statsHit("Container/Clone/Run")
 		other.runs = make([]interval16, len(c.runs))
 		copy(other.runs, c.runs)
 	}
@@ -1689,6 +1717,7 @@ func (c *Container) WriteTo(w io.Writer) (n int64, err error) {
 }
 
 func (c *Container) arrayWriteTo(w io.Writer) (n int64, err error) {
+	statsHit("Container/arrayWriteTo")
 	if len(c.array) == 0 {
 		return 0, nil
 	}
@@ -1705,12 +1734,14 @@ func (c *Container) arrayWriteTo(w io.Writer) (n int64, err error) {
 }
 
 func (c *Container) bitmapWriteTo(w io.Writer) (n int64, err error) {
+	statsHit("Container/bitmapWriteTo")
 	// Write sizeof(uint64) * bitmapN bytes.
 	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&c.bitmap[0]))[:(8 * bitmapN)])
 	return int64(nn), err
 }
 
 func (c *Container) runWriteTo(w io.Writer) (n int64, err error) {
+	statsHit("Container/runWriteTo")
 	if len(c.runs) == 0 {
 		return 0, nil
 	}
@@ -1815,6 +1846,7 @@ func flip(a *Container) *Container { // nolint: deadcode
 }
 
 func flipArray(b *Container) *Container {
+	statsHit("flipArray")
 	// TODO: actually implement this
 	x := b.Clone()
 	x.arrayToBitmap()
@@ -1822,6 +1854,7 @@ func flipArray(b *Container) *Container {
 }
 
 func flipBitmap(b *Container) *Container {
+	statsHit("flipBitmap")
 	other := &Container{bitmap: make([]uint64, bitmapN), containerType: containerBitmap}
 
 	for i, bitmap := range b.bitmap {
@@ -1833,6 +1866,7 @@ func flipBitmap(b *Container) *Container {
 }
 
 func flipRun(b *Container) *Container {
+	statsHit("flipRun")
 	// TODO: actually implement this
 	x := b.Clone()
 	x.runToBitmap()
@@ -1868,22 +1902,33 @@ func intersectionCount(a, b *Container) int32 {
 }
 
 func intersectionCountArrayArray(a, b *Container) (n int32) {
-	na, nb := len(a.array), len(b.array)
-	for i, j := 0, 0; i < na && j < nb; {
-		va, vb := a.array[i], b.array[j]
-		if va < vb {
-			i++
-		} else if va > vb {
+	statsHit("intersectionCount/ArrayArray")
+	ca, cb := a.array, b.array
+	na, nb := len(ca), len(cb)
+	if na == 0 || nb == 0 {
+		return 0
+	}
+	if na > nb {
+		ca, cb = cb, ca
+		na, nb = nb, na // nolint: ineffassign
+	}
+	j := 0
+	for _, va := range ca {
+		for cb[j] < va {
 			j++
-		} else {
+			if j >= nb {
+				return n
+			}
+		}
+		if cb[j] == va {
 			n++
-			i, j = i+1, j+1
 		}
 	}
 	return n
 }
 
 func intersectionCountArrayRun(a, b *Container) (n int32) {
+	statsHit("intersectionCount/ArrayRun")
 	na, nb := len(a.array), len(b.runs)
 	for i, j := 0, 0; i < na && j < nb; {
 		va, vb := a.array[i], b.runs[j]
@@ -1900,6 +1945,7 @@ func intersectionCountArrayRun(a, b *Container) (n int32) {
 }
 
 func intersectionCountRunRun(a, b *Container) (n int32) {
+	statsHit("intersectionCount/RunRun")
 	na, nb := len(a.runs), len(b.runs)
 	for i, j := 0, 0; i < na && j < nb; {
 		va, vb := a.runs[i], b.runs[j]
@@ -1931,6 +1977,7 @@ func intersectionCountRunRun(a, b *Container) (n int32) {
 }
 
 func intersectionCountBitmapRun(a, b *Container) (n int32) {
+	statsHit("intersectionCount/BitmapRun")
 	for _, iv := range b.runs {
 		n += a.bitmapCountRange(int32(iv.start), int32(iv.last)+1)
 	}
@@ -1938,6 +1985,7 @@ func intersectionCountBitmapRun(a, b *Container) (n int32) {
 }
 
 func intersectionCountArrayBitmap(a, b *Container) (n int32) {
+	statsHit("intersectionCount/ArrayBitmap")
 	ln := len(b.bitmap)
 	for _, val := range a.array {
 		i := int(val >> 6)
@@ -1951,6 +1999,7 @@ func intersectionCountArrayBitmap(a, b *Container) (n int32) {
 }
 
 func intersectionCountBitmapBitmap(a, b *Container) (n int32) {
+	statsHit("intersectionCount/BitmapBitmap")
 	return int32(popcountAndSlice(a.bitmap, b.bitmap))
 }
 
@@ -1983,6 +2032,7 @@ func intersect(a, b *Container) *Container {
 }
 
 func intersectArrayArray(a, b *Container) *Container {
+	statsHit("intersect/ArrayArray")
 	output := &Container{containerType: containerArray}
 	na, nb := len(a.array), len(b.array)
 	for i, j := 0, 0; i < na && j < nb; {
@@ -2004,6 +2054,7 @@ func intersectArrayArray(a, b *Container) *Container {
 // container. The return is always an array container (since it's guaranteed to
 // be low-cardinality)
 func intersectArrayRun(a, b *Container) *Container {
+	statsHit("intersect/ArrayRun")
 	output := &Container{containerType: containerArray}
 	na, nb := len(a.array), len(b.runs)
 	for i, j := 0, 0; i < na && j < nb; {
@@ -2023,6 +2074,7 @@ func intersectArrayRun(a, b *Container) *Container {
 
 // intersectRunRun computes the intersect of two run containers.
 func intersectRunRun(a, b *Container) *Container {
+	statsHit("intersect/RunRun")
 	output := &Container{containerType: containerRun}
 	na, nb := len(a.runs), len(b.runs)
 	for i, j := 0, 0; i < na && j < nb; {
@@ -2059,11 +2111,12 @@ func intersectRunRun(a, b *Container) *Container {
 	return output
 }
 
-// intersectBitmapRun returns an array container if the run container's
-// cardinality is < ArrayMaxSize. Otherwise it returns a bitmap container.
+// intersectBitmapRun returns an array container if either container's
+// cardinality is <= ArrayMaxSize. Otherwise it returns a bitmap container.
 func intersectBitmapRun(a, b *Container) *Container {
+	statsHit("intersect/BitmapRun")
 	var output *Container
-	if b.n < ArrayMaxSize {
+	if b.n <= ArrayMaxSize || a.n <= ArrayMaxSize {
 		// output is array container
 		output = &Container{containerType: containerArray}
 		for _, iv := range b.runs {
@@ -2117,14 +2170,12 @@ func intersectBitmapRun(a, b *Container) *Container {
 				valast = vastart + 63
 			}
 		}
-		if output.n < ArrayMaxSize {
-			output.bitmapToArray()
-		}
 	}
 	return output
 }
 
 func intersectArrayBitmap(a, b *Container) *Container {
+	statsHit("intersect/ArrayBitmap")
 	output := &Container{containerType: containerArray}
 	for _, va := range a.array {
 		bmidx := va / 64
@@ -2140,6 +2191,7 @@ func intersectArrayBitmap(a, b *Container) *Container {
 }
 
 func intersectBitmapBitmap(a, b *Container) *Container {
+	statsHit("intersect/BitmapBitmap")
 	// local variables added to prevent BCE checks in loop
 	// see https://go101.org/article/bounds-check-elimination.html
 	var (
@@ -2191,6 +2243,7 @@ func union(a, b *Container) *Container {
 }
 
 func unionArrayArray(a, b *Container) *Container {
+	statsHit("union/ArrayArray")
 	output := &Container{containerType: containerArray}
 	na, nb := len(a.array), len(b.array)
 	for i, j := 0, 0; ; {
@@ -2224,6 +2277,7 @@ func unionArrayArray(a, b *Container) *Container {
 // unionArrayRun optimistically assumes that the result will be a run container,
 // and converts to a bitmap or array container afterwards if necessary.
 func unionArrayRun(a, b *Container) *Container {
+	statsHit("union/ArrayRun")
 	if b.n == maxContainerVal+1 {
 		return b.Clone()
 	}
@@ -2281,6 +2335,7 @@ func (c *Container) runAppendInterval(v interval16) int32 {
 }
 
 func unionRunRun(a, b *Container) *Container {
+	statsHit("union/RunRun")
 	if a.n == maxContainerVal+1 {
 		return a.Clone()
 	}
@@ -2315,6 +2370,7 @@ func unionRunRun(a, b *Container) *Container {
 }
 
 func unionBitmapRun(a, b *Container) *Container {
+	statsHit("union/BitmapRun")
 	if b.n == maxContainerVal+1 {
 		return b.Clone()
 	}
@@ -2503,6 +2559,7 @@ func difference(a, b *Container) *Container {
 
 // differenceArrayArray computes the difference bween two arrays.
 func differenceArrayArray(a, b *Container) *Container {
+	statsHit("difference/ArrayArray")
 	output := &Container{containerType: containerArray}
 	na, nb := len(a.array), len(b.array)
 	for i, j := 0, 0; i < na; {
@@ -2528,6 +2585,7 @@ func differenceArrayArray(a, b *Container) *Container {
 
 // differenceArrayRun computes the difference of an array from a run.
 func differenceArrayRun(a, b *Container) *Container {
+	statsHit("difference/ArrayRun")
 	// func (ac *arrayContainer) iandNotRun16(rc *runContainer16) container {
 
 	if a.n == 0 || b.n == 0 {
@@ -2585,6 +2643,7 @@ func differenceArrayRun(a, b *Container) *Container {
 
 // differenceBitmapRun computes the difference of an bitmap from a run.
 func differenceBitmapRun(a, b *Container) *Container {
+	statsHit("difference/BitmapRun")
 	if a.n == 0 || b.n == 0 {
 		return a.Clone()
 	}
@@ -2599,6 +2658,7 @@ func differenceBitmapRun(a, b *Container) *Container {
 // differenceRunArray subtracts the bits in an array container from a run
 // container.
 func differenceRunArray(a, b *Container) *Container {
+	statsHit("difference/RunArray")
 	if a.n == 0 || b.n == 0 {
 		return a.Clone()
 	}
@@ -2654,6 +2714,7 @@ RUNLOOP:
 
 // differenceRunBitmap computes the difference of an run from a bitmap.
 func differenceRunBitmap(a, b *Container) *Container {
+	statsHit("difference/RunBitmap")
 	// If a is full, difference is the flip of b.
 	if len(a.runs) > 0 && a.runs[0].start == 0 && a.runs[0].last == 65535 {
 		return flipBitmap(b)
@@ -2711,6 +2772,7 @@ func differenceRunBitmap(a, b *Container) *Container {
 
 // differenceRunRun computes the difference of two runs.
 func differenceRunRun(a, b *Container) *Container {
+	statsHit("difference/RunRun")
 	if a.n == 0 || b.n == 0 {
 		return a.Clone()
 	}
@@ -2774,6 +2836,7 @@ func differenceRunRun(a, b *Container) *Container {
 }
 
 func differenceArrayBitmap(a, b *Container) *Container {
+	statsHit("difference/ArrayBitmap")
 	output := &Container{containerType: containerArray}
 	for _, va := range a.array {
 		bmidx := va / 64
@@ -2790,6 +2853,7 @@ func differenceArrayBitmap(a, b *Container) *Container {
 }
 
 func differenceBitmapArray(a, b *Container) *Container {
+	statsHit("difference/BitmapArray")
 	output := a.Clone()
 
 	for _, v := range b.array {
@@ -2805,6 +2869,7 @@ func differenceBitmapArray(a, b *Container) *Container {
 }
 
 func differenceBitmapBitmap(a, b *Container) *Container {
+	statsHit("difference/BitmapBitmap")
 	// local variables added to prevent BCE checks in loop
 	// see https://go101.org/article/bounds-check-elimination.html
 
@@ -2862,6 +2927,7 @@ func xor(a, b *Container) *Container {
 }
 
 func xorArrayArray(a, b *Container) *Container {
+	statsHit("xor/ArrayArray")
 	output := &Container{containerType: containerArray}
 	na, nb := len(a.array), len(b.array)
 	for i, j := 0, 0; i < na || j < nb; {
@@ -2891,6 +2957,7 @@ func xorArrayArray(a, b *Container) *Container {
 }
 
 func xorArrayBitmap(a, b *Container) *Container {
+	statsHit("xor/ArrayBitmap")
 	output := b.Clone()
 	for _, v := range a.array {
 		if b.bitmapContains(v) {
@@ -2910,6 +2977,7 @@ func xorArrayBitmap(a, b *Container) *Container {
 }
 
 func xorBitmapBitmap(a, b *Container) *Container {
+	statsHit("xor/BitmapBitmap")
 	// local variables added to prevent BCE checks in loop
 	// see https://go101.org/article/bounds-check-elimination.html
 
@@ -2987,6 +3055,7 @@ func (op *op) UnmarshalBinary(data []byte) error {
 	if len(data) < op.size() {
 		return fmt.Errorf("op data out of bounds: len=%d", len(data))
 	}
+	statsHit("op/UnmarshalBinary")
 
 	// Verify checksum.
 	h := fnv.New32a()
@@ -3011,6 +3080,7 @@ func lowbits(v uint64) uint16  { return uint16(v & 0xFFFF) }
 // search32 returns the index of value in a. If value is not found, it works the
 // same way as search64.
 func search32(a []uint16, value uint16) int32 {
+	statsHit("search32")
 	// Optimize for elements and the last element.
 	n := int32(len(a))
 	if n == 0 {
@@ -3054,6 +3124,7 @@ func search32(a []uint16, value uint16) int32 {
 // since negative 0 is no different from positive 0, we offset the returned
 // negative indices by 1. See the test for this function for examples.
 func search64(a []uint64, value uint64) int {
+	statsHit("search64")
 	// Optimize for elements and the last element.
 	n := len(a)
 	if n == 0 {
@@ -3132,6 +3203,7 @@ func (a *ErrorList) AppendWithPrefix(err error, prefix string) {
 
 // xorArrayRun computes the exclusive or of an array and a run container.
 func xorArrayRun(a, b *Container) *Container {
+	statsHit("xor/ArrayRun")
 	output := &Container{containerType: containerRun}
 	na, nb := len(a.array), len(b.runs)
 	var vb interval16
@@ -3290,6 +3362,7 @@ type xorstm struct {
 
 // xorRunRun computes the exclusive or of two run containers.
 func xorRunRun(a, b *Container) *Container {
+	statsHit("xor/RunRun")
 	na, nb := len(a.runs), len(b.runs)
 	if na == 0 {
 		return b.Clone()
@@ -3338,6 +3411,7 @@ func xorRunRun(a, b *Container) *Container {
 
 // xorRunRun computes the exclusive or of a bitmap and a run container.
 func xorBitmapRun(a, b *Container) *Container {
+	statsHit("xor/BitmapRun")
 	output := a.Clone()
 	for j := 0; j < len(b.runs); j++ {
 		output.bitmapXorRange(uint64(b.runs[j].start), uint64(b.runs[j].last)+1)
@@ -3352,6 +3426,7 @@ func xorBitmapRun(a, b *Container) *Container {
 }
 
 func bitmapsEqual(b, c *Bitmap) error { // nolint: deadcode
+	statsHit("bitmapsEqual")
 	if b.OpWriter != c.OpWriter {
 		return errors.New("opWriters not equal")
 	}
@@ -3404,6 +3479,7 @@ const (
 )
 
 func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint, card int) byte, header, pos int, haveRuns bool, err error) {
+	statsHit("readOfficialHeader")
 	if len(buf) < 8 {
 		err = fmt.Errorf("buffer too small, expecting at least 8 bytes, was %d", len(buf))
 		return size, containerTyper, header, pos, haveRuns, err
@@ -3465,6 +3541,11 @@ func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint
 // UnmarshalBinary decodes b from a binary-encoded byte slice. data can be in
 // either official roaring format or Pilosa's roaring format.
 func (b *Bitmap) UnmarshalBinary(data []byte) error {
+	if data == nil {
+		// Nothing to unmarshal
+		return nil
+	}
+	statsHit("Bitmap/UnmarshalBinary")
 	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
 	if fileMagic == magicNumber { // if pilosa roaring
 		return errors.Wrap(b.unmarshalPilosaRoaring(data), "unmarshaling as pilosa roaring")

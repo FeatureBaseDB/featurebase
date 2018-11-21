@@ -27,7 +27,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/stats"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -58,7 +60,7 @@ type Server struct { // nolint: maligned
 	// External
 	systemInfo SystemInfo
 	gcNotifier GCNotifier
-	logger     Logger
+	logger     logger.Logger
 
 	nodeID              string
 	uri                 URI
@@ -81,7 +83,7 @@ func (s *Server) Holder() *Holder {
 // ServerOption is a functional option type for pilosa.Server
 type ServerOption func(s *Server) error
 
-func OptServerLogger(l Logger) ServerOption {
+func OptServerLogger(l logger.Logger) ServerOption {
 	return func(s *Server) error {
 		s.logger = l
 		return nil
@@ -176,7 +178,7 @@ func OptServerPrimaryTranslateStoreFunc(tf func(interface{}) TranslateStore) Ser
 	}
 }
 
-func OptServerStatsClient(sc StatsClient) ServerOption {
+func OptServerStatsClient(sc stats.StatsClient) ServerOption {
 	return func(s *Server) error {
 		s.holder.Stats = sc
 		return nil
@@ -258,7 +260,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		metricInterval:      0,
 		diagnosticInterval:  0,
 
-		logger: NopLogger,
+		logger: logger.NopLogger,
 	}
 	s.executor = newExecutor(optExecutorInternalQueryClient(s.defaultClient))
 	s.cluster.InternalClient = s.defaultClient
@@ -583,7 +585,6 @@ func (s *Server) SendSync(m Message) error {
 	msg = append([]byte{getMessageType(m)}, msg...)
 	for _, node := range s.cluster.nodes {
 		node := node
-		s.logger.Printf("SendSync to: %s", node.URI)
 		// Don't forward the message to ourselves.
 		if s.uri == node.URI {
 			continue
@@ -604,7 +605,6 @@ func (s *Server) SendAsync(m Message) error {
 
 // SendTo represents an implementation of Broadcaster.
 func (s *Server) SendTo(to *Node, m Message) error {
-	s.logger.Printf("SendTo: %s", to.URI)
 	msg, err := s.serializer.Marshal(m)
 	if err != nil {
 		return fmt.Errorf("marshaling message: %v", err)
@@ -628,7 +628,7 @@ func (s *Server) handleRemoteStatus(pb Message) {
 
 	go func() {
 		// Make sure the holder has opened.
-		<-s.holder.opened
+		s.holder.opened.Recv()
 
 		err := s.mergeRemoteStatus(pb.(*NodeStatus))
 		if err != nil {
@@ -656,7 +656,7 @@ func (s *Server) mergeRemoteStatus(ns *NodeStatus) error {
 			// if we don't know about a field locally, log an error because
 			// fields should be created and synced prior to shard creation
 			if f == nil {
-				s.logger.Printf("Local Field not found: %s/%s", is.Name, fs.Name)
+				s.logger.Printf("local field not found: %s/%s", is.Name, fs.Name)
 				continue
 			}
 			if err := f.AddRemoteAvailableShards(fs.AvailableShards); err != nil {
@@ -701,7 +701,7 @@ func (s *Server) monitorDiagnostics() {
 		s.diagnostics.CheckVersion()
 		err = s.diagnostics.Flush()
 		if err != nil {
-			s.logger.Printf("Diagnostics error: %s", err)
+			s.logger.Printf("diagnostics error: %s", err)
 		}
 	}
 

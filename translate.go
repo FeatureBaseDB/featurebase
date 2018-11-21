@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cespare/xxhash"
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pkg/errors"
 )
 
@@ -68,7 +69,7 @@ type TranslateFile struct {
 
 	Path    string
 	mapSize int
-	logger  Logger
+	logger  logger.Logger
 	// If non-nil, data is streamed from a primary and this is a read-only store.
 	PrimaryTranslateStore TranslateStore
 	primaryID             string // unique ID used to identify the primary store
@@ -89,7 +90,7 @@ func OptTranslateFileMapSize(mapSize int) TranslateFileOption {
 		return nil
 	}
 }
-func OptTranslateFileLogger(l Logger) TranslateFileOption {
+func OptTranslateFileLogger(l logger.Logger) TranslateFileOption {
 	return func(s *TranslateFile) error {
 		s.logger = l
 		return nil
@@ -116,7 +117,7 @@ func NewTranslateFile(opts ...TranslateFileOption) *TranslateFile {
 
 		mapSize: defaultMapSize,
 
-		logger: NopLogger,
+		logger: logger.NopLogger,
 
 		replicationClosing: make(chan struct{}),
 		primaryStoreEvents: make(chan primaryStoreEvent),
@@ -194,12 +195,11 @@ func (s *TranslateFile) handlePrimaryStoreEvent(ev primaryStoreEvent) error {
 	}
 
 	// Stop translate store replication.
-	s.logger.Printf("stop monitor replication")
 	close(s.replicationClosing)
 	s.repWG.Wait()
 
 	// Set the primary node for translate store replication.
-	s.logger.Printf("set primary translate store to %s", ev.id)
+	s.logger.Debugf("set primary translate store to %s", ev.id)
 	s.primaryID = ev.id
 	if ev.id == "" {
 		s.PrimaryTranslateStore = nil
@@ -208,7 +208,6 @@ func (s *TranslateFile) handlePrimaryStoreEvent(ev primaryStoreEvent) error {
 	}
 
 	// Start translate store replication. Stream from primary, if available.
-	s.logger.Printf("start monitor replication")
 	if s.PrimaryTranslateStore != nil {
 		s.replicationClosing = make(chan struct{})
 		s.repWG.Add(1)
@@ -385,7 +384,6 @@ func (s *TranslateFile) monitorReplication() {
 // monitorPrimaryStoreEvents is executed in a separate goroutine and listens for changes
 // to the primary store assignment.
 func (s *TranslateFile) monitorPrimaryStoreEvents() {
-	s.logger.Printf("monitor primary store events")
 	// Keep handling events until the store closes.
 	for {
 		select {
@@ -403,7 +401,7 @@ func (s *TranslateFile) replicate(ctx context.Context) error {
 	off := s.size()
 
 	// Connect to remote primary.
-	s.logger.Printf("pilosa: replicating from offset %d", off)
+	s.logger.Debugf("pilosa: replicating from offset %d", off)
 	rc, err := s.PrimaryTranslateStore.Reader(ctx, off)
 	if err != nil {
 		return err

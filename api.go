@@ -28,6 +28,7 @@ import (
 
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/stats"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -291,15 +292,18 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 			eg.Go(func() error {
 				var err error
 				for viewName, viewData := range req.Views {
-					// must make a copy of data to operate on locally.
-					// field.importRoaring changes data
-					data := make([]byte, len(viewData))
-					copy(data, viewData)
 					if viewName == "" {
 						viewName = viewStandard
 					} else {
 						viewName = fmt.Sprintf("%s_%s", viewStandard, viewName)
 					}
+					if len(viewData) == 0 {
+						return fmt.Errorf("no data to import for view: %s", viewName)
+					}
+					// must make a copy of data to operate on locally.
+					// field.importRoaring changes data
+					data := make([]byte, len(viewData))
+					copy(data, viewData)
 					err = field.importRoaring(data, shard, viewName, req.Clear)
 					if err != nil {
 						return err
@@ -933,7 +937,7 @@ func (api *API) AvailableShardsByIndex(_ context.Context) map[string]*roaring.Bi
 
 // StatsWithTags returns an instance of whatever implementation of StatsClient
 // pilosa is using with the given tags.
-func (api *API) StatsWithTags(tags []string) StatsClient {
+func (api *API) StatsWithTags(tags []string) stats.StatsClient {
 	if api.holder == nil || api.cluster == nil {
 		return nil
 	}
@@ -959,7 +963,7 @@ func (api *API) validateShardOwnership(indexName string, shard uint64) error {
 }
 
 func (api *API) indexField(indexName string, fieldName string, shard uint64) (*Index, *Field, error) {
-	api.server.logger.Printf("importing: %v %v %v", indexName, fieldName, shard)
+	api.server.logger.Debugf("importing: %v %v %v", indexName, fieldName, shard)
 
 	// Find the Index.
 	index := api.holder.Index(indexName)

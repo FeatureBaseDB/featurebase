@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pkg/errors"
 )
 
@@ -51,7 +52,7 @@ type diagnosticsCollector struct {
 
 	client *http.Client
 
-	Logger Logger
+	Logger logger.Logger
 
 	server *Server
 }
@@ -65,7 +66,7 @@ func newDiagnosticsCollector(host string) *diagnosticsCollector { // nolint: unp
 		start:      time.Now(),
 		client:     &http.Client{Timeout: 10 * time.Second},
 		metrics:    make(map[string]interface{}),
-		Logger:     NopLogger,
+		Logger:     logger.NopLogger,
 	}
 }
 

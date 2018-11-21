@@ -28,8 +28,10 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/stats"
 	"github.com/pkg/errors"
 )
 
@@ -69,7 +71,7 @@ type Field struct {
 	rowAttrStore AttrStore
 
 	broadcaster broadcaster
-	Stats       StatsClient
+	Stats       stats.StatsClient
 
 	// Field options.
 	options FieldOptions
@@ -79,7 +81,7 @@ type Field struct {
 	// Shards with data on any node in the cluster, according to this node.
 	remoteAvailableShards *roaring.Bitmap
 
-	logger Logger
+	logger logger.Logger
 }
 
 // FieldOption is a functional option type for pilosa.fieldOptions.
@@ -196,13 +198,13 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 		rowAttrStore: nopStore,
 
 		broadcaster: NopBroadcaster,
-		Stats:       NopStatsClient,
+		Stats:       stats.NopStatsClient,
 
 		options: applyDefaultOptions(fo),
 
 		remoteAvailableShards: roaring.NewBitmap(),
 
-		logger: NopLogger,
+		logger: logger.NopLogger,
 	}
 	return f, nil
 }

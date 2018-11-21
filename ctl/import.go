@@ -99,13 +99,15 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 	cmd.client = client
 
 	if cmd.CreateSchema {
-		// set the correct type for the field
-		if cmd.FieldOptions.TimeQuantum != "" {
-			cmd.FieldOptions.Type = "time"
-		} else if cmd.FieldOptions.Min != 0 || cmd.FieldOptions.Max != 0 {
-			cmd.FieldOptions.Type = "int"
-		} else {
-			cmd.FieldOptions.Type = "set"
+		if cmd.FieldOptions.Type == "" {
+			// set the correct type for the field
+			if cmd.FieldOptions.TimeQuantum != "" {
+				cmd.FieldOptions.Type = "time"
+			} else if cmd.FieldOptions.Min != 0 || cmd.FieldOptions.Max != 0 {
+				cmd.FieldOptions.Type = "int"
+			} else {
+				cmd.FieldOptions.Type = "set"
+			}
 		}
 		err := cmd.ensureSchema(ctx)
 		if err != nil {
