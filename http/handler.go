@@ -24,8 +24,8 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
-	_ "net/http/pprof"
-	"net/url" // Imported for its side-effect of registering pprof endpoints with the server.
+	_ "net/http/pprof" // Imported for its side-effect of registering pprof endpoints with the server.
+	"net/url"
 	"reflect"
 	"runtime/debug"
 	"strconv"
