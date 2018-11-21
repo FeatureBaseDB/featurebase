@@ -1071,6 +1071,36 @@ func (api *API) Info() serverInfo {
 	}
 }
 
+func (api *API) TranslateKeys(body io.Reader) ([]byte, error) {
+	reqBytes, err := ioutil.ReadAll(body)
+	if err != nil {
+		return nil, NewBadRequestError(errors.Wrap(err, "read body error"))
+	}
+	var req TranslateKeysRequest
+	if err := api.Serializer.Unmarshal(reqBytes, &req); err != nil {
+		return nil, NewBadRequestError(errors.Wrap(err, "unmarshal body error"))
+	}
+	var ids []uint64
+	if req.Field == "" {
+		ids, err = api.holder.translateFile.TranslateColumnsToUint64(req.Index, req.Keys)
+	} else {
+		ids, err = api.holder.translateFile.TranslateRowsToUint64(req.Index, req.Field, req.Keys)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	resp := TranslateKeysResponse{
+		IDs: ids,
+	}
+	// Encode response.
+	buf, err := api.Serializer.Marshal(&resp)
+	if err != nil {
+		return nil, errors.Wrap(err, "translate keys response encoding error")
+	}
+	return buf, nil
+}
+
 type serverInfo struct {
 	ShardWidth uint64 `json:"shardWidth"`
 }

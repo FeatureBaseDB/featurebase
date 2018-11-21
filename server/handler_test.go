@@ -22,13 +22,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	gohttp "net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
-
-	gohttp "net/http"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/http"
@@ -687,6 +686,91 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if w.Body.String() != `{"success":false,"error":{"message":"index not found"}}`+"\n" {
 			t.Fatalf("unexpected body: %q", w.Body.String())
+		}
+	})
+
+	t.Run("translate keys", func(t *testing.T) {
+		// create index
+		w := httptest.NewRecorder()
+		r := test.MustNewHTTPRequest("POST", "/index/i1-tr", strings.NewReader(`{"options":{"keys":true}}`))
+		h.ServeHTTP(w, r)
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		} else if w.Body.String() != `{"success":true}`+"\n" {
+			t.Fatalf("unexpected body: %q", w.Body.String())
+		}
+
+		// create field
+		w = httptest.NewRecorder()
+		r = test.MustNewHTTPRequest("POST", "/index/i1-tr/field/f1", strings.NewReader(`{"options":{"keys":true}}`))
+		h.ServeHTTP(w, r)
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		} else if w.Body.String() != `{"success":true}`+"\n" {
+			t.Fatalf("unexpected body: %q", w.Body.String())
+		}
+
+		// set some bits
+		w = httptest.NewRecorder()
+		r = test.MustNewHTTPRequest("POST", "/index/i1-tr/query", strings.NewReader(`Set("col1", f1="row1")Set("col2", f1="row1")`))
+		h.ServeHTTP(w, r)
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+
+		// Generate request body for translate column keys request
+		reqBody, err := cmd.API.Serializer.Marshal(&pilosa.TranslateKeysRequest{
+			Index: "i1-tr",
+			Keys:  []string{"col1", "col2"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Generate protobuf request.
+		w = httptest.NewRecorder()
+		r = test.MustNewHTTPRequest("POST", "/internal/translate/keys", bytes.NewReader(reqBody))
+		r.Header.Set("Content-Type", "application/x-protobuf")
+		r.Header.Set("Accept", "application/x-protobuf")
+		h.ServeHTTP(w, r)
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		target := []uint64{1, 2}
+		resp := pilosa.TranslateKeysResponse{}
+		err = cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(target, resp.IDs) {
+			t.Fatalf("%v != %v", target, resp.IDs)
+		}
+
+		// Generate request body for translate row keys request
+		reqBody, err = cmd.API.Serializer.Marshal(&pilosa.TranslateKeysRequest{
+			Index: "i1-tr",
+			Field: "f1",
+			Keys:  []string{"row1"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Generate protobuf request.
+		w = httptest.NewRecorder()
+		r = test.MustNewHTTPRequest("POST", "/internal/translate/keys", bytes.NewReader(reqBody))
+		r.Header.Set("Content-Type", "application/x-protobuf")
+		r.Header.Set("Accept", "application/x-protobuf")
+		h.ServeHTTP(w, r)
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		target = []uint64{1}
+		resp = pilosa.TranslateKeysResponse{}
+		err = cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(target, resp.IDs) {
+			t.Fatalf("%v != %v", target, resp.IDs)
 		}
 	})
 }

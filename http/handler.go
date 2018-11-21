@@ -24,9 +24,8 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
-	"net/url"
-	// Imported for its side-effect of registering pprof endpoints with the server.
 	_ "net/http/pprof"
+	"net/url" // Imported for its side-effect of registering pprof endpoints with the server.
 	"reflect"
 	"runtime/debug"
 	"strconv"
@@ -37,7 +36,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/logger"
-
 	"github.com/pkg/errors"
 )
 
@@ -199,6 +197,7 @@ func (h *Handler) populateValidators() {
 	h.validators["GetNodes"] = queryValidationSpecRequired()
 	h.validators["GetShardMax"] = queryValidationSpecRequired()
 	h.validators["GetTranslateData"] = queryValidationSpecRequired("offset")
+	h.validators["PostTranslateKeys"] = queryValidationSpecRequired()
 }
 
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
@@ -260,6 +259,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
 	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET").Name("GetTranslateData")
+	router.HandleFunc("/internal/translate/keys", handler.handlePostTranslateKeys).Methods("POST").Name("PostTranslateKeys")
 
 	router.Use(handler.queryArgValidator)
 	return router
@@ -1547,5 +1547,27 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 	_, err = w.Write(buf)
 	if err != nil {
 		h.logger.Printf("writing import-roaring response: %v", err)
+	}
+}
+
+func (h *Handler) handlePostTranslateKeys(w http.ResponseWriter, r *http.Request) {
+	// Verify that request is only communicating over protobufs.
+	if r.Header.Get("Content-Type") != "application/x-protobuf" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	} else if r.Header.Get("Accept") != "application/x-protobuf" {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
+	}
+
+	buf, err := h.api.TranslateKeys(r.Body)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("translate keys: %v", err), http.StatusInternalServerError)
+	}
+
+	// Write response.
+	_, err = w.Write(buf)
+	if err != nil {
+		h.logger.Printf("writing translate keys response: %v", err)
 	}
 }

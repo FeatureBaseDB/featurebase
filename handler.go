@@ -112,3 +112,13 @@ type BlockDataResponse struct {
 	RowIDs    []uint64
 	ColumnIDs []uint64
 }
+
+type TranslateKeysRequest struct {
+	Index string
+	Field string
+	Keys  []string
+}
+
+type TranslateKeysResponse struct {
+	IDs []uint64
+}
