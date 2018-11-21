@@ -546,7 +546,7 @@ func (c *InternalClient) marshalImportValuePayload(index, field string, shard ui
 
 // ImportRoaring does fast import of raw bits in roaring format (pilosa or
 // official format, see API.ImportRoaring).
-func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64, remote bool, data []byte, opts ...pilosa.ImportOption) error {
+func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64, remote bool, req *pilosa.ImportRoaringRequest) error {
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
@@ -556,32 +556,27 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, ind
 		uri = c.defaultURI
 	}
 
-	// Set up import options.
-	options := &pilosa.ImportOptions{}
-	for _, opt := range opts {
-		err := opt(options)
-		if err != nil {
-			return errors.Wrap(err, "applying option")
-		}
-	}
-
 	vals := url.Values{}
 	vals.Set("remote", strconv.FormatBool(remote))
-	if options.Clear {
-		vals.Set("clear", "true")
-	}
 	url := fmt.Sprintf("%s/index/%s/field/%s/import-roaring/%d?%s", uri, index, field, shard, vals.Encode())
 
+	// Marshal data to protobuf.
+	data, err := c.serializer.Marshal(req)
+	if err != nil {
+		return errors.Wrap(err, "marshal import request")
+	}
+
 	// Generate HTTP request.
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
+	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
 	if err != nil {
 		return errors.Wrap(err, "creating request")
 	}
-	req.Header.Set("Content-Type", "application/x-binary")
-	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	httpReq.Header.Set("Content-Type", "application/x-protobuf")
+	httpReq.Header.Set("Accept", "application/x-protobuf")
+	httpReq.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
-	resp, err := c.executeRequest(req.WithContext(ctx))
+	resp, err := c.executeRequest(httpReq.WithContext(ctx))
 	if err != nil {
 		return err
 	}
@@ -591,7 +586,7 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, ind
 	rbody := &pilosa.ImportResponse{}
 	dec.Decode(rbody)
 	if rbody.Err != "" {
-		return errors.Errorf("importing roaring: %v", rbody.Err)
+		return errors.Wrap(errors.New(rbody.Err), "importing roaring")
 	}
 	return nil
 }

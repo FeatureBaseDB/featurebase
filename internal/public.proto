@@ -105,3 +105,13 @@ message ImportValueRequest {
 	repeated string ColumnKeys = 7;
 	repeated int64 Values = 6;
 }
+
+message ImportRoaringRequestView {
+	string Name = 1;
+	bytes Data = 2;
+}
+
+message ImportRoaringRequest {
+	bool Clear = 1;
+	repeated ImportRoaringRequestView views = 2;
+}

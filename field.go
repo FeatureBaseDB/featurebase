@@ -1184,9 +1184,10 @@ func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportO
 	return nil
 }
 
-func (f *Field) importRoaring(data []byte, shard uint64, clear bool) error {
-	viewName := viewStandard
-
+func (f *Field) importRoaring(data []byte, shard uint64, viewName string, clear bool) error {
+	if viewName == "" {
+		viewName = viewStandard
+	}
 	view, err := f.createViewIfNotExists(viewName)
 	if err != nil {
 		return errors.Wrap(err, "creating view")

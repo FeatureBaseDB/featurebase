@@ -96,6 +96,11 @@ type ImportRequest struct {
 	Timestamps []int64
 }
 
+type ImportRoaringRequest struct {
+	Clear bool
+	Views map[string][]byte
+}
+
 type ImportResponse struct {
 	Err string
 }
