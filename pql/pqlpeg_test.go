@@ -612,6 +612,23 @@ func TestPQLDeepEquality(t *testing.T) {
 					},
 				},
 			}},
+		{
+			name: "GroupBy",
+			call: "GroupBy(Rows(), filter=Row(a=1))",
+			exp: &Call{
+				Name: "GroupBy",
+				Args: map[string]interface{}{
+					"filter": &Call{
+						Name: "Row",
+						Args: map[string]interface{}{
+							"a": int64(1),
+						},
+					},
+				},
+				Children: []*Call{
+					{Name: "Rows"},
+				},
+			}},
 	}
 
 	for i, test := range tests {
