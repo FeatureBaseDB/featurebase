@@ -705,7 +705,7 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	case pilosa.FieldTypeInt:
 		fos = append(fos, pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max))
 	case pilosa.FieldTypeTime:
-		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum))
+		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum, req.Options.NoStandardView))
 	case pilosa.FieldTypeMutex:
 		fos = append(fos, pilosa.OptFieldTypeMutex(*req.Options.CacheType, *req.Options.CacheSize))
 	case pilosa.FieldTypeBool:
@@ -728,13 +728,14 @@ type postFieldRequest struct {
 // fieldOptions tracks pilosa.FieldOptions. It is made up of pointers to values,
 // and used for input validation.
 type fieldOptions struct {
-	Type        string              `json:"type,omitempty"`
-	CacheType   *string             `json:"cacheType,omitempty"`
-	CacheSize   *uint32             `json:"cacheSize,omitempty"`
-	Min         *int64              `json:"min,omitempty"`
-	Max         *int64              `json:"max,omitempty"`
-	TimeQuantum *pilosa.TimeQuantum `json:"timeQuantum,omitempty"`
-	Keys        *bool               `json:"keys,omitempty"`
+	Type           string              `json:"type,omitempty"`
+	CacheType      *string             `json:"cacheType,omitempty"`
+	CacheSize      *uint32             `json:"cacheSize,omitempty"`
+	Min            *int64              `json:"min,omitempty"`
+	Max            *int64              `json:"max,omitempty"`
+	TimeQuantum    *pilosa.TimeQuantum `json:"timeQuantum,omitempty"`
+	Keys           *bool               `json:"keys,omitempty"`
+	NoStandardView bool                `json:"noStandardView,omitempty"`
 }
 
 func (o *fieldOptions) validate() error {
