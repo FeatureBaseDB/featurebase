@@ -96,14 +96,9 @@ type ImportRequest struct {
 	Timestamps []int64
 }
 
-type ImportRoaringRequestView struct {
-	Name string
-	Data []byte
-}
-
 type ImportRoaringRequest struct {
 	Clear bool
-	Views []ImportRoaringRequestView
+	Views map[string][]byte
 }
 
 type ImportResponse struct {

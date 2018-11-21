@@ -358,17 +358,15 @@ func encodeImportValueRequest(m *pilosa.ImportValueRequest) *internal.ImportValu
 	}
 }
 
-func encodeImportRoaringRequestView(m *pilosa.ImportRoaringRequestView) *internal.ImportRoaringRequestView {
-	return &internal.ImportRoaringRequestView{
-		Name: m.Name,
-		Data: m.Data,
-	}
-}
-
 func encodeImportRoaringRequest(m *pilosa.ImportRoaringRequest) *internal.ImportRoaringRequest {
 	views := make([]*internal.ImportRoaringRequestView, len(m.Views))
-	for i, view := range m.Views {
-		views[i] = encodeImportRoaringRequestView(&view)
+	i := 0
+	for viewName, viewData := range m.Views {
+		views[i] = &internal.ImportRoaringRequestView{
+			Name: viewName,
+			Data: viewData,
+		}
+		i += 1
 	}
 	return &internal.ImportRoaringRequest{
 		Clear: m.Clear,
@@ -944,15 +942,10 @@ func decodeImportValueRequest(pb *internal.ImportValueRequest, m *pilosa.ImportV
 	m.Values = pb.Values
 }
 
-func decodeImportRoaringRequestView(pb *internal.ImportRoaringRequestView, m *pilosa.ImportRoaringRequestView) {
-	m.Name = pb.Name
-	m.Data = pb.Data
-}
-
 func decodeImportRoaringRequest(pb *internal.ImportRoaringRequest, m *pilosa.ImportRoaringRequest) {
-	views := make([]pilosa.ImportRoaringRequestView, len(pb.Views))
-	for i, view := range pb.Views {
-		decodeImportRoaringRequestView(view, &views[i])
+	views := map[string][]byte{}
+	for _, view := range pb.Views {
+		views[view.Name] = view.Data
 	}
 	m.Clear = pb.Clear
 	m.Views = views

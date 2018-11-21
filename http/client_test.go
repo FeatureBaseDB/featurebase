@@ -988,12 +988,10 @@ func MustNewClient(host string, h *gohttp.Client) *Client {
 
 func makeImportRoaringRequest(clear bool, viewData string) *pilosa.ImportRoaringRequest {
 	roaringData, _ := hex.DecodeString(viewData)
-	view := pilosa.ImportRoaringRequestView{
-		Name: "",
-		Data: roaringData,
-	}
 	return &pilosa.ImportRoaringRequest{
 		Clear: clear,
-		Views: []pilosa.ImportRoaringRequestView{view},
+		Views: map[string][]byte{
+			"": roaringData,
+		},
 	}
 }

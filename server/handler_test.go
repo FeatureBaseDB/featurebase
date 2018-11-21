@@ -93,8 +93,8 @@ func TestHandler_Endpoints(t *testing.T) {
 		roaringData, _ := hex.DecodeString("3B3001000100000900010000000100010009000100")
 		msg := pilosa.ImportRoaringRequest{
 			Clear: false,
-			Views: []pilosa.ImportRoaringRequestView{
-				{Name: "", Data: roaringData},
+			Views: map[string][]byte{
+				"": roaringData,
 			},
 		}
 		ser := proto.Serializer{}
@@ -125,8 +125,8 @@ func TestHandler_Endpoints(t *testing.T) {
 		roaringData, _ := hex.DecodeString("3B3001000100000900010000000100010009000100")
 		msg := pilosa.ImportRoaringRequest{
 			Clear: false,
-			Views: []pilosa.ImportRoaringRequestView{
-				{Name: "", Data: roaringData},
+			Views: map[string][]byte{
+				"": roaringData,
 			},
 		}
 		ser := proto.Serializer{}
