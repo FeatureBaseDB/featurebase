@@ -142,7 +142,7 @@ func (m *Command) Start() (err error) {
 	go func() {
 		err := m.Handler.Serve()
 		if err != nil {
-			m.logger.Printf("Handler serve error: %v", err)
+			m.logger.Printf("handler serve error: %v", err)
 		}
 	}()
 
@@ -151,7 +151,7 @@ func (m *Command) Start() (err error) {
 		return errors.Wrap(err, "opening server")
 	}
 
-	m.logger.Printf("Listening as %s\n", m.API.Node().URI)
+	m.logger.Printf("listening as %s\n", m.API.Node().URI)
 
 	return nil
 }
@@ -163,26 +163,30 @@ func (m *Command) Wait() error {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	select {
 	case sig := <-c:
-		m.logger.Printf("Received %s; gracefully shutting down...\n", sig.String())
+		m.logger.Printf("received signal '%s', gracefully shutting down...\n", sig.String())
 
 		// Second signal causes a hard shutdown.
 		go func() { <-c; os.Exit(1) }()
 		return errors.Wrap(m.Close(), "closing command")
 	case <-m.done:
-		m.logger.Printf("Server closed externally")
+		m.logger.Printf("server closed externally")
 		return nil
 	}
 }
 
 // setupLogger sets up the logger based on the configuration.
 func (m *Command) setupLogger() error {
-	var err error
 	if m.Config.LogPath == "" {
 		m.logOutput = m.Stderr
 	} else {
-		m.logOutput, err = os.OpenFile(m.Config.LogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+		f, err := os.OpenFile(m.Config.LogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
 		if err != nil {
 			return errors.Wrap(err, "opening file")
+		}
+		m.logOutput = f
+		err = syscall.Dup2(int(f.Fd()), int(os.Stderr.Fd()))
+		if err != nil {
+			return errors.Wrap(err, "dup2ing stderr onto logfile")
 		}
 	}
 

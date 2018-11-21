@@ -57,7 +57,7 @@ type Holder struct {
 	NewPrimaryTranslateStore func(interface{}) TranslateStore
 
 	// opened channel is closed once Open() completes.
-	opened chan struct{}
+	opened lockedChan
 
 	broadcaster broadcaster
 
@@ -79,13 +79,39 @@ type Holder struct {
 	Logger logger.Logger
 }
 
+// lockedChan looks a little ridiculous admittedly, but exists for good reason.
+// The channel within is used (for example) to signal to other goroutines when
+// the Holder has finished opening (via closing the channel). However, it is
+// possible for the holder to be closed and then reopened, but a channel which
+// is closed cannot be re-opened. We must create a new channel - this creates a
+// data race with any goroutine which might be accessing the channel. To ensure
+// that there is no data race on the value of the channel itself, we wrap any
+// operation on it with an RWMutex so that we can guarantee that nothing is
+// trying to listen on it when it gets swapped.
+type lockedChan struct {
+	ch chan struct{}
+	mu sync.RWMutex
+}
+
+func (lc *lockedChan) Close() {
+	lc.mu.RLock()
+	close(lc.ch)
+	lc.mu.RUnlock()
+}
+
+func (lc *lockedChan) Recv() {
+	lc.mu.RLock()
+	<-lc.ch
+	lc.mu.RUnlock()
+}
+
 // NewHolder returns a new instance of Holder.
 func NewHolder() *Holder {
 	return &Holder{
 		indexes: make(map[string]*Index),
 		closing: make(chan struct{}),
 
-		opened: make(chan struct{}),
+		opened: lockedChan{ch: make(chan struct{})},
 
 		translateFile:            NewTranslateFile(),
 		NewPrimaryTranslateStore: newNopTranslateStore,
@@ -159,7 +185,7 @@ func (h *Holder) Open() error {
 
 	h.Stats.Open()
 
-	close(h.opened)
+	h.opened.Close()
 	return nil
 }
 
@@ -184,7 +210,9 @@ func (h *Holder) Close() error {
 	}
 
 	// Reset opened in case Holder needs to be reopened.
-	h.opened = make(chan struct{})
+	h.opened.mu.Lock()
+	h.opened.ch = make(chan struct{})
+	h.opened.mu.Unlock()
 
 	return nil
 }
@@ -474,7 +502,7 @@ func (h *Holder) flushCaches() {
 					}
 
 					if err := fragment.FlushCache(); err != nil {
-						h.Logger.Printf("error flushing cache: err=%s, path=%s", err, fragment.cachePath())
+						h.Logger.Printf("ERROR flushing cache: err=%s, path=%s", err, fragment.cachePath())
 					}
 				}
 			}
@@ -535,7 +563,7 @@ func (h *Holder) setFileLimit() {
 			h.Logger.Printf("ERROR checking open file limit: %s", err)
 		} else {
 			if oldLimit.Cur < fileLimit {
-				h.Logger.Printf("WARNING: Tried to set open file limit to %d, but it is %d. You may consider running \"sudo ulimit -n %d\" before starting Pilosa to avoid \"too many open files\" error. See https://www.pilosa.com/docs/administration/#open-file-limits for more information.", fileLimit, oldLimit.Cur, fileLimit)
+				h.Logger.Printf("WARNING: Tried to set open file limit to %d, but it is %d. You may consider running \"sudo ulimit -n %d\" before starting Pilosa to avoid \"too many open files\" error. See https://www.pilosa.com/docs/latest/administration/#open-file-limits for more information.", fileLimit, oldLimit.Cur, fileLimit)
 			}
 		}
 	}

@@ -347,8 +347,6 @@ func (c *cluster) unprotectedUpdateCoordinator(n *Node) bool {
 // addNode adds a node to the Cluster and updates and saves the
 // new topology. unprotected.
 func (c *cluster) addNode(node *Node) error {
-	c.logger.Printf("add node %s to cluster on %s", node, c.Node)
-
 	// If the node being added is the coordinator, set it for this node.
 	if node.IsCoordinator {
 		c.Coordinator = node.ID
@@ -481,7 +479,7 @@ func (c *cluster) setNodeState(state string) error { // nolint: unparam
 		State:  state,
 	}
 
-	c.logger.Printf("Sending State %s (%s)", state, c.Coordinator)
+	c.logger.Printf("sending state %s (%s)", state, c.Coordinator)
 	if err := c.sendTo(c.coordinatorNode(), ns); err != nil {
 		return fmt.Errorf("sending node state error: err=%s", err)
 	}
@@ -970,7 +968,6 @@ func (c *cluster) close() error {
 }
 
 func (c *cluster) markAsJoined() {
-	c.logger.Printf("mark node as joined (received coordinator update)")
 	if !c.joined {
 		c.joined = true
 		close(c.joining)
@@ -1069,7 +1066,6 @@ func (c *cluster) unprotectedSetStateAndBroadcast(state string) error {
 	}
 	// Broadcast cluster status changes to the cluster.
 	status := c.unprotectedStatus()
-	c.logger.Printf("broadcasting ClusterStatus: %s", status)
 	return c.broadcaster.SendSync(status) // TODO fix c.Status
 
 }
@@ -1246,14 +1242,14 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 		return errors.Wrap(err, "merging cluster status")
 	}
 
-	c.logger.Printf("MergeClusterStatus done, start goroutine")
+	c.logger.Printf("done MergeClusterStatus, start goroutine")
 
 	// The actual resizing runs in a goroutine because we don't want to block
 	// the distribution of other ResizeInstructions to the rest of the cluster.
 	go func() {
 
 		// Make sure the holder has opened.
-		<-c.holder.opened
+		c.holder.opened.Recv()
 
 		// Prepare the return message.
 		complete := &ResizeInstructionComplete{
@@ -1266,7 +1262,7 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 		if err := func() error {
 
 			// Sync the schema received in the resize instruction.
-			c.logger.Printf("Holder ApplySchema")
+			c.logger.Debugf("holder applySchema")
 			if err := c.holder.applySchema(instr.Schema); err != nil {
 				return errors.Wrap(err, "applying schema")
 			}
@@ -1651,17 +1647,17 @@ func (c *cluster) ReceiveEvent(e *NodeEvent) (err error) {
 
 	switch e.Event {
 	case NodeJoin:
-		c.logger.Printf("nodeJoin of %s on %s", e.Node.URI, c.Node.URI)
+		c.logger.Debugf("nodeJoin of %s on %s", e.Node.URI, c.Node.URI)
 		// Ignore the event if this is not the coordinator.
 		if !c.isCoordinator() {
 			return nil
 		}
 		return c.nodeJoin(e.Node)
 	case NodeLeave:
-		c.logger.Printf("received node leave on %s: %s, uri: %v", c.Node, e.Node, e.Node.URI)
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		if c.unprotectedIsCoordinator() {
+			c.logger.Printf("received node leave: %v", e.Node)
 			// if removeNodeBasicSorted succeeds, that means that the node was
 			// not already removed by a removeNode request. We treat this as the
 			// host being temporarily unavailable, and expect it to come back
@@ -1673,7 +1669,6 @@ func (c *cluster) ReceiveEvent(e *NodeEvent) (err error) {
 				err = c.unprotectedSetStateAndBroadcast(c.determineClusterState())
 			}
 		}
-		c.logger.Printf("finished node leave on %s: %s, uri: %v", c.Node, e.Node, e.Node.URI)
 	case NodeUpdate:
 		c.logger.Printf("received node update event: id: %v, string: %v, uri: %v", e.Node.ID, e.Node.String(), e.Node.URI)
 		// NodeUpdate is intentionally not implemented.
@@ -1686,7 +1681,7 @@ func (c *cluster) ReceiveEvent(e *NodeEvent) (err error) {
 func (c *cluster) nodeJoin(node *Node) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.logger.Printf("NodeJoin event on coordinator, node: %s, id: %s", node.URI, node.ID)
+	c.logger.Printf("node join event on coordinator, node: %s, id: %s", node.URI, node.ID)
 	if c.needTopologyAgreement() {
 		// A host that is not part of the topology can't be added to the STARTING cluster.
 		if !c.Topology.ContainsID(node.ID) {
@@ -1726,7 +1721,7 @@ func (c *cluster) nodeJoin(node *Node) error {
 	// the cluster.
 	if cnode := c.unprotectedNodeByID(node.ID); cnode != nil {
 		if cnode.URI != node.URI {
-			c.logger.Printf("Node: %v changed URI from %s to %s", cnode.ID, cnode.URI, node.URI)
+			c.logger.Printf("node: %v changed URI from %s to %s", cnode.ID, cnode.URI, node.URI)
 			cnode.URI = node.URI
 		}
 		return c.unprotectedSetStateAndBroadcast(c.determineClusterState())
