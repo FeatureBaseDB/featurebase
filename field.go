@@ -131,6 +131,8 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 	}
 }
 
+// OptFieldTypeTime sets the field type to time.
+// Pass true to skip creation of the standard view.
 func OptFieldTypeTime(timeQuantum TimeQuantum, opt ...bool) FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
