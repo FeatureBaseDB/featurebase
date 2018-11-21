@@ -30,6 +30,7 @@ import (
 	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pilosa/pilosa/stats"
+	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )
@@ -720,6 +721,9 @@ func (s *holderSyncer) SyncHolder() error {
 
 // syncIndex synchronizes index attributes with the rest of the cluster.
 func (s *holderSyncer) syncIndex(index string) error {
+	span, ctx := tracing.StartSpanFromContext(context.Background(), "HolderSyncer.syncIndex")
+	defer span.Finish()
+
 	// Retrieve index reference.
 	idx := s.Holder.Index(index)
 	if idx == nil {
@@ -738,7 +742,7 @@ func (s *holderSyncer) syncIndex(index string) error {
 	for _, node := range Nodes(s.Cluster.nodes).FilterID(s.Node.ID) {
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
-		m, err := s.Cluster.InternalClient.ColumnAttrDiff(context.Background(), &node.URI, index, blks)
+		m, err := s.Cluster.InternalClient.ColumnAttrDiff(ctx, &node.URI, index, blks)
 		if err != nil {
 			return errors.Wrap(err, "getting differing blocks")
 		} else if len(m) == 0 {
@@ -763,6 +767,9 @@ func (s *holderSyncer) syncIndex(index string) error {
 
 // syncField synchronizes field attributes with the rest of the cluster.
 func (s *holderSyncer) syncField(index, name string) error {
+	span, ctx := tracing.StartSpanFromContext(context.Background(), "HolderSyncer.syncField")
+	defer span.Finish()
+
 	// Retrieve field reference.
 	f := s.Holder.Field(index, name)
 	if f == nil {
@@ -782,7 +789,7 @@ func (s *holderSyncer) syncField(index, name string) error {
 	for _, node := range Nodes(s.Cluster.nodes).FilterID(s.Node.ID) {
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
-		m, err := s.Cluster.InternalClient.RowAttrDiff(context.Background(), &node.URI, index, name, blks)
+		m, err := s.Cluster.InternalClient.RowAttrDiff(ctx, &node.URI, index, name, blks)
 		if err == ErrFieldNotFound {
 			continue // field not created remotely yet, skip
 		} else if err != nil {
