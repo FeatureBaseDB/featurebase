@@ -37,6 +37,8 @@ type Config struct {
 	// DataDir is the directory where Pilosa stores both indexed data and
 	// running state such as cluster topology information.
 	DataDir string `toml:"data-dir"`
+	//AttrStore is the underline engine for the attribute store
+	AttrStore string `toml:"attribute-store"`
 	// Bind is the host:port on which Pilosa will listen.
 	Bind string `toml:"bind"`
 
@@ -108,6 +110,7 @@ type Config struct {
 func NewConfig() *Config {
 	c := &Config{
 		DataDir:             "~/.pilosa",
+		AttrStore:           "boltdb",
 		Bind:                ":10101",
 		MaxWritesPerRequest: 5000,
 		// LogPath: "",

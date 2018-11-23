@@ -3,6 +3,14 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:be8511fbdf669eb267e4ba4f964b9c380ec3b95b8931ee3e89ce22ae01418b4b"
+  name = "github.com/AndreasBriese/bbloom"
+  packages = ["."]
+  pruneopts = ""
+  revision = "343706a395b76e5ca5c7dca46a5d937b48febc74"
+
+[[projects]]
+  branch = "master"
   digest = "1:7deffcad61694d0cf57178c7d0c41df6b1357612e215914e35cf8b6353abf65c"
   name = "github.com/CAFxX/gcnotifier"
   packages = ["."]
@@ -64,6 +72,29 @@
   pruneopts = ""
   revision = "346938d642f2ec3594ed81d874461961cd0faa76"
   version = "v1.1.0"
+
+[[projects]]
+  digest = "1:81d49e94365e7f1ed77edddf9a5482ab4ced461dab56fbf8fc2834da6c295de5"
+  name = "github.com/dgraph-io/badger"
+  packages = [
+    ".",
+    "options",
+    "protos",
+    "skl",
+    "table",
+    "y",
+  ]
+  pruneopts = ""
+  revision = "99233d725dbdd26d156c61b2f42ae1671b794656"
+  version = "v1.5.4"
+
+[[projects]]
+  branch = "master"
+  digest = "1:2407d73d2349c9dd9d7b2c9fafcee9412444cb6cb261ee47ebb751b2a5507976"
+  name = "github.com/dgryski/go-farm"
+  packages = ["."]
+  pruneopts = ""
+  revision = "2de33835d10275975374b37b2dcfd22c9020a1f5"
 
 [[projects]]
   digest = "1:eb53021a8aa3f599d29c7102e65026242bdedce998a54837dc67f14b6a97c5fd"
@@ -293,14 +324,24 @@
   digest = "1:02715a2fb4b9279af36651a59a51dd4164eb689bd6785874811899f43eeb2a54"
   name = "github.com/shirou/gopsutil"
   packages = [
+    "cpu",
     "host",
     "internal/common",
     "mem",
+    "net",
     "process",
   ]
   pruneopts = ""
   revision = "8048a2e9c5773235122027dd585cf821b2af1249"
   version = "v2.18.07"
+
+[[projects]]
+  branch = "master"
+  digest = "1:99c6a6dab47067c9b898e8c8b13d130c6ab4ffbcc4b7cc6236c2cd0b1e344f5b"
+  name = "github.com/shirou/w32"
+  packages = ["."]
+  pruneopts = ""
+  revision = "bb4de0191aa41b5507caa14b0650cdbddcd9280b"
 
 [[projects]]
   digest = "1:7ba2551c9a8de293bc575dbe2c0d862c52252d26f267f784547f059f512471c8"
@@ -407,8 +448,10 @@
     "context",
     "internal/iana",
     "internal/socket",
+    "internal/timeseries",
     "ipv4",
     "ipv6",
+    "trace",
   ]
   pruneopts = ""
   revision = "22bb95c5e783d192c577a7b310b06637db9f1d94"
@@ -464,6 +507,7 @@
     "github.com/boltdb/bolt",
     "github.com/cespare/xxhash",
     "github.com/davecgh/go-spew/spew",
+    "github.com/dgraph-io/badger",
     "github.com/gogo/protobuf/proto",
     "github.com/golang/protobuf/proto",
     "github.com/google/go-cmp/cmp",

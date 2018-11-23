@@ -25,6 +25,7 @@ import (
 func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags := cmd.Flags()
 	flags.StringVarP(&srv.Config.DataDir, "data-dir", "d", srv.Config.DataDir, "Directory to store pilosa data files.")
+	flags.StringVarP(&srv.Config.AttrStore, "attr-store", "s", srv.Config.AttrStore, "Pilosa attribute storage engine: badger|boltdb.")
 	flags.StringVarP(&srv.Config.Bind, "bind", "b", srv.Config.Bind, "Default URI on which pilosa should listen.")
 	flags.IntVarP(&srv.Config.MaxWritesPerRequest, "max-writes-per-request", "", srv.Config.MaxWritesPerRequest, "Number of write commands per request.")
 	flags.StringVar(&srv.Config.LogPath, "log-path", srv.Config.LogPath, "Log path")
