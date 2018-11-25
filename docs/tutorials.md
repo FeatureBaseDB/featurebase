@@ -710,7 +710,7 @@ Notice that the result set now contains a list of integers in the `columns` attr
 
 In order to retrieve the attribute information that we stored for each book, we need to add a URL parameter `columnAttrs=true` to the query.
 ``` request
-curl localhost:10101/index/books/query?columnAttrs=true \
+curl "localhost:10101/index/books/query?columnAttrs=true" \
      -X POST \
      -d 'Row(members=10002)'
 ```
@@ -728,7 +728,7 @@ The `book` attributes are included in the result set at the `columnAttrs` attrib
 
 Finally, if we want to find out which books were read by both `Sue` and `Pedro`, we just perform an `Intersect` query on those two members:
 ``` request
-curl localhost:10101/index/books/query?columnAttrs=true \
+curl "localhost:10101/index/books/query?columnAttrs=true" \
      -X POST \
      -d 'Intersect(Row(members=10002), Row(members=10004))'
 ```
