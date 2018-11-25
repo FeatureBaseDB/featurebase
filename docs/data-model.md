@@ -104,7 +104,7 @@ Setting a time quantum on a field creates extra views which allow Range queries 
 
 ### Attribute
 
-Attributes are arbitrary key/value pairs that can be associated with either rows or columns. This metadata is stored in a separate BoltDB data structure.
+Attributes are arbitrary key/value pairs that can be associated with either rows or columns. This metadata is stored in a separate BoltDB or Badger data structure.
 
 Column-level attributes are common across an index. That is, each column attribute applies to all bits in the corresponding column, across all fields in an index. Row attributes apply to all bits in the corresponding row.
 

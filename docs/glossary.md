@@ -8,7 +8,7 @@ nav = []
 
 <strong id="anti-entropy">[Anti-entropy](../configuration/#anti-entropy-interval):</strong> A periodic process that compares each [shard](#shard) and its [replicas](#replica) across the [cluster](#cluster) to repair inconsistencies.
 
-<strong id="attribute">[Attribute](../data-model/#attribute):</strong> Attributes can be associated to both [rows](#row) and [columns](#column). This metadata is kept separately from the core binary matrix in a [BoltDB](https://github.com/boltdb/bolt) store.
+<strong id="attribute">[Attribute](../data-model/#attribute):</strong> Attributes can be associated to both [rows](#row) and [columns](#column). This metadata is kept separately from the core binary matrix in either a [BoltDB](https://github.com/boltdb/bolt) or a [Badger](https://github.com/dgraph-io/badger) store
 
 <strong id="bit">[Bit](../data-model/#overview):</strong> Bits are the fundamental unit of data in Pilosa. A bit lives in a [field](#field), at the intersection of a [row](#row) and [column](#column).
 

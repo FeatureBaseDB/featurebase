@@ -616,6 +616,8 @@ curl localhost:10101/index/patients/query \
 
 Pilosa can store arbitrary values associated to any row or column. In Pilosa, these are referred to as `attributes`, and they can be of type `string`, `integer`, `boolean`, or `float`. In this tutorial we will store some attribute data and then run some queries that return that data.
 
+Pilosa can use either a [BoltDB](https://github.com/boltdb/bolt) or a [Badger](https://github.com/dgraph-io/badger) store. BoltDB is the default store. To use badger start pilosa with the `pilosa server -s badger` flag.
+
 First, create an index called `books` to use for this tutorial:
 ``` request
 curl localhost:10101/index/books \
