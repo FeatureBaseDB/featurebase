@@ -159,9 +159,8 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 		}
 
 		// Apply to the in-memory bitmap.
-		if op.apply(b) {
+		if b.DirectAdd(v) {
 			changed = true
-
 		}
 	}
 
