@@ -478,6 +478,32 @@ func (b *Bitmap) Xor(other *Bitmap) *Bitmap {
 	return output
 }
 
+func (b *Bitmap) Shift() (*Bitmap) {
+	output := NewBitmap()
+	iiter, _ := b.Containers.Iterator(0)
+	last:=false
+	lastKey:= uint64(0)
+	for iiter.Next() {
+		ki, ci := iiter.Value()
+		o, carry := shift(ci)
+		if last {
+			o.add(0)
+		}
+		if o.n>0{
+			output.Containers.Put(ki, o)
+		}
+		last = carry
+		lastKey=ki
+	}
+	if last { //handle the overflow
+		extra:= NewContainer()
+		extra.add(0)
+		output.Containers.Put(lastKey+1, extra)
+	}
+
+	return output
+}
+
 // removeEmptyContainers deletes all containers that have a count of zero.
 func (b *Bitmap) removeEmptyContainers() {
 	citer, _ := b.Containers.Iterator(0)
@@ -3023,7 +3049,6 @@ func shiftArray(a *Container) (*Container, bool) {
 	output.array = output.array[:0]
 	output.n = a.n
 	for _, v := range a.array {
-		fmt.Println(v,v+1)
 		if v+1 == 0 { //overflow
 			carry = true
 			output.n -= 1
@@ -3041,9 +3066,9 @@ func shiftBitmap(a *Container) (*Container, bool) {
 	output.bitmap = make([]uint64, len(a.bitmap))
 	output.bitmap = output.bitmap[:0]
 	output.n = a.n
-	lastcarry:=false
+	lastcarry := false
 	for i, v := range a.bitmap {
-		carry = (v&(1<<63))!= 0
+		carry = (v & (1 << 63)) != 0
 		v = v << 1
 		if i != 0 {
 			if lastcarry {

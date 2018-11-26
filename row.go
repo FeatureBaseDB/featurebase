@@ -153,6 +153,15 @@ func (r *Row) Difference(other *Row) *Row {
 
 	return &Row{segments: segments}
 }
+// Shift returns the bitwise shift of r by 1 bit.
+func (r *Row) Shift() *Row {
+	var segments []rowSegment
+	for _,segment := range r.segments {
+		segments = append(segments, *segment.Shift())
+	}
+
+	return &Row{segments: segments}
+}
 
 // SetBit sets the i-th column of the row.
 func (r *Row) SetBit(i uint64) (changed bool) {
@@ -320,6 +329,17 @@ func (s *rowSegment) Difference(other *rowSegment) *rowSegment {
 // Xor returns the xor of s and other.
 func (s *rowSegment) Xor(other *rowSegment) *rowSegment {
 	data := s.data.Xor(&other.data)
+
+	return &rowSegment{
+		data:  *data,
+		shard: s.shard,
+		n:     data.Count(),
+	}
+}
+// Shift returns s shifted by 1 bit.
+func (s *rowSegment) Shift() *rowSegment {
+	//TODO deal with overflow
+	data := s.data.Shift()
 
 	return &rowSegment{
 		data:  *data,

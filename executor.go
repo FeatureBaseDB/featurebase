@@ -515,6 +515,8 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, index string, c *
 		return e.executeXorShard(ctx, index, c, shard)
 	case "Not":
 		return e.executeNotShard(ctx, index, c, shard)
+	case "Shift":
+		return e.executeShiftShard(ctx, index, c, shard)
 	default:
 		return nil, fmt.Errorf("unknown call: %s", c.Name)
 	}
@@ -1417,6 +1419,22 @@ func (e *executor) executeNotShard(ctx context.Context, index string, c *pql.Cal
 	}
 
 	return existenceRow.Difference(row), nil
+}
+
+// executeShiftShard executes a shift() call for a local shard.
+func (e *executor) executeShiftShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
+	if len(c.Children) == 0 {
+		return nil, errors.New("Shift() requires an input row")
+	} else if len(c.Children) > 1 {
+		return nil, errors.New("Shift() only accepts a single row input")
+	}
+
+	row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
+	if err != nil {
+		return nil, err
+	}
+
+	return row.Shift(), nil
 }
 
 // executeCount executes a count() call.

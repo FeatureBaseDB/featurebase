@@ -3163,3 +3163,78 @@ func runCallTest(t *testing.T, writeQuery string, readQueries []string, indexOpt
 
 	return responses
 }
+
+func TestExecutor_Execute_Shift(t *testing.T) {
+	t.Run("Shift Bit 0", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+		hldr.SetBit("i", "general", 10, 0)
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Shift(Row(general=10))`}); err != nil {
+			t.Fatal(err)
+		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{1}) {
+			t.Fatalf("unexpected columns: %+v", columns)
+		}
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Shift(Shift(Row(general=10)))`}); err != nil {
+			t.Fatal(err)
+		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{2}) {
+			t.Fatalf("unexpected columns: %+v", columns)
+		}
+	})
+	t.Run("Shift container boundary", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+		hldr.SetBit("i", "general", 10, 65535)
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Shift(Row(general=10))`}); err != nil {
+			t.Fatal(err)
+		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{65536}) {
+			t.Fatalf("unexpected columns: %+v", columns)
+		}
+	})
+
+	t.Run("Shift shard boundary", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+		hldr.SetBit("i", "general", 10, ShardWidth-1)
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Shift(Row(general=10))`}); err != nil {
+			t.Fatal(err)
+		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{ShardWidth}) {
+			t.Fatalf("unexpected columns: %+v", columns)
+		}
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Shift(Shift(Row(general=10)))`}); err != nil {
+			t.Fatal(err)
+		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{ShardWidth+1}) {
+			t.Fatalf("unexpected columns: %+v", columns)
+		}
+	})
+
+	t.Run("Shift shard boundary no create", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+		hldr.SetBit("i", "general", 10, ShardWidth-2) //shardwidth -1
+		hldr.SetBit("i", "general", 10, ShardWidth-1) //shardwidth
+		hldr.SetBit("i", "general", 10, ShardWidth) //shardwidth +1
+		hldr.SetBit("i", "general", 10, ShardWidth+2) //shardwidth +3
+
+		exp:=[]uint64{ ShardWidth-1,ShardWidth,ShardWidth+1,ShardWidth+3}
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Shift(Row(general=10))`}); err != nil {
+			t.Fatal(err)
+		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, exp) {
+			t.Fatalf("unexpected columns: %+v", columns)
+		}
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Shift(Shift(Row(general=10)))`}); err != nil {
+			t.Fatal(err)
+		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns,[]uint64{ ShardWidth,ShardWidth+1,ShardWidth+2,ShardWidth+4} ) {
+			t.Fatalf("unexpected columns: \n%+v\n%+v", columns,exp)
+		}
+	})
+
+}
