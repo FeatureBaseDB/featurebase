@@ -40,6 +40,7 @@ import (
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pilosa/pilosa/stats"
+	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -1492,9 +1493,6 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 			lastRowID = rowID
 			rowSet[rowID] = struct{}{}
 		}
-
-		// Invalidate block checksum.
-		delete(f.checksums, int(rowID/HashBlockSize))
 	}
 
 	f.mu.Lock()
@@ -1518,6 +1516,9 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 
 	// Update cache counts for all affected rows.
 	for rowID := range rowSet {
+		// Invalidate block checksum.
+		delete(f.checksums, int(rowID/HashBlockSize))
+
 		n := results.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
 		f.cache.BulkAdd(rowID, n)
 	}
@@ -1734,7 +1735,6 @@ func (f *fragment) snapshot() error {
 // f.mu must be locked when calling it.
 func unprotectedWriteToFragment(f *fragment, bm *roaring.Bitmap) error { // nolint: interfacer
 
-	f.Logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	start := time.Now()
 	defer track(start, completeMessage, f.stats, f.Logger)
@@ -2188,6 +2188,9 @@ func (s *fragmentSyncer) isClosing() bool {
 // syncFragment compares checksums for the local and remote fragments and
 // then merges any blocks which have differences.
 func (s *fragmentSyncer) syncFragment() error {
+	span, ctx := tracing.StartSpanFromContext(context.Background(), "FragmentSyncer.syncFragment")
+	defer span.Finish()
+
 	// Determine replica set.
 	nodes := s.Cluster.shardNodes(s.Fragment.index, s.Fragment.shard)
 	if len(nodes) == 1 {
@@ -2205,7 +2208,7 @@ func (s *fragmentSyncer) syncFragment() error {
 		}
 
 		// Retrieve remote blocks.
-		blocks, err := s.Cluster.InternalClient.FragmentBlocks(context.Background(), &node.URI, s.Fragment.index, s.Fragment.field, s.Fragment.view, s.Fragment.shard)
+		blocks, err := s.Cluster.InternalClient.FragmentBlocks(ctx, &node.URI, s.Fragment.index, s.Fragment.field, s.Fragment.view, s.Fragment.shard)
 		if err != nil && err != ErrFragmentNotFound {
 			return errors.Wrap(err, "getting blocks")
 		}
@@ -2265,6 +2268,9 @@ func (s *fragmentSyncer) syncFragment() error {
 // syncBlock sends and receives all rows for a given block.
 // Returns an error if any remote hosts are unreachable.
 func (s *fragmentSyncer) syncBlock(id int) error {
+	span, ctx := tracing.StartSpanFromContext(context.Background(), "FragmentSyncer.syncBlock")
+	defer span.Finish()
+
 	f := s.Fragment
 
 	// Read pairs from each remote block.
@@ -2284,7 +2290,7 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 		uris = append(uris, uri)
 
 		// Only sync the standard block.
-		rowIDs, columnIDs, err := s.Cluster.InternalClient.BlockData(context.Background(), &node.URI, f.index, f.field, f.view, f.shard, id)
+		rowIDs, columnIDs, err := s.Cluster.InternalClient.BlockData(ctx, &node.URI, f.index, f.field, f.view, f.shard, id)
 		if err != nil {
 			return errors.Wrap(err, "getting block")
 		}
@@ -2346,7 +2352,7 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 				Query:  buffers[k].String(),
 				Remote: true,
 			}
-			_, err := s.Cluster.InternalClient.QueryNode(context.Background(), uris[i], f.index, queryRequest)
+			_, err := s.Cluster.InternalClient.QueryNode(ctx, uris[i], f.index, queryRequest)
 			if err != nil {
 				return errors.Wrap(err, "executing")
 			}

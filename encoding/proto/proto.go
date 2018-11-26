@@ -217,6 +217,14 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		decodeImportValueRequest(msg, mt)
 		return nil
+	case *pilosa.ImportRoaringRequest:
+		msg := &internal.ImportRoaringRequest{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling ImportRoaringRequest")
+		}
+		decodeImportRoaringRequest(msg, mt)
+		return nil
 	case *pilosa.ImportResponse:
 		msg := &internal.ImportResponse{}
 		err := proto.Unmarshal(buf, msg)
@@ -292,6 +300,8 @@ func encodeToProto(m pilosa.Message) proto.Message {
 		return encodeImportRequest(mt)
 	case *pilosa.ImportValueRequest:
 		return encodeImportValueRequest(mt)
+	case *pilosa.ImportRoaringRequest:
+		return encodeImportRoaringRequest(mt)
 	case *pilosa.ImportResponse:
 		return encodeImportResponse(mt)
 	case *pilosa.BlockDataRequest:
@@ -345,6 +355,22 @@ func encodeImportValueRequest(m *pilosa.ImportValueRequest) *internal.ImportValu
 		ColumnIDs:  m.ColumnIDs,
 		ColumnKeys: m.ColumnKeys,
 		Values:     m.Values,
+	}
+}
+
+func encodeImportRoaringRequest(m *pilosa.ImportRoaringRequest) *internal.ImportRoaringRequest {
+	views := make([]*internal.ImportRoaringRequestView, len(m.Views))
+	i := 0
+	for viewName, viewData := range m.Views {
+		views[i] = &internal.ImportRoaringRequestView{
+			Name: viewName,
+			Data: viewData,
+		}
+		i += 1
+	}
+	return &internal.ImportRoaringRequest{
+		Clear: m.Clear,
+		Views: views,
 	}
 }
 
@@ -914,6 +940,15 @@ func decodeImportValueRequest(pb *internal.ImportValueRequest, m *pilosa.ImportV
 	m.ColumnIDs = pb.ColumnIDs
 	m.ColumnKeys = pb.ColumnKeys
 	m.Values = pb.Values
+}
+
+func decodeImportRoaringRequest(pb *internal.ImportRoaringRequest, m *pilosa.ImportRoaringRequest) {
+	views := map[string][]byte{}
+	for _, view := range pb.Views {
+		views[view.Name] = view.Data
+	}
+	m.Clear = pb.Clear
+	m.Views = views
 }
 
 func decodeImportResponse(pb *internal.ImportResponse, m *pilosa.ImportResponse) {
