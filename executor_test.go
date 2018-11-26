@@ -3210,7 +3210,7 @@ func TestExecutor_Execute_Shift(t *testing.T) {
 
 		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Shift(Shift(Row(general=10)))`}); err != nil {
 			t.Fatal(err)
-		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{ShardWidth+1}) {
+		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{ShardWidth + 1}) {
 			t.Fatalf("unexpected columns: %+v", columns)
 		}
 	})
@@ -3221,10 +3221,10 @@ func TestExecutor_Execute_Shift(t *testing.T) {
 		hldr := test.Holder{Holder: c[0].Server.Holder()}
 		hldr.SetBit("i", "general", 10, ShardWidth-2) //shardwidth -1
 		hldr.SetBit("i", "general", 10, ShardWidth-1) //shardwidth
-		hldr.SetBit("i", "general", 10, ShardWidth) //shardwidth +1
+		hldr.SetBit("i", "general", 10, ShardWidth)   //shardwidth +1
 		hldr.SetBit("i", "general", 10, ShardWidth+2) //shardwidth +3
 
-		exp:=[]uint64{ ShardWidth-1,ShardWidth,ShardWidth+1,ShardWidth+3}
+		exp := []uint64{ShardWidth - 1, ShardWidth, ShardWidth + 1, ShardWidth + 3}
 		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Shift(Row(general=10))`}); err != nil {
 			t.Fatal(err)
 		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, exp) {
@@ -3232,8 +3232,8 @@ func TestExecutor_Execute_Shift(t *testing.T) {
 		}
 		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Shift(Shift(Row(general=10)))`}); err != nil {
 			t.Fatal(err)
-		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns,[]uint64{ ShardWidth,ShardWidth+1,ShardWidth+2,ShardWidth+4} ) {
-			t.Fatalf("unexpected columns: \n%+v\n%+v", columns,exp)
+		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{ShardWidth, ShardWidth + 1, ShardWidth + 2, ShardWidth + 4}) {
+			t.Fatalf("unexpected columns: \n%+v\n%+v", columns, exp)
 		}
 	})
 

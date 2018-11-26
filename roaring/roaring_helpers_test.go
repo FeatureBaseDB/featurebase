@@ -124,7 +124,6 @@ func bitmapFirstBitSecoundRowSet() []uint64 {
 	return bitmap
 }
 
-
 func bitmapLastBitSet() []uint64 {
 	bitmap := make([]uint64, bitmapN)
 	bitmap[bitmapN-1] = 0x8000000000000000
