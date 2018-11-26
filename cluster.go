@@ -27,14 +27,14 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
 	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -1260,6 +1260,8 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 
 		// Stop processing on any error.
 		if err := func() error {
+			span, ctx := tracing.StartSpanFromContext(context.Background(), "Cluster.followResizeInstruction")
+			defer span.Finish()
 
 			// Sync the schema received in the resize instruction.
 			c.logger.Debugf("holder applySchema")
@@ -1293,7 +1295,7 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 
 				// Stream shard from remote node.
 				c.logger.Printf("retrieve shard %d for index %s from host %s", src.Shard, src.Index, src.Node.URI)
-				rd, err := c.InternalClient.RetrieveShardFromURI(context.Background(), src.Index, src.Field, src.Shard, srcURI)
+				rd, err := c.InternalClient.RetrieveShardFromURI(ctx, src.Index, src.Field, src.Shard, srcURI)
 				if err != nil {
 					// For now it is an acceptable error if the fragment is not found
 					// on the remote node. This occurs when a shard has been skipped and

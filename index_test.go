@@ -70,6 +70,22 @@ func TestIndex_CreateField(t *testing.T) {
 		})
 	})
 
+	// Ensure time quantum can be set appropriately on a new field.
+	t.Run("TimeQuantumNoStandardView", func(t *testing.T) {
+		t.Run("Explicit", func(t *testing.T) {
+			index := test.MustOpenIndex()
+			defer index.Close()
+
+			// Create field with explicit quantum with no standard view
+			f, err := index.CreateField("f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH"), true))
+			if err != nil {
+				t.Fatal(err)
+			} else if q := f.TimeQuantum(); q != pilosa.TimeQuantum("YMDH") {
+				t.Fatalf("unexpected field time quantum: %s", q)
+			}
+		})
+	})
+
 	// Ensure field can include range columns.
 	t.Run("BSIFields", func(t *testing.T) {
 		t.Run("OK", func(t *testing.T) {

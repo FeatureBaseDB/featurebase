@@ -418,6 +418,9 @@ func (s *Server) loadNodeID() string {
 	return nodeID
 }
 
+// NodeID returns the server's node id.
+func (s *Server) NodeID() string { return s.nodeID }
+
 // SyncData manually invokes the anti entropy process which makes sure that this
 // node has the data from all replicas across the cluster.
 func (s *Server) SyncData() error {

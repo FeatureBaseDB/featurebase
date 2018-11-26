@@ -115,3 +115,13 @@ message TranslateKeysRequest {
 message TranslateKeysResponse {
 	repeated uint64 IDs = 3;
 }
+
+message ImportRoaringRequestView {
+	string Name = 1;
+	bytes Data = 2;
+}
+
+message ImportRoaringRequest {
+	bool Clear = 1;
+	repeated ImportRoaringRequestView views = 2;
+}
