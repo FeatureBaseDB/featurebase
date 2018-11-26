@@ -737,7 +737,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 		// set some bits
 		w = httptest.NewRecorder()
-		r = test.MustNewHTTPRequest("POST", "/index/i1-tr/query", strings.NewReader(`Set("col1", f1="row1")Set("col2", f1="row1")`))
+		r = test.MustNewHTTPRequest("POST", "/index/i1-tr/query", strings.NewReader(`Set("col1", f1="row1")`))
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
@@ -746,7 +746,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		// Generate request body for translate column keys request
 		reqBody, err := cmd.API.Serializer.Marshal(&pilosa.TranslateKeysRequest{
 			Index: "i1-tr",
-			Keys:  []string{"col1", "col2"},
+			Keys:  []string{"col1", "col2", "col3"},
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -760,7 +760,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
-		target := []uint64{1, 2}
+		target := []uint64{1, 2, 3}
 		resp := pilosa.TranslateKeysResponse{}
 		err = cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp)
 		if err != nil {
@@ -774,7 +774,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		reqBody, err = cmd.API.Serializer.Marshal(&pilosa.TranslateKeysRequest{
 			Index: "i1-tr",
 			Field: "f1",
-			Keys:  []string{"row1"},
+			Keys:  []string{"row1", "row2"},
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -788,7 +788,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
-		target = []uint64{1}
+		target = []uint64{1, 2}
 		resp = pilosa.TranslateKeysResponse{}
 		err = cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp)
 		if err != nil {
