@@ -1,4 +1,4 @@
-.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-pql gometalinter install install-build-deps install-dep install-gometalinter install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build require-dep require-gometalinter require-protoc require-protoc-gen-gofast require-peg test
+.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-pql gometalinter install install-build-deps install-dep install-gometalinter install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build test
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
@@ -150,26 +150,10 @@ gometalinter: require-gometalinter
 ######################
 
 # Verifies that needed build dependency is installed. Errors out if not installed.
-define require
-	$(if $(shell command -v $1 2>/dev/null),
-		$(info Verified build dependency "$1" is installed.),
-		$(error Build dependency "$1" not installed. To install, run `make install-$1` or `make install-build-deps`))
-endef
-
-require-dep:
-	$(call require,dep)
-
-require-protoc-gen-gofast:
-	$(call require,protoc-gen-gofast)
-
-require-protoc:
-	$(call require,protoc)
-
-require-peg:
-	$(call require,peg)
-
-require-gometalinter:
-	$(call require,gometalinter)
+require-%:
+	$(if $(shell command -v $* 2>/dev/null),\
+		$(info Verified build dependency "$*" is installed.),\
+		$(error Build dependency "$*" not installed. To install, try `make install-$*`))
 
 install-build-deps: install-dep install-protoc-gen-gofast install-protoc install-stringer install-peg
 
