@@ -1348,5 +1348,40 @@ func BenchmarkSliceDescending(b *testing.B) {
 		for col := uint64(pilosa.ShardWidth); col > uint64(0); col-- {
 			bm.Add(col)
 		}
+		bm.Add(0)
+	}
+}
+
+func BenchmarkSliceAscendingStriped(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		bm := roaring.NewFileBitmap()
+		l := uint64(pilosa.ShardWidth / 8)
+		for col := uint64(0); col < l; col++ {
+			bm.Add(l*0 + col)
+			bm.Add(l*1 + col)
+			bm.Add(l*2 + col)
+			bm.Add(l*3 + col)
+			bm.Add(l*4 + col)
+			bm.Add(l*5 + col)
+			bm.Add(l*6 + col)
+			bm.Add(l*7 + col)
+		}
+	}
+}
+
+func BenchmarkSliceDescendingStriped(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		bm := roaring.NewFileBitmap()
+		l := uint64(pilosa.ShardWidth / 8)
+		for col := uint64(l); col < l+1; col-- {
+			bm.Add(l*7 + col)
+			bm.Add(l*6 + col)
+			bm.Add(l*5 + col)
+			bm.Add(l*4 + col)
+			bm.Add(l*3 + col)
+			bm.Add(l*2 + col)
+			bm.Add(l*1 + col)
+			bm.Add(l*0 + col)
+		}
 	}
 }
