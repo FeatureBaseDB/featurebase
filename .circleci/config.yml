@@ -2,7 +2,7 @@ version: 2
 defaults: &defaults
   working_directory: /go/src/github.com/pilosa/pilosa
   docker:
-    - image: circleci/golang:1.10
+    - image: circleci/golang:1.11
 fast-checkout: &fast-checkout
   attach_workspace:
     at: .
@@ -30,20 +30,28 @@ jobs:
       - run: gometalinter --install
       - run: go get github.com/remyoudompheng/go-misc/deadcode
       - run: make gometalinter
-  test-golang-1.10: &base-test
+  test-golang-1.11: &base-test
     <<: *defaults
     steps:
       - *fast-checkout
       - run: sudo apt-get install lsof
       - run: make test
-  test-golang-1.11-rc:
-    <<: *base-test
-    docker:
-      - image: circleci/golang:1.11-rc
-  test-golang-1.10-386:
+  test-golang-1.11-race:
+    <<: *defaults
+    steps:
+      - *fast-checkout
+      - run: sudo apt-get install lsof
+      - run:
+          command: make test TESTFLAGS="-race -timeout=30m"
+          no_output_timeout: 30m
+  test-golang-1.11-386:
     <<: *base-test
     environment:
       GOARCH: 386
+  test-golang-1.10:
+    <<: *base-test
+    docker:
+      - image: circleci/golang:1.10
   cluster-tests:
     <<: *defaults
     steps:
@@ -96,13 +104,16 @@ workflows:
       - linter:
           requires:
             - build
+      - test-golang-1.11:
+          requires:
+            - build
+      - test-golang-1.11-race:
+          requires:
+            - build
+      - test-golang-1.11-386:
+          requires:
+            - build
       - test-golang-1.10:
-          requires:
-            - build
-      - test-golang-1.11-rc:
-          requires:
-            - build
-      - test-golang-1.10-386:
           requires:
             - build
       - cluster-tests:
@@ -111,11 +122,11 @@ workflows:
       - prerelease:
           requires:
             - linter
-            - test-golang-1.10
+            - test-golang-1.11
       - release:
           requires:
             - linter
-            - test-golang-1.10
+            - test-golang-1.11
           filters:
             tags:
               only: /^v.*/
@@ -127,4 +138,4 @@ workflows:
       - dockerhub-upload:
           requires:
             - linter
-            - test-golang-1.10
+            - test-golang-1.11
