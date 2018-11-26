@@ -307,6 +307,42 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
     skip-verify = true
     ```
 
+#### Tracing Sampler Type
+
+* Description: Jaeger sampler type (const, probabilistic, ratelimiting, or remote)
+* Flag: `tracing.sampler-type`
+* Env: `PILOSA_TRACING_SAMPLER_TYPE`
+* Config:
+
+    ```toml
+    [tracing]
+    sampler-type = "remote"
+    ```
+
+#### Tracing Sampler Parameter
+
+* Description: Jaeger sampler parameter (number)
+* Flag: `tracing.sampler-param`
+* Env: `PILOSA_TRACING_SAMPLER_PARAM`
+* Config:
+
+    ```toml
+    [tracing]
+    sampler-param = 0.001
+    ```
+
+#### Tracing Agent Host/Port
+
+* Description: Jaeger agent host:port
+* Flag: `tracing.agent-host-port`
+* Env: `PILOSA_TRACING_AGENT_HOST_PORT`
+* Config:
+
+    ```toml
+    [tracing]
+    agent-host-port = "localhost:6831"
+    ```
+
 #### Translation Map Size
 
 * Description: Size in bytes of mmap to allocate for key translation

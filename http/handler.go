@@ -24,9 +24,8 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
-	"net/url"
-	// Imported for its side-effect of registering pprof endpoints with the server.
 	_ "net/http/pprof"
+	"net/url" // Imported for its side-effect of registering pprof endpoints with the server.
 	"reflect"
 	"runtime/debug"
 	"strconv"
@@ -37,7 +36,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/logger"
-
+	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -222,6 +221,15 @@ func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
 	})
 }
 
+func (h *Handler) extractTracing(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		span, ctx := tracing.GlobalTracer.ExtractHTTPHeaders(r)
+		defer span.Finish()
+
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 // newRouter creates a new mux http router.
 func newRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
@@ -262,6 +270,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET").Name("GetTranslateData")
 
 	router.Use(handler.queryArgValidator)
+	router.Use(handler.extractTracing)
 	return router
 }
 
@@ -707,7 +716,7 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	case pilosa.FieldTypeInt:
 		fos = append(fos, pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max))
 	case pilosa.FieldTypeTime:
-		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum))
+		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum, req.Options.NoStandardView))
 	case pilosa.FieldTypeMutex:
 		fos = append(fos, pilosa.OptFieldTypeMutex(*req.Options.CacheType, *req.Options.CacheSize))
 	case pilosa.FieldTypeBool:
@@ -730,13 +739,14 @@ type postFieldRequest struct {
 // fieldOptions tracks pilosa.FieldOptions. It is made up of pointers to values,
 // and used for input validation.
 type fieldOptions struct {
-	Type        string              `json:"type,omitempty"`
-	CacheType   *string             `json:"cacheType,omitempty"`
-	CacheSize   *uint32             `json:"cacheSize,omitempty"`
-	Min         *int64              `json:"min,omitempty"`
-	Max         *int64              `json:"max,omitempty"`
-	TimeQuantum *pilosa.TimeQuantum `json:"timeQuantum,omitempty"`
-	Keys        *bool               `json:"keys,omitempty"`
+	Type           string              `json:"type,omitempty"`
+	CacheType      *string             `json:"cacheType,omitempty"`
+	CacheSize      *uint32             `json:"cacheSize,omitempty"`
+	Min            *int64              `json:"min,omitempty"`
+	Max            *int64              `json:"max,omitempty"`
+	TimeQuantum    *pilosa.TimeQuantum `json:"timeQuantum,omitempty"`
+	Keys           *bool               `json:"keys,omitempty"`
+	NoStandardView bool                `json:"noStandardView,omitempty"`
 }
 
 func (o *fieldOptions) validate() error {
@@ -1497,10 +1507,18 @@ func GetHTTPClient(t *tls.Config) *http.Client {
 
 // handlPostRoaringImport
 func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Content-Type") != "application/x-binary" {
+	// Verify that request is only communicating over protobufs.
+	if r.Header.Get("Content-Type") != "application/x-protobuf" {
 		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
 		return
+	} else if r.Header.Get("Accept") != "application/x-protobuf" {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
 	}
+
+	indexName := mux.Vars(r)["index"]
+	fieldName := mux.Vars(r)["field"]
+
 	q := r.URL.Query()
 	remoteStr := q.Get("remote")
 	var remote bool
@@ -1508,12 +1526,15 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 		remote = true
 	}
 
-	// If the clear flag is true, treat the import as clear bits.
-	doClear := q.Get("clear") == "true"
-
 	// Read entire body.
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	req := &pilosa.ImportRoaringRequest{}
+	if err := h.api.Serializer.Unmarshal(body, req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -1527,7 +1548,7 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 
 	resp := &pilosa.ImportResponse{}
 	// TODO give meaningful stats for import
-	err = h.api.ImportRoaring(r.Context(), urlVars["index"], urlVars["field"], shard, remote, body, pilosa.OptImportOptionsClear(doClear))
+	err = h.api.ImportRoaring(r.Context(), indexName, fieldName, shard, remote, req)
 	if err != nil {
 		resp.Err = err.Error()
 		if _, ok := err.(pilosa.BadRequestError); ok {

@@ -29,6 +29,7 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/encoding/proto"
+	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -66,6 +67,8 @@ func NewInternalClientFromURI(defaultURI *pilosa.URI, remoteClient *http.Client)
 
 // MaxShardByIndex returns the number of shards on a server by index.
 func (c *InternalClient) MaxShardByIndex(ctx context.Context) (map[string]uint64, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.MaxShardByIndex")
+	defer span.Finish()
 	return c.maxShardByIndex(ctx)
 }
 
@@ -91,9 +94,7 @@ func (c *InternalClient) maxShardByIndex(ctx context.Context) (map[string]uint64
 	defer resp.Body.Close()
 
 	var rsp getShardsMaxResponse
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
-	} else if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
 
@@ -102,6 +103,9 @@ func (c *InternalClient) maxShardByIndex(ctx context.Context) (map[string]uint64
 
 // Schema returns all index and field schema information.
 func (c *InternalClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Schema")
+	defer span.Finish()
+
 	// Execute request against the host.
 	u := c.defaultURI.Path("/schema")
 
@@ -130,6 +134,9 @@ func (c *InternalClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error
 
 // CreateIndex creates a new index on the server.
 func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilosa.IndexOptions) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.CreateIndex")
+	defer span.Finish()
+
 	// Encode query request.
 	buf, err := json.Marshal(&postIndexRequest{
 		Options: opt,
@@ -152,7 +159,7 @@ func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilo
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		if resp.StatusCode == http.StatusConflict {
+		if resp != nil && resp.StatusCode == http.StatusConflict {
 			return pilosa.ErrIndexExists
 		}
 		return err
@@ -162,6 +169,9 @@ func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilo
 
 // FragmentNodes returns a list of nodes that own a shard.
 func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard uint64) ([]*pilosa.Node, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FragmentNodes")
+	defer span.Finish()
+
 	// Execute request against the host.
 	u := uriPathToURL(c.defaultURI, "/internal/fragment/nodes")
 	u.RawQuery = (url.Values{"index": {index}, "shard": {strconv.FormatUint(shard, 10)}}).Encode()
@@ -191,6 +201,9 @@ func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard 
 
 // Nodes returns a list of all nodes.
 func (c *InternalClient) Nodes(ctx context.Context) ([]*pilosa.Node, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Nodes")
+	defer span.Finish()
+
 	// Execute request against the host.
 	u := uriPathToURL(c.defaultURI, "/internal/nodes")
 
@@ -219,11 +232,16 @@ func (c *InternalClient) Nodes(ctx context.Context) ([]*pilosa.Node, error) {
 
 // Query executes query against the index.
 func (c *InternalClient) Query(ctx context.Context, index string, queryRequest *pilosa.QueryRequest) (*pilosa.QueryResponse, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Query")
+	defer span.Finish()
 	return c.QueryNode(ctx, c.defaultURI, index, queryRequest)
 }
 
 // QueryNode executes query against the index, sending the request to the node specified.
 func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index string, queryRequest *pilosa.QueryRequest) (*pilosa.QueryResponse, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "QueryNode")
+	defer span.Finish()
+
 	if index == "" {
 		return nil, pilosa.ErrIndexRequired
 	} else if queryRequest.Query == "" {
@@ -258,8 +276,6 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index s
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading")
-	} else if resp.StatusCode != http.StatusOK {
-		return nil, errors.New(string(body))
 	}
 
 	qresp := &pilosa.QueryResponse{}
@@ -274,6 +290,9 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index s
 
 // Import bulk imports bits for a single shard to a host.
 func (c *InternalClient) Import(ctx context.Context, index, field string, shard uint64, bits []pilosa.Bit, opts ...pilosa.ImportOption) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Import")
+	defer span.Finish()
+
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
@@ -321,6 +340,9 @@ func getCoordinatorNode(nodes []*pilosa.Node) *pilosa.Node {
 
 // ImportK bulk imports bits specified by string keys to a host.
 func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits []pilosa.Bit, opts ...pilosa.ImportOption) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportK")
+	defer span.Finish()
+
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
@@ -361,6 +383,9 @@ func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits 
 }
 
 func (c *InternalClient) EnsureIndex(ctx context.Context, name string, options pilosa.IndexOptions) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.EnsureIndex")
+	defer span.Finish()
+
 	err := c.CreateIndex(ctx, name, options)
 	if err == nil || errors.Cause(err) == pilosa.ErrIndexExists {
 		return nil
@@ -369,10 +394,14 @@ func (c *InternalClient) EnsureIndex(ctx context.Context, name string, options p
 }
 
 func (c *InternalClient) EnsureField(ctx context.Context, indexName string, fieldName string) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.EnsureField")
+	defer span.Finish()
 	return c.EnsureFieldWithOptions(ctx, indexName, fieldName, pilosa.FieldOptions{})
 }
 
 func (c *InternalClient) EnsureFieldWithOptions(ctx context.Context, indexName string, fieldName string, opt pilosa.FieldOptions) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.EnsureFieldWithOptions")
+	defer span.Finish()
 	err := c.CreateFieldWithOptions(ctx, indexName, fieldName, opt)
 	if err == nil || errors.Cause(err) == pilosa.ErrFieldExists {
 		return nil
@@ -408,6 +437,9 @@ func (c *InternalClient) marshalImportPayload(index, field string, shard uint64,
 
 // importNode sends a pre-marshaled import request to a node.
 func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, index, field string, buf []byte, opts *pilosa.ImportOptions) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.importNode")
+	defer span.Finish()
+
 	// Create URL & HTTP request.
 	path := fmt.Sprintf("/index/%s/field/%s/import", index, field)
 	u := nodePathToURL(node, path)
@@ -455,6 +487,9 @@ func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, inde
 
 // ImportValue bulk imports field values for a single shard to a host.
 func (c *InternalClient) ImportValue(ctx context.Context, index, field string, shard uint64, vals []pilosa.FieldValue, opts ...pilosa.ImportOption) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportValue")
+	defer span.Finish()
+
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
@@ -493,6 +528,9 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 
 // ImportValueK bulk imports keyed field values to a host.
 func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, vals []pilosa.FieldValue, opts ...pilosa.ImportOption) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportValueK")
+	defer span.Finish()
+
 	buf, err := c.marshalImportValuePayload(index, field, 0, vals)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
@@ -550,7 +588,10 @@ func (c *InternalClient) marshalImportValuePayload(index, field string, shard ui
 
 // ImportRoaring does fast import of raw bits in roaring format (pilosa or
 // official format, see API.ImportRoaring).
-func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64, remote bool, data []byte, opts ...pilosa.ImportOption) error {
+func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64, remote bool, req *pilosa.ImportRoaringRequest) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportRoaring")
+	defer span.Finish()
+
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
@@ -560,32 +601,27 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, ind
 		uri = c.defaultURI
 	}
 
-	// Set up import options.
-	options := &pilosa.ImportOptions{}
-	for _, opt := range opts {
-		err := opt(options)
-		if err != nil {
-			return errors.Wrap(err, "applying option")
-		}
-	}
-
 	vals := url.Values{}
 	vals.Set("remote", strconv.FormatBool(remote))
-	if options.Clear {
-		vals.Set("clear", "true")
-	}
 	url := fmt.Sprintf("%s/index/%s/field/%s/import-roaring/%d?%s", uri, index, field, shard, vals.Encode())
 
+	// Marshal data to protobuf.
+	data, err := c.serializer.Marshal(req)
+	if err != nil {
+		return errors.Wrap(err, "marshal import request")
+	}
+
 	// Generate HTTP request.
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
+	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
 	if err != nil {
 		return errors.Wrap(err, "creating request")
 	}
-	req.Header.Set("Content-Type", "application/x-binary")
-	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	httpReq.Header.Set("Content-Type", "application/x-protobuf")
+	httpReq.Header.Set("Accept", "application/x-protobuf")
+	httpReq.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
-	resp, err := c.executeRequest(req.WithContext(ctx))
+	resp, err := c.executeRequest(httpReq.WithContext(ctx))
 	if err != nil {
 		return err
 	}
@@ -595,13 +631,16 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, ind
 	rbody := &pilosa.ImportResponse{}
 	dec.Decode(rbody)
 	if rbody.Err != "" {
-		return errors.Errorf("importing roaring: %v", rbody.Err)
+		return errors.Wrap(errors.New(rbody.Err), "importing roaring")
 	}
 	return nil
 }
 
 // ExportCSV bulk exports data for a single shard from a host to CSV format.
 func (c *InternalClient) ExportCSV(ctx context.Context, index, field string, shard uint64, w io.Writer) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ExportCSV")
+	defer span.Finish()
+
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
@@ -632,6 +671,9 @@ func (c *InternalClient) ExportCSV(ctx context.Context, index, field string, sha
 
 // exportNode copies a CSV export from a node to w.
 func (c *InternalClient) exportNodeCSV(ctx context.Context, node *pilosa.Node, index, field string, shard uint64, w io.Writer) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.exportNodeCSV")
+	defer span.Finish()
+
 	// Create URL.
 	u := nodePathToURL(node, "/export")
 	u.RawQuery = url.Values{
@@ -664,6 +706,9 @@ func (c *InternalClient) exportNodeCSV(ctx context.Context, node *pilosa.Node, i
 }
 
 func (c *InternalClient) RetrieveShardFromURI(ctx context.Context, index, field string, shard uint64, uri pilosa.URI) (io.ReadCloser, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.RetrieveShardFromURI")
+	defer span.Finish()
+
 	node := &pilosa.Node{
 		URI: uri,
 	}
@@ -671,6 +716,9 @@ func (c *InternalClient) RetrieveShardFromURI(ctx context.Context, index, field 
 }
 
 func (c *InternalClient) backupShardNode(ctx context.Context, index, field string, shard uint64, node *pilosa.Node) (io.ReadCloser, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.backupShardNode")
+	defer span.Finish()
+
 	u := nodePathToURL(node, "/fragment/data")
 	u.RawQuery = url.Values{
 		"index": {index},
@@ -689,7 +737,7 @@ func (c *InternalClient) backupShardNode(ctx context.Context, index, field strin
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		if resp.StatusCode == http.StatusNotFound {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
 			return nil, pilosa.ErrFragmentNotFound
 		}
 		return nil, err
@@ -699,11 +747,16 @@ func (c *InternalClient) backupShardNode(ctx context.Context, index, field strin
 }
 
 func (c *InternalClient) CreateField(ctx context.Context, index, field string) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.CreateField")
+	defer span.Finish()
 	return c.CreateFieldWithOptions(ctx, index, field, pilosa.FieldOptions{})
 }
 
 // CreateField creates a new field on the server.
 func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, field string, opt pilosa.FieldOptions) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.CreateFieldWithOptions")
+	defer span.Finish()
+
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	}
@@ -746,7 +799,7 @@ func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, fiel
 	// Execute request against the host.
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		if resp.StatusCode == http.StatusConflict {
+		if resp != nil && resp.StatusCode == http.StatusConflict {
 			return pilosa.ErrFieldExists
 		}
 		return err
@@ -758,6 +811,9 @@ func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, fiel
 // FragmentBlocks returns a list of block checksums for a fragment on a host.
 // Only returns blocks which contain data.
 func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, index, field, view string, shard uint64) ([]pilosa.FragmentBlock, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FragmentBlocks")
+	defer span.Finish()
+
 	if uri == nil {
 		uri = c.defaultURI
 	}
@@ -782,7 +838,7 @@ func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, in
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
 		// Return the appropriate error.
-		if resp.StatusCode == http.StatusNotFound {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
 			return nil, pilosa.ErrFragmentNotFound
 		}
 		return nil, err
@@ -799,6 +855,9 @@ func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, in
 
 // BlockData returns row/column id pairs for a block.
 func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, field, view string, shard uint64, block int) ([]uint64, []uint64, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.BlockData")
+	defer span.Finish()
+
 	if uri == nil {
 		panic("need to pass a URI to BlockData")
 	}
@@ -825,7 +884,7 @@ func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, 
 
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		if resp.StatusCode == http.StatusNotFound {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
 			return nil, nil, nil
 		}
 		return nil, nil, err
@@ -844,6 +903,9 @@ func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, 
 
 // ColumnAttrDiff returns data from differing blocks on a remote host.
 func (c *InternalClient) ColumnAttrDiff(ctx context.Context, uri *pilosa.URI, index string, blks []pilosa.AttrBlock) (map[uint64]map[string]interface{}, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ColumnAttrDiff")
+	defer span.Finish()
+
 	if uri == nil {
 		uri = c.defaultURI
 	}
@@ -881,6 +943,9 @@ func (c *InternalClient) ColumnAttrDiff(ctx context.Context, uri *pilosa.URI, in
 
 // RowAttrDiff returns data from differing blocks on a remote host.
 func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, index, field string, blks []pilosa.AttrBlock) (map[uint64]map[string]interface{}, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.RowAttrDiff")
+	defer span.Finish()
+
 	if uri == nil {
 		uri = c.defaultURI
 	}
@@ -904,7 +969,7 @@ func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, index
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		if resp.StatusCode == http.StatusNotFound {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
 			return nil, pilosa.ErrFieldNotFound
 		}
 		return nil, err
@@ -921,6 +986,9 @@ func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, index
 
 // SendMessage posts a message synchronously.
 func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, msg []byte) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.SendMessage")
+	defer span.Finish()
+
 	u := uriPathToURL(uri, "/internal/cluster/message")
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(msg))
 	if err != nil {
@@ -937,6 +1005,7 @@ func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, msg [
 
 // executeRequest executes the given request and checks the Response
 func (c *InternalClient) executeRequest(req *http.Request) (*http.Response, error) {
+	tracing.GlobalTracer.InjectHTTPHeaders(req)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "executing request")
