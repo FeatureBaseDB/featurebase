@@ -478,25 +478,25 @@ func (b *Bitmap) Xor(other *Bitmap) *Bitmap {
 	return output
 }
 
-func (b *Bitmap) Shift() (*Bitmap) {
+func (b *Bitmap) Shift() *Bitmap {
 	output := NewBitmap()
 	iiter, _ := b.Containers.Iterator(0)
-	last:=false
-	lastKey:= uint64(0)
+	last := false
+	lastKey := uint64(0)
 	for iiter.Next() {
 		ki, ci := iiter.Value()
 		o, carry := shift(ci)
 		if last {
 			o.add(0)
 		}
-		if o.n>0{
+		if o.n > 0 {
 			output.Containers.Put(ki, o)
 		}
 		last = carry
-		lastKey=ki
+		lastKey = ki
 	}
 	if last { //handle the overflow
-		extra:= NewContainer()
+		extra := NewContainer()
 		extra.add(0)
 		output.Containers.Put(lastKey+1, extra)
 	}

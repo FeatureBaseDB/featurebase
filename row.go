@@ -153,10 +153,11 @@ func (r *Row) Difference(other *Row) *Row {
 
 	return &Row{segments: segments}
 }
+
 // Shift returns the bitwise shift of r by 1 bit.
 func (r *Row) Shift() *Row {
 	var segments []rowSegment
-	for _,segment := range r.segments {
+	for _, segment := range r.segments {
 		segments = append(segments, *segment.Shift())
 	}
 
@@ -336,6 +337,7 @@ func (s *rowSegment) Xor(other *rowSegment) *rowSegment {
 		n:     data.Count(),
 	}
 }
+
 // Shift returns s shifted by 1 bit.
 func (s *rowSegment) Shift() *rowSegment {
 	//TODO deal with overflow
