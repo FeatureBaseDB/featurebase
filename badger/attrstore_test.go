@@ -38,7 +38,7 @@ func Test_attrStore_SetGetAttrs(t *testing.T) {
 		err = s.Open()
 		defer s.Close()
 		if err != nil {
-			t.Errorf("attrStore.Open() returned an error %v", err)
+			t.Fatalf("attrStore.Open() returned an error %v", err)
 		}
 		m := map[string]interface{}{
 			"some": "value",
@@ -74,7 +74,7 @@ func Test_attrStore_SetGetBulkAttrs(t *testing.T) {
 		err = s.Open()
 		defer s.Close()
 		if err != nil {
-			t.Errorf("attrStore.Open() returned an error %v", err)
+			t.Fatalf("attrStore.Open() returned an error %v", err)
 		}
 		m := map[uint64]map[string]interface{}{
 			1: { //id 1 will be stored in block data 0
@@ -96,18 +96,18 @@ func Test_attrStore_SetGetBulkAttrs(t *testing.T) {
 			t.Fatalf("attrStore.BlockData() error = %v", err)
 		}
 		if v := m2[1]["ten"]; v.(int64) != 10 {
-			t.Errorf("want \n%v, got \n%v", m, m2)
+			t.Fatalf("want \n%v, got \n%v", m, m2)
 		}
 		m3, err := s.BlockData(1)
 		if v := m3[102]["eleven"]; v.(int64) != 11 {
-			t.Errorf("want \n%v, got \n%v", m, m3)
+			t.Fatalf("want \n%v, got \n%v", m, m3)
 		}
 		if err != nil {
 			t.Fatalf("attrStore.BlockData() error = %v", err)
 		}
 		m4, err := s.BlockData(2)
 		if v := m4[202]["nil"]; v != nil {
-			t.Errorf("want \n%v, got \n%v", m, m4)
+			t.Fatalf("want \n%v, got \n%v", m, m4)
 		}
 		if err != nil {
 			t.Fatalf("attrStore.BlockData() error = %v", err)
@@ -134,7 +134,7 @@ func Test_attrStore_Blocks(t *testing.T) {
 		defer s.Close()
 
 		if err != nil {
-			t.Errorf("attrStore.Open() returned an error %v", err)
+			t.Fatalf("attrStore.Open() returned an error %v", err)
 		}
 
 		m := map[uint64]map[string]interface{}{

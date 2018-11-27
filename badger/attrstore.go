@@ -52,6 +52,11 @@ func (s *attrStore) Path() string {
 func (s *attrStore) Open() error {
 	//using default options:
 	opts := badger.DefaultOptions
+	//using a smaller value log file size works
+	//for GOARCH=386
+	opts.ValueLogFileSize = 1 << 29
+	//also possible to
+	//opts.ValueLogLoadingMode = options.FileIO
 	opts.Dir = s.path
 	opts.ValueDir = s.path
 	db, err := badger.Open(opts)
