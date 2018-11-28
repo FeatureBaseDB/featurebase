@@ -396,9 +396,24 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 }
 
 // Union returns the bitwise union of b and other.
-func (b *Bitmap) Union(other *Bitmap) *Bitmap {
+func (b *Bitmap) Union(others ...*Bitmap) *Bitmap {
 	output := NewBitmap()
+	output.UnionInPlace(others...)
+	return output
+}
 
+// UnionInPlace returns the bitwise union of b and other, modifying
+// b in place.
+func (b *Bitmap) UnionInPlace(others ...*Bitmap) {
+	for _, other := range others {
+		b.unionIntoTarget(other, b)
+	}
+}
+
+// unionIntoTarget stores the union of b and other into target. b and other will
+// be left unchanged, but target will be modified in place. Used to share
+// the union logic between the copy-on-write and in-place functions.
+func (b *Bitmap) unionIntoTarget(other *Bitmap, target *Bitmap) {
 	iiter, _ := b.Containers.Iterator(0)
 	jiter, _ := other.Containers.Iterator(0)
 	i, j := iiter.Next(), jiter.Next()
@@ -406,21 +421,20 @@ func (b *Bitmap) Union(other *Bitmap) *Bitmap {
 	kj, cj := jiter.Value()
 	for i || j {
 		if i && (!j || ki < kj) {
-			output.Containers.Put(ki, ci.Clone())
+			target.Containers.Put(ki, ci.Clone())
 			i = iiter.Next()
 			ki, ci = iiter.Value()
 		} else if j && (!i || ki > kj) {
-			output.Containers.Put(kj, cj.Clone())
+			target.Containers.Put(kj, cj.Clone())
 			j = jiter.Next()
 			kj, cj = jiter.Value()
 		} else { // ki == kj
-			output.Containers.Put(ki, union(ci, cj))
+			target.Containers.Put(ki, union(ci, cj))
 			i, j = iiter.Next(), jiter.Next()
 			ki, ci = iiter.Value()
 			kj, cj = jiter.Value()
 		}
 	}
-	return output
 }
 
 // Difference returns the difference of b and other.
