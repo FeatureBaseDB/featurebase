@@ -504,7 +504,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 					// Use a bitmap
 					buf := make([]uint64, bitmapN)
 					ob := buf[:bitmapN]
-					output := &Container{
+					container := &Container{
 						bitmap:        ob,
 						n:             n,
 						containerType: containerBitmap,
@@ -514,6 +514,13 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 						jKey, jContainer := jIter.iter.Value()
 
 						if iKey == jKey {
+							if jContainer.isArray() {
+								unionBitmapArrayInPlace(container, jContainer)
+							} else if jContainer.isRun() {
+								unionBitmapRunInPlace(container, jContainer)
+							} else {
+								unionBitmapBitmapInPlace(container, jContainer)
+							}
 						}
 					}
 				}
