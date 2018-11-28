@@ -411,31 +411,176 @@ func (b *Bitmap) UnionInPlace(others ...*Bitmap) {
 	}
 }
 
+type wrapperIter struct {
+	iter    ContainerIterator
+	hasNext bool
+	handled bool
+}
+
 // unionIntoTarget stores the union of b and other into target. b and other will
 // be left unchanged, but target will be modified in place. Used to share
 // the union logic between the copy-on-write and in-place functions.
-func (b *Bitmap) unionIntoTarget(other *Bitmap, target *Bitmap) {
-	iiter, _ := b.Containers.Iterator(0)
-	jiter, _ := other.Containers.Iterator(0)
-	i, j := iiter.Next(), jiter.Next()
-	ki, ci := iiter.Value()
-	kj, cj := jiter.Value()
-	for i || j {
-		if i && (!j || ki < kj) {
-			target.Containers.Put(ki, ci.Clone())
-			i = iiter.Next()
-			ki, ci = iiter.Value()
-		} else if j && (!i || ki > kj) {
-			target.Containers.Put(kj, cj.Clone())
-			j = jiter.Next()
-			kj, cj = jiter.Value()
-		} else { // ki == kj
-			target.Containers.Put(ki, union(ci, cj))
-			i, j = iiter.Next(), jiter.Next()
-			ki, ci = iiter.Value()
-			kj, cj = jiter.Value()
+func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
+	otherIters := make([]wrapperIter, 0, len(others))
+	for _, other := range others {
+		otherIter, _ := other.Containers.Iterator(0)
+		otherIters = append(otherIters, wrapperIter{
+			iter: otherIter,
+		})
+	}
+
+	// Loop until we've exhausted every iter.
+	for {
+		hasNext := false
+		for i, otherIter := range otherIters {
+			next := otherIter.iter.Next()
+			otherIters[i].hasNext = next
+			otherIters[i].handled = false
+			if next {
+				hasNext = true
+			}
+		}
+
+		if !hasNext {
+			// None of the iters had any more values, we're done.
+			break
+		}
+
+		// Loop until every iters current value has been handled.
+		for {
+			for i, iIter := range otherIters {
+				if !iIter.hasNext || iIter.handled {
+					continue
+				}
+
+				// Can store key-level statistics here
+				iKey, iContainer := iIter.iter.Value()
+				n := iContainer.n
+				needsUnion := false
+				hasMaxRange := iContainer.n == maxContainerVal+1
+				for _, jIter := range otherIters[i:] {
+					if hasMaxRange {
+						continue
+					}
+
+					// Calculate key-level statistics here
+					jKey, jContainer := jIter.iter.Value()
+
+					if iKey == jKey {
+						needsUnion = true
+						n += jContainer.n
+						if !hasMaxRange {
+							hasMaxRange = jContainer.n == maxContainerVal+1
+						}
+					}
+				}
+
+				if !needsUnion {
+					// TODO: Don't clone if sealed
+					target.Containers.Put(iKey, iContainer.Clone())
+					otherIters[i].handled = true
+					continue
+				}
+
+				// Need to union
+				if hasMaxRange {
+					// Use the max range
+					container := &Container{
+						runs:          []interval16{{start: 0, last: maxContainerVal}},
+						containerType: containerRun,
+						n:             maxContainerVal + 1,
+					}
+					target.Containers.Put(iKey, container)
+				} else {
+					// TODO: Implement this
+					// if n < ArrayMaxSize {
+					// 	// Use an array
+					// 	// container := &Container{
+					// 	// 	containerType: containerArray,
+					// 	// 	array:         make([]uint16, 0, n),
+					// 	// }
+					// }
+					// else {
+					// Use a bitmap
+					buf := make([]uint64, bitmapN)
+					ob := buf[:bitmapN]
+					output := &Container{
+						bitmap:        ob,
+						n:             n,
+						containerType: containerBitmap,
+					}
+
+					for _, jIter := range otherIters {
+						jKey, jContainer := jIter.iter.Value()
+
+						if iKey == jKey {
+						}
+					}
+				}
+			}
 		}
 	}
+	// iiter, _ := b.Containers.Iterator(0)
+	// i := iiter.Next()
+	// for i {
+	// 	for _, otherIter := range otherIters {
+	// 		jiter := otherIter
+	// 		j := jiter.Next()
+	// 		if !j {
+	// 			continue
+	// 		}
+
+	// 		ki, ci := iiter.Value()
+	// 		kj, cj := jiter.Value()
+
+	// 		if i && (!j || ki < kj) {
+	// 			// TODO: Don't clone if sealed
+	// 			target.Containers.Put(ki, ci.Clone())
+	// 			i = iiter.Next()
+	// 			ki, ci = iiter.Value()
+	// 		} else if j && (!i || ki > kj) {
+	// 			// TODO: Don't clone if sealed
+	// 			target.Containers.Put(kj, cj.Clone())
+	// 			j = jiter.Next()
+	// 			kj, cj = jiter.Value()
+	// 		} else { // ki == kj
+	// 			// TODO: unionIntoTarget?
+	// 			target.Containers.Put(ki, union(ci, cj))
+	// 			i, j = iiter.Next(), jiter.Next()
+	// 			ki, ci = iiter.Value()
+	// 			kj, cj = jiter.Value()
+	// 		}
+
+	// 	}
+	// 	}
+	// }
+
+	// for _, otherIter := range otherIters {
+	// 	jiter := otherIter
+
+	// 	i, j := iiter.Next(), jiter.Next()
+	// 	ki, ci := iiter.Value()
+	// 	kj, cj := jiter.Value()
+	// 	for i || j {
+	// 		if i && (!j || ki < kj) {
+	// 			// TODO: Don't clone if sealed
+	// 			target.Containers.Put(ki, ci.Clone())
+	// 			i = iiter.Next()
+	// 			ki, ci = iiter.Value()
+	// 		} else if j && (!i || ki > kj) {
+	// 			// TODO: Don't clone if sealed
+	// 			target.Containers.Put(kj, cj.Clone())
+	// 			j = jiter.Next()
+	// 			kj, cj = jiter.Value()
+	// 		} else { // ki == kj
+	// 			// TODO: unionIntoTarget?
+	// 			target.Containers.Put(ki, union(ci, cj))
+	// 			i, j = iiter.Next(), jiter.Next()
+	// 			ki, ci = iiter.Value()
+	// 			kj, cj = jiter.Value()
+	// 		}
+	// 	}
+	// }
 }
 
 // Difference returns the difference of b and other.
@@ -2289,6 +2434,38 @@ func unionArrayArray(a, b *Container) *Container {
 	return output
 }
 
+// func unionArrayArrayInPlace(a, b *Container) *Container {
+// 	statsHit("union/ArrayArray")
+// 	output := a
+// 	na, nb := len(a.array), len(b.array)
+// 	for i, j := 0, 0; ; {
+// 		if i >= na && j >= nb {
+// 			break
+// 		} else if i < na && j >= nb {
+// 			output.add(a.array[i])
+// 			i++
+// 			continue
+// 		} else if i >= na && j < nb {
+// 			output.add(b.array[j])
+// 			j++
+// 			continue
+// 		}
+
+// 		va, vb := a.array[i], b.array[j]
+// 		if va < vb {
+// 			output.add(va)
+// 			i++
+// 		} else if va > vb {
+// 			output.add(vb)
+// 			j++
+// 		} else {
+// 			output.add(va)
+// 			i, j = i+1, j+1
+// 		}
+// 	}
+// 	return output
+// }
+
 // unionArrayRun optimistically assumes that the result will be a run container,
 // and converts to a bitmap or array container afterwards if necessary.
 func unionArrayRun(a, b *Container) *Container {
@@ -2397,6 +2574,13 @@ func unionBitmapRun(a, b *Container) *Container {
 		output.bitmapSetRange(uint64(b.runs[j].start), uint64(b.runs[j].last)+1)
 	}
 	return output
+}
+
+func unionBitmapRunInPlace(a, b *Container) {
+	statsHit("union/BitmapRun")
+	for j := 0; j < len(b.runs); j++ {
+		a.bitmapSetRange(uint64(b.runs[j].start), uint64(b.runs[j].last)+1)
+	}
 }
 
 const maxBitmap = 0xFFFFFFFFFFFFFFFF
@@ -2518,6 +2702,15 @@ func unionArrayBitmap(a, b *Container) *Container {
 	return output
 }
 
+func unionBitmapArrayInPlace(a, b *Container) {
+	for _, v := range b.array {
+		if !a.bitmapContains(v) {
+			a.bitmap[v/64] |= (1 << uint64(v%64))
+			a.n++
+		}
+	}
+}
+
 func unionBitmapBitmap(a, b *Container) *Container {
 	// local variables added to prevent BCE checks in loop
 	// see https://go101.org/article/bounds-check-elimination.html
@@ -2542,6 +2735,25 @@ func unionBitmapBitmap(a, b *Container) *Container {
 		containerType: containerBitmap,
 	}
 	return output
+}
+
+func unionBitmapBitmapInPlace(a, b *Container) {
+	// local variables added to prevent BCE checks in loop
+	// see https://go101.org/article/bounds-check-elimination.html
+
+	var (
+		ab = a.bitmap[:bitmapN]
+		bb = b.bitmap[:bitmapN]
+
+		n int32
+	)
+
+	for i := 0; i < bitmapN; i++ {
+		ab[i] = ab[i] | bb[i]
+		n += int32(popcount(ab[i]))
+	}
+
+	a.n = n
 }
 
 func difference(a, b *Container) *Container {
