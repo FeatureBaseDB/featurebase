@@ -398,6 +398,7 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 // Union returns the bitwise union of b and other.
 func (b *Bitmap) Union(others ...*Bitmap) *Bitmap {
 	output := NewBitmap()
+	output.UnionInPlace(b)
 	output.UnionInPlace(others...)
 	return output
 }
