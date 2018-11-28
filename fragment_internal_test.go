@@ -172,6 +172,60 @@ func TestFragment_SetRow(t *testing.T) {
 	}
 }
 
+// Ensure a fragment can set & read a float value.
+func TestFragment_SetFloat(t *testing.T) {
+	t.Run("OK", func(t *testing.T) {
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
+		defer f.Close()
+
+		// Set value.
+		if changed, err := f.setFloat(100, 500, 112, false); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		// Read value.
+		// Note that 112 (1110000) with shift of 500 is equivalent
+		// to 7 (111) with shift of 504.
+		if value, shift, neg, exists, err := f.float(100); err != nil {
+			t.Fatal(err)
+		} else if value != 7 {
+			t.Fatalf("unexpected value: %d", value)
+		} else if shift != 504 {
+			t.Fatalf("unexpected shift: %d", shift)
+		} else if neg != false {
+			t.Fatalf("unexpected negative: %v", neg)
+		} else if !exists {
+			t.Fatal("expected to exist")
+		}
+
+		// Setting value should return no change.
+		if changed, err := f.setFloat(100, 500, 112, false); err != nil {
+			t.Fatal(err)
+		} else if changed {
+			t.Fatal("expected no change")
+		}
+	})
+}
+
+func BenchmarkFragment_Floats(b *testing.B) {
+	fieldName := fmt.Sprintf("f%d", b.N)
+	f := mustOpenFragment("i", fieldName, viewStandard, 0, "")
+	defer f.Close()
+
+	// Reset timer and execute benchmark.
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		shift := uint(1000)
+		val := uint64(7)
+		if _, err := f.setFloat(uint64(i), shift, val, false); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 // Ensure a fragment can set & read a value.
 func TestFragment_SetValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {

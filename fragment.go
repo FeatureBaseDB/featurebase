@@ -80,6 +80,8 @@ const (
 	// Row ids used for boolean fields.
 	falseRowID = uint64(0)
 	trueRowID  = uint64(1)
+
+	floatBitDepth = uint(2100) // 2048 + 52 for range -1075 to 1023
 )
 
 // fragment represents the intersection of a field and shard in an index.
@@ -614,6 +616,144 @@ func (f *fragment) value(columnID uint64, bitDepth uint) (value uint64, exists b
 	}
 
 	return value, true, nil
+}
+
+// float uses a column of bits to read a multi-bit float value.
+func (f *fragment) float(columnID uint64) (value uint64, shiftDepth uint, neg bool, exists bool, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// If existence bit is unset then ignore remaining bits.
+	if v, err := f.bit(uint64(floatBitDepth), columnID); err != nil {
+		return 0, 0, false, false, errors.Wrap(err, "getting existence bit")
+	} else if !v {
+		return 0, 0, false, false, nil
+	}
+
+	// Compute other bits into a value.
+	var foundSetBit bool
+	var leastSigBit uint
+	for i := uint(0); i < floatBitDepth; i++ {
+		if v, err := f.bit(uint64(i), columnID); err != nil {
+			return 0, 0, false, false, errors.Wrapf(err, "getting value bit %d", i)
+		} else if v {
+			if !foundSetBit {
+				foundSetBit = true
+				leastSigBit = i
+			}
+			value |= (1 << (i - leastSigBit))
+		}
+	}
+
+	// Get the negative bit.
+	if v, err := f.bit(uint64(floatBitDepth+1), columnID); err != nil {
+		return 0, 0, false, false, errors.Wrapf(err, "getting negative bit")
+	} else if v {
+		neg = true
+	}
+
+	return value, leastSigBit, neg, true, nil
+}
+
+// setFloat uses a column of bits to set a multi-bit float value.
+func (f *fragment) setFloat(columnID uint64, shiftDepth uint, value uint64, negative bool) (changed bool, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Check to see if this is a mutation.
+	mutation, err := f.bit(uint64(floatBitDepth), columnID)
+	if err != nil {
+		return changed, errors.Wrapf(err, "getting not-null bit")
+	}
+
+	// Set/Clear the bits representing the significand.
+	for i := uint(0); i < floatBitDepth; i++ {
+		// Only the 53 bits from shiftDepth to shiftDepth+52 need to be considered.
+		// It is assumed that the float value for this column is either new, or
+		// any previous value has been completely zeroed out prior to this call.
+		// However, if this is a mutation, we have to be conservative and zero out all other bits
+		// in the full bit range. Otherwise, we only need to set the significand bits.
+		if i < shiftDepth || i > shiftDepth+52 {
+			if mutation {
+				// TODO: we could probably be smarter about this by recognizing that we should
+				// only have to zero out at most 53 bits. For now it's zeroing out everything in
+				// the 2100-bit range.
+				// Zero out unused bit.
+				if c, err := f.unprotectedClearBit(uint64(i), columnID); err != nil {
+					return changed, err
+				} else if c {
+					changed = true
+				}
+			}
+			continue
+		}
+		if value&(1<<(i-shiftDepth)) != 0 {
+			if c, err := f.unprotectedSetBit(uint64(i), columnID); err != nil {
+				return changed, err
+			} else if c {
+				changed = true
+			}
+		} else {
+			if c, err := f.unprotectedClearBit(uint64(i), columnID); err != nil {
+				return changed, err
+			} else if c {
+				changed = true
+			}
+		}
+	}
+
+	// Mark value as set (or cleared).
+	if c, err := f.unprotectedSetBit(uint64(floatBitDepth), columnID); err != nil {
+		return changed, errors.Wrap(err, "marking not-null")
+	} else if c {
+		changed = true
+	}
+
+	// Set the negative bit.
+	if negative {
+		if c, err := f.unprotectedSetBit(uint64(floatBitDepth+1), columnID); err != nil {
+			return changed, errors.Wrap(err, "setting negative")
+		} else if c {
+			changed = true
+		}
+	} else {
+		if c, err := f.unprotectedClearBit(uint64(floatBitDepth+1), columnID); err != nil {
+			return changed, errors.Wrap(err, "clearing negative")
+		} else if c {
+			changed = true
+		}
+	}
+
+	return changed, nil
+}
+
+// clearFloat completely zeroes out a float value.
+func (f *fragment) clearFloat(columnID uint64) (changed bool, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Set/Clear the bits representing the significand.
+	for i := uint(0); i < floatBitDepth; i++ {
+		if c, err := f.unprotectedClearBit(uint64(i), columnID); err != nil {
+			return changed, err
+		} else if c {
+			changed = true
+		}
+	}
+
+	// Mark value as set (or cleared).
+	if c, err := f.unprotectedClearBit(uint64(floatBitDepth), columnID); err != nil {
+		return changed, errors.Wrap(err, "clearing not-null")
+	} else if c {
+		changed = true
+	}
+
+	// Clear the negative bit.
+	if _, err := f.unprotectedClearBit(uint64(floatBitDepth+1), columnID); err != nil {
+		return changed, errors.Wrap(err, "clearing negative")
+	}
+
+	return changed, nil
 }
 
 // clearValue uses a column of bits to clear a multi-bit value.

@@ -19,9 +19,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -53,6 +55,7 @@ const (
 const (
 	FieldTypeSet   = "set"
 	FieldTypeInt   = "int"
+	FieldTypeFloat = "float"
 	FieldTypeTime  = "time"
 	FieldTypeMutex = "mutex"
 	FieldTypeBool  = "bool"
@@ -129,6 +132,16 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 		fo.Type = FieldTypeInt
 		fo.Min = min
 		fo.Max = max
+		return nil
+	}
+}
+
+func OptFieldTypeFloat() FieldOption {
+	return func(fo *FieldOptions) error {
+		if fo.Type != "" {
+			return errors.Errorf("field type is already set to: %s", fo.Type)
+		}
+		fo.Type = FieldTypeFloat
 		return nil
 	}
 }
@@ -503,6 +516,27 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 			Type: bsiGroupTypeInt,
 			Min:  opt.Min,
 			Max:  opt.Max,
+		}
+		// Validate bsiGroup.
+		if err := bsig.validate(); err != nil {
+			return err
+		}
+		if err := f.createBSIGroup(bsig); err != nil {
+			return errors.Wrap(err, "creating bsigroup")
+		}
+	case FieldTypeFloat:
+		f.options.Type = opt.Type
+		f.options.CacheType = CacheTypeNone
+		f.options.CacheSize = 0
+		f.options.Min = 0
+		f.options.Max = 0
+		f.options.TimeQuantum = ""
+		f.options.Keys = opt.Keys
+
+		// Create new bsiGroup.
+		bsig := &bsiGroup{
+			Name: f.name,
+			Type: bsiGroupTypeFloat,
 		}
 		// Validate bsiGroup.
 		if err := bsig.validate(); err != nil {
@@ -947,6 +981,35 @@ func (f *Field) Value(columnID uint64) (value int64, exists bool, err error) {
 	return int64(v) + bsig.Min, true, nil
 }
 
+// Float reads a field float value for a column.
+func (f *Field) Float(columnID uint64) (value float64, exists bool, err error) {
+	bsig := f.bsiGroup(f.name)
+	if bsig == nil {
+		return 0, false, ErrBSIGroupNotFound
+	}
+
+	// Fetch target view.
+	view := f.view(viewBSIGroupPrefix + f.name)
+	if view == nil {
+		return 0, false, nil
+	}
+
+	val, shift, neg, exists, err := view.float(columnID)
+	if err != nil {
+		return 0, false, err
+	} else if !exists {
+		return 0, false, nil
+	}
+
+	fval := float64(val)
+	if neg {
+		fval *= -1
+	}
+	flt := math.Ldexp(fval, int(shift-1076))
+
+	return flt, true, nil
+}
+
 // SetValue sets a field value for a column.
 func (f *Field) SetValue(columnID uint64, value int64) (changed bool, err error) {
 	// Fetch bsiGroup and validate value.
@@ -969,6 +1032,55 @@ func (f *Field) SetValue(columnID uint64, value int64) (changed bool, err error)
 	baseValue := uint64(value - bsig.Min)
 
 	return view.setValue(columnID, bsig.BitDepth(), baseValue)
+}
+
+// SetFloat sets a field float value for a column.
+func (f *Field) SetFloat(columnID uint64, value float64) (changed bool, err error) {
+	// Fetch bsiGroup and validate value.
+	bsig := f.bsiGroup(f.name)
+	if bsig == nil {
+		return false, ErrBSIGroupNotFound
+	}
+
+	// Fetch target view.
+	view, err := f.createViewIfNotExists(viewBSIGroupPrefix + f.name)
+	if err != nil {
+		return false, errors.Wrap(err, "creating view")
+	}
+
+	// Check for NaN and Infinity.
+	// TODO: use a bitmap to track NaN/infinity instead of returning an error?
+	if math.IsNaN(value) {
+		return false, errors.New("float provided is NaN")
+	} else if math.IsInf(value, 0) {
+		return false, errors.New("float provided is infinity")
+	}
+
+	// Determine base value to store as well as the shift (exponent) value.
+	svalue := strconv.FormatFloat(value, 'b', -1, 64)
+	parts := strings.Split(svalue, "p")
+
+	var negative bool
+
+	ssig := parts[0]
+	if ssig[:1] == "-" {
+		negative = true
+		ssig = ssig[1:]
+	}
+
+	sig, err := strconv.ParseInt(ssig, 10, 64)
+	if err != nil {
+		return false, errors.Wrap(err, "getting significand")
+	}
+	exp, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return false, errors.Wrap(err, "getting exponent")
+	}
+
+	baseValue := uint64(sig)
+	shiftDepth := uint(1076 + exp)
+
+	return view.setFloat(columnID, shiftDepth, baseValue, negative)
 }
 
 // Sum returns the sum and count for a field.
@@ -1340,12 +1452,13 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 
 // List of bsiGroup types.
 const (
-	bsiGroupTypeInt = "int"
+	bsiGroupTypeInt   = "int"
+	bsiGroupTypeFloat = "float"
 )
 
 func isValidBSIGroupType(v string) bool {
 	switch v {
-	case bsiGroupTypeInt:
+	case bsiGroupTypeInt, bsiGroupTypeFloat:
 		return true
 	default:
 		return false

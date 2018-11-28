@@ -327,6 +327,16 @@ func (v *view) value(columnID uint64, bitDepth uint) (value uint64, exists bool,
 	return frag.value(columnID, bitDepth)
 }
 
+// float uses a column of bits to read a multi-bit float value.
+func (v *view) float(columnID uint64) (value uint64, shift uint, neg bool, exists bool, err error) {
+	shard := columnID / ShardWidth
+	frag, err := v.CreateFragmentIfNotExists(shard)
+	if err != nil {
+		return value, shift, neg, exists, err
+	}
+	return frag.float(columnID)
+}
+
 // setValue uses a column of bits to set a multi-bit value.
 func (v *view) setValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
 	shard := columnID / ShardWidth
@@ -335,6 +345,16 @@ func (v *view) setValue(columnID uint64, bitDepth uint, value uint64) (changed b
 		return changed, err
 	}
 	return frag.setValue(columnID, bitDepth, value)
+}
+
+// setFloat uses a column of bits to set a multi-bit float value.
+func (v *view) setFloat(columnID uint64, shiftDepth uint, value uint64, negative bool) (changed bool, err error) {
+	shard := columnID / ShardWidth
+	frag, err := v.CreateFragmentIfNotExists(shard)
+	if err != nil {
+		return changed, err
+	}
+	return frag.setFloat(columnID, shiftDepth, value, negative)
 }
 
 // sum returns the sum & count of a field.
