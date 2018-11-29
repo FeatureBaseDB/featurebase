@@ -100,6 +100,9 @@ type Containers interface {
 
 	Count() uint64
 
+	// Repair will n values after in-place operations.
+	Repair()
+
 	//Reset will clear the containers collection to allow for recycling during snapshot
 	Reset()
 }
@@ -567,17 +570,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 	}
 
 	// Repair bitmaps after the fact
-	iter, _ := target.Containers.Iterator(0)
-	for iter.Next() {
-		_, container := iter.Value()
-		if container.isBitmap() {
-			n := int32(0)
-			for i := 0; i < bitmapN; i++ {
-				n += int32(popcount(container.bitmap[i]))
-			}
-			container.n = n
-		}
-	}
+	target.Containers.Repair()
 }
 
 // Difference returns the difference of b and other.
@@ -1979,6 +1972,14 @@ func (c *Container) check() error {
 		return nil
 	}
 	return a
+}
+
+func (c *Container) bitmapRepair() {
+	n := int32(0)
+	for i := 0; i < bitmapN; i++ {
+		n += int32(popcount(c.bitmap[i]))
+	}
+	c.n = n
 }
 
 // containerInfo represents a point-in-time snapshot of container stats.
