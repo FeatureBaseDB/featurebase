@@ -601,12 +601,14 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 				continue
 			}
 
-			iKey, iContainer := iIter.iter.Value()
-
-			// Summary statistics about all the containers in the other bitmaps
-			// that share the same key so we can make smarter union strategy
-			// decisions later.
-			summaryStats := otherIters[i:].calculateSummaryStats(iKey)
+			var (
+				iKey, iContainer = iIter.iter.Value()
+				// Summary statistics about all the containers in the other bitmaps
+				// that share the same key so we can make smarter union strategy
+				// decisions later. Note that we slice to [i:] not [i+1:] because we
+				// want to include the current containers information in the stats.
+				summaryStats = otherIters[i:].calculateSummaryStats(iKey)
+			)
 
 			if summaryStats.isOnlyContainerWithKey {
 				// TODO(rartoul): We can avoid these clones if we can determine
