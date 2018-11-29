@@ -424,15 +424,6 @@ type wrapperIter struct {
 // be left unchanged, but target will be modified in place. Used to share
 // the union logic between the copy-on-write and in-place functions.
 func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
-	numArrayIntoBitmap := 0
-	numRunIntoBitmap := 0
-	numBitmapIntoBitmap := 0
-	// defer func() {
-	// 	fmt.Println("numArrayIntoBitmap: ", numArrayIntoBitmap)
-	// 	fmt.Println("numRunIntoBitmap: ", numRunIntoBitmap)
-	// 	fmt.Println("numBitmapIntoBitmap: ", numBitmapIntoBitmap)
-	// }()
-
 	otherIters := make([]wrapperIter, 0, len(others)+1)
 	bIter, _ := b.Containers.Iterator(0)
 	next := bIter.Next()
@@ -537,13 +528,10 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 
 					if iKey == jKey {
 						if jContainer.isArray() {
-							numArrayIntoBitmap++
 							unionBitmapArrayInPlace(container, jContainer)
 						} else if jContainer.isRun() {
-							numRunIntoBitmap++
 							unionBitmapRunInPlace(container, jContainer)
 						} else {
-							numBitmapIntoBitmap++
 							unionBitmapBitmapInPlace(container, jContainer)
 						}
 						otherIters[j].handled = true
