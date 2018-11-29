@@ -399,9 +399,14 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 	return output
 }
 
-// Union returns the bitwise union of b and other.
+// Union returns the bitwise union of b and other as a new bitmap.
 func (b *Bitmap) Union(others ...*Bitmap) *Bitmap {
 	output := NewBitmap()
+	if len(others) == 1 {
+		b.unionIntoTargetSingle(output, others[0])
+		return output
+	}
+
 	output.UnionInPlace(b)
 	output.UnionInPlace(others...)
 	return output
@@ -411,6 +416,30 @@ func (b *Bitmap) Union(others ...*Bitmap) *Bitmap {
 // b in place.
 func (b *Bitmap) UnionInPlace(others ...*Bitmap) {
 	b.unionIntoTarget(b, others...)
+}
+
+func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
+	iiter, _ := b.Containers.Iterator(0)
+	jiter, _ := other.Containers.Iterator(0)
+	i, j := iiter.Next(), jiter.Next()
+	ki, ci := iiter.Value()
+	kj, cj := jiter.Value()
+	for i || j {
+		if i && (!j || ki < kj) {
+			target.Containers.Put(ki, ci.Clone())
+			i = iiter.Next()
+			ki, ci = iiter.Value()
+		} else if j && (!i || ki > kj) {
+			target.Containers.Put(kj, cj.Clone())
+			j = jiter.Next()
+			kj, cj = jiter.Value()
+		} else { // ki == kj
+			target.Containers.Put(ki, union(ci, cj))
+			i, j = iiter.Next(), jiter.Next()
+			ki, ci = iiter.Value()
+			kj, cj = jiter.Value()
+		}
+	}
 }
 
 // unionIntoTarget stores the union of b and others into target. b and others will
