@@ -2703,10 +2703,7 @@ func unionArrayBitmap(a, b *Container) *Container {
 // of a will need to be repaired after the fact.
 func unionBitmapArrayInPlace(a, b *Container) {
 	for _, v := range b.array {
-		if !a.bitmapContains(v) {
-			a.bitmap[v/64] |= (1 << uint64(v%64))
-			a.n++
-		}
+		a.bitmap[v/64] |= (1 << uint64(v%64))
 	}
 }
 
