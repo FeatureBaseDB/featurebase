@@ -27,6 +27,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+func statshit() {}
+
 const (
 	// magicNumber is an identifier, in bytes 0-1 of the file.
 	magicNumber = uint32(12348)
@@ -419,6 +421,15 @@ type wrapperIter struct {
 // be left unchanged, but target will be modified in place. Used to share
 // the union logic between the copy-on-write and in-place functions.
 func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
+	numArrayIntoBitmap := 0
+	numRunIntoBitmap := 0
+	numBitmapIntoBitmap := 0
+	// defer func() {
+	// 	fmt.Println("numArrayIntoBitmap: ", numArrayIntoBitmap)
+	// 	fmt.Println("numRunIntoBitmap: ", numRunIntoBitmap)
+	// 	fmt.Println("numBitmapIntoBitmap: ", numBitmapIntoBitmap)
+	// }()
+
 	otherIters := make([]wrapperIter, 0, len(others)+1)
 	bIter, _ := b.Containers.Iterator(0)
 	next := bIter.Next()
@@ -490,6 +501,12 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 					n:             maxContainerVal + 1,
 				}
 				target.Containers.Put(iKey, container)
+				for j, jIter := range otherIters {
+					jKey, _ := jIter.iter.Value()
+					if iKey == jKey {
+						otherIters[j].handled = true
+					}
+				}
 			} else {
 				// TODO: Implement this
 				// if n < ArrayMaxSize {
@@ -512,17 +529,21 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 					}
 				}
 
-				for _, jIter := range otherIters {
+				for j, jIter := range otherIters {
 					jKey, jContainer := jIter.iter.Value()
 
 					if iKey == jKey {
 						if jContainer.isArray() {
+							numArrayIntoBitmap++
 							unionBitmapArrayInPlace(container, jContainer)
 						} else if jContainer.isRun() {
+							numRunIntoBitmap++
 							unionBitmapRunInPlace(container, jContainer)
 						} else {
+							numBitmapIntoBitmap++
 							unionBitmapBitmapInPlace(container, jContainer)
 						}
+						otherIters[j].handled = true
 					}
 				}
 				target.Containers.Put(iKey, container)
@@ -2703,7 +2724,9 @@ func unionArrayBitmap(a, b *Container) *Container {
 // of a will need to be repaired after the fact.
 func unionBitmapArrayInPlace(a, b *Container) {
 	for _, v := range b.array {
-		a.bitmap[v/64] |= (1 << uint64(v%64))
+		// a.bitmap[v>>6] |= (1 << uint64(v%64))
+		i := v >> 6
+		a.bitmap[i] = a.bitmap[i] | (uint64(1) << (v % 64))
 	}
 }
 
