@@ -544,6 +544,19 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 			break
 		}
 	}
+
+	// Repair bitmaps after the fact
+	iter, _ := target.Containers.Iterator(0)
+	for iter.Next() {
+		_, container := iter.Value()
+		if container.isBitmap() {
+			n := int32(0)
+			for i := 0; i < bitmapN; i++ {
+				n += int32(popcount(container.bitmap[i]))
+			}
+			container.n = n
+		}
+	}
 }
 
 // Difference returns the difference of b and other.
@@ -2539,10 +2552,12 @@ func unionBitmapRun(a, b *Container) *Container {
 	return output
 }
 
+// unions the run b into the bitmap a, mutating a in place. The n value of
+// a will need to be repaired after the fact.
 func unionBitmapRunInPlace(a, b *Container) {
 	statsHit("union/BitmapRun")
 	for j := 0; j < len(b.runs); j++ {
-		a.bitmapSetRange(uint64(b.runs[j].start), uint64(b.runs[j].last)+1)
+		a.bitmapSetRangeIgnoreN(uint64(b.runs[j].start), uint64(b.runs[j].last)+1)
 	}
 }
 
@@ -2567,6 +2582,25 @@ func (c *Container) bitmapSetRange(i, j uint64) {
 			c.bitmap[i] = maxBitmap
 		}
 		c.n += int32(ycnt - popcount(c.bitmap[y]&Y))
+		c.bitmap[y] |= Y
+	}
+}
+
+// sets all bits in [i, j) (c must be a bitmap container) without updating
+// the value of n, meaning it will need to be repaired after the fact.
+func (c *Container) bitmapSetRangeIgnoreN(i, j uint64) {
+	x := i >> 6
+	y := (j - 1) >> 6
+	var X uint64 = maxBitmap << (i % 64)
+	var Y uint64 = maxBitmap >> (63 - ((j - 1) % 64))
+
+	if x == y {
+		c.bitmap[x] |= (X & Y)
+	} else {
+		c.bitmap[x] |= X
+		for i := x + 1; i < y; i++ {
+			c.bitmap[i] = maxBitmap
+		}
 		c.bitmap[y] |= Y
 	}
 }
@@ -2665,6 +2699,8 @@ func unionArrayBitmap(a, b *Container) *Container {
 	return output
 }
 
+// unions array b into bitmap a, mutating a in place. The n value
+// of a will need to be repaired after the fact.
 func unionBitmapArrayInPlace(a, b *Container) {
 	for _, v := range b.array {
 		if !a.bitmapContains(v) {
@@ -2700,6 +2736,8 @@ func unionBitmapBitmap(a, b *Container) *Container {
 	return output
 }
 
+// unions bitmap b into bitmap a, mutating a in place. The n value of
+// a will need to be repaired after the fact.
 func unionBitmapBitmapInPlace(a, b *Container) {
 	// local variables added to prevent BCE checks in loop
 	// see https://go101.org/article/bounds-check-elimination.html
@@ -2707,16 +2745,11 @@ func unionBitmapBitmapInPlace(a, b *Container) {
 	var (
 		ab = a.bitmap[:bitmapN]
 		bb = b.bitmap[:bitmapN]
-
-		n int32
 	)
 
 	for i := 0; i < bitmapN; i++ {
 		ab[i] = ab[i] | bb[i]
-		n += int32(popcount(ab[i]))
 	}
-
-	a.n = n
 }
 
 func difference(a, b *Container) *Container {
