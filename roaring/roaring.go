@@ -448,9 +448,9 @@ func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
 // containers for each union operation for a given container key, only one
 // new container needs to be allocated (or re-used) regardless of how many bitmaps
 // participate in the union. This significantly reduces allocations. In addition,
-// because we perform the unions one container at a time accross all the bitmaps, we
+// because we perform the unions one container at a time across all the bitmaps, we
 // can calculate summary statistics that allow us to make more efficient decisions
-// up front. For example, imagine trying to perform a union accross the following three
+// up front. For example, imagine trying to perform a union across the following three
 // bitsets:
 //
 //     1. Bitmap A: Single array container at key 0 with 400 values in it.
