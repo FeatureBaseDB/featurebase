@@ -544,11 +544,19 @@ func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
 // Bitmap 4 |___X_______________________|     |      |___X_______________________|     |      |___X_______________________|
 //              _
 func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
-	otherIters := make(wrappedIters, 0, len(others)+1)
+	var (
+		wrappedArray = [20]handledIter{}
+		otherIters   handledIters
+	)
+	if len(others)+1 < 20 {
+		otherIters = wrappedArray[:0]
+	} else {
+		otherIters = make(handledIters, 0, len(others)+1)
+	}
 	bIter, _ := b.Containers.Iterator(0)
 	next := bIter.Next()
 	if next {
-		otherIters = append(otherIters, wrapperIter{
+		otherIters = append(otherIters, handledIter{
 			iter:    bIter,
 			hasNext: true,
 			handled: false,
@@ -559,7 +567,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 		otherIter, _ := other.Containers.Iterator(0)
 		next := otherIter.Next()
 		if next {
-			otherIters = append(otherIters, wrapperIter{
+			otherIters = append(otherIters, handledIter{
 				iter:    otherIter,
 				hasNext: true,
 				handled: false,
@@ -3981,15 +3989,15 @@ func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) {
 	}
 }
 
-type wrapperIter struct {
+type handledIter struct {
 	iter    ContainerIterator
 	hasNext bool
 	handled bool
 }
 
-type wrappedIters []wrapperIter
+type handledIters []handledIter
 
-func (w wrappedIters) next() bool {
+func (w handledIters) next() bool {
 	hasNext := false
 
 	for i, wrapped := range w {
@@ -4004,7 +4012,7 @@ func (w wrappedIters) next() bool {
 	return hasNext
 }
 
-func (w wrappedIters) markItersWithCurrentKeyAsHandled(key uint64) {
+func (w handledIters) markItersWithCurrentKeyAsHandled(key uint64) {
 	for i, wrapped := range w {
 		currKey, _ := wrapped.iter.Value()
 		if currKey == key {
