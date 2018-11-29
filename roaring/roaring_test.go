@@ -411,14 +411,10 @@ func TestBitmap_UnionInPlace1(t *testing.T) {
 
 	result.UnionInPlace(bm0, bm1)
 	if n := result.Count(); n != 2682675 {
-		// for _, val := range result.Slice() {
-		// 	fmt.Println(val)
-		// }
 		t.Fatalf("unexpected n: %d", n)
 	}
 
 	bm := testBM()
-	fmt.Println("bm.Count(): ", bm.Count())
 	result = roaring.NewBitmap()
 	result.UnionInPlace(bm, bm0)
 	if n := result.Count(); n != 75009 {

@@ -422,12 +422,10 @@ type wrapperIter struct {
 // be left unchanged, but target will be modified in place. Used to share
 // the union logic between the copy-on-write and in-place functions.
 func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
-	fmt.Println("huh: ", len(others))
 	otherIters := make([]wrapperIter, 0, len(others)+1)
 	bIter, _ := b.Containers.Iterator(0)
 	next := bIter.Next()
 	if next {
-		fmt.Println("Appending self")
 		otherIters = append(otherIters, wrapperIter{
 			iter:    bIter,
 			hasNext: true,
@@ -449,21 +447,16 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 
 	// Loop until we've exhausted every iter.
 	hasNext := true
-	fmt.Println(len(otherIters))
 	for hasNext {
 		// Loop until every iters current value has been handled.
 		// for {
 		for i, iIter := range otherIters {
-			fmt.Println("copter")
 			if !iIter.hasNext || iIter.handled {
 				continue
 			}
 
-			fmt.Println("here?")
 			// Can store key-level statistics here
 			iKey, iContainer := iIter.iter.Value()
-			fmt.Println("iKey: ", iKey)
-			fmt.Println("iContainer: ", iContainer)
 			n := iContainer.n
 			needsUnion := false
 			hasMaxRange := iContainer.n == maxContainerVal+1
@@ -474,7 +467,6 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 
 				// Calculate key-level statistics here
 				jKey, jContainer := jIter.iter.Value()
-				fmt.Println("jContainer.n: ", jContainer.n)
 
 				if iKey == jKey {
 					needsUnion = true
@@ -486,7 +478,6 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 			}
 
 			if !needsUnion {
-				fmt.Println("Cloning")
 				// TODO: Don't clone if sealed
 				target.Containers.Put(iKey, iContainer.Clone())
 				otherIters[i].handled = true
@@ -494,10 +485,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 			}
 
 			// Need to union
-			fmt.Println("ikey: ", iKey)
 			if hasMaxRange {
-				panic("maxRange")
-				fmt.Println("maxRange")
 				// Use the max range
 				container := &Container{
 					runs:          []interval16{{start: 0, last: maxContainerVal}},
@@ -516,7 +504,6 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 				// }
 				// else {
 				// Use a bitmap
-				fmt.Println("bitmap")
 				buf := make([]uint64, bitmapN)
 				ob := buf[:bitmapN]
 				container := &Container{
@@ -530,25 +517,17 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 
 					if iKey == jKey {
 						if jContainer.isArray() {
-							// panic("unionBitmapArrayInPlace")
-							fmt.Println("array into bitmap")
 							unionBitmapArrayInPlace(container, jContainer)
-							fmt.Println("After union array: ", container.n)
 						} else if jContainer.isRun() {
-							// panic("unionBitmapRunInPlace")
 							unionBitmapRunInPlace(container, jContainer)
 						} else {
-							fmt.Println("bitmap into bitmap")
-							// panic("unionBitmapBitmapInPlace")
 							unionBitmapBitmapInPlace(container, jContainer)
-							fmt.Println("After union bitmap: ", container.n)
 						}
 					}
 				}
 				target.Containers.Put(iKey, container)
 			}
 		}
-		// }
 
 		hasNext = false
 		for i, otherIter := range otherIters {
@@ -2691,7 +2670,6 @@ func unionBitmapArrayInPlace(a, b *Container) {
 		if !a.bitmapContains(v) {
 			a.bitmap[v/64] |= (1 << uint64(v%64))
 			a.n++
-			fmt.Println("added: ", v)
 		}
 	}
 }
