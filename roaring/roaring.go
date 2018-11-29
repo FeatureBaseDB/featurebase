@@ -606,45 +606,9 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 			// Summary statistics about all the containers in the other bitmaps
 			// that share the same key so we can make smarter union strategy
 			// decisions later.
-			var (
-				// Estimated cardinality of the union of all containers with the same
-				// key as iKey across all bitmaps. This calculation is very rough as
-				// we just sum the cardinality of the container across the different
-				// bitmaps which could result in very inflated values, but it allows
-				// us to avoid allocating expensive bitmaps when unioning many low
-				// density containers.
-				n = iContainer.n
-				// Whether iContainer is the only container across all the bitmaps
-				// with the key iKey. If true, we can skip all the unioning logic
-				// and just clone the container into target.
-				isOnlyContainerWithKey = true
-				// Whether any of the containers are storing every possible value that
-				// they can. If so, we can short-circuit all the unioning logic and use
-				// a RLE container with a single value in it. This is an optimization to
-				// avoid using an expensive bitmap container for bitmaps that have some
-				// extremely dense containers.
-				hasMaxRange = iContainer.n == maxContainerVal+1
-			)
-			for _, jIter := range otherIters[i:] {
-				if hasMaxRange {
-					// If we already know that we're going to use a max range RLE container,
-					// then there is no reason to continue calculating statistics.
-					continue
-				}
+			summaryStats := otherIters[i:].calculateSummaryStats(iKey)
 
-				// Calculate key-level statistics here
-				jKey, jContainer := jIter.iter.Value()
-
-				if iKey == jKey {
-					isOnlyContainerWithKey = false
-					n += jContainer.n
-					if !hasMaxRange {
-						hasMaxRange = jContainer.n == maxContainerVal+1
-					}
-				}
-			}
-
-			if isOnlyContainerWithKey {
+			if summaryStats.isOnlyContainerWithKey {
 				// TODO(rartoul): We can avoid these clones if we can determine
 				// if the container is coming from an immutable bitmap and we
 				// know that we can mark the target bitmap as immutable as well.
@@ -655,7 +619,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 
 			// There was more than one container across the bitmaps with key iKey
 			// so we need to calculate a union.
-			if hasMaxRange {
+			if summaryStats.hasMaxRange {
 				// One (or more) of the containers represented the maximum possible
 				// range that a container can store, so instead of calculating a
 				// union we can generate an RLE container that represents the entire
@@ -4033,4 +3997,51 @@ func (w handledIters) markItersWithCurrentKeyAsHandled(key uint64) {
 			w[i].handled = true
 		}
 	}
+}
+
+func (w handledIters) calculateSummaryStats(key uint64) containerUnionSummaryStats {
+	summary := containerUnionSummaryStats{}
+
+	for _, iter := range w {
+		if summary.hasMaxRange {
+			// If we already know that we're going to use a max range RLE container,
+			// then there is no reason to continue calculating statistics.
+			continue
+		}
+
+		// Calculate key-level statistics here
+		currKey, currContainer := iter.iter.Value()
+
+		if key == currKey {
+			summary.isOnlyContainerWithKey = false
+			summary.n += currContainer.n
+			if !summary.hasMaxRange {
+				summary.hasMaxRange = (currContainer.n == maxContainerVal+1)
+			}
+		}
+	}
+
+	return summary
+}
+
+// Summary statistics about all the containers in the other bitmaps
+// that share the same key so we can make smarter union strategy
+// decisions.
+type containerUnionSummaryStats struct {
+	// Estimated cardinality of the union of all containers with the same
+	// key across all bitmaps. This calculation is very rough as we just sum
+	// the cardinality of the container across the different bitmaps which could
+	// result in very inflated values, but it allows us to avoid allocating
+	// expensive bitmaps when unioning many low density containers.
+	n int32
+	// Whether any other is the only container across all the bitmaps
+	// with the specified key. If true, we can skip all the unioning logic
+	// and just clone the container into target.
+	isOnlyContainerWithKey bool
+	// Whether any of the containers with the specified keys are storing every possible
+	// value that they can. If so, we can short-circuit all the unioning logic and use
+	// a RLE container with a single value in it. This is an optimization to
+	// avoid using an expensive bitmap container for bitmaps that have some
+	// extremely dense containers.
+	hasMaxRange bool
 }
