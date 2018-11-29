@@ -413,9 +413,9 @@ func (b *Bitmap) UnionInPlace(others ...*Bitmap) {
 	b.unionIntoTarget(b, others...)
 }
 
-// unionIntoTarget stores the union of b and other into target. b and other will
-// be left unchanged, but target will be modified in place. Used to share
-// the union logic between the copy-on-write and in-place functions.
+// unionIntoTarget stores the union of b and others into target. b and others will
+// be left unchanged (unless one of them is also target), but target will be modified
+// in place.
 //
 // This function performs an n-way union of n bitmaps. It performs this in an
 // optimized manner looping through all the bitmaps and performing unions one
