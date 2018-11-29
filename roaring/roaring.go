@@ -592,6 +592,10 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 						otherIters[j].handled = true
 					}
 				}
+
+				// Now that we've calculated a container is that a union of all the containers
+				// with the same key across all the bitmaps, we store it in the list of containers
+				// for the target.
 				target.Containers.Put(iKey, container)
 			}
 		}
