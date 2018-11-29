@@ -485,7 +485,7 @@ func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
 // In the naive approach, we had to allocate two containers, whereas in the optimized approach
 // we only had to allocate one container, and we also had to perform less union operations. This
 // example is simplistic, but the impact in terms of CPU cycles and memory allocations achieved
-// by using the optimized alogorithm when working with a large number of large bitmaps is huge.
+// by using the optimized alogorithm when unioning many large bitmaps can be huge.
 //
 // An additional optimization that this function makes is that it recognizes that even when
 // CPU support is present, performing the popcount() operation isn't free. Imagine a scenario
