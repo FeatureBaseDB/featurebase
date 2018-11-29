@@ -599,7 +599,12 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 		hasNext = otherIters.next()
 	}
 
-	// Repair bitmaps after the fact
+	// Performing the popcount() operation with every union is wasteful because
+	// its likely the value will be invalidated by the next union operation. As
+	// a result, when we're performing all our in-place unions, we don't repair
+	// the value of n (container cardinality), and then at the very end we perform
+	// a "Repair" to recalculate all the container values. That way we never popcount()
+	// an entire bitmap container more than once per bulk union operation.
 	target.Containers.Repair()
 }
 
