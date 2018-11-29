@@ -27,8 +27,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-func statshit() {}
-
 const (
 	// magicNumber is an identifier, in bytes 0-1 of the file.
 	magicNumber = uint32(12348)
