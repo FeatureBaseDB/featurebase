@@ -549,7 +549,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 		// To avoid having to allocate a slice everytime, if the number of bitmaps
 		// being unioned is small enough we can just use this stack-allocated array.
 		staticHandledIters = [20]handledIter{}
-		otherIters         handledIters
+		bitmapIters        handledIters
 	)
 	if b != target {
 		// If b and target are not the same, we will need to union b into target which
@@ -558,9 +558,9 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 	}
 
 	if requiredSliceSize <= 20 {
-		otherIters = staticHandledIters[:0]
+		bitmapIters = staticHandledIters[:0]
 	} else {
-		otherIters = make(handledIters, 0, requiredSliceSize)
+		bitmapIters = make(handledIters, 0, requiredSliceSize)
 	}
 
 	// Only include b in the list of iters if its not the same as target to avoid
@@ -569,7 +569,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 		bIter, _ := b.Containers.Iterator(0)
 		next := bIter.Next()
 		if next {
-			otherIters = append(otherIters, handledIter{
+			bitmapIters = append(bitmapIters, handledIter{
 				iter:    bIter,
 				hasNext: true,
 				handled: false,
@@ -581,7 +581,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 		otherIter, _ := other.Containers.Iterator(0)
 		next := otherIter.Next()
 		if next {
-			otherIters = append(otherIters, handledIter{
+			bitmapIters = append(bitmapIters, handledIter{
 				iter:    otherIter,
 				hasNext: true,
 				handled: false,
@@ -593,7 +593,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 	hasNext := true
 	for hasNext {
 		// Loop until every iters current value has been handled.
-		for i, iIter := range otherIters {
+		for i, iIter := range bitmapIters {
 			if !iIter.hasNext || iIter.handled {
 				// Either we've exhausted this iter (it has no more containers), or
 				// we've already handled the current container by unioning it with
@@ -607,7 +607,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 				// that share the same key so we can make smarter union strategy
 				// decisions later. Note that we slice to [i:] not [i+1:] because we
 				// want to include the current containers information in the stats.
-				summaryStats = otherIters[i:].calculateSummaryStats(iKey)
+				summaryStats = bitmapIters[i:].calculateSummaryStats(iKey)
 			)
 
 			if summaryStats.isOnlyContainerWithKey {
@@ -615,7 +615,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 				// if the container is coming from an immutable bitmap and we
 				// know that we can mark the target bitmap as immutable as well.
 				target.Containers.Put(iKey, iContainer.Clone())
-				otherIters[i].handled = true
+				bitmapIters[i].handled = true
 				continue
 			}
 
@@ -632,7 +632,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 					n:             maxContainerVal + 1,
 				}
 				target.Containers.Put(iKey, container)
-				otherIters[i:].markItersWithCurrentKeyAsHandled(iKey)
+				bitmapIters[i:].markItersWithCurrentKeyAsHandled(iKey)
 			} else {
 				// Use a bitmap container for the target bitmap, and union everything
 				// into it.
@@ -660,7 +660,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 				// or allocating a new one) then the last step is to iterate through all the
 				// other containers to see which ones have the same key, and union all of them
 				// into the target bitmap container.
-				for j, jIter := range otherIters {
+				for j, jIter := range bitmapIters {
 					jKey, jContainer := jIter.iter.Value()
 
 					if iKey == jKey {
@@ -671,7 +671,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 						} else {
 							unionBitmapBitmapInPlace(container, jContainer)
 						}
-						otherIters[j].handled = true
+						bitmapIters[j].handled = true
 					}
 				}
 
@@ -682,7 +682,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 			}
 		}
 
-		hasNext = otherIters.next()
+		hasNext = bitmapIters.next()
 	}
 
 	// Performing the popcount() operation with every union is wasteful because
