@@ -699,7 +699,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 
 	// Performing the popcount() operation with every union is wasteful because
 	// its likely the value will be invalidated by the next union operation. As
-	// a result, when we're performing all our in-place unions we allow the value of
+	// a result, when we're performing all of our in-place unions we allow the value of
 	// n (container cardinality) to fall out of sync, and then at the very end we perform
 	// a "Repair" to recalculate all the container values. That way we never popcount()
 	// an entire bitmap container more than once per bulk union operation.
