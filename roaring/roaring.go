@@ -502,7 +502,7 @@ func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
 // At every "tick" of the outermost loop, we increment our pointer into the bitmaps list of containers
 // by 1 (if we haven't reached the end of the containers for that bitmap.)
 //
-// We then loop through all of the "current" values of the current container for all of the bitmaps
+// We then loop through all of the "current" values(containers) for all of the bitmaps
 // and for each container with a specific key that we encounter, we scan forward to see if any of the
 // other bitmaps have a container for the same key. If so, we calculate some summary statistics and
 // then use that information to make a decision about how to union all of the containers with the same
