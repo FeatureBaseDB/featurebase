@@ -519,7 +519,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 				// else {
 				// Use a bitmap
 				container := target.Containers.Get(iKey)
-				if container == nil {
+				if container == nil || container.containerType != containerBitmap {
 					buf := make([]uint64, bitmapN)
 					ob := buf[:bitmapN]
 					container = &Container{
