@@ -156,7 +156,7 @@ func (sc *sliceContainers) Iterator(key uint64) (citer ContainerIterator, found 
 	return &sliceIterator{e: sc, i: i}, found
 }
 
-func (sc *sliceContainers) Repair() {
+func (sc *sliceContainers) RepairBitmaps() {
 	for _, c := range sc.containers {
 		if c.isBitmap() {
 			c.bitmapRepair()
