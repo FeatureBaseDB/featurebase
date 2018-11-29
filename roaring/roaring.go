@@ -656,7 +656,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 					}
 				}
 
-				// Once we've acquire a bitmap container (either by reusing the existing one
+				// Once we've acquired a bitmap container (either by reusing the existing one
 				// or allocating a new one) then the last step is to iterate through all the
 				// other containers to see which ones have the same key, and union all of them
 				// into the target bitmap container.
