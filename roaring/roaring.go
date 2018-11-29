@@ -2471,38 +2471,6 @@ func unionArrayArray(a, b *Container) *Container {
 	return output
 }
 
-// func unionArrayArrayInPlace(a, b *Container) *Container {
-// 	statsHit("union/ArrayArray")
-// 	output := a
-// 	na, nb := len(a.array), len(b.array)
-// 	for i, j := 0, 0; ; {
-// 		if i >= na && j >= nb {
-// 			break
-// 		} else if i < na && j >= nb {
-// 			output.add(a.array[i])
-// 			i++
-// 			continue
-// 		} else if i >= na && j < nb {
-// 			output.add(b.array[j])
-// 			j++
-// 			continue
-// 		}
-
-// 		va, vb := a.array[i], b.array[j]
-// 		if va < vb {
-// 			output.add(va)
-// 			i++
-// 		} else if va > vb {
-// 			output.add(vb)
-// 			j++
-// 		} else {
-// 			output.add(va)
-// 			i, j = i+1, j+1
-// 		}
-// 	}
-// 	return output
-// }
-
 // unionArrayRun optimistically assumes that the result will be a run container,
 // and converts to a bitmap or array container afterwards if necessary.
 func unionArrayRun(a, b *Container) *Container {
@@ -2764,9 +2732,7 @@ func unionArrayBitmap(a, b *Container) *Container {
 // of a will need to be repaired after the fact.
 func unionBitmapArrayInPlace(a, b *Container) {
 	for _, v := range b.array {
-		// a.bitmap[v>>6] |= (1 << uint64(v%64))
-		i := v >> 6
-		a.bitmap[i] = a.bitmap[i] | (uint64(1) << (v % 64))
+		a.bitmap[v>>6] |= (uint64(1) << (v % 64))
 	}
 }
 
