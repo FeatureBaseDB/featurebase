@@ -1424,12 +1424,12 @@ func BenchmarkUnion(b *testing.B) {
 	}
 }
 
-// func BenchmarkUnionBulk(b *testing.B) {
-// 	// a1, a2, b, r1, r2 *roaring.Bitmap
-// 	data := getBenchData(b)
-// 	yolo := roaring.NewBitmap()
-// 	for n := 0; n < b.N; n++ {
-// 		yolo.
-// 			BulkUnion(data.a1, data.a2, data.b, data.r1, data.r2)
-// 	}
-// }
+func BenchmarkUnionBulk(b *testing.B) {
+	// a1, a2, b, r1, r2 *roaring.Bitmap
+	data := getBenchData(b)
+	yolo := roaring.NewBitmap()
+	for n := 0; n < b.N; n++ {
+		yolo.
+			UnionInPlace(data.a1, data.a2, data.b, data.r1, data.r2)
+	}
+}

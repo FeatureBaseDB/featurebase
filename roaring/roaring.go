@@ -407,9 +407,6 @@ func (b *Bitmap) Union(others ...*Bitmap) *Bitmap {
 // b in place.
 func (b *Bitmap) UnionInPlace(others ...*Bitmap) {
 	b.unionIntoTarget(b, others...)
-	// for _, other := range others {
-	// 	b.unionIntoTarget(other, b)
-	// }
 }
 
 type wrapperIter struct {
@@ -504,12 +501,15 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 				// }
 				// else {
 				// Use a bitmap
-				buf := make([]uint64, bitmapN)
-				ob := buf[:bitmapN]
-				container := &Container{
-					bitmap:        ob,
-					n:             0,
-					containerType: containerBitmap,
+				container := target.Containers.Get(iKey)
+				if container == nil {
+					buf := make([]uint64, bitmapN)
+					ob := buf[:bitmapN]
+					container = &Container{
+						bitmap:        ob,
+						n:             0,
+						containerType: containerBitmap,
+					}
 				}
 
 				for _, jIter := range otherIters {
