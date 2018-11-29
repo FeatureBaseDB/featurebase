@@ -513,8 +513,9 @@ func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
 // outer loop over again and the process repeats until we've iterated through every container in every bitmap
 // and unioned everything into a single target bitmap.
 //
-// The diagram below shows the iteration state of four different maps as the algorithm progresses. The diagrams should be
-// interpreted from left -> right, top -> bottom. The ^ symbol represents the bitmaps current container iteration position,
+// The diagram below shows the iteration state of four different bitmaps as the algorithm progresses them.
+// The diagrams should BE interpreted from left -> right, top -> bottom. The X's represent a container in
+// the bitmap at a specific key,  ^ symbol represents the bitmaps current container iteration position,
 // and the - symbol represents a container that is at the current iteration position, but has been marked as "handled".
 //
 //          ----------------------------      |      ----------------------------      |      ----------------------------
