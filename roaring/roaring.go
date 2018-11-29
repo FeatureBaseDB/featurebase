@@ -468,7 +468,6 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 	hasNext := true
 	for hasNext {
 		// Loop until every iters current value has been handled.
-		// for {
 		for i, iIter := range otherIters {
 			if !iIter.hasNext || iIter.handled {
 				continue
