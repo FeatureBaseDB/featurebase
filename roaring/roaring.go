@@ -437,6 +437,15 @@ func (w wrappedIters) next() bool {
 	return hasNext
 }
 
+func (w wrappedIters) markItersWithCurrentKeyAsHandled(key uint64) {
+	for i, wrapped := range w {
+		currKey, _ := wrapped.iter.Value()
+		if currKey == key {
+			w[i].handled = true
+		}
+	}
+}
+
 // unionIntoTarget stores the union of b and other into target. b and other will
 // be left unchanged, but target will be modified in place. Used to share
 // the union logic between the copy-on-write and in-place functions.
@@ -470,16 +479,40 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 		// Loop until every iters current value has been handled.
 		for i, iIter := range otherIters {
 			if !iIter.hasNext || iIter.handled {
+				// Either we've exhausted this iter (it has no more containers), or
+				// we've already handled the current container by unioning it with
+				// one of the containers we encountered earlier.
 				continue
 			}
 
-			// Can store key-level statistics here
 			iKey, iContainer := iIter.iter.Value()
-			n := iContainer.n
-			needsUnion := false
-			hasMaxRange := iContainer.n == maxContainerVal+1
+
+			// Summary statistics about all the containers in the other bitmaps
+			// that share the same key so we can make smarter union strategy
+			// decisions later.
+			var (
+				// Estimated cardinality of the union of all containers with the same
+				// key as iKey across all bitmaps. This calculation is very rough as
+				// we just sum the cardinality of the container across the different
+				// bitmaps which could result in very inflated values, but it allows
+				// us to avoid allocating expensive bitmaps when unioning many low
+				// density containers.
+				n = iContainer.n
+				// Whether iContainer is the only container across all the bitmaps
+				// with the key iKey. If true, we can skip all the unioning logic
+				// and just clone the container into target.
+				isOnlyContainerWithKey = true
+				// Whether any of the containers are storing every possible value that
+				// they can. If so, we can short-circuit all the unioning logic and use
+				// a RLE container with a single value in it. This is an optimization to
+				// avoid using an expensive bitmap container for bitmaps that have some
+				// extremely dense containers.
+				hasMaxRange = iContainer.n == maxContainerVal+1
+			)
 			for _, jIter := range otherIters[i:] {
 				if hasMaxRange {
+					// If we already know that we're going to use a max range RLE container,
+					// then there is no reason to continue calculating statistics.
 					continue
 				}
 
@@ -487,7 +520,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 				jKey, jContainer := jIter.iter.Value()
 
 				if iKey == jKey {
-					needsUnion = true
+					isOnlyContainerWithKey = false
 					n += jContainer.n
 					if !hasMaxRange {
 						hasMaxRange = jContainer.n == maxContainerVal+1
@@ -495,28 +528,29 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 				}
 			}
 
-			if !needsUnion {
-				// TODO: Don't clone if sealed
+			if isOnlyContainerWithKey {
+				// TODO(rartoul): We can avoid these clones if we can determine
+				// if the container is coming from an immutable bitmap and we
+				// know that we can mark the target bitmap as immutable as well.
 				target.Containers.Put(iKey, iContainer.Clone())
 				otherIters[i].handled = true
 				continue
 			}
 
-			// Need to union
+			// There was more than one container across the bitmaps with key iKey
+			// so we need to calculate a union.
 			if hasMaxRange {
-				// Use the max range
+				// One (or more) of the containers represented the maximum possible
+				// range that a container can store, so instead of calculating a
+				// union we can generate an RLE container that represents the entire
+				// range.
 				container := &Container{
 					runs:          []interval16{{start: 0, last: maxContainerVal}},
 					containerType: containerRun,
 					n:             maxContainerVal + 1,
 				}
 				target.Containers.Put(iKey, container)
-				for j, jIter := range otherIters {
-					jKey, _ := jIter.iter.Value()
-					if iKey == jKey {
-						otherIters[j].handled = true
-					}
-				}
+				otherIters[i:].markItersWithCurrentKeyAsHandled(iKey)
 			} else {
 				// TODO: Implement this
 				// if n < ArrayMaxSize {
