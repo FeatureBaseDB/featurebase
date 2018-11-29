@@ -3966,6 +3966,9 @@ func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) {
 	}
 }
 
+// handledIter and handledIters are wrappers around Bitmap Container iterators
+// and assist with the unionIntoTarget algorithm by abstracting away some tedious
+// operations.
 type handledIter struct {
 	iter    ContainerIterator
 	hasNext bool
