@@ -552,17 +552,18 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 				target.Containers.Put(iKey, container)
 				otherIters[i:].markItersWithCurrentKeyAsHandled(iKey)
 			} else {
-				// TODO: Implement this
-				// if n < ArrayMaxSize {
-				// 	// Use an array
-				// 	// container := &Container{
-				// 	// 	containerType: containerArray,
-				// 	// 	array:         make([]uint16, 0, n),
-				// 	// }
-				// }
-				// else {
-				// Use a bitmap
+				// Use a bitmap container for the target bitmap, and union everything
+				// into it.
+				//
+				// TODO(rartoul): Add another conditional case for n < ArrayMaxSize
+				// (or some fraction of that value) to avoid allocating expensive
+				// bitmaps when unioning many low-density array containers, but this
+				// will require writing a union in place algorithm for an array container
+				// that accepts multiple different containers to union into it for
+				// efficiency.
 				container := target.Containers.Get(iKey)
+				// If target already has a bitmap container for iKey then we can reuse that,
+				// otherwise we have to allocate a new one.
 				if container == nil || container.containerType != containerBitmap {
 					buf := make([]uint64, bitmapN)
 					ob := buf[:bitmapN]
@@ -573,6 +574,10 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 					}
 				}
 
+				// Once we've acquire a bitmap container (either by reusing the existing one
+				// or allocating a new one) then the last step is to iterate through all the
+				// other containers to see which ones have the same key, and union all of them
+				// into the target bitmap container.
 				for j, jIter := range otherIters {
 					jKey, jContainer := jIter.iter.Value()
 
@@ -592,11 +597,6 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 		}
 
 		hasNext = otherIters.next()
-
-		if !hasNext {
-			// None of the iters had any more values, we're done.
-			break
-		}
 	}
 
 	// Repair bitmaps after the fact
