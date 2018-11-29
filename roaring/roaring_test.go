@@ -1413,7 +1413,6 @@ func BenchmarkSliceDescending(b *testing.B) {
 }
 
 func BenchmarkUnion(b *testing.B) {
-	// a1, a2, b, r1, r2 *roaring.Bitmap
 	data := getBenchData(b)
 	for n := 0; n < b.N; n++ {
 		data.a1.
@@ -1425,11 +1424,10 @@ func BenchmarkUnion(b *testing.B) {
 }
 
 func BenchmarkUnionBulk(b *testing.B) {
-	// a1, a2, b, r1, r2 *roaring.Bitmap
 	data := getBenchData(b)
-	yolo := roaring.NewBitmap()
+	bm := roaring.NewBitmap()
 	for n := 0; n < b.N; n++ {
-		yolo.
+		bm.
 			UnionInPlace(data.a1, data.a2, data.b, data.r1, data.r2)
 	}
 }
