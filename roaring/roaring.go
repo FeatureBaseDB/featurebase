@@ -406,47 +406,112 @@ func (b *Bitmap) Union(others ...*Bitmap) *Bitmap {
 	return output
 }
 
-// UnionInPlace returns the bitwise union of b and other, modifying
+// UnionInPlace returns the bitwise union of b and others, modifying
 // b in place.
 func (b *Bitmap) UnionInPlace(others ...*Bitmap) {
 	b.unionIntoTarget(b, others...)
 }
 
-type wrapperIter struct {
-	iter    ContainerIterator
-	hasNext bool
-	handled bool
-}
-
-type wrappedIters []wrapperIter
-
-func (w wrappedIters) next() bool {
-	hasNext := false
-
-	for i, wrapped := range w {
-		next := wrapped.iter.Next()
-		w[i].hasNext = next
-		w[i].handled = false
-		if next {
-			hasNext = true
-		}
-	}
-
-	return hasNext
-}
-
-func (w wrappedIters) markItersWithCurrentKeyAsHandled(key uint64) {
-	for i, wrapped := range w {
-		currKey, _ := wrapped.iter.Value()
-		if currKey == key {
-			w[i].handled = true
-		}
-	}
-}
-
 // unionIntoTarget stores the union of b and other into target. b and other will
 // be left unchanged, but target will be modified in place. Used to share
 // the union logic between the copy-on-write and in-place functions.
+//
+// This function performs an n-way union of n bitmaps. It performs this in an
+// optimized manner looping through all the bitmaps and performing unions one
+// container at a time. As a result, instead of generating many intermediary
+// containers for each union operation for a given container key, only one
+// new container needs to be allocated (or re-used) regardless of how many bitmaps
+// participate in the union. This significantly reduces allocations. In addition,
+// because we perform the unions one container at a time accross all the bitmaps, we
+// can calculate summary statistics that allow us to make more efficient decisions
+// up front. For example, imagine trying to combine a union accross the following three
+// bitsets:
+//
+//     1. Bitmap A: Single array container at key 0 with 400 values in it.
+//     2. Bitmap B: Single array container at key 0 with 500 values in it.
+//     3. Bitmap C: Single array container at key 0 with 3500 values in it.
+//
+// Naive approach:
+//
+//     1. Perform union of bitmap A and B, container by container
+//         a. 400 + 500 < ArrayMaxSize so likely we will choose to allocate a new array
+//            container and then perform a unionArrayArray operation to merge the two
+//            arrays into the new array container.
+//     2. Perform a union of the bitmap generated in the step above with bitmap C.
+//        900 + 3500 > ArrayMaxSize so we will need to upgrade to a bitset container which
+//        we will have to allocate, and then we will have to perform two unions into the
+//        new bitmap container: one for the array container generated in the previous step,
+//        and one for the bitset container in bitmap C.
+//
+// Approach taken by this function:
+//
+//     1. Detect that bitmaps A, B, and C all have containers for key 0.
+//     2. Estimate the resulting cardinality of the union of all their containers to be
+//        400 + 500 + 3500 > ArrayMaxSize and decide upfront to use a bitset for the target
+//        container.
+//     3. Union the containers from bitmaps A, B, and C into the new bitset container directly
+//        using fast bitwise operations.
+//
+// In the naive approach, we had to allocate two containers, whereas in the optimized approach
+// we only had to allocate one container, and we also had to perform less union operations. This
+// example is simplistic, but the impact in terms of CPU cycles and memory allocations achieved
+// by using the optimized alogorithm when working with a large number of large bitmaps is huge.
+//
+// An additional optimization that this function makes is that it recognizes that even when
+// CPU support is present, performing the popcount() operation isn't free. Imagine a scenario
+// where 10 bitset containers are being unioned together one after the next. If every
+// bitset<->bitset union operation needs to keep the containers cardinality up to date, then
+// the algorithm will waste a lot of time performing intermediary popcount() operations that
+// will immediately be invalidated by the next union operation. As a result, we allow the cardinality
+// of containers to degrade when we perform the in-place union operations, and then when the algorithm
+// completes we "repair" all the containers by performing the popcount() operation one time. This means
+// that we only ever have to do O(1) popcount operations per container instead of O(n) where n is the
+// number of containers with the same key that are being unioned together.
+//
+// The algorithm works by iterating through all of the containers in all of the bitmaps concurrently.
+// At every "tick" of the outermost loop, we increment our pointer into the bitmaps list of containers
+// by 1 (if we haven't reached the end of the containers for that bitmap.)
+//
+// We then loop through all of the "current" values of the current container for all of the bitmaps
+// and for each container with a specific key that we encounter, we scan forward to see if any of the
+// other bitmaps have a container for the same key. If so, we calculate some summary statistics and
+// then use that information to make a decision about how to union all of the containers with the same
+// key together, perform the union, and then move on to the next batch of containers that share the same
+// key.
+//
+// We repeat this process until every single bitmaps current container has been "handled". Then  we start the
+// outer loop over again and the process repeats until we've iterated through every container in every bitmap
+// and unioned everything into a single target bitmap.
+//
+// The diagram below shows the iteration state of four different maps as the algorithm progresses. The diagrams should be
+// interpreted from left -> right, top -> bottom. The ^ symbol represents the bitmaps current container iteration position,
+// and the - symbol represents a container that is at the current iteration position, but has been marked as "handled".
+//
+//          ----------------------------      |      ----------------------------      |     ----------------------------
+// Bitmap 1 |___X____________X__________|     |      |___X____________X__________|     |      |___X____________X__________|
+//              ^                             |          _                             |
+//          ----------------------------      |      ----------------------------      |      ----------------------------
+// Bitmap 2 |_______X________X______X___|     |      |_______X_______________X___|     |      |_______X_______________X___|
+//                  ^                         |              ^                         |
+//          ----------------------------      |      ----------------------------      |      ----------------------------
+// Bitmap 3 |_______X___________________|     |      |_______X___________________|     |      |_______X___________________|
+//                  ^                         |              ^                         |
+//          ----------------------------      |      ----------------------------      |      ----------------------------
+// Bitmap 4 |___X_______________________|     |      |___X_______________________|     |      |___X_______________________|
+//              ^                             |          _                             |
+// ------------------------------------------------------------------------------------------------------------------------
+//          ----------------------------      |      ----------------------------      |      ----------------------------
+// Bitmap 1 |___X____________X__________|     |      |___X____________X__________|     |      |___X____________X__________|
+//              _                             |                       ^                |                       _
+//          ----------------------------      |      ----------------------------      |      ----------------------------
+// Bitmap 2 |_______X_______________X___|     |      |_______X_______________X___|     |      |_______X_______________X___|
+//                  _                         |                              ^         |                              ^
+//          ----------------------------      |      ----------------------------      |      ----------------------------
+// Bitmap 3 |_______X___________________|     |      |_______X___________________|     |      |_______X___________________|
+//                  _                         |                                        |
+//          ----------------------------      |      ----------------------------      |      ----------------------------
+// Bitmap 4 |___X_______________________|     |      |___X_______________________|     |      |___X_______________________|
+//              _
 func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 	otherIters := make(wrappedIters, 0, len(others)+1)
 	bIter, _ := b.Containers.Iterator(0)
@@ -3881,6 +3946,38 @@ func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) {
 			c.runs = nil
 			c.bitmap = (*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[pos]))[:bitmapN]
 			pos += bitmapN * 8
+		}
+	}
+}
+
+type wrapperIter struct {
+	iter    ContainerIterator
+	hasNext bool
+	handled bool
+}
+
+type wrappedIters []wrapperIter
+
+func (w wrappedIters) next() bool {
+	hasNext := false
+
+	for i, wrapped := range w {
+		next := wrapped.iter.Next()
+		w[i].hasNext = next
+		w[i].handled = false
+		if next {
+			hasNext = true
+		}
+	}
+
+	return hasNext
+}
+
+func (w wrappedIters) markItersWithCurrentKeyAsHandled(key uint64) {
+	for i, wrapped := range w {
+		currKey, _ := wrapped.iter.Value()
+		if currKey == key {
+			w[i].handled = true
 		}
 	}
 }
