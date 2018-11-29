@@ -517,7 +517,7 @@ func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
 // interpreted from left -> right, top -> bottom. The ^ symbol represents the bitmaps current container iteration position,
 // and the - symbol represents a container that is at the current iteration position, but has been marked as "handled".
 //
-//          ----------------------------      |      ----------------------------      |     ----------------------------
+//          ----------------------------      |      ----------------------------      |      ----------------------------
 // Bitmap 1 |___X____________X__________|     |      |___X____________X__________|     |      |___X____________X__________|
 //              ^                             |          _                             |
 //          ----------------------------      |      ----------------------------      |      ----------------------------
