@@ -509,7 +509,7 @@ func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
 // key together, perform the union, mark the unioned containers as "handled" and then move on to the next
 // batch of containers that share the same key.
 //
-// We repeat this process until every single bitmaps current container has been "handled". Then  we start the
+// We repeat this process until every single bitmaps current container has been "handled". Then we start the
 // outer loop over again and the process repeats until we've iterated through every container in every bitmap
 // and unioned everything into a single target bitmap.
 //
