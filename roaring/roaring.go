@@ -420,11 +420,28 @@ type wrapperIter struct {
 	handled bool
 }
 
+type wrappedIters []wrapperIter
+
+func (w wrappedIters) next() bool {
+	hasNext := false
+
+	for i, wrapped := range w {
+		next := wrapped.iter.Next()
+		w[i].hasNext = next
+		w[i].handled = false
+		if next {
+			hasNext = true
+		}
+	}
+
+	return hasNext
+}
+
 // unionIntoTarget stores the union of b and other into target. b and other will
 // be left unchanged, but target will be modified in place. Used to share
 // the union logic between the copy-on-write and in-place functions.
 func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
-	otherIters := make([]wrapperIter, 0, len(others)+1)
+	otherIters := make(wrappedIters, 0, len(others)+1)
 	bIter, _ := b.Containers.Iterator(0)
 	next := bIter.Next()
 	if next {
@@ -541,15 +558,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 			}
 		}
 
-		hasNext = false
-		for i, otherIter := range otherIters {
-			next := otherIter.iter.Next()
-			otherIters[i].hasNext = next
-			otherIters[i].handled = false
-			if next {
-				hasNext = true
-			}
-		}
+		hasNext = otherIters.next()
 
 		if !hasNext {
 			// None of the iters had any more values, we're done.
