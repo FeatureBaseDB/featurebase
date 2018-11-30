@@ -563,8 +563,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 	// a wasteful self union.
 	if b != target {
 		bIter, _ := b.Containers.Iterator(0)
-		next := bIter.Next()
-		if next {
+		if bIter.Next() {
 			bitmapIters = append(bitmapIters, handledIter{
 				iter:    bIter,
 				hasNext: true,
@@ -575,8 +574,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 
 	for _, other := range others {
 		otherIter, _ := other.Containers.Iterator(0)
-		next := otherIter.Next()
-		if next {
+		if otherIter.Next() {
 			bitmapIters = append(bitmapIters, handledIter{
 				iter:    otherIter,
 				hasNext: true,
