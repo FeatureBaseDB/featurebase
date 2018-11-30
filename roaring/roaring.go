@@ -2094,8 +2094,14 @@ func (c *Container) check() error {
 
 func (c *Container) bitmapRepair() {
 	n := int32(0)
-	for i := 0; i < bitmapN; i++ {
+	// Manually unroll loop to make it a little faster.
+	// TODO(rartoul): Can probably make this a few x faster using
+	// SIMD instructions.
+	for i := 0; i < bitmapN; i += 4 {
 		n += int32(popcount(c.bitmap[i]))
+		n += int32(popcount(c.bitmap[i+1]))
+		n += int32(popcount(c.bitmap[i+2]))
+		n += int32(popcount(c.bitmap[i+3]))
 	}
 	c.n = n
 }
@@ -2852,8 +2858,14 @@ func unionBitmapBitmapInPlace(a, b *Container) {
 		bb = b.bitmap[:bitmapN]
 	)
 
-	for i := 0; i < bitmapN; i++ {
+	// Manually unroll loop to make it a little faster.
+	// TODO(rartoul): Can probably make this a few x faster using
+	// SIMD instructions.
+	for i := 0; i < bitmapN; i += 4 {
 		ab[i] = ab[i] | bb[i]
+		ab[i+1] = ab[i+1] | bb[i+1]
+		ab[i+2] = ab[i+2] | bb[i+2]
+		ab[i+3] = ab[i+3] | bb[i+3]
 	}
 }
 
