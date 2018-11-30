@@ -3275,6 +3275,13 @@ func BenchmarkUnionBitmapBitmapInPlace(b *testing.B) {
 	}
 }
 
+func BenchmarkBitmapRepair(b *testing.B) {
+	b1 := newTestBitmapContainer()
+	for n := 0; n < b.N; n++ {
+		b1.bitmapRepair()
+	}
+}
+
 func newTestBitmapContainer() *Container {
 	var (
 		buf       = make([]uint64, bitmapN)
