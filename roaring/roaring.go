@@ -395,7 +395,7 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 	return output
 }
 
-// Union returns the bitwise union of b and other as a new bitmap.
+// Union returns the bitwise union of b and others as a new bitmap.
 func (b *Bitmap) Union(others ...*Bitmap) *Bitmap {
 	output := NewBitmap()
 	if len(others) == 1 {
