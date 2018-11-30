@@ -249,6 +249,22 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		decodeBlockDataResponse(msg, mt)
 		return nil
+	case *pilosa.TranslateKeysRequest:
+		msg := &internal.TranslateKeysRequest{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling TranslateKeysRequest")
+		}
+		decodeTranslateKeysRequest(msg, mt)
+		return nil
+	case *pilosa.TranslateKeysResponse:
+		msg := &internal.TranslateKeysResponse{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling TranslateKeysResponse")
+		}
+		decodeTranslateKeysResponse(msg, mt)
+		return nil
 	default:
 		panic(fmt.Sprintf("unhandled pilosa.Message of type %T: %#v", mt, m))
 	}
@@ -308,6 +324,10 @@ func encodeToProto(m pilosa.Message) proto.Message {
 		return encodeBlockDataRequest(mt)
 	case *pilosa.BlockDataResponse:
 		return encodeBlockDataResponse(mt)
+	case *pilosa.TranslateKeysRequest:
+		return encodeTranslateKeysRequest(mt)
+	case *pilosa.TranslateKeysResponse:
+		return encodeTranslateKeysResponse(mt)
 	}
 	return nil
 }
@@ -695,6 +715,20 @@ func encodeRecalculateCaches(*pilosa.RecalculateCaches) *internal.RecalculateCac
 	return &internal.RecalculateCaches{}
 }
 
+func encodeTranslateKeysResponse(response *pilosa.TranslateKeysResponse) *internal.TranslateKeysResponse {
+	return &internal.TranslateKeysResponse{
+		IDs: response.IDs,
+	}
+}
+
+func encodeTranslateKeysRequest(request *pilosa.TranslateKeysRequest) *internal.TranslateKeysRequest {
+	return &internal.TranslateKeysRequest{
+		Index: request.Index,
+		Field: request.Field,
+		Keys:  request.Keys,
+	}
+}
+
 func decodeResizeInstruction(ri *internal.ResizeInstruction, m *pilosa.ResizeInstruction) {
 	m.JobID = ri.JobID
 	m.Node = &pilosa.Node{}
@@ -997,6 +1031,16 @@ func decodeQueryResults(pb []*internal.QueryResult, m []interface{}) {
 	for i := range pb {
 		m[i] = decodeQueryResult(pb[i])
 	}
+}
+
+func decodeTranslateKeysRequest(pb *internal.TranslateKeysRequest, m *pilosa.TranslateKeysRequest) {
+	m.Index = pb.Index
+	m.Field = pb.Field
+	m.Keys = pb.Keys
+}
+
+func decodeTranslateKeysResponse(pb *internal.TranslateKeysResponse, m *pilosa.TranslateKeysResponse) {
+	m.IDs = pb.IDs
 }
 
 // QueryResult types.
