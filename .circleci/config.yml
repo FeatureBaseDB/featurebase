@@ -7,7 +7,7 @@ fast-checkout: &fast-checkout
   attach_workspace:
     at: .
 jobs:
-  build:
+  setup:
     <<: *defaults
     steps:
       - checkout
@@ -30,6 +30,14 @@ jobs:
       - run: gometalinter --install
       - run: go get github.com/remyoudompheng/go-misc/deadcode
       - run: make gometalinter
+  test-build-arm:
+    <<: *defaults
+    steps:
+      - *fast-checkout
+      - run: make build GOOS=linux GOARCH=arm GOARM=5
+      - run: make build GOOS=linux GOARCH=arm GOARM=6
+      - run: make build GOOS=linux GOARCH=arm GOARM=7
+      - run: make build GOOS=linux GOARCH=arm64
   test-golang-1.11: &base-test
     <<: *defaults
     steps:
@@ -100,25 +108,28 @@ workflows:
   version: 2
   test:
     jobs:
-      - build
+      - setup
       - linter:
           requires:
-            - build
+            - setup
+      - test-build-arm:
+          requires:
+            - setup
       - test-golang-1.11:
           requires:
-            - build
+            - setup
       - test-golang-1.11-race:
           requires:
-            - build
+            - setup
       - test-golang-1.11-386:
           requires:
-            - build
+            - setup
       - test-golang-1.10:
           requires:
-            - build
+            - setup
       - cluster-tests:
           requires:
-            - build
+            - setup
       - prerelease:
           requires:
             - linter
