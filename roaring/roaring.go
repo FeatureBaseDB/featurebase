@@ -629,54 +629,55 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 				}
 				target.Containers.Put(iKey, container)
 				bitmapIters[i:].markItersWithCurrentKeyAsHandled(iKey)
-			} else {
-				// Use a bitmap container for the target bitmap, and union everything
-				// into it.
-				//
-				// TODO(rartoul): Add another conditional case for n < ArrayMaxSize
-				// (or some fraction of that value) to avoid allocating expensive
-				// bitmaps when unioning many low-density array containers, but this
-				// will require writing a union in place algorithm for an array container
-				// that accepts multiple different containers to union into it for
-				// efficiency.
-				container := target.Containers.Get(iKey)
-				// If target already has a bitmap container for iKey then we can reuse that,
-				// otherwise we have to allocate a new one.
-				if container == nil || container.containerType != containerBitmap {
-					buf := make([]uint64, bitmapN)
-					ob := buf[:bitmapN]
-					container = &Container{
-						bitmap:        ob,
-						n:             0,
-						containerType: containerBitmap,
-					}
-				}
-
-				// Once we've acquired a bitmap container (either by reusing the existing one
-				// or allocating a new one) then the last step is to iterate through all the
-				// other containers to see which ones have the same key, and union all of them
-				// into the target bitmap container. Only need to loop starting from i because
-				// anything previous to that has already been handled.
-				for j, jIter := range bitmapIters[i:] {
-					jKey, jContainer := jIter.iter.Value()
-
-					if iKey == jKey {
-						if jContainer.isArray() {
-							unionBitmapArrayInPlace(container, jContainer)
-						} else if jContainer.isRun() {
-							unionBitmapRunInPlace(container, jContainer)
-						} else {
-							unionBitmapBitmapInPlace(container, jContainer)
-						}
-						bitmapIters[j].handled = true
-					}
-				}
-
-				// Now that we've calculated a container is that a union of all the containers
-				// with the same key across all the bitmaps, we store it in the list of containers
-				// for the target.
-				target.Containers.Put(iKey, container)
+				continue
 			}
+
+			// Use a bitmap container for the target bitmap, and union everything
+			// into it.
+			//
+			// TODO(rartoul): Add another conditional case for n < ArrayMaxSize
+			// (or some fraction of that value) to avoid allocating expensive
+			// bitmaps when unioning many low-density array containers, but this
+			// will require writing a union in place algorithm for an array container
+			// that accepts multiple different containers to union into it for
+			// efficiency.
+			container := target.Containers.Get(iKey)
+			// If target already has a bitmap container for iKey then we can reuse that,
+			// otherwise we have to allocate a new one.
+			if container == nil || container.containerType != containerBitmap {
+				buf := make([]uint64, bitmapN)
+				ob := buf[:bitmapN]
+				container = &Container{
+					bitmap:        ob,
+					n:             0,
+					containerType: containerBitmap,
+				}
+			}
+
+			// Once we've acquired a bitmap container (either by reusing the existing one
+			// or allocating a new one) then the last step is to iterate through all the
+			// other containers to see which ones have the same key, and union all of them
+			// into the target bitmap container. Only need to loop starting from i because
+			// anything previous to that has already been handled.
+			for j, jIter := range bitmapIters[i:] {
+				jKey, jContainer := jIter.iter.Value()
+
+				if iKey == jKey {
+					if jContainer.isArray() {
+						unionBitmapArrayInPlace(container, jContainer)
+					} else if jContainer.isRun() {
+						unionBitmapRunInPlace(container, jContainer)
+					} else {
+						unionBitmapBitmapInPlace(container, jContainer)
+					}
+					bitmapIters[j].handled = true
+				}
+			}
+
+			// Now that we've calculated a container that is a union of all the containers
+			// with the same key across all the bitmaps, we store it in the list of containers
+			// for the target.
+			target.Containers.Put(iKey, container)
 		}
 
 		hasNext = bitmapIters.next()
