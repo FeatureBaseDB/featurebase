@@ -98,8 +98,12 @@ type Containers interface {
 
 	Count() uint64
 
-	//Reset will clear the containers collection to allow for recycling during snapshot
+	// Reset will clear the containers collection to allow for recycling during snapshot
 	Reset()
+
+	// Repair will repair the cardinality of any containers whose cardinality were corrupted
+	// due to optimized operations.
+	Repair()
 }
 
 type ContainerIterator interface {
@@ -687,7 +691,7 @@ func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
 	// n (container cardinality) to fall out of sync, and then at the very end we perform
 	// a "Repair" to recalculate all the container values. That way we never popcount()
 	// an entire bitmap container more than once per bulk union operation.
-	target.Containers.(*sliceContainers).repairBitmaps()
+	target.Containers.Repair()
 }
 
 // Difference returns the difference of b and other.
@@ -2089,6 +2093,14 @@ func (c *Container) check() error {
 		return nil
 	}
 	return a
+}
+
+// Repair repairs the cardinality of c if it has been corrupted by
+// optimized operations.
+func (c *Container) Repair() {
+	if c.isBitmap() {
+		c.bitmapRepair()
+	}
 }
 
 func (c *Container) bitmapRepair() {
