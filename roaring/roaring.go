@@ -415,7 +415,7 @@ func (b *Bitmap) Union(others ...*Bitmap) *Bitmap {
 // UnionInPlace returns the bitwise union of b and others, modifying
 // b in place.
 func (b *Bitmap) UnionInPlace(others ...*Bitmap) {
-	b.unionIntoTarget(b, others...)
+	b.unionInPlace(others...)
 }
 
 func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
@@ -543,37 +543,20 @@ func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
 //          ----------------------------      |      ----------------------------      |      ----------------------------
 // Bitmap 4 |___X_______________________|     |      |___X_______________________|     |      |___X_______________________|
 //              _
-func (b *Bitmap) unionIntoTarget(target *Bitmap, others ...*Bitmap) {
+func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 	var (
 		requiredSliceSize = len(others)
 		// To avoid having to allocate a slice everytime, if the number of bitmaps
 		// being unioned is small enough we can just use this stack-allocated array.
 		staticHandledIters = [20]handledIter{}
 		bitmapIters        handledIters
+		target             = b
 	)
-	if b != target {
-		// If b and target are not the same, we will need to union b into target which
-		// means we need room for one more iter.
-		requiredSliceSize++
-	}
 
 	if requiredSliceSize <= 20 {
 		bitmapIters = staticHandledIters[:0]
 	} else {
 		bitmapIters = make(handledIters, 0, requiredSliceSize)
-	}
-
-	// Only include b in the list of iters if its not the same as target to avoid
-	// a wasteful self union.
-	if b != target {
-		bIter, _ := b.Containers.Iterator(0)
-		if bIter.Next() {
-			bitmapIters = append(bitmapIters, handledIter{
-				iter:    bIter,
-				hasNext: true,
-				handled: false,
-			})
-		}
 	}
 
 	for _, other := range others {
