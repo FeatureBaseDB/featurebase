@@ -98,7 +98,7 @@ type Containers interface {
 
 	Count() uint64
 
-	// Reset will clear the containers collection to allow for recycling during snapshot
+	// Reset clears the containers collection to allow for recycling during snapshot
 	Reset()
 
 	// Repair will repair the cardinality of any containers whose cardinality were corrupted
