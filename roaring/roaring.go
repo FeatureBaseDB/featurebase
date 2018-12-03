@@ -4028,20 +4028,17 @@ func (w handledIters) calculateSummaryStats(key uint64) containerUnionSummarySta
 	summary := containerUnionSummaryStats{}
 
 	for _, iter := range w {
-		if summary.hasMaxRange {
-			// If we already know that we're going to use a max range RLE container,
-			// then there is no reason to continue calculating statistics.
-			continue
-		}
-
 		// Calculate key-level statistics here
 		currKey, currContainer := iter.iter.Value()
 
 		if key == currKey {
 			summary.isOnlyContainerWithKey = false
 			summary.n += currContainer.n
-			if !summary.hasMaxRange {
-				summary.hasMaxRange = (currContainer.n == maxContainerVal+1)
+
+			if currContainer.n == maxContainerVal+1 {
+				summary.hasMaxRange = true
+				summary.n = maxContainerVal + 1
+				return summary
 			}
 		}
 	}
