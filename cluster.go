@@ -70,7 +70,7 @@ type Node struct {
 }
 
 func (n Node) String() string {
-	return fmt.Sprintf("Node:%s:%s:%s", n.URI, n.State, n.ID[:6])
+	return fmt.Sprintf("Node:%s:%s:%s", n.URI, n.State, n.ID)
 }
 
 // Nodes represents a list of nodes.
@@ -364,6 +364,7 @@ func (c *cluster) addNode(node *Node) error {
 	if !c.Topology.addID(node.ID) {
 		return nil
 	}
+	c.Topology.nodeStates[node.ID] = node.State
 
 	// save topology
 	return c.saveTopology()
@@ -588,6 +589,12 @@ func (c *cluster) nodePositionByID(nodeID string) int {
 func (c *cluster) addNodeBasicSorted(node *Node) bool {
 	n := c.unprotectedNodeByID(node.ID)
 	if n != nil {
+		if n.State != node.State || n.IsCoordinator != node.IsCoordinator || n.URI != node.URI {
+			n.State = node.State
+			n.IsCoordinator = node.IsCoordinator
+			n.URI = node.URI
+			return true
+		}
 		return false
 	}
 

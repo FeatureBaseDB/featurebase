@@ -678,6 +678,15 @@ func TestClusterQueriesAfterRestart(t *testing.T) {
 	defer cluster.Close()
 	cmd1 := cluster[1]
 
+	for _, com := range cluster {
+		nodes := com.API.Hosts(context.Background())
+		for _, n := range nodes {
+			if n.State != "READY" {
+				t.Fatalf("unexpected node state after upping cluster: %v", nodes)
+			}
+		}
+	}
+
 	cmd1.MustCreateIndex(t, "testidx", pilosa.IndexOptions{})
 	cmd1.MustCreateField(t, "testidx", "testfield", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 10))
 
