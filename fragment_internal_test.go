@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"math/rand"
 	"reflect"
 	"sort"
 	"testing"
@@ -1744,6 +1745,190 @@ func BenchmarkFragment_Import(b *testing.B) {
 			b.Fatalf("Error Building Sample: %s", err)
 		}
 	}
+}
+
+func BenchmarkImportRoaring(b *testing.B) {
+	for _, cacheType := range []string{CacheTypeRanked} { // CacheTypeNone didn't seem to affect the results much
+		for _, numRows := range []uint64{10, 100, 1000, 10000, 100000} {
+			data := getZipfRowsSliceRoaring(numRows, 1)
+			name := fmt.Sprintf("Rows%dCache_%s", numRows, cacheType)
+			b.Logf("%s: %.2fMB\n", name, float64(len(data))/1024/1024)
+			b.Run(name, func(b *testing.B) {
+				b.StopTimer()
+				for i := 0; i < b.N; i++ {
+					f := mustOpenFragment("i", fmt.Sprintf("r%dc%s", numRows, cacheType), viewStandard, 0, cacheType)
+					b.StartTimer()
+					err := f.importRoaring(data, false)
+					if err != nil {
+						b.Fatalf("import error: %v", err)
+					}
+					b.StopTimer()
+					f.Close()
+				}
+			})
+		}
+	}
+}
+
+func BenchmarkImportStandard(b *testing.B) {
+	for _, cacheType := range []string{CacheTypeRanked} {
+		for _, numRows := range []uint64{10, 100, 1000, 10000, 100000} {
+			rowIDs, columnIDs := getZipfRowsSliceStandard(numRows, 1)
+			b.Run(fmt.Sprintf("Rows%dCache_%s", numRows, cacheType), func(b *testing.B) {
+				b.StopTimer()
+				for i := 0; i < b.N; i++ {
+					f := mustOpenFragment("i", fmt.Sprintf("r%dc%s", numRows, cacheType), viewStandard, 0, cacheType)
+					b.StartTimer()
+					err := f.bulkImport(rowIDs, columnIDs, &ImportOptions{})
+					if err != nil {
+						b.Fatalf("import error: %v", err)
+					}
+					b.StopTimer()
+					f.Close()
+				}
+			})
+		}
+	}
+}
+
+func BenchmarkImportRoaringUpdate(b *testing.B) {
+	fileSize := make(map[string]int64)
+	names := []string{}
+	for _, cacheType := range []string{CacheTypeRanked} {
+		for _, numRows := range []uint64{10, 100, 1000, 10000, 100000} {
+			for _, numCols := range []uint64{20, 1000, 50000, 500000} {
+				data := getZipfRowsSliceRoaring(numRows, 1)
+				updata := getUpdataRoaring(numRows, numCols, 1)
+				name := fmt.Sprintf("%s%dRows%dCols", cacheType, numRows, numCols)
+				names = append(names, name)
+				b.Run(name, func(b *testing.B) {
+					b.StopTimer()
+					for i := 0; i < b.N; i++ {
+						f := mustOpenFragment("i", fmt.Sprintf("r%dc%s", numRows, cacheType), viewStandard, 0, cacheType)
+						err := f.importRoaring(data, false)
+						if err != nil {
+							b.Fatalf("import error: %v", err)
+						}
+						b.StartTimer()
+						err = f.importRoaring(updata, false)
+						if err != nil {
+							b.Fatalf("import error: %v", err)
+						}
+						b.StopTimer()
+						stat, _ := f.file.Stat()
+						fileSize[name] = stat.Size()
+						f.Close()
+					}
+				})
+
+			}
+		}
+	}
+	for _, name := range names {
+		b.Logf("%s: %.2fMB\n", name, float64(fileSize[name])/1024/1024)
+	}
+}
+
+func TestGetZipfRowsSliceRoaring(t *testing.T) {
+	f := mustOpenFragment("i", "f", viewStandard, 0, DefaultCacheType)
+	data := getZipfRowsSliceRoaring(10, 1)
+	f.importRoaring(data, false)
+	if !reflect.DeepEqual(f.rows(0), []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}) {
+		t.Fatalf("unexpected rows: %v", f.rows(0))
+	}
+	for i := uint64(1); i < 10; i++ {
+		if f.row(i).Count() >= f.row(i-1).Count() {
+			t.Fatalf("suspect distribution from getZipfRowsSliceRoaring")
+		}
+	}
+}
+
+// getZipfRowsSliceRoaring generates a random fragment with the given number of
+// rows, and 1 bit set in each column. The row each bit is set in is chosen via
+// the Zipf generator, and so will be skewed toward lower row numbers. If this
+// is edited to change the data distribution, getZipfRowsSliceStandard should be
+// edited as well.
+func getZipfRowsSliceRoaring(numRows uint64, seed int64) []byte {
+	b := roaring.NewBitmap()
+	s := rand.NewSource(seed)
+	r := rand.New(s)
+	z := rand.NewZipf(r, 1.6, 50, numRows-1)
+	for i := uint64(0); i < ShardWidth; i++ {
+		row := z.Uint64()
+		b.DirectAdd(row*ShardWidth + i)
+	}
+	buf := bytes.NewBuffer(make([]byte, 0, 100000))
+	_, err := b.WriteTo(buf)
+	if err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
+
+// getUpdataRoaring gets a byte slice containing a roaring bitmap which
+// represents numCols set bits distributed randomly throughout a shard's column
+// space and zipfianly throughout numRows rows.
+func getUpdataRoaring(numRows, numCols uint64, seed int64) []byte {
+	b := roaring.NewBitmap()
+	s := rand.NewSource(seed)
+	r := rand.New(s)
+	z := rand.NewZipf(r, 1.6, 50, numRows-1)
+
+	for i := uint64(0); i < numCols; i++ {
+		col := uint64(r.Int63n(ShardWidth)) // assuming the number of repeats will be negligible
+		row := z.Uint64()
+		b.DirectAdd(row*ShardWidth + col)
+	}
+	buf := bytes.NewBuffer(make([]byte, 0, 100000))
+	_, err := b.WriteTo(buf)
+	if err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
+
+// getZipfRowsSliceStandard is the same as getZipfRowsSliceRoaring, but returns
+// row and column ids instead of a byte slice containing roaring bitmap data.
+func getZipfRowsSliceStandard(numRows uint64, seed int64) (rowIDs, columnIDs []uint64) {
+	s := rand.NewSource(seed)
+	r := rand.New(s)
+	z := rand.NewZipf(r, 1.6, 50, numRows-1)
+	rowIDs, columnIDs = make([]uint64, ShardWidth), make([]uint64, ShardWidth)
+	for i := uint64(0); i < ShardWidth; i++ {
+		rowIDs[i] = z.Uint64()
+		columnIDs[i] = i
+	}
+	return rowIDs, columnIDs
+}
+
+func BenchmarkFileWrite(b *testing.B) {
+	for _, numRows := range []uint64{10, 100, 1000, 10000, 100000} {
+		data := getZipfRowsSliceRoaring(numRows, 1)
+		b.Run(fmt.Sprintf("Rows%d", numRows), func(b *testing.B) {
+			b.StopTimer()
+			for i := 0; i < b.N; i++ {
+				f, err := ioutil.TempFile("", "")
+				if err != nil {
+					b.Fatalf("getting temp file: %v", err)
+				}
+				b.StartTimer()
+				_, err = f.Write(data)
+				if err != nil {
+					b.Fatal(err)
+				}
+				err = f.Sync()
+				if err != nil {
+					b.Fatal(err)
+				}
+				err = f.Close()
+				if err != nil {
+					b.Fatal(err)
+				}
+				b.StopTimer()
+			}
+		})
+	}
+
 }
 
 /////////////////////////////////////////////////////////////////////
