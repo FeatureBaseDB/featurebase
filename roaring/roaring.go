@@ -478,7 +478,11 @@ func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
 //     1. Detect that bitmaps A, B, and C all have containers for key 0.
 //     2. Estimate the resulting cardinality of the union of all their containers to be
 //        400 + 500 + 3500 > ArrayMaxSize and decide upfront to use a bitset for the target
-//        container.
+//        container. Note that this is just an approximation of the final cardinality and can
+//        be off by a wide margin if there is a lot of overlap between containers, but that is
+//        fine, we'll still get the same result at the end, we'll just be more biased towards
+//        using bitmap containers will still being able to use array containers when all the
+//        cardinalities are small.
 //     3. Union the containers from bitmaps A, B, and C into the new bitset container directly
 //        using fast bitwise operations.
 //
