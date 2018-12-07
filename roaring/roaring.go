@@ -494,7 +494,7 @@ func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
 // An additional optimization that this function makes is that it recognizes that even when
 // CPU support is present, performing the popcount() operation isn't free. Imagine a scenario
 // where 10 bitset containers are being unioned together one after the next. If every
-// bitset<->bitset union operation needs to keep the containers cardinality up to date, then
+// bitset<->bitset union operation needs to keep the containers' cardinality up to date, then
 // the algorithm will waste a lot of time performing intermediary popcount() operations that
 // will immediately be invalidated by the next union operation. As a result, we allow the cardinality
 // of containers to degrade when we perform the in-place union operations, and then when the algorithm
