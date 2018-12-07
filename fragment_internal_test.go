@@ -39,7 +39,12 @@ var (
 	// In order to generate the sample fragment file,
 	// run an import and copy PILOSA_DATA_DIR/INDEX_NAME/FRAME_NAME/0 to testdata/sample_view
 	FragmentPath = flag.String("fragment", "testdata/sample_view/0", "fragment path")
+	TempDir      = ""
 )
+
+func init() {
+	flag.StringVar(&TempDir, "temp-dir", "", "Directory in which to place temporary data (e.g. for benchmarking). Useful if you are trying to benchmark different storage configurations.")
+}
 
 // Ensure a fragment can set a bit and retrieve it.
 func TestFragment_SetBit(t *testing.T) {
@@ -1985,7 +1990,7 @@ func BenchmarkFileWrite(b *testing.B) {
 		b.Run(fmt.Sprintf("Rows%d", numRows), func(b *testing.B) {
 			b.StopTimer()
 			for i := 0; i < b.N; i++ {
-				f, err := ioutil.TempFile("", "")
+				f, err := ioutil.TempFile(TempDir, "")
 				if err != nil {
 					b.Fatalf("getting temp file: %v", err)
 				}
@@ -2026,7 +2031,7 @@ func (f *fragment) Clean() error {
 
 // mustOpenFragment returns a new instance of Fragment with a temporary path.
 func mustOpenFragment(index, field, view string, shard uint64, cacheType string) *fragment {
-	file, err := ioutil.TempFile("", "pilosa-fragment-")
+	file, err := ioutil.TempFile(TempDir, "pilosa-fragment-")
 	if err != nil {
 		panic(err)
 	}
