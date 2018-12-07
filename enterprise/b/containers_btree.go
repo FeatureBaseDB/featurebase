@@ -177,6 +177,15 @@ func (btc *bTreeContainers) Iterator(key uint64) (citer roaring.ContainerIterato
 	}, found
 }
 
+func (btc *bTreeContainers) Repair() {
+	e, _ := btc.tree.Seek(0)
+	_, c, err := e.Next()
+	for err != io.EOF {
+		c.Repair()
+		_, c, err = e.Next()
+	}
+}
+
 type btcIterator struct {
 	e   *enumerator
 	key uint64

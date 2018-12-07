@@ -396,7 +396,44 @@ func TestBitmap_Union1(t *testing.T) {
 	if n := result.Count(); n != 75007 {
 		t.Fatalf("unexpected n: %d", n)
 	}
+}
 
+func TestBitmap_UnionInPlace1(t *testing.T) {
+	var (
+		bm0    = roaring.NewFileBitmap(0, 2683177)
+		bm1    = roaring.NewFileBitmap()
+		result = roaring.NewBitmap()
+	)
+	for i := uint64(628); i < 2683301; i++ {
+		bm1.Add(i)
+	}
+	bm1.Add(4000000)
+
+	result.UnionInPlace(bm0, bm1)
+	if n := result.Count(); n != 2682675 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	bm := testBM()
+	result = roaring.NewBitmap()
+	result.UnionInPlace(bm, bm0)
+	if n := result.Count(); n != 75009 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	result = roaring.NewBitmap()
+	result.UnionInPlace(bm, bm)
+	if n := result.Count(); n != 75007 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	// Make sure the bitmaps weren't mutated.
+	if n := bm0.Count(); n != 2 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	if n := bm1.Count(); n != 2682674 {
+		t.Fatalf("unexpected n: %d", n)
+	}
 }
 
 func TestBitmap_Intersection_Empty(t *testing.T) {
@@ -544,9 +581,33 @@ func TestBitmap_Union(t *testing.T) {
 	bm0 := roaring.NewFileBitmap(0, 1000001, 1000002, 1000003)
 	bm1 := roaring.NewFileBitmap(0, 50000, 1000001, 1000002)
 	result := bm0.Union(bm1)
+
 	if n := result.Count(); n != 5 {
 		t.Fatalf("unexpected n: %d", n)
 	}
+}
+
+func TestBitmap_UnionInPlace(t *testing.T) {
+	var (
+		bm0    = roaring.NewFileBitmap(0, 1000001, 1000002, 1000003)
+		bm1    = roaring.NewFileBitmap(0, 50000, 1000001, 1000002)
+		result = roaring.NewBitmap()
+	)
+	result.UnionInPlace(bm0, bm1)
+
+	// Make sure the union worked.
+	if n := result.Count(); n != 5 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	// Make sure the other bitmaps weren't mutated.
+	if n := bm0.Count(); n != 4 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	if n := bm1.Count(); n != 4 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
 }
 
 func TestBitmap_Xor(t *testing.T) {
@@ -1348,5 +1409,25 @@ func BenchmarkSliceDescending(b *testing.B) {
 		for col := uint64(pilosa.ShardWidth); col > uint64(0); col-- {
 			bm.Add(col)
 		}
+	}
+}
+
+func BenchmarkUnion(b *testing.B) {
+	data := getBenchData(b)
+	for n := 0; n < b.N; n++ {
+		data.a1.
+			Union(data.a2).
+			Union(data.b).
+			Union(data.r1).
+			Union(data.r2)
+	}
+}
+
+func BenchmarkUnionBulk(b *testing.B) {
+	data := getBenchData(b)
+	bm := roaring.NewBitmap()
+	for n := 0; n < b.N; n++ {
+		bm.
+			UnionInPlace(data.a1, data.a2, data.b, data.r1, data.r2)
 	}
 }

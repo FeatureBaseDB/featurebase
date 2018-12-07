@@ -3267,6 +3267,34 @@ func TestUnmarshalOfficialRoaring(t *testing.T) {
 
 }
 
+func BenchmarkUnionBitmapBitmapInPlace(b *testing.B) {
+	b1 := newTestBitmapContainer()
+	b2 := newTestBitmapContainer()
+	for n := 0; n < b.N; n++ {
+		unionBitmapBitmapInPlace(b1, b2)
+	}
+}
+
+func BenchmarkBitmapRepair(b *testing.B) {
+	b1 := newTestBitmapContainer()
+	for n := 0; n < b.N; n++ {
+		b1.bitmapRepair()
+	}
+}
+
+func newTestBitmapContainer() *Container {
+	var (
+		buf       = make([]uint64, bitmapN)
+		ob        = buf[:bitmapN]
+		container = &Container{
+			bitmap:        ob,
+			n:             0,
+			containerType: containerBitmap,
+		}
+	)
+	return container
+}
+
 /*
 // This function exercises an arcane edge case in dead code.
 // It doesn't need to be run right now.
