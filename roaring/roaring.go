@@ -2860,10 +2860,10 @@ func unionBitmapBitmapInPlace(a, b *Container) {
 	// TODO(rartoul): Can probably make this a few x faster using
 	// SIMD instructions.
 	for i := 0; i < bitmapN; i += 4 {
-		ab[i] = ab[i] | bb[i]
-		ab[i+1] = ab[i+1] | bb[i+1]
-		ab[i+2] = ab[i+2] | bb[i+2]
-		ab[i+3] = ab[i+3] | bb[i+3]
+		ab[i] |= bb[i]
+		ab[i+1] |= bb[i+1]
+		ab[i+2] |= bb[i+2]
+		ab[i+3] |= bb[i+3]
 	}
 }
 
