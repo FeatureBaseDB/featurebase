@@ -2845,6 +2845,16 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			checkGroupBy(t, expected, results)
 		})
 
+		t.Run("Filter", func(t *testing.T) {
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 100}}, Count: 3},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 110}}, Count: 1},
+			}
+
+			results := c.Query(t, "i", `GroupBy(Rows(field=general), Rows(field=sub), filter=Row(general=10))`).Results[0].([]pilosa.GroupCount)
+			checkGroupBy(t, expected, results)
+		})
+
 		t.Run("check field offset no limit", func(t *testing.T) {
 			expected := []pilosa.GroupCount{
 				{Group: []pilosa.FieldRow{{Field: "general", RowID: 11}}, Count: 2},

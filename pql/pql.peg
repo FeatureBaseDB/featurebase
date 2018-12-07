@@ -44,6 +44,7 @@ item <- ( 'null' &(comma / sp close) { p.addVal(nil) }
          / 'false' &(comma / sp close) { p.addVal(false) }
          / < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(buffer[begin:end]) }
          / < '-'? '.'[0-9]+ > { p.addNumVal(buffer[begin:end]) }
+         / < IDENT > { p.startCall(buffer[begin:end]) } open allargs comma? close { p.addVal(p.endCall()) }
          / < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > { p.addVal(buffer[begin:end]) }
          / < '"'  doublequotedstring '"' > { s, _ := strconv.Unquote(buffer[begin:end]); p.addVal(s) }
          / '\'' < singlequotedstring > '\'' { p.addVal(buffer[begin:end]) }

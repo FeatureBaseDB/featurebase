@@ -884,6 +884,10 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 	} else if hasLimit {
 		limit = int(lim)
 	}
+	filter, _, err := c.CallArg("filter")
+	if err != nil {
+		return nil, err
+	}
 
 	// perform necessary Rows queries (any that have limit or columns args) -
 	// TODO, call async? would only help if multiple Rows queries had a column
@@ -892,7 +896,7 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 	childRows := make([]RowIDs, len(c.Children))
 	for i, child := range c.Children {
 		if child.Name != "Rows" {
-			return nil, errors.Errorf("'%s' is not a valid child query for GroupBy, must be 'Rows'", c.Name)
+			return nil, errors.Errorf("'%s' is not a valid child query for GroupBy, must be 'Rows'", child.Name)
 		}
 		_, hasLimit, err := child.UintArg("limit")
 		if err != nil {
@@ -915,7 +919,7 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(shard uint64) (interface{}, error) {
-		return e.executeGroupByShard(ctx, index, c, shard, childRows)
+		return e.executeGroupByShard(ctx, index, c, filter, shard, childRows)
 	}
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
@@ -1028,8 +1032,15 @@ func (g GroupCount) Compare(o GroupCount) int {
 	return 0
 }
 
-func (e *executor) executeGroupByShard(_ context.Context, index string, c *pql.Call, shard uint64, childRows []RowIDs) ([]GroupCount, error) {
-	iter, err := newGroupByIterator(childRows, c.Children, index, shard, e.Holder)
+func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql.Call, filter *pql.Call, shard uint64, childRows []RowIDs) (_ []GroupCount, err error) {
+	var filterRow *Row
+	if filter != nil {
+		if filterRow, err = e.executeBitmapCallShard(ctx, index, filter, shard); err != nil {
+			return nil, errors.Wrapf(err, "executing group by filter for shard %d", shard)
+		}
+	}
+
+	iter, err := newGroupByIterator(childRows, c.Children, filterRow, index, shard, e.Holder)
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting group by iterator for shard %d", shard)
 	}
@@ -2687,16 +2698,20 @@ type groupByIterator struct {
 	// fields and then sets the row ids.
 	fields []FieldRow
 	done   bool
+
+	// Optional filter row to intersect against first level of values.
+	filter *Row
 }
 
 // newGroupByIterator initializes a new groupByIterator.
-func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, index string, shard uint64, holder *Holder) (*groupByIterator, error) {
+func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, filter *Row, index string, shard uint64, holder *Holder) (*groupByIterator, error) {
 	gbi := &groupByIterator{
 		rowIters: make([]*rowIterator, len(children)),
 		rows: make([]struct {
 			row *Row
 			id  uint64
 		}, len(children)),
+		filter: filter,
 		fields: make([]FieldRow, len(children)),
 	}
 
@@ -2756,6 +2771,11 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, index string, sha
 		}
 	}
 
+	// Apply filter to first level, if available.
+	if gbi.filter != nil && len(gbi.rows) > 0 {
+		gbi.rows[0].row = gbi.rows[0].row.Intersect(gbi.filter)
+	}
+
 	for i := 1; i < len(gbi.rows)-1; i++ {
 		gbi.rows[i].row = gbi.rows[i].row.Intersect(gbi.rows[i-1].row)
 	}
@@ -2774,10 +2794,12 @@ func (gbi *groupByIterator) nextAtIdx(i int) {
 	if wrapped && i != 0 {
 		gbi.nextAtIdx(i - 1)
 	}
-	if i != 0 && i != len(gbi.rows)-1 {
-		gbi.rows[i].row = nr.Intersect(gbi.rows[i-1].row)
-	} else {
+	if i == 0 && gbi.filter != nil {
+		gbi.rows[i].row = nr.Intersect(gbi.filter)
+	} else if i == 0 || i == len(gbi.rows)-1 {
 		gbi.rows[i].row = nr
+	} else {
+		gbi.rows[i].row = nr.Intersect(gbi.rows[i-1].row)
 	}
 	gbi.rows[i].id = rowID
 }
