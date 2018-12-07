@@ -1748,12 +1748,11 @@ func BenchmarkFragment_Import(b *testing.B) {
 }
 
 func BenchmarkImportRoaring(b *testing.B) {
-	for _, cacheType := range []string{CacheTypeRanked} { // CacheTypeNone didn't seem to affect the results much
-		for _, numRows := range []uint64{10, 100, 1000, 10000, 100000} {
-			data := getZipfRowsSliceRoaring(numRows, 1)
-			name := fmt.Sprintf("Rows%dCache_%s", numRows, cacheType)
-			b.Logf("%s: %.2fMB\n", name, float64(len(data))/1024/1024)
-			b.Run(name, func(b *testing.B) {
+	for _, numRows := range []uint64{10, 100, 1000, 10000, 100000} {
+		data := getZipfRowsSliceRoaring(numRows, 1)
+		b.Logf("%dRows: %.2fMB\n", numRows, float64(len(data))/1024/1024)
+		for _, cacheType := range []string{CacheTypeRanked} { // CacheTypeNone didn't seem to affect the results much
+			b.Run(fmt.Sprintf("Rows%dCache_%s", numRows, cacheType), func(b *testing.B) {
 				b.StopTimer()
 				for i := 0; i < b.N; i++ {
 					f := mustOpenFragment("i", fmt.Sprintf("r%dc%s", numRows, cacheType), viewStandard, 0, cacheType)
@@ -1768,6 +1767,41 @@ func BenchmarkImportRoaring(b *testing.B) {
 			})
 		}
 	}
+}
+
+func BenchmarkImportRoaringConcurrent(b *testing.B) {
+	for _, numRows := range []uint64{10, 100, 1000, 10000, 100000} {
+		data := getZipfRowsSliceRoaring(numRows, 1)
+		b.Logf("%dRows: %.2fMB\n", numRows, float64(len(data))/1024/1024)
+		for _, concurrency := range []int{2, 4, 8} {
+			b.Run(fmt.Sprintf("%dRows%dConcurrency", numRows, concurrency), func(b *testing.B) {
+				b.StopTimer()
+				frags := make([]*fragment, concurrency)
+				for i := 0; i < b.N; i++ {
+					for j := 0; j < concurrency; j++ {
+						frags[j] = mustOpenFragment("i", "f", viewStandard, uint64(j), CacheTypeRanked)
+					}
+					eg := errgroup.Group{}
+					b.StartTimer()
+					for j := 0; j < concurrency; j++ {
+						j := j
+						eg.Go(func() error {
+							return frags[j].importRoaring(data, false)
+						})
+					}
+					err := eg.Wait()
+					if err != nil {
+						b.Fatalf("importing fragment: %v", err)
+					}
+					b.StopTimer()
+					for j := 0; j < concurrency; j++ {
+						frags[j].Close()
+					}
+				}
+			})
+		}
+	}
+
 }
 
 func BenchmarkImportStandard(b *testing.B) {
