@@ -54,6 +54,8 @@ var (
 	// ErrFragmentNotFound is returned when a fragment does not exist.
 	ErrFragmentNotFound = errors.New("fragment not found")
 	ErrQueryRequired    = errors.New("query required")
+	ErrQueryCancelled   = errors.New("query cancelled")
+	ErrQueryTimeout     = errors.New("query timeout")
 	ErrTooManyWrites    = errors.New("too many write commands")
 
 	ErrClusterDoesNotOwnShard = errors.New("cluster does not own shard")
