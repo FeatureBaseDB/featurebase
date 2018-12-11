@@ -2138,7 +2138,7 @@ func (e *executor) shardsByNode(nodes []*Node, index string, shards []uint64) (m
 
 loop:
 	for _, shard := range shards {
-		for _, node := range e.Cluster.shardNodes(index, shard) {
+		for _, node := range e.Cluster.ShardNodes(index, shard) {
 			if Nodes(nodes).Contains(node) {
 				m[node] = append(m[node], shard)
 				continue loop
