@@ -762,7 +762,7 @@ Modifies the given query as follows:
 * `excludeRowAttrs`: Exclude row attributes from the result (Default: `false`).
 * `shards`: Run the query using only the data from the given shards. By default, the entire data set (i.e. data from all shards) is used.
 
-**Result Type:** Same result type as <CALL>.
+**Result Type:** Same result type as `<CALL>`.
 
 **Examples:**
 
