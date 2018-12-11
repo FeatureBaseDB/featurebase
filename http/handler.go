@@ -1504,7 +1504,15 @@ func GetHTTPClient(t *tls.Config) *http.Client {
 	if t != nil {
 		transport.TLSClientConfig = t
 	}
-	return &http.Client{Transport: transport}
+	return &http.Client{
+		Transport: transport,
+		// Internal queries will time out after 2h 7m by default. This is
+		// reduced from the old default of no timeout, so it was thought we
+		// should keep it fairly high, but it could probably be reduced in most
+		// cases. It is set to an odd number in the hopes that it will be
+		// recognizable in stats/traces/logs when this limit is being hit.
+		Timeout: 127 * time.Minute,
+	}
 }
 
 // handlPostRoaringImport

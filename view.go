@@ -206,37 +206,46 @@ func (v *view) recalculateCaches() {
 
 // CreateFragmentIfNotExists returns a fragment in the view by shard.
 func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	return v.createFragmentIfNotExists(shard)
+	frag, msg, err := v.createFragmentIfNotExists(shard)
+
+	if err == nil && msg != nil {
+		// Broadcast a message that a new max shard was just created.
+		if err = v.broadcaster.SendSync(msg); err != nil {
+			v.mu.Lock()
+			delete(v.fragments, shard)
+			v.mu.Unlock()
+			frag.close()
+			return nil, errors.Wrap(err, "sending createshard message")
+		}
+	}
+
+	return frag, err
 }
 
-func (v *view) createFragmentIfNotExists(shard uint64) (*fragment, error) {
+func (v *view) createFragmentIfNotExists(shard uint64) (*fragment, *CreateShardMessage, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	// Find fragment in cache first.
 	if frag := v.fragments[shard]; frag != nil {
-		return frag, nil
+		return frag, nil, nil
 	}
 
 	// Initialize and open fragment.
 	frag := v.newFragment(v.fragmentPath(shard), shard)
 	if err := frag.Open(); err != nil {
-		return nil, errors.Wrap(err, "opening fragment")
+		return nil, nil, errors.Wrap(err, "opening fragment")
 	}
 	frag.RowAttrStore = v.rowAttrStore
 
-	// Broadcast a message that a new max shard was just created.
-	if err := v.broadcaster.SendSync(&CreateShardMessage{
+	msg := &CreateShardMessage{
 		Index: v.index,
 		Field: v.field,
 		Shard: shard,
-	}); err != nil {
-		frag.close()
-		return nil, errors.Wrap(err, "sending createshard message")
 	}
+	v.fragments[shard] = frag
 
 	// Save to lookup.
-	v.fragments[shard] = frag
-	return frag, nil
+	return frag, msg, nil
 }
 
 func (v *view) newFragment(path string, shard uint64) *fragment {
