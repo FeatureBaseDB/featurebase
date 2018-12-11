@@ -212,12 +212,12 @@ func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 	if err == nil && msg != nil {
 		// Broadcast a message that a new max shard was just created.
 		if err = v.broadcaster.SendSync(msg); err != nil {
-			v.mu.Lock()
-			delete(v.fragments, shard)
-			v.mu.Unlock()
 			frag.close()
 			return nil, errors.Wrap(err, "sending createshard message")
 		}
+		v.mu.Lock()
+		v.fragments[shard] = frag
+		v.mu.Unlock()
 	}
 
 	return frag, err
@@ -243,9 +243,6 @@ func (v *view) createFragmentIfNotExists(shard uint64) (*fragment, *CreateShardM
 		Field: v.field,
 		Shard: shard,
 	}
-
-	// Save to lookup.
-	v.fragments[shard] = frag
 
 	return frag, msg, nil
 }
