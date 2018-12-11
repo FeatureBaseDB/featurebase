@@ -983,7 +983,7 @@ func (c *cluster) markAsJoined() {
 
 // needTopologyAgreement is unprotected.
 func (c *cluster) needTopologyAgreement() bool {
-	return c.state == ClusterStateStarting && !stringSlicesAreEqual(c.Topology.nodeIDs, c.nodeIDs())
+	return (c.state == ClusterStateStarting || c.state == ClusterStateDegraded) && !stringSlicesAreEqual(c.Topology.nodeIDs, c.nodeIDs())
 }
 
 // haveTopologyAgreement is unprotected.
