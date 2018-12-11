@@ -42,7 +42,7 @@ var (
 	TempDir      = ""
 )
 
-func init() {
+func init() { // nolint: gochecknoinits
 	flag.StringVar(&TempDir, "temp-dir", "", "Directory in which to place temporary data (e.g. for benchmarking). Useful if you are trying to benchmark different storage configurations.")
 }
 
