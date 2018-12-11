@@ -397,8 +397,8 @@ func TestHolderSyncer_TimeQuantum(t *testing.T) {
 	hldr0.SetBitTime("i", "f", 0, 1, &t1)
 	hldr0.SetBitTime("i", "f", 0, 2, &t2)
 
-	// Set data on node1
-	hldr0.SetBitTime("i", "f", 0, 22, &t2)
+	// Set data on node1.
+	hldr1.SetBitTime("i", "f", 0, 22, &t2)
 
 	err = c[0].Server.SyncData()
 	if err != nil {
