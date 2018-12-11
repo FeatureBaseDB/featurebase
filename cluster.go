@@ -836,6 +836,13 @@ func (c *cluster) partition(index string, shard uint64) int {
 	return int(h.Sum64() % uint64(c.partitionN))
 }
 
+// ShardNodes returns a list of nodes that own a fragment. Safe for concurrent use.
+func (c *cluster) ShardNodes(index string, shard uint64) []*Node {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.shardNodes(index, shard)
+}
+
 // shardNodes returns a list of nodes that own a fragment. unprotected
 func (c *cluster) shardNodes(index string, shard uint64) []*Node {
 	return c.partitionNodes(c.partition(index, shard))
