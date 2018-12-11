@@ -208,6 +208,7 @@ func (v *view) recalculateCaches() {
 func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 	frag, msg, err := v.createFragmentIfNotExists(shard)
 
+	// if msg is not nil, then a new shard was created
 	if err == nil && msg != nil {
 		// Broadcast a message that a new max shard was just created.
 		if err = v.broadcaster.SendSync(msg); err != nil {
@@ -242,9 +243,10 @@ func (v *view) createFragmentIfNotExists(shard uint64) (*fragment, *CreateShardM
 		Field: v.field,
 		Shard: shard,
 	}
-	v.fragments[shard] = frag
 
 	// Save to lookup.
+	v.fragments[shard] = frag
+
 	return frag, msg, nil
 }
 
