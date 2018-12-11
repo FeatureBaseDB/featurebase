@@ -333,8 +333,6 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 				}
 				return err
 			})
-			go func(node *Node) {
-			}(node)
 		} else if !remote { // if remote == true we don't forward to other nodes
 			// forward it on
 			eg.Go(func() error {
