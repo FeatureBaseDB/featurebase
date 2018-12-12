@@ -23,6 +23,7 @@ import (
 	"sort"
 	"testing"
 	"testing/quick"
+	"time"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/roaring"
@@ -433,6 +434,94 @@ func TestBitmap_UnionInPlace1(t *testing.T) {
 	}
 	if n := bm1.Count(); n != 2682674 {
 		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+// TestBitmap_UnionInPlaceProp is a manual property test that randomly generates
+// a number of different bitmaps with random vals and unions them together. It
+// then compares the result against a reference implementation (golang map) to
+// ensure that all the unions were handled correctly.
+func TestBitmap_UnionInPlaceProp(t *testing.T) {
+	var (
+		seed               = time.Now().UnixNano()
+		source             = rand.NewSource(seed)
+		rng                = rand.New(source)
+		numTests           = 100
+		maxNumIntsPerBatch = 100
+		maxNumBatches      = 100
+		maxRangePercent    = 2
+		// Need to limit the range of possible numbers that we generate
+		// otherwise two randomly generated numbers landing in the same
+		// container would be extremely unlikely, leaving container merging
+		// behavior untested.
+		maxUint64Val = 1000000
+	)
+
+	for i := 0; i < numTests; i++ {
+		var (
+			// We will use sets as the "reference" implementation.
+			sets    = []map[uint64]struct{}{}
+			bitmaps = []*roaring.Bitmap{}
+		)
+
+		// Ensure there are at least two batches.
+		numBatches := rng.Intn(maxNumBatches) + 2
+		for j := 0; j < numBatches; j++ {
+			// For each "batch" create the equivalent set and bitmap.
+			var (
+				set    = map[uint64]struct{}{}
+				bitmap = roaring.NewBitmap()
+			)
+
+			if rng.Intn(100) <= maxRangePercent {
+				// Generate max range RLE containers with a configurable
+				// probability to ensure that code-path is exercised.
+				start := rng.Intn((maxUint64Val))
+				// Add a continuous sequence of numbers that is 2x as long as the maximum
+				// size of a container to ensure we generate a maxRange container.
+				for x := start; x < (start + 2*(0xffff+1)); x++ {
+					set[uint64(x)] = struct{}{}
+					bitmap.Add(uint64(x))
+				}
+			}
+
+			// Generate and add a bunch of random values.
+			numIntsPerBatch := rng.Intn(maxNumIntsPerBatch)
+			for x := 0; x < numIntsPerBatch; x++ {
+				num := uint64(rng.Intn(maxUint64Val))
+				set[num] = struct{}{}
+				bitmap.Add(num)
+			}
+
+			sets = append(sets, set)
+			bitmaps = append(bitmaps, bitmap)
+		}
+
+		// "Union" all the sets into the first one.
+		set0 := sets[0]
+		for _, set := range sets[1:] {
+			for val := range set {
+				set0[val] = struct{}{}
+			}
+		}
+
+		// Union all the bitmaps into the first one.
+		bitmap0 := bitmaps[0]
+		bitmap0.UnionInPlace(bitmaps[1:]...)
+
+		// Ensure the unioned set and bitmap have the same cardinality.
+		if len(set0) != int(bitmap0.Count()) {
+			t.Fatalf("cardinality of set is: %d, but bitmap is: %d, failed with seed: %d",
+				len(set0), bitmap0.Count(), seed)
+		}
+
+		// Ensure the unioned set and bitmap have the exact same values.
+		for val := range set0 {
+			if !bitmap0.Contains(val) {
+				t.Fatalf("set contained %d, but bitmap did not, failed with seed: %d",
+					val, seed)
+			}
+		}
 	}
 }
 
