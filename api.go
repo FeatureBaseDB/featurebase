@@ -559,6 +559,23 @@ func (api *API) FragmentBlocks(ctx context.Context, indexName, fieldName, viewNa
 	return blocks, nil
 }
 
+// FragmentData returns all data in the specified fragment.
+func (api *API) FragmentData(ctx context.Context, indexName, fieldName, viewName string, shard uint64) (io.WriterTo, error) {
+	span, _ := tracing.StartSpanFromContext(ctx, "API.FragmentBlocks")
+	defer span.Finish()
+
+	if err := api.validate(apiFragmentData); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
+	}
+
+	// Retrieve fragment from holder.
+	f := api.holder.fragment(indexName, fieldName, viewName, shard)
+	if f == nil {
+		return nil, ErrFragmentNotFound
+	}
+	return f, nil
+}
+
 // Hosts returns a list of the hosts in the cluster including their ID,
 // URL, and which is the coordinator.
 func (api *API) Hosts(ctx context.Context) []*Node {
@@ -1203,6 +1220,7 @@ const (
 	apiExportCSV
 	apiFragmentBlockData
 	apiFragmentBlocks
+	apiFragmentData
 	apiField
 	apiFieldAttrDiff
 	//apiHosts // not implemented
@@ -1232,7 +1250,8 @@ var methodsCommon = map[apiMethod]struct{}{
 }
 
 var methodsResizing = map[apiMethod]struct{}{
-	apiResizeAbort: {},
+	apiFragmentData: {},
+	apiResizeAbort:  {},
 }
 
 var methodsNormal = map[apiMethod]struct{}{

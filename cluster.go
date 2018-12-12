@@ -1309,7 +1309,7 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 
 				// Stream shard from remote node.
 				c.logger.Printf("retrieve shard %d for index %s from host %s", src.Shard, src.Index, src.Node.URI)
-				rd, err := c.InternalClient.RetrieveShardFromURI(ctx, src.Index, src.Field, src.Shard, srcURI)
+				rd, err := c.InternalClient.RetrieveShardFromURI(ctx, src.Index, src.Field, src.View, src.Shard, srcURI)
 				if err != nil {
 					// For now it is an acceptable error if the fragment is not found
 					// on the remote node. This occurs when a shard has been skipped and
@@ -1318,7 +1318,7 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 					// TODO: figure out a way to distinguish from "fragment not found" errors
 					// which are true errors and which simply mean the fragment doesn't have data.
 					if err == ErrFragmentNotFound {
-						return nil
+						continue
 					}
 					return errors.Wrap(err, "retrieving shard")
 				} else if rd == nil {
