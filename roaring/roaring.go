@@ -617,7 +617,7 @@ func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 					n:             maxContainerVal + 1,
 				}
 				target.Containers.Put(iKey, container)
-				bitmapIters[i:].markItersWithCurrentKeyAsHandled(iKey)
+				bitmapIters.markItersWithCurrentKeyAsHandled(i, iKey)
 				continue
 			}
 
@@ -632,8 +632,9 @@ func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 			// efficiency.
 			container := target.Containers.Get(iKey)
 			// If target already has a bitmap container for iKey then we can reuse that,
-			// otherwise we have to allocate a new one.
-			if container == nil || container.containerType != containerBitmap {
+			// otherwise we have to allocate a new one or convert the existing container
+			// into a bitmap container.
+			if container == nil {
 				buf := make([]uint64, bitmapN)
 				ob := buf[:bitmapN]
 				container = &Container{
@@ -641,6 +642,10 @@ func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 					n:             0,
 					containerType: containerBitmap,
 				}
+			} else if container.isArray() {
+				container.arrayToBitmap()
+			} else if container.isRun() {
+				container.runToBitmap()
 			}
 
 			// Once we've acquired a bitmap container (either by reusing the existing one
@@ -648,7 +653,8 @@ func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 			// other containers to see which ones have the same key, and union all of them
 			// into the target bitmap container. Only need to loop starting from i because
 			// anything previous to that has already been handled.
-			for j, jIter := range bitmapIters[i:] {
+			for j := i; j < len(bitmapIters); j++ {
+				jIter := bitmapIters[j]
 				jKey, jContainer := jIter.iter.Value()
 
 				if iKey == jKey {
@@ -4002,8 +4008,9 @@ func (w handledIters) next() bool {
 	return hasNext
 }
 
-func (w handledIters) markItersWithCurrentKeyAsHandled(key uint64) {
-	for i, wrapped := range w {
+func (w handledIters) markItersWithCurrentKeyAsHandled(startIdx int, key uint64) {
+	for i := startIdx; i < len(w); i++ {
+		wrapped := w[i]
 		currKey, _ := wrapped.iter.Value()
 		if currKey == key {
 			w[i].handled = true
