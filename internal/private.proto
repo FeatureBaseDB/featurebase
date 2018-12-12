@@ -159,7 +159,7 @@ message ResizeInstruction {
     Node Node = 2;
     Node Coordinator = 3;
     repeated ResizeSource Sources = 4;
-    Schema Schema = 5;
+    NodeStatus NodeStatus = 7;
     ClusterStatus ClusterStatus = 6;
 }
 

@@ -1218,7 +1218,7 @@ func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*
 			Node:          toCluster.unprotectedNodeByID(id),
 			Coordinator:   c.unprotectedCoordinatorNode(),
 			Sources:       sources,
-			Schema:        &Schema{Indexes: c.holder.Schema()}, // Include the schema to ensure it's in sync on the receiving node.
+			NodeStatus:    c.nodeStatus(), // Include the NodeStatus in order to ensure that schema and availableShards are in sync on the receiving node.
 			ClusterStatus: c.unprotectedStatus(),
 		}
 		j.Instructions = append(j.Instructions, instr)
@@ -1277,10 +1277,28 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 			span, ctx := tracing.StartSpanFromContext(context.Background(), "Cluster.followResizeInstruction")
 			defer span.Finish()
 
-			// Sync the schema received in the resize instruction.
+			// Sync the NodeStatus received in the resize instruction.
+			// Sync schema.
 			c.logger.Debugf("holder applySchema")
-			if err := c.holder.applySchema(instr.Schema); err != nil {
+			if err := c.holder.applySchema(instr.NodeStatus.Schema); err != nil {
 				return errors.Wrap(err, "applying schema")
+			}
+
+			// Sync available shards.
+			for _, is := range instr.NodeStatus.Indexes {
+				for _, fs := range is.Fields {
+					f := c.holder.Field(is.Name, fs.Name)
+
+					// if we don't know about a field locally, log an error because
+					// fields should be created and synced prior to shard creation
+					if f == nil {
+						c.logger.Printf("local field not found: %s/%s", is.Name, fs.Name)
+						continue
+					}
+					if err := f.AddRemoteAvailableShards(fs.AvailableShards); err != nil {
+						return errors.Wrap(err, "adding remote available shards")
+					}
+				}
 			}
 
 			// Request each source file in ResizeSources.
@@ -1817,6 +1835,28 @@ func (c *cluster) nodeLeave(nodeID string) error {
 	return nil
 }
 
+func (c *cluster) nodeStatus() *NodeStatus {
+	ns := &NodeStatus{
+		Node:   c.Node,
+		Schema: &Schema{Indexes: c.holder.Schema()},
+	}
+	for _, idx := range ns.Schema.Indexes {
+		is := &IndexStatus{Name: idx.Name}
+		for _, f := range idx.Fields {
+			availableShards := roaring.NewBitmap()
+			if field := c.holder.Field(idx.Name, f.Name); field != nil {
+				availableShards = field.AvailableShards()
+			}
+			is.Fields = append(is.Fields, &FieldStatus{
+				Name:            f.Name,
+				AvailableShards: availableShards,
+			})
+		}
+		ns.Indexes = append(ns.Indexes, is)
+	}
+	return ns
+}
+
 func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -1918,7 +1958,7 @@ type ResizeInstruction struct {
 	Node          *Node
 	Coordinator   *Node
 	Sources       []*ResizeSource
-	Schema        *Schema
+	NodeStatus    *NodeStatus
 	ClusterStatus *ClusterStatus
 }
 
