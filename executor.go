@@ -87,6 +87,11 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 
 	resp := QueryResponse{}
 
+	// Check for query cancellation.
+	if err := validateQueryContext(ctx); err != nil {
+		return resp, err
+	}
+
 	// Verify that an index is set.
 	if index == "" {
 		return resp, ErrIndexRequired
@@ -112,11 +117,15 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	if !opt.Remote {
 		if err := e.translateCalls(ctx, index, idx, q.Calls); err != nil {
 			return resp, err
+		} else if err := validateQueryContext(ctx); err != nil {
+			return resp, err
 		}
 	}
 
 	results, err := e.execute(ctx, index, q, shards, opt)
 	if err != nil {
+		return resp, err
+	} else if err := validateQueryContext(ctx); err != nil {
 		return resp, err
 	}
 
@@ -158,6 +167,8 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	// No need to translate a remote call.
 	if !opt.Remote {
 		if err := e.translateResults(ctx, index, idx, q.Calls, results); err != nil {
+			return resp, err
+		} else if err := validateQueryContext(ctx); err != nil {
 			return resp, err
 		}
 	}
@@ -217,6 +228,10 @@ func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shar
 	// Execute each call serially.
 	results := make([]interface{}, 0, len(q.Calls))
 	for _, call := range q.Calls {
+		if err := validateQueryContext(ctx); err != nil {
+			return nil, err
+		}
+
 		v, err := e.executeCall(ctx, index, call, shards, opt)
 		if err != nil {
 			return nil, err
@@ -231,7 +246,9 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeCall")
 	defer span.Finish()
 
-	if err := e.validateCallArgs(c); err != nil {
+	if err := validateQueryContext(ctx); err != nil {
+		return nil, err
+	} else if err := e.validateCallArgs(c); err != nil {
 		return nil, errors.Wrap(err, "validating args")
 	}
 	indexTag := fmt.Sprintf("index:%s", index)
@@ -521,6 +538,10 @@ func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 
 // executeBitmapCallShard executes a bitmap call for a single shard.
 func (e *executor) executeBitmapCallShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
+	if err := validateQueryContext(ctx); err != nil {
+		return nil, err
+	}
+
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeBitmapCallShard")
 	defer span.Finish()
 
@@ -1977,7 +1998,13 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 
 	// Collect attributes by field/id.
 	m := make(map[string]map[uint64]map[string]interface{})
-	for _, c := range calls {
+	for i, c := range calls {
+		if i%10 == 0 {
+			if err := validateQueryContext(ctx); err != nil {
+				return nil, err
+			}
+		}
+
 		field, ok := c.Args["_field"].(string)
 		if !ok {
 			return nil, errors.New("SetRowAttrs() field required")
@@ -2558,6 +2585,23 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 	}
 
 	return result, nil
+}
+
+// validateQueryContext returns a query-appropriate error if the context is done.
+func validateQueryContext(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		switch err := ctx.Err(); err {
+		case context.Canceled:
+			return ErrQueryCancelled
+		case context.DeadlineExceeded:
+			return ErrQueryTimeout
+		default:
+			return err
+		}
+	default:
+		return nil
+	}
 }
 
 // errShardUnavailable is a marker error if no nodes are available.
