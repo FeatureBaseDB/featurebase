@@ -561,7 +561,7 @@ func (api *API) FragmentBlocks(ctx context.Context, indexName, fieldName, viewNa
 
 // FragmentData returns all data in the specified fragment.
 func (api *API) FragmentData(ctx context.Context, indexName, fieldName, viewName string, shard uint64) (io.WriterTo, error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "API.FragmentBlocks")
+	span, _ := tracing.StartSpanFromContext(ctx, "API.FragmentData")
 	defer span.Finish()
 
 	if err := api.validate(apiFragmentData); err != nil {

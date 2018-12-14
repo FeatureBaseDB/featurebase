@@ -1840,12 +1840,14 @@ func (c *cluster) nodeStatus() *NodeStatus {
 		Node:   c.Node,
 		Schema: &Schema{Indexes: c.holder.Schema()},
 	}
+	var availableShards *roaring.Bitmap
 	for _, idx := range ns.Schema.Indexes {
 		is := &IndexStatus{Name: idx.Name}
 		for _, f := range idx.Fields {
-			availableShards := roaring.NewBitmap()
 			if field := c.holder.Field(idx.Name, f.Name); field != nil {
 				availableShards = field.AvailableShards()
+			} else {
+				availableShards = roaring.NewBitmap()
 			}
 			is.Fields = append(is.Fields, &FieldStatus{
 				Name:            f.Name,
