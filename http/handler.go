@@ -1449,16 +1449,25 @@ func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Copy from reader to client until store or client disconnect.
-	buf := make([]byte, translateStoreBufferSize)
+	useBufferSize := translateStoreBufferSize
+	buf := make([]byte, useBufferSize)
 	for {
 		// Read from store.
 		n, err := rdr.Read(buf)
 		if err == io.EOF {
 			return
+		} else if err == pilosa.ErrTranslateReadTargetUndersized {
+			// Increase the buffer size and try to read again.
+			useBufferSize *= 2
+			buf = make([]byte, useBufferSize)
+			continue
 		} else if err != nil {
 			h.logger.Printf("http: translate store read error: %s", err)
 			return
 		} else if n == 0 {
+			// Reset the default buffer size.
+			useBufferSize = translateStoreBufferSize
+			buf = make([]byte, useBufferSize)
 			continue
 		}
 
