@@ -900,7 +900,7 @@ func TestClient_ImportExistence(t *testing.T) {
 		}
 
 		// Verify existence.
-		if a := hldr.ReadRow(idxName, "exists", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 5, 6}) {
+		if a := hldr.ReadRow(idxName, "_exists", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 5, 6}) {
 			t.Fatalf("unexpected existence columns: %+v", a)
 		}
 	})
@@ -935,7 +935,7 @@ func TestClient_ImportExistence(t *testing.T) {
 		}
 
 		// Verify existence.
-		if a := hldr.ReadRow(idxName, "exists", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 2, 3}) {
+		if a := hldr.ReadRow(idxName, "_exists", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 2, 3}) {
 			t.Fatalf("unexpected existence columns: %+v", a)
 		}
 	})

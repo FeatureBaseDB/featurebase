@@ -2163,10 +2163,10 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 			t.Fatalf("unexpected columns: %+v", bits)
 		}
 
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(exists=0)`}); err != nil {
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Not(Row(f=10))`}); err != nil {
 			t.Fatal(err)
-		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth + 1, ShardWidth + 2}) {
-			t.Fatalf("unexpected existence columns: %+v", bits)
+		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{ShardWidth + 2}) {
+			t.Fatalf("unexpected columns after Not: %+v", bits)
 		}
 
 		// Reopen cluster to ensure existence field is reloaded.
@@ -2174,10 +2174,10 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(exists=0)`}); err != nil {
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Not(Row(f=10))`}); err != nil {
 			t.Fatal(err)
-		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth + 1, ShardWidth + 2}) {
-			t.Fatalf("unexpected existence columns after reopen: %+v", bits)
+		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{ShardWidth + 2}) {
+			t.Fatalf("unexpected columns after reopen: %+v", bits)
 		}
 	})
 }

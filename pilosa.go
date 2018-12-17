@@ -49,8 +49,6 @@ var (
 	ErrName  = errors.New("invalid index or field name, must match [a-z0-9_-]")
 	ErrLabel = errors.New("invalid row or column label, must match [A-Za-z0-9_-]")
 
-	ErrReservedName = errors.New("reserved index or field name")
-
 	// ErrFragmentNotFound is returned when a fragment does not exist.
 	ErrFragmentNotFound = errors.New("fragment not found")
 	ErrQueryRequired    = errors.New("query required")
@@ -131,9 +129,6 @@ const TimeFormat = "2006-01-02T15:04"
 
 // validateName ensures that the name is a valid format.
 func validateName(name string) error {
-	if name == existenceFieldName {
-		return ErrReservedName
-	}
 	if !nameRegexp.Match([]byte(name)) {
 		return ErrName
 	}
