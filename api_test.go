@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa"
@@ -48,7 +49,7 @@ func TestAPI_Import(t *testing.T) {
 		index := "rick"
 		field := "f"
 
-		_, err := m0.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: true})
+		_, err := m0.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: true, TrackExistence: true})
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
@@ -99,6 +100,22 @@ func TestAPI_Import(t *testing.T) {
 		} else if keys := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, colKeys) {
 			t.Fatalf("unexpected column keys: %+v", keys)
 		}
+
+	})
+
+	// Relies on the previous test creating an index with TrackExistence and
+	// adding some data.
+	t.Run("SchemaHasNoExists", func(t *testing.T) {
+		schema := m1.API.Schema(context.Background())
+		for _, f := range schema[0].Fields {
+			if f.Name == "_exists" {
+				t.Fatalf("found _exists field in schema")
+			}
+			if strings.HasPrefix(f.Name, "_") {
+				t.Fatalf("found internal field '%s' in schema output", f.Name)
+			}
+		}
+
 	})
 
 	t.Run("RowKeyColumnID", func(t *testing.T) {

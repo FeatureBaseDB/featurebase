@@ -289,6 +289,9 @@ func (h *Holder) limitedSchema() []*IndexInfo {
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{Name: index.Name(), Options: index.Options()}
 		for _, field := range index.Fields() {
+			if strings.HasPrefix(field.name, "_") {
+				continue
+			}
 			fi := &FieldInfo{Name: field.Name(), Options: field.Options()}
 			di.Fields = append(di.Fields, fi)
 		}
