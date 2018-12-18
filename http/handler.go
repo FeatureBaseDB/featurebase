@@ -1426,7 +1426,11 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 type defaultClusterMessageResponse struct{}
 
 // translateStoreBufferSize is the buffer size used for streaming data.
-const translateStoreBufferSize = 65536
+const translateStoreBufferSize = 1 << 16 // 64k
+
+// translateStoreBufferSizeMax is the maximum size that the buffer is allowed
+// to grow before raising an error.
+const translateStoreBufferSizeMax = 1 << 22 // 4Mb
 
 func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -1449,16 +1453,30 @@ func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Copy from reader to client until store or client disconnect.
-	buf := make([]byte, translateStoreBufferSize)
+	useBufferSize := translateStoreBufferSize
+	buf := make([]byte, useBufferSize)
 	for {
 		// Read from store.
 		n, err := rdr.Read(buf)
 		if err == io.EOF {
 			return
+		} else if err == pilosa.ErrTranslateReadTargetUndersized {
+			// Increase the buffer size and try to read again.
+			useBufferSize *= 2
+			// Prevent the buffer from growing without bound.
+			if useBufferSize > translateStoreBufferSizeMax {
+				h.logger.Printf("http: translate store buffer exceeded max size: %s", err)
+				return
+			}
+			buf = make([]byte, useBufferSize)
+			continue
 		} else if err != nil {
 			h.logger.Printf("http: translate store read error: %s", err)
 			return
 		} else if n == 0 {
+			// Reset the default buffer size.
+			useBufferSize = translateStoreBufferSize
+			buf = make([]byte, useBufferSize)
 			continue
 		}
 

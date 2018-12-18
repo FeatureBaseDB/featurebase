@@ -29,10 +29,11 @@ const (
 )
 
 var (
-	ErrTranslateStoreClosed       = errors.New("pilosa: translate store closed")
-	ErrTranslateStoreReaderClosed = errors.New("pilosa: translate store reader closed")
-	ErrReplicationNotSupported    = errors.New("pilosa: replication not supported")
-	ErrTranslateStoreReadOnly     = errors.New("pilosa: translate store could not find or create key, translate store read only")
+	ErrTranslateStoreClosed          = errors.New("pilosa: translate store closed")
+	ErrTranslateStoreReaderClosed    = errors.New("pilosa: translate store reader closed")
+	ErrReplicationNotSupported       = errors.New("pilosa: replication not supported")
+	ErrTranslateStoreReadOnly        = errors.New("pilosa: translate store could not find or create key, translate store read only")
+	ErrTranslateReadTargetUndersized = errors.New("pilosa: translate read target is undersized")
 )
 
 // TranslateStore is the storage for translation string-to-uint64 values.
@@ -1089,8 +1090,13 @@ func (r *translateFileReader) read(p []byte) (n int, err error) {
 		return 0, nil
 	}
 
-	// Shorten buffer to maximum read size.
-	if max := sz - r.offset; int64(len(p)) > max {
+	if max := sz - r.offset; max > int64(len(p)) {
+		// If p is not large enough to hold a single entry,
+		// return an error so the client can increase the
+		// size of p and try again.
+		return 0, ErrTranslateReadTargetUndersized
+	} else if int64(len(p)) > max {
+		// Shorten buffer to maximum read size.
 		p = p[:max]
 	}
 
