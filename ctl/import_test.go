@@ -18,9 +18,11 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -181,6 +183,69 @@ func TestImportCommand_RunKeys(t *testing.T) {
 	err = cm.Run(ctx)
 	if err != nil {
 		t.Fatalf("Import Run with keys doesn't work: %s", err)
+	}
+}
+
+// Ensure that import with keys runs with key replication.
+func TestImportCommand_KeyReplication(t *testing.T) {
+	buf := bytes.Buffer{}
+	stdin, stdout, stderr := GetIO(buf)
+	cm := NewImportCommand(stdin, stdout, stderr)
+	file, err := ioutil.TempFile("", "import-key.csv")
+
+	// create a large import file in order to test the
+	// translateStoreBufferSize growth logic.
+	keyBytes := []byte{}
+	for row := 0; row < 100; row++ {
+		for col := 0; col < 100; col++ {
+			x := fmt.Sprintf("foo%d,bar%d\n", row, col)
+			keyBytes = append(keyBytes, x...)
+		}
+	}
+	x := "fooEND,barEND"
+	keyBytes = append(keyBytes, x...)
+
+	file.Write(keyBytes)
+	ctx := context.Background()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := test.MustRunCluster(t, 2)
+	cmd0 := c[0]
+	cmd1 := c[1]
+
+	host0 := cmd0.API.Node().URI.HostPort()
+	host1 := cmd1.API.Node().URI.HostPort()
+
+	cm.Host = host0
+
+	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader(`{"options":{"keys": true}}`)))
+	http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i/field/f", strings.NewReader(`{"options":{"keys": true}}`)))
+
+	cm.Index = "i"
+	cm.Field = "f"
+	cm.Paths = []string{file.Name()}
+	err = cm.Run(ctx)
+	if err != nil {
+		t.Fatalf("Import Run with key replication doesn't work: %s", err)
+	}
+
+	// Verify that the data is available on both nodes.
+	for _, host := range []string{host0, host1} {
+		qry := "Count(Row(f=foo0))"
+		resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+host+"/index/i/query", strings.NewReader(qry)))
+		if err != nil {
+			t.Fatalf("Querying data for validation: %s", err)
+		}
+
+		// Read body and unmarshal response.
+		exp := `{"results":[100]}` + "\n"
+		if body, err := ioutil.ReadAll(resp.Body); err != nil {
+			t.Fatalf("reading: %s", err)
+		} else if !reflect.DeepEqual(body, []byte(exp)) {
+			t.Fatalf("expected: %s, but got: %s", exp, body)
+		}
 	}
 }
 
