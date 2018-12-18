@@ -23,7 +23,7 @@ clean:
 	rm -rf vendor build
 
 # Set up vendor directory using `dep`
-vendor: Gopkg.toml
+vendor: Gopkg.toml Gopkg.lock
 	$(MAKE) require-dep
 	dep ensure -vendor-only
 	touch vendor
