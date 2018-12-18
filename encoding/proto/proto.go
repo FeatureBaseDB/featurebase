@@ -457,7 +457,7 @@ func encodeResizeInstruction(m *pilosa.ResizeInstruction) *internal.ResizeInstru
 		Node:          encodeNode(m.Node),
 		Coordinator:   encodeNode(m.Coordinator),
 		Sources:       encodeResizeSources(m.Sources),
-		Schema:        encodeSchema(m.Schema),
+		NodeStatus:    encodeNodeStatus(m.NodeStatus),
 		ClusterStatus: encodeClusterStatus(m.ClusterStatus),
 	}
 }
@@ -737,8 +737,8 @@ func decodeResizeInstruction(ri *internal.ResizeInstruction, m *pilosa.ResizeIns
 	decodeNode(ri.Coordinator, m.Coordinator)
 	m.Sources = make([]*pilosa.ResizeSource, len(ri.Sources))
 	decodeResizeSources(ri.Sources, m.Sources)
-	m.Schema = &pilosa.Schema{}
-	decodeSchema(ri.Schema, m.Schema)
+	m.NodeStatus = &pilosa.NodeStatus{}
+	decodeNodeStatus(ri.NodeStatus, m.NodeStatus)
 	m.ClusterStatus = &pilosa.ClusterStatus{}
 	decodeClusterStatus(ri.ClusterStatus, m.ClusterStatus)
 }

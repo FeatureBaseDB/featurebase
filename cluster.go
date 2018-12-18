@@ -1218,7 +1218,7 @@ func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*
 			Node:          toCluster.unprotectedNodeByID(id),
 			Coordinator:   c.unprotectedCoordinatorNode(),
 			Sources:       sources,
-			Schema:        &Schema{Indexes: c.holder.Schema()}, // Include the schema to ensure it's in sync on the receiving node.
+			NodeStatus:    c.nodeStatus(), // Include the NodeStatus in order to ensure that schema and availableShards are in sync on the receiving node.
 			ClusterStatus: c.unprotectedStatus(),
 		}
 		j.Instructions = append(j.Instructions, instr)
@@ -1277,10 +1277,28 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 			span, ctx := tracing.StartSpanFromContext(context.Background(), "Cluster.followResizeInstruction")
 			defer span.Finish()
 
-			// Sync the schema received in the resize instruction.
+			// Sync the NodeStatus received in the resize instruction.
+			// Sync schema.
 			c.logger.Debugf("holder applySchema")
-			if err := c.holder.applySchema(instr.Schema); err != nil {
+			if err := c.holder.applySchema(instr.NodeStatus.Schema); err != nil {
 				return errors.Wrap(err, "applying schema")
+			}
+
+			// Sync available shards.
+			for _, is := range instr.NodeStatus.Indexes {
+				for _, fs := range is.Fields {
+					f := c.holder.Field(is.Name, fs.Name)
+
+					// if we don't know about a field locally, log an error because
+					// fields should be created and synced prior to shard creation
+					if f == nil {
+						c.logger.Printf("local field not found: %s/%s", is.Name, fs.Name)
+						continue
+					}
+					if err := f.AddRemoteAvailableShards(fs.AvailableShards); err != nil {
+						return errors.Wrap(err, "adding remote available shards")
+					}
+				}
 			}
 
 			// Request each source file in ResizeSources.
@@ -1309,7 +1327,7 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 
 				// Stream shard from remote node.
 				c.logger.Printf("retrieve shard %d for index %s from host %s", src.Shard, src.Index, src.Node.URI)
-				rd, err := c.InternalClient.RetrieveShardFromURI(ctx, src.Index, src.Field, src.Shard, srcURI)
+				rd, err := c.InternalClient.RetrieveShardFromURI(ctx, src.Index, src.Field, src.View, src.Shard, srcURI)
 				if err != nil {
 					// For now it is an acceptable error if the fragment is not found
 					// on the remote node. This occurs when a shard has been skipped and
@@ -1318,7 +1336,7 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 					// TODO: figure out a way to distinguish from "fragment not found" errors
 					// which are true errors and which simply mean the fragment doesn't have data.
 					if err == ErrFragmentNotFound {
-						return nil
+						continue
 					}
 					return errors.Wrap(err, "retrieving shard")
 				} else if rd == nil {
@@ -1817,6 +1835,30 @@ func (c *cluster) nodeLeave(nodeID string) error {
 	return nil
 }
 
+func (c *cluster) nodeStatus() *NodeStatus {
+	ns := &NodeStatus{
+		Node:   c.Node,
+		Schema: &Schema{Indexes: c.holder.Schema()},
+	}
+	var availableShards *roaring.Bitmap
+	for _, idx := range ns.Schema.Indexes {
+		is := &IndexStatus{Name: idx.Name}
+		for _, f := range idx.Fields {
+			if field := c.holder.Field(idx.Name, f.Name); field != nil {
+				availableShards = field.AvailableShards()
+			} else {
+				availableShards = roaring.NewBitmap()
+			}
+			is.Fields = append(is.Fields, &FieldStatus{
+				Name:            f.Name,
+				AvailableShards: availableShards,
+			})
+		}
+		ns.Indexes = append(ns.Indexes, is)
+	}
+	return ns
+}
+
 func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -1918,7 +1960,7 @@ type ResizeInstruction struct {
 	Node          *Node
 	Coordinator   *Node
 	Sources       []*ResizeSource
-	Schema        *Schema
+	NodeStatus    *NodeStatus
 	ClusterStatus *ClusterStatus
 }
 

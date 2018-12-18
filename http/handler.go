@@ -192,6 +192,7 @@ func (h *Handler) populateValidators() {
 	h.validators["PostClusterMessage"] = queryValidationSpecRequired()
 	h.validators["GetFragmentBlockData"] = queryValidationSpecRequired()
 	h.validators["GetFragmentBlocks"] = queryValidationSpecRequired("index", "field", "view", "shard")
+	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "field", "view", "shard")
 	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("shard", "index")
 	h.validators["PostIndexAttrDiff"] = queryValidationSpecRequired()
 	h.validators["PostFieldAttrDiff"] = queryValidationSpecRequired()
@@ -262,6 +263,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/cluster/message", handler.handlePostClusterMessage).Methods("POST").Name("PostClusterMessage")
 	router.HandleFunc("/internal/fragment/block/data", handler.handleGetFragmentBlockData).Methods("GET").Name("GetFragmentBlockData")
 	router.HandleFunc("/internal/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET").Name("GetFragmentBlocks")
+	router.HandleFunc("/internal/fragment/data", handler.handleGetFragmentData).Methods("GET").Name("GetFragmentData")
 	router.HandleFunc("/internal/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET").Name("GetFragmentNodes")
 	router.HandleFunc("/internal/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST").Name("PostIndexAttrDiff")
 	router.HandleFunc("/internal/index/{index}/field/{field}/attr/diff", handler.handlePostFieldAttrDiff).Methods("POST").Name("PostFieldAttrDiff")
@@ -1212,6 +1214,27 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 
 type getFragmentBlocksResponse struct {
 	Blocks []pilosa.FragmentBlock `json:"blocks"`
+}
+
+// handleGetFragmentData handles GET /internal/fragment/data requests.
+func (h *Handler) handleGetFragmentData(w http.ResponseWriter, r *http.Request) {
+	// Read shard parameter.
+	q := r.URL.Query()
+	shard, err := strconv.ParseUint(q.Get("shard"), 10, 64)
+	if err != nil {
+		http.Error(w, "shard required", http.StatusBadRequest)
+		return
+	}
+	// Retrieve fragment data from holder.
+	f, err := h.api.FragmentData(r.Context(), q.Get("index"), q.Get("field"), q.Get("view"), shard)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	// Stream fragment to response body.
+	if _, err := f.WriteTo(w); err != nil {
+		h.logger.Printf("error streaming fragment data: %s", err)
+	}
 }
 
 // handleGetVersion handles /version requests.
