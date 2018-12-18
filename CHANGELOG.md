@@ -5,6 +5,92 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [v1.2.0] - 2018-12-18
+
+This version contains 154 contributions from 11 contributors. There are 113 files changed; 18,968 insertions; and 4,325 deletions.
+
+### Added 
+
+- Cancel queries on Context.Done() ([#1773](https://github.com/pilosa/pilosa/pull/1773))
+- Union In Place ([#1766](https://github.com/pilosa/pilosa/pull/1766)), ([#1774](https://github.com/pilosa/pilosa/pull/1774))
+- Import benchmarking ([#1771](https://github.com/pilosa/pilosa/pull/1771))
+- Add GroupBy() Filter ([#1753](https://github.com/pilosa/pilosa/pull/1753))
+- Added /internal/translate/keys endpoint ([#1751](https://github.com/pilosa/pilosa/pull/1751))
+- CircleCI: Add race detector to parallel build. Default to Go 1.11. ([#1756](https://github.com/pilosa/pilosa/pull/1756))
+- Add distributed tracing. ([#1684](https://github.com/pilosa/pilosa/pull/1684))
+- Adds NoStandardView field option. Fixes #1710 ([#1733](https://github.com/pilosa/pilosa/pull/1733))
+- Import roaring endpoint accepts a list of views ([#1738](https://github.com/pilosa/pilosa/pull/1738))
+- Add some stat tracking to roaring/ implementation. ([#1743](https://github.com/pilosa/pilosa/pull/1743))
+- Cluster tests ([#1717](https://github.com/pilosa/pilosa/pull/1717))
+- Allow backslash, carriage return in PQL strings ([#1713](https://github.com/pilosa/pilosa/pull/1713))
+- Add base system, curl and jq for debug and checks. ([#1707](https://github.com/pilosa/pilosa/pull/1707))
+- Add "Rows" and "GroupBy" functionality ([#1647](https://github.com/pilosa/pilosa/pull/1647))
+- Add `clear` functional option for imports ([#1699](https://github.com/pilosa/pilosa/pull/1699))
+- Maintain Available Shards ([#1600](https://github.com/pilosa/pilosa/pull/1600)), ([#1695](https://github.com/pilosa/pilosa/pull/1695)), ([#1624](https://github.com/pilosa/pilosa/pull/1624)), ([#1663](https://github.com/pilosa/pilosa/pull/1663))
+- Adds missing rowID/Key columnID/Key tests ([#1683](https://github.com/pilosa/pilosa/pull/1683))
+- Store() function ([#1666](https://github.com/pilosa/pilosa/pull/1666))
+- Adds diagnostics CPUArch field ([#1671](https://github.com/pilosa/pilosa/pull/1671))
+- Add CircleCI step to generate Docker image and push to Docker hub ([#1673](https://github.com/pilosa/pilosa/pull/1673))
+- Implement ClearRow() query ([#1645](https://github.com/pilosa/pilosa/pull/1645))
+- Add support for Bool fields ([#1658](https://github.com/pilosa/pilosa/pull/1658))
+- Make translate map size configurable ([#1653](https://github.com/pilosa/pilosa/pull/1653))
+- Adds DirectAdd function to roaring.Bitmap ([#1646](https://github.com/pilosa/pilosa/pull/1646))
+- Roaring import ([#1622](https://github.com/pilosa/pilosa/pull/1622))
+- Add Not() query ([#1635](https://github.com/pilosa/pilosa/pull/1635))
+- Implements Options call and excludeRowAttrs, excludeColumns, columnAttrs and shards args ([#1631](https://github.com/pilosa/pilosa/pull/1631))
+- Added field options to pilosa import ([#1625](https://github.com/pilosa/pilosa/pull/1625))
+- Existence Tracking ([#1788](https://github.com/pilosa/pilosa/pull/1788)), ([#1672](https://github.com/pilosa/pilosa/pull/1672)), ([#1628](https://github.com/pilosa/pilosa/pull/1628))
+
+### Changed
+
+- Convert the anti-entropy logic to use `ImportRoaring` instead of `QueryNode` ([#1780](https://github.com/pilosa/pilosa/pull/1780))
+- Simplify "require-*" logic in Makefile ([#1755](https://github.com/pilosa/pilosa/pull/1755))
+- Logging cleanup ([#1748](https://github.com/pilosa/pilosa/pull/1748))
+- Improve benchmarking and performance. ([#1741](https://github.com/pilosa/pilosa/pull/1741))
+- Remove TravisCI, add CircleCI shield ([#1740](https://github.com/pilosa/pilosa/pull/1740))
+- Upgrade Peg dependency and regenerate grammar ([#1725](https://github.com/pilosa/pilosa/pull/1725))
+- Upgrade to protoc 3.6.1. (also updated protoc-gen-gofast). ([#1724](https://github.com/pilosa/pilosa/pull/1724))
+- Move column attrs logic to executor ([#1677](https://github.com/pilosa/pilosa/pull/1677))
+- Shrank n(container bit count cache) to int32 ([#1664](https://github.com/pilosa/pilosa/pull/1664))
+- Removing bounds check ([#1619](https://github.com/pilosa/pilosa/pull/1619))
+
+
+### Fixed
+- Allow translate log entry buffer to grow ([#1787](https://github.com/pilosa/pilosa/pull/1787))
+- Add Gopkg.lock as a dependency for vendor target ([#1790](https://github.com/pilosa/pilosa/pull/1790))
+- Cluster resize fix ([#1785](https://github.com/pilosa/pilosa/pull/1785))
+- Attempt to fix deadlock by releasing view lock before broadcasting Cr… ([#1782](https://github.com/pilosa/pilosa/pull/1782))
+- Fix bug where cluster goes into RESIZING instead of NORMAL ([#1777](https://github.com/pilosa/pilosa/pull/1777))
+- Wrap `<CALL>` in backquotes so it gets displayed. ([#1779](https://github.com/pilosa/pilosa/pull/1779))
+- Propogate updates to node details (not just additions and deletions) ([#1769](https://github.com/pilosa/pilosa/pull/1769))
+- Fix arm64 support ([#1764](https://github.com/pilosa/pilosa/pull/1764))
+- More races ([#1750](https://github.com/pilosa/pilosa/pull/1750))
+- Import cmd field type flag ([#1732](https://github.com/pilosa/pilosa/pull/1732))
+- Increase the translate file size for tests/benchmarks ([#1744](https://github.com/pilosa/pilosa/pull/1744))
+- Prevent panic in Bitmap.UnmarshalBinary when there is no data ([#1742](https://github.com/pilosa/pilosa/pull/1742))
+- Removed unused rule from peg grammar ([#1737](https://github.com/pilosa/pilosa/pull/1737))
+- Improve Internal Client errors. Fixes #1697 ([#1729](https://github.com/pilosa/pilosa/pull/1729))
+- Forward imports to non-coordinator shards ([#1719](https://github.com/pilosa/pilosa/pull/1719))
+- Fix double escapes in PQL grammar ([#1727](https://github.com/pilosa/pilosa/pull/1727))
+- Ensure btree comparison doesn't fail for smallish N ([#1712](https://github.com/pilosa/pilosa/pull/1712))
+- Drop now-superfluous methodNotAllowedHandler ([#1711](https://github.com/pilosa/pilosa/pull/1711))
+- Use pilosa.Logger everywhere ([#1674](https://github.com/pilosa/pilosa/pull/1674))
+- Ensure view closes fragment on broadcast error ([#1675](https://github.com/pilosa/pilosa/pull/1675))
+- Prevent closing os.Stderr (used in verbose test logging) ([#1696](https://github.com/pilosa/pilosa/pull/1696))
+- Allow holder to close/open/close without panic on closing closed channel ([#1686](https://github.com/pilosa/pilosa/pull/1686))
+- Fix bug with Range() queries with field keys ([#1679](https://github.com/pilosa/pilosa/pull/1679))
+- Synced query validation for handlers ([#1676](https://github.com/pilosa/pilosa/pull/1676))
+- Wrap translation store errors, decrease test map size to prevent failure on 32-bit ([#1665](https://github.com/pilosa/pilosa/pull/1665))
+- Fixes pass-by-value issue in proto decode ([#1662](https://github.com/pilosa/pilosa/pull/1662))
+- Do not run prerelease in CI if this is a pull request ([#1655](https://github.com/pilosa/pilosa/pull/1655))
+- Ensure mutex imports unset previous columns ([#1656](https://github.com/pilosa/pilosa/pull/1656))
+- Treat import timestamps as UTC ([#1651](https://github.com/pilosa/pilosa/pull/1651))
+- Remove unused log buffers from test cluster, fixes race ([#1612](https://github.com/pilosa/pilosa/pull/1612))
+- Adds --field-keys and --index-keys options to pilosa import ([#1621](https://github.com/pilosa/pilosa/pull/1621))
+- Use passed stdin, stdout and stderr in the cmd package. Fixes #1538 ([#1620](https://github.com/pilosa/pilosa/pull/1620))
+- Updated Go client sample to match latest master ([#1614](https://github.com/pilosa/pilosa/pull/1614))
+
+
 ## [v1.1.0] - 2018-08-21
 
 This version contains 32 contributions from 5 contributors. There are 89 files changed; 2,752 insertions; and 1,013 deletions.
@@ -28,6 +114,7 @@ This version contains 32 contributions from 5 contributors. There are 89 files c
 - Add view parameter to sync logic for syncing time fields ([#1602](https://github.com/pilosa/pilosa/pull/1602))
 - Fix translator in cluster environment ([#1552](https://github.com/pilosa/pilosa/pull/1552))
 - Use string prefix instead of equality so json error message will pass on all Go versions ([#1558](https://github.com/pilosa/pilosa/pull/1558))
+- Fix fragment checksums race condition ([#1749](https://github.com/pilosa/pilosa/pull/1749))
 
 ## [v1.0.2] - 2018-08-01
 
