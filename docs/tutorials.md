@@ -455,7 +455,7 @@ curl localhost:10101/index/patients \
 {"success":true}
 ```
 
-In addition to storing rows of bits, a field can also store integer values. The next steps creates three fields (`age`, `weight`, `tcells`) in the `measurements` field.
+In addition to storing rows of bits, a field can also store integer values. The next steps creates three fields (`age`, `weight`, `tcells`) in the `patients` index.
 ``` request
 curl localhost:10101/index/patients/field/age \
      -X POST \
@@ -529,7 +529,7 @@ Assuming we have a file called `ages.csv` that is structured like this:
 ```
 where the first column of the CSV represents the patient `ID` and the second column represents the patient's `age`, then we can import the data into our `age` field by running this command:
 ```
-pilosa import -i patients -f measurements --field age ages.csv
+pilosa import -i patients --field age ages.csv
 ```
 
 Now that we have some data in our index, let's run a few queries to demonstrate how to use that data.
