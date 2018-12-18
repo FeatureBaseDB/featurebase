@@ -705,24 +705,19 @@ func (c *InternalClient) exportNodeCSV(ctx context.Context, node *pilosa.Node, i
 	return nil
 }
 
-func (c *InternalClient) RetrieveShardFromURI(ctx context.Context, index, field string, shard uint64, uri pilosa.URI) (io.ReadCloser, error) {
+func (c *InternalClient) RetrieveShardFromURI(ctx context.Context, index, field, view string, shard uint64, uri pilosa.URI) (io.ReadCloser, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.RetrieveShardFromURI")
 	defer span.Finish()
 
 	node := &pilosa.Node{
 		URI: uri,
 	}
-	return c.backupShardNode(ctx, index, field, shard, node)
-}
 
-func (c *InternalClient) backupShardNode(ctx context.Context, index, field string, shard uint64, node *pilosa.Node) (io.ReadCloser, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.backupShardNode")
-	defer span.Finish()
-
-	u := nodePathToURL(node, "/fragment/data")
+	u := nodePathToURL(node, "/internal/fragment/data")
 	u.RawQuery = url.Values{
 		"index": {index},
 		"field": {field},
+		"view":  {view},
 		"shard": {strconv.FormatUint(shard, 10)},
 	}.Encode()
 

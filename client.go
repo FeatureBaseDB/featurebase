@@ -52,7 +52,7 @@ type InternalClient interface {
 	ColumnAttrDiff(ctx context.Context, uri *URI, index string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
 	RowAttrDiff(ctx context.Context, uri *URI, index, field string, blks []AttrBlock) (map[uint64]map[string]interface{}, error)
 	SendMessage(ctx context.Context, uri *URI, msg []byte) error
-	RetrieveShardFromURI(ctx context.Context, index, field string, shard uint64, uri URI) (io.ReadCloser, error)
+	RetrieveShardFromURI(ctx context.Context, index, field, view string, shard uint64, uri URI) (io.ReadCloser, error)
 	ImportRoaring(ctx context.Context, uri *URI, index, field string, shard uint64, remote bool, req *ImportRoaringRequest) error
 }
 
@@ -149,6 +149,6 @@ func (n nopInternalClient) RowAttrDiff(ctx context.Context, uri *URI, index, fie
 func (n nopInternalClient) SendMessage(ctx context.Context, uri *URI, msg []byte) error {
 	return nil
 }
-func (n nopInternalClient) RetrieveShardFromURI(ctx context.Context, index, field string, shard uint64, uri URI) (io.ReadCloser, error) {
+func (n nopInternalClient) RetrieveShardFromURI(ctx context.Context, index, field, view string, shard uint64, uri URI) (io.ReadCloser, error) {
 	return nil, nil
 }
