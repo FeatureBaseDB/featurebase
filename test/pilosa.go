@@ -69,7 +69,7 @@ func newCommand(opts ...server.CommandOption) *Command {
 	m.Config.DataDir = path
 	m.Config.Bind = "http://localhost:0"
 	m.Config.Cluster.Disabled = true
-	m.Config.Translation.MapSize = 100000
+	m.Config.Translation.MapSize = 140000
 
 	if testing.Verbose() {
 		m.Command.Stdout = os.Stdout
