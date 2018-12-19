@@ -15,8 +15,10 @@
 package server_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -28,12 +30,21 @@ import (
 	"testing/quick"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/pelletier/go-toml"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/http"
+	"github.com/pilosa/pilosa/roaring"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
 )
+
+var runStress bool
+
+func init() { // nolint: gochecknoinits
+	flag.BoolVar(&runStress, "stress", false, "Enable stress tests (time consuming)")
+}
 
 // Ensure program can process queries and maintain consistency.
 func TestMain_Set_Quick(t *testing.T) {
@@ -754,3 +765,97 @@ func TestClusterQueriesAfterRestart(t *testing.T) {
 }
 
 // TODO: confirm that things keep working if a node is hard-closed (no nodeLeave event) and immediately restarted with a different address.
+
+func TestClusterExhaustingConnections(t *testing.T) {
+	if !runStress {
+		t.Skip("stress")
+	}
+	cluster := test.MustRunCluster(t, 5)
+	defer cluster.Close()
+	cmd1 := cluster[1]
+
+	for _, com := range cluster {
+		nodes := com.API.Hosts(context.Background())
+		for _, n := range nodes {
+			if n.State != "READY" {
+				t.Fatalf("unexpected node state after upping cluster: %v", nodes)
+			}
+		}
+	}
+
+	cmd1.MustCreateIndex(t, "testidx", pilosa.IndexOptions{})
+	cmd1.MustCreateField(t, "testidx", "testfield", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 10))
+
+	eg := errgroup.Group{}
+	for i := 0; i < 20; i++ {
+		i := i
+		eg.Go(func() error {
+			for j := i; j < 10000; j += 20 {
+				_, err := cluster[i%5].API.Query(context.Background(), &pilosa.QueryRequest{
+					Index: "testidx",
+					Query: fmt.Sprintf("Set(%d, testfield=0)", j*pilosa.ShardWidth),
+				})
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+	err := eg.Wait()
+	if err != nil {
+		t.Fatalf("setting lots of shards: %v", err)
+	}
+}
+
+func TestClusterExhaustingConnectionsImport(t *testing.T) {
+	if !runStress {
+		t.Skip("stress")
+	}
+	cluster := test.MustRunCluster(t, 5)
+	defer cluster.Close()
+	cmd1 := cluster[1]
+
+	for _, com := range cluster {
+		nodes := com.API.Hosts(context.Background())
+		for _, n := range nodes {
+			if n.State != "READY" {
+				t.Fatalf("unexpected node state after upping cluster: %v", nodes)
+			}
+		}
+	}
+
+	cmd1.MustCreateIndex(t, "testidx", pilosa.IndexOptions{})
+	cmd1.MustCreateField(t, "testidx", "testfield", pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 10))
+
+	bm := roaring.NewBitmap()
+	bm.DirectAdd(0)
+	buf := &bytes.Buffer{}
+	bm.WriteTo(buf)
+	data := buf.Bytes()
+
+	eg := errgroup.Group{}
+	for i := uint64(0); i < 20; i++ {
+		i := i
+		eg.Go(func() error {
+			for j := i; j < 10000; j += 20 {
+				if (j-i)%1000 == 0 {
+					fmt.Printf("%d is %.2f%% done.\n", i, float64(j-i)*100/100000)
+				}
+				err := cluster[i%5].API.ImportRoaring(context.Background(), "testidx", "testfield", j, false, &pilosa.ImportRoaringRequest{
+					Views: map[string][]byte{
+						"": data,
+					},
+				})
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+	err := eg.Wait()
+	if err != nil {
+		t.Fatalf("setting lots of shards: %v", err)
+	}
+}
