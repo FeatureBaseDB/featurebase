@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [1.2.0] - 2018-12-19
 
-This version contains 154 contributions from 11 contributors. There are 113 files changed; 18,968 insertions; and 4,325 deletions.
+This version contains 155 contributions from 11 contributors. There are 113 files changed; 19,085 insertions; and 4,323 deletions.
 
 ### Added 
 
@@ -59,6 +59,7 @@ This version contains 154 contributions from 11 contributors. There are 113 file
 
 ### Fixed
 
+- Ensure internal client closes all response bodies ([#1795](https://github.com/pilosa/pilosa/pull/1795))
 - Allow translate log entry buffer to grow ([#1787](https://github.com/pilosa/pilosa/pull/1787))
 - Add Gopkg.lock as a dependency for vendor target ([#1790](https://github.com/pilosa/pilosa/pull/1790))
 - Cluster resize fix ([#1785](https://github.com/pilosa/pilosa/pull/1785))
