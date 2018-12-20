@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## [1.2.0] - 2018-12-19
+## [1.2.0] - 2018-12-20
 
 This version contains 155 contributions from 11 contributors. There are 113 files changed; 19,085 insertions; and 4,323 deletions.
 
@@ -19,12 +19,11 @@ This version contains 155 contributions from 11 contributors. There are 113 file
 - CircleCI: Add race detector to parallel build, default to Go 1.11. ([#1756](https://github.com/pilosa/pilosa/pull/1756))
 - Add distributed tracing. ([#1684](https://github.com/pilosa/pilosa/pull/1684))
 - Add NoStandardView field option ([#1733](https://github.com/pilosa/pilosa/pull/1733))
-- Import roaring endpoint accepts a list of views ([#1738](https://github.com/pilosa/pilosa/pull/1738))
 - Add some stat tracking to roaring implementation ([#1743](https://github.com/pilosa/pilosa/pull/1743))
-- Cluster tests ([#1717](https://github.com/pilosa/pilosa/pull/1717))
+- Add cluster fault testing using docker-compose and pumba ([#1717](https://github.com/pilosa/pilosa/pull/1717))
 - Allow backslash, carriage return in PQL strings ([#1713](https://github.com/pilosa/pilosa/pull/1713))
 - Add base system, curl and jq for debug and checks ([#1707](https://github.com/pilosa/pilosa/pull/1707))
-- Add "Rows" and "GroupBy" functionality ([#1647](https://github.com/pilosa/pilosa/pull/1647))
+- Add `Rows` and `GroupBy` functionality ([#1647](https://github.com/pilosa/pilosa/pull/1647))
 - Add `clear` functional option for imports ([#1699](https://github.com/pilosa/pilosa/pull/1699))
 - Implement tracking of available shards to help support sparse datasets ([#1600](https://github.com/pilosa/pilosa/pull/1600), [#1695](https://github.com/pilosa/pilosa/pull/1695), [#1624](https://github.com/pilosa/pilosa/pull/1624), [#1663](https://github.com/pilosa/pilosa/pull/1663))
 - Add missing rowID/Key columnID/Key tests ([#1683](https://github.com/pilosa/pilosa/pull/1683))
@@ -35,7 +34,7 @@ This version contains 155 contributions from 11 contributors. There are 113 file
 - Add support for Bool fields ([#1658](https://github.com/pilosa/pilosa/pull/1658))
 - Make translate map size configurable ([#1653](https://github.com/pilosa/pilosa/pull/1653))
 - Add DirectAdd function to roaring.Bitmap ([#1646](https://github.com/pilosa/pilosa/pull/1646))
-- Roaring import ([#1622](https://github.com/pilosa/pilosa/pull/1622))
+- Implement Roaring import ([#1622](https://github.com/pilosa/pilosa/pull/1622), [#1738](https://github.com/pilosa/pilosa/pull/1738))
 - Add Not() query ([#1635](https://github.com/pilosa/pilosa/pull/1635))
 - Implement Options call and excludeRowAttrs, excludeColumns, columnAttrs and shards args ([#1631](https://github.com/pilosa/pilosa/pull/1631))
 - Add field options to pilosa import ([#1625](https://github.com/pilosa/pilosa/pull/1625))
@@ -44,13 +43,13 @@ This version contains 155 contributions from 11 contributors. There are 113 file
 ### Changed
 
 - Convert the anti-entropy logic to use `ImportRoaring` instead of `QueryNode` ([#1780](https://github.com/pilosa/pilosa/pull/1780))
-- Simplify "require-*" logic in Makefile ([#1755](https://github.com/pilosa/pilosa/pull/1755))
+- Simplify `require-*` logic in Makefile ([#1755](https://github.com/pilosa/pilosa/pull/1755))
 - Cleanup logging ([#1748](https://github.com/pilosa/pilosa/pull/1748))
 - Remove TravisCI, add CircleCI shield ([#1740](https://github.com/pilosa/pilosa/pull/1740))
 - Upgrade Peg dependency and regenerate grammar ([#1725](https://github.com/pilosa/pilosa/pull/1725))
 - Upgrade to protoc 3.6.1 (also updated protoc-gen-gofast) ([#1724](https://github.com/pilosa/pilosa/pull/1724))
 - Move column attrs logic to executor ([#1677](https://github.com/pilosa/pilosa/pull/1677))
-- Shrank n(container bit count cache) to int32 ([#1664](https://github.com/pilosa/pilosa/pull/1664))
+- Shrink container bit count to int32 ([#1664](https://github.com/pilosa/pilosa/pull/1664))
 
 ### Performance
 
