@@ -172,6 +172,112 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 	return changed, nil
 }
 
+// duplicates fragment's pos() function.
+func posBSI(row, col, rowOffset uint64) uint64 {
+	return (row * rowOffset) + (col % rowOffset)
+}
+
+// SetBSIValues is an optimized setter for BSI values. It should be called only with
+// values the Nth bit of which would all be in the same container. So, (column >> 16)
+// should be the same.
+//
+// This allows us to cache the lookups of the containers used for each bit.
+//
+// A BSI field is represented as a series of rows, one per bit, plus an additional
+// row indicating whether a value is present.
+func (b *Bitmap) SetBSIValues(columns []uint64, depth uint64, values []uint64, rowOffset uint64, clear bool) error {
+	return b.SetBSIValuesFancy(columns, depth, values, rowOffset, clear)
+}
+
+// SetBSIValuesNaive is a simple implementation of SetBSIValues which doesn't do
+// anything clever and just uses add/remove operations, but may be more cost
+// effective if only a few values are being set.
+func (b *Bitmap) SetBSIValuesNaive(columns []uint64, depth uint64, values []uint64, rowOffset uint64, clear bool) error {
+	for idx, column := range columns {
+		value := values[idx]
+		for j := uint64(0); j < depth; j++ {
+			pos := posBSI(j, column, rowOffset)
+			if value&(1<<j) != 0 {
+				b.DirectAdd(pos)
+			} else {
+
+				b.remove(pos)
+			}
+		}
+		pos := posBSI(depth, column, rowOffset)
+		if clear {
+			b.remove(pos)
+		} else {
+			b.DirectAdd(pos)
+		}
+	}
+	return nil
+}
+
+// SetBSIValuesFancy tries to coalesce writes.
+func (b *Bitmap) SetBSIValuesFancy(columns []uint64, depth uint64, values []uint64, rowOffset uint64, clear bool) error {
+	if len(columns) < 1 {
+		// congratulations! you have set all zero bits.
+		return nil
+	}
+	// firstContainerID := highbits(columns[0])
+	containers := make([]*Container, depth+1)
+
+	// obtain the containers for each bit, plus the "is set" container.
+	for i := uint64(0); i < depth+1; i++ {
+		bit := columns[0] + (rowOffset * uint64(i))
+		containers[i] = b.Containers.GetOrCreate(highbits(bit))
+		// coerce to bitmap, so we can operate on bits without worrying about it
+		if containers[i].containerType == containerArray {
+			containers[i].arrayToBitmap()
+		}
+		if containers[i].containerType == containerRun {
+			containers[i].runToBitmap()
+		}
+		containers[i].unmap()
+	}
+	// actually do the magic
+	set := make([]uint64, depth)
+	var mask uint64
+	var previousWord uint64
+	for idx, column := range columns {
+		value := values[idx]
+		word := uint64(lowbits(column)) >> 6
+		bit := uint64(column & 0x3f)
+		if word != previousWord {
+			for i := uint64(0); i < depth; i++ {
+				containers[i].bitmap[previousWord] =
+					(containers[i].bitmap[previousWord] &^ mask) | set[i]
+				set[i] = 0
+			}
+			if clear {
+				containers[depth].bitmap[previousWord] &^= mask
+			} else {
+				containers[depth].bitmap[previousWord] |= mask
+			}
+			previousWord = word
+		}
+		for i := uint64(0); i < depth; i++ {
+			set[i] |= ((value >> i) & 1) << bit
+		}
+		mask |= (1 << bit)
+	}
+	for i := uint64(0); i < depth; i++ {
+		containers[i].bitmap[previousWord] =
+			(containers[i].bitmap[previousWord] &^ mask) | set[i]
+		set[i] = 0
+	}
+	if clear {
+		containers[depth].bitmap[previousWord] &^= mask
+	} else {
+		containers[depth].bitmap[previousWord] |= mask
+	}
+	for i := uint64(0); i < depth+1; i++ {
+		containers[i].Repair()
+	}
+	return nil
+}
+
 // DirectAdd adds a value to the bitmap by bypassing the op log.
 func (b *Bitmap) DirectAdd(v uint64) bool {
 	cont := b.Containers.GetOrCreate(highbits(v))

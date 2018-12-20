@@ -1620,6 +1620,39 @@ func (f *fragment) bulkImportMutex(rowIDs, columnIDs []uint64) error {
 	return nil
 }
 
+// matched slices of columnIDs and values
+type columnValues struct {
+	columnIDs, values []uint64
+}
+
+// sortedValues provides corresponding slices of columnIDs and values
+// separated out by container width, but only if the columnIDs are
+// sorted. If the column IDs aren't sorted, we won't try to do the
+// fancy stuff.
+func sortedValues(columnIDs, values []uint64) []columnValues {
+	prev := uint64(0)
+	var batches []columnValues
+	var lastBatch = -1
+	var first int
+
+	for idx, columnID := range columnIDs {
+		if columnID < prev {
+			return nil
+		}
+		prev = columnID
+		batch := int(columnID >> 16)
+		if batch != lastBatch {
+			if idx != first {
+				batches = append(batches, columnValues{columnIDs: columnIDs[first:idx], values: values[first:idx]})
+			}
+			first = idx
+			lastBatch = batch
+		}
+	}
+	batches = append(batches, columnValues{columnIDs: columnIDs[first:], values: values[first:]})
+	return batches
+}
+
 // importValue bulk imports a set of range-encoded values.
 func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear bool) error {
 	f.mu.Lock()
@@ -1633,8 +1666,19 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 	// Process every value.
 	// If an error occurs then reopen the storage.
 	if err := func() error {
-		for i := range columnIDs {
-			columnID, value := columnIDs[i], values[i]
+		batches := sortedValues(columnIDs, values)
+		if batches != nil {
+			for _, batch := range batches {
+				err := f.storage.SetBSIValues(batch.columnIDs, uint64(bitDepth), batch.values, ShardWidth, clear)
+				if err != nil {
+					return errors.Wrap(err, "setting batch")
+				}
+			}
+			return nil
+		}
+
+		for i, columnID := range columnIDs {
+			value := values[i]
 
 			_, err := f.importSetValue(columnID, bitDepth, value, clear)
 			if err != nil {
