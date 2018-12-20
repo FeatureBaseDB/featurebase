@@ -1,4 +1,4 @@
-FROM golang:1.10.3 as builder
+FROM golang:1.11.4 as builder
 
 COPY . /go/src/github.com/pilosa/pilosa/
 
