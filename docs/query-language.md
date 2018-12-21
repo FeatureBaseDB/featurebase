@@ -781,3 +781,111 @@ Options(Row(f1=10), shards=[0, 2])
 ```response
 {"attrs":{},"columns":[100, 2097152]}
 ```
+
+**Spec:**
+
+```
+Rows(field=<STRING>, previous=<UINT|STRING>, limit=<UINT>, column=<UINT|STRING>)
+```
+
+**Description:**
+
+Rows returns a list of row IDs in the given field which have at least one bit
+set. The field argument is mandatory, the others are  optional.
+
+If `previous` is given, rows prior to and including the specified row ID or
+key will not be returned. If `column` is given, only rows which have a set bit
+in the given column will be returned. `previous` or `column` must be strings if
+and only if the field or index respectively is using key translation. If `limit`
+is given, the number of rowIDs returned will be less than or equal to
+`limit`. The combination of `limit` and `previous` allows for paging over large
+result sets. Results are always ordered, so setting `previous` as the last
+result of the previous request will start from the next available row.
+
+
+**Result Type:** Object with `"rows" or "keys" and an array of integers or strings respectively.`
+
+**Examples:**
+
+Without keys:
+```request
+Rows(field=blah)
+```
+```response
+{"rows":[1,9,39]}
+```
+
+With keys:
+```request
+Rows(field=blahk)
+```
+```response
+{"rows":null,"keys":["haha","zaaa","traa"]}
+```
+
+
+**Spec:**
+
+```
+GroupBy(<RowsCall>, [RowsCall...], limit=<UINT>, filter=<CALL>)
+```
+
+**Description:**
+
+GroupBy returns the count of the intersection of every combination of rows
+taking one row each from the specified `Rows` calls. It returns only those
+combinations for which the count is greater than 0. 
+
+The optional `filter` argument takes any type of `Row` query (e.g. Row, Union,
+ Intersect, etc.) which will be intersected with each result prior to returning
+ the count. This is analagous to a WHERE clause applied to a relational GROUP BY
+ query.
+
+The optional `limit` argument limits the number of results returned. The results
+are ordered, so as long as the data isn't changing, the same query will return
+the same result set.
+
+Paging through results is supported by passing the `previous` argument to each
+of the `Rows` calls in the GroupBy. Take the last result from your previous
+`GroupBy` query, and pass each row ID in that result as the `previous` argument
+to each of the respective `Rows` queries in your next `GroupBy` query.
+
+**Result Type:** Array of "groups". Each group is an object with a group key and
+a count key. The count is an integer, and the group is an array of objects which
+specify the field and row for each row that was intersected to get that result.
+
+**Examples:**
+
+A single `Rows` query.
+```request
+GroupBy(Rows(field=blah))
+```
+```response
+[{"group":[{"field":"blah","rowID":1}],"count":1},
+{"group":[{"field":"blah","rowID":9}],"count":1},
+{"group":[{"field":"blah","rowID":39}],"count":1}]
+```
+
+With two `Rows` queries - one with IDs and one with keys.
+```request
+GroupBy(Rows(field=blah), Rows(field=blahk), limit=7)
+```
+```response
+[{"group":[{"field":"blah","rowID":1},{"field":"blahk","rowKey":"haha"}],"count":1},
+ {"group":[{"field":"blah","rowID":1},{"field":"blahk","rowKey":"zaaa"}],"count":1},
+ {"group":[{"field":"blah","rowID":1},{"field":"blahk","rowKey":"traa"}],"count":1},
+ {"group":[{"field":"blah","rowID":9},{"field":"blahk","rowKey":"haha"}],"count":1},
+ {"group":[{"field":"blah","rowID":9},{"field":"blahk","rowKey":"zaaa"}],"count":1},
+ {"group":[{"field":"blah","rowID":9},{"field":"blahk","rowKey":"traa"}],"count":1},
+ {"group":[{"field":"blah","rowID":39},{"field":"blahk","rowKey":"haha"}],"count":1}]
+```
+
+Getting the rest of the results from the previous example (paging).
+```request
+GroupBy(Rows(field=blah, previous=39), Rows(field=blahk, previous="haha"), limit=7)
+```
+
+```response
+[{"group":[{"field":"blah","rowID":39},{"field":"blahk","rowKey":"zaaa"}],"count":1},
+ {"group":[{"field":"blah","rowID":39},{"field":"blahk","rowKey":"traa"}],"count":1}]
+```
