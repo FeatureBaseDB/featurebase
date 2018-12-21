@@ -2675,7 +2675,7 @@ func TestExecutor_Execute_Rows(t *testing.T) {
 }
 
 func TestExecutor_Execute_Query_Error(t *testing.T) {
-	c := test.MustRunCluster(t, 3)
+	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 	c.CreateField(t, "i", pilosa.IndexOptions{}, "general")
 
@@ -2710,6 +2710,10 @@ func TestExecutor_Execute_Query_Error(t *testing.T) {
 		{
 			query: "GroupBy(Rows(field=general), limit=-1)",
 			error: "must be positive, but got",
+		},
+		{
+			query: "GroupBy(Rows(field=general), filter=Rows(field=general))",
+			error: "unknown call: Rows",
 		},
 	}
 
