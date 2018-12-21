@@ -2836,6 +2836,7 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, filter *Row, inde
 // nextAtIdx is a recursive helper method for getting the next row for the field
 // at index i, and then updating the rows in the "higher" fields if it wraps.
 func (gbi *groupByIterator) nextAtIdx(i int) {
+TOP:
 	nr, rowID, wrapped := gbi.rowIters[i].Next()
 	if nr == nil {
 		gbi.done = true
@@ -2852,11 +2853,18 @@ func (gbi *groupByIterator) nextAtIdx(i int) {
 		gbi.rows[i].row = nr.Intersect(gbi.rows[i-1].row)
 	}
 	gbi.rows[i].id = rowID
+
+	if gbi.rows[i].row.Count() == 0 {
+		goto TOP // I wanted to just call nextAtIdx again, but if a bunch of
+		// rows in a row were 0, I was worried we'd get into a stack
+		// overflow situation
+	}
 }
 
 // Next returns a GroupCount representing the next group by record. When there
 // are no more records it will return an empty GroupCount and done==true.
 func (gbi *groupByIterator) Next() (ret GroupCount, done bool) {
+TOPNEXT:
 	if gbi.done {
 		return ret, true
 	}
@@ -2864,6 +2872,10 @@ func (gbi *groupByIterator) Next() (ret GroupCount, done bool) {
 		ret.Count = gbi.rows[len(gbi.rows)-1].row.Count()
 	} else {
 		ret.Count = gbi.rows[len(gbi.rows)-1].row.intersectionCount(gbi.rows[len(gbi.rows)-2].row)
+	}
+	if ret.Count == 0 {
+		gbi.nextAtIdx(len(gbi.rows) - 1)
+		goto TOPNEXT
 	}
 
 	ret.Group = make([]FieldRow, len(gbi.rows))
@@ -2873,6 +2885,7 @@ func (gbi *groupByIterator) Next() (ret GroupCount, done bool) {
 	}
 
 	// set up for next call
+
 	gbi.nextAtIdx(len(gbi.rows) - 1)
 
 	return ret, false
