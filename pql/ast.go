@@ -255,11 +255,23 @@ type Call struct {
 // Returns the field as a string if present, or an error if not.
 func (c *Call) FieldArg() (string, error) {
 	for arg := range c.Args {
-		if !strings.HasPrefix(arg, "_") {
+		if !IsReservedArg(arg) {
 			return arg, nil
 		}
 	}
 	return "", fmt.Errorf("No field argument specified")
+}
+
+func IsReservedArg(name string) bool {
+	if strings.HasPrefix(name, "_") {
+		return true
+	}
+	switch name {
+	case "from", "to":
+		return true
+	default:
+		return false
+	}
 }
 
 // BoolArg is for reading the value at key from call.Args as a bool. If the

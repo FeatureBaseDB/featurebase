@@ -64,7 +64,7 @@ Simple queries:
  Relational                                    | Pilosa
 -----------------------------------------------|------------------------------------
  `select ID from People where Name = 'Bob'`    | `Row(Name="Bob")`
- `select ID from People where Age > 30`        | `Range(Age > 30)`
+ `select ID from People where Age > 30`        | `Row(Age > 30)`
  `select ID from People where Member = true`   | `Row(Member=0)`
 
 Note that `Row(Member=0)` selects all entities with a bit set in row 0 of the Member field. We could just as well use row 1 to store this, in which case we would use `Row(Member=1)`, which looks a bit more intuitive. In the relational model, joins are often necessary. Because Pilosa supports extremely high cardinality in both rows and columns, many types of joins are accomplished with basic Pilosa queries across multiple fields. For example, this SQL join:
@@ -100,7 +100,7 @@ The LRU cache maintains the most recently accessed Rows.
 
 ### Time Quantum
 
-Setting a time quantum on a field creates extra views which allow Range queries down to the time interval specified. For example, if the time quantum is set to `YMD`, Range queries down to the granularity of a day are supported.
+Setting a time quantum on a field creates extra views which allow ranged Row queries down to the time interval specified. For example, if the time quantum is set to `YMD`, ranged Row queries down to the granularity of a day are supported.
 
 ### Attribute
 
@@ -145,7 +145,7 @@ curl localhost:10101/index/repository/field/quantity \
 
 ##### BSI Range-Encoding
 
-Bit-Sliced Indexing (BSI) is the storage method Pilosa uses to represent multi-bit integers in a bitmap index. Integers are stored as n-bit, range-encoded bit-sliced indexes of base-2, along with an additional row indicating "not null". This means that a 16-bit integer will require 17 rows: one for each 0-bit of the 16 bit-slice components (the 1-bit does not need to be stored because with range-encoding the highest bit position is always 1) and one for the non-null row. Pilosa can evaluate `Range`, `Min`, `Max`, and `Sum` queries on these BSI integers. The result of a `Sum` query includes a count, which can be used to compute an average with no other overhead.
+Bit-Sliced Indexing (BSI) is the storage method Pilosa uses to represent multi-bit integers in a bitmap index. Integers are stored as n-bit, range-encoded bit-sliced indexes of base-2, along with an additional row indicating "not null". This means that a 16-bit integer will require 17 rows: one for each 0-bit of the 16 bit-slice components (the 1-bit does not need to be stored because with range-encoding the highest bit position is always 1) and one for the non-null row. Pilosa can evaluate `Row`, `Min`, `Max`, and `Sum` queries on these BSI integers. The result of a `Sum` query includes a count, which can be used to compute an average with no other overhead.
 
 Internally Pilosa stores each BSI `field` as a `view`. The rows of the `view` contain the base-2 representations of the integer values. Pilosa manages the base-2 offset and translation that efficiently packs the integer value within the minimum set of rows.
 

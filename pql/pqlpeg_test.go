@@ -8,7 +8,7 @@ import (
 
 func TestPEG(t *testing.T) {
 	p := PQL{Buffer: `
-SetBit(Union(Zitmap(row==4), Intersect(Qitmap(blah>4), Ritmap(field="http://zoo9.com=\\'hello' and \"hello\"")), Hitmap(row=ag-bee)), a="4z", b=5) Count(Union(Witmap(row=5.73, frame=.10), Range(zztop><[2, 9]))) TopN(blah, fields=["hello", "goodbye", "zero"])`[1:]}
+SetBit(Union(Zitmap(row==4), Intersect(Qitmap(blah>4), Ritmap(field="http://zoo9.com=\\'hello' and \"hello\"")), Hitmap(row=ag-bee)), a="4z", b=5) Count(Union(Witmap(row=5.73, frame=.10), Row(zztop><[2, 9]))) TopN(blah, fields=["hello", "goodbye", "zero"])`[1:]}
 	p.Init()
 	err := p.Parse()
 	if err != nil {
@@ -202,51 +202,51 @@ func TestPEGWorking(t *testing.T) {
 			ncalls: 1},
 		{
 			name:   "RangeLT",
-			input:  "Range(a < 4)",
+			input:  "Row(a < 4)",
 			ncalls: 1},
 		{
 			name:   "RangeGT",
-			input:  "Range(a > 4)",
+			input:  "Row(a > 4)",
 			ncalls: 1},
 		{
 			name:   "RangeLTE",
-			input:  "Range(a <= 4)",
+			input:  "Row(a <= 4)",
 			ncalls: 1},
 		{
 			name:   "RangeGTE",
-			input:  "Range(a >= 4)",
+			input:  "Row(a >= 4)",
 			ncalls: 1},
 		{
 			name:   "RangeEQ",
-			input:  "Range(a == 4)",
+			input:  "Row(a == 4)",
 			ncalls: 1},
 		{
 			name:   "RangeNEQ",
-			input:  "Range(a != null)",
+			input:  "Row(a != null)",
 			ncalls: 1},
 		{
 			name:   "RangeLTLT",
-			input:  "Range(4 < a < 9)",
+			input:  "Row(4 < a < 9)",
 			ncalls: 1},
 		{
 			name:   "RangeLTLTE",
-			input:  "Range(4 < a <= 9)",
+			input:  "Row(4 < a <= 9)",
 			ncalls: 1},
 		{
 			name:   "RangeLTELT",
-			input:  "Range(4 <= a < 9)",
+			input:  "Row(4 <= a < 9)",
 			ncalls: 1},
 		{
 			name:   "RangeLTELTE",
-			input:  "Range(4 <= a <= 9)",
+			input:  "Row(4 <= a <= 9)",
 			ncalls: 1},
 		{
 			name:   "RangeTime",
-			input:  "Range(a=4, 2010-07-04T00:00, 2010-08-04T00:00)",
+			input:  "Row(a=4, from=2010-07-04T00:00, to=2010-08-04T00:00)",
 			ncalls: 1},
 		{
 			name:   "RangeTimeQuotes",
-			input:  `Range(a=4, '2010-07-04T00:00', "2010-08-04T00:00")`,
+			input:  `Row(a=4, from='2010-07-04T00:00', to="2010-08-04T00:00")`,
 			ncalls: 1},
 		{
 			name:   "Dashed Frame",
@@ -302,10 +302,10 @@ func TestPEGErrors(t *testing.T) {
 			input: "Clear(9)"},
 		{
 			name:  "RangeTimeGT",
-			input: "Range(a>4, 2010-07-04T00:00, 2010-08-04T00:00)"},
+			input: "Row(a>4, 2010-07-04T00:00, 2010-08-04T00:00)"},
 		{
 			name:  "RangeTimeOneStamp",
-			input: "Range(a=4, 2010-07-04T00:00)"},
+			input: "Row(a=4, 2010-07-04T00:00)"},
 	}
 
 	for i, test := range tests {
@@ -423,9 +423,9 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "RangeEQ",
-			call: "Range(a==7)",
+			call: "Row(a==7)",
 			exp: &Call{
-				Name: "Range",
+				Name: "Row",
 				Args: map[string]interface{}{
 					"a": &Condition{
 						Op:    EQ,
@@ -435,9 +435,9 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "RangeLT",
-			call: "Range(a<7)",
+			call: "Row(a<7)",
 			exp: &Call{
-				Name: "Range",
+				Name: "Row",
 				Args: map[string]interface{}{
 					"a": &Condition{
 						Op:    LT,
@@ -447,9 +447,9 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "RangeLTE",
-			call: "Range(a<=7)",
+			call: "Row(a<=7)",
 			exp: &Call{
-				Name: "Range",
+				Name: "Row",
 				Args: map[string]interface{}{
 					"a": &Condition{
 						Op:    LTE,
@@ -459,9 +459,9 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "RangeGTE",
-			call: "Range(a>=7)",
+			call: "Row(a>=7)",
 			exp: &Call{
-				Name: "Range",
+				Name: "Row",
 				Args: map[string]interface{}{
 					"a": &Condition{
 						Op:    GTE,
@@ -471,9 +471,9 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "RangeGT",
-			call: "Range(a>7)",
+			call: "Row(a>7)",
 			exp: &Call{
-				Name: "Range",
+				Name: "Row",
 				Args: map[string]interface{}{
 					"a": &Condition{
 						Op:    GT,
@@ -483,9 +483,9 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "RangeNEQ",
-			call: "Range(a!=null)",
+			call: "Row(a!=null)",
 			exp: &Call{
-				Name: "Range",
+				Name: "Row",
 				Args: map[string]interface{}{
 					"a": &Condition{
 						Op:    NEQ,
@@ -495,9 +495,9 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "RangeLTELT",
-			call: "Range(4 <= a < 9)",
+			call: "Row(4 <= a < 9)",
 			exp: &Call{
-				Name: "Range",
+				Name: "Row",
 				Args: map[string]interface{}{
 					"a": &Condition{
 						Op:    BETWEEN,
@@ -507,9 +507,9 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "RangeLTLT",
-			call: "Range(4 < a < 9)",
+			call: "Row(4 < a < 9)",
 			exp: &Call{
-				Name: "Range",
+				Name: "Row",
 				Args: map[string]interface{}{
 					"a": &Condition{
 						Op:    BETWEEN,
@@ -519,9 +519,9 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "RangeLTELTE",
-			call: "Range(4 <= a <= 9)",
+			call: "Row(4 <= a <= 9)",
 			exp: &Call{
-				Name: "Range",
+				Name: "Row",
 				Args: map[string]interface{}{
 					"a": &Condition{
 						Op:    BETWEEN,
@@ -531,9 +531,9 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "RangeLTLTE",
-			call: "Range(4 < a <= 9)",
+			call: "Row(4 < a <= 9)",
 			exp: &Call{
-				Name: "Range",
+				Name: "Row",
 				Args: map[string]interface{}{
 					"a": &Condition{
 						Op:    BETWEEN,
