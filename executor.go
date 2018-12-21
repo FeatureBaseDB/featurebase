@@ -2763,7 +2763,10 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, filter *Row, inde
 	for i, call := range children {
 		fieldName, ok := call.Args["field"].(string)
 		if !ok {
-			return nil, errors.Errorf("%s call must have 'field' argument", call.Name)
+			return nil, errors.Errorf("%s call must have 'field' argument with valid (string) field name. Got %v of type %[2]T", call.Name, call.Args["field"])
+		}
+		if holder.Field(index, fieldName) == nil {
+			return nil, ErrFieldNotFound
 		}
 		gbi.fields[i].Field = fieldName
 		// Fetch fragment.

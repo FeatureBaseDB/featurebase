@@ -2672,10 +2672,9 @@ func TestExecutor_Execute_Rows(t *testing.T) {
 	if !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{11, 12}}) {
 		t.Fatalf("unexpected rows: %+v", rows)
 	}
-
 }
 
-func TestExecutor_Execute_Rows_Error(t *testing.T) {
+func TestExecutor_Execute_Query_Error(t *testing.T) {
 	c := test.MustRunCluster(t, 3)
 	defer c.Close()
 	c.CreateField(t, "i", pilosa.IndexOptions{}, "general")
@@ -2687,6 +2686,30 @@ func TestExecutor_Execute_Rows_Error(t *testing.T) {
 		{
 			query: "GroupBy(Rows())",
 			error: "Rows call must have 'field' argument",
+		},
+		{
+			query: "GroupBy(Rows(field=true))",
+			error: "Rows call must have 'field' argument",
+		},
+		{
+			query: "GroupBy(Rows(field=\"true\"))",
+			error: "field not found",
+		},
+		{
+			query: "GroupBy(Rows(field=1))",
+			error: "Rows call must have 'field' argument",
+		},
+		{
+			query: "GroupBy(Rows(field))",
+			error: "parse error",
+		},
+		{
+			query: "GroupBy(Rows(field=general, limit=-1))",
+			error: "must be positive, but got",
+		},
+		{
+			query: "GroupBy(Rows(field=general), limit=-1)",
+			error: "must be positive, but got",
 		},
 	}
 
