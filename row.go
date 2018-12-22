@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 
 	"github.com/pilosa/pilosa/roaring"
@@ -40,6 +41,20 @@ func NewRow(columns ...uint64) *Row {
 		r.SetBit(i)
 	}
 	return r
+}
+
+func (r *Row) IsEmpty() bool {
+	fmt.Println("what", len(r.segments))
+	if len(r.segments) == 0 {
+		return true
+	}
+	for i := range r.segments {
+		if r.segments[i].n > 0 {
+			return false
+		}
+
+	}
+	return true
 }
 
 // Merge merges data from other into r.

@@ -2854,7 +2854,7 @@ TOP:
 	}
 	gbi.rows[i].id = rowID
 
-	if gbi.rows[i].row.Count() == 0 {
+	if gbi.rows[i].row.IsEmpty() {
 		goto TOP // I wanted to just call nextAtIdx again, but if a bunch of
 		// rows in a row were 0, I was worried we'd get into a stack
 		// overflow situation
