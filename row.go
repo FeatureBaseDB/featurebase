@@ -16,7 +16,6 @@ package pilosa
 
 import (
 	"encoding/json"
-	"fmt"
 	"sort"
 
 	"github.com/pilosa/pilosa/roaring"
@@ -44,7 +43,6 @@ func NewRow(columns ...uint64) *Row {
 }
 
 func (r *Row) IsEmpty() bool {
-	fmt.Println("what", len(r.segments))
 	if len(r.segments) == 0 {
 		return true
 	}
