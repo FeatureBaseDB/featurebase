@@ -291,6 +291,9 @@ func (c *Call) UintArg(key string) (uint64, bool, error) {
 	}
 	switch tval := val.(type) {
 	case int64:
+		if tval < 0 {
+			return 0, true, fmt.Errorf("value for '%s' must be positive, but got %v", key, tval)
+		}
 		return uint64(tval), true, nil
 	case uint64:
 		return tval, true, nil

@@ -2674,6 +2674,66 @@ func TestExecutor_Execute_Rows(t *testing.T) {
 	}
 }
 
+func TestExecutor_Execute_Query_Error(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "general")
+
+	tests := []struct {
+		query string
+		error string
+	}{
+		{
+			query: "GroupBy(Rows())",
+			error: "Rows call must have 'field' argument",
+		},
+		{
+			query: "GroupBy(Rows(field=true))",
+			error: "Rows call must have 'field' argument",
+		},
+		{
+			query: "GroupBy(Rows(field=\"true\"))",
+			error: "field not found",
+		},
+		{
+			query: "GroupBy(Rows(field=1))",
+			error: "Rows call must have 'field' argument",
+		},
+		{
+			query: "GroupBy(Rows(field))",
+			error: "parse error",
+		},
+		{
+			query: "GroupBy(Rows(field=general, limit=-1))",
+			error: "must be positive, but got",
+		},
+		{
+			query: "GroupBy(Rows(field=general), limit=-1)",
+			error: "must be positive, but got",
+		},
+		{
+			query: "GroupBy(Rows(field=general), filter=Rows(field=general))",
+			error: "unknown call: Rows",
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			r, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{
+				Index: "i",
+				Query: test.query,
+			})
+			if err == nil {
+				t.Fatalf("should have gotten an error on invalid rows query, but got %#v", r)
+			}
+			if !strings.Contains(err.Error(), test.error) {
+				t.Fatalf("unexpected error message: %s", err.Error())
+			}
+		})
+	}
+
+}
+
 func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
