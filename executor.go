@@ -1000,7 +1000,7 @@ func (fr FieldRow) MarshalJSON() ([]byte, error) {
 }
 
 func (fr FieldRow) String() string {
-	return fmt.Sprintf("%s.%d", fr.Field, fr.RowID)
+	return fmt.Sprintf("%s.%d.%s", fr.Field, fr.RowID, fr.RowKey)
 }
 
 type GroupCount struct {

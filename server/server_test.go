@@ -30,14 +30,13 @@ import (
 	"testing/quick"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/pelletier/go-toml"
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pilosa/pilosa/test"
+	"golang.org/x/sync/errgroup"
 )
 
 var runStress bool
@@ -245,6 +244,59 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{},"columns":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
+	}
+}
+
+func TestMain_GroupBy(t *testing.T) {
+	m := test.MustRunCommand()
+	defer m.Close()
+
+	// Create fields.
+	client := m.Client()
+	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+		t.Fatal(err)
+	}
+	if err := client.CreateFieldWithOptions(context.Background(), "i", "generalk", pilosa.FieldOptions{Keys: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.CreateFieldWithOptions(context.Background(), "i", "subk", pilosa.FieldOptions{Keys: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	query := `
+		Set(0, generalk="ten")
+		Set(1, generalk="ten")
+		Set(1001, generalk="ten")
+		Set(2, generalk="eleven")
+		Set(1002, generalk="eleven")
+		Set(2, generalk="twelve")
+		Set(1002, generalk="twelve")
+
+		Set(0, subk="one-hundred")
+		Set(1, subk="one-hundred")
+		Set(3, subk="one-hundred")
+		Set(1001, subk="one-hundred")
+		Set(2, subk="one-hundred-ten")
+		Set(0, subk="one-hundred-ten")
+	`
+
+	// Set columns on row.
+	if _, err := m.Query("i", "", query); err != nil {
+		t.Fatal(err)
+	}
+
+	expected := []pilosa.GroupCount{
+		{Group: []pilosa.FieldRow{{Field: "generalk", RowKey: "ten"}, {Field: "subk", RowKey: "one-hundred"}}, Count: 3},
+		{Group: []pilosa.FieldRow{{Field: "generalk", RowKey: "ten"}, {Field: "subk", RowKey: "one-hundred-ten"}}, Count: 1},
+		{Group: []pilosa.FieldRow{{Field: "generalk", RowKey: "eleven"}, {Field: "subk", RowKey: "one-hundred-ten"}}, Count: 1},
+		{Group: []pilosa.FieldRow{{Field: "generalk", RowKey: "twelve"}, {Field: "subk", RowKey: "one-hundred-ten"}}, Count: 1},
+	}
+
+	// Query row.
+	if res, err := m.QueryProtobuf("i", `GroupBy(Rows(field="generalk"), Rows(field="subk"))`); err != nil {
+		t.Fatal(err)
+	} else {
+		test.CheckGroupBy(t, expected, res.Results[0].([]pilosa.GroupCount))
 	}
 }
 
