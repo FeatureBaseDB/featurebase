@@ -2836,34 +2836,49 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, filter *Row, inde
 // nextAtIdx is a recursive helper method for getting the next row for the field
 // at index i, and then updating the rows in the "higher" fields if it wraps.
 func (gbi *groupByIterator) nextAtIdx(i int) {
-	nr, rowID, wrapped := gbi.rowIters[i].Next()
-	if nr == nil {
-		gbi.done = true
-		return
+	// loop until we find a non-empty row. This is an optimization - the loop and if/break can be removed.
+	for {
+		nr, rowID, wrapped := gbi.rowIters[i].Next()
+		if nr == nil {
+			gbi.done = true
+			return
+		}
+		if wrapped && i != 0 {
+			gbi.nextAtIdx(i - 1)
+		}
+		if i == 0 && gbi.filter != nil {
+			gbi.rows[i].row = nr.Intersect(gbi.filter)
+		} else if i == 0 || i == len(gbi.rows)-1 {
+			gbi.rows[i].row = nr
+		} else {
+			gbi.rows[i].row = nr.Intersect(gbi.rows[i-1].row)
+		}
+		gbi.rows[i].id = rowID
+
+		if !gbi.rows[i].row.IsEmpty() {
+			break
+		}
 	}
-	if wrapped && i != 0 {
-		gbi.nextAtIdx(i - 1)
-	}
-	if i == 0 && gbi.filter != nil {
-		gbi.rows[i].row = nr.Intersect(gbi.filter)
-	} else if i == 0 || i == len(gbi.rows)-1 {
-		gbi.rows[i].row = nr
-	} else {
-		gbi.rows[i].row = nr.Intersect(gbi.rows[i-1].row)
-	}
-	gbi.rows[i].id = rowID
 }
 
 // Next returns a GroupCount representing the next group by record. When there
 // are no more records it will return an empty GroupCount and done==true.
 func (gbi *groupByIterator) Next() (ret GroupCount, done bool) {
-	if gbi.done {
-		return ret, true
-	}
-	if len(gbi.rows) == 1 {
-		ret.Count = gbi.rows[len(gbi.rows)-1].row.Count()
-	} else {
-		ret.Count = gbi.rows[len(gbi.rows)-1].row.intersectionCount(gbi.rows[len(gbi.rows)-2].row)
+	// loop until we find a result with count > 0
+	for {
+		if gbi.done {
+			return ret, true
+		}
+		if len(gbi.rows) == 1 {
+			ret.Count = gbi.rows[len(gbi.rows)-1].row.Count()
+		} else {
+			ret.Count = gbi.rows[len(gbi.rows)-1].row.intersectionCount(gbi.rows[len(gbi.rows)-2].row)
+		}
+		if ret.Count == 0 {
+			gbi.nextAtIdx(len(gbi.rows) - 1)
+			continue
+		}
+		break
 	}
 
 	ret.Group = make([]FieldRow, len(gbi.rows))
@@ -2873,6 +2888,7 @@ func (gbi *groupByIterator) Next() (ret GroupCount, done bool) {
 	}
 
 	// set up for next call
+
 	gbi.nextAtIdx(len(gbi.rows) - 1)
 
 	return ret, false
