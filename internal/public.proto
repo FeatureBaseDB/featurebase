@@ -22,6 +22,7 @@ message Pair {
 message FieldRow{
 	string Field = 1;
 	uint64 RowID = 2;
+	string RowKey = 3;
 }
 
 message GroupCount{
@@ -32,12 +33,6 @@ message GroupCount{
 message ValCount {
 	int64 Val = 1;
 	int64 Count = 2;
-}
-
-message Bit {
-	uint64 RowID = 1;
-	uint64 ColumnID = 2;
-	int64 Timestamp = 3;
 }
 
 message ColumnAttrSet {

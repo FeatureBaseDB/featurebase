@@ -1147,8 +1147,14 @@ func decodeGroupCounts(a []*internal.GroupCount) []pilosa.GroupCount {
 func decodeFieldRows(a []*internal.FieldRow) []pilosa.FieldRow {
 	other := make([]pilosa.FieldRow, len(a))
 	for i := range a {
-		other[i].Field = a[i].Field
-		other[i].RowID = a[i].RowID
+		fr := a[i]
+		other[i].Field = fr.Field
+		if fr.RowKey == "" {
+			other[i].RowID = fr.RowID
+		} else {
+			other[i].RowKey = fr.RowKey
+		}
+		fmt.Println("OTHER", other)
 	}
 	return other
 }
@@ -1226,9 +1232,17 @@ func encodeGroupCounts(counts []pilosa.GroupCount) []*internal.GroupCount {
 func encodeFieldRows(a []pilosa.FieldRow) []*internal.FieldRow {
 	other := make([]*internal.FieldRow, len(a))
 	for i := range a {
-		other[i] = &internal.FieldRow{
-			Field: a[i].Field,
-			RowID: a[i].RowID,
+		fr := a[i]
+		if fr.RowKey == "" {
+			other[i] = &internal.FieldRow{
+				Field: fr.Field,
+				RowID: fr.RowID,
+			}
+		} else {
+			other[i] = &internal.FieldRow{
+				Field:  fr.Field,
+				RowKey: fr.RowKey,
+			}
 		}
 	}
 	return other

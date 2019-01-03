@@ -22,12 +22,14 @@ import (
 	gohttp "net/http"
 	"os"
 	"path"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/encoding/proto"
 	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pkg/errors"
@@ -183,6 +185,49 @@ func (m *Command) Query(index, rawQuery, query string) (string, error) {
 		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 	}
 	return resp.Body, nil
+}
+
+func (m *Command) QueryProtobuf(indexName string, query string) (*pilosa.QueryResponse, error) {
+	var ser proto.Serializer
+	queryReq := &pilosa.QueryRequest{
+		Index: indexName,
+		Query: query,
+	}
+	body, err := ser.Marshal(queryReq)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := gohttp.NewRequest(
+		"POST",
+		fmt.Sprintf("%s/index/%s/query", m.URL(), indexName),
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("Accept", "application/x-protobuf")
+
+	resp, err := gohttp.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	buf, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &pilosa.QueryResponse{}
+	err = ser.Unmarshal(buf, response)
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
 }
 
 // RecalculateCaches is deprecated. Use MustRecalculateCaches.
@@ -378,6 +423,17 @@ func MustDo(method, urlStr string, body string) *httpResponse {
 	}
 
 	return &httpResponse{Response: resp, Body: string(buf)}
+}
+
+func CheckGroupBy(t *testing.T, expected, results []pilosa.GroupCount) {
+	if len(results) != len(expected) {
+		t.Fatalf("number of  groupings mismatch:\n got:%+v\nwant:%+v\n", results, expected)
+	}
+	for i, result := range results {
+		if !reflect.DeepEqual(expected[i], result) {
+			t.Fatalf("unexpected result at %d: \n got:%+v\nwant:%+v\n", i, result, expected[i])
+		}
+	}
 }
 
 // httpResponse is a wrapper for http.Response that holds the Body as a string.

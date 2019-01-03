@@ -1907,7 +1907,7 @@ Set(4500001, fn=4)
 				{Group: []pilosa.FieldRow{{Field: "f", RowID: 10}}, Count: 4},
 			}
 			results := res.Results[0].([]pilosa.GroupCount)
-			checkGroupBy(t, expected, results)
+			test.CheckGroupBy(t, expected, results)
 		}
 	})
 }
@@ -2902,7 +2902,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			}
 
 			results := c.Query(t, "i", `GroupBy(Rows(field=general), Rows(field=sub))`).Results[0].([]pilosa.GroupCount)
-			checkGroupBy(t, expected, results)
+			test.CheckGroupBy(t, expected, results)
 		})
 
 		t.Run("Filter", func(t *testing.T) {
@@ -2912,7 +2912,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			}
 
 			results := c.Query(t, "i", `GroupBy(Rows(field=general), Rows(field=sub), filter=Row(general=10))`).Results[0].([]pilosa.GroupCount)
-			checkGroupBy(t, expected, results)
+			test.CheckGroupBy(t, expected, results)
 		})
 
 		t.Run("check field offset no limit", func(t *testing.T) {
@@ -2922,7 +2922,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			}
 
 			results := c.Query(t, "i", `GroupBy(Rows(field=general, previous=10))`).Results[0].([]pilosa.GroupCount)
-			checkGroupBy(t, expected, results)
+			test.CheckGroupBy(t, expected, results)
 		})
 
 		t.Run("check field offset limit", func(t *testing.T) {
@@ -2931,7 +2931,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			}
 
 			results := c.Query(t, "i", `GroupBy(Rows(field=general, previous=10), limit=1)`).Results[0].([]pilosa.GroupCount)
-			checkGroupBy(t, expected, results)
+			test.CheckGroupBy(t, expected, results)
 
 		})
 
@@ -2952,7 +2952,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			}
 
 			results := c.Query(t, "i", `GroupBy(Rows(field=a), Rows(field=b), limit=1)`).Results[0].([]pilosa.GroupCount)
-			checkGroupBy(t, expected, results)
+			test.CheckGroupBy(t, expected, results)
 		})
 
 		// set the same bits in a single shard in three fields
@@ -2985,7 +2985,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 				{Group: []pilosa.FieldRow{{Field: "wa", RowID: 0}, {Field: "wb", RowID: 1}, {Field: "wc", RowID: 0}}, Count: 1},
 				{Group: []pilosa.FieldRow{{Field: "wa", RowID: 0}, {Field: "wb", RowID: 1}, {Field: "wc", RowID: 1}}, Count: 1},
 			}
-			checkGroupBy(t, expected, results)
+			test.CheckGroupBy(t, expected, results)
 		})
 
 		t.Run("test previous is last result", func(t *testing.T) {
@@ -3000,7 +3000,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			expected := []pilosa.GroupCount{
 				{Group: []pilosa.FieldRow{{Field: "wa", RowID: 1}, {Field: "wb", RowID: 0}, {Field: "wc", RowID: 0}}, Count: 1},
 			}
-			checkGroupBy(t, expected, results)
+			test.CheckGroupBy(t, expected, results)
 		})
 
 		// test multiple shards with distinct results (different rows) and same
@@ -3028,7 +3028,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 1}, {Field: "mb", RowID: 3}}, Count: 1},
 				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 2}, {Field: "mb", RowID: 0}}, Count: 1},
 			}
-			checkGroupBy(t, expected, results)
+			test.CheckGroupBy(t, expected, results)
 		})
 
 		t.Run("distinct rows in different shards with row limit", func(t *testing.T) {
@@ -3039,7 +3039,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 2}, {Field: "mb", RowID: 0}}, Count: 1},
 				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 3}, {Field: "mb", RowID: 1}}, Count: 1},
 			}
-			checkGroupBy(t, expected, results)
+			test.CheckGroupBy(t, expected, results)
 		})
 
 		t.Run("distinct rows in different shards with column arg", func(t *testing.T) {
@@ -3050,7 +3050,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 3}, {Field: "mb", RowID: 1}}, Count: 1},
 				{Group: []pilosa.FieldRow{{Field: "ma", RowID: 3}, {Field: "mb", RowID: 3}}, Count: 1},
 			}
-			checkGroupBy(t, expected, results)
+			test.CheckGroupBy(t, expected, results)
 		})
 
 		c.CreateField(t, "i", pilosa.IndexOptions{}, "na")
@@ -3075,7 +3075,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 				{Group: []pilosa.FieldRow{{Field: "na", RowID: 1}, {Field: "nb", RowID: 0}}, Count: 2},
 				{Group: []pilosa.FieldRow{{Field: "na", RowID: 1}, {Field: "nb", RowID: 1}}, Count: 2},
 			}
-			checkGroupBy(t, expected, results)
+			test.CheckGroupBy(t, expected, results)
 
 		})
 
@@ -3120,8 +3120,43 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			}
 			expected[63].Count = 5
 
-			checkGroupBy(t, expected, totalResults)
+			test.CheckGroupBy(t, expected, totalResults)
 		})
+
+		// test row keys
+		c.CreateField(t, "i", pilosa.IndexOptions{}, "generalk", pilosa.OptFieldKeys())
+		c.CreateField(t, "i", pilosa.IndexOptions{}, "subk", pilosa.OptFieldKeys())
+		c.Query(t, "i", `
+			Set(0, generalk="ten")
+			Set(1, generalk="ten")
+			Set(1001, generalk="ten")
+			Set(2, generalk="eleven")
+			Set(1002, generalk="eleven")
+			Set(2, generalk="twelve")
+			Set(1002, generalk="twelve")
+
+			Set(0, subk="one-hundred")
+			Set(1, subk="one-hundred")
+			Set(3, subk="one-hundred")
+			Set(1001, subk="one-hundred")
+			Set(2, subk="one-hundred-ten")
+			Set(0, subk="one-hundred-ten")
+		`)
+
+		t.Run("test row keys", func(t *testing.T) {
+			// the execututor returns row IDs when the field has keys, so they should be included in the target.
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "generalk", RowID: 1, RowKey: "ten"}, {Field: "subk", RowID: 1, RowKey: "one-hundred"}}, Count: 3},
+				{Group: []pilosa.FieldRow{{Field: "generalk", RowID: 1, RowKey: "ten"}, {Field: "subk", RowID: 2, RowKey: "one-hundred-ten"}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "generalk", RowID: 2, RowKey: "eleven"}, {Field: "subk", RowID: 2, RowKey: "one-hundred-ten"}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "generalk", RowID: 3, RowKey: "twelve"}, {Field: "subk", RowID: 2, RowKey: "one-hundred-ten"}}, Count: 1},
+			}
+
+			results := c.Query(t, "i", `GroupBy(Rows(field="generalk"), Rows(field="subk"))`).Results[0].([]pilosa.GroupCount)
+			test.CheckGroupBy(t, expected, results)
+
+		})
+
 	}
 	for size := range []int{1, 3} {
 		t.Run(fmt.Sprintf("%d_nodes", size), func(t *testing.T) {
@@ -3182,17 +3217,6 @@ func BenchmarkGroupBy(b *testing.B) {
 
 	// TODO benchmark paging over large numbers of rows
 
-}
-
-func checkGroupBy(t *testing.T, expected, results []pilosa.GroupCount) {
-	if len(results) != len(expected) {
-		t.Fatalf("number of  groupings mismatch:\n got:%+v\nwant:%+v\n", results, expected)
-	}
-	for i, result := range results {
-		if !reflect.DeepEqual(expected[i], result) {
-			t.Fatalf("unexpected result at %d: \n got:%+v\nwant:%+v\n", i, result, expected[i])
-		}
-	}
 }
 
 func runCallTest(t *testing.T, writeQuery string, readQueries []string, indexOptions *pilosa.IndexOptions, fieldOption ...pilosa.FieldOption) []pilosa.QueryResponse {
