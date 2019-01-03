@@ -427,7 +427,7 @@ func MustDo(method, urlStr string, body string) *httpResponse {
 
 func CheckGroupBy(t *testing.T, expected, results []pilosa.GroupCount) {
 	if len(results) != len(expected) {
-		t.Fatalf("number of  groupings mismatch:\n got:%+v\nwant:%+v\n", results, expected)
+		t.Fatalf("number of groupings mismatch:\n got:%+v\nwant:%+v\n", results, expected)
 	}
 	for i, result := range results {
 		if !reflect.DeepEqual(expected[i], result) {
