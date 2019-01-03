@@ -1154,7 +1154,6 @@ func decodeFieldRows(a []*internal.FieldRow) []pilosa.FieldRow {
 		} else {
 			other[i].RowKey = fr.RowKey
 		}
-		fmt.Println("OTHER", other)
 	}
 	return other
 }
