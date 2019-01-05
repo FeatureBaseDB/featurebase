@@ -1029,7 +1029,8 @@ func TestBitmapToArray(t *testing.T) {
 		a.n = n
 
 		a.bitmapToArray()
-		if !reflect.DeepEqual(a.array, test.exp) {
+
+		if !reflect.DeepEqual(a.array, test.exp) && (cap(a.array) != 0 || cap(test.exp) != 0) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, a.array)
 		}
 	}
@@ -1157,7 +1158,7 @@ func TestBitmapToRun(t *testing.T) {
 		a.n = int32(n)
 		x := a.bitmap
 		a.bitmapToRun()
-		if !reflect.DeepEqual(a.runs, test.exp) {
+		if !reflect.DeepEqual(a.runs, test.exp) && (cap(a.runs) != 0 || cap(test.exp) != 0) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, a.runs)
 		}
 		a.runToBitmap()
@@ -1195,7 +1196,7 @@ func TestArrayToRun(t *testing.T) {
 		a.array = test.array
 		a.n = int32(len(test.array))
 		a.arrayToRun()
-		if !reflect.DeepEqual(a.runs, test.exp) {
+		if !reflect.DeepEqual(a.runs, test.exp) && (cap(a.runs) != 0 || cap(test.exp) != 0) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, a.runs)
 		}
 	}
@@ -1229,7 +1230,7 @@ func TestRunToArray(t *testing.T) {
 		a.runs = test.runs
 		a.n = int32(len(test.exp))
 		a.runToArray()
-		if !reflect.DeepEqual(a.array, test.exp) {
+		if !reflect.DeepEqual(a.array, test.exp) && (cap(a.array) != 0 || cap(test.exp) != 0) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, a.array)
 		}
 	}
@@ -1692,8 +1693,8 @@ func TestDifferenceBitmapArray(t *testing.T) {
 		b.n = b.count()
 		a.array = test.array
 		ret := differenceBitmapArray(b, a)
-		if !reflect.DeepEqual(ret.array, test.exp) {
-			t.Fatalf("test #%v expected %X, but got %X", i, test.exp, ret.array)
+		if !reflect.DeepEqual(ret.array, test.exp) && (cap(ret.array) != 0 || cap(test.exp) != 0) {
+			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.array)
 		}
 	}
 }
@@ -1882,11 +1883,12 @@ func TestXorArrayRun(t *testing.T) {
 		test.a.n = test.a.count()
 		test.b.n = test.b.count()
 		ret := xor(test.a, test.b)
-		if !reflect.DeepEqual(ret, test.exp) {
+		if !reflect.DeepEqual(ret, test.exp) && (cap(ret.array) != 0 || cap(test.exp.array) != 0) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret)
 		}
+
 		ret = xor(test.b, test.a)
-		if !reflect.DeepEqual(ret, test.exp) {
+		if !reflect.DeepEqual(ret, test.exp) && (cap(ret.array) != 0 || cap(test.exp.array) != 0) {
 			t.Fatalf("test #%v.1 expected %v, but got %v", i, test.exp, ret)
 		}
 	}
@@ -2588,6 +2590,30 @@ func TestIntersectArrayBitmap(t *testing.T) {
 	}
 }
 
+// TestContainer_Reset verifies that the Reset method always restores a Container
+// to a state indistinguishable from a new one.
+func TestContainer_Reset(t *testing.T) {
+	var (
+		c = NewContainerWithPooling(NewDefaultContainerPoolingConfiguration(10))
+		i = uint16(0)
+	)
+
+	for {
+		if i >= 2^16 {
+			break
+		}
+
+		c.add(i)
+		i++
+	}
+
+	c.Reset()
+	untouched := NewContainerWithPooling(NewDefaultContainerPoolingConfiguration(10))
+	if !reflect.DeepEqual(untouched, c) {
+		t.Fatalf("Reset bitmap: %+v is not identical to new bitmap: %+v", c, untouched)
+	}
+}
+
 func TestBitmapClone(t *testing.T) {
 	b := NewFileBitmap()
 	for i := uint64(61000); i < 71000; i++ {
@@ -2698,8 +2724,16 @@ func getFunctionName(i interface{}) string {
 }
 
 func TestContainerCombinations(t *testing.T) {
+	testContainerCombinations(t, false)
+}
 
-	cts := setupContainerTests()
+func TestContainerCombinationsWithPooling(t *testing.T) {
+	testContainerCombinations(t, true)
+}
+
+func testContainerCombinations(t *testing.T, poolingEnabled bool) {
+
+	cts := setupContainerTests(poolingEnabled)
 
 	containerTypes := []byte{containerArray, containerBitmap, containerRun}
 
@@ -3213,12 +3247,28 @@ func TestContainerCombinations(t *testing.T) {
 							t.Fatalf("test %s expected runs n=%d, but got n=%d", desc, cts[ct][exp].n, clone.n)
 						}
 						if !reflect.DeepEqual(clone.runs, cts[ct][exp].runs) {
-							t.Fatalf("test %s expected runs %X, but got %X", desc, cts[ct][exp].runs, clone.runs)
+							assertRunsEqual(t, desc, cts[ct][exp].runs, clone.runs)
 						}
 					}
 				}
 			}
 		}
+	}
+}
+
+func assertRunsEqual(t *testing.T, test string, a, b []interval16) {
+	equal := true
+	if len(a) != len(b) {
+		equal = false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			equal = false
+			break
+		}
+	}
+	if !equal {
+		t.Fatalf("test %s expected runs %X, but got %X", test, a, b)
 	}
 }
 

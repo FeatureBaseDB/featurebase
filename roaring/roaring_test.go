@@ -442,20 +442,37 @@ func TestBitmap_UnionInPlace1(t *testing.T) {
 // then compares the result against a reference implementation (golang map) to
 // ensure that all the unions were handled correctly.
 func TestBitmap_UnionInPlaceProp(t *testing.T) {
+	testBitmap_UnionInPlaceProp(t, false)
+}
+
+func TestBitmap_UnionInPlacePropWithPooling(t *testing.T) {
+	testBitmap_UnionInPlaceProp(t, true)
+}
+
+func testBitmap_UnionInPlaceProp(t *testing.T, poolingEnabled bool) {
 	var (
-		seed               = time.Now().UnixNano()
-		source             = rand.NewSource(seed)
-		rng                = rand.New(source)
-		numTests           = 100
-		maxNumIntsPerBatch = 100
-		maxNumBatches      = 100
-		maxRangePercent    = 2
+		seed                   = time.Now().UnixNano()
+		source                 = rand.NewSource(seed)
+		rng                    = rand.New(source)
+		numTests               = 100
+		maxNumIntsPerBatch     = 100
+		maxNumBatches          = 100
+		maxNumContainersInPool = 100
+		maxRangePercent        = 2
 		// Need to limit the range of possible numbers that we generate
 		// otherwise two randomly generated numbers landing in the same
 		// container would be extremely unlikely, leaving container merging
 		// behavior untested.
 		maxUint64Val = 1000000
 	)
+
+	var bitmapPool chan *roaring.Bitmap
+	if poolingEnabled {
+		bitmapPool = make(chan *roaring.Bitmap, maxNumBatches*2+2)
+		for i := 0; i < maxNumBatches*2+2; i++ {
+			bitmapPool <- roaring.NewBitmapWithDefaultPooling(rand.Intn(maxNumContainersInPool))
+		}
+	}
 
 	for i := 0; i < numTests; i++ {
 		var (
@@ -470,8 +487,14 @@ func TestBitmap_UnionInPlaceProp(t *testing.T) {
 			// For each "batch" create the equivalent set and bitmap.
 			var (
 				set    = map[uint64]struct{}{}
-				bitmap = roaring.NewBitmap()
+				bitmap *roaring.Bitmap
 			)
+			if poolingEnabled {
+				bitmap = <-bitmapPool
+			}
+			if bitmap == nil {
+				bitmap = roaring.NewBitmap()
+			}
 
 			if rng.Intn(100) <= maxRangePercent {
 				// Generate max range RLE containers with a configurable
@@ -522,6 +545,14 @@ func TestBitmap_UnionInPlaceProp(t *testing.T) {
 					val, seed)
 			}
 		}
+
+		if poolingEnabled {
+			for _, bitmap := range bitmaps {
+				bitmap.Reset()
+				bitmapPool <- bitmap
+			}
+		}
+
 	}
 }
 
@@ -1056,60 +1087,81 @@ func testBitmapMarshalQuick(t *testing.T, n int, min, max uint64, sorted bool) {
 		t.Skip("short")
 	}
 
-	quick.Check(func(a0, a1 []uint64) bool {
-		// Create bitmap with initial values set.
-		bm := roaring.NewFileBitmap(a0...)
-
-		set := make(map[uint64]struct{})
-		for _, v := range a0 {
-			set[v] = struct{}{}
+	newQuickCheckFunc := func(poolingEnabled bool) func(a0, a1 []uint64) bool {
+		// Allocate bitmaps outside the functions so we can reuse them.
+		var (
+			bm  *roaring.Bitmap
+			bm2 *roaring.Bitmap
+		)
+		if poolingEnabled {
+			bm = roaring.NewBitmapWithDefaultPooling(10)
+			bm2 = roaring.NewBitmapWithDefaultPooling(10)
+		} else {
+			bm = roaring.NewFileBitmap()
+			bm2 = roaring.NewFileBitmap()
 		}
 
-		// Write snapshot to buffer.
-		var buf bytes.Buffer
-		if n, err := bm.WriteTo(&buf); err != nil {
-			t.Fatal(err)
-		} else if n != int64(buf.Len()) {
-			t.Fatalf("size mismatch: %d != %d", n, buf.Len())
-		}
+		return func(a0, a1 []uint64) bool {
+			bm.Reset()
+			bm.Add(a0...)
 
-		// Set buffer as the writer for the ops log.
-		bm.OpWriter = &buf
+			set := make(map[uint64]struct{})
+			for _, v := range a0 {
+				set[v] = struct{}{}
+			}
 
-		// Add more values to bitmap.
-		for _, v := range a1 {
-			set[v] = struct{}{}
-			if _, err := bm.Add(v); err != nil {
+			// Write snapshot to buffer.
+			var buf bytes.Buffer
+			if n, err := bm.WriteTo(&buf); err != nil {
 				t.Fatal(err)
+			} else if n != int64(buf.Len()) {
+				t.Fatalf("size mismatch: %d != %d", n, buf.Len())
 			}
 
-			// Extract buffer as a byte slice so it can be mapped.
-			data := buf.Bytes()
+			// Set buffer as the writer for the ops log.
+			bm.OpWriter = &buf
 
-			// Create new bitmap from ops log data.
-			bm2 := roaring.NewFileBitmap()
-			if err := bm2.UnmarshalBinary(data); err != nil {
-				t.Fatal(err)
+			// Add more values to bitmap.
+			for _, v := range a1 {
+				set[v] = struct{}{}
+				if _, err := bm.Add(v); err != nil {
+					t.Fatal(err)
+				}
+
+				// Extract buffer as a byte slice so it can be mapped.
+				data := buf.Bytes()
+
+				// Create new bitmap from ops log data.
+				bm2.Reset()
+				if err := bm2.UnmarshalBinary(data); err != nil {
+					t.Fatal(err)
+				}
+
+				// Verify the original bitmap has the correct set of values.
+				if exp, got := uint64SetSlice(set), bm.Slice(); !reflect.DeepEqual(exp, got) {
+					t.Fatalf("mismatch: %s\n\nexp=%+v\n\ngot=%+v\n\n", diff(exp, got), exp, got)
+				}
+
+				// Verify the bitmap loaded with the ops log has the correct set of values.
+				if exp, got := uint64SetSlice(set), bm2.Slice(); !reflect.DeepEqual(exp, got) {
+					t.Fatalf("mismatch: %s\n\nexp=%+v\n\ngot=%+v\n\n", diff(exp, got), exp, got)
+				}
 			}
 
-			// Verify the original bitmap has the correct set of values.
-			if exp, got := uint64SetSlice(set), bm.Slice(); !reflect.DeepEqual(exp, got) {
-				t.Fatalf("mismatch: %s\n\nexp=%+v\n\ngot=%+v\n\n", diff(exp, got), exp, got)
-			}
-
-			// Verify the bitmap loaded with the ops log has the correct set of values.
-			if exp, got := uint64SetSlice(set), bm2.Slice(); !reflect.DeepEqual(exp, got) {
-				t.Fatalf("mismatch: %s\n\nexp=%+v\n\ngot=%+v\n\n", diff(exp, got), exp, got)
-			}
+			return true
 		}
+	}
 
-		return true
-	}, &quick.Config{
+	quickCheckConfig := &quick.Config{
 		Values: func(values []reflect.Value, rand *rand.Rand) {
 			values[0] = reflect.ValueOf(GenerateUint64Slice(n, min, max, sorted, rand))
 			values[1] = reflect.ValueOf(GenerateUint64Slice(100, min, max, sorted, rand))
 		},
-	})
+	}
+
+	// Run each quick check with pooling enabled and disabled.
+	quick.Check(newQuickCheckFunc(false), quickCheckConfig)
+	quick.Check(newQuickCheckFunc(true), quickCheckConfig)
 }
 
 // Ensure iterator can iterate over all the values on the bitmap.
@@ -1354,6 +1406,28 @@ func TestBitmap_Intersect(t *testing.T) {
 	}
 }
 
+// TestBitmap_Reset verifies that the Reset method always restores a Bitmap
+// to a state indistinguishable from a new one.
+func TestBitmap_Reset(t *testing.T) {
+	bm := roaring.NewBitmapWithDefaultPooling(10)
+
+	i := uint64(0)
+	for {
+		if i >= 10000 {
+			break
+		}
+
+		bm.Add(10000 * i)
+		i++
+	}
+
+	untouched := roaring.NewBitmapWithDefaultPooling(10)
+	bm.Reset()
+	if !reflect.DeepEqual(untouched, bm) {
+		t.Fatalf("Reset bitmap: %+v is not identical to new bitmap: %+v", bm, untouched)
+	}
+}
+
 func BenchmarkGetBenchData(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		sampleData = benchmarkSampleData{}
@@ -1504,7 +1578,8 @@ func BenchmarkSliceDescending(b *testing.B) {
 func BenchmarkUnion(b *testing.B) {
 	data := getBenchData(b)
 	for n := 0; n < b.N; n++ {
-		data.a1.
+		roaring.NewBitmap().
+			Union(data.a1).
 			Union(data.a2).
 			Union(data.b).
 			Union(data.r1).
@@ -1514,8 +1589,17 @@ func BenchmarkUnion(b *testing.B) {
 
 func BenchmarkUnionBulk(b *testing.B) {
 	data := getBenchData(b)
-	bm := roaring.NewBitmap()
 	for n := 0; n < b.N; n++ {
+		roaring.NewBitmap().
+			UnionInPlace(data.a1, data.a2, data.b, data.r1, data.r2)
+	}
+}
+
+func BenchmarkUnionBulkWithPooling(b *testing.B) {
+	data := getBenchData(b)
+	bm := roaring.NewBitmapWithDefaultPooling(100)
+	for n := 0; n < b.N; n++ {
+		bm.Reset()
 		bm.
 			UnionInPlace(data.a1, data.a2, data.b, data.r1, data.r2)
 	}

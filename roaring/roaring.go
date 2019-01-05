@@ -120,12 +120,48 @@ type Bitmap struct {
 
 	// Writer where operations are appended to.
 	OpWriter io.Writer
+
+	// Make sure to update the Reset() method if any new fields are added to
+	// this struct.
 }
 
 // NewBitmap returns a Bitmap with an initial set of values.
 func NewBitmap(a ...uint64) *Bitmap {
 	b := &Bitmap{
 		Containers: newSliceContainers(),
+	}
+	b.Add(a...)
+	return b
+}
+
+// NewBitmapWithDefaultPooling returns a new bitmap with the default pooling configuration.
+// See the comment for NewBitmapWithPooling for more details about the pooling implementation.
+func NewBitmapWithDefaultPooling(maxPoolCapacity int, a ...uint64) *Bitmap {
+	return NewBitmapWithPooling(NewDefaultContainerPoolingConfiguration(maxPoolCapacity), a...)
+}
+
+// NewBitmapWithPooling returns a new Bitmap with the provided container pooling configuration
+// and initial set of values.
+//
+// Container Pooling is useful for reusing short lived Bitmaps (common in the situation where
+// temporary bitmaps are being created for the sake of computation instead of storage). In that
+// case, allocating new containers over and over again is unecessarily expensive. Instead, when
+// you need an empty bitmap, you can call the Reset() method on an existing one. That will clear
+// all the data it contains and return its containers (up to the configured maximum) to its pool
+// so that when you start adding new data, the already allocated containers can be reused.
+//
+// In exchange for reduced memory pressure / allocations, bitmaps with pooling enabled will use
+// significantly more memory. This is for two reasons:
+//
+//    1. Even when there is no data in the bitmap, a configurable number of containers have already
+//       been pre-allocated and are waiting in reserve.
+//    2. Every container that is allocated when pooling is enabled is pre-allocated such that it can
+//       seamlessly switch between a run, array, or a bitmap with zero allocations. This means it can
+//       be used for performing calculations very quickly and without causing G.C pressure, but it will
+//       use much more space.
+func NewBitmapWithPooling(pooling ContainerPoolingConfiguration, a ...uint64) *Bitmap {
+	b := &Bitmap{
+		Containers: newSliceContainersWithPooling(pooling),
 	}
 	b.Add(a...)
 	return b
@@ -148,6 +184,13 @@ func (b *Bitmap) Clone() *Bitmap {
 	}
 
 	return other
+}
+
+// Reset reset the bitmap and the underlying containers for re-use.
+func (b *Bitmap) Reset() {
+	b.Containers.Reset()
+	b.opN = 0
+	b.OpWriter = nil
 }
 
 // Add adds values to the bitmap.
@@ -611,12 +654,17 @@ func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 				// range that a container can store, so instead of calculating a
 				// union we can generate an RLE container that represents the entire
 				// range.
-				container := &Container{
-					runs:          []interval16{{start: 0, last: maxContainerVal}},
-					containerType: containerRun,
-					n:             maxContainerVal + 1,
+				//
+				// Use GetOrCreate here to take advantage of pooling if its enabled.
+				container := target.Containers.GetOrCreate(iKey)
+				if cap(container.runs) > 0 {
+					container.runs = container.runs[:1]
+					container.runs[0] = interval16{start: 0, last: maxContainerVal}
+				} else {
+					container.runs = []interval16{{start: 0, last: maxContainerVal}}
 				}
-				target.Containers.Put(iKey, container)
+				container.containerType = containerRun
+				container.n = maxContainerVal + 1
 				bitmapIters.markItersWithCurrentKeyAsHandled(i, iKey)
 				continue
 			}
@@ -630,19 +678,12 @@ func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 			// will require writing a union in place algorithm for an array container
 			// that accepts multiple different containers to union into it for
 			// efficiency.
-			container := target.Containers.Get(iKey)
+			//
+			// Use GetOrCreate to take advantage of pooling if its enabled.
+			container := target.Containers.GetOrCreate(iKey)
 			// If target already has a bitmap container for iKey then we can reuse that,
-			// otherwise we have to allocate a new one or convert the existing container
-			// into a bitmap container.
-			if container == nil {
-				buf := make([]uint64, bitmapN)
-				ob := buf[:bitmapN]
-				container = &Container{
-					bitmap:        ob,
-					n:             0,
-					containerType: containerBitmap,
-				}
-			} else if container.isArray() {
+			// otherwise we have to convert the existing container into a bitmap container.
+			if container.isArray() {
 				container.arrayToBitmap()
 			} else if container.isRun() {
 				container.runToBitmap()
@@ -1271,12 +1312,16 @@ const runMaxSize = 2048
 // integers would use run length encoding, and more random data usually uses
 // bitmap encoding.
 type Container struct {
+	pooled        bool
 	mapped        bool         // mapped directly to a byte slice when true
 	containerType byte         // array, bitmap, or run
 	n             int32        // number of integers in container
 	array         []uint16     // used for array containers
 	bitmap        []uint64     // used for bitmap containers
 	runs          []interval16 // used for RLE containers
+
+	// Make sure to update the Reset() method if any new fields are added to
+	// this struct.
 }
 
 type interval16 struct {
@@ -1292,7 +1337,117 @@ func (iv interval16) runlen() int32 {
 // newContainer returns a new instance of container.
 func NewContainer() *Container {
 	statsHit("NewContainer")
-	return &Container{containerType: containerArray}
+	c := newContainer()
+	return &c
+}
+
+func newContainer() Container {
+	return Container{containerType: containerArray}
+}
+
+// NewContainerWithPooling creates a new container with the provided pooling
+// configuration.
+func NewContainerWithPooling(poolingConfig ContainerPoolingConfiguration) *Container {
+	statsHit("NewContainerWithPooling")
+	c := &Container{
+		pooled:        true,
+		containerType: containerArray,
+	}
+
+	if poolingConfig.AllocateArray {
+		c.array = make([]uint16, 0, ArrayMaxSize)
+	}
+	if poolingConfig.AllocateBitmap {
+		c.bitmap = make([]uint64, bitmapN)
+		// Start as a bitmap since we had to allocate it anyways.
+		c.containerType = containerBitmap
+	}
+	if poolingConfig.AllocateRuns {
+		c.runs = make([]interval16, 0, runMaxSize)
+	}
+
+	return c
+}
+
+// Reset the container so it can be reused while maintaining any allocated
+// datastructures.
+func (c *Container) Reset() {
+	c.mapped = false
+	if c.pooled {
+		c.containerType = containerBitmap
+	} else {
+		c.containerType = containerArray
+	}
+	c.n = 0
+
+	// Reset all the container types.
+	c.resetArrayWithMinimumCapacity(0)
+	c.resetBitmap(false)
+	c.resetRunsWithMinimumCapacity(0)
+}
+
+func (c *Container) resetArrayWithMinimumCapacity(size int) {
+	if c.pooled && c.array != nil && cap(c.array) >= size {
+		// We always keep the array capacity around if pooling is enabled,
+		// so just clear it.
+		c.array = c.array[:0]
+		return
+	}
+
+	if size == 0 {
+		// Pooling disabled and we don't need the capacity, nil reference
+		// so G.C can reclaim.
+		c.array = nil
+		return
+	}
+
+	c.array = make([]uint16, 0, size)
+}
+
+func (c *Container) resetBitmap(allocated bool) {
+	if c.pooled && c.bitmap != nil {
+		// We always keep the bitmap around if pooling is enabled,
+		// so just clear it.
+		for i := range c.bitmap {
+			c.bitmap[i] = 0
+		}
+		return
+	}
+
+	if !allocated {
+		// Pooling disabled and don't need the bitmap so nil it out.
+		c.bitmap = nil
+		return
+	}
+
+	if cap(c.bitmap) < bitmapN || c.bitmap == nil {
+		// Need the bitmap, but its too small or doesn't exist, allocate.
+		c.bitmap = make([]uint64, bitmapN)
+		return
+	}
+
+	for i := range c.bitmap {
+		// Bitmap exists and is big enough, just clear it.
+		c.bitmap[i] = 0
+	}
+}
+
+func (c *Container) resetRunsWithMinimumCapacity(size int) {
+	if c.pooled && c.runs != nil && cap(c.runs) >= size {
+		// We always keep the run capacity around if pooling is enabled,
+		// so just clear it.
+		c.runs = c.runs[:0]
+		return
+	}
+
+	if size == 0 {
+		// Pooling disabled and we don't need the capacity, nil reference
+		// so G.C can reclaim.
+		c.runs = nil
+		return
+	}
+
+	c.runs = make([]interval16, 0, size)
 }
 
 // Mapped returns true if the container is mapped directly to a byte slice
@@ -1775,12 +1930,12 @@ func (c *Container) runMax() uint16 {
 // bitmapToArray converts from bitmap format to array format.
 func (c *Container) bitmapToArray() {
 	statsHit("bitmapToArray")
-	c.array = make([]uint16, 0, c.n)
+	c.resetArrayWithMinimumCapacity(int(c.n))
 	c.containerType = containerArray
 
 	// return early if empty
 	if c.n == 0 {
-		c.bitmap = nil
+		c.resetBitmap(false)
 		c.mapped = false
 		return
 	}
@@ -1792,19 +1947,19 @@ func (c *Container) bitmapToArray() {
 			bitmap ^= t
 		}
 	}
-	c.bitmap = nil
+	c.resetBitmap(false)
 	c.mapped = false
 }
 
 // arrayToBitmap converts from array format to bitmap format.
 func (c *Container) arrayToBitmap() {
 	statsHit("arrayToBitmap")
-	c.bitmap = make([]uint64, bitmapN)
+	c.resetBitmap(true)
 	c.containerType = containerBitmap
 
 	// return early if empty
 	if c.n == 0 {
-		c.array = nil
+		c.resetArrayWithMinimumCapacity(0)
 		c.mapped = false
 		return
 	}
@@ -1812,19 +1967,19 @@ func (c *Container) arrayToBitmap() {
 	for _, v := range c.array {
 		c.bitmap[int(v)/64] |= (uint64(1) << uint(v%64))
 	}
-	c.array = nil
+	c.resetArrayWithMinimumCapacity(0)
 	c.mapped = false
 }
 
 // runToBitmap converts from RLE format to bitmap format.
 func (c *Container) runToBitmap() {
 	statsHit("runToBitmap")
-	c.bitmap = make([]uint64, bitmapN)
+	c.resetBitmap(true)
 	c.containerType = containerBitmap
 
 	// return early if empty
 	if c.n == 0 {
-		c.runs = nil
+		c.resetRunsWithMinimumCapacity(0)
 		c.mapped = false
 		return
 	}
@@ -1836,7 +1991,7 @@ func (c *Container) runToBitmap() {
 			c.bitmap[v/64] |= (uint64(1) << uint(v%64))
 		}
 	}
-	c.runs = nil
+	c.resetRunsWithMinimumCapacity(0)
 	c.mapped = false
 }
 
@@ -1846,14 +2001,14 @@ func (c *Container) bitmapToRun() {
 	c.containerType = containerRun
 	// return early if empty
 	if c.n == 0 {
-		c.runs = make([]interval16, 0)
-		c.bitmap = nil
+		c.resetRunsWithMinimumCapacity(0)
+		c.resetBitmap(false)
 		c.mapped = false
 		return
 	}
 
 	numRuns := c.bitmapCountRuns()
-	c.runs = make([]interval16, 0, numRuns)
+	c.resetRunsWithMinimumCapacity(int(numRuns))
 
 	current := c.bitmap[0]
 	var i, start, last uint16
@@ -1893,7 +2048,7 @@ func (c *Container) bitmapToRun() {
 		current = current & (current + 1)
 	}
 
-	c.bitmap = nil
+	c.resetBitmap(false)
 	c.mapped = false
 }
 
@@ -1903,14 +2058,14 @@ func (c *Container) arrayToRun() {
 	c.containerType = containerRun
 	// return early if empty
 	if c.n == 0 {
-		c.runs = make([]interval16, 0)
-		c.array = nil
+		c.resetRunsWithMinimumCapacity(0)
+		c.resetArrayWithMinimumCapacity(0)
 		c.mapped = false
 		return
 	}
 
 	numRuns := c.arrayCountRuns()
-	c.runs = make([]interval16, 0, numRuns)
+	c.resetRunsWithMinimumCapacity(int(numRuns))
 	start := c.array[0]
 	for i, v := range c.array[1:] {
 		if v-c.array[i] > 1 {
@@ -1921,7 +2076,7 @@ func (c *Container) arrayToRun() {
 	}
 	// append final run
 	c.runs = append(c.runs, interval16{start, c.array[c.n-1]})
-	c.array = nil
+	c.resetArrayWithMinimumCapacity(0)
 	c.mapped = false
 }
 
@@ -1929,11 +2084,11 @@ func (c *Container) arrayToRun() {
 func (c *Container) runToArray() {
 	statsHit("runToArray")
 	c.containerType = containerArray
-	c.array = make([]uint16, 0, c.n)
+	c.resetArrayWithMinimumCapacity(int(c.n))
 
 	// return early if empty
 	if c.n == 0 {
-		c.runs = nil
+		c.resetRunsWithMinimumCapacity(0)
 		c.mapped = false
 		return
 	}
@@ -1943,7 +2098,7 @@ func (c *Container) runToArray() {
 			c.array = append(c.array, uint16(v))
 		}
 	}
-	c.runs = nil
+	c.resetRunsWithMinimumCapacity(0)
 	c.mapped = false
 }
 
@@ -1951,6 +2106,11 @@ func (c *Container) runToArray() {
 func (c *Container) Clone() *Container {
 	statsHit("Container/Clone")
 	other := &Container{n: c.n, containerType: c.containerType}
+	if c.pooled {
+		// Clone the pooled flag, but allow the container types to
+		// be lazy alloced as needed.
+		other.pooled = true
+	}
 
 	switch c.containerType {
 	case containerArray:

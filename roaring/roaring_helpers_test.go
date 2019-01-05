@@ -230,10 +230,14 @@ type testOp struct {
 	exp string
 }
 
-func doContainer(containerType byte, data interface{}) *Container {
-	c := &Container{
-		containerType: containerType,
+func doContainer(containerType byte, poolingEnabled bool, data interface{}) *Container {
+	var c *Container
+	if poolingEnabled {
+		c = NewContainerWithPooling(NewDefaultContainerPoolingConfiguration(1))
+	} else {
+		c = NewContainer()
 	}
+	c.containerType = containerType
 
 	switch containerType {
 	case containerArray:
@@ -248,50 +252,50 @@ func doContainer(containerType byte, data interface{}) *Container {
 	return c
 }
 
-func setupContainerTests() map[byte]map[string]*Container {
+func setupContainerTests(poolingEnabled bool) map[byte]map[string]*Container {
 
 	cts := make(map[byte]map[string]*Container)
 
 	// array containers
 	cts[containerArray] = map[string]*Container{
-		"empty":         doContainer(containerArray, arrayEmpty()),
-		"full":          doContainer(containerArray, arrayFull()),
-		"firstBitSet":   doContainer(containerArray, arrayFirstBitSet()),
-		"lastBitSet":    doContainer(containerArray, arrayLastBitSet()),
-		"firstBitUnset": doContainer(containerArray, arrayFirstBitUnset()),
-		"lastBitUnset":  doContainer(containerArray, arrayLastBitUnset()),
-		"innerBitsSet":  doContainer(containerArray, arrayInnerBitsSet()),
-		"outerBitsSet":  doContainer(containerArray, arrayOuterBitsSet()),
-		"oddBitsSet":    doContainer(containerArray, arrayOddBitsSet()),
-		"evenBitsSet":   doContainer(containerArray, arrayEvenBitsSet()),
+		"empty":         doContainer(containerArray, poolingEnabled, arrayEmpty()),
+		"full":          doContainer(containerArray, poolingEnabled, arrayFull()),
+		"firstBitSet":   doContainer(containerArray, poolingEnabled, arrayFirstBitSet()),
+		"lastBitSet":    doContainer(containerArray, poolingEnabled, arrayLastBitSet()),
+		"firstBitUnset": doContainer(containerArray, poolingEnabled, arrayFirstBitUnset()),
+		"lastBitUnset":  doContainer(containerArray, poolingEnabled, arrayLastBitUnset()),
+		"innerBitsSet":  doContainer(containerArray, poolingEnabled, arrayInnerBitsSet()),
+		"outerBitsSet":  doContainer(containerArray, poolingEnabled, arrayOuterBitsSet()),
+		"oddBitsSet":    doContainer(containerArray, poolingEnabled, arrayOddBitsSet()),
+		"evenBitsSet":   doContainer(containerArray, poolingEnabled, arrayEvenBitsSet()),
 	}
 
 	// bitmap containers
 	cts[containerBitmap] = map[string]*Container{
-		"empty":         doContainer(containerBitmap, bitmapEmpty()),
-		"full":          doContainer(containerBitmap, bitmapFull()),
-		"firstBitSet":   doContainer(containerBitmap, bitmapFirstBitSet()),
-		"lastBitSet":    doContainer(containerBitmap, bitmapLastBitSet()),
-		"firstBitUnset": doContainer(containerBitmap, bitmapFirstBitUnset()),
-		"lastBitUnset":  doContainer(containerBitmap, bitmapLastBitUnset()),
-		"innerBitsSet":  doContainer(containerBitmap, bitmapInnerBitsSet()),
-		"outerBitsSet":  doContainer(containerBitmap, bitmapOuterBitsSet()),
-		"oddBitsSet":    doContainer(containerBitmap, bitmapOddBitsSet()),
-		"evenBitsSet":   doContainer(containerBitmap, bitmapEvenBitsSet()),
+		"empty":         doContainer(containerBitmap, poolingEnabled, bitmapEmpty()),
+		"full":          doContainer(containerBitmap, poolingEnabled, bitmapFull()),
+		"firstBitSet":   doContainer(containerBitmap, poolingEnabled, bitmapFirstBitSet()),
+		"lastBitSet":    doContainer(containerBitmap, poolingEnabled, bitmapLastBitSet()),
+		"firstBitUnset": doContainer(containerBitmap, poolingEnabled, bitmapFirstBitUnset()),
+		"lastBitUnset":  doContainer(containerBitmap, poolingEnabled, bitmapLastBitUnset()),
+		"innerBitsSet":  doContainer(containerBitmap, poolingEnabled, bitmapInnerBitsSet()),
+		"outerBitsSet":  doContainer(containerBitmap, poolingEnabled, bitmapOuterBitsSet()),
+		"oddBitsSet":    doContainer(containerBitmap, poolingEnabled, bitmapOddBitsSet()),
+		"evenBitsSet":   doContainer(containerBitmap, poolingEnabled, bitmapEvenBitsSet()),
 	}
 
 	// run containers
 	cts[containerRun] = map[string]*Container{
-		"empty":         doContainer(containerRun, runEmpty()),
-		"full":          doContainer(containerRun, runFull()),
-		"firstBitSet":   doContainer(containerRun, runFirstBitSet()),
-		"lastBitSet":    doContainer(containerRun, runLastBitSet()),
-		"firstBitUnset": doContainer(containerRun, runFirstBitUnset()),
-		"lastBitUnset":  doContainer(containerRun, runLastBitUnset()),
-		"innerBitsSet":  doContainer(containerRun, runInnerBitsSet()),
-		"outerBitsSet":  doContainer(containerRun, runOuterBitsSet()),
-		"oddBitsSet":    doContainer(containerRun, runOddBitsSet()),
-		"evenBitsSet":   doContainer(containerRun, runEvenBitsSet()),
+		"empty":         doContainer(containerRun, poolingEnabled, runEmpty()),
+		"full":          doContainer(containerRun, poolingEnabled, runFull()),
+		"firstBitSet":   doContainer(containerRun, poolingEnabled, runFirstBitSet()),
+		"lastBitSet":    doContainer(containerRun, poolingEnabled, runLastBitSet()),
+		"firstBitUnset": doContainer(containerRun, poolingEnabled, runFirstBitUnset()),
+		"lastBitUnset":  doContainer(containerRun, poolingEnabled, runLastBitUnset()),
+		"innerBitsSet":  doContainer(containerRun, poolingEnabled, runInnerBitsSet()),
+		"outerBitsSet":  doContainer(containerRun, poolingEnabled, runOuterBitsSet()),
+		"oddBitsSet":    doContainer(containerRun, poolingEnabled, runOddBitsSet()),
+		"evenBitsSet":   doContainer(containerRun, poolingEnabled, runEvenBitsSet()),
 	}
 
 	return cts
