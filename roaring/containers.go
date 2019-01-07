@@ -26,12 +26,12 @@ type sliceContainers struct {
 // ContainerPoolingConfiguration represents the configuration for
 // container pooling.
 type ContainerPoolingConfiguration struct {
-	// Whether an array should be allocated for each pooled container.
-	AllocateArray bool
+	// Maximum size of the allocated array that will be maintained in the pool.
+	MaxArraySize int
 	// Whether a bitmap should be allocated for each pooled container.
 	AllocateBitmap bool
-	// Whether a run should be allocated for each pooled container.
-	AllocateRuns bool
+	// Maximum size of the allocated runs that will be maintained in the pool.
+	MaxRunsSize int
 
 	// Maximum number of containers to pool.
 	MaxCapacity int
@@ -43,8 +43,8 @@ type ContainerPoolingConfiguration struct {
 // with default configuration.
 func NewDefaultContainerPoolingConfiguration(maxCapacity int) ContainerPoolingConfiguration {
 	return ContainerPoolingConfiguration{
-		AllocateArray:  true,
-		AllocateRuns:   true,
+		MaxArraySize:   ArrayMaxSize,
+		MaxRunsSize:    runMaxSize,
 		AllocateBitmap: true,
 
 		MaxCapacity: maxCapacity,
@@ -77,21 +77,25 @@ func (cp *containersPool) put(c *Container) {
 		return
 	}
 
-	if len(cp.containers) >= cp.config.MaxCapacity {
+	if len(cp.containers) > cp.config.MaxCapacity {
 		// Don't allow pool to exceed maximum capacity.
 		return
 	}
 
-	if c.array != nil && !cp.config.AllocateArray {
+	if cap(c.array) > cp.config.MaxArraySize {
 		// Don't allow any containers with an allocated array slice to be
 		// returned to the pool if the config doesn't allow it.
-		return
+		c.array = nil
 	}
 
-	if c.runs != nil && !cp.config.AllocateRuns {
+	if cap(c.runs) > cp.config.MaxRunsSize {
 		// Don't allow any containers with an allocated run slice to be
 		// returned to the pool if the config doesn't allow it.
-		return
+		c.runs = nil
+	}
+
+	if !cp.config.AllocateBitmap {
+		c.bitmap = nil
 	}
 
 	// Reset before returning to the pool to ensure all calls to get() return
