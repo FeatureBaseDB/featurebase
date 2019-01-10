@@ -223,7 +223,7 @@ func TestAPI_ImportValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		pql := fmt.Sprintf("Range(%s>0)", field)
+		pql := fmt.Sprintf("Row(%s>0)", field)
 
 		// Query node0.
 		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {

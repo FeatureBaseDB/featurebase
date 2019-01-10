@@ -50,7 +50,7 @@ curl localhost:10101/index/repository/query \
 * `ATTR_NAME` Must be a valid identifier `[A-Za-z][A-Za-z0-9._-]*`
 * `ATTR_VALUE` Can be a string, float, integer, or bool.
 * `CALL` Any query
-* `ROW_CALL` Any query which returns a row, such as `Row`, `Union`, `Difference`, `Xor`, `Intersect`, `Range`, `Not`
+* `ROW_CALL` Any query which returns a row, such as `Row`, `Union`, `Difference`, `Xor`, `Intersect`, `Not`
 * `[]ATTR_VALUE` Denotes an array of `ATTR_VALUE`s. (e.g. `["a", "b", "c"]`)
 
 ### Write Operations
@@ -335,6 +335,89 @@ Row(stargazer=1)
 * attrs are the attributes for user 1
 * columns are the repositories which user 1 has starred.
 
+
+#### Row (Range)
+
+**Spec:**
+
+```
+Row(<FIELD>=<ROW>, <TIMESTAMP>, <TIMESTAMP>)
+```
+
+**Description:**
+
+Similar to `Row`, but only returns bits which were set with timestamps
+between the given `start` (first) and `end` (second) timestamps.
+
+**Result Type:** object with attrs and bits
+
+
+**Examples:**
+
+Query all columns with a bit set in row 1 of a field (repositories that a user has starred), within a date range:
+```request
+Row(stargazer=1, 2010-01-01T00:00, 2017-03-02T03:00)
+```
+```response
+{{"attrs":{},"columns":[10]}
+```
+
+This example assumes timestamps have been set on some bits.
+
+* columns are repositories which were starred by user 1 in the time range 2010-01-01 to 2017-03-02.
+
+
+#### Row (BSI)
+
+**Spec:**
+
+```
+Row([<COMPARISON_VALUE> <COMPARISON_OPERATOR>] <FIELD> <COMPARISON_OPERATOR> <COMPARISON_VALUE>)
+```
+
+**Description:**
+
+The `Row` query is overloaded to work on `integer` values as well as `timestamp` values.
+Returns bits that are true for the comparison operator.
+
+**Result Type:** object with attrs and columns
+
+**Examples:**
+
+In our source data, commitactivity was counted over the last year.
+The following greater-than `Row` query returns all columns with a field value greater than 100 (repositories having more than 100 commits):
+
+```request
+Row(commitactivity > 100)
+```
+```response
+{{"attrs":{},"columns":[10]}
+```
+
+* columns are repositories which had at least 100 commits in the last year.
+
+BSI range queries support the following operators:
+
+ Operator | Name                          | Value
+----------|-------------------------------|--------------------
+ `>`      | greater-than, GT              | integer
+ `<`      | less-than, LT                 | integer
+ `<=`     | less-than-or-equal-to, LTE    | integer
+ `>=`     | greater-than-or-equal-to, GTE | integer
+ `==`     | equal-to, EQ                  | integer
+ `!=`     | not-equal-to, NEQ             | integer or `null`
+
+`<`, and `<=` can be chained together to represent a bounded interval. For example:
+
+```request
+Row(50 < commitactivity < 150)
+```
+```response
+{{"attrs":{},"columns":[10]}
+```
+
+As of Pilosa 1.0, the "between" syntax `Row(frame=stats, commitactivity >< [50, 150])` is no longer supported.
+
 #### Union
 
 **Spec:**
@@ -584,87 +667,6 @@ TopN(stargazer, n=2, attrName=active, attrValues=[true])
 
 * Results are the top two users (rows) which have the "active" attribute set to "true", sorted by the number of bits set (repositories that they've starred).
 
-#### Range Queries
-
-**Spec:**
-
-```
-Range(<FIELD>=<ROW>, <TIMESTAMP>, <TIMESTAMP>)
-```
-
-**Description:**
-
-Similar to `Row`, but only returns bits which were set with timestamps
-between the given `start` (first) and `end` (second) timestamps.
-
-**Result Type:** object with attrs and bits
-
-
-**Examples:**
-
-Query all columns with a bit set in row 1 of a field (repositories that a user has starred), within a date range:
-```request
-Range(stargazer=1, 2010-01-01T00:00, 2017-03-02T03:00)
-```
-```response
-{{"attrs":{},"columns":[10]}
-```
-
-This example assumes timestamps have been set on some bits.
-
-* columns are repositories which were starred by user 1 in the time range 2010-01-01 to 2017-03-02.
-
-
-#### Range (BSI)
-
-**Spec:**
-
-```
-Range([<COMPARISON_VALUE> <COMPARISON_OPERATOR>] <FIELD> <COMPARISON_OPERATOR> <COMPARISON_VALUE>)
-```
-
-**Description:**
-
-The `Range` query is overloaded to work on `integer` values as well as `timestamp` values.
-Returns bits that are true for the comparison operator.
-
-**Result Type:** object with attrs and columns
-
-**Examples:**
-
-In our source data, commitactivity was counted over the last year.
-The following greater-than `Range` query returns all columns with a field value greater than 100 (repositories having more than 100 commits):
-
-```request
-Range(commitactivity > 100)
-```
-```response
-{{"attrs":{},"columns":[10]}
-```
-
-* columns are repositories which had at least 100 commits in the last year.
-
-BSI range queries support the following operators:
-
- Operator | Name                          | Value
-----------|-------------------------------|--------------------
- `>`      | greater-than, GT              | integer
- `<`      | less-than, LT                 | integer
- `<=`     | less-than-or-equal-to, LTE    | integer
- `>=`     | greater-than-or-equal-to, GTE | integer
- `==`     | equal-to, EQ                  | integer
- `!=`     | not-equal-to, NEQ             | integer or `null`
-
-`<`, and `<=` can be chained together to represent a bounded interval. For example:
-
-```request
-Range(50 < commitactivity < 150)
-```
-```response
-{{"attrs":{},"columns":[10]}
-```
-
-As of Pilosa 1.0, the "between" syntax `Range(frame=stats, commitactivity >< [50, 150])` is no longer supported.
 
 #### Min
 

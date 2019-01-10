@@ -323,7 +323,7 @@ We currently track the following events
 - **Xor:** Count of Xor queries.
 - **Not:** Count of Not queries.
 - **Count:** Count of Count queries.
-- **Range:** Count of Range queries.
+- **Range:** Count of ranged Row queries.
 - **Snapshot:** Event count when the snapshot process is triggered.
 - **BlockRepair:** Count of data blocks that were out of sync and repaired.
 - **GarbageCollection:** Event count when garbage collection occurs.
