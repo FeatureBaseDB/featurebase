@@ -50,7 +50,7 @@ jobs:
       - *fast-checkout
       - run: sudo apt-get install lsof
       - run:
-          command: make test TESTFLAGS="-race -timeout=30m"
+          command: make test TESTFLAGS="-race -v -timeout=30m"
           no_output_timeout: 30m
   test-golang-1.11-386:
     <<: *base-test
