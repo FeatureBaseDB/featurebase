@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"time"
 
@@ -492,11 +493,11 @@ func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 		return nil, errors.Wrap(err, "map reduce")
 	}
 
-	// Attach attributes for Row() calls.
+	// Attach attributes for non-BSI Row() calls.
 	// If the column label is used then return column attributes.
 	// If the row label is used then return bitmap attributes.
 	row, _ := other.(*Row)
-	if c.Name == "Row" {
+	if c.Name == "Row" && !c.HasConditionArg() {
 		if opt.ExcludeRowAttrs {
 			row.Attrs = map[string]interface{}{}
 		} else {
@@ -546,14 +547,12 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, index string, c *
 	defer span.Finish()
 
 	switch c.Name {
-	case "Row":
-		return e.executeBitmapShard(ctx, index, c, shard)
+	case "Row", "Range":
+		return e.executeRowShard(ctx, index, c, shard)
 	case "Difference":
 		return e.executeDifferenceShard(ctx, index, c, shard)
 	case "Intersect":
 		return e.executeIntersectShard(ctx, index, c, shard)
-	case "Range":
-		return e.executeRangeShard(ctx, index, c, shard)
 	case "Union":
 		return e.executeUnionShard(ctx, index, c, shard)
 	case "Xor":
@@ -1170,9 +1169,18 @@ func (e *executor) executeRowsShard(_ context.Context, index string, c *pql.Call
 	return frag.rows(start, filters...), nil
 }
 
-func (e *executor) executeBitmapShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeBitmapShard")
+func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
+	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeRowShard")
 	defer span.Finish()
+
+	if c.Name == "Range" {
+		log.Print("DEPRECATED: Range() is deprecated, please use Row() instead.")
+	}
+
+	// Handle bsiGroup ranges differently.
+	if c.HasConditionArg() {
+		return e.executeRowBSIGroupShard(ctx, index, c, shard)
+	}
 
 	// Fetch column label from index.
 	idx := e.Holder.Index(index)
@@ -1197,93 +1205,43 @@ func (e *executor) executeBitmapShard(ctx context.Context, index string, c *pql.
 		return nil, fmt.Errorf("Row() must specify %v", rowLabel)
 	}
 
-	frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
-	if frag == nil {
-		return NewRow(), nil
-	}
-	return frag.row(rowID), nil
-}
-
-// executeIntersectShard executes a intersect() call for a local shard.
-func (e *executor) executeIntersectShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeIntersectShard")
-	defer span.Finish()
-
-	var other *Row
-	if len(c.Children) == 0 {
-		return nil, fmt.Errorf("empty Intersect query is currently not supported")
-	}
-	for i, input := range c.Children {
-		row, err := e.executeBitmapCallShard(ctx, index, input, shard)
-		if err != nil {
-			return nil, err
-		}
-
-		if i == 0 {
-			other = row
-		} else {
-			other = other.Intersect(row)
+	// Parse "from" time, if set.
+	var fromTime time.Time
+	if _, ok := c.Args["from"]; ok {
+		switch v := c.Args["from"].(type) {
+		case string:
+			if fromTime, err = time.Parse(TimeFormat, v); err != nil {
+				return nil, errors.New("cannot parse Row() 'from' time")
+			}
+		case int64:
+			fromTime = time.Unix(v, 0).UTC()
+		default:
+			return nil, errors.New("Row() 'from' arg must be a timestamp")
 		}
 	}
-	other.invalidateCount()
-	return other, nil
-}
 
-// executeRangeShard executes a range() call for a local shard.
-func (e *executor) executeRangeShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeRangeShard")
-	defer span.Finish()
-
-	// Handle bsiGroup ranges differently.
-	if c.HasConditionArg() {
-		return e.executeBSIGroupRangeShard(ctx, index, c, shard)
-	}
-
-	// Parse field.
-	fieldName, err := c.FieldArg()
-	if err != nil {
-		return nil, errors.New("Range() argument required: field")
+	// Parse "to" time, if set.
+	var toTime time.Time
+	if _, ok := c.Args["to"]; ok {
+		switch v := c.Args["to"].(type) {
+		case string:
+			if toTime, err = time.Parse(TimeFormat, v); err != nil {
+				return nil, errors.New("cannot parse Row() 'to' time")
+			}
+		case int64:
+			toTime = time.Unix(v, 0).UTC()
+		default:
+			return nil, errors.New("Row() 'to' arg must be a timestamp")
+		}
 	}
 
-	// Retrieve column label.
-	idx := e.Holder.Index(index)
-	if idx == nil {
-		return nil, ErrIndexNotFound
-	}
-
-	// Retrieve base field.
-	f := idx.Field(fieldName)
-	if f == nil {
-		return nil, ErrFieldNotFound
-	}
-
-	// Read row & column id.
-	rowID, rowOK, err := c.UintArg(fieldName)
-	if err != nil {
-		return nil, fmt.Errorf("executeRangeShard - reading row: %v", err)
-	}
-	if !rowOK {
-		return nil, fmt.Errorf("Range() must specify %q", rowLabel)
-	}
-
-	// Parse start time.
-	startTimeStr, ok := c.Args["_start"].(string)
-	if !ok {
-		return nil, errors.New("Range() start time required")
-	}
-	startTime, err := time.Parse(TimeFormat, startTimeStr)
-	if err != nil {
-		return nil, errors.New("cannot parse Range() start time")
-	}
-
-	// Parse end time.
-	endTimeStr, ok := c.Args["_end"].(string)
-	if !ok {
-		return nil, errors.New("Range() end time required")
-	}
-	endTime, err := time.Parse(TimeFormat, endTimeStr)
-	if err != nil {
-		return nil, errors.New("cannot parse Range() end time")
+	// Simply return row if times are not set.
+	if c.Name == "Row" && fromTime.IsZero() && toTime.IsZero() {
+		frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
+		if frag == nil {
+			return NewRow(), nil
+		}
+		return frag.row(rowID), nil
 	}
 
 	// If no quantum exists then return an empty bitmap.
@@ -1292,9 +1250,17 @@ func (e *executor) executeRangeShard(ctx context.Context, index string, c *pql.C
 		return &Row{}, nil
 	}
 
+	// Set maximum "to" value if only "from" is set. We don't need to worry
+	// about setting the minimum "from" since it is the zero value if omitted.
+	if toTime.IsZero() {
+		// This is the maximum comparable time.Time value.
+		// https://stackoverflow.com/a/32620397
+		toTime = time.Unix(1<<63-62135596801, 999999999)
+	}
+
 	// Union bitmaps across all time-based views.
 	row := &Row{}
-	for _, view := range viewsByTimeRange(viewStandard, startTime, endTime, q) {
+	for _, view := range viewsByTimeRange(viewStandard, fromTime, toTime, q) {
 		f := e.Holder.fragment(index, fieldName, view, shard)
 		if f == nil {
 			continue
@@ -1303,18 +1269,19 @@ func (e *executor) executeRangeShard(ctx context.Context, index string, c *pql.C
 	}
 	f.Stats.Count("range", 1, 1.0)
 	return row, nil
+
 }
 
-// executeBSIGroupRangeShard executes a range(bsiGroup) call for a local shard.
-func (e *executor) executeBSIGroupRangeShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeBSIGroupRangeShard")
+// executeRowBSIGroupShard executes a range(bsiGroup) call for a local shard.
+func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
+	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeRowBSIGroupShard")
 	defer span.Finish()
 
 	// Only one conditional should be present.
 	if len(c.Args) == 0 {
-		return nil, errors.New("Range(): condition required")
+		return nil, errors.New("Row(): condition required")
 	} else if len(c.Args) > 1 {
-		return nil, errors.New("Range(): too many arguments")
+		return nil, errors.New("Row(): too many arguments")
 	}
 
 	// Extract conditional.
@@ -1323,7 +1290,7 @@ func (e *executor) executeBSIGroupRangeShard(ctx context.Context, index string, 
 	for k, v := range c.Args {
 		vv, ok := v.(*pql.Condition)
 		if !ok {
-			return nil, fmt.Errorf("Range(): %q: expected condition argument, got %v", k, v)
+			return nil, fmt.Errorf("Row(): %q: expected condition argument, got %v", k, v)
 		}
 		fieldName, cond = k, vv
 	}
@@ -1335,7 +1302,7 @@ func (e *executor) executeBSIGroupRangeShard(ctx context.Context, index string, 
 
 	// EQ null           (not implemented: flip frag.NotNull with max ColumnID)
 	// NEQ null          frag.NotNull()
-	// BETWEEN a,b(in)   BETWEEN/frag.RangeBetween()
+	// BETWEEN a,b(in)   BETWEEN/frag.RowBetween()
 	// BETWEEN a,b(out)  BETWEEN/frag.NotNull()
 	// EQ <int>          frag.RangeOp
 	// NEQ <int>         frag.RangeOp
@@ -1365,11 +1332,11 @@ func (e *executor) executeBSIGroupRangeShard(ctx context.Context, index string, 
 
 		// Only support two integers for the between operation.
 		if len(predicates) != 2 {
-			return nil, errors.New("Range(): BETWEEN condition requires exactly two integer values")
+			return nil, errors.New("Row(): BETWEEN condition requires exactly two integer values")
 		}
 
 		// The reason we don't just call:
-		//     return f.RangeBetween(fieldName, predicates[0], predicates[1])
+		//     return f.RowBetween(fieldName, predicates[0], predicates[1])
 		// here is because we need the call to be shard-specific.
 
 		// Find bsiGroup.
@@ -1402,7 +1369,7 @@ func (e *executor) executeBSIGroupRangeShard(ctx context.Context, index string, 
 		// Only support integers for now.
 		value, ok := cond.Value.(int64)
 		if !ok {
-			return nil, errors.New("Range(): conditions only support integer values")
+			return nil, errors.New("Row(): conditions only support integer values")
 		}
 
 		// Find bsiGroup.
@@ -1436,6 +1403,31 @@ func (e *executor) executeBSIGroupRangeShard(ctx context.Context, index string, 
 		f.Stats.Count("range:bsigroup", 1, 1.0)
 		return frag.rangeOp(cond.Op, bsig.BitDepth(), baseValue)
 	}
+}
+
+// executeIntersectShard executes a intersect() call for a local shard.
+func (e *executor) executeIntersectShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeIntersectShard")
+	defer span.Finish()
+
+	var other *Row
+	if len(c.Children) == 0 {
+		return nil, fmt.Errorf("empty Intersect query is currently not supported")
+	}
+	for i, input := range c.Children {
+		row, err := e.executeBitmapCallShard(ctx, index, input, shard)
+		if err != nil {
+			return nil, err
+		}
+
+		if i == 0 {
+			other = row
+		} else {
+			other = other.Intersect(row)
+		}
+	}
+	other.invalidateCount()
+	return other, nil
 }
 
 // executeUnionShard executes a union() call for a local shard.
