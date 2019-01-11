@@ -1423,7 +1423,9 @@ func TestBitmap_Reset(t *testing.T) {
 
 	untouched := roaring.NewBitmapWithDefaultPooling(10)
 	bm.Reset()
-	if !reflect.DeepEqual(untouched, bm) {
+
+	if untouched.Containers.Count() != bm.Containers.Count() ||
+		untouched.Info().OpN != bm.Info().OpN {
 		t.Fatalf("Reset bitmap: %+v is not identical to new bitmap: %+v", bm, untouched)
 	}
 }
