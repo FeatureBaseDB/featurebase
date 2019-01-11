@@ -1901,16 +1901,44 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 	})
 
 	t.Run("BETWEEN", func(t *testing.T) {
-		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(0 < other < 1000)`}); err != nil {
-			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{0}, result.Results[0].(*pilosa.Row).Columns()) {
-			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		tests := []struct {
+			q   string
+			exp bool
+		}{
+			{q: `Row(0 < other < 1000)`, exp: false},
+			{q: `Row(0 <= other < 1000)`, exp: false},
+			{q: `Row(0 <= other <= 1000)`, exp: true},
+			{q: `Row(0 < other <= 1000)`, exp: true},
+
+			{q: `Row(1000 < other < 1000)`, exp: false},
+			{q: `Row(1000 <= other < 1000)`, exp: false},
+			{q: `Row(1000 <= other <= 1000)`, exp: true},
+			{q: `Row(1000 < other <= 1000)`, exp: false},
+
+			{q: `Row(1000 < other < 2000)`, exp: false},
+			{q: `Row(1000 <= other < 2000)`, exp: true},
+			{q: `Row(1000 <= other <= 2000)`, exp: true},
+			{q: `Row(1000 < other <= 2000)`, exp: false},
 		}
+		for i, test := range tests {
+			t.Run(fmt.Sprintf("#%d_%s", i, test.q), func(t *testing.T) {
+				var expected = []uint64{}
+				if test.exp {
+					expected = []uint64{0}
+				}
+				if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: test.q}); err != nil {
+					t.Fatal(err)
+				} else if !reflect.DeepEqual(expected, result.Results[0].(*pilosa.Row).Columns()) {
+					t.Fatalf("unexpected result for query: %s", test.q)
+				}
+			})
+		}
+
 	})
 
 	// Ensure that the NotNull code path gets run.
 	t.Run("NotNull", func(t *testing.T) {
-		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(-1 < other < 1000)`}); err != nil {
+		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(0 <= other <= 1000)`}); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0}, result.Results[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
@@ -2069,14 +2097,14 @@ func TestExecutor_Execute_Range_BSIGroup_Deprecated(t *testing.T) {
 	t.Run("BETWEEN", func(t *testing.T) {
 		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Range(0 < other < 1000)`}); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{0}, result.Results[0].(*pilosa.Row).Columns()) {
+		} else if !reflect.DeepEqual([]uint64{}, result.Results[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
 	})
 
 	// Ensure that the NotNull code path gets run.
 	t.Run("NotNull", func(t *testing.T) {
-		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Range(-1 < other < 1000)`}); err != nil {
+		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Range(0 <= other <= 1000)`}); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0}, result.Results[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
