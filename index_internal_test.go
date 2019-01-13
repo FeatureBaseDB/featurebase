@@ -21,7 +21,7 @@ import (
 
 // mustOpenIndex returns a new, opened index at a temporary path. Panic on error.
 func mustOpenIndex(opt IndexOptions) *Index {
-	path, err := ioutil.TempDir("", "pilosa-index-")
+	path, err := ioutil.TempDir(*TempDir, "pilosa-index-")
 	if err != nil {
 		panic(err)
 	}

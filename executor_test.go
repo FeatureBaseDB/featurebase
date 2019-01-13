@@ -16,7 +16,9 @@ package pilosa_test
 
 import (
 	"context"
+	"flag"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"reflect"
 	"strconv"
@@ -32,6 +34,20 @@ import (
 	"github.com/pilosa/pilosa/test"
 	"github.com/pkg/errors"
 )
+
+var (
+	TempDir *string
+)
+
+func init() {
+	tdflag := flag.Lookup("temp-dir")
+	if tdflag == nil {
+		TempDir = flag.String("temp-dir", "", "Directory in which to place temporary data (e.g. for benchmarking). Useful if you are trying to benchmark different storage configurations.")
+	} else {
+		s := tdflag.Value.String()
+		TempDir = &s
+	}
+}
 
 // Ensure a row query can be executed.
 func TestExecutor_Execute_Row(t *testing.T) {
@@ -2987,7 +3003,16 @@ func TestExecutor_Execute_SetRow(t *testing.T) {
 }
 
 func benchmarkExistence(nn bool, b *testing.B) {
-	c := test.MustRunCluster(b, 1)
+	c := test.MustNewCluster(b, 1)
+	var err error
+	c[0].Config.DataDir, err = ioutil.TempDir(*TempDir, "benchmarkExistence")
+	if err != nil {
+		b.Fatalf("getting temp dir: %v", err)
+	}
+	err = c.Start()
+	if err != nil {
+		b.Fatalf("starting cluster: %v", err)
+	}
 	defer c.Close()
 	hldr := test.Holder{Holder: c[0].Server.Holder()}
 
@@ -3587,7 +3612,16 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 }
 
 func BenchmarkGroupBy(b *testing.B) {
-	c := test.MustRunCluster(b, 1)
+	c := test.MustNewCluster(b, 1)
+	var err error
+	c[0].Config.DataDir, err = ioutil.TempDir(*TempDir, "benchmarkGroupBy")
+	if err != nil {
+		b.Fatalf("getting temp dir: %v", err)
+	}
+	err = c.Start()
+	if err != nil {
+		b.Fatalf("starting cluster: %v", err)
+	}
 	defer c.Close()
 	c.CreateField(b, "i", pilosa.IndexOptions{}, "a")
 	c.CreateField(b, "i", pilosa.IndexOptions{}, "b")
