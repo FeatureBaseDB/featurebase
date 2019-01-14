@@ -1253,9 +1253,8 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 	// Set maximum "to" value if only "from" is set. We don't need to worry
 	// about setting the minimum "from" since it is the zero value if omitted.
 	if toTime.IsZero() {
-		// This is the maximum comparable time.Time value.
-		// https://stackoverflow.com/a/32620397
-		toTime = time.Unix(1<<63-62135596801, 999999999)
+		// Set the end timestamp to current time + 1 day, in order to account for timezone differences.
+		toTime = time.Now().AddDate(0, 0, 1)
 	}
 
 	// Union bitmaps across all time-based views.
