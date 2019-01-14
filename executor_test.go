@@ -1481,7 +1481,7 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 func TestExecutor_Execute_Row_Range(t *testing.T) {
 	t.Run("RowIDColumnID", func(t *testing.T) {
 		// Create a timestamp just out of the current date + 1 day timestamp (default end timestamp).
-		nextDayExclusive := time.Now().AddDate(0, 0, 1).Add(1 * time.Second)
+		nextDayExclusive := time.Now().AddDate(0, 0, 1).Add(1 * time.Hour)
 
 		writeQuery := fmt.Sprintf(`
 		Set(2, f=1, 1999-12-31T00:00)
