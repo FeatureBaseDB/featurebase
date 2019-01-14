@@ -341,13 +341,12 @@ Row(stargazer=1)
 **Spec:**
 
 ```
-Row(<FIELD>=<ROW>, <TIMESTAMP>, <TIMESTAMP>)
+Row(<FIELD>=<ROW>, from=<TIMESTAMP>, to=<TIMESTAMP>)
 ```
 
 **Description:**
 
-Similar to `Row`, but only returns bits which were set with timestamps
-between the given `start` (first) and `end` (second) timestamps.
+Similar to `Row`, but only returns bits which were set with timestamps between the given `from` (inclusive) and `to` (exclusive) timestamps. Both `from` and `to` parameters are optional. The default for `to` timestamp is current time + 1 day. If a later end timestamp is required, specify it explicitly.
 
 **Result Type:** object with attrs and bits
 
@@ -356,7 +355,7 @@ between the given `start` (first) and `end` (second) timestamps.
 
 Query all columns with a bit set in row 1 of a field (repositories that a user has starred), within a date range:
 ```request
-Row(stargazer=1, 2010-01-01T00:00, 2017-03-02T03:00)
+Row(stargazer=1, from='2010-01-01T00:00', to='2017-03-02T03:00')
 ```
 ```response
 {{"attrs":{},"columns":[10]}
@@ -836,7 +835,7 @@ GroupBy(<RowsCall>, [RowsCall...], limit=<UINT>, filter=<CALL>)
 
 GroupBy returns the count of the intersection of every combination of rows
 taking one row each from the specified `Rows` calls. It returns only those
-combinations for which the count is greater than 0. 
+combinations for which the count is greater than 0.
 
 The optional `filter` argument takes any type of `Row` query (e.g. Row, Union,
  Intersect, etc.) which will be intersected with each result prior to returning
