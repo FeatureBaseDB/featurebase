@@ -42,6 +42,19 @@ func NewRow(columns ...uint64) *Row {
 	return r
 }
 
+func (r *Row) IsEmpty() bool {
+	if len(r.segments) == 0 {
+		return true
+	}
+	for i := range r.segments {
+		if r.segments[i].n > 0 {
+			return false
+		}
+
+	}
+	return true
+}
+
 // Merge merges data from other into r.
 func (r *Row) Merge(other *Row) {
 	var segments []rowSegment

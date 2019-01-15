@@ -57,7 +57,6 @@ func TestPostIndexRequestUnmarshalJSON(t *testing.T) {
 				t.Errorf("expected: %v, but got: %v for JSON: %s", test.expected, *actual, test.json)
 			}
 		}
-
 	}
 }
 
@@ -93,7 +92,6 @@ func TestPostFieldRequestUnmarshalJSON(t *testing.T) {
 				t.Errorf("test %d: expected: %v, but got: %v", i, test.expected, *actual)
 			}
 		}
-
 	}
 }
 
@@ -178,6 +176,5 @@ func TestFieldOptionValidation(t *testing.T) {
 				t.Errorf("test %d: expected: %v, but got: %v", i, test.expected, *actual)
 			}
 		}
-
 	}
 }

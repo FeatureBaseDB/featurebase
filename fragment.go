@@ -28,6 +28,7 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -2315,51 +2316,76 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 	// Write updates to remote blocks.
 	for i := 0; i < len(uris); i++ {
 		set, clear := sets[i], clears[i]
-		count := 0
 
-		// Ignore if there are no differences.
-		if len(set.columnIDs) == 0 && len(clear.columnIDs) == 0 {
-			continue
-		}
-
-		// Generate query with sets & clears, and group the requests to not exceed MaxWritesPerRequest.
-		total := len(set.columnIDs) + len(clear.columnIDs)
-		maxWrites := s.Cluster.maxWritesPerRequest
-		if maxWrites <= 0 {
-			maxWrites = 5000
-		}
-		buffers := make([]bytes.Buffer, int(math.Ceil(float64(total)/float64(maxWrites))))
-
-		// Only sync the standard block.
-		for j := 0; j < len(set.columnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/maxWrites]), "Set(%d, %s=%d)\n", (f.shard*ShardWidth)+set.columnIDs[j], f.field, set.rowIDs[j])
-			count++
-		}
-		for j := 0; j < len(clear.columnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/maxWrites]), "Clear(%d, %s=%d)\n", (f.shard*ShardWidth)+clear.columnIDs[j], f.field, clear.rowIDs[j])
-			count++
-		}
-
-		// Iterate over the buffers.
-		for k := 0; k < len(buffers); k++ {
-			// Verify sync is not prematurely closing.
-			if s.isClosing() {
-				return nil
-			}
-
-			// Execute query.
-			queryRequest := &QueryRequest{
-				Query:  buffers[k].String(),
-				Remote: true,
-			}
-			_, err := s.Cluster.InternalClient.QueryNode(ctx, uris[i], f.index, queryRequest)
+		// Handle Sets.
+		if len(set.columnIDs) > 0 {
+			setData, err := bitsToRoaringData(set)
 			if err != nil {
-				return errors.Wrap(err, "executing")
+				return errors.Wrap(err, "converting bits to roaring data (set)")
+			}
+
+			setReq := &ImportRoaringRequest{
+				Clear: false,
+				Views: map[string][]byte{cleanViewName(f.view): setData},
+			}
+
+			if err := s.Cluster.InternalClient.ImportRoaring(ctx, uris[i], f.index, f.field, f.shard, true, setReq); err != nil {
+				return errors.Wrap(err, "sending roaring data (set)")
+			}
+		}
+
+		// Handle Clears.
+		if len(clear.columnIDs) > 0 {
+			clearData, err := bitsToRoaringData(clear)
+			if err != nil {
+				return errors.Wrap(err, "converting bits to roaring data (clear)")
+			}
+
+			clearReq := &ImportRoaringRequest{
+				Clear: true,
+				Views: map[string][]byte{"": clearData},
+			}
+
+			if err := s.Cluster.InternalClient.ImportRoaring(ctx, uris[i], f.index, f.field, f.shard, true, clearReq); err != nil {
+				return errors.Wrap(err, "sending roaring data (clear)")
 			}
 		}
 	}
 
 	return nil
+}
+
+// cleanViewName converts a viewname into the equivalent
+// string required by the external api. Because views are
+// not exposed externally, the conversion looks like this:
+// "standard" -> ""
+// "standard_YYYYMMDD" -> "YYYYMMDD"
+// "other" -> "other" (there is currently not a use for this)
+func cleanViewName(v string) string {
+	viewPrefix := viewStandard + "_"
+	if strings.HasPrefix(v, viewPrefix) {
+		return v[len(viewPrefix):]
+	} else if v == viewStandard {
+		return ""
+	}
+	return v
+}
+
+// bitsToRoaringData converts a pairSet into a roaring.Bitmap
+// which represents the data within a single shard.
+func bitsToRoaringData(ps pairSet) ([]byte, error) {
+	bmp := roaring.NewBitmap()
+	for j := 0; j < len(ps.columnIDs); j++ {
+		bmp.DirectAdd(ps.rowIDs[j]*ShardWidth + (ps.columnIDs[j] % ShardWidth))
+	}
+
+	var buf bytes.Buffer
+	_, err := bmp.WriteTo(&buf)
+	if err != nil {
+		return nil, errors.Wrap(err, "writing to buffer")
+	}
+
+	return buf.Bytes(), nil
 }
 
 func madvise(b []byte, advice int) error { // nolint: unparam

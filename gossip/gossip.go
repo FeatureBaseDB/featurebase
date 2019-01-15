@@ -333,15 +333,30 @@ func newEventReceiver(logger *log.Logger, papi *pilosa.API) *eventReceiver {
 }
 
 func (g *eventReceiver) NotifyJoin(n *memberlist.Node) {
-	g.ch <- memberlist.NodeEvent{Event: memberlist.NodeJoin, Node: n}
+	// copy node to avoid data race
+	n2 := *n
+	n2.Meta = make([]byte, len(n.Meta))
+	copy(n2.Meta, n.Meta)
+
+	g.ch <- memberlist.NodeEvent{Event: memberlist.NodeJoin, Node: &n2}
 }
 
 func (g *eventReceiver) NotifyLeave(n *memberlist.Node) {
-	g.ch <- memberlist.NodeEvent{Event: memberlist.NodeLeave, Node: n}
+	// copy node to avoid data race
+	n2 := *n
+	n2.Meta = make([]byte, len(n.Meta))
+	copy(n2.Meta, n.Meta)
+
+	g.ch <- memberlist.NodeEvent{Event: memberlist.NodeLeave, Node: &n2}
 }
 
 func (g *eventReceiver) NotifyUpdate(n *memberlist.Node) {
-	g.ch <- memberlist.NodeEvent{Event: memberlist.NodeUpdate, Node: n}
+	// copy node to avoid data race
+	n2 := *n
+	n2.Meta = make([]byte, len(n.Meta))
+	copy(n2.Meta, n.Meta)
+
+	g.ch <- memberlist.NodeEvent{Event: memberlist.NodeUpdate, Node: &n2}
 }
 
 func (g *eventReceiver) listen() {

@@ -249,6 +249,22 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		decodeBlockDataResponse(msg, mt)
 		return nil
+	case *pilosa.TranslateKeysRequest:
+		msg := &internal.TranslateKeysRequest{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling TranslateKeysRequest")
+		}
+		decodeTranslateKeysRequest(msg, mt)
+		return nil
+	case *pilosa.TranslateKeysResponse:
+		msg := &internal.TranslateKeysResponse{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling TranslateKeysResponse")
+		}
+		decodeTranslateKeysResponse(msg, mt)
+		return nil
 	default:
 		panic(fmt.Sprintf("unhandled pilosa.Message of type %T: %#v", mt, m))
 	}
@@ -308,6 +324,10 @@ func encodeToProto(m pilosa.Message) proto.Message {
 		return encodeBlockDataRequest(mt)
 	case *pilosa.BlockDataResponse:
 		return encodeBlockDataResponse(mt)
+	case *pilosa.TranslateKeysRequest:
+		return encodeTranslateKeysRequest(mt)
+	case *pilosa.TranslateKeysResponse:
+		return encodeTranslateKeysResponse(mt)
 	}
 	return nil
 }
@@ -437,7 +457,7 @@ func encodeResizeInstruction(m *pilosa.ResizeInstruction) *internal.ResizeInstru
 		Node:          encodeNode(m.Node),
 		Coordinator:   encodeNode(m.Coordinator),
 		Sources:       encodeResizeSources(m.Sources),
-		Schema:        encodeSchema(m.Schema),
+		NodeStatus:    encodeNodeStatus(m.NodeStatus),
 		ClusterStatus: encodeClusterStatus(m.ClusterStatus),
 	}
 }
@@ -695,6 +715,20 @@ func encodeRecalculateCaches(*pilosa.RecalculateCaches) *internal.RecalculateCac
 	return &internal.RecalculateCaches{}
 }
 
+func encodeTranslateKeysResponse(response *pilosa.TranslateKeysResponse) *internal.TranslateKeysResponse {
+	return &internal.TranslateKeysResponse{
+		IDs: response.IDs,
+	}
+}
+
+func encodeTranslateKeysRequest(request *pilosa.TranslateKeysRequest) *internal.TranslateKeysRequest {
+	return &internal.TranslateKeysRequest{
+		Index: request.Index,
+		Field: request.Field,
+		Keys:  request.Keys,
+	}
+}
+
 func decodeResizeInstruction(ri *internal.ResizeInstruction, m *pilosa.ResizeInstruction) {
 	m.JobID = ri.JobID
 	m.Node = &pilosa.Node{}
@@ -703,8 +737,8 @@ func decodeResizeInstruction(ri *internal.ResizeInstruction, m *pilosa.ResizeIns
 	decodeNode(ri.Coordinator, m.Coordinator)
 	m.Sources = make([]*pilosa.ResizeSource, len(ri.Sources))
 	decodeResizeSources(ri.Sources, m.Sources)
-	m.Schema = &pilosa.Schema{}
-	decodeSchema(ri.Schema, m.Schema)
+	m.NodeStatus = &pilosa.NodeStatus{}
+	decodeNodeStatus(ri.NodeStatus, m.NodeStatus)
 	m.ClusterStatus = &pilosa.ClusterStatus{}
 	decodeClusterStatus(ri.ClusterStatus, m.ClusterStatus)
 }
@@ -999,6 +1033,16 @@ func decodeQueryResults(pb []*internal.QueryResult, m []interface{}) {
 	}
 }
 
+func decodeTranslateKeysRequest(pb *internal.TranslateKeysRequest, m *pilosa.TranslateKeysRequest) {
+	m.Index = pb.Index
+	m.Field = pb.Field
+	m.Keys = pb.Keys
+}
+
+func decodeTranslateKeysResponse(pb *internal.TranslateKeysResponse, m *pilosa.TranslateKeysResponse) {
+	m.IDs = pb.IDs
+}
+
 // QueryResult types.
 const (
 	queryResultTypeNil uint32 = iota
@@ -1103,8 +1147,13 @@ func decodeGroupCounts(a []*internal.GroupCount) []pilosa.GroupCount {
 func decodeFieldRows(a []*internal.FieldRow) []pilosa.FieldRow {
 	other := make([]pilosa.FieldRow, len(a))
 	for i := range a {
-		other[i].Field = a[i].Field
-		other[i].RowID = a[i].RowID
+		fr := a[i]
+		other[i].Field = fr.Field
+		if fr.RowKey == "" {
+			other[i].RowID = fr.RowID
+		} else {
+			other[i].RowKey = fr.RowKey
+		}
 	}
 	return other
 }
@@ -1182,9 +1231,17 @@ func encodeGroupCounts(counts []pilosa.GroupCount) []*internal.GroupCount {
 func encodeFieldRows(a []pilosa.FieldRow) []*internal.FieldRow {
 	other := make([]*internal.FieldRow, len(a))
 	for i := range a {
-		other[i] = &internal.FieldRow{
-			Field: a[i].Field,
-			RowID: a[i].RowID,
+		fr := a[i]
+		if fr.RowKey == "" {
+			other[i] = &internal.FieldRow{
+				Field: fr.Field,
+				RowID: fr.RowID,
+			}
+		} else {
+			other[i] = &internal.FieldRow{
+				Field:  fr.Field,
+				RowKey: fr.RowKey,
+			}
 		}
 	}
 	return other

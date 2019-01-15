@@ -43,7 +43,7 @@ const (
 	fileLimit = 262144 // (512^2)
 
 	// existenceFieldName is the name of the internal field used to store existence values.
-	existenceFieldName = "exists"
+	existenceFieldName = "_exists"
 )
 
 // Holder represents a container for indexes.
@@ -289,6 +289,9 @@ func (h *Holder) limitedSchema() []*IndexInfo {
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{Name: index.Name(), Options: index.Options()}
 		for _, field := range index.Fields() {
+			if strings.HasPrefix(field.name, "_") {
+				continue
+			}
 			fi := &FieldInfo{Name: field.Name(), Options: field.Options()}
 			di.Fields = append(di.Fields, fi)
 		}

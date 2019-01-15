@@ -164,7 +164,7 @@ func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilo
 		}
 		return err
 	}
-	return nil
+	return errors.Wrap(resp.Body.Close(), "closing response body")
 }
 
 // FragmentNodes returns a list of nodes that own a shard.
@@ -705,24 +705,22 @@ func (c *InternalClient) exportNodeCSV(ctx context.Context, node *pilosa.Node, i
 	return nil
 }
 
-func (c *InternalClient) RetrieveShardFromURI(ctx context.Context, index, field string, shard uint64, uri pilosa.URI) (io.ReadCloser, error) {
+// RetrieveShardFromURI returns a ReadCloser which contains the data of the
+// specified shard from the specified node. Caller *must* close the returned
+// ReadCloser or risk leaking goroutines/tcp connections.
+func (c *InternalClient) RetrieveShardFromURI(ctx context.Context, index, field, view string, shard uint64, uri pilosa.URI) (io.ReadCloser, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.RetrieveShardFromURI")
 	defer span.Finish()
 
 	node := &pilosa.Node{
 		URI: uri,
 	}
-	return c.backupShardNode(ctx, index, field, shard, node)
-}
 
-func (c *InternalClient) backupShardNode(ctx context.Context, index, field string, shard uint64, node *pilosa.Node) (io.ReadCloser, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.backupShardNode")
-	defer span.Finish()
-
-	u := nodePathToURL(node, "/fragment/data")
+	u := nodePathToURL(node, "/internal/fragment/data")
 	u.RawQuery = url.Values{
 		"index": {index},
 		"field": {field},
+		"view":  {view},
 		"shard": {strconv.FormatUint(shard, 10)},
 	}.Encode()
 
@@ -805,7 +803,7 @@ func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, fiel
 		return err
 	}
 
-	return nil
+	return errors.Wrap(resp.Body.Close(), "closing response body")
 }
 
 // FragmentBlocks returns a list of block checksums for a fragment on a host.
@@ -999,15 +997,24 @@ func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, msg [
 	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
-	_, err = c.executeRequest(req.WithContext(ctx))
-	return err
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return errors.Wrap(err, "executing request")
+	}
+	return errors.Wrap(resp.Body.Close(), "closing response body")
 }
 
-// executeRequest executes the given request and checks the Response
+// executeRequest executes the given request and checks the Response. For
+// responses with non-2XX status, the body is read and closed, and an error is
+// returned. If the error is nil, the caller must ensure that the response body
+// is closed.
 func (c *InternalClient) executeRequest(req *http.Request) (*http.Response, error) {
 	tracing.GlobalTracer.InjectHTTPHeaders(req)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		if resp != nil {
+			resp.Body.Close()
+		}
 		return nil, errors.Wrap(err, "executing request")
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {

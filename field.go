@@ -1124,7 +1124,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time, opts
 
 		frag, err := view.CreateFragmentIfNotExists(key.Shard)
 		if err != nil {
-			return errors.Wrap(err, "creating view")
+			return errors.Wrap(err, "creating fragment")
 		}
 
 		if err := frag.bulkImport(data.RowIDs, data.ColumnIDs, options); err != nil {
