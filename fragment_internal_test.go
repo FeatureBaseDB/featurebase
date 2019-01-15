@@ -1221,7 +1221,7 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
-	defer f.Clean(b)
+	defer f.CleanKeep(b)
 
 	// Reset timer and execute benchmark.
 	b.ResetTimer()
@@ -1750,7 +1750,7 @@ func BenchmarkFragment_Snapshot(b *testing.B) {
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
-	defer f.Clean(b)
+	defer f.CleanKeep(b)
 	b.ResetTimer()
 
 	// Reset timer and execute benchmark.
@@ -2102,6 +2102,20 @@ func (f *fragment) Clean(t testing.TB) {
 	errp := os.Remove(f.cachePath())
 	if errc != nil || errf != nil {
 		t.Fatal("cleaning up fragment: ", errc, errf, errp)
+	}
+	// not all fragments have cache files
+	if errp != nil && !os.IsNotExist(errp) {
+		t.Fatalf("cleaning up fragment cache: %v", errp)
+	}
+}
+
+// CleanKeep is just like Clean(), but it doesn't remove the
+// fragment file (note that it DOES remove the cache file).
+func (f *fragment) CleanKeep(t testing.TB) {
+	errc := f.Close()
+	errp := os.Remove(f.cachePath())
+	if errc != nil {
+		t.Fatal("closing fragment: ", errc, errp)
 	}
 	// not all fragments have cache files
 	if errp != nil && !os.IsNotExist(errp) {

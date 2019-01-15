@@ -91,8 +91,8 @@ func (q *Query) endConditional() {
 	if q.conditional[1] == "<" {
 		low++
 	}
-	if q.conditional[3] == "<=" {
-		high++
+	if q.conditional[3] == "<" {
+		high--
 	}
 
 	elem := q.lastCallStackElem()

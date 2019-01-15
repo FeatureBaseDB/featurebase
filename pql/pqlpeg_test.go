@@ -249,6 +249,14 @@ func TestPEGWorking(t *testing.T) {
 			input:  `Row(a=4, from='2010-07-04T00:00', to="2010-08-04T00:00")`,
 			ncalls: 1},
 		{
+			name:   "RangeTimeFromQuotes",
+			input:  `Row(a=4, from='2010-07-04T00:00')`,
+			ncalls: 1},
+		{
+			name:   "RangeTimeToQuotes",
+			input:  `Row(a=4, to="2010-08-04T00:00")`,
+			ncalls: 1},
+		{
 			name:   "Dashed Frame",
 			input:  "Set(1, my-frame=9)",
 			ncalls: 1},
@@ -501,7 +509,7 @@ func TestPQLDeepEquality(t *testing.T) {
 				Args: map[string]interface{}{
 					"a": &Condition{
 						Op:    BETWEEN,
-						Value: []interface{}{int64(4), int64(9)},
+						Value: []interface{}{int64(4), int64(8)},
 					},
 				},
 			}},
@@ -513,7 +521,7 @@ func TestPQLDeepEquality(t *testing.T) {
 				Args: map[string]interface{}{
 					"a": &Condition{
 						Op:    BETWEEN,
-						Value: []interface{}{int64(5), int64(9)},
+						Value: []interface{}{int64(5), int64(8)},
 					},
 				},
 			}},
@@ -525,7 +533,7 @@ func TestPQLDeepEquality(t *testing.T) {
 				Args: map[string]interface{}{
 					"a": &Condition{
 						Op:    BETWEEN,
-						Value: []interface{}{int64(4), int64(10)},
+						Value: []interface{}{int64(4), int64(9)},
 					},
 				},
 			}},
@@ -537,7 +545,7 @@ func TestPQLDeepEquality(t *testing.T) {
 				Args: map[string]interface{}{
 					"a": &Condition{
 						Op:    BETWEEN,
-						Value: []interface{}{int64(5), int64(10)},
+						Value: []interface{}{int64(5), int64(9)},
 					},
 				},
 			}},
@@ -622,6 +630,26 @@ func TestPQLDeepEquality(t *testing.T) {
 						Name: "Row",
 						Args: map[string]interface{}{
 							"a": int64(1),
+						},
+					},
+				},
+				Children: []*Call{
+					{Name: "Rows"},
+				},
+			}},
+		{
+			name: "GroupByFilterRangeLTLT",
+			call: "GroupBy(Rows(), filter=Row(4 < a < 9))",
+			exp: &Call{
+				Name: "GroupBy",
+				Args: map[string]interface{}{
+					"filter": &Call{
+						Name: "Row",
+						Args: map[string]interface{}{
+							"a": &Condition{
+								Op:    BETWEEN,
+								Value: []interface{}{int64(5), int64(8)},
+							},
 						},
 					},
 				},
