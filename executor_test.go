@@ -39,7 +39,7 @@ var (
 	TempDir *string
 )
 
-func init() {
+func init() { // nolint: gochecknoinits
 	tdflag := flag.Lookup("temp-dir")
 	if tdflag == nil {
 		TempDir = flag.String("temp-dir", "", "Directory in which to place temporary data (e.g. for benchmarking). Useful if you are trying to benchmark different storage configurations.")
