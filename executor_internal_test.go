@@ -46,7 +46,7 @@ func TestExecutor_TranslateGroupByCall(t *testing.T) {
 		t.Fatalf("translating rows %v, %v", erra, errb)
 	}
 
-	query, err := pql.ParseString(`GroupBy(Rows(field=ak), Rows(field=b), Rows(field=ck), previous=["la", 0, "ha"])`)
+	query, err := pql.ParseString(`GroupBy(Rows(ak), Rows(b), Rows(ck), previous=["la", 0, "ha"])`)
 	if err != nil {
 		t.Fatalf("parsing query: %v", err)
 	}
@@ -69,28 +69,28 @@ func TestExecutor_TranslateGroupByCall(t *testing.T) {
 		err string
 	}{
 		{
-			pql: `GroupBy(Rows(field=notfound), previous=1)`,
+			pql: `GroupBy(Rows(notfound), previous=1)`,
 			err: "'previous' argument must be list",
 		},
 		{
-			pql: `GroupBy(Rows(field=ak), previous=["la", 0])`,
+			pql: `GroupBy(Rows(ak), previous=["la", 0])`,
 			err: "mismatched lengths",
 		},
 		{
-			pql: `GroupBy(Rows(field=ak), previous=[1])`,
+			pql: `GroupBy(Rows(ak), previous=[1])`,
 			err: "prev value must be a string",
 		},
 		{
-			pql: `GroupBy(Rows(field=notfound), previous=[1])`,
+			pql: `GroupBy(Rows(notfound), previous=[1])`,
 			err: ErrFieldNotFound.Error(),
 		},
 		// TODO: an unknown key will actually allocate an id. this is probably bad.
 		// {
-		// 	pql: `GroupBy(Rows(field=ak), previous=["zoop"])`,
+		// 	pql: `GroupBy(Rows(ak), previous=["zoop"])`,
 		// 	err: "translating row key '",
 		// },
 		{
-			pql: `GroupBy(Rows(field=b), previous=["la"])`,
+			pql: `GroupBy(Rows(b), previous=["la"])`,
 			err: "which doesn't use string keys",
 		},
 	}

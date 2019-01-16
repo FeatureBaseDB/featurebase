@@ -1089,6 +1089,11 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 }
 
 func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
+	// Fetch field name from argument.
+	fieldName, ok := c.Args["_field"].(string)
+	if !ok {
+		return nil, errors.New("Rows() field required")
+	}
 	if columnID, ok, err := c.UintArg("column"); err != nil {
 		return nil, errors.Wrap(err, "getting column")
 	} else if ok {
@@ -1097,7 +1102,7 @@ func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, s
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(shard uint64) (interface{}, error) {
-		return e.executeRowsShard(ctx, index, c, shard)
+		return e.executeRowsShard(ctx, index, fieldName, c, shard)
 	}
 
 	// Determine limit so we can use it when reducing.
@@ -1122,16 +1127,11 @@ func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, s
 	return results, nil
 }
 
-func (e *executor) executeRowsShard(_ context.Context, index string, c *pql.Call, shard uint64) (RowIDs, error) {
+func (e *executor) executeRowsShard(_ context.Context, index string, fieldName string, c *pql.Call, shard uint64) (RowIDs, error) {
 	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
 		return nil, ErrIndexNotFound
-	}
-	// Fetch field name from argument.
-	fieldName, ok := c.Args["field"].(string)
-	if !ok {
-		return nil, errors.New("Rows() argument required: field")
 	}
 	// Fetch field.
 	f := e.Holder.Field(index, fieldName)
@@ -1694,19 +1694,19 @@ func (e *executor) executeClearRowShard(ctx context.Context, index string, c *pq
 	return changed, nil
 }
 
-// executeSetRow executes a SetRow() call.
+// executeSetRow executes a Store() call.
 func (e *executor) executeSetRow(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (bool, error) {
-	// Ensure the field type supports SetRow().
+	// Ensure the field type supports Store().
 	fieldName, err := c.FieldArg()
 	if err != nil {
-		return false, errors.New("SetRow() argument required: field")
+		return false, errors.New("Store() argument required: field")
 	}
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
 		return false, ErrFieldNotFound
 	}
 	if field.Type() != FieldTypeSet {
-		return false, fmt.Errorf("SetRow() is not supported on %s field types", field.Type())
+		return false, fmt.Errorf("Store() is not supported on %s field types", field.Type())
 	}
 
 	// Execute calls in bulk on each remote node and merge.
@@ -1731,15 +1731,15 @@ func (e *executor) executeSetRow(ctx context.Context, index string, c *pql.Call,
 func (e *executor) executeSetRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (bool, error) {
 	fieldName, err := c.FieldArg()
 	if err != nil {
-		return false, errors.New("SetRow() argument required: field")
+		return false, errors.New("Store() argument required: field")
 	}
 
 	// Read fields using labels.
 	rowID, ok, err := c.UintArg(fieldName)
 	if err != nil {
-		return false, fmt.Errorf("reading SetRow() row: %v", err)
+		return false, fmt.Errorf("reading Store() row: %v", err)
 	} else if !ok {
-		return false, fmt.Errorf("SetRow() row argument '%v' required", rowLabel)
+		return false, fmt.Errorf("Store() row argument '%v' required", rowLabel)
 	}
 
 	field := e.Holder.Field(index, fieldName)
@@ -1756,7 +1756,7 @@ func (e *executor) executeSetRowShard(ctx context.Context, index string, c *pql.
 		}
 		src = row
 	} else {
-		return false, errors.New("SetRow() requires a source row")
+		return false, errors.New("Store() requires a source row")
 	}
 
 	// Set the row on the standard view.
@@ -1775,7 +1775,7 @@ func (e *executor) executeSetRowShard(ctx context.Context, index string, c *pql.
 	}
 	set, err := fragment.setRow(src, rowID)
 	if err != nil {
-		return false, errors.Wrapf(err, "setting row %d on view %s shard %d", rowID, viewStandard, shard)
+		return false, errors.Wrapf(err, "storing row %d on view %s shard %d", rowID, viewStandard, shard)
 	}
 	changed = changed || set
 
@@ -2336,7 +2336,7 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 		rowKey = "_" + rowLabel
 		fieldName = callArgString(c, "_field")
 	case "Rows":
-		fieldName = callArgString(c, "field")
+		fieldName = callArgString(c, "_field")
 		rowKey = "previous"
 		colKey = "column"
 	case "GroupBy":
@@ -2441,7 +2441,7 @@ func (e *executor) translateGroupByCall(index string, idx *Index, c *pql.Call) e
 
 	fields := make([]*Field, len(c.Children))
 	for i, child := range c.Children {
-		fieldname := callArgString(child, "field")
+		fieldname := callArgString(child, "_field")
 		field := idx.Field(fieldname)
 		if field == nil {
 			return errors.Wrapf(ErrFieldNotFound, "getting field '%s' from '%s'", fieldname, child)
@@ -2552,7 +2552,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 	case RowIDs:
 		other := RowIdentifiers{}
 
-		fieldName := callArgString(call, "field")
+		fieldName := callArgString(call, "_field")
 		if fieldName == "" {
 			return nil, ErrFieldNotFound
 		}
@@ -2752,9 +2752,9 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, filter *Row, inde
 
 	ignorePrev := false
 	for i, call := range children {
-		fieldName, ok := call.Args["field"].(string)
+		fieldName, ok := call.Args["_field"].(string)
 		if !ok {
-			return nil, errors.Errorf("%s call must have 'field' argument with valid (string) field name. Got %v of type %[2]T", call.Name, call.Args["field"])
+			return nil, errors.Errorf("%s call must have field with valid (string) field name. Got %v of type %[2]T", call.Name, call.Args["_field"])
 		}
 		if holder.Field(index, fieldName) == nil {
 			return nil, ErrFieldNotFound
