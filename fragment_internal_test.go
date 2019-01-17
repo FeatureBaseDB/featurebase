@@ -367,6 +367,20 @@ func TestFragment_Sum(t *testing.T) {
 			t.Fatalf("unexpected sum: %d", sum)
 		}
 	})
+
+	// verify that clearValue clears values
+	if _, err := f.clearValue(1000, bitDepth, 23); err != nil {
+		t.Fatal(err)
+	}
+	t.Run("ClearValue", func(t *testing.T) {
+		if sum, n, err := f.sum(nil, bitDepth); err != nil {
+			t.Fatal(err)
+		} else if n != 3 {
+			t.Fatalf("unexpected count: %d", n)
+		} else if sum != (3800 - 382) {
+			t.Fatalf("unexpected sum: got %d, expecting %d", sum, 3800-382)
+		}
+	})
 }
 
 // Ensure a fragment can find the min and max of values.
@@ -635,6 +649,71 @@ func TestFragment_Range(t *testing.T) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
 		}
 	})
+}
+
+// benchmarkSetValues is a helper function to explore, very roughly, the cost
+// of setting values.
+func benchmarkSetValues(b *testing.B, bitDepth uint, f *fragment, cfunc func(uint64) uint64) {
+	column := uint64(0)
+	for i := 0; i < b.N; i++ {
+		f.setValue(column, bitDepth, uint64(i))
+		column = cfunc(column)
+	}
+}
+
+// Benchmark performance of setValue for BSI ranges.
+func BenchmarkFragment_SetValue(b *testing.B) {
+	depths := []uint{4, 8, 16}
+	for _, bitDepth := range depths {
+		name := fmt.Sprintf("Depth%d", bitDepth)
+		f := mustOpenFragment("i", "f", viewBSIGroupPrefix+"foo", 0, "none")
+		b.Run(name+"_Sparse", func(b *testing.B) {
+			benchmarkSetValues(b, bitDepth, f, func(u uint64) uint64 { return (u + 70000) & (ShardWidth - 1) })
+		})
+		f.Clean(b)
+		f = mustOpenFragment("i", "f", viewBSIGroupPrefix+"foo", 0, "none")
+		b.Run(name+"_Dense", func(b *testing.B) {
+			benchmarkSetValues(b, bitDepth, f, func(u uint64) uint64 { return (u + 1) & (ShardWidth - 1) })
+		})
+		f.Clean(b)
+	}
+}
+
+// benchmarkImportValues is a helper function to explore, very roughly, the cost
+// of setting values using the special setter used for imports.
+func benchmarkImportValues(b *testing.B, bitDepth uint, f *fragment, cfunc func(uint64) uint64) {
+	column := uint64(0)
+	b.StopTimer()
+	columns := make([]uint64, b.N)
+	values := make([]uint64, b.N)
+	for i := 0; i < b.N; i++ {
+		values[i] = uint64(i)
+		columns[i] = column
+		column = cfunc(column)
+	}
+	b.StartTimer()
+	err := f.importValue(columns, values, bitDepth, false)
+	if err != nil {
+		b.Fatalf("error importing values: %s", err)
+	}
+}
+
+// Benchmark performance of setValue for BSI ranges.
+func BenchmarkFragment_ImportValue(b *testing.B) {
+	depths := []uint{4, 8, 16}
+	for _, bitDepth := range depths {
+		name := fmt.Sprintf("Depth%d", bitDepth)
+		f := mustOpenFragment("i", "f", viewBSIGroupPrefix+"foo", 0, "none")
+		b.Run(name+"_Sparse", func(b *testing.B) {
+			benchmarkImportValues(b, bitDepth, f, func(u uint64) uint64 { return (u + 70000) & (ShardWidth - 1) })
+		})
+		f.Clean(b)
+		f = mustOpenFragment("i", "f", viewBSIGroupPrefix+"foo", 0, "none")
+		b.Run(name+"_Dense", func(b *testing.B) {
+			benchmarkImportValues(b, bitDepth, f, func(u uint64) uint64 { return (u + 1) & (ShardWidth - 1) })
+		})
+		f.Clean(b)
+	}
 }
 
 // Ensure a fragment can snapshot correctly.
@@ -1142,7 +1221,7 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
-	defer f.Clean(b)
+	defer f.CleanKeep(b)
 
 	// Reset timer and execute benchmark.
 	b.ResetTimer()
@@ -1671,7 +1750,7 @@ func BenchmarkFragment_Snapshot(b *testing.B) {
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
-	defer f.Clean(b)
+	defer f.CleanKeep(b)
 	b.ResetTimer()
 
 	// Reset timer and execute benchmark.
@@ -2023,6 +2102,20 @@ func (f *fragment) Clean(t testing.TB) {
 	errp := os.Remove(f.cachePath())
 	if errc != nil || errf != nil {
 		t.Fatal("cleaning up fragment: ", errc, errf, errp)
+	}
+	// not all fragments have cache files
+	if errp != nil && !os.IsNotExist(errp) {
+		t.Fatalf("cleaning up fragment cache: %v", errp)
+	}
+}
+
+// CleanKeep is just like Clean(), but it doesn't remove the
+// fragment file (note that it DOES remove the cache file).
+func (f *fragment) CleanKeep(t testing.TB) {
+	errc := f.Close()
+	errp := os.Remove(f.cachePath())
+	if errc != nil {
+		t.Fatal("closing fragment: ", errc, errp)
 	}
 	// not all fragments have cache files
 	if errp != nil && !os.IsNotExist(errp) {
