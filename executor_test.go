@@ -3064,7 +3064,7 @@ func TestExecutor_Execute_RowsTime(t *testing.T) {
 	defer c.Close()
 	c.CreateField(t, "i", pilosa.IndexOptions{}, "t", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), true))
 
-	exp := "executing: Rows() query on time field with no standard view is not supported"
+	exp := "executing: Rows() query on time field with no standard view is not currently supported"
 	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=t)`}); err == nil || err.Error() != exp {
 		t.Fatalf("expected error: %s", exp)
 	}

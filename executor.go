@@ -1143,7 +1143,7 @@ func (e *executor) executeRowsShard(_ context.Context, index string, c *pql.Call
 	// `noStandardView: true`.
 	// TODO https://github.com/pilosa/pilosa/issues/1783
 	if f.Type() == FieldTypeTime && f.options.NoStandardView {
-		return nil, errors.New("Rows() query on time field with no standard view is not supported")
+		return nil, errors.New("Rows() query on time field with no standard view is not currently supported")
 	}
 
 	frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
