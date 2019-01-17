@@ -206,6 +206,16 @@ func TestClusterResize_AddNode(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		// exp is the expected result for the Row queries that follow.
+		exp := `{"results":[{"attrs":{},"columns":[1,1300000]}]}` + "\n"
+
+		// Verify the data exists on the single node.
+		if res, err := m0.Query("i", "", `Row(f=1)`); err != nil {
+			t.Fatal(err)
+		} else if res != exp {
+			t.Fatalf("unexpected result: %s", res)
+		}
+
 		// Configure node1
 		m1 := test.NewCommandNode(false)
 		m1.Config.Gossip.Port = "0"
@@ -220,6 +230,18 @@ func TestClusterResize_AddNode(t *testing.T) {
 			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
 		} else if !checkClusterState(m1, pilosa.ClusterStateNormal, 1000) {
 			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
+		}
+
+		// Verify the data exists on both nodes.
+		if res, err := m0.Query("i", "", `Row(f=1)`); err != nil {
+			t.Fatal(err)
+		} else if res != exp {
+			t.Fatalf("unexpected result: %s", res)
+		}
+		if res, err := m1.Query("i", "", `Row(f=1)`); err != nil {
+			t.Fatal(err)
+		} else if res != exp {
+			t.Fatalf("unexpected result: %s", res)
 		}
 	})
 	t.Run("SkippedShard", func(t *testing.T) {
@@ -247,6 +269,16 @@ func TestClusterResize_AddNode(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		// exp is the expected result for the Row queries that follow.
+		exp := `{"results":[{"attrs":{},"columns":[1,2400000]}]}` + "\n"
+
+		// Verify the data exists on the single node.
+		if res, err := m0.Query("i", "", `Row(f=1)`); err != nil {
+			t.Fatal(err)
+		} else if res != exp {
+			t.Fatalf("unexpected result: %s", res)
+		}
+
 		// Configure node1
 		m1 := test.NewCommandNode(false)
 		m1.Config.Gossip.Port = "0"
@@ -261,6 +293,18 @@ func TestClusterResize_AddNode(t *testing.T) {
 			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
 		} else if !checkClusterState(m1, pilosa.ClusterStateNormal, 1000) {
 			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
+		}
+
+		// Verify the data exists on both nodes.
+		if res, err := m0.Query("i", "", `Row(f=1)`); err != nil {
+			t.Fatal(err)
+		} else if res != exp {
+			t.Fatalf("unexpected result: %s", res)
+		}
+		if res, err := m1.Query("i", "", `Row(f=1)`); err != nil {
+			t.Fatal(err)
+		} else if res != exp {
+			t.Fatalf("unexpected result: %s", res)
 		}
 	})
 }

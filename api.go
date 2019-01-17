@@ -333,8 +333,6 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 				}
 				return err
 			})
-			go func(node *Node) {
-			}(node)
 		} else if !remote { // if remote == true we don't forward to other nodes
 			// forward it on
 			eg.Go(func() error {
@@ -559,6 +557,23 @@ func (api *API) FragmentBlocks(ctx context.Context, indexName, fieldName, viewNa
 	// Retrieve blocks.
 	blocks := f.Blocks()
 	return blocks, nil
+}
+
+// FragmentData returns all data in the specified fragment.
+func (api *API) FragmentData(ctx context.Context, indexName, fieldName, viewName string, shard uint64) (io.WriterTo, error) {
+	span, _ := tracing.StartSpanFromContext(ctx, "API.FragmentData")
+	defer span.Finish()
+
+	if err := api.validate(apiFragmentData); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
+	}
+
+	// Retrieve fragment from holder.
+	f := api.holder.fragment(indexName, fieldName, viewName, shard)
+	if f == nil {
+		return nil, ErrFragmentNotFound
+	}
+	return f, nil
 }
 
 // Hosts returns a list of the hosts in the cluster including their ID,
@@ -1157,6 +1172,36 @@ func (api *API) Info() serverInfo {
 	}
 }
 
+func (api *API) TranslateKeys(body io.Reader) ([]byte, error) {
+	reqBytes, err := ioutil.ReadAll(body)
+	if err != nil {
+		return nil, NewBadRequestError(errors.Wrap(err, "read body error"))
+	}
+	var req TranslateKeysRequest
+	if err := api.Serializer.Unmarshal(reqBytes, &req); err != nil {
+		return nil, NewBadRequestError(errors.Wrap(err, "unmarshal body error"))
+	}
+	var ids []uint64
+	if req.Field == "" {
+		ids, err = api.holder.translateFile.TranslateColumnsToUint64(req.Index, req.Keys)
+	} else {
+		ids, err = api.holder.translateFile.TranslateRowsToUint64(req.Index, req.Field, req.Keys)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	resp := TranslateKeysResponse{
+		IDs: ids,
+	}
+	// Encode response.
+	buf, err := api.Serializer.Marshal(&resp)
+	if err != nil {
+		return nil, errors.Wrap(err, "translate keys response encoding error")
+	}
+	return buf, nil
+}
+
 type serverInfo struct {
 	ShardWidth uint64 `json:"shardWidth"`
 }
@@ -1175,6 +1220,7 @@ const (
 	apiExportCSV
 	apiFragmentBlockData
 	apiFragmentBlocks
+	apiFragmentData
 	apiField
 	apiFieldAttrDiff
 	//apiHosts // not implemented
@@ -1204,7 +1250,8 @@ var methodsCommon = map[apiMethod]struct{}{
 }
 
 var methodsResizing = map[apiMethod]struct{}{
-	apiResizeAbort: {},
+	apiFragmentData: {},
+	apiResizeAbort:  {},
 }
 
 var methodsNormal = map[apiMethod]struct{}{

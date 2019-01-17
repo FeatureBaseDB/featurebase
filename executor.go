@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"time"
 
@@ -87,6 +88,11 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 
 	resp := QueryResponse{}
 
+	// Check for query cancellation.
+	if err := validateQueryContext(ctx); err != nil {
+		return resp, err
+	}
+
 	// Verify that an index is set.
 	if index == "" {
 		return resp, ErrIndexRequired
@@ -112,11 +118,15 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	if !opt.Remote {
 		if err := e.translateCalls(ctx, index, idx, q.Calls); err != nil {
 			return resp, err
+		} else if err := validateQueryContext(ctx); err != nil {
+			return resp, err
 		}
 	}
 
 	results, err := e.execute(ctx, index, q, shards, opt)
 	if err != nil {
+		return resp, err
+	} else if err := validateQueryContext(ctx); err != nil {
 		return resp, err
 	}
 
@@ -158,6 +168,8 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	// No need to translate a remote call.
 	if !opt.Remote {
 		if err := e.translateResults(ctx, index, idx, q.Calls, results); err != nil {
+			return resp, err
+		} else if err := validateQueryContext(ctx); err != nil {
 			return resp, err
 		}
 	}
@@ -217,6 +229,10 @@ func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shar
 	// Execute each call serially.
 	results := make([]interface{}, 0, len(q.Calls))
 	for _, call := range q.Calls {
+		if err := validateQueryContext(ctx); err != nil {
+			return nil, err
+		}
+
 		v, err := e.executeCall(ctx, index, call, shards, opt)
 		if err != nil {
 			return nil, err
@@ -231,7 +247,9 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeCall")
 	defer span.Finish()
 
-	if err := e.validateCallArgs(c); err != nil {
+	if err := validateQueryContext(ctx); err != nil {
+		return nil, err
+	} else if err := e.validateCallArgs(c); err != nil {
 		return nil, errors.Wrap(err, "validating args")
 	}
 	indexTag := fmt.Sprintf("index:%s", index)
@@ -475,11 +493,11 @@ func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 		return nil, errors.Wrap(err, "map reduce")
 	}
 
-	// Attach attributes for Row() calls.
+	// Attach attributes for non-BSI Row() calls.
 	// If the column label is used then return column attributes.
 	// If the row label is used then return bitmap attributes.
 	row, _ := other.(*Row)
-	if c.Name == "Row" {
+	if c.Name == "Row" && !c.HasConditionArg() {
 		if opt.ExcludeRowAttrs {
 			row.Attrs = map[string]interface{}{}
 		} else {
@@ -521,18 +539,20 @@ func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 
 // executeBitmapCallShard executes a bitmap call for a single shard.
 func (e *executor) executeBitmapCallShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
+	if err := validateQueryContext(ctx); err != nil {
+		return nil, err
+	}
+
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeBitmapCallShard")
 	defer span.Finish()
 
 	switch c.Name {
-	case "Row":
-		return e.executeBitmapShard(ctx, index, c, shard)
+	case "Row", "Range":
+		return e.executeRowShard(ctx, index, c, shard)
 	case "Difference":
 		return e.executeDifferenceShard(ctx, index, c, shard)
 	case "Intersect":
 		return e.executeIntersectShard(ctx, index, c, shard)
-	case "Range":
-		return e.executeRangeShard(ctx, index, c, shard)
 	case "Union":
 		return e.executeUnionShard(ctx, index, c, shard)
 	case "Xor":
@@ -884,6 +904,10 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 	} else if hasLimit {
 		limit = int(lim)
 	}
+	filter, _, err := c.CallArg("filter")
+	if err != nil {
+		return nil, err
+	}
 
 	// perform necessary Rows queries (any that have limit or columns args) -
 	// TODO, call async? would only help if multiple Rows queries had a column
@@ -892,7 +916,7 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 	childRows := make([]RowIDs, len(c.Children))
 	for i, child := range c.Children {
 		if child.Name != "Rows" {
-			return nil, errors.Errorf("'%s' is not a valid child query for GroupBy, must be 'Rows'", c.Name)
+			return nil, errors.Errorf("'%s' is not a valid child query for GroupBy, must be 'Rows'", child.Name)
 		}
 		_, hasLimit, err := child.UintArg("limit")
 		if err != nil {
@@ -915,7 +939,7 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(shard uint64) (interface{}, error) {
-		return e.executeGroupByShard(ctx, index, c, shard, childRows)
+		return e.executeGroupByShard(ctx, index, c, filter, shard, childRows)
 	}
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
@@ -975,7 +999,7 @@ func (fr FieldRow) MarshalJSON() ([]byte, error) {
 }
 
 func (fr FieldRow) String() string {
-	return fmt.Sprintf("%s.%d", fr.Field, fr.RowID)
+	return fmt.Sprintf("%s.%d.%s", fr.Field, fr.RowID, fr.RowKey)
 }
 
 type GroupCount struct {
@@ -1028,8 +1052,15 @@ func (g GroupCount) Compare(o GroupCount) int {
 	return 0
 }
 
-func (e *executor) executeGroupByShard(_ context.Context, index string, c *pql.Call, shard uint64, childRows []RowIDs) ([]GroupCount, error) {
-	iter, err := newGroupByIterator(childRows, c.Children, index, shard, e.Holder)
+func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql.Call, filter *pql.Call, shard uint64, childRows []RowIDs) (_ []GroupCount, err error) {
+	var filterRow *Row
+	if filter != nil {
+		if filterRow, err = e.executeBitmapCallShard(ctx, index, filter, shard); err != nil {
+			return nil, errors.Wrapf(err, "executing group by filter for shard %d", shard)
+		}
+	}
+
+	iter, err := newGroupByIterator(childRows, c.Children, filterRow, index, shard, e.Holder)
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting group by iterator for shard %d", shard)
 	}
@@ -1138,9 +1169,18 @@ func (e *executor) executeRowsShard(_ context.Context, index string, c *pql.Call
 	return frag.rows(start, filters...), nil
 }
 
-func (e *executor) executeBitmapShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeBitmapShard")
+func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
+	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeRowShard")
 	defer span.Finish()
+
+	if c.Name == "Range" {
+		log.Print("DEPRECATED: Range() is deprecated, please use Row() instead.")
+	}
+
+	// Handle bsiGroup ranges differently.
+	if c.HasConditionArg() {
+		return e.executeRowBSIGroupShard(ctx, index, c, shard)
+	}
 
 	// Fetch column label from index.
 	idx := e.Holder.Index(index)
@@ -1165,93 +1205,43 @@ func (e *executor) executeBitmapShard(ctx context.Context, index string, c *pql.
 		return nil, fmt.Errorf("Row() must specify %v", rowLabel)
 	}
 
-	frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
-	if frag == nil {
-		return NewRow(), nil
-	}
-	return frag.row(rowID), nil
-}
-
-// executeIntersectShard executes a intersect() call for a local shard.
-func (e *executor) executeIntersectShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeIntersectShard")
-	defer span.Finish()
-
-	var other *Row
-	if len(c.Children) == 0 {
-		return nil, fmt.Errorf("empty Intersect query is currently not supported")
-	}
-	for i, input := range c.Children {
-		row, err := e.executeBitmapCallShard(ctx, index, input, shard)
-		if err != nil {
-			return nil, err
-		}
-
-		if i == 0 {
-			other = row
-		} else {
-			other = other.Intersect(row)
+	// Parse "from" time, if set.
+	var fromTime time.Time
+	if _, ok := c.Args["from"]; ok {
+		switch v := c.Args["from"].(type) {
+		case string:
+			if fromTime, err = time.Parse(TimeFormat, v); err != nil {
+				return nil, errors.New("cannot parse Row() 'from' time")
+			}
+		case int64:
+			fromTime = time.Unix(v, 0).UTC()
+		default:
+			return nil, errors.New("Row() 'from' arg must be a timestamp")
 		}
 	}
-	other.invalidateCount()
-	return other, nil
-}
 
-// executeRangeShard executes a range() call for a local shard.
-func (e *executor) executeRangeShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeRangeShard")
-	defer span.Finish()
-
-	// Handle bsiGroup ranges differently.
-	if c.HasConditionArg() {
-		return e.executeBSIGroupRangeShard(ctx, index, c, shard)
-	}
-
-	// Parse field.
-	fieldName, err := c.FieldArg()
-	if err != nil {
-		return nil, errors.New("Range() argument required: field")
+	// Parse "to" time, if set.
+	var toTime time.Time
+	if _, ok := c.Args["to"]; ok {
+		switch v := c.Args["to"].(type) {
+		case string:
+			if toTime, err = time.Parse(TimeFormat, v); err != nil {
+				return nil, errors.New("cannot parse Row() 'to' time")
+			}
+		case int64:
+			toTime = time.Unix(v, 0).UTC()
+		default:
+			return nil, errors.New("Row() 'to' arg must be a timestamp")
+		}
 	}
 
-	// Retrieve column label.
-	idx := e.Holder.Index(index)
-	if idx == nil {
-		return nil, ErrIndexNotFound
-	}
-
-	// Retrieve base field.
-	f := idx.Field(fieldName)
-	if f == nil {
-		return nil, ErrFieldNotFound
-	}
-
-	// Read row & column id.
-	rowID, rowOK, err := c.UintArg(fieldName)
-	if err != nil {
-		return nil, fmt.Errorf("executeRangeShard - reading row: %v", err)
-	}
-	if !rowOK {
-		return nil, fmt.Errorf("Range() must specify %q", rowLabel)
-	}
-
-	// Parse start time.
-	startTimeStr, ok := c.Args["_start"].(string)
-	if !ok {
-		return nil, errors.New("Range() start time required")
-	}
-	startTime, err := time.Parse(TimeFormat, startTimeStr)
-	if err != nil {
-		return nil, errors.New("cannot parse Range() start time")
-	}
-
-	// Parse end time.
-	endTimeStr, ok := c.Args["_end"].(string)
-	if !ok {
-		return nil, errors.New("Range() end time required")
-	}
-	endTime, err := time.Parse(TimeFormat, endTimeStr)
-	if err != nil {
-		return nil, errors.New("cannot parse Range() end time")
+	// Simply return row if times are not set.
+	if c.Name == "Row" && fromTime.IsZero() && toTime.IsZero() {
+		frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
+		if frag == nil {
+			return NewRow(), nil
+		}
+		return frag.row(rowID), nil
 	}
 
 	// If no quantum exists then return an empty bitmap.
@@ -1260,9 +1250,16 @@ func (e *executor) executeRangeShard(ctx context.Context, index string, c *pql.C
 		return &Row{}, nil
 	}
 
+	// Set maximum "to" value if only "from" is set. We don't need to worry
+	// about setting the minimum "from" since it is the zero value if omitted.
+	if toTime.IsZero() {
+		// Set the end timestamp to current time + 1 day, in order to account for timezone differences.
+		toTime = time.Now().AddDate(0, 0, 1)
+	}
+
 	// Union bitmaps across all time-based views.
 	row := &Row{}
-	for _, view := range viewsByTimeRange(viewStandard, startTime, endTime, q) {
+	for _, view := range viewsByTimeRange(viewStandard, fromTime, toTime, q) {
 		f := e.Holder.fragment(index, fieldName, view, shard)
 		if f == nil {
 			continue
@@ -1271,18 +1268,19 @@ func (e *executor) executeRangeShard(ctx context.Context, index string, c *pql.C
 	}
 	f.Stats.Count("range", 1, 1.0)
 	return row, nil
+
 }
 
-// executeBSIGroupRangeShard executes a range(bsiGroup) call for a local shard.
-func (e *executor) executeBSIGroupRangeShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeBSIGroupRangeShard")
+// executeRowBSIGroupShard executes a range(bsiGroup) call for a local shard.
+func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
+	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeRowBSIGroupShard")
 	defer span.Finish()
 
 	// Only one conditional should be present.
 	if len(c.Args) == 0 {
-		return nil, errors.New("Range(): condition required")
+		return nil, errors.New("Row(): condition required")
 	} else if len(c.Args) > 1 {
-		return nil, errors.New("Range(): too many arguments")
+		return nil, errors.New("Row(): too many arguments")
 	}
 
 	// Extract conditional.
@@ -1291,7 +1289,7 @@ func (e *executor) executeBSIGroupRangeShard(ctx context.Context, index string, 
 	for k, v := range c.Args {
 		vv, ok := v.(*pql.Condition)
 		if !ok {
-			return nil, fmt.Errorf("Range(): %q: expected condition argument, got %v", k, v)
+			return nil, fmt.Errorf("Row(): %q: expected condition argument, got %v", k, v)
 		}
 		fieldName, cond = k, vv
 	}
@@ -1303,7 +1301,7 @@ func (e *executor) executeBSIGroupRangeShard(ctx context.Context, index string, 
 
 	// EQ null           (not implemented: flip frag.NotNull with max ColumnID)
 	// NEQ null          frag.NotNull()
-	// BETWEEN a,b(in)   BETWEEN/frag.RangeBetween()
+	// BETWEEN a,b(in)   BETWEEN/frag.RowBetween()
 	// BETWEEN a,b(out)  BETWEEN/frag.NotNull()
 	// EQ <int>          frag.RangeOp
 	// NEQ <int>         frag.RangeOp
@@ -1333,11 +1331,11 @@ func (e *executor) executeBSIGroupRangeShard(ctx context.Context, index string, 
 
 		// Only support two integers for the between operation.
 		if len(predicates) != 2 {
-			return nil, errors.New("Range(): BETWEEN condition requires exactly two integer values")
+			return nil, errors.New("Row(): BETWEEN condition requires exactly two integer values")
 		}
 
 		// The reason we don't just call:
-		//     return f.RangeBetween(fieldName, predicates[0], predicates[1])
+		//     return f.RowBetween(fieldName, predicates[0], predicates[1])
 		// here is because we need the call to be shard-specific.
 
 		// Find bsiGroup.
@@ -1370,7 +1368,7 @@ func (e *executor) executeBSIGroupRangeShard(ctx context.Context, index string, 
 		// Only support integers for now.
 		value, ok := cond.Value.(int64)
 		if !ok {
-			return nil, errors.New("Range(): conditions only support integer values")
+			return nil, errors.New("Row(): conditions only support integer values")
 		}
 
 		// Find bsiGroup.
@@ -1404,6 +1402,31 @@ func (e *executor) executeBSIGroupRangeShard(ctx context.Context, index string, 
 		f.Stats.Count("range:bsigroup", 1, 1.0)
 		return frag.rangeOp(cond.Op, bsig.BitDepth(), baseValue)
 	}
+}
+
+// executeIntersectShard executes a intersect() call for a local shard.
+func (e *executor) executeIntersectShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeIntersectShard")
+	defer span.Finish()
+
+	var other *Row
+	if len(c.Children) == 0 {
+		return nil, fmt.Errorf("empty Intersect query is currently not supported")
+	}
+	for i, input := range c.Children {
+		row, err := e.executeBitmapCallShard(ctx, index, input, shard)
+		if err != nil {
+			return nil, err
+		}
+
+		if i == 0 {
+			other = row
+		} else {
+			other = other.Intersect(row)
+		}
+	}
+	other.invalidateCount()
+	return other, nil
 }
 
 // executeUnionShard executes a union() call for a local shard.
@@ -1966,7 +1989,13 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 
 	// Collect attributes by field/id.
 	m := make(map[string]map[uint64]map[string]interface{})
-	for _, c := range calls {
+	for i, c := range calls {
+		if i%10 == 0 {
+			if err := validateQueryContext(ctx); err != nil {
+				return nil, err
+			}
+		}
+
 		field, ok := c.Args["_field"].(string)
 		if !ok {
 			return nil, errors.New("SetRowAttrs() field required")
@@ -2127,7 +2156,7 @@ func (e *executor) shardsByNode(nodes []*Node, index string, shards []uint64) (m
 
 loop:
 	for _, shard := range shards {
-		for _, node := range e.Cluster.shardNodes(index, shard) {
+		for _, node := range e.Cluster.ShardNodes(index, shard) {
 			if Nodes(nodes).Contains(node) {
 				m[node] = append(m[node], shard)
 				continue loop
@@ -2549,6 +2578,23 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 	return result, nil
 }
 
+// validateQueryContext returns a query-appropriate error if the context is done.
+func validateQueryContext(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		switch err := ctx.Err(); err {
+		case context.Canceled:
+			return ErrQueryCancelled
+		case context.DeadlineExceeded:
+			return ErrQueryTimeout
+		default:
+			return err
+		}
+	default:
+		return nil
+	}
+}
+
 // errShardUnavailable is a marker error if no nodes are available.
 var errShardUnavailable = errors.New("shard unavailable")
 
@@ -2687,22 +2733,32 @@ type groupByIterator struct {
 	// fields and then sets the row ids.
 	fields []FieldRow
 	done   bool
+
+	// Optional filter row to intersect against first level of values.
+	filter *Row
 }
 
 // newGroupByIterator initializes a new groupByIterator.
-func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, index string, shard uint64, holder *Holder) (*groupByIterator, error) {
+func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, filter *Row, index string, shard uint64, holder *Holder) (*groupByIterator, error) {
 	gbi := &groupByIterator{
 		rowIters: make([]*rowIterator, len(children)),
 		rows: make([]struct {
 			row *Row
 			id  uint64
 		}, len(children)),
+		filter: filter,
 		fields: make([]FieldRow, len(children)),
 	}
 
 	ignorePrev := false
 	for i, call := range children {
-		fieldName := call.Args["field"].(string) // this has already been validated by this point
+		fieldName, ok := call.Args["field"].(string)
+		if !ok {
+			return nil, errors.Errorf("%s call must have 'field' argument with valid (string) field name. Got %v of type %[2]T", call.Name, call.Args["field"])
+		}
+		if holder.Field(index, fieldName) == nil {
+			return nil, ErrFieldNotFound
+		}
 		gbi.fields[i].Field = fieldName
 		// Fetch fragment.
 		frag := holder.fragment(index, fieldName, viewStandard, shard)
@@ -2756,6 +2812,11 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, index string, sha
 		}
 	}
 
+	// Apply filter to first level, if available.
+	if gbi.filter != nil && len(gbi.rows) > 0 {
+		gbi.rows[0].row = gbi.rows[0].row.Intersect(gbi.filter)
+	}
+
 	for i := 1; i < len(gbi.rows)-1; i++ {
 		gbi.rows[i].row = gbi.rows[i].row.Intersect(gbi.rows[i-1].row)
 	}
@@ -2766,32 +2827,49 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, index string, sha
 // nextAtIdx is a recursive helper method for getting the next row for the field
 // at index i, and then updating the rows in the "higher" fields if it wraps.
 func (gbi *groupByIterator) nextAtIdx(i int) {
-	nr, rowID, wrapped := gbi.rowIters[i].Next()
-	if nr == nil {
-		gbi.done = true
-		return
+	// loop until we find a non-empty row. This is an optimization - the loop and if/break can be removed.
+	for {
+		nr, rowID, wrapped := gbi.rowIters[i].Next()
+		if nr == nil {
+			gbi.done = true
+			return
+		}
+		if wrapped && i != 0 {
+			gbi.nextAtIdx(i - 1)
+		}
+		if i == 0 && gbi.filter != nil {
+			gbi.rows[i].row = nr.Intersect(gbi.filter)
+		} else if i == 0 || i == len(gbi.rows)-1 {
+			gbi.rows[i].row = nr
+		} else {
+			gbi.rows[i].row = nr.Intersect(gbi.rows[i-1].row)
+		}
+		gbi.rows[i].id = rowID
+
+		if !gbi.rows[i].row.IsEmpty() {
+			break
+		}
 	}
-	if wrapped && i != 0 {
-		gbi.nextAtIdx(i - 1)
-	}
-	if i != 0 && i != len(gbi.rows)-1 {
-		gbi.rows[i].row = nr.Intersect(gbi.rows[i-1].row)
-	} else {
-		gbi.rows[i].row = nr
-	}
-	gbi.rows[i].id = rowID
 }
 
 // Next returns a GroupCount representing the next group by record. When there
 // are no more records it will return an empty GroupCount and done==true.
 func (gbi *groupByIterator) Next() (ret GroupCount, done bool) {
-	if gbi.done {
-		return ret, true
-	}
-	if len(gbi.rows) == 1 {
-		ret.Count = gbi.rows[len(gbi.rows)-1].row.Count()
-	} else {
-		ret.Count = gbi.rows[len(gbi.rows)-1].row.intersectionCount(gbi.rows[len(gbi.rows)-2].row)
+	// loop until we find a result with count > 0
+	for {
+		if gbi.done {
+			return ret, true
+		}
+		if len(gbi.rows) == 1 {
+			ret.Count = gbi.rows[len(gbi.rows)-1].row.Count()
+		} else {
+			ret.Count = gbi.rows[len(gbi.rows)-1].row.intersectionCount(gbi.rows[len(gbi.rows)-2].row)
+		}
+		if ret.Count == 0 {
+			gbi.nextAtIdx(len(gbi.rows) - 1)
+			continue
+		}
+		break
 	}
 
 	ret.Group = make([]FieldRow, len(gbi.rows))
@@ -2801,6 +2879,7 @@ func (gbi *groupByIterator) Next() (ret GroupCount, done bool) {
 	}
 
 	// set up for next call
+
 	gbi.nextAtIdx(len(gbi.rows) - 1)
 
 	return ret, false

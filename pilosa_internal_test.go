@@ -20,7 +20,7 @@ import (
 
 func TestValidateName(t *testing.T) {
 	names := []string{
-		"a", "ab", "ab1", "b-c", "d_e",
+		"a", "ab", "ab1", "b-c", "d_e", "exists",
 		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}
 	for _, name := range names {
@@ -33,8 +33,7 @@ func TestValidateName(t *testing.T) {
 func TestValidateNameInvalid(t *testing.T) {
 	names := []string{
 		"", "'", "^", "/", "\\", "A", "*", "a:b", "valid?no", "yüce", "1", "_", "-",
-		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
-		"exists",
+		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", "_exists",
 	}
 	for _, name := range names {
 		if validateName(name) == nil {

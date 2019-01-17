@@ -428,7 +428,7 @@ func (s *Server) SyncData() error {
 }
 
 func (s *Server) monitorAntiEntropy() {
-	if s.antiEntropyInterval == 0 {
+	if s.antiEntropyInterval == 0 || s.cluster.ReplicaN <= 1 {
 		return // anti entropy disabled
 	}
 	s.cluster.initializeAntiEntropy()

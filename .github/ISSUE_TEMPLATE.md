@@ -1,8 +1,8 @@
 For bugs, please provide the following:
 
-### Expected behavior
+### What's going wrong?
 
-### Actual behavior
+### What was expected?
 
 ### Steps to reproduce the behavior
 

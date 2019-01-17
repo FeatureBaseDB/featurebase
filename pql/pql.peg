@@ -13,12 +13,12 @@ Call <-  'Set' {p.startCall("Set")} open col comma args (comma timestamp)? close
        / 'ClearRow' {p.startCall("ClearRow")} open arg close {p.endCall()}
        / 'Store' {p.startCall("Store")} open Call comma arg close {p.endCall()}
        / 'TopN' {p.startCall("TopN")} open posfield (comma allargs)? close {p.endCall()}
-       / 'Range' {p.startCall("Range")} open (timerange / conditional / arg) close {p.endCall()}
        / < IDENT > { p.startCall(buffer[begin:end] ) } open allargs comma? close { p.endCall() }
 allargs <- Call (comma Call)* (comma args)? / args / sp
 args <- arg (comma args)? sp
 arg <- (   field sp '=' sp value
          / field sp COND sp value
+         / conditional
          )
 COND <- ( '><' { p.addBTWN() }
         / '<=' { p.addLTE() }
@@ -28,12 +28,11 @@ COND <- ( '><' { p.addBTWN() }
         / '<' { p.addLT() }
         / '>' { p.addGT() }
         )
+
 conditional <- {p.startConditional()} condint condLT condfield condLT condint {p.endConditional()}
 condint <- <'-'? [1-9] [0-9]* / '0'> sp {p.condAdd(buffer[begin:end])}
 condLT <- <('<=' / '<')> sp {p.condAdd(buffer[begin:end])}
 condfield <- <fieldExpr> sp {p.condAdd(buffer[begin:end])}
-
-timerange <- field sp '=' sp value comma <timestampfmt> {p.addPosStr("_start", buffer[begin:end])} comma <timestampfmt> {p.addPosStr("_end", buffer[begin:end])}
 
 value <- ( item
          / lbrack { p.startList() } list rbrack { p.endList() }
@@ -42,8 +41,10 @@ list <- item (comma list)?
 item <- ( 'null' &(comma / sp close) { p.addVal(nil) }
          / 'true' &(comma / sp close) { p.addVal(true) }
          / 'false' &(comma / sp close) { p.addVal(false) }
+         / timestampfmt { p.addVal(buffer[begin:end]) }
          / < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(buffer[begin:end]) }
          / < '-'? '.'[0-9]+ > { p.addNumVal(buffer[begin:end]) }
+         / < IDENT > { p.startCall(buffer[begin:end]) } open allargs comma? close { p.addVal(p.endCall()) }
          / < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > { p.addVal(buffer[begin:end]) }
          / < '"'  doublequotedstring '"' > { s, _ := strconv.Unquote(buffer[begin:end]); p.addVal(s) }
          / '\'' < singlequotedstring > '\'' { p.addVal(buffer[begin:end]) }
@@ -76,5 +77,5 @@ IDENT <- [[A-Z]] ([[A-Z]] / [0-9])*
 
 
 timestampbasicfmt <- [0-9][0-9][0-9][0-9]'-'[01][0-9]'-'[0-3][0-9]'T'[0-9][0-9]':'[0-9][0-9]
-timestampfmt <- '"' timestampbasicfmt '"' / '\'' timestampbasicfmt '\'' / timestampbasicfmt
+timestampfmt <- '"' <timestampbasicfmt> '"' / '\'' <timestampbasicfmt> '\'' / <timestampbasicfmt>
 timestamp <- <timestampfmt> {p.addPosStr("_timestamp", buffer[begin:end])}
