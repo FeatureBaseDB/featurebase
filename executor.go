@@ -1090,9 +1090,13 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 
 func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
 	// Fetch field name from argument.
-	fieldName, ok := c.Args["_field"].(string)
-	if !ok {
-		return nil, errors.New("Rows() field required")
+	// Check "field" first for backwards compatibility
+	var fieldName string
+	var ok bool
+	if fieldName, ok = c.Args["field"].(string); !ok {
+		if fieldName, ok = c.Args["_field"].(string); !ok {
+			return nil, errors.New("Rows() field required")
+		}
 	}
 	if columnID, ok, err := c.UintArg("column"); err != nil {
 		return nil, errors.Wrap(err, "getting column")

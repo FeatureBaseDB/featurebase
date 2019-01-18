@@ -3043,6 +3043,13 @@ func TestExecutor_Execute_Rows(t *testing.T) {
 		t.Fatalf("unexpected rows: %+v", rows)
 	}
 
+	// backwards compatibility
+	// TODO: remove at Pilosa 2.0
+	rows = c.Query(t, "i", `Rows(field=general)`).Results[0].(pilosa.RowIdentifiers)
+	if !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{10, 11, 12, 13}}) {
+		t.Fatalf("unexpected rows: %+v", rows)
+	}
+
 	rows = c.Query(t, "i", `Rows(general, limit=2)`).Results[0].(pilosa.RowIdentifiers)
 	if !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{10, 11}}) {
 		t.Fatalf("unexpected rows: %+v", rows)
@@ -3154,8 +3161,20 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 			q:   `Rows(f)`,
 			exp: []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18"},
 		},
+		// backwards compatibility
+		// TODO: remove at Pilosa 2.0
+		{
+			q:   `Rows(field=f)`,
+			exp: []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18"},
+		},
 		{
 			q:   `Rows(f, limit=2)`,
+			exp: []string{"0", "1"},
+		},
+		// backwards compatibility
+		// TODO: remove at Pilosa 2.0
+		{
+			q:   `Rows(field=f, limit=2)`,
 			exp: []string{"0", "1"},
 		},
 		{
