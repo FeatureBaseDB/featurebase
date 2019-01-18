@@ -1093,10 +1093,11 @@ func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, s
 	// Check "field" first for backwards compatibility
 	var fieldName string
 	var ok bool
-	if fieldName, ok = c.Args["field"].(string); !ok {
-		if fieldName, ok = c.Args["_field"].(string); !ok {
-			return nil, errors.New("Rows() field required")
-		}
+	if fieldName, ok = c.Args["field"].(string); ok {
+		c.Args["_field"] = fieldName
+	}
+	if fieldName, ok = c.Args["_field"].(string); !ok {
+		return nil, errors.New("Rows() field required")
 	}
 	if columnID, ok, err := c.UintArg("column"); err != nil {
 		return nil, errors.Wrap(err, "getting column")
