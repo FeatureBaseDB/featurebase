@@ -36,17 +36,19 @@ import (
 )
 
 var (
-	TempDir *string
+	TempDir = getTempDirString()
 )
 
-func init() { // nolint: gochecknoinits
+func getTempDirString() (td *string) {
 	tdflag := flag.Lookup("temp-dir")
+
 	if tdflag == nil {
-		TempDir = flag.String("temp-dir", "", "Directory in which to place temporary data (e.g. for benchmarking). Useful if you are trying to benchmark different storage configurations.")
+		td = flag.String("temp-dir", "", "Directory in which to place temporary data (e.g. for benchmarking). Useful if you are trying to benchmark different storage configurations.")
 	} else {
 		s := tdflag.Value.String()
-		TempDir = &s
+		td = &s
 	}
+	return td
 }
 
 // Ensure a row query can be executed.
