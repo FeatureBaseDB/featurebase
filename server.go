@@ -487,7 +487,7 @@ func (s *Server) receiveMessage(m Message) error {
 	case *CreateShardMessage:
 		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
-			return fmt.Errorf("Local field not found: %s/%s", obj.Index, obj.Field)
+			return fmt.Errorf("local field not found: %s/%s", obj.Index, obj.Field)
 		}
 		if err := f.AddRemoteAvailableShards(roaring.NewBitmap(obj.Shard)); err != nil {
 			return errors.Wrap(err, "adding remote available shards")
@@ -505,7 +505,7 @@ func (s *Server) receiveMessage(m Message) error {
 	case *CreateFieldMessage:
 		idx := s.holder.Index(obj.Index)
 		if idx == nil {
-			return fmt.Errorf("Local Index not found: %s", obj.Index)
+			return fmt.Errorf("local index not found: %s", obj.Index)
 		}
 		opt := obj.Meta
 		_, err := idx.createField(obj.Field, *opt)
@@ -525,7 +525,7 @@ func (s *Server) receiveMessage(m Message) error {
 	case *CreateViewMessage:
 		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
-			return fmt.Errorf("Local Field not found: %s", obj.Field)
+			return fmt.Errorf("local field not found: %s", obj.Field)
 		}
 		_, _, err := f.createViewIfNotExistsBase(obj.View)
 		if err != nil {
@@ -534,7 +534,7 @@ func (s *Server) receiveMessage(m Message) error {
 	case *DeleteViewMessage:
 		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
-			return fmt.Errorf("Local Field not found: %s", obj.Field)
+			return fmt.Errorf("local field not found: %s", obj.Field)
 		}
 		err := f.deleteView(obj.View)
 		if err != nil {

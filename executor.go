@@ -806,7 +806,7 @@ func (e *executor) executeTopNShard(ctx context.Context, index string, c *pql.Ca
 		return nil, nil
 	}
 
-	if minThreshold <= 0 {
+	if minThreshold == 0 {
 		minThreshold = defaultMinThreshold
 	}
 
@@ -1582,14 +1582,14 @@ func (e *executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 	if err != nil {
 		return false, fmt.Errorf("reading Clear() row: %v", err)
 	} else if !ok {
-		return false, fmt.Errorf("Clear() row argument '%v' required", rowLabel)
+		return false, fmt.Errorf("row=<row> argument required to Clear() call")
 	}
 
 	colID, ok, err := c.UintArg("_" + columnLabel)
 	if err != nil {
 		return false, fmt.Errorf("reading Clear() column: %v", err)
 	} else if !ok {
-		return false, fmt.Errorf("Clear() col argument '%v' required", columnLabel)
+		return false, fmt.Errorf("column argument to Clear(<COLUMN>, <FIELD>=<ROW>) required")
 	}
 
 	return e.executeClearBitField(ctx, index, c, f, colID, rowID, opt)
@@ -1713,14 +1713,14 @@ func (e *executor) executeSetRow(ctx context.Context, index string, c *pql.Call,
 	// Ensure the field type supports Store().
 	fieldName, err := c.FieldArg()
 	if err != nil {
-		return false, errors.New("Store() argument required: field")
+		return false, errors.New("field required for Store()")
 	}
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
 		return false, ErrFieldNotFound
 	}
 	if field.Type() != FieldTypeSet {
-		return false, fmt.Errorf("Store() is not supported on %s field types", field.Type())
+		return false, fmt.Errorf("can't Store() on a %s field", field.Type())
 	}
 
 	// Execute calls in bulk on each remote node and merge.
@@ -1753,7 +1753,7 @@ func (e *executor) executeSetRowShard(ctx context.Context, index string, c *pql.
 	if err != nil {
 		return false, fmt.Errorf("reading Store() row: %v", err)
 	} else if !ok {
-		return false, fmt.Errorf("Store() row argument '%v' required", rowLabel)
+		return false, fmt.Errorf("need the <FIELD>=<ROW> argument on Store()")
 	}
 
 	field := e.Holder.Field(index, fieldName)

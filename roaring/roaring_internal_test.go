@@ -3224,7 +3224,7 @@ func TestContainerCombinations(t *testing.T) {
 
 //func getFunc(func(a, b *container) *container, m, n *container) *container {
 func runContainerFunc(f interface{}, c ...*Container) *Container {
-	switch f.(type) {
+	switch f.(type) { // nolint: staticcheck
 	case func(*Container) *Container:
 		return f.(func(*Container) *Container)(c[0])
 	case func(*Container, *Container) *Container:
