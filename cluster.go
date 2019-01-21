@@ -609,8 +609,8 @@ func (c *cluster) addNodeBasicSorted(node *Node) bool {
 // Nodes returns a copy of the slice of nodes in the cluster. Safe for
 // concurrent use, result may be modified.
 func (c *cluster) Nodes() []*Node {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	ret := make([]*Node, len(c.nodes))
 	copy(ret, c.nodes)
 	return ret
