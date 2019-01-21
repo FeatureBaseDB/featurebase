@@ -212,7 +212,7 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	t.common.Nodes = append(t.common.Nodes, node)
 
 	// create node-specific temp directory
-	path, err := ioutil.TempDir("", fmt.Sprintf("pilosa-cluster-node-%d-", i))
+	path, err := ioutil.TempDir(*TempDir, fmt.Sprintf("pilosa-cluster-node-%d-", i))
 	if err != nil {
 		return nil, err
 	}

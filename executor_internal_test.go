@@ -14,7 +14,7 @@ func TestExecutor_TranslateGroupByCall(t *testing.T) {
 	e := &executor{
 		Holder: NewHolder(),
 	}
-	e.Holder.Path, _ = ioutil.TempDir("", "")
+	e.Holder.Path, _ = ioutil.TempDir(*TempDir, "")
 	err := e.Holder.Open()
 	if err != nil {
 		t.Fatalf("opening holder: %v", err)

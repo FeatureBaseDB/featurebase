@@ -46,7 +46,7 @@ func (h *tHolder) Reopen() error {
 }
 
 func newHolder() *tHolder {
-	path, err := ioutil.TempDir("", "pilosa-")
+	path, err := ioutil.TempDir(*TempDir, "pilosa-")
 	if err != nil {
 		panic(err)
 	}

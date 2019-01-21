@@ -803,7 +803,7 @@ type TranslateFile struct {
 }
 
 func NewTranslateFile() *TranslateFile {
-	f, err := ioutil.TempFile("", "")
+	f, err := ioutil.TempFile(*TempDir, "")
 	if err != nil {
 		panic(err)
 	}

@@ -83,7 +83,7 @@ func TestFragCombos(t *testing.T) {
 
 // newIndexWithTempPath returns a new instance of Index.
 func newIndexWithTempPath(name string) *Index {
-	path, err := ioutil.TempDir("", "pilosa-index-")
+	path, err := ioutil.TempDir(*TempDir, "pilosa-index-")
 	if err != nil {
 		panic(err)
 	}
