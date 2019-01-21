@@ -786,7 +786,7 @@ Options(Row(f1=10), shards=[0, 2])
 **Spec:**
 
 ```
-Rows(field=<STRING>, previous=<UINT|STRING>, limit=<UINT>, column=<UINT|STRING>)
+Rows(<FIELD>, previous=<UINT|STRING>, limit=<UINT>, column=<UINT|STRING>)
 ```
 
 **Description:**
@@ -810,7 +810,7 @@ result of the previous request will start from the next available row.
 
 Without keys:
 ```request
-Rows(field=blah)
+Rows(blah)
 ```
 ```response
 {"rows":[1,9,39]}
@@ -818,7 +818,7 @@ Rows(field=blah)
 
 With keys:
 ```request
-Rows(field=blahk)
+Rows(blahk)
 ```
 ```response
 {"rows":null,"keys":["haha","zaaa","traa"]}
@@ -859,7 +859,7 @@ specify the field and row for each row that was intersected to get that result.
 
 A single `Rows` query.
 ```request
-GroupBy(Rows(field=blah))
+GroupBy(Rows(blah))
 ```
 ```response
 [{"group":[{"field":"blah","rowID":1}],"count":1},
@@ -869,7 +869,7 @@ GroupBy(Rows(field=blah))
 
 With two `Rows` queries - one with IDs and one with keys.
 ```request
-GroupBy(Rows(field=blah), Rows(field=blahk), limit=7)
+GroupBy(Rows(blah), Rows(blahk), limit=7)
 ```
 ```response
 [{"group":[{"field":"blah","rowID":1},{"field":"blahk","rowKey":"haha"}],"count":1},
@@ -883,7 +883,7 @@ GroupBy(Rows(field=blah), Rows(field=blahk), limit=7)
 
 Getting the rest of the results from the previous example (paging).
 ```request
-GroupBy(Rows(field=blah, previous=39), Rows(field=blahk, previous="haha"), limit=7)
+GroupBy(Rows(blah, previous=39), Rows(blahk, previous="haha"), limit=7)
 ```
 
 ```response

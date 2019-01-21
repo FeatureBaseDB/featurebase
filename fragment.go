@@ -1050,7 +1050,7 @@ func (f *fragment) top(opt topOptions) ([]Pair, error) {
 		rowID, cnt := pair.ID, pair.Count
 
 		// Ignore empty rows.
-		if cnt <= 0 {
+		if cnt == 0 {
 			continue
 		}
 

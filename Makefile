@@ -139,9 +139,9 @@ gometalinter: require-gometalinter
 	    --enable=ineffassign \
 	    --enable=interfacer \
 	    --enable=maligned \
-	    --enable=megacheck \
 	    --enable=misspell \
 	    --enable=nakedret \
+	    --enable=staticcheck \
 	    --enable=unconvert \
 	    --enable=unparam \
 	    --enable=vet \
