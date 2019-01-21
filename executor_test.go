@@ -3300,6 +3300,20 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			}
 		})
 
+		// backwards compatibility
+		// TODO: remove at Pilosa 2.0
+		t.Run("BasicLegacy", func(t *testing.T) {
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 100}}, Count: 3},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 110}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 11}, {Field: "sub", RowID: 110}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 12}, {Field: "sub", RowID: 110}}, Count: 1},
+			}
+
+			results := c.Query(t, "i", `GroupBy(Rows(field=general), Rows(sub))`).Results[0].([]pilosa.GroupCount)
+			test.CheckGroupBy(t, expected, results)
+		})
+
 		t.Run("Basic", func(t *testing.T) {
 			expected := []pilosa.GroupCount{
 				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 100}}, Count: 3},

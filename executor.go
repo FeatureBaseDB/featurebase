@@ -1090,7 +1090,8 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 
 func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (RowIDs, error) {
 	// Fetch field name from argument.
-	// Check "field" first for backwards compatibility
+	// Check "field" first for backwards compatibility.
+	// TODO: remove at Pilosa 2.0
 	var fieldName string
 	var ok bool
 	if fieldName, ok = c.Args["field"].(string); ok {
@@ -2763,10 +2764,16 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, filter *Row, inde
 		fields: make([]FieldRow, len(children)),
 	}
 
+	var fieldName string
+	var ok bool
 	ignorePrev := false
 	for i, call := range children {
-		fieldName, ok := call.Args["_field"].(string)
-		if !ok {
+		// Check "field" first for backwards compatibility.
+		// TODO: remove at Pilosa 2.0
+		if fieldName, ok = call.Args["field"].(string); ok {
+			call.Args["_field"] = fieldName
+		}
+		if fieldName, ok = call.Args["_field"].(string); !ok {
 			return nil, errors.Errorf("%s call must have field with valid (string) field name. Got %v of type %[2]T", call.Name, call.Args["_field"])
 		}
 		if holder.Field(index, fieldName) == nil {
