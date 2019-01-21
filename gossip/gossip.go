@@ -51,8 +51,11 @@ type memberSet struct {
 
 	Logger logger.Logger
 
-	logger    *log.Logger
+	// stdLogger is only used when passed into memberlist library things that take a std library logger rather than an interface.
+	stdLogger *log.Logger
+	// logOutput is similar to stdLogger in that it's passed to memberlist things which can't take a pilosa Logger.
 	logOutput io.Writer
+
 	transport *Transport
 
 	eventReceiver *eventReceiver
@@ -159,7 +162,7 @@ func WithTransport(transport *Transport) memberSetOption {
 // (gossip) package - for that, use the WithPilosaLogger option.
 func WithLogger(logger *log.Logger) memberSetOption {
 	return func(g *memberSet) error {
-		g.logger = logger
+		g.stdLogger = logger
 		return nil
 	}
 }
@@ -210,16 +213,16 @@ func NewMemberSet(cfg Config, api *pilosa.API, options ...memberSetOption) (*mem
 			return nil, fmt.Errorf("convert port: %s", err)
 		}
 
-		if g.logger == nil {
+		if g.stdLogger == nil {
 			if g.logOutput != nil {
-				g.logger = logger.NewStandardLogger(g.logOutput).Logger()
+				g.stdLogger = logger.NewStandardLogger(g.logOutput).Logger()
 			} else {
-				g.logger = log.New(os.Stderr, "", log.LstdFlags)
+				g.stdLogger = log.New(os.Stderr, "", log.LstdFlags)
 			}
 		}
 
 		// Set up the transport.
-		transport, err := NewTransport(host, port, g.logger)
+		transport, err := NewTransport(host, port, g.stdLogger)
 		if err != nil {
 			return nil, fmt.Errorf("new tranport: %s", err)
 		}
@@ -262,7 +265,7 @@ func NewMemberSet(cfg Config, api *pilosa.API, options ...memberSetOption) (*mem
 	if g.logOutput != nil {
 		conf.LogOutput = g.logOutput
 	} else {
-		conf.Logger = g.logger
+		conf.Logger = g.stdLogger
 	}
 
 	g.config = &config{
