@@ -372,7 +372,6 @@ func (s *TranslateFile) monitorReplication() {
 		if err := s.replicate(ctx); err != nil {
 			s.logger.Printf("pilosa: replication error: %s", err)
 		}
-
 		select {
 		case <-ctx.Done():
 			return
@@ -412,22 +411,42 @@ func (s *TranslateFile) replicate(ctx context.Context) error {
 	// Wrap in bufferred I/O so it implements io.ByteReader.
 	bufr := bufio.NewReader(rc)
 
+	// we need a way to make an asynchronous routine hand us back an error,
+	// but we might not still be there to get it. so we have a buffer.
+	chErr := make(chan error, 1)
+
 	// Continually read new entries from primary and append to local store.
 	for {
 		// Read next available entry.
 		var entry LogEntry
-		if _, err := entry.ReadFrom(bufr); err == io.EOF {
+		if _, err = entry.ReadFrom(bufr); err == io.EOF {
 			return nil
 		} else if err != nil {
 			return err
 		}
-		s.mu.Lock()
-		// Write to local store.
-		if err := s.appendEntry(&entry); err != nil {
-			s.mu.Unlock()
-			return err
+		// note: we should never end up spawning two of this goroutine
+		// at once. either we end up reading the error from chErr below,
+		// and this loop continues, or we don't, and the whole function
+		// returns. if the function returns, we can write that single
+		// error to the empty channel with a buffer of 1, the goroutine
+		// terminates, and chErr becomes garbage-collectable.
+		go func() {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			// Write to local store.
+			err = s.appendEntry(&entry)
+			chErr <- err
+		}()
+		select {
+		case err = <-chErr:
+			if err != nil {
+				return err
+			}
+		case <-s.replicationClosing:
+			return nil
+		case <-ctx.Done():
+			return nil
 		}
-		s.mu.Unlock()
 	}
 }
 
