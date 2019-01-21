@@ -914,6 +914,12 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 	// TODO support TopN in here would be really cool - and pretty easy I think.
 	childRows := make([]RowIDs, len(c.Children))
 	for i, child := range c.Children {
+		// Check "field" first for backwards compatibility, then set _field.
+		// TODO: remove at Pilosa 2.0
+		if fieldName, ok := child.Args["field"].(string); ok {
+			child.Args["_field"] = fieldName
+		}
+
 		if child.Name != "Rows" {
 			return nil, errors.Errorf("'%s' is not a valid child query for GroupBy, must be 'Rows'", child.Name)
 		}
@@ -2767,11 +2773,6 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, filter *Row, inde
 	var ok bool
 	ignorePrev := false
 	for i, call := range children {
-		// Check "field" first for backwards compatibility.
-		// TODO: remove at Pilosa 2.0
-		if fieldName, ok = call.Args["field"].(string); ok {
-			call.Args["_field"] = fieldName
-		}
 		if fieldName, ok = call.Args["_field"].(string); !ok {
 			return nil, errors.Errorf("%s call must have field with valid (string) field name. Got %v of type %[2]T", call.Name, call.Args["_field"])
 		}
