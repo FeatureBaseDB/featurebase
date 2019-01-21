@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sort"
 	"time"
 
@@ -1188,7 +1187,7 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 	defer span.Finish()
 
 	if c.Name == "Range" {
-		log.Print("DEPRECATED: Range() is deprecated, please use Row() instead.")
+		e.Holder.Logger.Printf("DEPRECATED: Range() is deprecated, please use Row() instead.")
 	}
 
 	// Handle bsiGroup ranges differently.
