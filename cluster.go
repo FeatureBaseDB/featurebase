@@ -1792,7 +1792,7 @@ func (c *cluster) nodeLeave(nodeID string) error {
 	}
 
 	if c.state != ClusterStateNormal && c.state != ClusterStateDegraded {
-		return fmt.Errorf("Cluster must be in state %s to remove a node. Current state: %s",
+		return fmt.Errorf("cluster must be '%s' to remove a node but is '%s'",
 			ClusterStateNormal, c.state)
 	}
 
@@ -1803,7 +1803,7 @@ func (c *cluster) nodeLeave(nodeID string) error {
 
 	// Prevent removing the coordinator node (this node).
 	if nodeID == c.Node.ID {
-		return fmt.Errorf("coordinator cannot be removed; first, make a different node the new coordinator.")
+		return fmt.Errorf("coordinator cannot be removed; first, make a different node the new coordinator")
 	}
 
 	// See if resize job can be generated
