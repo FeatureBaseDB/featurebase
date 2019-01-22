@@ -36,6 +36,17 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 
 ### All Options
 
+#### Advertise
+
+* Description: Address advertised by the server to other nodes in the cluster and to clients via the `/status` endpoint. Host defaults to the IP address represented by `bind` and port to 10101. If `bind` is set to `0.0.0.0` and `advertise` is not specified, then Pilosa will try to determine a reasonable, external IP address to use for `advertise`.
+* Flag: `--advertise="192.168.1.100:10101"`
+* Env: `PILOSA_BIND="192.168.1.100:10101"`
+* Config:
+
+    ```toml
+    advertise = 192.168.1.100:10101
+    ```
+
 #### Anti Entropy Interval
 
 * Description: Interval at which the cluster will run its anti-entropy routine which ensures that all replicas of each fragment are in sync.
@@ -50,7 +61,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 
 #### Bind
 
-* Description: host:port on which the Pilosa server will listen for requests. Host defaults to localhost and port to 10101.
+* Description: host:port on which the Pilosa server will listen for requests. Host defaults to localhost and port to 10101. If `bind` is set to `0.0.0.0` then Pilosa will listen on all addresses.
 * Flag: `--bind="localhost:10101"`
 * Env: `PILOSA_BIND="localhost:10101"`
 * Config:
@@ -113,6 +124,30 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 
     ```toml
     max-writes-per-request = 5000
+    ```
+
+#### Gossip Advertise Host
+
+* Description: Host on which memberlist should advertise. Defaults to `advertise` host.
+* Flag: `--gossip.advertise-host=192.168.1.100`
+* Env: `PILOSA_GOSSIP_ADVERTISE_HOST=192.168.1.100
+* Config:
+
+    ```toml
+    [gossip]
+      advertise-host = 192.168.1.100
+    ```
+
+#### Gossip Advertise Port
+
+* Description: Port on which memberlist should advertise. Defaults to `advertise` port.
+* Flag: `--gossip.advertise-port=15001`
+* Env: `PILOSA_GOSSIP_ADVERTISE_PORT=15001`
+* Config:
+
+    ```toml
+    [gossip]
+      advertise-port = 15001
     ```
 
 #### Gossip Port
