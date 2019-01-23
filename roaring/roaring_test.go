@@ -46,14 +46,14 @@ func TestSize(t *testing.T) {
 
 	//bitmap
 	b := roaring.NewFileBitmap()
-	for i:=uint64(0);i<2048;i++{
+	for i := uint64(0); i < 2048; i++ {
 		b.DirectAdd(i)
 	}
 
 	if b.Size() != 4096 {
 		t.Fatalf("Size in bytes incorrect \n")
 	}
-    //convert to rle
+	//convert to rle
 	b.Optimize()
 	//rle
 	if b.Size() != 6 {
