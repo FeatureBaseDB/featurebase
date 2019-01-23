@@ -37,6 +37,29 @@ func TestContainerCount(t *testing.T) {
 		t.Fatalf("Count != CountRange\n")
 	}
 }
+func TestSize(t *testing.T) {
+	//array
+	a := roaring.NewFileBitmap(0, 65535, 131072)
+	if a.Size() != 6 {
+		t.Fatalf("Size in bytes incorrect \n")
+	}
+
+	//bitmap
+	b := roaring.NewFileBitmap()
+	for i:=uint64(0);i<2048;i++{
+		b.DirectAdd(i)
+	}
+
+	if b.Size() != 4096 {
+		t.Fatalf("Size in bytes incorrect \n")
+	}
+    //convert to rle
+	b.Optimize()
+	//rle
+	if b.Size() != 6 {
+		t.Fatalf("Size in bytes incorrect \n")
+	}
+}
 
 func TestCountRange(t *testing.T) {
 	tests := []struct {
