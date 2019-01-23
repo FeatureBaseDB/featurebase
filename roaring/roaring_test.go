@@ -46,7 +46,7 @@ func TestSize(t *testing.T) {
 
 	//bitmap
 	b := roaring.NewFileBitmap()
-	for i := uint64(0); i < 4096; i++ {
+	for i := uint64(0); i <= 4096; i++ {
 		b.DirectAdd(i)
 	}
 
