@@ -61,7 +61,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 
 #### Bind
 
-* Description: host:port on which the Pilosa server will listen for requests. Host defaults to localhost and port to 10101. If `bind` is set to `0.0.0.0` then Pilosa will listen on all addresses.
+* Description: host:port on which the Pilosa server will listen for requests. Host defaults to localhost and port to 10101. If `bind` is set to `0.0.0.0` then Pilosa will listen on all available interfaces.
 * Flag: `--bind="localhost:10101"`
 * Env: `PILOSA_BIND="localhost:10101"`
 * Config:
