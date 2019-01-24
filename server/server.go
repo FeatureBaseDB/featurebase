@@ -320,6 +320,7 @@ func (m *Command) setupNetworking() error {
 		m.Config.Gossip,
 		m.API,
 		gossip.WithLogOutput(&filteredWriter{logOutput: m.logOutput, v: m.Config.Verbose}),
+		gossip.WithPilosaLogger(m.logger),
 		gossip.WithTransport(m.gossipTransport),
 	)
 	if err != nil {

@@ -163,9 +163,8 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 		}
 
 		// Apply to the in-memory bitmap.
-		if op.apply(b) {
+		if b.DirectAdd(v) {
 			changed = true
-
 		}
 	}
 
@@ -231,6 +230,18 @@ func (b *Bitmap) Max() uint64 {
 // Count returns the number of bits set in the bitmap.
 func (b *Bitmap) Count() (n uint64) {
 	return b.Containers.Count()
+}
+
+// Size returns the number of bytes required for the bitmap.
+func (b *Bitmap) Size() int {
+	numbytes := 0
+	citer, _ := b.Containers.Iterator(0)
+	for citer.Next() {
+		_, c := citer.Value()
+		numbytes += c.size()
+
+	}
+	return numbytes
 }
 
 // CountRange returns the number of bits set between [start, end).
@@ -3973,7 +3984,7 @@ func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint
 
 	header = pos
 	if size > (1 << 16) {
-		err = fmt.Errorf("It is logically impossible to have more than (1<<16) containers.")
+		err = fmt.Errorf("it is logically impossible to have more than (1<<16) containers")
 		return size, containerTyper, header, pos, haveRuns, err
 	}
 

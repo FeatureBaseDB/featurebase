@@ -83,7 +83,7 @@ func (c *Cache) Get(key Key) (value interface{}, ok bool) {
 }
 
 // remove removes the provided key from the cache.
-func (c *Cache) remove(key Key) { // nolint: megacheck
+func (c *Cache) remove(key Key) { // nolint: staticcheck
 	if c.cache == nil {
 		return
 	}
@@ -121,7 +121,7 @@ func (c *Cache) Len() int {
 }
 
 // clear purges all stored items from the cache.
-func (c *Cache) clear() { // nolint: megacheck
+func (c *Cache) clear() { // nolint: staticcheck
 	if c.OnEvicted != nil {
 		for _, e := range c.cache {
 			kv := e.Value.(*entry)
