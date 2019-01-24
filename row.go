@@ -19,6 +19,7 @@ import (
 	"sort"
 
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pkg/errors"
 )
 
 // Row is a set of integers (the associated columns), and attributes which are
@@ -167,14 +168,30 @@ func (r *Row) Difference(other *Row) *Row {
 	return &Row{segments: segments}
 }
 
-// Shift returns the bitwise shift of r by 1 bit.
-func (r *Row) Shift() *Row {
-	var segments []rowSegment
-	for _, segment := range r.segments {
-		segments = append(segments, *segment.Shift())
+// Shift returns the bitwise shift of r by n bits.
+// Currently only positive shift values are supported.
+func (r *Row) Shift(n int64) (*Row, error) {
+	if n < 0 {
+		return nil, errors.New("cannot shift by negative values")
+	} else if n == 0 {
+		return r, nil
 	}
 
-	return &Row{segments: segments}
+	work := r
+	var segments []rowSegment
+	for i := int64(0); i < n; i++ {
+		segments = segments[:0]
+		for _, segment := range work.segments {
+			shifted, err := segment.Shift()
+			if err != nil {
+				return nil, errors.Wrap(err, "shifting row segment")
+			}
+			segments = append(segments, *shifted)
+		}
+		work = &Row{segments: segments}
+	}
+
+	return work, nil
 }
 
 // SetBit sets the i-th column of the row.
@@ -352,15 +369,18 @@ func (s *rowSegment) Xor(other *rowSegment) *rowSegment {
 }
 
 // Shift returns s shifted by 1 bit.
-func (s *rowSegment) Shift() *rowSegment {
+func (s *rowSegment) Shift() (*rowSegment, error) {
 	//TODO deal with overflow
-	data := s.data.Shift()
+	data, err := s.data.Shift(1)
+	if err != nil {
+		return nil, errors.Wrap(err, "shifting roaring data")
+	}
 
 	return &rowSegment{
 		data:  *data,
 		shard: s.shard,
 		n:     data.Count(),
-	}
+	}, nil
 }
 
 // SetBit sets the i-th column of the row.

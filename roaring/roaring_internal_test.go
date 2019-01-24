@@ -3346,9 +3346,12 @@ func TestShiftArray(t *testing.T) {
 	for i, test := range tests {
 		a.array = test.array
 		a.n = int32(len(a.array))
-		ret, _ := shiftArray(a)
-		if !reflect.DeepEqual(ret.array, test.exp) {
-			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.array)
+		ret1, _ := shift(a)      // test generic shift function
+		ret2, _ := shiftArray(a) // test array-specific shift function
+		if !reflect.DeepEqual(ret1.array, test.exp) {
+			t.Fatalf("test #%v shift() expected %v, but got %v", i, test.exp, ret1.array)
+		} else if !reflect.DeepEqual(ret2.array, test.exp) {
+			t.Fatalf("test #%v shiftArray() expected %v, but got %v", i, test.exp, ret2.array)
 		}
 	}
 }
@@ -3378,9 +3381,12 @@ func TestShiftBitmap(t *testing.T) {
 	for i, test := range tests {
 		a.bitmap = test.bitmap
 		a.n = 1
-		ret, _ := shiftBitmap(a)
-		if !reflect.DeepEqual(ret.bitmap, test.exp) {
-			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.bitmap)
+		ret1, _ := shift(a)       // test generic shift function
+		ret2, _ := shiftBitmap(a) // test bitmap-specific shift function
+		if !reflect.DeepEqual(ret1.bitmap, test.exp) {
+			t.Fatalf("test #%v shift() expected %v, but got %v", i, test.exp, ret1.bitmap)
+		} else if !reflect.DeepEqual(ret2.bitmap, test.exp) {
+			t.Fatalf("test #%v shiftBitmap() expected %v, but got %v", i, test.exp, ret2.bitmap)
 		}
 	}
 }
@@ -3422,9 +3428,12 @@ func TestShiftRun(t *testing.T) {
 	for i, test := range tests {
 		a.runs = test.runs
 		a.n = test.n
-		ret, c := shiftRun(a)
-		if !reflect.DeepEqual(ret.runs, test.exp) && c == test.carry && ret.n == test.en {
-			t.Fatalf("test #%v expected %v, but got %v %d", i, test.exp, ret.runs, ret.n)
+		ret1, c1 := shift(a)    // test generic shift function
+		ret2, c2 := shiftRun(a) // test run-specific shift function
+		if !reflect.DeepEqual(ret1.runs, test.exp) && c1 == test.carry && ret1.n == test.en {
+			t.Fatalf("test #%v shift() expected %v, but got %v %d", i, test.exp, ret1.runs, ret1.n)
+		} else if !reflect.DeepEqual(ret2.runs, test.exp) && c2 == test.carry && ret2.n == test.en {
+			t.Fatalf("test #%v shiftRun() expected %v, but got %v %d", i, test.exp, ret2.runs, ret2.n)
 		}
 	}
 }
