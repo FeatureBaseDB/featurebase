@@ -232,6 +232,18 @@ func (b *Bitmap) Count() (n uint64) {
 	return b.Containers.Count()
 }
 
+// Size returns the number of bytes required for the bitmap.
+func (b *Bitmap) Size() int {
+	numbytes := 0
+	citer, _ := b.Containers.Iterator(0)
+	for citer.Next() {
+		_, c := citer.Value()
+		numbytes += c.size()
+
+	}
+	return numbytes
+}
+
 // CountRange returns the number of bits set between [start, end).
 func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 	if b.Containers.Size() == 0 {
