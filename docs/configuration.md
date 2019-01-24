@@ -401,7 +401,7 @@ A three node cluster running on different hosts could be minimally configured as
     
     [gossip]
       port = 12000
-      seed = "node0.pilosa.com:12000"
+      seeds = ["node0.pilosa.com:12000"]
 
     [cluster]
       replicas = 1
@@ -414,7 +414,7 @@ A three node cluster running on different hosts could be minimally configured as
     
     [gossip]
       port = 12000
-      seed = "node0.pilosa.com:12000"
+      seeds = ["node0.pilosa.com:12000"]
 
     [cluster]
       replicas = 1
@@ -427,7 +427,7 @@ A three node cluster running on different hosts could be minimally configured as
     
     [gossip]
       port = 12000
-      seed = "node0.pilosa.com:12000"
+      seeds = ["node0.pilosa.com:12000"]
 
     [cluster]
       replicas = 1
@@ -445,7 +445,7 @@ The same cluster which uses HTTPS instead of HTTP can be configured as follows. 
 
     [gossip]
       port = 12000
-      seed = "node0.pilosa.com:12000"
+      seeds = ["node0.pilosa.com:12000"]
       key = "/home/pilosa/private/gossip.key32"
 
     [cluster]
@@ -463,7 +463,7 @@ The same cluster which uses HTTPS instead of HTTP can be configured as follows. 
 
     [gossip]
       port = 12000
-      seed = "node0.pilosa.com:12000"
+      seeds = ["node0.pilosa.com:12000"]
       key = "/home/pilosa/private/gossip.key32"
 
     [cluster]
@@ -481,7 +481,7 @@ The same cluster which uses HTTPS instead of HTTP can be configured as follows. 
 
     [gossip]
       port = 12000
-      seed = "node0.pilosa.com:12000"
+      seeds = ["node0.pilosa.com:12000"]
       key = "/home/pilosa/private/gossip.key32"
 
     [cluster]
@@ -503,7 +503,7 @@ You can run a cluster on the same host using the configuration above with a few 
 
     [gossip]
       port = 12000
-      seed = "localhost:12000"
+      seeds = ["localhost:12000"]
       key = "/home/pilosa/private/gossip.key32"
 
     [cluster]
@@ -521,7 +521,7 @@ You can run a cluster on the same host using the configuration above with a few 
 
     [gossip]
       port = 12001
-      seed = "localhost:12000"
+      seeds = ["localhost:12000"]
       key = "/home/pilosa/private/gossip.key32"
 
     [cluster]
@@ -539,7 +539,7 @@ You can run a cluster on the same host using the configuration above with a few 
 
     [gossip]
       port = 12002
-      seed = "localhost:12000"
+      seeds = ["localhost:12000"]
       key = "/home/pilosa/private/gossip.key32"
 
     [cluster]
