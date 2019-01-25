@@ -594,6 +594,34 @@ Count(Row(stargazer=1))
 
 * Result is the number of repositories that user 1 has starred.
 
+#### Shift
+**Spec:**
+
+```
+Shift(<ROW_CALL>, [n=UINT])
+```
+
+**Description:**
+
+Returns the row specified by `ROW_CALL` shifted by `n` bits.
+
+**Result Type:** object with attrs and columns
+
+attrs will always be empty
+
+**Examples:**
+
+Query all columns with a bit set in row 1 of the field `stargazer`
+and shift the result by 2:
+```request
+Shift(Row(stargazer=1), n=2)
+```
+```response
+{"attrs":{},"columns":[12, 22]}
+```
+
+* columns are the repositories which user 1 has starred shifted by 2 bits.
+
 #### TopN
 
 **Spec:**
