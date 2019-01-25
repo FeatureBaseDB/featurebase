@@ -476,13 +476,21 @@ func (f *Field) saveMeta() error {
 // applyOptions configures the field based on opt.
 func (f *Field) applyOptions(opt FieldOptions) error {
 	switch opt.Type {
-	case FieldTypeSet, "":
-		f.options.Type = FieldTypeSet
+	case FieldTypeSet, FieldTypeMutex, "":
+		fldType := opt.Type
+		if fldType == "" {
+			fldType = FieldTypeSet
+		}
+		f.options.Type = fldType
 		if opt.CacheType != "" {
 			f.options.CacheType = opt.CacheType
 		}
 		if opt.CacheSize != 0 {
-			f.options.CacheSize = opt.CacheSize
+			if opt.CacheType == CacheTypeNone {
+				f.options.CacheSize = 0
+			} else {
+				f.options.CacheSize = opt.CacheSize
+			}
 		}
 		f.options.Min = 0
 		f.options.Max = 0
@@ -524,18 +532,6 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 			f.Close()
 			return errors.Wrap(err, "setting time quantum")
 		}
-	case FieldTypeMutex:
-		f.options.Type = FieldTypeMutex
-		if opt.CacheType != "" {
-			f.options.CacheType = opt.CacheType
-		}
-		if opt.CacheSize != 0 {
-			f.options.CacheSize = opt.CacheSize
-		}
-		f.options.Min = 0
-		f.options.Max = 0
-		f.options.TimeQuantum = ""
-		f.options.Keys = opt.Keys
 	case FieldTypeBool:
 		f.options.Type = FieldTypeBool
 		f.options.CacheType = CacheTypeNone
