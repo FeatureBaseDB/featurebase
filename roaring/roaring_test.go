@@ -985,6 +985,18 @@ func TestBitmap_IntersectionCount_Mixed(t *testing.T) {
 	}
 }
 
+func TestBitmap_Shift(t *testing.T) {
+	var max uint64 = math.MaxUint64
+	bm1 := roaring.NewFileBitmap(0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 65536, max)
+	bm2 := roaring.NewFileBitmap(1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 65537)
+
+	if got, err := bm1.Shift(1); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(got.Slice(), bm2.Slice()) {
+		t.Fatalf("unexpected bitmap: expected %v, but got %v", bm2.Slice(), got.Slice())
+	}
+}
+
 func TestBitmap_Quick_Array1(t *testing.T)     { testBitmapQuick(t, 1000, 1000, 2000) }
 func TestBitmap_Quick_Array2(t *testing.T)     { testBitmapQuick(t, 10000, 0, 1000) }
 func TestBitmap_Quick_Bitmap1(t *testing.T)    { testBitmapQuick(t, 10000, 0, 10000) }

@@ -52,16 +52,20 @@ const (
 	// bitmapN is the number of values in a container.bitmap.
 	bitmapN = (1 << 16) / 64
 
-	//containerArray indicates a container of bit position values
+	// containerArray indicates a container of bit position values
 	containerArray = byte(1)
 
-	//containerBitmap indicates a container of bits packed in a uint64 array block
+	// containerBitmap indicates a container of bits packed in a uint64 array block
 	containerBitmap = byte(2)
 
-	//containerRun  indicates a container of run encoded bits
+	// containerRun  indicates a container of run encoded bits
 	containerRun = byte(3)
 
 	maxContainerVal = 0xffff
+
+	// maxContainerKey is the key representing the last container in a full row.
+	// It is the full bitmap space (2^64) divided by container width (2^16).
+	maxContainerKey = (1 << 48) - 1
 )
 
 type Containers interface {
@@ -751,6 +755,38 @@ func (b *Bitmap) Xor(other *Bitmap) *Bitmap {
 		}
 	}
 	return output
+}
+
+// Shift shifts the contents of b by 1.
+func (b *Bitmap) Shift(n int) (*Bitmap, error) {
+	if n != 1 {
+		return nil, errors.New("cannot shift by a value other than 1")
+	}
+	output := NewBitmap()
+	iiter, _ := b.Containers.Iterator(0)
+	lastCarry := false
+	lastKey := uint64(0)
+	for iiter.Next() {
+		ki, ci := iiter.Value()
+		o, carry := shift(ci)
+		if lastCarry {
+			o.add(0)
+		}
+		if o.n > 0 {
+			output.Containers.Put(ki, o)
+		}
+		lastCarry = carry
+		lastKey = ki
+	}
+	// As long as the carry wasn't from the max container,
+	// append a new container and add the carried bit.
+	if lastCarry && lastKey != maxContainerKey {
+		extra := NewContainer()
+		extra.add(0)
+		output.Containers.Put(lastKey+1, extra)
+	}
+
+	return output, nil
 }
 
 // removeEmptyContainers deletes all containers that have a count of zero.
@@ -3359,6 +3395,88 @@ func xorBitmapBitmap(a, b *Container) *Container {
 		output.bitmapToArray()
 	}
 	return output
+}
+
+// shift() shifts the contents of c by one. It returns
+// the new container and a bool indicating whether a
+// carry bit was shifted out.
+func shift(c *Container) (*Container, bool) {
+	if c.isArray() {
+		return shiftArray(c)
+	} else if c.isRun() {
+		return shiftRun(c)
+	}
+	return shiftBitmap(c)
+}
+
+// shiftArray is an array-specific implementation of shift().
+func shiftArray(a *Container) (*Container, bool) {
+	statsHit("shift/Array")
+	carry := false
+	output := &Container{containerType: containerArray}
+	output.array = make([]uint16, len(a.array))
+	output.array = output.array[:0]
+	output.n = a.n
+	for _, v := range a.array {
+		if v+1 == 0 { // overflow
+			carry = true
+			output.n -= 1
+		} else {
+			output.array = append(output.array, v+1)
+		}
+	}
+	return output, carry
+}
+
+// shiftBitmap is a bitmap-specific implementation of shift().
+func shiftBitmap(a *Container) (*Container, bool) {
+	statsHit("shift/Bitmap")
+	carry := false
+	output := &Container{containerType: containerBitmap}
+	output.bitmap = make([]uint64, len(a.bitmap))
+	output.bitmap = output.bitmap[:0]
+	output.n = a.n
+	lastCarry := false
+	for _, v := range a.bitmap {
+		carry = (v & (1 << 63)) != 0
+		v = v << 1
+		if lastCarry {
+			v |= 1
+		}
+		output.bitmap = append(output.bitmap, v)
+		lastCarry = carry
+	}
+	if carry {
+		output.n -= 1
+	}
+	return output, carry
+}
+
+// shiftRun is a run-specific implementation of shift().
+func shiftRun(a *Container) (*Container, bool) {
+	statsHit("shift/Run")
+	carry := false
+	output := &Container{containerType: containerRun}
+	output.runs = make([]interval16, len(a.runs))
+	output.runs = output.runs[:0]
+	for _, v := range a.runs {
+		if v.start+1 == 0 { // final run was 1 bit on container edge
+			carry = true
+			output.n -= 1
+			break
+		} else if v.last+1 == 0 { // final run ends on container edge
+			v.start += 1
+			carry = true
+			output.n -= 1
+		} else {
+			v.start += 1
+			v.last += 1
+			carry = false
+		}
+		output.runs = append(output.runs, v)
+	}
+
+	return output, carry
 }
 
 // opType represents a type of operation.

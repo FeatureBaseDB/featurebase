@@ -106,6 +106,24 @@ func bitmapFirstBitSet() []uint64 {
 	return bitmap
 }
 
+func bitmapSecondBitSet() []uint64 {
+	bitmap := make([]uint64, bitmapN)
+	bitmap[0] = 0x0000000000000002
+	return bitmap
+}
+
+func bitmapLastBitFirstRowSet() []uint64 {
+	bitmap := make([]uint64, bitmapN)
+	bitmap[0] = 0x8000000000000000
+	return bitmap
+}
+
+func bitmapFirstBitSecoundRowSet() []uint64 {
+	bitmap := make([]uint64, bitmapN)
+	bitmap[1] = 0x0000000000000001
+	return bitmap
+}
+
 func bitmapLastBitSet() []uint64 {
 	bitmap := make([]uint64, bitmapN)
 	bitmap[bitmapN-1] = 0x8000000000000000
