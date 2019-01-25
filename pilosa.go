@@ -166,7 +166,6 @@ func stringSlicesAreEqual(a, b []string) bool {
 func AddressWithDefaults(addr string) (*URI, error) {
 	if addr == "" {
 		return defaultURI(), nil
-	} else {
-		return NewURIFromAddress(addr)
 	}
+	return NewURIFromAddress(addr)
 }

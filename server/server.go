@@ -21,6 +21,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"io"
 	"log"
@@ -78,6 +79,7 @@ type Command struct {
 	Handler      pilosa.Handler
 	API          *pilosa.API
 	ln           net.Listener
+	listenURI    *pilosa.URI
 	closeTimeout time.Duration
 
 	serverOptions []pilosa.ServerOption
@@ -151,7 +153,7 @@ func (m *Command) Start() (err error) {
 		return errors.Wrap(err, "opening server")
 	}
 
-	m.logger.Printf("listening as %s\n", m.API.Node().URI)
+	m.logger.Printf("listening as %s\n", m.listenURI)
 
 	return nil
 }
@@ -186,6 +188,15 @@ func (m *Command) SetupServer() error {
 		productName += " Enterprise"
 	}
 	m.logger.Printf("%s %s, build time %s\n", productName, pilosa.Version, pilosa.BuildTime)
+
+	// validateAddrs sets the appropriate values for Bind and Advertise
+	// based on the inputs. It is not responsible for applying defaults, although
+	// it does provide a non-zero port (10101) in the case where no port is specified.
+	// The alternative would be to use port 0, which would choose a random port, but
+	// currently that's not what we want.
+	if err := m.Config.validateAddrs(context.Background()); err != nil {
+		return errors.Wrap(err, "validating addresses")
+	}
 
 	uri, err := pilosa.AddressWithDefaults(m.Config.Bind)
 	if err != nil {
@@ -231,7 +242,19 @@ func (m *Command) SetupServer() error {
 		uri.SetPort(uint16(m.ln.Addr().(*net.TCPAddr).Port))
 	}
 
+	// Save listenURI for later reference.
+	m.listenURI = uri
+
 	c := http.GetHTTPClient(TLSConfig)
+
+	// Get advertise address as uri.
+	advertiseURI, err := pilosa.AddressWithDefaults(m.Config.Advertise)
+	if err != nil {
+		return errors.Wrap(err, "processing advertise address")
+	}
+	if advertiseURI.Port == 0 {
+		advertiseURI.SetPort(uri.Port)
+	}
 
 	// Primary store configuration is handled automatically now.
 	if m.Config.Translation.PrimaryURL != "" {
@@ -258,7 +281,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerSystemInfo(gopsutil.NewSystemInfo()),
 		pilosa.OptServerGCNotifier(gcnotify.NewActiveGCNotifier()),
 		pilosa.OptServerStatsClient(statsClient),
-		pilosa.OptServerURI(uri),
+		pilosa.OptServerURI(advertiseURI),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 		pilosa.OptServerPrimaryTranslateStoreFunc(http.NewTranslateStore),
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
@@ -295,7 +318,6 @@ func (m *Command) SetupServer() error {
 		http.OptHandlerCloseTimeout(m.closeTimeout),
 	)
 	return errors.Wrap(err, "new handler")
-
 }
 
 // setupNetworking sets up internode communication based on the configuration.
@@ -310,7 +332,7 @@ func (m *Command) setupNetworking() error {
 	}
 
 	// get the host portion of addr to use for binding
-	gossipHost := m.API.Node().URI.Host
+	gossipHost := m.listenURI.Host
 	m.gossipTransport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
 	if err != nil {
 		return errors.Wrap(err, "getting transport")
