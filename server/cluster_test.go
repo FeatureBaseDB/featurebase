@@ -399,7 +399,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 		nodeID := mustNodeID(m0.URL())
 		resp := test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
 
-		expBody := "removing node: calling node leave: coordinator cannot be removed; first, make a different node the new coordinator."
+		expBody := "removing node: calling node leave: coordinator cannot be removed; first, make a different node the new coordinator"
 		if resp.StatusCode != http.StatusInternalServerError {
 			t.Fatalf("expected StatusCode %d but got %d", http.StatusInternalServerError, resp.StatusCode)
 		} else if strings.TrimSpace(resp.Body) != expBody {

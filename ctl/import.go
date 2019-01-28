@@ -151,11 +151,11 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 func (cmd *ImportCommand) ensureSchema(ctx context.Context) error {
 	err := cmd.client.EnsureIndex(ctx, cmd.Index, cmd.IndexOptions)
 	if err != nil {
-		return fmt.Errorf("Error Creating Index: %s", err)
+		return errors.Wrap(err, "creating index")
 	}
 	err = cmd.client.EnsureFieldWithOptions(ctx, cmd.Index, cmd.Field, cmd.FieldOptions)
 	if err != nil {
-		return fmt.Errorf("Error Creating Field: %s", err)
+		return errors.Wrap(err, "creating field")
 	}
 	return nil
 }

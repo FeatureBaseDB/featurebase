@@ -293,7 +293,7 @@ func TestMain_GroupBy(t *testing.T) {
 	}
 
 	// Query row.
-	if res, err := m.QueryProtobuf("i", `GroupBy(Rows(field="generalk"), Rows(field="subk"))`); err != nil {
+	if res, err := m.QueryProtobuf("i", `GroupBy(Rows(generalk), Rows(subk))`); err != nil {
 		t.Fatal(err)
 	} else {
 		test.CheckGroupBy(t, expected, res.Results[0].([]pilosa.GroupCount))
@@ -468,7 +468,6 @@ func TestClusteringNodesReplica1(t *testing.T) {
 	// Create new main with the same config.
 	config := cluster[2].Command.Config
 	config.Translation.MapSize = 100000
-	// config.Bind = cluster[2].API.Node().URI.HostPort()
 
 	// this isn't necessary, but makes the test run way faster
 	config.Gossip.Port = strconv.Itoa(int(cluster[2].Command.GossipTransport().URI.Port))

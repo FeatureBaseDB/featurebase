@@ -259,7 +259,7 @@ func (c *Call) FieldArg() (string, error) {
 			return arg, nil
 		}
 	}
-	return "", fmt.Errorf("No field argument specified")
+	return "", fmt.Errorf("no field argument specified")
 }
 
 func IsReservedArg(name string) bool {

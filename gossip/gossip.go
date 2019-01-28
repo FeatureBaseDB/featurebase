@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -50,8 +51,11 @@ type memberSet struct {
 
 	Logger logger.Logger
 
-	logger    *log.Logger
+	// stdLogger is only used when passed into memberlist library things that take a std library logger rather than an interface.
+	stdLogger *log.Logger
+	// logOutput is similar to stdLogger in that it's passed to memberlist things which can't take a pilosa Logger.
 	logOutput io.Writer
+
 	transport *Transport
 
 	eventReceiver *eventReceiver
@@ -151,14 +155,20 @@ func WithTransport(transport *Transport) memberSetOption {
 	}
 }
 
-// WithLogger is a functional option for providing a logger to NewMemberSet.
+// WithLogger is a functional option for providing a Go logger to NewMemberSet.
+// If the memberSet's transport is nil, this logger will be used when creating
+// one. If WithLogOutput is not used, this logger will be passed to memberlist
+// for it to use internally. This logger is not used for logging by code in this
+// (gossip) package - for that, use the WithPilosaLogger option.
 func WithLogger(logger *log.Logger) memberSetOption {
 	return func(g *memberSet) error {
-		g.logger = logger
+		g.stdLogger = logger
 		return nil
 	}
 }
 
+// WithLogOutput allows one to pass a Writer which will in turn be passed to
+// memberlist for use in logging.
 func WithLogOutput(o io.Writer) memberSetOption {
 	return func(g *memberSet) error {
 		g.logOutput = o
@@ -166,7 +176,20 @@ func WithLogOutput(o io.Writer) memberSetOption {
 	}
 }
 
-// NewMemberSet returns a new instance of GossipMemberSet based on options.
+// WithPilosaLogger allows one to configure a memberSet with a logger of their
+// choice which satisfies the pilosa logger interface.
+func WithPilosaLogger(l logger.Logger) memberSetOption {
+	return func(g *memberSet) error {
+		g.Logger = l
+		return nil
+	}
+}
+
+// NewMemberSet returns a new instance of GossipMemberSet based on options. The
+// logging options which can be passed to NewMemberSet are complicated for
+// historical reasons - please pass WithPilosaLogger, and either WithLogOutput
+// or WithLogger. If you pass WithLogOutput, be sure to also pass in a Transport
+// using WithTransport.
 func NewMemberSet(cfg Config, api *pilosa.API, options ...memberSetOption) (*memberSet, error) {
 	host := api.Node().URI.Host
 	g := &memberSet{
@@ -180,7 +203,8 @@ func NewMemberSet(cfg Config, api *pilosa.API, options ...memberSetOption) (*mem
 			return nil, errors.Wrap(err, "executing option")
 		}
 	}
-	ger := newEventReceiver(g.logger, api)
+
+	ger := newEventReceiver(g.Logger, api)
 	g.eventReceiver = ger
 
 	if g.transport == nil {
@@ -189,8 +213,16 @@ func NewMemberSet(cfg Config, api *pilosa.API, options ...memberSetOption) (*mem
 			return nil, fmt.Errorf("convert port: %s", err)
 		}
 
+		if g.stdLogger == nil {
+			if g.logOutput != nil {
+				g.stdLogger = logger.NewStandardLogger(g.logOutput).Logger()
+			} else {
+				g.stdLogger = log.New(os.Stderr, "", log.LstdFlags)
+			}
+		}
+
 		// Set up the transport.
-		transport, err := NewTransport(host, port, g.logger)
+		transport, err := NewTransport(host, port, g.stdLogger)
 		if err != nil {
 			return nil, fmt.Errorf("new tranport: %s", err)
 		}
@@ -209,14 +241,29 @@ func NewMemberSet(cfg Config, api *pilosa.API, options ...memberSetOption) (*mem
 		}
 	}
 
+	////////////////////
 	// memberlist config
 	conf := memberlist.DefaultWANConfig()
 	conf.Transport = g.transport.net
 	conf.Name = api.Node().ID
 	conf.BindAddr = api.Node().URI.Host
 	conf.BindPort = port
-	conf.AdvertisePort = port
-	conf.AdvertiseAddr = hostToIP(api.Node().URI.Host)
+	// AdvertisePort
+	if cfg.AdvertisePort != "" {
+		if p, err := strconv.Atoi(cfg.Port); err != nil {
+			return nil, fmt.Errorf("convert advertise port: %s", err)
+		} else {
+			conf.AdvertisePort = p
+		}
+	} else {
+		conf.AdvertisePort = port
+	}
+	// AdvertiseHost
+	if cfg.AdvertiseHost != "" {
+		conf.AdvertiseAddr = cfg.AdvertiseHost
+	} else {
+		conf.AdvertiseAddr = hostToIP(api.Node().URI.Host)
+	}
 	//
 	conf.TCPTimeout = time.Duration(cfg.StreamTimeout)
 	conf.SuspicionMult = cfg.SuspicionMult
@@ -233,7 +280,7 @@ func NewMemberSet(cfg Config, api *pilosa.API, options ...memberSetOption) (*mem
 	if g.logOutput != nil {
 		conf.LogOutput = g.logOutput
 	} else {
-		conf.Logger = g.logger
+		conf.Logger = g.stdLogger
 	}
 
 	g.config = &config{
@@ -318,11 +365,11 @@ type eventReceiver struct {
 	ch   chan memberlist.NodeEvent
 	papi *pilosa.API
 
-	logger *log.Logger
+	logger logger.Logger
 }
 
 // newEventReceiver returns a new instance of GossipEventReceiver.
-func newEventReceiver(logger *log.Logger, papi *pilosa.API) *eventReceiver {
+func newEventReceiver(logger logger.Logger, papi *pilosa.API) *eventReceiver {
 	ger := &eventReceiver{
 		ch:     make(chan memberlist.NodeEvent, 1),
 		logger: logger,
@@ -468,7 +515,7 @@ func newTransport(conf *memberlist.Config) (*memberlist.NetTransport, error) {
 
 	nt, err := makeNetRetry(limit)
 	if err != nil {
-		return nil, fmt.Errorf("Could not set up network transport: %v", err)
+		return nil, errors.Wrap(err, "could not set up network transport")
 	}
 
 	return nt, nil
@@ -477,7 +524,16 @@ func newTransport(conf *memberlist.Config) (*memberlist.NetTransport, error) {
 // Config holds toml-friendly memberlist configuration.
 type Config struct {
 	// Port indicates the port to which pilosa should bind for internal state sharing.
-	Port  string   `toml:"port"`
+	Port string `toml:"port"`
+
+	// AdvertiseHost is the hostname or IP other nodes should use to connect to
+	// this host. If left blank, the value for Host will be used. This is useful
+	// in some proxy and NAT scenarios.
+	AdvertiseHost string `toml:"advertise-host"`
+	// AdvertisePort is the port other nodes will use to connect to this one.
+	// Behaves like AdvertiseHost.
+	AdvertisePort string `toml:"advertise-port"`
+
 	Seeds []string `toml:"seeds"`
 	Key   string   `toml:"key"`
 	// StreamTimeout is the timeout for establishing a stream connection with

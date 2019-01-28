@@ -38,7 +38,7 @@ func TestCountOpenFiles(t *testing.T) {
 
 func TestMonitorAntiEntropyZero(t *testing.T) {
 
-	td, err := ioutil.TempDir("", "")
+	td, err := ioutil.TempDir(*TempDir, "")
 	if err != nil {
 		t.Fatalf("getting temp dir: %v", err)
 	}

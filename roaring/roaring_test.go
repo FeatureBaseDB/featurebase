@@ -37,6 +37,29 @@ func TestContainerCount(t *testing.T) {
 		t.Fatalf("Count != CountRange\n")
 	}
 }
+func TestSize(t *testing.T) {
+	//array
+	a := roaring.NewFileBitmap(0, 65535, 131072)
+	if a.Size() != 6 {
+		t.Fatalf("Size in bytes incorrect \n")
+	}
+
+	//bitmap
+	b := roaring.NewFileBitmap()
+	for i := uint64(0); i <= 4096; i++ {
+		b.DirectAdd(i)
+	}
+
+	if b.Size() != 8192 {
+		t.Fatalf("Size in bytes incorrect \n")
+	}
+	//convert to rle
+	b.Optimize()
+	//rle
+	if b.Size() != 6 {
+		t.Fatalf("Size in bytes incorrect \n")
+	}
+}
 
 func TestCountRange(t *testing.T) {
 	tests := []struct {
@@ -962,6 +985,18 @@ func TestBitmap_IntersectionCount_Mixed(t *testing.T) {
 	}
 }
 
+func TestBitmap_Shift(t *testing.T) {
+	var max uint64 = math.MaxUint64
+	bm1 := roaring.NewFileBitmap(0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 65536, max)
+	bm2 := roaring.NewFileBitmap(1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 65537)
+
+	if got, err := bm1.Shift(1); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(got.Slice(), bm2.Slice()) {
+		t.Fatalf("unexpected bitmap: expected %v, but got %v", bm2.Slice(), got.Slice())
+	}
+}
+
 func TestBitmap_Quick_Array1(t *testing.T)     { testBitmapQuick(t, 1000, 1000, 2000) }
 func TestBitmap_Quick_Array2(t *testing.T)     { testBitmapQuick(t, 10000, 0, 1000) }
 func TestBitmap_Quick_Bitmap1(t *testing.T)    { testBitmapQuick(t, 10000, 0, 10000) }
@@ -1497,6 +1532,41 @@ func BenchmarkSliceDescending(b *testing.B) {
 		bm := roaring.NewFileBitmap()
 		for col := uint64(pilosa.ShardWidth); col > uint64(0); col-- {
 			bm.Add(col)
+		}
+		bm.Add(0)
+	}
+}
+
+func BenchmarkSliceAscendingStriped(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		bm := roaring.NewFileBitmap()
+		l := uint64(pilosa.ShardWidth / 8)
+		for col := uint64(0); col < l; col++ {
+			bm.Add(l*0 + col)
+			bm.Add(l*1 + col)
+			bm.Add(l*2 + col)
+			bm.Add(l*3 + col)
+			bm.Add(l*4 + col)
+			bm.Add(l*5 + col)
+			bm.Add(l*6 + col)
+			bm.Add(l*7 + col)
+		}
+	}
+}
+
+func BenchmarkSliceDescendingStriped(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		bm := roaring.NewFileBitmap()
+		l := uint64(pilosa.ShardWidth / 8)
+		for col := uint64(l); col < l+1; col-- {
+			bm.Add(l*7 + col)
+			bm.Add(l*6 + col)
+			bm.Add(l*5 + col)
+			bm.Add(l*4 + col)
+			bm.Add(l*3 + col)
+			bm.Add(l*2 + col)
+			bm.Add(l*1 + col)
+			bm.Add(l*0 + col)
 		}
 	}
 }
