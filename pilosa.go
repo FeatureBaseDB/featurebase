@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"encoding/json"
 	"errors"
 	"regexp"
 )
@@ -121,9 +122,28 @@ var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 // ColumnAttrSet represents a set of attributes for a vertical column in an index.
 // Can have a set of attributes attached to it.
 type ColumnAttrSet struct {
-	ID    uint64                 `json:"id,omitempty"`
+	ID    uint64                 `json:"id"`
 	Key   string                 `json:"key,omitempty"`
 	Attrs map[string]interface{} `json:"attrs,omitempty"`
+}
+
+func (cas ColumnAttrSet) MarshalJSON() ([]byte, error) {
+	if cas.Key != "" {
+		return json.Marshal(struct {
+			Key   string                 `json:"key,omitempty"`
+			Attrs map[string]interface{} `json:"attrs,omitempty"`
+		}{
+			Key:   cas.Key,
+			Attrs: cas.Attrs,
+		})
+	}
+	return json.Marshal(struct {
+		ID    uint64                 `json:"id"`
+		Attrs map[string]interface{} `json:"attrs,omitempty"`
+	}{
+		ID:    cas.ID,
+		Attrs: cas.Attrs,
+	})
 }
 
 // TimeFormat is the go-style time format used to parse string dates.
