@@ -16,6 +16,7 @@ package pilosa_test
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -2471,18 +2472,31 @@ func TestExecutor_ExecuteOptions(t *testing.T) {
 
 	t.Run("columnAttrs", func(t *testing.T) {
 		writeQuery := `
+			Set(0, f=10)
+			SetColumnAttrs(0, foo="baz")
 			Set(100, f=10)
 			SetColumnAttrs(100, foo="bar")`
 		readQueries := []string{`Options(Row(f=10), columnAttrs=true)`}
 		responses := runCallTest(t, writeQuery, readQueries, nil)
 		targetColAttrSets := []*pilosa.ColumnAttrSet{
+			{ID: 0, Attrs: map[string]interface{}{"foo": "baz"}},
 			{ID: 100, Attrs: map[string]interface{}{"foo": "bar"}},
 		}
 
-		if bits := responses[0].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{100}) {
+		targetJSON := `[{"id":0,"attrs":{"foo":"baz"}},{"id":100,"attrs":{"foo":"bar"}}]`
+
+		if bits := responses[0].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{0, 100}) {
 			t.Fatalf("unexpected columns: %+v", bits)
 		} else if attrs := responses[0].ColumnAttrSets; !reflect.DeepEqual(attrs, targetColAttrSets) {
 			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
+		} else {
+			// Ensure the JSON is marshaled correctly.
+			jres, err := json.Marshal(attrs)
+			if err != nil {
+				t.Fatal(err)
+			} else if string(jres) != targetJSON {
+				t.Fatalf("json marshal expected: %s, but got: %s", targetJSON, jres)
+			}
 		}
 	})
 
@@ -2499,10 +2513,20 @@ func TestExecutor_ExecuteOptions(t *testing.T) {
 			{Key: "one-hundred", Attrs: map[string]interface{}{"foo": "bar"}},
 		}
 
+		targetJSON := `[{"key":"one-hundred","attrs":{"foo":"bar"}}]`
+
 		if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"one-hundred"}) {
 			t.Fatalf("unexpected keys: %+v", keys)
 		} else if attrs := responses[0].ColumnAttrSets; !reflect.DeepEqual(attrs, targetColAttrSets) {
 			t.Fatalf("unexpected attrs: %s", spew.Sdump(attrs))
+		} else {
+			// Ensure the JSON is marshaled correctly.
+			jres, err := json.Marshal(attrs)
+			if err != nil {
+				t.Fatal(err)
+			} else if string(jres) != targetJSON {
+				t.Fatalf("json marshal expected: %s, but got: %s", targetJSON, jres)
+			}
 		}
 	})
 
