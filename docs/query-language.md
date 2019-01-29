@@ -280,7 +280,7 @@ Store(<ROW_CALL>, <FIELD>=<ROW>)
 
 **Description:**
 
-`Store` writes the results of <ROW_CALL> to the specified row. If the row already exists, it will be replaced. The destination field must be of field type `set`.
+`Store` writes the results of `<ROW_CALL>` to the specified row. If the row already exists, it will be replaced. The destination field must be of field type `set`.
 
 **Result Type:** boolean
 
@@ -786,6 +786,7 @@ Options(<CALL>, columnAttrs=<BOOL>, excludeColumns=<BOOL>, excludeRowAttrs=<BOOL
 **Description:**
 
 Modifies the given query as follows:
+
 * `columnAttrs`: Include column attributes in the result (Default: `false`).
 * `excludeColumns`: Exclude column IDs from the result (Default: `false`).
 * `excludeRowAttrs`: Exclude row attributes from the result (Default: `false`).
