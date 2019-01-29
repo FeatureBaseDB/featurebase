@@ -406,7 +406,7 @@ BSI range queries support the following operators:
  `==`     | equal-to, EQ                  | integer
  `!=`     | not-equal-to, NEQ             | integer or `null`
 
-`<`, and `<=` can be chained together to represent a bounded interval. For example:
+A bounded interval can be specified by chaining the `<` and `<=` operators (but not others). For example:
 
 ```request
 Row(50 < commitactivity < 150)
