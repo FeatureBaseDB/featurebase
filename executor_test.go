@@ -2887,6 +2887,19 @@ func TestExecutor_Execute_ClearRow(t *testing.T) {
 			t.Fatalf("topn wrong results: %v", res.Results)
 		}
 	})
+
+	// Ensure that ClearRow returns false when the row to clear needs translation.
+	t.Run("WithKeys", func(t *testing.T) {
+		wq := ""
+		rq := []string{
+			`ClearRow(f="bar")`,
+		}
+
+		responses := runCallTest(t, wq, rq, &pilosa.IndexOptions{}, pilosa.OptFieldKeys())
+		if res := responses[0].Results[0].(bool); res {
+			t.Fatalf("unexpected result: %+v", res)
+		}
+	})
 }
 
 // Ensure a row can be set.
