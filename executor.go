@@ -1693,6 +1693,9 @@ func (e *executor) executeClearRow(ctx context.Context, index string, c *pql.Cal
 	}
 
 	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return false, errors.Wrap(err, "mapreducing clearrow")
+	}
 	return result.(bool), err
 }
 
@@ -2368,7 +2371,7 @@ func (e *executor) translateCalls(ctx context.Context, index string, idx *Index,
 func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 	var colKey, rowKey, fieldName string
 	switch c.Name {
-	case "Set", "Clear", "Row", "Range", "SetColumnAttrs":
+	case "Set", "Clear", "Row", "Range", "SetColumnAttrs", "ClearRow":
 		// Positional args in new PQL syntax require special handling here.
 		colKey = "_" + columnLabel
 		fieldName, _ = c.FieldArg()
