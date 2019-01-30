@@ -1152,16 +1152,59 @@ func (e *executor) executeRowsShard(_ context.Context, index string, fieldName s
 		return nil, ErrFieldNotFound
 	}
 
-	// Rows query does not currently support a `time` field that has
-	// `noStandardView: true`.
-	// TODO https://github.com/pilosa/pilosa/issues/1783
-	if f.Type() == FieldTypeTime && f.options.NoStandardView {
-		return nil, errors.New("Rows() query on time field with no standard view is not currently supported")
-	}
+	// rowIDs is the result set.
+	var rowIDs RowIDs
 
-	frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
-	if frag == nil {
-		return make(RowIDs, 0), nil
+	// views contains the list of views to inspect (and merge)
+	// in order to represent `Rows` for the field.
+	var views []string = []string{viewStandard}
+
+	// Handle `time` fields.
+	if f.Type() == FieldTypeTime {
+		var err error
+
+		// Parse "from" time, if set.
+		var fromTime time.Time
+		if _, ok := c.Args["from"]; ok {
+			switch v := c.Args["from"].(type) {
+			case string:
+				if fromTime, err = time.Parse(TimeFormat, v); err != nil {
+					return nil, errors.New("cannot parse Row() 'from' time")
+				}
+			case int64:
+				fromTime = time.Unix(v, 0).UTC()
+			default:
+				return nil, errors.New("Row() 'from' arg must be a timestamp")
+			}
+		}
+
+		// Parse "to" time, if set.
+		var toTime time.Time
+		if _, ok := c.Args["to"]; ok {
+			switch v := c.Args["to"].(type) {
+			case string:
+				if toTime, err = time.Parse(TimeFormat, v); err != nil {
+					return nil, errors.New("cannot parse Row() 'to' time")
+				}
+			case int64:
+				toTime = time.Unix(v, 0).UTC()
+			default:
+				return nil, errors.New("Row() 'to' arg must be a timestamp")
+			}
+		}
+
+		if !fromTime.IsZero() && !toTime.IsZero() {
+			// If no quantum exists then return an empty result set.
+			q := f.TimeQuantum()
+			if q == "" {
+				return rowIDs, nil
+			}
+
+			// Determine the views based on the specified time range.
+			views = viewsByTimeRange(viewStandard, fromTime, toTime, q)
+		} else if f.options.NoStandardView {
+			return nil, errors.New("Rows() query on time field with no standard view requires a date range")
+		}
 	}
 
 	start := uint64(0)
@@ -1177,17 +1220,30 @@ func (e *executor) executeRowsShard(_ context.Context, index string, fieldName s
 	} else if ok {
 		colShard := columnID >> shardWidthExponent
 		if colShard != shard {
-			return RowIDs{}, nil
+			return rowIDs, nil
 		}
 		filters = append(filters, filterColumn(columnID))
 	}
-	if limit, hasLimit, err := c.UintArg("limit"); err != nil {
+
+	limit := int(^uint(0) >> 1)
+	if lim, hasLimit, err := c.UintArg("limit"); err != nil {
 		return nil, errors.Wrap(err, "getting limit")
 	} else if hasLimit {
-		filters = append(filters, filterWithLimit(limit))
+		filters = append(filters, filterWithLimit(lim))
+		limit = int(lim)
 	}
 
-	return frag.rows(start, filters...), nil
+	for _, view := range views {
+		frag := e.Holder.fragment(index, fieldName, view, shard)
+		if frag == nil {
+			continue
+		}
+
+		viewRows := frag.rows(start, filters...)
+		rowIDs = rowIDs.merge(viewRows, limit)
+	}
+
+	return rowIDs, nil
 }
 
 func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {

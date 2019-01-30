@@ -3133,11 +3133,47 @@ func TestExecutor_Execute_Rows(t *testing.T) {
 func TestExecutor_Execute_RowsTime(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
-	c.CreateField(t, "i", pilosa.IndexOptions{}, "t", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), true))
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "f", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), true))
 
-	exp := "executing: Rows() query on time field with no standard view is not currently supported"
-	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=t)`}); err == nil || err.Error() != exp {
+	writeQuery := fmt.Sprintf(`
+		Set(9, f=1, 2001-01-01T00:00)
+		Set(9, f=2, 2002-01-01T00:00)
+		Set(9, f=3, 2003-01-01T00:00)
+		Set(9, f=4, 2004-01-01T00:00)
+
+		Set(%d, f=13, 2003-02-02T00:00)
+		`, pilosa.ShardWidth+9)
+	readQueries := []string{
+		`Rows(field=f, from=1999-12-31T00:00, to=2002-01-01T03:00)`,
+		`Rows(field=f, from=2002-01-01T00:00, to=2004-01-01T00:00)`,
+		`Rows(field=f, from=1990-01-01T00:00, to=1999-01-01T00:00)`,
+	}
+	expResults := [][]uint64{
+		{1},
+		{2, 3, 13},
+		{},
+	}
+
+	// Make sure that date range is enforced when there's no standard view
+	// or if only a partial date range is provided.
+	exp := "executing: Rows() query on time field with no standard view requires a date range"
+	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=f)`}); err == nil || err.Error() != exp {
 		t.Fatalf("expected error: %s", exp)
+	} else if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=f, from=1999-12-31T00:00)`}); err == nil || err.Error() != exp {
+		t.Fatalf("expected error: %s", exp)
+	} else if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=f, to=1999-12-31T00:00)`}); err == nil || err.Error() != exp {
+		t.Fatalf("expected error: %s", exp)
+	}
+
+	responses := runCallTest(t, writeQuery, readQueries,
+		nil, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), true))
+
+	for i := range responses {
+		t.Run(fmt.Sprintf("response-%d", i), func(t *testing.T) {
+			if rows := responses[i].Results[0].(pilosa.RowIdentifiers).Rows; !reflect.DeepEqual(rows, expResults[i]) {
+				t.Fatalf("unexpected rows: %+v", rows)
+			}
+		})
 	}
 }
 
