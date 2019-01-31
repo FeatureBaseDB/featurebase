@@ -80,7 +80,7 @@ type Field struct {
 
 	// Shards with data on any node in the cluster, according to this node.
 	remoteAvailableShards *roaring.Bitmap
-	shardValidator func(uint64)bool
+	shardValidator        func(uint64) bool
 
 	logger logger.Logger
 }
@@ -208,7 +208,7 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 
 		remoteAvailableShards: roaring.NewBitmap(),
 
-		shardValidator:func(uint64)bool{
+		shardValidator: func(uint64) bool {
 			return true
 		},
 		logger: logger.NopLogger,
