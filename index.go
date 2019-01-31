@@ -50,9 +50,9 @@ type Index struct {
 	// Column attribute storage and cache.
 	columnAttrs AttrStore
 
-	broadcaster broadcaster
-	Stats       stats.StatsClient
-	shardValidator func(uint64)bool
+	broadcaster    broadcaster
+	Stats          stats.StatsClient
+	shardValidator func(uint64) bool
 
 	logger logger.Logger
 }
@@ -72,10 +72,10 @@ func NewIndex(path, name string) (*Index, error) {
 		newAttrStore: newNopAttrStore,
 		columnAttrs:  nopStore,
 
-		broadcaster:    NopBroadcaster,
-		Stats:          stats.NopStatsClient,
-		logger:         logger.NopLogger,
-		shardValidator: func(uint64)bool{
+		broadcaster: NopBroadcaster,
+		Stats:       stats.NopStatsClient,
+		logger:      logger.NopLogger,
+		shardValidator: func(uint64) bool {
 			return true
 		},
 		trackExistence: true,
