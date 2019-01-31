@@ -1015,7 +1015,7 @@ func (c *InternalClient) executeRequest(req *http.Request) (*http.Response, erro
 		if resp != nil {
 			resp.Body.Close()
 		}
-		return nil, errors.Wrap(err, "executing request")
+		return nil, errors.Wrap(err, "getting response")
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		defer resp.Body.Close()

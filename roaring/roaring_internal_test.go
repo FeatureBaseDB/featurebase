@@ -3317,3 +3317,123 @@ func TestEquals(t *testing.T) {
 	}
 }
 */
+func TestShiftArray(t *testing.T) {
+	a := &Container{
+		containerType: containerArray,
+	}
+	tests := []struct {
+		array []uint16
+		exp   []uint16
+	}{
+		{
+			array: []uint16{1},
+			exp:   []uint16{2},
+		},
+		{
+			array: []uint16{},
+			exp:   []uint16{},
+		},
+		{
+			array: []uint16{1, 2, 3, 4, 5, 11, 12},
+			exp:   []uint16{2, 3, 4, 5, 6, 12, 13},
+		},
+		{
+			array: []uint16{65535},
+			exp:   []uint16{},
+		},
+	}
+
+	for i, test := range tests {
+		a.array = test.array
+		a.n = int32(len(a.array))
+		ret1, _ := shift(a)      // test generic shift function
+		ret2, _ := shiftArray(a) // test array-specific shift function
+		if !reflect.DeepEqual(ret1.array, test.exp) {
+			t.Fatalf("test #%v shift() expected %v, but got %v", i, test.exp, ret1.array)
+		} else if !reflect.DeepEqual(ret2.array, test.exp) {
+			t.Fatalf("test #%v shiftArray() expected %v, but got %v", i, test.exp, ret2.array)
+		}
+	}
+}
+
+func TestShiftBitmap(t *testing.T) {
+	a := &Container{
+		containerType: containerBitmap,
+	}
+	tests := []struct {
+		bitmap []uint64
+		exp    []uint64
+	}{
+		{
+			bitmap: bitmapFirstBitSet(),
+			exp:    bitmapSecondBitSet(),
+		},
+		{
+			bitmap: bitmapLastBitSet(),
+			exp:    bitmapEmpty(),
+		},
+		{
+			bitmap: bitmapLastBitFirstRowSet(),
+			exp:    bitmapFirstBitSecoundRowSet(),
+		},
+	}
+
+	for i, test := range tests {
+		a.bitmap = test.bitmap
+		a.n = 1
+		ret1, _ := shift(a)       // test generic shift function
+		ret2, _ := shiftBitmap(a) // test bitmap-specific shift function
+		if !reflect.DeepEqual(ret1.bitmap, test.exp) {
+			t.Fatalf("test #%v shift() expected %v, but got %v", i, test.exp, ret1.bitmap)
+		} else if !reflect.DeepEqual(ret2.bitmap, test.exp) {
+			t.Fatalf("test #%v shiftBitmap() expected %v, but got %v", i, test.exp, ret2.bitmap)
+		}
+	}
+}
+func TestShiftRun(t *testing.T) {
+	a := &Container{
+		containerType: containerRun,
+	}
+
+	tests := []struct {
+		runs  []interval16
+		n     int32
+		en    int32
+		exp   []interval16
+		carry bool
+	}{
+		{
+			runs:  []interval16{{start: 5, last: 10}},
+			n:     5,
+			en:    5,
+			exp:   []interval16{{start: 6, last: 11}},
+			carry: false,
+		},
+		{
+			runs:  []interval16{{start: 5, last: 65535}},
+			n:     65530,
+			en:    65529,
+			exp:   []interval16{{start: 6, last: 65535}},
+			carry: true,
+		},
+		{
+			runs:  []interval16{{start: 65535, last: 65535}},
+			n:     1,
+			en:    0,
+			exp:   []interval16{},
+			carry: true,
+		},
+	}
+
+	for i, test := range tests {
+		a.runs = test.runs
+		a.n = test.n
+		ret1, c1 := shift(a)    // test generic shift function
+		ret2, c2 := shiftRun(a) // test run-specific shift function
+		if !reflect.DeepEqual(ret1.runs, test.exp) && c1 == test.carry && ret1.n == test.en {
+			t.Fatalf("test #%v shift() expected %v, but got %v %d", i, test.exp, ret1.runs, ret1.n)
+		} else if !reflect.DeepEqual(ret2.runs, test.exp) && c2 == test.carry && ret2.n == test.en {
+			t.Fatalf("test #%v shiftRun() expected %v, but got %v %d", i, test.exp, ret2.runs, ret2.n)
+		}
+	}
+}

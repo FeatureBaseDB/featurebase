@@ -52,9 +52,9 @@ nav = []
 
 <strong id="row">[Row](../data-model/#row):</strong> Rows are the fundamental vertical data axis within Pilosa. They are namespaced to each [field](#field) within an [index](#index). Represented as a [Bitmap](#bitmap).
 
-<strong id="range">[Row (Ranged)](../query-language/#range-queries):</strong>: A [PQL](#pql) query that returns bits based on comparison to timestamps, set according to the [time quantum](#time-quantum).
+<strong id="range">[Row (Ranged)](../query-language/#row-range):</strong>: A [PQL](#pql) query that returns bits based on comparison to timestamps, set according to the [time quantum](#time-quantum).
 
-<strong id="range-bsi">[Row (BSI)](../query-language/#range-bsi):</strong>: A [PQL](#pql) query that returns bits based on comparison to integers stored in [BSI](#bsi) [fields](#field).
+<strong id="range-bsi">[Row (BSI)](../query-language/#row-bsi):</strong>: A [PQL](#pql) query that returns bits based on comparison to integers stored in [BSI](#bsi) [fields](#field).
 
 <strong id="slice">[Slice](../data-model/#shard):</strong> Prior to Pilosa 1.0, shards were known as slices.
 

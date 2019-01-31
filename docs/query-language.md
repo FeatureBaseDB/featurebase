@@ -280,7 +280,7 @@ Store(<ROW_CALL>, <FIELD>=<ROW>)
 
 **Description:**
 
-`Store` writes the results of <ROW_CALL> to the specified row. If the row already exists, it will be replaced. The destination field must be of field type `set`.
+`Store` writes the results of `<ROW_CALL>` to the specified row. If the row already exists, it will be replaced. The destination field must be of field type `set`.
 
 **Result Type:** boolean
 
@@ -406,7 +406,7 @@ BSI range queries support the following operators:
  `==`     | equal-to, EQ                  | integer
  `!=`     | not-equal-to, NEQ             | integer or `null`
 
-`<`, and `<=` can be chained together to represent a bounded interval. For example:
+A bounded interval can be specified by chaining the `<` and `<=` operators (but not others). For example:
 
 ```request
 Row(50 < commitactivity < 150)
@@ -594,6 +594,34 @@ Count(Row(stargazer=1))
 
 * Result is the number of repositories that user 1 has starred.
 
+#### Shift
+**Spec:**
+
+```
+Shift(<ROW_CALL>, [n=UINT])
+```
+
+**Description:**
+
+Returns the row specified by `ROW_CALL` shifted by `n` bits.
+
+**Result Type:** object with attrs and columns
+
+attrs will always be empty
+
+**Examples:**
+
+Query all columns with a bit set in row 1 of the field `stargazer`
+and shift the result by 2:
+```request
+Shift(Row(stargazer=1), n=2)
+```
+```response
+{"attrs":{},"columns":[12, 22]}
+```
+
+* columns are the repositories which user 1 has starred shifted by 2 bits.
+
 #### TopN
 
 **Spec:**
@@ -758,6 +786,7 @@ Options(<CALL>, columnAttrs=<BOOL>, excludeColumns=<BOOL>, excludeRowAttrs=<BOOL
 **Description:**
 
 Modifies the given query as follows:
+
 * `columnAttrs`: Include column attributes in the result (Default: `false`).
 * `excludeColumns`: Exclude column IDs from the result (Default: `false`).
 * `excludeRowAttrs`: Exclude row attributes from the result (Default: `false`).
