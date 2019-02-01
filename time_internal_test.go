@@ -165,6 +165,131 @@ func TestViewsByTimeRange(t *testing.T) {
 	})
 }
 
+func TestMinMaxViews(t *testing.T) {
+	t.Run("Combos", func(t *testing.T) {
+		tests := []struct {
+			views []string
+			q     TimeQuantum
+			min   string
+			max   string
+		}{
+			{
+				[]string{""},
+				mustParseTimeQuantum("Y"),
+				"",
+				"",
+			},
+			{
+				[]string{"std_2019", "std_2020", "std_202002", "std_202002", "std_2022"},
+				mustParseTimeQuantum("Y"),
+				"std_2019",
+				"std_2022",
+			},
+			{
+				[]string{"std_201902", "std_201901"},
+				mustParseTimeQuantum("M"),
+				"std_201901",
+				"std_201902",
+			},
+			{
+				[]string{"std_201902", "std_201901"},
+				mustParseTimeQuantum("D"),
+				"",
+				"",
+			},
+			{
+				[]string{"std_20190201"},
+				mustParseTimeQuantum("D"),
+				"std_20190201",
+				"std_20190201",
+			},
+			{
+				[]string{"foo", "bar"},
+				mustParseTimeQuantum("D"),
+				"",
+				"",
+			},
+		}
+		for i, test := range tests {
+			if min, max := minMaxViews(test.views, test.q); min != test.min {
+				t.Errorf("test %d expected min: %v, but got: %v", i, test.min, min)
+			} else if max != test.max {
+				t.Errorf("test %d expected max: %v, but got: %v", i, test.max, max)
+			}
+		}
+	})
+}
+
+func TestTimeOfView(t *testing.T) {
+	t.Run("Combos", func(t *testing.T) {
+		tests := []struct {
+			view   string
+			exp    time.Time
+			expAdj time.Time
+			expErr string
+		}{
+			{
+				"std_2019",
+				time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC),
+				time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+				"",
+			},
+			{
+				"std_201902",
+				time.Date(2019, 2, 1, 0, 0, 0, 0, time.UTC),
+				time.Date(2019, 3, 1, 0, 0, 0, 0, time.UTC),
+				"",
+			},
+			{
+				"std_20190203",
+				time.Date(2019, 2, 3, 0, 0, 0, 0, time.UTC),
+				time.Date(2019, 2, 4, 0, 0, 0, 0, time.UTC),
+				"",
+			},
+			{
+				"std_2019020308",
+				time.Date(2019, 2, 3, 8, 0, 0, 0, time.UTC),
+				time.Date(2019, 2, 3, 9, 0, 0, 0, time.UTC),
+				"",
+			},
+			{
+				"foo",
+				time.Time{},
+				time.Time{},
+				"invalid time format on view: foo",
+			},
+			{
+				"std_201902030801",
+				time.Time{},
+				time.Time{},
+				"invalid time format on view: std_201902030801",
+			},
+		}
+		for i, test := range tests {
+			// adj: false
+			if tm, err := timeOfView(test.view, false); err != nil {
+				if err.Error() != test.expErr {
+					t.Errorf("test %d got unexpected error: %s", i, err)
+				}
+			} else if test.expErr != "" {
+				t.Errorf("test %d expected error: %s but got none", i, test.expErr)
+			} else if tm != test.exp {
+				t.Errorf("test %d expected time: %v, but got: %v", i, test.exp, tm)
+			}
+			// adj: true
+			if tm, err := timeOfView(test.view, true); err != nil {
+				if err.Error() != test.expErr {
+					t.Errorf("test %d got unexpected error: %s", i, err)
+				}
+			} else if test.expErr != "" {
+				t.Errorf("test %d expected error: %s but got none", i, test.expErr)
+			} else if tm != test.expAdj {
+				t.Errorf("test %d expected time: %v, but got: %v", i, test.expAdj, tm)
+			}
+		}
+	})
+}
+
 // defaultTimeLayout is the time layout used by the tests.
 const defaultTimeLayout = "2006-01-02 15:04"
 

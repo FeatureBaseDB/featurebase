@@ -1167,7 +1167,7 @@ func (e *executor) executeRowsShard(_ context.Context, index string, fieldName s
 		var fromTime time.Time
 		if v, ok := c.Args["from"]; ok {
 			if fromTime, err = parseTime(v); err != nil {
-				return nil, errors.Wrap(err, "determining from time")
+				return nil, errors.Wrap(err, "parsing from time")
 			}
 		}
 
@@ -1175,21 +1175,51 @@ func (e *executor) executeRowsShard(_ context.Context, index string, fieldName s
 		var toTime time.Time
 		if v, ok := c.Args["to"]; ok {
 			if toTime, err = parseTime(v); err != nil {
-				return nil, errors.Wrap(err, "determining to time")
+				return nil, errors.Wrap(err, "parsing to time")
 			}
 		}
 
-		if !fromTime.IsZero() && !toTime.IsZero() {
+		// Calculate the views for a range as long as some piece of the range
+		// (from/to) are specified, or if there's no standard view to represent
+		// all dates.
+		if !fromTime.IsZero() || !toTime.IsZero() || f.options.NoStandardView {
 			// If no quantum exists then return an empty result set.
 			q := f.TimeQuantum()
 			if q == "" {
 				return rowIDs, nil
 			}
 
-			// Determine the views based on the specified time range.
-			views = viewsByTimeRange(viewStandard, fromTime, toTime, q)
-		} else if f.options.NoStandardView {
-			return nil, errors.New("Rows() query on time field with no standard view requires a date range")
+			// Get min/max based on existing views.
+			var vs []string
+			for _, v := range f.views() {
+				vs = append(vs, v.name)
+			}
+			min, max := minMaxViews(vs, q)
+
+			// If min/max are empty, there were no time views.
+			if min == "" || max == "" {
+				views = []string{}
+			} else {
+				// Convert min/max from string to time.Time.
+				minTime, err := timeOfView(min, false)
+				if err != nil {
+					return rowIDs, errors.Wrapf(err, "getting min time from view: %s", min)
+				}
+				if fromTime.IsZero() || fromTime.Before(minTime) {
+					fromTime = minTime
+				}
+
+				maxTime, err := timeOfView(max, true)
+				if err != nil {
+					return rowIDs, errors.Wrapf(err, "getting max time from view: %s", max)
+				}
+				if toTime.IsZero() || toTime.After(maxTime) {
+					toTime = maxTime
+				}
+
+				// Determine the views based on the specified time range.
+				views = viewsByTimeRange(viewStandard, fromTime, toTime, q)
+			}
 		}
 	}
 
@@ -1272,7 +1302,7 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 	var fromTime time.Time
 	if v, ok := c.Args["from"]; ok {
 		if fromTime, err = parseTime(v); err != nil {
-			return nil, errors.Wrap(err, "determining from time")
+			return nil, errors.Wrap(err, "parsing from time")
 		}
 	}
 
@@ -1280,7 +1310,7 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 	var toTime time.Time
 	if v, ok := c.Args["to"]; ok {
 		if toTime, err = parseTime(v); err != nil {
-			return nil, errors.Wrap(err, "determining to time")
+			return nil, errors.Wrap(err, "parsing to time")
 		}
 	}
 
