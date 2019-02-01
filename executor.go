@@ -1198,28 +1198,28 @@ func (e *executor) executeRowsShard(_ context.Context, index string, fieldName s
 
 			// If min/max are empty, there were no time views.
 			if min == "" || max == "" {
-				views = []string{}
-			} else {
-				// Convert min/max from string to time.Time.
-				minTime, err := timeOfView(min, false)
-				if err != nil {
-					return rowIDs, errors.Wrapf(err, "getting min time from view: %s", min)
-				}
-				if fromTime.IsZero() || fromTime.Before(minTime) {
-					fromTime = minTime
-				}
-
-				maxTime, err := timeOfView(max, true)
-				if err != nil {
-					return rowIDs, errors.Wrapf(err, "getting max time from view: %s", max)
-				}
-				if toTime.IsZero() || toTime.After(maxTime) {
-					toTime = maxTime
-				}
-
-				// Determine the views based on the specified time range.
-				views = viewsByTimeRange(viewStandard, fromTime, toTime, q)
+				return rowIDs, nil
 			}
+
+			// Convert min/max from string to time.Time.
+			minTime, err := timeOfView(min, false)
+			if err != nil {
+				return rowIDs, errors.Wrapf(err, "getting min time from view: %s", min)
+			}
+			if fromTime.IsZero() || fromTime.Before(minTime) {
+				fromTime = minTime
+			}
+
+			maxTime, err := timeOfView(max, true)
+			if err != nil {
+				return rowIDs, errors.Wrapf(err, "getting max time from view: %s", max)
+			}
+			if toTime.IsZero() || toTime.After(maxTime) {
+				toTime = maxTime
+			}
+
+			// Determine the views based on the specified time range.
+			views = viewsByTimeRange(viewStandard, fromTime, toTime, q)
 		}
 	}
 
