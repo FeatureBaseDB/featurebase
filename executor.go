@@ -1165,31 +1165,17 @@ func (e *executor) executeRowsShard(_ context.Context, index string, fieldName s
 
 		// Parse "from" time, if set.
 		var fromTime time.Time
-		if _, ok := c.Args["from"]; ok {
-			switch v := c.Args["from"].(type) {
-			case string:
-				if fromTime, err = time.Parse(TimeFormat, v); err != nil {
-					return nil, errors.New("cannot parse Row() 'from' time")
-				}
-			case int64:
-				fromTime = time.Unix(v, 0).UTC()
-			default:
-				return nil, errors.New("Row() 'from' arg must be a timestamp")
+		if v, ok := c.Args["from"]; ok {
+			if fromTime, err = parseTime(v); err != nil {
+				return nil, errors.Wrap(err, "determining from time")
 			}
 		}
 
 		// Parse "to" time, if set.
 		var toTime time.Time
-		if _, ok := c.Args["to"]; ok {
-			switch v := c.Args["to"].(type) {
-			case string:
-				if toTime, err = time.Parse(TimeFormat, v); err != nil {
-					return nil, errors.New("cannot parse Row() 'to' time")
-				}
-			case int64:
-				toTime = time.Unix(v, 0).UTC()
-			default:
-				return nil, errors.New("Row() 'to' arg must be a timestamp")
+		if v, ok := c.Args["to"]; ok {
+			if toTime, err = parseTime(v); err != nil {
+				return nil, errors.Wrap(err, "determining to time")
 			}
 		}
 
@@ -1284,31 +1270,17 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 
 	// Parse "from" time, if set.
 	var fromTime time.Time
-	if _, ok := c.Args["from"]; ok {
-		switch v := c.Args["from"].(type) {
-		case string:
-			if fromTime, err = time.Parse(TimeFormat, v); err != nil {
-				return nil, errors.New("cannot parse Row() 'from' time")
-			}
-		case int64:
-			fromTime = time.Unix(v, 0).UTC()
-		default:
-			return nil, errors.New("Row() 'from' arg must be a timestamp")
+	if v, ok := c.Args["from"]; ok {
+		if fromTime, err = parseTime(v); err != nil {
+			return nil, errors.Wrap(err, "determining from time")
 		}
 	}
 
 	// Parse "to" time, if set.
 	var toTime time.Time
-	if _, ok := c.Args["to"]; ok {
-		switch v := c.Args["to"].(type) {
-		case string:
-			if toTime, err = time.Parse(TimeFormat, v); err != nil {
-				return nil, errors.New("cannot parse Row() 'to' time")
-			}
-		case int64:
-			toTime = time.Unix(v, 0).UTC()
-		default:
-			return nil, errors.New("Row() 'to' arg must be a timestamp")
+	if v, ok := c.Args["to"]; ok {
+		if toTime, err = parseTime(v); err != nil {
+			return nil, errors.Wrap(err, "determining to time")
 		}
 	}
 

@@ -214,3 +214,19 @@ func nextDayGTE(t time.Time, end time.Time) bool {
 	}
 	return end.After(next)
 }
+
+func parseTime(t interface{}) (time.Time, error) {
+	var err error
+	var calcTime time.Time
+	switch v := t.(type) {
+	case string:
+		if calcTime, err = time.Parse(TimeFormat, v); err != nil {
+			return time.Time{}, errors.New("cannot parse string time")
+		}
+	case int64:
+		calcTime = time.Unix(v, 0).UTC()
+	default:
+		return time.Time{}, errors.New("arg must be a timestamp")
+	}
+	return calcTime, nil
+}
