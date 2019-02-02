@@ -30,6 +30,12 @@ jobs:
       - *fast-checkout
       - run: make install-gometalinter
       - run: make gometalinter
+  golangci-lint:
+    <<: *defaults
+    steps:
+      - *fast-checkout
+      - run: curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(go env GOPATH)/bin v1.13.2
+      - run: make golangci-lint
   test-build-arm:
     <<: *defaults
     steps:
@@ -117,6 +123,9 @@ workflows:
       - linter:
           requires:
             - setup
+      - golangci-lint:
+          requires:
+            - setup
       - test-build-arm:
           requires:
             - setup
@@ -142,6 +151,7 @@ workflows:
       - release:
           requires:
             - linter
+            - golangci-lint
             - test-golang-1.12
           filters:
             tags:
@@ -155,3 +165,4 @@ workflows:
           requires:
             - linter
             - test-golang-1.12
+            - golangci-lint
