@@ -35,6 +35,12 @@ jobs:
     steps:
       - *fast-checkout
       - run: make check-license-headers
+  golangci-lint:
+    <<: *defaults
+    steps:
+      - *fast-checkout
+      - run: curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(go env GOPATH)/bin v1.13.2
+      - run: make golangci-lint
   test-build-arm:
     <<: *defaults
     steps:
@@ -131,6 +137,9 @@ workflows:
       - check-license-headers:
           requires:
             - setup
+      - golangci-lint:
+          requires:
+            - setup
       - test-build-arm:
           requires:
             - setup
@@ -158,6 +167,7 @@ workflows:
           requires:
             - linter
             - check-license-headers
+            - golangci-lint
             - test-golang-1.12
           filters:
             tags:
@@ -172,3 +182,4 @@ workflows:
             - linter
             - check-license-headers
             - test-golang-1.12
+            - golangci-lint
