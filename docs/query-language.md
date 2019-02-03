@@ -836,8 +836,7 @@ result of the previous request will start from the next available row.
 
 If the field is of type `time`, the `from` and `to` arguments can be provided
 to restrict the result to a specific time span. If `from` and `to` are
-not provided, the field must be configured with `noStandardView` set to
-`false`.
+not provided, the full range of existing data will be queried.
 
 **Result Type:** Object with `"rows" or "keys" and an array of integers or strings respectively.`
 
