@@ -3131,13 +3131,51 @@ func TestExecutor_Execute_Rows(t *testing.T) {
 }
 
 func TestExecutor_Execute_RowsTime(t *testing.T) {
+	writeQuery := fmt.Sprintf(`
+		Set(9, f=1, 2001-01-01T00:00)
+		Set(9, f=2, 2002-01-01T00:00)
+		Set(9, f=3, 2003-01-01T00:00)
+		Set(9, f=4, 2004-01-01T00:00)
+
+		Set(%d, f=13, 2003-02-02T00:00)
+		`, pilosa.ShardWidth+9)
+	readQueries := []string{
+		`Rows(f, from=1999-12-31T00:00, to=2002-01-01T03:00)`,
+		`Rows(f, from=2002-01-01T00:00, to=2004-01-01T00:00)`,
+		`Rows(f, from=1990-01-01T00:00, to=1999-01-01T00:00)`,
+		`Rows(f)`,
+		`Rows(f, from=2002-01-01T00:00)`,
+		`Rows(f, to=2003-02-03T00:00)`,
+	}
+	expResults := [][]uint64{
+		{1},
+		{2, 3, 13},
+		{},
+		{1, 2, 3, 4, 13},
+		{2, 3, 4, 13},
+		{1, 2, 3, 13},
+	}
+
+	responses := runCallTest(t, writeQuery, readQueries,
+		nil, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), true))
+
+	for i := range responses {
+		t.Run(fmt.Sprintf("response-%d", i), func(t *testing.T) {
+			if rows := responses[i].Results[0].(pilosa.RowIdentifiers).Rows; !reflect.DeepEqual(rows, expResults[i]) {
+				t.Fatalf("unexpected rows: %+v", rows)
+			}
+		})
+	}
+}
+
+// Ensure that an empty time field returns empty Rows().
+func TestExecutor_Execute_RowsTimeEmpty(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
-	c.CreateField(t, "i", pilosa.IndexOptions{}, "t", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), true))
-
-	exp := "executing: Rows() query on time field with no standard view is not currently supported"
-	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Rows(field=t)`}); err == nil || err.Error() != exp {
-		t.Fatalf("expected error: %s", exp)
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "x", pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMD"), true))
+	rows := c.Query(t, "i", `Rows(x, from=1999-12-31T00:00, to=2002-01-01T03:00)`).Results[0].(pilosa.RowIdentifiers).Rows
+	if !reflect.DeepEqual(rows, []uint64{}) {
+		t.Fatalf("unexpected rows: %+v", rows)
 	}
 }
 

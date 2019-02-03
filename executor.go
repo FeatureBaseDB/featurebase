@@ -1152,16 +1152,75 @@ func (e *executor) executeRowsShard(_ context.Context, index string, fieldName s
 		return nil, ErrFieldNotFound
 	}
 
-	// Rows query does not currently support a `time` field that has
-	// `noStandardView: true`.
-	// TODO https://github.com/pilosa/pilosa/issues/1783
-	if f.Type() == FieldTypeTime && f.options.NoStandardView {
-		return nil, errors.New("Rows() query on time field with no standard view is not currently supported")
-	}
+	// rowIDs is the result set.
+	var rowIDs RowIDs
 
-	frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
-	if frag == nil {
-		return make(RowIDs, 0), nil
+	// views contains the list of views to inspect (and merge)
+	// in order to represent `Rows` for the field.
+	var views []string = []string{viewStandard}
+
+	// Handle `time` fields.
+	if f.Type() == FieldTypeTime {
+		var err error
+
+		// Parse "from" time, if set.
+		var fromTime time.Time
+		if v, ok := c.Args["from"]; ok {
+			if fromTime, err = parseTime(v); err != nil {
+				return nil, errors.Wrap(err, "parsing from time")
+			}
+		}
+
+		// Parse "to" time, if set.
+		var toTime time.Time
+		if v, ok := c.Args["to"]; ok {
+			if toTime, err = parseTime(v); err != nil {
+				return nil, errors.Wrap(err, "parsing to time")
+			}
+		}
+
+		// Calculate the views for a range as long as some piece of the range
+		// (from/to) are specified, or if there's no standard view to represent
+		// all dates.
+		if !fromTime.IsZero() || !toTime.IsZero() || f.options.NoStandardView {
+			// If no quantum exists then return an empty result set.
+			q := f.TimeQuantum()
+			if q == "" {
+				return rowIDs, nil
+			}
+
+			// Get min/max based on existing views.
+			var vs []string
+			for _, v := range f.views() {
+				vs = append(vs, v.name)
+			}
+			min, max := minMaxViews(vs, q)
+
+			// If min/max are empty, there were no time views.
+			if min == "" || max == "" {
+				return rowIDs, nil
+			}
+
+			// Convert min/max from string to time.Time.
+			minTime, err := timeOfView(min, false)
+			if err != nil {
+				return rowIDs, errors.Wrapf(err, "getting min time from view: %s", min)
+			}
+			if fromTime.IsZero() || fromTime.Before(minTime) {
+				fromTime = minTime
+			}
+
+			maxTime, err := timeOfView(max, true)
+			if err != nil {
+				return rowIDs, errors.Wrapf(err, "getting max time from view: %s", max)
+			}
+			if toTime.IsZero() || toTime.After(maxTime) {
+				toTime = maxTime
+			}
+
+			// Determine the views based on the specified time range.
+			views = viewsByTimeRange(viewStandard, fromTime, toTime, q)
+		}
 	}
 
 	start := uint64(0)
@@ -1177,17 +1236,30 @@ func (e *executor) executeRowsShard(_ context.Context, index string, fieldName s
 	} else if ok {
 		colShard := columnID >> shardWidthExponent
 		if colShard != shard {
-			return RowIDs{}, nil
+			return rowIDs, nil
 		}
 		filters = append(filters, filterColumn(columnID))
 	}
-	if limit, hasLimit, err := c.UintArg("limit"); err != nil {
+
+	limit := int(^uint(0) >> 1)
+	if lim, hasLimit, err := c.UintArg("limit"); err != nil {
 		return nil, errors.Wrap(err, "getting limit")
 	} else if hasLimit {
-		filters = append(filters, filterWithLimit(limit))
+		filters = append(filters, filterWithLimit(lim))
+		limit = int(lim)
 	}
 
-	return frag.rows(start, filters...), nil
+	for _, view := range views {
+		frag := e.Holder.fragment(index, fieldName, view, shard)
+		if frag == nil {
+			continue
+		}
+
+		viewRows := frag.rows(start, filters...)
+		rowIDs = rowIDs.merge(viewRows, limit)
+	}
+
+	return rowIDs, nil
 }
 
 func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
@@ -1228,31 +1300,17 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 
 	// Parse "from" time, if set.
 	var fromTime time.Time
-	if _, ok := c.Args["from"]; ok {
-		switch v := c.Args["from"].(type) {
-		case string:
-			if fromTime, err = time.Parse(TimeFormat, v); err != nil {
-				return nil, errors.New("cannot parse Row() 'from' time")
-			}
-		case int64:
-			fromTime = time.Unix(v, 0).UTC()
-		default:
-			return nil, errors.New("Row() 'from' arg must be a timestamp")
+	if v, ok := c.Args["from"]; ok {
+		if fromTime, err = parseTime(v); err != nil {
+			return nil, errors.Wrap(err, "parsing from time")
 		}
 	}
 
 	// Parse "to" time, if set.
 	var toTime time.Time
-	if _, ok := c.Args["to"]; ok {
-		switch v := c.Args["to"].(type) {
-		case string:
-			if toTime, err = time.Parse(TimeFormat, v); err != nil {
-				return nil, errors.New("cannot parse Row() 'to' time")
-			}
-		case int64:
-			toTime = time.Unix(v, 0).UTC()
-		default:
-			return nil, errors.New("Row() 'to' arg must be a timestamp")
+	if v, ok := c.Args["to"]; ok {
+		if toTime, err = parseTime(v); err != nil {
+			return nil, errors.Wrap(err, "parsing to time")
 		}
 	}
 

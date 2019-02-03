@@ -812,10 +812,12 @@ Options(Row(f1=10), shards=[0, 2])
 {"attrs":{},"columns":[100, 2097152]}
 ```
 
+#### Rows
+
 **Spec:**
 
 ```
-Rows(<FIELD>, previous=<UINT|STRING>, limit=<UINT>, column=<UINT|STRING>)
+Rows(<FIELD>, previous=<UINT|STRING>, limit=<UINT>, column=<UINT|STRING>, from=<TIMESTAMP>, to=<TIMESTAMP>)
 ```
 
 **Description:**
@@ -832,6 +834,9 @@ is given, the number of rowIDs returned will be less than or equal to
 result sets. Results are always ordered, so setting `previous` as the last
 result of the previous request will start from the next available row.
 
+If the field is of type `time`, the `from` and `to` arguments can be provided
+to restrict the result to a specific time span. If `from` and `to` are
+not provided, the full range of existing data will be queried.
 
 **Result Type:** Object with `"rows" or "keys" and an array of integers or strings respectively.`
 
