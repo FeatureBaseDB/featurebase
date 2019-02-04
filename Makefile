@@ -14,6 +14,7 @@ RELEASE ?= 0
 RELEASE_ENABLED = $(subst 0,,$(RELEASE))
 BUILD_TAGS += $(if $(ENTERPRISE_ENABLED),enterprise)
 BUILD_TAGS += $(if $(RELEASE_ENABLED),release)
+export GO111MODULE=on
 
 # Run tests and compile Pilosa
 default: test build
@@ -157,7 +158,7 @@ require-%:
 		$(info Verified build dependency "$*" is installed.),\
 		$(error Build dependency "$*" not installed. To install, try `make install-$*`))
 
-install-build-deps: install-dep install-protoc-gen-gofast install-protoc install-stringer install-peg
+install-build-deps: install-protoc-gen-gofast install-protoc install-stringer install-peg
 
 install-stringer:
 	go get -u golang.org/x/tools/cmd/stringer
