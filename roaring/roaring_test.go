@@ -23,6 +23,7 @@ import (
 	"sort"
 	"testing"
 	"testing/quick"
+	"time"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/roaring"
@@ -34,6 +35,29 @@ func TestContainerCount(t *testing.T) {
 
 	if b.Count() != b.CountRange(0, 65546) {
 		t.Fatalf("Count != CountRange\n")
+	}
+}
+func TestSize(t *testing.T) {
+	//array
+	a := roaring.NewFileBitmap(0, 65535, 131072)
+	if a.Size() != 6 {
+		t.Fatalf("Size in bytes incorrect \n")
+	}
+
+	//bitmap
+	b := roaring.NewFileBitmap()
+	for i := uint64(0); i <= 4096; i++ {
+		b.DirectAdd(i)
+	}
+
+	if b.Size() != 8192 {
+		t.Fatalf("Size in bytes incorrect \n")
+	}
+	//convert to rle
+	b.Optimize()
+	//rle
+	if b.Size() != 6 {
+		t.Fatalf("Size in bytes incorrect \n")
 	}
 }
 
@@ -396,7 +420,132 @@ func TestBitmap_Union1(t *testing.T) {
 	if n := result.Count(); n != 75007 {
 		t.Fatalf("unexpected n: %d", n)
 	}
+}
 
+func TestBitmap_UnionInPlace1(t *testing.T) {
+	var (
+		bm0    = roaring.NewFileBitmap(0, 2683177)
+		bm1    = roaring.NewFileBitmap()
+		result = roaring.NewBitmap()
+	)
+	for i := uint64(628); i < 2683301; i++ {
+		bm1.Add(i)
+	}
+	bm1.Add(4000000)
+
+	result.UnionInPlace(bm0, bm1)
+	if n := result.Count(); n != 2682675 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	bm := testBM()
+	result = roaring.NewBitmap()
+	result.UnionInPlace(bm, bm0)
+	if n := result.Count(); n != 75009 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	result = roaring.NewBitmap()
+	result.UnionInPlace(bm, bm)
+	if n := result.Count(); n != 75007 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	// Make sure the bitmaps weren't mutated.
+	if n := bm0.Count(); n != 2 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	if n := bm1.Count(); n != 2682674 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+// TestBitmap_UnionInPlaceProp is a manual property test that randomly generates
+// a number of different bitmaps with random vals and unions them together. It
+// then compares the result against a reference implementation (golang map) to
+// ensure that all the unions were handled correctly.
+func TestBitmap_UnionInPlaceProp(t *testing.T) {
+	var (
+		seed               = time.Now().UnixNano()
+		source             = rand.NewSource(seed)
+		rng                = rand.New(source)
+		numTests           = 100
+		maxNumIntsPerBatch = 100
+		maxNumBatches      = 100
+		maxRangePercent    = 2
+		// Need to limit the range of possible numbers that we generate
+		// otherwise two randomly generated numbers landing in the same
+		// container would be extremely unlikely, leaving container merging
+		// behavior untested.
+		maxUint64Val = 1000000
+	)
+
+	for i := 0; i < numTests; i++ {
+		var (
+			// We will use sets as the "reference" implementation.
+			sets    = []map[uint64]struct{}{}
+			bitmaps = []*roaring.Bitmap{}
+		)
+
+		// Ensure there are at least two batches.
+		numBatches := rng.Intn(maxNumBatches) + 2
+		for j := 0; j < numBatches; j++ {
+			// For each "batch" create the equivalent set and bitmap.
+			var (
+				set    = map[uint64]struct{}{}
+				bitmap = roaring.NewBitmap()
+			)
+
+			if rng.Intn(100) <= maxRangePercent {
+				// Generate max range RLE containers with a configurable
+				// probability to ensure that code-path is exercised.
+				start := rng.Intn((maxUint64Val))
+				// Add a continuous sequence of numbers that is 2x as long as the maximum
+				// size of a container to ensure we generate a maxRange container.
+				for x := start; x < (start + 2*(0xffff+1)); x++ {
+					set[uint64(x)] = struct{}{}
+					bitmap.Add(uint64(x))
+				}
+			}
+
+			// Generate and add a bunch of random values.
+			numIntsPerBatch := rng.Intn(maxNumIntsPerBatch)
+			for x := 0; x < numIntsPerBatch; x++ {
+				num := uint64(rng.Intn(maxUint64Val))
+				set[num] = struct{}{}
+				bitmap.Add(num)
+			}
+
+			sets = append(sets, set)
+			bitmaps = append(bitmaps, bitmap)
+		}
+
+		// "Union" all the sets into the first one.
+		set0 := sets[0]
+		for _, set := range sets[1:] {
+			for val := range set {
+				set0[val] = struct{}{}
+			}
+		}
+
+		// Union all the bitmaps into the first one.
+		bitmap0 := bitmaps[0]
+		bitmap0.UnionInPlace(bitmaps[1:]...)
+
+		// Ensure the unioned set and bitmap have the same cardinality.
+		if len(set0) != int(bitmap0.Count()) {
+			t.Fatalf("cardinality of set is: %d, but bitmap is: %d, failed with seed: %d",
+				len(set0), bitmap0.Count(), seed)
+		}
+
+		// Ensure the unioned set and bitmap have the exact same values.
+		for val := range set0 {
+			if !bitmap0.Contains(val) {
+				t.Fatalf("set contained %d, but bitmap did not, failed with seed: %d",
+					val, seed)
+			}
+		}
+	}
 }
 
 func TestBitmap_Intersection_Empty(t *testing.T) {
@@ -411,12 +560,28 @@ func TestBitmap_Intersection_Empty(t *testing.T) {
 }
 
 func TestBitmap_IntersectArrayArray(t *testing.T) {
-	bm0 := roaring.NewFileBitmap(0, 1, 2683, 5005)
+	bm0 := roaring.NewFileBitmap(0, 1, 7, 9, 11, 2683, 5005)
 	bm1 := roaring.NewFileBitmap(0, 2683, 2684, 5000)
+	expected := []uint64{0, 2683}
 
 	result := bm0.Intersect(bm1)
 	if n := result.Count(); n != 2 {
 		t.Fatalf("unexpected n: %d", n)
+	}
+	for _, e := range expected {
+		if !result.Contains(e) {
+			t.Fatalf("missing value %d", e)
+		}
+	}
+	// confirm that it also works going the other way
+	result = bm1.Intersect(bm0)
+	if n := result.Count(); n != 2 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	for _, e := range expected {
+		if !result.Contains(e) {
+			t.Fatalf("missing value %d", e)
+		}
 	}
 }
 
@@ -528,9 +693,33 @@ func TestBitmap_Union(t *testing.T) {
 	bm0 := roaring.NewFileBitmap(0, 1000001, 1000002, 1000003)
 	bm1 := roaring.NewFileBitmap(0, 50000, 1000001, 1000002)
 	result := bm0.Union(bm1)
+
 	if n := result.Count(); n != 5 {
 		t.Fatalf("unexpected n: %d", n)
 	}
+}
+
+func TestBitmap_UnionInPlace(t *testing.T) {
+	var (
+		bm0    = roaring.NewFileBitmap(0, 1000001, 1000002, 1000003)
+		bm1    = roaring.NewFileBitmap(0, 50000, 1000001, 1000002)
+		result = roaring.NewBitmap()
+	)
+	result.UnionInPlace(bm0, bm1)
+
+	// Make sure the union worked.
+	if n := result.Count(); n != 5 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	// Make sure the other bitmaps weren't mutated.
+	if n := bm0.Count(); n != 4 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	if n := bm1.Count(); n != 4 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
 }
 
 func TestBitmap_Xor(t *testing.T) {
@@ -689,10 +878,10 @@ func TestBitmap_Flip_After(t *testing.T) {
 
 }
 
-// Ensure bitmap can return the number of intersecting bits in two bitmaps.
+// Ensure bitmap can return the number of intersecting bits in two arrays.
 func TestBitmap_IntersectionCount_ArrayArray(t *testing.T) {
-	bm0 := roaring.NewFileBitmap(0, 1, 1000001, 1000002, 1000003)
-	bm1 := roaring.NewFileBitmap(0, 50000, 1000001, 1000002)
+	bm0 := roaring.NewFileBitmap(0, 1000001, 1000002, 1000003)
+	bm1 := roaring.NewFileBitmap(0, 50000, 999998, 999999, 1000000, 1000001, 1000002)
 
 	if n := bm0.IntersectionCount(bm1); n != 3 {
 		t.Fatalf("unexpected n: %d", n)
@@ -793,6 +982,18 @@ func TestBitmap_IntersectionCount_Mixed(t *testing.T) {
 	}
 	if n := bm0.IntersectionCount(bm3); n != 1 {
 		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_Shift(t *testing.T) {
+	var max uint64 = math.MaxUint64
+	bm1 := roaring.NewFileBitmap(0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 65536, max)
+	bm2 := roaring.NewFileBitmap(1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 65537)
+
+	if got, err := bm1.Shift(1); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(got.Slice(), bm2.Slice()) {
+		t.Fatalf("unexpected bitmap: expected %v, but got %v", bm2.Slice(), got.Slice())
 	}
 }
 
@@ -1056,19 +1257,39 @@ func TestBitmapBufIterator(t *testing.T) {
 
 }
 
-var benchmarkBitmapIntersectionCountData struct {
-	a, b, r *roaring.Bitmap
+// this data is used to test various operations across
+// different types.
+type benchmarkSampleData struct {
+	a1, a2, b, r1, r2 *roaring.Bitmap
 }
 
-func getBenchData() *struct{ a, b, r *roaring.Bitmap } {
-	data := &benchmarkBitmapIntersectionCountData
-	if data.a == nil {
+var sampleData benchmarkSampleData
+
+func isAllType(b *roaring.Bitmap, typ string) bool {
+	bi := b.Info()
+	for _, c := range bi.Containers {
+		if c.Type != typ {
+			return false
+		}
+	}
+	return true
+}
+
+func getBenchData(b *testing.B) *benchmarkSampleData {
+	data := &sampleData
+	if data.a1 == nil {
 		const max = (1 << 24) / 64
 
 		// Build bitmap with array container.
-		data.a = roaring.NewFileBitmap()
-		for i, n := 0, 2*roaring.ArrayMaxSize/3; i < n; i++ {
-			data.a.Add(uint64(rand.Intn(max)))
+		data.a1 = roaring.NewFileBitmap()
+		data.a2 = roaring.NewFileBitmap()
+		// two lists of different lengths
+		for i, n := 0, roaring.ArrayMaxSize/3; i < n; i++ {
+			data.a1.Add(uint64(rand.Intn(max)))
+			data.a2.Add(uint64(rand.Intn(max)))
+		}
+		for i, n := 0, roaring.ArrayMaxSize/3; i < n; i++ {
+			data.a1.Add(uint64(rand.Intn(max)))
 		}
 
 		// Build bitmap with bitmap container.
@@ -1078,11 +1299,41 @@ func getBenchData() *struct{ a, b, r *roaring.Bitmap } {
 		}
 
 		// build bitmap with run container
-		data.r = roaring.NewFileBitmap()
+		data.r1 = roaring.NewFileBitmap()
 		for i, n := 0, MaxContainerVal; i < n; i++ {
-			data.r.Add(uint64(i))
+			data.r1.Add(uint64(i))
 		}
+		// build bitmap with multiple runs
+		data.r2 = roaring.NewFileBitmap()
+		for i, n := 0, MaxContainerVal; i < n; i++ {
+			data.r2.Add(uint64(i))
+			// break the runs up, this should produce 16 runs, which
+			// is small enough to make RLE tempting
+			if i&0xfff == 0xfff {
+				i += 5
+			}
+		}
+		data.a1.Optimize()
+		data.a2.Optimize()
+		data.b.Optimize()
+		data.r1.Optimize()
+		data.r2.Optimize()
 
+	}
+	if !isAllType(data.a1, "array") {
+		b.Fatalf("expected data.a1 to be an array, it wasn't.")
+	}
+	if !isAllType(data.a2, "array") {
+		b.Fatalf("expected data.a2 to be an array, it wasn't.")
+	}
+	if !isAllType(data.b, "bitmap") {
+		b.Fatalf("expected data.b to be a bitmap, it wasn't.")
+	}
+	if !isAllType(data.r1, "run") {
+		b.Fatalf("expected data.r1 to be RLE, it wasn't.")
+	}
+	if !isAllType(data.r2, "run") {
+		b.Fatalf("expected data.r2 to be RLE, it wasn't.")
 	}
 	return data
 }
@@ -1138,30 +1389,65 @@ func TestBitmap_Intersect(t *testing.T) {
 	}
 }
 
+func BenchmarkGetBenchData(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		sampleData = benchmarkSampleData{}
+		getBenchData(b)
+	}
+}
+
 func BenchmarkBitmap_IntersectionCount_ArrayRun(b *testing.B) {
-	data := getBenchData()
+	data := getBenchData(b)
 	// Reset timer & benchmark.
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		data.a.IntersectionCount(data.r)
+		data.a1.IntersectionCount(data.r1)
+	}
+}
+
+func BenchmarkBitmap_IntersectionCount_ArrayRuns(b *testing.B) {
+	data := getBenchData(b)
+	// Reset timer & benchmark.
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		data.a1.IntersectionCount(data.r2)
 	}
 }
 
 func BenchmarkBitmap_IntersectionCount_BitmapRun(b *testing.B) {
-	data := getBenchData()
+	data := getBenchData(b)
 	// Reset timer & benchmark.
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		data.b.IntersectionCount(data.r)
+		data.b.IntersectionCount(data.r1)
+	}
+}
+
+func BenchmarkBitmap_IntersectionCount_BitmapRuns(b *testing.B) {
+	data := getBenchData(b)
+	// Reset timer & benchmark.
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		data.b.IntersectionCount(data.r2)
+	}
+}
+
+func BenchmarkBitmap_IntersectionCount_ArrayArray(b *testing.B) {
+	data := getBenchData(b)
+	// Reset timer & benchmark.
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		data.a1.IntersectionCount(data.a2)
+		data.a2.IntersectionCount(data.a1)
 	}
 }
 
 func BenchmarkBitmap_IntersectionCount_ArrayBitmap(b *testing.B) {
-	data := getBenchData()
+	data := getBenchData(b)
 	// Reset timer & benchmark.
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		data.a.IntersectionCount(data.b)
+		data.a1.IntersectionCount(data.b)
 	}
 }
 
@@ -1247,5 +1533,60 @@ func BenchmarkSliceDescending(b *testing.B) {
 		for col := uint64(pilosa.ShardWidth); col > uint64(0); col-- {
 			bm.Add(col)
 		}
+		bm.Add(0)
+	}
+}
+
+func BenchmarkSliceAscendingStriped(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		bm := roaring.NewFileBitmap()
+		l := uint64(pilosa.ShardWidth / 8)
+		for col := uint64(0); col < l; col++ {
+			bm.Add(l*0 + col)
+			bm.Add(l*1 + col)
+			bm.Add(l*2 + col)
+			bm.Add(l*3 + col)
+			bm.Add(l*4 + col)
+			bm.Add(l*5 + col)
+			bm.Add(l*6 + col)
+			bm.Add(l*7 + col)
+		}
+	}
+}
+
+func BenchmarkSliceDescendingStriped(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		bm := roaring.NewFileBitmap()
+		l := uint64(pilosa.ShardWidth / 8)
+		for col := uint64(l); col < l+1; col-- {
+			bm.Add(l*7 + col)
+			bm.Add(l*6 + col)
+			bm.Add(l*5 + col)
+			bm.Add(l*4 + col)
+			bm.Add(l*3 + col)
+			bm.Add(l*2 + col)
+			bm.Add(l*1 + col)
+			bm.Add(l*0 + col)
+		}
+	}
+}
+
+func BenchmarkUnion(b *testing.B) {
+	data := getBenchData(b)
+	for n := 0; n < b.N; n++ {
+		data.a1.
+			Union(data.a2).
+			Union(data.b).
+			Union(data.r1).
+			Union(data.r2)
+	}
+}
+
+func BenchmarkUnionBulk(b *testing.B) {
+	data := getBenchData(b)
+	bm := roaring.NewBitmap()
+	for n := 0; n < b.N; n++ {
+		bm.
+			UnionInPlace(data.a1, data.a2, data.b, data.r1, data.r2)
 	}
 }

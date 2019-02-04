@@ -27,28 +27,34 @@ import (
 type Query struct {
 	Calls []*Call
 
-	lastField string
-	lastCond  Token
-	inList    bool
-	callStack []*Call
-
+	callStack   []*callStackElem
 	conditional []string
 }
 
 func (q *Query) startCall(name string) {
 	newCall := &Call{Name: name}
-	q.callStack = append(q.callStack, newCall)
+	q.callStack = append(q.callStack, &callStackElem{call: newCall})
 
 	if len(q.callStack) == 1 {
 		q.Calls = append(q.Calls, newCall)
-	} else {
-		calls := q.callStack[len(q.callStack)-2].Children
-		q.callStack[len(q.callStack)-2].Children = append(calls, newCall)
+	} else if prevElem := q.callStack[len(q.callStack)-2]; prevElem.lastField == "" {
+		prevElem.call.Children = append(prevElem.call.Children, newCall)
 	}
 }
 
-func (q *Query) endCall() {
+// endCall removes the last element from the call stack and returns the call.
+func (q *Query) endCall() *Call {
+	elem := q.callStack[len(q.callStack)-1]
+	q.callStack[len(q.callStack)-1] = nil
 	q.callStack = q.callStack[:len(q.callStack)-1]
+	return elem.call
+}
+
+func (q *Query) lastCallStackElem() *callStackElem {
+	if len(q.callStack) == 0 {
+		return nil
+	}
+	return q.callStack[len(q.callStack)-1]
 }
 
 func (q *Query) addPosNum(key, value string) {
@@ -63,9 +69,9 @@ func (q *Query) addPosStr(key, value string) {
 
 func (q *Query) startConditional() {
 	q.conditional = make([]string, 0)
-	call := q.callStack[len(q.callStack)-1]
-	if call.Args == nil {
-		call.Args = make(map[string]interface{})
+	elem := q.lastCallStackElem()
+	if elem.call.Args == nil {
+		elem.call.Args = make(map[string]interface{})
 	}
 }
 
@@ -85,51 +91,52 @@ func (q *Query) endConditional() {
 	if q.conditional[1] == "<" {
 		low++
 	}
-	if q.conditional[3] == "<=" {
-		high++
+	if q.conditional[3] == "<" {
+		high--
 	}
 
-	call := q.callStack[len(q.callStack)-1]
-	call.Args[field] = &Condition{Op: BETWEEN, Value: []interface{}{low, high}}
+	elem := q.lastCallStackElem()
+	elem.call.Args[field] = &Condition{Op: BETWEEN, Value: []interface{}{low, high}}
 
 	q.conditional = nil
 }
 
 func (q *Query) addField(field string) {
-	if q.lastField != "" {
-		panic(fmt.Sprintf("addField called with '%s' while field is not empty, it's: %s", field, q.lastField))
+	elem := q.lastCallStackElem()
+	if elem == nil || elem.lastField != "" {
+		panic(fmt.Sprintf("addField called with '%s' while field is not empty, it's: %s", field, elem.lastField))
 	}
-	q.lastField = field
-	call := q.callStack[len(q.callStack)-1]
-	if call.Args == nil {
-		call.Args = make(map[string]interface{})
+	elem.lastField = field
+	if elem.call.Args == nil {
+		elem.call.Args = make(map[string]interface{})
 	}
 }
 
 func (q *Query) addVal(val interface{}) {
-	if q.lastField == "" {
+	elem := q.lastCallStackElem()
+	if elem == nil || elem.lastField == "" {
 		panic(fmt.Sprintf("addVal called with '%s' when lastField is empty", val))
 	}
-	call := q.callStack[len(q.callStack)-1]
-	if q.inList {
-		list := call.Args[q.lastField].([]interface{})
-		call.Args[q.lastField] = append(list, val)
+	if elem.inList {
+		list := elem.call.Args[elem.lastField].([]interface{})
+		elem.call.Args[elem.lastField] = append(list, val)
 		return
 	}
-	if q.lastCond != ILLEGAL {
-		call.Args[q.lastField] = &Condition{
-			Op:    q.lastCond,
+	if elem.lastCond != ILLEGAL {
+		elem.call.Args[elem.lastField] = &Condition{
+			Op:    elem.lastCond,
 			Value: val,
 		}
 	} else {
-		call.Args[q.lastField] = val
+		elem.call.Args[elem.lastField] = val
 	}
-	q.lastField = ""
-	q.lastCond = ILLEGAL
+	elem.lastField = ""
+	elem.lastCond = ILLEGAL
 }
 
 func (q *Query) addNumVal(val string) {
-	if q.lastField == "" {
+	elem := q.lastCallStackElem()
+	if elem == nil || elem.lastField == "" {
 		panic(fmt.Sprintf("addIntVal called with '%s' when lastField is empty", val))
 	}
 	var ival interface{}
@@ -142,70 +149,70 @@ func (q *Query) addNumVal(val string) {
 	if err != nil {
 		panic(err)
 	}
-	call := q.callStack[len(q.callStack)-1]
-	if q.inList {
-		if q.lastCond != ILLEGAL {
-			list := call.Args[q.lastField].(*Condition).Value.([]interface{})
-			call.Args[q.lastField] = &Condition{
-				Op:    q.lastCond,
+	if elem.inList {
+		if elem.lastCond != ILLEGAL {
+			list := elem.call.Args[elem.lastField].(*Condition).Value.([]interface{})
+			elem.call.Args[elem.lastField] = &Condition{
+				Op:    elem.lastCond,
 				Value: append(list, ival),
 			}
 		} else {
-			list := call.Args[q.lastField].([]interface{})
-			call.Args[q.lastField] = append(list, ival)
+			list := elem.call.Args[elem.lastField].([]interface{})
+			elem.call.Args[elem.lastField] = append(list, ival)
 		}
 		return
-	} else if q.lastCond != ILLEGAL {
-		call.Args[q.lastField] = &Condition{
-			Op:    q.lastCond,
+	} else if elem.lastCond != ILLEGAL {
+		elem.call.Args[elem.lastField] = &Condition{
+			Op:    elem.lastCond,
 			Value: ival,
 		}
 	} else {
-		call.Args[q.lastField] = ival
+		elem.call.Args[elem.lastField] = ival
 	}
-	q.lastField = ""
-	q.lastCond = ILLEGAL
+	elem.lastField = ""
+	elem.lastCond = ILLEGAL
 }
 
 func (q *Query) startList() {
-	call := q.callStack[len(q.callStack)-1]
-	if q.lastCond != ILLEGAL {
-		call.Args[q.lastField] = &Condition{
-			Op:    q.lastCond,
+	elem := q.lastCallStackElem()
+	if elem.lastCond != ILLEGAL {
+		elem.call.Args[elem.lastField] = &Condition{
+			Op:    elem.lastCond,
 			Value: make([]interface{}, 0),
 		}
 	} else {
-		call.Args[q.lastField] = make([]interface{}, 0)
+		elem.call.Args[elem.lastField] = make([]interface{}, 0)
 	}
-	q.inList = true
+	elem.inList = true
 }
 
 func (q *Query) endList() {
-	q.inList = false
-	q.lastField = ""
-	q.lastCond = ILLEGAL
+	elem := q.lastCallStackElem()
+	elem.inList = false
+	elem.lastField = ""
+	elem.lastCond = ILLEGAL
 }
 
 func (q *Query) addGT() {
-	q.lastCond = GT
+	q.lastCallStackElem().lastCond = GT
 }
 func (q *Query) addLT() {
-	q.lastCond = LT
+	q.lastCallStackElem().lastCond = LT
 }
 func (q *Query) addGTE() {
-	q.lastCond = GTE
+	q.lastCallStackElem().lastCond = GTE
 }
 func (q *Query) addLTE() {
-	q.lastCond = LTE
+	q.lastCallStackElem().lastCond = LTE
 }
 func (q *Query) addEQ() {
-	q.lastCond = EQ
+	q.lastCallStackElem().lastCond = EQ
 }
 func (q *Query) addNEQ() {
-	q.lastCond = NEQ
+	q.lastCallStackElem().lastCond = NEQ
 }
 func (q *Query) addBTWN() {
-	q.lastCond = BETWEEN
+	q.lastCallStackElem().lastCond = BETWEEN
 }
 
 // WriteCallN returns the number of mutating calls.
@@ -229,6 +236,13 @@ func (q *Query) String() string {
 	return strings.Join(a, "\n")
 }
 
+type callStackElem struct {
+	call      *Call
+	lastField string
+	lastCond  Token
+	inList    bool
+}
+
 // Call represents a function call in the AST.
 type Call struct {
 	Name     string
@@ -241,11 +255,23 @@ type Call struct {
 // Returns the field as a string if present, or an error if not.
 func (c *Call) FieldArg() (string, error) {
 	for arg := range c.Args {
-		if !strings.HasPrefix(arg, "_") {
+		if !IsReservedArg(arg) {
 			return arg, nil
 		}
 	}
-	return "", fmt.Errorf("No field argument specified")
+	return "", fmt.Errorf("no field argument specified")
+}
+
+func IsReservedArg(name string) bool {
+	if strings.HasPrefix(name, "_") {
+		return true
+	}
+	switch name {
+	case "from", "to":
+		return true
+	default:
+		return false
+	}
 }
 
 // BoolArg is for reading the value at key from call.Args as a bool. If the
@@ -277,6 +303,9 @@ func (c *Call) UintArg(key string) (uint64, bool, error) {
 	}
 	switch tval := val.(type) {
 	case int64:
+		if tval < 0 {
+			return 0, true, fmt.Errorf("value for '%s' must be positive, but got %v", key, tval)
+		}
 		return uint64(tval), true, nil
 	case uint64:
 		return tval, true, nil
@@ -326,6 +355,22 @@ func (c *Call) UintSliceArg(key string) ([]uint64, bool, error) {
 		return ret, true, nil
 	default:
 		return nil, true, fmt.Errorf("unexpected type %T in UintSliceArg, val %v", tval, tval)
+	}
+}
+
+// CallArg is for reading the value at key from call.Args as a Call. If the
+// key is not in Call.Args, the value of the returned value will be nil, and
+// the error will be nil. An error is returned if the value is not a Call.
+func (c *Call) CallArg(key string) (*Call, bool, error) {
+	val, ok := c.Args[key]
+	if !ok {
+		return nil, false, nil
+	}
+	switch tval := val.(type) {
+	case *Call:
+		return tval, true, nil
+	default:
+		return nil, true, fmt.Errorf("could not convert %v of type %T to Call in Call.CallArg", tval, tval)
 	}
 }
 

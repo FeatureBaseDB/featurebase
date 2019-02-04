@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
 )
 
 // NewTestCluster returns a cluster with n nodes and uses a mod-based hasher.
@@ -211,7 +212,7 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	t.common.Nodes = append(t.common.Nodes, node)
 
 	// create node-specific temp directory
-	path, err := ioutil.TempDir("", fmt.Sprintf("pilosa-cluster-node-%d-", i))
+	path, err := ioutil.TempDir(*TempDir, fmt.Sprintf("pilosa-cluster-node-%d-", i))
 	if err != nil {
 		return nil, err
 	}
@@ -371,8 +372,24 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *ResizeInstruction) error
 		destCluster := t.clusterByID(instrNode.ID)
 
 		// Sync the schema received in the resize instruction.
-		if err := destCluster.holder.applySchema(instr.Schema); err != nil {
+		if err := destCluster.holder.applySchema(instr.NodeStatus.Schema); err != nil {
 			return err
+		}
+
+		// Sync available shards.
+		for _, is := range instr.NodeStatus.Indexes {
+			for _, fs := range is.Fields {
+				f := destCluster.holder.Field(is.Name, fs.Name)
+
+				// if we don't know about a field locally, log an error because
+				// fields should be created and synced prior to shard creation
+				if f == nil {
+					continue
+				}
+				if err := f.AddRemoteAvailableShards(fs.AvailableShards); err != nil {
+					return errors.Wrap(err, "adding remote available shards")
+				}
+			}
 		}
 
 		for _, src := range instr.Sources {

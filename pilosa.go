@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"encoding/json"
 	"errors"
 	"regexp"
 )
@@ -49,14 +50,16 @@ var (
 	ErrName  = errors.New("invalid index or field name, must match [a-z0-9_-]")
 	ErrLabel = errors.New("invalid row or column label, must match [A-Za-z0-9_-]")
 
-	ErrReservedName = errors.New("reserved index or field name")
-
 	// ErrFragmentNotFound is returned when a fragment does not exist.
 	ErrFragmentNotFound = errors.New("fragment not found")
 	ErrQueryRequired    = errors.New("query required")
+	ErrQueryCancelled   = errors.New("query cancelled")
+	ErrQueryTimeout     = errors.New("query timeout")
 	ErrTooManyWrites    = errors.New("too many write commands")
 
-	ErrClusterDoesNotOwnShard = errors.New("cluster does not own shard")
+	// TODO(2.0) poorly named - used when a *node* doesn't own a shard. Probably
+	// we won't need this error at all by 2.0 though.
+	ErrClusterDoesNotOwnShard = errors.New("node does not own shard")
 
 	ErrNodeIDNotExists    = errors.New("node with provided ID does not exist")
 	ErrNodeNotCoordinator = errors.New("node is not the coordinator")
@@ -119,9 +122,28 @@ var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 // ColumnAttrSet represents a set of attributes for a vertical column in an index.
 // Can have a set of attributes attached to it.
 type ColumnAttrSet struct {
-	ID    uint64                 `json:"id,omitempty"`
+	ID    uint64                 `json:"id"`
 	Key   string                 `json:"key,omitempty"`
 	Attrs map[string]interface{} `json:"attrs,omitempty"`
+}
+
+func (cas ColumnAttrSet) MarshalJSON() ([]byte, error) {
+	if cas.Key != "" {
+		return json.Marshal(struct {
+			Key   string                 `json:"key,omitempty"`
+			Attrs map[string]interface{} `json:"attrs,omitempty"`
+		}{
+			Key:   cas.Key,
+			Attrs: cas.Attrs,
+		})
+	}
+	return json.Marshal(struct {
+		ID    uint64                 `json:"id"`
+		Attrs map[string]interface{} `json:"attrs,omitempty"`
+	}{
+		ID:    cas.ID,
+		Attrs: cas.Attrs,
+	})
 }
 
 // TimeFormat is the go-style time format used to parse string dates.
@@ -129,9 +151,6 @@ const TimeFormat = "2006-01-02T15:04"
 
 // validateName ensures that the name is a valid format.
 func validateName(name string) error {
-	if name == existenceFieldName {
-		return ErrReservedName
-	}
 	if !nameRegexp.Match([]byte(name)) {
 		return ErrName
 	}
@@ -167,7 +186,6 @@ func stringSlicesAreEqual(a, b []string) bool {
 func AddressWithDefaults(addr string) (*URI, error) {
 	if addr == "" {
 		return defaultURI(), nil
-	} else {
-		return NewURIFromAddress(addr)
 	}
+	return NewURIFromAddress(addr)
 }

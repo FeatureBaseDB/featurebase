@@ -25,21 +25,23 @@ import (
 	"hash"
 	"io"
 	"io/ioutil"
+	"math"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 	"unsafe"
 
 	"github.com/cespare/xxhash"
-
-	"math"
-
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/stats"
+	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -118,7 +120,7 @@ type fragment struct {
 	MaxOpN int
 
 	// Logger used for out-of-band log entries.
-	Logger Logger
+	Logger logger.Logger
 
 	// Row attribute storage.
 	// This is set by the parent field unless overridden for testing.
@@ -128,7 +130,7 @@ type fragment struct {
 	// existing value (to clear) prior to setting a new value.
 	mutexVector vector
 
-	stats StatsClient
+	stats stats.StatsClient
 }
 
 // newFragment returns a new instance of Fragment.
@@ -142,10 +144,10 @@ func newFragment(path, index, field, view string, shard uint64) *fragment {
 		CacheType: DefaultCacheType,
 		CacheSize: DefaultCacheSize,
 
-		Logger: NopLogger,
+		Logger: logger.NopLogger,
 		MaxOpN: defaultFragmentMaxOpN,
 
-		stats: NopStatsClient,
+		stats: stats.NopStatsClient,
 	}
 }
 
@@ -1048,7 +1050,7 @@ func (f *fragment) top(opt topOptions) ([]Pair, error) {
 		rowID, cnt := pair.ID, pair.Count
 
 		// Ignore empty rows.
-		if cnt <= 0 {
+		if cnt == 0 {
 			continue
 		}
 
@@ -1492,9 +1494,6 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 			lastRowID = rowID
 			rowSet[rowID] = struct{}{}
 		}
-
-		// Invalidate block checksum.
-		delete(f.checksums, int(rowID/HashBlockSize))
 	}
 
 	f.mu.Lock()
@@ -1518,6 +1517,9 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 
 	// Update cache counts for all affected rows.
 	for rowID := range rowSet {
+		// Invalidate block checksum.
+		delete(f.checksums, int(rowID/HashBlockSize))
+
 		n := results.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
 		f.cache.BulkAdd(rowID, n)
 	}
@@ -1720,7 +1722,7 @@ func (f *fragment) Snapshot() error {
 	defer f.mu.Unlock()
 	return f.snapshot()
 }
-func track(start time.Time, message string, stats StatsClient, logger Logger) {
+func track(start time.Time, message string, stats stats.StatsClient, logger logger.Logger) {
 	elapsed := time.Since(start)
 	logger.Printf("%s took %s", message, elapsed)
 	stats.Histogram("snapshot", elapsed.Seconds(), 1.0)
@@ -1734,7 +1736,6 @@ func (f *fragment) snapshot() error {
 // f.mu must be locked when calling it.
 func unprotectedWriteToFragment(f *fragment, bm *roaring.Bitmap) error { // nolint: interfacer
 
-	f.Logger.Printf("fragment: snapshotting %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	start := time.Now()
 	defer track(start, completeMessage, f.stats, f.Logger)
@@ -2188,6 +2189,9 @@ func (s *fragmentSyncer) isClosing() bool {
 // syncFragment compares checksums for the local and remote fragments and
 // then merges any blocks which have differences.
 func (s *fragmentSyncer) syncFragment() error {
+	span, ctx := tracing.StartSpanFromContext(context.Background(), "FragmentSyncer.syncFragment")
+	defer span.Finish()
+
 	// Determine replica set.
 	nodes := s.Cluster.shardNodes(s.Fragment.index, s.Fragment.shard)
 	if len(nodes) == 1 {
@@ -2205,7 +2209,7 @@ func (s *fragmentSyncer) syncFragment() error {
 		}
 
 		// Retrieve remote blocks.
-		blocks, err := s.Cluster.InternalClient.FragmentBlocks(context.Background(), &node.URI, s.Fragment.index, s.Fragment.field, s.Fragment.view, s.Fragment.shard)
+		blocks, err := s.Cluster.InternalClient.FragmentBlocks(ctx, &node.URI, s.Fragment.index, s.Fragment.field, s.Fragment.view, s.Fragment.shard)
 		if err != nil && err != ErrFragmentNotFound {
 			return errors.Wrap(err, "getting blocks")
 		}
@@ -2265,6 +2269,9 @@ func (s *fragmentSyncer) syncFragment() error {
 // syncBlock sends and receives all rows for a given block.
 // Returns an error if any remote hosts are unreachable.
 func (s *fragmentSyncer) syncBlock(id int) error {
+	span, ctx := tracing.StartSpanFromContext(context.Background(), "FragmentSyncer.syncBlock")
+	defer span.Finish()
+
 	f := s.Fragment
 
 	// Read pairs from each remote block.
@@ -2284,7 +2291,7 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 		uris = append(uris, uri)
 
 		// Only sync the standard block.
-		rowIDs, columnIDs, err := s.Cluster.InternalClient.BlockData(context.Background(), &node.URI, f.index, f.field, f.view, f.shard, id)
+		rowIDs, columnIDs, err := s.Cluster.InternalClient.BlockData(ctx, &node.URI, f.index, f.field, f.view, f.shard, id)
 		if err != nil {
 			return errors.Wrap(err, "getting block")
 		}
@@ -2309,51 +2316,76 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 	// Write updates to remote blocks.
 	for i := 0; i < len(uris); i++ {
 		set, clear := sets[i], clears[i]
-		count := 0
 
-		// Ignore if there are no differences.
-		if len(set.columnIDs) == 0 && len(clear.columnIDs) == 0 {
-			continue
-		}
-
-		// Generate query with sets & clears, and group the requests to not exceed MaxWritesPerRequest.
-		total := len(set.columnIDs) + len(clear.columnIDs)
-		maxWrites := s.Cluster.maxWritesPerRequest
-		if maxWrites <= 0 {
-			maxWrites = 5000
-		}
-		buffers := make([]bytes.Buffer, int(math.Ceil(float64(total)/float64(maxWrites))))
-
-		// Only sync the standard block.
-		for j := 0; j < len(set.columnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/maxWrites]), "Set(%d, %s=%d)\n", (f.shard*ShardWidth)+set.columnIDs[j], f.field, set.rowIDs[j])
-			count++
-		}
-		for j := 0; j < len(clear.columnIDs); j++ {
-			fmt.Fprintf(&(buffers[count/maxWrites]), "Clear(%d, %s=%d)\n", (f.shard*ShardWidth)+clear.columnIDs[j], f.field, clear.rowIDs[j])
-			count++
-		}
-
-		// Iterate over the buffers.
-		for k := 0; k < len(buffers); k++ {
-			// Verify sync is not prematurely closing.
-			if s.isClosing() {
-				return nil
-			}
-
-			// Execute query.
-			queryRequest := &QueryRequest{
-				Query:  buffers[k].String(),
-				Remote: true,
-			}
-			_, err := s.Cluster.InternalClient.QueryNode(context.Background(), uris[i], f.index, queryRequest)
+		// Handle Sets.
+		if len(set.columnIDs) > 0 {
+			setData, err := bitsToRoaringData(set)
 			if err != nil {
-				return errors.Wrap(err, "executing")
+				return errors.Wrap(err, "converting bits to roaring data (set)")
+			}
+
+			setReq := &ImportRoaringRequest{
+				Clear: false,
+				Views: map[string][]byte{cleanViewName(f.view): setData},
+			}
+
+			if err := s.Cluster.InternalClient.ImportRoaring(ctx, uris[i], f.index, f.field, f.shard, true, setReq); err != nil {
+				return errors.Wrap(err, "sending roaring data (set)")
+			}
+		}
+
+		// Handle Clears.
+		if len(clear.columnIDs) > 0 {
+			clearData, err := bitsToRoaringData(clear)
+			if err != nil {
+				return errors.Wrap(err, "converting bits to roaring data (clear)")
+			}
+
+			clearReq := &ImportRoaringRequest{
+				Clear: true,
+				Views: map[string][]byte{"": clearData},
+			}
+
+			if err := s.Cluster.InternalClient.ImportRoaring(ctx, uris[i], f.index, f.field, f.shard, true, clearReq); err != nil {
+				return errors.Wrap(err, "sending roaring data (clear)")
 			}
 		}
 	}
 
 	return nil
+}
+
+// cleanViewName converts a viewname into the equivalent
+// string required by the external api. Because views are
+// not exposed externally, the conversion looks like this:
+// "standard" -> ""
+// "standard_YYYYMMDD" -> "YYYYMMDD"
+// "other" -> "other" (there is currently not a use for this)
+func cleanViewName(v string) string {
+	viewPrefix := viewStandard + "_"
+	if strings.HasPrefix(v, viewPrefix) {
+		return v[len(viewPrefix):]
+	} else if v == viewStandard {
+		return ""
+	}
+	return v
+}
+
+// bitsToRoaringData converts a pairSet into a roaring.Bitmap
+// which represents the data within a single shard.
+func bitsToRoaringData(ps pairSet) ([]byte, error) {
+	bmp := roaring.NewBitmap()
+	for j := 0; j < len(ps.columnIDs); j++ {
+		bmp.DirectAdd(ps.rowIDs[j]*ShardWidth + (ps.columnIDs[j] % ShardWidth))
+	}
+
+	var buf bytes.Buffer
+	_, err := bmp.WriteTo(&buf)
+	if err != nil {
+		return nil, errors.Wrap(err, "writing to buffer")
+	}
+
+	return buf.Bytes(), nil
 }
 
 func madvise(b []byte, advice int) error { // nolint: unparam

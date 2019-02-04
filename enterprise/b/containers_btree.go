@@ -23,8 +23,8 @@ import (
 	"github.com/pilosa/pilosa/roaring"
 )
 
-func cmp(a, b uint64) int {
-	return int(a - b)
+func cmp(a, b uint64) int64 {
+	return int64(a - b)
 }
 
 type bTreeContainers struct {
@@ -175,6 +175,15 @@ func (btc *bTreeContainers) Iterator(key uint64) (citer roaring.ContainerIterato
 	return &btcIterator{
 		e: e,
 	}, found
+}
+
+func (btc *bTreeContainers) Repair() {
+	e, _ := btc.tree.Seek(0)
+	_, c, err := e.Next()
+	for err != io.EOF {
+		c.Repair()
+		_, c, err = e.Next()
+	}
 }
 
 type btcIterator struct {

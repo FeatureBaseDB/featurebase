@@ -20,7 +20,7 @@ import (
 
 func TestValidateName(t *testing.T) {
 	names := []string{
-		"a", "ab", "ab1", "b-c", "d_e",
+		"a", "ab", "ab1", "b-c", "d_e", "exists",
 		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}
 	for _, name := range names {
@@ -33,8 +33,7 @@ func TestValidateName(t *testing.T) {
 func TestValidateNameInvalid(t *testing.T) {
 	names := []string{
 		"", "'", "^", "/", "\\", "A", "*", "a:b", "valid?no", "yüce", "1", "_", "-",
-		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
-		"exists",
+		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", "_exists",
 	}
 	for _, name := range names {
 		if validateName(name) == nil {
@@ -42,3 +41,25 @@ func TestValidateNameInvalid(t *testing.T) {
 		}
 	}
 }
+
+// memAttrStore represents an in-memory implementation of the AttrStore interface.
+type memAttrStore struct {
+	store map[uint64]map[string]interface{}
+}
+
+func (s *memAttrStore) Path() string                                          { return "" }
+func (s *memAttrStore) Open() error                                           { return nil }
+func (s *memAttrStore) Close() error                                          { return nil }
+func (s *memAttrStore) Attrs(id uint64) (m map[string]interface{}, err error) { return s.store[id], nil }
+func (s *memAttrStore) SetAttrs(id uint64, m map[string]interface{}) error {
+	s.store[id] = m
+	return nil
+}
+func (s *memAttrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
+	for id, v := range m {
+		s.store[id] = v
+	}
+	return nil
+}
+func (s *memAttrStore) Blocks() ([]AttrBlock, error)                                  { return nil, nil }
+func (s *memAttrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) { return nil, nil }

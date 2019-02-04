@@ -192,7 +192,7 @@ type TestField struct {
 
 // NewTestField returns a new instance of TestField d/0.
 func NewTestField(opts FieldOption) *TestField {
-	path, err := ioutil.TempDir("", "pilosa-field-")
+	path, err := ioutil.TempDir(*TempDir, "pilosa-field-")
 	if err != nil {
 		panic(err)
 	}

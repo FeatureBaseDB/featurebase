@@ -165,8 +165,8 @@ func TestRunCountRange(t *testing.T) {
 	}
 
 	c.add(17)
-	c.add(18)
 	c.add(19)
+	c.add(18)
 
 	cnt = c.runCountRange(1, 22)
 	if cnt != 10 {
@@ -179,6 +179,11 @@ func TestRunCountRange(t *testing.T) {
 	cnt = c.runCountRange(6, 18)
 	if cnt != 9 {
 		t.Fatalf("should get 9 from multiple ranges overlapping both sides, but got: %v", cnt)
+	}
+	// verify that the disparate ops resulted in three separate runs
+	cnt = c.countRuns()
+	if cnt != 3 {
+		t.Fatalf("should get 3 total runs, but got: %v [%v]", cnt, c.runs)
 	}
 }
 
@@ -3219,11 +3224,11 @@ func TestContainerCombinations(t *testing.T) {
 
 //func getFunc(func(a, b *container) *container, m, n *container) *container {
 func runContainerFunc(f interface{}, c ...*Container) *Container {
-	switch f.(type) {
+	switch f := f.(type) {
 	case func(*Container) *Container:
-		return f.(func(*Container) *Container)(c[0])
+		return f(c[0])
 	case func(*Container, *Container) *Container:
-		return f.(func(a, b *Container) *Container)(c[0], c[1])
+		return f(c[0], c[1])
 	}
 	return nil
 }
@@ -3260,4 +3265,175 @@ func TestUnmarshalOfficialRoaring(t *testing.T) {
 		t.Fatalf("expecting X got %d", bm.Count())
 	}
 
+}
+
+func BenchmarkUnionBitmapBitmapInPlace(b *testing.B) {
+	b1 := newTestBitmapContainer()
+	b2 := newTestBitmapContainer()
+	for n := 0; n < b.N; n++ {
+		unionBitmapBitmapInPlace(b1, b2)
+	}
+}
+
+func BenchmarkBitmapRepair(b *testing.B) {
+	b1 := newTestBitmapContainer()
+	for n := 0; n < b.N; n++ {
+		b1.bitmapRepair()
+	}
+}
+
+func newTestBitmapContainer() *Container {
+	var (
+		buf       = make([]uint64, bitmapN)
+		ob        = buf[:bitmapN]
+		container = &Container{
+			bitmap:        ob,
+			n:             0,
+			containerType: containerBitmap,
+		}
+	)
+	return container
+}
+
+/*
+// This function exercises an arcane edge case in dead code.
+// It doesn't need to be run right now.
+func TestEquals(t *testing.T) {
+	bma := NewBitmap()
+	bmr := NewBitmap()
+	for i := uint64(0); i < 30; i++ {
+		bma.Add(i)
+		bmr.Add(i)
+	}
+	bmr.Optimize()
+	bmi := bma.Intersect(bmr)
+	err := bitmapsEqual(bmi, bma)
+	if err != nil {
+		t.Fatalf("expected intersection to equal array")
+	}
+	err = bitmapsEqual(bmi, bmr)
+	if err != nil {
+		t.Fatalf("expected intersection to equal run")
+	}
+}
+*/
+func TestShiftArray(t *testing.T) {
+	a := &Container{
+		containerType: containerArray,
+	}
+	tests := []struct {
+		array []uint16
+		exp   []uint16
+	}{
+		{
+			array: []uint16{1},
+			exp:   []uint16{2},
+		},
+		{
+			array: []uint16{},
+			exp:   []uint16{},
+		},
+		{
+			array: []uint16{1, 2, 3, 4, 5, 11, 12},
+			exp:   []uint16{2, 3, 4, 5, 6, 12, 13},
+		},
+		{
+			array: []uint16{65535},
+			exp:   []uint16{},
+		},
+	}
+
+	for i, test := range tests {
+		a.array = test.array
+		a.n = int32(len(a.array))
+		ret1, _ := shift(a)      // test generic shift function
+		ret2, _ := shiftArray(a) // test array-specific shift function
+		if !reflect.DeepEqual(ret1.array, test.exp) {
+			t.Fatalf("test #%v shift() expected %v, but got %v", i, test.exp, ret1.array)
+		} else if !reflect.DeepEqual(ret2.array, test.exp) {
+			t.Fatalf("test #%v shiftArray() expected %v, but got %v", i, test.exp, ret2.array)
+		}
+	}
+}
+
+func TestShiftBitmap(t *testing.T) {
+	a := &Container{
+		containerType: containerBitmap,
+	}
+	tests := []struct {
+		bitmap []uint64
+		exp    []uint64
+	}{
+		{
+			bitmap: bitmapFirstBitSet(),
+			exp:    bitmapSecondBitSet(),
+		},
+		{
+			bitmap: bitmapLastBitSet(),
+			exp:    bitmapEmpty(),
+		},
+		{
+			bitmap: bitmapLastBitFirstRowSet(),
+			exp:    bitmapFirstBitSecoundRowSet(),
+		},
+	}
+
+	for i, test := range tests {
+		a.bitmap = test.bitmap
+		a.n = 1
+		ret1, _ := shift(a)       // test generic shift function
+		ret2, _ := shiftBitmap(a) // test bitmap-specific shift function
+		if !reflect.DeepEqual(ret1.bitmap, test.exp) {
+			t.Fatalf("test #%v shift() expected %v, but got %v", i, test.exp, ret1.bitmap)
+		} else if !reflect.DeepEqual(ret2.bitmap, test.exp) {
+			t.Fatalf("test #%v shiftBitmap() expected %v, but got %v", i, test.exp, ret2.bitmap)
+		}
+	}
+}
+func TestShiftRun(t *testing.T) {
+	a := &Container{
+		containerType: containerRun,
+	}
+
+	tests := []struct {
+		runs  []interval16
+		n     int32
+		en    int32
+		exp   []interval16
+		carry bool
+	}{
+		{
+			runs:  []interval16{{start: 5, last: 10}},
+			n:     5,
+			en:    5,
+			exp:   []interval16{{start: 6, last: 11}},
+			carry: false,
+		},
+		{
+			runs:  []interval16{{start: 5, last: 65535}},
+			n:     65530,
+			en:    65529,
+			exp:   []interval16{{start: 6, last: 65535}},
+			carry: true,
+		},
+		{
+			runs:  []interval16{{start: 65535, last: 65535}},
+			n:     1,
+			en:    0,
+			exp:   []interval16{},
+			carry: true,
+		},
+	}
+
+	for i, test := range tests {
+		a.runs = test.runs
+		a.n = test.n
+		ret1, c1 := shift(a)    // test generic shift function
+		ret2, c2 := shiftRun(a) // test run-specific shift function
+		if !reflect.DeepEqual(ret1.runs, test.exp) && c1 == test.carry && ret1.n == test.en {
+			t.Fatalf("test #%v shift() expected %v, but got %v %d", i, test.exp, ret1.runs, ret1.n)
+		} else if !reflect.DeepEqual(ret2.runs, test.exp) && c2 == test.carry && ret2.n == test.en {
+			t.Fatalf("test #%v shiftRun() expected %v, but got %v %d", i, test.exp, ret2.runs, ret2.n)
+		}
+	}
 }

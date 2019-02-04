@@ -803,13 +803,13 @@ type TranslateFile struct {
 }
 
 func NewTranslateFile() *TranslateFile {
-	f, err := ioutil.TempFile("", "")
+	f, err := ioutil.TempFile(*TempDir, "")
 	if err != nil {
 		panic(err)
 	}
 	f.Close()
 
-	s := &TranslateFile{TranslateFile: pilosa.NewTranslateFile(pilosa.OptTranslateFileMapSize(2 << 25))}
+	s := &TranslateFile{TranslateFile: pilosa.NewTranslateFile(pilosa.OptTranslateFileMapSize(2 << 26))}
 	s.Path = f.Name()
 	return s
 }

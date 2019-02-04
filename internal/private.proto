@@ -15,6 +15,7 @@ message FieldOptions {
     int64 Max = 10;
 	string TimeQuantum = 5;
     bool Keys = 11;
+    bool NoStandardView = 12;
 }
 
 message ImportResponse {
@@ -99,6 +100,7 @@ message Node {
     string ID = 1;
     URI URI = 2;
     bool IsCoordinator = 3;
+    string State = 4;
 }
 
 message NodeStateMessage {
@@ -157,7 +159,7 @@ message ResizeInstruction {
     Node Node = 2;
     Node Coordinator = 3;
     repeated ResizeSource Sources = 4;
-    Schema Schema = 5;
+    NodeStatus NodeStatus = 7;
     ClusterStatus ClusterStatus = 6;
 }
 

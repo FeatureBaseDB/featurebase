@@ -28,8 +28,10 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/stats"
 	"github.com/pkg/errors"
 )
 
@@ -69,7 +71,7 @@ type Field struct {
 	rowAttrStore AttrStore
 
 	broadcaster broadcaster
-	Stats       StatsClient
+	Stats       stats.StatsClient
 
 	// Field options.
 	options FieldOptions
@@ -79,7 +81,7 @@ type Field struct {
 	// Shards with data on any node in the cluster, according to this node.
 	remoteAvailableShards *roaring.Bitmap
 
-	logger Logger
+	logger logger.Logger
 }
 
 // FieldOption is a functional option type for pilosa.fieldOptions.
@@ -131,7 +133,9 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 	}
 }
 
-func OptFieldTypeTime(timeQuantum TimeQuantum) FieldOption {
+// OptFieldTypeTime sets the field type to time.
+// Pass true to skip creation of the standard view.
+func OptFieldTypeTime(timeQuantum TimeQuantum, opt ...bool) FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
 			return errors.Errorf("field type is already set to: %s", fo.Type)
@@ -141,6 +145,7 @@ func OptFieldTypeTime(timeQuantum TimeQuantum) FieldOption {
 		}
 		fo.Type = FieldTypeTime
 		fo.TimeQuantum = timeQuantum
+		fo.NoStandardView = len(opt) >= 1 && opt[0]
 		return nil
 	}
 }
@@ -196,13 +201,13 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 		rowAttrStore: nopStore,
 
 		broadcaster: NopBroadcaster,
-		Stats:       NopStatsClient,
+		Stats:       stats.NopStatsClient,
 
 		options: applyDefaultOptions(fo),
 
 		remoteAvailableShards: roaring.NewBitmap(),
 
-		logger: NopLogger,
+		logger: logger.NopLogger,
 	}
 	return f, nil
 }
@@ -446,6 +451,7 @@ func (f *Field) loadMeta() error {
 	f.options.Max = pb.Max
 	f.options.TimeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.options.Keys = pb.Keys
+	f.options.NoStandardView = pb.NoStandardView
 
 	return nil
 }
@@ -470,13 +476,21 @@ func (f *Field) saveMeta() error {
 // applyOptions configures the field based on opt.
 func (f *Field) applyOptions(opt FieldOptions) error {
 	switch opt.Type {
-	case FieldTypeSet, "":
-		f.options.Type = FieldTypeSet
+	case FieldTypeSet, FieldTypeMutex, "":
+		fldType := opt.Type
+		if fldType == "" {
+			fldType = FieldTypeSet
+		}
+		f.options.Type = fldType
 		if opt.CacheType != "" {
 			f.options.CacheType = opt.CacheType
 		}
 		if opt.CacheSize != 0 {
-			f.options.CacheSize = opt.CacheSize
+			if opt.CacheType == CacheTypeNone {
+				f.options.CacheSize = 0
+			} else {
+				f.options.CacheSize = opt.CacheSize
+			}
 		}
 		f.options.Min = 0
 		f.options.Max = 0
@@ -512,23 +526,12 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Min = 0
 		f.options.Max = 0
 		f.options.Keys = opt.Keys
+		f.options.NoStandardView = opt.NoStandardView
 		// Set the time quantum.
 		if err := f.setTimeQuantum(opt.TimeQuantum); err != nil {
 			f.Close()
 			return errors.Wrap(err, "setting time quantum")
 		}
-	case FieldTypeMutex:
-		f.options.Type = FieldTypeMutex
-		if opt.CacheType != "" {
-			f.options.CacheType = opt.CacheType
-		}
-		if opt.CacheSize != 0 {
-			f.options.CacheSize = opt.CacheSize
-		}
-		f.options.Min = 0
-		f.options.Max = 0
-		f.options.TimeQuantum = ""
-		f.options.Keys = opt.Keys
 	case FieldTypeBool:
 		f.options.Type = FieldTypeBool
 		f.options.CacheType = CacheTypeNone
@@ -795,18 +798,19 @@ func (f *Field) Row(rowID uint64) (*Row, error) {
 // SetBit sets a bit on a view within the field.
 func (f *Field) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err error) {
 	viewName := viewStandard
+	if !f.options.NoStandardView {
+		// Retrieve view. Exit if it doesn't exist.
+		view, err := f.createViewIfNotExists(viewName)
+		if err != nil {
+			return changed, errors.Wrap(err, "creating view")
+		}
 
-	// Retrieve view. Exit if it doesn't exist.
-	view, err := f.createViewIfNotExists(viewName)
-	if err != nil {
-		return changed, errors.Wrap(err, "creating view")
-	}
-
-	// Set non-time bit.
-	if v, err := view.setBit(rowID, colID); err != nil {
-		return changed, errors.Wrap(err, "setting on view")
-	} else if v {
-		changed = v
+		// Set non-time bit.
+		if v, err := view.setBit(rowID, colID); err != nil {
+			return changed, errors.Wrap(err, "setting on view")
+		} else if v {
+			changed = v
+		}
 	}
 
 	// Exit early if no timestamp is specified.
@@ -1090,9 +1094,11 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time, opts
 			standard = []string{viewStandard}
 		} else {
 			standard = viewsByTime(viewStandard, *timestamp, q)
-			// In order to match the logic of `SetBit()`, we want bits
-			// with timestamps to write to both time and standard views.
-			standard = append(standard, viewStandard)
+			if !f.options.NoStandardView {
+				// In order to match the logic of `SetBit()`, we want bits
+				// with timestamps to write to both time and standard views.
+				standard = append(standard, viewStandard)
+			}
 		}
 
 		// Attach bit to each standard view.
@@ -1114,7 +1120,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time, opts
 
 		frag, err := view.CreateFragmentIfNotExists(key.Shard)
 		if err != nil {
-			return errors.Wrap(err, "creating view")
+			return errors.Wrap(err, "creating fragment")
 		}
 
 		if err := frag.bulkImport(data.RowIDs, data.ColumnIDs, options); err != nil {
@@ -1182,9 +1188,10 @@ func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportO
 	return nil
 }
 
-func (f *Field) importRoaring(data []byte, shard uint64, clear bool) error {
-	viewName := viewStandard
-
+func (f *Field) importRoaring(data []byte, shard uint64, viewName string, clear bool) error {
+	if viewName == "" {
+		viewName = viewStandard
+	}
 	view, err := f.createViewIfNotExists(viewName)
 	if err != nil {
 		return errors.Wrap(err, "creating view")
@@ -1223,13 +1230,14 @@ func (p fieldInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
 // FieldOptions represents options to set when initializing a field.
 type FieldOptions struct {
-	Min         int64       `json:"min,omitempty"`
-	Max         int64       `json:"max,omitempty"`
-	Keys        bool        `json:"keys"`
-	CacheSize   uint32      `json:"cacheSize,omitempty"`
-	CacheType   string      `json:"cacheType,omitempty"`
-	Type        string      `json:"type,omitempty"`
-	TimeQuantum TimeQuantum `json:"timeQuantum,omitempty"`
+	Min            int64       `json:"min,omitempty"`
+	Max            int64       `json:"max,omitempty"`
+	Keys           bool        `json:"keys"`
+	NoStandardView bool        `json:"noStandardView,omitempty"`
+	CacheSize      uint32      `json:"cacheSize,omitempty"`
+	CacheType      string      `json:"cacheType,omitempty"`
+	Type           string      `json:"type,omitempty"`
+	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
 }
 
 // applyDefaultOptions returns a new FieldOptions object
@@ -1255,13 +1263,14 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 		return nil
 	}
 	return &internal.FieldOptions{
-		Type:        o.Type,
-		CacheType:   o.CacheType,
-		CacheSize:   o.CacheSize,
-		Min:         o.Min,
-		Max:         o.Max,
-		TimeQuantum: string(o.TimeQuantum),
-		Keys:        o.Keys,
+		Type:           o.Type,
+		CacheType:      o.CacheType,
+		CacheSize:      o.CacheSize,
+		Min:            o.Min,
+		Max:            o.Max,
+		TimeQuantum:    string(o.TimeQuantum),
+		Keys:           o.Keys,
+		NoStandardView: o.NoStandardView,
 	}
 }
 
@@ -1293,13 +1302,15 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 		})
 	case FieldTypeTime:
 		return json.Marshal(struct {
-			Type        string      `json:"type"`
-			TimeQuantum TimeQuantum `json:"timeQuantum"`
-			Keys        bool        `json:"keys"`
+			Type           string      `json:"type"`
+			TimeQuantum    TimeQuantum `json:"timeQuantum"`
+			Keys           bool        `json:"keys"`
+			NoStandardView bool        `json:"noStandardView"`
 		}{
 			o.Type,
 			o.TimeQuantum,
 			o.Keys,
+			o.NoStandardView,
 		})
 	case FieldTypeMutex:
 		return json.Marshal(struct {

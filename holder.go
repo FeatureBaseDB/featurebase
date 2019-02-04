@@ -27,7 +27,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/stats"
+	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )
@@ -40,7 +43,7 @@ const (
 	fileLimit = 262144 // (512^2)
 
 	// existenceFieldName is the name of the internal field used to store existence values.
-	existenceFieldName = "exists"
+	existenceFieldName = "_exists"
 )
 
 // Holder represents a container for indexes.
@@ -55,7 +58,7 @@ type Holder struct {
 	NewPrimaryTranslateStore func(interface{}) TranslateStore
 
 	// opened channel is closed once Open() completes.
-	opened chan struct{}
+	opened lockedChan
 
 	broadcaster broadcaster
 
@@ -66,7 +69,7 @@ type Holder struct {
 	closing chan struct{}
 
 	// Stats
-	Stats StatsClient
+	Stats stats.StatsClient
 
 	// Data directory path.
 	Path string
@@ -74,7 +77,33 @@ type Holder struct {
 	// The interval at which the cached row ids are persisted to disk.
 	cacheFlushInterval time.Duration
 
-	Logger Logger
+	Logger logger.Logger
+}
+
+// lockedChan looks a little ridiculous admittedly, but exists for good reason.
+// The channel within is used (for example) to signal to other goroutines when
+// the Holder has finished opening (via closing the channel). However, it is
+// possible for the holder to be closed and then reopened, but a channel which
+// is closed cannot be re-opened. We must create a new channel - this creates a
+// data race with any goroutine which might be accessing the channel. To ensure
+// that there is no data race on the value of the channel itself, we wrap any
+// operation on it with an RWMutex so that we can guarantee that nothing is
+// trying to listen on it when it gets swapped.
+type lockedChan struct {
+	ch chan struct{}
+	mu sync.RWMutex
+}
+
+func (lc *lockedChan) Close() {
+	lc.mu.RLock()
+	close(lc.ch)
+	lc.mu.RUnlock()
+}
+
+func (lc *lockedChan) Recv() {
+	lc.mu.RLock()
+	<-lc.ch
+	lc.mu.RUnlock()
 }
 
 // NewHolder returns a new instance of Holder.
@@ -83,19 +112,19 @@ func NewHolder() *Holder {
 		indexes: make(map[string]*Index),
 		closing: make(chan struct{}),
 
-		opened: make(chan struct{}),
+		opened: lockedChan{ch: make(chan struct{})},
 
 		translateFile:            NewTranslateFile(),
 		NewPrimaryTranslateStore: newNopTranslateStore,
 
 		broadcaster: NopBroadcaster,
-		Stats:       NopStatsClient,
+		Stats:       stats.NopStatsClient,
 
 		NewAttrStore: newNopAttrStore,
 
 		cacheFlushInterval: defaultCacheFlushInterval,
 
-		Logger: NopLogger,
+		Logger: logger.NopLogger,
 	}
 }
 
@@ -157,7 +186,7 @@ func (h *Holder) Open() error {
 
 	h.Stats.Open()
 
-	close(h.opened)
+	h.opened.Close()
 	return nil
 }
 
@@ -182,7 +211,9 @@ func (h *Holder) Close() error {
 	}
 
 	// Reset opened in case Holder needs to be reopened.
-	h.opened = make(chan struct{})
+	h.opened.mu.Lock()
+	h.opened.ch = make(chan struct{})
+	h.opened.mu.Unlock()
 
 	return nil
 }
@@ -258,6 +289,9 @@ func (h *Holder) limitedSchema() []*IndexInfo {
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{Name: index.Name(), Options: index.Options()}
 		for _, field := range index.Fields() {
+			if strings.HasPrefix(field.name, "_") {
+				continue
+			}
 			fi := &FieldInfo{Name: field.Name(), Options: field.Options()}
 			di.Fields = append(di.Fields, fi)
 		}
@@ -472,7 +506,7 @@ func (h *Holder) flushCaches() {
 					}
 
 					if err := fragment.FlushCache(); err != nil {
-						h.Logger.Printf("error flushing cache: err=%s, path=%s", err, fragment.cachePath())
+						h.Logger.Printf("ERROR flushing cache: err=%s, path=%s", err, fragment.cachePath())
 					}
 				}
 			}
@@ -533,7 +567,7 @@ func (h *Holder) setFileLimit() {
 			h.Logger.Printf("ERROR checking open file limit: %s", err)
 		} else {
 			if oldLimit.Cur < fileLimit {
-				h.Logger.Printf("WARNING: Tried to set open file limit to %d, but it is %d. You may consider running \"sudo ulimit -n %d\" before starting Pilosa to avoid \"too many open files\" error. See https://www.pilosa.com/docs/administration/#open-file-limits for more information.", fileLimit, oldLimit.Cur, fileLimit)
+				h.Logger.Printf("WARNING: Tried to set open file limit to %d, but it is %d. You may consider running \"sudo ulimit -n %d\" before starting Pilosa to avoid \"too many open files\" error. See https://www.pilosa.com/docs/latest/administration/#open-file-limits for more information.", fileLimit, oldLimit.Cur, fileLimit)
 			}
 		}
 	}
@@ -605,7 +639,7 @@ type holderSyncer struct {
 	Cluster *cluster
 
 	// Stats
-	Stats StatsClient
+	Stats stats.StatsClient
 
 	// Signals that the sync should stop.
 	Closing <-chan struct{}
@@ -690,6 +724,9 @@ func (s *holderSyncer) SyncHolder() error {
 
 // syncIndex synchronizes index attributes with the rest of the cluster.
 func (s *holderSyncer) syncIndex(index string) error {
+	span, ctx := tracing.StartSpanFromContext(context.Background(), "HolderSyncer.syncIndex")
+	defer span.Finish()
+
 	// Retrieve index reference.
 	idx := s.Holder.Index(index)
 	if idx == nil {
@@ -708,7 +745,7 @@ func (s *holderSyncer) syncIndex(index string) error {
 	for _, node := range Nodes(s.Cluster.nodes).FilterID(s.Node.ID) {
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
-		m, err := s.Cluster.InternalClient.ColumnAttrDiff(context.Background(), &node.URI, index, blks)
+		m, err := s.Cluster.InternalClient.ColumnAttrDiff(ctx, &node.URI, index, blks)
 		if err != nil {
 			return errors.Wrap(err, "getting differing blocks")
 		} else if len(m) == 0 {
@@ -733,6 +770,9 @@ func (s *holderSyncer) syncIndex(index string) error {
 
 // syncField synchronizes field attributes with the rest of the cluster.
 func (s *holderSyncer) syncField(index, name string) error {
+	span, ctx := tracing.StartSpanFromContext(context.Background(), "HolderSyncer.syncField")
+	defer span.Finish()
+
 	// Retrieve field reference.
 	f := s.Holder.Field(index, name)
 	if f == nil {
@@ -752,7 +792,7 @@ func (s *holderSyncer) syncField(index, name string) error {
 	for _, node := range Nodes(s.Cluster.nodes).FilterID(s.Node.ID) {
 		// Retrieve attributes from differing blocks.
 		// Skip update and recomputation if no attributes have changed.
-		m, err := s.Cluster.InternalClient.RowAttrDiff(context.Background(), &node.URI, index, name, blks)
+		m, err := s.Cluster.InternalClient.RowAttrDiff(ctx, &node.URI, index, name, blks)
 		if err == ErrFieldNotFound {
 			continue // field not created remotely yet, skip
 		} else if err != nil {

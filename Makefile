@@ -1,4 +1,4 @@
-.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-pql gometalinter install install-build-deps install-dep install-gometalinter install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build require-dep require-gometalinter require-protoc require-protoc-gen-gofast require-peg test
+.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-pql gometalinter install install-build-deps install-dep install-gometalinter install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build test
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
@@ -23,7 +23,7 @@ clean:
 	rm -rf vendor build
 
 # Set up vendor directory using `dep`
-vendor: Gopkg.toml
+vendor: Gopkg.toml Gopkg.lock
 	$(MAKE) require-dep
 	dep ensure -vendor-only
 	touch vendor
@@ -67,6 +67,25 @@ release: check-clean
 	$(MAKE) release-build GOOS=linux GOARCH=amd64 ENTERPRISE=1
 	$(MAKE) release-build GOOS=linux GOARCH=386
 	$(MAKE) release-build GOOS=linux GOARCH=386 ENTERPRISE=1
+
+
+# try (e.g.) internal/clustertests/docker-compose-replication2.yml
+DOCKER_COMPOSE=internal/clustertests/docker-compose.yml
+
+# Run cluster integration tests using docker. Requires docker daemon to be
+# running. This will catch changes to internal/clustertests/*.go, but if you
+# make changes to Pilosa, you'll want to run clustertests-build to rebuild the
+# pilosa image.
+clustertests:
+	docker-compose -f $(DOCKER_COMPOSE) down
+	docker-compose -f $(DOCKER_COMPOSE) build client1
+	docker-compose -f $(DOCKER_COMPOSE) up --exit-code-from=client1
+
+
+# Like clustertests, but rebuilds all images.
+clustertests-build:
+	docker-compose -f $(DOCKER_COMPOSE) down
+	docker-compose -f $(DOCKER_COMPOSE) up --exit-code-from=client1 --build
 
 # Create prerelease builds
 prerelease: vendor
@@ -120,9 +139,9 @@ gometalinter: require-gometalinter
 	    --enable=ineffassign \
 	    --enable=interfacer \
 	    --enable=maligned \
-	    --enable=megacheck \
 	    --enable=misspell \
 	    --enable=nakedret \
+	    --enable=staticcheck \
 	    --enable=unconvert \
 	    --enable=unparam \
 	    --enable=vet \
@@ -135,26 +154,10 @@ gometalinter: require-gometalinter
 ######################
 
 # Verifies that needed build dependency is installed. Errors out if not installed.
-define require
-	$(if $(shell command -v $1 2>/dev/null),
-		$(info Verified build dependency "$1" is installed.),
-		$(error Build dependency "$1" not installed. To install, run `make install-$1` or `make install-build-deps`))
-endef
-
-require-dep:
-	$(call require,dep)
-
-require-protoc-gen-gofast:
-	$(call require,protoc-gen-gofast)
-
-require-protoc:
-	$(call require,protoc)
-
-require-peg:
-	$(call require,peg)
-
-require-gometalinter:
-	$(call require,gometalinter)
+require-%:
+	$(if $(shell command -v $* 2>/dev/null),\
+		$(info Verified build dependency "$*" is installed.),\
+		$(error Build dependency "$*" not installed. To install, try `make install-$*`))
 
 install-build-deps: install-dep install-protoc-gen-gofast install-protoc install-stringer install-peg
 

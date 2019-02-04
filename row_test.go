@@ -111,3 +111,17 @@ func TestRow_Difference_Segment(t *testing.T) {
 		t.Fatalf("Test 2 Difference Results %v != expected %v\n", res.Columns(), exp)
 	}
 }
+
+func TestRow_IsEmpty(t *testing.T) {
+	r1 := pilosa.NewRow(1, ShardWidth)
+	r2 := pilosa.NewRow(0, 2*ShardWidth)
+	res := r2.Intersect(r1)
+
+	if r1.IsEmpty() {
+		t.Fatal("r1 Should Not Be Empty\n")
+	}
+	if !res.IsEmpty() {
+		t.Fatal("Result Should Be Empty\n")
+	}
+
+}

@@ -46,15 +46,15 @@ nav = []
 
 <strong id="protobuf">[Protobuf](https://developers.google.com/protocol-buffers/):</strong> Protocol Buffers is a binary serialization format which Pilosa uses for internal messages, and can be used by clients as an alternative to JSON.
 
-<strong id="range">[Range](../query-language/#range-queries):</strong>: A [PQL](#pql) query that returns bits based on comparison to timestamps, set according to the [time quantum](#time-quantum).
-
-<strong id="range-bsi">[Range (BSI)](../query-language/#range-bsi):</strong>: A [PQL](#pql) query that returns bits based on comparison to integers stored in [BSI](#bsi) [fields](#field).
-
 <strong id="replica">[Replica](../configuration/#cluster-replicas):</strong> A copy of a [fragment](#fragment) on a different [node](#node) than the original. The `cluster.replicas` configuration parameter determines how many replicas of a fragment exist in the cluster. This includes the original, so a value of 1 means no extra copies are made.
 
 <strong id="roaring-bitmap">[Roaring Bitmap](http://roaringbitmap.org):</strong> the compressed bitmap format which Pilosa uses to [implement bitmaps](../architecture/#roaring-bitmap-storage-format), for both storage and logical query operations.
 
 <strong id="row">[Row](../data-model/#row):</strong> Rows are the fundamental vertical data axis within Pilosa. They are namespaced to each [field](#field) within an [index](#index). Represented as a [Bitmap](#bitmap).
+
+<strong id="range">[Row (Ranged)](../query-language/#row-range):</strong>: A [PQL](#pql) query that returns bits based on comparison to timestamps, set according to the [time quantum](#time-quantum).
+
+<strong id="range-bsi">[Row (BSI)](../query-language/#row-bsi):</strong>: A [PQL](#pql) query that returns bits based on comparison to integers stored in [BSI](#bsi) [fields](#field).
 
 <strong id="slice">[Slice](../data-model/#shard):</strong> Prior to Pilosa 1.0, shards were known as slices.
 
@@ -64,10 +64,10 @@ nav = []
 
 <strong id="sum">[Sum](../query-language/#sum):</strong> A [PQL](#pql) query that returns the sum of integers stored in an [integer](#bsi) [field](#field).
 
-<strong id="time-quantum">[Time quantum](../data-model/#time-quantum):</strong> Defines the granularity to be used for [Range](#range) queries on time [fields](#field).
+<strong id="time-quantum">[Time quantum](../data-model/#time-quantum):</strong> Defines the granularity to be used for [ranged Row](#range) queries on time [fields](#field).
 
 <strong id="toml">[TOML](https://github.com/toml-lang/toml):</strong> the language used for Pilosa's [configuration file](../configuration/).
 
 <strong id="topn">[TopN](../query-language/#topn):</strong> A [PQL](#pql) query that returns a list of rows, sorted by the count of [columns](#column) set in the [row](#row), within a specified [field](#field).
 
-<strong id="view">[View](../data-model/#view):</strong> Views separate the different data layouts within a [Field](#field). The primary view is standard, which represents the typical [row](#row)/[column](#column) data. Time based field views are automatically generated for each [time quantum](#time-quantum). Views are internally managed by Pilosa, and never exposed directly via the API. This simplifies the functional interface by separating it from the physical data representation.
+<strong id="view">View:</strong> Views separate the different data layouts within a [Field](#field). The primary view is standard, which represents the typical [row](#row)/[column](#column) data. Time based field views are automatically generated for each [time quantum](#time-quantum). Views are internally managed by Pilosa, and never exposed directly via the API. This simplifies the functional interface by separating it from the physical data representation.

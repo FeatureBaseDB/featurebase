@@ -52,16 +52,20 @@ const (
 	// bitmapN is the number of values in a container.bitmap.
 	bitmapN = (1 << 16) / 64
 
-	//containerArray indicates a container of bit position values
+	// containerArray indicates a container of bit position values
 	containerArray = byte(1)
 
-	//containerBitmap indicates a container of bits packed in a uint64 array block
+	// containerBitmap indicates a container of bits packed in a uint64 array block
 	containerBitmap = byte(2)
 
-	//containerRun  indicates a container of run encoded bits
+	// containerRun  indicates a container of run encoded bits
 	containerRun = byte(3)
 
 	maxContainerVal = 0xffff
+
+	// maxContainerKey is the key representing the last container in a full row.
+	// It is the full bitmap space (2^64) divided by container width (2^16).
+	maxContainerKey = (1 << 48) - 1
 )
 
 type Containers interface {
@@ -98,8 +102,12 @@ type Containers interface {
 
 	Count() uint64
 
-	//Reset will clear the containers collection to allow for recycling during snapshot
+	// Reset clears the containers collection to allow for recycling during snapshot
 	Reset()
+
+	// Repair will repair the cardinality of any containers whose cardinality were corrupted
+	// due to optimized operations.
+	Repair()
 }
 
 type ContainerIterator interface {
@@ -159,9 +167,8 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 		}
 
 		// Apply to the in-memory bitmap.
-		if op.apply(b) {
+		if b.DirectAdd(v) {
 			changed = true
-
 		}
 	}
 
@@ -227,6 +234,18 @@ func (b *Bitmap) Max() uint64 {
 // Count returns the number of bits set in the bitmap.
 func (b *Bitmap) Count() (n uint64) {
 	return b.Containers.Count()
+}
+
+// Size returns the number of bytes required for the bitmap.
+func (b *Bitmap) Size() int {
+	numbytes := 0
+	citer, _ := b.Containers.Iterator(0)
+	for citer.Next() {
+		_, c := citer.Value()
+		numbytes += c.size()
+
+	}
+	return numbytes
 }
 
 // CountRange returns the number of bits set between [start, end).
@@ -395,10 +414,26 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 	return output
 }
 
-// Union returns the bitwise union of b and other.
-func (b *Bitmap) Union(other *Bitmap) *Bitmap {
+// Union returns the bitwise union of b and others as a new bitmap.
+func (b *Bitmap) Union(others ...*Bitmap) *Bitmap {
 	output := NewBitmap()
+	if len(others) == 1 {
+		b.unionIntoTargetSingle(output, others[0])
+		return output
+	}
 
+	output.UnionInPlace(b)
+	output.UnionInPlace(others...)
+	return output
+}
+
+// UnionInPlace returns the bitwise union of b and others, modifying
+// b in place.
+func (b *Bitmap) UnionInPlace(others ...*Bitmap) {
+	b.unionInPlace(others...)
+}
+
+func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
 	iiter, _ := b.Containers.Iterator(0)
 	jiter, _ := other.Containers.Iterator(0)
 	i, j := iiter.Next(), jiter.Next()
@@ -406,21 +441,265 @@ func (b *Bitmap) Union(other *Bitmap) *Bitmap {
 	kj, cj := jiter.Value()
 	for i || j {
 		if i && (!j || ki < kj) {
-			output.Containers.Put(ki, ci.Clone())
+			target.Containers.Put(ki, ci.Clone())
 			i = iiter.Next()
 			ki, ci = iiter.Value()
 		} else if j && (!i || ki > kj) {
-			output.Containers.Put(kj, cj.Clone())
+			target.Containers.Put(kj, cj.Clone())
 			j = jiter.Next()
 			kj, cj = jiter.Value()
 		} else { // ki == kj
-			output.Containers.Put(ki, union(ci, cj))
+			target.Containers.Put(ki, union(ci, cj))
 			i, j = iiter.Next(), jiter.Next()
 			ki, ci = iiter.Value()
 			kj, cj = jiter.Value()
 		}
 	}
-	return output
+}
+
+// unionIntoTarget stores the union of b and others into target. b and others will
+// be left unchanged (unless one of them is also target), but target will be modified
+// in place.
+//
+// This function performs an n-way union of n bitmaps. It performs this in an
+// optimized manner looping through all the bitmaps and performing unions one
+// container at a time. As a result, instead of generating many intermediary
+// containers for each union operation for a given container key, only one
+// new container needs to be allocated (or re-used) regardless of how many bitmaps
+// participate in the union. This significantly reduces allocations. In addition,
+// because we perform the unions one container at a time across all the bitmaps, we
+// can calculate summary statistics that allow us to make more efficient decisions
+// up front. For example, imagine trying to perform a union across the following three
+// bitsets:
+//
+//     1. Bitmap A: Single array container at key 0 with 400 values in it.
+//     2. Bitmap B: Single array container at key 0 with 500 values in it.
+//     3. Bitmap C: Single array container at key 0 with 3500 values in it.
+//
+// Naive approach:
+//
+//     1. Perform union of bitmap A and B, container by container
+//         a. 400 + 500 < ArrayMaxSize so likely we will choose to allocate a new array
+//            container and then perform a unionArrayArray operation to merge the two
+//            arrays into the new array container.
+//     2. Perform a union of the bitmap generated in the step above with bitmap C.
+//        900 + 3500 > ArrayMaxSize so we will need to upgrade to a bitset container which
+//        we will have to allocate, and then we will have to perform two unions into the
+//        new bitmap container: one for the array container generated in the previous step,
+//        and one for the bitset container in bitmap C.
+//
+// Approach taken by this function:
+//
+//     1. Detect that bitmaps A, B, and C all have containers for key 0.
+//     2. Estimate the resulting cardinality of the union of all their containers to be
+//        400 + 500 + 3500 > ArrayMaxSize and decide upfront to use a bitset for the target
+//        container. Note that this is just an approximation of the final cardinality and can
+//        be off by a wide margin if there is a lot of overlap between containers, but that is
+//        fine, we'll still get the same result at the end, we'll just be more biased towards
+//        using bitmap containers will still being able to use array containers when all the
+//        cardinalities are small.
+//     3. Union the containers from bitmaps A, B, and C into the new bitset container directly
+//        using fast bitwise operations.
+//
+// In the naive approach, we had to allocate two containers, whereas in the optimized approach
+// we only had to allocate one container, and we also had to perform less union operations. This
+// example is simplistic, but the impact in terms of CPU cycles and memory allocations achieved
+// by using the optimized alogorithm when unioning many large bitmaps can be huge.
+//
+// An additional optimization that this function makes is that it recognizes that even when
+// CPU support is present, performing the popcount() operation isn't free. Imagine a scenario
+// where 10 bitset containers are being unioned together one after the next. If every
+// bitset<->bitset union operation needs to keep the containers' cardinality up to date, then
+// the algorithm will waste a lot of time performing intermediary popcount() operations that
+// will immediately be invalidated by the next union operation. As a result, we allow the cardinality
+// of containers to degrade when we perform the in-place union operations, and then when the algorithm
+// completes we "repair" all the containers by performing the popcount() operation one time. This means
+// that we only ever have to do O(1) popcount operations per container instead of O(n) where n is the
+// number of containers with the same key that are being unioned together.
+//
+// The algorithm works by iterating through all of the containers in all of the bitmaps concurrently.
+// At every "tick" of the outermost loop, we increment our pointer into the bitmaps list of containers
+// by 1 (if we haven't reached the end of the containers for that bitmap.)
+//
+// We then loop through all of the "current" values(containers) for all of the bitmaps
+// and for each container with a specific key that we encounter, we scan forward to see if any of the
+// other bitmaps have a container for the same key. If so, we calculate some summary statistics and
+// then use that information to make a decision about how to union all of the containers with the same
+// key together, perform the union, mark the unioned containers as "handled" and then move on to the next
+// batch of containers that share the same key.
+//
+// We repeat this process until every single bitmaps current container has been "handled". Then we start the
+// outer loop over again and the process repeats until we've iterated through every container in every bitmap
+// and unioned everything into a single target bitmap.
+//
+// The diagram below shows the iteration state of four different bitmaps as the algorithm progresses them.
+// The diagrams should BE interpreted from left -> right, top -> bottom. The X's represent a container in
+// the bitmap at a specific key,  ^ symbol represents the bitmaps current container iteration position,
+// and the - symbol represents a container that is at the current iteration position, but has been marked as "handled".
+//
+//          ----------------------------      |      ----------------------------      |      ----------------------------
+// Bitmap 1 |___X____________X__________|     |      |___X____________X__________|     |      |___X____________X__________|
+//              ^                             |          _                             |
+//          ----------------------------      |      ----------------------------      |      ----------------------------
+// Bitmap 2 |_______X________X______X___|     |      |_______X_______________X___|     |      |_______X_______________X___|
+//                  ^                         |              ^                         |
+//          ----------------------------      |      ----------------------------      |      ----------------------------
+// Bitmap 3 |_______X___________________|     |      |_______X___________________|     |      |_______X___________________|
+//                  ^                         |              ^                         |
+//          ----------------------------      |      ----------------------------      |      ----------------------------
+// Bitmap 4 |___X_______________________|     |      |___X_______________________|     |      |___X_______________________|
+//              ^                             |          _                             |
+// ------------------------------------------------------------------------------------------------------------------------
+//          ----------------------------      |      ----------------------------      |      ----------------------------
+// Bitmap 1 |___X____________X__________|     |      |___X____________X__________|     |      |___X____________X__________|
+//              _                             |                       ^                |                       _
+//          ----------------------------      |      ----------------------------      |      ----------------------------
+// Bitmap 2 |_______X_______________X___|     |      |_______X_______________X___|     |      |_______X_______________X___|
+//                  _                         |                              ^         |                              ^
+//          ----------------------------      |      ----------------------------      |      ----------------------------
+// Bitmap 3 |_______X___________________|     |      |_______X___________________|     |      |_______X___________________|
+//                  _                         |                                        |
+//          ----------------------------      |      ----------------------------      |      ----------------------------
+// Bitmap 4 |___X_______________________|     |      |___X_______________________|     |      |___X_______________________|
+//              _
+func (b *Bitmap) unionInPlace(others ...*Bitmap) {
+	var (
+		requiredSliceSize = len(others)
+		// To avoid having to allocate a slice everytime, if the number of bitmaps
+		// being unioned is small enough we can just use this stack-allocated array.
+		staticHandledIters = [20]handledIter{}
+		bitmapIters        handledIters
+		target             = b
+	)
+
+	if requiredSliceSize <= 20 {
+		bitmapIters = staticHandledIters[:0]
+	} else {
+		bitmapIters = make(handledIters, 0, requiredSliceSize)
+	}
+
+	for _, other := range others {
+		otherIter, _ := other.Containers.Iterator(0)
+		if otherIter.Next() {
+			bitmapIters = append(bitmapIters, handledIter{
+				iter:    otherIter,
+				hasNext: true,
+				handled: false,
+			})
+		}
+	}
+
+	// Loop until we've exhausted every iter.
+	hasNext := true
+	for hasNext {
+		// Loop until every iters current value has been handled.
+		for i, iIter := range bitmapIters {
+			if !iIter.hasNext || iIter.handled {
+				// Either we've exhausted this iter (it has no more containers), or
+				// we've already handled the current container by unioning it with
+				// one of the containers we encountered earlier.
+				continue
+			}
+
+			var (
+				iKey, iContainer = iIter.iter.Value()
+				// Summary statistics about all the containers in the other bitmaps
+				// that share the same key so we can make smarter union strategy
+				// decisions later. Note that we slice to [i:] not [i+1:] because we
+				// want to include the current containers information in the stats.
+				summaryStats = bitmapIters[i:].calculateSummaryStats(iKey)
+			)
+
+			if summaryStats.isOnlyContainerWithKey {
+				// TODO(rartoul): We can avoid these clones if we can determine
+				// if the container is coming from an immutable bitmap and we
+				// know that we can mark the target bitmap as immutable as well.
+				target.Containers.Put(iKey, iContainer.Clone())
+				bitmapIters[i].handled = true
+				continue
+			}
+
+			// There was more than one container across the bitmaps with key iKey
+			// so we need to calculate a union.
+			if summaryStats.hasMaxRange {
+				// One (or more) of the containers represented the maximum possible
+				// range that a container can store, so instead of calculating a
+				// union we can generate an RLE container that represents the entire
+				// range.
+				container := &Container{
+					runs:          []interval16{{start: 0, last: maxContainerVal}},
+					containerType: containerRun,
+					n:             maxContainerVal + 1,
+				}
+				target.Containers.Put(iKey, container)
+				bitmapIters.markItersWithCurrentKeyAsHandled(i, iKey)
+				continue
+			}
+
+			// Use a bitmap container for the target bitmap, and union everything
+			// into it.
+			//
+			// TODO(rartoul): Add another conditional case for n < ArrayMaxSize
+			// (or some fraction of that value) to avoid allocating expensive
+			// bitmaps when unioning many low-density array containers, but this
+			// will require writing a union in place algorithm for an array container
+			// that accepts multiple different containers to union into it for
+			// efficiency.
+			container := target.Containers.Get(iKey)
+			// If target already has a bitmap container for iKey then we can reuse that,
+			// otherwise we have to allocate a new one or convert the existing container
+			// into a bitmap container.
+			if container == nil {
+				buf := make([]uint64, bitmapN)
+				ob := buf[:bitmapN]
+				container = &Container{
+					bitmap:        ob,
+					n:             0,
+					containerType: containerBitmap,
+				}
+			} else if container.isArray() {
+				container.arrayToBitmap()
+			} else if container.isRun() {
+				container.runToBitmap()
+			}
+
+			// Once we've acquired a bitmap container (either by reusing the existing one
+			// or allocating a new one) then the last step is to iterate through all the
+			// other containers to see which ones have the same key, and union all of them
+			// into the target bitmap container. Only need to loop starting from i because
+			// anything previous to that has already been handled.
+			for j := i; j < len(bitmapIters); j++ {
+				jIter := bitmapIters[j]
+				jKey, jContainer := jIter.iter.Value()
+
+				if iKey == jKey {
+					if jContainer.isArray() {
+						unionBitmapArrayInPlace(container, jContainer)
+					} else if jContainer.isRun() {
+						unionBitmapRunInPlace(container, jContainer)
+					} else {
+						unionBitmapBitmapInPlace(container, jContainer)
+					}
+					bitmapIters[j].handled = true
+				}
+			}
+
+			// Now that we've calculated a container that is a union of all the containers
+			// with the same key across all the bitmaps, we store it in the list of containers
+			// for the target.
+			target.Containers.Put(iKey, container)
+		}
+
+		hasNext = bitmapIters.next()
+	}
+
+	// Performing the popcount() operation with every union is wasteful because
+	// its likely the value will be invalidated by the next union operation. As
+	// a result, when we're performing all of our in-place unions we allow the value of
+	// n (container cardinality) to fall out of sync, and then at the very end we perform
+	// a "Repair" to recalculate all the container values. That way we never popcount()
+	// an entire bitmap container more than once per bulk union operation.
+	target.Containers.Repair()
 }
 
 // Difference returns the difference of b and other.
@@ -476,6 +755,38 @@ func (b *Bitmap) Xor(other *Bitmap) *Bitmap {
 		}
 	}
 	return output
+}
+
+// Shift shifts the contents of b by 1.
+func (b *Bitmap) Shift(n int) (*Bitmap, error) {
+	if n != 1 {
+		return nil, errors.New("cannot shift by a value other than 1")
+	}
+	output := NewBitmap()
+	iiter, _ := b.Containers.Iterator(0)
+	lastCarry := false
+	lastKey := uint64(0)
+	for iiter.Next() {
+		ki, ci := iiter.Value()
+		o, carry := shift(ci)
+		if lastCarry {
+			o.add(0)
+		}
+		if o.n > 0 {
+			output.Containers.Put(ki, o)
+		}
+		lastCarry = carry
+		lastKey = ki
+	}
+	// As long as the carry wasn't from the max container,
+	// append a new container and add the carried bit.
+	if lastCarry && lastKey != maxContainerKey {
+		extra := NewContainer()
+		extra.add(0)
+		output.Containers.Put(lastKey+1, extra)
+	}
+
+	return output, nil
 }
 
 // removeEmptyContainers deletes all containers that have a count of zero.
@@ -1027,6 +1338,7 @@ func (iv interval16) runlen() int32 {
 
 // newContainer returns a new instance of container.
 func NewContainer() *Container {
+	statsHit("NewContainer")
 	return &Container{containerType: containerArray}
 }
 
@@ -1194,6 +1506,7 @@ func (c *Container) add(v uint16) (added bool) {
 func (c *Container) arrayAdd(v uint16) bool {
 	// Optimize appending to the end of an array container.
 	if c.n > 0 && c.n < ArrayMaxSize && c.isArray() && c.array[c.n-1] < v {
+		statsHit("arrayAdd/append")
 		c.unmap()
 		c.array = append(c.array, v)
 		return true
@@ -1207,11 +1520,13 @@ func (c *Container) arrayAdd(v uint16) bool {
 
 	// Convert to a bitmap container if too many values are in an array container.
 	if c.n >= ArrayMaxSize {
+		statsHit("arrayAdd/arrayToBitmap")
 		c.arrayToBitmap()
 		return c.bitmapAdd(v)
 	}
 
 	// Otherwise insert into array.
+	statsHit("arrayAdd/insert")
 	c.unmap()
 	i = -i - 1
 	c.array = append(c.array, 0)
@@ -1325,6 +1640,7 @@ func (c *Container) countRuns() (r int32) {
 // amount of space.
 func (c *Container) optimize() {
 	if c.n == 0 {
+		statsHit("optimize/empty")
 		return
 	}
 	runs := c.countRuns()
@@ -1341,21 +1657,33 @@ func (c *Container) optimize() {
 	// Then convert accordingly.
 	if c.isArray() {
 		if newType == containerBitmap {
+			statsHit("optimize/arrayToBitmap")
 			c.arrayToBitmap()
 		} else if newType == containerRun {
+			statsHit("optimize/arrayToRun")
 			c.arrayToRun()
+		} else {
+			statsHit("optimize/arrayUnchanged")
 		}
 	} else if c.isBitmap() {
 		if newType == containerArray {
+			statsHit("optimize/bitmapToArray")
 			c.bitmapToArray()
 		} else if newType == containerRun {
+			statsHit("optimize/bitmapToRun")
 			c.bitmapToRun()
+		} else {
+			statsHit("optimize/bitmapUnchanged")
 		}
 	} else if c.isRun() {
 		if newType == containerBitmap {
+			statsHit("optimize/runToBitmap")
 			c.runToBitmap()
 		} else if newType == containerArray {
+			statsHit("optimize/runToArray")
 			c.runToArray()
+		} else {
+			statsHit("optimize/runUnchanged")
 		}
 	}
 }
@@ -1425,6 +1753,7 @@ func (c *Container) bitmapRemove(v uint16) bool {
 
 	// Convert to array if we go below the threshold.
 	if c.n == ArrayMaxSize {
+		statsHit("bitmapRemove/bitmapToArray")
 		c.bitmapToArray()
 	}
 	return true
@@ -1492,6 +1821,7 @@ func (c *Container) runMax() uint16 {
 
 // bitmapToArray converts from bitmap format to array format.
 func (c *Container) bitmapToArray() {
+	statsHit("bitmapToArray")
 	c.array = make([]uint16, 0, c.n)
 	c.containerType = containerArray
 
@@ -1515,6 +1845,7 @@ func (c *Container) bitmapToArray() {
 
 // arrayToBitmap converts from array format to bitmap format.
 func (c *Container) arrayToBitmap() {
+	statsHit("arrayToBitmap")
 	c.bitmap = make([]uint64, bitmapN)
 	c.containerType = containerBitmap
 
@@ -1534,6 +1865,7 @@ func (c *Container) arrayToBitmap() {
 
 // runToBitmap converts from RLE format to bitmap format.
 func (c *Container) runToBitmap() {
+	statsHit("runToBitmap")
 	c.bitmap = make([]uint64, bitmapN)
 	c.containerType = containerBitmap
 
@@ -1557,6 +1889,7 @@ func (c *Container) runToBitmap() {
 
 // bitmapToRun converts from bitmap format to RLE format.
 func (c *Container) bitmapToRun() {
+	statsHit("bitmapToRun")
 	c.containerType = containerRun
 	// return early if empty
 	if c.n == 0 {
@@ -1613,6 +1946,7 @@ func (c *Container) bitmapToRun() {
 
 // arrayToRun converts from array format to RLE format.
 func (c *Container) arrayToRun() {
+	statsHit("arrayToRun")
 	c.containerType = containerRun
 	// return early if empty
 	if c.n == 0 {
@@ -1640,6 +1974,7 @@ func (c *Container) arrayToRun() {
 
 // runToArray converts from RLE format to array format.
 func (c *Container) runToArray() {
+	statsHit("runToArray")
 	c.containerType = containerArray
 	c.array = make([]uint16, 0, c.n)
 
@@ -1661,16 +1996,20 @@ func (c *Container) runToArray() {
 
 // Clone returns a copy of c.
 func (c *Container) Clone() *Container {
+	statsHit("Container/Clone")
 	other := &Container{n: c.n, containerType: c.containerType}
 
 	switch c.containerType {
 	case containerArray:
+		statsHit("Container/Clone/Array")
 		other.array = make([]uint16, len(c.array))
 		copy(other.array, c.array)
 	case containerBitmap:
+		statsHit("Container/Clone/Bitmap")
 		other.bitmap = make([]uint64, len(c.bitmap))
 		copy(other.bitmap, c.bitmap)
 	case containerRun:
+		statsHit("Container/Clone/Run")
 		other.runs = make([]interval16, len(c.runs))
 		copy(other.runs, c.runs)
 	}
@@ -1689,6 +2028,7 @@ func (c *Container) WriteTo(w io.Writer) (n int64, err error) {
 }
 
 func (c *Container) arrayWriteTo(w io.Writer) (n int64, err error) {
+	statsHit("Container/arrayWriteTo")
 	if len(c.array) == 0 {
 		return 0, nil
 	}
@@ -1705,12 +2045,14 @@ func (c *Container) arrayWriteTo(w io.Writer) (n int64, err error) {
 }
 
 func (c *Container) bitmapWriteTo(w io.Writer) (n int64, err error) {
+	statsHit("Container/bitmapWriteTo")
 	// Write sizeof(uint64) * bitmapN bytes.
 	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&c.bitmap[0]))[:(8 * bitmapN)])
 	return int64(nn), err
 }
 
 func (c *Container) runWriteTo(w io.Writer) (n int64, err error) {
+	statsHit("Container/runWriteTo")
 	if len(c.runs) == 0 {
 		return 0, nil
 	}
@@ -1793,6 +2135,28 @@ func (c *Container) check() error {
 	return a
 }
 
+// Repair repairs the cardinality of c if it has been corrupted by
+// optimized operations.
+func (c *Container) Repair() {
+	if c.isBitmap() {
+		c.bitmapRepair()
+	}
+}
+
+func (c *Container) bitmapRepair() {
+	n := int32(0)
+	// Manually unroll loop to make it a little faster.
+	// TODO(rartoul): Can probably make this a few x faster using
+	// SIMD instructions.
+	for i := 0; i < bitmapN; i += 4 {
+		n += int32(popcount(c.bitmap[i]))
+		n += int32(popcount(c.bitmap[i+1]))
+		n += int32(popcount(c.bitmap[i+2]))
+		n += int32(popcount(c.bitmap[i+3]))
+	}
+	c.n = n
+}
+
 // containerInfo represents a point-in-time snapshot of container stats.
 type containerInfo struct {
 	Key     uint64         // container key
@@ -1815,6 +2179,7 @@ func flip(a *Container) *Container { // nolint: deadcode
 }
 
 func flipArray(b *Container) *Container {
+	statsHit("flipArray")
 	// TODO: actually implement this
 	x := b.Clone()
 	x.arrayToBitmap()
@@ -1822,6 +2187,7 @@ func flipArray(b *Container) *Container {
 }
 
 func flipBitmap(b *Container) *Container {
+	statsHit("flipBitmap")
 	other := &Container{bitmap: make([]uint64, bitmapN), containerType: containerBitmap}
 
 	for i, bitmap := range b.bitmap {
@@ -1833,6 +2199,7 @@ func flipBitmap(b *Container) *Container {
 }
 
 func flipRun(b *Container) *Container {
+	statsHit("flipRun")
 	// TODO: actually implement this
 	x := b.Clone()
 	x.runToBitmap()
@@ -1868,22 +2235,33 @@ func intersectionCount(a, b *Container) int32 {
 }
 
 func intersectionCountArrayArray(a, b *Container) (n int32) {
-	na, nb := len(a.array), len(b.array)
-	for i, j := 0, 0; i < na && j < nb; {
-		va, vb := a.array[i], b.array[j]
-		if va < vb {
-			i++
-		} else if va > vb {
+	statsHit("intersectionCount/ArrayArray")
+	ca, cb := a.array, b.array
+	na, nb := len(ca), len(cb)
+	if na == 0 || nb == 0 {
+		return 0
+	}
+	if na > nb {
+		ca, cb = cb, ca
+		na, nb = nb, na // nolint: ineffassign
+	}
+	j := 0
+	for _, va := range ca {
+		for cb[j] < va {
 			j++
-		} else {
+			if j >= nb {
+				return n
+			}
+		}
+		if cb[j] == va {
 			n++
-			i, j = i+1, j+1
 		}
 	}
 	return n
 }
 
 func intersectionCountArrayRun(a, b *Container) (n int32) {
+	statsHit("intersectionCount/ArrayRun")
 	na, nb := len(a.array), len(b.runs)
 	for i, j := 0, 0; i < na && j < nb; {
 		va, vb := a.array[i], b.runs[j]
@@ -1900,6 +2278,7 @@ func intersectionCountArrayRun(a, b *Container) (n int32) {
 }
 
 func intersectionCountRunRun(a, b *Container) (n int32) {
+	statsHit("intersectionCount/RunRun")
 	na, nb := len(a.runs), len(b.runs)
 	for i, j := 0, 0; i < na && j < nb; {
 		va, vb := a.runs[i], b.runs[j]
@@ -1931,6 +2310,7 @@ func intersectionCountRunRun(a, b *Container) (n int32) {
 }
 
 func intersectionCountBitmapRun(a, b *Container) (n int32) {
+	statsHit("intersectionCount/BitmapRun")
 	for _, iv := range b.runs {
 		n += a.bitmapCountRange(int32(iv.start), int32(iv.last)+1)
 	}
@@ -1938,6 +2318,7 @@ func intersectionCountBitmapRun(a, b *Container) (n int32) {
 }
 
 func intersectionCountArrayBitmap(a, b *Container) (n int32) {
+	statsHit("intersectionCount/ArrayBitmap")
 	ln := len(b.bitmap)
 	for _, val := range a.array {
 		i := int(val >> 6)
@@ -1951,6 +2332,7 @@ func intersectionCountArrayBitmap(a, b *Container) (n int32) {
 }
 
 func intersectionCountBitmapBitmap(a, b *Container) (n int32) {
+	statsHit("intersectionCount/BitmapBitmap")
 	return int32(popcountAndSlice(a.bitmap, b.bitmap))
 }
 
@@ -1983,6 +2365,7 @@ func intersect(a, b *Container) *Container {
 }
 
 func intersectArrayArray(a, b *Container) *Container {
+	statsHit("intersect/ArrayArray")
 	output := &Container{containerType: containerArray}
 	na, nb := len(a.array), len(b.array)
 	for i, j := 0, 0; i < na && j < nb; {
@@ -2004,6 +2387,7 @@ func intersectArrayArray(a, b *Container) *Container {
 // container. The return is always an array container (since it's guaranteed to
 // be low-cardinality)
 func intersectArrayRun(a, b *Container) *Container {
+	statsHit("intersect/ArrayRun")
 	output := &Container{containerType: containerArray}
 	na, nb := len(a.array), len(b.runs)
 	for i, j := 0, 0; i < na && j < nb; {
@@ -2023,6 +2407,7 @@ func intersectArrayRun(a, b *Container) *Container {
 
 // intersectRunRun computes the intersect of two run containers.
 func intersectRunRun(a, b *Container) *Container {
+	statsHit("intersect/RunRun")
 	output := &Container{containerType: containerRun}
 	na, nb := len(a.runs), len(b.runs)
 	for i, j := 0, 0; i < na && j < nb; {
@@ -2059,11 +2444,12 @@ func intersectRunRun(a, b *Container) *Container {
 	return output
 }
 
-// intersectBitmapRun returns an array container if the run container's
-// cardinality is < ArrayMaxSize. Otherwise it returns a bitmap container.
+// intersectBitmapRun returns an array container if either container's
+// cardinality is <= ArrayMaxSize. Otherwise it returns a bitmap container.
 func intersectBitmapRun(a, b *Container) *Container {
+	statsHit("intersect/BitmapRun")
 	var output *Container
-	if b.n < ArrayMaxSize {
+	if b.n <= ArrayMaxSize || a.n <= ArrayMaxSize {
 		// output is array container
 		output = &Container{containerType: containerArray}
 		for _, iv := range b.runs {
@@ -2117,14 +2503,12 @@ func intersectBitmapRun(a, b *Container) *Container {
 				valast = vastart + 63
 			}
 		}
-		if output.n < ArrayMaxSize {
-			output.bitmapToArray()
-		}
 	}
 	return output
 }
 
 func intersectArrayBitmap(a, b *Container) *Container {
+	statsHit("intersect/ArrayBitmap")
 	output := &Container{containerType: containerArray}
 	for _, va := range a.array {
 		bmidx := va / 64
@@ -2140,6 +2524,7 @@ func intersectArrayBitmap(a, b *Container) *Container {
 }
 
 func intersectBitmapBitmap(a, b *Container) *Container {
+	statsHit("intersect/BitmapBitmap")
 	// local variables added to prevent BCE checks in loop
 	// see https://go101.org/article/bounds-check-elimination.html
 	var (
@@ -2191,6 +2576,7 @@ func union(a, b *Container) *Container {
 }
 
 func unionArrayArray(a, b *Container) *Container {
+	statsHit("union/ArrayArray")
 	output := &Container{containerType: containerArray}
 	na, nb := len(a.array), len(b.array)
 	for i, j := 0, 0; ; {
@@ -2224,6 +2610,7 @@ func unionArrayArray(a, b *Container) *Container {
 // unionArrayRun optimistically assumes that the result will be a run container,
 // and converts to a bitmap or array container afterwards if necessary.
 func unionArrayRun(a, b *Container) *Container {
+	statsHit("union/ArrayRun")
 	if b.n == maxContainerVal+1 {
 		return b.Clone()
 	}
@@ -2281,6 +2668,7 @@ func (c *Container) runAppendInterval(v interval16) int32 {
 }
 
 func unionRunRun(a, b *Container) *Container {
+	statsHit("union/RunRun")
 	if a.n == maxContainerVal+1 {
 		return a.Clone()
 	}
@@ -2315,6 +2703,7 @@ func unionRunRun(a, b *Container) *Container {
 }
 
 func unionBitmapRun(a, b *Container) *Container {
+	statsHit("union/BitmapRun")
 	if b.n == maxContainerVal+1 {
 		return b.Clone()
 	}
@@ -2326,6 +2715,15 @@ func unionBitmapRun(a, b *Container) *Container {
 		output.bitmapSetRange(uint64(b.runs[j].start), uint64(b.runs[j].last)+1)
 	}
 	return output
+}
+
+// unions the run b into the bitmap a, mutating a in place. The n value of
+// a will need to be repaired after the fact.
+func unionBitmapRunInPlace(a, b *Container) {
+	statsHit("union/BitmapRun")
+	for j := 0; j < len(b.runs); j++ {
+		a.bitmapSetRangeIgnoreN(uint64(b.runs[j].start), uint64(b.runs[j].last)+1)
+	}
 }
 
 const maxBitmap = 0xFFFFFFFFFFFFFFFF
@@ -2349,6 +2747,25 @@ func (c *Container) bitmapSetRange(i, j uint64) {
 			c.bitmap[i] = maxBitmap
 		}
 		c.n += int32(ycnt - popcount(c.bitmap[y]&Y))
+		c.bitmap[y] |= Y
+	}
+}
+
+// sets all bits in [i, j) (c must be a bitmap container) without updating
+// the value of n, meaning it will need to be repaired after the fact.
+func (c *Container) bitmapSetRangeIgnoreN(i, j uint64) {
+	x := i >> 6
+	y := (j - 1) >> 6
+	var X uint64 = maxBitmap << (i % 64)
+	var Y uint64 = maxBitmap >> (63 - ((j - 1) % 64))
+
+	if x == y {
+		c.bitmap[x] |= (X & Y)
+	} else {
+		c.bitmap[x] |= X
+		for i := x + 1; i < y; i++ {
+			c.bitmap[i] = maxBitmap
+		}
 		c.bitmap[y] |= Y
 	}
 }
@@ -2447,6 +2864,14 @@ func unionArrayBitmap(a, b *Container) *Container {
 	return output
 }
 
+// unions array b into bitmap a, mutating a in place. The n value
+// of a will need to be repaired after the fact.
+func unionBitmapArrayInPlace(a, b *Container) {
+	for _, v := range b.array {
+		a.bitmap[v>>6] |= (uint64(1) << (v % 64))
+	}
+}
+
 func unionBitmapBitmap(a, b *Container) *Container {
 	// local variables added to prevent BCE checks in loop
 	// see https://go101.org/article/bounds-check-elimination.html
@@ -2471,6 +2896,28 @@ func unionBitmapBitmap(a, b *Container) *Container {
 		containerType: containerBitmap,
 	}
 	return output
+}
+
+// unions bitmap b into bitmap a, mutating a in place. The n value of
+// a will need to be repaired after the fact.
+func unionBitmapBitmapInPlace(a, b *Container) {
+	// local variables added to prevent BCE checks in loop
+	// see https://go101.org/article/bounds-check-elimination.html
+
+	var (
+		ab = a.bitmap[:bitmapN]
+		bb = b.bitmap[:bitmapN]
+	)
+
+	// Manually unroll loop to make it a little faster.
+	// TODO(rartoul): Can probably make this a few x faster using
+	// SIMD instructions.
+	for i := 0; i < bitmapN; i += 4 {
+		ab[i] |= bb[i]
+		ab[i+1] |= bb[i+1]
+		ab[i+2] |= bb[i+2]
+		ab[i+3] |= bb[i+3]
+	}
 }
 
 func difference(a, b *Container) *Container {
@@ -2503,6 +2950,7 @@ func difference(a, b *Container) *Container {
 
 // differenceArrayArray computes the difference bween two arrays.
 func differenceArrayArray(a, b *Container) *Container {
+	statsHit("difference/ArrayArray")
 	output := &Container{containerType: containerArray}
 	na, nb := len(a.array), len(b.array)
 	for i, j := 0, 0; i < na; {
@@ -2528,6 +2976,7 @@ func differenceArrayArray(a, b *Container) *Container {
 
 // differenceArrayRun computes the difference of an array from a run.
 func differenceArrayRun(a, b *Container) *Container {
+	statsHit("difference/ArrayRun")
 	// func (ac *arrayContainer) iandNotRun16(rc *runContainer16) container {
 
 	if a.n == 0 || b.n == 0 {
@@ -2585,6 +3034,7 @@ func differenceArrayRun(a, b *Container) *Container {
 
 // differenceBitmapRun computes the difference of an bitmap from a run.
 func differenceBitmapRun(a, b *Container) *Container {
+	statsHit("difference/BitmapRun")
 	if a.n == 0 || b.n == 0 {
 		return a.Clone()
 	}
@@ -2599,6 +3049,7 @@ func differenceBitmapRun(a, b *Container) *Container {
 // differenceRunArray subtracts the bits in an array container from a run
 // container.
 func differenceRunArray(a, b *Container) *Container {
+	statsHit("difference/RunArray")
 	if a.n == 0 || b.n == 0 {
 		return a.Clone()
 	}
@@ -2654,6 +3105,7 @@ RUNLOOP:
 
 // differenceRunBitmap computes the difference of an run from a bitmap.
 func differenceRunBitmap(a, b *Container) *Container {
+	statsHit("difference/RunBitmap")
 	// If a is full, difference is the flip of b.
 	if len(a.runs) > 0 && a.runs[0].start == 0 && a.runs[0].last == 65535 {
 		return flipBitmap(b)
@@ -2711,6 +3163,7 @@ func differenceRunBitmap(a, b *Container) *Container {
 
 // differenceRunRun computes the difference of two runs.
 func differenceRunRun(a, b *Container) *Container {
+	statsHit("difference/RunRun")
 	if a.n == 0 || b.n == 0 {
 		return a.Clone()
 	}
@@ -2774,6 +3227,7 @@ func differenceRunRun(a, b *Container) *Container {
 }
 
 func differenceArrayBitmap(a, b *Container) *Container {
+	statsHit("difference/ArrayBitmap")
 	output := &Container{containerType: containerArray}
 	for _, va := range a.array {
 		bmidx := va / 64
@@ -2790,6 +3244,7 @@ func differenceArrayBitmap(a, b *Container) *Container {
 }
 
 func differenceBitmapArray(a, b *Container) *Container {
+	statsHit("difference/BitmapArray")
 	output := a.Clone()
 
 	for _, v := range b.array {
@@ -2805,6 +3260,7 @@ func differenceBitmapArray(a, b *Container) *Container {
 }
 
 func differenceBitmapBitmap(a, b *Container) *Container {
+	statsHit("difference/BitmapBitmap")
 	// local variables added to prevent BCE checks in loop
 	// see https://go101.org/article/bounds-check-elimination.html
 
@@ -2862,6 +3318,7 @@ func xor(a, b *Container) *Container {
 }
 
 func xorArrayArray(a, b *Container) *Container {
+	statsHit("xor/ArrayArray")
 	output := &Container{containerType: containerArray}
 	na, nb := len(a.array), len(b.array)
 	for i, j := 0, 0; i < na || j < nb; {
@@ -2891,6 +3348,7 @@ func xorArrayArray(a, b *Container) *Container {
 }
 
 func xorArrayBitmap(a, b *Container) *Container {
+	statsHit("xor/ArrayBitmap")
 	output := b.Clone()
 	for _, v := range a.array {
 		if b.bitmapContains(v) {
@@ -2910,6 +3368,7 @@ func xorArrayBitmap(a, b *Container) *Container {
 }
 
 func xorBitmapBitmap(a, b *Container) *Container {
+	statsHit("xor/BitmapBitmap")
 	// local variables added to prevent BCE checks in loop
 	// see https://go101.org/article/bounds-check-elimination.html
 
@@ -2936,6 +3395,88 @@ func xorBitmapBitmap(a, b *Container) *Container {
 		output.bitmapToArray()
 	}
 	return output
+}
+
+// shift() shifts the contents of c by one. It returns
+// the new container and a bool indicating whether a
+// carry bit was shifted out.
+func shift(c *Container) (*Container, bool) {
+	if c.isArray() {
+		return shiftArray(c)
+	} else if c.isRun() {
+		return shiftRun(c)
+	}
+	return shiftBitmap(c)
+}
+
+// shiftArray is an array-specific implementation of shift().
+func shiftArray(a *Container) (*Container, bool) {
+	statsHit("shift/Array")
+	carry := false
+	output := &Container{containerType: containerArray}
+	output.array = make([]uint16, len(a.array))
+	output.array = output.array[:0]
+	output.n = a.n
+	for _, v := range a.array {
+		if v+1 == 0 { // overflow
+			carry = true
+			output.n -= 1
+		} else {
+			output.array = append(output.array, v+1)
+		}
+	}
+	return output, carry
+}
+
+// shiftBitmap is a bitmap-specific implementation of shift().
+func shiftBitmap(a *Container) (*Container, bool) {
+	statsHit("shift/Bitmap")
+	carry := false
+	output := &Container{containerType: containerBitmap}
+	output.bitmap = make([]uint64, len(a.bitmap))
+	output.bitmap = output.bitmap[:0]
+	output.n = a.n
+	lastCarry := false
+	for _, v := range a.bitmap {
+		carry = (v & (1 << 63)) != 0
+		v = v << 1
+		if lastCarry {
+			v |= 1
+		}
+		output.bitmap = append(output.bitmap, v)
+		lastCarry = carry
+	}
+	if carry {
+		output.n -= 1
+	}
+	return output, carry
+}
+
+// shiftRun is a run-specific implementation of shift().
+func shiftRun(a *Container) (*Container, bool) {
+	statsHit("shift/Run")
+	carry := false
+	output := &Container{containerType: containerRun}
+	output.runs = make([]interval16, len(a.runs))
+	output.runs = output.runs[:0]
+	for _, v := range a.runs {
+		if v.start+1 == 0 { // final run was 1 bit on container edge
+			carry = true
+			output.n -= 1
+			break
+		} else if v.last+1 == 0 { // final run ends on container edge
+			v.start += 1
+			carry = true
+			output.n -= 1
+		} else {
+			v.start += 1
+			v.last += 1
+			carry = false
+		}
+		output.runs = append(output.runs, v)
+	}
+
+	return output, carry
 }
 
 // opType represents a type of operation.
@@ -2987,6 +3528,7 @@ func (op *op) UnmarshalBinary(data []byte) error {
 	if len(data) < op.size() {
 		return fmt.Errorf("op data out of bounds: len=%d", len(data))
 	}
+	statsHit("op/UnmarshalBinary")
 
 	// Verify checksum.
 	h := fnv.New32a()
@@ -3011,6 +3553,7 @@ func lowbits(v uint64) uint16  { return uint16(v & 0xFFFF) }
 // search32 returns the index of value in a. If value is not found, it works the
 // same way as search64.
 func search32(a []uint16, value uint16) int32 {
+	statsHit("search32")
 	// Optimize for elements and the last element.
 	n := int32(len(a))
 	if n == 0 {
@@ -3054,6 +3597,7 @@ func search32(a []uint16, value uint16) int32 {
 // since negative 0 is no different from positive 0, we offset the returned
 // negative indices by 1. See the test for this function for examples.
 func search64(a []uint64, value uint64) int {
+	statsHit("search64")
 	// Optimize for elements and the last element.
 	n := len(a)
 	if n == 0 {
@@ -3132,6 +3676,7 @@ func (a *ErrorList) AppendWithPrefix(err error, prefix string) {
 
 // xorArrayRun computes the exclusive or of an array and a run container.
 func xorArrayRun(a, b *Container) *Container {
+	statsHit("xor/ArrayRun")
 	output := &Container{containerType: containerRun}
 	na, nb := len(a.array), len(b.runs)
 	var vb interval16
@@ -3290,6 +3835,7 @@ type xorstm struct {
 
 // xorRunRun computes the exclusive or of two run containers.
 func xorRunRun(a, b *Container) *Container {
+	statsHit("xor/RunRun")
 	na, nb := len(a.runs), len(b.runs)
 	if na == 0 {
 		return b.Clone()
@@ -3338,6 +3884,7 @@ func xorRunRun(a, b *Container) *Container {
 
 // xorRunRun computes the exclusive or of a bitmap and a run container.
 func xorBitmapRun(a, b *Container) *Container {
+	statsHit("xor/BitmapRun")
 	output := a.Clone()
 	for j := 0; j < len(b.runs); j++ {
 		output.bitmapXorRange(uint64(b.runs[j].start), uint64(b.runs[j].last)+1)
@@ -3352,6 +3899,7 @@ func xorBitmapRun(a, b *Container) *Container {
 }
 
 func bitmapsEqual(b, c *Bitmap) error { // nolint: deadcode
+	statsHit("bitmapsEqual")
 	if b.OpWriter != c.OpWriter {
 		return errors.New("opWriters not equal")
 	}
@@ -3404,6 +3952,7 @@ const (
 )
 
 func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint, card int) byte, header, pos int, haveRuns bool, err error) {
+	statsHit("readOfficialHeader")
 	if len(buf) < 8 {
 		err = fmt.Errorf("buffer too small, expecting at least 8 bytes, was %d", len(buf))
 		return size, containerTyper, header, pos, haveRuns, err
@@ -3449,7 +3998,7 @@ func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint
 
 	header = pos
 	if size > (1 << 16) {
-		err = fmt.Errorf("It is logically impossible to have more than (1<<16) containers.")
+		err = fmt.Errorf("it is logically impossible to have more than (1<<16) containers")
 		return size, containerTyper, header, pos, haveRuns, err
 	}
 
@@ -3465,6 +4014,11 @@ func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint
 // UnmarshalBinary decodes b from a binary-encoded byte slice. data can be in
 // either official roaring format or Pilosa's roaring format.
 func (b *Bitmap) UnmarshalBinary(data []byte) error {
+	if data == nil {
+		// Nothing to unmarshal
+		return nil
+	}
+	statsHit("Bitmap/UnmarshalBinary")
 	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
 	if fileMagic == magicNumber { // if pilosa roaring
 		return errors.Wrap(b.unmarshalPilosaRoaring(data), "unmarshaling as pilosa roaring")
@@ -3555,4 +4109,84 @@ func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) {
 			pos += bitmapN * 8
 		}
 	}
+}
+
+// handledIter and handledIters are wrappers around Bitmap Container iterators
+// and assist with the unionIntoTarget algorithm by abstracting away some tedious
+// operations.
+type handledIter struct {
+	iter    ContainerIterator
+	hasNext bool
+	handled bool
+}
+
+type handledIters []handledIter
+
+func (w handledIters) next() bool {
+	hasNext := false
+
+	for i, wrapped := range w {
+		next := wrapped.iter.Next()
+		w[i].hasNext = next
+		w[i].handled = false
+		if next {
+			hasNext = true
+		}
+	}
+
+	return hasNext
+}
+
+func (w handledIters) markItersWithCurrentKeyAsHandled(startIdx int, key uint64) {
+	for i := startIdx; i < len(w); i++ {
+		wrapped := w[i]
+		currKey, _ := wrapped.iter.Value()
+		if currKey == key {
+			w[i].handled = true
+		}
+	}
+}
+
+func (w handledIters) calculateSummaryStats(key uint64) containerUnionSummaryStats {
+	summary := containerUnionSummaryStats{}
+
+	for _, iter := range w {
+		// Calculate key-level statistics here
+		currKey, currContainer := iter.iter.Value()
+
+		if key == currKey {
+			summary.isOnlyContainerWithKey = false
+			summary.n += currContainer.n
+
+			if currContainer.n == maxContainerVal+1 {
+				summary.hasMaxRange = true
+				summary.n = maxContainerVal + 1
+				return summary
+			}
+		}
+	}
+
+	return summary
+}
+
+// Summary statistics about all the containers in the other bitmaps
+// that share the same key so we can make smarter union strategy
+// decisions.
+type containerUnionSummaryStats struct {
+	// Estimated cardinality of the union of all containers with the same
+	// key across all bitmaps. This calculation is very rough as we just sum
+	// the cardinality of the container across the different bitmaps which could
+	// result in very inflated values, but it allows us to avoid allocating
+	// expensive bitmaps when unioning many low density containers.
+	n int32
+	// Whether any other is the only container across all the bitmaps
+	// with the specified key. If true, we can skip all the unioning logic
+	// and just clone the container into target.
+	isOnlyContainerWithKey bool
+	// Whether any of the containers with the specified keys are storing every possible
+	// value that they can. If so, we can short-circuit all the unioning logic and use
+	// a RLE container with a single value in it. This is an optimization to
+	// avoid using an expensive bitmap container for bitmaps that have some
+	// extremely dense containers.
+	hasMaxRange bool
 }

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pilosa_test
+package stats_test
 
 import (
 	"context"
@@ -23,6 +23,8 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/http"
+	"github.com/pilosa/pilosa/logger"
+	"github.com/pilosa/pilosa/stats"
 	"github.com/pilosa/pilosa/test"
 )
 
@@ -32,51 +34,51 @@ func TestMultiStatClient_Expvar(t *testing.T) {
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
-	c := pilosa.NewExpvarStatsClient()
-	ms := make(pilosa.MultiStatsClient, 1)
+	c := stats.NewExpvarStatsClient()
+	ms := make(stats.MultiStatsClient, 1)
 	ms[0] = c
 	hldr.Stats = ms
 
 	hldr.SetBit("d", "f", 0, 0)
 	hldr.SetBit("d", "f", 0, 1)
-	hldr.SetBit("d", "f", 0, ShardWidth)
-	hldr.SetBit("d", "f", 0, ShardWidth+2)
+	hldr.SetBit("d", "f", 0, pilosa.ShardWidth)
+	hldr.SetBit("d", "f", 0, pilosa.ShardWidth+2)
 	hldr.ClearBit("d", "f", 0, 1)
 
-	if pilosa.Expvar.String() != `{"index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}}` {
-		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
+	if stats.Expvar.String() != `{"index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}}` {
+		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	hldr.Stats.CountWithCustomTags("cc", 1, 1.0, []string{"foo:bar"})
-	if pilosa.Expvar.String() != `{"cc": 1, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}}` {
-		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
+	if stats.Expvar.String() != `{"cc": 1, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}}` {
+		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	// Gauge creates a unique key, subsequent Gauge calls will overwrite
 	hldr.Stats.Gauge("g", 5, 1.0)
 	hldr.Stats.Gauge("g", 8, 1.0)
-	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}}` {
-		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
+	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}}` {
+		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	// Set creates a unique key, subsequent sets will overwrite
 	hldr.Stats.Set("s", "4", 1.0)
 	hldr.Stats.Set("s", "7", 1.0)
-	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}, "s": "7"}` {
-		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
+	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}, "s": "7"}` {
+		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	// Record timing duration and a uniquely Set key/value
 	dur, _ := time.ParseDuration("123us")
 	hldr.Stats.Timing("tt", dur, 1.0)
-	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}, "s": "7", "tt": 123µs}` {
-		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
+	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}, "s": "7", "tt": 123µs}` {
+		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	// Expvar histogram is implemented as a gauge
 	hldr.Stats.Histogram("hh", 3, 1.0)
-	if pilosa.Expvar.String() != `{"cc": 1, "g": 8, "hh": 3, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}, "s": "7", "tt": 123µs}` {
-		t.Fatalf("unexpected expvar : %s", pilosa.Expvar.String())
+	if stats.Expvar.String() != `{"cc": 1, "g": 8, "hh": 3, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}, "s": "7", "tt": 123µs}` {
+		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	// Expvar should ignore earlier set tags from setbit
@@ -92,8 +94,8 @@ func TestStatsCount_TopN(t *testing.T) {
 
 	hldr.SetBit("d", "f", 0, 0)
 	hldr.SetBit("d", "f", 0, 1)
-	hldr.SetBit("d", "f", 0, ShardWidth)
-	hldr.SetBit("d", "f", 0, ShardWidth+2)
+	hldr.SetBit("d", "f", 0, pilosa.ShardWidth)
+	hldr.SetBit("d", "f", 0, pilosa.ShardWidth+2)
 
 	// Execute query.
 	called := false
@@ -311,11 +313,11 @@ func (s *MockStats) CountWithCustomTags(name string, value int64, rate float64, 
 }
 
 func (c *MockStats) Tags() []string                                        { return nil }
-func (c *MockStats) WithTags(tags ...string) pilosa.StatsClient            { return c }
+func (c *MockStats) WithTags(tags ...string) stats.StatsClient             { return c }
 func (c *MockStats) Gauge(name string, value float64, rate float64)        {}
 func (c *MockStats) Histogram(name string, value float64, rate float64)    {}
 func (c *MockStats) Set(name string, value string, rate float64)           {}
 func (c *MockStats) Timing(name string, value time.Duration, rate float64) {}
-func (c *MockStats) SetLogger(logger pilosa.Logger)                        {}
+func (c *MockStats) SetLogger(logger logger.Logger)                        {}
 func (c *MockStats) Open()                                                 {}
 func (c *MockStats) Close() error                                          { return nil }

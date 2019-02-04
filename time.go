@@ -17,6 +17,7 @@ package pilosa
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -213,4 +214,121 @@ func nextDayGTE(t time.Time, end time.Time) bool {
 		return true
 	}
 	return end.After(next)
+}
+
+// parseTime parses a string or int64 into a time.Time value.
+func parseTime(t interface{}) (time.Time, error) {
+	var err error
+	var calcTime time.Time
+	switch v := t.(type) {
+	case string:
+		if calcTime, err = time.Parse(TimeFormat, v); err != nil {
+			return time.Time{}, errors.New("cannot parse string time")
+		}
+	case int64:
+		calcTime = time.Unix(v, 0).UTC()
+	default:
+		return time.Time{}, errors.New("arg must be a timestamp")
+	}
+	return calcTime, nil
+}
+
+// minMaxViews returns the min and max view from a list of views
+// with a time quantum taken into consideration. It assumes that
+// all views represent the same base view name (the logic depends
+// on the views sorting correctly in alphabetical order).
+func minMaxViews(views []string, q TimeQuantum) (min string, max string) {
+	// Sort the list of views.
+	sort.Strings(views)
+
+	// Determine the least significant quantum and set that as the
+	// number of string characters to compare against.
+	var chars int
+	if q.HasYear() {
+		chars = 4
+	} else if q.HasMonth() {
+		chars = 6
+	} else if q.HasDay() {
+		chars = 8
+	} else if q.HasHour() {
+		chars = 10
+	}
+
+	// min: get the first view with the matching number of time chars.
+	for _, v := range views {
+		if len(viewTimePart(v)) == chars {
+			min = v
+			break
+		}
+	}
+
+	// max: get the first view (from the end) with the matching number of time chars.
+	for i := len(views) - 1; i >= 0; i-- {
+		if len(viewTimePart(views[i])) == chars {
+			max = views[i]
+			break
+		}
+	}
+
+	return min, max
+}
+
+// timeOfView returns a valid time.Time based on the view string.
+// For upper bound use, the result can be adjusted by one by setting
+// the `adj` argument to `true`.
+func timeOfView(v string, adj bool) (time.Time, error) {
+	if v == "" {
+		return time.Time{}, nil
+	}
+
+	layout := "2006010203"
+	timePart := viewTimePart(v)
+
+	switch len(timePart) {
+	case 4: // year
+		t, err := time.Parse(layout[:4], timePart)
+		if err != nil {
+			return time.Time{}, err
+		}
+		if adj {
+			t = t.AddDate(1, 0, 0)
+		}
+		return t, nil
+	case 6: // month
+		t, err := time.Parse(layout[:6], timePart)
+		if err != nil {
+			return time.Time{}, err
+		}
+		if adj {
+			t = addMonth(t)
+		}
+		return t, nil
+	case 8: // day
+		t, err := time.Parse(layout[:8], timePart)
+		if err != nil {
+			return time.Time{}, err
+		}
+		if adj {
+			t = t.AddDate(0, 0, 1)
+		}
+		return t, nil
+	case 10: // hour
+		t, err := time.Parse(layout[:10], timePart)
+		if err != nil {
+			return time.Time{}, err
+		}
+		if adj {
+			t = t.Add(time.Hour)
+		}
+		return t, nil
+	}
+
+	return time.Time{}, fmt.Errorf("invalid time format on view: %s", v)
+}
+
+// viewTimePart returns the time portion of a string view name.
+// e.g. the view "string_201901" would return "201901".
+func viewTimePart(v string) string {
+	parts := strings.Split(v, "_")
+	return parts[len(parts)-1]
 }

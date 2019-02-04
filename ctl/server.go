@@ -26,6 +26,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags := cmd.Flags()
 	flags.StringVarP(&srv.Config.DataDir, "data-dir", "d", srv.Config.DataDir, "Directory to store pilosa data files.")
 	flags.StringVarP(&srv.Config.Bind, "bind", "b", srv.Config.Bind, "Default URI on which pilosa should listen.")
+	flags.StringVar(&srv.Config.Advertise, "advertise", srv.Config.Advertise, "Address to advertise externally.")
 	flags.IntVarP(&srv.Config.MaxWritesPerRequest, "max-writes-per-request", "", srv.Config.MaxWritesPerRequest, "Number of write commands per request.")
 	flags.StringVar(&srv.Config.LogPath, "log-path", srv.Config.LogPath, "Log path")
 	flags.BoolVar(&srv.Config.Verbose, "verbose", srv.Config.Verbose, "Enable verbose logging")
@@ -49,6 +50,9 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 
 	// Gossip
 	flags.StringVarP(&srv.Config.Gossip.Port, "gossip.port", "", srv.Config.Gossip.Port, "Port to which pilosa should bind for internal state sharing.")
+	flags.StringVarP(&srv.Config.Gossip.AdvertiseHost, "gossip.advertise-host", "", srv.Config.Gossip.AdvertiseHost, "Host on which memberlist should advertise.")
+	flags.StringVarP(&srv.Config.Gossip.AdvertisePort, "gossip.advertise-port", "", srv.Config.Gossip.AdvertisePort, "Port on which memberlist should advertise.")
+
 	flags.StringSliceVarP(&srv.Config.Gossip.Seeds, "gossip.seeds", "", srv.Config.Gossip.Seeds, "Host with which to seed the gossip membership.")
 	flags.StringVarP(&srv.Config.Gossip.Key, "gossip.key", "", srv.Config.Gossip.Key, "The path to file of the encryption key for gossip. The contents of the file should be either 16, 24, or 32 bytes to select AES-128, AES-192, or AES-256.")
 	flags.DurationVarP((*time.Duration)(&srv.Config.Gossip.StreamTimeout), "gossip.stream-timeout", "", (time.Duration)(srv.Config.Gossip.StreamTimeout), "Timeout for establishing a stream connection with a remote node for a full state sync.")
@@ -68,4 +72,9 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.StringVarP(&srv.Config.Metric.Host, "metric.host", "", srv.Config.Metric.Host, "Default URI to send metrics.")
 	flags.DurationVarP((*time.Duration)(&srv.Config.Metric.PollInterval), "metric.poll-interval", "", (time.Duration)(srv.Config.Metric.PollInterval), "Polling interval metrics.")
 	flags.BoolVarP((&srv.Config.Metric.Diagnostics), "metric.diagnostics", "", srv.Config.Metric.Diagnostics, "Enabled diagnostics reporting.")
+
+	// Tracing
+	flags.StringVarP(&srv.Config.Tracing.AgentHostPort, "tracing.agent-host-port", "", srv.Config.Tracing.AgentHostPort, "Jaeger agent host:port.")
+	flags.StringVarP(&srv.Config.Tracing.SamplerType, "tracing.sampler-type", "", srv.Config.Tracing.SamplerType, "Jaeger sampler type.")
+	flags.Float64VarP(&srv.Config.Tracing.SamplerParam, "tracing.sampler-param", "", srv.Config.Tracing.SamplerParam, "Jaeger sampler parameter.")
 }

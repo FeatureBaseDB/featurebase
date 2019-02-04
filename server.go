@@ -27,7 +27,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/stats"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -58,7 +60,7 @@ type Server struct { // nolint: maligned
 	// External
 	systemInfo SystemInfo
 	gcNotifier GCNotifier
-	logger     Logger
+	logger     logger.Logger
 
 	nodeID              string
 	uri                 URI
@@ -81,7 +83,7 @@ func (s *Server) Holder() *Holder {
 // ServerOption is a functional option type for pilosa.Server
 type ServerOption func(s *Server) error
 
-func OptServerLogger(l Logger) ServerOption {
+func OptServerLogger(l logger.Logger) ServerOption {
 	return func(s *Server) error {
 		s.logger = l
 		return nil
@@ -176,7 +178,7 @@ func OptServerPrimaryTranslateStoreFunc(tf func(interface{}) TranslateStore) Ser
 	}
 }
 
-func OptServerStatsClient(sc StatsClient) ServerOption {
+func OptServerStatsClient(sc stats.StatsClient) ServerOption {
 	return func(s *Server) error {
 		s.holder.Stats = sc
 		return nil
@@ -258,7 +260,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		metricInterval:      0,
 		diagnosticInterval:  0,
 
-		logger: NopLogger,
+		logger: logger.NopLogger,
 	}
 	s.executor = newExecutor(optExecutorInternalQueryClient(s.defaultClient))
 	s.cluster.InternalClient = s.defaultClient
@@ -298,6 +300,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		ID:            s.nodeID,
 		URI:           s.uri,
 		IsCoordinator: s.cluster.Coordinator == s.nodeID,
+		State:         nodeStateDown,
 	}
 	s.cluster.Node = node
 	if s.clusterDisabled {
@@ -415,6 +418,9 @@ func (s *Server) loadNodeID() string {
 	return nodeID
 }
 
+// NodeID returns the server's node id.
+func (s *Server) NodeID() string { return s.nodeID }
+
 // SyncData manually invokes the anti entropy process which makes sure that this
 // node has the data from all replicas across the cluster.
 func (s *Server) SyncData() error {
@@ -422,7 +428,7 @@ func (s *Server) SyncData() error {
 }
 
 func (s *Server) monitorAntiEntropy() {
-	if s.antiEntropyInterval == 0 {
+	if s.antiEntropyInterval == 0 || s.cluster.ReplicaN <= 1 {
 		return // anti entropy disabled
 	}
 	s.cluster.initializeAntiEntropy()
@@ -481,7 +487,7 @@ func (s *Server) receiveMessage(m Message) error {
 	case *CreateShardMessage:
 		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
-			return fmt.Errorf("Local field not found: %s/%s", obj.Index, obj.Field)
+			return fmt.Errorf("local field not found: %s/%s", obj.Index, obj.Field)
 		}
 		if err := f.AddRemoteAvailableShards(roaring.NewBitmap(obj.Shard)); err != nil {
 			return errors.Wrap(err, "adding remote available shards")
@@ -499,7 +505,7 @@ func (s *Server) receiveMessage(m Message) error {
 	case *CreateFieldMessage:
 		idx := s.holder.Index(obj.Index)
 		if idx == nil {
-			return fmt.Errorf("Local Index not found: %s", obj.Index)
+			return fmt.Errorf("local index not found: %s", obj.Index)
 		}
 		opt := obj.Meta
 		_, err := idx.createField(obj.Field, *opt)
@@ -519,7 +525,7 @@ func (s *Server) receiveMessage(m Message) error {
 	case *CreateViewMessage:
 		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
-			return fmt.Errorf("Local Field not found: %s", obj.Field)
+			return fmt.Errorf("local field not found: %s", obj.Field)
 		}
 		_, _, err := f.createViewIfNotExistsBase(obj.View)
 		if err != nil {
@@ -528,7 +534,7 @@ func (s *Server) receiveMessage(m Message) error {
 	case *DeleteViewMessage:
 		f := s.holder.Field(obj.Index, obj.Field)
 		if f == nil {
-			return fmt.Errorf("Local Field not found: %s", obj.Field)
+			return fmt.Errorf("local field not found: %s", obj.Field)
 		}
 		err := f.deleteView(obj.View)
 		if err != nil {
@@ -561,7 +567,10 @@ func (s *Server) receiveMessage(m Message) error {
 	case *RecalculateCaches:
 		s.holder.recalculateCaches()
 	case *NodeEvent:
-		s.cluster.ReceiveEvent(obj)
+		err := s.cluster.ReceiveEvent(obj)
+		if err != nil {
+			return errors.Wrapf(err, "cluster receiving NodeEvent %v", obj)
+		}
 	case *NodeStatus:
 		s.handleRemoteStatus(obj)
 	}
@@ -579,7 +588,6 @@ func (s *Server) SendSync(m Message) error {
 	msg = append([]byte{getMessageType(m)}, msg...)
 	for _, node := range s.cluster.nodes {
 		node := node
-		s.logger.Printf("SendSync to: %s", node.URI)
 		// Don't forward the message to ourselves.
 		if s.uri == node.URI {
 			continue
@@ -600,7 +608,6 @@ func (s *Server) SendAsync(m Message) error {
 
 // SendTo represents an implementation of Broadcaster.
 func (s *Server) SendTo(to *Node, m Message) error {
-	s.logger.Printf("SendTo: %s", to.URI)
 	msg, err := s.serializer.Marshal(m)
 	if err != nil {
 		return fmt.Errorf("marshaling message: %v", err)
@@ -624,7 +631,7 @@ func (s *Server) handleRemoteStatus(pb Message) {
 
 	go func() {
 		// Make sure the holder has opened.
-		<-s.holder.opened
+		s.holder.opened.Recv()
 
 		err := s.mergeRemoteStatus(pb.(*NodeStatus))
 		if err != nil {
@@ -652,7 +659,7 @@ func (s *Server) mergeRemoteStatus(ns *NodeStatus) error {
 			// if we don't know about a field locally, log an error because
 			// fields should be created and synced prior to shard creation
 			if f == nil {
-				s.logger.Printf("Local Field not found: %s/%s", is.Name, fs.Name)
+				s.logger.Printf("local field not found: %s/%s", is.Name, fs.Name)
 				continue
 			}
 			if err := f.AddRemoteAvailableShards(fs.AvailableShards); err != nil {
@@ -697,7 +704,7 @@ func (s *Server) monitorDiagnostics() {
 		s.diagnostics.CheckVersion()
 		err = s.diagnostics.Flush()
 		if err != nil {
-			s.logger.Printf("Diagnostics error: %s", err)
+			s.logger.Printf("diagnostics error: %s", err)
 		}
 	}
 

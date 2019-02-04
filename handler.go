@@ -96,6 +96,11 @@ type ImportRequest struct {
 	Timestamps []int64
 }
 
+type ImportRoaringRequest struct {
+	Clear bool
+	Views map[string][]byte
+}
+
 type ImportResponse struct {
 	Err string
 }
@@ -111,4 +116,14 @@ type BlockDataRequest struct {
 type BlockDataResponse struct {
 	RowIDs    []uint64
 	ColumnIDs []uint64
+}
+
+type TranslateKeysRequest struct {
+	Index string
+	Field string
+	Keys  []string
+}
+
+type TranslateKeysResponse struct {
+	IDs []uint64
 }

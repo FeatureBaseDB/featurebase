@@ -50,7 +50,7 @@ curl localhost:10101/index/repository/query \
 * `ATTR_NAME` Must be a valid identifier `[A-Za-z][A-Za-z0-9._-]*`
 * `ATTR_VALUE` Can be a string, float, integer, or bool.
 * `CALL` Any query
-* `ROW_CALL` Any query which returns a row, such as `Row`, `Union`, `Difference`, `Xor`, `Intersect`, `Range`, `Not`
+* `ROW_CALL` Any query which returns a row, such as `Row`, `Union`, `Difference`, `Xor`, `Intersect`, `Not`
 * `[]ATTR_VALUE` Denotes an array of `ATTR_VALUE`s. (e.g. `["a", "b", "c"]`)
 
 ### Write Operations
@@ -280,7 +280,7 @@ Store(<ROW_CALL>, <FIELD>=<ROW>)
 
 **Description:**
 
-`Store` writes the results of <ROW_CALL> to the specified row. If the row already exists, it will be replaced. The destination field must be of field type `set`.
+`Store` writes the results of `<ROW_CALL>` to the specified row. If the row already exists, it will be replaced. The destination field must be of field type `set`.
 
 **Result Type:** boolean
 
@@ -334,6 +334,88 @@ Row(stargazer=1)
 
 * attrs are the attributes for user 1
 * columns are the repositories which user 1 has starred.
+
+
+#### Row (Range)
+
+**Spec:**
+
+```
+Row(<FIELD>=<ROW>, from=<TIMESTAMP>, to=<TIMESTAMP>)
+```
+
+**Description:**
+
+Similar to `Row`, but only returns bits which were set with timestamps between the given `from` (inclusive) and `to` (exclusive) timestamps. Both `from` and `to` parameters are optional. The default for `to` timestamp is current time + 1 day. If a later end timestamp is required, specify it explicitly.
+
+**Result Type:** object with attrs and bits
+
+
+**Examples:**
+
+Query all columns with a bit set in row 1 of a field (repositories that a user has starred), within a date range:
+```request
+Row(stargazer=1, from='2010-01-01T00:00', to='2017-03-02T03:00')
+```
+```response
+{{"attrs":{},"columns":[10]}
+```
+
+This example assumes timestamps have been set on some bits.
+
+* columns are repositories which were starred by user 1 in the time range 2010-01-01 to 2017-03-02.
+
+
+#### Row (BSI)
+
+**Spec:**
+
+```
+Row([<COMPARISON_VALUE> <COMPARISON_OPERATOR>] <FIELD> <COMPARISON_OPERATOR> <COMPARISON_VALUE>)
+```
+
+**Description:**
+
+The `Row` query is overloaded to work on `integer` values as well as `timestamp` values.
+Returns bits that are true for the comparison operator.
+
+**Result Type:** object with attrs and columns
+
+**Examples:**
+
+In our source data, commitactivity was counted over the last year.
+The following greater-than `Row` query returns all columns with a field value greater than 100 (repositories having more than 100 commits):
+
+```request
+Row(commitactivity > 100)
+```
+```response
+{{"attrs":{},"columns":[10]}
+```
+
+* columns are repositories which had at least 100 commits in the last year.
+
+BSI range queries support the following operators:
+
+ Operator | Name                          | Value
+----------|-------------------------------|--------------------
+ `>`      | greater-than, GT              | integer
+ `<`      | less-than, LT                 | integer
+ `<=`     | less-than-or-equal-to, LTE    | integer
+ `>=`     | greater-than-or-equal-to, GTE | integer
+ `==`     | equal-to, EQ                  | integer
+ `!=`     | not-equal-to, NEQ             | integer or `null`
+
+A bounded interval can be specified by chaining the `<` and `<=` operators (but not others). For example:
+
+```request
+Row(50 < commitactivity < 150)
+```
+```response
+{{"attrs":{},"columns":[10]}
+```
+
+As of Pilosa 1.0, the "between" syntax `Row(frame=stats, commitactivity >< [50, 150])` is no longer supported.
 
 #### Union
 
@@ -512,6 +594,34 @@ Count(Row(stargazer=1))
 
 * Result is the number of repositories that user 1 has starred.
 
+#### Shift
+**Spec:**
+
+```
+Shift(<ROW_CALL>, [n=UINT])
+```
+
+**Description:**
+
+Returns the row specified by `ROW_CALL` shifted by `n` bits.
+
+**Result Type:** object with attrs and columns
+
+attrs will always be empty
+
+**Examples:**
+
+Query all columns with a bit set in row 1 of the field `stargazer`
+and shift the result by 2:
+```request
+Shift(Row(stargazer=1), n=2)
+```
+```response
+{"attrs":{},"columns":[12, 22]}
+```
+
+* columns are the repositories which user 1 has starred shifted by 2 bits.
+
 #### TopN
 
 **Spec:**
@@ -584,87 +694,6 @@ TopN(stargazer, n=2, attrName=active, attrValues=[true])
 
 * Results are the top two users (rows) which have the "active" attribute set to "true", sorted by the number of bits set (repositories that they've starred).
 
-#### Range Queries
-
-**Spec:**
-
-```
-Range(<FIELD>=<ROW>, <TIMESTAMP>, <TIMESTAMP>)
-```
-
-**Description:**
-
-Similar to `Row`, but only returns bits which were set with timestamps
-between the given `start` (first) and `end` (second) timestamps.
-
-**Result Type:** object with attrs and bits
-
-
-**Examples:**
-
-Query all columns with a bit set in row 1 of a field (repositories that a user has starred), within a date range:
-```request
-Range(stargazer=1, 2010-01-01T00:00, 2017-03-02T03:00)
-```
-```response
-{{"attrs":{},"columns":[10]}
-```
-
-This example assumes timestamps have been set on some bits.
-
-* columns are repositories which were starred by user 1 in the time range 2010-01-01 to 2017-03-02.
-
-
-#### Range (BSI)
-
-**Spec:**
-
-```
-Range([<COMPARISON_VALUE> <COMPARISON_OPERATOR>] <FIELD> <COMPARISON_OPERATOR> <COMPARISON_VALUE>)
-```
-
-**Description:**
-
-The `Range` query is overloaded to work on `integer` values as well as `timestamp` values.
-Returns bits that are true for the comparison operator.
-
-**Result Type:** object with attrs and columns
-
-**Examples:**
-
-In our source data, commitactivity was counted over the last year.
-The following greater-than `Range` query returns all columns with a field value greater than 100 (repositories having more than 100 commits):
-
-```request
-Range(commitactivity > 100)
-```
-```response
-{{"attrs":{},"columns":[10]}
-```
-
-* columns are repositories which had at least 100 commits in the last year.
-
-BSI range queries support the following operators:
-
- Operator | Name                          | Value
-----------|-------------------------------|--------------------
- `>`      | greater-than, GT              | integer
- `<`      | less-than, LT                 | integer
- `<=`     | less-than-or-equal-to, LTE    | integer
- `>=`     | greater-than-or-equal-to, GTE | integer
- `==`     | equal-to, EQ                  | integer
- `!=`     | not-equal-to, NEQ             | integer or `null`
-
-`<`, and `<=` can be chained together to represent a bounded interval. For example:
-
-```request
-Range(50 < commitactivity < 150)
-```
-```response
-{{"attrs":{},"columns":[10]}
-```
-
-As of Pilosa 1.0, the "between" syntax `Range(frame=stats, commitactivity >< [50, 150])` is no longer supported.
 
 #### Min
 
@@ -757,12 +786,13 @@ Options(<CALL>, columnAttrs=<BOOL>, excludeColumns=<BOOL>, excludeRowAttrs=<BOOL
 **Description:**
 
 Modifies the given query as follows:
+
 * `columnAttrs`: Include column attributes in the result (Default: `false`).
 * `excludeColumns`: Exclude column IDs from the result (Default: `false`).
 * `excludeRowAttrs`: Exclude row attributes from the result (Default: `false`).
 * `shards`: Run the query using only the data from the given shards. By default, the entire data set (i.e. data from all shards) is used.
 
-**Result Type:** Same result type as <CALL>.
+**Result Type:** Same result type as `<CALL>`.
 
 **Examples:**
 
@@ -780,4 +810,117 @@ Options(Row(f1=10), shards=[0, 2])
 ```
 ```response
 {"attrs":{},"columns":[100, 2097152]}
+```
+
+#### Rows
+
+**Spec:**
+
+```
+Rows(<FIELD>, previous=<UINT|STRING>, limit=<UINT>, column=<UINT|STRING>, from=<TIMESTAMP>, to=<TIMESTAMP>)
+```
+
+**Description:**
+
+Rows returns a list of row IDs in the given field which have at least one bit
+set. The field argument is mandatory, the others are  optional.
+
+If `previous` is given, rows prior to and including the specified row ID or
+key will not be returned. If `column` is given, only rows which have a set bit
+in the given column will be returned. `previous` or `column` must be strings if
+and only if the field or index respectively is using key translation. If `limit`
+is given, the number of rowIDs returned will be less than or equal to
+`limit`. The combination of `limit` and `previous` allows for paging over large
+result sets. Results are always ordered, so setting `previous` as the last
+result of the previous request will start from the next available row.
+
+If the field is of type `time`, the `from` and `to` arguments can be provided
+to restrict the result to a specific time span. If `from` and `to` are
+not provided, the full range of existing data will be queried.
+
+**Result Type:** Object with `"rows" or "keys" and an array of integers or strings respectively.`
+
+**Examples:**
+
+Without keys:
+```request
+Rows(blah)
+```
+```response
+{"rows":[1,9,39]}
+```
+
+With keys:
+```request
+Rows(blahk)
+```
+```response
+{"rows":null,"keys":["haha","zaaa","traa"]}
+```
+
+
+**Spec:**
+
+```
+GroupBy(<RowsCall>, [RowsCall...], limit=<UINT>, filter=<CALL>)
+```
+
+**Description:**
+
+GroupBy returns the count of the intersection of every combination of rows
+taking one row each from the specified `Rows` calls. It returns only those
+combinations for which the count is greater than 0.
+
+The optional `filter` argument takes any type of `Row` query (e.g. Row, Union,
+ Intersect, etc.) which will be intersected with each result prior to returning
+ the count. This is analagous to a WHERE clause applied to a relational GROUP BY
+ query.
+
+The optional `limit` argument limits the number of results returned. The results
+are ordered, so as long as the data isn't changing, the same query will return
+the same result set.
+
+Paging through results is supported by passing the `previous` argument to each
+of the `Rows` calls in the GroupBy. Take the last result from your previous
+`GroupBy` query, and pass each row ID in that result as the `previous` argument
+to each of the respective `Rows` queries in your next `GroupBy` query.
+
+**Result Type:** Array of "groups". Each group is an object with a group key and
+a count key. The count is an integer, and the group is an array of objects which
+specify the field and row for each row that was intersected to get that result.
+
+**Examples:**
+
+A single `Rows` query.
+```request
+GroupBy(Rows(blah))
+```
+```response
+[{"group":[{"field":"blah","rowID":1}],"count":1},
+{"group":[{"field":"blah","rowID":9}],"count":1},
+{"group":[{"field":"blah","rowID":39}],"count":1}]
+```
+
+With two `Rows` queries - one with IDs and one with keys.
+```request
+GroupBy(Rows(blah), Rows(blahk), limit=7)
+```
+```response
+[{"group":[{"field":"blah","rowID":1},{"field":"blahk","rowKey":"haha"}],"count":1},
+ {"group":[{"field":"blah","rowID":1},{"field":"blahk","rowKey":"zaaa"}],"count":1},
+ {"group":[{"field":"blah","rowID":1},{"field":"blahk","rowKey":"traa"}],"count":1},
+ {"group":[{"field":"blah","rowID":9},{"field":"blahk","rowKey":"haha"}],"count":1},
+ {"group":[{"field":"blah","rowID":9},{"field":"blahk","rowKey":"zaaa"}],"count":1},
+ {"group":[{"field":"blah","rowID":9},{"field":"blahk","rowKey":"traa"}],"count":1},
+ {"group":[{"field":"blah","rowID":39},{"field":"blahk","rowKey":"haha"}],"count":1}]
+```
+
+Getting the rest of the results from the previous example (paging).
+```request
+GroupBy(Rows(blah, previous=39), Rows(blahk, previous="haha"), limit=7)
+```
+
+```response
+[{"group":[{"field":"blah","rowID":39},{"field":"blahk","rowKey":"zaaa"}],"count":1},
+ {"group":[{"field":"blah","rowID":39},{"field":"blahk","rowKey":"traa"}],"count":1}]
 ```

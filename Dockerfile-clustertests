@@ -1,0 +1,26 @@
+# This Dockerfile is used for cluster testing - it produces a much larger image
+# and includes all of Go as well as some utilities.
+
+FROM golang:1.11
+
+LABEL maintainer "dev@pilosa.com"
+
+COPY . /go/src/github.com/pilosa/pilosa/
+
+RUN cd /go/src/github.com/pilosa/pilosa \
+    && CGO_ENABLED=0 make install-dep install FLAGS="-a"
+
+# download pumba for fault injection
+ADD https://github.com/alexei-led/pumba/releases/download/0.6.0/pumba_linux_amd64 /pumba
+RUN chmod +x /pumba
+
+RUN cp /go/bin/pilosa /pilosa
+
+COPY LICENSE /LICENSE
+COPY NOTICE /NOTICE
+
+EXPOSE 10101
+VOLUME /data
+
+ENTRYPOINT ["bash", "-c"]
+CMD ["/pilosa", "server", "--data-dir", "/data", "--bind", "http://0.0.0.0:10101"]

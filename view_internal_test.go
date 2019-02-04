@@ -24,7 +24,7 @@ import (
 
 // mustOpenView returns a new instance of View with a temporary path.
 func mustOpenView(index, field, name string) *view {
-	path, err := ioutil.TempDir("", "pilosa-view-")
+	path, err := ioutil.TempDir(*TempDir, "pilosa-view-")
 	if err != nil {
 		panic(err)
 	}

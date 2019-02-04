@@ -29,6 +29,7 @@ import (
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/encoding/proto"
+	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -66,6 +67,8 @@ func NewInternalClientFromURI(defaultURI *pilosa.URI, remoteClient *http.Client)
 
 // MaxShardByIndex returns the number of shards on a server by index.
 func (c *InternalClient) MaxShardByIndex(ctx context.Context) (map[string]uint64, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.MaxShardByIndex")
+	defer span.Finish()
 	return c.maxShardByIndex(ctx)
 }
 
@@ -84,16 +87,14 @@ func (c *InternalClient) maxShardByIndex(ctx context.Context) (map[string]uint64
 	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
-	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		return nil, errors.Wrap(err, "executing request")
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var rsp getShardsMaxResponse
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
-	} else if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
 
@@ -102,6 +103,9 @@ func (c *InternalClient) maxShardByIndex(ctx context.Context) (map[string]uint64
 
 // Schema returns all index and field schema information.
 func (c *InternalClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Schema")
+	defer span.Finish()
+
 	// Execute request against the host.
 	u := c.defaultURI.Path("/schema")
 
@@ -115,16 +119,14 @@ func (c *InternalClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error
 	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
-	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		return nil, errors.Wrap(err, "executing request")
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var rsp getSchemaResponse
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
-	} else if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
 	return rsp.Indexes, nil
@@ -132,6 +134,9 @@ func (c *InternalClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error
 
 // CreateIndex creates a new index on the server.
 func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilosa.IndexOptions) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.CreateIndex")
+	defer span.Finish()
+
 	// Encode query request.
 	buf, err := json.Marshal(&postIndexRequest{
 		Options: opt,
@@ -152,31 +157,21 @@ func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilo
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
-	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		return errors.Wrap(err, "executing request")
+		if resp != nil && resp.StatusCode == http.StatusConflict {
+			return pilosa.ErrIndexExists
+		}
+		return err
 	}
-	defer resp.Body.Close()
-
-	// Read body.
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return errors.Wrap(err, "reading")
-	}
-
-	// Handle response based on status code.
-	switch resp.StatusCode {
-	case http.StatusOK:
-		return nil // ok
-	case http.StatusConflict:
-		return pilosa.ErrIndexExists
-	default:
-		return errors.New(string(body))
-	}
+	return errors.Wrap(resp.Body.Close(), "closing response body")
 }
 
 // FragmentNodes returns a list of nodes that own a shard.
 func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard uint64) ([]*pilosa.Node, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FragmentNodes")
+	defer span.Finish()
+
 	// Execute request against the host.
 	u := uriPathToURL(c.defaultURI, "/internal/fragment/nodes")
 	u.RawQuery = (url.Values{"index": {index}, "shard": {strconv.FormatUint(shard, 10)}}).Encode()
@@ -191,24 +186,24 @@ func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard 
 	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
-	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		return nil, errors.Wrap(err, "executing request")
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var a []*pilosa.Node
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
-	} else if err := json.NewDecoder(resp.Body).Decode(&a); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&a); err != nil {
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
-
 	return a, nil
 }
 
 // Nodes returns a list of all nodes.
 func (c *InternalClient) Nodes(ctx context.Context) ([]*pilosa.Node, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Nodes")
+	defer span.Finish()
+
 	// Execute request against the host.
 	u := uriPathToURL(c.defaultURI, "/internal/nodes")
 
@@ -222,29 +217,31 @@ func (c *InternalClient) Nodes(ctx context.Context) ([]*pilosa.Node, error) {
 	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
-	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		return nil, errors.Wrap(err, "executing request")
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var a []*pilosa.Node
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("http: status=%d", resp.StatusCode)
-	} else if err := json.NewDecoder(resp.Body).Decode(&a); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&a); err != nil {
 		return nil, fmt.Errorf("json decode: %s", err)
 	}
-
 	return a, nil
 }
 
 // Query executes query against the index.
 func (c *InternalClient) Query(ctx context.Context, index string, queryRequest *pilosa.QueryRequest) (*pilosa.QueryResponse, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Query")
+	defer span.Finish()
 	return c.QueryNode(ctx, c.defaultURI, index, queryRequest)
 }
 
 // QueryNode executes query against the index, sending the request to the node specified.
 func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index string, queryRequest *pilosa.QueryRequest) (*pilosa.QueryResponse, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "QueryNode")
+	defer span.Finish()
+
 	if index == "" {
 		return nil, pilosa.ErrIndexRequired
 	} else if queryRequest.Query == "" {
@@ -269,9 +266,9 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index s
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
-	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		return nil, errors.Wrap(err, "executing request")
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -279,8 +276,6 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index s
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading")
-	} else if resp.StatusCode != http.StatusOK {
-		return nil, errors.New(string(body))
 	}
 
 	qresp := &pilosa.QueryResponse{}
@@ -295,6 +290,9 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index s
 
 // Import bulk imports bits for a single shard to a host.
 func (c *InternalClient) Import(ctx context.Context, index, field string, shard uint64, bits []pilosa.Bit, opts ...pilosa.ImportOption) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Import")
+	defer span.Finish()
+
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
@@ -342,6 +340,9 @@ func getCoordinatorNode(nodes []*pilosa.Node) *pilosa.Node {
 
 // ImportK bulk imports bits specified by string keys to a host.
 func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits []pilosa.Bit, opts ...pilosa.ImportOption) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportK")
+	defer span.Finish()
+
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
@@ -382,6 +383,9 @@ func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits 
 }
 
 func (c *InternalClient) EnsureIndex(ctx context.Context, name string, options pilosa.IndexOptions) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.EnsureIndex")
+	defer span.Finish()
+
 	err := c.CreateIndex(ctx, name, options)
 	if err == nil || errors.Cause(err) == pilosa.ErrIndexExists {
 		return nil
@@ -390,10 +394,14 @@ func (c *InternalClient) EnsureIndex(ctx context.Context, name string, options p
 }
 
 func (c *InternalClient) EnsureField(ctx context.Context, indexName string, fieldName string) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.EnsureField")
+	defer span.Finish()
 	return c.EnsureFieldWithOptions(ctx, indexName, fieldName, pilosa.FieldOptions{})
 }
 
 func (c *InternalClient) EnsureFieldWithOptions(ctx context.Context, indexName string, fieldName string, opt pilosa.FieldOptions) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.EnsureFieldWithOptions")
+	defer span.Finish()
 	err := c.CreateFieldWithOptions(ctx, indexName, fieldName, opt)
 	if err == nil || errors.Cause(err) == pilosa.ErrFieldExists {
 		return nil
@@ -467,6 +475,9 @@ func (c *InternalClient) Forward(ctx context.Context, w http.ResponseWriter, req
 
 // importNode sends a pre-marshaled import request to a node.
 func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, index, field string, buf []byte, opts *pilosa.ImportOptions) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.importNode")
+	defer span.Finish()
+
 	// Create URL & HTTP request.
 	path := fmt.Sprintf("/index/%s/field/%s/import", index, field)
 	u := nodePathToURL(node, path)
@@ -474,6 +485,9 @@ func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, inde
 	vals := url.Values{}
 	if opts.Clear {
 		vals.Set("clear", "true")
+	}
+	if opts.IgnoreKeyCheck {
+		vals.Set("ignoreKeyCheck", "true")
 	}
 	url := fmt.Sprintf("%s?%s", u.String(), vals.Encode())
 
@@ -487,9 +501,9 @@ func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, inde
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
-	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		return errors.Wrap(err, "executing request")
+		return err
 	}
 	defer resp.Body.Close()
 
@@ -497,8 +511,6 @@ func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, inde
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return errors.Wrap(err, "reading")
-	} else if resp.StatusCode != http.StatusOK {
-		return errors.New(string(body))
 	}
 
 	var isresp pilosa.ImportResponse
@@ -513,6 +525,9 @@ func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, inde
 
 // ImportValue bulk imports field values for a single shard to a host.
 func (c *InternalClient) ImportValue(ctx context.Context, index, field string, shard uint64, vals []pilosa.FieldValue, opts ...pilosa.ImportOption) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportValue")
+	defer span.Finish()
+
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
@@ -551,6 +566,9 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 
 // ImportValueK bulk imports keyed field values to a host.
 func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, vals []pilosa.FieldValue, opts ...pilosa.ImportOption) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportValueK")
+	defer span.Finish()
+
 	buf, err := c.marshalImportValuePayload(index, field, 0, vals)
 	if err != nil {
 		return fmt.Errorf("Error Creating Payload: %s", err)
@@ -608,7 +626,10 @@ func (c *InternalClient) marshalImportValuePayload(index, field string, shard ui
 
 // ImportRoaring does fast import of raw bits in roaring format (pilosa or
 // official format, see API.ImportRoaring).
-func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64, remote bool, data []byte, opts ...pilosa.ImportOption) error {
+func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, index, field string, shard uint64, remote bool, req *pilosa.ImportRoaringRequest) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportRoaring")
+	defer span.Finish()
+
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
@@ -618,53 +639,46 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, ind
 		uri = c.defaultURI
 	}
 
-	// Set up import options.
-	options := &pilosa.ImportOptions{}
-	for _, opt := range opts {
-		err := opt(options)
-		if err != nil {
-			return errors.Wrap(err, "applying option")
-		}
-	}
-
 	vals := url.Values{}
 	vals.Set("remote", strconv.FormatBool(remote))
-	if options.Clear {
-		vals.Set("clear", "true")
-	}
 	url := fmt.Sprintf("%s/index/%s/field/%s/import-roaring/%d?%s", uri, index, field, shard, vals.Encode())
 
+	// Marshal data to protobuf.
+	data, err := c.serializer.Marshal(req)
+	if err != nil {
+		return errors.Wrap(err, "marshal import request")
+	}
+
 	// Generate HTTP request.
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
+	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
 	if err != nil {
 		return errors.Wrap(err, "creating request")
 	}
-	req.Header.Set("Content-Type", "application/x-binary")
-	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	httpReq.Header.Set("Content-Type", "application/x-protobuf")
+	httpReq.Header.Set("Accept", "application/x-protobuf")
+	httpReq.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
-	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	resp, err := c.executeRequest(httpReq.WithContext(ctx))
 	if err != nil {
-		return errors.Wrap(err, "executing request")
+		return err
 	}
 	defer resp.Body.Close()
-
-	// Validate status code.
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("invalid status: %d", resp.StatusCode)
-	}
 
 	dec := json.NewDecoder(resp.Body)
 	rbody := &pilosa.ImportResponse{}
 	dec.Decode(rbody)
 	if rbody.Err != "" {
-		return errors.Errorf("importing roaring: %v", rbody.Err)
+		return errors.Wrap(errors.New(rbody.Err), "importing roaring")
 	}
 	return nil
 }
 
 // ExportCSV bulk exports data for a single shard from a host to CSV format.
 func (c *InternalClient) ExportCSV(ctx context.Context, index, field string, shard uint64, w io.Writer) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ExportCSV")
+	defer span.Finish()
+
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	} else if field == "" {
@@ -695,6 +709,9 @@ func (c *InternalClient) ExportCSV(ctx context.Context, index, field string, sha
 
 // exportNode copies a CSV export from a node to w.
 func (c *InternalClient) exportNodeCSV(ctx context.Context, node *pilosa.Node, index, field string, shard uint64, w io.Writer) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.exportNodeCSV")
+	defer span.Finish()
+
 	// Create URL.
 	u := nodePathToURL(node, "/export")
 	u.RawQuery = url.Values{
@@ -712,16 +729,11 @@ func (c *InternalClient) exportNodeCSV(ctx context.Context, node *pilosa.Node, i
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
-	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		return errors.Wrap(err, "executing request")
+		return err
 	}
 	defer resp.Body.Close()
-
-	// Validate status code.
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("invalid status: %d", resp.StatusCode)
-	}
 
 	// Copy body to writer.
 	if _, err := io.Copy(w, resp.Body); err != nil {
@@ -731,18 +743,22 @@ func (c *InternalClient) exportNodeCSV(ctx context.Context, node *pilosa.Node, i
 	return nil
 }
 
-func (c *InternalClient) RetrieveShardFromURI(ctx context.Context, index, field string, shard uint64, uri pilosa.URI) (io.ReadCloser, error) {
+// RetrieveShardFromURI returns a ReadCloser which contains the data of the
+// specified shard from the specified node. Caller *must* close the returned
+// ReadCloser or risk leaking goroutines/tcp connections.
+func (c *InternalClient) RetrieveShardFromURI(ctx context.Context, index, field, view string, shard uint64, uri pilosa.URI) (io.ReadCloser, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.RetrieveShardFromURI")
+	defer span.Finish()
+
 	node := &pilosa.Node{
 		URI: uri,
 	}
-	return c.backupShardNode(ctx, index, field, shard, node)
-}
 
-func (c *InternalClient) backupShardNode(ctx context.Context, index, field string, shard uint64, node *pilosa.Node) (io.ReadCloser, error) {
-	u := nodePathToURL(node, "/fragment/data")
+	u := nodePathToURL(node, "/internal/fragment/data")
 	u.RawQuery = url.Values{
 		"index": {index},
 		"field": {field},
+		"view":  {view},
 		"shard": {strconv.FormatUint(shard, 10)},
 	}.Encode()
 
@@ -755,29 +771,28 @@ func (c *InternalClient) backupShardNode(ctx context.Context, index, field strin
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request.
-	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		return nil, errors.Wrap(err, "executing request")
-	}
-
-	// Return error if status is not OK.
-	if resp.StatusCode == http.StatusNotFound {
-		resp.Body.Close()
-		return nil, pilosa.ErrFragmentNotFound
-	} else if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, fmt.Errorf("unexpected backup status code: host=%s, code=%d", node.URI, resp.StatusCode)
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return nil, pilosa.ErrFragmentNotFound
+		}
+		return nil, err
 	}
 
 	return resp.Body, nil
 }
 
 func (c *InternalClient) CreateField(ctx context.Context, index, field string) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.CreateField")
+	defer span.Finish()
 	return c.CreateFieldWithOptions(ctx, index, field, pilosa.FieldOptions{})
 }
 
 // CreateField creates a new field on the server.
 func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, field string, opt pilosa.FieldOptions) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.CreateFieldWithOptions")
+	defer span.Finish()
+
 	if index == "" {
 		return pilosa.ErrIndexRequired
 	}
@@ -818,32 +833,23 @@ func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, fiel
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
-	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		return errors.Wrap(err, "executing request")
-	}
-	defer resp.Body.Close()
-
-	// Read body.
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return errors.Wrap(err, "reading")
+		if resp != nil && resp.StatusCode == http.StatusConflict {
+			return pilosa.ErrFieldExists
+		}
+		return err
 	}
 
-	// Handle response based on status code.
-	switch resp.StatusCode {
-	case http.StatusOK:
-		return nil // ok
-	case http.StatusConflict:
-		return pilosa.ErrFieldExists
-	default:
-		return errors.New(string(body))
-	}
+	return errors.Wrap(resp.Body.Close(), "closing response body")
 }
 
 // FragmentBlocks returns a list of block checksums for a fragment on a host.
 // Only returns blocks which contain data.
 func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, index, field, view string, shard uint64) ([]pilosa.FragmentBlock, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FragmentBlocks")
+	defer span.Finish()
+
 	if uri == nil {
 		uri = c.defaultURI
 	}
@@ -865,20 +871,15 @@ func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, in
 	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
-	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		return nil, errors.Wrap(err, "executing request")
+		// Return the appropriate error.
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return nil, pilosa.ErrFragmentNotFound
+		}
+		return nil, err
 	}
 	defer resp.Body.Close()
-
-	// Return error if status is not OK.
-	switch resp.StatusCode {
-	case http.StatusOK: // ok
-	case http.StatusNotFound:
-		return nil, pilosa.ErrFragmentNotFound
-	default:
-		return nil, fmt.Errorf("unexpected status: code=%d", resp.StatusCode)
-	}
 
 	// Decode response object.
 	var rsp getFragmentBlocksResponse
@@ -890,6 +891,9 @@ func (c *InternalClient) FragmentBlocks(ctx context.Context, uri *pilosa.URI, in
 
 // BlockData returns row/column id pairs for a block.
 func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, field, view string, shard uint64, block int) ([]uint64, []uint64, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.BlockData")
+	defer span.Finish()
+
 	if uri == nil {
 		panic("need to pass a URI to BlockData")
 	}
@@ -914,20 +918,14 @@ func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, 
 	req.Header.Set("Accept", "application/protobuf")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
-	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "executing request")
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return nil, nil, nil
+		}
+		return nil, nil, err
 	}
 	defer resp.Body.Close()
-
-	// Return error if status is not OK.
-	switch resp.StatusCode {
-	case http.StatusOK: // fallthrough
-	case http.StatusNotFound:
-		return nil, nil, nil
-	default:
-		return nil, nil, fmt.Errorf("unexpected status: code=%d", resp.StatusCode)
-	}
 
 	// Decode response object.
 	var rsp pilosa.BlockDataResponse
@@ -941,6 +939,9 @@ func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, 
 
 // ColumnAttrDiff returns data from differing blocks on a remote host.
 func (c *InternalClient) ColumnAttrDiff(ctx context.Context, uri *pilosa.URI, index string, blks []pilosa.AttrBlock) (map[uint64]map[string]interface{}, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ColumnAttrDiff")
+	defer span.Finish()
+
 	if uri == nil {
 		uri = c.defaultURI
 	}
@@ -962,18 +963,11 @@ func (c *InternalClient) ColumnAttrDiff(ctx context.Context, uri *pilosa.URI, in
 	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
-	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		return nil, errors.Wrap(err, "executing request")
+		return nil, err
 	}
 	defer resp.Body.Close()
-
-	// Return error if status is not OK.
-	switch resp.StatusCode {
-	case http.StatusOK: // ok
-	default:
-		return nil, fmt.Errorf("unexpected status: code=%d", resp.StatusCode)
-	}
 
 	// Decode response object.
 	var rsp postIndexAttrDiffResponse
@@ -985,6 +979,9 @@ func (c *InternalClient) ColumnAttrDiff(ctx context.Context, uri *pilosa.URI, in
 
 // RowAttrDiff returns data from differing blocks on a remote host.
 func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, index, field string, blks []pilosa.AttrBlock) (map[uint64]map[string]interface{}, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.RowAttrDiff")
+	defer span.Finish()
+
 	if uri == nil {
 		uri = c.defaultURI
 	}
@@ -1006,20 +1003,14 @@ func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, index
 	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
-	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		return nil, errors.Wrap(err, "executing request")
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return nil, pilosa.ErrFieldNotFound
+		}
+		return nil, err
 	}
 	defer resp.Body.Close()
-
-	// Return error if status is not OK.
-	switch resp.StatusCode {
-	case http.StatusOK: // ok
-	case http.StatusNotFound:
-		return nil, pilosa.ErrFieldNotFound
-	default:
-		return nil, fmt.Errorf("unexpected status: code=%d", resp.StatusCode)
-	}
 
 	// Decode response object.
 	var rsp postFieldAttrDiffResponse
@@ -1031,6 +1022,9 @@ func (c *InternalClient) RowAttrDiff(ctx context.Context, uri *pilosa.URI, index
 
 // SendMessage posts a message synchronously.
 func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, msg []byte) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.SendMessage")
+	defer span.Finish()
+
 	u := uriPathToURL(uri, "/internal/cluster/message")
 	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(msg))
 	if err != nil {
@@ -1041,26 +1035,43 @@ func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, msg [
 	req.Header.Set("Accept", "application/json")
 
 	// Execute request.
-	resp, err := c.httpClient.Do(req.WithContext(ctx))
+	resp, err := c.executeRequest(req.WithContext(ctx))
 	if err != nil {
-		return fmt.Errorf("executing http request: %v", err)
+		return errors.Wrap(err, "executing request")
 	}
-	defer resp.Body.Close()
+	return errors.Wrap(resp.Body.Close(), "closing response body")
+}
 
-	// Read body.
-	body, err := ioutil.ReadAll(resp.Body)
+// executeRequest executes the given request and checks the Response. For
+// responses with non-2XX status, the body is read and closed, and an error is
+// returned. If the error is nil, the caller must ensure that the response body
+// is closed.
+func (c *InternalClient) executeRequest(req *http.Request) (*http.Response, error) {
+	tracing.GlobalTracer.InjectHTTPHeaders(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("reading response body: %v", err)
+		if resp != nil {
+			resp.Body.Close()
+		}
+		return nil, errors.Wrap(err, "getting response")
 	}
-
-	// Return error if status is not OK.
-	switch resp.StatusCode {
-	case http.StatusOK: // ok
-	default:
-		return fmt.Errorf("unexpected response status code: %d: %s", resp.StatusCode, body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		defer resp.Body.Close()
+		buf, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return resp, errors.Wrapf(err, "bad status '%s' and err reading body", resp.Status)
+		}
+		var msg string
+		// try to decode a JSON response
+		var sr successResponse
+		if err = json.Unmarshal(buf, &sr); err == nil {
+			msg = sr.Error.Error()
+		} else {
+			msg = string(buf)
+		}
+		return resp, errors.Errorf("server error %s: '%s'", resp.Status, msg)
 	}
-
-	return nil
+	return resp, nil
 }
 
 // Bits is a slice of Bit.

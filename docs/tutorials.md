@@ -444,7 +444,7 @@ Refer to the [Docker documentation](https://docs.docker.com) to see your options
 
 #### Introduction
 
-Pilosa can store integer values associated to the columns in an index, and those values are used to support `Range`, `Min`, `Max`, and `Sum` queries. In this tutorial we will show how to set up integer fields, populate those fields with data, and query the fields. The example index we're going to create will represent fictional patients at a medical facility and various bits of information about those patients.
+Pilosa can store integer values associated to the columns in an index, and those values are used to support `Row`, `Min`, `Max`, and `Sum` queries. In this tutorial we will show how to set up integer fields, populate those fields with data, and query the fields. The example index we're going to create will represent fictional patients at a medical facility and various bits of information about those patients.
 
 First, create an index called `patients`:
 ``` request
@@ -455,7 +455,7 @@ curl localhost:10101/index/patients \
 {"success":true}
 ```
 
-In addition to storing rows of bits, a field can also store integer values. The next steps creates three fields (`age`, `weight`, `tcells`) in the `measurements` field.
+In addition to storing rows of bits, a field can also store integer values. The next steps creates three fields (`age`, `weight`, `tcells`) in the `patients` index.
 ``` request
 curl localhost:10101/index/patients/field/age \
      -X POST \
@@ -529,22 +529,22 @@ Assuming we have a file called `ages.csv` that is structured like this:
 ```
 where the first column of the CSV represents the patient `ID` and the second column represents the patient's `age`, then we can import the data into our `age` field by running this command:
 ```
-pilosa import -i patients -f measurements --field age ages.csv
+pilosa import -i patients --field age ages.csv
 ```
 
 Now that we have some data in our index, let's run a few queries to demonstrate how to use that data.
 
-In order to find all patients over the age of 40, then simply run a `Range` query against the `age` field.
+In order to find all patients over the age of 40, then simply run a `Row` query against the `age` field.
 ``` request
 curl localhost:10101/index/patients/query \
      -X POST \
-     -d 'Range(age > 40)'
+     -d 'Row(age > 40)'
 ```
 ``` response
 {"results":[{"attrs":{},"columns":[2,6,9]}]}
 ```
 
-You can find a list of supported range operators in the [Range Query](../query-language/#range-bsi) documentation.
+You can find a list of supported range operators in the [Row (BSI) Query](../query-language/#row-bsi) documentation.
 
 To find the average age of all patients, run a `Sum` query:
 ``` request
@@ -561,7 +561,7 @@ You can also provide a filter to the `Sum()` function to find the average age of
 ``` request
 curl localhost:10101/index/patients/query \
      -X POST \
-     -d 'Sum(Range(age > 40), field="age")'
+     -d 'Sum(Row(age > 40), field="age")'
 ```
 ``` response
 {"results":[{"value":191,"count":3}]}
@@ -583,7 +583,7 @@ You can also provide a filter to the `Min()` function to find the minimum age of
 ``` request
 curl localhost:10101/index/patients/query \
      -X POST \
-     -d 'Min(Range(age > 40), field="age")'
+     -d 'Min(Row(age > 40), field="age")'
 ```
 ``` response
 {"results":[{"value":57,"count":1}]}
@@ -604,7 +604,7 @@ You can also provide a filter to the `Max()` function to find the maximum age of
 ``` request
 curl localhost:10101/index/patients/query \
      -X POST \
-     -d 'Max(Range(age < 40), field="age")'
+     -d 'Max(Row(age < 40), field="age")'
 ```
 ``` response
 {"results":[{"value":34,"count":1}]}

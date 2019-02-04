@@ -24,9 +24,8 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	_ "net/http/pprof" // Imported for its side-effect of registering pprof endpoints with the server.
 	"net/url"
-	// Imported for its side-effect of registering pprof endpoints with the server.
-	_ "net/http/pprof"
 	"reflect"
 	"runtime/debug"
 	"strconv"
@@ -36,7 +35,8 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa"
-
+	"github.com/pilosa/pilosa/logger"
+	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -44,7 +44,7 @@ import (
 type Handler struct {
 	Handler http.Handler
 
-	logger pilosa.Logger
+	logger logger.Logger
 
 	// Keeps the query argument validators for each handler
 	validators map[string]*queryValidationSpec
@@ -95,7 +95,7 @@ func OptHandlerAPI(api *pilosa.API) handlerOption {
 	}
 }
 
-func OptHandlerLogger(logger pilosa.Logger) handlerOption {
+func OptHandlerLogger(logger logger.Logger) handlerOption {
 	return func(h *Handler) error {
 		h.logger = logger
 		return nil
@@ -121,7 +121,7 @@ func OptHandlerCloseTimeout(d time.Duration) handlerOption {
 // NewHandler returns a new instance of Handler with a default logger.
 func NewHandler(opts ...handlerOption) (*Handler, error) {
 	handler := &Handler{
-		logger:       pilosa.NopLogger,
+		logger:       logger.NopLogger,
 		closeTimeout: time.Second * 30,
 	}
 	handler.Handler = newRouter(handler)
@@ -181,7 +181,7 @@ func (h *Handler) populateValidators() {
 	h.validators["DeleteIndex"] = queryValidationSpecRequired()
 	h.validators["PostField"] = queryValidationSpecRequired()
 	h.validators["DeleteField"] = queryValidationSpecRequired()
-	h.validators["PostImport"] = queryValidationSpecRequired().Optional("shard", "keyImport", "clear")
+	h.validators["PostImport"] = queryValidationSpecRequired().Optional("shard", "keyImport", "clear", "ignoreKeyCheck")
 	h.validators["PostImportRoaring"] = queryValidationSpecRequired().Optional("remote", "clear")
 	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("shards", "columnAttrs", "excludeRowAttrs", "excludeColumns")
 	h.validators["GetInfo"] = queryValidationSpecRequired()
@@ -192,12 +192,14 @@ func (h *Handler) populateValidators() {
 	h.validators["PostClusterMessage"] = queryValidationSpecRequired()
 	h.validators["GetFragmentBlockData"] = queryValidationSpecRequired()
 	h.validators["GetFragmentBlocks"] = queryValidationSpecRequired("index", "field", "view", "shard")
+	h.validators["GetFragmentData"] = queryValidationSpecRequired("index", "field", "view", "shard")
 	h.validators["GetFragmentNodes"] = queryValidationSpecRequired("shard", "index")
 	h.validators["PostIndexAttrDiff"] = queryValidationSpecRequired()
 	h.validators["PostFieldAttrDiff"] = queryValidationSpecRequired()
 	h.validators["GetNodes"] = queryValidationSpecRequired()
 	h.validators["GetShardMax"] = queryValidationSpecRequired()
 	h.validators["GetTranslateData"] = queryValidationSpecRequired("offset")
+	h.validators["PostTranslateKeys"] = queryValidationSpecRequired()
 }
 
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
@@ -218,6 +220,15 @@ func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
 			}
 		}
 		next.ServeHTTP(w, r)
+	})
+}
+
+func (h *Handler) extractTracing(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		span, ctx := tracing.GlobalTracer.ExtractHTTPHeaders(r)
+		defer span.Finish()
+
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
@@ -252,6 +263,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/cluster/message", handler.handlePostClusterMessage).Methods("POST").Name("PostClusterMessage")
 	router.HandleFunc("/internal/fragment/block/data", handler.handleGetFragmentBlockData).Methods("GET").Name("GetFragmentBlockData")
 	router.HandleFunc("/internal/fragment/blocks", handler.handleGetFragmentBlocks).Methods("GET").Name("GetFragmentBlocks")
+	router.HandleFunc("/internal/fragment/data", handler.handleGetFragmentData).Methods("GET").Name("GetFragmentData")
 	router.HandleFunc("/internal/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET").Name("GetFragmentNodes")
 	router.HandleFunc("/internal/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST").Name("PostIndexAttrDiff")
 	router.HandleFunc("/internal/index/{index}/field/{field}/attr/diff", handler.handlePostFieldAttrDiff).Methods("POST").Name("PostFieldAttrDiff")
@@ -259,19 +271,11 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
 	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET").Name("GetTranslateData")
-
-	// TODO: Apply MethodNotAllowed statuses to all endpoints.
-	// Ideally this would be automatic, as described in this (wontfix) ticket:
-	// https://github.com/gorilla/mux/issues/6
-	// For now we just do it for the most commonly used handler, /query
-	router.HandleFunc("/index/{index}/query", handler.methodNotAllowedHandler).Methods("GET")
+	router.HandleFunc("/internal/translate/keys", handler.handlePostTranslateKeys).Methods("POST").Name("PostTranslateKeys")
 
 	router.Use(handler.queryArgValidator)
+	router.Use(handler.extractTracing)
 	return router
-}
-
-func (h *Handler) methodNotAllowedHandler(w http.ResponseWriter, _ *http.Request) {
-	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 }
 
 // ServeHTTP handles an HTTP request.
@@ -580,11 +584,11 @@ func validateOptions(data map[string]interface{}, validIndexOptions []string) er
 			}
 			for kk, vv := range options {
 				if !foundItem(validIndexOptions, kk) {
-					return fmt.Errorf("Unknown key: %v:%v", kk, vv)
+					return fmt.Errorf("unknown key: %v:%v", kk, vv)
 				}
 			}
 		default:
-			return fmt.Errorf("Unknown key: %v:%v", k, v)
+			return fmt.Errorf("unknown key: %v:%v", k, v)
 		}
 	}
 	return nil
@@ -716,7 +720,7 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	case pilosa.FieldTypeInt:
 		fos = append(fos, pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max))
 	case pilosa.FieldTypeTime:
-		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum))
+		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum, req.Options.NoStandardView))
 	case pilosa.FieldTypeMutex:
 		fos = append(fos, pilosa.OptFieldTypeMutex(*req.Options.CacheType, *req.Options.CacheSize))
 	case pilosa.FieldTypeBool:
@@ -739,13 +743,14 @@ type postFieldRequest struct {
 // fieldOptions tracks pilosa.FieldOptions. It is made up of pointers to values,
 // and used for input validation.
 type fieldOptions struct {
-	Type        string              `json:"type,omitempty"`
-	CacheType   *string             `json:"cacheType,omitempty"`
-	CacheSize   *uint32             `json:"cacheSize,omitempty"`
-	Min         *int64              `json:"min,omitempty"`
-	Max         *int64              `json:"max,omitempty"`
-	TimeQuantum *pilosa.TimeQuantum `json:"timeQuantum,omitempty"`
-	Keys        *bool               `json:"keys,omitempty"`
+	Type           string              `json:"type,omitempty"`
+	CacheType      *string             `json:"cacheType,omitempty"`
+	CacheSize      *uint32             `json:"cacheSize,omitempty"`
+	Min            *int64              `json:"min,omitempty"`
+	Max            *int64              `json:"max,omitempty"`
+	TimeQuantum    *pilosa.TimeQuantum `json:"timeQuantum,omitempty"`
+	Keys           *bool               `json:"keys,omitempty"`
+	NoStandardView bool                `json:"noStandardView,omitempty"`
 }
 
 func (o *fieldOptions) validate() error {
@@ -997,6 +1002,12 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	// If the clear flag is true, treat the import as clear bits.
 	q := r.URL.Query()
 	doClear := q.Get("clear") == "true"
+	doIgnoreKeyCheck := q.Get("ignoreKeyCheck") == "true"
+
+	opts := []pilosa.ImportOption{
+		pilosa.OptImportOptionsClear(doClear),
+		pilosa.OptImportOptionsIgnoreKeyCheck(doIgnoreKeyCheck),
+	}
 
 	// Get index and field type to determine how to handle the
 	// import data.
@@ -1035,7 +1046,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := h.api.ImportValue(r.Context(), req, pilosa.OptImportOptionsClear(doClear)); err != nil {
+		if err := h.api.ImportValue(r.Context(), req, opts...); err != nil {
 			switch errors.Cause(err) {
 			case pilosa.ErrClusterDoesNotOwnShard:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
@@ -1053,7 +1064,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := h.api.Import(r.Context(), req, pilosa.OptImportOptionsClear(doClear)); err != nil {
+		if err := h.api.Import(r.Context(), req, opts...); err != nil {
 			switch errors.Cause(err) {
 			case pilosa.ErrClusterDoesNotOwnShard:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
@@ -1208,6 +1219,27 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 
 type getFragmentBlocksResponse struct {
 	Blocks []pilosa.FragmentBlock `json:"blocks"`
+}
+
+// handleGetFragmentData handles GET /internal/fragment/data requests.
+func (h *Handler) handleGetFragmentData(w http.ResponseWriter, r *http.Request) {
+	// Read shard parameter.
+	q := r.URL.Query()
+	shard, err := strconv.ParseUint(q.Get("shard"), 10, 64)
+	if err != nil {
+		http.Error(w, "shard required", http.StatusBadRequest)
+		return
+	}
+	// Retrieve fragment data from holder.
+	f, err := h.api.FragmentData(r.Context(), q.Get("index"), q.Get("field"), q.Get("view"), shard)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	// Stream fragment to response body.
+	if _, err := f.WriteTo(w); err != nil {
+		h.logger.Printf("error streaming fragment data: %s", err)
+	}
 }
 
 // handleGetVersion handles /version requests.
@@ -1399,7 +1431,11 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 type defaultClusterMessageResponse struct{}
 
 // translateStoreBufferSize is the buffer size used for streaming data.
-const translateStoreBufferSize = 65536
+const translateStoreBufferSize = 1 << 16 // 64k
+
+// translateStoreBufferSizeMax is the maximum size that the buffer is allowed
+// to grow before raising an error.
+const translateStoreBufferSizeMax = 1 << 22 // 4Mb
 
 func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -1422,16 +1458,30 @@ func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Copy from reader to client until store or client disconnect.
-	buf := make([]byte, translateStoreBufferSize)
+	useBufferSize := translateStoreBufferSize
+	buf := make([]byte, useBufferSize)
 	for {
 		// Read from store.
 		n, err := rdr.Read(buf)
 		if err == io.EOF {
 			return
+		} else if err == pilosa.ErrTranslateReadTargetUndersized {
+			// Increase the buffer size and try to read again.
+			useBufferSize *= 2
+			// Prevent the buffer from growing without bound.
+			if useBufferSize > translateStoreBufferSizeMax {
+				h.logger.Printf("http: translate store buffer exceeded max size: %s", err)
+				return
+			}
+			buf = make([]byte, useBufferSize)
+			continue
 		} else if err != nil {
 			h.logger.Printf("http: translate store read error: %s", err)
 			return
 		} else if n == 0 {
+			// Reset the default buffer size.
+			useBufferSize = translateStoreBufferSize
+			buf = make([]byte, useBufferSize)
 			continue
 		}
 
@@ -1505,10 +1555,18 @@ func GetHTTPClient(t *tls.Config) *http.Client {
 
 // handlPostRoaringImport
 func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Content-Type") != "application/x-binary" {
+	// Verify that request is only communicating over protobufs.
+	if r.Header.Get("Content-Type") != "application/x-protobuf" {
 		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
 		return
+	} else if r.Header.Get("Accept") != "application/x-protobuf" {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
 	}
+
+	indexName := mux.Vars(r)["index"]
+	fieldName := mux.Vars(r)["field"]
+
 	q := r.URL.Query()
 	remoteStr := q.Get("remote")
 	var remote bool
@@ -1516,12 +1574,15 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 		remote = true
 	}
 
-	// If the clear flag is true, treat the import as clear bits.
-	doClear := q.Get("clear") == "true"
-
 	// Read entire body.
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	req := &pilosa.ImportRoaringRequest{}
+	if err := h.api.Serializer.Unmarshal(body, req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -1535,7 +1596,7 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 
 	resp := &pilosa.ImportResponse{}
 	// TODO give meaningful stats for import
-	err = h.api.ImportRoaring(r.Context(), urlVars["index"], urlVars["field"], shard, remote, body, pilosa.OptImportOptionsClear(doClear))
+	err = h.api.ImportRoaring(r.Context(), indexName, fieldName, shard, remote, req)
 	if err != nil {
 		resp.Err = err.Error()
 		if _, ok := err.(pilosa.BadRequestError); ok {
@@ -1555,5 +1616,27 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 	_, err = w.Write(buf)
 	if err != nil {
 		h.logger.Printf("writing import-roaring response: %v", err)
+	}
+}
+
+func (h *Handler) handlePostTranslateKeys(w http.ResponseWriter, r *http.Request) {
+	// Verify that request is only communicating over protobufs.
+	if r.Header.Get("Content-Type") != "application/x-protobuf" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	} else if r.Header.Get("Accept") != "application/x-protobuf" {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
+	}
+
+	buf, err := h.api.TranslateKeys(r.Body)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("translate keys: %v", err), http.StatusInternalServerError)
+	}
+
+	// Write response.
+	_, err = w.Write(buf)
+	if err != nil {
+		h.logger.Printf("writing translate keys response: %v", err)
 	}
 }

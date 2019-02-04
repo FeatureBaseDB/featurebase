@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pkg/errors"
 )
 
@@ -51,7 +52,7 @@ type diagnosticsCollector struct {
 
 	client *http.Client
 
-	Logger Logger
+	Logger logger.Logger
 
 	server *Server
 }
@@ -65,7 +66,7 @@ func newDiagnosticsCollector(host string) *diagnosticsCollector { // nolint: unp
 		start:      time.Now(),
 		client:     &http.Client{Timeout: 10 * time.Second},
 		metrics:    make(map[string]interface{}),
-		Logger:     NopLogger,
+		Logger:     logger.NopLogger,
 	}
 }
 
@@ -136,11 +137,11 @@ func (d *diagnosticsCollector) compareVersion(value string) error {
 	localVersion := versionSegments(d.version)
 
 	if localVersion[0] < currentVersion[0] { //Major
-		return fmt.Errorf("Warning: You are running Pilosa %s. A newer version (%s) is available: https://github.com/pilosa/pilosa/releases", d.version, value)
+		return fmt.Errorf("you are running Pilosa %s, a newer version (%s) is available: https://github.com/pilosa/pilosa/releases", d.version, value)
 	} else if localVersion[1] < currentVersion[1] && localVersion[0] == currentVersion[0] { // Minor
-		return fmt.Errorf("Warning: You are running Pilosa %s. The latest Minor release is %s: https://github.com/pilosa/pilosa/releases", d.version, value)
+		return fmt.Errorf("you are running Pilosa %s, the latest minor release is %s: https://github.com/pilosa/pilosa/releases", d.version, value)
 	} else if localVersion[2] < currentVersion[2] && localVersion[0] == currentVersion[0] && localVersion[1] == currentVersion[1] { // Patch
-		return fmt.Errorf("There is a new patch release of Pilosa available: %s: https://github.com/pilosa/pilosa/releases", value)
+		return fmt.Errorf("there is a new patch release of Pilosa available: %s: https://github.com/pilosa/pilosa/releases", value)
 	}
 
 	return nil

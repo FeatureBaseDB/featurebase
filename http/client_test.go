@@ -408,8 +408,9 @@ func TestClient_ImportRoaring(t *testing.T) {
 	// Send import request.
 	host := cluster[0].URL()
 	c := MustNewClient(host, http.GetHTTPClient(nil))
-	roaringData, _ := hex.DecodeString("3B3001000100000900010000000100010009000100") // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537]
-	if err := c.ImportRoaring(context.Background(), &cluster[0].API.Node().URI, "i", "f", 0, false, roaringData); err != nil {
+	// [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537]
+	roaringReq := makeImportRoaringRequest(false, "3B3001000100000900010000000100010009000100")
+	if err := c.ImportRoaring(context.Background(), &cluster[0].API.Node().URI, "i", "f", 0, false, roaringReq); err != nil {
 		t.Fatal(err)
 	}
 
@@ -432,8 +433,9 @@ func TestClient_ImportRoaring(t *testing.T) {
 	}
 
 	// Ensure that sending a roaring import with the clear flag works as expected.
-	roaringDataClear, _ := hex.DecodeString("3A30000001000000010001001000000003000400") // [65539, 65540]
-	if err := c.ImportRoaring(context.Background(), &cluster[0].API.Node().URI, "i", "f", 0, false, roaringDataClear, pilosa.OptImportOptionsClear(true)); err != nil {
+	// [65539, 65540]
+	roaringReq = makeImportRoaringRequest(true, "3A30000001000000010001001000000003000400")
+	if err := c.ImportRoaring(context.Background(), &cluster[0].API.Node().URI, "i", "f", 0, false, roaringReq); err != nil {
 		t.Fatal(err)
 	}
 
@@ -454,8 +456,9 @@ func TestClient_ImportRoaring(t *testing.T) {
 	}
 
 	// Ensure that sending a roaring import with the clear flag works as expected.
-	roaringDataClear, _ = hex.DecodeString("3A300000020000000000010001000100180000001C0000000400060001000300") // [4, 6, 65537, 65539]
-	if err := c.ImportRoaring(context.Background(), &cluster[0].API.Node().URI, "i", "f", 0, false, roaringDataClear, pilosa.OptImportOptionsClear(true)); err != nil {
+	// [4, 6, 65537, 65539]
+	roaringReq = makeImportRoaringRequest(true, "3A300000020000000000010001000100180000001C0000000400060001000300")
+	if err := c.ImportRoaring(context.Background(), &cluster[0].API.Node().URI, "i", "f", 0, false, roaringReq); err != nil {
 		t.Fatal(err)
 	}
 
@@ -476,8 +479,9 @@ func TestClient_ImportRoaring(t *testing.T) {
 	}
 
 	// Ensure that sending a roaring import with the clear flag works as expected.
-	roaringDataClear, _ = hex.DecodeString("3B3001000100000900010000000100010009000100") // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537]
-	if err := c.ImportRoaring(context.Background(), &cluster[0].API.Node().URI, "i", "f", 0, false, roaringDataClear, pilosa.OptImportOptionsClear(true)); err != nil {
+	// [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 65537]
+	roaringReq = makeImportRoaringRequest(true, "3B3001000100000900010000000100010009000100")
+	if err := c.ImportRoaring(context.Background(), &cluster[0].API.Node().URI, "i", "f", 0, false, roaringReq); err != nil {
 		t.Fatal(err)
 	}
 
@@ -706,9 +710,9 @@ func TestClient_ImportKeys(t *testing.T) {
 			t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=50, cnt=3", sum, cnt)
 		}
 
-		// Verify Range.
+		// Verify range.
 		queryRequest := &pilosa.QueryRequest{
-			Query:  fmt.Sprintf(`Range(%s>10)`, fldName),
+			Query:  fmt.Sprintf(`Row(%s>10)`, fldName),
 			Remote: false,
 		}
 
@@ -739,7 +743,7 @@ func TestClient_ImportKeys(t *testing.T) {
 
 		// Verify Range.
 		queryRequest = &pilosa.QueryRequest{
-			Query:  fmt.Sprintf(`Range(%s>10)`, fldName),
+			Query:  fmt.Sprintf(`Row(%s>10)`, fldName),
 			Remote: false,
 		}
 
@@ -896,7 +900,7 @@ func TestClient_ImportExistence(t *testing.T) {
 		}
 
 		// Verify existence.
-		if a := hldr.ReadRow(idxName, "exists", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 5, 6}) {
+		if a := hldr.ReadRow(idxName, "_exists", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 5, 6}) {
 			t.Fatalf("unexpected existence columns: %+v", a)
 		}
 	})
@@ -931,7 +935,7 @@ func TestClient_ImportExistence(t *testing.T) {
 		}
 
 		// Verify existence.
-		if a := hldr.ReadRow(idxName, "exists", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 2, 3}) {
+		if a := hldr.ReadRow(idxName, "_exists", 0).Columns(); !reflect.DeepEqual(a, []uint64{1, 2, 3}) {
 			t.Fatalf("unexpected existence columns: %+v", a)
 		}
 	})
@@ -980,4 +984,14 @@ func MustNewClient(host string, h *gohttp.Client) *Client {
 		panic(err)
 	}
 	return &Client{InternalClient: c}
+}
+
+func makeImportRoaringRequest(clear bool, viewData string) *pilosa.ImportRoaringRequest {
+	roaringData, _ := hex.DecodeString(viewData)
+	return &pilosa.ImportRoaringRequest{
+		Clear: clear,
+		Views: map[string][]byte{
+			"": roaringData,
+		},
+	}
 }
