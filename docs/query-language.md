@@ -858,6 +858,7 @@ Rows(blahk)
 {"rows":null,"keys":["haha","zaaa","traa"]}
 ```
 
+#### Group By
 
 **Spec:**
 
