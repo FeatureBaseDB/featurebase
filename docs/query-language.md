@@ -280,7 +280,7 @@ Store(<ROW_CALL>, <FIELD>=<ROW>)
 
 **Description:**
 
-`Store` writes the results of <ROW_CALL> to the specified row. If the row already exists, it will be replaced. The destination field must be of field type `set`.
+`Store` writes the results of `<ROW_CALL>` to the specified row. If the row already exists, it will be replaced. The destination field must be of field type `set`.
 
 **Result Type:** boolean
 
@@ -406,7 +406,7 @@ BSI range queries support the following operators:
  `==`     | equal-to, EQ                  | integer
  `!=`     | not-equal-to, NEQ             | integer or `null`
 
-`<`, and `<=` can be chained together to represent a bounded interval. For example:
+A bounded interval can be specified by chaining the `<` and `<=` operators (but not others). For example:
 
 ```request
 Row(50 < commitactivity < 150)
@@ -786,6 +786,7 @@ Options(<CALL>, columnAttrs=<BOOL>, excludeColumns=<BOOL>, excludeRowAttrs=<BOOL
 **Description:**
 
 Modifies the given query as follows:
+
 * `columnAttrs`: Include column attributes in the result (Default: `false`).
 * `excludeColumns`: Exclude column IDs from the result (Default: `false`).
 * `excludeRowAttrs`: Exclude row attributes from the result (Default: `false`).
@@ -811,10 +812,12 @@ Options(Row(f1=10), shards=[0, 2])
 {"attrs":{},"columns":[100, 2097152]}
 ```
 
+#### Rows
+
 **Spec:**
 
 ```
-Rows(<FIELD>, previous=<UINT|STRING>, limit=<UINT>, column=<UINT|STRING>)
+Rows(<FIELD>, previous=<UINT|STRING>, limit=<UINT>, column=<UINT|STRING>, from=<TIMESTAMP>, to=<TIMESTAMP>)
 ```
 
 **Description:**
@@ -831,6 +834,9 @@ is given, the number of rowIDs returned will be less than or equal to
 result sets. Results are always ordered, so setting `previous` as the last
 result of the previous request will start from the next available row.
 
+If the field is of type `time`, the `from` and `to` arguments can be provided
+to restrict the result to a specific time span. If `from` and `to` are
+not provided, the full range of existing data will be queried.
 
 **Result Type:** Object with `"rows" or "keys" and an array of integers or strings respectively.`
 
@@ -852,6 +858,7 @@ Rows(blahk)
 {"rows":null,"keys":["haha","zaaa","traa"]}
 ```
 
+#### Group By
 
 **Spec:**
 

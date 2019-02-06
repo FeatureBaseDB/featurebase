@@ -544,7 +544,7 @@ curl localhost:10101/index/patients/query \
 {"results":[{"attrs":{},"columns":[2,6,9]}]}
 ```
 
-You can find a list of supported range operators in the [Row (BSI) Query](../query-language/#range-bsi) documentation.
+You can find a list of supported range operators in the [Row (BSI) Query](../query-language/#row-bsi) documentation.
 
 To find the average age of all patients, run a `Sum` query:
 ``` request
