@@ -25,7 +25,7 @@ clean:
 
 # Set up vendor directory using `go mod vendor`
 vendor: go.mod
-	GO111MODULE=off go mod vendor
+	go mod vendor
 
 # Run test suite
 test:
