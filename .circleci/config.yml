@@ -28,9 +28,8 @@ jobs:
     <<: *defaults
     steps:
       - *fast-checkout
-      - run: make install-gometalinter GO111MODULE=off
-      - run: make vendor
-      - run: make gometalinter GO111MODULE=off
+      - run: make install-gometalinter
+      - run: make gometalinter
   test-build-arm:
     <<: *defaults
     steps:

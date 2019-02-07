@@ -24,8 +24,8 @@ clean:
 	rm -rf vendor build
 
 # Set up vendor directory using `go mod vendor`
-vendor:
-	go mod vendor
+vendor: go.mod
+	GO111MODULE=off go mod vendor
 
 # Run test suite
 test:
@@ -126,8 +126,8 @@ docker-test:
 	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) go test -tags='$(BUILD_TAGS)' $(TESTFLAGS) ./...
 
 # Run gometalinter with custom flags
-gometalinter: require-gometalinter
-	gometalinter --vendor --disable-all \
+gometalinter: require-gometalinter vendor
+	GO111MODULE=off gometalinter --vendor --disable-all \
 	    --deadline=300s \
 	    --enable=deadcode \
 	    --enable=gochecknoinits \
@@ -161,18 +161,18 @@ require-%:
 install-build-deps: install-protoc-gen-gofast install-protoc install-stringer install-peg
 
 install-stringer:
-	go get -u golang.org/x/tools/cmd/stringer
+	GO111MODULE=off go get -u golang.org/x/tools/cmd/stringer
 
 install-protoc-gen-gofast:
-	go get -u github.com/gogo/protobuf/protoc-gen-gofast
+	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gofast
 
 install-protoc:
 	@echo This tool cannot automatically install protoc. Please download and install protoc from https://google.github.io/proto-lens/installing-protoc.html
 
 install-peg:
-	go get github.com/pointlander/peg
+	GO111MODULE=off go get github.com/pointlander/peg
 
 install-gometalinter:
-	go get -u github.com/alecthomas/gometalinter
-	gometalinter --install
-	go get github.com/remyoudompheng/go-misc/deadcode
+	GO111MODULE=off go get -u github.com/alecthomas/gometalinter
+	GO111MODULE=off gometalinter --install
+	GO111MODULE=off go get github.com/remyoudompheng/go-misc/deadcode
