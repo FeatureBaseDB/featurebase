@@ -260,7 +260,10 @@ func (cmd *ImportCommand) importBits(ctx context.Context, useColumnKeys, useRowK
 	// If keys are used, all bits are sent to the primary translate store (i.e. coordinator).
 	if useColumnKeys || useRowKeys {
 		logger.Printf("importing keys: n=%d", len(bits))
-		if err := cmd.client.ImportK(ctx, cmd.Index, cmd.Field, bits, pilosa.OptImportOptionsClear(cmd.Clear)); err != nil {
+		if err := cmd.client.Import(ctx, nil, cmd.Index, cmd.Field, 0, bits,
+			pilosa.OptImportOptionsClear(cmd.Clear),
+			pilosa.OptImportOptionsHasKeys("yes"),
+		); err != nil {
 			return errors.Wrap(err, "importing keys")
 		}
 		return nil
@@ -277,7 +280,10 @@ func (cmd *ImportCommand) importBits(ctx context.Context, useColumnKeys, useRowK
 		}
 
 		logger.Printf("importing shard: %d, n=%d", shard, len(chunk))
-		if err := cmd.client.Import(ctx, cmd.Index, cmd.Field, shard, chunk, pilosa.OptImportOptionsClear(cmd.Clear)); err != nil {
+		if err := cmd.client.Import(ctx, nil, cmd.Index, cmd.Field, shard, chunk,
+			pilosa.OptImportOptionsClear(cmd.Clear),
+			pilosa.OptImportOptionsHasKeys("no"),
+		); err != nil {
 			return errors.Wrap(err, "importing")
 		}
 	}
@@ -365,7 +371,8 @@ func (cmd *ImportCommand) importValues(ctx context.Context, useColumnKeys bool, 
 	// If keys are used, all values are sent to the primary translate store (i.e. coordinator).
 	if useColumnKeys {
 		logger.Printf("importing keyed values: n=%d", len(vals))
-		if err := cmd.client.ImportValueK(ctx, cmd.Index, cmd.Field, vals); err != nil {
+		if err := cmd.client.ImportValue(ctx, nil, cmd.Index, cmd.Field, 0, vals,
+			pilosa.OptImportOptionsClear(cmd.Clear), pilosa.OptImportOptionsHasKeys("yes")); err != nil {
 			return errors.Wrap(err, "importing keys")
 		}
 		return nil
@@ -382,7 +389,7 @@ func (cmd *ImportCommand) importValues(ctx context.Context, useColumnKeys bool, 
 		}
 
 		logger.Printf("importing shard: %d, n=%d", shard, len(vals))
-		if err := cmd.client.ImportValue(ctx, cmd.Index, cmd.Field, shard, vals, pilosa.OptImportOptionsClear(cmd.Clear)); err != nil {
+		if err := cmd.client.ImportValue(ctx, nil, cmd.Index, cmd.Field, shard, vals, pilosa.OptImportOptionsClear(cmd.Clear)); err != nil {
 			return errors.Wrap(err, "importing values")
 		}
 	}

@@ -347,7 +347,7 @@ func TestClient_Import(t *testing.T) {
 
 	// Send import request.
 	c := MustNewClient(host, http.GetHTTPClient(nil))
-	if err := c.Import(context.Background(), "i", "f", 0, []pilosa.Bit{
+	if err := c.Import(context.Background(), nil, "i", "f", 0, []pilosa.Bit{
 		{RowID: 0, ColumnID: 1},
 		{RowID: 0, ColumnID: 5},
 		{RowID: 200, ColumnID: 6},
@@ -364,7 +364,7 @@ func TestClient_Import(t *testing.T) {
 	}
 
 	// Clear some data.
-	if err := c.Import(context.Background(), "i", "f", 0, []pilosa.Bit{
+	if err := c.Import(context.Background(), nil, "i", "f", 0, []pilosa.Bit{
 		{RowID: 0, ColumnID: 5},
 		{RowID: 200, ColumnID: 6},
 	}, pilosa.OptImportOptionsClear(true)); err != nil {
@@ -519,7 +519,7 @@ func TestClient_ImportKeys(t *testing.T) {
 		c := MustNewClient(host, http.GetHTTPClient(nil))
 
 		t.Run("Import keyed,keyed", func(t *testing.T) {
-			if err := c.Import(context.Background(), "keyed", "keyedf", 0, []pilosa.Bit{
+			if err := c.Import(context.Background(), nil, "keyed", "keyedf", 0, []pilosa.Bit{
 				{RowKey: "green", ColumnKey: "eve"},
 				{RowKey: "green", ColumnKey: "alice"},
 				{RowKey: "green", ColumnKey: "bob"},
@@ -546,7 +546,7 @@ func TestClient_ImportKeys(t *testing.T) {
 		})
 
 		t.Run("Import keyed,unkeyedf", func(t *testing.T) {
-			if err := c.Import(context.Background(), "keyed", "unkeyedf", 0, []pilosa.Bit{
+			if err := c.Import(context.Background(), nil, "keyed", "unkeyedf", 0, []pilosa.Bit{
 				{RowID: 1, ColumnKey: "eve"},
 				{RowID: 1, ColumnKey: "alice"},
 				{RowID: 1, ColumnKey: "bob"},
@@ -573,7 +573,7 @@ func TestClient_ImportKeys(t *testing.T) {
 		})
 
 		t.Run("Import unkeyed,keyed", func(t *testing.T) {
-			if err := c.Import(context.Background(), "unkeyed", "keyedf", 0, []pilosa.Bit{
+			if err := c.Import(context.Background(), nil, "unkeyed", "keyedf", 0, []pilosa.Bit{
 				{RowKey: "green", ColumnID: 1},
 				{RowKey: "green", ColumnID: 2},
 				{RowKey: "green", ColumnID: 3},
@@ -617,7 +617,7 @@ func TestClient_ImportKeys(t *testing.T) {
 
 		// Import to node0.
 		t.Run("Import node0", func(t *testing.T) {
-			if err := c0.ImportK(context.Background(), "keyed", "keyedf0", []pilosa.Bit{
+			if err := c0.Import(context.Background(), nil, "keyed", "keyedf0", 0, []pilosa.Bit{
 				{RowKey: "green", ColumnKey: "eve"},
 				{RowKey: "green", ColumnKey: "alice"},
 				{RowKey: "green", ColumnKey: "bob"},
@@ -645,7 +645,7 @@ func TestClient_ImportKeys(t *testing.T) {
 
 		// Import to node1 (ensure import is routed to coordinator for translation).
 		t.Run("Import node1", func(t *testing.T) {
-			if err := c1.ImportK(context.Background(), "keyed", "keyedf1", []pilosa.Bit{
+			if err := c1.Import(context.Background(), nil, "keyed", "keyedf1", 0, []pilosa.Bit{
 				{RowKey: "green", ColumnKey: "eve"},
 				{RowKey: "green", ColumnKey: "alice"},
 				{RowKey: "green", ColumnKey: "bob"},
@@ -693,7 +693,7 @@ func TestClient_ImportKeys(t *testing.T) {
 
 		// Send import request.
 		c := MustNewClient(host, http.GetHTTPClient(nil))
-		if err := c.ImportValue(context.Background(), "i", "f", 0, []pilosa.FieldValue{
+		if err := c.ImportValue(context.Background(), nil, "i", "f", 0, []pilosa.FieldValue{
 			{ColumnKey: "col1", Value: -10},
 			{ColumnKey: "col2", Value: 20},
 			{ColumnKey: "col3", Value: 40},
@@ -726,7 +726,7 @@ func TestClient_ImportKeys(t *testing.T) {
 		}
 
 		// Clear data.
-		if err := c.ImportValue(context.Background(), "i", "f", 0, []pilosa.FieldValue{
+		if err := c.ImportValue(context.Background(), nil, "i", "f", 0, []pilosa.FieldValue{
 			{ColumnKey: "col2", Value: 20},
 		}, pilosa.OptImportOptionsClear(true)); err != nil {
 			t.Fatal(err)
@@ -776,7 +776,7 @@ func TestClient_ImportValue(t *testing.T) {
 
 	// Send import request.
 	c := MustNewClient(host, http.GetHTTPClient(nil))
-	if err := c.ImportValue(context.Background(), "i", "f", 0, []pilosa.FieldValue{
+	if err := c.ImportValue(context.Background(), nil, "i", "f", 0, []pilosa.FieldValue{
 		{ColumnID: 1, Value: -10},
 		{ColumnID: 2, Value: 20},
 		{ColumnID: 3, Value: 40},
@@ -825,7 +825,7 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Send import request.
-	if err := c.ImportValue(context.Background(), "i", "f", 0, []pilosa.FieldValue{
+	if err := c.ImportValue(context.Background(), nil, "i", "f", 0, []pilosa.FieldValue{
 		{ColumnID: 1, Value: -10},
 		{ColumnID: 3, Value: 40},
 	}, pilosa.OptImportOptionsClear(true)); err != nil {
@@ -883,7 +883,7 @@ func TestClient_ImportExistence(t *testing.T) {
 
 		// Send import request.
 		c := MustNewClient(host, http.GetHTTPClient(nil))
-		if err := c.Import(context.Background(), idxName, fldName, 0, []pilosa.Bit{
+		if err := c.Import(context.Background(), nil, idxName, fldName, 0, []pilosa.Bit{
 			{RowID: 0, ColumnID: 1},
 			{RowID: 0, ColumnID: 5},
 			{RowID: 200, ColumnID: 6},
@@ -917,7 +917,7 @@ func TestClient_ImportExistence(t *testing.T) {
 
 		// Send import request.
 		c := MustNewClient(host, http.GetHTTPClient(nil))
-		if err := c.ImportValue(context.Background(), idxName, fldName, 0, []pilosa.FieldValue{
+		if err := c.ImportValue(context.Background(), nil, idxName, fldName, 0, []pilosa.FieldValue{
 			{ColumnID: 1, Value: -10},
 			{ColumnID: 2, Value: 20},
 			{ColumnID: 3, Value: 40},

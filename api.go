@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -779,9 +778,21 @@ func (api *API) FieldAttrDiff(ctx context.Context, indexName string, fieldName s
 }
 
 // ImportOptions holds the options for the API.Import method.
+//   Clear:   When true, Treats the import as a Clear operation.
+//
+//   HasKeys: Can be used to indicate that the payload has keys
+//            which need to be translated. This can prevent the
+//            need to unmarshal the payload in order to look for
+//            keys. Valid values are: "", "yes", "no". This
+//            defaults to "", which will unmarshal the payload
+//            in order to determine if keys exists.
+//
+//   Remote:  When true, applies the import locally and does not
+//            forward.
 type ImportOptions struct {
-	Clear          bool
-	IgnoreKeyCheck bool
+	Clear   bool
+	HasKeys string
+	Remote  bool
 }
 
 // ImportOption is a functional option type for API.Import.
@@ -794,9 +805,16 @@ func OptImportOptionsClear(c bool) ImportOption {
 	}
 }
 
-func OptImportOptionsIgnoreKeyCheck(b bool) ImportOption {
+func OptImportOptionsHasKeys(k string) ImportOption {
 	return func(o *ImportOptions) error {
-		o.IgnoreKeyCheck = b
+		o.HasKeys = k
+		return nil
+	}
+}
+
+func OptImportOptionsRemote(r bool) ImportOption {
+	return func(o *ImportOptions) error {
+		o.Remote = r
 		return nil
 	}
 }
@@ -821,92 +839,224 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 		return errors.Wrap(err, "getting index and field")
 	}
 
-	// Unless explicitly ignoring key validation (meaning keys have been
-	// translated to ids in a previous step at the coordinator node), then
-	// check to see if keys need translation.
-	if !options.IgnoreKeyCheck {
-		// Translate row keys.
-		if field.keys() {
-			if len(req.RowIDs) != 0 {
-				return errors.New("row ids cannot be used because field uses string keys")
+	/*
+		The following describes how to handle each combination of import
+		options and arguments:
+
+		|--------+-----------+---------|--------------------------
+		| Remote | req.Shard | HasKeys | action
+		|--------+-----------+---------|--------------------------
+		| false  | 0-n       |         | determine hasKeys
+		| false  | 0-n       | yes     | forward to coordinator
+		| false  | 0-n       | no      | write local & replicas
+		| true   | 0-n       |         | write local
+		| true   | 0-n       | yes     | ERROR? - just write local
+		| true   | 0-n       | no      | write local
+		|--------+-----------+---------|--------------------------
+	*/
+
+	// Determine if key translation is required.
+	// If remote=true, any translation should have
+	// already occurred.
+	var translationRequired bool
+	if !options.Remote && (index.Keys() || field.keys()) {
+		switch options.HasKeys {
+		case "":
+			if len(req.RowKeys) != 0 || len(req.ColumnKeys) != 0 {
+				translationRequired = true
 			}
-			if req.RowIDs, err = api.holder.translateFile.TranslateRowsToUint64(index.Name(), field.Name(), req.RowKeys); err != nil {
-				return errors.Wrap(err, "translating rows")
+		case "yes":
+			translationRequired = true
+		case "no":
+			// keys have been translated to ids in a previous step at the
+			// coordinator node
+			translationRequired = false
+		}
+	}
+
+	if translationRequired {
+		return api.translateAndForward(ctx, req, index, field, opts...)
+	}
+
+	// Get all nodes responsible for shard.
+	nodes := api.cluster.shardNodes(req.Index, req.Shard)
+	var eg errgroup.Group
+
+	// Pre-build `bits` for use in forwarding.
+	preBuildBits := true
+	if options.Remote {
+		preBuildBits = false
+	} else if len(nodes) == 0 {
+		preBuildBits = false
+	} else if len(nodes) == 1 && nodes[0].ID == api.server.nodeID {
+		preBuildBits = false
+	}
+	var bits []Bit
+	if preBuildBits {
+		bits = make([]Bit, len(req.ColumnIDs))
+		for i := 0; i < len(req.ColumnIDs); i++ {
+			bits[i] = Bit{
+				RowID:     req.RowIDs[i],
+				ColumnID:  req.ColumnIDs[i],
+				Timestamp: req.Timestamps[i],
 			}
 		}
+	}
 
-		// Translate column keys.
-		if index.Keys() {
-			if len(req.ColumnIDs) != 0 {
-				return errors.New("column ids cannot be used because index uses string keys")
-			}
-			if req.ColumnIDs, err = api.holder.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
-				return errors.Wrap(err, "translating columns")
-			}
-		}
+	for _, node := range nodes {
+		node := node
+		if node.ID == api.server.nodeID {
+			eg.Go(func() error {
+				var err error
 
-		// For translated data, map the columnIDs to shards. If
-		// this node does not own the shard, forward to the node that does.
-		if index.Keys() || field.keys() {
-			m := make(map[uint64][]Bit)
-
-			for i, colID := range req.ColumnIDs {
-				shard := colID / ShardWidth
-				if _, ok := m[shard]; !ok {
-					m[shard] = make([]Bit, 0)
+				// Convert timestamps to time.Time.
+				timestamps := make([]*time.Time, len(req.Timestamps))
+				for i, ts := range req.Timestamps {
+					if ts == 0 {
+						continue
+					}
+					t := time.Unix(0, ts).UTC()
+					timestamps[i] = &t
 				}
-				m[shard] = append(m[shard], Bit{
-					RowID:     req.RowIDs[i],
-					ColumnID:  colID,
-					Timestamp: req.Timestamps[i],
-				})
-			}
 
-			// Signal to the receiving nodes to ignore checking for key translation.
-			opts = append(opts, OptImportOptionsIgnoreKeyCheck(true))
+				// Import columnIDs into existence field.
+				if !options.Clear {
+					if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
+						api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+						return errors.Wrap(err, "importing existence columns")
+					}
+				}
 
-			var eg errgroup.Group
-			for shard, bits := range m {
-				// TODO: if local node owns this shard we don't need to go through the client
-				shard := shard
-				bits := bits
-				eg.Go(func() error {
-					return api.server.defaultClient.Import(ctx, req.Index, req.Field, shard, bits, opts...)
-				})
-			}
-			return eg.Wait()
+				// Import into fragment.
+				err = field.Import(req.RowIDs, req.ColumnIDs, timestamps, opts...)
+				if err != nil {
+					api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+				}
+				return errors.Wrap(err, "importing")
+			})
+		} else if !options.Remote { // if options.Remote == true we don't forward to other nodes
+			opts = append(opts, OptImportOptionsRemote(true))
+			eg.Go(func() error {
+				return api.server.defaultClient.Import(ctx, node, req.Index, req.Field, req.Shard, bits, opts...)
+			})
+		}
+	}
+	return eg.Wait()
+}
+
+func reqToBits(req *ImportRequest) []Bit {
+	var maxLen int
+
+	if len(req.ColumnIDs) > 0 {
+		maxLen = len(req.ColumnIDs)
+	} else {
+		maxLen = len(req.ColumnKeys)
+	}
+
+	bits := make([]Bit, maxLen)
+	for i := 0; i < maxLen; i++ {
+		b := Bit{}
+		if len(req.RowIDs) > i {
+			b.RowID = req.RowIDs[i]
+		} else {
+			b.RowKey = req.RowKeys[i]
+		}
+		if len(req.ColumnIDs) > i {
+			b.ColumnID = req.ColumnIDs[i]
+		} else {
+			b.ColumnKey = req.ColumnKeys[i]
+		}
+		bits[i] = b
+	}
+	return bits
+}
+
+func reqToVals(req *ImportValueRequest) []FieldValue {
+	var maxLen int
+
+	if len(req.ColumnIDs) > 0 {
+		maxLen = len(req.ColumnIDs)
+	} else {
+		maxLen = len(req.ColumnKeys)
+	}
+
+	vals := make([]FieldValue, maxLen)
+	for i := 0; i < maxLen; i++ {
+		v := FieldValue{}
+		if len(req.ColumnIDs) > i {
+			v.ColumnID = req.ColumnIDs[i]
+		} else {
+			v.ColumnKey = req.ColumnKeys[i]
+		}
+		v.Value = req.Values[i]
+		vals[i] = v
+	}
+	return vals
+}
+
+// translateAndForward handles an import request that was determined
+// to require key translation. If this node can't handle the translation,
+// (i.e. if it's not the coordinator), it will forward the request to the
+// coordinator. Otherwise, it will perform the translation, map the request
+// to shards, and forward the request to all nodes responsible for the shard.
+func (api *API) translateAndForward(ctx context.Context, req *ImportRequest, index *Index, field *Field, opts ...ImportOption) error {
+	var err error
+
+	// If this node is not the coordinator then forward the request
+	// to the coordinator.
+	if !api.Node().IsCoordinator {
+		return api.server.defaultClient.Import(ctx, api.cluster.coordinatorNode(), req.Index, req.Field, req.Shard, reqToBits(req), opts...)
+	}
+
+	// Translate row keys.
+	if field.keys() {
+		if len(req.RowIDs) != 0 {
+			return errors.New("row ids cannot be used because field uses string keys")
+		}
+		if req.RowIDs, err = api.holder.translateFile.TranslateRowsToUint64(index.Name(), field.Name(), req.RowKeys); err != nil {
+			return errors.Wrap(err, "translating rows")
 		}
 	}
 
-	// Validate shard ownership.
-	if err := api.validateShardOwnership(req.Index, req.Shard); err != nil {
-		return errors.Wrap(err, "validating shard ownership")
-	}
-
-	// Convert timestamps to time.Time.
-	timestamps := make([]*time.Time, len(req.Timestamps))
-	for i, ts := range req.Timestamps {
-		if ts == 0 {
-			continue
+	// Translate column keys.
+	if index.Keys() {
+		if len(req.ColumnIDs) != 0 {
+			return errors.New("column ids cannot be used because index uses string keys")
 		}
-		t := time.Unix(0, ts).UTC()
-		timestamps[i] = &t
-	}
-
-	// Import columnIDs into existence field.
-	if !options.Clear {
-		if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
-			api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
-			return errors.Wrap(err, "importing existence columns")
+		if req.ColumnIDs, err = api.holder.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
+			return errors.Wrap(err, "translating columns")
 		}
 	}
 
-	// Import into fragment.
-	err = field.Import(req.RowIDs, req.ColumnIDs, timestamps, opts...)
-	if err != nil {
-		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+	// For translated data, map the columnIDs to shards. If
+	// this node does not own the shard, forward to the node that does.
+	m := make(map[uint64][]Bit)
+
+	for i, colID := range req.ColumnIDs {
+		shard := colID / ShardWidth
+		if _, ok := m[shard]; !ok {
+			m[shard] = make([]Bit, 0)
+		}
+		m[shard] = append(m[shard], Bit{
+			RowID:     req.RowIDs[i],
+			ColumnID:  colID,
+			Timestamp: req.Timestamps[i],
+		})
 	}
-	return errors.Wrap(err, "importing")
+
+	// Signal to the receiving nodes to ignore checking for key translation.
+	opts = append(opts, OptImportOptionsRemote(true))
+	opts = append(opts, OptImportOptionsHasKeys("no"))
+
+	var eg errgroup.Group
+	for shard, bits := range m {
+		shard := shard
+		bits := bits
+		eg.Go(func() error {
+			return api.server.defaultClient.Import(ctx, nil, req.Index, req.Field, shard, bits, opts...)
+		})
+	}
+	return eg.Wait()
 }
 
 // ImportValue bulk imports values into a particular field.
@@ -929,69 +1079,138 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 		return errors.Wrap(err, "getting index and field")
 	}
 
-	// Unless explicitly ignoring key validation (meaning keys have been
-	// translate to ids in a previous step at the coordinator node), then
-	// check to see if keys need translation.
-	if !options.IgnoreKeyCheck {
-		// Translate column keys.
-		if index.Keys() {
-			if len(req.ColumnIDs) != 0 {
-				return errors.New("column ids cannot be used because index uses string keys")
+	// Determine if key translation is required.
+	// If remote=true, any translation should have
+	// already occurred.
+	var translationRequired bool
+	if !options.Remote && index.Keys() {
+		switch options.HasKeys {
+		case "":
+			if len(req.ColumnKeys) != 0 {
+				translationRequired = true
 			}
-			if req.ColumnIDs, err = api.holder.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
-				return errors.Wrap(err, "translating columns")
+		case "yes":
+			translationRequired = true
+		case "no":
+			// keys have been translated to ids in a previous step at the
+			// coordinator node
+			translationRequired = false
+		}
+	}
+
+	if translationRequired {
+		return api.translateAndForwardValue(ctx, req, index, field, opts...)
+	}
+
+	///////////////////////////////////////////////////////////////////////
+
+	// Get all nodes responsible for shard.
+	nodes := api.cluster.shardNodes(req.Index, req.Shard)
+	var eg errgroup.Group
+
+	// Pre-build `vals` for use in forwarding.
+	preBuildVals := true
+	if options.Remote {
+		preBuildVals = false
+	} else if len(nodes) == 0 {
+		preBuildVals = false
+	} else if len(nodes) == 1 && nodes[0].ID == api.server.nodeID {
+		preBuildVals = false
+	}
+	var vals []FieldValue
+	if preBuildVals {
+		vals = make([]FieldValue, len(req.ColumnIDs))
+		for i := 0; i < len(req.ColumnIDs); i++ {
+			vals[i] = FieldValue{
+				Value:    req.Values[i],
+				ColumnID: req.ColumnIDs[i],
 			}
+		}
+	}
 
-			// For translated data, map the columnIDs to shards. If
-			// this node does not own the shard, forward to the node that does.
-			m := make(map[uint64][]FieldValue)
+	for _, node := range nodes {
+		node := node
+		if node.ID == api.server.nodeID {
+			eg.Go(func() error {
+				var err error
 
-			for i, colID := range req.ColumnIDs {
-				shard := colID / ShardWidth
-				if _, ok := m[shard]; !ok {
-					m[shard] = make([]FieldValue, 0)
+				// Import columnIDs into existence field.
+				if !options.Clear {
+					if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
+						api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+						return errors.Wrap(err, "importing existence columns")
+					}
 				}
-				m[shard] = append(m[shard], FieldValue{
-					Value:    req.Values[i],
-					ColumnID: colID,
-				})
-			}
 
-			// Signal to the receiving nodes to ignore checking for key translation.
-			opts = append(opts, OptImportOptionsIgnoreKeyCheck(true))
+				// Import into fragment.
+				err = field.importValue(req.ColumnIDs, req.Values, options)
+				if err != nil {
+					api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+				}
+				return errors.Wrap(err, "importing values")
+			})
+		} else if !options.Remote { // if options.Remote == true we don't forward to other nodes
+			opts = append(opts, OptImportOptionsRemote(true))
+			eg.Go(func() error {
+				return api.server.defaultClient.ImportValue(ctx, node, req.Index, req.Field, req.Shard, vals, opts...)
+			})
+		}
+	}
+	return eg.Wait()
+}
 
-			var eg errgroup.Group
-			for shard, vals := range m {
-				// TODO: if local node owns this shard we don't need to go through the client
-				shard := shard
-				vals := vals
-				eg.Go(func() error {
-					return api.server.defaultClient.ImportValue(ctx, req.Index, req.Field, shard, vals, opts...)
-				})
-			}
-			return eg.Wait()
+// translateAndForwardValue handles an import request that was determined
+// to require key translation. If this node can't handle the translation,
+// (i.e. if it's not the coordinator), it will forward the request to the
+// coordinator. Otherwise, it will perform the translation, map the request
+// to shards, and forward the request to all nodes responsible for the shard.
+func (api *API) translateAndForwardValue(ctx context.Context, req *ImportValueRequest, index *Index, field *Field, opts ...ImportOption) error {
+	var err error
+
+	// If this node is not the coordinator then forward the request
+	// to the coordinator.
+	if !api.Node().IsCoordinator {
+		return api.server.defaultClient.ImportValue(ctx, api.cluster.coordinatorNode(), req.Index, req.Field, req.Shard, reqToVals(req), opts...)
+	}
+
+	// Translate column keys.
+	if index.Keys() {
+		if len(req.ColumnIDs) != 0 {
+			return errors.New("column ids cannot be used because index uses string keys")
+		}
+		if req.ColumnIDs, err = api.holder.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
+			return errors.Wrap(err, "translating columns")
 		}
 	}
 
-	// Validate shard ownership.
-	if err := api.validateShardOwnership(req.Index, req.Shard); err != nil {
-		return errors.Wrap(err, "validating shard ownership")
-	}
+	// For translated data, map the columnIDs to shards. If
+	// this node does not own the shard, forward to the node that does.
+	m := make(map[uint64][]FieldValue)
 
-	// Import columnIDs into existence field.
-	if !options.Clear {
-		if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
-			api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
-			return errors.Wrap(err, "importing existence columns")
+	for i, colID := range req.ColumnIDs {
+		shard := colID / ShardWidth
+		if _, ok := m[shard]; !ok {
+			m[shard] = make([]FieldValue, 0)
 		}
+		m[shard] = append(m[shard], FieldValue{
+			Value:    req.Values[i],
+			ColumnID: colID,
+		})
 	}
 
-	// Import into fragment.
-	err = field.importValue(req.ColumnIDs, req.Values, options)
-	if err != nil {
-		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+	// Signal to the receiving nodes to ignore checking for key translation.
+	opts = append(opts, OptImportOptionsRemote(true))
+	opts = append(opts, OptImportOptionsHasKeys("no"))
+
+	var eg errgroup.Group
+	for shard, vals := range m {
+		shard := shard
+		vals := vals
+		eg.Go(func() error {
+			return api.server.defaultClient.ImportValue(ctx, nil, req.Index, req.Field, shard, vals, opts...)
+		})
 	}
-	return errors.Wrap(err, "importing")
+	return eg.Wait()
 }
 
 func importExistenceColumns(index *Index, columnIDs []uint64) error {
@@ -1041,15 +1260,6 @@ func (api *API) LongQueryTime() time.Duration {
 		return 0
 	}
 	return api.cluster.longQueryTime
-}
-
-func (api *API) validateShardOwnership(indexName string, shard uint64) error {
-	// Validate that this handler owns the shard.
-	if !api.cluster.ownsShard(api.Node().ID, indexName, shard) {
-		api.server.logger.Printf("node %s does not own shard %d of index %s", api.Node().ID, shard, indexName)
-		return ErrClusterDoesNotOwnShard
-	}
-	return nil
 }
 
 func (api *API) indexField(indexName string, fieldName string, shard uint64) (*Index, *Field, error) {
@@ -1173,58 +1383,40 @@ func (api *API) Info() serverInfo {
 	}
 }
 
-// EnsureOperatingNode determine if the current node is the destination for execution if not forward on to correct node
-func (api *API) EnsureOperatingNode(indexName string, w http.ResponseWriter, r *http.Request) bool {
-
-	values := r.URL.Query()
-
-	if _, keyImport := values["keyImport"]; keyImport {
-		// if not coordinator..forward on
-		if !api.Node().IsCoordinator {
-			api.forwardTo(w, r, api.getCoordinator())
-			return true
+// ForwardImportRequest forwards the request to all replicas that own the shard.
+// Note that it does not forward the request to itself; it is assumed that
+// if the local node needs to handle the request, it will have done that
+// elsewhere. If hasKeys is true, the request will instead be forwarded to
+// the coordinator for translation (again, only if this node is not the
+// coordinator, in which case it is assumed the request is handled elsewhere).
+func (api *API) ForwardImportRequest(indexName string, shard uint64, hasKeys bool, req interface{}) error {
+	// Forward to coordinator.
+	if hasKeys {
+		// Don't forward to self.
+		if api.Node().IsCoordinator {
+			return nil
 		}
-		return false
+		return api.server.defaultClient.Forward(req, api.cluster.coordinatorNode())
 	}
 
-	if shardS, hasShard := values["shard"]; hasShard {
-		shard, err := strconv.ParseUint(shardS[0], 10, 64)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return true
-		}
-		if forwardNode, ownsShard := api.ownsShard(indexName, shard); !ownsShard {
-			api.forwardTo(w, r, forwardNode)
-			return true
+	// Forward to replicas.
+	var eg errgroup.Group
+
+	replicas := api.cluster.shardNodes(indexName, shard)
+	for _, replica := range replicas {
+		replica := replica
+
+		// Don't forward to self.
+		if replica.ID == api.Node().ID {
+			continue
 		}
 
+		eg.Go(func() error {
+			return api.server.defaultClient.Forward(req, replica)
+		})
 	}
-	return false
-}
 
-func (api *API) ownsShard(indexName string, shard uint64) (node *Node, owner bool) {
-	nodes := api.cluster.shardNodes(indexName, shard)
-	for i := range nodes {
-		if nodes[i].ID == api.Node().ID {
-			owner = true
-			return
-		}
-		node = nodes[i]
-	}
-	return
-}
-
-func (api *API) forwardTo(w http.ResponseWriter, r *http.Request, node *Node) {
-	api.server.defaultClient.Forward(r.Context(), w, r, node.URI.Scheme, node.URI.HostPort())
-}
-
-func (api *API) getCoordinator() *Node {
-	for _, node := range api.cluster.nodes {
-		if node.IsCoordinator {
-			return node
-		}
-	}
-	return nil
+	return eg.Wait()
 }
 
 func (api *API) TranslateKeys(body io.Reader) ([]byte, error) {

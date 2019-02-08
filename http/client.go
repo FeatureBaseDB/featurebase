@@ -288,8 +288,20 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index s
 	return qresp, nil
 }
 
-// Import bulk imports bits for a single shard to a host.
-func (c *InternalClient) Import(ctx context.Context, index, field string, shard uint64, bits []pilosa.Bit, opts ...pilosa.ImportOption) error {
+// Import bulk imports bits for a single node or multiple
+// nodes based on the `node` and `shard` arguments.
+// There is a known risk with this function; if it is called
+// with the following arguments when key translation is
+// required:
+// - node = nil
+// - shard = 0 (or any other value, really)
+// - hasKeys = <anything other than "yes">
+// then the import will be broadcast to all nodes that own
+// shard 0. Unlike pilosa.api.Import() which will inspect
+// the payload to determine if keys are present, this method
+// does not do that. In other words, if the payload has keys,
+// it is required that the `hasKeys` option be set to "yes".
+func (c *InternalClient) Import(ctx context.Context, node *pilosa.Node, index, field string, shard uint64, bits []pilosa.Bit, opts ...pilosa.ImportOption) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Import")
 	defer span.Finish()
 
@@ -313,6 +325,27 @@ func (c *InternalClient) Import(ctx context.Context, index, field string, shard 
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
 
+	// NOTE: everything from here down is the same in ImportValue().
+
+	// If node is specified, import only to that node.
+	// If HasKeys, send to the coordinator.
+	// Otherwise, import to all nodes.
+	if node != nil {
+		return c.importNode(ctx, node, index, field, buf, options)
+	} else if options.HasKeys == "yes" {
+		// Get the coordinator node; all bits are sent to the
+		// primary translate store (i.e. coordinator).
+		nodes, err := c.Nodes(ctx)
+		if err != nil {
+			return fmt.Errorf("getting nodes: %s", err)
+		}
+		coord := getCoordinatorNode(nodes)
+		if coord == nil {
+			return fmt.Errorf("could not find the coordinator node")
+		}
+		return c.importNode(ctx, coord, index, field, buf, options)
+	}
+
 	// Retrieve a list of nodes that own the shard.
 	nodes, err := c.FragmentNodes(ctx, index, shard)
 	if err != nil {
@@ -320,9 +353,9 @@ func (c *InternalClient) Import(ctx context.Context, index, field string, shard 
 	}
 
 	// Import to each node.
-	for _, node := range nodes {
-		if err := c.importNode(ctx, node, index, field, buf, options); err != nil {
-			return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
+	for _, n := range nodes {
+		if err := c.importNode(ctx, n, index, field, buf, options); err != nil {
+			return fmt.Errorf("import node: host=%s, err=%s", n.URI, err)
 		}
 	}
 
@@ -335,50 +368,6 @@ func getCoordinatorNode(nodes []*pilosa.Node) *pilosa.Node {
 			return node
 		}
 	}
-	return nil
-}
-
-// ImportK bulk imports bits specified by string keys to a host.
-func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits []pilosa.Bit, opts ...pilosa.ImportOption) error {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportK")
-	defer span.Finish()
-
-	if index == "" {
-		return pilosa.ErrIndexRequired
-	} else if field == "" {
-		return pilosa.ErrFieldRequired
-	}
-
-	// Set up import options.
-	options := &pilosa.ImportOptions{}
-	for _, opt := range opts {
-		err := opt(options)
-		if err != nil {
-			return errors.Wrap(err, "applying option")
-		}
-	}
-
-	buf, err := c.marshalImportPayload(index, field, 0, bits)
-	if err != nil {
-		return fmt.Errorf("Error Creating Payload: %s", err)
-	}
-
-	// Get the coordinator node; all bits are sent to the
-	// primary translate store (i.e. coordinator).
-	nodes, err := c.Nodes(ctx)
-	if err != nil {
-		return fmt.Errorf("getting nodes: %s", err)
-	}
-	coord := getCoordinatorNode(nodes)
-	if coord == nil {
-		return fmt.Errorf("could not find the coordinator node")
-	}
-
-	// Import to node.
-	if err := c.importNode(ctx, coord, index, field, buf, options); err != nil {
-		return fmt.Errorf("import node: host=%s, err=%s", coord.URI, err)
-	}
-
 	return nil
 }
 
@@ -435,42 +424,55 @@ func (c *InternalClient) marshalImportPayload(index, field string, shard uint64,
 	return buf, nil
 }
 
+// requestResponse is just a wrapper around an http Request
+// and ResponseWriter to pass through api as a generic
+// interface{} implementation.
+type requestResponse struct {
+	req    *http.Request
+	w      http.ResponseWriter
+	remote bool
+}
+
 // Forward the request to the new host in request
-func (c *InternalClient) Forward(ctx context.Context, w http.ResponseWriter, req *http.Request, scheme, host string) error {
+func (c *InternalClient) Forward(req interface{}, node *pilosa.Node) error {
+	rr := req.(*requestResponse)
 
-	body, err := ioutil.ReadAll(req.Body) // it appears I must consume the
+	body, err := ioutil.ReadAll(rr.req.Body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(rr.w, err.Error(), http.StatusInternalServerError)
 		return nil
 	}
 
-	req.Body = ioutil.NopCloser(bytes.NewReader(body))
-	url := fmt.Sprintf("%s://%s%s", scheme, host, req.RequestURI)
+	rr.req.Body = ioutil.NopCloser(bytes.NewReader(body))
 
-	forReq, err := http.NewRequest(req.Method, url, bytes.NewReader(body))
+	// Create the destination url with remote=true.
+	url := rr.req.URL
+	url.Scheme = node.URI.Scheme
+	url.Host = node.URI.HostPort()
+	q := rr.req.URL.Query()
+	q.Set("remote", strconv.FormatBool(rr.remote))
+	url.RawQuery = q.Encode()
+
+	fwdReq, err := http.NewRequest(rr.req.Method, url.String(), bytes.NewReader(body))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return nil
+		return errors.Wrap(err, "generating new forward request")
 	}
 
-	forReq.Header = make(http.Header)
-	for h, val := range req.Header {
-		forReq.Header[h] = val
+	fwdReq.Header = make(http.Header)
+	for h, val := range rr.req.Header {
+		fwdReq.Header[h] = val
 	}
 
-	resp, err := c.httpClient.Do(forReq.WithContext(ctx))
+	resp, err := c.httpClient.Do(fwdReq.WithContext(rr.req.Context()))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return nil
+		return errors.Wrap(err, "executing forward request")
+	} else if resp.StatusCode != http.StatusOK {
+		return errors.Wrapf(err, "forward request failed: %v", resp.StatusCode)
 	}
-	if resp.StatusCode != http.StatusOK {
-		http.Error(w, "Forward Failed", resp.StatusCode)
-		return nil
-	}
+
 	defer resp.Body.Close()
-	_, err = io.Copy(w, resp.Body)
+	_, err = io.Copy(rr.w, resp.Body)
 	return err
-
 }
 
 // importNode sends a pre-marshaled import request to a node.
@@ -483,12 +485,10 @@ func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, inde
 	u := nodePathToURL(node, path)
 
 	vals := url.Values{}
-	if opts.Clear {
-		vals.Set("clear", "true")
-	}
-	if opts.IgnoreKeyCheck {
-		vals.Set("ignoreKeyCheck", "true")
-	}
+	vals.Set("hasKeys", opts.HasKeys)
+	vals.Set("clear", strconv.FormatBool(opts.Clear))
+	vals.Set("remote", strconv.FormatBool(opts.Remote))
+
 	url := fmt.Sprintf("%s?%s", u.String(), vals.Encode())
 
 	req, err := http.NewRequest("POST", url, bytes.NewReader(buf))
@@ -524,7 +524,7 @@ func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, inde
 }
 
 // ImportValue bulk imports field values for a single shard to a host.
-func (c *InternalClient) ImportValue(ctx context.Context, index, field string, shard uint64, vals []pilosa.FieldValue, opts ...pilosa.ImportOption) error {
+func (c *InternalClient) ImportValue(ctx context.Context, node *pilosa.Node, index, field string, shard uint64, vals []pilosa.FieldValue, opts ...pilosa.ImportOption) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportValue")
 	defer span.Finish()
 
@@ -548,6 +548,27 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 		return fmt.Errorf("Error Creating Payload: %s", err)
 	}
 
+	// NOTE: everything from here down is the same in Import().
+
+	// If node is specified, import only to that node.
+	// If HasKeys, send to the coordinator.
+	// Otherwise, import to all nodes.
+	if node != nil {
+		return c.importNode(ctx, node, index, field, buf, options)
+	} else if options.HasKeys == "yes" {
+		// Get the coordinator node; all bits are sent to the
+		// primary translate store (i.e. coordinator).
+		nodes, err := c.Nodes(ctx)
+		if err != nil {
+			return fmt.Errorf("getting nodes: %s", err)
+		}
+		coord := getCoordinatorNode(nodes)
+		if coord == nil {
+			return fmt.Errorf("could not find the coordinator node")
+		}
+		return c.importNode(ctx, coord, index, field, buf, options)
+	}
+
 	// Retrieve a list of nodes that own the shard.
 	nodes, err := c.FragmentNodes(ctx, index, shard)
 	if err != nil {
@@ -555,48 +576,10 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 	}
 
 	// Import to each node.
-	for _, node := range nodes {
-		if err := c.importNode(ctx, node, index, field, buf, options); err != nil {
-			return fmt.Errorf("import node: host=%s, err=%s", node.URI, err)
+	for _, n := range nodes {
+		if err := c.importNode(ctx, n, index, field, buf, options); err != nil {
+			return fmt.Errorf("import node: host=%s, err=%s", n.URI, err)
 		}
-	}
-
-	return nil
-}
-
-// ImportValueK bulk imports keyed field values to a host.
-func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, vals []pilosa.FieldValue, opts ...pilosa.ImportOption) error {
-	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportValueK")
-	defer span.Finish()
-
-	buf, err := c.marshalImportValuePayload(index, field, 0, vals)
-	if err != nil {
-		return fmt.Errorf("Error Creating Payload: %s", err)
-	}
-
-	// Set up import options.
-	options := &pilosa.ImportOptions{}
-	for _, opt := range opts {
-		err := opt(options)
-		if err != nil {
-			return errors.Wrap(err, "applying option")
-		}
-	}
-
-	// Get the coordinator node; all bits are sent to the
-	// primary translate store (i.e. coordinator).
-	nodes, err := c.Nodes(ctx)
-	if err != nil {
-		return fmt.Errorf("getting nodes: %s", err)
-	}
-	coord := getCoordinatorNode(nodes)
-	if coord == nil {
-		return fmt.Errorf("could not find the coordinator node")
-	}
-
-	// Import to node.
-	if err := c.importNode(ctx, coord, index, field, buf, options); err != nil {
-		return fmt.Errorf("import node: host=%s, err=%s", coord.URI, err)
 	}
 
 	return nil

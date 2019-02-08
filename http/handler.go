@@ -181,7 +181,7 @@ func (h *Handler) populateValidators() {
 	h.validators["DeleteIndex"] = queryValidationSpecRequired()
 	h.validators["PostField"] = queryValidationSpecRequired()
 	h.validators["DeleteField"] = queryValidationSpecRequired()
-	h.validators["PostImport"] = queryValidationSpecRequired().Optional("shard", "keyImport", "clear", "ignoreKeyCheck")
+	h.validators["PostImport"] = queryValidationSpecRequired().Optional("shard", "remote", "hasKeys", "clear")
 	h.validators["PostImportRoaring"] = queryValidationSpecRequired().Optional("remote", "clear")
 	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("shards", "columnAttrs", "excludeRowAttrs", "excludeColumns")
 	h.validators["GetInfo"] = queryValidationSpecRequired()
@@ -1001,12 +1001,81 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 
 	// If the clear flag is true, treat the import as clear bits.
 	q := r.URL.Query()
-	doClear := q.Get("clear") == "true"
-	doIgnoreKeyCheck := q.Get("ignoreKeyCheck") == "true"
+	clear := q.Get("clear") == "true"
+	hasKeys := q.Get("hasKeys")
+	remote := q.Get("remote") == "true"
+	shardS := q.Get("shard") // shard as a string
+
+	/*
+	   The following describes how to handle each combination of query
+	   arguments.
+
+	     |--------+--------+---------|-----------------------------------------------------------------------------------
+	     | remote | shardS | hasKeys | action
+	     |--------+--------+---------|-----------------------------------------------------------------------------------
+	   0 | false  |        |         | unmarshal, call api.Import(false, req.Shard, "")
+	   1 | false  |        | yes     | ->coordinator
+	   2 | false  |        | no      | unmarshal, call api.Import(false, req.Shard, "no")
+	   3 | false  | 0-n    |         | unmarshal, call api.Import(false, shard, ""); return error if shard != req.Shard
+	   4 | false  | 0-n    | yes     | ->coordinator
+	   5 | false  | 0-n    | no      | ->replicas
+	   6 | true   |        |         | unmarshal, call api.Import(true, req.Shard, "")
+	   7 | true   |        | yes     | return error
+	   8 | true   |        | no      | unmarshal, call api.Import(true, req.Shard, "no")
+	   9 | true   | 0-n    |         | unmarshal, call api.Import(false, shard, ""); return error if shard != req.Shard
+	   a | true   | 0-n    | yes     | return error
+	   b | true   | 0-n    | no      | unmarshal, call api.Import(true, shard, "no"); return error if shard != req.Shard
+	     |--------+--------+---------|-----------------------------------------------------------------------------------
+	*/
+
+	if remote && hasKeys == "yes" { // (7, a)
+		http.Error(w, "remote cannot be combined with hasKeys", http.StatusBadRequest)
+		return
+	} else if !remote && hasKeys == "yes" { // (1, 4)
+		// Apply to coordinator.
+		if !h.api.Node().IsCoordinator {
+			// Forward import request to the coordinator.
+			if err := h.api.ForwardImportRequest(indexName, 0, true, requestResponse{r, w, false}); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+			}
+			return
+		}
+		// Continue on to unmarshal.
+	} else if !remote && hasKeys == "no" && shardS != "" { // (5)
+		// Apply to all replicas.
+
+		// Convert string shard to uint64.
+		shard, err := strconv.ParseUint(shardS, 10, 64)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Forward import request to replicas.
+		if err := h.api.ForwardImportRequest(indexName, shard, false, requestResponse{r, w, true}); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Determine if the local node owns the shard, and if so
+		// allow the local write to occur by setting remote to true
+		// and letting this fall through.
+		if owns, err := h.ownsShard(r.Context(), indexName, shard); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		} else if owns {
+			remote = true
+			// Continue on to unmarshal.
+		} else {
+			return
+		}
+	}
+	// The rest continue on to unmarshal: (0, 2, 3, 6, 8, 9, b)
 
 	opts := []pilosa.ImportOption{
-		pilosa.OptImportOptionsClear(doClear),
-		pilosa.OptImportOptionsIgnoreKeyCheck(doIgnoreKeyCheck),
+		pilosa.OptImportOptionsClear(clear),
+		pilosa.OptImportOptionsHasKeys(hasKeys),
+		pilosa.OptImportOptionsRemote(remote),
 	}
 
 	// Get index and field type to determine how to handle the
@@ -1021,11 +1090,6 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		return
-	}
-
-	//if not the execution destination forward on to correct for execution
-	if h.api.EnsureOperatingNode(indexName, w, r) {
 		return
 	}
 
@@ -1046,6 +1110,12 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Verify shardS == req.Shard.
+		if err := validateShards(shardS, req.Shard); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
 		if err := h.api.ImportValue(r.Context(), req, opts...); err != nil {
 			switch errors.Cause(err) {
 			case pilosa.ErrClusterDoesNotOwnShard:
@@ -1060,6 +1130,12 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		// Marshal into request object.
 		req := &pilosa.ImportRequest{}
 		if err := h.api.Serializer.Unmarshal(body, req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Verify shardS == req.Shard.
+		if err := validateShards(shardS, req.Shard); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -1084,6 +1160,39 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 
 	// Write response.
 	w.Write(buf)
+}
+
+// validateShards returns an error if shardS doesn't
+// represents the same value as shard. Note that we are
+// not concerned in cases where shardS is an empty string,
+// so that is not an error case.
+func validateShards(shardS string, shard uint64) error {
+	if shardS == "" {
+		return nil
+	}
+
+	// Convert string shard to uint64.
+	if s, err := strconv.ParseUint(shardS, 10, 64); err != nil {
+		return errors.Wrap(err, "parsing string shard")
+	} else if s != shard {
+		return errors.New("shards do not match")
+	}
+
+	return nil
+}
+
+// ownsShard returns true if the local node owns the given shard.
+func (h *Handler) ownsShard(ctx context.Context, index string, shard uint64) (bool, error) {
+	nodes, err := h.api.ShardNodes(ctx, index, shard)
+	if err != nil {
+		return false, errors.Wrap(err, "getting shard nodes")
+	}
+	for i := range nodes {
+		if nodes[i].ID == h.api.Node().ID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // handleGetExport handles /export requests.
@@ -1568,11 +1677,7 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 	fieldName := mux.Vars(r)["field"]
 
 	q := r.URL.Query()
-	remoteStr := q.Get("remote")
-	var remote bool
-	if remoteStr == "true" {
-		remote = true
-	}
+	remote := q.Get("remote") == "true"
 
 	// Read entire body.
 	body, err := ioutil.ReadAll(r.Body)

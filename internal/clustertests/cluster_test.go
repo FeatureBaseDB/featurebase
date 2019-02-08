@@ -36,7 +36,7 @@ func TestClusterStuff(t *testing.T) {
 			data[i%10].ColumnID = uint64((i/10)*pilosa.ShardWidth + i%10)
 			shard := uint64(i / 10)
 			if i%10 == 9 {
-				err = cli.Import(context.Background(), "testidx", "testf", shard, data)
+				err = cli.Import(context.Background(), nil, "testidx", "testf", shard, data)
 				if err != nil {
 					t.Fatalf("importing: %v", err)
 				}
