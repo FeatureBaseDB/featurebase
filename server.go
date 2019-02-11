@@ -321,7 +321,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.broadcaster = s
 	s.cluster.maxWritesPerRequest = s.maxWritesPerRequest
 	s.holder.broadcaster = s
-	s.holder.shardValidatorfn = func(index string, shard uint64) bool {
+	s.holder.shardValidatorFunc = func(index string, shard uint64) bool {
 		return s.cluster.ownsShard(s.nodeID, index, shard)
 	}
 
