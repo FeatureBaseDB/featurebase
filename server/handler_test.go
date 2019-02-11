@@ -19,7 +19,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"io/ioutil"
 	gohttp "net/http"
@@ -56,8 +55,34 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/info", nil))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if body := w.Body.String(); body != fmt.Sprintf("{\"shardWidth\":%d}\n", pilosa.ShardWidth) {
-			t.Fatalf("unexpected body: %s", body)
+		}
+		var details map[string]interface{}
+		body := w.Body.Bytes()
+		err := json.Unmarshal(body, &details)
+		if err != nil {
+			t.Fatalf("error unmarshalling json body [%s]: %v", body, err)
+		}
+		sw := details["shardWidth"]
+		if sw == nil {
+			t.Fatalf("no shardWidth in json body [%s]", body)
+		}
+		var n float64
+		var ok bool
+		if n, ok = sw.(float64); !ok {
+			t.Fatalf("shardWidth not float64 (%T) in json body [%s]", sw, body)
+		}
+		if uint64(n) != pilosa.ShardWidth {
+			t.Fatalf("incorrect shard width: got %d, expected %d", uint64(n), pilosa.ShardWidth)
+		}
+		count := details["cpuPhysicalCores"]
+		if count == nil {
+			t.Fatalf("no cpuPhysicalCores in json body [%s]", body)
+		}
+		if n, ok = count.(float64); !ok {
+			t.Fatalf("cpuPhysicalCores not float64 (%T) in json body [%s]", count, body)
+		}
+		if int(n) == 0 {
+			t.Fatal("cpu count should not be 0")
 		}
 	})
 

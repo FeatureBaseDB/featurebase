@@ -1177,8 +1177,18 @@ func (api *API) Version() string {
 
 // Info returns information about this server instance
 func (api *API) Info() serverInfo {
+	si := api.server.systemInfo
+	// we don't report errors on failures to get this information
+	physicalCores, logicalCores, _ := si.CPUCores()
+	mhz, _ := si.CPUMHz()
+	mem, _ := si.MemTotal()
 	return serverInfo{
-		ShardWidth: ShardWidth,
+		ShardWidth:       ShardWidth,
+		CPUPhysicalCores: physicalCores,
+		CPULogicalCores:  logicalCores,
+		CPUMHz:           mhz,
+		CPUType:          si.CPUModel(),
+		Memory:           mem,
 	}
 }
 
@@ -1213,7 +1223,12 @@ func (api *API) TranslateKeys(body io.Reader) ([]byte, error) {
 }
 
 type serverInfo struct {
-	ShardWidth uint64 `json:"shardWidth"`
+	ShardWidth       uint64 `json:"shardWidth"`
+	Memory           uint64 `json:"memory"`
+	CPUType          string `json:"cpuType"`
+	CPUPhysicalCores int    `json:"cpuPhysicalCores"`
+	CPULogicalCores  int    `json:"cpuLogicalCores"`
+	CPUMHz           int    `json:"cpuMHz"`
 }
 
 type apiMethod int
