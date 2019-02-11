@@ -75,9 +75,7 @@ func newView(path, index, field, name string, fieldOptions FieldOptions) *view {
 		broadcaster: NopBroadcaster,
 		stats:       stats.NopStatsClient,
 		logger:      logger.NopLogger,
-		shardValidator: func(uint64) bool {
-			return true
-		},
+		shardValidator: defaultShardValidator,
 	}
 }
 

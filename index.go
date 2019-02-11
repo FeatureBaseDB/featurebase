@@ -75,9 +75,7 @@ func NewIndex(path, name string) (*Index, error) {
 		broadcaster: NopBroadcaster,
 		Stats:       stats.NopStatsClient,
 		logger:      logger.NopLogger,
-		shardValidator: func(uint64) bool {
-			return true
-		},
+		shardValidator: defaultShardValidator,
 		trackExistence: true,
 	}, nil
 }

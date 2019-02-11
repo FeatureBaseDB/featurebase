@@ -77,7 +77,7 @@ type Holder struct {
 	// The interval at which the cached row ids are persisted to disk.
 	cacheFlushInterval time.Duration
 
-	shardValidatorfn func(index string, shard uint64) bool
+	shardValidatorFunc func(index string, shard uint64) bool
 
 	Logger logger.Logger
 }
@@ -125,7 +125,7 @@ func NewHolder() *Holder {
 		NewAttrStore: newNopAttrStore,
 
 		cacheFlushInterval: defaultCacheFlushInterval,
-		shardValidatorfn: func(index string, shard uint64) bool {
+		shardValidatorFunc: func(index string, shard uint64) bool {
 			return true //default
 		},
 
@@ -427,7 +427,7 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	index.newAttrStore = h.NewAttrStore
 	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ".data"))
 	index.shardValidator = func(shard uint64) bool {
-		return h.shardValidatorfn(name, shard)
+		return h.shardValidatorFunc(name, shard)
 	}
 	return index, nil
 }
