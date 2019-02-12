@@ -65,6 +65,7 @@ jobs:
       GO111MODULE: "on"
     steps:
       - *fast-checkout
+      - run: sudo apt-get install lsof
       - run: make test
   cluster-tests:
     <<: *defaults
