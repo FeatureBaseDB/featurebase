@@ -72,9 +72,9 @@ func newView(path, index, field, name string, fieldOptions FieldOptions) *view {
 
 		fragments: make(map[uint64]*fragment),
 
-		broadcaster: NopBroadcaster,
-		stats:       stats.NopStatsClient,
-		logger:      logger.NopLogger,
+		broadcaster:    NopBroadcaster,
+		stats:          stats.NopStatsClient,
+		logger:         logger.NopLogger,
 		shardValidator: defaultShardValidator,
 	}
 }

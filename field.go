@@ -59,7 +59,7 @@ const (
 )
 
 func defaultShardValidator(shard uint64) bool {
-			return true
+	return true
 }
 
 // Field represents a container for views.
@@ -213,7 +213,7 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 		remoteAvailableShards: roaring.NewBitmap(),
 
 		shardValidator: defaultShardValidator,
-		logger: logger.NopLogger,
+		logger:         logger.NopLogger,
 	}
 	return f, nil
 }
