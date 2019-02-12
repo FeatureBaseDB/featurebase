@@ -72,9 +72,9 @@ func NewIndex(path, name string) (*Index, error) {
 		newAttrStore: newNopAttrStore,
 		columnAttrs:  nopStore,
 
-		broadcaster: NopBroadcaster,
-		Stats:       stats.NopStatsClient,
-		logger:      logger.NopLogger,
+		broadcaster:    NopBroadcaster,
+		Stats:          stats.NopStatsClient,
+		logger:         logger.NopLogger,
 		shardValidator: defaultShardValidator,
 		trackExistence: true,
 	}, nil
