@@ -57,6 +57,15 @@ jobs:
     environment:
       GO111MODULE: "on"
       GOARCH: 386
+  test-golang-1.12-rc: &base-test
+    working_directory: /go/src/github.com/pilosa/pilosa
+    docker:
+      - image: circleci/golang:1.12-rc
+    environment:
+      GO111MODULE: "on"
+    steps:
+      - *fast-checkout
+      - run: make test
   cluster-tests:
     <<: *defaults
     steps:
@@ -119,6 +128,9 @@ workflows:
           requires:
             - setup
       - test-golang-1.11-386:
+          requires:
+            - setup
+      - test-golang-1.12-rc:
           requires:
             - setup
       - cluster-tests:
