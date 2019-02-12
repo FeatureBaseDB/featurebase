@@ -41,12 +41,6 @@ If you want to help but you aren't sure where to start, check out our [github la
     cd ${GOPATH}/src/github.com/pilosa/pilosa
     ```
 
-- [Install](https://github.com/golang/dep/#installation) `dep` to manage dependencies:
-
-    ```sh
-    curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-    ```
-
 - Install Pilosa command line tools:
 
     ```sh
@@ -56,7 +50,7 @@ If you want to help but you aren't sure where to start, check out our [github la
     or
     
     ```
-    dep ensure && go install github.com/pilosa/pilosa/cmd/...
+    go install github.com/pilosa/pilosa/cmd/...
     ```
 
     Running `pilosa` should now run a Pilosa instance.
@@ -78,7 +72,7 @@ Pilosa includes a Makefile that automates several tasks:
     make install
     ```
 
-- Install build dependencies (dep and protoc):
+- Install build dependencies:
 
     ```sh
     make install-build-deps

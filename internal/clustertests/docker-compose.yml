@@ -45,11 +45,12 @@ services:
       context: .
     environment:
       - ENABLE_PILOSA_CLUSTER_TESTS=1
+      - GO111MODULE=on
     networks:
       - pilosanet
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command:
-      - "go test -v -count=1 github.com/pilosa/pilosa/internal/clustertests"
+      - "cd /go/src/github.com/pilosa/pilosa/ && go test -v -count=1 github.com/pilosa/pilosa/internal/clustertests"
 networks: 
   pilosanet:

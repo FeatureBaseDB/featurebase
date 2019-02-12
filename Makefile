@@ -1,4 +1,4 @@
-.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-pql gometalinter install install-build-deps install-dep install-gometalinter install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build test
+.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-pql gometalinter install install-build-deps install-gometalinter install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build test
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
@@ -14,26 +14,25 @@ RELEASE ?= 0
 RELEASE_ENABLED = $(subst 0,,$(RELEASE))
 BUILD_TAGS += $(if $(ENTERPRISE_ENABLED),enterprise)
 BUILD_TAGS += $(if $(RELEASE_ENABLED),release)
+export GO111MODULE=on
 
 # Run tests and compile Pilosa
 default: test build
 
-# Remove vendor and build directories
+# Remove build directories
 clean:
 	rm -rf vendor build
 
-# Set up vendor directory using `dep`
-vendor: Gopkg.toml Gopkg.lock
-	$(MAKE) require-dep
-	dep ensure -vendor-only
-	touch vendor
+# Set up vendor directory using `go mod vendor`
+vendor: go.mod
+	go mod vendor
 
 # Run test suite
-test: vendor
+test:
 	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS)
 
 # Run test suite with coverage enabled
-cover: vendor
+cover:
 	mkdir -p build
 	$(MAKE) test TESTFLAGS="-coverprofile=build/coverage.out"
 
@@ -42,11 +41,11 @@ cover-viz: cover
 	go tool cover -html=build/coverage.out
 
 # Compile Pilosa
-build: vendor
+build:
 	go build -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
 
 # Create a single release build under the build directory
-release-build: vendor
+release-build:
 	$(MAKE) $(if $(DOCKER_BUILD),docker-)build FLAGS="-o build/pilosa-$(VERSION_ID)/pilosa" RELEASE=1
 	cp NOTICE README.md build/pilosa-$(VERSION_ID)
 	$(if $(ENTERPRISE_ENABLED),cp enterprise/COPYING build/pilosa-$(VERSION_ID),cp LICENSE build/pilosa-$(VERSION_ID))
@@ -88,7 +87,7 @@ clustertests-build:
 	docker-compose -f $(DOCKER_COMPOSE) up --exit-code-from=client1 --build
 
 # Create prerelease builds
-prerelease: vendor
+prerelease:
 	$(MAKE) release-build GOOS=linux GOARCH=amd64 VERSION_ID=$$\(BRANCH_ID\)
 	$(if $(shell git describe --tags --exact-match HEAD),$(MAKE) release)
 
@@ -96,7 +95,7 @@ prerelease-upload:
 	aws s3 sync build/ s3://build.pilosa.com/ --exclude "*" --include "*.tar.gz" --acl public-read
 
 # Install Pilosa
-install: vendor
+install:
 	go install -tags='$(BUILD_TAGS)' -ldflags $(LDFLAGS) $(FLAGS) ./cmd/pilosa
 
 # `go generate` protocol buffers
@@ -127,8 +126,8 @@ docker-test:
 	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) go test -tags='$(BUILD_TAGS)' $(TESTFLAGS) ./...
 
 # Run gometalinter with custom flags
-gometalinter: require-gometalinter
-	gometalinter --vendor --disable-all \
+gometalinter: require-gometalinter vendor
+	GO111MODULE=off gometalinter --vendor --disable-all \
 	    --deadline=300s \
 	    --enable=deadcode \
 	    --enable=gochecknoinits \
@@ -159,24 +158,21 @@ require-%:
 		$(info Verified build dependency "$*" is installed.),\
 		$(error Build dependency "$*" not installed. To install, try `make install-$*`))
 
-install-build-deps: install-dep install-protoc-gen-gofast install-protoc install-stringer install-peg
-
-install-dep:
-	go get -u github.com/golang/dep/cmd/dep
+install-build-deps: install-protoc-gen-gofast install-protoc install-stringer install-peg
 
 install-stringer:
-	go get -u golang.org/x/tools/cmd/stringer
+	GO111MODULE=off go get -u golang.org/x/tools/cmd/stringer
 
 install-protoc-gen-gofast:
-	go get -u github.com/gogo/protobuf/protoc-gen-gofast
+	GO111MODULE=off go get -u github.com/gogo/protobuf/protoc-gen-gofast
 
 install-protoc:
 	@echo This tool cannot automatically install protoc. Please download and install protoc from https://google.github.io/proto-lens/installing-protoc.html
 
 install-peg:
-	go get github.com/pointlander/peg
+	GO111MODULE=off go get github.com/pointlander/peg
 
 install-gometalinter:
-	go get -u github.com/alecthomas/gometalinter
-	gometalinter --install
-	go get github.com/remyoudompheng/go-misc/deadcode
+	GO111MODULE=off go get -u github.com/alecthomas/gometalinter
+	GO111MODULE=off gometalinter --install
+	GO111MODULE=off go get github.com/remyoudompheng/go-misc/deadcode
