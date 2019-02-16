@@ -1187,6 +1187,7 @@ func decodeGroupCounts(a []*internal.GroupCount) []pilosa.GroupCount {
 		other[i] = pilosa.GroupCount{
 			Group: decodeFieldRows(a[i].Group),
 			Count: a[i].Count,
+			Sum:   a[i].Sum,
 		}
 	}
 	return other
@@ -1284,6 +1285,7 @@ func encodeGroupCounts(counts []pilosa.GroupCount) []*internal.GroupCount {
 		result[i] = &internal.GroupCount{
 			Group: encodeFieldRows(counts[i].Group),
 			Count: counts[i].Count,
+			Sum:   counts[i].Sum,
 		}
 	}
 	return result
