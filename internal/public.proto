@@ -28,6 +28,7 @@ message FieldRow{
 message GroupCount{
 	repeated FieldRow Group = 1;
 	uint64 Count = 2;
+	int64 Sum = 3;
 }
 
 message ValCount {

@@ -863,7 +863,7 @@ Rows(blahk)
 **Spec:**
 
 ```
-GroupBy(<RowsCall>, [RowsCall...], limit=<UINT>, filter=<CALL>)
+GroupBy(<RowsCall>, [RowsCall...], limit=<UINT>, filter=<CALL>, aggregate=<CALL>)
 ```
 
 **Description:**
@@ -873,13 +873,17 @@ taking one row each from the specified `Rows` calls. It returns only those
 combinations for which the count is greater than 0.
 
 The optional `filter` argument takes any type of `Row` query (e.g. Row, Union,
- Intersect, etc.) which will be intersected with each result prior to returning
- the count. This is analagous to a WHERE clause applied to a relational GROUP BY
- query.
+Intersect, etc.) which will be intersected with each result prior to returning
+the count. This is analagous to a WHERE clause applied to a relational GROUP BY
+query.
 
 The optional `limit` argument limits the number of results returned. The results
 are ordered, so as long as the data isn't changing, the same query will return
 the same result set.
+
+The optional `aggregate` argument takes a `Sum()` query which will be used to
+calculate the sum & count of each group. This is similar to using a `SUM()` in
+the SELECT clause of a relation GROUP BY query.
 
 Paging through results is supported by passing the `previous` argument to each
 of the `Rows` calls in the GroupBy. Take the last result from your previous

@@ -3224,15 +3224,25 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 	c.CreateField(t, "istring", pilosa.IndexOptions{Keys: true}, "generals", pilosa.OptFieldKeys())
+	c.CreateField(t, "istring", pilosa.IndexOptions{Keys: true}, "v", pilosa.OptFieldTypeInt(0, 1000))
 
-	req := &pilosa.ImportRequest{
+	if err := c[0].API.Import(context.Background(), &pilosa.ImportRequest{
 		Index:      "istring",
 		Field:      "generals",
 		Shard:      0,
 		RowKeys:    []string{"r1", "r2", "r1", "r2", "r1", "r2", "r1", "r2", "r1", "r2"},
 		ColumnKeys: []string{"c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10"},
+	}); err != nil {
+		t.Fatalf("importing: %v", err)
 	}
-	if err := c[0].API.Import(context.Background(), req); err != nil {
+
+	if err := c[0].API.ImportValue(context.Background(), &pilosa.ImportValueRequest{
+		Index:      "istring",
+		Field:      "v",
+		Shard:      0,
+		ColumnKeys: []string{"c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10"},
+		Values:     []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+	}); err != nil {
 		t.Fatalf("importing: %v", err)
 	}
 
@@ -3251,6 +3261,13 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 			query: "GroupBy(Rows(generals), filter=Row(generals=r2))",
 			expected: []pilosa.GroupCount{
 				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5},
+			},
+		},
+		{
+			query: "GroupBy(Rows(generals), aggregate=Sum(field=v))",
+			expected: []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5, Sum: 25},
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5, Sum: 30},
 			},
 		},
 	}
@@ -3406,6 +3423,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 		defer c.Close()
 		c.CreateField(t, "i", pilosa.IndexOptions{}, "general")
 		c.CreateField(t, "i", pilosa.IndexOptions{}, "sub")
+		c.CreateField(t, "i", pilosa.IndexOptions{}, "v", pilosa.OptFieldTypeInt(0, 1000))
 		c.ImportBits(t, "i", "general", [][2]uint64{
 			{10, 0},
 			{10, 1},
@@ -3424,6 +3442,11 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			{110, 2},
 			{110, 0},
 		})
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(0, v=10)`}); err != nil {
+			t.Fatal(err)
+		} else if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1, v=100)`}); err != nil {
+			t.Fatal(err)
+		}
 
 		t.Run("No Field List Arguments", func(t *testing.T) {
 			if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `GroupBy()`}); err != nil {
@@ -3474,6 +3497,16 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			}
 
 			results := c.Query(t, "i", `GroupBy(Rows(general), Rows(sub), filter=Row(general=10))`).Results[0].([]pilosa.GroupCount)
+			test.CheckGroupBy(t, expected, results)
+		})
+
+		t.Run("Aggregate", func(t *testing.T) {
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 100}}, Count: 2, Sum: 110},
+				{Group: []pilosa.FieldRow{{Field: "general", RowID: 10}, {Field: "sub", RowID: 110}}, Count: 1, Sum: 10},
+			}
+
+			results := c.Query(t, "i", `GroupBy(Rows(general), Rows(sub), aggregate=Sum(field=v))`).Results[0].([]pilosa.GroupCount)
 			test.CheckGroupBy(t, expected, results)
 		})
 
