@@ -327,17 +327,17 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 					if fileMagic == roaring.MagicNumber { // if pilosa roaring format
 						err = field.importRoaring(viewData, shard, viewName, req.Clear)
 						if err != nil {
-							return errors.Wrap(err,"import pilosa roaring")
+							return errors.Wrap(err, "import pilosa roaring")
 						}
 
 					} else {
-					// must make a copy of data to operate on locally on standard roaring format.
-					// field.importRoaring changes the standard roaring run format to pilosa roaring
+						// must make a copy of data to operate on locally on standard roaring format.
+						// field.importRoaring changes the standard roaring run format to pilosa roaring
 						data := make([]byte, len(viewData))
 						copy(data, viewData)
 						err = field.importRoaring(data, shard, viewName, req.Clear)
 						if err != nil {
-							return errors.Wrap(err,"import standard roaring")
+							return errors.Wrap(err, "import standard roaring")
 						}
 					}
 				}
