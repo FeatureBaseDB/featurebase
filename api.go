@@ -327,7 +327,7 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 					if fileMagic == roaring.MagicNumber { // if pilosa roaring format
 						err = field.importRoaring(viewData, shard, viewName, req.Clear)
 						if err != nil {
-							return errors.Wrap(err, "import pilosa roaring")
+							return errors.Wrap(err, "importing pilosa roaring")
 						}
 
 					} else {
@@ -337,7 +337,7 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 						copy(data, viewData)
 						err = field.importRoaring(data, shard, viewName, req.Clear)
 						if err != nil {
-							return errors.Wrap(err, "import standard roaring")
+							return errors.Wrap(err, "importing standard roaring")
 						}
 					}
 				}
