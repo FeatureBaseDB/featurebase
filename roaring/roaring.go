@@ -28,15 +28,15 @@ import (
 )
 
 const (
-	// magicNumber is an identifier, in bytes 0-1 of the file.
-	magicNumber = uint32(12348)
+	// MagicNumber is an identifier, in bytes 0-1 of the file.
+	MagicNumber = uint32(12348)
 
 	// storageVersion indicates the storage version, in bytes 2-3.
 	storageVersion = uint32(0)
 
 	// cookie is the first four bytes in a roaring bitmap file,
-	// formed by joining magicNumber and storageVersion
-	cookie = magicNumber + storageVersion<<16
+	// formed by joining MagicNumber and storageVersion
+	cookie = MagicNumber + storageVersion<<16
 
 	// headerBaseSize is the size in bytes of the cookie and key count at the
 	// beginning of a file.
@@ -935,10 +935,10 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 		return errors.New("data too small")
 	}
 
-	// Verify the first two bytes are a valid magicNumber, and second two bytes match current storageVersion.
+	// Verify the first two bytes are a valid MagicNumber, and second two bytes match current storageVersion.
 	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
 	fileVersion := uint32(binary.LittleEndian.Uint16(data[2:4]))
-	if fileMagic != magicNumber {
+	if fileMagic != MagicNumber {
 		return fmt.Errorf("invalid roaring file, magic number %v is incorrect", fileMagic)
 	}
 
@@ -4020,7 +4020,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	}
 	statsHit("Bitmap/UnmarshalBinary")
 	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
-	if fileMagic == magicNumber { // if pilosa roaring
+	if fileMagic == MagicNumber { // if pilosa roaring
 		return errors.Wrap(b.unmarshalPilosaRoaring(data), "unmarshaling as pilosa roaring")
 	}
 

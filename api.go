@@ -18,6 +18,7 @@ package pilosa
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -322,13 +323,22 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 					if len(viewData) == 0 {
 						return fmt.Errorf("no data to import for view: %s", viewName)
 					}
-					// must make a copy of data to operate on locally.
-					// field.importRoaring changes data
-					data := make([]byte, len(viewData))
-					copy(data, viewData)
-					err = field.importRoaring(data, shard, viewName, req.Clear)
-					if err != nil {
-						return err
+					fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
+					if fileMagic == roaring.MagicNumber { // if pilosa roaring format
+						err = field.importRoaring(viewData, shard, viewName, req.Clear)
+						if err != nil {
+							return errors.Wrap(err, "importing pilosa roaring")
+						}
+
+					} else {
+						// must make a copy of data to operate on locally on standard roaring format.
+						// field.importRoaring changes the standard roaring run format to pilosa roaring
+						data := make([]byte, len(viewData))
+						copy(data, viewData)
+						err = field.importRoaring(data, shard, viewName, req.Clear)
+						if err != nil {
+							return errors.Wrap(err, "importing standard roaring")
+						}
 					}
 				}
 				return err
