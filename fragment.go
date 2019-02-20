@@ -2050,6 +2050,94 @@ func filterWithRows(rows []uint64) rowFilter {
 	}
 }
 
+// rowColumn is a row/column pair.
+type rowColumn struct {
+	rowID uint64
+	colID uint64
+}
+
+// rowsForColumns returns row/column pairs for the given colIDs.
+// It is assumed that colIDs doesn't contain duplicates.
+func (f *fragment) rowsForColumns(colIDs uint64Slice) []rowColumn {
+	rc := []rowColumn{}
+
+	// If no columns are provided then bail out early.
+	if len(colIDs) == 0 {
+		return rc
+	}
+
+	// Sort colIDs in order to ensure the sort order of mk and
+	// the map's []uint64.
+	sort.Sort(colIDs)
+
+	// Map each column ID to its container key.
+	// Keep an index into the map that maintains order.
+	m := make(map[uint64][]uint64)
+	var mk []uint64 // list of keys in m
+	var lastContainerKey uint64 = math.MaxUint64
+
+	for _, col := range colIDs {
+		colID := col % ShardWidth
+		containerKey := colID >> 16
+		m[containerKey] = append(m[containerKey], colID)
+		if containerKey != lastContainerKey {
+			mk = append(mk, containerKey)
+			lastContainerKey = containerKey
+		}
+	}
+
+	i, _ := f.storage.Containers.Iterator(0)
+	var lastRow uint64 = math.MaxUint64
+
+	// contIdx is the index of the container currently
+	// being considered in the row iteration.
+	var contIdx uint64
+
+	// Loop over the existing containers.
+	for i.Next() {
+		key, c := i.Value()
+		vKey := key & ((1 << shardVsContainerExponent) - 1) // Mod by number of containers in shard.
+
+		// virtual row for the current container
+		vRow := key >> shardVsContainerExponent
+
+		// For each virtual row, reset the container map index.
+		if vRow != lastRow {
+			contIdx = 0
+		}
+		lastRow = vRow
+
+		if vKey > mk[contIdx] {
+			// Advance contIndex until it's >= vKey or
+			// until there are no more containers in mk.
+			if int(contIdx) >= len(mk)-1 {
+				continue
+			} else {
+				for contIdx++; vKey > mk[contIdx]; contIdx++ {
+					if int(contIdx) >= len(mk)-1 {
+						break
+					}
+				}
+			}
+			if vKey != mk[contIdx] {
+				continue
+			}
+		}
+		if vKey == mk[contIdx] {
+			for _, colID := range m[mk[contIdx]] {
+				colVal := uint16(colID & 0xFFFF)
+				if c.Contains(colVal) {
+					rc = append(rc, rowColumn{vRow, f.shard*ShardWidth + colID})
+				}
+			}
+		} else { // vKey < mk[contIdx]
+			continue
+		}
+	}
+
+	return rc
+}
+
 // rows returns all rows starting from 'start'. Filters will be applied in
 // order. All filters must return true to include the row. Once a row is
 // included, further containers in that row will be skipped. So, for a row to be

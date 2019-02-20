@@ -2179,6 +2179,106 @@ func (f *fragment) mustSetBits(rowID uint64, columnIDs ...uint64) {
 	}
 }
 
+// Test getting the rows column pairs for a list of columns.
+func TestFragment_RowsForColumns(t *testing.T) {
+	// Populate fragments for testing.
+
+	// f1 is a fragment with general test data.
+	f1 := mustOpenFragment("i", "f1", viewStandard, 0, "")
+	defer f1.Clean(t)
+
+	pairs1 := []rowColumn{
+		{101, 101},
+		{101, 104},
+		{102, 65540},
+		{102, 104},
+		{103, 65537},
+		{103, 65538},
+		{9999, 65537},
+		{10000, 1048575},
+	}
+	for _, p := range pairs1 {
+		if _, err := f1.setBit(p.rowID, p.colID); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// f2 is an empty fragment
+	f2 := mustOpenFragment("i", "f2", viewStandard, 0, "")
+	defer f2.Clean(t)
+
+	// f3 is a fragment in shard 1 with general test data.
+	f3 := mustOpenFragment("i", "f3", viewStandard, 1, "")
+	defer f3.Clean(t)
+
+	pairs3 := []rowColumn{
+		{10000, 1048580},
+	}
+	for _, p := range pairs3 {
+		if _, err := f3.setBit(p.rowID, p.colID); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// tests
+	////////////////////////////////////////
+	tests := []struct {
+		colIDs []uint64
+		exp    []rowColumn
+		frag   *fragment
+	}{
+		{
+			[]uint64{},
+			[]rowColumn{},
+			f1,
+		},
+		{
+			[]uint64{101},
+			[]rowColumn{{101, 101}},
+			f1,
+		},
+		{
+			[]uint64{65538},
+			[]rowColumn{{103, 65538}},
+			f1,
+		},
+		{
+			[]uint64{131073},
+			[]rowColumn{},
+			f1,
+		},
+		{
+			[]uint64{65537, 104, 101, 102},
+			[]rowColumn{{101, 101}, {101, 104}, {102, 104}, {103, 65537}, {9999, 65537}},
+			f1,
+		},
+		{
+			[]uint64{1048575},
+			[]rowColumn{{10000, 1048575}},
+			f1,
+		},
+		{
+			[]uint64{1048575},
+			[]rowColumn{},
+			f2,
+		},
+		{
+			[]uint64{1048580},
+			[]rowColumn{{10000, 1048580}},
+			f3,
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("rowsforcolumns%d", i), func(t *testing.T) {
+			rowColPairs := test.frag.rowsForColumns(test.colIDs)
+			if !reflect.DeepEqual(test.exp, rowColPairs) {
+				t.Fatalf("expected: %v, but got: %v", test.exp, rowColPairs)
+			}
+		})
+	}
+}
+
 // Test Various methods of retrieving RowIDs
 func TestFragment_RowsIteration(t *testing.T) {
 	t.Run("firstContainer", func(t *testing.T) {
