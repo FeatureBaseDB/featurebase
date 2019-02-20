@@ -76,7 +76,7 @@ const (
 	HashBlockSize = 100
 
 	// defaultFragmentMaxOpN is the default value for Fragment.MaxOpN.
-	defaultFragmentMaxOpN = 2000
+	defaultFragmentMaxOpN = 5000
 
 	// Row ids used for boolean fields.
 	falseRowID = uint64(0)
@@ -1455,7 +1455,30 @@ func (f *fragment) bulkImport(rowIDs, columnIDs []uint64, options *ImportOptions
 }
 
 // bulkImportStandard performs a bulk import on a standard fragment.
-func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *ImportOptions) error {
+func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *ImportOptions) (err error) {
+	// first we'll try the "small update" path. If there aren't many bits being
+	// set, it isn't worth it to do a full import and snapshot. Instead we
+	// leverage individual set/clear bits which get set in memory and appended
+	// to the op log.
+	if len(columnIDs)+f.opN < f.MaxOpN {
+		for i := range rowIDs {
+			rowID, columnID := rowIDs[i], columnIDs[i]
+			if options.Clear {
+				_, err = f.clearBit(rowID, columnID)
+			} else {
+				_, err = f.setBit(rowID, columnID)
+			}
+			if err != nil {
+				return errors.Wrapf(err, "importing %dth bit clear:%v", i, options.Clear)
+			}
+		}
+		// forcibly recalculate the cache - setbit just calls invalidate, but in
+		// order to maintain parity with the "normal" bulkimport path, we want
+		// to recalculate it at the end of the import
+		f.cache.Recalculate()
+		return nil
+	} // end "small update" path - after this is the real bulk import path
+
 	// Create a temporary bitmap which will be populated by rowIDs and columnIDs
 	// and then merged into the existing fragment's bitmap.
 	localBitmap := roaring.NewBitmap()

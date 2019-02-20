@@ -713,6 +713,58 @@ func BenchmarkFragment_ImportValue(b *testing.B) {
 	}
 }
 
+// BenchmarkFragment_RepeatedSmallImports tests the situation where updates are
+// constantly coming in across a large column space so that each fragment gets
+// only a few updates during each import.
+//
+// We test a variety of combinations of the number of separate updates(imports),
+// the number of bits in the import, the number of rows in the fragment (which
+// is a pretty good proxy for fragment size on disk), and the MaxOpN on the
+// fragment which controls how many set bits occur before a snapshot is done. If
+// the number of bits in a given import is greater than MaxOpN, bulkImport will
+// always go through the standard snapshotting import path.
+func BenchmarkFragment_RepeatedSmallImports(b *testing.B) {
+	for _, numUpdates := range []int{100} {
+		for _, bitsPerUpdate := range []int{100, 1000} {
+			for _, numRows := range []int{1000, 100000, 1000000} {
+				// build the update data set all at once - this will get applied
+				// to a fragment in numUpdates batches
+				updateRows := make([]uint64, numUpdates*bitsPerUpdate)
+				updateCols := make([]uint64, numUpdates*bitsPerUpdate)
+				for i := 0; i < numUpdates*bitsPerUpdate; i++ {
+					updateRows[i] = uint64(rand.Int63n(int64(numRows))) // row id
+					updateCols[i] = uint64(rand.Int63n(ShardWidth))     // column id
+				}
+				for _, opN := range []int{1, 5000, 50000} {
+					b.Run(fmt.Sprintf("Rows%dUpdates%dBits%dOpN%d", numRows, numUpdates, bitsPerUpdate, opN), func(b *testing.B) {
+						for a := 0; a < b.N; a++ {
+							b.StopTimer()
+							f := mustOpenFragment("i", "f", viewStandard, 0, "")
+							f.MaxOpN = opN
+							defer f.Clean(b)
+							err := f.importRoaring(getZipfRowsSliceRoaring(uint64(numRows), 1), false)
+							if err != nil {
+								b.Fatalf("importing base data for benchmark: %v", err)
+							}
+							b.StartTimer()
+							for i := 0; i < numUpdates; i++ {
+								err := f.bulkImportStandard(
+									updateRows[bitsPerUpdate*i:bitsPerUpdate*(i+1)],
+									updateRows[bitsPerUpdate*i:bitsPerUpdate*(i+1)],
+									&ImportOptions{},
+								)
+								if err != nil {
+									b.Fatalf("doing small bulk import: %v", err)
+								}
+							}
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
 // Ensure a fragment can snapshot correctly.
 func TestFragment_Snapshot(t *testing.T) {
 	f := mustOpenFragment("i", "f", viewStandard, 0, "")
