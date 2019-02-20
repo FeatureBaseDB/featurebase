@@ -2856,7 +2856,10 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, filter *Row, inde
 	var fieldName string
 	var ok bool
 	ignorePrev := false
+	maxChild := 0
+
 	for i, call := range children {
+		maxChild = i
 		if fieldName, ok = call.Args["_field"].(string); !ok {
 			return nil, errors.Errorf("%s call must have field with valid (string) field name. Got %v of type %[2]T", call.Name, call.Args["_field"])
 		}
@@ -2919,6 +2922,10 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, filter *Row, inde
 	// Apply filter to first level, if available.
 	if gbi.filter != nil && len(gbi.rows) > 0 {
 		gbi.rows[0].row = gbi.rows[0].row.Intersect(gbi.filter)
+	}
+
+	if maxChild == 0 {
+		return gbi, nil
 	}
 
 	for i := 1; i < len(gbi.rows)-1; i++ {
