@@ -727,18 +727,18 @@ func BenchmarkFragment_RepeatedSmallImports(b *testing.B) {
 	for _, numUpdates := range []int{100} {
 		for _, bitsPerUpdate := range []int{100, 1000} {
 			for _, numRows := range []int{1000, 100000, 1000000} {
-				// build the update data set all at once - this will get applied
-				// to a fragment in numUpdates batches
-				updateRows := make([]uint64, numUpdates*bitsPerUpdate)
-				updateCols := make([]uint64, numUpdates*bitsPerUpdate)
-				for i := 0; i < numUpdates*bitsPerUpdate; i++ {
-					updateRows[i] = uint64(rand.Int63n(int64(numRows))) // row id
-					updateCols[i] = uint64(rand.Int63n(ShardWidth))     // column id
-				}
 				for _, opN := range []int{1, 5000, 50000} {
 					b.Run(fmt.Sprintf("Rows%dUpdates%dBits%dOpN%d", numRows, numUpdates, bitsPerUpdate, opN), func(b *testing.B) {
 						for a := 0; a < b.N; a++ {
 							b.StopTimer()
+							// build the update data set all at once - this will get applied
+							// to a fragment in numUpdates batches
+							updateRows := make([]uint64, numUpdates*bitsPerUpdate)
+							updateCols := make([]uint64, numUpdates*bitsPerUpdate)
+							for i := 0; i < numUpdates*bitsPerUpdate; i++ {
+								updateRows[i] = uint64(rand.Int63n(int64(numRows))) // row id
+								updateCols[i] = uint64(rand.Int63n(ShardWidth))     // column id
+							}
 							f := mustOpenFragment("i", "f", viewStandard, 0, "")
 							f.MaxOpN = opN
 							defer f.Clean(b)
@@ -761,6 +761,58 @@ func BenchmarkFragment_RepeatedSmallImports(b *testing.B) {
 					})
 				}
 			}
+		}
+	}
+}
+
+func BenchmarkFragment_RepeatedSmallValueImports(b *testing.B) {
+	initialCols := make([]uint64, 0, ShardWidth)
+	initialVals := make([]uint64, 0, ShardWidth)
+	for i := uint64(0); i < ShardWidth; i++ {
+		// every 29 columns, skip between 0 and 12 columns
+		if i%29 == 0 {
+			i += i % 13
+		}
+		initialCols = append(initialCols, i)
+		initialVals = append(initialVals, uint64(rand.Int63n(1<<21)))
+	}
+
+	for _, numUpdates := range []int{100} {
+		for _, valsPerUpdate := range []int{10, 100} {
+			updateCols := make([]uint64, numUpdates*valsPerUpdate)
+			updateVals := make([]uint64, numUpdates*valsPerUpdate)
+			for i := 0; i < numUpdates*valsPerUpdate; i++ {
+				updateCols[i] = uint64(rand.Int63n(ShardWidth))
+				updateVals[i] = uint64(rand.Int63n(1 << 21))
+			}
+
+			for _, opN := range []int{1, 5000, 50000} {
+				b.Run(fmt.Sprintf("Updates%dVals%dOpN%d", numUpdates, valsPerUpdate, opN), func(b *testing.B) {
+					for i := 0; i < b.N; i++ {
+						b.StopTimer()
+						f := mustOpenFragment("i", "f", viewBSIGroupPrefix+"foo", 0, CacheTypeNone)
+						f.MaxOpN = opN
+						err := f.importValue(initialCols, initialVals, 21, false)
+						if err != nil {
+							b.Fatalf("initial value import: %v", err)
+						}
+						b.StartTimer()
+						for j := 0; j < numUpdates; j++ {
+							err := f.importValue(
+								updateCols[valsPerUpdate*i:valsPerUpdate*(i+1)],
+								updateVals[valsPerUpdate*i:valsPerUpdate*(i+1)],
+								21,
+								false,
+							)
+							if err != nil {
+								b.Fatalf("importing values: %v", err)
+							}
+						}
+
+					}
+				})
+			}
+
 		}
 	}
 }
