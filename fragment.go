@@ -350,29 +350,40 @@ func (f *fragment) row(rowID uint64) *Row {
 	return f.unprotectedRow(rowID)
 }
 
+// unprotectedRow returns a row from the row cache if available or from storage
+// (updating the cache).
 func (f *fragment) unprotectedRow(rowID uint64) *Row {
 	r, ok := f.rowCache.Fetch(rowID)
 	if ok && r != nil {
 		return r
 	}
 
+	row := f.rowFromStorage(rowID)
+	f.rowCache.Add(rowID, row)
+	return row
+}
+
+// rowFromStorage clones a row data out of fragment storage and returns it as a
+// Row object.
+func (f *fragment) rowFromStorage(rowID uint64) *Row {
 	// Only use a subset of the containers.
 	// NOTE: The start & end ranges must be divisible by container width.
 	data := f.storage.OffsetRange(f.shard*ShardWidth, rowID*ShardWidth, (rowID+1)*ShardWidth)
 
-	// Reference bitmap subrange in storage.
-	// We Clone() data because otherwise row will contain pointers to containers in storage.
-	// This causes unexpected results when we cache the row and try to use it later.
+	// Reference bitmap subrange in storage. We Clone() data because otherwise
+	// row will contain pointers to containers in storage. This causes
+	// unexpected results when we cache the row and try to use it later.
+	// Basically, since we return the Row and release the fragment lock, the
+	// underlying fragment storage could be changed or snapshotted and thrown
+	// out at any point.
 	row := &Row{
 		segments: []rowSegment{{
 			data:     *data.Clone(),
 			shard:    f.shard,
-			writable: false,
+			writable: false, // this Row will probably be cached and shared, so it must be read only.
 		}},
 	}
 	row.invalidateCount()
-
-	f.rowCache.Add(rowID, row)
 
 	return row
 }
@@ -1454,63 +1465,41 @@ func (f *fragment) bulkImport(rowIDs, columnIDs []uint64, options *ImportOptions
 	return f.bulkImportStandard(rowIDs, columnIDs, options)
 }
 
-// bulkImportStandard performs a bulk import on a standard fragment.
+// bulkImportStandard performs a bulk import on a standard fragment. May mutate
+// its rowIDs and columnIDs arguments.
 func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *ImportOptions) (err error) {
-	// first we'll try the "small update" path. If there aren't many bits being
-	// set, it isn't worth it to do a full import and snapshot. Instead we
-	// leverage individual set/clear bits which get set in memory and appended
-	// to the op log.
+	var localBitmap *roaring.Bitmap
+	smallWrite := false
+	f.mu.Lock()
+	defer f.mu.Unlock() // TODO the big import path doesn't need to acquire the lock this soon.
 	if len(columnIDs)+f.opN < f.MaxOpN {
-		for i := range rowIDs {
-			rowID, columnID := rowIDs[i], columnIDs[i]
-			if options.Clear {
-				_, err = f.clearBit(rowID, columnID)
-			} else {
-				_, err = f.setBit(rowID, columnID)
-			}
-			if err != nil {
-				return errors.Wrapf(err, "importing %dth bit clear:%v", i, options.Clear)
-			}
-		}
-		// forcibly recalculate the cache - setbit just calls invalidate, but in
-		// order to maintain parity with the "normal" bulkimport path, we want
-		// to recalculate it at the end of the import
-		f.cache.Recalculate()
-		return nil
-	} // end "small update" path - after this is the real bulk import path
+		smallWrite = true
+		// If the number of operations is small, we'll write directly to local storage
+		localBitmap = f.storage
+	} else {
+		// Create a temporary bitmap which will be populated by rowIDs and columnIDs
+		// and then merged into the existing fragment's bitmap.
+		localBitmap = roaring.NewBitmap()
 
-	// Create a temporary bitmap which will be populated by rowIDs and columnIDs
-	// and then merged into the existing fragment's bitmap.
-	localBitmap := roaring.NewBitmap()
+		// Disconnect op writer so we don't append updates.
+		localBitmap.OpWriter = nil
+	}
 
-	// Disconnect op writer so we don't append updates.
-	localBitmap.OpWriter = nil
-
-	// rowSet maintains the set of rowIDs present in this import.
-	// It allows the cache to be updated once per row, instead of once
-	// per bit.
+	// rowSet maintains the set of rowIDs present in this import. It allows the
+	// cache to be updated once per row, instead of once per bit. TODO: consider
+	// sorting by rowID/columnID first and avoiding the map allocation here. (we
+	// could reuse rowIDs to store the list of unique row IDs)
 	rowSet := make(map[uint64]struct{})
 	lastRowID := uint64(0)
 
-	// Process every bit by writing to a local bitmap,
-	// to be merged with fragment storage next.
-	for i := range rowIDs {
+	// replace columnIDs with calculated positions to avoid allocation.
+	for i := 0; i < len(columnIDs); i++ {
 		rowID, columnID := rowIDs[i], columnIDs[i]
-
-		// Determine the position of the bit in the storage.
 		pos, err := f.pos(rowID, columnID)
 		if err != nil {
 			return err
 		}
-
-		// Write to local storage.
-		_, err = localBitmap.Add(pos)
-		if err != nil {
-			return err
-		}
-
-		// Reduce the StatsD rate for high volume stats
-		f.stats.Count("ImportBit", 1, 0.0001)
+		columnIDs[i] = pos
 
 		// Add row to rowSet.
 		if i == 0 || rowID != lastRowID {
@@ -1518,24 +1507,37 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 			rowSet[rowID] = struct{}{}
 		}
 	}
-
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	// Merge localBitmap into fragment's existing data.
-	var results *roaring.Bitmap
+	positions := columnIDs
+	var changedN int
 	if options.Clear {
-		if f.storage.Count() > 0 {
-			results = f.storage.Difference(localBitmap)
+		changedN, err = localBitmap.RemoveN(positions...) // TODO benchmark AddN behavior with sorted/unsorted positions
+	} else {
+		changedN, err = localBitmap.AddN(positions...) // TODO benchmark RemoveN behavior with sorted/unsorted positions
+	}
+	if err != nil {
+		return errors.Wrap(err, "adding positions")
+	}
+	f.stats.Count("ImportBit", int64(changedN), 1)
+	f.opN += changedN
+
+	var results *roaring.Bitmap
+	if !smallWrite {
+		// Merge localBitmap into fragment's existing data.
+		if options.Clear {
+			if f.storage.Count() > 0 {
+				results = f.storage.Difference(localBitmap)
+			} else {
+				results = roaring.NewBitmap()
+			}
 		} else {
-			results = roaring.NewBitmap()
+			if f.storage.Count() > 0 {
+				results = f.storage.Union(localBitmap)
+			} else {
+				results = localBitmap
+			}
 		}
 	} else {
-		if f.storage.Count() > 0 {
-			results = f.storage.Union(localBitmap)
-		} else {
-			results = localBitmap
-		}
+		results = f.storage
 	}
 
 	// Update cache counts for all affected rows.
@@ -1545,10 +1547,20 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 
 		n := results.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
 		f.cache.BulkAdd(rowID, n)
+
+		if smallWrite {
+			if _, ok := f.rowCache.Fetch(rowID); ok { // we won't update the rowCache if it wasn't already in there.
+				f.rowCache.Add(rowID, f.rowFromStorage(rowID))
+			}
+		}
 	}
 
 	f.cache.Recalculate()
-	return unprotectedWriteToFragment(f, results)
+
+	if !smallWrite {
+		return unprotectedWriteToFragment(f, results)
+	}
+	return nil
 }
 
 // bulkImportMutex performs a bulk import on a fragment while ensuring
@@ -1645,23 +1657,36 @@ func (f *fragment) bulkImportMutex(rowIDs, columnIDs []uint64) error {
 
 // importValue bulk imports a set of range-encoded values.
 func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear bool) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
 	// Verify that there are an equal number of column ids and values.
 	if len(columnIDs) != len(values) {
 		return fmt.Errorf("mismatch of column/value len: %d != %d", len(columnIDs), len(values))
 	}
+	f.mu.RLock()
+	smallPath := false
+	if len(columnIDs)*int(bitDepth)/2+f.opN < f.MaxOpN {
+		smallPath = true
+	}
+	f.mu.RUnlock()
 
-	f.storage.OpWriter = nil
+	if !smallPath {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.storage.OpWriter = nil
+	}
 	// Process every value.
 	// If an error occurs then reopen the storage.
 	if err := func() error {
 		for i := range columnIDs {
 			columnID, value := columnIDs[i], values[i]
 
-			_, err := f.importSetValue(columnID, bitDepth, value, clear)
+			var err error
+			if smallPath {
+				_, err = f.setValueBase(columnID, bitDepth, value, clear)
+			} else {
+				_, err = f.importSetValue(columnID, bitDepth, value, clear)
+			}
 			if err != nil {
-				return errors.Wrap(err, "setting")
+				return errors.Wrapf(err, "setting value, smallPath:%v", smallPath)
 			}
 		}
 		return nil
@@ -1670,8 +1695,11 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 		_ = f.openStorage()
 		return err
 	}
-	if err := f.snapshot(); err != nil {
-		return errors.Wrap(err, "snapshotting")
+
+	if !smallPath {
+		if err := f.snapshot(); err != nil {
+			return errors.Wrap(err, "snapshotting")
+		}
 	}
 	return nil
 }

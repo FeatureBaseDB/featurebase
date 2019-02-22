@@ -175,6 +175,28 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 	return changed, nil
 }
 
+// AddN adds values to the bitmap, appending them all to the op log in a batched write. It returns the number of changed bits.
+func (b *Bitmap) AddN(a ...uint64) (changed int, err error) {
+	op := &op{
+		typ:    opTypeAddBatch,
+		values: a,
+	}
+	if err := b.writeOp(op); err != nil {
+		return 0, errors.Wrap(err, "writing to op log")
+	}
+
+	// TODO consider applying changes in-memory first and then only writing the
+	// changed bits to op log?
+	for _, v := range a {
+		// Apply to the in-memory bitmap.
+		if b.DirectAdd(v) {
+			changed++
+		}
+	}
+
+	return changed, nil
+}
+
 // DirectAdd adds a value to the bitmap by bypassing the op log.
 func (b *Bitmap) DirectAdd(v uint64) bool {
 	cont := b.Containers.GetOrCreate(highbits(v))
@@ -207,6 +229,27 @@ func (b *Bitmap) Remove(a ...uint64) (changed bool, err error) {
 			changed = true
 		}
 	}
+	return changed, nil
+}
+
+func (b *Bitmap) RemoveN(a ...uint64) (changed int, err error) {
+	op := &op{
+		typ:    opTypeRemoveBatch,
+		values: a,
+	}
+	if err := b.writeOp(op); err != nil {
+		return 0, errors.Wrap(err, "writing to op log")
+	}
+
+	// TODO consider applying changes in-memory first and then only writing the
+	// changed bits to op log?
+	for _, v := range a {
+		// Apply to the in-memory bitmap.
+		if b.remove(v) {
+			changed++
+		}
+	}
+
 	return changed, nil
 }
 
@@ -3487,26 +3530,38 @@ func shiftRun(a *Container) (*Container, bool) {
 type opType uint8
 
 const (
-	opTypeAdd    = opType(0)
-	opTypeRemove = opType(1)
+	opTypeAdd         = opType(0)
+	opTypeRemove      = opType(1)
+	opTypeAddBatch    = opType(2)
+	opTypeRemoveBatch = opType(3)
 )
 
 // op represents an operation on the bitmap.
 type op struct {
-	typ   opType
-	value uint64
+	typ    opType
+	value  uint64
+	values []uint64
 }
 
 // apply executes the operation against a bitmap.
-func (op *op) apply(b *Bitmap) bool {
+func (op *op) apply(b *Bitmap) (changed bool) {
 	switch op.typ {
 	case opTypeAdd:
 		return b.DirectAdd(op.value)
 	case opTypeRemove:
 		return b.remove(op.value)
+	case opTypeAddBatch:
+		for _, v := range op.values {
+			changed = changed || b.DirectAdd(v)
+		}
+	case opTypeRemoveBatch:
+		for _, v := range op.values {
+			changed = changed || b.remove(v)
+		}
 	default:
 		panic(fmt.Sprintf("invalid op type: %d", op.typ))
 	}
+	return changed
 }
 
 // WriteTo writes op to the w.
@@ -3515,11 +3570,21 @@ func (op *op) WriteTo(w io.Writer) (n int64, err error) {
 
 	// Write type and value.
 	buf[0] = byte(op.typ)
-	binary.LittleEndian.PutUint64(buf[1:9], op.value)
+	if op.typ <= 1 {
+		binary.LittleEndian.PutUint64(buf[1:9], op.value)
+	} else {
+		binary.LittleEndian.PutUint64(buf[1:9], uint64(len(op.values)))
+		p := 13 // start of values (skip 4 for checksum)
+		for _, v := range op.values {
+			binary.LittleEndian.PutUint64(buf[p:p+8], v)
+			p += 8
+		}
+	}
 
 	// Add checksum at the end.
 	h := fnv.New32a()
 	h.Write(buf[0:9])
+	h.Write(buf[13:])
 	binary.LittleEndian.PutUint32(buf[9:13], h.Sum32())
 
 	// Write to writer.
@@ -3527,29 +3592,49 @@ func (op *op) WriteTo(w io.Writer) (n int64, err error) {
 	return int64(nn), err
 }
 
+var minOpSize = 13
+
 // UnmarshalBinary decodes data into an op.
 func (op *op) UnmarshalBinary(data []byte) error {
-	if len(data) < op.size() {
+	if len(data) < minOpSize {
 		return fmt.Errorf("op data out of bounds: len=%d", len(data))
 	}
 	statsHit("op/UnmarshalBinary")
 
+	op.typ = opType(data[0])
+	// op.value will actually contain the length of values for batch ops
+	op.value = binary.LittleEndian.Uint64(data[1:9])
+
 	// Verify checksum.
 	h := fnv.New32a()
 	h.Write(data[0:9])
+
+	if op.typ > 1 {
+		if len(data) < int(13+op.value*8) {
+			return fmt.Errorf("op data truncated - expected %d, got %d", 13+op.value*8, len(data))
+		}
+		h.Write(data[13 : 13+op.value*8])
+		op.values = make([]uint64, op.value)
+		for i := uint64(0); i < op.value; i++ {
+			start := 13 + i*8
+			op.values[i] = binary.LittleEndian.Uint64(data[start : start+8])
+		}
+		op.value = 0
+	}
 	if chk := binary.LittleEndian.Uint32(data[9:13]); chk != h.Sum32() {
 		return fmt.Errorf("checksum mismatch: exp=%08x, got=%08x", h.Sum32(), chk)
 	}
-
-	// Read type and value.
-	op.typ = opType(data[0])
-	op.value = binary.LittleEndian.Uint64(data[1:9])
 
 	return nil
 }
 
 // size returns the encoded size of the op, in bytes.
-func (*op) size() int { return 1 + 8 + 4 }
+func (op *op) size() int {
+	if op.typ == opTypeAdd || op.typ == opTypeRemove {
+		return 1 + 8 + 4
+	}
+	return 1 + 8 + 4 + len(op.values)*8
+}
 
 func highbits(v uint64) uint64 { return v >> 16 }
 func lowbits(v uint64) uint16  { return uint16(v & 0xFFFF) }

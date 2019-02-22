@@ -23,6 +23,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/pkg/errors"
 )
 
 // String produces a human viewable string of the contents.
@@ -3436,4 +3438,114 @@ func TestShiftRun(t *testing.T) {
 			t.Fatalf("test #%v shiftRun() expected %v, but got %v %d", i, test.exp, ret2.runs, ret2.n)
 		}
 	}
+}
+
+func TestOpLogWriteUnmarshal(t *testing.T) {
+	tests := []*op{
+		&op{
+			typ:   opTypeAdd,
+			value: 27,
+		},
+		&op{
+			typ:   opTypeRemove,
+			value: 28,
+		},
+		&op{
+			typ:    opTypeAddBatch,
+			values: []uint64{1, 2, 6, 19},
+		},
+		&op{
+			typ:    opTypeRemoveBatch,
+			values: []uint64{1, 2, 6, 19, 22, 44},
+		},
+		&op{
+			typ:    opTypeAddBatch,
+			values: []uint64{51234567890},
+		},
+		&op{
+			typ:    opTypeRemoveBatch,
+			values: []uint64{51234567890},
+		},
+		&op{
+			typ:   opTypeAdd,
+			value: 0,
+		},
+		&op{
+			typ:   opTypeRemove,
+			value: 0,
+		},
+		&op{
+			typ:    opTypeAddBatch,
+			values: []uint64{0},
+		},
+		&op{
+			typ:    opTypeRemoveBatch,
+			values: []uint64{0},
+		},
+		&op{
+			typ:    opTypeAddBatch,
+			values: []uint64{},
+		},
+		&op{
+			typ:    opTypeRemoveBatch,
+			values: []uint64{},
+		},
+	}
+
+	// test each one separately
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			if _, err := test.WriteTo(buf); err != nil {
+				t.Errorf("writing op %v to buffer: %v", test, err)
+			}
+
+			op := &op{}
+			if err := op.UnmarshalBinary(buf.Bytes()); err != nil {
+				t.Fatalf("unmarshling op: %v", err)
+			}
+
+			if err := compareOps(test, op); err != nil {
+				t.Errorf("mismatch: %v", err)
+			}
+		})
+	}
+
+	// now write them all to the same buffer and unmarshal one by one
+	t.Run("writeAllOps", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		for _, test := range tests {
+			_, err := test.WriteTo(buf)
+			if err != nil {
+				t.Fatalf("writing op to buffer: %v", err)
+			}
+		}
+
+		data := buf.Bytes()
+		offset := 0
+		for i, test := range tests {
+			op := &op{}
+
+			if err := op.UnmarshalBinary(data[offset:]); err != nil {
+				t.Fatalf("unmarshling op: %v", err)
+			}
+			if err := compareOps(test, op); err != nil {
+				t.Errorf("mismatch at %d: %v", i, err)
+			}
+			offset += op.size()
+		}
+	})
+}
+
+func compareOps(op1, op2 *op) error {
+	if op1.typ != op2.typ || op1.value != op2.value || len(op1.values) != len(op2.values) {
+		return errors.Errorf("mismatched type, value, or length: %v, %v", op1, op2)
+	}
+
+	for i := 0; i < len(op1.values); i++ {
+		if op1.values[i] != op2.values[i] {
+			return errors.Errorf("mismatched values at %d: %d and %d", i, op1.values[i], op2.values[i])
+		}
+	}
+	return nil
 }
