@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/pql"
@@ -180,10 +181,8 @@ func (v *view) fragmentPath(shard uint64) string {
 func (v *view) Fragment(shard uint64) *fragment {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
-	return v.fragment(shard)
+	return v.fragments[shard]
 }
-
-func (v *view) fragment(shard uint64) *fragment { return v.fragments[shard] }
 
 // allFragments returns a list of all fragments in the view.
 func (v *view) allFragments() []*fragment {
@@ -206,45 +205,46 @@ func (v *view) recalculateCaches() {
 
 // CreateFragmentIfNotExists returns a fragment in the view by shard.
 func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
-	frag, msg, err := v.createFragmentIfNotExists(shard)
-
-	// if msg is not nil, then a new shard was created
-	if err == nil && msg != nil {
-		// Broadcast a message that a new max shard was just created.
-		if err = v.broadcaster.SendSync(msg); err != nil {
-			frag.close()
-			return nil, errors.Wrap(err, "sending createshard message")
-		}
-		v.mu.Lock()
-		v.fragments[shard] = frag
-		v.mu.Unlock()
-	}
-
-	return frag, err
-}
-
-func (v *view) createFragmentIfNotExists(shard uint64) (*fragment, *CreateShardMessage, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	// Find fragment in cache first.
 	if frag := v.fragments[shard]; frag != nil {
-		return frag, nil, nil
+		return frag, nil
 	}
 
 	// Initialize and open fragment.
 	frag := v.newFragment(v.fragmentPath(shard), shard)
 	if err := frag.Open(); err != nil {
-		return nil, nil, errors.Wrap(err, "opening fragment")
+		return nil, errors.Wrap(err, "opening fragment")
 	}
 	frag.RowAttrStore = v.rowAttrStore
 
-	msg := &CreateShardMessage{
-		Index: v.index,
-		Field: v.field,
-		Shard: shard,
+	v.fragments[shard] = frag
+	broadcastChan := make(chan struct{})
+
+	go func() {
+		msg := &CreateShardMessage{
+			Index: v.index,
+			Field: v.field,
+			Shard: shard,
+		}
+		// Broadcast a message that a new max shard was just created.
+		err := v.broadcaster.SendSync(msg)
+		if err != nil {
+			v.logger.Printf("broadcasting create shard: %v", err)
+		}
+		close(broadcastChan)
+	}()
+
+	// We want to wait until the broadcast is complete, but what if it
+	// takes a really long time? So we time out.
+	select {
+	case <-broadcastChan:
+	case <-time.After(50 * time.Millisecond):
+		v.logger.Debugf("broadcasting create shard took >50ms")
 	}
 
-	return frag, msg, nil
+	return frag, nil
 }
 
 func (v *view) newFragment(path string, shard uint64) *fragment {
@@ -263,8 +263,7 @@ func (v *view) newFragment(path string, shard uint64) *fragment {
 
 // deleteFragment removes the fragment from the view.
 func (v *view) deleteFragment(shard uint64) error {
-
-	fragment := v.fragments[shard]
+	fragment := v.Fragment(shard)
 	if fragment == nil {
 		return ErrFragmentNotFound
 	}
@@ -318,8 +317,8 @@ func (v *view) setBit(rowID, columnID uint64) (changed bool, err error) {
 // clearBit clears a bit within the view.
 func (v *view) clearBit(rowID, columnID uint64) (changed bool, err error) {
 	shard := columnID / ShardWidth
-	frag, found := v.fragments[shard]
-	if !found {
+	frag := v.Fragment(shard)
+	if frag == nil {
 		return false, nil
 	}
 	return frag.clearBit(rowID, columnID)

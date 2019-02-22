@@ -16,10 +16,10 @@ package pilosa
 
 import (
 	"io/ioutil"
-	"strings"
 	"testing"
+	"time"
 
-	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // mustOpenView returns a new instance of View with a temporary path.
@@ -77,44 +77,41 @@ func TestView_DeleteFragment(t *testing.T) {
 	}
 }
 
-// Ensure view closes fragment after failed shard broadcast.
-func TestView_CreateFragmentError(t *testing.T) {
+// Ensure that simultaneous attempts to grab a new fragment don't clash even
+// if the broadcast operation takes a bit of time.
+func TestView_CreateFragmentRace(t *testing.T) {
+	var creates errgroup.Group
 	v := mustOpenView("i", "f", "v")
 	defer v.close()
 
 	// Use a broadcaster which intentionally fails.
-	v.broadcaster = errorBroadcaster{}
+	v.broadcaster = delayBroadcaster{delay: 10 * time.Millisecond}
 
 	shard := uint64(0)
 
-	// Create fragment (with error on broadcast).
-	fragment, err := v.CreateFragmentIfNotExists(shard)
-	if !strings.Contains(err.Error(), "intentional error") {
-		if err != nil {
-			t.Fatal(err)
-		} else if fragment == nil {
-			t.Fatal("expected fragment")
-		} else {
-			t.Fatal("expected intentional error")
-		}
-	}
-
-	// Set the broadcaster back to no-op.
-	v.broadcaster = nopBroadcaster{}
-
-	// Try to create the fragment again.
-	_, err = v.CreateFragmentIfNotExists(shard)
+	creates.Go(func() error {
+		_, err := v.CreateFragmentIfNotExists(shard)
+		return err
+	})
+	creates.Go(func() error {
+		_, err := v.CreateFragmentIfNotExists(shard)
+		return err
+	})
+	err := creates.Wait()
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-// errorBroadcaster is a broadcaster which always returns an error.
-type errorBroadcaster struct {
+// delayBroadcaster is a nopBroadcaster with a configurable delay.
+type delayBroadcaster struct {
 	nopBroadcaster
+	delay time.Duration
 }
 
-// SendSync is an implementation of Broadcaster SendSync which always returns an error.
-func (errorBroadcaster) SendSync(Message) error {
-	return errors.New("intentional error")
+// SendSync is an implementation of Broadcaster SendSync which delays for a
+// specified interval before succeeding.
+func (d delayBroadcaster) SendSync(Message) error {
+	time.Sleep(d.delay)
+	return nil
 }
