@@ -2720,6 +2720,7 @@ func unionBitmapRun(a, b *Container) *Container {
 // unions the run b into the bitmap a, mutating a in place. The n value of
 // a will need to be repaired after the fact.
 func unionBitmapRunInPlace(a, b *Container) {
+	a.unmap()
 	statsHit("union/BitmapRun")
 	for j := 0; j < len(b.runs); j++ {
 		a.bitmapSetRangeIgnoreN(uint64(b.runs[j].start), uint64(b.runs[j].last)+1)
@@ -2867,6 +2868,7 @@ func unionArrayBitmap(a, b *Container) *Container {
 // unions array b into bitmap a, mutating a in place. The n value
 // of a will need to be repaired after the fact.
 func unionBitmapArrayInPlace(a, b *Container) {
+	a.unmap()
 	for _, v := range b.array {
 		a.bitmap[v>>6] |= (uint64(1) << (v % 64))
 	}
@@ -2901,6 +2903,8 @@ func unionBitmapBitmap(a, b *Container) *Container {
 // unions bitmap b into bitmap a, mutating a in place. The n value of
 // a will need to be repaired after the fact.
 func unionBitmapBitmapInPlace(a, b *Container) {
+	a.unmap()
+
 	// local variables added to prevent BCE checks in loop
 	// see https://go101.org/article/bounds-check-elimination.html
 
