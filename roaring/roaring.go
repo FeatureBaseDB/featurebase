@@ -131,7 +131,7 @@ func NewBitmap(a ...uint64) *Bitmap {
 	b := &Bitmap{
 		Containers: newSliceContainers(),
 	}
-	b.Add(a...)
+	b.AddN(a...)
 	return b
 }
 
@@ -177,12 +177,17 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 
 // AddN adds values to the bitmap, appending them all to the op log in a batched write. It returns the number of changed bits.
 func (b *Bitmap) AddN(a ...uint64) (changed int, err error) {
-	op := &op{
-		typ:    opTypeAddBatch,
-		values: a,
+	if len(a) == 0 {
+		return 0, nil
 	}
-	if err := b.writeOp(op); err != nil {
-		return 0, errors.Wrap(err, "writing to op log")
+	if b.OpWriter != nil {
+		op := &op{
+			typ:    opTypeAddBatch,
+			values: a,
+		}
+		if err := b.writeOp(op); err != nil {
+			return 0, errors.Wrap(err, "writing to op log")
+		}
 	}
 
 	// TODO consider applying changes in-memory first and then only writing the
@@ -233,12 +238,17 @@ func (b *Bitmap) Remove(a ...uint64) (changed bool, err error) {
 }
 
 func (b *Bitmap) RemoveN(a ...uint64) (changed int, err error) {
-	op := &op{
-		typ:    opTypeRemoveBatch,
-		values: a,
+	if len(a) == 0 {
+		return 0, nil
 	}
-	if err := b.writeOp(op); err != nil {
-		return 0, errors.Wrap(err, "writing to op log")
+	if b.OpWriter != nil {
+		op := &op{
+			typ:    opTypeRemoveBatch,
+			values: a,
+		}
+		if err := b.writeOp(op); err != nil {
+			return 0, errors.Wrap(err, "writing to op log")
+		}
 	}
 
 	// TODO consider applying changes in-memory first and then only writing the
