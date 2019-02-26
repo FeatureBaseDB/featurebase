@@ -3442,51 +3442,51 @@ func TestShiftRun(t *testing.T) {
 
 func TestOpLogWriteUnmarshal(t *testing.T) {
 	tests := []*op{
-		&op{
+		{
 			typ:   opTypeAdd,
 			value: 27,
 		},
-		&op{
+		{
 			typ:   opTypeRemove,
 			value: 28,
 		},
-		&op{
+		{
 			typ:    opTypeAddBatch,
 			values: []uint64{1, 2, 6, 19},
 		},
-		&op{
+		{
 			typ:    opTypeRemoveBatch,
 			values: []uint64{1, 2, 6, 19, 22, 44},
 		},
-		&op{
+		{
 			typ:    opTypeAddBatch,
 			values: []uint64{51234567890},
 		},
-		&op{
+		{
 			typ:    opTypeRemoveBatch,
 			values: []uint64{51234567890},
 		},
-		&op{
+		{
 			typ:   opTypeAdd,
 			value: 0,
 		},
-		&op{
+		{
 			typ:   opTypeRemove,
 			value: 0,
 		},
-		&op{
+		{
 			typ:    opTypeAddBatch,
 			values: []uint64{0},
 		},
-		&op{
+		{
 			typ:    opTypeRemoveBatch,
 			values: []uint64{0},
 		},
-		&op{
+		{
 			typ:    opTypeAddBatch,
 			values: []uint64{},
 		},
-		&op{
+		{
 			typ:    opTypeRemoveBatch,
 			values: []uint64{},
 		},
