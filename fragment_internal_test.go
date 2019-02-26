@@ -799,8 +799,8 @@ func BenchmarkFragment_RepeatedSmallValueImports(b *testing.B) {
 						b.StartTimer()
 						for j := 0; j < numUpdates; j++ {
 							err := f.importValue(
-								updateCols[valsPerUpdate*i:valsPerUpdate*(i+1)],
-								updateVals[valsPerUpdate*i:valsPerUpdate*(i+1)],
+								updateCols[valsPerUpdate*j:valsPerUpdate*(j+1)],
+								updateVals[valsPerUpdate*j:valsPerUpdate*(j+1)],
 								21,
 								false,
 							)
@@ -2701,4 +2701,84 @@ func randPositions(n int, r *rand.Rand) []uint64 {
 		ret[i] = uint64(r.Int63n(ShardWidth))
 	}
 	return ret
+}
+
+func TestFragmentPositionsForValue(t *testing.T) {
+	f := mustOpenFragment("i", "f", "v", 0, CacheTypeNone)
+	defer f.Clean(t)
+
+	tests := []struct {
+		columnID uint64
+		bitDepth uint
+		value    uint64
+		clear    bool
+		toSet    []uint64
+		toClear  []uint64
+	}{
+		{
+			columnID: 0,
+			bitDepth: 1,
+			value:    0,
+			toSet:    []uint64{ShardWidth},
+			toClear:  []uint64{0},
+		},
+		{
+			columnID: 0,
+			bitDepth: 3,
+			value:    0,
+			toSet:    []uint64{ShardWidth * 3},
+			toClear:  []uint64{0, ShardWidth, ShardWidth * 2},
+		},
+		{
+			columnID: 1,
+			bitDepth: 3,
+			value:    0,
+			toSet:    []uint64{ShardWidth*3 + 1},
+			toClear:  []uint64{1, ShardWidth + 1, ShardWidth*2 + 1},
+		},
+		{
+			columnID: 0,
+			bitDepth: 1,
+			value:    1,
+			toSet:    []uint64{0, ShardWidth},
+			toClear:  []uint64{},
+		},
+		{
+			columnID: 0,
+			bitDepth: 4,
+			value:    10,
+			toSet:    []uint64{ShardWidth, ShardWidth * 3, ShardWidth * 4},
+			toClear:  []uint64{0, ShardWidth * 2},
+		},
+		{
+			columnID: 0,
+			bitDepth: 5,
+			value:    10,
+			toSet:    []uint64{ShardWidth, ShardWidth * 3, ShardWidth * 5},
+			toClear:  []uint64{0, ShardWidth * 2, ShardWidth * 4},
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			toSet, toClear, err := f.positionsForValue(test.columnID, test.bitDepth, test.value, test.clear)
+			if err != nil {
+				t.Fatalf("getting positions: %v", err)
+			}
+
+			if len(toSet) != len(test.toSet) || len(toClear) != len(test.toClear) {
+				t.Fatalf("differing lengths (exp/got): set\n%v\n%v\nclear\n%v\n%v\n", test.toSet, toSet, test.toClear, toClear)
+			}
+			for i := 0; i < len(toSet); i++ {
+				if toSet[i] != test.toSet[i] {
+					t.Errorf("toSet don't match at %d - exp:%d and got:%d", i, test.toSet[i], toSet[i])
+				}
+			}
+			for i := 0; i < len(toClear); i++ {
+				if toClear[i] != test.toClear[i] {
+					t.Errorf("toClear don't match at %d - exp:%d and got:%d", i, test.toClear[i], toClear[i])
+				}
+			}
+		})
+	}
 }

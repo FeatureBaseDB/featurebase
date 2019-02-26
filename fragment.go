@@ -417,6 +417,7 @@ func (f *fragment) handleMutex(rowID, columnID uint64) error {
 	return nil
 }
 
+// unprotectedSetBit TODO should be replaced by an invocation of importPositions with a single bit to set.
 func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err error) {
 	changed = false
 	// Determine the position of the bit in the storage.
@@ -469,6 +470,8 @@ func (f *fragment) clearBit(rowID, columnID uint64) (bool, error) {
 	return f.unprotectedClearBit(rowID, columnID)
 }
 
+// unprotectedClearBit TODO should be replaced by an invocation of
+// importPositions with a single bit to clear.
 func (f *fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, err error) {
 	changed = false
 	// Determine the position of the bit in the storage.
@@ -638,6 +641,39 @@ func (f *fragment) setValue(columnID uint64, bitDepth uint, value uint64) (chang
 	return f.setValueBase(columnID, bitDepth, value, false)
 }
 
+func (f *fragment) positionsForValue(columnID uint64, bitDepth uint, value uint64, clear bool) (toSet, toClear []uint64, err error) {
+	toSet = make([]uint64, 0, bitDepth+1)
+	toClear = make([]uint64, 0, bitDepth+1) // TODO store these on the fragment
+	// (as [64]uint64?) and make sure
+	// they aren't used concurrently to
+	// avoid extra allocations
+	for i := uint(0); i < bitDepth; i++ {
+		bit, err := f.pos(uint64(i), columnID)
+		if err != nil {
+			return toSet, toClear, errors.Wrap(err, "getting pos")
+		}
+		if value&(1<<i) != 0 {
+			toSet = append(toSet, bit)
+		} else {
+			toClear = append(toClear, bit)
+		}
+	}
+
+	// Mark value as set.
+	bit, err := f.pos(uint64(bitDepth), columnID)
+	if err != nil {
+		return toSet, toClear, errors.Wrap(err, "getting not-null pos")
+	}
+	if clear {
+		toClear = append(toClear, bit)
+	} else {
+		toSet = append(toSet, bit)
+	}
+
+	return toSet, toClear, nil
+}
+
+// TODO get rid of this and use positionsForValue to generate a single write op, and set that with importPositions.
 func (f *fragment) setValueBase(columnID uint64, bitDepth uint, value uint64, clear bool) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -1691,10 +1727,16 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 	if len(columnIDs) != len(values) {
 		return fmt.Errorf("mismatch of column/value len: %d != %d", len(columnIDs), len(values))
 	}
+	var toSet, toClear []uint64
 	f.mu.RLock()
 	smallPath := false
-	if len(columnIDs)*int(bitDepth)/2+f.opN < f.MaxOpN {
+	if len(columnIDs)*int(bitDepth+1)+f.opN < f.MaxOpN {
 		smallPath = true
+		// TODO figure out how to avoid re-allocating these each time. Probably
+		// possible to store them on the fragment with a capacity based on
+		// MaxOpN.
+		toSet = make([]uint64, 0, len(columnIDs)*int(bitDepth)/2)
+		toClear = make([]uint64, 0, len(columnIDs)*int(bitDepth)/2)
 	}
 	f.mu.RUnlock()
 
@@ -1708,14 +1750,15 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 	if err := func() error {
 		for i := range columnIDs {
 			columnID, value := columnIDs[i], values[i]
-
 			var err error
 			if smallPath {
-				_, err = f.setValueBase(columnID, bitDepth, value, clear)
-			} else {
-				_, err = f.importSetValue(columnID, bitDepth, value, clear)
-			}
-			if err != nil {
+				ts, tc, err := f.positionsForValue(columnID, bitDepth, value, clear)
+				if err != nil {
+					return errors.Wrap(err, "getting positions for value")
+				}
+				toSet = append(toSet, ts...)
+				toClear = append(toClear, tc...)
+			} else if _, err = f.importSetValue(columnID, bitDepth, value, clear); err != nil {
 				return errors.Wrapf(err, "setting value, smallPath:%v", smallPath)
 			}
 		}
@@ -1726,12 +1769,16 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 		return err
 	}
 
-	if !smallPath {
-		if err := f.snapshot(); err != nil {
-			return errors.Wrap(err, "snapshotting")
+	if smallPath {
+		rowSet := make(map[uint64]struct{}, bitDepth+1)
+		for i := uint(0); i < bitDepth+1; i++ {
+			rowSet[uint64(i)] = struct{}{}
 		}
+		err := f.importPositions(toSet, toClear, rowSet)
+		return errors.Wrap(err, "importing positions")
 	}
-	return nil
+	err := f.snapshot()
+	return errors.Wrap(err, "snapshotting")
 }
 
 // importRoaring imports from the official roaring data format defined at
