@@ -29,6 +29,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"syscall"
 	"time"
@@ -179,6 +180,9 @@ func (m *Command) Wait() error {
 
 // SetupServer uses the cluster configuration to set up this server.
 func (m *Command) SetupServer() error {
+	runtime.SetBlockProfileRate(m.Config.Profile.BlockRate)
+	runtime.SetMutexProfileFraction(m.Config.Profile.MutexFraction)
+
 	syswrap.SetMaxMapCount(m.Config.MaxMapCount)
 	syswrap.SetMaxFileCount(m.Config.MaxFileCount)
 

@@ -128,6 +128,13 @@ type Config struct {
 		// AgentHostPort is the host:port of the local agent.
 		AgentHostPort string `toml:"agent-host-port"`
 	} `toml:"tracing"`
+
+	Profile struct {
+		// BlockRate is passed directly to runtime.SetBlockProfileRate
+		BlockRate int `toml:"block-rate`
+		// MutexFraction is passed directly to runtime.SetMutexProfileFraction
+		MutexFraction int `toml:"mutex-fraction"`
+	} `toml:"profile"`
 }
 
 // NewConfig returns an instance of Config with default options.
@@ -169,6 +176,9 @@ func NewConfig() *Config {
 	// Tracing config.
 	c.Tracing.SamplerType = jaeger.SamplerTypeRemote
 	c.Tracing.SamplerParam = 0.001
+
+	c.Profile.BlockRate = 10000000 // 1 sample per 10 ms
+	c.Profile.MutexFraction = 100  // 1% sampling
 
 	return c
 }
