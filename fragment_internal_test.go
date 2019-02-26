@@ -2572,3 +2572,29 @@ func TestFragmentRowIterator(t *testing.T) {
 		}
 	})
 }
+
+func TestUnionInPlaceMapped(t *testing.T) {
+	f := mustOpenFragment("i", "f", "v", 0, CacheTypeNone)
+	defer f.Clean(t)
+	r0 := rand.New(rand.NewSource(2))
+	r1 := rand.New(rand.NewSource(1))
+	data0 := randPositions(1000000, r0)
+	setBM := roaring.NewBitmap()
+	setBM.OpWriter = nil
+	setBM.Add(data0...)
+	unprotectedWriteToFragment(f, setBM)
+	data1 := randPositions(1000000, r1)
+	setBM2 := roaring.NewBitmap()
+	setBM2.OpWriter = nil
+	setBM2.Add(data1...)
+
+	f.storage.UnionInPlace(setBM2)
+}
+
+func randPositions(n int, r *rand.Rand) []uint64 {
+	ret := make([]uint64, n)
+	for i := 0; i < n; i++ {
+		ret[i] = uint64(r.Int63n(ShardWidth))
+	}
+	return ret
+}
