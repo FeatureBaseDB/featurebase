@@ -1729,9 +1729,9 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 	}
 	var toSet, toClear []uint64
 	f.mu.RLock()
-	smallPath := false
+	smallWrite := false
 	if len(columnIDs)*int(bitDepth+1)+f.opN < f.MaxOpN {
-		smallPath = true
+		smallWrite = true
 		// TODO figure out how to avoid re-allocating these each time. Probably
 		// possible to store them on the fragment with a capacity based on
 		// MaxOpN.
@@ -1740,7 +1740,7 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 	}
 	f.mu.RUnlock()
 
-	if !smallPath {
+	if !smallWrite {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.storage.OpWriter = nil
@@ -1751,7 +1751,7 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 		for i := range columnIDs {
 			columnID, value := columnIDs[i], values[i]
 			var err error
-			if smallPath {
+			if smallWrite {
 				ts, tc, err := f.positionsForValue(columnID, bitDepth, value, clear)
 				if err != nil {
 					return errors.Wrap(err, "getting positions for value")
@@ -1759,7 +1759,7 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 				toSet = append(toSet, ts...)
 				toClear = append(toClear, tc...)
 			} else if _, err = f.importSetValue(columnID, bitDepth, value, clear); err != nil {
-				return errors.Wrapf(err, "setting value, smallPath:%v", smallPath)
+				return errors.Wrapf(err, "setting value, smallPath:%v", smallWrite)
 			}
 		}
 		return nil
@@ -1769,7 +1769,7 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 		return err
 	}
 
-	if smallPath {
+	if smallWrite {
 		rowSet := make(map[uint64]struct{}, bitDepth+1)
 		for i := uint(0); i < bitDepth+1; i++ {
 			rowSet[uint64(i)] = struct{}{}
