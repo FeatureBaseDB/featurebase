@@ -295,7 +295,7 @@ func (b *Bitmap) Count() (n uint64) {
 func (b *Bitmap) Any() bool {
 	iter, _ := b.Containers.Iterator(0)
 	// TODO (jaffee) I'm not sure if it's possible/legal to have an empty
-	// container, so this loop may be totally uneccesary. In theory, any empty
+	// container, so this loop may be totally unnecessary. In theory, any empty
 	// container should be removed from the bitmap though.
 	for b := iter.Next(); b; iter.Next() {
 		_, c := iter.Value()
