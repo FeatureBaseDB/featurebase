@@ -648,12 +648,7 @@ func (f *fragment) setValue(columnID uint64, bitDepth uint, value uint64) (chang
 	return f.setValueBase(columnID, bitDepth, value, false)
 }
 
-func (f *fragment) positionsForValue(columnID uint64, bitDepth uint, value uint64, clear bool) (toSet, toClear []uint64, err error) {
-	toSet = make([]uint64, 0, bitDepth+1)
-	toClear = make([]uint64, 0, bitDepth+1) // TODO store these on the fragment
-	// (as [64]uint64?) and make sure
-	// they aren't used concurrently to
-	// avoid extra allocations
+func (f *fragment) positionsForValue(columnID uint64, bitDepth uint, value uint64, clear bool, toSet, toClear []uint64) ([]uint64, []uint64, error) {
 	for i := uint(0); i < bitDepth; i++ {
 		bit, err := f.pos(uint64(i), columnID)
 		if err != nil {
@@ -1756,17 +1751,14 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 	}
 	// Process every value.
 	// If an error occurs then reopen the storage.
-	if err := func() error {
+	if err := func() (err error) {
 		for i := range columnIDs {
 			columnID, value := columnIDs[i], values[i]
-			var err error
 			if smallWrite {
-				ts, tc, err := f.positionsForValue(columnID, bitDepth, value, clear)
+				toSet, toClear, err = f.positionsForValue(columnID, bitDepth, value, clear, toSet, toClear)
 				if err != nil {
 					return errors.Wrap(err, "getting positions for value")
 				}
-				toSet = append(toSet, ts...)
-				toClear = append(toClear, tc...)
 			} else if _, err = f.importSetValue(columnID, bitDepth, value, clear); err != nil {
 				return errors.Wrapf(err, "setting value, smallPath:%v", smallWrite)
 			}

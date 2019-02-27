@@ -2760,8 +2760,10 @@ func TestFragmentPositionsForValue(t *testing.T) {
 	}
 
 	for i, test := range tests {
+		toSet, toClear := make([]uint64, 0), make([]uint64, 0)
+		var err error
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			toSet, toClear, err := f.positionsForValue(test.columnID, test.bitDepth, test.value, test.clear)
+			toSet, toClear, err = f.positionsForValue(test.columnID, test.bitDepth, test.value, test.clear, toSet, toClear)
 			if err != nil {
 				t.Fatalf("getting positions: %v", err)
 			}
