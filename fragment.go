@@ -76,7 +76,7 @@ const (
 	HashBlockSize = 100
 
 	// defaultFragmentMaxOpN is the default value for Fragment.MaxOpN.
-	defaultFragmentMaxOpN = 5000
+	defaultFragmentMaxOpN = 10000
 
 	// Row ids used for boolean fields.
 	falseRowID = uint64(0)
