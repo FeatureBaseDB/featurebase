@@ -1596,7 +1596,7 @@ func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct
 	var results *roaring.Bitmap
 	if smallWrite {
 		results = f.storage
-	} else if beforeCnt := f.storage.Count(); !smallWrite && beforeCnt > 0 {
+	} else if beforeCnt := f.storage.Count(); beforeCnt > 0 {
 		// Merge localBitmap into fragment's existing data.
 		if len(clear) > 0 {
 			f.storage = f.storage.Difference(clearBitmap)
@@ -1741,9 +1741,11 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 		smallWrite = true
 		// TODO figure out how to avoid re-allocating these each time. Probably
 		// possible to store them on the fragment with a capacity based on
-		// MaxOpN.
-		toSet = make([]uint64, 0, len(columnIDs)*int(bitDepth)/2)
-		toClear = make([]uint64, 0, len(columnIDs)*int(bitDepth)/2)
+		// MaxOpN. For now, we know that the total number of bits to be
+		// set+cleared is len(values)*(bitDepth+1), so we make each slice
+		// slightly more than half of that to try to avoid reallocation.
+		toSet = make([]uint64, 0, len(columnIDs)*int(bitDepth+1)*(5/8))
+		toClear = make([]uint64, 0, len(columnIDs)*int(bitDepth+1)*(5/8))
 	}
 	f.mu.RUnlock()
 

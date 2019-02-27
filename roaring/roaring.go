@@ -291,6 +291,21 @@ func (b *Bitmap) Count() (n uint64) {
 	return b.Containers.Count()
 }
 
+// Any returns "b.Count() > 0"... but faster than doing that.
+func (b *Bitmap) Any() bool {
+	iter, _ := b.Containers.Iterator(0)
+	// TODO (jaffee) I'm not sure if it's possible/legal to have an empty
+	// container, so this loop may be totally uneccesary. In theory, any empty
+	// container should be removed from the bitmap though.
+	for b := iter.Next(); b; iter.Next() {
+		_, c := iter.Value()
+		if c.n > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // Size returns the number of bytes required for the bitmap.
 func (b *Bitmap) Size() int {
 	numbytes := 0
