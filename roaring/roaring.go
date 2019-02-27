@@ -119,7 +119,9 @@ type ContainerIterator interface {
 type Bitmap struct {
 	Containers Containers
 
-	// Number of operations written to the writer.
+	// Number of bit change operations written to the writer. Some operations
+	// contain multiple values, each of those counts the number of values rather
+	// than counting as one operation.
 	opN int
 
 	// Writer where operations are appended to.
@@ -1064,7 +1066,7 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 		opr.apply(b)
 
 		// Increase the op count.
-		b.opN++
+		b.opN += opr.count()
 
 		// Move the buffer forward.
 		buf = buf[opr.size():]
@@ -1082,8 +1084,8 @@ func (b *Bitmap) writeOp(op *op) error {
 	if _, err := op.WriteTo(b.OpWriter); err != nil {
 		return err
 	}
+	b.opN += op.count()
 
-	b.opN++
 	return nil
 }
 
@@ -3646,6 +3648,18 @@ func (op *op) size() int {
 	return 1 + 8 + 4 + len(op.values)*8
 }
 
+// count returns the number of bits the operation mutates.
+func (op *op) count() int {
+	switch op.typ {
+	case 0, 1:
+		return 1
+	case 2, 3:
+		return len(op.values)
+	default:
+		panic(fmt.Sprintf("unknown operation type: %d", op.typ))
+	}
+}
+
 func highbits(v uint64) uint64 { return v >> 16 }
 func lowbits(v uint64) uint16  { return uint16(v & 0xFFFF) }
 
@@ -4118,6 +4132,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		return nil
 	}
 	statsHit("Bitmap/UnmarshalBinary")
+	b.opN = 0 // reset opN since we're reading new data.
 	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
 	if fileMagic == MagicNumber { // if pilosa roaring
 		return errors.Wrap(b.unmarshalPilosaRoaring(data), "unmarshaling as pilosa roaring")

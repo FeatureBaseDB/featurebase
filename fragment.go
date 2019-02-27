@@ -238,6 +238,8 @@ func (f *fragment) openStorage() error {
 		return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
 	}
 
+	f.opN = f.storage.Info().OpN
+
 	// Attach the file to the bitmap to act as a write-ahead log.
 	f.storage.OpWriter = f.file
 	f.rowCache = &simpleCache{make(map[uint64]*Row)}
@@ -339,6 +341,11 @@ func (f *fragment) closeStorage() error {
 			return fmt.Errorf("close file: %s", err)
 		}
 	}
+
+	// opN is determined by how many bit set/clear operations are in the storage
+	// write log, so once the storage is closed it should be 0. Opening new
+	// storage will set opN appropriately.
+	f.opN = 0
 
 	return nil
 }

@@ -2782,3 +2782,53 @@ func TestFragmentPositionsForValue(t *testing.T) {
 		})
 	}
 }
+
+func TestSmallImportRestart(t *testing.T) {
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
+	err := f.bulkImport([]uint64{1, 2, 3, 4, 5, 6, 7, 8, 9}, []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9}, &ImportOptions{})
+	if err != nil {
+		t.Fatalf("initial small import: %v", err)
+	}
+	if f.opN != 9 {
+		t.Errorf("unexpected opN - %d is not 9", f.opN)
+	}
+
+	err = f.Close()
+	if err != nil {
+		t.Fatalf("closing fragment: %v", err)
+	}
+
+	err = f.Open()
+	if err != nil {
+		t.Fatalf("reopening fragment: %v", err)
+	}
+
+	if f.opN != 9 {
+		t.Errorf("unexpected opN after close/open %d is not 9", f.opN)
+	}
+
+	if r1 := f.row(1).Columns(); len(r1) != 1 || r1[0] != 1 {
+		t.Errorf("row 1 should be [1], but got %v", r1)
+	}
+
+	f2 := newFragment(f.path, "i", "f", viewStandard, 0)
+	f2.CacheType = f.CacheType
+
+	err = f.closeStorage()
+	if err != nil {
+		t.Fatalf("closing storage: %v", err)
+	}
+
+	err = f2.Open()
+	if err != nil {
+		t.Fatalf("opening new fragment: %v", err)
+	}
+
+	if f2.opN != 9 {
+		t.Errorf("unexpected opN after close/open %d is not 9", f2.opN)
+	}
+
+	if r1 := f2.row(1).Columns(); len(r1) != 1 || r1[0] != 1 {
+		t.Errorf("row 1 should be [1], but got %v", r1)
+	}
+}
