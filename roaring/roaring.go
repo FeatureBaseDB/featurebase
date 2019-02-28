@@ -182,22 +182,22 @@ func (b *Bitmap) AddN(a ...uint64) (changed int, err error) {
 	if len(a) == 0 {
 		return 0, nil
 	}
-	if b.OpWriter != nil {
-		op := &op{
-			typ:    opTypeAddBatch,
-			values: a,
-		}
-		if err := b.writeOp(op); err != nil {
-			return 0, errors.Wrap(err, "writing to op log")
-		}
-	}
 
-	// TODO consider applying changes in-memory first and then only writing the
-	// changed bits to op log?
 	for _, v := range a {
 		// Apply to the in-memory bitmap.
 		if b.DirectAdd(v) {
+			a[changed] = v
 			changed++
+		}
+	}
+
+	if b.OpWriter != nil {
+		op := &op{
+			typ:    opTypeAddBatch,
+			values: a[:changed],
+		}
+		if err := b.writeOp(op); err != nil {
+			return 0, errors.Wrap(err, "writing to op log")
 		}
 	}
 
@@ -243,22 +243,22 @@ func (b *Bitmap) RemoveN(a ...uint64) (changed int, err error) {
 	if len(a) == 0 {
 		return 0, nil
 	}
-	if b.OpWriter != nil {
-		op := &op{
-			typ:    opTypeRemoveBatch,
-			values: a,
-		}
-		if err := b.writeOp(op); err != nil {
-			return 0, errors.Wrap(err, "writing to op log")
-		}
-	}
 
-	// TODO consider applying changes in-memory first and then only writing the
-	// changed bits to op log?
 	for _, v := range a {
 		// Apply to the in-memory bitmap.
 		if b.remove(v) {
+			a[changed] = v
 			changed++
+		}
+	}
+
+	if b.OpWriter != nil {
+		op := &op{
+			typ:    opTypeRemoveBatch,
+			values: a[:changed],
+		}
+		if err := b.writeOp(op); err != nil {
+			return 0, errors.Wrap(err, "writing to op log")
 		}
 	}
 
