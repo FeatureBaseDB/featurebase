@@ -1700,7 +1700,7 @@ func TestFragment_ImportMutex(t *testing.T) {
 			for k, v := range test.setExp {
 				cols := f.row(k).Columns()
 				if !reflect.DeepEqual(cols, v) {
-					t.Fatalf("expected: %v, but got: %v", v, cols)
+					t.Fatalf("row: %d, expected: %v, but got: %v", k, v, cols)
 				}
 			}
 
@@ -1714,7 +1714,7 @@ func TestFragment_ImportMutex(t *testing.T) {
 			for k, v := range test.clearExp {
 				cols := f.row(k).Columns()
 				if !reflect.DeepEqual(cols, v) {
-					t.Fatalf("expected: %v, but got: %v", v, cols)
+					t.Fatalf("row: %d expected: %v, but got: %v", k, v, cols)
 				}
 			}
 		})
