@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -54,49 +53,45 @@ func (q TimeQuantum) Valid() bool {
 		return false
 	}
 }
+
 type timeUnitCache struct {
-	mux  sync.RWMutex
 	lookup map[unitKey]string
 }
 type unitKey struct {
-	name string
-	year    int
-	month    time.Month
-	hour    int
-	unit rune
+	name  string
+	year  int
+	month time.Month
+	day   int
+	hour  int
+	unit  rune
 }
 
 func (tc *timeUnitCache) viewByTimeUnitCached(name string, t time.Time, unit rune) string {
 	key := unitKey{
-		name: name,
-		year: t.Year(),
+		name:  name,
+		year:  t.Year(),
 		month: t.Month(),
-		hour:    t.Hour(),
-		unit: unit,
+		day:   t.Day(),
+		hour:  t.Hour(),
+		unit:  unit,
 	}
-	tc.mux.RLock()
 	viewWithUnit, found := tc.lookup[key]
-	tc.mux.RUnlock()
 	if found {
 		return viewWithUnit
 	}
 	viewWithUnit = viewByTimeUnitAlloc(name, t, unit)
-	tc.mux.Lock()
 	tc.lookup[key] = viewWithUnit
-	tc.mux.Unlock()
 	return viewWithUnit
 
 }
 
-var viewByTimeUnit = viewByTimeUnitAlloc
+type viewTimeUnitProvider = func (name string, t time.Time, unit rune) string
 
-func init() {
-	tc := timeUnitCache{
-		lookup:make(map[unitKey]string),
+func newTimeUnitCache()*timeUnitCache {
+	return &timeUnitCache{
+		lookup: make(map[unitKey]string),
 	}
-	viewByTimeUnit = tc.viewByTimeUnitCached
 }
-
 
 // The following methods are required to implement pflag Value interface.
 
@@ -132,7 +127,7 @@ func viewByTimeUnitAlloc(name string, t time.Time, unit rune) string {
 }
 
 // viewsByTime returns a list of views for a given timestamp.
-func viewsByTime(name string, t time.Time, q TimeQuantum) []string { // nolint: unparam
+func viewsByTime(name string, t time.Time, q TimeQuantum, viewByTimeUnit viewTimeUnitProvider) []string { // nolint: unparam
 	a := make([]string, 0, len(q))
 	for _, unit := range q {
 		view := viewByTimeUnit(name, t, unit)
@@ -145,7 +140,7 @@ func viewsByTime(name string, t time.Time, q TimeQuantum) []string { // nolint: 
 }
 
 // viewsByTimeRange returns a list of views to traverse to query a time range.
-func viewsByTimeRange(name string, start, end time.Time, q TimeQuantum) []string { // nolint: unparam
+func viewsByTimeRange(name string, start, end time.Time, q TimeQuantum, viewByTimeUnit viewTimeUnitProvider) []string { // nolint: unparam
 	t := start
 
 	// Save flags for performance.

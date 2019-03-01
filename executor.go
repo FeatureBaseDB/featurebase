@@ -1219,7 +1219,7 @@ func (e *executor) executeRowsShard(_ context.Context, index string, fieldName s
 			}
 
 			// Determine the views based on the specified time range.
-			views = viewsByTimeRange(viewStandard, fromTime, toTime, q)
+			views = viewsByTimeRange(viewStandard, fromTime, toTime, q,viewByTimeUnitAlloc)
 		}
 	}
 
@@ -1338,7 +1338,7 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 
 	// Union bitmaps across all time-based views.
 	row := &Row{}
-	for _, view := range viewsByTimeRange(viewStandard, fromTime, toTime, q) {
+	for _, view := range viewsByTimeRange(viewStandard, fromTime, toTime, q,viewByTimeUnitAlloc) {
 		f := e.Holder.fragment(index, fieldName, view, shard)
 		if f == nil {
 			continue

@@ -82,6 +82,8 @@ type Field struct {
 	remoteAvailableShards *roaring.Bitmap
 
 	logger logger.Logger
+
+	timeViewCache viewTimeUnitProvider
 }
 
 // FieldOption is a functional option type for pilosa.fieldOptions.
@@ -191,6 +193,8 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 		return nil, errors.Wrap(err, "applying option")
 	}
 
+	tvc:=newTimeUnitCache()
+
 	f := &Field{
 		path:  path,
 		index: index,
@@ -208,6 +212,8 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 		remoteAvailableShards: roaring.NewBitmap(),
 
 		logger: logger.NopLogger,
+		timeViewCache: tvc.viewByTimeUnitCached,
+
 	}
 	return f, nil
 }
@@ -663,7 +669,7 @@ func (f *Field) RowTime(rowID uint64, time time.Time, quantum string) (*Row, err
 	if !TimeQuantum(quantum).Valid() {
 		return nil, ErrInvalidTimeQuantum
 	}
-	viewname := viewsByTime(viewStandard, time, TimeQuantum(quantum[len(quantum)-1:]))[0]
+	viewname := viewsByTime(viewStandard, time, TimeQuantum(quantum[len(quantum)-1:]),f.timeViewCache)[0]
 	view := f.view(viewname)
 	if view == nil {
 		return nil, errors.Errorf("view with quantum %v not found.", quantum)
@@ -819,7 +825,7 @@ func (f *Field) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err err
 	}
 
 	// If a timestamp is specified then set bits across all views for the quantum.
-	for _, subname := range viewsByTime(viewName, *t, f.TimeQuantum()) {
+	for _, subname := range viewsByTime(viewName, *t, f.TimeQuantum(),f.timeViewCache) {
 		view, err := f.createViewIfNotExists(subname)
 		if err != nil {
 			return changed, errors.Wrapf(err, "creating view %s", subname)
@@ -1093,7 +1099,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time, opts
 		if timestamp == nil {
 			standard = []string{viewStandard}
 		} else {
-			standard = viewsByTime(viewStandard, *timestamp, q)
+			standard = viewsByTime(viewStandard, *timestamp, q , f.timeViewCache)
 			if !f.options.NoStandardView {
 				// In order to match the logic of `SetBit()`, we want bits
 				// with timestamps to write to both time and standard views.
