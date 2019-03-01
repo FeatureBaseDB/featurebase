@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -53,6 +54,45 @@ func (q TimeQuantum) Valid() bool {
 		return false
 	}
 }
+type timeUnitCache struct {
+	mux  sync.RWMutex
+	lookup map[unitKey]string
+}
+type unitKey struct {
+	name string
+	t    time.Time
+	unit rune
+}
+
+func (tc *timeUnitCache) viewByTimeUnitCached(name string, t time.Time, unit rune) string {
+	key := unitKey{
+		name: name,
+		t:    t,
+		unit: unit,
+	}
+	tc.mux.RLock()
+	viewWithUnit, found := tc.lookup[key]
+	tc.mux.RUnlock()
+	if found {
+		return viewWithUnit
+	}
+	viewWithUnit = viewByTimeUnitAlloc(name, t, unit)
+	tc.mux.Lock()
+	tc.lookup[key] = viewWithUnit
+	tc.mux.Unlock()
+	return viewWithUnit
+
+}
+
+var viewByTimeUnit = viewByTimeUnitAlloc
+
+func init() {
+	tc := timeUnitCache{
+		lookup:make(map[unitKey]string),
+	}
+	viewByTimeUnit = tc.viewByTimeUnitCached
+}
+
 
 // The following methods are required to implement pflag Value interface.
 
@@ -72,7 +112,7 @@ func (q TimeQuantum) Type() string {
 }
 
 // viewByTimeUnit returns the view name for time with a given quantum unit.
-func viewByTimeUnit(name string, t time.Time, unit rune) string {
+func viewByTimeUnitAlloc(name string, t time.Time, unit rune) string {
 	switch unit {
 	case 'Y':
 		return fmt.Sprintf("%s_%s", name, t.Format("2006"))
