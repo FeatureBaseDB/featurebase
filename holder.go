@@ -287,7 +287,11 @@ func (h *Holder) Schema() []*IndexInfo {
 func (h *Holder) limitedSchema() []*IndexInfo {
 	var a []*IndexInfo
 	for _, index := range h.Indexes() {
-		di := &IndexInfo{Name: index.Name(), Options: index.Options()}
+		di := &IndexInfo{
+			Name:       index.Name(),
+			Options:    index.Options(),
+			ShardWidth: ShardWidth,
+		}
 		for _, field := range index.Fields() {
 			if strings.HasPrefix(field.name, "_") {
 				continue

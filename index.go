@@ -453,9 +453,10 @@ func (p indexSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
 // IndexInfo represents schema information for an index.
 type IndexInfo struct {
-	Name    string       `json:"name"`
-	Options IndexOptions `json:"options"`
-	Fields  []*FieldInfo `json:"fields"`
+	Name       string       `json:"name"`
+	Options    IndexOptions `json:"options"`
+	Fields     []*FieldInfo `json:"fields"`
+	ShardWidth uint64       `json:"shardWidth"`
 }
 
 type indexInfoSlice []*IndexInfo
