@@ -85,9 +85,9 @@ func (tc *timeUnitCache) viewByTimeUnitCached(name string, t time.Time, unit run
 
 }
 
-type viewTimeUnitProvider = func (name string, t time.Time, unit rune) string
+type viewTimeUnitProvider = func(name string, t time.Time, unit rune) string
 
-func newTimeUnitCache()*timeUnitCache {
+func newTimeUnitCache() *timeUnitCache {
 	return &timeUnitCache{
 		lookup: make(map[unitKey]string),
 	}
