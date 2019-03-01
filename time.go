@@ -60,14 +60,18 @@ type timeUnitCache struct {
 }
 type unitKey struct {
 	name string
-	t    time.Time
+	year    int
+	month    time.Month
+	hour    int
 	unit rune
 }
 
 func (tc *timeUnitCache) viewByTimeUnitCached(name string, t time.Time, unit rune) string {
 	key := unitKey{
 		name: name,
-		t:    t,
+		year: t.Year(),
+		month: t.Month(),
+		hour:    t.Hour(),
 		unit: unit,
 	}
 	tc.mux.RLock()
