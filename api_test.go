@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/server"
@@ -42,7 +43,7 @@ func TestAPI_Import(t *testing.T) {
 	defer c.Close()
 
 	m0 := c[0]
-	m1 := c[1]
+	m1 := c[0]
 
 	t.Run("RowIDColumnKey", func(t *testing.T) {
 		ctx := context.Background()
@@ -246,4 +247,113 @@ type offsetModHasher struct{}
 
 func (*offsetModHasher) Hash(key uint64, n int) int {
 	return int(key+1) % n
+}
+
+func BenchmarkTImportNoCache(b *testing.B) {
+	c := test.MustRunCluster(b, 1)
+	defer c.Close()
+
+	s := c[0]
+
+	ctx := context.Background()
+	index := "i"
+	field := "f"
+
+	_, err := s.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: false})
+	if err != nil {
+		b.Fatalf("creating index: %v", err)
+	}
+	_, err = s.API.CreateField(ctx, index, field, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")), pilosa.OptFieldCacheTimeViewDisable())
+	//_, err = server.API.CreateField(ctx, index, field, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")),pilosa.OptFieldCacheTimeView())
+	if err != nil {
+		b.Fatalf("creating field: %v", err)
+	}
+
+	// Generate some keyed records.
+	rowIDs := make([]uint64, 1000000)
+	colIDs := make([]uint64, 1000000)
+	timestamps := make([]int64, 1000000)
+	timein := time.Now().Local()
+	i := 0
+	for row := uint64(0); i < 10000; i++ {
+		for col := uint64(0); col < 100; col++ {
+			rowIDs[i] = row
+			colIDs[i] = col
+			timestamps[i] = timein.UnixNano()
+			timein = timein.Add(time.Millisecond)
+			i++
+
+		}
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for n := 0; n < b.N; n++ {
+		req := &pilosa.ImportRequest{
+			Index:      index,
+			Field:      field,
+			Shard:      0,
+			RowIDs:     rowIDs,
+			ColumnIDs:  colIDs,
+			Timestamps: timestamps,
+		}
+		if err := s.API.Import(ctx, req); err != nil {
+			b.Fatal(err)
+		}
+
+	}
+}
+
+func BenchmarkTImportCached(b *testing.B) {
+	c := test.MustRunCluster(b, 1)
+	defer c.Close()
+
+	server := c[0]
+
+	ctx := context.Background()
+	index := "i"
+	field := "f"
+
+	_, err := server.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: false})
+	if err != nil {
+		b.Fatalf("creating index: %v", err)
+	}
+	_, err = server.API.CreateField(ctx, index, field, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
+	if err != nil {
+		b.Fatalf("creating field: %v", err)
+	}
+
+	// Generate some keyed records.
+	rowIDs := make([]uint64, 1000000)
+	colIDs := make([]uint64, 1000000)
+	timestamps := make([]int64, 1000000)
+	timein := time.Now().Local()
+	i := 0
+	for row := uint64(0); i < 1000; i++ {
+		for col := uint64(0); col < 1000; col++ {
+			rowIDs[i] = row
+			colIDs[i] = col
+			timestamps[i] = timein.UnixNano()
+			timein = timein.Add(time.Millisecond)
+			i++
+
+		}
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for n := 0; n < b.N; n++ {
+		req := &pilosa.ImportRequest{
+			Index:      index,
+			Field:      field,
+			Shard:      0,
+			RowIDs:     rowIDs,
+			ColumnIDs:  colIDs,
+			Timestamps: timestamps,
+		}
+		if err := server.API.Import(ctx, req); err != nil {
+			b.Fatal(err)
+		}
+
+	}
 }

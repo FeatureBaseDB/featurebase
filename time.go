@@ -87,10 +87,11 @@ func (tc *timeUnitCache) viewByTimeUnitCached(name string, t time.Time, unit run
 
 type viewTimeUnitProvider = func(name string, t time.Time, unit rune) string
 
-func newTimeUnitCache() *timeUnitCache {
-	return &timeUnitCache{
+func newTimeUnitCacheProvider() viewTimeUnitProvider {
+	p := timeUnitCache{
 		lookup: make(map[unitKey]string),
 	}
+	return p.viewByTimeUnitCached
 }
 
 // The following methods are required to implement pflag Value interface.

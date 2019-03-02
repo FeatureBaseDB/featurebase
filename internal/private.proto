@@ -16,6 +16,7 @@ message FieldOptions {
 	string TimeQuantum = 5;
     bool Keys = 11;
     bool NoStandardView = 12;
+    bool TimeViewCacheDisable = 13;
 }
 
 message ImportResponse {

@@ -96,6 +96,13 @@ func OptFieldKeys() FieldOption {
 	}
 }
 
+func OptFieldCacheTimeViewDisable() FieldOption {
+	return func(fo *FieldOptions) error {
+		fo.TimeViewCacheDisable = true
+		return nil
+	}
+}
+
 func OptFieldTypeDefault() FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
@@ -193,8 +200,6 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 		return nil, errors.Wrap(err, "applying option")
 	}
 
-	tvc := newTimeUnitCache()
-
 	f := &Field{
 		path:  path,
 		index: index,
@@ -211,8 +216,9 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 
 		remoteAvailableShards: roaring.NewBitmap(),
 
-		logger:        logger.NopLogger,
-		timeViewCache: tvc.viewByTimeUnitCached,
+		logger: logger.NopLogger,
+
+		timeViewCache: viewByTimeUnitAlloc,
 	}
 	return f, nil
 }
@@ -532,6 +538,9 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Max = 0
 		f.options.Keys = opt.Keys
 		f.options.NoStandardView = opt.NoStandardView
+		if !opt.TimeViewCacheDisable {
+			f.timeViewCache = newTimeUnitCacheProvider()
+		}
 		// Set the time quantum.
 		if err := f.setTimeQuantum(opt.TimeQuantum); err != nil {
 			f.Close()
@@ -1235,14 +1244,15 @@ func (p fieldInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
 // FieldOptions represents options to set when initializing a field.
 type FieldOptions struct {
-	Min            int64       `json:"min,omitempty"`
-	Max            int64       `json:"max,omitempty"`
-	Keys           bool        `json:"keys"`
-	NoStandardView bool        `json:"noStandardView,omitempty"`
-	CacheSize      uint32      `json:"cacheSize,omitempty"`
-	CacheType      string      `json:"cacheType,omitempty"`
-	Type           string      `json:"type,omitempty"`
-	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
+	Min                  int64       `json:"min,omitempty"`
+	Max                  int64       `json:"max,omitempty"`
+	Keys                 bool        `json:"keys"`
+	NoStandardView       bool        `json:"noStandardView,omitempty"`
+	CacheSize            uint32      `json:"cacheSize,omitempty"`
+	CacheType            string      `json:"cacheType,omitempty"`
+	Type                 string      `json:"type,omitempty"`
+	TimeQuantum          TimeQuantum `json:"timeQuantum,omitempty"`
+	TimeViewCacheDisable bool        `json:"timeViewCacheDisable,omitempty"`
 }
 
 // applyDefaultOptions returns a new FieldOptions object
@@ -1250,9 +1260,10 @@ type FieldOptions struct {
 func applyDefaultOptions(o FieldOptions) FieldOptions {
 	if o.Type == "" {
 		return FieldOptions{
-			Type:      DefaultFieldType,
-			CacheType: DefaultCacheType,
-			CacheSize: DefaultCacheSize,
+			Type:                 DefaultFieldType,
+			CacheType:            DefaultCacheType,
+			CacheSize:            DefaultCacheSize,
+			TimeViewCacheDisable: false,
 		}
 	}
 	return o
@@ -1268,14 +1279,15 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 		return nil
 	}
 	return &internal.FieldOptions{
-		Type:           o.Type,
-		CacheType:      o.CacheType,
-		CacheSize:      o.CacheSize,
-		Min:            o.Min,
-		Max:            o.Max,
-		TimeQuantum:    string(o.TimeQuantum),
-		Keys:           o.Keys,
-		NoStandardView: o.NoStandardView,
+		Type:                 o.Type,
+		CacheType:            o.CacheType,
+		CacheSize:            o.CacheSize,
+		Min:                  o.Min,
+		Max:                  o.Max,
+		TimeQuantum:          string(o.TimeQuantum),
+		Keys:                 o.Keys,
+		NoStandardView:       o.NoStandardView,
+		TimeViewCacheDisable: o.TimeViewCacheDisable,
 	}
 }
 
@@ -1307,15 +1319,17 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 		})
 	case FieldTypeTime:
 		return json.Marshal(struct {
-			Type           string      `json:"type"`
-			TimeQuantum    TimeQuantum `json:"timeQuantum"`
-			Keys           bool        `json:"keys"`
-			NoStandardView bool        `json:"noStandardView"`
+			Type                 string      `json:"type"`
+			TimeQuantum          TimeQuantum `json:"timeQuantum"`
+			Keys                 bool        `json:"keys"`
+			NoStandardView       bool        `json:"noStandardView"`
+			TimeViewCacheDisable bool        `json:"timeViewCache"`
 		}{
 			o.Type,
 			o.TimeQuantum,
 			o.Keys,
 			o.NoStandardView,
+			o.TimeViewCacheDisable,
 		})
 	case FieldTypeMutex:
 		return json.Marshal(struct {
