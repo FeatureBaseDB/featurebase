@@ -1548,64 +1548,31 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 // snapshot of the fragment or just do in-memory updates while appending
 // operations to the op log.
 func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct{}) error {
-	var setBitmap *roaring.Bitmap
-	var clearBitmap *roaring.Bitmap
 	smallWrite := false
 	if len(set)+len(clear)+f.opN < f.MaxOpN {
 		smallWrite = true
-		// If the number of operations is small, we'll write directly to local storage
-		setBitmap = f.storage
-		clearBitmap = f.storage
 	} else {
-		// Create a temporary bitmap which will be populated by rowIDs and columnIDs
-		// and then merged into the existing fragment's bitmap.
-		setBitmap = roaring.NewBitmap()
-		clearBitmap = roaring.NewBitmap()
-
-		// Disconnect op writer so we don't append updates.
-		setBitmap.OpWriter = nil
-		clearBitmap.OpWriter = nil
+		f.storage.OpWriter = nil
 	}
 
-	changedN, err := setBitmap.AddN(set...) // TODO benchmark Add/RemoveN behavior with sorted/unsorted positions
-	if err != nil {
-		return errors.Wrap(err, "adding positions")
-	}
-
-	if smallWrite {
-		f.stats.Count("ImportBit", int64(changedN), 1)
-		f.opN += changedN
-		changedN, err = clearBitmap.RemoveN(clear...)
-		f.stats.Count("ClearBit", int64(changedN), 1)
-		f.opN += changedN
-	} else {
-		// when doing big imports, we're going to difference the local bitmap,
-		// so we need to add rather than removing. TODO: figure out why we
-		// aren't adding/removing directly from storage.
-		_, err = clearBitmap.AddN(clear...)
-	}
-	if err != nil {
-		return errors.Wrap(err, "clearing positions")
-	}
-
-	var results *roaring.Bitmap
-	if smallWrite {
-		results = f.storage
-	} else if beforeCnt := f.storage.Count(); beforeCnt > 0 {
-		// Merge localBitmap into fragment's existing data.
-		if len(clear) > 0 {
-			f.storage = f.storage.Difference(clearBitmap)
-			nc := f.storage.Count()
-			f.stats.Count("ClearBit", int64(beforeCnt-nc), 1)
-			beforeCnt = nc
-			results = f.storage
+	if len(set) > 0 {
+		f.stats.Count("ImportingN", int64(len(set)), 1)
+		changedN, err := f.storage.AddN(set...) // TODO benchmark Add/RemoveN behavior with sorted/unsorted positions
+		if err != nil {
+			return errors.Wrap(err, "adding positions")
 		}
-		if len(set) > 0 {
-			results = f.storage.Union(setBitmap) // TODO replace with UnionInPlace after https://github.com/pilosa/pilosa/issues/1875
-			f.stats.Count("ImportBit", int64(beforeCnt-f.storage.Count()), 1)
+		f.stats.Count("ImportedN", int64(changedN), 1)
+		f.opN += changedN
+	}
+
+	if len(clear) > 0 {
+		f.stats.Count("ClearingN", int64(len(clear)), 1)
+		changedN, err := f.storage.RemoveN(clear...)
+		if err != nil {
+			return errors.Wrap(err, "clearing positions")
 		}
-	} else { // !smallWrite and nothing in storage
-		results = setBitmap
+		f.stats.Count("ClearedN", int64(changedN), 1)
+		f.opN += changedN
 	}
 
 	// Update cache counts for all affected rows.
@@ -1613,7 +1580,7 @@ func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct
 		// Invalidate block checksum.
 		delete(f.checksums, int(rowID/HashBlockSize))
 
-		n := results.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
+		n := f.storage.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
 		f.cache.BulkAdd(rowID, n)
 
 		if smallWrite {
@@ -1626,7 +1593,7 @@ func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct
 	f.cache.Recalculate()
 
 	if !smallWrite {
-		return unprotectedWriteToFragment(f, results)
+		return f.snapshot()
 	}
 	return nil
 }
