@@ -1610,12 +1610,14 @@ func (f *fragment) bulkImportMutex(rowIDs, columnIDs []uint64) error {
 	// we have to maintain which columns are getting bits set as a map so that
 	// we don't end up setting multiple bits in the same column if a column is
 	// repeated within the import.
-	colSet := make(map[uint64]uint64) // row to column
+	colSet := make(map[uint64]uint64)
+
 	// Since each imported bit will at most set one bit and clear one bit, we
 	// can reuse the rowIDs and columnIDs slices as the set and clear slice
-	// arguments to importPositions. We maintain indexes into them as we loop
-	// through them since the indexes of set and cleared bits may lag behind the
-	// current index.
+	// arguments to importPositions. The set positions we'll get from the
+	// colSet, but we maintain clearIdx as we loop through row and col ids so
+	// that we know how many bits we need to clear and how far through columnIDs
+	// we are.
 	clearIdx := 0
 	for i := range rowIDs {
 		rowID, columnID := rowIDs[i], columnIDs[i]
@@ -1641,6 +1643,8 @@ func (f *fragment) bulkImportMutex(rowIDs, columnIDs []uint64) error {
 		colSet[columnID] = pos
 		rowSet[rowID] = struct{}{}
 	}
+
+	// re-use rowIDs by populating positions to set from colSet.
 	i := 0
 	for _, pos := range colSet {
 		rowIDs[i] = pos
