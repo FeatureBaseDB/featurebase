@@ -1923,11 +1923,16 @@ func BenchmarkFragment_Import(b *testing.B) {
 			break
 		}
 	}
+	rowsUse, colsUse := make([]uint64, len(rows)), make([]uint64, len(cols))
+	copy(rowsUse, rows)
+	copy(colsUse, cols)
 	b.ResetTimer()
 	b.ReportAllocs()
 	options := &ImportOptions{}
 	for i := 0; i < b.N; i++ {
-		if err := f.bulkImport(rows, cols, options); err != nil {
+		copy(rowsUse, rows)
+		copy(colsUse, cols)
+		if err := f.bulkImport(rowsUse, colsUse, options); err != nil {
 			b.Fatalf("Error Building Sample: %s", err)
 		}
 	}
@@ -2035,10 +2040,13 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 func BenchmarkImportStandard(b *testing.B) {
 	for _, cacheType := range []string{CacheTypeRanked} {
 		for _, numRows := range rowCases {
-			rowIDs, columnIDs := getZipfRowsSliceStandard(numRows, 1)
+			rowIDsOrig, columnIDsOrig := getZipfRowsSliceStandard(numRows, 1)
+			rowIDs, columnIDs := make([]uint64, len(rowIDsOrig)), make([]uint64, len(columnIDsOrig))
 			b.Run(fmt.Sprintf("Rows%dCache_%s", numRows, cacheType), func(b *testing.B) {
 				b.StopTimer()
 				for i := 0; i < b.N; i++ {
+					copy(rowIDs, rowIDsOrig)
+					copy(columnIDs, columnIDsOrig)
 					f := mustOpenFragment("i", fmt.Sprintf("r%dc%s", numRows, cacheType), viewStandard, 0, cacheType)
 					b.StartTimer()
 					err := f.bulkImport(rowIDs, columnIDs, &ImportOptions{})
