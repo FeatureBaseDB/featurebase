@@ -1248,11 +1248,11 @@ type FieldOptions struct {
 	Max                  int64       `json:"max,omitempty"`
 	Keys                 bool        `json:"keys"`
 	NoStandardView       bool        `json:"noStandardView,omitempty"`
+	TimeViewCacheDisable bool        `json:"timeViewCacheDisable,omitempty"`
 	CacheSize            uint32      `json:"cacheSize,omitempty"`
 	CacheType            string      `json:"cacheType,omitempty"`
 	Type                 string      `json:"type,omitempty"`
 	TimeQuantum          TimeQuantum `json:"timeQuantum,omitempty"`
-	TimeViewCacheDisable bool        `json:"timeViewCacheDisable,omitempty"`
 }
 
 // applyDefaultOptions returns a new FieldOptions object
