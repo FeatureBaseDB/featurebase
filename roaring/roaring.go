@@ -156,7 +156,8 @@ func (b *Bitmap) Clone() *Bitmap {
 	return other
 }
 
-// Add adds values to the bitmap.
+// Add adds values to the bitmap. TODO(2.0) deprecate - use the more general
+// AddN (though be aware that it modifies 'a' in place).
 func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 	changed = false
 	for _, v := range a {
@@ -177,19 +178,14 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 	return changed, nil
 }
 
-// AddN adds values to the bitmap, appending them all to the op log in a batched write. It returns the number of changed bits.
+// AddN adds values to the bitmap, appending them all to the op log in a batched
+// write. It returns the number of changed bits.
 func (b *Bitmap) AddN(a ...uint64) (changed int, err error) {
 	if len(a) == 0 {
 		return 0, nil
 	}
 
-	for _, v := range a {
-		// Apply to the in-memory bitmap.
-		if b.DirectAdd(v) {
-			a[changed] = v
-			changed++
-		}
-	}
+	changed = b.DirectAddN(a...) // modifies a in-place
 
 	if b.OpWriter != nil {
 		op := &op{
@@ -197,6 +193,7 @@ func (b *Bitmap) AddN(a ...uint64) (changed int, err error) {
 			values: a[:changed],
 		}
 		if err := b.writeOp(op); err != nil {
+			b.DirectRemoveN(op.values...) // reset data since we're returning an error
 			return 0, errors.Wrap(err, "writing to op log")
 		}
 	}
@@ -204,7 +201,46 @@ func (b *Bitmap) AddN(a ...uint64) (changed int, err error) {
 	return changed, nil
 }
 
-// DirectAdd adds a value to the bitmap by bypassing the op log.
+// DirectAddN sets multiple bits in the bitmap, returning how many changed. It
+// modifies the slice 'a' in place such that once it's complete a[:changed] will
+// be list of changed bits. It is more efficient than repeated calls to
+// DirectAdd for semi-dense sorted data because it reuses the container from the
+// previous value if the new value has the same highbits instead of looking it
+// up each time. TODO: if Containers implementations cached the last few
+// Container objects returned from calls like Get and GetOrCreate, this
+// optimization would be less useful.
+func (b *Bitmap) DirectAddN(a ...uint64) (changed int) {
+	return b.directOpN((*Container).add, a...)
+}
+
+// DirectRemoveN behaves analgously to DirectAddN.
+func (b *Bitmap) DirectRemoveN(a ...uint64) (changed int) {
+	return b.directOpN((*Container).remove, a...)
+}
+
+// directOpN contains the logic for DirectAddN and DirectRemoveN. Theoretically,
+// it could be used by anything that wanted to apply a boolean-returning
+// container level operation across a list of values and return the number of
+// trues while modifying the list of values in place to contain the
+// true-returning values in order.
+func (b *Bitmap) directOpN(op func(c *Container, v uint16) bool, a ...uint64) (changed int) {
+	hb := uint64(0xFFFFFFFFFFFFFFFF) // impossible sentinel value
+	var cont *Container
+	for _, v := range a {
+		if newhb := highbits(v); newhb != hb {
+			hb = newhb
+			cont = b.Containers.GetOrCreate(hb)
+		}
+		if op(cont, lowbits(v)) {
+			a[changed] = v
+			changed++
+		}
+	}
+	return changed
+}
+
+// DirectAdd adds a value to the bitmap by bypassing the op log. TODO(2.0)
+// deprecate in favor of DirectAddN.
 func (b *Bitmap) DirectAdd(v uint64) bool {
 	cont := b.Containers.GetOrCreate(highbits(v))
 	return cont.add(lowbits(v))
@@ -219,7 +255,9 @@ func (b *Bitmap) Contains(v uint64) bool {
 	return c.Contains(lowbits(v))
 }
 
-// Remove removes values from the bitmap.
+// Remove removes values from the bitmap (writing to the op log if available).
+// TODO(2.0) deprecate - use the more general RemoveN (though be aware that it
+// modifies 'a' in place).
 func (b *Bitmap) Remove(a ...uint64) (changed bool, err error) {
 	changed = false
 	for _, v := range a {
@@ -239,18 +277,13 @@ func (b *Bitmap) Remove(a ...uint64) (changed bool, err error) {
 	return changed, nil
 }
 
+// RemoveN behaves analagously to AddN.
 func (b *Bitmap) RemoveN(a ...uint64) (changed int, err error) {
 	if len(a) == 0 {
 		return 0, nil
 	}
 
-	for _, v := range a {
-		// Apply to the in-memory bitmap.
-		if b.remove(v) {
-			a[changed] = v
-			changed++
-		}
-	}
+	changed = b.DirectRemoveN(a...) // modifies a in-place
 
 	if b.OpWriter != nil {
 		op := &op{
@@ -258,6 +291,7 @@ func (b *Bitmap) RemoveN(a ...uint64) (changed int, err error) {
 			values: a[:changed],
 		}
 		if err := b.writeOp(op); err != nil {
+			b.DirectAddN(op.values...) // reset data since we're returning an error
 			return 0, errors.Wrap(err, "writing to op log")
 		}
 	}
