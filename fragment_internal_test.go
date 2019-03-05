@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math"
 	"math/rand"
@@ -2101,6 +2102,66 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 	}
 }
 
+var bigFrag string
+
+func initBigFrag() {
+	if bigFrag == "" {
+		f := mustOpenFragment("i", "f", viewStandard, 0, DefaultCacheType)
+		for i := int64(0); i < 10; i++ {
+			// 10 million rows, 1 bit per column, random seeded by i
+			data := getZipfRowsSliceRoaring(10000000, i)
+			err := f.importRoaring(data, false)
+			if err != nil {
+				panic(fmt.Sprintf("setting up fragment data: %v", err))
+			}
+		}
+		err := f.Close()
+		if err != nil {
+			panic(fmt.Sprintf("closing fragment: %v", err))
+		}
+		bigFrag = f.path
+	}
+}
+
+func BenchmarkImportIntoLargeFragment(b *testing.B) {
+	b.StopTimer()
+	initBigFrag()
+	rowsOrig, colsOrig := getUpdataSlices(10000000, 11000, 0)
+	rows, cols := make([]uint64, len(rowsOrig)), make([]uint64, len(colsOrig))
+	opts := &ImportOptions{}
+	for i := 0; i < b.N; i++ {
+		origF, err := os.Open(bigFrag)
+		if err != nil {
+			b.Fatalf("opening frag file: %v", err)
+		}
+		fi, err := ioutil.TempFile(*TempDir, "")
+		if err != nil {
+			b.Fatalf("getting temp file: %v", err)
+		}
+		_, err = io.Copy(fi, origF)
+		if err != nil {
+			b.Fatalf("copying fragment file: %v", err)
+		}
+		origF.Close()
+		fi.Close()
+		nf := newFragment(fi.Name(), "i", "f", viewStandard, 0)
+		err = nf.Open()
+		if err != nil {
+			b.Fatalf("opening fragment: %v", err)
+		}
+		copy(rows, rowsOrig)
+		copy(cols, colsOrig)
+		b.StartTimer()
+		err = nf.bulkImport(rows, cols, opts)
+		b.StopTimer()
+		if err != nil {
+			b.Fatalf("bulkImport: %v", err)
+		}
+
+		nf.Clean(b)
+	}
+}
+
 func TestGetZipfRowsSliceRoaring(t *testing.T) {
 	f := mustOpenFragment("i", "f", viewStandard, 0, DefaultCacheType)
 	data := getZipfRowsSliceRoaring(10, 1)
@@ -2119,16 +2180,23 @@ func TestGetZipfRowsSliceRoaring(t *testing.T) {
 // rows, and 1 bit set in each column. The row each bit is set in is chosen via
 // the Zipf generator, and so will be skewed toward lower row numbers. If this
 // is edited to change the data distribution, getZipfRowsSliceStandard should be
-// edited as well.
+// edited as well. TODO switch to generating row-major for perf boost
 func getZipfRowsSliceRoaring(numRows uint64, seed int64) []byte {
-	b := roaring.NewBitmap()
+	b := roaring.NewBTreeBitmap()
 	s := rand.NewSource(seed)
 	r := rand.New(s)
 	z := rand.NewZipf(r, 1.6, 50, numRows-1)
+	bufSize := 1 << 14
+	posBuf := make([]uint64, 0, bufSize)
 	for i := uint64(0); i < ShardWidth; i++ {
 		row := z.Uint64()
-		b.DirectAdd(row*ShardWidth + i)
+		posBuf = append(posBuf, row*ShardWidth+i)
+		if len(posBuf) == bufSize {
+			sort.Slice(posBuf, func(i int, j int) bool { return posBuf[i] < posBuf[j] })
+			b.DirectAddN(posBuf...)
+		}
 	}
+	b.DirectAddN(posBuf...)
 	buf := bytes.NewBuffer(make([]byte, 0, 100000))
 	_, err := b.WriteTo(buf)
 	if err != nil {
@@ -2137,11 +2205,34 @@ func getZipfRowsSliceRoaring(numRows uint64, seed int64) []byte {
 	return buf.Bytes()
 }
 
+func getUpdataSlices(numRows, numCols uint64, seed int64) (rows, cols []uint64) {
+	getUpdataInto(func(row, col uint64) bool {
+		rows = append(rows, row)
+		cols = append(cols, col)
+		return true
+	}, numRows, numCols, seed)
+	return rows, cols
+}
+
 // getUpdataRoaring gets a byte slice containing a roaring bitmap which
 // represents numCols set bits distributed randomly throughout a shard's column
 // space and zipfianly throughout numRows rows.
 func getUpdataRoaring(numRows, numCols uint64, seed int64) []byte {
 	b := roaring.NewBitmap()
+
+	getUpdataInto(func(row, col uint64) bool {
+		return b.DirectAdd(row*ShardWidth + col)
+	}, numRows, numCols, seed)
+
+	buf := bytes.NewBuffer(make([]byte, 0, 100000))
+	_, err := b.WriteTo(buf)
+	if err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
+
+func getUpdataInto(f func(row, col uint64) bool, numRows, numCols uint64, seed int64) (changed int) {
 	s := rand.NewSource(seed)
 	r := rand.New(s)
 	z := rand.NewZipf(r, 1.6, 50, numRows-1)
@@ -2149,14 +2240,11 @@ func getUpdataRoaring(numRows, numCols uint64, seed int64) []byte {
 	for i := uint64(0); i < numCols; i++ {
 		col := uint64(r.Int63n(ShardWidth)) // assuming the number of repeats will be negligible
 		row := z.Uint64()
-		b.DirectAdd(row*ShardWidth + col)
+		if f(row, col) {
+			changed++
+		}
 	}
-	buf := bytes.NewBuffer(make([]byte, 0, 100000))
-	_, err := b.WriteTo(buf)
-	if err != nil {
-		panic(err)
-	}
-	return buf.Bytes()
+	return changed
 }
 
 // getZipfRowsSliceStandard is the same as getZipfRowsSliceRoaring, but returns
