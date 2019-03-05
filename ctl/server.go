@@ -68,8 +68,8 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.DurationVarP((*time.Duration)(&srv.Config.AntiEntropy.Interval), "anti-entropy.interval", "", (time.Duration)(srv.Config.AntiEntropy.Interval), "Interval at which to run anti-entropy routine.")
 
 	// Metric
-	flags.StringVarP(&srv.Config.Metric.Service, "metric.service", "", srv.Config.Metric.Service, "Default URI on which pilosa should listen.")
-	flags.StringVarP(&srv.Config.Metric.Host, "metric.host", "", srv.Config.Metric.Host, "Default URI to send metrics.")
+	flags.StringVarP(&srv.Config.Metric.Service, "metric.service", "", srv.Config.Metric.Service, "Where to send stats: can be expvar (in-memory served at /debug/vars), statsd or none.")
+	flags.StringVarP(&srv.Config.Metric.Host, "metric.host", "", srv.Config.Metric.Host, "URI to send metrics when metric.service is statsd.")
 	flags.DurationVarP((*time.Duration)(&srv.Config.Metric.PollInterval), "metric.poll-interval", "", (time.Duration)(srv.Config.Metric.PollInterval), "Polling interval metrics.")
 	flags.BoolVarP((&srv.Config.Metric.Diagnostics), "metric.diagnostics", "", srv.Config.Metric.Diagnostics, "Enabled diagnostics reporting.")
 
