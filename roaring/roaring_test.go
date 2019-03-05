@@ -1457,64 +1457,87 @@ const (
 	MaxContainerVal = 0xffff
 )
 
-func BenchmarkContainerLinear(b *testing.B) {
+var bmFuncs = []func(a ...uint64) *roaring.Bitmap{roaring.NewBitmap, roaring.NewBTreeBitmap}
+var bmFuncNames = []string{"slice", "btree"}
 
-	for n := 0; n < b.N; n++ {
-		bm := roaring.NewFileBitmap()
-		for row := uint64(1); row < NumRows; row++ {
-			for col := uint64(1); col < NumColums; col++ {
-				bm.Add(row*pilosa.ShardWidth + (col * MaxContainerVal))
+func BenchmarkContainerLinear(b *testing.B) {
+	for i, bmMaker := range bmFuncs {
+		b.Run(fmt.Sprintf("%v", bmFuncNames[i]), func(b *testing.B) {
+			for n := 0; n < b.N; n++ {
+				bm := bmMaker()
+				for row := uint64(1); row < NumRows; row++ {
+					for col := uint64(1); col < NumColums; col++ {
+						bm.Add(row*pilosa.ShardWidth + (col * MaxContainerVal))
+					}
+				}
 			}
-		}
+
+		})
 	}
 }
 
 func BenchmarkContainerReverse(b *testing.B) {
-	for n := 0; n < b.N; n++ {
-		bm := roaring.NewFileBitmap()
-		for row := NumRows - 1; row >= 1; row-- {
-			for col := NumColums - 1; col >= 1; col-- {
-				bm.Add(row*pilosa.ShardWidth + (col * MaxContainerVal))
+	for i, bmMaker := range bmFuncs {
+		b.Run(fmt.Sprintf("%v", bmFuncNames[i]), func(b *testing.B) {
+			for n := 0; n < b.N; n++ {
+				bm := bmMaker()
+				for row := NumRows - 1; row >= 1; row-- {
+					for col := NumColums - 1; col >= 1; col-- {
+						bm.Add(row*pilosa.ShardWidth + (col * MaxContainerVal))
+					}
+				}
 			}
-		}
+		})
 	}
 }
 
 func BenchmarkContainerColumn(b *testing.B) {
-	for n := 0; n < b.N; n++ {
-		bm := roaring.NewFileBitmap()
-		for col := uint64(1); col < NumColums; col++ {
-			for row := uint64(1); row < NumRows; row++ {
-				bm.Add(row*pilosa.ShardWidth + (col * MaxContainerVal))
+	for i, bmMaker := range bmFuncs {
+		b.Run(fmt.Sprintf("%v", bmFuncNames[i]), func(b *testing.B) {
+			for n := 0; n < b.N; n++ {
+				bm := bmMaker()
+				for col := uint64(1); col < NumColums; col++ {
+					for row := uint64(1); row < NumRows; row++ {
+						bm.Add(row*pilosa.ShardWidth + (col * MaxContainerVal))
+					}
+				}
 			}
-		}
+		})
 	}
 }
 
 func BenchmarkContainerOutsideIn(b *testing.B) {
-	middle := NumRows / uint64(2)
-	for n := 0; n < b.N; n++ {
-		bm := roaring.NewFileBitmap()
-
-		for col := uint64(1); col < NumColums; col++ {
-			for row := uint64(1); row < middle; row++ {
-				bm.Add(row*pilosa.ShardWidth + (col * MaxContainerVal))
-				bm.Add((NumRows-row)*pilosa.ShardWidth + (col * MaxContainerVal))
+	for i, bmMaker := range bmFuncs {
+		b.Run(fmt.Sprintf("%v", bmFuncNames[i]), func(b *testing.B) {
+			middle := NumRows / uint64(2)
+			for n := 0; n < b.N; n++ {
+				bm := bmMaker()
+				for col := uint64(1); col < NumColums; col++ {
+					for row := uint64(1); row < middle; row++ {
+						bm.Add(row*pilosa.ShardWidth + (col * MaxContainerVal))
+						bm.Add((NumRows-row)*pilosa.ShardWidth + (col * MaxContainerVal))
+					}
+				}
 			}
-		}
+		})
 	}
 }
 
 func BenchmarkContainerInsideOut(b *testing.B) {
+	reflect.TypeOf(bmFuncs[0]).Name()
 	middle := NumRows / uint64(2)
-	for n := 0; n < b.N; n++ {
-		bm := roaring.NewFileBitmap()
-		for col := uint64(1); col < NumColums; col++ {
-			for row := uint64(1); row <= middle; row++ {
-				bm.Add((middle+row)*pilosa.ShardWidth + (col * MaxContainerVal))
-				bm.Add((middle-row)*pilosa.ShardWidth + (col * MaxContainerVal))
+	for i, bmMaker := range bmFuncs {
+		b.Run(fmt.Sprintf("%v", bmFuncNames[i]), func(b *testing.B) {
+			for n := 0; n < b.N; n++ {
+				bm := bmMaker()
+				for col := uint64(1); col < NumColums; col++ {
+					for row := uint64(1); row <= middle; row++ {
+						bm.Add((middle+row)*pilosa.ShardWidth + (col * MaxContainerVal))
+						bm.Add((middle-row)*pilosa.ShardWidth + (col * MaxContainerVal))
+					}
+				}
 			}
-		}
+		})
 	}
 }
 
