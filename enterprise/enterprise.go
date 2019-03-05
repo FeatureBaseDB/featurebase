@@ -15,10 +15,11 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Pilosa Enterprise Edition.  If not, see <http://www.gnu.org/licenses/>.
 
-// Package enterprise injects enterprise implementations of various Pilosa
-// features when Pilosa is built with "ENTERPRISE=1 make install". These
-// features are dual-licensed separately from Pilosa community edition under the
-// AGPL and Pilosa's commercial license.
+// Package enterprise is now deprecated, and the functionality under
+// enterprise/b has been copied into roaring/. It existed to inject enterprise
+// implementations of various Pilosa features when Pilosa was built with
+// "ENTERPRISE=1 make install". These features were dual-licensed separately
+// from Pilosa community edition under the AGPL and Pilosa's commercial license.
 package enterprise
 
 import (
