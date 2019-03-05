@@ -1511,7 +1511,7 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 	// sorting by rowID/columnID first and avoiding the map allocation here. (we
 	// could reuse rowIDs to store the list of unique row IDs)
 	rowSet := make(map[uint64]struct{})
-	lastRowID := uint64(0)
+	lastRowID := uint64(1 << 63)
 
 	// replace columnIDs with calculated positions to avoid allocation.
 	for i := 0; i < len(columnIDs); i++ {
@@ -1523,7 +1523,7 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 		columnIDs[i] = pos
 
 		// Add row to rowSet.
-		if i == 0 || rowID != lastRowID {
+		if rowID != lastRowID {
 			lastRowID = rowID
 			rowSet[rowID] = struct{}{}
 		}
