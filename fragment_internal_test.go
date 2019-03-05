@@ -1904,8 +1904,7 @@ func BenchmarkFragment_FullSnapshot(b *testing.B) {
 }
 
 func BenchmarkFragment_Import(b *testing.B) {
-	f := mustOpenFragment("i", "f", viewStandard, 0, "")
-	defer f.Clean(b)
+	b.StopTimer()
 	maxX := 1048576 * 5 * 2
 	sz := maxX
 	rows := make([]uint64, sz)
@@ -1924,17 +1923,19 @@ func BenchmarkFragment_Import(b *testing.B) {
 		}
 	}
 	rowsUse, colsUse := make([]uint64, len(rows)), make([]uint64, len(cols))
-	copy(rowsUse, rows)
-	copy(colsUse, cols)
-	b.ResetTimer()
 	b.ReportAllocs()
 	options := &ImportOptions{}
 	for i := 0; i < b.N; i++ {
+		// since bulkImport modifies the input slices, we make new copies for each round
 		copy(rowsUse, rows)
 		copy(colsUse, cols)
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
+		b.StartTimer()
 		if err := f.bulkImport(rowsUse, colsUse, options); err != nil {
-			b.Fatalf("Error Building Sample: %s", err)
+			b.Errorf("Error Building Sample: %s", err)
 		}
+		b.StopTimer()
+		f.Clean(b)
 	}
 }
 
