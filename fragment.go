@@ -218,24 +218,29 @@ func (f *fragment) openStorage() error {
 		if err != nil {
 			return errors.Wrap(err, "statting file after")
 		}
-	}
+	} else {
+		// Mmap the underlying file so it can be zero copied.
+		data, err := syscall.Mmap(int(f.file.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
+		if err != nil {
+			f.Logger.Printf("mmap failed %s using ReadAll", err)
+			data, err = ioutil.ReadAll(file)
+			if err != nil {
+				return errors.Wrap(err, "failure file readall")
+			}
 
-	// Mmap the underlying file so it can be zero copied.
-	storageData, err := syscall.Mmap(int(f.file.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
-	if err != nil {
-		return fmt.Errorf("mmap: %s", err)
-	}
-	f.storageData = storageData
+		} else {
 
-	// Advise the kernel that the mmap is accessed randomly.
-	if err := madvise(f.storageData, syscall.MADV_RANDOM); err != nil {
-		return fmt.Errorf("madvise: %s", err)
-	}
+			f.storageData = data
+			// Advise the kernel that the mmap is accessed randomly.
+			if err := madvise(f.storageData, syscall.MADV_RANDOM); err != nil {
+				return fmt.Errorf("madvise: %s", err)
+			}
+		}
 
-	// Attach the mmap file to the bitmap.
-	data := f.storageData
-	if err := f.storage.UnmarshalBinary(data); err != nil {
-		return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
+		if err := f.storage.UnmarshalBinary(data); err != nil {
+			return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
+		}
+
 	}
 
 	f.opN = f.storage.Info().OpN
