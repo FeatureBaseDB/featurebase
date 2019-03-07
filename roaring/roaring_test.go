@@ -1462,7 +1462,7 @@ var bmFuncNames = []string{"slice", "btree"}
 
 func BenchmarkContainerLinear(b *testing.B) {
 	for i, bmMaker := range bmFuncs {
-		b.Run(fmt.Sprintf("%v", bmFuncNames[i]), func(b *testing.B) {
+		b.Run(bmFuncNames[i], func(b *testing.B) {
 			for n := 0; n < b.N; n++ {
 				bm := bmMaker()
 				for row := uint64(1); row < NumRows; row++ {
@@ -1478,7 +1478,7 @@ func BenchmarkContainerLinear(b *testing.B) {
 
 func BenchmarkContainerReverse(b *testing.B) {
 	for i, bmMaker := range bmFuncs {
-		b.Run(fmt.Sprintf("%v", bmFuncNames[i]), func(b *testing.B) {
+		b.Run(bmFuncNames[i], func(b *testing.B) {
 			for n := 0; n < b.N; n++ {
 				bm := bmMaker()
 				for row := NumRows - 1; row >= 1; row-- {
@@ -1493,7 +1493,7 @@ func BenchmarkContainerReverse(b *testing.B) {
 
 func BenchmarkContainerColumn(b *testing.B) {
 	for i, bmMaker := range bmFuncs {
-		b.Run(fmt.Sprintf("%v", bmFuncNames[i]), func(b *testing.B) {
+		b.Run(bmFuncNames[i], func(b *testing.B) {
 			for n := 0; n < b.N; n++ {
 				bm := bmMaker()
 				for col := uint64(1); col < NumColums; col++ {
@@ -1508,7 +1508,7 @@ func BenchmarkContainerColumn(b *testing.B) {
 
 func BenchmarkContainerOutsideIn(b *testing.B) {
 	for i, bmMaker := range bmFuncs {
-		b.Run(fmt.Sprintf("%v", bmFuncNames[i]), func(b *testing.B) {
+		b.Run(bmFuncNames[i], func(b *testing.B) {
 			middle := NumRows / uint64(2)
 			for n := 0; n < b.N; n++ {
 				bm := bmMaker()
@@ -1527,7 +1527,7 @@ func BenchmarkContainerInsideOut(b *testing.B) {
 	reflect.TypeOf(bmFuncs[0]).Name()
 	middle := NumRows / uint64(2)
 	for i, bmMaker := range bmFuncs {
-		b.Run(fmt.Sprintf("%v", bmFuncNames[i]), func(b *testing.B) {
+		b.Run(bmFuncNames[i], func(b *testing.B) {
 			for n := 0; n < b.N; n++ {
 				bm := bmMaker()
 				for col := uint64(1); col < NumColums; col++ {
