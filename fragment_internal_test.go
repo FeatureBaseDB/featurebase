@@ -64,7 +64,7 @@ func TestFragment_SetBit(t *testing.T) {
 	} else if n := f.row(121).Count(); n != 1 {
 		t.Fatalf("unexpected count: %d", n)
 	}
-    fmt.Println("GO")
+	fmt.Println("GO")
 	// Close and reopen the fragment & verify the data.
 	if err := f.reopen(); err != nil {
 		t.Fatal(err)
@@ -1997,7 +1997,7 @@ func TestGetZipfRowsSliceRoaring(t *testing.T) {
 		t.Fatalf("unexpected rows: %v", f.rows(0))
 	}
 	for i := uint64(1); i < 10; i++ {
-		if f.row(i).Count() >= f.row(i-1).Count() {
+		if f.row(i).Count() >= f.row(i - 1).Count() {
 			t.Fatalf("suspect distribution from getZipfRowsSliceRoaring")
 		}
 	}

@@ -229,10 +229,6 @@ func (f *fragment) openStorage() error {
 			return fmt.Errorf("init storage file: %s", err)
 		}
 		bi.Flush()
-		fi, err = f.file.Stat()
-		if err != nil {
-			return errors.Wrap(err, "statting file after")
-		}
 	} else {
 		// Mmap the underlying file so it can be zero copied.
 		var data []byte
@@ -247,6 +243,9 @@ func (f *fragment) openStorage() error {
 			}
 		} else {
 			data, err = ioutil.ReadAll(file)
+			if err != nil {
+				return fmt.Errorf("reading fragment: file=%s, err=%s", f.file.Name(), err)
+			}
 		}
 		if err := f.storage.UnmarshalBinary(data); err != nil {
 			return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
