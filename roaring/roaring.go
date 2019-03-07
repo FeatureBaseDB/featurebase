@@ -119,7 +119,9 @@ type ContainerIterator interface {
 type Bitmap struct {
 	Containers Containers
 
-	// Number of operations written to the writer.
+	// Number of bit change operations written to the writer. Some operations
+	// contain multiple values, each of those counts the number of values rather
+	// than counting as one operation.
 	opN int
 
 	// Writer where operations are appended to.
@@ -131,13 +133,13 @@ func NewBitmap(a ...uint64) *Bitmap {
 	b := &Bitmap{
 		Containers: newSliceContainers(),
 	}
-	b.Add(a...)
+	b.AddN(a...)
 	return b
 }
 
 // NewFileBitmap returns a Bitmap with an initial set of values, used for file storage.
 // By default, this is a copy of NewBitmap, but is replaced with B+Tree in server/enterprise.go
-var NewFileBitmap func(a ...uint64) *Bitmap = NewBitmap
+var NewFileBitmap func(a ...uint64) *Bitmap = NewBTreeBitmap
 
 // Clone returns a heap allocated copy of the bitmap.
 // Note: The OpWriter IS NOT copied to the new bitmap.
@@ -154,7 +156,8 @@ func (b *Bitmap) Clone() *Bitmap {
 	return other
 }
 
-// Add adds values to the bitmap.
+// Add adds values to the bitmap. TODO(2.0) deprecate - use the more general
+// AddN (though be aware that it modifies 'a' in place).
 func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 	changed = false
 	for _, v := range a {
@@ -175,7 +178,69 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 	return changed, nil
 }
 
-// DirectAdd adds a value to the bitmap by bypassing the op log.
+// AddN adds values to the bitmap, appending them all to the op log in a batched
+// write. It returns the number of changed bits.
+func (b *Bitmap) AddN(a ...uint64) (changed int, err error) {
+	if len(a) == 0 {
+		return 0, nil
+	}
+
+	changed = b.DirectAddN(a...) // modifies a in-place
+
+	if b.OpWriter != nil {
+		op := &op{
+			typ:    opTypeAddBatch,
+			values: a[:changed],
+		}
+		if err := b.writeOp(op); err != nil {
+			b.DirectRemoveN(op.values...) // reset data since we're returning an error
+			return 0, errors.Wrap(err, "writing to op log")
+		}
+	}
+
+	return changed, nil
+}
+
+// DirectAddN sets multiple bits in the bitmap, returning how many changed. It
+// modifies the slice 'a' in place such that once it's complete a[:changed] will
+// be list of changed bits. It is more efficient than repeated calls to
+// DirectAdd for semi-dense sorted data because it reuses the container from the
+// previous value if the new value has the same highbits instead of looking it
+// up each time. TODO: if Containers implementations cached the last few
+// Container objects returned from calls like Get and GetOrCreate, this
+// optimization would be less useful.
+func (b *Bitmap) DirectAddN(a ...uint64) (changed int) {
+	return b.directOpN((*Container).add, a...)
+}
+
+// DirectRemoveN behaves analgously to DirectAddN.
+func (b *Bitmap) DirectRemoveN(a ...uint64) (changed int) {
+	return b.directOpN((*Container).remove, a...)
+}
+
+// directOpN contains the logic for DirectAddN and DirectRemoveN. Theoretically,
+// it could be used by anything that wanted to apply a boolean-returning
+// container level operation across a list of values and return the number of
+// trues while modifying the list of values in place to contain the
+// true-returning values in order.
+func (b *Bitmap) directOpN(op func(c *Container, v uint16) bool, a ...uint64) (changed int) {
+	hb := uint64(0xFFFFFFFFFFFFFFFF) // impossible sentinel value
+	var cont *Container
+	for _, v := range a {
+		if newhb := highbits(v); newhb != hb {
+			hb = newhb
+			cont = b.Containers.GetOrCreate(hb)
+		}
+		if op(cont, lowbits(v)) {
+			a[changed] = v
+			changed++
+		}
+	}
+	return changed
+}
+
+// DirectAdd adds a value to the bitmap by bypassing the op log. TODO(2.0)
+// deprecate in favor of DirectAddN.
 func (b *Bitmap) DirectAdd(v uint64) bool {
 	cont := b.Containers.GetOrCreate(highbits(v))
 	return cont.add(lowbits(v))
@@ -190,7 +255,9 @@ func (b *Bitmap) Contains(v uint64) bool {
 	return c.Contains(lowbits(v))
 }
 
-// Remove removes values from the bitmap.
+// Remove removes values from the bitmap (writing to the op log if available).
+// TODO(2.0) deprecate - use the more general RemoveN (though be aware that it
+// modifies 'a' in place).
 func (b *Bitmap) Remove(a ...uint64) (changed bool, err error) {
 	changed = false
 	for _, v := range a {
@@ -207,6 +274,28 @@ func (b *Bitmap) Remove(a ...uint64) (changed bool, err error) {
 			changed = true
 		}
 	}
+	return changed, nil
+}
+
+// RemoveN behaves analagously to AddN.
+func (b *Bitmap) RemoveN(a ...uint64) (changed int, err error) {
+	if len(a) == 0 {
+		return 0, nil
+	}
+
+	changed = b.DirectRemoveN(a...) // modifies a in-place
+
+	if b.OpWriter != nil {
+		op := &op{
+			typ:    opTypeRemoveBatch,
+			values: a[:changed],
+		}
+		if err := b.writeOp(op); err != nil {
+			b.DirectAddN(op.values...) // reset data since we're returning an error
+			return 0, errors.Wrap(err, "writing to op log")
+		}
+	}
+
 	return changed, nil
 }
 
@@ -234,6 +323,21 @@ func (b *Bitmap) Max() uint64 {
 // Count returns the number of bits set in the bitmap.
 func (b *Bitmap) Count() (n uint64) {
 	return b.Containers.Count()
+}
+
+// Any returns "b.Count() > 0"... but faster than doing that.
+func (b *Bitmap) Any() bool {
+	iter, _ := b.Containers.Iterator(0)
+	// TODO (jaffee) I'm not sure if it's possible/legal to have an empty
+	// container, so this loop may be totally unnecessary. In theory, any empty
+	// container should be removed from the bitmap though.
+	for b := iter.Next(); b; iter.Next() {
+		_, c := iter.Value()
+		if c.n > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // Size returns the number of bytes required for the bitmap.
@@ -1011,7 +1115,7 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 		opr.apply(b)
 
 		// Increase the op count.
-		b.opN++
+		b.opN += opr.count()
 
 		// Move the buffer forward.
 		buf = buf[opr.size():]
@@ -1029,8 +1133,8 @@ func (b *Bitmap) writeOp(op *op) error {
 	if _, err := op.WriteTo(b.OpWriter); err != nil {
 		return err
 	}
+	b.opN += op.count()
 
-	b.opN++
 	return nil
 }
 
@@ -3487,26 +3591,38 @@ func shiftRun(a *Container) (*Container, bool) {
 type opType uint8
 
 const (
-	opTypeAdd    = opType(0)
-	opTypeRemove = opType(1)
+	opTypeAdd         = opType(0)
+	opTypeRemove      = opType(1)
+	opTypeAddBatch    = opType(2)
+	opTypeRemoveBatch = opType(3)
 )
 
 // op represents an operation on the bitmap.
 type op struct {
-	typ   opType
-	value uint64
+	typ    opType
+	value  uint64
+	values []uint64
 }
 
 // apply executes the operation against a bitmap.
-func (op *op) apply(b *Bitmap) bool {
+func (op *op) apply(b *Bitmap) (changed bool) {
 	switch op.typ {
 	case opTypeAdd:
 		return b.DirectAdd(op.value)
 	case opTypeRemove:
 		return b.remove(op.value)
+	case opTypeAddBatch:
+		for _, v := range op.values {
+			changed = changed || b.DirectAdd(v)
+		}
+	case opTypeRemoveBatch:
+		for _, v := range op.values {
+			changed = changed || b.remove(v)
+		}
 	default:
 		panic(fmt.Sprintf("invalid op type: %d", op.typ))
 	}
+	return changed
 }
 
 // WriteTo writes op to the w.
@@ -3515,11 +3631,21 @@ func (op *op) WriteTo(w io.Writer) (n int64, err error) {
 
 	// Write type and value.
 	buf[0] = byte(op.typ)
-	binary.LittleEndian.PutUint64(buf[1:9], op.value)
+	if op.typ <= 1 {
+		binary.LittleEndian.PutUint64(buf[1:9], op.value)
+	} else {
+		binary.LittleEndian.PutUint64(buf[1:9], uint64(len(op.values)))
+		p := 13 // start of values (skip 4 for checksum)
+		for _, v := range op.values {
+			binary.LittleEndian.PutUint64(buf[p:p+8], v)
+			p += 8
+		}
+	}
 
 	// Add checksum at the end.
 	h := fnv.New32a()
 	h.Write(buf[0:9])
+	h.Write(buf[13:])
 	binary.LittleEndian.PutUint32(buf[9:13], h.Sum32())
 
 	// Write to writer.
@@ -3527,29 +3653,61 @@ func (op *op) WriteTo(w io.Writer) (n int64, err error) {
 	return int64(nn), err
 }
 
+var minOpSize = 13
+
 // UnmarshalBinary decodes data into an op.
 func (op *op) UnmarshalBinary(data []byte) error {
-	if len(data) < op.size() {
+	if len(data) < minOpSize {
 		return fmt.Errorf("op data out of bounds: len=%d", len(data))
 	}
 	statsHit("op/UnmarshalBinary")
 
+	op.typ = opType(data[0])
+	// op.value will actually contain the length of values for batch ops
+	op.value = binary.LittleEndian.Uint64(data[1:9])
+
 	// Verify checksum.
 	h := fnv.New32a()
 	h.Write(data[0:9])
+
+	if op.typ > 1 {
+		if len(data) < int(13+op.value*8) {
+			return fmt.Errorf("op data truncated - expected %d, got %d", 13+op.value*8, len(data))
+		}
+		h.Write(data[13 : 13+op.value*8])
+		op.values = make([]uint64, op.value)
+		for i := uint64(0); i < op.value; i++ {
+			start := 13 + i*8
+			op.values[i] = binary.LittleEndian.Uint64(data[start : start+8])
+		}
+		op.value = 0
+	}
 	if chk := binary.LittleEndian.Uint32(data[9:13]); chk != h.Sum32() {
 		return fmt.Errorf("checksum mismatch: exp=%08x, got=%08x", h.Sum32(), chk)
 	}
-
-	// Read type and value.
-	op.typ = opType(data[0])
-	op.value = binary.LittleEndian.Uint64(data[1:9])
 
 	return nil
 }
 
 // size returns the encoded size of the op, in bytes.
-func (*op) size() int { return 1 + 8 + 4 }
+func (op *op) size() int {
+	if op.typ == opTypeAdd || op.typ == opTypeRemove {
+		return 1 + 8 + 4
+	}
+	return 1 + 8 + 4 + len(op.values)*8
+}
+
+// count returns the number of bits the operation mutates.
+func (op *op) count() int {
+	switch op.typ {
+	case 0, 1:
+		return 1
+	case 2, 3:
+		return len(op.values)
+	default:
+		panic(fmt.Sprintf("unknown operation type: %d", op.typ))
+	}
+}
 
 func highbits(v uint64) uint64 { return v >> 16 }
 func lowbits(v uint64) uint16  { return uint16(v & 0xFFFF) }
@@ -4023,6 +4181,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		return nil
 	}
 	statsHit("Bitmap/UnmarshalBinary")
+	b.opN = 0 // reset opN since we're reading new data.
 	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
 	if fileMagic == MagicNumber { // if pilosa roaring
 		return errors.Wrap(b.unmarshalPilosaRoaring(data), "unmarshaling as pilosa roaring")

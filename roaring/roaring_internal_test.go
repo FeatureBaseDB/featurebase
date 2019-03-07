@@ -23,6 +23,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/pkg/errors"
 )
 
 // String produces a human viewable string of the contents.
@@ -3436,4 +3438,218 @@ func TestShiftRun(t *testing.T) {
 			t.Fatalf("test #%v shiftRun() expected %v, but got %v %d", i, test.exp, ret2.runs, ret2.n)
 		}
 	}
+}
+
+func TestOpLogWriteUnmarshal(t *testing.T) {
+	tests := []*op{
+		{
+			typ:   opTypeAdd,
+			value: 27,
+		},
+		{
+			typ:   opTypeRemove,
+			value: 28,
+		},
+		{
+			typ:    opTypeAddBatch,
+			values: []uint64{1, 2, 6, 19},
+		},
+		{
+			typ:    opTypeRemoveBatch,
+			values: []uint64{1, 2, 6, 19, 22, 44},
+		},
+		{
+			typ:    opTypeAddBatch,
+			values: []uint64{51234567890},
+		},
+		{
+			typ:    opTypeRemoveBatch,
+			values: []uint64{51234567890},
+		},
+		{
+			typ:   opTypeAdd,
+			value: 0,
+		},
+		{
+			typ:   opTypeRemove,
+			value: 0,
+		},
+		{
+			typ:    opTypeAddBatch,
+			values: []uint64{0},
+		},
+		{
+			typ:    opTypeRemoveBatch,
+			values: []uint64{0},
+		},
+		{
+			typ:    opTypeAddBatch,
+			values: []uint64{},
+		},
+		{
+			typ:    opTypeRemoveBatch,
+			values: []uint64{},
+		},
+	}
+
+	// test each one separately
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			if _, err := test.WriteTo(buf); err != nil {
+				t.Errorf("writing op %v to buffer: %v", test, err)
+			}
+
+			op := &op{}
+			if err := op.UnmarshalBinary(buf.Bytes()); err != nil {
+				t.Fatalf("unmarshling op: %v", err)
+			}
+
+			if err := compareOps(test, op); err != nil {
+				t.Errorf("mismatch: %v", err)
+			}
+		})
+	}
+
+	// now write them all to the same buffer and unmarshal one by one
+	t.Run("writeAllOps", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		for _, test := range tests {
+			_, err := test.WriteTo(buf)
+			if err != nil {
+				t.Fatalf("writing op to buffer: %v", err)
+			}
+		}
+
+		data := buf.Bytes()
+		offset := 0
+		for i, test := range tests {
+			op := &op{}
+
+			if err := op.UnmarshalBinary(data[offset:]); err != nil {
+				t.Fatalf("unmarshling op: %v", err)
+			}
+			if err := compareOps(test, op); err != nil {
+				t.Errorf("mismatch at %d: %v", i, err)
+			}
+			offset += op.size()
+		}
+	})
+}
+
+func compareOps(op1, op2 *op) error {
+	if op1.typ != op2.typ || op1.value != op2.value || len(op1.values) != len(op2.values) {
+		return errors.Errorf("mismatched type, value, or length: %v, %v", op1, op2)
+	}
+
+	for i := 0; i < len(op1.values); i++ {
+		if op1.values[i] != op2.values[i] {
+			return errors.Errorf("mismatched values at %d: %d and %d", i, op1.values[i], op2.values[i])
+		}
+	}
+	return nil
+}
+
+func TestDirectAddN(t *testing.T) {
+	tests := []struct {
+		call1     []uint64
+		expn1     int
+		call2     []uint64
+		expn2     int
+		exp       []uint64
+		expcall2n []uint64
+	}{
+		{
+			call1:     []uint64{0},
+			expn1:     1,
+			call2:     []uint64{0, 1},
+			expn2:     1,
+			exp:       []uint64{0, 1},
+			expcall2n: []uint64{1},
+		},
+		{
+			call1:     []uint64{0, 22, 55},
+			expn1:     3,
+			call2:     []uint64{0, 14, 22, 99, 55},
+			expn2:     2,
+			exp:       []uint64{0, 14, 22, 55, 99},
+			expcall2n: []uint64{14, 99},
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			b := NewBitmap()
+			n1 := b.DirectAddN(test.call1...)
+			if n1 != test.expn1 {
+				t.Errorf("mismatched n1 exp:%d got:%d", test.expn1, n1)
+			}
+			n2 := b.DirectAddN(test.call2...)
+			if n2 != test.expn2 {
+				t.Errorf("mismatched n2 exp:%d got:%d", test.expn2, n2)
+			}
+			if !reflect.DeepEqual(test.exp, b.Slice()) {
+				t.Errorf("misatched results \n%v\n%v", test.exp, b.Slice())
+			}
+			if !reflect.DeepEqual(test.expcall2n, test.call2[:n2]) {
+				t.Errorf("unexpected arg change \n%v\n%v", test.expcall2n, test.call2[:n2])
+			}
+		})
+	}
+}
+
+func TestDirectAddNVsAdd(t *testing.T) {
+	tests := [][]uint64{
+		{},
+		{0},
+		{0, 1, 2, 3},
+		{0, 1, 2, 101000, 9384932},
+		{9384932, 101000, 2, 1, 0},
+		{3489, 19230, 394, 0, 893982, 890283, 14, 7},
+	}
+	// TODO generate more tests and fuzz
+	testsCopy := make([][]uint64, len(tests))
+	copy(testsCopy, tests)
+	for i, test := range testsCopy {
+		t.Run(fmt.Sprintf("Fresh%d", i), func(t *testing.T) {
+			ba := NewBitmap()
+			bd := NewBitmap()
+			na, err := ba.Add(test...)
+			if err != nil {
+				t.Fatalf("adding bits: %v", err)
+			}
+			nd := bd.DirectAddN(test...)
+			if na != (nd > 0) {
+				t.Errorf("differing changed numbers %v, %d", na, nd)
+			}
+			if ba.Count() != bd.Count() {
+				t.Errorf("different counts")
+			}
+			if !reflect.DeepEqual(ba.Slice(), bd.Slice()) {
+				t.Errorf("unequal values\n%v\n%v", ba.Slice(), bd.Slice())
+			}
+		})
+	}
+
+	ba := NewBitmap()
+	bd := NewBitmap()
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("ContinuousAdd%d", i), func(t *testing.T) {
+			na, err := ba.Add(test...)
+			if err != nil {
+				t.Fatalf("adding bits: %v", err)
+			}
+			nd := bd.DirectAddN(test...)
+			if na != (nd > 0) {
+				t.Errorf("differing changed numbers %v, %d", na, nd)
+			}
+			if ba.Count() != bd.Count() {
+				t.Errorf("different counts")
+			}
+			if !reflect.DeepEqual(ba.Slice(), bd.Slice()) {
+				t.Errorf("unequal values\n%v\n%v", ba.Slice(), bd.Slice())
+			}
+		})
+	}
+
 }

@@ -76,7 +76,7 @@ const (
 	HashBlockSize = 100
 
 	// defaultFragmentMaxOpN is the default value for Fragment.MaxOpN.
-	defaultFragmentMaxOpN = 2000
+	defaultFragmentMaxOpN = 10000
 
 	// Row ids used for boolean fields.
 	falseRowID = uint64(0)
@@ -238,6 +238,8 @@ func (f *fragment) openStorage() error {
 		return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
 	}
 
+	f.opN = f.storage.Info().OpN
+
 	// Attach the file to the bitmap to act as a write-ahead log.
 	f.storage.OpWriter = f.file
 	f.rowCache = &simpleCache{make(map[uint64]*Row)}
@@ -340,6 +342,11 @@ func (f *fragment) closeStorage() error {
 		}
 	}
 
+	// opN is determined by how many bit set/clear operations are in the storage
+	// write log, so once the storage is closed it should be 0. Opening new
+	// storage will set opN appropriately.
+	f.opN = 0
+
 	return nil
 }
 
@@ -350,29 +357,40 @@ func (f *fragment) row(rowID uint64) *Row {
 	return f.unprotectedRow(rowID)
 }
 
+// unprotectedRow returns a row from the row cache if available or from storage
+// (updating the cache).
 func (f *fragment) unprotectedRow(rowID uint64) *Row {
 	r, ok := f.rowCache.Fetch(rowID)
 	if ok && r != nil {
 		return r
 	}
 
+	row := f.rowFromStorage(rowID)
+	f.rowCache.Add(rowID, row)
+	return row
+}
+
+// rowFromStorage clones a row data out of fragment storage and returns it as a
+// Row object.
+func (f *fragment) rowFromStorage(rowID uint64) *Row {
 	// Only use a subset of the containers.
 	// NOTE: The start & end ranges must be divisible by container width.
 	data := f.storage.OffsetRange(f.shard*ShardWidth, rowID*ShardWidth, (rowID+1)*ShardWidth)
 
-	// Reference bitmap subrange in storage.
-	// We Clone() data because otherwise row will contain pointers to containers in storage.
-	// This causes unexpected results when we cache the row and try to use it later.
+	// Reference bitmap subrange in storage. We Clone() data because otherwise
+	// row will contain pointers to containers in storage. This causes
+	// unexpected results when we cache the row and try to use it later.
+	// Basically, since we return the Row and release the fragment lock, the
+	// underlying fragment storage could be changed or snapshotted and thrown
+	// out at any point.
 	row := &Row{
 		segments: []rowSegment{{
 			data:     *data.Clone(),
 			shard:    f.shard,
-			writable: false,
+			writable: false, // this Row will probably be cached and shared, so it must be read only.
 		}},
 	}
 	row.invalidateCount()
-
-	f.rowCache.Add(rowID, row)
 
 	return row
 }
@@ -406,6 +424,7 @@ func (f *fragment) handleMutex(rowID, columnID uint64) error {
 	return nil
 }
 
+// unprotectedSetBit TODO should be replaced by an invocation of importPositions with a single bit to set.
 func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err error) {
 	changed = false
 	// Determine the position of the bit in the storage.
@@ -458,6 +477,8 @@ func (f *fragment) clearBit(rowID, columnID uint64) (bool, error) {
 	return f.unprotectedClearBit(rowID, columnID)
 }
 
+// unprotectedClearBit TODO should be replaced by an invocation of
+// importPositions with a single bit to clear.
 func (f *fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, err error) {
 	changed = false
 	// Determine the position of the bit in the storage.
@@ -627,6 +648,34 @@ func (f *fragment) setValue(columnID uint64, bitDepth uint, value uint64) (chang
 	return f.setValueBase(columnID, bitDepth, value, false)
 }
 
+func (f *fragment) positionsForValue(columnID uint64, bitDepth uint, value uint64, clear bool, toSet, toClear []uint64) ([]uint64, []uint64, error) {
+	for i := uint(0); i < bitDepth; i++ {
+		bit, err := f.pos(uint64(i), columnID)
+		if err != nil {
+			return toSet, toClear, errors.Wrap(err, "getting pos")
+		}
+		if value&(1<<i) != 0 {
+			toSet = append(toSet, bit)
+		} else {
+			toClear = append(toClear, bit)
+		}
+	}
+
+	// Mark value as set.
+	bit, err := f.pos(uint64(bitDepth), columnID)
+	if err != nil {
+		return toSet, toClear, errors.Wrap(err, "getting not-null pos")
+	}
+	if clear {
+		toClear = append(toClear, bit)
+	} else {
+		toSet = append(toSet, bit)
+	}
+
+	return toSet, toClear, nil
+}
+
+// TODO get rid of this and use positionsForValue to generate a single write op, and set that with importPositions.
 func (f *fragment) setValueBase(columnID uint64, bitDepth uint, value uint64, clear bool) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -1454,65 +1503,76 @@ func (f *fragment) bulkImport(rowIDs, columnIDs []uint64, options *ImportOptions
 	return f.bulkImportStandard(rowIDs, columnIDs, options)
 }
 
-// bulkImportStandard performs a bulk import on a standard fragment.
-func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *ImportOptions) error {
-	// Create a temporary bitmap which will be populated by rowIDs and columnIDs
-	// and then merged into the existing fragment's bitmap.
-	localBitmap := roaring.NewBitmap()
-
-	// Disconnect op writer so we don't append updates.
-	localBitmap.OpWriter = nil
-
-	// rowSet maintains the set of rowIDs present in this import.
-	// It allows the cache to be updated once per row, instead of once
-	// per bit.
+// bulkImportStandard performs a bulk import on a standard fragment. May mutate
+// its rowIDs and columnIDs arguments.
+func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *ImportOptions) (err error) {
+	// rowSet maintains the set of rowIDs present in this import. It allows the
+	// cache to be updated once per row, instead of once per bit. TODO: consider
+	// sorting by rowID/columnID first and avoiding the map allocation here. (we
+	// could reuse rowIDs to store the list of unique row IDs)
 	rowSet := make(map[uint64]struct{})
-	lastRowID := uint64(0)
+	lastRowID := uint64(1 << 63)
 
-	// Process every bit by writing to a local bitmap,
-	// to be merged with fragment storage next.
-	for i := range rowIDs {
+	// replace columnIDs with calculated positions to avoid allocation.
+	for i := 0; i < len(columnIDs); i++ {
 		rowID, columnID := rowIDs[i], columnIDs[i]
-
-		// Determine the position of the bit in the storage.
 		pos, err := f.pos(rowID, columnID)
 		if err != nil {
 			return err
 		}
-
-		// Write to local storage.
-		_, err = localBitmap.Add(pos)
-		if err != nil {
-			return err
-		}
-
-		// Reduce the StatsD rate for high volume stats
-		f.stats.Count("ImportBit", 1, 0.0001)
+		columnIDs[i] = pos
 
 		// Add row to rowSet.
-		if i == 0 || rowID != lastRowID {
+		if rowID != lastRowID {
 			lastRowID = rowID
 			rowSet[rowID] = struct{}{}
 		}
 	}
-
+	positions := columnIDs
 	f.mu.Lock()
 	defer f.mu.Unlock()
-
-	// Merge localBitmap into fragment's existing data.
-	var results *roaring.Bitmap
 	if options.Clear {
-		if f.storage.Count() > 0 {
-			results = f.storage.Difference(localBitmap)
-		} else {
-			results = roaring.NewBitmap()
-		}
+		err = f.importPositions(nil, positions, rowSet)
 	} else {
-		if f.storage.Count() > 0 {
-			results = f.storage.Union(localBitmap)
-		} else {
-			results = localBitmap
+		err = f.importPositions(positions, nil, rowSet)
+	}
+	return errors.Wrap(err, "bulkImportStandard")
+}
+
+// importPositions takes slices of positions within the fragment to set and
+// clear in storage. One must also pass in the set of unique rows which are
+// affected by the set and clear operations. It is unprotected (f.mu must be
+// locked when calling it). No position should appear in both set and clear.
+//
+// importPositions tries to intelligently decide whether or not to do a full
+// snapshot of the fragment or just do in-memory updates while appending
+// operations to the op log.
+func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct{}) error {
+	smallWrite := false
+	if len(set)+len(clear)+f.opN < f.MaxOpN {
+		smallWrite = true
+	} else {
+		f.storage.OpWriter = nil
+	}
+
+	if len(set) > 0 {
+		f.stats.Count("ImportingN", int64(len(set)), 1)
+		changedN, err := f.storage.AddN(set...) // TODO benchmark Add/RemoveN behavior with sorted/unsorted positions
+		if err != nil {
+			return errors.Wrap(err, "adding positions")
 		}
+		f.stats.Count("ImportedN", int64(changedN), 1)
+		f.opN += changedN
+	}
+
+	if len(clear) > 0 {
+		f.stats.Count("ClearingN", int64(len(clear)), 1)
+		changedN, err := f.storage.RemoveN(clear...)
+		if err != nil {
+			return errors.Wrap(err, "clearing positions")
+		}
+		f.stats.Count("ClearedN", int64(changedN), 1)
+		f.opN += changedN
 	}
 
 	// Update cache counts for all affected rows.
@@ -1520,12 +1580,22 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 		// Invalidate block checksum.
 		delete(f.checksums, int(rowID/HashBlockSize))
 
-		n := results.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
+		n := f.storage.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
 		f.cache.BulkAdd(rowID, n)
+
+		if smallWrite {
+			if _, ok := f.rowCache.Fetch(rowID); ok { // we won't update the rowCache if it wasn't already in there.
+				f.rowCache.Add(rowID, f.rowFromStorage(rowID))
+			}
+		}
 	}
 
 	f.cache.Recalculate()
-	return unprotectedWriteToFragment(f, results)
+
+	if !smallWrite {
+		return f.snapshot()
+	}
+	return nil
 }
 
 // bulkImportMutex performs a bulk import on a fragment while ensuring
@@ -1536,109 +1606,94 @@ func (f *fragment) bulkImportMutex(rowIDs, columnIDs []uint64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	// Disconnect op writer so we don't append updates.
-	f.storage.OpWriter = nil
+	rowSet := make(map[uint64]struct{})
+	// we have to maintain which columns are getting bits set as a map so that
+	// we don't end up setting multiple bits in the same column if a column is
+	// repeated within the import.
+	colSet := make(map[uint64]uint64)
 
-	// If an error occurs then reopen the storage.
-	if err := func() error {
-		// rowSet maintains the set of rowIDs present in this import.
-		// It allows the cache to be updated once per row, instead of once
-		// per bit.
-		rowSet := make(map[uint64]struct{})
-		lastRowID := uint64(0)
-
-		// Process every bit.
-		for i := range rowIDs {
-			rowID, columnID := rowIDs[i], columnIDs[i]
-
-			// Handle mutex vector (i.e. clear an existing row).
-			if existingRowID, found, err := f.mutexVector.Get(columnID); err != nil {
-				return errors.Wrap(err, "getting mutex vector data")
-			} else if found && existingRowID != rowID {
-				// Determine the position of the bit in the storage.
-				pos, err := f.pos(existingRowID, columnID)
-				if err != nil {
-					return err
-				}
-
-				// Clear storage.
-				_, err = f.storage.Remove(pos)
-				if err != nil {
-					return err
-				}
-
-				rowSet[existingRowID] = struct{}{}
-			}
-
+	// Since each imported bit will at most set one bit and clear one bit, we
+	// can reuse the rowIDs and columnIDs slices as the set and clear slice
+	// arguments to importPositions. The set positions we'll get from the
+	// colSet, but we maintain clearIdx as we loop through row and col ids so
+	// that we know how many bits we need to clear and how far through columnIDs
+	// we are.
+	clearIdx := 0
+	for i := range rowIDs {
+		rowID, columnID := rowIDs[i], columnIDs[i]
+		if existingRowID, found, err := f.mutexVector.Get(columnID); err != nil {
+			return errors.Wrap(err, "getting mutex vector data")
+		} else if found && existingRowID != rowID {
 			// Determine the position of the bit in the storage.
-			pos, err := f.pos(rowID, columnID)
+			clearPos, err := f.pos(existingRowID, columnID)
 			if err != nil {
 				return err
 			}
+			columnIDs[clearIdx] = clearPos
+			clearIdx++
 
-			// Write to storage.
-			_, err = f.storage.Add(pos)
-			if err != nil {
-				return err
-			}
-
-			// Reduce the StatsD rate for high volume stats
-			f.stats.Count("ImportBit", 1, 0.0001)
-
-			// Add row to rowSet.
-			if i == 0 || rowID != lastRowID {
-				lastRowID = rowID
-				rowSet[rowID] = struct{}{}
-			}
-
-			// Invalidate block checksum.
-			delete(f.checksums, int(rowID/HashBlockSize))
+			rowSet[existingRowID] = struct{}{}
+		} else if found && existingRowID == rowID {
+			continue
 		}
-
-		// Update cache counts for all rows.
-		for rowID := range rowSet {
-			// Import should ALWAYS have row() load a new bm from fragment.storage
-			// because the row that's in rowCache hasn't been updated with
-			// this import's data.
-			f.cache.BulkAdd(rowID, f.unprotectedRow(rowID).Count())
+		pos, err := f.pos(rowID, columnID)
+		if err != nil {
+			return err
 		}
-
-		f.cache.Invalidate()
-
-		return nil
-	}(); err != nil {
-		_ = f.closeStorage()
-		_ = f.openStorage()
-		return err
+		colSet[columnID] = pos
+		rowSet[rowID] = struct{}{}
 	}
 
-	// Write the storage to disk and reload.
-	if err := f.snapshot(); err != nil {
-		return err
+	// re-use rowIDs by populating positions to set from colSet.
+	i := 0
+	for _, pos := range colSet {
+		rowIDs[i] = pos
+		i++
 	}
+	toSet := rowIDs[:i]
+	toClear := columnIDs[:clearIdx]
 
-	return nil
+	return errors.Wrap(f.importPositions(toSet, toClear, rowSet), "importing positions")
 }
 
 // importValue bulk imports a set of range-encoded values.
 func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear bool) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
 	// Verify that there are an equal number of column ids and values.
 	if len(columnIDs) != len(values) {
 		return fmt.Errorf("mismatch of column/value len: %d != %d", len(columnIDs), len(values))
 	}
+	var toSet, toClear []uint64
+	f.mu.RLock()
+	smallWrite := false
+	if len(columnIDs)*int(bitDepth+1)+f.opN < f.MaxOpN {
+		smallWrite = true
+		// TODO figure out how to avoid re-allocating these each time. Probably
+		// possible to store them on the fragment with a capacity based on
+		// MaxOpN. For now, we know that the total number of bits to be
+		// set+cleared is len(values)*(bitDepth+1), so we make each slice
+		// slightly more than half of that to try to avoid reallocation.
+		toSet = make([]uint64, 0, len(columnIDs)*int(bitDepth+1)*(5/8))
+		toClear = make([]uint64, 0, len(columnIDs)*int(bitDepth+1)*(5/8))
+	}
+	f.mu.RUnlock()
 
-	f.storage.OpWriter = nil
+	if !smallWrite {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.storage.OpWriter = nil
+	}
 	// Process every value.
 	// If an error occurs then reopen the storage.
-	if err := func() error {
+	if err := func() (err error) {
 		for i := range columnIDs {
 			columnID, value := columnIDs[i], values[i]
-
-			_, err := f.importSetValue(columnID, bitDepth, value, clear)
-			if err != nil {
-				return errors.Wrap(err, "setting")
+			if smallWrite {
+				toSet, toClear, err = f.positionsForValue(columnID, bitDepth, value, clear, toSet, toClear)
+				if err != nil {
+					return errors.Wrap(err, "getting positions for value")
+				}
+			} else if _, err = f.importSetValue(columnID, bitDepth, value, clear); err != nil {
+				return errors.Wrapf(err, "setting value, smallPath:%v", smallWrite)
 			}
 		}
 		return nil
@@ -1647,10 +1702,17 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 		_ = f.openStorage()
 		return err
 	}
-	if err := f.snapshot(); err != nil {
-		return errors.Wrap(err, "snapshotting")
+
+	if smallWrite {
+		rowSet := make(map[uint64]struct{}, bitDepth+1)
+		for i := uint(0); i < bitDepth+1; i++ {
+			rowSet[uint64(i)] = struct{}{}
+		}
+		err := f.importPositions(toSet, toClear, rowSet)
+		return errors.Wrap(err, "importing positions")
 	}
-	return nil
+	err := f.snapshot()
+	return errors.Wrap(err, "snapshotting")
 }
 
 // importRoaring imports from the official roaring data format defined at

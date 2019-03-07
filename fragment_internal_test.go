@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math"
 	"math/rand"
@@ -710,6 +711,110 @@ func BenchmarkFragment_ImportValue(b *testing.B) {
 			benchmarkImportValues(b, bitDepth, f, func(u uint64) uint64 { return (u + 1) & (ShardWidth - 1) })
 		})
 		f.Clean(b)
+	}
+}
+
+// BenchmarkFragment_RepeatedSmallImports tests the situation where updates are
+// constantly coming in across a large column space so that each fragment gets
+// only a few updates during each import.
+//
+// We test a variety of combinations of the number of separate updates(imports),
+// the number of bits in the import, the number of rows in the fragment (which
+// is a pretty good proxy for fragment size on disk), and the MaxOpN on the
+// fragment which controls how many set bits occur before a snapshot is done. If
+// the number of bits in a given import is greater than MaxOpN, bulkImport will
+// always go through the standard snapshotting import path.
+func BenchmarkFragment_RepeatedSmallImports(b *testing.B) {
+	for _, numUpdates := range []int{100} {
+		for _, bitsPerUpdate := range []int{100, 1000} {
+			for _, numRows := range []int{1000, 100000, 1000000} {
+				for _, opN := range []int{1, 5000, 50000} {
+					b.Run(fmt.Sprintf("Rows%dUpdates%dBits%dOpN%d", numRows, numUpdates, bitsPerUpdate, opN), func(b *testing.B) {
+						for a := 0; a < b.N; a++ {
+							b.StopTimer()
+							// build the update data set all at once - this will get applied
+							// to a fragment in numUpdates batches
+							updateRows := make([]uint64, numUpdates*bitsPerUpdate)
+							updateCols := make([]uint64, numUpdates*bitsPerUpdate)
+							for i := 0; i < numUpdates*bitsPerUpdate; i++ {
+								updateRows[i] = uint64(rand.Int63n(int64(numRows))) // row id
+								updateCols[i] = uint64(rand.Int63n(ShardWidth))     // column id
+							}
+							f := mustOpenFragment("i", "f", viewStandard, 0, "")
+							f.MaxOpN = opN
+							defer f.Clean(b)
+							err := f.importRoaring(getZipfRowsSliceRoaring(uint64(numRows), 1), false)
+							if err != nil {
+								b.Fatalf("importing base data for benchmark: %v", err)
+							}
+							b.StartTimer()
+							for i := 0; i < numUpdates; i++ {
+								err := f.bulkImportStandard(
+									updateRows[bitsPerUpdate*i:bitsPerUpdate*(i+1)],
+									updateRows[bitsPerUpdate*i:bitsPerUpdate*(i+1)],
+									&ImportOptions{},
+								)
+								if err != nil {
+									b.Fatalf("doing small bulk import: %v", err)
+								}
+							}
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
+func BenchmarkFragment_RepeatedSmallValueImports(b *testing.B) {
+	initialCols := make([]uint64, 0, ShardWidth)
+	initialVals := make([]uint64, 0, ShardWidth)
+	for i := uint64(0); i < ShardWidth; i++ {
+		// every 29 columns, skip between 0 and 12 columns
+		if i%29 == 0 {
+			i += i % 13
+		}
+		initialCols = append(initialCols, i)
+		initialVals = append(initialVals, uint64(rand.Int63n(1<<21)))
+	}
+
+	for _, numUpdates := range []int{100} {
+		for _, valsPerUpdate := range []int{10, 100} {
+			updateCols := make([]uint64, numUpdates*valsPerUpdate)
+			updateVals := make([]uint64, numUpdates*valsPerUpdate)
+			for i := 0; i < numUpdates*valsPerUpdate; i++ {
+				updateCols[i] = uint64(rand.Int63n(ShardWidth))
+				updateVals[i] = uint64(rand.Int63n(1 << 21))
+			}
+
+			for _, opN := range []int{1, 5000, 50000} {
+				b.Run(fmt.Sprintf("Updates%dVals%dOpN%d", numUpdates, valsPerUpdate, opN), func(b *testing.B) {
+					for i := 0; i < b.N; i++ {
+						b.StopTimer()
+						f := mustOpenFragment("i", "f", viewBSIGroupPrefix+"foo", 0, CacheTypeNone)
+						f.MaxOpN = opN
+						err := f.importValue(initialCols, initialVals, 21, false)
+						if err != nil {
+							b.Fatalf("initial value import: %v", err)
+						}
+						b.StartTimer()
+						for j := 0; j < numUpdates; j++ {
+							err := f.importValue(
+								updateCols[valsPerUpdate*j:valsPerUpdate*(j+1)],
+								updateVals[valsPerUpdate*j:valsPerUpdate*(j+1)],
+								21,
+								false,
+							)
+							if err != nil {
+								b.Fatalf("importing values: %v", err)
+							}
+						}
+
+					}
+				})
+			}
+
+		}
 	}
 }
 
@@ -1596,7 +1701,7 @@ func TestFragment_ImportMutex(t *testing.T) {
 			for k, v := range test.setExp {
 				cols := f.row(k).Columns()
 				if !reflect.DeepEqual(cols, v) {
-					t.Fatalf("expected: %v, but got: %v", v, cols)
+					t.Fatalf("row: %d, expected: %v, but got: %v", k, v, cols)
 				}
 			}
 
@@ -1610,7 +1715,7 @@ func TestFragment_ImportMutex(t *testing.T) {
 			for k, v := range test.clearExp {
 				cols := f.row(k).Columns()
 				if !reflect.DeepEqual(cols, v) {
-					t.Fatalf("expected: %v, but got: %v", v, cols)
+					t.Fatalf("row: %d expected: %v, but got: %v", k, v, cols)
 				}
 			}
 		})
@@ -1800,8 +1905,7 @@ func BenchmarkFragment_FullSnapshot(b *testing.B) {
 }
 
 func BenchmarkFragment_Import(b *testing.B) {
-	f := mustOpenFragment("i", "f", viewStandard, 0, "")
-	defer f.Clean(b)
+	b.StopTimer()
 	maxX := 1048576 * 5 * 2
 	sz := maxX
 	rows := make([]uint64, sz)
@@ -1819,13 +1923,20 @@ func BenchmarkFragment_Import(b *testing.B) {
 			break
 		}
 	}
-	b.ResetTimer()
+	rowsUse, colsUse := make([]uint64, len(rows)), make([]uint64, len(cols))
 	b.ReportAllocs()
 	options := &ImportOptions{}
 	for i := 0; i < b.N; i++ {
-		if err := f.bulkImport(rows, cols, options); err != nil {
-			b.Fatalf("Error Building Sample: %s", err)
+		// since bulkImport modifies the input slices, we make new copies for each round
+		copy(rowsUse, rows)
+		copy(colsUse, cols)
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
+		b.StartTimer()
+		if err := f.bulkImport(rowsUse, colsUse, options); err != nil {
+			b.Errorf("Error Building Sample: %s", err)
 		}
+		b.StopTimer()
+		f.Clean(b)
 	}
 }
 
@@ -1931,10 +2042,13 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 func BenchmarkImportStandard(b *testing.B) {
 	for _, cacheType := range []string{CacheTypeRanked} {
 		for _, numRows := range rowCases {
-			rowIDs, columnIDs := getZipfRowsSliceStandard(numRows, 1)
+			rowIDsOrig, columnIDsOrig := getZipfRowsSliceStandard(numRows, 1)
+			rowIDs, columnIDs := make([]uint64, len(rowIDsOrig)), make([]uint64, len(columnIDsOrig))
 			b.Run(fmt.Sprintf("Rows%dCache_%s", numRows, cacheType), func(b *testing.B) {
 				b.StopTimer()
 				for i := 0; i < b.N; i++ {
+					copy(rowIDs, rowIDsOrig)
+					copy(columnIDs, columnIDsOrig)
 					f := mustOpenFragment("i", fmt.Sprintf("r%dc%s", numRows, cacheType), viewStandard, 0, cacheType)
 					b.StartTimer()
 					err := f.bulkImport(rowIDs, columnIDs, &ImportOptions{})
@@ -1988,6 +2102,66 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 	}
 }
 
+var bigFrag string
+
+func initBigFrag() {
+	if bigFrag == "" {
+		f := mustOpenFragment("i", "f", viewStandard, 0, DefaultCacheType)
+		for i := int64(0); i < 10; i++ {
+			// 10 million rows, 1 bit per column, random seeded by i
+			data := getZipfRowsSliceRoaring(10000000, i)
+			err := f.importRoaring(data, false)
+			if err != nil {
+				panic(fmt.Sprintf("setting up fragment data: %v", err))
+			}
+		}
+		err := f.Close()
+		if err != nil {
+			panic(fmt.Sprintf("closing fragment: %v", err))
+		}
+		bigFrag = f.path
+	}
+}
+
+func BenchmarkImportIntoLargeFragment(b *testing.B) {
+	b.StopTimer()
+	initBigFrag()
+	rowsOrig, colsOrig := getUpdataSlices(10000000, 11000, 0)
+	rows, cols := make([]uint64, len(rowsOrig)), make([]uint64, len(colsOrig))
+	opts := &ImportOptions{}
+	for i := 0; i < b.N; i++ {
+		origF, err := os.Open(bigFrag)
+		if err != nil {
+			b.Fatalf("opening frag file: %v", err)
+		}
+		fi, err := ioutil.TempFile(*TempDir, "")
+		if err != nil {
+			b.Fatalf("getting temp file: %v", err)
+		}
+		_, err = io.Copy(fi, origF)
+		if err != nil {
+			b.Fatalf("copying fragment file: %v", err)
+		}
+		origF.Close()
+		fi.Close()
+		nf := newFragment(fi.Name(), "i", "f", viewStandard, 0)
+		err = nf.Open()
+		if err != nil {
+			b.Fatalf("opening fragment: %v", err)
+		}
+		copy(rows, rowsOrig)
+		copy(cols, colsOrig)
+		b.StartTimer()
+		err = nf.bulkImport(rows, cols, opts)
+		b.StopTimer()
+		if err != nil {
+			b.Fatalf("bulkImport: %v", err)
+		}
+
+		nf.Clean(b)
+	}
+}
+
 func TestGetZipfRowsSliceRoaring(t *testing.T) {
 	f := mustOpenFragment("i", "f", viewStandard, 0, DefaultCacheType)
 	data := getZipfRowsSliceRoaring(10, 1)
@@ -2006,16 +2180,23 @@ func TestGetZipfRowsSliceRoaring(t *testing.T) {
 // rows, and 1 bit set in each column. The row each bit is set in is chosen via
 // the Zipf generator, and so will be skewed toward lower row numbers. If this
 // is edited to change the data distribution, getZipfRowsSliceStandard should be
-// edited as well.
+// edited as well. TODO switch to generating row-major for perf boost
 func getZipfRowsSliceRoaring(numRows uint64, seed int64) []byte {
-	b := roaring.NewBitmap()
+	b := roaring.NewBTreeBitmap()
 	s := rand.NewSource(seed)
 	r := rand.New(s)
 	z := rand.NewZipf(r, 1.6, 50, numRows-1)
+	bufSize := 1 << 14
+	posBuf := make([]uint64, 0, bufSize)
 	for i := uint64(0); i < ShardWidth; i++ {
 		row := z.Uint64()
-		b.DirectAdd(row*ShardWidth + i)
+		posBuf = append(posBuf, row*ShardWidth+i)
+		if len(posBuf) == bufSize {
+			sort.Slice(posBuf, func(i int, j int) bool { return posBuf[i] < posBuf[j] })
+			b.DirectAddN(posBuf...)
+		}
 	}
+	b.DirectAddN(posBuf...)
 	buf := bytes.NewBuffer(make([]byte, 0, 100000))
 	_, err := b.WriteTo(buf)
 	if err != nil {
@@ -2024,11 +2205,34 @@ func getZipfRowsSliceRoaring(numRows uint64, seed int64) []byte {
 	return buf.Bytes()
 }
 
+func getUpdataSlices(numRows, numCols uint64, seed int64) (rows, cols []uint64) {
+	getUpdataInto(func(row, col uint64) bool {
+		rows = append(rows, row)
+		cols = append(cols, col)
+		return true
+	}, numRows, numCols, seed)
+	return rows, cols
+}
+
 // getUpdataRoaring gets a byte slice containing a roaring bitmap which
 // represents numCols set bits distributed randomly throughout a shard's column
 // space and zipfianly throughout numRows rows.
 func getUpdataRoaring(numRows, numCols uint64, seed int64) []byte {
 	b := roaring.NewBitmap()
+
+	getUpdataInto(func(row, col uint64) bool {
+		return b.DirectAdd(row*ShardWidth + col)
+	}, numRows, numCols, seed)
+
+	buf := bytes.NewBuffer(make([]byte, 0, 100000))
+	_, err := b.WriteTo(buf)
+	if err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
+
+func getUpdataInto(f func(row, col uint64) bool, numRows, numCols uint64, seed int64) (changed int) {
 	s := rand.NewSource(seed)
 	r := rand.New(s)
 	z := rand.NewZipf(r, 1.6, 50, numRows-1)
@@ -2036,14 +2240,11 @@ func getUpdataRoaring(numRows, numCols uint64, seed int64) []byte {
 	for i := uint64(0); i < numCols; i++ {
 		col := uint64(r.Int63n(ShardWidth)) // assuming the number of repeats will be negligible
 		row := z.Uint64()
-		b.DirectAdd(row*ShardWidth + col)
+		if f(row, col) {
+			changed++
+		}
 	}
-	buf := bytes.NewBuffer(make([]byte, 0, 100000))
-	_, err := b.WriteTo(buf)
-	if err != nil {
-		panic(err)
-	}
-	return buf.Bytes()
+	return changed
 }
 
 // getZipfRowsSliceStandard is the same as getZipfRowsSliceRoaring, but returns
@@ -2597,4 +2798,136 @@ func randPositions(n int, r *rand.Rand) []uint64 {
 		ret[i] = uint64(r.Int63n(ShardWidth))
 	}
 	return ret
+}
+
+func TestFragmentPositionsForValue(t *testing.T) {
+	f := mustOpenFragment("i", "f", "v", 0, CacheTypeNone)
+	defer f.Clean(t)
+
+	tests := []struct {
+		columnID uint64
+		bitDepth uint
+		value    uint64
+		clear    bool
+		toSet    []uint64
+		toClear  []uint64
+	}{
+		{
+			columnID: 0,
+			bitDepth: 1,
+			value:    0,
+			toSet:    []uint64{ShardWidth},
+			toClear:  []uint64{0},
+		},
+		{
+			columnID: 0,
+			bitDepth: 3,
+			value:    0,
+			toSet:    []uint64{ShardWidth * 3},
+			toClear:  []uint64{0, ShardWidth, ShardWidth * 2},
+		},
+		{
+			columnID: 1,
+			bitDepth: 3,
+			value:    0,
+			toSet:    []uint64{ShardWidth*3 + 1},
+			toClear:  []uint64{1, ShardWidth + 1, ShardWidth*2 + 1},
+		},
+		{
+			columnID: 0,
+			bitDepth: 1,
+			value:    1,
+			toSet:    []uint64{0, ShardWidth},
+			toClear:  []uint64{},
+		},
+		{
+			columnID: 0,
+			bitDepth: 4,
+			value:    10,
+			toSet:    []uint64{ShardWidth, ShardWidth * 3, ShardWidth * 4},
+			toClear:  []uint64{0, ShardWidth * 2},
+		},
+		{
+			columnID: 0,
+			bitDepth: 5,
+			value:    10,
+			toSet:    []uint64{ShardWidth, ShardWidth * 3, ShardWidth * 5},
+			toClear:  []uint64{0, ShardWidth * 2, ShardWidth * 4},
+		},
+	}
+
+	for i, test := range tests {
+		toSet, toClear := make([]uint64, 0), make([]uint64, 0)
+		var err error
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			toSet, toClear, err = f.positionsForValue(test.columnID, test.bitDepth, test.value, test.clear, toSet, toClear)
+			if err != nil {
+				t.Fatalf("getting positions: %v", err)
+			}
+
+			if len(toSet) != len(test.toSet) || len(toClear) != len(test.toClear) {
+				t.Fatalf("differing lengths (exp/got): set\n%v\n%v\nclear\n%v\n%v\n", test.toSet, toSet, test.toClear, toClear)
+			}
+			for i := 0; i < len(toSet); i++ {
+				if toSet[i] != test.toSet[i] {
+					t.Errorf("toSet don't match at %d - exp:%d and got:%d", i, test.toSet[i], toSet[i])
+				}
+			}
+			for i := 0; i < len(toClear); i++ {
+				if toClear[i] != test.toClear[i] {
+					t.Errorf("toClear don't match at %d - exp:%d and got:%d", i, test.toClear[i], toClear[i])
+				}
+			}
+		})
+	}
+}
+
+func TestSmallImportRestart(t *testing.T) {
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
+	err := f.bulkImport([]uint64{1, 2, 3, 4, 5, 6, 7, 8, 9}, []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9}, &ImportOptions{})
+	if err != nil {
+		t.Fatalf("initial small import: %v", err)
+	}
+	if f.opN != 9 {
+		t.Errorf("unexpected opN - %d is not 9", f.opN)
+	}
+
+	err = f.Close()
+	if err != nil {
+		t.Fatalf("closing fragment: %v", err)
+	}
+
+	err = f.Open()
+	if err != nil {
+		t.Fatalf("reopening fragment: %v", err)
+	}
+
+	if f.opN != 9 {
+		t.Errorf("unexpected opN after close/open %d is not 9", f.opN)
+	}
+
+	if r1 := f.row(1).Columns(); len(r1) != 1 || r1[0] != 1 {
+		t.Errorf("row 1 should be [1], but got %v", r1)
+	}
+
+	f2 := newFragment(f.path, "i", "f", viewStandard, 0)
+	f2.CacheType = f.CacheType
+
+	err = f.closeStorage()
+	if err != nil {
+		t.Fatalf("closing storage: %v", err)
+	}
+
+	err = f2.Open()
+	if err != nil {
+		t.Fatalf("opening new fragment: %v", err)
+	}
+
+	if f2.opN != 9 {
+		t.Errorf("unexpected opN after close/open %d is not 9", f2.opN)
+	}
+
+	if r1 := f2.row(1).Columns(); len(r1) != 1 || r1[0] != 1 {
+		t.Errorf("row 1 should be [1], but got %v", r1)
+	}
 }

@@ -55,8 +55,8 @@ The file /pilosa/lru/lru.go contains a redistribution of lru
     See the License for the specific language governing permissions and
     limitations under the License.
 
-The file /enterprise/b/btree.go contains a modified redistribution of b
-(https://github.com/cznic/b); the license follows:
+The files /enterprise/b/btree.go and /roaring/btree.go contain a modified
+redistribution of b (https://github.com/cznic/b); the license follows:
 
     Copyright (c) 2014 The b Authors. All rights reserved.
 
