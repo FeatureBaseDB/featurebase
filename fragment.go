@@ -130,7 +130,8 @@ type fragment struct {
 	// existing value (to clear) prior to setting a new value.
 	mutexVector vector
 
-	stats stats.StatsClient
+	stats    stats.StatsClient
+	nonemmap bool
 }
 
 // newFragment returns a new instance of Fragment.
@@ -234,10 +235,17 @@ func (f *fragment) openStorage() error {
 		}
 	} else {
 		// Mmap the underlying file so it can be zero copied.
-		data, err := syscall.Mmap(int(f.file.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
-
-		if err != nil {
-			f.Logger.Printf("mmap failed %s using ReadAll", err)
+		var data []byte
+		if !f.nonemmap {
+			data, err = syscall.Mmap(int(f.file.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
+			if err != nil {
+				f.Logger.Printf("mmap failed %s using ReadAll", err)
+				data, err = ioutil.ReadAll(file)
+			} else {
+				//save reference for unmapping
+				f.storageData = data
+			}
+		} else {
 			data, err = ioutil.ReadAll(file)
 		}
 		if err := f.storage.UnmarshalBinary(data); err != nil {
@@ -327,7 +335,7 @@ func (f *fragment) closeStorage() error {
 	//f.storage = roaring.NewBitmap()
 
 	// Unmap the file.
-	if f.storageData != nil {
+	if f.nonemmap && f.storageData != nil {
 		if err := syscall.Munmap(f.storageData); err != nil {
 			return fmt.Errorf("munmap: %s", err)
 		}
@@ -1761,6 +1769,7 @@ func (f *fragment) snapshot() error {
 // unprotectedWriteToFragment writes the fragment f with bm as the data. It is unprotected, and
 // f.mu must be locked when calling it.
 func unprotectedWriteToFragment(f *fragment, bm *roaring.Bitmap) error { // nolint: interfacer
+	f.nonemmap = true
 
 	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	start := time.Now()
