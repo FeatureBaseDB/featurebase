@@ -186,6 +186,19 @@ func (f *fragment) Open() error {
 	return nil
 }
 
+func (f *fragment) openOpWriter() error {
+	// Open the data file to be mmap'd and used as an ops log.
+	file, err := os.OpenFile(f.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		return fmt.Errorf("open file: %s", err)
+	}
+	file.Seek(0, 2)
+
+	f.file = file
+	f.storage.OpWriter = file
+	return nil
+}
+
 // openStorage opens the storage bitmap.
 func (f *fragment) openStorage() error {
 	// Create a roaring bitmap to serve as storage for the shard.
@@ -197,8 +210,9 @@ func (f *fragment) openStorage() error {
 	if err != nil {
 		return fmt.Errorf("open file: %s", err)
 	}
-	f.file = file
+	defer f.closeStorage()
 
+	f.file = file
 	// Lock the underlying file.
 	if err := syscall.Flock(int(f.file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		return fmt.Errorf("flock: %s", err)
@@ -221,30 +235,18 @@ func (f *fragment) openStorage() error {
 	} else {
 		// Mmap the underlying file so it can be zero copied.
 		data, err := syscall.Mmap(int(f.file.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
+
 		if err != nil {
 			f.Logger.Printf("mmap failed %s using ReadAll", err)
 			data, err = ioutil.ReadAll(file)
-			if err != nil {
-				return errors.Wrap(err, "failure file readall")
-			}
-
-		} else {
-
-			f.storageData = data
-			// Advise the kernel that the mmap is accessed randomly.
-			if err := madvise(f.storageData, syscall.MADV_RANDOM); err != nil {
-				return fmt.Errorf("madvise: %s", err)
-			}
 		}
-
 		if err := f.storage.UnmarshalBinary(data); err != nil {
 			return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
 		}
-
 	}
 
 	// Attach the file to the bitmap to act as a write-ahead log.
-	f.storage.OpWriter = f.file
+	//f.storage.OpWriter = f.file
 	f.rowCache = &simpleCache{make(map[uint64]*Row)}
 
 	return nil
@@ -344,7 +346,10 @@ func (f *fragment) closeStorage() error {
 			return fmt.Errorf("close file: %s", err)
 		}
 	}
-
+	f.file = nil
+	if f.storage != nil {
+		f.storage.OpWriter = nil
+	}
 	return nil
 }
 
@@ -372,7 +377,7 @@ func (f *fragment) unprotectedRow(rowID uint64) *Row {
 		segments: []rowSegment{{
 			data:     *data.Clone(),
 			shard:    f.shard,
-			writable: false,
+			writable: true,
 		}},
 	}
 	row.invalidateCount()
@@ -417,6 +422,12 @@ func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 	pos, err := f.pos(rowID, columnID)
 	if err != nil {
 		return false, errors.Wrap(err, "getting bit pos")
+	}
+	if f.storage.OpWriter == nil {
+		err = f.openOpWriter()
+		if err != nil {
+			return false, errors.Wrap(err, "getting opWriter")
+		}
 	}
 
 	// Write to storage.
@@ -469,6 +480,13 @@ func (f *fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, er
 	pos, err := f.pos(rowID, columnID)
 	if err != nil {
 		return false, errors.Wrap(err, "getting bit pos")
+	}
+
+	if f.storage.OpWriter == nil {
+		err = f.openOpWriter()
+		if err != nil {
+			return false, errors.Wrap(err, "getting opWriter")
+		}
 	}
 
 	// Write to storage.
@@ -536,6 +554,7 @@ func (f *fragment) unprotectedSetRow(row *Row, rowID uint64) (changed bool, err 
 		k, c := citer.Value()
 		f.storage.Containers.Put(headContainerKey+(k%(1<<shardVsContainerExponent)), c)
 	}
+	fmt.Println("MAYBE")
 
 	// Update the row in cache.
 	n := f.storage.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
@@ -1214,7 +1233,9 @@ type topOptions struct {
 // If two fragments have the same checksum then they have the same data.
 func (f *fragment) Checksum() []byte {
 	h := xxhash.New()
+	fmt.Println("CHECK")
 	for _, block := range f.Blocks() {
+		fmt.Println(block)
 		h.Write(block.Checksum)
 	}
 	return h.Sum(nil)

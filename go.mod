@@ -3,6 +3,7 @@ module github.com/pilosa/pilosa
 require (
 	github.com/CAFxX/gcnotifier v0.0.0-20190112062741-224a280d589d
 	github.com/DataDog/datadog-go v0.0.0-20180822151419-281ae9f2d895
+	github.com/benbjohnson/immutable v0.1.1
 	github.com/boltdb/bolt v1.3.1
 	github.com/cespare/xxhash v1.1.0
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect

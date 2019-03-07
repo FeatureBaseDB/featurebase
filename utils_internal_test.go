@@ -356,6 +356,7 @@ func (b bcast) SendTo(to *Node, m Message) error {
 // FollowResizeInstruction is a version of cluster.FollowResizeInstruction used for testing.
 func (t *ClusterCluster) FollowResizeInstruction(instr *ResizeInstruction) error {
 
+	fmt.Println("what",instr)
 	// Prepare the return message.
 	complete := &ResizeInstructionComplete{
 		JobID: instr.JobID,
@@ -394,7 +395,6 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *ResizeInstruction) error
 
 		for _, src := range instr.Sources {
 			srcCluster := t.clusterByID(src.Node.ID)
-
 			srcFragment := srcCluster.holder.fragment(src.Index, src.Field, src.View, src.Shard)
 			destFragment := destCluster.holder.fragment(src.Index, src.Field, src.View, src.Shard)
 			if destFragment == nil {

@@ -56,6 +56,7 @@ func TestFragment_SetBit(t *testing.T) {
 	} else if _, err := f.setBit(121, 0); err != nil {
 		t.Fatal(err)
 	}
+	fmt.Println("WRITE COMPLETE")
 
 	// Verify counts on rows.
 	if n := f.row(120).Count(); n != 2 {
@@ -63,7 +64,7 @@ func TestFragment_SetBit(t *testing.T) {
 	} else if n := f.row(121).Count(); n != 1 {
 		t.Fatalf("unexpected count: %d", n)
 	}
-
+    fmt.Println("GO")
 	// Close and reopen the fragment & verify the data.
 	if err := f.reopen(); err != nil {
 		t.Fatal(err)
@@ -141,7 +142,7 @@ func TestFragment_SetRow(t *testing.T) {
 	} else if _, err := f.setBit(rowID, 8065536); err != nil {
 		t.Fatal(err)
 	}
-
+	fmt.Println("SETS WORK")
 	// Verify data on row.
 	if cols := f.row(rowID).Columns(); !reflect.DeepEqual(cols, []uint64{8000001, 8065536}) {
 		t.Fatalf("unexpected columns: %+v", cols)
