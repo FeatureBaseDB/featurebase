@@ -1732,8 +1732,10 @@ func (f *fragment) importRoaring(data []byte, clear bool) error {
 	rowSet := make([]uint64, 0)
 	var lastRow uint64 = math.MaxUint64
 
+	incomingCnt := 0
 	for iter.Next() {
-		key, _ := iter.Value()
+		key, c := iter.Value()
+		incomingCnt += int(c.N())
 
 		// virtual row for the current container
 		vRow := key >> shardVsContainerExponent
@@ -1749,8 +1751,13 @@ func (f *fragment) importRoaring(data []byte, clear bool) error {
 	if clear {
 		bm = f.storage.Difference(bm)
 	} else {
-		if f.storage.Count() > 0 {
-			bm = f.storage.Union(bm)
+		if cnt := f.storage.Count(); cnt > 0 {
+			if incomingCnt > int(cnt) {
+				bm.UnionInPlace(f.storage)
+			} else {
+				f.storage.UnionInPlace(bm)
+				bm = f.storage
+			}
 		}
 	}
 
