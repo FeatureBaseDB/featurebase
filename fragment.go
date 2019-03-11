@@ -1763,11 +1763,8 @@ func (f *fragment) importRoaring(data []byte, clear bool) error {
 
 	if clear {
 		bm = f.storage.Difference(bm)
-	} else if f.storage.Containers.Size() >= bm.Containers.Size() {
-		f.storage.UnionInPlace(bm)
-		bm = f.storage
-	} else {
-		bm.UnionInPlace(f.storage)
+	} else if f.storage.Any() {
+		bm = f.storage.Union(bm)
 	}
 
 	for rowID := range rowSet {
