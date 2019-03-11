@@ -1970,6 +1970,9 @@ func BenchmarkImportRoaring(b *testing.B) {
 }
 
 func BenchmarkImportRoaringConcurrent(b *testing.B) {
+	if testing.Short() {
+		b.SkipNow()
+	}
 	for _, numRows := range rowCases {
 		data := getZipfRowsSliceRoaring(numRows, 1)
 		b.Logf("%dRows: %.2fMB\n", numRows, float64(len(data))/1024/1024)
@@ -2003,6 +2006,9 @@ func BenchmarkImportRoaringConcurrent(b *testing.B) {
 	}
 }
 func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
+	if testing.Short() {
+		b.SkipNow()
+	}
 	for _, numRows := range rowCases {
 		for _, numCols := range colCases {
 			data := getZipfRowsSliceRoaring(numRows, 1)
@@ -2153,6 +2159,41 @@ func BenchmarkImportIntoLargeFragment(b *testing.B) {
 		copy(cols, colsOrig)
 		b.StartTimer()
 		err = nf.bulkImport(rows, cols, opts)
+		b.StopTimer()
+		if err != nil {
+			b.Fatalf("bulkImport: %v", err)
+		}
+
+		nf.Clean(b)
+	}
+}
+
+func BenchmarkImportRoaringIntoLargeFragment(b *testing.B) {
+	b.StopTimer()
+	initBigFrag()
+	updata := getUpdataRoaring(10000000, 11000, 0)
+	for i := 0; i < b.N; i++ {
+		origF, err := os.Open(bigFrag)
+		if err != nil {
+			b.Fatalf("opening frag file: %v", err)
+		}
+		fi, err := ioutil.TempFile(*TempDir, "")
+		if err != nil {
+			b.Fatalf("getting temp file: %v", err)
+		}
+		_, err = io.Copy(fi, origF)
+		if err != nil {
+			b.Fatalf("copying fragment file: %v", err)
+		}
+		origF.Close()
+		fi.Close()
+		nf := newFragment(fi.Name(), "i", "f", viewStandard, 0)
+		err = nf.Open()
+		if err != nil {
+			b.Fatalf("opening fragment: %v", err)
+		}
+		b.StartTimer()
+		err = nf.importRoaring(updata, false)
 		b.StopTimer()
 		if err != nil {
 			b.Fatalf("bulkImport: %v", err)
