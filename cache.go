@@ -437,6 +437,34 @@ type bitmapCache interface {
 	Add(id uint64, b *Row)
 }
 
+type nopBitmapCache struct{}
+
+func (nopBitmapCache) Fetch(id uint64) (*Row, bool) { return nil, false }
+func (nopBitmapCache) Add(id uint64, b *Row)        {}
+
+type lruBitmapCache struct {
+	cache *lru.Cache
+}
+
+func newLRUBitmapCache(maxEntries int) *lruBitmapCache {
+	return &lruBitmapCache{
+		cache: lru.New(maxEntries),
+	}
+}
+
+func (c *lruBitmapCache) Fetch(id uint64) (*Row, bool) {
+	value, found := c.cache.Get(lru.Key(id))
+	if !found {
+		return nil, false
+	}
+	row := value.(*Row)
+	return row, found
+}
+
+func (c *lruBitmapCache) Add(id uint64, b *Row) {
+	c.cache.Add(lru.Key(id), b)
+}
+
 // simpleCache implements BitmapCache
 // it is meant to be a short-lived cache for cases where writes are continuing to access
 // the same row within a short time frame (i.e. good for write-heavy loads)
