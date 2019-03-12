@@ -1275,7 +1275,7 @@ func isAllType(b *roaring.Bitmap, typ string) bool {
 	return true
 }
 
-func getBenchData(b *testing.B) *benchmarkSampleData {
+func getBenchData(tb testing.TB) *benchmarkSampleData {
 	data := &sampleData
 	if data.a1 == nil {
 		const max = (1 << 24) / 64
@@ -1321,19 +1321,19 @@ func getBenchData(b *testing.B) *benchmarkSampleData {
 
 	}
 	if !isAllType(data.a1, "array") {
-		b.Fatalf("expected data.a1 to be an array, it wasn't.")
+		tb.Fatalf("expected data.a1 to be an array, it wasn't.")
 	}
 	if !isAllType(data.a2, "array") {
-		b.Fatalf("expected data.a2 to be an array, it wasn't.")
+		tb.Fatalf("expected data.a2 to be an array, it wasn't.")
 	}
 	if !isAllType(data.b, "bitmap") {
-		b.Fatalf("expected data.b to be a bitmap, it wasn't.")
+		tb.Fatalf("expected data.b to be a bitmap, it wasn't.")
 	}
 	if !isAllType(data.r1, "run") {
-		b.Fatalf("expected data.r1 to be RLE, it wasn't.")
+		tb.Fatalf("expected data.r1 to be RLE, it wasn't.")
 	}
 	if !isAllType(data.r2, "run") {
-		b.Fatalf("expected data.r2 to be RLE, it wasn't.")
+		tb.Fatalf("expected data.r2 to be RLE, it wasn't.")
 	}
 	return data
 }
@@ -1607,8 +1607,8 @@ func BenchmarkUnion(b *testing.B) {
 
 func BenchmarkUnionBulk(b *testing.B) {
 	data := getBenchData(b)
-	bm := roaring.NewBitmap()
 	for n := 0; n < b.N; n++ {
+		bm := roaring.NewBitmap()
 		bm.
 			UnionInPlace(data.a1, data.a2, data.b, data.r1, data.r2)
 	}
