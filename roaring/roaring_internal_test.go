@@ -3653,3 +3653,28 @@ func TestDirectAddNVsAdd(t *testing.T) {
 	}
 
 }
+
+func BenchmarkUnionInPlaceRegression(b *testing.B) {
+	initial := make([]uint64, 0, 10100)
+	add := make([]uint64, 0, 10000)
+	for i := uint64(0); i < 1<<30; i += 100000 {
+		initial = append(initial, i)
+		add = append(add, i+67000)
+	}
+	addBM := NewBTreeBitmap(add...)
+	b.Run("Union", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			bm := NewBTreeBitmap(initial...)
+			bm = bm.Union(addBM)
+		}
+	})
+	b.Run("UnionInPlace", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			bm := NewBTreeBitmap(initial...)
+			bm.UnionInPlace(addBM)
+		}
+	})
+
+}
