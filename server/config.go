@@ -75,10 +75,11 @@ type Config struct {
 
 	Cluster struct {
 		// Disabled controls whether clustering functionality is enabled.
-		Disabled      bool          `toml:"disabled"`
-		Coordinator   bool          `toml:"coordinator"`
-		ReplicaN      int           `toml:"replicas"`
-		Hosts         []string      `toml:"hosts"`
+		Disabled    bool     `toml:"disabled"`
+		Coordinator bool     `toml:"coordinator"`
+		ReplicaN    int      `toml:"replicas"`
+		Hosts       []string `toml:"hosts"`
+		// TODO(2.0) move this out of cluster. (why is it here??)
 		LongQueryTime toml.Duration `toml:"long-query-time"`
 	} `toml:"cluster"`
 

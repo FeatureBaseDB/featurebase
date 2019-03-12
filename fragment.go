@@ -1729,11 +1729,13 @@ func (f *fragment) importRoaring(data []byte, clear bool) error {
 
 	// get a list of keys in order to update the cache
 	iter, _ := bm.Containers.Iterator(0)
-	rowSet := make([]uint64, 0)
+	rowSet := make(map[uint64]struct{})
 	var lastRow uint64 = math.MaxUint64
 
+	incomingCnt := uint64(0)
 	for iter.Next() {
-		key, _ := iter.Value()
+		key, c := iter.Value()
+		incomingCnt += uint64(c.N())
 
 		// virtual row for the current container
 		vRow := key >> shardVsContainerExponent
@@ -1742,19 +1744,30 @@ func (f *fragment) importRoaring(data []byte, clear bool) error {
 		if vRow == lastRow {
 			continue
 		}
-		rowSet = append(rowSet, vRow)
+		rowSet[vRow] = struct{}{}
 		lastRow = vRow
+	}
+
+	// take smallPath? TODO - ideally instead of checking f.storage.Any(), the
+	// test here would be if the storage size (in bytes) is significantly
+	// greater than the size of the incoming bits serialized as append
+	// operations. Getting the storage size might be a bit expensive though
+	// especially if the fragment isn't mapped.
+	if incomingCnt+uint64(f.opN) <= uint64(f.MaxOpN) && f.storage.Any() {
+		toSet, toClear := bm.Slice(), []uint64{}
+		if clear {
+			toSet, toClear = toClear, toSet
+		}
+		return f.importPositions(toSet, toClear, rowSet)
 	}
 
 	if clear {
 		bm = f.storage.Difference(bm)
-	} else {
-		if f.storage.Count() > 0 {
-			bm = f.storage.Union(bm)
-		}
+	} else if f.storage.Any() {
+		bm = f.storage.Union(bm)
 	}
 
-	for _, rowID := range rowSet {
+	for rowID := range rowSet {
 		n := bm.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
 		f.cache.BulkAdd(rowID, n)
 	}
