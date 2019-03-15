@@ -1773,6 +1773,9 @@ func (c *Container) optimize() {
 	}
 }
 
+// unionInPlace does not necessarily preserve container's N; it's expected
+// to be used when running a sequence of unions, after which you should
+// call Repair(). (As of this writing, that only matters for bitmaps.)
 func (c *Container) unionInPlace(other *Container) {
 	switch c.containerType {
 	case containerBitmap:
