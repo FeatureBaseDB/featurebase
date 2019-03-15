@@ -435,14 +435,14 @@ func TestBitmap_UnionInPlace1(t *testing.T) {
 
 	result.UnionInPlace(bm0, bm1)
 	if n := result.Count(); n != 2682675 {
-		t.Fatalf("unexpected n: %d", n)
+		t.Fatalf("unexpected n: got %d, expected 2682675", n)
 	}
 
 	bm := testBM()
 	result = roaring.NewBitmap()
 	result.UnionInPlace(bm, bm0)
 	if n := result.Count(); n != 75009 {
-		t.Fatalf("unexpected n: %d", n)
+		t.Fatalf("unexpected n: got %d, expected 75009", n)
 	}
 
 	result = roaring.NewBitmap()
