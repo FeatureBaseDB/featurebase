@@ -2699,6 +2699,18 @@ func getFunctionName(i interface{}) string {
 	return y[0]
 }
 
+// UnionInPlace is defined at the Bitmap level, but this wrapper lets us insert
+// it into our ContainerCombinations tests so that it gets exercised on a wide
+// variety of container data.
+func unionInPlaceWrapper(a, b *Container) *Container {
+	out := NewBitmap()
+	out.Containers.Put(0, a.Clone())
+	B := NewBitmap()
+	B.Containers.Put(0, b)
+	out.UnionInPlace(B)
+	return out.Containers.Get(0)
+}
+
 func TestContainerCombinations(t *testing.T) {
 
 	cts := setupContainerTests()
@@ -2934,6 +2946,117 @@ func TestContainerCombinations(t *testing.T) {
 		//{union, "evenBitsSet", "outerBitsSet", ""},
 		{union, "evenBitsSet", "oddBitsSet", "full"},
 		{union, "evenBitsSet", "evenBitsSet", "evenBitsSet"},
+
+		// unionInPlaceWrapper
+		{unionInPlaceWrapper, "empty", "empty", "empty"},
+		{unionInPlaceWrapper, "empty", "full", "full"},
+		{unionInPlaceWrapper, "empty", "firstBitSet", "firstBitSet"},
+		{unionInPlaceWrapper, "empty", "lastBitSet", "lastBitSet"},
+		{unionInPlaceWrapper, "empty", "firstBitUnset", "firstBitUnset"},
+		{unionInPlaceWrapper, "empty", "lastBitUnset", "lastBitUnset"},
+		{unionInPlaceWrapper, "empty", "innerBitsSet", "innerBitsSet"},
+		{unionInPlaceWrapper, "empty", "outerBitsSet", "outerBitsSet"},
+		{unionInPlaceWrapper, "empty", "oddBitsSet", "oddBitsSet"},
+		{unionInPlaceWrapper, "empty", "evenBitsSet", "evenBitsSet"},
+		//
+		{unionInPlaceWrapper, "full", "empty", "full"},
+		{unionInPlaceWrapper, "full", "full", "full"},
+		{unionInPlaceWrapper, "full", "firstBitSet", "full"},
+		{unionInPlaceWrapper, "full", "lastBitSet", "full"},
+		{unionInPlaceWrapper, "full", "firstBitUnset", "full"},
+		{unionInPlaceWrapper, "full", "lastBitUnset", "full"},
+		{unionInPlaceWrapper, "full", "innerBitsSet", "full"},
+		{unionInPlaceWrapper, "full", "outerBitsSet", "full"},
+		{unionInPlaceWrapper, "full", "oddBitsSet", "full"},
+		{unionInPlaceWrapper, "full", "evenBitsSet", "full"},
+		//
+		{unionInPlaceWrapper, "firstBitSet", "empty", "firstBitSet"},
+		{unionInPlaceWrapper, "firstBitSet", "full", "full"},
+		{unionInPlaceWrapper, "firstBitSet", "firstBitSet", "firstBitSet"},
+		{unionInPlaceWrapper, "firstBitSet", "lastBitSet", "outerBitsSet"},
+		{unionInPlaceWrapper, "firstBitSet", "firstBitUnset", "full"},
+		{unionInPlaceWrapper, "firstBitSet", "lastBitUnset", "lastBitUnset"},
+		{unionInPlaceWrapper, "firstBitSet", "innerBitsSet", "lastBitUnset"},
+		{unionInPlaceWrapper, "firstBitSet", "outerBitsSet", "outerBitsSet"},
+		//{unionInPlaceWrapper, "firstBitSet", "oddBitsSet", ""},
+		{unionInPlaceWrapper, "firstBitSet", "evenBitsSet", "evenBitsSet"},
+		//
+		{unionInPlaceWrapper, "lastBitSet", "empty", "lastBitSet"},
+		{unionInPlaceWrapper, "lastBitSet", "full", "full"},
+		{unionInPlaceWrapper, "lastBitSet", "firstBitSet", "outerBitsSet"},
+		{unionInPlaceWrapper, "lastBitSet", "lastBitSet", "lastBitSet"},
+		{unionInPlaceWrapper, "lastBitSet", "firstBitUnset", "firstBitUnset"},
+		{unionInPlaceWrapper, "lastBitSet", "lastBitUnset", "full"},
+		{unionInPlaceWrapper, "lastBitSet", "innerBitsSet", "firstBitUnset"},
+		{unionInPlaceWrapper, "lastBitSet", "outerBitsSet", "outerBitsSet"},
+		{unionInPlaceWrapper, "lastBitSet", "oddBitsSet", "oddBitsSet"},
+		//{unionInPlaceWrapper, "lastBitSet", "evenBitsSet", ""},
+		//
+		{unionInPlaceWrapper, "firstBitUnset", "empty", "firstBitUnset"},
+		{unionInPlaceWrapper, "firstBitUnset", "full", "full"},
+		{unionInPlaceWrapper, "firstBitUnset", "firstBitSet", "full"},
+		{unionInPlaceWrapper, "firstBitUnset", "lastBitSet", "firstBitUnset"},
+		{unionInPlaceWrapper, "firstBitUnset", "firstBitUnset", "firstBitUnset"},
+		{unionInPlaceWrapper, "firstBitUnset", "lastBitUnset", "full"},
+		{unionInPlaceWrapper, "firstBitUnset", "innerBitsSet", "firstBitUnset"},
+		{unionInPlaceWrapper, "firstBitUnset", "outerBitsSet", "full"},
+		{unionInPlaceWrapper, "firstBitUnset", "oddBitsSet", "firstBitUnset"},
+		{unionInPlaceWrapper, "firstBitUnset", "evenBitsSet", "full"},
+		//
+		{unionInPlaceWrapper, "lastBitUnset", "empty", "lastBitUnset"},
+		{unionInPlaceWrapper, "lastBitUnset", "full", "full"},
+		{unionInPlaceWrapper, "lastBitUnset", "firstBitSet", "lastBitUnset"},
+		{unionInPlaceWrapper, "lastBitUnset", "lastBitSet", "full"},
+		{unionInPlaceWrapper, "lastBitUnset", "firstBitUnset", "full"},
+		{unionInPlaceWrapper, "lastBitUnset", "lastBitUnset", "lastBitUnset"},
+		{unionInPlaceWrapper, "lastBitUnset", "innerBitsSet", "lastBitUnset"},
+		{unionInPlaceWrapper, "lastBitUnset", "outerBitsSet", "full"},
+		{unionInPlaceWrapper, "lastBitUnset", "oddBitsSet", "full"},
+		{unionInPlaceWrapper, "lastBitUnset", "evenBitsSet", "lastBitUnset"},
+		//
+		{unionInPlaceWrapper, "innerBitsSet", "empty", "innerBitsSet"},
+		{unionInPlaceWrapper, "innerBitsSet", "full", "full"},
+		{unionInPlaceWrapper, "innerBitsSet", "firstBitSet", "lastBitUnset"},
+		{unionInPlaceWrapper, "innerBitsSet", "lastBitSet", "firstBitUnset"},
+		{unionInPlaceWrapper, "innerBitsSet", "firstBitUnset", "firstBitUnset"},
+		{unionInPlaceWrapper, "innerBitsSet", "lastBitUnset", "lastBitUnset"},
+		{unionInPlaceWrapper, "innerBitsSet", "innerBitsSet", "innerBitsSet"},
+		{unionInPlaceWrapper, "innerBitsSet", "outerBitsSet", "full"},
+		{unionInPlaceWrapper, "innerBitsSet", "oddBitsSet", "firstBitUnset"},
+		{unionInPlaceWrapper, "innerBitsSet", "evenBitsSet", "lastBitUnset"},
+		//
+		{unionInPlaceWrapper, "outerBitsSet", "empty", "outerBitsSet"},
+		{unionInPlaceWrapper, "outerBitsSet", "full", "full"},
+		{unionInPlaceWrapper, "outerBitsSet", "firstBitSet", "outerBitsSet"},
+		{unionInPlaceWrapper, "outerBitsSet", "lastBitSet", "outerBitsSet"},
+		{unionInPlaceWrapper, "outerBitsSet", "firstBitUnset", "full"},
+		{unionInPlaceWrapper, "outerBitsSet", "lastBitUnset", "full"},
+		{unionInPlaceWrapper, "outerBitsSet", "innerBitsSet", "full"},
+		{unionInPlaceWrapper, "outerBitsSet", "outerBitsSet", "outerBitsSet"},
+		//{unionInPlaceWrapper, "outerBitsSet", "oddBitsSet", ""},
+		//{unionInPlaceWrapper, "outerBitsSet", "evenBitsSet", ""},
+		//
+		{unionInPlaceWrapper, "oddBitsSet", "empty", "oddBitsSet"},
+		{unionInPlaceWrapper, "oddBitsSet", "full", "full"},
+		//{unionInPlaceWrapper, "oddBitsSet", "firstBitSet", ""},
+		{unionInPlaceWrapper, "oddBitsSet", "lastBitSet", "oddBitsSet"},
+		{unionInPlaceWrapper, "oddBitsSet", "firstBitUnset", "firstBitUnset"},
+		{unionInPlaceWrapper, "oddBitsSet", "lastBitUnset", "full"},
+		{unionInPlaceWrapper, "oddBitsSet", "innerBitsSet", "firstBitUnset"},
+		//{unionInPlaceWrapper, "oddBitsSet", "outerBitsSet", ""},
+		{unionInPlaceWrapper, "oddBitsSet", "oddBitsSet", "oddBitsSet"},
+		{unionInPlaceWrapper, "oddBitsSet", "evenBitsSet", "full"},
+		//
+		{unionInPlaceWrapper, "evenBitsSet", "empty", "evenBitsSet"},
+		{unionInPlaceWrapper, "evenBitsSet", "full", "full"},
+		{unionInPlaceWrapper, "evenBitsSet", "firstBitSet", "evenBitsSet"},
+		//{unionInPlaceWrapper, "evenBitsSet", "lastBitSet", ""},
+		{unionInPlaceWrapper, "evenBitsSet", "firstBitUnset", "full"},
+		{unionInPlaceWrapper, "evenBitsSet", "lastBitUnset", "lastBitUnset"},
+		{unionInPlaceWrapper, "evenBitsSet", "innerBitsSet", "lastBitUnset"},
+		//{unionInPlaceWrapper, "evenBitsSet", "outerBitsSet", ""},
+		{unionInPlaceWrapper, "evenBitsSet", "oddBitsSet", "full"},
+		{unionInPlaceWrapper, "evenBitsSet", "evenBitsSet", "evenBitsSet"},
 
 		// difference
 		{difference, "empty", "empty", "empty"},
@@ -3652,4 +3775,46 @@ func TestDirectAddNVsAdd(t *testing.T) {
 		})
 	}
 
+}
+
+func BenchmarkUnionInPlaceRegression(b *testing.B) {
+	initial := make([]uint64, 0, 10100)
+	a1 := make([]uint64, 0, 10000)
+	a2 := make([]uint64, 0, 10000)
+	for i := uint64(0); i < 1<<30; i += 100000 {
+		initial = append(initial, i)
+		a1 = append(a1, i+67000)
+		a2 = append(a2, i/2)
+	}
+	a1BM := NewBTreeBitmap(a1...)
+	a2BM := NewBTreeBitmap(a2...)
+	b.Run("Union1", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			bm := NewBTreeBitmap(initial...)
+			_ = bm.Union(a1BM)
+		}
+	})
+	b.Run("UnionInPlace1", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			bm := NewBTreeBitmap(initial...)
+			bm.UnionInPlace(a1BM)
+		}
+	})
+
+	b.Run("Union2", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			bm := NewBTreeBitmap(initial...)
+			_ = bm.Union(a1BM, a2BM)
+		}
+	})
+	b.Run("UnionInPlace2", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			bm := NewBTreeBitmap(initial...)
+			bm.UnionInPlace(a1BM, a2BM)
+		}
+	})
 }

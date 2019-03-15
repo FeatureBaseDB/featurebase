@@ -520,13 +520,12 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 
 // Union returns the bitwise union of b and others as a new bitmap.
 func (b *Bitmap) Union(others ...*Bitmap) *Bitmap {
-	output := NewBitmap()
 	if len(others) == 1 {
+		output := NewBitmap()
 		b.unionIntoTargetSingle(output, others[0])
 		return output
 	}
-
-	output.UnionInPlace(b)
+	output := b.Clone()
 	output.UnionInPlace(others...)
 	return output
 }
@@ -561,9 +560,8 @@ func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
 	}
 }
 
-// unionIntoTarget stores the union of b and others into target. b and others will
-// be left unchanged (unless one of them is also target), but target will be modified
-// in place.
+// unionInPlace stores the union of b and others into b. The others will
+// be left unchanged.
 //
 // This function performs an n-way union of n bitmaps. It performs this in an
 // optimized manner looping through all the bitmaps and performing unions one
@@ -573,42 +571,13 @@ func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
 // participate in the union. This significantly reduces allocations. In addition,
 // because we perform the unions one container at a time across all the bitmaps, we
 // can calculate summary statistics that allow us to make more efficient decisions
-// up front. For example, imagine trying to perform a union across the following three
-// bitsets:
-//
-//     1. Bitmap A: Single array container at key 0 with 400 values in it.
-//     2. Bitmap B: Single array container at key 0 with 500 values in it.
-//     3. Bitmap C: Single array container at key 0 with 3500 values in it.
-//
-// Naive approach:
-//
-//     1. Perform union of bitmap A and B, container by container
-//         a. 400 + 500 < ArrayMaxSize so likely we will choose to allocate a new array
-//            container and then perform a unionArrayArray operation to merge the two
-//            arrays into the new array container.
-//     2. Perform a union of the bitmap generated in the step above with bitmap C.
-//        900 + 3500 > ArrayMaxSize so we will need to upgrade to a bitset container which
-//        we will have to allocate, and then we will have to perform two unions into the
-//        new bitmap container: one for the array container generated in the previous step,
-//        and one for the bitset container in bitmap C.
-//
-// Approach taken by this function:
-//
-//     1. Detect that bitmaps A, B, and C all have containers for key 0.
-//     2. Estimate the resulting cardinality of the union of all their containers to be
-//        400 + 500 + 3500 > ArrayMaxSize and decide upfront to use a bitset for the target
-//        container. Note that this is just an approximation of the final cardinality and can
-//        be off by a wide margin if there is a lot of overlap between containers, but that is
-//        fine, we'll still get the same result at the end, we'll just be more biased towards
-//        using bitmap containers will still being able to use array containers when all the
-//        cardinalities are small.
-//     3. Union the containers from bitmaps A, B, and C into the new bitset container directly
-//        using fast bitwise operations.
-//
-// In the naive approach, we had to allocate two containers, whereas in the optimized approach
-// we only had to allocate one container, and we also had to perform less union operations. This
-// example is simplistic, but the impact in terms of CPU cycles and memory allocations achieved
-// by using the optimized alogorithm when unioning many large bitmaps can be huge.
+// up front. For instance, if we have a non-bitmap target container, but we
+// expect more than ArrayMaxSize bits, we can convert to bitmap preemptively.
+// This will sometimes be wrong (we can't really tell how many bits we'll have
+// after a union) but is probably close enough to be useful. This will save
+// some reallocations for cases where several consecutive ops have array
+// representations, and we expect to have to convert to a bitmap eventually;
+// we don't allocate larger and larger array slices before doing that.
 //
 // An additional optimization that this function makes is that it recognizes that even when
 // CPU support is present, performing the popcount() operation isn't free. Imagine a scenario
@@ -705,93 +674,105 @@ func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 				continue
 			}
 
-			var (
-				iKey, iContainer = iIter.iter.Value()
-				// Summary statistics about all the containers in the other bitmaps
-				// that share the same key so we can make smarter union strategy
-				// decisions later. Note that we slice to [i:] not [i+1:] because we
-				// want to include the current containers information in the stats.
-				summaryStats = bitmapIters[i:].calculateSummaryStats(iKey)
-			)
+			iKey, iContainer := iIter.iter.Value()
+			expectedN := int64(0)
 
-			if summaryStats.isOnlyContainerWithKey {
-				// TODO(rartoul): We can avoid these clones if we can determine
-				// if the container is coming from an immutable bitmap and we
-				// know that we can mark the target bitmap as immutable as well.
-				target.Containers.Put(iKey, iContainer.Clone())
-				bitmapIters[i].handled = true
-				continue
+			// determine whether we have a target to union into.
+			tContainer := target.Containers.Get(iKey)
+			// if the target's full, short-circuit out.
+			if tContainer != nil {
+				if tContainer.n == maxContainerVal+1 {
+					bitmapIters.markItersWithKeyAsHandled(i, iKey)
+					continue
+				}
+				expectedN = int64(tContainer.n)
 			}
-
-			// There was more than one container across the bitmaps with key iKey
-			// so we need to calculate a union.
+			// Check i and later iters for any max-range containers, and
+			// find out how many there are.
+			summaryStats := bitmapIters[i:].calculateSummaryStats(iKey)
 			if summaryStats.hasMaxRange {
 				// One (or more) of the containers represented the maximum possible
 				// range that a container can store, so instead of calculating a
 				// union we can generate an RLE container that represents the entire
 				// range.
-				container := &Container{
+				tContainer = &Container{
 					runs:          []interval16{{start: 0, last: maxContainerVal}},
 					containerType: containerRun,
 					n:             maxContainerVal + 1,
 				}
-				target.Containers.Put(iKey, container)
-				bitmapIters.markItersWithCurrentKeyAsHandled(i, iKey)
+				target.Containers.Put(iKey, tContainer)
+				bitmapIters.markItersWithKeyAsHandled(i, iKey)
 				continue
 			}
-
-			// Use a bitmap container for the target bitmap, and union everything
-			// into it.
-			//
-			// TODO(rartoul): Add another conditional case for n < ArrayMaxSize
-			// (or some fraction of that value) to avoid allocating expensive
-			// bitmaps when unioning many low-density array containers, but this
-			// will require writing a union in place algorithm for an array container
-			// that accepts multiple different containers to union into it for
-			// efficiency.
-			container := target.Containers.Get(iKey)
-			// If target already has a bitmap container for iKey then we can reuse that,
-			// otherwise we have to allocate a new one or convert the existing container
-			// into a bitmap container.
-			if container == nil {
-				buf := make([]uint64, bitmapN)
-				ob := buf[:bitmapN]
-				container = &Container{
-					bitmap:        ob,
-					n:             0,
-					containerType: containerBitmap,
+			expectedN += summaryStats.n
+			var itersToUnion handledIters
+			// Overview: We know that we have at least one "other" container
+			// to union in, and we may have a target container already. We want
+			// to shortcut easy cases ("no target container, exactly one
+			// other container").
+			if tContainer == nil {
+				// No existing target container.
+				if summaryStats.c == 1 {
+					// There's no target and we have only one container, we
+					// can just clone it instead of unioning.
+					statsHit("unionInPlace/reuse")
+					target.Containers.Put(iKey, iContainer.Clone())
+					bitmapIters[i].handled = true
+					continue
 				}
-			} else if container.isArray() {
-				container.arrayToBitmap()
-			} else if container.isRun() {
-				container.runToBitmap()
+				// We have at least two other containers. We can union
+				// everything together. We can union everything but
+				// the first other container into a clone of the
+				// first other container, but for some cases, that will
+				// result in cloning a non-bitmap, then converting it
+				// to a bitmap, and this will be expensive...
+				if expectedN >= 512 && iContainer.containerType != containerBitmap {
+					// copying the non-bitmap, then converting it,
+					// is expensive.
+					statsHit("unionInPlace/newBitmap")
+					tContainer = &Container{containerType: containerBitmap, bitmap: make([]uint64, bitmapN)}
+					itersToUnion = bitmapIters[i:]
+				} else {
+					// either N will be small or iContainer is a
+					// bitmap, so we can skip one union op by copying it.
+					statsHit("unionInPlace/clone")
+					tContainer = iContainer.Clone()
+					itersToUnion = bitmapIters[i+1:]
+				}
+			} else {
+				// we have an existing target container. If we're
+				// going to end up wanting it to be a bitmap, we
+				// convert it preemptively, because union into a
+				// bitmap is nearly always faster.
+				itersToUnion = bitmapIters[i:]
+				if expectedN >= 512 && tContainer.containerType != containerBitmap {
+					statsHit("unionInPlace/convertToBitmap")
+					switch tContainer.containerType {
+					case containerArray:
+						tContainer.arrayToBitmap()
+					case containerRun:
+						tContainer.runToBitmap()
+					}
+				}
 			}
 
-			// Once we've acquired a bitmap container (either by reusing the existing one
-			// or allocating a new one) then the last step is to iterate through all the
-			// other containers to see which ones have the same key, and union all of them
-			// into the target bitmap container. Only need to loop starting from i because
-			// anything previous to that has already been handled.
-			for j := i; j < len(bitmapIters); j++ {
-				jIter := bitmapIters[j]
-				jKey, jContainer := jIter.iter.Value()
+			// Now we union all remaining containers with this key
+			// together.
+			for j, iter := range itersToUnion {
+				jKey, jContainer := iter.iter.Value()
 
 				if iKey == jKey {
-					if jContainer.isArray() {
-						unionBitmapArrayInPlace(container, jContainer)
-					} else if jContainer.isRun() {
-						unionBitmapRunInPlace(container, jContainer)
-					} else {
-						unionBitmapBitmapInPlace(container, jContainer)
-					}
-					bitmapIters[j].handled = true
+					tContainer.unionInPlace(jContainer)
+					// "iter" is a local copy from the range
+					// loop, not the actual slice member.
+					itersToUnion[j].handled = true
 				}
 			}
 
 			// Now that we've calculated a container that is a union of all the containers
 			// with the same key across all the bitmaps, we store it in the list of containers
 			// for the target.
-			target.Containers.Put(iKey, container)
+			target.Containers.Put(iKey, tContainer)
 		}
 
 		hasNext = bitmapIters.next()
@@ -1792,6 +1773,47 @@ func (c *Container) optimize() {
 	}
 }
 
+// unionInPlace does not necessarily preserve container's N; it's expected
+// to be used when running a sequence of unions, after which you should
+// call Repair(). (As of this writing, that only matters for bitmaps.)
+func (c *Container) unionInPlace(other *Container) {
+	switch c.containerType {
+	case containerBitmap:
+		switch other.containerType {
+		case containerBitmap:
+			unionBitmapBitmapInPlace(c, other)
+		case containerArray:
+			unionBitmapArrayInPlace(c, other)
+		case containerRun:
+			unionBitmapRunInPlace(c, other)
+
+		}
+	case containerArray:
+		switch other.containerType {
+		case containerBitmap:
+			c.arrayToBitmap()
+			unionBitmapBitmapInPlace(c, other)
+		case containerArray:
+			unionArrayArrayInPlace(c, other)
+		case containerRun:
+			c.arrayToBitmap()
+			unionBitmapRunInPlace(c, other)
+		}
+	case containerRun:
+		switch other.containerType {
+		case containerBitmap:
+			c.runToBitmap()
+			unionBitmapBitmapInPlace(c, other)
+		case containerArray:
+			c.runToBitmap()
+			unionBitmapArrayInPlace(c, other)
+		case containerRun:
+			c.runToBitmap()
+			unionBitmapRunInPlace(c, other)
+		}
+	}
+}
+
 func (c *Container) arrayContains(v uint16) bool {
 	return search32(c.array, v) >= 0
 }
@@ -2709,6 +2731,50 @@ func unionArrayArray(a, b *Container) *Container {
 		}
 	}
 	return output
+}
+
+// unionArrayArrayInPlace does what it sounds like -- tries to combine
+// the two arrays in-place. It does not try to ensure that the result is
+// of a good array size, so it could be up to twice that size, temporarily.
+func unionArrayArrayInPlace(a, b *Container) {
+	statsHit("union/ArrayArrayInPlace")
+	na, nb := len(a.array), len(b.array)
+	output := make([]uint16, na+nb)
+	outN := 0
+	for i, j := 0, 0; ; {
+		if i >= na && j >= nb {
+			break
+		} else if i < na && j >= nb {
+			copy(output[outN:], a.array[i:])
+			outN += na - i
+			break
+		} else if i >= na && j < nb {
+			copy(output[outN:], b.array[j:])
+			outN += nb - j
+			break
+		}
+
+		va, vb := a.array[i], b.array[j]
+		if va < vb {
+			output[outN] = va
+			outN++
+			i++
+		} else if va > vb {
+			output[outN] = vb
+			outN++
+			j++
+		} else {
+			output[outN] = va
+			outN++
+			i++
+			j++
+		}
+	}
+	a.array = output[:outN]
+	a.n = int32(outN)
+	if a.n > ArrayMaxSize {
+		a.optimize()
+	}
 }
 
 // unionArrayRun optimistically assumes that the result will be a run container,
@@ -4300,7 +4366,9 @@ func (w handledIters) next() bool {
 	return hasNext
 }
 
-func (w handledIters) markItersWithCurrentKeyAsHandled(startIdx int, key uint64) {
+// Check all the iters from startIdx and up to see whether their next
+// key is the given key; if it is, mark them as handled.
+func (w handledIters) markItersWithKeyAsHandled(startIdx int, key uint64) {
 	for i := startIdx; i < len(w); i++ {
 		wrapped := w[i]
 		currKey, _ := wrapped.iter.Value()
@@ -4318,8 +4386,8 @@ func (w handledIters) calculateSummaryStats(key uint64) containerUnionSummarySta
 		currKey, currContainer := iter.iter.Value()
 
 		if key == currKey {
-			summary.isOnlyContainerWithKey = false
-			summary.n += currContainer.n
+			summary.c++
+			summary.n += int64(currContainer.n)
 
 			if currContainer.n == maxContainerVal+1 {
 				summary.hasMaxRange = true
@@ -4341,11 +4409,9 @@ type containerUnionSummaryStats struct {
 	// the cardinality of the container across the different bitmaps which could
 	// result in very inflated values, but it allows us to avoid allocating
 	// expensive bitmaps when unioning many low density containers.
-	n int32
-	// Whether any other is the only container across all the bitmaps
-	// with the specified key. If true, we can skip all the unioning logic
-	// and just clone the container into target.
-	isOnlyContainerWithKey bool
+	n int64
+	// Containers found with this key. May be inaccurate if hasMaxRange is true.
+	c int
 	// Whether any of the containers with the specified keys are storing every possible
 	// value that they can. If so, we can short-circuit all the unioning logic and use
 	// a RLE container with a single value in it. This is an optimization to
