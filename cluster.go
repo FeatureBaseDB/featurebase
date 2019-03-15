@@ -851,6 +851,8 @@ func (c *cluster) shardNodes(index string, shard uint64) []*Node {
 
 // ownsShard returns true if a host owns a fragment.
 func (c *cluster) ownsShard(nodeID string, index string, shard uint64) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return Nodes(c.shardNodes(index, shard)).ContainsID(nodeID)
 }
 
