@@ -45,6 +45,7 @@ import (
 	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/stats"
 	"github.com/pilosa/pilosa/statsd"
+	"github.com/pilosa/pilosa/syswrap"
 	"github.com/pkg/errors"
 )
 
@@ -178,6 +179,8 @@ func (m *Command) Wait() error {
 
 // SetupServer uses the cluster configuration to set up this server.
 func (m *Command) SetupServer() error {
+	syswrap.MaxMapCount = m.Config.MaxMapCount
+
 	err := m.setupLogger()
 	if err != nil {
 		return errors.Wrap(err, "setting up logger")

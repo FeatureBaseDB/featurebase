@@ -70,6 +70,11 @@ type Config struct {
 		AllowedOrigins []string `toml:"allowed-origins"`
 	} `toml:"handler"`
 
+	// MaxMapCount puts an in-process limit on the number of mmaps. After this
+	// is exhausted, Pilosa will fall back to reading the file into memory
+	// normally.
+	MaxMapCount uint64 `toml:"max-map-count"`
+
 	// TLS
 	TLS TLSConfig `toml:"tls"`
 
@@ -124,6 +129,7 @@ func NewConfig() *Config {
 		DataDir:             "~/.pilosa",
 		Bind:                ":10101",
 		MaxWritesPerRequest: 5000,
+		MaxMapCount:         60000,
 		TLS:                 TLSConfig{},
 	}
 
