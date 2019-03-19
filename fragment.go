@@ -41,6 +41,7 @@ import (
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pilosa/pilosa/stats"
+	"github.com/pilosa/pilosa/syswrap"
 	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
 )
@@ -214,28 +215,33 @@ func (f *fragment) openStorage() error {
 			return fmt.Errorf("init storage file: %s", err)
 		}
 		bi.Flush()
-		fi, err = f.file.Stat()
+		_, err = f.file.Stat()
 		if err != nil {
 			return errors.Wrap(err, "statting file after")
 		}
-	}
+	} else {
+		// Mmap the underlying file so it can be zero copied.
+		data, err := syswrap.Mmap(int(f.file.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
+		if err == syswrap.ErrMaxMapCountReached {
+			f.Logger.Debugf("maximum number of maps reached, reading file instead")
+			data, err = ioutil.ReadAll(file)
+			if err != nil {
+				return errors.Wrap(err, "failure file readall")
+			}
+		} else if err != nil {
+			return errors.Wrap(err, "mmap failed")
+		} else {
+			f.storageData = data
+			// Advise the kernel that the mmap is accessed randomly.
+			if err := madvise(f.storageData, syscall.MADV_RANDOM); err != nil {
+				return fmt.Errorf("madvise: %s", err)
+			}
+		}
 
-	// Mmap the underlying file so it can be zero copied.
-	storageData, err := syscall.Mmap(int(f.file.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
-	if err != nil {
-		return fmt.Errorf("mmap: %s", err)
-	}
-	f.storageData = storageData
+		if err := f.storage.UnmarshalBinary(data); err != nil {
+			return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
+		}
 
-	// Advise the kernel that the mmap is accessed randomly.
-	if err := madvise(f.storageData, syscall.MADV_RANDOM); err != nil {
-		return fmt.Errorf("madvise: %s", err)
-	}
-
-	// Attach the mmap file to the bitmap.
-	data := f.storageData
-	if err := f.storage.UnmarshalBinary(data); err != nil {
-		return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
 	}
 
 	f.opN = f.storage.Info().OpN
@@ -323,7 +329,7 @@ func (f *fragment) closeStorage() error {
 
 	// Unmap the file.
 	if f.storageData != nil {
-		if err := syscall.Munmap(f.storageData); err != nil {
+		if err := syswrap.Munmap(f.storageData); err != nil {
 			return fmt.Errorf("munmap: %s", err)
 		}
 		f.storageData = nil

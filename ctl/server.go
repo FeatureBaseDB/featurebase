@@ -30,6 +30,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	flags.IntVarP(&srv.Config.MaxWritesPerRequest, "max-writes-per-request", "", srv.Config.MaxWritesPerRequest, "Number of write commands per request.")
 	flags.StringVar(&srv.Config.LogPath, "log-path", srv.Config.LogPath, "Log path")
 	flags.BoolVar(&srv.Config.Verbose, "verbose", srv.Config.Verbose, "Enable verbose logging")
+	flags.Uint64Var(&srv.Config.MaxMapCount, "max-map-count", srv.Config.MaxMapCount, "Limits the maximum number of active mmaps. Pilosa will fall back to reading files once this is exhausted. Set below your system's vm.max_map_count.")
 
 	// TLS
 	SetTLSConfig(flags, &srv.Config.TLS.CertificatePath, &srv.Config.TLS.CertificateKeyPath, &srv.Config.TLS.SkipVerify)
