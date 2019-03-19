@@ -1,3 +1,5 @@
+// +build !container24s
+
 package roaring
 
 import (

@@ -1899,6 +1899,7 @@ func (c *Container) bitmapToArray() {
 	c.typ = containerArray
 	array := make([]uint16, c.n)
 	c.setArray(array)
+	array = c.array()
 	c.mapped = false
 
 	// return early if empty
@@ -2678,35 +2679,41 @@ func union(a, b *Container) *Container {
 
 func unionArrayArray(a, b *Container) *Container {
 	statsHit("union/ArrayArray")
-	output := NewContainerArray(nil)
 	aa, ab := a.array(), b.array()
 	na, nb := len(aa), len(ab)
+	output := make([]uint16, na+nb)
+	n := 0
 	for i, j := 0, 0; ; {
 		if i >= na && j >= nb {
 			break
 		} else if i < na && j >= nb {
-			output.add(aa[i])
+			output[n] = aa[i]
+			n++
 			i++
 			continue
 		} else if i >= na && j < nb {
-			output.add(ab[j])
+			output[n] = ab[j]
+			n++
 			j++
 			continue
 		}
 
 		va, vb := aa[i], ab[j]
 		if va < vb {
-			output.add(va)
+			output[n] = va
+			n++
 			i++
 		} else if va > vb {
-			output.add(vb)
+			output[n] = vb
+			n++
 			j++
 		} else {
-			output.add(va)
+			output[n] = va
+			n++
 			i, j = i+1, j+1
 		}
 	}
-	return output
+	return NewContainerArray(output[:n])
 }
 
 // unionArrayArrayInPlace does what it sounds like -- tries to combine

@@ -93,7 +93,7 @@ func (sc *sliceContainers) GetOrCreate(key uint64) *Container {
 	sc.lastKey = key
 	i := search64(sc.keys, key)
 	if i < 0 {
-		c := NewContainerArray(nil)
+		c := NewContainer()
 		sc.insertAt(key, c, -i-1)
 		sc.lastContainer = c
 		return c

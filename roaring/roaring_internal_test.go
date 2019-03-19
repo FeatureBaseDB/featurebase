@@ -464,7 +464,11 @@ func TestIntersectArrayRun(t *testing.T) {
 		a.setArray(test.array)
 		b.setRuns(test.runs)
 		ret := intersectArrayRun(a, b)
-		if !reflect.DeepEqual(ret.array(), test.exp) {
+		if test.exp == nil {
+			if len(ret.array()) != 0 {
+				t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.array())
+			}
+		} else if !reflect.DeepEqual(ret.array(), test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.array())
 		}
 	}
@@ -523,11 +527,14 @@ func TestIntersectRunRun(t *testing.T) {
 		if ret.n != test.expN {
 			t.Fatalf("test #%v expected n to be %v, but got %v", i, test.expN, ret.n)
 		}
-		if !reflect.DeepEqual(ret.runs(), test.exp) {
+		if test.exp != nil {
+			if !reflect.DeepEqual(ret.runs(), test.exp) {
+				t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs())
+			}
+		} else if len(ret.runs()) != 0 {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, ret.runs())
 		}
 	}
-
 }
 
 func TestIntersectBitmapRunBitmap(t *testing.T) {
@@ -1850,11 +1857,11 @@ func TestXorArrayRun(t *testing.T) {
 		test.a.n = test.a.count()
 		test.b.n = test.b.count()
 		ret := xor(test.a, test.b)
-		if !reflect.DeepEqual(ret, test.exp) {
+		if !reflect.DeepEqual(ret.array(), test.exp.array()) {
 			t.Fatalf("test #%v expected %#v, but got %#v", i, test.exp, ret)
 		}
 		ret = xor(test.b, test.a)
-		if !reflect.DeepEqual(ret, test.exp) {
+		if !reflect.DeepEqual(ret.array(), test.exp.array()) {
 			t.Fatalf("test #%v.1 expected %#v, but got %#v", i, test.exp, ret)
 		}
 	}

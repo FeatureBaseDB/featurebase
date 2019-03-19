@@ -108,7 +108,7 @@ func (btc *bTreeContainers) GetOrCreate(key uint64) *Container {
 	btc.lastKey = key
 	v, ok := btc.tree.Get(key)
 	if !ok {
-		cont := NewContainerArray(nil)
+		cont := NewContainer()
 		btc.tree.Set(key, cont)
 		btc.lastContainer = cont
 		return cont
@@ -122,7 +122,7 @@ func (btc *bTreeContainers) Count() (n uint64) {
 	e, _ := btc.tree.Seek(0)
 	_, c, err := e.Next()
 	for err != io.EOF {
-		n += uint64(c.N())
+		n += uint64(c.n)
 		_, c, err = e.Next()
 	}
 	return n
