@@ -926,9 +926,10 @@ func TestBitmapSetRange(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		copy(c.bitmap(), test.bitmap)
+		bitmap := c.bitmap()
+		copy(bitmap, test.bitmap)
 		c.n = c.countRange(0, 65535)
-		c.bitmapSetRange(test.start, test.last+1)
+		c.bitmapSetRange(bitmap, test.start, test.last+1)
 		if !reflect.DeepEqual(c.bitmap()[:len(test.exp)], test.exp) {
 			t.Fatalf("test %#v expected %x, got %x", i, test.exp, c.bitmap()[:len(test.bitmap)])
 		}

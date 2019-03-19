@@ -1,4 +1,4 @@
-// +build container24s
+// +build !container32
 
 package roaring
 
@@ -223,35 +223,40 @@ func (c *Container) isRun() bool {
 	return c.typ == containerRun
 }
 
-// unmap creates copies of the containers data in the heap.
-//
-// This is performed when altering the container since its contents could be
-// pointing at a read-only mmap.
-func (c *Container) unmap() {
+// unmapArray ensures that the container is not using mmapped storage.
+func (c *Container) unmapArray() {
 	if !c.mapped {
 		return
 	}
+	array := c.array()
+	tmp := make([]uint16, c.len)
+	copy(tmp, array)
+	h := (*reflect.SliceHeader)(unsafe.Pointer(&tmp))
+	c.pointer, c.cap = (*uint16)(unsafe.Pointer(h.Data)), int32(h.Cap)
+	runtime.KeepAlive(&tmp)
+}
 
-	switch c.typ {
-	case containerArray:
-		array := c.array()
-		if len(array) > stashedArraySize {
-			tmp := make([]uint16, len(array))
-			h := (*reflect.SliceHeader)(unsafe.Pointer(&tmp))
-			c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(h.Data)), int32(h.Len), int32(h.Len)
-			copy(tmp, array)
-		} else {
-			c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(&c.data[0])), int32(len(array)), stashedArraySize
-			copy(c.data[:stashedArraySize], array)
-		}
-	case containerBitmap:
-		tmp := make([]uint64, len(c.bitmap()))
-		copy(tmp, c.bitmap())
-		c.setBitmap(tmp)
-	case containerRun:
-		tmp := make([]interval16, len(c.runs()))
-		copy(tmp, c.runs())
-		c.setRuns(tmp)
+// unmapBitmap ensures that the container is not using mmapped storage.
+func (c *Container) unmapBitmap() {
+	if !c.mapped {
+		return
 	}
-	c.mapped = false
+	bitmap := c.bitmap()
+	tmp := make([]uint64, c.len)
+	copy(tmp, bitmap)
+	h := (*reflect.SliceHeader)(unsafe.Pointer(&tmp))
+	c.pointer, c.cap = (*uint16)(unsafe.Pointer(h.Data)), int32(h.Cap)
+	runtime.KeepAlive(&tmp)
+}
+
+// unmapRun ensures that the container is not using mmapped storage.
+func (c *Container) unmapRun() {
+	if !c.mapped {
+		return
+	}
+	runs := c.runs()
+	tmp := make([]interval16, c.len)
+	copy(tmp, runs)
+	h := (*reflect.SliceHeader)(unsafe.Pointer(&tmp))
+	c.pointer, c.cap = (*uint16)(unsafe.Pointer(h.Data)), int32(h.Cap)
 }

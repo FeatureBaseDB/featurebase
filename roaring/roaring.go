@@ -1514,7 +1514,7 @@ func (c *Container) arrayAdd(v uint16) bool {
 	array := c.array()
 	if c.n > 0 && c.n < ArrayMaxSize && c.isArray() && array[c.n-1] < v {
 		statsHit("arrayAdd/append")
-		c.unmap()
+		c.unmapArray()
 		array = append(c.array(), v)
 		c.setArray(array)
 		return true
@@ -1535,7 +1535,7 @@ func (c *Container) arrayAdd(v uint16) bool {
 
 	// Otherwise insert into array.
 	statsHit("arrayAdd/insert")
-	c.unmap()
+	c.unmapArray()
 	i = -i - 1
 	array = append(c.array(), 0)
 	copy(array[i+1:], array[i:])
@@ -1549,7 +1549,7 @@ func (c *Container) bitmapAdd(v uint16) bool {
 	if c.bitmapContains(v) {
 		return false
 	}
-	c.unmap()
+	c.unmapBitmap()
 	c.bitmap()[v/64] |= (1 << uint64(v%64))
 	return true
 }
@@ -1558,7 +1558,7 @@ func (c *Container) runAdd(v uint16) bool {
 	runs := c.runs()
 
 	if len(runs) == 0 {
-		c.unmap()
+		c.unmapRun()
 		c.setRuns([]interval16{{start: v, last: v}})
 		return true
 	}
@@ -1575,7 +1575,7 @@ func (c *Container) runAdd(v uint16) bool {
 		return false
 	}
 
-	c.unmap()
+	c.unmapRun()
 	runs = c.runs()
 	if iv.last < v {
 		if iv.last == v-1 {
@@ -1796,7 +1796,8 @@ func (c *Container) arrayRemove(v uint16) bool {
 	if i < 0 {
 		return false
 	}
-	c.unmap()
+	c.unmapArray()
+	array = c.array()
 
 	array = append(array[:i], array[i+1:]...)
 	c.n--
@@ -1808,7 +1809,7 @@ func (c *Container) bitmapRemove(v uint16) bool {
 	if !c.bitmapContains(v) {
 		return false
 	}
-	c.unmap()
+	c.unmapBitmap()
 
 	// Lower count and remove element.
 	c.bitmap()[v/64] &^= (uint64(1) << uint(v%64))
@@ -1829,7 +1830,7 @@ func (c *Container) runRemove(v uint16) bool {
 	if !contains {
 		return false
 	}
-	c.unmap()
+	c.unmapRun()
 	if v == runs[i].last && v == runs[i].start {
 		runs = append(runs[:i], runs[i+1:]...)
 	} else if v == runs[i].last {
@@ -2868,8 +2869,9 @@ func unionBitmapRun(a, b *Container) *Container {
 		return a.Clone()
 	}
 	output := a.Clone()
+	bitmap := output.bitmap()
 	for _, run := range b.runs() {
-		output.bitmapSetRange(uint64(run.start), uint64(run.last)+1)
+		output.bitmapSetRange(bitmap, uint64(run.start), uint64(run.last)+1)
 	}
 	return output
 }
@@ -2877,24 +2879,25 @@ func unionBitmapRun(a, b *Container) *Container {
 // unions the run b into the bitmap a, mutating a in place. The n value of
 // a will need to be repaired after the fact.
 func unionBitmapRunInPlace(a, b *Container) {
-	a.unmap()
+	a.unmapBitmap()
+	bitmap := a.bitmap()
 	statsHit("union/BitmapRun")
 	for _, run := range b.runs() {
-		a.bitmapSetRangeIgnoreN(uint64(run.start), uint64(run.last)+1)
+		bitmapSetRangeIgnoreN(bitmap, uint64(run.start), uint64(run.last)+1)
 	}
 }
 
 const maxBitmap = 0xFFFFFFFFFFFFFFFF
 
-// sets all bits in [i, j) (c must be a bitmap container)
-func (c *Container) bitmapSetRange(i, j uint64) {
+// sets all bits in [i, j) (c must be a bitmap container, and bitmap must
+// be its bitmap).
+func (c *Container) bitmapSetRange(bitmap []uint64, i, j uint64) {
 	x := i >> 6
 	y := (j - 1) >> 6
 	var X uint64 = maxBitmap << (i % 64)
 	var Y uint64 = maxBitmap >> (63 - ((j - 1) % 64))
 	xcnt := popcount(X)
 	ycnt := popcount(Y)
-	bitmap := c.bitmap()
 	if x == y {
 		c.n += int32((j - i) - popcount(bitmap[x]&(X&Y)))
 		bitmap[x] |= (X & Y)
@@ -2910,15 +2913,13 @@ func (c *Container) bitmapSetRange(i, j uint64) {
 	}
 }
 
-// sets all bits in [i, j) (c must be a bitmap container) without updating
-// the value of n, meaning it will need to be repaired after the fact.
-func (c *Container) bitmapSetRangeIgnoreN(i, j uint64) {
+// sets all bits in [i, j) without updating any corresponding n value.
+func bitmapSetRangeIgnoreN(bitmap []uint64, i, j uint64) {
 	x := i >> 6
 	y := (j - 1) >> 6
 	var X uint64 = maxBitmap << (i % 64)
 	var Y uint64 = maxBitmap >> (63 - ((j - 1) % 64))
 
-	bitmap := c.bitmap()
 	if x == y {
 		bitmap[x] |= (X & Y)
 	} else {
@@ -3033,7 +3034,7 @@ func unionArrayBitmap(a, b *Container) *Container {
 // unions array b into bitmap a, mutating a in place. The n value
 // of a will need to be repaired after the fact.
 func unionBitmapArrayInPlace(a, b *Container) {
-	a.unmap()
+	a.unmapBitmap()
 	bitmap := a.bitmap()
 	for _, v := range b.array() {
 		bitmap[v>>6] |= (uint64(1) << (v % 64))
@@ -3064,16 +3065,15 @@ func unionBitmapBitmap(a, b *Container) *Container {
 // unions bitmap b into bitmap a, mutating a in place. The n value of
 // a will need to be repaired after the fact.
 func unionBitmapBitmapInPlace(a, b *Container) {
-	a.unmap()
+
+	a.unmapBitmap()
 
 	// local variables added to prevent BCE checks in loop
 	// see https://go101.org/article/bounds-check-elimination.html
-
 	var (
 		ab = a.bitmap()[:bitmapN]
 		bb = b.bitmap()[:bitmapN]
 	)
-
 	// Manually unroll loop to make it a little faster.
 	// TODO(rartoul): Can probably make this a few x faster using
 	// SIMD instructions.

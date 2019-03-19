@@ -1,4 +1,4 @@
-// +build !container24s
+// +build container32
 
 package roaring
 
