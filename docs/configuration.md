@@ -115,6 +115,26 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
     verbose = true
     ```
 
+#### Max Map Count
+
+* Description: Maximum number of active memory maps Pilosa will use for fragment
+  files (actual total usage may be slightly higher). Best practice is to set
+  this ~10% lower than your system's maximum map count (obtained via `sysctl
+  vm.max_map_count` on Linux). If you plan on having lots of fragments per host,
+  it's a good idea to raise both the system's max map count, and Pilosa's. The
+  number of fragments is a function of the number of shards, fields, and time
+  quantums. Using, for example, YMDH time quantum fields with a wide range of
+  timestamps will create lots of fragments. When Pilosa exhausts the
+  max-map-count it falls back to reading files directly into memory. This can be
+  a bit slower, and cause slower restarts, but is generally fine.
+  * Flag: `--max-map-count=60000`
+  * Env: `PILOSA_MAX_MAP_COUNT=60000`
+  * Config:
+
+      ```toml
+      max-map-count = 60000
+      ```
+
 #### Max Writes Per Request
 
 * Description: Maximum number of mutating commands allowed per request. This includes Set, Clear, SetRowAttrs, and SetColumnAttrs.
