@@ -215,7 +215,7 @@ func (f *fragment) openStorage() error {
 			return fmt.Errorf("init storage file: %s", err)
 		}
 		bi.Flush()
-		fi, err = f.file.Stat()
+		_, err = f.file.Stat()
 		if err != nil {
 			return errors.Wrap(err, "statting file after")
 		}

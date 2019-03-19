@@ -3,6 +3,7 @@
 package syswrap
 
 import (
+	"sync"
 	"sync/atomic"
 	"syscall"
 
@@ -13,16 +14,25 @@ var mapCount uint64
 
 var ErrMaxMapCountReached = errors.New("maximum map count reached")
 
-// MaxMapCount default to slightly less than the typical
+// maxMapCount default to slightly less than the typical
 // default on Linux (65K). We want to leave some
 // overhead for (e.g.) the Go runtime.
-var MaxMapCount uint64 = 60000
+var maxMapCount uint64 = 60000
+var mu sync.RWMutex
+
+func SetMaxMapCount(max uint64) {
+	mu.Lock()
+	maxMapCount = max
+	mu.Unlock()
+}
 
 // Mmap increments the global map count, and then calls syscall.Mmap. It
 // decrements the map count and returns an error if the count was over the
 // limit. If syscall.Mmap returns an error it also decrements the count.
 func Mmap(fd int, offset int64, length int, prot int, flags int) (data []byte, err error) {
-	if newCount := atomic.AddUint64(&mapCount, 1); newCount > MaxMapCount {
+	mu.RLock()
+	defer mu.RUnlock()
+	if newCount := atomic.AddUint64(&mapCount, 1); newCount > maxMapCount {
 		atomic.AddUint64(&mapCount, ^uint64(0)) // decrement
 		return nil, ErrMaxMapCountReached
 	}
