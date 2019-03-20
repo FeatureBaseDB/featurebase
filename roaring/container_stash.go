@@ -1,5 +1,3 @@
-// +build !container32
-
 package roaring
 
 import (
