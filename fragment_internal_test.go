@@ -66,7 +66,7 @@ func TestFragment_SetBit(t *testing.T) {
 	}
 
 	// Close and reopen the fragment & verify the data.
-	if err := f.reopen(); err != nil {
+	if err := f.Reopen(); err != nil {
 		t.Fatal(err)
 	} else if n := f.row(120).Count(); n != 2 {
 		t.Fatalf("unexpected count (reopen): %d", n)
@@ -95,7 +95,7 @@ func TestFragment_ClearBit(t *testing.T) {
 	}
 
 	// Close and reopen the fragment & verify the data.
-	if err := f.reopen(); err != nil {
+	if err := f.Reopen(); err != nil {
 		t.Fatal(err)
 	} else if n := f.row(1000).Count(); n != 1 {
 		t.Fatalf("unexpected count (reopen): %d", n)
@@ -122,7 +122,7 @@ func TestFragment_ClearRow(t *testing.T) {
 	}
 
 	// Close and reopen the fragment & verify the data.
-	if err := f.reopen(); err != nil {
+	if err := f.Reopen(); err != nil {
 		t.Fatal(err)
 	} else if n := f.row(1000).Count(); n != 0 {
 		t.Fatalf("unexpected count (reopen): %d", n)
@@ -170,7 +170,7 @@ func TestFragment_SetRow(t *testing.T) {
 	}
 
 	// Close and reopen the fragment & verify the data.
-	if err := f.reopen(); err != nil {
+	if err := f.Reopen(); err != nil {
 		t.Fatal(err)
 	} else if n := f.row(rowID).Count(); n != 3 {
 		t.Fatalf("unexpected count (reopen): %d", n)
@@ -874,7 +874,7 @@ func TestFragment_Snapshot(t *testing.T) {
 	}
 
 	// Close and reopen the fragment & verify the data.
-	if err := f.reopen(); err != nil {
+	if err := f.Reopen(); err != nil {
 		t.Fatal(err)
 	} else if n := f.row(1000).Count(); n != 1 {
 		t.Fatalf("unexpected count (reopen): %d", n)
@@ -1004,11 +1004,21 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 		990, 991, 992, 993, 994, 995, 996, 997, 998, 999,
 	)
 
+	bm := roaring.NewBTreeBitmap()
 	// Set bits on rows 0 - 999. Higher rows have higher bit counts.
 	for i := uint64(0); i < 1000; i++ {
 		for j := uint64(0); j < i; j++ {
-			f.mustSetBits(i, j)
+			addToBitmap(bm, i, j)
 		}
+	}
+	b := &bytes.Buffer{}
+	_, err := bm.WriteTo(b)
+	if err != nil {
+		t.Fatalf("writing to bytes: %v", err)
+	}
+	err = f.importRoaring(b.Bytes(), false)
+	if err != nil {
+		t.Fatalf("importing data: %v", err)
 	}
 	f.RecalculateCache()
 
@@ -1228,7 +1238,7 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 	}
 
 	// Reopen the fragment.
-	if err := f.reopen(); err != nil {
+	if err := f.Reopen(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1338,7 +1348,7 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	}
 
 	// Close and reopen the fragment & verify the data.
-	if err := f1.reopen(); err != nil {
+	if err := f1.Reopen(); err != nil {
 		t.Fatal(err)
 	} else if n := f1.cache.Len(); n != 1 {
 		t.Fatalf("unexpected cache size (reopen): %d", n)
@@ -1466,7 +1476,7 @@ func TestFragment_Snapshot_Run(t *testing.T) {
 	}
 
 	// Close and reopen the fragment & verify the data.
-	if err := f.reopen(); err != nil {
+	if err := f.Reopen(); err != nil {
 		t.Fatal(err)
 	} else if n := f.row(1000).Count(); n != 2 {
 		t.Fatalf("unexpected count (reopen): %d", n)
@@ -2435,7 +2445,7 @@ func mustOpenBoolFragment(index, field, view string, shard uint64, cacheType str
 }
 
 // Reopen closes the fragment and reopens it as a new instance.
-func (f *fragment) reopen() error {
+func (f *fragment) Reopen() error {
 	if err := f.Close(); err != nil {
 		return err
 	}
@@ -2453,6 +2463,14 @@ func (f *fragment) mustSetBits(rowID uint64, columnIDs ...uint64) {
 			panic(err)
 		}
 	}
+}
+
+func addToBitmap(bm *roaring.Bitmap, rowID uint64, columnIDs ...uint64) {
+	for i, c := range columnIDs {
+		columnIDs[i] = rowID*ShardWidth + c%ShardWidth
+	}
+	positions := columnIDs
+	bm.DirectAddN(positions...)
 }
 
 // Test Various methods of retrieving RowIDs

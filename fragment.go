@@ -187,6 +187,18 @@ func (f *fragment) Open() error {
 	return nil
 }
 
+func (f *fragment) reopen() (mustClose bool, err error) {
+	if f.file == nil {
+		// Open the data file to be mmap'd and used as an ops log.
+		f.file, mustClose, err = syswrap.OpenFile(f.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+		if err != nil {
+			return mustClose, fmt.Errorf("open file: %s", err)
+		}
+		f.storage.OpWriter = f.file
+	}
+	return mustClose, nil
+}
+
 // openStorage opens the storage bitmap.
 func (f *fragment) openStorage() error {
 	// Create a roaring bitmap to serve as storage for the shard.
@@ -194,11 +206,14 @@ func (f *fragment) openStorage() error {
 		f.storage = roaring.NewFileBitmap()
 	}
 	// Open the data file to be mmap'd and used as an ops log.
-	file, err := os.OpenFile(f.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	file, mustClose, err := syswrap.OpenFile(f.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		return fmt.Errorf("open file: %s", err)
 	}
 	f.file = file
+	if mustClose {
+		defer f.safeClose()
+	}
 
 	// Lock the underlying file.
 	if err := syscall.Flock(int(f.file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
@@ -322,6 +337,26 @@ func (f *fragment) close() error {
 	return nil
 }
 
+// safeClose is unprotected.
+func (f *fragment) safeClose() error {
+	// Flush file, unlock & close.
+	if f.file != nil {
+		if err := f.file.Sync(); err != nil {
+			return fmt.Errorf("sync: %s", err)
+		}
+		if err := syscall.Flock(int(f.file.Fd()), syscall.LOCK_UN); err != nil {
+			return fmt.Errorf("unlock: %s", err)
+		}
+		if err := syswrap.CloseFile(f.file); err != nil {
+			return fmt.Errorf("close file: %s", err)
+		}
+	}
+	f.file = nil
+	f.storage.OpWriter = nil
+
+	return nil
+}
+
 func (f *fragment) closeStorage() error {
 	// Clear the storage bitmap so it doesn't access the closed mmap.
 
@@ -335,17 +370,8 @@ func (f *fragment) closeStorage() error {
 		f.storageData = nil
 	}
 
-	// Flush file, unlock & close.
-	if f.file != nil {
-		if err := f.file.Sync(); err != nil {
-			return fmt.Errorf("sync: %s", err)
-		}
-		if err := syscall.Flock(int(f.file.Fd()), syscall.LOCK_UN); err != nil {
-			return fmt.Errorf("unlock: %s", err)
-		}
-		if err := f.file.Close(); err != nil {
-			return fmt.Errorf("close file: %s", err)
-		}
+	if err := f.safeClose(); err != nil {
+		return err
 	}
 
 	// opN is determined by how many bit set/clear operations are in the storage
@@ -406,6 +432,13 @@ func (f *fragment) rowFromStorage(rowID uint64) *Row {
 func (f *fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	mustClose, err := f.reopen()
+	if err != nil {
+		return false, errors.Wrap(err, "reopening")
+	}
+	if mustClose {
+		defer f.safeClose()
+	}
 
 	// handle mutux field type
 	if f.mutexVector != nil {
@@ -480,6 +513,13 @@ func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 func (f *fragment) clearBit(rowID, columnID uint64) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	mustClose, err := f.reopen()
+	if err != nil {
+		return false, errors.Wrap(err, "reopening")
+	}
+	if mustClose {
+		defer f.safeClose()
+	}
 	return f.unprotectedClearBit(rowID, columnID)
 }
 
@@ -528,6 +568,13 @@ func (f *fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, er
 func (f *fragment) setRow(row *Row, rowID uint64) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	mustClose, err := f.reopen()
+	if err != nil {
+		return false, errors.Wrap(err, "reopening")
+	}
+	if mustClose {
+		defer f.safeClose()
+	}
 	return f.unprotectedSetRow(row, rowID)
 }
 
@@ -578,6 +625,13 @@ func (f *fragment) unprotectedSetRow(row *Row, rowID uint64) (changed bool, err 
 func (f *fragment) clearRow(rowID uint64) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	mustClose, err := f.reopen()
+	if err != nil {
+		return false, errors.Wrap(err, "reopening")
+	}
+	if mustClose {
+		defer f.safeClose()
+	}
 	return f.unprotectedClearRow(rowID)
 }
 
@@ -685,6 +739,13 @@ func (f *fragment) positionsForValue(columnID uint64, bitDepth uint, value uint6
 func (f *fragment) setValueBase(columnID uint64, bitDepth uint, value uint64, clear bool) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	mustClose, err := f.reopen()
+	if err != nil {
+		return false, errors.Wrap(err, "reopening")
+	}
+	if mustClose {
+		defer f.safeClose()
+	}
 
 	for i := uint(0); i < bitDepth; i++ {
 		if value&(1<<i) != 0 {
@@ -1557,6 +1618,14 @@ func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct
 	smallWrite := false
 	if len(set)+len(clear)+f.opN < f.MaxOpN {
 		smallWrite = true
+		mustClose, err := f.reopen()
+		if err != nil {
+			return errors.Wrap(err, "reopening")
+		}
+		if mustClose {
+			defer f.safeClose()
+		}
+
 	} else {
 		f.storage.OpWriter = nil
 	}
@@ -1673,6 +1742,7 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 	smallWrite := false
 	if len(columnIDs)*int(bitDepth+1)+f.opN < f.MaxOpN {
 		smallWrite = true
+
 		// TODO figure out how to avoid re-allocating these each time. Probably
 		// possible to store them on the fragment with a capacity based on
 		// MaxOpN. For now, we know that the total number of bits to be
@@ -1686,6 +1756,7 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 	if !smallWrite {
 		f.mu.Lock()
 		defer f.mu.Unlock()
+
 		f.storage.OpWriter = nil
 	}
 	// Process every value.
