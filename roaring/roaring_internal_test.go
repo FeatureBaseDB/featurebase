@@ -244,12 +244,12 @@ func TestIntersectionCountArrayBitmap3(t *testing.T) {
 		t.Fatalf("test #1 intersectCountBitmapBitmap fail orig: %v new: %v exp: %v", res.n, res.count(), maxContainerVal+1)
 	}
 
-	a.bitmapToRun()
+	a.bitmapToRun(0)
 	res = intersectBitmapRun(b, a)
 	if res.n != res.count() || res.n != maxContainerVal+1 {
 		t.Fatalf("test #2 intersectCountBitmapRun fail orig: %v new: %v exp: %v", res.n, res.count(), maxContainerVal+1)
 	}
-	b.bitmapToRun()
+	b.bitmapToRun(0)
 	res = intersectRunRun(a, b)
 	n := intersectionCountRunRun(a, b)
 	if res.n != res.count() || res.n != maxContainerVal+1 || res.n != int32(n) {
@@ -1125,7 +1125,7 @@ func TestBitmapToRun(t *testing.T) {
 		}
 		a.n = int32(n)
 		x := bitmap
-		a.bitmapToRun()
+		a.bitmapToRun(0)
 		if !reflect.DeepEqual(a.runs(), test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, a.runs())
 		}
@@ -1164,7 +1164,7 @@ func TestArrayToRun(t *testing.T) {
 		a.typ = containerArray
 		a.setArray(test.array)
 		a.n = int32(len(test.array))
-		a.arrayToRun()
+		a.arrayToRun(0)
 		if !reflect.DeepEqual(a.runs(), test.exp) {
 			t.Fatalf("test #%v expected %v, but got %v", i, test.exp, a.runs())
 		}
@@ -3289,9 +3289,9 @@ func TestContainerCombinations(t *testing.T) {
 						}
 					} else if ct == containerRun {
 						if clone.isArray() {
-							clone.arrayToRun()
+							clone.arrayToRun(0)
 						} else if clone.isBitmap() {
-							clone.bitmapToRun()
+							clone.bitmapToRun(0)
 						}
 						if clone.n != cts[ct][exp].n {
 							t.Fatalf("test %s expected runs n=%d, but got n=%d", desc, cts[ct][exp].n, clone.n)

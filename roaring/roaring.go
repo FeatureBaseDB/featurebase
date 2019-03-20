@@ -1683,7 +1683,7 @@ func (c *Container) optimize() {
 			c.arrayToBitmap()
 		} else if newType == containerRun {
 			statsHit("optimize/arrayToRun")
-			c.arrayToRun()
+			c.arrayToRun(runs)
 		} else {
 			statsHit("optimize/arrayUnchanged")
 		}
@@ -1693,7 +1693,7 @@ func (c *Container) optimize() {
 			c.bitmapToArray()
 		} else if newType == containerRun {
 			statsHit("optimize/bitmapToRun")
-			c.bitmapToRun()
+			c.bitmapToRun(runs)
 		} else {
 			statsHit("optimize/bitmapUnchanged")
 		}
@@ -1899,17 +1899,16 @@ func (c *Container) bitmapToArray() {
 	bitmap := c.bitmap()
 	c.setBitmap(nil)
 	c.typ = containerArray
-	array := make([]uint16, c.n)
-	c.setArray(array)
-	array = c.array()
 	c.mapped = false
 
 	// return early if empty
 	if c.n == 0 {
+		c.setArray(nil)
 		return
 	}
 	n := int32(0)
 
+	array := make([]uint16, c.n)
 	for i, word := range bitmap {
 		for word != 0 {
 			t := word & -word
@@ -1928,13 +1927,13 @@ func (c *Container) bitmapToArray() {
 			panic("bitmap has fewer bits set than container.n")
 		}
 	}
+	c.setArray(array)
 }
 
 // arrayToBitmap converts from array format to bitmap format.
 func (c *Container) arrayToBitmap() {
 	statsHit("arrayToBitmap")
 	array := c.array()
-	c.setArray(nil)
 	c.typ = containerBitmap
 	bitmap := make([]uint64, bitmapN)
 	c.setBitmap(bitmap)
@@ -1954,7 +1953,6 @@ func (c *Container) arrayToBitmap() {
 func (c *Container) runToBitmap() {
 	statsHit("runToBitmap")
 	runs := c.runs()
-	c.setRuns(nil)
 	bitmap := make([]uint64, bitmapN)
 	c.typ = containerBitmap
 	c.setBitmap(bitmap)
@@ -1976,19 +1974,20 @@ func (c *Container) runToBitmap() {
 }
 
 // bitmapToRun converts from bitmap format to RLE format.
-func (c *Container) bitmapToRun() {
+func (c *Container) bitmapToRun(numRuns int32) {
 	statsHit("bitmapToRun")
 	bitmap := c.bitmap()
-	c.setBitmap(nil)
 	c.mapped = false
 	c.typ = containerRun
 	// return early if empty
 	if c.n == 0 {
-		c.setRuns(make([]interval16, 0))
+		c.setRuns(nil)
 		return
 	}
+	if numRuns == 0 {
+		numRuns = bitmapCountRuns(bitmap)
+	}
 
-	numRuns := bitmapCountRuns(bitmap)
 	runs := make([]interval16, 0, numRuns)
 
 	current := bitmap[0]
@@ -2032,19 +2031,20 @@ func (c *Container) bitmapToRun() {
 }
 
 // arrayToRun converts from array format to RLE format.
-func (c *Container) arrayToRun() {
+func (c *Container) arrayToRun(numRuns int32) {
 	statsHit("arrayToRun")
 	array := c.array()
-	c.setArray(nil)
 	c.typ = containerRun
 	c.mapped = false
 	// return early if empty
 	if c.n == 0 {
-		c.setRuns(make([]interval16, 0))
+		c.setRuns(nil)
 		return
 	}
+	if numRuns == 0 {
+		numRuns = arrayCountRuns(array)
+	}
 
-	numRuns := arrayCountRuns(array)
 	runs := make([]interval16, 0, numRuns)
 	start := array[0]
 	for i, v := range array[1:] {
@@ -2062,21 +2062,27 @@ func (c *Container) arrayToRun() {
 // runToArray converts from RLE format to array format.
 func (c *Container) runToArray() {
 	statsHit("runToArray")
-	array := make([]uint16, 0, c.n)
 	runs := c.runs()
-	c.setRuns(nil)
 	c.typ = containerArray
 	c.mapped = false
 
 	// return early if empty
 	if c.n == 0 {
-		c.setArray(array)
+		c.setArray(nil)
 		return
 	}
 
+	array := make([]uint16, c.n)
+	n := int32(0)
 	for _, r := range runs {
 		for v := int(r.start); v <= int(r.last); v++ {
-			array = append(array, uint16(v))
+			array[n] = uint16(v)
+			n++
+		}
+	}
+	if roaringParanoia {
+		if n != c.n {
+			panic("run has fewer bits set than container.n")
 		}
 	}
 	c.setArray(array)
