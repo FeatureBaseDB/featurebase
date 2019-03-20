@@ -2255,8 +2255,8 @@ func (c *Container) bitmapRepair() {
 	// Manually unroll loop to make it a little faster.
 	// TODO(rartoul): Can probably make this a few x faster using
 	// SIMD instructions.
-	bitmap := c.bitmap()
-	for i := 0; i < bitmapN; i += 4 {
+	bitmap := c.bitmap()[:bitmapN]
+	for i := 0; i <= bitmapN-4; i += 4 {
 		n += int32(popcount(bitmap[i]))
 		n += int32(popcount(bitmap[i+1]))
 		n += int32(popcount(bitmap[i+2]))
