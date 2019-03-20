@@ -111,9 +111,9 @@ func (c *Container) setArray(array []uint16) {
 		return
 	}
 	h := (*reflect.SliceHeader)(unsafe.Pointer(&array))
-	if h.Data == uintptr(unsafe.Pointer(&c.data[0])) {
+	if h.Data == uintptr(unsafe.Pointer(c.pointer)) {
 		// nothing to do but update length
-		c.len, c.cap = int32(h.Len), stashedArraySize
+		c.len = int32(h.Len)
 		return
 	}
 	// array we can fit in data store:
@@ -172,9 +172,9 @@ func (c *Container) setRuns(runs []interval16) {
 		return
 	}
 	h := (*reflect.SliceHeader)(unsafe.Pointer(&runs))
-	if h.Data == uintptr(unsafe.Pointer(&c.data[0])) {
-		// nothing to do but update cap and length
-		c.len, c.cap = int32(h.Len), stashedRunSize
+	if h.Data == uintptr(unsafe.Pointer(c.pointer)) {
+		// nothing to do but update length
+		c.len = int32(h.Len)
 		return
 	}
 
@@ -232,6 +232,7 @@ func (c *Container) unmapArray() {
 	h := (*reflect.SliceHeader)(unsafe.Pointer(&tmp))
 	c.pointer, c.cap = (*uint16)(unsafe.Pointer(h.Data)), int32(h.Cap)
 	runtime.KeepAlive(&tmp)
+	c.mapped = false
 }
 
 // unmapBitmap ensures that the container is not using mmapped storage.
@@ -245,6 +246,7 @@ func (c *Container) unmapBitmap() {
 	h := (*reflect.SliceHeader)(unsafe.Pointer(&tmp))
 	c.pointer, c.cap = (*uint16)(unsafe.Pointer(h.Data)), int32(h.Cap)
 	runtime.KeepAlive(&tmp)
+	c.mapped = false
 }
 
 // unmapRun ensures that the container is not using mmapped storage.
@@ -257,4 +259,5 @@ func (c *Container) unmapRun() {
 	copy(tmp, runs)
 	h := (*reflect.SliceHeader)(unsafe.Pointer(&tmp))
 	c.pointer, c.cap = (*uint16)(unsafe.Pointer(h.Data)), int32(h.Cap)
+	c.mapped = false
 }

@@ -1831,6 +1831,7 @@ func (c *Container) runRemove(v uint16) bool {
 		return false
 	}
 	c.unmapRun()
+	runs = c.runs()
 	if v == runs[i].last && v == runs[i].start {
 		runs = append(runs[:i], runs[i+1:]...)
 	} else if v == runs[i].last {
