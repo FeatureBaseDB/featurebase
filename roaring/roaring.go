@@ -1068,13 +1068,13 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 		switch c.typ {
 		case containerRun:
 			runCount := binary.LittleEndian.Uint16(data[offset : offset+runCountHeaderSize])
-			c.setRuns((*[0xFFFFFFF]interval16)(unsafe.Pointer(&data[offset+runCountHeaderSize]))[:runCount])
+			c.setRuns((*[0xFFFFFFF]interval16)(unsafe.Pointer(&data[offset+runCountHeaderSize]))[:runCount:runCount])
 			opsOffset = int(offset) + runCountHeaderSize + len(c.runs())*interval16Size
 		case containerArray:
-			c.setArray((*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[offset]))[:c.n])
+			c.setArray((*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[offset]))[:c.n:c.n])
 			opsOffset = int(offset) + len(c.array())*2 // sizeof(uint32)
 		case containerBitmap:
-			c.setBitmap((*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN])
+			c.setBitmap((*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN:bitmapN])
 			opsOffset = int(offset) + len(c.bitmap())*8 // sizeof(uint64)
 		}
 	}
@@ -2144,7 +2144,7 @@ func (c *Container) arrayWriteTo(w io.Writer) (n int64, err error) {
 	//}
 
 	// Write sizeof(uint16) * cardinality bytes.
-	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&array[0]))[:2*c.n])
+	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&array[0]))[: 2*c.n : 2*c.n])
 	return int64(nn), err
 }
 
@@ -2152,7 +2152,7 @@ func (c *Container) bitmapWriteTo(w io.Writer) (n int64, err error) {
 	statsHit("Container/bitmapWriteTo")
 	bitmap := c.bitmap()
 	// Write sizeof(uint64) * bitmapN bytes.
-	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&bitmap[0]))[:(8 * bitmapN)])
+	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&bitmap[0]))[:(8 * bitmapN):(8 * bitmapN)])
 	return int64(nn), err
 }
 
@@ -2168,7 +2168,7 @@ func (c *Container) runWriteTo(w io.Writer) (n int64, err error) {
 	if err != nil {
 		return 0, err
 	}
-	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&runs[0]))[:interval16Size*len(runs)])
+	nn, err := w.Write((*[0xFFFFFFF]byte)(unsafe.Pointer(&runs[0]))[: interval16Size*len(runs) : interval16Size*len(runs)])
 	return int64(runCountHeaderSize + nn), err
 }
 
@@ -4284,9 +4284,9 @@ func readOffsets(b *Bitmap, data []byte, pos int, keyN uint32) error {
 		_, c := citer.Value()
 		switch c.typ {
 		case containerArray:
-			c.setArray((*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[offset]))[:c.n])
+			c.setArray((*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[offset]))[:c.n:c.n])
 		case containerBitmap:
-			c.setBitmap((*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN])
+			c.setBitmap((*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN:bitmapN])
 		default:
 			return fmt.Errorf("unsupported container type %d", c.typ)
 		}
@@ -4302,7 +4302,7 @@ func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) {
 		switch c.typ {
 		case containerRun:
 			runCount := binary.LittleEndian.Uint16(data[pos : pos+runCountHeaderSize])
-			c.setRuns((*[0xFFFFFFF]interval16)(unsafe.Pointer(&data[pos+runCountHeaderSize]))[:runCount])
+			c.setRuns((*[0xFFFFFFF]interval16)(unsafe.Pointer(&data[pos+runCountHeaderSize]))[:runCount:runCount])
 			runs := c.runs()
 
 			for o := range runs { // must convert from start:length to start:end :(
@@ -4310,10 +4310,10 @@ func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) {
 			}
 			pos += int((runCount * interval16Size) + runCountHeaderSize)
 		case containerArray:
-			c.setArray((*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[pos]))[:c.n])
+			c.setArray((*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[pos]))[:c.n:c.n])
 			pos += int(c.n * 2)
 		case containerBitmap:
-			c.setBitmap((*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[pos]))[:bitmapN])
+			c.setBitmap((*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[pos]))[:bitmapN:bitmapN])
 			pos += bitmapN * 8
 		}
 	}
