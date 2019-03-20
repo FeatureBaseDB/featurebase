@@ -2643,8 +2643,8 @@ func intersectBitmapBitmap(a, b *Container) *Container {
 	// local variables added to prevent BCE checks in loop
 	// see https://go101.org/article/bounds-check-elimination.html
 	var (
-		ab = a.bitmap()
-		bb = b.bitmap()
+		ab = a.bitmap()[:bitmapN]
+		bb = b.bitmap()[:bitmapN]
 		ob = make([]uint64, bitmapN)
 		n  int32
 	)
