@@ -331,7 +331,7 @@ func (b *Bitmap) Any() bool {
 	// TODO (jaffee) I'm not sure if it's possible/legal to have an empty
 	// container, so this loop may be totally unnecessary. In theory, any empty
 	// container should be removed from the bitmap though.
-	for b := iter.Next(); b; iter.Next() {
+	for iter.Next() {
 		_, c := iter.Value()
 		if c.n > 0 {
 			return true
