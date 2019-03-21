@@ -3818,3 +3818,31 @@ func BenchmarkUnionInPlaceRegression(b *testing.B) {
 		}
 	})
 }
+
+func TestBitmapAny(t *testing.T) {
+	bm := NewBTreeBitmap()
+	if bm.Any() {
+		t.Error("empty bitmap should have Any()==false")
+	}
+	bm.Add(1)
+	if !bm.Any() {
+		t.Error("bitmap with 1 bit should have Any()==true")
+	}
+	bm.Add(100000)
+	if !bm.Any() {
+		t.Error("bitmap with 2 bits should have Any()==true")
+	}
+	bm.Remove(1)
+	if !bm.Any() {
+		t.Error("bitmap with 1 bit left after removing 1 should have Any()==true")
+	}
+	bm.Add(1)
+	bm = bm.Difference(NewBTreeBitmap(1))
+	if !bm.Any() {
+		t.Error("bitmap with 1 bit left after differencing 1 should have Any()==true")
+	}
+	bm.Remove(100000)
+	if bm.Any() {
+		t.Error("shouldn't be any left")
+	}
+}
