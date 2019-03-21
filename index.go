@@ -50,8 +50,9 @@ type Index struct {
 	// Column attribute storage and cache.
 	columnAttrs AttrStore
 
-	broadcaster broadcaster
-	Stats       stats.StatsClient
+	broadcaster    broadcaster
+	Stats          stats.StatsClient
+	shardValidator func(uint64) bool
 
 	logger logger.Logger
 }
@@ -74,6 +75,7 @@ func NewIndex(path, name string) (*Index, error) {
 		broadcaster:    NopBroadcaster,
 		Stats:          stats.NopStatsClient,
 		logger:         logger.NopLogger,
+		shardValidator: defaultShardValidator,
 		trackExistence: true,
 	}, nil
 }
@@ -403,6 +405,7 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	f.Stats = i.Stats.WithTags(fmt.Sprintf("field:%s", name))
 	f.broadcaster = i.broadcaster
 	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
+	f.shardValidator = i.shardValidator
 	return f, nil
 }
 
