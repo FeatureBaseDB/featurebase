@@ -14,6 +14,8 @@
 
 package roaring
 
+import "fmt"
+
 type sliceContainers struct {
 	keys          []uint64
 	containers    []*Container
@@ -34,6 +36,15 @@ func (sc *sliceContainers) Get(key uint64) *Container {
 }
 
 func (sc *sliceContainers) Put(key uint64, c *Container) {
+	// Don't accept an empty container
+	if c == nil {
+		fmt.Println("slice: got a nil!")
+		return
+	}
+	if c.n == 0 {
+		fmt.Println("slice: got an empty!")
+		return
+	}
 	i := search64(sc.keys, key)
 
 	// If index is negative then there's not an exact match

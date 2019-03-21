@@ -15,6 +15,7 @@
 package roaring
 
 import (
+	"fmt"
 	"io"
 )
 
@@ -60,6 +61,15 @@ func (btc *bTreeContainers) Get(key uint64) *Container {
 }
 
 func (btc *bTreeContainers) Put(key uint64, c *Container) {
+	// Don't accept an empty container
+	if c == nil {
+		fmt.Println("btree: got a nil!")
+		return
+	}
+	if c.n == 0 {
+		fmt.Println("btree: got an empty!")
+		return
+	}
 	// If a mapped container is added to the tree, reset the
 	// lastContainer cache so that the cache is not pointing
 	// at a read-only mmap.

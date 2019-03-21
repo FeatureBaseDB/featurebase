@@ -27,6 +27,9 @@ import (
 	"github.com/pkg/errors"
 )
 
+// TODO remove when seebs' build-tagged stuff is merged
+const roaringParanoia = true
+
 const (
 	// MagicNumber is an identifier, in bytes 0-1 of the file.
 	MagicNumber = uint32(12348)
@@ -228,7 +231,11 @@ func (b *Bitmap) directOpN(op func(c *Container, v uint16) bool, a ...uint64) (c
 	var cont *Container
 	for _, v := range a {
 		if newhb := highbits(v); newhb != hb {
+			if cont != nil && cont.n == 0 {
+				b.Containers.Remove(hb)
+			}
 			hb = newhb
+			// TODO: if we're removing, we don't need to get or create—just get or skip.
 			cont = b.Containers.GetOrCreate(hb)
 		}
 		if op(cont, lowbits(v)) {
@@ -300,12 +307,17 @@ func (b *Bitmap) RemoveN(a ...uint64) (changed int, err error) {
 }
 
 func (b *Bitmap) remove(v uint64) bool {
-	c := b.Containers.Get(highbits(v))
+	key := highbits(v)
+	c := b.Containers.Get(key)
 	if c == nil {
 		return false
 	}
 	// TODO - do nil check inside c.remove?
-	return c.remove(lowbits(v))
+	changed := c.remove(lowbits(v))
+	if c.n == 0 {
+		b.Containers.Remove(key)
+	}
+	return changed
 }
 
 // Max returns the highest value in the bitmap.
@@ -328,16 +340,14 @@ func (b *Bitmap) Count() (n uint64) {
 // Any returns "b.Count() > 0"... but faster than doing that.
 func (b *Bitmap) Any() bool {
 	iter, _ := b.Containers.Iterator(0)
-	// TODO (jaffee) I'm not sure if it's possible/legal to have an empty
-	// container, so this loop may be totally unnecessary. In theory, any empty
-	// container should be removed from the bitmap though.
-	for b := iter.Next(); b; iter.Next() {
+	found := iter.Next()
+	if roaringParanoia {
 		_, c := iter.Value()
-		if c.n > 0 {
-			return true
+		if c != nil && c.n <= 0 {
+			panic(fmt.Sprintf("container cardinality should always be >0, but is %d", c.n))
 		}
 	}
-	return false
+	return found
 }
 
 // Size returns the number of bytes required for the bitmap.
@@ -874,16 +884,6 @@ func (b *Bitmap) Shift(n int) (*Bitmap, error) {
 	return output, nil
 }
 
-// removeEmptyContainers deletes all containers that have a count of zero.
-func (b *Bitmap) removeEmptyContainers() {
-	citer, _ := b.Containers.Iterator(0)
-	for citer.Next() {
-		k, c := citer.Value()
-		if c.n == 0 {
-			b.Containers.Remove(k)
-		}
-	}
-}
 func (b *Bitmap) countEmptyContainers() int {
 	result := 0
 	citer, _ := b.Containers.Iterator(0)
@@ -893,6 +893,9 @@ func (b *Bitmap) countEmptyContainers() int {
 			result++
 		}
 	}
+	if result > 0 {
+		panic(fmt.Sprintf("counted %d empty containers—should be none", result))
+	}
 	return result
 }
 
@@ -901,6 +904,11 @@ func (b *Bitmap) Optimize() {
 	citer, _ := b.Containers.Iterator(0)
 	for citer.Next() {
 		_, c := citer.Value()
+		if roaringParanoia {
+			if c.n <= 0 {
+				panic(fmt.Sprintf("container cardinality should always be >0, but is %d", c.n))
+			}
+		}
 		c.optimize()
 	}
 }
@@ -943,10 +951,11 @@ func (ew *errWriter) WriteUint64(b []byte, v uint64) {
 // WriteTo writes b to w.
 func (b *Bitmap) WriteTo(w io.Writer) (n int64, err error) {
 	b.Optimize()
-	// Remove empty containers before persisting.
-	//b.removeEmptyContainers()
 
-	containerCount := b.Containers.Size() - b.countEmptyContainers()
+	containerCount := b.Containers.Size()
+	if roaringParanoia {
+		b.countEmptyContainers()
+	}
 	headerSize := headerBaseSize
 	byte2 := make([]byte, 2)
 	byte4 := make([]byte, 4)

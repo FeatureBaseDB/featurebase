@@ -2420,18 +2420,6 @@ func TestRunBinSearch(t *testing.T) {
 		}
 	}
 }
-func TestBitmap_RemoveEmptyContainers(t *testing.T) {
-	bm1 := NewFileBitmap(1<<16, 2<<16, 3<<16)
-	bm1.Remove(2 << 16)
-	if bm1.countEmptyContainers() != 1 {
-		t.Fatalf("Should be 1 empty container ")
-	}
-	bm1.removeEmptyContainers()
-
-	if bm1.countEmptyContainers() != 0 {
-		t.Fatalf("Should be no empty containers ")
-	}
-}
 
 func TestBitmap_BitmapWriteToWithEmpty(t *testing.T) {
 	bm1 := NewFileBitmap(1<<16, 2<<16, 3<<16)
@@ -3817,4 +3805,32 @@ func BenchmarkUnionInPlaceRegression(b *testing.B) {
 			bm.UnionInPlace(a1BM, a2BM)
 		}
 	})
+}
+
+func TestBitmapAny(t *testing.T) {
+	bm := NewBTreeBitmap()
+	if bm.Any() {
+		t.Error("empty bitmap should have Any()==false")
+	}
+	bm.Add(1)
+	if !bm.Any() {
+		t.Error("bitmap with 1 bit should have Any()==true")
+	}
+	bm.Add(100000)
+	if !bm.Any() {
+		t.Error("bitmap with 2 bits should have Any()==true")
+	}
+	bm.Remove(1)
+	if !bm.Any() {
+		t.Error("bitmap with 1 bit left after removing 1 should have Any()==true")
+	}
+	bm.Add(1)
+	bm = bm.Difference(NewBTreeBitmap(1))
+	if !bm.Any() {
+		t.Error("bitmap with 1 bit left after differencing 1 should have Any()==true")
+	}
+	bm.Remove(100000)
+	if bm.Any() {
+		t.Error("shouldn't be any left")
+	}
 }
