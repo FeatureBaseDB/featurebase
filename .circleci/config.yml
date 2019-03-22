@@ -138,11 +138,11 @@ workflows:
       - prerelease:
           requires:
             - linter
-            - test-golang-1.11
+            - test-golang-1.12
       - release:
           requires:
             - linter
-            - test-golang-1.11
+            - test-golang-1.12
           filters:
             tags:
               only: /^v.*/
@@ -154,4 +154,4 @@ workflows:
       - dockerhub-upload:
           requires:
             - linter
-            - test-golang-1.11
+            - test-golang-1.12
