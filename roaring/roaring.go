@@ -2110,12 +2110,12 @@ func (c *Container) Clone() (out *Container) {
 		copy(runs, cRuns)
 		out = NewContainerRun(runs)
 	}
+	// this should probably never happen
 	if roaringParanoia {
 		if out.n != out.count() {
 			panic("cloned container has wrong n")
 		}
 	}
-	// this should probably never happen
 	return out
 }
 
