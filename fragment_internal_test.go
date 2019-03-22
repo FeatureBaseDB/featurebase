@@ -2466,11 +2466,11 @@ func (f *fragment) mustSetBits(rowID uint64, columnIDs ...uint64) {
 }
 
 func addToBitmap(bm *roaring.Bitmap, rowID uint64, columnIDs ...uint64) {
+	// we'll reuse the columnIDs slice and fill it with positions for DirectAddN
 	for i, c := range columnIDs {
 		columnIDs[i] = rowID*ShardWidth + c%ShardWidth
 	}
-	positions := columnIDs
-	bm.DirectAddN(positions...)
+	bm.DirectAddN(columnIDs...)
 }
 
 // Test Various methods of retrieving RowIDs
