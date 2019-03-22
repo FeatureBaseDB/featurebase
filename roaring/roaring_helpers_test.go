@@ -248,22 +248,18 @@ type testOp struct {
 	exp string
 }
 
-func doContainer(containerType byte, data interface{}) *Container {
-	c := &Container{
-		containerType: containerType,
-	}
-
-	switch containerType {
+func doContainer(typ byte, data interface{}) *Container {
+	switch typ {
 	case containerArray:
-		c.array = data.([]uint16)
+		return NewContainerArray(data.([]uint16))
 	case containerBitmap:
-		c.bitmap = data.([]uint64)
+		c := NewContainerBitmap(0, data.([]uint64))
+		c.n = c.count()
+		return c
 	case containerRun:
-		c.runs = data.([]interval16)
+		return NewContainerRun(data.([]interval16))
 	}
-	c.n = c.count()
-
-	return c
+	return nil
 }
 
 func setupContainerTests() map[byte]map[string]*Container {

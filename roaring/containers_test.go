@@ -32,8 +32,8 @@ func testContainersIterator(cs Containers, t *testing.T) {
 		t.Fatal("Next() should be false for empty btc")
 	}
 
-	cs.Put(1, &Container{n: 1})
-	cs.Put(2, &Container{n: 2})
+	cs.Put(1, NewContainerArray([]uint16{1}))
+	cs.Put(2, NewContainerArray([]uint16{1, 2}))
 
 	itr, found = cs.Iterator(0)
 	if found {
@@ -57,9 +57,9 @@ func testContainersIterator(cs Containers, t *testing.T) {
 		t.Fatalf("itr should be done, but got true")
 	}
 
-	cs.Put(3, &Container{n: 3})
-	cs.Put(5, &Container{n: 5})
-	cs.Put(6, &Container{n: 6})
+	cs.Put(3, NewContainerArray([]uint16{1, 2, 3}))
+	cs.Put(5, NewContainerArray([]uint16{1, 2, 3, 4, 5}))
+	cs.Put(6, NewContainerArray([]uint16{1, 2, 3, 4, 5, 6}))
 
 	itr, found = cs.Iterator(3)
 	if !itr.Next() {

@@ -93,8 +93,8 @@ type updater struct {
 	mapped        bool
 }
 
-func (btc *bTreeContainers) PutContainerValues(key uint64, containerType byte, n int, mapped bool) {
-	a := updater{key, int32(n), containerType, mapped}
+func (btc *bTreeContainers) PutContainerValues(key uint64, typ byte, n int, mapped bool) {
+	a := updater{key, int32(n), typ, mapped}
 	btc.tree.Put(key, a.update)
 }
 
@@ -111,7 +111,7 @@ func (btc *bTreeContainers) GetOrCreate(key uint64) *roaring.Container {
 	btc.lastKey = key
 	v, ok := btc.tree.Get(key)
 	if !ok {
-		cont := roaring.NewContainer()
+		cont := roaring.NewContainerArray(nil)
 		btc.tree.Set(key, cont)
 		btc.lastContainer = cont
 		return cont
