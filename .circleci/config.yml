@@ -38,6 +38,16 @@ jobs:
       - run: make build GOOS=linux GOARCH=arm GOARM=6
       - run: make build GOOS=linux GOARCH=arm GOARM=7
       - run: make build GOOS=linux GOARCH=arm64
+  test-golang-1.12: &base-test
+    working_directory: /go/src/github.com/pilosa/pilosa
+    docker:
+      - image: circleci/golang:1.12
+    environment:
+      GO111MODULE: "on"
+    steps:
+      - *fast-checkout
+      - run: sudo apt-get install lsof
+      - run: make test
   test-golang-1.11: &base-test
     <<: *defaults
     steps:
@@ -110,6 +120,9 @@ workflows:
           requires:
             - setup
       - test-build-arm:
+          requires:
+            - setup
+      - test-golang-1.12:
           requires:
             - setup
       - test-golang-1.11:
