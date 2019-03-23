@@ -2,7 +2,7 @@ version: 2
 defaults: &defaults
   working_directory: /go/src/github.com/pilosa/pilosa
   docker:
-    - image: circleci/golang:1.11
+    - image: circleci/golang:1.12
   environment:
     GO111MODULE: "on"
 fast-checkout: &fast-checkout
@@ -38,13 +38,13 @@ jobs:
       - run: make build GOOS=linux GOARCH=arm GOARM=6
       - run: make build GOOS=linux GOARCH=arm GOARM=7
       - run: make build GOOS=linux GOARCH=arm64
-  test-golang-1.11: &base-test
+  test-golang-1.12: &base-test
     <<: *defaults
     steps:
       - *fast-checkout
       - run: sudo apt-get install lsof
       - run: make test
-  test-golang-1.11-race:
+  test-golang-1.12-race:
     <<: *defaults
     steps:
       - *fast-checkout
@@ -52,11 +52,19 @@ jobs:
       - run:
           command: make test TESTFLAGS="-race -v -timeout=30m"
           no_output_timeout: 30m
-  test-golang-1.11-386:
+  test-golang-1.12-386:
     <<: *base-test
     environment:
       GO111MODULE: "on"
       GOARCH: 386
+  test-golang-1.11:
+    <<: *defaults
+    docker:
+      - image: circleci/golang:1.11
+    steps:
+      - *fast-checkout
+      - run: sudo apt-get install lsof
+      - run: make test
   cluster-tests:
     <<: *defaults
     steps:
@@ -112,13 +120,16 @@ workflows:
       - test-build-arm:
           requires:
             - setup
+      - test-golang-1.12:
+          requires:
+            - setup
+      - test-golang-1.12-race:
+          requires:
+            - setup
+      - test-golang-1.12-386:
+          requires:
+            - setup
       - test-golang-1.11:
-          requires:
-            - setup
-      - test-golang-1.11-race:
-          requires:
-            - setup
-      - test-golang-1.11-386:
           requires:
             - setup
       - cluster-tests:
@@ -127,11 +138,11 @@ workflows:
       - prerelease:
           requires:
             - linter
-            - test-golang-1.11
+            - test-golang-1.12
       - release:
           requires:
             - linter
-            - test-golang-1.11
+            - test-golang-1.12
           filters:
             tags:
               only: /^v.*/
@@ -143,4 +154,4 @@ workflows:
       - dockerhub-upload:
           requires:
             - linter
-            - test-golang-1.11
+            - test-golang-1.12
