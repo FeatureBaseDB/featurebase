@@ -428,7 +428,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 #### Profile Mutex Fraction
 
 * Description: Mutex Fraction is passed directly to Go's
-  runtime.SetMutexProfileFraction. 1/`fraction` of events will be sampled. 
+  [runtime.SetMutexProfileFraction](https://golang.org/pkg/runtime/#SetMutexProfileFraction). 1/`fraction` of events will be sampled. 
 * Flag: `--profile.mutex-fraction=100`
 * Env: `PILOSA_PROFILE_MUTEX_FRACTION=100`
 * Config:
