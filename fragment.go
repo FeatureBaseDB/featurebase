@@ -432,16 +432,10 @@ func (f *fragment) rowFromStorage(rowID uint64) *Row {
 func (f *fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	mustClose, err := f.reopen()
-	if err != nil {
-		return false, errors.Wrap(err, "reopening")
-	}
-	if mustClose {
-		defer f.safeClose()
-	}
 
 	// handle mutux field type
 	if f.mutexVector != nil {
+		// TODO combine this with the importPositions call for SetBit
 		if err := f.handleMutex(rowID, columnID); err != nil {
 			return changed, errors.Wrap(err, "handling mutex")
 		}
@@ -479,13 +473,6 @@ func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 func (f *fragment) clearBit(rowID, columnID uint64) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	mustClose, err := f.reopen()
-	if err != nil {
-		return false, errors.Wrap(err, "reopening")
-	}
-	if mustClose {
-		defer f.safeClose()
-	}
 	return f.unprotectedClearBit(rowID, columnID)
 }
 
@@ -1734,8 +1721,7 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 		_, err := f.importPositions(toSet, toClear, rowSet)
 		return errors.Wrap(err, "importing positions")
 	}
-	err := f.snapshot()
-	return errors.Wrap(err, "snapshotting")
+	return errors.Wrap(f.snapshot(), "snapshotting")
 }
 
 // importRoaring imports from the official roaring data format defined at
