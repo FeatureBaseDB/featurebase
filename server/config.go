@@ -131,7 +131,7 @@ type Config struct {
 
 	Profile struct {
 		// BlockRate is passed directly to runtime.SetBlockProfileRate
-		BlockRate int `toml:"block-rate`
+		BlockRate int `toml:"block-rate"`
 		// MutexFraction is passed directly to runtime.SetMutexProfileFraction
 		MutexFraction int `toml:"mutex-fraction"`
 	} `toml:"profile"`

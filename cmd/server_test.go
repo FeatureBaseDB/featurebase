@@ -133,8 +133,8 @@ func TestServerConfig(t *testing.T) {
 		service = "statsd"
 		host = "127.0.0.1:8125"
 	[profile]
-		block-rate = 100
-		mutex-fraction = 10
+		block-rate = 5352
+		mutex-fraction = 91
 
 	`,
 			validation: func() error {
@@ -144,8 +144,8 @@ func TestServerConfig(t *testing.T) {
 				v.Check(cmd.Server.Config.LogPath, logFile.Name())
 				v.Check(cmd.Server.Config.Metric.Service, "statsd")
 				v.Check(cmd.Server.Config.Metric.Host, "127.0.0.1:8125")
-				v.Check(cmd.Server.Config.Profile.BlockRate, 100)
-				v.Check(cmd.Server.Config.Profile.MutexFraction, 10)
+				v.Check(cmd.Server.Config.Profile.BlockRate, 5352)
+				v.Check(cmd.Server.Config.Profile.MutexFraction, 91)
 				if v.Error() != nil {
 					return v.Error()
 				}
