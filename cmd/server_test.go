@@ -43,7 +43,13 @@ func TestServerConfig(t *testing.T) {
 		// TEST 0
 		{
 			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "localhost:10111,localhost:10110", "--bind", "localhost:10111", "--translation.map-size", "100000"},
-			env:  map[string]string{"PILOSA_DATA_DIR": "/tmp/myEnvDatadir", "PILOSA_CLUSTER_LONG_QUERY_TIME": "1m30s", "PILOSA_MAX_WRITES_PER_REQUEST": "2000"},
+			env: map[string]string{
+				"PILOSA_DATA_DIR":                "/tmp/myEnvDatadir",
+				"PILOSA_CLUSTER_LONG_QUERY_TIME": "1m30s",
+				"PILOSA_MAX_WRITES_PER_REQUEST":  "2000",
+				"PILOSA_PROFILE_BLOCK_RATE":      "9123",
+				"PILOSA_PROFILE_MUTEX_FRACTION":  "444",
+			},
 			cfgFileContent: `
 	data-dir = "/tmp/myFileDatadir"
 	bind = "localhost:0"
@@ -56,6 +62,9 @@ func TestServerConfig(t *testing.T) {
 			"localhost:19444",
 		]
 		long-query-time = "1m10s"
+	[profile]
+		block-rate = 100
+		mutex-fraction = 10
 	`,
 			validation: func() error {
 				v := validator{}
@@ -66,13 +75,25 @@ func TestServerConfig(t *testing.T) {
 				v.Check(cmd.Server.Config.Cluster.LongQueryTime, toml.Duration(time.Second*90))
 				v.Check(cmd.Server.Config.MaxWritesPerRequest, 2000)
 				v.Check(cmd.Server.Config.Translation.MapSize, 100000)
+				v.Check(cmd.Server.Config.Profile.BlockRate, 9123)
+				v.Check(cmd.Server.Config.Profile.MutexFraction, 444)
 				return v.Error()
 			},
 		},
 		// TEST 1
 		{
-			args: []string{"server", "--anti-entropy.interval", "9m0s"},
-			env:  map[string]string{"PILOSA_CLUSTER_HOSTS": "localhost:1110,localhost:1111", "PILOSA_BIND": "localhost:1110", "PILOSA_TRANSLATION_MAP_SIZE": "100000"},
+			args: []string{"server",
+				"--anti-entropy.interval", "9m0s",
+				"--profile.block-rate", "4832",
+				"--profile.mutex-fraction", "8290",
+			},
+			env: map[string]string{
+				"PILOSA_CLUSTER_HOSTS":          "localhost:1110,localhost:1111",
+				"PILOSA_BIND":                   "localhost:1110",
+				"PILOSA_TRANSLATION_MAP_SIZE":   "100000",
+				"PILOSA_PROFILE_BLOCK_RATE":     "9123",
+				"PILOSA_PROFILE_MUTEX_FRACTION": "444",
+			},
 			cfgFileContent: `
 	bind = "localhost:0"
 	data-dir = "` + actualDataDir + `"
@@ -81,12 +102,17 @@ func TestServerConfig(t *testing.T) {
 		hosts = [
 			"localhost:19444",
 		]
+	[profile]
+		block-rate = 100
+		mutex-fraction = 10
 	`,
 			validation: func() error {
 				v := validator{}
 				v.Check(cmd.Server.Config.Cluster.Hosts, []string{"localhost:1110", "localhost:1111"})
 				v.Check(cmd.Server.Config.AntiEntropy.Interval, toml.Duration(time.Minute*9))
 				v.Check(cmd.Server.Config.Translation.MapSize, 100000)
+				v.Check(cmd.Server.Config.Profile.BlockRate, 4832)
+				v.Check(cmd.Server.Config.Profile.MutexFraction, 8290)
 				return v.Error()
 			},
 		},
@@ -106,6 +132,10 @@ func TestServerConfig(t *testing.T) {
 	[metric]
 		service = "statsd"
 		host = "127.0.0.1:8125"
+	[profile]
+		block-rate = 5352
+		mutex-fraction = 91
+
 	`,
 			validation: func() error {
 				v := validator{}
@@ -114,6 +144,8 @@ func TestServerConfig(t *testing.T) {
 				v.Check(cmd.Server.Config.LogPath, logFile.Name())
 				v.Check(cmd.Server.Config.Metric.Service, "statsd")
 				v.Check(cmd.Server.Config.Metric.Host, "127.0.0.1:8125")
+				v.Check(cmd.Server.Config.Profile.BlockRate, 5352)
+				v.Check(cmd.Server.Config.Profile.MutexFraction, 91)
 				if v.Error() != nil {
 					return v.Error()
 				}

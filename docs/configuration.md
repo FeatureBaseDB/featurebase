@@ -411,6 +411,32 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
     agent-host-port = "localhost:6831"
     ```
 
+#### Profile Block Rate
+
+* Description: Block Rate is passed directly to Go's
+  [runtime.SetBlockProfileRate](https://golang.org/pkg/runtime/#SetBlockProfileRate). Goroutine blocking events will be sampled at 1
+  per `rate` nanoseconds. A value of "1" samples every event, and 0 disables
+  profiling.
+* Flag: `--profile.block-rate=10000000`
+* Env: `PILOSA_PROFILE_BLOCK_RATE=10000000`
+* Config:
+   ```toml
+   [profile]
+   block-rate = 10000000
+   ```
+
+#### Profile Mutex Fraction
+
+* Description: Mutex Fraction is passed directly to Go's
+  [runtime.SetMutexProfileFraction](https://golang.org/pkg/runtime/#SetMutexProfileFraction). 1/`fraction` of events will be sampled. 
+* Flag: `--profile.mutex-fraction=100`
+* Env: `PILOSA_PROFILE_MUTEX_FRACTION=100`
+* Config:
+   ```toml
+   [profile]
+   mutex-fraction = 100
+   ```
+
 #### Translation Map Size
 
 * Description: Size in bytes of mmap to allocate for key translation
