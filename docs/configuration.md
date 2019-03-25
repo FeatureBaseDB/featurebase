@@ -414,7 +414,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 #### Profile Block Rate
 
 * Description: Block Rate is passed directly to Go's
-  runtime.SetBlockProfileRate. Goroutine blocking events will be sampled at 1
+  [runtime.SetBlockProfileRate](https://golang.org/pkg/runtime/#SetBlockProfileRate). Goroutine blocking events will be sampled at 1
   per `rate` nanoseconds. A value of "1" samples every event, and 0 disables
   profiling.
 * Flag: `--profile.block-rate=10000000`
