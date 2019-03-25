@@ -465,47 +465,13 @@ func (f *fragment) handleMutex(rowID, columnID uint64) error {
 
 // unprotectedSetBit TODO should be replaced by an invocation of importPositions with a single bit to set.
 func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err error) {
-	changed = false
-	// Determine the position of the bit in the storage.
-	pos, err := f.pos(rowID, columnID)
+	positions := make([]uint64, 1)
+	positions[0], err = f.pos(rowID, columnID)
 	if err != nil {
-		return false, errors.Wrap(err, "getting bit pos")
+		return false, errors.Wrap(err, "getting position")
 	}
-
-	// Write to storage.
-	if changed, err = f.storage.Add(pos); err != nil {
-		return false, errors.Wrap(err, "writing")
-	}
-
-	// Don't update the cache if nothing changed.
-	if !changed {
-		return changed, nil
-	}
-
-	// Invalidate block checksum.
-	delete(f.checksums, int(rowID/HashBlockSize))
-
-	// Increment number of operations until snapshot is required.
-	if err := f.incrementOpN(); err != nil {
-		return false, errors.Wrap(err, "incrementing")
-	}
-
-	// Get the row from row cache or fragment.storage.
-	row := f.unprotectedRow(rowID)
-	row.SetBit(columnID)
-
-	// Update the cache.
-	f.cache.Add(rowID, row.Count())
-
-	f.stats.Count("setBit", 1, 0.001)
-
-	// Update row count if they have increased.
-	if rowID > f.maxRowID {
-		f.maxRowID = rowID
-		f.stats.Gauge("rows", float64(f.maxRowID), 1.0)
-	}
-
-	return changed, nil
+	n, err := f.importPositions(positions, nil, map[uint64]struct{}{rowID: struct{}{}})
+	return n == 1, errors.Wrap(err, "importing positions")
 }
 
 // clearBit clears a bit for a given column & row within the fragment.
@@ -526,41 +492,13 @@ func (f *fragment) clearBit(rowID, columnID uint64) (bool, error) {
 // unprotectedClearBit TODO should be replaced by an invocation of
 // importPositions with a single bit to clear.
 func (f *fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, err error) {
-	changed = false
-	// Determine the position of the bit in the storage.
-	pos, err := f.pos(rowID, columnID)
+	positions := make([]uint64, 1)
+	positions[0], err = f.pos(rowID, columnID)
 	if err != nil {
-		return false, errors.Wrap(err, "getting bit pos")
+		return false, errors.Wrap(err, "getting position")
 	}
-
-	// Write to storage.
-	if changed, err = f.storage.Remove(pos); err != nil {
-		return false, errors.Wrap(err, "writing")
-	}
-
-	// Don't update the cache if nothing changed.
-	if !changed {
-		return changed, nil
-	}
-
-	// Invalidate block checksum.
-	delete(f.checksums, int(rowID/HashBlockSize))
-
-	// Increment number of operations until snapshot is required.
-	if err := f.incrementOpN(); err != nil {
-		return false, errors.Wrap(err, "incrementing")
-	}
-
-	// Get the row from cache or fragment.storage.
-	row := f.unprotectedRow(rowID)
-	row.clearBit(columnID)
-
-	// Update the cache.
-	f.cache.Add(rowID, row.Count())
-
-	f.stats.Count("clearBit", 1, 1.0)
-
-	return changed, nil
+	n, err := f.importPositions(nil, positions, map[uint64]struct{}{rowID: struct{}{}})
+	return n == 1, errors.Wrap(err, "importing positions")
 }
 
 // setRow replaces an existing row (specified by rowID) with the given
@@ -1599,9 +1537,9 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if options.Clear {
-		err = f.importPositions(nil, positions, rowSet)
+		_, err = f.importPositions(nil, positions, rowSet)
 	} else {
-		err = f.importPositions(positions, nil, rowSet)
+		_, err = f.importPositions(positions, nil, rowSet)
 	}
 	return errors.Wrap(err, "bulkImportStandard")
 }
@@ -1614,13 +1552,13 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 // importPositions tries to intelligently decide whether or not to do a full
 // snapshot of the fragment or just do in-memory updates while appending
 // operations to the op log.
-func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct{}) error {
+func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct{}) (changed int, err error) {
 	smallWrite := false
 	if len(set)+len(clear)+f.opN < f.MaxOpN {
 		smallWrite = true
 		mustClose, err := f.reopen()
 		if err != nil {
-			return errors.Wrap(err, "reopening")
+			return changed, errors.Wrap(err, "reopening")
 		}
 		if mustClose {
 			defer f.safeClose()
@@ -1634,20 +1572,22 @@ func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct
 		f.stats.Count("ImportingN", int64(len(set)), 1)
 		changedN, err := f.storage.AddN(set...) // TODO benchmark Add/RemoveN behavior with sorted/unsorted positions
 		if err != nil {
-			return errors.Wrap(err, "adding positions")
+			return changed, errors.Wrap(err, "adding positions")
 		}
 		f.stats.Count("ImportedN", int64(changedN), 1)
 		f.opN += changedN
+		changed += changedN
 	}
 
 	if len(clear) > 0 {
 		f.stats.Count("ClearingN", int64(len(clear)), 1)
 		changedN, err := f.storage.RemoveN(clear...)
 		if err != nil {
-			return errors.Wrap(err, "clearing positions")
+			return changed, errors.Wrap(err, "clearing positions")
 		}
 		f.stats.Count("ClearedN", int64(changedN), 1)
 		f.opN += changedN
+		changed += changedN
 	}
 
 	// Update cache counts for all affected rows.
@@ -1663,14 +1603,19 @@ func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct
 				f.rowCache.Add(rowID, f.rowFromStorage(rowID))
 			}
 		}
+
+		if rowID > f.maxRowID {
+			f.maxRowID = rowID
+			f.stats.Gauge("rows", float64(f.maxRowID), 1.0)
+		}
 	}
 
 	f.cache.Recalculate()
 
 	if !smallWrite {
-		return f.snapshot()
+		return changed, f.snapshot()
 	}
-	return nil
+	return changed, nil
 }
 
 // bulkImportMutex performs a bulk import on a fragment while ensuring
@@ -1728,7 +1673,8 @@ func (f *fragment) bulkImportMutex(rowIDs, columnIDs []uint64) error {
 	toSet := rowIDs[:i]
 	toClear := columnIDs[:clearIdx]
 
-	return errors.Wrap(f.importPositions(toSet, toClear, rowSet), "importing positions")
+	_, err := f.importPositions(toSet, toClear, rowSet)
+	return errors.Wrap(err, "importing positions")
 }
 
 // importValue bulk imports a set of range-encoded values.
@@ -1785,7 +1731,7 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 		for i := uint(0); i < bitDepth+1; i++ {
 			rowSet[uint64(i)] = struct{}{}
 		}
-		err := f.importPositions(toSet, toClear, rowSet)
+		_, err := f.importPositions(toSet, toClear, rowSet)
 		return errors.Wrap(err, "importing positions")
 	}
 	err := f.snapshot()
@@ -1835,7 +1781,8 @@ func (f *fragment) importRoaring(data []byte, clear bool) error {
 		if clear {
 			toSet, toClear = toClear, toSet
 		}
-		return f.importPositions(toSet, toClear, rowSet)
+		_, err := f.importPositions(toSet, toClear, rowSet)
+		return errors.Wrap(err, "importing positions")
 	}
 
 	if clear {
