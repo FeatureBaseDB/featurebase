@@ -3024,3 +3024,24 @@ func TestSmallImportRestart(t *testing.T) {
 		t.Errorf("row 1 should be [1], but got %v", r1)
 	}
 }
+
+func TestImportValueConcurrent(t *testing.T) {
+	f := mustOpenFragment("i", "f", viewBSIGroupPrefix+"foo", 0, "none")
+	eg := &errgroup.Group{}
+	for i := 0; i < 4; i++ {
+		i := i
+		eg.Go(func() error {
+			for j := uint64(0); j < 10; j++ {
+				err := f.importValue([]uint64{j}, []uint64{uint64(rand.Int63n(1000))}, 10, i%2 == 0)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+	err := eg.Wait()
+	if err != nil {
+		t.Fatalf("concurrently importing values: %v", err)
+	}
+}

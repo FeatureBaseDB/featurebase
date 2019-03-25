@@ -1785,7 +1785,9 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 		for i := uint(0); i < bitDepth+1; i++ {
 			rowSet[uint64(i)] = struct{}{}
 		}
+		f.mu.Lock()
 		err := f.importPositions(toSet, toClear, rowSet)
+		f.mu.Unlock()
 		return errors.Wrap(err, "importing positions")
 	}
 	err := f.snapshot()
