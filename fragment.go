@@ -1733,12 +1733,15 @@ func (f *fragment) bulkImportMutex(rowIDs, columnIDs []uint64) error {
 
 // importValue bulk imports a set of range-encoded values.
 func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	// Verify that there are an equal number of column ids and values.
 	if len(columnIDs) != len(values) {
 		return fmt.Errorf("mismatch of column/value len: %d != %d", len(columnIDs), len(values))
 	}
 	var toSet, toClear []uint64
-	f.mu.RLock()
+
 	smallWrite := false
 	if len(columnIDs)*int(bitDepth+1)+f.opN < f.MaxOpN {
 		smallWrite = true
@@ -1751,14 +1754,11 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 		toSet = make([]uint64, 0, len(columnIDs)*int(bitDepth+1)*(5/8))
 		toClear = make([]uint64, 0, len(columnIDs)*int(bitDepth+1)*(5/8))
 	}
-	f.mu.RUnlock()
 
 	if !smallWrite {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-
 		f.storage.OpWriter = nil
 	}
+
 	// Process every value.
 	// If an error occurs then reopen the storage.
 	if err := func() (err error) {
