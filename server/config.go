@@ -75,6 +75,13 @@ type Config struct {
 	// normally.
 	MaxMapCount uint64 `toml:"max-map-count"`
 
+	// MaxFileCount puts a soft, in-process limit on the number of open fragment
+	// files. Once this limit is passed, Pilosa will only keep files open while
+	// actively working with them, and will close them afterward. This has a
+	// negative effect on performance for workloads which make small appends to
+	// lots of fragments.
+	MaxFileCount uint64 `toml:"max-file-count"`
+
 	// TLS
 	TLS TLSConfig `toml:"tls"`
 
@@ -130,6 +137,7 @@ func NewConfig() *Config {
 		Bind:                ":10101",
 		MaxWritesPerRequest: 5000,
 		MaxMapCount:         60000,
+		MaxFileCount:        500000,
 		TLS:                 TLSConfig{},
 	}
 

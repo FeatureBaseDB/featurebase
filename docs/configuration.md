@@ -146,6 +146,19 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
     max-writes-per-request = 5000
     ```
 
+#### Max File Count
+
+* Description: A soft limit on the maximum number of files that Pilosa will keep
+  open simultaneously. When past this limit, Pilosa will only keep files open
+  for as long as it needs to write updates. This will negatively affect
+  performance in cases where Pilosa is doing lots of small updates.
+* Flag: `--max-file-count=500000`
+* Env: `PILOSA_MAX_FILE_COUNT=500000`
+* Config:
+    ```toml
+    max-file-count = 500000
+    ```
+
 #### Gossip Advertise Host
 
 * Description: Host on which memberlist should advertise. Defaults to `advertise` host.

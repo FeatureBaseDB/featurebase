@@ -180,6 +180,7 @@ func (m *Command) Wait() error {
 // SetupServer uses the cluster configuration to set up this server.
 func (m *Command) SetupServer() error {
 	syswrap.SetMaxMapCount(m.Config.MaxMapCount)
+	syswrap.SetMaxFileCount(m.Config.MaxFileCount)
 
 	err := m.setupLogger()
 	if err != nil {
