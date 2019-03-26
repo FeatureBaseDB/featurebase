@@ -271,6 +271,9 @@ type SystemInfo interface {
 	MemFree() (uint64, error)
 	MemTotal() (uint64, error)
 	MemUsed() (uint64, error)
+	CPUModel() string
+	CPUCores() (physical int, logical int, err error)
+	CPUMHz() (int, error)
 	CPUArch() string
 }
 
@@ -326,4 +329,19 @@ func (n *nopSystemInfo) MemUsed() (uint64, error) {
 // CPUArch returns the CPU architecture, such as amd64
 func (n *nopSystemInfo) CPUArch() string {
 	return ""
+}
+
+// CPUModel returns the CPU model string
+func (n *nopSystemInfo) CPUModel() string {
+	return "unknown"
+}
+
+// CPUMHz returns the CPU clock speed
+func (n *nopSystemInfo) CPUMHz() (int, error) {
+	return 0, nil
+}
+
+// CPUCores returns the number of CPU cores (physical or logical)
+func (n *nopSystemInfo) CPUCores() (physical, logical int, err error) {
+	return 0, 0, nil
 }
