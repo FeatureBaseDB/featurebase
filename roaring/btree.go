@@ -38,9 +38,9 @@ import (
 
 const (
 	// kx must be >= 2
-	kx = 128 //TODO benchmark tune this number if using custom key/value type(s).
+	kx = 126 //TODO benchmark tune this number if using custom key/value type(s).
 	// kd must be >= 1
-	kd = 128 //TODO benchmark tune this number if using custom key/value type(s).
+	kd = 254 //TODO benchmark tune this number if using custom key/value type(s).
 )
 
 var (
