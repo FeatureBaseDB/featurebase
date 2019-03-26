@@ -52,9 +52,8 @@ var (
 
 type btTpool struct{ sync.Pool }
 
-func (p *btTpool) get(cmp Cmp) *tree {
+func (p *btTpool) get() *tree {
 	x := p.Get().(*tree)
-	x.cmp = cmp
 	return x
 }
 
@@ -67,20 +66,12 @@ func (p *btEpool) get(err error, hit bool, i int, k uint64, q *d, t *tree, ver i
 }
 
 type (
-	// Cmp compares a and b. Return value is:
-	//
-	//	< 0 if a <  b
-	//	  0 if a == b
-	//	> 0 if a >  b
-	//
-	Cmp func(a, b uint64) int64
-
 	d struct { // data page
 		dTree //lint:ignore U1000 this is conditional on a build flag
-		c int
-		d [2*kd + 1]de
-		n *d
-		p *d
+		c     int
+		d     [2*kd + 1]de
+		n     *d
+		p     *d
 	}
 
 	de struct { // d element
@@ -109,12 +100,11 @@ type (
 	// tree is a B+tree.
 	tree struct {
 		treeInst //lint:ignore U1000 this is conditional on a build flag
-		c     int
-		cmp   Cmp
-		first *d
-		last  *d
-		r     interface{}
-		ver   int64
+		c        int
+		first    *d
+		last     *d
+		r        interface{}
+		ver      int64
 	}
 
 	xe struct { // x element
@@ -228,8 +218,8 @@ func (l *d) mvR(r *d, c int) {
 
 // treeNew returns a newly created, empty Tree. The compare function is used
 // for key collation.
-func treeNew(cmp Cmp) *tree {
-	return btTPool.get(cmp)
+func treeNew() *tree {
+	return btTPool.get()
 }
 
 // Clear removes all K/V pairs from the tree.
@@ -384,13 +374,13 @@ func (t *tree) find(q interface{}, k uint64) (i int, ok bool) {
 		for l <= h {
 			m := (l + h) >> 1
 			mk = x.x[m].k
-			switch cmp := t.cmp(k, mk); {
-			case cmp > 0:
+			switch {
+			case k > mk:
 				l = m + 1
-			case cmp == 0:
-				return m, true
-			default:
+			case k < mk:
 				h = m - 1
+			default:
+				return m, true
 			}
 		}
 	case *d:
@@ -398,13 +388,13 @@ func (t *tree) find(q interface{}, k uint64) (i int, ok bool) {
 		for l <= h {
 			m := (l + h) >> 1
 			mk = x.d[m].k
-			switch cmp := t.cmp(k, mk); {
-			case cmp > 0:
+			switch {
+			case k > mk:
 				l = m + 1
-			case cmp == 0:
-				return m, true
-			default:
+			case k < mk:
 				h = m - 1
+			default:
+				return m, true
 			}
 		}
 	}
