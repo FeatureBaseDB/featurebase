@@ -76,6 +76,7 @@ type (
 	Cmp func(a, b uint64) int64
 
 	d struct { // data page
+		dTree //lint:ignore U1000 this is conditional on a build flag
 		c int
 		d [2*kd + 1]de
 		n *d
@@ -107,6 +108,7 @@ type (
 
 	// tree is a B+tree.
 	tree struct {
+		treeInst //lint:ignore U1000 this is conditional on a build flag
 		c     int
 		cmp   Cmp
 		first *d
@@ -197,6 +199,7 @@ func (q *x) siblings(i int) (l, r *d) {
 // -------------------------------------------------------------------------- d
 
 func (l *d) mvL(r *d, c int) {
+	r.didCopy(r.c)
 	copy(l.d[l.c:], r.d[:c])
 	copy(r.d[:], r.d[c:r.c])
 	// Zero out the de's here to prevent reading bad data
@@ -209,6 +212,7 @@ func (l *d) mvL(r *d, c int) {
 }
 
 func (l *d) mvR(r *d, c int) {
+	l.didCopy(r.c + c)
 	copy(r.d[c:], r.d[:r.c])
 	copy(r.d[:c], l.d[l.c-c:])
 	// Zero out the de's here to prevent reading bad data
@@ -364,6 +368,7 @@ func (t *tree) extract(q *d, i int) { // (r *container) {
 	//r = q.d[i].v // prepared for Extract
 	q.c--
 	if i < q.c {
+		t.didCopy(q.c - i)
 		copy(q.d[i:], q.d[i+1:q.c+1])
 	}
 	q.d[q.c] = zde // GC
@@ -446,8 +451,10 @@ func (t *tree) Get(k uint64) (v *Container, ok bool) {
 
 func (t *tree) insert(q *d, i int, k uint64, v *Container) *d {
 	t.ver++
+	q.setTree(t)
 	c := q.c
 	if i < c {
+		t.didCopy(c - i)
 		copy(q.d[i+1:], q.d[i:c])
 	}
 	c++
@@ -704,6 +711,7 @@ func (t *tree) Put(k uint64, upd func(oldV *Container, exists bool) (newV *Conta
 func (t *tree) split(p *x, q *d, pi, i int, k uint64, v *Container) {
 	t.ver++
 	r := btDPool.Get().(*d)
+	r.setTree(t)
 	if q.n != nil {
 		r.n = q.n
 		r.n.p = r
@@ -713,6 +721,7 @@ func (t *tree) split(p *x, q *d, pi, i int, k uint64, v *Container) {
 	q.n = r
 	r.p = q
 
+	t.didCopy(kd)
 	copy(r.d[:], q.d[kd:2*kd])
 	for i := range q.d[kd:] {
 		q.d[kd+i] = zde
