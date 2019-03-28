@@ -1987,7 +1987,7 @@ func BenchmarkFragment_Import(b *testing.B) {
 var (
 	rowCases         = []uint64{2, 50, 1000, 100000}
 	colCases         = []uint64{20, 1000, 50000, 500000}
-	concurrencyCases = []int{2, 4, 8, 16}
+	concurrencyCases = []int{2, 16}
 )
 
 func BenchmarkImportRoaring(b *testing.B) {

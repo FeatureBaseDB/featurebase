@@ -31,6 +31,9 @@ vendor: go.mod
 test:
 	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS)
 
+bench:
+	go test ./... -bench=. -run=NoneZ -timeout=127m $(TESTFLAGS)
+
 # Run test suite with coverage enabled
 cover:
 	mkdir -p build
