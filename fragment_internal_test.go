@@ -2291,14 +2291,14 @@ func TestGetZipfRowsSliceRoaring(t *testing.T) {
 // the Zipf generator, and so will be skewed toward lower row numbers. If this
 // is edited to change the data distribution, getZipfRowsSliceStandard should be
 // edited as well. TODO switch to generating row-major for perf boost
-func getZipfRowsSliceRoaring(numRows uint64, seed int64, startCol, endAt uint64) []byte {
+func getZipfRowsSliceRoaring(numRows uint64, seed int64, startCol, endCol uint64) []byte {
 	b := roaring.NewBTreeBitmap()
 	s := rand.NewSource(seed)
 	r := rand.New(s)
 	z := rand.NewZipf(r, 1.6, 50, numRows-1)
 	bufSize := 1 << 14
 	posBuf := make([]uint64, 0, bufSize)
-	for i := uint64(startCol); i < endAt; i++ {
+	for i := uint64(startCol); i < endCol; i++ {
 		row := z.Uint64()
 		posBuf = append(posBuf, row*ShardWidth+i)
 		if len(posBuf) == bufSize {
@@ -2359,12 +2359,12 @@ func getUpdataInto(f func(row, col uint64) bool, numRows, numCols uint64, seed i
 
 // getZipfRowsSliceStandard is the same as getZipfRowsSliceRoaring, but returns
 // row and column ids instead of a byte slice containing roaring bitmap data.
-func getZipfRowsSliceStandard(numRows uint64, seed int64, startFrom, endAt uint64) (rowIDs, columnIDs []uint64) {
+func getZipfRowsSliceStandard(numRows uint64, seed int64, startCol, endCol uint64) (rowIDs, columnIDs []uint64) {
 	s := rand.NewSource(seed)
 	r := rand.New(s)
 	z := rand.NewZipf(r, 1.6, 50, numRows-1)
 	rowIDs, columnIDs = make([]uint64, ShardWidth), make([]uint64, ShardWidth)
-	for i := uint64(startFrom); i < endAt; i++ {
+	for i := uint64(startCol); i < endCol; i++ {
 		rowIDs[i] = z.Uint64()
 		columnIDs[i] = i
 	}
