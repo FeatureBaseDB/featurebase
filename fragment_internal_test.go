@@ -743,7 +743,7 @@ func BenchmarkFragment_RepeatedSmallImports(b *testing.B) {
 							f := mustOpenFragment("i", "f", viewStandard, 0, "")
 							f.MaxOpN = opN
 							defer f.Clean(b)
-							err := f.importRoaring(getZipfRowsSliceRoaring(uint64(numRows), 1), false)
+							err := f.importRoaring(getZipfRowsSliceRoaring(uint64(numRows), 1, 0, ShardWidth), false)
 							if err != nil {
 								b.Fatalf("importing base data for benchmark: %v", err)
 							}
@@ -779,7 +779,7 @@ func BenchmarkFragment_RepeatedSmallImportsRoaring(b *testing.B) {
 							f := mustOpenFragment("i", "f", viewStandard, 0, "")
 							f.MaxOpN = opN
 							defer f.Clean(b)
-							err := f.importRoaring(getZipfRowsSliceRoaring(numRows, 1), false)
+							err := f.importRoaring(getZipfRowsSliceRoaring(numRows, 1, 0, ShardWidth), false)
 							if err != nil {
 								b.Fatalf("importing base data for benchmark: %v", err)
 							}
@@ -1992,7 +1992,7 @@ var (
 
 func BenchmarkImportRoaring(b *testing.B) {
 	for _, numRows := range rowCases {
-		data := getZipfRowsSliceRoaring(numRows, 1)
+		data := getZipfRowsSliceRoaring(numRows, 1, 0, ShardWidth)
 		b.Logf("%dRows: %.2fMB\n", numRows, float64(len(data))/1024/1024)
 		for _, cacheType := range []string{CacheTypeRanked} { // CacheTypeNone didn't seem to affect the results much
 			b.Run(fmt.Sprintf("Rows%dCache_%s", numRows, cacheType), func(b *testing.B) {
@@ -2018,7 +2018,7 @@ func BenchmarkImportRoaringConcurrent(b *testing.B) {
 		b.SkipNow()
 	}
 	for _, numRows := range rowCases {
-		data := getZipfRowsSliceRoaring(numRows, 1)
+		data := getZipfRowsSliceRoaring(numRows, 1, 0, ShardWidth)
 		b.Logf("%dRows: %.2fMB\n", numRows, float64(len(data))/1024/1024)
 		for _, concurrency := range concurrencyCases {
 			b.Run(fmt.Sprintf("%dRows%dConcurrency", numRows, concurrency), func(b *testing.B) {
@@ -2055,7 +2055,7 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 	}
 	for _, numRows := range rowCases {
 		for _, numCols := range colCases {
-			data := getZipfRowsSliceRoaring(numRows, 1)
+			data := getZipfRowsSliceRoaring(numRows, 1, 0, ShardWidth)
 			updata := getUpdataRoaring(numRows, numCols, 1)
 			for _, concurrency := range concurrencyCases {
 				b.Run(fmt.Sprintf("%dRows%dCols%dConcurrency", numRows, numCols, concurrency), func(b *testing.B) {
@@ -2092,7 +2092,7 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 func BenchmarkImportStandard(b *testing.B) {
 	for _, cacheType := range []string{CacheTypeRanked} {
 		for _, numRows := range rowCases {
-			rowIDsOrig, columnIDsOrig := getZipfRowsSliceStandard(numRows, 1)
+			rowIDsOrig, columnIDsOrig := getZipfRowsSliceStandard(numRows, 1, 0, ShardWidth)
 			rowIDs, columnIDs := make([]uint64, len(rowIDsOrig)), make([]uint64, len(columnIDsOrig))
 			b.Run(fmt.Sprintf("Rows%dCache_%s", numRows, cacheType), func(b *testing.B) {
 				b.StopTimer()
@@ -2119,7 +2119,7 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 	for _, cacheType := range []string{CacheTypeRanked} {
 		for _, numRows := range rowCases {
 			for _, numCols := range colCases {
-				data := getZipfRowsSliceRoaring(numRows, 1)
+				data := getZipfRowsSliceRoaring(numRows, 1, 0, ShardWidth)
 				updata := getUpdataRoaring(numRows, numCols, 1)
 				name := fmt.Sprintf("%s%dRows%dCols", cacheType, numRows, numCols)
 				names = append(names, name)
@@ -2152,6 +2152,31 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 	}
 }
 
+// BenchmarkUpdatePathological imports more data into an existing fragment than
+// already exists, but the larger data comes after the smaller data. If
+// SliceContainers are in use, this can cause horrible performance.
+func BenchmarkUpdatePathological(b *testing.B) {
+	exists := getZipfRowsSliceRoaring(100000, 1, 0, 400000)
+	inc := getZipfRowsSliceRoaring(100000, 2, 400000, ShardWidth)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		f := mustOpenFragment("i", "f", viewStandard, 0, DefaultCacheType)
+		err := f.importRoaring(exists, false)
+		if err != nil {
+			b.Fatalf("importing roaring: %v", err)
+		}
+		b.StartTimer()
+		err = f.importRoaring(inc, false)
+		if err != nil {
+			b.Fatalf("importing second: %v", err)
+		}
+
+	}
+
+}
+
 var bigFrag string
 
 func initBigFrag() {
@@ -2159,7 +2184,7 @@ func initBigFrag() {
 		f := mustOpenFragment("i", "f", viewStandard, 0, DefaultCacheType)
 		for i := int64(0); i < 10; i++ {
 			// 10 million rows, 1 bit per column, random seeded by i
-			data := getZipfRowsSliceRoaring(10000000, i)
+			data := getZipfRowsSliceRoaring(10000000, i, 0, ShardWidth)
 			err := f.importRoaring(data, false)
 			if err != nil {
 				panic(fmt.Sprintf("setting up fragment data: %v", err))
@@ -2249,7 +2274,7 @@ func BenchmarkImportRoaringIntoLargeFragment(b *testing.B) {
 
 func TestGetZipfRowsSliceRoaring(t *testing.T) {
 	f := mustOpenFragment("i", "f", viewStandard, 0, DefaultCacheType)
-	data := getZipfRowsSliceRoaring(10, 1)
+	data := getZipfRowsSliceRoaring(10, 1, 0, ShardWidth)
 	f.importRoaring(data, false)
 	if !reflect.DeepEqual(f.rows(0), []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}) {
 		t.Fatalf("unexpected rows: %v", f.rows(0))
@@ -2266,14 +2291,14 @@ func TestGetZipfRowsSliceRoaring(t *testing.T) {
 // the Zipf generator, and so will be skewed toward lower row numbers. If this
 // is edited to change the data distribution, getZipfRowsSliceStandard should be
 // edited as well. TODO switch to generating row-major for perf boost
-func getZipfRowsSliceRoaring(numRows uint64, seed int64) []byte {
+func getZipfRowsSliceRoaring(numRows uint64, seed int64, startCol, endCol uint64) []byte {
 	b := roaring.NewBTreeBitmap()
 	s := rand.NewSource(seed)
 	r := rand.New(s)
 	z := rand.NewZipf(r, 1.6, 50, numRows-1)
 	bufSize := 1 << 14
 	posBuf := make([]uint64, 0, bufSize)
-	for i := uint64(0); i < ShardWidth; i++ {
+	for i := uint64(startCol); i < endCol; i++ {
 		row := z.Uint64()
 		posBuf = append(posBuf, row*ShardWidth+i)
 		if len(posBuf) == bufSize {
@@ -2334,12 +2359,12 @@ func getUpdataInto(f func(row, col uint64) bool, numRows, numCols uint64, seed i
 
 // getZipfRowsSliceStandard is the same as getZipfRowsSliceRoaring, but returns
 // row and column ids instead of a byte slice containing roaring bitmap data.
-func getZipfRowsSliceStandard(numRows uint64, seed int64) (rowIDs, columnIDs []uint64) {
+func getZipfRowsSliceStandard(numRows uint64, seed int64, startCol, endCol uint64) (rowIDs, columnIDs []uint64) {
 	s := rand.NewSource(seed)
 	r := rand.New(s)
 	z := rand.NewZipf(r, 1.6, 50, numRows-1)
 	rowIDs, columnIDs = make([]uint64, ShardWidth), make([]uint64, ShardWidth)
-	for i := uint64(0); i < ShardWidth; i++ {
+	for i := uint64(startCol); i < endCol; i++ {
 		rowIDs[i] = z.Uint64()
 		columnIDs[i] = i
 	}
@@ -2348,7 +2373,7 @@ func getZipfRowsSliceStandard(numRows uint64, seed int64) (rowIDs, columnIDs []u
 
 func BenchmarkFileWrite(b *testing.B) {
 	for _, numRows := range rowCases {
-		data := getZipfRowsSliceRoaring(numRows, 1)
+		data := getZipfRowsSliceRoaring(numRows, 1, 0, ShardWidth)
 		b.Run(fmt.Sprintf("Rows%d", numRows), func(b *testing.B) {
 			b.StopTimer()
 			for i := 0; i < b.N; i++ {
