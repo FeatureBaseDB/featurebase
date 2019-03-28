@@ -1743,6 +1743,7 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 	var toSet, toClear []uint64
 
 	smallWrite := false
+	var colSet map[uint64]struct{}
 	if len(columnIDs)*int(bitDepth+1)+f.opN < f.MaxOpN {
 		smallWrite = true
 
@@ -1753,6 +1754,7 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 		// slightly more than half of that to try to avoid reallocation.
 		toSet = make([]uint64, 0, len(columnIDs)*int(bitDepth+1)*(5/8))
 		toClear = make([]uint64, 0, len(columnIDs)*int(bitDepth+1)*(5/8))
+		colSet = make(map[uint64]struct{})
 	}
 
 	if !smallWrite {
@@ -1762,9 +1764,13 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 	// Process every value.
 	// If an error occurs then reopen the storage.
 	if err := func() (err error) {
-		for i := range columnIDs {
+		for i := len(columnIDs) - 1; i >= 0; i-- {
 			columnID, value := columnIDs[i], values[i]
 			if smallWrite {
+				if _, ok := colSet[columnID]; ok {
+					continue
+				}
+				colSet[columnID] = struct{}{}
 				toSet, toClear, err = f.positionsForValue(columnID, bitDepth, value, clear, toSet, toClear)
 				if err != nil {
 					return errors.Wrap(err, "getting positions for value")
