@@ -3070,3 +3070,50 @@ func TestImportValueConcurrent(t *testing.T) {
 		t.Fatalf("concurrently importing values: %v", err)
 	}
 }
+
+func TestImportMultipleValues(t *testing.T) {
+	tests := []struct {
+		cols      []uint64
+		vals      []uint64
+		checkCols []uint64
+		checkVals []uint64
+		depth     uint
+	}{
+		{
+			cols:      []uint64{0, 0},
+			vals:      []uint64{97, 100},
+			depth:     7,
+			checkCols: []uint64{0},
+			checkVals: []uint64{100},
+		},
+	}
+
+	for i, test := range tests {
+		for _, maxOpN := range []int{0, 10000} { // test small/large write
+			t.Run(fmt.Sprintf("%dLowOpN", i), func(t *testing.T) {
+				f := mustOpenFragment("i", "f", viewBSIGroupPrefix+"foo", 0, CacheTypeNone)
+				f.MaxOpN = maxOpN
+				defer f.Clean(t)
+				err := f.importValue(test.cols, test.vals, test.depth, false)
+				if err != nil {
+					t.Fatalf("importing values: %v", err)
+				}
+
+				for i := range test.checkCols {
+					cc, cv := test.checkCols[i], test.checkVals[i]
+					n, exists, err := f.value(cc, test.depth)
+					if err != nil {
+						t.Fatalf("getting value: %v", err)
+					}
+					if !exists {
+						t.Errorf("column %d should exist", cc)
+					}
+					if n != 100 {
+						t.Errorf("wrong value: %d is not %d", n, cv)
+					}
+				}
+			})
+
+		}
+	}
+}
