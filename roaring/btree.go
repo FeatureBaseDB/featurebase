@@ -38,9 +38,9 @@ import (
 
 const (
 	// kx must be >= 2
-	kx = 128 //TODO benchmark tune this number if using custom key/value type(s).
+	kx = 126 //TODO benchmark tune this number if using custom key/value type(s).
 	// kd must be >= 1
-	kd = 128 //TODO benchmark tune this number if using custom key/value type(s).
+	kd = 254 //TODO benchmark tune this number if using custom key/value type(s).
 )
 
 var (
@@ -52,9 +52,8 @@ var (
 
 type btTpool struct{ sync.Pool }
 
-func (p *btTpool) get(cmp Cmp) *tree {
+func (p *btTpool) get() *tree {
 	x := p.Get().(*tree)
-	x.cmp = cmp
 	return x
 }
 
@@ -67,19 +66,12 @@ func (p *btEpool) get(err error, hit bool, i int, k uint64, q *d, t *tree, ver i
 }
 
 type (
-	// Cmp compares a and b. Return value is:
-	//
-	//	< 0 if a <  b
-	//	  0 if a == b
-	//	> 0 if a >  b
-	//
-	Cmp func(a, b uint64) int64
-
 	d struct { // data page
-		c int
-		d [2*kd + 1]de
-		n *d
-		p *d
+		dTree //lint:ignore U1000 this is conditional on a build flag
+		c     int
+		d     [2*kd + 1]de
+		n     *d
+		p     *d
 	}
 
 	de struct { // d element
@@ -107,12 +99,12 @@ type (
 
 	// tree is a B+tree.
 	tree struct {
-		c     int
-		cmp   Cmp
-		first *d
-		last  *d
-		r     interface{}
-		ver   int64
+		treeInst //lint:ignore U1000 this is conditional on a build flag
+		c        int
+		first    *d
+		last     *d
+		r        interface{}
+		ver      int64
 	}
 
 	xe struct { // x element
@@ -197,6 +189,7 @@ func (q *x) siblings(i int) (l, r *d) {
 // -------------------------------------------------------------------------- d
 
 func (l *d) mvL(r *d, c int) {
+	r.didCopy(r.c)
 	copy(l.d[l.c:], r.d[:c])
 	copy(r.d[:], r.d[c:r.c])
 	// Zero out the de's here to prevent reading bad data
@@ -209,6 +202,7 @@ func (l *d) mvL(r *d, c int) {
 }
 
 func (l *d) mvR(r *d, c int) {
+	l.didCopy(r.c + c)
 	copy(r.d[c:], r.d[:r.c])
 	copy(r.d[:c], l.d[l.c-c:])
 	// Zero out the de's here to prevent reading bad data
@@ -224,8 +218,8 @@ func (l *d) mvR(r *d, c int) {
 
 // treeNew returns a newly created, empty Tree. The compare function is used
 // for key collation.
-func treeNew(cmp Cmp) *tree {
-	return btTPool.get(cmp)
+func treeNew() *tree {
+	return btTPool.get()
 }
 
 // Clear removes all K/V pairs from the tree.
@@ -364,6 +358,7 @@ func (t *tree) extract(q *d, i int) { // (r *container) {
 	//r = q.d[i].v // prepared for Extract
 	q.c--
 	if i < q.c {
+		t.didCopy(q.c - i)
 		copy(q.d[i:], q.d[i+1:q.c+1])
 	}
 	q.d[q.c] = zde // GC
@@ -379,13 +374,13 @@ func (t *tree) find(q interface{}, k uint64) (i int, ok bool) {
 		for l <= h {
 			m := (l + h) >> 1
 			mk = x.x[m].k
-			switch cmp := t.cmp(k, mk); {
-			case cmp > 0:
+			switch {
+			case k > mk:
 				l = m + 1
-			case cmp == 0:
-				return m, true
-			default:
+			case k < mk:
 				h = m - 1
+			default:
+				return m, true
 			}
 		}
 	case *d:
@@ -393,13 +388,13 @@ func (t *tree) find(q interface{}, k uint64) (i int, ok bool) {
 		for l <= h {
 			m := (l + h) >> 1
 			mk = x.d[m].k
-			switch cmp := t.cmp(k, mk); {
-			case cmp > 0:
+			switch {
+			case k > mk:
 				l = m + 1
-			case cmp == 0:
-				return m, true
-			default:
+			case k < mk:
 				h = m - 1
+			default:
+				return m, true
 			}
 		}
 	}
@@ -446,8 +441,10 @@ func (t *tree) Get(k uint64) (v *Container, ok bool) {
 
 func (t *tree) insert(q *d, i int, k uint64, v *Container) *d {
 	t.ver++
+	q.setTree(t)
 	c := q.c
 	if i < c {
+		t.didCopy(c - i)
 		copy(q.d[i+1:], q.d[i:c])
 	}
 	c++
@@ -704,6 +701,7 @@ func (t *tree) Put(k uint64, upd func(oldV *Container, exists bool) (newV *Conta
 func (t *tree) split(p *x, q *d, pi, i int, k uint64, v *Container) {
 	t.ver++
 	r := btDPool.Get().(*d)
+	r.setTree(t)
 	if q.n != nil {
 		r.n = q.n
 		r.n.p = r
@@ -713,6 +711,7 @@ func (t *tree) split(p *x, q *d, pi, i int, k uint64, v *Container) {
 	q.n = r
 	r.p = q
 
+	t.didCopy(kd)
 	copy(r.d[:], q.d[kd:2*kd])
 	for i := range q.d[kd:] {
 		q.d[kd+i] = zde

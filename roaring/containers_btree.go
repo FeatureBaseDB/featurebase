@@ -18,10 +18,6 @@ import (
 	"io"
 )
 
-func cmp(a, b uint64) int64 {
-	return int64(a - b)
-}
-
 type bTreeContainers struct {
 	tree *tree
 
@@ -31,7 +27,7 @@ type bTreeContainers struct {
 
 func newBTreeContainers() *bTreeContainers {
 	return &bTreeContainers{
-		tree: treeNew(cmp),
+		tree: treeNew(),
 	}
 }
 
@@ -158,7 +154,7 @@ func (btc *bTreeContainers) Size() int {
 }
 
 func (btc *bTreeContainers) Reset() {
-	btc.tree = treeNew(cmp)
+	btc.tree = treeNew()
 	btc.lastKey = 0
 	btc.lastContainer = nil
 }
