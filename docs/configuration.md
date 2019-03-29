@@ -127,12 +127,12 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
   timestamps will create lots of fragments. When Pilosa exhausts the
   max-map-count it falls back to reading files directly into memory. This can be
   a bit slower, and cause slower restarts, but is generally fine.
-  * Flag: `--max-map-count=60000`
-  * Env: `PILOSA_MAX_MAP_COUNT=60000`
+  * Flag: `--max-map-count=1000000`
+  * Env: `PILOSA_MAX_MAP_COUNT=1000000`
   * Config:
 
       ```toml
-      max-map-count = 60000
+      max-map-count = 1000000
       ```
 
 #### Max Writes Per Request
@@ -152,11 +152,11 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
   open simultaneously. When past this limit, Pilosa will only keep files open
   for as long as it needs to write updates. This will negatively affect
   performance in cases where Pilosa is doing lots of small updates.
-* Flag: `--max-file-count=500000`
-* Env: `PILOSA_MAX_FILE_COUNT=500000`
+* Flag: `--max-file-count=1000000`
+* Env: `PILOSA_MAX_FILE_COUNT=1000000`
 * Config:
     ```toml
-    max-file-count = 500000
+    max-file-count = 1000000
     ```
 
 #### Gossip Advertise Host
