@@ -3089,27 +3089,31 @@ func TestImportMultipleValues(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			f := mustOpenFragment("i", "f", viewBSIGroupPrefix+"foo", 0, CacheTypeNone)
-			err := f.importValue(test.cols, test.vals, test.depth, false)
-			if err != nil {
-				t.Fatalf("importing values: %v", err)
-			}
-
-			for i := range test.checkCols {
-				cc, cv := test.checkCols[i], test.checkVals[i]
-				n, exists, err := f.value(cc, test.depth)
+		for _, maxOpN := range []int{0, 10000} { // test small/large write
+			t.Run(fmt.Sprintf("%dLowOpN", i), func(t *testing.T) {
+				f := mustOpenFragment("i", "f", viewBSIGroupPrefix+"foo", 0, CacheTypeNone)
+				f.MaxOpN = maxOpN
+				defer f.Clean(t)
+				err := f.importValue(test.cols, test.vals, test.depth, false)
 				if err != nil {
-					t.Fatalf("getting value: %v", err)
+					t.Fatalf("importing values: %v", err)
 				}
-				if !exists {
-					t.Errorf("column %d should exist", cc)
-				}
-				if n != 100 {
-					t.Errorf("wrong value: %d is not %d", n, cv)
-				}
-			}
 
-		})
+				for i := range test.checkCols {
+					cc, cv := test.checkCols[i], test.checkVals[i]
+					n, exists, err := f.value(cc, test.depth)
+					if err != nil {
+						t.Fatalf("getting value: %v", err)
+					}
+					if !exists {
+						t.Errorf("column %d should exist", cc)
+					}
+					if n != 100 {
+						t.Errorf("wrong value: %d is not %d", n, cv)
+					}
+				}
+			})
+
+		}
 	}
 }

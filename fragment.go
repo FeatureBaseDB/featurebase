@@ -1731,6 +1731,42 @@ func (f *fragment) bulkImportMutex(rowIDs, columnIDs []uint64) error {
 	return errors.Wrap(f.importPositions(toSet, toClear, rowSet), "importing positions")
 }
 
+func (f *fragment) importValueSmallWrite(columnIDs, values []uint64, bitDepth uint, clear bool) error {
+	// TODO figure out how to avoid re-allocating these each time. Probably
+	// possible to store them on the fragment with a capacity based on
+	// MaxOpN. For now, we know that the total number of bits to be
+	// set+cleared is len(values)*(bitDepth+1), so we make each slice
+	// slightly more than half of that to try to avoid reallocation.
+	toSet := make([]uint64, 0, len(columnIDs)*int(bitDepth+1)*(5/8))
+	toClear := make([]uint64, 0, len(columnIDs)*int(bitDepth+1)*(5/8))
+	colSet := make(map[uint64]struct{}, len(columnIDs))
+
+	if err := func() (err error) {
+		for i := len(columnIDs) - 1; i >= 0; i-- {
+			columnID, value := columnIDs[i], values[i]
+			if _, ok := colSet[columnID]; ok {
+				continue
+			}
+			colSet[columnID] = struct{}{}
+			toSet, toClear, err = f.positionsForValue(columnID, bitDepth, value, clear, toSet, toClear)
+			if err != nil {
+				return errors.Wrap(err, "getting positions for value")
+			}
+		}
+		return nil
+	}(); err != nil {
+		_ = f.closeStorage()
+		_ = f.openStorage()
+		return err
+	}
+	rowSet := make(map[uint64]struct{}, bitDepth+1)
+	for i := uint(0); i < bitDepth+1; i++ {
+		rowSet[uint64(i)] = struct{}{}
+	}
+	err := f.importPositions(toSet, toClear, rowSet)
+	return errors.Wrap(err, "importing positions")
+}
+
 // importValue bulk imports a set of range-encoded values.
 func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear bool) error {
 	f.mu.Lock()
@@ -1740,43 +1776,21 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 	if len(columnIDs) != len(values) {
 		return fmt.Errorf("mismatch of column/value len: %d != %d", len(columnIDs), len(values))
 	}
-	var toSet, toClear []uint64
 
-	smallWrite := false
-	var colSet map[uint64]struct{}
 	if len(columnIDs)*int(bitDepth+1)+f.opN < f.MaxOpN {
-		smallWrite = true
+		return errors.Wrap(f.importValueSmallWrite(columnIDs, values, bitDepth, clear), "import small write")
 
-		// TODO figure out how to avoid re-allocating these each time. Probably
-		// possible to store them on the fragment with a capacity based on
-		// MaxOpN. For now, we know that the total number of bits to be
-		// set+cleared is len(values)*(bitDepth+1), so we make each slice
-		// slightly more than half of that to try to avoid reallocation.
-		toSet = make([]uint64, 0, len(columnIDs)*int(bitDepth+1)*(5/8))
-		toClear = make([]uint64, 0, len(columnIDs)*int(bitDepth+1)*(5/8))
-		colSet = make(map[uint64]struct{})
 	}
 
-	if !smallWrite {
-		f.storage.OpWriter = nil
-	}
+	f.storage.OpWriter = nil
 
 	// Process every value.
 	// If an error occurs then reopen the storage.
 	if err := func() (err error) {
-		for i := len(columnIDs) - 1; i >= 0; i-- {
+		for i := range columnIDs {
 			columnID, value := columnIDs[i], values[i]
-			if smallWrite {
-				if _, ok := colSet[columnID]; ok {
-					continue
-				}
-				colSet[columnID] = struct{}{}
-				toSet, toClear, err = f.positionsForValue(columnID, bitDepth, value, clear, toSet, toClear)
-				if err != nil {
-					return errors.Wrap(err, "getting positions for value")
-				}
-			} else if _, err = f.importSetValue(columnID, bitDepth, value, clear); err != nil {
-				return errors.Wrapf(err, "setting value, smallPath:%v", smallWrite)
+			if _, err := f.importSetValue(columnID, bitDepth, value, clear); err != nil {
+				return errors.Wrapf(err, "importSetValue")
 			}
 		}
 		return nil
@@ -1786,14 +1800,6 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 		return err
 	}
 
-	if smallWrite {
-		rowSet := make(map[uint64]struct{}, bitDepth+1)
-		for i := uint(0); i < bitDepth+1; i++ {
-			rowSet[uint64(i)] = struct{}{}
-		}
-		err := f.importPositions(toSet, toClear, rowSet)
-		return errors.Wrap(err, "importing positions")
-	}
 	err := f.snapshot()
 	return errors.Wrap(err, "snapshotting")
 }
