@@ -64,8 +64,12 @@ func (cmd *InspectCommand) Run(_ context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "mmapping")
 	}
-	defer syscall.Munmap(data)
-
+	defer func() {
+		err := syscall.Munmap(data)
+		if err != nil {
+			fmt.Fprintf(cmd.Stderr, "inspect command: munmap failed: %v", err)
+		}
+	}()
 	// Attach the mmap file to the bitmap.
 	t := time.Now()
 	fmt.Fprintf(cmd.Stderr, "unmarshaling bitmap...")

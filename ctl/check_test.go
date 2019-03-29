@@ -40,7 +40,9 @@ func TestCheckCommand_RunCacheFile(t *testing.T) {
 	err := cm.Run(context.Background())
 	w.Close()
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("copy: %v", err)
+	}
 
 	if !strings.Contains(buf.String(), "ignoring cache file") {
 		t.Fatalf("expect: ignoring cache file, actual: '%s'", err)
@@ -59,7 +61,9 @@ func TestCheckCommand_RunSnapshot(t *testing.T) {
 	err := cm.Run(context.Background())
 	w.Close()
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("copy: %v", err)
+	}
 
 	if !strings.Contains(buf.String(), "ignoring snapshot file") {
 		t.Fatalf("expect: ignoring snapshot file, actual: '%s'", err)
@@ -71,7 +75,9 @@ func TestCheckCommand_Run(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	file.Write([]byte("1234,1223"))
+	if _, err := file.Write([]byte("1234,1223")); err != nil {
+		t.Fatalf("writing to temp file: %v", err)
+	}
 	file.Close()
 
 	rder := []byte{}
@@ -83,7 +89,9 @@ func TestCheckCommand_Run(t *testing.T) {
 	err = cm.Run(context.Background())
 	w.Close()
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatalf("copy: %v", err)
+	}
 
 	if !strings.HasPrefix(err.Error(), "checking bitmap: unmarshalling: reading roaring header:") {
 		t.Fatalf("expect error: invalid roaring file, actual: '%s'", err)

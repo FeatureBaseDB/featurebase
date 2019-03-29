@@ -173,7 +173,7 @@ func (v *view) availableShards() *roaring.Bitmap {
 
 	b := roaring.NewBitmap()
 	for shard := range v.fragments {
-		b.Add(shard) // ignore error, no writer attached
+		_, _ = b.Add(shard) // ignore error, no writer attached
 	}
 	return b
 }

@@ -139,9 +139,7 @@ func (s *systemInfo) collectPlatformInfo() error {
 			// we have no way to know, let's try runtime
 			s.cpuLogicalCores = runtime.NumCPU()
 		}
-		if err != nil {
-			return err
-		}
+		return nil
 	}
 	return nil
 }

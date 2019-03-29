@@ -370,7 +370,10 @@ func TestField_PersistAvailableShardsFootprint(t *testing.T) {
 	// bm represents remote available shards.
 	bm := roaring.NewBitmap()
 	for i := uint64(0); i < 1204; i += 2 {
-		bm.Add(i)
+		_, err := bm.Add(i)
+		if err != nil {
+			t.Fatalf("adding bits: %v", err)
+		}
 	}
 
 	if err := f.AddRemoteAvailableShards(bm); err != nil {
@@ -386,7 +389,10 @@ func TestField_PersistAvailableShardsFootprint(t *testing.T) {
 
 	bm1 := roaring.NewBitmap()
 	for i := uint64(1); i < 1204; i += 2 {
-		bm1.Add(i)
+		_, err := bm1.Add(i)
+		if err != nil {
+			t.Fatalf("adding bits: %v", err)
+		}
 	}
 
 	if err := f.AddRemoteAvailableShards(bm1); err != nil {

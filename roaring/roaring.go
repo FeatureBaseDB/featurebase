@@ -137,7 +137,10 @@ func NewBitmap(a ...uint64) *Bitmap {
 	b := &Bitmap{
 		Containers: newSliceContainers(),
 	}
-	b.AddN(a...)
+	// TODO: We have no way to report this. We aren't in a server context
+	// so we haven't got a logger, nothing is checking for nil returns
+	// from this...
+	_, _ = b.AddN(a...)
 	return b
 }
 
@@ -3695,8 +3698,8 @@ func (op *op) WriteTo(w io.Writer) (n int64, err error) {
 
 	// Add checksum at the end.
 	h := fnv.New32a()
-	h.Write(buf[0:9])
-	h.Write(buf[13:])
+	_, _ = h.Write(buf[0:9])
+	_, _ = h.Write(buf[13:])
 	binary.LittleEndian.PutUint32(buf[9:13], h.Sum32())
 
 	// Write to writer.
@@ -3719,13 +3722,13 @@ func (op *op) UnmarshalBinary(data []byte) error {
 
 	// Verify checksum.
 	h := fnv.New32a()
-	h.Write(data[0:9])
+	_, _ = h.Write(data[0:9])
 
 	if op.typ > 1 {
 		if len(data) < int(13+op.value*8) {
 			return fmt.Errorf("op data truncated - expected %d, got %d", 13+op.value*8, len(data))
 		}
-		h.Write(data[13 : 13+op.value*8])
+		_, _ = h.Write(data[13 : 13+op.value*8])
 		op.values = make([]uint64, op.value)
 		for i := uint64(0); i < op.value; i++ {
 			start := 13 + i*8

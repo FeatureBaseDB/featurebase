@@ -844,8 +844,8 @@ func (c *cluster) partition(index string, shard uint64) int {
 
 	// Hash the bytes and mod by partition count.
 	h := fnv.New64a()
-	h.Write([]byte(index))
-	h.Write(buf[:])
+	_, _ = h.Write([]byte(index))
+	_, _ = h.Write(buf[:])
 	return int(h.Sum64() % uint64(c.partitionN))
 }
 
@@ -1892,7 +1892,12 @@ func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 	for _, node := range officialNodes {
 		if node.ID == c.Node.ID && node.State != c.Node.State {
 			c.logger.Printf("mismatched state in mergeClusterStatus got %v have %v", node.State, c.Node.State)
-			go c.setNodeState(c.Node.State)
+			go func() {
+				err := c.setNodeState(c.Node.State)
+				if err != nil {
+					c.logger.Printf("error setting node state from %v to %v: %v", node.State, c.Node.State, err)
+				}
+			}()
 		}
 		if err := c.addNode(node); err != nil {
 			return errors.Wrap(err, "adding node")

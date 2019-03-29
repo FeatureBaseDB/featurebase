@@ -44,7 +44,8 @@ func NewBTreeBitmap(a ...uint64) *roaring.Bitmap {
 	b := &roaring.Bitmap{
 		Containers: newBTreeContainers(),
 	}
-	b.Add(a...)
+	// TODO: there's no way to report an error here
+	_, _ = b.Add(a...)
 	return b
 }
 

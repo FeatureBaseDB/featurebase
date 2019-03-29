@@ -594,9 +594,10 @@ func (h *Holder) loadNodeID() (string, error) {
 	}
 
 	nodeIDBytes, err := ioutil.ReadFile(idPath)
-	if err == nil {
-		nodeID = strings.TrimSpace(string(nodeIDBytes))
-	} else if os.IsNotExist(err) {
+	// apparently it's safe to call IsNotExist on something that might
+	// be nil:
+	// https://github.com/golang/go/issues/31065
+	if os.IsNotExist(err) {
 		nodeID = uuid.NewV4().String()
 		err = ioutil.WriteFile(idPath, []byte(nodeID), 0600)
 		if err != nil {
@@ -605,6 +606,7 @@ func (h *Holder) loadNodeID() (string, error) {
 	} else if err != nil {
 		return "", errors.Wrap(err, "reading file")
 	}
+	nodeID = strings.TrimSpace(string(nodeIDBytes))
 
 	return nodeID, nil
 }

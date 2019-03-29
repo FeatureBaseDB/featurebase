@@ -116,9 +116,18 @@ func TestClient_MultiNode(t *testing.T) {
 	// Rebuild the RankCache.
 	// We have to do this to avoid the 10-second cache invalidation delay
 	// built into cache.Invalidate()
-	c[0].RecalculateCaches()
-	c[1].RecalculateCaches()
-	c[2].RecalculateCaches()
+	err = c[0].RecalculateCaches()
+	if err != nil {
+		t.Fatalf("recalculating cache: %v", err)
+	}
+	err = c[1].RecalculateCaches()
+	if err != nil {
+		t.Fatalf("recalculating cache: %v", err)
+	}
+	err = c[2].RecalculateCaches()
+	if err != nil {
+		t.Fatalf("recalculating cache: %v", err)
+	}
 
 	// Connect to each node to compare results.
 	client := make([]*Client, 3)

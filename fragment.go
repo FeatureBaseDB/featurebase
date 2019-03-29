@@ -1328,7 +1328,7 @@ type topOptions struct {
 func (f *fragment) Checksum() []byte {
 	h := xxhash.New()
 	for _, block := range f.Blocks() {
-		h.Write(block.Checksum)
+		_, _ = h.Write(block.Checksum)
 	}
 	return h.Sum(nil)
 }
@@ -2332,7 +2332,7 @@ func (h *blockHasher) Sum() []byte {
 
 func (h *blockHasher) WriteValue(v uint64) {
 	binary.BigEndian.PutUint64(h.buf[:], v)
-	h.hash.Write(h.buf[:])
+	_, _ = h.hash.Write(h.buf[:])
 }
 
 // fragmentSyncer syncs a local fragment to one on a remote host.

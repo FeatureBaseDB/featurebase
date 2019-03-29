@@ -34,14 +34,23 @@ func TestInspectCommand_Run(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error creating tempfile: %s", err)
 	}
-	file.Write([]byte("12358267538963"))
+	_, err = file.Write([]byte("12358267538963"))
+	if err != nil {
+		t.Fatalf("writing to tempfile: %v", err)
+	}
 	file.Close()
 	cm.Path = file.Name()
 	err = cm.Run(context.Background())
+	if err != nil {
+		t.Fatalf("can't run command: %v", err)
+	}
 
 	w.Close()
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, err = io.Copy(&buf, r)
+	if err != nil {
+		t.Fatalf("copying data: %v", err)
+	}
 	if !strings.Contains(buf.String(), "unmarshaling bitmap...") {
 		t.Fatalf("Inspect doesn't work: %s", err)
 	}

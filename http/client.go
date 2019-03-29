@@ -629,7 +629,10 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, ind
 
 	dec := json.NewDecoder(resp.Body)
 	rbody := &pilosa.ImportResponse{}
-	dec.Decode(rbody)
+	err = dec.Decode(rbody)
+	if err != nil {
+		return errors.Wrap(err, "decoding response body")
+	}
 	if rbody.Err != "" {
 		return errors.Wrap(errors.New(rbody.Err), "importing roaring")
 	}

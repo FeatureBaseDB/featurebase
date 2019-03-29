@@ -320,6 +320,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // successResponse is a general success/error struct for http responses.
 type successResponse struct {
+	h       *Handler
 	Success bool   `json:"success"`
 	Error   *Error `json:"error,omitempty"`
 }
@@ -367,8 +368,18 @@ func (r *successResponse) write(w http.ResponseWriter, err error) {
 
 	// Write the response.
 	if statusCode == 0 {
-		w.Write(msg)
-		w.Write([]byte("\n"))
+		_, err := w.Write(msg)
+		if err != nil {
+			r.h.logger.Printf("error writing response: %v", err)
+			http.Error(w, string(msg), http.StatusInternalServerError)
+			return
+		}
+		_, err = w.Write([]byte("\n"))
+		if err != nil {
+			r.h.logger.Printf("error writing newline after response: %v", err)
+			http.Error(w, string(msg), http.StatusInternalServerError)
+			return
+		}
 	} else {
 		http.Error(w, string(msg), statusCode)
 	}
@@ -449,7 +460,10 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	req, err := h.readQueryRequest(r)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		h.writeQueryResponse(w, r, &pilosa.QueryResponse{Err: err})
+		e := h.writeQueryResponse(w, r, &pilosa.QueryResponse{Err: err})
+		if e != nil {
+			h.logger.Printf("write query response error: %v (while trying to write another error: %v)", e, err)
+		}
 		return
 	}
 	// TODO: Remove
@@ -463,7 +477,10 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 		}
-		h.writeQueryResponse(w, r, &pilosa.QueryResponse{Err: err})
+		e := h.writeQueryResponse(w, r, &pilosa.QueryResponse{Err: err})
+		if e != nil {
+			h.logger.Printf("write query response error: %v (while trying to write another error: %v)", e, err)
+		}
 		return
 	}
 
@@ -612,7 +629,7 @@ func (h *Handler) handleDeleteIndex(w http.ResponseWriter, r *http.Request) {
 
 	indexName := mux.Vars(r)["index"]
 
-	resp := successResponse{}
+	resp := successResponse{h: h}
 	err := h.api.DeleteIndex(r.Context(), indexName)
 	resp.write(w, err)
 }
@@ -625,7 +642,7 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	indexName := mux.Vars(r)["index"]
 
-	resp := successResponse{}
+	resp := successResponse{h: h}
 
 	// Decode request.
 	req := postIndexRequest{
@@ -694,7 +711,7 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	fieldName := mux.Vars(r)["field"]
 
-	resp := successResponse{}
+	resp := successResponse{h: h}
 
 	// Decode request.
 	var req postFieldRequest
@@ -847,7 +864,7 @@ func (h *Handler) handleDeleteField(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	fieldName := mux.Vars(r)["field"]
 
-	resp := successResponse{}
+	resp := successResponse{h: h}
 	err := h.api.DeleteField(r.Context(), indexName, fieldName)
 	resp.write(w, err)
 }
@@ -863,7 +880,7 @@ func (h *Handler) handleDeleteRemoteAvailableShard(w http.ResponseWriter, r *htt
 	fieldName := mux.Vars(r)["field"]
 	shardID, _ := strconv.ParseUint(mux.Vars(r)["shardID"], 10, 64)
 
-	resp := successResponse{}
+	resp := successResponse{h: h}
 	err := h.api.DeleteAvailableShard(r.Context(), indexName, fieldName, shardID)
 	resp.write(w, err)
 }
@@ -1080,7 +1097,10 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Write response.
-	w.Write(buf)
+	_, err = w.Write(buf)
+	if err != nil {
+		h.logger.Printf("writing import response: %v", err)
+	}
 }
 
 // handleGetExport handles /export requests.
@@ -1179,7 +1199,10 @@ func (h *Handler) handleGetFragmentBlockData(w http.ResponseWriter, r *http.Requ
 	// Write response.
 	w.Header().Set("Content-Type", "application/protobuf")
 	w.Header().Set("Content-Length", strconv.Itoa(len(buf)))
-	w.Write(buf)
+	_, err = w.Write(buf)
+	if err != nil {
+		h.logger.Printf("writing fragment/block/data response: %v", err)
+	}
 }
 
 // handleGetFragmentBlocks handles GET /internal/fragment/blocks requests.

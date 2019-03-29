@@ -846,7 +846,10 @@ func TestClusterTranslator(t *testing.T) {
 	cluster := make(test.Cluster, 2)
 	cluster[0] = test.NewCommandNode(true)
 	cluster[0].Config.Gossip.Port = "0"
-	cluster[0].Start()
+	err := cluster[0].Start()
+	if err != nil {
+		t.Fatalf("starting cluster 1: %v", err)
+	}
 	httpTranslateStore := http.NewTranslateStore(cluster[0].URL())
 	cluster[1] = test.NewCommandNode(false,
 		server.OptCommandServerOptions(
@@ -855,7 +858,10 @@ func TestClusterTranslator(t *testing.T) {
 	)
 	cluster[1].Config.Gossip.Port = "0"
 	cluster[1].Config.Gossip.Seeds = []string{cluster[0].GossipAddress()}
-	cluster[1].Start()
+	err = cluster[1].Start()
+	if err != nil {
+		t.Fatalf("starting cluster 1: %v", err)
+	}
 
 	test.MustDo("POST", cluster[0].URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
 	test.MustDo("POST", cluster[0].URL()+"/index/i0/field/f0", "{\"options\": {\"keys\": true}}")
