@@ -137,14 +137,14 @@ func TestFragment_SetRow(t *testing.T) {
 	rowID := uint64(1000)
 
 	// Set bits on the fragment.
-	if _, err := f.setBit(rowID, 8000001); err != nil {
+	if _, err := f.setBit(rowID, 7*ShardWidth+1); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.setBit(rowID, 8065536); err != nil {
+	} else if _, err := f.setBit(rowID, 7*ShardWidth+65536); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify data on row.
-	if cols := f.row(rowID).Columns(); !reflect.DeepEqual(cols, []uint64{8000001, 8065536}) {
+	if cols := f.row(rowID).Columns(); !reflect.DeepEqual(cols, []uint64{7*ShardWidth + 1, 7*ShardWidth + 65536}) {
 		t.Fatalf("unexpected columns: %+v", cols)
 	}
 	// Verify count on row.
@@ -153,7 +153,7 @@ func TestFragment_SetRow(t *testing.T) {
 	}
 
 	// Set row (overwrite existing data).
-	row := NewRow(8000002, 8065537, 8131074)
+	row := NewRow(7*ShardWidth+1, 7*ShardWidth+65537, 7*ShardWidth+140000)
 	if changed, err := f.unprotectedSetRow(row, rowID); err != nil {
 		t.Fatal(err)
 	} else if !changed {
@@ -161,7 +161,7 @@ func TestFragment_SetRow(t *testing.T) {
 	}
 
 	// Verify data on row.
-	if cols := f.row(rowID).Columns(); !reflect.DeepEqual(cols, []uint64{8000002, 8065537, 8131074}) {
+	if cols := f.row(rowID).Columns(); !reflect.DeepEqual(cols, []uint64{7*ShardWidth + 1, 7*ShardWidth + 65537, 7*ShardWidth + 140000}) {
 		t.Fatalf("unexpected columns after set row: %+v", cols)
 	}
 	// Verify count on row.
@@ -1914,7 +1914,7 @@ func BenchmarkFragment_FullSnapshot(b *testing.B) {
 	f := mustOpenFragment("i", "f", viewStandard, 0, "")
 	defer f.Clean(b)
 	// Generate some intersecting data.
-	maxX := 1048576 / 2
+	maxX := ShardWidth / 2
 	sz := maxX
 	rows := make([]uint64, sz)
 	cols := make([]uint64, sz)
@@ -1950,7 +1950,7 @@ func BenchmarkFragment_FullSnapshot(b *testing.B) {
 
 func BenchmarkFragment_Import(b *testing.B) {
 	b.StopTimer()
-	maxX := 1048576 * 5 * 2
+	maxX := ShardWidth * 5 * 2
 	sz := maxX
 	rows := make([]uint64, sz)
 	cols := make([]uint64, sz)

@@ -48,8 +48,9 @@ import (
 
 const (
 	// ShardWidth is the number of column IDs in a shard. It must be a power of 2 greater than or equal to 16.
-	shardWidthExponent = 20
-	ShardWidth         = 1 << shardWidthExponent
+	// shardWidthExponent = 20 // set in shardwidthNN.go files
+
+	ShardWidth = 1 << shardWidthExponent
 
 	// shardVsContainerExponent is the power of 2 of ShardWith minus the power
 	// of two of roaring container width (which is 16).

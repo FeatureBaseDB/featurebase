@@ -2226,11 +2226,11 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("Remote SetBit", func(t *testing.T) {
-		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1500000, f=7)`}); err != nil {
-			t.Fatalf("quuerying remote: %v", err)
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: fmt.Sprintf(`Set(%d, f=7)`, pilosa.ShardWidth+1)}); err != nil {
+			t.Fatalf("querying remote: %v", err)
 		}
 
-		if !reflect.DeepEqual(hldr1.Row("i", "f", 7).Columns(), []uint64{1500000}) {
+		if !reflect.DeepEqual(hldr1.Row("i", "f", 7).Columns(), []uint64{pilosa.ShardWidth + 1}) {
 			t.Fatalf("unexpected cols from row 7: %v", hldr1.Row("i", "f", 7).Columns())
 		}
 	})
@@ -2241,11 +2241,11 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 			t.Fatalf("creating field: %v", err)
 		}
 
-		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1500000, z=5, 2010-07-08T00:00)`}); err != nil {
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: fmt.Sprintf(`Set(%d, z=5, 2010-07-08T00:00)`, pilosa.ShardWidth+1)}); err != nil {
 			t.Fatalf("quuerying remote: %v", err)
 		}
 
-		if !reflect.DeepEqual(hldr1.RowTime("i", "z", 5, time.Date(2010, time.January, 1, 0, 0, 0, 0, time.UTC), "Y").Columns(), []uint64{1500000}) {
+		if !reflect.DeepEqual(hldr1.RowTime("i", "z", 5, time.Date(2010, time.January, 1, 0, 0, 0, 0, time.UTC), "Y").Columns(), []uint64{pilosa.ShardWidth + 1}) {
 			t.Fatalf("unexpected cols from row 7: %v", hldr1.RowTime("i", "z", 5, time.Date(2010, time.January, 1, 0, 0, 0, 0, time.UTC), "Y").Columns())
 		}
 	})
