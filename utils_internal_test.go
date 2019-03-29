@@ -235,7 +235,9 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	// add nodes
 	if saveTopology {
 		for _, n := range t.common.Nodes {
-			c.addNode(n)
+			if err := c.addNode(n); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -314,7 +316,10 @@ func (b bcast) SendSync(m Message) error {
 		// Apply the send message to all nodes (except the coordinator).
 		for _, c := range b.t.Clusters {
 			if c != b.c {
-				c.mergeClusterStatus(obj)
+				err := c.mergeClusterStatus(obj)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		b.t.mu.RLock()
@@ -348,7 +353,9 @@ func (b bcast) SendTo(to *Node, m Message) error {
 		}
 	case *ResizeInstructionComplete:
 		coord := b.t.clusterByID(to.ID)
-		go coord.markResizeInstructionComplete(obj)
+		// this used to be async, but that prevented us from checking
+		// its error status...
+		return coord.markResizeInstructionComplete(obj)
 	case *ClusterStatus:
 		// Apply the send message to the node.
 		for _, c := range b.t.Clusters {
