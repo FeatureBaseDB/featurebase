@@ -143,9 +143,15 @@ func NewConfig() *Config {
 		DataDir:             "~/.pilosa",
 		Bind:                ":10101",
 		MaxWritesPerRequest: 5000,
-		MaxMapCount:         60000,
-		MaxFileCount:        500000,
-		TLS:                 TLSConfig{},
+
+		// We default these Max File/Map counts very high. This is basically a
+		// backwards compatibility thing where we don't want to cause different
+		// behavior for those who had previously set their system limits high,
+		// and weren't experiencing any bad behavior. Ideally you want these set
+		// a bit below your system limits.
+		MaxMapCount:  1000000,
+		MaxFileCount: 1000000,
+		TLS:          TLSConfig{},
 	}
 
 	// Cluster config.
