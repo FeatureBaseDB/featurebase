@@ -16,6 +16,7 @@ require (
 	github.com/opentracing/opentracing-go v1.0.2
 	github.com/pelletier/go-toml v1.2.0
 	github.com/pkg/errors v0.8.1
+	github.com/remyoudompheng/bigfft v0.0.0-20190321074620-2f0d2b0e0001 // indirect
 	github.com/satori/go.uuid v1.2.0
 	github.com/shirou/gopsutil v2.18.12+incompatible
 	github.com/spf13/cobra v0.0.3
@@ -24,4 +25,6 @@ require (
 	github.com/uber/jaeger-client-go v2.15.0+incompatible
 	github.com/uber/jaeger-lib v1.5.0
 	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
+	modernc.org/mathutil v1.0.0
+	modernc.org/strutil v1.0.0
 )
