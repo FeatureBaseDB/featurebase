@@ -1104,7 +1104,7 @@ func (f *fragment) pos(rowID, columnID uint64) (uint64, error) {
 	// Return an error if the column ID is out of the range of the fragment's shard.
 	minColumnID := f.shard * ShardWidth
 	if columnID < minColumnID || columnID >= minColumnID+ShardWidth {
-		return 0, errors.New("column out of bounds")
+		return 0, errors.Errorf("column:%d out of bounds", columnID)
 	}
 	return pos(rowID, columnID), nil
 }
