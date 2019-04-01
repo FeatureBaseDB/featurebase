@@ -630,7 +630,8 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, ind
 	dec := json.NewDecoder(resp.Body)
 	rbody := &pilosa.ImportResponse{}
 	err = dec.Decode(rbody)
-	if err != nil {
+	// Decode can return EOF when no error occurred. helpful!
+	if err != nil && err != io.EOF {
 		return errors.Wrap(err, "decoding response body")
 	}
 	if rbody.Err != "" {
