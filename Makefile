@@ -190,7 +190,7 @@ install-peg:
 	GO111MODULE=off go get github.com/pointlander/peg
 
 install-golangci-lint:
-	go get github.com/golangci/golangci-lint/cmd/golangci-lint
+	GO111MODULE=off go get github.com/golangci/golangci-lint/cmd/golangci-lint
 
 install-gometalinter:
 	GO111MODULE=off go get -u github.com/alecthomas/gometalinter
