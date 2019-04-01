@@ -3000,54 +3000,163 @@ func TestFragmentPositionsForValue(t *testing.T) {
 	}
 }
 
-func TestSmallImportRestart(t *testing.T) {
-	f := mustOpenFragment("i", "f", viewStandard, 0, "")
-	err := f.bulkImport([]uint64{1, 2, 3, 4, 5, 6, 7, 8, 9}, []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9}, &ImportOptions{})
-	if err != nil {
-		t.Fatalf("initial small import: %v", err)
-	}
-	if f.opN != 9 {
-		t.Errorf("unexpected opN - %d is not 9", f.opN)
-	}
-
-	err = f.Close()
-	if err != nil {
-		t.Fatalf("closing fragment: %v", err)
-	}
-
-	err = f.Open()
-	if err != nil {
-		t.Fatalf("reopening fragment: %v", err)
-	}
-
-	if f.opN != 9 {
-		t.Errorf("unexpected opN after close/open %d is not 9", f.opN)
-	}
-
-	if r1 := f.row(1).Columns(); len(r1) != 1 || r1[0] != 1 {
-		t.Errorf("row 1 should be [1], but got %v", r1)
+func TestImportClearRestart(t *testing.T) {
+	tests := []struct {
+		rows []uint64
+		cols []uint64
+	}{
+		{
+			rows: []uint64{1},
+			cols: []uint64{1},
+		},
+		{
+			rows: []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 1},
+			cols: []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 500000},
+		},
+		{
+			rows: []uint64{0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			cols: []uint64{0, 65535, 65536, 131071, 131072, 196607, 196608, 262143, 262144, 1000000},
+		},
+		{
+			rows: []uint64{1, 2, 20, 200, 2000, 200000},
+			cols: []uint64{1, 1, 1, 1, 1, 1},
+		},
 	}
 
-	f2 := newFragment(f.path, "i", "f", viewStandard, 0)
-	f2.CacheType = f.CacheType
+	for i, test := range tests {
+		for _, maxOpN := range []int{0, 10000} {
+			t.Run(fmt.Sprintf("%dMaxOpN%d", i, maxOpN), func(t *testing.T) {
+				testrows, testcols := make([]uint64, len(test.rows)), make([]uint64, len(test.rows))
+				copy(testrows, test.rows)
+				copy(testcols, test.cols)
+				exp := make(map[uint64]map[uint64]struct{}) // row num to cols
+				if len(testrows) != len(testcols) {
+					t.Fatalf("bad test spec-need same number of rows/cols, %d/%d", len(testrows), len(testcols))
+				}
+				// set up expected data
+				expOpN := 0
+				for i := range testrows {
+					row, col := testrows[i], testcols[i]
+					cols, ok := exp[row]
+					if !ok {
+						exp[row] = make(map[uint64]struct{})
+						cols = exp[row]
+					}
+					if _, ok = cols[col]; !ok {
+						expOpN++
+						cols[col] = struct{}{}
+					}
+				}
 
-	err = f.closeStorage()
-	if err != nil {
-		t.Fatalf("closing storage: %v", err)
+				f := mustOpenFragment("i", "f", viewStandard, 0, "")
+				f.MaxOpN = maxOpN
+				err := f.bulkImport(testrows, testcols, &ImportOptions{})
+				if err != nil {
+					t.Fatalf("initial small import: %v", err)
+				}
+				if expOpN <= maxOpN && f.opN != expOpN {
+					t.Errorf("unexpected opN - %d is not %d", f.opN, expOpN)
+				}
+				check(t, f, exp)
+
+				err = f.Close()
+				if err != nil {
+					t.Fatalf("closing fragment: %v", err)
+				}
+
+				err = f.Open()
+				if err != nil {
+					t.Fatalf("reopening fragment: %v", err)
+				}
+
+				if expOpN <= maxOpN && f.opN != expOpN {
+					t.Errorf("unexpected opN after close/open %d is not %d", f.opN, expOpN)
+				}
+
+				check(t, f, exp)
+
+				f2 := newFragment(f.path, "i", "f", viewStandard, 0)
+				f2.MaxOpN = maxOpN
+				f2.CacheType = f.CacheType
+
+				err = f.closeStorage()
+				if err != nil {
+					t.Fatalf("closing storage: %v", err)
+				}
+
+				err = f2.Open()
+				if err != nil {
+					t.Fatalf("opening new fragment: %v", err)
+				}
+
+				if expOpN <= maxOpN && f2.opN != expOpN {
+					t.Errorf("unexpected opN after close/open %d is not %d", f2.opN, expOpN)
+				}
+
+				check(t, f2, exp)
+
+				copy(testrows, test.rows)
+				copy(testcols, test.cols)
+				err = f2.bulkImport(testrows, testcols, &ImportOptions{Clear: true})
+				if err != nil {
+					t.Fatalf("clearing imported data: %v", err)
+				}
+
+				// clear exp, but leave rows in so we re-query them in `check`
+				for row := range exp {
+					exp[row] = nil
+				}
+
+				check(t, f2, exp)
+
+				f3 := newFragment(f2.path, "i", "f", viewStandard, 0)
+				f3.MaxOpN = maxOpN
+				f3.CacheType = f.CacheType
+
+				err = f2.closeStorage()
+				if err != nil {
+					t.Fatalf("f2 closing storage: %v", err)
+				}
+
+				err = f3.Open()
+				if err != nil {
+					t.Fatalf("opening f3: %v", err)
+				}
+				defer f3.Clean(t)
+
+				check(t, f3, exp)
+
+			})
+
+		}
+	}
+}
+
+func check(t *testing.T, f *fragment, exp map[uint64]map[uint64]struct{}) {
+	for rowID, colsExp := range exp {
+		colsAct := f.row(rowID).Columns()
+		if len(colsAct) != len(colsExp) {
+			t.Errorf("row %d len mismatch got: %d exp:%d", rowID, len(colsAct), len(colsExp))
+		}
+		for _, colAct := range colsAct {
+			if _, ok := colsExp[colAct]; !ok {
+				t.Errorf("extra column: %d", colAct)
+			}
+		}
+		for colExp := range colsExp {
+			found := false
+			for _, colAct := range colsAct {
+				if colExp == colAct {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("expected %d, but not found", colExp)
+			}
+		}
 	}
 
-	err = f2.Open()
-	if err != nil {
-		t.Fatalf("opening new fragment: %v", err)
-	}
-
-	if f2.opN != 9 {
-		t.Errorf("unexpected opN after close/open %d is not 9", f2.opN)
-	}
-
-	if r1 := f2.row(1).Columns(); len(r1) != 1 || r1[0] != 1 {
-		t.Errorf("row 1 should be [1], but got %v", r1)
-	}
 }
 
 func TestImportValueConcurrent(t *testing.T) {
