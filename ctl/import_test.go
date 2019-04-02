@@ -313,7 +313,7 @@ func TestImportCommand_RunValueKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = file.Write([]byte("foo1,bar2\nfoo3,bar4\nfoo5,bar6"))
+	_, err = file.Write([]byte("foo1,2\nfoo3,4\nfoo5,6"))
 	if err != nil {
 		t.Fatalf("writing to tempfile: %v", err)
 	}
@@ -355,7 +355,7 @@ func TestImportCommand_InvalidFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating tempfile: %v", err)
 	}
-	_, err = file.Write([]byte("1,2\n3,4\n5,6"))
+	_, err = file.Write([]byte("a,2\n3,5\n5,6"))
 	if err != nil {
 		t.Fatalf("writing to tempfile: %v", err)
 	}
