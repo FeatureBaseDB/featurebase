@@ -6,6 +6,7 @@
 ./lru/lru.go
 ./roaring/btree.go
 ./roaring/btree_test.go
+./roaring/containerarchetype_string.go
 ./proto/pilosa.pb.go
 ./logger/filewriter.go
 ./logger/filewriter_test.go
