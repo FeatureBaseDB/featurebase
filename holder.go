@@ -587,27 +587,23 @@ func (h *Holder) setFileLimit() {
 
 func (h *Holder) loadNodeID() (string, error) {
 	idPath := path.Join(h.Path, ".id")
-	nodeID := ""
 	h.Logger.Printf("load NodeID: %s", idPath)
 	if err := os.MkdirAll(h.Path, 0777); err != nil {
 		return "", errors.Wrap(err, "creating directory")
 	}
 
 	nodeIDBytes, err := ioutil.ReadFile(idPath)
-	// apparently it's safe to call IsNotExist on something that might
-	// be nil:
-	// https://github.com/golang/go/issues/31065
-	if os.IsNotExist(err) {
-		nodeID = uuid.NewV4().String()
-		err = ioutil.WriteFile(idPath, []byte(nodeID), 0600)
-		if err != nil {
-			return "", errors.Wrap(err, "writing file")
-		}
-	} else if err != nil {
+	if err == nil {
+		return strings.TrimSpace(string(nodeIDBytes)), nil
+	}
+	if !os.IsNotExist(err) {
 		return "", errors.Wrap(err, "reading file")
 	}
-	nodeID = strings.TrimSpace(string(nodeIDBytes))
-
+	nodeID := uuid.NewV4().String()
+	err = ioutil.WriteFile(idPath, []byte(nodeID), 0600)
+	if err != nil {
+		return "", errors.Wrap(err, "writing file")
+	}
 	return nodeID, nil
 }
 
