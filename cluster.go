@@ -1892,12 +1892,12 @@ func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 	for _, node := range officialNodes {
 		if node.ID == c.Node.ID && node.State != c.Node.State {
 			c.logger.Printf("mismatched state in mergeClusterStatus got %v have %v", node.State, c.Node.State)
-			go func() {
-				err := c.setNodeState(c.Node.State)
+			go func(fromState, toState string) {
+				err := c.setNodeState(toState)
 				if err != nil {
-					c.logger.Printf("error setting node state from %v to %v: %v", node.State, c.Node.State, err)
+					c.logger.Printf("error setting node state from %v to %v: %v", fromState, toState, err)
 				}
-			}()
+			}(node.State, c.Node.State)
 		}
 		if err := c.addNode(node); err != nil {
 			return errors.Wrap(err, "adding node")
