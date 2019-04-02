@@ -41,7 +41,7 @@ func TestInspectCommand_Run(t *testing.T) {
 	file.Close()
 	cm.Path = file.Name()
 	err = cm.Run(context.Background())
-	if err != nil {
+	if err != nil && err.Error() != "unmarshalling: reading roaring header: did not find expected serialCookie in header" {
 		t.Fatalf("can't run command: %v", err)
 	}
 
