@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/shardwidth"
 	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
 )
@@ -1234,7 +1235,7 @@ func (e *executor) executeRowsShard(_ context.Context, index string, fieldName s
 	if columnID, ok, err := c.UintArg("column"); err != nil {
 		return nil, err
 	} else if ok {
-		colShard := columnID >> shardWidthExponent
+		colShard := columnID >> shardwidth.Exponent
 		if colShard != shard {
 			return rowIDs, nil
 		}

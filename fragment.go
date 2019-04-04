@@ -40,6 +40,7 @@ import (
 	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/shardwidth"
 	"github.com/pilosa/pilosa/stats"
 	"github.com/pilosa/pilosa/syswrap"
 	"github.com/pilosa/pilosa/tracing"
@@ -50,7 +51,7 @@ const (
 	// ShardWidth is the number of column IDs in a shard. It must be a power of 2 greater than or equal to 16.
 	// shardWidthExponent = 20 // set in shardwidthNN.go files
 
-	ShardWidth = 1 << shardWidthExponent
+	ShardWidth = 1 << shardwidth.Exponent
 
 	// shardVsContainerExponent is the power of 2 of ShardWith minus the power
 	// of two of roaring container width (which is 16).
@@ -60,7 +61,7 @@ const (
 	// which a given container is in means dividing by the number of rows per
 	// container which is performantly expressed as a right shift by this
 	// exponent.
-	shardVsContainerExponent = shardWidthExponent - 16
+	shardVsContainerExponent = shardwidth.Exponent - 16
 
 	// width of roaring containers is 2^16
 	containerWidth = 1 << 16
