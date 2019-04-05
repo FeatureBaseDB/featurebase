@@ -267,6 +267,10 @@ func TestPEGWorking(t *testing.T) {
 my-frame
 =9)`,
 			ncalls: 1},
+		{
+			name:   "OldRange",
+			input:  "Range(blah=1, 2019-04-07T00:00, 2019-08-07T00:00)",
+			ncalls: 1},
 	}
 
 	for i, test := range tests {
