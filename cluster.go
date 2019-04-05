@@ -296,16 +296,16 @@ func (c *cluster) unprotectedIsCoordinator() bool {
 // nodes with its version of Cluster.Status.
 func (c *cluster) setCoordinator(n *Node) error {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	// Verify that the new Coordinator value matches
 	// this node.
 	if c.Node.ID != n.ID {
-		c.mu.Unlock()
 		return fmt.Errorf("coordinator node does not match this node")
 	}
 
 	// Update IsCoordinator on all nodes (locally).
 	_ = c.unprotectedUpdateCoordinator(n)
-	c.mu.Unlock()
+
 	// Send the update coordinator message to all nodes.
 	err := c.unprotectedSendSync(
 		&UpdateCoordinatorMessage{
@@ -316,7 +316,7 @@ func (c *cluster) setCoordinator(n *Node) error {
 	}
 
 	// Broadcast cluster status.
-	return c.unprotectedSendSync(c.status())
+	return c.unprotectedSendSync(c.unprotectedStatus())
 }
 
 // unprotectedSendSync is used in place of c.broadcaster.SendSync (which is
