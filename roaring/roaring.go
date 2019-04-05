@@ -3667,15 +3667,9 @@ func (op *op) apply(b *Bitmap) (changed bool) {
 	case opTypeRemove:
 		return b.remove(op.value)
 	case opTypeAddBatch:
-		for _, v := range op.values {
-			nc := b.DirectAdd(v)
-			changed = nc || changed
-		}
+		changed = b.DirectAddN(op.values...) > 0
 	case opTypeRemoveBatch:
-		for _, v := range op.values {
-			nc := b.remove(v)
-			changed = nc || changed
-		}
+		changed = b.DirectRemoveN(op.values...) > 0
 	default:
 		panic(fmt.Sprintf("invalid op type: %d", op.typ))
 	}
