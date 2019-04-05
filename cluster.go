@@ -307,7 +307,7 @@ func (c *cluster) setCoordinator(n *Node) error {
 	_ = c.unprotectedUpdateCoordinator(n)
 	c.mu.Unlock()
 	// Send the update coordinator message to all nodes.
-	err := c.broadcaster.SendSync(
+	err := c.unprotectedSendSync(
 		&UpdateCoordinatorMessage{
 			New: n,
 		})
@@ -316,7 +316,25 @@ func (c *cluster) setCoordinator(n *Node) error {
 	}
 
 	// Broadcast cluster status.
-	return c.broadcaster.SendSync(c.status())
+	return c.unprotectedSendSync(c.status())
+}
+
+// unprotectedSendSync is used in place of c.broadcaster.SendSync (which is
+// Server.SendSync) because Server.SendSync needs to obtain a cluster lock to
+// get the list of nodes. TODO: the reference loop from
+// Server->cluster->broadcaster(Server) will likely continue to cause confusion
+// and should be refactored.
+func (c *cluster) unprotectedSendSync(m Message) error {
+	var eg errgroup.Group
+	for _, node := range c.nodes {
+		node := node
+		// Don't send to myself.
+		if node.ID == c.Node.ID {
+			continue
+		}
+		eg.Go(func() error { return c.broadcaster.SendTo(node, m) })
+	}
+	return eg.Wait()
 }
 
 // updateCoordinator updates this nodes Coordinator value as well as
@@ -1083,7 +1101,7 @@ func (c *cluster) unprotectedSetStateAndBroadcast(state string) error {
 	}
 	// Broadcast cluster status changes to the cluster.
 	status := c.unprotectedStatus()
-	return c.broadcaster.SendSync(status) // TODO fix c.Status
+	return c.unprotectedSendSync(status) // TODO fix c.Status
 
 }
 
