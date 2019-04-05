@@ -24,12 +24,6 @@ jobs:
       - persist_to_workspace:
           root: .
           paths: "*"
-  linter:
-    <<: *defaults
-    steps:
-      - *fast-checkout
-      - run: make install-gometalinter
-      - run: make gometalinter
   check-license-headers:
     <<: *defaults
     steps:
