@@ -276,7 +276,7 @@ func TestFragment_SetValue(t *testing.T) {
 		}
 
 		// Non-existent value.
-		if value, exists, err := f.value(100, 11); err != nil {
+		if value, exists, err := f.value(101, 11); err != nil {
 			t.Fatal(err)
 		} else if value != 0 {
 			t.Fatalf("unexpected value: %d", value)
@@ -305,7 +305,7 @@ func TestFragment_SetValue(t *testing.T) {
 
 				m[columnID] = int64(value)
 
-				if _, err := f.setValue(columnID, bitDepth, value); err != nil {
+				if _, err := f.setValue(columnID, bitDepth, int64(value)); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -409,7 +409,7 @@ func TestFragment_MinMax(t *testing.T) {
 	t.Run("Min", func(t *testing.T) {
 		tests := []struct {
 			filter *Row
-			exp    uint64
+			exp    int64
 			cnt    uint64
 		}{
 			{filter: nil, exp: 0, cnt: 1},
@@ -433,7 +433,7 @@ func TestFragment_MinMax(t *testing.T) {
 	t.Run("Max", func(t *testing.T) {
 		tests := []struct {
 			filter *Row
-			exp    uint64
+			exp    int64
 			cnt    uint64
 		}{
 			{filter: nil, exp: 2818, cnt: 2},
@@ -444,12 +444,15 @@ func TestFragment_MinMax(t *testing.T) {
 			{filter: NewRow(7000), exp: 0, cnt: 1},
 		}
 		for i, test := range tests {
+			var columns []uint64
+			if test.filter != nil {
+				columns = test.filter.Columns()
+			}
+
 			if max, cnt, err := f.max(test.filter, bitDepth); err != nil {
 				t.Fatal(err)
-			} else if max != test.exp {
-				t.Errorf("test %d expected max: %v, but got: %v", i, test.exp, max)
-			} else if cnt != test.cnt {
-				t.Errorf("test %d expected cnt: %v, but got: %v", i, test.cnt, cnt)
+			} else if max != test.exp || cnt != test.cnt {
+				t.Errorf("%d. max(%v, %v)=(%v, %v), expected (%v, %v)", i, columns, bitDepth, max, cnt, test.exp, test.cnt)
 			}
 		}
 	})
@@ -657,7 +660,7 @@ func benchmarkSetValues(b *testing.B, bitDepth uint, f *fragment, cfunc func(uin
 	for i := 0; i < b.N; i++ {
 		// We're not checking the error because this is a benchmark.
 		// That does mean the result could be completely wrong...
-		_, _ = f.setValue(column, bitDepth, uint64(i))
+		_, _ = f.setValue(column, bitDepth, int64(i))
 		column = cfunc(column)
 	}
 }
@@ -686,9 +689,9 @@ func benchmarkImportValues(b *testing.B, bitDepth uint, f *fragment, cfunc func(
 	column := uint64(0)
 	b.StopTimer()
 	columns := make([]uint64, b.N)
-	values := make([]uint64, b.N)
+	values := make([]int64, b.N)
 	for i := 0; i < b.N; i++ {
-		values[i] = uint64(i)
+		values[i] = int64(i)
 		columns[i] = column
 		column = cfunc(column)
 	}
@@ -805,23 +808,23 @@ func BenchmarkFragment_RepeatedSmallImportsRoaring(b *testing.B) {
 
 func BenchmarkFragment_RepeatedSmallValueImports(b *testing.B) {
 	initialCols := make([]uint64, 0, ShardWidth)
-	initialVals := make([]uint64, 0, ShardWidth)
+	initialVals := make([]int64, 0, ShardWidth)
 	for i := uint64(0); i < ShardWidth; i++ {
 		// every 29 columns, skip between 0 and 12 columns
 		if i%29 == 0 {
 			i += i % 13
 		}
 		initialCols = append(initialCols, i)
-		initialVals = append(initialVals, uint64(rand.Int63n(1<<21)))
+		initialVals = append(initialVals, int64(rand.Int63n(1<<21)))
 	}
 
 	for _, numUpdates := range []int{100} {
 		for _, valsPerUpdate := range []int{10, 100} {
 			updateCols := make([]uint64, numUpdates*valsPerUpdate)
-			updateVals := make([]uint64, numUpdates*valsPerUpdate)
+			updateVals := make([]int64, numUpdates*valsPerUpdate)
 			for i := 0; i < numUpdates*valsPerUpdate; i++ {
 				updateCols[i] = uint64(rand.Int63n(ShardWidth))
-				updateVals[i] = uint64(rand.Int63n(1 << 21))
+				updateVals[i] = int64(rand.Int63n(1 << 21))
 			}
 
 			for _, opN := range []int{1, 5000, 50000} {
@@ -1372,7 +1375,7 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 	}
 
 	// Open the fragment specified by the path.
-	f := newFragment(*FragmentPath, "i", "f", viewStandard, 0)
+	f := newFragment(*FragmentPath, "i", "f", viewStandard, 0, 0)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
@@ -1901,7 +1904,7 @@ func BenchmarkFragment_Snapshot(b *testing.B) {
 
 	b.ReportAllocs()
 	// Open the fragment specified by the path.
-	f := newFragment(*FragmentPath, "i", "f", viewStandard, 0)
+	f := newFragment(*FragmentPath, "i", "f", viewStandard, 0, 0)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
@@ -2231,7 +2234,7 @@ func BenchmarkImportIntoLargeFragment(b *testing.B) {
 		}
 		origF.Close()
 		fi.Close()
-		nf := newFragment(fi.Name(), "i", "f", viewStandard, 0)
+		nf := newFragment(fi.Name(), "i", "f", viewStandard, 0, 0)
 		err = nf.Open()
 		if err != nil {
 			b.Fatalf("opening fragment: %v", err)
@@ -2268,7 +2271,7 @@ func BenchmarkImportRoaringIntoLargeFragment(b *testing.B) {
 		}
 		origF.Close()
 		fi.Close()
-		nf := newFragment(fi.Name(), "i", "f", viewStandard, 0)
+		nf := newFragment(fi.Name(), "i", "f", viewStandard, 0, 0)
 		err = nf.Open()
 		if err != nil {
 			b.Fatalf("opening fragment: %v", err)
@@ -2463,7 +2466,7 @@ func mustOpenFragment(index, field, view string, shard uint64, cacheType string)
 		cacheType = DefaultCacheType
 	}
 
-	f := newFragment(file.Name(), index, field, view, shard)
+	f := newFragment(file.Name(), index, field, view, shard, 0)
 	f.CacheType = cacheType
 	f.RowAttrStore = &memAttrStore{
 		store: make(map[uint64]map[string]interface{}),
@@ -2988,7 +2991,7 @@ func TestFragmentPositionsForValue(t *testing.T) {
 	tests := []struct {
 		columnID uint64
 		bitDepth uint
-		value    uint64
+		value    int64
 		clear    bool
 		toSet    []uint64
 		toClear  []uint64
@@ -2997,43 +3000,43 @@ func TestFragmentPositionsForValue(t *testing.T) {
 			columnID: 0,
 			bitDepth: 1,
 			value:    0,
-			toSet:    []uint64{ShardWidth},
-			toClear:  []uint64{0},
+			toSet:    []uint64{0},                          // exists bit only
+			toClear:  []uint64{ShardWidth, ShardWidth * 2}, // sign bit & 1-position
 		},
 		{
 			columnID: 0,
 			bitDepth: 3,
 			value:    0,
-			toSet:    []uint64{ShardWidth * 3},
-			toClear:  []uint64{0, ShardWidth, ShardWidth * 2},
+			toSet:    []uint64{0},                                                              // exists bit only
+			toClear:  []uint64{ShardWidth * 1, ShardWidth * 2, ShardWidth * 3, ShardWidth * 4}, // sign bit, 1, 2, 4
 		},
 		{
 			columnID: 1,
 			bitDepth: 3,
 			value:    0,
-			toSet:    []uint64{ShardWidth*3 + 1},
-			toClear:  []uint64{1, ShardWidth + 1, ShardWidth*2 + 1},
+			toSet:    []uint64{1},                                                                    // exists bit only
+			toClear:  []uint64{ShardWidth + 1, ShardWidth*2 + 1, ShardWidth*3 + 1, ShardWidth*4 + 1}, // sign bit, 1, 2, 4
 		},
 		{
 			columnID: 0,
 			bitDepth: 1,
 			value:    1,
-			toSet:    []uint64{0, ShardWidth},
-			toClear:  []uint64{},
+			toSet:    []uint64{0, ShardWidth * 2}, // exists bit, 1
+			toClear:  []uint64{ShardWidth},        // sign bit only
 		},
 		{
 			columnID: 0,
 			bitDepth: 4,
 			value:    10,
-			toSet:    []uint64{ShardWidth, ShardWidth * 3, ShardWidth * 4},
-			toClear:  []uint64{0, ShardWidth * 2},
+			toSet:    []uint64{0, ShardWidth * 3, ShardWidth * 5},              // exists bit, 2, 8
+			toClear:  []uint64{ShardWidth * 1, ShardWidth * 2, ShardWidth * 4}, // sign bit, 1, 4
 		},
 		{
 			columnID: 0,
 			bitDepth: 5,
 			value:    10,
-			toSet:    []uint64{ShardWidth, ShardWidth * 3, ShardWidth * 5},
-			toClear:  []uint64{0, ShardWidth * 2, ShardWidth * 4},
+			toSet:    []uint64{0, ShardWidth * 3, ShardWidth * 5},                              // exists bit, 2, 8
+			toClear:  []uint64{ShardWidth * 1, ShardWidth * 2, ShardWidth * 4, ShardWidth * 6}, // sign bit, 1, 4, 16
 		},
 	}
 
@@ -3138,7 +3141,7 @@ func TestImportClearRestart(t *testing.T) {
 
 				check(t, f, exp)
 
-				f2 := newFragment(f.path, "i", "f", viewStandard, 0)
+				f2 := newFragment(f.path, "i", "f", viewStandard, 0, 0)
 				f2.MaxOpN = maxOpN
 				f2.CacheType = f.CacheType
 
@@ -3172,7 +3175,7 @@ func TestImportClearRestart(t *testing.T) {
 
 				check(t, f2, exp)
 
-				f3 := newFragment(f2.path, "i", "f", viewStandard, 0)
+				f3 := newFragment(f2.path, "i", "f", viewStandard, 0, 0)
 				f3.MaxOpN = maxOpN
 				f3.CacheType = f.CacheType
 
@@ -3229,7 +3232,7 @@ func TestImportValueConcurrent(t *testing.T) {
 		i := i
 		eg.Go(func() error {
 			for j := uint64(0); j < 10; j++ {
-				err := f.importValue([]uint64{j}, []uint64{uint64(rand.Int63n(1000))}, 10, i%2 == 0)
+				err := f.importValue([]uint64{j}, []int64{int64(rand.Int63n(1000))}, 10, i%2 == 0)
 				if err != nil {
 					return err
 				}
@@ -3246,14 +3249,14 @@ func TestImportValueConcurrent(t *testing.T) {
 func TestImportMultipleValues(t *testing.T) {
 	tests := []struct {
 		cols      []uint64
-		vals      []uint64
+		vals      []int64
 		checkCols []uint64
 		checkVals []uint64
 		depth     uint
 	}{
 		{
 			cols:      []uint64{0, 0},
-			vals:      []uint64{97, 100},
+			vals:      []int64{97, 100},
 			depth:     7,
 			checkCols: []uint64{0},
 			checkVals: []uint64{100},

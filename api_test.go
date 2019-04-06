@@ -198,7 +198,7 @@ func TestAPI_ImportValue(t *testing.T) {
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
-		_, err = m0.API.CreateField(ctx, index, field, pilosa.OptFieldTypeInt(0, 100))
+		_, err = m0.API.CreateField(ctx, index, field, pilosa.OptFieldTypeInt(0))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}

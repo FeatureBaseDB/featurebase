@@ -11,11 +11,14 @@ message FieldOptions {
     string Type = 8;
 	string CacheType = 3;
 	uint32 CacheSize = 4;
-    int64 Min = 9;
-    int64 Max = 10;
 	string TimeQuantum = 5;
     bool Keys = 11;
     bool NoStandardView = 12;
+    int64 Base = 13;
+    uint64 BitDepth = 14;
+
+    int64 Min = 9 [deprecated=true];
+    int64 Max = 10 [deprecated=true];
 }
 
 message ImportResponse {

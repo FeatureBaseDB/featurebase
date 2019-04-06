@@ -799,8 +799,11 @@ func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, fiel
 		fieldOpt.CacheType = &opt.CacheType
 		fieldOpt.CacheSize = &opt.CacheSize
 	} else if fieldOpt.Type == "int" {
-		fieldOpt.Min = &opt.Min
-		fieldOpt.Max = &opt.Max
+		if opt.Base == 0 && opt.Min != 0 {
+			opt.Base = opt.Min
+		}
+		fieldOpt.Base = &opt.Base
+		fieldOpt.BitDepth = &opt.BitDepth
 	} else if fieldOpt.Type == "time" {
 		fieldOpt.TimeQuantum = &opt.TimeQuantum
 	}

@@ -758,7 +758,13 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	case pilosa.FieldTypeSet:
 		fos = append(fos, pilosa.OptFieldTypeSet(*req.Options.CacheType, *req.Options.CacheSize))
 	case pilosa.FieldTypeInt:
-		fos = append(fos, pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max))
+		var base int64
+		if v := req.Options.Base; v != nil {
+			base = *v
+		} else if v := req.Options.Min; v != nil {
+			base = *v
+		}
+		fos = append(fos, pilosa.OptFieldTypeInt(base))
 	case pilosa.FieldTypeTime:
 		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum, req.Options.NoStandardView))
 	case pilosa.FieldTypeMutex:
@@ -786,11 +792,15 @@ type fieldOptions struct {
 	Type           string              `json:"type,omitempty"`
 	CacheType      *string             `json:"cacheType,omitempty"`
 	CacheSize      *uint32             `json:"cacheSize,omitempty"`
-	Min            *int64              `json:"min,omitempty"`
-	Max            *int64              `json:"max,omitempty"`
+	Base           *int64              `json:"base,omitempty"`
+	BitDepth       *uint               `json:"bitDepth,omitempty"`
 	TimeQuantum    *pilosa.TimeQuantum `json:"timeQuantum,omitempty"`
 	Keys           *bool               `json:"keys,omitempty"`
 	NoStandardView bool                `json:"noStandardView,omitempty"`
+
+	// Deprecated. Use base/bit depth.
+	Min *int64 `json:"min,omitempty"`
+	Max *int64 `json:"max,omitempty"`
 }
 
 func (o *fieldOptions) validate() error {
@@ -812,7 +822,11 @@ func (o *fieldOptions) validate() error {
 		if o.CacheSize == nil {
 			o.CacheSize = &defaultCacheSize
 		}
-		if o.Min != nil {
+		if o.Base != nil {
+			return pilosa.NewBadRequestError(errors.New("base does not apply to field type set"))
+		} else if o.BitDepth != nil {
+			return pilosa.NewBadRequestError(errors.New("bit depth does not apply to field type set"))
+		} else if o.Min != nil {
 			return pilosa.NewBadRequestError(errors.New("min does not apply to field type set"))
 		} else if o.Max != nil {
 			return pilosa.NewBadRequestError(errors.New("max does not apply to field type set"))
@@ -824,10 +838,6 @@ func (o *fieldOptions) validate() error {
 			return pilosa.NewBadRequestError(errors.New("cacheType does not apply to field type int"))
 		} else if o.CacheSize != nil {
 			return pilosa.NewBadRequestError(errors.New("cacheSize does not apply to field type int"))
-		} else if o.Min == nil {
-			return pilosa.NewBadRequestError(errors.New("min is required for field type int"))
-		} else if o.Max == nil {
-			return pilosa.NewBadRequestError(errors.New("max is required for field type int"))
 		} else if o.TimeQuantum != nil {
 			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type int"))
 		}
@@ -836,6 +846,10 @@ func (o *fieldOptions) validate() error {
 			return pilosa.NewBadRequestError(errors.New("cacheType does not apply to field type time"))
 		} else if o.CacheSize != nil {
 			return pilosa.NewBadRequestError(errors.New("cacheSize does not apply to field type time"))
+		} else if o.Base != nil {
+			return pilosa.NewBadRequestError(errors.New("base does not apply to field type time"))
+		} else if o.BitDepth != nil {
+			return pilosa.NewBadRequestError(errors.New("bitDepth does not apply to field type time"))
 		} else if o.Min != nil {
 			return pilosa.NewBadRequestError(errors.New("min does not apply to field type time"))
 		} else if o.Max != nil {
@@ -850,7 +864,11 @@ func (o *fieldOptions) validate() error {
 		if o.CacheSize == nil {
 			o.CacheSize = &defaultCacheSize
 		}
-		if o.Min != nil {
+		if o.Base != nil {
+			return pilosa.NewBadRequestError(errors.New("base does not apply to field type mutex"))
+		} else if o.BitDepth != nil {
+			return pilosa.NewBadRequestError(errors.New("bitDepth does not apply to field type mutex"))
+		} else if o.Min != nil {
 			return pilosa.NewBadRequestError(errors.New("min does not apply to field type mutex"))
 		} else if o.Max != nil {
 			return pilosa.NewBadRequestError(errors.New("max does not apply to field type mutex"))
@@ -862,6 +880,10 @@ func (o *fieldOptions) validate() error {
 			return pilosa.NewBadRequestError(errors.New("cacheType does not apply to field type bool"))
 		} else if o.CacheSize != nil {
 			return pilosa.NewBadRequestError(errors.New("cacheSize does not apply to field type bool"))
+		} else if o.Base != nil {
+			return pilosa.NewBadRequestError(errors.New("base does not apply to field type bool"))
+		} else if o.BitDepth != nil {
+			return pilosa.NewBadRequestError(errors.New("bitDepth does not apply to field type bool"))
 		} else if o.Min != nil {
 			return pilosa.NewBadRequestError(errors.New("min does not apply to field type bool"))
 		} else if o.Max != nil {
