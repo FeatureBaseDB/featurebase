@@ -338,7 +338,7 @@ func (bcast) SendAsync(Message) error {
 	return nil
 }
 
-// SendTo is a test implemenetation of Broadcaster SendTo method.
+// SendTo is a test implementation of Broadcaster SendTo method.
 func (b bcast) SendTo(to *Node, m Message) error {
 	switch obj := m.(type) {
 	case *ResizeInstruction:
@@ -349,6 +349,20 @@ func (b bcast) SendTo(to *Node, m Message) error {
 	case *ResizeInstructionComplete:
 		coord := b.t.clusterByID(to.ID)
 		go coord.markResizeInstructionComplete(obj)
+	case *ClusterStatus:
+		// Apply the send message to the node.
+		for _, c := range b.t.Clusters {
+			if c.Node.ID == to.ID {
+				c.mergeClusterStatus(obj)
+			}
+		}
+		b.t.mu.RLock()
+		if obj.State == ClusterStateNormal && b.t.resizing {
+			close(b.t.resizeDone)
+		}
+		b.t.mu.RUnlock()
+	default:
+		panic(fmt.Sprintf("message not handled:\n%#v\n", obj))
 	}
 	return nil
 }
