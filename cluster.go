@@ -551,12 +551,6 @@ func (c *cluster) determineClusterState() (clusterState string) {
 	return ClusterStateStarting
 }
 
-func (c *cluster) status() *ClusterStatus {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.unprotectedStatus()
-}
-
 // unprotectedStatus returns the the cluster's status including what nodes it contains, its ID, and current state.
 func (c *cluster) unprotectedStatus() *ClusterStatus {
 	return &ClusterStatus{
