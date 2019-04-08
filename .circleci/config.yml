@@ -29,7 +29,7 @@ jobs:
     steps:
       - *fast-checkout
       - run: make check-license-headers
-  golangci-lint:
+  linter:
     <<: *defaults
     steps:
       - *fast-checkout
