@@ -132,9 +132,6 @@ workflows:
       - check-license-headers:
           requires:
             - setup
-      - golangci-lint:
-          requires:
-            - setup
       - test-build-arm:
           requires:
             - setup
@@ -162,7 +159,6 @@ workflows:
           requires:
             - linter
             - check-license-headers
-            - golangci-lint
             - test-golang-1.12
           filters:
             tags:
@@ -177,4 +173,3 @@ workflows:
             - linter
             - check-license-headers
             - test-golang-1.12
-            - golangci-lint
