@@ -360,7 +360,10 @@ func (b bcast) SendTo(to *Node, m Message) error {
 		// Apply the send message to the node.
 		for _, c := range b.t.Clusters {
 			if c.Node.ID == to.ID {
-				c.mergeClusterStatus(obj)
+				err := c.mergeClusterStatus(obj)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		b.t.mu.RLock()
