@@ -900,7 +900,7 @@ func TestClusterExhaustingConnections(t *testing.T) {
 			return nil
 		})
 	}
-	err = eg.Wait()
+	err := eg.Wait()
 	if err != nil {
 		t.Fatalf("setting lots of shards: %v", err)
 	}
@@ -955,7 +955,7 @@ func TestClusterExhaustingConnectionsImport(t *testing.T) {
 			return nil
 		})
 	}
-	err := eg.Wait()
+	err = eg.Wait()
 	if err != nil {
 		t.Fatalf("setting lots of shards: %v", err)
 	}
