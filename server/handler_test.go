@@ -248,6 +248,8 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != `{"results":[2]}`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
+		} else if w.Header().Get("Content-Type") != "application/json" {
+			t.Fatalf("unexpected header: %q", w.Header().Get("Content-Type"))
 		}
 
 	})
@@ -286,6 +288,8 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatal(err)
 		} else if rt, ok := resp.Results[0].(uint64); !ok || rt != 3 {
 			t.Fatalf("unexpected response type: %#v", resp.Results[0])
+		} else if w.Header().Get("Content-Type") != "application/protobuf" {
+			t.Fatalf("unexpected header: %q", w.Header().Get("Content-Type"))
 		}
 	})
 
