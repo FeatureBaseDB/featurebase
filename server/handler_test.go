@@ -445,6 +445,14 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	})
 
+	t.Run("Query empty", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader("")))
+		if body := w.Body.String(); body != `{"results":[]}`+"\n" {
+			t.Fatalf("unexpected body: %q", body)
+		}
+	})
+
 	t.Run("Method not allowed", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/index/i0/query", nil))
