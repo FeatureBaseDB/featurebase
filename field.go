@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -32,6 +33,7 @@ import (
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pilosa/pilosa/stats"
+	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -1218,10 +1220,14 @@ func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportO
 	return nil
 }
 
-func (f *Field) importRoaring(data []byte, shard uint64, viewName string, clear bool) error {
+func (f *Field) importRoaring(ctx context.Context, data []byte, shard uint64, viewName string, clear bool) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Field.importRoaring")
+	defer span.Finish()
+
 	if viewName == "" {
 		viewName = viewStandard
 	}
+	span.LogKV("view", viewName, "bytes", len(data), "shard", shard)
 	view, err := f.createViewIfNotExists(viewName)
 	if err != nil {
 		return errors.Wrap(err, "creating view")
@@ -1232,7 +1238,7 @@ func (f *Field) importRoaring(data []byte, shard uint64, viewName string, clear 
 		return errors.Wrap(err, "creating fragment")
 	}
 
-	if err := frag.importRoaring(data, clear); err != nil {
+	if err := frag.importRoaring(ctx, data, clear); err != nil {
 		return err
 	}
 

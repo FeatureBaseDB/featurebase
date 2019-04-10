@@ -1811,11 +1811,15 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 // importRoaring imports from the official roaring data format defined at
 // https://github.com/RoaringBitmap/RoaringFormatSpec or from pilosa's version
 // of the roaring format. The cache is updated to reflect the new data.
-func (f *fragment) importRoaring(data []byte, clear bool) error {
+func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "fragment.importRoaring")
+	defer span.Finish()
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	bm := roaring.NewBTreeBitmap()
+	span, ctx = tracing.StartSpanFromContext(ctx, "importRoaring.UnmarshalBinary")
 	err := bm.UnmarshalBinary(data)
+	span.Finish()
 	if err != nil {
 		return err
 	}
@@ -1851,16 +1855,25 @@ func (f *fragment) importRoaring(data []byte, clear bool) error {
 		if clear {
 			toSet, toClear = toClear, toSet
 		}
-		return f.importPositions(toSet, toClear, rowSet)
+		span, _ = tracing.StartSpanFromContext(ctx, "importRoaring.ImportPositions")
+		err := f.importPositions(toSet, toClear, rowSet)
+		span.Finish()
+		return err
 	}
 
 	if clear {
+		span, ctx = tracing.StartSpanFromContext(ctx, "importRoaringDifference")
 		bm = f.storage.Difference(bm)
+		span.Finish()
 	} else if f.storage.Containers.Size() >= bm.Containers.Size() {
+		span, ctx = tracing.StartSpanFromContext(ctx, "importRoaringStorageUIP")
 		f.storage.UnionInPlace(bm)
 		bm = f.storage
+		span.Finish()
 	} else {
+		span, ctx = tracing.StartSpanFromContext(ctx, "importRoaringBitmapUIP")
 		bm.UnionInPlace(f.storage)
+		span.Finish()
 	}
 
 	for rowID := range rowSet {
@@ -1869,7 +1882,9 @@ func (f *fragment) importRoaring(data []byte, clear bool) error {
 	}
 	f.cache.Recalculate()
 
+	span, _ = tracing.StartSpanFromContext(ctx, "importRoaring.WriteToFragment")
 	err = unprotectedWriteToFragment(f, bm)
+	span.Finish()
 	return err
 }
 

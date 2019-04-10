@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -745,7 +746,7 @@ func BenchmarkFragment_RepeatedSmallImports(b *testing.B) {
 							f := mustOpenFragment("i", "f", viewStandard, 0, "")
 							f.MaxOpN = opN
 							defer f.Clean(b)
-							err := f.importRoaring(getZipfRowsSliceRoaring(uint64(numRows), 1, 0, ShardWidth), false)
+							err := f.importRoaringT(getZipfRowsSliceRoaring(uint64(numRows), 1, 0, ShardWidth), false)
 							if err != nil {
 								b.Fatalf("importing base data for benchmark: %v", err)
 							}
@@ -781,14 +782,14 @@ func BenchmarkFragment_RepeatedSmallImportsRoaring(b *testing.B) {
 							f := mustOpenFragment("i", "f", viewStandard, 0, "")
 							f.MaxOpN = opN
 							defer f.Clean(b)
-							err := f.importRoaring(getZipfRowsSliceRoaring(numRows, 1, 0, ShardWidth), false)
+							err := f.importRoaringT(getZipfRowsSliceRoaring(numRows, 1, 0, ShardWidth), false)
 							if err != nil {
 								b.Fatalf("importing base data for benchmark: %v", err)
 							}
 							for i := 0; i < numUpdates; i++ {
 								data := getUpdataRoaring(numRows, bitsPerUpdate, int64(i))
 								b.StartTimer()
-								err := f.importRoaring(data, false)
+								err := f.importRoaringT(data, false)
 								b.StopTimer()
 								if err != nil {
 									b.Fatalf("doing small roaring import: %v", err)
@@ -1024,7 +1025,7 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 	if err != nil {
 		t.Fatalf("writing to bytes: %v", err)
 	}
-	err = f.importRoaring(b.Bytes(), false)
+	err = f.importRoaringT(b.Bytes(), false)
 	if err != nil {
 		t.Fatalf("importing data: %v", err)
 	}
@@ -2008,7 +2009,7 @@ func BenchmarkImportRoaring(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					f := mustOpenFragment("i", fmt.Sprintf("r%dc%s", numRows, cacheType), viewStandard, 0, cacheType)
 					b.StartTimer()
-					err := f.importRoaring(data, false)
+					err := f.importRoaringT(data, false)
 					if err != nil {
 						f.Clean(b)
 						b.Fatalf("import error: %v", err)
@@ -2041,7 +2042,7 @@ func BenchmarkImportRoaringConcurrent(b *testing.B) {
 					for j := 0; j < concurrency; j++ {
 						j := j
 						eg.Go(func() error {
-							return frags[j].importRoaring(data, false)
+							return frags[j].importRoaringT(data, false)
 						})
 					}
 					err := eg.Wait()
@@ -2072,7 +2073,7 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 					for i := 0; i < b.N; i++ {
 						for j := 0; j < concurrency; j++ {
 							frags[j] = mustOpenFragment("i", "f", viewStandard, uint64(j), CacheTypeRanked)
-							err := frags[j].importRoaring(data, false)
+							err := frags[j].importRoaringT(data, false)
 							if err != nil {
 								b.Fatalf("importing roaring: %v", err)
 							}
@@ -2082,7 +2083,7 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 						for j := 0; j < concurrency; j++ {
 							j := j
 							eg.Go(func() error {
-								return frags[j].importRoaring(updata, false)
+								return frags[j].importRoaringT(updata, false)
 							})
 						}
 						err := eg.Wait()
@@ -2138,12 +2139,12 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 					b.StopTimer()
 					for i := 0; i < b.N; i++ {
 						f := mustOpenFragment("i", fmt.Sprintf("r%dc%s", numRows, cacheType), viewStandard, 0, cacheType)
-						err := f.importRoaring(data, false)
+						err := f.importRoaringT(data, false)
 						if err != nil {
 							b.Errorf("import error: %v", err)
 						}
 						b.StartTimer()
-						err = f.importRoaring(updata, false)
+						err = f.importRoaringT(updata, false)
 						if err != nil {
 							f.Clean(b)
 							b.Errorf("import error: %v", err)
@@ -2174,12 +2175,12 @@ func BenchmarkUpdatePathological(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 		f := mustOpenFragment("i", "f", viewStandard, 0, DefaultCacheType)
-		err := f.importRoaring(exists, false)
+		err := f.importRoaringT(exists, false)
 		if err != nil {
 			b.Fatalf("importing roaring: %v", err)
 		}
 		b.StartTimer()
-		err = f.importRoaring(inc, false)
+		err = f.importRoaringT(inc, false)
 		if err != nil {
 			b.Fatalf("importing second: %v", err)
 		}
@@ -2196,7 +2197,7 @@ func initBigFrag() {
 		for i := int64(0); i < 10; i++ {
 			// 10 million rows, 1 bit per column, random seeded by i
 			data := getZipfRowsSliceRoaring(10000000, i, 0, ShardWidth)
-			err := f.importRoaring(data, false)
+			err := f.importRoaringT(data, false)
 			if err != nil {
 				panic(fmt.Sprintf("setting up fragment data: %v", err))
 			}
@@ -2273,7 +2274,7 @@ func BenchmarkImportRoaringIntoLargeFragment(b *testing.B) {
 			b.Fatalf("opening fragment: %v", err)
 		}
 		b.StartTimer()
-		err = nf.importRoaring(updata, false)
+		err = nf.importRoaringT(updata, false)
 		b.StopTimer()
 		if err != nil {
 			b.Fatalf("bulkImport: %v", err)
@@ -2286,7 +2287,7 @@ func BenchmarkImportRoaringIntoLargeFragment(b *testing.B) {
 func TestGetZipfRowsSliceRoaring(t *testing.T) {
 	f := mustOpenFragment("i", "f", viewStandard, 0, DefaultCacheType)
 	data := getZipfRowsSliceRoaring(10, 1, 0, ShardWidth)
-	err := f.importRoaring(data, false)
+	err := f.importRoaringT(data, false)
 	if err != nil {
 		t.Fatalf("importing roaring: %v", err)
 	}
@@ -2429,6 +2430,11 @@ func (f *fragment) Clean(t testing.TB) {
 	if errp != nil && !os.IsNotExist(errp) {
 		t.Fatalf("cleaning up fragment cache: %v", errp)
 	}
+}
+
+// importRoaringT calls importRoaring with context.Background() for convenience
+func (f *fragment) importRoaringT(data []byte, clear bool) error {
+	return f.importRoaring(context.Background(), data, clear)
 }
 
 // CleanKeep is just like Clean(), but it doesn't remove the
@@ -2622,7 +2628,7 @@ func TestFragment_RoaringImport(t *testing.T) {
 				if err != nil {
 					t.Fatalf("writing to buffer: %v", err)
 				}
-				err = f.importRoaring(buf.Bytes(), false)
+				err = f.importRoaringT(buf.Bytes(), false)
 				if err != nil {
 					t.Fatalf("importing roaring: %v", err)
 				}
@@ -2697,7 +2703,7 @@ func TestFragment_RoaringImportTopN(t *testing.T) {
 			if err != nil {
 				t.Fatalf("writing to buffer: %v", err)
 			}
-			err = f.importRoaring(buf.Bytes(), false)
+			err = f.importRoaringT(buf.Bytes(), false)
 			if err != nil {
 				t.Fatalf("importing roaring: %v", err)
 			}

@@ -290,6 +290,7 @@ func setUpImportOptions(opts ...ImportOption) (*ImportOptions, error) {
 // bitmap.
 func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, shard uint64, remote bool, req *ImportRoaringRequest) (err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "API.ImportRoaring")
+	span.LogKV("index", indexName, "field", fieldName)
 	defer span.Finish()
 
 	if err = api.validate(apiField); err != nil {
@@ -325,7 +326,7 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 					}
 					fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
 					if fileMagic == roaring.MagicNumber { // if pilosa roaring format
-						err = field.importRoaring(viewData, shard, viewName, req.Clear)
+						err = field.importRoaring(ctx, viewData, shard, viewName, req.Clear)
 						if err != nil {
 							return errors.Wrap(err, "importing pilosa roaring")
 						}
@@ -335,7 +336,7 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 						// field.importRoaring changes the standard roaring run format to pilosa roaring
 						data := make([]byte, len(viewData))
 						copy(data, viewData)
-						err = field.importRoaring(data, shard, viewName, req.Clear)
+						err = field.importRoaring(ctx, data, shard, viewName, req.Clear)
 						if err != nil {
 							return errors.Wrap(err, "importing standard roaring")
 						}

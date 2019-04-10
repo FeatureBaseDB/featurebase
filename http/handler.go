@@ -1617,15 +1617,23 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 		remote = true
 	}
 
+	ctx := r.Context()
+
 	// Read entire body.
+	span, _ := tracing.StartSpanFromContext(ctx, "ioutil.ReadAll-Body")
 	body, err := ioutil.ReadAll(r.Body)
+	span.LogKV("bodySize", len(body))
+	span.Finish()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	req := &pilosa.ImportRoaringRequest{}
-	if err := h.api.Serializer.Unmarshal(body, req); err != nil {
+	span, _ = tracing.StartSpanFromContext(ctx, "Unmarshal")
+	err = h.api.Serializer.Unmarshal(body, req)
+	span.Finish()
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -1639,7 +1647,7 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 
 	resp := &pilosa.ImportResponse{}
 	// TODO give meaningful stats for import
-	err = h.api.ImportRoaring(r.Context(), indexName, fieldName, shard, remote, req)
+	err = h.api.ImportRoaring(ctx, indexName, fieldName, shard, remote, req)
 	if err != nil {
 		resp.Err = err.Error()
 		if _, ok := err.(pilosa.BadRequestError); ok {
@@ -1648,6 +1656,7 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}
+
 	// Marshal response object.
 	buf, err := h.api.Serializer.Marshal(resp)
 	if err != nil {
