@@ -676,3 +676,55 @@ func TestPQLDeepEquality(t *testing.T) {
 		})
 	}
 }
+
+func TestPQLPanic(t *testing.T) {
+	tests := []struct {
+		name string
+		call string
+	}{
+		// case 1
+		{
+			name: "StringConditional",
+			call: "Row(a==foo, a==bar)",
+		},
+		// case 2
+		{
+			name: "StringValue",
+			call: "Row(a=foo, a=bar)",
+		},
+		// case 3
+		{
+			name: "IntConditional",
+			call: "Row(a>5, a>6)",
+		},
+		// case 4
+		{
+			name: "IntValue",
+			call: "Row(a=7, a=8)",
+		},
+		// case 5
+		{
+			name: "List",
+			call: "Row(a=[7], a=[7,8])",
+		},
+	}
+	for i, test := range tests {
+		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
+			var v interface{}
+			func() {
+				defer func() { v = recover() }()
+
+				q, err := ParseString(test.call)
+				if err != nil {
+					t.Fatalf("parsing query '%s': %v", test.call, err)
+				}
+				_ = q
+			}()
+
+			if !reflect.DeepEqual(v, "multiple instances of argument 'a' provided") {
+				t.Fatalf("unexpected panic value: %#v", v)
+			}
+
+		})
+	}
+}
