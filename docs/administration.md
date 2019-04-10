@@ -56,7 +56,7 @@ When importing large datasets remember it is much faster to pre sort the data by
 pilosa import --sort -i project -f stargazer project-stargazer.csv
 ```
 
-Official Pilosa client libraries support importing data. You can find the corresponding documentation at:
+We suggest importing the data using official Pilosa client libraries. You can find the corresponding documentation at:
 * [Go client imports documentation](https://github.com/pilosa/go-pilosa/blob/master/docs/imports-exports.md)
 * [Java client imports documentation](https://github.com/pilosa/java-pilosa/blob/master/docs/imports.md)
 * [Python client imports documentation](https://github.com/pilosa/python-pilosa/blob/master/docs/imports.md)
