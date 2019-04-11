@@ -45,18 +45,19 @@ type QueryResponse struct {
 
 // MarshalJSON marshals QueryResponse into a JSON-encoded byte slice
 func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
-	var output struct {
-		Results        []interface{}    `json:"results,omitempty"`
-		ColumnAttrSets []*ColumnAttrSet `json:"columnAttrs,omitempty"`
-		Err            string           `json:"error,omitempty"`
-	}
-	output.Results = resp.Results
-	output.ColumnAttrSets = resp.ColumnAttrSets
-
 	if resp.Err != nil {
-		output.Err = resp.Err.Error()
+		return json.Marshal(struct {
+			Err string `json:"error"`
+		}{Err: resp.Err.Error()})
 	}
-	return json.Marshal(output)
+
+	return json.Marshal(struct {
+		Results        []interface{}    `json:"results"`
+		ColumnAttrSets []*ColumnAttrSet `json:"columnAttrs,omitempty"`
+	}{
+		Results:        resp.Results,
+		ColumnAttrSets: resp.ColumnAttrSets,
+	})
 }
 
 type Handler interface {

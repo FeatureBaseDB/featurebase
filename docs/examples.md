@@ -83,10 +83,10 @@ lfm := pdk.LinearFloatMapper{
 
 `Min` and `Max` define the linear function, and `Res` determines the maximum allowed value for the output row ID - we chose these values to produce a “round to nearest integer” behavior. Other predefined mappers have their own specific parameters, usually two or three.
 
-This mapper function is the core operation, but we need a few other pieces to define the overall process, which is encapsulated in the BitMapper object. This object defines which field(s) of the input data source to use (`Fields`), how to parse them (`Parsers`), what mapping to use (`Mapper`), and the name of the field to use (`Frame`).  TODO update so this makes sense
+This mapper function is the core operation, but we need a few other pieces to define the overall process, which is encapsulated in the ColumnMapper object. This object defines which field(s) of the input data source to use (`Fields`), how to parse them (`Parsers`), what mapping to use (`Mapper`), and the name of the field to use (`Field`). <!-- TODO update so this makes sense -->
 ```go
-pdk.BitMapper{
-    Frame:   "dist_miles",
+pdk.ColumnMapper{
+    Field:   "dist_miles",
     Mapper:  lfm,
     Parsers: []pdk.Parser{pdk.FloatParser{}},
     Fields:  []int{fields["trip_distance"]},
@@ -107,9 +107,9 @@ These same objects are represented in the JSON definition file:
             "Res": 3600
         }
     ],
-    "BitMappers": [
+    "ColumnMappers": [
         {
-            "Frame": "dist_miles",
+            "Field": "dist_miles",
             "Mapper": {
                 "Name": "lfm0"
             },
@@ -122,9 +122,9 @@ These same objects are represented in the JSON definition file:
 }
 ```
 
-Here, we define a list of Mappers, each including a name, which we use to refer to the mapper later, in the list of BitMappers. We can also do this with Parsers, but a few simple Parsers that need no configuration are available by default. We also have a list of Fields, which is simply a map of field names (in the source data) to column indices (in Pilosa). We use these names in the BitMapper definitions to keep things human-readable.
+Here, we define a list of Mappers, each including a name, which we use to refer to the mapper later, in the list of ColumnMappers. We can also do this with Parsers, but a few simple Parsers that need no configuration are available by default. We also have a list of Fields, which is simply a map of field names (in the source data) to column indices (in Pilosa). We use these names in the ColumnMapper definitions to keep things human-readable.
 
-**total_amount_dollars:** Here we use the rounding mapping again, so each row represents rides with a total cost that rounds to the row's ID. The BitMapper definition is very similar to the previous one.
+**total_amount_dollars:** Here we use the rounding mapping again, so each row represents rides with a total cost that rounds to the row's ID. The ColumnMapper definition is very similar to the previous one.
 
 **passenger_count:** This column contains small integers, so we use one of the simplest possible mappings: the column value is the row ID.
 
@@ -132,7 +132,7 @@ Here, we define a list of Mappers, each including a name, which we use to refer 
 
 When working with a composite data type like a timestamp, there are plenty of mapping options. In this case, we expect to see interesting periodic trends, so we want to encode the cyclic components of time in a way that allows us to look at them independently during analysis.
 
-We do this by storing time data in four separate fields for each timestamp: one each for the year, month, day, and time of day. The first three are mapped directly. For example, a ride with a date of 2015/06/24 will have a bit set in row 2015 of field "year", row 6 of field "month", and row 24 of field "day". 
+We do this by storing time data in four separate fields for each timestamp: one each for the year, month, day, and time of day. The first three are mapped directly. For example, a ride with a date of 2015/06/24 will have a bit set in row 2015 of field "year", row 6 of field "month", and row 24 of field "day".
 
 We might continue this pattern with hours, minutes, and seconds, but we don't have much use for that level of precision here, so instead we use a "bucketing" approach. That is, we pick a resolution (30 minutes), divide the day into buckets of that size, and create a row for each one. So a ride with a time of 6:45AM has a bit set in row 13 of field "time_of_day".
 
@@ -189,16 +189,26 @@ TopN(pickup_grid_id)
 Average of `total_amount` per `passenger_count` can be computed with some postprocessing. We use a small number of `TopN` calls to retrieve counts of rides by passenger_count, then use those counts to compute an average.
 
 ```python
-queries = ''
+import pilosa
+
+client = pilosa.Client()
+schema = client.schema()
+taxi = schema.index("taxi")
+passenger_count = taxi.field("passenger_count")
+total_amount_dollars = taxi.field("total_amount_dollars")
+
+queries = []
 pcounts = range(10)
 for i in pcounts:
-    queries += "TopN(Row(passenger_count=%d), total_amount_dollars)" % i
+    queries.append(total_amount_dollars.topn(passenger_count.row(i))
+query = taxi.batch_query(**queries)
+results = client.query(query)
 resp = requests.post(qurl, data=queries)
 
 average_amounts = []
-for pcount, topn in zip(pcounts, resp.json()['results']):
-    wsum = sum([r['count'] * r['key'] for r in topn])
-    count = sum([r['count'] for r in topn])
+for pcount, result in zip(pcounts, resp.results):
+    wsum = sum([r.count * r.id for r in result.count_items])
+    count = sum([r.count for r in result.count_items])
     average_amounts.append(float(wsum)/count)
 ```
 
@@ -206,127 +216,6 @@ for pcount, topn in zip(pcounts, resp.json()['results']):
 Note that the <a href="../data-model/#bsi-range-encoding">BSI</a>-powered <a href="../query-language/#sum">Sum</a> query now provides an alternative approach to this kind of query.
 </div>
 
+<!-- Disabled until we have the time to update the Jupyter notebook --YT
 For more examples and details, see this [ipython notebook](https://github.com/pilosa/notebooks/blob/master/taxi-use-case.ipynb).
-
-<!--
-
-### Chemical similarity search
-
-<div class="warning">
-This example uses the inverse frames feature, which is deprecated as of v0.9.0. The example will soon be updated to reflect the current Pilosa API.
-</div>
-
-#### Overview
-
-The notion of chemical similarity (or molecular similarity) plays an important role in predicting the properties of chemical compounds, designing chemicals with a predefined set of properties, and—especially—conducting drug design studies. All of these are accomplished by screening large indexes containing structures of available or potentially available chemicals.
-
-We'd like to use Pilosa to search through millions of molecules and find those most similar to a given molecule. Others have tried to solve this chemical similarity search problem using databases (MongoDB, PostgreSQL), so it will be interesting to compare those results to Pilosa using the same data set.
-
-Calculation of the similarity of any two molecules is achieved by comparing their molecular fingerprints. These fingerprints are comprised of structural information about the molecule which has been encoded as a series of bits. The most commonly used algorithm to calculate the similarity is the Tanimoto coefficient.
-```
-T(A,B)= Intersect(A,B) / (Count(A) + Count(B) - Intersect(A,B))
-```
-
-A and B are sets of fingerprint bits on in the fingerprints of molecule A and molecule B. AB is the set of common bits of fingerprints of both molecule A and B. The Tanimoto coefficient ranges from 0 when the fingerprints have no bits in common, to 1 when the fingerprints are identical.
-
-All source code to calculate tanimoto for molecule fingerprint using Pilosa is available in a [Github repository](https://github.com/pilosa/chem-usecase).
-
-#### Data model
-
-We use the [latest ChEMBL release](ftp://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/releases/) chembl_22.sdf for test data. Each molecule in the SD file gives us the canonical isomeric SMILES (Simplified molecular-input line-entry system) and chembl_id. 
-
-Because Pilosa store information as a series of bits, we use RDKit in Python to convert molecules from their SMILES encoding to Morgan fingerprints, which are arrays of “on” bit positions.
-
-Given a SMILES encoded molecule and a similarity threshold, we want to retrieve all molecule ids (or SMILES) that have a similarity percentage greater than or equal to the similarity threshold. For example, given a molecule with:
-```
-SMILES = "IC=C1/CCC(C(=O)O1)c2cccc3ccccc23"
-threshold = 90
-```
-
-return the set of molecules that have at least a 90% similarity with the given molecule.
-
-#### Import process
-
-To import data into Pilosa, we need to get chembl_id and SMILES from SD files, convert SMILES to Morgan fingerprints, and then write chembl_id and fingerprint to Pilosa. The fastest way is to extracted chembl_id and SMILES from SD file to csv file, then use the `pilosa import` command to import the csv file into Pilosa. Since chembl_id in the SD file is always paired with CHEMBL, e.g CHEMBL6329, and because Pilosa doesn't support string keys, we will ignore CHEMBL and instead use chembl_id as an integer key.
-
-For the `mole` index, each row in the csv file has the format 'chembl_id, position_id' by running the following command from Chem-usecase:
-```
-python import_from_sdf.py -p <path_to_sdf_file> -file id_fingerprint.csv
-```
-
-
-First, follow the instruction in the [getting started](../getting-started/) guide to run a Pilosa server. Then create the indexes and frames according to the schemas outlined in the Data Model section above.
-The option cacheSize should be set as amount of chembl_id to calculate effectively for the whole data set, so we need to calculate amount of chembl_id. We have total 1678393 chembl_id (it will displayed after import_from_sdf.py script running), then the cacheSize should be >= 1678393
-```
-curl localhost:10101/index/mole \
-     -X POST
-
-curl localhost:10101/index/mole/frame/fingerprint \
-     -X POST \
-     -d '{"options": {"inverseEnabled": true, "cacheSize": 2000000, "cacheType": "ranked"}}'
-
-```
-
-Run the following commands to import the csv data into the `mole` index:
-```
-pilosa import -d mole -f fingerprint id_fingerprint.csv
-```
-
-#### Queries
-
-Get chembl_id from a given SMILES:
-```
-python get_mol_fr_smile.py -s "I\C=C/1\CCC(C(=O)O1)c2cccc3ccccc23"
-```
-
-Return chembl_id = 6223. This script uses Pilosa’s Intersection query to get all chemlb_id that have positions are on, which following these steps:
-
-* Convert SMILES to fingerprint bit "on" positions
-
-    ```python
-    from rdkit import Chem
-    from rdkit.Chem import AllChem
-    mol=Chem.MolFromSmiles("I\C=C/1\CCC(C(=O)O1)c2cccc3ccccc23")
-    fp = list(AllChem.GetMorganFingerprintAsBitVect(mol, 2, nBits=4096).GetOnBits())
-    ```
-        
-* From list of chembl_id, query all "on" position from mol index, if the length of array of "on" position is matched to len(fp) then return that chembl_id, otherwise the given SMILES does not exist.
-
-    ```python    
-    for m in mole_ids:
-        mol = requests.post("http://%s/index/%s/query" % (host, db), data="Bitmap(row=%s, frame=%s)" % (m, frame)).json()["results"][0]["bits"]
-        existed_mol = False
-        if len(mol) == len(fp):
-            found = m
-            existed_mol = True
-            break
-    ```
-
-Retrieve molecule_ids that have similarity with SMILES="I\C=C/1\CCC(C(=O)O1)c2cccc3ccccc23" and similarity threshold = 70%
-```
-python similar.py -s "I\C=C/1\CCC(C(=O)O1)c2cccc3ccccc23" -t 70
-```
-
-Return chembl_id = [6223, 269758, 6206, 6228]. This script uses Pilosa’s TopN query to get all chemlb_id that have position is on, which following these steps:
-
-* Get chembl_id from a SMILES (steps discussed above)
-
-* Query Pilosa’s TopN to get list of similarity chembl_id
-    ```python
-    query_string = 'TopN(Bitmap(row=6223, frame="fingerprint"), frame="fingerprint", n=2000000, tanimotoThreshold=70)'
-    topn = requests.post("http://127.0.0.1:10101/index/mol/query" , data=query_string)
-    ```
-
-#### Benchmark
-
-To run benchmark for specific chembl_id for different similarity threshold at percentage of [50, 70, 75, 80, 85, 90], run following command:
-```
-python benchmarks.py -id 6223
-```
-
-As Matt Swain’s blog post also did a great job using mongoDB for chemical similarity search, we compared benchmark on 500000 molecules between mongoDB aggregation framework with Pilosa.
-
-Both using the same molecule, Morgan fingerprint folded to fixed lengths of 4096 bits and were run on a MacBook Pro with a 2.8 GHz 2-core Intel Core i7 processor, memory of 16 GB 1600 MHz DDR3, single host cluster
-
-
 -->
