@@ -1,6 +1,21 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pql
 
 import (
+	"fmt"
 	"reflect"
 	"strconv"
 	"testing"
@@ -677,7 +692,7 @@ func TestPQLDeepEquality(t *testing.T) {
 	}
 }
 
-func TestPQLPanic(t *testing.T) {
+func TestDuplicateArgError(t *testing.T) {
 	tests := []struct {
 		name string
 		call string
@@ -710,21 +725,13 @@ func TestPQLPanic(t *testing.T) {
 	}
 	for i, test := range tests {
 		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
-			var v interface{}
-			func() {
-				defer func() { v = recover() }()
-
-				q, err := ParseString(test.call)
-				if err != nil {
-					t.Fatalf("parsing query '%s': %v", test.call, err)
-				}
-				_ = q
-			}()
-
-			if !reflect.DeepEqual(v, "multiple instances of argument 'a' provided") {
-				t.Fatalf("unexpected panic value: %#v", v)
+			_, err := ParseString(test.call)
+			expErr := fmt.Sprintf("%s: a", duplicateArgErrorMessage)
+			if err == nil {
+				t.Fatalf("expected error for duplicate argument: %s", test.call)
+			} else if err.Error() != expErr {
+				t.Fatalf("expected error: %s, but got: %v", expErr, err.Error())
 			}
-
 		})
 	}
 }

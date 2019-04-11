@@ -119,7 +119,7 @@ func (q *Query) addField(field string) {
 // key/value.
 func (q *Query) validateArgField(elem *callStackElem) {
 	if _, exists := elem.call.Args[elem.lastField]; exists {
-		panic(fmt.Sprintf("multiple instances of argument '%s' provided", elem.lastField))
+		panic(fmt.Sprintf("%s: %s", duplicateArgErrorMessage, elem.lastField))
 	}
 }
 
