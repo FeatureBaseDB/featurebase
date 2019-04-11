@@ -6,6 +6,7 @@ VERSION_ID = $(if $(ENTERPRISE_ENABLED),enterprise-)$(VERSION)-$(GOOS)-$(GOARCH)
 BRANCH := $(if $(TRAVIS_BRANCH),$(TRAVIS_BRANCH),$(if $(CIRCLE_BRANCH),$(CIRCLE_BRANCH),$(shell git rev-parse --abbrev-ref HEAD)))
 BRANCH_ID := $(BRANCH)-$(GOOS)-$(GOARCH)
 BUILD_TIME := $(shell date -u +%FT%T%z)
+SHARD_WIDTH = 20
 LDFLAGS="-X github.com/pilosa/pilosa.Version=$(VERSION) -X github.com/pilosa/pilosa.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa.Enterprise=$(if $(ENTERPRISE_ENABLED),1)"
 GO_VERSION=latest
 ENTERPRISE ?= 0
@@ -14,6 +15,7 @@ RELEASE ?= 0
 RELEASE_ENABLED = $(subst 0,,$(RELEASE))
 BUILD_TAGS += $(if $(ENTERPRISE_ENABLED),enterprise)
 BUILD_TAGS += $(if $(RELEASE_ENABLED),release)
+BUILD_TAGS += shardwidth$(SHARD_WIDTH)
 export GO111MODULE=on
 
 # Run tests and compile Pilosa
@@ -29,7 +31,7 @@ vendor: go.mod
 
 # Run test suite
 test:
-	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS)
+	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS) 
 
 bench:
 	go test ./... -bench=. -run=NoneZ -timeout=127m $(TESTFLAGS)

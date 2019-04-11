@@ -44,6 +44,12 @@ jobs:
       - *fast-checkout
       - run: sudo apt-get install lsof
       - run: make test
+  test-golang-1.12-shard22: &base-test
+    <<: *defaults
+    steps:
+      - *fast-checkout
+      - run: sudo apt-get install lsof
+      - run: make test SHARD_WIDTH=22
   test-golang-1.12-race:
     <<: *defaults
     steps:

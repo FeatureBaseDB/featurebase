@@ -85,10 +85,10 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	}
 
 	// Write data on first node.
-	if _, err := m0.Query("i", "", `
+	if _, err := m0.Query("i", "", fmt.Sprintf(`
             Set(1, f=1)
-            Set(2400000, f=1)
-        `); err != nil {
+            Set(%d, f=1)
+        `, 2*pilosa.ShardWidth+1)); err != nil {
 		t.Fatal(err)
 	}
 

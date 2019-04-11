@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	gohttp "net/http"
@@ -109,8 +110,8 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		body := w.Body.String()
-		target := `{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":1048576},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":1048576}]}
-`
+		target := fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%[1]d}]}
+`, pilosa.ShardWidth)
 		if body != target {
 			t.Fatalf("%s != %s", target, body)
 		}
@@ -298,7 +299,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader("Row(f0=30)")))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if body := w.Body.String(); body != `{"results":[{"attrs":{},"columns":[1048577,1048578,3145732]}]}`+"\n" {
+		} else if body := w.Body.String(); body != fmt.Sprintf(`{"results":[{"attrs":{},"columns":[%d,%d,%d]}]}`, pilosa.ShardWidth+1, pilosa.ShardWidth+2, 3*pilosa.ShardWidth+4)+"\n" {
 			t.Fatalf("unexpected body: %s", body)
 		}
 	})
@@ -315,10 +316,11 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("ColumnAttrs_JSON", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query?columnAttrs=true", strings.NewReader("Row(f0=30)")))
+		exp := fmt.Sprintf(`{"results":[{"attrs":{"a":"b","c":1,"d":true},"columns":[%[1]d,%[2]d,%[3]d]}],"columnAttrs":[{"id":%[1]d,"attrs":{"x":"y"}},{"id":%[2]d,"attrs":{"y":123,"z":false}}]}`, pilosa.ShardWidth+1, pilosa.ShardWidth+2, 3*pilosa.ShardWidth+4) + "\n"
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d. body: %s", w.Code, w.Body.String())
-		} else if body := w.Body.String(); body != `{"results":[{"attrs":{"a":"b","c":1,"d":true},"columns":[1048577,1048578,3145732]}],"columnAttrs":[{"id":1048577,"attrs":{"x":"y"}},{"id":1048578,"attrs":{"y":123,"z":false}}]}`+"\n" {
-			t.Fatalf("unexpected body: %s", body)
+		} else if body := w.Body.String(); body != exp {
+			t.Fatalf("unexpected body: \n%s\ngot:\n%s", body, exp)
 		}
 	})
 

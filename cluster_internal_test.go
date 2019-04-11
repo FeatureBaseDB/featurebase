@@ -157,15 +157,15 @@ func TestFragSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = field.SetBit(1, 1300000, nil)
+	_, err = field.SetBit(1, ShardWidth+1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = field.SetBit(1, 2600000, nil)
+	_, err = field.SetBit(1, ShardWidth*2+1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = field.SetBit(1, 3900000, nil)
+	_, err = field.SetBit(1, ShardWidth*3+1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -755,7 +755,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 			t.Fatal(err)
 		}
 		tc.SetBit("i", "f", 1, 101, nil)
-		tc.SetBit("i", "f", 1, 1300000, nil)
+		tc.SetBit("i", "f", 1, ShardWidth+1, nil)
 
 		// Before starting the resize, get the CheckSum to use for
 		// comparison later.
