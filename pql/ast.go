@@ -103,12 +103,23 @@ func (q *Query) endConditional() {
 
 func (q *Query) addField(field string) {
 	elem := q.lastCallStackElem()
-	if elem == nil || elem.lastField != "" {
+	if elem == nil {
+		panic(fmt.Sprintf("addField called with '%s' while element is nil", field))
+	} else if elem.lastField != "" {
 		panic(fmt.Sprintf("addField called with '%s' while field is not empty, it's: %s", field, elem.lastField))
 	}
 	elem.lastField = field
 	if elem.call.Args == nil {
 		elem.call.Args = make(map[string]interface{})
+	}
+}
+
+// validateArgField ensures that field does not already
+// exist as a key in the Args map before adding the new
+// key/value.
+func (q *Query) validateArgField(elem *callStackElem) {
+	if _, exists := elem.call.Args[elem.lastField]; exists {
+		panic(fmt.Sprintf("%s: %s", duplicateArgErrorMessage, elem.lastField))
 	}
 }
 
@@ -123,11 +134,13 @@ func (q *Query) addVal(val interface{}) {
 		return
 	}
 	if elem.lastCond != ILLEGAL {
+		q.validateArgField(elem) // case 1
 		elem.call.Args[elem.lastField] = &Condition{
 			Op:    elem.lastCond,
 			Value: val,
 		}
 	} else {
+		q.validateArgField(elem) // case 2
 		elem.call.Args[elem.lastField] = val
 	}
 	elem.lastField = ""
@@ -162,11 +175,13 @@ func (q *Query) addNumVal(val string) {
 		}
 		return
 	} else if elem.lastCond != ILLEGAL {
+		q.validateArgField(elem) // case 3
 		elem.call.Args[elem.lastField] = &Condition{
 			Op:    elem.lastCond,
 			Value: ival,
 		}
 	} else {
+		q.validateArgField(elem) // case 4
 		elem.call.Args[elem.lastField] = ival
 	}
 	elem.lastField = ""
@@ -175,6 +190,7 @@ func (q *Query) addNumVal(val string) {
 
 func (q *Query) startList() {
 	elem := q.lastCallStackElem()
+	q.validateArgField(elem) // case 5
 	if elem.lastCond != ILLEGAL {
 		elem.call.Args[elem.lastField] = &Condition{
 			Op:    elem.lastCond,
