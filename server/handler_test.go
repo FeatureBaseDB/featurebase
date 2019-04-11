@@ -249,6 +249,8 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		} else if body := w.Body.String(); body != `{"results":[2]}`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
+		} else if w.Header().Get("Content-Type") != "application/json" {
+			t.Fatalf("unexpected header: %q", w.Header().Get("Content-Type"))
 		}
 
 	})
@@ -287,6 +289,8 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatal(err)
 		} else if rt, ok := resp.Results[0].(uint64); !ok || rt != 3 {
 			t.Fatalf("unexpected response type: %#v", resp.Results[0])
+		} else if w.Header().Get("Content-Type") != "application/protobuf" {
+			t.Fatalf("unexpected header: %q", w.Header().Get("Content-Type"))
 		}
 	})
 
@@ -444,6 +448,14 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatal(err)
 		} else if s := resp.Err.Error(); s != `executing: map reduce: field not found` {
 			t.Fatalf("unexpected error: %s", s)
+		}
+	})
+
+	t.Run("Query empty", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader("")))
+		if body := w.Body.String(); body != `{"results":[]}`+"\n" {
+			t.Fatalf("unexpected body: %q", body)
 		}
 	})
 

@@ -1720,6 +1720,17 @@ func TestExecutor_Execute_Range_Deprecated(t *testing.T) {
 				t.Fatalf("unexpected columns: %+v", columns)
 			}
 		})
+
+		rq2 := []string{
+			`Range(f=1, 1999-12-31T00:00, 2002-01-01T03:00)`,
+		}
+		responses = runCallTest(t, writeQuery, rq2,
+			nil, pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
+		t.Run("OldRange", func(t *testing.T) {
+			if columns := responses[0].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{2, 3, 4, 5, 6, 7}) {
+				t.Fatalf("unexpected columns: %+v", columns)
+			}
+		})
 	})
 
 	t.Run("RowIDColumnKey", func(t *testing.T) {

@@ -56,6 +56,11 @@ When importing large datasets remember it is much faster to pre sort the data by
 pilosa import --sort -i project -f stargazer project-stargazer.csv
 ```
 
+We recommend importing data using official Pilosa client libraries. You can find the corresponding documentation at:
+* [Go client imports documentation](https://github.com/pilosa/go-pilosa/blob/master/docs/imports-exports.md)
+* [Java client imports documentation](https://github.com/pilosa/java-pilosa/blob/master/docs/imports.md)
+* [Python client imports documentation](https://github.com/pilosa/python-pilosa/blob/master/docs/imports.md)
+
 ##### Importing Integer Values
 
 If you are using [integer](../data-model/#bsi-range-encoding) field values, the CSV file should be in the format `Column,Value`.
@@ -283,13 +288,13 @@ Each Pilosa cluster is configured by default to share anonymous usage details wi
 - **NumViews:** Number of views in the Cluster.
 - **OpenFiles:** Open file handle count.
 - **GoRoutines:** Go routine count.
- 
+
 You can opt-out of the Pilosa diagnostics reporting by setting the command line configuration option `--metric.diagnostics=false`, the `PILOSA_METRIC_DIAGNOSTICS` environment variable, or the TOML configuration file `[metric]` `diagnostics` option.
 
 ### Metrics
 
 Pilosa can be configured to emit metrics pertaining to its internal processes in one of two formats: Expvar or StatsD. Metric recording is disabled by default.
-The metrics configuration options are: 
+The metrics configuration options are:
 
   - [Host](../configuration/#metric-host): specify host that receives metric events
   - [Poll Interval](../configuration/#metric-poll-interval): specify polling interval for runtime metrics

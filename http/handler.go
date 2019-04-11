@@ -964,10 +964,12 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*pilosa.QueryRequest, er
 }
 
 // writeQueryResponse writes the response from the executor to w.
-func (h *Handler) writeQueryResponse(w io.Writer, r *http.Request, resp *pilosa.QueryResponse) error {
+func (h *Handler) writeQueryResponse(w http.ResponseWriter, r *http.Request, resp *pilosa.QueryResponse) error {
 	if !validHeaderAcceptJSON(r.Header) {
+		w.Header().Set("Content-Type", "application/protobuf")
 		return h.writeProtobufQueryResponse(w, resp)
 	}
+	w.Header().Set("Content-Type", "application/json")
 	return h.writeJSONQueryResponse(w, resp)
 }
 

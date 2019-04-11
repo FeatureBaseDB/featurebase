@@ -630,6 +630,53 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 	}
 }
 
+func TestRemoveConcurrentIndexCreation(t *testing.T) {
+	cluster := test.MustNewCluster(t, 3)
+	for _, c := range cluster {
+		c.Config.Cluster.ReplicaN = 2
+	}
+	err := cluster.Start()
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
+	}
+
+	var wait = true
+	for wait {
+		wait = false
+		for _, node := range cluster {
+			if node.API.State() != pilosa.ClusterStateNormal {
+				wait = true
+			}
+		}
+		time.Sleep(time.Millisecond * 1)
+	}
+
+	errc := make(chan error)
+	go func() {
+		_, err := cluster[0].API.CreateIndex(context.Background(), "blah", pilosa.IndexOptions{})
+		errc <- err
+	}()
+
+	if _, err := cluster[0].API.RemoveNode(cluster[2].API.Node().ID); err != nil {
+		t.Fatalf("removing node: %v", err)
+	}
+
+	for i := 0; cluster[0].API.State() != pilosa.ClusterStateNormal; i++ {
+		time.Sleep(time.Millisecond)
+		if i > 10 {
+			t.Fatalf("expected state to be DEGRADED, but got %s", cluster[0].API.State())
+		}
+	}
+
+	hosts := cluster[0].API.Hosts(context.Background())
+	if len(hosts) != 2 {
+		t.Fatalf("unexpected hosts: %v", hosts)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("error from index creation: %v", err)
+	}
+}
+
 // Ensure program imports timestamps as UTC.
 func TestMain_ImportTimestamp(t *testing.T) {
 	m := test.MustRunCommand()

@@ -589,7 +589,8 @@ func (s *Server) SendSync(m Message) error {
 		return fmt.Errorf("marshaling message: %v", err)
 	}
 	msg = append([]byte{getMessageType(m)}, msg...)
-	for _, node := range s.cluster.nodes {
+
+	for _, node := range s.cluster.Nodes() {
 		node := node
 		// Don't forward the message to ourselves.
 		if s.uri == node.URI {
