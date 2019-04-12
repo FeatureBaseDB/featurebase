@@ -155,6 +155,7 @@ gometalinter: require-gometalinter vendor
 	    ./...
 
 # Verify that all Go files have license header
+check-license-headers: SHELL:=/bin/bash
 check-license-headers:
 	@! find . -name '*.go' | grep -v '^./vendor' | while read fn;\
 	    do [[ `head -13 $$fn | shasum | cut -f 1 -d " "` == $(LICENSE_HASH) ]] || echo $$fn; done | \
