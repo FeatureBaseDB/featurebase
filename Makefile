@@ -159,7 +159,7 @@ check-license-headers: SHELL:=/bin/bash
 check-license-headers:
 	@! find . -name '*.go' | grep -v '^./vendor' | while read fn;\
 	    do [[ `head -13 $$fn | shasum | cut -f 1 -d " "` == $(LICENSE_HASH) ]] || echo $$fn; done | \
-	    grep -v apimethod_string.go | grep -v pb.go | grep -v peg.go | grep -v lru.go | grep -v btree
+	    grep -v apimethod_string.go | grep -v pb.go | grep -v peg.go | grep -v lru.go | grep -v btree | grep -v enterprise
 
 ######################
 # Build dependencies #
