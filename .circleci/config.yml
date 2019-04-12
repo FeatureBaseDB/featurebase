@@ -30,6 +30,11 @@ jobs:
       - *fast-checkout
       - run: make install-gometalinter
       - run: make gometalinter
+  check-license-headers:
+    <<: *defaults
+    steps:
+      - *fast-checkout
+      - run: make check-license-headers
   test-build-arm:
     <<: *defaults
     steps:
@@ -123,6 +128,9 @@ workflows:
       - linter:
           requires:
             - setup
+      - check-license-headers:
+          requires:
+            - setup
       - test-build-arm:
           requires:
             - setup
@@ -144,10 +152,12 @@ workflows:
       - prerelease:
           requires:
             - linter
+            - check-license-headers
             - test-golang-1.12
       - release:
           requires:
             - linter
+            - check-license-headers
             - test-golang-1.12
           filters:
             tags:
@@ -160,4 +170,5 @@ workflows:
       - dockerhub-upload:
           requires:
             - linter
+            - check-license-headers
             - test-golang-1.12
