@@ -347,7 +347,7 @@ func (r *successResponse) check(err error) (statusCode int) {
 	}
 
 	r.Success = false
-	r.Error = &Error{Message: cause.Error()}
+	r.Error = &Error{Message: err.Error()}
 
 	return statusCode
 }

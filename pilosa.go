@@ -16,7 +16,7 @@ package pilosa
 
 import (
 	"encoding/json"
-	"errors"
+	"github.com/pkg/errors"
 	"regexp"
 )
 
@@ -152,7 +152,7 @@ const TimeFormat = "2006-01-02T15:04"
 // validateName ensures that the name is a valid format.
 func validateName(name string) error {
 	if !nameRegexp.Match([]byte(name)) {
-		return ErrName
+		return errors.Wrapf(ErrName, "'%s'", name)
 	}
 	return nil
 }
