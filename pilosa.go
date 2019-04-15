@@ -16,8 +16,9 @@ package pilosa
 
 import (
 	"encoding/json"
-	"github.com/pkg/errors"
 	"regexp"
+
+	"github.com/pkg/errors"
 )
 
 // System errors.
