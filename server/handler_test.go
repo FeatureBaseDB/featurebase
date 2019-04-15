@@ -690,9 +690,9 @@ func TestHandler_Endpoints(t *testing.T) {
 		r = test.MustNewHTTPRequest("POST", "/index/idx1", strings.NewReader(""))
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusConflict {
-			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":false,"error":{"message":"index already exists"}}`+"\n" {
-			t.Fatalf("unexpected body: %q", w.Body.String())
+			t.Errorf("unexpected status code: %d", w.Code)
+		} else if w.Body.String() != `{"success":false,"error":{"message":"creating index: index already exists"}}`+"\n" {
+			t.Errorf("unexpected body: %q", w.Body.String())
 		}
 
 		// create field
@@ -710,9 +710,9 @@ func TestHandler_Endpoints(t *testing.T) {
 		r = test.MustNewHTTPRequest("POST", "/index/idx1/field/fld1", strings.NewReader(""))
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusConflict {
-			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":false,"error":{"message":"field already exists"}}`+"\n" {
-			t.Fatalf("unexpected body: %q", w.Body.String())
+			t.Errorf("unexpected status code: %d", w.Code)
+		} else if w.Body.String() != `{"success":false,"error":{"message":"creating field: field already exists"}}`+"\n" {
+			t.Errorf("unexpected body: %q", w.Body.String())
 		}
 
 		// delete field
@@ -730,9 +730,9 @@ func TestHandler_Endpoints(t *testing.T) {
 		r = test.MustNewHTTPRequest("DELETE", "/index/idx1/field/fld1", strings.NewReader(""))
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusNotFound {
-			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":false,"error":{"message":"field not found"}}`+"\n" {
-			t.Fatalf("unexpected body: %q", w.Body.String())
+			t.Errorf("unexpected status code: %d", w.Code)
+		} else if w.Body.String() != `{"success":false,"error":{"message":"deleting field: field not found"}}`+"\n" {
+			t.Errorf("unexpected body: %q", w.Body.String())
 		}
 
 		// delete index
@@ -750,9 +750,9 @@ func TestHandler_Endpoints(t *testing.T) {
 		r = test.MustNewHTTPRequest("DELETE", "/index/idx1", strings.NewReader(""))
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusNotFound {
-			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":false,"error":{"message":"index not found"}}`+"\n" {
-			t.Fatalf("unexpected body: %q", w.Body.String())
+			t.Errorf("unexpected status code: %d", w.Code)
+		} else if w.Body.String() != `{"success":false,"error":{"message":"deleting index: index not found"}}`+"\n" {
+			t.Errorf("unexpected body: %q", w.Body.String())
 		}
 	})
 
