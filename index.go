@@ -155,7 +155,7 @@ func (i *Index) openFields() error {
 
 		fld, err := i.newField(i.fieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 		if err != nil {
-			return ErrName
+			return errors.Wrapf(ErrName, "'%s'", fi.Name())
 		}
 		if err := fld.Open(); err != nil {
 			return fmt.Errorf("open field: name=%s, err=%s", fld.Name(), err)
