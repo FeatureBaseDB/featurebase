@@ -67,6 +67,8 @@ github.com/pilosa/memberlist v0.1.4-0.20190406170317-7e5a340efc07 h1:f1Xp66+XJjf
 github.com/pilosa/memberlist v0.1.4-0.20190406170317-7e5a340efc07/go.mod h1:ajVTdAv/9Im8oMAAj5G31PhhMCZJV2pPBoIllUwCN7I=
 github.com/pilosa/memberlist v0.1.4-0.20190408132233-ff8741fd3108 h1:6QjQrHgdgVR7nnbzPwJwZ1dliUdjYtFi6ma50GtLOwA=
 github.com/pilosa/memberlist v0.1.4-0.20190408132233-ff8741fd3108/go.mod h1:ajVTdAv/9Im8oMAAj5G31PhhMCZJV2pPBoIllUwCN7I=
+github.com/pilosa/memberlist v0.1.4-0.20190415211605-f6512523c021 h1:ERLyN4p3KS5Fk2ADsDENm2cq0+Lx6sF1sG8uwRlySpU=
+github.com/pilosa/memberlist v0.1.4-0.20190415211605-f6512523c021/go.mod h1:ajVTdAv/9Im8oMAAj5G31PhhMCZJV2pPBoIllUwCN7I=
 github.com/pkg/errors v0.8.1 h1:iURUrRGxPUNPdy5/HRSm+Yj6okJ6UtLINN0Q9M4+h3I=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
