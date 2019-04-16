@@ -239,7 +239,7 @@ func (s *attrStore) Blocks() (blocks []pilosa.AttrBlock, err error) {
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "getting blocks")
 	}
 	return blocks, nil
 }
@@ -271,7 +271,7 @@ func (s *attrStore) BlockData(i uint64) (m map[uint64]map[string]interface{}, er
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "getting block data")
 	}
 	return m, nil
 }

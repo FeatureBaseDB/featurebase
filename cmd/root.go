@@ -51,11 +51,14 @@ Build Time: ` + pilosa.BuildTime + "\n",
 			}
 
 			// return "dry run" error if "dry-run" flag is set
-			if ret, err := cmd.Flags().GetBool("dry-run"); ret && err == nil {
+			ret, err := cmd.Flags().GetBool("dry-run")
+			if err != nil {
+				return fmt.Errorf("problem getting dry-run flag: %v", err)
+			}
+			if ret {
 				if cmd.Parent() != nil {
 					return fmt.Errorf("dry run")
 				}
-				return fmt.Errorf("problem getting dry-run flag: %v", err)
 			}
 
 			return nil

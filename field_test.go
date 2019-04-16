@@ -219,7 +219,7 @@ func TestField_AvailableShards(t *testing.T) {
 	for i := uint64(0); i < 5; i++ {
 		err := f.RemoveAvailableShard(i)
 		if err != nil {
-			t.Fatalf("removing shard: %v", err)
+			t.Fatalf("removing shard %d: %v", i, err)
 		}
 	}
 	if diff := cmp.Diff(f.AvailableShards().Slice(), []uint64{0, 2}); diff != "" {

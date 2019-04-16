@@ -710,8 +710,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 	t.Run("Multiple nodes, in/not in topology", func(t *testing.T) {
 		tc := NewClusterCluster(0)
-		err := tc.addNode()
-		if err != nil {
+		if err := tc.addNode(); err != nil {
 			t.Fatalf("adding node: %v", err)
 		}
 		node0 := tc.Clusters[0]
@@ -736,13 +735,11 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 		// Expect an error by adding a node not in the topology.
 		expectedError := "host is not in topology: node1"
-		err = tc.addNode()
-		if err == nil || err.Error() != expectedError {
+		if err := tc.addNode(); err == nil || err.Error() != expectedError {
 			t.Errorf("did not receive expected error: %s", expectedError)
 		}
 
-		err = tc.addNode()
-		if err != nil {
+		if err := tc.addNode(); err != nil {
 			t.Fatalf("adding node: %v", err)
 		}
 		node2 := tc.Clusters[2]
@@ -762,14 +759,13 @@ func TestCluster_ResizeStates(t *testing.T) {
 
 	t.Run("Multiple nodes, with data", func(t *testing.T) {
 		tc := NewClusterCluster(0)
-		err := tc.addNode()
-		if err != nil {
+		if err := tc.addNode(); err != nil {
 			t.Fatalf("adding node: %v", err)
 		}
 		node0 := tc.Clusters[0]
 
 		// Open TestCluster.
-		if err = tc.Open(); err != nil {
+		if err := tc.Open(); err != nil {
 			t.Fatal(err)
 		}
 
@@ -792,8 +788,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 		node0Checksum := node0Fragment.Checksum()
 
 		// addNode needs to block until the resize process has completed.
-		err = tc.addNode()
-		if err != nil {
+		if err := tc.addNode(); err != nil {
 			t.Fatalf("adding node: %v", err)
 		}
 		node1 := tc.Clusters[1]

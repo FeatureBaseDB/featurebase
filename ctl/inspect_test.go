@@ -51,7 +51,7 @@ func TestInspectCommand_Run(t *testing.T) {
 	if err != nil {
 		t.Fatalf("copying data: %v", err)
 	}
-	if !strings.Contains(buf.String(), "unmarshaling bitmap...") {
+	if !strings.Contains(buf.String(), "unmarshalling bitmap...") {
 		t.Fatalf("Inspect doesn't work: %s", err)
 	}
 
