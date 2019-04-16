@@ -587,7 +587,6 @@ func (h *Holder) setFileLimit() {
 
 func (h *Holder) loadNodeID() (string, error) {
 	idPath := path.Join(h.Path, ".id")
-	nodeID := ""
 	h.Logger.Printf("load NodeID: %s", idPath)
 	if err := os.MkdirAll(h.Path, 0777); err != nil {
 		return "", errors.Wrap(err, "creating directory")
@@ -595,17 +594,16 @@ func (h *Holder) loadNodeID() (string, error) {
 
 	nodeIDBytes, err := ioutil.ReadFile(idPath)
 	if err == nil {
-		nodeID = strings.TrimSpace(string(nodeIDBytes))
-	} else if os.IsNotExist(err) {
-		nodeID = uuid.NewV4().String()
-		err = ioutil.WriteFile(idPath, []byte(nodeID), 0600)
-		if err != nil {
-			return "", errors.Wrap(err, "writing file")
-		}
-	} else if err != nil {
+		return strings.TrimSpace(string(nodeIDBytes)), nil
+	}
+	if !os.IsNotExist(err) {
 		return "", errors.Wrap(err, "reading file")
 	}
-
+	nodeID := uuid.NewV4().String()
+	err = ioutil.WriteFile(idPath, []byte(nodeID), 0600)
+	if err != nil {
+		return "", errors.Wrap(err, "writing file")
+	}
 	return nodeID, nil
 }
 

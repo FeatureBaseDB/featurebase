@@ -870,8 +870,10 @@ func (e *enumerator) Next() (k uint64, v *Container, err error) {
 	i := e.q.d[e.i]
 	k, v = i.k, i.v
 	e.k, e.hit = k, true
-	e.next()
-	return k, v, nil
+	// Any error returned would be stashed in e.err, and would come up
+	// on the next call.
+	_ = e.next()
+	return k, v, err
 }
 
 func (e *enumerator) next() error {
@@ -925,7 +927,9 @@ func (e *enumerator) Prev() (k uint64, v *Container, err error) {
 	i := e.q.d[e.i]
 	k, v = i.k, i.v
 	e.k, e.hit = k, true
-	e.prev()
+	// Any error returned would be stashed in e.err, and would come up
+	// on the next call.
+	_ = e.prev()
 	return k, v, err
 }
 

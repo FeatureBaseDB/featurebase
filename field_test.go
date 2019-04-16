@@ -208,17 +208,20 @@ func TestField_AvailableShards(t *testing.T) {
 	}
 
 	// Set remote shards and verify.
-	f.AddRemoteAvailableShards(roaring.NewBitmap(1, 2, 4))
+	if err := f.AddRemoteAvailableShards(roaring.NewBitmap(1, 2, 4)); err != nil {
+		t.Fatalf("adding remote shards: %v", err)
+	}
 	if diff := cmp.Diff(f.AvailableShards().Slice(), []uint64{0, 1, 2, 4}); diff != "" {
 		t.Fatal(diff)
 	}
 
 	// Delete shards; only local shards should remain.
-	f.RemoveAvailableShard(0)
-	f.RemoveAvailableShard(1)
-	f.RemoveAvailableShard(2)
-	f.RemoveAvailableShard(3)
-	f.RemoveAvailableShard(4)
+	for i := uint64(0); i < 5; i++ {
+		err := f.RemoveAvailableShard(i)
+		if err != nil {
+			t.Fatalf("removing shard %d: %v", i, err)
+		}
+	}
 	if diff := cmp.Diff(f.AvailableShards().Slice(), []uint64{0, 2}); diff != "" {
 		t.Fatal(diff)
 	}

@@ -1,4 +1,4 @@
-.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-pql gometalinter install install-build-deps install-gometalinter install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build test
+.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-pql gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build test
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
@@ -131,6 +131,10 @@ docker-build:
 docker-test:
 	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) go test -tags='$(BUILD_TAGS)' $(TESTFLAGS) ./...
 
+# Run golangci-lint
+golangci-lint: require-golangci-lint
+	golangci-lint run
+
 # Run gometalinter with custom flags
 gometalinter: require-gometalinter vendor
 	GO111MODULE=off gometalinter --vendor --disable-all \
@@ -184,6 +188,9 @@ install-protoc:
 
 install-peg:
 	GO111MODULE=off go get github.com/pointlander/peg
+
+install-golangci-lint:
+	GO111MODULE=off go get github.com/golangci/golangci-lint/cmd/golangci-lint
 
 install-gometalinter:
 	GO111MODULE=off go get -u github.com/alecthomas/gometalinter

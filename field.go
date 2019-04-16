@@ -612,7 +612,9 @@ func (f *Field) createBSIGroup(bsig *bsiGroup) error {
 	if err := f.addBSIGroup(bsig); err != nil {
 		return err
 	}
-	f.saveMeta()
+	if err := f.saveMeta(); err != nil {
+		return errors.Wrap(err, "saving")
+	}
 	return nil
 }
 

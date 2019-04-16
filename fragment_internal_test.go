@@ -654,7 +654,9 @@ func TestFragment_Range(t *testing.T) {
 func benchmarkSetValues(b *testing.B, bitDepth uint, f *fragment, cfunc func(uint64) uint64) {
 	column := uint64(0)
 	for i := 0; i < b.N; i++ {
-		f.setValue(column, bitDepth, uint64(i))
+		// We're not checking the error because this is a benchmark.
+		// That does mean the result could be completely wrong...
+		_, _ = f.setValue(column, bitDepth, uint64(i))
 		column = cfunc(column)
 	}
 }
@@ -943,8 +945,14 @@ func TestFragment_Top_Filter(t *testing.T) {
 	f.mustSetBits(102, 1, 2)
 	f.RecalculateCache()
 	// Assign attributes.
-	f.RowAttrStore.SetAttrs(101, map[string]interface{}{"x": int64(10)})
-	f.RowAttrStore.SetAttrs(102, map[string]interface{}{"x": int64(20)})
+	err := f.RowAttrStore.SetAttrs(101, map[string]interface{}{"x": int64(10)})
+	if err != nil {
+		t.Fatalf("setAttrs: %v", err)
+	}
+	err = f.RowAttrStore.SetAttrs(102, map[string]interface{}{"x": int64(20)})
+	if err != nil {
+		t.Fatalf("setAttrs: %v", err)
+	}
 
 	// Retrieve top rows.
 	if pairs, err := f.top(topOptions{
@@ -2064,7 +2072,10 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 					for i := 0; i < b.N; i++ {
 						for j := 0; j < concurrency; j++ {
 							frags[j] = mustOpenFragment("i", "f", viewStandard, uint64(j), CacheTypeRanked)
-							frags[j].importRoaring(data, false)
+							err := frags[j].importRoaring(data, false)
+							if err != nil {
+								b.Fatalf("importing roaring: %v", err)
+							}
 						}
 						eg := errgroup.Group{}
 						b.StartTimer()
@@ -2275,7 +2286,10 @@ func BenchmarkImportRoaringIntoLargeFragment(b *testing.B) {
 func TestGetZipfRowsSliceRoaring(t *testing.T) {
 	f := mustOpenFragment("i", "f", viewStandard, 0, DefaultCacheType)
 	data := getZipfRowsSliceRoaring(10, 1, 0, ShardWidth)
-	f.importRoaring(data, false)
+	err := f.importRoaring(data, false)
+	if err != nil {
+		t.Fatalf("importing roaring: %v", err)
+	}
 	if !reflect.DeepEqual(f.rows(0), []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}) {
 		t.Fatalf("unexpected rows: %v", f.rows(0))
 	}
@@ -2608,7 +2622,10 @@ func TestFragment_RoaringImport(t *testing.T) {
 				if err != nil {
 					t.Fatalf("writing to buffer: %v", err)
 				}
-				f.importRoaring(buf.Bytes(), false)
+				err = f.importRoaring(buf.Bytes(), false)
+				if err != nil {
+					t.Fatalf("importing roaring: %v", err)
+				}
 				exp := calcExpected(test[:num+1]...)
 				for row, expCols := range exp {
 					cols := f.row(uint64(row)).Columns()
@@ -2680,7 +2697,10 @@ func TestFragment_RoaringImportTopN(t *testing.T) {
 			if err != nil {
 				t.Fatalf("writing to buffer: %v", err)
 			}
-			f.importRoaring(buf.Bytes(), false)
+			err = f.importRoaring(buf.Bytes(), false)
+			if err != nil {
+				t.Fatalf("importing roaring: %v", err)
+			}
 			rows, cols := toRowsCols(test.roaring)
 			expPairs = calcTop(append(test.rowIDs, rows...), append(test.colIDs, cols...))
 			pairs, err = f.top(topOptions{})
@@ -2895,19 +2915,56 @@ func TestFragmentRowIterator(t *testing.T) {
 func TestUnionInPlaceMapped(t *testing.T) {
 	f := mustOpenFragment("i", "f", "v", 0, CacheTypeNone)
 	defer f.Clean(t)
+	// I know this doesn't actually matter in our current context, but
+	// strictly speaking, we do say you have to hold the lock while calling
+	// unprotectedWriteToFragment...
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	r0 := rand.New(rand.NewSource(2))
 	r1 := rand.New(rand.NewSource(1))
 	data0 := randPositions(1000000, r0)
-	setBM := roaring.NewBitmap()
-	setBM.OpWriter = nil
-	setBM.Add(data0...)
-	unprotectedWriteToFragment(f, setBM)
-	data1 := randPositions(1000000, r1)
-	setBM2 := roaring.NewBitmap()
-	setBM2.OpWriter = nil
-	setBM2.Add(data1...)
+	setBM0 := roaring.NewBitmap()
+	setBM0.OpWriter = nil
+	_, err := setBM0.Add(data0...)
+	if err != nil {
+		t.Fatalf("adding bits: %v", err)
+	}
+	count0 := setBM0.Count()
 
-	f.storage.UnionInPlace(setBM2)
+	data1 := randPositions(1000000, r1)
+	setBM1 := roaring.NewBitmap()
+	setBM1.OpWriter = nil
+	_, err = setBM1.Add(data1...)
+	if err != nil {
+		t.Fatalf("adding bits: %v", err)
+	}
+	count1 := setBM1.Count()
+
+	// now we write setBM0 into f.storage.
+	err = unprotectedWriteToFragment(f, setBM0)
+	if err != nil {
+		t.Fatalf("trying to flush fragment to disk: %v", err)
+	}
+	countF := f.storage.Count()
+
+	f.storage.UnionInPlace(setBM1)
+	countUnion := f.storage.Count()
+
+	if count0 != countF {
+		t.Fatalf("writing bitmap to storage changed count: %d => %d", count0, countF)
+	}
+	min := count0
+	if count1 > min {
+		min = count1
+	}
+	max := count0 + count1
+	// We don't know how many bits we should have, because of overlap,
+	// but it should be between the size of the largest bitmap and the
+	// sum of the bitmaps.
+	if countUnion < min || countUnion > max {
+		t.Fatalf("union of sets with cardinality %d and %d should be between %d and %d, got %d",
+			count0, count1, min, max, countUnion)
+	}
 }
 
 func randPositions(n int, r *rand.Rand) []uint64 {

@@ -35,7 +35,8 @@ func NewBTreeBitmap(a ...uint64) *Bitmap {
 	b := &Bitmap{
 		Containers: newBTreeContainers(),
 	}
-	b.Add(a...)
+	// TODO: We have no way to report this.
+	_, _ = b.Add(a...)
 	return b
 }
 

@@ -215,66 +215,64 @@ func (s *attrStore) SetBulkAttrs(m map[uint64]map[string]interface{}) error {
 }
 
 // Blocks returns a list of all blocks in the store.
-func (s *attrStore) Blocks() ([]pilosa.AttrBlock, error) {
-	tx, err := s.db.Begin(false)
-	if err != nil {
-		return nil, errors.Wrap(err, "starting transaction")
-	}
-	defer tx.Rollback()
+func (s *attrStore) Blocks() (blocks []pilosa.AttrBlock, err error) {
+	err = s.db.View(func(tx *bolt.Tx) error {
+		// Wrap cursor to segment by block.
+		cur := newBlockCursor(tx.Bucket([]byte("attrs")).Cursor(), attrBlockSize)
 
-	// Wrap cursor to segment by block.
-	cur := newBlockCursor(tx.Bucket([]byte("attrs")).Cursor(), attrBlockSize)
+		// Iterate over each block.
+		for cur.nextBlock() {
+			block := pilosa.AttrBlock{ID: cur.blockID()}
 
-	// Iterate over each block.
-	var blocks []pilosa.AttrBlock
-	for cur.nextBlock() {
-		block := pilosa.AttrBlock{ID: cur.blockID()}
+			// Compute checksum of every key/value in block.
+			h := xxhash.New()
+			for k, v := cur.next(); k != nil; k, v = cur.next() {
+				// hash function writes don't usually need to be checked
+				_, _ = h.Write(k)
+				_, _ = h.Write(v)
+			}
+			block.Checksum = h.Sum(nil)
 
-		// Compute checksum of every key/value in block.
-		h := xxhash.New()
-		for k, v := cur.next(); k != nil; k, v = cur.next() {
-			h.Write(k)
-			h.Write(v)
+			// Append block.
+			blocks = append(blocks, block)
 		}
-		block.Checksum = h.Sum(nil)
-
-		// Append block.
-		blocks = append(blocks, block)
+		return nil
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "getting blocks")
 	}
-
 	return blocks, nil
 }
 
 // BlockData returns all data for a single block.
-func (s *attrStore) BlockData(i uint64) (map[uint64]map[string]interface{}, error) {
-	m := make(map[uint64]map[string]interface{})
+func (s *attrStore) BlockData(i uint64) (m map[uint64]map[string]interface{}, err error) {
+	m = make(map[uint64]map[string]interface{})
 
 	// Start read-only transaction.
-	tx, err := s.db.Begin(false)
+	err = s.db.View(func(tx *bolt.Tx) error {
+		// Move to the start of the block.
+		min := u64tob(i * attrBlockSize)
+		max := u64tob((i + 1) * attrBlockSize)
+		cur := tx.Bucket([]byte("attrs")).Cursor()
+		for k, v := cur.Seek(min); k != nil; k, v = cur.Next() {
+			// Exit if we're past the end of the block.
+			if bytes.Compare(k, max) != -1 {
+				break
+			}
+
+			// Decode attribute map and associate with id.
+			attrs, err := pilosa.DecodeAttrs(v)
+			if err != nil {
+				return errors.Wrap(err, "decoding attrs")
+			}
+			m[btou64(k)] = attrs
+
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, errors.Wrap(err, "starting transaction")
+		return nil, errors.Wrap(err, "getting block data")
 	}
-	defer tx.Rollback()
-
-	// Move to the start of the block.
-	min := u64tob(i * attrBlockSize)
-	max := u64tob((i + 1) * attrBlockSize)
-	cur := tx.Bucket([]byte("attrs")).Cursor()
-	for k, v := cur.Seek(min); k != nil; k, v = cur.Next() {
-		// Exit if we're past the end of the block.
-		if bytes.Compare(k, max) != -1 {
-			break
-		}
-
-		// Decode attribute map and associate with id.
-		attrs, err := pilosa.DecodeAttrs(v)
-		if err != nil {
-			return nil, errors.Wrap(err, "decoding attrs")
-		}
-		m[btou64(k)] = attrs
-
-	}
-
 	return m, nil
 }
 

@@ -42,7 +42,7 @@ func (cmd *GenerateConfigCommand) Run(_ context.Context) error {
 	conf := server.NewConfig()
 	ret, err := toml.Marshal(*conf)
 	if err != nil {
-		return errors.Wrap(err, "unmarshaling default config")
+		return errors.Wrap(err, "unmarshalling default config")
 	}
 	fmt.Fprintf(cmd.Stdout, "%s\n", ret)
 	return nil

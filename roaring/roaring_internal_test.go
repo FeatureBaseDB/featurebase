@@ -2127,10 +2127,14 @@ func TestIteratorBitmap(t *testing.T) {
 	// but won't update to RLE until Optimize() is called
 	b := NewFileBitmap()
 	for i := uint64(61000); i < 71000; i++ {
-		b.Add(i)
+		if _, err := b.Add(i); err != nil {
+			t.Fatalf("adding bit: %v", err)
+		}
 	}
 	for i := uint64(75000); i < 75100; i++ {
-		b.Add(i)
+		if _, err := b.Add(i); err != nil {
+			t.Fatalf("adding bit: %v", err)
+		}
 	}
 	if !b.Containers.Get(0).isBitmap() {
 		t.Fatalf("wrong container type")
@@ -2393,7 +2397,9 @@ func TestRunBinSearch(t *testing.T) {
 }
 func TestBitmap_RemoveEmptyContainers(t *testing.T) {
 	bm1 := NewFileBitmap(1<<16, 2<<16, 3<<16)
-	bm1.Remove(2 << 16)
+	if _, err := bm1.Remove(2 << 16); err != nil {
+		t.Fatalf("removing a bit: %v", err)
+	}
 	if bm1.countEmptyContainers() != 1 {
 		t.Fatalf("Should be 1 empty container ")
 	}
@@ -2406,13 +2412,17 @@ func TestBitmap_RemoveEmptyContainers(t *testing.T) {
 
 func TestBitmap_BitmapWriteToWithEmpty(t *testing.T) {
 	bm1 := NewFileBitmap(1<<16, 2<<16, 3<<16)
-	bm1.Remove(2 << 16)
+	if _, err := bm1.Remove(2 << 16); err != nil {
+		t.Fatalf("removing a bit: %v", err)
+	}
 	var buf bytes.Buffer
 	if _, err := bm1.WriteTo(&buf); err != nil {
 		t.Fatalf("Failure to write to bitmap buffer. ")
 	}
 	bm0 := NewFileBitmap()
-	bm0.UnmarshalBinary(buf.Bytes())
+	if err := bm0.UnmarshalBinary(buf.Bytes()); err != nil {
+		t.Fatalf("unmarshalling: %v", err)
+	}
 	if bm0.countEmptyContainers() != 0 {
 		t.Fatalf("Should be no empty containers ")
 	}
@@ -2559,7 +2569,9 @@ func TestIntersectArrayBitmap(t *testing.T) {
 func TestBitmapClone(t *testing.T) {
 	b := NewFileBitmap()
 	for i := uint64(61000); i < 71000; i++ {
-		b.Add(i)
+		if _, err := b.Add(i); err != nil {
+			t.Fatalf("adding bit: %v", err)
+		}
 	}
 	c := b.Clone()
 	if err := bitmapsEqual(b, c); err != nil {
@@ -3770,24 +3782,45 @@ func TestBitmapAny(t *testing.T) {
 	if bm.Any() {
 		t.Error("empty bitmap should have Any()==false")
 	}
-	bm.Add(1)
+	_, err := bm.Add(1)
+	if err != nil {
+		t.Errorf("couldn't add a bit: %v", err)
+	}
 	if !bm.Any() {
 		t.Error("bitmap with 1 bit should have Any()==true")
 	}
-	bm.Add(100000)
+	_, err = bm.Add(100000)
+	if err != nil {
+		t.Errorf("couldn't add a bit: %v", err)
+	}
 	if !bm.Any() {
 		t.Error("bitmap with 2 bits should have Any()==true")
 	}
-	bm.Remove(1)
+	changed, err := bm.Remove(1)
+	if err != nil {
+		t.Errorf("couldn't remove a bit: %v", err)
+	}
+	if changed != true {
+		t.Error("removing a set bit should have been a change")
+	}
 	if !bm.Any() {
 		t.Error("bitmap with 1 bit left after removing 1 should have Any()==true")
 	}
-	bm.Add(1)
+	_, err = bm.Add(1)
+	if err != nil {
+		t.Errorf("couldn't remove a bit: %v", err)
+	}
+	if changed != true {
+		t.Error("re-addintg a previously set bit should have been a change")
+	}
 	bm = bm.Difference(NewBTreeBitmap(1))
 	if !bm.Any() {
 		t.Error("bitmap with 1 bit left after differencing 1 should have Any()==true")
 	}
-	bm.Remove(100000)
+	_, err = bm.Remove(100000)
+	if err != nil {
+		t.Errorf("couldn't remove a bit: %v", err)
+	}
 	if bm.Any() {
 		t.Error("shouldn't be any left")
 	}

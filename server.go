@@ -559,7 +559,7 @@ func (s *Server) receiveMessage(m Message) error {
 			return err
 		}
 	case *SetCoordinatorMessage:
-		s.cluster.setCoordinator(obj.New)
+		return s.cluster.setCoordinator(obj.New)
 	case *UpdateCoordinatorMessage:
 		s.cluster.updateCoordinator(obj.New)
 	case *NodeStateMessage:
@@ -705,7 +705,10 @@ func (s *Server) monitorDiagnostics() {
 		s.diagnostics.Set("GoRoutines", runtime.NumGoroutine())
 		s.diagnostics.EnrichWithMemoryInfo()
 		s.diagnostics.EnrichWithSchemaProperties()
-		s.diagnostics.CheckVersion()
+		err = s.diagnostics.CheckVersion()
+		if err != nil {
+			s.logger.Printf("can't check version: %v", err)
+		}
 		err = s.diagnostics.Flush()
 		if err != nil {
 			s.logger.Printf("diagnostics error: %s", err)

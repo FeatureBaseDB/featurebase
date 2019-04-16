@@ -57,15 +57,15 @@ func NewTestCluster(n int) *cluster {
 // NewTestURI is a test URI creator that intentionally swallows errors.
 func NewTestURI(scheme, host string, port uint16) URI {
 	uri := defaultURI()
-	uri.setScheme(scheme)
-	uri.setHost(host)
+	_ = uri.setScheme(scheme)
+	_ = uri.setHost(host)
 	uri.SetPort(port)
 	return *uri
 }
 
 func NewTestURIFromHostPort(host string, port uint16) URI {
 	uri := defaultURI()
-	uri.setHost(host)
+	_ = uri.setHost(host)
 	uri.SetPort(port)
 	return *uri
 }
@@ -235,7 +235,9 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	// add nodes
 	if saveTopology {
 		for _, n := range t.common.Nodes {
-			c.addNode(n)
+			if err := c.addNode(n); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -314,7 +316,10 @@ func (b bcast) SendSync(m Message) error {
 		// Apply the send message to all nodes (except the coordinator).
 		for _, c := range b.t.Clusters {
 			if c != b.c {
-				c.mergeClusterStatus(obj)
+				err := c.mergeClusterStatus(obj)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		b.t.mu.RLock()
@@ -348,12 +353,17 @@ func (b bcast) SendTo(to *Node, m Message) error {
 		}
 	case *ResizeInstructionComplete:
 		coord := b.t.clusterByID(to.ID)
-		go coord.markResizeInstructionComplete(obj)
+		// this used to be async, but that prevented us from checking
+		// its error status...
+		return coord.markResizeInstructionComplete(obj)
 	case *ClusterStatus:
 		// Apply the send message to the node.
 		for _, c := range b.t.Clusters {
 			if c.Node.ID == to.ID {
-				c.mergeClusterStatus(obj)
+				err := c.mergeClusterStatus(obj)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		b.t.mu.RLock()

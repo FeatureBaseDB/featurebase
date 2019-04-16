@@ -33,13 +33,16 @@ func TestConfigCommand_Run(t *testing.T) {
 	cm.Config = server.NewConfig()
 
 	err := cm.Run(context.Background())
-	w.Close()
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-
 	if err != nil {
 		t.Fatalf("Config Run doesn't work: %s", err)
-	} else if !strings.Contains(buf.String(), ":10101") {
+	}
+	w.Close()
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, r)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(buf.String(), ":10101") {
 		t.Fatalf("Unexpected config: \n%s", buf.String())
 	}
 }

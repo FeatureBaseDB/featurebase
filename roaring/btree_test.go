@@ -101,16 +101,16 @@ func (t *tree) dump() string {
 					n = i + 1
 				}
 			}
-			f.Format("%sX#%d(%p) n %d:%d {", pref, h, x, x.c, n)
+			_, _ = f.Format("%sX#%d(%p) n %d:%d {", pref, h, x, x.c, n)
 			a := []interface{}{}
 			for i, v := range x.x[:n] {
 				a = append(a, v.ch)
 				if i != 0 {
-					f.Format(" ")
+					_, _ = f.Format(" ")
 				}
-				f.Format("(C#%d K %v)", handle(v.ch), v.k)
+				_, _ = f.Format("(C#%d K %v)", handle(v.ch), v.k)
 			}
-			f.Format("}\n")
+			_, _ = f.Format("}\n")
 			for _, p := range a {
 				pagedump(p, pref+". ")
 			}
@@ -122,14 +122,14 @@ func (t *tree) dump() string {
 					n = i + 1
 				}
 			}
-			f.Format("%sD#%d(%p) P#%d N#%d n %d:%d {", pref, h, x, handle(x.p), handle(x.n), x.c, n)
+			_, _ = f.Format("%sD#%d(%p) P#%d N#%d n %d:%d {", pref, h, x, handle(x.p), handle(x.n), x.c, n)
 			for i, d := range x.d[:n] {
 				if i != 0 {
-					f.Format(" ")
+					_, _ = f.Format(" ")
 				}
-				f.Format("%v:%v", d.k, d.v)
+				_, _ = f.Format("%v:%v", d.k, d.v)
 			}
-			f.Format("}\n")
+			_, _ = f.Format("}\n")
 		}
 	}
 
