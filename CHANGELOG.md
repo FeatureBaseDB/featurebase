@@ -5,6 +5,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [1.3.0] - 2019-04-16
+
+This version contains 98 contributions from 10 contributors. There are 144 files changed; 12,635 insertions; and 4,341 deletions.
+
+### Added 
+- Add license headers and CI check ([#1940](https://github.com/pilosa/pilosa/pull/1940))
+- Add support to modify shard width at build time ([#1921](https://github.com/pilosa/pilosa/pull/1921))
+- Add 'bench' Makefile target and run fewer concurrency level benchmarks ([#1915](https://github.com/pilosa/pilosa/pull/1915))
+- Add server stats to /info endpoint ([#1859](https://github.com/pilosa/pilosa/pull/1859))
+- Implement config options for block profile rate and mutex fraction ([#1910](https://github.com/pilosa/pilosa/pull/1910))
+- Implement global open file counter using syswrap (to scale past system open file limits) ([#1906](https://github.com/pilosa/pilosa/pull/1906))
+- Implement global mmap counter with fallback (to scale past system mmap limits) ([#1903](https://github.com/pilosa/pilosa/pull/1903))
+- Add shard width to index info in schema (allows client to get shard width at run time) ([#1881](https://github.com/pilosa/pilosa/pull/1881))
+- Add shift operator ([#1761](https://github.com/pilosa/pilosa/pull/1761))
+- Support advertise address and listen on 0.0.0.0 ([#1832](https://github.com/pilosa/pilosa/pull/1832))
+- Added convenience function to efficiently calculate size of a roaring bitmap in bytes ([#1839](https://github.com/pilosa/pilosa/pull/1839))
+- Make sure more tests and benchmarks can have their temp dir set by flag ([#1831](https://github.com/pilosa/pilosa/pull/1831))
+- Add sliceascending/slicedescending striped benchmarks ([#1763](https://github.com/pilosa/pilosa/pull/1763))
+- Add setValue test and benchmarks ([#1820](https://github.com/pilosa/pilosa/pull/1820))
+- Add a test for groupby filter with RangeLTLT ([#1818](https://github.com/pilosa/pilosa/pull/1818))
+- Add tests for GroupBy with keys; removes unused Bit message from proto ([#1811](https://github.com/pilosa/pilosa/pull/1811))
+
+### Fixed
+- Update to latest memberlist fork with race fixes ([#1944](https://github.com/pilosa/pilosa/pull/1944))
+- Return original error instead of cause in handler ([#1943](https://github.com/pilosa/pilosa/pull/1943))
+- Validate (and panic) on duplicate PQL arguments ([#1938](https://github.com/pilosa/pilosa/pull/1938))
+- Add correct content type to query responses Fixes #1873 ([#1936](https://github.com/pilosa/pilosa/pull/1936))
+- Address race condition by getting cluster nodes with lock ([#1931](https://github.com/pilosa/pilosa/pull/1931))
+- Make sure to unmap containers before modifying ([#1876](https://github.com/pilosa/pilosa/pull/1876))
+- Avoid probable race when creating fragments ([#1863](https://github.com/pilosa/pilosa/pull/1863))
+- Improve help strings for metrics options ([#1887](https://github.com/pilosa/pilosa/pull/1887))
+- Ensure ClearRow() arguments get translated ([#1848](https://github.com/pilosa/pilosa/pull/1848))
+- Prevent omitting zero ids on columnattrs ([#1846](https://github.com/pilosa/pilosa/pull/1846))
+- Set cache size to 0 if cache type is none ([#1842](https://github.com/pilosa/pilosa/pull/1842))
+- Prevent deadlock in replication logic on reopening a store ([#1834](https://github.com/pilosa/pilosa/pull/1834))
+- Pass loggers around properly in gossip ([#1835](https://github.com/pilosa/pilosa/pull/1835))
+- Include read lock in cluster.Nodes() ([#1836](https://github.com/pilosa/pilosa/pull/1836))
+- Raise an error on Rows() query against a time field with noStandardView: true ([#1826](https://github.com/pilosa/pilosa/pull/1826))
+- Don't delete test fragment data (part of repo) ([#1827](https://github.com/pilosa/pilosa/pull/1827))
+- Fix bug on upper end of bsi range queries ([#1822](https://github.com/pilosa/pilosa/pull/1822))
+- Group by fixes ([#1802](https://github.com/pilosa/pilosa/pull/1802))
+
+### Changed
+- Switch to GolangCI lint ([#1924](https://github.com/pilosa/pilosa/pull/1924))
+- Return empty result set when query empty ([#1937](https://github.com/pilosa/pilosa/pull/1937))
+- Add Go 1.12 to CircleCI ([#1909](https://github.com/pilosa/pilosa/pull/1909))
+- Ignore fragment files from shards node doesn't own ([#1900](https://github.com/pilosa/pilosa/pull/1900))
+- Go module support. Use Modules instead of dep for dependencies ([#1616](https://github.com/pilosa/pilosa/pull/1616))
+- Merge Range() into Row() call. ([#1804](https://github.com/pilosa/pilosa/pull/1804))
+- Add from/to range arguments to Rows() call ([#1851](https://github.com/pilosa/pilosa/pull/1851))
+- Fixes Store call error messages, Rows doesn't need field argument ([#1830](https://github.com/pilosa/pilosa/pull/1830))
+
+### Performance
+- BTree performance improvements ([#1916](https://github.com/pilosa/pilosa/pull/1916))
+- Make Containers smaller, especially when they have small contents ([#1901](https://github.com/pilosa/pilosa/pull/1901))
+- Address UnionInPlace performance regressions ([#1897](https://github.com/pilosa/pilosa/pull/1897))
+- Small write path for import-roaring. Makes small imports faster ([#1892](https://github.com/pilosa/pilosa/pull/1892))
+- Small write path for imports ([#1871](https://github.com/pilosa/pilosa/pull/1871))
+- Remove copy for pilosa roaring files ([#1865](https://github.com/pilosa/pilosa/pull/1865))
+- Disable anti-entropy if not using replication [performance] ([#1814](https://github.com/pilosa/pilosa/pull/1814))
+- Group By—skip 0 counts as early as possible ([#1803](https://github.com/pilosa/pilosa/pull/1803))
+
 ## [1.2.0] - 2018-12-20
 
 This version contains 155 contributions from 11 contributors. There are 113 files changed; 19,085 insertions; and 4,323 deletions.
