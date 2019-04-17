@@ -77,8 +77,8 @@ type apiMethodNotAllowedError struct {
 	error
 }
 
-// newApiMethodNotAllowedError returns err wrapped in an ApiMethodNotAllowedError.
-func newApiMethodNotAllowedError(err error) apiMethodNotAllowedError {
+// newAPIMethodNotAllowedError returns err wrapped in an ApiMethodNotAllowedError.
+func newAPIMethodNotAllowedError(err error) apiMethodNotAllowedError {
 	return apiMethodNotAllowedError{err}
 }
 
@@ -128,6 +128,8 @@ type ColumnAttrSet struct {
 	Attrs map[string]interface{} `json:"attrs,omitempty"`
 }
 
+// MarshalJSON marshals the ColumnAttrSet to JSON such that
+// either a Key or an ID is included.
 func (cas ColumnAttrSet) MarshalJSON() ([]byte, error) {
 	if cas.Key != "" {
 		return json.Marshal(struct {

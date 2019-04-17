@@ -50,7 +50,6 @@ import (
 const (
 	// ShardWidth is the number of column IDs in a shard. It must be a power of 2 greater than or equal to 16.
 	// shardWidthExponent = 20 // set in shardwidthNN.go files
-
 	ShardWidth = 1 << shardwidth.Exponent
 
 	// shardVsContainerExponent is the power of 2 of ShardWith minus the power
@@ -2299,7 +2298,7 @@ func (ri *rowIterator) Next() (r *Row, rowID uint64, wrapped bool) {
 	}
 	rowID = ri.rowIDs[ri.cur]
 	r = ri.f.row(rowID)
-	ri.cur += 1
+	ri.cur++
 	return r, rowID, wrapped
 }
 

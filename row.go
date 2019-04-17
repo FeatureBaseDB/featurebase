@@ -43,6 +43,7 @@ func NewRow(columns ...uint64) *Row {
 	return r
 }
 
+// IsEmpty returns true if the row doesn't contain any set bits.
 func (r *Row) IsEmpty() bool {
 	if len(r.segments) == 0 {
 		return true

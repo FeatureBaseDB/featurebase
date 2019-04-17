@@ -17,6 +17,7 @@ package pilosa
 // NodeEventType are the types of node events.
 type NodeEventType int
 
+// Constant node event types.
 const (
 	NodeJoin NodeEventType = iota
 	NodeLeave

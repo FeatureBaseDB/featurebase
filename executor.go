@@ -987,6 +987,8 @@ type FieldRow struct {
 	RowKey string `json:"rowKey,omitempty"`
 }
 
+// MarshalJSON marshals FieldRow to JSON such that
+// either a Key or an ID is included.
 func (fr FieldRow) MarshalJSON() ([]byte, error) {
 	if fr.RowKey != "" {
 		return json.Marshal(struct {
@@ -1006,10 +1008,12 @@ func (fr FieldRow) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// String is the FieldRow stringer.
 func (fr FieldRow) String() string {
 	return fmt.Sprintf("%s.%d.%s", fr.Field, fr.RowID, fr.RowKey)
 }
 
+// GroupCount represents a result item for a group by query.
 type GroupCount struct {
 	Group []FieldRow `json:"group"`
 	Count uint64     `json:"count"`
@@ -1048,6 +1052,7 @@ func mergeGroupCounts(a, b []GroupCount, limit int) []GroupCount {
 	return ret
 }
 
+// Compare is used in ordering two GroupCount objects.
 func (g GroupCount) Compare(o GroupCount) int {
 	for i := range g.Group {
 		if g.Group[i].RowID < o.Group[i].RowID {
@@ -1158,7 +1163,7 @@ func (e *executor) executeRowsShard(_ context.Context, index string, fieldName s
 
 	// views contains the list of views to inspect (and merge)
 	// in order to represent `Rows` for the field.
-	var views []string = []string{viewStandard}
+	var views = []string{viewStandard}
 
 	// Handle `time` fields.
 	if f.Type() == FieldTypeTime {
@@ -1706,11 +1711,11 @@ func (e *executor) executeClearBitField(ctx context.Context, index string, c *pq
 		}
 
 		// Forward call to remote node otherwise.
-		if res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil); err != nil {
+		res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil)
+		if err != nil {
 			return false, err
-		} else {
-			ret = res[0].(bool)
 		}
+		ret = res[0].(bool)
 	}
 	return ret, nil
 }
@@ -1982,11 +1987,11 @@ func (e *executor) executeSetBitField(ctx context.Context, index string, c *pql.
 		}
 
 		// Forward call to remote node otherwise.
-		if res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil); err != nil {
+		res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil)
+		if err != nil {
 			return false, err
-		} else {
-			ret = res[0].(bool)
 		}
+		ret = res[0].(bool)
 	}
 	return ret, nil
 }
@@ -2017,11 +2022,11 @@ func (e *executor) executeSetValueField(ctx context.Context, index string, c *pq
 		}
 
 		// Forward call to remote node otherwise.
-		if res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil); err != nil {
+		res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil)
+		if err != nil {
 			return false, err
-		} else {
-			ret = res[0].(bool)
 		}
+		ret = res[0].(bool)
 	}
 	return ret, nil
 }
@@ -2881,7 +2886,7 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, filter *Row, inde
 			return nil, errors.Wrap(err, "getting previous")
 		} else if hasPrev && !ignorePrev {
 			if i == len(children)-1 {
-				prev += 1
+				prev++
 			}
 			gbi.rowIters[i].Seek(prev)
 		}

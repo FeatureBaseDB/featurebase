@@ -230,11 +230,11 @@ func (d *diagnosticsCollector) EnrichWithSchemaProperties() {
 
 	for _, index := range d.server.holder.Indexes() {
 		numShards += index.AvailableShards().Count()
-		numIndexes += 1
+		numIndexes++
 		for _, field := range index.Fields() {
-			numFields += 1
+			numFields++
 			if field.Type() == FieldTypeInt {
-				bsiFieldCount += 1
+				bsiFieldCount++
 			}
 			if field.TimeQuantum() != "" {
 				timeQuantumEnabled = true

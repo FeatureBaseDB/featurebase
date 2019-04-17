@@ -92,6 +92,8 @@ type Field struct {
 // FieldOption is a functional option type for pilosa.fieldOptions.
 type FieldOption func(fo *FieldOptions) error
 
+// OptFieldKeys is a functional option on FieldOptions
+// used to specify whether keys are used for this field.
 func OptFieldKeys() FieldOption {
 	return func(fo *FieldOptions) error {
 		fo.Keys = true
@@ -99,6 +101,8 @@ func OptFieldKeys() FieldOption {
 	}
 }
 
+// OptFieldTypeDefault is a functional option on FieldOptions
+// used to set the field type and cache setting to the default values.
 func OptFieldTypeDefault() FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
@@ -111,6 +115,9 @@ func OptFieldTypeDefault() FieldOption {
 	}
 }
 
+// OptFieldTypeSet is a functional option on FieldOptions
+// used to specify the field as being type `set` and to
+// provide any respective configuration values.
 func OptFieldTypeSet(cacheType string, cacheSize uint32) FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
@@ -123,6 +130,9 @@ func OptFieldTypeSet(cacheType string, cacheSize uint32) FieldOption {
 	}
 }
 
+// OptFieldTypeInt is a functional option on FieldOptions
+// used to specify the field as being type `int` and to
+// provide any respective configuration values.
 func OptFieldTypeInt(min, max int64) FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
@@ -138,7 +148,9 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 	}
 }
 
-// OptFieldTypeTime sets the field type to time.
+// OptFieldTypeTime is a functional option on FieldOptions
+// used to specify the field as being type `time` and to
+// provide any respective configuration values.
 // Pass true to skip creation of the standard view.
 func OptFieldTypeTime(timeQuantum TimeQuantum, opt ...bool) FieldOption {
 	return func(fo *FieldOptions) error {
@@ -155,6 +167,9 @@ func OptFieldTypeTime(timeQuantum TimeQuantum, opt ...bool) FieldOption {
 	}
 }
 
+// OptFieldTypeMutex is a functional option on FieldOptions
+// used to specify the field as being type `mutex` and to
+// provide any respective configuration values.
 func OptFieldTypeMutex(cacheType string, cacheSize uint32) FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
@@ -167,6 +182,9 @@ func OptFieldTypeMutex(cacheType string, cacheSize uint32) FieldOption {
 	}
 }
 
+// OptFieldTypeBool is a functional option on FieldOptions
+// used to specify the field as being type `bool` and to
+// provide any respective configuration values.
 func OptFieldTypeBool() FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
@@ -1036,6 +1054,7 @@ func (f *Field) Max(filter *Row, name string) (max, count int64, err error) {
 	return int64(vmax) + bsig.Min, int64(vcount), nil
 }
 
+// Range performs a conditional operation on Field.
 func (f *Field) Range(name string, op pql.Token, predicate int64) (*Row, error) {
 	// Retrieve and validate bsiGroup.
 	bsig := f.bsiGroup(name)
@@ -1283,6 +1302,9 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 	}
 }
 
+// MarshalJSON marshals FieldOptions to JSON such that
+// only those attributes associated to the field type
+// are included.
 func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 	switch o.Type {
 	case FieldTypeSet:
