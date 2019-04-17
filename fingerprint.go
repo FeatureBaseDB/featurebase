@@ -123,8 +123,7 @@ func (fp *FingerPrinter) GatherData() {
 
 					}
 					for _, row := range fragment.rows(0) {
-						rowSet[row] = rowSet[row] + fragment.unprotectedRow(row).Count()
-
+						rowSet[row] = rowSet[row] + fragment.storage.CountRange(row*ShardWidth, (row+1)*ShardWidth)
 					}
 
 				}
