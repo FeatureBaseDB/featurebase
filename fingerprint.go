@@ -29,7 +29,12 @@ func NewFingerPrinter(path string) *FingerPrinter {
 	holder.Path = path
 	holder.translateFile.Path = filepath.Join(path, ".keys")
 	fmt.Println("Loading")
-	holder.Open()
+
+	if err := holder.Open(); err != nil {
+		fmt.Println("Problems", err)
+		return nil
+
+	}
 	return &FingerPrinter{holder}
 }
 
