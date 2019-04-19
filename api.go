@@ -96,7 +96,7 @@ func (api *API) validate(f apiMethod) error {
 	if _, ok := validAPIMethods[state][f]; ok {
 		return nil
 	}
-	return newApiMethodNotAllowedError(errors.Errorf("api method %s not allowed in state %s", f, state))
+	return newAPIMethodNotAllowedError(errors.Errorf("api method %s not allowed in state %s", f, state))
 }
 
 // Query parses a PQL query out of the request and executes it.
@@ -617,7 +617,7 @@ func (api *API) RecalculateCaches(ctx context.Context) error {
 	return nil
 }
 
-// PostClusterMessage is for internal use. It decodes a protobuf message out of
+// ClusterMessage is for internal use. It decodes a protobuf message out of
 // the body and forwards it to the BroadcastHandler.
 func (api *API) ClusterMessage(ctx context.Context, reqBody io.Reader) error {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.ClusterMessage")
@@ -712,7 +712,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, fieldName stri
 	return errors.Wrap(err, "sending DeleteView message")
 }
 
-// IndexAttrDiff
+// IndexAttrDiff determines the local column attribute data blocks which differ from those provided.
 func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.IndexAttrDiff")
 	defer span.Finish()
@@ -750,6 +750,7 @@ func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []At
 	return attrs, nil
 }
 
+// FieldAttrDiff determines the local row attribute data blocks which differ from those provided.
 func (api *API) FieldAttrDiff(ctx context.Context, indexName string, fieldName string, blocks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.FieldAttrDiff")
 	defer span.Finish()
@@ -796,6 +797,8 @@ type ImportOptions struct {
 // ImportOption is a functional option type for API.Import.
 type ImportOption func(*ImportOptions) error
 
+// OptImportOptionsClear is a functional option on ImportOption
+// used to specify whether the import is a set or clear operation.
 func OptImportOptionsClear(c bool) ImportOption {
 	return func(o *ImportOptions) error {
 		o.Clear = c
@@ -803,6 +806,8 @@ func OptImportOptionsClear(c bool) ImportOption {
 	}
 }
 
+// OptImportOptionsIgnoreKeyCheck is a functional option on ImportOption
+// used to specify whether key check should be ignored.
 func OptImportOptionsIgnoreKeyCheck(b bool) ImportOption {
 	return func(o *ImportOptions) error {
 		o.IgnoreKeyCheck = b
@@ -1175,7 +1180,7 @@ func (api *API) Version() string {
 	return strings.TrimPrefix(Version, "v")
 }
 
-// Info returns information about this server instance
+// Info returns information about this server instance.
 func (api *API) Info() serverInfo {
 	si := api.server.systemInfo
 	// we don't report errors on failures to get this information
@@ -1192,6 +1197,7 @@ func (api *API) Info() serverInfo {
 	}
 }
 
+// TranslateKeys handles a TranslateKeyRequest.
 func (api *API) TranslateKeys(body io.Reader) ([]byte, error) {
 	reqBytes, err := ioutil.ReadAll(body)
 	if err != nil {

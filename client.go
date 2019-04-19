@@ -72,6 +72,7 @@ type InternalClient interface {
 
 //===============
 
+// InternalQueryClient is the internal interface for querying a node.
 type InternalQueryClient interface {
 	QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error)
 }

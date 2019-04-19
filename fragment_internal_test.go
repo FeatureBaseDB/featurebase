@@ -2757,7 +2757,7 @@ func calcTop(rowIDs, colIDs []uint64) []Pair {
 func calcExpected(inputs ...[]uint64) [][]uint64 {
 	// create map of row id to set of column values in that row.
 	rows := make(map[uint64]map[uint64]struct{})
-	var maxrow uint64 = 0
+	var maxrow uint64
 	for _, input := range inputs {
 		for _, val := range input {
 			row := val / ShardWidth

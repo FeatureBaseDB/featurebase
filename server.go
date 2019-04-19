@@ -75,6 +75,7 @@ type Server struct { // nolint: maligned
 	dataDir       string
 }
 
+// Holder returns the holder for server.
 // TODO: have this return an interface for Holder instead of concrete object?
 func (s *Server) Holder() *Holder {
 	return s.holder
@@ -83,6 +84,8 @@ func (s *Server) Holder() *Holder {
 // ServerOption is a functional option type for pilosa.Server
 type ServerOption func(s *Server) error
 
+// OptServerLogger is a functional option on Server
+// used to set the logger.
 func OptServerLogger(l logger.Logger) ServerOption {
 	return func(s *Server) error {
 		s.logger = l
@@ -90,6 +93,8 @@ func OptServerLogger(l logger.Logger) ServerOption {
 	}
 }
 
+// OptServerReplicaN is a functional option on Server
+// used to set the number of replicas.
 func OptServerReplicaN(n int) ServerOption {
 	return func(s *Server) error {
 		s.cluster.ReplicaN = n
@@ -97,6 +102,8 @@ func OptServerReplicaN(n int) ServerOption {
 	}
 }
 
+// OptServerDataDir is a functional option on Server
+// used to set the data directory.
 func OptServerDataDir(dir string) ServerOption {
 	return func(s *Server) error {
 		s.dataDir = dir
@@ -104,6 +111,9 @@ func OptServerDataDir(dir string) ServerOption {
 	}
 }
 
+// OptServerAttrStoreFunc is a functional option on Server
+// used to provide the function to use to generate a new
+// attribute store.
 func OptServerAttrStoreFunc(af func(string) AttrStore) ServerOption {
 	return func(s *Server) error {
 		s.holder.NewAttrStore = af
@@ -111,6 +121,8 @@ func OptServerAttrStoreFunc(af func(string) AttrStore) ServerOption {
 	}
 }
 
+// OptServerAntiEntropyInterval is a functional option on Server
+// used to set the anti-entropy interval.
 func OptServerAntiEntropyInterval(interval time.Duration) ServerOption {
 	return func(s *Server) error {
 		s.antiEntropyInterval = interval
@@ -118,6 +130,8 @@ func OptServerAntiEntropyInterval(interval time.Duration) ServerOption {
 	}
 }
 
+// OptServerLongQueryTime is a functional option on Server
+// used to set long query duration.
 func OptServerLongQueryTime(dur time.Duration) ServerOption {
 	return func(s *Server) error {
 		s.cluster.longQueryTime = dur
@@ -125,6 +139,8 @@ func OptServerLongQueryTime(dur time.Duration) ServerOption {
 	}
 }
 
+// OptServerMaxWritesPerRequest is a functional option on Server
+// used to set the maximum number of writes allowed per request.
 func OptServerMaxWritesPerRequest(n int) ServerOption {
 	return func(s *Server) error {
 		s.maxWritesPerRequest = n
@@ -132,6 +148,8 @@ func OptServerMaxWritesPerRequest(n int) ServerOption {
 	}
 }
 
+// OptServerMetricInterval is a functional option on Server
+// used to set the interval between metric samples.
 func OptServerMetricInterval(dur time.Duration) ServerOption {
 	return func(s *Server) error {
 		s.metricInterval = dur
@@ -139,6 +157,8 @@ func OptServerMetricInterval(dur time.Duration) ServerOption {
 	}
 }
 
+// OptServerSystemInfo is a functional option on Server
+// used to set the system information source.
 func OptServerSystemInfo(si SystemInfo) ServerOption {
 	return func(s *Server) error {
 		s.systemInfo = si
@@ -146,6 +166,8 @@ func OptServerSystemInfo(si SystemInfo) ServerOption {
 	}
 }
 
+// OptServerGCNotifier is a functional option on Server
+// used to set the garbage collection notification source.
 func OptServerGCNotifier(gcn GCNotifier) ServerOption {
 	return func(s *Server) error {
 		s.gcNotifier = gcn
@@ -153,6 +175,8 @@ func OptServerGCNotifier(gcn GCNotifier) ServerOption {
 	}
 }
 
+// OptServerInternalClient is a functional option on Server
+// used to set the implementation of InternalClient.
 func OptServerInternalClient(c InternalClient) ServerOption {
 	return func(s *Server) error {
 		s.executor = newExecutor(optExecutorInternalQueryClient(c))
@@ -162,7 +186,7 @@ func OptServerInternalClient(c InternalClient) ServerOption {
 	}
 }
 
-// DEPRECATED
+// OptServerPrimaryTranslateStore has been deprecated.
 func OptServerPrimaryTranslateStore(store TranslateStore) ServerOption {
 	return func(s *Server) error {
 		s.logger.Printf("DEPRECATED: OptServerPrimaryTranslateStore")
@@ -170,6 +194,9 @@ func OptServerPrimaryTranslateStore(store TranslateStore) ServerOption {
 	}
 }
 
+// OptServerPrimaryTranslateStoreFunc is a functional option on Server
+// used to specify the function used to create a new primary translate
+// store.
 func OptServerPrimaryTranslateStoreFunc(tf func(interface{}) TranslateStore) ServerOption {
 
 	return func(s *Server) error {
@@ -178,6 +205,8 @@ func OptServerPrimaryTranslateStoreFunc(tf func(interface{}) TranslateStore) Ser
 	}
 }
 
+// OptServerStatsClient is a functional option on Server
+// used to specify the stats client.
 func OptServerStatsClient(sc stats.StatsClient) ServerOption {
 	return func(s *Server) error {
 		s.holder.Stats = sc
@@ -185,6 +214,8 @@ func OptServerStatsClient(sc stats.StatsClient) ServerOption {
 	}
 }
 
+// OptServerDiagnosticsInterval is a functional option on Server
+// used to specify the duration between diagnostic checks.
 func OptServerDiagnosticsInterval(dur time.Duration) ServerOption {
 	return func(s *Server) error {
 		s.diagnosticInterval = dur
@@ -192,6 +223,8 @@ func OptServerDiagnosticsInterval(dur time.Duration) ServerOption {
 	}
 }
 
+// OptServerURI is a functional option on Server
+// used to set the server URI.
 func OptServerURI(uri *URI) ServerOption {
 	return func(s *Server) error {
 		s.uri = *uri
@@ -199,7 +232,7 @@ func OptServerURI(uri *URI) ServerOption {
 	}
 }
 
-// OptClusterDisabled tells the server whether to use a static cluster with the
+// OptServerClusterDisabled tells the server whether to use a static cluster with the
 // defined hosts. Mostly used for testing.
 func OptServerClusterDisabled(disabled bool, hosts []string) ServerOption {
 	return func(s *Server) error {
@@ -209,6 +242,8 @@ func OptServerClusterDisabled(disabled bool, hosts []string) ServerOption {
 	}
 }
 
+// OptServerSerializer is a functional option on Server
+// used to set the serializer.
 func OptServerSerializer(ser Serializer) ServerOption {
 	return func(s *Server) error {
 		s.serializer = ser
@@ -216,6 +251,8 @@ func OptServerSerializer(ser Serializer) ServerOption {
 	}
 }
 
+// OptServerIsCoordinator is a functional option on Server
+// used to specify whether or not this server is the coordinator.
 func OptServerIsCoordinator(is bool) ServerOption {
 	return func(s *Server) error {
 		s.isCoordinator = is
@@ -223,6 +260,8 @@ func OptServerIsCoordinator(is bool) ServerOption {
 	}
 }
 
+// OptServerNodeID is a functional option on Server
+// used to set the server node ID.
 func OptServerNodeID(nodeID string) ServerOption {
 	return func(s *Server) error {
 		s.nodeID = nodeID
@@ -230,6 +269,9 @@ func OptServerNodeID(nodeID string) ServerOption {
 	}
 }
 
+// OptServerClusterHasher is a functional option on Server
+// used to specify the consistent hash algorithm for data
+// location within the cluster.
 func OptServerClusterHasher(h Hasher) ServerOption {
 	return func(s *Server) error {
 		s.cluster.Hasher = h
@@ -237,6 +279,8 @@ func OptServerClusterHasher(h Hasher) ServerOption {
 	}
 }
 
+// OptServerTranslateFileMapSize is a functional option on Server
+// used to specify the size of the translate file.
 func OptServerTranslateFileMapSize(mapSize int) ServerOption {
 	return func(s *Server) error {
 		s.holder.translateFile = NewTranslateFile(OptTranslateFileMapSize(mapSize))
@@ -681,9 +725,8 @@ func (s *Server) monitorDiagnostics() {
 	if s.diagnosticInterval < time.Minute {
 		s.logger.Printf("diagnostics disabled")
 		return
-	} else {
-		s.logger.Printf("Pilosa is currently configured to send small diagnostics reports to our team every %v. More information here: https://www.pilosa.com/docs/latest/administration/#diagnostics", s.diagnosticInterval)
 	}
+	s.logger.Printf("Pilosa is currently configured to send small diagnostics reports to our team every %v. More information here: https://www.pilosa.com/docs/latest/administration/#diagnostics", s.diagnosticInterval)
 
 	s.diagnostics.Logger = s.logger
 	s.diagnostics.SetVersion(Version)

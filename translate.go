@@ -33,6 +33,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Log entry type constants.
 const (
 	LogEntryTypeInsertColumn = 1
 	LogEntryTypeInsertRow    = 2
@@ -42,6 +43,7 @@ const (
 	defaultReplicationRetryInterval = 1 * time.Second
 )
 
+// Translate store errors.
 var (
 	ErrTranslateStoreClosed          = errors.New("pilosa: translate store closed")
 	ErrTranslateStoreReaderClosed    = errors.New("pilosa: translate store reader closed")
@@ -99,12 +101,17 @@ type TranslateFile struct {
 // TranslateFileOption is a functional option type for pilosa.TranslateFile
 type TranslateFileOption func(f *TranslateFile) error
 
+// OptTranslateFileMapSize is a functional option on TranslateFile
+// used to set the map size.
 func OptTranslateFileMapSize(mapSize int) TranslateFileOption {
 	return func(f *TranslateFile) error {
 		f.mapSize = mapSize
 		return nil
 	}
 }
+
+// OptTranslateFileLogger is a functional option on TranslateFile
+// used to set the file logger.
 func OptTranslateFileLogger(l logger.Logger) TranslateFileOption {
 	return func(s *TranslateFile) error {
 		s.logger = l
@@ -151,6 +158,7 @@ func NewTranslateFile(opts ...TranslateFileOption) *TranslateFile {
 	return f
 }
 
+// Open opens the translate file.
 func (s *TranslateFile) Open() (err error) {
 	// Open writer & buffered writer.
 	if err := os.MkdirAll(filepath.Dir(s.Path), 0777); err != nil {
@@ -232,6 +240,7 @@ func (s *TranslateFile) handlePrimaryStoreEvent(ev primaryStoreEvent) error {
 	return nil
 }
 
+// Close closes the translate file.
 func (s *TranslateFile) Close() (err error) {
 	s.once.Do(func() {
 		close(s.closing)
@@ -588,6 +597,7 @@ func (s *TranslateFile) TranslateColumnToString(index string, value uint64) (str
 	return "", nil
 }
 
+// TranslateRowsToUint64 converts a slice of row keys to a slice of row IDs.
 func (s *TranslateFile) TranslateRowsToUint64(index, field string, values []string) ([]uint64, error) {
 	key := fieldKey{index, field}
 
@@ -679,6 +689,7 @@ func (s *TranslateFile) TranslateRowsToUint64(index, field string, values []stri
 	return ret, nil
 }
 
+// TranslateRowToString translates a row ID to a string key.
 func (s *TranslateFile) TranslateRowToString(index, field string, id uint64) (string, error) {
 	s.mu.RLock()
 	if idx := s.rows[fieldKey{index, field}]; idx != nil {
@@ -700,6 +711,8 @@ func (s *TranslateFile) Reader(ctx context.Context, offset int64) (io.ReadCloser
 	return rc, nil
 }
 
+// LogEntry is a batch of Key/ID mappings which is replicated to other nodes
+// for read-only key translation.
 type LogEntry struct {
 	Type  uint8
 	Index []byte
