@@ -379,27 +379,33 @@ func (f *Field) Options() FieldOptions {
 func (f *Field) Open() error {
 	if err := func() error {
 		// Ensure the field's path exists.
+		f.logger.Debugf("ensure field path exists: %s", f.path)
 		if err := os.MkdirAll(f.path, 0777); err != nil {
 			return errors.Wrap(err, "creating field dir")
 		}
 
+		f.logger.Debugf("load meta file for index/field: %s/%s", f.index, f.name)
 		if err := f.loadMeta(); err != nil {
 			return errors.Wrap(err, "loading meta")
 		}
 
+		f.logger.Debugf("load available shards for index/field: %s/%s", f.index, f.name)
 		if err := f.loadAvailableShards(); err != nil {
 			return errors.Wrap(err, "loading available shards")
 		}
 
 		// Apply the field options loaded from meta.
+		f.logger.Debugf("apply options for index/field: %s/%s", f.index, f.name)
 		if err := f.applyOptions(f.options); err != nil {
 			return errors.Wrap(err, "applying options")
 		}
 
+		f.logger.Debugf("open views for index/field: %s/%s", f.index, f.name)
 		if err := f.openViews(); err != nil {
 			return errors.Wrap(err, "opening views")
 		}
 
+		f.logger.Debugf("open row attribute store for index/field: %s/%s", f.index, f.name)
 		if err := f.rowAttrStore.Open(); err != nil {
 			return errors.Wrap(err, "opening attrstore")
 		}
@@ -410,6 +416,7 @@ func (f *Field) Open() error {
 		return err
 	}
 
+	f.logger.Debugf("successfully opened field index/field: %s/%s", f.index, f.name)
 	return nil
 }
 
@@ -434,11 +441,13 @@ func (f *Field) openViews() error {
 		}
 
 		name := filepath.Base(fi.Name())
+		f.logger.Debugf("open index/field/view: %s/%s/%s", f.index, f.name, fi.Name())
 		view := f.newView(f.viewPath(name), name)
 		if err := view.open(); err != nil {
 			return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
 		}
 		view.rowAttrStore = f.rowAttrStore
+		f.logger.Debugf("add index/field/view to field.viewMap: %s/%s/%s", f.index, f.name, view.name)
 		f.viewMap[view.name] = view
 	}
 
