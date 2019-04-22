@@ -58,10 +58,6 @@ const (
 	FieldTypeBool  = "bool"
 )
 
-func defaultShardValidator(shard uint64) bool {
-	return true
-}
-
 // Field represents a container for views.
 type Field struct {
 	mu    sync.RWMutex
@@ -84,7 +80,6 @@ type Field struct {
 
 	// Shards with data on any node in the cluster, according to this node.
 	remoteAvailableShards *roaring.Bitmap
-	shardValidator        func(uint64) bool
 
 	logger logger.Logger
 }
@@ -212,8 +207,7 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 
 		remoteAvailableShards: roaring.NewBitmap(),
 
-		shardValidator: defaultShardValidator,
-		logger:         logger.NopLogger,
+		logger: logger.NopLogger,
 	}
 	return f, nil
 }
@@ -762,7 +756,6 @@ func (f *Field) newView(path, name string) *view {
 	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats.WithTags(fmt.Sprintf("view:%s", name))
 	view.broadcaster = f.broadcaster
-	view.shardValidator = f.shardValidator
 	return view
 }
 
