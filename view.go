@@ -52,11 +52,10 @@ type view struct {
 	// Fragments by shard.
 	fragments map[uint64]*fragment
 
-	broadcaster    broadcaster
-	stats          stats.StatsClient
-	rowAttrStore   AttrStore
-	logger         logger.Logger
-	shardValidator func(uint64) bool
+	broadcaster  broadcaster
+	stats        stats.StatsClient
+	rowAttrStore AttrStore
+	logger       logger.Logger
 }
 
 // newView returns a new instance of View.
@@ -73,10 +72,9 @@ func newView(path, index, field, name string, fieldOptions FieldOptions) *view {
 
 		fragments: make(map[uint64]*fragment),
 
-		broadcaster:    NopBroadcaster,
-		stats:          stats.NopStatsClient,
-		logger:         logger.NopLogger,
-		shardValidator: defaultShardValidator,
+		broadcaster: NopBroadcaster,
+		stats:       stats.NopStatsClient,
+		logger:      logger.NopLogger,
 	}
 }
 
@@ -132,10 +130,6 @@ func (v *view) openFragments() error {
 		// Parse filename into integer.
 		shard, err := strconv.ParseUint(filepath.Base(fi.Name()), 10, 64)
 		if err != nil {
-			continue
-		}
-		//skip shard if not owned
-		if !v.shardValidator(shard) {
 			continue
 		}
 
