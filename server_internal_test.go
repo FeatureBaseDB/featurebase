@@ -16,12 +16,9 @@ package pilosa
 
 import (
 	"io/ioutil"
-	"os"
 	"runtime"
 	"testing"
 	"time"
-
-	"github.com/pilosa/pilosa/roaring"
 )
 
 // Ensure the file handle count is working
@@ -61,60 +58,5 @@ func TestMonitorAntiEntropyZero(t *testing.T) {
 	case <-ch:
 	case <-time.After(time.Second):
 		t.Fatalf("monitorAntiEntropy should have returned immediately with duration 0")
-	}
-}
-
-func TestOnlyOpenOwnedFiles(t *testing.T) {
-	path, err := ioutil.TempDir("", "pilosa")
-	if err != nil {
-		t.Fatalf("getting temp dir: %v", err)
-	}
-	defer func() {
-		err := os.RemoveAll(path)
-		if err != nil {
-			t.Logf("cleaning up temp dir: %v", err)
-		}
-	}()
-	bm := roaring.NewFileBitmap(1, 2, 3)
-	err = os.MkdirAll(path+"/i/f/views/standard/fragments", os.ModeDir|os.ModePerm)
-	if err != nil {
-		t.Fatalf("mkdirall: %v", err)
-	}
-	one, err := os.Create(path + "/i/f/views/standard/fragments/1")
-	if err != nil {
-		t.Fatalf("creating one: %v", err)
-	}
-	two, err := os.Create(path + "/i/f/views/standard/fragments/2")
-	if err != nil {
-		t.Fatalf("creating two: %v", err)
-	}
-	_, err = bm.WriteTo(one)
-	if err != nil {
-		t.Fatalf("writing to one: %v", err)
-	}
-	_, err = bm.WriteTo(two)
-	if err != nil {
-		t.Fatalf("writing to two: %v", err)
-	}
-
-	h := NewHolder()
-	h.Path = path
-	h.shardValidatorFunc = func(index string, shard uint64) bool {
-		return shard == 1
-	}
-
-	err = h.Open()
-	if err != nil {
-		t.Fatalf("opening holder: %v", err)
-	}
-
-	view := h.Index("i").Field("f").view("standard")
-
-	if len(view.fragments) != 1 {
-		t.Errorf("should have one fragment, but have: %d", len(view.fragments))
-	}
-
-	if _, ok := view.fragments[1]; !ok {
-		t.Errorf("should have fragment 1, but fragments: %#v", view.fragments)
 	}
 }
