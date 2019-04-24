@@ -167,6 +167,7 @@ func (s *TranslateFile) Open() (err error) {
 		return errors.Wrapf(err, "open file %s", s.Path)
 	}
 	s.w = bufio.NewWriter(s.file)
+	s.n = 0
 
 	// Memory map data file.
 	if s.data, err = syscall.Mmap(int(s.file.Fd()), 0, s.mapSize, syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
