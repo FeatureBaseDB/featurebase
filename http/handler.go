@@ -187,6 +187,7 @@ func (h *Handler) populateValidators() {
 	h.validators["GetInfo"] = queryValidationSpecRequired()
 	h.validators["RecalculateCaches"] = queryValidationSpecRequired()
 	h.validators["GetSchema"] = queryValidationSpecRequired()
+	h.validators["PostSchema"] = queryValidationSpecRequired()
 	h.validators["GetStatus"] = queryValidationSpecRequired()
 	h.validators["GetVersion"] = queryValidationSpecRequired()
 	h.validators["PostClusterMessage"] = queryValidationSpecRequired()
@@ -255,6 +256,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/info", handler.handleGetInfo).Methods("GET").Name("GetInfo")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST").Name("RecalculateCaches")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET").Name("GetSchema")
+	router.HandleFunc("/schema", handler.handlePostSchema).Methods("POST").Name("PostSchema")
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET").Name("GetStatus")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET").Name("GetVersion")
 
@@ -412,8 +414,22 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	}
 
 	schema := h.api.Schema(r.Context())
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{"indexes": schema}); err != nil {
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"indexes": schema}); err != nil { // TODO: use pilosa.Schema instead of map[string]interface{} here?
 		h.logger.Printf("write schema response error: %s", err)
+	}
+}
+
+func (h *Handler) handlePostSchema(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("here")
+	schema := &pilosa.Schema{}
+	if err := json.NewDecoder(r.Body).Decode(schema); err != nil {
+		http.Error(w, fmt.Sprintf("decoding request as JSON Pilosa schema: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	if err := h.api.ApplySchema(r.Context(), schema); err != nil {
+		http.Error(w, fmt.Sprintf("apply schema to Pilosa: %v", err), http.StatusBadRequest)
+		return
 	}
 }
 

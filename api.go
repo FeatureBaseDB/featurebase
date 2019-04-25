@@ -655,6 +655,10 @@ func (api *API) Schema(ctx context.Context) []*IndexInfo {
 	return api.holder.limitedSchema()
 }
 
+func (api *API) ApplySchema(ctx context.Context, s *Schema) error {
+	return api.holder.applySchema(s)
+}
+
 // Views returns the views in the given field.
 func (api *API) Views(ctx context.Context, indexName string, fieldName string) ([]*view, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Views")
