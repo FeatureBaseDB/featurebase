@@ -420,7 +420,6 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handlePostSchema(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("here")
 	schema := &pilosa.Schema{}
 	if err := json.NewDecoder(r.Body).Decode(schema); err != nil {
 		http.Error(w, fmt.Sprintf("decoding request as JSON Pilosa schema: %v", err), http.StatusBadRequest)
