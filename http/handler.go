@@ -430,6 +430,7 @@ func (h *Handler) handlePostSchema(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("apply schema to Pilosa: %v", err), http.StatusBadRequest)
 		return
 	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleGetStatus handles GET /status requests.

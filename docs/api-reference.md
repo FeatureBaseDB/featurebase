@@ -241,7 +241,7 @@ curl -XDELETE localhost:10101/index/user/field/language
 Returns the schema of all indexes in JSON.
 
 ``` request
-curl -XGET localhost:10101/index
+curl -XGET localhost:10101/schema
 ```
 ``` response
 {
@@ -275,6 +275,24 @@ curl -XGET localhost:10101/index
     ]
 }
 ```
+
+### Duplicate schema into empty Pilosa cluster
+
+`POST /schema`
+
+To duplicate one Pilosa cluster's schema to another, it's possible to
+pass the output of `GET /schema` as the request body of `POST /schema`
+and all the indexes and fields in the schema will be created in
+Pilosa. As of this writing, the behavior of POSTing a schema to a
+non-empty Pilosa cluster is undefined. These semantics will likely be
+ironed out in a future version.
+
+``` request
+# after (e.g.) curl -XGET localhost:10101/schema > schema.json
+curl -XPOST localhost:10101/schema --data-binary @schema.json
+```
+
+Response: `204 No Content`
 
 ### Get version
 
