@@ -36,19 +36,57 @@ import (
 	"github.com/pilosa/pilosa/test"
 )
 
-// Ensure the handler returns "not found" for invalid paths.
 func TestHandler_Endpoints(t *testing.T) {
 	cmd := test.MustRunCluster(t, 1)[0]
 	h := cmd.Handler.(*http.Handler).Handler
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
 
+	// Ensure the handler returns "not found" for invalid paths.
 	t.Run("Not Found", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/no_such_path", nil))
 		if w.Code != gohttp.StatusNotFound {
 			t.Fatalf("invalid status: %d", w.Code)
 		}
+	})
+
+	t.Run("SchemaEmpty", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", nil))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		body := w.Body.String()
+		if body != "{\"indexes\":null}\n" {
+			t.Fatalf("unexpected empty schema: '%v'", body)
+		}
+
+	})
+
+	t.Run("PostSchema", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/schema", strings.NewReader(`{"indexes":[{"name":"blah","options":{"keys":false,"trackExistence":true},"fields":[{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":1048576}]}`)))
+		if w.Code != gohttp.StatusNoContent {
+			t.Fatalf("unexpected code: %v", w.Code)
+		}
+		idx, err := cmd.API.Index(context.Background(), "blah")
+		if err != nil {
+			t.Fatalf("getting index: %v", err)
+		}
+		if idx.Name() != "blah" {
+			t.Fatalf("index did not get set, got %v", idx.Name())
+		}
+
+		fld, err := cmd.API.Field(context.Background(), "blah", "f1")
+		if err != nil {
+			t.Fatalf("getting field: %v", err)
+		}
+		if fld.Name() != "f1" {
+			t.Fatalf("unexpected field: %v", fld.Name())
+		}
+
+		h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/blah", nil))
 	})
 
 	t.Run("Info", func(t *testing.T) {
