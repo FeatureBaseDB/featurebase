@@ -186,7 +186,7 @@ Set(3, A=8, 2017-05-19T00:00)
 ```
 
 ![time quantum field diagram](/img/docs/field-time-quantum.png)
-*Time quantum fueld diagram*
+*Time quantum field diagram*
 
 #### Mutex
 
