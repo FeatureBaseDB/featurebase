@@ -16,6 +16,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"strings"
@@ -125,29 +126,31 @@ func TestConfig_validateAddrs(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		c := NewConfig()
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			c := NewConfig()
 
-		c.Bind = test.in.bind
-		c.Advertise = test.in.advertise
+			c.Bind = test.in.bind
+			c.Advertise = test.in.advertise
 
-		err := c.validateAddrs(context.Background())
+			err := c.validateAddrs(context.Background())
 
-		if err != nil && test.expErr == "" {
-			t.Fatal(err)
-		} else if err == nil && test.expErr != "" {
-			t.Fatalf("test %d: expected error string to contain %s, but got no error", i, test.expErr)
-		} else if err != nil && test.expErr != "" {
-			if strings.Contains(err.Error(), test.expErr) {
-				continue
-			} else {
-				t.Fatalf("test %d: expected error string to contain %s, but got %s", i, test.expErr, err.Error())
+			if err != nil && test.expErr == "" {
+				t.Fatal(err)
+			} else if err == nil && test.expErr != "" {
+				t.Fatalf("expected error string to contain %s, but got no error", test.expErr)
+			} else if err != nil && test.expErr != "" {
+				if strings.Contains(err.Error(), test.expErr) {
+					return
+				} else {
+					t.Fatalf("expected error string to contain %s, but got %s", test.expErr, err.Error())
+				}
 			}
-		}
 
-		if c.Bind != test.exp.bind {
-			t.Fatalf("test %d: bind address: expected %s, but got %s", i, test.exp.bind, c.Bind)
-		} else if c.Advertise != test.exp.advertise {
-			t.Fatalf("test %d: advertise address: expected %s, but got %s", i, test.exp.advertise, c.Advertise)
-		}
+			if c.Bind != test.exp.bind {
+				t.Fatalf("bind address: expected %s, but got %s", test.exp.bind, c.Bind)
+			} else if c.Advertise != test.exp.advertise {
+				t.Fatalf("advertise address: expected %s, but got %s", test.exp.advertise, c.Advertise)
+			}
+		})
 	}
 }

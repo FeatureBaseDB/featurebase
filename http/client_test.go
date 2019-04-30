@@ -182,7 +182,10 @@ func TestClient_MultiNode(t *testing.T) {
 
 // Ensure client can export data.
 func TestClient_Export(t *testing.T) {
-	cmd := test.MustRunCluster(t, 1)[0]
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
+
 	host := cmd.URL()
 
 	cmd.MustCreateIndex(t, "keyed", pilosa.IndexOptions{Keys: true})
@@ -345,7 +348,9 @@ func TestClient_Export(t *testing.T) {
 
 // Ensure client can bulk import data.
 func TestClient_Import(t *testing.T) {
-	cmd := test.MustRunCluster(t, 1)[0]
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
 	host := cmd.URL()
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
@@ -514,7 +519,9 @@ func TestClient_ImportRoaring(t *testing.T) {
 // Ensure client can bulk import data.
 func TestClient_ImportKeys(t *testing.T) {
 	t.Run("SingleNode", func(t *testing.T) {
-		cmd := test.MustRunCluster(t, 1)[0]
+		cluster := test.MustRunCluster(t, 1)
+		defer cluster.Close()
+		cmd := cluster[0]
 		host := cmd.URL()
 
 		cmd.MustCreateIndex(t, "keyed", pilosa.IndexOptions{Keys: true})
@@ -611,6 +618,7 @@ func TestClient_ImportKeys(t *testing.T) {
 
 	t.Run("MultiNode", func(t *testing.T) {
 		cluster := test.MustRunCluster(t, 2)
+		defer cluster.Close()
 		cmd0 := cluster[0]
 		cmd1 := cluster[1]
 		host0 := cmd0.URL()
@@ -686,7 +694,9 @@ func TestClient_ImportKeys(t *testing.T) {
 	})
 
 	t.Run("IntegerFieldSingleNode", func(t *testing.T) {
-		cmd := test.MustRunCluster(t, 1)[0]
+		cluster := test.MustRunCluster(t, 1)
+		defer cluster.Close()
+		cmd := cluster[0]
 		host := cmd.URL()
 		holder := cmd.Server.Holder()
 		hldr := test.Holder{Holder: holder}
@@ -769,7 +779,9 @@ func TestClient_ImportKeys(t *testing.T) {
 
 // Ensure client can bulk import value data.
 func TestClient_ImportValue(t *testing.T) {
-	cmd := test.MustRunCluster(t, 1)[0]
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
 	host := cmd.URL()
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
@@ -875,7 +887,9 @@ func TestClient_ImportValue(t *testing.T) {
 
 // Ensure client can bulk import data while tracking existence.
 func TestClient_ImportExistence(t *testing.T) {
-	cmd := test.MustRunCluster(t, 1)[0]
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
 	host := cmd.URL()
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
@@ -952,7 +966,10 @@ func TestClient_ImportExistence(t *testing.T) {
 
 // Ensure client can retrieve a list of all checksums for blocks in a fragment.
 func TestClient_FragmentBlocks(t *testing.T) {
-	cmd := test.MustRunCluster(t, 1)[0]
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
+
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
 
