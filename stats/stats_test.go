@@ -211,7 +211,9 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 }
 
 func TestStatsCount_APICalls(t *testing.T) {
-	cmd := test.MustRunCluster(t, 1)[0]
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
 	h := cmd.Handler.(*http.Handler).Handler
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}

@@ -37,7 +37,9 @@ func TestTranslateStore_Reader(t *testing.T) {
 			// "translator_test.go:65: unexpected EOF"
 			t.Skip()
 
-			primary := test.MustRunCluster(t, 1)[0]
+			cluster := test.MustRunCluster(t, 1)
+			defer cluster.Close()
+			primary := cluster[0]
 
 			hldr := test.Holder{Holder: primary.Server.Holder()}
 			index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{Keys: true})
@@ -103,9 +105,10 @@ func TestTranslateStore_Reader(t *testing.T) {
 			}
 
 			opts := server.OptCommandServerOptions(pilosa.OptServerPrimaryTranslateStore(translateStore))
-			primary := test.MustRunCluster(t, 1, []server.CommandOption{opts})[0]
+			cluster := test.MustRunCluster(t, 1, []server.CommandOption{opts})
+			defer cluster.Close()
+			primary := cluster[0]
 
-			defer primary.Close()
 			defer close(done)
 
 			// Connect to server and begin streaming.
@@ -135,8 +138,9 @@ func TestTranslateStore_Reader(t *testing.T) {
 		}
 
 		opts := server.OptCommandServerOptions(pilosa.OptServerPrimaryTranslateStore(translateStore))
-		primary := test.MustRunCluster(t, 1, []server.CommandOption{opts})[0]
-		defer primary.Close()
+		cluster := test.MustRunCluster(t, 1, []server.CommandOption{opts})
+		defer cluster.Close()
+		primary := cluster[0]
 
 		ts := http.NewTranslateStore(primary.URL())
 		_, err := ts.Reader(context.Background(), 0)

@@ -36,8 +36,49 @@ import (
 	"github.com/pilosa/pilosa/test"
 )
 
+func TestHandler_PostSchemaCluster(t *testing.T) {
+	cluster := test.MustRunCluster(t, 3)
+	defer cluster.Close()
+	cmd := cluster[0]
+	h := cmd.Handler.(*http.Handler).Handler
+
+	t.Run("PostSchema", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/schema", strings.NewReader(`{"indexes":[{"name":"blah","options":{"keys":false,"trackExistence":true},"fields":[{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":1048576}]}`)))
+		if w.Code != gohttp.StatusNoContent {
+			bod, err := ioutil.ReadAll(w.Result().Body)
+			if err != nil {
+				t.Errorf("reading body: %v", err)
+			}
+			t.Fatalf("unexpected code: %v, bod: %s", w.Code, bod)
+		}
+		for i := 0; i < len(cluster); i++ {
+			cmd = cluster[i]
+			idx, err := cmd.API.Index(context.Background(), "blah")
+			if err != nil {
+				t.Fatalf("getting index: %v", err)
+			}
+			if idx.Name() != "blah" {
+				t.Fatalf("index did not get set, got %v", idx.Name())
+			}
+
+			fld, err := cmd.API.Field(context.Background(), "blah", "f1")
+			if err != nil {
+				t.Fatalf("getting field: %v", err)
+			}
+			if fld.Name() != "f1" {
+				t.Fatalf("unexpected field: %v", fld.Name())
+			}
+		}
+
+		h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/blah", nil))
+	})
+}
+
 func TestHandler_Endpoints(t *testing.T) {
-	cmd := test.MustRunCluster(t, 1)[0]
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
 	h := cmd.Handler.(*http.Handler).Handler
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
@@ -68,7 +109,11 @@ func TestHandler_Endpoints(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/schema", strings.NewReader(`{"indexes":[{"name":"blah","options":{"keys":false,"trackExistence":true},"fields":[{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":1048576}]}`)))
 		if w.Code != gohttp.StatusNoContent {
-			t.Fatalf("unexpected code: %v", w.Code)
+			bod, err := ioutil.ReadAll(w.Result().Body)
+			if err != nil {
+				t.Errorf("reading body: %v", err)
+			}
+			t.Fatalf("unexpected code: %v, bod: %s", w.Code, bod)
 		}
 		idx, err := cmd.API.Index(context.Background(), "blah")
 		if err != nil {
@@ -698,6 +743,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 
 		clus := test.MustRunCluster(t, 1, []server.CommandOption{test.OptAllowedOrigins([]string{"http://test/"})})
+		defer clus.Close()
 		w = httptest.NewRecorder()
 		h := clus[0].Handler.(*http.Handler).Handler
 		h.ServeHTTP(w, req)

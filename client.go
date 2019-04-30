@@ -46,6 +46,7 @@ type FieldValue struct {
 type InternalClient interface {
 	MaxShardByIndex(ctx context.Context) (map[string]uint64, error)
 	Schema(ctx context.Context) ([]*IndexInfo, error)
+	PostSchema(ctx context.Context, uri *URI, s *Schema, remote bool) error
 	CreateIndex(ctx context.Context, index string, opt IndexOptions) error
 	FragmentNodes(ctx context.Context, index string, shard uint64) ([]*Node, error)
 	Nodes(ctx context.Context) ([]*Node, error)
@@ -103,6 +104,10 @@ func (n nopInternalClient) MaxShardByIndex(context.Context) (map[string]uint64, 
 	return nil, nil
 }
 func (n nopInternalClient) Schema(ctx context.Context) ([]*IndexInfo, error) { return nil, nil }
+func (n nopInternalClient) PostSchema(ctx context.Context, uri *URI, s *Schema, remote bool) error {
+	return nil
+}
+
 func (n nopInternalClient) CreateIndex(ctx context.Context, index string, opt IndexOptions) error {
 	return nil
 }

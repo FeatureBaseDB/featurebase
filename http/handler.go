@@ -187,7 +187,7 @@ func (h *Handler) populateValidators() {
 	h.validators["GetInfo"] = queryValidationSpecRequired()
 	h.validators["RecalculateCaches"] = queryValidationSpecRequired()
 	h.validators["GetSchema"] = queryValidationSpecRequired()
-	h.validators["PostSchema"] = queryValidationSpecRequired()
+	h.validators["PostSchema"] = queryValidationSpecRequired().Optional("remote")
 	h.validators["GetStatus"] = queryValidationSpecRequired()
 	h.validators["GetVersion"] = queryValidationSpecRequired()
 	h.validators["PostClusterMessage"] = queryValidationSpecRequired()
@@ -420,13 +420,20 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handlePostSchema(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	remoteStr := q.Get("remote")
+	var remote bool
+	if remoteStr == "true" {
+		remote = true
+	}
+
 	schema := &pilosa.Schema{}
 	if err := json.NewDecoder(r.Body).Decode(schema); err != nil {
 		http.Error(w, fmt.Sprintf("decoding request as JSON Pilosa schema: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	if err := h.api.ApplySchema(r.Context(), schema); err != nil {
+	if err := h.api.ApplySchema(r.Context(), schema, remote); err != nil {
 		http.Error(w, fmt.Sprintf("apply schema to Pilosa: %v", err), http.StatusBadRequest)
 		return
 	}

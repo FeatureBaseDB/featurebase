@@ -26,7 +26,12 @@ require (
 	github.com/spf13/viper v1.3.1
 	github.com/uber/jaeger-client-go v2.15.0+incompatible
 	github.com/uber/jaeger-lib v1.5.0
-	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
+	golang.org/x/crypto v0.0.0-20190426145343-a29dc8fdc734 // indirect
+	golang.org/x/net v0.0.0-20190424112056-4829fb13d2c6 // indirect
+	golang.org/x/sync v0.0.0-20190423024810-112230192c58
+	golang.org/x/sys v0.0.0-20190429190828-d89cdac9e872 // indirect
+	golang.org/x/text v0.3.2 // indirect
+	golang.org/x/tools v0.0.0-20190429231329-9d4d845e86f1 // indirect
 	modernc.org/mathutil v1.0.0
 	modernc.org/strutil v1.0.0
 )
