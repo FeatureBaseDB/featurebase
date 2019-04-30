@@ -1814,8 +1814,10 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "fragment.importRoaring")
 	defer span.Finish()
+	span, ctx = tracing.StartSpanFromContext(ctx, "importRoaring.AcquireFragmentLock")
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	span.Finish()
 	bm := roaring.NewBTreeBitmap()
 	span, ctx = tracing.StartSpanFromContext(ctx, "importRoaring.UnmarshalBinary")
 	err := bm.UnmarshalBinary(data)
@@ -1883,7 +1885,8 @@ func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) e
 	f.cache.Recalculate()
 
 	span, _ = tracing.StartSpanFromContext(ctx, "importRoaring.WriteToFragment")
-	err = unprotectedWriteToFragment(f, bm)
+	n, err := unprotectedWriteToFragment(f, bm)
+	span.LogKV("bytesWritten", n)
 	span.Finish()
 	return err
 }
@@ -1915,12 +1918,13 @@ func track(start time.Time, message string, stats stats.StatsClient, logger logg
 }
 
 func (f *fragment) snapshot() error {
-	return unprotectedWriteToFragment(f, f.storage)
+	_, err := unprotectedWriteToFragment(f, f.storage)
+	return err
 }
 
 // unprotectedWriteToFragment writes the fragment f with bm as the data. It is unprotected, and
 // f.mu must be locked when calling it.
-func unprotectedWriteToFragment(f *fragment, bm *roaring.Bitmap) error { // nolint: interfacer
+func unprotectedWriteToFragment(f *fragment, bm *roaring.Bitmap) (n int64, err error) { // nolint: interfacer
 
 	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	start := time.Now()
@@ -1930,39 +1934,39 @@ func unprotectedWriteToFragment(f *fragment, bm *roaring.Bitmap) error { // noli
 	snapshotPath := f.path + snapshotExt
 	file, err := os.Create(snapshotPath)
 	if err != nil {
-		return fmt.Errorf("create snapshot file: %s", err)
+		return n, fmt.Errorf("create snapshot file: %s", err)
 	}
 	defer file.Close()
 
 	// Write storage to snapshot.
 	bw := bufio.NewWriter(file)
-	if _, err := bm.WriteTo(bw); err != nil {
-		return fmt.Errorf("snapshot write to: %s", err)
+	if n, err = bm.WriteTo(bw); err != nil {
+		return n, fmt.Errorf("snapshot write to: %s", err)
 	}
 
 	if err := bw.Flush(); err != nil {
-		return fmt.Errorf("flush: %s", err)
+		return n, fmt.Errorf("flush: %s", err)
 	}
 
 	// Close current storage.
 	if err := f.closeStorage(); err != nil {
-		return fmt.Errorf("close storage: %s", err)
+		return n, fmt.Errorf("close storage: %s", err)
 	}
 
 	// Move snapshot to data file location.
 	if err := os.Rename(snapshotPath, f.path); err != nil {
-		return fmt.Errorf("rename snapshot: %s", err)
+		return n, fmt.Errorf("rename snapshot: %s", err)
 	}
 
 	// Reopen storage.
 	if err := f.openStorage(); err != nil {
-		return fmt.Errorf("open storage: %s", err)
+		return n, fmt.Errorf("open storage: %s", err)
 	}
 
 	// Reset operation count.
 	f.opN = 0
 
-	return nil
+	return n, nil
 }
 
 // RecalculateCache rebuilds the cache regardless of invalidate time delay.

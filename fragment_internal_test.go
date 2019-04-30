@@ -2947,7 +2947,7 @@ func TestUnionInPlaceMapped(t *testing.T) {
 	count1 := setBM1.Count()
 
 	// now we write setBM0 into f.storage.
-	err = unprotectedWriteToFragment(f, setBM0)
+	_, err = unprotectedWriteToFragment(f, setBM0)
 	if err != nil {
 		t.Fatalf("trying to flush fragment to disk: %v", err)
 	}
