@@ -163,11 +163,13 @@ func (f *fragment) Open() error {
 
 	if err := func() error {
 		// Initialize storage in a function so we can close if anything goes wrong.
+		f.Logger.Debugf("open storage for index/field/view/fragment: %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 		if err := f.openStorage(); err != nil {
 			return errors.Wrap(err, "opening storage")
 		}
 
 		// Fill cache with rows persisted to disk.
+		f.Logger.Debugf("open cache for index/field/view/fragment: %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 		if err := f.openCache(); err != nil {
 			return errors.Wrap(err, "opening cache")
 		}
@@ -185,6 +187,7 @@ func (f *fragment) Open() error {
 		return err
 	}
 
+	f.Logger.Debugf("successfully opened index/field/view/fragment: %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	return nil
 }
 

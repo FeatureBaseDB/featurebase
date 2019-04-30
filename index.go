@@ -107,15 +107,18 @@ func (i *Index) options() IndexOptions {
 // Open opens and initializes the index.
 func (i *Index) Open() error {
 	// Ensure the path exists.
+	i.logger.Debugf("ensure index path exists: %s", i.path)
 	if err := os.MkdirAll(i.path, 0777); err != nil {
 		return errors.Wrap(err, "creating directory")
 	}
 
 	// Read meta file.
+	i.logger.Debugf("load meta file for index: %s", i.name)
 	if err := i.loadMeta(); err != nil {
 		return errors.Wrap(err, "loading meta file")
 	}
 
+	i.logger.Debugf("open fields for index: %s", i.name)
 	if err := i.openFields(); err != nil {
 		return errors.Wrap(err, "opening fields")
 	}
@@ -151,6 +154,7 @@ func (i *Index) openFields() error {
 			continue
 		}
 
+		i.logger.Debugf("open field: %s", fi.Name())
 		fld, err := i.newField(i.fieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 		if err != nil {
 			return errors.Wrapf(ErrName, "'%s'", fi.Name())
@@ -158,6 +162,7 @@ func (i *Index) openFields() error {
 		if err := fld.Open(); err != nil {
 			return fmt.Errorf("open field: name=%s, err=%s", fld.Name(), err)
 		}
+		i.logger.Debugf("add field to index.fields: %s", fi.Name())
 		i.fields[fld.Name()] = fld
 	}
 	return nil
