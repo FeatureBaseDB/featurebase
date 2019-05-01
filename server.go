@@ -17,17 +17,21 @@ package pilosa
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"plugin"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/pilosa/pilosa/ext"
 	"github.com/pilosa/pilosa/logger"
+	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pilosa/pilosa/stats"
 	"github.com/pkg/errors"
@@ -57,6 +61,8 @@ type Server struct { // nolint: maligned
 	hosts            []string
 	clusterDisabled  bool
 	serializer       Serializer
+	extensionPath    string
+	extensions       []*ext.ExtensionInfo
 
 	// External
 	systemInfo SystemInfo
@@ -337,6 +343,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.extensionPath = filepath.Join(path, ".extensions")
 
 	s.holder.Path = path
 	s.holder.translateFile.Path = filepath.Join(path, ".keys")
@@ -379,6 +386,30 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.broadcaster = s
 	s.cluster.maxWritesPerRequest = s.maxWritesPerRequest
 	s.holder.broadcaster = s
+	err = s.loadPlugins()
+	if err != nil {
+		s.logger.Printf("not all plugins loaded successfully")
+	}
+	if len(s.extensions) > 0 {
+		s.logger.Printf("loaded extensions:")
+		for _, ext := range s.extensions {
+			if ext == nil {
+				s.logger.Printf("  inexplicably, a nil extension?!?")
+				continue
+			}
+			s.logger.Printf("  %s %s: %s", ext.Name, ext.Version, ext.Description)
+			if ext.License != "" {
+				s.logger.Printf("    License: %s", ext.License)
+			}
+			if len(ext.BitmapOps) > 0 {
+				opList := make([]string, len(ext.BitmapOps))
+				for i := range ext.BitmapOps {
+					opList[i] = ext.BitmapOps[i].Name
+				}
+				s.logger.Printf("    Ops: %s", strings.Join(opList, ", "))
+			}
+		}
+	}
 
 	err = s.cluster.setup()
 	if err != nil {
@@ -386,6 +417,92 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	return s, nil
+}
+
+func (s *Server) loadPlugins() error {
+	var anyError error
+	dir, err := os.Open(s.extensionPath)
+	if err != nil {
+		// don't complain about it not existing, that's fine.
+		if os.IsNotExist(err) {
+			s.logger.Printf("extension interface v0: no extensions directory.")
+			return nil
+		}
+		return errors.Wrap(err, "opening extension path:")
+	}
+	defer dir.Close()
+	for files, err := dir.Readdir(64); err != io.EOF; files, err = dir.Readdir(64) {
+		if err != nil {
+			return errors.Wrap(err, "searching extension directory:")
+		}
+		for _, file := range files {
+			name := file.Name()
+			// only .so files are likely plugins.
+			if !strings.HasSuffix(name, ".so") {
+				continue
+			}
+			// only regular files are candidates for loading.
+			mode := file.Mode()
+			if !mode.IsRegular() {
+				s.logger.Printf("extension file '%s' is not a regular file", name)
+				continue
+			}
+			err = s.loadPlugin(name)
+			if err != nil {
+				s.logger.Printf("loading extension %s: %v", name, err)
+				anyError = err
+			}
+		}
+	}
+	return anyError
+}
+
+func (s *Server) loadPlugin(name string) error {
+	path := filepath.Join(s.extensionPath, name)
+	p, err := plugin.Open(path)
+	if err != nil {
+		return err
+	}
+	pluginExtInfo, err := p.Lookup("ExtensionInfo")
+	if err != nil {
+		return fmt.Errorf("%s: no ExtensionInfo found", name)
+	}
+	extInfoFunc, ok := pluginExtInfo.(func(string) (*ext.ExtensionInfo, error))
+	if !ok {
+		return fmt.Errorf("%s: unexpected %T instead of ExtensionInfo object", name, pluginExtInfo)
+	}
+	extInfo, err := extInfoFunc("v0")
+	if err != nil {
+		return errors.Wrap(err, name)
+	}
+	if extInfo == nil {
+		return fmt.Errorf("%s: nil ExtensionInfo", name)
+	}
+	if extInfo.ExtensionAPI != "v0" {
+		return fmt.Errorf("%s: unsupported extension API %s", name, extInfo.ExtensionAPI)
+	}
+	s.extensions = append(s.extensions, extInfo)
+	bitmapOps := extInfo.BitmapOps
+	bmOps, countOps, fieldOps, unknownOps := 0, 0, 0, 0
+	for i := range bitmapOps {
+		// title-case the name
+		bitmapOps[i].Name = strings.Title(bitmapOps[i].Name)
+		typ := bitmapOps[i].Func.BitmapOpType()
+		switch {
+		case typ.Input == ext.OpInputBitmap && typ.Output == ext.OpOutputCount:
+			countOps++
+		case typ.Input == ext.OpInputBitmap && typ.Output == ext.OpOutputBitmap:
+			bmOps++
+		case typ.Input == ext.OpInputNaryBSI && typ.Output == ext.OpOutputSignedBitmap:
+			fieldOps++
+		default:
+			unknownOps++
+		}
+	}
+	err = s.executor.registerOps(bitmapOps)
+	// try to register this anyway, because it *might* work?
+	pql.RegisterPluginFuncs(bitmapOps)
+	return err
 }
 
 // UpAndDown brings the server up minimally and shuts it down

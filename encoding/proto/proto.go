@@ -395,14 +395,19 @@ func encodeImportRoaringRequest(m *pilosa.ImportRoaringRequest) *internal.Import
 }
 
 func encodeQueryRequest(m *pilosa.QueryRequest) *internal.QueryRequest {
-	return &internal.QueryRequest{
+	r := &internal.QueryRequest{
 		Query:           m.Query,
 		Shards:          m.Shards,
 		ColumnAttrs:     m.ColumnAttrs,
 		Remote:          m.Remote,
 		ExcludeRowAttrs: m.ExcludeRowAttrs,
 		ExcludeColumns:  m.ExcludeColumns,
+		EmbeddedData:    make([]*internal.Row, len(m.EmbeddedData)),
 	}
+	for i := range m.EmbeddedData {
+		r.EmbeddedData[i] = encodeRow(m.EmbeddedData[i])
+	}
+	return r
 }
 
 func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
@@ -415,6 +420,9 @@ func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
 		pb.Results[i] = &internal.QueryResult{}
 
 		switch result := m.Results[i].(type) {
+		case pilosa.SignedRow:
+			pb.Results[i].Type = queryResultTypeSignedRow
+			pb.Results[i].SignedRow = encodeSignedRow(result)
 		case *pilosa.Row:
 			pb.Results[i].Type = queryResultTypeRow
 			pb.Results[i].Row = encodeRow(result)
@@ -445,7 +453,7 @@ func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
 		case nil:
 			pb.Results[i].Type = queryResultTypeNil
 		default:
-			panic(fmt.Errorf("unknown type: %d", pb.Results[i].Type))
+			panic(fmt.Errorf("unknown type: %T", m.Results[i]))
 		}
 	}
 
@@ -963,6 +971,10 @@ func decodeQueryRequest(pb *internal.QueryRequest, m *pilosa.QueryRequest) {
 	m.Remote = pb.Remote
 	m.ExcludeRowAttrs = pb.ExcludeRowAttrs
 	m.ExcludeColumns = pb.ExcludeColumns
+	m.EmbeddedData = make([]*pilosa.Row, len(pb.EmbeddedData))
+	for i := range pb.EmbeddedData {
+		m.EmbeddedData[i] = decodeRow(pb.EmbeddedData[i])
+	}
 }
 
 func decodeImportRequest(pb *internal.ImportRequest, m *pilosa.ImportRequest) {
@@ -1064,10 +1076,13 @@ const (
 	queryResultTypeGroupCounts
 	queryResultTypeRowIdentifiers
 	queryResultTypePair
+	queryResultTypeSignedRow
 )
 
 func decodeQueryResult(pb *internal.QueryResult) interface{} {
 	switch pb.Type {
+	case queryResultTypeSignedRow:
+		return decodeSignedRow(pb.SignedRow)
 	case queryResultTypeRow:
 		return decodeRow(pb.Row)
 	case queryResultTypePairs:
@@ -1095,14 +1110,31 @@ func decodeQueryResult(pb *internal.QueryResult) interface{} {
 // DecodeRow converts r from its internal representation.
 func decodeRow(pr *internal.Row) *pilosa.Row {
 	if pr == nil {
-		return nil
+		return pilosa.NewRow()
 	}
 
-	r := pilosa.NewRow()
+	var r *pilosa.Row
+	if len(pr.Roaring) > 0 {
+		r = pilosa.NewRowFromRoaring(pr.Roaring)
+	} else {
+		r = pilosa.NewRow()
+		for _, v := range pr.Columns {
+			r.SetBit(v)
+		}
+	}
 	r.Attrs = decodeAttrs(pr.Attrs)
 	r.Keys = pr.Keys
-	for _, v := range pr.Columns {
-		r.SetBit(v)
+
+	return r
+}
+
+func decodeSignedRow(pr *internal.SignedRow) pilosa.SignedRow {
+	if pr == nil {
+		return pilosa.SignedRow{}
+	}
+	r := pilosa.SignedRow{
+		Pos: decodeRow(pr.Pos),
+		Neg: decodeRow(pr.Neg),
 	}
 	return r
 }
@@ -1209,16 +1241,29 @@ func encodeColumnAttrSet(set *pilosa.ColumnAttrSet) *internal.ColumnAttrSet {
 	}
 }
 
+func encodeSignedRow(r pilosa.SignedRow) *internal.SignedRow {
+	ir := &internal.SignedRow{
+		Pos: encodeRow(r.Pos),
+		Neg: encodeRow(r.Neg),
+	}
+	return ir
+}
+
 func encodeRow(r *pilosa.Row) *internal.Row {
 	if r == nil {
 		return nil
 	}
 
-	return &internal.Row{
-		Columns: r.Columns(),
-		Keys:    r.Keys,
-		Attrs:   encodeAttrs(r.Attrs),
+	ir := &internal.Row{
+		Keys:  r.Keys,
+		Attrs: encodeAttrs(r.Attrs),
 	}
+	if false {
+		ir.Columns = r.Columns()
+	} else {
+		ir.Roaring = r.Roaring()
+	}
+	return ir
 }
 
 func encodeRowIdentifiers(r pilosa.RowIdentifiers) *internal.RowIdentifiers {

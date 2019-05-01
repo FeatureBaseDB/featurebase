@@ -419,6 +419,44 @@ func (c *Container) bitmap() []uint64 {
 	return *(*[]uint64)(unsafe.Pointer(&reflect.SliceHeader{Data: uintptr(unsafe.Pointer(c.pointer)), Len: int(c.len), Cap: int(c.cap)}))
 }
 
+// AsBitmap yields a 65k-bit bitmap, storing it in the target if a target
+// is provided. The target should be zeroed, or this becomes an implicit
+// union.
+func (c *Container) AsBitmap(target []uint64) (out []uint64) {
+	if c.typeID == containerBitmap {
+		return c.bitmap()
+	}
+	if target != nil || len(target) < 1024 {
+		out = make([]uint64, 1024)
+	} else {
+		out = target
+	}
+	if c.typeID == containerArray {
+		a := c.array()
+		for _, v := range a {
+			out[v/64] |= 1 << (v % 64)
+		}
+		return out
+	}
+	if c.typeID == containerRun {
+		runs := c.runs()
+		for _, r := range runs {
+			splatRun(out, r)
+		}
+		return out
+	}
+	// in theory this shouldn't happen?
+	return out
+}
+
+func splatRun(into []uint64, from interval16) {
+	// TODO this can be ~64x faster for long runs by setting maxBitmap instead of single bits
+	//note v must be int or will overflow
+	for v := int(from.start); v <= int(from.last); v++ {
+		into[v/64] |= (uint64(1) << uint(v%64))
+	}
+}
+
 // setBitmap stores a set of uint64s as data.
 func (c *Container) setBitmap(bitmap []uint64) {
 	if c == nil || c.frozen() {

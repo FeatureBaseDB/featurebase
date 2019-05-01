@@ -42,6 +42,8 @@ type QueryRequest struct {
 	// If true, indicates that query is part of a larger distributed query.
 	// If false, this request is on the originating node.
 	Remote bool
+
+	EmbeddedData []*Row
 }
 
 // QueryResponse represent a response from a processed query.

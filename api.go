@@ -148,6 +148,7 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 		ExcludeRowAttrs: req.ExcludeRowAttrs, // NOTE: Kept for Pilosa 1.x compat.
 		ExcludeColumns:  req.ExcludeColumns,  // NOTE: Kept for Pilosa 1.x compat.
 		ColumnAttrs:     req.ColumnAttrs,     // NOTE: Kept for Pilosa 1.x compat.
+		EmbeddedData:    req.EmbeddedData,    // precomputed values that needed to be passed with the request
 	}
 	resp, err := api.server.executor.Execute(ctx, req.Index, q, req.Shards, execOpts)
 	if err != nil {
