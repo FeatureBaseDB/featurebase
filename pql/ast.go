@@ -17,6 +17,7 @@ package pql
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -264,6 +265,137 @@ type Call struct {
 	Name     string
 	Args     map[string]interface{}
 	Children []*Call
+}
+
+// validArgs defines the arguments allowed for a particular PQL call. If
+// allowUnknown is true, unfamiliar non-reserved names are allowed on the
+// assumption that they're field names. Otherwise, only those names explicitly
+// listed are allowed. Reserved args (those with a leading underscore) are
+// never allowed unless explicitly present.
+//
+// The prototypes map maps from argument names to a value. If the value is
+// non-nil, the argument will be checked for type-matching. So, for instance,
+// `x: 10` would indicate that x must be an int.
+type validArgs struct {
+	allowUnknown bool
+	prototypes   map[string]interface{}
+}
+
+var allowField = validArgs{
+	allowUnknown: true,
+	prototypes: map[string]interface{}{
+		"_field": "",
+	},
+}
+
+var validArgsByFunc = map[string]validArgs{
+	// the easy cases: things that take arbitrary inputs
+	"Bitmap": {allowUnknown: true},
+	"Count":  {allowUnknown: true},
+	"Max":    {allowUnknown: true},
+	"Min":    {allowUnknown: true},
+	"Row":    {allowUnknown: true},
+	"Range":  {allowUnknown: true},
+	"Sum":    {allowUnknown: true},
+
+	// used only in testing
+	"MyCall": {allowUnknown: true},
+	"B":      {allowUnknown: true},
+	"C":      {allowUnknown: true},
+	"Blerg":  {allowUnknown: true},
+	"Arb":    {allowUnknown: true},
+
+	// only take other calls, should never have "args"
+	"Difference": {allowUnknown: false},
+	"Intersect":  {allowUnknown: false},
+	"Not":        {allowUnknown: false},
+	"Rows":       {allowUnknown: false},
+	"Shift":      {allowUnknown: false},
+	"Union":      {allowUnknown: false},
+	"Xor":        {allowUnknown: false},
+
+	// things that take _field
+	"TopN": allowField,
+	// special cases:
+	"Clear": {
+		allowUnknown: true,
+		prototypes: map[string]interface{}{
+			"_col": int64(0),
+		},
+	},
+	"GroupBy": {
+		allowUnknown: false,
+		prototypes: map[string]interface{}{
+			"filter": nil,
+		},
+	},
+	"Options": {
+		allowUnknown: false,
+		prototypes: map[string]interface{}{
+			"excludeRowAttrs": true,
+		},
+	},
+	"Set": {
+		allowUnknown: true,
+		prototypes: map[string]interface{}{
+			"_col":       nil,
+			"_timestamp": "",
+		},
+	},
+	"SetBit": {
+		allowUnknown: true,
+		prototypes: map[string]interface{}{
+			"_col": nil,
+		},
+	},
+	"SetRowAttrs": {
+		allowUnknown: true,
+		prototypes: map[string]interface{}{
+			"_field": "",
+			"_row":   nil,
+		},
+	},
+	"SetColumnAttrs": {
+		allowUnknown: true,
+		prototypes: map[string]interface{}{
+			"_field": "",
+			"_col":   nil,
+		},
+	},
+}
+
+// CheckArgs tries to validate that arguments are correct and valid for the
+// given call. It does not guarantee checking all possible errors; for instance,
+// if an argument is a field name, CheckArgs can't validate that the field
+// exists.
+func (c *Call) CheckArgs() error {
+	valid, ok := validArgsByFunc[c.Name]
+	if !ok {
+		return fmt.Errorf("no arg validation for '%s'", c.Name)
+	}
+	for k, v := range c.Args {
+		acceptable, ok := valid.prototypes[k]
+		if !ok && !valid.allowUnknown {
+			return fmt.Errorf("'%s': unknown arg '%s'", c.String(), k)
+		}
+		if !ok && strings.HasPrefix(k, "_") {
+			return fmt.Errorf("'%s': unknown reserved arg '%s'", c.String(), k)
+		}
+		if acceptable == nil {
+			continue
+		}
+		if reflect.TypeOf(acceptable) != reflect.TypeOf(v) {
+			return fmt.Errorf("'%s': arg '%s' wrong type (got %T, expected %T)",
+				c.String(), k, v, acceptable)
+		}
+	}
+	// call-specific checking
+	for _, child := range c.Children {
+		if err := child.CheckArgs(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // FieldArg determines which key-value pair contains the field and rowID,
