@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [1.3.1] - 2019-05-01
+
+This version contains 1 contribution from 1 contributor. There are 6 files changed; 10 insertions; and 95 deletions.
+
+### Fixed
+- Remove shard validation to fix bug where some nodes weren't loading their fragments. #1951 ([#1964](https://github.com/pilosa/pilosa/pull/1964))
+
 ## [1.3.0] - 2019-04-16
 
 This version contains 98 contributions from 10 contributors. There are 144 files changed; 12,635 insertions; and 4,341 deletions.
