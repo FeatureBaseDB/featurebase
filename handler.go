@@ -48,6 +48,10 @@ type QueryRequest struct {
 
 	// Should we profile this query?
 	Profile bool
+
+	// Additional data associated with the query, in cases where there's
+	// row-style inputs for precomputed values.
+	EmbeddedData []*Row
 }
 
 // QueryResponse represent a response from a processed query.

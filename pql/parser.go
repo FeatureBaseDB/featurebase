@@ -82,6 +82,14 @@ func (p *parser) Parse() (*Query, error) {
 			panic(v)
 		}
 	}
+	for _, call := range p.Query.Calls {
+		if call == nil {
+			return nil, fmt.Errorf("unexpected nil Call in query's call list")
+		}
+		if err := call.CheckCallInfo(); err != nil {
+			return nil, err
+		}
+	}
 
 	return &p.Query, nil
 }

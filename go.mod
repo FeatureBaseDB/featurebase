@@ -18,6 +18,7 @@ require (
 	github.com/gorilla/mux v1.7.0
 	github.com/hashicorp/memberlist v0.1.3
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
+	github.com/molecula/apophenia v0.0.0-20190827192002-68b7a14a478b
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/pelletier/go-toml v1.2.0
 	github.com/pkg/errors v0.8.1
@@ -44,4 +45,4 @@ require (
 	modernc.org/strutil v1.0.0
 )
 
-go 1.11
+go 1.13

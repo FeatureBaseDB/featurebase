@@ -75,12 +75,12 @@ func TestParser_Parse(t *testing.T) {
 
 	// Parse with only arguments.
 	t.Run("ArgumentsOnly", func(t *testing.T) {
-		q, err := pql.ParseString(`MyCall( key= value, foo='bar', age = 12 , bool0=true, bool1=false, x=null, escape="\" \\escape\n\\\\"  )`)
+		q, err := pql.ParseString(`Row( key= value, foo='bar', age = 12 , bool0=true, bool1=false, x=null, escape="\" \\escape\n\\\\"  )`)
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(q.Calls[0],
 			&pql.Call{
-				Name: "MyCall",
+				Name: "Row",
 				Args: map[string]interface{}{
 					"key":    "value",
 					"foo":    "bar",
@@ -98,12 +98,12 @@ func TestParser_Parse(t *testing.T) {
 
 	// Parse with float arguments.
 	t.Run("WithFloatArgs", func(t *testing.T) {
-		q, err := pql.ParseString(`MyCall( key=12.25, foo= 13.167, bar=2., baz=0.9)`)
+		q, err := pql.ParseString(`Row( key=12.25, foo= 13.167, bar=2., baz=0.9)`)
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(q.Calls[0],
 			&pql.Call{
-				Name: "MyCall",
+				Name: "Row",
 				Args: map[string]interface{}{
 					"key": 12.25,
 					"foo": 13.167,
@@ -118,12 +118,12 @@ func TestParser_Parse(t *testing.T) {
 
 	// Parse with float arguments.
 	t.Run("WithNegativeArgs", func(t *testing.T) {
-		q, err := pql.ParseString(`MyCall( key=-12.25, foo= -13)`)
+		q, err := pql.ParseString(`Row( key=-12.25, foo= -13)`)
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(q.Calls[0],
 			&pql.Call{
-				Name: "MyCall",
+				Name: "Row",
 				Args: map[string]interface{}{
 					"key": -12.25,
 					"foo": int64(-13),
@@ -173,12 +173,12 @@ func TestParser_Parse(t *testing.T) {
 
 	// Parse with condition arguments.
 	t.Run("WithCondition", func(t *testing.T) {
-		q, err := pql.ParseString(`MyCall(key=foo, x == 12.25, y >= 100, z >< [4,8], m != null)`)
+		q, err := pql.ParseString(`Row(key=foo, x == 12.25, y >= 100, z >< [4,8], m != null)`)
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(q.Calls[0],
 			&pql.Call{
-				Name: "MyCall",
+				Name: "Row",
 				Args: map[string]interface{}{
 					"key": "foo",
 					"x":   &pql.Condition{Op: pql.EQ, Value: 12.25},

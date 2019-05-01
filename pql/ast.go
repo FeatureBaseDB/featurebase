@@ -17,10 +17,13 @@ package pql
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pilosa/pilosa/v2/ext"
 )
 
 // Query represents a PQL query.
@@ -259,11 +262,250 @@ type callStackElem struct {
 	inList    bool
 }
 
-// Call represents a function call in the AST.
+// Some call types may require special handling, which needs to occur
+// before distributing processing to individual shards.
+type CallType byte
+
+const (
+	// Normal calls can be executed per shard.
+	PrecallNone = CallType(iota)
+	// PreCallGlobal indicates a call which must be run globally *before*
+	// distributing the call to other shards. Example: A Distinct query,
+	// where every shard could potentially produce results for any shard,
+	// so you have to produce the results up front.
+	PrecallGlobal
+	// PreCallPerNode indicates a call which needs to be run per-shard
+	// in a way that lets it be done on each shard, but where it should
+	// be done prior to spawning per-shard goroutines. Example:
+	// A cross-index query, where each local shard may or may not need
+	// to get data from a remote node, but batches of shards can
+	// probably be gotten from the same remote node.
+	PrecallPerNode
+)
+
+// Call represents a function call in the AST. The Precomputed field
+// is used by the executor to handle non-standard call types; it does
+// these by actually executing them separately, then replacing them
+// in the call tree with a new call using the special precomputed
+// type, with the Precomputed field set to a map from shards to results.
 type Call struct {
-	Name     string
-	Args     map[string]interface{}
-	Children []*Call
+	Name        string
+	Args        map[string]interface{}
+	Children    []*Call
+	Type        CallType
+	Precomputed map[uint64]interface{}
+}
+
+// callInfo defines the arguments allowed for a particular PQL call, and
+// possibly things about its semantics. If allowUnknown is true, unfamiliar
+// non-reserved names are allowed on the assumption that they're field names.
+// Otherwise, only those names explicitly listed are allowed. Reserved args
+// (those with a leading underscore) are never allowed unless explicitly
+// present.
+//
+// The prototypes map maps from argument names to a value. If the value is
+// non-nil, the argument will be checked for type-matching. So, for instance,
+// `x: 10` would indicate that x must be an int.
+type callInfo struct {
+	allowUnknown bool
+	prototypes   map[string]interface{}
+	callType     CallType
+}
+
+// We want to be able to accept either a string or int64 for
+// field names. Special-case type:
+type stringOrInt64Type struct{}
+
+var stringOrInt64 stringOrInt64Type
+
+var allowUnderField = callInfo{
+	allowUnknown: true,
+	prototypes: map[string]interface{}{
+		"_field": "",
+	},
+}
+
+var allowField = callInfo{
+	allowUnknown: false,
+	prototypes: map[string]interface{}{
+		"field": "",
+	},
+}
+
+var callInfoByFunc = map[string]callInfo{
+	// the easy cases: things that take arbitrary inputs, because they're
+	// taking field=value cases
+	"Bitmap": {allowUnknown: true},
+	"Count":  {allowUnknown: true},
+	"Row":    {allowUnknown: true},
+	"Range":  {allowUnknown: true},
+
+	// allow only "field=X" cases with string field names
+	"Max": allowField,
+	"Min": allowField,
+	"Sum": allowField,
+
+	// only take other calls, should never have "args"
+	"Difference": {allowUnknown: false},
+	"Intersect":  {allowUnknown: false},
+	"Not":        {allowUnknown: false},
+	"ClearRow":   {allowUnknown: true},
+	"Store":      {allowUnknown: true},
+	"MinRow":     allowField,
+	"MaxRow":     allowField,
+	"Rows": {
+		allowUnknown: false,
+		prototypes: map[string]interface{}{
+			"_field":   "",
+			"field":    "",
+			"limit":    int64(0),
+			"column":   nil,
+			"previous": nil,
+			"from":     nil,
+			"to":       nil,
+		},
+	},
+	"Shift": {allowUnknown: false,
+		prototypes: map[string]interface{}{
+			"n": int64(0),
+		},
+	},
+	"Union": {allowUnknown: false},
+	"Xor":   {allowUnknown: false},
+
+	// things that take _field
+	"TopN": allowUnderField,
+	// special cases:
+	"Clear": {
+		allowUnknown: true,
+		prototypes: map[string]interface{}{
+			"_col": stringOrInt64,
+		},
+	},
+	"GroupBy": {
+		allowUnknown: false,
+		prototypes: map[string]interface{}{
+			"filter":   nil,
+			"limit":    int64(0),
+			"previous": nil,
+		},
+	},
+	"Options": {
+		allowUnknown: false,
+		prototypes: map[string]interface{}{
+			"excludeRowAttrs": true,
+			"excludeColumns":  true,
+			"columnAttrs":     true,
+			"shards":          nil,
+		},
+	},
+	"Set": {
+		allowUnknown: true,
+		prototypes: map[string]interface{}{
+			"_col":       stringOrInt64,
+			"_timestamp": "",
+		},
+	},
+	"Precomputed": {
+		allowUnknown: true,
+	},
+	"SetBit": {
+		allowUnknown: true,
+		prototypes: map[string]interface{}{
+			"_col": stringOrInt64,
+		},
+	},
+	"SetRowAttrs": {
+		allowUnknown: true,
+		prototypes: map[string]interface{}{
+			"_field": "",
+			"_row":   stringOrInt64,
+		},
+	},
+	"SetColumnAttrs": {
+		allowUnknown: true,
+		prototypes: map[string]interface{}{
+			"_field": "",
+			"_col":   stringOrInt64,
+		},
+	},
+	"IncludesColumn": {
+		allowUnknown: false,
+		prototypes: map[string]interface{}{
+			"column": stringOrInt64,
+		},
+	},
+}
+
+// RegisterPluginFuncs adds arg validation for plugin funcs. Not very good
+// arg validation.
+func RegisterPluginFuncs(ops []ext.BitmapOp) {
+	for _, op := range ops {
+		// ignore overlap for now. This should change.
+		if _, ok := callInfoByFunc[op.Name]; ok {
+			continue
+		}
+		ci := callInfo{allowUnknown: true}
+		if len(op.Reserved) > 0 {
+			// mark these as valid/known reserved words
+			ci.prototypes = make(map[string]interface{})
+			for _, res := range op.Reserved {
+				ci.prototypes[res] = nil
+			}
+		}
+		t := op.Func.BitmapOpType()
+		if t.Precall == ext.OpPrecallGlobal {
+			ci.callType = PrecallGlobal
+		}
+		callInfoByFunc[op.Name] = ci
+	}
+}
+
+// CheckCallInfo tries to validate that arguments are correct and valid for the
+// given call. It does not guarantee checking all possible errors; for instance,
+// if an argument is a field name, CheckCallInfo can't validate that the field
+// exists. It also updates with information like whether the call is expected
+// to require precalling.
+func (c *Call) CheckCallInfo() error {
+	valid, ok := callInfoByFunc[c.Name]
+	if !ok {
+		return fmt.Errorf("no arg validation for '%s'", c.Name)
+	}
+	c.Type = valid.callType
+	for k, v := range c.Args {
+		acceptable, ok := valid.prototypes[k]
+		if !ok && !valid.allowUnknown {
+			return fmt.Errorf("'%s': unknown arg '%s'", c.String(), k)
+		}
+		if !ok && strings.HasPrefix(k, "_") {
+			return fmt.Errorf("'%s': unknown reserved arg '%s'", c.String(), k)
+		}
+		if acceptable == nil {
+			continue
+		}
+		// if the types are identical, that's fine
+		if reflect.TypeOf(acceptable) == reflect.TypeOf(v) {
+			continue
+		}
+		if reflect.TypeOf(acceptable) == reflect.TypeOf(stringOrInt64) {
+			switch v.(type) {
+			case string, int64:
+				continue
+			default:
+				return fmt.Errorf("'%s': arg '%s' needed a string or integer value, got %T.",
+					c.String(), k, v)
+			}
+		}
+		return fmt.Errorf("'%s': arg '%s' wrong type (got %T, expected %T)",
+			c.String(), k, v, acceptable)
+	}
+	// call-specific checking
+	for _, child := range c.Children {
+		if err := child.CheckCallInfo(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // FieldArg determines which key-value pair contains the field and rowID,
@@ -283,11 +525,27 @@ func IsReservedArg(name string) bool {
 		return true
 	}
 	switch name {
-	case "from", "to":
+	case "from", "to", "index":
 		return true
 	default:
 		return false
 	}
+}
+
+// CallIndex handles guessing whether we've been asked to apply this to a
+// different index. An empty string means "no".
+func (c *Call) CallIndex() string {
+	if index, ok := c.Args["_index"]; ok {
+		if index, ok := index.(string); ok {
+			return index
+		}
+	}
+	if index, ok := c.Args["index"]; ok && index != "" {
+		if index, ok := index.(string); ok {
+			return index
+		}
+	}
+	return ""
 }
 
 // BoolArg is for reading the value at key from call.Args as a bool. If the
