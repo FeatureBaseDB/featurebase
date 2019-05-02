@@ -1811,11 +1811,17 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 // importRoaring imports from the official roaring data format defined at
 // https://github.com/RoaringBitmap/RoaringFormatSpec or from pilosa's version
 // of the roaring format. The cache is updated to reflect the new data.
-func (f *fragment) importRoaring(data []byte, clear bool) error {
+func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "fragment.importRoaring")
+	defer span.Finish()
+	span, ctx = tracing.StartSpanFromContext(ctx, "importRoaring.AcquireFragmentLock")
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	span.Finish()
 	bm := roaring.NewBTreeBitmap()
+	span, ctx = tracing.StartSpanFromContext(ctx, "importRoaring.UnmarshalBinary")
 	err := bm.UnmarshalBinary(data)
+	span.Finish()
 	if err != nil {
 		return err
 	}
@@ -1851,16 +1857,25 @@ func (f *fragment) importRoaring(data []byte, clear bool) error {
 		if clear {
 			toSet, toClear = toClear, toSet
 		}
-		return f.importPositions(toSet, toClear, rowSet)
+		span, _ = tracing.StartSpanFromContext(ctx, "importRoaring.ImportPositions")
+		err := f.importPositions(toSet, toClear, rowSet)
+		span.Finish()
+		return err
 	}
 
 	if clear {
+		span, ctx = tracing.StartSpanFromContext(ctx, "importRoaringDifference")
 		bm = f.storage.Difference(bm)
+		span.Finish()
 	} else if f.storage.Containers.Size() >= bm.Containers.Size() {
+		span, ctx = tracing.StartSpanFromContext(ctx, "importRoaringStorageUIP")
 		f.storage.UnionInPlace(bm)
 		bm = f.storage
+		span.Finish()
 	} else {
+		span, ctx = tracing.StartSpanFromContext(ctx, "importRoaringBitmapUIP")
 		bm.UnionInPlace(f.storage)
+		span.Finish()
 	}
 
 	for rowID := range rowSet {
@@ -1869,7 +1884,10 @@ func (f *fragment) importRoaring(data []byte, clear bool) error {
 	}
 	f.cache.Recalculate()
 
-	err = unprotectedWriteToFragment(f, bm)
+	span, _ = tracing.StartSpanFromContext(ctx, "importRoaring.WriteToFragment")
+	n, err := unprotectedWriteToFragment(f, bm)
+	span.LogKV("bytesWritten", n)
+	span.Finish()
 	return err
 }
 
@@ -1900,12 +1918,13 @@ func track(start time.Time, message string, stats stats.StatsClient, logger logg
 }
 
 func (f *fragment) snapshot() error {
-	return unprotectedWriteToFragment(f, f.storage)
+	_, err := unprotectedWriteToFragment(f, f.storage)
+	return err
 }
 
 // unprotectedWriteToFragment writes the fragment f with bm as the data. It is unprotected, and
 // f.mu must be locked when calling it.
-func unprotectedWriteToFragment(f *fragment, bm *roaring.Bitmap) error { // nolint: interfacer
+func unprotectedWriteToFragment(f *fragment, bm *roaring.Bitmap) (n int64, err error) { // nolint: interfacer
 
 	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	start := time.Now()
@@ -1915,39 +1934,39 @@ func unprotectedWriteToFragment(f *fragment, bm *roaring.Bitmap) error { // noli
 	snapshotPath := f.path + snapshotExt
 	file, err := os.Create(snapshotPath)
 	if err != nil {
-		return fmt.Errorf("create snapshot file: %s", err)
+		return n, fmt.Errorf("create snapshot file: %s", err)
 	}
 	defer file.Close()
 
 	// Write storage to snapshot.
 	bw := bufio.NewWriter(file)
-	if _, err := bm.WriteTo(bw); err != nil {
-		return fmt.Errorf("snapshot write to: %s", err)
+	if n, err = bm.WriteTo(bw); err != nil {
+		return n, fmt.Errorf("snapshot write to: %s", err)
 	}
 
 	if err := bw.Flush(); err != nil {
-		return fmt.Errorf("flush: %s", err)
+		return n, fmt.Errorf("flush: %s", err)
 	}
 
 	// Close current storage.
 	if err := f.closeStorage(); err != nil {
-		return fmt.Errorf("close storage: %s", err)
+		return n, fmt.Errorf("close storage: %s", err)
 	}
 
 	// Move snapshot to data file location.
 	if err := os.Rename(snapshotPath, f.path); err != nil {
-		return fmt.Errorf("rename snapshot: %s", err)
+		return n, fmt.Errorf("rename snapshot: %s", err)
 	}
 
 	// Reopen storage.
 	if err := f.openStorage(); err != nil {
-		return fmt.Errorf("open storage: %s", err)
+		return n, fmt.Errorf("open storage: %s", err)
 	}
 
 	// Reset operation count.
 	f.opN = 0
 
-	return nil
+	return n, nil
 }
 
 // RecalculateCache rebuilds the cache regardless of invalidate time delay.
