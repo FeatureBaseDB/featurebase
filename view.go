@@ -88,12 +88,14 @@ func (v *view) open() error {
 
 	if err := func() error {
 		// Ensure the view's path exists.
+		v.logger.Debugf("ensure view path exists: %s", v.path)
 		if err := os.MkdirAll(v.path, 0777); err != nil {
 			return errors.Wrap(err, "creating view directory")
 		} else if err := os.MkdirAll(filepath.Join(v.path, "fragments"), 0777); err != nil {
 			return errors.Wrap(err, "creating fragments directory")
 		}
 
+		v.logger.Debugf("open fragments for index/field/view: %s/%s/%s", v.index, v.field, v.name)
 		if err := v.openFragments(); err != nil {
 			return errors.Wrap(err, "opening fragments")
 		}
@@ -104,6 +106,7 @@ func (v *view) open() error {
 		return err
 	}
 
+	v.logger.Debugf("successfully opened index/field/view: %s/%s/%s", v.index, v.field, v.name)
 	return nil
 }
 
@@ -130,14 +133,17 @@ func (v *view) openFragments() error {
 		// Parse filename into integer.
 		shard, err := strconv.ParseUint(filepath.Base(fi.Name()), 10, 64)
 		if err != nil {
+			v.logger.Debugf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", v.index, v.field, v.name, fi.Name())
 			continue
 		}
 
+		v.logger.Debugf("open index/field/view/fragment: %s/%s/%s/%d", v.index, v.field, v.name, shard)
 		frag := v.newFragment(v.fragmentPath(shard), shard)
 		if err := frag.Open(); err != nil {
 			return fmt.Errorf("open fragment: shard=%d, err=%s", frag.shard, err)
 		}
 		frag.RowAttrStore = v.rowAttrStore
+		v.logger.Debugf("add index/field/view/fragment to view.fragments: %s/%s/%s/%d", v.index, v.field, v.name, shard)
 		v.fragments[frag.shard] = frag
 	}
 

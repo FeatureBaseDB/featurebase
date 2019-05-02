@@ -74,7 +74,7 @@ curl localhost:10101/index/repository/field/stargazer \
 {"success":true}
 ```
 
-Since our data contains time stamps whcih represent the time users starred repos, we set the field type to `time`. Time quantum is the resolution of the time we want to use, and we set it to `YMD` (year, month, day) for `stargazer`.
+Since our data contains time stamps which represent the time users starred repos, we set the field type to `time`. Time quantum is the resolution of the time we want to use, and we set it to `YMD` (year, month, day) for `stargazer`.
 
 Next up is the `language` field, which will contain IDs for programming languages:
 ``` request

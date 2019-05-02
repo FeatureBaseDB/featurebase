@@ -321,6 +321,7 @@ func TestConfig_Parse_DataDir(t *testing.T) {
 func TestMain_RecalculateHashes(t *testing.T) {
 	const clusterSize = 5
 	cluster := test.MustRunCluster(t, clusterSize)
+	defer cluster.Close()
 
 	// Create the schema.
 	client0 := cluster[0].Client()

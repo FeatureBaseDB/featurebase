@@ -655,6 +655,33 @@ func (api *API) Schema(ctx context.Context) []*IndexInfo {
 	return api.holder.limitedSchema()
 }
 
+// ApplySchema takes the given schema and applies it across the
+// cluster (if remote is false), or just to this node (if remote is
+// true). This is designed for the use case of replicating a schema
+// from one Pilosa cluster to another which is initially empty. It is
+// not officially supported in other scenarios and may produce
+// surprising results.
+func (api *API) ApplySchema(ctx context.Context, s *Schema, remote bool) error {
+	span, _ := tracing.StartSpanFromContext(ctx, "API.ApplySchema")
+	defer span.Finish()
+
+	if err := api.validate(apiApplySchema); err != nil {
+		return errors.Wrap(err, "validating api method")
+	}
+
+	if !remote {
+		nodes := api.cluster.Nodes()
+		for i, node := range nodes {
+			err := api.server.defaultClient.PostSchema(ctx, &node.URI, s, true)
+			if err != nil {
+				return errors.Wrapf(err, "forwarding post schema to node %d of %d", i+1, len(nodes))
+			}
+		}
+	}
+
+	return api.holder.applySchema(s)
+}
+
 // Views returns the views in the given field.
 func (api *API) Views(ctx context.Context, indexName string, fieldName string) ([]*view, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Views")
@@ -1273,6 +1300,7 @@ const (
 	//apiStatsWithTags // not implemented
 	//apiVersion // not implemented
 	apiViews
+	apiApplySchema
 )
 
 var methodsCommon = map[apiMethod]struct{}{
@@ -1306,4 +1334,5 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiRemoveNode:           {},
 	apiShardNodes:           {},
 	apiViews:                {},
+	apiApplySchema:          {},
 }

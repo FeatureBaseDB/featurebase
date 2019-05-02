@@ -70,7 +70,9 @@ func TestImportCommand_Basic(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		cmd := test.MustRunCluster(t, 1)[0]
+		cluster := test.MustRunCluster(t, 1)
+		defer cluster.Close()
+		cmd := cluster[0]
 		cm.Host = cmd.API.Node().URI.HostPort()
 
 		cm.Index = "i"
@@ -97,7 +99,9 @@ func TestImportCommand_Basic(t *testing.T) {
 		}
 		ctx := context.Background()
 
-		cmd := test.MustRunCluster(t, 1)[0]
+		cluster := test.MustRunCluster(t, 1)
+		defer cluster.Close()
+		cmd := cluster[0]
 		cm.Host = cmd.API.Node().URI.HostPort()
 
 		cm.Index = "i"
@@ -128,7 +132,9 @@ func TestImportCommand_RunValue(t *testing.T) {
 		}
 		ctx := context.Background()
 
-		cmd := test.MustRunCluster(t, 1)[0]
+		cluster := test.MustRunCluster(t, 1)
+		defer cluster.Close()
+		cmd := cluster[0]
 		cm.Host = cmd.API.Node().URI.HostPort()
 
 		resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader("")))
@@ -168,7 +174,9 @@ func TestImportCommand_RunValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		cmd := test.MustRunCluster(t, 1)[0]
+		cluster := test.MustRunCluster(t, 1)
+		defer cluster.Close()
+		cmd := cluster[0]
 		cm.Host = cmd.API.Node().URI.HostPort()
 
 		resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader("")))
@@ -208,7 +216,9 @@ func TestImportCommand_RunKeys(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	cmd := test.MustRunCluster(t, 1)[0]
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
 	cm.Host = cmd.API.Node().URI.HostPort()
 
 	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader(`{"options":{"keys": true}}`)))
@@ -259,6 +269,7 @@ func TestImportCommand_KeyReplication(t *testing.T) {
 	ctx := context.Background()
 
 	c := test.MustRunCluster(t, 2)
+	defer c.Close()
 	cmd0 := c[0]
 	cmd1 := c[1]
 
@@ -319,7 +330,9 @@ func TestImportCommand_RunValueKeys(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	cmd := test.MustRunCluster(t, 1)[0]
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
 	cm.Host = cmd.API.Node().URI.HostPort()
 
 	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader(`{"options":{"keys": true}}`)))
@@ -343,7 +356,9 @@ func TestImportCommand_RunValueKeys(t *testing.T) {
 }
 
 func TestImportCommand_InvalidFile(t *testing.T) {
-	cmd := test.MustRunCluster(t, 1)[0]
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
 
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
@@ -429,7 +444,9 @@ func GetIO(buf bytes.Buffer) (io.Reader, io.Writer, io.Writer) {
 }
 
 func TestImportCommand_BugOverwriteValue(t *testing.T) {
-	cmd := test.MustRunCluster(t, 1)[0]
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
 
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
@@ -503,7 +520,9 @@ func TestImportCommand_RunBool(t *testing.T) {
 	cm := NewImportCommand(stdin, stdout, stderr)
 	ctx := context.Background()
 
-	cmd := test.MustRunCluster(t, 1)[0]
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
 	cm.Host = cmd.API.Node().URI.HostPort()
 
 	resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+cm.Host+"/index/i", strings.NewReader("")))

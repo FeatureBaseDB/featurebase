@@ -508,7 +508,9 @@ func TestExecutor_Execute_Count(t *testing.T) {
 // Ensure a set query can be executed.
 func TestExecutor_Execute_Set(t *testing.T) {
 	t.Run("RowIDColumnID", func(t *testing.T) {
-		cmd := test.MustRunCluster(t, 1)[0]
+		cluster := test.MustRunCluster(t, 1)
+		defer cluster.Close()
+		cmd := cluster[0]
 		holder := cmd.Server.Holder()
 		hldr := test.Holder{Holder: holder}
 		hldr.SetBit("i", "f", 1, 0)
@@ -571,7 +573,9 @@ func TestExecutor_Execute_Set(t *testing.T) {
 	})
 
 	t.Run("RowKeyColumnKey", func(t *testing.T) {
-		cmd := test.MustRunCluster(t, 1)[0]
+		cluster := test.MustRunCluster(t, 1)
+		defer cluster.Close()
+		cmd := cluster[0]
 		holder := cmd.Server.Holder()
 		hldr := test.Holder{Holder: holder}
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{Keys: true})
