@@ -281,29 +281,38 @@ type validArgs struct {
 	prototypes   map[string]interface{}
 }
 
-var allowField = validArgs{
+// We want to be able to accept either a string or int64 for
+// field names. Special-case type:
+type stringOrInt64Type struct{}
+
+var stringOrInt64 stringOrInt64Type
+
+var allowUnderField = validArgs{
 	allowUnknown: true,
 	prototypes: map[string]interface{}{
 		"_field": "",
 	},
 }
 
+var allowField = validArgs{
+	allowUnknown: false,
+	prototypes: map[string]interface{}{
+		"field": "",
+	},
+}
+
 var validArgsByFunc = map[string]validArgs{
-	// the easy cases: things that take arbitrary inputs
+	// the easy cases: things that take arbitrary inputs, because they're
+	// taking field=value cases
 	"Bitmap": {allowUnknown: true},
 	"Count":  {allowUnknown: true},
-	"Max":    {allowUnknown: true},
-	"Min":    {allowUnknown: true},
 	"Row":    {allowUnknown: true},
 	"Range":  {allowUnknown: true},
-	"Sum":    {allowUnknown: true},
 
-	// used only in testing
-	"MyCall": {allowUnknown: true},
-	"B":      {allowUnknown: true},
-	"C":      {allowUnknown: true},
-	"Blerg":  {allowUnknown: true},
-	"Arb":    {allowUnknown: true},
+	// allow only "field=X" cases with string field names
+	"Max": allowField,
+	"Min": allowField,
+	"Sum": allowField,
 
 	// only take other calls, should never have "args"
 	"Difference": {allowUnknown: false},
@@ -315,12 +324,12 @@ var validArgsByFunc = map[string]validArgs{
 	"Xor":        {allowUnknown: false},
 
 	// things that take _field
-	"TopN": allowField,
+	"TopN": allowUnderField,
 	// special cases:
 	"Clear": {
 		allowUnknown: true,
 		prototypes: map[string]interface{}{
-			"_col": int64(0),
+			"_col": stringOrInt64,
 		},
 	},
 	"GroupBy": {
@@ -338,28 +347,28 @@ var validArgsByFunc = map[string]validArgs{
 	"Set": {
 		allowUnknown: true,
 		prototypes: map[string]interface{}{
-			"_col":       nil,
+			"_col":       stringOrInt64,
 			"_timestamp": "",
 		},
 	},
 	"SetBit": {
 		allowUnknown: true,
 		prototypes: map[string]interface{}{
-			"_col": nil,
+			"_col": stringOrInt64,
 		},
 	},
 	"SetRowAttrs": {
 		allowUnknown: true,
 		prototypes: map[string]interface{}{
 			"_field": "",
-			"_row":   nil,
+			"_row":   stringOrInt64,
 		},
 	},
 	"SetColumnAttrs": {
 		allowUnknown: true,
 		prototypes: map[string]interface{}{
 			"_field": "",
-			"_col":   nil,
+			"_col":   stringOrInt64,
 		},
 	},
 }
@@ -384,10 +393,21 @@ func (c *Call) CheckArgs() error {
 		if acceptable == nil {
 			continue
 		}
-		if reflect.TypeOf(acceptable) != reflect.TypeOf(v) {
-			return fmt.Errorf("'%s': arg '%s' wrong type (got %T, expected %T)",
-				c.String(), k, v, acceptable)
+		// if the types are identical, that's fine
+		if reflect.TypeOf(acceptable) == reflect.TypeOf(v) {
+			continue
 		}
+		if reflect.TypeOf(acceptable) == reflect.TypeOf(stringOrInt64) {
+			switch v.(type) {
+			case string, int64:
+				continue
+			default:
+				return fmt.Errorf("'%s': arg '%s' needed a string or integer value, got %T.",
+					c.String(), k, v)
+			}
+		}
+		return fmt.Errorf("'%s': arg '%s' wrong type (got %T, expected %T)",
+			c.String(), k, v, acceptable)
 	}
 	// call-specific checking
 	for _, child := range c.Children {
