@@ -28,11 +28,17 @@ If you want to help but you aren't sure where to start, check out our [github la
 
 - Fork the [Pilosa repository][2] to your own account.
 
-- Create a directory (note that we use `github.com/pilosa`, NOT `github.com/USER`) and clone your own Pilosa repo:
+- It will be easier to follow these instructions if you:
+
+    ```sh
+    export GH_USERNAME=<your github username>
+	```
+
+- Create a directory (note that we use `github.com/pilosa`, NOT `github.com/USER`) and clone Pilosa:
 
     ```sh
     mkdir -p ${GOPATH}/src/github.com/pilosa && cd $_
-    git clone git@github.com:${USER}/pilosa.git
+    git clone https://github.com/pilosa/pilosa.git
     ```
 
 - `cd` to your pilosa directory:
@@ -46,20 +52,14 @@ If you want to help but you aren't sure where to start, check out our [github la
     ```sh
     make install
     ```
-    
-    or
-    
-    ```
-    go install github.com/pilosa/pilosa/cmd/...
-    ```
 
     Running `pilosa` should now run a Pilosa instance.
 
-- In order to sync your fork with upstream Pilosa repo, add an *upstream* to your repo:
+- The official Pilosa repository is your "origin" remote in git. Add your fork as your github username
 
     ```sh
     cd ${GOPATH}/src/github.com/pilosa/pilosa
-    git remote add upstream git@github.com:pilosa/pilosa.git
+    git remote add ${GH_USERNAME} git@github.com:${GH_USERNAME}/pilosa.git
     ```
 
 ### Makefile
@@ -133,9 +133,8 @@ Additional commands are available in the `Makefile`.
 - Before starting to work on a task, sync your branch with the upstream:
 
     ```sh
-    git fetch upstream
     git checkout master
-    git merge upstream/master
+    git pull
     ```
 
 - Create a local feature branch:
@@ -155,15 +154,16 @@ Additional commands are available in the `Makefile`.
 - Verify that your pull request is applied to the latest version of code on github:
 
     ```sh
-    git remote add upstream git@github.com:pilosa/pilosa.git
-    git fetch upstream
-    git rebase -i upstream/master
+    git checkout master
+    git pull
+    git checkout something-amazing
+    git rebase master
     ```
 
 - Push to your fork:
 
     ```sh
-    git push -u <yourfork> something-amazing
+    git push -u $GH_USERNAME something-amazing:something-amazing
     ```
 
 - Submit a [pull request][3]
