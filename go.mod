@@ -3,6 +3,7 @@ module github.com/pilosa/pilosa
 replace github.com/hashicorp/memberlist => github.com/pilosa/memberlist v0.1.4-0.20190415211605-f6512523c021
 
 require (
+	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/CAFxX/gcnotifier v0.0.0-20190112062741-224a280d589d
 	github.com/DataDog/datadog-go v0.0.0-20180822151419-281ae9f2d895
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
