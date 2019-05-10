@@ -897,11 +897,14 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 				if _, ok := m[shard]; !ok {
 					m[shard] = make([]Bit, 0)
 				}
-				m[shard] = append(m[shard], Bit{
-					RowID:     req.RowIDs[i],
-					ColumnID:  colID,
-					Timestamp: req.Timestamps[i],
-				})
+				bit := Bit{
+					RowID:    req.RowIDs[i],
+					ColumnID: colID,
+				}
+				if len(req.Timestamps) > 0 {
+					bit.Timestamp = req.Timestamps[i]
+				}
+				m[shard] = append(m[shard], bit)
 			}
 
 			// Signal to the receiving nodes to ignore checking for key translation.
