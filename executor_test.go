@@ -3262,23 +3262,35 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 	}
 
 	tests := []struct {
-		query string
+		query    string
+		expected []pilosa.GroupCount
 	}{
 		{
+			query: "GroupBy(Rows(generals))",
+			expected: []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5},
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5},
+			},
+		},
+		{
 			query: "GroupBy(Rows(generals), filter=Row(generals=r2))",
+			expected: []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5},
+			},
 		},
 	}
 
-	for i, test := range tests {
+	for i, tst := range tests {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			r, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{
 				Index: "istring",
-				Query: test.query,
+				Query: tst.query,
 			})
 			if err != nil {
 				t.Fatalf("got an error %v", err)
 			}
-			fmt.Println(r)
+			results := r.Results[0].([]pilosa.GroupCount)
+			test.CheckGroupBy(t, tst.expected, results)
 		})
 	}
 }
