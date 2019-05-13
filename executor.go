@@ -766,11 +766,14 @@ func (e *executor) executeTopNShard(ctx context.Context, index string, c *pql.Ca
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopNShard")
 	defer span.Finish()
 
-	field, _ := c.Args["_field"].(string)
+	fieldName, _ := c.Args["_field"].(string)
 	n, _, err := c.UintArg("n")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNShard: %v", err)
+	} else if f := e.Holder.Field(index, fieldName); f != nil && f.Type() == FieldTypeInt {
+		return nil, fmt.Errorf("cannot compute TopN() on integer field: %q", fieldName)
 	}
+
 	attrName, _ := c.Args["attrName"].(string)
 	rowIDs, _, err := c.UintSliceArg("ids")
 	if err != nil {
@@ -799,13 +802,15 @@ func (e *executor) executeTopNShard(ctx context.Context, index string, c *pql.Ca
 	}
 
 	// Set default field.
-	if field == "" {
-		field = defaultField
+	if fieldName == "" {
+		fieldName = defaultField
 	}
 
-	f := e.Holder.fragment(index, field, viewStandard, shard)
+	f := e.Holder.fragment(index, fieldName, viewStandard, shard)
 	if f == nil {
 		return nil, nil
+	} else if f.CacheType == CacheTypeNone {
+		return nil, fmt.Errorf("cannot compute TopN(), field has no cache: %q", fieldName)
 	}
 
 	if minThreshold == 0 {
@@ -2623,7 +2628,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 		if fieldName := callArgString(call, "_field"); fieldName != "" {
 			field := idx.Field(fieldName)
 			if field == nil {
-				return nil, ErrFieldNotFound
+				return nil, fmt.Errorf("field %q not found", fieldName)
 			}
 			if field.keys() {
 				other := make([]Pair, len(result))
