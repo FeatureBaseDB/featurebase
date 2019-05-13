@@ -2536,6 +2536,16 @@ func (e *executor) translateGroupByCall(index string, idx *Index, c *pql.Call) e
 		}
 	}
 
+	if filter, ok, err := c.CallArg("filter"); ok {
+		if err != nil {
+			return errors.Wrap(err, "getting filter call")
+		}
+		err = e.translateCall(index, idx, filter)
+		if err != nil {
+			return errors.Wrap(err, "translating filter call")
+		}
+	}
+
 	prev, ok := c.Args["previous"]
 	if !ok {
 		return nil // nothing else to be translated

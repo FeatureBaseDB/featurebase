@@ -3243,7 +3243,56 @@ func TestExecutor_Execute_Query_Error(t *testing.T) {
 			}
 		})
 	}
+}
 
+func TestExecutor_GroupByStrings(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	c.CreateField(t, "istring", pilosa.IndexOptions{Keys: true}, "generals", pilosa.OptFieldKeys())
+
+	req := &pilosa.ImportRequest{
+		Index:      "istring",
+		Field:      "generals",
+		Shard:      0,
+		RowKeys:    []string{"r1", "r2", "r1", "r2", "r1", "r2", "r1", "r2", "r1", "r2"},
+		ColumnKeys: []string{"c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10"},
+	}
+	if err := c[0].API.Import(context.Background(), req); err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	tests := []struct {
+		query    string
+		expected []pilosa.GroupCount
+	}{
+		{
+			query: "GroupBy(Rows(generals))",
+			expected: []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5},
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5},
+			},
+		},
+		{
+			query: "GroupBy(Rows(generals), filter=Row(generals=r2))",
+			expected: []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5},
+			},
+		},
+	}
+
+	for i, tst := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			r, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{
+				Index: "istring",
+				Query: tst.query,
+			})
+			if err != nil {
+				t.Fatalf("got an error %v", err)
+			}
+			results := r.Results[0].([]pilosa.GroupCount)
+			test.CheckGroupBy(t, tst.expected, results)
+		})
+	}
 }
 
 func TestExecutor_Execute_Rows_Keys(t *testing.T) {
