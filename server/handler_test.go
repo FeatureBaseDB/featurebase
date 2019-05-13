@@ -230,7 +230,7 @@ func TestHandler_Endpoints(t *testing.T) {
 
 	t.Run("ImportRoaringFieldTypeFail", func(t *testing.T) {
 		// Roaring import into a non-set field should fail.
-		if _, err := i0.CreateFieldIfNotExists("int-field", pilosa.OptFieldTypeInt(0, 1)); err != nil {
+		if _, err := i0.CreateFieldIfNotExists("int-field", pilosa.OptFieldTypeInt(0, 0, 1)); err != nil {
 			t.Fatal(err)
 		}
 		w := httptest.NewRecorder()

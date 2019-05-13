@@ -15,7 +15,9 @@
 package pilosa
 
 import (
+	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"reflect"
 	"testing"
@@ -32,19 +34,24 @@ func TestBSIGroup_BaseValue(t *testing.T) {
 		Type:     bsiGroupTypeInt,
 		Base:     -100,
 		BitDepth: 10,
+		Min:      -1000,
+		Max:      1000,
 	}
 	b1 := &bsiGroup{
 		Name:     "b1",
 		Type:     bsiGroupTypeInt,
 		Base:     0,
 		BitDepth: 8,
+		Min:      -255,
+		Max:      255,
 	}
-
 	b2 := &bsiGroup{
 		Name:     "b2",
 		Type:     bsiGroupTypeInt,
 		Base:     100,
 		BitDepth: 11,
+		Min:      math.MinInt64,
+		Max:      math.MaxInt64,
 	}
 
 	t.Run("Normal Condition", func(t *testing.T) {
@@ -104,10 +111,12 @@ func TestBSIGroup_BaseValue(t *testing.T) {
 			{b2, pql.EQ, 105, 5, false},
 			{b2, pql.EQ, 1105, 1005, false},
 		} {
-			bv, oor := tt.f.baseValue(tt.op, tt.val)
-			if oor != tt.expOutOfRange || !reflect.DeepEqual(bv, tt.expBaseValue) {
-				t.Errorf("%d. %s) baseValue(%s, %v)=(%v, %v), expected (%v, %v)", i, tt.f.Name, tt.op, tt.val, bv, oor, tt.expBaseValue, tt.expOutOfRange)
-			}
+			t.Run(fmt.Sprint(i), func(t *testing.T) {
+				bv, oor := tt.f.baseValue(tt.op, tt.val)
+				if oor != tt.expOutOfRange || !reflect.DeepEqual(bv, tt.expBaseValue) {
+					t.Errorf("%s) baseValue(%s, %v)=(%v, %v), expected (%v, %v)", tt.f.Name, tt.op, tt.val, bv, oor, tt.expBaseValue, tt.expOutOfRange)
+				}
+			})
 		}
 	})
 

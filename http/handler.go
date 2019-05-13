@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net"
 	"net/http"
 	_ "net/http/pprof" // Imported for its side-effect of registering pprof endpoints with the server.
@@ -764,7 +765,7 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 		} else if v := req.Options.Min; v != nil {
 			base = *v
 		}
-		fos = append(fos, pilosa.OptFieldTypeInt(base))
+		fos = append(fos, pilosa.OptFieldTypeInt(base, math.MinInt64, math.MaxInt64))
 	case pilosa.FieldTypeTime:
 		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum, req.Options.NoStandardView))
 	case pilosa.FieldTypeMutex:

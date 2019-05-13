@@ -16,6 +16,7 @@ package pilosa_test
 
 import (
 	"io/ioutil"
+	"math"
 	"reflect"
 	"testing"
 
@@ -93,7 +94,7 @@ func TestIndex_CreateField(t *testing.T) {
 			defer index.Close()
 
 			// Create field with schema and verify it exists.
-			if f, err := index.CreateField("f", pilosa.OptFieldTypeInt(10)); err != nil {
+			if f, err := index.CreateField("f", pilosa.OptFieldTypeInt(10, math.MinInt64, math.MaxInt64)); err != nil {
 				t.Fatal(err)
 			} else if !reflect.DeepEqual(f.Type(), pilosa.FieldTypeInt) {
 				t.Fatalf("unexpected type: %#v", f.Type())

@@ -1408,7 +1408,6 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 		return frag.notNull()
 
 	} else if cond.Op == pql.BETWEEN {
-
 		predicates, err := cond.IntSliceValue()
 		if err != nil {
 			return nil, errors.Wrap(err, "getting condition value")
@@ -1442,7 +1441,7 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 
 		// If the query is asking for the entire valid range, just return
 		// the not-null bitmap for the bsiGroup.
-		if predicates[0] <= bsig.Min() && predicates[1] >= bsig.Max() {
+		if predicates[0] <= bsig.Min && predicates[1] >= bsig.Max {
 			return frag.notNull()
 		}
 
@@ -1474,8 +1473,8 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 		}
 
 		// LT[E] and GT[E] should return all not-null if selected range fully encompasses valid bsiGroup range.
-		if (cond.Op == pql.LT && value > bsig.Max()) || (cond.Op == pql.LTE && value >= bsig.Max()) ||
-			(cond.Op == pql.GT && value < bsig.Min()) || (cond.Op == pql.GTE && value <= bsig.Min()) {
+		if (cond.Op == pql.LT && value > bsig.Max) || (cond.Op == pql.LTE && value >= bsig.Max) ||
+			(cond.Op == pql.GT && value < bsig.Min) || (cond.Op == pql.GTE && value <= bsig.Min) {
 			return frag.notNull()
 		}
 

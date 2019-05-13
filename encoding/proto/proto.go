@@ -798,6 +798,8 @@ func decodeFieldOptions(options *internal.FieldOptions, m *pilosa.FieldOptions) 
 	m.Type = options.Type
 	m.CacheType = options.CacheType
 	m.CacheSize = options.CacheSize
+	m.Min = options.Min
+	m.Max = options.Max
 	m.Base = options.Base
 	m.BitDepth = uint(options.BitDepth)
 	m.TimeQuantum = pilosa.TimeQuantum(options.TimeQuantum)

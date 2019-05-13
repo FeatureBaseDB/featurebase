@@ -130,13 +130,15 @@ func OptFieldTypeSet(cacheType string, cacheSize uint32) FieldOption {
 // OptFieldTypeInt is a functional option on FieldOptions
 // used to specify the field as being type `int` and to
 // provide any respective configuration values.
-func OptFieldTypeInt(base int64) FieldOption {
+func OptFieldTypeInt(base, min, max int64) FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
 			return errors.Errorf("field type is already set to: %s", fo.Type)
 		}
 		fo.Type = FieldTypeInt
 		fo.Base = base
+		fo.Min = min
+		fo.Max = max
 		fo.BitDepth = 1
 		return nil
 	}
@@ -485,16 +487,21 @@ func (f *Field) loadMeta() error {
 		}
 	}
 
-	// Convert min/max from deprecated v1 int type.
-	if pb.Min != 0 || pb.Max != 0 {
+	// Initialize "base" to "min" when upgrading from v1 BSI format.
+	if pb.BitDepth == 0 {
 		pb.Base = pb.Min
-		pb.BitDepth = uint64(bitDepth(uint64(pb.Max - pb.Min)))
+		pb.BitDepth = uint64(bitDepthInt64(pb.Max - pb.Min))
+		if pb.BitDepth == 0 {
+			pb.BitDepth = 1
+		}
 	}
 
 	// Copy metadata fields.
 	f.options.Type = pb.Type
 	f.options.CacheType = pb.CacheType
 	f.options.CacheSize = pb.CacheSize
+	f.options.Min = pb.Min
+	f.options.Max = pb.Max
 	f.options.Base = pb.Base
 	f.options.BitDepth = uint(pb.BitDepth)
 	f.options.TimeQuantum = TimeQuantum(pb.TimeQuantum)
@@ -540,6 +547,8 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 				f.options.CacheSize = opt.CacheSize
 			}
 		}
+		f.options.Min = 0
+		f.options.Max = 0
 		f.options.Base = 0
 		f.options.BitDepth = 0
 		f.options.TimeQuantum = ""
@@ -548,6 +557,8 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Type = opt.Type
 		f.options.CacheType = CacheTypeNone
 		f.options.CacheSize = 0
+		f.options.Min = opt.Min
+		f.options.Max = opt.Max
 		f.options.Base = opt.Base
 		f.options.BitDepth = opt.BitDepth
 		f.options.TimeQuantum = ""
@@ -557,6 +568,8 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		bsig := &bsiGroup{
 			Name:     f.name,
 			Type:     bsiGroupTypeInt,
+			Min:      opt.Min,
+			Max:      opt.Max,
 			Base:     opt.Base,
 			BitDepth: opt.BitDepth,
 		}
@@ -571,6 +584,8 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Type = opt.Type
 		f.options.CacheType = CacheTypeNone
 		f.options.CacheSize = 0
+		f.options.Min = 0
+		f.options.Max = 0
 		f.options.Base = 0
 		f.options.BitDepth = 0
 		f.options.Keys = opt.Keys
@@ -584,6 +599,8 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Type = FieldTypeBool
 		f.options.CacheType = CacheTypeNone
 		f.options.CacheSize = 0
+		f.options.Min = 0
+		f.options.Max = 0
 		f.options.Base = 0
 		f.options.BitDepth = 0
 		f.options.TimeQuantum = ""
@@ -995,7 +1012,7 @@ func (f *Field) Value(columnID uint64) (value int64, exists bool, err error) {
 
 // SetValue sets a field value for a column.
 func (f *Field) SetValue(columnID uint64, value int64) (changed bool, err error) {
-	// Fetch bsiGroup.
+	// Fetch bsiGroup & validate min/max.
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return false, ErrBSIGroupNotFound
@@ -1003,9 +1020,10 @@ func (f *Field) SetValue(columnID uint64, value int64) (changed bool, err error)
 
 	// Determine base value to store.
 	baseValue := int64(value - bsig.Base)
+	requiredBitDepth := bitDepthInt64(baseValue)
 
 	// Increase bit depth value if the unsigned value is greater.
-	if value < bsig.Min() || value > bsig.Max() {
+	if requiredBitDepth > bsig.BitDepth {
 		if err := func() error {
 			f.mu.Lock()
 			defer f.mu.Unlock()
@@ -1099,7 +1117,7 @@ func (f *Field) Range(name string, op pql.Token, predicate int64) (*Row, error) 
 	bsig := f.bsiGroup(name)
 	if bsig == nil {
 		return nil, ErrBSIGroupNotFound
-	} else if predicate < bsig.Min() || predicate > bsig.Max() {
+	} else if predicate < bsig.Min || predicate > bsig.Max {
 		return nil, nil
 	}
 
@@ -1365,6 +1383,8 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 		Type:           o.Type,
 		CacheType:      o.CacheType,
 		CacheSize:      o.CacheSize,
+		Min:            o.Min,
+		Max:            o.Max,
 		Base:           o.Base,
 		BitDepth:       uint64(o.BitDepth),
 		TimeQuantum:    string(o.TimeQuantum),
@@ -1454,18 +1474,10 @@ func isValidBSIGroupType(v string) bool {
 type bsiGroup struct {
 	Name     string `json:"name,omitempty"`
 	Type     string `json:"type,omitempty"`
+	Min      int64  `json:"min,omitempty"`
+	Max      int64  `json:"max,omitempty"`
 	Base     int64  `json:"base,omitempty"`
 	BitDepth uint   `json:"bitDepth,omitempty"`
-}
-
-// Min returns the lowest possible value for the group based on current bit depth.
-func (b *bsiGroup) Min() int64 {
-	return b.Base - (1 << b.BitDepth) + 1
-}
-
-// Max returns the highest possible value for the group based on current bit depth.
-func (b *bsiGroup) Max() int64 {
-	return b.Base + (1 << b.BitDepth) - 1
 }
 
 // baseValue adjusts the value to align with the range for Field for a certain
@@ -1481,7 +1493,7 @@ func (b *bsiGroup) Max() int64 {
 // Executor.executeBSIGroupRangeShard() takes this into account and returns
 // `frag.FieldNotNull(bsig.BitDepth())` in such instances.
 func (b *bsiGroup) baseValue(op pql.Token, value int64) (baseValue int64, outOfRange bool) {
-	min, max := b.Min(), b.Max()
+	min, max := b.bitDepthMin(), b.bitDepthMax()
 
 	if op == pql.GT || op == pql.GTE {
 		if value > max {
@@ -1507,23 +1519,20 @@ func (b *bsiGroup) baseValue(op pql.Token, value int64) (baseValue int64, outOfR
 }
 
 // baseValueBetween adjusts the min/max value to align with the range for Field.
-func (b *bsiGroup) baseValueBetween(min, max int64) (baseValueMin, baseValueMax int64, outOfRange bool) {
-	bsiMin, bsiMax := b.Min(), b.Max()
+func (b *bsiGroup) baseValueBetween(lo, hi int64) (baseValueLo, baseValueHi int64, outOfRange bool) {
+	min, max := b.bitDepthMin(), b.bitDepthMax()
+	if hi < min || lo > max {
+		return 0, 0, true
+	}
 
-	if max < bsiMin || min > bsiMax {
-		return baseValueMin, baseValueMax, true
+	// Limit lo/hi to possible bit range.
+	if lo < min {
+		lo = min
 	}
-	// Adjust min/max to range.
-	if min > bsiMin {
-		baseValueMin = int64(min - b.Base)
+	if hi > max {
+		hi = max
 	}
-	// Make sure the high value of the BETWEEN does not exceed BitDepth.
-	if max > bsiMax {
-		baseValueMax = int64(bsiMax - b.Base)
-	} else if max > bsiMin {
-		baseValueMax = int64(max - b.Base)
-	}
-	return baseValueMin, baseValueMax, false
+	return lo - b.Base, hi - b.Base, false
 }
 
 func (b *bsiGroup) validate() error {
@@ -1533,6 +1542,16 @@ func (b *bsiGroup) validate() error {
 		return ErrInvalidBSIGroupType
 	}
 	return nil
+}
+
+// bitDepthMin returns the minimum value possible for the current bit depth.
+func (b *bsiGroup) bitDepthMin() int64 {
+	return b.Base - (1 << b.BitDepth) + 1
+}
+
+// bitDepthMax returns the maximum value possible for the current bit depth.
+func (b *bsiGroup) bitDepthMax() int64 {
+	return b.Base + (1 << b.BitDepth) - 1
 }
 
 // Cache types.

@@ -1273,7 +1273,7 @@ func (f *fragment) rangeBetweenUnsigned(filter *Row, bitDepth uint, predicateMin
 			}
 		}
 
-		// LTE predicateMin
+		// LTE predicateMax
 		// If bit is zero then remove all set bits not in excluded bitmap.
 		if bit2 == 0 {
 			filter = filter.Difference(row.Difference(keep2))
@@ -2492,9 +2492,9 @@ func upgradeRoaringBSIv2(f *fragment, bitDepth uint) (string, error) {
 		f.storage.ForEach(func(i uint64) {
 			rowID, columnID := i/ShardWidth, (f.shard*ShardWidth)+(i%ShardWidth)
 			if rowID == uint64(bitDepth) {
-				other.Add(pos(bsiExistsBit, columnID)) // move exists bit to beginning
+				_, _ = other.Add(pos(bsiExistsBit, columnID)) // move exists bit to beginning
 			} else {
-				other.Add(pos(rowID+bsiOffsetBit, columnID)) // move other bits up
+				_, _ = other.Add(pos(rowID+bsiOffsetBit, columnID)) // move other bits up
 			}
 		})
 	}()
