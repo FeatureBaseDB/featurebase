@@ -43,7 +43,7 @@ curl localhost:10101/index/repository/query \
 
 #### Arguments and Types
 
-* `field` The field specifies on which Pilosa [field](../glossary/#field) the query will operate. Valid field names are lower case strings; they start with an alphanumeric character, and contain only alphanumeric characters and `_-`. They must be 64 characters or less in length.
+* `field` The field specifies on which Pilosa [field](../glossary/#field) the query will operate. Valid field names are lower case strings; they start with a lowercase letter, and contain only alphanumeric characters and `_-`. They must be 64 characters or less in length.
 * `TIMESTAMP` This is a timestamp in the following format `YYYY-MM-DDTHH:MM` (e.g. 2006-01-02T15:04)
 * `UINT` An unsigned integer (e.g. 42839)
 * `BOOL` A boolean value, `true` or `false`

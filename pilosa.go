@@ -48,7 +48,7 @@ var (
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")
 
-	ErrName  = errors.New("invalid index or field name, must match [a-z0-9_-]")
+	ErrName  = errors.New("invalid index or field name, must match [a-z][a-z0-9_-]* and contain at most 64 characters")
 	ErrLabel = errors.New("invalid row or column label, must match [A-Za-z0-9_-]")
 
 	// ErrFragmentNotFound is returned when a fragment does not exist.
@@ -152,7 +152,7 @@ func (cas ColumnAttrSet) MarshalJSON() ([]byte, error) {
 // TimeFormat is the go-style time format used to parse string dates.
 const TimeFormat = "2006-01-02T15:04"
 
-// validateName ensures that the name is a valid format.
+// validateName ensures that the index or field name is a valid format.
 func validateName(name string) error {
 	if !nameRegexp.Match([]byte(name)) {
 		return errors.Wrapf(ErrName, "'%s'", name)

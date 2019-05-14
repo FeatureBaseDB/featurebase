@@ -63,6 +63,7 @@ curl localhost:10101/index/repository -X POST
 ``` response
 {"success":true}
 ```
+The index name must be 64 characters or less, start with a letter, and consist only of lowercase alphanumeric characters or `_-`.
 
 Let's create the `stargazer` field which has user IDs of stargazers as its rows:
 ``` request
