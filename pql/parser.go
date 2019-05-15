@@ -28,7 +28,7 @@ const timeFormat = "2006-01-02T15:04"
 
 // error strings in the parser
 const duplicateArgErrorMessage = "duplicate argument provided"
-const outOfBoundsErrorMessage = "out of bounds"
+const intOutOfRangeError = "integer is not in signed 64-bit range"
 
 // parser represents a parser for the PQL language.
 type parser struct {
@@ -72,7 +72,8 @@ func (p *parser) Parse() (*Query, error) {
 		p.Execute()
 	}()
 	if v != nil {
-		if strings.HasPrefix(v.(string), duplicateArgErrorMessage) || strings.HasPrefix(v.(string), outOfBoundsErrorMessage) {
+		errorMessage := v.(string)
+		if strings.HasPrefix(errorMessage, duplicateArgErrorMessage) || strings.HasPrefix(errorMessage, intOutOfRangeError) {
 			return nil, fmt.Errorf("%s", v)
 		} else {
 			panic(v)
