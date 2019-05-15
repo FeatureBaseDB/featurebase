@@ -26,9 +26,9 @@ import (
 // timeFormat is the go-style time format used to parse string dates.
 const timeFormat = "2006-01-02T15:04"
 
-// duplicateArgErrorMessage is used as an error string in the parser.
+// error strings in the parser
 const duplicateArgErrorMessage = "duplicate argument provided"
-const parsingIntErrorMessage = "out of bounds"
+const outOfBoundsErrorMessage = "out of bounds"
 
 // parser represents a parser for the PQL language.
 type parser struct {
@@ -72,7 +72,7 @@ func (p *parser) Parse() (*Query, error) {
 		p.Execute()
 	}()
 	if v != nil {
-		if strings.HasPrefix(v.(string), duplicateArgErrorMessage) || strings.HasPrefix(v.(string), parsingIntErrorMessage){
+		if strings.HasPrefix(v.(string), duplicateArgErrorMessage) || strings.HasPrefix(v.(string), outOfBoundsErrorMessage) {
 			return nil, fmt.Errorf("%s", v)
 		} else {
 			panic(v)

@@ -333,7 +333,7 @@ func TestPEGErrors(t *testing.T) {
 		{
 			name:  "RangeTimeOneStamp",
 			input: "Row(a=4, 2010-07-04T00:00)"},
-        {
+		{
 			name:  "ArgOutOfBounds",
 			input: "Row(a=9223372036854775808)"},
 		{
