@@ -72,7 +72,10 @@ func (p *parser) Parse() (*Query, error) {
 		p.Execute()
 	}()
 	if v != nil {
-		errorMessage := v.(string)
+		errorMessage, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("unexpected parser error of type %T: %[1]v", v)
+		}
 		if strings.HasPrefix(errorMessage, duplicateArgErrorMessage) || strings.HasPrefix(errorMessage, intOutOfRangeError) {
 			return nil, fmt.Errorf("%s", v)
 		} else {
