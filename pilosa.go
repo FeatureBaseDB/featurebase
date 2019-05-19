@@ -40,6 +40,8 @@ var (
 	ErrInvalidBSIGroupType      = errors.New("invalid bsigroup type")
 	ErrInvalidBSIGroupRange     = errors.New("invalid bsigroup range")
 	ErrInvalidBSIGroupValueType = errors.New("invalid bsigroup value type")
+	ErrBSIGroupValueTooLow      = errors.New("bsigroup value too low")
+	ErrBSIGroupValueTooHigh     = errors.New("bsigroup value too high")
 	ErrInvalidRangeOperation    = errors.New("invalid range operation")
 	ErrInvalidBetweenValue      = errors.New("invalid value for between operation")
 

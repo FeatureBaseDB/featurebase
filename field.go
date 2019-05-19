@@ -130,16 +130,14 @@ func OptFieldTypeSet(cacheType string, cacheSize uint32) FieldOption {
 // OptFieldTypeInt is a functional option on FieldOptions
 // used to specify the field as being type `int` and to
 // provide any respective configuration values.
-func OptFieldTypeInt(base, min, max int64) FieldOption {
+func OptFieldTypeInt(min, max int64) FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
 			return errors.Errorf("field type is already set to: %s", fo.Type)
 		}
 		fo.Type = FieldTypeInt
-		fo.Base = base
 		fo.Min = min
 		fo.Max = max
-		fo.BitDepth = 1
 		return nil
 	}
 }
@@ -1016,6 +1014,10 @@ func (f *Field) SetValue(columnID uint64, value int64) (changed bool, err error)
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return false, ErrBSIGroupNotFound
+	} else if value < bsig.Min {
+		return false, ErrBSIGroupValueTooLow
+	} else if value > bsig.Max {
+		return false, ErrBSIGroupValueTooHigh
 	}
 
 	// Determine base value to store.
@@ -1259,6 +1261,11 @@ func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportO
 	dataByFragment := make(map[importKey]importValueData)
 	for i := range columnIDs {
 		columnID, value := columnIDs[i], values[i]
+		if value > bsig.Max {
+			return fmt.Errorf("%v, columnID=%v, value=%v", ErrBSIGroupValueTooHigh, columnID, value)
+		} else if value < bsig.Min {
+			return fmt.Errorf("%v, columnID=%v, value=%v", ErrBSIGroupValueTooLow, columnID, value)
+		}
 
 		// Attach value to each bsiGroup view.
 		for _, name := range []string{viewName} {
@@ -1345,16 +1352,14 @@ func (p fieldInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 type FieldOptions struct {
 	Base           int64       `json:"base,omitempty"`
 	BitDepth       uint        `json:"bitDepth,omitempty"`
+	Min            int64       `json:"min,omitempty"`
+	Max            int64       `json:"max,omitempty"`
 	Keys           bool        `json:"keys"`
 	NoStandardView bool        `json:"noStandardView,omitempty"`
 	CacheSize      uint32      `json:"cacheSize,omitempty"`
 	CacheType      string      `json:"cacheType,omitempty"`
 	Type           string      `json:"type,omitempty"`
 	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
-
-	// Deprecated. Use base/bit depth.
-	Min int64 `json:"min,omitempty"`
-	Max int64 `json:"max,omitempty"`
 }
 
 // applyDefaultOptions returns a new FieldOptions object
@@ -1383,10 +1388,10 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 		Type:           o.Type,
 		CacheType:      o.CacheType,
 		CacheSize:      o.CacheSize,
-		Min:            o.Min,
-		Max:            o.Max,
 		Base:           o.Base,
 		BitDepth:       uint64(o.BitDepth),
+		Min:            o.Min,
+		Max:            o.Max,
 		TimeQuantum:    string(o.TimeQuantum),
 		Keys:           o.Keys,
 		NoStandardView: o.NoStandardView,
@@ -1415,11 +1420,15 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			Type     string `json:"type"`
 			Base     int64  `json:"base"`
 			BitDepth uint   `json:"bitDepth"`
+			Min      int64  `json:"min"`
+			Max      int64  `json:"max"`
 			Keys     bool   `json:"keys"`
 		}{
 			o.Type,
 			o.Base,
 			o.BitDepth,
+			o.Min,
+			o.Max,
 			o.Keys,
 		})
 	case FieldTypeTime:

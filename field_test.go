@@ -31,7 +31,7 @@ func TestField_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(0, math.MinInt64, math.MaxInt64))
+		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -64,7 +64,7 @@ func TestField_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(0, math.MinInt64, math.MaxInt64))
+		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -104,6 +104,36 @@ func TestField_SetValue(t *testing.T) {
 
 		// Set value.
 		if _, err := f.SetValue(100, 21); err != pilosa.ErrBSIGroupNotFound {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
+
+	t.Run("ErrBSIGroupValueTooLow", func(t *testing.T) {
+		idx := test.MustOpenIndex()
+		defer idx.Close()
+
+		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(20, 30))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Set value.
+		if _, err := f.SetValue(100, 15); err != pilosa.ErrBSIGroupValueTooLow {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
+
+	t.Run("ErrBSIGroupValueTooHigh", func(t *testing.T) {
+		idx := test.MustOpenIndex()
+		defer idx.Close()
+
+		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(20, 30))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Set value.
+		if _, err := f.SetValue(100, 31); err != pilosa.ErrBSIGroupValueTooHigh {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})

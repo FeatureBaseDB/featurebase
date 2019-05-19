@@ -705,7 +705,7 @@ func TestClient_ImportKeys(t *testing.T) {
 
 		// Load bitmap into cache to ensure cache gets updated.
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{Keys: true})
-		field, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(0, -100, 100))
+		field, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-100, 100))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -790,7 +790,7 @@ func TestClient_ImportValue(t *testing.T) {
 
 	// Load bitmap into cache to ensure cache gets updated.
 	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	field, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(0, -100, 100))
+	field, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-100, 100))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -832,8 +832,8 @@ func TestClient_ImportValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if min != -100 || cnt != 0 {
-		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=-100, cnt=0", min, cnt)
+	if min != 0 || cnt != 0 {
+		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=0, cnt=0", min, cnt)
 	}
 
 	// Verify Max.
@@ -871,8 +871,8 @@ func TestClient_ImportValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if min != -100 || cnt != 0 {
-		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=-100, cnt=0", min, cnt)
+	if min != 0 || cnt != 0 {
+		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=0, cnt=0", min, cnt)
 	}
 
 	// Verify Max.
@@ -933,7 +933,7 @@ func TestClient_ImportExistence(t *testing.T) {
 		fldName := "fint"
 
 		index := hldr.MustCreateIndexIfNotExists(idxName, pilosa.IndexOptions{TrackExistence: true})
-		field, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(0, -100, 100))
+		field, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-100, 100))
 		if err != nil {
 			t.Fatal(err)
 		}
