@@ -16,6 +16,7 @@ package pilosa_test
 
 import (
 	"io/ioutil"
+	"math"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -30,7 +31,7 @@ func TestField_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(0, 30))
+		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -63,7 +64,7 @@ func TestField_SetValue(t *testing.T) {
 		idx := test.MustOpenIndex()
 		defer idx.Close()
 
-		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(0, 30))
+		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 		if err != nil {
 			t.Fatal(err)
 		}

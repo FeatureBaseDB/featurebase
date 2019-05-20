@@ -83,6 +83,14 @@ const (
 	// Row ids used for boolean fields.
 	falseRowID = uint64(0)
 	trueRowID  = uint64(1)
+
+	// BSI bits used to check existence & sign.
+	bsiExistsBit = 0
+	bsiSignBit   = 1
+	bsiOffsetBit = 2
+
+	// Roaring bitmap flags.
+	roaringFlagBSIv2 = 0x01 // indicates version using low bit for existence
 )
 
 // fragment represents the intersection of a field and shard in an index.
@@ -97,6 +105,7 @@ type fragment struct {
 
 	// File-backed storage
 	path        string
+	flags       byte // user-defined flags passed to roaring
 	file        *os.File
 	storage     *roaring.Bitmap
 	storageData []byte
@@ -136,13 +145,14 @@ type fragment struct {
 }
 
 // newFragment returns a new instance of Fragment.
-func newFragment(path, index, field, view string, shard uint64) *fragment {
+func newFragment(path, index, field, view string, shard uint64, flags byte) *fragment {
 	return &fragment{
 		path:      path,
 		index:     index,
 		field:     field,
 		view:      view,
 		shard:     shard,
+		flags:     flags,
 		CacheType: DefaultCacheType,
 		CacheSize: DefaultCacheSize,
 
@@ -208,6 +218,7 @@ func (f *fragment) openStorage() error {
 	// Create a roaring bitmap to serve as storage for the shard.
 	if f.storage == nil {
 		f.storage = roaring.NewFileBitmap()
+		f.storage.Flags = f.flags
 	}
 	// Open the data file to be mmap'd and used as an ops log.
 	file, mustClose, err := syswrap.OpenFile(f.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
@@ -679,12 +690,12 @@ func (f *fragment) bit(rowID, columnID uint64) (bool, error) {
 }
 
 // value uses a column of bits to read a multi-bit value.
-func (f *fragment) value(columnID uint64, bitDepth uint) (value uint64, exists bool, err error) {
+func (f *fragment) value(columnID uint64, bitDepth uint) (value int64, exists bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	// If existence bit is unset then ignore remaining bits.
-	if v, err := f.bit(uint64(bitDepth), columnID); err != nil {
+	if v, err := f.bit(bsiExistsBit, columnID); err != nil {
 		return 0, false, errors.Wrap(err, "getting existence bit")
 	} else if !v {
 		return 0, false, nil
@@ -692,55 +703,75 @@ func (f *fragment) value(columnID uint64, bitDepth uint) (value uint64, exists b
 
 	// Compute other bits into a value.
 	for i := uint(0); i < bitDepth; i++ {
-		if v, err := f.bit(uint64(i), columnID); err != nil {
+		if v, err := f.bit(uint64(bsiOffsetBit+i), columnID); err != nil {
 			return 0, false, errors.Wrapf(err, "getting value bit %d", i)
 		} else if v {
 			value |= (1 << i)
 		}
 	}
 
+	// Negate if sign bit set.
+	if v, err := f.bit(bsiSignBit, columnID); err != nil {
+		return 0, false, errors.Wrap(err, "getting sign bit")
+	} else if v {
+		value = -value
+	}
+
 	return value, true, nil
 }
 
 // clearValue uses a column of bits to clear a multi-bit value.
-func (f *fragment) clearValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+func (f *fragment) clearValue(columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
 	return f.setValueBase(columnID, bitDepth, value, true)
 }
 
 // setValue uses a column of bits to set a multi-bit value.
-func (f *fragment) setValue(columnID uint64, bitDepth uint, value uint64) (changed bool, err error) {
+func (f *fragment) setValue(columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
 	return f.setValueBase(columnID, bitDepth, value, false)
 }
 
-func (f *fragment) positionsForValue(columnID uint64, bitDepth uint, value uint64, clear bool, toSet, toClear []uint64) ([]uint64, []uint64, error) {
+func (f *fragment) positionsForValue(columnID uint64, bitDepth uint, value int64, clear bool, toSet, toClear []uint64) ([]uint64, []uint64, error) {
+	// Convert value to an unsigned representation.
+	uvalue := uint64(value)
+	if value < 0 {
+		uvalue = uint64(-value)
+	}
+
+	// Mark value as set.
+	if bit, err := f.pos(bsiExistsBit, columnID); err != nil {
+		return toSet, toClear, errors.Wrap(err, "getting not-null pos")
+	} else if clear {
+		toClear = append(toClear, bit)
+	} else {
+		toSet = append(toSet, bit)
+	}
+
+	// Mark sign.
+	if bit, err := f.pos(bsiSignBit, columnID); err != nil {
+		return toSet, toClear, errors.Wrap(err, "getting sign pos")
+	} else if value >= 0 || clear {
+		toClear = append(toClear, bit)
+	} else {
+		toSet = append(toSet, bit)
+	}
+
 	for i := uint(0); i < bitDepth; i++ {
-		bit, err := f.pos(uint64(i), columnID)
+		bit, err := f.pos(uint64(bsiOffsetBit+i), columnID)
 		if err != nil {
 			return toSet, toClear, errors.Wrap(err, "getting pos")
 		}
-		if value&(1<<i) != 0 {
+		if uvalue&(1<<i) != 0 {
 			toSet = append(toSet, bit)
 		} else {
 			toClear = append(toClear, bit)
 		}
 	}
 
-	// Mark value as set.
-	bit, err := f.pos(uint64(bitDepth), columnID)
-	if err != nil {
-		return toSet, toClear, errors.Wrap(err, "getting not-null pos")
-	}
-	if clear {
-		toClear = append(toClear, bit)
-	} else {
-		toSet = append(toSet, bit)
-	}
-
 	return toSet, toClear, nil
 }
 
 // TODO get rid of this and use positionsForValue to generate a single write op, and set that with importPositions.
-func (f *fragment) setValueBase(columnID uint64, bitDepth uint, value uint64, clear bool) (changed bool, err error) {
+func (f *fragment) setValueBase(columnID uint64, bitDepth uint, value int64, clear bool) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	mustClose, err := f.reopen()
@@ -751,15 +782,21 @@ func (f *fragment) setValueBase(columnID uint64, bitDepth uint, value uint64, cl
 		defer f.safeClose()
 	}
 
+	// Convert value to an unsigned representation.
+	uvalue := uint64(value)
+	if value < 0 {
+		uvalue = uint64(-value)
+	}
+
 	for i := uint(0); i < bitDepth; i++ {
-		if value&(1<<i) != 0 {
-			if c, err := f.unprotectedSetBit(uint64(i), columnID); err != nil {
+		if uvalue&(1<<i) != 0 {
+			if c, err := f.unprotectedSetBit(uint64(bsiOffsetBit+i), columnID); err != nil {
 				return changed, err
 			} else if c {
 				changed = true
 			}
 		} else {
-			if c, err := f.unprotectedClearBit(uint64(i), columnID); err != nil {
+			if c, err := f.unprotectedClearBit(uint64(bsiOffsetBit+i), columnID); err != nil {
 				return changed, err
 			} else if c {
 				changed = true
@@ -769,14 +806,29 @@ func (f *fragment) setValueBase(columnID uint64, bitDepth uint, value uint64, cl
 
 	// Mark value as set (or cleared).
 	if clear {
-		if c, err := f.unprotectedClearBit(uint64(bitDepth), columnID); err != nil {
+		if c, err := f.unprotectedClearBit(uint64(bsiExistsBit), columnID); err != nil {
 			return changed, errors.Wrap(err, "clearing not-null")
 		} else if c {
 			changed = true
 		}
 	} else {
-		if c, err := f.unprotectedSetBit(uint64(bitDepth), columnID); err != nil {
+		if c, err := f.unprotectedSetBit(uint64(bsiExistsBit), columnID); err != nil {
 			return changed, errors.Wrap(err, "marking not-null")
+		} else if c {
+			changed = true
+		}
+	}
+
+	// Mark sign bit (or clear).
+	if value >= 0 || clear {
+		if c, err := f.unprotectedClearBit(uint64(bsiSignBit), columnID); err != nil {
+			return changed, errors.Wrap(err, "clearing sign")
+		} else if c {
+			changed = true
+		}
+	} else {
+		if c, err := f.unprotectedSetBit(uint64(bsiSignBit), columnID); err != nil {
+			return changed, errors.Wrap(err, "marking sign")
 		} else if c {
 			changed = true
 		}
@@ -786,23 +838,26 @@ func (f *fragment) setValueBase(columnID uint64, bitDepth uint, value uint64, cl
 }
 
 // importSetValue is a more efficient SetValue just for imports.
-func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value uint64, clear bool) (changed bool, err error) { // nolint: unparam
+func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value int64, clear bool) (changed bool, err error) { // nolint: unparam
+	// Convert value to an unsigned representation.
+	uvalue := uint64(value)
+	if value < 0 {
+		uvalue = uint64(-value)
+	}
+
 	for i := uint(0); i < bitDepth; i++ {
-		if value&(1<<i) != 0 {
-			bit, err := f.pos(uint64(i), columnID)
-			if err != nil {
-				return changed, errors.Wrap(err, "getting set pos")
-			}
+		bit, err := f.pos(uint64(bsiOffsetBit+i), columnID)
+		if err != nil {
+			return changed, errors.Wrap(err, "getting pos")
+		}
+
+		if uvalue&(1<<i) != 0 {
 			if c, err := f.storage.Add(bit); err != nil {
 				return changed, errors.Wrap(err, "adding")
 			} else if c {
 				changed = true
 			}
 		} else {
-			bit, err := f.pos(uint64(i), columnID)
-			if err != nil {
-				return changed, errors.Wrap(err, "getting clear pos")
-			}
 			if c, err := f.storage.Remove(bit); err != nil {
 				return changed, errors.Wrap(err, "removing")
 			} else if c {
@@ -812,11 +867,9 @@ func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value uint64, 
 	}
 
 	// Mark value as set.
-	p, err := f.pos(uint64(bitDepth), columnID)
-	if err != nil {
+	if p, err := f.pos(uint64(bsiExistsBit), columnID); err != nil {
 		return changed, errors.Wrap(err, "getting not-null pos")
-	}
-	if clear {
+	} else if clear {
 		if c, err := f.storage.Remove(p); err != nil {
 			return changed, errors.Wrap(err, "removing not-null from storage")
 		} else if c {
@@ -830,18 +883,39 @@ func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value uint64, 
 		}
 	}
 
+	// Mark sign bit.
+	if p, err := f.pos(uint64(bsiSignBit), columnID); err != nil {
+		return changed, errors.Wrap(err, "getting sign pos")
+	} else if value >= 0 || clear {
+		if c, err := f.storage.Remove(p); err != nil {
+			return changed, errors.Wrap(err, "removing sign from storage")
+		} else if c {
+			changed = true
+		}
+	} else {
+		if c, err := f.storage.Add(p); err != nil {
+			return changed, errors.Wrap(err, "adding sign to storage")
+		} else if c {
+			changed = true
+		}
+	}
+
 	return changed, nil
 }
 
 // sum returns the sum of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error) {
+func (f *fragment) sum(filter *Row, bitDepth uint) (sum int64, count uint64, err error) {
 	// Compute count based on the existence row.
-	consider := f.row(uint64(bitDepth))
+	consider := f.row(bsiExistsBit)
 	if filter != nil {
 		consider = consider.Intersect(filter)
 	}
 	count = consider.Count()
+
+	// Determine positive & negative sets.
+	nrow := f.row(bsiSignBit)
+	prow := consider.Difference(nrow)
 
 	// Compute the sum based on the bit count of each row multiplied by the
 	// place value of each row. For example, 10 bits in the 1's place plus
@@ -850,11 +924,16 @@ func (f *fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error
 	//
 	//   10*(2^0) + 4*(2^1) + 3*(2^2) = 30
 	//
-	var cnt uint64
+	// Execute once for positive numbers and once for negative. Subtract the
+	// negative sum from the positive sum.
 	for i := uint(0); i < bitDepth; i++ {
-		row := f.row(uint64(i))
-		cnt = row.intersectionCount(consider)
-		sum += (1 << i) * cnt
+		row := f.row(uint64(bsiOffsetBit + i))
+
+		psum := int64((1 << i) * row.intersectionCount(prow))
+		nsum := int64((1 << i) * row.intersectionCount(nrow))
+
+		// Squash to reduce the possibility of overflow.
+		sum += psum - nsum
 	}
 
 	return sum, count, nil
@@ -862,9 +941,8 @@ func (f *fragment) sum(filter *Row, bitDepth uint) (sum, count uint64, err error
 
 // min returns the min of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *fragment) min(filter *Row, bitDepth uint) (min, count uint64, err error) {
-
-	consider := f.row(uint64(bitDepth))
+func (f *fragment) min(filter *Row, bitDepth uint) (min int64, count uint64, err error) {
+	consider := f.row(bsiExistsBit)
 	if filter != nil {
 		consider = consider.Intersect(filter)
 	}
@@ -874,58 +952,79 @@ func (f *fragment) min(filter *Row, bitDepth uint) (min, count uint64, err error
 		return 0, 0, nil
 	}
 
-	for i := bitDepth; i > uint(0); i-- {
-		ii := i - 1 // allow for uint range: (bitDepth-1) to 0
-		row := f.row(uint64(ii))
+	// If we have negative values, we should find the highest unsigned value
+	// from that set, then negate it, and return it. For example, if values
+	// (-1, -2) exist, they are stored unsigned (1,2) with a negative sign bit
+	// set. We take the highest of that set (2) and negate it and return it.
+	if row := f.row(bsiSignBit).Intersect(consider); row.Any() {
+		min, count := f.maxUnsigned(row, bitDepth)
+		return -min, count, nil
+	}
 
-		x := consider.Difference(row)
-		count = x.Count()
+	// Otherwise find lowest positive number.
+	min, count = f.minUnsigned(consider, bitDepth)
+	return min, count, nil
+}
+
+// minUnsigned the lowest value without considering the sign bit. Filter is required.
+func (f *fragment) minUnsigned(filter *Row, bitDepth uint) (min int64, count uint64) {
+	for i := int(bitDepth - 1); i >= 0; i-- {
+		row := filter.Difference(f.row(uint64(bsiOffsetBit + i)))
+		count = row.Count()
 		if count > 0 {
-			consider = x
+			filter = row
 		} else {
-			min += (1 << ii)
-			if ii == 0 {
-				count = consider.Count()
+			min += (1 << uint(i))
+			if i == 0 {
+				count = filter.Count()
 			}
 		}
 	}
-
-	return min, count, nil
+	return min, count
 }
 
 // max returns the max of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *fragment) max(filter *Row, bitDepth uint) (max, count uint64, err error) {
-
-	consider := f.row(uint64(bitDepth))
+func (f *fragment) max(filter *Row, bitDepth uint) (max int64, count uint64, err error) {
+	consider := f.row(bsiExistsBit)
 	if filter != nil {
 		consider = consider.Intersect(filter)
 	}
 
 	// If there are no columns to consider, return early.
-	if consider.Count() == 0 {
+	if !consider.Any() {
 		return 0, 0, nil
 	}
 
-	for i := bitDepth; i > uint(0); i-- {
-		ii := i - 1 // allow for uint range: (bitDepth-1) to 0
-		row := f.row(uint64(ii))
-
-		x := row.Intersect(consider)
-		count = x.Count()
-		if count > 0 {
-			max += (1 << ii)
-			consider = x
-		} else if ii == 0 {
-			count = consider.Count()
-		}
+	// Find lowest negative number w/o sign and negate, if no positives are available.
+	pos := consider.Difference(f.row(bsiSignBit))
+	if !pos.Any() {
+		max, count = f.minUnsigned(consider, bitDepth)
+		return -max, count, nil
 	}
 
+	// Otherwise find highest positive number.
+	max, count = f.maxUnsigned(pos, bitDepth)
 	return max, count, nil
 }
 
+// maxUnsigned the highest value without considering the sign bit. Filter is required.
+func (f *fragment) maxUnsigned(filter *Row, bitDepth uint) (max int64, count uint64) {
+	for i := int(bitDepth - 1); i >= 0; i-- {
+		row := f.row(uint64(bsiOffsetBit + i)).Intersect(filter)
+		count = row.Count()
+		if count > 0 {
+			max += (1 << uint(i))
+			filter = row
+		} else if i == 0 {
+			count = filter.Count()
+		}
+	}
+	return max, count
+}
+
 // rangeOp returns bitmaps with a bsiGroup value encoding matching the predicate.
-func (f *fragment) rangeOp(op pql.Token, bitDepth uint, predicate uint64) (*Row, error) {
+func (f *fragment) rangeOp(op pql.Token, bitDepth uint, predicate int64) (*Row, error) {
 	switch op {
 	case pql.EQ:
 		return f.rangeEQ(bitDepth, predicate)
@@ -940,14 +1039,23 @@ func (f *fragment) rangeOp(op pql.Token, bitDepth uint, predicate uint64) (*Row,
 	}
 }
 
-func (f *fragment) rangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
+func (f *fragment) rangeEQ(bitDepth uint, predicate int64) (*Row, error) {
 	// Start with set of columns with values set.
-	b := f.row(uint64(bitDepth))
+	b := f.row(bsiExistsBit)
+
+	// Filter to only positive/negative numbers.
+	upredicate := uint64(predicate)
+	if predicate < 0 {
+		upredicate = uint64(-predicate)
+		b = b.Intersect(f.row(bsiSignBit)) // only negatives
+	} else {
+		b = b.Difference(f.row(bsiSignBit)) // only positives
+	}
 
 	// Filter any bits that don't match the current bit value.
 	for i := int(bitDepth - 1); i >= 0; i-- {
-		row := f.row(uint64(i))
-		bit := (predicate >> uint(i)) & 1
+		row := f.row(uint64(bsiOffsetBit + i))
+		bit := (upredicate >> uint(i)) & 1
 
 		if bit == 1 {
 			b = b.Intersect(row)
@@ -959,9 +1067,9 @@ func (f *fragment) rangeEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	return b, nil
 }
 
-func (f *fragment) rangeNEQ(bitDepth uint, predicate uint64) (*Row, error) {
+func (f *fragment) rangeNEQ(bitDepth uint, predicate int64) (*Row, error) {
 	// Start with set of columns with values set.
-	b := f.row(uint64(bitDepth))
+	b := f.row(bsiExistsBit)
 
 	// Get the equal bitmap.
 	eq, err := f.rangeEQ(bitDepth, predicate)
@@ -975,22 +1083,44 @@ func (f *fragment) rangeNEQ(bitDepth uint, predicate uint64) (*Row, error) {
 	return b, nil
 }
 
-func (f *fragment) rangeLT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
-	keep := NewRow()
-
+func (f *fragment) rangeLT(bitDepth uint, predicate int64, allowEquality bool) (*Row, error) {
 	// Start with set of columns with values set.
-	b := f.row(uint64(bitDepth))
+	b := f.row(bsiExistsBit)
+
+	// Create predicate without sign bit.
+	upredicate := uint64(predicate)
+	if predicate < 0 {
+		upredicate = uint64(-predicate)
+	}
+
+	// If predicate is positive, return all positives less than predicate and all negatives.
+	if (predicate >= 0 && allowEquality) || (predicate >= -1 && !allowEquality) {
+		pos, err := f.rangeLTUnsigned(b.Difference(f.row(bsiSignBit)), bitDepth, upredicate, allowEquality)
+		if err != nil {
+			return nil, err
+		}
+		neg := f.row(bsiSignBit)
+		return neg.Union(pos), nil
+	}
+
+	// Otherwise if predicate is negative, return all negatives greater than upredicate.
+	return f.rangeGTUnsigned(b.Intersect(f.row(bsiSignBit)), bitDepth, upredicate, allowEquality)
+}
+
+// rangeLTUnsigned returns all bits LT/LTE the predicate without considering the sign bit.
+func (f *fragment) rangeLTUnsigned(filter *Row, bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
+	keep := NewRow()
 
 	// Filter any bits that don't match the current bit value.
 	leadingZeros := true
 	for i := int(bitDepth - 1); i >= 0; i-- {
-		row := f.row(uint64(i))
+		row := f.row(uint64(bsiOffsetBit + i))
 		bit := (predicate >> uint(i)) & 1
 
 		// Remove any columns with higher bits set.
 		if leadingZeros {
 			if bit == 0 {
-				b = b.Difference(row)
+				filter = filter.Difference(row)
 				continue
 			} else {
 				leadingZeros = false
@@ -1004,32 +1134,54 @@ func (f *fragment) rangeLT(bitDepth uint, predicate uint64, allowEquality bool) 
 			if bit == 0 {
 				return keep, nil
 			}
-			return b.Difference(row.Difference(keep)), nil
+			return filter.Difference(row.Difference(keep)), nil
 		}
 
 		// If bit is zero then remove all set columns not in excluded bitmap.
 		if bit == 0 {
-			b = b.Difference(row.Difference(keep))
+			filter = filter.Difference(row.Difference(keep))
 			continue
 		}
 
 		// If bit is set then add columns for set bits to exclude.
 		// Don't bother to compute this on the final iteration.
 		if i > 0 {
-			keep = keep.Union(b.Difference(row))
+			keep = keep.Union(filter.Difference(row))
 		}
 	}
 
-	return b, nil
+	return filter, nil
 }
 
-func (f *fragment) rangeGT(bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
-	b := f.row(uint64(bitDepth))
+func (f *fragment) rangeGT(bitDepth uint, predicate int64, allowEquality bool) (*Row, error) {
+	b := f.row(bsiExistsBit)
+
+	// Create predicate without sign bit.
+	upredicate := uint64(predicate)
+	if predicate < 0 {
+		upredicate = uint64(-predicate)
+	}
+
+	// If predicate is positive, return all positives greater than predicate.
+	if (predicate >= 0 && allowEquality) || (predicate >= -1 && !allowEquality) {
+		return f.rangeGTUnsigned(b.Difference(f.row(bsiSignBit)), bitDepth, upredicate, allowEquality)
+	}
+
+	// If predicate is negative, return all negatives less than than upredicate and all positives.
+	neg, err := f.rangeLTUnsigned(b.Intersect(f.row(bsiSignBit)), bitDepth, upredicate, allowEquality)
+	if err != nil {
+		return nil, err
+	}
+	pos := b.Difference(f.row(bsiSignBit))
+	return pos.Union(neg), nil
+}
+
+func (f *fragment) rangeGTUnsigned(filter *Row, bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
 	keep := NewRow()
 
 	// Filter any bits that don't match the current bit value.
 	for i := int(bitDepth - 1); i >= 0; i-- {
-		row := f.row(uint64(i))
+		row := f.row(uint64(bsiOffsetBit + i))
 		bit := (predicate >> uint(i)) & 1
 
 		// Handle last bit differently.
@@ -1039,68 +1191,102 @@ func (f *fragment) rangeGT(bitDepth uint, predicate uint64, allowEquality bool) 
 			if bit == 1 {
 				return keep, nil
 			}
-			return b.Difference(b.Difference(row).Difference(keep)), nil
+			return filter.Difference(filter.Difference(row).Difference(keep)), nil
 		}
 
 		// If bit is set then remove all unset columns not already kept.
 		if bit == 1 {
-			b = b.Difference(b.Difference(row).Difference(keep))
+			filter = filter.Difference(filter.Difference(row).Difference(keep))
 			continue
 		}
 
 		// If bit is unset then add columns with set bit to keep.
 		// Don't bother to compute this on the final iteration.
 		if i > 0 {
-			keep = keep.Union(b.Intersect(row))
+			keep = keep.Union(filter.Intersect(row))
 		}
 	}
 
-	return b, nil
+	return filter, nil
 }
 
-// notNull returns the not-null row (stored at bitDepth).
-func (f *fragment) notNull(bitDepth uint) (*Row, error) {
-	return f.row(uint64(bitDepth)), nil
+// notNull returns the exists row.
+func (f *fragment) notNull() (*Row, error) {
+	return f.row(bsiExistsBit), nil
 }
 
 // rangeBetween returns bitmaps with a bsiGroup value encoding matching any value between predicateMin and predicateMax.
-func (f *fragment) rangeBetween(bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
-	b := f.row(uint64(bitDepth))
+func (f *fragment) rangeBetween(bitDepth uint, predicateMin, predicateMax int64) (*Row, error) {
+	b := f.row(bsiExistsBit)
+
+	// Convert predicates to unsigned values.
+	upredicateMin, upredicateMax := uint64(predicateMin), uint64(predicateMax)
+	if predicateMin < 0 {
+		upredicateMin = uint64(-predicateMin)
+	}
+	if predicateMax < 0 {
+		upredicateMax = uint64(-predicateMax)
+	}
+
+	// Handle positive-only values.
+	if predicateMin >= 0 {
+		return f.rangeBetweenUnsigned(b.Difference(f.row(bsiSignBit)), bitDepth, upredicateMin, upredicateMax)
+	}
+
+	// Handle negative-only values. Swap unsigned min/max predicates.
+	if predicateMax < 0 {
+		return f.rangeBetweenUnsigned(b.Intersect(f.row(bsiSignBit)), bitDepth, upredicateMax, upredicateMin)
+	}
+
+	// If predicate crosses positive/negative boundary then handle separately and union.
+	pos, err := f.rangeLTUnsigned(b.Difference(f.row(bsiSignBit)), bitDepth, upredicateMax, true)
+	if err != nil {
+		return nil, err
+	}
+	neg, err := f.rangeLTUnsigned(b.Intersect(f.row(bsiSignBit)), bitDepth, upredicateMin, true)
+	if err != nil {
+		return nil, err
+	}
+	return pos.Union(neg), nil
+}
+
+// rangeBetweenUnsigned returns BSI columns for a range of values. Disregards the sign bit.
+func (f *fragment) rangeBetweenUnsigned(filter *Row, bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
 	keep1 := NewRow() // GTE
 	keep2 := NewRow() // LTE
 
 	// Filter any bits that don't match the current bit value.
 	for i := int(bitDepth - 1); i >= 0; i-- {
-		row := f.row(uint64(i))
+		row := f.row(uint64(bsiOffsetBit + i))
 		bit1 := (predicateMin >> uint(i)) & 1
 		bit2 := (predicateMax >> uint(i)) & 1
 
 		// GTE predicateMin
 		// If bit is set then remove all unset columns not already kept.
 		if bit1 == 1 {
-			b = b.Difference(b.Difference(row).Difference(keep1))
+			filter = filter.Difference(filter.Difference(row).Difference(keep1))
 		} else {
 			// If bit is unset then add columns with set bit to keep.
 			// Don't bother to compute this on the final iteration.
 			if i > 0 {
-				keep1 = keep1.Union(b.Intersect(row))
+				keep1 = keep1.Union(filter.Intersect(row))
 			}
 		}
 
-		// LTE predicateMin
+		// LTE predicateMax
 		// If bit is zero then remove all set bits not in excluded bitmap.
 		if bit2 == 0 {
-			b = b.Difference(row.Difference(keep2))
+			filter = filter.Difference(row.Difference(keep2))
 		} else {
 			// If bit is set then add columns for set bits to exclude.
 			// Don't bother to compute this on the final iteration.
 			if i > 0 {
-				keep2 = keep2.Union(b.Difference(row))
+				keep2 = keep2.Union(filter.Difference(row))
 			}
 		}
 	}
 
-	return b, nil
+	return filter, nil
 }
 
 // pos translates the row ID and column ID into a position in the storage bitmap.
@@ -1735,7 +1921,7 @@ func (f *fragment) bulkImportMutex(rowIDs, columnIDs []uint64) error {
 	return errors.Wrap(f.importPositions(toSet, toClear, rowSet), "importing positions")
 }
 
-func (f *fragment) importValueSmallWrite(columnIDs, values []uint64, bitDepth uint, clear bool) error {
+func (f *fragment) importValueSmallWrite(columnIDs []uint64, values []int64, bitDepth uint, clear bool) error {
 	// TODO figure out how to avoid re-allocating these each time. Probably
 	// possible to store them on the fragment with a capacity based on
 	// MaxOpN. For now, we know that the total number of bits to be
@@ -1751,6 +1937,7 @@ func (f *fragment) importValueSmallWrite(columnIDs, values []uint64, bitDepth ui
 			if _, ok := colSet[columnID]; ok {
 				continue
 			}
+
 			colSet[columnID] = struct{}{}
 			toSet, toClear, err = f.positionsForValue(columnID, bitDepth, value, clear, toSet, toClear)
 			if err != nil {
@@ -1772,7 +1959,7 @@ func (f *fragment) importValueSmallWrite(columnIDs, values []uint64, bitDepth ui
 }
 
 // importValue bulk imports a set of range-encoded values.
-func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear bool) error {
+func (f *fragment) importValue(columnIDs []uint64, values []int64, bitDepth uint, clear bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -1783,7 +1970,6 @@ func (f *fragment) importValue(columnIDs, values []uint64, bitDepth uint, clear 
 
 	if len(columnIDs)*int(bitDepth+1)+f.opN < f.MaxOpN {
 		return errors.Wrap(f.importValueSmallWrite(columnIDs, values, bitDepth, clear), "import small write")
-
 	}
 
 	f.storage.OpWriter = nil
@@ -2286,6 +2472,51 @@ func (f *fragment) rows(start uint64, filters ...rowFilter) []uint64 {
 		}
 	}
 	return rows
+}
+
+// upgradeRoaringBSIv2 upgrades a fragment that contains old BSI formatting
+// to a new BSI format (v2). The new format moves the "exists" bit to the
+// beginning & adds a negative sign bit.
+func upgradeRoaringBSIv2(f *fragment, bitDepth uint) (string, error) {
+	// If flag set, already upgraded. Exit.
+	if f.storage.Flags&roaringFlagBSIv2 == 1 {
+		return "", nil
+	}
+
+	other := roaring.NewBitmap()
+	other.Flags = roaringFlagBSIv2
+	func() {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+
+		f.storage.ForEach(func(i uint64) {
+			rowID, columnID := i/ShardWidth, (f.shard*ShardWidth)+(i%ShardWidth)
+			if rowID == uint64(bitDepth) {
+				_, _ = other.Add(pos(bsiExistsBit, columnID)) // move exists bit to beginning
+			} else {
+				_, _ = other.Add(pos(rowID+bsiOffsetBit, columnID)) // move other bits up
+			}
+		})
+	}()
+
+	// Create temporary file next to existing file.
+	newPath := f.path + ".tmp"
+	file, err := os.OpenFile(newPath, os.O_WRONLY|os.O_CREATE, 0666)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	// Write & flush to temporary file.
+	if _, err := other.WriteTo(file); err != nil {
+		return "", err
+	} else if err := file.Sync(); err != nil {
+		return "", err
+	} else if err := file.Close(); err != nil {
+		return "", err
+	}
+
+	return newPath, nil
 }
 
 type rowIterator struct {

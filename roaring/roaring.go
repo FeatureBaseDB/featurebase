@@ -31,16 +31,18 @@ const (
 	// MagicNumber is an identifier, in bytes 0-1 of the file.
 	MagicNumber = uint32(12348)
 
-	// storageVersion indicates the storage version, in bytes 2-3.
+	// storageVersion indicates the storage version, in byte 2.
 	storageVersion = uint32(0)
 
-	// cookie is the first four bytes in a roaring bitmap file,
+	// NOTE: byte 3 stores user-defined flags.
+
+	// cookie is the first 3 bytes in a roaring bitmap file,
 	// formed by joining MagicNumber and storageVersion
 	cookie = MagicNumber + storageVersion<<16
 
-	// headerBaseSize is the size in bytes of the cookie and key count at the
-	// beginning of a file.
-	headerBaseSize = 4 + 4
+	// headerBaseSize is the size in bytes of the cookie, flags, and key count
+	// at the beginning of a file.
+	headerBaseSize = 3 + 1 + 4
 
 	// runCountHeaderSize is the size in bytes of the run count stored
 	// at the beginning of every serialized run container.
@@ -122,6 +124,9 @@ type ContainerIterator interface {
 // Bitmap represents a roaring bitmap.
 type Bitmap struct {
 	Containers Containers
+
+	// User-defined flags.
+	Flags byte
 
 	// Number of bit change operations written to the writer. Some operations
 	// contain multiple values, each of those counts the number of values rather
@@ -970,7 +975,7 @@ func (b *Bitmap) writeToUnoptimized(w io.Writer) (n int64, err error) {
 		n: 0,
 	}
 
-	ew.WriteUint32(byte4, cookie)
+	ew.WriteUint32(byte4, cookie|(uint32(b.Flags)<<24))
 	ew.WriteUint32(byte4, uint32(containerCount))
 
 	// Descriptive header section: encode keys and cardinality.
@@ -1032,7 +1037,8 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 
 	// Verify the first two bytes are a valid MagicNumber, and second two bytes match current storageVersion.
 	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
-	fileVersion := uint32(binary.LittleEndian.Uint16(data[2:4]))
+	b.Flags = data[2]
+	fileVersion := uint32(data[3])
 	if fileMagic != MagicNumber {
 		return fmt.Errorf("invalid roaring file, magic number %v is incorrect", fileMagic)
 	}
@@ -1041,8 +1047,8 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 		return fmt.Errorf("wrong roaring version, file is v%d, server requires v%d", fileVersion, storageVersion)
 	}
 
-	// Read key count in bytes sizeof(cookie):(sizeof(cookie)+sizeof(uint32)).
-	keyN := binary.LittleEndian.Uint32(data[4:8])
+	// Read key count in bytes sizeof(cookie)+sizeof(flag):(sizeof(cookie)+sizeof(uint32)).
+	keyN := binary.LittleEndian.Uint32(data[3+1 : 8])
 
 	headerSize := headerBaseSize
 	b.Containers.Reset()
@@ -4166,11 +4172,11 @@ const (
 	serialCookie               = 12347 // runs, arrays, and bitmaps
 )
 
-func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint, card int) byte, header, pos int, haveRuns bool, err error) {
+func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint, card int) byte, header, pos int, flags byte, haveRuns bool, err error) {
 	statsHit("readOfficialHeader")
 	if len(buf) < 8 {
 		err = fmt.Errorf("buffer too small, expecting at least 8 bytes, was %d", len(buf))
-		return size, containerTyper, header, pos, haveRuns, err
+		return size, containerTyper, header, pos, flags, haveRuns, err
 	}
 	cf := func(index uint, card int) (newType byte) {
 		newType = containerBitmap
@@ -4180,7 +4186,8 @@ func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint
 		return newType
 	}
 	containerTyper = cf
-	cookie := binary.LittleEndian.Uint32(buf)
+	cookie := binary.LittleEndian.Uint32(buf) & 0xFFFFFF
+	flags = buf[3]
 	pos += 4
 
 	// cookie header
@@ -4195,7 +4202,7 @@ func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint
 		isRunBitmapSize := (int(size) + 7) / 8
 		if pos+isRunBitmapSize > len(buf) {
 			err = fmt.Errorf("malformed bitmap, is-run bitmap overruns buffer at %d", pos+isRunBitmapSize)
-			return size, containerTyper, header, pos, haveRuns, err
+			return size, containerTyper, header, pos, flags, haveRuns, err
 		}
 
 		isRunBitmap := buf[pos : pos+isRunBitmapSize]
@@ -4208,22 +4215,22 @@ func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint
 		}
 	} else {
 		err = fmt.Errorf("did not find expected serialCookie in header")
-		return size, containerTyper, header, pos, haveRuns, err
+		return size, containerTyper, header, pos, flags, haveRuns, err
 	}
 
 	header = pos
 	if size > (1 << 16) {
 		err = fmt.Errorf("it is logically impossible to have more than (1<<16) containers")
-		return size, containerTyper, header, pos, haveRuns, err
+		return size, containerTyper, header, pos, flags, haveRuns, err
 	}
 
 	// descriptive header
 	if pos+2*2*int(size) > len(buf) {
 		err = fmt.Errorf("malformed bitmap, key-cardinality slice overruns buffer at %d", pos+2*2*int(size))
-		return size, containerTyper, header, pos, haveRuns, err
+		return size, containerTyper, header, pos, flags, haveRuns, err
 	}
 	pos += 2 * 2 * int(size) // moving pos past keycount
-	return size, containerTyper, header, pos, haveRuns, err
+	return size, containerTyper, header, pos, flags, haveRuns, err
 }
 
 // UnmarshalBinary decodes b from a binary-encoded byte slice. data can be in
@@ -4240,10 +4247,11 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		return errors.Wrap(b.unmarshalPilosaRoaring(data), "unmarshaling as pilosa roaring")
 	}
 
-	keyN, containerTyper, header, pos, haveRuns, err := readOfficialHeader(data)
+	keyN, containerTyper, header, pos, flags, haveRuns, err := readOfficialHeader(data)
 	if err != nil {
 		return errors.Wrap(err, "reading roaring header")
 	}
+	b.Flags = flags
 
 	b.Containers.Reset()
 	// Descriptive header section: Read container keys and cardinalities.

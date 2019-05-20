@@ -832,8 +832,8 @@ func TestClient_ImportValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if min != -100 || cnt != 0 {
-		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=-100, cnt=0", min, cnt)
+	if min != 0 || cnt != 0 {
+		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=0, cnt=0", min, cnt)
 	}
 
 	// Verify Max.
@@ -871,8 +871,8 @@ func TestClient_ImportValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if min != -100 || cnt != 0 {
-		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=-100, cnt=0", min, cnt)
+	if min != 0 || cnt != 0 {
+		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=0, cnt=0", min, cnt)
 	}
 
 	// Verify Max.

@@ -113,6 +113,16 @@ func (r *Row) Intersect(other *Row) *Row {
 	return &Row{segments: segments}
 }
 
+// Any returns true if row contains any bits.
+func (r *Row) Any() bool {
+	for _, s := range r.segments {
+		if s.data.Any() {
+			return true
+		}
+	}
+	return false
+}
+
 // Xor returns the xor of r and other.
 func (r *Row) Xor(other *Row) *Row {
 	var segments []rowSegment

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net"
 	"net/http"
 	_ "net/http/pprof" // Imported for its side-effect of registering pprof endpoints with the server.
@@ -758,7 +759,7 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	case pilosa.FieldTypeSet:
 		fos = append(fos, pilosa.OptFieldTypeSet(*req.Options.CacheType, *req.Options.CacheSize))
 	case pilosa.FieldTypeInt:
-		fos = append(fos, pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max))
+		fos = append(fos, pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 	case pilosa.FieldTypeTime:
 		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum, req.Options.NoStandardView))
 	case pilosa.FieldTypeMutex:
@@ -824,10 +825,6 @@ func (o *fieldOptions) validate() error {
 			return pilosa.NewBadRequestError(errors.New("cacheType does not apply to field type int"))
 		} else if o.CacheSize != nil {
 			return pilosa.NewBadRequestError(errors.New("cacheSize does not apply to field type int"))
-		} else if o.Min == nil {
-			return pilosa.NewBadRequestError(errors.New("min is required for field type int"))
-		} else if o.Max == nil {
-			return pilosa.NewBadRequestError(errors.New("max is required for field type int"))
 		} else if o.TimeQuantum != nil {
 			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type int"))
 		}
