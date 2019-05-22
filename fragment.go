@@ -422,19 +422,18 @@ func (f *fragment) unprotectedRow(rowID uint64) *Row {
 func (f *fragment) rowFromStorage(rowID uint64) *Row {
 	// Only use a subset of the containers.
 	// NOTE: The start & end ranges must be divisible by container width.
+	//
+	// Note that OffsetRange now returns a new bitmap which uses frozen
+	// containers which will use copy-on-write semantics. The actual bitmap
+	// and Containers object are new and not shared, but the containers are
+	// shared.
 	data := f.storage.OffsetRange(f.shard*ShardWidth, rowID*ShardWidth, (rowID+1)*ShardWidth)
 
-	// Reference bitmap subrange in storage. We Clone() data because otherwise
-	// row will contain pointers to containers in storage. This causes
-	// unexpected results when we cache the row and try to use it later.
-	// Basically, since we return the Row and release the fragment lock, the
-	// underlying fragment storage could be changed or snapshotted and thrown
-	// out at any point.
 	row := &Row{
 		segments: []rowSegment{{
-			data:     *data.Clone(),
+			data:     data,
 			shard:    f.shard,
-			writable: false, // this Row will probably be cached and shared, so it must be read only.
+			writable: true,
 		}},
 	}
 	row.invalidateCount()
@@ -505,12 +504,15 @@ func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 		return false, errors.Wrap(err, "incrementing")
 	}
 
-	// Get the row from row cache or fragment.storage.
-	row := f.unprotectedRow(rowID)
-	row.SetBit(columnID)
-
-	// Update the cache.
-	f.cache.Add(rowID, row.Count())
+	// If we're using a cache, update it. Otherwise skip the
+	// possibly-expensive count operation.
+	if f.CacheType != CacheTypeNone {
+		n := f.storage.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
+		f.cache.Add(rowID, n)
+	}
+	// Drop the rowCache entry; it's wrong, and we don't want to force
+	// a new copy if no one's reading it.
+	f.rowCache.Add(rowID, nil)
 
 	f.stats.Count("setBit", 1, 0.001)
 
@@ -566,12 +568,15 @@ func (f *fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, er
 		return false, errors.Wrap(err, "incrementing")
 	}
 
-	// Get the row from cache or fragment.storage.
-	row := f.unprotectedRow(rowID)
-	row.clearBit(columnID)
-
-	// Update the cache.
-	f.cache.Add(rowID, row.Count())
+	// If we're using a cache, update it. Otherwise skip the
+	// possibly-expensive count operation.
+	if f.CacheType != CacheTypeNone {
+		n := f.storage.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
+		f.cache.Add(rowID, n)
+	}
+	// Drop the rowCache entry; it's wrong, and we don't want to force
+	// a new copy if no one's reading it.
+	f.rowCache.Add(rowID, nil)
 
 	f.stats.Count("clearBit", 1, 1.0)
 
@@ -1849,9 +1854,7 @@ func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct
 		f.cache.BulkAdd(rowID, n)
 
 		if smallWrite {
-			if _, ok := f.rowCache.Fetch(rowID); ok { // we won't update the rowCache if it wasn't already in there.
-				f.rowCache.Add(rowID, f.rowFromStorage(rowID))
-			}
+			f.rowCache.Add(rowID, nil)
 		}
 	}
 

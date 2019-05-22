@@ -570,6 +570,13 @@ func (t *tree) Set(k uint64, v *Container) {
 	//defer func() {
 	//	dbg("--- POST\n%s\n====\n", t.dump())
 	//}()
+	// we don't want to store nil containers; if you try to set a
+	// container to nil, that's equivalent to not having one at that
+	// location.
+	if v == nil {
+		_ = t.Delete(k)
+		return
+	}
 
 	pi := -1
 	var p *x
@@ -642,7 +649,9 @@ func (t *tree) Put(k uint64, upd func(oldV *Container, exists bool) (newV *Conta
 		if !written {
 			return
 		}
-
+		if newV == nil {
+			return
+		}
 		z := t.insert(btDPool.Get().(*d), 0, k, newV)
 		t.r, t.first, t.last = z, z, z
 		return
@@ -667,7 +676,11 @@ func (t *tree) Put(k uint64, upd func(oldV *Container, exists bool) (newV *Conta
 				if !written {
 					return
 				}
-
+				// delete nil containers rather than storing them.
+				if newV == nil {
+					t.Delete(k)
+					return
+				}
 				x.d[i].v = newV
 			}
 			return
@@ -684,6 +697,10 @@ func (t *tree) Put(k uint64, upd func(oldV *Container, exists bool) (newV *Conta
 		case *d: // new KV pair
 			newV, written = upd(newV, false)
 			if !written {
+				return
+			}
+			// nil values don't need to exist, and break iteration later.
+			if newV == nil {
 				return
 			}
 
@@ -874,6 +891,46 @@ func (e *enumerator) Next() (k uint64, v *Container, err error) {
 	// on the next call.
 	_ = e.next()
 	return k, v, err
+}
+
+// Every iterates over a tree.
+func (e *enumerator) Every(upd func(oldV *Container, exists bool) (newV *Container, write bool)) error {
+	if err := e.err; err != nil {
+		return err
+	}
+
+	if e.ver != e.t.ver {
+		f, _ := e.t.Seek(e.k)
+		*e = *f
+		f.Close()
+	}
+
+	for {
+		if e.q == nil {
+			e.err = io.EOF
+			return e.err
+		}
+
+		if e.i >= e.q.c {
+			if err := e.next(); err != nil {
+				e.err = err
+				return e.err
+			}
+		}
+
+		i := e.q.d[e.i]
+		nv, write := upd(i.v, true)
+		if write {
+			if nv == nil {
+				e.t.Delete(e.q.d[e.i].k)
+			} else {
+				e.q.d[e.i].v = nv
+			}
+		}
+		// Any error returned would be stashed in e.err, and would come up
+		// on the next call.
+		_ = e.next()
+	}
 }
 
 func (e *enumerator) next() error {

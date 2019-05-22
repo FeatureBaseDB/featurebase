@@ -1087,14 +1087,15 @@ func testBitmapQuick(t *testing.T, n int, min, max uint64) {
 		}
 
 		// Remove all values in random order.
-		for _, i := range rand.Perm(len(a)) {
-			removed, _ := bm.Remove(a[i])
+		for i, item := range rand.Perm(len(a)) {
+			removed, _ := bm.Remove(a[item])
 			if removed {
 				manual_count--
 			}
 			//check count
 			if manual_count != bm.Count() {
-				t.Fatalf("expected bitmap Remove count to be: %d got: %d", manual_count, bm.Count())
+				t.Fatalf("removing %d/%d [%d] from bitmap: expected bitmap Remove count to be %d, got %d",
+					i, len(a), a[item], manual_count, bm.Count())
 			}
 		}
 
