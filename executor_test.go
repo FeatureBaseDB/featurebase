@@ -1058,6 +1058,65 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 			t.Fatal(diff)
 		}
 	})
+
+	t.Run("ErrFieldNotFound", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		// Set data on the "f" field.
+		if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault()); err != nil {
+			t.Fatal(err)
+		} else if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+			Set(0, f=0)
+			Set(0, f=1)
+		`}); err != nil {
+			t.Fatal(err)
+		} else if err := c[0].RecalculateCaches(); err != nil {
+			t.Fatalf("recalculating caches: %v", err)
+		}
+
+		// Attempt to query the "g" field.
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(g, n=2)`}); err == nil || err.Error() != `executing: field "g" not found` {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("ErrBSIField", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		// Create BSI "f" field.
+		if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeInt(0, 100)); err != nil {
+			t.Fatal(err)
+		} else if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err == nil || err.Error() != `executing: finding top results: cannot compute TopN() on integer field: "f"` {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("ErrCacheNone", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeSet(pilosa.CacheTypeNone, 0)); err != nil {
+			t.Fatal(err)
+		} else if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+			Set(0, f=0)
+			Set(0, f=1)
+		`}); err != nil {
+			t.Fatal(err)
+		} else if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err == nil || err.Error() != `executing: finding top results: cannot compute TopN(), field has no cache: "f"` {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestExecutor_Execute_TopN_fill(t *testing.T) {
