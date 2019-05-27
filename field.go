@@ -135,6 +135,9 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 		if fo.Type != "" {
 			return errors.Errorf("field type is already set to: %s", fo.Type)
 		}
+		if min > max {
+			return errors.New("int field min cannot be greater than max")
+		}
 		fo.Type = FieldTypeInt
 		fo.Min = min
 		fo.Max = max

@@ -760,10 +760,12 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 		fos = append(fos, pilosa.OptFieldTypeSet(*req.Options.CacheType, *req.Options.CacheSize))
 	case pilosa.FieldTypeInt:
 		if req.Options.Min == nil {
-			*req.Options.Min = math.MinInt64
+			min := int64(math.MinInt64)
+			req.Options.Min = &min
 		}
 		if req.Options.Max == nil {
-			*req.Options.Max = math.MaxInt64
+			max := int64(math.MaxInt64)
+			req.Options.Max = &max
 		}
 		fos = append(fos, pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max))
 	case pilosa.FieldTypeTime:
