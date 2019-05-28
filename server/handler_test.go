@@ -557,7 +557,7 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		rsp := getSchemaResponse{}
-		if err := json.Unmarshal([]byte(w.Body.String()), &rsp); err != nil {
+		if err := json.Unmarshal(w.Body.Bytes(), &rsp); err != nil {
 			t.Fatalf("json decode: %s", err)
 		}
 		field := rsp.findField("i0", fieldName)
@@ -586,7 +586,7 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		rsp := getSchemaResponse{}
-		if err := json.Unmarshal([]byte(w.Body.String()), &rsp); err != nil {
+		if err := json.Unmarshal(w.Body.Bytes(), &rsp); err != nil {
 			t.Fatalf("json decode: %s", err)
 		}
 		field := rsp.findField("i0", fieldName)
@@ -615,7 +615,7 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
 		rsp := getSchemaResponse{}
-		if err := json.Unmarshal([]byte(w.Body.String()), &rsp); err != nil {
+		if err := json.Unmarshal(w.Body.Bytes(), &rsp); err != nil {
 			t.Fatalf("json decode: %s", err)
 		}
 		field := rsp.findField("i0", fieldName)

@@ -782,11 +782,9 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = h.api.CreateField(r.Context(), indexName, fieldName, fos...)
-	if err != nil {
-		if _, ok := err.(pilosa.BadRequestError); ok {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
+	if _, ok := err.(pilosa.BadRequestError); ok {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 	resp.write(w, err)
 }
