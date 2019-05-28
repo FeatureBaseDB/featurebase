@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"sort"
 
+	"github.com/pilosa/pilosa/ext"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
 )
@@ -161,6 +162,24 @@ func (r *Row) Union(other *Row) *Row {
 	return &Row{segments: segments}
 }
 
+// GenericBitmapBinary returns the output of a generic op on r and other.
+func (r *Row) GenericBinaryOp(op *ext.BitmapOp, other *Row) *Row {
+	var segments []rowSegment
+	itr := newMergeSegmentIterator(r.segments, other.segments)
+	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
+		if s1 == nil {
+			segments = append(segments, *s0)
+			continue
+		} else if s0 == nil {
+			segments = append(segments, *s1)
+			continue
+		}
+		segments = append(segments, *s0.GenericBinaryOp(op, s1))
+	}
+
+	return &Row{segments: segments}
+}
+
 // Difference returns the diff of r and other.
 func (r *Row) Difference(other *Row) *Row {
 	var segments []rowSegment
@@ -177,6 +196,19 @@ func (r *Row) Difference(other *Row) *Row {
 	}
 
 	return &Row{segments: segments}
+}
+
+// GenericUnary returns the results of a generic op on r.
+func (r *Row) GenericUnaryOp(op *ext.BitmapOp) *Row {
+	work := r
+	var segments []rowSegment
+	for _, segment := range work.segments {
+		opped := segment.GenericUnaryOp(op)
+		segments = append(segments, *opped)
+	}
+	return &Row{segments: segments}
+
+	return work
 }
 
 // Shift returns the bitwise shift of r by n bits.
@@ -275,6 +307,15 @@ func (r *Row) Count() uint64 {
 	return n
 }
 
+// GenericCount applies an op to lots of things.
+func (r *Row) GenericCount(op *ext.BitmapOp) uint64 {
+	var n uint64
+	for i := range r.segments {
+		n += op.CountFunc(WrapBitmap(&r.segments[i].data))
+	}
+	return n
+}
+
 // MarshalJSON returns a JSON-encoded byte slice of r.
 func (r *Row) MarshalJSON() ([]byte, error) {
 	var o struct {
@@ -357,6 +398,17 @@ func (s *rowSegment) Union(other *rowSegment) *rowSegment {
 	}
 }
 
+// GenericOp performs a generic op on s and other
+func (s *rowSegment) GenericBinaryOp(op *ext.BitmapOp, other *rowSegment) *rowSegment {
+	data := op.BitmapFunc(WrapBitmap(&s.data), WrapBitmap(&other.data))
+
+	return &rowSegment{
+		data:  *UnwrapBitmap(data),
+		shard: s.shard,
+		n:     data.Count(),
+	}
+}
+
 // Difference returns the diff of s and other.
 func (s *rowSegment) Difference(other *rowSegment) *rowSegment {
 	data := s.data.Difference(&other.data)
@@ -392,6 +444,18 @@ func (s *rowSegment) Shift() (*rowSegment, error) {
 		shard: s.shard,
 		n:     data.Count(),
 	}, nil
+}
+
+// GenericUnary returns s subject to op.
+func (s *rowSegment) GenericUnaryOp(op *ext.BitmapOp) *rowSegment {
+	//TODO deal with overflow
+	data := UnwrapBitmap(op.BitmapFunc(WrapBitmap(&s.data)))
+
+	return &rowSegment{
+		data:  *data,
+		shard: s.shard,
+		n:     data.Count(),
+	}
 }
 
 // SetBit sets the i-th column of the row.

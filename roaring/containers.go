@@ -153,6 +153,12 @@ func (sc *sliceContainers) seek(key uint64) (int, bool) {
 
 func (sc *sliceContainers) Iterator(key uint64) (citer ContainerIterator, found bool) {
 	i, found := sc.seek(key)
+	// Seek reports the position we would put the container at, if it doesn't
+	// exist. if you seek past the end, you get the index of the container after
+	// the end. So we adjust down, so you can use seek(^uint64(0)) to go to the end.
+	if !found && i > 0 {
+		i--
+	}
 	return &sliceIterator{e: sc, i: i}, found
 }
 
@@ -176,6 +182,17 @@ func (si *sliceIterator) Next() bool {
 	si.key = si.e.keys[si.i]
 	si.value = si.e.containers[si.i]
 	si.i++
+
+	return true
+}
+
+func (si *sliceIterator) Prev() bool {
+	if si.e == nil || si.i < 0 {
+		return false
+	}
+	si.key = si.e.keys[si.i]
+	si.value = si.e.containers[si.i]
+	si.i--
 
 	return true
 }

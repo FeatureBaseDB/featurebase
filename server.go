@@ -365,6 +365,10 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.broadcaster = s
 	s.cluster.maxWritesPerRequest = s.maxWritesPerRequest
 	s.holder.broadcaster = s
+	err = loadPlugin("/home/seebs/src/go/src/github.com/pilosa/pilosa/ext/samples/neighbors/neighbors.so", s)
+	if err != nil {
+		s.logger.Printf("plugin load: ignoring error %v\n", err)
+	}
 
 	err = s.cluster.setup()
 	if err != nil {

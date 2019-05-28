@@ -21,6 +21,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/pilosa/pilosa/ext"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/shardwidth"
 	"github.com/pilosa/pilosa/tracing"
@@ -55,6 +56,12 @@ type executor struct {
 
 	// Stores key/id translation data.
 	TranslateStore TranslateStore
+
+	// global registry to check for name clashes
+	additionalOps map[string]*ext.BitmapOp
+	// typed registries we can use in lookups
+	additionalBitmapOps map[string]*ext.BitmapOp
+	additionalCountOps  map[string]*ext.BitmapOp
 }
 
 // executorOption is a functional option type for pilosa.Executor
@@ -79,6 +86,28 @@ func newExecutor(opts ...executorOption) *executor {
 		}
 	}
 	return e
+}
+
+func (e *executor) registerOps(ops []ext.BitmapOp) error {
+	if e.additionalOps == nil {
+		e.additionalOps = make(map[string]*ext.BitmapOp)
+		e.additionalBitmapOps = make(map[string]*ext.BitmapOp)
+		e.additionalCountOps = make(map[string]*ext.BitmapOp)
+	}
+	for i, op := range ops {
+		name := op.Name
+		if _, exists := e.additionalOps[name]; exists {
+			return fmt.Errorf("op name '%s' already defined", name)
+		}
+		e.additionalOps[name] = &ops[i]
+		if op.CountFunc != nil {
+			e.additionalCountOps[name] = &ops[i]
+		}
+		if op.BitmapFunc != nil {
+			e.additionalBitmapOps[name] = &ops[i]
+		}
+	}
+	return nil
 }
 
 // Execute executes a PQL query.
@@ -254,6 +283,10 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	}
 	indexTag := fmt.Sprintf("index:%s", index)
 	// Special handling for mutation and top-n calls.
+	if op, ok := e.additionalCountOps[c.Name]; ok {
+		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		return e.executeGeneric(ctx, index, c, op, shards, opt)
+	}
 	switch c.Name {
 	case "Sum":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
@@ -545,6 +578,13 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, index string, c *
 
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeBitmapCallShard")
 	defer span.Finish()
+
+	if _, ok := e.additionalCountOps[c.Name]; ok {
+		return nil, fmt.Errorf("count op %s used as bitmap call", c.Name)
+	}
+	if op, ok := e.additionalBitmapOps[c.Name]; ok {
+		return e.executeGenericBitmapShard(ctx, index, c, op, shard)
+	}
 
 	switch c.Name {
 	case "Row", "Range":
@@ -1513,6 +1553,39 @@ func (e *executor) executeIntersectShard(ctx context.Context, index string, c *p
 	return other, nil
 }
 
+// executeGenericBitmapShard executes a generic bitmap call for a local shard.
+func (e *executor) executeGenericBitmapShard(ctx context.Context, index string, c *pql.Call, op *ext.BitmapOp, shard uint64) (*Row, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGenericBitmapShard")
+	defer span.Finish()
+
+	if op.Arity == ext.OpUnary {
+		if len(c.Children) != 1 {
+			return nil, fmt.Errorf("%s needs exactly one row parameter", c.Name)
+		}
+		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
+		if err != nil {
+			return nil, err
+		}
+		return row.GenericUnaryOp(op), nil
+	}
+
+	var other *Row
+	for _, input := range c.Children {
+		row, err := e.executeBitmapCallShard(ctx, index, input, shard)
+		if err != nil {
+			return nil, err
+		}
+
+		if other == nil {
+			other = row
+		} else {
+			other = other.GenericBinaryOp(op, row)
+		}
+	}
+	other.invalidateCount()
+	return other, nil
+}
+
 // executeUnionShard executes a union() call for a local shard.
 func (e *executor) executeUnionShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeUnionShard")
@@ -1611,6 +1684,41 @@ func (e *executor) executeShiftShard(ctx context.Context, index string, c *pql.C
 	}
 
 	return row.Shift(n)
+}
+
+// executeGeneric executes a provided count-like call.
+func (e *executor) executeGeneric(ctx context.Context, index string, c *pql.Call, op *ext.BitmapOp, shards []uint64, opt *execOptions) (uint64, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGeneric")
+	defer span.Finish()
+
+	if len(c.Children) == 0 {
+		return 0, fmt.Errorf("%s() requires an input bitmap", c.Name)
+	} else if len(c.Children) > 1 {
+		return 0, fmt.Errorf("%s() only accepts a single bitmap input", c.Name)
+	}
+
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(shard uint64) (interface{}, error) {
+		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
+		if err != nil {
+			return 0, err
+		}
+		return row.GenericCount(op), nil
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		other, _ := prev.(uint64)
+		return other + v.(uint64)
+	}
+
+	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := result.(uint64)
+
+	return n, nil
 }
 
 // executeCount executes a count() call.

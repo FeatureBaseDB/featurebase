@@ -118,6 +118,7 @@ type Containers interface {
 
 type ContainerIterator interface {
 	Next() bool
+	Prev() bool
 	Value() (uint64, *Container)
 }
 
@@ -852,24 +853,40 @@ func (b *Bitmap) Xor(other *Bitmap) *Bitmap {
 
 // Shift shifts the contents of b by 1.
 func (b *Bitmap) Shift(n int) (*Bitmap, error) {
-	if n != 1 {
+	if n != 1 && n != -1 {
 		return nil, errors.New("cannot shift by a value other than 1")
 	}
 	output := NewBitmap()
-	iiter, _ := b.Containers.Iterator(0)
-	lastCarry := false
-	lastKey := uint64(0)
-	for iiter.Next() {
-		ki, ci := iiter.Value()
-		o, carry := shift(ci)
-		if lastCarry {
-			o.add(0)
+	var lastCarry bool
+	var lastKey uint64
+	if n > 0 {
+		iiter, _ := b.Containers.Iterator(0)
+		for iiter.Next() {
+			ki, ci := iiter.Value()
+			o, carry := shift(ci)
+			if lastCarry {
+				o.add(0)
+			}
+			if o.n > 0 {
+				output.Containers.Put(ki, o)
+			}
+			lastCarry = carry
+			lastKey = ki
 		}
-		if o.n > 0 {
-			output.Containers.Put(ki, o)
+	} else {
+		iiter, _ := b.Containers.Iterator(^uint64(0))
+		for iiter.Prev() {
+			ki, ci := iiter.Value()
+			o, carry := shiftDown(ci)
+			if lastCarry {
+				o.add(maxContainerVal)
+			}
+			if o.n > 0 {
+				output.Containers.Put(ki, o)
+			}
+			lastCarry = carry
+			lastKey = ki
 		}
-		lastCarry = carry
-		lastKey = ki
 	}
 	// As long as the carry wasn't from the max container,
 	// append a new container and add the carried bit.
@@ -3588,6 +3605,23 @@ func shift(c *Container) (*Container, bool) {
 	return shiftBitmap(c)
 }
 
+// shiftDown() shifts the contents of c down by one. It returns
+// the new container and a bool indicating whether a
+// carry bit was shifted out. "down" in this case means that a container
+// with its first bit set becomes an empty container and a carry bit.
+func shiftDown(c *Container) (*Container, bool) {
+	// empty containers have nothing to shift
+	if c.N() == 0 {
+		return nil, false
+	}
+	if c.isArray() {
+		return shiftDownArray(c)
+	} else if c.isRun() {
+		return shiftDownRun(c)
+	}
+	return shiftDownBitmap(c)
+}
+
 // shiftArray is an array-specific implementation of shift().
 func shiftArray(a *Container) (*Container, bool) {
 	statsHit("shift/Array")
@@ -3644,6 +3678,64 @@ func shiftRun(a *Container) (*Container, bool) {
 			v.start++
 			v.last++
 			carry = false
+		}
+		ro = append(ro, v)
+	}
+
+	return NewContainerRun(ro), carry
+}
+
+// shiftDownArray is an array-specific implementation of shiftDown().
+func shiftDownArray(a *Container) (*Container, bool) {
+	statsHit("shiftDown/Array")
+	carry := false
+	aa := a.array()
+	output := make([]uint16, 0, len(aa))
+	if len(aa) > 0 && aa[0] == 0 {
+		aa = aa[1:]
+		carry = true
+	}
+	for _, v := range aa {
+		output = append(output, v-1)
+	}
+	return NewContainerArray(output), carry
+}
+
+// shiftDownBitmap is a bitmap-specific implementation of shiftDown().
+func shiftDownBitmap(a *Container) (*Container, bool) {
+	statsHit("shiftDown/Bitmap")
+	carry := uint64(0)
+	output := NewContainerBitmap(a.n, nil)
+	ba, bo := a.bitmap(), output.bitmap()
+	lastCarry := uint64(0)
+	for i, v := range ba {
+		carry, v := (v&1)<<63, (v>>1 | lastCarry)
+		bo[i] = v
+		lastCarry = carry
+	}
+	if carry != 0 {
+		output.n--
+	}
+	return output, carry != 0
+}
+
+// shiftRightRun is a run-specific implementation of shift().
+func shiftDownRun(a *Container) (*Container, bool) {
+	statsHit("shiftDown/Run")
+	carry := false
+	ra := a.runs()
+	ro := make([]interval16, 0, len(ra))
+
+	for _, v := range ra {
+		if v.start == 0 && v.last == 0 { // one-bit run at container edge
+			carry = true
+			break
+		} else if v.start == 0 { // first run ends on container edge
+			v.last--
+			carry = true
+		} else {
+			v.start--
+			v.last--
 		}
 		ro = append(ro, v)
 	}

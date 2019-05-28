@@ -197,6 +197,17 @@ func (i *btcIterator) Next() bool {
 	return true
 }
 
+func (i *btcIterator) Prev() bool {
+
+	k, v, err := i.e.Prev()
+	if err == io.EOF {
+		return false
+	}
+	i.key = k
+	i.val = v
+	return true
+}
+
 func (i *btcIterator) Value() (uint64, *Container) {
 	if i.val == nil {
 		return 0, nil

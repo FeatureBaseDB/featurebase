@@ -22,6 +22,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pilosa/pilosa/ext"
 )
 
 // Query represents a PQL query.
@@ -319,9 +321,13 @@ var validArgsByFunc = map[string]validArgs{
 	"Intersect":  {allowUnknown: false},
 	"Not":        {allowUnknown: false},
 	"Rows":       {allowUnknown: false},
-	"Shift":      {allowUnknown: false},
-	"Union":      {allowUnknown: false},
-	"Xor":        {allowUnknown: false},
+	"Shift": {allowUnknown: false,
+		prototypes: map[string]interface{}{
+			"n": int64(0),
+		},
+	},
+	"Union": {allowUnknown: false},
+	"Xor":   {allowUnknown: false},
 
 	// things that take _field
 	"TopN": allowUnderField,
@@ -371,6 +377,18 @@ var validArgsByFunc = map[string]validArgs{
 			"_col":   stringOrInt64,
 		},
 	},
+}
+
+// RegisterPluginFuncs adds arg validation for plugin funcs. Not very good
+// arg validation.
+func RegisterPluginFuncs(ops []ext.BitmapOp) {
+	for _, op := range ops {
+		// ignore overlap for now. This should change.
+		if _, ok := validArgsByFunc[op.Name]; ok {
+			continue
+		}
+		validArgsByFunc[op.Name] = validArgs{allowUnknown: true}
+	}
 }
 
 // CheckArgs tries to validate that arguments are correct and valid for the
