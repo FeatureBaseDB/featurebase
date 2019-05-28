@@ -213,7 +213,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 	for _, opt := range opts {
 		err := opt(&fo)
 		if err != nil {
-			return nil, errors.Wrap(err, "applying option")
+			return nil, NewBadRequestError(errors.Wrap(err, "applying option"))
 		}
 	}
 
