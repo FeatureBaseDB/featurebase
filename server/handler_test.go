@@ -565,10 +565,10 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("field not found: %s", fieldName)
 		}
 		if math.MinInt64 != field.Options.Min {
-			t.Fatalf("field min %d != %d", math.MinInt64, field.Options.Min)
+			t.Fatalf("field min %d != %d", int64(math.MinInt64), field.Options.Min)
 		}
 		if math.MaxInt64 != field.Options.Max {
-			t.Fatalf("field max %d != %d", math.MaxInt64, field.Options.Max)
+			t.Fatalf("field max %d != %d", int64(math.MaxInt64), field.Options.Max)
 		}
 	})
 
@@ -594,7 +594,7 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("field not found: %s", fieldName)
 		}
 		if math.MinInt64 != field.Options.Min {
-			t.Fatalf("field min %d != %d", math.MinInt64, field.Options.Min)
+			t.Fatalf("field min %d != %d", int64(math.MinInt64), field.Options.Min)
 		}
 		if 10 != field.Options.Max {
 			t.Fatalf("field max %d != %d", 10, field.Options.Max)
@@ -626,7 +626,7 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatalf("field min %d != %d", 10, field.Options.Min)
 		}
 		if math.MaxInt64 != field.Options.Max {
-			t.Fatalf("field max %d != %d", math.MaxInt64, field.Options.Max)
+			t.Fatalf("field max %d != %d", int64(math.MaxInt64), field.Options.Max)
 		}
 	})
 
