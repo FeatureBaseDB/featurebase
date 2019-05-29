@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	gohttp "net/http"
 	"net/http/httptest"
 	"reflect"
@@ -542,6 +543,104 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	})
 
+	t.Run("Query int field unbounded", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		fieldName := "f-int-ubound"
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
+			strings.NewReader(`{"options":{"type":"int"}}`)))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		w = httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", strings.NewReader("")))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		rsp := getSchemaResponse{}
+		if err := json.Unmarshal(w.Body.Bytes(), &rsp); err != nil {
+			t.Fatalf("json decode: %s", err)
+		}
+		field := rsp.findField("i0", fieldName)
+		if field == nil {
+			t.Fatalf("field not found: %s", fieldName)
+		}
+		if math.MinInt64 != field.Options.Min {
+			t.Fatalf("field min %d != %d", int64(math.MinInt64), field.Options.Min)
+		}
+		if math.MaxInt64 != field.Options.Max {
+			t.Fatalf("field max %d != %d", int64(math.MaxInt64), field.Options.Max)
+		}
+	})
+
+	t.Run("Query int field unbounded min", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		fieldName := "f-int-ubound-min"
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
+			strings.NewReader(`{"options":{"type":"int", "max": 10}}`)))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		w = httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", strings.NewReader("")))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		rsp := getSchemaResponse{}
+		if err := json.Unmarshal(w.Body.Bytes(), &rsp); err != nil {
+			t.Fatalf("json decode: %s", err)
+		}
+		field := rsp.findField("i0", fieldName)
+		if field == nil {
+			t.Fatalf("field not found: %s", fieldName)
+		}
+		if math.MinInt64 != field.Options.Min {
+			t.Fatalf("field min %d != %d", int64(math.MinInt64), field.Options.Min)
+		}
+		if 10 != field.Options.Max {
+			t.Fatalf("field max %d != %d", 10, field.Options.Max)
+		}
+	})
+
+	t.Run("Query int field unbounded max", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		fieldName := "f-int-ubound-max"
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
+			strings.NewReader(`{"options":{"type":"int", "min": -10}}`)))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		w = httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", strings.NewReader("")))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		rsp := getSchemaResponse{}
+		if err := json.Unmarshal(w.Body.Bytes(), &rsp); err != nil {
+			t.Fatalf("json decode: %s", err)
+		}
+		field := rsp.findField("i0", fieldName)
+		if field == nil {
+			t.Fatalf("field not found: %s", fieldName)
+		}
+		if -10 != field.Options.Min {
+			t.Fatalf("field min %d != %d", 10, field.Options.Min)
+		}
+		if math.MaxInt64 != field.Options.Max {
+			t.Fatalf("field max %d != %d", int64(math.MaxInt64), field.Options.Max)
+		}
+	})
+
+	t.Run("Query int field min > max return 400", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		fieldName := "f-int-ubound-err"
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
+			strings.NewReader(`{"options":{"type":"int", "min": 10, "max": -10}}`)))
+		fmt.Println("body", w.Body.String())
+		if w.Code != gohttp.StatusBadRequest {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+	})
+
 	t.Run("Method not allowed", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/index/i0/query", nil))
@@ -998,4 +1097,21 @@ func mustJSONDecodeSlice(t *testing.T, r io.Reader) (ret []interface{}) {
 		t.Fatalf("decoding response: %v", err)
 	}
 	return ret
+}
+
+type getSchemaResponse struct {
+	Indexes []*pilosa.IndexInfo `json:"indexes"`
+}
+
+func (r getSchemaResponse) findField(indexName, fieldName string) *pilosa.FieldInfo {
+	for _, index := range r.Indexes {
+		if index.Name == indexName {
+			for _, field := range index.Fields {
+				if field.Name == fieldName {
+					return field
+				}
+			}
+		}
+	}
+	return nil
 }

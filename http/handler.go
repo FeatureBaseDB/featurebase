@@ -759,7 +759,15 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	case pilosa.FieldTypeSet:
 		fos = append(fos, pilosa.OptFieldTypeSet(*req.Options.CacheType, *req.Options.CacheSize))
 	case pilosa.FieldTypeInt:
-		fos = append(fos, pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+		if req.Options.Min == nil {
+			min := int64(math.MinInt64)
+			req.Options.Min = &min
+		}
+		if req.Options.Max == nil {
+			max := int64(math.MaxInt64)
+			req.Options.Max = &max
+		}
+		fos = append(fos, pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max))
 	case pilosa.FieldTypeTime:
 		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum, req.Options.NoStandardView))
 	case pilosa.FieldTypeMutex:
@@ -774,6 +782,10 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = h.api.CreateField(r.Context(), indexName, fieldName, fos...)
+	if _, ok := err.(pilosa.BadRequestError); ok {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	resp.write(w, err)
 }
 
