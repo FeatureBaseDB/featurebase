@@ -149,6 +149,13 @@ func (btc *bTreeContainers) Clone() roaring.Containers {
 	return nbtc
 }
 
+func (btc *bTreeContainers) First() (key uint64, c *roaring.Container) {
+	if btc.tree.Len() == 0 {
+		return 0, nil
+	}
+	return btc.tree.First()
+}
+
 func (btc *bTreeContainers) Last() (key uint64, c *roaring.Container) {
 	if btc.tree.Len() == 0 {
 		return 0, nil
