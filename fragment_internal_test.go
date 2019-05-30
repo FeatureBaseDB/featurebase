@@ -707,12 +707,12 @@ func BenchmarkFragment_ImportValue(b *testing.B) {
 	depths := []uint{4, 8, 16}
 	for _, bitDepth := range depths {
 		name := fmt.Sprintf("Depth%d", bitDepth)
-		f := mustOpenFragment("i", "f", viewBSIGroupPrefix+"foo", 0, "none")
+		f := mustOpenBSIFragment("i", "f", viewBSIGroupPrefix+"foo", 0)
 		b.Run(name+"_Sparse", func(b *testing.B) {
 			benchmarkImportValues(b, bitDepth, f, func(u uint64) uint64 { return (u + 70000) & (ShardWidth - 1) })
 		})
 		f.Clean(b)
-		f = mustOpenFragment("i", "f", viewBSIGroupPrefix+"foo", 0, "none")
+		f = mustOpenBSIFragment("i", "f", viewBSIGroupPrefix+"foo", 0)
 		b.Run(name+"_Dense", func(b *testing.B) {
 			benchmarkImportValues(b, bitDepth, f, func(u uint64) uint64 { return (u + 1) & (ShardWidth - 1) })
 		})
@@ -831,7 +831,7 @@ func BenchmarkFragment_RepeatedSmallValueImports(b *testing.B) {
 				b.Run(fmt.Sprintf("Updates%dVals%dOpN%d", numUpdates, valsPerUpdate, opN), func(b *testing.B) {
 					for i := 0; i < b.N; i++ {
 						b.StopTimer()
-						f := mustOpenFragment("i", "f", viewBSIGroupPrefix+"foo", 0, CacheTypeNone)
+						f := mustOpenBSIFragment("i", "f", viewBSIGroupPrefix+"foo", 0)
 						f.MaxOpN = opN
 						err := f.importValue(initialCols, initialVals, 21, false)
 						if err != nil {
@@ -2456,6 +2456,15 @@ func (f *fragment) CleanKeep(t testing.TB) {
 
 // mustOpenFragment returns a new instance of Fragment with a temporary path.
 func mustOpenFragment(index, field, view string, shard uint64, cacheType string) *fragment {
+	return mustOpenFragmentFlags(index, field, view, shard, cacheType, 0)
+}
+
+func mustOpenBSIFragment(index, field, view string, shard uint64) *fragment {
+	return mustOpenFragmentFlags(index, field, view, shard, "", 1)
+}
+
+// mustOpenFragment returns a new instance of Fragment with a temporary path.
+func mustOpenFragmentFlags(index, field, view string, shard uint64, cacheType string, flags byte) *fragment {
 	file, err := ioutil.TempFile(*TempDir, "pilosa-fragment-")
 	if err != nil {
 		panic(err)
@@ -2466,7 +2475,7 @@ func mustOpenFragment(index, field, view string, shard uint64, cacheType string)
 		cacheType = DefaultCacheType
 	}
 
-	f := newFragment(file.Name(), index, field, view, shard, 0)
+	f := newFragment(file.Name(), index, field, view, shard, flags)
 	f.CacheType = cacheType
 	f.RowAttrStore = &memAttrStore{
 		store: make(map[uint64]map[string]interface{}),
@@ -3226,7 +3235,7 @@ func check(t *testing.T, f *fragment, exp map[uint64]map[uint64]struct{}) {
 }
 
 func TestImportValueConcurrent(t *testing.T) {
-	f := mustOpenFragment("i", "f", viewBSIGroupPrefix+"foo", 0, "none")
+	f := mustOpenBSIFragment("i", "f", viewBSIGroupPrefix+"foo", 0)
 	eg := &errgroup.Group{}
 	for i := 0; i < 4; i++ {
 		i := i
@@ -3266,7 +3275,7 @@ func TestImportMultipleValues(t *testing.T) {
 	for i, test := range tests {
 		for _, maxOpN := range []int{0, 10000} { // test small/large write
 			t.Run(fmt.Sprintf("%dLowOpN", i), func(t *testing.T) {
-				f := mustOpenFragment("i", "f", viewBSIGroupPrefix+"foo", 0, CacheTypeNone)
+				f := mustOpenBSIFragment("i", "f", viewBSIGroupPrefix+"foo", 0)
 				f.MaxOpN = maxOpN
 				defer f.Clean(t)
 				err := f.importValue(test.cols, test.vals, test.depth, false)
