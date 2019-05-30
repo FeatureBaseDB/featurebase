@@ -309,6 +309,32 @@ func TestBitmap_Max(t *testing.T) {
 	}
 }
 
+// Ensure bitmap can return the lowest value.
+func TestBitmap_Min(t *testing.T) {
+	bm := roaring.NewFileBitmap()
+	for i := uint64(100000); i > 0; i-- {
+		if _, err := bm.Add(i); err != nil {
+			t.Fatalf("adding bits: %v", err)
+		}
+
+		v, ok := bm.Min()
+		if !ok {
+			t.Fatalf("ok should be true")
+		}
+
+		if v != i {
+			t.Fatalf("min: got=%d; want=%d", v, i)
+		}
+	}
+
+	// empty bitmap
+	bm = roaring.NewFileBitmap()
+	_, ok := bm.Min()
+	if ok {
+		t.Fatalf("ok should be false")
+	}
+}
+
 // Ensure CountRange is correct even if rangekey is prior to initial container.
 func TestBitmap_BitmapCountRangeEdgeCase(t *testing.T) {
 	s := uint64(2009 * pilosa.ShardWidth)

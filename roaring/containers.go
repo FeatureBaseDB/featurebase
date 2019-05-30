@@ -114,6 +114,13 @@ func (sc *sliceContainers) Clone() Containers {
 	return other
 }
 
+func (sc *sliceContainers) First() (key uint64, c *Container) {
+	if len(sc.keys) == 0 {
+		return 0, nil
+	}
+	return sc.keys[0], sc.containers[0]
+}
+
 func (sc *sliceContainers) Last() (key uint64, c *Container) {
 	if len(sc.keys) == 0 {
 		return 0, nil

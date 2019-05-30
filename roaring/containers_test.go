@@ -15,6 +15,7 @@
 package roaring
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -98,5 +99,46 @@ func testContainersIterator(cs Containers, t *testing.T) {
 	if itr.Next() {
 		t.Fatalf("itr should be done, but got true")
 	}
+}
 
+func TestContainers(t *testing.T) {
+	cs := NewFileBitmap().Containers
+	first := NewContainerArray([]uint16{1, 2, 3})
+	last := NewContainerArray([]uint16{1, 2, 3, 4, 5, 6})
+	cs.Put(3, first)
+	cs.Put(6, last)
+
+	key, container := cs.First()
+	if key != 3 {
+		t.Fatalf("cs.First key 3 != %d", key)
+	}
+	if !reflect.DeepEqual(first, container) {
+		t.Fatalf("cs.First container %v != %v", first, container)
+	}
+
+	key, container = cs.Last()
+	if key != 6 {
+		t.Fatalf("cs.First key 6 != %d", key)
+	}
+	if !reflect.DeepEqual(last, container) {
+		t.Fatalf("cs.First container %v != %v", last, container)
+	}
+
+	cs = NewFileBitmap().Containers
+
+	key, container = cs.First()
+	if key != 0 {
+		t.Fatalf("cs.First key 0 != %d", key)
+	}
+	if nil != container {
+		t.Fatalf("cs.First container nil != %v", container)
+	}
+
+	key, container = cs.Last()
+	if key != 0 {
+		t.Fatalf("cs.First key 0 != %d", key)
+	}
+	if nil != container {
+		t.Fatalf("cs.First container nil != %v", container)
+	}
 }

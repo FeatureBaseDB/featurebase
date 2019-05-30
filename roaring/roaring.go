@@ -95,6 +95,9 @@ type Containers interface {
 	// Clone does a deep copy of Containers, including cloning all containers contained.
 	Clone() Containers
 
+	// First returns the lowest key and associated container.
+	First() (key uint64, c *Container)
+
 	// Last returns the highest key and associated container.
 	Last() (key uint64, c *Container)
 
@@ -318,6 +321,18 @@ func (b *Bitmap) remove(v uint64) bool {
 	}
 	// TODO - do nil check inside c.remove?
 	return c.remove(lowbits(v))
+}
+
+// Min returns the lowest value in the bitmap.
+// Second return value is true if containers exist in the bitmap.
+func (b *Bitmap) Min() (uint64, bool) {
+	if b.Containers.Size() == 0 {
+		return 0, false
+	}
+
+	hb, c := b.Containers.First()
+	lb, ok := c.min()
+	return hb<<16 | uint64(lb), ok
 }
 
 // Max returns the highest value in the bitmap.
@@ -1860,6 +1875,17 @@ func (c *Container) runRemove(v uint16) bool {
 	return true
 }
 
+// min returns the minimum value in the container.
+func (c *Container) min() (uint16, bool) {
+	if c.isArray() {
+		return c.arrayMin()
+	} else if c.isRun() {
+		return c.runMin()
+	} else {
+		return c.bitmapMin()
+	}
+}
+
 // max returns the maximum value in the container.
 func (c *Container) max() uint16 {
 	if c.isArray() {
@@ -1871,6 +1897,15 @@ func (c *Container) max() uint16 {
 	}
 }
 
+// Second result value is true if array is non-empty.
+func (c *Container) arrayMin() (uint16, bool) {
+	array := c.array()
+	if len(array) == 0 {
+		return 0, false
+	}
+	return array[0], true
+}
+
 func (c *Container) arrayMax() uint16 {
 	array := c.array()
 	if len(array) == 0 {
@@ -1879,19 +1914,41 @@ func (c *Container) arrayMax() uint16 {
 	return array[len(array)-1]
 }
 
+// Second result value is true if array is non-empty.
+func (c *Container) bitmapMin() (uint16, bool) {
+	bitmap := c.bitmap()
+	for i := 0; i < len(bitmap); i++ {
+		// If value is zero then skip.
+		v := bitmap[i]
+		if v != 0 {
+			r := bits.TrailingZeros64(v)
+			return uint16(r + i*64), true
+		}
+	}
+	return 0, false
+}
+
 func (c *Container) bitmapMax() uint16 {
 	// Search bitmap in reverse order.
 	bitmap := c.bitmap()
-	for i := len(bitmap); i > 0; i-- {
+	for i := len(bitmap) - 1; i > 0; i-- {
 		// If value is zero then skip.
-		v := bitmap[i-1]
+		v := bitmap[i]
 		if v != 0 {
 			r := bits.LeadingZeros64(v)
-			return uint16((i-1)*64 + 63 - r)
+			return uint16(i*64 + 63 - r)
 		}
-
 	}
 	return 0
+}
+
+// Second result value is true if array is non-empty.
+func (c *Container) runMin() (uint16, bool) {
+	runs := c.runs()
+	if len(runs) == 0 {
+		return 0, false
+	}
+	return runs[0].start, true
 }
 
 func (c *Container) runMax() uint16 {
