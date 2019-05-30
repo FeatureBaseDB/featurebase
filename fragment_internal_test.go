@@ -34,6 +34,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
+	"github.com/pkg/errors"
 )
 
 // Test flags
@@ -3291,4 +3292,31 @@ func TestImportMultipleValues(t *testing.T) {
 
 		}
 	}
+}
+
+func TestFragmentConcurrentReadWrite(t *testing.T) {
+	f := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeRanked)
+	defer f.Clean(t)
+
+	eg := &errgroup.Group{}
+	eg.Go(func() error {
+		for i := uint64(0); i < 1000; i++ {
+			_, err := f.setBit(i%4, i)
+			if err != nil {
+				return errors.Wrap(err, "setting bit")
+			}
+		}
+		return nil
+	})
+
+	acc := uint64(0)
+	for i := uint64(0); i < 100; i++ {
+		r := f.row(i % 4)
+		acc += r.Count()
+	}
+	if err := eg.Wait(); err != nil {
+		t.Errorf("error from setting a bit: %v", err)
+	}
+
+	t.Logf("%d", acc)
 }
