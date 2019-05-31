@@ -2755,6 +2755,10 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 				if err != nil {
 					return nil, err
 				}
+				if call.Name == "MinRow" || call.Name == "MaxRow" {
+					result.Key = key
+					return result, nil
+				}
 				return Pair{Key: key, Count: result.Count}, nil
 			}
 		}
