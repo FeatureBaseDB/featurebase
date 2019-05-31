@@ -118,6 +118,8 @@ type fragment struct {
 
 	// Stats reporting.
 	maxRowID uint64
+	minRowID uint64
+	hasRowID bool
 
 	// Cache containing full rows (not just counts).
 	rowCache bitmapCache
@@ -188,8 +190,10 @@ func (f *fragment) Open() error {
 		f.checksums = make(map[int][]byte)
 
 		// Read last bit to determine max row.
-		pos := f.storage.Max()
-		f.maxRowID = pos / ShardWidth
+		f.maxRowID = f.storage.Max() / ShardWidth
+		min, ok := f.storage.Min()
+		f.minRowID = min / ShardWidth
+		f.hasRowID = ok
 		f.stats.Gauge("rows", float64(f.maxRowID), 1.0)
 		return nil
 	}(); err != nil {
@@ -518,6 +522,10 @@ func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 	if rowID > f.maxRowID {
 		f.maxRowID = rowID
 		f.stats.Gauge("rows", float64(f.maxRowID), 1.0)
+	}
+	if !f.hasRowID || rowID < f.minRowID {
+		f.minRowID = rowID
+		f.hasRowID = true
 	}
 
 	return changed, nil
@@ -1021,6 +1029,14 @@ func (f *fragment) maxUnsigned(filter *Row, bitDepth uint) (max int64, count uin
 		}
 	}
 	return max, count
+}
+
+func (f *fragment) rowIDMin() (uint64, bool) {
+	return f.minRowID, f.hasRowID
+}
+
+func (f *fragment) rowIDMax() uint64 {
+	return f.maxRowID
 }
 
 // rangeOp returns bitmaps with a bsiGroup value encoding matching the predicate.
