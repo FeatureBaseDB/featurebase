@@ -785,9 +785,6 @@ func (e *executor) executeMaxShard(ctx context.Context, index string, c *pql.Cal
 
 // executeMaxRowShard returns the minimum row ID for a shard.
 func (e *executor) executeMaxRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (Pair, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMaxRowShard")
-	defer span.Finish()
-
 	fieldName, _ := c.Args["field"].(string)
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
