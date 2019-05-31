@@ -724,9 +724,6 @@ func (e *executor) executeMinShard(ctx context.Context, index string, c *pql.Cal
 
 // executeMinRowShard returns the minimum row ID for a shard.
 func (e *executor) executeMinRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (Pair, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMinRowShard")
-	defer span.Finish()
-
 	fieldName, _ := c.Args["field"].(string)
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
@@ -750,9 +747,6 @@ func (e *executor) executeMinRowShard(ctx context.Context, index string, c *pql.
 
 // executeMaxShard calculates the max for bsiGroups on a shard.
 func (e *executor) executeMaxShard(ctx context.Context, index string, c *pql.Call, shard uint64) (ValCount, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMaxShard")
-	defer span.Finish()
-
 	var filter *Row
 	if len(c.Children) == 1 {
 		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)

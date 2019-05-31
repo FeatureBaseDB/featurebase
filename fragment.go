@@ -1031,14 +1031,6 @@ func (f *fragment) maxUnsigned(filter *Row, bitDepth uint) (max int64, count uin
 	return max, count
 }
 
-func (f *fragment) rowIDMin() (uint64, bool) {
-	return f.minRowID, f.hasRowID
-}
-
-func (f *fragment) rowIDMax() uint64 {
-	return f.maxRowID
-}
-
 // rangeOp returns bitmaps with a bsiGroup value encoding matching the predicate.
 func (f *fragment) rangeOp(op pql.Token, bitDepth uint, predicate int64) (*Row, error) {
 	switch op {
