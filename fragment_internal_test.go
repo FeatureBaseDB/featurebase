@@ -26,6 +26,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"sync/atomic"
 	"testing"
 	"testing/quick"
 
@@ -102,6 +103,44 @@ func TestFragment_ClearBit(t *testing.T) {
 	} else if n := f.row(1000).Count(); n != 1 {
 		t.Fatalf("unexpected count (reopen): %d", n)
 	}
+}
+
+// What about rowcache timing.
+func TestFragment_RowcacheMap(t *testing.T) {
+	var done int64
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
+	defer f.Clean(t)
+
+	ch := make(chan struct{})
+
+	for i := 0; i < f.MaxOpN; i++ {
+		f.setBit(0, uint64(i*32))
+	}
+	// force snapshot so we get a mmapped row...
+	f.snapshot()
+	row := f.row(0)
+	segment := row.Segments()[0]
+	bitmap := segment.data
+
+	// request information from the frozen bitmap we got back
+	go func() {
+		for atomic.LoadInt64(&done) == 0 {
+			for i := 0; i < f.MaxOpN; i++ {
+				_ = bitmap.Contains(uint64(i * 32))
+			}
+		}
+		close(ch)
+	}()
+
+	// modify the original bitmap, until it causes a snapshot, which
+	// then invalidates the other map...
+	for j := 0; j < 5; j++ {
+		for i := 0; i < f.MaxOpN; i++ {
+			f.setBit(0, uint64(i*32+j+1))
+		}
+	}
+	atomic.StoreInt64(&done, 1)
+	<-ch
 }
 
 // Ensure a fragment can clear a row.
