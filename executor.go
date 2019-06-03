@@ -722,29 +722,6 @@ func (e *executor) executeMinShard(ctx context.Context, index string, c *pql.Cal
 	}, nil
 }
 
-// executeMinRowShard returns the minimum row ID for a shard.
-func (e *executor) executeMinRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (Pair, error) {
-	fieldName, _ := c.Args["field"].(string)
-	field := e.Holder.Field(index, fieldName)
-	if field == nil {
-		return Pair{}, nil
-	}
-
-	fragment := e.Holder.fragment(index, fieldName, viewStandard, shard)
-	if fragment == nil {
-		return Pair{}, nil
-	}
-
-	count := uint64(1)
-	if !fragment.hasRowID {
-		count = 0
-	}
-	return Pair{
-		ID:    fragment.minRowID,
-		Count: count,
-	}, nil
-}
-
 // executeMaxShard calculates the max for bsiGroups on a shard.
 func (e *executor) executeMaxShard(ctx context.Context, index string, c *pql.Call, shard uint64) (ValCount, error) {
 	var filter *Row
@@ -780,6 +757,29 @@ func (e *executor) executeMaxShard(ctx context.Context, index string, c *pql.Cal
 	return ValCount{
 		Val:   int64(fmax) + bsig.Base,
 		Count: int64(fcount),
+	}, nil
+}
+
+// executeMinRowShard returns the minimum row ID for a shard.
+func (e *executor) executeMinRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (Pair, error) {
+	fieldName, _ := c.Args["field"].(string)
+	field := e.Holder.Field(index, fieldName)
+	if field == nil {
+		return Pair{}, nil
+	}
+
+	fragment := e.Holder.fragment(index, fieldName, viewStandard, shard)
+	if fragment == nil {
+		return Pair{}, nil
+	}
+
+	count := uint64(1)
+	if !fragment.hasRowID {
+		count = 0
+	}
+	return Pair{
+		ID:    fragment.minRowID,
+		Count: count,
 	}, nil
 }
 
