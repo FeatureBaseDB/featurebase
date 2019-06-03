@@ -1118,8 +1118,8 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 
 	// Verify the first two bytes are a valid MagicNumber, and second two bytes match current storageVersion.
 	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
-	b.Flags = data[2]
-	fileVersion := uint32(data[3])
+	fileVersion := uint32(data[2])
+	b.Flags = data[3]
 	if fileMagic != MagicNumber {
 		return fmt.Errorf("invalid roaring file, magic number %v is incorrect", fileMagic)
 	}
