@@ -1036,6 +1036,46 @@ func (f *fragment) maxUnsigned(filter *Row, bitDepth uint) (max int64, count uin
 	return max, count
 }
 
+// minRow returns minRowID of the rows in the filter and its count.
+// if filter is nil, it returns fragment.minRowID, 1
+// if fragment has no rows, it returns 0, 0
+func (f *fragment) minRow(filter *Row) (uint64, uint64) {
+	if f.hasRowID {
+		if filter == nil {
+			return f.minRowID, 1
+		}
+		// iterate from min row ID and return the first that intersects with filter.
+		for i := f.minRowID; i <= f.maxRowID; i++ {
+			row := f.row(i).Intersect(filter)
+			count := row.Count()
+			if count > 0 {
+				return i, count
+			}
+		}
+	}
+	return 0, 0
+}
+
+// maxRow returns maxRowID of the rows in the filter and its count.
+// if filter is nil, it returns fragment.maxRowID, 1
+// if fragment has no rows, it returns 0, 0
+func (f *fragment) maxRow(filter *Row) (uint64, uint64) {
+	if f.hasRowID {
+		if filter == nil {
+			return f.maxRowID, 1
+		}
+		// iterate back from max row ID and return the first that intersects with filter.
+		for i := f.maxRowID; i >= f.minRowID; i-- {
+			row := f.row(i).Intersect(filter)
+			count := row.Count()
+			if count > 0 {
+				return i, count
+			}
+		}
+	}
+	return 0, 0
+}
+
 // rangeOp returns bitmaps with a bsiGroup value encoding matching the predicate.
 func (f *fragment) rangeOp(op pql.Token, bitDepth uint, predicate int64) (*Row, error) {
 	switch op {

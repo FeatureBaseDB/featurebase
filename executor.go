@@ -762,6 +762,15 @@ func (e *executor) executeMaxShard(ctx context.Context, index string, c *pql.Cal
 
 // executeMinRowShard returns the minimum row ID for a shard.
 func (e *executor) executeMinRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (Pair, error) {
+	var filter *Row
+	if len(c.Children) == 1 {
+		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
+		if err != nil {
+			return Pair{}, err
+		}
+		filter = row
+	}
+
 	fieldName, _ := c.Args["field"].(string)
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
@@ -773,18 +782,24 @@ func (e *executor) executeMinRowShard(ctx context.Context, index string, c *pql.
 		return Pair{}, nil
 	}
 
-	count := uint64(1)
-	if !fragment.hasRowID {
-		count = 0
-	}
+	minRowID, count := fragment.minRow(filter)
 	return Pair{
-		ID:    fragment.minRowID,
+		ID:    minRowID,
 		Count: count,
 	}, nil
 }
 
 // executeMaxRowShard returns the minimum row ID for a shard.
 func (e *executor) executeMaxRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (Pair, error) {
+	var filter *Row
+	if len(c.Children) == 1 {
+		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
+		if err != nil {
+			return Pair{}, err
+		}
+		filter = row
+	}
+
 	fieldName, _ := c.Args["field"].(string)
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
@@ -796,12 +811,9 @@ func (e *executor) executeMaxRowShard(ctx context.Context, index string, c *pql.
 		return Pair{}, nil
 	}
 
-	count := uint64(1)
-	if !fragment.hasRowID {
-		count = 0
-	}
+	maxRowID, count := fragment.maxRow(filter)
 	return Pair{
-		ID:    fragment.maxRowID,
+		ID:    maxRowID,
 		Count: count,
 	}, nil
 }
