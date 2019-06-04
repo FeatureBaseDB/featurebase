@@ -13,7 +13,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/gogo/protobuf v1.2.0
-	github.com/golang/protobuf v1.2.0
+	github.com/golang/protobuf v1.3.1
 	github.com/google/go-cmp v0.2.0
 	github.com/gorilla/handlers v1.3.0
 	github.com/gorilla/mux v1.7.0
@@ -22,6 +22,7 @@ require (
 	github.com/opentracing/opentracing-go v1.0.2
 	github.com/pelletier/go-toml v1.2.0
 	github.com/pkg/errors v0.8.1
+	github.com/prometheus/client_golang v0.9.3 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20190321074620-2f0d2b0e0001 // indirect
 	github.com/satori/go.uuid v1.2.0
 	github.com/shirou/gopsutil v2.18.12+incompatible

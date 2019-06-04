@@ -39,6 +39,7 @@ import (
 	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Handler represents an HTTP handler.
@@ -243,6 +244,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST").Name("PostClusterResizeSetCoordinator")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
+	router.Handle("/metrics", promhttp.Handler())
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET").Name("GetExport")
 	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET").Name("GetIndexes")
 	router.HandleFunc("/index/{index}", handler.handleGetIndex).Methods("GET").Name("GetIndex")
