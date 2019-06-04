@@ -114,10 +114,10 @@ func TestFragment_RowcacheMap(t *testing.T) {
 	ch := make(chan struct{})
 
 	for i := 0; i < f.MaxOpN; i++ {
-		f.setBit(0, uint64(i*32))
+		_, _ = f.setBit(0, uint64(i*32))
 	}
 	// force snapshot so we get a mmapped row...
-	f.snapshot()
+	_ = f.snapshot()
 	row := f.row(0)
 	segment := row.Segments()[0]
 	bitmap := segment.data
@@ -136,7 +136,7 @@ func TestFragment_RowcacheMap(t *testing.T) {
 	// then invalidates the other map...
 	for j := 0; j < 5; j++ {
 		for i := 0; i < f.MaxOpN; i++ {
-			f.setBit(0, uint64(i*32+j+1))
+			_, _ = f.setBit(0, uint64(i*32+j+1))
 		}
 	}
 	atomic.StoreInt64(&done, 1)
