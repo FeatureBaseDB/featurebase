@@ -44,6 +44,8 @@ type prometheusClient struct {
 	counterVecs map[string]*prometheus.CounterVec
 	gauges      map[string]prometheus.Gauge
 	gaugeVecs   map[string]*prometheus.GaugeVec
+	observers   map[string]prometheus.Observer
+	summaryVecs map[string]*prometheus.SummaryVec
 }
 
 // NewPrometheusClient returns a new instance of StatsClient.
@@ -176,6 +178,43 @@ func (c *prometheusClient) Gauge(name string, value float64, rate float64) {
 
 // Histogram tracks statistical distribution of a metric.
 func (c *prometheusClient) Histogram(name string, value float64, rate float64) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	var observer prometheus.Observer
+	var ok bool
+	labels := c.labels()
+	opts := prometheus.SummaryOpts{
+		Namespace:  namespace,
+		Name:       name,
+		Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
+	}
+	if len(labels) == 0 {
+		observer, ok = c.observers[name]
+		if !ok {
+			summary := prometheus.NewSummary(opts)
+			observer = summary
+			c.observers[name] = observer
+			prometheus.MustRegister(summary)
+		}
+	} else {
+		var summaryVec *prometheus.SummaryVec
+		summaryVec, ok = c.summaryVecs[name]
+		if !ok {
+			summaryVec = prometheus.NewSummaryVec(
+				opts,
+				labelKeys(labels),
+			)
+			c.summaryVecs[name] = summaryVec
+			prometheus.MustRegister(summaryVec)
+		}
+		var err error
+		observer, err = summaryVec.GetMetricWith(labels)
+		if err != nil {
+			c.logger.Printf("summaryVec.GetMetricWith error: %s", err)
+		}
+	}
+	observer.Observe(value)
 }
 
 // Set tracks number of unique elements.
