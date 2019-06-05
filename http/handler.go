@@ -302,6 +302,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Calculate per request StatsD metrics when the handler is fully configured.
 	statsTags := make([]string, 0, 4)
 
+	pathParts := strings.Split(r.URL.Path, "/")
 	longQueryTime := h.api.LongQueryTime()
 	if longQueryTime > 0 && dif > longQueryTime {
 		h.logger.Printf("%s %s %v", r.Method, r.URL.String(), dif)
