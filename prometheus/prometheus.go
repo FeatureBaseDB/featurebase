@@ -100,6 +100,7 @@ func (c *prometheusClient) Count(name string, value int64, rate float64) {
 
 	var counter prometheus.Counter
 	var ok bool
+	name = strings.Replace(name, ".", "_", -1)
 	labels := c.labels()
 	opts := prometheus.CounterOpts{
 		Namespace: namespace,
@@ -148,6 +149,7 @@ func (c *prometheusClient) Gauge(name string, value float64, rate float64) {
 
 	var gauge prometheus.Gauge
 	var ok bool
+	name = strings.Replace(name, ".", "_", -1)
 	labels := c.labels()
 	opts := prometheus.GaugeOpts{
 		Namespace: namespace,
@@ -187,6 +189,7 @@ func (c *prometheusClient) Histogram(name string, value float64, rate float64) {
 
 	var observer prometheus.Observer
 	var ok bool
+	name = strings.Replace(name, ".", "_", -1)
 	labels := c.labels()
 	opts := prometheus.SummaryOpts{
 		Namespace:  namespace,
