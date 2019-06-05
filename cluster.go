@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -61,8 +62,9 @@ const (
 	resizeJobActionAdd    = "ADD"
 	resizeJobActionRemove = "REMOVE"
 
-	confirmDownRetries = 20
+	confirmDownRetries = 15
 	confirmDownSleep   = 1
+	confirmDownTimeout = 2
 )
 
 // Node represents a node in the cluster.
@@ -1693,16 +1695,30 @@ func (c *cluster) considerTopology() error {
 
 // band aid to protect against false nodeLeave events from memberlist
 // the test is the lightest weight endpoint of the node in question /version
-// TODO provide more robust solution to false nodeJoin events
-func confirmNodeDown(uri URI) bool {
+// TODO provide more robust solution to false nodeLeave events
+func confirmNodeDown(uri URI, log logger.Logger) bool {
+	u := url.URL{
+		Scheme: uri.Scheme,
+		Host:   uri.HostPort(),
+		Path:   "version",
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), confirmDownTimeout*time.Second)
+	defer cancel()
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		log.Printf("bad request:%s %s", u.String(), err)
+		return false
+	}
+
 	for i := 0; i < confirmDownRetries; i++ {
-		resp, err := http.Get(uri.Scheme + uri.HostPort() + "/version")
+		resp, err := http.DefaultClient.Do(req.WithContext(ctx))
 		if err == nil {
 			if resp.StatusCode == 200 {
 				return false
 			}
-			time.Sleep(confirmDownSleep * time.Second)
 		}
+		log.Printf("NodeLeave Timeout with %s %d", uri.HostPort(), i)
+		time.Sleep(confirmDownSleep * time.Second)
 	}
 	return true
 }
@@ -1730,7 +1746,7 @@ func (c *cluster) ReceiveEvent(e *NodeEvent) (err error) {
 			// not already removed by a removeNode request. We treat this as the
 			// host being temporarily unavailable, and expect it to come back
 			// up.
-			if confirmNodeDown(e.Node.URI) {
+			if confirmNodeDown(e.Node.URI, c.logger) {
 				if c.removeNodeBasicSorted(e.Node.ID) {
 					c.Topology.nodeStates[e.Node.ID] = nodeStateDown
 					// put the cluster into STARTING if we've lost a number of nodes

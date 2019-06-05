@@ -16,15 +16,24 @@ package pilosa
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"math/rand"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/quick"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/gorilla/mux"
+	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pkg/errors"
 )
@@ -884,4 +893,72 @@ func TestCluster_UpdateCoordinator(t *testing.T) {
 			t.Errorf("expected coordinator: %s, but got: %s", c.Coordinator, newNode.URI)
 		}
 	})
+}
+
+func TestCluster_confirmNodeDownUp(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/version", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, "ignored")
+	}))
+	server := httptest.NewServer(r)
+	// Close the server when test finishes
+	defer server.Close()
+	u, err := url.Parse(server.URL)
+	if err != nil {
+		t.Error("bad test setup")
+	}
+	uri := URI{}
+	host, port, _ := net.SplitHostPort(u.Host)
+	uri.Scheme = u.Scheme
+	uri.Host = host
+	iport, err := strconv.ParseUint(port, 0, 16)
+	if err != nil {
+		t.Error(err)
+	}
+	uri.Port = uint16(iport)
+	if confirmNodeDown(uri, logger.NewVerboseLogger(os.Stdout)) {
+		t.Errorf("expected node to be up")
+	}
+
+}
+func TestCluster_confirmNodeDownTimeout(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/version", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(confirmDownSleep * time.Second * confirmDownRetries)
+		fmt.Fprintln(w, "ignored")
+	}))
+	server := httptest.NewServer(r)
+	// Close the server when test finishes
+	defer server.Close()
+	u, err := url.Parse(server.URL)
+	if err != nil {
+		t.Error("bad test setup")
+	}
+	uri := URI{}
+	host, port, _ := net.SplitHostPort(u.Host)
+	uri.Scheme = u.Scheme
+	uri.Host = host
+	iport, err := strconv.ParseUint(port, 0, 16)
+	if err != nil {
+		t.Error(err)
+	}
+	uri.Port = uint16(iport)
+
+	if !confirmNodeDown(uri, logger.NewVerboseLogger(os.Stdout)) {
+		t.Errorf("expected node to be down")
+	}
+
+}
+
+func TestCluster_confirmNodeDownDown(t *testing.T) {
+	uri := URI{}
+	uri.Scheme = "http"
+	uri.Host = "DoesntMatter"
+	uri.Port = 6666
+
+	if !confirmNodeDown(uri, logger.NewVerboseLogger(os.Stdout)) {
+		t.Errorf("expected node to be down")
+	}
+
 }
