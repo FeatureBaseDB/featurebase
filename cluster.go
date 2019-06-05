@@ -1754,7 +1754,7 @@ func (c *cluster) ReceiveEvent(e *NodeEvent) (err error) {
 					err = c.unprotectedSetStateAndBroadcast(c.determineClusterState())
 				}
 			} else {
-				c.logger.Printf("received node leave: %v", e.Node)
+				c.logger.Printf("ignored received node leave: %v", e.Node)
 			}
 		}
 	case NodeUpdate:
