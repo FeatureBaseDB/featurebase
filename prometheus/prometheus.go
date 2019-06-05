@@ -33,13 +33,17 @@ const (
 // Ensure client implements interface.
 var _ stats.StatsClient = &prometheusClient{}
 
+// Module-level mutex to avoid copying in WithTags()
+var mu sync.Mutex
+
 // prometheusClient represents a Prometheus implementation of pilosa.statsClient.
 type prometheusClient struct {
 	tags        []string
 	logger      logger.Logger
-	mu          sync.Mutex
 	counters    map[string]prometheus.Counter
 	counterVecs map[string]*prometheus.CounterVec
+	gauges      map[string]prometheus.Gauge
+	gaugeVecs   map[string]*prometheus.GaugeVec
 }
 
 // NewPrometheusClient returns a new instance of StatsClient.
@@ -48,6 +52,8 @@ func NewPrometheusClient() (*prometheusClient, error) {
 		logger:      logger.NopLogger,
 		counters:    make(map[string]prometheus.Counter),
 		counterVecs: make(map[string]*prometheus.CounterVec),
+		gauges:      make(map[string]prometheus.Gauge),
+		gaugeVecs:   make(map[string]*prometheus.GaugeVec),
 	}, nil
 }
 
@@ -74,32 +80,35 @@ func (c *prometheusClient) WithTags(tags ...string) stats.StatsClient {
 	return &prometheusClient{
 		tags:        unionStringSlice(c.tags, tags),
 		logger:      c.logger,
-		mu:          c.mu,
 		counters:    c.counters,
 		counterVecs: c.counterVecs,
+		gauges:      c.gauges,
+		gaugeVecs:   c.gaugeVecs,
 	}
 }
 
 // Count tracks the number of times something occurs per second.
 func (c *prometheusClient) Count(name string, value int64, rate float64) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	mu.Lock()
+	defer mu.Unlock()
 
 	var counter prometheus.Counter
+	var ok bool
 	labels := c.labels()
 	opts := prometheus.CounterOpts{
 		Namespace: namespace,
 		Name:      name,
 	}
 	if len(labels) == 0 {
-		if counter, ok := c.counters[name]; !ok {
+		counter, ok = c.counters[name]
+		if !ok {
 			counter = prometheus.NewCounter(opts)
 			c.counters[name] = counter
 			prometheus.MustRegister(counter)
 		}
 	} else {
 		var counterVec *prometheus.CounterVec
-		counterVec, ok := c.counterVecs[name]
+		counterVec, ok = c.counterVecs[name]
 		if !ok {
 			counterVec = prometheus.NewCounterVec(
 				opts,
@@ -128,6 +137,41 @@ func (c *prometheusClient) CountWithCustomTags(name string, value int64, rate fl
 
 // Gauge sets the value of a metric.
 func (c *prometheusClient) Gauge(name string, value float64, rate float64) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	var gauge prometheus.Gauge
+	var ok bool
+	labels := c.labels()
+	opts := prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      name,
+	}
+	if len(labels) == 0 {
+		gauge, ok = c.gauges[name]
+		if !ok {
+			gauge = prometheus.NewGauge(opts)
+			c.gauges[name] = gauge
+			prometheus.MustRegister(gauge)
+		}
+	} else {
+		var gaugeVec *prometheus.GaugeVec
+		gaugeVec, ok = c.gaugeVecs[name]
+		if !ok {
+			gaugeVec = prometheus.NewGaugeVec(
+				opts,
+				labelKeys(labels),
+			)
+			c.gaugeVecs[name] = gaugeVec
+			prometheus.MustRegister(gaugeVec)
+		}
+		var err error
+		gauge, err = gaugeVec.GetMetricWith(labels)
+		if err != nil {
+			c.logger.Printf("gaugeVec.GetMetricWith error: %s", err)
+		}
+	}
+	gauge.Set(float64(value))
 }
 
 // Histogram tracks statistical distribution of a metric.
