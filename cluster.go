@@ -62,7 +62,7 @@ const (
 	resizeJobActionAdd    = "ADD"
 	resizeJobActionRemove = "REMOVE"
 
-	confirmDownRetries = 15
+	confirmDownRetries = 10
 	confirmDownSleep   = 1
 	confirmDownTimeout = 2
 )
