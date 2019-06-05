@@ -219,10 +219,13 @@ func (c *prometheusClient) Histogram(name string, value float64, rate float64) {
 
 // Set tracks number of unique elements.
 func (c *prometheusClient) Set(name string, value string, rate float64) {
+	c.logger.Printf("prometheusClient.Set unimplemented: %s=%s", name, value)
 }
 
 // Timing tracks timing information for a metric.
 func (c *prometheusClient) Timing(name string, value time.Duration, rate float64) {
+	durationMs := value / time.Millisecond
+	c.Histogram(name, float64(durationMs), rate)
 }
 
 // SetLogger sets the logger for client.
