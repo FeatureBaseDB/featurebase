@@ -21,6 +21,7 @@ import (
 	"hash/fnv"
 	"io/ioutil"
 	"math/rand"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -59,6 +60,9 @@ const (
 
 	resizeJobActionAdd    = "ADD"
 	resizeJobActionRemove = "REMOVE"
+
+	confirmDownRetries = 20
+	confirmDownSleep   = 1
 )
 
 // Node represents a node in the cluster.
@@ -1687,13 +1691,28 @@ func (c *cluster) considerTopology() error {
 	return nil
 }
 
+// band aid to protect against false nodeLeave events from memberlist
+// the test is the lightest weight endpoint of the node in question /version
+// TODO provide more robust solution to false nodeJoin events
+func confirmNodeDown(uri URI) bool {
+	for i := 0; i < confirmDownRetries; i++ {
+		resp, err := http.Get(uri.Scheme + uri.HostPort() + "/version")
+		if err == nil {
+			if resp.StatusCode == 200 {
+				return false
+			}
+			time.Sleep(confirmDownSleep * time.Second)
+		}
+	}
+	return true
+}
+
 // ReceiveEvent represents an implementation of EventHandler.
 func (c *cluster) ReceiveEvent(e *NodeEvent) (err error) {
 	// Ignore events sent from this node.
 	if e.Node.ID == c.Node.ID {
 		return nil
 	}
-
 	switch e.Event {
 	case NodeJoin:
 		c.logger.Debugf("nodeJoin of %s on %s", e.Node.URI, c.Node.URI)
@@ -1711,11 +1730,15 @@ func (c *cluster) ReceiveEvent(e *NodeEvent) (err error) {
 			// not already removed by a removeNode request. We treat this as the
 			// host being temporarily unavailable, and expect it to come back
 			// up.
-			if c.removeNodeBasicSorted(e.Node.ID) {
-				c.Topology.nodeStates[e.Node.ID] = nodeStateDown
-				// put the cluster into STARTING if we've lost a number of nodes
-				// equal to or greater than ReplicaN
-				err = c.unprotectedSetStateAndBroadcast(c.determineClusterState())
+			if confirmNodeDown(e.Node.URI) {
+				if c.removeNodeBasicSorted(e.Node.ID) {
+					c.Topology.nodeStates[e.Node.ID] = nodeStateDown
+					// put the cluster into STARTING if we've lost a number of nodes
+					// equal to or greater than ReplicaN
+					err = c.unprotectedSetStateAndBroadcast(c.determineClusterState())
+				}
+			} else {
+				c.logger.Printf("received node leave: %v", e.Node)
 			}
 		}
 	case NodeUpdate:
