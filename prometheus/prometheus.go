@@ -56,6 +56,8 @@ func NewPrometheusClient() (*prometheusClient, error) {
 		counterVecs: make(map[string]*prometheus.CounterVec),
 		gauges:      make(map[string]prometheus.Gauge),
 		gaugeVecs:   make(map[string]*prometheus.GaugeVec),
+		observers:   make(map[string]prometheus.Observer),
+		summaryVecs: make(map[string]*prometheus.SummaryVec),
 	}, nil
 }
 
@@ -86,6 +88,8 @@ func (c *prometheusClient) WithTags(tags ...string) stats.StatsClient {
 		counterVecs: c.counterVecs,
 		gauges:      c.gauges,
 		gaugeVecs:   c.gaugeVecs,
+		observers:   c.observers,
+		summaryVecs: c.summaryVecs,
 	}
 }
 
