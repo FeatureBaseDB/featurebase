@@ -300,7 +300,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	dif := time.Since(t)
 
 	// Calculate per request StatsD metrics when the handler is fully configured.
-	statsTags := make([]string, 0, 3)
+	statsTags := make([]string, 0, 4)
 
 	longQueryTime := h.api.LongQueryTime()
 	if longQueryTime > 0 && dif > longQueryTime {
@@ -308,8 +308,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		statsTags = append(statsTags, "slow_query")
 	}
 
-	pathParts := strings.Split(r.URL.Path, "/")
-	endpointName := strings.Join(pathParts, "_")
+	statsTags = append(statsTags, "url:"+r.URL.Path)
 
 	if externalPrefixFlag[pathParts[1]] {
 		statsTags = append(statsTags, "external")
@@ -319,7 +318,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	statsTags = append(statsTags, "useragent:"+r.UserAgent())
 	stats := h.api.StatsWithTags(statsTags)
 	if stats != nil {
-		stats.Histogram("http."+endpointName, float64(dif), 0.1)
+		stats.Histogram("http.request", float64(dif), 0.1)
 	}
 }
 
