@@ -22,6 +22,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/pilosa/pilosa/logger"
 )
 
 func TestDiagnosticsClient(t *testing.T) {
@@ -112,19 +114,34 @@ func TestDiagnosticsVersion_Check(t *testing.T) {
 	// Mock server.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(versionResponse{
+		err := json.NewEncoder(w).Encode(versionResponse{
 			Version: "1.1.1",
 		})
+		if err != nil {
+			t.Fatalf("couldn't encode version response: %v", err)
+		}
 	}))
 
 	// Create a new client.
 	d := newDiagnosticsCollector("localhost:10101")
 
+	logs := logger.NewCaptureLogger()
+	d.Logger = logs
+
 	version := "0.1.1"
 	d.SetVersion(version)
 	d.VersionURL = server.URL
 
-	d.CheckVersion()
+	err := d.CheckVersion()
+	if err != nil {
+		t.Fatalf("checking version: %v", err)
+	}
+	if len(logs.Prints) != 1 {
+		t.Fatalf("expected a version upgrade message")
+	}
+	if !strings.Contains(logs.Prints[0], "a newer version") {
+		t.Fatalf("expected version upgrade message, got '%s'", logs.Prints[0])
+	}
 }
 
 func compareJSON(a, b []byte) (bool, error) {

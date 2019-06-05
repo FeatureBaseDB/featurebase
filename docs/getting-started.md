@@ -63,6 +63,7 @@ curl localhost:10101/index/repository -X POST
 ``` response
 {"success":true}
 ```
+The index name must be 64 characters or less, start with a letter, and consist only of lowercase alphanumeric characters or `_-`.
 
 Let's create the `stargazer` field which has user IDs of stargazers as its rows:
 ``` request
@@ -74,7 +75,7 @@ curl localhost:10101/index/repository/field/stargazer \
 {"success":true}
 ```
 
-Since our data contains time stamps whcih represent the time users starred repos, we set the field type to `time`. Time quantum is the resolution of the time we want to use, and we set it to `YMD` (year, month, day) for `stargazer`.
+Since our data contains time stamps which represent the time users starred repos, we set the field type to `time`. Time quantum is the resolution of the time we want to use, and we set it to `YMD` (year, month, day) for `stargazer`.
 
 Next up is the `language` field, which will contain IDs for programming languages:
 ``` request

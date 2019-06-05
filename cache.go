@@ -452,9 +452,14 @@ func (s *simpleCache) Fetch(id uint64) (*Row, bool) {
 	return m, ok
 }
 
-// Add adds the bitmap to the cache, keyed on the id.
+// Add adds the bitmap to the cache, keyed on the id. A nil row means
+// deleting the row from the cache.
 func (s *simpleCache) Add(id uint64, b *Row) {
-	s.cache[id] = b
+	if b != nil {
+		s.cache[id] = b
+	} else {
+		delete(s.cache, id)
+	}
 }
 
 // nopCache represents a no-op Cache implementation.

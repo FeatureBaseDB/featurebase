@@ -68,7 +68,7 @@ func (cmd *CheckCommand) Run(_ context.Context) error {
 }
 
 // checkBitmapFile performs a consistency check on path for a roaring bitmap file.
-func (cmd *CheckCommand) checkBitmapFile(path string) error {
+func (cmd *CheckCommand) checkBitmapFile(path string) (err error) {
 	// Open file handle.
 	f, err := os.Open(path)
 	if err != nil {
@@ -86,8 +86,17 @@ func (cmd *CheckCommand) checkBitmapFile(path string) error {
 	if err != nil {
 		return errors.Wrap(err, "mmapping")
 	}
-	defer syscall.Munmap(data)
-
+	defer func() {
+		e := syscall.Munmap(data)
+		if e != nil {
+			fmt.Fprintf(cmd.Stderr, "WARNING: munmap failed: %v", e)
+		}
+		// don't overwrite another error with this, but also indicate
+		// this error.
+		if err == nil {
+			err = e
+		}
+	}()
 	// Attach the mmap file to the bitmap.
 	bm := roaring.NewBitmap()
 	if err := bm.UnmarshalBinary(data); err != nil {

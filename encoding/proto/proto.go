@@ -532,6 +532,8 @@ func encodeFieldOptions(o *pilosa.FieldOptions) *internal.FieldOptions {
 		CacheSize:   o.CacheSize,
 		Min:         o.Min,
 		Max:         o.Max,
+		Base:        o.Base,
+		BitDepth:    uint64(o.BitDepth),
 		TimeQuantum: string(o.TimeQuantum),
 		Keys:        o.Keys,
 	}
@@ -800,6 +802,8 @@ func decodeFieldOptions(options *internal.FieldOptions, m *pilosa.FieldOptions) 
 	m.CacheSize = options.CacheSize
 	m.Min = options.Min
 	m.Max = options.Max
+	m.Base = options.Base
+	m.BitDepth = uint(options.BitDepth)
 	m.TimeQuantum = pilosa.TimeQuantum(options.TimeQuantum)
 	m.Keys = options.Keys
 }

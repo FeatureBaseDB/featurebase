@@ -1,3 +1,17 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pilosa
 
 import (
@@ -19,6 +33,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Log entry type constants.
 const (
 	LogEntryTypeInsertColumn = 1
 	LogEntryTypeInsertRow    = 2
@@ -28,6 +43,7 @@ const (
 	defaultReplicationRetryInterval = 1 * time.Second
 )
 
+// Translate store errors.
 var (
 	ErrTranslateStoreClosed          = errors.New("pilosa: translate store closed")
 	ErrTranslateStoreReaderClosed    = errors.New("pilosa: translate store reader closed")
@@ -85,12 +101,17 @@ type TranslateFile struct {
 // TranslateFileOption is a functional option type for pilosa.TranslateFile
 type TranslateFileOption func(f *TranslateFile) error
 
+// OptTranslateFileMapSize is a functional option on TranslateFile
+// used to set the map size.
 func OptTranslateFileMapSize(mapSize int) TranslateFileOption {
 	return func(f *TranslateFile) error {
 		f.mapSize = mapSize
 		return nil
 	}
 }
+
+// OptTranslateFileLogger is a functional option on TranslateFile
+// used to set the file logger.
 func OptTranslateFileLogger(l logger.Logger) TranslateFileOption {
 	return func(s *TranslateFile) error {
 		s.logger = l
@@ -137,6 +158,7 @@ func NewTranslateFile(opts ...TranslateFileOption) *TranslateFile {
 	return f
 }
 
+// Open opens the translate file.
 func (s *TranslateFile) Open() (err error) {
 	// Open writer & buffered writer.
 	if err := os.MkdirAll(filepath.Dir(s.Path), 0777); err != nil {
@@ -145,6 +167,7 @@ func (s *TranslateFile) Open() (err error) {
 		return errors.Wrapf(err, "open file %s", s.Path)
 	}
 	s.w = bufio.NewWriter(s.file)
+	s.n = 0
 
 	// Memory map data file.
 	if s.data, err = syscall.Mmap(int(s.file.Fd()), 0, s.mapSize, syscall.PROT_READ, syscall.MAP_SHARED); err != nil {
@@ -218,6 +241,7 @@ func (s *TranslateFile) handlePrimaryStoreEvent(ev primaryStoreEvent) error {
 	return nil
 }
 
+// Close closes the translate file.
 func (s *TranslateFile) Close() (err error) {
 	s.once.Do(func() {
 		close(s.closing)
@@ -574,6 +598,7 @@ func (s *TranslateFile) TranslateColumnToString(index string, value uint64) (str
 	return "", nil
 }
 
+// TranslateRowsToUint64 converts a slice of row keys to a slice of row IDs.
 func (s *TranslateFile) TranslateRowsToUint64(index, field string, values []string) ([]uint64, error) {
 	key := fieldKey{index, field}
 
@@ -665,6 +690,7 @@ func (s *TranslateFile) TranslateRowsToUint64(index, field string, values []stri
 	return ret, nil
 }
 
+// TranslateRowToString translates a row ID to a string key.
 func (s *TranslateFile) TranslateRowToString(index, field string, id uint64) (string, error) {
 	s.mu.RLock()
 	if idx := s.rows[fieldKey{index, field}]; idx != nil {
@@ -686,6 +712,8 @@ func (s *TranslateFile) Reader(ctx context.Context, offset int64) (io.ReadCloser
 	return rc, nil
 }
 
+// LogEntry is a batch of Key/ID mappings which is replicated to other nodes
+// for read-only key translation.
 type LogEntry struct {
 	Type  uint8
 	Index []byte

@@ -165,6 +165,14 @@ Set(3, B=6)
 
 Check out this [blog post](/blog/range-encoded-bitmaps/) for some more details about BSI in Pilosa.
 
+
+###### BSI Deprecated Format
+
+The original implementation of BSI required a fixed bit depth when creating fields because the existence bit was written to the bit above the highest bit. The second version of BSI moves the existence bit to the beginning, adds a negative bit as the second bit, and shifts all remaining bits up by two.
+
+Pilosa automatically converts all old data to the new format on startup, however, this can cause issues when upgrading Pilosa and then reverting back to an old version. This documentation section exists as a record for anyone who experiences unusual behavior in BSI between versions.
+
+
 #### Time
 
 Time fields are similar to `set` fields, but in addition to row and column information, they also store a per-bit time value down to a defined granularity. The following example creates a `time` field called "event" which stores timestamp information down to a day granularity.
@@ -186,7 +194,7 @@ Set(3, A=8, 2017-05-19T00:00)
 ```
 
 ![time quantum field diagram](/img/docs/field-time-quantum.png)
-*Time quantum fueld diagram*
+*Time quantum field diagram*
 
 #### Mutex
 

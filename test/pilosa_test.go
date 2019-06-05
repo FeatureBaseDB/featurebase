@@ -28,6 +28,7 @@ import (
 func TestNewCluster(t *testing.T) {
 	numNodes := 3
 	cluster := test.MustRunCluster(t, numNodes)
+	defer cluster.Close()
 
 	coordinator := getCoordinator(cluster[0])
 	for i := 1; i < numNodes; i++ {

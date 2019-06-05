@@ -32,6 +32,6 @@ type nopGCNotifier struct{}
 func (n *nopGCNotifier) Close() {}
 
 // AfterGC is a no-op implementation of GCNotifier AfterGC method.
-func (c *nopGCNotifier) AfterGC() <-chan struct{} {
+func (n *nopGCNotifier) AfterGC() <-chan struct{} {
 	return nil
 }

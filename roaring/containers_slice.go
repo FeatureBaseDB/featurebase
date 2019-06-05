@@ -1,4 +1,4 @@
-// Copyright (C) 2017-2018 Pilosa Corp. All rights reserved.
+// Copyright 2017 Pilosa Corp.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -50,15 +50,21 @@ func (sc *sliceContainers) PutContainerValues(key uint64, typ byte, n int, mappe
 	i := search64(sc.keys, key)
 	if i < 0 {
 		c := NewContainer()
-		c.typ = typ
-		c.n = int32(n)
-		c.mapped = mapped
+		c.setTyp(typ)
+		c.setN(int32(n))
+		c.setMapped(mapped)
 		sc.insertAt(key, c, -i-1)
 	} else {
-		c := sc.containers[i]
-		c.typ = typ
-		c.n = int32(n)
-		c.mapped = mapped
+		// if the container already exists, and is frozen, this may
+		// result in copying its data, which is sort of pointless
+		// because PutContainerValues almost always gets called
+		// because we're reading new data from a file -- but also
+		// that means this case probably never happens.
+		c := sc.containers[i].Thaw()
+		c.setTyp(typ)
+		c.setN(int32(n))
+		c.setMapped(mapped)
+		sc.containers[i] = c
 	}
 
 }
@@ -114,6 +120,17 @@ func (sc *sliceContainers) Clone() Containers {
 	return other
 }
 
+func (sc *sliceContainers) Freeze() Containers {
+	other := newSliceContainers()
+	other.keys = make([]uint64, len(sc.keys))
+	other.containers = make([]*Container, len(sc.containers))
+	copy(other.keys, sc.keys)
+	for i, c := range sc.containers {
+		other.containers[i] = c.Freeze()
+	}
+	return other
+}
+
 func (sc *sliceContainers) Last() (key uint64, c *Container) {
 	if len(sc.keys) == 0 {
 		return 0, nil
@@ -129,7 +146,7 @@ func (sc *sliceContainers) Size() int {
 func (sc *sliceContainers) Count() uint64 {
 	n := uint64(0)
 	for i := range sc.containers {
-		n += uint64(sc.containers[i].n)
+		n += uint64(sc.containers[i].N())
 	}
 	return n
 }
@@ -162,6 +179,42 @@ func (sc *sliceContainers) Repair() {
 	}
 }
 
+// Update calls fn (existing-container, existed), and expects
+// (new-container, write). If write is true, the container is used to
+// replace the given container.
+func (sc *sliceContainers) Update(key uint64, fn func(*Container, bool) (*Container, bool)) {
+	i, found := sc.seek(key)
+	var nc *Container
+	var write bool
+	if found {
+		nc, write = fn(sc.containers[i], true)
+		if write {
+			sc.containers[i] = nc
+		}
+	} else {
+		nc, write = fn(nil, false)
+		// don't expand the slice just to add a nil container, we
+		// could return that anyway
+		if write && nc != nil {
+			sc.containers = append(sc.containers, nil)
+			copy(sc.containers[i+1:], sc.containers[i:])
+			sc.containers[i] = nc
+		}
+	}
+}
+
+// UpdateEvery calls fn (existing-container, existed), and expects
+// (new-container, write). If write is true, the container is used to
+// replace the given container.
+func (sc *sliceContainers) UpdateEvery(fn func(*Container, bool) (*Container, bool)) {
+	for i, c := range sc.containers {
+		nc, write := fn(c, true)
+		if write {
+			sc.containers[i] = nc
+		}
+	}
+}
+
 type sliceIterator struct {
 	e     *sliceContainers
 	i     int
@@ -170,14 +223,20 @@ type sliceIterator struct {
 }
 
 func (si *sliceIterator) Next() bool {
-	if si.e == nil || si.i > len(si.e.keys)-1 {
+	if si.e == nil {
 		return false
 	}
-	si.key = si.e.keys[si.i]
-	si.value = si.e.containers[si.i]
-	si.i++
-
-	return true
+	// discard nil containers from iteration. we don't always
+	// actually remove them because copying is expensive.
+	for si.i < len(si.e.keys) {
+		si.key = si.e.keys[si.i]
+		si.value = si.e.containers[si.i]
+		si.i++
+		if si.value != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (si *sliceIterator) Value() (uint64, *Container) {

@@ -21,13 +21,3 @@
 // "ENTERPRISE=1 make install". These features were dual-licensed separately
 // from Pilosa community edition under the AGPL and Pilosa's commercial license.
 package enterprise
-
-import (
-	"github.com/pilosa/pilosa/enterprise/b"
-	"github.com/pilosa/pilosa/roaring"
-)
-
-func init() { // nolint: gochecknoinits
-	// Replace Bitmap constructor with B+Tree implementation
-	roaring.NewFileBitmap = b.NewBTreeBitmap
-}

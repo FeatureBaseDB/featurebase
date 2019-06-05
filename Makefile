@@ -1,4 +1,4 @@
-.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-pql gometalinter install install-build-deps install-gometalinter install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build test
+.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-pql gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build test
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
@@ -6,6 +6,7 @@ VERSION_ID = $(if $(ENTERPRISE_ENABLED),enterprise-)$(VERSION)-$(GOOS)-$(GOARCH)
 BRANCH := $(if $(TRAVIS_BRANCH),$(TRAVIS_BRANCH),$(if $(CIRCLE_BRANCH),$(CIRCLE_BRANCH),$(shell git rev-parse --abbrev-ref HEAD)))
 BRANCH_ID := $(BRANCH)-$(GOOS)-$(GOARCH)
 BUILD_TIME := $(shell date -u +%FT%T%z)
+SHARD_WIDTH = 20
 LDFLAGS="-X github.com/pilosa/pilosa.Version=$(VERSION) -X github.com/pilosa/pilosa.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa.Enterprise=$(if $(ENTERPRISE_ENABLED),1)"
 GO_VERSION=latest
 ENTERPRISE ?= 0
@@ -14,6 +15,8 @@ RELEASE ?= 0
 RELEASE_ENABLED = $(subst 0,,$(RELEASE))
 BUILD_TAGS += $(if $(ENTERPRISE_ENABLED),enterprise)
 BUILD_TAGS += $(if $(RELEASE_ENABLED),release)
+BUILD_TAGS += shardwidth$(SHARD_WIDTH)
+LICENSE_HASH=$(shell head -13 pilosa.go | shasum | cut -f 1 -d " ")
 export GO111MODULE=on
 
 # Run tests and compile Pilosa
@@ -29,7 +32,7 @@ vendor: go.mod
 
 # Run test suite
 test:
-	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS)
+	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS) 
 
 bench:
 	go test ./... -bench=. -run=NoneZ -timeout=127m $(TESTFLAGS)
@@ -128,6 +131,10 @@ docker-build:
 docker-test:
 	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) go test -tags='$(BUILD_TAGS)' $(TESTFLAGS) ./...
 
+# Run golangci-lint
+golangci-lint: require-golangci-lint
+	golangci-lint run
+
 # Run gometalinter with custom flags
 gometalinter: require-gometalinter vendor
 	GO111MODULE=off gometalinter --vendor --disable-all \
@@ -150,6 +157,13 @@ gometalinter: require-gometalinter vendor
 	    --exclude "^internal/.*\.pb\.go" \
 	    --exclude "^pql/pql.peg.go" \
 	    ./...
+
+# Verify that all Go files have license header
+check-license-headers: SHELL:=/bin/bash
+check-license-headers:
+	@! find . -name '*.go' | grep -v '^./vendor' | while read fn;\
+	    do [[ `head -13 $$fn | shasum | cut -f 1 -d " "` == $(LICENSE_HASH) ]] || echo $$fn; done | \
+	    grep -v apimethod_string.go | grep -v pb.go | grep -v peg.go | grep -v lru.go | grep -v btree | grep -v enterprise
 
 ######################
 # Build dependencies #
@@ -174,6 +188,9 @@ install-protoc:
 
 install-peg:
 	GO111MODULE=off go get github.com/pointlander/peg
+
+install-golangci-lint:
+	GO111MODULE=off go get github.com/golangci/golangci-lint/cmd/golangci-lint
 
 install-gometalinter:
 	GO111MODULE=off go get -u github.com/alecthomas/gometalinter

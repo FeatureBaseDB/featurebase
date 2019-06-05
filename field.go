@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -32,6 +33,7 @@ import (
 	"github.com/pilosa/pilosa/pql"
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pilosa/pilosa/stats"
+	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -58,10 +60,6 @@ const (
 	FieldTypeBool  = "bool"
 )
 
-func defaultShardValidator(shard uint64) bool {
-	return true
-}
-
 // Field represents a container for views.
 type Field struct {
 	mu    sync.RWMutex
@@ -84,7 +82,6 @@ type Field struct {
 
 	// Shards with data on any node in the cluster, according to this node.
 	remoteAvailableShards *roaring.Bitmap
-	shardValidator        func(uint64) bool
 
 	logger logger.Logger
 }
@@ -92,6 +89,8 @@ type Field struct {
 // FieldOption is a functional option type for pilosa.fieldOptions.
 type FieldOption func(fo *FieldOptions) error
 
+// OptFieldKeys is a functional option on FieldOptions
+// used to specify whether keys are used for this field.
 func OptFieldKeys() FieldOption {
 	return func(fo *FieldOptions) error {
 		fo.Keys = true
@@ -99,6 +98,8 @@ func OptFieldKeys() FieldOption {
 	}
 }
 
+// OptFieldTypeDefault is a functional option on FieldOptions
+// used to set the field type and cache setting to the default values.
 func OptFieldTypeDefault() FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
@@ -111,6 +112,9 @@ func OptFieldTypeDefault() FieldOption {
 	}
 }
 
+// OptFieldTypeSet is a functional option on FieldOptions
+// used to specify the field as being type `set` and to
+// provide any respective configuration values.
 func OptFieldTypeSet(cacheType string, cacheSize uint32) FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
@@ -123,13 +127,16 @@ func OptFieldTypeSet(cacheType string, cacheSize uint32) FieldOption {
 	}
 }
 
+// OptFieldTypeInt is a functional option on FieldOptions
+// used to specify the field as being type `int` and to
+// provide any respective configuration values.
 func OptFieldTypeInt(min, max int64) FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
 			return errors.Errorf("field type is already set to: %s", fo.Type)
 		}
 		if min > max {
-			return ErrInvalidBSIGroupRange
+			return errors.New("int field min cannot be greater than max")
 		}
 		fo.Type = FieldTypeInt
 		fo.Min = min
@@ -138,7 +145,9 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 	}
 }
 
-// OptFieldTypeTime sets the field type to time.
+// OptFieldTypeTime is a functional option on FieldOptions
+// used to specify the field as being type `time` and to
+// provide any respective configuration values.
 // Pass true to skip creation of the standard view.
 func OptFieldTypeTime(timeQuantum TimeQuantum, opt ...bool) FieldOption {
 	return func(fo *FieldOptions) error {
@@ -155,6 +164,9 @@ func OptFieldTypeTime(timeQuantum TimeQuantum, opt ...bool) FieldOption {
 	}
 }
 
+// OptFieldTypeMutex is a functional option on FieldOptions
+// used to specify the field as being type `mutex` and to
+// provide any respective configuration values.
 func OptFieldTypeMutex(cacheType string, cacheSize uint32) FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
@@ -167,6 +179,9 @@ func OptFieldTypeMutex(cacheType string, cacheSize uint32) FieldOption {
 	}
 }
 
+// OptFieldTypeBool is a functional option on FieldOptions
+// used to specify the field as being type `bool` and to
+// provide any respective configuration values.
 func OptFieldTypeBool() FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
@@ -212,8 +227,7 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 
 		remoteAvailableShards: roaring.NewBitmap(),
 
-		shardValidator: defaultShardValidator,
-		logger:         logger.NopLogger,
+		logger: logger.NopLogger,
 	}
 	return f, nil
 }
@@ -367,27 +381,33 @@ func (f *Field) Options() FieldOptions {
 func (f *Field) Open() error {
 	if err := func() error {
 		// Ensure the field's path exists.
+		f.logger.Debugf("ensure field path exists: %s", f.path)
 		if err := os.MkdirAll(f.path, 0777); err != nil {
 			return errors.Wrap(err, "creating field dir")
 		}
 
+		f.logger.Debugf("load meta file for index/field: %s/%s", f.index, f.name)
 		if err := f.loadMeta(); err != nil {
 			return errors.Wrap(err, "loading meta")
 		}
 
+		f.logger.Debugf("load available shards for index/field: %s/%s", f.index, f.name)
 		if err := f.loadAvailableShards(); err != nil {
 			return errors.Wrap(err, "loading available shards")
 		}
 
 		// Apply the field options loaded from meta.
+		f.logger.Debugf("apply options for index/field: %s/%s", f.index, f.name)
 		if err := f.applyOptions(f.options); err != nil {
 			return errors.Wrap(err, "applying options")
 		}
 
+		f.logger.Debugf("open views for index/field: %s/%s", f.index, f.name)
 		if err := f.openViews(); err != nil {
 			return errors.Wrap(err, "opening views")
 		}
 
+		f.logger.Debugf("open row attribute store for index/field: %s/%s", f.index, f.name)
 		if err := f.rowAttrStore.Open(); err != nil {
 			return errors.Wrap(err, "opening attrstore")
 		}
@@ -398,6 +418,7 @@ func (f *Field) Open() error {
 		return err
 	}
 
+	f.logger.Debugf("successfully opened field index/field: %s/%s", f.index, f.name)
 	return nil
 }
 
@@ -422,11 +443,29 @@ func (f *Field) openViews() error {
 		}
 
 		name := filepath.Base(fi.Name())
+		f.logger.Debugf("open index/field/view: %s/%s/%s", f.index, f.name, fi.Name())
 		view := f.newView(f.viewPath(name), name)
 		if err := view.open(); err != nil {
 			return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
 		}
+
+		// Automatically upgrade BSI v1 fragments if they exist & reopen view.
+		if bsig := f.bsiGroup(f.name); bsig != nil {
+			if ok, err := upgradeViewBSIv2(view, bsig.BitDepth); err != nil {
+				return errors.Wrap(err, "upgrade view bsi v2")
+			} else if ok {
+				if err := view.close(); err != nil {
+					return errors.Wrap(err, "closing upgraded view")
+				}
+				view = f.newView(f.viewPath(name), name)
+				if err := view.open(); err != nil {
+					return fmt.Errorf("re-opening view: view=%s, err=%s", view.name, err)
+				}
+			}
+		}
+
 		view.rowAttrStore = f.rowAttrStore
+		f.logger.Debugf("add index/field/view to field.viewMap: %s/%s/%s", f.index, f.name, view.name)
 		f.viewMap[view.name] = view
 	}
 
@@ -449,12 +488,23 @@ func (f *Field) loadMeta() error {
 		}
 	}
 
+	// Initialize "base" to "min" when upgrading from v1 BSI format.
+	if pb.BitDepth == 0 {
+		pb.Base = pb.Min
+		pb.BitDepth = uint64(bitDepthInt64(pb.Max - pb.Min))
+		if pb.BitDepth == 0 {
+			pb.BitDepth = 1
+		}
+	}
+
 	// Copy metadata fields.
 	f.options.Type = pb.Type
 	f.options.CacheType = pb.CacheType
 	f.options.CacheSize = pb.CacheSize
 	f.options.Min = pb.Min
 	f.options.Max = pb.Max
+	f.options.Base = pb.Base
+	f.options.BitDepth = uint(pb.BitDepth)
 	f.options.TimeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.options.Keys = pb.Keys
 	f.options.NoStandardView = pb.NoStandardView
@@ -500,6 +550,8 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		}
 		f.options.Min = 0
 		f.options.Max = 0
+		f.options.Base = 0
+		f.options.BitDepth = 0
 		f.options.TimeQuantum = ""
 		f.options.Keys = opt.Keys
 	case FieldTypeInt:
@@ -508,15 +560,19 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.CacheSize = 0
 		f.options.Min = opt.Min
 		f.options.Max = opt.Max
+		f.options.Base = opt.Base
+		f.options.BitDepth = opt.BitDepth
 		f.options.TimeQuantum = ""
 		f.options.Keys = opt.Keys
 
 		// Create new bsiGroup.
 		bsig := &bsiGroup{
-			Name: f.name,
-			Type: bsiGroupTypeInt,
-			Min:  opt.Min,
-			Max:  opt.Max,
+			Name:     f.name,
+			Type:     bsiGroupTypeInt,
+			Min:      opt.Min,
+			Max:      opt.Max,
+			Base:     opt.Base,
+			BitDepth: opt.BitDepth,
 		}
 		// Validate bsiGroup.
 		if err := bsig.validate(); err != nil {
@@ -531,6 +587,8 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.CacheSize = 0
 		f.options.Min = 0
 		f.options.Max = 0
+		f.options.Base = 0
+		f.options.BitDepth = 0
 		f.options.Keys = opt.Keys
 		f.options.NoStandardView = opt.NoStandardView
 		// Set the time quantum.
@@ -544,6 +602,8 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.CacheSize = 0
 		f.options.Min = 0
 		f.options.Max = 0
+		f.options.Base = 0
+		f.options.BitDepth = 0
 		f.options.TimeQuantum = ""
 		f.options.Keys = false
 	default:
@@ -612,7 +672,9 @@ func (f *Field) createBSIGroup(bsig *bsiGroup) error {
 	if err := f.addBSIGroup(bsig); err != nil {
 		return err
 	}
-	f.saveMeta()
+	if err := f.saveMeta(); err != nil {
+		return errors.Wrap(err, "saving")
+	}
 	return nil
 }
 
@@ -760,7 +822,6 @@ func (f *Field) newView(path, name string) *view {
 	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats.WithTags(fmt.Sprintf("view:%s", name))
 	view.broadcaster = f.broadcaster
-	view.shardValidator = f.shardValidator
 	return view
 }
 
@@ -941,18 +1002,18 @@ func (f *Field) Value(columnID uint64) (value int64, exists bool, err error) {
 		return 0, false, nil
 	}
 
-	v, exists, err := view.value(columnID, bsig.BitDepth())
+	v, exists, err := view.value(columnID, bsig.BitDepth)
 	if err != nil {
 		return 0, false, err
 	} else if !exists {
 		return 0, false, nil
 	}
-	return int64(v) + bsig.Min, true, nil
+	return int64(v) + bsig.Base, true, nil
 }
 
 // SetValue sets a field value for a column.
 func (f *Field) SetValue(columnID uint64, value int64) (changed bool, err error) {
-	// Fetch bsiGroup and validate value.
+	// Fetch bsiGroup & validate min/max.
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return false, ErrBSIGroupNotFound
@@ -962,16 +1023,37 @@ func (f *Field) SetValue(columnID uint64, value int64) (changed bool, err error)
 		return false, ErrBSIGroupValueTooHigh
 	}
 
+	// Determine base value to store.
+	baseValue := int64(value - bsig.Base)
+	requiredBitDepth := bitDepthInt64(baseValue)
+
+	// Increase bit depth value if the unsigned value is greater.
+	if requiredBitDepth > bsig.BitDepth {
+		if err := func() error {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+
+			uvalue := uint64(baseValue)
+			if value < 0 {
+				uvalue = uint64(-baseValue)
+			}
+			bitDepth := bitDepth(uvalue)
+
+			bsig.BitDepth = bitDepth
+			f.options.BitDepth = bitDepth
+			return f.saveMeta()
+		}(); err != nil {
+			return false, errors.Wrap(err, "increasing bsi max")
+		}
+	}
+
 	// Fetch target view.
 	view, err := f.createViewIfNotExists(viewBSIGroupPrefix + f.name)
 	if err != nil {
 		return false, errors.Wrap(err, "creating view")
 	}
 
-	// Determine base value to store.
-	baseValue := uint64(value - bsig.Min)
-
-	return view.setValue(columnID, bsig.BitDepth(), baseValue)
+	return view.setValue(columnID, bsig.BitDepth, baseValue)
 }
 
 // Sum returns the sum and count for a field.
@@ -987,11 +1069,11 @@ func (f *Field) Sum(filter *Row, name string) (sum, count int64, err error) {
 		return 0, 0, nil
 	}
 
-	vsum, vcount, err := view.sum(filter, bsig.BitDepth())
+	vsum, vcount, err := view.sum(filter, bsig.BitDepth)
 	if err != nil {
 		return 0, 0, err
 	}
-	return int64(vsum) + (int64(vcount) * bsig.Min), int64(vcount), nil
+	return int64(vsum) + (int64(vcount) * bsig.Base), int64(vcount), nil
 }
 
 // Min returns the min for a field.
@@ -1007,11 +1089,11 @@ func (f *Field) Min(filter *Row, name string) (min, count int64, err error) {
 		return 0, 0, nil
 	}
 
-	vmin, vcount, err := view.min(filter, bsig.BitDepth())
+	vmin, vcount, err := view.min(filter, bsig.BitDepth)
 	if err != nil {
 		return 0, 0, err
 	}
-	return int64(vmin) + bsig.Min, int64(vcount), nil
+	return int64(vmin) + bsig.Base, int64(vcount), nil
 }
 
 // Max returns the max for a field.
@@ -1027,13 +1109,14 @@ func (f *Field) Max(filter *Row, name string) (max, count int64, err error) {
 		return 0, 0, nil
 	}
 
-	vmax, vcount, err := view.max(filter, bsig.BitDepth())
+	vmax, vcount, err := view.max(filter, bsig.BitDepth)
 	if err != nil {
 		return 0, 0, err
 	}
-	return int64(vmax) + bsig.Min, int64(vcount), nil
+	return int64(vmax) + bsig.Base, int64(vcount), nil
 }
 
+// Range performs a conditional operation on Field.
 func (f *Field) Range(name string, op pql.Token, predicate int64) (*Row, error) {
 	// Retrieve and validate bsiGroup.
 	bsig := f.bsiGroup(name)
@@ -1054,7 +1137,7 @@ func (f *Field) Range(name string, op pql.Token, predicate int64) (*Row, error) 
 		return NewRow(), nil
 	}
 
-	return view.rangeOp(op, bsig.BitDepth(), baseValue)
+	return view.rangeOp(op, bsig.BitDepth, baseValue)
 }
 
 // Import bulk imports data.
@@ -1147,6 +1230,36 @@ func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportO
 		return errors.Wrap(ErrBSIGroupNotFound, f.name)
 	}
 
+	// Find the lowest/highest values.
+	var min, max int64
+	for i, value := range values {
+		if i == 0 || value < min {
+			min = value
+		}
+		if i == 0 || value > max {
+			max = value
+		}
+	}
+
+	// Determine the highest bit depth required by the min & max.
+	requiredDepth := bitDepthInt64(min - bsig.Base)
+	if v := bitDepthInt64(max - bsig.Base); v > requiredDepth {
+		requiredDepth = v
+	}
+
+	// Increase bit depth if required.
+	if requiredDepth > bsig.BitDepth {
+		if err := func() error {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			bsig.BitDepth = requiredDepth
+			f.options.BitDepth = requiredDepth
+			return f.saveMeta()
+		}(); err != nil {
+			return errors.Wrap(err, "increasing bsi bit depth")
+		}
+	}
+
 	// Split import data by fragment.
 	dataByFragment := make(map[importKey]importValueData)
 	for i := range columnIDs {
@@ -1169,7 +1282,6 @@ func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportO
 
 	// Import into each fragment.
 	for key, data := range dataByFragment {
-
 		// The view must already exist (i.e. we can't create it)
 		// because we need to know bitDepth (based on min/max value).
 		view, err := f.createViewIfNotExists(key.View)
@@ -1182,12 +1294,12 @@ func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportO
 			return errors.Wrap(err, "creating fragment")
 		}
 
-		baseValues := make([]uint64, len(data.Values))
+		baseValues := make([]int64, len(data.Values))
 		for i, value := range data.Values {
-			baseValues[i] = uint64(value - bsig.Min)
+			baseValues[i] = value - bsig.Base
 		}
 
-		if err := frag.importValue(data.ColumnIDs, baseValues, bsig.BitDepth(), options.Clear); err != nil {
+		if err := frag.importValue(data.ColumnIDs, baseValues, requiredDepth, options.Clear); err != nil {
 			return err
 		}
 	}
@@ -1195,10 +1307,14 @@ func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportO
 	return nil
 }
 
-func (f *Field) importRoaring(data []byte, shard uint64, viewName string, clear bool) error {
+func (f *Field) importRoaring(ctx context.Context, data []byte, shard uint64, viewName string, clear bool) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Field.importRoaring")
+	defer span.Finish()
+
 	if viewName == "" {
 		viewName = viewStandard
 	}
+	span.LogKV("view", viewName, "bytes", len(data), "shard", shard)
 	view, err := f.createViewIfNotExists(viewName)
 	if err != nil {
 		return errors.Wrap(err, "creating view")
@@ -1209,7 +1325,7 @@ func (f *Field) importRoaring(data []byte, shard uint64, viewName string, clear 
 		return errors.Wrap(err, "creating fragment")
 	}
 
-	if err := frag.importRoaring(data, clear); err != nil {
+	if err := frag.importRoaring(ctx, data, clear); err != nil {
 		return err
 	}
 
@@ -1237,6 +1353,8 @@ func (p fieldInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 
 // FieldOptions represents options to set when initializing a field.
 type FieldOptions struct {
+	Base           int64       `json:"base,omitempty"`
+	BitDepth       uint        `json:"bitDepth,omitempty"`
 	Min            int64       `json:"min,omitempty"`
 	Max            int64       `json:"max,omitempty"`
 	Keys           bool        `json:"keys"`
@@ -1273,6 +1391,8 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 		Type:           o.Type,
 		CacheType:      o.CacheType,
 		CacheSize:      o.CacheSize,
+		Base:           o.Base,
+		BitDepth:       uint64(o.BitDepth),
 		Min:            o.Min,
 		Max:            o.Max,
 		TimeQuantum:    string(o.TimeQuantum),
@@ -1281,6 +1401,9 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 	}
 }
 
+// MarshalJSON marshals FieldOptions to JSON such that
+// only those attributes associated to the field type
+// are included.
 func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 	switch o.Type {
 	case FieldTypeSet:
@@ -1297,12 +1420,16 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 		})
 	case FieldTypeInt:
 		return json.Marshal(struct {
-			Type string `json:"type"`
-			Min  int64  `json:"min"`
-			Max  int64  `json:"max"`
-			Keys bool   `json:"keys"`
+			Type     string `json:"type"`
+			Base     int64  `json:"base"`
+			BitDepth uint   `json:"bitDepth"`
+			Min      int64  `json:"min"`
+			Max      int64  `json:"max"`
+			Keys     bool   `json:"keys"`
 		}{
 			o.Type,
+			o.Base,
+			o.BitDepth,
 			o.Min,
 			o.Max,
 			o.Keys,
@@ -1357,20 +1484,12 @@ func isValidBSIGroupType(v string) bool {
 
 // bsiGroup represents a group of range-encoded rows on a field.
 type bsiGroup struct {
-	Name string `json:"name,omitempty"`
-	Type string `json:"type,omitempty"`
-	Min  int64  `json:"min,omitempty"`
-	Max  int64  `json:"max,omitempty"`
-}
-
-// BitDepth returns the number of bits required to store a value between min & max.
-func (b *bsiGroup) BitDepth() uint {
-	for i := uint(0); i < 63; i++ {
-		if b.Max-b.Min < (1 << i) {
-			return i
-		}
-	}
-	return 63
+	Name     string `json:"name,omitempty"`
+	Type     string `json:"type,omitempty"`
+	Min      int64  `json:"min,omitempty"`
+	Max      int64  `json:"max,omitempty"`
+	Base     int64  `json:"base,omitempty"`
+	BitDepth uint   `json:"bitDepth,omitempty"`
 }
 
 // baseValue adjusts the value to align with the range for Field for a certain
@@ -1385,46 +1504,47 @@ func (b *bsiGroup) BitDepth() uint {
 // In order to make this work, we effectively need to change the operator to LTE.
 // Executor.executeBSIGroupRangeShard() takes this into account and returns
 // `frag.FieldNotNull(bsig.BitDepth())` in such instances.
-func (b *bsiGroup) baseValue(op pql.Token, value int64) (baseValue uint64, outOfRange bool) {
+func (b *bsiGroup) baseValue(op pql.Token, value int64) (baseValue int64, outOfRange bool) {
+	min, max := b.bitDepthMin(), b.bitDepthMax()
+
 	if op == pql.GT || op == pql.GTE {
-		if value > b.Max {
+		if value > max {
 			return baseValue, true
-		} else if value > b.Min {
-			baseValue = uint64(value - b.Min)
+		} else if value > min {
+			baseValue = int64(value - b.Base)
 		}
 	} else if op == pql.LT || op == pql.LTE {
-		if value < b.Min {
+		if value < min {
 			return baseValue, true
-		} else if value > b.Max {
-			baseValue = uint64(b.Max - b.Min)
+		} else if value > max {
+			baseValue = int64(max - b.Base)
 		} else {
-			baseValue = uint64(value - b.Min)
+			baseValue = int64(value - b.Base)
 		}
 	} else if op == pql.EQ || op == pql.NEQ {
-		if value < b.Min || value > b.Max {
+		if value < min || value > max {
 			return baseValue, true
 		}
-		baseValue = uint64(value - b.Min)
+		baseValue = int64(value - b.Base)
 	}
 	return baseValue, false
 }
 
 // baseValueBetween adjusts the min/max value to align with the range for Field.
-func (b *bsiGroup) baseValueBetween(min, max int64) (baseValueMin, baseValueMax uint64, outOfRange bool) {
-	if max < b.Min || min > b.Max {
-		return baseValueMin, baseValueMax, true
+func (b *bsiGroup) baseValueBetween(lo, hi int64) (baseValueLo, baseValueHi int64, outOfRange bool) {
+	min, max := b.bitDepthMin(), b.bitDepthMax()
+	if hi < min || lo > max {
+		return 0, 0, true
 	}
-	// Adjust min/max to range.
-	if min > b.Min {
-		baseValueMin = uint64(min - b.Min)
+
+	// Limit lo/hi to possible bit range.
+	if lo < min {
+		lo = min
 	}
-	// Make sure the high value of the BETWEEN does not exceed BitDepth.
-	if max > b.Max {
-		baseValueMax = uint64(b.Max - b.Min)
-	} else if max > b.Min {
-		baseValueMax = uint64(max - b.Min)
+	if hi > max {
+		hi = max
 	}
-	return baseValueMin, baseValueMax, false
+	return lo - b.Base, hi - b.Base, false
 }
 
 func (b *bsiGroup) validate() error {
@@ -1432,10 +1552,18 @@ func (b *bsiGroup) validate() error {
 		return ErrBSIGroupNameRequired
 	} else if !isValidBSIGroupType(b.Type) {
 		return ErrInvalidBSIGroupType
-	} else if b.Min > b.Max {
-		return ErrInvalidBSIGroupRange
 	}
 	return nil
+}
+
+// bitDepthMin returns the minimum value possible for the current bit depth.
+func (b *bsiGroup) bitDepthMin() int64 {
+	return b.Base - (1 << b.BitDepth) + 1
+}
+
+// bitDepthMax returns the maximum value possible for the current bit depth.
+func (b *bsiGroup) bitDepthMax() int64 {
+	return b.Base + (1 << b.BitDepth) - 1
 }
 
 // Cache types.
@@ -1453,4 +1581,22 @@ func isValidCacheType(v string) bool {
 	default:
 		return false
 	}
+}
+
+// bitDepth returns the number of bits required to store a value.
+func bitDepth(v uint64) uint {
+	for i := uint(0); i < 63; i++ {
+		if v < (1 << i) {
+			return i
+		}
+	}
+	return 63
+}
+
+// bitDepthInt64 returns the required bit depth for abs(v).
+func bitDepthInt64(v int64) uint {
+	if v < 0 {
+		return bitDepth(uint64(-v))
+	}
+	return bitDepth(uint64(v))
 }
