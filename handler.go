@@ -1,3 +1,17 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pilosa
 
 import (
@@ -60,6 +74,8 @@ func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// Handler is the interface for the data handler, a wrapper around
+// Pilosa's data store.
 type Handler interface {
 	Serve() error
 	Close() error
@@ -75,8 +91,11 @@ func (n nopHandler) Close() error {
 	return nil
 }
 
+// NopHandler is a no-op implementation of the Handler interface.
 var NopHandler Handler = nopHandler{}
 
+// ImportValueRequest describes the import request structure
+// for a value (BSI) import.
 type ImportValueRequest struct {
 	Index      string
 	Field      string
@@ -86,6 +105,8 @@ type ImportValueRequest struct {
 	Values     []int64
 }
 
+// ImportRequest describes the import request structure
+// for an import.
 type ImportRequest struct {
 	Index      string
 	Field      string
@@ -97,15 +118,20 @@ type ImportRequest struct {
 	Timestamps []int64
 }
 
+// ImportRoaringRequest describes the import request structure
+// for an import containing roaring-encoded data.
 type ImportRoaringRequest struct {
 	Clear bool
 	Views map[string][]byte
 }
 
+// ImportResponse is the structured response of an import.
 type ImportResponse struct {
 	Err string
 }
 
+// BlockDataRequest describes the structure of a request
+// for fragment block data.
 type BlockDataRequest struct {
 	Index string
 	Field string
@@ -114,17 +140,23 @@ type BlockDataRequest struct {
 	Block uint64
 }
 
+// BlockDataResponse is the structured response of a block
+// data request.
 type BlockDataResponse struct {
 	RowIDs    []uint64
 	ColumnIDs []uint64
 }
 
+// TranslateKeysRequest describes the structure of a request
+// for a batch of key translations.
 type TranslateKeysRequest struct {
 	Index string
 	Field string
 	Keys  []string
 }
 
+// TranslateKeysResponse is the structured response of a key
+// translation request.
 type TranslateKeysResponse struct {
 	IDs []uint64
 }

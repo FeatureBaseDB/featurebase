@@ -77,8 +77,6 @@ type Holder struct {
 	// The interval at which the cached row ids are persisted to disk.
 	cacheFlushInterval time.Duration
 
-	shardValidatorFunc func(index string, shard uint64) bool
-
 	Logger logger.Logger
 }
 
@@ -125,9 +123,6 @@ func NewHolder() *Holder {
 		NewAttrStore: newNopAttrStore,
 
 		cacheFlushInterval: defaultCacheFlushInterval,
-		shardValidatorFunc: func(index string, shard uint64) bool {
-			return true //default
-		},
 
 		Logger: logger.NopLogger,
 	}
@@ -430,9 +425,6 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	index.broadcaster = h.broadcaster
 	index.newAttrStore = h.NewAttrStore
 	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ".data"))
-	index.shardValidator = func(shard uint64) bool {
-		return h.shardValidatorFunc(name, shard)
-	}
 	return index, nil
 }
 
@@ -587,7 +579,6 @@ func (h *Holder) setFileLimit() {
 
 func (h *Holder) loadNodeID() (string, error) {
 	idPath := path.Join(h.Path, ".id")
-	nodeID := ""
 	h.Logger.Printf("load NodeID: %s", idPath)
 	if err := os.MkdirAll(h.Path, 0777); err != nil {
 		return "", errors.Wrap(err, "creating directory")
@@ -595,17 +586,16 @@ func (h *Holder) loadNodeID() (string, error) {
 
 	nodeIDBytes, err := ioutil.ReadFile(idPath)
 	if err == nil {
-		nodeID = strings.TrimSpace(string(nodeIDBytes))
-	} else if os.IsNotExist(err) {
-		nodeID = uuid.NewV4().String()
-		err = ioutil.WriteFile(idPath, []byte(nodeID), 0600)
-		if err != nil {
-			return "", errors.Wrap(err, "writing file")
-		}
-	} else if err != nil {
+		return strings.TrimSpace(string(nodeIDBytes)), nil
+	}
+	if !os.IsNotExist(err) {
 		return "", errors.Wrap(err, "reading file")
 	}
-
+	nodeID := uuid.NewV4().String()
+	err = ioutil.WriteFile(idPath, []byte(nodeID), 0600)
+	if err != nil {
+		return "", errors.Wrap(err, "writing file")
+	}
 	return nodeID, nil
 }
 

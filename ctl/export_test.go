@@ -44,7 +44,9 @@ func TestExportCommand_Validation(t *testing.T) {
 }
 
 func TestExportCommand_Run(t *testing.T) {
-	cmd := test.MustRunCluster(t, 1)[0]
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
 
 	buf := bytes.Buffer{}
 	stdin, stdout, stderr := GetIO(buf)
@@ -52,8 +54,16 @@ func TestExportCommand_Run(t *testing.T) {
 	hostport := cmd.API.Node().URI.HostPort()
 	cm.Host = hostport
 
-	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", "http://"+hostport+"/index/i", strings.NewReader("")))
-	http.DefaultClient.Do(test.MustNewHTTPRequest("POST", "http://"+hostport+"/index/i/field/f", strings.NewReader("")))
+	resp, err := http.DefaultClient.Do(test.MustNewHTTPRequest("POST", "http://"+hostport+"/index/i", strings.NewReader("")))
+	if err != nil {
+		t.Fatalf("making http request: %v", err)
+	}
+	resp.Body.Close()
+	resp, err = http.DefaultClient.Do(test.MustNewHTTPRequest("POST", "http://"+hostport+"/index/i/field/f", strings.NewReader("")))
+	if err != nil {
+		t.Fatalf("making http request: %v", err)
+	}
+	resp.Body.Close()
 
 	cm.Index = "i"
 	cm.Field = "f"

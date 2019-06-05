@@ -56,8 +56,11 @@ func defaultURI() *URI {
 	}
 }
 
+// URIs is a convenience type representing a slice of URI.
 type URIs []URI
 
+// HostPortStrings returns a slice of host:port strings
+// based on the slice of URI.
 func (u URIs) HostPortStrings() []string {
 	s := make([]string, len(u))
 	for i, a := range u {
@@ -199,6 +202,7 @@ func (u *URI) MarshalJSON() ([]byte, error) {
 	return json.Marshal(output)
 }
 
+// UnmarshalJSON unmarshals a byte slice to a URI.
 func (u *URI) UnmarshalJSON(b []byte) error {
 	var input struct {
 		Scheme string `json:"scheme,omitempty"`

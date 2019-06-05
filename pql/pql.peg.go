@@ -15,7 +15,7 @@ const endSymbol rune = 1114112
 type pegRule uint8
 
 const (
-	ruleUnknown pegRule = iota
+	ruleUnknown pegRule = iota // nolint:varcheck,deadcode,unused
 	ruleCalls
 	ruleCall
 	ruleallargs

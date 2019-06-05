@@ -1,3 +1,17 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pilosa_test
 
 import (
@@ -744,6 +758,156 @@ func TestTranslateFile_ReassignPrimaryTranslateStore(t *testing.T) {
 	})
 }
 
+func TestTranslateFile_ReopenTheSameInstance(t *testing.T) {
+	s := MustOpenTranslateFile()
+	defer s.MustClose()
+
+	// First translation should start id at zero.
+	if ids, err := s.TranslateColumnsToUint64("IDX0", []string{"foo"}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(ids, []uint64{1}) {
+		t.Fatalf("unexpected id: %#v", ids)
+	}
+
+	// Next translation on the same index should move to one.
+	if ids, err := s.TranslateColumnsToUint64("IDX0", []string{"bar"}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(ids, []uint64{2}) {
+		t.Fatalf("unexpected id: %#v", ids)
+	}
+
+	// Translation on a different index restarts at 0.
+	if ids, err := s.TranslateColumnsToUint64("IDX1", []string{"bar"}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(ids, []uint64{1}) {
+		t.Fatalf("unexpected id: %#v", ids)
+	}
+
+	// Ensure that string values can be looked up by ID.
+	if value, err := s.TranslateColumnToString("IDX0", 2); err != nil {
+		t.Fatal(err)
+	} else if value != "bar" {
+		t.Fatalf("unexpected value: %s", value)
+	}
+
+	if value, err := s.TranslateColumnToString("IDX0", 1); err != nil {
+		t.Fatal(err)
+	} else if value != "foo" {
+		t.Fatalf("unexpected value: %s", value)
+	}
+
+	// Ensure that non-existent values return "".
+	if value, err := s.TranslateColumnToString("IDX0", 1000); err != nil {
+		t.Fatal(err)
+	} else if value != "" {
+		t.Fatalf("unexpected value: %s", value)
+	}
+
+	if err := s.TranslateFile.Close(); err != nil {
+		panic(err)
+	}
+	s.MustOpen()
+
+	// Ensure translation is still correct after reopen.
+	if ids, err := s.TranslateColumnsToUint64("IDX1", []string{"bar"}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(ids, []uint64{1}) {
+		t.Fatalf("unexpected id: %#v", ids)
+	}
+
+	// Ensure translation is still correct after reopen.
+	if value, err := s.TranslateColumnToString("IDX0", 2); err != nil {
+		t.Fatal(err)
+	} else if value != "bar" {
+		t.Fatalf("unexpected value: %s", value)
+	}
+
+	// Next translation on the same index should move to one.
+	if ids, err := s.TranslateColumnsToUint64("IDX0", []string{"baz"}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(ids, []uint64{3}) {
+		t.Fatalf("unexpected id: %#v", ids)
+	}
+
+	if err := s.TranslateFile.Close(); err != nil {
+		panic(err)
+	}
+	s.MustOpen()
+
+	// First translation should start id at zero.
+	if ids, err := s.TranslateRowsToUint64("IDX0", "FIELD0", []string{"foo"}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(ids, []uint64{1}) {
+		t.Fatalf("unexpected id: %#v", ids)
+	}
+
+	// Next translation on the same index should move to one.
+	if ids, err := s.TranslateRowsToUint64("IDX0", "FIELD0", []string{"bar"}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(ids, []uint64{2}) {
+		t.Fatalf("unexpected id: %#v", ids)
+	}
+
+	// Translation on a different index restarts at 0.
+	if ids, err := s.TranslateRowsToUint64("IDX1", "FIELD0", []string{"bar"}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(ids, []uint64{1}) {
+		t.Fatalf("unexpected id: %#v", ids)
+	}
+
+	// Translation on a different field restarts at 0.
+	if ids, err := s.TranslateRowsToUint64("IDX0", "FIELD1", []string{"bar"}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(ids, []uint64{1}) {
+		t.Fatalf("unexpected id: %#v", ids)
+	}
+
+	// Ensure that string values can be looked up by ID.
+	if value, err := s.TranslateRowToString("IDX0", "FIELD0", 2); err != nil {
+		t.Fatal(err)
+	} else if value != "bar" {
+		t.Fatalf("unexpected value: %s", value)
+	}
+
+	// Ensure that non-existent values return blank.
+	if value, err := s.TranslateRowToString("IDX0", "FIELD0", 1000); err != nil {
+		t.Fatal(err)
+	} else if value != "" {
+		t.Fatalf("unexpected value: %s", value)
+	}
+
+	if err := s.TranslateFile.Close(); err != nil {
+		panic(err)
+	}
+	// Reopen the store.
+	s.MustOpen()
+
+	// Translation on a different field restarts at 0.
+	if ids, err := s.TranslateRowsToUint64("IDX0", "FIELD1", []string{"bar"}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(ids, []uint64{1}) {
+		t.Fatalf("unexpected id: %#v", ids)
+	}
+
+	// Ensure that string values can be looked up by ID.
+	if value, err := s.TranslateRowToString("IDX0", "FIELD0", 2); err != nil {
+		t.Fatal(err)
+	} else if value != "bar" {
+		t.Fatalf("unexpected value: %s", value)
+	}
+
+	// Translate new row and increment sequence.
+	if ids, err := s.TranslateRowsToUint64("IDX0", "FIELD0", []string{"baz"}); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(ids, []uint64{3}) {
+		t.Fatalf("unexpected id: %#v", ids)
+	}
+
+	if err := s.TranslateFile.Close(); err != nil {
+		panic(err)
+	}
+}
+
 func BenchmarkTranslateFile_TranslateColumnsToUint64(b *testing.B) {
 	const batchSize = 1000
 
@@ -822,10 +986,14 @@ func (t *TranslateFile) Reader(ctx context.Context, offset int64) (io.ReadCloser
 
 func MustOpenTranslateFile() *TranslateFile {
 	s := NewTranslateFile()
+	s.MustOpen()
+	return s
+}
+
+func (s *TranslateFile) MustOpen() {
 	if err := s.Open(); err != nil {
 		panic(err)
 	}
-	return s
 }
 
 func (s *TranslateFile) Close() error {

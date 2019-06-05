@@ -43,6 +43,7 @@ func NewRow(columns ...uint64) *Row {
 	return r
 }
 
+// IsEmpty returns true if the row doesn't contain any set bits.
 func (r *Row) IsEmpty() bool {
 	if len(r.segments) == 0 {
 		return true
@@ -54,6 +55,12 @@ func (r *Row) IsEmpty() bool {
 
 	}
 	return true
+}
+
+func (r *Row) Freeze() {
+	for _, s := range r.segments {
+		s.Freeze()
+	}
 }
 
 // Merge merges data from other into r.
@@ -110,6 +117,16 @@ func (r *Row) Intersect(other *Row) *Row {
 	}
 
 	return &Row{segments: segments}
+}
+
+// Any returns true if row contains any bits.
+func (r *Row) Any() bool {
+	for _, s := range r.segments {
+		if s.data.Any() {
+			return true
+		}
+	}
+	return false
 }
 
 // Xor returns the xor of r and other.
@@ -199,15 +216,6 @@ func (r *Row) SetBit(i uint64) (changed bool) {
 	return r.createSegmentIfNotExists(i / ShardWidth).SetBit(i)
 }
 
-// clearBit clears the i-th column of the row.
-func (r *Row) clearBit(i uint64) (changed bool) { // nolint: unparam
-	s := r.segment(i / ShardWidth)
-	if s == nil {
-		return false
-	}
-	return s.ClearBit(i)
-}
-
 // Segments returns a list of all segments in the row.
 func (r *Row) Segments() []rowSegment {
 	return r.segments
@@ -235,12 +243,12 @@ func (r *Row) createSegmentIfNotExists(shard uint64) *rowSegment {
 	}
 
 	// Insert new segment.
-	r.segments = append(r.segments, rowSegment{data: *roaring.NewBitmap()})
+	r.segments = append(r.segments, rowSegment{data: roaring.NewSliceBitmap()})
 	if i < len(r.segments) {
 		copy(r.segments[i+1:], r.segments[i:])
 	}
 	r.segments[i] = rowSegment{
-		data:     *roaring.NewBitmap(),
+		data:     roaring.NewSliceBitmap(),
 		shard:    shard,
 		writable: true,
 	}
@@ -301,11 +309,15 @@ type rowSegment struct {
 	// Underlying raw bitmap implementation.
 	// This is an mmapped bitmap if writable is false. Otherwise
 	// it is a heap allocated bitmap which can be manipulated.
-	data     roaring.Bitmap
+	data     *roaring.Bitmap
 	writable bool
 
 	// Bit count
 	n uint64
+}
+
+func (s *rowSegment) Freeze() {
+	s.data.Freeze()
 }
 
 // Merge adds chunks from other to s.
@@ -321,50 +333,58 @@ func (s *rowSegment) Merge(other *rowSegment) {
 
 // IntersectionCount returns the number of intersections between s and other.
 func (s *rowSegment) IntersectionCount(other *rowSegment) uint64 {
-	return s.data.IntersectionCount(&other.data)
+	return s.data.IntersectionCount(other.data)
 }
 
 // Intersect returns the itersection of s and other.
 func (s *rowSegment) Intersect(other *rowSegment) *rowSegment {
-	data := s.data.Intersect(&other.data)
+	data := s.data.Intersect(other.data)
+	data.Freeze()
 
 	return &rowSegment{
-		data:  *data,
-		shard: s.shard,
-		n:     data.Count(),
+		data:     data,
+		shard:    s.shard,
+		n:        data.Count(),
+		writable: true,
 	}
 }
 
 // Union returns the bitwise union of s and other.
 func (s *rowSegment) Union(other *rowSegment) *rowSegment {
-	data := s.data.Union(&other.data)
+	data := s.data.Union(other.data)
+	data.Freeze()
 
 	return &rowSegment{
-		data:  *data,
-		shard: s.shard,
-		n:     data.Count(),
+		data:     data,
+		shard:    s.shard,
+		n:        data.Count(),
+		writable: true,
 	}
 }
 
 // Difference returns the diff of s and other.
 func (s *rowSegment) Difference(other *rowSegment) *rowSegment {
-	data := s.data.Difference(&other.data)
+	data := s.data.Difference(other.data)
+	data.Freeze()
 
 	return &rowSegment{
-		data:  *data,
-		shard: s.shard,
-		n:     data.Count(),
+		data:     data,
+		shard:    s.shard,
+		n:        data.Count(),
+		writable: true,
 	}
 }
 
 // Xor returns the xor of s and other.
 func (s *rowSegment) Xor(other *rowSegment) *rowSegment {
-	data := s.data.Xor(&other.data)
+	data := s.data.Xor(other.data)
+	data.Freeze()
 
 	return &rowSegment{
-		data:  *data,
-		shard: s.shard,
-		n:     data.Count(),
+		data:     data,
+		shard:    s.shard,
+		n:        data.Count(),
+		writable: true,
 	}
 }
 
@@ -375,11 +395,13 @@ func (s *rowSegment) Shift() (*rowSegment, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "shifting roaring data")
 	}
+	data.Freeze()
 
 	return &rowSegment{
-		data:  *data,
-		shard: s.shard,
-		n:     data.Count(),
+		data:     data,
+		shard:    s.shard,
+		n:        data.Count(),
+		writable: true,
 	}, nil
 }
 
@@ -428,7 +450,11 @@ func (s *rowSegment) ensureWritable() {
 		return
 	}
 
-	s.data = *s.data.Clone()
+	// This doesn't actually clone all the containers, but does clone
+	// the bitmap itself -- we get a new bitmap, but it just marks the
+	// containers as frozen and shares them. It's now safe to write to
+	// this bitmap, but the actual containers are copy-on-write.
+	s.data = s.data.Freeze()
 	s.writable = true
 }
 

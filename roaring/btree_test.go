@@ -101,16 +101,16 @@ func (t *tree) dump() string {
 					n = i + 1
 				}
 			}
-			f.Format("%sX#%d(%p) n %d:%d {", pref, h, x, x.c, n)
+			_, _ = f.Format("%sX#%d(%p) n %d:%d {", pref, h, x, x.c, n)
 			a := []interface{}{}
 			for i, v := range x.x[:n] {
 				a = append(a, v.ch)
 				if i != 0 {
-					f.Format(" ")
+					_, _ = f.Format(" ")
 				}
-				f.Format("(C#%d K %v)", handle(v.ch), v.k)
+				_, _ = f.Format("(C#%d K %v)", handle(v.ch), v.k)
 			}
-			f.Format("}\n")
+			_, _ = f.Format("}\n")
 			for _, p := range a {
 				pagedump(p, pref+". ")
 			}
@@ -122,14 +122,14 @@ func (t *tree) dump() string {
 					n = i + 1
 				}
 			}
-			f.Format("%sD#%d(%p) P#%d N#%d n %d:%d {", pref, h, x, handle(x.p), handle(x.n), x.c, n)
+			_, _ = f.Format("%sD#%d(%p) P#%d N#%d n %d:%d {", pref, h, x, handle(x.p), handle(x.n), x.c, n)
 			for i, d := range x.d[:n] {
 				if i != 0 {
-					f.Format(" ")
+					_, _ = f.Format(" ")
 				}
-				f.Format("%v:%v", d.k, d.v)
+				_, _ = f.Format("%v:%v", d.k, d.v)
 			}
-			f.Format("}\n")
+			_, _ = f.Format("}\n")
 		}
 	}
 
@@ -467,13 +467,14 @@ func benchmarkSetRnd(b *testing.B, n int) {
 		a[i] = rng.Next()
 	}
 	b.ResetTimer()
+	c := getDummyC(1)
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 		r := treeNew()
 		debug.FreeOSMemory()
 		b.StartTimer()
 		for _, v := range a {
-			r.Set(uint64(v), nil)
+			r.Set(uint64(v), c)
 		}
 		b.StopTimer()
 		r.Close()
@@ -504,8 +505,9 @@ func benchmarkGetRnd(b *testing.B, n int) {
 	for i := range a {
 		a[i] = rng.Next()
 	}
+	c := getDummyC(1)
 	for _, v := range a {
-		r.Set(uint64(v), nil)
+		r.Set(uint64(v), c)
 	}
 	debug.FreeOSMemory()
 	b.ResetTimer()
@@ -1392,7 +1394,7 @@ func TestBtreePut(t *testing.T) {
 					t.Fatal(iTest, g, e)
 				}
 			}
-			return nil, test.write
+			return getDummyC(99), test.write
 		})
 		if test.exists {
 			if g, e := oldV, getDummyC(test.oldV); g != e {
@@ -1427,6 +1429,8 @@ func TestBtreePut(t *testing.T) {
 			var e *Container
 			if test.post[i+1] != -1 {
 				e = getDummyC(test.post[i+1])
+			} else {
+				e = getDummyC(99)
 			}
 			if g := v; g != e {
 				t.Fatal(iTest, g, e)
@@ -1445,7 +1449,7 @@ func TestBtreeSeek(t *testing.T) {
 	tr := treeNew()
 	for i := 0; i < N; i++ {
 		k := 2*i + 1
-		tr.Set(uint64(k), nil)
+		tr.Set(uint64(k), getDummyC(1))
 	}
 	for i := 0; i < N; i++ {
 		k := 2 * i
@@ -1476,14 +1480,14 @@ func TestBtreePR4(t *testing.T) {
 	tr := treeNew()
 	for i := 0; i < 2*kd+1; i++ {
 		k := 1000 * i
-		tr.Set(uint64(k), nil)
+		tr.Set(uint64(k), getDummyC(1))
 	}
 	tr.Delete(1000 * kd)
 	for i := 0; i < kd; i++ {
-		tr.Set(uint64(1000*(kd+1)-1-i), nil)
+		tr.Set(uint64(1000*(kd+1)-1-i), getDummyC(1))
 	}
 	k := 1000*(kd+1) - 1 - kd
-	tr.Set(uint64(k), nil)
+	tr.Set(uint64(k), getDummyC(1))
 	if _, ok := tr.Get(uint64(k)); !ok {
 		t.Fatalf("key lost: %v", k)
 	}

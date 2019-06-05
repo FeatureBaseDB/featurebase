@@ -132,6 +132,33 @@ func (c *InternalClient) Schema(ctx context.Context) ([]*pilosa.IndexInfo, error
 	return rsp.Indexes, nil
 }
 
+func (c *InternalClient) PostSchema(ctx context.Context, uri *pilosa.URI, s *pilosa.Schema, remote bool) error {
+	u := uri.Path(fmt.Sprintf("/schema?remote=%v", remote))
+	buf, err := json.Marshal(s)
+	if err != nil {
+		return errors.Wrap(err, "marshalling schema")
+	}
+	req, err := http.NewRequest("POST", u, bytes.NewReader(buf))
+	if err != nil {
+		return errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return errors.Wrap(err, "executing request")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return errors.Errorf("unexpected status code: %s", resp.Status)
+	}
+	return nil
+}
+
 // CreateIndex creates a new index on the server.
 func (c *InternalClient) CreateIndex(ctx context.Context, index string, opt pilosa.IndexOptions) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.CreateIndex")
@@ -629,7 +656,11 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, ind
 
 	dec := json.NewDecoder(resp.Body)
 	rbody := &pilosa.ImportResponse{}
-	dec.Decode(rbody)
+	err = dec.Decode(rbody)
+	// Decode can return EOF when no error occurred. helpful!
+	if err != nil && err != io.EOF {
+		return errors.Wrap(err, "decoding response body")
+	}
 	if rbody.Err != "" {
 		return errors.Wrap(errors.New(rbody.Err), "importing roaring")
 	}

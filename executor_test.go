@@ -20,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"reflect"
 	"strconv"
@@ -508,7 +509,9 @@ func TestExecutor_Execute_Count(t *testing.T) {
 // Ensure a set query can be executed.
 func TestExecutor_Execute_Set(t *testing.T) {
 	t.Run("RowIDColumnID", func(t *testing.T) {
-		cmd := test.MustRunCluster(t, 1)[0]
+		cluster := test.MustRunCluster(t, 1)
+		defer cluster.Close()
+		cmd := cluster[0]
 		holder := cmd.Server.Holder()
 		hldr := test.Holder{Holder: holder}
 		hldr.SetBit("i", "f", 1, 0)
@@ -571,7 +574,9 @@ func TestExecutor_Execute_Set(t *testing.T) {
 	})
 
 	t.Run("RowKeyColumnKey", func(t *testing.T) {
-		cmd := test.MustRunCluster(t, 1)[0]
+		cluster := test.MustRunCluster(t, 1)
+		defer cluster.Close()
+		cmd := cluster[0]
 		holder := cmd.Server.Holder()
 		hldr := test.Holder{Holder: holder}
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{Keys: true})
@@ -765,7 +770,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 
 		// Create fields.
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeInt(0, 50)); err != nil {
+		if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64)); err != nil {
 			t.Fatal(err)
 		} else if _, err := index.CreateFieldIfNotExists("xxx", pilosa.OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
@@ -802,7 +807,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		hldr := test.Holder{Holder: c[0].Server.Holder()}
 
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-		if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeInt(0, 100)); err != nil {
+		if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1053,6 +1058,65 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 			t.Fatal(diff)
 		}
 	})
+
+	t.Run("ErrFieldNotFound", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		// Set data on the "f" field.
+		if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault()); err != nil {
+			t.Fatal(err)
+		} else if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+			Set(0, f=0)
+			Set(0, f=1)
+		`}); err != nil {
+			t.Fatal(err)
+		} else if err := c[0].RecalculateCaches(); err != nil {
+			t.Fatalf("recalculating caches: %v", err)
+		}
+
+		// Attempt to query the "g" field.
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(g, n=2)`}); err == nil || err.Error() != `executing: field "g" not found` {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("ErrBSIField", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		// Create BSI "f" field.
+		if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeInt(0, 100)); err != nil {
+			t.Fatal(err)
+		} else if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err == nil || err.Error() != `executing: finding top results: cannot compute TopN() on integer field: "f"` {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("ErrCacheNone", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		if idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if _, err := idx.CreateField("f", pilosa.OptFieldTypeSet(pilosa.CacheTypeNone, 0)); err != nil {
+			t.Fatal(err)
+		} else if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+			Set(0, f=0)
+			Set(0, f=1)
+		`}); err != nil {
+			t.Fatal(err)
+		} else if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err == nil || err.Error() != `executing: finding top results: cannot compute TopN(), field has no cache: "f"` {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestExecutor_Execute_TopN_fill(t *testing.T) {
@@ -1210,7 +1274,7 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := idx.CreateField("f", pilosa.OptFieldTypeInt(-10, 100)); err != nil {
+		if _, err := idx.CreateField("f", pilosa.OptFieldTypeInt(-1100, 1000)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1258,32 +1322,6 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 				}
 			}
 		})
-
-		t.Run("Max", func(t *testing.T) {
-			tests := []struct {
-				filter string
-				exp    int64
-				cnt    int64
-			}{
-				{filter: ``, exp: 60, cnt: 1},
-				{filter: `Row(x=0)`, exp: 60, cnt: 1},
-				{filter: `Row(x=1)`, exp: -5, cnt: 1},
-				{filter: `Row(x=2)`, exp: 40, cnt: 1},
-			}
-			for i, tt := range tests {
-				var pql string
-				if tt.filter == "" {
-					pql = `Max(field=f)`
-				} else {
-					pql = fmt.Sprintf(`Max(%s, field=f)`, tt.filter)
-				}
-				if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
-					t.Fatal(err)
-				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: tt.exp, Count: tt.cnt}) {
-					t.Fatalf("unexpected result, test %d: %s", i, spew.Sdump(result))
-				}
-			}
-		})
 	})
 
 	t.Run("ColumnKey", func(t *testing.T) {
@@ -1300,7 +1338,7 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := idx.CreateField("f", pilosa.OptFieldTypeInt(-10, 100)); err != nil {
+		if _, err := idx.CreateField("f", pilosa.OptFieldTypeInt(-1110, 1000)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1393,15 +1431,15 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := idx.CreateField("foo", pilosa.OptFieldTypeInt(10, 100)); err != nil {
+		if _, err := idx.CreateField("foo", pilosa.OptFieldTypeInt(-990, 1000)); err != nil {
 			t.Fatal(err)
 		}
 
-		if _, err := idx.CreateField("bar", pilosa.OptFieldTypeInt(0, 100000)); err != nil {
+		if _, err := idx.CreateField("bar", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64)); err != nil {
 			t.Fatal(err)
 		}
 
-		if _, err := idx.CreateField("other", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+		if _, err := idx.CreateField("other", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1451,15 +1489,15 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := idx.CreateField("foo", pilosa.OptFieldTypeInt(10, 100)); err != nil {
+		if _, err := idx.CreateField("foo", pilosa.OptFieldTypeInt(-990, 1000)); err != nil {
 			t.Fatal(err)
 		}
 
-		if _, err := idx.CreateField("bar", pilosa.OptFieldTypeInt(0, 100000)); err != nil {
+		if _, err := idx.CreateField("bar", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64)); err != nil {
 			t.Fatal(err)
 		}
 
-		if _, err := idx.CreateField("other", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+		if _, err := idx.CreateField("other", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1853,19 +1891,19 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateField("foo", pilosa.OptFieldTypeInt(10, 100)); err != nil {
+	if _, err := idx.CreateField("foo", pilosa.OptFieldTypeInt(-990, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateField("bar", pilosa.OptFieldTypeInt(0, 100000)); err != nil {
+	if _, err := idx.CreateField("bar", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64)); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateField("other", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := idx.CreateField("other", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64)); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateField("edge", pilosa.OptFieldTypeInt(-100, 100)); err != nil {
+	if _, err := idx.CreateField("edge", pilosa.OptFieldTypeInt(-900, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1889,8 +1927,8 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 	t.Run("EQ", func(t *testing.T) {
 		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(foo == 20)`}); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{50, (5 * ShardWidth) + 100}, result.Results[0].(*pilosa.Row).Columns()) {
-			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		} else if got, exp := result.Results[0].(*pilosa.Row).Columns(), []uint64{50, (5 * ShardWidth) + 100}; !reflect.DeepEqual(exp, got) {
+			t.Fatalf("Query().Row.Columns=%#v, expected %#v", got, exp)
 		}
 	})
 
@@ -1899,20 +1937,20 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(other != null)`}); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0}, result.Results[0].(*pilosa.Row).Columns()) {
-			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+			t.Fatalf("unexpected result: %#v", result.Results[0].(*pilosa.Row).Columns())
 		}
 		// NEQ <int>
 		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(foo != 20)`}); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{ShardWidth, ShardWidth + 1, ShardWidth + 2}, result.Results[0].(*pilosa.Row).Columns()) {
-			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+			t.Fatalf("unexpected result: %#v", result.Results[0].(*pilosa.Row).Columns())
 		}
 		// NEQ -<int>
 		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(other != -20)`}); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0}, result.Results[0].(*pilosa.Row).Columns()) {
 			//t.Fatalf("unexpected result: %s", spew.Sdump(result))
-			t.Fatalf("unexpected result: %v", result.Results[0].(*pilosa.Row).Columns())
+			t.Fatalf("unexpected result: %#v", result.Results[0].(*pilosa.Row).Columns())
 		}
 	})
 
@@ -1927,8 +1965,8 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 	t.Run("LTE", func(t *testing.T) {
 		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(foo <= 20)`}); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual([]uint64{50, ShardWidth + 2, (5 * ShardWidth) + 100}, result.Results[0].(*pilosa.Row).Columns()) {
-			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		} else if got, exp := result.Results[0].(*pilosa.Row).Columns(), []uint64{50, ShardWidth + 2, (5 * ShardWidth) + 100}; !reflect.DeepEqual(got, exp) {
+			t.Fatalf("unexpected result: got=%v, exp=%v", got, exp)
 		}
 	})
 
@@ -1936,7 +1974,7 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(foo > 20)`}); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{ShardWidth, ShardWidth + 1}, result.Results[0].(*pilosa.Row).Columns()) {
-			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+			t.Fatalf("unexpected result: %v", result.Results[0].(*pilosa.Row).Columns())
 		}
 	})
 
@@ -1944,7 +1982,7 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(foo >= 20)`}); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{50, ShardWidth, ShardWidth + 1, (5 * ShardWidth) + 100}, result.Results[0].(*pilosa.Row).Columns()) {
-			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+			t.Fatalf("unexpected result: %v", result.Results[0].(*pilosa.Row).Columns())
 		}
 	})
 
@@ -1964,7 +2002,7 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 			{q: `Row(1000 < other <= 1000)`, exp: false},
 
 			{q: `Row(1000 < other < 2000)`, exp: false},
-			{q: `Row(1000 <= other < 2000)`, exp: true},
+			{q: `Row(1000 <= other < 20000)`, exp: true},
 			{q: `Row(1000 <= other <= 2000)`, exp: true},
 			{q: `Row(1000 < other <= 2000)`, exp: false},
 		}
@@ -1977,7 +2015,7 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 				if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: test.q}); err != nil {
 					t.Fatal(err)
 				} else if !reflect.DeepEqual(expected, result.Results[0].(*pilosa.Row).Columns()) {
-					t.Fatalf("unexpected result for query: %s", test.q)
+					t.Fatalf("unexpected result for query: %s (%#v)", test.q, result.Results[0].(*pilosa.Row).Columns())
 				}
 			})
 		}
@@ -2018,7 +2056,7 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 	})
 
 	t.Run("GTBelowMin", func(t *testing.T) {
-		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(edge > -200)`}); err != nil {
+		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(edge > -1000)`}); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0, 1}, result.Results[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result.Results[0].(*pilosa.Row).Columns()))
@@ -2047,19 +2085,19 @@ func TestExecutor_Execute_Range_BSIGroup_Deprecated(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateField("foo", pilosa.OptFieldTypeInt(10, 100)); err != nil {
+	if _, err := idx.CreateField("foo", pilosa.OptFieldTypeInt(-990, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateField("bar", pilosa.OptFieldTypeInt(0, 100000)); err != nil {
+	if _, err := idx.CreateField("bar", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64)); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateField("other", pilosa.OptFieldTypeInt(0, 1000)); err != nil {
+	if _, err := idx.CreateField("other", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64)); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := idx.CreateField("edge", pilosa.OptFieldTypeInt(-100, 100)); err != nil {
+	if _, err := idx.CreateField("edge", pilosa.OptFieldTypeInt(-1100, 1000)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2184,7 +2222,7 @@ func TestExecutor_Execute_Range_BSIGroup_Deprecated(t *testing.T) {
 	})
 
 	t.Run("GTBelowMin", func(t *testing.T) {
-		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Range(edge > -200)`}); err != nil {
+		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Range(edge > -1200)`}); err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual([]uint64{0, 1}, result.Results[0].(*pilosa.Row).Columns()) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result.Results[0].(*pilosa.Row).Columns()))
@@ -2237,11 +2275,11 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	})
 
 	t.Run("Remote SetBit", func(t *testing.T) {
-		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1500000, f=7)`}); err != nil {
-			t.Fatalf("quuerying remote: %v", err)
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: fmt.Sprintf(`Set(%d, f=7)`, pilosa.ShardWidth+1)}); err != nil {
+			t.Fatalf("querying remote: %v", err)
 		}
 
-		if !reflect.DeepEqual(hldr1.Row("i", "f", 7).Columns(), []uint64{1500000}) {
+		if !reflect.DeepEqual(hldr1.Row("i", "f", 7).Columns(), []uint64{pilosa.ShardWidth + 1}) {
 			t.Fatalf("unexpected cols from row 7: %v", hldr1.Row("i", "f", 7).Columns())
 		}
 	})
@@ -2252,11 +2290,11 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 			t.Fatalf("creating field: %v", err)
 		}
 
-		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1500000, z=5, 2010-07-08T00:00)`}); err != nil {
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: fmt.Sprintf(`Set(%d, z=5, 2010-07-08T00:00)`, pilosa.ShardWidth+1)}); err != nil {
 			t.Fatalf("quuerying remote: %v", err)
 		}
 
-		if !reflect.DeepEqual(hldr1.RowTime("i", "z", 5, time.Date(2010, time.January, 1, 0, 0, 0, 0, time.UTC), "Y").Columns(), []uint64{1500000}) {
+		if !reflect.DeepEqual(hldr1.RowTime("i", "z", 5, time.Date(2010, time.January, 1, 0, 0, 0, 0, time.UTC), "Y").Columns(), []uint64{pilosa.ShardWidth + 1}) {
 			t.Fatalf("unexpected cols from row 7: %v", hldr1.RowTime("i", "z", 5, time.Date(2010, time.January, 1, 0, 0, 0, 0, time.UTC), "Y").Columns())
 		}
 	})
@@ -2817,7 +2855,7 @@ func TestExecutor_Execute_ClearRow(t *testing.T) {
 		defer c.Close()
 		hldr := test.Holder{Holder: c[0].Server.Holder()}
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackExistence: true})
-		_, err := index.CreateField("f", pilosa.OptFieldTypeInt(0, 100))
+		_, err := index.CreateField("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3239,7 +3277,56 @@ func TestExecutor_Execute_Query_Error(t *testing.T) {
 			}
 		})
 	}
+}
 
+func TestExecutor_GroupByStrings(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	c.CreateField(t, "istring", pilosa.IndexOptions{Keys: true}, "generals", pilosa.OptFieldKeys())
+
+	req := &pilosa.ImportRequest{
+		Index:      "istring",
+		Field:      "generals",
+		Shard:      0,
+		RowKeys:    []string{"r1", "r2", "r1", "r2", "r1", "r2", "r1", "r2", "r1", "r2"},
+		ColumnKeys: []string{"c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10"},
+	}
+	if err := c[0].API.Import(context.Background(), req); err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	tests := []struct {
+		query    string
+		expected []pilosa.GroupCount
+	}{
+		{
+			query: "GroupBy(Rows(generals))",
+			expected: []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5},
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5},
+			},
+		},
+		{
+			query: "GroupBy(Rows(generals), filter=Row(generals=r2))",
+			expected: []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5},
+			},
+		},
+	}
+
+	for i, tst := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			r, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{
+				Index: "istring",
+				Query: tst.query,
+			})
+			if err != nil {
+				t.Fatalf("got an error %v", err)
+			}
+			results := r.Results[0].([]pilosa.GroupCount)
+			test.CheckGroupBy(t, tst.expected, results)
+		})
+	}
 }
 
 func TestExecutor_Execute_Rows_Keys(t *testing.T) {

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/shardwidth"
 	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
 )
@@ -596,12 +597,12 @@ func (e *executor) executeSumCountShard(ctx context.Context, index string, c *pq
 		return ValCount{}, nil
 	}
 
-	vsum, vcount, err := fragment.sum(filter, bsig.BitDepth())
+	vsum, vcount, err := fragment.sum(filter, bsig.BitDepth)
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "computing sum")
 	}
 	return ValCount{
-		Val:   int64(vsum) + (int64(vcount) * bsig.Min),
+		Val:   int64(vsum) + (int64(vcount) * bsig.Base),
 		Count: int64(vcount),
 	}, nil
 }
@@ -637,12 +638,12 @@ func (e *executor) executeMinShard(ctx context.Context, index string, c *pql.Cal
 		return ValCount{}, nil
 	}
 
-	fmin, fcount, err := fragment.min(filter, bsig.BitDepth())
+	fmin, fcount, err := fragment.min(filter, bsig.BitDepth)
 	if err != nil {
 		return ValCount{}, err
 	}
 	return ValCount{
-		Val:   int64(fmin) + bsig.Min,
+		Val:   int64(fmin) + bsig.Base,
 		Count: int64(fcount),
 	}, nil
 }
@@ -678,12 +679,12 @@ func (e *executor) executeMaxShard(ctx context.Context, index string, c *pql.Cal
 		return ValCount{}, nil
 	}
 
-	fmax, fcount, err := fragment.max(filter, bsig.BitDepth())
+	fmax, fcount, err := fragment.max(filter, bsig.BitDepth)
 	if err != nil {
 		return ValCount{}, err
 	}
 	return ValCount{
-		Val:   int64(fmax) + bsig.Min,
+		Val:   int64(fmax) + bsig.Base,
 		Count: int64(fcount),
 	}, nil
 }
@@ -765,11 +766,14 @@ func (e *executor) executeTopNShard(ctx context.Context, index string, c *pql.Ca
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopNShard")
 	defer span.Finish()
 
-	field, _ := c.Args["_field"].(string)
+	fieldName, _ := c.Args["_field"].(string)
 	n, _, err := c.UintArg("n")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNShard: %v", err)
+	} else if f := e.Holder.Field(index, fieldName); f != nil && f.Type() == FieldTypeInt {
+		return nil, fmt.Errorf("cannot compute TopN() on integer field: %q", fieldName)
 	}
+
 	attrName, _ := c.Args["attrName"].(string)
 	rowIDs, _, err := c.UintSliceArg("ids")
 	if err != nil {
@@ -798,13 +802,15 @@ func (e *executor) executeTopNShard(ctx context.Context, index string, c *pql.Ca
 	}
 
 	// Set default field.
-	if field == "" {
-		field = defaultField
+	if fieldName == "" {
+		fieldName = defaultField
 	}
 
-	f := e.Holder.fragment(index, field, viewStandard, shard)
+	f := e.Holder.fragment(index, fieldName, viewStandard, shard)
 	if f == nil {
 		return nil, nil
+	} else if f.CacheType == CacheTypeNone {
+		return nil, fmt.Errorf("cannot compute TopN(), field has no cache: %q", fieldName)
 	}
 
 	if minThreshold == 0 {
@@ -986,6 +992,8 @@ type FieldRow struct {
 	RowKey string `json:"rowKey,omitempty"`
 }
 
+// MarshalJSON marshals FieldRow to JSON such that
+// either a Key or an ID is included.
 func (fr FieldRow) MarshalJSON() ([]byte, error) {
 	if fr.RowKey != "" {
 		return json.Marshal(struct {
@@ -1005,10 +1013,12 @@ func (fr FieldRow) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// String is the FieldRow stringer.
 func (fr FieldRow) String() string {
 	return fmt.Sprintf("%s.%d.%s", fr.Field, fr.RowID, fr.RowKey)
 }
 
+// GroupCount represents a result item for a group by query.
 type GroupCount struct {
 	Group []FieldRow `json:"group"`
 	Count uint64     `json:"count"`
@@ -1047,6 +1057,7 @@ func mergeGroupCounts(a, b []GroupCount, limit int) []GroupCount {
 	return ret
 }
 
+// Compare is used in ordering two GroupCount objects.
 func (g GroupCount) Compare(o GroupCount) int {
 	for i := range g.Group {
 		if g.Group[i].RowID < o.Group[i].RowID {
@@ -1157,7 +1168,7 @@ func (e *executor) executeRowsShard(_ context.Context, index string, fieldName s
 
 	// views contains the list of views to inspect (and merge)
 	// in order to represent `Rows` for the field.
-	var views []string = []string{viewStandard}
+	var views = []string{viewStandard}
 
 	// Handle `time` fields.
 	if f.Type() == FieldTypeTime {
@@ -1234,7 +1245,7 @@ func (e *executor) executeRowsShard(_ context.Context, index string, fieldName s
 	if columnID, ok, err := c.UintArg("column"); err != nil {
 		return nil, err
 	} else if ok {
-		colShard := columnID >> shardWidthExponent
+		colShard := columnID >> shardwidth.Exponent
 		if colShard != shard {
 			return rowIDs, nil
 		}
@@ -1399,10 +1410,9 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 			return NewRow(), nil
 		}
 
-		return frag.notNull(bsig.BitDepth())
+		return frag.notNull()
 
 	} else if cond.Op == pql.BETWEEN {
-
 		predicates, err := cond.IntSliceValue()
 		if err != nil {
 			return nil, errors.Wrap(err, "getting condition value")
@@ -1437,10 +1447,10 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 		// If the query is asking for the entire valid range, just return
 		// the not-null bitmap for the bsiGroup.
 		if predicates[0] <= bsig.Min && predicates[1] >= bsig.Max {
-			return frag.notNull(bsig.BitDepth())
+			return frag.notNull()
 		}
 
-		return frag.rangeBetween(bsig.BitDepth(), baseValueMin, baseValueMax)
+		return frag.rangeBetween(bsig.BitDepth, baseValueMin, baseValueMax)
 
 	} else {
 
@@ -1470,16 +1480,16 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 		// LT[E] and GT[E] should return all not-null if selected range fully encompasses valid bsiGroup range.
 		if (cond.Op == pql.LT && value > bsig.Max) || (cond.Op == pql.LTE && value >= bsig.Max) ||
 			(cond.Op == pql.GT && value < bsig.Min) || (cond.Op == pql.GTE && value <= bsig.Min) {
-			return frag.notNull(bsig.BitDepth())
+			return frag.notNull()
 		}
 
 		// outOfRange for NEQ should return all not-null.
 		if outOfRange && cond.Op == pql.NEQ {
-			return frag.notNull(bsig.BitDepth())
+			return frag.notNull()
 		}
 
 		f.Stats.Count("range:bsigroup", 1, 1.0)
-		return frag.rangeOp(cond.Op, bsig.BitDepth(), baseValue)
+		return frag.rangeOp(cond.Op, bsig.BitDepth, baseValue)
 	}
 }
 
@@ -1705,11 +1715,11 @@ func (e *executor) executeClearBitField(ctx context.Context, index string, c *pq
 		}
 
 		// Forward call to remote node otherwise.
-		if res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil); err != nil {
+		res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil)
+		if err != nil {
 			return false, err
-		} else {
-			ret = res[0].(bool)
 		}
+		ret = res[0].(bool)
 	}
 	return ret, nil
 }
@@ -1981,11 +1991,11 @@ func (e *executor) executeSetBitField(ctx context.Context, index string, c *pql.
 		}
 
 		// Forward call to remote node otherwise.
-		if res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil); err != nil {
+		res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil)
+		if err != nil {
 			return false, err
-		} else {
-			ret = res[0].(bool)
 		}
+		ret = res[0].(bool)
 	}
 	return ret, nil
 }
@@ -2016,11 +2026,11 @@ func (e *executor) executeSetValueField(ctx context.Context, index string, c *pq
 		}
 
 		// Forward call to remote node otherwise.
-		if res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil); err != nil {
+		res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil)
+		if err != nil {
 			return false, err
-		} else {
-			ret = res[0].(bool)
 		}
+		ret = res[0].(bool)
 	}
 	return ret, nil
 }
@@ -2530,6 +2540,16 @@ func (e *executor) translateGroupByCall(index string, idx *Index, c *pql.Call) e
 		}
 	}
 
+	if filter, ok, err := c.CallArg("filter"); ok {
+		if err != nil {
+			return errors.Wrap(err, "getting filter call")
+		}
+		err = e.translateCall(index, idx, filter)
+		if err != nil {
+			return errors.Wrap(err, "translating filter call")
+		}
+	}
+
 	prev, ok := c.Args["previous"]
 	if !ok {
 		return nil // nothing else to be translated
@@ -2608,7 +2628,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 		if fieldName := callArgString(call, "_field"); fieldName != "" {
 			field := idx.Field(fieldName)
 			if field == nil {
-				return nil, ErrFieldNotFound
+				return nil, fmt.Errorf("field %q not found", fieldName)
 			}
 			if field.keys() {
 				other := make([]Pair, len(result))
@@ -2880,7 +2900,7 @@ func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, filter *Row, inde
 			return nil, errors.Wrap(err, "getting previous")
 		} else if hasPrev && !ignorePrev {
 			if i == len(children)-1 {
-				prev += 1
+				prev++
 			}
 			gbi.rowIters[i].Seek(prev)
 		}

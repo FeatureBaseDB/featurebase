@@ -187,10 +187,12 @@ bind = "127.0.0.1:10101"
     "127.0.0.1:10101",
     "127.0.0.1:10111",
   ]`
-	file.Write([]byte(config))
+	if _, err := file.Write([]byte(config)); err != nil {
+		t.Fatalf("writing config file: %v", err)
+	}
 	file.Close()
 	_, err = ExecNewRootCommand(t, "server", "--config", file.Name())
-	if err.Error() != "invalid option in configuration file: cluster.partitions" {
+	if err == nil || err.Error() != "invalid option in configuration file: cluster.partitions" {
 		t.Fatalf("Expected invalid option in configuration file, but err: '%v'", err)
 	}
 }

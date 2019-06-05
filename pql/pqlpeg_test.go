@@ -1,6 +1,21 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pql
 
 import (
+	"fmt"
 	"reflect"
 	"strconv"
 	"testing"
@@ -318,6 +333,12 @@ func TestPEGErrors(t *testing.T) {
 		{
 			name:  "RangeTimeOneStamp",
 			input: "Row(a=4, 2010-07-04T00:00)"},
+		{
+			name:  "ArgOutOfBounds",
+			input: "Row(a=9223372036854775808)"},
+		{
+			name:  "ArgOutOfBoundsNeg",
+			input: "Row(a=-9223372036854775809)"},
 	}
 
 	for i, test := range tests {
@@ -672,6 +693,50 @@ func TestPQLDeepEquality(t *testing.T) {
 
 			if !reflect.DeepEqual(test.exp, q.Calls[0]) {
 				t.Fatalf("unexpected call:\n%s\ninstead of:\n%s\n'%#v'\ninstead of:\n'%#v'", q.Calls[0], test.exp, q.Calls[0], test.exp)
+			}
+		})
+	}
+}
+
+func TestDuplicateArgError(t *testing.T) {
+	tests := []struct {
+		name string
+		call string
+	}{
+		// case 1
+		{
+			name: "StringConditional",
+			call: "Row(a==foo, a==bar)",
+		},
+		// case 2
+		{
+			name: "StringValue",
+			call: "Row(a=foo, a=bar)",
+		},
+		// case 3
+		{
+			name: "IntConditional",
+			call: "Row(a>5, a>6)",
+		},
+		// case 4
+		{
+			name: "IntValue",
+			call: "Row(a=7, a=8)",
+		},
+		// case 5
+		{
+			name: "List",
+			call: "Row(a=[7], a=[7,8])",
+		},
+	}
+	for i, test := range tests {
+		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
+			_, err := ParseString(test.call)
+			expErr := fmt.Sprintf("%s: a", duplicateArgErrorMessage)
+			if err == nil {
+				t.Fatalf("expected error for duplicate argument: %s", test.call)
+			} else if err.Error() != expErr {
+				t.Fatalf("expected error: %s, but got: %v", expErr, err.Error())
 			}
 		})
 	}

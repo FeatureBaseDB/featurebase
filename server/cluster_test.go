@@ -33,8 +33,7 @@ import (
 func TestMain_SendReceiveMessage(t *testing.T) {
 	ms := test.MustRunCluster(t, 2)
 	m0, m1 := ms[0], ms[1]
-	defer m0.Close()
-	defer m1.Close()
+	defer ms.Close()
 
 	// Expected indexes and Fields
 	expected := map[string][]string{
@@ -85,10 +84,10 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	}
 
 	// Write data on first node.
-	if _, err := m0.Query("i", "", `
+	if _, err := m0.Query("i", "", fmt.Sprintf(`
             Set(1, f=1)
-            Set(2400000, f=1)
-        `); err != nil {
+            Set(%d, f=1)
+        `, 2*pilosa.ShardWidth+1)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -127,8 +126,7 @@ func TestClusterResize_EmptyNode(t *testing.T) {
 // Ensure that a cluster of empty nodes comes up in a NORMAL state.
 func TestClusterResize_EmptyNodes(t *testing.T) {
 	clus := test.MustRunCluster(t, 2)
-	defer clus[0].Close()
-	defer clus[1].Close()
+	defer clus.Close()
 
 	if clus[0].API.State() != pilosa.ClusterStateNormal {
 		t.Fatalf("unexpected node0 cluster state: %s", clus[0].API.State())
@@ -141,6 +139,7 @@ func TestClusterResize_EmptyNodes(t *testing.T) {
 func TestClusterResize_AddNode(t *testing.T) {
 	t.Run("NoData", func(t *testing.T) {
 		clus := test.MustRunCluster(t, 2)
+		defer clus.Close()
 
 		if !checkClusterState(clus[0], pilosa.ClusterStateNormal, 1000) {
 			t.Fatalf("unexpected node0 cluster state: %s", clus[0].API.State())
@@ -552,6 +551,7 @@ func TestCluster_GossipMembership(t *testing.T) {
 
 func TestClusterResize_RemoveNode(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
+	defer cluster.Close()
 	m0 := cluster[0]
 	m1 := cluster[1]
 

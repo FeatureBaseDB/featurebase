@@ -116,9 +116,18 @@ func TestClient_MultiNode(t *testing.T) {
 	// Rebuild the RankCache.
 	// We have to do this to avoid the 10-second cache invalidation delay
 	// built into cache.Invalidate()
-	c[0].RecalculateCaches()
-	c[1].RecalculateCaches()
-	c[2].RecalculateCaches()
+	err = c[0].RecalculateCaches()
+	if err != nil {
+		t.Fatalf("recalculating cache: %v", err)
+	}
+	err = c[1].RecalculateCaches()
+	if err != nil {
+		t.Fatalf("recalculating cache: %v", err)
+	}
+	err = c[2].RecalculateCaches()
+	if err != nil {
+		t.Fatalf("recalculating cache: %v", err)
+	}
 
 	// Connect to each node to compare results.
 	client := make([]*Client, 3)
@@ -173,7 +182,10 @@ func TestClient_MultiNode(t *testing.T) {
 
 // Ensure client can export data.
 func TestClient_Export(t *testing.T) {
-	cmd := test.MustRunCluster(t, 1)[0]
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
+
 	host := cmd.URL()
 
 	cmd.MustCreateIndex(t, "keyed", pilosa.IndexOptions{Keys: true})
@@ -336,7 +348,9 @@ func TestClient_Export(t *testing.T) {
 
 // Ensure client can bulk import data.
 func TestClient_Import(t *testing.T) {
-	cmd := test.MustRunCluster(t, 1)[0]
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
 	host := cmd.URL()
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
@@ -505,7 +519,9 @@ func TestClient_ImportRoaring(t *testing.T) {
 // Ensure client can bulk import data.
 func TestClient_ImportKeys(t *testing.T) {
 	t.Run("SingleNode", func(t *testing.T) {
-		cmd := test.MustRunCluster(t, 1)[0]
+		cluster := test.MustRunCluster(t, 1)
+		defer cluster.Close()
+		cmd := cluster[0]
 		host := cmd.URL()
 
 		cmd.MustCreateIndex(t, "keyed", pilosa.IndexOptions{Keys: true})
@@ -602,6 +618,7 @@ func TestClient_ImportKeys(t *testing.T) {
 
 	t.Run("MultiNode", func(t *testing.T) {
 		cluster := test.MustRunCluster(t, 2)
+		defer cluster.Close()
 		cmd0 := cluster[0]
 		cmd1 := cluster[1]
 		host0 := cmd0.URL()
@@ -677,7 +694,9 @@ func TestClient_ImportKeys(t *testing.T) {
 	})
 
 	t.Run("IntegerFieldSingleNode", func(t *testing.T) {
-		cmd := test.MustRunCluster(t, 1)[0]
+		cluster := test.MustRunCluster(t, 1)
+		defer cluster.Close()
+		cmd := cluster[0]
 		host := cmd.URL()
 		holder := cmd.Server.Holder()
 		hldr := test.Holder{Holder: holder}
@@ -760,7 +779,9 @@ func TestClient_ImportKeys(t *testing.T) {
 
 // Ensure client can bulk import value data.
 func TestClient_ImportValue(t *testing.T) {
-	cmd := test.MustRunCluster(t, 1)[0]
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
 	host := cmd.URL()
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
@@ -811,8 +832,8 @@ func TestClient_ImportValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if min != -100 || cnt != 0 {
-		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=-100, cnt=0", min, cnt)
+	if min != 0 || cnt != 0 {
+		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=0, cnt=0", min, cnt)
 	}
 
 	// Verify Max.
@@ -850,8 +871,8 @@ func TestClient_ImportValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if min != -100 || cnt != 0 {
-		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=-100, cnt=0", min, cnt)
+	if min != 0 || cnt != 0 {
+		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=0, cnt=0", min, cnt)
 	}
 
 	// Verify Max.
@@ -866,7 +887,9 @@ func TestClient_ImportValue(t *testing.T) {
 
 // Ensure client can bulk import data while tracking existence.
 func TestClient_ImportExistence(t *testing.T) {
-	cmd := test.MustRunCluster(t, 1)[0]
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
 	host := cmd.URL()
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
@@ -943,7 +966,10 @@ func TestClient_ImportExistence(t *testing.T) {
 
 // Ensure client can retrieve a list of all checksums for blocks in a fragment.
 func TestClient_FragmentBlocks(t *testing.T) {
-	cmd := test.MustRunCluster(t, 1)[0]
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
+
 	holder := cmd.Server.Holder()
 	hldr := test.Holder{Holder: holder}
 

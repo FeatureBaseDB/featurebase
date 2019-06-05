@@ -1,4 +1,4 @@
-// Copyright (C) 2017-2018 Pilosa Corp. All rights reserved.
+// Copyright 2017 Pilosa Corp.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 package roaring
 
 import (
+	"fmt"
 	"io"
 )
 
@@ -35,13 +36,14 @@ func NewBTreeBitmap(a ...uint64) *Bitmap {
 	b := &Bitmap{
 		Containers: newBTreeContainers(),
 	}
-	b.Add(a...)
+	// TODO: We have no way to report this.
+	_, _ = b.Add(a...)
 	return b
 }
 
 func (btc *bTreeContainers) Get(key uint64) *Container {
 	// Check the last* cache for same container.
-	if key == btc.lastKey && btc.lastContainer != nil {
+	if key == btc.lastKey {
 		return btc.lastContainer
 	}
 
@@ -56,11 +58,15 @@ func (btc *bTreeContainers) Get(key uint64) *Container {
 }
 
 func (btc *bTreeContainers) Put(key uint64, c *Container) {
+	// If we don't do this, a Put on a container we just got from
+	// Get can result in the tree containing a different container
+	// than we'll get on next lookup.
+	btc.lastKey, btc.lastContainer = key, c
 	// If a mapped container is added to the tree, reset the
 	// lastContainer cache so that the cache is not pointing
 	// at a read-only mmap.
 	if c.Mapped() {
-		btc.lastContainer = nil
+		btc.lastKey = ^uint64(0)
 	}
 	btc.tree.Set(key, c)
 }
@@ -68,13 +74,13 @@ func (btc *bTreeContainers) Put(key uint64, c *Container) {
 func (u updater) update(oldV *Container, exists bool) (*Container, bool) {
 	// update the existing container
 	if exists {
-		oldV.Update(u.typ, u.n, u.mapped)
-		return oldV, false
+		oldV = oldV.UpdateOrMake(u.typ, u.n, u.mapped)
+		return oldV, true
 	}
 	cont := NewContainer()
-	cont.typ = u.typ
-	cont.n = u.n
-	cont.mapped = u.mapped
+	cont.setTyp(u.typ)
+	cont.setN(u.n)
+	cont.setMapped(u.mapped)
 	return cont, true
 }
 
@@ -97,7 +103,7 @@ func (btc *bTreeContainers) Remove(key uint64) {
 
 func (btc *bTreeContainers) GetOrCreate(key uint64) *Container {
 	// Check the last* cache for same container.
-	if key == btc.lastKey && btc.lastContainer != nil {
+	if key == btc.lastKey {
 		return btc.lastContainer
 	}
 
@@ -118,7 +124,7 @@ func (btc *bTreeContainers) Count() (n uint64) {
 	e, _ := btc.tree.Seek(0)
 	_, c, err := e.Next()
 	for err != io.EOF {
-		n += uint64(c.n)
+		n += uint64(c.N())
 		_, c, err = e.Next()
 	}
 	return n
@@ -141,6 +147,23 @@ func (btc *bTreeContainers) Clone() Containers {
 	return nbtc
 }
 
+func (btc *bTreeContainers) Freeze() Containers {
+	nbtc := newBTreeContainers()
+
+	itr, err := btc.tree.SeekFirst()
+	if err == io.EOF {
+		return nbtc
+	}
+	for {
+		k, v, err := itr.Next()
+		if err == io.EOF {
+			break
+		}
+		nbtc.tree.Set(k, v.Freeze())
+	}
+	return nbtc
+}
+
 func (btc *bTreeContainers) Last() (key uint64, c *Container) {
 	if btc.tree.Len() == 0 {
 		return 0, nil
@@ -155,7 +178,10 @@ func (btc *bTreeContainers) Size() int {
 
 func (btc *bTreeContainers) Reset() {
 	btc.tree = treeNew()
-	btc.lastKey = 0
+	// use a definitely-invalid key, so we can distinguish between "you
+	// just looked that up, and it was a nil container" and "you have
+	// never looked that up before."
+	btc.lastKey = ^uint64(0)
 	btc.lastContainer = nil
 }
 
@@ -179,6 +205,23 @@ func (btc *bTreeContainers) Repair() {
 	}
 }
 
+// Update calls fn (existing-container, existed), and expects
+// (new-container, write). If write is true, the container is used to
+// replace the given container.
+func (btc *bTreeContainers) Update(key uint64, fn func(*Container, bool) (*Container, bool)) {
+	btc.tree.Put(key, fn)
+}
+
+// UpdateEvery calls fn (existing-container, existed), and expects
+// (new-container, write). If write is true, the container is used to
+// replace the given container.
+func (btc *bTreeContainers) UpdateEvery(fn func(*Container, bool) (*Container, bool)) {
+	e, _ := btc.tree.Seek(0)
+	// currently not handling the error from this, but in practice it has
+	// to be io.EOF.
+	_ = e.Every(fn)
+}
+
 type btcIterator struct {
 	e   *enumerator
 	key uint64
@@ -186,10 +229,14 @@ type btcIterator struct {
 }
 
 func (i *btcIterator) Next() bool {
-
 	k, v, err := i.e.Next()
 	if err == io.EOF {
 		return false
+	}
+	if roaringParanoia {
+		if v == nil {
+			panic(fmt.Sprintf("got nil container for key %d", k))
+		}
 	}
 	i.key = k
 	i.val = v
@@ -197,8 +244,5 @@ func (i *btcIterator) Next() bool {
 }
 
 func (i *btcIterator) Value() (uint64, *Container) {
-	if i.val == nil {
-		return 0, nil
-	}
 	return i.key, i.val
 }

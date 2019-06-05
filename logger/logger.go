@@ -15,6 +15,7 @@
 package logger
 
 import (
+	"fmt"
 	"io"
 	"log"
 )
@@ -81,4 +82,26 @@ func (vb *verboseLogger) Debugf(format string, v ...interface{}) {
 
 func (vb *verboseLogger) Logger() *log.Logger {
 	return vb.logger
+}
+
+// CaptureLogger is a logger that stores all the print and debug messages
+// it sees, useful for testing.
+type CaptureLogger struct {
+	Prints []string
+	Debugs []string
+}
+
+// NewCaptureLogger yields a CaptureLogger.
+func NewCaptureLogger() *CaptureLogger {
+	return &CaptureLogger{}
+}
+
+// Printf formats a message and appends it to Prints.
+func (cl *CaptureLogger) Printf(format string, v ...interface{}) {
+	cl.Prints = append(cl.Prints, fmt.Sprintf(format, v...))
+}
+
+// Debugf formats a message and appends it to Debugs.
+func (cl *CaptureLogger) Debugf(format string, v ...interface{}) {
+	cl.Debugs = append(cl.Debugs, fmt.Sprintf(format, v...))
 }

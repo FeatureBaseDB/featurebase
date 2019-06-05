@@ -34,15 +34,24 @@ func TestInspectCommand_Run(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error creating tempfile: %s", err)
 	}
-	file.Write([]byte("12358267538963"))
+	_, err = file.Write([]byte("12358267538963"))
+	if err != nil {
+		t.Fatalf("writing to tempfile: %v", err)
+	}
 	file.Close()
 	cm.Path = file.Name()
 	err = cm.Run(context.Background())
+	if err != nil && err.Error() != "unmarshalling: reading roaring header: did not find expected serialCookie in header" {
+		t.Fatalf("can't run command: %v", err)
+	}
 
 	w.Close()
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	if !strings.Contains(buf.String(), "unmarshaling bitmap...") {
+	_, err = io.Copy(&buf, r)
+	if err != nil {
+		t.Fatalf("copying data: %v", err)
+	}
+	if !strings.Contains(buf.String(), "unmarshalling bitmap...") {
 		t.Fatalf("Inspect doesn't work: %s", err)
 	}
 

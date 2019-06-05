@@ -96,7 +96,7 @@ func (api *API) validate(f apiMethod) error {
 	if _, ok := validAPIMethods[state][f]; ok {
 		return nil
 	}
-	return newApiMethodNotAllowedError(errors.Errorf("api method %s not allowed in state %s", f, state))
+	return newAPIMethodNotAllowedError(errors.Errorf("api method %s not allowed in state %s", f, state))
 }
 
 // Query parses a PQL query out of the request and executes it.
@@ -213,7 +213,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 	for _, opt := range opts {
 		err := opt(&fo)
 		if err != nil {
-			return nil, errors.Wrap(err, "applying option")
+			return nil, NewBadRequestError(errors.Wrap(err, "applying option"))
 		}
 	}
 
@@ -290,6 +290,7 @@ func setUpImportOptions(opts ...ImportOption) (*ImportOptions, error) {
 // bitmap.
 func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, shard uint64, remote bool, req *ImportRoaringRequest) (err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "API.ImportRoaring")
+	span.LogKV("index", indexName, "field", fieldName)
 	defer span.Finish()
 
 	if err = api.validate(apiField); err != nil {
@@ -325,7 +326,7 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 					}
 					fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
 					if fileMagic == roaring.MagicNumber { // if pilosa roaring format
-						err = field.importRoaring(viewData, shard, viewName, req.Clear)
+						err = field.importRoaring(ctx, viewData, shard, viewName, req.Clear)
 						if err != nil {
 							return errors.Wrap(err, "importing pilosa roaring")
 						}
@@ -335,7 +336,7 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 						// field.importRoaring changes the standard roaring run format to pilosa roaring
 						data := make([]byte, len(viewData))
 						copy(data, viewData)
-						err = field.importRoaring(data, shard, viewName, req.Clear)
+						err = field.importRoaring(ctx, data, shard, viewName, req.Clear)
 						if err != nil {
 							return errors.Wrap(err, "importing standard roaring")
 						}
@@ -617,7 +618,7 @@ func (api *API) RecalculateCaches(ctx context.Context) error {
 	return nil
 }
 
-// PostClusterMessage is for internal use. It decodes a protobuf message out of
+// ClusterMessage is for internal use. It decodes a protobuf message out of
 // the body and forwards it to the BroadcastHandler.
 func (api *API) ClusterMessage(ctx context.Context, reqBody io.Reader) error {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.ClusterMessage")
@@ -653,6 +654,33 @@ func (api *API) Schema(ctx context.Context) []*IndexInfo {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.Schema")
 	defer span.Finish()
 	return api.holder.limitedSchema()
+}
+
+// ApplySchema takes the given schema and applies it across the
+// cluster (if remote is false), or just to this node (if remote is
+// true). This is designed for the use case of replicating a schema
+// from one Pilosa cluster to another which is initially empty. It is
+// not officially supported in other scenarios and may produce
+// surprising results.
+func (api *API) ApplySchema(ctx context.Context, s *Schema, remote bool) error {
+	span, _ := tracing.StartSpanFromContext(ctx, "API.ApplySchema")
+	defer span.Finish()
+
+	if err := api.validate(apiApplySchema); err != nil {
+		return errors.Wrap(err, "validating api method")
+	}
+
+	if !remote {
+		nodes := api.cluster.Nodes()
+		for i, node := range nodes {
+			err := api.server.defaultClient.PostSchema(ctx, &node.URI, s, true)
+			if err != nil {
+				return errors.Wrapf(err, "forwarding post schema to node %d of %d", i+1, len(nodes))
+			}
+		}
+	}
+
+	return api.holder.applySchema(s)
 }
 
 // Views returns the views in the given field.
@@ -712,7 +740,7 @@ func (api *API) DeleteView(ctx context.Context, indexName string, fieldName stri
 	return errors.Wrap(err, "sending DeleteView message")
 }
 
-// IndexAttrDiff
+// IndexAttrDiff determines the local column attribute data blocks which differ from those provided.
 func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.IndexAttrDiff")
 	defer span.Finish()
@@ -750,6 +778,7 @@ func (api *API) IndexAttrDiff(ctx context.Context, indexName string, blocks []At
 	return attrs, nil
 }
 
+// FieldAttrDiff determines the local row attribute data blocks which differ from those provided.
 func (api *API) FieldAttrDiff(ctx context.Context, indexName string, fieldName string, blocks []AttrBlock) (map[uint64]map[string]interface{}, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.FieldAttrDiff")
 	defer span.Finish()
@@ -796,6 +825,8 @@ type ImportOptions struct {
 // ImportOption is a functional option type for API.Import.
 type ImportOption func(*ImportOptions) error
 
+// OptImportOptionsClear is a functional option on ImportOption
+// used to specify whether the import is a set or clear operation.
 func OptImportOptionsClear(c bool) ImportOption {
 	return func(o *ImportOptions) error {
 		o.Clear = c
@@ -803,6 +834,8 @@ func OptImportOptionsClear(c bool) ImportOption {
 	}
 }
 
+// OptImportOptionsIgnoreKeyCheck is a functional option on ImportOption
+// used to specify whether key check should be ignored.
 func OptImportOptionsIgnoreKeyCheck(b bool) ImportOption {
 	return func(o *ImportOptions) error {
 		o.IgnoreKeyCheck = b
@@ -864,11 +897,14 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 				if _, ok := m[shard]; !ok {
 					m[shard] = make([]Bit, 0)
 				}
-				m[shard] = append(m[shard], Bit{
-					RowID:     req.RowIDs[i],
-					ColumnID:  colID,
-					Timestamp: req.Timestamps[i],
-				})
+				bit := Bit{
+					RowID:    req.RowIDs[i],
+					ColumnID: colID,
+				}
+				if len(req.Timestamps) > 0 {
+					bit.Timestamp = req.Timestamps[i]
+				}
+				m[shard] = append(m[shard], bit)
 			}
 
 			// Signal to the receiving nodes to ignore checking for key translation.
@@ -1175,7 +1211,7 @@ func (api *API) Version() string {
 	return strings.TrimPrefix(Version, "v")
 }
 
-// Info returns information about this server instance
+// Info returns information about this server instance.
 func (api *API) Info() serverInfo {
 	si := api.server.systemInfo
 	// we don't report errors on failures to get this information
@@ -1192,6 +1228,7 @@ func (api *API) Info() serverInfo {
 	}
 }
 
+// TranslateKeys handles a TranslateKeyRequest.
 func (api *API) TranslateKeys(body io.Reader) ([]byte, error) {
 	reqBytes, err := ioutil.ReadAll(body)
 	if err != nil {
@@ -1267,6 +1304,7 @@ const (
 	//apiStatsWithTags // not implemented
 	//apiVersion // not implemented
 	apiViews
+	apiApplySchema
 )
 
 var methodsCommon = map[apiMethod]struct{}{
@@ -1300,4 +1338,5 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiRemoveNode:           {},
 	apiShardNodes:           {},
 	apiViews:                {},
+	apiApplySchema:          {},
 }

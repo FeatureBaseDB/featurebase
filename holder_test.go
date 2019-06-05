@@ -67,7 +67,9 @@ func TestHolder_Open(t *testing.T) {
 		} else if err := os.Chmod(h.IndexPath("test"), 0000); err != nil {
 			t.Fatal(err)
 		}
-		defer os.Chmod(h.IndexPath("test"), 0777)
+		defer func() {
+			_ = os.Chmod(h.IndexPath("test"), 0755)
+		}()
 
 		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
 			t.Fatalf("unexpected error: %s", err)
@@ -106,8 +108,9 @@ func TestHolder_Open(t *testing.T) {
 		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar"), 0000); err != nil {
 			t.Fatal(err)
 		}
-		defer os.Chmod(filepath.Join(h.Path, "foo", "bar"), 0777)
-
+		defer func() {
+			_ = os.Chmod(filepath.Join(h.Path, "foo", "bar"), 0755)
+		}()
 		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
 			t.Fatalf("unexpected error: %s", err)
 		}
@@ -167,8 +170,9 @@ func TestHolder_Open(t *testing.T) {
 		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0"), 0000); err != nil {
 			t.Fatal(err)
 		}
-		defer os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0"), 0666)
-
+		defer func() {
+			_ = os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0"), 0644)
+		}()
 		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
 			t.Fatalf("unexpected error: %s", err)
 		}

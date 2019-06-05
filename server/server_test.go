@@ -321,6 +321,7 @@ func TestConfig_Parse_DataDir(t *testing.T) {
 func TestMain_RecalculateHashes(t *testing.T) {
 	const clusterSize = 5
 	cluster := test.MustRunCluster(t, clusterSize)
+	defer cluster.Close()
 
 	// Create the schema.
 	client0 := cluster[0].Client()
@@ -929,7 +930,10 @@ func TestClusterExhaustingConnectionsImport(t *testing.T) {
 	bm := roaring.NewBitmap()
 	bm.DirectAdd(0)
 	buf := &bytes.Buffer{}
-	bm.WriteTo(buf)
+	_, err := bm.WriteTo(buf)
+	if err != nil {
+		t.Fatalf("writing to buffer: %v", err)
+	}
 	data := buf.Bytes()
 
 	eg := errgroup.Group{}
@@ -952,7 +956,7 @@ func TestClusterExhaustingConnectionsImport(t *testing.T) {
 			return nil
 		})
 	}
-	err := eg.Wait()
+	err = eg.Wait()
 	if err != nil {
 		t.Fatalf("setting lots of shards: %v", err)
 	}

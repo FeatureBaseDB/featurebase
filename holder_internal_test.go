@@ -112,8 +112,10 @@ func TestHolder_Optn(t *testing.T) {
 		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard"), 0000); err != nil {
 			t.Fatal(err)
 		}
-		defer os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard"), 0777)
-
+		defer func() {
+			// we don't care about a failure here
+			_ = os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard"), 0755)
+		}()
 		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
 			t.Fatalf("unexpected error: %s", err)
 		}
@@ -136,7 +138,10 @@ func TestHolder_Optn(t *testing.T) {
 		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments"), 0000); err != nil {
 			t.Fatal(err)
 		}
-		defer os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments"), 0777)
+		defer func() {
+			// we don't care about a failure here
+			_ = os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments"), 0755)
+		}()
 
 		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
 			t.Fatalf("unexpected error: %s", err)
@@ -165,8 +170,9 @@ func TestHolder_Optn(t *testing.T) {
 		} else if err := os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0.cache"), 0000); err != nil {
 			t.Fatal(err)
 		}
-		defer os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0.cache"), 0666)
-
+		defer func() {
+			_ = os.Chmod(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0.cache"), 0644)
+		}()
 		if err := h.Reopen(); err == nil || !strings.Contains(err.Error(), "permission denied") {
 			t.Fatalf("unexpected error: %s", err)
 		}
@@ -209,8 +215,14 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 	hldr0.SetBit("y", "z", 10, (2*ShardWidth)+7)
 
 	// Set highest shard.
-	hldr0.Field("i", "f").AddRemoteAvailableShards(roaring.NewBitmap(0, 1))
-	hldr0.Field("y", "z").AddRemoteAvailableShards(roaring.NewBitmap(0, 1, 2))
+	err := hldr0.Field("i", "f").AddRemoteAvailableShards(roaring.NewBitmap(0, 1))
+	if err != nil {
+		t.Fatalf("adding remote shards: %v", err)
+	}
+	err = hldr0.Field("y", "z").AddRemoteAvailableShards(roaring.NewBitmap(0, 1, 2))
+	if err != nil {
+		t.Fatalf("adding remote shards: %v", err)
+	}
 
 	// Keep replication the same and ensure we get the expected results.
 	cluster.ReplicaN = 2
@@ -292,8 +304,20 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 func TestHolderCleaner_Reopen(t *testing.T) {
 	h := NewHolder()
 	h.Path = "path"
-	h.Open()
-	h.Close()
-	h.Open()
-	h.Close()
+	err := h.Open()
+	if err != nil {
+		t.Fatalf("couldn't open holder: %v", err)
+	}
+	err = h.Close()
+	if err != nil {
+		t.Fatalf("couldn't close holder: %v", err)
+	}
+	err = h.Open()
+	if err != nil {
+		t.Fatalf("couldn't open holder: %v", err)
+	}
+	err = h.Close()
+	if err != nil {
+		t.Fatalf("couldn't close holder: %v", err)
+	}
 }

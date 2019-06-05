@@ -253,8 +253,7 @@ func doContainer(typ byte, data interface{}) *Container {
 	case containerArray:
 		return NewContainerArray(data.([]uint16))
 	case containerBitmap:
-		c := NewContainerBitmap(0, data.([]uint64))
-		c.n = c.count()
+		c := NewContainerBitmap(-1, data.([]uint64))
 		return c
 	case containerRun:
 		return NewContainerRun(data.([]interval16))

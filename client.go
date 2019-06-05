@@ -1,3 +1,17 @@
+// Copyright 2017 Pilosa Corp.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pilosa
 
 import (
@@ -32,6 +46,7 @@ type FieldValue struct {
 type InternalClient interface {
 	MaxShardByIndex(ctx context.Context) (map[string]uint64, error)
 	Schema(ctx context.Context) ([]*IndexInfo, error)
+	PostSchema(ctx context.Context, uri *URI, s *Schema, remote bool) error
 	CreateIndex(ctx context.Context, index string, opt IndexOptions) error
 	FragmentNodes(ctx context.Context, index string, shard uint64) ([]*Node, error)
 	Nodes(ctx context.Context) ([]*Node, error)
@@ -58,6 +73,7 @@ type InternalClient interface {
 
 //===============
 
+// InternalQueryClient is the internal interface for querying a node.
 type InternalQueryClient interface {
 	QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error)
 }
@@ -88,6 +104,10 @@ func (n nopInternalClient) MaxShardByIndex(context.Context) (map[string]uint64, 
 	return nil, nil
 }
 func (n nopInternalClient) Schema(ctx context.Context) ([]*IndexInfo, error) { return nil, nil }
+func (n nopInternalClient) PostSchema(ctx context.Context, uri *URI, s *Schema, remote bool) error {
+	return nil
+}
+
 func (n nopInternalClient) CreateIndex(ctx context.Context, index string, opt IndexOptions) error {
 	return nil
 }

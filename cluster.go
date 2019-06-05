@@ -850,8 +850,8 @@ func (c *cluster) partition(index string, shard uint64) int {
 
 	// Hash the bytes and mod by partition count.
 	h := fnv.New64a()
-	h.Write([]byte(index))
-	h.Write(buf[:])
+	_, _ = h.Write([]byte(index))
+	_, _ = h.Write(buf[:])
 	return int(h.Sum64() % uint64(c.partitionN))
 }
 
@@ -1931,7 +1931,12 @@ func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 	for _, node := range officialNodes {
 		if node.ID == c.Node.ID && node.State != c.Node.State {
 			c.logger.Printf("mismatched state in mergeClusterStatus got %v have %v", node.State, c.Node.State)
-			go c.setNodeState(c.Node.State)
+			go func(fromState, toState string) {
+				err := c.setNodeState(toState)
+				if err != nil {
+					c.logger.Printf("error setting node state from %v to %v: %v", fromState, toState, err)
+				}
+			}(node.State, c.Node.State)
 		}
 		if err := c.addNode(node); err != nil {
 			return errors.Wrap(err, "adding node")
@@ -2003,12 +2008,16 @@ func (c *cluster) setStatic(hosts []string) error {
 	return nil
 }
 
+// ClusterStatus describes the status of the cluster including its
+// state and node topology.
 type ClusterStatus struct {
 	ClusterID string
 	State     string
 	Nodes     []*Node
 }
 
+// ResizeInstruction contains the instruction provided to a node
+// during a cluster resize operation.
 type ResizeInstruction struct {
 	JobID         int64
 	Node          *Node
@@ -2018,6 +2027,8 @@ type ResizeInstruction struct {
 	ClusterStatus *ClusterStatus
 }
 
+// ResizeSource is the source of data for a node acting on a
+// ResizeInstruction.
 type ResizeSource struct {
 	Node  *Node  `protobuf:"bytes,1,opt,name=Node" json:"Node,omitempty"`
 	Index string `protobuf:"bytes,2,opt,name=Index,proto3" json:"Index,omitempty"`
@@ -2057,82 +2068,101 @@ func decodeTopology(topology *internal.Topology) (*Topology, error) {
 	return t, nil
 }
 
+// CreateShardMessage is an internal message indicating shard creation.
 type CreateShardMessage struct {
 	Index string
 	Field string
 	Shard uint64
 }
 
+// CreateIndexMessage is an internal message indicating index creation.
 type CreateIndexMessage struct {
 	Index string
 	Meta  *IndexOptions
 }
 
+// DeleteIndexMessage is an internal message indicating index deletion.
 type DeleteIndexMessage struct {
 	Index string
 }
 
+// CreateFieldMessage is an internal message indicating field creation.
 type CreateFieldMessage struct {
 	Index string
 	Field string
 	Meta  *FieldOptions
 }
 
+// DeleteFieldMessage is an internal message indicating field deletion.
 type DeleteFieldMessage struct {
 	Index string
 	Field string
 }
 
+// DeleteAvailableShardMessage is an internal message indicating available shard deletion.
 type DeleteAvailableShardMessage struct {
 	Index   string
 	Field   string
 	ShardID uint64
 }
 
+// CreateViewMessage is an internal message indicating view creation.
 type CreateViewMessage struct {
 	Index string
 	Field string
 	View  string
 }
+
+// DeleteViewMessage is an internal message indicating view deletion.
 type DeleteViewMessage struct {
 	Index string
 	Field string
 	View  string
 }
 
+// ResizeInstructionComplete is an internal message to the coordinator indicating
+// that the resize instructions performed on a single node have completed.
 type ResizeInstructionComplete struct {
 	JobID int64
 	Node  *Node
 	Error string
 }
 
+// SetCoordinatorMessage is an internal message instructing nodes to honor a new coordinator.
 type SetCoordinatorMessage struct {
 	New *Node
 }
 
+// UpdateCoordinatorMessage is an internal message for reassigning the coordinator.
 type UpdateCoordinatorMessage struct {
 	New *Node
 }
 
+// NodeStateMessage is an internal message for broadcasting a node's state.
 type NodeStateMessage struct {
 	NodeID string `protobuf:"bytes,1,opt,name=NodeID,proto3" json:"NodeID,omitempty"`
 	State  string `protobuf:"bytes,2,opt,name=State,proto3" json:"State,omitempty"`
 }
 
+// NodeStatus is an internal message representing the contents of a node.
 type NodeStatus struct {
 	Node    *Node
 	Indexes []*IndexStatus
 	Schema  *Schema
 }
 
+// IndexStatus is an internal message representing the contents of an index.
 type IndexStatus struct {
 	Name   string
 	Fields []*FieldStatus
 }
 
+// FieldStatus is an internal message representing the contents of a field.
 type FieldStatus struct {
 	Name            string
 	AvailableShards *roaring.Bitmap
 }
 
+// RecalculateCaches is an internal message for recalculating all caches
+// within a holder.
 type RecalculateCaches struct{}
