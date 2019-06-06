@@ -13,15 +13,16 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/gogo/protobuf v1.2.0
-	github.com/golang/protobuf v1.2.0
+	github.com/golang/protobuf v1.3.1
 	github.com/google/go-cmp v0.2.0
 	github.com/gorilla/handlers v1.3.0
 	github.com/gorilla/mux v1.7.0
 	github.com/hashicorp/memberlist v0.1.3
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	github.com/opentracing/opentracing-go v1.0.2
+	github.com/opentracing/opentracing-go v1.1.0
 	github.com/pelletier/go-toml v1.2.0
 	github.com/pkg/errors v0.8.1
+	github.com/prometheus/client_golang v0.9.3
 	github.com/remyoudompheng/bigfft v0.0.0-20190321074620-2f0d2b0e0001 // indirect
 	github.com/satori/go.uuid v1.2.0
 	github.com/shirou/gopsutil v2.18.12+incompatible
@@ -29,14 +30,15 @@ require (
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/pflag v1.0.3
 	github.com/spf13/viper v1.3.1
+	github.com/uber-go/atomic v1.4.0 // indirect
 	github.com/uber/jaeger-client-go v2.16.0+incompatible
 	github.com/uber/jaeger-lib v2.0.0+incompatible // indirect
+	go.uber.org/atomic v1.4.0 // indirect
 	golang.org/x/crypto v0.0.0-20190426145343-a29dc8fdc734 // indirect
 	golang.org/x/net v0.0.0-20190424112056-4829fb13d2c6 // indirect
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/sys v0.0.0-20190429190828-d89cdac9e872 // indirect
 	golang.org/x/text v0.3.2 // indirect
-	golang.org/x/tools v0.0.0-20190429231329-9d4d845e86f1 // indirect
 	modernc.org/mathutil v1.0.0
 	modernc.org/strutil v1.0.0
 )

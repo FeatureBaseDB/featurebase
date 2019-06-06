@@ -39,6 +39,7 @@ import (
 	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Handler represents an HTTP handler.
@@ -243,6 +244,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST").Name("PostClusterResizeSetCoordinator")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
+	router.Handle("/metrics", promhttp.Handler())
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET").Name("GetExport")
 	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET").Name("GetIndexes")
 	router.HandleFunc("/index/{index}", handler.handleGetIndex).Methods("GET").Name("GetIndex")
@@ -298,16 +300,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	dif := time.Since(t)
 
 	// Calculate per request StatsD metrics when the handler is fully configured.
-	statsTags := make([]string, 0, 3)
+	statsTags := make([]string, 0, 4)
 
+	pathParts := strings.Split(r.URL.Path, "/")
 	longQueryTime := h.api.LongQueryTime()
 	if longQueryTime > 0 && dif > longQueryTime {
 		h.logger.Printf("%s %s %v", r.Method, r.URL.String(), dif)
 		statsTags = append(statsTags, "slow_query")
 	}
 
-	pathParts := strings.Split(r.URL.Path, "/")
-	endpointName := strings.Join(pathParts, "_")
+	statsTags = append(statsTags, "url:"+r.URL.Path)
 
 	if externalPrefixFlag[pathParts[1]] {
 		statsTags = append(statsTags, "external")
@@ -317,7 +319,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	statsTags = append(statsTags, "useragent:"+r.UserAgent())
 	stats := h.api.StatsWithTags(statsTags)
 	if stats != nil {
-		stats.Histogram("http."+endpointName, float64(dif), 0.1)
+		stats.Histogram("http.request", float64(dif), 0.1)
 	}
 }
 
