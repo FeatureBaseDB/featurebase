@@ -239,13 +239,13 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t := time.Now()
 		next.ServeHTTP(w, r)
-		dif := time.Since(t)
+		dur := time.Since(t)
 
 		statsTags := make([]string, 0, 4)
 
 		longQueryTime := h.api.LongQueryTime()
-		if longQueryTime > 0 && dif > longQueryTime {
-			h.logger.Printf("%s %s %v", r.Method, r.URL.String(), dif)
+		if longQueryTime > 0 && dur > longQueryTime {
+			h.logger.Printf("%s %s %v", r.Method, r.URL.String(), dur)
 			statsTags = append(statsTags, "slow_query")
 		}
 
@@ -263,7 +263,7 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 
 		stats := h.api.StatsWithTags(statsTags)
 		if stats != nil {
-			stats.Histogram("http.request", float64(dif), 0.1)
+			stats.Timing("http.request", dur, 0.1)
 		}
 	})
 }
