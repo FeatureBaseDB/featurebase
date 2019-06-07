@@ -233,7 +233,7 @@ func (c *prometheusClient) Set(name string, value string, rate float64) {
 
 // Timing tracks timing information for a metric.
 func (c *prometheusClient) Timing(name string, value time.Duration, rate float64) {
-	durationMs := value / time.Millisecond
+	durationMs := value / time.Second
 	c.Histogram(name, float64(durationMs), rate)
 }
 
