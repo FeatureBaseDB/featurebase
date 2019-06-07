@@ -242,6 +242,115 @@ func TestAPI_ImportValue(t *testing.T) {
 	})
 }
 
+func TestAPI_ShardDistributionByIndex(t *testing.T) {
+	c := test.MustRunCluster(t, 5)
+	defer c.Close()
+
+	m0 := c[0]
+
+	ctx := context.Background()
+	index := "idx"
+	field := "f"
+
+	_, err := m0.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: false, TrackExistence: false})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+	_, err = m0.API.CreateField(ctx, index, field, pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, 100))
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
+
+	// Generate a shard range by setting a bit.
+	rowIDs := []uint64{1}
+	colIDs := []uint64{3145728}
+	timestamps := []int64{0}
+
+	// Import data with keys to the coordinator (node0) and verify that it gets
+	// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
+	req := &pilosa.ImportRequest{
+		Index:      index,
+		Field:      field,
+		Shard:      0,
+		RowIDs:     rowIDs,
+		ColumnIDs:  colIDs,
+		Timestamps: timestamps,
+	}
+	if err := m0.API.Import(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name            string
+		idx             string
+		provideMaxShard bool
+		maxShard        uint64
+		expected        [][]uint64
+	}{
+		{
+			name:            "ExistingIndexProvideMaxShard",
+			idx:             index,
+			provideMaxShard: true,
+			maxShard:        10,
+			expected: [][]uint64{
+				{0, 1, 2, 4, 5},
+				{6},
+				{8},
+				{7, 9},
+				{3, 10},
+			},
+		},
+		{
+			name:            "ExistingIndexNotProvideMaxShard",
+			idx:             index,
+			provideMaxShard: false,
+			maxShard:        0,
+			expected: [][]uint64{
+				{0, 1, 2},
+				{},
+				{},
+				{},
+				{3},
+			},
+		},
+		{
+			name:            "NonExistingIndexProvideMaxShard",
+			idx:             "foobar",
+			provideMaxShard: true,
+			maxShard:        10,
+			expected: [][]uint64{
+				{0, 1, 2, 3, 6},
+				{5},
+				{8},
+				{4, 9},
+				{7, 10},
+			},
+		},
+		{
+			name:            "NonExistingIndexNotProvideMaxShard",
+			idx:             "foobar",
+			provideMaxShard: false,
+			maxShard:        0,
+			expected: [][]uint64{
+				{0},
+				{},
+				{},
+				{},
+				{},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, shards := m0.API.ShardDistributionByIndex(ctx, test.idx, test.provideMaxShard, test.maxShard)
+
+			if !reflect.DeepEqual(shards, test.expected) {
+				t.Fatalf("unexpected shard distribution for index: %v", shards)
+			}
+		})
+	}
+}
+
 // offsetModHasher represents a simple, mod-based hashing offset by 1.
 type offsetModHasher struct{}
 

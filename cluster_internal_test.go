@@ -389,6 +389,47 @@ func TestHasher(t *testing.T) {
 	}
 }
 
+// Ensure shardDistributionByIndex can generate the correct shard distribution lists.
+func TestCluster_ShardDistribution(t *testing.T) {
+	t.Run("Replication1", func(t *testing.T) {
+		c := NewTestCluster(5)
+		c.ReplicaN = 1
+
+		_, shards := c.shardDistributionByIndex("idx", 12)
+
+		exp := [][]uint64{
+			{9, 12},
+			{1, 4, 7, 8, 11},
+			{},
+			{0, 3, 6, 10},
+			{2, 5},
+		}
+
+		if !reflect.DeepEqual(shards, exp) {
+			t.Fatalf("unexpected shard distribution for index: %v", shards)
+		}
+	})
+
+	t.Run("Replication2", func(t *testing.T) {
+		c := NewTestCluster(5)
+		c.ReplicaN = 2
+
+		_, shards := c.shardDistributionByIndex("idx", 12)
+
+		exp := [][]uint64{
+			{2, 5, 9, 12},
+			{1, 4, 7, 8, 9, 11, 12},
+			{1, 4, 7, 8, 11},
+			{0, 3, 6, 10},
+			{0, 2, 3, 5, 6, 10},
+		}
+
+		if !reflect.DeepEqual(shards, exp) {
+			t.Fatalf("unexpected shard distribution for index: %v", shards)
+		}
+	})
+}
+
 // Ensure ContainsShards can find the actual shard list for node and index.
 func TestCluster_ContainsShards(t *testing.T) {
 	c := NewTestCluster(5)
@@ -396,7 +437,7 @@ func TestCluster_ContainsShards(t *testing.T) {
 	shards := c.containsShards("test", roaring.NewBitmap(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10), c.nodes[2])
 
 	if !reflect.DeepEqual(shards, []uint64{0, 2, 3, 5, 6, 9, 10}) {
-		t.Fatalf("unexpected shars for node's index: %v", shards)
+		t.Fatalf("unexpected shards for node's index: %v", shards)
 	}
 }
 
