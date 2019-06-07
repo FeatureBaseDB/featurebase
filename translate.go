@@ -29,11 +29,10 @@ const (
 )
 
 var (
-	ErrTranslateStoreClosed          = errors.New("pilosa: translate store closed")
-	ErrTranslateStoreReaderClosed    = errors.New("pilosa: translate store reader closed")
-	ErrReplicationNotSupported       = errors.New("pilosa: replication not supported")
-	ErrTranslateStoreReadOnly        = errors.New("pilosa: translate store could not find or create key, translate store read only")
-	ErrTranslateReadTargetUndersized = errors.New("pilosa: translate read target is undersized")
+	ErrTranslateStoreClosed       = errors.New("pilosa: translate store closed")
+	ErrTranslateStoreReaderClosed = errors.New("pilosa: translate store reader closed")
+	ErrReplicationNotSupported    = errors.New("pilosa: replication not supported")
+	ErrTranslateStoreReadOnly     = errors.New("pilosa: translate store could not find or create key, translate store read only")
 )
 
 // TranslateStore is the storage for translation string-to-uint64 values.
@@ -699,48 +698,38 @@ func (e *LogEntry) ReadFrom(r io.Reader) (_ int64, err error) {
 		return int64(uVarintSize(e.Length)), err
 	}
 
-	// Slurp entire entry and replace reader.
-	buf := make([]byte, e.Length)
-	n, err := io.ReadFull(r, buf)
-	n64 := int64(n + uVarintSize(e.Length))
-	if err != nil {
-		return n64, err
-	}
-	bufr := bytes.NewReader(buf)
-	br, r = bufr, bufr
-
 	// Read the entry type.
 	if err := binary.Read(r, binary.BigEndian, &e.Type); err != nil {
-		return n64, err
+		return 0, err
 	}
 
 	// Read index name.
 	if sz, err := binary.ReadUvarint(br); err != nil {
-		return n64, err
+		return 0, err
 	} else if sz == 0 {
 		e.Index = nil
 	} else {
 		e.Index = make([]byte, sz)
 		if _, err := io.ReadFull(r, e.Index); err != nil {
-			return n64, err
+			return 0, err
 		}
 	}
 
 	// Read field name.
 	if sz, err := binary.ReadUvarint(br); err != nil {
-		return n64, err
+		return 0, err
 	} else if sz == 0 {
 		e.Field = nil
 	} else {
 		e.Field = make([]byte, sz)
 		if _, err := io.ReadFull(r, e.Field); err != nil {
-			return n64, err
+			return 0, err
 		}
 	}
 
 	// Read key count.
 	if n, err := binary.ReadUvarint(br); err != nil {
-		return n64, err
+		return 0, err
 	} else if n == 0 {
 		e.IDs, e.Keys = nil, nil
 	} else {
@@ -751,20 +740,21 @@ func (e *LogEntry) ReadFrom(r io.Reader) (_ int64, err error) {
 	for i := range e.Keys {
 		// Read identifier.
 		if e.IDs[i], err = binary.ReadUvarint(br); err != nil {
-			return n64, err
+			return 0, err
 		}
 
 		// Read key.
 		if sz, err := binary.ReadUvarint(br); err != nil {
-			return n64, err
+			return 0, err
 		} else if sz > 0 {
 			e.Keys[i] = make([]byte, sz)
 			if _, err := io.ReadFull(r, e.Keys[i]); err != nil {
-				return n64, err
+				return 0, err
 			}
 		}
 	}
-	return n64, nil
+
+	return int64(uVarintSize(e.Length)) + int64(e.Length), nil
 }
 
 // WriteTo serializes a LogEntry to w.
@@ -826,22 +816,6 @@ func (e *LogEntry) WriteTo(w io.Writer) (_ int64, err error) {
 	// Write buffer.
 	n, err := buf.WriteTo(w)
 	return int64(sz) + n, err
-}
-
-// validLogEntriesLen returns the maximum length of p that contains valid entries.
-func validLogEntriesLen(p []byte) (n int) {
-	r := bytes.NewReader(p)
-	for {
-		if sz, err := binary.ReadUvarint(r); err != nil {
-			return n
-		} else if off, err := r.Seek(int64(sz), io.SeekCurrent); err != nil {
-			return n
-		} else if off > int64(len(p)) {
-			return n
-		} else {
-			n = int(off)
-		}
-	}
 }
 
 type fieldKey struct {
@@ -1079,7 +1053,7 @@ func (r *translateFileReader) Read(p []byte) (n int, err error) {
 	}
 }
 
-// read writes the bytes for zero or more valid entries to p.
+// read reads up to len(p) bytes into p.
 func (r *translateFileReader) read(p []byte) (n int, err error) {
 	sz := r.store.size()
 
@@ -1090,20 +1064,13 @@ func (r *translateFileReader) read(p []byte) (n int, err error) {
 		return 0, nil
 	}
 
-	if max := sz - r.offset; max > int64(len(p)) {
-		// If p is not large enough to hold a single entry,
-		// return an error so the client can increase the
-		// size of p and try again.
-		return 0, ErrTranslateReadTargetUndersized
-	} else if int64(len(p)) > max {
+	if max := sz - r.offset; int64(len(p)) > max {
 		// Shorten buffer to maximum read size.
 		p = p[:max]
 	}
 
 	// Read data from file at offset.
-	// Limit the number of bytes read to only whole entries.
 	n, err = r.file.ReadAt(p, r.offset)
-	n = validLogEntriesLen(p[:n])
 	r.offset += int64(n)
 	return n, err
 }
