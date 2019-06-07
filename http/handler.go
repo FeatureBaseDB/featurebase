@@ -241,7 +241,7 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 		dur := time.Since(t)
 
-		statsTags := make([]string, 0, 4)
+		statsTags := make([]string, 0, 5)
 
 		longQueryTime := h.api.LongQueryTime()
 		if longQueryTime > 0 && dur > longQueryTime {
@@ -260,6 +260,8 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 		if err == nil {
 			statsTags = append(statsTags, "path:"+path)
 		}
+
+		statsTags = append(statsTags, "method:"+r.Method)
 
 		stats := h.api.StatsWithTags(statsTags)
 		if stats != nil {
