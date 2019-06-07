@@ -235,6 +235,39 @@ func (h *Handler) extractTracing(next http.Handler) http.Handler {
 	})
 }
 
+func (h *Handler) collectStats(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t := time.Now()
+		next.ServeHTTP(w, r)
+		dif := time.Since(t)
+
+		statsTags := make([]string, 0, 4)
+
+		longQueryTime := h.api.LongQueryTime()
+		if longQueryTime > 0 && dif > longQueryTime {
+			h.logger.Printf("%s %s %v", r.Method, r.URL.String(), dif)
+			statsTags = append(statsTags, "slow_query")
+		}
+
+		pathParts := strings.Split(r.URL.Path, "/")
+		if externalPrefixFlag[pathParts[1]] {
+			statsTags = append(statsTags, "external")
+		}
+
+		statsTags = append(statsTags, "useragent:"+r.UserAgent())
+
+		path, err := mux.CurrentRoute(r).GetPathTemplate()
+		if err == nil {
+			statsTags = append(statsTags, "path:"+path)
+		}
+
+		stats := h.api.StatsWithTags(statsTags)
+		if stats != nil {
+			stats.Histogram("http.request", float64(dif), 0.1)
+		}
+	})
+}
+
 // newRouter creates a new mux http router.
 func newRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
@@ -280,6 +313,7 @@ func newRouter(handler *Handler) *mux.Router {
 
 	router.Use(handler.queryArgValidator)
 	router.Use(handler.extractTracing)
+	router.Use(handler.collectStats)
 	return router
 }
 
@@ -295,32 +329,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	t := time.Now()
 	h.Handler.ServeHTTP(w, r)
-	dif := time.Since(t)
-
-	// Calculate per request StatsD metrics when the handler is fully configured.
-	statsTags := make([]string, 0, 4)
-
-	pathParts := strings.Split(r.URL.Path, "/")
-	longQueryTime := h.api.LongQueryTime()
-	if longQueryTime > 0 && dif > longQueryTime {
-		h.logger.Printf("%s %s %v", r.Method, r.URL.String(), dif)
-		statsTags = append(statsTags, "slow_query")
-	}
-
-	statsTags = append(statsTags, "url:"+r.URL.Path)
-
-	if externalPrefixFlag[pathParts[1]] {
-		statsTags = append(statsTags, "external")
-	}
-
-	// useragent tag identifies internal/external endpoints
-	statsTags = append(statsTags, "useragent:"+r.UserAgent())
-	stats := h.api.StatsWithTags(statsTags)
-	if stats != nil {
-		stats.Histogram("http.request", float64(dif), 0.1)
-	}
 }
 
 // successResponse is a general success/error struct for http responses.
