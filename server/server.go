@@ -44,6 +44,7 @@ import (
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/logger"
+	"github.com/pilosa/pilosa/prometheus"
 	"github.com/pilosa/pilosa/stats"
 	"github.com/pilosa/pilosa/statsd"
 	"github.com/pilosa/pilosa/syswrap"
@@ -395,6 +396,8 @@ func newStatsClient(name string, host string) (stats.StatsClient, error) {
 		return stats.NewExpvarStatsClient(), nil
 	case "statsd":
 		return statsd.NewStatsClient(host)
+	case "prometheus":
+		return prometheus.NewPrometheusClient()
 	case "nop", "none":
 		return stats.NopStatsClient, nil
 	default:
