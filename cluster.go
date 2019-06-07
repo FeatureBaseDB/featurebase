@@ -843,6 +843,34 @@ func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*ResizeSour
 	return m, nil
 }
 
+// shardDistributionByIndex returns a slice of shards per node for an index, up to maxShard.
+func (c *cluster) shardDistributionByIndex(index string, maxShard uint64) ([]Node, [][]uint64) {
+	m := make(map[Node][]uint64)
+
+	for i := range c.nodes {
+		m[*c.nodes[i]] = []uint64{}
+	}
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	for shard := uint64(0); shard <= maxShard; shard++ {
+		for _, node := range c.shardNodes(index, shard) {
+			m[*node] = append(m[*node], shard)
+		}
+	}
+
+	n := make([]Node, len(c.nodes))
+	s := make([][]uint64, len(c.nodes))
+
+	for i := range c.nodes {
+		n[i] = *c.nodes[i]
+		s[i] = m[*c.nodes[i]]
+	}
+
+	return n, s
+}
+
 // partition returns the partition that a shard belongs to.
 func (c *cluster) partition(index string, shard uint64) int {
 	var buf [8]byte

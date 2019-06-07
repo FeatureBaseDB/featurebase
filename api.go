@@ -1049,6 +1049,25 @@ func importExistenceColumns(index *Index, columnIDs []uint64) error {
 	return ef.Import(existenceRowIDs, columnIDs, nil)
 }
 
+// ShardDistributionByIndex returns a slice of shards per node.
+func (api *API) ShardDistributionByIndex(ctx context.Context, index string, provideMaxShard bool, maxShard uint64) ([]Node, [][]uint64) {
+	span, _ := tracing.StartSpanFromContext(ctx, "API.ShardDistributionByIndex")
+	defer span.Finish()
+
+	calculatedMaxShard := uint64(0)
+	if provideMaxShard {
+		calculatedMaxShard = maxShard
+	} else {
+		// Get max shard from cluster.
+		maxShards := api.MaxShards(ctx)
+		if mx, ok := maxShards[index]; ok {
+			calculatedMaxShard = mx
+		}
+	}
+
+	return api.cluster.shardDistributionByIndex(index, calculatedMaxShard)
+}
+
 // MaxShards returns the maximum shard number for each index in a map.
 // TODO (2.0): This method has been deprecated. Instead, use
 // AvailableShardsByIndex.

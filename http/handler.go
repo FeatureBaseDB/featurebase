@@ -200,7 +200,8 @@ func (h *Handler) populateValidators() {
 	h.validators["PostIndexAttrDiff"] = queryValidationSpecRequired()
 	h.validators["PostFieldAttrDiff"] = queryValidationSpecRequired()
 	h.validators["GetNodes"] = queryValidationSpecRequired()
-	h.validators["GetShardMax"] = queryValidationSpecRequired()
+	h.validators["GetShardsDistribution"] = queryValidationSpecRequired("index").Optional("maxShard")
+	h.validators["GetShardsMax"] = queryValidationSpecRequired()
 	h.validators["GetTranslateData"] = queryValidationSpecRequired("offset")
 	h.validators["PostTranslateKeys"] = queryValidationSpecRequired()
 }
@@ -274,6 +275,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/index/{index}/field/{field}/attr/diff", handler.handlePostFieldAttrDiff).Methods("POST").Name("PostFieldAttrDiff")
 	router.HandleFunc("/internal/index/{index}/field/{field}/remote-available-shards/{shardID}", handler.handleDeleteRemoteAvailableShard).Methods("DELETE")
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
+	router.HandleFunc("/internal/shards/distribution", handler.handleGetShardsDistribution).Methods("GET").Name("GetShardsDistribution")
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
 	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET").Name("GetTranslateData")
 	router.HandleFunc("/internal/translate/keys", handler.handlePostTranslateKeys).Methods("POST").Name("PostTranslateKeys")
@@ -526,6 +528,53 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 	if err := h.writeQueryResponse(w, r, &resp); err != nil {
 		h.logger.Printf("write query response error: %s", err)
 	}
+}
+
+// handleGetShardsDistribution handles GET /internal/shards/distribution requests.
+func (h *Handler) handleGetShardsDistribution(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+
+	q := r.URL.Query()
+	index := q.Get("index")
+	provideMaxShard := q.Get("maxShard") != ""
+	maxShard := uint64(0)
+
+	if provideMaxShard {
+		ms, err := strconv.ParseUint(q.Get("maxShard"), 10, 64)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("invalid max shard: %s", err.Error()), http.StatusBadRequest)
+			return
+		}
+		maxShard = ms
+	}
+
+	nodes, shards := h.api.ShardDistributionByIndex(r.Context(), index, provideMaxShard, maxShard)
+
+	ns := []nodeShards{}
+	for i := range nodes {
+		ns = append(ns, nodeShards{
+			Position: i,
+			Node:     nodes[i],
+			Shards:   shards[i],
+		})
+	}
+
+	if err := json.NewEncoder(w).Encode(ns); err != nil {
+		h.logger.Printf("shards-distribution response error: %s", err)
+	}
+}
+
+type nodeShards struct {
+	Position int         `json:"position"`
+	Node     pilosa.Node `json:"node"`
+	Shards   []uint64    `json:"shards"`
+}
+
+type getShardsDistributionResponse struct {
+	Standard []nodeShards `json:"standard"`
 }
 
 // handleGetShardsMax handles GET /internal/shards/max requests.

@@ -49,6 +49,7 @@ type InternalClient interface {
 	PostSchema(ctx context.Context, uri *URI, s *Schema, remote bool) error
 	CreateIndex(ctx context.Context, index string, opt IndexOptions) error
 	FragmentNodes(ctx context.Context, index string, shard uint64) ([]*Node, error)
+	ShardDistribution(ctx context.Context, index string, maxShard uint64) ([]Node, [][]uint64, error)
 	Nodes(ctx context.Context) ([]*Node, error)
 	Query(ctx context.Context, index string, queryRequest *QueryRequest) (*QueryResponse, error)
 	QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error)
@@ -113,6 +114,9 @@ func (n nopInternalClient) CreateIndex(ctx context.Context, index string, opt In
 }
 func (n nopInternalClient) FragmentNodes(ctx context.Context, index string, shard uint64) ([]*Node, error) {
 	return nil, nil
+}
+func (n nopInternalClient) ShardDistribution(ctx context.Context, index string, maxShard uint64) ([]Node, [][]uint64, error) {
+	return nil, nil, nil
 }
 func (n nopInternalClient) Nodes(ctx context.Context) ([]*Node, error) {
 	return nil, nil

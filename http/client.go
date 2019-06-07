@@ -226,6 +226,48 @@ func (c *InternalClient) FragmentNodes(ctx context.Context, index string, shard 
 	return a, nil
 }
 
+// ShardDistribution returns a slice of shards per node.
+func (c *InternalClient) ShardDistribution(ctx context.Context, index string, maxShard uint64) ([]pilosa.Node, [][]uint64, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ShardDistribution")
+	defer span.Finish()
+
+	// Execute request against the host.
+	u := uriPathToURL(c.defaultURI, "/internal/shards/distribution")
+	u.RawQuery = (url.Values{"index": {index}, "maxShard": {strconv.FormatUint(maxShard, 10)}}).Encode()
+
+	// Build request.
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+	req.Header.Set("Accept", "application/json")
+
+	// Execute request.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+
+	// Decode response object.
+	var rsp getShardsDistributionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&rsp); err != nil {
+		return nil, nil, errors.Wrap(err, "decoding")
+	}
+
+	n := make([]pilosa.Node, len(rsp.Standard))
+	s := make([][]uint64, len(rsp.Standard))
+
+	for i := range rsp.Standard {
+		n[i] = rsp.Standard[i].Node
+		s[i] = rsp.Standard[i].Shards
+	}
+
+	return n, s, nil
+}
+
 // Nodes returns a list of all nodes.
 func (c *InternalClient) Nodes(ctx context.Context) ([]*pilosa.Node, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Nodes")
