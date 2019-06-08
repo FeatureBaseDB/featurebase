@@ -562,7 +562,9 @@ func (h *Handler) handleGetShardsDistribution(w http.ResponseWriter, r *http.Req
 		})
 	}
 
-	if err := json.NewEncoder(w).Encode(ns); err != nil {
+	if err := json.NewEncoder(w).Encode(getShardsDistributionResponse{
+		Distribution: ns,
+	}); err != nil {
 		h.logger.Printf("shards-distribution response error: %s", err)
 	}
 }
@@ -574,7 +576,7 @@ type nodeShards struct {
 }
 
 type getShardsDistributionResponse struct {
-	Standard []nodeShards `json:"standard"`
+	Distribution []nodeShards `json:"distribution"`
 }
 
 // handleGetShardsMax handles GET /internal/shards/max requests.

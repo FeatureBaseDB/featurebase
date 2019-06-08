@@ -75,6 +75,7 @@ Build Time: ` + pilosa.BuildTime + "\n",
 	rc.AddCommand(newImportCommand(stdin, stdout, stderr))
 	rc.AddCommand(newInspectCommand(stdin, stdout, stderr))
 	rc.AddCommand(newServeCmd(stdin, stdout, stderr))
+	rc.AddCommand(newShardDistributionCommand(stdin, stdout, stderr))
 
 	rc.SetOutput(stderr)
 	return rc

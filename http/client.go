@@ -257,12 +257,12 @@ func (c *InternalClient) ShardDistribution(ctx context.Context, index string, ma
 		return nil, nil, errors.Wrap(err, "decoding")
 	}
 
-	n := make([]pilosa.Node, len(rsp.Standard))
-	s := make([][]uint64, len(rsp.Standard))
+	n := make([]pilosa.Node, len(rsp.Distribution))
+	s := make([][]uint64, len(rsp.Distribution))
 
-	for i := range rsp.Standard {
-		n[i] = rsp.Standard[i].Node
-		s[i] = rsp.Standard[i].Shards
+	for i := range rsp.Distribution {
+		n[i] = rsp.Distribution[i].Node
+		s[i] = rsp.Distribution[i].Shards
 	}
 
 	return n, s, nil
