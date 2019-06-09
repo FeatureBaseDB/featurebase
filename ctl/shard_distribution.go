@@ -43,9 +43,6 @@ type ShardDistributionCommand struct {
 	// Replicas to include in shard distribution.
 	ReplicaN int
 
-	// Filename to export to.
-	Path string
-
 	// Standard input/output
 	*pilosa.CmdIO
 
@@ -72,7 +69,7 @@ func (cmd *ShardDistributionCommand) Run(ctx context.Context) error {
 	maxShard := uint64(cmd.MaxShard)
 
 	//nodes := []pilosa.Node{}
-	shards := [][]uint64{}
+	var shards [][]uint64
 
 	// If no host is specified, launch an in-memory cluster.
 	if cmd.Host == "" {

@@ -45,7 +45,6 @@ Pilosa cluster.
 	flags.IntVarP(&shardDistributioner.NumNodes, "num-nodes", "n", 1, "Number of nodes in the cluster")
 	flags.IntVarP(&shardDistributioner.MaxShard, "max-shard", "m", 0, "Maximum shard to include (0-indexed)")
 	flags.IntVarP(&shardDistributioner.ReplicaN, "replicas", "r", 1, "Number of replicas to include")
-	flags.StringVarP(&shardDistributioner.Path, "output-file", "o", "", "File to write shard distribution to - default stdout")
 	ctl.SetTLSConfig(flags, &shardDistributioner.TLS.CertificatePath, &shardDistributioner.TLS.CertificateKeyPath, &shardDistributioner.TLS.SkipVerify)
 
 	return shardDistributionCmd
