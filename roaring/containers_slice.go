@@ -75,6 +75,10 @@ func (sc *sliceContainers) Remove(key uint64) {
 	if i < 0 {
 		return
 	}
+	if key == sc.lastKey {
+		sc.lastKey = ^uint64(0)
+		sc.lastContainer = nil
+	}
 	sc.keys = append(sc.keys[:i], sc.keys[i+1:]...)
 	sc.containers = append(sc.containers[:i], sc.containers[i+1:]...)
 
@@ -154,6 +158,18 @@ func (sc *sliceContainers) Count() uint64 {
 func (sc *sliceContainers) Reset() {
 	sc.keys = sc.keys[:0]
 	sc.containers = sc.containers[:0]
+	sc.lastContainer = nil
+	sc.lastKey = 0
+}
+
+func (sc *sliceContainers) ResetN(n int) {
+	if cap(sc.keys) < n {
+		sc.keys = make([]uint64, 0, n)
+		sc.containers = make([]*Container, 0, n)
+	} else {
+		sc.keys = sc.keys[:0]
+		sc.containers = sc.containers[:0]
+	}
 	sc.lastContainer = nil
 	sc.lastKey = 0
 }

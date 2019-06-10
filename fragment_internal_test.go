@@ -3208,7 +3208,7 @@ func TestImportClearRestart(t *testing.T) {
 				f2.MaxOpN = maxOpN
 				f2.CacheType = f.CacheType
 
-				err = f.closeStorage()
+				err = f.closeStorage(true)
 				if err != nil {
 					t.Fatalf("closing storage: %v", err)
 				}
@@ -3242,7 +3242,7 @@ func TestImportClearRestart(t *testing.T) {
 				f3.MaxOpN = maxOpN
 				f3.CacheType = f.CacheType
 
-				err = f2.closeStorage()
+				err = f2.closeStorage(true)
 				if err != nil {
 					t.Fatalf("f2 closing storage: %v", err)
 				}

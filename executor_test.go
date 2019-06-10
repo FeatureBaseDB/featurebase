@@ -2876,7 +2876,6 @@ func TestExecutor_Execute_ClearRow(t *testing.T) {
 			t.Fatalf("unexpected columns: %+v", bits)
 		}
 	})
-
 	t.Run("Mutex", func(t *testing.T) {
 		responses := runCallTest(t, writeQuery, readQueries,
 			&pilosa.IndexOptions{TrackExistence: true},

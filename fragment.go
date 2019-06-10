@@ -177,7 +177,7 @@ func (f *fragment) Open() error {
 	if err := func() error {
 		// Initialize storage in a function so we can close if anything goes wrong.
 		f.Logger.Debugf("open storage for index/field/view/fragment: %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
-		if err := f.openStorage(); err != nil {
+		if err := f.openStorage(true); err != nil {
 			return errors.Wrap(err, "opening storage")
 		}
 
@@ -215,12 +215,17 @@ func (f *fragment) reopen() (mustClose bool, err error) {
 	return mustClose, nil
 }
 
-// openStorage opens the storage bitmap.
-func (f *fragment) openStorage() error {
+// openStorage opens the storage bitmap. Usually you also want to read in
+// the storage, but in the case where we just wrote that file, such as
+// unprotectedWriteToStorage, we could also just... not.
+func (f *fragment) openStorage(readData bool) error {
 	// Create a roaring bitmap to serve as storage for the shard.
 	if f.storage == nil {
 		f.storage = roaring.NewFileBitmap()
 		f.storage.Flags = f.flags
+		// if we didn't actually have storage, we *do* need to
+		// read this data.
+		readData = true
 	}
 	// Open the data file to be mmap'd and used as an ops log.
 	file, mustClose, err := syswrap.OpenFile(f.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
@@ -251,7 +256,12 @@ func (f *fragment) openStorage() error {
 		if err != nil {
 			return errors.Wrap(err, "statting file after")
 		}
-	} else {
+		// there's nothing here, we're not going to read the data.
+		readData = false
+		f.rowCache = &simpleCache{make(map[uint64]*Row)}
+	}
+
+	if readData {
 		// Mmap the underlying file so it can be zero copied.
 		data, err := syswrap.Mmap(int(f.file.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
 		if err == syswrap.ErrMaxMapCountReached {
@@ -273,17 +283,20 @@ func (f *fragment) openStorage() error {
 		if err := f.storage.UnmarshalBinary(data); err != nil {
 			return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
 		}
-
+		f.rowCache = &simpleCache{make(map[uint64]*Row)}
+	} else {
+		// we're moving to new storage, so instead of using the OpN
+		// derived from reading that storage, we need notify that
+		// OpN is now effectively-zero.
+		f.storage.SetOpN(0)
 	}
 
-	f.opN = f.storage.Info().OpN
+	f.opN = f.storage.OpN()
 
 	// Attach the file to the bitmap to act as a write-ahead log.
 	f.storage.OpWriter = f.file
-	f.rowCache = &simpleCache{make(map[uint64]*Row)}
 
 	return nil
-
 }
 
 // openCache initializes the cache from row ids persisted to disk.
@@ -343,7 +356,7 @@ func (f *fragment) close() error {
 	}
 
 	// Close underlying storage.
-	if err := f.closeStorage(); err != nil {
+	if err := f.closeStorage(true); err != nil {
 		f.Logger.Printf("fragment: error closing storage: err=%s, path=%s", err, f.path)
 		return errors.Wrap(err, "closing storage")
 	}
@@ -374,13 +387,19 @@ func (f *fragment) safeClose() error {
 	return nil
 }
 
-func (f *fragment) closeStorage() error {
+// closeStorage attempts to close storage, including unmapping the old
+// storage if includeMap is true. This would normally make sense if you're
+// expecting to be done using the fragment, or to reload it. But it's also
+// okay to just leave stuff mmapped; you don't have to keep the file
+// descriptor open. So in some cases, we'll just leave the old mmapping
+// in place, rather than regenerating everything from the new file.
+func (f *fragment) closeStorage(includeMap bool) error {
 	// Clear the storage bitmap so it doesn't access the closed mmap.
 
 	//f.storage = roaring.NewBitmap()
 
 	// Unmap the file.
-	if f.storageData != nil {
+	if includeMap && f.storageData != nil {
 		if err := syswrap.Munmap(f.storageData); err != nil {
 			return fmt.Errorf("munmap: %s", err)
 		}
@@ -629,8 +648,13 @@ func (f *fragment) unprotectedSetRow(row *Row, rowID uint64) (changed bool, err 
 	}
 
 	// Update the row in cache.
-	n := f.storage.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
-	f.cache.BulkAdd(rowID, n)
+	if f.CacheType != CacheTypeNone {
+		n := f.storage.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
+		f.cache.BulkAdd(rowID, n)
+	}
+
+	// invalidate rowCache for this row.
+	f.rowCache.Add(rowID, nil)
 
 	// Snapshot storage.
 	if err := f.snapshot(); err != nil {
@@ -677,6 +701,7 @@ func (f *fragment) unprotectedClearRow(rowID uint64) (changed bool, err error) {
 
 	// Clear the row in cache.
 	f.cache.Add(rowID, 0)
+	f.rowCache.Add(rowID, nil)
 
 	// Snapshot storage.
 	if err := f.snapshot(); err != nil {
@@ -1856,7 +1881,7 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 // operations to the op log.
 func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct{}) error {
 	smallWrite := false
-	if len(set)+len(clear)+f.opN < f.MaxOpN {
+	if len(set)+len(clear)+f.opN <= f.MaxOpN {
 		smallWrite = true
 		mustClose, err := f.reopen()
 		if err != nil {
@@ -1895,15 +1920,17 @@ func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct
 		// Invalidate block checksum.
 		delete(f.checksums, int(rowID/HashBlockSize))
 
-		n := f.storage.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
-		f.cache.BulkAdd(rowID, n)
-
-		if smallWrite {
-			f.rowCache.Add(rowID, nil)
+		if f.CacheType != CacheTypeNone {
+			n := f.storage.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
+			f.cache.BulkAdd(rowID, n)
 		}
+
+		f.rowCache.Add(rowID, nil)
 	}
 
-	f.cache.Recalculate()
+	if f.CacheType != CacheTypeNone {
+		f.cache.Recalculate()
+	}
 
 	if !smallWrite {
 		return f.snapshot()
@@ -1994,8 +2021,8 @@ func (f *fragment) importValueSmallWrite(columnIDs []uint64, values []int64, bit
 		}
 		return nil
 	}(); err != nil {
-		_ = f.closeStorage()
-		_ = f.openStorage()
+		_ = f.closeStorage(true)
+		_ = f.openStorage(true)
 		return err
 	}
 	rowSet := make(map[uint64]struct{}, bitDepth+1)
@@ -2033,8 +2060,8 @@ func (f *fragment) importValue(columnIDs []uint64, values []int64, bitDepth uint
 		}
 		return nil
 	}(); err != nil {
-		_ = f.closeStorage()
-		_ = f.openStorage()
+		_ = f.closeStorage(true)
+		_ = f.openStorage(true)
 		return err
 	}
 
@@ -2087,7 +2114,7 @@ func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) e
 	// operations. Getting the storage size might be a bit expensive though
 	// especially if the fragment isn't mapped.
 	if incomingCnt+uint64(f.opN) <= uint64(f.MaxOpN) && f.storage.Any() {
-		toSet, toClear := bm.Slice(), []uint64{}
+		toSet, toClear := bm.Slice(), []uint64(nil)
 		if clear {
 			toSet, toClear = toClear, toSet
 		}
@@ -2112,11 +2139,13 @@ func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) e
 		span.Finish()
 	}
 
-	for rowID := range rowSet {
-		n := bm.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
-		f.cache.BulkAdd(rowID, n)
+	if f.CacheType != CacheTypeNone {
+		for rowID := range rowSet {
+			n := bm.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
+			f.cache.BulkAdd(rowID, n)
+		}
+		f.cache.Recalculate()
 	}
-	f.cache.Recalculate()
 
 	span, _ = tracing.StartSpanFromContext(ctx, "importRoaring.WriteToFragment")
 	n, err := unprotectedWriteToFragment(f, bm)
@@ -2159,7 +2188,6 @@ func (f *fragment) snapshot() error {
 // unprotectedWriteToFragment writes the fragment f with bm as the data. It is unprotected, and
 // f.mu must be locked when calling it.
 func unprotectedWriteToFragment(f *fragment, bm *roaring.Bitmap) (n int64, err error) { // nolint: interfacer
-
 	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	start := time.Now()
 	defer track(start, completeMessage, f.stats, f.Logger)
@@ -2183,7 +2211,7 @@ func unprotectedWriteToFragment(f *fragment, bm *roaring.Bitmap) (n int64, err e
 	}
 
 	// Close current storage.
-	if err := f.closeStorage(); err != nil {
+	if err := f.closeStorage(false); err != nil {
 		return n, fmt.Errorf("close storage: %s", err)
 	}
 
@@ -2193,9 +2221,13 @@ func unprotectedWriteToFragment(f *fragment, bm *roaring.Bitmap) (n int64, err e
 	}
 
 	// Reopen storage.
-	if err := f.openStorage(); err != nil {
+	if err := f.openStorage(false); err != nil {
 		return n, fmt.Errorf("open storage: %s", err)
 	}
+
+	// if we reloaded from the file, we'd end up with this bitmap
+	// as our storage. so... let's use this bitmap. as our storage.
+	f.storage = bm
 
 	// Reset operation count.
 	f.opN = 0
@@ -2382,7 +2414,7 @@ func (f *fragment) readStorageFromArchive(r io.Reader) error {
 	}
 
 	// Close current storage.
-	if err := f.closeStorage(); err != nil {
+	if err := f.closeStorage(true); err != nil {
 		return errors.Wrap(err, "closing")
 	}
 
@@ -2392,7 +2424,7 @@ func (f *fragment) readStorageFromArchive(r io.Reader) error {
 	}
 
 	// Reopen storage.
-	if err := f.openStorage(); err != nil {
+	if err := f.openStorage(true); err != nil {
 		return errors.Wrap(err, "opening")
 	}
 

@@ -128,6 +128,8 @@ type Containers interface {
 
 	// Reset clears the containers collection to allow for recycling during snapshot
 	Reset()
+	// ResetN clears the collection but hints at a needed size.
+	ResetN(int)
 
 	// Repair will repair the cardinality of any containers whose cardinality were corrupted
 	// due to optimized operations.
@@ -1122,7 +1124,7 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 	keyN := binary.LittleEndian.Uint32(data[3+1 : 8])
 
 	headerSize := headerBaseSize
-	b.Containers.Reset()
+	b.Containers.ResetN(int(keyN))
 	// Descriptive header section: Read container keys and cardinalities.
 	for i, buf := 0, data[headerSize:]; i < int(keyN); i, buf = i+1, buf[12:] {
 		b.Containers.PutContainerValues(
@@ -1209,6 +1211,18 @@ func (b *Bitmap) Iterator() *Iterator {
 	itr := &Iterator{bitmap: b}
 	itr.Seek(0)
 	return itr
+}
+
+// OpN returns the number of write ops the bitmap is aware of in its ops
+// log.
+func (b *Bitmap) OpN() int {
+	return b.opN
+}
+
+// SetOpN lets us reset the operation count in the weird case where we know
+// we've changed an underlying file, without actually refreshing the bitmap.
+func (b *Bitmap) SetOpN(int) {
+	b.opN = 0
 }
 
 // Info returns stats for the bitmap.
@@ -4488,7 +4502,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	}
 	b.Flags = flags
 
-	b.Containers.Reset()
+	b.Containers.ResetN(int(keyN))
 	// Descriptive header section: Read container keys and cardinalities.
 	for i, buf := uint(0), data[header:]; i < uint(keyN); i, buf = i+1, buf[4:] {
 		card := int(binary.LittleEndian.Uint16(buf[2:4])) + 1

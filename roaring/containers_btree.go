@@ -99,6 +99,10 @@ func (btc *bTreeContainers) PutContainerValues(key uint64, typ byte, n int, mapp
 
 func (btc *bTreeContainers) Remove(key uint64) {
 	btc.tree.Delete(key)
+	if key == btc.lastKey {
+		btc.lastKey = ^uint64(0)
+		btc.lastContainer = nil
+	}
 }
 
 func (btc *bTreeContainers) GetOrCreate(key uint64) *Container {
@@ -183,6 +187,11 @@ func (btc *bTreeContainers) Reset() {
 	// never looked that up before."
 	btc.lastKey = ^uint64(0)
 	btc.lastContainer = nil
+}
+
+func (btc *bTreeContainers) ResetN(n int) {
+	// we ignore n because it's impractical to preallocate the tree
+	btc.Reset()
 }
 
 func (btc *bTreeContainers) Iterator(key uint64) (citer ContainerIterator, found bool) {

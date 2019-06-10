@@ -439,11 +439,11 @@ func upgradeViewBSIv2(v *view, bitDepth uint) (ok bool, _ error) {
 
 		if tmpPath, err := upgradeRoaringBSIv2(frag, bitDepth); err != nil {
 			return ok, errors.Wrap(err, "upgrading bsi v2")
-		} else if err := frag.closeStorage(); err != nil {
+		} else if err := frag.closeStorage(true); err != nil {
 			return ok, errors.Wrap(err, "closing after bsi v2 upgrade")
 		} else if err := os.Rename(tmpPath, frag.path); err != nil {
 			return ok, errors.Wrap(err, "renaming after bsi v2 upgrade")
-		} else if err := frag.openStorage(); err != nil {
+		} else if err := frag.openStorage(true); err != nil {
 			return ok, errors.Wrap(err, "re-opening after bsi v2 upgrade")
 		}
 	}
