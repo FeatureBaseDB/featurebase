@@ -820,7 +820,7 @@ func (f *Field) newView(path, name string) *view {
 	view := newView(path, f.index, f.name, name, f.options)
 	view.logger = f.logger
 	view.rowAttrStore = f.rowAttrStore
-	view.stats = f.Stats.WithTags(fmt.Sprintf("view:%s", name))
+	view.stats = f.Stats
 	view.broadcaster = f.broadcaster
 	return view
 }

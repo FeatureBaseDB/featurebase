@@ -267,7 +267,7 @@ func (v *view) newFragment(path string, shard uint64) *fragment {
 	frag.CacheType = v.cacheType
 	frag.CacheSize = v.cacheSize
 	frag.Logger = v.logger
-	frag.stats = v.stats.WithTags(fmt.Sprintf("shard:%d", shard))
+	frag.stats = v.stats
 	if v.fieldType == FieldTypeMutex {
 		frag.mutexVector = newRowsVector(frag)
 	} else if v.fieldType == FieldTypeBool {
