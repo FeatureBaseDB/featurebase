@@ -177,6 +177,7 @@ func (c *prometheusClient) Gauge(name string, value float64, rate float64) {
 		gauge, err = gaugeVec.GetMetricWith(labels)
 		if err != nil {
 			c.logger.Printf("gaugeVec.GetMetricWith error: %s", err)
+			return
 		}
 	}
 	gauge.Set(float64(value))
@@ -219,6 +220,7 @@ func (c *prometheusClient) Histogram(name string, value float64, rate float64) {
 		observer, err = summaryVec.GetMetricWith(labels)
 		if err != nil {
 			c.logger.Printf("summaryVec.GetMetricWith error: %s", err)
+			return
 		}
 	}
 	observer.Observe(value)
@@ -231,7 +233,7 @@ func (c *prometheusClient) Set(name string, value string, rate float64) {
 
 // Timing tracks timing information for a metric.
 func (c *prometheusClient) Timing(name string, value time.Duration, rate float64) {
-	durationMs := value / time.Millisecond
+	durationMs := value / time.Second
 	c.Histogram(name, float64(durationMs), rate)
 }
 
