@@ -176,7 +176,7 @@ func (h *Handler) populateValidators() {
 	h.validators["PostClusterResizeAbort"] = queryValidationSpecRequired()
 	h.validators["PostClusterResizeRemoveNode"] = queryValidationSpecRequired()
 	h.validators["PostClusterResizeSetCoordinator"] = queryValidationSpecRequired()
-	h.validators["GetExport"] = queryValidationSpecRequired("index", "field", "shard")
+	h.validators["GetExport"] = queryValidationSpecRequired("index", "field", "shard").Optional("timestamps")
 	h.validators["GetIndexes"] = queryValidationSpecRequired()
 	h.validators["GetIndex"] = queryValidationSpecRequired()
 	h.validators["PostIndex"] = queryValidationSpecRequired()
@@ -1169,7 +1169,9 @@ func (h *Handler) handleGetExportCSV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = h.api.ExportCSV(r.Context(), index, field, shard, w); err != nil {
+	includeTimestamps := q.Get("timestamps") == "true"
+
+	if err = h.api.ExportCSVTime(r.Context(), index, field, shard, includeTimestamps, w); err != nil {
 		switch errors.Cause(err) {
 		case pilosa.ErrFragmentNotFound:
 			break

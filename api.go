@@ -425,6 +425,13 @@ func (api *API) DeleteAvailableShard(_ context.Context, indexName, fieldName str
 // ExportCSV encodes the fragment designated by the index,field,shard as
 // CSV of the form <row>,<col>
 func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName string, shard uint64, w io.Writer) error {
+	return api.ExportCSVTime(ctx, indexName, fieldName, shard, false, w)
+}
+
+// ExportCSV encodes the fragment designated by the index,field,shard
+// If includeTimestamp == true, CSV of the form <row>,<col>,<timestamp>
+// Otherwise CSV of the form <row>,<col>
+func (api *API) ExportCSVTime(ctx context.Context, indexName string, fieldName string, shard uint64, includeTimestamp bool, w io.Writer) error {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.ExportCSV")
 	defer span.Finish()
 
@@ -450,52 +457,77 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 		return newNotFoundError(ErrFieldNotFound)
 	}
 
-	// Find the fragment.
-	f := api.holder.fragment(indexName, fieldName, viewStandard, shard)
-	if f == nil {
-		return ErrFragmentNotFound
+	viewNames := []string{}
+	// If timestamps are not included, only bits for viewStandard are returned.
+	// Otherwise, bits for all matching time views are returned.
+	if includeTimestamp {
+		// Find the time views with the appropriate length.
+		// e.g., for YMDH, len("standard_2019061023")
+		viewNameLength := timeViewNameLen(field.options.TimeQuantum)
+		for viewName := range field.viewMap {
+			if len(viewName) == viewNameLength {
+				viewNames = append(viewNames, viewName)
+			}
+		}
+	} else {
+		viewNames = append(viewNames, viewStandard)
 	}
 
-	// Wrap writer with a CSV writer.
-	cw := csv.NewWriter(w)
-
-	// Define the function to write each bit as a string,
-	// translating to keys where necessary.
-	var n int
-	fn := func(rowID, columnID uint64) error {
-		var rowStr string
-		var colStr string
-		var err error
-
-		if field.keys() {
-			if rowStr, err = api.holder.translateFile.TranslateRowToString(index.Name(), field.Name(), rowID); err != nil {
-				return errors.Wrap(err, "translating row")
-			}
-		} else {
-			rowStr = strconv.FormatUint(rowID, 10)
+	for _, viewName := range viewNames {
+		// Find the fragment.
+		f := api.holder.fragment(indexName, fieldName, viewName, shard)
+		if f == nil {
+			return ErrFragmentNotFound
 		}
 
-		if index.Keys() {
-			if colStr, err = api.holder.translateFile.TranslateColumnToString(index.Name(), columnID); err != nil {
-				return errors.Wrap(err, "translating column")
+		timestamp := viewNameToTimestamp(field.options.TimeQuantum, viewName)
+
+		// Wrap writer with a CSV writer.
+		cw := csv.NewWriter(w)
+
+		// Define the function to write each bit as a string,
+		// translating to keys where necessary.
+		var n int
+		fn := func(rowID, columnID uint64) error {
+			var rowStr string
+			var colStr string
+			var err error
+
+			if field.keys() {
+				if rowStr, err = api.holder.translateFile.TranslateRowToString(index.Name(), field.Name(), rowID); err != nil {
+					return errors.Wrap(err, "translating row")
+				}
+			} else {
+				rowStr = strconv.FormatUint(rowID, 10)
 			}
-		} else {
-			colStr = strconv.FormatUint(columnID, 10)
+
+			if index.Keys() {
+				if colStr, err = api.holder.translateFile.TranslateColumnToString(index.Name(), columnID); err != nil {
+					return errors.Wrap(err, "translating column")
+				}
+			} else {
+				colStr = strconv.FormatUint(columnID, 10)
+			}
+
+			n++
+			var row []string
+			if timestamp == "" {
+				row = []string{rowStr, colStr}
+			} else {
+				row = []string{rowStr, colStr, timestamp}
+			}
+			return cw.Write(row)
 		}
 
-		n++
-		return cw.Write([]string{rowStr, colStr})
+		// Iterate over each column.
+		if err := f.forEachBit(fn); err != nil {
+			return errors.Wrap(err, "writing CSV")
+		}
+		// Ensure data is flushed.
+		cw.Flush()
+
+		span.LogKV("n", n)
 	}
-
-	// Iterate over each column.
-	if err := f.forEachBit(fn); err != nil {
-		return errors.Wrap(err, "writing CSV")
-	}
-
-	// Ensure data is flushed.
-	cw.Flush()
-
-	span.LogKV("n", n)
 
 	return nil
 }
@@ -1339,4 +1371,42 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiShardNodes:           {},
 	apiViews:                {},
 	apiApplySchema:          {},
+}
+
+func timeViewNameLen(timeQuantum TimeQuantum) int {
+	viewNameLen := len("standard_")
+	for _, ch := range string(timeQuantum) {
+		if ch == 'Y' {
+			viewNameLen += 4
+		} else {
+			viewNameLen += 2
+		}
+	}
+	return viewNameLen
+}
+
+func viewNameToTimestamp(timeQuantum TimeQuantum, viewName string) string {
+	if viewName == viewStandard {
+		return ""
+	}
+	format := "standard_"
+	for _, ch := range string(timeQuantum) {
+		switch ch {
+		case 'Y':
+			format += "2006"
+		case 'M':
+			format += "01"
+		case 'D':
+			format += "02"
+		case 'H':
+			format += "15"
+		default:
+			panic(fmt.Sprintf("invalid time quantum: %d", ch))
+		}
+	}
+	t, err := time.Parse(format, viewName)
+	if err != nil {
+		panic(err)
+	}
+	return t.Format("2006-01-02T15:00")
 }
