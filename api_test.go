@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pilosa/pilosa"
 	"github.com/pilosa/pilosa/server"
@@ -279,6 +280,10 @@ func TestAPI_ShardDistributionByIndex(t *testing.T) {
 	if err := m0.API.Import(ctx, req); err != nil {
 		t.Fatal(err)
 	}
+
+	// TODO: instead of sleeping here, we need to know when the shard-creation
+	// message has propagated.
+	time.Sleep(500 * time.Millisecond)
 
 	tests := []struct {
 		name            string
