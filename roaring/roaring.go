@@ -218,6 +218,198 @@ func (b *Bitmap) Freeze() *Bitmap {
 	return other
 }
 
+// ImportRoaringBits tries to set (or clear) the bits found in a roaring bitmap,
+// without actually fully unpacking the bitmap. If rowSet is set, then each "row"
+// (set of containers that's a multiple of rowSize) gets its updated count
+// returned; this might be used for caching row counts. If the number of changes
+// plus opN is less than or equal to maxOpN, they are appended to the ops log;
+// otherwise, the boolean return value is true, indicating that a snapshot should
+// be performed.
+func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int, rowSet map[uint64]uint64, rowSize uint64, cacheCountsNeeded bool) (bool, error) {
+	// Read key count in bytes sizeof(cookie)+sizeof(flag):(sizeof(cookie)+sizeof(uint32)).
+	keyN := int64(binary.LittleEndian.Uint32(data[3+1 : 8]))
+	if int64(len(data)) < int64(headerBaseSize+(keyN*16)) {
+		return false, fmt.Errorf("insufficient data for header + offsets: want %d bytes, got %d",
+			headerBaseSize+(keyN*16), len(data))
+	}
+	// it could happen
+	if keyN == 0 {
+		return false, nil
+	}
+	headerStart := int64(headerBaseSize)
+	headerEnd := headerStart + (keyN * 12)
+	offsetStart := headerEnd
+	offsetEnd := offsetStart + (keyN * 4)
+	headers := data[headerStart:headerEnd]
+	offsets := data[offsetStart:offsetEnd]
+
+	prevRow := ^uint64(0)
+	var currentRow uint64
+	rowChanged := false
+	doSnapshot := false
+	// we cache changes until we run out of room for them; if we run out
+	// of room, we'll request a snapshot, otherwise, we'll create an ops log
+	// entry.
+	changes := make([]uint64, maxOpN-opN)
+	contChanges := make([]uint16, 1024)
+	changeCount := int32(0)
+
+	var opsOffset int64 = headerBaseSize
+	// synthC is a Container, not a *Container, because we're going to be
+	// reusing it.
+	synthC := Container{}
+
+	var header []byte
+	var offsetBytes []byte
+	var newKey uint64
+
+	updater := func(c *Container, existed bool) (*Container, bool) {
+
+		existN := c.N()
+		// don't need to do anything to clear empty containers or set
+		// bits in full containers
+		if clear {
+			if existN == 0 {
+				return nil, false
+			}
+		} else {
+			if existN == maxContainerVal+1 {
+				return nil, false
+			}
+		}
+
+		// Either we have no existing container, and are setting, or
+		// we have an existing container of some kind. Let's see what
+		// we'd be comparing it with.
+
+		synthC.typeID = byte(binary.LittleEndian.Uint16(header[8:10]))
+		synthC.setN(int32(binary.LittleEndian.Uint16(header[10:12])) + 1)
+		minOffset := int64(binary.LittleEndian.Uint32(offsetBytes))
+		maxOffset := minOffset
+		switch synthC.typeID {
+		case containerArray:
+			synthC.len = synthC.N()
+			maxOffset += 2 * int64(synthC.N())
+		case containerRun:
+			synthC.len = int32(binary.LittleEndian.Uint16(data[minOffset : minOffset+2]))
+			minOffset += 2
+			maxOffset += int64(2 + (4 * synthC.len))
+		case containerBitmap:
+			synthC.len = 1024
+			maxOffset += 8192
+		}
+		// used only to verify that there's no ops data -- there shouldn't be?
+		if maxOffset > opsOffset {
+			opsOffset = maxOffset
+		}
+		synthC.pointer = (*uint16)(unsafe.Pointer(&data[minOffset]))
+		synthC.cap = synthC.len
+		// now synthC looks like a Container based on that data.
+		var changed int32
+		var changeData *Container
+		var newC *Container
+		if clear {
+			newC = difference(c, &synthC)
+			changed := existN - newC.N()
+			if changeCount+changed < int32(len(changes)) {
+				changeData = difference(c, newC)
+			} else {
+				// we're done tracking changes
+				changes = nil
+				doSnapshot = true
+			}
+		} else {
+			if c == nil {
+				newC = synthC.Clone()
+				changed = newC.N()
+			} else {
+				newC = union(c, &synthC)
+				changed = newC.N() - existN
+			}
+			if changeCount+changed < int32(len(changes)) {
+				changeData = difference(newC, c)
+			} else {
+				changes = nil
+				doSnapshot = true
+			}
+		}
+		if changeData != nil {
+			rowChanged = true
+			if changeData.N() > int32(len(contChanges)) {
+				contChanges = make([]uint16, changeData.N())
+			}
+			switch changeData.typ() {
+			case containerArray:
+				a := changeData.array()
+				copy(contChanges, a)
+			case containerBitmap:
+				bitmap := changeData.bitmap()
+				bitmapIntoArray(bitmap, contChanges)
+			case containerRun:
+				r := changeData.runs()
+				runsIntoArray(r, contChanges)
+			}
+			for i := int32(0); i < changed; i++ {
+				changes[changeCount+i] = uint64(contChanges[i]) + (newKey << 16)
+			}
+			changeCount += changed
+		}
+		if changed != 0 {
+			return newC, true
+		}
+		return nil, false
+	}
+
+	for i := int64(0); i < keyN; i++ {
+		header = headers[i*12:]
+		offsetBytes = offsets[i*4:]
+		newKey = binary.LittleEndian.Uint64(header[0:8])
+		// stash updated count for previous row
+		currentRow = newKey / rowSize
+		if currentRow != prevRow && rowChanged {
+			if cacheCountsNeeded {
+				rowSet[prevRow] = b.CountRange((prevRow*rowSize)<<16, ((prevRow+1)*rowSize)<<16)
+			} else {
+				rowSet[prevRow] = 0
+			}
+			rowChanged = false
+		}
+		prevRow = currentRow
+		// So we don't want to have to double-iterate the tree to write to it. So...
+		// We make a function that will, given an existing container and whether
+		// or not it existed, tell the Containers whether or not to replace it!
+
+		b.Containers.Update(newKey, updater)
+	}
+	if rowChanged {
+		if cacheCountsNeeded {
+			rowSet[prevRow] = b.CountRange((prevRow*rowSize)<<16, ((prevRow+1)*rowSize)<<16)
+		} else {
+			rowSet[prevRow] = 0
+		}
+	}
+	if !doSnapshot {
+		// we have changeCount changes, so we need to write an ops log of them:
+		if b.OpWriter != nil {
+			op := &op{
+				typ:    opTypeAddBatch,
+				values: changes[:changeCount],
+			}
+			if err := b.writeOp(op); err != nil {
+				b.DirectRemoveN(op.values...) // reset data since we're returning an error
+				return false, errors.Wrap(err, "writing to op log")
+			}
+		}
+	}
+
+	if int64(len(data)) > opsOffset {
+		return doSnapshot, fmt.Errorf("unexpected ops log on imported roaring data (%d bytes)", int64(len(data))-opsOffset)
+	}
+
+	return doSnapshot, nil
+
+}
+
 // Add adds values to the bitmap. TODO(2.0) deprecate - use the more general
 // AddN (though be aware that it modifies 'a' in place).
 func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
@@ -2069,6 +2261,30 @@ func (c *Container) bitmapToArray() *Container {
 	c.setMapped(false)
 	c.setArray(array)
 	return c
+}
+
+// dumps bitmap's bits into a provided array, which must be big enough
+func bitmapIntoArray(bitmap []uint64, array []uint16) {
+	n := 0
+	for i, word := range bitmap {
+		for word != 0 {
+			t := word & -word
+			array[n] = uint16((i*64 + int(popcount(t-1))))
+			n++
+			word ^= t
+		}
+	}
+}
+
+// dumps bitmap's bits into a provided array, which must be big enough
+func runsIntoArray(runs []interval16, array []uint16) {
+	n := 0
+	for _, r := range runs {
+		for v := int(r.start); v <= int(r.last); v++ {
+			array[n] = uint16(v)
+			n++
+		}
+	}
 }
 
 // arrayToBitmap converts from array format to bitmap format.

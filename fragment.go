@@ -2007,76 +2007,47 @@ func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) e
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	span.Finish()
-	bm := roaring.NewBTreeBitmap()
-	span, ctx = tracing.StartSpanFromContext(ctx, "importRoaring.UnmarshalBinary")
-	err := bm.UnmarshalBinary(data)
+	var err error
+	var snapshotNeeded bool
+	span, ctx = tracing.StartSpanFromContext(ctx, "importRoaring.SetRoaringBits")
+	// we need to drop rowCache entries for any affected rows, but we also need
+	// to cache counts if there's a cache.
+	rowSet := make(map[uint64]uint64)
+	cacheCountsNeeded := f.CacheType != CacheTypeNone
+	// roaring doesn't know about rows, but it can pretend to if we tell it how big
+	// a range of container keys is a "row".
+	//
+	// we need to provide opN and MaxOpN so the roaring code can decide whether to
+	// write ops log entries for the changes it's making.
+	snapshotNeeded, err = f.storage.ImportRoaringBits(data, clear, f.opN, f.MaxOpN, rowSet, 1<<shardVsContainerExponent, cacheCountsNeeded)
 	span.Finish()
+	// what if error *and* snapshotNeeded? I dunno. for that matter, what
+	// about the cache?
 	if err != nil {
 		return err
 	}
 
-	// get a list of keys in order to update the cache
-	iter, _ := bm.Containers.Iterator(0)
-	rowSet := make(map[uint64]struct{})
-	var lastRow uint64 = math.MaxUint64
-
-	incomingCnt := uint64(0)
-	for iter.Next() {
-		key, c := iter.Value()
-		incomingCnt += uint64(c.N())
-
-		// virtual row for the current container
-		vRow := key >> shardVsContainerExponent
-
-		// skip dups
-		if vRow == lastRow {
-			continue
+	if cacheCountsNeeded {
+		for rowID, n := range rowSet {
+			f.cache.BulkAdd(rowID, n)
 		}
-		rowSet[vRow] = struct{}{}
-		lastRow = vRow
+		f.cache.Recalculate()
 	}
 
-	// take smallPath? TODO - ideally instead of checking f.storage.Any(), the
-	// test here would be if the storage size (in bytes) is significantly
-	// greater than the size of the incoming bits serialized as append
-	// operations. Getting the storage size might be a bit expensive though
-	// especially if the fragment isn't mapped.
-	if incomingCnt+uint64(f.opN) <= uint64(f.MaxOpN) && f.storage.Any() {
-		toSet, toClear := bm.Slice(), []uint64{}
-		if clear {
-			toSet, toClear = toClear, toSet
+	if snapshotNeeded {
+		span, _ = tracing.StartSpanFromContext(ctx, "importRoaring.WriteToFragment")
+		n, err := unprotectedWriteToFragment(f, f.storage)
+		span.LogKV("bytesWritten", n)
+		span.Finish()
+		if err != nil {
+			return err
 		}
-		span, _ = tracing.StartSpanFromContext(ctx, "importRoaring.ImportPositions")
-		err := f.importPositions(toSet, toClear, rowSet)
-		span.Finish()
-		return err
-	}
-
-	if clear {
-		span, ctx = tracing.StartSpanFromContext(ctx, "importRoaringDifference")
-		bm = f.storage.Difference(bm)
-		span.Finish()
-	} else if f.storage.Containers.Size() >= bm.Containers.Size() {
-		span, ctx = tracing.StartSpanFromContext(ctx, "importRoaringStorageUIP")
-		f.storage.UnionInPlace(bm)
-		bm = f.storage
-		span.Finish()
 	} else {
-		span, ctx = tracing.StartSpanFromContext(ctx, "importRoaringBitmapUIP")
-		bm.UnionInPlace(f.storage)
-		span.Finish()
+		// eliminate rowCache entries for modified rows
+		for rowID := range rowSet {
+			f.rowCache.Add(rowID, nil)
+		}
 	}
-
-	for rowID := range rowSet {
-		n := bm.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
-		f.cache.BulkAdd(rowID, n)
-	}
-	f.cache.Recalculate()
-
-	span, _ = tracing.StartSpanFromContext(ctx, "importRoaring.WriteToFragment")
-	n, err := unprotectedWriteToFragment(f, bm)
-	span.LogKV("bytesWritten", n)
-	span.Finish()
 	return err
 }
 
