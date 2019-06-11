@@ -978,11 +978,9 @@ func (b *Bitmap) countEmptyContainers() int {
 
 // Optimize converts array and bitmap containers to run containers as necessary.
 func (b *Bitmap) Optimize() {
-	citer, _ := b.Containers.Iterator(0)
-	for citer.Next() {
-		_, c := citer.Value()
-		c.optimize()
-	}
+	b.Containers.UpdateEvery(func(c *Container, existed bool) (*Container, bool) {
+		return c.optimize(), true
+	})
 }
 
 type errWriter struct {
@@ -3525,7 +3523,7 @@ RUNLOOP:
 		}
 	}
 	output := NewContainerRun(runs)
-	output.optimize()
+	output = output.optimize()
 	return output
 }
 

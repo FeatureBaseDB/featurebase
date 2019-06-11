@@ -45,39 +45,39 @@ func TestMultiStatClient_Expvar(t *testing.T) {
 	hldr.SetBit("d", "f", 0, pilosa.ShardWidth+2)
 	hldr.ClearBit("d", "f", 0, 1)
 
-	if stats.Expvar.String() != `{"index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}}` {
+	if stats.Expvar.String() != `{"index:d": {"clearBit": 1, "rows": 0, "setBit": 4}}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	hldr.Stats.CountWithCustomTags("cc", 1, 1.0, []string{"foo:bar"})
-	if stats.Expvar.String() != `{"cc": 1, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}}` {
+	if stats.Expvar.String() != `{"cc": 1, "index:d": {"clearBit": 1, "rows": 0, "setBit": 4}}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	// Gauge creates a unique key, subsequent Gauge calls will overwrite
 	hldr.Stats.Gauge("g", 5, 1.0)
 	hldr.Stats.Gauge("g", 8, 1.0)
-	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}}` {
+	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"clearBit": 1, "rows": 0, "setBit": 4}}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	// Set creates a unique key, subsequent sets will overwrite
 	hldr.Stats.Set("s", "4", 1.0)
 	hldr.Stats.Set("s", "7", 1.0)
-	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}, "s": "7"}` {
+	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"clearBit": 1, "rows": 0, "setBit": 4}, "s": "7"}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	// Record timing duration and a uniquely Set key/value
 	dur, _ := time.ParseDuration("123us")
 	hldr.Stats.Timing("tt", dur, 1.0)
-	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}, "s": "7", "tt": 123µs}` {
+	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"clearBit": 1, "rows": 0, "setBit": 4}, "s": "7", "tt": 123µs}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	// Expvar histogram is implemented as a gauge
 	hldr.Stats.Histogram("hh", 3, 1.0)
-	if stats.Expvar.String() != `{"cc": 1, "g": 8, "hh": 3, "index:d": {"field:f": {"view:standard": {"shard:0": {"clearBit": 1, "rows": 0, "setBit": 2}, "shard:1": {"rows": 0, "setBit": 2}}}}, "s": "7", "tt": 123µs}` {
+	if stats.Expvar.String() != `{"cc": 1, "g": 8, "hh": 3, "index:d": {"clearBit": 1, "rows": 0, "setBit": 4}, "s": "7", "tt": 123µs}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
