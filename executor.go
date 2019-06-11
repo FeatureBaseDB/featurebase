@@ -789,7 +789,7 @@ func (e *executor) executeMinRowShard(ctx context.Context, index string, c *pql.
 	}, nil
 }
 
-// executeMaxRowShard returns the minimum row ID for a shard.
+// executeMaxRowShard returns the maximum row ID for a shard.
 func (e *executor) executeMaxRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (Pair, error) {
 	var filter *Row
 	if len(c.Children) == 1 {
