@@ -196,9 +196,7 @@ func (sc *sliceContainers) Update(key uint64, fn func(*Container, bool) (*Contai
 		// don't expand the slice just to add a nil container, we
 		// could return that anyway
 		if write && nc != nil {
-			sc.containers = append(sc.containers, nil)
-			copy(sc.containers[i+1:], sc.containers[i:])
-			sc.containers[i] = nc
+			sc.insertAt(key, nc, -i-1)
 		}
 	}
 }
