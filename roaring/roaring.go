@@ -352,6 +352,9 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 					if changeData.N() > 0 {
 						newC = c.unionInPlace(changeData)
 						changed = changeData.N()
+						if newC.typ() == containerBitmap {
+							newC.Repair()
+						}
 					}
 				}
 			}
