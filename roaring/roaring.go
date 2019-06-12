@@ -322,7 +322,15 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 			}
 		} else {
 			if c.N() == 0 {
-				newC = synthC.Clone()
+				// We don't need to clone newC; we just need to
+				// make a new container identical to it. The new
+				// container will get put into the fragment, and
+				// will use the roaring data as backing store,
+				// which prevents that data from being freed for
+				// now, but probably it gets snapshotted "soon".
+				newerC := synthC
+				newC = &newerC
+				newC.setMapped(true)
 				changed = newC.N()
 			} else {
 				newC = union(c, &synthC)
