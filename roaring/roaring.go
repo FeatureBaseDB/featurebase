@@ -437,6 +437,7 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 					changes = nil
 				}
 				b.Containers.Put(newKey, &newerC)
+				rowChanged = true
 				// and update our belief about the highest value key we've seen
 				lastKey = newKey
 			}
