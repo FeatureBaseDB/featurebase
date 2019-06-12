@@ -2039,14 +2039,15 @@ func BenchmarkFragment_Import(b *testing.B) {
 var (
 	rowCases         = []uint64{2, 50, 1000, 100000}
 	colCases         = []uint64{20, 1000, 50000, 500000}
+	cacheCases       = []string{CacheTypeNone, CacheTypeRanked}
 	concurrencyCases = []int{2, 16}
 )
 
-func BenchmarkImportRoaring(b *testing.B) {
+func BenchmarkImportRoaringSingle(b *testing.B) {
 	for _, numRows := range rowCases {
 		data := getZipfRowsSliceRoaring(numRows, 1, 0, ShardWidth)
 		b.Logf("%dRows: %.2fMB\n", numRows, float64(len(data))/1024/1024)
-		for _, cacheType := range []string{CacheTypeRanked} { // CacheTypeNone didn't seem to affect the results much
+		for _, cacheType := range cacheCases {
 			b.Run(fmt.Sprintf("Rows%dCache_%s", numRows, cacheType), func(b *testing.B) {
 				b.StopTimer()
 				for i := 0; i < b.N; i++ {
@@ -2072,61 +2073,21 @@ func BenchmarkImportRoaringConcurrent(b *testing.B) {
 	for _, numRows := range rowCases {
 		data := getZipfRowsSliceRoaring(numRows, 1, 0, ShardWidth)
 		b.Logf("%dRows: %.2fMB\n", numRows, float64(len(data))/1024/1024)
-		for _, concurrency := range concurrencyCases {
-			b.Run(fmt.Sprintf("%dRows%dConcurrency", numRows, concurrency), func(b *testing.B) {
-				b.StopTimer()
-				frags := make([]*fragment, concurrency)
-				for i := 0; i < b.N; i++ {
-					for j := 0; j < concurrency; j++ {
-						frags[j] = mustOpenFragment("i", "f", viewStandard, uint64(j), CacheTypeRanked)
-					}
-					eg := errgroup.Group{}
-					b.StartTimer()
-					for j := 0; j < concurrency; j++ {
-						j := j
-						eg.Go(func() error {
-							return frags[j].importRoaringT(data, false)
-						})
-					}
-					err := eg.Wait()
-					if err != nil {
-						b.Errorf("importing fragment: %v", err)
-					}
-					b.StopTimer()
-					for j := 0; j < concurrency; j++ {
-						frags[j].Clean(b)
-					}
-				}
-			})
-		}
-	}
-}
-func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
-	if testing.Short() {
-		b.SkipNow()
-	}
-	for _, numRows := range rowCases {
-		for _, numCols := range colCases {
-			data := getZipfRowsSliceRoaring(numRows, 1, 0, ShardWidth)
-			updata := getUpdataRoaring(numRows, numCols, 1)
+		for _, cacheType := range cacheCases {
 			for _, concurrency := range concurrencyCases {
-				b.Run(fmt.Sprintf("%dRows%dCols%dConcurrency", numRows, numCols, concurrency), func(b *testing.B) {
+				b.Run(fmt.Sprintf("Rows%dCache_%sConcurrency%d", numRows, cacheType, concurrency), func(b *testing.B) {
 					b.StopTimer()
 					frags := make([]*fragment, concurrency)
 					for i := 0; i < b.N; i++ {
 						for j := 0; j < concurrency; j++ {
-							frags[j] = mustOpenFragment("i", "f", viewStandard, uint64(j), CacheTypeRanked)
-							err := frags[j].importRoaringT(data, false)
-							if err != nil {
-								b.Fatalf("importing roaring: %v", err)
-							}
+							frags[j] = mustOpenFragment("i", "f", viewStandard, uint64(j), cacheType)
 						}
 						eg := errgroup.Group{}
 						b.StartTimer()
 						for j := 0; j < concurrency; j++ {
 							j := j
 							eg.Go(func() error {
-								return frags[j].importRoaringT(updata, false)
+								return frags[j].importRoaringT(data, false)
 							})
 						}
 						err := eg.Wait()
@@ -2143,10 +2104,54 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 		}
 	}
 }
+func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
+	if testing.Short() {
+		b.SkipNow()
+	}
+	for _, numRows := range rowCases {
+		for _, numCols := range colCases {
+			data := getZipfRowsSliceRoaring(numRows, 1, 0, ShardWidth)
+			updata := getUpdataRoaring(numRows, numCols, 1)
+			for _, cacheType := range cacheCases {
+				for _, concurrency := range concurrencyCases {
+					b.Run(fmt.Sprintf("Rows%dCols%dCache_%sConcurrency%d", numRows, numCols, cacheType, concurrency), func(b *testing.B) {
+						b.StopTimer()
+						frags := make([]*fragment, concurrency)
+						for i := 0; i < b.N; i++ {
+							for j := 0; j < concurrency; j++ {
+								frags[j] = mustOpenFragment("i", "f", viewStandard, uint64(j), cacheType)
+								err := frags[j].importRoaringT(data, false)
+								if err != nil {
+									b.Fatalf("importing roaring: %v", err)
+								}
+							}
+							eg := errgroup.Group{}
+							b.StartTimer()
+							for j := 0; j < concurrency; j++ {
+								j := j
+								eg.Go(func() error {
+									return frags[j].importRoaringT(updata, false)
+								})
+							}
+							err := eg.Wait()
+							if err != nil {
+								b.Errorf("importing fragment: %v", err)
+							}
+							b.StopTimer()
+							for j := 0; j < concurrency; j++ {
+								frags[j].Clean(b)
+							}
+						}
+					})
+				}
+			}
+		}
+	}
+}
 
 func BenchmarkImportStandard(b *testing.B) {
-	for _, cacheType := range []string{CacheTypeRanked} {
-		for _, numRows := range rowCases {
+	for _, numRows := range rowCases {
+		for _, cacheType := range cacheCases {
 			rowIDsOrig, columnIDsOrig := getZipfRowsSliceStandard(numRows, 1, 0, ShardWidth)
 			rowIDs, columnIDs := make([]uint64, len(rowIDsOrig)), make([]uint64, len(columnIDsOrig))
 			b.Run(fmt.Sprintf("Rows%dCache_%s", numRows, cacheType), func(b *testing.B) {
@@ -2168,15 +2173,15 @@ func BenchmarkImportStandard(b *testing.B) {
 	}
 }
 
-func BenchmarkImportRoaringUpdate(b *testing.B) {
+func BenchmarkImportRoaringUpdateSingle(b *testing.B) {
 	fileSize := make(map[string]int64)
 	names := []string{}
-	for _, cacheType := range []string{CacheTypeRanked} {
-		for _, numRows := range rowCases {
+	for _, numRows := range rowCases {
+		for _, cacheType := range cacheCases {
 			for _, numCols := range colCases {
 				data := getZipfRowsSliceRoaring(numRows, 1, 0, ShardWidth)
 				updata := getUpdataRoaring(numRows, numCols, 1)
-				name := fmt.Sprintf("%s%dRows%dCols", cacheType, numRows, numCols)
+				name := fmt.Sprintf("Rows%dCols%dCache_%s", numRows, numCols, cacheType)
 				names = append(names, name)
 				b.Run(name, func(b *testing.B) {
 					b.StopTimer()
