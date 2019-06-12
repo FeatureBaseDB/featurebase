@@ -218,6 +218,135 @@ func (b *Bitmap) Freeze() *Bitmap {
 	return other
 }
 
+// synthesizeRoaring synthesizes a container from header/offsets/data, returning
+// the highest offset of that container.
+func (c *Container) synthesizeRoaring(header []byte, offset []byte, data []byte) (int64, error) {
+	c.setTyp(byte(binary.LittleEndian.Uint16(header[8:10])))
+	c.setN(int32(binary.LittleEndian.Uint16(header[10:12])) + 1)
+	minOffset := int64(binary.LittleEndian.Uint32(offset))
+	if int64(len(data)) < minOffset+2 {
+		return minOffset, fmt.Errorf("roaring data malformed, starting offset %d of %d bytes", minOffset, len(data))
+	}
+	maxOffset := minOffset
+	switch c.typ() {
+	case containerArray:
+		c.len = c.N()
+		maxOffset += 2 * int64(c.N())
+	case containerRun:
+		c.len = int32(binary.LittleEndian.Uint16(data[minOffset : minOffset+2]))
+		minOffset += 2
+		maxOffset += int64(2 + (4 * c.len))
+	case containerBitmap:
+		c.len = 1024
+		maxOffset += 8192
+	}
+	if int64(len(data)) < maxOffset {
+		return maxOffset, fmt.Errorf("roaring data malformed, ending offset %d of %d bytes", maxOffset, len(data))
+	}
+	c.pointer = (*uint16)(unsafe.Pointer(&data[minOffset]))
+	c.cap = c.len
+	return maxOffset, nil
+}
+
+// updateSetTrackingChanges sets bits from new in old, sending the set of
+// changes to applyChanges, and returning the resulting container and an
+// indicator of whether anything changed.
+func updateSetTrackingChanges(oldC *Container, newC *Container, maxN int32, applyChanges func(*Container)) (*Container, bool) {
+	if oldC.N() == maxContainerVal+1 {
+		return oldC, false
+	}
+	existN := oldC.N()
+	if existN == 0 {
+		// We need to copy the new container, which will then be stored
+		// in the bitmap. We don't need to copy its backing store. We're
+		// copying it because the actual container object itself gets
+		// reused for each new container.
+		newerC := *newC
+		newC = &newerC
+		newC.setMapped(true)
+		applyChanges(newC)
+		return newC, true
+	}
+	// if we got here, we are tracking changes, and we have existing
+	// data and also new data to union into it. It's possible that
+	// we have enough new data that applyChangeData will end up
+	// discarding the changes, but figuring that out makes this
+	// too messy and brittle.
+	result := union(oldC, newC)
+	if result.N() == existN {
+		return oldC, false
+	}
+	if result.N()-existN > maxN {
+		applyChanges(nil)
+	} else {
+		applyChanges(difference(result, oldC))
+	}
+	return result, true
+}
+
+// updateSetWithoutTrackingChanges sets bits from new in old, returning the
+// resulting container and an indicator of whether anything changed. Contrast
+// updateSetTrackingChanges.
+func updateSetWithoutTrackingChanges(oldC *Container, newC *Container) (*Container, bool) {
+	if oldC.N() == maxContainerVal+1 {
+		return oldC, false
+	}
+	existN := oldC.N()
+	if existN == 0 {
+		// We need to copy the new container, which will then be stored
+		// in the bitmap. We don't need to copy its backing store. We're
+		// copying it because the actual container object itself gets
+		// reused for each new container.
+		newerC := *newC
+		newC = &newerC
+		newC.setMapped(true)
+		return newC, true
+	}
+	result := oldC.unionInPlace(newC)
+	if result.typ() == containerBitmap {
+		result.Repair()
+	}
+	if result.N() == existN {
+		return oldC, false
+	}
+	return result, true
+}
+
+// updateSetTrackingChanges clears bits from new in old, sending the set of
+// changes to applyChanges, and returning the resulting container and an
+// indicator of whether anything changed.
+func updateClearTrackingChanges(oldC *Container, newC *Container, maxN int32, applyChanges func(*Container)) (*Container, bool) {
+	if oldC.N() == 0 {
+		return nil, false
+	}
+	existN := oldC.N()
+	result := difference(oldC, newC)
+	if result.N() == existN {
+		return nil, false
+	}
+	if existN-result.N() > maxN {
+		applyChanges(nil)
+	} else {
+		applyChanges(difference(oldC, result))
+	}
+	return result, true
+}
+
+// updateSetWithoutTrackingChanges clears bits from new in old, returning the
+// resulting container and an indicator of whether anything changed. Contrast
+// updateSetTrackingChanges.
+func updateClearWithoutTrackingChanges(oldC *Container, newC *Container) (*Container, bool) {
+	if oldC.N() == 0 {
+		return nil, false
+	}
+	existN := oldC.N()
+	result := difference(oldC, newC)
+	if result.N() == existN {
+		return nil, false
+	}
+	return result, true
+}
+
 // ImportRoaringBits tries to set (or clear) the bits found in a roaring bitmap,
 // without actually fully unpacking the bitmap. If rowSet is set, then each "row"
 // (set of containers that's a multiple of rowSize) gets its updated count
@@ -253,50 +382,83 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 	// of room, we'll request a snapshot, otherwise, we'll create an ops log
 	// entry.
 	var changes []uint64
+	maxChanges := int32(maxOpN - opN)
 	if b.OpWriter != nil {
-		changes = make([]uint64, maxOpN-opN)
+		changes = make([]uint64, maxChanges)
 	}
 	contChanges := make([]uint16, 1024)
 	changeCount := int32(0)
 
-	var opsOffset int64 = headerBaseSize
 	// synthC is a Container, not a *Container, because we're going to be
 	// reusing it.
 	synthC := Container{}
 
-	var header []byte
-	var offsetBytes []byte
 	var newKey uint64
 
-	setSynthC := func() {
-		synthC.typeID = byte(binary.LittleEndian.Uint16(header[8:10]))
-		synthC.setN(int32(binary.LittleEndian.Uint16(header[10:12])) + 1)
-		minOffset := int64(binary.LittleEndian.Uint32(offsetBytes))
-		maxOffset := minOffset
-		switch synthC.typeID {
-		case containerArray:
-			synthC.len = synthC.N()
-			maxOffset += 2 * int64(synthC.N())
-		case containerRun:
-			synthC.len = int32(binary.LittleEndian.Uint16(data[minOffset : minOffset+2]))
-			minOffset += 2
-			maxOffset += int64(2 + (4 * synthC.len))
-		case containerBitmap:
-			synthC.len = 1024
-			maxOffset += 8192
+	// this function is declared up here so the updaters can use it, but
+	// its definition is below them so it can change the updater function.
+	// evil. sorry.
+	var applyChangeData func(*Container)
+
+	// updateFn is the update callback used by the Containers to update
+	// each container. By default, if we're tracking changes, it will be
+	// a function which tracks changes.
+	var updateTrackImpl func(oldC *Container, newC *Container, maxN int32, apply func(*Container)) (result *Container, write bool)
+	var updateNoTrackImpl func(oldC *Container, newC *Container) (result *Container, write bool)
+
+	if clear {
+		updateTrackImpl = updateClearTrackingChanges
+		updateNoTrackImpl = updateClearWithoutTrackingChanges
+	} else {
+		updateTrackImpl = updateSetTrackingChanges
+		updateNoTrackImpl = updateSetWithoutTrackingChanges
+	}
+	updateTrackFn := func(c *Container, existed bool) (*Container, bool) {
+		newC, write := updateTrackImpl(c, &synthC, maxChanges, applyChangeData)
+		if write {
+			rowChanged = true
 		}
-		// used only to verify that there's no ops data -- there shouldn't be?
-		if maxOffset > opsOffset {
-			opsOffset = maxOffset
+		return newC, write
+	}
+	updateNoTrackFn := func(c *Container, existed bool) (*Container, bool) {
+		newC, write := updateNoTrackImpl(c, &synthC)
+		if write {
+			rowChanged = true
 		}
-		if minOffset < int64(len(data)) {
-			synthC.pointer = (*uint16)(unsafe.Pointer(&data[minOffset]))
-		}
-		synthC.cap = synthC.len
+		return newC, write
+	}
+	var updateFn func(c *Container, existed bool) (*Container, bool)
+
+	if changes != nil {
+		updateFn = updateTrackFn
+	} else {
+		updateFn = updateNoTrackFn
 	}
 
-	applyChangeData := func(changeData *Container) {
+	// applyChangeData is a closure so it can reuse contChanges between
+	// calls. It is also responsible for dropping the change tracking and
+	// marking that we need to do a snapshot if there's too many changes.
+	//
+	// If no container is provided, that indicates that we're done.
+	applyChangeData = func(changeData *Container) {
+		if changeData == nil {
+			doSnapshot = true
+			changes = nil
+			maxChanges = 0
+			updateFn = updateNoTrackFn
+			return
+		}
 		changed := changeData.N()
+		if changed == 0 {
+			return
+		}
+		if changed > maxChanges {
+			doSnapshot = true
+			maxChanges = 0
+			changes = nil
+			updateFn = updateNoTrackFn
+			return
+		}
 		if changeData.N() > int32(len(contChanges)) {
 			contChanges = make([]uint16, changeData.N())
 		}
@@ -314,99 +476,15 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 		for i := int32(0); i < changed; i++ {
 			changes[changeCount+i] = uint64(contChanges[i]) + (newKey << 16)
 		}
+		maxChanges -= changed
 		changeCount += changed
 	}
 
-	updater := func(c *Container, existed bool) (*Container, bool) {
-		existN := c.N()
-		// don't need to do anything to clear empty containers or set
-		// bits in full containers
-		if clear {
-			if existN == 0 {
-				return nil, false
-			}
-		} else {
-			if existN == maxContainerVal+1 {
-				return nil, false
-			}
-		}
-
-		// Either we have no existing container, and are setting, or
-		// we have an existing container of some kind. Let's see what
-		// we'd be comparing it with.
-
-		// obtain a fake container with that data:
-		setSynthC()
-
-		var changed int32
-		var changeData *Container
-		var newC *Container
-		if clear {
-			newC = difference(c, &synthC)
-			changed := existN - newC.N()
-			if changeCount+changed < int32(len(changes)) {
-				if changed > 0 {
-					changeData = difference(c, newC)
-				}
-			} else {
-				// we're done tracking changes
-				changes = nil
-				doSnapshot = true
-			}
-		} else {
-			if existN == 0 {
-				// We don't need to clone newC; we just need to
-				// make a new container identical to it. The new
-				// container will get put into the fragment, and
-				// will use the roaring data as backing store,
-				// which prevents that data from being freed for
-				// now, but probably it gets snapshotted "soon".
-				// Also, this container *is* the set of changes.
-				newerC := synthC
-				newC = &newerC
-				newC.setMapped(true)
-				changed = newC.N()
-				changeData = newC
-			} else {
-				if synthC.N() > 100 {
-					newC = union(c, &synthC)
-					changed = newC.N() - existN
-				} else {
-					// if we do the union, then find the
-					// difference, it's sort of expensive...
-					changeData = difference(&synthC, c)
-					if changeData.N() > 0 {
-						newC = c.unionInPlace(changeData)
-						changed = changeData.N()
-						if newC.typ() == containerBitmap {
-							newC.Repair()
-						}
-					}
-				}
-			}
-			if changeCount+changed < int32(len(changes)) {
-				if changed > 0 && changeData == nil {
-					changeData = difference(newC, c)
-				}
-			} else {
-				changeData = nil
-				changes = nil
-				doSnapshot = true
-			}
-		}
-		if changeData != nil {
-			applyChangeData(changeData)
-		}
-		if changed != 0 {
-			rowChanged = true
-			return newC, true
-		}
-		return nil, false
-	}
-
+	var err error
+	var opsOffset int64 = headerBaseSize
 	for i := int64(0); i < keyN; i++ {
-		header = headers[i*12:]
-		offsetBytes = offsets[i*4:]
+		header := headers[i*12:]
+		offset := offsets[i*4:]
 		newKey = binary.LittleEndian.Uint64(header[0:8])
 		// stash updated count for previous row
 		currentRow = newKey / rowSize
@@ -419,34 +497,36 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 			rowChanged = false
 		}
 		prevRow = currentRow
+		// if we're in the range of known keys, we'll try to set/clear
+		// things. if we're out of that range, we only need to think
+		// about setting; clearing is irrelevant.
 		if newKey <= lastKey {
 			// So we don't want to have to double-iterate the tree to write to it. So...
 			// We make a function that will, given an existing container and whether
 			// or not it existed, tell the Containers whether or not to replace it!
-			b.Containers.Update(newKey, updater)
+			opsOffset, err = synthC.synthesizeRoaring(header, offset, data)
+			if err != nil {
+				return false, int(changeCount), err
+			}
+			if synthC.N() > 0 {
+				b.Containers.Update(newKey, updateFn)
+			}
 		} else if !clear {
 			// make a synthesized container using the data as backing store,
 			// copy it, and insert the copy in the Containers.
-			setSynthC()
+			opsOffset, err = synthC.synthesizeRoaring(header, offset, data)
+			if err != nil {
+				return false, int(changeCount), err
+			}
 			if synthC.N() > 0 {
 				newerC := synthC
-				if newerC.N()+changeCount < int32(len(changes)) {
-					applyChangeData(&newerC)
-				} else {
-					doSnapshot = true
-					changes = nil
-				}
-				b.Containers.Put(newKey, &newerC)
+				applyChangeData(&newerC)
 				rowChanged = true
+				b.Containers.Put(newKey, &newerC)
 				// and update our belief about the highest value key we've seen
 				lastKey = newKey
 			}
 		}
-		// note, if this happens, we might have a bogus container put
-		if opsOffset > int64(len(data)) {
-			return false, int(changeCount), fmt.Errorf("roaring ran out of bytes, max offset %d with only %d bytes", opsOffset, len(data))
-		}
-		// if we're clearing bits, and the key is higher than our highest key, we're done.
 	}
 	if rowChanged {
 		if cacheCountsNeeded {
