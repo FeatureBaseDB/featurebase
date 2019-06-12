@@ -252,7 +252,10 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 	// we cache changes until we run out of room for them; if we run out
 	// of room, we'll request a snapshot, otherwise, we'll create an ops log
 	// entry.
-	changes := make([]uint64, maxOpN-opN)
+	var changes []uint64
+	if b.OpWriter != nil {
+		changes = make([]uint64, maxOpN-opN)
+	}
 	contChanges := make([]uint16, 1024)
 	changeCount := int32(0)
 
@@ -459,7 +462,12 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 				values: changes[:changeCount],
 			}
 			if err := b.writeOp(op); err != nil {
-				b.DirectRemoveN(op.values...) // reset data since we're returning an error
+				// reset data since we're returning an error
+				if clear {
+					b.DirectRemoveN(op.values...)
+				} else {
+					b.DirectAddN(op.values...)
+				}
 				return false, 0, errors.Wrap(err, "writing to op log")
 			}
 		}
