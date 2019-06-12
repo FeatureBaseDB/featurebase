@@ -243,6 +243,8 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 	headers := data[headerStart:headerEnd]
 	offsets := data[offsetStart:offsetEnd]
 
+	lastKey, _ := b.Containers.Last()
+
 	prevRow := ^uint64(0)
 	var currentRow uint64
 	rowChanged := false
@@ -263,25 +265,7 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 	var offsetBytes []byte
 	var newKey uint64
 
-	updater := func(c *Container, existed bool) (*Container, bool) {
-
-		existN := c.N()
-		// don't need to do anything to clear empty containers or set
-		// bits in full containers
-		if clear {
-			if existN == 0 {
-				return nil, false
-			}
-		} else {
-			if existN == maxContainerVal+1 {
-				return nil, false
-			}
-		}
-
-		// Either we have no existing container, and are setting, or
-		// we have an existing container of some kind. Let's see what
-		// we'd be comparing it with.
-
+	setSynthC := func() {
 		synthC.typeID = byte(binary.LittleEndian.Uint16(header[8:10]))
 		synthC.setN(int32(binary.LittleEndian.Uint16(header[10:12])) + 1)
 		minOffset := int64(binary.LittleEndian.Uint32(offsetBytes))
@@ -304,7 +288,30 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 		}
 		synthC.pointer = (*uint16)(unsafe.Pointer(&data[minOffset]))
 		synthC.cap = synthC.len
-		// now synthC looks like a Container based on that data.
+	}
+
+	updater := func(c *Container, existed bool) (*Container, bool) {
+
+		existN := c.N()
+		// don't need to do anything to clear empty containers or set
+		// bits in full containers
+		if clear {
+			if existN == 0 {
+				return nil, false
+			}
+		} else {
+			if existN == maxContainerVal+1 {
+				return nil, false
+			}
+		}
+
+		// Either we have no existing container, and are setting, or
+		// we have an existing container of some kind. Let's see what
+		// we'd be comparing it with.
+
+		// obtain a fake container with that data:
+		setSynthC()
+
 		var changed int32
 		var changeData *Container
 		var newC *Container
@@ -321,26 +328,39 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 				doSnapshot = true
 			}
 		} else {
-			if c.N() == 0 {
+			if existN == 0 {
 				// We don't need to clone newC; we just need to
 				// make a new container identical to it. The new
 				// container will get put into the fragment, and
 				// will use the roaring data as backing store,
 				// which prevents that data from being freed for
 				// now, but probably it gets snapshotted "soon".
+				// Also, this container *is* the set of changes.
 				newerC := synthC
 				newC = &newerC
 				newC.setMapped(true)
 				changed = newC.N()
+				changeData = newC
 			} else {
-				newC = union(c, &synthC)
-				changed = newC.N() - existN
+				if synthC.N() > 100 {
+					newC = union(c, &synthC)
+					changed = newC.N() - existN
+				} else {
+					// if we do the union, then find the
+					// difference, it's sort of expensive...
+					changeData = difference(&synthC, c)
+					if changeData.N() > 0 {
+						newC = c.unionInPlace(changeData)
+						changed = changeData.N()
+					}
+				}
 			}
 			if changeCount+changed < int32(len(changes)) {
-				if changed > 0 {
+				if changed > 0 && changeData == nil {
 					changeData = difference(newC, c)
 				}
 			} else {
+				changeData = nil
 				changes = nil
 				doSnapshot = true
 			}
@@ -387,11 +407,21 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 			rowChanged = false
 		}
 		prevRow = currentRow
-		// So we don't want to have to double-iterate the tree to write to it. So...
-		// We make a function that will, given an existing container and whether
-		// or not it existed, tell the Containers whether or not to replace it!
-
-		b.Containers.Update(newKey, updater)
+		if newKey <= lastKey {
+			// So we don't want to have to double-iterate the tree to write to it. So...
+			// We make a function that will, given an existing container and whether
+			// or not it existed, tell the Containers whether or not to replace it!
+			b.Containers.Update(newKey, updater)
+		} else if !clear {
+			// make a synthesized container using the data as backing store,
+			// copy it, and insert the copy in the Containers.
+			setSynthC()
+			newerC := synthC
+			b.Containers.Put(newKey, &newerC)
+			// and update our belief about the highest value key we've seen
+			lastKey = newKey
+		}
+		// if we're clearing bits, and the key is higher than our highest key, we're done.
 	}
 	if rowChanged {
 		if cacheCountsNeeded {
