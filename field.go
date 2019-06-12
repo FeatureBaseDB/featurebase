@@ -301,13 +301,13 @@ func (f *Field) saveAvailableShards() error {
 
 func (f *Field) unprotectedSaveAvailableShards() error {
 	path := filepath.Join(f.path, ".available.shards")
-	// Create a temporary file to snapshot to.
-	snapshotPath := path + snapshotExt
+	// Create a temporary file to save to.
+	tempPath := path + tempExt
 
 	// Open or create file.
-	file, err := os.OpenFile(snapshotPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+	file, err := os.OpenFile(tempPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
-		return errors.Wrap(err, "opening available shards file")
+		return errors.Wrap(err, "opening temporary available shards file")
 	}
 	defer file.Close()
 
@@ -319,7 +319,7 @@ func (f *Field) unprotectedSaveAvailableShards() error {
 	bw.Flush()
 
 	// Move snapshot to data file location.
-	if err := os.Rename(snapshotPath, path); err != nil {
+	if err := os.Rename(tempPath, path); err != nil {
 		return fmt.Errorf("rename snapshot: %s", err)
 	}
 
