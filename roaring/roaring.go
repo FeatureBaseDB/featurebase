@@ -294,7 +294,6 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 
 	applyChangeData := func(changeData *Container) {
 		changed := changeData.N()
-		rowChanged = true
 		if changeData.N() > int32(len(contChanges)) {
 			contChanges = make([]uint16, changeData.N())
 		}
@@ -396,6 +395,7 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 			applyChangeData(changeData)
 		}
 		if changed != 0 {
+			rowChanged = true
 			return newC, true
 		}
 		return nil, false
