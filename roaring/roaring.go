@@ -286,7 +286,9 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 		if maxOffset > opsOffset {
 			opsOffset = maxOffset
 		}
-		synthC.pointer = (*uint16)(unsafe.Pointer(&data[minOffset]))
+		if minOffset < int64(len(data)) {
+			synthC.pointer = (*uint16)(unsafe.Pointer(&data[minOffset]))
+		}
 		synthC.cap = synthC.len
 	}
 
@@ -435,6 +437,10 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 				// and update our belief about the highest value key we've seen
 				lastKey = newKey
 			}
+		}
+		// note, if this happens, we might have a bogus container put
+		if opsOffset > int64(len(data)) {
+			return false, int(changeCount), fmt.Errorf("roaring ran out of bytes, max offset %d with only %d bytes", opsOffset, len(data))
 		}
 		// if we're clearing bits, and the key is higher than our highest key, we're done.
 	}
