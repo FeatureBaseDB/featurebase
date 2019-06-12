@@ -2009,6 +2009,7 @@ func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) e
 	span.Finish()
 	var err error
 	var snapshotNeeded bool
+	var newOps int
 	span, ctx = tracing.StartSpanFromContext(ctx, "importRoaring.SetRoaringBits")
 	// we need to drop rowCache entries for any affected rows, but we also need
 	// to cache counts if there's a cache.
@@ -2019,7 +2020,7 @@ func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) e
 	//
 	// we need to provide opN and MaxOpN so the roaring code can decide whether to
 	// write ops log entries for the changes it's making.
-	snapshotNeeded, err = f.storage.ImportRoaringBits(data, clear, f.opN, f.MaxOpN, rowSet, 1<<shardVsContainerExponent, cacheCountsNeeded)
+	snapshotNeeded, newOps, err = f.storage.ImportRoaringBits(data, clear, f.opN, f.MaxOpN, rowSet, 1<<shardVsContainerExponent, cacheCountsNeeded)
 	span.Finish()
 	// what if error *and* snapshotNeeded? I dunno. for that matter, what
 	// about the cache?
@@ -2047,6 +2048,7 @@ func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) e
 		for rowID := range rowSet {
 			f.rowCache.Add(rowID, nil)
 		}
+		f.opN += newOps
 	}
 	return err
 }

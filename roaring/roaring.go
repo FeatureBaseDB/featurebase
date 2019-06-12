@@ -225,16 +225,16 @@ func (b *Bitmap) Freeze() *Bitmap {
 // plus opN is less than or equal to maxOpN, they are appended to the ops log;
 // otherwise, the boolean return value is true, indicating that a snapshot should
 // be performed.
-func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int, rowSet map[uint64]uint64, rowSize uint64, cacheCountsNeeded bool) (bool, error) {
+func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int, rowSet map[uint64]uint64, rowSize uint64, cacheCountsNeeded bool) (bool, int, error) {
 	// Read key count in bytes sizeof(cookie)+sizeof(flag):(sizeof(cookie)+sizeof(uint32)).
 	keyN := int64(binary.LittleEndian.Uint32(data[3+1 : 8]))
 	if int64(len(data)) < int64(headerBaseSize+(keyN*16)) {
-		return false, fmt.Errorf("insufficient data for header + offsets: want %d bytes, got %d",
+		return false, 0, fmt.Errorf("insufficient data for header + offsets: want %d bytes, got %d",
 			headerBaseSize+(keyN*16), len(data))
 	}
 	// it could happen
 	if keyN == 0 {
-		return false, nil
+		return false, 0, nil
 	}
 	headerStart := int64(headerBaseSize)
 	headerEnd := headerStart + (keyN * 12)
@@ -312,14 +312,16 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 			newC = difference(c, &synthC)
 			changed := existN - newC.N()
 			if changeCount+changed < int32(len(changes)) {
-				changeData = difference(c, newC)
+				if changed > 0 {
+					changeData = difference(c, newC)
+				}
 			} else {
 				// we're done tracking changes
 				changes = nil
 				doSnapshot = true
 			}
 		} else {
-			if c == nil {
+			if c.N() == 0 {
 				newC = synthC.Clone()
 				changed = newC.N()
 			} else {
@@ -327,7 +329,9 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 				changed = newC.N() - existN
 			}
 			if changeCount+changed < int32(len(changes)) {
-				changeData = difference(newC, c)
+				if changed > 0 {
+					changeData = difference(newC, c)
+				}
 			} else {
 				changes = nil
 				doSnapshot = true
@@ -397,16 +401,16 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 			}
 			if err := b.writeOp(op); err != nil {
 				b.DirectRemoveN(op.values...) // reset data since we're returning an error
-				return false, errors.Wrap(err, "writing to op log")
+				return false, 0, errors.Wrap(err, "writing to op log")
 			}
 		}
 	}
 
 	if int64(len(data)) > opsOffset {
-		return doSnapshot, fmt.Errorf("unexpected ops log on imported roaring data (%d bytes)", int64(len(data))-opsOffset)
+		return doSnapshot, int(changeCount), fmt.Errorf("unexpected ops log on imported roaring data (%d bytes)", int64(len(data))-opsOffset)
 	}
 
-	return doSnapshot, nil
+	return doSnapshot, int(changeCount), nil
 
 }
 
