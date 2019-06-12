@@ -290,8 +290,30 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 		synthC.cap = synthC.len
 	}
 
-	updater := func(c *Container, existed bool) (*Container, bool) {
+	applyChangeData := func(changeData *Container) {
+		changed := changeData.N()
+		rowChanged = true
+		if changeData.N() > int32(len(contChanges)) {
+			contChanges = make([]uint16, changeData.N())
+		}
+		switch changeData.typ() {
+		case containerArray:
+			a := changeData.array()
+			copy(contChanges, a)
+		case containerBitmap:
+			bitmap := changeData.bitmap()
+			bitmapIntoArray(bitmap, contChanges)
+		case containerRun:
+			r := changeData.runs()
+			runsIntoArray(r, contChanges)
+		}
+		for i := int32(0); i < changed; i++ {
+			changes[changeCount+i] = uint64(contChanges[i]) + (newKey << 16)
+		}
+		changeCount += changed
+	}
 
+	updater := func(c *Container, existed bool) (*Container, bool) {
 		existN := c.N()
 		// don't need to do anything to clear empty containers or set
 		// bits in full containers
@@ -369,25 +391,7 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 			}
 		}
 		if changeData != nil {
-			rowChanged = true
-			if changeData.N() > int32(len(contChanges)) {
-				contChanges = make([]uint16, changeData.N())
-			}
-			switch changeData.typ() {
-			case containerArray:
-				a := changeData.array()
-				copy(contChanges, a)
-			case containerBitmap:
-				bitmap := changeData.bitmap()
-				bitmapIntoArray(bitmap, contChanges)
-			case containerRun:
-				r := changeData.runs()
-				runsIntoArray(r, contChanges)
-			}
-			for i := int32(0); i < changed; i++ {
-				changes[changeCount+i] = uint64(contChanges[i]) + (newKey << 16)
-			}
-			changeCount += changed
+			applyChangeData(changeData)
 		}
 		if changed != 0 {
 			return newC, true
@@ -419,10 +423,18 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, opN int, maxOpN int,
 			// make a synthesized container using the data as backing store,
 			// copy it, and insert the copy in the Containers.
 			setSynthC()
-			newerC := synthC
-			b.Containers.Put(newKey, &newerC)
-			// and update our belief about the highest value key we've seen
-			lastKey = newKey
+			if synthC.N() > 0 {
+				newerC := synthC
+				if newerC.N()+changeCount < int32(len(changes)) {
+					applyChangeData(&newerC)
+				} else {
+					doSnapshot = true
+					changes = nil
+				}
+				b.Containers.Put(newKey, &newerC)
+				// and update our belief about the highest value key we've seen
+				lastKey = newKey
+			}
 		}
 		// if we're clearing bits, and the key is higher than our highest key, we're done.
 	}
