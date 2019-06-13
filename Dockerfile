@@ -5,7 +5,7 @@ COPY . /go/src/github.com/pilosa/pilosa/
 RUN cd /go/src/github.com/pilosa/pilosa \
     && CGO_ENABLED=0 make install-dep install FLAGS="-a"
 
-FROM alpine:3.8
+FROM alpine:3.9.4
 
 LABEL maintainer "dev@pilosa.com"
 
