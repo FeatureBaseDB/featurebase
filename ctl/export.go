@@ -37,6 +37,9 @@ type ExportCommand struct {
 	// Filename to export to.
 	Path string
 
+	// Enabled/disable timestamps
+	Timestamps bool
+
 	// Standard input/output
 	*pilosa.CmdIO
 
@@ -89,7 +92,7 @@ func (cmd *ExportCommand) Run(ctx context.Context) error {
 	// Export each shard.
 	for shard := uint64(0); shard <= maxShards[cmd.Index]; shard++ {
 		logger.Printf("exporting shard: %d", shard)
-		if err := client.ExportCSV(ctx, cmd.Index, cmd.Field, shard, w); err != nil {
+		if err := client.ExportCSVTimestamp(ctx, cmd.Index, cmd.Field, shard, cmd.Timestamps, w); err != nil {
 			return errors.Wrap(err, "exporting")
 		}
 	}

@@ -669,6 +669,11 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, ind
 
 // ExportCSV bulk exports data for a single shard from a host to CSV format.
 func (c *InternalClient) ExportCSV(ctx context.Context, index, field string, shard uint64, w io.Writer) error {
+	return c.ExportCSVTimestamp(ctx, index, field, shard, false, w)
+}
+
+// ExportCSV bulk exports data for a single shard from a host to CSV format.
+func (c *InternalClient) ExportCSVTimestamp(ctx context.Context, index, field string, shard uint64, timestamps bool, w io.Writer) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ExportCSV")
 	defer span.Finish()
 
@@ -689,7 +694,7 @@ func (c *InternalClient) ExportCSV(ctx context.Context, index, field string, sha
 	for _, i := range rand.Perm(len(nodes)) {
 		node := nodes[i]
 
-		if err := c.exportNodeCSV(ctx, node, index, field, shard, w); err != nil {
+		if err := c.exportNodeCSV(ctx, node, index, field, shard, timestamps, w); err != nil {
 			e = fmt.Errorf("export node: host=%s, err=%s", node.URI, err)
 			continue
 		} else {
@@ -701,16 +706,17 @@ func (c *InternalClient) ExportCSV(ctx context.Context, index, field string, sha
 }
 
 // exportNode copies a CSV export from a node to w.
-func (c *InternalClient) exportNodeCSV(ctx context.Context, node *pilosa.Node, index, field string, shard uint64, w io.Writer) error {
+func (c *InternalClient) exportNodeCSV(ctx context.Context, node *pilosa.Node, index, field string, shard uint64, timestamps bool, w io.Writer) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.exportNodeCSV")
 	defer span.Finish()
 
 	// Create URL.
 	u := nodePathToURL(node, "/export")
 	u.RawQuery = url.Values{
-		"index": {index},
-		"field": {field},
-		"shard": {strconv.FormatUint(shard, 10)},
+		"index":      {index},
+		"field":      {field},
+		"shard":      {strconv.FormatUint(shard, 10)},
+		"timestamps": {strconv.FormatBool(timestamps)},
 	}.Encode()
 
 	// Generate HTTP request.

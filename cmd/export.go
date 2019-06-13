@@ -36,7 +36,7 @@ the output is written to STDOUT.
 
 The format of the CSV file is:
 
-	ROWID,COLUMNID
+	ROWID,COLUMNID[,TIMESTAMP]
 
 The file does not contain any headers.
 `,
@@ -50,6 +50,7 @@ The file does not contain any headers.
 	flags.StringVarP(&Exporter.Index, "index", "i", "", "Pilosa index to export")
 	flags.StringVarP(&Exporter.Field, "field", "f", "", "Field to export")
 	flags.StringVarP(&Exporter.Path, "output-file", "o", "", "File to write export to - default stdout")
+	flags.BoolVarP(&Exporter.Timestamps, "timestamps", "", false, "Enable timestamp column for time fields")
 	ctl.SetTLSConfig(flags, &Exporter.TLS.CertificatePath, &Exporter.TLS.CertificateKeyPath, &Exporter.TLS.SkipVerify)
 
 	return exportCmd
