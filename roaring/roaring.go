@@ -3961,7 +3961,10 @@ func (op *op) UnmarshalBinary(data []byte) error {
 	_, _ = h.Write(data[0:9])
 
 	if op.typ > 1 {
-		if 1152921504606847000 < int(op.value) {
+		// The maximum integer value for a int64 is 9223372036854775807
+		maxInt := 9223372036854775807
+		maxOpValue := maxInt/8-13
+		if maxOpValue < int(op.value) {
 			return fmt.Errorf("too big")
 		}
 		if len(data) < int(13+op.value*8) {
