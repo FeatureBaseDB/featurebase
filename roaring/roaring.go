@@ -23,6 +23,7 @@ import (
 	"math/bits"
 	"sort"
 	"unsafe"
+	"math"
 
 	"github.com/pkg/errors"
 )
@@ -3956,17 +3957,15 @@ func (op *op) UnmarshalBinary(data []byte) error {
 	// op.value will actually contain the length of values for batch ops
 	op.value = binary.LittleEndian.Uint64(data[1:9])
 
+	if math.MaxInt64/8-13 < int(op.value){
+		return fmt.Errorf("too big")
+	}
+
 	// Verify checksum.
 	h := fnv.New32a()
 	_, _ = h.Write(data[0:9])
 
 	if op.typ > 1 {
-		// The maximum integer value for a int64 is 9223372036854775807
-		maxInt := 9223372036854775807
-		maxOpValue := maxInt/8-13
-		if maxOpValue < int(op.value) {
-			return fmt.Errorf("too big")
-		}
 		if len(data) < int(13+op.value*8) {
 			return fmt.Errorf("op data truncated - expected %d, got %d", 13+op.value*8, len(data))
 		}
