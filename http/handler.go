@@ -39,6 +39,7 @@ import (
 	"github.com/pilosa/pilosa/logger"
 	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Handler represents an HTTP handler.
@@ -234,6 +235,41 @@ func (h *Handler) extractTracing(next http.Handler) http.Handler {
 	})
 }
 
+func (h *Handler) collectStats(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t := time.Now()
+		next.ServeHTTP(w, r)
+		dur := time.Since(t)
+
+		statsTags := make([]string, 0, 5)
+
+		longQueryTime := h.api.LongQueryTime()
+		if longQueryTime > 0 && dur > longQueryTime {
+			h.logger.Printf("%s %s %v", r.Method, r.URL.String(), dur)
+			statsTags = append(statsTags, "slow_query")
+		}
+
+		pathParts := strings.Split(r.URL.Path, "/")
+		if externalPrefixFlag[pathParts[1]] {
+			statsTags = append(statsTags, "external")
+		}
+
+		statsTags = append(statsTags, "useragent:"+r.UserAgent())
+
+		path, err := mux.CurrentRoute(r).GetPathTemplate()
+		if err == nil {
+			statsTags = append(statsTags, "path:"+path)
+		}
+
+		statsTags = append(statsTags, "method:"+r.Method)
+
+		stats := h.api.StatsWithTags(statsTags)
+		if stats != nil {
+			stats.Timing("http.request", dur, 0.1)
+		}
+	})
+}
+
 // newRouter creates a new mux http router.
 func newRouter(handler *Handler) *mux.Router {
 	router := mux.NewRouter()
@@ -243,6 +279,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/cluster/resize/set-coordinator", handler.handlePostClusterResizeSetCoordinator).Methods("POST").Name("PostClusterResizeSetCoordinator")
 	router.PathPrefix("/debug/pprof/").Handler(http.DefaultServeMux).Methods("GET")
 	router.Handle("/debug/vars", expvar.Handler()).Methods("GET")
+	router.Handle("/metrics", promhttp.Handler())
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET").Name("GetExport")
 	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET").Name("GetIndexes")
 	router.HandleFunc("/index/{index}", handler.handleGetIndex).Methods("GET").Name("GetIndex")
@@ -278,6 +315,7 @@ func newRouter(handler *Handler) *mux.Router {
 
 	router.Use(handler.queryArgValidator)
 	router.Use(handler.extractTracing)
+	router.Use(handler.collectStats)
 	return router
 }
 
@@ -293,32 +331,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	t := time.Now()
 	h.Handler.ServeHTTP(w, r)
-	dif := time.Since(t)
-
-	// Calculate per request StatsD metrics when the handler is fully configured.
-	statsTags := make([]string, 0, 3)
-
-	longQueryTime := h.api.LongQueryTime()
-	if longQueryTime > 0 && dif > longQueryTime {
-		h.logger.Printf("%s %s %v", r.Method, r.URL.String(), dif)
-		statsTags = append(statsTags, "slow_query")
-	}
-
-	pathParts := strings.Split(r.URL.Path, "/")
-	endpointName := strings.Join(pathParts, "_")
-
-	if externalPrefixFlag[pathParts[1]] {
-		statsTags = append(statsTags, "external")
-	}
-
-	// useragent tag identifies internal/external endpoints
-	statsTags = append(statsTags, "useragent:"+r.UserAgent())
-	stats := h.api.StatsWithTags(statsTags)
-	if stats != nil {
-		stats.Histogram("http."+endpointName, float64(dif), 0.1)
-	}
 }
 
 // successResponse is a general success/error struct for http responses.
@@ -1485,10 +1498,6 @@ type defaultClusterMessageResponse struct{}
 // translateStoreBufferSize is the buffer size used for streaming data.
 const translateStoreBufferSize = 1 << 16 // 64k
 
-// translateStoreBufferSizeMax is the maximum size that the buffer is allowed
-// to grow before raising an error.
-const translateStoreBufferSizeMax = 1 << 22 // 4Mb
-
 func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	offset, _ := strconv.ParseInt(q.Get("offset"), 10, 64)
@@ -1517,16 +1526,6 @@ func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request)
 		n, err := rdr.Read(buf)
 		if err == io.EOF {
 			return
-		} else if err == pilosa.ErrTranslateReadTargetUndersized {
-			// Increase the buffer size and try to read again.
-			useBufferSize *= 2
-			// Prevent the buffer from growing without bound.
-			if useBufferSize > translateStoreBufferSizeMax {
-				h.logger.Printf("http: translate store buffer exceeded max size: %s", err)
-				return
-			}
-			buf = make([]byte, useBufferSize)
-			continue
 		} else if err != nil {
 			h.logger.Printf("http: translate store read error: %s", err)
 			return

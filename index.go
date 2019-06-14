@@ -405,7 +405,7 @@ func (i *Index) newField(path, name string) (*Field, error) {
 		return nil, err
 	}
 	f.logger = i.logger
-	f.Stats = i.Stats.WithTags(fmt.Sprintf("field:%s", name))
+	f.Stats = i.Stats
 	f.broadcaster = i.broadcaster
 	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
 	return f, nil

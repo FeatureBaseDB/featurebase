@@ -256,11 +256,20 @@ func (c *Container) setMapped(mapped bool) {
 }
 
 // Freeze returns an unmodifiable container identical to c. This might
-// be c, now marked unmodifiable, or might be a new container.
+// be c, now marked unmodifiable, or might be a new container. If c
+// is currently marked as "mapped", referring to a backing store that's
+// not a conventional Go pointer, the storage may be copied.
 func (c *Container) Freeze() *Container {
 	if c == nil {
 		return nil
 	}
+	// don't need to freeze
+	if c.flags&flagFrozen != 0 {
+		return c
+	}
+	// unmapOrClone should unmap-in-place because the existing
+	// container isn't frozen (or we'd already have returned it).
+	c = c.unmapOrClone()
 	c.flags |= flagFrozen
 	return c
 }
