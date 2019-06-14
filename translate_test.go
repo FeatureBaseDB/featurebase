@@ -370,6 +370,45 @@ func TestTranslateFile_Reader(t *testing.T) {
 			t.Fatal(diff)
 		}
 	})
+
+	t.Run("TinyBuffer", func(t *testing.T) {
+		stringKeys := make([]string, 1024)
+		byteSliceKeys := make([][]byte, len(stringKeys))
+		ids := make([]uint64, len(stringKeys))
+		for i := range stringKeys {
+			stringKeys[i] = fmt.Sprintf("KEY%d", i)
+			byteSliceKeys[i] = []byte(stringKeys[i])
+			ids[i] = uint64(i + 1)
+		}
+
+		s := MustOpenTranslateFile()
+		defer s.MustClose()
+		if _, err := s.TranslateColumnsToUint64("IDX0", stringKeys); err != nil {
+			t.Fatal(err)
+		}
+
+		// Obtain the reader and use the smallest possible buffer for bufio.
+		rc, err := s.Reader(context.Background(), 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		brc := bufio.NewReaderSize(rc, 16)
+		defer rc.Close()
+
+		// Record should be able to be read using multiple reads.
+		var entry pilosa.LogEntry
+		if _, err := entry.ReadFrom(brc); err != nil {
+			t.Fatal(err)
+		} else if diff := cmp.Diff(entry, pilosa.LogEntry{
+			Type:   pilosa.LogEntryTypeInsertColumn,
+			Index:  []byte("IDX0"),
+			IDs:    ids,
+			Keys:   byteSliceKeys,
+			Length: 9012,
+		}); diff != "" {
+			t.Fatal(diff)
+		}
+	})
 }
 
 func TestPrintTranslateFile(t *testing.T) {

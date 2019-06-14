@@ -418,7 +418,7 @@ func (api *API) DeleteAvailableShard(_ context.Context, indexName, fieldName str
 		api.server.logger.Printf("problem sending DeleteAvailableShard message: %s", err)
 		return errors.Wrap(err, "sending DeleteAvailableShard message")
 	}
-	api.holder.Stats.CountWithCustomTags("deleteAvailableShard", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName), fmt.Sprintf("field:%s", fieldName)})
+	api.holder.Stats.CountWithCustomTags("deleteAvailableShard", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
 	return nil
 }
 

@@ -74,6 +74,9 @@ const (
 	// cacheExt is the file extension for persisted cache ids.
 	cacheExt = ".cache"
 
+	// tempExt is the file extension for temporary files.
+	tempExt = ".temp"
+
 	// HashBlockSize is the number of rows in a merkle hash block.
 	HashBlockSize = 100
 
