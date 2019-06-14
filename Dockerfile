@@ -4,7 +4,7 @@ COPY . pilosa
 
 RUN cd pilosa && CGO_ENABLED=0 make install FLAGS="-a"
 
-FROM alpine:3.8
+FROM alpine:3.9.4
 
 LABEL maintainer "dev@pilosa.com"
 

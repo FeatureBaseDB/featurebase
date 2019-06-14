@@ -80,7 +80,7 @@ func TestClusterStuff(t *testing.T) {
 
 		// TODO change the sleep to wait for status to return to NORMAL - need support in internal client for getting status
 		t.Log("done with pause, waiting for stability")
-		time.Sleep(time.Second * 3)
+		time.Sleep(time.Second * 20)
 		t.Log("done waiting for stability")
 
 		r, err = cli.Query(context.Background(), "testidx", &pilosa.QueryRequest{Index: "testidx", Query: "Count(Row(testf=0))"})

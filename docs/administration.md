@@ -293,7 +293,7 @@ You can opt-out of the Pilosa diagnostics reporting by setting the command line 
 
 ### Metrics
 
-Pilosa can be configured to emit metrics pertaining to its internal processes in one of two formats: Expvar or StatsD. Metric recording is disabled by default.
+Pilosa can be configured to emit metrics pertaining to its internal processes in one of three formats: Expvar, StatsD, or Prometheus. Metric recording is disabled by default.
 The metrics configuration options are:
 
   - [Host](../configuration/#metric-host): specify host that receives metric events
