@@ -118,8 +118,6 @@ type fragment struct {
 
 	// Stats reporting.
 	maxRowID uint64
-	minRowID uint64
-	hasRowID bool
 
 	// Cache containing full rows (not just counts).
 	rowCache bitmapCache
@@ -191,9 +189,6 @@ func (f *fragment) Open() error {
 
 		// Read last bit to determine max row.
 		f.maxRowID = f.storage.Max() / ShardWidth
-		min, ok := f.storage.Min()
-		f.minRowID = min / ShardWidth
-		f.hasRowID = ok
 		f.stats.Gauge("rows", float64(f.maxRowID), 1.0)
 		return nil
 	}(); err != nil {
@@ -524,10 +519,6 @@ func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 	if rowID > f.maxRowID {
 		f.maxRowID = rowID
 		f.stats.Gauge("rows", float64(f.maxRowID), 1.0)
-	}
-	if !f.hasRowID || rowID < f.minRowID {
-		f.minRowID = rowID
-		f.hasRowID = true
 	}
 
 	return changed, nil
@@ -1040,12 +1031,13 @@ func (f *fragment) maxUnsigned(filter *Row, bitDepth uint) (max int64, count uin
 // if filter is nil, it returns fragment.minRowID, 1
 // if fragment has no rows, it returns 0, 0
 func (f *fragment) minRow(filter *Row) (uint64, uint64) {
-	if f.hasRowID {
+	minRowID, hasRowID := f.minRowID()
+	if hasRowID {
 		if filter == nil {
-			return f.minRowID, 1
+			return minRowID, 1
 		}
 		// iterate from min row ID and return the first that intersects with filter.
-		for i := f.minRowID; i <= f.maxRowID; i++ {
+		for i := minRowID; i <= f.maxRowID; i++ {
 			row := f.row(i).Intersect(filter)
 			count := row.Count()
 			if count > 0 {
@@ -1060,12 +1052,14 @@ func (f *fragment) minRow(filter *Row) (uint64, uint64) {
 // if filter is nil, it returns fragment.maxRowID, 1
 // if fragment has no rows, it returns 0, 0
 func (f *fragment) maxRow(filter *Row) (uint64, uint64) {
-	if f.hasRowID {
+	minRowID, hasRowID := f.minRowID()
+	if hasRowID {
 		if filter == nil {
 			return f.maxRowID, 1
 		}
 		// iterate back from max row ID and return the first that intersects with filter.
-		for i := f.maxRowID; i >= f.minRowID; i-- {
+		// TODO: implement reverse container iteration to improve performance here for sparse data. --Jaffee
+		for i := f.maxRowID; i >= minRowID; i-- {
 			row := f.row(i).Intersect(filter)
 			count := row.Count()
 			if count > 0 {
@@ -2417,6 +2411,11 @@ func (f *fragment) readCacheFromArchive(r io.Reader) error {
 	}
 
 	return nil
+}
+
+func (f *fragment) minRowID() (uint64, bool) {
+	min, ok := f.storage.Min()
+	return min / ShardWidth, ok
 }
 
 // rowFilter is a function signature for controlling iteration over containers

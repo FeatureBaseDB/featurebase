@@ -2008,12 +2008,12 @@ func (c *Container) arrayMax() uint16 {
 func (c *Container) bitmapMax() uint16 {
 	// Search bitmap in reverse order.
 	bitmap := c.bitmap()
-	for i := len(bitmap) - 1; i > 0; i-- {
+	for i := len(bitmap); i > 0; i-- {
 		// If value is zero then skip.
-		v := bitmap[i]
+		v := bitmap[i-1]
 		if v != 0 {
 			r := bits.LeadingZeros64(v)
-			return uint16(i*64 + 63 - r)
+			return uint16((i-1)*64 + 63 - r)
 		}
 	}
 	return 0
