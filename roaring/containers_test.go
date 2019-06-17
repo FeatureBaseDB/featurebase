@@ -98,5 +98,4 @@ func testContainersIterator(cs Containers, t *testing.T) {
 	if itr.Next() {
 		t.Fatalf("itr should be done, but got true")
 	}
-
 }
