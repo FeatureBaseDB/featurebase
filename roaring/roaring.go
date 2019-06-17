@@ -23,7 +23,6 @@ import (
 	"math/bits"
 	"sort"
 	"unsafe"
-	"math"
 
 	"github.com/pkg/errors"
 )
@@ -3945,7 +3944,7 @@ func (op *op) WriteTo(w io.Writer) (n int64, err error) {
 }
 
 var minOpSize = 13
-var maxOpSize = math.MaxInt64/8 - 13
+var maxOpN = 1000000
 
 // UnmarshalBinary decodes data into an op.
 func (op *op) UnmarshalBinary(data []byte) error {
@@ -3963,8 +3962,8 @@ func (op *op) UnmarshalBinary(data []byte) error {
 	_, _ = h.Write(data[0:9])
 
 	if op.typ > 1 {
-		if maxOpSize < int(op.value){
-			return fmt.Errorf("too big")
+		if maxOpN < int(op.value){
+			return fmt.Errorf("Maximum operation size exceeded")
 		}
 		if len(data) < int(13+op.value*8) {
 			return fmt.Errorf("op data truncated - expected %d, got %d", 13+op.value*8, len(data))
