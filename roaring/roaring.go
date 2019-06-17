@@ -2015,6 +2015,7 @@ func (c *Container) bitmapMax() uint16 {
 			r := bits.LeadingZeros64(v)
 			return uint16((i-1)*64 + 63 - r)
 		}
+
 	}
 	return 0
 }
