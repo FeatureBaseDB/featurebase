@@ -12,7 +12,11 @@ You must now make the workdir/corpus directory. This is achieved by:
 
 `mkdir workdir/corpus`
 
-The fuzzer needs some input to start the fuzzing with. Copy some sample fragments into the workdir/corpus folder. Once you have copied your sample inputs, you are ready to run the fuzzer:
+The fuzzer needs some input to start the fuzzing with. Copy some sample Pilosa fragments into the workdir/corpus folder. For example:
+
+`cp ~/.pilosa/my-index/my-field/views/standard/fragments/0 workdir/corpus`
+
+Once you have copied your sample inputs, you are ready to run the fuzzer:
 
 `go-fuzz -bin=roaring-fuzz.zip -workdir=workdir -func=FuzzBitmapUnmarshalBianry`
 
