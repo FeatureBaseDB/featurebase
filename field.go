@@ -300,12 +300,14 @@ func (f *Field) saveAvailableShards() error {
 }
 
 func (f *Field) unprotectedSaveAvailableShards() error {
-	// Open or create file.
 	path := filepath.Join(f.path, ".available.shards")
+	// Create a temporary file to save to.
+	tempPath := path + tempExt
 
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+	// Open or create file.
+	file, err := os.OpenFile(tempPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
-		return errors.Wrap(err, "opening available shards file")
+		return errors.Wrap(err, "opening temporary available shards file")
 	}
 	defer file.Close()
 
@@ -315,6 +317,11 @@ func (f *Field) unprotectedSaveAvailableShards() error {
 		return errors.Wrap(err, "writing bitmap to buffer")
 	}
 	bw.Flush()
+
+	// Move snapshot to data file location.
+	if err := os.Rename(tempPath, path); err != nil {
+		return fmt.Errorf("rename snapshot: %s", err)
+	}
 
 	return nil
 }
@@ -514,6 +521,10 @@ func (f *Field) loadMeta() error {
 
 // saveMeta writes meta data for the field.
 func (f *Field) saveMeta() error {
+	path := filepath.Join(f.path, ".meta")
+	// Create a temporary file to marshal to.
+	tempPath := f.path + tempExt
+
 	// Marshal metadata.
 	fo := f.options
 	buf, err := proto.Marshal(fo.encode())
@@ -522,8 +533,13 @@ func (f *Field) saveMeta() error {
 	}
 
 	// Write to meta file.
-	if err := ioutil.WriteFile(filepath.Join(f.path, ".meta"), buf, 0666); err != nil {
+	if err := ioutil.WriteFile(tempPath, buf, 0666); err != nil {
 		return errors.Wrap(err, "writing meta")
+	}
+
+	// Move temp file to data file location.
+	if err := os.Rename(tempPath, path); err != nil {
+		return fmt.Errorf("rename temp: %s", err)
 	}
 
 	return nil
