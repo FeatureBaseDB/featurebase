@@ -3945,6 +3945,7 @@ func (op *op) WriteTo(w io.Writer) (n int64, err error) {
 }
 
 var minOpSize = 13
+var maxOpSize = math.MaxInt64/8 - 13
 
 // UnmarshalBinary decodes data into an op.
 func (op *op) UnmarshalBinary(data []byte) error {
@@ -3957,15 +3958,14 @@ func (op *op) UnmarshalBinary(data []byte) error {
 	// op.value will actually contain the length of values for batch ops
 	op.value = binary.LittleEndian.Uint64(data[1:9])
 
-	if math.MaxInt64/8-13 < int(op.value){
-		return fmt.Errorf("too big")
-	}
-
 	// Verify checksum.
 	h := fnv.New32a()
 	_, _ = h.Write(data[0:9])
 
 	if op.typ > 1 {
+		if maxOpSize < int(op.value){
+			return fmt.Errorf("too big")
+		}
 		if len(data) < int(13+op.value*8) {
 			return fmt.Errorf("op data truncated - expected %d, got %d", 13+op.value*8, len(data))
 		}
