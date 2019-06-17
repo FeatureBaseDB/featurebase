@@ -18,7 +18,7 @@ The fuzzer needs some input to start the fuzzing with. Copy some sample Pilosa f
 
 Once you have copied your sample inputs, you are ready to run the fuzzer:
 
-`go-fuzz -bin=roaring-fuzz.zip -workdir=workdir -func=FuzzBitmapUnmarshalBianry`
+`go-fuzz -bin=roaring-fuzz.zip -workdir=workdir -func=FuzzBitmapUnmarshalBinary`
 
 ## Understanding the Fuzzer Output
 
