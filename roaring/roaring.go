@@ -1095,7 +1095,7 @@ func (b *Bitmap) writeToUnoptimized(w io.Writer) (n int64, err error) {
 // unmarshalPilosaRoaring treats data as being encoded in Pilosa's 64 bit
 // roaring format and decodes it into b.
 func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
-	if len(data) < headerBaseSize {
+	if len(data) <= headerBaseSize {
 		return errors.New("data too small")
 	}
 
