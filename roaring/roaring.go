@@ -3944,7 +3944,7 @@ func (op *op) WriteTo(w io.Writer) (n int64, err error) {
 }
 
 var minOpSize = 13
-var maxBatchSize = 1<<59
+var maxBatchSize = uint64(1<<59)
 
 // UnmarshalBinary decodes data into an op.
 func (op *op) UnmarshalBinary(data []byte) error {
@@ -3964,7 +3964,7 @@ func (op *op) UnmarshalBinary(data []byte) error {
 	if op.typ > 1 {
 		// This ensures that in doing 13+op.value*8, the max int won't be exceeded and a wrap around case
 		// (resulting in a negative value) won't occur in the slice indexing while writing
-		if int(op.value) > maxBatchSize {
+		if int(op.value) > int(maxBatchSize) {
 			return fmt.Errorf("Maximum operation size exceeded")
 		}
 		if len(data) < int(13+op.value*8) {
