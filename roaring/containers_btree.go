@@ -224,7 +224,7 @@ func (btc *bTreeContainers) Update(key uint64, fn func(*Container, bool) (*Conta
 // UpdateEvery calls fn (existing-container, existed), and expects
 // (new-container, write). If write is true, the container is used to
 // replace the given container.
-func (btc *bTreeContainers) UpdateEvery(fn func(*Container, bool) (*Container, bool)) {
+func (btc *bTreeContainers) UpdateEvery(fn func(uint64, *Container, bool) (*Container, bool)) {
 	e, _ := btc.tree.Seek(0)
 	// currently not handling the error from this, but in practice it has
 	// to be io.EOF.

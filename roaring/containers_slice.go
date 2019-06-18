@@ -220,9 +220,9 @@ func (sc *sliceContainers) Update(key uint64, fn func(*Container, bool) (*Contai
 // UpdateEvery calls fn (existing-container, existed), and expects
 // (new-container, write). If write is true, the container is used to
 // replace the given container.
-func (sc *sliceContainers) UpdateEvery(fn func(*Container, bool) (*Container, bool)) {
+func (sc *sliceContainers) UpdateEvery(fn func(uint64, *Container, bool) (*Container, bool)) {
 	for i, c := range sc.containers {
-		nc, write := fn(c, true)
+		nc, write := fn(sc.keys[i], c, true)
 		if write {
 			sc.containers[i] = nc
 		}

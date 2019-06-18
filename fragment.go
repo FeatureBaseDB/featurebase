@@ -217,15 +217,31 @@ func (f *fragment) reopen() (mustClose bool, err error) {
 
 // openStorage opens the storage bitmap. Usually you also want to read in
 // the storage, but in the case where we just wrote that file, such as
-// unprotectedWriteToStorage, we could also just... not.
-func (f *fragment) openStorage(readData bool) error {
+// unprotectedWriteToFragment, we could also just... not. If we didn't
+// have existing storage, we probably need to unmarshal the data. If the
+// file we're asked to open is empty, we probably don't.
+//
+// If we already had mapped storage previously, we want to unmap that, and
+// possibly remap it from the file, but we don't need a full unmarshal, just
+// an update of mapped pointers.
+//
+// readData: Do we need to read/mmap this data?
+// unmarshalData: Do we need to discard the existing bitmap?
+//
+// usually unmarshalData is only set to false when we're in the middle of
+// a snapshot, and unprotectedWriteToFragment just wrote the in-memory data
+// out.
+func (f *fragment) openStorage(unmarshalData bool) error {
+	oldStorageData := f.storageData
+	var lastError error
+
 	// Create a roaring bitmap to serve as storage for the shard.
 	if f.storage == nil {
 		f.storage = roaring.NewFileBitmap()
 		f.storage.Flags = f.flags
 		// if we didn't actually have storage, we *do* need to
-		// read this data.
-		readData = true
+		// unmarshal this data in order to have any.
+		unmarshalData = true
 	}
 	// Open the data file to be mmap'd and used as an ops log.
 	file, mustClose, err := syswrap.OpenFile(f.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
@@ -242,13 +258,24 @@ func (f *fragment) openStorage(readData bool) error {
 		return fmt.Errorf("flock: %s", err)
 	}
 
+	// data is the data we would unmarshal from, if we're unmarshalling; it might
+	// be obtained by calling ReadAll on a file.
+	//
+	// newStorageData is the data we should map things to. it is set only if
+	// mmapped; if we didn't mmap (say, we couldn't), we won't want to unmap
+	// the ioutil byte slice. (Theoretically, we shouldn't be using the mapped
+	// flag in that case...)
+	var data []byte
+	var newStorageData []byte
+
 	// If the file is empty then initialize it with an empty bitmap.
 	fi, err := f.file.Stat()
 	if err != nil {
 		return errors.Wrap(err, "statting file before")
 	} else if fi.Size() == 0 {
 		bi := bufio.NewWriter(f.file)
-		if _, err := f.storage.WriteTo(bi); err != nil {
+		var err error
+		if _, err = f.storage.WriteTo(bi); err != nil {
 			return fmt.Errorf("init storage file: %s", err)
 		}
 		bi.Flush()
@@ -256,47 +283,89 @@ func (f *fragment) openStorage(readData bool) error {
 		if err != nil {
 			return errors.Wrap(err, "statting file after")
 		}
-		// there's nothing here, we're not going to read the data.
-		readData = false
+		// there's nothing here, we're not going to try to unmarshal it.
+		unmarshalData = false
 		f.rowCache = &simpleCache{make(map[uint64]*Row)}
-	}
-
-	if readData {
+	} else {
 		// Mmap the underlying file so it can be zero copied.
-		data, err := syswrap.Mmap(int(f.file.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
+		data, err = syswrap.Mmap(int(f.file.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
 		if err == syswrap.ErrMaxMapCountReached {
 			f.Logger.Debugf("maximum number of maps reached, reading file instead")
-			data, err = ioutil.ReadAll(file)
-			if err != nil {
-				return errors.Wrap(err, "failure file readall")
+			if unmarshalData {
+				data, err = ioutil.ReadAll(file)
+				if err != nil {
+					return errors.Wrap(err, "failure file readall")
+				}
 			}
 		} else if err != nil {
+			fmt.Printf("f.file.Fd(): %d, size: %d\n", f.file.Fd(), fi.Size())
 			return errors.Wrap(err, "mmap failed")
 		} else {
-			f.storageData = data
-			// Advise the kernel that the mmap is accessed randomly.
-			if err := madvise(f.storageData, syscall.MADV_RANDOM); err != nil {
-				return fmt.Errorf("madvise: %s", err)
-			}
+			newStorageData = data
 		}
+	}
 
+	if unmarshalData {
+		f.storageData = newStorageData
+		// We're about to either re-read the bitmap, or fail to do so
+		// and unconditionally unmap the existing stuff. Either way, we
+		// want to unmap the old storage data after we're done here, but
+		// we can't unmap it yet because it's still live until sometime
+		// later, but we can't unmap it later, because we could return
+		// early... this is what defer is for.
+		if oldStorageData != nil {
+			defer func() {
+				unmapErr := syswrap.Munmap(oldStorageData)
+				if unmapErr != nil {
+					f.Logger.Printf("unmap of old storage failed: %s", err)
+				}
+			}()
+		}
+		// so we have a problem here: if this fails, it's unclear whether
+		// *either* or *both* of old and new storage data might be in use.
+		// So we call the thing that should unconditionally unmap both of them...
 		if err := f.storage.UnmarshalBinary(data); err != nil {
+			f.storage.RemapRoaringStorage(nil)
 			return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
 		}
 		f.rowCache = &simpleCache{make(map[uint64]*Row)}
+		f.opN = f.storage.OpN()
 	} else {
 		// we're moving to new storage, so instead of using the OpN
 		// derived from reading that storage, we need notify that
 		// OpN is now effectively-zero.
 		f.storage.SetOpN(0)
+		// if oldStorageData is nil, this just tries to unmap any bits that
+		// are currently mapped. otherwise, it will point them at this
+		// storage.
+		mappedAny, err := f.storage.RemapRoaringStorage(newStorageData)
+		if oldStorageData != nil {
+			unmapErr := syswrap.Munmap(oldStorageData)
+			if unmapErr != nil {
+				f.Logger.Printf("unmap of old storage failed: %s", err)
+			}
+		}
+		if mappedAny {
+			// Advise the kernel that the mmap is accessed randomly.
+			if err := madvise(newStorageData, syscall.MADV_RANDOM); err != nil {
+				lastError = fmt.Errorf("madvise: %s", err)
+			}
+		} else {
+			if newStorageData != nil {
+				unmapErr := syswrap.Munmap(newStorageData)
+				if unmapErr != nil {
+					lastError = fmt.Errorf("unmapping unused storage data: %s", err)
+				}
+				newStorageData = nil
+			}
+		}
+		f.storageData = newStorageData
 	}
-
-	f.opN = f.storage.OpN()
 
 	// Attach the file to the bitmap to act as a write-ahead log.
 	f.storage.OpWriter = f.file
 
-	return nil
+	return lastError
 }
 
 // openCache initializes the cache from row ids persisted to disk.
