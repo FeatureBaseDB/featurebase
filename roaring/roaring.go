@@ -1124,7 +1124,6 @@ func newRoaringIterator(data []byte) (*roaringIterator, error) {
 	if len(data) < headerBaseSize {
 		return nil, errors.New("invalid data: not long enough to be a roaring header")
 	}
-
 	// Verify the first two bytes are a valid MagicNumber, and second two bytes match current storageVersion.
 	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
 	fileVersion := uint32(data[2])
@@ -1238,16 +1237,21 @@ func (b *Bitmap) RemapRoaringStorage(data []byte) (mappedAny bool, returnErr err
 	if b.Containers == nil {
 		return false, nil
 	}
-	itr, err := newRoaringIterator(data)
-	// don't return early: we still have to do the unmapping
-	if err != nil {
-		returnErr = err
-	}
+	var itr *roaringIterator
+	var err error
 	var itrKey uint64
 	var itrCType byte
 	var itrN int
 	var itrPointer *uint16
 	var itrErr error
+
+	if data != nil {
+		itr, err = newRoaringIterator(data)
+	}
+	// don't return early: we still have to do the unmapping
+	if err != nil {
+		returnErr = err
+	}
 
 	if itr != nil {
 		itrKey, itrCType, itrN, itrPointer, itrErr = itr.Next()
