@@ -30,7 +30,7 @@ func TestUnmarshalBinary(t *testing.T) {
 		{
 			cr : []byte("<0\x000\x00\x00\x00\x00000000000000" +
 			"0"),														//"<000000000000000"
-			expected : "unmarshaling as pilosa roaring: too big",
+			expected : "unmarshaling as pilosa roaring: Maximum operation size exceeded",
 		},		
 	}
 
