@@ -3259,7 +3259,7 @@ func runContainerFunc(f interface{}, c ...*Container) *Container {
 }
 
 func TestUnmarshalRoaringWithNoErrors(t *testing.T) {
-	testValues := []struct {
+	testCases := []struct {
 		hexString string
 		count uint64
 		expectedBits string
@@ -3281,26 +3281,21 @@ func TestUnmarshalRoaringWithNoErrors(t *testing.T) {
 		},
 
 	}
-	for _, testLoop := range testValues {
-		if testLoop.hexString != "testdata/bitmapcontainer.roaringbitmap" {
-			testContainer, _ := hex.DecodeString(testLoop.hexString)
+	for _, testCase := range testCases {
+		if testCase.hexString != "testdata/bitmapcontainer.roaringbitmap" {
+			testContainer, _ := hex.DecodeString(testCase.hexString)
+		} else {
+			testContainer, _ := ioutil.ReadFile(testCase.hexString)
+		}
 			bm := NewBitmap()
 			er:= bm.UnmarshalBinary(testContainer)
 			if er != nil {
 				t.Fatalf("UnmarshalOfficialRoaring %s", er)
 			}
-			if bm.Count() != testLoop.count {
-				t.Fatalf("unexpected bitmap %v expected bits %s", bm.Slice(), testLoop.expectedBits)
-			}
-		} else {
-			testContainer, _ := ioutil.ReadFile(testLoop.hexString)
-			bm := NewBitmap()
-			er := bm.UnmarshalBinary(testContainer)
-			if er != nil {
-				t.Fatalf("UnmarshalOfficialRoaring %s", er)
-			}
-			if bm.Count() != 10000 {
-				t.Fatalf("expecting %s got %d", testLoop.expectedBits, bm.Count())
+			if bm.Count() != testCase.count && testCase.hexString != "testdata/bitmapcontainer.roaringbitmap" {
+				t.Fatalf("unexpected bitmap %v expected bits %s", bm.Slice(), testCase.expectedBits)
+			} else if bm.Count() != testCase.count {
+				t.Fatalf("expecting %s got %d", testCase.expectedBits, bm.Count())
 			}
 		}
 	}
