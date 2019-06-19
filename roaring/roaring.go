@@ -4453,7 +4453,7 @@ func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint
 	}
 
 	// descriptive header
-	if pos+2*2*int(size) > len(buf) {
+	if pos+2*2*int(size) >= len(buf) {
 		err = fmt.Errorf("malformed bitmap, key-cardinality slice overruns buffer at %d", pos+2*2*int(size))
 		return size, containerTyper, header, pos, flags, haveRuns, err
 	}
