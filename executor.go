@@ -264,6 +264,12 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "Max":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeMax(ctx, index, c, shards, opt)
+	case "MinRow":
+		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		return e.executeMinRow(ctx, index, c, shards, opt)
+	case "MaxRow":
+		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		return e.executeMaxRow(ctx, index, c, shards, opt)
 	case "Clear":
 		return e.executeClearBit(ctx, index, c, opt)
 	case "ClearRow":
@@ -468,6 +474,74 @@ func (e *executor) executeMax(ctx context.Context, index string, c *pql.Call, sh
 	return other, nil
 }
 
+// executeMinRow executes a MinRow() call.
+func (e *executor) executeMinRow(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (interface{}, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMinRow")
+	defer span.Finish()
+
+	if field := c.Args["field"]; field == "" {
+		return ValCount{}, errors.New("MinRow(): field required")
+	}
+
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeMinRowShard(ctx, index, c, shard)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		// if minRowID exists, and if it is smaller than the other one return it.
+		// otherwise return the minRowID of the one which exists.
+		prevp, _ := prev.(Pair)
+		vp, _ := v.(Pair)
+		if prevp.Count > 0 && vp.Count > 0 {
+			if prevp.ID < vp.ID {
+				return prevp
+			}
+			return vp
+		} else if prevp.Count > 0 {
+			return prevp
+		}
+		return vp
+	}
+
+	return e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+}
+
+// executeMinRow executes a MaxRow() call.
+func (e *executor) executeMaxRow(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (interface{}, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMaxRow")
+	defer span.Finish()
+
+	if field := c.Args["field"]; field == "" {
+		return ValCount{}, errors.New("MaxRow(): field required")
+	}
+
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeMaxRowShard(ctx, index, c, shard)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		// if minRowID exists, and if it is smaller than the other one return it.
+		// otherwise return the minRowID of the one which exists.
+		prevp, _ := prev.(Pair)
+		vp, _ := v.(Pair)
+		if prevp.Count > 0 && vp.Count > 0 {
+			if prevp.ID > vp.ID {
+				return prevp
+			}
+			return vp
+		} else if prevp.Count > 0 {
+			return prevp
+		}
+		return vp
+	}
+
+	return e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+}
+
 // executeBitmapCall executes a call that returns a bitmap.
 func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (*Row, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeBitmapCall")
@@ -650,9 +724,6 @@ func (e *executor) executeMinShard(ctx context.Context, index string, c *pql.Cal
 
 // executeMaxShard calculates the max for bsiGroups on a shard.
 func (e *executor) executeMaxShard(ctx context.Context, index string, c *pql.Call, shard uint64) (ValCount, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMaxShard")
-	defer span.Finish()
-
 	var filter *Row
 	if len(c.Children) == 1 {
 		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
@@ -686,6 +757,64 @@ func (e *executor) executeMaxShard(ctx context.Context, index string, c *pql.Cal
 	return ValCount{
 		Val:   int64(fmax) + bsig.Base,
 		Count: int64(fcount),
+	}, nil
+}
+
+// executeMinRowShard returns the minimum row ID for a shard.
+func (e *executor) executeMinRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (Pair, error) {
+	var filter *Row
+	if len(c.Children) == 1 {
+		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
+		if err != nil {
+			return Pair{}, err
+		}
+		filter = row
+	}
+
+	fieldName, _ := c.Args["field"].(string)
+	field := e.Holder.Field(index, fieldName)
+	if field == nil {
+		return Pair{}, nil
+	}
+
+	fragment := e.Holder.fragment(index, fieldName, viewStandard, shard)
+	if fragment == nil {
+		return Pair{}, nil
+	}
+
+	minRowID, count := fragment.minRow(filter)
+	return Pair{
+		ID:    minRowID,
+		Count: count,
+	}, nil
+}
+
+// executeMaxRowShard returns the maximum row ID for a shard.
+func (e *executor) executeMaxRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (Pair, error) {
+	var filter *Row
+	if len(c.Children) == 1 {
+		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
+		if err != nil {
+			return Pair{}, err
+		}
+		filter = row
+	}
+
+	fieldName, _ := c.Args["field"].(string)
+	field := e.Holder.Field(index, fieldName)
+	if field == nil {
+		return Pair{}, nil
+	}
+
+	fragment := e.Holder.fragment(index, fieldName, viewStandard, shard)
+	if fragment == nil {
+		return Pair{}, nil
+	}
+
+	maxRowID, count := fragment.maxRow(filter)
+	return Pair{
+		ID:    maxRowID,
+		Count: count,
 	}, nil
 }
 
@@ -2622,6 +2751,25 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 				}
 			}
 			return other, nil
+		}
+
+	case Pair:
+		if fieldName := callArgString(call, "field"); fieldName != "" {
+			field := idx.Field(fieldName)
+			if field == nil {
+				return nil, fmt.Errorf("field %q not found", fieldName)
+			}
+			if field.keys() {
+				key, err := e.TranslateStore.TranslateRowToString(index, fieldName, result.ID)
+				if err != nil {
+					return nil, err
+				}
+				if call.Name == "MinRow" || call.Name == "MaxRow" {
+					result.Key = key
+					return result, nil
+				}
+				return Pair{Key: key, Count: result.Count}, nil
+			}
 		}
 
 	case []Pair:
