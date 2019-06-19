@@ -65,5 +65,5 @@ func TestUnmarshalBinary(t *testing.T) {
 			t.Errorf("Expected: %s, Got: %s", crash.expected, err)
 		} 
 	}
-	
+  
 }
