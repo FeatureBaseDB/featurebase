@@ -23,14 +23,14 @@ func TestUnmarshalBinary(t *testing.T) {
 		cr []byte
 		expected string
 	} {
+		{	// Checks for the zero containers situation
+			cr : []byte(":0\x000\x01\x00\x00\x000000"),					//":000000"
+			expected : "reading roaring header: malformed bitmap, key-cardinality slice overruns buffer at 12",
+		},	
 		{	// Checks for int overflow
 			cr : []byte("<0\x000\x00\x00\x00\x00000000000000" +
 			"0"),														//"<000000000000000"
 			expected : "unmarshaling as pilosa roaring: Maximum operation size exceeded",
-		},		
-		{	// Checks for the zero containers situation
-			cr : []byte(":0\x000\x01\x00\x00\x000000"),					//":000000"
-			expected : "reading roaring header: malformed bitmap, key-cardinality slice overruns buffer at 12",
 		},	
 		{	// The next 5 check for malformed bitmaps
 			cr : []byte("<0\x0000000000000000000" +
