@@ -225,14 +225,24 @@ func (f *fragment) reopen() (mustClose bool, err error) {
 // possibly remap it from the file, but we don't need a full unmarshal, just
 // an update of mapped pointers.
 //
-// readData: Do we need to read/mmap this data?
-// unmarshalData: Do we need to discard the existing bitmap?
+// unmarshalData is somewhat overloaded. it tells us whether or not we
+// need to actually create a bitmap from the data (if the data exists to
+// do this from).
 //
 // usually unmarshalData is only set to false when we're in the middle of
 // a snapshot, and unprotectedWriteToFragment just wrote the in-memory data
 // out.
+//
+// If we have existing storage data, and we successfully get new data,
+// we will unmap the existing storage data.
+//
+// This function's design is probably a problem -- it is trying to handle
+// both cases where there was existing data before, and cases where we
+// just wrote the data.
 func (f *fragment) openStorage(unmarshalData bool) error {
 	oldStorageData := f.storageData
+	// there's a few places where we might encounter an error, but need
+	// to continue past it through other error checks, before returning it.
 	var lastError error
 
 	// Create a roaring bitmap to serve as storage for the shard.
@@ -332,13 +342,14 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 		f.opN = f.storage.OpN()
 	} else {
 		// we're moving to new storage, so instead of using the OpN
-		// derived from reading that storage, we need notify that
-		// OpN is now effectively-zero.
+		// derived from reading that storage, we notify the bitmap that
+		// OpN is now effectively zero.
 		f.storage.SetOpN(0)
 		// if oldStorageData is nil, this just tries to unmap any bits that
 		// are currently mapped. otherwise, it will point them at this
-		// storage.
-		mappedAny, err := f.storage.RemapRoaringStorage(newStorageData)
+		// storage (if the containers match).
+		var mappedAny bool
+		mappedAny, lastError = f.storage.RemapRoaringStorage(newStorageData)
 		if oldStorageData != nil {
 			unmapErr := syswrap.Munmap(oldStorageData)
 			if unmapErr != nil {
@@ -351,6 +362,9 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 				lastError = fmt.Errorf("madvise: %s", err)
 			}
 		} else {
+			// if we did map data, but for some reason none of it got used
+			// as backing store, we can unmap it, and set the slice to nil,
+			// so we don't keep the now-invalid slice in f.storageData.
 			if newStorageData != nil {
 				unmapErr := syswrap.Munmap(newStorageData)
 				if unmapErr != nil {
