@@ -1415,6 +1415,103 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 	})
 }
 
+// Ensure MinRow() and MaxRow() queries can be executed.
+func TestExecutor_Execute_MinMaxRow(t *testing.T) {
+	t.Run("RowID", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault()); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+			Set(0, f=7000)
+			Set(3, f=50)
+			Set(` + strconv.Itoa(ShardWidth+1) + `, f=10000)
+			Set(1000, f=1)
+			Set(` + strconv.Itoa(ShardWidth+2) + `, f=5000)
+		`}); err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run("MinRow", func(t *testing.T) {
+			result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "MinRow(field=f)"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			target := pilosa.Pair{ID: 1, Count: 1}
+			if !reflect.DeepEqual(target, result.Results[0]) {
+				t.Fatalf("unexpected result %v != %v", target, result.Results[0])
+			}
+		})
+
+		t.Run("MaxRow", func(t *testing.T) {
+			result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "MaxRow(field=f)"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			target := pilosa.Pair{ID: 10000, Count: 1}
+			if !reflect.DeepEqual(target, result.Results[0]) {
+				t.Fatalf("unexpected result %v != %v", target, result.Results[0])
+			}
+		})
+	})
+
+	t.Run("RowKey", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := idx.CreateField("f", pilosa.OptFieldKeys()); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+			Set(0, f="seven-thousand")
+			Set(3, f="fifty")
+			Set(` + strconv.Itoa(ShardWidth+1) + `, f="ten-thousand")
+			Set(1000, f="one")
+			Set(` + strconv.Itoa(ShardWidth+2) + `, f="five-thousand")
+		`}); err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run("MinRow", func(t *testing.T) {
+			result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "MinRow(field=f)"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			target := pilosa.Pair{Key: "seven-thousand", ID: 1, Count: 1}
+			if !reflect.DeepEqual(target, result.Results[0]) {
+				t.Fatalf("unexpected result %v != %v", target, result.Results[0])
+			}
+		})
+
+		t.Run("MaxRow", func(t *testing.T) {
+			result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "MaxRow(field=f)"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			target := pilosa.Pair{Key: "five-thousand", ID: 5, Count: 1}
+			if !reflect.DeepEqual(target, result.Results[0]) {
+				t.Fatalf("unexpected result %v != %v", target, result.Results[0])
+			}
+		})
+	})
+}
+
 // Ensure a Sum() query can be executed.
 func TestExecutor_Execute_Sum(t *testing.T) {
 	t.Run("ColumnID", func(t *testing.T) {
