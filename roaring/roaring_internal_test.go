@@ -3260,43 +3260,42 @@ func runContainerFunc(f interface{}, c ...*Container) *Container {
 
 func TestUnmarshalRoaringWithNoErrors(t *testing.T) {
 	testCases := []struct {
-		hexString string
+		roaringData string
+		roaringFileName string
 		count uint64
 		expectedBits string
 	}{
 		{	// generated serialize image from java(clojure) with arrays
-			hexString : "3A300000020000000000020001000000180000001E0000000100020003000100",
+			roaringData : "3A300000020000000000020001000000180000001E0000000100020003000100",
 			count : 4,
 			expectedBits : "[1 2 3 65537]",
 		},
 		{	// generated serialize image from java(clojure) with a run and array
-			hexString : "3B3001000100000900010000000100010009000100",
+			roaringData : "3B3001000100000900010000000100010009000100",
 			count : 11,
 			expectedBits : "[1 2 3 4 5 6 7 8 9 10 65537]",
 		},
 		{	// had to use an external file because emacs was barfing on the long line :()
-			hexString : "testdata/bitmapcontainer.roaringbitmap",
+			roaringFileName : "testdata/bitmapcontainer.roaringbitmap",
 			count : 10000,
 			expectedBits : "X",
 		},
 
 	}
+	var testContainer []byte
 	for _, testCase := range testCases {
-		if testCase.hexString != "testdata/bitmapcontainer.roaringbitmap" {
-			testContainer, _ := hex.DecodeString(testCase.hexString)
+		if testCase.roaringFileName == "" {
+			testContainer, _ = hex.DecodeString(testCase.roaringData)
 		} else {
-			testContainer, _ := ioutil.ReadFile(testCase.hexString)
+			testContainer, _ = ioutil.ReadFile(testCase.roaringFileName)
 		}
-			bm := NewBitmap()
-			er:= bm.UnmarshalBinary(testContainer)
-			if er != nil {
-				t.Fatalf("UnmarshalOfficialRoaring %s", er)
-			}
-			if bm.Count() != testCase.count && testCase.hexString != "testdata/bitmapcontainer.roaringbitmap" {
-				t.Fatalf("unexpected bitmap %v expected bits %s", bm.Slice(), testCase.expectedBits)
-			} else if bm.Count() != testCase.count {
-				t.Fatalf("expecting %s got %d", testCase.expectedBits, bm.Count())
-			}
+		bm := NewBitmap()
+		er:= bm.UnmarshalBinary(testContainer)
+		if er != nil {
+			t.Fatalf("UnmarshalOfficialRoaring %s", er)
+		}
+		if bm.Count() != testCase.count {
+			t.Fatalf("expecting %s got %d", testCase.expectedBits, bm.Count())
 		}
 	}
 }
