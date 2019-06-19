@@ -271,7 +271,7 @@ func (f *fragment) openStorage() error {
 			}
 		}
 
-		if err := f.storage.UnmarshalBinary(data); err != nil {
+		if err := f.storage.UnmarshalBinary(data); err != nil && !strings.Contains(err.Error(), "data too small") {
 			return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
 		}
 
