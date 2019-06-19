@@ -27,7 +27,6 @@ import (
 	"reflect"
 	"sort"
 	"sync/atomic"
-	"strings"
 	"testing"
 	"testing/quick"
 
@@ -154,7 +153,7 @@ func TestFragment_ClearRow(t *testing.T) {
 		t.Fatal(err)
 	} else if _, err := f.setBit(1000, 65536); err != nil {
 		t.Fatal(err)
-	} else if didChange, err := f.unprotectedClearRow(1000); err != nil && didChange == true{
+	} else if _, err := f.unprotectedClearRow(1000); err != nil{
 		t.Fatal(err)
 	}
 
@@ -2547,7 +2546,7 @@ func (f *fragment) Reopen() error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	if err := f.Open(); err != nil && !strings.Contains(err.Error(), "data too small") {
+	if err := f.Open(); err != nil {
 		return err
 	}
 	return nil
