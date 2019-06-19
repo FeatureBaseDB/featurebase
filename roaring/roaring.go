@@ -1102,7 +1102,7 @@ func (b *Bitmap) writeToUnoptimized(w io.Writer) (n int64, err error) {
 // unmarshalPilosaRoaring treats data as being encoded in Pilosa's 64 bit
 // roaring format and decodes it into b.
 func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
-	if len(data) < headerBaseSize {
+	if len(data) <= headerBaseSize {
 		return errors.New("data too small")
 	}
 
@@ -1120,6 +1120,9 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 
 	// Read key count in bytes sizeof(cookie)+sizeof(flag):(sizeof(cookie)+sizeof(uint32)).
 	keyN := binary.LittleEndian.Uint32(data[3+1 : 8])
+	if len(data) < headerBaseSize+int(keyN)*12 {
+		return fmt.Errorf("malformed bitmap, key-cardinality not provided for %d containers", int(keyN)/12)
+	}
 
 	headerSize := headerBaseSize
 	b.Containers.Reset()
@@ -3951,6 +3954,7 @@ func (op *op) WriteTo(w io.Writer) (n int64, err error) {
 }
 
 var minOpSize = 13
+var maxBatchSize = uint64(1<<59)
 
 // UnmarshalBinary decodes data into an op.
 func (op *op) UnmarshalBinary(data []byte) error {
@@ -3968,6 +3972,11 @@ func (op *op) UnmarshalBinary(data []byte) error {
 	_, _ = h.Write(data[0:9])
 
 	if op.typ > 1 {
+		// This ensures that in doing 13+op.value*8, the max int won't be exceeded and a wrap around case
+		// (resulting in a negative value) won't occur in the slice indexing while writing
+		if op.value > maxBatchSize {
+			return fmt.Errorf("Maximum operation size exceeded")
+		}
 		if len(data) < int(13+op.value*8) {
 			return fmt.Errorf("op data truncated - expected %d, got %d", 13+op.value*8, len(data))
 		}
@@ -4460,7 +4469,7 @@ func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint
 	}
 
 	// descriptive header
-	if pos+2*2*int(size) > len(buf) {
+	if pos+2*2*int(size) >= len(buf) {
 		err = fmt.Errorf("malformed bitmap, key-cardinality slice overruns buffer at %d", pos+2*2*int(size))
 		return size, containerTyper, header, pos, flags, haveRuns, err
 	}
