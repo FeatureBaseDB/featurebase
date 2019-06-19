@@ -3964,7 +3964,7 @@ func (op *op) UnmarshalBinary(data []byte) error {
 	if op.typ > 1 {
 		// This ensures that in doing 13+op.value*8, the max int won't be exceeded and a wrap around case
 		// (resulting in a negative value) won't occur in the slice indexing while writing
-		if int(op.value) > int(maxBatchSize) {
+		if op.value > maxBatchSize {
 			return fmt.Errorf("Maximum operation size exceeded")
 		}
 		if len(data) < int(13+op.value*8) {
