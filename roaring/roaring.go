@@ -1120,7 +1120,7 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 
 	// Read key count in bytes sizeof(cookie)+sizeof(flag):(sizeof(cookie)+sizeof(uint32)).
 	keyN := binary.LittleEndian.Uint32(data[3+1 : 8])
-	if len(data) < headerBaseSize+int(keyN)*12 {
+	if uint32(len(data)) < headerBaseSize+keyN*12 {
 		return fmt.Errorf("malformed bitmap, key-cardinality not provided for %d containers", int(keyN)/12)
 	}
 
