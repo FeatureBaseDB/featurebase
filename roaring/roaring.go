@@ -1102,7 +1102,7 @@ func (b *Bitmap) writeToUnoptimized(w io.Writer) (n int64, err error) {
 // unmarshalPilosaRoaring treats data as being encoded in Pilosa's 64 bit
 // roaring format and decodes it into b.
 func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
-	if len(data) <= headerBaseSize {
+	if len(data) < headerBaseSize {
 		return errors.New("data too small")
 	}
 
@@ -3954,7 +3954,7 @@ func (op *op) WriteTo(w io.Writer) (n int64, err error) {
 }
 
 var minOpSize = 13
-var maxBatchSize = uint64(1<<59)
+var maxBatchSize = uint64(1 << 59)
 
 // UnmarshalBinary decodes data into an op.
 func (op *op) UnmarshalBinary(data []byte) error {
