@@ -1709,15 +1709,17 @@ func confirmNodeDown(uri URI, log logger.Logger) bool {
 		log.Printf("bad request:%s %s", u.String(), err)
 		return false
 	}
-
 	for i := 0; i < confirmDownRetries; i++ {
 		resp, err := http.DefaultClient.Do(req.WithContext(ctx))
+		var bod []byte
 		if err == nil {
+			bod, err = ioutil.ReadAll(resp.Body)
 			if resp.StatusCode == 200 {
 				return false
 			}
 		}
-		log.Printf("NodeLeave Timeout with %s %d", uri.HostPort(), i)
+
+		log.Printf("NodeLeave confirm with %s %d. err: '%v' bod: '%s'", uri.HostPort(), i, err, bod)
 		time.Sleep(confirmDownSleep * time.Second)
 	}
 	return true
