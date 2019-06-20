@@ -153,7 +153,7 @@ func TestFragment_ClearRow(t *testing.T) {
 		t.Fatal(err)
 	} else if _, err := f.setBit(1000, 65536); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.unprotectedClearRow(1000); err != nil{
+	} else if _, err := f.unprotectedClearRow(1000); err != nil {
 		t.Fatal(err)
 	}
 
