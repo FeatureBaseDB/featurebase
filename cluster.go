@@ -1702,14 +1702,14 @@ func confirmNodeDown(uri URI, log logger.Logger) bool {
 		Host:   uri.HostPort(),
 		Path:   "version",
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), confirmDownTimeout*time.Second)
-	defer cancel()
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
 		log.Printf("bad request:%s %s", u.String(), err)
 		return false
 	}
 	for i := 0; i < confirmDownRetries; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), confirmDownTimeout*time.Second)
+		defer cancel()
 		resp, err := http.DefaultClient.Do(req.WithContext(ctx))
 		var bod []byte
 		if err == nil {
