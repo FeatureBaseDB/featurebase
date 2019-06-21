@@ -2025,6 +2025,15 @@ func TestIteratorArray(t *testing.T) {
 		t.Fatalf("iterator did not next correctly across containers: %v\n", itr)
 	}
 
+	itr.Seek(65535)
+	if !(itr.key == 1 && itr.j == -1) {
+		t.Fatalf("iterator did not seek missing value in previous container correctly: %v\n", itr)
+	}
+	val, eof = itr.Next()
+	if !(val == 90000 && !eof) {
+		t.Fatalf("iterator did not next from missing value in previous container correctly: %d, %v\n", val, eof)
+	}
+
 	itr.Seek(80000)
 	if !(itr.key == 1 && itr.j == -1) {
 		t.Fatalf("iterator did not seek missing value correctly: %v\n", itr)
@@ -2043,6 +2052,24 @@ func TestIteratorArray(t *testing.T) {
 	val, eof = itr.Next()
 	if !(val == 0 && eof) {
 		t.Fatalf("iterator did not eof correctly: %d, %v\n", val, eof)
+	}
+
+	// Test for seeking value not in bitmap, where next container that the iterator should
+	// go to has values with low bits smaller than the low bits of seek.
+	b = NewBitmap(65537, 65538, 65539, 65541, 65542)
+	itr = b.Iterator()
+	// Both 65536+5-1 and 5 are not in b.
+	itr.Seek(5)
+	if !(itr.key == 1 && itr.j == -1) {
+		t.Fatalf("iterator did not seek correctly in next container: %v\n", itr)
+	}
+	val, eof = itr.Next()
+	if !(val == 65537 && !eof) {
+		t.Fatalf("iterator did not next corrrectly to next container: %d, %v\n", val, eof)
+	}
+	val, eof = itr.Next()
+	if !(val == 65538 && !eof) {
+		t.Fatalf("iterator did not next correctly: %d, %v\n", val, eof)
 	}
 }
 
@@ -2101,6 +2128,39 @@ func TestIteratorBitmap(t *testing.T) {
 	val, eof = itr.Next()
 	if !(val == 0 && eof) {
 		t.Fatalf("iterator did not eof correctly: %d, %v\n", val, eof)
+	}
+
+	// Test for seeking value not in bitmap, where next container that the iterator should
+	// go to has values with low bits smaller than the low bits of seek.
+	for i := uint64(65536*3 + 2); i < 65536*3+7; i++ {
+		if i != 65536*3+5 {
+			if _, err := b.Add(i); err != nil {
+				t.Fatalf("adding bit: %v", err)
+			}
+		}
+	}
+	for i := uint64(65536*3 + 8); i < 65536*3+4110; i++ {
+		if _, err := b.Add(i); err != nil {
+			t.Fatalf("adding bit: %v", err)
+		}
+	}
+
+	if !b.Containers.Get(3).isBitmap() {
+		t.Fatalf("wrong container type")
+	}
+
+	// Both 65536*2+5 and 65536*3+5 are not in b.
+	itr.Seek(65536*2 + 5)
+	if !(itr.key == 3 && itr.j == -1) {
+		t.Fatalf("iterator did not seek correctly in next container: %v\n", itr)
+	}
+	val, eof = itr.Next()
+	if !((val == 65536*3+2) && !eof) {
+		t.Fatalf("iterator did not next correctly to next container: %d, %v\n", val, eof)
+	}
+	val, eof = itr.Next()
+	if !((val == 65536*3+3) && !eof) {
+		t.Fatalf("iterator did not next correctly to next container: %d, %v\n", val, eof)
 	}
 }
 
@@ -2163,6 +2223,38 @@ func TestIteratorRuns(t *testing.T) {
 	val, eof = itr.Next()
 	if !(val == 0 && eof) {
 		t.Fatalf("iterator did not eof correctly: %d, %v\n", val, eof)
+	}
+
+	// Test for seeking value not in bitmap, where next container that the iterator should
+	// go to has values with low bits smaller than the low bits of seek.
+	for i := uint64(65536*3 + 1); i <= 65536*3+8; i++ {
+		if _, err := b.Add(i); err != nil {
+			t.Fatalf("adding bit: %v", err)
+		}
+	}
+	for i := uint64(65536*3 + 10); i <= 65536*3+20; i++ {
+		if _, err := b.Add(i); err != nil {
+			t.Fatalf("adding bit: %v", err)
+		}
+	}
+	b.Optimize()
+
+	if !b.Containers.Get(3).isRun() {
+		t.Fatalf("wrong container type")
+	}
+
+	// Both 65536*2+9 and 65536*3+9 are not in b.
+	itr.Seek(65536*2 + 9)
+	if !(itr.key == 3 && itr.j == 0 && itr.k == -1) {
+		t.Fatalf("iterator did not seek correctly in next container: %v\n", itr)
+	}
+	val, eof = itr.Next()
+	if !((val == 65536*3+1) && !eof) {
+		t.Fatalf("iterator did not next correctly to next container: %d, %v\n", val, eof)
+	}
+	val, eof = itr.Next()
+	if !((val == 65536*3+2) && !eof) {
+		t.Fatalf("iterator did not next correctly to next container: %d, %v\n", val, eof)
 	}
 }
 

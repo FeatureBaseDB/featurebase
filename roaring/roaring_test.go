@@ -146,6 +146,20 @@ func TestCountRange(t *testing.T) {
 			end:    6 * 65536,
 			exp:    1,
 		},
+		{
+			name:   "start < end in different containers",
+			bitmap: []uint64{65537, 65538, 65539, 65540},
+			start:  65536,
+			end:    2,
+			exp:    0,
+		},
+		{
+			name:   "start == end",
+			bitmap: []uint64{65537, 65538, 65539, 65540},
+			start:  65537,
+			end:    65537,
+			exp:    0,
+		},
 	}
 
 	for _, test := range tests {
@@ -390,11 +404,21 @@ func TestBitmap_BitmapCountRange(t *testing.T) {
 	if n := bm0.CountRange(10000000, 10000001); n != 0 {
 		t.Fatalf("unexpected n: %d", n)
 	}
+
+	// Test the case where start < end and bitmap contains value in the same container as start.
+	if n := bm0.CountRange(65536, 2); n != 0 {
+		t.Fatalf("unexpected n: %d", n)
+	}
 }
 
 func TestBitmap_ArrayCountRange(t *testing.T) {
 	bm0 := roaring.NewFileBitmap(0, 2683177, 2683313)
 	if n := bm0.CountRange(1, 2683313); n != 1 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	// Test the case where start < end and bitmap contains value in the same container as start.
+	if n := bm0.CountRange(2621440, 2); n != 0 {
 		t.Fatalf("unexpected n: %d", n)
 	}
 }
@@ -425,6 +449,12 @@ func TestBitmap_RunCountRange(t *testing.T) {
 	bm1 := roaring.NewFileBitmap(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17)
 	bm1.Optimize() // convert to runs
 	if n := bm1.CountRange(5, 12); n != 7 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	bm2 := roaring.NewFileBitmap(65536, 65537, 65538, 65539, 65540, 65541, 65542, 65543, 65544, 65545, 65546, 65547, 65548, 65549, 65550, 65551, 65552, 65553)
+	bm2.Optimize() // convert to runs
+	if n := bm2.CountRange(3, 2); n != 0 {
 		t.Fatalf("unexpected n: %d", n)
 	}
 }
@@ -1063,6 +1093,22 @@ func TestBitmap_Shift(t *testing.T) {
 	} else if !reflect.DeepEqual(got.Slice(), bm2.Slice()) {
 		t.Fatalf("unexpected bitmap: expected %v, but got %v", bm2.Slice(), got.Slice())
 	}
+
+	bm1 = roaring.NewFileBitmap(65535, 131073)
+	bm2 = roaring.NewFileBitmap(65536, 131074)
+	if got, err := bm1.Shift(1); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(got.Slice(), bm2.Slice()) {
+		t.Fatalf("unexpected bitmap: expected %v, but got %v", bm2.Slice(), got.Slice())
+	}
+
+	bm1 = roaring.NewFileBitmap(65535, 131073, 65536*5-1, 65536*10, 65536*15-1)
+	bm2 = roaring.NewFileBitmap(65536, 131074, 65536*5, 65536*10+1, 65536*15)
+	if got, err := bm1.Shift(1); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(got.Slice(), bm2.Slice()) {
+		t.Fatalf("unexpected bitmap: expected %v, but got %v", bm2.Slice(), got.Slice())
+	}
 }
 
 func TestBitmap_Quick_Array1(t *testing.T)     { testBitmapQuick(t, 1000, 1000, 2000) }
@@ -1078,17 +1124,17 @@ func testBitmapQuick(t *testing.T, n int, min, max uint64) {
 		m := make(map[uint64]struct{})
 
 		// Add values to the bitmap and set.
-		manual_count := uint64(0)
+		manualCount := uint64(0)
 		for _, v := range a {
-			new_bit, _ := bm.Add(v)
-			if new_bit {
-				manual_count++
+			newBit, _ := bm.Add(v)
+			if newBit {
+				manualCount++
 			}
 			m[v] = struct{}{}
 		}
 		//check count
-		if manual_count != bm.Count() {
-			t.Fatalf("expected bitmap Add count to be: %d got: %d", manual_count, bm.Count())
+		if manualCount != bm.Count() {
+			t.Fatalf("expected bitmap Add count to be: %d got: %d", manualCount, bm.Count())
 		}
 
 		// Verify existence.
@@ -1116,12 +1162,12 @@ func testBitmapQuick(t *testing.T, n int, min, max uint64) {
 		for i, item := range rand.Perm(len(a)) {
 			removed, _ := bm.Remove(a[item])
 			if removed {
-				manual_count--
+				manualCount--
 			}
 			//check count
-			if manual_count != bm.Count() {
+			if manualCount != bm.Count() {
 				t.Fatalf("removing %d/%d [%d] from bitmap: expected bitmap Remove count to be %d, got %d",
-					i, len(a), a[item], manual_count, bm.Count())
+					i, len(a), a[item], manualCount, bm.Count())
 			}
 		}
 
@@ -1241,13 +1287,13 @@ func TestIterator(t *testing.T) {
 
 	t.Run("run", func(t *testing.T) {
 		bm1 := roaring.NewFileBitmap()
-		for i := uint64(0); i < 11; i += 1 {
+		for i := uint64(0); i < 11; i++ {
 			_, _ = bm1.Add(i)
 		}
 		bm1.Optimize()
 
 		bm2 := roaring.NewFileBitmap()
-		for i := uint64(0); i < 12; i += 1 {
+		for i := uint64(0); i < 12; i++ {
 			_, _ = bm2.Add(i)
 		}
 		bm2.Optimize()
@@ -1290,11 +1336,11 @@ func testBM() *roaring.Bitmap {
 		_, _ = bm.Add((2 << 16) + i)
 	}
 	//small run
-	for i := uint64(0); i < 1024; i += 1 {
+	for i := uint64(0); i < 1024; i++ {
 		_, _ = bm.Add((3 << 16) + i)
 	}
 	//large run
-	for i := uint64(0); i < 65535; i += 1 {
+	for i := uint64(0); i < 65535; i++ {
 		_, _ = bm.Add((4 << 16) + i)
 	}
 	bm.Optimize()

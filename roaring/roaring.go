@@ -452,6 +452,16 @@ func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 			// TODO remove once we've validated this stuff works
 			panic("should be impossible for k to be less than skey")
 		}
+		if roaringParanoia {
+			if start > end {
+				panic(fmt.Sprintf("counting in range but %v > %v", start, end))
+			}
+		}
+		// k > ekey handles the case when start > end and where start and end
+		// are in different containers. Same container case is already handled above.
+		if k > ekey {
+			break
+		}
 		if k == skey {
 			n += uint64(c.countRange(int32(lowbits(start)), maxContainerVal+1))
 			continue
@@ -462,9 +472,6 @@ func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 		}
 		if k == ekey {
 			n += uint64(c.countRange(0, int32(lowbits(end))))
-			break
-		}
-		if k > ekey {
 			break
 		}
 	}
@@ -485,6 +492,11 @@ func (b *Bitmap) Slice() []uint64 {
 
 // SliceRange returns a slice of integers between [start, end).
 func (b *Bitmap) SliceRange(start, end uint64) []uint64 {
+	if roaringParanoia {
+		if start > end {
+			panic(fmt.Sprintf("getting slice in range but %v > %v", start, end))
+		}
+	}
 	var a []uint64
 	itr := b.Iterator()
 	itr.Seek(start)
@@ -934,6 +946,11 @@ func (b *Bitmap) Shift(n int) (*Bitmap, error) {
 	lastKey := uint64(0)
 	for iiter.Next() {
 		ki, ci := iiter.Value()
+		if lastCarry && ki > lastKey+1 {
+			extra := NewContainerArray([]uint16{0})
+			output.Containers.Put(lastKey+1, extra)
+			lastCarry = false
+		}
 		o, carry := shift(ci)
 		if lastCarry {
 			o.add(0)
@@ -1249,6 +1266,11 @@ func (b *Bitmap) Check() error {
 
 // Flip performs a logical negate of the bits in the range [start,end].
 func (b *Bitmap) Flip(start, end uint64) *Bitmap {
+	if roaringParanoia {
+		if start > end {
+			panic(fmt.Sprintf("flipping in range but %v > %v", start, end))
+		}
+	}
 	result := NewBitmap()
 	itr := b.Iterator()
 	v, eof := itr.Next()
@@ -1310,8 +1332,14 @@ func (itr *Iterator) Seek(seek uint64) {
 	}
 
 	// Move to the correct value index inside the container.
-	lb := lowbits(seek)
+	lb, hb := lowbits(seek), highbits(seek)
 	if itr.c.isArray() {
+		// Seek is smaller than min(itr.c).
+		if itr.key > hb {
+			itr.j = -1
+			return
+		}
+
 		// Find index in the container.
 		itr.j = search32(itr.c.array(), lb)
 		if itr.j < 0 {
@@ -1333,24 +1361,37 @@ func (itr *Iterator) Seek(seek uint64) {
 	}
 
 	if itr.c.isRun() {
-		if seek == 0 {
-			itr.j, itr.k = 0, -1
+		// Seek is smaller than min(itr.c).
+		if itr.key > hb {
+			itr.j = 0
+			itr.k = -1
+			return
 		}
 
 		j, contains := binSearchRuns(lb, itr.c.runs())
 		if contains {
 			itr.j = j
 			itr.k = int32(lb) - int32(itr.c.runs()[j].start) - 1
-		} else {
-			// Set iterator to next value in the Bitmap.
-			itr.j = j
-			itr.k = -1
+			return
 		}
-
+		// If seek is larger than all elements, return.
+		if j >= int32(len(itr.c.runs())) {
+			if !itr.citer.Next() {
+				itr.c = nil
+				return
+			}
+		}
+		// Set iterator to next value in the Bitmap.
+		itr.j = j
+		itr.k = -1
 		return
 	}
 
 	// If it's a bitmap container then move to index before the value and call next().
+	if itr.key > hb {
+		itr.j = -1
+		return
+	}
 	itr.j = int32(lb) - 1
 }
 
@@ -1502,6 +1543,11 @@ func (c *Container) countRange(start, end int32) (n int32) {
 	if c == nil {
 		return 0
 	}
+	if roaringParanoia {
+		if start > end {
+			panic(fmt.Sprintf("counting in range but %v > %v", start, end))
+		}
+	}
 	if c.isArray() {
 		return c.arrayCountRange(start, end)
 	} else if c.isRun() {
@@ -1511,6 +1557,11 @@ func (c *Container) countRange(start, end int32) (n int32) {
 }
 
 func (c *Container) arrayCountRange(start, end int32) (n int32) {
+	if roaringParanoia {
+		if start > end {
+			panic(fmt.Sprintf("counting in range but %v > %v", start, end))
+		}
+	}
 	array := c.array()
 	i := int32(sort.Search(len(array), func(i int) bool { return int32(array[i]) >= start }))
 	for ; i < int32(len(array)); i++ {
@@ -1524,6 +1575,11 @@ func (c *Container) arrayCountRange(start, end int32) (n int32) {
 }
 
 func (c *Container) bitmapCountRange(start, end int32) int32 {
+	if roaringParanoia {
+		if start > end {
+			panic(fmt.Sprintf("counting in range but %v > %v", start, end))
+		}
+	}
 	var n uint64
 	i, j := start/64, end/64
 	// Special case when start and end fall in the same word.
@@ -1555,6 +1611,11 @@ func (c *Container) bitmapCountRange(start, end int32) int32 {
 }
 
 func (c *Container) runCountRange(start, end int32) (n int32) {
+	if roaringParanoia {
+		if start > end {
+			panic(fmt.Sprintf("counting in range but %v > %v", start, end))
+		}
+	}
 	runs := c.runs()
 	for _, iv := range runs {
 		// iv is before range
