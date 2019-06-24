@@ -3322,12 +3322,15 @@ func TestUnmarshalRoaringWithErrors(t *testing.T) {
 		},
 	}
 	for _, loopContainers := range noContainers {
-		zeroContainers, _ := hex.DecodeString(loopContainers.hexString)
+		zeroContainers, err := hex.DecodeString(loopContainers.hexString)
+		if err != nil {
+			t.Fatalf("hex decode %s", err)
+		}
 		bm := NewBitmap()
-		er := bm.UnmarshalBinary(zeroContainers)
-		if er != nil {
-			if er.Error() != loopContainers.expectedError {
-				t.Fatalf("Expected: %s, Got: %s", loopContainers.expectedError, er)
+		err = bm.UnmarshalBinary(zeroContainers)
+		if err != nil {
+			if err.Error() != loopContainers.expectedError {
+				t.Fatalf("Expected: %s, Got: %s", loopContainers.expectedError, err)
 			}
 		}
 	}
