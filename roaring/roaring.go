@@ -4491,7 +4491,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		return errors.Wrap(b.unmarshalPilosaRoaring(data), "unmarshaling as pilosa roaring")
 	}
 
-	keyN, containerTyper, header, pos, flags, haveRuns, err := readOfficialHeader(data)
+	keyN, containerTyper, header, pos, flags, _, err := readOfficialHeader(data)
 	if err != nil {
 		return errors.Wrap(err, "reading roaring header")
 	}
@@ -4509,43 +4509,14 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	}
 
 	// Read container offsets and attach data.
-	if haveRuns {
-		readWithRuns(b, data, pos, keyN)
-	} else {
-		err := readOffsets(b, data, pos, keyN)
-		if err != nil {
-			return errors.Wrap(err, "reading offsets from official roaring format")
-		}
+	err = readWithRuns(b, data, pos, keyN)
+	if err != nil {
+		return errors.Wrap(err, "reading offsets from official roaring format")
 	}
 	return nil
 }
 
-func readOffsets(b *Bitmap, data []byte, pos int, keyN uint32) error {
-
-	citer, _ := b.Containers.Iterator(0)
-	for i, buf := 0, data[pos:]; i < int(keyN); i, buf = i+1, buf[4:] {
-		offset := binary.LittleEndian.Uint32(buf[0:4])
-		// Verify the offset is within the bounds of the input data.
-		if int(offset) >= len(data) {
-			return fmt.Errorf("offset out of bounds: off=%d, len=%d", offset, len(data))
-		}
-
-		// Map byte slice directly to the container data.
-		citer.Next()
-		_, c := citer.Value()
-		switch c.typ() {
-		case containerArray:
-			c.setArray((*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[offset]))[:c.N():c.N()])
-		case containerBitmap:
-			c.setBitmap((*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN:bitmapN])
-		default:
-			return fmt.Errorf("unsupported container type %d", c.typ())
-		}
-	}
-	return nil
-}
-
-func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) {
+func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) error {
 	citer, _ := b.Containers.Iterator(0)
 	for i := 0; i < int(keyN); i++ {
 		citer.Next()
@@ -4566,8 +4537,11 @@ func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) {
 		case containerBitmap:
 			c.setBitmap((*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[pos]))[:bitmapN:bitmapN])
 			pos += bitmapN * 8
+		default:
+			return fmt.Errorf("unsupported container type %d", c.typ())
 		}
 	}
+	return nil
 }
 
 // handledIter and handledIters are wrappers around Bitmap Container iterators
