@@ -431,6 +431,12 @@ func (b *Bitmap) Size() int {
 
 // CountRange returns the number of bits set between [start, end).
 func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
+	if roaringParanoia {
+		if start > end {
+			panic(fmt.Sprintf("counting in range but %v > %v", start, end))
+		}
+	}
+
 	if b.Containers.Size() == 0 {
 		return
 	}
@@ -452,11 +458,7 @@ func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 			// TODO remove once we've validated this stuff works
 			panic("should be impossible for k to be less than skey")
 		}
-		if roaringParanoia {
-			if start > end {
-				panic(fmt.Sprintf("counting in range but %v > %v", start, end))
-			}
-		}
+
 		// k > ekey handles the case when start > end and where start and end
 		// are in different containers. Same container case is already handled above.
 		if k > ekey {
@@ -1380,6 +1382,9 @@ func (itr *Iterator) Seek(seek uint64) {
 				itr.c = nil
 				return
 			}
+			itr.key, itr.c = itr.citer.Value()
+			itr.j = -1
+			return
 		}
 		// Set iterator to next value in the Bitmap.
 		itr.j = j
@@ -1387,7 +1392,7 @@ func (itr *Iterator) Seek(seek uint64) {
 		return
 	}
 
-	// If it's a bitmap container then move to index before the value and call next().
+	// If it's a bitmap container then move to index before the value.
 	if itr.key > hb {
 		itr.j = -1
 		return
@@ -1540,13 +1545,13 @@ func (c *Container) count() (n int32) {
 
 // countRange counts the number of bits set between [start, end).
 func (c *Container) countRange(start, end int32) (n int32) {
-	if c == nil {
-		return 0
-	}
 	if roaringParanoia {
 		if start > end {
 			panic(fmt.Sprintf("counting in range but %v > %v", start, end))
 		}
+	}
+	if c == nil {
+		return 0
 	}
 	if c.isArray() {
 		return c.arrayCountRange(start, end)
