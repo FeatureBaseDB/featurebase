@@ -61,6 +61,11 @@ func TestUnmarshalBinary(t *testing.T) {
 			cr:       []byte(";0\x000\v00000"), //";0000000"
 			expected: "reading offsets from official roaring format: offset incomplete: len=10",
 		},
+		{ // Checks for incomplete offset in readOffsets
+			cr: []byte(":0\x000\x03\x00\x00\x00000000000000" +
+				"\x00"), //:0000000000000
+			expected: "reading offsets from official roaring format: offset incomplete: len=1",
+		},
 	}
 
 	for _, crash := range confirmedCrashers {

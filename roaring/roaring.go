@@ -4527,6 +4527,10 @@ func readOffsets(b *Bitmap, data []byte, pos int, keyN uint32) error {
 
 	citer, _ := b.Containers.Iterator(0)
 	for i, buf := 0, data[pos:]; i < int(keyN); i, buf = i+1, buf[4:] {
+		// Verify the offset is fully formed
+		if len(buf) < 4 {
+			return fmt.Errorf("offset incomplete: len=%d", len(buf))
+		}
 		offset := binary.LittleEndian.Uint32(buf[0:4])
 		// Verify the offset is within the bounds of the input data.
 		if int(offset) >= len(data) {
