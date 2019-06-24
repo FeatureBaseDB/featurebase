@@ -1120,6 +1120,9 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 
 	// Read key count in bytes sizeof(cookie)+sizeof(flag):(sizeof(cookie)+sizeof(uint32)).
 	keyN := binary.LittleEndian.Uint32(data[3+1 : 8])
+	if uint32(len(data)) < headerBaseSize+keyN*12 {
+		return fmt.Errorf("malformed bitmap, key-cardinality not provided for %d containers", int(keyN)/12)
+	}
 
 	headerSize := headerBaseSize
 	b.Containers.Reset()
@@ -3951,7 +3954,7 @@ func (op *op) WriteTo(w io.Writer) (n int64, err error) {
 }
 
 var minOpSize = 13
-var maxBatchSize = uint64(1<<59)
+var maxBatchSize = uint64(1 << 59)
 
 // UnmarshalBinary decodes data into an op.
 func (op *op) UnmarshalBinary(data []byte) error {
