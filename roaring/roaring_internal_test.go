@@ -3282,16 +3282,20 @@ func TestUnmarshalRoaringWithNoErrors(t *testing.T) {
 		},
 	}
 	var testContainer []byte
+	var err error
 	for _, testCase := range testCases {
 		if testCase.roaringFileName == "" {
-			testContainer, _ = hex.DecodeString(testCase.roaringData)
+			testContainer, err = hex.DecodeString(testCase.roaringData)
+			if err != nil {
+				t.Fatalf("hex decode %s", err)
+			}
 		} else {
 			testContainer, _ = ioutil.ReadFile(testCase.roaringFileName)
 		}
 		bm := NewBitmap()
-		er := bm.UnmarshalBinary(testContainer)
-		if er != nil {
-			t.Fatalf("UnmarshalOfficialRoaring %s", er)
+		err = bm.UnmarshalBinary(testContainer)
+		if err != nil {
+			t.Fatalf("UnmarshalOfficialRoaring %s", err)
 		}
 		if bm.Count() != testCase.count {
 			t.Fatalf("expecting %s got %d", testCase.expectedBits, bm.Count())
