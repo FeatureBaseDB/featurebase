@@ -379,6 +379,13 @@ func (b *Bitmap) remove(v uint64) bool {
 	return changed
 }
 
+// Min returns the lowest value in the bitmap.
+// Second return value is true if containers exist in the bitmap.
+func (b *Bitmap) Min() (uint64, bool) {
+	v, eof := b.Iterator().Next()
+	return v, !eof
+}
+
 // Max returns the highest value in the bitmap.
 // Returns zero if the bitmap is empty.
 func (b *Bitmap) Max() uint64 {
