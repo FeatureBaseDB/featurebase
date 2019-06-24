@@ -191,8 +191,7 @@ func (f *fragment) Open() error {
 		f.checksums = make(map[int][]byte)
 
 		// Read last bit to determine max row.
-		pos := f.storage.Max()
-		f.maxRowID = pos / ShardWidth
+		f.maxRowID = f.storage.Max() / ShardWidth
 		f.stats.Gauge("rows", float64(f.maxRowID), 1.0)
 		return nil
 	}(); err != nil {
@@ -1029,6 +1028,49 @@ func (f *fragment) maxUnsigned(filter *Row, bitDepth uint) (max int64, count uin
 		}
 	}
 	return max, count
+}
+
+// minRow returns minRowID of the rows in the filter and its count.
+// if filter is nil, it returns fragment.minRowID, 1
+// if fragment has no rows, it returns 0, 0
+func (f *fragment) minRow(filter *Row) (uint64, uint64) {
+	minRowID, hasRowID := f.minRowID()
+	if hasRowID {
+		if filter == nil {
+			return minRowID, 1
+		}
+		// iterate from min row ID and return the first that intersects with filter.
+		for i := minRowID; i <= f.maxRowID; i++ {
+			row := f.row(i).Intersect(filter)
+			count := row.Count()
+			if count > 0 {
+				return i, count
+			}
+		}
+	}
+	return 0, 0
+}
+
+// maxRow returns maxRowID of the rows in the filter and its count.
+// if filter is nil, it returns fragment.maxRowID, 1
+// if fragment has no rows, it returns 0, 0
+func (f *fragment) maxRow(filter *Row) (uint64, uint64) {
+	minRowID, hasRowID := f.minRowID()
+	if hasRowID {
+		if filter == nil {
+			return f.maxRowID, 1
+		}
+		// iterate back from max row ID and return the first that intersects with filter.
+		// TODO: implement reverse container iteration to improve performance here for sparse data. --Jaffee
+		for i := f.maxRowID; i >= minRowID; i-- {
+			row := f.row(i).Intersect(filter)
+			count := row.Count()
+			if count > 0 {
+				return i, count
+			}
+		}
+	}
+	return 0, 0
 }
 
 // rangeOp returns bitmaps with a bsiGroup value encoding matching the predicate.
@@ -2372,6 +2414,11 @@ func (f *fragment) readCacheFromArchive(r io.Reader) error {
 	}
 
 	return nil
+}
+
+func (f *fragment) minRowID() (uint64, bool) {
+	min, ok := f.storage.Min()
+	return min / ShardWidth, ok
 }
 
 // rowFilter is a function signature for controlling iteration over containers
