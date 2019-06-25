@@ -502,7 +502,7 @@ func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 	delete(f.checksums, int(rowID/HashBlockSize))
 
 	// Increment number of operations until snapshot is required.
-	if err := f.incrementOpN(); err != nil {
+	if err := f.incrementOpN(1); err != nil {
 		return false, errors.Wrap(err, "incrementing")
 	}
 
@@ -566,7 +566,7 @@ func (f *fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, er
 	delete(f.checksums, int(rowID/HashBlockSize))
 
 	// Increment number of operations until snapshot is required.
-	if err := f.incrementOpN(); err != nil {
+	if err := f.incrementOpN(1); err != nil {
 		return false, errors.Wrap(err, "incrementing")
 	}
 
@@ -2046,89 +2046,48 @@ func (f *fragment) importValue(columnIDs []uint64, values []int64, bitDepth uint
 // https://github.com/RoaringBitmap/RoaringFormatSpec or from pilosa's version
 // of the roaring format. The cache is updated to reflect the new data.
 func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) error {
+	rowSize := uint64(1 << shardVsContainerExponent)
 	span, ctx := tracing.StartSpanFromContext(ctx, "fragment.importRoaring")
 	defer span.Finish()
 	span, ctx = tracing.StartSpanFromContext(ctx, "importRoaring.AcquireFragmentLock")
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	span.Finish()
-	bm := roaring.NewBTreeBitmap()
-	span, ctx = tracing.StartSpanFromContext(ctx, "importRoaring.UnmarshalBinary")
-	err := bm.UnmarshalBinary(data)
+	span, ctx = tracing.StartSpanFromContext(ctx, "importRoaring.ImportRoaringBits")
+	changed, rowSet, err := f.storage.ImportRoaringBits(data, clear, true, rowSize)
 	span.Finish()
 	if err != nil {
 		return err
 	}
 
-	// get a list of keys in order to update the cache
-	iter, _ := bm.Containers.Iterator(0)
-	rowSet := make(map[uint64]struct{})
-	var lastRow uint64 = math.MaxUint64
+	updateCache := f.CacheType != CacheTypeNone
+	anyChanged := false
 
-	incomingCnt := uint64(0)
-	for iter.Next() {
-		key, c := iter.Value()
-		incomingCnt += uint64(c.N())
-
-		// virtual row for the current container
-		vRow := key >> shardVsContainerExponent
-
-		// skip dups
-		if vRow == lastRow {
+	for rowID, changes := range rowSet {
+		if changes == 0 {
 			continue
 		}
-		rowSet[vRow] = struct{}{}
-		lastRow = vRow
-	}
-
-	// take smallPath? TODO - ideally instead of checking f.storage.Any(), the
-	// test here would be if the storage size (in bytes) is significantly
-	// greater than the size of the incoming bits serialized as append
-	// operations. Getting the storage size might be a bit expensive though
-	// especially if the fragment isn't mapped.
-	if incomingCnt+uint64(f.opN) <= uint64(f.MaxOpN) && f.storage.Any() {
-		toSet, toClear := bm.Slice(), []uint64{}
-		if clear {
-			toSet, toClear = toClear, toSet
+		f.rowCache.Add(rowID, nil)
+		if updateCache {
+			anyChanged = true
+			f.cache.BulkAdd(rowID, f.cache.Get(rowID)+uint64(changes))
 		}
-		span, _ = tracing.StartSpanFromContext(ctx, "importRoaring.ImportPositions")
-		err := f.importPositions(toSet, toClear, rowSet)
-		span.Finish()
-		return err
+	}
+	// we only set this if we need to update the cache
+	if anyChanged {
+		f.cache.Recalculate()
 	}
 
-	if clear {
-		span, ctx = tracing.StartSpanFromContext(ctx, "importRoaringDifference")
-		bm = f.storage.Difference(bm)
-		span.Finish()
-	} else if f.storage.Containers.Size() >= bm.Containers.Size() {
-		span, ctx = tracing.StartSpanFromContext(ctx, "importRoaringStorageUIP")
-		f.storage.UnionInPlace(bm)
-		bm = f.storage
-		span.Finish()
-	} else {
-		span, ctx = tracing.StartSpanFromContext(ctx, "importRoaringBitmapUIP")
-		bm.UnionInPlace(f.storage)
-		span.Finish()
-	}
-
-	for rowID := range rowSet {
-		n := bm.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
-		f.cache.BulkAdd(rowID, n)
-	}
-	f.cache.Recalculate()
-
-	span, _ = tracing.StartSpanFromContext(ctx, "importRoaring.WriteToFragment")
-	n, err := unprotectedWriteToFragment(f, bm)
-	span.LogKV("bytesWritten", n)
+	span, _ = tracing.StartSpanFromContext(ctx, "importRoaring.incrementOpN")
+	f.incrementOpN(changed)
 	span.Finish()
 	return err
 }
 
 // incrementOpN increase the operation count by one.
 // If the count exceeds the maximum allowed then a snapshot is performed.
-func (f *fragment) incrementOpN() error {
-	f.opN++
+func (f *fragment) incrementOpN(changed int) error {
+	f.opN += changed
 	if f.opN <= f.MaxOpN {
 		return nil
 	}
