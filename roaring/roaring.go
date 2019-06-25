@@ -1128,6 +1128,8 @@ type roaringIterator interface {
 	Next() (key uint64, cType byte, n int, length int, pointer *uint16, err error)
 }
 
+// baseRoaringIterator holds values used by both Pilosa and official Roaring
+// iterators.
 type baseRoaringIterator struct {
 	data              []byte
 	keys              int64
@@ -1163,7 +1165,7 @@ func newOfficialRoaringIterator(data []byte) (*officialRoaringIterator, error) {
 	var keys uint32
 
 	// we ignore the flags, since we don't have to process them for anything.
-	keys, r.containerTyper, headerOffset, offsetOffset, _, r.haveRuns, err = readOfficialHeader(data)
+	keys, r.containerTyper, headerOffset, offsetOffset, r.haveRuns, err = readOfficialHeader(data)
 	if err != nil {
 		return nil, fmt.Errorf("reading official header: %v", err)
 	}
@@ -5054,11 +5056,11 @@ const (
 	serialCookie               = 12347 // runs, arrays, and bitmaps
 )
 
-func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint, card int) byte, header, pos int, flags byte, haveRuns bool, err error) {
+func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint, card int) byte, header, pos int, haveRuns bool, err error) {
 	statsHit("readOfficialHeader")
 	if len(buf) < 8 {
 		err = fmt.Errorf("buffer too small, expecting at least 8 bytes, was %d", len(buf))
-		return size, containerTyper, header, pos, flags, haveRuns, err
+		return size, containerTyper, header, pos, haveRuns, err
 	}
 	cf := func(index uint, card int) (newType byte) {
 		newType = containerBitmap
@@ -5068,8 +5070,7 @@ func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint
 		return newType
 	}
 	containerTyper = cf
-	cookie := binary.LittleEndian.Uint32(buf) & 0xFFFFFF
-	flags = buf[3]
+	cookie := binary.LittleEndian.Uint32(buf)
 	pos += 4
 
 	// cookie header
@@ -5084,7 +5085,7 @@ func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint
 		isRunBitmapSize := (int(size) + 7) / 8
 		if pos+isRunBitmapSize > len(buf) {
 			err = fmt.Errorf("malformed bitmap, is-run bitmap overruns buffer at %d", pos+isRunBitmapSize)
-			return size, containerTyper, header, pos, flags, haveRuns, err
+			return size, containerTyper, header, pos, haveRuns, err
 		}
 
 		isRunBitmap := buf[pos : pos+isRunBitmapSize]
@@ -5097,22 +5098,22 @@ func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint
 		}
 	} else {
 		err = fmt.Errorf("did not find expected serialCookie in header")
-		return size, containerTyper, header, pos, flags, haveRuns, err
+		return size, containerTyper, header, pos, haveRuns, err
 	}
 
 	header = pos
 	if size > (1 << 16) {
 		err = fmt.Errorf("it is logically impossible to have more than (1<<16) containers")
-		return size, containerTyper, header, pos, flags, haveRuns, err
+		return size, containerTyper, header, pos, haveRuns, err
 	}
 
 	// descriptive header
 	if pos+2*2*int(size) >= len(buf) {
 		err = fmt.Errorf("malformed bitmap, key-cardinality slice overruns buffer at %d", pos+2*2*int(size))
-		return size, containerTyper, header, pos, flags, haveRuns, err
+		return size, containerTyper, header, pos, haveRuns, err
 	}
 	pos += 2 * 2 * int(size) // moving pos past keycount
-	return size, containerTyper, header, pos, flags, haveRuns, err
+	return size, containerTyper, header, pos, haveRuns, err
 }
 
 // UnmarshalBinary decodes b from a binary-encoded byte slice. data can be in
@@ -5129,11 +5130,13 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		return errors.Wrap(b.unmarshalPilosaRoaring(data), "unmarshaling as pilosa roaring")
 	}
 
-	keyN, containerTyper, header, pos, flags, haveRuns, err := readOfficialHeader(data)
+	keyN, containerTyper, header, pos, haveRuns, err := readOfficialHeader(data)
 	if err != nil {
 		return errors.Wrap(err, "reading roaring header")
 	}
-	b.Flags = flags
+	// Only the Pilosa roaring format has flags. The official Roaring format
+	// hasn't got space in its header for flags.
+	b.Flags = 0
 
 	b.Containers.ResetN(int(keyN))
 	// Descriptive header section: Read container keys and cardinalities.

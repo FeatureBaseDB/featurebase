@@ -24,7 +24,7 @@ func TestUnmarshalBinary(t *testing.T) {
 		expected string
 	}{
 		{ // Checks for the zero containers situation
-			cr:       []byte(":0\x000\x01\x00\x00\x000000"), //":000000"
+			cr:       []byte(":0\x00\x00\x01\x00\x00\x000000"), //":000000"
 			expected: "reading roaring header: malformed bitmap, key-cardinality slice overruns buffer at 12",
 		},
 		{ // Checks for int overflow
@@ -58,11 +58,11 @@ func TestUnmarshalBinary(t *testing.T) {
 			expected: "unmarshaling as pilosa roaring: malformed bitmap, key-cardinality not provided for 0 containers",
 		},
 		{ // Checks for incomplete offset in readWithRuns
-			cr:       []byte(";0\x000\v00000"), //";0000000"
+			cr:       []byte(";0\x00\x00\v00000"), //";0000000"
 			expected: "reading offsets from official roaring format: offset incomplete: len=10",
 		},
 		{ // Checks for incomplete offset in readOffsets
-			cr: []byte(":0\x000\x03\x00\x00\x00000000000000" +
+			cr: []byte(":0\x00\x00\x03\x00\x00\x00000000000000" +
 				"\x00"), //:0000000000000
 			expected: "reading offsets from official roaring format: offset incomplete: len=1",
 		},
