@@ -149,8 +149,9 @@ type Bitmap struct {
 	Flags byte
 
 	// Number of bit change operations written to the writer. Some operations
-	// contain multiple values, each of those counts the number of values rather
-	// than counting as one operation.
+	// contain multiple values, so "ops" represents the number of distinct
+	// operations, while "opN" represents expected bit changes.
+	ops int
 	opN int
 
 	// Writer where operations are appended to.
@@ -1508,6 +1509,7 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 		opr.apply(b)
 
 		// Increase the op count.
+		b.ops++
 		b.opN += opr.count()
 
 		// Move the buffer forward.
@@ -1527,6 +1529,7 @@ func (b *Bitmap) writeOp(op *op) error {
 		return err
 	}
 	b.opN += op.count()
+	b.ops++
 
 	return nil
 }
@@ -1538,22 +1541,23 @@ func (b *Bitmap) Iterator() *Iterator {
 	return itr
 }
 
-// OpN returns the number of write ops the bitmap is aware of in its ops
-// log.
-func (b *Bitmap) OpN() int {
-	return b.opN
+// Ops returns the number of write ops the bitmap is aware of in its ops
+// log, and their total bit count.
+func (b *Bitmap) Ops() (ops int, opN int) {
+	return b.ops, b.opN
 }
 
-// SetOpN lets us reset the operation count in the weird case where we know
+// SetOps lets us reset the operation count in the weird case where we know
 // we've changed an underlying file, without actually refreshing the bitmap.
-func (b *Bitmap) SetOpN(int) {
-	b.opN = 0
+func (b *Bitmap) SetOps(ops int, opN int) {
+	b.ops, b.opN = ops, opN
 }
 
 // Info returns stats for the bitmap.
 func (b *Bitmap) Info() bitmapInfo {
 	info := bitmapInfo{
 		OpN:        b.opN,
+		Ops:        b.ops,
 		Containers: make([]containerInfo, 0, b.Containers.Size()),
 	}
 
@@ -1622,6 +1626,7 @@ func (b *Bitmap) Flip(start, end uint64) *Bitmap {
 // bitmapInfo represents a point-in-time snapshot of bitmap stats.
 type bitmapInfo struct {
 	OpN        int
+	Ops        int
 	Containers []containerInfo
 }
 

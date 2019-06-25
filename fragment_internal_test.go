@@ -889,7 +889,6 @@ func BenchmarkFragment_RepeatedSmallValueImports(b *testing.B) {
 								b.Fatalf("importing values: %v", err)
 							}
 						}
-
 					}
 				})
 			}
@@ -2055,6 +2054,7 @@ func BenchmarkImportRoaring(b *testing.B) {
 					b.StartTimer()
 					err := f.importRoaringT(data, false)
 					if err != nil {
+						f.awaitSnapshot()
 						f.Clean(b)
 						b.Fatalf("import error: %v", err)
 					}
@@ -2092,7 +2092,9 @@ func BenchmarkImportRoaringConcurrent(b *testing.B) {
 						for j := 0; j < concurrency; j++ {
 							j := j
 							eg.Go(func() error {
-								return frags[j].importRoaringT(data[j], false)
+								err := frags[j].importRoaringT(data[j], false)
+								frags[j].awaitSnapshot()
+								return err
 							})
 						}
 						err := eg.Wait()
@@ -2125,7 +2127,12 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 						for i := 0; i < b.N; i++ {
 							for j := 0; j < concurrency; j++ {
 								frags[j] = mustOpenFragment("i", "f", viewStandard, uint64(j), cacheType)
-								err := frags[j].importRoaringT(data, false)
+								// the cost of actually doing the op log for the large initial data set
+								// is excessive. force storage into snapshotted state, then use import
+								// to generate an op log and/or snapshot.
+								_, _, err := frags[j].storage.ImportRoaringBits(data, false, false, 0)
+								frags[j].enqueueSnapshot()
+								frags[j].awaitSnapshot()
 								if err != nil {
 									b.Fatalf("importing roaring: %v", err)
 								}
@@ -2135,7 +2142,9 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 							for j := 0; j < concurrency; j++ {
 								j := j
 								eg.Go(func() error {
-									return frags[j].importRoaringT(updata, false)
+									err := frags[j].importRoaringT(updata, false)
+									frags[j].awaitSnapshot()
+									return err
 								})
 							}
 							err := eg.Wait()
@@ -2192,12 +2201,18 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 					b.StopTimer()
 					for i := 0; i < b.N; i++ {
 						f := mustOpenFragment("i", fmt.Sprintf("r%dc%dcache_%s", numRows, numCols, cacheType), viewStandard, 0, cacheType)
-						err := f.importRoaringT(data, false)
+						// the cost of actually doing the op log for the large initial data set
+						// is excessive. force storage into snapshotted state, then use import
+						// to generate an op log and/or snapshot.
+						_, _, err := f.storage.ImportRoaringBits(data, false, false, 0)
+						f.enqueueSnapshot()
+						f.awaitSnapshot()
 						if err != nil {
 							b.Errorf("import error: %v", err)
 						}
 						b.StartTimer()
 						err = f.importRoaringT(updata, false)
+						f.awaitSnapshot()
 						if err != nil {
 							f.Clean(b)
 							b.Errorf("import error: %v", err)
@@ -2494,12 +2509,17 @@ func (f *fragment) sanityCheck(t testing.TB) {
 }
 
 func (f *fragment) Clean(t testing.TB) {
+	f.awaitSnapshot()
 	f.sanityCheck(t)
 	errc := f.Close()
 	errf := os.Remove(f.path)
 	errp := os.Remove(f.cachePath())
 	if errc != nil || errf != nil {
 		t.Fatal("cleaning up fragment: ", errc, errf, errp)
+	}
+	if f.snapshotQueue != nil {
+		close(f.snapshotQueue)
+		f.snapshotQueue = nil
 	}
 	// not all fragments have cache files
 	if errp != nil && !os.IsNotExist(errp) {
@@ -2519,6 +2539,10 @@ func (f *fragment) CleanKeep(t testing.TB) {
 	errp := os.Remove(f.cachePath())
 	if errc != nil {
 		t.Fatal("closing fragment: ", errc, errp)
+	}
+	if f.snapshotQueue != nil {
+		close(f.snapshotQueue)
+		f.snapshotQueue = nil
 	}
 	// not all fragments have cache files
 	if errp != nil && !os.IsNotExist(errp) {
@@ -2552,6 +2576,7 @@ func mustOpenFragmentFlags(index, field, view string, shard uint64, cacheType st
 	f.RowAttrStore = &memAttrStore{
 		store: make(map[uint64]map[string]interface{}),
 	}
+	f.snapshotQueue = newSnapshotQueue(1, 1, nil)
 
 	if err := f.Open(); err != nil {
 		panic(err)
@@ -3039,7 +3064,9 @@ func TestUnionInPlaceMapped(t *testing.T) {
 
 	f.storage.UnionInPlace(setBM1)
 	countUnion := f.storage.Count()
-	f.snapshot()
+	// UnionInPlace produces no ops log, we have to make it snapshot, to
+	// ensure that the on-disk representation is correct.
+	f.enqueueSnapshot()
 
 	if count0 != countF {
 		t.Fatalf("writing bitmap to storage changed count: %d => %d", count0, countF)

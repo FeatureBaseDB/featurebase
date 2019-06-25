@@ -107,12 +107,21 @@ type fragment struct {
 	shard uint64
 
 	// File-backed storage
-	path        string
-	flags       byte // user-defined flags passed to roaring
-	file        *os.File
-	storage     *roaring.Bitmap
-	storageData []byte
-	opN         int // number of ops since snapshot
+	path               string
+	flags              byte // user-defined flags passed to roaring
+	file               *os.File
+	storage            *roaring.Bitmap
+	storageData        []byte
+	totalOpN           int64 // total opN values
+	totalOps           int64 // total ops (across all snapshots)
+	opN                int   // number of ops since snapshot (may be approximate for imports)
+	ops                int   // number of higher-level operations, as opposed to bit changes
+	snapshotsRequested int   // number of times we've requested a snapshot
+	snapshotsTaken     int   // number of actual snapshot operations
+	snapshotting       bool  // set to true when requesting a snapshot, set to false after snapshot completes
+	snapshotCond       sync.Cond
+	snapshotDelays     int
+	snapshotDelayTime  time.Duration
 
 	// Cache for row counts.
 	CacheType string // passed in by field
@@ -145,11 +154,13 @@ type fragment struct {
 	mutexVector vector
 
 	stats stats.StatsClient
+
+	snapshotQueue chan *fragment
 }
 
 // newFragment returns a new instance of Fragment.
 func newFragment(path, index, field, view string, shard uint64, flags byte) *fragment {
-	return &fragment{
+	f := &fragment{
 		path:      path,
 		index:     index,
 		field:     field,
@@ -164,10 +175,67 @@ func newFragment(path, index, field, view string, shard uint64, flags byte) *fra
 
 		stats: stats.NopStatsClient,
 	}
+	f.snapshotCond = sync.Cond{L: &f.mu}
+	return f
 }
 
 // cachePath returns the path to the fragment's cache data.
 func (f *fragment) cachePath() string { return f.path + cacheExt }
+
+// newSnapshotQueue makes a new snapshot queue, of depth N, and spawns a
+// goroutine for it.
+func newSnapshotQueue(n int, w int, l logger.Logger) chan *fragment {
+	ch := make(chan *fragment, n)
+	for i := 0; i < w; i++ {
+		go snapshotQueueWorker(ch, l)
+	}
+	return ch
+}
+
+func snapshotQueueWorker(snapshotQueue chan *fragment, l logger.Logger) {
+	for f := range snapshotQueue {
+		err := f.protectedSnapshot(true)
+		if err != nil {
+			l.Printf("snapshot error: %v", err)
+		}
+		f.snapshotCond.Broadcast()
+	}
+}
+
+// enqueueSnapshot requests that the fragment be snapshotted at some point
+// in the future, if this has not already been requested. Call this only when
+// the mutex is held.
+func (f *fragment) enqueueSnapshot() {
+	f.snapshotsRequested++
+	if f.snapshotting {
+		return
+	}
+	f.snapshotting = true
+	if f.snapshotQueue != nil {
+		select {
+		case f.snapshotQueue <- f:
+		default:
+			before := time.Now()
+			// wait forever, but notice that we're waiting
+			f.snapshotQueue <- f
+			f.snapshotDelays++
+			f.snapshotDelayTime += time.Now().Sub(before)
+			if f.snapshotDelays >= 10 {
+				f.Logger.Printf("snapshotting %s: last ten delays took %v", f.path, f.snapshotDelayTime)
+				f.snapshotDelays = 0
+				f.snapshotDelayTime = 0
+			}
+		case <-time.After(5 * time.Second):
+			f.Logger.Printf("snapshot for %s: timed out\n", f.path)
+		}
+	} else {
+		// in testing, for instance, there may be no holder, thus no one
+		// to handle these snapshots.
+		f.snapshot()
+		f.snapshotting = false
+		f.snapshotCond.Broadcast()
+	}
+}
 
 // Open opens the underlying storage.
 func (f *fragment) Open() error {
@@ -334,18 +402,21 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 		// *either* or *both* of old and new storage data might be in use.
 		// So we call the thing that should unconditionally unmap both of them...
 		if err := f.storage.UnmarshalBinary(data); err != nil {
-			f.storage.RemapRoaringStorage(nil)
+			_, e2 := f.storage.RemapRoaringStorage(nil)
+			if e2 != nil {
+				return fmt.Errorf("unmarshal storage: file=%s, err=%s, clearing old mapping also failed: %v", f.file.Name(), err, e2)
+			}
 			return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
 		}
 		f.rowCache = &simpleCache{make(map[uint64]*Row)}
-		f.opN = f.storage.OpN()
-		// slightly incorrect, but we can't measure it so...
+		f.ops, f.opN = f.storage.Ops()
 	} else {
 		// we're moving to new storage, so instead of using the OpN
 		// derived from reading that storage, we notify the bitmap that
 		// OpN is now effectively zero.
 		f.opN = 0
-		f.storage.SetOpN(0)
+		f.ops = 0
+		f.storage.SetOps(0, 0)
 		// if oldStorageData is nil, this just tries to unmap any bits that
 		// are currently mapped. otherwise, it will point them at this
 		// storage (if the containers match).
@@ -429,7 +500,29 @@ func (f *fragment) openCache() error {
 func (f *fragment) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	for f.snapshotting {
+		f.snapshotCond.Wait()
+	}
 	return f.close()
+}
+
+// awaitSnapshot lets us delay until the snapshot gets written, preventing tests
+// from misleadingly showing amazingly fast performance because the snapshots they
+// trigger haven't happened yet.
+func (f *fragment) awaitSnapshot() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for f.snapshotting {
+		f.snapshotCond.Wait()
+	}
+}
+
+// protectedAwaitSnapshot assumes you already hold the lock, and waits for
+// the snapshot fairy to come along.
+func (f *fragment) protectedAwaitSnapshot() {
+	for f.snapshotting {
+		f.snapshotCond.Wait()
+	}
 }
 
 func (f *fragment) close() error {
@@ -732,14 +825,16 @@ func (f *fragment) unprotectedSetRow(row *Row, rowID uint64) (changed bool, err 
 	}
 
 	// Update the row in cache.
-	n := f.storage.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
-	f.cache.BulkAdd(rowID, n)
-
-	// Snapshot storage.
-	if err := f.snapshot(); err != nil {
-		return false, errors.Wrap(err, "snapshotting")
+	if f.CacheType != CacheTypeNone {
+		n := f.storage.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
+		f.cache.BulkAdd(rowID, n)
 	}
 
+	// invalidate rowCache for this row.
+	f.rowCache.Add(rowID, nil)
+
+	// Snapshot storage.
+	f.enqueueSnapshot()
 	f.stats.Count("setRow", 1, 1.0)
 
 	return changed, nil
@@ -780,11 +875,10 @@ func (f *fragment) unprotectedClearRow(rowID uint64) (changed bool, err error) {
 
 	// Clear the row in cache.
 	f.cache.Add(rowID, 0)
+	f.rowCache.Add(rowID, nil)
 
 	// Snapshot storage.
-	if err := f.snapshot(); err != nil {
-		return false, errors.Wrap(err, "snapshotting")
-	}
+	f.enqueueSnapshot()
 
 	f.stats.Count("clearRow", 1, 1.0)
 
@@ -948,7 +1042,7 @@ func (f *fragment) setValueBase(columnID uint64, bitDepth uint, value int64, cle
 }
 
 // importSetValue is a more efficient SetValue just for imports.
-func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value int64, clear bool) (changed bool, err error) { // nolint: unparam
+func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value int64, clear bool) (changed int, err error) { // nolint: unparam
 	// Convert value to an unsigned representation.
 	uvalue := uint64(value)
 	if value < 0 {
@@ -965,13 +1059,13 @@ func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value int64, c
 			if c, err := f.storage.Add(bit); err != nil {
 				return changed, errors.Wrap(err, "adding")
 			} else if c {
-				changed = true
+				changed++
 			}
 		} else {
 			if c, err := f.storage.Remove(bit); err != nil {
 				return changed, errors.Wrap(err, "removing")
 			} else if c {
-				changed = true
+				changed++
 			}
 		}
 	}
@@ -983,13 +1077,13 @@ func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value int64, c
 		if c, err := f.storage.Remove(p); err != nil {
 			return changed, errors.Wrap(err, "removing not-null from storage")
 		} else if c {
-			changed = true
+			changed++
 		}
 	} else {
 		if c, err := f.storage.Add(p); err != nil {
 			return changed, errors.Wrap(err, "adding not-null to storage")
 		} else if c {
-			changed = true
+			changed++
 		}
 	}
 
@@ -1000,13 +1094,13 @@ func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value int64, c
 		if c, err := f.storage.Remove(p); err != nil {
 			return changed, errors.Wrap(err, "removing sign from storage")
 		} else if c {
-			changed = true
+			changed++
 		}
 	} else {
 		if c, err := f.storage.Add(p); err != nil {
 			return changed, errors.Wrap(err, "adding sign to storage")
 		} else if c {
-			changed = true
+			changed++
 		}
 	}
 
@@ -1958,19 +2052,12 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 // snapshot of the fragment or just do in-memory updates while appending
 // operations to the op log.
 func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct{}) error {
-	smallWrite := false
-	if len(set)+len(clear)+f.opN < f.MaxOpN {
-		smallWrite = true
-		mustClose, err := f.reopen()
-		if err != nil {
-			return errors.Wrap(err, "reopening")
-		}
-		if mustClose {
-			defer f.safeClose()
-		}
-
-	} else {
-		f.storage.OpWriter = nil
+	mustClose, err := f.reopen()
+	if err != nil {
+		return errors.Wrap(err, "reopening")
+	}
+	if mustClose {
+		defer f.safeClose()
 	}
 
 	if len(set) > 0 {
@@ -1980,7 +2067,7 @@ func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct
 			return errors.Wrap(err, "adding positions")
 		}
 		f.stats.Count("ImportedN", int64(changedN), 1)
-		f.opN += changedN
+		f.incrementOpN(changedN)
 	}
 
 	if len(clear) > 0 {
@@ -1990,7 +2077,7 @@ func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct
 			return errors.Wrap(err, "clearing positions")
 		}
 		f.stats.Count("ClearedN", int64(changedN), 1)
-		f.opN += changedN
+		f.incrementOpN(changedN)
 	}
 
 	// Update cache counts for all affected rows.
@@ -1998,19 +2085,18 @@ func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct
 		// Invalidate block checksum.
 		delete(f.checksums, int(rowID/HashBlockSize))
 
-		n := f.storage.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
-		f.cache.BulkAdd(rowID, n)
-
-		if smallWrite {
-			f.rowCache.Add(rowID, nil)
+		if f.CacheType != CacheTypeNone {
+			n := f.storage.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
+			f.cache.BulkAdd(rowID, n)
 		}
+
+		f.rowCache.Add(rowID, nil)
 	}
 
-	f.cache.Recalculate()
-
-	if !smallWrite {
-		return f.snapshot()
+	if f.CacheType != CacheTypeNone {
+		f.cache.Recalculate()
 	}
+
 	return nil
 }
 
@@ -2123,16 +2209,18 @@ func (f *fragment) importValue(columnIDs []uint64, values []int64, bitDepth uint
 		return errors.Wrap(f.importValueSmallWrite(columnIDs, values, bitDepth, clear), "import small write")
 	}
 
-	f.storage.OpWriter = nil
-
 	// Process every value.
 	// If an error occurs then reopen the storage.
+	f.storage.OpWriter = nil
+	totalChanges := 0
 	if err := func() (err error) {
 		for i := range columnIDs {
 			columnID, value := columnIDs[i], values[i]
-			if _, err := f.importSetValue(columnID, bitDepth, value, clear); err != nil {
+			changed, err := f.importSetValue(columnID, bitDepth, value, clear)
+			if err != nil {
 				return errors.Wrapf(err, "importSetValue")
 			}
+			totalChanges += changed
 		}
 		return nil
 	}(); err != nil {
@@ -2140,9 +2228,15 @@ func (f *fragment) importValue(columnIDs []uint64, values []int64, bitDepth uint
 		_ = f.openStorage(true)
 		return err
 	}
+	// We don't actually care, except we want our stats to be accurate.
+	f.incrementOpN(totalChanges)
+	// in theory, this should probably have happened anyway, but if enough
+	// of the bits matched existing bits, we'll be under our opN estimate, and
+	// we want to ensure that the snapshot happens.
+	f.enqueueSnapshot()
+	f.protectedAwaitSnapshot()
 
-	err := f.snapshot()
-	return errors.Wrap(err, "snapshotting")
+	return nil
 }
 
 // importRoaring imports from the official roaring data format defined at
@@ -2190,30 +2284,51 @@ func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) e
 // incrementOpN increase the operation count by one.
 // If the count exceeds the maximum allowed then a snapshot is performed.
 func (f *fragment) incrementOpN(changed int) error {
-	f.opN += changed
-	if f.opN <= f.MaxOpN {
+	if changed <= 0 {
 		return nil
 	}
-
-	if err := f.snapshot(); err != nil {
-		return fmt.Errorf("snapshot: %s", err)
+	f.opN += changed
+	f.ops++
+	if f.opN > f.MaxOpN {
+		f.enqueueSnapshot()
 	}
 	return nil
 }
 
-// Snapshot writes the storage bitmap to disk and reopens it.
+// Snapshot writes the storage bitmap to disk and reopens it. This may
+// coexist with existing background-queue snapshotting; it does not remove
+// things from the queue. You probably don't want to do this; use
+// enqueueSnapshot/awaitSnapshot.
 func (f *fragment) Snapshot() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.snapshot()
 }
+
 func track(start time.Time, message string, stats stats.StatsClient, logger logger.Logger) {
 	elapsed := time.Since(start)
 	logger.Printf("%s took %s", message, elapsed)
 	stats.Histogram("snapshot", elapsed.Seconds(), 1.0)
 }
 
+// protectedSnapshot grabs the lock and unconditionally calls snapshot(). If
+// fromQueue is true, the snapshotting state is also cleared.
+func (f *fragment) protectedSnapshot(fromQueue bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	err := f.snapshot()
+	if fromQueue {
+		f.snapshotting = false
+	}
+	return err
+}
+
+// snapshot does the actual snapshot operation. it does not check or care
+// about f.snapshotting.
 func (f *fragment) snapshot() error {
+	f.totalOpN += int64(f.opN)
+	f.totalOps += int64(f.ops)
+	f.snapshotsTaken++
 	_, err := unprotectedWriteToFragment(f, f.storage)
 	return err
 }

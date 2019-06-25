@@ -52,10 +52,11 @@ type view struct {
 	// Fragments by shard.
 	fragments map[uint64]*fragment
 
-	broadcaster  broadcaster
-	stats        stats.StatsClient
-	rowAttrStore AttrStore
-	logger       logger.Logger
+	broadcaster   broadcaster
+	stats         stats.StatsClient
+	rowAttrStore  AttrStore
+	logger        logger.Logger
+	snapshotQueue chan *fragment
 }
 
 // newView returns a new instance of View.
@@ -268,6 +269,7 @@ func (v *view) newFragment(path string, shard uint64) *fragment {
 	frag.CacheSize = v.cacheSize
 	frag.Logger = v.logger
 	frag.stats = v.stats
+	frag.snapshotQueue = v.snapshotQueue
 	if v.fieldType == FieldTypeMutex {
 		frag.mutexVector = newRowsVector(frag)
 	} else if v.fieldType == FieldTypeBool {
