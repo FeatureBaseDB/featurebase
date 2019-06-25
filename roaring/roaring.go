@@ -1124,7 +1124,11 @@ func (b *Bitmap) writeToUnoptimized(w io.Writer) (n int64, err error) {
 // roaringIterator represents something which can iterate through a roaring
 // bitmap and yield information about containers, including type, size, and
 // the location of their data structures.
-type roaringIterator struct {
+type roaringIterator interface {
+	Next() (key uint64, cType byte, n int, length int, pointer *uint16, err error)
+}
+
+type baseRoaringIterator struct {
 	data              []byte
 	keys              int64
 	headers           []byte
@@ -1139,20 +1143,58 @@ type roaringIterator struct {
 	lastErr           error
 }
 
-func newRoaringIterator(data []byte) (*roaringIterator, error) {
-	if len(data) < headerBaseSize {
-		return nil, errors.New("invalid data: not long enough to be a roaring header")
+type pilosaRoaringIterator struct {
+	baseRoaringIterator
+}
+
+type officialRoaringIterator struct {
+	baseRoaringIterator
+	containerTyper func(index uint, card int) byte
+	haveRuns       bool
+}
+
+func newOfficialRoaringIterator(data []byte) (*officialRoaringIterator, error) {
+	r := &officialRoaringIterator{}
+	r.data = data
+
+	// share code with the existing unmarshal code
+	var offsetOffset, headerOffset int
+	var err error
+	var keys uint32
+
+	// we ignore the flags, since we don't have to process them for anything.
+	keys, r.containerTyper, headerOffset, offsetOffset, _, r.haveRuns, err = readOfficialHeader(data)
+	if err != nil {
+		return nil, fmt.Errorf("reading official header: %v", err)
 	}
-	// Verify the first two bytes are a valid MagicNumber, and second two bytes match current storageVersion.
-	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
+	if keys == 0 {
+		// not an error, exactly. it's valid and well-formed, we just have nothing to do
+		r.Done(io.EOF)
+		return r, nil
+	}
+	r.keys = int64(keys)
+	r.headers = data[headerOffset:offsetOffset]
+	// note: offsets are only actually used with the no-run headers.
+	if r.haveRuns {
+		// start out pointed at where the offsets would have been.
+		r.currentDataOffset = uint32(offsetOffset)
+	} else {
+		r.offsets = data[offsetOffset : offsetOffset+int(r.keys*4)]
+	}
+	// set key to -1; user should call Next first.
+	r.currentIdx = -1
+	r.currentKey = ^uint64(0)
+	r.lastErr = errors.New("tried to read iterator without calling Next first")
+	return r, nil
+}
+
+func newPilosaRoaringIterator(data []byte) (*pilosaRoaringIterator, error) {
 	fileVersion := uint32(data[2])
-	if fileMagic != MagicNumber {
-		return nil, fmt.Errorf("invalid roaring file, magic number %v is incorrect", fileMagic)
-	}
 	if fileVersion != storageVersion {
 		return nil, fmt.Errorf("wrong roaring version, file is v%d, server requires v%d", fileVersion, storageVersion)
 	}
-	r := &roaringIterator{data: data}
+	r := &pilosaRoaringIterator{}
+	r.data = data
 	// Read key count in bytes sizeof(cookie)+sizeof(flag):(sizeof(cookie)+sizeof(uint32)).
 	r.keys = int64(binary.LittleEndian.Uint32(data[3+1 : 8]))
 	// it could happen
@@ -1179,8 +1221,23 @@ func newRoaringIterator(data []byte) (*roaringIterator, error) {
 	return r, nil
 }
 
+func newRoaringIterator(data []byte) (roaringIterator, error) {
+	if len(data) < headerBaseSize {
+		return nil, errors.New("invalid data: not long enough to be a roaring header")
+	}
+	// Verify the first two bytes are a valid MagicNumber, and second two bytes match current storageVersion.
+	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
+	switch fileMagic {
+	case serialCookie, serialCookieNoRunContainer:
+		return newOfficialRoaringIterator(data)
+	case MagicNumber:
+		return newPilosaRoaringIterator(data)
+	}
+	return nil, fmt.Errorf("unknown roaring magic number %d", fileMagic)
+}
+
 // Done marks the iterator as complete, recording err as the reason why
-func (r *roaringIterator) Done(err error) {
+func (r *baseRoaringIterator) Done(err error) {
 	r.lastErr = err
 	r.currentKey = ^uint64(0)
 	r.currentType = 0
@@ -1190,7 +1247,7 @@ func (r *roaringIterator) Done(err error) {
 	r.currentDataOffset = 0
 }
 
-func (r *roaringIterator) Next() (key uint64, cType byte, n int, length int, pointer *uint16, err error) {
+func (r *pilosaRoaringIterator) Next() (key uint64, cType byte, n int, length int, pointer *uint16, err error) {
 	if r.currentIdx >= r.keys {
 		// we're already done
 		return r.Current()
@@ -1206,8 +1263,11 @@ func (r *roaringIterator) Next() (key uint64, cType byte, n int, length int, poi
 	r.currentType = byte(binary.LittleEndian.Uint16(header[8:10]))
 	r.currentN = int(binary.LittleEndian.Uint16(header[10:12])) + 1
 	r.currentDataOffset = binary.LittleEndian.Uint32(r.offsets[r.currentIdx*4:])
+
 	// a run container keeps its data after an initial 2 byte length header
+	var runCount uint16
 	if r.currentType == containerRun {
+		runCount = binary.LittleEndian.Uint16(r.data[r.currentDataOffset : r.currentDataOffset+runCountHeaderSize])
 		r.currentDataOffset += 2
 	}
 	if r.currentDataOffset > uint32(len(r.data)) || r.currentDataOffset < headerBaseSize {
@@ -1225,7 +1285,7 @@ func (r *roaringIterator) Next() (key uint64, cType byte, n int, length int, poi
 		r.currentLen = 1024
 		size = 8192
 	case containerRun:
-		r.currentLen = int(*((*uint16)(unsafe.Pointer(&r.data[r.currentDataOffset-2]))))
+		r.currentLen = int(runCount)
 		size = r.currentLen * 4
 	}
 	if int64(r.currentDataOffset)+int64(size) > int64(len(r.data)) {
@@ -1237,7 +1297,70 @@ func (r *roaringIterator) Next() (key uint64, cType byte, n int, length int, poi
 	return r.Current()
 }
 
-func (r *roaringIterator) Current() (key uint64, cType byte, n int, length int, pointer *uint16, err error) {
+func (r *officialRoaringIterator) Next() (key uint64, cType byte, n int, length int, pointer *uint16, err error) {
+	if r.currentIdx >= r.keys {
+		// we're already done
+		return r.Current()
+	}
+	r.currentIdx++
+	if r.currentIdx == r.keys {
+		// this is the last key. transition state to the finalized state
+		r.Done(io.EOF)
+		return r.Current()
+	}
+	header := r.headers[r.currentIdx*4:]
+	r.currentKey = uint64(binary.LittleEndian.Uint16(header[0:2]))
+	r.currentN = int(binary.LittleEndian.Uint16(header[2:4])) + 1
+	r.currentType = r.containerTyper(uint(r.currentIdx), r.currentN)
+	// with runs, we can't actually look up offsets; the format just stores
+	// things sequentially. so we have to actually track the offset in that case.
+	if !r.haveRuns {
+		r.currentDataOffset = binary.LittleEndian.Uint32(r.offsets[r.currentIdx*4:])
+	}
+	// a run container keeps its data after an initial 2 byte length header
+	var runCount uint16
+	if r.currentType == containerRun {
+		runCount = binary.LittleEndian.Uint16(r.data[r.currentDataOffset : r.currentDataOffset+runCountHeaderSize])
+		r.currentDataOffset += 2
+	}
+	if r.currentDataOffset > uint32(len(r.data)) || r.currentDataOffset < headerBaseSize {
+		r.Done(fmt.Errorf("container %d/%d, key %d, had offset %d, maximum %d",
+			r.currentIdx, r.keys, r.currentKey, r.currentDataOffset, len(r.data)))
+		return r.Current()
+	}
+	r.currentPointer = (*uint16)(unsafe.Pointer(&r.data[r.currentDataOffset]))
+	var size int
+	switch r.currentType {
+	case containerArray:
+		r.currentLen = r.currentN
+		size = r.currentLen * 2
+	case containerBitmap:
+		r.currentLen = 1024
+		size = 8192
+	case containerRun:
+		// official format stores runs as start/len, we want to convert, but since
+		// they might be mmapped, we can't write to that memory
+		newRuns := make([]interval16, runCount)
+		oldRuns := (*[65536]interval16)(unsafe.Pointer(r.currentPointer))[:runCount:runCount]
+		copy(newRuns, oldRuns)
+		for i := range newRuns {
+			newRuns[i].last += newRuns[i].start
+		}
+		r.currentPointer = (*uint16)(unsafe.Pointer(&newRuns[0]))
+		r.currentLen = int(runCount)
+		size = r.currentLen * 4
+	}
+	if int64(r.currentDataOffset)+int64(size) > int64(len(r.data)) {
+		r.Done(fmt.Errorf("container %d/%d, key %d, had offset %d+%d size, maximum %d",
+			r.currentIdx, r.keys, r.currentKey, r.currentDataOffset, size, len(r.data)))
+		return r.Current()
+	}
+	r.currentDataOffset += uint32(size)
+	r.lastErr = nil
+	return r.Current()
+}
+
+func (r *baseRoaringIterator) Current() (key uint64, cType byte, n int, length int, pointer *uint16, err error) {
 	return r.currentKey, r.currentType, r.currentN, r.currentLen, r.currentPointer, r.lastErr
 }
 
@@ -1250,13 +1373,11 @@ func (r *roaringIterator) Current() (key uint64, cType byte, n int, length int, 
 // Regardless, after this function runs, no containers have
 // mapped storage which does not refer to data; either they got mapped
 // to the new storage, or storage was allocated for them.
-//
-// Data should be in the Pilosa roaring format.
 func (b *Bitmap) RemapRoaringStorage(data []byte) (mappedAny bool, returnErr error) {
 	if b.Containers == nil {
 		return false, nil
 	}
-	var itr *roaringIterator
+	var itr roaringIterator
 	var err error
 	var itrKey uint64
 	var itrCType byte
@@ -1331,7 +1452,7 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, log bool, rowSize ui
 	if data == nil {
 		return 0, nil, errors.New("no roaring bitmap provided")
 	}
-	var itr *roaringIterator
+	var itr roaringIterator
 	var itrKey uint64
 	var itrCType byte
 	var itrN int
