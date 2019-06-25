@@ -431,7 +431,7 @@ func (b *Bitmap) Size() int {
 
 // CountRange returns the number of bits set between [start, end).
 func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
-	if roaringParanoia {
+	if roaringSentinel {
 		if start > end {
 			panic(fmt.Sprintf("counting in range but %v > %v", start, end))
 		}
@@ -494,7 +494,7 @@ func (b *Bitmap) Slice() []uint64 {
 
 // SliceRange returns a slice of integers between [start, end).
 func (b *Bitmap) SliceRange(start, end uint64) []uint64 {
-	if roaringParanoia {
+	if roaringSentinel {
 		if start > end {
 			panic(fmt.Sprintf("getting slice in range but %v > %v", start, end))
 		}
@@ -1271,7 +1271,7 @@ func (b *Bitmap) Check() error {
 
 // Flip performs a logical negate of the bits in the range [start,end].
 func (b *Bitmap) Flip(start, end uint64) *Bitmap {
-	if roaringParanoia {
+	if roaringSentinel {
 		if start > end {
 			panic(fmt.Sprintf("flipping in range but %v > %v", start, end))
 		}
