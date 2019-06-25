@@ -4306,11 +4306,13 @@ func (op *op) UnmarshalBinary(data []byte) error {
 	_, _ = h.Write(data[0:9])
 
 	switch op.typ {
+	case 0, 1:
+		// nothing to do, just being not-default
 	case 2, 3:
 		// This ensures that in doing 13+op.value*8, the max int won't be exceeded and a wrap around case
 		// (resulting in a negative value) won't occur in the slice indexing while writing
 		if op.value > maxBatchSize {
-			return fmt.Errorf("Maximum operation size exceeded")
+			return fmt.Errorf("maximum operation size exceeded")
 		}
 		if len(data) < int(13+op.value*8) {
 			return fmt.Errorf("op data truncated - expected %d, got %d", 13+op.value*8, len(data))
@@ -4330,6 +4332,8 @@ func (op *op) UnmarshalBinary(data []byte) error {
 		op.roaring = data[17 : 17+op.value]
 		_, _ = h.Write(data[13 : 17+op.value])
 		// op.value = 0
+	default:
+		return fmt.Errorf("unknown op type: %d", op.typ)
 	}
 	if chk := binary.LittleEndian.Uint32(data[9:13]); chk != h.Sum32() {
 		return fmt.Errorf("checksum mismatch: type %d, exp=%08x, got=%08x", op.typ, h.Sum32(), chk)

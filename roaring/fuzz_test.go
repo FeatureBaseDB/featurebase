@@ -30,7 +30,7 @@ func TestUnmarshalBinary(t *testing.T) {
 		{ // Checks for int overflow
 			cr: []byte("<0\x000\x00\x00\x00\x00000000000000" +
 				"0"), //"<000000000000000"
-			expected: "unmarshaling as pilosa roaring: Maximum operation size exceeded",
+			expected: "unmarshaling as pilosa roaring: unknown op type: 48",
 		},
 		{ // The next 5 check for malformed bitmaps
 			cr: []byte("<0\x0000000000000000000" +
