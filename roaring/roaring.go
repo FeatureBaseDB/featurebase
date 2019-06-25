@@ -1240,6 +1240,82 @@ func (r *roaringIterator) Current() (key uint64, cType byte, n int, length int, 
 	return r.currentKey, r.currentType, r.currentN, r.currentLen, r.currentPointer, r.lastErr
 }
 
+// RemapRoaringStorage tries to update all containers to refer to
+// the roaring bitmap in the provided []byte. If any containers are
+// marked as mapped, but do not match the provided storage, they will
+// be unmapped. The boolean return indicates whether or not any
+// containers were mapped to the given storage.
+//
+// Regardless, after this function runs, no containers have
+// mapped storage which does not refer to data; either they got mapped
+// to the new storage, or storage was allocated for them.
+//
+// Data should be in the Pilosa roaring format.
+func (b *Bitmap) RemapRoaringStorage(data []byte) (mappedAny bool, returnErr error) {
+	if b.Containers == nil {
+		return false, nil
+	}
+	var itr *roaringIterator
+	var err error
+	var itrKey uint64
+	var itrCType byte
+	var itrN int
+	var itrPointer *uint16
+	var itrErr error
+
+	if data != nil {
+		itr, err = newRoaringIterator(data)
+	}
+	// don't return early: we still have to do the unmapping
+	if err != nil {
+		returnErr = err
+	}
+
+	if itr != nil {
+		itrKey, itrCType, itrN, _, itrPointer, itrErr = itr.Next()
+	}
+	if itrErr != nil {
+		// iterator errored out, so we won't check it in the loop below
+		itr = nil
+	}
+
+	b.Containers.UpdateEvery(func(key uint64, oldC *Container, existed bool) (newC *Container, write bool) {
+		if itr != nil {
+			for itrKey < key && itrErr == nil {
+				itrKey, itrCType, itrN, _, itrPointer, itrErr = itr.Next()
+			}
+			if itrErr != nil {
+				itr = nil
+			}
+			// container might be similar enough that we should trust it:
+			if itrKey == key && itrCType == oldC.typ() && itrN == int(oldC.N()) {
+				if oldC.frozen() {
+					// we don't use Clone, because that would copy the
+					// storage, and we don't need that.
+					var halfCopy Container
+					halfCopy = *oldC
+					halfCopy.flags &^= flagFrozen
+					newC = &halfCopy
+				} else {
+					newC = oldC
+				}
+				mappedAny = true
+				newC.pointer = itrPointer
+				newC.flags |= flagMapped
+				return newC, true
+			}
+		}
+		// if the container isn't mapped, we don't need to do anything
+		if !oldC.Mapped() {
+			return oldC, false
+		}
+		// forcibly unmap it, so the old mapping can be unmapped safely.
+		newC = oldC.unmapOrClone()
+		return newC, true
+	})
+	return mappedAny, returnErr
+}
+
 // ImportRoaringBits sets-or-clears bits based on a provided Roaring bitmap.
 // This should be equivalent to unmarshalling the bitmap, then executing
 // either `b = Union(b, newB)` or `b = Difference(b, newB)`, but with lower

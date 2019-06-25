@@ -117,7 +117,7 @@ func TestFragment_RowcacheMap(t *testing.T) {
 		_, _ = f.setBit(0, uint64(i*32))
 	}
 	// force snapshot so we get a mmapped row...
-	_ = f.snapshot()
+	_ = f.Snapshot()
 	row := f.row(0)
 	segment := row.Segments()[0]
 	bitmap := segment.data
@@ -3227,7 +3227,7 @@ func TestImportClearRestart(t *testing.T) {
 				f2.MaxOpN = maxOpN
 				f2.CacheType = f.CacheType
 
-				err = f.closeStorage()
+				err = f.closeStorage(true)
 				if err != nil {
 					t.Fatalf("closing storage: %v", err)
 				}
@@ -3261,7 +3261,7 @@ func TestImportClearRestart(t *testing.T) {
 				f3.MaxOpN = maxOpN
 				f3.CacheType = f.CacheType
 
-				err = f2.closeStorage()
+				err = f2.closeStorage(true)
 				if err != nil {
 					t.Fatalf("f2 closing storage: %v", err)
 				}
