@@ -117,7 +117,7 @@ type Containers interface {
 	// UpdateEvery calls fn (existing-container, existed), and expects
 	// (new-container, write). If write is true, the container is used to
 	// replace the given container.
-	UpdateEvery(fn func(*Container, bool) (*Container, bool))
+	UpdateEvery(fn func(uint64, *Container, bool) (*Container, bool))
 
 	// Iterator returns a Contiterator which after a call to Next(), a call to Value() will
 	// return the first container at or after key. found will be true if a
@@ -128,6 +128,8 @@ type Containers interface {
 
 	// Reset clears the containers collection to allow for recycling during snapshot
 	Reset()
+	// ResetN clears the collection but hints at a needed size.
+	ResetN(int)
 
 	// Repair will repair the cardinality of any containers whose cardinality were corrupted
 	// due to optimized operations.
@@ -997,7 +999,7 @@ func (b *Bitmap) countEmptyContainers() int {
 
 // Optimize converts array and bitmap containers to run containers as necessary.
 func (b *Bitmap) Optimize() {
-	b.Containers.UpdateEvery(func(c *Container, existed bool) (*Container, bool) {
+	b.Containers.UpdateEvery(func(key uint64, c *Container, existed bool) (*Container, bool) {
 		return c.optimize(), true
 	})
 }
@@ -1118,6 +1120,233 @@ func (b *Bitmap) writeToUnoptimized(w io.Writer) (n int64, err error) {
 	return n, nil
 }
 
+// roaringIterator represents something which can iterate through a roaring
+// bitmap and yield information about containers, including type, size, and
+// the location of their data structures.
+type roaringIterator struct {
+	data              []byte
+	keys              int64
+	headers           []byte
+	offsets           []byte
+	currentKey        uint64
+	currentIdx        int64
+	currentType       byte
+	currentN          int
+	currentLen        int
+	currentPointer    *uint16
+	currentDataOffset uint32
+	lastErr           error
+}
+
+func newRoaringIterator(data []byte) (*roaringIterator, error) {
+	if len(data) < headerBaseSize {
+		return nil, errors.New("invalid data: not long enough to be a roaring header")
+	}
+	// Verify the first two bytes are a valid MagicNumber, and second two bytes match current storageVersion.
+	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
+	fileVersion := uint32(data[2])
+	if fileMagic != MagicNumber {
+		return nil, fmt.Errorf("invalid roaring file, magic number %v is incorrect", fileMagic)
+	}
+	if fileVersion != storageVersion {
+		return nil, fmt.Errorf("wrong roaring version, file is v%d, server requires v%d", fileVersion, storageVersion)
+	}
+	r := &roaringIterator{data: data}
+	// Read key count in bytes sizeof(cookie)+sizeof(flag):(sizeof(cookie)+sizeof(uint32)).
+	r.keys = int64(binary.LittleEndian.Uint32(data[3+1 : 8]))
+	// it could happen
+	if r.keys == 0 {
+		// not an error, exactly. it's valid and well-formed, we just have nothing to do
+		r.Done(io.EOF)
+		return r, nil
+	}
+	if int64(len(data)) < int64(headerBaseSize+(r.keys*16)) {
+		return nil, fmt.Errorf("insufficient data for header + offsets: want %d bytes, got %d",
+			headerBaseSize+(r.keys*16), len(data))
+	}
+
+	headerStart := int64(headerBaseSize)
+	headerEnd := headerStart + (r.keys * 12)
+	offsetStart := headerEnd
+	offsetEnd := offsetStart + (r.keys * 4)
+	r.headers = data[headerStart:headerEnd]
+	r.offsets = data[offsetStart:offsetEnd]
+	// set key to -1; user should call Next first.
+	r.currentIdx = -1
+	r.currentKey = ^uint64(0)
+	r.lastErr = errors.New("tried to read iterator without calling Next first")
+	return r, nil
+}
+
+// Done marks the iterator as complete, recording err as the reason why
+func (r *roaringIterator) Done(err error) {
+	r.lastErr = err
+	r.currentKey = ^uint64(0)
+	r.currentType = 0
+	r.currentN = 0
+	r.currentLen = 0
+	r.currentPointer = nil
+	r.currentDataOffset = 0
+}
+
+func (r *roaringIterator) Next() (key uint64, cType byte, n int, length int, pointer *uint16, err error) {
+	if r.currentIdx >= r.keys {
+		// we're already done
+		return r.Current()
+	}
+	r.currentIdx++
+	if r.currentIdx == r.keys {
+		// this is the last key. transition state to the finalized state
+		r.Done(io.EOF)
+		return r.Current()
+	}
+	header := r.headers[r.currentIdx*12:]
+	r.currentKey = binary.LittleEndian.Uint64(header[0:8])
+	r.currentType = byte(binary.LittleEndian.Uint16(header[8:10]))
+	r.currentN = int(binary.LittleEndian.Uint16(header[10:12])) + 1
+	r.currentDataOffset = binary.LittleEndian.Uint32(r.offsets[r.currentIdx*4:])
+	// a run container keeps its data after an initial 2 byte length header
+	if r.currentType == containerRun {
+		r.currentDataOffset += 2
+	}
+	if r.currentDataOffset > uint32(len(r.data)) || r.currentDataOffset < headerBaseSize {
+		r.Done(fmt.Errorf("container %d/%d, key %d, had offset %d, maximum %d",
+			r.currentIdx, r.keys, r.currentKey, r.currentDataOffset, len(r.data)))
+		return r.Current()
+	}
+	r.currentPointer = (*uint16)(unsafe.Pointer(&r.data[r.currentDataOffset]))
+	var size int
+	switch r.currentType {
+	case containerArray:
+		r.currentLen = r.currentN
+		size = r.currentLen * 2
+	case containerBitmap:
+		r.currentLen = 1024
+		size = 8192
+	case containerRun:
+		r.currentLen = int(*((*uint16)(unsafe.Pointer(&r.data[r.currentDataOffset-2]))))
+		size = r.currentLen * 4
+	}
+	if int64(r.currentDataOffset)+int64(size) > int64(len(r.data)) {
+		r.Done(fmt.Errorf("container %d/%d, key %d, had offset %d+%d size, maximum %d",
+			r.currentIdx, r.keys, r.currentKey, r.currentDataOffset, size, len(r.data)))
+		return r.Current()
+	}
+	r.lastErr = nil
+	return r.Current()
+}
+
+func (r *roaringIterator) Current() (key uint64, cType byte, n int, length int, pointer *uint16, err error) {
+	return r.currentKey, r.currentType, r.currentN, r.currentLen, r.currentPointer, r.lastErr
+}
+
+// ImportRoaringBits sets-or-clears bits based on a provided Roaring bitmap.
+// This should be equivalent to unmarshalling the bitmap, then executing
+// either `b = Union(b, newB)` or `b = Difference(b, newB)`, but with lower
+// overhead. The log parameter controls whether to write to the op log; the
+// answer should always be yes, except if you're calling using this to apply
+// the op log.
+//
+// If rowSize is non-zero, we should return a map of rows we altered,
+// where "rows" are sets of rowSize containers. Otherwise the map isn't used.
+// (This allows ImportRoaring to update caches; see fragment.go.)
+func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, log bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error) {
+	if data == nil {
+		return 0, nil, errors.New("no roaring bitmap provided")
+	}
+	var itr *roaringIterator
+	var itrKey uint64
+	var itrCType byte
+	var itrN int
+	var itrLen int
+	var itrPointer *uint16
+	var itrErr error
+
+	itr, err = newRoaringIterator(data)
+	if err != nil {
+		return 0, nil, err
+	}
+	if itr == nil {
+		return 0, nil, errors.New("failed to create roaring iterator, but don't know why")
+	}
+
+	rowSet = make(map[uint64]int)
+
+	var synthC Container
+	var importUpdater func(*Container, bool) (*Container, bool)
+	var currRow uint64
+	if clear {
+		importUpdater = func(oldC *Container, existed bool) (newC *Container, write bool) {
+			existN := oldC.N()
+			if existN == 0 || !existed {
+				return nil, false
+			}
+			newC = difference(oldC, &synthC)
+			if newC.N() != existN {
+				changes := int(existN - newC.N())
+				changed += changes
+				rowSet[currRow] -= changes
+				return newC, true
+			}
+			return oldC, false
+		}
+	} else {
+		importUpdater = func(oldC *Container, existed bool) (newC *Container, write bool) {
+			existN := oldC.N()
+			if existN == maxContainerVal+1 {
+				return oldC, false
+			}
+			if existN == 0 {
+				newerC := synthC.Clone()
+				changed += int(newerC.N())
+				rowSet[currRow] += int(newerC.N())
+				return newerC, true
+			}
+			newC = oldC.unionInPlace(&synthC)
+			if newC.typeID == containerBitmap {
+				newC.Repair()
+			}
+			if newC.N() != existN {
+				changes := int(newC.N() - existN)
+				changed += changes
+				rowSet[currRow] += changes
+				return newC, true
+			}
+			return oldC, false
+		}
+	}
+	itrKey, itrCType, itrN, itrLen, itrPointer, itrErr = itr.Next()
+	for itrErr == nil {
+		synthC.typeID = itrCType
+		synthC.n = int32(itrN)
+		synthC.len = int32(itrLen)
+		synthC.cap = int32(itrLen)
+		synthC.pointer = itrPointer
+		if rowSize != 0 {
+			currRow = itrKey / rowSize
+		}
+		b.Containers.Update(itrKey, importUpdater)
+		itrKey, itrCType, itrN, itrLen, itrPointer, itrErr = itr.Next()
+	}
+	// note: if we get a non-EOF err, it's possible that we made SOME
+	// changes but didn't log them. I don't have a good solution to this.
+	if itrErr != io.EOF {
+		return changed, rowSet, itrErr
+	}
+	err = nil
+	if log {
+		op := op{opN: changed, roaring: data}
+		if clear {
+			op.typ = opTypeRemoveRoaring
+		} else {
+			op.typ = opTypeAddRoaring
+		}
+		err = b.writeOp(&op)
+	}
+	return changed, rowSet, err
+
+}
+
 // unmarshalPilosaRoaring treats data as being encoded in Pilosa's 64 bit
 // roaring format and decodes it into b.
 func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
@@ -1144,7 +1373,7 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 	}
 
 	headerSize := headerBaseSize
-	b.Containers.Reset()
+	b.Containers.ResetN(int(keyN))
 	// Descriptive header section: Read container keys and cardinalities.
 	for i, buf := 0, data[headerSize:]; i < int(keyN); i, buf = i+1, buf[12:] {
 		b.Containers.PutContainerValues(
@@ -1231,6 +1460,18 @@ func (b *Bitmap) Iterator() *Iterator {
 	itr := &Iterator{bitmap: b}
 	itr.Seek(0)
 	return itr
+}
+
+// OpN returns the number of write ops the bitmap is aware of in its ops
+// log.
+func (b *Bitmap) OpN() int {
+	return b.opN
+}
+
+// SetOpN lets us reset the operation count in the weird case where we know
+// we've changed an underlying file, without actually refreshing the bitmap.
+func (b *Bitmap) SetOpN(int) {
+	b.opN = 0
 }
 
 // Info returns stats for the bitmap.
@@ -3961,17 +4202,21 @@ func shiftRun(a *Container) (*Container, bool) {
 type opType uint8
 
 const (
-	opTypeAdd         = opType(0)
-	opTypeRemove      = opType(1)
-	opTypeAddBatch    = opType(2)
-	opTypeRemoveBatch = opType(3)
+	opTypeAdd           = opType(0)
+	opTypeRemove        = opType(1)
+	opTypeAddBatch      = opType(2)
+	opTypeRemoveBatch   = opType(3)
+	opTypeAddRoaring    = opType(4)
+	opTypeRemoveRoaring = opType(5)
 )
 
 // op represents an operation on the bitmap.
 type op struct {
-	typ    opType
-	value  uint64
-	values []uint64
+	typ     opType
+	opN     int
+	value   uint64
+	values  []uint64
+	roaring []byte
 }
 
 // apply executes the operation against a bitmap.
@@ -3985,6 +4230,12 @@ func (op *op) apply(b *Bitmap) (changed bool) {
 		changed = b.DirectAddN(op.values...) > 0
 	case opTypeRemoveBatch:
 		changed = b.DirectRemoveN(op.values...) > 0
+	case opTypeAddRoaring:
+		changedN, _, _ := b.ImportRoaringBits(op.roaring, false, false, 0)
+		changed = changedN != 0
+	case opTypeRemoveRoaring:
+		changedN, _, _ := b.ImportRoaringBits(op.roaring, true, false, 0)
+		changed = changedN != 0
 	default:
 		panic(fmt.Sprintf("invalid op type: %d", op.typ))
 	}
@@ -3993,29 +4244,45 @@ func (op *op) apply(b *Bitmap) (changed bool) {
 
 // WriteTo writes op to the w.
 func (op *op) WriteTo(w io.Writer) (n int64, err error) {
-	buf := make([]byte, op.size())
+	buf := make([]byte, op.encodeSize())
 
 	// Write type and value.
 	buf[0] = byte(op.typ)
-	if op.typ <= 1 {
+	switch op.typ {
+	case 0, 1:
 		binary.LittleEndian.PutUint64(buf[1:9], op.value)
-	} else {
+	case 2, 3:
 		binary.LittleEndian.PutUint64(buf[1:9], uint64(len(op.values)))
 		p := 13 // start of values (skip 4 for checksum)
 		for _, v := range op.values {
 			binary.LittleEndian.PutUint64(buf[p:p+8], v)
 			p += 8
 		}
+	case 4, 5:
+		binary.LittleEndian.PutUint64(buf[1:9], uint64(len(op.roaring)))
+		binary.LittleEndian.PutUint32(buf[13:17], uint32(op.opN))
 	}
 
 	// Add checksum at the end.
 	h := fnv.New32a()
 	_, _ = h.Write(buf[0:9])
 	_, _ = h.Write(buf[13:])
+	if op.typ == 4 || op.typ == 5 {
+		_, _ = h.Write(op.roaring)
+	}
 	binary.LittleEndian.PutUint32(buf[9:13], h.Sum32())
 
 	// Write to writer.
 	nn, err := w.Write(buf)
+	if err != nil {
+		return int64(nn), err
+	}
+	if op.typ == 4 || op.typ == 5 {
+		var nn2 int
+		// separate write so we don't have to copy the whole thing
+		nn2, err = w.Write(op.roaring)
+		nn += nn2
+	}
 	return int64(nn), err
 }
 
@@ -4030,14 +4297,16 @@ func (op *op) UnmarshalBinary(data []byte) error {
 	statsHit("op/UnmarshalBinary")
 
 	op.typ = opType(data[0])
-	// op.value will actually contain the length of values for batch ops
+	// op.value will actually contain the length of values for batch ops, or
+	// length of the roaring bitmap for roaring bitmap ops
 	op.value = binary.LittleEndian.Uint64(data[1:9])
 
 	// Verify checksum.
 	h := fnv.New32a()
 	_, _ = h.Write(data[0:9])
 
-	if op.typ > 1 {
+	switch op.typ {
+	case 2, 3:
 		// This ensures that in doing 13+op.value*8, the max int won't be exceeded and a wrap around case
 		// (resulting in a negative value) won't occur in the slice indexing while writing
 		if op.value > maxBatchSize {
@@ -4053,9 +4322,17 @@ func (op *op) UnmarshalBinary(data []byte) error {
 			op.values[i] = binary.LittleEndian.Uint64(data[start : start+8])
 		}
 		op.value = 0
+	case 4, 5:
+		if len(data) < int(13+4+op.value) {
+			return fmt.Errorf("op data truncated - expected %d, got %d", 13+op.value, len(data))
+		}
+		op.opN = int(binary.LittleEndian.Uint32(data[13:17]))
+		op.roaring = data[17 : 17+op.value]
+		_, _ = h.Write(data[13 : 17+op.value])
+		// op.value = 0
 	}
 	if chk := binary.LittleEndian.Uint32(data[9:13]); chk != h.Sum32() {
-		return fmt.Errorf("checksum mismatch: exp=%08x, got=%08x", h.Sum32(), chk)
+		return fmt.Errorf("checksum mismatch: type %d, exp=%08x, got=%08x", op.typ, h.Sum32(), chk)
 	}
 
 	return nil
@@ -4066,7 +4343,25 @@ func (op *op) size() int {
 	if op.typ == opTypeAdd || op.typ == opTypeRemove {
 		return 1 + 8 + 4
 	}
-	return 1 + 8 + 4 + len(op.values)*8
+	if op.typ == opTypeAddBatch || op.typ == opTypeRemoveBatch {
+		return 1 + 8 + 4 + len(op.values)*8
+	}
+	// else it's presumably roaring?
+	return 1 + 8 + 4 + 4 + len(op.roaring)
+}
+
+// size returns the size needed to encode the op, in bytes. for
+// roaring ops, this does not include the roaring data, which is
+// already encoded.
+func (op *op) encodeSize() int {
+	if op.typ == opTypeAdd || op.typ == opTypeRemove {
+		return 1 + 8 + 4
+	}
+	if op.typ == opTypeAddBatch || op.typ == opTypeRemoveBatch {
+		return 1 + 8 + 4 + len(op.values)*8
+	}
+	// else it's presumably roaring?
+	return 1 + 8 + 4 + 4
 }
 
 // count returns the number of bits the operation mutates.
@@ -4076,6 +4371,8 @@ func (op *op) count() int {
 		return 1
 	case 2, 3:
 		return len(op.values)
+	case 4, 5:
+		return op.opN
 	default:
 		panic(fmt.Sprintf("unknown operation type: %d", op.typ))
 	}
@@ -4429,6 +4726,75 @@ func xorBitmapRun(a, b *Container) *Container {
 	return output
 }
 
+// CompareEquality is used mostly in test cases to confirm that two bitmaps came
+// out the same. It does not expect corresponding opN, or OpWriter, but expects
+// identical bit contents. It does not expect identical representations; a bitmap
+// container can be identical to an array container. It returns a boolean value,
+// and also an explanation for a false value.
+func (b *Bitmap) BitwiseEqual(c *Bitmap) (bool, error) {
+	biter, _ := b.Containers.Iterator(0)
+	citer, _ := c.Containers.Iterator(0)
+	bn, cn := biter.Next(), citer.Next()
+	var bk, ck uint64
+	var bc, cc *Container
+	bct, cct := 0, 0
+	for bn && cn {
+		bk, bc = biter.Value()
+		ck, cc = citer.Value()
+		// zero containers are allowed to match no-container
+		if bk < ck {
+			if bc.N() == 0 {
+				bn = biter.Next()
+				continue
+			}
+		}
+		if ck < bk {
+			if cc.N() == 0 {
+				cn = citer.Next()
+				continue
+			}
+		}
+		bct++
+		cct++
+		if bk != ck {
+			return false, fmt.Errorf("differing keys [%d vs %d]", bk, ck)
+		}
+		diff := xor(bc, cc)
+		if diff.N() != 0 {
+			return false, fmt.Errorf("differing containers for key %d: %v vs %v", bk, bc, cc)
+		}
+		bn, cn = biter.Next(), citer.Next()
+	}
+	// only one can have containers left. they should all be empty. so we
+	// look at any remaining containers, break out of the loop if they're not
+	// empty, and otherwise keep iterating.
+	for bn {
+		bn = biter.Next()
+		bk, bc = biter.Value()
+		if bc.N() != 0 {
+			bct++
+			break
+		}
+		bn = biter.Next()
+	}
+	for cn {
+		cn = citer.Next()
+		ck, cc = biter.Value()
+		if cc.N() != 0 {
+			cct++
+			break
+		}
+		cn = biter.Next()
+	}
+	if bn {
+		return false, fmt.Errorf("container mismatch: %d vs %d containers, first bitmap has extra container %d [%d bits]", bct, cct, bk, bc)
+	}
+	if cn {
+		return false, fmt.Errorf("container mismatch: %d vs %d containers, second bitmap has extra container %d [%d bits]", bct, cct, ck, cc)
+	}
+	return true, nil
+}
+
 func bitmapsEqual(b, c *Bitmap) error { // nolint: deadcode
 	statsHit("bitmapsEqual")
 	if b.OpWriter != c.OpWriter {
@@ -4563,7 +4929,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	}
 	b.Flags = flags
 
-	b.Containers.Reset()
+	b.Containers.ResetN(int(keyN))
 	// Descriptive header section: Read container keys and cardinalities.
 	for i, buf := uint(0), data[header:]; i < uint(keyN); i, buf = i+1, buf[4:] {
 		card := int(binary.LittleEndian.Uint16(buf[2:4])) + 1

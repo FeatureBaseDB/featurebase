@@ -2476,7 +2476,25 @@ func BenchmarkFileWrite(b *testing.B) {
 
 /////////////////////////////////////////////////////////////////////
 
+func (f *fragment) sanityCheck(t testing.TB) {
+	newBM := roaring.NewFileBitmap()
+	file, err := os.Open(f.path)
+	if err != nil {
+		t.Fatalf("sanityCheck couldn't open file %s: %v", f.path, err)
+	}
+	defer file.Close()
+	data, err := ioutil.ReadAll(file)
+	err = newBM.UnmarshalBinary(data)
+	if err != nil {
+		t.Fatalf("sanityCheck couldn't read fragment %s: %v", f.path, err)
+	}
+	if equal, reason := newBM.BitwiseEqual(f.storage); !equal {
+		t.Fatalf("fragment %s: unmarshalled bitmap different: %v", f.path, reason)
+	}
+}
+
 func (f *fragment) Clean(t testing.TB) {
+	f.sanityCheck(t)
 	errc := f.Close()
 	errf := os.Remove(f.path)
 	errp := os.Remove(f.cachePath())
@@ -3021,6 +3039,7 @@ func TestUnionInPlaceMapped(t *testing.T) {
 
 	f.storage.UnionInPlace(setBM1)
 	countUnion := f.storage.Count()
+	f.snapshot()
 
 	if count0 != countF {
 		t.Fatalf("writing bitmap to storage changed count: %d => %d", count0, countF)
