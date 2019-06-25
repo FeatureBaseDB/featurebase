@@ -4576,7 +4576,10 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 
 	// Read container offsets and attach data.
 	if haveRuns {
-		readWithRuns(b, data, pos, keyN)
+		err := readWithRuns(b, data, pos, keyN)
+		if err != nil {
+			return errors.Wrap(err, "reading offsets from official roaring format")
+		}
 	} else {
 		err := readOffsets(b, data, pos, keyN)
 		if err != nil {
@@ -4590,6 +4593,10 @@ func readOffsets(b *Bitmap, data []byte, pos int, keyN uint32) error {
 
 	citer, _ := b.Containers.Iterator(0)
 	for i, buf := 0, data[pos:]; i < int(keyN); i, buf = i+1, buf[4:] {
+		// Verify the offset is fully formed
+		if len(buf) < 4 {
+			return fmt.Errorf("offset incomplete: len=%d", len(buf))
+		}
 		offset := binary.LittleEndian.Uint32(buf[0:4])
 		// Verify the offset is within the bounds of the input data.
 		if int(offset) >= len(data) {
@@ -4611,7 +4618,10 @@ func readOffsets(b *Bitmap, data []byte, pos int, keyN uint32) error {
 	return nil
 }
 
-func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) {
+func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) error {
+	if len(data) < pos+runCountHeaderSize {
+		return fmt.Errorf("offset incomplete: len=%d", len(data))
+	}
 	citer, _ := b.Containers.Iterator(0)
 	for i := 0; i < int(keyN); i++ {
 		citer.Next()
@@ -4634,6 +4644,7 @@ func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) {
 			pos += bitmapN * 8
 		}
 	}
+	return nil
 }
 
 // handledIter and handledIters are wrappers around Bitmap Container iterators
