@@ -2499,9 +2499,12 @@ func (f *fragment) sanityCheck(t testing.TB) {
 	}
 	defer file.Close()
 	data, err := ioutil.ReadAll(file)
-	err = newBM.UnmarshalBinary(data)
 	if err != nil {
 		t.Fatalf("sanityCheck couldn't read fragment %s: %v", f.path, err)
+	}
+	err = newBM.UnmarshalBinary(data)
+	if err != nil {
+		t.Fatalf("sanityCheck couldn't unmarshal fragment %s: %v", f.path, err)
 	}
 	if equal, reason := newBM.BitwiseEqual(f.storage); !equal {
 		t.Fatalf("fragment %s: unmarshalled bitmap different: %v", f.path, reason)

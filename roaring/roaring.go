@@ -1145,6 +1145,17 @@ type baseRoaringIterator struct {
 	lastErr           error
 }
 
+// okay, then
+func (b *baseRoaringIterator) SilenceLint() {
+	// these are actually used in pilosaRoaringIterator or officialRoaringIterator
+	// but structcheck doesn't know that
+	_ = b.data
+	_ = b.keys
+	_ = b.offsets
+	_ = b.headers
+	_ = b.currentIdx
+}
+
 type pilosaRoaringIterator struct {
 	baseRoaringIterator
 }
@@ -1416,8 +1427,7 @@ func (b *Bitmap) RemapRoaringStorage(data []byte) (mappedAny bool, returnErr err
 				if oldC.frozen() {
 					// we don't use Clone, because that would copy the
 					// storage, and we don't need that.
-					var halfCopy Container
-					halfCopy = *oldC
+					halfCopy := *oldC
 					halfCopy.flags &^= flagFrozen
 					newC = &halfCopy
 				} else {

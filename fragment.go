@@ -219,7 +219,7 @@ func (f *fragment) enqueueSnapshot() {
 			// wait forever, but notice that we're waiting
 			f.snapshotQueue <- f
 			f.snapshotDelays++
-			f.snapshotDelayTime += time.Now().Sub(before)
+			f.snapshotDelayTime += time.Since(before)
 			if f.snapshotDelays >= 10 {
 				f.Logger.Printf("snapshotting %s: last ten delays took %v", f.path, f.snapshotDelayTime)
 				f.snapshotDelays = 0
@@ -231,7 +231,10 @@ func (f *fragment) enqueueSnapshot() {
 	} else {
 		// in testing, for instance, there may be no holder, thus no one
 		// to handle these snapshots.
-		f.snapshot()
+		err := f.snapshot()
+		if err != nil {
+			f.Logger.Printf("snapshot failed: %v", err)
+		}
 		f.snapshotting = false
 		f.snapshotCond.Broadcast()
 	}
@@ -517,9 +520,9 @@ func (f *fragment) awaitSnapshot() {
 	}
 }
 
-// protectedAwaitSnapshot assumes you already hold the lock, and waits for
+// unprotectedAwaitSnapshot assumes you already hold the lock, and waits for
 // the snapshot fairy to come along.
-func (f *fragment) protectedAwaitSnapshot() {
+func (f *fragment) unprotectedAwaitSnapshot() {
 	for f.snapshotting {
 		f.snapshotCond.Wait()
 	}
@@ -698,9 +701,7 @@ func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 	delete(f.checksums, int(rowID/HashBlockSize))
 
 	// Increment number of operations until snapshot is required.
-	if err := f.incrementOpN(1); err != nil {
-		return false, errors.Wrap(err, "incrementing")
-	}
+	f.incrementOpN(1)
 
 	// If we're using a cache, update it. Otherwise skip the
 	// possibly-expensive count operation.
@@ -762,9 +763,7 @@ func (f *fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, er
 	delete(f.checksums, int(rowID/HashBlockSize))
 
 	// Increment number of operations until snapshot is required.
-	if err := f.incrementOpN(1); err != nil {
-		return false, errors.Wrap(err, "incrementing")
-	}
+	f.incrementOpN(1)
 
 	// If we're using a cache, update it. Otherwise skip the
 	// possibly-expensive count operation.
@@ -2230,11 +2229,12 @@ func (f *fragment) importValue(columnIDs []uint64, values []int64, bitDepth uint
 	}
 	// We don't actually care, except we want our stats to be accurate.
 	f.incrementOpN(totalChanges)
+
 	// in theory, this should probably have happened anyway, but if enough
 	// of the bits matched existing bits, we'll be under our opN estimate, and
 	// we want to ensure that the snapshot happens.
 	f.enqueueSnapshot()
-	f.protectedAwaitSnapshot()
+	f.unprotectedAwaitSnapshot()
 
 	return nil
 }
@@ -2278,21 +2278,20 @@ func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) e
 	span, _ = tracing.StartSpanFromContext(ctx, "importRoaring.incrementOpN")
 	f.incrementOpN(changed)
 	span.Finish()
-	return err
+	return nil
 }
 
 // incrementOpN increase the operation count by one.
 // If the count exceeds the maximum allowed then a snapshot is performed.
-func (f *fragment) incrementOpN(changed int) error {
+func (f *fragment) incrementOpN(changed int) {
 	if changed <= 0 {
-		return nil
+		return
 	}
 	f.opN += changed
 	f.ops++
 	if f.opN > f.MaxOpN {
 		f.enqueueSnapshot()
 	}
-	return nil
 }
 
 // Snapshot writes the storage bitmap to disk and reopens it. This may
