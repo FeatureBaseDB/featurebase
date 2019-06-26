@@ -2669,6 +2669,13 @@ func filterWithRows(rows []uint64) rowFilter {
 // this container have been processed. The rows accumulated up to this point
 // (including this row if all filters passed) will be returned.
 func (f *fragment) rows(start uint64, filters ...rowFilter) []uint64 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.unprotectedRows(start, filters...)
+}
+
+// unprotectedRows calls rows without grabbing the mutex.
+func (f *fragment) unprotectedRows(start uint64, filters ...rowFilter) []uint64 {
 	startKey := rowToKey(start)
 	i, _ := f.storage.Containers.Iterator(startKey)
 	rows := make([]uint64, 0)
@@ -3096,9 +3103,10 @@ func newRowsVector(f *fragment) *rowsVector {
 
 // Get returns the rowID associated to the given colID.
 // Additionally, it returns true if a value was found,
-// otherwise it returns false.
+// otherwise it returns false. Ensure that you already
+// have the mutex before calling this.
 func (v *rowsVector) Get(colID uint64) (uint64, bool, error) {
-	rows := v.f.rows(0, filterColumn(colID))
+	rows := v.f.unprotectedRows(0, filterColumn(colID))
 	if len(rows) > 1 {
 		return 0, false, errors.New("found multiple row values for column")
 	} else if len(rows) == 1 {
@@ -3129,9 +3137,10 @@ func newBoolVector(f *fragment) *boolVector {
 
 // Get returns the rowID associated to the given colID.
 // Additionally, it returns true if a value was found,
-// otherwise it returns false.
+// otherwise it returns false. Ensure that you already
+// have the fragment mutex before calling this.
 func (v *boolVector) Get(colID uint64) (uint64, bool, error) {
-	rows := v.f.rows(0, filterColumn(colID))
+	rows := v.f.unprotectedRows(0, filterColumn(colID))
 	if len(rows) > 1 {
 		return 0, false, errors.New("found multiple row values for column")
 	} else if len(rows) == 1 {
