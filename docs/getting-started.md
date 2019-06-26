@@ -40,9 +40,9 @@ curl localhost:10101/status
 
 ### Sample Project
 
-In order to better understand Pilosa's capabilities, we will create a sample project called "Star Trace" containing information about 1,000 popular Github repositories which have "go" in their name. The Star Trace index will include data points such as programming language, tags, and stargazers—people who have starred a project.
+In order to better understand Pilosa's capabilities, we will create a sample project called "Star Trace" containing information about 1,000 popular Github repositories which have "go" in their name. The Star Trace index will include data points such as programming language and stargazers—people who have starred a project.
 
-Although Pilosa doesn't keep the data in a tabular format, we still use the terms "columns" and "rows" when describing the data model. We put the primary objects in columns, and the properties of those objects in rows. For example, the Star Trace project will contain an index called "repository" which contains columns representing Github repositories, and rows representing properties like programming languages and tags. We can better organize the rows by grouping them into sets called Fields. So the "repository" index might have a "languages" field as well as a "tags" field. You can learn more about indexes and fields in the [Data Model](../data-model/) section of the documentation.
+Although Pilosa doesn't keep the data in a tabular format, we still use the terms "columns" and "rows" when describing the data model. We put the primary objects in columns, and the properties of those objects in rows. For example, the Star Trace project will contain an index called "repository" which contains columns representing Github repositories, and rows representing properties like programming languages and stargazers. We can better organize the rows by grouping them into sets called Fields. So the "repository" index might have a "languages" field as well as a "stargazers" field. You can learn more about indexes and fields in the [Data Model](../data-model/) section of the documentation.
 
 Note:
 If at any time you want to verify the data structure, you can request the schema as follows:
@@ -58,7 +58,7 @@ curl localhost:10101/schema
 
 Note: This is not the recommended way to interact with Pilosa, but it is the fastest way to see the efficiency of Pilosa.
 
-##### Creating the Schema
+##### Create the Schema
 
 Before we can import data or run queries, we need to create our indexes and the fields within them. Let's create the repository index first:
 ``` request
@@ -67,7 +67,7 @@ curl localhost:10101/index/repository -X POST
 ``` response
 {"success":true}
 ```
-The index name must be 64 characters or less, start with a letter, and consist only of lowercase alphanumeric characters or `_-`.
+The index name must be 64 characters or less, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
 
 Let's create the `stargazer` field which has user IDs of stargazers as its rows:
 ``` request
@@ -229,7 +229,7 @@ Pilosa requires Go 1.12 or higher. It is also recommended that you have a code e
 
 ##### Create the Environment
 
-In order to communicate with Pilosa through your go code, you must have a "translator," which is go-pilosa. To install go-pilsa, open a terminal (one other than the one running pilosa) and download the library in your `GOPATH` using:
+In order to communicate with Pilosa through your go code, you must have a "translator," which is go-pilosa. To install go-pilosa, open a terminal (one other than the one running pilosa) and download the library in your `GOPATH` using:
 ``` 
 go get github.com/pilosa/go-pilosa
 ```
@@ -411,10 +411,10 @@ response, err = client.Query(repository.Intersect(stargazer.Row(14), stargazer.R
 if err != nil {
 	log.Fatal(err)
 }
-fmt.Println("User 14 or 19 starred, written in language 1: ", response.Result().Row().Columns)
+fmt.Println("Both user 14 and 19 starred and were written in language 1: ", response.Result().Row().Columns)
 ```
 ``` response
-User 14 or 19 starred, written in language 1:  [2 362 416 461]
+Both user 14 and 19 starred and were written in language 1:  [2 362 416 461]
 ```
 
 Set user 99999 as a stargazer for repository 77777:
