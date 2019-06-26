@@ -225,8 +225,6 @@ func (f *fragment) enqueueSnapshot() {
 				f.snapshotDelays = 0
 				f.snapshotDelayTime = 0
 			}
-		case <-time.After(5 * time.Second):
-			f.Logger.Printf("snapshot for %s: timed out\n", f.path)
 		}
 	} else {
 		// in testing, for instance, there may be no holder, thus no one
