@@ -278,7 +278,9 @@ func (v *view) newFragment(path string, shard uint64) *fragment {
 
 // deleteFragment removes the fragment from the view.
 func (v *view) deleteFragment(shard uint64) error {
-	fragment := v.Fragment(shard)
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	fragment := v.fragments[shard]
 	if fragment == nil {
 		return ErrFragmentNotFound
 	}
