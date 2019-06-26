@@ -221,7 +221,7 @@ func (f *fragment) enqueueSnapshot() {
 			f.snapshotDelays++
 			f.snapshotDelayTime += time.Since(before)
 			if f.snapshotDelays >= 10 {
-				f.Logger.Printf("snapshotting %s: last ten delays took %v", f.path, f.snapshotDelayTime)
+				f.Logger.Printf("snapshotting %s: last ten enqueue delays took %v", f.path, f.snapshotDelayTime)
 				f.snapshotDelays = 0
 				f.snapshotDelayTime = 0
 			}
@@ -2666,8 +2666,8 @@ func filterWithRows(rows []uint64) rowFilter {
 // this container have been processed. The rows accumulated up to this point
 // (including this row if all filters passed) will be returned.
 func (f *fragment) rows(start uint64, filters ...rowFilter) []uint64 {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	return f.unprotectedRows(start, filters...)
 }
 
