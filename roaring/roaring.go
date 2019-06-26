@@ -4463,18 +4463,20 @@ func (op *op) WriteTo(w io.Writer) (n int64, err error) {
 	// Write type and value.
 	buf[0] = byte(op.typ)
 	switch op.typ {
-	case 0, 1:
+	case opTypeAdd, opTypeRemove:
 		binary.LittleEndian.PutUint64(buf[1:9], op.value)
-	case 2, 3:
+	case opTypeAddBatch, opTypeRemoveBatch:
 		binary.LittleEndian.PutUint64(buf[1:9], uint64(len(op.values)))
 		p := 13 // start of values (skip 4 for checksum)
 		for _, v := range op.values {
 			binary.LittleEndian.PutUint64(buf[p:p+8], v)
 			p += 8
 		}
-	case 4, 5:
+	case opTypeAddRoaring, opTypeRemoveRoaring:
 		binary.LittleEndian.PutUint64(buf[1:9], uint64(len(op.roaring)))
 		binary.LittleEndian.PutUint32(buf[13:17], uint32(op.opN))
+	default:
+		return 0, fmt.Errorf("can't marshal unknown op type %d", op.typ)
 	}
 
 	// Add checksum at the end.
@@ -4520,9 +4522,9 @@ func (op *op) UnmarshalBinary(data []byte) error {
 	_, _ = h.Write(data[0:9])
 
 	switch op.typ {
-	case 0, 1:
+	case opTypeAdd, opTypeRemove:
 		// nothing to do, just being not-default
-	case 2, 3:
+	case opTypeAddBatch, opTypeRemoveBatch:
 		// This ensures that in doing 13+op.value*8, the max int won't be exceeded and a wrap around case
 		// (resulting in a negative value) won't occur in the slice indexing while writing
 		if op.value > maxBatchSize {
@@ -4538,7 +4540,7 @@ func (op *op) UnmarshalBinary(data []byte) error {
 			op.values[i] = binary.LittleEndian.Uint64(data[start : start+8])
 		}
 		op.value = 0
-	case 4, 5:
+	case opTypeAddRoaring, opTypeRemoveRoaring:
 		if len(data) < int(13+4+op.value) {
 			return fmt.Errorf("op data truncated - expected %d, got %d", 13+op.value, len(data))
 		}
@@ -4558,28 +4560,38 @@ func (op *op) UnmarshalBinary(data []byte) error {
 
 // size returns the encoded size of the op, in bytes.
 func (op *op) size() int {
-	if op.typ == opTypeAdd || op.typ == opTypeRemove {
+	switch op.typ {
+	case opTypeAdd, opTypeRemove:
 		return 1 + 8 + 4
-	}
-	if op.typ == opTypeAddBatch || op.typ == opTypeRemoveBatch {
+	case opTypeAddBatch, opTypeRemoveBatch:
 		return 1 + 8 + 4 + len(op.values)*8
+
+	case opTypeAddRoaring, opTypeRemoveRoaring:
+		return 1 + 8 + 4 + 4 + len(op.roaring)
 	}
-	// else it's presumably roaring?
-	return 1 + 8 + 4 + 4 + len(op.roaring)
+	if roaringParanoia {
+		panic(fmt.Sprintf("op size() called on unknown op type %d", op.typ))
+	}
+	return 0
 }
 
 // size returns the size needed to encode the op, in bytes. for
 // roaring ops, this does not include the roaring data, which is
 // already encoded.
 func (op *op) encodeSize() int {
-	if op.typ == opTypeAdd || op.typ == opTypeRemove {
+	switch op.typ {
+	case opTypeAdd, opTypeRemove:
 		return 1 + 8 + 4
-	}
-	if op.typ == opTypeAddBatch || op.typ == opTypeRemoveBatch {
+	case opTypeAddBatch, opTypeRemoveBatch:
 		return 1 + 8 + 4 + len(op.values)*8
+
+	case opTypeAddRoaring, opTypeRemoveRoaring:
+		return 1 + 8 + 4 + 4
 	}
-	// else it's presumably roaring?
-	return 1 + 8 + 4 + 4
+	if roaringParanoia {
+		panic(fmt.Sprintf("op encodeSize() called on unknown op type %d", op.typ))
+	}
+	return 0
 }
 
 // count returns the number of bits the operation mutates.
