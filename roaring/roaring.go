@@ -431,6 +431,12 @@ func (b *Bitmap) Size() int {
 
 // CountRange returns the number of bits set between [start, end).
 func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
+	if roaringParanoia {
+		if start > end {
+			panic(fmt.Sprintf("counting in range but %v > %v", start, end))
+		}
+	}
+
 	if b.Containers.Size() == 0 {
 		return
 	}
@@ -452,6 +458,12 @@ func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 			// TODO remove once we've validated this stuff works
 			panic("should be impossible for k to be less than skey")
 		}
+
+		// k > ekey handles the case when start > end and where start and end
+		// are in different containers. Same container case is already handled above.
+		if k > ekey {
+			break
+		}
 		if k == skey {
 			n += uint64(c.countRange(int32(lowbits(start)), maxContainerVal+1))
 			continue
@@ -462,9 +474,6 @@ func (b *Bitmap) CountRange(start, end uint64) (n uint64) {
 		}
 		if k == ekey {
 			n += uint64(c.countRange(0, int32(lowbits(end))))
-			break
-		}
-		if k > ekey {
 			break
 		}
 	}
@@ -485,6 +494,11 @@ func (b *Bitmap) Slice() []uint64 {
 
 // SliceRange returns a slice of integers between [start, end).
 func (b *Bitmap) SliceRange(start, end uint64) []uint64 {
+	if roaringParanoia {
+		if start > end {
+			panic(fmt.Sprintf("getting slice in range but %v > %v", start, end))
+		}
+	}
 	var a []uint64
 	itr := b.Iterator()
 	itr.Seek(start)
@@ -934,6 +948,11 @@ func (b *Bitmap) Shift(n int) (*Bitmap, error) {
 	lastKey := uint64(0)
 	for iiter.Next() {
 		ki, ci := iiter.Value()
+		if lastCarry && ki > lastKey+1 {
+			extra := NewContainerArray([]uint16{0})
+			output.Containers.Put(lastKey+1, extra)
+			lastCarry = false
+		}
 		o, carry := shift(ci)
 		if lastCarry {
 			o.add(0)
@@ -1252,6 +1271,11 @@ func (b *Bitmap) Check() error {
 
 // Flip performs a logical negate of the bits in the range [start,end].
 func (b *Bitmap) Flip(start, end uint64) *Bitmap {
+	if roaringParanoia {
+		if start > end {
+			panic(fmt.Sprintf("flipping in range but %v > %v", start, end))
+		}
+	}
 	result := NewBitmap()
 	itr := b.Iterator()
 	v, eof := itr.Next()
@@ -1313,8 +1337,14 @@ func (itr *Iterator) Seek(seek uint64) {
 	}
 
 	// Move to the correct value index inside the container.
-	lb := lowbits(seek)
+	lb, hb := lowbits(seek), highbits(seek)
 	if itr.c.isArray() {
+		// Seek is smaller than min(itr.c).
+		if itr.key > hb {
+			itr.j = -1
+			return
+		}
+
 		// Find index in the container.
 		itr.j = search32(itr.c.array(), lb)
 		if itr.j < 0 {
@@ -1336,24 +1366,40 @@ func (itr *Iterator) Seek(seek uint64) {
 	}
 
 	if itr.c.isRun() {
-		if seek == 0 {
-			itr.j, itr.k = 0, -1
+		// Seek is smaller than min(itr.c).
+		if itr.key > hb {
+			itr.j = 0
+			itr.k = -1
+			return
 		}
 
 		j, contains := binSearchRuns(lb, itr.c.runs())
 		if contains {
 			itr.j = j
 			itr.k = int32(lb) - int32(itr.c.runs()[j].start) - 1
-		} else {
-			// Set iterator to next value in the Bitmap.
-			itr.j = j
-			itr.k = -1
+			return
 		}
-
+		// If seek is larger than all elements, return.
+		if j >= int32(len(itr.c.runs())) {
+			if !itr.citer.Next() {
+				itr.c = nil
+				return
+			}
+			itr.key, itr.c = itr.citer.Value()
+			itr.j = -1
+			return
+		}
+		// Set iterator to next value in the Bitmap.
+		itr.j = j
+		itr.k = -1
 		return
 	}
 
-	// If it's a bitmap container then move to index before the value and call next().
+	// If it's a bitmap container then move to index before the value.
+	if itr.key > hb {
+		itr.j = -1
+		return
+	}
 	itr.j = int32(lb) - 1
 }
 
@@ -1502,6 +1548,11 @@ func (c *Container) count() (n int32) {
 
 // countRange counts the number of bits set between [start, end).
 func (c *Container) countRange(start, end int32) (n int32) {
+	if roaringParanoia {
+		if start > end {
+			panic(fmt.Sprintf("counting in range but %v > %v", start, end))
+		}
+	}
 	if c == nil {
 		return 0
 	}
@@ -1514,6 +1565,11 @@ func (c *Container) countRange(start, end int32) (n int32) {
 }
 
 func (c *Container) arrayCountRange(start, end int32) (n int32) {
+	if roaringParanoia {
+		if start > end {
+			panic(fmt.Sprintf("counting in range but %v > %v", start, end))
+		}
+	}
 	array := c.array()
 	i := int32(sort.Search(len(array), func(i int) bool { return int32(array[i]) >= start }))
 	for ; i < int32(len(array)); i++ {
@@ -1527,6 +1583,11 @@ func (c *Container) arrayCountRange(start, end int32) (n int32) {
 }
 
 func (c *Container) bitmapCountRange(start, end int32) int32 {
+	if roaringParanoia {
+		if start > end {
+			panic(fmt.Sprintf("counting in range but %v > %v", start, end))
+		}
+	}
 	var n uint64
 	i, j := start/64, end/64
 	// Special case when start and end fall in the same word.
@@ -1558,6 +1619,11 @@ func (c *Container) bitmapCountRange(start, end int32) int32 {
 }
 
 func (c *Container) runCountRange(start, end int32) (n int32) {
+	if roaringParanoia {
+		if start > end {
+			panic(fmt.Sprintf("counting in range but %v > %v", start, end))
+		}
+	}
 	runs := c.runs()
 	for _, iv := range runs {
 		// iv is before range
@@ -4510,7 +4576,10 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 
 	// Read container offsets and attach data.
 	if haveRuns {
-		readWithRuns(b, data, pos, keyN)
+		err := readWithRuns(b, data, pos, keyN)
+		if err != nil {
+			return errors.Wrap(err, "reading offsets from official roaring format")
+		}
 	} else {
 		err := readOffsets(b, data, pos, keyN)
 		if err != nil {
@@ -4524,6 +4593,10 @@ func readOffsets(b *Bitmap, data []byte, pos int, keyN uint32) error {
 
 	citer, _ := b.Containers.Iterator(0)
 	for i, buf := 0, data[pos:]; i < int(keyN); i, buf = i+1, buf[4:] {
+		// Verify the offset is fully formed
+		if len(buf) < 4 {
+			return fmt.Errorf("offset incomplete: len=%d", len(buf))
+		}
 		offset := binary.LittleEndian.Uint32(buf[0:4])
 		// Verify the offset is within the bounds of the input data.
 		if int(offset) >= len(data) {
@@ -4545,7 +4618,10 @@ func readOffsets(b *Bitmap, data []byte, pos int, keyN uint32) error {
 	return nil
 }
 
-func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) {
+func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) error {
+	if len(data) < pos+runCountHeaderSize {
+		return fmt.Errorf("offset incomplete: len=%d", len(data))
+	}
 	citer, _ := b.Containers.Iterator(0)
 	for i := 0; i < int(keyN); i++ {
 		citer.Next()
@@ -4568,6 +4644,7 @@ func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) {
 			pos += bitmapN * 8
 		}
 	}
+	return nil
 }
 
 // handledIter and handledIters are wrappers around Bitmap Container iterators
