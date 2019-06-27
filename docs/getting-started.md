@@ -54,7 +54,7 @@ curl localhost:10101/schema
 {"indexes":null}
 ```
 
-#### Using HTTP
+#### Using Curl
 
 Note: This is not the recommended way to interact with Pilosa, but it is the fastest way to see the efficiency of Pilosa.
 
@@ -236,11 +236,10 @@ go get github.com/pilosa/go-pilosa
 
 For simplicity, we reccomend that you create a separate folder for this project. In the terminal, create a new folder as follows:
 ```
-mkdir GettingStarted
-cd GettingStarted
+mkdir GettingStarted && cd GettingStarted
 ```
 
-In this folder, we will download two CSV files to provide data to our fields later on. Download the stargazer.csv and language.csv files here:
+In this folder, we will download two CSV files to provide data to our fields later on. Download the `stargazer.csv` and `language.csv` files here:
 ```
 curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/stargazer.csv
 curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/language.csv
@@ -272,7 +271,7 @@ func main() {
 	client := pilosa.DefaultClient()
 	schema, _ := client.Schema()
 	repository := schema.Index("repository")
-	// This is where the field will go later
+	// This is where the fields will go later
 	err := client.SyncSchema(schema)
 	if err != nil {
 		log.Fatal(err)
@@ -291,7 +290,7 @@ Next up is the `language` field, which will contain IDs for programming language
 	language := repository.Field("language")
 ```
 
-Your StarTrace.go file should look like:
+Your `StarTrace.go` file should look like:
 ```
 package main
 
@@ -335,7 +334,7 @@ First, we will load our data into the `stargazer` field:
 		log.Fatal(err)
 	}
 ```
-Since our `stargazer` data contains time stamps, which represent the time users starred repos, we will be using the `csv.NewColumnIterator` function that is built into the go-pilosa import. For more information on imports in go-pilosa, please see the go-pilosa [site](https://github.com/pilosa/go-pilosa/blob/master/docs/imports-exports.md). Time quantum is the resolution of the time we want to use and is defined by the `format` variable.
+Since our `stargazer` data contains time stamps, which represent the time users starred repos, we will be using the `csv.NewColumnIterator` function that is built into the go-pilosa import. Time quantum is the resolution of the time we want to use and is defined by the `format` variable.
 
 Next, we will load our data into the `language` field:
 ```
@@ -350,6 +349,8 @@ Next, we will load our data into the `language` field:
 	}
 ```
 The `language` is a `set` field, but since the default field type is `set`, we didn't need to specify it.
+
+For more information on imports in go-pilosa, please see the go-pilosa [site](https://github.com/pilosa/go-pilosa/blob/master/docs/imports-exports.md).
 
 Note that both the user IDs and the repository IDs were remapped to sequential integers in the data files, they don't correspond to actual Github IDs anymore. You can check out [languages.txt](https://github.com/pilosa/getting-started/blob/master/languages.txt) to see the mapping for languages.
 
@@ -435,7 +436,228 @@ Don't try to use arbitrary 64-bit integers as column or row IDs in Pilosa - this
 
 For more information about go-pilosa, please see our Go client library for [go-pilosa](https://github.com/pilosa/go-pilosa)
 
-#### Java and Python Users
+#### Using Java
+
+Pilosa requires Java 8 or higher and Maven 3 or higher. It is also recommended that you have a code editor downloaded.
+
+##### Create the Environment
+
+To contain the Getting Started project in one place, we will create a new folder as follows:
+```
+mkdir GettingStarted && cd GettingStarted
+```
+
+In this folder, we will download two CSV files to provide data to our fields later on. Download the `stargazer.csv` and `language.csv` files here:
+```
+curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/stargazer.csv
+curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/language.csv
+```
+
+We will now create the java directory that will contain our `pom.xml` file and import the `pom.xml` file:
+```
+mkdir startrace && cd startrace
+curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/java/startrace/pom.xml
+```
+
+For this specific project, the `pom.xml` file needs to be edited. The file can be edited by typing `nano pom.xml` directly into the terminal or simply using your code editing software. The following needs to be changed:
+```
+<dependencies>
+     <dependency>
+         <groupId>com.pilosa</groupId>
+         <artifactId>pilosa-client</artifactId>
+         <version>1.3.1</version>
+     </dependency>
+</dependencies>
+
+<!-- Build an executable JAR -->
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-jar-plugin</artifactId>
+    <version>3.0.2</version>
+    <configuration>
+        <archive>
+            <manifest>
+                <addClasspath>true</addClasspath>
+                <classpathPrefix>lib/</classpathPrefix>
+                <mainClass>main.java.StarTrace</mainClass>
+            </manifest>
+        </archive>
+    </configuration>
+</plugin>
+```
+
+We will now create the java directory that will contain our `StarTrace.java` file and create the `StarTrace.jave file:
+```
+mkdir src && cd src
+mkdir main && cd main
+mkdir java && cd java
+touch StarTrace.go
+```
+
+This file will be used in the following sections.
+
+##### Create the Schema
+
+Before we can import data or run queries, we need to create our indexes and the fields within them. Let's create the repository index first. Copy the following into the StarTrace.java file:
+```
+package main.java;
+
+import com.pilosa.client.PilosaClient;
+import com.pilosa.client.QueryResponse;
+import com.pilosa.client.exceptions.PilosaException;
+import com.pilosa.client.orm.*;
+import com.pilosa.client.csv.FileRecordIterator; 
+import com.pilosa.client.TimeQuantum;
+
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+
+public class StarTrace {
+    public static void main(String []args) throws IOException {
+        // Create the Schema
+        PilosaClient client = PilosaClient.defaultClient();
+        Schema schema = client.readSchema();
+        Index repository = schema.index("repository");
+	// This is were the fields will go later
+        client.syncSchema(schema);
+    }
+}
+```
+The index name must be 64 characters or less, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
+
+Let's create the `stargazer` field which has user IDs of stargazers as its rows:
+```
+	FieldOptions stargazerOptions = FieldOptions.builder()
+            .fieldTime(TimeQuantum.YEAR_MONTH_DAY)
+            .build();
+        Field stargazer = repository.field("stargazer", stargazerOptions);
+```
+Since our data contains time stamps which represent the time users starred repos, we set the field type to `time` using `fieldTime()`. Time quantum is the resolution of the time we want to use, and we set it to `YEAR_MONTH-DAY` for `stargazer`.
+
+Next up is the `language` field, which will contain IDs for programming languages:
+```
+	Field language = repository.field("language");
+```
+
+Your `StarTrace.java` file should look like:
+```
+package main.java;
+
+import com.pilosa.client.PilosaClient;
+import com.pilosa.client.QueryResponse;
+import com.pilosa.client.exceptions.PilosaException;
+import com.pilosa.client.orm.*;
+import com.pilosa.client.csv.FileRecordIterator; 
+import com.pilosa.client.TimeQuantum;
+
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+
+public class StarTrace {
+    public static void main(String []args) throws IOException {
+        // Create the Schema
+        PilosaClient client = PilosaClient.defaultClient();
+        Schema schema = client.readSchema();
+        Index repository = schema.index("repository");
+
+        FieldOptions stargazerOptions = FieldOptions.builder()
+            .fieldTime(TimeQuantum.YEAR_MONTH_DAY)
+            .build();
+        Field stargazer = repository.field("stargazer", stargazerOptions);
+        
+        Field language = repository.field("language");
+        client.syncSchema(schema);
+    }
+}
+```
+
+##### Import Data From CSV Files
+
+Now that we have our index and our fields, we can import the data we downloaded earlier and soon be making our own queries.
+
+First, we will load our data into the `stargazer` field:
+```
+	SimpleDateFormat timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'hh:mm");
+        FileRecordIterator iterator = FileRecordIterator.fromPath("stargazer.csv", stargazer, timestampFormat);
+        client.importField(stargazer, iterator);
+```
+Due to the time aspect of the `stargazer` field, we have to specify the format of the time stamps using the `SimpleDateFormat() function.
+
+Next, we will load our data into the `language` field:
+```
+	iterator = FileRecordIterator.fromPath("language.csv", language);
+        client.importField(language, iterator);
+```
+The `language` is a `set` field, but since the default field type is `set`, we didn't need to specify it.
+
+For more information on imports in java-pilosa, please see the java-pilosa [site](https://github.com/pilosa/java-pilosa/blob/master/docs/imports.md).
+
+Note that both the user IDs and the repository IDs were remapped to sequential integers in the data files, they don't correspond to actual Github IDs anymore. You can check out [languages.txt](https://github.com/pilosa/getting-started/blob/master/languages.txt) to see the mapping for languages.
+
+##### Make Some Queries
+
+Now that we have a working schema, we can query it.
+
+Which repositories did user 14 star:
+``` request
+QueryResponse response = client.query(stargazer.row(14));
+System.out.println("User 14 starred: " + response.getResult().getRow().getColumns());
+```
+``` response
+User 14 starred: [1, 2, 3, 362, 368, 391, 396, 409, 416, 430, 436, 450, 454, 460, 461, 464, 466, 469, 470, 483, 484, 486, 490, 491, 503, 504, 514]
+```
+
+What are the top 5 languages in the sample data:
+``` request
+response = client.query(language.topN(5));
+System.out.println("Top Languages: " + response.getResult().getCountItems());
+```
+``` response
+Top Languages: [CountResultItem(id=5, count=119), CountResultItem(id=1, count=50), CountResultItem(id=4, count=48), CountResultItem(id=9, count=31), CountResultItem(id=13, count=25)]
+```
+
+Which repositories were starred by user 14 and 19:
+``` request
+response = client.query(repository.intersect(stargazer.row(14), stargazer.row(19)));
+System.out.println("Both user 14 and 19 starred: " + response.getResult().getRow().getColumns());
+```
+``` response
+Both user 14 and 19 starred: [2, 3, 362, 396, 416, 461, 464, 466, 470, 486]
+```
+
+Which repositories were starred by user 14 or 19:
+``` request
+response = client.query(repository.union(stargazer.row(14), stargazer.row(19)));
+System.out.println("User 14 or 19 starred: " + response.getResult().getRow().getColumns());
+```
+``` response
+User 14 or 19 starred: [1, 2, 3, 361, 362, 368, 376, 377, 378, 382, 386, 388, 391, 396, 398, 400, 409, 411, 412, 416, 426, 428, 430, 435, 436, 450, 452, 453, 454, 456, 460, 461, 464, 465, 466, 469, 470, 483, 484, 486, 487, 489, 490, 491, 500, 503, 504, 505, 512, 514]
+```
+
+Which repositories were starred by user 14 and 19 and also were written in language 1:
+``` request
+response = client.query(repository.intersect(stargazer.row(14), stargazer.row(19), language.row(1)));
+System.out.println("Both user 14 and 19 starred and were written in language 1: " + response.getResult().getRow().getColumns());
+```
+``` response
+Both user 14 and 19 starred and were written in language 1: [2, 362, 416, 461]
+```
+
+Set user 99999 as a stargazer for repository 77777:
+``` request
+client.query(stargazer.set(99999, 77777));
+System.out.println("Set user 99999 as a stargazer for repository 77777");
+```
+``` response
+Set user 99999 as a stargazer for repository 77777
+```
+
+Please note that while user ID 99999 may not be sequential with the other column IDs, it is still a relatively low number. 
+Don't try to use arbitrary 64-bit integers as column or row IDs in Pilosa - this will lead to problems such as poor performance and out of memory errors.
+
+For more information about java-pilosa, please see our Java client library for [java-pilosa](https://github.com/pilosa/java-pilosa)
+
+#### Python Users
 
 <div class="note">
     <p>Java and Python support will be uploaded shortly.
