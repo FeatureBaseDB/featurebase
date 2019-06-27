@@ -581,7 +581,7 @@ First, we will load our data into the `stargazer` field:
         FileRecordIterator iterator = FileRecordIterator.fromPath("stargazer.csv", stargazer, timestampFormat);
         client.importField(stargazer, iterator);
 ```
-Due to the time aspect of the `stargazer` field, we have to specify the format of the time stamps using the `SimpleDateFormat() function.
+Due to the time aspect of the `stargazer` field, we have to specify the format of the time stamps using the `SimpleDateFormat()` function.
 
 Next, we will load our data into the `language` field:
 ```
@@ -659,9 +659,202 @@ For more information about java-pilosa, please see our Java client library for [
 
 #### Python Users
 
-<div class="note">
-    <p>Java and Python support will be uploaded shortly.
-</div>
+Pilosa requires Python 2.7 or higher or Python 3.4 or higher. It is also recommended that you have a code editor downloaded.
+
+##### Create the Environment
+
+To contain the Getting Started project in one place, we will create a new folder as follows:
+```
+mkdir GettingStarted && cd GettingStarted
+```
+In this folder, we will download two CSV files to provide data to our fields later on. Download the `stargazer.csv` and `language.csv` files here:
+```
+curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/stargazer.csv
+curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/language.csv
+```
+We will also download two `.txt` files. One is the `requirements.txt` that will install python-pilosa and the other is `languages.txt` which will provide context to the `language` field.
+```
+curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/python/requirements.txt
+curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/language.txt
+```
+We will now create the python environment:
+```
+python3 -m venv startrace
+```
+
+Next, we activate the python environment we created and install the requirements:
+```
+source startrace/bin/activate
+pip install -r requirements.txt
+```
+We will also create a file called StarTrace.py as follows:
+```
+touch StarTrace.py
+```
+This file will be used in the following sections.
+
+##### Create the Schema
+
+Before we can import data or run queries, we need to create our indexes and the fields within them. Let's create the repository index first. Copy the following into the StarTrace.py file:
+``` 
+from __future__ import print_function
+
+import os
+import sys
+import time
+import pilosa
+
+from pilosa import Client, Index, TimeQuantum
+from pilosa.imports import csv_column_reader, csv_row_id_column_id
+
+from io import StringIO
+
+# Create the Schema
+client = pilosa.Client()
+schema = client.schema()
+repository = schema.index("repository")
+# This is where the fields will go later
+client.sync_schema(schema)
+```
+The index name must be 64 characters or less, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
+
+Let's create the `stargazer` field which has user IDs of stargazers as its rows:
+```
+stargazer = repository.field("stargazer", time_quantum=pilosa.TimeQuantum.YEAR_MONTH_DAY)
+```
+Since our data contains time stamps which represent the time users starred repos, we set the field type to `time` using `time_quantum`. Time quantum is the resolution of the time we want to use, and we set it to `YEAR_MONTH-DAY` for `stargazer`.
+
+Next up is the `language` field, which will contain IDs for programming languages:
+```
+language = repository.field("language")
+```
+Your `StarTrace.py` file should look like:
+```
+from __future__ import print_function
+
+import os
+import sys
+import time
+import pilosa
+
+from pilosa import Client, Index, TimeQuantum
+from pilosa.imports import csv_column_reader, csv_row_id_column_id
+
+from io import StringIO
+
+# Create the Schema
+client = pilosa.Client()
+schema = client.schema()
+repository = schema.index("repository")
+stargazer = repository.field("stargazer", time_quantum=pilosa.TimeQuantum.YEAR_MONTH_DAY)
+language = repository.field("language")
+client.sync_schema(schema)
+```
+
+##### Import Data From CSV Files
+
+Now that we have our index and our fields, we can import the data we downloaded earlier and soon be making our own queries.
+
+First, we will load our data into the `stargazer` field:
+```
+time_func = lambda s: int(time.mktime(time.strptime(s, "%Y-%m-%dT%H:%M")))
+with open("stargazer.csv") as f:
+    stargazer_reader = csv_column_reader(f, timefunc=time_func)
+    client.import_field(stargazer, stargazer_reader)
+```
+Due to the time aspect of the `stargazer` field, we have to specify the format of the time stamps using the `time_func` variable.
+
+Next, we will load our data into the `language` field:
+```
+with open("language.csv") as f:
+    language_reader = csv_column_reader(f, csv_row_id_column_id)
+    client.import_field(language, language_reader)
+```
+
+The `language` is a `set` field, but since the default field type is `set`, we didn't need to specify it.
+
+For more information on imports in python-pilosa, please see the python-pilosa [site](https://github.com/pilosa/python-pilosa/blob/master/docs/imports.md).
+
+Note that both the user IDs and the repository IDs were remapped to sequential integers in the data files, they don't correspond to actual Github IDs anymore. You can check out [languages.txt](https://github.com/pilosa/getting-started/blob/master/languages.txt) to see the mapping for languages.
+
+##### Make Some Queries
+
+Now that we have a working schema, we can query it.
+
+Which repositories did user 14 star:
+``` request
+response = client.query(stargazer.row(14))
+print("User 14 starred: ", response.result.row.columns)
+```
+``` response
+User 14 starred:  [1, 2, 3, 362, 368, 391, 396, 409, 416, 430, 436, 450, 454, 460, 461, 464, 466, 469, 470, 483, 484, 486, 490, 491, 503, 504, 514]
+```
+
+What are the top 5 languages in the sample data:
+``` request
+def load_language_names():
+    with open("languages.txt") as f:
+        return [line.strip() for line in f]
+
+def print_topn(items):
+    lines = ["\t{i}. {s[0]}: {s[1]} stars".format(s=s, i=i + 1) for i, s in enumerate(items)]
+    print("\n".join(lines))
+
+language_names = load_language_names()
+top_languages = client.query(language.topn(5)).result.count_items
+language_items = [(language_names[item.id], item.count) for item in top_languages]
+print("Top languages: ")
+print_topn(language_items)
+```
+``` response
+Top languages: 
+        1. Go: 119 stars
+        2. Shell: 50 stars
+        3. Makefile: 48 stars
+        4. HTML: 31 stars
+        5. JavaScript: 25 stars
+```
+
+Which repositories were starred by user 14 and 19:
+``` request
+repsonse = client.query(repository.intersect(stargazer.row(14), stargazer.row(19)))
+print("Both user 14 and 19 starred: ", response.result.row.columns)
+```
+``` resposne
+Both user 14 and 19 starred:  [1, 2, 3, 362, 368, 391, 396, 409, 416, 430, 436, 450, 454, 460, 461, 464, 466, 469, 470, 483, 484, 486, 490, 491, 503, 504, 514]
+```
+
+Which repositories were starred by user 14 or 19:
+``` request
+response = client.query(repository.union(stargazer.row(14), stargazer.row(19)))
+print("User 14 or 19 starred: ", response.result.row.columns)
+```
+``` response
+User 14 or 19 starred:  [1, 2, 3, 361, 362, 368, 376, 377, 378, 382, 386, 388, 391, 396, 398, 400, 409, 411, 412, 416, 426, 428, 430, 435, 436, 450, 452, 453, 454, 456, 460, 461, 464, 465, 466, 469, 470, 483, 484, 486, 487, 489, 490, 491, 500, 503, 504, 505, 512, 514]
+```
+
+Which repositories were starred by user 14 and 19 and also were written in language 1:
+``` request
+response = client.query(repository.intersect(stargazer.row(14), stargazer.row(19), language.row(1)))
+print("Both user 14 and 19 starred and were written in language 1: ", response.result.row.columns)
+```
+``` response
+Both user 14 and 19 starred and were written in language 1:  [2, 362, 416, 461]
+```
+
+Set user 99999 as a stargazer for repository 77777:
+``` request
+client.query(stargazer.set(99999, 77777))
+print("Set user 99999 as a stargazer for repository 77777")
+```
+``` response
+Set user 99999 as a stargazer for repository 77777
+```
+
+Please note that while user ID 99999 may not be sequential with the other column IDs, it is still a relatively low number. 
+Don't try to use arbitrary 64-bit integers as column or row IDs in Pilosa - this will lead to problems such as poor performance and out of memory errors.
+
+For more information about python-pilosa, please see our Python client library for [python-pilosa](https://github.com/pilosa/python-pilosa).
 
 ### What's Next?
 
