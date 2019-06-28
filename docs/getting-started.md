@@ -4,6 +4,10 @@ weight = 3
 nav = [
      "Starting Pilosa",
      "Sample Project",
+     "Using Curl",
+     "Using Go",
+     "Using Java",
+     "Using Python",
      "What's Next?",
 ]
 +++
