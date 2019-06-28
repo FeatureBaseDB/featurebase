@@ -11,7 +11,7 @@ nav = [
 ## Getting Started
 
 Pilosa supports an HTTP interface which uses JSON by default.
-Any HTTP tool can be used to interact with the Pilosa server. The examples in this documentation will use curl which is available by default on many UNIX-like systems including Linux and MacOS. However, the best way to interface with the Pilosa server is through one of our three client libraries. Pilosa currently supports go, java, and python.
+Any HTTP tool can be used to interact with the Pilosa server. The examples in this documentation will use curl which is available by default on many UNIX-like systems including Linux and MacOS. However, the best way to interface with the Pilosa server is through one of our three client libraries. Pilosa currently supports [Go](https://github.com/pilosa/go-pilosa), [Java](https://github.com/pilosa/java-pilosa), and [Python](https://github.com/pilosa/python-pilosa).
 
 <div class="note">
     <p>Note that Pilosa server requires a high limit for open files. Check the documentation of your system to see how to increase it in case you hit that limit. See <a href="/docs/administration/#open-file-limits">Open File Limits</a> for more details.</p>
@@ -23,10 +23,6 @@ Follow the steps in the [Installation](../installation/) document to install Pil
 Execute the following in a terminal to run Pilosa with the default configuration (Pilosa will be available at [localhost:10101](http://localhost:10101)):
 ```
 pilosa server
-```
-If you are using the Docker image, you can run an ephemeral Pilosa container on the default address using the following command:
-```
-docker run -it --rm --name pilosa -p 10101:10101 pilosa/pilosa:latest
 ```
 
 Let's make sure Pilosa is running:
@@ -44,8 +40,9 @@ In order to better understand Pilosa's capabilities, we will create a sample pro
 
 Although Pilosa doesn't keep the data in a tabular format, we still use the terms "columns" and "rows" when describing the data model. We put the primary objects in columns, and the properties of those objects in rows. For example, the Star Trace project will contain an index called "repository" which contains columns representing Github repositories, and rows representing properties like programming languages and stargazers. We can better organize the rows by grouping them into sets called Fields. So the "repository" index might have a "languages" field as well as a "stargazers" field. You can learn more about indexes and fields in the [Data Model](../data-model/) section of the documentation.
 
-Note:
-If at any time you want to verify the data structure, you can request the schema as follows:
+Pilosa supports curl (or any HTTP tool), Go, Java, and Python. In this project, we will walk you through how to use each one to best communicate with the Pilosa server.
+
+Note: If at any time you want to verify the data structure, you can request the schema as follows:
 
 ``` request
 curl localhost:10101/schema
@@ -60,7 +57,7 @@ Note: This is not the recommended way to interact with Pilosa, but it is the fas
 
 ##### Create the Schema
 
-Before we can import data or run queries, we need to create our indexes and the fields within them. Let's create the repository index first:
+Before we can import data or run queries, we need to create our indexes and the fields within them. Let's create the `repository` index first:
 ``` request
 curl localhost:10101/index/repository -X POST
 ```
@@ -229,12 +226,12 @@ Pilosa requires Go 1.12 or higher. It is also recommended that you have a code e
 
 ##### Create the Environment
 
-In order to communicate with Pilosa through your go code, you must have a "translator," which is go-pilosa. To install go-pilosa, open a terminal (one other than the one running pilosa) and download the library in your `GOPATH` using:
+In order to communicate with Pilosa through your Go code, you must have a "translator," which is go-pilosa. To install go-pilosa, open a terminal (one other than the one running Pilosa) and download the library in your `GOPATH` using:
 ``` 
 go get github.com/pilosa/go-pilosa
 ```
 
-For simplicity, we reccomend that you create a separate folder for this project. In the terminal, create a new folder as follows:
+To contain the Getting Started project in one place, we will create a new folder as follows:
 ```
 mkdir GettingStarted && cd GettingStarted
 ```
@@ -245,7 +242,7 @@ curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/stargaze
 curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/language.csv
 ```
 
-We will also create a file called StarTrace.go as follows:
+We will also create a file called `StarTrace.go` as follows:
 ```
 touch StarTrace.go
 ```
@@ -253,7 +250,7 @@ This file will be used in the following sections.
 
 ##### Create the Schema
 
-Before we can import data or run queries, we need to create our indexes and the fields within them. Let's create the repository index first. Copy the following into the StarTrace.go file:
+Before we can import data or run queries, we need to create our schema. Go-pilosa is implemented by importing `github.com/pilosa/go-pilosa` and its ability to read csv files is implemented by importing 'github.com/pilosa/go-pilosa/csv`. The first steps to creating the schema are creating a client which will communicate our schema to Pilosa, creating a schema which will contain our indexes and fields, and syncing with Pilosa. This is all done in the `StarTrace.go` file:
 ``` 
 package main
 
@@ -270,7 +267,7 @@ func main() {
 	// Create the Schema
 	client := pilosa.DefaultClient()
 	schema, _ := client.Schema()
-	repository := schema.Index("repository")
+	// This is where the index will go later
 	// This is where the fields will go later
 	err := client.SyncSchema(schema)
 	if err != nil {
@@ -278,6 +275,12 @@ func main() {
 	}
 }
 ```
+
+Next, let's create the `repository` index:
+```
+	repository := schema.Index("repository")
+```
+
 The index name must be 64 characters or less, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
 
 Let's create the `stargazer` field which has user IDs of stargazers as its rows:
@@ -319,7 +322,7 @@ func main() {
 
 ##### Import Data From CSV Files
 
-Now that we have our index and our fields, we can import the data we downloaded earlier and soon be making our own queries.
+Now that we have our index and our fields, we can import the data we downloaded earlier and be on our way to making our own queries.
 
 First, we will load our data into the `stargazer` field:
 ```
@@ -334,7 +337,7 @@ First, we will load our data into the `stargazer` field:
 		log.Fatal(err)
 	}
 ```
-Since our `stargazer` data contains time stamps, which represent the time users starred repos, we will be using the `csv.NewColumnIterator` function that is built into the go-pilosa import. Time quantum is the resolution of the time we want to use and is defined by the `format` variable.
+Since our `stargazer` data contains time stamps, which represent the time users starred repos, we will be using the `csv.NewColumnIteratorWithTimeStampFormat` function that is built into the go-pilosa import. This function takes the format of the csv files (`csv.RowIDColumnID`), an `io.Reader` (`bytes.NewReader(stargazerFile)`), and the time quantum format (`format`) and translates the csv file into a format Pilosa can read. Time quantum is the resolution of the time we want to use.
 
 Next, we will load our data into the `language` field:
 ```
@@ -348,11 +351,11 @@ Next, we will load our data into the `language` field:
 		log.Fatal(err)
 	}
 ```
-The `language` is a `set` field, but since the default field type is `set`, we didn't need to specify it.
-
-For more information on imports in go-pilosa, please see the go-pilosa [site](https://github.com/pilosa/go-pilosa/blob/master/docs/imports-exports.md).
+Since our `language` data doesn't contain time stamps, we will use the `csv.NewColumnIterator` function in place of `csv.NewColumnIteratorWithTimeStampFormat`.
 
 Note that both the user IDs and the repository IDs were remapped to sequential integers in the data files, they don't correspond to actual Github IDs anymore. You can check out [languages.txt](https://github.com/pilosa/getting-started/blob/master/languages.txt) to see the mapping for languages.
+
+For more information on imports in go-pilosa, please see the go-pilosa [site](https://github.com/pilosa/go-pilosa/blob/master/docs/imports-exports.md).
 
 ##### Make Some Queries
 
@@ -434,7 +437,7 @@ Set user 99999 as a stargazer for repository 77777
 Please note that while user ID 99999 may not be sequential with the other column IDs, it is still a relatively low number. 
 Don't try to use arbitrary 64-bit integers as column or row IDs in Pilosa - this will lead to problems such as poor performance and out of memory errors.
 
-For more information about go-pilosa, please see our Go client library for [go-pilosa](https://github.com/pilosa/go-pilosa)
+For more information about go-pilosa, please see our Go client library at [go-pilosa](https://github.com/pilosa/go-pilosa) or checkout the go-pilosa [Data Model and Queries](https://github.com/pilosa/go-pilosa/blob/master/docs/data-model-queries.md) section for more query options.
 
 #### Using Java
 
@@ -453,7 +456,7 @@ curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/stargaze
 curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/language.csv
 ```
 
-We will now create the java directory that will contain our `pom.xml` file and import the `pom.xml` file:
+We will now create the java directory that will contain our `pom.xml` file and then import the `pom.xml` file:
 ```
 mkdir startrace && cd startrace
 curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/java/startrace/pom.xml
@@ -465,7 +468,7 @@ For this specific project, the `pom.xml` file needs to be edited. The file can b
      <dependency>
          <groupId>com.pilosa</groupId>
          <artifactId>pilosa-client</artifactId>
-         <version>1.3.1</version>
+         <version>**1.3.1**</version>
      </dependency>
 </dependencies>
 
@@ -479,14 +482,14 @@ For this specific project, the `pom.xml` file needs to be edited. The file can b
             <manifest>
                 <addClasspath>true</addClasspath>
                 <classpathPrefix>lib/</classpathPrefix>
-                <mainClass>main.java.StarTrace</mainClass>
+                <mainClass>**main.java.StarTrace**</mainClass>
             </manifest>
         </archive>
     </configuration>
 </plugin>
 ```
 
-We will now create the java directory that will contain our `StarTrace.java` file and create the `StarTrace.jave file:
+We will now create the java directory that will contain our `StarTrace.java` file and create the `StarTrace.java` file:
 ```
 mkdir src && cd src
 mkdir main && cd main
@@ -498,7 +501,16 @@ This file will be used in the following sections.
 
 ##### Create the Schema
 
-Before we can import data or run queries, we need to create our indexes and the fields within them. Let's create the repository index first. Copy the following into the StarTrace.java file:
+Before we can import data or run queries, we need to create our schema. The following imports implement the java-pilosa:
+```
+import com.pilosa.client.PilosaClient;
+import com.pilosa.client.QueryResponse;
+import com.pilosa.client.exceptions.PilosaException;
+import com.pilosa.client.orm.*;
+import com.pilosa.client.csv.FileRecordIterator;
+import com.pilosa.client.TimeQuantum;
+```
+The first steps to creating the schema are creating a client which will communicate our schema to Pilosa, creating a schema which will contain our indexes and fields, and syncing with Pilosa. This is all done in the `StarTrace.java` file:
 ```
 package main.java;
 
@@ -517,11 +529,16 @@ public class StarTrace {
         // Create the Schema
         PilosaClient client = PilosaClient.defaultClient();
         Schema schema = client.readSchema();
-        Index repository = schema.index("repository");
+        // This is were the index will go later
 	// This is were the fields will go later
         client.syncSchema(schema);
     }
 }
+```
+
+Next, let's create the `repository` index:
+```
+	Index repository = schema.index("repository");
 ```
 The index name must be 64 characters or less, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
 
@@ -538,6 +555,7 @@ Next up is the `language` field, which will contain IDs for programming language
 ```
 	Field language = repository.field("language");
 ```
+The `language` field is a `set` field, but since the default field type is `set`, we don't need to specify it
 
 Your `StarTrace.java` file should look like:
 ```
@@ -573,7 +591,7 @@ public class StarTrace {
 
 ##### Import Data From CSV Files
 
-Now that we have our index and our fields, we can import the data we downloaded earlier and soon be making our own queries.
+Now that we have our index and our fields, we can import the data we downloaded earlier and be on our way to making our own queries.
 
 First, we will load our data into the `stargazer` field:
 ```
@@ -581,18 +599,18 @@ First, we will load our data into the `stargazer` field:
         FileRecordIterator iterator = FileRecordIterator.fromPath("stargazer.csv", stargazer, timestampFormat);
         client.importField(stargazer, iterator);
 ```
-Due to the time aspect of the `stargazer` field, we have to specify the format of the time stamps using the `SimpleDateFormat()` function.
+Due to the time aspect of the `stargazer` csv file, we have to specify the time stamp format in the `fromPath` function. We set the variable `timestampFormat` to the format present in the csv file using the function `SimpleDateFormat()` and call the variable in the `fromPath` function, which will take the csv file name, the field name, and the time stamp format and translate the csv file into a format Pilosa can read.
 
 Next, we will load our data into the `language` field:
 ```
 	iterator = FileRecordIterator.fromPath("language.csv", language);
         client.importField(language, iterator);
 ```
-The `language` is a `set` field, but since the default field type is `set`, we didn't need to specify it.
-
-For more information on imports in java-pilosa, please see the java-pilosa [site](https://github.com/pilosa/java-pilosa/blob/master/docs/imports.md).
+Since our `language` data doesn't have a time aspect, the time stamp format doesn't need to be specified.
 
 Note that both the user IDs and the repository IDs were remapped to sequential integers in the data files, they don't correspond to actual Github IDs anymore. You can check out [languages.txt](https://github.com/pilosa/getting-started/blob/master/languages.txt) to see the mapping for languages.
+
+For more information on imports in java-pilosa, please see the java-pilosa [site](https://github.com/pilosa/java-pilosa/blob/master/docs/imports.md).
 
 ##### Make Some Queries
 
@@ -655,7 +673,7 @@ Set user 99999 as a stargazer for repository 77777
 Please note that while user ID 99999 may not be sequential with the other column IDs, it is still a relatively low number. 
 Don't try to use arbitrary 64-bit integers as column or row IDs in Pilosa - this will lead to problems such as poor performance and out of memory errors.
 
-For more information about java-pilosa, please see our Java client library for [java-pilosa](https://github.com/pilosa/java-pilosa)
+For more information about java-pilosa, please see our Java client library at [java-pilosa](https://github.com/pilosa/java-pilosa) or checkout the java-pilosa [Data Model and Queries](https://github.com/pilosa/java-pilosa/blob/master/docs/data-model-queries.md) section for more query options.
 
 #### Python Users
 
@@ -672,7 +690,7 @@ In this folder, we will download two CSV files to provide data to our fields lat
 curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/stargazer.csv
 curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/language.csv
 ```
-We will also download two `.txt` files. One is the `requirements.txt` that will install python-pilosa and the other is `languages.txt` which will provide context to the `language` field.
+We will also download two text files. One is the `requirements.txt` that will install python-pilosa later on and the other is `languages.txt` which will provide context to the `language` field.
 ```
 curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/python/requirements.txt
 curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/language.txt
@@ -682,12 +700,12 @@ We will now create the python environment:
 python3 -m venv startrace
 ```
 
-Next, we activate the python environment we created and install the requirements:
+Next, we activate the python environment we created and install the requirements (and python-pilosa):
 ```
 source startrace/bin/activate
 pip install -r requirements.txt
 ```
-We will also create a file called StarTrace.py as follows:
+We will also create a file called `StarTrace.py` as follows:
 ```
 touch StarTrace.py
 ```
@@ -695,7 +713,14 @@ This file will be used in the following sections.
 
 ##### Create the Schema
 
-Before we can import data or run queries, we need to create our indexes and the fields within them. Let's create the repository index first. Copy the following into the StarTrace.py file:
+Before we can import data or run queries, we need to create our schema. The following imports implement the python-pilosa. This is all done in the `StarTrace.py` file:
+```
+import pilosa
+from pilosa import Client, Index, TimeQuantum
+from pilosa.imports import csv_column_reader, csv_row_id_column_id
+```
+
+The first steps to creating the schema are creating a client which will communicate our schema to Pilosa, creating a schema which will contain our indexes and fields, and syncing with Pilosa:
 ``` 
 from __future__ import print_function
 
@@ -707,14 +732,23 @@ import pilosa
 from pilosa import Client, Index, TimeQuantum
 from pilosa.imports import csv_column_reader, csv_row_id_column_id
 
-from io import StringIO
+try:
+	# Python 2.7 and 3
+	from io import StringIO
+except ImportError:
+	# Python 2.6 and 2.7
+	from StringIO import StringIO
 
 # Create the Schema
 client = pilosa.Client()
 schema = client.schema()
-repository = schema.index("repository")
+# This is where the index will go later
 # This is where the fields will go later
 client.sync_schema(schema)
+```
+Next, let's create the `repository` index:
+```
+repository = schema.index("repository")
 ```
 The index name must be 64 characters or less, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
 
@@ -722,12 +756,14 @@ Let's create the `stargazer` field which has user IDs of stargazers as its rows:
 ```
 stargazer = repository.field("stargazer", time_quantum=pilosa.TimeQuantum.YEAR_MONTH_DAY)
 ```
-Since our data contains time stamps which represent the time users starred repos, we set the field type to `time` using `time_quantum`. Time quantum is the resolution of the time we want to use, and we set it to `YEAR_MONTH-DAY` for `stargazer`.
+Since our data contains time stamps which represent the time users starred repos, we establish the time aspect by using `time_quantum`. Time quantum is the resolution of the time we want to use, and we set it to `YEAR_MONTH-DAY` for `stargazer`.
 
 Next up is the `language` field, which will contain IDs for programming languages:
 ```
 language = repository.field("language")
 ```
+The `language` field is a `set` field, but since the defualt field is `set`, we didn't need to specify any options.
+
 Your `StarTrace.py` file should look like:
 ```
 from __future__ import print_function
@@ -740,7 +776,12 @@ import pilosa
 from pilosa import Client, Index, TimeQuantum
 from pilosa.imports import csv_column_reader, csv_row_id_column_id
 
-from io import StringIO
+try:
+        # Python 2.7 and 3
+        from io import StringIO
+except ImportError:
+        # Python 2.6 and 2.7
+        from StringIO import StringIO
 
 # Create the Schema
 client = pilosa.Client()
@@ -753,7 +794,7 @@ client.sync_schema(schema)
 
 ##### Import Data From CSV Files
 
-Now that we have our index and our fields, we can import the data we downloaded earlier and soon be making our own queries.
+Now that we have our index and our fields, we can import the data we downloaded earlier and be on our way to making our own queries.
 
 First, we will load our data into the `stargazer` field:
 ```
@@ -762,7 +803,7 @@ with open("stargazer.csv") as f:
     stargazer_reader = csv_column_reader(f, timefunc=time_func)
     client.import_field(stargazer, stargazer_reader)
 ```
-Due to the time aspect of the `stargazer` field, we have to specify the format of the time stamps using the `time_func` variable.
+Due to the time aspect of the `stargazer` csv file, we have to specify the time stamp format in the `csv_column_reader` function. We set the variable `time_func` to the format present in the csv file and call it in the `csv_column_reader` function, which will take the csv file and the time stamp format and translate the csv file into a format Pilosa can read
 
 Next, we will load our data into the `language` field:
 ```
@@ -854,7 +895,7 @@ Set user 99999 as a stargazer for repository 77777
 Please note that while user ID 99999 may not be sequential with the other column IDs, it is still a relatively low number. 
 Don't try to use arbitrary 64-bit integers as column or row IDs in Pilosa - this will lead to problems such as poor performance and out of memory errors.
 
-For more information about python-pilosa, please see our Python client library for [python-pilosa](https://github.com/pilosa/python-pilosa).
+For more information about python-pilosa, please see our Python client library at [python-pilosa](https://github.com/pilosa/python-pilosa) or checkout the python-pilosa [Data Model and Queries](https://github.com/pilosa/python-pilosa/blob/master/docs/data-model-queries.md) section for more query options.
 
 ### What's Next?
 
