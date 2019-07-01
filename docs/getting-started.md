@@ -44,7 +44,7 @@ In order to better understand Pilosa's capabilities, we will create a sample pro
 
 Although Pilosa doesn't keep the data in a tabular format, we still use the terms "columns" and "rows" when describing the data model. We put the primary objects in columns, and the properties of those objects in rows. For example, the Star Trace project will contain an index called "repository" which contains columns representing Github repositories, and rows representing properties like programming languages and stargazers. We can better organize the rows by grouping them into sets called Fields. So the "repository" index might have a "languages" field as well as a "stargazers" field. You can learn more about indexes and fields in the [Data Model](../data-model/) section of the documentation.
 
-Pilosa as an organization supports curl (or any HTTP tool), Go, Java, and Python. However, Pilosa as a server will support any client that can send requests to it. In this project, we will walk you through how to use each one to best communicate with the Pilosa server.
+Pilosa officially supports curl (or any HTTP tool), Go, Java, and Python, however it will accept any client that can send requests to it. In this project, we will walk you through how to use each one to best communicate with the Pilosa server.
 
 Note: If at any time you want to verify the data structure, you can request the schema as follows:
 
@@ -52,9 +52,40 @@ Note: If at any time you want to verify the data structure, you can request the 
 curl localhost:10101/schema
 ```
 ``` response
-{"indexes":[{"name":"repository","options":{"keys":false,"trackExistence":true},"fields":[{"name":"language","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}},{"name":"stargazer","options":{"type":"time","timeQuantum":"YMDH","keys":false,"noStandardView":false}}],"shardWidth":1048576}}
+{
+  "indexes": [
+    {
+      "name": "repository",
+      "options": {
+        "keys": false,
+        "trackExistence": true
+      },
+      "fields": [
+        {
+          "name": "language",
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": false
+          }
+        },
+        {
+          "name": "stargazer",
+          "options": {
+            "type": "time",
+            "timeQuantum": "YMDH",
+            "keys": false,
+            "noStandardView": false
+          }
+        }
+      ],
+      "shardWidth": 1048576
+    }
+  ]
+}
 ```
-Note: This is the response you should recieve once completing this project.
+Note: This is the response you should receive once completing this project. It has also been formatted using `jq`.
 
 #### Using Curl
 
@@ -108,6 +139,14 @@ Run the following commands to import the data into Pilosa:
 ```
 pilosa import -i repository -f stargazer stargazer.csv
 pilosa import -i repository -f language language.csv
+```
+
+If you are using a Docker container for Pilosa (with name `pilosa`), you should instead copy the `*.csv` file into the container and then import them:
+```
+docker cp stargazer.csv pilosa:/stargazer.csv
+docker exec -it pilosa /pilosa import -i repository -f stargazer /stargazer.csv
+docker cp language.csv pilosa:/language.csv
+docker exec -it pilosa /pilosa import -i repository -f language /language.csv
 ```
 
 Note that both the user IDs and the repository IDs were remapped to sequential integers in the data files, they don't correspond to actual Github IDs anymore. You can check out [languages.txt](https://github.com/pilosa/getting-started/blob/master/languages.txt) to see the mapping for languages.
@@ -227,18 +266,18 @@ Don't try to use arbitrary 64-bit integers as column or row IDs in Pilosa - this
 
 #### Using Go
 
-Pilosa requires Go 1.12 or higher.
+Pilosa supports the two most recent versions of Go.
 
 ##### Create the Environment
 
-In order to communicate with Pilosa through your Go code, you must have a client, which is go-pilosa. To install go-pilosa, open a terminal (one other than the one running Pilosa) and download the library to your `GOPATH` using:
+Interacting with Pilosa in your go program is best accomplished using our client, go-pilosa. To install go-pilosa, open a new  terminal and download the library to your `GOPATH` using:
 ``` 
 go get github.com/pilosa/go-pilosa
 ```
 
-To contain the Getting Started project in one place, we will create a new folder as follows:
+Create a project folder:
 ```
-mkdir getting_started && cd getting_started
+mkdir getting-started && cd getting-started
 ```
 
 In this folder, we will download two CSV files to provide data to our fields later on. Download the `stargazer.csv` and `language.csv` files here:
@@ -255,7 +294,7 @@ This file will be used in the following sections.
 
 ##### Create the Schema
 
-Before we can import data or run queries, we need to create our schema. You can see two imports from the go-pilosa repo, go-pilosa for the client, and csv for the CSV reader. Create the schema by creating a client which will communicate our schema to Pilosa, creating a schema which will contain our indexes and fields, and syncing with Pilosa. This is all done in the `startrace.go` file:
+Before we can import data or run queries, we need to create our schema. You can see two imports from the go-pilosa repo, go-pilosa for the client, and csv for the CSV reader. Create the schema by creating a client (which will communicate our schema to Pilosa), creating a schema locally (which will contain our indexes and fields), and syncing with Pilosa. This is all done in the `startrace.go` file:
 ``` 
 package main
 
@@ -450,9 +489,9 @@ Pilosa requires Java 8 or higher and Maven 3 or higher.
 
 ##### Create the Environment
 
-To contain the Getting Started project in one place, we will create a new folder as follows:
+Create a project folder:
 ```
-mkdir getting_started && cd getting_started
+mkdir getting-started && cd getting-started
 ```
 
 In this folder, we will download two CSV files to provide data to our fields later on. Download the `stargazer.csv` and `language.csv` files here:
@@ -461,61 +500,92 @@ curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/stargaze
 curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/language.csv
 ```
 
-We will now create the java directory that will contain our `pom.xml` file and then import the `pom.xml` file:
+We will now create the java directory that will contain our `pom.xml` file and create the `pom.xml` file:
 ```
 mkdir startrace && cd startrace
-curl -O https://raw.githubusercontent.com/pilosa/getting-started/master/java/startrace/pom.xml
+touch pom.xml
 ```
 
-For this specific project, the `pom.xml` file needs to be edited. The file can be edited by typing `nano pom.xml` directly into the terminal or simply using your code editing software. The following needs to be changed:
+For this specific project, the `pom.xml` file needs to contain:
 ```
-<dependencies>
-     <dependency>
-         <groupId>com.pilosa</groupId>
-         <artifactId>pilosa-client</artifactId>
-         <version>**1.3.1**</version>
-     </dependency>
-</dependencies>
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
 
-<!-- Build an executable JAR -->
-<plugin>
-    <groupId>org.apache.maven.plugins</groupId>
-    <artifactId>maven-jar-plugin</artifactId>
-    <version>3.0.2</version>
-    <configuration>
-        <archive>
-            <manifest>
-                <addClasspath>true</addClasspath>
-                <classpathPrefix>lib/</classpathPrefix>
-                <mainClass>**main.java.startrace**</mainClass>
-            </manifest>
-        </archive>
-    </configuration>
-</plugin>
+    <groupId>com.pilosa</groupId>
+    <artifactId>getting-started</artifactId>
+    <version>1.0.0</version>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.pilosa</groupId>
+            <artifactId>pilosa-client</artifactId>
+            <version>1.3.1</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.6.1</version>
+                <configuration>
+                    <source>1.8</source>
+                    <target>1.8</target>
+                </configuration>
+            </plugin>
+
+            <!-- Build an executable JAR -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.0.2</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <addClasspath>true</addClasspath>
+                            <classpathPrefix>lib/</classpathPrefix>
+                            <mainClass>main.java.StarTrace</mainClass>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+
+            <!-- create an uber JAR -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.0.0</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+
+</project>
 ```
 
-We will now create the java directory that will contain our `startrace.java` file and create the `startrace.java` file:
+We will now create the java directory that will contain our `StarTrace.java` file and create the `StarTrace.java` file:
 ```
-mkdir src && cd src
-mkdir main && cd main
-mkdir java && cd java
-touch startrace.go
+mkdir -p src/main/java && cd src/main/java
+touch StarTrace.java
 ```
 
 This file will be used in the following sections.
 
 ##### Create the Schema
 
-Before we can import data or run queries, we need to create our schema. The following imports can be seen from the java-pilosa repo:
-```
-import com.pilosa.client.PilosaClient;
-import com.pilosa.client.QueryResponse;
-import com.pilosa.client.exceptions.PilosaException;
-import com.pilosa.client.orm.*;
-import com.pilosa.client.csv.FileRecordIterator;
-import com.pilosa.client.TimeQuantum;
-```
-Create the schema by creating a client which will communicate our schema to Pilosa, creating a schema which will contain our indexes and fields, and syncing with Pilosa. This is all done in the `startrace.java` file:
+Before we can import data or run queries, we need to create our schema. The first 6 dependencies are imported from the java-pilosa library. Create the schema by creating a client which will communicate our schema to Pilosa, creating a schema which will contain our indexes and fields, and syncing with Pilosa. This is all done in the `StarTrace.java` file:
 ```
 package main.java;
 
@@ -529,7 +599,7 @@ import com.pilosa.client.TimeQuantum;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 
-public class startrace {
+public class StarTrace {
     public static void main(String []args) throws IOException {
         // Create the Schema
         PilosaClient client = PilosaClient.defaultClient();
@@ -562,7 +632,7 @@ Next up is the `language` field, which will contain IDs for programming language
 ```
 The `language` field is a `set` field, but since the default field type is `set`, we don't need to specify it
 
-Your `startrace.java` file should look like:
+Your `StarTrace.java` file should look like:
 ```
 package main.java;
 
@@ -576,7 +646,7 @@ import com.pilosa.client.TimeQuantum;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 
-public class startrace {
+public class StarTrace {
     public static void main(String []args) throws IOException {
         // Create the Schema
         PilosaClient client = PilosaClient.defaultClient();
@@ -604,7 +674,7 @@ First, we will load our data into the `stargazer` field:
         FileRecordIterator iterator = FileRecordIterator.fromPath("stargazer.csv", stargazer, timestampFormat);
         client.importField(stargazer, iterator);
 ```
-Due to the time aspect of the `stargazer` csv file, we have to specify the time stamp format in the `fromPath` function. We set the variable `timestampFormat` to the format present in the csv file using the function `SimpleDateFormat()` and call the variable in the `fromPath` function, which will take the csv file name, the field name, and the time stamp format and translate the csv file into a format Pilosa can read.
+Due to the time aspect of the `stargazer` csv file, we have to specify the time stamp format in the `fromPath` function. We set the variable `timestampFormat` to the format present in the csv file using the function `SimpleDateFormat()` and pass the variable to the `fromPath` function, which will take the csv file name, the field name, and the time stamp format and translate the csv file into a format Pilosa can read.
 
 Next, we will load our data into the `language` field:
 ```
@@ -686,9 +756,9 @@ Pilosa requires Python 2.7 or higher or Python 3.4 or higher.
 
 ##### Create the Environment
 
-To contain the Getting Started project in one place, we will create a new folder as follows:
+Create a new project folder:
 ```
-mkdir getting_started && cd getting_started
+mkdir getting-started && cd getting-started
 ```
 In this folder, we will download two CSV files to provide data to our fields later on. Download the `stargazer.csv` and `language.csv` files here:
 ```
@@ -718,14 +788,7 @@ This file will be used in the following sections.
 
 ##### Create the Schema
 
-Before we can import data or run queries, we need to create our schema. The following imports can be seen from the python-pilosa repo. This is all done in the `startrace.py` file:
-```
-import pilosa
-from pilosa import Client, Index, TimeQuantum
-from pilosa.imports import csv_column_reader, csv_row_id_column_id
-```
-
-Create the schema by creating a client which will communicate our schema to Pilosa, creating a schema which will contain our indexes and fields, and syncing with Pilosa:
+Before we can import data or run queries, we need to create our schema. The dependencies dealing with `pilosa` are from the python-pilosa library. Create the schema by creating a client which will communicate our schema to Pilosa, creating a schema which will contain our indexes and fields, and syncing with Pilosa. This is all done in the `startrace.py` file:
 ``` 
 from __future__ import print_function
 
