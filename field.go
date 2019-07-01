@@ -84,6 +84,8 @@ type Field struct {
 	remoteAvailableShards *roaring.Bitmap
 
 	logger logger.Logger
+
+	snapshotQueue chan *fragment
 }
 
 // FieldOption is a functional option type for pilosa.fieldOptions.
@@ -838,6 +840,7 @@ func (f *Field) newView(path, name string) *view {
 	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats
 	view.broadcaster = f.broadcaster
+	view.snapshotQueue = f.snapshotQueue
 	return view
 }
 

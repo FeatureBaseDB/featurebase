@@ -78,6 +78,8 @@ type Holder struct {
 	cacheFlushInterval time.Duration
 
 	Logger logger.Logger
+
+	snapshotQueue chan *fragment
 }
 
 // lockedChan looks a little ridiculous admittedly, but exists for good reason.
@@ -152,6 +154,11 @@ func (h *Holder) Open() error {
 		return errors.Wrap(err, "reading directory")
 	}
 
+	// Run snapshots asynchronously. The snapshotQueue will have a background
+	// task associated with it which flushes it and waits until this channel
+	// is closed, so we should always close this channel when done.
+	h.snapshotQueue = newSnapshotQueue(100, 2, h.Logger)
+
 	for _, fi := range fis {
 		// Skip files or hidden directories.
 		if !fi.IsDir() || strings.HasPrefix(fi.Name(), ".") {
@@ -202,6 +209,11 @@ func (h *Holder) Close() error {
 		if err := index.Close(); err != nil {
 			return errors.Wrap(err, "closing index")
 		}
+	}
+	if h.snapshotQueue != nil {
+		close(h.snapshotQueue)
+		// assuming the snapshotQueueWorker has already started, this is safe.
+		h.snapshotQueue = nil
 	}
 
 	if h.translateFile != nil {
@@ -425,6 +437,7 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	index.broadcaster = h.broadcaster
 	index.newAttrStore = h.NewAttrStore
 	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ".data"))
+	index.snapshotQueue = h.snapshotQueue
 	return index, nil
 }
 

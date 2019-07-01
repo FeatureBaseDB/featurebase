@@ -53,7 +53,8 @@ type Index struct {
 	broadcaster broadcaster
 	Stats       stats.StatsClient
 
-	logger logger.Logger
+	logger        logger.Logger
+	snapshotQueue chan *fragment
 }
 
 // NewIndex returns a new instance of Index.
@@ -408,6 +409,7 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	f.Stats = i.Stats
 	f.broadcaster = i.broadcaster
 	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
+	f.snapshotQueue = i.snapshotQueue
 	return f, nil
 }
 
