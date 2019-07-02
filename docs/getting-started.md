@@ -44,7 +44,7 @@ In order to better understand Pilosa's capabilities, we will create a sample pro
 
 Although Pilosa doesn't keep the data in a tabular format, we still use the terms "columns" and "rows" when describing the data model. We put the primary objects in columns, and the properties of those objects in rows. For example, the Star Trace project will contain an index called "repository" which contains columns representing Github repositories, and rows representing properties like programming languages and stargazers. We can better organize the rows by grouping them into sets called Fields. So the "repository" index might have a "languages" field as well as a "stargazers" field. You can learn more about indexes and fields in the [Data Model](../data-model/) section of the documentation.
 
-Pilosa officially supports curl (or any HTTP tool), Go, Java, and Python, however it will accept any client that can send requests to it. In this project, we will walk you through how to use each one to best communicate with the Pilosa server.
+Pilosa officially supports three client libraries, for Go, Java and Python. You can also use any HTTP client, such as curl, for quick testing, but official client libraries are the preferred method in production code.
 
 Note: If at any time you want to verify the data structure, you can request the schema as follows:
 
@@ -88,8 +88,6 @@ curl localhost:10101/schema
 Note: This is the response you should receive once completing this project. It has also been formatted using `jq`.
 
 #### Using Curl
-
-Note: This is not the recommended way to interact with Pilosa, but it is the fastest way to see the efficiency of Pilosa.
 
 ##### Create the Schema
 
@@ -266,7 +264,7 @@ Don't try to use arbitrary 64-bit integers as column or row IDs in Pilosa - this
 
 #### Using Go
 
-Pilosa supports the two most recent versions of Go.
+Pilosa follows the Go policy of supporting the two most recent major versions of Go.
 
 ##### Create the Environment
 
@@ -585,7 +583,7 @@ This file will be used in the following sections.
 
 ##### Create the Schema
 
-Before we can import data or run queries, we need to create our schema. The first 6 dependencies are imported from the java-pilosa library. Create the schema by creating a client which will communicate our schema to Pilosa, creating a schema which will contain our indexes and fields, and syncing with Pilosa. This is all done in the `StarTrace.java` file:
+Before we can import data or run queries, we need to create our schema. You can see the first six dependencies are imported from the java-pilosa library. Create the schema by creating a client which will communicate our schema to Pilosa, creating a schema which will contain our indexes and fields, and syncing with Pilosa. This is all done in the `StarTrace.java` file:
 ```
 package main.java;
 
@@ -788,7 +786,7 @@ This file will be used in the following sections.
 
 ##### Create the Schema
 
-Before we can import data or run queries, we need to create our schema. The dependencies dealing with `pilosa` are from the python-pilosa library. Create the schema by creating a client which will communicate our schema to Pilosa, creating a schema which will contain our indexes and fields, and syncing with Pilosa. This is all done in the `startrace.py` file:
+Before we can import data or run queries, we need to create our schema. You can see the dependencies dealing with `pilosa` are from the python-pilosa library. Create the schema by creating a client which will communicate our schema to Pilosa, creating a schema which will contain our indexes and fields, and syncing with Pilosa. This is all done in the `startrace.py` file:
 ``` 
 from __future__ import print_function
 
