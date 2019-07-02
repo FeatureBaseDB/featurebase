@@ -46,7 +46,7 @@ Although Pilosa doesn't keep the data in a tabular format, we still use the term
 
 Pilosa officially supports three client libraries, for Go, Java and Python. You can also use any HTTP client, such as curl, for quick testing, but official client libraries are the preferred method in production code.
 
-Note: If at any time you want to verify the data structure, you can request the schema as follows:
+If at any time you want to verify the data structure, you can request the schema as follows:
 
 ``` request
 curl localhost:10101/schema
