@@ -46,11 +46,12 @@ Although Pilosa doesn't keep the data in a tabular format, we still use the term
 
 <div class="note">
     <p>If at any time you want to verify the data structure, you can request the schema as follows:</p>
+</div>
 
-<code request>
+```request
 curl localhost:10101/schema
-</code>
-<code response>
+```
+```response
 {
   "indexes": [
     {
@@ -83,8 +84,9 @@ curl localhost:10101/schema
     }
   ]
 }
-</code>
-    <p>Note: This is the response you should receive once completing this project. It has also been formatted using [`jq`](https://stedolan.github.io/jq/). <\p>
+```
+<div class="note">
+    <p>Note: This is the response you should receive once completing this project. It has also been formatted using <code>[jq](https://stedolan.github.io/jq/)</code>. </p>
 </div>
 
 #### Using Curl
