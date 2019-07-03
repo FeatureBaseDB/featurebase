@@ -75,6 +75,10 @@ func (sc *sliceContainers) Remove(key uint64) {
 	if i < 0 {
 		return
 	}
+	if key == sc.lastKey {
+		sc.lastKey = ^uint64(0)
+		sc.lastContainer = nil
+	}
 	sc.keys = append(sc.keys[:i], sc.keys[i+1:]...)
 	sc.containers = append(sc.containers[:i], sc.containers[i+1:]...)
 
@@ -158,6 +162,18 @@ func (sc *sliceContainers) Reset() {
 	sc.lastKey = 0
 }
 
+func (sc *sliceContainers) ResetN(n int) {
+	if cap(sc.keys) < n {
+		sc.keys = make([]uint64, 0, n)
+		sc.containers = make([]*Container, 0, n)
+	} else {
+		sc.keys = sc.keys[:0]
+		sc.containers = sc.containers[:0]
+	}
+	sc.lastContainer = nil
+	sc.lastKey = 0
+}
+
 func (sc *sliceContainers) seek(key uint64) (int, bool) {
 	i := search64(sc.keys, key)
 	found := true
@@ -204,9 +220,9 @@ func (sc *sliceContainers) Update(key uint64, fn func(*Container, bool) (*Contai
 // UpdateEvery calls fn (existing-container, existed), and expects
 // (new-container, write). If write is true, the container is used to
 // replace the given container.
-func (sc *sliceContainers) UpdateEvery(fn func(*Container, bool) (*Container, bool)) {
+func (sc *sliceContainers) UpdateEvery(fn func(uint64, *Container, bool) (*Container, bool)) {
 	for i, c := range sc.containers {
-		nc, write := fn(c, true)
+		nc, write := fn(sc.keys[i], c, true)
 		if write {
 			sc.containers[i] = nc
 		}

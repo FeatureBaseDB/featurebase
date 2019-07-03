@@ -377,7 +377,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 
 #### Tracing Sampler Type
 
-* Description: Jaeger sampler type (const, probabilistic, ratelimiting, or remote)
+* Description: Jaeger sampler type (const, probabilistic, ratelimiting, or remote). Set to 'off' to disable tracing completely.
 * Flag: `tracing.sampler-type`
 * Env: `PILOSA_TRACING_SAMPLER_TYPE`
 * Config:

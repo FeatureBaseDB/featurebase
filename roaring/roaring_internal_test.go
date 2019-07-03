@@ -3356,38 +3356,82 @@ func runContainerFunc(f interface{}, c ...*Container) *Container {
 	return nil
 }
 
-func TestUnmarshalOfficialRoaring(t *testing.T) {
-	//generated serialize image from java(clojure) with arrays
-	rbContainerWithTwoArrays, _ := hex.DecodeString("3A300000020000000000020001000000180000001E0000000100020003000100")
-	bm := NewBitmap()
-	er := bm.UnmarshalBinary(rbContainerWithTwoArrays)
-	if er != nil {
-		t.Fatalf("UnmarshalOfficialRoaring %s", er)
+func TestUnmarshalRoaringWithNoErrors(t *testing.T) {
+	testCases := []struct {
+		roaringData     string
+		roaringFileName string
+		count           uint64
+		expectedBits    string
+	}{
+		{ // generated serialize image from java(clojure) with arrays
+			roaringData:  "3A300000020000000000020001000000180000001E0000000100020003000100",
+			count:        4,
+			expectedBits: "[1 2 3 65537]",
+		},
+		{ // generated serialize image from java(clojure) with a run and array
+			roaringData:  "3B3001000100000900010000000100010009000100",
+			count:        11,
+			expectedBits: "[1 2 3 4 5 6 7 8 9 10 65537]",
+		},
+		{ // had to use an external file because emacs was barfing on the long line :()
+			roaringFileName: "testdata/bitmapcontainer.roaringbitmap",
+			count:           10000,
+			expectedBits:    "X",
+		},
 	}
-	if bm.Count() != 4 {
-		t.Fatalf("unexpected bitmap %v expected bits [1 2 3 65537]", bm.Slice())
+	var testContainer []byte
+	var err error
+	for _, testCase := range testCases {
+		if testCase.roaringFileName == "" {
+			testContainer, err = hex.DecodeString(testCase.roaringData)
+			if err != nil {
+				t.Fatalf("hex decode %s", err)
+			}
+		} else {
+			testContainer, _ = ioutil.ReadFile(testCase.roaringFileName)
+		}
+		bm := NewBitmap()
+		err = bm.UnmarshalBinary(testContainer)
+		if err != nil {
+			t.Fatalf("UnmarshalOfficialRoaring %s", err)
+		}
+		if bm.Count() != testCase.count {
+			t.Fatalf("expecting %s got %d", testCase.expectedBits, bm.Count())
+		}
 	}
-	//generated serialize image from java(clojure) with a run and array
-	rbContainerWithRLEandArray, _ := hex.DecodeString("3B3001000100000900010000000100010009000100")
-	bm = NewBitmap()
-	er = bm.UnmarshalBinary(rbContainerWithRLEandArray)
-	if er != nil {
-		t.Fatalf("UnmarshalOfficialRoaring %s", er)
-	}
-	if bm.Count() != 11 {
-		t.Fatalf("unexpected bitmap %v expected bits [1 2 3 4 5 6 7 8 9 10 65537]", bm.Slice())
-	}
-	//had to use an external file because emacs was barfing on the long line :()
-	_bitmap_array_container, _ := ioutil.ReadFile("testdata/bitmapcontainer.roaringbitmap")
-	bm = NewBitmap()
-	er = bm.UnmarshalBinary(_bitmap_array_container)
-	if er != nil {
-		t.Fatalf("UnmarshalOfficialRoaring %s", er)
-	}
-	if bm.Count() != 10000 {
-		t.Fatalf("expecting X got %d", bm.Count())
-	}
+}
 
+func TestUnmarshalRoaringWithErrors(t *testing.T) {
+	//testing bitmaps with no containers
+	noContainers := []struct {
+		hexString     string
+		expectedError string
+	}{
+		{ // Runs a bitmap without runs and no containers through the official roaring
+			hexString:     "3A30000000000000",
+			expectedError: "reading roaring header: malformed bitmap, key-cardinality slice overruns buffer at 8",
+		},
+		{ // Runs a bitmap with runs and no containers through the official roaring
+			hexString:     "3B30000000000000",
+			expectedError: "reading roaring header: malformed bitmap, key-cardinality slice overruns buffer at 9",
+		},
+		{ // Runs a bitmap in the Pilosa format through the Pilosa roaring
+			hexString: "3C30000000000000",
+		},
+	}
+	for _, loopContainers := range noContainers {
+		zeroContainers, err := hex.DecodeString(loopContainers.hexString)
+		if err != nil {
+			t.Fatalf("hex decode %s", err)
+		}
+		bm := NewBitmap()
+		err = bm.UnmarshalBinary(zeroContainers)
+		if err != nil {
+			if err.Error() != loopContainers.expectedError {
+				t.Fatalf("Expected: %s, Got: %s", loopContainers.expectedError, err)
+			}
+		}
+	}
 }
 
 func BenchmarkUnionBitmapBitmapInPlace(b *testing.B) {
