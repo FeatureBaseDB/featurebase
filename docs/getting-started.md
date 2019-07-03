@@ -45,13 +45,12 @@ In order to better understand Pilosa's capabilities, we will create a sample pro
 Although Pilosa doesn't keep the data in a tabular format, we still use the terms "columns" and "rows" when describing the data model. We put the primary objects in columns, and the properties of those objects in rows. For example, the Star Trace project will contain an index called "repository" which contains columns representing Github repositories, and rows representing properties like programming languages and stargazers. We can better organize the rows by grouping them into sets called Fields. So the "repository" index might have a "languages" field as well as a "stargazers" field. You can learn more about indexes and fields in the [Data Model](../data-model/) section of the documentation.
 
 <div class="note">
- <p>If at any time you want to verify the data structure, you can request the schema as follows:<\p>
-<\div>
+    <p>If at any time you want to verify the data structure, you can request the schema as follows:</p>
 
-``` request
+<code request>
 curl localhost:10101/schema
-```
-``` response
+</code>
+<code response>
 {
   "indexes": [
     {
@@ -84,9 +83,8 @@ curl localhost:10101/schema
     }
   ]
 }
-```
-<div class="note">
-	<p>Note: This is the response you should receive once completing this project. It has also been formatted using `jq`. <\p>
+</code>
+    <p>Note: This is the response you should receive once completing this project. It has also been formatted using [`jq`](https://stedolan.github.io/jq/). <\p>
 </div>
 
 #### Using Curl
@@ -100,7 +98,7 @@ curl localhost:10101/index/repository -X POST
 ``` response
 {"success":true}
 ```
-The index name must be 64 characters or less, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
+The index name must be 64 characters or fewer, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
 
 Let's create the `stargazer` field which has user IDs of stargazers as its rows:
 ``` request
@@ -325,7 +323,7 @@ Next, let's create the `repository` index:
 	repository := schema.Index("repository")
 ```
 
-The index name must be 64 characters or less, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
+The index name must be 64 characters or fewer, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
 
 Let's create the `stargazer` field which has user IDs of stargazers as its rows:
 ```
@@ -615,7 +613,7 @@ Next, let's create the `repository` index:
 ```
 	Index repository = schema.index("repository");
 ```
-The index name must be 64 characters or less, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
+The index name must be 64 characters or fewer, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
 
 Let's create the `stargazer` field which has user IDs of stargazers as its rows:
 ```
@@ -624,7 +622,7 @@ Let's create the `stargazer` field which has user IDs of stargazers as its rows:
             .build();
         Field stargazer = repository.field("stargazer", stargazerOptions);
 ```
-Since our data contains time stamps which represent the time users starred repos, we set the field type to `time` using `fieldTime()`. Time quantum is the resolution of the time we want to use, and we set it to `YEAR_MONTH-DAY` for `stargazer`.
+Since our data contains time stamps which represent the time users starred repos, we set the field type to `time` using `fieldTime()`. Time quantum is the resolution of the time we want to use, and we set it to `YEAR_MONTH_DAY` for `stargazer`.
 
 Next up is the `language` field, which will contain IDs for programming languages:
 ```
@@ -775,7 +773,7 @@ We will now create the python environment:
 python3 -m venv startrace
 ```
 
-Next, we activate the python environment we created and install the requirements (and python-pilosa):
+Next, we activate the python environment we created and install the single dependency, python-pilosa:
 ```
 source startrace/bin/activate
 pip install -r requirements.txt
@@ -818,7 +816,7 @@ Next, let's create the `repository` index:
 ```
 repository = schema.index("repository")
 ```
-The index name must be 64 characters or less, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
+The index name must be 64 characters or fewer, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
 
 Let's create the `stargazer` field which has user IDs of stargazers as its rows:
 ```
