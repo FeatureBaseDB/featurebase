@@ -15,7 +15,7 @@ nav = [
 ## Getting Started
 
 Pilosa supports an HTTP interface which uses JSON by default.
-Any HTTP tool can be used to interact with the Pilosa server. The examples in this documentation will use curl which is available by default on many UNIX-like systems including Linux and MacOS. However, the best way to interface with the Pilosa server is through one of our three official client libraries. Pilosa currently supports [Go](https://github.com/pilosa/go-pilosa), [Java](https://github.com/pilosa/java-pilosa), and [Python](https://github.com/pilosa/python-pilosa).
+Any HTTP tool can be used to interact with the Pilosa server. The examples in this documentation will use [curl](https://curl.haxx.se/) which is available by default on many UNIX-like systems including Linux and MacOS. However, the best way to interface with the Pilosa server is through one of our three official client libraries. Pilosa currently supports [Go](https://github.com/pilosa/go-pilosa), [Java](https://github.com/pilosa/java-pilosa), and [Python](https://github.com/pilosa/python-pilosa).
 
 <div class="note">
     <p>Note that Pilosa server requires a high limit for open files. Check the documentation of your system to see how to increase it in case you hit that limit. See <a href="/docs/administration/#open-file-limits">Open File Limits</a> for more details.</p>
@@ -43,8 +43,6 @@ curl localhost:10101/status
 In order to better understand Pilosa's capabilities, we will create a sample project called "Star Trace" containing information about 1,000 popular Github repositories which have "go" in their name. The Star Trace index will include data points such as programming language and stargazers—people who have starred a project.
 
 Although Pilosa doesn't keep the data in a tabular format, we still use the terms "columns" and "rows" when describing the data model. We put the primary objects in columns, and the properties of those objects in rows. For example, the Star Trace project will contain an index called "repository" which contains columns representing Github repositories, and rows representing properties like programming languages and stargazers. We can better organize the rows by grouping them into sets called Fields. So the "repository" index might have a "languages" field as well as a "stargazers" field. You can learn more about indexes and fields in the [Data Model](../data-model/) section of the documentation.
-
-Pilosa officially supports three client libraries, for Go, Java and Python. You can also use any HTTP client, such as curl, for quick testing, but official client libraries are the preferred method in production code.
 
 <div class="note">
  <p>If at any time you want to verify the data structure, you can request the schema as follows:<\p>
