@@ -4,12 +4,8 @@ weight = 5
 nav = [
     "Overview",
     "Index",
-    "Column",
-    "Row",
     "Field",
     "Time Quantum",
-    "Attribute",
-    "Shard",
 ]
 +++
 
@@ -17,34 +13,38 @@ nav = [
 
 ### Overview
 
-The central component of Pilosa's data model is a boolean matrix. Each cell in the matrix is a single bit; if the bit is set, it indicates that a relationship exists between that particular row and column.
+The central component of Pilosa's data model is the index. An index can be thought of as a boolean matrix in which each cell in the matrix is a single bit; if the bit is set, it indicates that a relationship exists between that particular row and column.
 
 Rows and columns can represent anything (they could even represent the same set of things as in a [bigraph](https://en.wikipedia.org/wiki/Bigraph)). Pilosa can associate arbitrary key/value pairs (referred to as attributes) to rows and columns, but queries and storage are optimized around the core matrix.
 
-Pilosa lays out data first in rows, so queries which get all the set bits in one or many rows, or compute a combining operation—such as Intersect or Union—on multiple rows, are the fastest. Pilosa categorizes rows into different *fields* and quickly retrieves the top rows in a field sorted by the number of columns set in each row.
+Pilosa categorizes rows into different *fields* and makes queries which get all the set bits in one or many rows, or compute a combining operation — such as Intersect or Union — on multiple rows and possbily multiple fields. Pilosa can also quickly retrieve the top rows in a field sorted by the number of columns set in each row.
+
+<div class="note">
+    <font size="5"><b>Shard</b></font>
+    <p>Indexes are segmented into groups of columns called shards (previously known as slices). Each shard contains a fixed number of columns, which is the ShardWidth. ShardWidth is a constant that can only be modified at compile time, and before ingesting data. The default value is 2<sup>20</sup>.</p>
+    <p>Query operations run in parallel, and they are evenly distributed across a cluster via a consistent hash algorithm.</p>
+</div>
 
 Please note that Pilosa is most performant when row and column IDs are sequential starting from 0. You can deviate from this to some degree, but setting a bit with column ID 2<sup>63</sup> on a single-node cluster, for example, will not work well due to memory limitations.
 
 ![basic data model diagram](/img/docs/data-model.png)
 *Basic data model diagram*
 
-### Index
+##### Row
 
-The purpose of the Index is to represent a data namespace. You cannot perform cross-index queries.
+Rows are the horizantal sets of bits in the matrix. They are namespaced to each field within an index and are represented by a Bitmap. Row IDs are sequential, increasing integers that usually represent features of the column subject.
 
-### Column
+##### Column
 
-Column ids are sequential, increasing integers and they are common to all Fields within an Index. A single column often corresponds to a record in a relational table, although other configurations are possible, and sometimes preferable.
+Columns are the vertical sets of bits in the matrix. They are grouped into sets of 2<sup>20</sup> called Shards. Column IDs are sequential, increasing integers that are common to all fields within an index and represent different types of some item of interest. A single column often corresponds to a record in a relational table, although other configurations are possible, and sometimes preferable.
 
-### Row
+##### Attribute
 
-Row ids are sequential, increasing integers namespaced to each Field within an Index.
+Attributes are arbitrary key/value pairs that can be associated with either rows or columns. This metadata is stored in a separate BoltDB data structure.
 
-### Field
+Column-level attributes are common across an index. That is, each column attribute applies to all bits in the corresponding column, across all fields in an index. Row attributes apply to all bits in the corresponding row.
 
-Fields are used to segment rows within an index, for example to define different functional groups. A Pilosa field might correspond to a single field in a relational table, where each row in a standard Pilosa field represents a single possible value of the relational field. Similarly, an integer field could represent all possible integer values of a relational field.
-
-#### Relational Analogy
+##### Relational Analogy
 
 The Pilosa index is a flexible structure; it can represent any sort of high-cardinality binary matrix. We have explored a number of modeling patterns in Pilosa use cases; one accessible example is a direct analogy to the relational model, summarized here.
 
@@ -84,37 +84,25 @@ Sum(Row(Car-Make="Ford"), field=Age)
 
 This is one major component of Pilosa's ability to combine relationships from multiple data stores.
 
-#### Ranked
+### Index
 
-Ranked Fields maintain a sorted cache of column counts by Row ID (yielding the top rows by columns with a bit set in each). This cache facilitates the TopN query. The cache size defaults to 50,000 and can be set at Field creation.
+An index is a top level container in Pilosa, analogous to a database in a Relational Database Management System (RDBMS). It's purpose is to represent a data namespace for the Pilosa Bitmap. Pilosa stores the index in a format called Roaring, which both compresses the bitmaps in the rows and allows for efficient computation on them. By using Roaring, Pilosa is able to use Roaring's unary *count* operation and the binary operations *intersect*, *union*, *difference*, and *XOR* within an index when making queries. Cross-index queries are currently unavailable, but check back soon as Pilosa is constantly updating.
+
+### Field
+
+Fields are used to segment rows into different categories to organize the data for quering. They are created based on the user's need, so an index may have one field or it may have hundreds. Row IDs are namespaced by field such that the same row ID in a different field refers to a different row. For example, row 1 in field is not the same as row 1 in field 2. Fields also maintain a cache with a default size of 50,000. Their cache type can be set to either the ranked or least recently used (LRU) setting upon creation of the field. A ranked field maintains a list of row IDs sorted in descending order by the number of bits set in the row.
 
 ![ranked field diagram](/img/docs/field-ranked.png)
 *Ranked field diagram*
 
-#### LRU
-
-The LRU cache maintains the most recently accessed Rows.
+A LRU field maintains a similar list of row IDs sorted by the most recently accessed.
 
 ![lru field diagram](/img/docs/field-lru.png)
 *LRU field diagram*
 
-### Time Quantum
+Fields can also be one of five types.
 
-Setting a time quantum on a field creates extra views which allow ranged Row queries down to the time interval specified. For example, if the time quantum is set to `YMD`, ranged Row queries down to the granularity of a day are supported.
-
-### Attribute
-
-Attributes are arbitrary key/value pairs that can be associated with either rows or columns. This metadata is stored in a separate BoltDB data structure.
-
-Column-level attributes are common across an index. That is, each column attribute applies to all bits in the corresponding column, across all fields in an index. Row attributes apply to all bits in the corresponding row.
-
-### Shard
-
-Indexes are segmented into groups of columns called shards (previously known as slices). Each shard contains a fixed number of columns, which is the ShardWidth. ShardWidth is a constant that can only be modified at compile time, and before ingesting data. The default value is 2<sup>20</sup>.
-
-Query operations run in parallel, and they are evenly distributed across a cluster via a consistent hash algorithm.
-
-### Field Type
+#### Field Type
 
 Upon creation, fields are configured to be of a certain type. Pilosa supports the following field types: `set`, `int`, `bool`, `time`, and `mutex`.
 
@@ -195,6 +183,9 @@ Set(3, A=8, 2017-05-19T00:00)
 
 ![time quantum field diagram](/img/docs/field-time-quantum.png)
 *Time quantum field diagram*
+
+Setting a time quantum on a field creates extra views which allow ranged Row queries down to the time interval specified. For example, if the time quantum is set to `YMD`, ranged Row queries down to the granularity of a day are supported.
+
 
 #### Mutex
 
