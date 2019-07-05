@@ -99,6 +99,10 @@ func (btc *bTreeContainers) PutContainerValues(key uint64, typ byte, n int, mapp
 
 func (btc *bTreeContainers) Remove(key uint64) {
 	btc.tree.Delete(key)
+	if key == btc.lastKey {
+		btc.lastKey = ^uint64(0)
+		btc.lastContainer = nil
+	}
 }
 
 func (btc *bTreeContainers) GetOrCreate(key uint64) *Container {
@@ -185,6 +189,11 @@ func (btc *bTreeContainers) Reset() {
 	btc.lastContainer = nil
 }
 
+func (btc *bTreeContainers) ResetN(n int) {
+	// we ignore n because it's impractical to preallocate the tree
+	btc.Reset()
+}
+
 func (btc *bTreeContainers) Iterator(key uint64) (citer ContainerIterator, found bool) {
 	e, ok := btc.tree.Seek(key)
 	if ok {
@@ -215,7 +224,7 @@ func (btc *bTreeContainers) Update(key uint64, fn func(*Container, bool) (*Conta
 // UpdateEvery calls fn (existing-container, existed), and expects
 // (new-container, write). If write is true, the container is used to
 // replace the given container.
-func (btc *bTreeContainers) UpdateEvery(fn func(*Container, bool) (*Container, bool)) {
+func (btc *bTreeContainers) UpdateEvery(fn func(uint64, *Container, bool) (*Container, bool)) {
 	e, _ := btc.tree.Seek(0)
 	// currently not handling the error from this, but in practice it has
 	// to be io.EOF.

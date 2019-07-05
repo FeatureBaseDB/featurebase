@@ -894,7 +894,7 @@ func (e *enumerator) Next() (k uint64, v *Container, err error) {
 }
 
 // Every iterates over a tree.
-func (e *enumerator) Every(upd func(oldV *Container, exists bool) (newV *Container, write bool)) error {
+func (e *enumerator) Every(upd func(key uint64, oldV *Container, exists bool) (newV *Container, write bool)) error {
 	if err := e.err; err != nil {
 		return err
 	}
@@ -919,10 +919,10 @@ func (e *enumerator) Every(upd func(oldV *Container, exists bool) (newV *Contain
 		}
 
 		i := e.q.d[e.i]
-		nv, write := upd(i.v, true)
+		nv, write := upd(i.k, i.v, true)
 		if write {
 			if nv == nil {
-				e.t.Delete(e.q.d[e.i].k)
+				e.t.Delete(i.k)
 			} else {
 				e.q.d[e.i].v = nv
 			}

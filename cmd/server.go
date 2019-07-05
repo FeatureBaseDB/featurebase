@@ -46,22 +46,24 @@ on the configured port.`,
 				return errors.Wrap(err, "running server")
 			}
 
-			// Initialize tracing in the command since it is global.
-			var cfg jaegercfg.Configuration
-			cfg.ServiceName = "pilosa"
-			cfg.Sampler = &jaegercfg.SamplerConfig{
-				Type:  Server.Config.Tracing.SamplerType,
-				Param: Server.Config.Tracing.SamplerParam,
+			if Server.Config.Tracing.SamplerType != "off" {
+				// Initialize tracing in the command since it is global.
+				var cfg jaegercfg.Configuration
+				cfg.ServiceName = "pilosa"
+				cfg.Sampler = &jaegercfg.SamplerConfig{
+					Type:  Server.Config.Tracing.SamplerType,
+					Param: Server.Config.Tracing.SamplerParam,
+				}
+				cfg.Reporter = &jaegercfg.ReporterConfig{
+					LocalAgentHostPort: Server.Config.Tracing.AgentHostPort,
+				}
+				tracer, closer, err := cfg.NewTracer()
+				if err != nil {
+					return errors.Wrap(err, "initializing jaeger tracer")
+				}
+				defer closer.Close()
+				tracing.GlobalTracer = opentracing.NewTracer(tracer)
 			}
-			cfg.Reporter = &jaegercfg.ReporterConfig{
-				LocalAgentHostPort: Server.Config.Tracing.AgentHostPort,
-			}
-			tracer, closer, err := cfg.NewTracer()
-			if err != nil {
-				return errors.Wrap(err, "initializing jaeger tracer")
-			}
-			defer closer.Close()
-			tracing.GlobalTracer = opentracing.NewTracer(tracer)
 
 			return errors.Wrap(Server.Wait(), "waiting on Server")
 		},
