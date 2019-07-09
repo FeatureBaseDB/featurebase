@@ -256,6 +256,7 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 
 	// Fixes #2009
 	// See: https://github.com/pilosa/pilosa/issues/2009
+	// TODO: Remove at version 2.0
 	if e.detectRangeCall(c) {
 		e.Holder.Logger.Printf("DEPRECATED: Range() is deprecated, please use Row() instead.")
 	}
@@ -2852,6 +2853,8 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 	return result, nil
 }
 
+// detectRangeCall returns true if the call or one of its children contains a Range call
+// TODO: Remove at version 2.0
 func (e *executor) detectRangeCall(c *pql.Call) bool {
 	// detect whether there is a Range call
 	if c.Name == "Range" {
