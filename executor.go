@@ -253,6 +253,13 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return nil, errors.Wrap(err, "validating args")
 	}
 	indexTag := fmt.Sprintf("index:%s", index)
+
+	// Fixes #2009
+	// See: https://github.com/pilosa/pilosa/issues/2009
+	if e.detectRangeCall(c) {
+		e.Holder.Logger.Printf("DEPRECATED: Range() is deprecated, please use Row() instead.")
+	}
+
 	// Special handling for mutation and top-n calls.
 	switch c.Name {
 	case "Sum":
@@ -1405,10 +1412,6 @@ func (e *executor) executeRowsShard(_ context.Context, index string, fieldName s
 func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeRowShard")
 	defer span.Finish()
-
-	if c.Name == "Range" {
-		e.Holder.Logger.Printf("DEPRECATED: Range() is deprecated, please use Row() instead.")
-	}
 
 	// Handle bsiGroup ranges differently.
 	if c.HasConditionArg() {
@@ -2847,6 +2850,19 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 	}
 
 	return result, nil
+}
+
+func (e *executor) detectRangeCall(c *pql.Call) bool {
+	// detect whether there is a Range call
+	if c.Name == "Range" {
+		return true
+	}
+	for _, c := range c.Children {
+		if e.detectRangeCall(c) {
+			return true
+		}
+	}
+	return false
 }
 
 // validateQueryContext returns a query-appropriate error if the context is done.
