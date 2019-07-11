@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"sort"
 	"time"
 
@@ -55,6 +56,8 @@ type executor struct {
 
 	// Stores key/id translation data.
 	TranslateStore TranslateStore
+
+	work chan job
 }
 
 // executorOption is a functional option type for pilosa.Executor
@@ -71,12 +74,16 @@ func optExecutorInternalQueryClient(c InternalQueryClient) executorOption {
 func newExecutor(opts ...executorOption) *executor {
 	e := &executor{
 		client: newNopInternalQueryClient(),
+		work:   make(chan job, 2000),
 	}
 	for _, opt := range opts {
 		err := opt(e)
 		if err != nil {
 			panic(err)
 		}
+	}
+	for i := 0; i < runtime.NumCPU()+8; i++ {
+		go worker(e.work)
 	}
 	return e
 }
@@ -2516,6 +2523,24 @@ func (e *executor) mapper(ctx context.Context, ch chan mapResponse, nodes []*Nod
 	return nil
 }
 
+type job struct {
+	shard      uint64
+	mapFn      mapFunc
+	ctx        context.Context
+	resultChan chan mapResponse
+}
+
+func worker(work chan job) {
+	for j := range work {
+		result, err := j.mapFn(j.shard)
+
+		select {
+		case <-j.ctx.Done():
+		case j.resultChan <- mapResponse{result: result, err: err}:
+		}
+	}
+}
+
 // mapperLocal performs map & reduce entirely on the local node.
 func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFunc, reduceFn reduceFunc) (interface{}, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapperLocal")
@@ -2524,15 +2549,12 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 	ch := make(chan mapResponse, len(shards))
 
 	for _, shard := range shards {
-		go func(shard uint64) {
-			result, err := mapFn(shard)
-
-			// Return response to the channel.
-			select {
-			case <-ctx.Done():
-			case ch <- mapResponse{result: result, err: err}:
-			}
-		}(shard)
+		e.work <- job{
+			shard:      shard,
+			mapFn:      mapFn,
+			ctx:        ctx,
+			resultChan: ch,
+		}
 	}
 
 	// Reduce results
