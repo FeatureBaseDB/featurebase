@@ -72,9 +72,14 @@ func optExecutorInternalQueryClient(c InternalQueryClient) executorOption {
 
 // newExecutor returns a new instance of Executor.
 func newExecutor(opts ...executorOption) *executor {
+	// this is somewhat arbitrary, though going less than
+	// runtime.NumCPU() would likely result in a loss of throughput.
+	workerPoolSize := runtime.NumCPU() + 8
 	e := &executor{
 		client: newNopInternalQueryClient(),
-		work:   make(chan job, 2000),
+
+		// capacity of this channel is unlikely to affect much
+		work: make(chan job, workerPoolSize),
 	}
 	for _, opt := range opts {
 		err := opt(e)
@@ -82,10 +87,15 @@ func newExecutor(opts ...executorOption) *executor {
 			panic(err)
 		}
 	}
-	for i := 0; i < runtime.NumCPU()+8; i++ {
+	for i := 0; i < workerPoolSize; i++ {
 		go worker(e.work)
 	}
 	return e
+}
+
+func (e *executor) Close() error {
+	close(e.work)
+	return nil
 }
 
 // Execute executes a PQL query.

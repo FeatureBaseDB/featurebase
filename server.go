@@ -426,6 +426,8 @@ func (s *Server) Open() error {
 
 // Close closes the server and waits for it to shutdown.
 func (s *Server) Close() error {
+	errE := s.executor.Close()
+
 	// Notify goroutines to stop.
 	close(s.closing)
 	s.wg.Wait()
@@ -445,7 +447,11 @@ func (s *Server) Close() error {
 	if errh != nil {
 		return errors.Wrap(errh, "closing holder")
 	}
-	return errors.Wrap(errc, "closing cluster")
+	if errc != nil {
+		return errors.Wrap(errc, "closing cluster")
+	}
+	return errors.Wrap(errE, "closing executor")
+
 }
 
 // loadNodeID gets NodeID from disk, or creates a new value.
