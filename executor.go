@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"runtime"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/pilosa/pilosa/pql"
@@ -57,7 +58,8 @@ type executor struct {
 	// Stores key/id translation data.
 	TranslateStore TranslateStore
 
-	work chan job
+	workersWG sync.WaitGroup
+	work      chan job
 }
 
 // executorOption is a functional option type for pilosa.Executor
@@ -88,13 +90,18 @@ func newExecutor(opts ...executorOption) *executor {
 		}
 	}
 	for i := 0; i < workerPoolSize; i++ {
-		go worker(e.work)
+		e.workersWG.Add(1)
+		go func() {
+			defer e.workersWG.Done()
+			worker(e.work)
+		}()
 	}
 	return e
 }
 
 func (e *executor) Close() error {
 	close(e.work)
+	e.workersWG.Wait()
 	return nil
 }
 
