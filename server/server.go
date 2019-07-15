@@ -284,6 +284,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerMaxWritesPerRequest(m.Config.MaxWritesPerRequest),
 		pilosa.OptServerMetricInterval(time.Duration(m.Config.Metric.PollInterval)),
 		pilosa.OptServerDiagnosticsInterval(diagnosticsInterval),
+		pilosa.OptServerExecutorPoolSize(m.Config.WorkerPoolSize),
 
 		pilosa.OptServerLogger(m.logger),
 		pilosa.OptServerAttrStoreFunc(boltdb.NewAttrStore),

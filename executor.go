@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"runtime"
 	"sort"
 	"sync"
 	"time"
@@ -58,8 +57,9 @@ type executor struct {
 	// Stores key/id translation data.
 	TranslateStore TranslateStore
 
-	workersWG sync.WaitGroup
-	work      chan job
+	workersWG      sync.WaitGroup
+	workerPoolSize int
+	work           chan job
 }
 
 // executorOption is a functional option type for pilosa.Executor
@@ -72,16 +72,18 @@ func optExecutorInternalQueryClient(c InternalQueryClient) executorOption {
 	}
 }
 
+func optExecutorWorkerPoolSize(size int) executorOption {
+	return func(e *executor) error {
+		e.workerPoolSize = size
+		return nil
+	}
+}
+
 // newExecutor returns a new instance of Executor.
 func newExecutor(opts ...executorOption) *executor {
-	// this is somewhat arbitrary, though going less than
-	// runtime.NumCPU() would likely result in a loss of throughput.
-	workerPoolSize := runtime.NumCPU() + 8
 	e := &executor{
-		client: newNopInternalQueryClient(),
-
-		// capacity of this channel is unlikely to affect much
-		work: make(chan job, workerPoolSize),
+		client:         newNopInternalQueryClient(),
+		workerPoolSize: 2,
 	}
 	for _, opt := range opts {
 		err := opt(e)
@@ -89,7 +91,12 @@ func newExecutor(opts ...executorOption) *executor {
 			panic(err)
 		}
 	}
-	for i := 0; i < workerPoolSize; i++ {
+	// this channel cap doesn't necessarily have to be the same as
+	// workerPoolSize... any larger doesn't seem to have an effect in
+	// the few tests we've done at scale with concurrent query
+	// workloads. Possible that it could be smaller.
+	e.work = make(chan job, e.workerPoolSize)
+	for i := 0; i < e.workerPoolSize; i++ {
 		e.workersWG.Add(1)
 		go func() {
 			defer e.workersWG.Done()

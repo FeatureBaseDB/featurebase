@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -84,6 +85,13 @@ type Config struct {
 
 	// TLS
 	TLS TLSConfig `toml:"tls"`
+
+	// WorkerPoolSize controls how many goroutines are created for
+	// processing queries. Defaults to runtime.NumCPU(). It is
+	// intentionally not defined as a flag... only exposed here so
+	// that we can limit the size while running tests in CI so we
+	// don't exhaust the goroutine limit.
+	WorkerPoolSize int
 
 	Cluster struct {
 		// Disabled controls whether clustering functionality is enabled.
@@ -151,7 +159,10 @@ func NewConfig() *Config {
 		// a bit below your system limits.
 		MaxMapCount:  1000000,
 		MaxFileCount: 1000000,
-		TLS:          TLSConfig{},
+
+		TLS: TLSConfig{},
+
+		WorkerPoolSize: runtime.NumCPU(),
 	}
 
 	// Cluster config.

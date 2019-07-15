@@ -49,13 +49,14 @@ type Server struct { // nolint: maligned
 	closing chan struct{}
 
 	// Internal
-	holder          *Holder
-	cluster         *cluster
-	diagnostics     *diagnosticsCollector
-	executor        *executor
-	hosts           []string
-	clusterDisabled bool
-	serializer      Serializer
+	holder           *Holder
+	cluster          *cluster
+	diagnostics      *diagnosticsCollector
+	executor         *executor
+	executorPoolSize int
+	hosts            []string
+	clusterDisabled  bool
+	serializer       Serializer
 
 	// External
 	systemInfo SystemInfo
@@ -179,9 +180,15 @@ func OptServerGCNotifier(gcn GCNotifier) ServerOption {
 // used to set the implementation of InternalClient.
 func OptServerInternalClient(c InternalClient) ServerOption {
 	return func(s *Server) error {
-		s.executor = newExecutor(optExecutorInternalQueryClient(c))
 		s.defaultClient = c
 		s.cluster.InternalClient = c
+		return nil
+	}
+}
+
+func OptServerExecutorPoolSize(size int) ServerOption {
+	return func(s *Server) error {
+		s.executorPoolSize = size
 		return nil
 	}
 }
@@ -306,7 +313,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 		logger: logger.NopLogger,
 	}
-	s.executor = newExecutor(optExecutorInternalQueryClient(s.defaultClient))
 	s.cluster.InternalClient = s.defaultClient
 
 	s.diagnostics.server = s
@@ -317,6 +323,14 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 			return nil, errors.Wrap(err, "applying option")
 		}
 	}
+
+	// set up executor after server opts have been processed
+	executorOpts := []executorOption{optExecutorInternalQueryClient(s.defaultClient)}
+	if s.executorPoolSize > 0 {
+		executorOpts = append(executorOpts, optExecutorWorkerPoolSize(s.executorPoolSize))
+	}
+	s.executor = newExecutor(executorOpts...)
+
 	s.holder.translateFile.logger = s.logger
 
 	path, err := expandDirName(s.dataDir)
