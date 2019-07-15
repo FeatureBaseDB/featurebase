@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/pilosa/pilosa/pql"
@@ -55,6 +56,10 @@ type executor struct {
 
 	// Stores key/id translation data.
 	TranslateStore TranslateStore
+
+	workersWG      sync.WaitGroup
+	workerPoolSize int
+	work           chan job
 }
 
 // executorOption is a functional option type for pilosa.Executor
@@ -67,10 +72,18 @@ func optExecutorInternalQueryClient(c InternalQueryClient) executorOption {
 	}
 }
 
+func optExecutorWorkerPoolSize(size int) executorOption {
+	return func(e *executor) error {
+		e.workerPoolSize = size
+		return nil
+	}
+}
+
 // newExecutor returns a new instance of Executor.
 func newExecutor(opts ...executorOption) *executor {
 	e := &executor{
-		client: newNopInternalQueryClient(),
+		client:         newNopInternalQueryClient(),
+		workerPoolSize: 2,
 	}
 	for _, opt := range opts {
 		err := opt(e)
@@ -78,7 +91,25 @@ func newExecutor(opts ...executorOption) *executor {
 			panic(err)
 		}
 	}
+	// this channel cap doesn't necessarily have to be the same as
+	// workerPoolSize... any larger doesn't seem to have an effect in
+	// the few tests we've done at scale with concurrent query
+	// workloads. Possible that it could be smaller.
+	e.work = make(chan job, e.workerPoolSize)
+	for i := 0; i < e.workerPoolSize; i++ {
+		e.workersWG.Add(1)
+		go func() {
+			defer e.workersWG.Done()
+			worker(e.work)
+		}()
+	}
 	return e
+}
+
+func (e *executor) Close() error {
+	close(e.work)
+	e.workersWG.Wait()
+	return nil
 }
 
 // Execute executes a PQL query.
@@ -2516,6 +2547,24 @@ func (e *executor) mapper(ctx context.Context, ch chan mapResponse, nodes []*Nod
 	return nil
 }
 
+type job struct {
+	shard      uint64
+	mapFn      mapFunc
+	ctx        context.Context
+	resultChan chan mapResponse
+}
+
+func worker(work chan job) {
+	for j := range work {
+		result, err := j.mapFn(j.shard)
+
+		select {
+		case <-j.ctx.Done():
+		case j.resultChan <- mapResponse{result: result, err: err}:
+		}
+	}
+}
+
 // mapperLocal performs map & reduce entirely on the local node.
 func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFunc, reduceFn reduceFunc) (interface{}, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapperLocal")
@@ -2524,15 +2573,12 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 	ch := make(chan mapResponse, len(shards))
 
 	for _, shard := range shards {
-		go func(shard uint64) {
-			result, err := mapFn(shard)
-
-			// Return response to the channel.
-			select {
-			case <-ctx.Done():
-			case ch <- mapResponse{result: result, err: err}:
-			}
-		}(shard)
+		e.work <- job{
+			shard:      shard,
+			mapFn:      mapFn,
+			ctx:        ctx,
+			resultChan: ch,
+		}
 	}
 
 	// Reduce results

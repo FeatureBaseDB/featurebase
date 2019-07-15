@@ -72,6 +72,7 @@ func newCommand(opts ...server.CommandOption) *Command {
 	m.Config.Bind = "http://localhost:0"
 	m.Config.Cluster.Disabled = true
 	m.Config.Translation.MapSize = 140000
+	m.Config.WorkerPoolSize = 2
 
 	if testing.Verbose() {
 		m.Command.Stdout = os.Stdout
