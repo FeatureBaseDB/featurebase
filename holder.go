@@ -234,8 +234,8 @@ func (h *Holder) Close() error {
 // This is used to determine if the rebalancing of data is necessary
 // when a node joins the cluster.
 func (h *Holder) HasData() (bool, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	if len(h.indexes) > 0 {
 		return true, nil
 	}
@@ -385,15 +385,21 @@ func (h *Holder) CreateIndex(name string, opt IndexOptions) (*Index, error) {
 // CreateIndexIfNotExists returns an index by name.
 // The index is created if it does not already exist.
 func (h *Holder) CreateIndexIfNotExists(name string, opt IndexOptions) (*Index, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.mu.RLock()
 
 	// Find index in cache first.
 	if index := h.indexes[name]; index != nil {
+		h.mu.RUnlock()
 		return index, nil
 	}
 
-	return h.createIndex(name, opt)
+	h.mu.RUnlock()
+
+	index, err := h.CreateIndex(name, opt)
+	if _, ok := err.(ConflictError); err != nil && !ok {
+		return nil, err
+	}
+	return index, nil
 }
 
 func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {

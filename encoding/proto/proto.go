@@ -439,8 +439,13 @@ func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
 		case pilosa.RowIdentifiers:
 			pb.Results[i].Type = queryResultTypeRowIdentifiers
 			pb.Results[i].RowIdentifiers = encodeRowIdentifiers(result)
+		case pilosa.Pair:
+			pb.Results[i].Type = queryResultTypePair
+			pb.Results[i].Pairs = []*internal.Pair{encodePair(result)}
 		case nil:
 			pb.Results[i].Type = queryResultTypeNil
+		default:
+			panic(fmt.Errorf("unknown type: %d", pb.Results[i].Type))
 		}
 	}
 
@@ -1058,6 +1063,7 @@ const (
 	queryResultTypeRowIDs
 	queryResultTypeGroupCounts
 	queryResultTypeRowIdentifiers
+	queryResultTypePair
 )
 
 func decodeQueryResult(pb *internal.QueryResult) interface{} {
@@ -1080,6 +1086,8 @@ func decodeQueryResult(pb *internal.QueryResult) interface{} {
 		return decodeRowIdentifiers(pb.RowIdentifiers)
 	case queryResultTypeGroupCounts:
 		return decodeGroupCounts(pb.GroupCounts)
+	case queryResultTypePair:
+		return decodePair(pb.Pairs[0])
 	}
 	panic(fmt.Sprintf("unknown type: %d", pb.Type))
 }
