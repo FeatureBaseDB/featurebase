@@ -1521,6 +1521,11 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 		}
 		rows = append(rows, f.row(rowID))
 	}
+	if len(rows) == 0 {
+		return &Row{}, nil
+	} else if len(rows) == 1 {
+		return rows[0], nil
+	}
 	row := rows[0].Union(rows[1:]...)
 	f.Stats.Count("range", 1, 1.0)
 	return row, nil
