@@ -1512,14 +1512,16 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 	}
 
 	// Union bitmaps across all time-based views.
-	row := &Row{}
-	for _, view := range viewsByTimeRange(viewStandard, fromTime, toTime, q) {
+	views := viewsByTimeRange(viewStandard, fromTime, toTime, q)
+	rows := make([]*Row, 0, len(views))
+	for _, view := range views {
 		f := e.Holder.fragment(index, fieldName, view, shard)
 		if f == nil {
 			continue
 		}
-		row = row.Union(f.row(rowID))
+		rows = append(rows, f.row(rowID))
 	}
+	row := rows[0].Union(rows[1:]...)
 	f.Stats.Count("range", 1, 1.0)
 	return row, nil
 
