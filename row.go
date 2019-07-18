@@ -173,6 +173,26 @@ func (r *Row) Union(other *Row) *Row {
 	return &Row{segments: segments}
 }
 
+// UnionInPlace returns the bitwise union of r and other. For any
+// segments which exist on r, it unions other into them in-place.
+func (r *Row) UnionInPlace(other *Row) *Row {
+	var segments []rowSegment
+	itr := newMergeSegmentIterator(r.segments, other.segments)
+	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
+		if s1 == nil {
+			segments = append(segments, *s0)
+			continue
+		} else if s0 == nil {
+			segments = append(segments, *s1)
+			continue
+		}
+		s0.UnionInPlace(s1)
+		segments = append(segments, *s0)
+	}
+
+	return &Row{segments: segments}
+}
+
 // Difference returns the diff of r and other.
 func (r *Row) Difference(other *Row) *Row {
 	var segments []rowSegment
@@ -370,6 +390,12 @@ func (s *rowSegment) Union(other *rowSegment) *rowSegment {
 		n:        data.Count(),
 		writable: true,
 	}
+}
+
+func (s *rowSegment) UnionInPlace(other *rowSegment) {
+	s.data.UnionInPlace(other.data)
+	s.n = s.data.Count()
+	s.writable = true
 }
 
 // Difference returns the diff of s and other.

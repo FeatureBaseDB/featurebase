@@ -1518,7 +1518,7 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 		if f == nil {
 			continue
 		}
-		row = row.Union(f.row(rowID))
+		row = row.UnionInPlace(f.row(rowID))
 	}
 	f.Stats.Count("range", 1, 1.0)
 	return row, nil
