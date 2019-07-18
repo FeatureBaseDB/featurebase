@@ -1526,7 +1526,6 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 	row := rows[0].Union(rows[1:]...)
 	f.Stats.Count("range", 1, 1.0)
 	return row, nil
-
 }
 
 // executeRowBSIGroupShard executes a range(bsiGroup) call for a local shard.
