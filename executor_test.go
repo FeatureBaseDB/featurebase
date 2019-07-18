@@ -3981,6 +3981,11 @@ func runCallTest(t *testing.T, writeQuery string, readQueries []string, indexOpt
 		if err != nil {
 			t.Fatal(err)
 		}
+		// because we want to keep rows around for a while, we need to clone them;
+		// normal rows can become invalidated by snapshots.
+		if r, ok := res.Results[0].(*pilosa.Row); ok {
+			r.Clone()
+		}
 		responses = append(responses, res)
 	}
 

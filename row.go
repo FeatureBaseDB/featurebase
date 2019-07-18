@@ -63,6 +63,12 @@ func (r *Row) Freeze() {
 	}
 }
 
+func (r *Row) Clone() {
+	for _, s := range r.segments {
+		s.Clone()
+	}
+}
+
 // Merge merges data from other into r.
 func (r *Row) Merge(other *Row) {
 	var segments []rowSegment
@@ -318,6 +324,10 @@ type rowSegment struct {
 
 func (s *rowSegment) Freeze() {
 	s.data.Freeze()
+}
+
+func (s *rowSegment) Clone() {
+	s.data = s.data.Clone()
 }
 
 // Merge adds chunks from other to s.

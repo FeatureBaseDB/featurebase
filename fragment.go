@@ -434,7 +434,7 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 			if newStorageData != nil {
 				unmapErr := syswrap.Munmap(newStorageData)
 				if unmapErr != nil {
-					lastError = fmt.Errorf("unmapping unused storage data: %s", err)
+					lastError = fmt.Errorf("unmapping unused storage data: %s", unmapErr)
 				}
 				newStorageData = nil
 			}
@@ -571,10 +571,15 @@ func (f *fragment) closeStorage(includeMap bool) error {
 
 	// Unmap the file.
 	if includeMap && f.storageData != nil {
-		if err := syswrap.Munmap(f.storageData); err != nil {
+		var err error
+		if f.prevStorageData != nil {
+			err = syswrap.Munmap(f.prevStorageData)
+		}
+		f.prevStorageData = f.storageData
+		f.storageData = nil
+		if err != nil {
 			return fmt.Errorf("munmap: %s", err)
 		}
-		f.storageData = nil
 	}
 
 	if err := f.safeClose(); err != nil {
