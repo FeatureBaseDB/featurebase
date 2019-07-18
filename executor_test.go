@@ -3292,6 +3292,7 @@ func TestExecutor_Execute_RowsTime(t *testing.T) {
 		`Rows(f)`,
 		`Rows(f, from=2002-01-01T00:00)`,
 		`Rows(f, to=2003-02-03T00:00)`,
+		`Rows(f, from=2002-01-01T00:00, to=2002-01-02T00:00)`,
 	}
 	expResults := [][]uint64{
 		{1},
@@ -3300,6 +3301,7 @@ func TestExecutor_Execute_RowsTime(t *testing.T) {
 		{1, 2, 3, 4, 13},
 		{2, 3, 4, 13},
 		{1, 2, 3, 13},
+		{2},
 	}
 
 	responses := runCallTest(t, writeQuery, readQueries,
