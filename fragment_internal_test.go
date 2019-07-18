@@ -134,7 +134,9 @@ func TestFragment_RowcacheMap(t *testing.T) {
 
 	// modify the original bitmap, until it causes a snapshot, which
 	// then invalidates the other map...
-	for j := 0; j < 5; j++ {
+	// but only try this once, because our current design gives us one
+	// snapshot of safety margin.
+	for j := 0; j < 1; j++ {
 		for i := 0; i < f.MaxOpN; i++ {
 			_, _ = f.setBit(0, uint64(i*32+j+1))
 		}

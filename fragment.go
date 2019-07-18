@@ -112,6 +112,7 @@ type fragment struct {
 	file               *os.File
 	storage            *roaring.Bitmap
 	storageData        []byte
+	prevStorageData    []byte
 	totalOpN           int64 // total opN values
 	totalOps           int64 // total ops (across all snapshots)
 	opN                int   // number of ops since snapshot (may be approximate for imports)
@@ -382,26 +383,24 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 			newStorageData = data
 		}
 	}
+	// it's possible for the row cache to contain a thing using mapped data,
+	// meaning a query already in flight might be using it, so it's unsafe to unmap
+	// it right away. So, every time we get here, we stash the storageData pointer
+	// we had when we started this call. But first we unmap the *previously*
+	// stashed one. That gives us a safety margin of the interval between snapshots.
+	if f.prevStorageData != nil {
+		unmapErr := syswrap.Munmap(f.prevStorageData)
+		if unmapErr != nil {
+			f.Logger.Printf("unmap of old storage failed: %s", unmapErr)
+		}
+		f.prevStorageData = nil
+	}
+	f.prevStorageData = oldStorageData
 
 	if unmarshalData {
 		f.storageData = newStorageData
 		// We're about to either re-read the bitmap, or fail to do so
-		// and unconditionally unmap the existing stuff. Either way, we
-		// want to unmap the old storage data after we're done here, but
-		// we can't unmap it yet because it's still live until sometime
-		// later, but we can't unmap it later, because we could return
-		// early... this is what defer is for.
-		if oldStorageData != nil {
-			defer func() {
-				unmapErr := syswrap.Munmap(oldStorageData)
-				if unmapErr != nil {
-					f.Logger.Printf("unmap of old storage failed: %s", err)
-				}
-			}()
-		}
-		// so we have a problem here: if this fails, it's unclear whether
-		// *either* or *both* of old and new storage data might be in use.
-		// So we call the thing that should unconditionally unmap both of them...
+		// and unconditionally unmap the existing stuff.
 		if err := f.storage.UnmarshalBinary(data); err != nil {
 			_, e2 := f.storage.RemapRoaringStorage(nil)
 			if e2 != nil {
@@ -423,12 +422,6 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 		// storage (if the containers match).
 		var mappedAny bool
 		mappedAny, lastError = f.storage.RemapRoaringStorage(newStorageData)
-		if oldStorageData != nil {
-			unmapErr := syswrap.Munmap(oldStorageData)
-			if unmapErr != nil {
-				f.Logger.Printf("unmap of old storage failed: %s", err)
-			}
-		}
 		if mappedAny {
 			// Advise the kernel that the mmap is accessed randomly.
 			if err := madvise(newStorageData, syscall.MADV_RANDOM); err != nil {
