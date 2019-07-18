@@ -2920,6 +2920,7 @@ func TestExecutor_Execute_ClearRow(t *testing.T) {
 			Set(2, f=10, 2001-01-01T00:00)`
 		readQueries := []string{
 			`Row(f=1, from=1999-12-31T00:00, to=2003-01-01T03:00)`,
+			`Row(f=1, from=2002-01-01T00:00, to=2002-01-02T00:00)`,
 			`ClearRow(f=1)`,
 			`Row(f=1, from=1999-12-31T00:00, to=2003-01-01T03:00)`,
 			`Row(f=10, from=1999-12-31T00:00, to=2003-01-01T03:00)`,
@@ -2931,20 +2932,26 @@ func TestExecutor_Execute_ClearRow(t *testing.T) {
 			t.Fatalf("unexpected columns: %+v", columns)
 		}
 
+		// Single day query (regression test)
+		if columns := responses[1].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{7}) {
+			t.Fatalf("unexpected columns: %+v", columns)
+		}
+
 		// Clear the row and ensure we get a `true` response.
-		if res := responses[1].Results[0].(bool); !res {
+		if res := responses[2].Results[0].(bool); !res {
 			t.Fatalf("unexpected clear row result: %+v", res)
 		}
 
 		// Ensure the row is empty.
-		if columns := responses[2].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{}) {
+		if columns := responses[3].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{}) {
 			t.Fatalf("unexpected columns: %+v", columns)
 		}
 
 		// Ensure other rows were not affected.
-		if columns := responses[3].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{2}) {
+		if columns := responses[4].Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{2}) {
 			t.Fatalf("unexpected columns: %+v", columns)
 		}
+
 	})
 
 	t.Run("Int", func(t *testing.T) {
