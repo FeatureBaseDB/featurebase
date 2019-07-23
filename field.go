@@ -35,6 +35,7 @@ import (
 	"github.com/pilosa/pilosa/stats"
 	"github.com/pilosa/pilosa/tracing"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // Default field settings.
@@ -431,6 +432,8 @@ func (f *Field) Open() error {
 	return nil
 }
 
+var fieldQueue = make(chan struct{}, 16)
+
 // openViews opens and initializes the views inside the field.
 func (f *Field) openViews() error {
 	file, err := os.Open(filepath.Join(f.path, "views"))
@@ -445,40 +448,56 @@ func (f *Field) openViews() error {
 	if err != nil {
 		return errors.Wrap(err, "reading directory")
 	}
+	eg, ctx := errgroup.WithContext(context.Background())
+	var mu sync.Mutex
 
-	for _, fi := range fis {
-		if !fi.IsDir() {
-			continue
-		}
-
-		name := filepath.Base(fi.Name())
-		f.logger.Debugf("open index/field/view: %s/%s/%s", f.index, f.name, fi.Name())
-		view := f.newView(f.viewPath(name), name)
-		if err := view.open(); err != nil {
-			return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
-		}
-
-		// Automatically upgrade BSI v1 fragments if they exist & reopen view.
-		if bsig := f.bsiGroup(f.name); bsig != nil {
-			if ok, err := upgradeViewBSIv2(view, bsig.BitDepth); err != nil {
-				return errors.Wrap(err, "upgrade view bsi v2")
-			} else if ok {
-				if err := view.close(); err != nil {
-					return errors.Wrap(err, "closing upgraded view")
-				}
-				view = f.newView(f.viewPath(name), name)
-				if err := view.open(); err != nil {
-					return fmt.Errorf("re-opening view: view=%s, err=%s", view.name, err)
-				}
+	for _, loopFi := range fis {
+		select {
+		case <-ctx.Done():
+			break
+		default:
+			fi := loopFi
+			if !fi.IsDir() {
+				continue
 			}
-		}
+			fieldQueue <- struct{}{}
+			eg.Go(func() error {
+				defer func() {
+					<-fieldQueue
+				}()
+				name := filepath.Base(fi.Name())
+				f.logger.Debugf("open index/field/view: %s/%s/%s", f.index, f.name, fi.Name())
+				view := f.newView(f.viewPath(name), name)
+				if err := view.open(); err != nil {
+					return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
+				}
 
-		view.rowAttrStore = f.rowAttrStore
-		f.logger.Debugf("add index/field/view to field.viewMap: %s/%s/%s", f.index, f.name, view.name)
-		f.viewMap[view.name] = view
+				// Automatically upgrade BSI v1 fragments if they exist & reopen view.
+				if bsig := f.bsiGroup(f.name); bsig != nil {
+					if ok, err := upgradeViewBSIv2(view, bsig.BitDepth); err != nil {
+						return errors.Wrap(err, "upgrade view bsi v2")
+					} else if ok {
+						if err := view.close(); err != nil {
+							return errors.Wrap(err, "closing upgraded view")
+						}
+						view = f.newView(f.viewPath(name), name)
+						if err := view.open(); err != nil {
+							return fmt.Errorf("re-opening view: view=%s, err=%s", view.name, err)
+						}
+					}
+				}
+
+				view.rowAttrStore = f.rowAttrStore
+				f.logger.Debugf("add index/field/view to field.viewMap: %s/%s/%s", f.index, f.name, view.name)
+				mu.Lock()
+				f.viewMap[view.name] = view
+				mu.Unlock()
+				return nil
+			})
+		}
 	}
 
-	return nil
+	return eg.Wait()
 }
 
 // loadMeta reads meta data for the field, if any.

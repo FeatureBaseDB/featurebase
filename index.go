@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -29,6 +30,7 @@ import (
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pilosa/pilosa/stats"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // Index represents a container for fields.
@@ -137,6 +139,8 @@ func (i *Index) Open() error {
 	return nil
 }
 
+var indexQueue = make(chan struct{}, 8)
+
 // openFields opens and initializes the fields inside the index.
 func (i *Index) openFields() error {
 	f, err := os.Open(i.path)
@@ -149,24 +153,43 @@ func (i *Index) openFields() error {
 	if err != nil {
 		return errors.Wrap(err, "reading directory")
 	}
+	eg, ctx := errgroup.WithContext(context.Background())
+	var mu sync.Mutex
 
-	for _, fi := range fis {
-		if !fi.IsDir() {
-			continue
-		}
+	for _, loopFi := range fis {
+		select {
+		case <-ctx.Done():
+			break
+		default:
+			fi := loopFi
+			if !fi.IsDir() {
+				continue
+			}
+			indexQueue <- struct{}{}
+			eg.Go(func() error {
+				defer func() {
+					<-indexQueue
+				}()
+				i.logger.Debugf("open field: %s", fi.Name())
+				mu.Lock()
+				fld, err := i.newField(i.fieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
+				mu.Unlock()
+				if err != nil {
+					return errors.Wrapf(ErrName, "'%s'", fi.Name())
+				}
 
-		i.logger.Debugf("open field: %s", fi.Name())
-		fld, err := i.newField(i.fieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
-		if err != nil {
-			return errors.Wrapf(ErrName, "'%s'", fi.Name())
+				if err := fld.Open(); err != nil {
+					return fmt.Errorf("open field: name=%s, err=%s", fld.Name(), err)
+				}
+				i.logger.Debugf("add field to index.fields: %s", fi.Name())
+				mu.Lock()
+				i.fields[fld.Name()] = fld
+				mu.Unlock()
+				return nil
+			})
 		}
-		if err := fld.Open(); err != nil {
-			return fmt.Errorf("open field: name=%s, err=%s", fld.Name(), err)
-		}
-		i.logger.Debugf("add field to index.fields: %s", fi.Name())
-		i.fields[fld.Name()] = fld
 	}
-	return nil
+	return eg.Wait()
 }
 
 // openExistenceField gets or creates the existence field and associates it to the index.
