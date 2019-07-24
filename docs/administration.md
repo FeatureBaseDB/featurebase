@@ -42,7 +42,21 @@ While Pilosa does have some high system requirements it is not a best practice t
 
 Pilosa requires a large number of open files to support its memory-mapped file storage system. Most operating systems put limits on the maximum number of files that may be opened concurrently by a process. On Linux systems, this limit is controlled by a utility called [ulimit](https://ss64.com/bash/ulimit.html). Pilosa will automatically attempt to raise the limit to `262144` during startup, but it may fail due to access limitations. If you see errors related to open file limits when starting Pilosa, it is recommended that you run `sudo ulimit -n 262144` before starting Pilosa.
 
-On Mac OS X, `ulimit` does not behave predictably. [This blog post](https://blog.dekstroza.io/ulimit-shenanigans-on-osx-el-capitan/) contains information about setting open file limits in OS X.
+On Mac OS X, `ulimit` does not behave predictably. The Mac OS X system has a utility called csrutil that prevents you from changing the open file limit easily. One workaround that may work for you involves disabling the csrutil program. To disable the csrutil program, restart your laptop and when the start up screen pops up, hold down command + R to enter Recovery Mode. Open a terminal and enter `csrutil disable`, then restart your computer as you normally would. Now that the csrutil is disabled, you can change the open file limit. The open file limit can be changed by creating the following files and changing their ownership:
+
+Copy the contents of [this](https://github.com/wilsonmar/mac-setup/blob/master/configs/limit.maxfiles.plist) file into a new file on your system located at /Library/LaunchDaemons/limit.maxfiles.plist, then run:
+
+```
+sudo chown root:wheel /Library/LaunchDaemons/limit.maxfiles.plist
+```
+
+Copy the contents of [this](https://github.com/wilsonmar/mac-setup/blob/master/configs/limit.maxproc.plist) file into a new file on your system located at /Library/LaunchDaemons/limit.maxproc.plist, then run:
+
+```
+sudo chown root:wheel /Library/LaunchDaemons/limit.maxproc.plist
+```
+
+To ensure the open file limit has successfully changed, run `ulimit -a`. Your open files should be set to a number greater than 256 (in the range of 524288) and your max users processes should be greater than 709 (in the range of 2048).
 
 ### Importing and Exporting Data
 
