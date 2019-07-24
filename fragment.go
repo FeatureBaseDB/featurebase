@@ -399,6 +399,8 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 				}
 			}()
 		}
+		// set the preference for mapping based on whether the data's mmapped
+		f.storage.PreferMapping(newStorageData != nil)
 		// so we have a problem here: if this fails, it's unclear whether
 		// *either* or *both* of old and new storage data might be in use.
 		// So we call the thing that should unconditionally unmap both of them...

@@ -25,53 +25,50 @@ func TestUnmarshalBinary(t *testing.T) {
 	}{
 		{ // Checks for the zero containers situation
 			cr:       []byte(":0\x00\x00\x01\x00\x00\x000000"), //":000000"
-			expected: "reading roaring header: malformed bitmap, key-cardinality slice overruns buffer at 12",
-		},
-		{ // Checks for int overflow
-			cr: []byte("<0\x000\x00\x00\x00\x00000000000000" +
-				"0"), //"<000000000000000"
-			expected: "unmarshaling as pilosa roaring: unknown op type: 48",
+			expected: "reading official header: malformed bitmap, key-cardinality slice overruns buffer at 12",
 		},
 		{ // The next 5 check for malformed bitmaps
 			cr: []byte("<0\x0000000000000000000" +
 				"\x00\x00\xec\x00\x03\x00\x00\x00\xec000"), //"<000000000000000000ÏÏ000"
-			expected: "unmarshaling as pilosa roaring: malformed bitmap, key-cardinality not provided for 67372036 containers",
+			expected: "insufficient data for header + offsets: want 12935430920 bytes, got 32",
 		},
 		{
 			cr: []byte("<0\x00\x02\x00\x00\x00\\f\x01\xb5\x8d\x009\v\x01\x00\x00\x00\x00" +
 				"\x00\x00e\x04\x00\x00\x00\x04\xfd\x00\x01\x00"), //"<0\fµç9e˝"
-			expected: "unmarshaling as pilosa roaring: malformed bitmap, key-cardinality not provided for 128625322 containers",
+			expected: "insufficient data for header + offsets: want 24696061960 bytes, got 32",
 		},
 		{
 			cr:       []byte("<0\x00\x02\x00\x00\x00&x.field safe"), //"<0&x.field safe"
-			expected: "unmarshaling as pilosa roaring: malformed bitmap, key-cardinality not provided for 53127850 containers",
+			expected: "insufficient data for header + offsets: want 10200547336 bytes, got 20",
 		},
 		{
 			cr: []byte("<0\x00\x00\x14\x00\x00\x00\x80\xffp\x05_ 4\x114089" +
 				"\x00\x00\xff\x000\x00\x02\x00\x00\x00\x00\xff\u007f\x00\x00\x01\x10\x00\x00j" +
 				"\x02\x00\x00$\x04_\x00\xff\u007f\xff062616163\x00" + //"<0Äˇp_ 44089ˇ0ˇj$_ˇˇ0626161630ø¸ad$j√"
 				"0\x00\x02\x00\x01\xbf\x00\x04\x00\xfcad$\x00\x00j\x10\x00\x00\xc3"),
-			expected: "unmarshaling as pilosa roaring: malformed bitmap, key-cardinality not provided for 1 containers",
+			expected: "insufficient data for header + offsets: want 328 bytes, got 80",
 		},
 		{ // 0 containers because the container is partially formed, but not fully (ie. 3/12 = 0)
 			cr:       []byte("<0\x00\x02\x03\x00\x00\x00쳫\v\x00d9\v\x00\x009\v"), //<0쳫d99
-			expected: "unmarshaling as pilosa roaring: malformed bitmap, key-cardinality not provided for 0 containers",
+			expected: "insufficient data for header + offsets: want 56 bytes, got 20",
 		},
 		{ // Checks for incomplete offset in readWithRuns
 			cr:       []byte(";0\x00\x00\v00000"), //";0000000"
-			expected: "reading offsets from official roaring format: offset incomplete: len=10",
+			expected: "container 0/1, expect run length at 9/10 bytes",
 		},
 		{ // Checks for incomplete offset in readOffsets
 			cr: []byte(":0\x00\x00\x03\x00\x00\x00000000000000" +
 				"\x00"), //:0000000000000
-			expected: "reading offsets from official roaring format: offset incomplete: len=1",
+			expected: "insufficient data for offsets (need 12 bytes, found 1)",
 		},
 	}
 
 	for _, crash := range confirmedCrashers {
 		err := b.UnmarshalBinary(crash.cr)
-		if err.Error() != crash.expected {
-			t.Errorf("Expected: %s, Got: %s", crash.expected, err)
+		if err == nil {
+			t.Errorf("expected: %s, got: no error", crash.expected)
+		} else if err.Error() != crash.expected {
+			t.Errorf("expected: %s, got: %s", crash.expected, err)
 		}
 	}
 
