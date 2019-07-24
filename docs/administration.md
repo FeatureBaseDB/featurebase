@@ -44,13 +44,13 @@ Pilosa requires a large number of open files to support its memory-mapped file s
 
 On Mac OS X, `ulimit` does not behave predictably. The Mac OS X system has a utility called csrutil that prevents you from changing the open file limit easily. One workaround that may work for you involves disabling the csrutil program. To disable the csrutil program, restart your laptop and when the start up screen pops up, hold down command + R to enter Recovery Mode. Open a terminal and enter `csrutil disable`, then restart your computer as you normally would. Now that the csrutil is disabled, you can change the open file limit. The open file limit can be changed by creating the following files and changing their ownership:
 
-Copy the contents of [this] file into a new file on your system located at /Library/LaunchDaemons/limit.maxfiles.plist, then run:
+Copy the contents of [this](https://github.com/wilsonmar/mac-setup/blob/master/configs/limit.maxfiles.plist) file into a new file on your system located at /Library/LaunchDaemons/limit.maxfiles.plist, then run:
 
 ```
 sudo chown root:wheel /Library/LaunchDaemons/limit.maxfiles.plist
 ```
 
-Copy the contents of [this] file into a new file on your system located at /Library/LaunchDaemons/limit.maxfiles.plist, then run:
+Copy the contents of [this](https://github.com/wilsonmar/mac-setup/blob/master/configs/limit.maxproc.plist) file into a new file on your system located at /Library/LaunchDaemons/limit.maxproc.plist, then run:
 
 ```
 sudo chown root:wheel /Library/LaunchDaemons/limit.maxproc.plist
