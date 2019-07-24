@@ -38,17 +38,17 @@ the record to arrive at that field. For example:
 
 This JSON object would result in the following Pilosa schema:
 
-| Field          | Type   |    CacheSize |
-|----------------|--------|--------------|
-| name           | ranked |    100000    |
-| favorite_foods | ranked |    100000    |
-| default        | ranked |    100000    |
-| age            | int    |              |
-| location       | ranked |     1000     |
-| latitude       | int    |              |
-| longitude      | int    |              |
-| location-city  | ranked |    100000    |
-| location-state | ranked |    100000    |
+| Field          | Value                        | Type   | Cache Size |
+|----------------|------------------------------|--------|------------|
+| name           |           "jill"             | ranked |   100000   |
+| favorite_foods | "corn chips", "chipotle dip" | ranked |   100000   |
+| default        |                              | ranked |   100000   |
+| age            |              27              | int    |            |
+| location       |                              | ranked |    1000    |
+| latitude       |             3754             | int    |            |
+| longitude      |             4526             | int    |            |
+| location-city  |           "Austin"           | ranked |   100000   |
+| location-state |           "Texas"            | ranked |   100000   |
 
 All set fields are created as ranked fields by default, with the cache size 
 listed above. Integer fields are created with a minimum size of zero and a 
