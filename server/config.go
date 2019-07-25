@@ -93,6 +93,13 @@ type Config struct {
 	// don't exhaust the goroutine limit.
 	WorkerPoolSize int
 
+	// ImportWorkerPoolSize controls how many goroutines are created for
+	// processing importRoaring jobs. Defaults to runtime.NumCPU(). It is
+	// intentionally not defined as a flag... only exposed here so
+	// that we can limit the size while running tests in CI so we
+	// don't exhaust the goroutine limit.
+	ImportWorkerPoolSize int
+
 	Cluster struct {
 		// Disabled controls whether clustering functionality is enabled.
 		Disabled    bool     `toml:"disabled"`
@@ -162,7 +169,8 @@ func NewConfig() *Config {
 
 		TLS: TLSConfig{},
 
-		WorkerPoolSize: runtime.NumCPU(),
+		WorkerPoolSize:       runtime.NumCPU(),
+		ImportWorkerPoolSize: runtime.NumCPU(),
 	}
 
 	// Cluster config.
