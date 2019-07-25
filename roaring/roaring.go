@@ -5156,63 +5156,6 @@ func readOfficialHeader(buf []byte) (size uint32, containerTyper func(index uint
 	return size, containerTyper, header, pos, haveRuns, err
 }
 
-func readOffsets(b *Bitmap, data []byte, pos int, keyN uint32) error {
-	citer, _ := b.Containers.Iterator(0)
-	for i, buf := 0, data[pos:]; i < int(keyN); i, buf = i+1, buf[4:] {
-		// Verify the offset is fully formed
-		if len(buf) < 4 {
-			return fmt.Errorf("offset incomplete: len=%d", len(buf))
-		}
-		offset := binary.LittleEndian.Uint32(buf[0:4])
-		// Verify the offset is within the bounds of the input data.
-		if int(offset) >= len(data) {
-			return fmt.Errorf("offset out of bounds: off=%d, len=%d", offset, len(data))
-		}
-
-		// Map byte slice directly to the container data.
-		citer.Next()
-		_, c := citer.Value()
-		switch c.typ() {
-		case containerArray:
-			c.setArray((*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[offset]))[:c.N():c.N()])
-		case containerBitmap:
-			c.setBitmap((*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[offset]))[:bitmapN:bitmapN])
-		default:
-			return fmt.Errorf("unsupported container type %d", c.typ())
-		}
-	}
-	return nil
-}
-
-func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) error {
-	if len(data) < pos+runCountHeaderSize {
-		return fmt.Errorf("offset incomplete: len=%d", len(data))
-	}
-	citer, _ := b.Containers.Iterator(0)
-	for i := 0; i < int(keyN); i++ {
-		citer.Next()
-		_, c := citer.Value()
-		switch c.typ() {
-		case containerRun:
-			runCount := binary.LittleEndian.Uint16(data[pos : pos+runCountHeaderSize])
-			c.setRuns((*[0xFFFFFFF]interval16)(unsafe.Pointer(&data[pos+runCountHeaderSize]))[:runCount:runCount])
-			runs := c.runs()
-
-			for o := range runs { // must convert from start:length to start:end :(
-				runs[o].last = runs[o].start + runs[o].last
-			}
-			pos += int((runCount * interval16Size) + runCountHeaderSize)
-		case containerArray:
-			c.setArray((*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[pos]))[:c.N():c.N()])
-			pos += int(c.N() * 2)
-		case containerBitmap:
-			c.setBitmap((*[0xFFFFFFF]uint64)(unsafe.Pointer(&data[pos]))[:bitmapN:bitmapN])
-			pos += bitmapN * 8
-		}
-	}
-	return nil
-}
-
 // handledIter and handledIters are wrappers around Bitmap Container iterators
 // and assist with the unionIntoTarget algorithm by abstracting away some tedious
 // operations.
