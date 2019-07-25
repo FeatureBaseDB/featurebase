@@ -59,11 +59,11 @@ Every request that enters Pilosa starts in the `Holder`, which is the top level 
 
 ##### SnapShot
 
-A `Snapshot` is requested by the `Holder` and carried out by the `Fragment`. A `Snapshot` is exactly what it sounds like, a snapshot of the instance of Pilosa at any given time. It is stored in Pilosa Roaring as a back up.
+A `Snapshot` is requested by the `Holder` and carried out by the `Fragment`. A `Snapshot` is exactly what it sounds like, a snapshot of the instance of Pilosa at any given time. It is used to store information about Pilosa onto disk.
 
 ### Pilosa Roaring
 
-Pilosa Roaring is the storage method for Pilosa. When making an import, the data is stored in Pilosa Roaring. The journey into storage begins with `Roaring`, where each row is converted into a roaring bitmap. From `Roaring`, the bitmaps are sent to `Containers Btree`, where they are formatted and prepared for storage. `Roaring` can send the bitmaps to `Containers Slice` if need be, but the default is `Containers Btree`. The prepared bitmaps are then sent into `Container Stash`, where they are stored on disk ready for querying. When making a query, the answer is extracted from Pilosa Roaring by directly quering `Container Stash`.
+Pilosa Roaring is the storage method for Pilosa. When making an import, the data is stored in Pilosa Roaring. The journey into storage begins with `Roaring`, where each row is converted into a roaring bitmap. From `Roaring`, the bitmaps are sent to `Containers Slice`, where they are formatted and prepared for storage. The prepared bitmaps are then sent into `Container Stash`, where they are stored to memory ready for querying. When making a query, the answer is extracted from Pilosa Roaring by directly querying `Container Stash` memory. When a snapshot is made, `Roaring` sends the data to `Containers Btree` for formatting before being sent to `Container Stash` for storage on disk.
 
 ![Roaring Diagram](/img/docs/PilosaRoaring.svg)
 *Pilosa Roaring Overview Diagram*
