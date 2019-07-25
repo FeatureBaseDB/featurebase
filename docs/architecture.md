@@ -85,3 +85,17 @@ Bitmaps are persisted to disk using a file format very similar to the [Roaring B
 All values are little-endian. The first two bytes of the cookie is 12348, to reflect incompatibility with the spec, which uses 12346 or 12347. Container types are NOT inferred from their cardinality as in the spec. Instead, the container type is read directly from the descriptive header.
 
 Check out this [blog post](/blog/adding-rle-support/) for some more details about Roaring in Pilosa.
+
+### Resources
+
+For more information about Pilosa, please see the following:
+
+* [Setting up a Secure Cluster](https://www.pilosa.com/docs/latest/tutorials/)
+
+* [Data-Model](https://www.pilosa.com/docs/latest/data-model/)
+
+* [Code Base](https://github.com/pilosa/pilosa)
+
+* [Pilosa Whitepaper](https://www.pilosa.com/pdf/PILOSA%20-%20Technical%20White%20Paper.pdf)
+
+* [Administration Guide](https://www.pilosa.com/docs/latest/administration/)
