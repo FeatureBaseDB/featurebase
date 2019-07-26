@@ -378,6 +378,7 @@ func (m *Command) Close() error {
 	eg := errgroup.Group{}
 	eg.Go(m.Handler.Close)
 	eg.Go(m.Server.Close)
+	eg.Go(m.API.Close)
 	if m.gossipMemberSet != nil {
 		eg.Go(m.gossipMemberSet.Close)
 	}

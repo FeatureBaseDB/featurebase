@@ -25,6 +25,7 @@ import (
 	"io/ioutil"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pilosa/pilosa/pql"
@@ -42,6 +43,7 @@ type API struct {
 	cluster *cluster
 	server  *Server
 
+	importWorkersWG      sync.WaitGroup
 	importWorkerPoolSize int
 	importWork           chan importJob
 
@@ -83,8 +85,10 @@ func NewAPI(opts ...apiOption) (*API, error) {
 
 	api.importWork = make(chan importJob, api.importWorkerPoolSize)
 	for i := 0; i < api.importWorkerPoolSize; i++ {
+		api.importWorkersWG.Add(1)
 		go func() {
 			importWorker(api.importWork)
+			defer api.importWorkersWG.Done()
 		}()
 	}
 
@@ -117,6 +121,13 @@ func (api *API) validate(f apiMethod) error {
 		return nil
 	}
 	return newAPIMethodNotAllowedError(errors.Errorf("api method %s not allowed in state %s", f, state))
+}
+
+// Close closes the api and waits for it to shutdown.
+func (api *API) Close() error {
+	close(api.importWork)
+	api.importWorkersWG.Wait()
+	return nil
 }
 
 // Query parses a PQL query out of the request and executes it.
