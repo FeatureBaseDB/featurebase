@@ -38,17 +38,17 @@ the record to arrive at that field. For example:
 
 This JSON object would result in the following Pilosa schema:
 
-| Field          | Type   | Min |        Max |   Size |
-|----------------|--------|-----|------------|--------|
-| name           | ranked |     |            | 100000 |
-| favorite_foods | ranked |     |            | 100000 |
-| default        | ranked |     |            | 100000 |
-| age            | int    |   0 | 2147483647 |        |
-| location       | ranked |     |            |   1000 |
-| latitude       | int    |   0 | 2147483647 |        |
-| longitude      | int    |   0 | 2147483647 |        |
-| location-city  | ranked |     |            | 100000 |
-| location-state | ranked |     |            | 100000 |
+| Field          | Example Value | Type   | Cache Size |
+|----------------|---------------|--------|------------|
+| name           | "jill"        | ranked |   100000   |
+| favorite_foods | "corn chips"  | ranked |   100000   |
+| default        |               | ranked |   100000   |
+| age            | 27            | int    |            |
+| location       |               | ranked |    1000    |
+| latitude       | 3754          | int    |            |
+| longitude      | 4526          | int    |            |
+| location-city  | "Austin"      | ranked |   100000   |
+| location-state | "Texas"       | ranked |   100000   |
 
 All set fields are created as ranked fields by default, with the cache size 
 listed above. Integer fields are created with a minimum size of zero and a 
@@ -66,6 +66,7 @@ control over the way data is indexed, and ingestion performance.
 * `--subject-path`: If nothing is passed for this option, then each record will be assigned a unique sequential column ID. If `subject-path` is specified, then the value at this path in the record will be mapped to a column ID. If the same value appears in another record, the same column ID will be used.
 * `--proxy`: The PDK ingests data, but also keeps a mapping for string values to row IDs, and from subjects to column ids. Because of this, querying Pilosa directly may not be useful, since it only returns integer row and column ids. The PDK will start a proxy server which intercepts requests to Pilosa using strings for row and column ids, and translates them to the integers that Pilosa understands. It will also translate responses so that (e.g.) a TopN query will return `{"results":[[{"Key":"chipotle dip","Count":1},{"Key":"corn chips","Count":1}]]}`. By default, the mapping is stored in an embedded leveldb.
 
+For more information on running `pdk kafka` and how Pilosa interfaces with Kafka, please see the [kafka directory](https://github.com/pilosa/pdk/tree/master/kafka) in the pdk repository.
 
 ### Library
 
