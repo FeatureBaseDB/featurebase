@@ -150,21 +150,48 @@ func (r *Row) Xor(other *Row) *Row {
 }
 
 // Union returns the bitwise union of r and other.
-func (r *Row) Union(other *Row) *Row {
-	var segments []rowSegment
-	itr := newMergeSegmentIterator(r.segments, other.segments)
-	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
-		if s1 == nil {
-			segments = append(segments, *s0)
-			continue
-		} else if s0 == nil {
-			segments = append(segments, *s1)
-			continue
-		}
-		segments = append(segments, *s0.Union(s1))
+func (r *Row) Union(others ...*Row) *Row {
+	segments := make([][]rowSegment, 0, len(others)+1)
+	if len(r.segments) > 0 {
+		segments = append(segments, r.segments)
 	}
-
-	return &Row{segments: segments}
+	nextSegs := make([][]rowSegment, 0, len(others)+1)
+	toProcess := make([]*rowSegment, 0, len(others)+1)
+	var output []rowSegment
+	for _, other := range others {
+		if len(other.segments) > 0 {
+			segments = append(segments, other.segments)
+		}
+	}
+	for len(segments) > 0 {
+		shard := segments[0][0].shard
+		for _, segs := range segments {
+			if segs[0].shard < shard {
+				shard = segs[0].shard
+			}
+		}
+		nextSegs = nextSegs[:0]
+		toProcess := toProcess[:0]
+		for _, segs := range segments {
+			if segs[0].shard == shard {
+				toProcess = append(toProcess, &segs[0])
+				segs = segs[1:]
+			}
+			if len(segs) > 0 {
+				nextSegs = append(nextSegs, segs)
+			}
+		}
+		// at this point, "toProcess" is a list of all the segments
+		// sharing the lowest ID, and nextSegs is a list of all the others.
+		// Swap the segment lists (so we don't have to reallocate it)
+		segments, nextSegs = nextSegs, segments
+		if len(toProcess) == 1 {
+			output = append(output, *toProcess[0])
+		} else {
+			output = append(output, *toProcess[0].Union(toProcess[1:]...))
+		}
+	}
+	return &Row{segments: output}
 }
 
 // Difference returns the diff of r and other.
@@ -350,8 +377,12 @@ func (s *rowSegment) Intersect(other *rowSegment) *rowSegment {
 }
 
 // Union returns the bitwise union of s and other.
-func (s *rowSegment) Union(other *rowSegment) *rowSegment {
-	data := s.data.Union(other.data)
+func (s *rowSegment) Union(others ...*rowSegment) *rowSegment {
+	datas := make([]*roaring.Bitmap, len(others))
+	for i, other := range others {
+		datas[i] = other.data
+	}
+	data := s.data.Union(datas...)
 	data.Freeze()
 
 	return &rowSegment{
