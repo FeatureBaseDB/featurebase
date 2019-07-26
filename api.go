@@ -25,6 +25,7 @@ import (
 	"io/ioutil"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pilosa/pilosa/pql"
@@ -42,6 +43,10 @@ type API struct {
 	cluster *cluster
 	server  *Server
 
+	importWorkersWG      sync.WaitGroup
+	importWorkerPoolSize int
+	importWork           chan importJob
+
 	Serializer Serializer
 }
 
@@ -58,9 +63,18 @@ func OptAPIServer(s *Server) apiOption {
 	}
 }
 
+func OptAPIImportWorkerPoolSize(size int) apiOption {
+	return func(a *API) error {
+		a.importWorkerPoolSize = size
+		return nil
+	}
+}
+
 // NewAPI returns a new API instance.
 func NewAPI(opts ...apiOption) (*API, error) {
-	api := &API{}
+	api := &API{
+		importWorkerPoolSize: 2,
+	}
 
 	for _, opt := range opts {
 		err := opt(api)
@@ -68,6 +82,16 @@ func NewAPI(opts ...apiOption) (*API, error) {
 			return nil, errors.Wrap(err, "applying option")
 		}
 	}
+
+	api.importWork = make(chan importJob, api.importWorkerPoolSize)
+	for i := 0; i < api.importWorkerPoolSize; i++ {
+		api.importWorkersWG.Add(1)
+		go func() {
+			importWorker(api.importWork)
+			defer api.importWorkersWG.Done()
+		}()
+	}
+
 	return api, nil
 }
 
@@ -97,6 +121,13 @@ func (api *API) validate(f apiMethod) error {
 		return nil
 	}
 	return newAPIMethodNotAllowedError(errors.Errorf("api method %s not allowed in state %s", f, state))
+}
+
+// Close closes the api and waits for it to shutdown.
+func (api *API) Close() error {
+	close(api.importWork)
+	api.importWorkersWG.Wait()
+	return nil
 }
 
 // Query parses a PQL query out of the request and executes it.
@@ -271,6 +302,51 @@ func setUpImportOptions(opts ...ImportOption) (*ImportOptions, error) {
 	return options, nil
 }
 
+type importJob struct {
+	ctx     context.Context
+	req     *ImportRoaringRequest
+	shard   uint64
+	field   *Field
+	errChan chan error
+}
+
+func importWorker(importWork chan importJob) {
+	for j := range importWork {
+		err := func() error {
+			for viewName, viewData := range j.req.Views {
+				if viewName == "" {
+					viewName = viewStandard
+				} else {
+					viewName = fmt.Sprintf("%s_%s", viewStandard, viewName)
+				}
+				if len(viewData) == 0 {
+					return fmt.Errorf("no data to import for view: %s", viewName)
+				}
+				fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
+				if fileMagic == roaring.MagicNumber { // if pilosa roaring format
+					if err := j.field.importRoaring(j.ctx, viewData, j.shard, viewName, j.req.Clear); err != nil {
+						return errors.Wrap(err, "importing pilosa roaring")
+					}
+				} else {
+					// must make a copy of data to operate on locally on standard roaring format.
+					// field.importRoaring changes the standard roaring run format to pilosa roaring
+					data := make([]byte, len(viewData))
+					copy(data, viewData)
+					if err := j.field.importRoaring(j.ctx, data, j.shard, viewName, j.req.Clear); err != nil {
+						return errors.Wrap(err, "importing standard roaring")
+					}
+				}
+			}
+			return nil
+		}()
+
+		select {
+		case <-j.ctx.Done():
+		case j.errChan <- err:
+		}
+	}
+}
+
 // ImportRoaring is a low level interface for importing data to Pilosa when
 // extremely high throughput is desired. The data must be encoded in a
 // particular way which may be unintuitive (discussed below). The data is merged
@@ -298,7 +374,6 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 	}
 
 	nodes := api.cluster.shardNodes(indexName, shard)
-	var eg errgroup.Group
 
 	field := api.holder.Field(indexName, fieldName)
 	if field == nil {
@@ -310,48 +385,45 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 		return NewBadRequestError(errors.New("roaring import is only supported for set and time fields"))
 	}
 
+	errCh := make(chan error, len(nodes))
+
 	for _, node := range nodes {
 		node := node
 		if node.ID == api.server.nodeID {
-			eg.Go(func() error {
-				var err error
-				for viewName, viewData := range req.Views {
-					if viewName == "" {
-						viewName = viewStandard
-					} else {
-						viewName = fmt.Sprintf("%s_%s", viewStandard, viewName)
-					}
-					if len(viewData) == 0 {
-						return fmt.Errorf("no data to import for view: %s", viewName)
-					}
-					fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
-					if fileMagic == roaring.MagicNumber { // if pilosa roaring format
-						err = field.importRoaring(ctx, viewData, shard, viewName, req.Clear)
-						if err != nil {
-							return errors.Wrap(err, "importing pilosa roaring")
-						}
-
-					} else {
-						// must make a copy of data to operate on locally on standard roaring format.
-						// field.importRoaring changes the standard roaring run format to pilosa roaring
-						data := make([]byte, len(viewData))
-						copy(data, viewData)
-						err = field.importRoaring(ctx, data, shard, viewName, req.Clear)
-						if err != nil {
-							return errors.Wrap(err, "importing standard roaring")
-						}
-					}
-				}
-				return err
-			})
+			api.importWork <- importJob{
+				ctx:     ctx,
+				req:     req,
+				shard:   shard,
+				field:   field,
+				errChan: errCh,
+			}
 		} else if !remote { // if remote == true we don't forward to other nodes
 			// forward it on
-			eg.Go(func() error {
-				return api.server.defaultClient.ImportRoaring(ctx, &node.URI, indexName, fieldName, shard, true, req)
-			})
+			go func() {
+				errCh <- api.server.defaultClient.ImportRoaring(ctx, &node.URI, indexName, fieldName, shard, true, req)
+			}()
+		} else {
+			errCh <- nil
 		}
 	}
-	return eg.Wait()
+
+	var maxNode int
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case nodeErr := <-errCh:
+			if nodeErr != nil {
+				return nodeErr
+			}
+			maxNode++
+		}
+
+		// Exit once all nodes are processed.
+		if maxNode == len(nodes) {
+			return nil
+		}
+	}
 }
 
 // DeleteField removes the named field from the named index. If the index is not
