@@ -412,3 +412,29 @@ func TestField_PersistAvailableShardsFootprint(t *testing.T) {
 	}
 
 }
+
+// Ensure that FieldOptions.Base defaults to the correct value.
+func TestBSIGroup_BaseDefaultValue(t *testing.T) {
+	for i, tt := range []struct {
+		min     int64
+		max     int64
+		expBase int64
+	}{
+		{100, 200, 100},
+		{-100, 100, 0},
+		{-200, -100, -100},
+	} {
+		fn := OptFieldTypeInt(tt.min, tt.max)
+
+		// Apply functional option.
+		fo := FieldOptions{}
+		err := fn(&fo)
+		if err != nil {
+			t.Fatalf("test %d, applying functional option: %s", i, err.Error())
+		}
+
+		if fo.Base != tt.expBase {
+			t.Fatalf("test %d, unexpected FieldOptions.Base value. expected: %d, but got: %d", i, tt.expBase, fo.Base)
+		}
+	}
+}

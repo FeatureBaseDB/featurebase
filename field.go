@@ -143,6 +143,15 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 		fo.Type = FieldTypeInt
 		fo.Min = min
 		fo.Max = max
+		// Base is not exposed as a field option argument.
+		// It defaults to min, max, or 0 depending on the min/max range.
+		if min > 0 {
+			fo.Base = min
+		} else if max < 0 {
+			fo.Base = max
+		} else {
+			fo.Base = 0
+		}
 		return nil
 	}
 }
