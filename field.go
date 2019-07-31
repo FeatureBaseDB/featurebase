@@ -143,15 +143,7 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 		fo.Type = FieldTypeInt
 		fo.Min = min
 		fo.Max = max
-		// Base is not exposed as a field option argument.
-		// It defaults to min, max, or 0 depending on the min/max range.
-		if min > 0 {
-			fo.Base = min
-		} else if max < 0 {
-			fo.Base = max
-		} else {
-			fo.Base = 0
-		}
+		fo.Base = bsiBase(min, max)
 		return nil
 	}
 }
@@ -508,13 +500,7 @@ func (f *Field) loadMeta() error {
 
 	// Initialize "base" to "min" when upgrading from v1 BSI format.
 	if pb.BitDepth == 0 {
-		if pb.Min > 0 {
-			pb.Base = pb.Min
-		} else if pb.Max < 0 {
-			pb.Base = pb.Max
-		} else {
-			pb.Base = 0
-		}
+		pb.Base = bsiBase(pb.Min, pb.Max)
 		pb.BitDepth = uint64(bitDepthInt64(pb.Max - pb.Min))
 		if pb.BitDepth == 0 {
 			pb.BitDepth = 1
@@ -1514,6 +1500,18 @@ func isValidBSIGroupType(v string) bool {
 	default:
 		return false
 	}
+}
+
+// bsiBase is a helper function used to determine the default value
+// for base. Because base is not exposed as a field option argument,
+// it defaults to min, max, or 0 depending on the min/max range.
+func bsiBase(min, max int64) int64 {
+	if min > 0 {
+		return min
+	} else if max < 0 {
+		return max
+	}
+	return 0
 }
 
 // bsiGroup represents a group of range-encoded rows on a field.
