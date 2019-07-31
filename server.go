@@ -276,12 +276,12 @@ func OptServerNodeID(nodeID string) ServerOption {
 	}
 }
 
-// OptServerClusterHasher is a functional option on Server
-// used to specify the consistent hash algorithm for data
-// location within the cluster.
-func OptServerClusterHasher(h Hasher) ServerOption {
+// OptServerShardDistributor is a functional option on Server
+// used to specify the shard distributing algorithm for
+// distributing shards to nodes in the cluster.
+func OptServerShardDistributor(d ShardDistributor) ServerOption {
 	return func(s *Server) error {
-		s.cluster.Hasher = h
+		s.cluster.ShardDistributor = d
 		return nil
 	}
 }

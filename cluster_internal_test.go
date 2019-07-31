@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -28,7 +27,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"testing/quick"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -330,41 +328,18 @@ func TestCluster_Owners(t *testing.T) {
 			{URI: NewTestURIFromHostPort("serverB", 1000)},
 			{URI: NewTestURIFromHostPort("serverC", 1000)},
 		},
-		Hasher:   NewTestModHasher(),
-		ReplicaN: 2,
+		ShardDistributor: NewTestModDistributor(3),
+		ReplicaN:         2,
 	}
 
 	// Verify nodes are distributed.
-	if a := c.partitionNodes(0); !reflect.DeepEqual(a, []*Node{c.nodes[0], c.nodes[1]}) {
+	if a := c.shardNodes("index", 0); !reflect.DeepEqual(a, []*Node{c.nodes[0], c.nodes[1]}) {
 		t.Fatalf("unexpected owners: %s", spew.Sdump(a))
 	}
 
 	// Verify nodes go around the ring.
-	if a := c.partitionNodes(2); !reflect.DeepEqual(a, []*Node{c.nodes[2], c.nodes[0]}) {
+	if a := c.shardNodes("index", 2); !reflect.DeepEqual(a, []*Node{c.nodes[2], c.nodes[0]}) {
 		t.Fatalf("unexpected owners: %s", spew.Sdump(a))
-	}
-}
-
-// Ensure the partitioner can assign a fragment to a partition.
-func TestCluster_Partition(t *testing.T) {
-	if err := quick.Check(func(index string, shard uint64, partitionN int) bool {
-		c := newCluster()
-		c.partitionN = partitionN
-
-		partitionID := c.partition(index, shard)
-		if partitionID < 0 || partitionID >= partitionN {
-			t.Errorf("partition out of range: shard=%d, p=%d, n=%d", shard, partitionID, partitionN)
-		}
-
-		return true
-	}, &quick.Config{
-		Values: func(values []reflect.Value, rand *rand.Rand) {
-			values[0], _ = quick.Value(reflect.TypeOf(""), rand)
-			values[1] = reflect.ValueOf(uint64(rand.Uint32()))
-			values[2] = reflect.ValueOf(rand.Intn(1000) + 1)
-		},
-	}); err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -381,8 +356,8 @@ func TestHasher(t *testing.T) {
 		{0x0ddc0ffeebadf00d, []int{0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 15, 15, 15, 15}},
 	} {
 		for i, v := range tt.bucket {
-			hasher := &jmphasher{}
-			if got := hasher.Hash(tt.key, i+1); got != v {
+			distributor := &jumpDistributor{}
+			if got := distributor.Hash(tt.key, i+1); got != v {
 				t.Errorf("hash(%v,%v)=%v, want %v", tt.key, i+1, got, v)
 			}
 		}
@@ -392,11 +367,12 @@ func TestHasher(t *testing.T) {
 // Ensure ContainsShards can find the actual shard list for node and index.
 func TestCluster_ContainsShards(t *testing.T) {
 	c := NewTestCluster(5)
+	c.ShardDistributor = NewTestModDistributor(5)
 	c.ReplicaN = 3
 	shards := c.containsShards("test", roaring.NewBitmap(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10), c.nodes[2])
 
-	if !reflect.DeepEqual(shards, []uint64{0, 2, 3, 5, 6, 9, 10}) {
-		t.Fatalf("unexpected shars for node's index: %v", shards)
+	if !reflect.DeepEqual(shards, []uint64{0, 1, 2, 5, 6, 7, 10}) {
+		t.Fatalf("unexpected shards for node's index: %v", shards)
 	}
 }
 

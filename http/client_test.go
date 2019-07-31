@@ -35,13 +35,14 @@ import (
 
 // Test distributed TopN Row count across 3 nodes.
 func TestClient_MultiNode(t *testing.T) {
+	partitionN := 3
 	c := test.MustRunCluster(t, 3,
 		[]server.CommandOption{
-			server.OptCommandServerOptions(pilosa.OptServerNodeID("node0"), pilosa.OptServerClusterHasher(&test.ModHasher{}))},
+			server.OptCommandServerOptions(pilosa.OptServerNodeID("node0"), pilosa.OptServerShardDistributor(test.NewModDistributor(partitionN)))},
 		[]server.CommandOption{
-			server.OptCommandServerOptions(pilosa.OptServerNodeID("node1"), pilosa.OptServerClusterHasher(&test.ModHasher{}))},
+			server.OptCommandServerOptions(pilosa.OptServerNodeID("node1"), pilosa.OptServerShardDistributor(test.NewModDistributor(partitionN)))},
 		[]server.CommandOption{
-			server.OptCommandServerOptions(pilosa.OptServerNodeID("node2"), pilosa.OptServerClusterHasher(&test.ModHasher{}))},
+			server.OptCommandServerOptions(pilosa.OptServerNodeID("node2"), pilosa.OptServerShardDistributor(test.NewModDistributor(partitionN)))},
 	)
 	defer c.Close()
 

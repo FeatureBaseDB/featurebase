@@ -36,7 +36,7 @@ func NewTestCluster(n int) *cluster {
 
 	c := newCluster()
 	c.ReplicaN = 1
-	c.Hasher = NewTestModHasher()
+	c.ShardDistributor = NewTestModDistributor(defaultPartitionN)
 	c.Path = path
 	c.Topology = newTopology()
 
@@ -77,6 +77,26 @@ type TestModHasher struct{}
 func NewTestModHasher() *TestModHasher { return &TestModHasher{} }
 
 func (*TestModHasher) Hash(key uint64, n int) int { return int(key) % n }
+
+// ModDistributor represents a simple, mod-based shard distributor.
+type TestModDistributor struct {
+	partitionN int
+}
+
+// NewTestModDistributor returns a new instance of ModDistributor.
+func NewTestModDistributor(partitionN int) *TestModDistributor {
+	return &TestModDistributor{partitionN: partitionN}
+}
+
+// NodeOwners satisfies the ShardDistributor interface.
+func (d *TestModDistributor) NodeOwners(nodeIDs []string, replicaN int, index string, shard uint64) []string {
+	idx := int(shard % uint64(d.partitionN))
+	owners := make([]string, 0, replicaN)
+	for i := 0; i < replicaN; i++ {
+		owners = append(owners, nodeIDs[(idx+i)%len(nodeIDs)])
+	}
+	return owners
+}
 
 // ClusterCluster represents a cluster of test nodes, each of which
 // has a Cluster.
@@ -224,7 +244,8 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	// cluster
 	c := newCluster()
 	c.ReplicaN = 1
-	c.Hasher = NewTestModHasher()
+	// need partitionN
+	c.ShardDistributor = NewTestModDistributor(defaultPartitionN)
 	c.Path = path
 	c.Topology = newTopology()
 	c.holder = h
