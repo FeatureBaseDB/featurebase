@@ -508,7 +508,13 @@ func (f *Field) loadMeta() error {
 
 	// Initialize "base" to "min" when upgrading from v1 BSI format.
 	if pb.BitDepth == 0 {
-		pb.Base = pb.Min
+		if pb.Min > 0 {
+			pb.Base = pb.Min
+		} else if pb.Max < 0 {
+			pb.Base = pb.Max
+		} else {
+			pb.Base = 0
+		}
 		pb.BitDepth = uint64(bitDepthInt64(pb.Max - pb.Min))
 		if pb.BitDepth == 0 {
 			pb.BitDepth = 1
