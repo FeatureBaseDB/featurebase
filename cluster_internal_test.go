@@ -379,7 +379,7 @@ func TestCluster_ContainsShards(t *testing.T) {
 // Ensure Jump distributor distributes shards the same way as previous implementation.
 func TestCluster_JumpDistributor(t *testing.T) {
 	c := NewTestCluster(5)
-	c.ShardDistributor = &jumpDistributor{partitionN: defaultPartitionN}
+	c.ShardDistributor = newJumpDistributor(defaultPartitionN)
 	c.ReplicaN = 3
 
 	tests := []struct {

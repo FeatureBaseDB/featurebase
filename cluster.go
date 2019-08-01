@@ -232,7 +232,7 @@ type cluster struct { // nolint: maligned
 // newCluster returns a new instance of Cluster with defaults.
 func newCluster() *cluster {
 	return &cluster{
-		ShardDistributor: &jumpDistributor{partitionN: defaultPartitionN},
+		ShardDistributor: newJumpDistributor(defaultPartitionN),
 		partitionN:       defaultPartitionN,
 		ReplicaN:         1,
 
@@ -891,6 +891,12 @@ type ShardDistributor interface {
 
 type jumpDistributor struct {
 	partitionN int
+}
+
+func newJumpDistributor(partitionN int) *jumpDistributor {
+	return &jumpDistributor{
+		partitionN: partitionN,
+	}
 }
 
 // Hash returns the integer hash for the given key.
