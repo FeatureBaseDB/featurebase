@@ -35,6 +35,8 @@ import (
 
 // Test distributed TopN Row count across 3 nodes.
 func TestClient_MultiNode(t *testing.T) {
+	// For testing with modhasher, we set the number
+	// of partitions to the number of nodes.
 	partitionN := 3
 	c := test.MustRunCluster(t, 3,
 		[]server.CommandOption{
@@ -52,27 +54,7 @@ func TestClient_MultiNode(t *testing.T) {
 	}
 
 	// Create a dispersed set of bitmaps across 3 nodes such that each individual node and shard width increment would reveal a different TopN.
-	shardNums := []uint64{1, 2, 6}
-
-	// This was generated with: `owns := s[i].Handler.Handler.API.Cluster.OwnsShards("i", 20, s[i].HostURI())`
-	owns := [][]uint64{
-		{1, 3, 4, 8, 10, 13, 17, 19},
-		{2, 5, 7, 11, 12, 14, 18},
-		{0, 6, 9, 15, 16, 20},
-	}
-
-	for i, num := range shardNums {
-		ownsNum := false
-		for _, ownNum := range owns[i] {
-			if ownNum == num {
-				ownsNum = true
-				break
-			}
-		}
-		if !ownsNum {
-			t.Fatalf("Trying to use shard %d on host %s, but it doesn't own that shard. It owns %v", num, c[i].URL(), owns)
-		}
-	}
+	shardNums := []uint64{0, 1, 2}
 
 	baseBit0 := pilosa.ShardWidth * shardNums[0]
 	baseBit1 := pilosa.ShardWidth * shardNums[1]
