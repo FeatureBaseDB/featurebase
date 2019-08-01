@@ -376,6 +376,47 @@ func TestCluster_ContainsShards(t *testing.T) {
 	}
 }
 
+// Ensure Jump distributor distributes shards the same way as previous implementation.
+func TestCluster_JumpDistributor(t *testing.T) {
+	c := NewTestCluster(5)
+	c.ShardDistributor = &jumpDistributor{partitionN: defaultPartitionN}
+	c.ReplicaN = 3
+
+	tests := []struct {
+		shard    uint64
+		expected []string
+	}{
+		{shard: 2, expected: []string{"node4", "node0", "node1"}},
+		{shard: 5, expected: []string{"node1", "node2", "node3"}},
+		{shard: 13, expected: []string{"node4", "node0", "node1"}},
+		{shard: 34, expected: []string{"node2", "node3", "node4"}},
+		{shard: 89, expected: []string{"node2", "node3", "node4"}},
+		{shard: 233, expected: []string{"node0", "node1", "node2"}},
+		{shard: 610, expected: []string{"node1", "node2", "node3"}},
+		{shard: 1597, expected: []string{"node4", "node0", "node1"}},
+		{shard: 4181, expected: []string{"node1", "node2", "node3"}},
+		{shard: 10946, expected: []string{"node0", "node1", "node2"}},
+		{shard: 28657, expected: []string{"node3", "node4", "node0"}},
+		{shard: 75025, expected: []string{"node3", "node4", "node0"}},
+		{shard: 196418, expected: []string{"node4", "node0", "node1"}},
+		{shard: 514229, expected: []string{"node3", "node4", "node0"}},
+		{shard: 1346269, expected: []string{"node2", "node3", "node4"}},
+		{shard: 3524578, expected: []string{"node2", "node3", "node4"}},
+		{shard: 9227465, expected: []string{"node3", "node4", "node0"}},
+		{shard: 24157817, expected: []string{"node4", "node0", "node1"}},
+		{shard: 63245986, expected: []string{"node0", "node1", "node2"}},
+		{shard: 165580141, expected: []string{"node1", "node2", "node3"}},
+	}
+
+	for _, ts := range tests {
+		nodes := c.shardNodes("index", ts.shard)
+		nodeIDs := Nodes(nodes).IDs()
+		if !reflect.DeepEqual(nodeIDs, ts.expected) {
+			t.Fatalf("wrong distribution for shard %d: expected %v, got %v", ts.shard, ts.expected, nodeIDs)
+		}
+	}
+}
+
 func TestCluster_Nodes(t *testing.T) {
 	uri0 := NewTestURIFromHostPort("node0", 0)
 	uri1 := NewTestURIFromHostPort("node1", 0)
