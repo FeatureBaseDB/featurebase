@@ -855,7 +855,7 @@ func (c *cluster) shardNodes(index string, shard uint64) []*Node {
 	nodeIDs := c.ShardDistributor.NodeOwners(c.nodeIDs(), c.ReplicaN, index, shard)
 	nodes := make([]*Node, 0)
 	for _, ID := range nodeIDs {
-		node := c.nodeByID(ID)
+		node := c.unprotectedNodeByID(ID)
 		nodes = append(nodes, node)
 	}
 	return nodes
