@@ -70,14 +70,6 @@ func NewTestURIFromHostPort(host string, port uint16) URI {
 	return *uri
 }
 
-// ModHasher represents a simple, mod-based hashing.
-type TestModHasher struct{}
-
-// NewTestModHasher returns a new instance of ModHasher with n buckets.
-func NewTestModHasher() *TestModHasher { return &TestModHasher{} }
-
-func (*TestModHasher) Hash(key uint64, n int) int { return int(key) % n }
-
 // ModDistributor represents a simple, mod-based shard distributor.
 type TestModDistributor struct {
 	partitionN int
