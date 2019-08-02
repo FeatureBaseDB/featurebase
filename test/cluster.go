@@ -33,3 +33,9 @@ func (d *ModDistributor) NodeOwners(nodeIDs []string, replicaN int, index string
 	}
 	return owners
 }
+
+// AddNode is a nop and only exists to satisfy the `ShardDistributor` interface.
+func (d *ModDistributor) AddNode(nodeID string) error { return nil }
+
+// RemoveNode is a nop and only exists to satisfy the `ShardDistributor` interface.
+func (d *ModDistributor) RemoveNode(nodeID string) error { return nil }

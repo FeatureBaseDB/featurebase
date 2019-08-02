@@ -90,6 +90,12 @@ func (d *TestModDistributor) NodeOwners(nodeIDs []string, replicaN int, index st
 	return owners
 }
 
+// AddNode is a nop and only exists to satisfy the `ShardDistributor` interface.
+func (d *TestModDistributor) AddNode(nodeID string) error { return nil }
+
+// RemoveNode is a nop and only exists to satisfy the `ShardDistributor` interface.
+func (d *TestModDistributor) RemoveNode(nodeID string) error { return nil }
+
 // ClusterCluster represents a cluster of test nodes, each of which
 // has a Cluster.
 // ClusterCluster implements Broadcaster interface.

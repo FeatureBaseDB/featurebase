@@ -370,7 +370,7 @@ func (c *cluster) unprotectedUpdateCoordinator(n *Node) bool {
 }
 
 // addNode adds a node to the Cluster and updates and saves the
-// new topology. unprotected.
+// new topology. This also updates the shard distributor. unprotected.
 func (c *cluster) addNode(node *Node) error {
 	// If the node being added is the coordinator, set it for this node.
 	if node.IsCoordinator {
@@ -380,6 +380,11 @@ func (c *cluster) addNode(node *Node) error {
 	// add to cluster
 	if !c.addNodeBasicSorted(node) {
 		return nil
+	}
+
+	// add to ShardDistributor
+	if err := c.ShardDistributor.AddNode(node.ID); err != nil {
+		return fmt.Errorf("adding node to shard distributor: %v", err)
 	}
 
 	// add to topology
@@ -396,10 +401,15 @@ func (c *cluster) addNode(node *Node) error {
 }
 
 // removeNode removes a node from the Cluster and updates and saves the
-// new topology. unprotected.
+// new topology. This also updates the shard distributor. unprotected.
 func (c *cluster) removeNode(nodeID string) error {
 	// remove from cluster
 	c.removeNodeBasicSorted(nodeID)
+
+	// remove from ShardDistributor
+	if err := c.ShardDistributor.RemoveNode(nodeID); err != nil {
+		return fmt.Errorf("removing node from shard distributor: %v", err)
+	}
 
 	// remove from topology
 	if c.Topology == nil {
@@ -887,6 +897,10 @@ func (c *cluster) containsShards(index string, availableShards *roaring.Bitmap, 
 type ShardDistributor interface {
 	// NodeOwners returns a list of nodes that own a fragment.
 	NodeOwners(nodeIDs []string, replicaN int, index string, shard uint64) []string
+	// AddNode adds a new node to the shard distributor.
+	AddNode(nodeID string) error
+	// RemoveNode removes a node from the shard distributor.
+	RemoveNode(nodeID string) error
 }
 
 type jumpDistributor struct {
@@ -898,6 +912,17 @@ func newJumpDistributor(partitionN int) *jumpDistributor {
 		partitionN: partitionN,
 	}
 }
+
+// NodeOwners returns a list of nodes that own a fragment.
+func (d *jumpDistributor) NodeOwners(nodeIDs []string, replicaN int, index string, shard uint64) []string {
+	return d.shardNodes(nodeIDs, replicaN, index, shard)
+}
+
+// AddNode is a nop for Jump and only exists to satisfy the `ShardDistributor` interface.
+func (d *jumpDistributor) AddNode(nodeID string) error { return nil }
+
+// RemoveNode is a nop for Jump and only exists to satisfy the `ShardDistributor` interface.
+func (d *jumpDistributor) RemoveNode(nodeID string) error { return nil }
 
 // Hash returns the integer hash for the given key.
 func (d *jumpDistributor) Hash(key uint64, n int) int {
@@ -948,10 +973,6 @@ func (d *jumpDistributor) partitionNodes(nodeIDs []string, partitionID, replicaN
 func (d *jumpDistributor) shardNodes(nodeIDs []string, replicaN int, index string, shard uint64) []string {
 	partitionID := d.partitionID(index, shard)
 	return d.partitionNodes(nodeIDs, partitionID, replicaN)
-}
-
-func (d *jumpDistributor) NodeOwners(nodeIDs []string, replicaN int, index string, shard uint64) []string {
-	return d.shardNodes(nodeIDs, replicaN, index, shard)
 }
 
 func (c *cluster) setup() error {
