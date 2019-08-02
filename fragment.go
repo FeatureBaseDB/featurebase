@@ -1104,6 +1104,56 @@ func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value int64, c
 	return changed, nil
 }
 
+// distinct returns a list of distinct values in the fragment.
+// A bitmap can be passed in to optionally filter the computed columns.
+func (f *fragment) distinct(filter *Row, bitDepth uint) ([]int64, error) {
+	// Compute distinct based on the existence row.
+	consider := f.row(bsiExistsBit)
+	if filter != nil {
+		consider = consider.Intersect(filter)
+	}
+
+	sums := make(map[uint64]int64)
+
+	//initialize the map
+	for _, col := range consider.Columns() {
+		sums[col] = 0
+	}
+
+	// get each row in bitDepth and increment the relevant sums
+	for i := uint(0); i < bitDepth; i++ {
+		row := f.row(uint64(bsiOffsetBit + i)).Intersect(consider)
+		for _, col := range row.Columns() {
+			sums[col] += 1 << i
+		}
+	}
+
+	// get the sign row and apply to relevant columns
+	nrow := f.row(bsiSignBit).Intersect(consider)
+	for _, col := range nrow.Columns() {
+		sums[col] *= -1
+	}
+
+	// set is a map used to maintain a distinct set of return values.
+	set := make(map[int64]struct{})
+
+	// add values to the set
+	for _, v := range sums {
+		set[v] = struct{}{}
+	}
+
+	// get the keys from the set map and return as an array
+	keys := make([]int64, 0, len(set))
+	for k := range set {
+		keys = append(keys, k)
+	}
+
+	// sort keys before returning
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+
+	return keys, nil
+}
+
 // sum returns the sum of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
 func (f *fragment) sum(filter *Row, bitDepth uint) (sum int64, count uint64, err error) {
