@@ -1104,6 +1104,107 @@ func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value int64, c
 	return changed, nil
 }
 
+// distinct returns a list of distinct values in the fragment.
+// A bitmap can be passed in to optionally filter the computed columns.
+func (f *fragment) distinct(filter *Row, bitDepth uint) ([]int64, error) {
+	// Compute distinct based on the existence row.
+	consider := f.row(bsiExistsBit)
+	if filter != nil {
+		consider = consider.Intersect(filter)
+	}
+
+	// set up array of channels (bool) sizeBitDepth + 1 for sign
+	var chans []chan bool
+	for i := uint(0); i < bitDepth; i++ {
+		chans = append(chans, make(chan bool))
+	}
+
+	// channel for sign bits
+	var signCh = make(chan bool)
+
+	nrow := f.row(bsiSignBit)
+
+	// make bitDepth + 1 iterators over rows + sign row
+	for i := uint(0); i < bitDepth; i++ {
+		go func(rowID uint) {
+			rowToChan(consider, f.row(uint64(bsiOffsetBit+rowID)), chans[rowID])
+		}(i)
+	}
+	go func() {
+		rowToChan(consider, nrow, signCh)
+	}()
+
+	// set is a map used to maintain a distinct set of return values.
+	type void struct{}
+	var member void
+	set := make(map[int64]void)
+
+	// read a bool from each channel and create a value (also setting sign bit)
+	for range consider.Columns() {
+		var colVal int64
+		for i := uint(0); i < bitDepth; i++ {
+			if <-chans[i] {
+				colVal += 1 << i
+			}
+		}
+		// get the sign bit
+		if <-signCh {
+			colVal *= -1
+		}
+
+		// add value to the set
+		set[colVal] = member
+	}
+
+	// close channels
+	for i := range chans {
+		close(chans[i])
+	}
+	close(signCh)
+
+	// get the keys from the set map and return as an array
+	keys := make([]int64, 0, len(set))
+	for k := range set {
+		keys = append(keys, k)
+	}
+
+	// sort keys before returning
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+
+	return keys, nil
+}
+
+// rowToChan is a helper function used by distinct().
+// It pushes the bit values of row (0/1) to channel ch
+// as a boolean (false/true respectively). The consider
+// parameter is used to filter the result to contain only
+// those specific columns.
+func rowToChan(consider, row *Row, ch chan bool) {
+	row = row.Intersect(consider)
+	rowCols := row.Columns()
+
+	var rowIdx = 0
+	var nextVal uint64 = 0
+	var checkNextVal = true
+
+	// run iterators and populate channels with 0's and 1's
+	for _, col := range consider.Columns() {
+		// get the next value
+		if checkNextVal && len(rowCols) > rowIdx {
+			nextVal = rowCols[rowIdx]
+			rowIdx++
+		}
+
+		if col == nextVal {
+			ch <- true
+			checkNextVal = true
+			continue
+		}
+		ch <- false
+		checkNextVal = false
+	}
+}
+
 // sum returns the sum of a given bsiGroup as well as the number of columns involved.
 // A bitmap can be passed in to optionally filter the computed columns.
 func (f *fragment) sum(filter *Row, bitDepth uint) (sum int64, count uint64, err error) {

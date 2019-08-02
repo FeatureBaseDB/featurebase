@@ -3431,3 +3431,88 @@ func TestFragmentConcurrentReadWrite(t *testing.T) {
 
 	t.Logf("%d", acc)
 }
+
+// Ensure a fragment can return distinct values.
+func TestFragment_Distinct(t *testing.T) {
+	const bitDepth = 16
+
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
+	defer f.Clean(t)
+
+	// Set values.
+	if _, err := f.setValue(1000, bitDepth, 382); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.setValue(2000, bitDepth, 300); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.setValue(3000, bitDepth, -2818); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.setValue(4000, bitDepth, 300); err != nil {
+		t.Fatal(err)
+	} else if _, err := f.setValue(5000, bitDepth, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("NoFilter", func(t *testing.T) {
+		if distincts, err := f.distinct(nil, bitDepth); err != nil {
+			t.Fatalf("getting distincts: %s", err)
+		} else if !reflect.DeepEqual(distincts, []int64{-2818, 0, 300, 382}) {
+			t.Fatalf("unexpected distinct: %v", distincts)
+		}
+	})
+
+	t.Run("WithFilter", func(t *testing.T) {
+		if distincts, err := f.distinct(NewRow(2000, 4000, 6000), bitDepth); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(distincts, []int64{300}) {
+			t.Fatalf("unexpected distinct: %v", distincts)
+		}
+	})
+}
+
+// Benchmark performance of distinct for BSI fields.
+func BenchmarkFragmentDistinct(b *testing.B) {
+	depths := []uint{4, 8, 16}
+	for _, bitDepth := range depths {
+		name := fmt.Sprintf("Depth%d", bitDepth)
+
+		// sparse
+		sparse := mustOpenBSIFragment("i", "sparse", viewBSIGroupPrefix+"foo", 0)
+		simpleImportValues(b, 15, bitDepth, sparse, func(u uint64) uint64 { return (u + 70000) & (ShardWidth - 1) })
+
+		// dense
+		dense := mustOpenBSIFragment("i", "f", viewBSIGroupPrefix+"foo", 0)
+		simpleImportValues(b, ShardWidth, bitDepth, dense, func(u uint64) uint64 { return (u + 1) & (ShardWidth - 1) })
+
+		b.Run(name+"_Sparse", func(b *testing.B) {
+			for n := 0; n < b.N; n++ {
+				if _, err := sparse.distinct(nil, bitDepth); err != nil {
+					b.Fatalf("getting distincts: %s", err)
+				}
+			}
+		})
+
+		b.Run(name+"_Dense", func(b *testing.B) {
+			for n := 0; n < b.N; n++ {
+				if _, err := dense.distinct(nil, bitDepth); err != nil {
+					b.Fatalf("getting distincts: %s", err)
+				}
+			}
+		})
+	}
+}
+
+// simpleImportValues is a helper function to set various BSI value patterns.
+func simpleImportValues(b *testing.B, cols, bitDepth uint, f *fragment, cfunc func(uint64) uint64) {
+	column := uint64(0)
+	columns := make([]uint64, cols)
+	values := make([]int64, cols)
+	for i := uint(0); i < cols; i++ {
+		values[i] = int64(i)
+		columns[i] = column
+		column = cfunc(column)
+	}
+	err := f.importValue(columns, values, bitDepth, false)
+	if err != nil {
+		b.Fatalf("error importing values: %s", err)
+	}
+}
