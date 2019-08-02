@@ -3453,18 +3453,22 @@ func TestFragment_Distinct(t *testing.T) {
 	}
 
 	t.Run("NoFilter", func(t *testing.T) {
-		if distincts, err := f.distinct(nil, bitDepth); err != nil {
+		if neg, pos, err := f.distinct(nil, bitDepth); err != nil {
 			t.Fatalf("getting distincts: %s", err)
-		} else if !reflect.DeepEqual(distincts, []int64{-2818, 0, 300, 382}) {
-			t.Fatalf("unexpected distinct: %v", distincts)
+		} else if !reflect.DeepEqual(neg.Columns(), []uint64{2818}) {
+			t.Fatalf("unexpected distinct (negative): %v", neg.Columns())
+		} else if !reflect.DeepEqual(pos.Columns(), []uint64{0, 300, 382}) {
+			t.Fatalf("unexpected distinct (positive): %v", pos.Columns())
 		}
 	})
 
 	t.Run("WithFilter", func(t *testing.T) {
-		if distincts, err := f.distinct(NewRow(2000, 4000, 6000), bitDepth); err != nil {
-			t.Fatal(err)
-		} else if !reflect.DeepEqual(distincts, []int64{300}) {
-			t.Fatalf("unexpected distinct: %v", distincts)
+		if neg, pos, err := f.distinct(NewRow(2000, 4000, 6000), bitDepth); err != nil {
+			t.Fatalf("getting distincts: %s", err)
+		} else if !reflect.DeepEqual(neg.Columns(), []uint64{}) {
+			t.Fatalf("unexpected distinct (negative): %v", neg.Columns())
+		} else if !reflect.DeepEqual(pos.Columns(), []uint64{300}) {
+			t.Fatalf("unexpected distinct (positive): %v", pos.Columns())
 		}
 	})
 }
@@ -3485,7 +3489,7 @@ func BenchmarkFragmentDistinct(b *testing.B) {
 
 		b.Run(name+"_Sparse", func(b *testing.B) {
 			for n := 0; n < b.N; n++ {
-				if _, err := sparse.distinct(nil, bitDepth); err != nil {
+				if _, _, err := sparse.distinct(nil, bitDepth); err != nil {
 					b.Fatalf("getting distincts: %s", err)
 				}
 			}
@@ -3493,7 +3497,7 @@ func BenchmarkFragmentDistinct(b *testing.B) {
 
 		b.Run(name+"_Dense", func(b *testing.B) {
 			for n := 0; n < b.N; n++ {
-				if _, err := dense.distinct(nil, bitDepth); err != nil {
+				if _, _, err := dense.distinct(nil, bitDepth); err != nil {
 					b.Fatalf("getting distincts: %s", err)
 				}
 			}

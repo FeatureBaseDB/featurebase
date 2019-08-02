@@ -1106,7 +1106,13 @@ func (f *fragment) importSetValue(columnID uint64, bitDepth uint, value int64, c
 
 // distinct returns a list of distinct values in the fragment.
 // A bitmap can be passed in to optionally filter the computed columns.
-func (f *fragment) distinct(filter *Row, bitDepth uint) ([]int64, error) {
+// Returns two bitmaps; one each for positive and negative values. Zero
+// will only be set in the positive bitmap.
+func (f *fragment) distinct(filter *Row, bitDepth uint) (neg, pos *Row, err error) {
+
+	neg = NewRow()
+	pos = NewRow()
+
 	// Compute distinct based on the existence row.
 	consider := f.row(bsiExistsBit)
 	if filter != nil {
@@ -1134,24 +1140,16 @@ func (f *fragment) distinct(filter *Row, bitDepth uint) ([]int64, error) {
 		sums[col] *= -1
 	}
 
-	// set is a map used to maintain a distinct set of return values.
-	set := make(map[int64]struct{})
-
-	// add values to the set
+	// add values to the neg/pos bitmaps.
 	for _, v := range sums {
-		set[v] = struct{}{}
+		if v >= 0 {
+			pos.SetBit(uint64(v))
+		} else {
+			neg.SetBit(uint64(v * -1))
+		}
 	}
 
-	// get the keys from the set map and return as an array
-	keys := make([]int64, 0, len(set))
-	for k := range set {
-		keys = append(keys, k)
-	}
-
-	// sort keys before returning
-	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
-
-	return keys, nil
+	return neg, pos, nil
 }
 
 // sum returns the sum of a given bsiGroup as well as the number of columns involved.
