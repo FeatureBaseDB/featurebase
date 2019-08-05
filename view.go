@@ -363,6 +363,20 @@ func (v *view) setValue(columnID uint64, bitDepth uint, value int64) (changed bo
 	return frag.setValue(columnID, bitDepth, value)
 }
 
+// distinct returns the distinct among all fragments.
+func (v *view) distinct(filter *Row, bitDepth uint) (neg, pos *Row, err error) {
+	for _, f := range v.allFragments() {
+		fneg, fpos, err := f.distinct(filter, bitDepth)
+		if err != nil {
+			return fneg, fpos, errors.Wrap(err, "getting distinct from fragment")
+		}
+		neg = neg.Union(fneg)
+		pos = pos.Union(fpos)
+	}
+
+	return neg, pos, err
+}
+
 // sum returns the sum & count of a field.
 func (v *view) sum(filter *Row, bitDepth uint) (sum int64, count uint64, err error) {
 	for _, f := range v.allFragments() {

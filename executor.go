@@ -294,6 +294,9 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 
 	// Special handling for mutation and top-n calls.
 	switch c.Name {
+	case "Distinct":
+		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		return e.executeDistinct(ctx, index, c, shards, opt)
 	case "Sum":
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeSum(ctx, index, c, shards, opt)
@@ -403,6 +406,39 @@ func (e *executor) executeOptionsCall(ctx context.Context, index string, c *pql.
 		}
 	}
 	return e.executeCall(ctx, index, c.Children[0], shards, optCopy)
+}
+
+// executeDistinct executes a Distinct() call.
+func (e *executor) executeDistinct(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (SignedRow, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeDistinct")
+	defer span.Finish()
+
+	if field := c.Args["field"]; field == "" {
+		return SignedRow{}, errors.New("Distinct(): field required")
+	}
+
+	if len(c.Children) > 1 {
+		return SignedRow{}, errors.New("Distinct() only accepts a single bitmap input")
+	}
+
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeDistinctShard(ctx, index, c, shard)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		other, _ := prev.(SignedRow)
+		return other.union(v.(SignedRow))
+	}
+
+	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return SignedRow{}, err
+	}
+	other, _ := result.(SignedRow)
+
+	return other, nil
 }
 
 // executeSum executes a Sum() call.
@@ -677,6 +713,48 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, index string, c *
 	default:
 		return nil, fmt.Errorf("unknown call: %s", c.Name)
 	}
+}
+
+// executeDistinctShard calculates distinct on a shard.
+func (e *executor) executeDistinctShard(ctx context.Context, index string, c *pql.Call, shard uint64) (SignedRow, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeDistinctShard")
+	defer span.Finish()
+
+	var filter *Row
+	if len(c.Children) == 1 {
+		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
+		if err != nil {
+			return SignedRow{}, errors.Wrap(err, "executing bitmap call")
+		}
+		filter = row
+	}
+
+	fieldName, _ := c.Args["field"].(string)
+
+	field := e.Holder.Field(index, fieldName)
+	if field == nil {
+		return SignedRow{}, nil
+	}
+
+	bsig := field.bsiGroup(fieldName)
+	if bsig == nil {
+		return SignedRow{}, nil
+	}
+
+	fragment := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
+	if fragment == nil {
+		return SignedRow{}, nil
+	}
+
+	fneg, fpos, err := fragment.distinct(filter, bsig.BitDepth)
+	if err != nil {
+		return SignedRow{}, errors.Wrap(err, "computing distinct")
+	}
+
+	return SignedRow{
+		Neg: fneg,
+		Pos: fpos,
+	}, nil
 }
 
 // executeSumCountShard calculates the sum and count for bsiGroups on a shard.
@@ -2991,6 +3069,36 @@ func needsShards(calls []*pql.Call) bool {
 		}
 	}
 	return false
+}
+
+// SignedRow represents a signed *Row with two (neg/pos) *Rows.
+type SignedRow struct {
+	Neg *Row `json:"neg"`
+	Pos *Row `json:"pos"`
+}
+
+func (sr *SignedRow) union(other SignedRow) SignedRow {
+	ret := SignedRow{&Row{}, &Row{}}
+
+	// merge in sr
+	if sr != nil {
+		if sr.Neg != nil {
+			ret.Neg = ret.Neg.Union(sr.Neg)
+		}
+		if sr.Pos != nil {
+			ret.Pos = ret.Pos.Union(sr.Pos)
+		}
+	}
+
+	// merge in other
+	if other.Neg != nil {
+		ret.Neg = ret.Neg.Union(other.Neg)
+	}
+	if other.Pos != nil {
+		ret.Pos = ret.Pos.Union(other.Pos)
+	}
+
+	return ret
 }
 
 // ValCount represents a grouping of sum & count for Sum() and Average() calls.

@@ -1512,6 +1512,78 @@ func TestExecutor_Execute_MinMaxRow(t *testing.T) {
 	})
 }
 
+// Ensure a Distinct() query can be executed.
+func TestExecutor_Execute_Distinct(t *testing.T) {
+	t.Run("ColumnID", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := idx.CreateField("x", pilosa.OptFieldTypeDefault()); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := idx.CreateField("foo", pilosa.OptFieldTypeInt(-990, 1000)); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := idx.CreateField("bar", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64)); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := idx.CreateField("other", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64)); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+			Set(0, x=0)
+			Set(` + strconv.Itoa(ShardWidth+1) + `, x=0)
+
+			Set(0, foo=20)
+			Set(0, bar=2000)
+			Set(` + strconv.Itoa(ShardWidth) + `, foo=-30)
+			Set(` + strconv.Itoa(ShardWidth+2) + `, foo=40)
+			Set(` + strconv.Itoa(ShardWidth+8) + `, foo=0)
+			Set(` + strconv.Itoa((5*ShardWidth)+100) + `, foo=50)
+			Set(` + strconv.Itoa(ShardWidth+1) + `, foo=60)
+			Set(0, other=1000)
+		`}); err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run("NoFilter", func(t *testing.T) {
+			if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Distinct(field=foo)`}); err != nil {
+				t.Fatal(err)
+			} else {
+				res := result.Results[0].(pilosa.SignedRow)
+				if !reflect.DeepEqual(res.Neg.Columns(), []uint64{30}) {
+					t.Fatalf("unexpected neg result: %s", spew.Sdump(res.Neg.Columns()))
+				} else if !reflect.DeepEqual(res.Pos.Columns(), []uint64{0, 20, 40, 50, 60}) {
+					t.Fatalf("unexpected pos result: %s", spew.Sdump(res.Pos.Columns()))
+				}
+			}
+		})
+
+		t.Run("WithFilter", func(t *testing.T) {
+			if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Distinct(Row(x=0), field=foo)`}); err != nil {
+				t.Fatal(err)
+			} else {
+				res := result.Results[0].(pilosa.SignedRow)
+				if !reflect.DeepEqual(res.Neg.Columns(), []uint64{}) {
+					t.Fatalf("unexpected neg result: %s", spew.Sdump(res.Neg.Columns()))
+				} else if !reflect.DeepEqual(res.Pos.Columns(), []uint64{20, 60}) {
+					t.Fatalf("unexpected pos result: %s", spew.Sdump(res.Pos.Columns()))
+				}
+			}
+		})
+	})
+}
+
 // Ensure a Sum() query can be executed.
 func TestExecutor_Execute_Sum(t *testing.T) {
 	t.Run("ColumnID", func(t *testing.T) {

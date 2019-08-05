@@ -1076,6 +1076,22 @@ func (f *Field) SetValue(columnID uint64, value int64) (changed bool, err error)
 	return view.setValue(columnID, bsig.BitDepth, baseValue)
 }
 
+// Distinct returns the distinct values for a field.
+// An optional filtering row can be provided.
+func (f *Field) Distinct(filter *Row, name string) (neg, pos *Row, err error) {
+	bsig := f.bsiGroup(name)
+	if bsig == nil {
+		return neg, pos, ErrBSIGroupNotFound
+	}
+
+	view := f.view(viewBSIGroupPrefix + name)
+	if view == nil {
+		return neg, pos, err
+	}
+
+	return view.distinct(filter, bsig.BitDepth)
+}
+
 // Sum returns the sum and count for a field.
 // An optional filtering row can be provided.
 func (f *Field) Sum(filter *Row, name string) (sum, count int64, err error) {
