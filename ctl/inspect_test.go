@@ -41,8 +41,8 @@ func TestInspectCommand_Run(t *testing.T) {
 	file.Close()
 	cm.Path = file.Name()
 	err = cm.Run(context.Background())
-	expectedError := "unmarshalling: unknown roaring magic number 12849"
-	if err != nil && err.Error() != expectedError {
+	expectedError := "unmarshalling: "
+	if !strings.Contains(err.Error(), expectedError) {
 		t.Fatalf("expected error '%s', got '%v'", expectedError, err)
 	}
 

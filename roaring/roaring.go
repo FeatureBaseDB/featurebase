@@ -1364,7 +1364,7 @@ func (r *officialRoaringIterator) Next() (key uint64, cType byte, n int, length 
 	var runCount uint16
 	if r.currentType == containerRun {
 		if int(r.currentDataOffset)+2 > len(r.data) {
-			r.Done(fmt.Errorf("container %d/%d, expect run length at %d/%d bytes",
+			r.Done(fmt.Errorf("insufficient data for offsets container %d/%d, expect run length at %d/%d bytes",
 				r.currentIdx, r.keys, r.currentDataOffset, len(r.data)))
 			return r.Current()
 		}
@@ -1593,81 +1593,6 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, log bool, rowSize ui
 
 func (b *Bitmap) PreferMapping(preferred bool) {
 	b.preferMapping = preferred
-}
-
-// unmarshalPilosaRoaring treats data as being encoded in Pilosa's 64 bit
-// roaring format and decodes it into b.
-func (b *Bitmap) UnmarshalBinary(data []byte) (err error) {
-	if data == nil {
-		return errors.New("no roaring bitmap provided")
-	}
-	var itr roaringIterator
-	var itrKey uint64
-	var itrCType byte
-	var itrN int
-	var itrLen int
-	var itrPointer *uint16
-	var itrErr error
-
-	itr, err = newRoaringIterator(data)
-	if err != nil {
-		return err
-	}
-	if itr == nil {
-		return errors.New("failed to create roaring iterator, but don't know why")
-	}
-
-	b.Containers.Reset()
-
-	itrKey, itrCType, itrN, itrLen, itrPointer, itrErr = itr.Next()
-	for itrErr == nil {
-		newC := &Container{
-			typeID:  itrCType,
-			n:       int32(itrN),
-			len:     int32(itrLen),
-			cap:     int32(itrLen),
-			pointer: itrPointer,
-			flags:   flagMapped,
-		}
-		if !b.preferMapping {
-			newC.unmapOrClone()
-		}
-		b.Containers.Put(itrKey, newC)
-		itrKey, itrCType, itrN, itrLen, itrPointer, itrErr = itr.Next()
-	}
-	// note: if we get a non-EOF err, it's possible that we made SOME
-	// changes but didn't log them. I don't have a good solution to this.
-	if itrErr != io.EOF {
-		return itrErr
-	}
-
-	// Read ops log until the end of the file.
-	b.ops = 0
-	b.opN = 0
-	buf := itr.Remaining()
-	for {
-		// Exit when there are no more ops to parse.
-		if len(buf) == 0 {
-			break
-		}
-
-		// Unmarshal the op and apply it.
-		var opr op
-		if err := opr.UnmarshalBinary(buf); err != nil {
-			// FIXME(benbjohnson): return error with position so file can be trimmed.
-			return err
-		}
-
-		opr.apply(b)
-
-		// Increase the op count.
-		b.ops++
-		b.opN += opr.count()
-
-		// Move the buffer forward.
-		buf = buf[opr.size():]
-	}
-	return nil
 }
 
 // writeOp writes op to the OpWriter, if available.

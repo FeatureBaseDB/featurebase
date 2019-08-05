@@ -93,7 +93,7 @@ func TestCheckCommand_Run(t *testing.T) {
 		t.Fatalf("copy: %v", err)
 	}
 
-	expectedPrefix := "checking bitmap: unmarshalling: unknown roaring magic number 12849"
+	expectedPrefix := "checking bitmap: unmarshalling: "
 	if !strings.HasPrefix(err.Error(), expectedPrefix) {
 		t.Fatalf("expect error: '%s...', actual: '%s'", expectedPrefix, err)
 	}
