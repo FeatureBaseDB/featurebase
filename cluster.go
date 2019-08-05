@@ -183,9 +183,6 @@ type cluster struct { // nolint: maligned
 	// Shard distributing algorithm to distribute shards to nodes.
 	ShardDistributor ShardDistributor
 
-	// The number of partitions in the cluster.
-	partitionN int
-
 	// The number of replicas a partition has.
 	ReplicaN int
 
@@ -233,7 +230,6 @@ type cluster struct { // nolint: maligned
 func newCluster() *cluster {
 	return &cluster{
 		ShardDistributor: newJumpDistributor(defaultPartitionN),
-		partitionN:       defaultPartitionN,
 		ReplicaN:         1,
 
 		joiningLeavingNodes: make(chan nodeAction, 10), // buffered channel
@@ -792,7 +788,6 @@ func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*ResizeSour
 		srcCluster = newCluster()
 		srcCluster.nodes = Nodes(c.nodes).Clone()
 		srcCluster.ShardDistributor = c.ShardDistributor
-		srcCluster.partitionN = c.partitionN
 		srcCluster.ReplicaN = 1
 	}
 
@@ -1243,7 +1238,6 @@ func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*
 	toCluster := newCluster()
 	toCluster.nodes = Nodes(c.nodes).Clone()
 	toCluster.ShardDistributor = c.ShardDistributor
-	toCluster.partitionN = c.partitionN
 	toCluster.ReplicaN = c.ReplicaN
 	if nodeAction.action == resizeJobActionRemove {
 		toCluster.removeNodeBasicSorted(nodeAction.node.ID)
