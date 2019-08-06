@@ -282,6 +282,12 @@ func OptServerNodeID(nodeID string) ServerOption {
 func OptServerShardDistributor(d ShardDistributor) ServerOption {
 	return func(s *Server) error {
 		s.cluster.ShardDistributor = d
+		// Add nodes in cluster to shard distributor.
+		for _, id := range s.cluster.nodeIDs() {
+			if err := d.AddNode(id); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 }
