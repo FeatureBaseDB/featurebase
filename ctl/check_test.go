@@ -93,8 +93,9 @@ func TestCheckCommand_Run(t *testing.T) {
 		t.Fatalf("copy: %v", err)
 	}
 
-	if !strings.HasPrefix(err.Error(), "checking bitmap: unmarshalling: reading roaring header:") {
-		t.Fatalf("expect error: invalid roaring file, actual: '%s'", err)
+	expectedPrefix := "checking bitmap: unmarshalling: "
+	if !strings.HasPrefix(err.Error(), expectedPrefix) {
+		t.Fatalf("expect error: '%s...', actual: '%s'", expectedPrefix, err)
 	}
 	//	Todo: need correct roaring file for happy path
 }

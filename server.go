@@ -388,6 +388,35 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	return s, nil
 }
 
+// UpAndDown brings the server up minimally and shuts it down
+// again; basically, it exists for testing holder open and close.
+func (s *Server) UpAndDown() error {
+	s.logger.Printf("open server")
+
+	// Log startup
+	err := s.holder.logStartup()
+	if err != nil {
+		log.Println(errors.Wrap(err, "logging startup"))
+	}
+
+	// Initialize id-key storage.
+	if err := s.holder.translateFile.Open(); err != nil {
+		return errors.Wrap(err, "opening TranslateFile")
+	}
+
+	// Open holder.
+	if err := s.holder.Open(); err != nil {
+		return errors.Wrap(err, "opening Holder")
+	}
+
+	errh := s.holder.Close()
+	if errh != nil {
+		return errors.Wrap(errh, "closing holder")
+	}
+
+	return nil
+}
+
 // Open opens and initializes the server.
 func (s *Server) Open() error {
 	s.logger.Printf("open server")

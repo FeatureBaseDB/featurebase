@@ -15,9 +15,11 @@
 package pilosa
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,6 +30,7 @@ import (
 	"github.com/pilosa/pilosa/roaring"
 	"github.com/pilosa/pilosa/stats"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // View layout modes.
@@ -111,6 +114,8 @@ func (v *view) open() error {
 	return nil
 }
 
+var workQueue = make(chan struct{}, runtime.NumCPU()*2)
+
 // openFragments opens and initializes the fragments inside the view.
 func (v *view) openFragments() error {
 	file, err := os.Open(filepath.Join(v.path, "fragments"))
@@ -126,29 +131,47 @@ func (v *view) openFragments() error {
 		return errors.Wrap(err, "reading fragments directory")
 	}
 
-	for _, fi := range fis {
-		if fi.IsDir() {
-			continue
-		}
+	eg, ctx := errgroup.WithContext(context.Background())
+	var mu sync.Mutex
 
-		// Parse filename into integer.
-		shard, err := strconv.ParseUint(filepath.Base(fi.Name()), 10, 64)
-		if err != nil {
-			v.logger.Debugf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", v.index, v.field, v.name, fi.Name())
-			continue
-		}
+	for _, loopFi := range fis {
+		select {
+		case <-ctx.Done():
+			break
+		default:
+			fi := loopFi
 
-		v.logger.Debugf("open index/field/view/fragment: %s/%s/%s/%d", v.index, v.field, v.name, shard)
-		frag := v.newFragment(v.fragmentPath(shard), shard)
-		if err := frag.Open(); err != nil {
-			return fmt.Errorf("open fragment: shard=%d, err=%s", frag.shard, err)
+			if fi.IsDir() {
+				continue
+			}
+
+			// Parse filename into integer.
+			shard, err := strconv.ParseUint(filepath.Base(fi.Name()), 10, 64)
+			if err != nil {
+				v.logger.Debugf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", v.index, v.field, v.name, fi.Name())
+				continue
+			}
+
+			workQueue <- struct{}{}
+			v.logger.Debugf("open index/field/view/fragment: %s/%s/%s/%d", v.index, v.field, v.name, shard)
+			eg.Go(func() error {
+				defer func() {
+					<-workQueue
+				}()
+				frag := v.newFragment(v.fragmentPath(shard), shard)
+				if err := frag.Open(); err != nil {
+					return fmt.Errorf("open fragment: shard=%d, err=%s", frag.shard, err)
+				}
+				frag.RowAttrStore = v.rowAttrStore
+				v.logger.Debugf("add index/field/view/fragment to view.fragments: %s/%s/%s/%d", v.index, v.field, v.name, shard)
+				mu.Lock()
+				v.fragments[frag.shard] = frag
+				mu.Unlock()
+				return nil
+			})
 		}
-		frag.RowAttrStore = v.rowAttrStore
-		v.logger.Debugf("add index/field/view/fragment to view.fragments: %s/%s/%s/%d", v.index, v.field, v.name, shard)
-		v.fragments[frag.shard] = frag
 	}
-
-	return nil
+	return eg.Wait()
 }
 
 // close closes the view and its fragments.
@@ -157,14 +180,29 @@ func (v *view) close() error {
 	defer v.mu.Unlock()
 
 	// Close all fragments.
-	for _, frag := range v.fragments {
-		if err := frag.Close(); err != nil {
-			return errors.Wrap(err, "closing fragment")
+	eg, ctx := errgroup.WithContext(context.Background())
+	for _, loopFrag := range v.fragments {
+		select {
+		case <-ctx.Done():
+			break
+		default:
+			frag := loopFrag
+			workQueue <- struct{}{}
+			eg.Go(func() error {
+				defer func() {
+					<-workQueue
+				}()
+
+				if err := frag.Close(); err != nil {
+					return errors.Wrap(err, "closing fragment")
+				}
+				return nil
+			})
 		}
 	}
+	err := eg.Wait()
 	v.fragments = make(map[uint64]*fragment)
-
-	return nil
+	return err
 }
 
 // flags returns a set of flags for the underlying fragments.

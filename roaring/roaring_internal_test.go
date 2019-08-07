@@ -3409,11 +3409,11 @@ func TestUnmarshalRoaringWithErrors(t *testing.T) {
 	}{
 		{ // Runs a bitmap without runs and no containers through the official roaring
 			hexString:     "3A30000000000000",
-			expectedError: "reading roaring header: malformed bitmap, key-cardinality slice overruns buffer at 8",
+			expectedError: "header: malformed bitmap, key-cardinality slice overruns buffer at 8",
 		},
 		{ // Runs a bitmap with runs and no containers through the official roaring
 			hexString:     "3B30000000000000",
-			expectedError: "reading roaring header: malformed bitmap, key-cardinality slice overruns buffer at 9",
+			expectedError: "header: malformed bitmap, key-cardinality slice overruns buffer at 9",
 		},
 		{ // Runs a bitmap in the Pilosa format through the Pilosa roaring
 			hexString: "3C30000000000000",
@@ -3427,7 +3427,7 @@ func TestUnmarshalRoaringWithErrors(t *testing.T) {
 		bm := NewBitmap()
 		err = bm.UnmarshalBinary(zeroContainers)
 		if err != nil {
-			if err.Error() != loopContainers.expectedError {
+			if !strings.Contains(err.Error(), loopContainers.expectedError) {
 				t.Fatalf("Expected: %s, Got: %s", loopContainers.expectedError, err)
 			}
 		}
