@@ -180,6 +180,83 @@ func TestHolder_Optn(t *testing.T) {
 
 }
 
+// Ensure that the holder assigns the correct shard distributor to new and pre-existing indexes.
+func TestHolder_ShardDistributor(t *testing.T) {
+	t.Run("default shard distributor", func(t *testing.T) {
+		h := newHolder()
+		defer h.Close()
+		if h.defaultShardDistributor != "jump" {
+			t.Fatalf("expected jump, got %v", h.defaultShardDistributor)
+		}
+		h.shardDistributors = append(h.shardDistributors, "consistent")
+
+		index0 := h.MustCreateIndexIfNotExists("index0", IndexOptions{})
+		index1 := h.MustCreateIndexIfNotExists("index1", IndexOptions{ShardDistributor: "consistent"})
+
+		if index0.shardDistributor != "jump" {
+			t.Fatalf("expected jump, got %v", index0.shardDistributor)
+		}
+		if index1.shardDistributor != "consistent" {
+			t.Fatalf("expected consistent, got %v", index1.shardDistributor)
+		}
+	})
+
+	t.Run("different shard distributor", func(t *testing.T) {
+		h := newHolder()
+		defer h.Close()
+		h.defaultShardDistributor = "alternate"
+		h.shardDistributors = []string{"alternate", "consistent"}
+
+		index0 := h.MustCreateIndexIfNotExists("index0", IndexOptions{})
+		index1 := h.MustCreateIndexIfNotExists("index1", IndexOptions{ShardDistributor: "consistent"})
+
+		if index0.shardDistributor != "alternate" {
+			t.Fatalf("expected jump, got %v", index0.shardDistributor)
+		}
+		if index1.shardDistributor != "consistent" {
+			t.Fatalf("expected consistent, got %v", index1.shardDistributor)
+		}
+	})
+
+	t.Run("existing indexes default to jump", func(t *testing.T) {
+		h := newHolder()
+		defer h.Close()
+		h.defaultShardDistributor = "leap"
+
+		// simulate pre-existing index where shard distributor is not specified.
+		index0, err := h.CreateIndexIfNotExists("index0", IndexOptions{})
+		index0.shardDistributor = ""
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+
+		if err := h.Holder.Close(); err != nil {
+			t.Fatalf("closing holder: %v", err)
+		}
+		if err := h.Holder.Open(); err != nil {
+			t.Fatalf("reopening holder: %v", err)
+		}
+
+		index0 = h.Index("index0")
+		if index0.shardDistributor != "jump" {
+			t.Fatalf("expected jump, got %v", index0.shardDistributor)
+		}
+	})
+
+	t.Run("invalid shard distributor index option", func(t *testing.T) {
+		h := newHolder()
+		defer h.Close()
+		if h.defaultShardDistributor != "jump" {
+			t.Fatalf("expected jump, got %v", h.defaultShardDistributor)
+		}
+
+		_, err := h.CreateIndex("index0", IndexOptions{ShardDistributor: "invalid-alg"})
+		if err == nil {
+			t.Fatalf("expected error")
+		}
+	})
+}
+
 // Ensure holder can clean up orphaned fragments.
 func TestHolderCleaner_CleanHolder(t *testing.T) {
 	cluster := NewTestCluster(2)

@@ -2338,9 +2338,17 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 	partitionN := 2
 	c := test.MustRunCluster(t, 2,
 		[]server.CommandOption{
-			server.OptCommandServerOptions(pilosa.OptServerNodeID("node0"), pilosa.OptServerShardDistributor(test.NewModDistributor(partitionN)))},
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("node0"),
+				pilosa.OptServerShardDistributors(map[string]pilosa.ShardDistributor{MOD: test.NewModDistributor(partitionN)}),
+				pilosa.OptServerDefaultShardDistributor(MOD),
+			)},
 		[]server.CommandOption{
-			server.OptCommandServerOptions(pilosa.OptServerNodeID("node1"), pilosa.OptServerShardDistributor(test.NewModDistributor(partitionN)))},
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("node1"),
+				pilosa.OptServerShardDistributors(map[string]pilosa.ShardDistributor{MOD: test.NewModDistributor(partitionN)}),
+				pilosa.OptServerDefaultShardDistributor(MOD),
+			)},
 	)
 	defer c.Close()
 	hldr0 := test.Holder{Holder: c[0].Server.Holder()}

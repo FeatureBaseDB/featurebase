@@ -180,8 +180,11 @@ type cluster struct { // nolint: maligned
 	Node  *Node
 	nodes []*Node
 
-	// Shard distributing algorithm to distribute shards to nodes.
-	ShardDistributor ShardDistributor
+	// Shard distributing algorithms to distribute shards to nodes.
+	shardDistributors map[string]ShardDistributor
+	// Default for indexes that have not been assigned a shard distributor.
+	// This should be the same value as `holder.defaultShardDistributor`.
+	defaultShardDistributor string
 
 	// The number of replicas a partition has.
 	ReplicaN int
@@ -229,8 +232,9 @@ type cluster struct { // nolint: maligned
 // newCluster returns a new instance of Cluster with defaults.
 func newCluster() *cluster {
 	return &cluster{
-		ShardDistributor: newJumpDistributor(defaultPartitionN),
-		ReplicaN:         1,
+		shardDistributors:       map[string]ShardDistributor{JUMP: newJumpDistributor(defaultPartitionN)},
+		defaultShardDistributor: JUMP,
+		ReplicaN:                1,
 
 		joiningLeavingNodes: make(chan nodeAction, 10), // buffered channel
 		jobs:                make(map[int64]*resizeJob),
@@ -378,9 +382,11 @@ func (c *cluster) addNode(node *Node) error {
 		return nil
 	}
 
-	// add to ShardDistributor
-	if err := c.ShardDistributor.AddNode(node.ID); err != nil {
-		return fmt.Errorf("adding node to shard distributor: %v", err)
+	// add to shardDistributors
+	for distName, distributor := range c.shardDistributors {
+		if err := distributor.AddNode(node.ID); err != nil {
+			return fmt.Errorf("adding node to shard distributor %s: %v", distName, err)
+		}
 	}
 
 	// add to topology
@@ -402,9 +408,11 @@ func (c *cluster) removeNode(nodeID string) error {
 	// remove from cluster
 	c.removeNodeBasicSorted(nodeID)
 
-	// remove from ShardDistributor
-	if err := c.ShardDistributor.RemoveNode(nodeID); err != nil {
-		return fmt.Errorf("removing node from shard distributor: %v", err)
+	// remove from shardDistributors
+	for shardDistName, shardDistributor := range c.shardDistributors {
+		if err := shardDistributor.RemoveNode(nodeID); err != nil {
+			return fmt.Errorf("removing node from shard distributor %s: %v", shardDistName, err)
+		}
 	}
 
 	// remove from topology
@@ -787,7 +795,8 @@ func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*ResizeSour
 	if action == resizeJobActionAdd && c.ReplicaN > 1 {
 		srcCluster = newCluster()
 		srcCluster.nodes = Nodes(c.nodes).Clone()
-		srcCluster.ShardDistributor = c.ShardDistributor
+		srcCluster.shardDistributors = shardDistributors(c.shardDistributors).Clone()
+		srcCluster.defaultShardDistributor = c.defaultShardDistributor
 		srcCluster.ReplicaN = 1
 	}
 
@@ -848,6 +857,28 @@ func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*ResizeSour
 	return m, nil
 }
 
+type shardDistributors map[string]ShardDistributor
+
+// Clone returns a shallow copy of shard distributors.
+func (s shardDistributors) Clone() shardDistributors {
+	clone := make(shardDistributors)
+	for shardDistName, shardDistributor := range s {
+		clone[shardDistName] = shardDistributor
+	}
+	return clone
+}
+
+// shardDistributor returns the shardDistributor of the index. If the index
+// doesn't exist yet, use the default shard distributor.
+func (c *cluster) shardDistributor(indexName string) string {
+	if c.holder != nil {
+		if index, ok := c.holder.indexes[indexName]; ok {
+			return index.shardDistributor
+		}
+	}
+	return c.defaultShardDistributor
+}
+
 // ShardNodes returns a list of nodes that own a fragment. Safe for concurrent use.
 func (c *cluster) ShardNodes(index string, shard uint64) []*Node {
 	c.mu.RLock()
@@ -857,7 +888,9 @@ func (c *cluster) ShardNodes(index string, shard uint64) []*Node {
 
 // shardNodes returns a list of nodes that own a fragment. unprotected
 func (c *cluster) shardNodes(index string, shard uint64) []*Node {
-	nodeIDs := c.ShardDistributor.NodeOwners(c.nodeIDs(), c.ReplicaN, index, shard)
+	shardDistName := c.shardDistributor(index)
+	shardDistributor := c.shardDistributors[shardDistName]
+	nodeIDs := shardDistributor.NodeOwners(c.nodeIDs(), c.ReplicaN, index, shard)
 	nodes := make([]*Node, 0)
 	for _, ID := range nodeIDs {
 		node := c.unprotectedNodeByID(ID)
@@ -897,6 +930,9 @@ type ShardDistributor interface {
 	// RemoveNode removes a node from the shard distributor.
 	RemoveNode(nodeID string) error
 }
+
+// JUMP is the name for `jumpDistributor`.
+const JUMP = "jump"
 
 type jumpDistributor struct {
 	partitionN int
@@ -1237,7 +1273,8 @@ func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*
 	// toCluster is a clone of Cluster with the new node added/removed for comparison.
 	toCluster := newCluster()
 	toCluster.nodes = Nodes(c.nodes).Clone()
-	toCluster.ShardDistributor = c.ShardDistributor
+	toCluster.shardDistributors = shardDistributors(c.shardDistributors).Clone()
+	toCluster.defaultShardDistributor = c.defaultShardDistributor
 	toCluster.ReplicaN = c.ReplicaN
 	if nodeAction.action == resizeJobActionRemove {
 		toCluster.removeNodeBasicSorted(nodeAction.node.ID)

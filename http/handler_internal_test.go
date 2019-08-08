@@ -31,9 +31,10 @@ func TestPostIndexRequestUnmarshalJSON(t *testing.T) {
 		expected postIndexRequest
 		err      string
 	}{
-		{json: `{"options": {}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{TrackExistence: true}}},
-		{json: `{"options": {"trackExistence": false}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{TrackExistence: false}}},
-		{json: `{"options": {"keys": true}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{Keys: true, TrackExistence: true}}},
+		{json: `{"options": {}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{TrackExistence: true, ShardDistributor: "jump"}}},
+		{json: `{"options": {"trackExistence": false}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{TrackExistence: false, ShardDistributor: "jump"}}},
+		{json: `{"options": {"keys": true}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{Keys: true, TrackExistence: true, ShardDistributor: "jump"}}},
+		{json: `{"options": {"shardDistributor": "consistent"}}`, expected: postIndexRequest{Options: pilosa.IndexOptions{TrackExistence: true, ShardDistributor: "consistent"}}},
 		{json: `{"options": 4}`, err: "options is not map[string]interface{}"},
 		{json: `{"option": {}}`, err: "unknown key: option:map[]"},
 		{json: `{"options": {"badKey": "test"}}`, err: "unknown key: badKey:test"},

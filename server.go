@@ -276,18 +276,36 @@ func OptServerNodeID(nodeID string) ServerOption {
 	}
 }
 
-// OptServerShardDistributor is a functional option on Server
-// used to specify the shard distributing algorithm for
-// distributing shards to nodes in the cluster.
-func OptServerShardDistributor(d ShardDistributor) ServerOption {
+// OptServerShardDistributors is a functional option on Server
+// used to add shard distributing algorithms for distributing
+// shards to nodes in the cluster.
+func OptServerShardDistributors(distributors map[string]ShardDistributor) ServerOption {
 	return func(s *Server) error {
-		s.cluster.ShardDistributor = d
-		// Add nodes in cluster to shard distributor.
-		for _, id := range s.cluster.nodeIDs() {
-			if err := d.AddNode(id); err != nil {
-				return err
+		for shardDistName, shardDistributor := range distributors {
+			s.cluster.shardDistributors[shardDistName] = shardDistributor
+			s.holder.shardDistributors = append(s.holder.shardDistributors, shardDistName)
+			// Add nodes in cluster to shard distributor.
+			for _, id := range s.cluster.nodeIDs() {
+				if err := shardDistributor.AddNode(id); err != nil {
+					return fmt.Errorf("adding node %s to %s", id, shardDistName)
+				}
 			}
 		}
+		return nil
+	}
+}
+
+// OptServerDefaultShardDistributor is a functional option on Server used to
+// specify the default shard distributing algorithmnin holder to be used by indexes.
+// This option should be specified AFTER `OptServerShardDistributors` in order
+// to validate that the shard distributor exists.
+func OptServerDefaultShardDistributor(shardDistName string) ServerOption {
+	return func(s *Server) error {
+		if _, ok := s.cluster.shardDistributors[shardDistName]; !ok {
+			return fmt.Errorf("%s does not exist in %v", shardDistName, s.cluster.shardDistributors)
+		}
+		s.cluster.defaultShardDistributor = shardDistName
+		s.holder.defaultShardDistributor = shardDistName
 		return nil
 	}
 }
@@ -322,6 +340,10 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.InternalClient = s.defaultClient
 
 	s.diagnostics.server = s
+
+	if err := setShardDistributors(s); err != nil {
+		return nil, errors.Wrapf(err, "setting shard distributors")
+	}
 
 	for _, opt := range opts {
 		err := opt(s)

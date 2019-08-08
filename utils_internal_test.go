@@ -27,6 +27,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+const MOD = "mod"
+
 // NewTestCluster returns a cluster with n nodes and uses a mod-based hasher.
 func NewTestCluster(n int) *cluster {
 	path, err := ioutil.TempDir("", "pilosa-cluster-")
@@ -36,7 +38,8 @@ func NewTestCluster(n int) *cluster {
 
 	c := newCluster()
 	c.ReplicaN = 1
-	c.ShardDistributor = NewTestModDistributor(defaultPartitionN)
+	c.shardDistributors = map[string]ShardDistributor{MOD: NewTestModDistributor(defaultPartitionN)}
+	c.defaultShardDistributor = MOD
 	c.Path = path
 	c.Topology = newTopology()
 
@@ -238,12 +241,13 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	// holder
 	h := NewHolder()
 	h.Path = path
+	h.defaultShardDistributor = MOD
 
 	// cluster
 	c := newCluster()
 	c.ReplicaN = 1
-	// need partitionN
-	c.ShardDistributor = NewTestModDistributor(defaultPartitionN)
+	c.shardDistributors = map[string]ShardDistributor{MOD: NewTestModDistributor(defaultPartitionN)}
+	c.defaultShardDistributor = MOD
 	c.Path = path
 	c.Topology = newTopology()
 	c.holder = h
@@ -262,6 +266,11 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 
 	// Add this node to the ClusterCluster.
 	t.Clusters = append(t.Clusters, c)
+
+	// Update modulus of modhasher on cluster addition.
+	for _, c := range t.Clusters {
+		c.shardDistributors[MOD] = NewTestModDistributor(len(t.Clusters))
+	}
 
 	return c, nil
 }

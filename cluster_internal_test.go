@@ -328,8 +328,9 @@ func TestCluster_Owners(t *testing.T) {
 			{URI: NewTestURIFromHostPort("serverB", 1000)},
 			{URI: NewTestURIFromHostPort("serverC", 1000)},
 		},
-		ShardDistributor: NewTestModDistributor(3),
-		ReplicaN:         2,
+		shardDistributors:       map[string]ShardDistributor{MOD: NewTestModDistributor(3)},
+		defaultShardDistributor: MOD,
+		ReplicaN:                2,
 	}
 
 	// Verify nodes are distributed.
@@ -367,7 +368,7 @@ func TestHasher(t *testing.T) {
 // Ensure ContainsShards can find the actual shard list for node and index.
 func TestCluster_ContainsShards(t *testing.T) {
 	c := NewTestCluster(5)
-	c.ShardDistributor = NewTestModDistributor(5)
+	c.shardDistributors[MOD] = NewTestModDistributor(5)
 	c.ReplicaN = 3
 	shards := c.containsShards("test", roaring.NewBitmap(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10), c.nodes[2])
 
@@ -379,7 +380,8 @@ func TestCluster_ContainsShards(t *testing.T) {
 // Ensure Jump distributor distributes shards the same way as previous implementation.
 func TestCluster_JumpDistributor(t *testing.T) {
 	c := NewTestCluster(5)
-	c.ShardDistributor = newJumpDistributor(defaultPartitionN)
+	c.shardDistributors[JUMP] = newJumpDistributor(defaultPartitionN)
+	c.defaultShardDistributor = JUMP
 	c.ReplicaN = 3
 
 	tests := []struct {

@@ -27,18 +27,22 @@ import (
 	"github.com/pilosa/pilosa/test"
 )
 
+const MOD = "mod"
+
 func TestAPI_Import(t *testing.T) {
 	partitionN := 2
 	c := test.MustRunCluster(t, 2,
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
-				pilosa.OptServerShardDistributor(newOffsetModDistributor(partitionN)),
+				pilosa.OptServerShardDistributors(map[string]pilosa.ShardDistributor{MOD: newOffsetModDistributor(partitionN)}),
+				pilosa.OptServerDefaultShardDistributor(MOD),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node1"),
-				pilosa.OptServerShardDistributor(newOffsetModDistributor(partitionN)),
+				pilosa.OptServerShardDistributors(map[string]pilosa.ShardDistributor{MOD: newOffsetModDistributor(partitionN)}),
+				pilosa.OptServerDefaultShardDistributor(MOD),
 			)},
 	)
 	defer c.Close()
@@ -179,12 +183,14 @@ func TestAPI_ImportValue(t *testing.T) {
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
-				pilosa.OptServerShardDistributor(newOffsetModDistributor(partitionN)),
+				pilosa.OptServerShardDistributors(map[string]pilosa.ShardDistributor{MOD: newOffsetModDistributor(partitionN)}),
+				pilosa.OptServerDefaultShardDistributor(MOD),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node1"),
-				pilosa.OptServerShardDistributor(newOffsetModDistributor(partitionN)),
+				pilosa.OptServerShardDistributors(map[string]pilosa.ShardDistributor{MOD: newOffsetModDistributor(partitionN)}),
+				pilosa.OptServerDefaultShardDistributor(MOD),
 			)},
 	)
 	defer c.Close()

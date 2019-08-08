@@ -32,6 +32,7 @@ func mustOpenIndex(opt IndexOptions) *Index {
 
 	index.keys = opt.Keys
 	index.trackExistence = opt.TrackExistence
+	index.shardDistributor = opt.ShardDistributor
 
 	if err := index.Open(); err != nil {
 		panic(err)
@@ -48,6 +49,21 @@ func (i *Index) reopen() error {
 		return err
 	}
 	return nil
+}
+
+// reopenNew closes the index and reopens it on a new Index object.
+func (i *Index) reopenNew() (*Index, error) {
+	if err := i.Close(); err != nil {
+		return nil, err
+	}
+	index, err := NewIndex(i.path, "new-index")
+	if err != nil {
+		return nil, err
+	}
+	if err := index.Open(); err != nil {
+		return nil, err
+	}
+	return index, nil
 }
 
 // Ensure that deleting the existence field is handled properly.
@@ -85,4 +101,49 @@ func TestIndex_Existence_Delete(t *testing.T) {
 	} else if index.existenceFld != nil {
 		t.Fatalf("expected index.existenceField to be nil")
 	}
+}
+
+// Ensure that reopening an index preserves the metadata on its shard distributor.
+func TestIndex_ShardDistributor(t *testing.T) {
+	// In holder, if the index's shard distributor is empty, it will
+	// automatically default to `holder.defaultShardDistributor`.
+	// In this test, because there is no way for an index to know the
+	// default shard distributor, that value is left blank.
+	t.Run("existing empty shard distributor", func(t *testing.T) {
+		index0 := mustOpenIndex(IndexOptions{})
+		defer index0.Close()
+
+		if index0.shardDistributor != "" {
+			t.Fatalf(`expected "", got %v`, index0.shardDistributor)
+		}
+
+		newIndex0, err := index0.reopenNew()
+		defer newIndex0.Close()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if newIndex0.shardDistributor != "" {
+			t.Fatalf(`expected "", got %v`, newIndex0.shardDistributor)
+		}
+	})
+
+	t.Run("existing shard distributor", func(t *testing.T) {
+		index1 := mustOpenIndex(IndexOptions{ShardDistributor: "some-distributor"})
+		defer index1.Close()
+
+		if index1.shardDistributor != "some-distributor" {
+			t.Fatalf("expected some-distributor, got %v", index1.shardDistributor)
+		}
+
+		newIndex1, err := index1.reopenNew()
+		defer newIndex1.Close()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if newIndex1.shardDistributor != "some-distributor" {
+			t.Fatalf("expected some-distributor, got %v", newIndex1.shardDistributor)
+		}
+	})
 }

@@ -33,6 +33,8 @@ import (
 	"github.com/pilosa/pilosa/test"
 )
 
+const MOD = "mod"
+
 // Test distributed TopN Row count across 3 nodes.
 func TestClient_MultiNode(t *testing.T) {
 	// For testing with modhasher, we set the number
@@ -40,11 +42,23 @@ func TestClient_MultiNode(t *testing.T) {
 	partitionN := 3
 	c := test.MustRunCluster(t, 3,
 		[]server.CommandOption{
-			server.OptCommandServerOptions(pilosa.OptServerNodeID("node0"), pilosa.OptServerShardDistributor(test.NewModDistributor(partitionN)))},
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("node0"),
+				pilosa.OptServerShardDistributors(map[string]pilosa.ShardDistributor{MOD: test.NewModDistributor(partitionN)}),
+				pilosa.OptServerDefaultShardDistributor(MOD),
+			)},
 		[]server.CommandOption{
-			server.OptCommandServerOptions(pilosa.OptServerNodeID("node1"), pilosa.OptServerShardDistributor(test.NewModDistributor(partitionN)))},
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("node1"),
+				pilosa.OptServerShardDistributors(map[string]pilosa.ShardDistributor{MOD: test.NewModDistributor(partitionN)}),
+				pilosa.OptServerDefaultShardDistributor(MOD),
+			)},
 		[]server.CommandOption{
-			server.OptCommandServerOptions(pilosa.OptServerNodeID("node2"), pilosa.OptServerShardDistributor(test.NewModDistributor(partitionN)))},
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("node2"),
+				pilosa.OptServerShardDistributors(map[string]pilosa.ShardDistributor{MOD: test.NewModDistributor(partitionN)}),
+				pilosa.OptServerDefaultShardDistributor(MOD),
+			)},
 	)
 	defer c.Close()
 

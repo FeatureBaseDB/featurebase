@@ -5,6 +5,7 @@ package internal;
 message IndexMeta {
 	bool Keys = 3;
 	bool TrackExistence = 4;
+	string ShardDistributor = 5;
 }
 
 message FieldOptions {

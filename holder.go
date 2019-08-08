@@ -53,6 +53,11 @@ type Holder struct {
 	// Indexes by name.
 	indexes map[string]*Index
 
+	// valid shard distributors indexes can use
+	shardDistributors []string
+	// defaultShardDistributor to use for indexes
+	defaultShardDistributor string
+
 	// Key/ID translation
 	translateFile            *TranslateFile
 	NewPrimaryTranslateStore func(interface{}) TranslateStore
@@ -113,6 +118,11 @@ func NewHolder() *Holder {
 	return &Holder{
 		indexes: make(map[string]*Index),
 		closing: make(chan struct{}),
+
+		// Default for indexes that do no specify their shard distributor.
+		// This should be the same as `cluster.defaultShardDistributor`.
+		defaultShardDistributor: JUMP,
+		shardDistributors:       []string{JUMP},
 
 		opened: lockedChan{ch: make(chan struct{})},
 
@@ -183,6 +193,10 @@ func (h *Holder) Open() error {
 		}
 		h.mu.Lock()
 		h.indexes[index.Name()] = index
+		// if index already exists, it has been distributed with jump.
+		if index.shardDistributor == "" {
+			index.shardDistributor = JUMP
+		}
 		h.mu.Unlock()
 	}
 	h.Logger.Printf("open holder: complete")
@@ -420,6 +434,13 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 
 	index.keys = opt.Keys
 	index.trackExistence = opt.TrackExistence
+	// Override default shard distributor from holder.
+	if opt.ShardDistributor != "" {
+		if !h.validateShardDistributor(opt.ShardDistributor) {
+			return nil, errors.Errorf("%s is not a valid shard distributor", opt.ShardDistributor)
+		}
+		index.shardDistributor = opt.ShardDistributor
+	}
 
 	if err := index.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")
@@ -438,6 +459,7 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	if err != nil {
 		return nil, err
 	}
+	index.shardDistributor = h.defaultShardDistributor
 	index.logger = h.Logger
 	index.Stats = h.Stats.WithTags(fmt.Sprintf("index:%s", index.Name()))
 	index.broadcaster = h.broadcaster
@@ -499,6 +521,15 @@ func (h *Holder) fragment(index, field, view string, shard uint64) *fragment {
 		return nil
 	}
 	return v.Fragment(shard)
+}
+
+func (h *Holder) validateShardDistributor(shardDistName string) bool {
+	for _, s := range h.shardDistributors {
+		if s == shardDistName {
+			return true
+		}
+	}
+	return false
 }
 
 // monitorCacheFlush periodically flushes all fragment caches sequentially.

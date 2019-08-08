@@ -603,8 +603,9 @@ func (p *postIndexRequest) UnmarshalJSON(b []byte) error {
 	// Unmarshal expected values.
 	_p := _postIndexRequest{
 		Options: pilosa.IndexOptions{
-			Keys:           false,
-			TrackExistence: true,
+			Keys:             false,
+			TrackExistence:   true,
+			ShardDistributor: pilosa.JUMP,
 		},
 	}
 	if err := json.Unmarshal(b, &_p); err != nil {
@@ -684,8 +685,9 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 	// Decode request.
 	req := postIndexRequest{
 		Options: pilosa.IndexOptions{
-			Keys:           false,
-			TrackExistence: true,
+			Keys:             false,
+			TrackExistence:   true,
+			ShardDistributor: pilosa.JUMP,
 		},
 	}
 	err := json.NewDecoder(r.Body).Decode(&req)
