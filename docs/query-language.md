@@ -44,14 +44,15 @@ curl localhost:10101/index/repository/query \
 #### Arguments and Types
 
 * `field` The field specifies on which Pilosa [field](../glossary/#field) the query will operate. Valid field names are lower case strings; they start with a lowercase letter, and contain only alphanumeric characters and `_-`. They must be 64 characters or less in length.
-* `TIMESTAMP` This is a timestamp in the following format `YYYY-MM-DDTHH:MM` (e.g. 2006-01-02T15:04)
-* `UINT` An unsigned integer (e.g. 42839)
-* `BOOL` A boolean value, `true` or `false`
-* `ATTR_NAME` Must be a valid identifier `[A-Za-z][A-Za-z0-9._-]*`
+* `TIMESTAMP` This is a timestamp in the following format `YYYY-MM-DDTHH:MM` (e.g. 2006-01-02T15:04).
+* `UINT` An unsigned integer (e.g. 42839).
+* `BOOL` A boolean value, `true` or `false`.
+* `ATTR_NAME` Must be a valid identifier `[A-Za-z][A-Za-z0-9._-]*`.
 * `ATTR_VALUE` Can be a string, float, integer, or bool.
-* `CALL` Any query
-* `ROW_CALL` Any query which returns a row, such as `Row`, `Union`, `Difference`, `Xor`, `Intersect`, `Not`
-* `[]ATTR_VALUE` Denotes an array of `ATTR_VALUE`s. (e.g. `["a", "b", "c"]`)
+* `CALL` Any query.
+* `ROW_CALL` Any query which returns a row, such as `Row`, `Union`, `Difference`, `Xor`, `Intersect`, `Not`.
+* `ROWS_CALL` A query that returns a `Rows` result (i.e. a list of row IDs). Currently only the `Rows` query.
+* `[]ATTR_VALUE` Denotes an array of `ATTR_VALUE`s. (e.g. `["a", "b", "c"]`).
 
 ### Write Operations
 
@@ -823,7 +824,7 @@ Rows(<FIELD>, previous=<UINT|STRING>, limit=<UINT>, column=<UINT|STRING>, from=<
 **Description:**
 
 Rows returns a list of row IDs in the given field which have at least one bit
-set. The field argument is mandatory, the others are  optional.
+set. The field argument is mandatory, the others are optional.
 
 If `previous` is given, rows prior to and including the specified row ID or
 key will not be returned. If `column` is given, only rows which have a set bit
@@ -863,7 +864,7 @@ Rows(blahk)
 **Spec:**
 
 ```
-GroupBy(<RowsCall>, [RowsCall...], limit=<UINT>, filter=<CALL>)
+GroupBy(<ROWS_CALL>, [<ROWS_CALL>...], limit=<UINT>, filter=<ROW_CALL>)
 ```
 
 **Description:**
@@ -924,4 +925,13 @@ GroupBy(Rows(blah, previous=39), Rows(blahk, previous="haha"), limit=7)
 ```response
 [{"group":[{"field":"blah","rowID":39},{"field":"blahk","rowKey":"zaaa"}],"count":1},
  {"group":[{"field":"blah","rowID":39},{"field":"blahk","rowKey":"traa"}],"count":1}]
+```
+
+Using the filter argument.
+```request
+GroupBy(Rows(blah, previous=39), Rows(blahk, previous="haha"), limit=7, filter=Row(age=22))
+```
+
+```response
+TODO
 ```
