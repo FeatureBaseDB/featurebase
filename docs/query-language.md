@@ -845,18 +845,18 @@ not provided, the full range of existing data will be queried.
 
 Without keys:
 ```request
-Rows(blah)
+Rows(age)
 ```
 ```response
-{"rows":[1,9,39]}
+{"rows":[18,22,29]}
 ```
 
 With keys:
 ```request
-Rows(blahk)
+Rows(job)
 ```
 ```response
-{"rows":null,"keys":["haha","zaaa","traa"]}
+{"rows":null,"keys":["engineer","management","student""]}
 ```
 
 #### Group By
@@ -895,43 +895,49 @@ specify the field and row for each row that was intersected to get that result.
 
 A single `Rows` query.
 ```request
-GroupBy(Rows(blah))
+GroupBy(Rows(age))
 ```
 ```response
-[{"group":[{"field":"blah","rowID":1}],"count":1},
-{"group":[{"field":"blah","rowID":9}],"count":1},
-{"group":[{"field":"blah","rowID":39}],"count":1}]
+[{"group":[{"field":"age","rowID":18}],"count":14},
+{"group":[{"field":"age","rowID":22}],"count":22},
+{"group":[{"field":"age","rowID":29}],"count":6}]
 ```
 
 With two `Rows` queries - one with IDs and one with keys.
 ```request
-GroupBy(Rows(blah), Rows(blahk), limit=7)
+GroupBy(Rows(age), Rows(job), limit=7)
 ```
 ```response
-[{"group":[{"field":"blah","rowID":1},{"field":"blahk","rowKey":"haha"}],"count":1},
- {"group":[{"field":"blah","rowID":1},{"field":"blahk","rowKey":"zaaa"}],"count":1},
- {"group":[{"field":"blah","rowID":1},{"field":"blahk","rowKey":"traa"}],"count":1},
- {"group":[{"field":"blah","rowID":9},{"field":"blahk","rowKey":"haha"}],"count":1},
- {"group":[{"field":"blah","rowID":9},{"field":"blahk","rowKey":"zaaa"}],"count":1},
- {"group":[{"field":"blah","rowID":9},{"field":"blahk","rowKey":"traa"}],"count":1},
- {"group":[{"field":"blah","rowID":39},{"field":"blahk","rowKey":"haha"}],"count":1}]
+[{"group":[{"field":"age","rowID":18},{"field":"job","rowKey":"engineer"}],"count":3},
+ {"group":[{"field":"age","rowID":18},{"field":"job","rowKey":"management"}],"count":1},
+ {"group":[{"field":"age","rowID":18},{"field":"job","rowKey":"student"}],"count":11},
+ {"group":[{"field":"age","rowID":22},{"field":"job","rowKey":"engineer"}],"count":6},
+ {"group":[{"field":"age","rowID":22},{"field":"job","rowKey":"management"}],"count":2},
+ {"group":[{"field":"age","rowID":22},{"field":"job","rowKey":"student"}],"count":4},
+ {"group":[{"field":"age","rowID":29},{"field":"job","rowKey":"engineer"}],"count":9}]
 ```
 
 Getting the rest of the results from the previous example (paging).
 ```request
-GroupBy(Rows(blah, previous=39), Rows(blahk, previous="haha"), limit=7)
+GroupBy(Rows(age, previous=29), Rows(job, previous="management"), limit=7)
 ```
 
 ```response
-[{"group":[{"field":"blah","rowID":39},{"field":"blahk","rowKey":"zaaa"}],"count":1},
- {"group":[{"field":"blah","rowID":39},{"field":"blahk","rowKey":"traa"}],"count":1}]
+ {"group":[{"field":"age","rowID":29},{"field":"job","rowKey":"engineer"}],"count":9}]
+[{"group":[{"field":"age","rowID":29},{"field":"job","rowKey":"management"}],"count":3},
+ {"group":[{"field":"age","rowID":29},{"field":"job","rowKey":"student"}],"count":1}]
 ```
 
 Using the filter argument.
 ```request
-GroupBy(Rows(blah, previous=39), Rows(blahk, previous="haha"), limit=7, filter=Row(age=22))
+GroupBy(Rows(age), Rows(job), limit=7, filter=Row(country=USA))
 ```
 
 ```response
-TODO
+[{"group":[{"field":"age","rowID":18},{"field":"job","rowKey":"engineer"}],"count":1},
+ {"group":[{"field":"age","rowID":18},{"field":"job","rowKey":"student"}],"count":6},
+ {"group":[{"field":"age","rowID":22},{"field":"job","rowKey":"engineer"}],"count":3},
+ {"group":[{"field":"age","rowID":22},{"field":"job","rowKey":"management"}],"count":1},
+ {"group":[{"field":"age","rowID":22},{"field":"job","rowKey":"student"}],"count":3},
+ {"group":[{"field":"age","rowID":29},{"field":"job","rowKey":"management"}],"count":7}]
 ```
