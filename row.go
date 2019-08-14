@@ -311,7 +311,7 @@ func (r *Row) Count() uint64 {
 func (r *Row) GenericCount(op *ext.BitmapOp) uint64 {
 	var n uint64
 	for i := range r.segments {
-		n += op.CountFunc(WrapBitmap(&r.segments[i].data))
+		n += op.CountFunc([]ext.Bitmap{WrapBitmap(&r.segments[i].data)})
 	}
 	return n
 }
@@ -400,7 +400,7 @@ func (s *rowSegment) Union(other *rowSegment) *rowSegment {
 
 // GenericOp performs a generic op on s and other
 func (s *rowSegment) GenericBinaryOp(op *ext.BitmapOp, other *rowSegment) *rowSegment {
-	data := op.BitmapFunc(WrapBitmap(&s.data), WrapBitmap(&other.data))
+	data := op.BitmapFunc([]ext.Bitmap{WrapBitmap(&s.data), WrapBitmap(&other.data)})
 
 	return &rowSegment{
 		data:  *UnwrapBitmap(data),
@@ -449,7 +449,7 @@ func (s *rowSegment) Shift() (*rowSegment, error) {
 // GenericUnary returns s subject to op.
 func (s *rowSegment) GenericUnaryOp(op *ext.BitmapOp) *rowSegment {
 	//TODO deal with overflow
-	data := UnwrapBitmap(op.BitmapFunc(WrapBitmap(&s.data)))
+	data := UnwrapBitmap(op.BitmapFunc([]ext.Bitmap{WrapBitmap(&s.data)}))
 
 	return &rowSegment{
 		data:  *data,

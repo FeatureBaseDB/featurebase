@@ -63,8 +63,8 @@ const (
 // a bitmap or count, to be supported in PQL. Only one of BitmapFunc or
 // CountFunc should be present.
 type BitmapOp struct {
-	Name string
-	Arity BitmapOpType
-	BitmapFunc func(...Bitmap) Bitmap
-	CountFunc func(...Bitmap) uint64
+	Name       string
+	Arity      BitmapOpType
+	BitmapFunc func([]Bitmap) Bitmap
+	CountFunc  func([]Bitmap) uint64
 }

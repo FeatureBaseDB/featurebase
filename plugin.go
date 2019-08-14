@@ -66,22 +66,28 @@ func UnwrapBitmap(bm ext.Bitmap) *roaring.Bitmap {
 func (b wrappedBitmap) Intersect(other ext.Bitmap) ext.Bitmap {
 	return wrappedBitmap{b.Bitmap.Intersect(other.(wrappedBitmap).Bitmap)}
 }
+
 func (b wrappedBitmap) Union(other ext.Bitmap) ext.Bitmap {
 	return wrappedBitmap{b.Bitmap.Union(other.(wrappedBitmap).Bitmap)}
 }
+
 func (b wrappedBitmap) IntersectionCount(other ext.Bitmap) uint64 {
 	return b.Bitmap.IntersectionCount(other.(wrappedBitmap).Bitmap)
 }
+
 func (b wrappedBitmap) Difference(other ext.Bitmap) ext.Bitmap {
 	return wrappedBitmap{b.Bitmap.Difference(other.(wrappedBitmap).Bitmap)}
 }
+
 func (b wrappedBitmap) Xor(other ext.Bitmap) ext.Bitmap {
 	return wrappedBitmap{b.Bitmap.Xor(other.(wrappedBitmap).Bitmap)}
 }
+
 func (b wrappedBitmap) Shift(n int) (ext.Bitmap, error) {
 	shifted, err := b.Bitmap.Shift(n)
 	return wrappedBitmap{shifted}, err
 }
+
 func (b wrappedBitmap) Flip(start, last uint64) ext.Bitmap {
 	return wrappedBitmap{b.Bitmap.Flip(start, last)}
 }

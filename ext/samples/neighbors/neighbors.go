@@ -15,7 +15,7 @@ func BitmapOps() ([]ext.BitmapOp, error) {
 }
 
 // CountNeighbors only checks its first parameter, because it's described as unary.
-func CountNeighbors(inputs ...ext.Bitmap) uint64 {
+func CountNeighbors(inputs []ext.Bitmap) uint64 {
 	in := inputs[0]
 	shifted, _ := in.Shift(1)
 	prime := in.Intersect(shifted)
@@ -24,7 +24,7 @@ func CountNeighbors(inputs ...ext.Bitmap) uint64 {
 }
 
 // Neighbors only checks its first parameter, because it's described as unary.
-func Neighbors(inputs ...ext.Bitmap) ext.Bitmap {
+func Neighbors(inputs []ext.Bitmap) ext.Bitmap {
 	in := inputs[0]
 	shifted, _ := in.Shift(1)
 	prime := in.Intersect(shifted)
