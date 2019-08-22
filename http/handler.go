@@ -185,7 +185,7 @@ func (h *Handler) populateValidators() {
 	h.validators["DeleteField"] = queryValidationSpecRequired()
 	h.validators["PostImport"] = queryValidationSpecRequired().Optional("clear", "ignoreKeyCheck")
 	h.validators["PostImportRoaring"] = queryValidationSpecRequired().Optional("remote", "clear")
-	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("shards", "columnAttrs", "excludeRowAttrs", "excludeColumns")
+	h.validators["PostQuery"] = queryValidationSpecRequired().Optional("shards", "columnAttrs", "excludeRowAttrs", "excludeColumns", "profile")
 	h.validators["GetInfo"] = queryValidationSpecRequired()
 	h.validators["RecalculateCaches"] = queryValidationSpecRequired()
 	h.validators["GetSchema"] = queryValidationSpecRequired()
@@ -1016,9 +1016,20 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*pilosa.QueryRequest, er
 		return nil, errors.New("invalid shard argument")
 	}
 
+	// Optional profiling
+	profile := false
+	profileString := q.Get("profile")
+	if profileString != "" {
+		profile, err = strconv.ParseBool(q.Get("profile"))
+		if err != nil {
+			return nil, fmt.Errorf("invalid profile argument: '%s' (should be true/false)", profileString)
+		}
+	}
+
 	return &pilosa.QueryRequest{
 		Query:           query,
 		Shards:          shards,
+		Profile:         profile,
 		ColumnAttrs:     q.Get("columnAttrs") == "true",
 		ExcludeRowAttrs: q.Get("excludeRowAttrs") == "true",
 		ExcludeColumns:  q.Get("excludeColumns") == "true",
