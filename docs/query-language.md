@@ -874,7 +874,7 @@ combinations for which the count is greater than 0.
 
 The optional `filter` argument takes any type of `Row` query (e.g. Row, Union,
  Intersect, etc.) which will be intersected with each result prior to returning
- the count. This is analagous to a WHERE clause applied to a relational GROUP BY
+ the count. This is analogous to a WHERE clause applied to a relational GROUP BY
  query.
 
 The optional `limit` argument limits the number of results returned. The results
