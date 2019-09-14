@@ -155,6 +155,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 * Flag: `--max-file-count=1000000`
 * Env: `PILOSA_MAX_FILE_COUNT=1000000`
 * Config:
+
     ```toml
     max-file-count = 1000000
     ```
@@ -213,6 +214,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 * Flag: `--gossip.key="/var/secret/gossip.key32"`
 * Env: `PILOSA_GOSSIP_KEY="/var/secret/gossip.key32"`
 * Config:
+
     ```toml
     [gossip]
       key = "/var/secret/gossip.key32"
@@ -420,6 +422,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 * Flag: `--profile.block-rate=10000000`
 * Env: `PILOSA_PROFILE_BLOCK_RATE=10000000`
 * Config:
+
    ```toml
    [profile]
    block-rate = 10000000
@@ -432,6 +435,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 * Flag: `--profile.mutex-fraction=100`
 * Env: `PILOSA_PROFILE_MUTEX_FRACTION=100`
 * Config:
+
    ```toml
    [profile]
    mutex-fraction = 100
