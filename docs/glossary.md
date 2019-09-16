@@ -14,7 +14,7 @@ nav = []
 
 <strong id="bitmap">[Bitmap](../data-model/#overview):</strong> The on-disk and in-memory representation of a [row](#row). Implemented with [Roaring](#roaring-bitmap).
 
-<strong id="bsi">[BSI](../data-model/#bsi-range-encoding)</strong> Bit-sliced indexing is the method Pilosa uses to represent multi-bit integers. Integer values are stored in `int` [fields](#field), and can be used for [Range](#range-bsi), [Min](#min), [Max](#max), and [Sum](#sum) queries.
+<strong id="bsi">[BSI](../data-model/#bsi-range-encoding):</strong> Bit-sliced indexing is the method Pilosa uses to represent multi-bit integers. Integer values are stored in `int` [fields](#field), and can be used for [Range](#range-bsi), [Min](#min), [Max](#max), and [Sum](#sum) queries.
 
 <strong id="cluster">Cluster:</strong> A cluster consists of one or more [nodes](#node) which share a cluster configuration. The cluster also defines how data is [replicated](#replica) and how internode communication is coordinated. Pilosa does not have a leader node, all data is evenly distributed, and any node can respond to queries.
 
@@ -22,13 +22,15 @@ nav = []
 
 <strong id="fragment">Fragment:</strong> A Fragment is the intersection of a [field](#field) and a [shard](#shard) in an [index](#index).
 
-<strong id="field">[Field](../data-model/#field):</strong> Fields are used to group [rows](#row) into different categories. Row IDs are namespaced by field such that the same row ID in a different field refers to a different row. For [ranked](#topn) fields, rows are kept in sorted order within the field. Fields are one of four types: set, [int](#bsi), bool, time, and mutex. For more information, see [data model](../data-model/) and [Creating fields](../api-reference/#create-field).
+<strong id="field">[Field](../data-model/#field):</strong> Fields are used to group [rows](#row) into different categories. Row IDs are namespaced by field such that the same row ID in a different field refers to a different row. For [ranked](#topn) fields, rows are kept in sorted order within the field. Fields are one of five types: set, [int](#bsi), bool, time, and mutex. For more information, see [data model](../data-model/) and [Creating fields](../api-reference/#create-field).
 
 <strong id="frame">[Frame](../data-model/#field):</strong> Prior to Pilosa 1.0, fields were known as frames.
 
 <strong id="gossip">[Gossip](https://en.wikipedia.org/wiki/Gossip_protocol):</strong> A protocol used by Pilosa for internal communication.
 
-<strong id="index">[Index](../data-model/#index):</strong> An Index is a top level container in Pilosa, analogous to a database in an RDBMS. Queries cannot operate across multiple indexes.
+<strong id="groupby">[GroupBy](../query-language/#group-by):</strong> A [PQL](#pql) query, with functionality similar to a SQL `GROUP BY` clause, that returns the count of the intersection of every combination of rows taking one row each from the specified `Rows` calls. GroupBy can be thought of as a multi-dimensional version of the [TopN](#topn) query.
+
+<strong id="index">[Index](../data-model/#index):</strong> An Index is a top level container in Pilosa, analogous to a database in an RDBMS. Basic queries cannot operate across multiple indexes.
 
 <strong id="jump-consistent-hash">[Jump Consistent Hash](https://arxiv.org/pdf/1406.2294v1.pdf):</strong> A fast, minimal memory, consistent hash algorithm that evenly distributes the workload even when the number of buckets changes.
 
@@ -52,9 +54,11 @@ nav = []
 
 <strong id="row">[Row](../data-model/#row):</strong> Rows are the fundamental vertical data axis within Pilosa. They are namespaced to each [field](#field) within an [index](#index). Represented as a [Bitmap](#bitmap).
 
-<strong id="range">[Row (Ranged)](../query-language/#row-range):</strong>: A [PQL](#pql) query that returns bits based on comparison to timestamps, set according to the [time quantum](#time-quantum).
+<strong id="range">[Row (Ranged)](../query-language/#row-range):</strong> A [PQL](#pql) query that returns bits based on comparison to timestamps, set according to the [time quantum](#time-quantum).
 
-<strong id="range-bsi">[Row (BSI)](../query-language/#row-bsi):</strong>: A [PQL](#pql) query that returns bits based on comparison to integers stored in [BSI](#bsi) [fields](#field).
+<strong id="range-bsi">[Row (BSI)](../query-language/#row-bsi):</strong> A [PQL](#pql) query that returns bits based on comparison to integers stored in [BSI](#bsi) [fields](#field).
+
+<strong id="rows">[Rows](../query-language/#rows):<strong> A [PQL](#pql) query that returns a list of row IDs in the given field which have at least one bit set. The field argument is mandatory, the others are optional. `Rows` is the primary argument used with the [GroupBy](#groupby) query.
 
 <strong id="slice">[Slice](../data-model/#shard):</strong> Prior to Pilosa 1.0, shards were known as slices.
 
