@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [1.4.0] - 2019-09-17
 
-This version contains 99 contributions from 11 contributor. There are 94 files changed; 9,453 insertions; and 6,121 deletions.
+This version contains 99 contributions from 11 contributors. There are 94 files changed; 9,453 insertions; and 6,121 deletions.
 
 ### Added
 - Update "Getting Started" documentation ([#2028](https://github.com/pilosa/pilosa/pull/2028))
