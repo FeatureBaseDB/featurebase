@@ -24,7 +24,7 @@ This version contains 99 contributions from 11 contributors. There are 94 files 
 - Add ability to post schema using holder.applySchema ([#1956](https://github.com/pilosa/pilosa/pull/1956))
 
 ### Changed
-- Update CirleCI build with Go 1.13 and run enterprise tests ([#2064](https://github.com/pilosa/pilosa/pull/2064))
+- Update CircleCI build with Go 1.13 and run enterprise tests ([#2064](https://github.com/pilosa/pilosa/pull/2064))
 - Update Alpine to 3.9.4 in Dockerfile ([#2001](https://github.com/pilosa/pilosa/pull/2001))
 - Add Prometheus tests, refactor http stats as middleware, minor fixes ([#1994](https://github.com/pilosa/pilosa/pull/1994))
 - Add confirmation logic to catch false nodeLeave events ([#1993](https://github.com/pilosa/pilosa/pull/1993))
