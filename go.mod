@@ -43,3 +43,5 @@ require (
 	modernc.org/mathutil v1.0.0
 	modernc.org/strutil v1.0.0
 )
+
+go 1.11
