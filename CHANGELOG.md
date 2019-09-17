@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 This version contains 99 contributions from 11 contributors. There are 94 files changed; 9,453 insertions; and 6,121 deletions.
 
+**Attention**: Pilosa 1.4.0 changes the way that integer fields are stored. The upgrade from old format to new is handled automatically, however you will not be able to downgrade to 1.3 should you wish to do so. We *always* recommend taking a backup of your Pilosa data directory before upgrading Pilosa, but doubly so with this release.
+
 ### Added
 - Update "Getting Started" documentation ([#2028](https://github.com/pilosa/pilosa/pull/2028))
 - Add ability to disable tracing and use nopTracer ([#2029](https://github.com/pilosa/pilosa/pull/2029))
