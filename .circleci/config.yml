@@ -174,12 +174,12 @@ workflows:
           requires:
             - linter
             - check-license-headers
-            - test-golang-1.12
+            - test-golang-1.13
       - release:
           requires:
             - linter
             - check-license-headers
-            - test-golang-1.12
+            - test-golang-1.13
           filters:
             tags:
               only: /^v.*/
@@ -192,4 +192,4 @@ workflows:
           requires:
             - linter
             - check-license-headers
-            - test-golang-1.12
+            - test-golang-1.13
