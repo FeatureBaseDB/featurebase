@@ -153,32 +153,9 @@ To upgrade Pilosa:
 5. Upgrade the Pilosa server binaries and any configuration changes. See the following sections on any version-specific changes you must make.
 6. Start Pilosa. It is recommended to start the cluster coordinator node first, followed by any other nodes.
 
-##### Version 0.9
+##### Version 1.4
 
-Pilosa v0.9 introduces a few compatibility changes that need to be addressed.
-
-**Configuration changes**: These changes need to occur before starting Pilosa v0.9:
-
-1. Cluster-resize capability eliminates the `hosts` setting. Now, cluster membership is determined by gossip. This is only a factor if you are running Pilosa as a cluster.
-2. Gossip-based cluster membership requires you to set a single cluster node as a [coordinator](../configuration/#cluster-coordinator). Make sure only a single node has the `cluster.coordinator` flag set.
-3. `gossip.seed` has been renamed [`gossip.seeds`](../configuration/#gossip-seeds) and takes multiple items. It is recommended that at least two nodes are specified as gossip seeds.
-
-**Data directory changes**: These changes need to occur while the cluster is shut down, before starting Pilosa v0.9:
-
-Pilosa v0.9 adds two new files to the data directory, an `.id` file and a `.topology` file. Due to the way Pilosa internally shards indices, upgrading a Pilosa cluster will result in data loss if an existing cluster is brought up without these files. New clusters will generate them automatically, but you may migrate an existing cluster by using a tool we called [`topology-generator`](https://github.com/pilosa/upgrade-utils/tree/master/v0.9/topology-generator):
-
-1. Observe the `cluster.hosts` configuration value in Pilosa v0.8. The ordering of the nodes in the config file is significant, as it determines shard ownership. Pilosa v0.9 uses UUIDs for each node, and the ordering is alphabetical.
-2. Install the `topology-generator`: `go get github.com/pilosa/upgrade-utils/v0.9/topology-generator`.
-3. Run the `topology-generator`. There are two arguments: the number of nodes and the output directory. For this example, we'll assume a 3-node cluster and place the files in the current working directory: `topology-generator 3 .`.
-4. This tool will generate a file, `topology`, and multiple id files, called `nodeX.id`, X being the node index position.
-5. Copy the file `topology` into the data directories of every node in the cluster, naming it `.topology` (note the dot), e.g. `cp topology ~/.pilosa/.topology` or `scp topology node1:.pilosa/.topology`.
-6. Copy the node ID files into the respective node data directories. For example, `node0.id` will be placed on the first node in the `cluster.hosts` list, with the name `.id`. For example: `scp node0.id node0:.pilosa/.id`. Again, it is very important that the ordering you give the nodes with these IDs matches the ordering you had in your existing `cluster.hosts` setting.
-
-**Application changes**:
-
-1. Row and column labels were deprecated in Pilosa v0.8, and removed in Pilosa v0.9. Make sure that your application does not attempt to use a custom row or column label, as they are no longer supported.
-2. If your application relies on the implicit creation of [time quantums](../glossary/#time-quantum) by inheriting the time-quantum setting of the index, you must begin explicitly enabling the time quantum per-field, as index-level time-quantums have been removed.
-3. Inverse fields have been deprecated, removed from docs, and will be unsupported in the next release.
+Pilosa 1.4.0 changes the way that integer fields are stored. The upgrade from old format to new is handled automatically, however you will not be able to downgrade to 1.3 should you wish to do so. We *always* recommend taking a backup of your Pilosa data directory before upgrading Pilosa, but doubly so with this release.
 
 ### Resizing the Cluster
 

@@ -5,6 +5,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [1.4.0] - 2019-09-17
+
+This version contains 99 contributions from 11 contributors. There are 94 files changed; 9,453 insertions; and 6,121 deletions.
+
+**Attention**: Pilosa 1.4.0 changes the way that integer fields are stored. The upgrade from old format to new is handled automatically, however you will not be able to downgrade to 1.3 should you wish to do so. We *always* recommend taking a backup of your Pilosa data directory before upgrading Pilosa, but doubly so with this release.
+
+### Added
+- Update "Getting Started" documentation ([#2028](https://github.com/pilosa/pilosa/pull/2028))
+- Add ability to disable tracing and use nopTracer ([#2029](https://github.com/pilosa/pilosa/pull/2029))
+- Add test for no containers ([#2016](https://github.com/pilosa/pilosa/pull/2016))
+- Add naive implementations of Roaring and fuzz test ([#2023](https://github.com/pilosa/pilosa/pull/2023))
+- Add fuzzing code and readme.md to explain the fuzzer ([#2004](https://github.com/pilosa/pilosa/pull/2004))
+- Add MinRow and MaxRow calls ([#1983](https://github.com/pilosa/pilosa/pull/1983))
+- Add Prometheus stats backend ([#1992](https://github.com/pilosa/pilosa/pull/1992))
+- Add extra tracing spans and metadata ([#1939](https://github.com/pilosa/pilosa/pull/1939))
+- Add more Debugf() statements to the holder open process ([#1950](https://github.com/pilosa/pilosa/pull/1950))
+- Add ability to post schema using holder.applySchema ([#1956](https://github.com/pilosa/pilosa/pull/1956))
+
+### Changed
+- Update CircleCI build with Go 1.13 and run enterprise tests ([#2064](https://github.com/pilosa/pilosa/pull/2064))
+- Update Alpine to 3.9.4 in Dockerfile ([#2001](https://github.com/pilosa/pilosa/pull/2001))
+- Add Prometheus tests, refactor http stats as middleware, minor fixes ([#1994](https://github.com/pilosa/pilosa/pull/1994))
+- Add confirmation logic to catch false nodeLeave events ([#1993](https://github.com/pilosa/pilosa/pull/1993))
+- Improve TopN() errors ([#1978](https://github.com/pilosa/pilosa/pull/1978))
+- Make integer fields unbounded by using sign+magnitude representation ([#1902](https://github.com/pilosa/pilosa/pull/1902))
+- Simplify contributing instructions by removing weird upstream thing ([#1966](https://github.com/pilosa/pilosa/pull/1966))
+
+### Fixed
+- Default BSI base value to min, max, or 0 depending on the min/max range ([#2050](https://github.com/pilosa/pilosa/pull/2050))
+- Add worker pool for query processing ([#2034](https://github.com/pilosa/pilosa/pull/2034))
+- Move Range deprecation message to higher level ([#2033](https://github.com/pilosa/pilosa/pull/2033))
+- Use lock in view.deleteFragment while altering fragments ([#2026](https://github.com/pilosa/pilosa/pull/2026))
+- Fix malformed offset bug in readOffsets and readWithRuns ([#2021](https://github.com/pilosa/pilosa/pull/2021))
+- Fix various container iteration bugs in Roaring ([#2019](https://github.com/pilosa/pilosa/pull/2019))
+- Fix malformed bitmap handling ([#2017](https://github.com/pilosa/pilosa/pull/2017))
+- Fix fuzzer errors in roaring ([#2012](https://github.com/pilosa/pilosa/pull/2012))
+- Save all state files atomically to avoid corruption ([#2000](https://github.com/pilosa/pilosa/pull/2000))
+- Fix slice container updates ([#1997](https://github.com/pilosa/pilosa/pull/1997))
+- Fix out of bounds panic to show error ([#1975](https://github.com/pilosa/pilosa/pull/1975))
+- Fix error message returned by regex on field and index names ([#1973](https://github.com/pilosa/pilosa/pull/1973))
+- Fix filter calls in GroupBy not being translated ([#1970](https://github.com/pilosa/pilosa/pull/1970))
+- Fix TranslateFile behavior when reopened ([#1954](https://github.com/pilosa/pilosa/pull/1954))
+- Remove buggy shard validation code ([#1951](https://github.com/pilosa/pilosa/pull/1951))
+- Fix some lint warnings raised in VS-Code ([#1947](https://github.com/pilosa/pilosa/pull/1947))
+
+### Performance
+- Address some startup speed and performance issues ([#1988](https://github.com/pilosa/pilosa/pull/1988))
+- Add a worker pool for importRoaring jobs ([#2048](https://github.com/pilosa/pilosa/pull/2048))
+- Use UnionInPlace for computing time rows which involve multiple views ([#2041](https://github.com/pilosa/pilosa/pull/2041))
+- Improve ingest performance with snapshot queue and unmarshaling improvements ([#2024](https://github.com/pilosa/pilosa/pull/2024))
+- Improve row cache ([#1974](https://github.com/pilosa/pilosa/pull/1974))
+
+### Removed
+- Remove extraneous stat tags to improve prometheus performance ([#1996](https://github.com/pilosa/pilosa/pull/1996))
+
+## [1.3.1] - 2019-05-01
+
+This version contains 1 contribution from 1 contributor. There are 6 files changed; 10 insertions; and 95 deletions.
+
+### Fixed
+- Remove shard validation to fix bug where some nodes weren't loading their fragments. #1951 ([#1964](https://github.com/pilosa/pilosa/pull/1964))
+
 ## [1.3.0] - 2019-04-16
 
 This version contains 98 contributions from 10 contributors. There are 144 files changed; 12,635 insertions; and 4,341 deletions.
