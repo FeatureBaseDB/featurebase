@@ -25,7 +25,7 @@ Some of our tutorials work better as standalone repos, since you can <code>git c
 
 #### Introduction
 
-Pilosa supports encrypting all communication with nodes in a cluster using TLS. In this tutorial, we will be setting up a three node Pilosa cluster running on the same computer. The same steps can be used for a multi-computer cluster but that requires setting up firewalls and other platform-specific configuration which is beyond the scope of this tutorial.
+Pilosa supports encrypting all communication with nodes in a cluster using TLS, including [Mutual TLS Authentication](https://en.wikipedia.org/wiki/Mutual_authentication). In this tutorial, we will be setting up a three node Pilosa cluster running on the same computer. The same steps can be used for a multi-computer cluster but that requires setting up firewalls and other platform-specific configuration which is beyond the scope of this tutorial.
 
 This tutorial assumes that you are using a UNIX-like system, such as Linux or MacOS. [Windows Subsystem for Linux (WSL)](https://msdn.microsoft.com/en-us/commandline/wsl/about) works equally well on Windows 10 systems.
 
@@ -45,8 +45,8 @@ tools for administering pilosa, importing/exporting data,
 backing up, and more. Complete documentation is available
 at https://www.pilosa.com/docs/.
 
-Version: v1.0.0
-Build Time: 2018-05-14T22:14:01+0000
+Pilosa v1.4.0
+Build Time: 2019-09-23T14:33:07+0000
 
 Usage:
   pilosa [command]
@@ -57,6 +57,7 @@ Available Commands:
   export          Export data from pilosa.
   generate-config Print the default configuration.
   help            Help about any command
+  holder          Load Pilosa.
   import          Bulk load data into pilosa.
   inspect         Get stats on a pilosa data file.
   server          Run Pilosa.
@@ -75,22 +76,54 @@ mkdir $HOME/pilosa-tls-tutorial && cd $_
 
 #### Creating the TLS Certificate and Gossip Key
 
-Securing a Pilosa cluster consists of securing the communication between nodes using TLS and Gossip encryption. [Pilosa Enterprise](https://www.pilosa.com/enterprise/) additionally supports authentication and other security features, but those are not covered in this tutorial.
+Securing a Pilosa cluster consists of securing the communication between nodes using TLS and Gossip encryption.
 
-The first step is acquiring an SSL certificate. You can buy a commercial certificate or retrieve a [Let's Encrypt](https://letsencrypt.org/) certificate, but we will be using a self signed certificate for practical reasons. Using self-signed certificates is not recommended in production since it makes man-in-the-middle attacks easy.
+The first step is acquiring the necessary TLS certificates. Operating your own public key infrastructure (PKI) is outside of the scope of this tutorial, but it is easy to get started with [certstrap](https://github.com/square/certstrap) for testing/development purposes. For production, you can use OpenSSL or any other software that provides PKI using X.509 certificates, including [Hashicorp Vault](https://learn.hashicorp.com/vault/secrets-management/sm-pki-engine). It is not recommended to use certstrap in production.
 
-The following command creates a 2048-bit, self-signed wildcard certificate for `*.pilosa.local` which expires 10 years later.
+First, create a certificate authority (CA):
 
 ```
-openssl req -x509 -newkey rsa:2048 -keyout pilosa.local.key -out pilosa.local.crt -days 3650 -nodes -subj "/C=US/ST=Texas/L=Austin/O=Pilosa/OU=Com/CN=*.pilosa.local"
+$ certstrap init --common-name ca
+Created out/ca.key
+Created out/ca.crt
+Created out/ca.crl
 ```
 
-The command above creates two files in the current directory:
+The command above creates three files in the `out/` directory:
 
-* `pilosa.local.crt` is the SSL certificate.
-* `pilosa.local.key` is the private key file which must be kept as secret.
+* `ca.key` is the CA private key file which must be kept as secret.
+* `ca.crt` is the CA TLS certificate.
+* `ca.crl` is the Certificate Revocation List (CRL).
 
-Having created the SSL certificate, we can now create the gossip encryption key. The gossip encryption key file must be exactly 16, 24, or 32 bytes to select one of AES-128, AES-192, or AES-256 encryption. Reading random bytes from cryptographically secure `/dev/random` serves our purpose very well:
+Next, create and sign a wildcard certificate for pilosa:
+
+```
+$ certstrap request-cert --cn "*.pilosa.local"
+Created out/*.pilosa.local.key
+Created out/*.pilosa.local.csr
+
+$ certstrap sign "*.pilosa.local" --CA ca
+Created out/*.pilosa.local.crt from out/*.pilosa.local.csr signed by out/ca.key
+```
+
+The commands above create three files in the `out/` directory:
+
+* `*.pilosa.local.key` is the private key file which must be kept as secret.
+* `*.pilosa.local.csr` is the certificate signing request (CSR).
+* `*.pilosa.local.crt` is the signed TLS certificate.
+
+You can also create a separate client certificate signed by the same CA to test mutual TLS using curl:
+
+```
+$ certstrap request-cert --cn "curl"
+Created out/curl.key
+Created out/curl.csr
+
+$ certstrap sign "curl" --CA ca
+Created out/curl.crt from out/curl.csr signed by out/ca.key
+```
+
+Having created the TLS certificates, we can now create the gossip encryption key. The gossip encryption key file must be exactly 16, 24, or 32 bytes to select one of AES-128, AES-192, or AES-256 encryption. Reading random bytes from cryptographically secure `/dev/random` serves our purpose very well:
 ```
 head -c 32 /dev/random > pilosa.local.gossip32
 ```
@@ -115,9 +148,10 @@ bind = "https://01.pilosa.local:10501"
 coordinator = true
 
 [tls]
-certificate = "pilosa.local.crt"
-key = "pilosa.local.key"
-skip-verify = true
+ca-certificate = "out/ca.crt"
+certificate = "out/*.pilosa.local.crt"
+key = "out/*.pilosa.local.key"
+enable-client-verification = true
 
 [gossip]
 seeds = ["01.pilosa.local:15000"]
@@ -134,9 +168,10 @@ data-dir = "node2_data"
 bind = "https://02.pilosa.local:10502"
 
 [tls]
-certificate = "pilosa.local.crt"
-key = "pilosa.local.key"
-skip-verify = true
+ca-certificate = "out/ca.crt"
+certificate = "out/*.pilosa.local.crt"
+key = "out/*.pilosa.local.key"
+enable-client-verification = true
 
 [gossip]
 seeds = ["01.pilosa.local:15000"]
@@ -153,9 +188,10 @@ data-dir = "node3_data"
 bind = "https://03.pilosa.local:10503"
 
 [tls]
-certificate = "pilosa.local.crt"
-key = "pilosa.local.key"
-skip-verify = true
+ca-certificate = "out/ca.crt"
+certificate = "out/*.pilosa.local.crt"
+key = "out/*.pilosa.local.key"
+enable-client-verification = true
 
 [gossip]
 seeds = ["01.pilosa.local:15000"]
@@ -168,7 +204,7 @@ Here is some explanation of the configuration items:
 * `data-dir` points to the directory where the Pilosa server writes its data. If it doesn't exist, the server will create it.
 * `bind` is the address to which the server listens for incoming requests. The address is composed of three parts: scheme, host, and port. The default scheme is `http` so we explicitly specify `https` to use the HTTPS protocol for communication between nodes.
 * `[cluster]` section contains the settings for a cluster. We set `coordinator = true` for only the first node to choose that as the coordinator node. See [Cluster Configuration](../configuration/#cluster-coordinator) for other settings.
-* `[tls]` section contains the TLS settings, including the path to the SSL certificate and the corresponding key. Set `skip-verify` to `true` in order to disable host name verification and other security measures. Do not set `skip-verify` to `true` on production servers.
+* `[tls]` section contains the TLS settings, including the path to the TLS certificate and the corresponding key. The `ca-certificate` setting is optional and will default to your system CAs. You may also disable server-to-server verification by setting `skip-verify` to `true`, which we don't recommend for production.
 * `[gossip]` section contains settings for the gossip protocol. `seeds` contains the list of nodes from which to seed cluster membership. There must be at least one gossip seed. The `port` setting is the gossip listen address for the node. If all nodes of the cluster are running on the same computer, the gossip listen address should be different for each node. Otherwise, it can be set to the same value. Finally, the `key` points to the gossip encryption key we created earlier.
 
 #### Final Touches Before Running the Cluster
@@ -211,7 +247,8 @@ pilosa server -c node3.config.toml
 
 Let's ensure that all three Pilosa servers are running and they are connected:
 ``` request
-curl -k --ipv4 https://01.pilosa.local:10501/status
+curl --cacert out/ca.crt --cert out/curl.crt --key out/curl.key \
+     https://01.pilosa.local:10501/status
 ```
 ``` response
 {"state":"NORMAL","nodes":[{"id":"98ebd177-c082-4c54-8d48-7e7c75857b52","uri":{"scheme":"https","host":"02.pilosa.local","port":10502},"isCoordinator":false},{"id":"a33dc0d6-c35f-4559-984a-e582bf032a21","uri":{"scheme":"https","host":"03.pilosa.local","port":10503},"isCoordinator":false},{"id":"e24ac014-ee2f-4cb0-b565-74df6c551f0a","uri":{"scheme":"https","host":"01.pilosa.local","port":10501},"isCoordinator":true}]}
@@ -225,8 +262,8 @@ If everything is set up correctly, the cluster state should be `NORMAL`.
 
 Having confirmed that our cluster is running normally, let's perform a few queries. First, we need to create an index and a field:
 ``` request
-curl https://01.pilosa.local:10501/index/sample-index \
-     -k --ipv4 \
+curl --cacert out/ca.crt --cert out/curl.crt --key out/curl.key \
+     https://01.pilosa.local:10501/index/sample-index \
      -X POST
 ```
 ``` response
@@ -235,8 +272,8 @@ curl https://01.pilosa.local:10501/index/sample-index \
 
 This will create index `sample-index` with default options. Let's create the field now:
 ``` request
-curl https://01.pilosa.local:10501/index/sample-index/field/sample-field \
-     -k --ipv4 \
+curl --cacert out/ca.crt --cert out/curl.crt --key out/curl.key \
+     https://01.pilosa.local:10501/index/sample-index/field/sample-field \
      -X POST
 ```
 ``` response
@@ -247,8 +284,8 @@ We just created field `sample-field` with default options.
 
 Let's run a `Set` query:
 ``` request
-curl https://01.pilosa.local:10501/index/sample-index/query \
-     -k --ipv4 \
+curl --cacert out/ca.crt --cert out/curl.crt --key out/curl.key \
+     https://01.pilosa.local:10501/index/sample-index/query \
      -X POST \
      -d 'Set(100, sample-field=1)'
 ```
@@ -258,8 +295,8 @@ curl https://01.pilosa.local:10501/index/sample-index/query \
 
 Confirm that the value was indeed set:
 ``` request
-curl https://01.pilosa.local:10501/index/sample-index/query \
-     -k --ipv4 \
+curl --cacert out/ca.crt --cert out/curl.crt --key out/curl.key \
+     https://01.pilosa.local:10501/index/sample-index/query \
      -X POST \
      -d 'Row(sample-field=1)'
 ```
@@ -269,8 +306,8 @@ curl https://01.pilosa.local:10501/index/sample-index/query \
 
 The same response should be returned when querying other nodes in the cluster:
 ``` request
-curl https://02.pilosa.local:10501/index/sample-index/query \
-     -k --ipv4 \
+curl --cacert out/ca.crt --cert out/curl.crt --key out/curl.key \
+     https://02.pilosa.local:10502/index/sample-index/query \
      -X POST \
      -d 'Row(sample-field=1)'
 ```

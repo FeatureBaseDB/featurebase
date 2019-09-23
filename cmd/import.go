@@ -63,7 +63,7 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 	flags.BoolVarP(&Importer.Sort, "sort", "", false, "Enables sorting before import.")
 	flags.BoolVarP(&Importer.CreateSchema, "create", "e", false, "Create the schema if it does not exist before import.")
 	flags.BoolVarP(&Importer.Clear, "clear", "", false, "Clear the data provided in the import.")
-	ctl.SetTLSConfig(flags, &Importer.TLS.CertificatePath, &Importer.TLS.CertificateKeyPath, &Importer.TLS.SkipVerify)
+	ctl.SetTLSConfig(flags, &Importer.TLS.CertificatePath, &Importer.TLS.CertificateKeyPath, &Importer.TLS.CACertPath, &Importer.TLS.SkipVerify, &Importer.TLS.EnableClientVerification)
 
 	return importCmd
 }
