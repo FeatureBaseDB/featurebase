@@ -77,6 +77,46 @@ var containerTypeNames = map[byte]string{
 
 var fullContainer = NewContainerRun([]interval16{{start: 0, last: maxContainerVal}}).Freeze()
 
+// AdvisoryError is used for the special case where we probably want to *report*
+// an error reading a file, but don't want to actually count the file as not
+// being read. For instance, a partial ops-log entry is *probably* harmless;
+// we probably crashed while writing (?) and as such didn't report the write
+// as successful. We hope.
+type AdvisoryError interface {
+	error
+	AdvisoryOnly()
+}
+
+type advisoryError struct {
+	e error
+}
+
+func (a advisoryError) Error() string {
+	return a.e.Error()
+}
+
+// This marks the error as safe to ignore.
+func (a advisoryError) AdvisoryOnly() {
+}
+
+type FileShouldBeTruncatedError interface {
+	AdvisoryError
+	SuggestedLength() int64
+}
+
+type fileShouldBeTruncatedError struct {
+	advisoryError
+	offset int64
+}
+
+func (f *fileShouldBeTruncatedError) SuggestedLength() int64 {
+	return f.offset
+}
+
+func newFileShouldBeTruncatedError(err error, offset int64) *fileShouldBeTruncatedError {
+	return &fileShouldBeTruncatedError{advisoryError: advisoryError{e: err}, offset: offset}
+}
+
 type Containers interface {
 	// Get returns nil if the key does not exist.
 	Get(key uint64) *Container

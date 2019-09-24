@@ -205,15 +205,15 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 		// Unmarshal the op and apply it.
 		var opr op
 		if err := opr.UnmarshalBinary(buf); err != nil {
-			// FIXME(benbjohnson): return error with position so file can be trimmed.
-			return err
+			return newFileShouldBeTruncatedError(err, int64(opsOffset))
 		}
 		opr.apply(b)
 		// Increase the op count.
 		b.ops++
 		b.opN += opr.count()
+		opsOffset += opr.size()
 		// Move the buffer forward.
-		buf = buf[opr.size():]
+		buf = buf[opsOffset:]
 	}
 
 	return nil

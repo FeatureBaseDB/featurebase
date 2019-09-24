@@ -406,11 +406,24 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 		// *either* or *both* of old and new storage data might be in use.
 		// So we call the thing that should unconditionally unmap both of them...
 		if err := f.storage.UnmarshalBinary(data); err != nil {
-			_, e2 := f.storage.RemapRoaringStorage(nil)
-			if e2 != nil {
-				return fmt.Errorf("unmarshal storage: file=%s, err=%s, clearing old mapping also failed: %v", f.file.Name(), err, e2)
+			// roaring can report advisory-only errors...
+			_, ok := err.(roaring.AdvisoryError)
+			if !ok {
+				name := f.file.Name()
+				f.file.Close()
+				f.file = nil
+				_, e2 := f.storage.RemapRoaringStorage(nil)
+				if e2 != nil {
+					return fmt.Errorf("unmarshal storage: file=%s, err=%s, clearing old mapping also failed: %v", name, err, e2)
+				}
+				return fmt.Errorf("unmarshal storage: file=%s, err=%s", name, err)
+			} else {
+				f.Logger.Printf("warning: unmarshal storage, file=%s, err=%v", f.file.Name(), err)
 			}
-			return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
+			trunc, ok := err.(roaring.FileShouldBeTruncatedError)
+			if ok {
+				f.Logger.Printf("should probably truncate file %s to %d bytes, but can't yet", f.file.Name(), trunc.SuggestedLength())
+			}
 		}
 		f.rowCache = &simpleCache{make(map[uint64]*Row)}
 		f.ops, f.opN = f.storage.Ops()
