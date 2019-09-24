@@ -318,6 +318,30 @@ func TestConfig_Parse_DataDir(t *testing.T) {
 	}
 }
 
+func TestConcurrentFieldCreation(t *testing.T) {
+	cluster := test.MustRunCluster(t, 3)
+	defer cluster.Close()
+
+	api0 := cluster[0].API
+	if _, err := api0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+	eg := errgroup.Group{}
+	for i := 0; i < 100; i++ {
+		i := i
+		eg.Go(func() error {
+			if _, err := api0.CreateField(context.Background(), "i", fmt.Sprintf("f%d", i)); err != nil {
+				return err
+			}
+			return nil
+		})
+	}
+	err := eg.Wait()
+	if err != nil {
+		t.Fatalf("creating concurrent field: %v", err)
+	}
+}
+
 func TestMain_RecalculateHashes(t *testing.T) {
 	const clusterSize = 5
 	cluster := test.MustRunCluster(t, clusterSize)
