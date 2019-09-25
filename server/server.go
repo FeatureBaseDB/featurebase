@@ -490,7 +490,7 @@ func GetTLSConfig(tlsConfig *TLSConfig) (TLSConfig *tls.Config, err error) {
 		if tlsConfig.CACertPath != "" {
 			b, err := ioutil.ReadFile(tlsConfig.CACertPath)
 			if err != nil {
-				log.Fatalf("loading tls ca key: %s\n", err)
+				return nil, errors.Wrap(err, "loading tls ca key")
 			}
 			certPool := x509.NewCertPool()
 
