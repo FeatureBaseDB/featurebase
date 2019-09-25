@@ -27,7 +27,7 @@ import (
 	"github.com/pilosa/pilosa/gossip"
 	"github.com/pilosa/pilosa/toml"
 	"github.com/pkg/errors"
-	"github.com/uber/jaeger-client-go"
+	jaeger "github.com/uber/jaeger-client-go"
 )
 
 // TLSConfig contains TLS configuration
@@ -36,8 +36,12 @@ type TLSConfig struct {
 	CertificatePath string `toml:"certificate"`
 	// CertificateKeyPath contains the path to the certificate key (.key file)
 	CertificateKeyPath string `toml:"key"`
-	// SkipVerify disables verification for self-signed certificates
+	// CACertPath is the path to a CA certificate (.crt or .pem file)
+	CACertPath string `toml:"ca-certificate"`
+	// SkipVerify disables verification of server certificates when connecting to another Pilosa node
 	SkipVerify bool `toml:"skip-verify"`
+	// EnableClientVerification enables verification of client TLS certificates (Mutual TLS)
+	EnableClientVerification bool `toml:"enable-client-verification"`
 }
 
 // Config represents the configuration for the command.

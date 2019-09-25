@@ -23,7 +23,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
@@ -247,19 +249,9 @@ func (m *Command) SetupServer() error {
 	// Setup TLS
 	var TLSConfig *tls.Config
 	if uri.Scheme == "https" {
-		if m.Config.TLS.CertificatePath == "" {
-			return errors.New("certificate path is required for TLS sockets")
-		}
-		if m.Config.TLS.CertificateKeyPath == "" {
-			return errors.New("certificate key path is required for TLS sockets")
-		}
-		cert, err := tls.LoadX509KeyPair(m.Config.TLS.CertificatePath, m.Config.TLS.CertificateKeyPath)
+		TLSConfig, err = GetTLSConfig(&m.Config.TLS)
 		if err != nil {
-			return errors.Wrap(err, "load x509 key pair")
-		}
-		TLSConfig = &tls.Config{
-			Certificates:       []tls.Certificate{cert},
-			InsecureSkipVerify: m.Config.TLS.SkipVerify,
+			return errors.Wrap(err, "get tls config")
 		}
 	}
 
@@ -324,7 +316,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerStatsClient(statsClient),
 		pilosa.OptServerURI(advertiseURI),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
-		pilosa.OptServerPrimaryTranslateStoreFunc(http.NewTranslateStore),
+		pilosa.OptServerPrimaryTranslateStoreFunc(http.NewTranslateStoreWithHTTPClient(c)),
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
 		pilosa.OptServerSerializer(proto.Serializer{}),
 		coordinatorOpt,
@@ -481,4 +473,37 @@ func (f *filteredWriter) Write(p []byte) (n int, err error) {
 		return f.logOutput.Write(p)
 	}
 	return len(p), nil
+}
+
+func GetTLSConfig(tlsConfig *TLSConfig) (TLSConfig *tls.Config, err error) {
+	if tlsConfig.CertificatePath != "" && tlsConfig.CertificateKeyPath != "" {
+		cert, err := tls.LoadX509KeyPair(tlsConfig.CertificatePath, tlsConfig.CertificateKeyPath)
+		if err != nil {
+			return nil, errors.Wrap(err, "loading keypair")
+		}
+		TLSConfig = &tls.Config{
+			Certificates:             []tls.Certificate{cert},
+			InsecureSkipVerify:       tlsConfig.SkipVerify,
+			PreferServerCipherSuites: true,
+			MinVersion:               tls.VersionTLS12,
+		}
+		if tlsConfig.CACertPath != "" {
+			b, err := ioutil.ReadFile(tlsConfig.CACertPath)
+			if err != nil {
+				return nil, errors.Wrap(err, "loading tls ca key")
+			}
+			certPool := x509.NewCertPool()
+
+			ok := certPool.AppendCertsFromPEM(b)
+			if !ok {
+				return nil, errors.New("error parsing CA certificate")
+			}
+			TLSConfig.ClientCAs = certPool
+			TLSConfig.RootCAs = certPool
+		}
+		if tlsConfig.EnableClientVerification {
+			TLSConfig.ClientAuth = tls.RequireAndVerifyClientCert
+		}
+	}
+	return TLSConfig, nil
 }

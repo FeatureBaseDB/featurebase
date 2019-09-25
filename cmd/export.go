@@ -50,7 +50,7 @@ The file does not contain any headers.
 	flags.StringVarP(&Exporter.Index, "index", "i", "", "Pilosa index to export")
 	flags.StringVarP(&Exporter.Field, "field", "f", "", "Field to export")
 	flags.StringVarP(&Exporter.Path, "output-file", "o", "", "File to write export to - default stdout")
-	ctl.SetTLSConfig(flags, &Exporter.TLS.CertificatePath, &Exporter.TLS.CertificateKeyPath, &Exporter.TLS.SkipVerify)
+	ctl.SetTLSConfig(flags, &Exporter.TLS.CertificatePath, &Exporter.TLS.CertificateKeyPath, &Exporter.TLS.CACertPath, &Exporter.TLS.SkipVerify, &Exporter.TLS.EnableClientVerification)
 
 	return exportCmd
 }

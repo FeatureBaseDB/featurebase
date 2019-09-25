@@ -33,7 +33,8 @@ var _ pilosa.TranslateStore = (*translateStore)(nil)
 // translateStore represents an implementation of pilosa.TranslateStore that
 // communicates over HTTP. This is used with the TranslateHandler.
 type translateStore struct {
-	node *pilosa.Node
+	node       *pilosa.Node
+	httpClient *http.Client
 }
 
 // NewTranslateStore returns a new instance of TranslateStore based on node.
@@ -57,7 +58,15 @@ func NewTranslateStore(node interface{}) pilosa.TranslateStore {
 	default:
 		panic("*pilosa.Node is the only type supported by NewTranslateStore().")
 	}
-	return &translateStore{node: n}
+	return &translateStore{node: n, httpClient: http.DefaultClient}
+}
+
+func NewTranslateStoreWithHTTPClient(httpClient *http.Client) func(interface{}) pilosa.TranslateStore {
+	return func(node interface{}) pilosa.TranslateStore {
+		store := NewTranslateStore(node)
+		store.(*translateStore).httpClient = httpClient
+		return store
+	}
 }
 
 // TranslateColumnsToUint64 is not currently implemented.
@@ -100,7 +109,7 @@ func (s *translateStore) Reader(ctx context.Context, off int64) (io.ReadCloser, 
 	req = req.WithContext(ctx)
 
 	// Connect a stream to the remote server.
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("http: cannot connect to translate store endpoint: %s", err)
 	}

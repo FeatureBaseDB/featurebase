@@ -15,8 +15,6 @@
 package ctl
 
 import (
-	"crypto/tls"
-
 	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pkg/errors"
@@ -30,27 +28,22 @@ type CommandWithTLSSupport interface {
 }
 
 // SetTLSConfig creates common TLS flags
-func SetTLSConfig(flags *pflag.FlagSet, certificatePath *string, certificateKeyPath *string, skipVerify *bool) {
-	flags.StringVarP(certificatePath, "tls.certificate", "", "", "TLS certificate path (usually has the .crt or .pem extension")
-	flags.StringVarP(certificateKeyPath, "tls.key", "", "", "TLS certificate key path (usually has the .key extension")
-	flags.BoolVarP(skipVerify, "tls.skip-verify", "", false, "Skip TLS certificate verification (not secure)")
+func SetTLSConfig(flags *pflag.FlagSet, certificatePath *string, certificateKeyPath *string, caCertPath *string, skipVerify *bool, enableClientVerification *bool) {
+	flags.StringVarP(certificatePath, "tls.certificate", "", "", "TLS certificate path (usually has the .crt or .pem extension)")
+	flags.StringVarP(certificateKeyPath, "tls.key", "", "", "TLS certificate key path (usually has the .key extension)")
+	flags.StringVarP(caCertPath, "tls.ca-certificate", "", "", "TLS CA certificate path (usually has the .pem extension)")
+	flags.BoolVarP(skipVerify, "tls.skip-verify", "", false, "Skip TLS certificate server verification (not secure)")
+	flags.BoolVarP(enableClientVerification, "tls.enable-client-verification", "", false, "Enable TLS certificate client verification for incoming connections")
 }
 
 // commandClient returns a pilosa.InternalHTTPClient for the command
 func commandClient(cmd CommandWithTLSSupport) (*http.InternalClient, error) {
-	tlsConfig := cmd.TLSConfiguration()
-	var TLSConfig *tls.Config
-	if tlsConfig.CertificatePath != "" && tlsConfig.CertificateKeyPath != "" {
-		cert, err := tls.LoadX509KeyPair(tlsConfig.CertificatePath, tlsConfig.CertificateKeyPath)
-		if err != nil {
-			return nil, errors.Wrap(err, "loading keypair")
-		}
-		TLSConfig = &tls.Config{
-			Certificates:       []tls.Certificate{cert},
-			InsecureSkipVerify: tlsConfig.SkipVerify,
-		}
+	tls := cmd.TLSConfiguration()
+	tlsConfig, err := server.GetTLSConfig(&tls)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting tls config")
 	}
-	client, err := http.NewInternalClient(cmd.TLSHost(), http.GetHTTPClient(TLSConfig))
+	client, err := http.NewInternalClient(cmd.TLSHost(), http.GetHTTPClient(tlsConfig))
 	if err != nil {
 		return nil, errors.Wrap(err, "getting internal client")
 	}
