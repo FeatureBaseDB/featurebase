@@ -51,6 +51,7 @@ import (
 	"github.com/pilosa/pilosa/statsd"
 	"github.com/pilosa/pilosa/syswrap"
 	"github.com/pkg/errors"
+	"github.com/robustirc/bridge/tlsutil"
 )
 
 type loggerLogger interface {
@@ -477,15 +478,15 @@ func (f *filteredWriter) Write(p []byte) (n int, err error) {
 
 func GetTLSConfig(tlsConfig *TLSConfig) (TLSConfig *tls.Config, err error) {
 	if tlsConfig.CertificatePath != "" && tlsConfig.CertificateKeyPath != "" {
-		cert, err := tls.LoadX509KeyPair(tlsConfig.CertificatePath, tlsConfig.CertificateKeyPath)
+		kpr, err := tlsutil.NewKeypairReloader(tlsConfig.CertificatePath, tlsConfig.CertificateKeyPath)
 		if err != nil {
 			return nil, errors.Wrap(err, "loading keypair")
 		}
 		TLSConfig = &tls.Config{
-			Certificates:             []tls.Certificate{cert},
 			InsecureSkipVerify:       tlsConfig.SkipVerify,
 			PreferServerCipherSuites: true,
 			MinVersion:               tls.VersionTLS12,
+			GetCertificate:           kpr.GetCertificateFunc(),
 		}
 		if tlsConfig.CACertPath != "" {
 			b, err := ioutil.ReadFile(tlsConfig.CACertPath)
