@@ -15,6 +15,8 @@
 package ctl
 
 import (
+	"log"
+
 	"github.com/pilosa/pilosa/http"
 	"github.com/pilosa/pilosa/server"
 	"github.com/pkg/errors"
@@ -25,6 +27,7 @@ import (
 type CommandWithTLSSupport interface {
 	TLSHost() string
 	TLSConfiguration() server.TLSConfig
+	Logger() *log.Logger
 }
 
 // SetTLSConfig creates common TLS flags
@@ -39,7 +42,7 @@ func SetTLSConfig(flags *pflag.FlagSet, certificatePath *string, certificateKeyP
 // commandClient returns a pilosa.InternalHTTPClient for the command
 func commandClient(cmd CommandWithTLSSupport) (*http.InternalClient, error) {
 	tls := cmd.TLSConfiguration()
-	tlsConfig, err := server.GetTLSConfig(&tls)
+	tlsConfig, err := server.GetTLSConfig(&tls, cmd.Logger())
 	if err != nil {
 		return nil, errors.Wrap(err, "getting tls config")
 	}

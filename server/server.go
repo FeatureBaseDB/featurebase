@@ -23,9 +23,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"io"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
@@ -51,7 +49,6 @@ import (
 	"github.com/pilosa/pilosa/statsd"
 	"github.com/pilosa/pilosa/syswrap"
 	"github.com/pkg/errors"
-	"github.com/robustirc/bridge/tlsutil"
 )
 
 type loggerLogger interface {
@@ -250,7 +247,7 @@ func (m *Command) SetupServer() error {
 	// Setup TLS
 	var TLSConfig *tls.Config
 	if uri.Scheme == "https" {
-		TLSConfig, err = GetTLSConfig(&m.Config.TLS)
+		TLSConfig, err = GetTLSConfig(&m.Config.TLS, m.logger.Logger())
 		if err != nil {
 			return errors.Wrap(err, "get tls config")
 		}
@@ -474,37 +471,4 @@ func (f *filteredWriter) Write(p []byte) (n int, err error) {
 		return f.logOutput.Write(p)
 	}
 	return len(p), nil
-}
-
-func GetTLSConfig(tlsConfig *TLSConfig) (TLSConfig *tls.Config, err error) {
-	if tlsConfig.CertificatePath != "" && tlsConfig.CertificateKeyPath != "" {
-		kpr, err := tlsutil.NewKeypairReloader(tlsConfig.CertificatePath, tlsConfig.CertificateKeyPath)
-		if err != nil {
-			return nil, errors.Wrap(err, "loading keypair")
-		}
-		TLSConfig = &tls.Config{
-			InsecureSkipVerify:       tlsConfig.SkipVerify,
-			PreferServerCipherSuites: true,
-			MinVersion:               tls.VersionTLS12,
-			GetCertificate:           kpr.GetCertificateFunc(),
-		}
-		if tlsConfig.CACertPath != "" {
-			b, err := ioutil.ReadFile(tlsConfig.CACertPath)
-			if err != nil {
-				return nil, errors.Wrap(err, "loading tls ca key")
-			}
-			certPool := x509.NewCertPool()
-
-			ok := certPool.AppendCertsFromPEM(b)
-			if !ok {
-				return nil, errors.New("error parsing CA certificate")
-			}
-			TLSConfig.ClientCAs = certPool
-			TLSConfig.RootCAs = certPool
-		}
-		if tlsConfig.EnableClientVerification {
-			TLSConfig.ClientAuth = tls.RequireAndVerifyClientCert
-		}
-	}
-	return TLSConfig, nil
 }
