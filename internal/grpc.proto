@@ -1,0 +1,31 @@
+ 
+syntax = "proto3";
+ 
+message QueryPQLRequest {
+  string vds = 1;
+  string pql = 2;
+}
+
+message RowResponse{
+  repeated ColumnInfo column_info = 1;
+  repeated ColumnResponse columns = 2;
+}
+
+message ColumnInfo {
+  string name = 1;
+  string datatype = 2;
+}
+
+message ColumnResponse{
+  oneof columnVal {
+    string stringVal = 1;
+    int64 intVal = 2;
+    bool boolVal = 3;
+    bytes blobVal = 4;
+  }
+}
+
+service Molecula {
+  rpc QueryPQL(QueryPQLRequest) returns (stream RowResponse) {
+  };
+}
