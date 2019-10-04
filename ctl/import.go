@@ -80,7 +80,7 @@ func NewImportCommand(stdin io.Reader, stdout, stderr io.Writer) *ImportCommand 
 
 // Run executes the main program execution.
 func (cmd *ImportCommand) Run(ctx context.Context) error {
-	logger := log.New(cmd.Stderr, "", log.LstdFlags)
+	logger := cmd.Logger()
 
 	// Validate arguments.
 	// Index and field are validated early before the files are parsed.

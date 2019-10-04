@@ -17,7 +17,6 @@ package ctl
 import (
 	"context"
 	"io"
-	"log"
 	"os"
 
 	"github.com/pilosa/pilosa"
@@ -52,7 +51,7 @@ func NewExportCommand(stdin io.Reader, stdout, stderr io.Writer) *ExportCommand 
 
 // Run executes the export.
 func (cmd *ExportCommand) Run(ctx context.Context) error {
-	logger := log.New(cmd.Stderr, "", log.LstdFlags)
+	logger := cmd.Logger()
 
 	// Validate arguments.
 	if cmd.Index == "" {
