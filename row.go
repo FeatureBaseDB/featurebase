@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"bytes"
 	"encoding/json"
 	"sort"
 
@@ -345,6 +346,12 @@ type rowSegment struct {
 
 func (s *rowSegment) Freeze() {
 	s.data.Freeze()
+}
+
+func (s *rowSegment) Raw() (uint64, []byte) {
+	var buf bytes.Buffer
+	s.data.WriteTo(&buf)
+	return s.shard, buf.Bytes()
 }
 
 // Merge adds chunks from other to s.
