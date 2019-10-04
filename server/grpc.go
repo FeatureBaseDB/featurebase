@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/pilosa/pilosa"
-	pb "github.com/pilosa/pilosa/internal"
+	pb "github.com/pilosa/pilosa/proto"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
@@ -122,11 +122,11 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 	}()
 	return results
 }
-func (s grpchandler) QueryPQL(pql *pb.QueryPQLRequest, stream pb.Molecula_QueryPQLServer) error {
-	fmt.Println(pql.Pql)
+func (s grpchandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQLServer) error {
+	fmt.Println(req.Pql)
 	query := pilosa.QueryRequest{
-		Index: pql.Vds,
-		Query: pql.Pql,
+		Index: req.Index,
+		Query: req.Pql,
 	}
 	resp, err := s.api.Query(context.Background(), &query)
 	if err != nil {
@@ -172,7 +172,7 @@ func (s *grpcServer) Serve() error {
 
 	// create grpc server
 	srv := grpc.NewServer()
-	pb.RegisterMoleculaServer(srv, grpchandler{api: s.api})
+	pb.RegisterPilosaServer(srv, grpchandler{api: s.api})
 
 	// and start...
 	if err := srv.Serve(lis); err != nil {
