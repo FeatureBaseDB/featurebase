@@ -2,7 +2,7 @@
 syntax = "proto3";
  
 message QueryPQLRequest {
-  string vds = 1;
+  string index = 1;
   string pql = 2;
 }
 
@@ -25,7 +25,7 @@ message ColumnResponse{
   }
 }
 
-service Molecula {
+service Pilosa {
   rpc QueryPQL(QueryPQLRequest) returns (stream RowResponse) {
   };
 }
