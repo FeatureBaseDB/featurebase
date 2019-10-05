@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -540,7 +541,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 		var err error
 
 		if field.keys() {
-			if rowStr, err = api.holder.translateFile.TranslateRowToString(index.Name(), field.Name(), rowID); err != nil {
+			if rowStr, err = field.translateStore.TranslateID(rowID); err != nil {
 				return errors.Wrap(err, "translating row")
 			}
 		} else {
@@ -548,7 +549,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 		}
 
 		if index.Keys() {
-			if colStr, err = api.holder.translateFile.TranslateColumnToString(index.Name(), columnID); err != nil {
+			if colStr, err = index.translateStore.TranslateID(columnID); err != nil {
 				return errors.Wrap(err, "translating column")
 			}
 		} else {
@@ -944,7 +945,7 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 			if len(req.RowIDs) != 0 {
 				return errors.New("row ids cannot be used because field uses string keys")
 			}
-			if req.RowIDs, err = api.holder.translateFile.TranslateRowsToUint64(index.Name(), field.Name(), req.RowKeys); err != nil {
+			if req.RowIDs, err = field.translateStore.TranslateKeys(req.RowKeys); err != nil {
 				return errors.Wrap(err, "translating rows")
 			}
 		}
@@ -954,7 +955,7 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 			if len(req.ColumnIDs) != 0 {
 				return errors.New("column ids cannot be used because index uses string keys")
 			}
-			if req.ColumnIDs, err = api.holder.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
+			if req.ColumnIDs, err = index.translateStore.TranslateKeys(req.ColumnKeys); err != nil {
 				return errors.Wrap(err, "translating columns")
 			}
 		}
@@ -1055,7 +1056,7 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 			if len(req.ColumnIDs) != 0 {
 				return errors.New("column ids cannot be used because index uses string keys")
 			}
-			if req.ColumnIDs, err = api.holder.translateFile.TranslateColumnsToUint64(index.Name(), req.ColumnKeys); err != nil {
+			if req.ColumnIDs, err = index.translateStore.TranslateKeys(req.ColumnKeys); err != nil {
 				return errors.Wrap(err, "translating columns")
 			}
 
@@ -1255,22 +1256,6 @@ func (api *API) ResizeAbort() error {
 	return errors.Wrap(err, "complete current job")
 }
 
-// GetTranslateData provides a reader for key translation logs starting at offset.
-func (api *API) GetTranslateData(ctx context.Context, offset int64) (io.ReadCloser, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "API.GetTranslateData")
-	defer span.Finish()
-
-	rc, err := api.holder.translateFile.Reader(ctx, offset)
-	if err != nil {
-		return nil, errors.Wrap(err, "read from translate store")
-	}
-
-	// Ensure reader is closed when the client disconnects.
-	go func() { <-ctx.Done(); rc.Close() }()
-
-	return rc, nil
-}
-
 // State returns the cluster state which is usually "NORMAL", but could be
 // "STARTING", "RESIZING", or potentially others. See cluster.go for more
 // details.
@@ -1300,35 +1285,47 @@ func (api *API) Info() serverInfo {
 	}
 }
 
+// GetTranslateEntryReader provides an entry reader for key translation logs starting at offset.
+func (api *API) GetTranslateEntryReader(ctx context.Context, offsets TranslateOffsetMap) (TranslateEntryReader, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "API.GetTranslateEntryReader")
+	defer span.Finish()
+	return api.holder.TranslateEntryReader(ctx, offsets)
+}
+
 // TranslateKeys handles a TranslateKeyRequest.
-func (api *API) TranslateKeys(body io.Reader) ([]byte, error) {
-	reqBytes, err := ioutil.ReadAll(body)
-	if err != nil {
-		return nil, NewBadRequestError(errors.Wrap(err, "read body error"))
-	}
+func (api *API) TranslateKeys(r io.Reader) ([]byte, error) {
 	var req TranslateKeysRequest
-	if err := api.Serializer.Unmarshal(reqBytes, &req); err != nil {
-		return nil, NewBadRequestError(errors.Wrap(err, "unmarshal body error"))
+	if buf, err := ioutil.ReadAll(r); err != nil {
+		return nil, NewBadRequestError(errors.Wrap(err, "read translate keys request error"))
+	} else if err := api.Serializer.Unmarshal(buf, &req); err != nil {
+		return nil, NewBadRequestError(errors.Wrap(err, "unmarshal translate keys request error"))
 	}
-	var ids []uint64
-	if req.Field == "" {
-		ids, err = api.holder.translateFile.TranslateColumnsToUint64(req.Index, req.Keys)
-	} else {
-		ids, err = api.holder.translateFile.TranslateRowsToUint64(req.Index, req.Field, req.Keys)
+
+	// Lookup store for either index or field and translate keys.
+	store, err := api.holder.TranslateStore(req.Index, req.Field)
+	if err != nil {
+		return nil, err
 	}
+	ids, err := store.TranslateKeys(req.Keys)
 	if err != nil {
 		return nil, err
 	}
 
-	resp := TranslateKeysResponse{
-		IDs: ids,
-	}
 	// Encode response.
-	buf, err := api.Serializer.Marshal(&resp)
+	buf, err := api.Serializer.Marshal(&TranslateKeysResponse{IDs: ids})
 	if err != nil {
 		return nil, errors.Wrap(err, "translate keys response encoding error")
 	}
 	return buf, nil
+}
+
+// PrimaryReplicaNodeURL returns the URL of the cluster's primary replica.
+func (api *API) PrimaryReplicaNodeURL() url.URL {
+	node := api.cluster.PrimaryReplicaNode()
+	if node == nil {
+		return url.URL{}
+	}
+	return node.URI.URL()
 }
 
 type serverInfo struct {

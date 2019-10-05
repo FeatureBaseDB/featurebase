@@ -21,8 +21,11 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/boltdb"
+	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
 )
@@ -33,11 +36,15 @@ func TestAPI_Import(t *testing.T) {
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+				pilosa.OptServerOpenTranslateReader(http.OpenTranslateReader),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node1"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+				pilosa.OptServerOpenTranslateReader(http.OpenTranslateReader),
 			)},
 	)
 	defer c.Close()
@@ -92,16 +99,20 @@ func TestAPI_Import(t *testing.T) {
 		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
 			t.Fatal(err)
 		} else if keys := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, colKeys) {
-			t.Fatalf("unexpected column keys: %+v", keys)
+			t.Fatalf("unexpected column keys: %#v", keys)
 		}
 
 		// Query node1.
-		if res, err := m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
+		if err := test.RetryUntil(5*time.Second, func() error {
+			if res, err := m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
+				return err
+			} else if keys := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, colKeys) {
+				return fmt.Errorf("unexpected column keys: %#v", keys)
+			}
+			return nil
+		}); err != nil {
 			t.Fatal(err)
-		} else if keys := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, colKeys) {
-			t.Fatalf("unexpected column keys: %+v", keys)
 		}
-
 	})
 
 	// Relies on the previous test creating an index with TrackExistence and
@@ -178,11 +189,13 @@ func TestAPI_ImportValue(t *testing.T) {
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
+				pilosa.OptServerOpenTranslateReader(http.OpenTranslateReader),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node1"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
+				pilosa.OptServerOpenTranslateReader(http.OpenTranslateReader),
 			)},
 	)
 	defer c.Close()
@@ -234,10 +247,15 @@ func TestAPI_ImportValue(t *testing.T) {
 		}
 
 		// Query node1.
-		if res, err := m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
+		if err := test.RetryUntil(5*time.Second, func() error {
+			if res, err := m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
+				return err
+			} else if keys := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, colKeys) {
+				return fmt.Errorf("unexpected column keys: %+v", keys)
+			}
+			return nil
+		}); err != nil {
 			t.Fatal(err)
-		} else if keys := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, colKeys) {
-			t.Fatalf("unexpected column keys: %+v", keys)
 		}
 	})
 }

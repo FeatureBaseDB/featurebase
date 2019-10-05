@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/boltdb"
 	"github.com/pilosa/pilosa/v2/encoding/proto"
 	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/server"
@@ -1033,10 +1034,10 @@ func TestClusterTranslator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("starting cluster 1: %v", err)
 	}
-	httpTranslateStore := http.NewTranslateStore(cluster[0].URL())
 	cluster[1] = test.NewCommandNode(false,
 		server.OptCommandServerOptions(
-			pilosa.OptServerPrimaryTranslateStore(httpTranslateStore),
+			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+			pilosa.OptServerOpenTranslateReader(http.OpenTranslateReader),
 		),
 	)
 	cluster[1].Config.Gossip.Port = "0"
@@ -1051,14 +1052,16 @@ func TestClusterTranslator(t *testing.T) {
 
 	test.MustDo("POST", cluster[0].URL()+"/index/i0/query", "Set(\"foo\", f0=\"bar\")")
 
-	// wait for key to replicate to second node
-	time.Sleep(500 * time.Millisecond)
-
-	result0 := test.MustDo("POST", cluster[0].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
-	result1 := test.MustDo("POST", cluster[1].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
-
-	if result0 != result1 {
-		t.Fatalf("`%s` != `%s`", result0, result1)
+	var result0, result1 string
+	if err := test.RetryUntil(2*time.Second, func() error {
+		result0 = test.MustDo("POST", cluster[0].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
+		result1 = test.MustDo("POST", cluster[1].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
+		if result0 != result1 {
+			return fmt.Errorf("`%s` != `%s`", result0, result1)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	for _, i := range []string{result0, result1} {

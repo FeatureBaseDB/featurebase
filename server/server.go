@@ -307,6 +307,8 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerMetricInterval(time.Duration(m.Config.Metric.PollInterval)),
 		pilosa.OptServerDiagnosticsInterval(diagnosticsInterval),
 		pilosa.OptServerExecutorPoolSize(m.Config.WorkerPoolSize),
+		pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+		pilosa.OptServerOpenTranslateReader(http.OpenTranslateReader),
 		pilosa.OptServerLogger(m.logger),
 		pilosa.OptServerAttrStoreFunc(boltdb.NewAttrStore),
 		pilosa.OptServerSystemInfo(gopsutil.NewSystemInfo()),
@@ -314,20 +316,11 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerStatsClient(statsClient),
 		pilosa.OptServerURI(advertiseURI),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
-		pilosa.OptServerPrimaryTranslateStoreFunc(http.NewTranslateStoreWithHTTPClient(c)),
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
 		pilosa.OptServerSerializer(proto.Serializer{}),
 		coordinatorOpt,
 	}
 
-	if m.Config.Translation.MapSize > 0 {
-		serverOptions = append(
-			serverOptions,
-			pilosa.OptServerTranslateFileMapSize(
-				m.Config.Translation.MapSize,
-			),
-		)
-	}
 	serverOptions = append(serverOptions, m.serverOptions...)
 
 	m.Server, err = pilosa.NewServer(serverOptions...)
