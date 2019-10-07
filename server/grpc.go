@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-type grpchandler struct {
+type grpcHandler struct {
 	api *pilosa.API
 }
 
@@ -31,7 +31,7 @@ func makeLabel(group []pilosa.FieldRow) string {
 }
 
 // I think ideally this would be plugged in the executor somewhere
-// in order to get some concurency benefit but we can
+// in order to get some concurrency benefit but we can
 // start with the combined response
 func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 	results := make(chan *pb.RowResponse)
@@ -39,20 +39,36 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 		for _, result := range resp.Results {
 			switch r := result.(type) {
 			case *pilosa.Row:
-				ci := []*pb.ColumnInfo{
-					{Name: "shard", Datatype: "uint64"},
-					{Name: "segment", Datatype: "roaring"},
-				}
-				for _, x := range r.Segments() {
-					shard, b := x.Raw()
-					results <- &pb.RowResponse{
-						ColumnInfo: ci,
-						Columns: []*pb.ColumnResponse{
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(shard)}},
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BlobVal{b}},
-						}}
-					ci = nil //only send on the first
-
+				if len(r.Keys) > 0 {
+					// Column keys
+					ci := []*pb.ColumnInfo{
+						{Name: "id", Datatype: "string"},
+					}
+					for _, x := range r.Keys {
+						results <- &pb.RowResponse{
+							ColumnInfo: ci,
+							Columns: []*pb.ColumnResponse{
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{x}},
+							}}
+						ci = nil //only send on the first
+					}
+				} else {
+					// Roaring segments
+					ci := []*pb.ColumnInfo{
+						// TODO:
+						{Name: "shard", Datatype: "uint64"},
+						{Name: "segment", Datatype: "roaring"},
+					}
+					for _, x := range r.Segments() {
+						shard, b := x.Raw()
+						results <- &pb.RowResponse{
+							ColumnInfo: ci,
+							Columns: []*pb.ColumnResponse{
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(shard)}},
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BlobVal{b}},
+							}}
+						ci = nil //only send on the first
+					}
 				}
 			case pilosa.Pair:
 				results <- &pb.RowResponse{
@@ -122,20 +138,20 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 	}()
 	return results
 }
-func (s grpchandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQLServer) error {
-	fmt.Println(req.Pql)
+func (s grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQLServer) error {
+	//fmt.Println(req.Pql)
 	query := pilosa.QueryRequest{
 		Index: req.Index,
 		Query: req.Pql,
 	}
 	resp, err := s.api.Query(context.Background(), &query)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "querying")
 	}
 	for row := range makeRows(resp) {
 		err := stream.Send(row)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "sending row to stream")
 		}
 	}
 
@@ -163,7 +179,7 @@ func OptAddressPort(pilosaURI *pilosa.URI) grpcServerOption {
 	}
 }
 func (s *grpcServer) Serve() error {
-	// create listiner
+	// create listener
 	lis, err := net.Listen("tcp", s.hostPort)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
@@ -172,7 +188,7 @@ func (s *grpcServer) Serve() error {
 
 	// create grpc server
 	srv := grpc.NewServer()
-	pb.RegisterPilosaServer(srv, grpchandler{api: s.api})
+	pb.RegisterPilosaServer(srv, grpcHandler{api: s.api})
 
 	// and start...
 	if err := srv.Serve(lis); err != nil {
