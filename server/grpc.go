@@ -131,7 +131,11 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(r)}},
 					}}
 			default:
-				fmt.Printf("unhandled %T\n", r)
+				results <- &pb.RowResponse{
+					ErrorMessage: fmt.Sprintf("unhandled %T\n", r),
+				}
+				log.Printf("unhandled %T\n", r)
+				break
 			}
 		}
 		close(results)
@@ -146,10 +150,14 @@ func (s grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 	}
 	resp, err := s.api.Query(context.Background(), &query)
 	if err != nil {
+		er := &pb.RowResponse{
+			ErrorMessage: err.Error(),
+		}
+		err = stream.Send(er)
 		return errors.Wrap(err, "querying")
 	}
 	for row := range makeRows(resp) {
-		err := stream.Send(row)
+		err = stream.Send(row)
 		if err != nil {
 			return errors.Wrap(err, "sending row to stream")
 		}
