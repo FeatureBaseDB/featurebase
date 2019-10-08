@@ -18,7 +18,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/pilosa/pilosa/server"
+	"github.com/pilosa/pilosa/v2/server"
 	"github.com/spf13/cobra"
 )
 

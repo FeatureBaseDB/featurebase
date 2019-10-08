@@ -18,8 +18,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pilosa/pilosa"
-	_ "github.com/pilosa/pilosa/test"
+	"github.com/pilosa/pilosa/v2"
+	_ "github.com/pilosa/pilosa/v2/test"
 )
 
 func TestAddressWithDefaults(t *testing.T) {

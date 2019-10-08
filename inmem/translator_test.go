@@ -20,7 +20,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/pilosa/pilosa/inmem"
+	"github.com/pilosa/pilosa/v2/inmem"
 )
 
 func TestTranslateStore_TranslateColumn(t *testing.T) {

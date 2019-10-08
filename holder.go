@@ -27,10 +27,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/pilosa/pilosa/logger"
-	"github.com/pilosa/pilosa/roaring"
-	"github.com/pilosa/pilosa/stats"
-	"github.com/pilosa/pilosa/tracing"
+	"github.com/pilosa/pilosa/v2/logger"
+	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 )

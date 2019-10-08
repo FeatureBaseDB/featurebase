@@ -24,8 +24,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pilosa/pilosa/gossip"
-	"github.com/pilosa/pilosa/toml"
+	"github.com/pilosa/pilosa/v2/gossip"
+	"github.com/pilosa/pilosa/v2/toml"
 	"github.com/pkg/errors"
 	jaeger "github.com/uber/jaeger-client-go"
 )

@@ -18,8 +18,8 @@ import (
 	"context"
 	"io"
 
-	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/ctl"
+	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/ctl"
 	"github.com/spf13/cobra"
 )
 

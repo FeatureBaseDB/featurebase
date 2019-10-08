@@ -17,8 +17,8 @@ package ctl
 import (
 	"log"
 
-	"github.com/pilosa/pilosa/http"
-	"github.com/pilosa/pilosa/server"
+	"github.com/pilosa/pilosa/v2/http"
+	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )

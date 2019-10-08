@@ -18,7 +18,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/v2"
 )
 
 var _ pilosa.TranslateStore = (*TranslateStore)(nil)

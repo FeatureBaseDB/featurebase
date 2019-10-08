@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/cespare/xxhash"
-	"github.com/pilosa/pilosa/logger"
+	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pkg/errors"
 )
 

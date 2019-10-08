@@ -19,8 +19,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/server"
-	"github.com/pilosa/pilosa/toml"
+	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/toml"
 )
 
 func Test_NewConfig(t *testing.T) {

@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/v2"
 )
 
 func TestTranslateFile_TranslateColumn(t *testing.T) {

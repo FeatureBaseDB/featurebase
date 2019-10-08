@@ -19,7 +19,7 @@ import (
 	"sort"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/internal"
+	"github.com/pilosa/pilosa/v2/internal"
 )
 
 // Attribute data type enum.

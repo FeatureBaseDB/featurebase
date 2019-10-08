@@ -35,9 +35,9 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/logger"
-	"github.com/pilosa/pilosa/tracing"
+	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/logger"
+	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )

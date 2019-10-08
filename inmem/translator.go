@@ -19,7 +19,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/v2"
 )
 
 // Ensure type implements interface.

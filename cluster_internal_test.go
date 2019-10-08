@@ -33,8 +33,8 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gorilla/mux"
-	"github.com/pilosa/pilosa/logger"
-	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/v2/logger"
+	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pkg/errors"
 )
 

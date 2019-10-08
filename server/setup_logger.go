@@ -20,7 +20,7 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/pilosa/pilosa/logger"
+	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pkg/errors"
 )
 

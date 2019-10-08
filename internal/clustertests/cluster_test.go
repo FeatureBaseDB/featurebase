@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa"
-	picli "github.com/pilosa/pilosa/http"
+	"github.com/pilosa/pilosa/v2"
+	picli "github.com/pilosa/pilosa/v2/http"
 )
 
 func TestClusterStuff(t *testing.T) {
