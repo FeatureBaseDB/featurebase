@@ -29,10 +29,10 @@ message ColumnResponse{
 
 message InspectRequest {
   string index = 1;
-  repeated Column columns = 2;
+  repeated IdKey columns = 2;
 }
-message Column{
-  oneof columnType{
+message IdKey{
+  oneof type{
     int64 id =1;
     string key =2;
   } 
@@ -43,7 +43,7 @@ message InspectResponse {
 
 message FieldSet {
   string fieldName =1;
-  repeated Column columns =2;
+  repeated IdKey items =2;
 }
 
 service Pilosa {
