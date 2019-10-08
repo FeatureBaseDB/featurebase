@@ -166,22 +166,21 @@ func (s grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 	return nil
 }
 
-func makeItems(p pilosa.RowIdentifiers) []*pb.IdKey {
+func makeItems(p pilosa.RowIdentifiers) *pb.IdsOrKeys {
 	if len(p.Keys) == 0 {
 		//use Rows
-		results := make([]*pb.IdKey, len(p.Rows))
+
+		results := make([]int64, len(p.Rows))
 		for i, id := range p.Rows {
-			item := &pb.IdKey{Type: &pb.IdKey_Id{Id: int64(id)}}
-			results[i] = item
+			results[i] = int64(id)
 		}
-		return results
+		return &pb.IdsOrKeys{Type: &pb.IdsOrKeys_Ids{Ids: &pb.Ids{Vals: results}}}
 	}
-	results := make([]*pb.IdKey, len(p.Rows))
+	results := make([]string, len(p.Rows))
 	for i, key := range p.Keys {
-		item := &pb.IdKey{Type: &pb.IdKey_Key{Key: key}}
-		results[i] = item
+		results[i] = key
 	}
-	return results
+	return &pb.IdsOrKeys{Type: &pb.IdsOrKeys_Keys{Keys: &pb.Keys{Vals: results}}}
 }
 func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectServer) error {
 
@@ -194,35 +193,64 @@ func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 			}
 		}
 	}
-	for _, col := range req.Columns {
-		ir := &pb.InspectResponse{}
-		for _, field := range fields {
-			var column string
-			if col.GetKey() == "" { //need to figure out the proper way to handle oneof
-				column = fmt.Sprintf("%d", col.GetId())
-			} else {
-				column = fmt.Sprintf("\"%s\"", col.GetKey())
+	ints, ok := req.Columns.Type.(*pb.IdsOrKeys_Ids)
+	if ok {
+		for _, col := range ints.Ids.Vals {
+			ir := &pb.InspectResponse{}
+			for _, field := range fields {
+				column := fmt.Sprintf("%d", col)
+				pql := fmt.Sprintf("Rows(%s, column=%s)", field, column)
+				query := pilosa.QueryRequest{
+					Index: req.Index,
+					Query: pql,
+				}
+				resp, err := s.api.Query(context.Background(), &query)
+				if err != nil {
+					return err
+				}
+				var ids *pb.IdsOrKeys
+				for _, result := range resp.Results {
+					ids = makeItems(result.(pilosa.RowIdentifiers))
+				}
+				fs := &pb.FieldSet{
+					FieldName: field,
+					Items:     ids,
+				}
+				ir.Set = append(ir.Set, fs)
 			}
-			pql := fmt.Sprintf("Rows(%s, column=%s)", field, column)
-			query := pilosa.QueryRequest{
-				Index: req.Index,
-				Query: pql,
-			}
-			resp, err := s.api.Query(context.Background(), &query)
-			if err != nil {
-				return err
-			}
-			var ids []*pb.IdKey
-			for _, result := range resp.Results {
-				ids = makeItems(result.(pilosa.RowIdentifiers))
-			}
-			fs := &pb.FieldSet{
-				FieldName: field,
-				Items:     ids,
-			}
-			ir.Set = append(ir.Set, fs)
+			stream.Send(ir)
 		}
-		stream.Send(ir)
+	} else {
+		keys, ok := req.Columns.Type.(*pb.IdsOrKeys_Keys)
+		if !ok {
+			//not correct type
+			return nil
+		}
+		for _, col := range keys.Keys.Vals {
+			ir := &pb.InspectResponse{}
+			for _, field := range fields {
+				column := fmt.Sprintf("\"%s\"", col)
+				pql := fmt.Sprintf("Rows(%s, column=%s)", field, column)
+				query := pilosa.QueryRequest{
+					Index: req.Index,
+					Query: pql,
+				}
+				resp, err := s.api.Query(context.Background(), &query)
+				if err != nil {
+					return err
+				}
+				var ids *pb.IdsOrKeys
+				for _, result := range resp.Results {
+					ids = makeItems(result.(pilosa.RowIdentifiers))
+				}
+				fs := &pb.FieldSet{
+					FieldName: field,
+					Items:     ids,
+				}
+				ir.Set = append(ir.Set, fs)
+			}
+			stream.Send(ir)
+		}
 	}
 	return nil
 }
