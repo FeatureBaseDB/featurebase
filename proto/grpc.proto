@@ -29,21 +29,31 @@ message ColumnResponse{
 
 message InspectRequest {
   string index = 1;
-  repeated IdKey columns = 2;
+  IdsOrKeys columns = 2;
 }
-message IdKey{
-  oneof type{
-    int64 id =1;
-    string key =2;
-  } 
+
+message Ids {
+  repeated int64 vals = 1;
 }
+
+message Keys {
+  repeated string vals = 1;
+}
+
+message IdsOrKeys {
+  oneof type {
+    Ids ids = 1;
+    Keys keys = 2;
+  }
+}
+
 message InspectResponse {
-  repeated FieldSet set=1; 
+  repeated FieldSet set = 1;
 }
 
 message FieldSet {
-  string fieldName =1;
-  repeated IdKey items =2;
+  string fieldName = 1;
+  IdsOrKeys items = 2;
 }
 
 service Pilosa {
