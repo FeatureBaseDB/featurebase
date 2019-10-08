@@ -166,6 +166,67 @@ func (s grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 	return nil
 }
 
+func makeItems(p pilosa.RowIdentifiers) []*pb.IdKey {
+	if len(p.Keys) == 0 {
+		//use Rows
+		result := make([]*pb.IdKey, len(p.Rows))
+		for i, id := range p.Rows {
+			item := &pb.IdKey_Id{Id: int64(id)}
+			result[i] = &pb.IdKey{Type: item}
+		}
+		return result
+	}
+	result := make([]*pb.IdKey, len(p.Keys))
+	for i, key := range p.Keys {
+		item := &pb.IdKey_Key{Key: key}
+		result[i] = &pb.IdKey{Type: item}
+	}
+	return result
+}
+func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectServer) error {
+
+	schema := s.api.Schema(context.Background())
+	var fields []string
+	for _, index := range schema {
+		if index.Name == req.Index {
+			for _, field := range index.Fields {
+				fields = append(fields, field.Name)
+			}
+		}
+	}
+	for _, col := range req.Columns {
+		ir := &pb.InspectResponse{}
+		for _, field := range fields {
+			var column string
+			if col.GetKey() == "" { //need to figure out the proper way to handle oneof
+				column = fmt.Sprintf("%d", col.GetId())
+			} else {
+				column = fmt.Sprintf("\"%s\"", col.GetKey())
+			}
+			pql := fmt.Sprintf("Rows(%s, column=%s)", field, column)
+			query := pilosa.QueryRequest{
+				Index: req.Index,
+				Query: pql,
+			}
+			resp, err := s.api.Query(context.Background(), &query)
+			if err != nil {
+				return err
+			}
+			var ids []*pb.IdKey
+			for _, result := range resp.Results {
+				ids = makeItems(result.(pilosa.RowIdentifiers))
+			}
+			fs := &pb.FieldSet{
+				FieldName: field,
+				Items:     ids,
+			}
+			ir.Set = append(ir.Set, fs)
+		}
+		stream.Send(ir)
+	}
+	return nil
+}
+
 type grpcServer struct {
 	api      *pilosa.API
 	hostPort string
