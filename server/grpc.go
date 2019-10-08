@@ -169,19 +169,19 @@ func (s grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 func makeItems(p pilosa.RowIdentifiers) []*pb.IdKey {
 	if len(p.Keys) == 0 {
 		//use Rows
-		result := make([]*pb.IdKey, len(p.Rows))
+		results := make([]*pb.IdKey, len(p.Rows))
 		for i, id := range p.Rows {
-			item := &pb.IdKey_Id{Id: int64(id)}
-			result[i] = &pb.IdKey{Type: item}
+			item := &pb.IdKey{Type: &pb.IdKey_Id{Id: int64(id)}}
+			results[i] = item
 		}
-		return result
+		return results
 	}
-	result := make([]*pb.IdKey, len(p.Keys))
+	results := make([]*pb.IdKey, len(p.Rows))
 	for i, key := range p.Keys {
-		item := &pb.IdKey_Key{Key: key}
-		result[i] = &pb.IdKey{Type: item}
+		item := &pb.IdKey{Type: &pb.IdKey_Key{Key: key}}
+		results[i] = item
 	}
-	return result
+	return results
 }
 func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectServer) error {
 
