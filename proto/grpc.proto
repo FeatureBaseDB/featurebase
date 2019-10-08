@@ -27,7 +27,26 @@ message ColumnResponse{
   }
 }
 
+message InspectRequest {
+  string index = 1;
+  repeated Column columns = 2;
+}
+message Column{
+  oneof columnType{
+    int64 id =1;
+    string key =2;
+  } 
+}
+message InspectResponse {
+  repeated FieldSet set=1; 
+}
+
+message FieldSet {
+  string fieldName =1;
+  repeated Column columns =2;
+}
+
 service Pilosa {
-  rpc QueryPQL(QueryPQLRequest) returns (stream RowResponse) {
-  };
+  rpc QueryPQL(QueryPQLRequest) returns (stream RowResponse) {};
+  rpc Inspect(InspectRequest) returns (stream InspectResponse) {};
 }
