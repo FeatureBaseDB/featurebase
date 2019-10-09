@@ -442,3 +442,23 @@ type httpResponse struct {
 	*gohttp.Response
 	Body string
 }
+
+// RetryUntil repeatedly executes fn until it returns nil or timeout occurs.
+func RetryUntil(timeout time.Duration, fn func() error) (err error) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		if err = fn(); err == nil {
+			return nil
+		}
+
+		select {
+		case <-timer.C:
+			return err
+		case <-ticker.C:
+		}
+	}
+}

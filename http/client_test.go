@@ -688,7 +688,7 @@ func TestClient_ImportKeys(t *testing.T) {
 				{Key: "blue", Count: 2},
 				{Key: "purple", Count: 1},
 			}) {
-				t.Fatalf("unexpected topn result: %v", pairs)
+				t.Fatalf("unexpected topn result: %#v", pairs)
 			}
 		})
 	})

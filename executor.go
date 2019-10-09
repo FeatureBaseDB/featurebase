@@ -54,9 +54,6 @@ type executor struct {
 	// Maximum number of Set() or Clear() commands per request.
 	MaxWritesPerRequest int
 
-	// Stores key/id translation data.
-	TranslateStore TranslateStore
-
 	workersWG      sync.WaitGroup
 	workerPoolSize int
 	work           chan job
@@ -184,7 +181,7 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 		// Translate column attributes, if necessary.
 		if idx.Keys() {
 			for _, col := range columnAttrSets {
-				v, err := e.Holder.translateFile.TranslateColumnToString(index, col.ID)
+				v, err := idx.translateStore.TranslateID(col.ID)
 				if err != nil {
 					return resp, err
 				}
@@ -2645,17 +2642,18 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 		fieldName = callArgString(c, "field")
 		rowKey = "row"
 	}
+
 	// Translate column key.
 	if idx.Keys() {
 		if c.Args[colKey] != nil && !isString(c.Args[colKey]) {
 			return errors.New("column value must be a string when index 'keys' option enabled")
 		}
 		if value := callArgString(c, colKey); value != "" {
-			ids, err := e.TranslateStore.TranslateColumnsToUint64(index, []string{value})
+			id, err := idx.translateStore.TranslateKey(value)
 			if err != nil {
 				return err
 			}
-			c.Args[colKey] = ids[0]
+			c.Args[colKey] = id
 		}
 	} else {
 		if isString(c.Args[colKey]) {
@@ -2692,11 +2690,11 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 				return errors.New("row value must be a string when field 'keys' option enabled")
 			}
 			if value := callArgString(c, rowKey); value != "" {
-				ids, err := e.TranslateStore.TranslateRowsToUint64(index, fieldName, []string{value})
+				id, err := field.translateStore.TranslateKey(value)
 				if err != nil {
 					return err
 				}
-				c.Args[rowKey] = ids[0]
+				c.Args[rowKey] = id
 			}
 		} else {
 			if isString(c.Args[rowKey]) {
@@ -2765,11 +2763,11 @@ func (e *executor) translateGroupByCall(index string, idx *Index, c *pql.Call) e
 			if !ok {
 				return errors.New("prev value must be a string when field 'keys' option enabled")
 			}
-			ids, err := e.TranslateStore.TranslateRowsToUint64(index, field.Name(), []string{prevStr})
+			id, err := field.translateStore.TranslateKey(prevStr)
 			if err != nil {
 				return errors.Wrapf(err, "translating row key '%s'", prevStr)
 			}
-			previous[i] = ids[0]
+			previous[i] = id
 		} else {
 			if prevStr, ok := prev.(string); ok {
 				return errors.Errorf("got string row val '%s' in 'previous' for field %s which doesn't use string keys", prevStr, field.Name())
@@ -2800,7 +2798,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 			other := &Row{Attrs: result.Attrs}
 			for _, segment := range result.Segments() {
 				for _, col := range segment.Columns() {
-					key, err := e.TranslateStore.TranslateColumnToString(index, col)
+					key, err := idx.translateStore.TranslateID(col)
 					if err != nil {
 						return nil, err
 					}
@@ -2817,7 +2815,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 				return nil, fmt.Errorf("field %q not found", fieldName)
 			}
 			if field.keys() {
-				key, err := e.TranslateStore.TranslateRowToString(index, fieldName, result.ID)
+				key, err := field.translateStore.TranslateID(result.ID)
 				if err != nil {
 					return nil, err
 				}
@@ -2838,7 +2836,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 			if field.keys() {
 				other := make([]Pair, len(result))
 				for i := range result {
-					key, err := e.TranslateStore.TranslateRowToString(index, fieldName, result[i].ID)
+					key, err := field.translateStore.TranslateID(result[i].ID)
 					if err != nil {
 						return nil, err
 					}
@@ -2862,7 +2860,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 					return nil, ErrFieldNotFound
 				}
 				if field.keys() {
-					key, err := e.TranslateStore.TranslateRowToString(index, g.Field, g.RowID)
+					key, err := field.translateStore.TranslateID(g.RowID)
 					if err != nil {
 						return nil, errors.Wrap(err, "translating row ID in Group")
 					}
@@ -2890,7 +2888,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 		} else if field.keys() {
 			other.Keys = make([]string, len(result))
 			for i, id := range result {
-				key, err := e.TranslateStore.TranslateRowToString(index, fieldName, id)
+				key, err := field.translateStore.TranslateID(id)
 				if err != nil {
 					return nil, errors.Wrap(err, "translating row ID")
 				}

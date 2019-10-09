@@ -181,6 +181,8 @@ func (h *Handler) populateValidators() {
 	h.validators["GetIndex"] = queryValidationSpecRequired()
 	h.validators["PostIndex"] = queryValidationSpecRequired()
 	h.validators["DeleteIndex"] = queryValidationSpecRequired()
+	h.validators["GetTranslateData"] = queryValidationSpecRequired("offset")
+	h.validators["PostTranslateKeys"] = queryValidationSpecRequired()
 	h.validators["PostField"] = queryValidationSpecRequired()
 	h.validators["DeleteField"] = queryValidationSpecRequired()
 	h.validators["PostImport"] = queryValidationSpecRequired().Optional("clear", "ignoreKeyCheck")
@@ -201,8 +203,6 @@ func (h *Handler) populateValidators() {
 	h.validators["PostFieldAttrDiff"] = queryValidationSpecRequired()
 	h.validators["GetNodes"] = queryValidationSpecRequired()
 	h.validators["GetShardMax"] = queryValidationSpecRequired()
-	h.validators["GetTranslateData"] = queryValidationSpecRequired("offset")
-	h.validators["PostTranslateKeys"] = queryValidationSpecRequired()
 }
 
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
@@ -306,12 +306,12 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/fragment/data", handler.handleGetFragmentData).Methods("GET").Name("GetFragmentData")
 	router.HandleFunc("/internal/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET").Name("GetFragmentNodes")
 	router.HandleFunc("/internal/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST").Name("PostIndexAttrDiff")
+	router.HandleFunc("/internal/translate/data", handler.handlePostTranslateData).Methods("POST").Name("PostTranslateData")
+	router.HandleFunc("/internal/translate/keys", handler.handlePostTranslateKeys).Methods("POST").Name("PostTranslateKeys")
 	router.HandleFunc("/internal/index/{index}/field/{field}/attr/diff", handler.handlePostFieldAttrDiff).Methods("POST").Name("PostFieldAttrDiff")
 	router.HandleFunc("/internal/index/{index}/field/{field}/remote-available-shards/{shardID}", handler.handleDeleteRemoteAvailableShard).Methods("DELETE")
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
-	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET").Name("GetTranslateData")
-	router.HandleFunc("/internal/translate/keys", handler.handlePostTranslateKeys).Methods("POST").Name("PostTranslateKeys")
 
 	router.Use(handler.queryArgValidator)
 	router.Use(handler.extractTracing)
@@ -508,9 +508,14 @@ func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.api.Query(r.Context(), req)
 	if err != nil {
-		switch errors.Cause(resp.Err) {
+		switch errors.Cause(err) {
 		case pilosa.ErrTooManyWrites:
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
+		case pilosa.ErrTranslateStoreReadOnly:
+			u := h.api.PrimaryReplicaNodeURL()
+			u.Path, u.RawQuery = r.URL.Path, r.URL.RawQuery
+			http.Redirect(w, r, u.String(), http.StatusFound)
+			return
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 		}
@@ -1495,54 +1500,46 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 
 type defaultClusterMessageResponse struct{}
 
-// translateStoreBufferSize is the buffer size used for streaming data.
-const translateStoreBufferSize = 1 << 16 // 64k
-
-func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	offset, _ := strconv.ParseInt(q.Get("offset"), 10, 64)
-
-	rdr, err := h.api.GetTranslateData(r.Context(), offset)
-	if err != nil {
-		if errors.Cause(err) == pilosa.ErrNotImplemented {
-			http.Error(w, err.Error(), http.StatusNotImplemented)
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
+func (h *Handler) handlePostTranslateData(w http.ResponseWriter, r *http.Request) {
+	// Parse offsets for all indexes and fields from POST body.
+	offsets := make(pilosa.TranslateOffsetMap)
+	if err := json.NewDecoder(r.Body).Decode(&offsets); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	// Stream all translation data.
+	rd, err := h.api.GetTranslateEntryReader(r.Context(), offsets)
+	if errors.Cause(err) == pilosa.ErrNotImplemented {
+		http.Error(w, err.Error(), http.StatusNotImplemented)
+		return
+	} else if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rd.Close()
+
 	// Flush header so client can continue.
 	w.WriteHeader(http.StatusOK)
-	if w, ok := w.(http.Flusher); ok {
-		w.Flush()
-	}
+	w.(http.Flusher).Flush()
 
 	// Copy from reader to client until store or client disconnect.
-	useBufferSize := translateStoreBufferSize
-	buf := make([]byte, useBufferSize)
+	enc := json.NewEncoder(w)
 	for {
 		// Read from store.
-		n, err := rdr.Read(buf)
-		if err == io.EOF {
+		var entry pilosa.TranslateEntry
+		if err := rd.ReadEntry(&entry); err == io.EOF {
 			return
 		} else if err != nil {
 			h.logger.Printf("http: translate store read error: %s", err)
 			return
-		} else if n == 0 {
-			// Reset the default buffer size.
-			useBufferSize = translateStoreBufferSize
-			buf = make([]byte, useBufferSize)
-			continue
 		}
 
 		// Write to response & flush.
-		if _, err := w.Write(buf[:n]); err != nil {
-			h.logger.Printf("http: translate store response write error: %s", err)
+		if err := enc.Encode(&entry); err != nil {
 			return
-		} else if w, ok := w.(http.Flusher); ok {
-			w.Flush()
 		}
+		w.(http.Flusher).Flush()
 	}
 }
 
@@ -1676,6 +1673,7 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 	_, err = w.Write(buf)
 	if err != nil {
 		h.logger.Printf("writing import-roaring response: %v", err)
+		return
 	}
 }
 

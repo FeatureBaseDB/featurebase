@@ -17,6 +17,8 @@ package pilosa
 import (
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -45,6 +47,11 @@ type URI struct {
 	Scheme string `json:"scheme"`
 	Host   string `json:"host"`
 	Port   uint16 `json:"port"`
+}
+
+// URL returns a url.URL representation of the URI.
+func (u *URI) URL() url.URL {
+	return url.URL{Scheme: u.Scheme, Host: net.JoinHostPort(u.Host, strconv.Itoa(int(u.Port)))}
 }
 
 // defaultURI creates and returns the default URI.

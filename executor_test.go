@@ -32,6 +32,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/boltdb"
+	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
 	"github.com/pkg/errors"
@@ -2712,7 +2714,12 @@ func TestExecutor_ExecuteOptions(t *testing.T) {
 // Ensure an existence field is maintained.
 func TestExecutor_Execute_Existence(t *testing.T) {
 	t.Run("Row", func(t *testing.T) {
-		c := test.MustRunCluster(t, 1)
+		c := test.MustRunCluster(t, 1, []server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+				pilosa.OptServerOpenTranslateReader(http.OpenTranslateReader),
+			),
+		})
 		defer c.Close()
 		hldr := test.Holder{Holder: c[0].Server.Holder()}
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackExistence: true})
