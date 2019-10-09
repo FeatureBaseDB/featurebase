@@ -30,6 +30,7 @@ message ColumnResponse{
 message InspectRequest {
   string index = 1;
   IdsOrKeys columns = 2;
+  repeated string filterFields =3;
 }
 
 message Ids {
