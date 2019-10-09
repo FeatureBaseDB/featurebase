@@ -169,7 +169,6 @@ func (s grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 func makeItems(p pilosa.RowIdentifiers) *pb.IdsOrKeys {
 	if len(p.Keys) == 0 {
 		//use Rows
-
 		results := make([]int64, len(p.Rows))
 		for i, id := range p.Rows {
 			results[i] = int64(id)
@@ -189,7 +188,17 @@ func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 	for _, index := range schema {
 		if index.Name == req.Index {
 			for _, field := range index.Fields {
-				fields = append(fields, field.Name)
+				if len(req.FilterFields) > 0 {
+					for _, filter := range req.FilterFields {
+						if filter == field.Name {
+							fields = append(fields, field.Name)
+							break
+						}
+
+					}
+				} else {
+					fields = append(fields, field.Name)
+				}
 			}
 		}
 	}
@@ -198,8 +207,7 @@ func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 		for _, col := range ints.Ids.Vals {
 			ir := &pb.InspectResponse{}
 			for _, field := range fields {
-				column := fmt.Sprintf("%d", col)
-				pql := fmt.Sprintf("Rows(%s, column=%s)", field, column)
+				pql := fmt.Sprintf("Rows(%s, column=%d)", field, col)
 				query := pilosa.QueryRequest{
 					Index: req.Index,
 					Query: pql,
@@ -218,7 +226,10 @@ func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 				}
 				ir.Set = append(ir.Set, fs)
 			}
-			stream.Send(ir)
+			err := stream.Send(ir)
+			if err != nil {
+				return err
+			}
 		}
 	} else {
 		keys, ok := req.Columns.Type.(*pb.IdsOrKeys_Keys)
@@ -229,8 +240,7 @@ func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 		for _, col := range keys.Keys.Vals {
 			ir := &pb.InspectResponse{}
 			for _, field := range fields {
-				column := fmt.Sprintf("\"%s\"", col)
-				pql := fmt.Sprintf("Rows(%s, column=%s)", field, column)
+				pql := fmt.Sprintf("Rows(%s, column=\"%s\")", field, col)
 				query := pilosa.QueryRequest{
 					Index: req.Index,
 					Query: pql,
