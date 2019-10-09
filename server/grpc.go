@@ -206,6 +206,10 @@ func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 	if ok {
 		for _, col := range ints.Ids.Vals {
 			ir := &pb.InspectResponse{}
+			ir.Set = append(ir.Set, &pb.FieldSet{
+				FieldName: "_id",
+				Items:     &pb.IdsOrKeys{Type: &pb.IdsOrKeys_Ids{Ids: &pb.Ids{Vals: []int64{col}}}},
+			})
 			for _, field := range fields {
 				pql := fmt.Sprintf("Rows(%s, column=%d)", field, col)
 				query := pilosa.QueryRequest{
@@ -239,6 +243,10 @@ func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 		}
 		for _, col := range keys.Keys.Vals {
 			ir := &pb.InspectResponse{}
+			ir.Set = append(ir.Set, &pb.FieldSet{
+				FieldName: "_key",
+				Items:     &pb.IdsOrKeys{Type: &pb.IdsOrKeys_Keys{Keys: &pb.Keys{Vals: []string{col}}}},
+			})
 			for _, field := range fields {
 				pql := fmt.Sprintf("Rows(%s, column=\"%s\")", field, col)
 				query := pilosa.QueryRequest{
