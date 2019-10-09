@@ -176,7 +176,7 @@ func makeItems(p pilosa.RowIdentifiers) *pb.IdsOrKeys {
 		}
 		return &pb.IdsOrKeys{Type: &pb.IdsOrKeys_Ids{Ids: &pb.Ids{Vals: results}}}
 	}
-	results := make([]string, len(p.Rows))
+	results := make([]string, len(p.Keys))
 	for i, key := range p.Keys {
 		results[i] = key
 	}
