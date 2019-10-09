@@ -1397,6 +1397,7 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 
 	// Read into another fragment.
 	f1 := mustOpenFragment("i", "f", viewStandard, 0, "")
+	defer f1.Clean(t)
 	if rn, err := f1.ReadFrom(&buf); err != nil {
 		t.Fatal(err)
 	} else if wn != rn {
@@ -2233,7 +2234,20 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 							b.Errorf("import error: %v", err)
 						}
 						b.StopTimer()
-						stat, _ := f.file.Stat()
+						var stat os.FileInfo
+						var statTarget io.Writer
+						err = f.gen.Transaction(&statTarget, func() error {
+							targetFile, ok := statTarget.(*os.File)
+							if ok {
+								stat, _ = targetFile.Stat()
+							} else {
+								b.Errorf("couldn't stat file")
+							}
+							return nil
+						})
+						if err != nil {
+							b.Errorf("transaction error: %v", err)
+						}
 						fileSize[name] = stat.Size()
 						f.Clean(b)
 					}
@@ -2382,6 +2396,7 @@ func TestGetZipfRowsSliceRoaring(t *testing.T) {
 			t.Fatalf("suspect distribution from getZipfRowsSliceRoaring")
 		}
 	}
+	f.Clean(t)
 }
 
 // getZipfRowsSliceRoaring generates a random fragment with the given number of
@@ -2529,7 +2544,14 @@ func (f *fragment) sanityCheck(t testing.TB) {
 func (f *fragment) Clean(t testing.TB) {
 	f.awaitSnapshot()
 	f.sanityCheck(t)
+	if f.storage != nil && f.storage.Source != nil {
+		if f.storage.Source.Dead() {
+			t.Fatalf("cleaning up fragment %s, source %s, source already dead", f.path, f.storage.Source.ID())
+		}
+	}
 	errc := f.Close()
+	// prevent double-closes of generation during testing.
+	f.gen = nil
 	errf := os.Remove(f.path)
 	errp := os.Remove(f.cachePath())
 	if errc != nil || errf != nil {
@@ -3272,7 +3294,7 @@ func TestImportClearRestart(t *testing.T) {
 				f2.MaxOpN = maxOpN
 				f2.CacheType = f.CacheType
 
-				err = f.closeStorage(true)
+				err = f.closeStorage()
 				if err != nil {
 					t.Fatalf("closing storage: %v", err)
 				}
@@ -3306,7 +3328,7 @@ func TestImportClearRestart(t *testing.T) {
 				f3.MaxOpN = maxOpN
 				f3.CacheType = f.CacheType
 
-				err = f2.closeStorage(true)
+				err = f2.closeStorage()
 				if err != nil {
 					t.Fatalf("f2 closing storage: %v", err)
 				}
@@ -3354,6 +3376,7 @@ func check(t *testing.T, f *fragment, exp map[uint64]map[uint64]struct{}) {
 
 func TestImportValueConcurrent(t *testing.T) {
 	f := mustOpenBSIFragment("i", "f", viewBSIGroupPrefix+"foo", 0)
+	defer f.Clean(t)
 	eg := &errgroup.Group{}
 	for i := 0; i < 4; i++ {
 		i := i

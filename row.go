@@ -359,7 +359,7 @@ type rowSegment struct {
 }
 
 func (s *rowSegment) Freeze() {
-	s.data.Freeze()
+	s.data = s.data.Freeze()
 }
 
 /*
@@ -392,7 +392,7 @@ func (s *rowSegment) IntersectionCount(other *rowSegment) uint64 {
 // Intersect returns the itersection of s and other.
 func (s *rowSegment) Intersect(other *rowSegment) *rowSegment {
 	data := s.data.Intersect(other.data)
-	data.Freeze()
+	data = data.Freeze()
 
 	return &rowSegment{
 		data:     data,
@@ -422,7 +422,7 @@ func (s *rowSegment) Union(others ...*rowSegment) *rowSegment {
 // Difference returns the diff of s and other.
 func (s *rowSegment) Difference(other *rowSegment) *rowSegment {
 	data := s.data.Difference(other.data)
-	data.Freeze()
+	data = data.Freeze()
 
 	return &rowSegment{
 		data:     data,
@@ -435,7 +435,7 @@ func (s *rowSegment) Difference(other *rowSegment) *rowSegment {
 // Xor returns the xor of s and other.
 func (s *rowSegment) Xor(other *rowSegment) *rowSegment {
 	data := s.data.Xor(other.data)
-	data.Freeze()
+	data = data.Freeze()
 
 	return &rowSegment{
 		data:     data,
@@ -452,7 +452,7 @@ func (s *rowSegment) Shift() (*rowSegment, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "shifting roaring data")
 	}
-	data.Freeze()
+	data = data.Freeze()
 
 	return &rowSegment{
 		data:     data,

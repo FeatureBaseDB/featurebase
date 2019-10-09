@@ -30,7 +30,9 @@ func (b *Bitmap) UnmarshalBinary(data []byte) error {
 		return nil
 	}
 	statsHit("Bitmap/UnmarshalBinary")
-	b.opN = 0 // reset opN since we're reading new data.
+	// reset ops/opN since we're reading new data.
+	b.ops = 0
+	b.opN = 0
 	fileMagic := uint32(binary.LittleEndian.Uint16(data[0:2]))
 	if fileMagic == MagicNumber { // if pilosa roaring
 		return errors.Wrap(b.unmarshalPilosaRoaring(data), "unmarshaling as pilosa roaring")
@@ -213,7 +215,7 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 		b.opN += opr.count()
 		opsOffset += opr.size()
 		// Move the buffer forward.
-		buf = buf[opsOffset:]
+		buf = data[opsOffset:]
 	}
 
 	return nil

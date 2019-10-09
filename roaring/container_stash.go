@@ -267,9 +267,6 @@ func (c *Container) Freeze() *Container {
 	if c.flags&flagFrozen != 0 {
 		return c
 	}
-	// unmapOrClone should unmap-in-place because the existing
-	// container isn't frozen (or we'd already have returned it).
-	c = c.unmapOrClone()
 	c.flags |= flagFrozen
 	return c
 }

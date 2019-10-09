@@ -43,7 +43,6 @@ import (
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/shardwidth"
 	"github.com/pilosa/pilosa/v2/stats"
-	"github.com/pilosa/pilosa/v2/syswrap"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 )
@@ -110,9 +109,8 @@ type fragment struct {
 	// File-backed storage
 	path               string
 	flags              byte // user-defined flags passed to roaring
-	file               *os.File
+	gen                generation
 	storage            *roaring.Bitmap
-	storageData        []byte
 	totalOpN           int64 // total opN values
 	totalOps           int64 // total ops (across all snapshots)
 	opN                int   // number of ops since snapshot (may be approximate for imports)
@@ -254,6 +252,10 @@ func (f *fragment) Open() error {
 		// Fill cache with rows persisted to disk.
 		f.Logger.Debugf("open cache for index/field/view/fragment: %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 		if err := f.openCache(); err != nil {
+			e2 := f.closeStorage()
+			if e2 != nil {
+				return errors.Wrapf(err, "closing storage: %v, after opening cache", e2)
+			}
 			return errors.Wrap(err, "opening cache")
 		}
 
@@ -273,48 +275,103 @@ func (f *fragment) Open() error {
 	return nil
 }
 
-func (f *fragment) reopen() (mustClose bool, err error) {
-	if f.file == nil {
-		// Open the data file to be mmap'd and used as an ops log.
-		f.file, mustClose, err = syswrap.OpenFile(f.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-		if err != nil {
-			return mustClose, fmt.Errorf("open file: %s", err)
-		}
-		f.storage.OpWriter = f.file
+// emptyStorage is the common case for importStorage/applyStorage where they
+// get no data. It tries to write the current storage to the provided file,
+// which is assumed to be the file they didn't get any data from.
+func (f *fragment) emptyStorage(file *os.File) (bool, error) {
+	// No data. We'll mark this for no mapping, clear any existing
+	// mapped containers, and set the Source to nil. We also have no
+	// ops.
+	f.opN = 0
+	f.ops = 0
+	f.storage.SetOps(0, 0)
+
+	f.storage.PreferMapping(false)
+	_, err := f.storage.RemapRoaringStorage(nil)
+	f.storage.SetSource(nil)
+	if err != nil {
+		return false, fmt.Errorf("applying/importing storage: no data, and clearing old mapping also failed: %v", err)
 	}
-	return mustClose, nil
+	// Write the existing storage out to the file so it's
+	// a valid Roaring file thereafter. nothing to unmarshal.
+	// In the unlikely event that this happened even though we
+	// had significant data, we're not mapping it, but that's
+	// harmless even if it's not maximally efficient.
+	bi := bufio.NewWriter(file)
+	if _, err = f.storage.WriteTo(bi); err != nil {
+		return false, fmt.Errorf("init storage file: %s", err)
+	}
+	bi.Flush()
+	return false, nil
 }
 
-// openStorage opens the storage bitmap. Usually you also want to read in
-// the storage, but in the case where we just wrote that file, such as
-// unprotectedWriteToFragment, we could also just... not. If we didn't
-// have existing storage, we probably need to unmarshal the data. If the
-// file we're asked to open is empty, we probably don't.
-//
-// If we already had mapped storage previously, we want to unmap that, and
-// possibly remap it from the file, but we don't need a full unmarshal, just
-// an update of mapped pointers.
-//
-// unmarshalData is somewhat overloaded. it tells us whether or not we
-// need to actually create a bitmap from the data (if the data exists to
-// do this from).
-//
-// usually unmarshalData is only set to false when we're in the middle of
-// a snapshot, and unprotectedWriteToFragment just wrote the in-memory data
-// out.
-//
-// If we have existing storage data, and we successfully get new data,
-// we will unmap the existing storage data.
-//
-// This function's design is probably a problem -- it is trying to handle
-// both cases where there was existing data before, and cases where we
-// just wrote the data.
-func (f *fragment) openStorage(unmarshalData bool) error {
-	oldStorageData := f.storageData
-	// there's a few places where we might encounter an error, but need
-	// to continue past it through other error checks, before returning it.
-	var lastError error
+// importStorage attempts to import data from storage -- for instance,
+// reading in a roaring bitmap from media.
+func (f *fragment) importStorage(data []byte, file *os.File, newGen generation, mapped bool) (bool, error) {
+	f.storage.PreferMapping(mapped)
+	if len(data) == 0 {
+		return f.emptyStorage(file)
+	}
 
+	// UnmarshalBinary will have remapped the storage to newGen if it
+	// succeeded, or if it fails but the error is advisory-only. So we
+	// optimistically set the source here, but if there's a non-advisory
+	// error, we'll unmap it and then set the source to nil.
+	f.storage.SetSource(newGen)
+	if err := f.storage.UnmarshalBinary(data); err != nil {
+		// roaring can report advisory-only errors...
+		cause := errors.Cause(err)
+		_, ok := cause.(roaring.AdvisoryError)
+		if !ok {
+			_, e2 := f.storage.RemapRoaringStorage(nil)
+			f.storage.SetSource(nil)
+			if e2 != nil {
+				return false, fmt.Errorf("unmarshal storage: file=%s, err=%s, clearing old mapping also failed: %v", file.Name(), err, e2)
+			}
+			return false, fmt.Errorf("unmarshal storage: file=%s, err=%s", file.Name(), err)
+		}
+		f.Logger.Printf("warning: unmarshal storage, file=%s, err=%v", file.Name(), err)
+		trunc, ok := cause.(roaring.FileShouldBeTruncatedError)
+		if ok {
+			// generation code looks for a FileShouldBeTruncatedError
+			return false, trunc
+		}
+	}
+	f.ops, f.opN = f.storage.Ops()
+	// For now, we assume that UnmarshalBinary will have mapped at least
+	// one container if we told it the storage was mapped and it didn't
+	// error out. This might be wrong in occasional trivial cases, but
+	// it should be harmless.
+	return mapped, nil
+}
+
+// applyStorage applies storage to a fragment that may already have
+// usable data. For instance, this would try to remap existing containers
+// to use a new storage as backing store.
+func (f *fragment) applyStorage(data []byte, file *os.File, newGen generation, mapped bool) (bool, error) {
+	if len(data) == 0 {
+		return f.emptyStorage(file)
+	}
+	// Tell storage to prefer mapping if and only if we think the data
+	// is mmapped and valid.
+	f.storage.PreferMapping(mapped)
+	f.storage.SetSource(newGen)
+	// RemapRoaringStorage will fix any mapped containers to point either
+	// to the provided data (if PreferMapping was called with true and
+	// data is provided and there's a corresponding container) or to
+	// allocated storage, so when it's done, there's nothing in it that
+	// is mapped to anything *other than* the provided data.
+	return f.storage.RemapRoaringStorage(data)
+}
+
+// openStorage opens the storage bitmap.
+//
+// This has been massively reworked recently, and now hands a lot of
+// file management off to the generation object and the Done method
+// of that object. Similarly, the bitmap mapping/remapping
+// logic is now mostly in importStorage (reading in a bitmap) and applyStorage
+// (remapping an existing bitmap to match a new backing store).
+func (f *fragment) openStorage(unmarshalData bool) error {
 	// Create a roaring bitmap to serve as storage for the shard.
 	if f.storage == nil {
 		f.storage = roaring.NewFileBitmap()
@@ -323,152 +380,23 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 		// unmarshal this data in order to have any.
 		unmarshalData = true
 	}
-	// Open the data file to be mmap'd and used as an ops log.
-	file, mustClose, err := syswrap.OpenFile(f.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		return fmt.Errorf("open file: %s", err)
-	}
-	f.file = file
-	if mustClose {
-		defer f.safeClose()
-	}
-
-	// Lock the underlying file.
-	if err := syscall.Flock(int(f.file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		return fmt.Errorf("flock: %s", err)
-	}
-
-	// data is the data we would unmarshal from, if we're unmarshalling; it might
-	// be obtained by calling ReadAll on a file.
-	//
-	// newStorageData is the data we should map things to. it is set only if
-	// mmapped; if we didn't mmap (say, we couldn't), we won't want to unmap
-	// the ioutil byte slice. (Theoretically, we shouldn't be using the mapped
-	// flag in that case...)
-	var data []byte
-	var newStorageData []byte
-
-	// If the file is empty then initialize it with an empty bitmap.
-	fi, err := f.file.Stat()
-	if err != nil {
-		return errors.Wrap(err, "statting file before")
-	} else if fi.Size() == 0 {
-		bi := bufio.NewWriter(f.file)
-		var err error
-		if _, err = f.storage.WriteTo(bi); err != nil {
-			return fmt.Errorf("init storage file: %s", err)
-		}
-		bi.Flush()
-		_, err = f.file.Stat()
-		if err != nil {
-			return errors.Wrap(err, "statting file after")
-		}
-		// there's nothing here, we're not going to try to unmarshal it.
-		unmarshalData = false
-		f.rowCache = &simpleCache{make(map[uint64]*Row)}
-	} else {
-		// Mmap the underlying file so it can be zero copied.
-		data, err = syswrap.Mmap(int(f.file.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
-		if err == syswrap.ErrMaxMapCountReached {
-			f.Logger.Debugf("maximum number of maps reached, reading file instead")
-			if unmarshalData {
-				data, err = ioutil.ReadAll(file)
-				if err != nil {
-					return errors.Wrap(err, "failure file readall")
-				}
-			}
-		} else if err != nil {
-			return errors.Wrap(err, "mmap failed")
-		} else {
-			newStorageData = data
-		}
-	}
-
+	f.rowCache = &simpleCache{make(map[uint64]*Row)}
+	var storageOp func([]byte, *os.File, generation, bool) (bool, error)
 	if unmarshalData {
-		f.storageData = newStorageData
-		// We're about to either re-read the bitmap, or fail to do so
-		// and unconditionally unmap the existing stuff. Either way, we
-		// want to unmap the old storage data after we're done here, but
-		// we can't unmap it yet because it's still live until sometime
-		// later, but we can't unmap it later, because we could return
-		// early... this is what defer is for.
-		if oldStorageData != nil {
-			defer func() {
-				unmapErr := syswrap.Munmap(oldStorageData)
-				if unmapErr != nil {
-					f.Logger.Printf("unmap of old storage failed: %s", err)
-				}
-			}()
-		}
-		// set the preference for mapping based on whether the data's mmapped
-		f.storage.PreferMapping(newStorageData != nil)
-		// so we have a problem here: if this fails, it's unclear whether
-		// *either* or *both* of old and new storage data might be in use.
-		// So we call the thing that should unconditionally unmap both of them...
-		if err := f.storage.UnmarshalBinary(data); err != nil {
-			// roaring can report advisory-only errors...
-			_, ok := err.(roaring.AdvisoryError)
-			if !ok {
-				name := f.file.Name()
-				f.file.Close()
-				f.file = nil
-				_, e2 := f.storage.RemapRoaringStorage(nil)
-				if e2 != nil {
-					return fmt.Errorf("unmarshal storage: file=%s, err=%s, clearing old mapping also failed: %v", name, err, e2)
-				}
-				return fmt.Errorf("unmarshal storage: file=%s, err=%s", name, err)
-			} else {
-				f.Logger.Printf("warning: unmarshal storage, file=%s, err=%v", f.file.Name(), err)
-			}
-			trunc, ok := err.(roaring.FileShouldBeTruncatedError)
-			if ok {
-				f.Logger.Printf("should probably truncate file %s to %d bytes, but can't yet", f.file.Name(), trunc.SuggestedLength())
-			}
-		}
-		f.rowCache = &simpleCache{make(map[uint64]*Row)}
-		f.ops, f.opN = f.storage.Ops()
+		storageOp = f.importStorage
 	} else {
-		// we're moving to new storage, so instead of using the OpN
-		// derived from reading that storage, we notify the bitmap that
-		// OpN is now effectively zero.
-		f.opN = 0
-		f.ops = 0
-		f.storage.SetOps(0, 0)
-		// if oldStorageData is nil, this just tries to unmap any bits that
-		// are currently mapped. otherwise, it will point them at this
-		// storage (if the containers match).
-		var mappedAny bool
-		mappedAny, lastError = f.storage.RemapRoaringStorage(newStorageData)
-		if oldStorageData != nil {
-			unmapErr := syswrap.Munmap(oldStorageData)
-			if unmapErr != nil {
-				f.Logger.Printf("unmap of old storage failed: %s", err)
-			}
-		}
-		if mappedAny {
-			// Advise the kernel that the mmap is accessed randomly.
-			if err := madvise(newStorageData, syscall.MADV_RANDOM); err != nil {
-				lastError = fmt.Errorf("madvise: %s", err)
-			}
-		} else {
-			// if we did map data, but for some reason none of it got used
-			// as backing store, we can unmap it, and set the slice to nil,
-			// so we don't keep the now-invalid slice in f.storageData.
-			if newStorageData != nil {
-				unmapErr := syswrap.Munmap(newStorageData)
-				if unmapErr != nil {
-					lastError = fmt.Errorf("unmapping unused storage data: %s", err)
-				}
-				newStorageData = nil
-			}
-		}
-		f.storageData = newStorageData
+		storageOp = f.applyStorage
 	}
-
-	// Attach the file to the bitmap to act as a write-ahead log.
-	f.storage.OpWriter = f.file
-
-	return lastError
+	var err error
+	f.gen, err = newGeneration(f.gen, f.path, unmarshalData, storageOp, f.Logger)
+	if generationDebug {
+		// We might have already done this anyway, if we think we
+		// mapped stuff, but when debugging we want to do it
+		// unconditionally, because the test cases otherwise won't
+		// exercise this code well.
+		f.storage.SetSource(f.gen)
+	}
+	return err
 }
 
 // openCache initializes the cache from row ids persisted to disk.
@@ -550,7 +478,7 @@ func (f *fragment) close() error {
 	}
 
 	// Close underlying storage.
-	if err := f.closeStorage(true); err != nil {
+	if err := f.closeStorage(); err != nil {
 		f.Logger.Printf("fragment: error closing storage: err=%s, path=%s", err, f.path)
 		return errors.Wrap(err, "closing storage")
 	}
@@ -561,54 +489,17 @@ func (f *fragment) close() error {
 	return nil
 }
 
-// safeClose is unprotected.
-func (f *fragment) safeClose() error {
-	// Flush file, unlock & close.
-	if f.file != nil {
-		if err := f.file.Sync(); err != nil {
-			return fmt.Errorf("sync: %s", err)
-		}
-		if err := syscall.Flock(int(f.file.Fd()), syscall.LOCK_UN); err != nil {
-			return fmt.Errorf("unlock: %s", err)
-		}
-		if err := syswrap.CloseFile(f.file); err != nil {
-			return fmt.Errorf("close file: %s", err)
-		}
-	}
-	f.file = nil
-	f.storage.OpWriter = nil
-
-	return nil
-}
-
-// closeStorage attempts to close storage, including unmapping the old
-// storage if includeMap is true. This would normally make sense if you're
-// expecting to be done using the fragment, or to reload it. But it's also
-// okay to just leave stuff mmapped; you don't have to keep the file
-// descriptor open. So in some cases, we'll just leave the old mmapping
-// in place, rather than regenerating everything from the new file.
-func (f *fragment) closeStorage(includeMap bool) error {
-	// Clear the storage bitmap so it doesn't access the closed mmap.
-
-	//f.storage = roaring.NewBitmap()
-
-	// Unmap the file.
-	if includeMap && f.storageData != nil {
-		if err := syswrap.Munmap(f.storageData); err != nil {
-			return fmt.Errorf("munmap: %s", err)
-		}
-		f.storageData = nil
-	}
-
-	if err := f.safeClose(); err != nil {
-		return err
-	}
-
+// closeStorage marks the current generation as done. It is not necessary
+// to call this before openStorage.
+func (f *fragment) closeStorage() error {
 	// opN is determined by how many bit set/clear operations are in the storage
 	// write log, so once the storage is closed it should be 0. Opening new
 	// storage will set opN appropriately.
 	f.opN = 0
 
+	if f.gen != nil {
+		f.gen.Done()
+	}
 	return nil
 }
 
@@ -661,22 +552,17 @@ func (f *fragment) rowFromStorage(rowID uint64) *Row {
 func (f *fragment) setBit(rowID, columnID uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	mustClose, err := f.reopen()
-	if err != nil {
-		return false, errors.Wrap(err, "reopening")
-	}
-	if mustClose {
-		defer f.safeClose()
-	}
-
-	// handle mutux field type
-	if f.mutexVector != nil {
-		if err := f.handleMutex(rowID, columnID); err != nil {
-			return changed, errors.Wrap(err, "handling mutex")
+	err = f.gen.Transaction(&f.storage.OpWriter, func() error {
+		// handle mutux field type
+		if f.mutexVector != nil {
+			if err := f.handleMutex(rowID, columnID); err != nil {
+				return errors.Wrap(err, "handling mutex")
+			}
 		}
-	}
-
-	return f.unprotectedSetBit(rowID, columnID)
+		changed, err = f.unprotectedSetBit(rowID, columnID)
+		return err
+	})
+	return changed, err
 }
 
 // handleMutex will clear an existing row and store the new row
@@ -740,17 +626,14 @@ func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 
 // clearBit clears a bit for a given column & row within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
-func (f *fragment) clearBit(rowID, columnID uint64) (bool, error) {
+func (f *fragment) clearBit(rowID, columnID uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	mustClose, err := f.reopen()
-	if err != nil {
-		return false, errors.Wrap(err, "reopening")
-	}
-	if mustClose {
-		defer f.safeClose()
-	}
-	return f.unprotectedClearBit(rowID, columnID)
+	err = f.gen.Transaction(&f.storage.OpWriter, func() error {
+		changed, err = f.unprotectedClearBit(rowID, columnID)
+		return err
+	})
+	return changed, err
 }
 
 // unprotectedClearBit TODO should be replaced by an invocation of
@@ -796,17 +679,14 @@ func (f *fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, er
 
 // setRow replaces an existing row (specified by rowID) with the given
 // Row. This updates both the on-disk storage and the in-cache bitmap.
-func (f *fragment) setRow(row *Row, rowID uint64) (bool, error) {
+func (f *fragment) setRow(row *Row, rowID uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	mustClose, err := f.reopen()
-	if err != nil {
-		return false, errors.Wrap(err, "reopening")
-	}
-	if mustClose {
-		defer f.safeClose()
-	}
-	return f.unprotectedSetRow(row, rowID)
+	err = f.gen.Transaction(&f.storage.OpWriter, func() error {
+		changed, err = f.unprotectedSetRow(row, rowID)
+		return err
+	})
+	return changed, err
 }
 
 func (f *fragment) unprotectedSetRow(row *Row, rowID uint64) (changed bool, err error) {
@@ -855,17 +735,14 @@ func (f *fragment) unprotectedSetRow(row *Row, rowID uint64) (changed bool, err 
 
 // ClearRow clears a row for a given rowID within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
-func (f *fragment) clearRow(rowID uint64) (bool, error) {
+func (f *fragment) clearRow(rowID uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	mustClose, err := f.reopen()
-	if err != nil {
-		return false, errors.Wrap(err, "reopening")
-	}
-	if mustClose {
-		defer f.safeClose()
-	}
-	return f.unprotectedClearRow(rowID)
+	err = f.gen.Transaction(&f.storage.OpWriter, func() error {
+		changed, err = f.unprotectedClearRow(rowID)
+		return err
+	})
+	return changed, err
 }
 
 func (f *fragment) unprotectedClearRow(rowID uint64) (changed bool, err error) {
@@ -991,67 +868,62 @@ func (f *fragment) positionsForValue(columnID uint64, bitDepth uint, value int64
 func (f *fragment) setValueBase(columnID uint64, bitDepth uint, value int64, clear bool) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	mustClose, err := f.reopen()
-	if err != nil {
-		return false, errors.Wrap(err, "reopening")
-	}
-	if mustClose {
-		defer f.safeClose()
-	}
+	err = f.gen.Transaction(&f.storage.OpWriter, func() error {
+		// Convert value to an unsigned representation.
+		uvalue := uint64(value)
+		if value < 0 {
+			uvalue = uint64(-value)
+		}
 
-	// Convert value to an unsigned representation.
-	uvalue := uint64(value)
-	if value < 0 {
-		uvalue = uint64(-value)
-	}
+		for i := uint(0); i < bitDepth; i++ {
+			if uvalue&(1<<i) != 0 {
+				if c, err := f.unprotectedSetBit(uint64(bsiOffsetBit+i), columnID); err != nil {
+					return err
+				} else if c {
+					changed = true
+				}
+			} else {
+				if c, err := f.unprotectedClearBit(uint64(bsiOffsetBit+i), columnID); err != nil {
+					return err
+				} else if c {
+					changed = true
+				}
+			}
+		}
 
-	for i := uint(0); i < bitDepth; i++ {
-		if uvalue&(1<<i) != 0 {
-			if c, err := f.unprotectedSetBit(uint64(bsiOffsetBit+i), columnID); err != nil {
-				return changed, err
+		// Mark value as set (or cleared).
+		if clear {
+			if c, err := f.unprotectedClearBit(uint64(bsiExistsBit), columnID); err != nil {
+				return errors.Wrap(err, "clearing not-null")
 			} else if c {
 				changed = true
 			}
 		} else {
-			if c, err := f.unprotectedClearBit(uint64(bsiOffsetBit+i), columnID); err != nil {
-				return changed, err
+			if c, err := f.unprotectedSetBit(uint64(bsiExistsBit), columnID); err != nil {
+				return errors.Wrap(err, "marking not-null")
 			} else if c {
 				changed = true
 			}
 		}
-	}
 
-	// Mark value as set (or cleared).
-	if clear {
-		if c, err := f.unprotectedClearBit(uint64(bsiExistsBit), columnID); err != nil {
-			return changed, errors.Wrap(err, "clearing not-null")
-		} else if c {
-			changed = true
+		// Mark sign bit (or clear).
+		if value >= 0 || clear {
+			if c, err := f.unprotectedClearBit(uint64(bsiSignBit), columnID); err != nil {
+				return errors.Wrap(err, "clearing sign")
+			} else if c {
+				changed = true
+			}
+		} else {
+			if c, err := f.unprotectedSetBit(uint64(bsiSignBit), columnID); err != nil {
+				return errors.Wrap(err, "marking sign")
+			} else if c {
+				changed = true
+			}
 		}
-	} else {
-		if c, err := f.unprotectedSetBit(uint64(bsiExistsBit), columnID); err != nil {
-			return changed, errors.Wrap(err, "marking not-null")
-		} else if c {
-			changed = true
-		}
-	}
 
-	// Mark sign bit (or clear).
-	if value >= 0 || clear {
-		if c, err := f.unprotectedClearBit(uint64(bsiSignBit), columnID); err != nil {
-			return changed, errors.Wrap(err, "clearing sign")
-		} else if c {
-			changed = true
-		}
-	} else {
-		if c, err := f.unprotectedSetBit(uint64(bsiSignBit), columnID); err != nil {
-			return changed, errors.Wrap(err, "marking sign")
-		} else if c {
-			changed = true
-		}
-	}
-
-	return changed, nil
+		return nil
+	})
+	return changed, err
 }
 
 // importSetValue is a more efficient SetValue just for imports.
@@ -2079,52 +1951,46 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 // snapshot of the fragment or just do in-memory updates while appending
 // operations to the op log.
 func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct{}) error {
-	mustClose, err := f.reopen()
-	if err != nil {
-		return errors.Wrap(err, "reopening")
-	}
-	if mustClose {
-		defer f.safeClose()
-	}
-
-	if len(set) > 0 {
-		f.stats.Count("ImportingN", int64(len(set)), 1)
-		changedN, err := f.storage.AddN(set...) // TODO benchmark Add/RemoveN behavior with sorted/unsorted positions
-		if err != nil {
-			return errors.Wrap(err, "adding positions")
+	err := f.gen.Transaction(&f.storage.OpWriter, func() error {
+		if len(set) > 0 {
+			f.stats.Count("ImportingN", int64(len(set)), 1)
+			changedN, err := f.storage.AddN(set...) // TODO benchmark Add/RemoveN behavior with sorted/unsorted positions
+			if err != nil {
+				return errors.Wrap(err, "adding positions")
+			}
+			f.stats.Count("ImportedN", int64(changedN), 1)
+			f.incrementOpN(changedN)
 		}
-		f.stats.Count("ImportedN", int64(changedN), 1)
-		f.incrementOpN(changedN)
-	}
 
-	if len(clear) > 0 {
-		f.stats.Count("ClearingN", int64(len(clear)), 1)
-		changedN, err := f.storage.RemoveN(clear...)
-		if err != nil {
-			return errors.Wrap(err, "clearing positions")
+		if len(clear) > 0 {
+			f.stats.Count("ClearingN", int64(len(clear)), 1)
+			changedN, err := f.storage.RemoveN(clear...)
+			if err != nil {
+				return errors.Wrap(err, "clearing positions")
+			}
+			f.stats.Count("ClearedN", int64(changedN), 1)
+			f.incrementOpN(changedN)
 		}
-		f.stats.Count("ClearedN", int64(changedN), 1)
-		f.incrementOpN(changedN)
-	}
 
-	// Update cache counts for all affected rows.
-	for rowID := range rowSet {
-		// Invalidate block checksum.
-		delete(f.checksums, int(rowID/HashBlockSize))
+		// Update cache counts for all affected rows.
+		for rowID := range rowSet {
+			// Invalidate block checksum.
+			delete(f.checksums, int(rowID/HashBlockSize))
+
+			if f.CacheType != CacheTypeNone {
+				n := f.storage.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
+				f.cache.BulkAdd(rowID, n)
+			}
+
+			f.rowCache.Add(rowID, nil)
+		}
 
 		if f.CacheType != CacheTypeNone {
-			n := f.storage.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
-			f.cache.BulkAdd(rowID, n)
+			f.cache.Recalculate()
 		}
-
-		f.rowCache.Add(rowID, nil)
-	}
-
-	if f.CacheType != CacheTypeNone {
-		f.cache.Recalculate()
-	}
-
-	return nil
+		return nil
+	})
+	return err
 }
 
 // bulkImportMutex performs a bulk import on a fragment while ensuring
@@ -2210,7 +2076,6 @@ func (f *fragment) importValueSmallWrite(columnIDs []uint64, values []int64, bit
 		}
 		return nil
 	}(); err != nil {
-		_ = f.closeStorage(true)
 		_ = f.openStorage(true)
 		return err
 	}
@@ -2258,7 +2123,6 @@ func (f *fragment) importValue(columnIDs []uint64, values []int64, bitDepth uint
 		}
 		return nil
 	}(); err != nil {
-		_ = f.closeStorage(true)
 		_ = f.openStorage(true)
 		return err
 	}
@@ -2289,7 +2153,13 @@ func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) e
 	defer f.mu.Unlock()
 	span.Finish()
 	span, ctx = tracing.StartSpanFromContext(ctx, "importRoaring.ImportRoaringBits")
-	changed, rowSet, err := f.storage.ImportRoaringBits(data, clear, true, rowSize)
+	var changed int
+	var rowSet map[uint64]int
+	err := f.gen.Transaction(&f.storage.OpWriter, func() (err error) {
+		changed, rowSet, err = f.storage.ImportRoaringBits(data, clear, true, rowSize)
+		return err
+	})
+
 	span.Finish()
 	if err != nil {
 		return err
@@ -2383,22 +2253,24 @@ func unprotectedWriteToFragment(f *fragment, bm *roaring.Bitmap) (n int64, err e
 	if err != nil {
 		return n, fmt.Errorf("create snapshot file: %s", err)
 	}
-	defer file.Close()
+	// No deferred close, because we want to close it sooner than the
+	// end of this function.
 
 	// Write storage to snapshot.
 	bw := bufio.NewWriter(file)
 	if n, err = bm.WriteTo(bw); err != nil {
+		file.Close()
 		return n, fmt.Errorf("snapshot write to: %s", err)
 	}
 
 	if err := bw.Flush(); err != nil {
+		file.Close()
 		return n, fmt.Errorf("flush: %s", err)
 	}
 
-	// Close current storage.
-	if err := f.closeStorage(false); err != nil {
-		return n, fmt.Errorf("close storage: %s", err)
-	}
+	// we close the file here so we don't still have it open when trying
+	// to open it in a moment.
+	file.Close()
 
 	// Move snapshot to data file location.
 	if err := os.Rename(snapshotPath, f.path); err != nil {
@@ -2596,11 +2468,6 @@ func (f *fragment) readStorageFromArchive(r io.Reader) error {
 	// Copy reader into temporary path.
 	if _, err = io.Copy(file, r); err != nil {
 		return errors.Wrap(err, "copying")
-	}
-
-	// Close current storage.
-	if err := f.closeStorage(true); err != nil {
-		return errors.Wrap(err, "closing")
 	}
 
 	// Move snapshot to data file location.
