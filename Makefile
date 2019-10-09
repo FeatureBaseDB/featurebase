@@ -7,7 +7,7 @@ BRANCH := $(if $(TRAVIS_BRANCH),$(TRAVIS_BRANCH),$(if $(CIRCLE_BRANCH),$(CIRCLE_
 BRANCH_ID := $(BRANCH)-$(GOOS)-$(GOARCH)
 BUILD_TIME := $(shell date -u +%FT%T%z)
 SHARD_WIDTH = 20
-LDFLAGS="-X github.com/pilosa/pilosa.Version=$(VERSION) -X github.com/pilosa/pilosa.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa.Enterprise=$(if $(ENTERPRISE_ENABLED),1)"
+LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(VERSION) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Enterprise=$(if $(ENTERPRISE_ENABLED),1)"
 GO_VERSION=latest
 ENTERPRISE ?= 0
 ENTERPRISE_ENABLED = $(subst 0,,$(ENTERPRISE))
@@ -106,11 +106,11 @@ install:
 
 # `go generate` protocol buffers
 generate-protoc: require-protoc require-protoc-gen-gofast
-	go generate github.com/pilosa/pilosa/internal
+	go generate github.com/pilosa/pilosa/v2/internal
 
 # `go generate` stringers
 generate-stringer:
-	go generate github.com/pilosa/pilosa
+	go generate github.com/pilosa/pilosa/v2
 
 generate-pql: require-peg
 	cd pql && peg -inline pql.peg && cd ..

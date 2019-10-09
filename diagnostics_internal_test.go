@@ -23,7 +23,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pilosa/pilosa/logger"
+	"github.com/pilosa/pilosa/v2/logger"
 )
 
 func TestDiagnosticsClient(t *testing.T) {

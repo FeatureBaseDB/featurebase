@@ -18,7 +18,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/v2"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/host"
 	"github.com/shirou/gopsutil/mem"

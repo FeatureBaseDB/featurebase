@@ -18,8 +18,8 @@ import (
 	"net"
 	"testing"
 
-	"github.com/pilosa/pilosa"
-	"github.com/pilosa/pilosa/http"
+	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/http"
 )
 
 func TestHandlerOptions(t *testing.T) {

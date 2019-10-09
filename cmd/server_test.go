@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pilosa/pilosa/cmd"
-	_ "github.com/pilosa/pilosa/test"
-	"github.com/pilosa/pilosa/toml"
+	"github.com/pilosa/pilosa/v2/cmd"
+	_ "github.com/pilosa/pilosa/v2/test"
+	"github.com/pilosa/pilosa/v2/toml"
 	"github.com/pkg/errors"
 )
 

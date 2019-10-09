@@ -22,7 +22,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pilosa/pilosa/roaring"
+	"github.com/pilosa/pilosa/v2/roaring"
 )
 
 type tHolder struct {

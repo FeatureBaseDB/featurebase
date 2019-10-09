@@ -1,4 +1,4 @@
-module github.com/pilosa/pilosa
+module github.com/pilosa/pilosa/v2
 
 replace github.com/hashicorp/memberlist => github.com/pilosa/memberlist v0.1.4-0.20190415211605-f6512523c021
 

@@ -36,14 +36,14 @@ import (
 
 	"github.com/cespare/xxhash"
 	"github.com/gogo/protobuf/proto"
-	"github.com/pilosa/pilosa/internal"
-	"github.com/pilosa/pilosa/logger"
-	"github.com/pilosa/pilosa/pql"
-	"github.com/pilosa/pilosa/roaring"
-	"github.com/pilosa/pilosa/shardwidth"
-	"github.com/pilosa/pilosa/stats"
-	"github.com/pilosa/pilosa/syswrap"
-	"github.com/pilosa/pilosa/tracing"
+	"github.com/pilosa/pilosa/v2/internal"
+	"github.com/pilosa/pilosa/v2/logger"
+	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/shardwidth"
+	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/pilosa/pilosa/v2/syswrap"
+	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 )
 

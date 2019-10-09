@@ -28,10 +28,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/pql"
-	"github.com/pilosa/pilosa/roaring"
-	"github.com/pilosa/pilosa/stats"
-	"github.com/pilosa/pilosa/tracing"
+	"github.com/pilosa/pilosa/v2/pql"
+	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )

@@ -18,7 +18,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/pilosa/pilosa/pql"
+	"github.com/pilosa/pilosa/v2/pql"
 )
 
 // Ensure call can be converted into a string.

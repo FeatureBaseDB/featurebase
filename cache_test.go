@@ -17,7 +17,7 @@ package pilosa_test
 import (
 	"testing"
 
-	"github.com/pilosa/pilosa"
+	"github.com/pilosa/pilosa/v2"
 )
 
 // Ensure a bitmap query can be executed.

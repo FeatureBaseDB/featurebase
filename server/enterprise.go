@@ -17,5 +17,5 @@
 package server
 
 import (
-	_ "github.com/pilosa/pilosa/enterprise"
+	_ "github.com/pilosa/pilosa/v2/enterprise"
 )
