@@ -258,7 +258,7 @@ func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 		for _, col := range keys.Keys.Vals {
 			ir := &pb.InspectResponse{}
 			ir.Set = append(ir.Set, &pb.FieldSet{
-				FieldName: "_key",
+				FieldName: "_id",
 				Items:     &pb.IdsOrKeys{Type: &pb.IdsOrKeys_Keys{Keys: &pb.Keys{Vals: []string{col}}}},
 			})
 			for _, field := range fields {
