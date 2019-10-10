@@ -21,8 +21,8 @@ import (
 	"net"
 	"strings"
 
-	"github.com/pilosa/pilosa"
-	pb "github.com/pilosa/pilosa/proto"
+	"github.com/pilosa/pilosa/v2"
+	pb "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
