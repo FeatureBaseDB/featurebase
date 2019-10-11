@@ -34,7 +34,7 @@ message InspectRequest {
 }
 
 message Ids {
-  repeated int64 vals = 1;
+  repeated uint64 vals = 1;
 }
 
 message Keys {
