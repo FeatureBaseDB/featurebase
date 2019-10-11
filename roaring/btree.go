@@ -67,6 +67,7 @@ func (p *btEpool) get(err error, hit bool, i int, k uint64, q *d, t *tree, ver i
 
 type (
 	d struct { // data page
+		//nolint:unused
 		dTree //lint:ignore U1000 this is conditional on a build flag
 		c     int
 		d     [2*kd + 1]de
@@ -99,6 +100,7 @@ type (
 
 	// tree is a B+tree.
 	tree struct {
+		//nolint:unused
 		treeInst //lint:ignore U1000 this is conditional on a build flag
 		c        int
 		first    *d

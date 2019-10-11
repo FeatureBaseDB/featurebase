@@ -174,10 +174,11 @@ func (i *Index) openFields() error {
 	eg, ctx := errgroup.WithContext(context.Background())
 	var mu sync.Mutex
 
+fileLoop:
 	for _, loopFi := range fis {
 		select {
 		case <-ctx.Done():
-			break
+			break fileLoop
 		default:
 			fi := loopFi
 			if !fi.IsDir() {
