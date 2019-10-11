@@ -49,7 +49,7 @@ message IdsOrKeys {
 }
 
 message InspectResponse {
-  repeated FieldSet set = 1;
+  repeated FieldSet fields = 1;
 }
 
 message FieldSet {
