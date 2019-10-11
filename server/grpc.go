@@ -220,7 +220,7 @@ func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 	if ok {
 		for _, col := range ints.Ids.Vals {
 			ir := &pb.InspectResponse{}
-			ir.Set = append(ir.Set, &pb.FieldSet{
+			ir.Fields = append(ir.Fields, &pb.FieldSet{
 				FieldName: "_id",
 				Items:     &pb.IdsOrKeys{Type: &pb.IdsOrKeys_Ids{Ids: &pb.Ids{Vals: []uint64{col}}}},
 			})
@@ -242,7 +242,7 @@ func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 					FieldName: field,
 					Items:     ids,
 				}
-				ir.Set = append(ir.Set, fs)
+				ir.Fields = append(ir.Fields, fs)
 			}
 			err := stream.Send(ir)
 			if err != nil {
@@ -257,7 +257,7 @@ func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 		}
 		for _, col := range keys.Keys.Vals {
 			ir := &pb.InspectResponse{}
-			ir.Set = append(ir.Set, &pb.FieldSet{
+			ir.Fields = append(ir.Fields, &pb.FieldSet{
 				FieldName: "_id",
 				Items:     &pb.IdsOrKeys{Type: &pb.IdsOrKeys_Keys{Keys: &pb.Keys{Vals: []string{col}}}},
 			})
@@ -279,7 +279,7 @@ func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 					FieldName: field,
 					Items:     ids,
 				}
-				ir.Set = append(ir.Set, fs)
+				ir.Fields = append(ir.Fields, fs)
 			}
 			stream.Send(ir)
 		}
