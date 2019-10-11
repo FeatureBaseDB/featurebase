@@ -183,9 +183,9 @@ func (s grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 func makeItems(p pilosa.RowIdentifiers) *pb.IdsOrKeys {
 	if len(p.Keys) == 0 {
 		//use Rows
-		results := make([]int64, len(p.Rows))
+		results := make([]uint64, len(p.Rows))
 		for i, id := range p.Rows {
-			results[i] = int64(id)
+			results[i] = id
 		}
 		return &pb.IdsOrKeys{Type: &pb.IdsOrKeys_Ids{Ids: &pb.Ids{Vals: results}}}
 	}
@@ -222,7 +222,7 @@ func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 			ir := &pb.InspectResponse{}
 			ir.Set = append(ir.Set, &pb.FieldSet{
 				FieldName: "_id",
-				Items:     &pb.IdsOrKeys{Type: &pb.IdsOrKeys_Ids{Ids: &pb.Ids{Vals: []int64{col}}}},
+				Items:     &pb.IdsOrKeys{Type: &pb.IdsOrKeys_Ids{Ids: &pb.Ids{Vals: []uint64{col}}}},
 			})
 			for _, field := range fields {
 				pql := fmt.Sprintf("Rows(%s, column=%d)", field, col)
