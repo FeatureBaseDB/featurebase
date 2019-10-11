@@ -150,7 +150,16 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 			return resp, err
 		}
 	}
-
+	if opt.Profile {
+		var prof tracing.ProfiledSpan
+		prof, ctx = tracing.StartProfiledSpanFromContext(ctx, "Execute")
+		defer prof.Finish()
+		var ok bool
+		resp.Profile, ok = prof.(*tracing.Profile)
+		if !ok {
+			return resp, fmt.Errorf("profiling execution failed: %T is not tracing.Profile", prof)
+		}
+	}
 	results, err := e.execute(ctx, index, q, shards, opt)
 	if err != nil {
 		return resp, err
@@ -2959,6 +2968,7 @@ type mapResponse struct {
 // execOptions represents an execution context for a single Execute() call.
 type execOptions struct {
 	Remote          bool
+	Profile         bool
 	ExcludeRowAttrs bool
 	ExcludeColumns  bool
 	ColumnAttrs     bool

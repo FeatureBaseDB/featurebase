@@ -146,6 +146,7 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	}
 	execOpts := &execOptions{
 		Remote:          req.Remote,
+		Profile:         req.Profile,
 		ExcludeRowAttrs: req.ExcludeRowAttrs, // NOTE: Kept for Pilosa 1.x compat.
 		ExcludeColumns:  req.ExcludeColumns,  // NOTE: Kept for Pilosa 1.x compat.
 		ColumnAttrs:     req.ColumnAttrs,     // NOTE: Kept for Pilosa 1.x compat.
