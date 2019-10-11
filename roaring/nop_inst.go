@@ -17,10 +17,12 @@
 package roaring
 
 //lint:ignore U1000 this is conditional on a build flag
+//nolint:unused
 type dTree struct {
 }
 
 //lint:ignore U1000 this is conditional on a build flag
+//nolint:unused
 type treeInst struct {
 }
 
