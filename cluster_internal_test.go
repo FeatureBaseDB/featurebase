@@ -948,6 +948,9 @@ func TestCluster_confirmNodeDownUp(t *testing.T) {
 
 }
 func TestCluster_confirmNodeDownTimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
 	r := mux.NewRouter()
 	r.HandleFunc("/version", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(confirmDownSleep * time.Second * confirmDownRetries)
@@ -973,10 +976,12 @@ func TestCluster_confirmNodeDownTimeout(t *testing.T) {
 	if !confirmNodeDown(uri, logger.NewVerboseLogger(os.Stdout)) {
 		t.Errorf("expected node to be down")
 	}
-
 }
 
 func TestCluster_confirmNodeDownDown(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
 	uri := URI{}
 	uri.Scheme = "http"
 	uri.Host = "DoesntMatter"
@@ -985,5 +990,4 @@ func TestCluster_confirmNodeDownDown(t *testing.T) {
 	if !confirmNodeDown(uri, logger.NewVerboseLogger(os.Stdout)) {
 		t.Errorf("expected node to be down")
 	}
-
 }
