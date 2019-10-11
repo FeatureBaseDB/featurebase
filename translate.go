@@ -301,7 +301,7 @@ func (s *InMemTranslateStore) TranslateIDs(ids []uint64) ([]string, error) {
 }
 
 func (s *InMemTranslateStore) translateID(id uint64) string {
-	if id <= 0 || id > uint64(len(s.keys)) {
+	if id == 0 || id > uint64(len(s.keys)) {
 		return ""
 	}
 	return s.keys[id-1]
