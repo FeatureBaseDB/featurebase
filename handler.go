@@ -16,6 +16,8 @@ package pilosa
 
 import (
 	"encoding/json"
+
+	"github.com/pilosa/pilosa/v2/tracing"
 )
 
 // QueryRequest represent a request to process a query.
@@ -42,6 +44,9 @@ type QueryRequest struct {
 	// If true, indicates that query is part of a larger distributed query.
 	// If false, this request is on the originating node.
 	Remote bool
+
+	// Should we profile this query?
+	Profile bool
 }
 
 // QueryResponse represent a response from a processed query.
@@ -55,6 +60,9 @@ type QueryResponse struct {
 
 	// Error during parsing or execution.
 	Err error
+
+	// Profiling data, if any
+	Profile *tracing.Profile
 }
 
 // MarshalJSON marshals QueryResponse into a JSON-encoded byte slice
@@ -68,9 +76,11 @@ func (resp *QueryResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		Results        []interface{}    `json:"results"`
 		ColumnAttrSets []*ColumnAttrSet `json:"columnAttrs,omitempty"`
+		Profile        *tracing.Profile `json:"profile,omitempty"`
 	}{
 		Results:        resp.Results,
 		ColumnAttrSets: resp.ColumnAttrSets,
+		Profile:        resp.Profile,
 	})
 }
 
