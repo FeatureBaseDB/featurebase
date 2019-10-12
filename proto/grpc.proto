@@ -8,7 +8,7 @@ message QueryPQLRequest {
 
 
 message RowResponse{
-  repeated ColumnInfo column_info = 1;
+  repeated ColumnInfo headers = 1;
   repeated ColumnResponse columns = 2;
   string errorMessage=3;
 }
