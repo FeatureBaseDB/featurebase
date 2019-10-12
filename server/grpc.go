@@ -60,7 +60,7 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 					}
 					for _, x := range r.Keys {
 						results <- &pb.RowResponse{
-							ColumnInfo: ci,
+							Headers: ci,
 							Columns: []*pb.ColumnResponse{
 								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{x}},
 							}}
@@ -76,7 +76,7 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 					for _, x := range r.Segments() {
 						shard, b := x.Raw()
 						results <- &pb.RowResponse{
-							ColumnInfo: ci,
+							Headers: ci,
 							Columns: []*pb.ColumnResponse{
 								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(shard)}},
 								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BlobVal{b}},
@@ -86,7 +86,7 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 				}
 			case pilosa.Pair:
 				results <- &pb.RowResponse{
-					ColumnInfo: []*pb.ColumnInfo{
+					Headers: []*pb.ColumnInfo{
 						{Name: "id", Datatype: "uint64"},
 						{Name: "key", Datatype: "string"},
 						{Name: "count", Datatype: "uint64"},
@@ -105,7 +105,7 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 				}
 				for _, pair := range r {
 					results <- &pb.RowResponse{
-						ColumnInfo: ci,
+						Headers: ci,
 						Columns: []*pb.ColumnResponse{
 							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(pair.ID)}},
 							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{pair.Key}},
@@ -120,7 +120,7 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 				}
 				for _, gc := range r {
 					results <- &pb.RowResponse{
-						ColumnInfo: ci,
+						Headers: ci,
 						Columns: []*pb.ColumnResponse{
 							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{makeLabel(gc.Group)}},
 							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(gc.Count)}},
@@ -131,7 +131,7 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 				ci := []*pb.ColumnInfo{{Name: "id", Datatype: "uint64"}}
 				for _, id := range r.Rows {
 					results <- &pb.RowResponse{
-						ColumnInfo: ci,
+						Headers: ci,
 						Columns: []*pb.ColumnResponse{
 							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(id)}},
 						}}
@@ -140,7 +140,7 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 			case uint64:
 				ci := []*pb.ColumnInfo{{Name: "count", Datatype: "uint64"}}
 				results <- &pb.RowResponse{
-					ColumnInfo: ci,
+					Headers: ci,
 					Columns: []*pb.ColumnResponse{
 						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(r)}},
 					}}
