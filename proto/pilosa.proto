@@ -1,5 +1,5 @@
- 
 syntax = "proto3";
+package proto;
  
 message QueryPQLRequest {
   string index = 1;
