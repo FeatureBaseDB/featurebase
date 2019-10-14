@@ -10,7 +10,7 @@ message QueryPQLRequest {
 message RowResponse{
   repeated ColumnInfo headers = 1;
   repeated ColumnResponse columns = 2;
-  string errorMessage=3;
+  string errorMessage = 3;
 }
 
 message ColumnInfo {
@@ -21,16 +21,17 @@ message ColumnInfo {
 message ColumnResponse{
   oneof columnVal {
     string stringVal = 1;
-    int64 intVal = 2;
-    bool boolVal = 3;
-    bytes blobVal = 4;
+    uint64 uintVal = 2;
+    int64 intVal = 3;
+    bool boolVal = 4;
+    bytes blobVal = 5;
   }
 }
 
 message InspectRequest {
   string index = 1;
   IdsOrKeys columns = 2;
-  repeated string filterFields =3;
+  repeated string filterFields = 3;
 }
 
 message Ids {

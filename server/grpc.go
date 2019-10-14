@@ -67,22 +67,39 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 						ci = nil //only send on the first
 					}
 				} else {
-					// Roaring segments
+					// Column keys
 					ci := []*pb.ColumnInfo{
-						// TODO:
-						{Name: "shard", Datatype: "uint64"},
-						{Name: "segment", Datatype: "roaring"},
+						{Name: "id", Datatype: "uint64"},
 					}
-					for _, x := range r.Segments() {
-						shard, b := x.Raw()
+					for _, x := range r.Columns() {
 						results <- &pb.RowResponse{
 							Headers: ci,
 							Columns: []*pb.ColumnResponse{
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(shard)}},
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BlobVal{b}},
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_UintVal{x}},
 							}}
 						ci = nil //only send on the first
 					}
+
+					// The following will return roaring segments.
+					// This is commented out for now until we decide how we want to use this.
+					/*
+						// Roaring segments
+						ci := []*pb.ColumnInfo{
+							// TODO:
+							{Name: "shard", Datatype: "uint64"},
+							{Name: "segment", Datatype: "roaring"},
+						}
+						for _, x := range r.Segments() {
+							shard, b := x.Raw()
+							results <- &pb.RowResponse{
+								Headers: ci,
+								Columns: []*pb.ColumnResponse{
+									&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(shard)}},
+									&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BlobVal{b}},
+								}}
+							ci = nil //only send on the first
+						}
+					*/
 				}
 			case pilosa.Pair:
 				results <- &pb.RowResponse{
