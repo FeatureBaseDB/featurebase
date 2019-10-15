@@ -50,12 +50,12 @@ message IdsOrKeys {
 }
 
 message InspectResponse {
-  repeated FieldSet fields = 1;
+  repeated FieldValues fields = 1;
 }
 
-message FieldSet {
-  string fieldName = 1;
-  IdsOrKeys items = 2;
+message FieldValues {
+  string name = 1;
+  IdsOrKeys values = 2;
 }
 
 service Pilosa {

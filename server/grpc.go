@@ -56,7 +56,7 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 				if len(r.Keys) > 0 {
 					// Column keys
 					ci := []*pb.ColumnInfo{
-						{Name: "id", Datatype: "string"},
+						{Name: "_id", Datatype: "string"},
 					}
 					for _, x := range r.Keys {
 						results <- &pb.RowResponse{
@@ -67,9 +67,9 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 						ci = nil //only send on the first
 					}
 				} else {
-					// Column keys
+					// Column IDs
 					ci := []*pb.ColumnInfo{
-						{Name: "id", Datatype: "uint64"},
+						{Name: "_id", Datatype: "uint64"},
 					}
 					for _, x := range r.Columns() {
 						results <- &pb.RowResponse{
@@ -104,8 +104,8 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 			case pilosa.Pair:
 				results <- &pb.RowResponse{
 					Headers: []*pb.ColumnInfo{
-						{Name: "id", Datatype: "uint64"},
-						{Name: "key", Datatype: "string"},
+						{Name: "_id", Datatype: "uint64"},
+						{Name: "_key", Datatype: "string"},
 						{Name: "count", Datatype: "uint64"},
 					},
 					Columns: []*pb.ColumnResponse{
@@ -116,8 +116,8 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 				}
 			case []pilosa.Pair:
 				ci := []*pb.ColumnInfo{
-					{Name: "id", Datatype: "uint64"},
-					{Name: "key", Datatype: "string"},
+					{Name: "_id", Datatype: "uint64"},
+					{Name: "_key", Datatype: "string"},
 					{Name: "count", Datatype: "uint64"},
 				}
 				for _, pair := range r {
@@ -145,7 +145,7 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 					ci = nil //only send on the first
 				}
 			case pilosa.RowIdentifiers:
-				ci := []*pb.ColumnInfo{{Name: "id", Datatype: "uint64"}}
+				ci := []*pb.ColumnInfo{{Name: "_id", Datatype: "uint64"}}
 				for _, id := range r.Rows {
 					results <- &pb.RowResponse{
 						Headers: ci,
@@ -237,9 +237,9 @@ func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 	if ok {
 		for _, col := range ints.Ids.Vals {
 			ir := &pb.InspectResponse{}
-			ir.Fields = append(ir.Fields, &pb.FieldSet{
-				FieldName: "_id",
-				Items:     &pb.IdsOrKeys{Type: &pb.IdsOrKeys_Ids{Ids: &pb.Ids{Vals: []uint64{col}}}},
+			ir.Fields = append(ir.Fields, &pb.FieldValues{
+				Name:   "_id",
+				Values: &pb.IdsOrKeys{Type: &pb.IdsOrKeys_Ids{Ids: &pb.Ids{Vals: []uint64{col}}}},
 			})
 			for _, field := range fields {
 				pql := fmt.Sprintf("Rows(%s, column=%d)", field, col)
@@ -255,9 +255,9 @@ func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 				for _, result := range resp.Results {
 					ids = makeItems(result.(pilosa.RowIdentifiers))
 				}
-				fs := &pb.FieldSet{
-					FieldName: field,
-					Items:     ids,
+				fs := &pb.FieldValues{
+					Name:   field,
+					Values: ids,
 				}
 				ir.Fields = append(ir.Fields, fs)
 			}
@@ -274,9 +274,9 @@ func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 		}
 		for _, col := range keys.Keys.Vals {
 			ir := &pb.InspectResponse{}
-			ir.Fields = append(ir.Fields, &pb.FieldSet{
-				FieldName: "_id",
-				Items:     &pb.IdsOrKeys{Type: &pb.IdsOrKeys_Keys{Keys: &pb.Keys{Vals: []string{col}}}},
+			ir.Fields = append(ir.Fields, &pb.FieldValues{
+				Name:   "_id",
+				Values: &pb.IdsOrKeys{Type: &pb.IdsOrKeys_Keys{Keys: &pb.Keys{Vals: []string{col}}}},
 			})
 			for _, field := range fields {
 				pql := fmt.Sprintf("Rows(%s, column=\"%s\")", field, col)
@@ -292,9 +292,9 @@ func (s grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 				for _, result := range resp.Results {
 					ids = makeItems(result.(pilosa.RowIdentifiers))
 				}
-				fs := &pb.FieldSet{
-					FieldName: field,
-					Items:     ids,
+				fs := &pb.FieldValues{
+					Name:   field,
+					Values: ids,
 				}
 				ir.Fields = append(ir.Fields, fs)
 			}
