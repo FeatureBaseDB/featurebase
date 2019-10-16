@@ -403,11 +403,18 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 		// *either* or *both* of old and new storage data might be in use.
 		// So we call the thing that should unconditionally unmap both of them...
 		if err := f.storage.UnmarshalBinary(data); err != nil {
-			_, e2 := f.storage.RemapRoaringStorage(nil)
-			if e2 != nil {
-				return fmt.Errorf("unmarshal storage: file=%s, err=%s, clearing old mapping also failed: %v", f.file.Name(), err, e2)
+			cause := errors.Cause(err)
+			if corruptionErr, ok := cause.(roaring.FileCorruptionError); ok {
+				if terr := f.file.Truncate(int64(corruptionErr.TrimTo)); err != nil {
+					return errors.Wrapf(terr, "truncating file after corrupt unmarshal: %v", err)
+				}
+			} else {
+				_, e2 := f.storage.RemapRoaringStorage(nil)
+				if e2 != nil {
+					return fmt.Errorf("unmarshal storage: file=%s, err=%s, clearing old mapping also failed: %v", f.file.Name(), err, e2)
+				}
+				return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
 			}
-			return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
 		}
 		f.rowCache = &simpleCache{make(map[uint64]*Row)}
 		f.ops, f.opN = f.storage.Ops()
