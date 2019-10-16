@@ -403,11 +403,33 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 		// *either* or *both* of old and new storage data might be in use.
 		// So we call the thing that should unconditionally unmap both of them...
 		if err := f.storage.UnmarshalBinary(data); err != nil {
-			_, e2 := f.storage.RemapRoaringStorage(nil)
-			if e2 != nil {
-				return fmt.Errorf("unmarshal storage: file=%s, err=%s, clearing old mapping also failed: %v", f.file.Name(), err, e2)
+			cause := errors.Cause(err)
+			if corruptionErr, ok := cause.(roaring.FileCorruptionError); ok {
+				if terr := f.file.Truncate(corruptionErr.TrimTo); err != nil {
+					// close file so we don't try to use it later.
+					_ = f.safeClose()
+					return errors.Wrapf(terr, "truncating file after corrupt unmarshal: %v", err)
+				}
+				f.safeClose()
+				// Reopen now-truncated file. We ignore mustClose here, and just use the previous
+				// value. This might mean we end up off by one but the mustClose/safeClose/reopen
+				// stuff will handle that.
+				f.file, _, err = syswrap.OpenFile(f.path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+				if err != nil {
+					return fmt.Errorf("open file: %s", err)
+				}
+				if err := syscall.Flock(int(f.file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+					return fmt.Errorf("flock: %s", err)
+				}
+				// Note lack of re-mmap. This is because the existing map will still be valid,
+				// and isn't reliant on the file descriptor, and the contents shouldn't be different.
+			} else {
+				_, e2 := f.storage.RemapRoaringStorage(nil)
+				if e2 != nil {
+					return fmt.Errorf("unmarshal storage: file=%s, err=%s, clearing old mapping also failed: %v", f.file.Name(), err, e2)
+				}
+				return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
 			}
-			return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
 		}
 		f.rowCache = &simpleCache{make(map[uint64]*Row)}
 		f.ops, f.opN = f.storage.Ops()

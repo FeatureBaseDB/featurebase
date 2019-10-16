@@ -1626,6 +1626,7 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 
 	// Read ops log until the end of the file.
 	buf := data[opsOffset:]
+	goodOffset := opsOffset
 	for {
 		// Exit when there are no more ops to parse.
 		if len(buf) == 0 {
@@ -1635,8 +1636,8 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 		// Unmarshal the op and apply it.
 		var opr op
 		if err := opr.UnmarshalBinary(buf); err != nil {
-			// FIXME(benbjohnson): return error with position so file can be trimmed.
-			return err
+			// return error with position so file can be trimmed.
+			return FileCorruptionError{err: err, TrimTo: int64(goodOffset)}
 		}
 
 		opr.apply(b)
@@ -1646,10 +1647,28 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 		b.opN += opr.count()
 
 		// Move the buffer forward.
+		goodOffset += opr.size()
 		buf = buf[opr.size():]
 	}
 
+	// NOTE: calling code for this method assumes that if a
+	// FileCorruptionError is returned that the work is complete up to
+	// that point, and the Bitmap is usable. If it becomes necessary
+	// to add any cleanup or finalization logic down here, we'll need
+	// to rethink that assumption. This particularly matters in
+	// Pilosa's fragment.go where it calls UnmarshalBinary and then
+	// checks to see if the error is a FileCorruption error.
+
 	return nil
+}
+
+type FileCorruptionError struct {
+	err    error
+	TrimTo int64
+}
+
+func (f FileCorruptionError) Error() string {
+	return f.err.Error()
 }
 
 // writeOp writes op to the OpWriter, if available.
