@@ -406,7 +406,7 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 		if err := f.storage.UnmarshalBinary(data); err != nil {
 			cause := errors.Cause(err)
 			if corruptionErr, ok := cause.(roaring.FileCorruptionError); ok {
-				if terr := f.file.Truncate(corruptionErr.TrimTo); err != nil {
+				if terr := f.file.Truncate(corruptionErr.TrimTo); terr != nil {
 					// close file so we don't try to use it later.
 					_ = f.safeClose()
 					return errors.Wrapf(terr, "truncating file after corrupt unmarshal: %v", err)
