@@ -104,32 +104,64 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 					*/
 				}
 			case pilosa.Pair:
-				results <- &pb.RowResponse{
-					Headers: []*pb.ColumnInfo{
-						{Name: "_id", Datatype: "uint64"},
-						{Name: "_key", Datatype: "string"},
-						{Name: "count", Datatype: "uint64"},
-					},
-					Columns: []*pb.ColumnResponse{
-						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(r.ID)}},
-						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{r.Key}},
-						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(r.Count)}},
-					},
+				if r.Key != "" {
+					results <- &pb.RowResponse{
+						Headers: []*pb.ColumnInfo{
+							{Name: "_id", Datatype: "string"},
+							{Name: "count", Datatype: "uint64"},
+						},
+						Columns: []*pb.ColumnResponse{
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{r.Key}},
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(r.Count)}},
+						},
+					}
+				} else {
+					results <- &pb.RowResponse{
+						Headers: []*pb.ColumnInfo{
+							{Name: "_id", Datatype: "uint64"},
+							{Name: "count", Datatype: "uint64"},
+						},
+						Columns: []*pb.ColumnResponse{
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(r.ID)}},
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(r.Count)}},
+						},
+					}
 				}
 			case []pilosa.Pair:
+				// Determine if the ID has string keys.
+				var stringKeys bool
+				if len(r) > 0 {
+					if r[0].Key != "" {
+						stringKeys = true
+					}
+				}
+
+				dtype := "uint64"
+				if stringKeys {
+					dtype = "string"
+				}
 				ci := []*pb.ColumnInfo{
-					{Name: "_id", Datatype: "uint64"},
-					{Name: "_key", Datatype: "string"},
+					{Name: "_id", Datatype: dtype},
 					{Name: "count", Datatype: "uint64"},
 				}
 				for _, pair := range r {
-					results <- &pb.RowResponse{
-						Headers: ci,
-						Columns: []*pb.ColumnResponse{
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(pair.ID)}},
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{pair.Key}},
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(pair.Count)}},
-						}}
+					if stringKeys {
+						results <- &pb.RowResponse{
+							Headers: ci,
+							Columns: []*pb.ColumnResponse{
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{pair.Key}},
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(pair.Count)}},
+							},
+						}
+					} else {
+						results <- &pb.RowResponse{
+							Headers: ci,
+							Columns: []*pb.ColumnResponse{
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(pair.ID)}},
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(pair.Count)}},
+							},
+						}
+					}
 					ci = nil //only send on the first
 				}
 			case []pilosa.GroupCount:
