@@ -25,6 +25,8 @@ import (
 	pb "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type grpcHandler struct {
@@ -162,9 +164,6 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(r)}},
 					}}
 			default:
-				results <- &pb.RowResponse{
-					ErrorMessage: fmt.Sprintf("unhandled %T\n", r),
-				}
 				log.Printf("unhandled %T\n", r)
 				break
 			}
@@ -181,16 +180,12 @@ func (s grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 	}
 	resp, err := s.api.Query(context.Background(), &query)
 	if err != nil {
-		er := &pb.RowResponse{
-			ErrorMessage: err.Error(),
-		}
-		err = stream.Send(er)
-		return errors.Wrap(err, "querying")
+		return status.Error(codes.Unknown, err.Error())
 	}
 	for row := range makeRows(resp) {
 		err = stream.Send(row)
 		if err != nil {
-			return errors.Wrap(err, "sending row to stream")
+			return status.Error(codes.Unknown, err.Error())
 		}
 	}
 

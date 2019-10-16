@@ -10,7 +10,6 @@ message QueryPQLRequest {
 message RowResponse{
   repeated ColumnInfo headers = 1;
   repeated ColumnResponse columns = 2;
-  string errorMessage = 3;
 }
 
 message ColumnInfo {
