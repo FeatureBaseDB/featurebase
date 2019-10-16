@@ -327,6 +327,8 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 	if err != nil {
 		return fmt.Errorf("open file: %s", err)
 	}
+	// unconditionally set the rowCache to a non-nil value if we opened the file.
+	f.rowCache = &simpleCache{make(map[uint64]*Row)}
 	f.file = file
 	if mustClose {
 		defer f.safeClose()
@@ -364,7 +366,6 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 		}
 		// there's nothing here, we're not going to try to unmarshal it.
 		unmarshalData = false
-		f.rowCache = &simpleCache{make(map[uint64]*Row)}
 	} else {
 		// Mmap the underlying file so it can be zero copied.
 		data, err = syswrap.Mmap(int(f.file.Fd()), 0, int(fi.Size()), syscall.PROT_READ, syscall.MAP_SHARED)
@@ -431,7 +432,6 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 				return fmt.Errorf("unmarshal storage: file=%s, err=%s", f.file.Name(), err)
 			}
 		}
-		f.rowCache = &simpleCache{make(map[uint64]*Row)}
 		f.ops, f.opN = f.storage.Ops()
 	} else {
 		// we're moving to new storage, so instead of using the OpN
@@ -628,6 +628,9 @@ func (f *fragment) row(rowID uint64) *Row {
 // unprotectedRow returns a row from the row cache if available or from storage
 // (updating the cache).
 func (f *fragment) unprotectedRow(rowID uint64) *Row {
+	if f.rowCache == nil {
+		f.rowCache = &simpleCache{make(map[uint64]*Row)}
+	}
 	r, ok := f.rowCache.Fetch(rowID)
 	if ok && r != nil {
 		return r
