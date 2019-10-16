@@ -1637,7 +1637,7 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 		var opr op
 		if err := opr.UnmarshalBinary(buf); err != nil {
 			// return error with position so file can be trimmed.
-			return FileCorruptionError{err: err, TrimTo: goodOffset}
+			return FileCorruptionError{err: err, TrimTo: int64(goodOffset)}
 		}
 
 		opr.apply(b)
@@ -1664,7 +1664,7 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 
 type FileCorruptionError struct {
 	err    error
-	TrimTo int
+	TrimTo int64
 }
 
 func (f FileCorruptionError) Error() string {
