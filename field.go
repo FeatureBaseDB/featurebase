@@ -91,8 +91,7 @@ type Field struct {
 
 	logger logger.Logger
 
-	snapshotQueue chan *fragment
-
+	snapshotQueue snapshotQueue
 	// Instantiates new translation store on open.
 	OpenTranslateStore OpenTranslateStoreFunc
 }
@@ -924,7 +923,9 @@ func (f *Field) newView(path, name string) *view {
 	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats
 	view.broadcaster = f.broadcaster
-	view.snapshotQueue = f.snapshotQueue
+	if f.snapshotQueue != nil {
+		view.snapshotQueue = f.snapshotQueue
+	}
 	return view
 }
 
