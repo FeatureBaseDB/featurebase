@@ -16,7 +16,7 @@ RELEASE_ENABLED = $(subst 0,,$(RELEASE))
 BUILD_TAGS += $(if $(ENTERPRISE_ENABLED),enterprise)
 BUILD_TAGS += $(if $(RELEASE_ENABLED),release)
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
-LICENSE_HASH=$(shell head -13 pilosa.go | shasum | cut -f 1 -d " ")
+LICENSE_HASH=$(shell head -13 pilosa.go | sed -e 's/Copyright 20[0-9][0-9]/Copyright 20XX/g' | shasum | cut -f 1 -d " ")
 export GO111MODULE=on
 
 # Run tests and compile Pilosa
@@ -162,7 +162,7 @@ gometalinter: require-gometalinter vendor
 check-license-headers: SHELL:=/bin/bash
 check-license-headers:
 	@! find . -name '*.go' | grep -v '^./vendor' | while read fn;\
-	    do [[ `head -13 $$fn | shasum | cut -f 1 -d " "` == $(LICENSE_HASH) ]] || echo $$fn; done | \
+	    do [[ `head -13 $$fn | sed -e 's/Copyright 20[0-9][0-9]/Copyright 20XX/g' | shasum | cut -f 1 -d " "` == $(LICENSE_HASH) ]] || echo $$fn; done | \
 	    grep -v apimethod_string.go | grep -v pb.go | grep -v peg.go | grep -v lru.go | grep -v btree | grep -v enterprise
 
 ######################
