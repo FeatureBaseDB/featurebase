@@ -16,7 +16,11 @@ RELEASE_ENABLED = $(subst 0,,$(RELEASE))
 BUILD_TAGS += $(if $(ENTERPRISE_ENABLED),enterprise)
 BUILD_TAGS += $(if $(RELEASE_ENABLED),release)
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
-LICENSE_HASH=$(shell head -13 pilosa.go | shasum | cut -f 1 -d " ")
+define LICENSE_HASH_CODE
+    head -13 $1 | sed -e 's/Copyright 20[0-9][0-9]/Copyright 20XX/g' | shasum | cut -f 1 -d " "
+endef
+LICENSE_HASH=$(shell $(call LICENSE_HASH_CODE, pilosa.go))
+
 export GO111MODULE=on
 
 # Run tests and compile Pilosa
@@ -32,7 +36,7 @@ vendor: go.mod
 
 # Run test suite
 test:
-	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS) 
+	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS)
 
 bench:
 	go test ./... -bench=. -run=NoneZ -timeout=127m $(TESTFLAGS)
@@ -161,9 +165,8 @@ gometalinter: require-gometalinter vendor
 # Verify that all Go files have license header
 check-license-headers: SHELL:=/bin/bash
 check-license-headers:
-	@! find . -name '*.go' | grep -v '^./vendor' | while read fn;\
-	    do [[ `head -13 $$fn | shasum | cut -f 1 -d " "` == $(LICENSE_HASH) ]] || echo $$fn; done | \
-	    grep -v apimethod_string.go | grep -v pb.go | grep -v peg.go | grep -v lru.go | grep -v btree | grep -v enterprise
+	@! find . -path ./vendor -prune -o -name '*.go' -print | grep -v -F -f license.exceptions | while read fn;\
+	    do [[ `$(call LICENSE_HASH_CODE, $$fn)` == $(LICENSE_HASH) ]] || echo $$fn; done | grep '.'
 
 ######################
 # Build dependencies #
