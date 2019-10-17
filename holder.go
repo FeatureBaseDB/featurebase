@@ -75,7 +75,7 @@ type Holder struct {
 
 	Logger logger.Logger
 
-	snapshotQueue chan *fragment
+	snapshotQueue snapshotQueue
 
 	// Manages replication from the primary node.
 	primaryTranslateNode     *Node
@@ -167,7 +167,7 @@ func (h *Holder) Open() error {
 	// Run snapshots asynchronously. The snapshotQueue will have a background
 	// task associated with it which flushes it and waits until this channel
 	// is closed, so we should always close this channel when done.
-	h.snapshotQueue = newSnapshotQueue(100, 2, h.Logger)
+	h.snapshotQueue = newSnapshotQueue(10, 2, h.Logger)
 
 	for _, fi := range fis {
 		// Skip files or hidden directories.
@@ -203,6 +203,7 @@ func (h *Holder) Open() error {
 	go func() { defer h.wg.Done(); h.monitorCacheFlush() }()
 
 	h.Stats.Open()
+	go h.snapshotQueue.ScanHolder(h)
 
 	h.opened.Close()
 	return nil
@@ -222,8 +223,7 @@ func (h *Holder) Close() error {
 		}
 	}
 	if h.snapshotQueue != nil {
-		close(h.snapshotQueue)
-		// assuming the snapshotQueueWorker has already started, this is safe.
+		h.snapshotQueue.Stop()
 		h.snapshotQueue = nil
 	}
 

@@ -107,21 +107,17 @@ type fragment struct {
 	shard uint64
 
 	// File-backed storage
-	path               string
-	flags              byte // user-defined flags passed to roaring
-	file               *os.File
-	storage            *roaring.Bitmap
-	storageData        []byte
-	totalOpN           int64 // total opN values
-	totalOps           int64 // total ops (across all snapshots)
-	opN                int   // number of ops since snapshot (may be approximate for imports)
-	ops                int   // number of higher-level operations, as opposed to bit changes
-	snapshotsRequested int   // number of times we've requested a snapshot
-	snapshotsTaken     int   // number of actual snapshot operations
-	snapshotting       bool  // set to true when requesting a snapshot, set to false after snapshot completes
-	snapshotCond       sync.Cond
-	snapshotDelays     int
-	snapshotDelayTime  time.Duration
+	path            string
+	flags           byte // user-defined flags passed to roaring
+	file            *os.File
+	storage         *roaring.Bitmap
+	storageData     []byte
+	opN             int  // number of ops since snapshot (may be approximate for imports)
+	ops             int  // number of higher-level operations, as opposed to bit changes
+	snapshotPending bool // set to true when requesting a snapshot, set to false after snapshot completes
+	snapshotCond    sync.Cond
+	snapshotErr     error     // error yielded by the last snapshot operation
+	snapshotStamp   time.Time // timestamp of last snapshot
 
 	// Cache for row counts.
 	CacheType string // passed in by field
@@ -155,7 +151,7 @@ type fragment struct {
 
 	stats stats.StatsClient
 
-	snapshotQueue chan *fragment
+	snapshotQueue snapshotQueue
 }
 
 // newFragment returns a new instance of Fragment.
@@ -173,7 +169,8 @@ func newFragment(path, index, field, view string, shard uint64, flags byte) *fra
 		Logger: logger.NopLogger,
 		MaxOpN: defaultFragmentMaxOpN,
 
-		stats: stats.NopStatsClient,
+		stats:         stats.NopStatsClient,
+		snapshotQueue: defaultSnapshotQueue,
 	}
 	f.snapshotCond = sync.Cond{L: &f.mu}
 	return f
@@ -181,62 +178,6 @@ func newFragment(path, index, field, view string, shard uint64, flags byte) *fra
 
 // cachePath returns the path to the fragment's cache data.
 func (f *fragment) cachePath() string { return f.path + cacheExt }
-
-// newSnapshotQueue makes a new snapshot queue, of depth N, and spawns a
-// goroutine for it.
-func newSnapshotQueue(n int, w int, l logger.Logger) chan *fragment {
-	ch := make(chan *fragment, n)
-	for i := 0; i < w; i++ {
-		go snapshotQueueWorker(ch, l)
-	}
-	return ch
-}
-
-func snapshotQueueWorker(snapshotQueue chan *fragment, l logger.Logger) {
-	for f := range snapshotQueue {
-		err := f.protectedSnapshot(true)
-		if err != nil {
-			l.Printf("snapshot error: %v", err)
-		}
-		f.snapshotCond.Broadcast()
-	}
-}
-
-// enqueueSnapshot requests that the fragment be snapshotted at some point
-// in the future, if this has not already been requested. Call this only when
-// the mutex is held.
-func (f *fragment) enqueueSnapshot() {
-	f.snapshotsRequested++
-	if f.snapshotting {
-		return
-	}
-	f.snapshotting = true
-	if f.snapshotQueue != nil {
-		select {
-		case f.snapshotQueue <- f:
-		default:
-			before := time.Now()
-			// wait forever, but notice that we're waiting
-			f.snapshotQueue <- f
-			f.snapshotDelays++
-			f.snapshotDelayTime += time.Since(before)
-			if f.snapshotDelays >= 10 {
-				f.Logger.Printf("snapshotting %s: last ten enqueue delays took %v", f.path, f.snapshotDelayTime)
-				f.snapshotDelays = 0
-				f.snapshotDelayTime = 0
-			}
-		}
-	} else {
-		// in testing, for instance, there may be no holder, thus no one
-		// to handle these snapshots.
-		err := f.snapshot()
-		if err != nil {
-			f.Logger.Printf("snapshot failed: %v", err)
-		}
-		f.snapshotting = false
-		f.snapshotCond.Broadcast()
-	}
-}
 
 // Open opens the underlying storage.
 func (f *fragment) Open() error {
@@ -503,29 +444,10 @@ func (f *fragment) openCache() error {
 func (f *fragment) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	for f.snapshotting {
+	for f.snapshotPending {
 		f.snapshotCond.Wait()
 	}
 	return f.close()
-}
-
-// awaitSnapshot lets us delay until the snapshot gets written, preventing tests
-// from misleadingly showing amazingly fast performance because the snapshots they
-// trigger haven't happened yet.
-func (f *fragment) awaitSnapshot() {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	for f.snapshotting {
-		f.snapshotCond.Wait()
-	}
-}
-
-// unprotectedAwaitSnapshot assumes you already hold the lock, and waits for
-// the snapshot fairy to come along.
-func (f *fragment) unprotectedAwaitSnapshot() {
-	for f.snapshotting {
-		f.snapshotCond.Wait()
-	}
 }
 
 func (f *fragment) close() error {
@@ -833,7 +755,7 @@ func (f *fragment) unprotectedSetRow(row *Row, rowID uint64) (changed bool, err 
 	f.rowCache.Add(rowID, nil)
 
 	// Snapshot storage.
-	f.enqueueSnapshot()
+	f.snapshotQueue.Enqueue(f)
 	f.stats.Count("setRow", 1, 1.0)
 
 	return changed, nil
@@ -877,7 +799,7 @@ func (f *fragment) unprotectedClearRow(rowID uint64) (changed bool, err error) {
 	f.rowCache.Add(rowID, nil)
 
 	// Snapshot storage.
-	f.enqueueSnapshot()
+	f.snapshotQueue.Enqueue(f)
 
 	f.stats.Count("clearRow", 1, 1.0)
 
@@ -2230,11 +2152,10 @@ func (f *fragment) importValue(columnIDs []uint64, values []int64, bitDepth uint
 	// We don't actually care, except we want our stats to be accurate.
 	f.incrementOpN(totalChanges)
 
-	// in theory, this should probably have happened anyway, but if enough
+	// in theory, this should probably have been queued anyway, but if enough
 	// of the bits matched existing bits, we'll be under our opN estimate, and
 	// we want to ensure that the snapshot happens.
-	f.enqueueSnapshot()
-	f.unprotectedAwaitSnapshot()
+	f.snapshotQueue.Await(f)
 
 	return nil
 }
@@ -2290,14 +2211,14 @@ func (f *fragment) incrementOpN(changed int) {
 	f.opN += changed
 	f.ops++
 	if f.opN > f.MaxOpN {
-		f.enqueueSnapshot()
+		f.snapshotQueue.Enqueue(f)
 	}
 }
 
 // Snapshot writes the storage bitmap to disk and reopens it. This may
 // coexist with existing background-queue snapshotting; it does not remove
 // things from the queue. You probably don't want to do this; use
-// enqueueSnapshot/awaitSnapshot.
+// the snapshotQueue's Enqueue/Await.
 func (f *fragment) Snapshot() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -2310,25 +2231,13 @@ func track(start time.Time, message string, stats stats.StatsClient, logger logg
 	stats.Histogram("snapshot", elapsed.Seconds(), 1.0)
 }
 
-// protectedSnapshot grabs the lock and unconditionally calls snapshot(). If
-// fromQueue is true, the snapshotting state is also cleared.
-func (f *fragment) protectedSnapshot(fromQueue bool) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	err := f.snapshot()
-	if fromQueue {
-		f.snapshotting = false
-	}
-	return err
-}
-
 // snapshot does the actual snapshot operation. it does not check or care
-// about f.snapshotting.
+// about f.snapshotPending.
 func (f *fragment) snapshot() error {
-	f.totalOpN += int64(f.opN)
-	f.totalOps += int64(f.ops)
-	f.snapshotsTaken++
 	_, err := unprotectedWriteToFragment(f, f.storage)
+	if err == nil {
+		f.snapshotStamp = time.Now()
+	}
 	return err
 }
 
