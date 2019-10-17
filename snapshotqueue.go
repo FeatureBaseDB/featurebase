@@ -50,7 +50,7 @@ type snapshotQueue interface {
 type queuelessSnapshotQueue struct{}
 
 func (q *queuelessSnapshotQueue) Enqueue(f *fragment) {
-	f.snapshot()
+	_ = f.snapshot()
 }
 
 func (q *queuelessSnapshotQueue) Await(f *fragment) error {

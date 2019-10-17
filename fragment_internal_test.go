@@ -2054,7 +2054,11 @@ func BenchmarkImportRoaring(b *testing.B) {
 					b.StartTimer()
 					err := f.importRoaringT(data, false)
 					if err != nil {
-						f.snapshotQueue.Await(f)
+						// we don't actually particularly
+						// care whether this succeeds,
+						// but if it's happening we want
+						// it to be done.
+						_ = f.snapshotQueue.Await(f)
 						f.Clean(b)
 						b.Fatalf("import error: %v", err)
 					}
@@ -2093,7 +2097,9 @@ func BenchmarkImportRoaringConcurrent(b *testing.B) {
 							j := j
 							eg.Go(func() error {
 								err := frags[j].importRoaringT(data[j], false)
-								frags[j].snapshotQueue.Await(frags[j])
+								// error unimportant if it happened, but we want
+								// any snapshots to have finished.
+								_ = frags[j].snapshotQueue.Await(frags[j])
 								return err
 							})
 						}
@@ -2131,9 +2137,12 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 								// is excessive. force storage into snapshotted state, then use import
 								// to generate an op log and/or snapshot.
 								_, _, err := frags[j].storage.ImportRoaringBits(data, false, false, 0)
-								frags[j].snapshotQueue.Immediate(frags[j])
 								if err != nil {
 									b.Fatalf("importing roaring: %v", err)
+								}
+								err = frags[j].snapshotQueue.Immediate(frags[j])
+								if err != nil {
+									b.Fatalf("snapshot after import: %v", err)
 								}
 							}
 							eg := errgroup.Group{}
@@ -2142,7 +2151,10 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 								j := j
 								eg.Go(func() error {
 									err := frags[j].importRoaringT(updata, false)
-									frags[j].snapshotQueue.Await(frags[j])
+									err2 := frags[j].snapshotQueue.Await(frags[j])
+									if err == nil {
+										err = err2
+									}
 									return err
 								})
 							}
@@ -2204,16 +2216,22 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 						// is excessive. force storage into snapshotted state, then use import
 						// to generate an op log and/or snapshot.
 						_, _, err := f.storage.ImportRoaringBits(data, false, false, 0)
-						f.snapshotQueue.Immediate(f)
 						if err != nil {
 							b.Errorf("import error: %v", err)
 						}
+						err = f.snapshotQueue.Immediate(f)
+						if err != nil {
+							b.Errorf("snapshot after import error: %v", err)
+						}
 						b.StartTimer()
 						err = f.importRoaringT(updata, false)
-						f.snapshotQueue.Await(f)
 						if err != nil {
 							f.Clean(b)
 							b.Errorf("import error: %v", err)
+						}
+						err = f.snapshotQueue.Await(f)
+						if err != nil {
+							b.Errorf("snapshot after import error: %v", err)
 						}
 						b.StopTimer()
 						stat, _ := f.file.Stat()
@@ -2511,8 +2529,11 @@ func (f *fragment) sanityCheck(t testing.TB) {
 
 func (f *fragment) Clean(t testing.TB) {
 	f.mu.Lock()
-	f.snapshotQueue.Await(f)
+	err := f.snapshotQueue.Await(f)
 	f.mu.Unlock()
+	if err != nil {
+		t.Fatalf("snapshot failed before sanity check: %v", err)
+	}
 	f.sanityCheck(t)
 	errc := f.Close()
 	errf := os.Remove(f.path)
@@ -3073,7 +3094,10 @@ func TestUnionInPlaceMapped(t *testing.T) {
 	// it's used only in computation of things that usually don't go to
 	// disk, which is why we handle this specially in testing and not
 	// generically.
-	f.snapshotQueue.Immediate(f)
+	err = f.snapshotQueue.Immediate(f)
+	if err != nil {
+		t.Fatalf("snapshot after union-in-place: %v", err)
+	}
 
 	if count0 != countF {
 		t.Fatalf("writing bitmap to storage changed count: %d => %d", count0, countF)

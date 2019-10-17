@@ -2155,9 +2155,7 @@ func (f *fragment) importValue(columnIDs []uint64, values []int64, bitDepth uint
 	// in theory, this should probably have been queued anyway, but if enough
 	// of the bits matched existing bits, we'll be under our opN estimate, and
 	// we want to ensure that the snapshot happens.
-	f.snapshotQueue.Await(f)
-
-	return nil
+	return f.snapshotQueue.Immediate(f)
 }
 
 // importRoaring imports from the official roaring data format defined at
