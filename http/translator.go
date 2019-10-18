@@ -27,8 +27,14 @@ import (
 	"github.com/pilosa/pilosa/v2/logger"
 )
 
-func OpenTranslateReader(ctx context.Context, nodeURL string, offsets pilosa.TranslateOffsetMap) (pilosa.TranslateEntryReader, error) {
-	r := NewTranslateEntryReader(ctx)
+func GetOpenTranslateReaderFunc(client *http.Client) pilosa.OpenTranslateReaderFunc {
+	return func(ctx context.Context, nodeURL string, offsets pilosa.TranslateOffsetMap) (pilosa.TranslateEntryReader, error) {
+		return openTranslateReader(ctx, nodeURL, offsets, client)
+	}
+}
+
+func openTranslateReader(ctx context.Context, nodeURL string, offsets pilosa.TranslateOffsetMap, client *http.Client) (pilosa.TranslateEntryReader, error) {
+	r := NewTranslateEntryReader(ctx, client)
 	r.URL = nodeURL + "/internal/translate/data"
 	r.Offsets = offsets
 	if err := r.Open(); err != nil {
@@ -60,8 +66,11 @@ type TranslateEntryReader struct {
 }
 
 // NewTranslateEntryReader returns a new instance of TranslateEntryReader.
-func NewTranslateEntryReader(ctx context.Context) *TranslateEntryReader {
-	r := &TranslateEntryReader{HTTPClient: http.DefaultClient, Logger: logger.NopLogger}
+func NewTranslateEntryReader(ctx context.Context, client *http.Client) *TranslateEntryReader {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	r := &TranslateEntryReader{HTTPClient: client, Logger: logger.NopLogger}
 	r.ctx, r.cancel = context.WithCancel(ctx)
 	return r
 }
