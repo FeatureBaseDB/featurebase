@@ -17,7 +17,6 @@ package tracing
 import (
 	"context"
 	"net/http"
-	"runtime"
 	"time"
 )
 
@@ -54,9 +53,7 @@ func startMaybeProfiledSpanFromContext(ctx context.Context, operationName string
 	if !makeProfile {
 		return GlobalTracer.StartSpanFromContext(ctx, operationName)
 	}
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	newProf := &Profile{Name: operationName, Begin: time.Now(), StartHeap: m.HeapAlloc, KV: make(map[string]interface{})}
+	newProf := &Profile{Name: operationName, Begin: time.Now(), KV: make(map[string]interface{})}
 	if parent != nil {
 		parent.AddChild(newProf)
 	}
@@ -105,21 +102,12 @@ type Profile struct {
 	Duration   time.Duration
 	Children   []ProfiledSpan         `json:",omitempty"`
 	KV         map[string]interface{} `json:",omitempty"`
-	StartHeap  uint64
-	EndHeap    uint64
-	HeapMax    uint64
-	NumGC      uint32
 }
 
 func (p *Profile) Finish() {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
 	p.inner.Finish()
 	p.End = time.Now()
 	p.Duration = p.End.Sub(p.Begin)
-	p.EndHeap = m.HeapAlloc
-	p.HeapMax = m.HeapSys
-	p.NumGC = m.NumGC
 }
 
 func (p *Profile) LogKV(alternatingKeyValues ...interface{}) {
