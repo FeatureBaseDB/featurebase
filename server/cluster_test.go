@@ -640,7 +640,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 func TestClusterMutualTLS(t *testing.T) {
 	commandOpts := make([][]server.CommandOption, 3)
 	configs := make([]*server.Config, 3)
-	for i, _ := range configs {
+	for i := range configs {
 		conf := server.NewConfig()
 		configs[i] = conf
 		conf.Bind = "https://localhost:0"
