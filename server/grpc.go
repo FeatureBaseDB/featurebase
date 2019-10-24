@@ -21,6 +21,8 @@ import (
 	"net"
 	"strings"
 
+	"google.golang.org/grpc/reflection"
+
 	"github.com/pilosa/pilosa/v2"
 	pb "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pkg/errors"
@@ -362,6 +364,9 @@ func (s *grpcServer) Serve() error {
 	// create grpc server
 	srv := grpc.NewServer()
 	pb.RegisterPilosaServer(srv, grpcHandler{api: s.api})
+
+	// register the server so its services are available to grpc_cli and others
+	reflection.Register(srv)
 
 	// and start...
 	if err := srv.Serve(lis); err != nil {
