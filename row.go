@@ -347,6 +347,17 @@ func (s *rowSegment) Freeze() {
 	s.data.Freeze()
 }
 
+/*
+// Raw returns the row segment as a byte slice.
+// It may be used by the gRPC server to deliver results
+// as a roaring bitmap instead of a stream of RowResults.
+func (s *rowSegment) Raw() (uint64, []byte) {
+	var buf bytes.Buffer
+	s.data.WriteTo(&buf)
+	return s.shard, buf.Bytes()
+}
+*/
+
 // Merge adds chunks from other to s.
 // Chunks in s are overwritten if they exist in other.
 func (s *rowSegment) Merge(other *rowSegment) {

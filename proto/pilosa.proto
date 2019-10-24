@@ -1,0 +1,56 @@
+syntax = "proto3";
+package proto;
+
+message QueryPQLRequest {
+  string index = 1;
+  string pql = 2;
+}
+
+
+message RowResponse{
+  repeated ColumnInfo headers = 1;
+  repeated ColumnResponse columns = 2;
+}
+
+message ColumnInfo {
+  string name = 1;
+  string datatype = 2;
+}
+
+message ColumnResponse{
+  oneof columnVal {
+    string stringVal = 1;
+    uint64 uint64Val = 2;
+    int64 int64Val = 3;
+    bool boolVal = 4;
+    bytes blobVal = 5;
+    Uint64Array uint64ArrayVal = 6;
+    StringArray stringArrayVal = 7;
+  }
+}
+
+message InspectRequest {
+  string index = 1;
+  IdsOrKeys columns = 2;
+  repeated string filterFields = 3;
+}
+
+message Uint64Array {
+  repeated uint64 vals = 1;
+}
+
+message StringArray {
+  repeated string vals = 1;
+}
+
+message IdsOrKeys {
+  oneof type {
+    Uint64Array ids = 1;
+    StringArray keys = 2;
+  }
+}
+
+service Pilosa {
+  rpc QueryPQL(QueryPQLRequest) returns (stream RowResponse) {};
+  rpc Inspect(InspectRequest) returns (stream RowResponse) {};
+}
