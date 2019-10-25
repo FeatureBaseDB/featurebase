@@ -940,6 +940,9 @@ func (e *executor) executeGenericFieldShard(ctx context.Context, index string, c
 		filter = row
 		if filter != nil && len(filter.segments) > 0 {
 			filterBitmap = filter.segments[0].data
+		} else {
+			// we *had* a filter, it's just empty here.
+			filterBitmap = roaring.NewFileBitmap()
 		}
 	}
 
