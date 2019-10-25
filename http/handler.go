@@ -776,7 +776,7 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	switch req.Options.Type {
 	case pilosa.FieldTypeSet:
 		fos = append(fos, pilosa.OptFieldTypeSet(*req.Options.CacheType, *req.Options.CacheSize))
-	case pilosa.FieldTypeInt:
+	case pilosa.FieldTypeInt, pilosa.FieldTypeDecimal:
 		if req.Options.Min == nil {
 			min := int64(math.MinInt64)
 			req.Options.Min = &min
@@ -785,7 +785,15 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 			max := int64(math.MaxInt64)
 			req.Options.Max = &max
 		}
-		fos = append(fos, pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max))
+		if req.Options.Type == pilosa.FieldTypeDecimal {
+			scale := int64(0)
+			if req.Options.Scale != nil {
+				scale = *req.Options.Scale
+			}
+			fos = append(fos, pilosa.OptFieldTypeDecimal(scale, *req.Options.Min, *req.Options.Max))
+		} else {
+			fos = append(fos, pilosa.OptFieldTypeInt(*req.Options.Min, *req.Options.Max))
+		}
 	case pilosa.FieldTypeTime:
 		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum, req.Options.NoStandardView))
 	case pilosa.FieldTypeMutex:
@@ -819,6 +827,7 @@ type fieldOptions struct {
 	CacheSize      *uint32             `json:"cacheSize,omitempty"`
 	Min            *int64              `json:"min,omitempty"`
 	Max            *int64              `json:"max,omitempty"`
+	Scale          *int64              `json:"scale,omitempty"`
 	TimeQuantum    *pilosa.TimeQuantum `json:"timeQuantum,omitempty"`
 	Keys           *bool               `json:"keys,omitempty"`
 	NoStandardView bool                `json:"noStandardView,omitempty"`
@@ -850,7 +859,7 @@ func (o *fieldOptions) validate() error {
 		} else if o.TimeQuantum != nil {
 			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type set"))
 		}
-	case pilosa.FieldTypeInt:
+	case pilosa.FieldTypeInt, pilosa.FieldTypeDecimal:
 		if o.CacheType != nil {
 			return pilosa.NewBadRequestError(errors.New("cacheType does not apply to field type int"))
 		} else if o.CacheSize != nil {
@@ -1112,7 +1121,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Unmarshal request based on field type.
-	if field.Type() == pilosa.FieldTypeInt {
+	if field.Type() == pilosa.FieldTypeInt || field.Type() == pilosa.FieldTypeDecimal {
 		// Field type: Int
 		// Marshal into request object.
 		req := &pilosa.ImportValueRequest{}

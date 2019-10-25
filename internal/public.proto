@@ -99,6 +99,7 @@ message ImportValueRequest {
 	repeated uint64 ColumnIDs = 5;
 	repeated string ColumnKeys = 7;
 	repeated int64 Values = 6;
+	repeated double FloatValues = 8;
 }
 
 message TranslateKeysRequest {

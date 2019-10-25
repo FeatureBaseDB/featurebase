@@ -998,6 +998,47 @@ func TestClient_FragmentBlocks(t *testing.T) {
 	}
 }
 
+func TestClient_CreateDecimalField(t *testing.T) {
+	cluster := test.MustRunCluster(t, 1)
+	defer cluster.Close()
+	cmd := cluster[0]
+
+	c := MustNewClient(cmd.URL(), http.GetHTTPClient(nil))
+
+	index := "cdf"
+	err := c.CreateIndex(context.Background(), index, pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+	field := "dfield"
+	err = c.CreateFieldWithOptions(context.Background(), index, field, pilosa.FieldOptions{Type: pilosa.FieldTypeDecimal, Scale: 1, Min: -1000, Max: 1000})
+	if err != nil {
+		t.Fatalf("creating field: %v", err)
+	}
+
+	fld, err := cmd.API.Field(context.Background(), index, field)
+	if err != nil {
+		t.Fatalf("getting field: %v", err)
+	}
+	if fld.Options().Scale != 1 {
+		t.Fatalf("expected Scale 1, got: %+v", fld.Options())
+	}
+
+	err = c.ImportValue2(context.Background(), &pilosa.ImportValueRequest{Index: index, Field: field, ColumnIDs: []uint64{1, 2, 3}, Shard: 0, FloatValues: []float64{1.1, 2.2, 3.3}}, &pilosa.ImportOptions{})
+	if err != nil {
+		t.Fatalf("importing float values: %v", err)
+	}
+
+	resp, err := c.Query(context.Background(), index, &pilosa.QueryRequest{Index: index, Query: "Row(dfield>21)"})
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Columns(), []uint64{2, 3}) {
+		t.Fatalf("unexpected results: %v", resp.Results[0].(*pilosa.Row).Columns())
+	}
+
+}
+
 // Client represents a test wrapper for pilosa.Client.
 type Client struct {
 	*http.InternalClient
