@@ -2717,7 +2717,7 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 		c := test.MustRunCluster(t, 1, []server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.OpenTranslateReader),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 			),
 		})
 		defer c.Close()

@@ -385,6 +385,10 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	return s, nil
 }
 
+func (s *Server) InternalClient() InternalClient {
+	return s.defaultClient
+}
+
 // UpAndDown brings the server up minimally and shuts it down
 // again; basically, it exists for testing holder open and close.
 func (s *Server) UpAndDown() error {

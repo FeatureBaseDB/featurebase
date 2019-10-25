@@ -1037,7 +1037,7 @@ func TestClusterTranslator(t *testing.T) {
 	cluster[1] = test.NewCommandNode(false,
 		server.OptCommandServerOptions(
 			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-			pilosa.OptServerOpenTranslateReader(http.OpenTranslateReader),
+			pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 		),
 	)
 	cluster[1].Config.Gossip.Port = "0"

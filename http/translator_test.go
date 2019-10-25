@@ -54,7 +54,7 @@ func TestTranslateStore_EntryReader(t *testing.T) {
 			}
 
 			// Connect to server and stream all available data.
-			r := http.NewTranslateEntryReader(context.Background())
+			r := http.NewTranslateEntryReader(context.Background(), nil)
 			r.URL = primary.URL()
 
 			// Wait to ensure writes make it to translate store
