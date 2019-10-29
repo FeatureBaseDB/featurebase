@@ -1,0 +1,9 @@
+# names of files which we do not expect to have our license header
+./apimethod_string.go
+./pql/pql.peg.go
+./internal/private.pb.go
+./internal/public.pb.go
+./lru/lru.go
+./enterprise/enterprise.go
+./roaring/btree.go
+./roaring/btree_test.go
