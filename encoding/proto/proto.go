@@ -369,12 +369,13 @@ func encodeImportRequest(m *pilosa.ImportRequest) *internal.ImportRequest {
 
 func encodeImportValueRequest(m *pilosa.ImportValueRequest) *internal.ImportValueRequest {
 	return &internal.ImportValueRequest{
-		Index:      m.Index,
-		Field:      m.Field,
-		Shard:      m.Shard,
-		ColumnIDs:  m.ColumnIDs,
-		ColumnKeys: m.ColumnKeys,
-		Values:     m.Values,
+		Index:       m.Index,
+		Field:       m.Field,
+		Shard:       m.Shard,
+		ColumnIDs:   m.ColumnIDs,
+		ColumnKeys:  m.ColumnKeys,
+		Values:      m.Values,
+		FloatValues: m.FloatValues,
 	}
 }
 
@@ -538,6 +539,7 @@ func encodeFieldOptions(o *pilosa.FieldOptions) *internal.FieldOptions {
 		Min:         o.Min,
 		Max:         o.Max,
 		Base:        o.Base,
+		Scale:       o.Scale,
 		BitDepth:    uint64(o.BitDepth),
 		TimeQuantum: string(o.TimeQuantum),
 		Keys:        o.Keys,
@@ -808,6 +810,7 @@ func decodeFieldOptions(options *internal.FieldOptions, m *pilosa.FieldOptions) 
 	m.Min = options.Min
 	m.Max = options.Max
 	m.Base = options.Base
+	m.Scale = options.Scale
 	m.BitDepth = uint(options.BitDepth)
 	m.TimeQuantum = pilosa.TimeQuantum(options.TimeQuantum)
 	m.Keys = options.Keys
@@ -983,6 +986,7 @@ func decodeImportValueRequest(pb *internal.ImportValueRequest, m *pilosa.ImportV
 	m.ColumnIDs = pb.ColumnIDs
 	m.ColumnKeys = pb.ColumnKeys
 	m.Values = pb.Values
+	m.FloatValues = pb.FloatValues
 }
 
 func decodeImportRoaringRequest(pb *internal.ImportRoaringRequest, m *pilosa.ImportRoaringRequest) {

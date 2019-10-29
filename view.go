@@ -210,7 +210,7 @@ fragLoop:
 // flags returns a set of flags for the underlying fragments.
 func (v *view) flags() byte {
 	var flag byte
-	if v.fieldType == FieldTypeInt {
+	if v.fieldType == FieldTypeInt || v.fieldType == FieldTypeDecimal {
 		flag |= roaringFlagBSIv2
 	}
 	return flag

@@ -18,6 +18,7 @@ message FieldOptions {
 	bool NoStandardView = 12;
 	int64 Base = 13;
 	uint64 BitDepth = 14;
+	int64 Scale = 15;
 }
 
 message ImportResponse {

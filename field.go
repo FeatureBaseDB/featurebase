@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -54,11 +55,12 @@ const (
 
 // Field types.
 const (
-	FieldTypeSet   = "set"
-	FieldTypeInt   = "int"
-	FieldTypeTime  = "time"
-	FieldTypeMutex = "mutex"
-	FieldTypeBool  = "bool"
+	FieldTypeSet     = "set"
+	FieldTypeInt     = "int"
+	FieldTypeTime    = "time"
+	FieldTypeMutex   = "mutex"
+	FieldTypeBool    = "bool"
+	FieldTypeDecimal = "decimal"
 )
 
 // Field represents a container for views.
@@ -151,6 +153,32 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 		fo.Min = min
 		fo.Max = max
 		fo.Base = bsiBase(min, max)
+		return nil
+	}
+}
+
+func OptFieldTypeDecimal(scale int64, minmax ...int64) FieldOption {
+	return func(fo *FieldOptions) error {
+		if fo.Type != "" {
+			return errors.Errorf("can't set field type to 'decimal', already set to: %s", fo.Type)
+		}
+		fo.Min = math.MinInt64
+		fo.Max = math.MaxInt64
+		if len(minmax) == 2 {
+			min, max := minmax[0], minmax[1]
+			if min > max {
+				return errors.Errorf("decimal field min cannot be greater than max, got %d, %d", min, max)
+			}
+			fo.Min = min
+			fo.Max = max
+		} else if len(minmax) > 2 {
+			return errors.Errorf("unknown extra parameters beyond min and max: %v", minmax)
+		} else if len(minmax) == 1 {
+			fo.Min = minmax[0]
+		}
+		fo.Type = FieldTypeDecimal
+		fo.Base = bsiBase(fo.Min, fo.Max)
+		fo.Scale = scale
 		return nil
 	}
 }
@@ -550,6 +578,7 @@ func (f *Field) loadMeta() error {
 	f.options.Min = pb.Min
 	f.options.Max = pb.Max
 	f.options.Base = pb.Base
+	f.options.Scale = pb.Scale
 	f.options.BitDepth = uint(pb.BitDepth)
 	f.options.TimeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.options.Keys = pb.Keys
@@ -609,13 +638,14 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.BitDepth = 0
 		f.options.TimeQuantum = ""
 		f.options.Keys = opt.Keys
-	case FieldTypeInt:
+	case FieldTypeInt, FieldTypeDecimal:
 		f.options.Type = opt.Type
 		f.options.CacheType = CacheTypeNone
 		f.options.CacheSize = 0
 		f.options.Min = opt.Min
 		f.options.Max = opt.Max
 		f.options.Base = opt.Base
+		f.options.Scale = opt.Scale
 		f.options.BitDepth = opt.BitDepth
 		f.options.TimeQuantum = ""
 		f.options.Keys = opt.Keys
@@ -627,6 +657,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 			Min:      opt.Min,
 			Max:      opt.Max,
 			Base:     opt.Base,
+			Scale:    opt.Scale,
 			BitDepth: opt.BitDepth,
 		}
 		// Validate bsiGroup.
@@ -1051,6 +1082,21 @@ func (f *Field) allTimeViewsSortedByQuantum() (me []*view) {
 	return me
 }
 
+// FloatValue reads an integer field value for a column, and converts
+// it to a float based on the configured scale.
+func (f *Field) FloatValue(columnID uint64) (value float64, exists bool, err error) {
+	bsig := f.bsiGroup(f.name)
+	if bsig == nil {
+		return 0, false, ErrBSIGroupNotFound
+	}
+
+	val, exists, err := f.Value(columnID)
+	if exists {
+		value = float64(val) / math.Pow10(int(bsig.Scale))
+	}
+	return value, exists, err
+}
+
 // Value reads a field value for a column.
 func (f *Field) Value(columnID uint64) (value int64, exists bool, err error) {
 	bsig := f.bsiGroup(f.name)
@@ -1071,6 +1117,18 @@ func (f *Field) Value(columnID uint64) (value int64, exists bool, err error) {
 		return 0, false, nil
 	}
 	return int64(v) + bsig.Base, true, nil
+}
+
+// SetFloatValue takes a floating point value, and converts it to an
+// integer based on the field's configured scale, before setting that
+// integer via SetValue.
+func (f *Field) SetFloatValue(columnID uint64, value float64) (changed bool, err error) {
+	bsig := f.bsiGroup(f.name)
+	if bsig == nil {
+		return false, ErrBSIGroupNotFound
+	}
+	val := int64(float64(value) * math.Pow10(int(bsig.Scale)))
+	return f.SetValue(columnID, val)
 }
 
 // SetValue sets a field value for a column.
@@ -1118,6 +1176,22 @@ func (f *Field) SetValue(columnID uint64, value int64) (changed bool, err error)
 	return view.setValue(columnID, bsig.BitDepth, baseValue)
 }
 
+// FloatSum performs a Sum query and converts the result to a float
+// based on the field's configured scale.
+func (f *Field) FloatSum(filter *Row, name string) (sum float64, count int64, err error) {
+	bsig := f.bsiGroup(f.name)
+	if bsig == nil {
+		return 0, 0, ErrBSIGroupNotFound
+	}
+
+	sumI, count, err := f.Sum(filter, name)
+	if err == nil {
+		sum = float64(sumI) / math.Pow10(int(bsig.Scale))
+	}
+	return sum, count, err
+
+}
+
 // Sum returns the sum and count for a field.
 // An optional filtering row can be provided.
 func (f *Field) Sum(filter *Row, name string) (sum, count int64, err error) {
@@ -1138,6 +1212,21 @@ func (f *Field) Sum(filter *Row, name string) (sum, count int64, err error) {
 	return int64(vsum) + (int64(vcount) * bsig.Base), int64(vcount), nil
 }
 
+// FloatMin performs a Min query and converts the result to a float
+// based on the field's configured scale.
+func (f *Field) FloatMin(filter *Row, name string) (min float64, count int64, err error) {
+	bsig := f.bsiGroup(f.name)
+	if bsig == nil {
+		return 0, 0, ErrBSIGroupNotFound
+	}
+
+	minI, count, err := f.Min(filter, name)
+	if err == nil {
+		min = float64(minI) / math.Pow10(int(bsig.Scale))
+	}
+	return min, count, err
+}
+
 // Min returns the min for a field.
 // An optional filtering row can be provided.
 func (f *Field) Min(filter *Row, name string) (min, count int64, err error) {
@@ -1156,6 +1245,21 @@ func (f *Field) Min(filter *Row, name string) (min, count int64, err error) {
 		return 0, 0, err
 	}
 	return int64(vmin) + bsig.Base, int64(vcount), nil
+}
+
+// FloatMax performs a max query and converts the result to a float
+// based on the field's configured scale.
+func (f *Field) FloatMax(filter *Row, name string) (max float64, count int64, err error) {
+	bsig := f.bsiGroup(f.name)
+	if bsig == nil {
+		return 0, 0, ErrBSIGroupNotFound
+	}
+
+	maxI, count, err := f.Max(filter, name)
+	if err == nil {
+		max = float64(maxI) / math.Pow10(int(bsig.Scale))
+	}
+	return max, count, err
 }
 
 // Max returns the max for a field.
@@ -1281,6 +1385,21 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time, opts
 	}
 
 	return nil
+}
+
+func (f *Field) importFloatValue(columnIDs []uint64, values []float64, options *ImportOptions) error {
+	// convert values to int64 values based on scale
+	ivalues := make([]int64, len(values))
+	bsig := f.bsiGroup(f.name)
+	if bsig == nil {
+		return errors.Wrap(ErrBSIGroupNotFound, f.name)
+	}
+	mult := math.Pow10(int(bsig.Scale))
+	for i, fval := range values {
+		ivalues[i] = int64(fval * mult)
+	}
+	// then call importValue
+	return f.importValue(columnIDs, ivalues, options)
 }
 
 // importValue bulk imports range-encoded value data.
@@ -1419,6 +1538,7 @@ type FieldOptions struct {
 	BitDepth       uint        `json:"bitDepth,omitempty"`
 	Min            int64       `json:"min,omitempty"`
 	Max            int64       `json:"max,omitempty"`
+	Scale          int64       `json:"scale,omitempty"`
 	Keys           bool        `json:"keys"`
 	NoStandardView bool        `json:"noStandardView,omitempty"`
 	CacheSize      uint32      `json:"cacheSize,omitempty"`
@@ -1454,6 +1574,7 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 		CacheType:      o.CacheType,
 		CacheSize:      o.CacheSize,
 		Base:           o.Base,
+		Scale:          o.Scale,
 		BitDepth:       uint64(o.BitDepth),
 		Min:            o.Min,
 		Max:            o.Max,
@@ -1480,10 +1601,11 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			o.CacheSize,
 			o.Keys,
 		})
-	case FieldTypeInt:
+	case FieldTypeInt, FieldTypeDecimal:
 		return json.Marshal(struct {
 			Type     string `json:"type"`
 			Base     int64  `json:"base"`
+			Scale    int64  `json:"scale"`
 			BitDepth uint   `json:"bitDepth"`
 			Min      int64  `json:"min"`
 			Max      int64  `json:"max"`
@@ -1491,6 +1613,7 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 		}{
 			o.Type,
 			o.Base,
+			o.Scale,
 			o.BitDepth,
 			o.Min,
 			o.Max,
@@ -1563,6 +1686,7 @@ type bsiGroup struct {
 	Min      int64  `json:"min,omitempty"`
 	Max      int64  `json:"max,omitempty"`
 	Base     int64  `json:"base,omitempty"`
+	Scale    int64  `json:"scale,omitempty"`
 	BitDepth uint   `json:"bitDepth,omitempty"`
 }
 

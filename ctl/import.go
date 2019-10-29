@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"os"
 	"sort"
 	"strconv"
@@ -102,11 +103,11 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 		if cmd.FieldOptions.Type == "" {
 			// set the correct type for the field
 			if cmd.FieldOptions.TimeQuantum != "" {
-				cmd.FieldOptions.Type = "time"
+				cmd.FieldOptions.Type = pilosa.FieldTypeTime
 			} else if cmd.FieldOptions.Min != 0 || cmd.FieldOptions.Max != 0 {
-				cmd.FieldOptions.Type = "int"
+				cmd.FieldOptions.Type = pilosa.FieldTypeInt
 			} else {
-				cmd.FieldOptions.Type = "set"
+				cmd.FieldOptions.Type = pilosa.FieldTypeSet
 			}
 		}
 		err := cmd.ensureSchema(ctx)
@@ -163,8 +164,8 @@ func (cmd *ImportCommand) ensureSchema(ctx context.Context) error {
 // importPath parses a path into bits and imports it to the server.
 func (cmd *ImportCommand) importPath(ctx context.Context, fieldType string, useColumnKeys, useRowKeys bool, path string) error {
 	// If fieldType is `int`, treat the import data as values to be range-encoded.
-	if fieldType == pilosa.FieldTypeInt {
-		return cmd.bufferValues(ctx, useColumnKeys, path)
+	if fieldType == pilosa.FieldTypeInt || fieldType == pilosa.FieldTypeDecimal {
+		return cmd.bufferValues(ctx, useColumnKeys, fieldType == pilosa.FieldTypeDecimal, path)
 	}
 	return cmd.bufferBits(ctx, useColumnKeys, useRowKeys, path)
 }
@@ -285,9 +286,13 @@ func (cmd *ImportCommand) importBits(ctx context.Context, useColumnKeys, useRowK
 	return nil
 }
 
-// bufferValues buffers slices of FieldValues to be imported as a batch.
-func (cmd *ImportCommand) bufferValues(ctx context.Context, useColumnKeys bool, path string) error {
-	a := make([]pilosa.FieldValue, 0, cmd.BufferSize)
+// bufferValues buffers slices of record identifiers and values to be imported as a batch.
+func (cmd *ImportCommand) bufferValues(ctx context.Context, useColumnKeys, parseAsFloat bool, path string) error {
+	req := &pilosa.ImportValueRequest{
+		Index: cmd.Index,
+		Field: cmd.Field,
+		Shard: math.MaxUint64,
+	}
 
 	var r *csv.Reader
 
@@ -307,6 +312,7 @@ func (cmd *ImportCommand) bufferValues(ctx context.Context, useColumnKeys bool, 
 
 	r.FieldsPerRecord = -1
 	rnum := 0
+
 	for {
 		rnum++
 
@@ -325,69 +331,44 @@ func (cmd *ImportCommand) bufferValues(ctx context.Context, useColumnKeys bool, 
 			return fmt.Errorf("bad column count on row %d: col=%d", rnum, len(record))
 		}
 
-		var val pilosa.FieldValue
-
 		// Parse column id.
 		if useColumnKeys {
-			val.ColumnKey = record[0]
+			req.ColumnKeys = append(req.ColumnKeys, record[0])
+		} else if columnID, err := strconv.ParseUint(record[0], 10, 64); err == nil {
+			req.ColumnIDs = append(req.ColumnIDs, columnID)
+		} else if err != nil {
+			return fmt.Errorf("invalid column id on row %d: %q", rnum, record[0])
+		}
+
+		// Parse value.
+		if parseAsFloat {
+			value, err := strconv.ParseFloat(record[1], 64)
+			if err != nil {
+				return errors.Wrapf(err, "parseing value '%s' as float", record[1])
+			}
+			req.FloatValues = append(req.FloatValues, value)
 		} else {
-			if val.ColumnID, err = strconv.ParseUint(record[0], 10, 64); err != nil {
-				return fmt.Errorf("invalid column id on row %d: %q", rnum, record[0])
+			value, err := strconv.ParseInt(record[1], 10, 64)
+			if err != nil {
+				return errors.Wrapf(err, "invalid value on row %d: %q", rnum, record[1])
 			}
+			req.Values = append(req.Values, value)
 		}
 
-		// Parse FieldValue.
-		value, err := strconv.ParseInt(record[1], 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid value on row %d: %q", rnum, record[1])
-		}
-		val.Value = value
-
-		a = append(a, val)
-
-		// If we've reached the buffer size then import FieldValues.
-		if len(a) == cmd.BufferSize {
-			if err := cmd.importValues(ctx, useColumnKeys, a); err != nil {
-				return err
+		// If we've reached the buffer size then import the batch.
+		if len(req.ColumnKeys) == cmd.BufferSize || len(req.ColumnIDs) == cmd.BufferSize {
+			if err := cmd.client.ImportValue2(ctx, req, &pilosa.ImportOptions{}); err != nil {
+				return errors.Wrap(err, "importing values")
 			}
-			a = a[:0]
+			req.ColumnIDs = req.ColumnIDs[:0]
+			req.ColumnKeys = req.ColumnKeys[:0]
+			req.Values = req.Values[:0]
+			req.FloatValues = req.FloatValues[:0]
 		}
 	}
 
 	// If there are still values in the buffer then flush them.
-	return cmd.importValues(ctx, useColumnKeys, a)
-}
-
-// importValues sends batches of FieldValues to the server.
-func (cmd *ImportCommand) importValues(ctx context.Context, useColumnKeys bool, vals []pilosa.FieldValue) error {
-	logger := log.New(cmd.Stderr, "", log.LstdFlags)
-
-	// If keys are used, all values are sent to the primary translate store (i.e. coordinator).
-	if useColumnKeys {
-		logger.Printf("importing keyed values: n=%d", len(vals))
-		if err := cmd.client.ImportValueK(ctx, cmd.Index, cmd.Field, vals); err != nil {
-			return errors.Wrap(err, "importing keys")
-		}
-		return nil
-	}
-
-	// Group vals by shard.
-	logger.Printf("grouping %d vals", len(vals))
-	valsByShard := http.FieldValues(vals).GroupByShard()
-
-	// Parse path into FieldValues.
-	for shard, vals := range valsByShard {
-		if cmd.Sort {
-			sort.Sort(http.FieldValues(vals))
-		}
-
-		logger.Printf("importing shard: %d, n=%d", shard, len(vals))
-		if err := cmd.client.ImportValue(ctx, cmd.Index, cmd.Field, shard, vals, pilosa.OptImportOptionsClear(cmd.Clear)); err != nil {
-			return errors.Wrap(err, "importing values")
-		}
-	}
-
-	return nil
+	return errors.Wrap(cmd.client.ImportValue2(ctx, req, &pilosa.ImportOptions{}), "importing values")
 }
 
 func (cmd *ImportCommand) TLSHost() string {

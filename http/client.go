@@ -553,6 +553,35 @@ func (c *InternalClient) ImportValue(ctx context.Context, index, field string, s
 	return nil
 }
 
+// ImportValue2 is a simplified ImportValue method which just uses the
+// ImportValueRequest instead of splitting up ImportValue and
+// ImportValueK... it also supports importing float values. The idea
+// being that (assuming it works) this will become the default (and be
+// renamed) for 2.0, and we can deprecate the other methods.
+func (c *InternalClient) ImportValue2(ctx context.Context, req *pilosa.ImportValueRequest, options *pilosa.ImportOptions) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.NewImportValue")
+	defer span.Finish()
+
+	buf, err := c.serializer.Marshal(req)
+	if err != nil {
+		return errors.Errorf("marshal import request: %s", err)
+	}
+
+	// Retrieve a list of nodes that own the shard.
+	nodes, err := c.FragmentNodes(ctx, req.Index, req.Shard)
+	if err != nil {
+		return errors.Errorf("shard nodes: %s", err)
+	}
+
+	// Import to each node.
+	for _, node := range nodes {
+		if err := c.importNode(ctx, node, req.Index, req.Field, buf, options); err != nil {
+			return errors.Errorf("import node: host=%s, err=%s", node.URI, err)
+		}
+	}
+	return nil
+}
+
 // ImportValueK bulk imports keyed field values to a host.
 func (c *InternalClient) ImportValueK(ctx context.Context, index, field string, vals []pilosa.FieldValue, opts ...pilosa.ImportOption) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportValueK")
@@ -791,18 +820,28 @@ func (c *InternalClient) CreateFieldWithOptions(ctx context.Context, index, fiel
 	}
 
 	// convert pilosa.FieldOptions to fieldOptions
+	//
+	// TODO this kind of sucks because it's one more place that needs
+	// changes when we change anything with field options (and there
+	// are a lot of places already). It's not clear to me that this is
+	// providing a lot of value, but I think this kind of validation
+	// should probably happen in the field anyway??
 	fieldOpt := fieldOptions{
 		Type: opt.Type,
 		Keys: &opt.Keys,
 	}
-	if fieldOpt.Type == "set" {
+	if fieldOpt.Type == pilosa.FieldTypeSet {
 		fieldOpt.CacheType = &opt.CacheType
 		fieldOpt.CacheSize = &opt.CacheSize
-	} else if fieldOpt.Type == "int" {
+	} else if fieldOpt.Type == pilosa.FieldTypeInt {
 		fieldOpt.Min = &opt.Min
 		fieldOpt.Max = &opt.Max
-	} else if fieldOpt.Type == "time" {
+	} else if fieldOpt.Type == pilosa.FieldTypeTime {
 		fieldOpt.TimeQuantum = &opt.TimeQuantum
+	} else if fieldOpt.Type == pilosa.FieldTypeDecimal {
+		fieldOpt.Min = &opt.Min
+		fieldOpt.Max = &opt.Max
+		fieldOpt.Scale = &opt.Scale
 	}
 
 	// TODO: remove buf completely? (depends on whether importer needs to create specific field types)

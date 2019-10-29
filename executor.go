@@ -944,7 +944,7 @@ func (e *executor) executeTopNShard(ctx context.Context, index string, c *pql.Ca
 	n, _, err := c.UintArg("n")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopNShard: %v", err)
-	} else if f := e.Holder.Field(index, fieldName); f != nil && f.Type() == FieldTypeInt {
+	} else if f := e.Holder.Field(index, fieldName); f != nil && (f.Type() == FieldTypeInt || f.Type() == FieldTypeDecimal) {
 		return nil, fmt.Errorf("cannot compute TopN() on integer field: %q", fieldName)
 	}
 
@@ -2109,7 +2109,7 @@ func (e *executor) executeSet(ctx context.Context, index string, c *pql.Call, op
 	}
 
 	// Int field.
-	if f.Type() == FieldTypeInt {
+	if f.Type() == FieldTypeInt || f.Type() == FieldTypeDecimal {
 		// Read row value.
 		rowVal, ok, err := c.IntArg(fieldName)
 		if err != nil {

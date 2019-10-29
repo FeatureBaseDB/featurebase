@@ -26,6 +26,7 @@ import (
 	"io"
 	"io/ioutil"
 	"math"
+	"math/bits"
 	"os"
 	"sort"
 	"strings"
@@ -1353,9 +1354,23 @@ func (f *fragment) rangeLT(bitDepth uint, predicate int64, allowEquality bool) (
 	return f.rangeGTUnsigned(b.Intersect(f.row(bsiSignBit)), bitDepth, upredicate, allowEquality)
 }
 
+// msb gives the 1-indexed position (counting from lsb) of the most
+// significant bit. E.G. for 1 it would return 1, for 2 2, for 3 2,
+// for 4 3, for 8 4, etc.
+func msb(x uint64) uint {
+	lz := bits.LeadingZeros64(x)
+	return 64 - uint(lz)
+}
+
 // rangeLTUnsigned returns all bits LT/LTE the predicate without considering the sign bit.
 func (f *fragment) rangeLTUnsigned(filter *Row, bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
 	keep := NewRow()
+
+	// if the predicate is larger than all representable numbers given
+	// our bitDepth... then just return everything.
+	if msb(predicate) >= bitDepth {
+		return filter, nil
+	}
 
 	// Filter any bits that don't match the current bit value.
 	leadingZeros := true

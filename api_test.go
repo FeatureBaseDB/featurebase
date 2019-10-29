@@ -258,6 +258,147 @@ func TestAPI_ImportValue(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+
+	t.Run("ValDecimalField", func(t *testing.T) {
+		ctx := context.Background()
+		index := "valdec"
+		field := "fdec"
+
+		_, err := m1.API.CreateIndex(ctx, index, pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+		fld, err := m1.API.CreateField(ctx, index, field, pilosa.OptFieldTypeDecimal(1))
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+
+		// Generate some keyed records.
+		values := []float64{}
+		colIDs := []uint64{}
+		for i := 0; i < 10; i++ {
+			values = append(values, float64(i)+0.1)
+			colIDs = append(colIDs, uint64(i))
+		}
+
+		// Import data with keys to the coordinator (node0) and verify that it gets
+		// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
+		req := &pilosa.ImportValueRequest{
+			Index:       index,
+			Field:       field,
+			ColumnIDs:   colIDs,
+			FloatValues: values,
+		}
+		if err := m1.API.ImportValue(ctx, req); err != nil {
+			t.Fatal(err)
+		}
+
+		pql := fmt.Sprintf("Row(%s>60)", field)
+
+		// Query node0.
+		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
+			t.Fatal(err)
+		} else if ids := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(ids, colIDs[6:]) {
+			t.Fatalf("unexpected column keys: %+v", ids)
+		}
+
+		sum, count, err := fld.FloatSum(nil, field)
+		if err != nil {
+			t.Fatalf("getting floatsum: %v", err)
+		} else if sum != 0.1+1.1+2.1+3.1+4.1+5.1+6.1+7.1+8.1+9.1 {
+			t.Fatalf("unexpected sum: %f", sum)
+		} else if count != 10 {
+			t.Fatalf("unexpected count: %d", count)
+		}
+
+		min, count, err := fld.FloatMin(nil, field)
+		if err != nil {
+			t.Fatalf("getting floatmin: %v", err)
+		} else if min != 0.1 {
+			t.Fatalf("unexpected min: %f", min)
+		} else if count != 1 {
+			t.Fatalf("unexpected count: %d", count)
+		}
+
+		max, count, err := fld.FloatMax(nil, field)
+		if err != nil {
+			t.Fatalf("getting floatmax: %v", err)
+		} else if max != 9.1 {
+			t.Fatalf("unexpected max: %f", max)
+		} else if count != 1 {
+			t.Fatalf("unexpected count: %d", count)
+		}
+
+		val, exists, err := fld.FloatValue(1)
+		if err != nil {
+			t.Fatalf("unepxected err getting floatvalue")
+		} else if !exists {
+			t.Fatalf("column 1 should exist")
+		} else if val != 1.1 {
+			t.Fatalf("unexpected floatvalue %f", val)
+		}
+
+		changed, err := fld.SetFloatValue(11, 11.1)
+		if err != nil {
+			t.Fatalf("setting float value: %v", err)
+		} else if !changed {
+			t.Fatalf("expected change")
+		}
+
+		val, exists, err = fld.FloatValue(11)
+		if err != nil {
+			t.Fatalf("getting float val: %v", err)
+		} else if !exists {
+			t.Fatalf("should exist")
+		} else if val != 11.1 {
+			t.Fatalf("unexpected val: %f", 11.1)
+		}
+	})
+
+	t.Run("ValDecimalFieldNegativeScale", func(t *testing.T) {
+		ctx := context.Background()
+		index := "valdecneg"
+		field := "fdecneg"
+
+		_, err := m0.API.CreateIndex(ctx, index, pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+		_, err = m0.API.CreateField(ctx, index, field, pilosa.OptFieldTypeDecimal(-1))
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+
+		// Generate some keyed records.
+		values := []float64{}
+		colIDs := []uint64{}
+		for i := 0; i < 10; i++ {
+			values = append(values, float64(i)*100+10)
+			colIDs = append(colIDs, uint64(i))
+		}
+
+		// Import data with keys to the coordinator (node0) and verify that it gets
+		// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
+		req := &pilosa.ImportValueRequest{
+			Index:       index,
+			Field:       field,
+			ColumnIDs:   colIDs,
+			FloatValues: values,
+		}
+		if err := m1.API.ImportValue(ctx, req); err != nil {
+			t.Fatal(err)
+		}
+
+		pql := fmt.Sprintf("Row(%s>60)", field)
+
+		// Query node0.
+		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
+			t.Fatal(err)
+		} else if ids := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(ids, colIDs[6:]) {
+			t.Fatalf("unexpected column keys: %+v", ids)
+		}
+
+	})
 }
 
 // offsetModHasher represents a simple, mod-based hashing offset by 1.

@@ -23,7 +23,9 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -890,10 +892,17 @@ func (api *API) FieldAttrDiff(ctx context.Context, indexName string, fieldName s
 	return attrs, nil
 }
 
-// ImportOptions holds the options for the API.Import method.
+// ImportOptions holds the options for the API.Import
+// method.
+//
+// TODO(2.0) we have entirely missed the point of functional options
+// by exporting this structure. If it needs to be exported for some
+// reason, we should consider not using functional options here which
+// just adds complexity.
 type ImportOptions struct {
 	Clear          bool
 	IgnoreKeyCheck bool
+	Presorted      bool
 }
 
 // ImportOption is a functional option type for API.Import.
@@ -913,6 +922,13 @@ func OptImportOptionsClear(c bool) ImportOption {
 func OptImportOptionsIgnoreKeyCheck(b bool) ImportOption {
 	return func(o *ImportOptions) error {
 		o.IgnoreKeyCheck = b
+		return nil
+	}
+}
+
+func OptImportOptionsPresorted(b bool) ImportOption {
+	return func(o *ImportOptions) error {
+		o.Presorted = b
 		return nil
 	}
 }
@@ -1037,6 +1053,10 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 		return errors.Wrap(err, "validating api method")
 	}
 
+	if err := req.Validate(); err != nil {
+		return errors.Wrap(err, "validating import value request")
+	}
+
 	// Set up import options.
 	options, err := setUpImportOptions(opts...)
 	if err != nil {
@@ -1060,57 +1080,93 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 			if req.ColumnIDs, err = index.translateStore.TranslateKeys(req.ColumnKeys); err != nil {
 				return errors.Wrap(err, "translating columns")
 			}
-
-			// For translated data, map the columnIDs to shards. If
-			// this node does not own the shard, forward to the node that does.
-			m := make(map[uint64][]FieldValue)
-
-			for i, colID := range req.ColumnIDs {
-				shard := colID / ShardWidth
-				if _, ok := m[shard]; !ok {
-					m[shard] = make([]FieldValue, 0)
-				}
-				m[shard] = append(m[shard], FieldValue{
-					Value:    req.Values[i],
-					ColumnID: colID,
-				})
-			}
-
-			// Signal to the receiving nodes to ignore checking for key translation.
-			opts = append(opts, OptImportOptionsIgnoreKeyCheck(true))
-
-			var eg errgroup.Group
-			for shard, vals := range m {
-				// TODO: if local node owns this shard we don't need to go through the client
-				shard := shard
-				vals := vals
-				eg.Go(func() error {
-					return api.server.defaultClient.ImportValue(ctx, req.Index, req.Field, shard, vals, opts...)
-				})
-			}
-			return eg.Wait()
+			req.Shard = math.MaxUint64
 		}
 	}
 
-	// Validate shard ownership.
-	if err := api.validateShardOwnership(req.Index, req.Shard); err != nil {
-		return errors.Wrap(err, "validating shard ownership")
+	if !options.Presorted {
+		sort.Sort(req)
 	}
 
-	// Import columnIDs into existence field.
-	if !options.Clear {
-		if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
-			api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
-			return errors.Wrap(err, "importing existence columns")
+	// if we're importing into a specific shard
+	if req.Shard != math.MaxUint64 {
+		// Check that column IDs match the stated shard.
+		if s1, s2 := req.ColumnIDs[0]/ShardWidth, req.ColumnIDs[len(req.ColumnIDs)-1]/ShardWidth; s1 != s2 && s2 != req.Shard {
+			return errors.Errorf("shard %d specified, but import spans shards %d to %d", req.Shard, s1, s2)
+		}
+		// Validate shard ownership. TODO - we should forward to the
+		// correct node rather than barfing here.
+		if err := api.validateShardOwnership(req.Index, req.Shard); err != nil {
+			return errors.Wrap(err, "validating shard ownership")
+		}
+		// Import columnIDs into existence field.
+		if !options.Clear {
+			if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
+				api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+				return errors.Wrap(err, "importing existence columns")
+			}
+		}
+
+		// Import into fragment.
+		if len(req.Values) > 0 {
+			err = field.importValue(req.ColumnIDs, req.Values, options)
+			if err != nil {
+				api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+			}
+		} else if len(req.FloatValues) > 0 {
+			err = field.importFloatValue(req.ColumnIDs, req.FloatValues, options)
+			if err != nil {
+				api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+			}
+		}
+
+		return errors.Wrap(err, "importing")
+	}
+
+	options.IgnoreKeyCheck = true
+	start := 0
+	shard := req.ColumnIDs[0] / ShardWidth
+	var eg errgroup.Group // TODO make this a pooled errgroup
+	for i, colID := range req.ColumnIDs {
+		if colID/ShardWidth != shard {
+			subreq := &ImportValueRequest{
+				Index:     req.Index,
+				Field:     req.Field,
+				Shard:     shard,
+				ColumnIDs: req.ColumnIDs[start:i],
+			}
+			if req.Values != nil {
+				subreq.Values = req.Values[start:i]
+			} else if req.FloatValues != nil {
+				subreq.FloatValues = req.FloatValues[start:i]
+			}
+
+			eg.Go(func() error {
+				return api.server.defaultClient.ImportValue2(ctx, subreq, options)
+			})
+			start = i
+			shard = colID / ShardWidth
 		}
 	}
-
-	// Import into fragment.
-	err = field.importValue(req.ColumnIDs, req.Values, options)
-	if err != nil {
-		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+	subreq := &ImportValueRequest{
+		Index:     req.Index,
+		Field:     req.Field,
+		Shard:     shard,
+		ColumnIDs: req.ColumnIDs[start:],
 	}
-	return errors.Wrap(err, "importing")
+	if req.Values != nil {
+		subreq.Values = req.Values[start:]
+	} else if req.FloatValues != nil {
+		subreq.FloatValues = req.FloatValues[start:]
+	}
+	eg.Go(func() error {
+		// TODO we should elevate the logic for figuring out which
+		// node(s) to send to into API instead of having those details
+		// in the client implementation.
+		return api.server.defaultClient.ImportValue2(ctx, subreq, options)
+	})
+	return eg.Wait()
+
 }
 
 func importExistenceColumns(index *Index, columnIDs []uint64) error {

@@ -59,6 +59,7 @@ type InternalClient interface {
 	EnsureFieldWithOptions(ctx context.Context, index, field string, opt FieldOptions) error
 	ImportValue(ctx context.Context, index, field string, shard uint64, vals []FieldValue, opts ...ImportOption) error
 	ImportValueK(ctx context.Context, index, field string, vals []FieldValue, opts ...ImportOption) error
+	ImportValue2(ctx context.Context, req *ImportValueRequest, options *ImportOptions) error
 	ExportCSV(ctx context.Context, index, field string, shard uint64, w io.Writer) error
 	CreateField(ctx context.Context, index, field string) error
 	CreateFieldWithOptions(ctx context.Context, index, field string, opt FieldOptions) error
@@ -129,6 +130,10 @@ func (n nopInternalClient) Import(ctx context.Context, index, field string, shar
 func (n nopInternalClient) ImportK(ctx context.Context, index, field string, bits []Bit, opts ...ImportOption) error {
 	return nil
 }
+func (n nopInternalClient) ImportValue2(ctx context.Context, req *ImportValueRequest, options *ImportOptions) error {
+	return nil
+}
+
 func (n nopInternalClient) ImportRoaring(ctx context.Context, uri *URI, index, field string, shard uint64, remote bool, req *ImportRoaringRequest) error {
 	return nil
 }
