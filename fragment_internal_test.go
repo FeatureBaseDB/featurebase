@@ -596,6 +596,21 @@ func TestFragment_Range(t *testing.T) {
 		}
 	})
 
+	t.Run("LTRegression", func(t *testing.T) {
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
+		defer f.Clean(t)
+
+		if _, err := f.setValue(1, 1, 1); err != nil {
+			t.Fatal(err)
+		}
+
+		if b, err := f.rangeOp(pql.LT, 1, 2); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{1}) {
+			t.Fatalf("unepxected coulmns: %+v", b.Columns())
+		}
+	})
+
 	t.Run("GT", func(t *testing.T) {
 		f := mustOpenFragment("i", "f", viewStandard, 0, "")
 		defer f.Clean(t)
