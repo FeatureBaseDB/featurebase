@@ -73,6 +73,9 @@ func newCommand(opts ...server.CommandOption) *Command {
 	if m.Config.Bind == defaultConf.Bind {
 		m.Config.Bind = "http://localhost:0"
 	}
+	if m.Config.BindGRPC == defaultConf.BindGRPC {
+		m.Config.BindGRPC = "http://localhost:0"
+	}
 	m.Config.Translation.MapSize = 140000
 	m.Config.WorkerPoolSize = 2
 

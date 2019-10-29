@@ -80,6 +80,7 @@ type Command struct {
 	logger    loggerLogger
 
 	Handler      pilosa.Handler
+	grpcServer   *grpcServer
 	API          *pilosa.API
 	ln           net.Listener
 	listenURI    *pilosa.URI
@@ -163,6 +164,11 @@ func (m *Command) Start() (err error) {
 	}
 
 	m.logger.Printf("listening as %s\n", m.listenURI)
+	go func() {
+		if err := m.grpcServer.Serve(); err != nil {
+			m.logger.Printf("grpc server error: %v", err)
+		}
+	}()
 
 	close(m.Started)
 	return nil
@@ -249,6 +255,11 @@ func (m *Command) SetupServer() error {
 	uri, err := pilosa.AddressWithDefaults(m.Config.Bind)
 	if err != nil {
 		return errors.Wrap(err, "processing bind address")
+	}
+
+	grpcURI, err := pilosa.NewURIFromAddress(m.Config.BindGRPC)
+	if err != nil {
+		return errors.Wrap(err, "processing bind grpc address")
 	}
 
 	// Setup TLS
@@ -351,7 +362,12 @@ func (m *Command) SetupServer() error {
 		http.OptHandlerListener(m.ln),
 		http.OptHandlerCloseTimeout(m.closeTimeout),
 	)
-	return errors.Wrap(err, "new handler")
+	if err != nil {
+		return errors.Wrap(err, "new handler")
+	}
+
+	m.grpcServer, err = NewGRPCServer(OptGRPCServerAPI(m.API), OptGRPCServerURI(grpcURI))
+	return errors.Wrap(err, "new grpc server")
 }
 
 // setupNetworking sets up internode communication based on the configuration.

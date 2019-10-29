@@ -53,6 +53,9 @@ type Config struct {
 	// Bind is the host:port on which Pilosa will listen.
 	Bind string `toml:"bind"`
 
+	// BindGRPC is the host:port on which Pilosa will bind for gRPC.
+	BindGRPC string `toml:"bind-grpc"`
+
 	// Advertise is the address advertised by the server to other nodes
 	// in the cluster. It should be reachable by all other nodes and should
 	// route to an interface that Bind is listening on.
@@ -161,6 +164,7 @@ func NewConfig() *Config {
 	c := &Config{
 		DataDir:             "~/.pilosa",
 		Bind:                ":10101",
+		BindGRPC:            ":20101",
 		MaxWritesPerRequest: 5000,
 
 		// We default these Max File/Map counts very high. This is basically a
@@ -232,6 +236,13 @@ func (cfg *Config) validateAddrs(ctx context.Context) error {
 		return errors.Wrap(err, "validating listen address")
 	}
 	cfg.Bind = schemeHostPortString(listenScheme, listenHost, listenPort)
+
+	// Validate the gRPC listen address.
+	grpcListenScheme, grpcListenHost, grpcListenPort, err := validateListenAddr(ctx, cfg.BindGRPC)
+	if err != nil {
+		return errors.Wrap(err, "validating grpc listen address")
+	}
+	cfg.BindGRPC = schemeHostPortString(grpcListenScheme, grpcListenHost, grpcListenPort)
 
 	return nil
 }

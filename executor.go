@@ -2676,15 +2676,20 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 		// are only two possible values. Instead, they are handled
 		// directly.
 		if field.Type() == FieldTypeBool {
-			boolVal, err := callArgBool(c, rowKey)
-			if err != nil {
-				return errors.Wrap(err, "getting bool key")
+			// TODO: This code block doesn't make sense for a `Rows()`
+			// queries on a `bool` field. Need to review this better,
+			// include it in tests, and probably back-port it to Pilosa.
+			if c.Name != "Rows" {
+				boolVal, err := callArgBool(c, rowKey)
+				if err != nil {
+					return errors.Wrap(err, "getting bool key")
+				}
+				rowID := falseRowID
+				if boolVal {
+					rowID = trueRowID
+				}
+				c.Args[rowKey] = rowID
 			}
-			rowID := falseRowID
-			if boolVal {
-				rowID = trueRowID
-			}
-			c.Args[rowKey] = rowID
 		} else if field.keys() {
 			if c.Args[rowKey] != nil && !isString(c.Args[rowKey]) {
 				return errors.New("row value must be a string when field 'keys' option enabled")
