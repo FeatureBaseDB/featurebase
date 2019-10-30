@@ -109,7 +109,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 					}
 					resp, err := h.api.Query(context.Background(), &query)
 					if err != nil {
-						return errors.Wrap(err, "querying rows")
+						return errors.Wrapf(err, "querying rows for set: %s", pql)
 					}
 
 					ids, ok := resp.Results[0].(pilosa.RowIdentifiers)
@@ -133,7 +133,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 					}
 					resp, err := h.api.Query(context.Background(), &query)
 					if err != nil {
-						return errors.Wrap(err, "querying rows")
+						return errors.Wrap(err, "querying rows for mutex")
 					}
 
 					ids, ok := resp.Results[0].(pilosa.RowIdentifiers)
@@ -163,7 +163,17 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
 					}
-
+				case "decimal":
+					value, exists, err := field.FloatValue(col)
+					if err != nil {
+						return errors.Wrap(err, "getting decimal field value for column")
+					} else if exists {
+						rowResp.Columns = append(rowResp.Columns,
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Float64Val{value}})
+					} else {
+						rowResp.Columns = append(rowResp.Columns,
+							&pb.ColumnResponse{ColumnVal: nil})
+					}
 				case "bool":
 					pql := fmt.Sprintf("Rows(%s, column=%d)", field.Name(), col)
 					query := pilosa.QueryRequest{
@@ -172,7 +182,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 					}
 					resp, err := h.api.Query(context.Background(), &query)
 					if err != nil {
-						return errors.Wrap(err, "querying rows")
+						return errors.Wrap(err, "querying rows for bool")
 					}
 
 					ids, ok := resp.Results[0].(pilosa.RowIdentifiers)
@@ -227,7 +237,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 					}
 					resp, err := h.api.Query(context.Background(), &query)
 					if err != nil {
-						return errors.Wrap(err, "querying rows")
+						return errors.Wrap(err, "querying set rows(keys)")
 					}
 
 					ids, ok := resp.Results[0].(pilosa.RowIdentifiers)
@@ -251,7 +261,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 					}
 					resp, err := h.api.Query(context.Background(), &query)
 					if err != nil {
-						return errors.Wrap(err, "querying rows")
+						return errors.Wrap(err, "querying mutex rows(keys)")
 					}
 
 					ids, ok := resp.Results[0].(pilosa.RowIdentifiers)
@@ -287,6 +297,23 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
 					}
+				case "decimal":
+					// Translate column key.
+					id, err := index.TranslateStore().TranslateKey(col)
+					if err != nil {
+						return errors.Wrap(err, "translating column key")
+					}
+
+					value, exists, err := field.FloatValue(id)
+					if err != nil {
+						return errors.Wrap(err, "getting decimal field value for column")
+					} else if exists {
+						rowResp.Columns = append(rowResp.Columns,
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Float64Val{value}})
+					} else {
+						rowResp.Columns = append(rowResp.Columns,
+							&pb.ColumnResponse{ColumnVal: nil})
+					}
 
 				case "bool":
 					pql := fmt.Sprintf("Rows(%s, column=\"%s\")", field.Name(), col)
@@ -296,7 +323,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 					}
 					resp, err := h.api.Query(context.Background(), &query)
 					if err != nil {
-						return errors.Wrap(err, "querying rows")
+						return errors.Wrap(err, "querying bool rows(keys)")
 					}
 
 					ids, ok := resp.Results[0].(pilosa.RowIdentifiers)

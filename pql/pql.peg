@@ -55,7 +55,7 @@ item <- ( 'null' &(comma / sp close) { p.addVal(nil) }
 doublequotedstring <- ( '\\"' / '\\\\' / [^"] )*
 singlequotedstring <- ( '\\\'' / '\\\\' / [^'] )*
 
-fieldExpr <- [[A-Z]] ( [[A-Z]] / [0-9] / '_' / '-' )*
+fieldExpr <- ( [[A-Z]] / '_' ) ( [[A-Z]] / [0-9] / '_' / '-' )*
 field <- <fieldExpr / reserved> { p.addField(buffer[begin:end]) }
 reserved <- ('_row' / '_col' / '_start' / '_end' / '_timestamp' / '_field')
 posfield <- <fieldExpr> { p.addPosStr("_field", buffer[begin:end]) }

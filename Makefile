@@ -119,6 +119,10 @@ generate-stringer:
 generate-pql: require-peg
 	cd pql && peg -inline pql.peg && cd ..
 
+# dunno if protoc-gen-gofast is actually needed here
+generate-proto-grpc: require-protoc require-protoc-gen-gofast
+	protoc -I proto proto/pilosa.proto --go_out=plugins=grpc:proto
+
 # `go generate` all needed packages
 generate: generate-protoc generate-stringer generate-pql
 
