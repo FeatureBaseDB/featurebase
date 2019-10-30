@@ -84,6 +84,7 @@ type Command struct {
 	API          *pilosa.API
 	ln           net.Listener
 	listenURI    *pilosa.URI
+	tlsConfig    *tls.Config
 	closeTimeout time.Duration
 
 	serverOptions []pilosa.ServerOption
@@ -165,7 +166,7 @@ func (m *Command) Start() (err error) {
 
 	m.logger.Printf("listening as %s\n", m.listenURI)
 	go func() {
-		if err := m.grpcServer.Serve(); err != nil {
+		if err := m.grpcServer.Serve(m.tlsConfig); err != nil {
 			m.logger.Printf("grpc server error: %v", err)
 		}
 	}()
@@ -263,9 +264,8 @@ func (m *Command) SetupServer() error {
 	}
 
 	// Setup TLS
-	var TLSConfig *tls.Config
 	if uri.Scheme == "https" {
-		TLSConfig, err = GetTLSConfig(&m.Config.TLS, m.logger.Logger())
+		m.tlsConfig, err = GetTLSConfig(&m.Config.TLS, m.logger.Logger())
 		if err != nil {
 			return errors.Wrap(err, "get tls config")
 		}
@@ -281,7 +281,7 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "new stats client")
 	}
 
-	m.ln, err = getListener(*uri, TLSConfig)
+	m.ln, err = getListener(*uri, m.tlsConfig)
 	if err != nil {
 		return errors.Wrap(err, "getting listener")
 	}
@@ -294,7 +294,7 @@ func (m *Command) SetupServer() error {
 	// Save listenURI for later reference.
 	m.listenURI = uri
 
-	c := http.GetHTTPClient(TLSConfig)
+	c := http.GetHTTPClient(m.tlsConfig)
 
 	// Get advertise address as uri.
 	advertiseURI, err := pilosa.AddressWithDefaults(m.Config.Advertise)

@@ -16,10 +16,12 @@ package client
 
 import (
 	"context"
+	"crypto/tls"
 
 	pb "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 // GRPCClient is a client for working with the gRPC server.
@@ -28,9 +30,15 @@ type GRPCClient struct {
 }
 
 // NewGRPCClient returns a new instance of GRPCClient.
-func NewGRPCClient(dialTarget string) (*GRPCClient, error) {
+func NewGRPCClient(dialTarget string, tlsConfig *tls.Config) (*GRPCClient, error) {
 	var opts []grpc.DialOption
-	opts = append(opts, grpc.WithInsecure()) // TODO: consider implementing WithTransportCredentials()
+	if tlsConfig != nil {
+		creds := credentials.NewTLS(tlsConfig)
+		opts = append(opts, grpc.WithTransportCredentials(creds))
+	} else {
+		opts = append(opts, grpc.WithInsecure())
+	}
+
 	gconn, err := grpc.Dial(dialTarget, opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating new grpc client")
