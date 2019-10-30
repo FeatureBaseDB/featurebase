@@ -26,6 +26,7 @@ message ColumnResponse{
     bytes blobVal = 5;
     Uint64Array uint64ArrayVal = 6;
     StringArray stringArrayVal = 7;
+    double float64Val = 8;
   }
 }
 
