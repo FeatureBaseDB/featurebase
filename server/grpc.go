@@ -16,6 +16,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -25,6 +26,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 )
@@ -556,8 +558,9 @@ func makeItems(p pilosa.RowIdentifiers) *pb.IdsOrKeys {
 }
 
 type grpcServer struct {
-	api      *pilosa.API
-	hostPort string
+	api        *pilosa.API
+	grpcServer *grpc.Server
+	hostPort   string
 }
 
 type grpcServerOption func(s *grpcServer) error
@@ -577,7 +580,7 @@ func OptGRPCServerURI(uri *pilosa.URI) grpcServerOption {
 	}
 }
 
-func (s *grpcServer) Serve() error {
+func (s *grpcServer) Serve(tlsConfig *tls.Config) error {
 	// create listener
 	lis, err := net.Listen("tcp", s.hostPort)
 	if err != nil {
@@ -585,15 +588,24 @@ func (s *grpcServer) Serve() error {
 	}
 	log.Printf("enabled grpc listening on %s", s.hostPort)
 
+	opts := make([]grpc.ServerOption, 0)
+	if tlsConfig != nil {
+		creds := credentials.NewTLS(tlsConfig)
+		if err != nil {
+			log.Fatalf("loading tls: %s\n", err)
+		}
+		opts = append(opts, grpc.Creds(creds))
+	}
+
 	// create grpc server
-	srv := grpc.NewServer()
-	pb.RegisterPilosaServer(srv, grpcHandler{api: s.api})
+	s.grpcServer = grpc.NewServer(opts...)
+	pb.RegisterPilosaServer(s.grpcServer, grpcHandler{api: s.api})
 
 	// register the server so its services are available to grpc_cli and others
-	reflection.Register(srv)
+	reflection.Register(s.grpcServer)
 
 	// and start...
-	if err := srv.Serve(lis); err != nil {
+	if err := s.grpcServer.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
 	return nil
