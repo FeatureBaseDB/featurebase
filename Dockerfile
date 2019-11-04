@@ -1,8 +1,11 @@
 FROM golang:1.13.0 as builder
 
+ARG BUILD_FLAGS
+ARG MAKE_FLAGS
+
 COPY . pilosa
 
-RUN cd pilosa && CGO_ENABLED=0 make install FLAGS="-a"
+RUN cd pilosa && CGO_ENABLED=0 make install FLAGS="-a ${BUILD_FLAGS}" ${MAKE_FLAGS}
 
 FROM alpine:3.9.4
 
