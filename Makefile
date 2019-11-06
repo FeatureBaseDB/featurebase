@@ -141,7 +141,7 @@ docker-test:
 
 # Run golangci-lint
 golangci-lint: require-golangci-lint
-	golangci-lint run
+	golangci-lint run --skip-files '.*\.peg\.go'
 
 # Run gometalinter with custom flags
 gometalinter: require-gometalinter vendor
