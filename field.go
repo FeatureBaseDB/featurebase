@@ -625,12 +625,10 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		if opt.CacheType != "" {
 			f.options.CacheType = opt.CacheType
 		}
-		if opt.CacheSize != 0 {
-			if opt.CacheType == CacheTypeNone {
-				f.options.CacheSize = 0
-			} else {
-				f.options.CacheSize = opt.CacheSize
-			}
+		if opt.CacheType == CacheTypeNone {
+			f.options.CacheSize = 0
+		} else if opt.CacheSize != 0 {
+			f.options.CacheSize = opt.CacheSize
 		}
 		f.options.Min = 0
 		f.options.Max = 0
