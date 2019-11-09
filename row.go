@@ -326,6 +326,21 @@ func (r *Row) Columns() []uint64 {
 	return a
 }
 
+// Includes returns true if the row contains the given column.
+func (r *Row) Includes(col uint64) bool {
+	// TODO: improve the efficiency of this method by
+	// performing the column filter at the bitmap level
+	// rather than iterating through the results here.
+	for i := range r.segments {
+		for _, c := range r.segments[i].Columns() {
+			if c == col {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // rowSegment holds a subset of a row.
 // This could point to a mmapped roaring bitmap or an in-memory bitmap. The
 // width of the segment will always match the shard width.

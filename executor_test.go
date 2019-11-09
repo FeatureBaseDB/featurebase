@@ -4090,3 +4090,60 @@ func TestExecutor_Execute_Shift(t *testing.T) {
 		}
 	})
 }
+
+func TestExecutor_Execute_IncludesColumn(t *testing.T) {
+	t.Run("results", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+		hldr.SetBit("i", "general", 10, 1)
+		hldr.SetBit("i", "general", 10, ShardWidth)
+		hldr.SetBit("i", "general", 10, 2*ShardWidth)
+
+		for i, tt := range []struct {
+			col         uint64
+			expIncluded bool
+		}{
+			{1, true},
+			{2, false},
+			{ShardWidth, true},
+			{ShardWidth + 1, false},
+			{2 * ShardWidth, true},
+			{(2 * ShardWidth) + 1, false},
+		} {
+			t.Run(fmt.Sprint(i), func(t *testing.T) {
+				if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: fmt.Sprintf("IncludesColumn(Row(general=10), column=%d)", tt.col)}); err != nil {
+					t.Fatal(err)
+				} else if tt.expIncluded && !res.Results[0].(bool) {
+					t.Fatalf("expected to find column: %d", tt.col)
+				} else if !tt.expIncluded && res.Results[0].(bool) {
+					t.Fatalf("did not expect to find column: %d", tt.col)
+				}
+			})
+		}
+	})
+	t.Run("errors", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+		hldr.SetBit("i", "general", 10, 1)
+
+		t.Run("no column", func(t *testing.T) {
+			expErr := "IncludesColumn call must specify a column"
+			if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `IncludesColumn(Row(general=10))`}); err == nil {
+				t.Fatalf("expected to get an error")
+			} else if !strings.Contains(err.Error(), expErr) {
+				t.Fatalf("expected error: %s, but got: %s", expErr, err.Error())
+			}
+		})
+
+		t.Run("no row query", func(t *testing.T) {
+			expErr := "IncludesColumn call must specify a row query"
+			if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `IncludesColumn(column=1)`}); err == nil {
+				t.Fatalf("expected to get an error")
+			} else if !strings.Contains(err.Error(), expErr) {
+				t.Fatalf("expected error: %s, but got: %s", expErr, err.Error())
+			}
+		})
+	})
+}

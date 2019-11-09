@@ -341,6 +341,8 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return e.executeGroupBy(ctx, index, c, shards, opt)
 	case "Options":
 		return e.executeOptionsCall(ctx, index, c, shards, opt)
+	case "IncludesColumn":
+		return e.executeIncludesColumnCall(ctx, index, c, shards, opt)
 	default:
 		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
 		return e.executeBitmapCall(ctx, index, c, shards, opt)
@@ -409,6 +411,58 @@ func (e *executor) executeOptionsCall(ctx context.Context, index string, c *pql.
 		}
 	}
 	return e.executeCall(ctx, index, c.Children[0], shards, optCopy)
+}
+
+// executeIncludesColumnCall executes an IncludesColumn() call.
+func (e *executor) executeIncludesColumnCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (bool, error) {
+	// Get the shard containing the column, since that's the only
+	// shard that needs to execute this query.
+	var shard uint64
+	col, ok, err := c.UintArg("column")
+	if err != nil {
+		return false, errors.Wrap(err, "getting column from args")
+	} else if !ok {
+		return false, errors.New("IncludesColumn call must specify a column")
+	}
+	shard = col / ShardWidth
+
+	// If shard is not in shards, bail early.
+	if !uint64InSlice(shard, shards) {
+		return false, nil
+	}
+
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeIncludesColumnCallShard(ctx, index, c, shard, col)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		other, _ := prev.(bool)
+		return other || v.(bool)
+	}
+
+	result, err := e.mapReduce(ctx, index, []uint64{shard}, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return false, err
+	}
+	return result.(bool), nil
+}
+
+// executeIncludesColumnCallShard
+func (e *executor) executeIncludesColumnCallShard(ctx context.Context, index string, c *pql.Call, shard uint64, column uint64) (bool, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeIncludesColumnCallShard")
+	defer span.Finish()
+
+	if len(c.Children) == 1 {
+		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
+		if err != nil {
+			return false, errors.Wrap(err, "executing bitmap call")
+		}
+		return row.Includes(column), nil
+	}
+
+	return false, errors.New("IncludesColumn call must specify a row query")
 }
 
 // executeSum executes a Sum() call.
