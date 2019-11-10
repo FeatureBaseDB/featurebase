@@ -3243,6 +3243,22 @@ func TestFragmentPositionsForValue(t *testing.T) {
 	}
 }
 
+func TestIntLTRegression(t *testing.T) {
+	f := mustOpenFragment("i", "f", "v", 0, CacheTypeNone)
+	defer f.Clean(t)
+
+	f.setValue(1, 6, 33)
+
+	row, err := f.rangeOp(pql.LT, 6, 33)
+	if err != nil {
+		t.Fatalf("doing range of: %v", err)
+	}
+
+	if !row.IsEmpty() {
+		t.Errorf("expected nothing, but got: %v", row.Columns())
+	}
+}
+
 func TestImportClearRestart(t *testing.T) {
 	tests := []struct {
 		rows []uint64
