@@ -1,0 +1,3 @@
+run:
+  skip-files:
+    - pql/pql.peg.go

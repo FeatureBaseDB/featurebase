@@ -95,7 +95,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 			rowResp := &pb.RowResponse{
 				Headers: ci,
 				Columns: []*pb.ColumnResponse{
-					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{col}},
+					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: col}},
 				},
 			}
 			ci = nil // only include headers with the first row
@@ -121,10 +121,10 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 
 					if len(ids.Keys) > 0 {
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringArrayVal{&pb.StringArray{Vals: ids.Keys}}})
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringArrayVal{StringArrayVal: &pb.StringArray{Vals: ids.Keys}}})
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64ArrayVal{&pb.Uint64Array{Vals: ids.Rows}}})
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64ArrayVal{Uint64ArrayVal: &pb.Uint64Array{Vals: ids.Rows}}})
 					}
 
 				case "mutex":
@@ -145,10 +145,10 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 
 					if len(ids.Keys) == 1 {
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{ids.Keys[0]}})
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: ids.Keys[0]}})
 					} else if len(ids.Rows) == 1 {
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{ids.Rows[0]}})
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: ids.Rows[0]}})
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
@@ -160,7 +160,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						return errors.Wrap(err, "getting int field value for column")
 					} else if exists {
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{value}})
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: value}})
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
@@ -171,7 +171,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						return errors.Wrap(err, "getting decimal field value for column")
 					} else if exists {
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Float64Val{value}})
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Float64Val{Float64Val: value}})
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
@@ -198,7 +198,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 							bval = true
 						}
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BoolVal{bval}})
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BoolVal{BoolVal: bval}})
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
@@ -223,7 +223,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 			rowResp := &pb.RowResponse{
 				Headers: ci,
 				Columns: []*pb.ColumnResponse{
-					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{col}},
+					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: col}},
 				},
 			}
 			ci = nil // only include headers with the first row
@@ -249,10 +249,10 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 
 					if len(ids.Keys) > 0 {
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringArrayVal{&pb.StringArray{Vals: ids.Keys}}})
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringArrayVal{StringArrayVal: &pb.StringArray{Vals: ids.Keys}}})
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64ArrayVal{&pb.Uint64Array{Vals: ids.Rows}}})
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64ArrayVal{Uint64ArrayVal: &pb.Uint64Array{Vals: ids.Rows}}})
 					}
 
 				case "mutex":
@@ -273,10 +273,10 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 
 					if len(ids.Keys) == 1 {
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{ids.Keys[0]}})
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: ids.Keys[0]}})
 					} else if len(ids.Rows) == 1 {
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{ids.Rows[0]}})
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: ids.Rows[0]}})
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
@@ -294,7 +294,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						return errors.Wrap(err, "getting int field value for column")
 					} else if exists {
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{value}})
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: value}})
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
@@ -311,7 +311,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						return errors.Wrap(err, "getting decimal field value for column")
 					} else if exists {
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Float64Val{value}})
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Float64Val{Float64Val: value}})
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
@@ -339,7 +339,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 							bval = true
 						}
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BoolVal{bval}})
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BoolVal{BoolVal: bval}})
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
@@ -362,7 +362,11 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 	results := make(chan *pb.RowResponse)
 	go func() {
+		var breakLoop bool // Support the "break" inside the switch.
 		for _, result := range resp.Results {
+			if breakLoop {
+				break
+			}
 			switch r := result.(type) {
 			case *pilosa.Row:
 				if len(r.Keys) > 0 {
@@ -374,7 +378,7 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 						results <- &pb.RowResponse{
 							Headers: ci,
 							Columns: []*pb.ColumnResponse{
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{x}},
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: x}},
 							}}
 						ci = nil //only send on the first
 					}
@@ -387,7 +391,7 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 						results <- &pb.RowResponse{
 							Headers: ci,
 							Columns: []*pb.ColumnResponse{
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{x}},
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: x}},
 							}}
 						ci = nil //only send on the first
 					}
@@ -421,8 +425,8 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 							{Name: "count", Datatype: "uint64"},
 						},
 						Columns: []*pb.ColumnResponse{
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{r.Key}},
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{r.Count}},
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: r.Key}},
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: r.Count}},
 						},
 					}
 				} else {
@@ -432,8 +436,8 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 							{Name: "count", Datatype: "uint64"},
 						},
 						Columns: []*pb.ColumnResponse{
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{r.ID}},
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{r.Count}},
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: r.ID}},
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: r.Count}},
 						},
 					}
 				}
@@ -459,16 +463,16 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 						results <- &pb.RowResponse{
 							Headers: ci,
 							Columns: []*pb.ColumnResponse{
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{pair.Key}},
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{uint64(pair.Count)}},
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: pair.Key}},
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(pair.Count)}},
 							},
 						}
 					} else {
 						results <- &pb.RowResponse{
 							Headers: ci,
 							Columns: []*pb.ColumnResponse{
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{uint64(pair.ID)}},
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{uint64(pair.Count)}},
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(pair.ID)}},
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(pair.Count)}},
 							},
 						}
 					}
@@ -494,12 +498,12 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 
 					for _, fieldRow := range gc.Group {
 						if fieldRow.RowKey != "" {
-							rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{fieldRow.RowKey}})
+							rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: fieldRow.RowKey}})
 						} else {
-							rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{uint64(fieldRow.RowID)}})
+							rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(fieldRow.RowID)}})
 						}
 					}
-					rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{uint64(gc.Count)}})
+					rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(gc.Count)}})
 					results <- rowResp
 				}
 			case pilosa.RowIdentifiers:
@@ -509,7 +513,7 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 						results <- &pb.RowResponse{
 							Headers: ci,
 							Columns: []*pb.ColumnResponse{
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{key}},
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: key}},
 							}}
 						ci = nil
 					}
@@ -519,7 +523,7 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 						results <- &pb.RowResponse{
 							Headers: ci,
 							Columns: []*pb.ColumnResponse{
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{uint64(id)}},
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(id)}},
 							}}
 						ci = nil
 					}
@@ -529,32 +533,16 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 				results <- &pb.RowResponse{
 					Headers: ci,
 					Columns: []*pb.ColumnResponse{
-						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{uint64(r)}},
+						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(r)}},
 					}}
 			default:
 				log.Printf("unhandled %T\n", r)
-				break
+				breakLoop = true
 			}
 		}
 		close(results)
 	}()
 	return results
-}
-
-func makeItems(p pilosa.RowIdentifiers) *pb.IdsOrKeys {
-	if len(p.Keys) == 0 {
-		//use Rows
-		results := make([]uint64, len(p.Rows))
-		for i, id := range p.Rows {
-			results[i] = id
-		}
-		return &pb.IdsOrKeys{Type: &pb.IdsOrKeys_Ids{Ids: &pb.Uint64Array{Vals: results}}}
-	}
-	results := make([]string, len(p.Keys))
-	for i, key := range p.Keys {
-		results[i] = key
-	}
-	return &pb.IdsOrKeys{Type: &pb.IdsOrKeys_Keys{Keys: &pb.StringArray{Vals: results}}}
 }
 
 type grpcServer struct {
