@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -1929,8 +1930,9 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 
 		return frag.notNull()
 
-	} else if cond.Op == pql.BETWEEN {
-		predicates, err := cond.IntSliceValue()
+	} else if cond.Op == pql.BETWEEN || cond.Op == pql.BTWN_LT_LT ||
+		cond.Op == pql.BTWN_LTE_LT || cond.Op == pql.BTWN_LT_LTE {
+		predicates, err := getCondIntSlice(f, cond)
 		if err != nil {
 			return nil, errors.Wrap(err, "getting condition value")
 		}
@@ -1970,11 +1972,17 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 		return frag.rangeBetween(bsig.BitDepth, baseValueMin, baseValueMax)
 
 	} else {
-
-		// Only support integers for now.
 		value, ok := cond.Value.(int64)
 		if !ok {
-			return nil, errors.New("Row(): conditions only support integer values")
+			if floatVal, ok := cond.Value.(float64); ok {
+				if f.Options().Type != FieldTypeDecimal {
+					return nil, errors.Errorf("Float value '%f' given in query to non-decimal field", floatVal)
+				}
+				scale := f.Options().Scale
+				value = int64(floatVal * math.Pow10(int(scale)))
+			} else {
+				return nil, errors.New("Row(): conditions only support integer values (or floats for decimal fields)")
+			}
 		}
 
 		// Find bsiGroup.
@@ -3745,4 +3753,48 @@ func (gbi *groupByIterator) Next() (ret GroupCount, done bool) {
 	gbi.nextAtIdx(len(gbi.rows) - 1)
 
 	return ret, false
+}
+
+// getCondIntSlice looks at the field, the cond op type (which is
+// expected to be one of the BETWEEN ops types), and the values in the
+// conditional and returns a slice of int64 which is scaled for
+// decimal fields and has the values modulated such that the BETWEEN
+// op can be treated as being of the form a<=x<=b.
+func getCondIntSlice(f *Field, cond *pql.Condition) ([]int64, error) {
+	val, ok := cond.Value.([]interface{})
+	if !ok {
+		return nil, errors.Errorf("expected conditional to have []interface{} Value, but got %v of %[1]T", cond.Value)
+	}
+
+	ret := make([]int64, len(val))
+	for i, v := range val {
+		switch tv := v.(type) {
+		case int64:
+			ret[i] = tv
+		case uint64:
+			ret[i] = int64(tv)
+		case float64:
+			if f.Options().Type != FieldTypeDecimal {
+				return nil, errors.Errorf("got a float value '%f' in a query to an integer field", tv)
+			}
+			scale := f.Options().Scale
+			iv := int64(tv * math.Pow10(int(scale)))
+			ret[i] = iv
+		default:
+			return nil, errors.Errorf("unexpected value type %T, val %v", tv, tv)
+		}
+	}
+
+	switch cond.Op {
+	case pql.BTWN_LT_LTE: // a < x <= b
+		ret[0]++
+	case pql.BTWN_LTE_LT: // a < x <= b
+		ret[1]--
+	case pql.BTWN_LT_LT: // a < x < b
+		ret[0]++
+		ret[1]--
+	}
+
+	return ret, nil
+
 }

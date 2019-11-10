@@ -533,8 +533,8 @@ func TestPQLDeepEquality(t *testing.T) {
 				Name: "Row",
 				Args: map[string]interface{}{
 					"a": &Condition{
-						Op:    BETWEEN,
-						Value: []interface{}{int64(4), int64(8)},
+						Op:    BTWN_LTE_LT,
+						Value: []interface{}{int64(4), int64(9)},
 					},
 				},
 			}},
@@ -545,8 +545,8 @@ func TestPQLDeepEquality(t *testing.T) {
 				Name: "Row",
 				Args: map[string]interface{}{
 					"a": &Condition{
-						Op:    BETWEEN,
-						Value: []interface{}{int64(5), int64(8)},
+						Op:    BTWN_LT_LT,
+						Value: []interface{}{int64(4), int64(9)},
 					},
 				},
 			}},
@@ -569,8 +569,8 @@ func TestPQLDeepEquality(t *testing.T) {
 				Name: "Row",
 				Args: map[string]interface{}{
 					"a": &Condition{
-						Op:    BETWEEN,
-						Value: []interface{}{int64(5), int64(9)},
+						Op:    BTWN_LT_LTE,
+						Value: []interface{}{int64(4), int64(9)},
 					},
 				},
 			}},
@@ -672,8 +672,8 @@ func TestPQLDeepEquality(t *testing.T) {
 						Name: "Row",
 						Args: map[string]interface{}{
 							"a": &Condition{
-								Op:    BETWEEN,
-								Value: []interface{}{int64(5), int64(8)},
+								Op:    BTWN_LT_LT,
+								Value: []interface{}{int64(4), int64(9)},
 							},
 						},
 					},

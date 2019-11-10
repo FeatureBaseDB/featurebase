@@ -42,7 +42,7 @@ func TestServerConfig(t *testing.T) {
 	tests := []commandTest{
 		// TEST 0
 		{
-			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "localhost:42454,localhost:10110", "--bind", "localhost:42454", "--bind-grpc", "localhost:20111", "--translation.map-size", "100000"},
+			args: []string{"server", "--data-dir", actualDataDir, "--cluster.hosts", "localhost:42454,localhost:10110", "--bind", "localhost:42454", "--bind-grpc", "localhost:30112", "--translation.map-size", "100000"},
 			env: map[string]string{
 				"PILOSA_DATA_DIR":                "/tmp/myEnvDatadir",
 				"PILOSA_CLUSTER_LONG_QUERY_TIME": "1m30s",
