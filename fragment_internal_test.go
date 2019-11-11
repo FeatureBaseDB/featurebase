@@ -3247,7 +3247,10 @@ func TestIntLTRegression(t *testing.T) {
 	f := mustOpenFragment("i", "f", "v", 0, CacheTypeNone)
 	defer f.Clean(t)
 
-	f.setValue(1, 6, 33)
+	_, err := f.setValue(1, 6, 33)
+	if err != nil {
+		t.Fatalf("setting value: %v", err)
+	}
 
 	row, err := f.rangeOp(pql.LT, 6, 33)
 	if err != nil {
