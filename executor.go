@@ -1972,17 +1972,9 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 		return frag.rangeBetween(bsig.BitDepth, baseValueMin, baseValueMax)
 
 	} else {
-		value, ok := cond.Value.(int64)
-		if !ok {
-			if floatVal, ok := cond.Value.(float64); ok {
-				if f.Options().Type != FieldTypeDecimal {
-					return nil, errors.Errorf("Float value '%f' given in query to non-decimal field", floatVal)
-				}
-				scale := f.Options().Scale
-				value = int64(floatVal * math.Pow10(int(scale)))
-			} else {
-				return nil, errors.New("Row(): conditions only support integer values (or floats for decimal fields)")
-			}
+		value, err := getScaledInt(f, cond.Value)
+		if err != nil {
+			return nil, errors.Wrap(err, "getting scaled integer")
 		}
 
 		// Find bsiGroup.
@@ -3768,21 +3760,11 @@ func getCondIntSlice(f *Field, cond *pql.Condition) ([]int64, error) {
 
 	ret := make([]int64, len(val))
 	for i, v := range val {
-		switch tv := v.(type) {
-		case int64:
-			ret[i] = tv
-		case uint64:
-			ret[i] = int64(tv)
-		case float64:
-			if f.Options().Type != FieldTypeDecimal {
-				return nil, errors.Errorf("got a float value '%f' in a query to an integer field", tv)
-			}
-			scale := f.Options().Scale
-			iv := int64(tv * math.Pow10(int(scale)))
-			ret[i] = iv
-		default:
-			return nil, errors.Errorf("unexpected value type %T, val %v", tv, tv)
+		s, err := getScaledInt(f, v)
+		if err != nil {
+			return nil, errors.Wrap(err, "getting scaled integer")
 		}
+		ret[i] = s
 	}
 
 	switch cond.Op {
@@ -3796,5 +3778,33 @@ func getCondIntSlice(f *Field, cond *pql.Condition) ([]int64, error) {
 	}
 
 	return ret, nil
+}
 
+// getScaledInt gets the scaled integer value for v based on
+// the field type.
+func getScaledInt(f *Field, v interface{}) (int64, error) {
+	var value int64
+	if f.Options().Type == FieldTypeDecimal {
+		scale := f.Options().Scale
+		switch tv := v.(type) {
+		case int64:
+			value = int64(float64(tv) * math.Pow10(int(scale)))
+		case uint64:
+			value = int64(float64(tv) * math.Pow10(int(scale)))
+		case float64:
+			value = int64(tv * math.Pow10(int(scale)))
+		default:
+			return 0, errors.Errorf("unexpected decimal value type %T, val %v", tv, tv)
+		}
+	} else {
+		switch tv := v.(type) {
+		case int64:
+			value = tv
+		case uint64:
+			value = int64(tv)
+		default:
+			return 0, errors.Errorf("unexpected value type %T, val %v", tv, tv)
+		}
+	}
+	return value, nil
 }
