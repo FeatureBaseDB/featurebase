@@ -113,19 +113,19 @@ func TestGRPC(t *testing.T) {
 			// []GroupCount (uint64)
 			{
 				[]pilosa.GroupCount{
-					{
-						[]pilosa.FieldRow{
+					pilosa.GroupCount{
+						Group: []pilosa.FieldRow{
 							{Field: "a", RowID: 10},
 							{Field: "b", RowID: 11},
 						},
-						123,
+						Count: 123,
 					},
-					{
-						[]pilosa.FieldRow{
+					pilosa.GroupCount{
+						Group: []pilosa.FieldRow{
 							{Field: "a", RowID: 10},
 							{Field: "b", RowID: 12},
 						},
-						456,
+						Count: 456,
 					},
 				},
 				[]expHeader{
@@ -141,19 +141,19 @@ func TestGRPC(t *testing.T) {
 			// []GroupCount (string)
 			{
 				[]pilosa.GroupCount{
-					{
-						[]pilosa.FieldRow{
+					pilosa.GroupCount{
+						Group: []pilosa.FieldRow{
 							{Field: "a", RowKey: "ten"},
 							{Field: "b", RowKey: "eleven"},
 						},
-						123,
+						Count: 123,
 					},
 					{
-						[]pilosa.FieldRow{
+						Group: []pilosa.FieldRow{
 							{Field: "a", RowKey: "ten"},
 							{Field: "b", RowKey: "twelve"},
 						},
-						456,
+						Count: 456,
 					},
 				},
 				[]expHeader{

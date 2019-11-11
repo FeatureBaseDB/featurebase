@@ -336,7 +336,7 @@ func (cmd *ImportCommand) bufferValues(ctx context.Context, useColumnKeys, parse
 			req.ColumnKeys = append(req.ColumnKeys, record[0])
 		} else if columnID, err := strconv.ParseUint(record[0], 10, 64); err == nil {
 			req.ColumnIDs = append(req.ColumnIDs, columnID)
-		} else if err != nil {
+		} else {
 			return fmt.Errorf("invalid column id on row %d: %q", rnum, record[0])
 		}
 
