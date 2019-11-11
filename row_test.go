@@ -123,5 +123,18 @@ func TestRow_IsEmpty(t *testing.T) {
 	if !res.IsEmpty() {
 		t.Fatal("Result Should Be Empty\n")
 	}
+}
 
+func TestRow_Includes(t *testing.T) {
+	row := pilosa.NewRow(0, 2*ShardWidth)
+
+	if !row.Includes(0) {
+		t.Fatal("row should include 0")
+	}
+	if row.Includes(1) {
+		t.Fatal("row should not include 1")
+	}
+	if !row.Includes(2 * ShardWidth) {
+		t.Fatalf("row should include %d", 2*ShardWidth)
+	}
 }
