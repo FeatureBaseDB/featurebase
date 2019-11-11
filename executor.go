@@ -3788,7 +3788,7 @@ func getCondIntSlice(f *Field, cond *pql.Condition) ([]int64, error) {
 	switch cond.Op {
 	case pql.BTWN_LT_LTE: // a < x <= b
 		ret[0]++
-	case pql.BTWN_LTE_LT: // a < x <= b
+	case pql.BTWN_LTE_LT: // a <= x < b
 		ret[1]--
 	case pql.BTWN_LT_LT: // a < x < b
 		ret[0]++
