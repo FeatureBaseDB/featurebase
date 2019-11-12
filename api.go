@@ -387,7 +387,7 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 
 	// only set and time fields are supported
 	if field.Type() != FieldTypeSet && field.Type() != FieldTypeTime {
-		return NewBadRequestError(errors.New("roaring import is only supported for set and time fields"))
+		return NewBadRequestError(errors.Errorf("roaring import is only supported for set and time fields, not '%s' fields.", field.Type()))
 	}
 
 	errCh := make(chan error, len(nodes))
