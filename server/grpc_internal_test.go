@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/logger"
 )
 
 func TestGRPC(t *testing.T) {
@@ -206,6 +207,7 @@ func TestGRPC(t *testing.T) {
 			},
 		}
 
+		logger := logger.NopLogger
 		for ti, test := range tests {
 			results := make([]interface{}, 0)
 			results = append(results, test.result)
@@ -213,7 +215,7 @@ func TestGRPC(t *testing.T) {
 			qr := pilosa.QueryResponse{}
 			qr.Results = results
 
-			ch := makeRows(qr)
+			ch := makeRows(qr, logger)
 
 			cnt := 0
 			for row := range ch {
