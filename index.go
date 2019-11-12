@@ -58,7 +58,7 @@ type Index struct {
 	Stats       stats.StatsClient
 
 	logger        logger.Logger
-	snapshotQueue chan *fragment
+	snapshotQueue snapshotQueue
 
 	// Used for notifying holder when a field is added.
 	holder *Holder
@@ -462,7 +462,9 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	f.Stats = i.Stats
 	f.broadcaster = i.broadcaster
 	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
-	f.snapshotQueue = i.snapshotQueue
+	if i.snapshotQueue != nil {
+		f.snapshotQueue = i.snapshotQueue
+	}
 	f.OpenTranslateStore = i.OpenTranslateStore
 	return f, nil
 }

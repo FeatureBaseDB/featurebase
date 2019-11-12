@@ -21,6 +21,7 @@ import (
 	"hash/fnv"
 	"io"
 	"math/bits"
+	"reflect"
 	"sort"
 	"unsafe"
 
@@ -76,6 +77,46 @@ var containerTypeNames = map[byte]string{
 }
 
 var fullContainer = NewContainerRun([]interval16{{start: 0, last: maxContainerVal}}).Freeze()
+
+// AdvisoryError is used for the special case where we probably want to *report*
+// an error reading a file, but don't want to actually count the file as not
+// being read. For instance, a partial ops-log entry is *probably* harmless;
+// we probably crashed while writing (?) and as such didn't report the write
+// as successful. We hope.
+type AdvisoryError interface {
+	error
+	AdvisoryOnly()
+}
+
+type advisoryError struct {
+	e error
+}
+
+func (a advisoryError) Error() string {
+	return a.e.Error()
+}
+
+// This marks the error as safe to ignore.
+func (a advisoryError) AdvisoryOnly() {
+}
+
+type FileShouldBeTruncatedError interface {
+	AdvisoryError
+	SuggestedLength() int64
+}
+
+type fileShouldBeTruncatedError struct {
+	advisoryError
+	offset int64
+}
+
+func (f *fileShouldBeTruncatedError) SuggestedLength() int64 {
+	return f.offset
+}
+
+func newFileShouldBeTruncatedError(err error, offset int64) *fileShouldBeTruncatedError {
+	return &fileShouldBeTruncatedError{advisoryError: advisoryError{e: err}, offset: offset}
+}
 
 type Containers interface {
 	// Get returns nil if the key does not exist.
@@ -144,6 +185,7 @@ type ContainerIterator interface {
 // Bitmap represents a roaring bitmap.
 type Bitmap struct {
 	Containers Containers
+	Source     Source
 
 	// User-defined flags.
 	Flags byte
@@ -218,6 +260,7 @@ func (b *Bitmap) Freeze() *Bitmap {
 	// Create a copy of the bitmap structure.
 	other := &Bitmap{
 		Containers: b.Containers.Freeze(),
+		Source:     b.Source,
 	}
 
 	return other
@@ -391,6 +434,13 @@ func (b *Bitmap) Min() (uint64, bool) {
 	return v, !eof
 }
 
+// MinAt returns the lowest value in the bitmap at least equal to its argument.
+// Second return value is true if containers exist in the bitmap.
+func (b *Bitmap) MinAt(start uint64) (uint64, bool) {
+	v, eof := b.IteratorAt(start).Next()
+	return v, !eof
+}
+
 // Max returns the highest value in the bitmap.
 // Returns zero if the bitmap is empty.
 func (b *Bitmap) Max() uint64 {
@@ -549,12 +599,20 @@ func (b *Bitmap) OffsetRange(offset, start, end uint64) *Bitmap {
 	hi0, hi1 := highbits(start), highbits(end)
 	citer, _ := b.Containers.Iterator(hi0)
 	other := NewSliceBitmap()
+	mappedAny := false
 	for citer.Next() {
 		k, c := citer.Value()
 		if k >= hi1 {
 			break
 		}
+		if c.Mapped() {
+			mappedAny = true
+		}
 		other.Containers.Put(off+(k-hi0), c.Freeze())
+	}
+	// if b.Source != nil && mappedAny {
+	if b.Source != nil && (generationDebug || mappedAny) {
+		other.Source = b.Source
 	}
 	return other
 }
@@ -594,6 +652,7 @@ func (b *Bitmap) IntersectionCount(other *Bitmap) uint64 {
 // Intersect returns the intersection of b and other.
 func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 	output := NewBitmap()
+	usedB, usedOther := false, false
 	iiter, _ := b.Containers.Iterator(0)
 	jiter, _ := other.Containers.Iterator(0)
 	i, j := iiter.Next(), jiter.Next()
@@ -607,11 +666,26 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 			j = jiter.Next()
 			kj, cj = jiter.Value()
 		} else { // ki == kj
-			output.Containers.Put(ki, intersect(ci, cj))
+			newC := intersect(ci, cj)
+			if newC == ci {
+				usedB = true
+			}
+			if newC == cj {
+				usedOther = true
+			}
+			output.Containers.Put(ki, newC)
 			i, j = iiter.Next(), jiter.Next()
 			ki, ci = iiter.Value()
 			kj, cj = jiter.Value()
 		}
+	}
+	switch {
+	case usedB && usedOther:
+		output.Source = MergeSources(b.Source, other.Source)
+	case usedB:
+		output.Source = b.Source
+	case usedOther:
+		output.Source = other.Source
 	}
 	return output
 }
@@ -640,24 +714,42 @@ func (b *Bitmap) UnionInPlace(others ...*Bitmap) {
 func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
 	iiter, _ := b.Containers.Iterator(0)
 	jiter, _ := other.Containers.Iterator(0)
+	usedB, usedOther := false, false
 	i, j := iiter.Next(), jiter.Next()
 	ki, ci := iiter.Value()
 	kj, cj := jiter.Value()
 	for i || j {
 		if i && (!j || ki < kj) {
 			target.Containers.Put(ki, ci.Freeze())
+			usedB = true
 			i = iiter.Next()
 			ki, ci = iiter.Value()
 		} else if j && (!i || ki > kj) {
 			target.Containers.Put(kj, cj.Freeze())
+			usedOther = true
 			j = jiter.Next()
 			kj, cj = jiter.Value()
 		} else { // ki == kj
-			target.Containers.Put(ki, union(ci, cj))
+			newC := union(ci, cj)
+			target.Containers.Put(ki, newC)
+			if newC == ci {
+				usedB = true
+			}
+			if newC == cj {
+				usedOther = true
+			}
 			i, j = iiter.Next(), jiter.Next()
 			ki, ci = iiter.Value()
 			kj, cj = jiter.Value()
 		}
+	}
+	switch {
+	case usedB && usedOther:
+		target.Source = MergeSources(b.Source, other.Source)
+	case usedB:
+		target.Source = b.Source
+	case usedOther:
+		target.Source = other.Source
 	}
 }
 
@@ -752,7 +844,14 @@ func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 		bitmapIters = make(handledIters, 0, requiredSliceSize)
 	}
 
+	var sources []Source
+	if b.Source != nil {
+		sources = append(sources, b.Source)
+	}
 	for _, other := range others {
+		if other.Source != nil {
+			sources = append(sources, other.Source)
+		}
 		otherIter, _ := other.Containers.Iterator(0)
 		if otherIter.Next() {
 			bitmapIters = append(bitmapIters, handledIter{
@@ -762,6 +861,8 @@ func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 			})
 		}
 	}
+	// new bitmap might have containers from any of those bitmaps in it
+	b.Source = MergeSources(sources...)
 
 	// Loop until we've exhausted every iter.
 	hasNext := true
@@ -890,6 +991,7 @@ func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 // Difference returns the difference of b and other.
 func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 	output := NewBitmap()
+	output.Source = b.Source
 
 	iiter, _ := b.Containers.Iterator(0)
 	jiter, _ := other.Containers.Iterator(0)
@@ -917,6 +1019,9 @@ func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
 // Xor returns the bitwise exclusive or of b and other.
 func (b *Bitmap) Xor(other *Bitmap) *Bitmap {
 	output := NewBitmap()
+	// Xor can end up with containers from either parent if the other
+	// had no container or an empty container.
+	output.Source = MergeSources(b.Source, other.Source)
 
 	iiter, _ := b.Containers.Iterator(0)
 	jiter, _ := other.Containers.Iterator(0)
@@ -1433,7 +1538,11 @@ func (b *Bitmap) RemapRoaringStorage(data []byte) (mappedAny bool, returnErr err
 	var itrPointer *uint16
 	var itrErr error
 
-	if data != nil {
+	// If we got no data, we don't want to do the actual mapping, just
+	// the unmapping. If preferMapping is false, we also don't want to
+	// map to the data. We still need to do the UpdateEvery loop, we
+	// just won't have an iterator for it.
+	if data != nil && b.preferMapping {
 		itr, err = newRoaringIterator(data)
 	}
 	// don't return early: we still have to do the unmapping
@@ -1617,6 +1726,12 @@ func (b *Bitmap) Iterator() *Iterator {
 	return itr
 }
 
+func (b *Bitmap) IteratorAt(start uint64) *Iterator {
+	itr := &Iterator{bitmap: b}
+	itr.Seek(start)
+	return itr
+}
+
 // Ops returns the number of write ops the bitmap is aware of in its ops
 // log, and their total bit count.
 func (b *Bitmap) Ops() (ops int, opN int) {
@@ -1627,6 +1742,167 @@ func (b *Bitmap) Ops() (ops int, opN int) {
 // we've changed an underlying file, without actually refreshing the bitmap.
 func (b *Bitmap) SetOps(ops int, opN int) {
 	b.ops, b.opN = ops, opN
+}
+
+// RoaringToBitmaps yields a series of bitmaps with specified shard
+// keys, based on a single roaring file, with splits at multiples of
+// shardWidth, which should be a multiple of container size.
+func RoaringToBitmaps(data []byte, shardWidth uint64) ([]*Bitmap, []uint64) {
+	if data == nil {
+		return nil, nil
+	}
+	var itr roaringIterator
+	var itrKey uint64
+	var itrCType byte
+	var itrN int
+	var itrLen int
+	var itrPointer *uint16
+	var itrErr error
+	currentShard := ^uint64(0)
+	var currentBitmap *Bitmap
+	var bitmaps []*Bitmap
+	var shards []uint64
+	keysPerShard := shardWidth >> 16
+
+	itr, err := newRoaringIterator(data)
+	if err != nil || itr == nil {
+		return nil, nil
+	}
+
+	itrKey, itrCType, itrN, itrLen, itrPointer, itrErr = itr.Next()
+	for itrErr == nil {
+		newC := &Container{
+			typeID:  itrCType,
+			n:       int32(itrN),
+			len:     int32(itrLen),
+			cap:     int32(itrLen),
+			pointer: itrPointer,
+			flags:   flagMapped,
+		}
+		shard := itrKey / keysPerShard
+		if shard != currentShard {
+			if currentBitmap != nil {
+				bitmaps = append(bitmaps, currentBitmap)
+				shards = append(shards, currentShard)
+			}
+			currentBitmap = NewFileBitmap()
+			currentShard = shard
+		}
+		currentBitmap.Containers.Put(itrKey, newC)
+		itrKey, itrCType, itrN, itrLen, itrPointer, itrErr = itr.Next()
+	}
+	if currentBitmap != nil {
+		bitmaps = append(bitmaps, currentBitmap)
+		shards = append(shards, currentShard)
+	}
+	// we don't support ops logs for this
+	return bitmaps, shards
+}
+
+// BitmapsToRoaring renders a series of non-overlapping bitmaps as a
+// unified roaring file.
+func BitmapsToRoaring(bitmaps []*Bitmap) []byte {
+	count := int64(0)
+	size := int64(0)
+	for i, bm := range bitmaps {
+		c, s := bm.roaringSize()
+		// skip this bitmap during the next pass, since it's empty
+		if c == 0 {
+			bitmaps[i] = nil
+			continue
+		}
+		count += c
+		size += s
+	}
+	if count == 0 {
+		return nil
+	}
+	// we have count headers, which need 12 bytes, plus a magic number,
+	// plus offsets (4 bytes per container), plus size bytes of data to
+	// write.
+	out := make([]byte, headerBaseSize+(12*count)+(4*count)+size)
+	binary.LittleEndian.PutUint16(out[0:2], uint16(MagicNumber))
+	out[3] = byte(storageVersion)
+	binary.LittleEndian.PutUint32(out[4:8], uint32(count))
+	headerEnd := 8 + (12 * count)
+	offsetEnd := headerEnd + (4 * count)
+	headers := out[8:headerEnd]
+	offsets := out[headerEnd:offsetEnd]
+	data := out[offsetEnd:]
+	headerOffset := 0
+	offsetOffset := 0
+	dataOffset := 0
+	prevKey := uint64(0)
+	for _, bm := range bitmaps {
+		if bm == nil {
+			continue
+		}
+		citer, _ := bm.Containers.Iterator(0)
+		for citer.Next() {
+			k, c := citer.Value()
+			n := c.N()
+			if n == 0 {
+				continue
+			}
+			if roaringParanoia {
+				if k < prevKey {
+					panic("unsorted keys in multiple-bitmap roaring conversion")
+				}
+			}
+			// place header at header offset, and data at data
+			// offset
+			header := headers[headerOffset : headerOffset+12]
+			offset := offsets[offsetOffset : offsetOffset+4]
+			headerOffset += 12
+			offsetOffset += 4
+			binary.LittleEndian.PutUint64(header[0:8], k)
+			binary.LittleEndian.PutUint16(header[8:10], uint16(c.typeID))
+			binary.LittleEndian.PutUint16(header[10:12], uint16(n-1))
+			binary.LittleEndian.PutUint32(offset[0:4], uint32(dataOffset+int(offsetEnd)))
+			nextData := data[dataOffset:]
+			switch c.typeID {
+			case containerArray:
+				asUint16 := *(*[]uint16)(unsafe.Pointer(&reflect.SliceHeader{Data: uintptr(unsafe.Pointer(&nextData[0])), Len: int(c.len), Cap: int(c.len)}))
+				copy(asUint16, c.array())
+				dataOffset += 2 * int(c.len)
+			case containerBitmap:
+				asUint64 := *(*[]uint64)(unsafe.Pointer(&reflect.SliceHeader{Data: uintptr(unsafe.Pointer(&nextData[0])), Len: 1024, Cap: 1024}))
+				copy(asUint64, c.bitmap())
+				dataOffset += 8192
+			case containerRun:
+				asInterval16 := *(*[]interval16)(unsafe.Pointer(&reflect.SliceHeader{Data: uintptr(unsafe.Pointer(&nextData[2])), Len: int(c.len), Cap: int(c.len)}))
+				copy(asInterval16, c.runs())
+				binary.LittleEndian.PutUint16(nextData[0:2], uint16(c.len))
+				dataOffset += int(4*c.len) + 2
+			}
+		}
+	}
+	return out
+}
+
+// roaringSize yields the count of non-empty containers, and the size
+// of the storage *only* -- not the headers.
+func (b *Bitmap) roaringSize() (int64, int64) {
+	count := int64(0)
+	size := int64(0)
+	citer, _ := b.Containers.Iterator(0)
+	for citer.Next() {
+		_, c := citer.Value()
+		if c.N() == 0 {
+			continue
+		}
+		count++
+		switch c.typeID {
+		case containerArray:
+			size += 2 * int64(c.N())
+		case containerBitmap:
+			size += 8192
+		case containerRun:
+			// 2 bytes for the count of runs, plus 4 bytes per run
+			size += 2 + (4 * int64(c.len))
+		}
+	}
+	return count, size
 }
 
 // Info returns stats for the bitmap.
@@ -3271,9 +3547,9 @@ func intersectRunRun(a, b *Container) *Container {
 	output.setN(n)
 	runs := output.runs()
 	if n < ArrayMaxSize && int32(len(runs)) > n/2 {
-		output.runToArray()
+		output = output.runToArray()
 	} else if len(runs) > runMaxSize {
-		output.runToBitmap()
+		output = output.runToBitmap()
 	}
 	return output
 }

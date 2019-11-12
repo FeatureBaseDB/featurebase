@@ -46,7 +46,7 @@ SetBit(Union(Zitmap(row==4), Intersect(Qitmap(blah>4), Ritmap(field="http://zoo9
 		t.Fatalf("Failed, got: %s", q)
 	}
 
-	_, err = ParseString("C(a=falsen0)")
+	_, err = ParseString("Row(a=falsen0)")
 	if err != nil {
 		t.Fatalf("falsen0 should have been parsed as a string")
 	}
@@ -109,15 +109,15 @@ func TestPEGWorking(t *testing.T) {
 			ncalls: 2},
 		{
 			name:   "SetWithArbCall",
-			input:  "Set(1, a=4)Blerg(z=ha)",
+			input:  "Set(1, a=4)Row(z=ha)",
 			ncalls: 2},
 		{
 			name:   "SetArbSet",
-			input:  "Set(1, a=4)Blerg(z=ha)Set(2, z=99)",
+			input:  "Set(1, a=4)Row(z=ha)Set(2, z=99)",
 			ncalls: 3},
 		{
 			name:   "ArbSetArb",
-			input:  "Arb(q=1, a=4)Set(1, z=9)Arb(z=99)",
+			input:  "Row(q=1, a=4)Set(1, z=9)Row(z=99)",
 			ncalls: 3},
 		{
 			name:   "SetStringArg",
@@ -161,11 +161,11 @@ func TestPEGWorking(t *testing.T) {
 			ncalls: 1},
 		{
 			name:   "double quoted args",
-			input:  `B(a="zm''e")`,
+			input:  `Row(a="zm''e")`,
 			ncalls: 1},
 		{
 			name:   "single quoted args",
-			input:  `B(a='zm""e')`,
+			input:  `Row(a='zm""e')`,
 			ncalls: 1},
 		{
 			name:   "SetRowAttrs",
@@ -320,7 +320,7 @@ func TestPEGErrors(t *testing.T) {
 			input: "Set(, 1, a=4)"},
 		{
 			name:  "StartinCommaArb",
-			input: "Zeeb(, a=4)"},
+			input: "Row(, a=4)"},
 		{
 			name:  "SetRowAttrs0args",
 			input: "SetRowAttrs(blah, 9)"},
@@ -585,11 +585,11 @@ func TestPQLDeepEquality(t *testing.T) {
 			}},
 		{
 			name: "Weird dash",
-			call: "Sum(field-=f)",
+			call: "Count(dashy-=f)",
 			exp: &Call{
-				Name: "Sum",
+				Name: "Count",
 				Args: map[string]interface{}{
-					"field-": "f",
+					"dashy-": "f",
 				},
 			}},
 		{

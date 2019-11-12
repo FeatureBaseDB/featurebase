@@ -18,12 +18,14 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"sync"
 )
 
 // bufferLogger represents a test Logger that holds log messages
 // in a buffer for review.
 type bufferLogger struct {
 	buf *bytes.Buffer
+	mu  sync.Mutex
 }
 
 // NewBufferLogger returns a new instance of BufferLogger.
@@ -34,6 +36,8 @@ func NewBufferLogger() *bufferLogger {
 }
 
 func (b *bufferLogger) Printf(format string, v ...interface{}) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	s := fmt.Sprintf(format, v...)
 	_, err := b.buf.WriteString(s)
 	if err != nil {
@@ -44,5 +48,7 @@ func (b *bufferLogger) Printf(format string, v ...interface{}) {
 func (b *bufferLogger) Debugf(format string, v ...interface{}) {}
 
 func (b *bufferLogger) ReadAll() ([]byte, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	return ioutil.ReadAll(b.buf)
 }
