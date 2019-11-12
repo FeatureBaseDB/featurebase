@@ -438,3 +438,50 @@ func TestBSIGroup_BaseDefaultValue(t *testing.T) {
 		}
 	}
 }
+
+// Ensure that importValue handles requiredDepth correctly.
+// This test sets the same column value to 1, then 8, then 1.
+// A previous bug was incorrectly determining bitDepth based
+// on the values in the import, and not taking existing values
+// into consideration. This would cause an import of 1/8/1
+// to result in a value of 9 instead of 1.
+func TestBSIGroup_importValue(t *testing.T) {
+	f := MustOpenField(OptFieldTypeInt(-100, 200))
+
+	options := &ImportOptions{}
+	for i, tt := range []struct {
+		columnIDs []uint64
+		values    []int64
+		checkVal  int64
+		expCols   []uint64
+	}{
+		{
+			[]uint64{100},
+			[]int64{1},
+			1,
+			[]uint64{100},
+		},
+		{
+			[]uint64{100},
+			[]int64{8},
+			8,
+			[]uint64{100},
+		},
+		{
+			[]uint64{100},
+			[]int64{1},
+			1,
+			[]uint64{100},
+		},
+	} {
+		if err := f.importValue(tt.columnIDs, tt.values, options); err != nil {
+			t.Fatalf("test %d, importing values: %s", i, err.Error())
+		}
+
+		if row, err := f.Range(f.name, pql.EQ, tt.checkVal); err != nil {
+			t.Fatalf("test %d, getting range: %s", i, err.Error())
+		} else if !reflect.DeepEqual(row.Columns(), tt.expCols) {
+			t.Fatalf("test %d, expected columns: %v, but got: %v", i, tt.expCols, row.Columns())
+		}
+	}
+}
