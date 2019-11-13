@@ -32,7 +32,7 @@ COND <- ( '><' { p.addBTWN() }
         )
 
 conditional <- {p.startConditional()} condint condLT condfield condLT condint {p.endConditional()}
-condint <- <'-'? [1-9] [0-9]* / '0'> sp {p.condAdd(buffer[begin:end])}
+condint <- < '-'? [0-9]* '.' [0-9]+ / '0' / '-'? [1-9] [0-9]* > sp {p.condAdd(buffer[begin:end])}
 condLT <- <('<=' / '<')> sp {p.condAdd(buffer[begin:end])}
 condfield <- <fieldExpr> sp {p.condAdd(buffer[begin:end])}
 

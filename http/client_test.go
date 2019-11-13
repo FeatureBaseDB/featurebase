@@ -1095,7 +1095,8 @@ func TestClient_CreateDecimalField(t *testing.T) {
 		t.Fatalf("importing float values: %v", err)
 	}
 
-	resp, err := c.Query(context.Background(), index, &pilosa.QueryRequest{Index: index, Query: "Row(dfield>21)"})
+	// Integer predicate.
+	resp, err := c.Query(context.Background(), index, &pilosa.QueryRequest{Index: index, Query: "Row(dfield>2)"})
 	if err != nil {
 		t.Fatalf("querying: %v", err)
 	}
@@ -1103,6 +1104,72 @@ func TestClient_CreateDecimalField(t *testing.T) {
 		t.Fatalf("unexpected results: %v", resp.Results[0].(*pilosa.Row).Columns())
 	}
 
+	// Float predicate.
+	resp, err = c.Query(context.Background(), index, &pilosa.QueryRequest{Index: index, Query: "Row(dfield>2.1)"})
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Columns(), []uint64{2, 3}) {
+		t.Fatalf("unexpected results: %v", resp.Results[0].(*pilosa.Row).Columns())
+	}
+
+	// Integer predicates.
+	resp, err = c.Query(context.Background(), index, &pilosa.QueryRequest{Index: index, Query: "Row(1<dfield<3)"})
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Columns(), []uint64{1, 2}) {
+		t.Fatalf("unexpected results: %v", resp.Results[0].(*pilosa.Row).Columns())
+	}
+
+	// Float predicates.
+	resp, err = c.Query(context.Background(), index, &pilosa.QueryRequest{Index: index, Query: "Row(1.1<dfield<3.3)"})
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Columns(), []uint64{2}) {
+		t.Fatalf("unexpected results: %v", resp.Results[0].(*pilosa.Row).Columns())
+	}
+
+	resp, err = c.Query(context.Background(), index, &pilosa.QueryRequest{Index: index, Query: "Row(1.1<=dfield<3.3)"})
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Columns(), []uint64{1, 2}) {
+		t.Fatalf("unexpected results: %v", resp.Results[0].(*pilosa.Row).Columns())
+	}
+
+	resp, err = c.Query(context.Background(), index, &pilosa.QueryRequest{Index: index, Query: "Row(1.1<dfield<=3.3)"})
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Columns(), []uint64{2, 3}) {
+		t.Fatalf("unexpected results: %v", resp.Results[0].(*pilosa.Row).Columns())
+	}
+
+	resp, err = c.Query(context.Background(), index, &pilosa.QueryRequest{Index: index, Query: "Row(dfield<3.3)"})
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Columns(), []uint64{1, 2}) {
+		t.Fatalf("unexpected results: %v", resp.Results[0].(*pilosa.Row).Columns())
+	}
+
+	resp, err = c.Query(context.Background(), index, &pilosa.QueryRequest{Index: index, Query: "Row(dfield>2.2)"})
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Columns(), []uint64{3}) {
+		t.Fatalf("unexpected results: %v", resp.Results[0].(*pilosa.Row).Columns())
+	}
+
+	resp, err = c.Query(context.Background(), index, &pilosa.QueryRequest{Index: index, Query: "Row(dfield>=2.2)"})
+	if err != nil {
+		t.Fatalf("querying: %v", err)
+	}
+	if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Columns(), []uint64{2, 3}) {
+		t.Fatalf("unexpected results: %v", resp.Results[0].(*pilosa.Row).Columns())
+	}
 }
 
 // Client represents a test wrapper for pilosa.Client.

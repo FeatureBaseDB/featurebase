@@ -87,19 +87,26 @@ func (q *Query) endConditional() {
 	if len(q.conditional) != 5 {
 		panic(fmt.Sprintf("conditional of wrong length: %#v", q.conditional))
 	}
-	low, _ := strconv.ParseInt(q.conditional[0], 10, 64)
+	low := parseNum(q.conditional[0])
 	field := q.conditional[2]
-	high, _ := strconv.ParseInt(q.conditional[4], 10, 64)
+	high := parseNum(q.conditional[4])
 
-	if q.conditional[1] == "<" {
-		low++
-	}
-	if q.conditional[3] == "<" {
-		high--
+	var op Token
+	switch q.conditional[1] + q.conditional[3] {
+	case "<<":
+		op = BTWN_LT_LT
+	case "<=<":
+		op = BTWN_LTE_LT
+	case "<<=":
+		op = BTWN_LT_LTE
+	case "<=<=":
+		op = BETWEEN
+	default:
+		panic(fmt.Sprintf("impossible conditional ops: '%s' and '%s'", q.conditional[1], q.conditional[3]))
 	}
 
 	elem := q.lastCallStackElem()
-	elem.call.Args[field] = &Condition{Op: BETWEEN, Value: []interface{}{low, high}}
+	elem.call.Args[field] = &Condition{Op: op, Value: []interface{}{low, high}}
 
 	q.conditional = nil
 }
@@ -155,16 +162,7 @@ func (q *Query) addNumVal(val string) {
 	if elem == nil || elem.lastField == "" {
 		panic(fmt.Sprintf("addIntVal called with '%s' when lastField is empty", val))
 	}
-	var ival interface{}
-	var err error
-	if strings.Contains(val, ".") {
-		ival, err = strconv.ParseFloat(val, 64)
-	} else {
-		ival, err = strconv.ParseInt(val, 10, 64)
-	}
-	if err != nil {
-		panic(fmt.Sprintf("%s: %s", intOutOfRangeError, err))
-	}
+	ival := parseNum(val)
 	if elem.inList {
 		if elem.lastCond != ILLEGAL {
 			list := elem.call.Args[elem.lastField].(*Condition).Value.([]interface{})
@@ -750,6 +748,12 @@ func (cond *Condition) String() string {
 // IntSliceValue reads cond.Value as a slice of uint64.
 // If the value is a slice of uint64 it will convert
 // it to []int64. Otherwise, if it is not a []int64 it will return an error.
+//
+// TODO(2.0) this is now only referenced in a test and should probably
+// be removed. The functionality was replaced by getCondIntSlice in
+// pilosa/executor.go which needed to check for floating point values
+// and also have access to the Pilosa field to see if floating point
+// values were valid and how they needed to be scaled.
 func (cond *Condition) IntSliceValue() ([]int64, error) {
 	val := cond.Value
 
@@ -817,4 +821,18 @@ func joinUint64Slice(a []uint64) string {
 		other[i] = strconv.FormatUint(a[i], 10)
 	}
 	return "[" + strings.Join(other, ",") + "]"
+}
+
+func parseNum(val string) interface{} {
+	var ival interface{}
+	var err error
+	if strings.Contains(val, ".") {
+		ival, err = strconv.ParseFloat(val, 64)
+	} else {
+		ival, err = strconv.ParseInt(val, 10, 64)
+	}
+	if err != nil {
+		panic(fmt.Sprintf("%s: %s", intOutOfRangeError, err))
+	}
+	return ival
 }

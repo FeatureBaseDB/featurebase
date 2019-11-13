@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -1929,8 +1930,9 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 
 		return frag.notNull()
 
-	} else if cond.Op == pql.BETWEEN {
-		predicates, err := cond.IntSliceValue()
+	} else if cond.Op == pql.BETWEEN || cond.Op == pql.BTWN_LT_LT ||
+		cond.Op == pql.BTWN_LTE_LT || cond.Op == pql.BTWN_LT_LTE {
+		predicates, err := getCondIntSlice(f, cond)
 		if err != nil {
 			return nil, errors.Wrap(err, "getting condition value")
 		}
@@ -1970,11 +1972,9 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 		return frag.rangeBetween(bsig.BitDepth, baseValueMin, baseValueMax)
 
 	} else {
-
-		// Only support integers for now.
-		value, ok := cond.Value.(int64)
-		if !ok {
-			return nil, errors.New("Row(): conditions only support integer values")
+		value, err := getScaledInt(f, cond.Value)
+		if err != nil {
+			return nil, errors.Wrap(err, "getting scaled integer")
 		}
 
 		// Find bsiGroup.
@@ -3745,4 +3745,66 @@ func (gbi *groupByIterator) Next() (ret GroupCount, done bool) {
 	gbi.nextAtIdx(len(gbi.rows) - 1)
 
 	return ret, false
+}
+
+// getCondIntSlice looks at the field, the cond op type (which is
+// expected to be one of the BETWEEN ops types), and the values in the
+// conditional and returns a slice of int64 which is scaled for
+// decimal fields and has the values modulated such that the BETWEEN
+// op can be treated as being of the form a<=x<=b.
+func getCondIntSlice(f *Field, cond *pql.Condition) ([]int64, error) {
+	val, ok := cond.Value.([]interface{})
+	if !ok {
+		return nil, errors.Errorf("expected conditional to have []interface{} Value, but got %v of %[1]T", cond.Value)
+	}
+
+	ret := make([]int64, len(val))
+	for i, v := range val {
+		s, err := getScaledInt(f, v)
+		if err != nil {
+			return nil, errors.Wrap(err, "getting scaled integer")
+		}
+		ret[i] = s
+	}
+
+	switch cond.Op {
+	case pql.BTWN_LT_LTE: // a < x <= b
+		ret[0]++
+	case pql.BTWN_LTE_LT: // a <= x < b
+		ret[1]--
+	case pql.BTWN_LT_LT: // a < x < b
+		ret[0]++
+		ret[1]--
+	}
+
+	return ret, nil
+}
+
+// getScaledInt gets the scaled integer value for v based on
+// the field type.
+func getScaledInt(f *Field, v interface{}) (int64, error) {
+	var value int64
+	if f.Options().Type == FieldTypeDecimal {
+		scale := f.Options().Scale
+		switch tv := v.(type) {
+		case int64:
+			value = int64(float64(tv) * math.Pow10(int(scale)))
+		case uint64:
+			value = int64(float64(tv) * math.Pow10(int(scale)))
+		case float64:
+			value = int64(tv * math.Pow10(int(scale)))
+		default:
+			return 0, errors.Errorf("unexpected decimal value type %T, val %v", tv, tv)
+		}
+	} else {
+		switch tv := v.(type) {
+		case int64:
+			value = tv
+		case uint64:
+			value = int64(tv)
+		default:
+			return 0, errors.Errorf("unexpected value type %T, val %v", tv, tv)
+		}
+	}
+	return value, nil
 }
