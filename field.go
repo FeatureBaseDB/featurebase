@@ -91,8 +91,7 @@ type Field struct {
 
 	logger logger.Logger
 
-	snapshotQueue chan *fragment
-
+	snapshotQueue snapshotQueue
 	// Instantiates new translation store on open.
 	OpenTranslateStore OpenTranslateStoreFunc
 }
@@ -316,18 +315,30 @@ func (f *Field) mergeRemoteAvailableShards(b *roaring.Bitmap) {
 
 // loadAvailableShards reads remoteAvailableShards data for the field, if any.
 func (f *Field) loadAvailableShards() error {
-	bm := roaring.NewBitmap()
 	// Read data from meta file.
 	path := filepath.Join(f.path, ".available.shards")
 	buf, err := ioutil.ReadFile(path)
+	// doesn't exist: this is fine
 	if os.IsNotExist(err) {
 		return nil
-	} else if err != nil {
-		return errors.Wrap(err, "reading available shards")
-	} else {
-		if err := bm.UnmarshalBinary(buf); err != nil {
-			return errors.Wrap(err, "unmarshaling")
+	}
+	// some other problem:
+	if err != nil {
+		f.logger.Printf("available shards file present but unreadable, discarding: %v", err)
+		err = os.Remove(path)
+		if err != nil {
+			return errors.Wrap(err, "deleting corrupt available shards list")
 		}
+		return nil
+	}
+	bm := roaring.NewBitmap()
+	if err = bm.UnmarshalBinary(buf); err != nil {
+		f.logger.Printf("available shards file corrupt, discarding: %v", err)
+		err = os.Remove(path)
+		if err != nil {
+			return errors.Wrap(err, "deleting corrupt available shards list")
+		}
+		return nil
 	}
 	// Merge bitmap from file into field.
 	f.mergeRemoteAvailableShards(bm)
@@ -912,7 +923,9 @@ func (f *Field) newView(path, name string) *view {
 	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats
 	view.broadcaster = f.broadcaster
-	view.snapshotQueue = f.snapshotQueue
+	if f.snapshotQueue != nil {
+		view.snapshotQueue = f.snapshotQueue
+	}
 	return view
 }
 

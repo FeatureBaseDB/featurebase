@@ -301,6 +301,9 @@ func (t *ClusterCluster) Close() error {
 		if err != nil {
 			return err
 		}
+		// Make sure open indexes get shut down too. we wouldn't do
+		// this normally for a cluster, but we want to for test cases.
+		c.holder.Close()
 	}
 	return nil
 }

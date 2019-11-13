@@ -1397,6 +1397,7 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 
 	// Read into another fragment.
 	f1 := mustOpenFragment("i", "f", viewStandard, 0, "")
+	defer f1.Clean(t)
 	if rn, err := f1.ReadFrom(&buf); err != nil {
 		t.Fatal(err)
 	} else if wn != rn {
@@ -2069,7 +2070,11 @@ func BenchmarkImportRoaring(b *testing.B) {
 					b.StartTimer()
 					err := f.importRoaringT(data, false)
 					if err != nil {
-						f.awaitSnapshot()
+						// we don't actually particularly
+						// care whether this succeeds,
+						// but if it's happening we want
+						// it to be done.
+						_ = f.snapshotQueue.Await(f)
 						f.Clean(b)
 						b.Fatalf("import error: %v", err)
 					}
@@ -2108,7 +2113,9 @@ func BenchmarkImportRoaringConcurrent(b *testing.B) {
 							j := j
 							eg.Go(func() error {
 								err := frags[j].importRoaringT(data[j], false)
-								frags[j].awaitSnapshot()
+								// error unimportant if it happened, but we want
+								// any snapshots to have finished.
+								_ = frags[j].snapshotQueue.Await(frags[j])
 								return err
 							})
 						}
@@ -2146,10 +2153,12 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 								// is excessive. force storage into snapshotted state, then use import
 								// to generate an op log and/or snapshot.
 								_, _, err := frags[j].storage.ImportRoaringBits(data, false, false, 0)
-								frags[j].enqueueSnapshot()
-								frags[j].awaitSnapshot()
 								if err != nil {
 									b.Fatalf("importing roaring: %v", err)
+								}
+								err = frags[j].snapshotQueue.Immediate(frags[j])
+								if err != nil {
+									b.Fatalf("snapshot after import: %v", err)
 								}
 							}
 							eg := errgroup.Group{}
@@ -2158,7 +2167,10 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 								j := j
 								eg.Go(func() error {
 									err := frags[j].importRoaringT(updata, false)
-									frags[j].awaitSnapshot()
+									err2 := frags[j].snapshotQueue.Await(frags[j])
+									if err == nil {
+										err = err2
+									}
 									return err
 								})
 							}
@@ -2220,20 +2232,38 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 						// is excessive. force storage into snapshotted state, then use import
 						// to generate an op log and/or snapshot.
 						_, _, err := f.storage.ImportRoaringBits(data, false, false, 0)
-						f.enqueueSnapshot()
-						f.awaitSnapshot()
 						if err != nil {
 							b.Errorf("import error: %v", err)
 						}
+						err = f.snapshotQueue.Immediate(f)
+						if err != nil {
+							b.Errorf("snapshot after import error: %v", err)
+						}
 						b.StartTimer()
 						err = f.importRoaringT(updata, false)
-						f.awaitSnapshot()
 						if err != nil {
 							f.Clean(b)
 							b.Errorf("import error: %v", err)
 						}
+						err = f.snapshotQueue.Await(f)
+						if err != nil {
+							b.Errorf("snapshot after import error: %v", err)
+						}
 						b.StopTimer()
-						stat, _ := f.file.Stat()
+						var stat os.FileInfo
+						var statTarget io.Writer
+						err = f.gen.Transaction(&statTarget, func() error {
+							targetFile, ok := statTarget.(*os.File)
+							if ok {
+								stat, _ = targetFile.Stat()
+							} else {
+								b.Errorf("couldn't stat file")
+							}
+							return nil
+						})
+						if err != nil {
+							b.Errorf("transaction error: %v", err)
+						}
 						fileSize[name] = stat.Size()
 						f.Clean(b)
 					}
@@ -2382,6 +2412,7 @@ func TestGetZipfRowsSliceRoaring(t *testing.T) {
 			t.Fatalf("suspect distribution from getZipfRowsSliceRoaring")
 		}
 	}
+	f.Clean(t)
 }
 
 // getZipfRowsSliceRoaring generates a random fragment with the given number of
@@ -2527,16 +2558,28 @@ func (f *fragment) sanityCheck(t testing.TB) {
 }
 
 func (f *fragment) Clean(t testing.TB) {
-	f.awaitSnapshot()
+	f.mu.Lock()
+	err := f.snapshotQueue.Await(f)
+	f.mu.Unlock()
+	if err != nil {
+		t.Fatalf("snapshot failed before sanity check: %v", err)
+	}
 	f.sanityCheck(t)
+	if f.storage != nil && f.storage.Source != nil {
+		if f.storage.Source.Dead() {
+			t.Fatalf("cleaning up fragment %s, source %s, source already dead", f.path, f.storage.Source.ID())
+		}
+	}
 	errc := f.Close()
+	// prevent double-closes of generation during testing.
+	f.gen = nil
 	errf := os.Remove(f.path)
 	errp := os.Remove(f.cachePath())
 	if errc != nil || errf != nil {
 		t.Fatal("cleaning up fragment: ", errc, errf, errp)
 	}
 	if f.snapshotQueue != nil {
-		close(f.snapshotQueue)
+		f.snapshotQueue.Stop()
 		f.snapshotQueue = nil
 	}
 	// not all fragments have cache files
@@ -2559,7 +2602,7 @@ func (f *fragment) CleanKeep(t testing.TB) {
 		t.Fatal("closing fragment: ", errc, errp)
 	}
 	if f.snapshotQueue != nil {
-		close(f.snapshotQueue)
+		f.snapshotQueue.Stop()
 		f.snapshotQueue = nil
 	}
 	// not all fragments have cache files
@@ -3047,10 +3090,10 @@ func TestFragmentRowIterator(t *testing.T) {
 
 func TestUnionInPlaceMapped(t *testing.T) {
 	f := mustOpenFragment("i", "f", "v", 0, CacheTypeNone)
+	// note: clean has to be deferred first, because it has to run with
+	// the lock *not* held, because it is sometimes so it has to grab the
+	// lock...
 	defer f.Clean(t)
-	// I know this doesn't actually matter in our current context, but
-	// strictly speaking, we do say you have to hold the lock while calling
-	// unprotectedWriteToFragment...
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	r0 := rand.New(rand.NewSource(2))
@@ -3083,8 +3126,15 @@ func TestUnionInPlaceMapped(t *testing.T) {
 	f.storage.UnionInPlace(setBM1)
 	countUnion := f.storage.Count()
 	// UnionInPlace produces no ops log, we have to make it snapshot, to
-	// ensure that the on-disk representation is correct.
-	f.enqueueSnapshot()
+	// ensure that the on-disk representation is correct. Note, UIP is
+	// not used for things that are modifying real fragments, usually;
+	// it's used only in computation of things that usually don't go to
+	// disk, which is why we handle this specially in testing and not
+	// generically.
+	err = f.snapshotQueue.Immediate(f)
+	if err != nil {
+		t.Fatalf("snapshot after union-in-place: %v", err)
+	}
 
 	if count0 != countF {
 		t.Fatalf("writing bitmap to storage changed count: %d => %d", count0, countF)
@@ -3272,7 +3322,7 @@ func TestImportClearRestart(t *testing.T) {
 				f2.MaxOpN = maxOpN
 				f2.CacheType = f.CacheType
 
-				err = f.closeStorage(true)
+				err = f.closeStorage()
 				if err != nil {
 					t.Fatalf("closing storage: %v", err)
 				}
@@ -3306,7 +3356,7 @@ func TestImportClearRestart(t *testing.T) {
 				f3.MaxOpN = maxOpN
 				f3.CacheType = f.CacheType
 
-				err = f2.closeStorage(true)
+				err = f2.closeStorage()
 				if err != nil {
 					t.Fatalf("f2 closing storage: %v", err)
 				}
@@ -3354,6 +3404,7 @@ func check(t *testing.T, f *fragment, exp map[uint64]map[uint64]struct{}) {
 
 func TestImportValueConcurrent(t *testing.T) {
 	f := mustOpenBSIFragment("i", "f", viewBSIGroupPrefix+"foo", 0)
+	defer f.Clean(t)
 	eg := &errgroup.Group{}
 	for i := 0; i < 4; i++ {
 		i := i

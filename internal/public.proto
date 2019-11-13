@@ -6,6 +6,12 @@ message Row {
 	repeated uint64 Columns = 1;
 	repeated string Keys = 3;
 	repeated Attr Attrs = 2;
+	bytes Roaring = 4;
+}
+
+message SignedRow {
+	Row Pos = 1;
+	Row Neg = 2;
 }
 
 message RowIdentifiers {
@@ -61,6 +67,7 @@ message QueryRequest {
 	bool Remote = 5;
 	bool ExcludeRowAttrs = 6;
 	bool ExcludeColumns = 7;
+	repeated Row EmbeddedData = 8;
 }
 
 message QueryResponse {
@@ -79,6 +86,7 @@ message QueryResult {
 	repeated uint64 RowIDs = 7;
 	repeated GroupCount GroupCounts = 8;
 	RowIdentifiers RowIdentifiers = 9;
+	SignedRow SignedRow = 10;
 }
 
 message ImportRequest {

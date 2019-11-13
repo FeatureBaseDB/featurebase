@@ -19,6 +19,7 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -364,6 +365,62 @@ func TestField_PersistAvailableShards(t *testing.T) {
 		t.Fatalf("unexpected available shards (reopen). expected: %v, but got: %v", bm.Slice(), f.remoteAvailableShards.Slice())
 	}
 
+}
+
+func TestField_CorruptAvailableShards(t *testing.T) {
+	f := MustOpenField(OptFieldTypeDefault())
+
+	// bm represents remote available shards.
+	bm := roaring.NewBitmap(1, 2, 3)
+
+	if err := f.AddRemoteAvailableShards(bm); err != nil {
+		t.Fatal(err)
+	}
+
+	path := filepath.Join(f.path, ".available.shards")
+
+	avail, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := avail.Write([]byte{23})
+	if err != nil || n != 1 {
+		t.Fatal(err)
+	}
+	avail.Close()
+
+	// Reload field and verify that shard data is persisted.
+	if err := f.Reopen(); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(f.remoteAvailableShards.Slice(), []uint64(nil)) {
+		t.Fatalf("unexpected available shards (reopen). expected: %#v, but got: %#v", []uint64{}, f.remoteAvailableShards.Slice())
+	}
+}
+
+func TestField_TruncatedAvailableShards(t *testing.T) {
+	f := MustOpenField(OptFieldTypeDefault())
+
+	// bm represents remote available shards.
+	bm := roaring.NewBitmap(1, 2, 3)
+
+	if err := f.AddRemoteAvailableShards(bm); err != nil {
+		t.Fatal(err)
+	}
+
+	path := filepath.Join(f.path, ".available.shards")
+
+	avail, err := os.OpenFile(path, os.O_TRUNC|os.O_WRONLY, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	avail.Close()
+
+	// Reload field and verify that shard data is persisted.
+	if err := f.Reopen(); err != nil {
+		t.Fatal(err)
+	} else if !reflect.DeepEqual(f.remoteAvailableShards.Slice(), []uint64(nil)) {
+		t.Fatalf("unexpected available shards (reopen). expected: %#v, but got: %#v", []uint64{}, f.remoteAvailableShards.Slice())
+	}
 }
 
 // Ensure that persisting available shards having a smaller footprint (for example,

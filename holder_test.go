@@ -197,7 +197,26 @@ func TestHolder_Open(t *testing.T) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
+	t.Run("ErrFragmentStorageRecoverable", func(t *testing.T) {
+		h := test.MustOpenHolder()
+		defer h.Close()
 
+		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		} else if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
+			t.Fatal(err)
+		} else if _, err := field.SetBit(0, 0, nil); err != nil {
+			t.Fatal(err)
+		} else if err := h.Holder.Close(); err != nil {
+			t.Fatal(err)
+		} else if err := os.Truncate(filepath.Join(h.Path, "foo", "bar", "views", "standard", "fragments", "0"), 20); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := h.Reopen(); err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
+	})
 }
 
 func TestHolder_HasData(t *testing.T) {

@@ -205,6 +205,16 @@ func TestGRPC(t *testing.T) {
 					{uint64(123)},
 				},
 			},
+			// bool
+			{
+				true,
+				[]expHeader{
+					{"changed", "bool"},
+				},
+				[][]expColumn{
+					{true},
+				},
+			},
 		}
 
 		logger := logger.NopLogger
@@ -241,6 +251,11 @@ func TestGRPC(t *testing.T) {
 						}
 					case uint64:
 						val := column.GetUint64Val()
+						if val != v {
+							t.Fatalf("test %d expected column val: %v, but got: %v", ti, v, val)
+						}
+					case bool:
+						val := column.GetBoolVal()
 						if val != v {
 							t.Fatalf("test %d expected column val: %v, but got: %v", ti, v, val)
 						}
