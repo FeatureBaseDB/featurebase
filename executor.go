@@ -3120,6 +3120,8 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 		colKey = "column"
 	case "GroupBy":
 		return errors.Wrap(e.translateGroupByCall(index, idx, c), "translating GroupBy")
+	case "IncludesColumn":
+		colKey = "column"
 	default:
 		colKey = "col"
 		fieldName = callArgString(c, "field")
