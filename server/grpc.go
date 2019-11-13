@@ -535,6 +535,13 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 					Columns: []*pb.ColumnResponse{
 						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(r)}},
 					}}
+			case bool:
+				ci := []*pb.ColumnInfo{{Name: "changed", Datatype: "bool"}}
+				results <- &pb.RowResponse{
+					Headers: ci,
+					Columns: []*pb.ColumnResponse{
+						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BoolVal{BoolVal: r}},
+					}}
 			default:
 				log.Printf("unhandled %T\n", r)
 				breakLoop = true
