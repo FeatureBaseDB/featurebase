@@ -4092,7 +4092,7 @@ func TestExecutor_Execute_Shift(t *testing.T) {
 }
 
 func TestExecutor_Execute_IncludesColumn(t *testing.T) {
-	t.Run("results", func(t *testing.T) {
+	t.Run("results-ids", func(t *testing.T) {
 		c := test.MustRunCluster(t, 1)
 		defer c.Close()
 		hldr := test.Holder{Holder: c[0].Server.Holder()}
@@ -4118,6 +4118,47 @@ func TestExecutor_Execute_IncludesColumn(t *testing.T) {
 					t.Fatalf("expected to find column: %d", tt.col)
 				} else if !tt.expIncluded && res.Results[0].(bool) {
 					t.Fatalf("did not expect to find column: %d", tt.col)
+				}
+			})
+		}
+	})
+	t.Run("results-keys", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		cmd := c[0]
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{Keys: true})
+		if _, err := index.CreateField("general", pilosa.OptFieldTypeDefault(), pilosa.OptFieldKeys()); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := cmd.API.Query(
+			context.Background(),
+			&pilosa.QueryRequest{
+				Index: "i",
+				Query: `Set("one", general="ten") Set("eleven", general="ten") Set("twentyone", general="ten")`,
+			}); err != nil {
+			t.Fatal(err)
+		}
+
+		for i, tt := range []struct {
+			col         string
+			expIncluded bool
+		}{
+			{"one", true},
+			{"two", false},
+			{"eleven", true},
+			{"twelve", false},
+			{"twentyone", true},
+			{"twentytwo", false},
+		} {
+			t.Run(fmt.Sprint(i), func(t *testing.T) {
+				if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: fmt.Sprintf("IncludesColumn(Row(general=ten), column=%s)", tt.col)}); err != nil {
+					t.Fatal(err)
+				} else if tt.expIncluded && !res.Results[0].(bool) {
+					t.Fatalf("expected to find column: %s", tt.col)
+				} else if !tt.expIncluded && res.Results[0].(bool) {
+					t.Fatalf("did not expect to find column: %s", tt.col)
 				}
 			})
 		}
