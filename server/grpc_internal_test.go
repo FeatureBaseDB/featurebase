@@ -209,7 +209,7 @@ func TestGRPC(t *testing.T) {
 			{
 				true,
 				[]expHeader{
-					{"changed", "bool"},
+					{"result", "bool"},
 				},
 				[][]expColumn{
 					{true},

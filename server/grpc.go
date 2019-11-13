@@ -538,7 +538,7 @@ func makeRows(resp pilosa.QueryResponse, logger logger.Logger) chan *pb.RowRespo
 						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(r)}},
 					}}
 			case bool:
-				ci := []*pb.ColumnInfo{{Name: "changed", Datatype: "bool"}}
+				ci := []*pb.ColumnInfo{{Name: "result", Datatype: "bool"}}
 				results <- &pb.RowResponse{
 					Headers: ci,
 					Columns: []*pb.ColumnResponse{
