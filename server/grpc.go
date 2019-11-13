@@ -18,10 +18,10 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"log"
 	"net"
 
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/logger"
 	pb "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -34,6 +34,8 @@ import (
 // grpcHandler contains methods which handle the various gRPC requests.
 type grpcHandler struct {
 	api *pilosa.API
+
+	logger logger.Logger
 }
 
 // QueryPQL handles the PQL request and sends RowResponses to the stream.
@@ -46,7 +48,7 @@ func (h grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 	if err != nil {
 		return status.Error(codes.Unknown, err.Error())
 	}
-	for row := range makeRows(resp) {
+	for row := range makeRows(resp, h.logger) {
 		err = stream.Send(row)
 		if err != nil {
 			return status.Error(codes.Unknown, err.Error())
@@ -359,7 +361,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 // I think ideally this would be plugged in the executor somewhere
 // in order to get some concurrency benefit but we can
 // start with the combined response
-func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
+func makeRows(resp pilosa.QueryResponse, logger logger.Logger) chan *pb.RowResponse {
 	results := make(chan *pb.RowResponse)
 	go func() {
 		var breakLoop bool // Support the "break" inside the switch.
@@ -543,7 +545,7 @@ func makeRows(resp pilosa.QueryResponse) chan *pb.RowResponse {
 						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BoolVal{BoolVal: r}},
 					}}
 			default:
-				log.Printf("unhandled %T\n", r)
+				logger.Printf("unhandled %T\n", r)
 				breakLoop = true
 			}
 		}
@@ -556,6 +558,8 @@ type grpcServer struct {
 	api        *pilosa.API
 	grpcServer *grpc.Server
 	hostPort   string
+
+	logger logger.Logger
 }
 
 type grpcServerOption func(s *grpcServer) error
@@ -569,8 +573,15 @@ func OptGRPCServerAPI(api *pilosa.API) grpcServerOption {
 
 func OptGRPCServerURI(uri *pilosa.URI) grpcServerOption {
 	hostport := fmt.Sprintf("%s:%d", uri.Host, uri.Port)
-	return func(h *grpcServer) error {
-		h.hostPort = hostport
+	return func(s *grpcServer) error {
+		s.hostPort = hostport
+		return nil
+	}
+}
+
+func OptGRPCServerLogger(logger logger.Logger) grpcServerOption {
+	return func(s *grpcServer) error {
+		s.logger = logger
 		return nil
 	}
 }
@@ -579,35 +590,34 @@ func (s *grpcServer) Serve(tlsConfig *tls.Config) error {
 	// create listener
 	lis, err := net.Listen("tcp", s.hostPort)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		return errors.Wrap(err, "creating listener")
 	}
-	log.Printf("enabled grpc listening on %s", s.hostPort)
+	s.logger.Printf("enabled grpc listening on %s", s.hostPort)
 
 	opts := make([]grpc.ServerOption, 0)
 	if tlsConfig != nil {
 		creds := credentials.NewTLS(tlsConfig)
-		if err != nil {
-			log.Fatalf("loading tls: %s\n", err)
-		}
 		opts = append(opts, grpc.Creds(creds))
 	}
 
 	// create grpc server
 	s.grpcServer = grpc.NewServer(opts...)
-	pb.RegisterPilosaServer(s.grpcServer, grpcHandler{api: s.api})
+	pb.RegisterPilosaServer(s.grpcServer, grpcHandler{api: s.api, logger: s.logger})
 
 	// register the server so its services are available to grpc_cli and others
 	reflection.Register(s.grpcServer)
 
 	// and start...
 	if err := s.grpcServer.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+		return errors.Wrap(err, "starting grpc server")
 	}
 	return nil
 }
 
 func NewGRPCServer(opts ...grpcServerOption) (*grpcServer, error) {
-	server := &grpcServer{}
+	server := &grpcServer{
+		logger: logger.NopLogger,
+	}
 	for _, opt := range opts {
 		err := opt(server)
 		if err != nil {

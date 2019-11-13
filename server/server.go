@@ -366,7 +366,11 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "new handler")
 	}
 
-	m.grpcServer, err = NewGRPCServer(OptGRPCServerAPI(m.API), OptGRPCServerURI(grpcURI))
+	m.grpcServer, err = NewGRPCServer(
+		OptGRPCServerAPI(m.API),
+		OptGRPCServerURI(grpcURI),
+		OptGRPCServerLogger(m.logger),
+	)
 	return errors.Wrap(err, "new grpc server")
 }
 
