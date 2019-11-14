@@ -200,8 +200,8 @@ func (sq *prioritySnapshotQueue) Enqueue(f *fragment) {
 	if f.snapshotPending {
 		return
 	}
-	sq.mu.Lock()
-	defer sq.mu.Unlock()
+	sq.mu.RLock()
+	defer sq.mu.RUnlock()
 	if sq.normal == nil {
 		sq.logger.Printf("requested snapshot after snapshot queue was closed")
 		return
