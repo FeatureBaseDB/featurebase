@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pilosa/pilosa/v2/logger"
@@ -108,8 +109,8 @@ type prioritySnapshotQueue struct {
 	mu               sync.RWMutex
 	scanWG, workerWG sync.WaitGroup
 	stats            struct {
-		enqueued int64
-		skipped  int64
+		enqueued uint64
+		skipped  uint64
 	}
 }
 
@@ -214,10 +215,10 @@ func (sq *prioritySnapshotQueue) Enqueue(f *fragment) {
 	// try to enqueue snapshot
 	select {
 	case sq.normal <- snapshotRequest{frag: f, when: time.Now()}:
-		sq.stats.enqueued++
+		atomic.AddUint64(&sq.stats.enqueued, 1)
 		return
 	default:
-		sq.stats.skipped++
+		atomic.AddUint64(&sq.stats.skipped, 1)
 		f.snapshotPending = false
 		return
 	}
