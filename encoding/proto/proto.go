@@ -1262,7 +1262,7 @@ func encodeRow(r *pilosa.Row) *internal.Row {
 		Keys:  r.Keys,
 		Attrs: encodeAttrs(r.Attrs),
 	}
-	if false {
+	if true {
 		ir.Columns = r.Columns()
 	} else {
 		ir.Roaring = r.Roaring()
