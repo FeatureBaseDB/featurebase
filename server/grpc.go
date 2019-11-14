@@ -492,6 +492,7 @@ func makeRows(resp pilosa.QueryResponse, logger logger.Logger) chan *pb.RowRespo
 							}
 						}
 						ci = append(ci, &pb.ColumnInfo{Name: "count", Datatype: "uint64"})
+						ci = append(ci, &pb.ColumnInfo{Name: "sum", Datatype: "int64"})
 					}
 					rowResp := &pb.RowResponse{
 						Headers: ci,
@@ -505,7 +506,10 @@ func makeRows(resp pilosa.QueryResponse, logger logger.Logger) chan *pb.RowRespo
 							rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(fieldRow.RowID)}})
 						}
 					}
-					rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(gc.Count)}})
+					rowResp.Columns = append(rowResp.Columns,
+						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: gc.Count}},
+						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: gc.Sum}},
+					)
 					results <- rowResp
 				}
 			case pilosa.RowIdentifiers:

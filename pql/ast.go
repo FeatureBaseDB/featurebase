@@ -383,9 +383,10 @@ var callInfoByFunc = map[string]callInfo{
 	"GroupBy": {
 		allowUnknown: false,
 		prototypes: map[string]interface{}{
-			"filter":   nil,
-			"limit":    int64(0),
-			"previous": nil,
+			"filter":    nil,
+			"limit":     int64(0),
+			"previous":  nil,
+			"aggregate": nil,
 		},
 	},
 	"Options": {
