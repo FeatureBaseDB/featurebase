@@ -175,10 +175,15 @@ func TestAPI_Import(t *testing.T) {
 		}
 
 		// Query node1.
-		if res, err := m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
+		if err := test.RetryUntil(5*time.Second, func() error {
+			if res, err := m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
+				return err
+			} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, colIDs) {
+				return fmt.Errorf("unexpected column ids: %+v", columns)
+			}
+			return nil
+		}); err != nil {
 			t.Fatal(err)
-		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, colIDs) {
-			t.Fatalf("unexpected column ids: %+v", columns)
 		}
 	})
 }
