@@ -172,6 +172,7 @@ func (c *rankCache) Add(id uint64, n uint64) {
 	// unless the count is 0, which is effectively used
 	// to clear the cache value.
 	if n < c.thresholdValue && n > 0 {
+		delete(c.entries, id)
 		return
 	}
 
@@ -185,6 +186,7 @@ func (c *rankCache) BulkAdd(id uint64, n uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if n < c.thresholdValue {
+		delete(c.entries, id)
 		return
 	}
 

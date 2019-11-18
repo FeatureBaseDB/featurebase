@@ -20,8 +20,8 @@ import (
 	"github.com/pilosa/pilosa/v2"
 )
 
-// Ensure a bitmap query can be executed.
-func TestCache_Rank(t *testing.T) {
+// Ensure cache stays constrained to its configured size.
+func TestCache_Rank_Size(t *testing.T) {
 	cacheSize := uint32(3)
 	cache := pilosa.NewRankCache(cacheSize)
 	for i := 1; i < int(2*cacheSize); i++ {
@@ -31,5 +31,26 @@ func TestCache_Rank(t *testing.T) {
 	if cache.Len() != int(cacheSize) {
 		t.Fatalf("unexpected cache Size: %d!=%d expected\n", cache.Len(), cacheSize)
 	}
+}
 
+// Ensure cache entries set below threshold are handled appropriately.
+func TestCache_Rank_Threshold(t *testing.T) {
+	cacheSize := uint32(5)
+	cache := pilosa.NewRankCache(cacheSize)
+	for i := 1; i < int(2*cacheSize); i++ {
+		cache.Add(uint64(i), 3)
+	}
+
+	// Set the cache value for rows 4 and 5 to a number below the threshold
+	// value (which is 3), and ensure that they gets zeroed out.
+	cache.Add(4, 1)
+	cache.BulkAdd(5, 1)
+	cache.Recalculate()
+
+	if cache.Get(4) != 0 {
+		t.Fatalf("unexpected cache value after Add: %d!=%d expected\n", cache.Get(4), 0)
+	}
+	if cache.Get(5) != 0 {
+		t.Fatalf("unexpected cache value after BulkAdd: %d!=%d expected\n", cache.Get(5), 0)
+	}
 }

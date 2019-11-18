@@ -2099,7 +2099,16 @@ func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) e
 		f.rowCache.Add(rowID, nil)
 		if updateCache {
 			anyChanged = true
-			f.cache.BulkAdd(rowID, f.cache.Get(rowID)+uint64(changes))
+			if changes < 0 {
+				absChanges := uint64(-1 * changes)
+				if absChanges <= f.cache.Get(rowID) {
+					f.cache.BulkAdd(rowID, f.cache.Get(rowID)-absChanges)
+				} else {
+					f.cache.BulkAdd(rowID, 0)
+				}
+			} else {
+				f.cache.BulkAdd(rowID, f.cache.Get(rowID)+uint64(changes))
+			}
 		}
 	}
 	// we only set this if we need to update the cache
