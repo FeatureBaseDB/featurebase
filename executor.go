@@ -1068,21 +1068,28 @@ func (e *executor) executeSumCountShard(ctx context.Context, index string, c *pq
 
 	fieldName, _ := c.Args["field"].(string)
 
+	fragspan, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSumCountShard_gettingFragment")
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
+		fragspan.Finish()
 		return ValCount{}, nil
 	}
 
 	bsig := field.bsiGroup(fieldName)
 	if bsig == nil {
+		fragspan.Finish()
 		return ValCount{}, nil
 	}
 
 	fragment := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
 	if fragment == nil {
+		fragspan.Finish()
 		return ValCount{}, nil
 	}
+	fragspan.Finish()
 
+	sumspan, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSumCountShard_fragment.sum")
+	defer sumspan.Finish()
 	vsum, vcount, err := fragment.sum(filter, bsig.BitDepth)
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "computing sum")
@@ -1442,6 +1449,8 @@ func (r RowIDs) merge(other RowIDs, limit int) RowIDs {
 }
 
 func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) ([]GroupCount, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGroupBy")
+	defer span.Finish()
 	// validate call
 	if len(c.Children) == 0 {
 		return nil, errors.New("need at least one child call")
@@ -1614,6 +1623,9 @@ func (g GroupCount) Compare(o GroupCount) int {
 }
 
 func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql.Call, filter *pql.Call, shard uint64, childRows []RowIDs) (_ []GroupCount, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGroupByShard")
+	defer span.Finish()
+
 	var filterRow *Row
 	if filter != nil {
 		if filterRow, err = e.executeBitmapCallShard(ctx, index, filter, shard); err != nil {
@@ -1626,7 +1638,10 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 		return nil, err
 	}
 
+	newspan, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGroupByShard_newGroupByIterator")
 	iter, err := newGroupByIterator(e, childRows, c.Children, aggregate, filterRow, index, shard, e.Holder)
+	newspan.Finish()
+
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting group by iterator for shard %d", shard)
 	}
