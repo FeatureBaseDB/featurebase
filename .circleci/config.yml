@@ -8,10 +8,13 @@ defaults: &defaults
 fast-checkout: &fast-checkout
   attach_workspace:
     at: .
+add-github-auth: &add-github-auth
+  run: git config --global url."https://moleculacorp:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com".insteadOf "https://github.com"
 jobs:
   setup:
     <<: *defaults
     steps:
+      - *add-github-auth
       - checkout
       - restore_cache:
           keys:
@@ -28,11 +31,13 @@ jobs:
     <<: *defaults
     steps:
       - *fast-checkout
+      - *add-github-auth
       - run: make check-license-headers
   linter:
     <<: *defaults
     steps:
       - *fast-checkout
+      - *add-github-auth
       - run: curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s v1.20.0
       - run: sudo cp bin/golangci-lint /usr/local/bin/
       - run: make golangci-lint
@@ -40,6 +45,7 @@ jobs:
     <<: *defaults
     steps:
       - *fast-checkout
+      - *add-github-auth
       - run: make build GOOS=linux GOARCH=arm GOARM=5
       - run: make build GOOS=linux GOARCH=arm GOARM=6
       - run: make build GOOS=linux GOARCH=arm GOARM=7
@@ -48,18 +54,21 @@ jobs:
     <<: *defaults
     steps:
       - *fast-checkout
+      - *add-github-auth
       - run: sudo apt-get install lsof
       - run: make test
   test-golang-1.13-shard22:
     <<: *defaults
     steps:
       - *fast-checkout
+      - *add-github-auth
       - run: sudo apt-get install lsof
       - run: make test SHARD_WIDTH=22
   test-golang-1.13-race:
     <<: *defaults
     steps:
       - *fast-checkout
+      - *add-github-auth
       - run: sudo apt-get install lsof
       - run:
           command: make test TESTFLAGS="-race -v -timeout=30m"
@@ -73,6 +82,7 @@ jobs:
     <<: *defaults
     steps:
       - *fast-checkout
+      - *add-github-auth
       - run: sudo apt-get install lsof
       - run: make test ENTERPRISE=1
   test-golang-1.12:
@@ -81,6 +91,7 @@ jobs:
       - image: circleci/golang:1.12
     steps:
       - *fast-checkout
+      - *add-github-auth
       - run: sudo apt-get install lsof
       - run: make test
   test-golang-1.11:
@@ -89,18 +100,21 @@ jobs:
       - image: circleci/golang:1.11
     steps:
       - *fast-checkout
+      - *add-github-auth
       - run: sudo apt-get install lsof
       - run: make test
   cluster-tests:
     <<: *defaults
     steps:
       - *fast-checkout
+      - *add-github-auth
       - setup_remote_docker
       - run: make clustertests-build
   prerelease:
     <<: *base-test
     steps:
       - *fast-checkout
+      - *add-github-auth
       - run: make prerelease
       - store_artifacts:
           path: build
@@ -111,6 +125,7 @@ jobs:
     <<: *defaults
     steps:
       - *fast-checkout
+      - *add-github-auth
       - run: make release
       - store_artifacts:
           path: build
@@ -123,6 +138,7 @@ jobs:
     steps:
       - run: '[[ -v CIRCLE_PR_NUMBER ]] && circleci step halt || true' # Skip job if this is a PR
       - *fast-checkout
+      - *add-github-auth
       - run: sudo pip install awscli
       - run: make prerelease-upload
   dockerhub-upload:
@@ -130,11 +146,23 @@ jobs:
     steps:
       - run: '[[ -v CIRCLE_PR_NUMBER ]] && circleci step halt || true' # Skip job if this is a PR
       - *fast-checkout
+      - *add-github-auth
       - setup_remote_docker
       - run: make docker
       - run: docker tag pilosa:$(git describe --tags) pilosa/pilosa:master
       - run: docker login -u $DOCKER_USER -p $DOCKER_PASS
       - run: docker push pilosa/pilosa:master
+  docker-enterprise-upload:
+    <<: *defaults
+    steps:
+      #- run: '[[ -v CIRCLE_PR_NUMBER ]] && circleci step halt || true' # Skip job if this is a PR
+      - *fast-checkout
+      - *add-github-auth
+      - setup_remote_docker
+      - run: make docker-enterprise
+      - run: docker tag pilosa:$(git describe --tags) molecula.azurecr.io/pilosa-enterprise:unstable
+      - run: docker login -u $DOCKER_USER -p $DOCKER_PASS
+      - run: docker push molecula.azurecr.io/pilosa-enterprise:unstable
 workflows:
   version: 2
   test:
@@ -185,11 +213,4 @@ workflows:
               only: /^v.*/
             branches:
               ignore: /.*/
-      - prerelease-upload:
-          requires:
-            - prerelease
-      - dockerhub-upload:
-          requires:
-            - linter
-            - check-license-headers
-            - test-golang-1.13
+
