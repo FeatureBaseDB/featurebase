@@ -427,7 +427,7 @@ func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shar
 		// already precomputed by handlePreCallChildren, though,
 		// we don't need this logic in executeCall.
 		if newIndex := call.CallIndex(); newIndex != "" {
-			v, err = e.executeCall(ctx, newIndex, call, shards, opt)
+			v, err = e.executeCall(ctx, newIndex, call, nil, opt)
 		} else {
 			v, err = e.executeCall(ctx, index, call, shards, opt)
 		}
@@ -456,6 +456,20 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	// TODO: Remove at version 2.0
 	if e.detectRangeCall(c) {
 		e.Holder.Logger.Printf("DEPRECATED: Range() is deprecated, please use Row() instead.")
+	}
+
+	// If shards are specified, then use that value for shards. If shards aren't
+	// specified, then include all of them.
+	if shards == nil && needsShards([]*pql.Call{c}) {
+		// Round up the number of shards.
+		idx := e.Holder.Index(index)
+		if idx == nil {
+			return nil, ErrIndexNotFound
+		}
+		shards = idx.AvailableShards().Slice()
+		if len(shards) == 0 {
+			shards = []uint64{0}
+		}
 	}
 
 	// Special handling for mutation and top-n calls.
