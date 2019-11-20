@@ -1068,27 +1068,22 @@ func (e *executor) executeSumCountShard(ctx context.Context, index string, c *pq
 
 	fieldName, _ := c.Args["field"].(string)
 
-	fragspan, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSumCountShard_gettingFragment")
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		fragspan.Finish()
 		return ValCount{}, nil
 	}
 
 	bsig := field.bsiGroup(fieldName)
 	if bsig == nil {
-		fragspan.Finish()
 		return ValCount{}, nil
 	}
 
 	fragment := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
 	if fragment == nil {
-		fragspan.Finish()
 		return ValCount{}, nil
 	}
-	fragspan.Finish()
 
-	sumspan, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSumCountShard_fragment.sum")
+	sumspan, _ := tracing.StartSpanFromContext(ctx, "Executor.executeSumCountShard_fragment.sum")
 	defer sumspan.Finish()
 	vsum, vcount, err := fragment.sum(filter, bsig.BitDepth)
 	if err != nil {
