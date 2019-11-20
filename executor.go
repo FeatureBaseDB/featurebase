@@ -366,6 +366,14 @@ func (e *executor) handlePreCallChildren(ctx context.Context, index string, c *p
 			return err
 		}
 	}
+	for _, val := range c.Args {
+		// Handle Call() operations which exist inside named arguments, too.
+		if call, ok := val.(*pql.Call); ok {
+			if err := e.handlePreCalls(ctx, index, call, shards, opt); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
@@ -3095,7 +3103,20 @@ func (e *executor) translateCalls(ctx context.Context, index string, idx *Index,
 	defer span.Finish()
 
 	for i := range calls {
-		if err := e.translateCall(index, idx, calls[i]); err != nil {
+		// Possibly change to another index for translation, if this
+		// call crosses index boundaries.
+		newIdxName := calls[i].CallIndex()
+		var newIdx *Index
+		if newIdxName == "" || newIdxName == index {
+			newIdxName = index
+			newIdx = idx
+		} else {
+			newIdx = idx.holder.indexes[newIdxName]
+			if newIdx == nil {
+				return fmt.Errorf("unknown index %q specified in cross-index call", newIdxName)
+			}
+		}
+		if err := e.translateCall(newIdxName, newIdx, calls[i]); err != nil {
 			return err
 		}
 	}
@@ -3195,7 +3216,20 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 
 	// Translate child calls.
 	for _, child := range c.Children {
-		if err := e.translateCall(index, idx, child); err != nil {
+		// Possibly change to another index for translation, if this
+		// call crosses index boundaries.
+		newIdxName := child.CallIndex()
+		var newIdx *Index
+		if newIdxName == "" || newIdxName == index {
+			newIdxName = index
+			newIdx = idx
+		} else {
+			newIdx = idx.holder.indexes[newIdxName]
+			if newIdx == nil {
+				return fmt.Errorf("unknown index %q specified in cross-index call", newIdxName)
+			}
+		}
+		if err := e.translateCall(newIdxName, newIdx, child); err != nil {
 			return err
 		}
 	}
