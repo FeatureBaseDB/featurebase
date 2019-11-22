@@ -428,6 +428,9 @@ func (c *Container) AsBitmap(target []uint64) (out []uint64) {
 		out = make([]uint64, 1024)
 	} else {
 		out = target
+		for i := range out {
+			out[i] = 0
+		}
 	}
 	if c.typeID == containerArray {
 		a := c.array()

@@ -317,6 +317,8 @@ func (e *executor) handlePreCalls(ctx context.Context, index string, c *pql.Call
 	if newIndex != "" && newIndex != index {
 		c.Type = pql.PrecallGlobal
 		index = newIndex
+		// we need to recompute shards, then
+		shards = nil
 	}
 	if c.Type == pql.PrecallNone {
 		// otherwise, handle the children
@@ -364,6 +366,14 @@ func (e *executor) handlePreCallChildren(ctx context.Context, index string, c *p
 	for i := range c.Children {
 		if err := e.handlePreCalls(ctx, index, c.Children[i], shards, opt); err != nil {
 			return err
+		}
+	}
+	for _, val := range c.Args {
+		// Handle Call() operations which exist inside named arguments, too.
+		if call, ok := val.(*pql.Call); ok {
+			if err := e.handlePreCalls(ctx, index, call, shards, opt); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -419,7 +429,7 @@ func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shar
 		// already precomputed by handlePreCallChildren, though,
 		// we don't need this logic in executeCall.
 		if newIndex := call.CallIndex(); newIndex != "" {
-			v, err = e.executeCall(ctx, newIndex, call, shards, opt)
+			v, err = e.executeCall(ctx, newIndex, call, nil, opt)
 		} else {
 			v, err = e.executeCall(ctx, index, call, shards, opt)
 		}
@@ -448,6 +458,20 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	// TODO: Remove at version 2.0
 	if e.detectRangeCall(c) {
 		e.Holder.Logger.Printf("DEPRECATED: Range() is deprecated, please use Row() instead.")
+	}
+
+	// If shards are specified, then use that value for shards. If shards aren't
+	// specified, then include all of them.
+	if shards == nil && needsShards([]*pql.Call{c}) {
+		// Round up the number of shards.
+		idx := e.Holder.Index(index)
+		if idx == nil {
+			return nil, ErrIndexNotFound
+		}
+		shards = idx.AvailableShards().Slice()
+		if len(shards) == 0 {
+			shards = []uint64{0}
+		}
 	}
 
 	// Special handling for mutation and top-n calls.
@@ -993,6 +1017,8 @@ func (e *executor) executeGenericFieldShard(ctx context.Context, index string, c
 		filter = row
 		if filter != nil && len(filter.segments) > 0 {
 			filterBitmap = filter.segments[0].data
+		} else {
+			filterBitmap = roaring.NewFileBitmap()
 		}
 	}
 
@@ -3095,7 +3121,20 @@ func (e *executor) translateCalls(ctx context.Context, index string, idx *Index,
 	defer span.Finish()
 
 	for i := range calls {
-		if err := e.translateCall(index, idx, calls[i]); err != nil {
+		// Possibly change to another index for translation, if this
+		// call crosses index boundaries.
+		newIdxName := calls[i].CallIndex()
+		var newIdx *Index
+		if newIdxName == "" || newIdxName == index {
+			newIdxName = index
+			newIdx = idx
+		} else {
+			newIdx = idx.holder.indexes[newIdxName]
+			if newIdx == nil {
+				return fmt.Errorf("unknown index %q specified in cross-index call", newIdxName)
+			}
+		}
+		if err := e.translateCall(newIdxName, newIdx, calls[i]); err != nil {
 			return err
 		}
 	}
@@ -3195,7 +3234,20 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 
 	// Translate child calls.
 	for _, child := range c.Children {
-		if err := e.translateCall(index, idx, child); err != nil {
+		// Possibly change to another index for translation, if this
+		// call crosses index boundaries.
+		newIdxName := child.CallIndex()
+		var newIdx *Index
+		if newIdxName == "" || newIdxName == index {
+			newIdxName = index
+			newIdx = idx
+		} else {
+			newIdx = idx.holder.indexes[newIdxName]
+			if newIdx == nil {
+				return fmt.Errorf("unknown index %q specified in cross-index call", newIdxName)
+			}
+		}
+		if err := e.translateCall(newIdxName, newIdx, child); err != nil {
 			return err
 		}
 	}
