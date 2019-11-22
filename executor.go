@@ -317,6 +317,8 @@ func (e *executor) handlePreCalls(ctx context.Context, index string, c *pql.Call
 	if newIndex != "" && newIndex != index {
 		c.Type = pql.PrecallGlobal
 		index = newIndex
+		// we need to recompute shards, then
+		shards = nil
 	}
 	if c.Type == pql.PrecallNone {
 		// otherwise, handle the children
