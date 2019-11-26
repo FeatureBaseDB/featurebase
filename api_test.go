@@ -16,9 +16,11 @@ package pilosa_test
 
 import (
 	"context"
+	"crypto/md5"
 	"fmt"
 	"math"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +31,89 @@ import (
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
 )
+
+func TestAPI_ImportColumnAttrs(t *testing.T) {
+	c := test.MustRunCluster(t, 2,
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("node0"),
+				pilosa.OptServerClusterHasher(&offsetModHasher{}),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+			)},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("node1"),
+				pilosa.OptServerClusterHasher(&offsetModHasher{}),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+			)},
+	)
+	defer c.Close()
+
+	m0 := c[0]
+	m1 := c[1]
+
+	t.Run("ImportColumnAttrs", func(t *testing.T) {
+		ctx := context.Background()
+		index := "i"
+		field := "f"
+
+		_, err := m0.API.CreateIndex(ctx, index, pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+		_, err = m0.API.CreateField(ctx, index, field)
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+
+		// Generate some attrs
+		columnIDs := make([]uint64, 0, 10000)
+		attrVals := make([]string, 0, 10000)
+		for n := 0; n < 1000000; n += 10000 {
+			columnIDs = append(columnIDs, uint64(n))
+			md5 := md5.Sum([]byte(strconv.FormatInt(int64(n), 10)))
+			attrVals = append(attrVals, fmt.Sprintf("%x", md5))
+			setPql := fmt.Sprintf("Set(%d, %s=0) ", n, field)
+			m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: setPql})
+		}
+
+		req := &pilosa.ImportColumnAttrsRequest{
+			AttrKey:   "columnid-md5",
+			ColumnIDs: columnIDs,
+			AttrVals:  attrVals,
+			Shard:     0,
+			Index:     index,
+		}
+
+		if err := m1.API.ImportColumnAttrs(ctx, req); err != nil {
+			t.Fatal(err)
+		}
+
+		pql := fmt.Sprintf("Options(Row(%s=0), columnAttrs=true)", field)
+
+		// Query node1.
+		res, err := m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql})
+		if err != nil {
+			t.Fatal(err)
+		}
+		fmt.Printf("%+v\n", res)
+		fmt.Printf("%+v\n", res.Results[0])
+		fmt.Printf("%#v\n", res.ColumnAttrSets)
+		/*
+			for k, v := range res.ColumnAttrSets {
+				//fmt.Printf("%+v %+v\n", k, v)
+
+				id := v.Attrs["ID"]
+				//if !ok {
+				//	t.Fatal(err)
+				//}
+				//idMd5 := md5.Sum([]byte(strconv.FormatInt(int64(id), 10)))
+				idMd5 := "."
+				fmt.Printf("%+v %+v, %v %+v\n", k, id, idMd5, v.Attrs["columnid-md5"])
+			}
+		*/
+	})
+}
 
 func TestAPI_Import(t *testing.T) {
 	c := test.MustRunCluster(t, 2,

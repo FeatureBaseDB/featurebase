@@ -105,6 +105,16 @@ type ImportValueRequest struct {
 	Values     []int64
 }
 
+// ImportColumnAttrsRequest describes the import request structure
+// for a ColumnAttr import
+type ImportColumnAttrsRequest struct {
+	AttrKey   string
+	ColumnIDs []uint64
+	AttrVals  []string
+	Shard     int64
+	Index     string
+}
+
 // ImportRequest describes the import request structure
 // for an import.
 type ImportRequest struct {

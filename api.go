@@ -1112,6 +1112,33 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 	return errors.Wrap(err, "importing")
 }
 
+func (api *API) ImportColumnAttrs(ctx context.Context, req *ImportColumnAttrsRequest, opts ...ImportOption) error {
+	span, _ := tracing.StartSpanFromContext(ctx, "API.ImportColumnAttrs")
+	defer span.Finish()
+
+	index, err := api.Index(ctx, req.Index)
+	if err != nil {
+		return errors.Wrap(err, "getting index")
+	}
+
+	if err := api.validateShardOwnership(req.Index, uint64(req.Shard)); err != nil {
+		return errors.Wrap(err, "validating shard ownership")
+	}
+
+	bulkAttrs := make(map[uint64]map[string]interface{})
+	for n := 0; n < len(req.ColumnIDs); n++ {
+		bulkAttrs[uint64(n)] = map[string]interface{}{req.AttrKey: req.AttrVals[n]}
+	}
+	if err := index.ColumnAttrStore().SetBulkAttrs(bulkAttrs); err != nil {
+		return err
+	}
+
+	if err != nil {
+		api.server.logger.Printf("import error: index=%s, shard=%d, len(columns)=%d, err=%s", req.Index, req.Shard, len(req.ColumnIDs), err)
+	}
+	return errors.Wrap(err, "importing column attrs")
+}
+
 func importExistenceColumns(index *Index, columnIDs []uint64) error {
 	ef := index.existenceField()
 	if ef == nil {
