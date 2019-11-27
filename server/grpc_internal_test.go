@@ -133,10 +133,11 @@ func TestGRPC(t *testing.T) {
 					{"a", "uint64"},
 					{"b", "uint64"},
 					{"count", "uint64"},
+					{"sum", "int64"},
 				},
 				[][]expColumn{
-					{uint64(10), uint64(11), uint64(123)},
-					{uint64(10), uint64(12), uint64(456)},
+					{uint64(10), uint64(11), uint64(123), int64(0)},
+					{uint64(10), uint64(12), uint64(456), int64(0)},
 				},
 			},
 			// []GroupCount (string)
@@ -161,10 +162,11 @@ func TestGRPC(t *testing.T) {
 					{"a", "string"},
 					{"b", "string"},
 					{"count", "uint64"},
+					{"sum", "int64"},
 				},
 				[][]expColumn{
-					{"ten", "eleven", uint64(123)},
-					{"ten", "twelve", uint64(456)},
+					{"ten", "eleven", uint64(123), int64(0)},
+					{"ten", "twelve", uint64(456), int64(0)},
 				},
 			},
 			// RowIdentifiers (uint64)
@@ -258,6 +260,11 @@ func TestGRPC(t *testing.T) {
 						val := column.GetBoolVal()
 						if val != v {
 							t.Fatalf("test %d expected column val: %v, but got: %v", ti, v, val)
+						}
+					case int64:
+						val := column.GetInt64Val()
+						if val != v {
+							t.Fatalf("test %d expected column val: %v but got: %v", ti, v, val)
 						}
 					default:
 						t.Fatalf("test %d has unhandled data type: %T", ti, v)

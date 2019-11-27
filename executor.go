@@ -666,7 +666,7 @@ func (e *executor) executeSum(ctx context.Context, index string, c *pql.Call, sh
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(shard uint64) (interface{}, error) {
-		return e.executeSumCountShard(ctx, index, c, shard)
+		return e.executeSumCountShard(ctx, index, c, nil, shard)
 	}
 
 	// Merge returned results at coordinating node.
@@ -1053,12 +1053,12 @@ func (e *executor) executeGenericFieldShard(ctx context.Context, index string, c
 }
 
 // executeSumCountShard calculates the sum and count for bsiGroups on a shard.
-func (e *executor) executeSumCountShard(ctx context.Context, index string, c *pql.Call, shard uint64) (ValCount, error) {
+func (e *executor) executeSumCountShard(ctx context.Context, index string, c *pql.Call, filter *Row, shard uint64) (ValCount, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSumCountShard")
 	defer span.Finish()
 
-	var filter *Row
-	if len(c.Children) == 1 {
+	// Only calculate the filter if it doesn't exist and a child call as been passed in.
+	if filter == nil && len(c.Children) == 1 {
 		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
 		if err != nil {
 			return ValCount{}, errors.Wrap(err, "executing bitmap call")
@@ -1083,6 +1083,8 @@ func (e *executor) executeSumCountShard(ctx context.Context, index string, c *pq
 		return ValCount{}, nil
 	}
 
+	sumspan, _ := tracing.StartSpanFromContext(ctx, "Executor.executeSumCountShard_fragment.sum")
+	defer sumspan.Finish()
 	vsum, vcount, err := fragment.sum(filter, bsig.BitDepth)
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "computing sum")
@@ -1442,6 +1444,8 @@ func (r RowIDs) merge(other RowIDs, limit int) RowIDs {
 }
 
 func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) ([]GroupCount, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGroupBy")
+	defer span.Finish()
 	// validate call
 	if len(c.Children) == 0 {
 		return nil, errors.New("need at least one child call")
@@ -1563,6 +1567,7 @@ func (fr FieldRow) String() string {
 type GroupCount struct {
 	Group []FieldRow `json:"group"`
 	Count uint64     `json:"count"`
+	Sum   int64      `json:"sum"`
 }
 
 // mergeGroupCounts merges two slices of GroupCounts throwing away any that go
@@ -1581,6 +1586,7 @@ func mergeGroupCounts(a, b []GroupCount, limit int) []GroupCount {
 			i++
 		case 0:
 			a[i].Count += b[j].Count
+			a[i].Sum += b[j].Sum
 			ret = append(ret, a[i])
 			i++
 			j++
@@ -1612,6 +1618,9 @@ func (g GroupCount) Compare(o GroupCount) int {
 }
 
 func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql.Call, filter *pql.Call, shard uint64, childRows []RowIDs) (_ []GroupCount, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGroupByShard")
+	defer span.Finish()
+
 	var filterRow *Row
 	if filter != nil {
 		if filterRow, err = e.executeBitmapCallShard(ctx, index, filter, shard); err != nil {
@@ -1619,7 +1628,15 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 		}
 	}
 
-	iter, err := newGroupByIterator(childRows, c.Children, filterRow, index, shard, e.Holder)
+	aggregate, _, err := c.CallArg("aggregate")
+	if err != nil {
+		return nil, err
+	}
+
+	newspan, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGroupByShard_newGroupByIterator")
+	iter, err := newGroupByIterator(e, childRows, c.Children, aggregate, filterRow, index, shard, e.Holder)
+	newspan.Finish()
+
 	if err != nil {
 		return nil, errors.Wrapf(err, "getting group by iterator for shard %d", shard)
 	}
@@ -1637,7 +1654,10 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 	results := make([]GroupCount, 0)
 
 	num := 0
-	for gc, done := iter.Next(); !done && num < limit; gc, done = iter.Next() {
+	for gc, done, err := iter.Next(ctx); !done && num < limit; gc, done, err = iter.Next(ctx) {
+		if err != nil {
+			return nil, err
+		}
 		if gc.Count > 0 {
 			num++
 			results = append(results, gc)
@@ -3279,6 +3299,16 @@ func (e *executor) translateGroupByCall(index string, idx *Index, c *pql.Call) e
 		}
 	}
 
+	if aggregate, ok, err := c.CallArg("aggregate"); ok {
+		if err != nil {
+			return errors.Wrap(err, "getting aggregate call")
+		}
+		err = e.translateCall(index, idx, aggregate)
+		if err != nil {
+			return errors.Wrap(err, "translating aggregate call")
+		}
+	}
+
 	prev, ok := c.Args["previous"]
 	if !ok {
 		return nil // nothing else to be translated
@@ -3416,6 +3446,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 			other = append(other, GroupCount{
 				Group: group,
 				Count: gl.Count,
+				Sum:   gl.Sum,
 			})
 		}
 		return other, nil
@@ -3656,6 +3687,10 @@ func isValidID(v interface{}) bool {
 // elements equal to the number of fields in the group by (the number of Rows
 // calls).
 type groupByIterator struct {
+	executor *executor
+	index    string
+	shard    uint64
+
 	// rowIters contains a rowIterator for each of the fields in the Group By.
 	rowIters []*rowIterator
 	// rows contains the current row data for each of the fields in the Group
@@ -3677,18 +3712,25 @@ type groupByIterator struct {
 
 	// Optional filter row to intersect against first level of values.
 	filter *Row
+
+	// Optional aggregate function to execute for each group.
+	aggregate *pql.Call
 }
 
 // newGroupByIterator initializes a new groupByIterator.
-func newGroupByIterator(rowIDs []RowIDs, children []*pql.Call, filter *Row, index string, shard uint64, holder *Holder) (*groupByIterator, error) {
+func newGroupByIterator(executor *executor, rowIDs []RowIDs, children []*pql.Call, aggregate *pql.Call, filter *Row, index string, shard uint64, holder *Holder) (*groupByIterator, error) {
 	gbi := &groupByIterator{
+		executor: executor,
+		index:    index,
+		shard:    shard,
 		rowIters: make([]*rowIterator, len(children)),
 		rows: make([]struct {
 			row *Row
 			id  uint64
 		}, len(children)),
-		filter: filter,
-		fields: make([]FieldRow, len(children)),
+		filter:    filter,
+		aggregate: aggregate,
+		fields:    make([]FieldRow, len(children)),
 	}
 
 	var fieldName string
@@ -3796,16 +3838,33 @@ func (gbi *groupByIterator) nextAtIdx(i int) {
 
 // Next returns a GroupCount representing the next group by record. When there
 // are no more records it will return an empty GroupCount and done==true.
-func (gbi *groupByIterator) Next() (ret GroupCount, done bool) {
+func (gbi *groupByIterator) Next(ctx context.Context) (ret GroupCount, done bool, err error) {
 	// loop until we find a result with count > 0
 	for {
 		if gbi.done {
-			return ret, true
+			return ret, true, nil
 		}
-		if len(gbi.rows) == 1 {
-			ret.Count = gbi.rows[len(gbi.rows)-1].row.Count()
+		if gbi.aggregate == nil {
+			if len(gbi.rows) == 1 {
+				ret.Count = gbi.rows[len(gbi.rows)-1].row.Count()
+			} else {
+				ret.Count = gbi.rows[len(gbi.rows)-1].row.intersectionCount(gbi.rows[len(gbi.rows)-2].row)
+			}
 		} else {
-			ret.Count = gbi.rows[len(gbi.rows)-1].row.intersectionCount(gbi.rows[len(gbi.rows)-2].row)
+			filter := gbi.rows[len(gbi.rows)-1].row
+			if len(gbi.rows) != 1 {
+				filter = filter.Intersect(gbi.rows[len(gbi.rows)-2].row)
+			}
+
+			switch gbi.aggregate.Name {
+			case "Sum":
+				result, err := gbi.executor.executeSumCountShard(ctx, gbi.index, gbi.aggregate, filter, gbi.shard)
+				if err != nil {
+					return ret, false, err
+				}
+				ret.Count = uint64(result.Count)
+				ret.Sum = result.Val
+			}
 		}
 		if ret.Count == 0 {
 			gbi.nextAtIdx(len(gbi.rows) - 1)
@@ -3824,7 +3883,7 @@ func (gbi *groupByIterator) Next() (ret GroupCount, done bool) {
 
 	gbi.nextAtIdx(len(gbi.rows) - 1)
 
-	return ret, false
+	return ret, false, nil
 }
 
 // getCondIntSlice looks at the field, the cond op type (which is
