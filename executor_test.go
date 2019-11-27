@@ -526,10 +526,8 @@ func TestExecutor_Execute_Set(t *testing.T) {
 
 			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1, f=11)`}); err != nil {
 				t.Fatal(err)
-			} else {
-				if !res.Results[0].(bool) {
-					t.Fatalf("expected column changed")
-				}
+			} else if !res.Results[0].(bool) {
+				t.Fatalf("expected column changed")
 			}
 
 			if n := hldr.Row("i", "f", 11).Count(); n != 1 {
@@ -537,10 +535,8 @@ func TestExecutor_Execute_Set(t *testing.T) {
 			}
 			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1, f=11)`}); err != nil {
 				t.Fatal(err)
-			} else {
-				if res.Results[0].(bool) {
-					t.Fatalf("expected column unchanged")
-				}
+			} else if res.Results[0].(bool) {
+				t.Fatalf("expected column unchanged")
 			}
 		})
 
@@ -591,10 +587,8 @@ func TestExecutor_Execute_Set(t *testing.T) {
 
 			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("foo", f=11)`}); err != nil {
 				t.Fatal(err)
-			} else {
-				if !res.Results[0].(bool) {
-					t.Fatalf("expected column changed")
-				}
+			} else if !res.Results[0].(bool) {
+				t.Fatalf("expected column changed")
 			}
 
 			if n := hldr.Row("i", "f", 11).Count(); n != 1 {
@@ -602,10 +596,20 @@ func TestExecutor_Execute_Set(t *testing.T) {
 			}
 			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set("foo", f=11)`}); err != nil {
 				t.Fatal(err)
-			} else {
-				if res.Results[0].(bool) {
-					t.Fatalf("expected column unchanged")
-				}
+			} else if res.Results[0].(bool) {
+				t.Fatalf("expected column unchanged")
+			}
+
+			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2, f=11)`}); err != nil {
+				t.Fatal(err)
+			} else if !res.Results[0].(bool) {
+				t.Fatalf("expected column changed with integer column key")
+			}
+
+			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2, f=11)`}); err != nil {
+				t.Fatal(err)
+			} else if res.Results[0].(bool) {
+				t.Fatalf("expected column unchanged with integer column key")
 			}
 		})
 
@@ -617,8 +621,14 @@ func TestExecutor_Execute_Set(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2, f=1)`}); err == nil || errors.Cause(err).Error() != `column value must be a string when index 'keys' option enabled` {
+			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2.1, f=1)`}); err == nil || strings.Contains(err.Error(), `column value must be a string or non-negative integer`) {
 				t.Fatal(err)
+			}
+
+			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2, f=1)`}); err != nil {
+				t.Fatal(err)
+			} else if !res.Results[0].(bool) {
+				t.Fatalf("expected column changed with integer column key")
 			}
 		})
 
@@ -627,9 +637,16 @@ func TestExecutor_Execute_Set(t *testing.T) {
 			if _, err := index.CreateField("f", pilosa.OptFieldTypeDefault(), pilosa.OptFieldKeys()); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "inokey", Query: `Set(2, f=1)`}); err == nil || errors.Cause(err).Error() != `row value must be a string when field 'keys' option enabled` {
+			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "inokey", Query: `Set(2, f=1.2)`}); err == nil || !strings.Contains(err.Error(), "row value must be a string or non-negative integer") {
 				t.Fatal(err)
 			}
+
+			if res, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2, f=9)`}); err != nil {
+				t.Fatal(err)
+			} else if !res.Results[0].(bool) {
+				t.Fatalf("expected column changed with integer column key")
+			}
+
 		})
 	})
 }

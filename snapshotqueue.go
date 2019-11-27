@@ -394,7 +394,7 @@ func (sq *prioritySnapshotQueue) scanHolderWorker(h *Holder, background chan sna
 			sq.logger.Printf("background scan: %d fragments needed snapshots\n", hits)
 			hits = 0
 		} else {
-			sq.logger.Printf("background scan: no fragments needed snapshots, waiting\n")
+			sq.logger.Debugf("background scan: no fragments needed snapshots, waiting\n")
 			// No reason to be active if we're not finding anything.
 			select {
 			case <-time.After(60 * time.Second):

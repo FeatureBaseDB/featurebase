@@ -3170,9 +3170,10 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 	// Translate column key.
 	if idx.Keys() {
 		if c.Args[colKey] != nil && !isString(c.Args[colKey]) {
-			return errors.New("column value must be a string when index 'keys' option enabled")
-		}
-		if value := callArgString(c, colKey); value != "" {
+			if !isValidID(c.Args[colKey]) {
+				return errors.Errorf("column value must be a string or non-negative integer, but got: %v of %[1]T", c.Args[colKey])
+			}
+		} else if value := callArgString(c, colKey); value != "" {
 			id, err := idx.translateStore.TranslateKey(value)
 			if err != nil {
 				return err
@@ -3216,9 +3217,11 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 			}
 		} else if field.keys() {
 			if c.Args[rowKey] != nil && !isString(c.Args[rowKey]) {
-				return errors.New("row value must be a string when field 'keys' option enabled")
-			}
-			if value := callArgString(c, rowKey); value != "" {
+				// allow passing row id directly (this can come in handy, but make sure it is a valid row id)
+				if !isValidID(c.Args[rowKey]) {
+					return errors.Errorf("row value must be a string or non-negative integer, but got: %v of %[1]T", c.Args[rowKey])
+				}
+			} else if value := callArgString(c, rowKey); value != "" {
 				id, err := field.translateStore.TranslateKey(value)
 				if err != nil {
 					return err
@@ -3624,6 +3627,29 @@ func callArgString(call *pql.Call, key string) string {
 func isString(v interface{}) bool {
 	_, ok := v.(string)
 	return ok
+}
+
+// isValidID returns whether v can be interpreted as a valid row or
+// column ID. In short, is v a non-negative integer? I think the int64
+// and default cases are the only ones actually used since the PQL
+// parser doesn't return any other integer types.
+func isValidID(v interface{}) bool {
+	switch vt := v.(type) {
+	case uint, uint64, uint32, uint16, uint8:
+		return true
+	case int64:
+		return vt >= 0
+	case int:
+		return vt >= 0
+	case int32:
+		return vt >= 0
+	case int16:
+		return vt >= 0
+	case int8:
+		return vt >= 0
+	default:
+		return false
+	}
 }
 
 // groupByIterator contains several slices. Each slice contains a number of
