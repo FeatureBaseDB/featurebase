@@ -205,6 +205,9 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
 					}
+				case "time":
+					rowResp.Columns = append(rowResp.Columns,
+						&pb.ColumnResponse{ColumnVal: nil})
 				}
 			}
 
@@ -547,6 +550,17 @@ func makeRows(resp pilosa.QueryResponse, logger logger.Logger) chan *pb.RowRespo
 					Headers: ci,
 					Columns: []*pb.ColumnResponse{
 						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BoolVal{BoolVal: r}},
+					}}
+			case pilosa.ValCount:
+				ci := []*pb.ColumnInfo{
+					{Name: "value", Datatype: "int64"},
+					{Name: "count", Datatype: "int64"},
+				}
+				results <- &pb.RowResponse{
+					Headers: ci,
+					Columns: []*pb.ColumnResponse{
+						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: r.Val}},
+						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: r.Count}},
 					}}
 			default:
 				logger.Printf("unhandled %T\n", r)
