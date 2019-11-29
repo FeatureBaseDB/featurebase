@@ -1730,7 +1730,7 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 	// Marshal response object.
 	buf, err := h.api.Serializer.Marshal(resp)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("marshal import response: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("marshal import-roaring response: %v", err), http.StatusInternalServerError)
 		return
 	}
 

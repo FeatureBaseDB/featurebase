@@ -1121,7 +1121,7 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 			}
 		}
 
-		return errors.Wrap(err, "importing")
+		return errors.Wrap(err, "importing value")
 	}
 
 	options.IgnoreKeyCheck = true
