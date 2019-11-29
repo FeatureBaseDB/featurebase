@@ -3459,6 +3459,22 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5, Sum: 30},
 			},
 		},
+		{
+			query: "GroupBy(Rows(generals), aggregate=Sum(field=v), having=Condition(sum>25))",
+			expected: []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 2, RowKey: "r2"}}, Count: 5, Sum: 30},
+			},
+		},
+		{
+			query: "GroupBy(Rows(generals), aggregate=Sum(field=v), having=Condition(-5<sum<27))",
+			expected: []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "generals", RowID: 1, RowKey: "r1"}}, Count: 5, Sum: 25},
+			},
+		},
+		{
+			query:    "GroupBy(Rows(generals), aggregate=Sum(field=v), having=Condition(count>5))",
+			expected: []pilosa.GroupCount{},
+		},
 	}
 
 	for i, tst := range tests {

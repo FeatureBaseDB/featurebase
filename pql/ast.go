@@ -387,6 +387,7 @@ var callInfoByFunc = map[string]callInfo{
 			"limit":     int64(0),
 			"previous":  nil,
 			"aggregate": nil,
+			"having":    nil,
 		},
 	},
 	"Options": {
@@ -775,6 +776,79 @@ func (cond *Condition) IntSliceValue() ([]int64, error) {
 	default:
 		return nil, fmt.Errorf("unexpected type %T in IntSliceValue, val %v", tval, tval)
 	}
+}
+
+func (cond *Condition) Uint64Value() (uint64, bool) {
+	val := cond.Value
+
+	switch tval := val.(type) {
+	case int64:
+		if tval >= 0 {
+			return uint64(tval), true
+		}
+	case uint64:
+		return tval, true
+	}
+
+	return 0, false
+}
+
+func (cond *Condition) Uint64SliceValue() ([]uint64, bool) {
+	val := cond.Value
+
+	switch tval := val.(type) {
+	case []interface{}:
+		ret := make([]uint64, len(tval))
+		for i, v := range tval {
+			switch tv := v.(type) {
+			case int64:
+				ret[i] = uint64(tv)
+			case uint64:
+				ret[i] = tv
+			default:
+				return nil, false
+			}
+		}
+		return ret, true
+	}
+
+	return nil, false
+}
+
+func (cond *Condition) Int64Value() (int64, bool) {
+	val := cond.Value
+
+	switch tval := val.(type) {
+	case int64:
+		return tval, true
+	case uint64:
+		// TODO: consider overflow?
+		return int64(tval), true
+	}
+
+	return 0, false
+}
+
+func (cond *Condition) Int64SliceValue() ([]int64, bool) {
+	val := cond.Value
+
+	switch tval := val.(type) {
+	case []interface{}:
+		ret := make([]int64, len(tval))
+		for i, v := range tval {
+			switch tv := v.(type) {
+			case int64:
+				ret[i] = tv
+			case uint64:
+				ret[i] = int64(tv)
+			default:
+				return nil, false
+			}
+		}
+		return ret, true
+	}
+
+	return nil, false
 }
 
 func formatValue(v interface{}) string {
