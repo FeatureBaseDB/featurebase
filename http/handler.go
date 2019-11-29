@@ -286,6 +286,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}", handler.handlePostIndex).Methods("POST").Name("PostIndex")
 	router.HandleFunc("/index/{index}", handler.handleDeleteIndex).Methods("DELETE").Name("DeleteIndex")
 	//router.HandleFunc("/index/{index}/field", handler.handleGetFields).Methods("GET") // Not implemented.
+	router.HandleFunc("/index/{index}/import-column-attrs", handler.handlePostImportColumnAttrs).Methods("POST").Name("PostImportColumnAttrs")
 	router.HandleFunc("/index/{index}/field/{field}", handler.handlePostField).Methods("POST").Name("PostField")
 	router.HandleFunc("/index/{index}/field/{field}", handler.handleDeleteField).Methods("DELETE").Name("DeleteField")
 	router.HandleFunc("/index/{index}/field/{field}/import", handler.handlePostImport).Methods("POST").Name("PostImport")
@@ -1619,6 +1620,50 @@ func GetHTTPClient(t *tls.Config) *http.Client {
 		transport.TLSClientConfig = t
 	}
 	return &http.Client{Transport: transport}
+}
+
+// handlePostImportColumnAttrs
+func (h *Handler) handlePostImportColumnAttrs(w http.ResponseWriter, r *http.Request) {
+	// Verify that request is only communicating over protobufs.
+	if r.Header.Get("Content-Type") != "application/x-protobuf" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	} else if r.Header.Get("Accept") != "application/x-protobuf" {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
+	}
+
+	opts := []pilosa.ImportOption{}
+
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	req := &pilosa.ImportColumnAttrsRequest{}
+	if err := h.api.Serializer.Unmarshal(body, req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := h.api.ImportColumnAttrs(r.Context(), req, opts...); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Marshal response object.
+	buf, e := h.api.Serializer.Marshal(&pilosa.ImportResponse{Err: ""})
+	if e != nil {
+		http.Error(w, fmt.Sprintf("marshal import-column-attrs response"), http.StatusInternalServerError)
+		return
+	}
+
+	// Write response.
+	_, err = w.Write(buf)
+	if err != nil {
+		h.logger.Printf("writing import-column-attrs response: %v", err)
+	}
 }
 
 // handlPostRoaringImport

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +30,126 @@ import (
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
 )
+
+// attrFun defines a mapping from columnID -> attr value
+func attrFun(id uint64) string {
+	//return fmt.Sprintf("%x", md5.Sum([]byte(strconv.FormatInt(int64(id), 10))))
+	return strconv.FormatInt(int64(id), 10)
+}
+
+func TestAPI_ImportColumnAttrs(t *testing.T) {
+	/*
+	   columns seconds
+	   100      1.150
+	   1000     1.568
+	   10000    5.156
+	   100000  38.179
+	*/
+	c := test.MustRunCluster(t, 2,
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("node0"),
+				pilosa.OptServerClusterHasher(&offsetModHasher{}),
+			)},
+		[]server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerNodeID("node1"),
+				pilosa.OptServerClusterHasher(&offsetModHasher{}),
+			)},
+	)
+	defer c.Close()
+
+	m0 := c[0]
+	m1 := c[1]
+	t.Run("ImportColumnAttrs", func(t *testing.T) {
+		ctx := context.Background()
+		index := "i"
+		field := "f"
+		attrKey := "columnid-md5"
+
+		_, err := m0.API.CreateIndex(ctx, index, pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+		_, err = m0.API.CreateField(ctx, index, field)
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+
+		// Generate some attrs for two shards
+		columnIDs0 := make([]uint64, 0, 100)
+		attrVals0 := make([]string, 0, 100)
+		columnIDs1 := make([]uint64, 0, 100)
+		attrVals1 := make([]string, 0, 100)
+		for n := 0; n < 1000000; n += 10000 {
+			columnIDs0 = append(columnIDs0, uint64(n))
+			md50 := attrFun(uint64(n))
+			attrVals0 = append(attrVals0, md50)
+			setPql0 := fmt.Sprintf("Set(%d, %s=0) ", n, field)
+			m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: setPql0})
+
+			columnIDs1 = append(columnIDs1, uint64(n+ShardWidth))
+			md51 := attrFun(uint64(n + ShardWidth))
+			attrVals1 = append(attrVals1, md51)
+			setPql1 := fmt.Sprintf("Set(%d, %s=0) ", n+ShardWidth, field)
+			m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: setPql1})
+		}
+
+		// send shard0 to node1
+		req := &pilosa.ImportColumnAttrsRequest{
+			AttrKey:   attrKey,
+			ColumnIDs: columnIDs0,
+			AttrVals:  attrVals0,
+			Shard:     0,
+			Index:     index,
+		}
+
+		if err := m1.API.ImportColumnAttrs(ctx, req); err != nil {
+			t.Fatal(err)
+		}
+
+		// send shard1 to node0
+		req = &pilosa.ImportColumnAttrsRequest{
+			AttrKey:   attrKey,
+			ColumnIDs: columnIDs1,
+			AttrVals:  attrVals1,
+			Shard:     1,
+			Index:     index,
+		}
+
+		if err := m0.API.ImportColumnAttrs(ctx, req); err != nil {
+			t.Fatal(err)
+		}
+
+		// Query node0.
+		pql := fmt.Sprintf("Options(Row(%s=0), columnAttrs=true)", field)
+		res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, v := range res.ColumnAttrSets {
+			attrVal := attrFun(v.ID)
+			if attrVal != v.Attrs[attrKey] {
+				t.Fatal(err)
+			}
+		}
+		// Query node1.
+		pql = fmt.Sprintf("Options(Row(%s=0), columnAttrs=true)", field)
+		res, err = m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for _, v := range res.ColumnAttrSets {
+			attrVal := attrFun(v.ID)
+			if attrVal != v.Attrs[attrKey] {
+				t.Fatal(err)
+			}
+		}
+
+	})
+}
 
 func TestAPI_Import(t *testing.T) {
 	c := test.MustRunCluster(t, 2,
