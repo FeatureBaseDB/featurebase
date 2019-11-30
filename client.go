@@ -70,6 +70,7 @@ type InternalClient interface {
 	SendMessage(ctx context.Context, uri *URI, msg []byte) error
 	RetrieveShardFromURI(ctx context.Context, index, field, view string, shard uint64, uri URI) (io.ReadCloser, error)
 	ImportRoaring(ctx context.Context, uri *URI, index, field string, shard uint64, remote bool, req *ImportRoaringRequest) error
+	ImportColumnAttrs(ctx context.Context, uri *URI, index string, req *ImportColumnAttrsRequest) error
 }
 
 //===============
@@ -137,6 +138,11 @@ func (n nopInternalClient) ImportValue2(ctx context.Context, req *ImportValueReq
 func (n nopInternalClient) ImportRoaring(ctx context.Context, uri *URI, index, field string, shard uint64, remote bool, req *ImportRoaringRequest) error {
 	return nil
 }
+
+func (n nopInternalClient) ImportColumnAttrs(ctx context.Context, uri *URI, index string, req *ImportColumnAttrsRequest) error {
+	return nil
+}
+
 func (n nopInternalClient) EnsureIndex(ctx context.Context, name string, options IndexOptions) error {
 	return nil
 }

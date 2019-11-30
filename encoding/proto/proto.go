@@ -225,6 +225,14 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		decodeImportRoaringRequest(msg, mt)
 		return nil
+	case *pilosa.ImportColumnAttrsRequest:
+		msg := &internal.ImportColumnAttrsRequest{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling ImportColumnAttrsRequest")
+		}
+		decodeImportColumnAttrsRequest(msg, mt)
+		return nil
 	case *pilosa.ImportResponse:
 		msg := &internal.ImportResponse{}
 		err := proto.Unmarshal(buf, msg)
@@ -318,6 +326,8 @@ func encodeToProto(m pilosa.Message) proto.Message {
 		return encodeImportValueRequest(mt)
 	case *pilosa.ImportRoaringRequest:
 		return encodeImportRoaringRequest(mt)
+	case *pilosa.ImportColumnAttrsRequest:
+		return encodeImportColumnAttrsRequest(mt)
 	case *pilosa.ImportResponse:
 		return encodeImportResponse(mt)
 	case *pilosa.BlockDataRequest:
@@ -392,6 +402,16 @@ func encodeImportRoaringRequest(m *pilosa.ImportRoaringRequest) *internal.Import
 	return &internal.ImportRoaringRequest{
 		Clear: m.Clear,
 		Views: views,
+	}
+}
+
+func encodeImportColumnAttrsRequest(m *pilosa.ImportColumnAttrsRequest) *internal.ImportColumnAttrsRequest {
+	return &internal.ImportColumnAttrsRequest{
+		Index:     m.Index,
+		Shard:     m.Shard,
+		AttrKey:   m.AttrKey,
+		AttrVals:  m.AttrVals,
+		ColumnIDs: m.ColumnIDs,
 	}
 }
 
@@ -1008,6 +1028,14 @@ func decodeImportRoaringRequest(pb *internal.ImportRoaringRequest, m *pilosa.Imp
 	}
 	m.Clear = pb.Clear
 	m.Views = views
+}
+
+func decodeImportColumnAttrsRequest(pb *internal.ImportColumnAttrsRequest, m *pilosa.ImportColumnAttrsRequest) {
+	m.Index = pb.Index
+	m.Shard = pb.Shard
+	m.AttrKey = pb.AttrKey
+	m.AttrVals = pb.AttrVals
+	m.ColumnIDs = pb.ColumnIDs
 }
 
 func decodeImportResponse(pb *internal.ImportResponse, m *pilosa.ImportResponse) {

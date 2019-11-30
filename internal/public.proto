@@ -130,3 +130,11 @@ message ImportRoaringRequest {
 	bool Clear = 1;
 	repeated ImportRoaringRequestView views = 2;
 }
+
+message ImportColumnAttrsRequest {
+	string Index = 1;
+	int64 Shard = 2;
+	string AttrKey = 3;
+	repeated string AttrVals = 4;
+	repeated uint64 ColumnIDs = 5;
+}
