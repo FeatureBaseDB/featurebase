@@ -46,7 +46,7 @@ func TestExecutor_TranslateGroupByCall(t *testing.T) {
 		t.Fatalf("creating fields %v, %v, %v", erra, errb, errc)
 	}
 
-	query, err := pql.ParseString(`GroupBy(Rows(ak), Rows(b), Rows(ck), previous=["la", 0, "ha"])`)
+	query, err := pql.ParseString(`GroupBy(Rows(ak), Rows(b), Rows(ck), previous=["la", 0, "ha"], having=Condition(count > 10))`)
 	if err != nil {
 		t.Fatalf("parsing query: %v", err)
 	}
@@ -61,6 +61,19 @@ func TestExecutor_TranslateGroupByCall(t *testing.T) {
 	for i, v := range c.Args["previous"].([]interface{}) {
 		if !isInt(v) {
 			t.Fatalf("expected all items in previous to be ints, but '%v' at index %d is %[1]T", v, i)
+		}
+	}
+
+	if having, hok := c.Args["having"].(*pql.Call); !hok {
+		t.Fatal("expected having to be a call")
+	} else if cond, cok := having.Args["count"].(*pql.Condition); !cok {
+		t.Fatal("expected condition to be a count")
+	} else if cond.Op != pql.GT {
+		t.Fatal("expected condition op to be >")
+	} else {
+		val, ok := cond.Uint64Value()
+		if !ok || val != uint64(10) {
+			t.Fatal("expected condition val to be uint64(10)")
 		}
 	}
 
@@ -221,4 +234,124 @@ func TestFieldRowMarshalJSON(t *testing.T) {
 	if string(b) != `{"field":"blah","rowID":2}` {
 		t.Fatalf("unexpected json: %s", b)
 	}
+}
+
+func TestExecutor_GroupCountCondition(t *testing.T) {
+	t.Run("satisfiesCondition", func(t *testing.T) {
+		type condCheck struct {
+			cond string
+			exp  bool
+		}
+		tests := []struct {
+			groupCount GroupCount
+			checks     []condCheck
+		}{
+			{
+				groupCount: GroupCount{Count: 100},
+				checks: []condCheck{
+					{cond: "count == 99", exp: false},
+					{cond: "count != 99", exp: true},
+					{cond: "count < 99", exp: false},
+					{cond: "count <= 99", exp: false},
+					{cond: "count > 99", exp: true},
+					{cond: "count >= 99", exp: true},
+
+					{cond: "count == 100", exp: true},
+					{cond: "count != 100", exp: false},
+					{cond: "count < 100", exp: false},
+					{cond: "count <= 100", exp: true},
+					{cond: "count > 100", exp: false},
+					{cond: "count >= 100", exp: true},
+
+					{cond: "count == 101", exp: false},
+					{cond: "count != 101", exp: true},
+					{cond: "count < 101", exp: true},
+					{cond: "count <= 101", exp: true},
+					{cond: "count > 101", exp: false},
+					{cond: "count >= 101", exp: false},
+				},
+			},
+			{
+				groupCount: GroupCount{Sum: 100},
+				checks: []condCheck{
+					{cond: "sum == 99", exp: false},
+					{cond: "sum != 99", exp: true},
+					{cond: "sum < 99", exp: false},
+					{cond: "sum <= 99", exp: false},
+					{cond: "sum > 99", exp: true},
+					{cond: "sum >= 99", exp: true},
+
+					{cond: "sum == 100", exp: true},
+					{cond: "sum != 100", exp: false},
+					{cond: "sum < 100", exp: false},
+					{cond: "sum <= 100", exp: true},
+					{cond: "sum > 100", exp: false},
+					{cond: "sum >= 100", exp: true},
+
+					{cond: "sum == 101", exp: false},
+					{cond: "sum != 101", exp: true},
+					{cond: "sum < 101", exp: true},
+					{cond: "sum <= 101", exp: true},
+					{cond: "sum > 101", exp: false},
+					{cond: "sum >= 101", exp: false},
+				},
+			},
+			{
+				groupCount: GroupCount{Sum: -100},
+				checks: []condCheck{
+					{cond: "sum == -99", exp: false},
+					{cond: "sum != -99", exp: true},
+					{cond: "sum < -99", exp: true},
+					{cond: "sum <= -99", exp: true},
+					{cond: "sum > -99", exp: false},
+					{cond: "sum >= -99", exp: false},
+
+					{cond: "sum == -100", exp: true},
+					{cond: "sum != -100", exp: false},
+					{cond: "sum < -100", exp: false},
+					{cond: "sum <= -100", exp: true},
+					{cond: "sum > -100", exp: false},
+					{cond: "sum >= -100", exp: true},
+
+					{cond: "sum == -101", exp: false},
+					{cond: "sum != -101", exp: true},
+					{cond: "sum < -101", exp: false},
+					{cond: "sum <= -101", exp: false},
+					{cond: "sum > -101", exp: true},
+					{cond: "sum >= -101", exp: true},
+				},
+			},
+		}
+		for i, test := range tests {
+			t.Run(fmt.Sprintf("test (#%d):", i), func(t *testing.T) {
+				for j, check := range test.checks {
+					t.Run(fmt.Sprintf("check (#%d):", j), func(t *testing.T) {
+
+						query, err := pql.ParseString(fmt.Sprintf("GroupBy(Rows(a), having=Condition(%s))", check.cond))
+						if err != nil {
+							t.Fatalf("parsing query: %v", err)
+						}
+						c := query.Calls[0]
+						having := c.Args["having"].(*pql.Call)
+
+						var got bool
+						for subj, cond := range having.Args {
+							switch subj {
+							case "count", "sum":
+								condition, ok := cond.(*pql.Condition)
+								if !ok {
+									t.Fatalf("not a valid condition")
+								}
+								got = test.groupCount.satisfiesCondition(subj, condition)
+							}
+						}
+
+						if got != check.exp {
+							t.Fatalf("expected: %v, but got: %v", check.exp, got)
+						}
+					})
+				}
+			})
+		}
+	})
 }

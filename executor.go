@@ -1511,6 +1511,27 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 	}
 	results, _ := other.([]GroupCount)
 
+	// Apply having.
+	if having, hasHaving, err := c.CallArg("having"); err != nil {
+		return nil, err
+	} else if hasHaving {
+		// parse the condition as PQL
+		if having.Name != "Condition" {
+			return nil, errors.New("the only supported having call is Condition()")
+		}
+		if len(having.Args) != 1 {
+			return nil, errors.New("Condition() must contain a single condition")
+		}
+		for subj, cond := range having.Args {
+			switch subj {
+			case "count", "sum":
+				results = applyConditionToGroupCounts(results, subj, cond.(*pql.Condition))
+			default:
+				return nil, errors.New("Condition() only supports count or sum")
+			}
+		}
+	}
+
 	// Apply offset.
 	if offset, hasOffset, err := c.UintArg("offset"); err != nil {
 		return nil, err
@@ -1615,6 +1636,137 @@ func (g GroupCount) Compare(o GroupCount) int {
 		}
 	}
 	return 0
+}
+
+func (g GroupCount) satisfiesCondition(subj string, cond *pql.Condition) bool {
+	switch subj {
+	case "count":
+		switch cond.Op {
+		case pql.EQ, pql.NEQ, pql.LT, pql.LTE, pql.GT, pql.GTE:
+			val, ok := cond.Uint64Value()
+			if !ok {
+				return false
+			}
+			if cond.Op == pql.EQ {
+				if g.Count == val {
+					return true
+				}
+			} else if cond.Op == pql.NEQ {
+				if g.Count != val {
+					return true
+				}
+			} else if cond.Op == pql.LT {
+				if g.Count < val {
+					return true
+				}
+			} else if cond.Op == pql.LTE {
+				if g.Count <= val {
+					return true
+				}
+			} else if cond.Op == pql.GT {
+				if g.Count > val {
+					return true
+				}
+			} else if cond.Op == pql.GTE {
+				if g.Count >= val {
+					return true
+				}
+			}
+		case pql.BETWEEN, pql.BTWN_LT_LTE, pql.BTWN_LTE_LT, pql.BTWN_LT_LT:
+			val, ok := cond.Uint64SliceValue()
+			if !ok {
+				return false
+			}
+			if cond.Op == pql.BETWEEN {
+				if val[0] <= g.Count && g.Count <= val[1] {
+					return true
+				}
+			} else if cond.Op == pql.BTWN_LT_LTE {
+				if val[0] < g.Count && g.Count <= val[1] {
+					return true
+				}
+			} else if cond.Op == pql.BTWN_LTE_LT {
+				if val[0] <= g.Count && g.Count < val[1] {
+					return true
+				}
+			} else if cond.Op == pql.BTWN_LT_LT {
+				if val[0] < g.Count && g.Count < val[1] {
+					return true
+				}
+			}
+		}
+	case "sum":
+		switch cond.Op {
+		case pql.EQ, pql.NEQ, pql.LT, pql.LTE, pql.GT, pql.GTE:
+			val, ok := cond.Int64Value()
+			if !ok {
+				return false
+			}
+			if cond.Op == pql.EQ {
+				if g.Sum == val {
+					return true
+				}
+			} else if cond.Op == pql.NEQ {
+				if g.Sum != val {
+					return true
+				}
+			} else if cond.Op == pql.LT {
+				if g.Sum < val {
+					return true
+				}
+			} else if cond.Op == pql.LTE {
+				if g.Sum <= val {
+					return true
+				}
+			} else if cond.Op == pql.GT {
+				if g.Sum > val {
+					return true
+				}
+			} else if cond.Op == pql.GTE {
+				if g.Sum >= val {
+					return true
+				}
+			}
+		case pql.BETWEEN, pql.BTWN_LT_LTE, pql.BTWN_LTE_LT, pql.BTWN_LT_LT:
+			val, ok := cond.Int64SliceValue()
+			if !ok {
+				return false
+			}
+			if cond.Op == pql.BETWEEN {
+				if val[0] <= g.Sum && g.Sum <= val[1] {
+					return true
+				}
+			} else if cond.Op == pql.BTWN_LT_LTE {
+				if val[0] < g.Sum && g.Sum <= val[1] {
+					return true
+				}
+			} else if cond.Op == pql.BTWN_LTE_LT {
+				if val[0] <= g.Sum && g.Sum < val[1] {
+					return true
+				}
+			} else if cond.Op == pql.BTWN_LT_LT {
+				if val[0] < g.Sum && g.Sum < val[1] {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// applyConditionToGroupCounts filters the contents of gcs according
+// to the condition. Currently, `count` and `sum` are the only
+// fields supported.
+func applyConditionToGroupCounts(gcs []GroupCount, subj string, cond *pql.Condition) []GroupCount {
+	var i int
+	for _, gc := range gcs {
+		if !gc.satisfiesCondition(subj, cond) {
+			continue // drop this GroupCount
+		}
+		gcs[i] = gc
+		i++
+	}
+	return gcs[:i]
 }
 
 func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql.Call, filter *pql.Call, shard uint64, childRows []RowIDs) (_ []GroupCount, err error) {
