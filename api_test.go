@@ -65,7 +65,7 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 		ctx := context.Background()
 		index := "i"
 		field := "f"
-		attrKey := "columnid-md5"
+		attrKey := "k"
 
 		_, err := m0.API.CreateIndex(ctx, index, pilosa.IndexOptions{})
 		if err != nil {
@@ -77,20 +77,21 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 		}
 
 		// Generate some attrs for two shards
-		columnIDs0 := make([]uint64, 0, 100)
-		attrVals0 := make([]string, 0, 100)
-		columnIDs1 := make([]uint64, 0, 100)
-		attrVals1 := make([]string, 0, 100)
-		for n := 0; n < 1000000; n += 10000 {
+		numAttrs := 100
+		columnIDs0 := make([]uint64, 0, numAttrs)
+		attrVals0 := make([]string, 0, numAttrs)
+		columnIDs1 := make([]uint64, 0, numAttrs)
+		attrVals1 := make([]string, 0, numAttrs)
+		for n := 0; n < 1000000; n += 1000000 / numAttrs {
 			columnIDs0 = append(columnIDs0, uint64(n))
-			md50 := attrFun(uint64(n))
-			attrVals0 = append(attrVals0, md50)
+			val0 := attrFun(uint64(n))
+			attrVals0 = append(attrVals0, val0)
 			setPql0 := fmt.Sprintf("Set(%d, %s=0) ", n, field)
 			m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: setPql0})
 
 			columnIDs1 = append(columnIDs1, uint64(n+ShardWidth))
-			md51 := attrFun(uint64(n + ShardWidth))
-			attrVals1 = append(attrVals1, md51)
+			val1 := attrFun(uint64(n + ShardWidth))
+			attrVals1 = append(attrVals1, val1)
 			setPql1 := fmt.Sprintf("Set(%d, %s=0) ", n+ShardWidth, field)
 			m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: setPql1})
 		}
@@ -127,6 +128,9 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if len(res.ColumnAttrSets) != 100 {
+			t.Fatal("incorrect number of column attrs set")
+		}
 
 		for _, v := range res.ColumnAttrSets {
 			attrVal := attrFun(v.ID)
@@ -139,6 +143,9 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 		res, err = m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql})
 		if err != nil {
 			t.Fatal(err)
+		}
+		if len(res.ColumnAttrSets) != 100 {
+			t.Fatal("incorrect number of column attrs set")
 		}
 
 		for _, v := range res.ColumnAttrSets {
