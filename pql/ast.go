@@ -747,6 +747,30 @@ func (cond *Condition) String() string {
 	return fmt.Sprintf("%s %s", cond.Op.String(), formatValue(cond.Value))
 }
 
+// StringWithSubj returns the string representation of the condition
+// including the provided subject.
+func (cond *Condition) StringWithSubj(subj string) string {
+	switch cond.Op {
+	case EQ, NEQ, LT, LTE, GT, GTE:
+		return fmt.Sprintf("%s%s", subj, cond.String())
+	case BETWEEN, BTWN_LT_LTE, BTWN_LTE_LT, BTWN_LT_LT:
+		val, ok := cond.Int64SliceValue() // TODO: this should depend on subj type (int64 vs. uint64)
+		if !ok || len(val) < 2 {
+			return ""
+		}
+		if cond.Op == BETWEEN {
+			return fmt.Sprintf("%d<=%s<=%d", val[0], subj, val[1])
+		} else if cond.Op == BTWN_LT_LTE {
+			return fmt.Sprintf("%d<%s<=%d", val[0], subj, val[1])
+		} else if cond.Op == BTWN_LTE_LT {
+			return fmt.Sprintf("%d<=%s<%d", val[0], subj, val[1])
+		} else if cond.Op == BTWN_LT_LT {
+			return fmt.Sprintf("%d<%s<%d", val[0], subj, val[1])
+		}
+	}
+	return ""
+}
+
 // IntSliceValue reads cond.Value as a slice of uint64.
 // If the value is a slice of uint64 it will convert
 // it to []int64. Otherwise, if it is not a []int64 it will return an error.
