@@ -269,6 +269,13 @@ func TestExecutor_GroupCountCondition(t *testing.T) {
 					{cond: "count <= 101", exp: true},
 					{cond: "count > 101", exp: false},
 					{cond: "count >= 101", exp: false},
+
+					{cond: "98 < count < 100", exp: false},
+					{cond: "98 < count <= 100", exp: true},
+					{cond: "98 < count < 101", exp: true},
+					{cond: "100 <= count < 102", exp: true},
+					{cond: "100 < count < 102", exp: false},
+					{cond: "98 <= count <= 102", exp: true},
 				},
 			},
 			{
@@ -294,6 +301,13 @@ func TestExecutor_GroupCountCondition(t *testing.T) {
 					{cond: "sum <= 101", exp: true},
 					{cond: "sum > 101", exp: false},
 					{cond: "sum >= 101", exp: false},
+
+					{cond: "98 < sum < 100", exp: false},
+					{cond: "98 < sum <= 100", exp: true},
+					{cond: "98 < sum < 101", exp: true},
+					{cond: "100 <= sum < 102", exp: true},
+					{cond: "100 < sum < 102", exp: false},
+					{cond: "98 <= sum <= 102", exp: true},
 				},
 			},
 			{
@@ -319,6 +333,13 @@ func TestExecutor_GroupCountCondition(t *testing.T) {
 					{cond: "sum <= -101", exp: false},
 					{cond: "sum > -101", exp: true},
 					{cond: "sum >= -101", exp: true},
+
+					{cond: "-100 < sum < -98", exp: false},
+					{cond: "-100 <= sum < -98", exp: true},
+					{cond: "-101 < sum < -98", exp: true},
+					{cond: "-102 < sum <= -100", exp: true},
+					{cond: "-102 < sum < -100", exp: false},
+					{cond: "-102 <= sum <= -98", exp: true},
 				},
 			},
 		}
