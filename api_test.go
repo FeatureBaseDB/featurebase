@@ -87,13 +87,17 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 			val0 := attrFun(uint64(n))
 			attrVals0 = append(attrVals0, val0)
 			setPql0 := fmt.Sprintf("Set(%d, %s=0) ", n, field)
-			m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: setPql0})
+			if _, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: setPql0}); err != nil {
+				t.Fatal(err)
+			}
 
 			columnIDs1 = append(columnIDs1, uint64(n+ShardWidth))
 			val1 := attrFun(uint64(n + ShardWidth))
 			attrVals1 = append(attrVals1, val1)
 			setPql1 := fmt.Sprintf("Set(%d, %s=0) ", n+ShardWidth, field)
-			m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: setPql1})
+			if _, err := m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: setPql1}); err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		// send shard0 to node1
