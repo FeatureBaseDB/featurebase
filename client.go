@@ -44,6 +44,8 @@ type FieldValue struct {
 // While I understand that putting the entire Client behind an interface might require this many methods,
 // I don't want to let it go unquestioned.
 type InternalClient interface {
+	InternalQueryClient
+
 	MaxShardByIndex(ctx context.Context) (map[string]uint64, error)
 	Schema(ctx context.Context) ([]*IndexInfo, error)
 	PostSchema(ctx context.Context, uri *URI, s *Schema, remote bool) error
@@ -51,7 +53,6 @@ type InternalClient interface {
 	FragmentNodes(ctx context.Context, index string, shard uint64) ([]*Node, error)
 	Nodes(ctx context.Context) ([]*Node, error)
 	Query(ctx context.Context, index string, queryRequest *QueryRequest) (*QueryResponse, error)
-	QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error)
 	Import(ctx context.Context, index, field string, shard uint64, bits []Bit, opts ...ImportOption) error
 	ImportK(ctx context.Context, index, field string, bits []Bit, opts ...ImportOption) error
 	EnsureIndex(ctx context.Context, name string, options IndexOptions) error
@@ -76,11 +77,21 @@ type InternalClient interface {
 // InternalQueryClient is the internal interface for querying a node.
 type InternalQueryClient interface {
 	QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error)
+	TranslateKeysNode(ctx context.Context, uri *URI, index, field string, keys []string) ([]uint64, error)
+	TranslateIDsNode(ctx context.Context, uri *URI, index, field string, id []uint64) ([]string, error)
 }
 
 type nopInternalQueryClient struct{}
 
 func (n *nopInternalQueryClient) QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
+	return nil, nil
+}
+
+func (n nopInternalQueryClient) TranslateKeysNode(ctx context.Context, uri *URI, index, field string, keys []string) ([]uint64, error) {
+	return nil, nil
+}
+
+func (n nopInternalQueryClient) TranslateIDsNode(ctx context.Context, uri *URI, index, field string, ids []uint64) ([]string, error) {
 	return nil, nil
 }
 
@@ -121,6 +132,12 @@ func (n nopInternalClient) Query(ctx context.Context, index string, queryRequest
 	return nil, nil
 }
 func (n nopInternalClient) QueryNode(ctx context.Context, uri *URI, index string, queryRequest *QueryRequest) (*QueryResponse, error) {
+	return nil, nil
+}
+func (n nopInternalClient) TranslateKeysNode(ctx context.Context, uri *URI, index, field string, keys []string) ([]uint64, error) {
+	return nil, nil
+}
+func (n nopInternalClient) TranslateIDsNode(ctx context.Context, uri *URI, index, field string, ids []uint64) ([]string, error) {
 	return nil, nil
 }
 func (n nopInternalClient) Import(ctx context.Context, index, field string, shard uint64, bits []Bit, opts ...ImportOption) error {

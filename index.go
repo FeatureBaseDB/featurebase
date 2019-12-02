@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -52,8 +53,6 @@ type Index struct {
 	// Column attribute storage and cache.
 	columnAttrs AttrStore
 
-	translateStore TranslateStore
-
 	broadcaster broadcaster
 	Stats       stats.StatsClient
 
@@ -62,9 +61,6 @@ type Index struct {
 
 	// Used for notifying holder when a field is added.
 	holder *Holder
-
-	// Instantiates new translation stores for fields.
-	OpenTranslateStore OpenTranslateStoreFunc
 }
 
 // NewIndex returns a new instance of Index.
@@ -86,8 +82,6 @@ func NewIndex(path, name string) (*Index, error) {
 		Stats:          stats.NopStatsClient,
 		logger:         logger.NopLogger,
 		trackExistence: true,
-
-		OpenTranslateStore: OpenInMemTranslateStore,
 	}, nil
 }
 
@@ -97,14 +91,16 @@ func (i *Index) Name() string { return i.name }
 // Path returns the path the index was initialized with.
 func (i *Index) Path() string { return i.path }
 
+// TranslateStorePath returns the translation database path for a partition.
+func (i *Index) TranslateStorePath(partitionID int) string {
+	return filepath.Join(i.path, "keys", strconv.Itoa(partitionID))
+}
+
 // Keys returns true if the index uses string keys.
 func (i *Index) Keys() bool { return i.keys }
 
 // ColumnAttrStore returns the storage for column attributes.
 func (i *Index) ColumnAttrStore() AttrStore { return i.columnAttrs }
-
-// TranslateStore returns the underlying translation store for the index.
-func (i *Index) TranslateStore() TranslateStore { return i.translateStore }
 
 // Options returns all options for this index.
 func (i *Index) Options() IndexOptions {
@@ -147,11 +143,6 @@ func (i *Index) Open() (err error) {
 
 	if err := i.columnAttrs.Open(); err != nil {
 		return errors.Wrap(err, "opening attrstore")
-	}
-
-	// Instantiate & open translation store.
-	if i.translateStore, err = i.OpenTranslateStore(filepath.Join(i.path, "keys"), i.name, ""); err != nil {
-		return errors.Wrap(err, "opening translate store")
 	}
 
 	return nil
@@ -278,12 +269,6 @@ func (i *Index) Close() error {
 		}
 	}
 	i.fields = make(map[string]*Field)
-
-	if i.translateStore != nil {
-		if err := i.translateStore.Close(); err != nil {
-			return err
-		}
-	}
 
 	return nil
 }
@@ -445,11 +430,6 @@ func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 	// Add to index's field lookup.
 	i.fields[name] = f
 
-	// Update replication, if needed.
-	if i.holder != nil {
-		go i.holder.refreshTranslateStoreReplicator()
-	}
-
 	return f, nil
 }
 
@@ -463,7 +443,6 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	f.broadcaster = i.broadcaster
 	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
 	f.snapshotQueue = i.snapshotQueue
-	f.OpenTranslateStore = i.OpenTranslateStore
 	return f, nil
 }
 

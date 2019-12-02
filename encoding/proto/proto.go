@@ -722,17 +722,31 @@ func encodeRecalculateCaches(*pilosa.RecalculateCaches) *internal.RecalculateCac
 	return &internal.RecalculateCaches{}
 }
 
+func encodeTranslateKeysRequest(request *pilosa.TranslateKeysRequest) *internal.TranslateKeysRequest {
+	return &internal.TranslateKeysRequest{
+		Index: request.Index,
+		Field: request.Field,
+		Keys:  request.Keys,
+	}
+}
+
 func encodeTranslateKeysResponse(response *pilosa.TranslateKeysResponse) *internal.TranslateKeysResponse {
 	return &internal.TranslateKeysResponse{
 		IDs: response.IDs,
 	}
 }
 
-func encodeTranslateKeysRequest(request *pilosa.TranslateKeysRequest) *internal.TranslateKeysRequest {
-	return &internal.TranslateKeysRequest{
+func encodeTranslateIDsRequest(request *pilosa.TranslateIDsRequest) *internal.TranslateIDsRequest {
+	return &internal.TranslateIDsRequest{
 		Index: request.Index,
 		Field: request.Field,
-		Keys:  request.Keys,
+		IDs:   request.IDs,
+	}
+}
+
+func encodeTranslateIDsResponse(response *pilosa.TranslateIDsResponse) *internal.TranslateIDsResponse {
+	return &internal.TranslateIDsResponse{
+		Keys: response.Keys,
 	}
 }
 
@@ -1050,6 +1064,16 @@ func decodeTranslateKeysRequest(pb *internal.TranslateKeysRequest, m *pilosa.Tra
 
 func decodeTranslateKeysResponse(pb *internal.TranslateKeysResponse, m *pilosa.TranslateKeysResponse) {
 	m.IDs = pb.IDs
+}
+
+func decodeTranslateIDsRequest(pb *internal.TranslateIDsRequest, m *pilosa.TranslateIDsRequest) {
+	m.Index = pb.Index
+	m.Field = pb.Field
+	m.IDs = pb.IDs
+}
+
+func decodeTranslateIDsResponse(pb *internal.TranslateIDsResponse, m *pilosa.TranslateIDsResponse) {
+	m.Keys = pb.Keys
 }
 
 // QueryResult types.

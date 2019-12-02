@@ -73,9 +73,6 @@ type Field struct {
 	// Row attribute storage and cache
 	rowAttrStore AttrStore
 
-	// Key/ID translation store.
-	translateStore TranslateStore
-
 	broadcaster broadcaster
 	Stats       stats.StatsClient
 
@@ -90,9 +87,6 @@ type Field struct {
 	logger logger.Logger
 
 	snapshotQueue chan *fragment
-
-	// Instantiates new translation store on open.
-	OpenTranslateStore OpenTranslateStoreFunc
 }
 
 // FieldOption is a functional option type for pilosa.fieldOptions.
@@ -238,8 +232,6 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 		remoteAvailableShards: roaring.NewBitmap(),
 
 		logger: logger.NopLogger,
-
-		OpenTranslateStore: OpenInMemTranslateStore,
 	}
 	return f, nil
 }
@@ -253,11 +245,13 @@ func (f *Field) Index() string { return f.index }
 // Path returns the path the field was initialized with.
 func (f *Field) Path() string { return f.path }
 
+// TranslateStorePath returns the translation database path for the field.
+func (f *Field) TranslateStorePath() string {
+	return filepath.Join(f.path, "keys")
+}
+
 // RowAttrStore returns the attribute storage.
 func (f *Field) RowAttrStore() AttrStore { return f.rowAttrStore }
-
-// TranslateStore returns the underlying translation store for the field.
-func (f *Field) TranslateStore() TranslateStore { return f.translateStore }
 
 // AvailableShards returns a bitmap of shards that contain data.
 func (f *Field) AvailableShards() *roaring.Bitmap {
@@ -432,11 +426,6 @@ func (f *Field) Open() error {
 		f.logger.Debugf("open row attribute store for index/field: %s/%s", f.index, f.name)
 		if err := f.rowAttrStore.Open(); err != nil {
 			return errors.Wrap(err, "opening attrstore")
-		}
-
-		// Instantiate & open translation store.
-		if f.translateStore, err = f.OpenTranslateStore(filepath.Join(f.path, "keys"), f.index, f.name); err != nil {
-			return errors.Wrap(err, "opening translate store")
 		}
 
 		return nil
@@ -685,12 +674,6 @@ func (f *Field) Close() error {
 		}
 	}
 	f.viewMap = make(map[string]*view)
-
-	if f.translateStore != nil {
-		if err := f.translateStore.Close(); err != nil {
-			return err
-		}
-	}
 
 	return nil
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/pilosa/pilosa/v2/shardwidth"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // defaultField is the field used if one is not specified.
@@ -180,12 +181,18 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 
 		// Translate column attributes, if necessary.
 		if idx.Keys() {
+			idSet := make(map[uint64]struct{})
 			for _, col := range columnAttrSets {
-				v, err := idx.translateStore.TranslateID(col.ID)
-				if err != nil {
-					return resp, err
-				}
-				col.Key, col.ID = v, 0
+				idSet[col.ID] = struct{}{}
+			}
+
+			idMap, err := e.Cluster.translateIndexIDSet(ctx, index, idSet)
+			if err != nil {
+				return resp, errors.Wrap(err, "translating id set")
+			}
+
+			for _, col := range columnAttrSets {
+				col.Key, col.ID = idMap[col.ID], 0
 			}
 		}
 
@@ -2607,53 +2614,76 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 	}
 }
 
-func (e *executor) translateCalls(ctx context.Context, index string, idx *Index, calls []*pql.Call) error {
+func (e *executor) translateCalls(ctx context.Context, index string, idx *Index, calls []*pql.Call) (err error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.translateCalls")
 	defer span.Finish()
 
+	keyMap := make(map[string]uint64)
+	if idx.Keys() {
+		// Collect all index keys.
+		keySet := make(map[string]struct{})
+		for i := range calls {
+			if err := e.collectCallIndexKeys(index, idx, calls[i], keySet); err != nil {
+				return err
+			}
+		}
+
+		if keyMap, err = e.Cluster.translateIndexKeySet(ctx, index, keySet); err != nil {
+			return err
+		}
+	}
+
+	// Translate calls.
 	for i := range calls {
-		if err := e.translateCall(index, idx, calls[i]); err != nil {
+		if err := e.translateCall(index, idx, calls[i], keyMap); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
-	var colKey, rowKey, fieldName string
-	switch c.Name {
-	case "Set", "Clear", "Row", "Range", "SetColumnAttrs", "ClearRow":
-		// Positional args in new PQL syntax require special handling here.
-		colKey = "_" + columnLabel
-		fieldName, _ = c.FieldArg()
-		rowKey = fieldName
-	case "SetRowAttrs":
-		// Positional args in new PQL syntax require special handling here.
-		rowKey = "_" + rowLabel
-		fieldName = callArgString(c, "_field")
-	case "Rows":
-		fieldName = callArgString(c, "_field")
-		rowKey = "previous"
-		colKey = "column"
-	case "GroupBy":
-		return errors.Wrap(e.translateGroupByCall(index, idx, c), "translating GroupBy")
-	default:
-		colKey = "col"
-		fieldName = callArgString(c, "field")
-		rowKey = "row"
+func (e *executor) collectCallIndexKeys(index string, idx *Index, c *pql.Call, keySet map[string]struct{}) error {
+	// Handle group by separately.
+	if c.Name == "GroupBy" {
+		for _, child := range c.Children {
+			if err := e.collectCallIndexKeys(index, idx, child, keySet); err != nil {
+				return errors.Wrapf(err, "translating %s", child)
+			}
+		}
+
+		if filter, ok, err := c.CallArg("filter"); ok {
+			if err != nil {
+				return errors.Wrap(err, "getting filter call")
+			}
+			err = e.collectCallIndexKeys(index, idx, filter, keySet)
+			if err != nil {
+				return errors.Wrap(err, "translating filter call")
+			}
+		}
+		return nil
+	}
+
+	colKey, _, _ := c.TranslateInfo(columnLabel, rowLabel)
+	if c.Args[colKey] != nil && !isString(c.Args[colKey]) {
+		return errors.New("column value must be a string when index 'keys' option enabled")
+	} else if value := callArgString(c, colKey); value != "" {
+		keySet[value] = struct{}{}
+	}
+	return nil
+}
+
+func (e *executor) translateCall(index string, idx *Index, c *pql.Call, keyMap map[string]uint64) error {
+	if c.Name == "GroupBy" {
+		return errors.Wrap(e.translateGroupByCall(index, idx, c, keyMap), "translating GroupBy")
 	}
 
 	// Translate column key.
+	colKey, rowKey, fieldName := c.TranslateInfo(columnLabel, rowLabel)
 	if idx.Keys() {
 		if c.Args[colKey] != nil && !isString(c.Args[colKey]) {
 			return errors.New("column value must be a string when index 'keys' option enabled")
-		}
-		if value := callArgString(c, colKey); value != "" {
-			id, err := idx.translateStore.TranslateKey(value)
-			if err != nil {
-				return err
-			}
-			c.Args[colKey] = id
+		} else if value := callArgString(c, colKey); value != "" {
+			c.Args[colKey] = keyMap[value]
 		}
 	} else {
 		if isString(c.Args[colKey]) {
@@ -2690,7 +2720,7 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 				return errors.New("row value must be a string when field 'keys' option enabled")
 			}
 			if value := callArgString(c, rowKey); value != "" {
-				id, err := field.translateStore.TranslateKey(value)
+				id, err := e.Cluster.translateFieldKey(index, fieldName, value)
 				if err != nil {
 					return err
 				}
@@ -2705,7 +2735,7 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 
 	// Translate child calls.
 	for _, child := range c.Children {
-		if err := e.translateCall(index, idx, child); err != nil {
+		if err := e.translateCall(index, idx, child, keyMap); err != nil {
 			return err
 		}
 	}
@@ -2713,13 +2743,13 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 	return nil
 }
 
-func (e *executor) translateGroupByCall(index string, idx *Index, c *pql.Call) error {
+func (e *executor) translateGroupByCall(index string, idx *Index, c *pql.Call, keyMap map[string]uint64) error {
 	if c.Name != "GroupBy" {
 		panic("translateGroupByCall called with '" + c.Name + "'")
 	}
 
 	for _, child := range c.Children {
-		if err := e.translateCall(index, idx, child); err != nil {
+		if err := e.translateCall(index, idx, child, keyMap); err != nil {
 			return errors.Wrapf(err, "translating %s", child)
 		}
 	}
@@ -2728,7 +2758,7 @@ func (e *executor) translateGroupByCall(index string, idx *Index, c *pql.Call) e
 		if err != nil {
 			return errors.Wrap(err, "getting filter call")
 		}
-		err = e.translateCall(index, idx, filter)
+		err = e.translateCall(index, idx, filter, keyMap)
 		if err != nil {
 			return errors.Wrap(err, "translating filter call")
 		}
@@ -2763,7 +2793,7 @@ func (e *executor) translateGroupByCall(index string, idx *Index, c *pql.Call) e
 			if !ok {
 				return errors.New("prev value must be a string when field 'keys' option enabled")
 			}
-			id, err := field.translateStore.TranslateKey(prevStr)
+			id, err := e.Cluster.translateFieldKey(index, field.Name(), prevStr)
 			if err != nil {
 				return errors.Wrapf(err, "translating row key '%s'", prevStr)
 			}
@@ -2782,8 +2812,49 @@ func (e *executor) translateResults(ctx context.Context, index string, idx *Inde
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.translateResults")
 	defer span.Finish()
 
+	idMap := make(map[uint64]string)
+	if idx.Keys() {
+		// Collect all index ids.
+		idSet := make(map[uint64]struct{})
+		for i := range calls {
+			if err := e.collectResultIDs(index, idx, calls[i], results[i], idSet); err != nil {
+				return err
+			}
+		}
+
+		// Split ids by partition.
+		idsByPartition := make(map[int][]uint64, e.Cluster.partitionN)
+		for id := range idSet {
+			partitionID := e.Cluster.shardPartition(index, id/ShardWidth)
+			idsByPartition[partitionID] = append(idsByPartition[partitionID], id)
+		}
+
+		// Translate ids by partition.
+		var g errgroup.Group
+		var mu sync.Mutex
+		for partitionID, ids := range idsByPartition {
+			g.Go(func() error {
+				nodes := e.Cluster.partitionNodes(partitionID)
+				keys, err := e.client.TranslateIDsNode(ctx, &nodes[0].URI, index, "", ids)
+				if err != nil {
+					return err
+				}
+
+				mu.Lock()
+				defer mu.Unlock()
+				for i := range ids {
+					idMap[ids[i]] = keys[i]
+				}
+				return nil
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return err
+		}
+	}
+
 	for i := range results {
-		results[i], err = e.translateResult(index, idx, calls[i], results[i])
+		results[i], err = e.translateResult(index, idx, calls[i], results[i], idMap)
 		if err != nil {
 			return err
 		}
@@ -2791,18 +2862,30 @@ func (e *executor) translateResults(ctx context.Context, index string, idx *Inde
 	return nil
 }
 
-func (e *executor) translateResult(index string, idx *Index, call *pql.Call, result interface{}) (interface{}, error) {
+func (e *executor) collectResultIDs(index string, idx *Index, call *pql.Call, result interface{}, idSet map[uint64]struct{}) error {
+	row, ok := result.(*Row)
+	if !ok {
+		return nil
+	} else if !idx.Keys() {
+		return nil
+	}
+
+	for _, segment := range row.Segments() {
+		for _, col := range segment.Columns() {
+			idSet[col] = struct{}{}
+		}
+	}
+	return nil
+}
+
+func (e *executor) translateResult(index string, idx *Index, call *pql.Call, result interface{}, idSet map[uint64]string) (interface{}, error) {
 	switch result := result.(type) {
 	case *Row:
 		if idx.Keys() {
 			other := &Row{Attrs: result.Attrs}
 			for _, segment := range result.Segments() {
 				for _, col := range segment.Columns() {
-					key, err := idx.translateStore.TranslateID(col)
-					if err != nil {
-						return nil, err
-					}
-					other.Keys = append(other.Keys, key)
+					other.Keys = append(other.Keys, idSet[col])
 				}
 			}
 			return other, nil
@@ -2815,7 +2898,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 				return nil, fmt.Errorf("field %q not found", fieldName)
 			}
 			if field.keys() {
-				key, err := field.translateStore.TranslateID(result.ID)
+				key, err := e.Cluster.translateFieldID(index, fieldName, result.ID)
 				if err != nil {
 					return nil, err
 				}
@@ -2836,7 +2919,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 			if field.keys() {
 				other := make([]Pair, len(result))
 				for i := range result {
-					key, err := field.translateStore.TranslateID(result[i].ID)
+					key, err := e.Cluster.translateFieldID(index, fieldName, result[i].ID)
 					if err != nil {
 						return nil, err
 					}
@@ -2860,7 +2943,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 					return nil, ErrFieldNotFound
 				}
 				if field.keys() {
-					key, err := field.translateStore.TranslateID(g.RowID)
+					key, err := e.Cluster.translateFieldID(index, g.Field, g.RowID)
 					if err != nil {
 						return nil, errors.Wrap(err, "translating row ID in Group")
 					}
@@ -2888,7 +2971,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 		} else if field.keys() {
 			other.Keys = make([]string, len(result))
 			for i, id := range result {
-				key, err := field.translateStore.TranslateID(id)
+				key, err := e.Cluster.translateFieldID(index, fieldName, id)
 				if err != nil {
 					return nil, errors.Wrap(err, "translating row ID")
 				}

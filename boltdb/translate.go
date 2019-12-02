@@ -32,8 +32,8 @@ var (
 )
 
 // OpenTranslateStore opens and initializes a boltdb translation store.
-func OpenTranslateStore(path, index, field string) (pilosa.TranslateStore, error) {
-	s := NewTranslateStore(index, field)
+func OpenTranslateStore(path, index, field string, partitionID int) (pilosa.TranslateStore, error) {
+	s := NewTranslateStore(index, field, partitionID)
 	s.Path = path
 	if err := s.Open(); err != nil {
 		return nil, err
@@ -49,8 +49,9 @@ type TranslateStore struct {
 	mu sync.RWMutex
 	db *bolt.DB
 
-	index string
-	field string
+	index       string
+	field       string
+	partitionID int
 
 	once    sync.Once
 	closing chan struct{}
@@ -63,10 +64,11 @@ type TranslateStore struct {
 }
 
 // NewTranslateStore returns a new instance of TranslateStore.
-func NewTranslateStore(index, field string) *TranslateStore {
+func NewTranslateStore(index, field string, partitionID int) *TranslateStore {
 	return &TranslateStore{
 		index:       index,
 		field:       field,
+		partitionID: partitionID,
 		closing:     make(chan struct{}),
 		writeNotify: make(chan struct{}),
 	}
@@ -106,6 +108,11 @@ func (s *TranslateStore) Close() (err error) {
 		}
 	}
 	return nil
+}
+
+// PartitionID returns the partition id the store was initialized with.
+func (s *TranslateStore) PartitionID() int {
+	return s.partitionID
 }
 
 // ReadOnly returns true if the store is in read-only mode.
