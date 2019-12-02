@@ -61,7 +61,6 @@ type Server struct { // nolint: maligned
 	hosts            []string
 	clusterDisabled  bool
 	serializer       Serializer
-	extensionPath    string
 	extensions       []*ext.ExtensionInfo
 
 	// External
