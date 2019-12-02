@@ -1752,7 +1752,7 @@ func (h *Handler) handlePostTranslateKeys(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	buf, err := h.api.TranslateKeys(r.Body)
+	buf, err := h.api.TranslateKeys(r.Context(), r.Body)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("translate keys: %v", err), http.StatusInternalServerError)
 	}

@@ -28,6 +28,7 @@ var (
 	ErrTranslateStoreReaderClosed = errors.New("translate store reader closed")
 	ErrReplicationNotSupported    = errors.New("replication not supported")
 	ErrTranslateStoreReadOnly     = errors.New("translate store could not find or create key, translate store read only")
+	ErrTranslateStoreNotFound     = errors.New("translate store not found")
 	ErrCannotOpenV1TranslateFile  = errors.New("cannot open v1 translate .keys file")
 )
 
@@ -38,11 +39,18 @@ type TranslateStore interface {
 	// Returns the maximum ID set on the store.
 	MaxID() (uint64, error)
 
+	// Retrieves the partition ID associated with the store.
+	// Only applies to index stores.
+	PartitionID() int
+
 	// Sets & retrieves whether the store is read-only.
 	ReadOnly() bool
 	SetReadOnly(v bool)
 
 	// Converts a string key to its autoincrementing integer ID value.
+	//
+	// Translated id must be associated with a shard in the store's partition
+	// unless partition is set to -1.
 	TranslateKey(key string) (uint64, error)
 	TranslateKeys(key []string) ([]uint64, error)
 
@@ -58,7 +66,7 @@ type TranslateStore interface {
 }
 
 // OpenTranslateStoreFunc represents a function for instantiating and opening a TranslateStore.
-type OpenTranslateStoreFunc func(path, index, field string) (TranslateStore, error)
+type OpenTranslateStoreFunc func(path, index, field string, partitionID int) (TranslateStore, error)
 
 // TranslateEntryReader represents a stream of translation entries.
 type TranslateEntryReader interface {
@@ -154,22 +162,22 @@ type readEntryResponse struct {
 }
 
 // TranslateOffsetMap maintains a set of offsets for both indexes & fields.
-type TranslateOffsetMap map[string]map[string]uint64
+type TranslateOffsetMap map[string]*IndexTranslateOffsetMap
 
 // IndexOffset returns the offset for the given index.
-func (m TranslateOffsetMap) IndexOffset(name string) uint64 {
+func (m TranslateOffsetMap) IndexPartitionOffset(name string, partitionID int) uint64 {
 	if m[name] == nil {
 		return 0
 	}
-	return m[name][""]
+	return m[name].Partitions[partitionID]
 }
 
 // SetIndexOffset sets the offset for the given index.
-func (m TranslateOffsetMap) SetIndexOffset(name string, offset uint64) {
+func (m TranslateOffsetMap) SetIndexPartitionOffset(name string, partitionID int, offset uint64) {
 	if m[name] == nil {
-		m[name] = make(map[string]uint64)
+		m[name] = NewIndexTranslateOffsetMap()
 	}
-	m[name][""] = offset
+	m[name].Partitions[partitionID] = offset
 }
 
 // FieldOffset returns the offset for the given field.
@@ -177,15 +185,27 @@ func (m TranslateOffsetMap) FieldOffset(index, name string) uint64 {
 	if m[index] == nil {
 		return 0
 	}
-	return m[index][name]
+	return m[index].Fields[name]
 }
 
 // SetFieldOffset sets the offset for the given field.
 func (m TranslateOffsetMap) SetFieldOffset(index, name string, offset uint64) {
 	if m[index] == nil {
-		m[index] = make(map[string]uint64)
+		m[index] = NewIndexTranslateOffsetMap()
 	}
-	m[index][name] = offset
+	m[index].Fields[name] = offset
+}
+
+type IndexTranslateOffsetMap struct {
+	Partitions map[int]uint64    `json:"partitions"`
+	Fields     map[string]uint64 `json:"fields"`
+}
+
+func NewIndexTranslateOffsetMap() *IndexTranslateOffsetMap {
+	return &IndexTranslateOffsetMap{
+		Partitions: make(map[int]uint64),
+		Fields:     make(map[string]uint64),
+	}
 }
 
 // Ensure type implements interface.
@@ -193,19 +213,21 @@ var _ TranslateStore = &InMemTranslateStore{}
 
 // InMemTranslateStore is an in-memory storage engine for mapping keys to int values.
 type InMemTranslateStore struct {
-	mu       sync.RWMutex
-	index    string
-	field    string
-	readOnly bool
-	keys     []string
-	lookup   map[string]uint64
+	mu          sync.RWMutex
+	partitionID int
+	index       string
+	field       string
+	readOnly    bool
+	keys        []string
+	lookup      map[string]uint64
 
 	writeNotify chan struct{}
 }
 
 // NewInMemTranslateStore returns a new instance of InMemTranslateStore.
-func NewInMemTranslateStore(index, field string) *InMemTranslateStore {
+func NewInMemTranslateStore(index, field string, partitionID int) *InMemTranslateStore {
 	return &InMemTranslateStore{
+		partitionID: partitionID,
 		index:       index,
 		field:       field,
 		lookup:      make(map[string]uint64),
@@ -217,12 +239,17 @@ var _ OpenTranslateStoreFunc = OpenInMemTranslateStore
 
 // OpenInMemTranslateStore returns a new instance of InMemTranslateStore.
 // Implements OpenTranslateStoreFunc.
-func OpenInMemTranslateStore(rawurl, index, field string) (TranslateStore, error) {
-	return NewInMemTranslateStore(index, field), nil
+func OpenInMemTranslateStore(rawurl, index, field string, partitionID int) (TranslateStore, error) {
+	return NewInMemTranslateStore(index, field, partitionID), nil
 }
 
 func (s *InMemTranslateStore) Close() error {
 	return nil
+}
+
+// PartitionID returns the partition id the store was initialized with.
+func (s *InMemTranslateStore) PartitionID() int {
+	return s.partitionID
 }
 
 // ReadOnly returns true if the store is in read-only mode.

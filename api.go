@@ -545,7 +545,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 		var err error
 
 		if field.keys() {
-			if rowStr, err = field.translateStore.TranslateID(rowID); err != nil {
+			if rowStr, err = api.cluster.translateFieldID(indexName, fieldName, rowID); err != nil {
 				return errors.Wrap(err, "translating row")
 			}
 		} else {
@@ -553,7 +553,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 		}
 
 		if index.Keys() {
-			if colStr, err = index.translateStore.TranslateID(columnID); err != nil {
+			if colStr, err = api.cluster.translateIndexPartitionID(ctx, indexName, api.cluster.idPartition(indexName, columnID), columnID); err != nil {
 				return errors.Wrap(err, "translating column")
 			}
 		} else {
@@ -963,7 +963,7 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 			if len(req.RowIDs) != 0 {
 				return errors.New("row ids cannot be used because field uses string keys")
 			}
-			if req.RowIDs, err = field.translateStore.TranslateKeys(req.RowKeys); err != nil {
+			if req.RowIDs, err = api.cluster.translateFieldKeys(req.Index, req.Field, req.RowKeys); err != nil {
 				return errors.Wrap(err, "translating rows")
 			}
 		}
@@ -973,7 +973,7 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 			if len(req.ColumnIDs) != 0 {
 				return errors.New("column ids cannot be used because index uses string keys")
 			}
-			if req.ColumnIDs, err = index.translateStore.TranslateKeys(req.ColumnKeys); err != nil {
+			if req.ColumnIDs, err = api.cluster.translateIndexKeys(ctx, req.Index, req.ColumnKeys); err != nil {
 				return errors.Wrap(err, "translating columns")
 			}
 		}
@@ -1078,7 +1078,7 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 			if len(req.ColumnIDs) != 0 {
 				return errors.New("column ids cannot be used because index uses string keys")
 			}
-			if req.ColumnIDs, err = index.translateStore.TranslateKeys(req.ColumnKeys); err != nil {
+			if req.ColumnIDs, err = api.cluster.translateIndexKeys(ctx, req.Index, req.ColumnKeys); err != nil {
 				return errors.Wrap(err, "translating columns")
 			}
 			req.Shard = math.MaxUint64
@@ -1371,11 +1371,11 @@ func (api *API) Info() serverInfo {
 func (api *API) GetTranslateEntryReader(ctx context.Context, offsets TranslateOffsetMap) (TranslateEntryReader, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "API.GetTranslateEntryReader")
 	defer span.Finish()
-	return api.holder.TranslateEntryReader(ctx, offsets)
+	return api.cluster.translateEntryReader(ctx, offsets)
 }
 
 // TranslateKeys handles a TranslateKeyRequest.
-func (api *API) TranslateKeys(r io.Reader) ([]byte, error) {
+func (api *API) TranslateKeys(ctx context.Context, r io.Reader) (_ []byte, err error) {
 	var req TranslateKeysRequest
 	if buf, err := ioutil.ReadAll(r); err != nil {
 		return nil, NewBadRequestError(errors.Wrap(err, "read translate keys request error"))
@@ -1384,13 +1384,15 @@ func (api *API) TranslateKeys(r io.Reader) ([]byte, error) {
 	}
 
 	// Lookup store for either index or field and translate keys.
-	store, err := api.holder.TranslateStore(req.Index, req.Field)
-	if err != nil {
-		return nil, err
-	}
-	ids, err := store.TranslateKeys(req.Keys)
-	if err != nil {
-		return nil, err
+	var ids []uint64
+	if req.Field == "" {
+		if ids, err = api.cluster.translateIndexKeys(ctx, req.Index, req.Keys); err != nil {
+			return nil, err
+		}
+	} else {
+		if ids, err = api.cluster.translateFieldKeys(req.Index, req.Field, req.Keys); err != nil {
+			return nil, err
+		}
 	}
 
 	// Encode response.

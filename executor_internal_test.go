@@ -25,8 +25,16 @@ import (
 )
 
 func TestExecutor_TranslateGroupByCall(t *testing.T) {
+	holder := NewHolder()
+
+	cluster := newCluster()
+	cluster.holder = holder
+	cluster.Node = &Node{ID: "node1", URI: NewTestURIFromHostPort("node1", 0)}
+	cluster.addNode(cluster.Node)
+
 	e := &executor{
-		Holder: NewHolder(),
+		Holder:  holder,
+		Cluster: cluster,
 	}
 	e.Holder.Path, _ = ioutil.TempDir(*TempDir, "")
 	err := e.Holder.Open()
@@ -46,12 +54,16 @@ func TestExecutor_TranslateGroupByCall(t *testing.T) {
 		t.Fatalf("creating fields %v, %v, %v", erra, errb, errc)
 	}
 
+	if err := cluster.updateTranslateStores(); err != nil {
+		t.Fatal(err)
+	}
+
 	query, err := pql.ParseString(`GroupBy(Rows(ak), Rows(b), Rows(ck), previous=["la", 0, "ha"], having=Condition(count > 10))`)
 	if err != nil {
 		t.Fatalf("parsing query: %v", err)
 	}
 	c := query.Calls[0]
-	err = e.translateGroupByCall("i", idx, c)
+	err = e.translateGroupByCall("i", idx, c, make(map[string]uint64))
 	if err != nil {
 		t.Fatalf("translating call: %v", err)
 	}
@@ -115,7 +127,7 @@ func TestExecutor_TranslateGroupByCall(t *testing.T) {
 				t.Fatalf("parsing query: %v", err)
 			}
 			c := query.Calls[0]
-			err = e.translateGroupByCall("i", idx, c)
+			err = e.translateGroupByCall("i", idx, c, make(map[string]uint64))
 			if err == nil {
 				t.Fatalf("expected error, but translated call is '%s", c)
 			}

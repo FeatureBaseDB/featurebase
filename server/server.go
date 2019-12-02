@@ -137,7 +137,6 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer, opts ...CommandOption
 
 // Start starts the pilosa server - it returns once the server is running.
 func (m *Command) Start() (err error) {
-
 	// Seed random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
 

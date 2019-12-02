@@ -212,3 +212,17 @@ type TranslateKeysRequest struct {
 type TranslateKeysResponse struct {
 	IDs []uint64
 }
+
+// TranslateIDsRequest describes the structure of a request
+// for a batch of id translations.
+type TranslateIDsRequest struct {
+	Index string
+	Field string
+	IDs   []uint64
+}
+
+// TranslateIDsResponse is the structured response of a id
+// translation request.
+type TranslateIDsResponse struct {
+	Keys []string
+}

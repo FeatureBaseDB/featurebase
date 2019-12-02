@@ -352,7 +352,7 @@ func TestCluster_Partition(t *testing.T) {
 		c := newCluster()
 		c.partitionN = partitionN
 
-		partitionID := c.partition(index, shard)
+		partitionID := c.shardPartition(index, shard)
 		if partitionID < 0 || partitionID >= partitionN {
 			t.Errorf("partition out of range: shard=%d, p=%d, n=%d", shard, partitionID, partitionN)
 		}

@@ -78,12 +78,7 @@ type Holder struct {
 	snapshotQueue snapshotQueue
 
 	// Manages replication from the primary node.
-	primaryTranslateNode     *Node
-	translateStoreReplicator *holderTranslateStoreReplicator
-
-	// Instantiates new translation stores for indexes & fields.
-	OpenTranslateStore  OpenTranslateStoreFunc  // local store
-	OpenTranslateReader OpenTranslateReaderFunc // replication
+	primaryTranslateNode *Node
 }
 
 // lockedChan looks a little ridiculous admittedly, but exists for good reason.
@@ -128,8 +123,6 @@ func NewHolder() *Holder {
 		cacheFlushInterval: defaultCacheFlushInterval,
 
 		Logger: logger.NopLogger,
-
-		OpenTranslateStore: OpenInMemTranslateStore,
 	}
 }
 
@@ -231,13 +224,6 @@ func (h *Holder) Close() error {
 	h.opened.mu.Lock()
 	h.opened.ch = make(chan struct{})
 	h.opened.mu.Unlock()
-
-	h.mu.Lock()
-	if h.translateStoreReplicator != nil {
-		h.translateStoreReplicator.Close()
-		h.translateStoreReplicator = nil
-	}
-	h.mu.Unlock()
 
 	return nil
 }
@@ -452,9 +438,6 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	// Update options.
 	h.indexes[index.Name()] = index
 
-	// Restart replication.
-	go h.refreshTranslateStoreReplicator()
-
 	return index, nil
 }
 
@@ -470,7 +453,6 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ".data"))
 	index.snapshotQueue = h.snapshotQueue
 	index.holder = h
-	index.OpenTranslateStore = h.OpenTranslateStore
 	return index, nil
 }
 
@@ -665,243 +647,6 @@ func (h *Holder) logStartup() error {
 	}
 
 	return nil
-}
-
-// TranslateStore returns store for the given index or field.
-func (h *Holder) TranslateStore(index, field string) (TranslateStore, error) {
-	if field == "" {
-		idx := h.Index(index)
-		if idx == nil {
-			return nil, ErrIndexNotFound
-		}
-		return idx.TranslateStore(), nil
-	}
-
-	f := h.Field(index, field)
-	if f == nil {
-		return nil, ErrFieldNotFound
-	}
-	return f.TranslateStore(), nil
-}
-
-// TranslateOffsetMap returns a map of offsets for all indexes & fields.
-func (h *Holder) TranslateOffsetMap() (TranslateOffsetMap, error) {
-	m := make(TranslateOffsetMap)
-	for _, idx := range h.Indexes() {
-		id, err := idx.TranslateStore().MaxID()
-		if err != nil {
-			return nil, err
-		}
-		m.SetIndexOffset(idx.Name(), id+1)
-
-		for _, field := range idx.Fields() {
-			id, err := field.TranslateStore().MaxID()
-			if err != nil {
-				return nil, err
-			}
-			m.SetFieldOffset(idx.Name(), field.Name(), id+1)
-		}
-	}
-	return m, nil
-}
-
-func (h *Holder) setTranslateStoreReadOnly(v bool) {
-	for _, idx := range h.Indexes() {
-		idx.TranslateStore().SetReadOnly(v)
-		for _, field := range idx.Fields() {
-			field.TranslateStore().SetReadOnly(v)
-		}
-	}
-}
-
-func (h *Holder) setPrimaryTranslateStore(node *Node) error {
-	if node != nil && h.OpenTranslateReader == nil {
-		return nil
-	}
-	h.mu.Lock()
-	h.primaryTranslateNode = node.Clone()
-	h.mu.Unlock()
-
-	go h.refreshTranslateStoreReplicator()
-	return nil
-}
-
-func (h *Holder) refreshTranslateStoreReplicator() {
-	h.mu.RLock()
-	node := h.primaryTranslateNode
-	h.mu.RUnlock()
-
-	var nodeURL string
-	if node != nil {
-		u := node.URI.URL()
-		nodeURL = u.String()
-	}
-
-	// Stop existing replication, if running.
-	h.mu.Lock()
-	if h.translateStoreReplicator != nil {
-		h.translateStoreReplicator.Close()
-		h.translateStoreReplicator = nil
-	}
-	h.mu.Unlock()
-
-	// Set all stores read only mode based on if we have a primary.
-	h.setTranslateStoreReadOnly(node != nil)
-
-	// Start replication monitor, if needed.
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if nodeURL != "" {
-		h.translateStoreReplicator = newHolderTranslateStoreReplicator(h, nodeURL)
-		h.translateStoreReplicator.logger = h.Logger
-		if err := h.translateStoreReplicator.Open(); err != nil {
-			h.Logger.Printf("cannot open translate store replicator: %s", err)
-		}
-	}
-}
-
-// TranslateEntryReader returns a reader that merges all index & field reader
-// that are specified in the offsets map.
-func (h *Holder) TranslateEntryReader(ctx context.Context, offsets TranslateOffsetMap) (_ TranslateEntryReader, err error) {
-	// Ensure all readers are cleaned up if any error.
-	var a []TranslateEntryReader
-	defer func() {
-		if err != nil {
-			for i := range a {
-				a[i].Close()
-			}
-		}
-	}()
-
-	// Fetch all readers.
-	for indexName, m := range offsets {
-		for fieldName, offset := range m {
-			var store TranslateStore
-
-			idx := h.Index(indexName)
-			if idx == nil {
-				return nil, ErrIndexNotFound
-			}
-
-			// Fetch from index or field store.
-			if fieldName == "" {
-				store = idx.TranslateStore()
-			} else {
-				f := idx.Field(fieldName)
-				if f == nil {
-					return nil, ErrFieldNotFound
-				}
-				store = f.TranslateStore()
-			}
-
-			// Generate reader and append to multireader.
-			r, err := store.EntryReader(ctx, uint64(offset))
-			if err != nil {
-				return nil, errors.Wrap(err, "translate reader")
-			}
-			a = append(a, r)
-		}
-	}
-
-	return NewMultiTranslateEntryReader(ctx, a), nil
-}
-
-// holderTranslateStoreReplicator manages the replication of translation store
-// data from a primary store to the local replica. Continually tries to
-// reconnect on disconnect.
-type holderTranslateStoreReplicator struct {
-	ctx    context.Context
-	cancel func()
-	wg     sync.WaitGroup
-
-	holder  *Holder
-	nodeURL string
-
-	logger logger.Logger
-}
-
-func newHolderTranslateStoreReplicator(h *Holder, nodeURL string) *holderTranslateStoreReplicator {
-	r := &holderTranslateStoreReplicator{
-		holder:  h,
-		nodeURL: nodeURL,
-		logger:  logger.NopLogger,
-	}
-	r.ctx, r.cancel = context.WithCancel(context.Background())
-	return r
-}
-
-// Open starts the background monitoring goroutine.
-func (r *holderTranslateStoreReplicator) Open() error {
-	r.wg.Add(1)
-	go func() { defer r.wg.Done(); r.monitor() }()
-	return nil
-}
-
-// Close stops the replicator.
-func (r *holderTranslateStoreReplicator) Close() error {
-	r.cancel()
-	return nil
-}
-
-// monitor runs in a background goroutine and continually tries to connect and
-// stream translate changes from the primary store.
-func (r *holderTranslateStoreReplicator) monitor() {
-	for {
-		select {
-		case <-r.ctx.Done():
-			return
-		default:
-			if err := r.replicate(); err != nil {
-				r.logger.Printf("cannot replicate: nodeURL=%s err=%s", r.nodeURL, err)
-			}
-			time.Sleep(1 * time.Second)
-		}
-	}
-}
-
-func (r *holderTranslateStoreReplicator) replicate() error {
-	// Determine the offsets of every index & field store.
-	offsets, err := r.holder.TranslateOffsetMap()
-	if err != nil {
-		return err
-	} else if len(offsets) == 0 {
-		return nil
-	}
-
-	// Begin streaming from remote primary.
-	rd, err := r.holder.OpenTranslateReader(r.ctx, r.nodeURL, offsets)
-	if err != nil {
-		return err
-	}
-	defer rd.Close()
-
-	for {
-		var entry TranslateEntry
-		if err := rd.ReadEntry(&entry); err != nil {
-			return err
-		}
-
-		// Find appropriate store.
-		var store TranslateStore
-		if entry.Field == "" {
-			idx := r.holder.Index(entry.Index)
-			if idx == nil {
-				return ErrIndexNotFound
-			}
-			store = idx.TranslateStore()
-		} else {
-			f := r.holder.Field(entry.Index, entry.Field)
-			if f == nil {
-				return ErrFieldNotFound
-			}
-			store = f.TranslateStore()
-		}
-
-		// Apply replication to store.
-		if err := store.ForceSet(entry.ID, entry.Key); err != nil {
-			return err
-		}
-	}
 }
 
 // holderSyncer is an active anti-entropy tool that compares the local holder

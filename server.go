@@ -284,7 +284,7 @@ func OptServerClusterHasher(h Hasher) ServerOption {
 // used to specify the translation data store type.
 func OptServerOpenTranslateStore(fn OpenTranslateStoreFunc) ServerOption {
 	return func(s *Server) error {
-		s.holder.OpenTranslateStore = fn
+		s.cluster.OpenTranslateStore = fn
 		return nil
 	}
 }
@@ -293,7 +293,7 @@ func OptServerOpenTranslateStore(fn OpenTranslateStoreFunc) ServerOption {
 // used to specify the remote translation data reader.
 func OptServerOpenTranslateReader(fn OpenTranslateReaderFunc) ServerOption {
 	return func(s *Server) error {
-		s.holder.OpenTranslateReader = fn
+		s.cluster.OpenTranslateReader = fn
 		return nil
 	}
 }
