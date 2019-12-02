@@ -38,6 +38,8 @@
 // case, no ops are registered.
 package ext
 
+import "sync"
+
 // The Bitmap type represents a Pilosa bitmap, and is used for bitmap
 // operations.
 type Bitmap interface {
@@ -235,4 +237,27 @@ type ExtensionInfo struct {
 	ExtensionAPI string     // Extension API version. Should be v0 for now.
 	License      string     // License info.
 	BitmapOps    []BitmapOp // List of provided ops.
+}
+
+var extMu sync.Mutex
+
+var knownExtensions []*ExtensionInfo
+var newExtensions []*ExtensionInfo
+
+// RegisterExtension tells the extension system about a new extension.
+func RegisterExtension(ext *ExtensionInfo) {
+	extMu.Lock()
+	defer extMu.Unlock()
+	newExtensions = append(newExtensions, ext)
+}
+
+// NewExtentsions returns extensions that have been registered, but not previously
+// returned by Newextensions.
+func NewExtensions() []*ExtensionInfo {
+	extMu.Lock()
+	defer extMu.Unlock()
+	knownExtensions = append(knownExtensions, newExtensions...)
+	ret := newExtensions
+	newExtensions = nil
+	return ret
 }

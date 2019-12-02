@@ -16,6 +16,7 @@ RELEASE_ENABLED = $(subst 0,,$(RELEASE))
 BUILD_TAGS += $(if $(ENTERPRISE_ENABLED),enterprise)
 BUILD_TAGS += $(if $(RELEASE_ENABLED),release)
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
+BUILD_TAGS += $(foreach p,$(PLUGINS),plugin$(p))
 define LICENSE_HASH_CODE
     head -13 $1 | sed -e 's/Copyright 20[0-9][0-9]/Copyright 20XX/g' | shasum | cut -f 1 -d " "
 endef
