@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/ext"
+	"github.com/molecula/ext"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/shardwidth"
