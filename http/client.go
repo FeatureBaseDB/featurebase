@@ -696,6 +696,56 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, ind
 	return nil
 }
 
+// ImportColumnAttrs does bulk import of column attrs
+func (c *InternalClient) ImportColumnAttrs(ctx context.Context, uri *pilosa.URI, index string, req *pilosa.ImportColumnAttrsRequest) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ImportRoaring")
+	defer span.Finish()
+
+	if index == "" {
+		return pilosa.ErrIndexRequired
+	}
+	if uri == nil {
+		uri = c.defaultURI
+	}
+
+	url := fmt.Sprintf("%s/index/%s/import-column-attrs", uri, index)
+
+	// Marshal data to protobuf.
+	data, err := c.serializer.Marshal(req)
+	if err != nil {
+		return errors.Wrap(err, "marshal import-column-attrs request")
+	}
+
+	// Generate HTTP request.
+	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
+	if err != nil {
+		return errors.Wrap(err, "creating request")
+	}
+	httpReq.Header.Set("Content-Type", "application/x-protobuf")
+	httpReq.Header.Set("Accept", "application/x-protobuf")
+	httpReq.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	// Execute request against the host.
+	resp, err := c.executeRequest(httpReq.WithContext(ctx))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	dec := json.NewDecoder(resp.Body)
+	rbody := &pilosa.ImportResponse{}
+	err = dec.Decode(rbody)
+	// Decode can return EOF when no error occurred. helpful!
+	if err != nil && err != io.EOF {
+		return errors.Wrap(err, "decoding response body")
+	}
+	if rbody.Err != "" {
+		return errors.Wrap(errors.New(rbody.Err), "importing roaring")
+	}
+
+	return nil
+}
+
 // ExportCSV bulk exports data for a single shard from a host to CSV format.
 func (c *InternalClient) ExportCSV(ctx context.Context, index, field string, shard uint64, w io.Writer) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.ExportCSV")
