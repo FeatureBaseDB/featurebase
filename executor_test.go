@@ -4256,25 +4256,24 @@ func TestExecutor_Execute_IncludesColumn(t *testing.T) {
 }
 
 func TestExecutor_Execute_MinMaxCountEqual(t *testing.T) {
-	t.Run("ColumnID", func(t *testing.T) {
-		c := test.MustRunCluster(t, 1)
-		defer c.Close()
-		hldr := test.Holder{Holder: c[0].Server.Holder()}
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
 
-		idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
-		if err != nil {
-			t.Fatal(err)
-		}
+	idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		if _, err := idx.CreateField("x", pilosa.OptFieldTypeDefault()); err != nil {
-			t.Fatal(err)
-		}
+	if _, err := idx.CreateField("x", pilosa.OptFieldTypeDefault()); err != nil {
+		t.Fatal(err)
+	}
 
-		if _, err := idx.CreateField("f", pilosa.OptFieldTypeInt(-1100, 1000)); err != nil {
-			t.Fatal(err)
-		}
+	if _, err := idx.CreateField("f", pilosa.OptFieldTypeInt(-1100, 1000)); err != nil {
+		t.Fatal(err)
+	}
 
-		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
 			Set(0, f=3)
 			Set(1, f=3)
 			Set(2, f=4)
@@ -4290,54 +4289,53 @@ func TestExecutor_Execute_MinMaxCountEqual(t *testing.T) {
 			Set(1, x=3)
 
 		`}); err != nil {
-			t.Fatal(err)
+		t.Fatal(err)
+	}
+
+	t.Run("Min", func(t *testing.T) {
+		tests := []struct {
+			filter string
+			exp    int64
+			cnt    int64
+		}{
+			{filter: ``, exp: 3, cnt: 4},
+			{filter: `Row(x=3)`, exp: 3, cnt: 2},
 		}
+		for i, tt := range tests {
+			var pql string
+			if tt.filter == "" {
+				pql = `Min(field=f)`
+			} else {
+				pql = fmt.Sprintf(`Min(%s, field=f)`, tt.filter)
+			}
+			if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+				t.Fatal(err)
+			} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: tt.exp, Count: tt.cnt}) {
+				t.Fatalf("unexpected result, test %d: %s", i, spew.Sdump(result))
+			}
+		}
+	})
 
-		t.Run("Min", func(t *testing.T) {
-			tests := []struct {
-				filter string
-				exp    int64
-				cnt    int64
-			}{
-				{filter: ``, exp: 3, cnt: 4},
-				{filter: `Row(x=3)`, exp: 3, cnt: 2},
+	t.Run("Max", func(t *testing.T) {
+		tests := []struct {
+			filter string
+			exp    int64
+			cnt    int64
+		}{
+			{filter: ``, exp: 5, cnt: 5},
+		}
+		for i, tt := range tests {
+			var pql string
+			if tt.filter == "" {
+				pql = `Max(field=f)`
+			} else {
+				pql = fmt.Sprintf(`Max(%s, field=f)`, tt.filter)
 			}
-			for i, tt := range tests {
-				var pql string
-				if tt.filter == "" {
-					pql = `Min(field=f)`
-				} else {
-					pql = fmt.Sprintf(`Min(%s, field=f)`, tt.filter)
-				}
-				if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
-					t.Fatal(err)
-				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: tt.exp, Count: tt.cnt}) {
-					t.Fatalf("unexpected result, test %d: %s", i, spew.Sdump(result))
-				}
+			if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+				t.Fatal(err)
+			} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: tt.exp, Count: tt.cnt}) {
+				t.Fatalf("unexpected result, test %d: %s", i, spew.Sdump(result))
 			}
-		})
-
-		t.Run("Max", func(t *testing.T) {
-			tests := []struct {
-				filter string
-				exp    int64
-				cnt    int64
-			}{
-				{filter: ``, exp: 5, cnt: 5},
-			}
-			for i, tt := range tests {
-				var pql string
-				if tt.filter == "" {
-					pql = `Max(field=f)`
-				} else {
-					pql = fmt.Sprintf(`Max(%s, field=f)`, tt.filter)
-				}
-				if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
-					t.Fatal(err)
-				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: tt.exp, Count: tt.cnt}) {
-					t.Fatalf("unexpected result, test %d: %s", i, spew.Sdump(result))
-				}
-			}
-		})
+		}
 	})
 }
