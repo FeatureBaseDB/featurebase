@@ -38,6 +38,17 @@ type grpcHandler struct {
 	logger logger.Logger
 }
 
+// errorToStatusError appends an appropriate grpc status code
+// to the error (returning it as a status.Error). It is
+// assumed that the input err is non-nil.
+func errToStatusError(err error) error {
+	switch errors.Cause(err) {
+	case pilosa.ErrIndexNotFound, pilosa.ErrFieldNotFound:
+		return status.Error(codes.NotFound, err.Error())
+	}
+	return status.Error(codes.Unknown, err.Error())
+}
+
 // QueryPQL handles the PQL request and sends RowResponses to the stream.
 func (h grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQLServer) error {
 	query := pilosa.QueryRequest{
@@ -46,19 +57,19 @@ func (h grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 	}
 	resp, err := h.api.Query(context.Background(), &query)
 	if err != nil {
-		return status.Error(codes.Unknown, err.Error())
+		return errToStatusError(err)
 	}
 	for row := range makeRows(resp, h.logger) {
 		err = stream.Send(row)
 		if err != nil {
-			return status.Error(codes.Unknown, err.Error())
+			return errToStatusError(err)
 		}
 	}
 
 	return nil
 }
 
-// Inspect handles the inpspect request and sends an InspectResponse to the stream.
+// Inspect handles the inspect request and sends an InspectResponse to the stream.
 func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectServer) error {
 	index, err := h.api.Index(context.Background(), req.Index)
 	if err != nil {
