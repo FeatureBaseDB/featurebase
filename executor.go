@@ -3769,9 +3769,13 @@ func (vc *ValCount) smaller(other ValCount) ValCount {
 	if vc.Count == 0 || (other.Val < vc.Val && other.Count > 0) {
 		return other
 	}
+	extra := int64(0)
+	if vc.Val == other.Val {
+		extra += other.Count
+	}
 	return ValCount{
 		Val:   vc.Val,
-		Count: vc.Count,
+		Count: vc.Count + extra,
 	}
 }
 
@@ -3780,9 +3784,13 @@ func (vc *ValCount) larger(other ValCount) ValCount {
 	if vc.Count == 0 || (other.Val > vc.Val && other.Count > 0) {
 		return other
 	}
+	extra := int64(0)
+	if vc.Val == other.Val {
+		extra += other.Count
+	}
 	return ValCount{
 		Val:   vc.Val,
-		Count: vc.Count,
+		Count: vc.Count + extra,
 	}
 }
 
