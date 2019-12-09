@@ -2479,7 +2479,6 @@ func (e *executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 	if f == nil {
 		return false, ErrFieldNotFound
 	}
-
 	// Read fields using labels.
 	rowID, ok, err := c.UintArg(fieldName)
 	if err != nil {
@@ -2493,6 +2492,11 @@ func (e *executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 		return false, fmt.Errorf("reading Clear() column: %v", err)
 	} else if !ok {
 		return false, fmt.Errorf("column argument to Clear(<COLUMN>, <FIELD>=<ROW>) required")
+	}
+
+	// Int field.
+	if f.Type() == FieldTypeInt || f.Type() == FieldTypeDecimal {
+		return e.executeClearValueField(ctx, index, c, f, colID, opt)
 	}
 
 	return e.executeClearBitField(ctx, index, c, f, colID, rowID, opt)
@@ -2819,6 +2823,41 @@ func (e *executor) executeSetValueField(ctx context.Context, index string, c *pq
 		// Update locally if host matches.
 		if node.ID == e.Node.ID {
 			val, err := f.SetValue(colID, value)
+			if err != nil {
+				return false, err
+			} else if val {
+				ret = true
+			}
+			continue
+		}
+
+		// Do not forward call if this is already being forwarded.
+		if opt.Remote {
+			continue
+		}
+
+		// Forward call to remote node otherwise.
+		res, err := e.remoteExec(ctx, node, index, &pql.Query{Calls: []*pql.Call{c}}, nil, nil)
+		if err != nil {
+			return false, err
+		}
+		ret = res[0].(bool)
+	}
+	return ret, nil
+}
+
+// executeSetValueField executes a Set() call for a specific int field.
+func (e *executor) executeClearValueField(ctx context.Context, index string, c *pql.Call, f *Field, colID uint64, opt *execOptions) (bool, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeClearValueField")
+	defer span.Finish()
+
+	shard := colID / ShardWidth
+	ret := false
+
+	for _, node := range e.Cluster.shardNodes(index, shard) {
+		// Update locally if host matches.
+		if node.ID == e.Node.ID {
+			val, err := f.ClearValue(colID)
 			if err != nil {
 				return false, err
 			} else if val {

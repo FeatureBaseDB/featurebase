@@ -405,6 +405,16 @@ func (v *view) setValue(columnID uint64, bitDepth uint, value int64) (changed bo
 	return frag.setValue(columnID, bitDepth, value)
 }
 
+// clearValue uses a column of bits to set a multi-bit value.
+func (v *view) clearValue(columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
+	shard := columnID / ShardWidth
+	frag, err := v.CreateFragmentIfNotExists(shard)
+	if err != nil {
+		return changed, err
+	}
+	return frag.clearValue(columnID, bitDepth, value)
+}
+
 // sum returns the sum & count of a field.
 func (v *view) sum(filter *Row, bitDepth uint) (sum int64, count uint64, err error) {
 	for _, f := range v.allFragments() {
