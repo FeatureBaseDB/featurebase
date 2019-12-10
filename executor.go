@@ -808,14 +808,19 @@ func (e *executor) executeMinRow(ctx context.Context, index string, c *pql.Call,
 	reduceFn := func(prev, v interface{}) interface{} {
 		// if minRowID exists, and if it is smaller than the other one return it.
 		// otherwise return the minRowID of the one which exists.
-		prevp, _ := prev.(Pair)
-		vp, _ := v.(Pair)
-		if prevp.Count > 0 && vp.Count > 0 {
-			if prevp.ID < vp.ID {
+		if prev == nil {
+			return v
+		} else if v == nil {
+			return prev
+		}
+		prevp, _ := prev.(PairField)
+		vp, _ := v.(PairField)
+		if prevp.Pair.Count > 0 && vp.Pair.Count > 0 {
+			if prevp.Pair.ID < vp.Pair.ID {
 				return prevp
 			}
 			return vp
-		} else if prevp.Count > 0 {
+		} else if prevp.Pair.Count > 0 {
 			return prevp
 		}
 		return vp
@@ -824,7 +829,7 @@ func (e *executor) executeMinRow(ctx context.Context, index string, c *pql.Call,
 	return e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
 }
 
-// executeMinRow executes a MaxRow() call.
+// executeMaxRow executes a MaxRow() call.
 func (e *executor) executeMaxRow(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (interface{}, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMaxRow")
 	defer span.Finish()
@@ -842,14 +847,19 @@ func (e *executor) executeMaxRow(ctx context.Context, index string, c *pql.Call,
 	reduceFn := func(prev, v interface{}) interface{} {
 		// if minRowID exists, and if it is smaller than the other one return it.
 		// otherwise return the minRowID of the one which exists.
-		prevp, _ := prev.(Pair)
-		vp, _ := v.(Pair)
-		if prevp.Count > 0 && vp.Count > 0 {
-			if prevp.ID > vp.ID {
+		if prev == nil {
+			return v
+		} else if v == nil {
+			return prev
+		}
+		prevp, _ := prev.(PairField)
+		vp, _ := v.(PairField)
+		if prevp.Pair.Count > 0 && vp.Pair.Count > 0 {
+			if prevp.Pair.ID > vp.Pair.ID {
 				return prevp
 			}
 			return vp
-		} else if prevp.Count > 0 {
+		} else if prevp.Pair.Count > 0 {
 			return prevp
 		}
 		return vp
@@ -1175,12 +1185,12 @@ func (e *executor) executeMaxShard(ctx context.Context, index string, c *pql.Cal
 }
 
 // executeMinRowShard returns the minimum row ID for a shard.
-func (e *executor) executeMinRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (Pair, error) {
+func (e *executor) executeMinRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (PairField, error) {
 	var filter *Row
 	if len(c.Children) == 1 {
 		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
 		if err != nil {
-			return Pair{}, err
+			return PairField{}, err
 		}
 		filter = row
 	}
@@ -1188,28 +1198,31 @@ func (e *executor) executeMinRowShard(ctx context.Context, index string, c *pql.
 	fieldName, _ := c.Args["field"].(string)
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		return Pair{}, nil
+		return PairField{}, nil
 	}
 
 	fragment := e.Holder.fragment(index, fieldName, viewStandard, shard)
 	if fragment == nil {
-		return Pair{}, nil
+		return PairField{}, nil
 	}
 
 	minRowID, count := fragment.minRow(filter)
-	return Pair{
-		ID:    minRowID,
-		Count: count,
+	return PairField{
+		Pair: Pair{
+			ID:    minRowID,
+			Count: count,
+		},
+		Field: fieldName,
 	}, nil
 }
 
 // executeMaxRowShard returns the maximum row ID for a shard.
-func (e *executor) executeMaxRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (Pair, error) {
+func (e *executor) executeMaxRowShard(ctx context.Context, index string, c *pql.Call, shard uint64) (PairField, error) {
 	var filter *Row
 	if len(c.Children) == 1 {
 		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
 		if err != nil {
-			return Pair{}, err
+			return PairField{}, err
 		}
 		filter = row
 	}
@@ -1217,25 +1230,28 @@ func (e *executor) executeMaxRowShard(ctx context.Context, index string, c *pql.
 	fieldName, _ := c.Args["field"].(string)
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		return Pair{}, nil
+		return PairField{}, nil
 	}
 
 	fragment := e.Holder.fragment(index, fieldName, viewStandard, shard)
 	if fragment == nil {
-		return Pair{}, nil
+		return PairField{}, nil
 	}
 
 	maxRowID, count := fragment.maxRow(filter)
-	return Pair{
-		ID:    maxRowID,
-		Count: count,
+	return PairField{
+		Pair: Pair{
+			ID:    maxRowID,
+			Count: count,
+		},
+		Field: fieldName,
 	}, nil
 }
 
 // executeTopN executes a TopN() call.
 // This first performs the TopN() to determine the top results and then
 // requeries to retrieve the full counts for each of the top results.
-func (e *executor) executeTopN(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) ([]Pair, error) {
+func (e *executor) executeTopN(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (*PairsField, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopN")
 	defer span.Finish()
 
@@ -1243,6 +1259,8 @@ func (e *executor) executeTopN(ctx context.Context, index string, c *pql.Call, s
 	if err != nil {
 		return nil, fmt.Errorf("executeTopN: %v", err)
 	}
+
+	fieldName, _ := c.Args["_field"].(string)
 	n, _, err := c.UintArg("n")
 	if err != nil {
 		return nil, fmt.Errorf("executeTopN: %v", err)
@@ -1256,13 +1274,16 @@ func (e *executor) executeTopN(ctx context.Context, index string, c *pql.Call, s
 
 	// If this call is against specific ids, or we didn't get results,
 	// or we are part of a larger distributed query then don't refetch.
-	if len(pairs) == 0 || len(idsArg) > 0 || opt.Remote {
-		return pairs, nil
+	if len(pairs.Pairs) == 0 || len(idsArg) > 0 || opt.Remote {
+		return &PairsField{
+			Pairs: pairs.Pairs,
+			Field: fieldName,
+		}, nil
 	}
 	// Only the original caller should refetch the full counts.
 	other := c.Clone()
 
-	ids := Pairs(pairs).Keys()
+	ids := Pairs(pairs.Pairs).Keys()
 	sort.Sort(uint64Slice(ids))
 	other.Args["ids"] = ids
 
@@ -1271,13 +1292,17 @@ func (e *executor) executeTopN(ctx context.Context, index string, c *pql.Call, s
 		return nil, errors.Wrap(err, "retrieving full counts")
 	}
 
-	if n != 0 && int(n) < len(trimmedList) {
-		trimmedList = trimmedList[0:n]
+	if n != 0 && int(n) < len(trimmedList.Pairs) {
+		trimmedList.Pairs = trimmedList.Pairs[0:n]
 	}
-	return trimmedList, nil
+
+	return &PairsField{
+		Pairs: trimmedList.Pairs,
+		Field: fieldName,
+	}, nil
 }
 
-func (e *executor) executeTopNShards(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) ([]Pair, error) {
+func (e *executor) executeTopNShards(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (*PairsField, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopNShards")
 	defer span.Finish()
 
@@ -1288,24 +1313,31 @@ func (e *executor) executeTopNShards(ctx context.Context, index string, c *pql.C
 
 	// Merge returned results at coordinating node.
 	reduceFn := func(prev, v interface{}) interface{} {
-		other, _ := prev.([]Pair)
-		return Pairs(other).Add(v.([]Pair))
+		other, _ := prev.(*PairsField)
+		vpf, _ := v.(*PairsField)
+		if other == nil {
+			return vpf
+		} else if vpf == nil {
+			return other
+		}
+		other.Pairs = Pairs(other.Pairs).Add(vpf.Pairs)
+		return other
 	}
 
 	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
 	if err != nil {
 		return nil, err
 	}
-	results, _ := other.([]Pair)
+	results, _ := other.(*PairsField)
 
 	// Sort final merged results.
-	sort.Sort(Pairs(results))
+	sort.Sort(Pairs(results.Pairs))
 
 	return results, nil
 }
 
 // executeTopNShard executes a TopN call for a single shard.
-func (e *executor) executeTopNShard(ctx context.Context, index string, c *pql.Call, shard uint64) ([]Pair, error) {
+func (e *executor) executeTopNShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*PairsField, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeTopNShard")
 	defer span.Finish()
 
@@ -1351,7 +1383,7 @@ func (e *executor) executeTopNShard(ctx context.Context, index string, c *pql.Ca
 
 	f := e.Holder.fragment(index, fieldName, viewStandard, shard)
 	if f == nil {
-		return nil, nil
+		return &PairsField{}, nil
 	} else if f.CacheType == CacheTypeNone {
 		return nil, fmt.Errorf("cannot compute TopN(), field has no cache: %q", fieldName)
 	}
@@ -1363,7 +1395,7 @@ func (e *executor) executeTopNShard(ctx context.Context, index string, c *pql.Ca
 	if tanimotoThreshold > 100 {
 		return nil, errors.New("Tanimoto Threshold is from 1 to 100 only")
 	}
-	return f.top(topOptions{
+	pairs, err := f.top(topOptions{
 		N:                 int(n),
 		Src:               src,
 		RowIDs:            rowIDs,
@@ -1372,6 +1404,13 @@ func (e *executor) executeTopNShard(ctx context.Context, index string, c *pql.Ca
 		MinThreshold:      minThreshold,
 		TanimotoThreshold: tanimotoThreshold,
 	})
+	if err != nil {
+		return nil, errors.Wrap(err, "getting top")
+	}
+
+	return &PairsField{
+		Pairs: pairs,
+	}, nil
 }
 
 // executeDifferenceShard executes a difference() call for a local shard.
@@ -1405,8 +1444,14 @@ func (e *executor) executeDifferenceShard(ctx context.Context, index string, c *
 // Row query which returns `Columns` and `Keys`.
 // TODO: Rename this to something better. Anything.
 type RowIdentifiers struct {
-	Rows []uint64 `json:"rows"`
-	Keys []string `json:"keys,omitempty"`
+	Rows  []uint64 `json:"rows"`
+	Keys  []string `json:"keys,omitempty"`
+	field string
+}
+
+// Field returns the field name associated to the row.
+func (r *RowIdentifiers) Field() string {
+	return r.field
 }
 
 // RowIDs is a query return type for just uint64 row ids.
@@ -3535,41 +3580,47 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 			return other, nil
 		}
 
-	case Pair:
+	case PairField:
 		if fieldName := callArgString(call, "field"); fieldName != "" {
 			field := idx.Field(fieldName)
 			if field == nil {
 				return nil, fmt.Errorf("field %q not found", fieldName)
 			}
 			if field.keys() {
-				key, err := field.translateStore.TranslateID(result.ID)
+				key, err := field.translateStore.TranslateID(result.Pair.ID)
 				if err != nil {
 					return nil, err
 				}
 				if call.Name == "MinRow" || call.Name == "MaxRow" {
-					result.Key = key
+					result.Pair.Key = key
 					return result, nil
 				}
-				return Pair{Key: key, Count: result.Count}, nil
+				return PairField{
+					Pair:  Pair{Key: key, Count: result.Pair.Count},
+					Field: fieldName,
+				}, nil
 			}
 		}
 
-	case []Pair:
+	case *PairsField:
 		if fieldName := callArgString(call, "_field"); fieldName != "" {
 			field := idx.Field(fieldName)
 			if field == nil {
 				return nil, fmt.Errorf("field %q not found", fieldName)
 			}
 			if field.keys() {
-				other := make([]Pair, len(result))
-				for i := range result {
-					key, err := field.translateStore.TranslateID(result[i].ID)
+				other := make([]Pair, len(result.Pairs))
+				for i := range result.Pairs {
+					key, err := field.translateStore.TranslateID(result.Pairs[i].ID)
 					if err != nil {
 						return nil, err
 					}
-					other[i] = Pair{Key: key, Count: result[i].Count}
+					other[i] = Pair{Key: key, Count: result.Pairs[i].Count}
 				}
-				return other, nil
+				return &PairsField{
+					Pairs: other,
+					Field: fieldName,
+				}, nil
 			}
 		}
 
@@ -3604,11 +3655,13 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 		return other, nil
 
 	case RowIDs:
-		other := RowIdentifiers{}
-
 		fieldName := callArgString(call, "_field")
 		if fieldName == "" {
 			return nil, ErrFieldNotFound
+		}
+
+		other := RowIdentifiers{
+			field: fieldName,
 		}
 
 		if field := idx.Field(fieldName); field == nil {

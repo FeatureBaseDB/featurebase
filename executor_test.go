@@ -945,9 +945,12 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 
 		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(result.Results[0], []pilosa.Pair{
-			{ID: 0, Count: 5},
-			{ID: 10, Count: 2},
+		} else if !reflect.DeepEqual(result.Results[0], &pilosa.PairsField{
+			Pairs: []pilosa.Pair{
+				{ID: 0, Count: 5},
+				{ID: 10, Count: 2},
+			},
+			Field: "f",
 		}) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
@@ -986,9 +989,12 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 
 		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(result.Results[0], []pilosa.Pair{
-			{ID: 0, Count: 5},
-			{ID: 10, Count: 2},
+		} else if !reflect.DeepEqual(result.Results[0], &pilosa.PairsField{
+			Pairs: []pilosa.Pair{
+				{ID: 0, Count: 5},
+				{ID: 10, Count: 2},
+			},
+			Field: "f",
 		}) {
 			t.Fatalf("unexpected result: %s", spew.Sdump(result))
 		}
@@ -1027,11 +1033,16 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 
 		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(result.Results[0], []pilosa.Pair{
-			{Key: "zero", Count: 5},
-			{Key: "ten", Count: 2},
-		}) {
-			t.Fatalf("unexpected result: %s", spew.Sdump(result))
+		} else {
+			if !reflect.DeepEqual(result.Results[0], &pilosa.PairsField{
+				Pairs: []pilosa.Pair{
+					{Key: "zero", Count: 5},
+					{Key: "ten", Count: 2},
+				},
+				Field: "f",
+			}) {
+				t.Fatalf("unexpected result: %s", spew.Sdump(result))
+			}
 		}
 	})
 
@@ -1069,9 +1080,12 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=2)`}); err != nil {
 			t.Fatal(err)
 		} else if diff := cmp.Diff(result.Results, []interface{}{
-			[]pilosa.Pair{
-				{Key: "foo", Count: 5},
-				{Key: "bar", Count: 2},
+			&pilosa.PairsField{
+				Pairs: []pilosa.Pair{
+					{Key: "foo", Count: 5},
+					{Key: "bar", Count: 2},
+				},
+				Field: "f",
 			},
 		}); diff != "" {
 			t.Fatal(diff)
@@ -1154,8 +1168,11 @@ func TestExecutor_Execute_TopN_fill(t *testing.T) {
 	// Execute query.
 	if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=1)`}); err != nil {
 		t.Fatal(err)
-	} else if !reflect.DeepEqual(result.Results, []interface{}{[]pilosa.Pair{
-		{ID: 0, Count: 4},
+	} else if !reflect.DeepEqual(result.Results, []interface{}{&pilosa.PairsField{
+		Pairs: []pilosa.Pair{
+			{ID: 0, Count: 4},
+		},
+		Field: "f",
 	}}) {
 		t.Fatalf("unexpected result: %s", spew.Sdump(result))
 	}
@@ -1188,8 +1205,11 @@ func TestExecutor_Execute_TopN_fill_small(t *testing.T) {
 	// Execute query.
 	if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=1)`}); err != nil {
 		t.Fatal(err)
-	} else if !reflect.DeepEqual(result.Results, []interface{}{[]pilosa.Pair{
-		{ID: 0, Count: 5},
+	} else if !reflect.DeepEqual(result.Results, []interface{}{&pilosa.PairsField{
+		Pairs: []pilosa.Pair{
+			{ID: 0, Count: 5},
+		},
+		Field: "f",
 	}}) {
 		t.Fatalf("unexpected result: %s", spew.Sdump(result))
 	}
@@ -1224,10 +1244,13 @@ func TestExecutor_Execute_TopN_Src(t *testing.T) {
 	// Execute query.
 	if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, Row(other=100), n=3)`}); err != nil {
 		t.Fatal(err)
-	} else if !reflect.DeepEqual(result.Results, []interface{}{[]pilosa.Pair{
-		{ID: 20, Count: 3},
-		{ID: 10, Count: 2},
-		{ID: 0, Count: 1},
+	} else if !reflect.DeepEqual(result.Results, []interface{}{&pilosa.PairsField{
+		Pairs: []pilosa.Pair{
+			{ID: 20, Count: 3},
+			{ID: 10, Count: 2},
+			{ID: 0, Count: 1},
+		},
+		Field: "f",
 	}}) {
 		t.Fatalf("unexpected result: %s", spew.Sdump(result))
 	}
@@ -1247,8 +1270,11 @@ func TestExecutor_Execute_TopN_Attr(t *testing.T) {
 	}
 	if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=1, attrName="category", attrValues=[123])`}); err != nil {
 		t.Fatal(err)
-	} else if !reflect.DeepEqual(result.Results, []interface{}{[]pilosa.Pair{
-		{ID: 10, Count: 1},
+	} else if !reflect.DeepEqual(result.Results, []interface{}{&pilosa.PairsField{
+		Pairs: []pilosa.Pair{
+			{ID: 10, Count: 1},
+		},
+		Field: "f",
 	}}) {
 		t.Fatalf("unexpected result: %s", spew.Sdump(result))
 	}
@@ -1270,8 +1296,11 @@ func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
 	}
 	if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, Row(f=10), n=1, attrName="category", attrValues=[123])`}); err != nil {
 		t.Fatal(err)
-	} else if !reflect.DeepEqual(result.Results, []interface{}{[]pilosa.Pair{
-		{ID: 10, Count: 1},
+	} else if !reflect.DeepEqual(result.Results, []interface{}{&pilosa.PairsField{
+		Pairs: []pilosa.Pair{
+			{ID: 10, Count: 1},
+		},
+		Field: "f",
 	}}) {
 		t.Fatalf("unexpected result: %s", spew.Sdump(result))
 	}
@@ -1465,7 +1494,10 @@ func TestExecutor_Execute_MinMaxRow(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			target := pilosa.Pair{ID: 1, Count: 1}
+			target := pilosa.PairField{
+				Pair:  pilosa.Pair{ID: 1, Count: 1},
+				Field: "f",
+			}
 			if !reflect.DeepEqual(target, result.Results[0]) {
 				t.Fatalf("unexpected result %v != %v", target, result.Results[0])
 			}
@@ -1476,7 +1508,10 @@ func TestExecutor_Execute_MinMaxRow(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			target := pilosa.Pair{ID: 10000, Count: 1}
+			target := pilosa.PairField{
+				Pair:  pilosa.Pair{ID: 10000, Count: 1},
+				Field: "f",
+			}
 			if !reflect.DeepEqual(target, result.Results[0]) {
 				t.Fatalf("unexpected result %v != %v", target, result.Results[0])
 			}
@@ -1512,7 +1547,10 @@ func TestExecutor_Execute_MinMaxRow(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			target := pilosa.Pair{Key: "seven-thousand", ID: 1, Count: 1}
+			target := pilosa.PairField{
+				Pair:  pilosa.Pair{Key: "seven-thousand", ID: 1, Count: 1},
+				Field: "f",
+			}
 			if !reflect.DeepEqual(target, result.Results[0]) {
 				t.Fatalf("unexpected result %v != %v", target, result.Results[0])
 			}
@@ -1523,7 +1561,10 @@ func TestExecutor_Execute_MinMaxRow(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			target := pilosa.Pair{Key: "five-thousand", ID: 5, Count: 1}
+			target := pilosa.PairField{
+				Pair:  pilosa.Pair{Key: "five-thousand", ID: 5, Count: 1},
+				Field: "f",
+			}
 			if !reflect.DeepEqual(target, result.Results[0]) {
 				t.Fatalf("unexpected result %v != %v", target, result.Results[0])
 			}
@@ -2420,7 +2461,6 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
-
 		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
 Set(500001, fn=5)
 Set(1500001, fn=5)
@@ -2432,11 +2472,11 @@ Set(3500003, fn=3)
 Set(500001, fn=4)
 Set(4500001, fn=4)
 `}); err != nil {
-			t.Fatalf("quuerying remote: %v", err)
+			t.Fatalf("querying remote: %v", err)
 		}
 		err := c[0].API.RecalculateCaches(context.Background())
 		if err != nil {
-			t.Fatalf("recalcing caches: %v", err)
+			t.Fatalf("recalculating caches: %v", err)
 		}
 
 		if res, err := c[1].API.Query(context.Background(), &pilosa.QueryRequest{
@@ -2444,10 +2484,13 @@ Set(4500001, fn=4)
 			Query: `TopN(fn, n=3)`,
 		}); err != nil {
 			t.Fatalf("topn querying: %v", err)
-		} else if !reflect.DeepEqual(res.Results, []interface{}{[]pilosa.Pair{
-			{ID: 5, Count: 4},
-			{ID: 3, Count: 3},
-			{ID: 4, Count: 2},
+		} else if !reflect.DeepEqual(res.Results, []interface{}{&pilosa.PairsField{
+			Pairs: []pilosa.Pair{
+				{ID: 5, Count: 4},
+				{ID: 3, Count: 3},
+				{ID: 4, Count: 2},
+			},
+			Field: "fn",
 		}}) {
 			t.Fatalf("topn wrong results: %v", res.Results)
 		}
@@ -3039,10 +3082,13 @@ func TestExecutor_Execute_ClearRow(t *testing.T) {
 		// Check the TopN results.
 		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=5)`}); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(res.Results, []interface{}{[]pilosa.Pair{
-			{ID: 1, Count: 7},
-			{ID: 2, Count: 6},
-			{ID: 3, Count: 5},
+		} else if !reflect.DeepEqual(res.Results, []interface{}{&pilosa.PairsField{
+			Pairs: []pilosa.Pair{
+				{ID: 1, Count: 7},
+				{ID: 2, Count: 6},
+				{ID: 3, Count: 5},
+			},
+			Field: "f",
 		}}) {
 			t.Fatalf("topn wrong results: %v", res.Results)
 		}
@@ -3057,9 +3103,12 @@ func TestExecutor_Execute_ClearRow(t *testing.T) {
 		// Ensure that the cleared row doesn't show up in TopN (i.e. it was removed from the cache).
 		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `TopN(f, n=5)`}); err != nil {
 			t.Fatal(err)
-		} else if !reflect.DeepEqual(res.Results, []interface{}{[]pilosa.Pair{
-			{ID: 1, Count: 7},
-			{ID: 3, Count: 5},
+		} else if !reflect.DeepEqual(res.Results, []interface{}{&pilosa.PairsField{
+			Pairs: []pilosa.Pair{
+				{ID: 1, Count: 7},
+				{ID: 3, Count: 5},
+			},
+			Field: "f",
 		}}) {
 			t.Fatalf("topn wrong results: %v", res.Results)
 		}
@@ -3280,30 +3329,40 @@ func TestExecutor_Execute_Rows(t *testing.T) {
 	})
 
 	rows := c.Query(t, "i", `Rows(general)`).Results[0].(pilosa.RowIdentifiers)
-	if !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{10, 11, 12, 13}}) {
-		t.Fatalf("unexpected rows: %+v", rows)
+	if !reflect.DeepEqual(rows.Rows, []uint64{10, 11, 12, 13}) {
+		t.Fatalf("unexpected rows: %+v", rows.Rows)
+	} else if rows.Keys != nil {
+		t.Fatalf("unexpected keys: %+v", rows.Keys)
 	}
 
 	// backwards compatibility
 	// TODO: remove at Pilosa 2.0
 	rows = c.Query(t, "i", `Rows(field=general)`).Results[0].(pilosa.RowIdentifiers)
-	if !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{10, 11, 12, 13}}) {
-		t.Fatalf("unexpected rows: %+v", rows)
+	if !reflect.DeepEqual(rows.Rows, []uint64{10, 11, 12, 13}) {
+		t.Fatalf("unexpected rows: %+v", rows.Rows)
+	} else if rows.Keys != nil {
+		t.Fatalf("unexpected keys: %+v", rows.Keys)
 	}
 
 	rows = c.Query(t, "i", `Rows(general, limit=2)`).Results[0].(pilosa.RowIdentifiers)
-	if !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{10, 11}}) {
-		t.Fatalf("unexpected rows: %+v", rows)
+	if !reflect.DeepEqual(rows.Rows, []uint64{10, 11}) {
+		t.Fatalf("unexpected rows: %+v", rows.Rows)
+	} else if rows.Keys != nil {
+		t.Fatalf("unexpected keys: %+v", rows.Keys)
 	}
 
 	rows = c.Query(t, "i", `Rows(general, previous=10,limit=2)`).Results[0].(pilosa.RowIdentifiers)
-	if !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{11, 12}}) {
-		t.Fatalf("unexpected rows: %+v", rows)
+	if !reflect.DeepEqual(rows.Rows, []uint64{11, 12}) {
+		t.Fatalf("unexpected rows: %+v", rows.Rows)
+	} else if rows.Keys != nil {
+		t.Fatalf("unexpected keys: %+v", rows.Keys)
 	}
 
 	rows = c.Query(t, "i", `Rows(general, column=2)`).Results[0].(pilosa.RowIdentifiers)
-	if !reflect.DeepEqual(rows, pilosa.RowIdentifiers{Rows: []uint64{11, 12}}) {
-		t.Fatalf("unexpected rows: %+v", rows)
+	if !reflect.DeepEqual(rows.Rows, []uint64{11, 12}) {
+		t.Fatalf("unexpected rows: %+v", rows.Rows)
+	} else if rows.Keys != nil {
+		t.Fatalf("unexpected keys: %+v", rows.Keys)
 	}
 }
 
@@ -3613,9 +3672,13 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 		t.Run(fmt.Sprintf("#%d_%s", i, test.q), func(t *testing.T) {
 			if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: test.q}); err != nil {
 				t.Fatal(err)
-			} else if rows := res.Results[0].(pilosa.RowIdentifiers); !reflect.DeepEqual(
-				rows, pilosa.RowIdentifiers{Keys: test.exp}) {
-				t.Fatalf("\ngot: %+v\nexp: %+v", rows, pilosa.RowIdentifiers{Keys: test.exp})
+			} else {
+				rows := res.Results[0].(pilosa.RowIdentifiers)
+				if !reflect.DeepEqual(rows.Keys, test.exp) {
+					t.Fatalf("\ngot: %+v\nexp: %+v", rows.Keys, test.exp)
+				} else if rows.Rows != nil {
+					t.Fatalf("\ngot: %+v\nexp: nil", rows.Rows)
+				}
 			}
 		})
 	}
