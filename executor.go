@@ -2846,7 +2846,7 @@ func (e *executor) executeSetValueField(ctx context.Context, index string, c *pq
 	return ret, nil
 }
 
-// executeSetValueField executes a Set() call for a specific int field.
+// executeSetValueField removes value for colID if present
 func (e *executor) executeClearValueField(ctx context.Context, index string, c *pql.Call, f *Field, colID uint64, opt *execOptions) (bool, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeClearValueField")
 	defer span.Finish()

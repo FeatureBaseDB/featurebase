@@ -257,6 +257,7 @@ func TestField_ClearValue(t *testing.T) {
 		if changed, err := f.ClearValue(100); err != nil {
 			t.Fatal(err)
 		} else if !changed {
+			t.Fatal(err)
 		}
 
 		// Read value.

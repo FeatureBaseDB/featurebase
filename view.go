@@ -405,7 +405,7 @@ func (v *view) setValue(columnID uint64, bitDepth uint, value int64) (changed bo
 	return frag.setValue(columnID, bitDepth, value)
 }
 
-// clearValue uses a column of bits to set a multi-bit value.
+// clearValue removes a specific value assigned to columnID
 func (v *view) clearValue(columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag, err := v.CreateFragmentIfNotExists(shard)
