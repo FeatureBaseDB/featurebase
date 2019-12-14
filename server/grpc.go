@@ -573,6 +573,27 @@ func makeRows(resp pilosa.QueryResponse, logger logger.Logger) chan *pb.RowRespo
 						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: r.Val}},
 						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: r.Count}},
 					}}
+			case pilosa.SignedRow:
+				// TODO: address the overflow issue with values outside the int64 range
+				ci := []*pb.ColumnInfo{{Name: r.Field(), Datatype: "int64"}}
+				negs := r.Neg.Columns()
+				for i := len(negs) - 1; i >= 0; i-- {
+					results <- &pb.RowResponse{
+						Headers: ci,
+						Columns: []*pb.ColumnResponse{
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: -1 * int64(negs[i])}},
+						}}
+					ci = nil
+				}
+				for _, id := range r.Pos.Columns() {
+					results <- &pb.RowResponse{
+						Headers: ci,
+						Columns: []*pb.ColumnResponse{
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: int64(id)}},
+						}}
+					ci = nil
+				}
+
 			default:
 				logger.Printf("unhandled %T\n", r)
 				breakLoop = true

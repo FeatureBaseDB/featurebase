@@ -694,7 +694,8 @@ func (e *executor) executeGenericField(ctx context.Context, index string, c *pql
 	span.LogKV("name", c.Name)
 	defer span.Finish()
 
-	if field := c.Args["field"]; field == "" {
+	field := c.Args["field"]
+	if field == "" {
 		return SignedRow{}, fmt.Errorf("plugin operation %s(): field required", c.Name)
 	}
 
@@ -714,6 +715,7 @@ func (e *executor) executeGenericField(ctx context.Context, index string, c *pql
 		return SignedRow{}, err
 	}
 	other, _ := result.(SignedRow)
+	other.field = field.(string)
 
 	return other, nil
 }
@@ -3776,12 +3778,18 @@ func needsShards(calls []*pql.Call) bool {
 
 // SignedRow represents a signed *Row with two (neg/pos) *Rows.
 type SignedRow struct {
-	Neg *Row `json:"neg"`
-	Pos *Row `json:"pos"`
+	Neg   *Row `json:"neg"`
+	Pos   *Row `json:"pos"`
+	field string
+}
+
+// Field returns the field name associated to the signed row.
+func (s *SignedRow) Field() string {
+	return s.field
 }
 
 func (sr *SignedRow) union(other SignedRow) SignedRow {
-	ret := SignedRow{&Row{}, &Row{}}
+	ret := SignedRow{&Row{}, &Row{}, ""}
 
 	// merge in sr
 	if sr != nil {
