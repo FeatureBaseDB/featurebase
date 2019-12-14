@@ -273,6 +273,22 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		decodeTranslateKeysResponse(msg, mt)
 		return nil
+	case *pilosa.TranslateIDsRequest:
+		msg := &internal.TranslateIDsRequest{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling TranslateIDsRequest")
+		}
+		decodeTranslateIDsRequest(msg, mt)
+		return nil
+	case *pilosa.TranslateIDsResponse:
+		msg := &internal.TranslateIDsResponse{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling TranslateIDsResponse")
+		}
+		decodeTranslateIDsResponse(msg, mt)
+		return nil
 	default:
 		panic(fmt.Sprintf("unhandled pilosa.Message of type %T: %#v", mt, m))
 	}
@@ -338,6 +354,10 @@ func encodeToProto(m pilosa.Message) proto.Message {
 		return encodeTranslateKeysRequest(mt)
 	case *pilosa.TranslateKeysResponse:
 		return encodeTranslateKeysResponse(mt)
+	case *pilosa.TranslateIDsRequest:
+		return encodeTranslateIDsRequest(mt)
+	case *pilosa.TranslateIDsResponse:
+		return encodeTranslateIDsResponse(mt)
 	}
 	return nil
 }

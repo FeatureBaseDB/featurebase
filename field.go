@@ -89,6 +89,11 @@ type Field struct {
 	logger logger.Logger
 
 	snapshotQueue snapshotQueue
+
+	translateStore TranslateStore
+
+	// Instantiates new translation stores
+	OpenTranslateStore OpenTranslateStoreFunc
 }
 
 // FieldOption is a functional option type for pilosa.fieldOptions.
@@ -260,6 +265,8 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 		remoteAvailableShards: roaring.NewBitmap(),
 
 		logger: logger.NopLogger,
+
+		OpenTranslateStore: OpenInMemTranslateStore,
 	}
 	return f, nil
 }
@@ -276,6 +283,11 @@ func (f *Field) Path() string { return f.path }
 // TranslateStorePath returns the translation database path for the field.
 func (f *Field) TranslateStorePath() string {
 	return filepath.Join(f.path, "keys")
+}
+
+// TranslateStore returns the field's translation store.
+func (f *Field) TranslateStore() TranslateStore {
+	return f.translateStore
 }
 
 // RowAttrStore returns the attribute storage.
@@ -466,6 +478,11 @@ func (f *Field) Open() error {
 		f.logger.Debugf("open row attribute store for index/field: %s/%s", f.index, f.name)
 		if err := f.rowAttrStore.Open(); err != nil {
 			return errors.Wrap(err, "opening attrstore")
+		}
+
+		f.logger.Debugf("open translate store for index/field: %s/%s", f.index, f.name)
+		if f.translateStore, err = f.OpenTranslateStore(f.TranslateStorePath(), f.index, f.name, 0); err != nil {
+			return errors.Wrap(err, "opening field translate store")
 		}
 
 		return nil

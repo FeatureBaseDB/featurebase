@@ -1183,7 +1183,7 @@ func (c *InternalClient) TranslateIDsNode(ctx context.Context, uri *pilosa.URI, 
 		return nil, pilosa.ErrIndexRequired
 	}
 
-	buf, err := c.serializer.Marshal(pilosa.TranslateIDsRequest{
+	buf, err := c.serializer.Marshal(&pilosa.TranslateIDsRequest{
 		Index: index,
 		Field: field,
 		IDs:   ids,

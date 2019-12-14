@@ -54,10 +54,6 @@ func TestExecutor_TranslateGroupByCall(t *testing.T) {
 		t.Fatalf("creating fields %v, %v, %v", erra, errb, errc)
 	}
 
-	if err := cluster.updateTranslateStores(); err != nil {
-		t.Fatal(err)
-	}
-
 	query, err := pql.ParseString(`GroupBy(Rows(ak), Rows(b), Rows(ck), previous=["la", 0, "ha"], having=Condition(count > 10))`)
 	if err != nil {
 		t.Fatalf("parsing query: %v", err)

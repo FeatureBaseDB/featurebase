@@ -215,10 +215,6 @@ type cluster struct { // nolint: maligned
 	holder      *Holder
 	broadcaster broadcaster
 
-	// translation stores
-	indexTranslateStoreMap map[string]map[int]TranslateStore    // store by index+partition
-	fieldTranslateStoreMap map[string]map[string]TranslateStore // store by index+field
-
 	joiningLeavingNodes chan nodeAction
 
 	// joining is held open until this node
@@ -240,9 +236,7 @@ type cluster struct { // nolint: maligned
 
 	InternalClient InternalClient
 
-	// Instantiates new translation stores
-	OpenTranslateStore  OpenTranslateStoreFunc
-	OpenTranslateReader OpenTranslateReaderFunc
+	// OpenTranslateReader OpenTranslateReaderFunc
 }
 
 // newCluster returns a new instance of Cluster with defaults.
@@ -257,12 +251,7 @@ func newCluster() *cluster {
 		closing:             make(chan struct{}),
 		joining:             make(chan struct{}),
 
-		indexTranslateStoreMap: make(map[string]map[int]TranslateStore),
-		fieldTranslateStoreMap: make(map[string]map[string]TranslateStore),
-
 		InternalClient: newNopInternalClient(),
-
-		OpenTranslateStore: OpenInMemTranslateStore,
 
 		logger: logger.NopLogger,
 	}
@@ -1010,10 +999,6 @@ func (c *cluster) setup() error {
 	err := c.addNode(c.Node)
 	if err != nil {
 		return errors.Wrap(err, "adding local node")
-	}
-
-	if err := c.updateTranslateStores(); err != nil {
-		return err
 	}
 	return nil
 }
@@ -2024,11 +2009,6 @@ func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 		}
 	}
 
-	// Open appropriate translate stores.
-	if err := c.updateTranslateStores(); err != nil {
-		return err
-	}
-
 	c.unprotectedSetState(cs.State)
 
 	c.markAsJoined()
@@ -2085,6 +2065,145 @@ func (c *cluster) setStatic(hosts []string) error {
 	return nil
 }
 
+func (c *cluster) translateIndexKey(ctx context.Context, indexName string, key string) (uint64, error) {
+	keyMap, err := c.translateIndexKeySet(ctx, indexName, map[string]struct{}{key: struct{}{}})
+	if err != nil {
+		return 0, err
+	}
+	return keyMap[key], nil
+}
+
+func (c *cluster) translateIndexKeys(ctx context.Context, indexName string, keys []string) ([]uint64, error) {
+	keySet := make(map[string]struct{})
+	for _, key := range keys {
+		keySet[key] = struct{}{}
+	}
+
+	keyMap, err := c.translateIndexKeySet(ctx, indexName, keySet)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]uint64, len(keys))
+	for i := range keys {
+		ids[i] = keyMap[keys[i]]
+	}
+	return ids, nil
+}
+
+func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, keySet map[string]struct{}) (map[string]uint64, error) {
+	keyMap := make(map[string]uint64)
+
+	idx := c.holder.Index(indexName)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	}
+
+	// Split keys by partition.
+	keysByPartition := make(map[int][]string, c.partitionN)
+	for key := range keySet {
+		partitionID := c.keyPartition(indexName, key)
+		keysByPartition[partitionID] = append(keysByPartition[partitionID], key)
+	}
+
+	// Translate keys by partition.
+	var g errgroup.Group
+	var mu sync.Mutex
+	for partitionID := range keysByPartition {
+		keys := keysByPartition[partitionID]
+
+		g.Go(func() (err error) {
+			var ids []uint64
+			if c.ownsPartition(c.Node.ID, partitionID) {
+				if ids, err = idx.TranslateStore(partitionID).TranslateKeys(keys); err != nil {
+					return err
+				}
+			} else {
+				nodes := c.partitionNodes(partitionID)
+				if ids, err = c.InternalClient.TranslateKeysNode(ctx, &nodes[0].URI, indexName, "", keys); err != nil {
+					return err
+				}
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			for i := range keys {
+				keyMap[keys[i]] = ids[i]
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	return keyMap, nil
+}
+
+func (c *cluster) translateIndexIDs(ctx context.Context, indexName string, ids []uint64) ([]string, error) {
+	idSet := make(map[uint64]struct{})
+	for _, id := range ids {
+		idSet[id] = struct{}{}
+	}
+
+	idMap, err := c.translateIndexIDSet(ctx, indexName, idSet)
+	if err != nil {
+		return nil, err
+	}
+
+	keys := make([]string, len(ids))
+	for i := range ids {
+		keys[i] = idMap[ids[i]]
+	}
+	return keys, nil
+}
+
+func (c *cluster) translateIndexIDSet(ctx context.Context, indexName string, idSet map[uint64]struct{}) (map[uint64]string, error) {
+	idMap := make(map[uint64]string)
+
+	index := c.holder.Index(indexName)
+	if index == nil {
+		return nil, ErrIndexNotFound
+	}
+
+	// Split ids by partition.
+	idsByPartition := make(map[int][]uint64, c.partitionN)
+	for id := range idSet {
+		partitionID := c.idPartition(indexName, id)
+		idsByPartition[partitionID] = append(idsByPartition[partitionID], id)
+	}
+
+	// Translate ids by partition.
+	var g errgroup.Group
+	var mu sync.Mutex
+	for partitionID, ids := range idsByPartition {
+		g.Go(func() (err error) {
+			var keys []string
+			if c.ownsPartition(c.Node.ID, partitionID) {
+				if keys, err = index.TranslateStore(partitionID).TranslateIDs(ids); err != nil {
+					return err
+				}
+			} else {
+				nodes := c.partitionNodes(partitionID)
+				if keys, err = c.InternalClient.TranslateIDsNode(ctx, &nodes[0].URI, indexName, "", ids); err != nil {
+					return err
+				}
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			for i := range ids {
+				idMap[ids[i]] = keys[i]
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	return idMap, nil
+}
+
+/*
 // updateTranslateStores starts stores for partitions & fields owned by this
 // node and stops stores for ones this node does not own.
 func (c *cluster) updateTranslateStores() error {
@@ -2115,23 +2234,6 @@ func (c *cluster) closeUnownedTranslateStores() error {
 		}
 	}
 
-	// Close index partition stores.
-	for indexName, m := range c.fieldTranslateStoreMap {
-		idx := c.holder.Index(indexName)
-
-		for fieldName, store := range m {
-			if idx != nil && idx.Field(fieldName) != nil {
-				continue
-			}
-			if err := store.Close(); err != nil {
-				return err
-			}
-			delete(m, fieldName)
-		}
-		if len(c.fieldTranslateStoreMap) == 0 {
-			delete(c.fieldTranslateStoreMap, indexName)
-		}
-	}
 	return nil
 }
 
@@ -2157,26 +2259,6 @@ func (c *cluster) openOwnedTranslateStores() error {
 		}
 	}
 
-	// Open field stores.
-	for _, index := range c.holder.Indexes() {
-		m := c.fieldTranslateStoreMap[index.Name()]
-		if m == nil {
-			m = make(map[string]TranslateStore)
-			c.fieldTranslateStoreMap[index.Name()] = m
-		}
-
-		for _, field := range index.Fields() {
-			if m[field.Name()] != nil {
-				continue
-			}
-			store, err := c.OpenTranslateStore(field.TranslateStorePath(), index.Name(), field.Name(), 0)
-			if err != nil {
-				return err
-			}
-			m[field.Name()] = store
-		}
-	}
-
 	return nil
 }
 
@@ -2196,101 +2278,7 @@ func (c *cluster) fieldTranslateStore(index, field string) TranslateStore {
 	return m[field]
 }
 
-func (c *cluster) translateIndexKeys(ctx context.Context, index string, keys []string) ([]uint64, error) {
-	keySet := make(map[string]struct{})
-	for _, key := range keys {
-		keySet[key] = struct{}{}
-	}
 
-	keyMap, err := c.translateIndexKeySet(ctx, index, keySet)
-	if err != nil {
-		return nil, err
-	}
-
-	ids := make([]uint64, len(keys))
-	for i := range keys {
-		ids[i] = keyMap[keys[i]]
-	}
-	return ids, nil
-}
-
-func (c *cluster) translateIndexKeySet(ctx context.Context, index string, keySet map[string]struct{}) (map[string]uint64, error) {
-	keyMap := make(map[string]uint64)
-
-	// Split keys by partition.
-	keysByPartition := make(map[int][]string, c.partitionN)
-	for key := range keySet {
-		partitionID := c.keyPartition(index, key)
-		keysByPartition[partitionID] = append(keysByPartition[partitionID], key)
-	}
-
-	// Translate keys by partition.
-	var g errgroup.Group
-	var mu sync.Mutex
-	for partitionID := range keysByPartition {
-		keys := keysByPartition[partitionID]
-
-		g.Go(func() (err error) {
-			var ids []uint64
-			if c.ownsPartition(c.Node.ID, partitionID) {
-				if ids, err = c.translateIndexPartitionKeys(ctx, index, partitionID, keys); err != nil {
-					return err
-				}
-			} else {
-				nodes := c.partitionNodes(partitionID)
-				if ids, err = c.InternalClient.TranslateKeysNode(ctx, &nodes[0].URI, index, "", keys); err != nil {
-					return err
-				}
-			}
-
-			mu.Lock()
-			defer mu.Unlock()
-			for i := range keys {
-				keyMap[keys[i]] = ids[i]
-			}
-			return nil
-		})
-	}
-	if err := g.Wait(); err != nil {
-		return nil, err
-	}
-	return keyMap, nil
-}
-
-func (c *cluster) translateIndexIDSet(ctx context.Context, index string, idSet map[uint64]struct{}) (map[uint64]string, error) {
-	idMap := make(map[uint64]string)
-
-	// Split ids by partition.
-	idsByPartition := make(map[int][]uint64, c.partitionN)
-	for id := range idSet {
-		partitionID := c.idPartition(index, id)
-		idsByPartition[partitionID] = append(idsByPartition[partitionID], id)
-	}
-
-	// Translate ids by partition.
-	var g errgroup.Group
-	var mu sync.Mutex
-	for partitionID, ids := range idsByPartition {
-		g.Go(func() error {
-			nodes := c.partitionNodes(partitionID)
-			keys, err := c.InternalClient.TranslateIDsNode(ctx, &nodes[0].URI, index, "", ids)
-			if err != nil {
-				return err
-			}
-
-			mu.Lock()
-			defer mu.Unlock()
-			for i := range ids {
-				idMap[ids[i]] = keys[i]
-			}
-			return nil
-		})
-	}
-	if err := g.Wait(); err != nil {
-		return nil, err
-	}
-	return idMap, nil
-}
 
 func (c *cluster) translateIndexPartitionKeys(ctx context.Context, index string, partitionID int, keys []string) ([]uint64, error) {
 	s := c.indexPartitionTranslateStore(index, partitionID)
@@ -2388,54 +2376,7 @@ func (c *cluster) setTranslateStoreReadOnly(v bool) {
 		}
 	}
 }
-
-// translateEntryReader returns a reader that merges all index & field reader
-// that are specified in the offsets map.
-func (c *cluster) translateEntryReader(ctx context.Context, offsets TranslateOffsetMap) (_ TranslateEntryReader, err error) {
-	// Ensure all readers are cleaned up if any error.
-	var a []TranslateEntryReader
-	defer func() {
-		if err != nil {
-			for i := range a {
-				a[i].Close()
-			}
-		}
-	}()
-
-	// Fetch all index partition readers.
-	for indexName, indexMap := range offsets {
-		for partitionID, offset := range indexMap.Partitions {
-			store := c.indexPartitionTranslateStore(indexName, partitionID)
-			if store == nil {
-				return nil, ErrTranslateStoreNotFound
-			}
-
-			r, err := store.EntryReader(ctx, uint64(offset))
-			if err != nil {
-				return nil, errors.Wrap(err, "index partition translate reader")
-			}
-			a = append(a, r)
-		}
-	}
-
-	// Fetch all field readers.
-	for indexName, indexMap := range offsets {
-		for fieldName, offset := range indexMap.Fields {
-			store := c.fieldTranslateStore(indexName, fieldName)
-			if store == nil {
-				return nil, ErrTranslateStoreNotFound
-			}
-
-			r, err := store.EntryReader(ctx, uint64(offset))
-			if err != nil {
-				return nil, errors.Wrap(err, "field translate reader")
-			}
-			a = append(a, r)
-		}
-	}
-
-	return NewMultiTranslateEntryReader(ctx, a), nil
-}
+*/
 
 /*
 // holderTranslateStoreReplicator manages the replication of translation store

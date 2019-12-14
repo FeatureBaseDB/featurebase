@@ -79,6 +79,10 @@ type Holder struct {
 
 	// Manages replication from the primary node.
 	primaryTranslateNode *Node
+
+	// Instantiates new translation stores
+	OpenTranslateStore  OpenTranslateStoreFunc
+	OpenTranslateReader OpenTranslateReaderFunc
 }
 
 // lockedChan looks a little ridiculous admittedly, but exists for good reason.

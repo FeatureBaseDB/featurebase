@@ -61,6 +61,12 @@ type Index struct {
 
 	// Used for notifying holder when a field is added.
 	holder *Holder
+
+	// Per-partition translation stores
+	translateStores map[int]TranslateStore
+
+	// Instantiates new translation stores
+	OpenTranslateStore OpenTranslateStoreFunc
 }
 
 // NewIndex returns a new instance of Index.
@@ -82,6 +88,10 @@ func NewIndex(path, name string) (*Index, error) {
 		Stats:          stats.NopStatsClient,
 		logger:         logger.NopLogger,
 		trackExistence: true,
+
+		translateStores: make(map[int]TranslateStore),
+
+		OpenTranslateStore: OpenInMemTranslateStore,
 	}, nil
 }
 
@@ -94,6 +104,11 @@ func (i *Index) Path() string { return i.path }
 // TranslateStorePath returns the translation database path for a partition.
 func (i *Index) TranslateStorePath(partitionID int) string {
 	return filepath.Join(i.path, "keys", strconv.Itoa(partitionID))
+}
+
+// TranslateStore returns the translation store for a given partition.
+func (i *Index) TranslateStore(partitionID int) TranslateStore {
+	return i.translateStores[partitionID]
 }
 
 // Keys returns true if the index uses string keys.
@@ -143,6 +158,16 @@ func (i *Index) Open() (err error) {
 
 	if err := i.columnAttrs.Open(); err != nil {
 		return errors.Wrap(err, "opening attrstore")
+	}
+
+	// TODO(BBJ): Support non-default partition counts.
+	i.logger.Debugf("open translate store for index: %s", i.name)
+	for partitionID := 0; partitionID < defaultPartitionN; partitionID++ {
+		store, err := i.OpenTranslateStore(i.TranslateStorePath(partitionID), i.name, "", partitionID)
+		if err != nil {
+			return errors.Wrap(err, "opening index translate store")
+		}
+		i.translateStores[partitionID] = store
 	}
 
 	return nil
@@ -445,6 +470,7 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	if i.snapshotQueue != nil {
 		f.snapshotQueue = i.snapshotQueue
 	}
+	f.OpenTranslateStore = i.OpenTranslateStore
 	return f, nil
 }
 

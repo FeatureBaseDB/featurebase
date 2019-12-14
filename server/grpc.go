@@ -421,7 +421,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 
 				case "int":
 					// Translate column key.
-					id, err := index.TranslateStore().TranslateKey(col)
+					id, err := h.api.TranslateIndexKey(context.Background(), index.Name(), col)
 					if err != nil {
 						return errors.Wrap(err, "translating column key")
 					}
@@ -438,7 +438,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 					}
 				case "decimal":
 					// Translate column key.
-					id, err := index.TranslateStore().TranslateKey(col)
+					id, err := h.api.TranslateIndexKey(context.Background(), index.Name(), col)
 					if err != nil {
 						return errors.Wrap(err, "translating column key")
 					}
