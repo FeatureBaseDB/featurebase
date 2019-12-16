@@ -450,6 +450,9 @@ func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
 		case []pilosa.Pair:
 			pb.Results[i].Type = queryResultTypePairs
 			pb.Results[i].Pairs = encodePairs(result)
+		case *pilosa.PairsField:
+			pb.Results[i].Type = queryResultTypePairsField
+			pb.Results[i].PairsField = encodePairsField(result)
 		case pilosa.ValCount:
 			pb.Results[i].Type = queryResultTypeValCount
 			pb.Results[i].ValCount = encodeValCount(result)
@@ -471,6 +474,9 @@ func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
 		case pilosa.Pair:
 			pb.Results[i].Type = queryResultTypePair
 			pb.Results[i].Pairs = []*internal.Pair{encodePair(result)}
+		case pilosa.PairField:
+			pb.Results[i].Type = queryResultTypePairField
+			pb.Results[i].Pairs = []*internal.Pair{encodePairField(result)}
 		case nil:
 			pb.Results[i].Type = queryResultTypeNil
 		default:
@@ -1101,6 +1107,7 @@ const (
 	queryResultTypeNil uint32 = iota
 	queryResultTypeRow
 	queryResultTypePairs
+	queryResultTypePairsField
 	queryResultTypeValCount
 	queryResultTypeUint64
 	queryResultTypeBool
@@ -1108,6 +1115,7 @@ const (
 	queryResultTypeGroupCounts
 	queryResultTypeRowIdentifiers
 	queryResultTypePair
+	queryResultTypePairField
 	queryResultTypeSignedRow
 )
 
@@ -1119,6 +1127,8 @@ func decodeQueryResult(pb *internal.QueryResult) interface{} {
 		return decodeRow(pb.Row)
 	case queryResultTypePairs:
 		return decodePairs(pb.Pairs)
+	case queryResultTypePairsField:
+		return decodePairsField(pb.PairsField)
 	case queryResultTypeValCount:
 		return decodeValCount(pb.ValCount)
 	case queryResultTypeUint64:
@@ -1135,6 +1145,8 @@ func decodeQueryResult(pb *internal.QueryResult) interface{} {
 		return decodeGroupCounts(pb.GroupCounts)
 	case queryResultTypePair:
 		return decodePair(pb.Pairs[0])
+	case queryResultTypePairField:
+		return decodePairField(pb.Pairs[0])
 	}
 	panic(fmt.Sprintf("unknown type: %d", pb.Type))
 }
@@ -1243,11 +1255,33 @@ func decodePairs(a []*internal.Pair) []pilosa.Pair {
 	return other
 }
 
+func decodePairsField(a *internal.PairsField) *pilosa.PairsField {
+	other := &pilosa.PairsField{
+		Pairs: make([]pilosa.Pair, len(a.Pairs)),
+	}
+	for i := range a.Pairs {
+		other.Pairs[i] = decodePair(a.Pairs[i])
+	}
+	other.Field = a.Field
+	return other
+}
+
 func decodePair(pb *internal.Pair) pilosa.Pair {
 	return pilosa.Pair{
 		ID:    pb.ID,
 		Key:   pb.Key,
 		Count: pb.Count,
+	}
+}
+
+func decodePairField(pb *internal.Pair) pilosa.PairField {
+	return pilosa.PairField{
+		Pair: pilosa.Pair{
+			ID:    pb.ID,
+			Key:   pb.Key,
+			Count: pb.Count,
+		},
+		//Field: pb.Field, // TODO: in order to have this, we need PairField in QueryResponse.
 	}
 }
 
@@ -1346,12 +1380,34 @@ func encodePairs(a pilosa.Pairs) []*internal.Pair {
 	return other
 }
 
+func encodePairsField(a *pilosa.PairsField) *internal.PairsField {
+	other := &internal.PairsField{
+		Pairs: make([]*internal.Pair, len(a.Pairs)),
+	}
+	for i := range a.Pairs {
+		other.Pairs[i] = encodePair(a.Pairs[i])
+	}
+	other.Field = a.Field
+	return other
+}
+
 func encodePair(p pilosa.Pair) *internal.Pair {
 	return &internal.Pair{
 		ID:    p.ID,
 		Key:   p.Key,
 		Count: p.Count,
 	}
+}
+
+func encodePairField(p pilosa.PairField) *internal.Pair {
+	/*
+		// TODO: in order to have this, we need PairField in QueryResponse.
+		return &internal.Pair{
+			Pair:  encodePair(p.Pair),
+			Field: p.Field,
+		}
+	*/
+	return encodePair(p.Pair)
 }
 
 func encodeValCount(vc pilosa.ValCount) *internal.ValCount {

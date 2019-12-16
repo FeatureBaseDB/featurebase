@@ -25,6 +25,16 @@ message Pair {
 	uint64 Count = 2;
 }
 
+message PairField {
+	Pair Pair = 1;
+	string Field = 2;
+}
+
+message PairsField {
+	repeated Pair Pairs = 1;
+	string Field = 2;
+}
+
 message FieldRow{
 	string Field = 1;
 	uint64 RowID = 2;
@@ -88,6 +98,7 @@ message QueryResult {
 	repeated GroupCount GroupCounts = 8;
 	RowIdentifiers RowIdentifiers = 9;
 	SignedRow SignedRow = 10;
+	PairsField PairsField = 11;
 }
 
 message ImportRequest {
