@@ -1188,13 +1188,10 @@ func (api *API) ImportColumnAttrs(ctx context.Context, req *ImportColumnAttrsReq
 		bulkAttrs[uint64(req.ColumnIDs[n])] = map[string]interface{}{req.AttrKey: req.AttrVals[n]}
 	}
 	if err := index.ColumnAttrStore().SetBulkAttrs(bulkAttrs); err != nil {
-		return err
-	}
-
-	if err != nil {
 		api.server.logger.Printf("import error: index=%s, shard=%d, len(columns)=%d, err=%s", req.Index, req.Shard, len(req.ColumnIDs), err)
+		return errors.Wrap(err, "importing column attrs")
 	}
-	return errors.Wrap(err, "importing column attrs")
+	return nil
 }
 
 func importExistenceColumns(index *Index, columnIDs []uint64) error {
