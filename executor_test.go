@@ -2898,6 +2898,149 @@ func TestExecutor_Execute_Not(t *testing.T) {
 	})
 }
 
+// Ensure an all query can be executed.
+func TestExecutor_Execute_All(t *testing.T) {
+	t.Run("ColumnID", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackExistence: true})
+		fld, err := index.CreateField("f", pilosa.OptFieldTypeDefault())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Create an import request that sets a full shard,
+		// plus a couple bits set on either side of it, and
+		// a final bit set in a fourth shard.
+		//
+		//    shard0     shard1     shard2     shard3
+		// |----------|----------|----------|----------|
+		// |        **|**********|**        | *
+		//
+		bitCount := ShardWidth + 5
+		req := &pilosa.ImportRequest{
+			Index:     index.Name(),
+			Field:     fld.Name(),
+			Shard:     0,
+			RowIDs:    make([]uint64, bitCount),
+			ColumnIDs: make([]uint64, bitCount),
+		}
+		for i := 0; i < bitCount-1; i++ {
+			req.RowIDs[i] = 10
+			req.ColumnIDs[i] = uint64(i + ShardWidth - 2)
+		}
+		req.RowIDs[bitCount-1] = 10
+		req.ColumnIDs[bitCount-1] = uint64((3 * ShardWidth) + 2)
+
+		if err := c[0].API.Import(context.Background(), req); err != nil {
+			t.Fatal(err)
+		}
+
+		tests := []struct {
+			qry     string
+			expCols []uint64
+			expCnt  uint64
+		}{
+			{qry: "All()", expCols: req.ColumnIDs, expCnt: uint64(bitCount)},
+			{qry: "All(limit=1)", expCols: req.ColumnIDs[:1], expCnt: 1},
+			{qry: "All(limit=4)", expCols: req.ColumnIDs[:4], expCnt: 4},
+			{qry: "All(limit=4, offset=4)", expCols: req.ColumnIDs[4:8], expCnt: 4},
+			{qry: fmt.Sprintf("All(limit=4, offset=%d)", bitCount-5), expCols: req.ColumnIDs[bitCount-5 : bitCount-1], expCnt: 4},
+			{qry: fmt.Sprintf("All(limit=1, offset=%d)", bitCount-2), expCols: req.ColumnIDs[bitCount-2 : bitCount-1], expCnt: 1},
+			{qry: fmt.Sprintf("All(limit=1, offset=%d)", bitCount-2), expCols: req.ColumnIDs[bitCount-2 : bitCount-1], expCnt: 1},
+			{qry: fmt.Sprintf("All(limit=4, offset=%d)", bitCount-2), expCols: req.ColumnIDs[bitCount-2:], expCnt: 2},
+			{qry: fmt.Sprintf("All(limit=4, offset=%d)", bitCount+1), expCols: []uint64{}, expCnt: 0},
+			{qry: fmt.Sprintf("All(limit=2, offset=%d)", bitCount-3), expCols: req.ColumnIDs[bitCount-3 : bitCount-1], expCnt: 2},
+			{qry: fmt.Sprintf("All(limit=2, offset=%d)", bitCount-5), expCols: req.ColumnIDs[bitCount-5 : bitCount-3], expCnt: 2},
+			{qry: "All(limit=2, offset=2)", expCols: req.ColumnIDs[2:4], expCnt: 2},
+			{qry: "All(limit=1, offset=1)", expCols: req.ColumnIDs[1:2], expCnt: 1},
+			{qry: fmt.Sprintf("All(limit=%d, offset=2)", ShardWidth), expCols: req.ColumnIDs[2 : bitCount-3], expCnt: ShardWidth},
+		}
+		for i, test := range tests {
+			if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: test.qry}); err != nil {
+				t.Fatal(err)
+			} else if cnt := res.Results[0].(*pilosa.Row).Count(); cnt != test.expCnt {
+				t.Fatalf("test %d, unexpected count, got: %d, but expected: %d", i, cnt, test.expCnt)
+			} else if cols := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(cols, test.expCols) {
+				// If the error results are too large, just show the count.
+				if len(cols) > 1000 || len(test.expCols) > 1000 {
+					t.Fatalf("test %d, unexpected columns, got: len(%d), but expected: len(%d)", i, len(cols), len(test.expCols))
+				} else {
+					t.Fatalf("test %d, unexpected columns, got: %v, but expected: %v", i, cols, test.expCols)
+				}
+			}
+		}
+	})
+
+	t.Run("ColumnKey", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1, []server.CommandOption{
+			server.OptCommandServerOptions(
+				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+			),
+		})
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackExistence: true, Keys: true})
+		fld, err := index.CreateField("f", pilosa.OptFieldTypeDefault())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Create an import request that sets key columns
+		//
+		//    shard0
+		// |----------|
+		// |****      |
+		//
+		bitCount := 4
+		req := &pilosa.ImportRequest{
+			Index:      index.Name(),
+			Field:      fld.Name(),
+			Shard:      0,
+			RowIDs:     make([]uint64, bitCount),
+			ColumnKeys: make([]string, bitCount),
+		}
+		for i := 0; i < bitCount; i++ {
+			req.RowIDs[i] = 10
+			req.ColumnKeys[i] = fmt.Sprintf("c%d", i)
+		}
+
+		if err := c[0].API.Import(context.Background(), req); err != nil {
+			t.Fatal(err)
+		}
+
+		tests := []struct {
+			qry     string
+			expCols []string
+			expCnt  uint64
+		}{
+			{qry: "All()", expCols: req.ColumnKeys, expCnt: uint64(bitCount)},
+			{qry: "All(limit=1)", expCols: req.ColumnKeys[:1], expCnt: 1},
+			{qry: "All(limit=4)", expCols: req.ColumnKeys, expCnt: 4},
+			{qry: "All(limit=5)", expCols: req.ColumnKeys, expCnt: 4},
+			{qry: "All(limit=1, offset=1)", expCols: req.ColumnKeys[1:2], expCnt: 1},
+			{qry: "All(limit=4, offset=1)", expCols: req.ColumnKeys[1:], expCnt: 3},
+			{qry: "All(limit=4, offset=5)", expCols: nil, expCnt: 0},
+		}
+		for i, test := range tests {
+			if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: test.qry}); err != nil {
+				t.Fatal(err)
+			} else if cnt := len(res.Results[0].(*pilosa.Row).Keys); uint64(cnt) != test.expCnt {
+				t.Fatalf("test %d, unexpected count, got: %d, but expected: %d", i, cnt, test.expCnt)
+			} else if cols := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(cols, test.expCols) {
+				// If the error results are too large, just show the count.
+				if len(cols) > 1000 || len(test.expCols) > 1000 {
+					t.Fatalf("test %d, unexpected columns, got: len(%d), but expected: len(%d)", i, len(cols), len(test.expCols))
+				} else {
+					t.Fatalf("test %d, unexpected columns, got: %T, but expected: %T", i, cols, test.expCols)
+				}
+			}
+		}
+	})
+}
+
 // Ensure a row can be cleared.
 func TestExecutor_Execute_ClearRow(t *testing.T) {
 	// Set and Mutex tests use the same data and queries
