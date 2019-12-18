@@ -33,6 +33,7 @@ import (
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -663,6 +664,9 @@ type holderSyncer struct {
 	Node    *Node
 	Cluster *cluster
 
+	// Translation sync handling.
+	readers []TranslateEntryReader
+
 	// Stats
 	Stats stats.StatsClient
 
@@ -874,6 +878,183 @@ func (s *holderSyncer) syncFragment(index, field, view string, shard uint64) err
 	}
 
 	return nil
+}
+
+// BeginTranslationSync initializes streaming sync of translation data.
+func (s *holderSyncer) BeginTranslationSync() error {
+	// Stop existing streams.
+	if err := s.stopTranslationSync(); err != nil {
+		return errors.Wrap(err, "stop translation sync")
+	}
+
+	// Set read-only flag for all translation stores.
+	s.setTranslateReadOnlyFlags()
+
+	// Connect to each node that has a primary for which we are a replica.
+	if err := s.initializeIndexTranslateReplication(); err != nil {
+		return errors.Wrap(err, "initialize index translate replication")
+	}
+
+	// Connect to coordinator to stream field data.
+	if err := s.initializeFieldTranslateReplication(); err != nil {
+		return errors.Wrap(err, "initialize field translate replication")
+	}
+	return nil
+}
+
+// stopTranslationSync closes and waits for all outstanding translation readers
+// to complete. This should be called before reconnecting to the cluster in case
+// of a cluster resize or schema change.
+func (s *holderSyncer) stopTranslationSync() error {
+	var g errgroup.Group
+	for i := range s.readers {
+		rd := s.readers[i]
+		g.Go(func() error {
+			return rd.Close()
+		})
+	}
+	return g.Wait()
+}
+
+// setTranslateReadOnlyFlags updates all translation stores to enabled or disable
+// writing new translation keys. Index stores are writable if the node owns the
+// partition. Field stores are writable if the node is the coordinator.
+func (s *holderSyncer) setTranslateReadOnlyFlags() {
+	isCoordinator := s.Cluster.isCoordinator()
+
+	for _, index := range s.Holder.Indexes() {
+		for partitionID := 0; partitionID < s.Cluster.partitionN; partitionID++ {
+			ownsPartition := s.Cluster.ownsPartition(s.Node.ID, partitionID)
+			index.TranslateStore(partitionID).SetReadOnly(!ownsPartition)
+		}
+
+		for _, field := range index.Fields() {
+			field.TranslateStore().SetReadOnly(!isCoordinator)
+		}
+	}
+}
+
+// initializeIndexTranslateReplication connects to each node that is the
+// primary for a partition that we are a replica of.
+func (s *holderSyncer) initializeIndexTranslateReplication() error {
+	for _, node := range s.Cluster.Nodes() {
+		// Skip local node.
+		if node.ID == s.Node.ID {
+			continue
+		}
+
+		// Build a map of partition offsets to stream from.
+		m := make(TranslateOffsetMap)
+		for _, index := range s.Holder.Indexes() {
+			for partitionID := 0; partitionID < s.Cluster.partitionN; partitionID++ {
+				partitionNodes := s.Cluster.partitionNodes(partitionID)
+				isPrimary := partitionNodes[0].ID == node.ID                 // remote is primary?
+				isReplica := Nodes(partitionNodes[1:]).ContainsID(s.Node.ID) // local is replica?
+				if !isPrimary || !isReplica {
+					continue
+				}
+
+				store := index.TranslateStore(partitionID)
+				offset, err := store.MaxID()
+				if err != nil {
+					return errors.Wrapf(err, "cannot determine max id for %q", index.Name())
+				}
+				m.SetIndexPartitionOffset(index.Name(), partitionID, offset)
+			}
+		}
+
+		// Connect to remote not and begin streaming.
+		rd, err := s.Holder.OpenTranslateReader(context.Background(), node.URI.String(), m)
+		if err != nil {
+			return err
+		}
+		s.readers = append(s.readers, rd)
+
+		go func() { defer rd.Close(); s.readIndexTranslateReader(rd) }()
+	}
+
+	return nil
+}
+
+// initializeFieldTranslateReplication connects the coordinator to stream field data.
+func (s *holderSyncer) initializeFieldTranslateReplication() error {
+	// Skip if coordinator.
+	if s.Cluster.Node.IsCoordinator {
+		return nil
+	}
+
+	// Build a map of partition offsets to stream from.
+	m := make(TranslateOffsetMap)
+	for _, index := range s.Holder.Indexes() {
+		for _, field := range index.Fields() {
+			store := field.TranslateStore()
+			offset, err := store.MaxID()
+			if err != nil {
+				return errors.Wrapf(err, "cannot determine max id for %q/%q", index.Name(), field.Name())
+			}
+			m.SetFieldOffset(index.Name(), field.Name(), offset)
+		}
+	}
+
+	// Connect to coordinator and begin streaming.
+	coordinator := s.Cluster.coordinatorNode()
+	rd, err := s.Holder.OpenTranslateReader(context.Background(), coordinator.URI.String(), m)
+	if err != nil {
+		return err
+	}
+	s.readers = append(s.readers, rd)
+
+	go func() { defer rd.Close(); s.readFieldTranslateReader(rd) }()
+
+	return nil
+}
+
+func (s *holderSyncer) readIndexTranslateReader(rd TranslateEntryReader) {
+	for {
+		var entry TranslateEntry
+		if err := rd.ReadEntry(&entry); err != nil {
+			s.Holder.Logger.Printf("cannot read index translate entry: %s", err)
+			return
+		}
+
+		// Find appropriate store.
+		idx := s.Holder.Index(entry.Index)
+		if idx == nil {
+			s.Holder.Logger.Printf("index not found: %q", entry.Index)
+			return
+		}
+
+		// Apply replication to store.
+		store := idx.TranslateStore(s.Cluster.keyPartition(entry.Index, entry.Key))
+		if err := store.ForceSet(entry.ID, entry.Key); err != nil {
+			s.Holder.Logger.Printf("cannot force set index translation data: %d=%q", entry.ID, entry.Key)
+			return
+		}
+	}
+}
+
+func (s *holderSyncer) readFieldTranslateReader(rd TranslateEntryReader) {
+	for {
+		var entry TranslateEntry
+		if err := rd.ReadEntry(&entry); err != nil {
+			s.Holder.Logger.Printf("cannot read field translate entry: %s", err)
+			return
+		}
+
+		// Find appropriate store.
+		f := s.Holder.Field(entry.Index, entry.Field)
+		if f == nil {
+			s.Holder.Logger.Printf("field not found: %q/%q", entry.Index, entry.Field)
+			return
+		}
+
+		// Apply replication to store.
+		store := f.TranslateStore()
+		if err := store.ForceSet(entry.ID, entry.Key); err != nil {
+			s.Holder.Logger.Printf("cannot force set field translation data: %d=%q", entry.ID, entry.Key)
+			return
+		}
+	}
 }
 
 // holderCleaner removes fragments and data files that are no longer used.

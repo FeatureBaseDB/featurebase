@@ -519,6 +519,10 @@ func (s *Server) Open() error {
 	s.syncer.Closing = s.closing
 	s.syncer.Stats = s.holder.Stats.WithTags("HolderSyncer")
 
+	if err := s.syncer.BeginTranslationSync(); err != nil {
+		return err
+	}
+
 	// Start background monitoring.
 	s.wg.Add(3)
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
