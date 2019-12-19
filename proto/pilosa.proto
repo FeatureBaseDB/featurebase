@@ -34,6 +34,8 @@ message InspectRequest {
   string index = 1;
   IdsOrKeys columns = 2;
   repeated string filterFields = 3;
+  uint64 limit = 4;
+  uint64 offset = 5;
 }
 
 message Uint64Array {

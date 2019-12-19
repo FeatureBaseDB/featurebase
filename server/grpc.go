@@ -71,6 +71,8 @@ func (h grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 
 // Inspect handles the inspect request and sends an InspectResponse to the stream.
 func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectServer) error {
+	const defaultLimit = 100000
+
 	index, err := h.api.Index(context.Background(), req.Index)
 	if err != nil {
 		return errors.Wrap(err, "getting index")
@@ -96,7 +98,17 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 		return nil
 	}
 
-	if ints, ok := req.Columns.Type.(*pb.IdsOrKeys_Ids); ok {
+	limit := req.Limit
+	if limit == 0 {
+		limit = defaultLimit
+	}
+	offset := req.Offset
+
+	if !index.Options().Keys {
+		ints, ok := req.Columns.Type.(*pb.IdsOrKeys_Ids)
+		if !ok {
+			return errors.New("invalid int columns")
+		}
 		ci := []*pb.ColumnInfo{
 			{Name: "_id", Datatype: "uint64"},
 		}
@@ -104,7 +116,46 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 			ci = append(ci, &pb.ColumnInfo{Name: field.Name(), Datatype: field.Type()}) // TODO: field.Type likely doesn't align with supported datatypes
 		}
 
-		for _, col := range ints.Ids.Vals {
+		// If Columns is empty, then get the _exists list (via All()),
+		// from the index and loop over that instead.
+		cols := ints.Ids.Vals
+		if len(cols) > 0 {
+			// Apply limit/offset to the provided columns.
+			if int(offset) >= len(cols) {
+				return nil
+			}
+			end := limit + offset
+			if int(end) > len(cols) {
+				end = uint64(len(cols))
+			}
+			cols = cols[offset:end]
+		} else {
+			// Prevent getting too many records by forcing a limit.
+			pql := fmt.Sprintf("All(limit=%d, offset=%d)", limit, offset)
+			query := pilosa.QueryRequest{
+				Index: req.Index,
+				Query: pql,
+			}
+			resp, err := h.api.Query(context.Background(), &query)
+			if err != nil {
+				return errors.Wrapf(err, "querying for all: %s", pql)
+			}
+
+			ids, ok := resp.Results[0].(*pilosa.Row)
+			if !ok {
+				return errors.Wrap(err, "getting results as a row")
+			}
+
+			limitedCols := ids.Columns()
+			if len(limitedCols) == 0 {
+				// If cols is still empty after the limit/offset, then
+				// return with no results.
+				return nil
+			}
+			cols = limitedCols
+		}
+
+		for _, col := range cols {
 			rowResp := &pb.RowResponse{
 				Headers: ci,
 				Columns: []*pb.ColumnResponse{
@@ -178,6 +229,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
 					}
+
 				case "decimal":
 					value, exists, err := field.FloatValue(col)
 					if err != nil {
@@ -189,6 +241,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
 					}
+
 				case "bool":
 					pql := fmt.Sprintf("Rows(%s, column=%d)", field.Name(), col)
 					query := pilosa.QueryRequest{
@@ -216,6 +269,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
 					}
+
 				case "time":
 					rowResp.Columns = append(rowResp.Columns,
 						&pb.ColumnResponse{ColumnVal: nil})
@@ -227,7 +281,11 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 			}
 		}
 
-	} else if keys, ok := req.Columns.Type.(*pb.IdsOrKeys_Keys); ok {
+	} else {
+		keys, ok := req.Columns.Type.(*pb.IdsOrKeys_Keys)
+		if !ok {
+			return errToStatusError(errors.New("invalid key columns"))
+		}
 		ci := []*pb.ColumnInfo{
 			{Name: "_id", Datatype: "string"},
 		}
@@ -235,7 +293,47 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 			ci = append(ci, &pb.ColumnInfo{Name: field.Name(), Datatype: field.Type()}) // TODO: field.Type likely doesn't align with supported datatypes
 		}
 
-		for _, col := range keys.Keys.Vals {
+		// If Columns is empty, then get the _exists list (via All()),
+		// from the index and loop over that instead.
+		cols := keys.Keys.Vals
+		if len(cols) > 0 {
+			// Apply limit/offset to the provided columns.
+			if int(offset) >= len(cols) {
+				return nil
+			}
+			end := limit + offset
+			if int(end) > len(cols) {
+				end = uint64(len(cols))
+			}
+			cols = cols[offset:end]
+		} else {
+			// Prevent getting too many records by forcing a limit.
+			pql := fmt.Sprintf("All(limit=%d, offset=%d)", limit, offset)
+			query := pilosa.QueryRequest{
+				Index: req.Index,
+				Query: pql,
+			}
+			resp, err := h.api.Query(context.Background(), &query)
+			if err != nil {
+				fmt.Println("GOT ERROR trying to get ALL():", err)
+				return errors.Wrapf(err, "querying for all: %s", pql)
+			}
+
+			ids, ok := resp.Results[0].(*pilosa.Row)
+			if !ok {
+				return errors.Wrap(err, "getting results as a row")
+			}
+
+			limitedCols := ids.Keys
+			if len(limitedCols) == 0 {
+				// If cols is still empty after the limit/offset, then
+				// return with no results.
+				return nil
+			}
+			cols = limitedCols
+		}
+
+		for _, col := range cols {
 			rowResp := &pb.RowResponse{
 				Headers: ci,
 				Columns: []*pb.ColumnResponse{
