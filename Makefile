@@ -87,14 +87,14 @@ DOCKER_COMPOSE=internal/clustertests/docker-compose.yml
 # running. This will catch changes to internal/clustertests/*.go, but if you
 # make changes to Pilosa, you'll want to run clustertests-build to rebuild the
 # pilosa image.
-clustertests:
+clustertests: vendor
 	docker-compose -f $(DOCKER_COMPOSE) down
 	docker-compose -f $(DOCKER_COMPOSE) build client1
 	docker-compose -f $(DOCKER_COMPOSE) up --exit-code-from=client1
 
 
 # Like clustertests, but rebuilds all images.
-clustertests-build:
+clustertests-build: vendor
 	docker-compose -f $(DOCKER_COMPOSE) down
 	docker-compose -f $(DOCKER_COMPOSE) up --exit-code-from=client1 --build
 
