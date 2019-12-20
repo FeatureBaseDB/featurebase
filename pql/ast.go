@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/ext"
+	"github.com/molecula/ext"
 )
 
 // Query represents a PQL query.

@@ -16,12 +16,16 @@ RELEASE_ENABLED = $(subst 0,,$(RELEASE))
 BUILD_TAGS += $(if $(ENTERPRISE_ENABLED),enterprise)
 BUILD_TAGS += $(if $(RELEASE_ENABLED),release)
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
+BUILD_TAGS += $(foreach p,$(PLUGINS),plugin$(p))
 define LICENSE_HASH_CODE
     head -13 $1 | sed -e 's/Copyright 20[0-9][0-9]/Copyright 20XX/g' | shasum | cut -f 1 -d " "
 endef
 LICENSE_HASH=$(shell $(call LICENSE_HASH_CODE, pilosa.go))
 
+PLUGINS=distinct
 export GO111MODULE=on
+export GOPRIVATE=github.com/molecula
+export PLUGINS
 
 # Run tests and compile Pilosa
 default: test build
@@ -85,14 +89,14 @@ DOCKER_COMPOSE=internal/clustertests/docker-compose.yml
 # running. This will catch changes to internal/clustertests/*.go, but if you
 # make changes to Pilosa, you'll want to run clustertests-build to rebuild the
 # pilosa image.
-clustertests:
+clustertests: vendor
 	docker-compose -f $(DOCKER_COMPOSE) down
 	docker-compose -f $(DOCKER_COMPOSE) build client1
 	docker-compose -f $(DOCKER_COMPOSE) up --exit-code-from=client1
 
 
 # Like clustertests, but rebuilds all images.
-clustertests-build:
+clustertests-build: vendor
 	docker-compose -f $(DOCKER_COMPOSE) down
 	docker-compose -f $(DOCKER_COMPOSE) up --exit-code-from=client1 --build
 
