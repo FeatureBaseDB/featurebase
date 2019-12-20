@@ -80,7 +80,7 @@ func (c *GRPCClient) Query(ctx context.Context, index string, pql string) (pb.St
 
 // Inspect returns a stream of RowResponse for the given index, columns, and filters.
 // It is intended to mimic something like "select [fields] from table where recordID IN (...)".
-func (c *GRPCClient) Inspect(ctx context.Context, index string, columnIDs []uint64, columnKeys []string, fieldFilters []string) (pb.StreamClient, error) {
+func (c *GRPCClient) Inspect(ctx context.Context, index string, columnIDs []uint64, columnKeys []string, fieldFilters []string, limit, offset uint64) (pb.StreamClient, error) {
 	if c.conn == nil {
 		return nil, errors.New("client has not established a grpc connection")
 	}
@@ -103,7 +103,10 @@ func (c *GRPCClient) Inspect(ctx context.Context, index string, columnIDs []uint
 		Index:        index,
 		Columns:      idsOrKeys,
 		FilterFields: fieldFilters,
+		Limit:        limit,
+		Offset:       offset,
 	})
+
 	if err != nil {
 		return nil, errors.Wrap(err, "getting stream")
 	} else if stream == nil {

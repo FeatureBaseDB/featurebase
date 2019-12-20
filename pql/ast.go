@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/ext"
+	"github.com/molecula/ext"
 )
 
 // Query represents a PQL query.
@@ -347,10 +347,17 @@ var callInfoByFunc = map[string]callInfo{
 	"Difference": {allowUnknown: false},
 	"Intersect":  {allowUnknown: false},
 	"Not":        {allowUnknown: false},
-	"ClearRow":   {allowUnknown: true},
-	"Store":      {allowUnknown: true},
-	"MinRow":     allowField,
-	"MaxRow":     allowField,
+	"All": {
+		allowUnknown: false,
+		prototypes: map[string]interface{}{
+			"limit":  int64(0),
+			"offset": int64(0),
+		},
+	},
+	"ClearRow": {allowUnknown: true},
+	"Store":    {allowUnknown: true},
+	"MinRow":   allowField,
+	"MaxRow":   allowField,
 	"Rows": {
 		allowUnknown: false,
 		prototypes: map[string]interface{}{

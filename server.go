@@ -17,19 +17,19 @@ package pilosa
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"plugin"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/ext"
+	"github.com/molecula/ext"
+	// extensions pulls in some extensions depending on build tags
+	_ "github.com/pilosa/pilosa/v2/extensions"
 	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
@@ -61,7 +61,6 @@ type Server struct { // nolint: maligned
 	hosts            []string
 	clusterDisabled  bool
 	serializer       Serializer
-	extensionPath    string
 	extensions       []*ext.ExtensionInfo
 
 	// External
@@ -341,8 +340,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.extensionPath = filepath.Join(path, ".extensions")
-
 	s.holder.Path = path
 	// s.holder.translateFile.Path = filepath.Join(path, ".keys")
 	s.holder.Logger = s.logger
@@ -383,7 +380,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.broadcaster = s
 	s.cluster.maxWritesPerRequest = s.maxWritesPerRequest
 	s.holder.broadcaster = s
-	err = s.loadPlugins()
+	err = s.loadExtensions()
 	if err != nil {
 		s.logger.Printf("not all plugins loaded successfully")
 	}
@@ -420,67 +417,20 @@ func (s *Server) InternalClient() InternalClient {
 	return s.defaultClient
 }
 
-func (s *Server) loadPlugins() error {
-	var anyError error
-	dir, err := os.Open(s.extensionPath)
-	if err != nil {
-		// don't complain about it not existing, that's fine.
-		if os.IsNotExist(err) {
-			s.logger.Printf("extension interface v0: no extensions directory.")
-			return nil
-		}
-		return errors.Wrap(err, "opening extension path:")
-	}
-	defer dir.Close()
-	for files, err := dir.Readdir(64); err != io.EOF; files, err = dir.Readdir(64) {
-		if err != nil {
-			return errors.Wrap(err, "searching extension directory:")
-		}
-		for _, file := range files {
-			name := file.Name()
-			// only .so files are likely plugins.
-			if !strings.HasSuffix(name, ".so") {
-				continue
-			}
-			// only regular files are candidates for loading.
-			mode := file.Mode()
-			if !mode.IsRegular() {
-				s.logger.Printf("extension file '%s' is not a regular file", name)
-				continue
-			}
-			err = s.loadPlugin(name)
-			if err != nil {
-				s.logger.Printf("loading extension %s: %v", name, err)
-				anyError = err
-			}
+func (s *Server) loadExtensions() error {
+	exts := ext.NewExtensions()
+	var lastError error
+	for _, extension := range exts {
+		if err := s.loadExtension(extension); err != nil {
+			lastError = err
 		}
 	}
-	return anyError
+	return lastError
 }
 
-func (s *Server) loadPlugin(name string) error {
-	path := filepath.Join(s.extensionPath, name)
-	p, err := plugin.Open(path)
-	if err != nil {
-		return err
-	}
-	pluginExtInfo, err := p.Lookup("ExtensionInfo")
-	if err != nil {
-		return fmt.Errorf("%s: no ExtensionInfo found", name)
-	}
-	extInfoFunc, ok := pluginExtInfo.(func(string) (*ext.ExtensionInfo, error))
-	if !ok {
-		return fmt.Errorf("%s: unexpected %T instead of ExtensionInfo object", name, pluginExtInfo)
-	}
-	extInfo, err := extInfoFunc("v0")
-	if err != nil {
-		return errors.Wrap(err, name)
-	}
-	if extInfo == nil {
-		return fmt.Errorf("%s: nil ExtensionInfo", name)
-	}
+func (s *Server) loadExtension(extInfo *ext.ExtensionInfo) error {
 	if extInfo.ExtensionAPI != "v0" {
-		return fmt.Errorf("%s: unsupported extension API %s", name, extInfo.ExtensionAPI)
+		return fmt.Errorf("%s: unsupported extension API %s", extInfo.Name, extInfo.ExtensionAPI)
 	}
 	s.extensions = append(s.extensions, extInfo)
 	bitmapOps := extInfo.BitmapOps
@@ -500,7 +450,7 @@ func (s *Server) loadPlugin(name string) error {
 			unknownOps++
 		}
 	}
-	err = s.executor.registerOps(bitmapOps)
+	err := s.executor.registerOps(bitmapOps)
 	if err != nil {
 		s.logger.Printf("warning: extension registration failed: %v", err)
 	} else {

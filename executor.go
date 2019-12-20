@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/ext"
+	"github.com/molecula/ext"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/shardwidth"
@@ -527,6 +527,8 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return e.executeOptionsCall(ctx, index, c, shards, opt)
 	case "IncludesColumn":
 		return e.executeIncludesColumnCall(ctx, index, c, shards, opt)
+	case "All":
+		return e.executeAllCall(ctx, index, c, shards, opt)
 	case "Precomputed":
 		return e.executePrecomputedCall(ctx, index, c, shards, opt)
 	default:
@@ -633,6 +635,112 @@ func (e *executor) executeIncludesColumnCall(ctx context.Context, index string, 
 		return false, err
 	}
 	return result.(bool), nil
+}
+
+// executeAllCall executes an All() call.
+func (e *executor) executeAllCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (*Row, error) {
+	rslt := NewRow()
+
+	var limit uint64
+	var offset uint64
+
+	if lim, hasLimit, err := c.UintArg("limit"); err != nil {
+		return nil, errors.Wrap(err, "getting limit")
+	} else if hasLimit && lim > 0 {
+		limit = uint64(lim)
+	}
+	if off, hasOffset, err := c.UintArg("offset"); err != nil {
+		return nil, errors.Wrap(err, "getting offset")
+	} else if hasOffset && off > 0 {
+		offset = uint64(off)
+	}
+
+	if limit == 0 {
+		limit = math.MaxUint64
+	}
+
+	// skip tracks the number of records left to be skipped
+	// in support of getting to the offset.
+	var skip uint64 = offset
+
+	// got tracks the number of records gotten to that point.
+	var got uint64
+
+	for _, shard := range shards {
+		row, err := e.executeAllCallMapReduce(ctx, index, c, shard, opt)
+		if err != nil {
+			return nil, errors.Wrap(err, "executing map reduce on shard")
+		}
+
+		segCnt := row.Count()
+
+		// If this segment doesn't reach the offset, skip it.
+		if segCnt <= skip {
+			skip -= segCnt
+			continue
+		}
+
+		// This segment doesn't have enough to finish fulfilling the limit
+		// (or it has exactly enough).
+		if segCnt-skip <= limit-got {
+			if skip == 0 {
+				rslt.Merge(row)
+			} else {
+				cols := row.Columns()
+				partialRow := NewRow()
+				for _, bit := range cols[skip:] {
+					partialRow.SetBit(bit)
+				}
+				rslt.Merge(partialRow)
+			}
+			got += segCnt - skip
+			// In the case where this segment exactly fulfills the limit, break.
+			if got == limit {
+				break
+			}
+			skip = 0
+			continue
+		}
+
+		// This segment has more records than the remaining limit requires.
+		cols := row.Columns()
+		partialRow := NewRow()
+		for _, bit := range cols[skip : skip+limit-got] {
+			partialRow.SetBit(bit)
+		}
+		rslt.Merge(partialRow)
+		break
+	}
+
+	return rslt, nil
+}
+
+// executeAllCallMapReduce executes a single shard of the All() call
+// using the executor.mapReduce() method.
+func (e *executor) executeAllCallMapReduce(ctx context.Context, index string, c *pql.Call, shard uint64, opt *execOptions) (*Row, error) {
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeAllShard(ctx, index, c, shard)
+	}
+
+	// Merge returned results at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		other, _ := prev.(*Row)
+		if other == nil {
+			other = NewRow()
+		}
+		other.Merge(v.(*Row))
+		return other
+	}
+
+	result, err := e.mapReduce(ctx, index, []uint64{shard}, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return nil, errors.Wrap(err, "map reduce")
+	}
+
+	row, _ := result.(*Row)
+
+	return row, nil
 }
 
 // executeIncludesColumnCallShard
@@ -2381,7 +2489,7 @@ func (e *executor) executePrecomputedCallShard(ctx context.Context, index string
 	return nil, fmt.Errorf("per-shard: missing precomputed values for shard %d", shard)
 }
 
-// executeNotShard executes a not() call for a local shard.
+// executeNotShard executes a Not() call for a local shard.
 func (e *executor) executeNotShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeNotShard")
 	defer span.Finish()
@@ -2414,6 +2522,34 @@ func (e *executor) executeNotShard(ctx context.Context, index string, c *pql.Cal
 	}
 
 	return existenceRow.Difference(row), nil
+}
+
+// executeAllShard executes an All() call for a local shard.
+func (e *executor) executeAllShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
+	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeAllShard")
+	defer span.Finish()
+
+	if len(c.Children) > 0 {
+		return nil, errors.New("All() does not accept an input row")
+	}
+
+	// Make sure the index supports existence tracking.
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	} else if idx.existenceField() == nil {
+		return nil, errors.Errorf("index does not support existence tracking: %s", index)
+	}
+
+	var existenceRow *Row
+	existenceFrag := e.Holder.fragment(index, existenceFieldName, viewStandard, shard)
+	if existenceFrag == nil {
+		existenceRow = NewRow()
+	} else {
+		existenceRow = existenceFrag.row(0)
+	}
+
+	return existenceRow, nil
 }
 
 // executeShiftShard executes a shift() call for a local shard.
