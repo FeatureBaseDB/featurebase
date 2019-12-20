@@ -29,7 +29,6 @@ import (
 	"github.com/pilosa/pilosa/v2/shardwidth"
 	"github.com/pilosa/pilosa/v2/tracing"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 // defaultField is the field used if one is not specified.
@@ -3591,10 +3590,10 @@ func (e *executor) collectCallIndexKeys(index string, idx *Index, c *pql.Call, k
 	}
 
 	colKey, _, _ := c.TranslateInfo(columnLabel, rowLabel)
-	if c.Args[colKey] != nil && !isString(c.Args[colKey]) {
-		return errors.New("column value must be a string when index 'keys' option enabled")
-	} else if value := callArgString(c, colKey); value != "" {
-		keySet[value] = struct{}{}
+	if c.Args[colKey] != nil && isString(c.Args[colKey]) {
+		if value := callArgString(c, colKey); value != "" {
+			keySet[value] = struct{}{}
+		}
 	}
 	return nil
 }
@@ -3768,6 +3767,7 @@ func (e *executor) translateGroupByCall(index string, idx *Index, c *pql.Call, k
 }
 
 func (e *executor) translateResults(ctx context.Context, index string, idx *Index, calls []*pql.Call, results []interface{}) (err error) {
+	println("dbg/")
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.translateResults")
 	defer span.Finish()
 
@@ -3780,39 +3780,13 @@ func (e *executor) translateResults(ctx context.Context, index string, idx *Inde
 				return err
 			}
 		}
-
-		// Split ids by partition.
-		idsByPartition := make(map[int][]uint64, e.Cluster.partitionN)
-		for id := range idSet {
-			partitionID := e.Cluster.shardPartition(index, id/ShardWidth)
-			idsByPartition[partitionID] = append(idsByPartition[partitionID], id)
-		}
-
-		// Translate ids by partition.
-		var g errgroup.Group
-		var mu sync.Mutex
-		for partitionID, ids := range idsByPartition {
-			g.Go(func() error {
-				nodes := e.Cluster.partitionNodes(partitionID)
-				keys, err := e.client.TranslateIDsNode(ctx, &nodes[0].URI, index, "", ids)
-				if err != nil {
-					return err
-				}
-
-				mu.Lock()
-				defer mu.Unlock()
-				for i := range ids {
-					idMap[ids[i]] = keys[i]
-				}
-				return nil
-			})
-		}
-		if err := g.Wait(); err != nil {
+		if idMap, err = e.Cluster.translateIndexIDSet(ctx, index, idSet); err != nil {
 			return err
 		}
 	}
 
 	for i := range results {
+		println("dbg/results.a", i)
 		results[i], err = e.translateResult(index, idx, calls[i], results[i], idMap)
 		if err != nil {
 			return err

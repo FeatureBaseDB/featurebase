@@ -40,8 +40,8 @@ import (
 )
 
 const (
-	// defaultPartitionN is the default number of partitions in a cluster.
-	defaultPartitionN = 256
+	// DefaultPartitionN is the default number of partitions in a cluster.
+	DefaultPartitionN = 256
 
 	// ClusterState represents the state returned in the /status endpoint.
 	ClusterStateStarting = "STARTING"
@@ -243,7 +243,7 @@ type cluster struct { // nolint: maligned
 func newCluster() *cluster {
 	return &cluster{
 		Hasher:     &jmphasher{},
-		partitionN: defaultPartitionN,
+		partitionN: DefaultPartitionN,
 		ReplicaN:   1,
 
 		joiningLeavingNodes: make(chan nodeAction, 10), // buffered channel
@@ -876,7 +876,7 @@ func (c *cluster) keyPartition(index, key string) int {
 
 // idPartition returns the partition that an id belongs to.
 func (c *cluster) idPartition(index string, id uint64) int {
-	return c.shardPartition(index, id/ShardWidth)
+	return c.shardPartition(index, (id/ShardWidth)%uint64(c.partitionN))
 }
 
 // ShardNodes returns a list of nodes that own a fragment. Safe for concurrent use.
@@ -2110,10 +2110,12 @@ func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, ke
 	var g errgroup.Group
 	var mu sync.Mutex
 	for partitionID := range keysByPartition {
+		partitionID := partitionID
 		keys := keysByPartition[partitionID]
 
 		g.Go(func() (err error) {
 			var ids []uint64
+			println("dbg/translateIndexKeySet", partitionID, len(keys), c.ownsPartition(c.Node.ID, partitionID))
 			if c.ownsPartition(c.Node.ID, partitionID) {
 				if ids, err = idx.TranslateStore(partitionID).TranslateKeys(keys); err != nil {
 					return err
@@ -2175,9 +2177,13 @@ func (c *cluster) translateIndexIDSet(ctx context.Context, indexName string, idS
 	// Translate ids by partition.
 	var g errgroup.Group
 	var mu sync.Mutex
-	for partitionID, ids := range idsByPartition {
+	for partitionID := range idsByPartition {
+		partitionID := partitionID
+		ids := idsByPartition[partitionID]
+
 		g.Go(func() (err error) {
 			var keys []string
+			println("dbg/translateIndexIDSet", partitionID, len(ids), c.ownsPartition(c.Node.ID, partitionID))
 			if c.ownsPartition(c.Node.ID, partitionID) {
 				if keys, err = index.TranslateStore(partitionID).TranslateIDs(ids); err != nil {
 					return err
@@ -2192,6 +2198,7 @@ func (c *cluster) translateIndexIDSet(ctx context.Context, indexName string, idS
 			mu.Lock()
 			defer mu.Unlock()
 			for i := range ids {
+				println("dbg/>>", ids[i], keys[i])
 				idMap[ids[i]] = keys[i]
 			}
 			return nil

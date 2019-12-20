@@ -45,6 +45,9 @@ type Index struct {
 	trackExistence bool
 	existenceFld   *Field
 
+	// Partitions used by translation.
+	partitionN int
+
 	// Fields by name.
 	fields map[string]*Field
 
@@ -70,16 +73,17 @@ type Index struct {
 }
 
 // NewIndex returns a new instance of Index.
-func NewIndex(path, name string) (*Index, error) {
+func NewIndex(path, name string, partitionN int) (*Index, error) {
 	err := validateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
 	}
 
 	return &Index{
-		path:   path,
-		name:   name,
-		fields: make(map[string]*Field),
+		path:       path,
+		name:       name,
+		partitionN: partitionN,
+		fields:     make(map[string]*Field),
 
 		newAttrStore: newNopAttrStore,
 		columnAttrs:  nopStore,
@@ -162,8 +166,8 @@ func (i *Index) Open() (err error) {
 
 	// TODO(BBJ): Support non-default partition counts.
 	i.logger.Debugf("open translate store for index: %s", i.name)
-	for partitionID := 0; partitionID < defaultPartitionN; partitionID++ {
-		store, err := i.OpenTranslateStore(i.TranslateStorePath(partitionID), i.name, "", partitionID)
+	for partitionID := 0; partitionID < i.partitionN; partitionID++ {
+		store, err := i.OpenTranslateStore(i.TranslateStorePath(partitionID), i.name, "", partitionID, i.partitionN)
 		if err != nil {
 			return errors.Wrap(err, "opening index translate store")
 		}

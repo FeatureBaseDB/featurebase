@@ -25,7 +25,7 @@ import (
 )
 
 func TestExecutor_TranslateGroupByCall(t *testing.T) {
-	holder := NewHolder()
+	holder := NewHolder(DefaultPartitionN)
 
 	cluster := newCluster()
 	cluster.holder = holder

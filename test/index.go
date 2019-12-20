@@ -32,7 +32,7 @@ func newIndex() *Index {
 	if err != nil {
 		panic(err)
 	}
-	index, err := pilosa.NewIndex(path, "i")
+	index, err := pilosa.NewIndex(path, "i", PartitionN)
 	if err != nil {
 		panic(err)
 	}
@@ -62,7 +62,7 @@ func (i *Index) Reopen() error {
 	}
 
 	path, name := i.Path(), i.Name()
-	i.Index, err = pilosa.NewIndex(path, name)
+	i.Index, err = pilosa.NewIndex(path, name, PartitionN)
 	if err != nil {
 		return err
 	}

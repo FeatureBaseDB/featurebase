@@ -218,7 +218,7 @@ func (t *ClusterCluster) addCluster(i int, saveTopology bool) (*cluster, error) 
 	}
 
 	// holder
-	h := NewHolder()
+	h := NewHolder(DefaultPartitionN)
 	h.Path = path
 
 	// cluster

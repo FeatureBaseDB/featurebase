@@ -51,6 +51,9 @@ const (
 type Holder struct {
 	mu sync.RWMutex
 
+	// Partition count used by translation.
+	partitionN int
+
 	// Indexes by name.
 	indexes map[string]*Index
 
@@ -113,10 +116,11 @@ func (lc *lockedChan) Recv() {
 }
 
 // NewHolder returns a new instance of Holder.
-func NewHolder() *Holder {
+func NewHolder(partitionN int) *Holder {
 	return &Holder{
-		indexes: make(map[string]*Index),
-		closing: make(chan struct{}),
+		partitionN: partitionN,
+		indexes:    make(map[string]*Index),
+		closing:    make(chan struct{}),
 
 		opened: lockedChan{ch: make(chan struct{})},
 
@@ -447,7 +451,7 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 }
 
 func (h *Holder) newIndex(path, name string) (*Index, error) {
-	index, err := NewIndex(path, name)
+	index, err := NewIndex(path, name, h.partitionN)
 	if err != nil {
 		return nil, err
 	}
@@ -880,8 +884,8 @@ func (s *holderSyncer) syncFragment(index, field, view string, shard uint64) err
 	return nil
 }
 
-// BeginTranslationSync initializes streaming sync of translation data.
-func (s *holderSyncer) BeginTranslationSync() error {
+// ResetTranslationSync reinitializes streaming sync of translation data.
+func (s *holderSyncer) ResetTranslationSync() error {
 	// Stop existing streams.
 	if err := s.stopTranslationSync(); err != nil {
 		return errors.Wrap(err, "stop translation sync")

@@ -481,7 +481,7 @@ func (f *Field) Open() error {
 		}
 
 		f.logger.Debugf("open translate store for index/field: %s/%s", f.index, f.name)
-		if f.translateStore, err = f.OpenTranslateStore(f.TranslateStorePath(), f.index, f.name, 0); err != nil {
+		if f.translateStore, err = f.OpenTranslateStore(f.TranslateStorePath(), f.index, f.name, -1, -1); err != nil {
 			return errors.Wrap(err, "opening field translate store")
 		}
 

@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 
@@ -66,7 +67,26 @@ type TranslateStore interface {
 }
 
 // OpenTranslateStoreFunc represents a function for instantiating and opening a TranslateStore.
-type OpenTranslateStoreFunc func(path, index, field string, partitionID int) (TranslateStore, error)
+type OpenTranslateStoreFunc func(path, index, field string, partitionID, partitionN int) (TranslateStore, error)
+
+// GenerateNextPartitionedID returns the next  ID within the same partition.
+func GenerateNextPartitionedID(prev uint64, partitionID, partitionN int) (uint64, error) {
+	// Generate the first available ID for partition if none previously existed.
+	var id uint64
+	if prev == 0 {
+		return (uint64(partitionID) * ShardWidth), nil
+	} else if (prev/ShardWidth)%uint64(partitionN) != uint64(partitionID) {
+		return 0, fmt.Errorf("partition id mismatch: id=%d partition=%d", prev, partitionID)
+	}
+
+	// Try to use the next ID if it is in the same partition.
+	if id++; (id/ShardWidth)%uint64(partitionN) == uint64(partitionID) {
+		return id, nil
+	}
+
+	// Otherwise jump to the next possible shard that is in the same partition.
+	return (id - ShardWidth) + (ShardWidth * uint64(partitionN)), nil
+}
 
 // TranslateEntryReader represents a stream of translation entries.
 type TranslateEntryReader interface {
@@ -214,23 +234,27 @@ var _ TranslateStore = &InMemTranslateStore{}
 // InMemTranslateStore is an in-memory storage engine for mapping keys to int values.
 type InMemTranslateStore struct {
 	mu          sync.RWMutex
-	partitionID int
 	index       string
 	field       string
+	partitionID int
+	partitionN  int
 	readOnly    bool
-	keys        []string
-	lookup      map[string]uint64
+	keysByID    map[uint64]string
+	idsByKey    map[string]uint64
+	maxID       uint64
 
 	writeNotify chan struct{}
 }
 
 // NewInMemTranslateStore returns a new instance of InMemTranslateStore.
-func NewInMemTranslateStore(index, field string, partitionID int) *InMemTranslateStore {
+func NewInMemTranslateStore(index, field string, partitionID, partitionN int) *InMemTranslateStore {
 	return &InMemTranslateStore{
-		partitionID: partitionID,
 		index:       index,
 		field:       field,
-		lookup:      make(map[string]uint64),
+		partitionID: partitionID,
+		partitionN:  partitionN,
+		keysByID:    make(map[uint64]string),
+		idsByKey:    make(map[string]uint64),
 		writeNotify: make(chan struct{}),
 	}
 }
@@ -239,8 +263,8 @@ var _ OpenTranslateStoreFunc = OpenInMemTranslateStore
 
 // OpenInMemTranslateStore returns a new instance of InMemTranslateStore.
 // Implements OpenTranslateStoreFunc.
-func OpenInMemTranslateStore(rawurl, index, field string, partitionID int) (TranslateStore, error) {
-	return NewInMemTranslateStore(index, field, partitionID), nil
+func OpenInMemTranslateStore(rawurl, index, field string, partitionID, partitionN int) (TranslateStore, error) {
+	return NewInMemTranslateStore(index, field, partitionID, partitionN), nil
 }
 
 func (s *InMemTranslateStore) Close() error {
@@ -275,12 +299,12 @@ func (s *InMemTranslateStore) TranslateKey(key string) (uint64, error) {
 	if s.readOnly {
 		return 0, nil
 	}
-	return s.translateKey(key), nil
+	return s.translateKey(key)
 }
 
 // TranslateKeys converts a string key to an integer ID.
 // If key does not have an associated id then one is created.
-func (s *InMemTranslateStore) TranslateKeys(keys []string) ([]uint64, error) {
+func (s *InMemTranslateStore) TranslateKeys(keys []string) (_ []uint64, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -290,21 +314,30 @@ func (s *InMemTranslateStore) TranslateKeys(keys []string) ([]uint64, error) {
 
 	ids := make([]uint64, len(keys))
 	for i := range keys {
-		ids[i] = s.translateKey(keys[i])
+		if ids[i], err = s.translateKey(keys[i]); err != nil {
+			return ids, err
+		}
 	}
 	return ids, nil
 }
 
-func (s *InMemTranslateStore) translateKey(key string) uint64 {
+func (s *InMemTranslateStore) translateKey(key string) (_ uint64, err error) {
 	// Return id if it has been added.
-	if id, ok := s.lookup[key]; ok {
-		return id
+	if id, ok := s.idsByKey[key]; ok {
+		return id, nil
 	}
 
 	// Generate a new id and update db.
-	id := uint64(len(s.keys) + 1)
+	var id uint64
+	if s.field == "" {
+		if id, err = GenerateNextPartitionedID(s.maxID, s.partitionID, s.partitionN); err != nil {
+			return 0, err
+		}
+	} else {
+		id = s.maxID + 1
+	}
 	s.set(id, key)
-	return id
+	return id, nil
 }
 
 // TranslateID converts an integer ID to a string key.
@@ -328,10 +361,7 @@ func (s *InMemTranslateStore) TranslateIDs(ids []uint64) ([]string, error) {
 }
 
 func (s *InMemTranslateStore) translateID(id uint64) string {
-	if id == 0 || id > uint64(len(s.keys)) {
-		return ""
-	}
-	return s.keys[id-1]
+	return s.keysByID[id]
 }
 
 // ForceSet writes the id/key pair to the db. Used by replication.
@@ -344,8 +374,11 @@ func (s *InMemTranslateStore) ForceSet(id uint64, key string) error {
 
 // set assigns the id/key pair to the store.
 func (s *InMemTranslateStore) set(id uint64, key string) {
-	s.keys = append(s.keys, key)
-	s.lookup[key] = id
+	s.keysByID[id] = key
+	s.idsByKey[key] = id
+	if id > s.maxID {
+		s.maxID = id
+	}
 	s.notifyWrite()
 }
 
@@ -374,7 +407,7 @@ func (s *InMemTranslateStore) EntryReader(ctx context.Context, offset uint64) (T
 func (s *InMemTranslateStore) MaxID() (uint64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return uint64(len(s.keys)), nil
+	return s.maxID, nil
 }
 
 // inMemEntryReader represents a stream of translation entries for an inmem translation store.
