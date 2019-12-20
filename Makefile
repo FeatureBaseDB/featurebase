@@ -131,12 +131,12 @@ generate-proto-grpc: require-protoc require-protoc-gen-gofast
 generate: generate-protoc generate-stringer generate-pql
 
 # Create Docker image from Dockerfile
-docker:
+docker: vendor
 	docker build --build-arg BUILD_FLAGS="${FLAGS}" -t "pilosa:$(VERSION)" .
 	@echo Created docker image: pilosa:$(VERSION)
 
 # Create Docker image from Dockerfile (enterprise)
-docker-enterprise:
+docker-enterprise: vendor
 	docker build --build-arg MAKE_FLAGS="ENTERPRISE=1" -t "pilosa-enterprise:$(VERSION)" .
 	@echo Created docker image: pilosa-enterprise:$(VERSION)
 
