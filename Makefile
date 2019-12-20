@@ -22,8 +22,10 @@ define LICENSE_HASH_CODE
 endef
 LICENSE_HASH=$(shell $(call LICENSE_HASH_CODE, pilosa.go))
 
+PLUGINS=distinct
 export GO111MODULE=on
 export GOPRIVATE=github.com/molecula
+export PLUGINS
 
 # Run tests and compile Pilosa
 default: test build
