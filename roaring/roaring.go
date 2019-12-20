@@ -3688,41 +3688,43 @@ func union(a, b *Container) *Container {
 
 func unionArrayArray(a, b *Container) *Container {
 	statsHit("union/ArrayArray")
-	aa, ab := a.array(), b.array()
-	na, nb := len(aa), len(ab)
-	output := make([]uint16, na+nb)
-	n := 0
-	for i, j := 0, 0; ; {
-		if i >= na && j >= nb {
-			break
-		} else if i < na && j >= nb {
-			output[n] = aa[i]
-			n++
-			i++
-			continue
-		} else if i >= na && j < nb {
-			output[n] = ab[j]
-			n++
-			j++
-			continue
-		}
-
-		va, vb := aa[i], ab[j]
+	if a.N() == 0 {
+		return b
+	}
+	if b.N() == 0 {
+		return a
+	}
+	s1, s2 := a.array(), b.array()
+	n1, n2 := len(s1), len(s2)
+	output := make([]uint16, 0, n1+n2)
+	i, j := 0, 0
+	for {
+		va, vb := s1[i], s2[j]
 		if va < vb {
-			output[n] = va
-			n++
+			output = append(output, va)
 			i++
 		} else if va > vb {
-			output[n] = vb
-			n++
+			output = append(output, vb)
 			j++
 		} else {
-			output[n] = va
-			n++
-			i, j = i+1, j+1
+			output = append(output, va)
+			i++
+			j++
+		}
+		// It's possible we hit the ends at the same time,
+		// in which case the append will copy 0 items. This
+		// is cheaper than performing a separate conditional
+		// check every time...
+		if j >= n2 {
+			output = append(output, s1[i:]...)
+			break
+		}
+		if i >= n1 {
+			output = append(output, s2[j:]...)
+			break
 		}
 	}
-	return NewContainerArray(output[:n])
+	return NewContainerArray(output)
 }
 
 // unionArrayArrayInPlace does what it sounds like -- tries to combine
@@ -3730,47 +3732,56 @@ func unionArrayArray(a, b *Container) *Container {
 // of a good array size, so it could be up to twice that size, temporarily.
 func unionArrayArrayInPlace(a, b *Container) *Container {
 	statsHit("union/ArrayArrayInPlace")
-	aa, ab := a.array(), b.array()
-	na, nb := len(aa), len(ab)
-	output := make([]uint16, na+nb)
-	outN := 0
-	for i, j := 0, 0; ; {
-		if i >= na && j >= nb {
-			break
-		} else if i < na && j >= nb {
-			copy(output[outN:], aa[i:])
-			outN += na - i
-			break
-		} else if i >= na && j < nb {
-			copy(output[outN:], ab[j:])
-			outN += nb - j
-			break
+	if a.N() == 0 {
+		if b.N() != 0 {
+			// for InPlace, we actually want to ensure that
+			// we update a, as long as it's not frozen.
+			a = a.Thaw()
+			a.setArray(b.array())
+			return a.optimize()
 		}
-
-		va, vb := aa[i], ab[j]
+		return a
+	}
+	if b.N() == 0 {
+		return a
+	}
+	s1, s2 := a.array(), b.array()
+	n1, n2 := len(s1), len(s2)
+	output := make([]uint16, 0, n1+n2)
+	i, j := 0, 0
+	for {
+		va, vb := s1[i], s2[j]
 		if va < vb {
-			output[outN] = va
-			outN++
+			output = append(output, va)
 			i++
 		} else if va > vb {
-			output[outN] = vb
-			outN++
+			output = append(output, vb)
 			j++
 		} else {
-			output[outN] = va
-			outN++
+			output = append(output, va)
 			i++
 			j++
+		}
+		// It's possible we hit the ends at the same time,
+		// in which case the append will copy 0 items. This
+		// is cheaper than performing a separate conditional
+		// check every time...
+		if j >= n2 {
+			output = append(output, s1[i:]...)
+			break
+		}
+		if i >= n1 {
+			output = append(output, s2[j:]...)
+			break
 		}
 	}
 	// a union can't omit anything that was previously in a, so if
 	// the output is the same length, nothing changed.
 	if len(output) != int(a.N()) {
 		a = a.Thaw()
-		a.setArray(output[:outN])
-		a = a.optimize()
+		a.setArray(output)
 	}
-	return a
+	return a.optimize()
 }
 
 // unionArrayRun optimistically assumes that the result will be a run container,
