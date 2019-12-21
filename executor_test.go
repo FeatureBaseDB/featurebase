@@ -3039,6 +3039,32 @@ func TestExecutor_Execute_All(t *testing.T) {
 			}
 		}
 	})
+
+	// Ensure that a query which uses All() at the shard level can call it.
+	t.Run("AllShard", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackExistence: true})
+		_, err := index.CreateField("f", pilosa.OptFieldTypeDefault())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+Set(3001, f=3)
+Set(5001, f=5)
+Set(5002, f=5)
+`}); err != nil {
+			t.Fatalf("querying remote: %v", err)
+		}
+
+		expCols := []uint64{5001, 5002}
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: "Intersect(All(), Row(f=5))"}); err != nil {
+			t.Fatal(err)
+		} else if cols := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(cols, expCols) {
+			t.Fatalf("unexpected columns, got: %v, but expected: %v", cols, expCols)
+		}
+	})
 }
 
 // Ensure a row can be cleared.
