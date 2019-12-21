@@ -291,6 +291,14 @@ func (i *Index) Close() error {
 	// Close the attribute store.
 	i.columnAttrs.Close()
 
+	// Close partitioned translation stores.
+	for _, store := range i.translateStores {
+		if err := store.Close(); err != nil {
+			return errors.Wrap(err, "closing translation store")
+		}
+	}
+	i.translateStores = make(map[int]TranslateStore)
+
 	// Close all fields.
 	for _, f := range i.fields {
 		if err := f.Close(); err != nil {

@@ -855,6 +855,10 @@ func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*ResizeSour
 
 // shardPartition returns the partition that a shard belongs to.
 func (c *cluster) shardPartition(index string, shard uint64) int {
+	return shardPartition(index, shard, c.partitionN)
+}
+
+func shardPartition(index string, shard uint64, partitionN int) int {
 	var buf [8]byte
 	binary.BigEndian.PutUint64(buf[:], shard)
 
@@ -862,21 +866,25 @@ func (c *cluster) shardPartition(index string, shard uint64) int {
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(index))
 	_, _ = h.Write(buf[:])
-	return int(h.Sum64() % uint64(c.partitionN))
+	return int(h.Sum64() % uint64(partitionN))
 }
 
 // keyPartition returns the partition that a shard belongs to.
 func (c *cluster) keyPartition(index, key string) int {
+	return keyPartition(index, key, c.partitionN)
+}
+
+func keyPartition(index, key string, partitionN int) int {
 	// Hash the bytes and mod by partition count.
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(index))
 	_, _ = h.Write([]byte(key))
-	return int(h.Sum64() % uint64(c.partitionN))
+	return int(h.Sum64() % uint64(partitionN))
 }
 
 // idPartition returns the partition that an id belongs to.
 func (c *cluster) idPartition(index string, id uint64) int {
-	return c.shardPartition(index, (id/ShardWidth)%uint64(c.partitionN))
+	return shardPartition(index, id/ShardWidth, c.partitionN)
 }
 
 // ShardNodes returns a list of nodes that own a fragment. Safe for concurrent use.
@@ -2115,7 +2123,6 @@ func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, ke
 
 		g.Go(func() (err error) {
 			var ids []uint64
-			println("dbg/translateIndexKeySet", partitionID, len(keys), c.ownsPartition(c.Node.ID, partitionID))
 			if c.ownsPartition(c.Node.ID, partitionID) {
 				if ids, err = idx.TranslateStore(partitionID).TranslateKeys(keys); err != nil {
 					return err
@@ -2183,7 +2190,6 @@ func (c *cluster) translateIndexIDSet(ctx context.Context, indexName string, idS
 
 		g.Go(func() (err error) {
 			var keys []string
-			println("dbg/translateIndexIDSet", partitionID, len(ids), c.ownsPartition(c.Node.ID, partitionID))
 			if c.ownsPartition(c.Node.ID, partitionID) {
 				if keys, err = index.TranslateStore(partitionID).TranslateIDs(ids); err != nil {
 					return err
@@ -2198,7 +2204,6 @@ func (c *cluster) translateIndexIDSet(ctx context.Context, indexName string, idS
 			mu.Lock()
 			defer mu.Unlock()
 			for i := range ids {
-				println("dbg/>>", ids[i], keys[i])
 				idMap[ids[i]] = keys[i]
 			}
 			return nil

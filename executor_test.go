@@ -99,7 +99,7 @@ func TestExecutor_Execute_Row(t *testing.T) {
 		readQueries := []string{`Row(f=1)`}
 		responses := runCallTest(t, writeQuery, readQueries,
 			&pilosa.IndexOptions{Keys: true})
-		if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"one-hundred", "two-hundred"}) {
+		if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"two-hundred", "one-hundred"}) {
 			t.Fatalf("unexpected keys: %+v", keys)
 		}
 	})
@@ -324,7 +324,7 @@ func TestExecutor_Execute_Union(t *testing.T) {
 		readQueries := []string{`Union(Row(f=10), Row(f=11))`}
 		responses := runCallTest(t, writeQuery, readQueries,
 			&pilosa.IndexOptions{Keys: true})
-		if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"one", "one-hundred", "two-hundred", "two"}) {
+		if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"one", "two-hundred", "one-hundred", "two"}) {
 			t.Fatalf("unexpected keys: %+v", keys)
 		}
 	})
@@ -357,7 +357,7 @@ func TestExecutor_Execute_Union(t *testing.T) {
 		responses := runCallTest(t, writeQuery, readQueries,
 			&pilosa.IndexOptions{Keys: true},
 			pilosa.OptFieldKeys())
-		if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"one", "one-hundred", "two-hundred", "two"}) {
+		if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"one", "two-hundred", "one-hundred", "two"}) {
 			t.Fatalf("unexpected keys: %+v", keys)
 		}
 	})
@@ -1766,13 +1766,13 @@ func TestExecutor_Execute_Row_Range(t *testing.T) {
 			pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
 
 		t.Run("Standard", func(t *testing.T) {
-			if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"two", "three", "four", "five", "six", "seven"}) {
+			if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"four", "six", "two", "seven", "five", "three"}) {
 				t.Fatalf("unexpected keys: %+v", keys)
 			}
 		})
 
 		t.Run("Clear", func(t *testing.T) {
-			if keys := responses[2].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"three", "four", "five", "six", "seven"}) {
+			if keys := responses[2].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"four", "six", "seven", "five", "three"}) {
 				t.Fatalf("unexpected keys: %+v", keys)
 			}
 		})
@@ -1836,13 +1836,13 @@ func TestExecutor_Execute_Row_Range(t *testing.T) {
 			pilosa.OptFieldKeys())
 
 		t.Run("Standard", func(t *testing.T) {
-			if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"two", "three", "four", "five", "six", "seven"}) {
+			if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"four", "six", "two", "seven", "five", "three"}) {
 				t.Fatalf("unexpected keys: %+v", keys)
 			}
 		})
 
 		t.Run("Clear", func(t *testing.T) {
-			if keys := responses[2].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"three", "four", "five", "six", "seven"}) {
+			if keys := responses[2].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"four", "six", "seven", "five", "three"}) {
 				t.Fatalf("unexpected keys: %+v", keys)
 			}
 		})
@@ -1950,13 +1950,13 @@ func TestExecutor_Execute_Range_Deprecated(t *testing.T) {
 			pilosa.OptFieldTypeTime(pilosa.TimeQuantum("YMDH")))
 
 		t.Run("Standard", func(t *testing.T) {
-			if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"two", "three", "four", "five", "six", "seven"}) {
+			if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"four", "six", "two", "seven", "five", "three"}) {
 				t.Fatalf("unexpected keys: %+v", keys)
 			}
 		})
 
 		t.Run("Clear", func(t *testing.T) {
-			if keys := responses[2].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"three", "four", "five", "six", "seven"}) {
+			if keys := responses[2].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"four", "six", "seven", "five", "three"}) {
 				t.Fatalf("unexpected keys: %+v", keys)
 			}
 		})
@@ -2020,13 +2020,13 @@ func TestExecutor_Execute_Range_Deprecated(t *testing.T) {
 			pilosa.OptFieldKeys())
 
 		t.Run("Standard", func(t *testing.T) {
-			if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"two", "three", "four", "five", "six", "seven"}) {
+			if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"four", "six", "two", "seven", "five", "three"}) {
 				t.Fatalf("unexpected keys: %+v", keys)
 			}
 		})
 
 		t.Run("Clear", func(t *testing.T) {
-			if keys := responses[2].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"three", "four", "five", "six", "seven"}) {
+			if keys := responses[2].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"four", "six", "seven", "five", "three"}) {
 				t.Fatalf("unexpected keys: %+v", keys)
 			}
 		})
@@ -2861,7 +2861,7 @@ func TestExecutor_Execute_Not(t *testing.T) {
 				TrackExistence: true,
 				Keys:           true,
 			})
-		if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"three", "sw1"}) {
+		if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"sw1", "three"}) {
 			t.Fatalf("unexpected keys: %+v", keys)
 		}
 	})
@@ -2892,7 +2892,7 @@ func TestExecutor_Execute_Not(t *testing.T) {
 				TrackExistence: true,
 				Keys:           true,
 			}, pilosa.OptFieldKeys())
-		if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"three", "sw1"}) {
+		if keys := responses[0].Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, []string{"sw1", "three"}) {
 			t.Fatalf("unexpected keys: %+v", keys)
 		}
 	})
@@ -3016,12 +3016,12 @@ func TestExecutor_Execute_All(t *testing.T) {
 			expCols []string
 			expCnt  uint64
 		}{
-			{qry: "All()", expCols: req.ColumnKeys, expCnt: uint64(bitCount)},
-			{qry: "All(limit=1)", expCols: req.ColumnKeys[:1], expCnt: 1},
-			{qry: "All(limit=4)", expCols: req.ColumnKeys, expCnt: 4},
-			{qry: "All(limit=5)", expCols: req.ColumnKeys, expCnt: 4},
-			{qry: "All(limit=1, offset=1)", expCols: req.ColumnKeys[1:2], expCnt: 1},
-			{qry: "All(limit=4, offset=1)", expCols: req.ColumnKeys[1:], expCnt: 3},
+			{qry: "All()", expCols: []string{"c1", "c0", "c3", "c2"}, expCnt: uint64(bitCount)},
+			{qry: "All(limit=1)", expCols: []string{"c1"}, expCnt: 1},
+			{qry: "All(limit=4)", expCols: []string{"c1", "c0", "c3", "c2"}, expCnt: 4},
+			{qry: "All(limit=5)", expCols: []string{"c1", "c0", "c3", "c2"}, expCnt: 4},
+			{qry: "All(limit=1, offset=1)", expCols: []string{"c0"}, expCnt: 1},
+			{qry: "All(limit=4, offset=1)", expCols: []string{"c0", "c3", "c2"}, expCnt: 3},
 			{qry: "All(limit=4, offset=5)", expCols: nil, expCnt: 0},
 		}
 		for i, test := range tests {
@@ -3034,7 +3034,7 @@ func TestExecutor_Execute_All(t *testing.T) {
 				if len(cols) > 1000 || len(test.expCols) > 1000 {
 					t.Fatalf("test %d, unexpected columns, got: len(%d), but expected: len(%d)", i, len(cols), len(test.expCols))
 				} else {
-					t.Fatalf("test %d, unexpected columns, got: %T, but expected: %T", i, cols, test.expCols)
+					t.Fatalf("test %d, unexpected columns, got: %#v, but expected: %#v", i, cols, test.expCols)
 				}
 			}
 		}

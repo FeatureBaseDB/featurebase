@@ -725,6 +725,11 @@ func (f *Field) Close() error {
 		_ = f.rowAttrStore.Close()
 	}
 
+	// Close field translation store.
+	if err := f.translateStore.Close(); err != nil {
+		return err
+	}
+
 	// Close all views.
 	for _, view := range f.viewMap {
 		if err := view.close(); err != nil {

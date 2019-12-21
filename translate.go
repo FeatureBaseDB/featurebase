@@ -16,7 +16,6 @@ package pilosa
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"sync"
 
@@ -69,23 +68,15 @@ type TranslateStore interface {
 // OpenTranslateStoreFunc represents a function for instantiating and opening a TranslateStore.
 type OpenTranslateStoreFunc func(path, index, field string, partitionID, partitionN int) (TranslateStore, error)
 
-// GenerateNextPartitionedID returns the next  ID within the same partition.
-func GenerateNextPartitionedID(prev uint64, partitionID, partitionN int) (uint64, error) {
-	// Generate the first available ID for partition if none previously existed.
-	var id uint64
-	if prev == 0 {
-		return (uint64(partitionID) * ShardWidth), nil
-	} else if (prev/ShardWidth)%uint64(partitionN) != uint64(partitionID) {
-		return 0, fmt.Errorf("partition id mismatch: id=%d partition=%d", prev, partitionID)
-	}
-
+// GenerateNextPartitionedID returns the next ID within the same partition.
+func GenerateNextPartitionedID(index string, prev uint64, partitionID, partitionN int) uint64 {
 	// Try to use the next ID if it is in the same partition.
-	if id++; (id/ShardWidth)%uint64(partitionN) == uint64(partitionID) {
-		return id, nil
+	// Otherwise find ID in next shard that has a matching partition.
+	for id := prev + 1; ; id += ShardWidth {
+		if shardPartition(index, id/ShardWidth, partitionN) == partitionID {
+			return id
+		}
 	}
-
-	// Otherwise jump to the next possible shard that is in the same partition.
-	return (id - ShardWidth) + (ShardWidth * uint64(partitionN)), nil
 }
 
 // TranslateEntryReader represents a stream of translation entries.
@@ -330,9 +321,7 @@ func (s *InMemTranslateStore) translateKey(key string) (_ uint64, err error) {
 	// Generate a new id and update db.
 	var id uint64
 	if s.field == "" {
-		if id, err = GenerateNextPartitionedID(s.maxID, s.partitionID, s.partitionN); err != nil {
-			return 0, err
-		}
+		id = GenerateNextPartitionedID(s.index, s.maxID, s.partitionID, s.partitionN)
 	} else {
 		id = s.maxID + 1
 	}

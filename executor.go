@@ -3767,7 +3767,6 @@ func (e *executor) translateGroupByCall(index string, idx *Index, c *pql.Call, k
 }
 
 func (e *executor) translateResults(ctx context.Context, index string, idx *Index, calls []*pql.Call, results []interface{}) (err error) {
-	println("dbg/")
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.translateResults")
 	defer span.Finish()
 
@@ -3786,7 +3785,6 @@ func (e *executor) translateResults(ctx context.Context, index string, idx *Inde
 	}
 
 	for i := range results {
-		println("dbg/results.a", i)
 		results[i], err = e.translateResult(index, idx, calls[i], results[i], idMap)
 		if err != nil {
 			return err
