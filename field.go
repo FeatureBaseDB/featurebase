@@ -726,8 +726,10 @@ func (f *Field) Close() error {
 	}
 
 	// Close field translation store.
-	if err := f.translateStore.Close(); err != nil {
-		return err
+	if f.translateStore != nil {
+		if err := f.translateStore.Close(); err != nil {
+			return err
+		}
 	}
 
 	// Close all views.

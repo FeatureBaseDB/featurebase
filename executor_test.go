@@ -127,7 +127,7 @@ func TestExecutor_Execute_Row(t *testing.T) {
 			&pilosa.IndexOptions{Keys: true},
 			pilosa.OptFieldKeys())
 		if diff := cmp.Diff(responses[0].Results, []interface{}{
-			&pilosa.Row{Keys: []string{"foo", "bat"}, Attrs: map[string]interface{}{}},
+			&pilosa.Row{Keys: []string{"bat", "foo"}, Attrs: map[string]interface{}{}},
 		}, cmpopts.IgnoreUnexported(pilosa.Row{})); diff != "" {
 			t.Fatal(diff)
 		}

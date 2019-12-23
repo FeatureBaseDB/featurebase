@@ -754,6 +754,8 @@ func (c *Call) TranslateInfo(columnLabel, rowLabel string) (colKey, rowKey, fiel
 		return "", "_" + rowLabel, c.ArgString("_field")
 	case "Rows":
 		return "column", "previous", c.ArgString("_field")
+	case "IncludesColumn":
+		return "column", "", ""
 	case "GroupBy":
 		return "", "", ""
 	default:
