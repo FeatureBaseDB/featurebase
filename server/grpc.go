@@ -42,8 +42,14 @@ type grpcHandler struct {
 // to the error (returning it as a status.Error). It is
 // assumed that the input err is non-nil.
 func errToStatusError(err error) error {
+	// Check error string.
 	switch errors.Cause(err) {
 	case pilosa.ErrIndexNotFound, pilosa.ErrFieldNotFound:
+		return status.Error(codes.NotFound, err.Error())
+	}
+	// Check error type.
+	switch errors.Cause(err).(type) {
+	case pilosa.NotFoundError:
 		return status.Error(codes.NotFound, err.Error())
 	}
 	return status.Error(codes.Unknown, err.Error())
@@ -75,7 +81,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 
 	index, err := h.api.Index(context.Background(), req.Index)
 	if err != nil {
-		return errors.Wrap(err, "getting index")
+		return errToStatusError(err)
 	}
 
 	var fields []*pilosa.Field
@@ -315,7 +321,6 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 			}
 			resp, err := h.api.Query(context.Background(), &query)
 			if err != nil {
-				fmt.Println("GOT ERROR trying to get ALL():", err)
 				return errors.Wrapf(err, "querying for all: %s", pql)
 			}
 
