@@ -75,6 +75,29 @@ func (h grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 	return nil
 }
 
+// fieldDataType returns a useful data type (string,
+// uint64, bool, etc.) based on the Pilosa field type.
+func fieldDataType(f *pilosa.Field) string {
+	switch f.Type() {
+	case "set", "mutex":
+		if f.Options().Keys {
+			return "[]string"
+		} else {
+			return "[]uint64"
+		}
+	case "int":
+		return "int64"
+	case "decimal":
+		return "float64"
+	case "bool":
+		return "bool"
+	case "time":
+		return "int64" // TODO: this is a placeholder
+	default:
+		panic(fmt.Sprintf("unimplemented fieldDataType: %s", f.Type()))
+	}
+}
+
 // Inspect handles the inspect request and sends an InspectResponse to the stream.
 func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectServer) error {
 	const defaultLimit = 100000
@@ -119,7 +142,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 			{Name: "_id", Datatype: "uint64"},
 		}
 		for _, field := range fields {
-			ci = append(ci, &pb.ColumnInfo{Name: field.Name(), Datatype: field.Type()}) // TODO: field.Type likely doesn't align with supported datatypes
+			ci = append(ci, &pb.ColumnInfo{Name: field.Name(), Datatype: fieldDataType(field)})
 		}
 
 		// If Columns is empty, then get the _exists list (via All()),
@@ -296,7 +319,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 			{Name: "_id", Datatype: "string"},
 		}
 		for _, field := range fields {
-			ci = append(ci, &pb.ColumnInfo{Name: field.Name(), Datatype: field.Type()}) // TODO: field.Type likely doesn't align with supported datatypes
+			ci = append(ci, &pb.ColumnInfo{Name: field.Name(), Datatype: fieldDataType(field)})
 		}
 
 		// If Columns is empty, then get the _exists list (via All()),
@@ -745,7 +768,7 @@ func (s *grpcServer) Serve(tlsConfig *tls.Config) error {
 	if err != nil {
 		return errors.Wrap(err, "creating listener")
 	}
-	s.logger.Printf("enabled grpc listening on %s", s.hostPort)
+	s.logger.Printf("enabled grpc listening on %s", lis.Addr())
 
 	opts := make([]grpc.ServerOption, 0)
 	if tlsConfig != nil {
