@@ -720,7 +720,7 @@ func (e *executor) executeAllCall(ctx context.Context, index string, c *pql.Call
 func (e *executor) executeAllCallMapReduce(ctx context.Context, index string, c *pql.Call, shard uint64, opt *execOptions) (*Row, error) {
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(shard uint64) (interface{}, error) {
-		return e.executeAllShard(ctx, index, c, shard)
+		return e.executeAllCallShard(ctx, index, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
@@ -1113,6 +1113,8 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, index string, c *
 		return e.executeNotShard(ctx, index, c, shard)
 	case "Shift":
 		return e.executeShiftShard(ctx, index, c, shard)
+	case "All": // Allow a shard computation to use All() (note, limit/offset not applied)
+		return e.executeAllCallShard(ctx, index, c, shard)
 	case "Precomputed":
 		return e.executePrecomputedCallShard(ctx, index, c, shard)
 	default:
@@ -2524,9 +2526,9 @@ func (e *executor) executeNotShard(ctx context.Context, index string, c *pql.Cal
 	return existenceRow.Difference(row), nil
 }
 
-// executeAllShard executes an All() call for a local shard.
-func (e *executor) executeAllShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
-	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeAllShard")
+// executeAllCallShard executes an All() call for a local shard.
+func (e *executor) executeAllCallShard(ctx context.Context, index string, c *pql.Call, shard uint64) (*Row, error) {
+	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeAllCallShard")
 	defer span.Finish()
 
 	if len(c.Children) > 0 {
