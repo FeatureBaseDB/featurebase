@@ -122,11 +122,6 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 		}
 	}
 
-	// If there are no matching fields, then don't return any records.
-	if len(fields) == 0 {
-		return nil
-	}
-
 	limit := req.Limit
 	if limit == 0 {
 		limit = defaultLimit
