@@ -169,7 +169,7 @@ func (s *TranslateStore) TranslateKey(key string) (id uint64, _ error) {
 			return nil
 		}
 
-		id := pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
+		id = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
 		if err := bkt.Put([]byte(key), u64tob(id)); err != nil {
 			return err
 		} else if err := tx.Bucket([]byte("ids")).Put(u64tob(id), []byte(key)); err != nil {

@@ -310,7 +310,7 @@ func TestImportCommand_KeyReplication(t *testing.T) {
 		if body, err := ioutil.ReadAll(resp.Body); err != nil {
 			t.Fatalf("reading: %s", err)
 		} else if !reflect.DeepEqual(body, []byte(exp)) {
-			t.Fatalf("expected: %s, but got: %s", exp, body)
+			t.Errorf("expected: %s, but got: %s", exp, body)
 		}
 	}
 }
