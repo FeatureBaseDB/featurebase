@@ -950,6 +950,10 @@ func (s *holderSyncer) initializeIndexTranslateReplication() error {
 		// Build a map of partition offsets to stream from.
 		m := make(TranslateOffsetMap)
 		for _, index := range s.Holder.Indexes() {
+			if !index.Keys() {
+				continue
+			}
+
 			for partitionID := 0; partitionID < s.Cluster.partitionN; partitionID++ {
 				partitionNodes := s.Cluster.partitionNodes(partitionID)
 				isPrimary := partitionNodes[0].ID == node.ID                 // remote is primary?
@@ -965,6 +969,11 @@ func (s *holderSyncer) initializeIndexTranslateReplication() error {
 				}
 				m.SetIndexPartitionOffset(index.Name(), partitionID, offset)
 			}
+		}
+
+		// Skip if no replication required.
+		if len(m) == 0 {
+			continue
 		}
 
 		// Connect to remote not and begin streaming.
@@ -990,6 +999,9 @@ func (s *holderSyncer) initializeFieldTranslateReplication() error {
 	// Build a map of partition offsets to stream from.
 	m := make(TranslateOffsetMap)
 	for _, index := range s.Holder.Indexes() {
+		if !index.Keys() {
+			continue
+		}
 		for _, field := range index.Fields() {
 			store := field.TranslateStore()
 			offset, err := store.MaxID()
@@ -998,6 +1010,11 @@ func (s *holderSyncer) initializeFieldTranslateReplication() error {
 			}
 			m.SetFieldOffset(index.Name(), field.Name(), offset)
 		}
+	}
+
+	// Skip if no replication required.
+	if len(m) == 0 {
+		return nil
 	}
 
 	// Connect to coordinator and begin streaming.

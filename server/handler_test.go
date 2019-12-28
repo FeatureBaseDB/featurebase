@@ -991,7 +991,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
-		target := []uint64{1, 2, 3}
+		target := []uint64{162529281, 159383553, 160432129}
 		resp := pilosa.TranslateKeysResponse{}
 		err = cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp)
 		if err != nil {
