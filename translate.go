@@ -286,10 +286,6 @@ func (s *InMemTranslateStore) SetReadOnly(v bool) {
 func (s *InMemTranslateStore) TranslateKey(key string) (uint64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if s.readOnly {
-		return 0, nil
-	}
 	return s.translateKey(key)
 }
 
@@ -298,10 +294,6 @@ func (s *InMemTranslateStore) TranslateKey(key string) (uint64, error) {
 func (s *InMemTranslateStore) TranslateKeys(keys []string) (_ []uint64, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if s.readOnly {
-		return nil, nil
-	}
 
 	ids := make([]uint64, len(keys))
 	for i := range keys {
@@ -316,6 +308,8 @@ func (s *InMemTranslateStore) translateKey(key string) (_ uint64, err error) {
 	// Return id if it has been added.
 	if id, ok := s.idsByKey[key]; ok {
 		return id, nil
+	} else if s.readOnly {
+		return 0, nil
 	}
 
 	// Generate a new id and update db.
