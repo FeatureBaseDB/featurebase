@@ -23,8 +23,6 @@ import (
 	"github.com/pilosa/pilosa/v2/boltdb"
 )
 
-const PartitionN = 256
-
 // Holder is a test wrapper for pilosa.Holder.
 type Holder struct {
 	*pilosa.Holder
@@ -37,7 +35,7 @@ func NewHolder() *Holder {
 		panic(err)
 	}
 
-	h := &Holder{Holder: pilosa.NewHolder(PartitionN)}
+	h := &Holder{Holder: pilosa.NewHolder(pilosa.DefaultPartitionN)}
 	h.Path = path
 	h.Holder.NewAttrStore = boltdb.NewAttrStore
 
@@ -63,7 +61,7 @@ func (h *Holder) Close() error {
 // Note that the holder must be Closed first.
 func (h *Holder) Reopen() error {
 	path, logger := h.Path, h.Holder.Logger
-	h.Holder = pilosa.NewHolder(PartitionN)
+	h.Holder = pilosa.NewHolder(pilosa.DefaultPartitionN)
 	h.Holder.Path = path
 	h.Holder.Logger = logger
 	h.Holder.NewAttrStore = boltdb.NewAttrStore
