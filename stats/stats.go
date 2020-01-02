@@ -25,7 +25,7 @@ import (
 )
 
 // Expvar global expvar map.
-var Expvar = expvar.NewMap("index")
+var Expvar *expvar.Map
 
 // StatsClient represents a client to a stats server.
 type StatsClient interface {
@@ -90,6 +90,9 @@ type expvarStatsClient struct {
 // NewExpvarStatsClient returns a new instance of ExpvarStatsClient.
 // This client points at the root of the expvar index map.
 func NewExpvarStatsClient() *expvarStatsClient {
+	if Expvar == nil {
+		Expvar = expvar.NewMap("index")
+	}
 	return &expvarStatsClient{
 		m: Expvar,
 	}
