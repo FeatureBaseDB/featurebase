@@ -81,9 +81,6 @@ type Holder struct {
 
 	snapshotQueue snapshotQueue
 
-	// Manages replication from the primary node.
-	primaryTranslateNode *Node
-
 	// Instantiates new translation stores
 	OpenTranslateStore  OpenTranslateStoreFunc
 	OpenTranslateReader OpenTranslateReaderFunc
