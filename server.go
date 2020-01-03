@@ -419,7 +419,7 @@ func (s *Server) InternalClient() InternalClient {
 
 // loadNewExtensions loads extensions that have been
 // registered since the last call to loadNewExtensions.
-func (s *Server) loadNewExtensions() error {
+func (s *Server) loadNewExtensions() error { //nolint:unused
 	return s.loadExtensions(ext.NewExtensions())
 }
 
