@@ -164,7 +164,6 @@ func (i *Index) Open() (err error) {
 		return errors.Wrap(err, "opening attrstore")
 	}
 
-	// TODO(BBJ): Support non-default partition counts.
 	i.logger.Debugf("open translate store for index: %s", i.name)
 	for partitionID := 0; partitionID < i.partitionN; partitionID++ {
 		store, err := i.OpenTranslateStore(i.TranslateStorePath(partitionID), i.name, "", partitionID, i.partitionN)
