@@ -432,6 +432,9 @@ func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 	}
 
 	// Apply field options.
+	// This is already happening in f.Open() just before this, but in
+	// that case, the options being applied are those read from the meta
+	// file on disk.
 	if err := f.applyOptions(opt); err != nil {
 		f.Close()
 		return nil, errors.Wrap(err, "applying options")

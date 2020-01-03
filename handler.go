@@ -116,11 +116,12 @@ type ImportValueRequest struct {
 	Field string
 	// if Shard is MaxUint64 (an impossible shard value), this
 	// indicates that the column IDs may come from multiple shards.
-	Shard       uint64
-	ColumnIDs   []uint64
-	ColumnKeys  []string
-	Values      []int64
-	FloatValues []float64
+	Shard        uint64
+	ColumnIDs    []uint64
+	ColumnKeys   []string
+	Values       []int64
+	FloatValues  []float64
+	StringValues []string
 }
 
 func (ivr *ImportValueRequest) Len() int           { return len(ivr.ColumnIDs) }
@@ -134,15 +135,26 @@ func (ivr *ImportValueRequest) Swap(i, j int) {
 	}
 }
 
-func (i *ImportValueRequest) Validate() error {
-	if i.Index == "" || i.Field == "" {
-		return errors.Errorf("index and field required, but got '%s' and '%s'", i.Index, i.Field)
+// Validate ensures that the payload of the request is valid.
+func (ivr *ImportValueRequest) Validate() error {
+	if ivr.Index == "" || ivr.Field == "" {
+		return errors.Errorf("index and field required, but got '%s' and '%s'", ivr.Index, ivr.Field)
 	}
-	if len(i.ColumnIDs) != 0 && len(i.ColumnKeys) != 0 {
+	if len(ivr.ColumnIDs) != 0 && len(ivr.ColumnKeys) != 0 {
 		return errors.Errorf("must pass either column ids or keys, but not both")
 	}
-	if len(i.Values) != 0 && len(i.FloatValues) != 0 {
-		return errors.Errorf("must pass ints or floats but not both")
+	var valueSetCount int
+	if len(ivr.Values) != 0 {
+		valueSetCount++
+	}
+	if len(ivr.FloatValues) != 0 {
+		valueSetCount++
+	}
+	if len(ivr.StringValues) != 0 {
+		valueSetCount++
+	}
+	if valueSetCount > 1 {
+		return errors.Errorf("must pass ints, floats, or strings but not multiple")
 	}
 	return nil
 }

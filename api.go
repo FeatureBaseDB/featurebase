@@ -1083,6 +1083,25 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 			}
 			req.Shard = math.MaxUint64
 		}
+
+		// Translate values when the field has a ForeignIndex with keys.
+		if fidx := field.Options().ForeignIndex; fidx != "" {
+			foreignIndex := api.holder.Index(fidx)
+			if foreignIndex == nil {
+				return errors.Errorf("foreign index does not exist: %s", fidx)
+			}
+			uints, err := foreignIndex.translateStore.TranslateKeys(req.StringValues)
+			if err != nil {
+				return errors.Wrap(err, "translating string values")
+			}
+			// Because the BSI field supports negative value, we have to
+			// convert the slice of uint64 keys to a slice of int64.
+			ints := make([]int64, len(uints))
+			for i := range uints {
+				ints[i] = int64(uints[i])
+			}
+			req.Values = ints
+		}
 	}
 
 	if !options.Presorted {

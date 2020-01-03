@@ -567,16 +567,17 @@ func encodeFieldOptions(o *pilosa.FieldOptions) *internal.FieldOptions {
 		return nil
 	}
 	return &internal.FieldOptions{
-		Type:        o.Type,
-		CacheType:   o.CacheType,
-		CacheSize:   o.CacheSize,
-		Min:         o.Min,
-		Max:         o.Max,
-		Base:        o.Base,
-		Scale:       o.Scale,
-		BitDepth:    uint64(o.BitDepth),
-		TimeQuantum: string(o.TimeQuantum),
-		Keys:        o.Keys,
+		Type:         o.Type,
+		CacheType:    o.CacheType,
+		CacheSize:    o.CacheSize,
+		Min:          o.Min,
+		Max:          o.Max,
+		Base:         o.Base,
+		Scale:        o.Scale,
+		BitDepth:     uint64(o.BitDepth),
+		TimeQuantum:  string(o.TimeQuantum),
+		Keys:         o.Keys,
+		ForeignIndex: o.ForeignIndex,
 	}
 }
 
@@ -848,6 +849,7 @@ func decodeFieldOptions(options *internal.FieldOptions, m *pilosa.FieldOptions) 
 	m.BitDepth = uint(options.BitDepth)
 	m.TimeQuantum = pilosa.TimeQuantum(options.TimeQuantum)
 	m.Keys = options.Keys
+	m.ForeignIndex = options.ForeignIndex
 }
 
 func decodeNodes(a []*internal.Node, m []*pilosa.Node) {

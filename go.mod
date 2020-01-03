@@ -18,7 +18,7 @@ require (
 	github.com/gorilla/mux v1.7.0
 	github.com/hashicorp/memberlist v0.1.3
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	github.com/molecula/ext v0.0.0-20191202195653-240f38a75171
+	github.com/molecula/ext v0.0.0-20200103203257-8a458a73e8c2
 	github.com/molecula/extensions v0.0.0-20191218165536-562244600fd4
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/pelletier/go-toml v1.2.0

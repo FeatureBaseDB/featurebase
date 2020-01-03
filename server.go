@@ -380,7 +380,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.broadcaster = s
 	s.cluster.maxWritesPerRequest = s.maxWritesPerRequest
 	s.holder.broadcaster = s
-	err = s.loadExtensions()
+	err = s.loadAllExtensions()
 	if err != nil {
 		s.logger.Printf("not all plugins loaded successfully")
 	}
@@ -417,8 +417,18 @@ func (s *Server) InternalClient() InternalClient {
 	return s.defaultClient
 }
 
-func (s *Server) loadExtensions() error {
-	exts := ext.NewExtensions()
+// loadNewExtensions loads extensions that have been
+// registered since the last call to loadNewExtensions.
+func (s *Server) loadNewExtensions() error {
+	return s.loadExtensions(ext.NewExtensions())
+}
+
+// loadAllExtensions loads all extensions.
+func (s *Server) loadAllExtensions() error {
+	return s.loadExtensions(ext.AllExtensions())
+}
+
+func (s *Server) loadExtensions(exts []*ext.ExtensionInfo) error {
 	var lastError error
 	for _, extension := range exts {
 		if err := s.loadExtension(extension); err != nil {

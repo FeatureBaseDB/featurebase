@@ -108,6 +108,17 @@ func OptFieldKeys() FieldOption {
 	}
 }
 
+// OptFieldForeignIndex marks this field as a foreign key to another
+// index. That is, the values of this field should be interpreted as
+// referencing records (Pilosa columns) in another index. TODO explain
+// where/how this is used by Pilosa.
+func OptFieldForeignIndex(index string) FieldOption {
+	return func(fo *FieldOptions) error {
+		fo.ForeignIndex = index
+		return nil
+	}
+}
+
 // OptFieldTypeDefault is a functional option on FieldOptions
 // used to set the field type and cache setting to the default values.
 func OptFieldTypeDefault() FieldOption {
@@ -230,6 +241,11 @@ func OptFieldTypeBool() FieldOption {
 }
 
 // NewField returns a new instance of field.
+// NOTE: This function is only used in tests, which is why
+// it only takes a single `FieldOption` (the assumption being
+// that it's of the type `OptFieldType*`). This means
+// this function couldn't be used to set, for example,
+// `FieldOptions.Keys`.
 func NewField(path, index, name string, opts FieldOption) (*Field, error) {
 	err := validateName(name)
 	if err != nil {
@@ -594,6 +610,7 @@ func (f *Field) loadMeta() error {
 	f.options.TimeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.options.Keys = pb.Keys
 	f.options.NoStandardView = pb.NoStandardView
+	f.options.ForeignIndex = pb.ForeignIndex
 
 	return nil
 }
@@ -647,6 +664,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.BitDepth = 0
 		f.options.TimeQuantum = ""
 		f.options.Keys = opt.Keys
+		f.options.ForeignIndex = ""
 	case FieldTypeInt, FieldTypeDecimal:
 		f.options.Type = opt.Type
 		f.options.CacheType = CacheTypeNone
@@ -658,6 +676,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.BitDepth = opt.BitDepth
 		f.options.TimeQuantum = ""
 		f.options.Keys = opt.Keys
+		f.options.ForeignIndex = opt.ForeignIndex
 
 		// Create new bsiGroup.
 		bsig := &bsiGroup{
@@ -691,6 +710,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 			f.Close()
 			return errors.Wrap(err, "setting time quantum")
 		}
+		f.options.ForeignIndex = ""
 	case FieldTypeBool:
 		f.options.Type = FieldTypeBool
 		f.options.CacheType = CacheTypeNone
@@ -701,6 +721,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.BitDepth = 0
 		f.options.TimeQuantum = ""
 		f.options.Keys = false
+		f.options.ForeignIndex = ""
 	default:
 		return errors.New("invalid field type")
 	}
@@ -1580,6 +1601,7 @@ type FieldOptions struct {
 	CacheType      string      `json:"cacheType,omitempty"`
 	Type           string      `json:"type,omitempty"`
 	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
+	ForeignIndex   string      `json:"foreignIndex"`
 }
 
 // applyDefaultOptions returns a new FieldOptions object
