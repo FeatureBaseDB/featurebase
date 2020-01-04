@@ -27,12 +27,7 @@ import (
 func TestExecutor_TranslateGroupByCall(t *testing.T) {
 	holder := NewHolder(DefaultPartitionN)
 
-	cluster := newCluster()
-	cluster.holder = holder
-	cluster.Node = &Node{ID: "node1", URI: NewTestURIFromHostPort("node1", 0)}
-	if err := cluster.addNode(cluster.Node); err != nil {
-		t.Fatal(err)
-	}
+	cluster := NewTestCluster(1)
 
 	e := &executor{
 		Holder:  holder,

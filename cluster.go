@@ -2215,7 +2215,6 @@ func (c *cluster) translateIndexIDSet(ctx context.Context, indexName string, idS
 	return idMap, nil
 }
 
-
 // ClusterStatus describes the status of the cluster including its
 // state and node topology.
 type ClusterStatus struct {
