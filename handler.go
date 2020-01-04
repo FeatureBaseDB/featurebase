@@ -132,6 +132,8 @@ func (ivr *ImportValueRequest) Swap(i, j int) {
 		ivr.Values[i], ivr.Values[j] = ivr.Values[j], ivr.Values[i]
 	} else if len(ivr.FloatValues) > 0 {
 		ivr.FloatValues[i], ivr.FloatValues[j] = ivr.FloatValues[j], ivr.FloatValues[i]
+	} else if len(ivr.StringValues) > 0 {
+		ivr.StringValues[i], ivr.StringValues[j] = ivr.StringValues[j], ivr.StringValues[i]
 	}
 }
 
