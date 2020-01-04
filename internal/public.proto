@@ -120,6 +120,7 @@ message ImportValueRequest {
 	repeated string ColumnKeys = 7;
 	repeated int64 Values = 6;
 	repeated double FloatValues = 8;
+	repeated string StringValues = 9;
 }
 
 message TranslateKeysRequest {
