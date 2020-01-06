@@ -1490,21 +1490,20 @@ func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportO
 		requiredDepth = v
 	}
 	// Increase bit depth if required.
-	f.mu.RLock()
-	bitDepth := bsig.BitDepth
-	f.mu.RUnlock()
-	if requiredDepth > bitDepth {
-		if err := func() error {
-			f.mu.Lock()
-			defer f.mu.Unlock()
+	if err := func() error {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		bitDepth := bsig.BitDepth
+		if requiredDepth > bitDepth {
 			bsig.BitDepth = requiredDepth
 			f.options.BitDepth = requiredDepth
 			return f.saveMeta()
-		}(); err != nil {
-			return errors.Wrap(err, "increasing bsi bit depth")
+		} else {
+			requiredDepth = bitDepth
 		}
-	} else {
-		requiredDepth = bitDepth
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "increasing bsi bit depth")
 	}
 
 	// Import into each fragment.

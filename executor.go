@@ -3588,13 +3588,11 @@ func (e *executor) collectCallIndexNameMap(ctx context.Context, defaultIndexName
 	m[callIndex] = struct{}{}
 
 	if c.Name == "GroupBy" {
-		if filter, ok, err := c.CallArg("filter"); ok {
-			if err != nil {
-				return errors.Wrap(err, "getting filter call")
-			}
-			err := e.collectCallIndexNameMap(ctx, defaultIndexName, filter, m)
-			if err != nil {
-				return errors.Wrap(err, "collecting filter call index name")
+		for _, arg := range c.Args {
+			if arg, ok := arg.(*pql.Call); ok {
+				if err := e.collectCallIndexNameMap(ctx, defaultIndexName, arg, m); err != nil {
+					return errors.Wrap(err, "collecting group by call index name")
+				}
 			}
 		}
 	}
@@ -3617,13 +3615,11 @@ func (e *executor) collectCallIndexKeys(index string, idx *Index, isDefaultIndex
 		}
 
 		if callIndex := c.CallIndex(); callIndex == index || (callIndex == "" && isDefaultIndex) {
-			if filter, ok, err := c.CallArg("filter"); ok {
-				if err != nil {
-					return errors.Wrap(err, "getting filter call")
-				}
-				err = e.collectCallIndexKeys(index, idx, isDefaultIndex, filter, keySet)
-				if err != nil {
-					return errors.Wrap(err, "translating filter call")
+			for _, arg := range c.Args {
+				if arg, ok := arg.(*pql.Call); ok {
+					if err := e.collectCallIndexKeys(index, idx, isDefaultIndex, arg, keySet); err != nil {
+						return errors.Wrap(err, "translating group by arg call")
+					}
 				}
 			}
 		}
