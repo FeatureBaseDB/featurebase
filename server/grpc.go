@@ -42,8 +42,14 @@ type grpcHandler struct {
 // to the error (returning it as a status.Error). It is
 // assumed that the input err is non-nil.
 func errToStatusError(err error) error {
+	// Check error string.
 	switch errors.Cause(err) {
 	case pilosa.ErrIndexNotFound, pilosa.ErrFieldNotFound:
+		return status.Error(codes.NotFound, err.Error())
+	}
+	// Check error type.
+	switch errors.Cause(err).(type) {
+	case pilosa.NotFoundError:
 		return status.Error(codes.NotFound, err.Error())
 	}
 	return status.Error(codes.Unknown, err.Error())
@@ -69,11 +75,36 @@ func (h grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 	return nil
 }
 
+// fieldDataType returns a useful data type (string,
+// uint64, bool, etc.) based on the Pilosa field type.
+func fieldDataType(f *pilosa.Field) string {
+	switch f.Type() {
+	case "set", "mutex":
+		if f.Options().Keys {
+			return "[]string"
+		} else {
+			return "[]uint64"
+		}
+	case "int":
+		return "int64"
+	case "decimal":
+		return "float64"
+	case "bool":
+		return "bool"
+	case "time":
+		return "int64" // TODO: this is a placeholder
+	default:
+		panic(fmt.Sprintf("unimplemented fieldDataType: %s", f.Type()))
+	}
+}
+
 // Inspect handles the inspect request and sends an InspectResponse to the stream.
 func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectServer) error {
+	const defaultLimit = 100000
+
 	index, err := h.api.Index(context.Background(), req.Index)
 	if err != nil {
-		return errors.Wrap(err, "getting index")
+		return errToStatusError(err)
 	}
 
 	var fields []*pilosa.Field
@@ -91,20 +122,64 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 		}
 	}
 
-	// If there are no matching fields, then don't return any records.
-	if len(fields) == 0 {
-		return nil
+	limit := req.Limit
+	if limit == 0 {
+		limit = defaultLimit
 	}
+	offset := req.Offset
 
-	if ints, ok := req.Columns.Type.(*pb.IdsOrKeys_Ids); ok {
+	if !index.Options().Keys {
+		ints, ok := req.Columns.Type.(*pb.IdsOrKeys_Ids)
+		if !ok {
+			return errors.New("invalid int columns")
+		}
 		ci := []*pb.ColumnInfo{
 			{Name: "_id", Datatype: "uint64"},
 		}
 		for _, field := range fields {
-			ci = append(ci, &pb.ColumnInfo{Name: field.Name(), Datatype: field.Type()}) // TODO: field.Type likely doesn't align with supported datatypes
+			ci = append(ci, &pb.ColumnInfo{Name: field.Name(), Datatype: fieldDataType(field)})
 		}
 
-		for _, col := range ints.Ids.Vals {
+		// If Columns is empty, then get the _exists list (via All()),
+		// from the index and loop over that instead.
+		cols := ints.Ids.Vals
+		if len(cols) > 0 {
+			// Apply limit/offset to the provided columns.
+			if int(offset) >= len(cols) {
+				return nil
+			}
+			end := limit + offset
+			if int(end) > len(cols) {
+				end = uint64(len(cols))
+			}
+			cols = cols[offset:end]
+		} else {
+			// Prevent getting too many records by forcing a limit.
+			pql := fmt.Sprintf("All(limit=%d, offset=%d)", limit, offset)
+			query := pilosa.QueryRequest{
+				Index: req.Index,
+				Query: pql,
+			}
+			resp, err := h.api.Query(context.Background(), &query)
+			if err != nil {
+				return errors.Wrapf(err, "querying for all: %s", pql)
+			}
+
+			ids, ok := resp.Results[0].(*pilosa.Row)
+			if !ok {
+				return errors.Wrap(err, "getting results as a row")
+			}
+
+			limitedCols := ids.Columns()
+			if len(limitedCols) == 0 {
+				// If cols is still empty after the limit/offset, then
+				// return with no results.
+				return nil
+			}
+			cols = limitedCols
+		}
+
+		for _, col := range cols {
 			rowResp := &pb.RowResponse{
 				Headers: ci,
 				Columns: []*pb.ColumnResponse{
@@ -178,6 +253,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
 					}
+
 				case "decimal":
 					value, exists, err := field.FloatValue(col)
 					if err != nil {
@@ -189,6 +265,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
 					}
+
 				case "bool":
 					pql := fmt.Sprintf("Rows(%s, column=%d)", field.Name(), col)
 					query := pilosa.QueryRequest{
@@ -216,6 +293,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
 					}
+
 				case "time":
 					rowResp.Columns = append(rowResp.Columns,
 						&pb.ColumnResponse{ColumnVal: nil})
@@ -227,15 +305,58 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 			}
 		}
 
-	} else if keys, ok := req.Columns.Type.(*pb.IdsOrKeys_Keys); ok {
+	} else {
+		keys, ok := req.Columns.Type.(*pb.IdsOrKeys_Keys)
+		if !ok {
+			return errToStatusError(errors.New("invalid key columns"))
+		}
 		ci := []*pb.ColumnInfo{
 			{Name: "_id", Datatype: "string"},
 		}
 		for _, field := range fields {
-			ci = append(ci, &pb.ColumnInfo{Name: field.Name(), Datatype: field.Type()}) // TODO: field.Type likely doesn't align with supported datatypes
+			ci = append(ci, &pb.ColumnInfo{Name: field.Name(), Datatype: fieldDataType(field)})
 		}
 
-		for _, col := range keys.Keys.Vals {
+		// If Columns is empty, then get the _exists list (via All()),
+		// from the index and loop over that instead.
+		cols := keys.Keys.Vals
+		if len(cols) > 0 {
+			// Apply limit/offset to the provided columns.
+			if int(offset) >= len(cols) {
+				return nil
+			}
+			end := limit + offset
+			if int(end) > len(cols) {
+				end = uint64(len(cols))
+			}
+			cols = cols[offset:end]
+		} else {
+			// Prevent getting too many records by forcing a limit.
+			pql := fmt.Sprintf("All(limit=%d, offset=%d)", limit, offset)
+			query := pilosa.QueryRequest{
+				Index: req.Index,
+				Query: pql,
+			}
+			resp, err := h.api.Query(context.Background(), &query)
+			if err != nil {
+				return errors.Wrapf(err, "querying for all: %s", pql)
+			}
+
+			ids, ok := resp.Results[0].(*pilosa.Row)
+			if !ok {
+				return errors.Wrap(err, "getting results as a row")
+			}
+
+			limitedCols := ids.Keys
+			if len(limitedCols) == 0 {
+				// If cols is still empty after the limit/offset, then
+				// return with no results.
+				return nil
+			}
+			cols = limitedCols
+		}
+
+		for _, col := range cols {
 			rowResp := &pb.RowResponse{
 				Headers: ci,
 				Columns: []*pb.ColumnResponse{
@@ -433,35 +554,35 @@ func makeRows(resp pilosa.QueryResponse, logger logger.Logger) chan *pb.RowRespo
 						}
 					*/
 				}
-			case pilosa.Pair:
-				if r.Key != "" {
+			case pilosa.PairField:
+				if r.Pair.Key != "" {
 					results <- &pb.RowResponse{
 						Headers: []*pb.ColumnInfo{
-							{Name: "_id", Datatype: "string"},
+							{Name: r.Field, Datatype: "string"},
 							{Name: "count", Datatype: "uint64"},
 						},
 						Columns: []*pb.ColumnResponse{
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: r.Key}},
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: r.Count}},
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: r.Pair.Key}},
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: r.Pair.Count}},
 						},
 					}
 				} else {
 					results <- &pb.RowResponse{
 						Headers: []*pb.ColumnInfo{
-							{Name: "_id", Datatype: "uint64"},
+							{Name: r.Field, Datatype: "uint64"},
 							{Name: "count", Datatype: "uint64"},
 						},
 						Columns: []*pb.ColumnResponse{
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: r.ID}},
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: r.Count}},
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: r.Pair.ID}},
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: r.Pair.Count}},
 						},
 					}
 				}
-			case []pilosa.Pair:
+			case *pilosa.PairsField:
 				// Determine if the ID has string keys.
 				var stringKeys bool
-				if len(r) > 0 {
-					if r[0].Key != "" {
+				if len(r.Pairs) > 0 {
+					if r.Pairs[0].Key != "" {
 						stringKeys = true
 					}
 				}
@@ -471,10 +592,10 @@ func makeRows(resp pilosa.QueryResponse, logger logger.Logger) chan *pb.RowRespo
 					dtype = "string"
 				}
 				ci := []*pb.ColumnInfo{
-					{Name: "_id", Datatype: dtype},
+					{Name: r.Field, Datatype: dtype},
 					{Name: "count", Datatype: "uint64"},
 				}
-				for _, pair := range r {
+				for _, pair := range r.Pairs {
 					if stringKeys {
 						results <- &pb.RowResponse{
 							Headers: ci,
@@ -528,7 +649,7 @@ func makeRows(resp pilosa.QueryResponse, logger logger.Logger) chan *pb.RowRespo
 				}
 			case pilosa.RowIdentifiers:
 				if len(r.Keys) > 0 {
-					ci := []*pb.ColumnInfo{{Name: "_id", Datatype: "string"}}
+					ci := []*pb.ColumnInfo{{Name: r.Field(), Datatype: "string"}}
 					for _, key := range r.Keys {
 						results <- &pb.RowResponse{
 							Headers: ci,
@@ -538,7 +659,7 @@ func makeRows(resp pilosa.QueryResponse, logger logger.Logger) chan *pb.RowRespo
 						ci = nil
 					}
 				} else {
-					ci := []*pb.ColumnInfo{{Name: "_id", Datatype: "uint64"}}
+					ci := []*pb.ColumnInfo{{Name: r.Field(), Datatype: "uint64"}}
 					for _, id := range r.Rows {
 						results <- &pb.RowResponse{
 							Headers: ci,
@@ -573,6 +694,27 @@ func makeRows(resp pilosa.QueryResponse, logger logger.Logger) chan *pb.RowRespo
 						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: r.Val}},
 						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: r.Count}},
 					}}
+			case pilosa.SignedRow:
+				// TODO: address the overflow issue with values outside the int64 range
+				ci := []*pb.ColumnInfo{{Name: r.Field(), Datatype: "int64"}}
+				negs := r.Neg.Columns()
+				for i := len(negs) - 1; i >= 0; i-- {
+					results <- &pb.RowResponse{
+						Headers: ci,
+						Columns: []*pb.ColumnResponse{
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: -1 * int64(negs[i])}},
+						}}
+					ci = nil
+				}
+				for _, id := range r.Pos.Columns() {
+					results <- &pb.RowResponse{
+						Headers: ci,
+						Columns: []*pb.ColumnResponse{
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: int64(id)}},
+						}}
+					ci = nil
+				}
+
 			default:
 				logger.Printf("unhandled %T\n", r)
 				breakLoop = true
@@ -621,7 +763,7 @@ func (s *grpcServer) Serve(tlsConfig *tls.Config) error {
 	if err != nil {
 		return errors.Wrap(err, "creating listener")
 	}
-	s.logger.Printf("enabled grpc listening on %s", s.hostPort)
+	s.logger.Printf("enabled grpc listening on %s", lis.Addr())
 
 	opts := make([]grpc.ServerOption, 0)
 	if tlsConfig != nil {

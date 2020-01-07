@@ -18,7 +18,8 @@ require (
 	github.com/gorilla/mux v1.7.0
 	github.com/hashicorp/memberlist v0.1.3
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	github.com/molecula/apophenia v0.0.0-20190827192002-68b7a14a478b
+	github.com/molecula/ext v0.0.0-20191202195653-240f38a75171
+	github.com/molecula/extensions v0.0.0-20191218165536-562244600fd4
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/pelletier/go-toml v1.2.0
 	github.com/pkg/errors v0.8.1
@@ -34,15 +35,17 @@ require (
 	github.com/uber-go/atomic v1.4.0 // indirect
 	github.com/uber/jaeger-client-go v2.16.0+incompatible
 	github.com/uber/jaeger-lib v2.2.0+incompatible // indirect
+	github.com/youtube/vitess v2.1.1+incompatible // indirect
 	go.uber.org/atomic v1.4.0 // indirect
 	golang.org/x/crypto v0.0.0-20190426145343-a29dc8fdc734 // indirect
-	golang.org/x/net v0.0.0-20190424112056-4829fb13d2c6 // indirect
+	golang.org/x/net v0.0.0-20190424112056-4829fb13d2c6
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/sys v0.0.0-20190429190828-d89cdac9e872 // indirect
 	golang.org/x/text v0.3.2 // indirect
 	google.golang.org/grpc v1.24.0
 	modernc.org/mathutil v1.0.0
 	modernc.org/strutil v1.0.0
+	vitess.io/vitess v2.1.1+incompatible // indirect
 )
 
 go 1.13

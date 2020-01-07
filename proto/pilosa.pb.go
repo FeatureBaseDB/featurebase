@@ -4,13 +4,14 @@
 package pilosa
 
 import (
-	context "context"
 	fmt "fmt"
 	proto "github.com/golang/protobuf/proto"
-	grpc "google.golang.org/grpc"
-	codes "google.golang.org/grpc/codes"
-	status "google.golang.org/grpc/status"
 	math "math"
+)
+
+import (
+	context "golang.org/x/net/context"
+	grpc "google.golang.org/grpc"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -22,7 +23,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
+const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 
 type QueryPQLRequest struct {
 	Index                string   `protobuf:"bytes,1,opt,name=index,proto3" json:"index,omitempty"`
@@ -71,9 +72,57 @@ func (m *QueryPQLRequest) GetPql() string {
 	return ""
 }
 
+type StatusError struct {
+	Code                 uint32   `protobuf:"varint,1,opt,name=Code,proto3" json:"Code,omitempty"`
+	Message              string   `protobuf:"bytes,2,opt,name=Message,proto3" json:"Message,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *StatusError) Reset()         { *m = StatusError{} }
+func (m *StatusError) String() string { return proto.CompactTextString(m) }
+func (*StatusError) ProtoMessage()    {}
+func (*StatusError) Descriptor() ([]byte, []int) {
+	return fileDescriptor_ef0691a44d1e275c, []int{1}
+}
+
+func (m *StatusError) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_StatusError.Unmarshal(m, b)
+}
+func (m *StatusError) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_StatusError.Marshal(b, m, deterministic)
+}
+func (m *StatusError) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StatusError.Merge(m, src)
+}
+func (m *StatusError) XXX_Size() int {
+	return xxx_messageInfo_StatusError.Size(m)
+}
+func (m *StatusError) XXX_DiscardUnknown() {
+	xxx_messageInfo_StatusError.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StatusError proto.InternalMessageInfo
+
+func (m *StatusError) GetCode() uint32 {
+	if m != nil {
+		return m.Code
+	}
+	return 0
+}
+
+func (m *StatusError) GetMessage() string {
+	if m != nil {
+		return m.Message
+	}
+	return ""
+}
+
 type RowResponse struct {
 	Headers              []*ColumnInfo     `protobuf:"bytes,1,rep,name=headers,proto3" json:"headers,omitempty"`
 	Columns              []*ColumnResponse `protobuf:"bytes,2,rep,name=columns,proto3" json:"columns,omitempty"`
+	StatusError          *StatusError      `protobuf:"bytes,3,opt,name=StatusError,proto3" json:"StatusError,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
 	XXX_unrecognized     []byte            `json:"-"`
 	XXX_sizecache        int32             `json:"-"`
@@ -83,7 +132,7 @@ func (m *RowResponse) Reset()         { *m = RowResponse{} }
 func (m *RowResponse) String() string { return proto.CompactTextString(m) }
 func (*RowResponse) ProtoMessage()    {}
 func (*RowResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{1}
+	return fileDescriptor_ef0691a44d1e275c, []int{2}
 }
 
 func (m *RowResponse) XXX_Unmarshal(b []byte) error {
@@ -118,6 +167,13 @@ func (m *RowResponse) GetColumns() []*ColumnResponse {
 	return nil
 }
 
+func (m *RowResponse) GetStatusError() *StatusError {
+	if m != nil {
+		return m.StatusError
+	}
+	return nil
+}
+
 type ColumnInfo struct {
 	Name                 string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Datatype             string   `protobuf:"bytes,2,opt,name=datatype,proto3" json:"datatype,omitempty"`
@@ -130,7 +186,7 @@ func (m *ColumnInfo) Reset()         { *m = ColumnInfo{} }
 func (m *ColumnInfo) String() string { return proto.CompactTextString(m) }
 func (*ColumnInfo) ProtoMessage()    {}
 func (*ColumnInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{2}
+	return fileDescriptor_ef0691a44d1e275c, []int{3}
 }
 
 func (m *ColumnInfo) XXX_Unmarshal(b []byte) error {
@@ -185,7 +241,7 @@ func (m *ColumnResponse) Reset()         { *m = ColumnResponse{} }
 func (m *ColumnResponse) String() string { return proto.CompactTextString(m) }
 func (*ColumnResponse) ProtoMessage()    {}
 func (*ColumnResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{3}
+	return fileDescriptor_ef0691a44d1e275c, []int{4}
 }
 
 func (m *ColumnResponse) XXX_Unmarshal(b []byte) error {
@@ -321,9 +377,9 @@ func (m *ColumnResponse) GetFloat64Val() float64 {
 	return 0
 }
 
-// XXX_OneofWrappers is for the internal use of the proto package.
-func (*ColumnResponse) XXX_OneofWrappers() []interface{} {
-	return []interface{}{
+// XXX_OneofFuncs is for the internal use of the proto package.
+func (*ColumnResponse) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
+	return _ColumnResponse_OneofMarshaler, _ColumnResponse_OneofUnmarshaler, _ColumnResponse_OneofSizer, []interface{}{
 		(*ColumnResponse_StringVal)(nil),
 		(*ColumnResponse_Uint64Val)(nil),
 		(*ColumnResponse_Int64Val)(nil),
@@ -335,10 +391,162 @@ func (*ColumnResponse) XXX_OneofWrappers() []interface{} {
 	}
 }
 
+func _ColumnResponse_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
+	m := msg.(*ColumnResponse)
+	// columnVal
+	switch x := m.ColumnVal.(type) {
+	case *ColumnResponse_StringVal:
+		b.EncodeVarint(1<<3 | proto.WireBytes)
+		b.EncodeStringBytes(x.StringVal)
+	case *ColumnResponse_Uint64Val:
+		b.EncodeVarint(2<<3 | proto.WireVarint)
+		b.EncodeVarint(uint64(x.Uint64Val))
+	case *ColumnResponse_Int64Val:
+		b.EncodeVarint(3<<3 | proto.WireVarint)
+		b.EncodeVarint(uint64(x.Int64Val))
+	case *ColumnResponse_BoolVal:
+		t := uint64(0)
+		if x.BoolVal {
+			t = 1
+		}
+		b.EncodeVarint(4<<3 | proto.WireVarint)
+		b.EncodeVarint(t)
+	case *ColumnResponse_BlobVal:
+		b.EncodeVarint(5<<3 | proto.WireBytes)
+		b.EncodeRawBytes(x.BlobVal)
+	case *ColumnResponse_Uint64ArrayVal:
+		b.EncodeVarint(6<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Uint64ArrayVal); err != nil {
+			return err
+		}
+	case *ColumnResponse_StringArrayVal:
+		b.EncodeVarint(7<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.StringArrayVal); err != nil {
+			return err
+		}
+	case *ColumnResponse_Float64Val:
+		b.EncodeVarint(8<<3 | proto.WireFixed64)
+		b.EncodeFixed64(math.Float64bits(x.Float64Val))
+	case nil:
+	default:
+		return fmt.Errorf("ColumnResponse.ColumnVal has unexpected type %T", x)
+	}
+	return nil
+}
+
+func _ColumnResponse_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
+	m := msg.(*ColumnResponse)
+	switch tag {
+	case 1: // columnVal.stringVal
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		x, err := b.DecodeStringBytes()
+		m.ColumnVal = &ColumnResponse_StringVal{x}
+		return true, err
+	case 2: // columnVal.uint64Val
+		if wire != proto.WireVarint {
+			return true, proto.ErrInternalBadWireType
+		}
+		x, err := b.DecodeVarint()
+		m.ColumnVal = &ColumnResponse_Uint64Val{x}
+		return true, err
+	case 3: // columnVal.int64Val
+		if wire != proto.WireVarint {
+			return true, proto.ErrInternalBadWireType
+		}
+		x, err := b.DecodeVarint()
+		m.ColumnVal = &ColumnResponse_Int64Val{int64(x)}
+		return true, err
+	case 4: // columnVal.boolVal
+		if wire != proto.WireVarint {
+			return true, proto.ErrInternalBadWireType
+		}
+		x, err := b.DecodeVarint()
+		m.ColumnVal = &ColumnResponse_BoolVal{x != 0}
+		return true, err
+	case 5: // columnVal.blobVal
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		x, err := b.DecodeRawBytes(true)
+		m.ColumnVal = &ColumnResponse_BlobVal{x}
+		return true, err
+	case 6: // columnVal.uint64ArrayVal
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(Uint64Array)
+		err := b.DecodeMessage(msg)
+		m.ColumnVal = &ColumnResponse_Uint64ArrayVal{msg}
+		return true, err
+	case 7: // columnVal.stringArrayVal
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(StringArray)
+		err := b.DecodeMessage(msg)
+		m.ColumnVal = &ColumnResponse_StringArrayVal{msg}
+		return true, err
+	case 8: // columnVal.float64Val
+		if wire != proto.WireFixed64 {
+			return true, proto.ErrInternalBadWireType
+		}
+		x, err := b.DecodeFixed64()
+		m.ColumnVal = &ColumnResponse_Float64Val{math.Float64frombits(x)}
+		return true, err
+	default:
+		return false, nil
+	}
+}
+
+func _ColumnResponse_OneofSizer(msg proto.Message) (n int) {
+	m := msg.(*ColumnResponse)
+	// columnVal
+	switch x := m.ColumnVal.(type) {
+	case *ColumnResponse_StringVal:
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(len(x.StringVal)))
+		n += len(x.StringVal)
+	case *ColumnResponse_Uint64Val:
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(x.Uint64Val))
+	case *ColumnResponse_Int64Val:
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(x.Int64Val))
+	case *ColumnResponse_BoolVal:
+		n += 1 // tag and wire
+		n += 1
+	case *ColumnResponse_BlobVal:
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(len(x.BlobVal)))
+		n += len(x.BlobVal)
+	case *ColumnResponse_Uint64ArrayVal:
+		s := proto.Size(x.Uint64ArrayVal)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *ColumnResponse_StringArrayVal:
+		s := proto.Size(x.StringArrayVal)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *ColumnResponse_Float64Val:
+		n += 1 // tag and wire
+		n += 8
+	case nil:
+	default:
+		panic(fmt.Sprintf("proto: unexpected type %T in oneof", x))
+	}
+	return n
+}
+
 type InspectRequest struct {
 	Index                string     `protobuf:"bytes,1,opt,name=index,proto3" json:"index,omitempty"`
 	Columns              *IdsOrKeys `protobuf:"bytes,2,opt,name=columns,proto3" json:"columns,omitempty"`
 	FilterFields         []string   `protobuf:"bytes,3,rep,name=filterFields,proto3" json:"filterFields,omitempty"`
+	Limit                uint64     `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	Offset               uint64     `protobuf:"varint,5,opt,name=offset,proto3" json:"offset,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
 	XXX_unrecognized     []byte     `json:"-"`
 	XXX_sizecache        int32      `json:"-"`
@@ -348,7 +556,7 @@ func (m *InspectRequest) Reset()         { *m = InspectRequest{} }
 func (m *InspectRequest) String() string { return proto.CompactTextString(m) }
 func (*InspectRequest) ProtoMessage()    {}
 func (*InspectRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{4}
+	return fileDescriptor_ef0691a44d1e275c, []int{5}
 }
 
 func (m *InspectRequest) XXX_Unmarshal(b []byte) error {
@@ -390,6 +598,20 @@ func (m *InspectRequest) GetFilterFields() []string {
 	return nil
 }
 
+func (m *InspectRequest) GetLimit() uint64 {
+	if m != nil {
+		return m.Limit
+	}
+	return 0
+}
+
+func (m *InspectRequest) GetOffset() uint64 {
+	if m != nil {
+		return m.Offset
+	}
+	return 0
+}
+
 type Uint64Array struct {
 	Vals                 []uint64 `protobuf:"varint,1,rep,packed,name=vals,proto3" json:"vals,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
@@ -401,7 +623,7 @@ func (m *Uint64Array) Reset()         { *m = Uint64Array{} }
 func (m *Uint64Array) String() string { return proto.CompactTextString(m) }
 func (*Uint64Array) ProtoMessage()    {}
 func (*Uint64Array) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{5}
+	return fileDescriptor_ef0691a44d1e275c, []int{6}
 }
 
 func (m *Uint64Array) XXX_Unmarshal(b []byte) error {
@@ -440,7 +662,7 @@ func (m *StringArray) Reset()         { *m = StringArray{} }
 func (m *StringArray) String() string { return proto.CompactTextString(m) }
 func (*StringArray) ProtoMessage()    {}
 func (*StringArray) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{6}
+	return fileDescriptor_ef0691a44d1e275c, []int{7}
 }
 
 func (m *StringArray) XXX_Unmarshal(b []byte) error {
@@ -482,7 +704,7 @@ func (m *IdsOrKeys) Reset()         { *m = IdsOrKeys{} }
 func (m *IdsOrKeys) String() string { return proto.CompactTextString(m) }
 func (*IdsOrKeys) ProtoMessage()    {}
 func (*IdsOrKeys) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{7}
+	return fileDescriptor_ef0691a44d1e275c, []int{8}
 }
 
 func (m *IdsOrKeys) XXX_Unmarshal(b []byte) error {
@@ -540,16 +762,83 @@ func (m *IdsOrKeys) GetKeys() *StringArray {
 	return nil
 }
 
-// XXX_OneofWrappers is for the internal use of the proto package.
-func (*IdsOrKeys) XXX_OneofWrappers() []interface{} {
-	return []interface{}{
+// XXX_OneofFuncs is for the internal use of the proto package.
+func (*IdsOrKeys) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
+	return _IdsOrKeys_OneofMarshaler, _IdsOrKeys_OneofUnmarshaler, _IdsOrKeys_OneofSizer, []interface{}{
 		(*IdsOrKeys_Ids)(nil),
 		(*IdsOrKeys_Keys)(nil),
 	}
 }
 
+func _IdsOrKeys_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
+	m := msg.(*IdsOrKeys)
+	// type
+	switch x := m.Type.(type) {
+	case *IdsOrKeys_Ids:
+		b.EncodeVarint(1<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Ids); err != nil {
+			return err
+		}
+	case *IdsOrKeys_Keys:
+		b.EncodeVarint(2<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Keys); err != nil {
+			return err
+		}
+	case nil:
+	default:
+		return fmt.Errorf("IdsOrKeys.Type has unexpected type %T", x)
+	}
+	return nil
+}
+
+func _IdsOrKeys_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
+	m := msg.(*IdsOrKeys)
+	switch tag {
+	case 1: // type.ids
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(Uint64Array)
+		err := b.DecodeMessage(msg)
+		m.Type = &IdsOrKeys_Ids{msg}
+		return true, err
+	case 2: // type.keys
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(StringArray)
+		err := b.DecodeMessage(msg)
+		m.Type = &IdsOrKeys_Keys{msg}
+		return true, err
+	default:
+		return false, nil
+	}
+}
+
+func _IdsOrKeys_OneofSizer(msg proto.Message) (n int) {
+	m := msg.(*IdsOrKeys)
+	// type
+	switch x := m.Type.(type) {
+	case *IdsOrKeys_Ids:
+		s := proto.Size(x.Ids)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *IdsOrKeys_Keys:
+		s := proto.Size(x.Keys)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case nil:
+	default:
+		panic(fmt.Sprintf("proto: unexpected type %T in oneof", x))
+	}
+	return n
+}
+
 func init() {
 	proto.RegisterType((*QueryPQLRequest)(nil), "pilosa.QueryPQLRequest")
+	proto.RegisterType((*StatusError)(nil), "pilosa.StatusError")
 	proto.RegisterType((*RowResponse)(nil), "pilosa.RowResponse")
 	proto.RegisterType((*ColumnInfo)(nil), "pilosa.ColumnInfo")
 	proto.RegisterType((*ColumnResponse)(nil), "pilosa.ColumnResponse")
@@ -557,44 +846,6 @@ func init() {
 	proto.RegisterType((*Uint64Array)(nil), "pilosa.Uint64Array")
 	proto.RegisterType((*StringArray)(nil), "pilosa.StringArray")
 	proto.RegisterType((*IdsOrKeys)(nil), "pilosa.IdsOrKeys")
-}
-
-func init() { proto.RegisterFile("pilosa.proto", fileDescriptor_ef0691a44d1e275c) }
-
-var fileDescriptor_ef0691a44d1e275c = []byte{
-	// 497 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x53, 0x5d, 0x6b, 0xd4, 0x40,
-	0x14, 0xcd, 0x34, 0xe9, 0xee, 0xe6, 0x66, 0x59, 0xf5, 0x2a, 0x1a, 0x16, 0x91, 0x98, 0x17, 0x23,
-	0x4a, 0x29, 0xab, 0x08, 0x4a, 0x7d, 0xb0, 0x82, 0x64, 0x51, 0xb0, 0x1d, 0xb1, 0xef, 0xb3, 0xcd,
-	0x6c, 0x0d, 0xce, 0x66, 0xd2, 0x4c, 0xd6, 0x9a, 0x57, 0xff, 0xa2, 0x7f, 0x48, 0x66, 0xf2, 0xb1,
-	0x49, 0x61, 0x7d, 0x9b, 0x39, 0xe7, 0xdc, 0xef, 0x7b, 0x61, 0x9a, 0xa7, 0x42, 0x2a, 0x76, 0x94,
-	0x17, 0xb2, 0x94, 0x38, 0xaa, 0x7f, 0xe1, 0x5b, 0xb8, 0x73, 0xbe, 0xe5, 0x45, 0x75, 0x76, 0xfe,
-	0x85, 0xf2, 0xeb, 0x2d, 0x57, 0x25, 0x3e, 0x80, 0xc3, 0x34, 0x4b, 0xf8, 0x6f, 0x9f, 0x04, 0x24,
-	0x72, 0x69, 0xfd, 0xc1, 0xbb, 0x60, 0xe7, 0xd7, 0xc2, 0x3f, 0x30, 0x98, 0x7e, 0x86, 0x1b, 0xf0,
-	0xa8, 0xbc, 0xa1, 0x5c, 0xe5, 0x32, 0x53, 0x1c, 0x5f, 0xc2, 0xf8, 0x07, 0x67, 0x09, 0x2f, 0x94,
-	0x4f, 0x02, 0x3b, 0xf2, 0x16, 0x78, 0xd4, 0x44, 0xfc, 0x28, 0xc5, 0x76, 0x93, 0x2d, 0xb3, 0xb5,
-	0xa4, 0xad, 0x04, 0x8f, 0x61, 0x7c, 0x69, 0x60, 0xe5, 0x1f, 0x18, 0xf5, 0xc3, 0xa1, 0xba, 0x75,
-	0x4b, 0x5b, 0x59, 0x78, 0x02, 0xb0, 0x73, 0x84, 0x08, 0x4e, 0xc6, 0x36, 0xbc, 0xc9, 0xd1, 0xbc,
-	0x71, 0x0e, 0x93, 0x84, 0x95, 0xac, 0xac, 0x72, 0xde, 0xe4, 0xd9, 0xfd, 0xc3, 0xbf, 0x07, 0x30,
-	0x1b, 0x7a, 0xc6, 0x27, 0xe0, 0xaa, 0xb2, 0x48, 0xb3, 0xab, 0x0b, 0x26, 0x6a, 0x3f, 0xb1, 0x45,
-	0x77, 0x90, 0xe6, 0xb7, 0x69, 0x56, 0xbe, 0x79, 0xad, 0x79, 0xed, 0xcf, 0xd1, 0x7c, 0x07, 0xe1,
-	0x63, 0x98, 0x74, 0xb4, 0x1d, 0x90, 0xc8, 0x8e, 0x2d, 0xda, 0x21, 0x38, 0x87, 0xf1, 0x4a, 0x4a,
-	0xa1, 0x49, 0x27, 0x20, 0xd1, 0x24, 0xb6, 0x68, 0x0b, 0x18, 0x4e, 0xc8, 0x95, 0xe6, 0x0e, 0x03,
-	0x12, 0x4d, 0x0d, 0x57, 0x03, 0xf8, 0x1e, 0x66, 0x75, 0x88, 0x0f, 0x45, 0xc1, 0x2a, 0x2d, 0x19,
-	0x05, 0x24, 0xf2, 0x16, 0xf7, 0xdb, 0xfe, 0x7c, 0xdf, 0xb1, 0xb1, 0x45, 0x6f, 0x89, 0xb5, 0x79,
-	0x5d, 0x41, 0x67, 0x3e, 0x1e, 0x9a, 0x7f, 0xdb, 0xb1, 0xda, 0x7c, 0x28, 0xc6, 0x00, 0x60, 0x2d,
-	0x24, 0x6b, 0xaa, 0x9a, 0x04, 0x24, 0x22, 0xb1, 0x45, 0x7b, 0xd8, 0xa9, 0x07, 0x6e, 0x3d, 0x91,
-	0x0b, 0x26, 0xc2, 0x1b, 0x98, 0x2d, 0x33, 0x95, 0xf3, 0xcb, 0xf2, 0xff, 0xcb, 0xf3, 0xa2, 0x3f,
-	0x6d, 0x9d, 0xce, 0xbd, 0x36, 0x9d, 0x65, 0xa2, 0xbe, 0x16, 0x9f, 0x79, 0xa5, 0xba, 0x41, 0x63,
-	0x08, 0xd3, 0x75, 0x2a, 0x4a, 0x5e, 0x7c, 0x4a, 0xb9, 0x48, 0x94, 0x6f, 0x07, 0x76, 0xe4, 0xd2,
-	0x01, 0x16, 0x3e, 0x05, 0xaf, 0xd7, 0x07, 0xbd, 0x0d, 0xbf, 0x98, 0xa8, 0x17, 0xcf, 0xa1, 0xe6,
-	0xad, 0x25, 0xbd, 0x5a, 0x07, 0x12, 0xb7, 0x91, 0x5c, 0x81, 0xdb, 0xc5, 0xc7, 0x67, 0x60, 0xa7,
-	0x89, 0x32, 0x79, 0xef, 0xed, 0xb6, 0x56, 0xe0, 0x73, 0x70, 0x7e, 0xf2, 0xaa, 0xad, 0x64, 0x4f,
-	0x63, 0x8d, 0xe4, 0x74, 0x04, 0x8e, 0xde, 0xbe, 0xc5, 0x1f, 0x02, 0xa3, 0x33, 0x23, 0xc3, 0x13,
-	0x98, 0xb4, 0x07, 0x87, 0x8f, 0x5a, 0xdb, 0x5b, 0x27, 0x38, 0xef, 0x9c, 0xf6, 0x0e, 0x2c, 0xb4,
-	0x8e, 0x09, 0xbe, 0x83, 0x71, 0xd3, 0x70, 0xec, 0x0e, 0x66, 0x38, 0x81, 0xbd, 0xb6, 0xab, 0x91,
-	0xb9, 0xfc, 0x57, 0xff, 0x02, 0x00, 0x00, 0xff, 0xff, 0xca, 0x68, 0x70, 0x08, 0x09, 0x04, 0x00,
-	0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -691,17 +942,6 @@ type PilosaServer interface {
 	Inspect(*InspectRequest, Pilosa_InspectServer) error
 }
 
-// UnimplementedPilosaServer can be embedded to have forward compatible implementations.
-type UnimplementedPilosaServer struct {
-}
-
-func (*UnimplementedPilosaServer) QueryPQL(req *QueryPQLRequest, srv Pilosa_QueryPQLServer) error {
-	return status.Errorf(codes.Unimplemented, "method QueryPQL not implemented")
-}
-func (*UnimplementedPilosaServer) Inspect(req *InspectRequest, srv Pilosa_InspectServer) error {
-	return status.Errorf(codes.Unimplemented, "method Inspect not implemented")
-}
-
 func RegisterPilosaServer(s *grpc.Server, srv PilosaServer) {
 	s.RegisterService(&_Pilosa_serviceDesc, srv)
 }
@@ -765,4 +1005,46 @@ var _Pilosa_serviceDesc = grpc.ServiceDesc{
 		},
 	},
 	Metadata: "pilosa.proto",
+}
+
+func init() { proto.RegisterFile("pilosa.proto", fileDescriptor_ef0691a44d1e275c) }
+
+var fileDescriptor_ef0691a44d1e275c = []byte{
+	// 568 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x54, 0xdd, 0x6e, 0xd3, 0x30,
+	0x14, 0x8e, 0x97, 0x2c, 0x69, 0x4e, 0xc6, 0x00, 0x83, 0x46, 0x54, 0x21, 0x14, 0x72, 0x43, 0x10,
+	0x68, 0x9a, 0xca, 0x8f, 0x04, 0x8c, 0x0b, 0x36, 0x81, 0x5a, 0x01, 0x62, 0x33, 0x62, 0xf7, 0xee,
+	0xe2, 0x96, 0x08, 0x37, 0xce, 0x62, 0x17, 0xe8, 0x2d, 0xcf, 0x02, 0x4f, 0xc4, 0x0b, 0x21, 0x3b,
+	0x3f, 0x4d, 0x2a, 0x95, 0x3b, 0x9f, 0xef, 0xfb, 0xce, 0xf1, 0xf9, 0xb3, 0x61, 0xaf, 0xc8, 0xb8,
+	0x90, 0xf4, 0xb0, 0x28, 0x85, 0x12, 0xd8, 0xad, 0xac, 0xf8, 0x05, 0x5c, 0x3f, 0x5f, 0xb2, 0x72,
+	0x75, 0x76, 0xfe, 0x81, 0xb0, 0xab, 0x25, 0x93, 0x0a, 0xdf, 0x86, 0xdd, 0x2c, 0x4f, 0xd9, 0xcf,
+	0x10, 0x45, 0x28, 0xf1, 0x49, 0x65, 0xe0, 0x1b, 0x60, 0x17, 0x57, 0x3c, 0xdc, 0x31, 0x98, 0x3e,
+	0xc6, 0xaf, 0x20, 0xf8, 0xac, 0xa8, 0x5a, 0xca, 0xb7, 0x65, 0x29, 0x4a, 0x8c, 0xc1, 0x39, 0x15,
+	0x29, 0x33, 0x5e, 0xd7, 0x88, 0x39, 0xe3, 0x10, 0xbc, 0x8f, 0x4c, 0x4a, 0x3a, 0x67, 0xb5, 0x63,
+	0x63, 0xc6, 0xbf, 0x11, 0x04, 0x44, 0xfc, 0x20, 0x4c, 0x16, 0x22, 0x97, 0x0c, 0x3f, 0x06, 0xef,
+	0x2b, 0xa3, 0x29, 0x2b, 0x65, 0x88, 0x22, 0x3b, 0x09, 0x46, 0xf8, 0xb0, 0xce, 0xf7, 0x54, 0xf0,
+	0xe5, 0x22, 0x9f, 0xe4, 0x33, 0x41, 0x1a, 0x09, 0x3e, 0x02, 0xef, 0xd2, 0xc0, 0x32, 0xdc, 0x31,
+	0xea, 0x83, 0xbe, 0xba, 0x09, 0x4b, 0x1a, 0x19, 0x7e, 0xd6, 0x4b, 0x36, 0xb4, 0x23, 0x94, 0x04,
+	0xa3, 0x5b, 0x8d, 0x57, 0x87, 0x22, 0x5d, 0x5d, 0x7c, 0x0c, 0xb0, 0xbe, 0x5f, 0x97, 0x98, 0xd3,
+	0x05, 0xab, 0x1b, 0x63, 0xce, 0x78, 0x08, 0x83, 0x94, 0x2a, 0xaa, 0x56, 0x45, 0x53, 0x63, 0x6b,
+	0xc7, 0x7f, 0x77, 0x60, 0xbf, 0x9f, 0x10, 0xbe, 0x07, 0xbe, 0x54, 0x65, 0x96, 0xcf, 0x2f, 0x28,
+	0xaf, 0xe2, 0x8c, 0x2d, 0xb2, 0x86, 0x34, 0xbf, 0xcc, 0x72, 0xf5, 0xfc, 0xa9, 0xe6, 0x75, 0x3c,
+	0x47, 0xf3, 0x2d, 0x84, 0xef, 0xc2, 0xa0, 0xa5, 0x75, 0x11, 0xf6, 0xd8, 0x22, 0x2d, 0x82, 0x87,
+	0xe0, 0x4d, 0x85, 0xe0, 0x9a, 0x74, 0x22, 0x94, 0x0c, 0xc6, 0x16, 0x69, 0x00, 0xc3, 0x71, 0x31,
+	0xd5, 0xdc, 0x6e, 0x84, 0x92, 0x3d, 0xc3, 0x55, 0x00, 0x7e, 0x0d, 0xfb, 0xd5, 0x15, 0x6f, 0xca,
+	0x92, 0xae, 0xb4, 0xc4, 0xed, 0x37, 0xe8, 0xcb, 0x9a, 0x1d, 0x5b, 0x64, 0x43, 0xac, 0xdd, 0xab,
+	0x0a, 0x5a, 0x77, 0x6f, 0xb3, 0xbf, 0x2d, 0xab, 0xdd, 0xfb, 0x62, 0x1c, 0x01, 0xcc, 0xb8, 0xa0,
+	0x75, 0x55, 0x83, 0x08, 0x25, 0x68, 0x6c, 0x91, 0x0e, 0x76, 0x12, 0x80, 0x5f, 0x0d, 0xf2, 0x82,
+	0xf2, 0xf8, 0x0f, 0x82, 0xfd, 0x49, 0x2e, 0x0b, 0x76, 0xa9, 0xfe, 0xbf, 0xb2, 0x8f, 0xba, 0x5b,
+	0xa2, 0xf3, 0xb9, 0xd9, 0xe4, 0x33, 0x49, 0xe5, 0xa7, 0xf2, 0x3d, 0x5b, 0xc9, 0xf5, 0x82, 0xc4,
+	0xb0, 0x37, 0xcb, 0xb8, 0x62, 0xe5, 0xbb, 0x8c, 0xf1, 0x54, 0x86, 0x76, 0x64, 0x27, 0x3e, 0xe9,
+	0x61, 0xfa, 0x1a, 0x9e, 0x2d, 0x32, 0x65, 0x9a, 0xeb, 0x90, 0xca, 0xc0, 0x07, 0xe0, 0x8a, 0xd9,
+	0x4c, 0x32, 0x65, 0xfa, 0xea, 0x90, 0xda, 0x8a, 0xef, 0x43, 0xd0, 0x69, 0x9b, 0x5e, 0x9e, 0xef,
+	0x94, 0x57, 0xeb, 0xed, 0x10, 0x73, 0xd6, 0x92, 0x4e, 0x6b, 0x7a, 0x12, 0xbf, 0x96, 0xcc, 0xc1,
+	0x6f, 0xb3, 0xc5, 0x0f, 0xc0, 0xce, 0x52, 0x69, 0xaa, 0xdc, 0x3a, 0x1c, 0xad, 0xc0, 0x0f, 0xc1,
+	0xf9, 0xc6, 0x56, 0x4d, 0xdd, 0x5b, 0xe6, 0x60, 0x24, 0x27, 0x2e, 0x38, 0x7a, 0x59, 0x47, 0xbf,
+	0x10, 0xb8, 0x67, 0x46, 0x86, 0x8f, 0x61, 0xd0, 0x7c, 0x0a, 0xf8, 0x4e, 0xe3, 0xbb, 0xf1, 0x4d,
+	0x0c, 0xdb, 0xa0, 0x9d, 0x67, 0x1c, 0x5b, 0x47, 0x08, 0xbf, 0x04, 0xaf, 0x1e, 0x0f, 0x6e, 0x9f,
+	0x65, 0x7f, 0x5e, 0x5b, 0x7d, 0xa7, 0xae, 0xf9, 0x9d, 0x9e, 0xfc, 0x0b, 0x00, 0x00, 0xff, 0xff,
+	0x9e, 0xd3, 0x7d, 0xab, 0xad, 0x04, 0x00, 0x00,
 }

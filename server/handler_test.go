@@ -224,7 +224,12 @@ func TestHandler_Endpoints(t *testing.T) {
 		if err != nil {
 			t.Fatalf("querying: %v", err)
 		}
-		if !reflect.DeepEqual(resp.Results[0], []pilosa.Pair{{Count: 12, ID: 0}}) {
+		if !reflect.DeepEqual(resp.Results[0], &pilosa.PairsField{
+			Pairs: []pilosa.Pair{
+				{Count: 12, ID: 0},
+			},
+			Field: "f1",
+		}) {
 			t.Fatalf("Unexpected result %v", resp.Results[0])
 		}
 
@@ -504,8 +509,8 @@ func TestHandler_Endpoints(t *testing.T) {
 		var resp pilosa.QueryResponse
 		if err := cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 			t.Fatal(err)
-		} else if a := resp.Results[0].([]pilosa.Pair); len(a) != 2 {
-			t.Fatalf("unexpected pair length: %d", len(a))
+		} else if a := resp.Results[0].(*pilosa.PairsField); len(a.Pairs) != 2 {
+			t.Fatalf("unexpected pair length: %d", len(a.Pairs))
 		}
 	})
 

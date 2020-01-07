@@ -175,7 +175,7 @@ func TestGRPC(t *testing.T) {
 					Rows: []uint64{10, 11, 12},
 				},
 				[]expHeader{
-					{"_id", "uint64"},
+					{"", "uint64"}, // This is blank because we don't expose RowIdentifiers.field, so we have no way to set it for tests.
 				},
 				[][]expColumn{
 					{uint64(10)},
@@ -189,7 +189,7 @@ func TestGRPC(t *testing.T) {
 					Keys: []string{"ten", "eleven", "twelve"},
 				},
 				[]expHeader{
-					{"_id", "string"},
+					{"", "string"}, // This is blank because we don't expose RowIdentifiers.field, so we have no way to set it for tests.
 				},
 				[][]expColumn{
 					{"ten"},

@@ -51,6 +51,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command:
-      - "cd /go/src/github.com/pilosa/pilosa/ && go test -v -count=1 github.com/pilosa/pilosa/internal/clustertests"
+      - "cd /go/src/github.com/pilosa/pilosa/ && go test -mod=vendor -v -count=1 github.com/pilosa/pilosa/v2/internal/clustertests"
 networks: 
   pilosanet:

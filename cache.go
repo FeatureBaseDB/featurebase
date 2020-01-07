@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -322,6 +323,18 @@ type Pair struct {
 	Count uint64 `json:"count"`
 }
 
+// PairField
+type PairField struct {
+	Pair  Pair
+	Field string
+}
+
+// MarshalJSON marshals PairField into a JSON-encoded byte slice,
+// excluding `Field`.
+func (p PairField) MarshalJSON() ([]byte, error) {
+	return json.Marshal(p.Pair)
+}
+
 // Pairs is a sortable slice of Pair objects.
 type Pairs []Pair
 
@@ -395,6 +408,18 @@ func (p Pairs) String() string {
 	}
 	buf.WriteString(")")
 	return buf.String()
+}
+
+// PairsField
+type PairsField struct {
+	Pairs []Pair
+	Field string
+}
+
+// MarshalJSON marshals PairsField into a JSON-encoded byte slice,
+// excluding `Field`.
+func (p PairsField) MarshalJSON() ([]byte, error) {
+	return json.Marshal(p.Pairs)
 }
 
 // uint64Slice represents a sortable slice of uint64 numbers.

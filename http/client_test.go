@@ -148,7 +148,8 @@ func TestClient_MultiNode(t *testing.T) {
 	}
 
 	// Test must return exactly N results.
-	if len(result.Results[0].([]pilosa.Pair)) != topN {
+	pairsField := result.Results[0].(*pilosa.PairsField)
+	if len(pairsField.Pairs) != topN {
 		t.Fatalf("unexpected number of TopN results: %s", spew.Sdump(result))
 	}
 	p := []pilosa.Pair{
@@ -158,7 +159,7 @@ func TestClient_MultiNode(t *testing.T) {
 		{ID: 99, Count: 7}}
 
 	// Valdidate the Top 4 result counts.
-	if !reflect.DeepEqual(result.Results[0].([]pilosa.Pair), p) {
+	if !reflect.DeepEqual(pairsField.Pairs, p) {
 		t.Fatalf("Invalid TopN result set: %s", spew.Sdump(result))
 	}
 
@@ -605,14 +606,14 @@ func TestClient_ImportKeys(t *testing.T) {
 				Index: "keyed",
 				Query: "TopN(keyedf)",
 			})
-			if pairs, ok := resp.Results[0].([]pilosa.Pair); !ok {
+			if pairs, ok := resp.Results[0].(*pilosa.PairsField); !ok {
 				t.Fatalf("unexpected response type %T", resp.Results[0])
-			} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
+			} else if !reflect.DeepEqual(pairs.Pairs, []pilosa.Pair{
 				{Key: "green", Count: 3},
 				{Key: "blue", Count: 2},
 				{Key: "purple", Count: 1},
 			}) {
-				t.Fatalf("unexpected topn result: %v", pairs)
+				t.Fatalf("unexpected topn result: %v", pairs.Pairs)
 			}
 		})
 
@@ -632,14 +633,14 @@ func TestClient_ImportKeys(t *testing.T) {
 				Index: "keyed",
 				Query: "TopN(unkeyedf)",
 			})
-			if pairs, ok := resp.Results[0].([]pilosa.Pair); !ok {
+			if pairs, ok := resp.Results[0].(*pilosa.PairsField); !ok {
 				t.Fatalf("unexpected response type %T", resp.Results[0])
-			} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
+			} else if !reflect.DeepEqual(pairs.Pairs, []pilosa.Pair{
 				{ID: 1, Count: 3},
 				{ID: 2, Count: 2},
 				{ID: 3, Count: 1},
 			}) {
-				t.Fatalf("unexpected topn result: %v", pairs)
+				t.Fatalf("unexpected topn result: %v", pairs.Pairs)
 			}
 		})
 
@@ -659,14 +660,14 @@ func TestClient_ImportKeys(t *testing.T) {
 				Index: "unkeyed",
 				Query: "TopN(keyedf)",
 			})
-			if pairs, ok := resp.Results[0].([]pilosa.Pair); !ok {
+			if pairs, ok := resp.Results[0].(*pilosa.PairsField); !ok {
 				t.Fatalf("unexpected response type %T", resp.Results[0])
-			} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
+			} else if !reflect.DeepEqual(pairs.Pairs, []pilosa.Pair{
 				{Key: "green", Count: 3},
 				{Key: "blue", Count: 2},
 				{Key: "purple", Count: 1},
 			}) {
-				t.Fatalf("unexpected topn result: %v", pairs)
+				t.Fatalf("unexpected topn result: %v", pairs.Pairs)
 			}
 		})
 	})
@@ -704,14 +705,14 @@ func TestClient_ImportKeys(t *testing.T) {
 				Index: "keyed",
 				Query: "TopN(keyedf0)",
 			})
-			if pairs, ok := resp.Results[0].([]pilosa.Pair); !ok {
+			if pairs, ok := resp.Results[0].(*pilosa.PairsField); !ok {
 				t.Fatalf("unexpected response type %T", resp.Results[0])
-			} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
+			} else if !reflect.DeepEqual(pairs.Pairs, []pilosa.Pair{
 				{Key: "green", Count: 3},
 				{Key: "blue", Count: 2},
 				{Key: "purple", Count: 1},
 			}) {
-				t.Fatalf("unexpected topn result: %v", pairs)
+				t.Fatalf("unexpected topn result: %v", pairs.Pairs)
 			}
 		})
 
@@ -736,14 +737,14 @@ func TestClient_ImportKeys(t *testing.T) {
 				Index: "keyed",
 				Query: "TopN(keyedf1)",
 			})
-			if pairs, ok := resp.Results[0].([]pilosa.Pair); !ok {
+			if pairs, ok := resp.Results[0].(*pilosa.PairsField); !ok {
 				t.Fatalf("unexpected response type %T", resp.Results[0])
-			} else if !reflect.DeepEqual(pairs, []pilosa.Pair{
+			} else if !reflect.DeepEqual(pairs.Pairs, []pilosa.Pair{
 				{Key: "green", Count: 3},
 				{Key: "blue", Count: 2},
 				{Key: "purple", Count: 1},
 			}) {
-				t.Fatalf("unexpected topn result: %#v", pairs)
+				t.Fatalf("unexpected topn result: %#v", pairs.Pairs)
 			}
 		})
 	})
