@@ -1186,7 +1186,7 @@ func (f *Field) SetValue(columnID uint64, value int64) (changed bool, err error)
 	return view.setValue(columnID, bsig.BitDepth, baseValue)
 }
 
-// SetValue sets a field value for a column.
+// ClearValue removes a field value for a column.
 func (f *Field) ClearValue(columnID uint64) (changed bool, err error) {
 	// Fetch bsiGroup & validate min/max.
 	bsig := f.bsiGroup(f.name)
@@ -1195,9 +1195,9 @@ func (f *Field) ClearValue(columnID uint64) (changed bool, err error) {
 	}
 
 	// Fetch target view.
-	view, err := f.createViewIfNotExists(viewBSIGroupPrefix + f.name)
-	if err != nil {
-		return false, errors.Wrap(err, "creating view")
+	view := f.view(viewBSIGroupPrefix + f.name)
+	if view == nil {
+		return false, nil
 	}
 	value, exists, err := view.value(columnID, bsig.BitDepth)
 	if err != nil {
