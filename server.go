@@ -446,8 +446,6 @@ func (s *Server) loadExtension(extInfo *ext.ExtensionInfo) error {
 	bitmapOps := extInfo.BitmapOps
 	bmOps, countOps, fieldOps, unknownOps := 0, 0, 0, 0
 	for i := range bitmapOps {
-		// title-case the name
-		bitmapOps[i].Name = strings.Title(bitmapOps[i].Name)
 		typ := bitmapOps[i].Func.BitmapOpType()
 		switch {
 		case typ.Input == ext.OpInputBitmap && typ.Output == ext.OpOutputCount:
