@@ -408,9 +408,9 @@ func (v *view) setValue(columnID uint64, bitDepth uint, value int64) (changed bo
 // clearValue removes a specific value assigned to columnID
 func (v *view) clearValue(columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
 	shard := columnID / ShardWidth
-	frag, err := v.CreateFragmentIfNotExists(shard)
-	if err != nil {
-		return changed, err
+	frag := v.Fragment(shard)
+	if frag == nil {
+		return false, nil
 	}
 	return frag.clearValue(columnID, bitDepth, value)
 }
