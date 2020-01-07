@@ -227,3 +227,44 @@ func TestField_AvailableShards(t *testing.T) {
 		t.Fatal(diff)
 	}
 }
+
+func TestField_ClearValue(t *testing.T) {
+	t.Run("OK", func(t *testing.T) {
+		idx := test.MustOpenIndex()
+		defer idx.Close()
+
+		f, err := idx.CreateField("f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Set value on field.
+		if changed, err := f.SetValue(100, 21); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal("expected change")
+		}
+
+		// Read value.
+		if value, exists, err := f.Value(100); err != nil {
+			t.Fatal(err)
+		} else if value != 21 {
+			t.Fatalf("unexpected value: %d", value)
+		} else if !exists {
+			t.Fatal("expected value to exist")
+		}
+
+		if changed, err := f.ClearValue(100); err != nil {
+			t.Fatal(err)
+		} else if !changed {
+			t.Fatal(err)
+		}
+
+		// Read value.
+		if _, exists, err := f.Value(100); err != nil {
+			t.Fatal(err)
+		} else if exists {
+			t.Fatal("expected value to not exist")
+		}
+	})
+}

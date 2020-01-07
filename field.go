@@ -1183,8 +1183,28 @@ func (f *Field) SetValue(columnID uint64, value int64) (changed bool, err error)
 	if err != nil {
 		return false, errors.Wrap(err, "creating view")
 	}
-
 	return view.setValue(columnID, bsig.BitDepth, baseValue)
+}
+
+// ClearValue removes a field value for a column.
+func (f *Field) ClearValue(columnID uint64) (changed bool, err error) {
+	bsig := f.bsiGroup(f.name)
+	if bsig == nil {
+		return false, ErrBSIGroupNotFound
+	}
+	// Fetch target view.
+	view := f.view(viewBSIGroupPrefix + f.name)
+	if view == nil {
+		return false, nil
+	}
+	value, exists, err := view.value(columnID, bsig.BitDepth)
+	if err != nil {
+		return false, err
+	}
+	if exists {
+		return view.clearValue(columnID, bsig.BitDepth, value)
+	}
+	return false, nil
 }
 
 // FloatSum performs a Sum query and converts the result to a float
