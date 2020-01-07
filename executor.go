@@ -2650,6 +2650,14 @@ func (e *executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeClearBit")
 	defer span.Finish()
 
+	// Read colID
+	colID, ok, err := c.UintArg("_" + columnLabel)
+	if err != nil {
+		return false, fmt.Errorf("reading Clear() column: %v", err)
+	} else if !ok {
+		return false, fmt.Errorf("column argument to Clear(<COLUMN>, <FIELD>=<ROW>) required")
+	}
+	// Read field name.
 	fieldName, err := c.FieldArg()
 	if err != nil {
 		return false, errors.New("Clear() argument required: field")
@@ -2664,24 +2672,24 @@ func (e *executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 	if f == nil {
 		return false, ErrFieldNotFound
 	}
-	// Read fields using labels.
-	rowID, ok, err := c.UintArg(fieldName)
-	if err != nil {
-		return false, fmt.Errorf("reading Clear() row: %v", err)
-	} else if !ok {
-		return false, fmt.Errorf("row=<row> argument required to Clear() call")
-	}
 
-	colID, ok, err := c.UintArg("_" + columnLabel)
-	if err != nil {
-		return false, fmt.Errorf("reading Clear() column: %v", err)
-	} else if !ok {
-		return false, fmt.Errorf("column argument to Clear(<COLUMN>, <FIELD>=<ROW>) required")
+	// Clear column on existence field
+	if ef := idx.existenceField(); ef != nil {
+		if _, err := ef.ClearBit(0, colID); err != nil {
+			return false, errors.Wrap(err, "clearing existence column")
+		}
 	}
 
 	// Int field.
 	if f.Type() == FieldTypeInt || f.Type() == FieldTypeDecimal {
 		return e.executeClearValueField(ctx, index, c, f, colID, opt)
+	}
+
+	rowID, ok, err := c.UintArg(fieldName)
+	if err != nil {
+		return false, fmt.Errorf("reading Clear() row: %v", err)
+	} else if !ok {
+		return false, fmt.Errorf("row=<row> argument required to Clear() call")
 	}
 
 	return e.executeClearBitField(ctx, index, c, f, colID, rowID, opt)
