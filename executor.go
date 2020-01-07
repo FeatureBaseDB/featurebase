@@ -3623,18 +3623,6 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 			if err := e.translateRowKey(c, field.translateStore, rowKey); err != nil {
 				return errors.Wrap(err, "translating rowkey")
 			}
-		} else if field.Options().ForeignIndex != "" {
-			// Get the foreign index.
-			fidx := field.Options().ForeignIndex
-			foreignIndex := e.Holder.Index(fidx)
-			if foreignIndex == nil {
-				return errors.Errorf("foreign index does not exist: %s", fidx)
-			}
-			if foreignIndex.Keys() {
-				if err := e.translateRowKey(c, foreignIndex.translateStore, rowKey); err != nil {
-					return errors.Wrap(err, "translating rowkey")
-				}
-			}
 		} else {
 			if isString(c.Args[rowKey]) {
 				return errors.New("string 'row' value not allowed unless field 'keys' option enabled")

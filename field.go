@@ -84,6 +84,15 @@ type Field struct {
 	// Field options.
 	options FieldOptions
 
+	// finalOptions is used with a final call to applyOptions.
+	// The initial call to applyOptions is made with options
+	// loaded from the meta file on disk (in the case when
+	// a field is being re-opened). If the field creator calls
+	// setOptions before calling Open(), then those options
+	// will be held in finalOptions, and applied instead of
+	// those from the meta file.
+	finalOptions *FieldOptions
+
 	bsiGroups []*bsiGroup
 
 	// Shards with data on any node in the cluster, according to this node.
@@ -94,6 +103,15 @@ type Field struct {
 	snapshotQueue snapshotQueue
 	// Instantiates new translation store on open.
 	OpenTranslateStore OpenTranslateStoreFunc
+
+	// Used for looking up a foreign index.
+	holder *Holder
+
+	// Stores whether or not the field has keys enabled.
+	// This is most helpful for cases where the keys are
+	// based on a foreign index; this prevents having to
+	// call holder.index.Keys() every time.
+	usesKeys bool
 }
 
 // FieldOption is a functional option type for pilosa.fieldOptions.
@@ -276,7 +294,7 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 		broadcaster: NopBroadcaster,
 		Stats:       stats.NopStatsClient,
 
-		options: applyDefaultOptions(fo),
+		options: *applyDefaultOptions(&fo),
 
 		remoteAvailableShards: roaring.NewBitmap(),
 
@@ -473,7 +491,13 @@ func (f *Field) Open() error {
 			return errors.Wrap(err, "loading available shards")
 		}
 
-		// Apply the field options loaded from meta.
+		// If options were provided using setOptions(), then
+		// use those instead of the options from the meta file.
+		if f.finalOptions != nil {
+			f.options = *f.finalOptions
+		}
+
+		// Apply the field options loaded from meta (or set via setOptions()).
 		f.logger.Debugf("apply options for index/field: %s/%s", f.index, f.name)
 		if err := f.applyOptions(f.options); err != nil {
 			return errors.Wrap(err, "applying options")
@@ -489,9 +513,22 @@ func (f *Field) Open() error {
 			return errors.Wrap(err, "opening attrstore")
 		}
 
-		// Instantiate & open translation store.
-		if f.translateStore, err = f.OpenTranslateStore(filepath.Join(f.path, "keys"), f.index, f.name); err != nil {
-			return errors.Wrap(err, "opening translate store")
+		// If the field has a foreign index, and that index uses keys,
+		// then use that index's translateStore instead.
+		if f.options.ForeignIndex != "" {
+			foreignIndex := f.holder.Index(f.options.ForeignIndex)
+			if foreignIndex == nil {
+				return errors.Errorf("foreign index does not exist: %s", f.options.ForeignIndex)
+			} else if foreignIndex.Keys() {
+				f.usesKeys = true
+				f.translateStore = foreignIndex.translateStore
+			}
+		} else {
+			// Instantiate & open translation store.
+			if f.translateStore, err = f.OpenTranslateStore(filepath.Join(f.path, "keys"), f.index, f.name); err != nil {
+				return errors.Wrap(err, "opening translate store")
+			}
+			f.usesKeys = f.options.Keys
 		}
 
 		return nil
@@ -641,6 +678,11 @@ func (f *Field) saveMeta() error {
 	return nil
 }
 
+// setOptions saves options for final application during Open().
+func (f *Field) setOptions(opts *FieldOptions) {
+	f.finalOptions = applyDefaultOptions(opts)
+}
+
 // applyOptions configures the field based on opt.
 func (f *Field) applyOptions(opt FieldOptions) error {
 	switch opt.Type {
@@ -760,7 +802,7 @@ func (f *Field) Close() error {
 func (f *Field) keys() bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	return f.options.Keys
+	return f.usesKeys
 }
 
 // bsiGroup returns a bsiGroup by name.
@@ -1604,15 +1646,13 @@ type FieldOptions struct {
 	ForeignIndex   string      `json:"foreignIndex"`
 }
 
-// applyDefaultOptions returns a new FieldOptions object
-// with default values if o does not contain a valid type.
-func applyDefaultOptions(o FieldOptions) FieldOptions {
+// applyDefaultOptions updates FieldOptions with the default
+// values if o does not contain a valid type.
+func applyDefaultOptions(o *FieldOptions) *FieldOptions {
 	if o.Type == "" {
-		return FieldOptions{
-			Type:      DefaultFieldType,
-			CacheType: DefaultCacheType,
-			CacheSize: DefaultCacheSize,
-		}
+		o.Type = DefaultFieldType
+		o.CacheType = DefaultCacheType
+		o.CacheSize = DefaultCacheSize
 	}
 	return o
 }

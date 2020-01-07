@@ -61,6 +61,7 @@ type Index struct {
 	snapshotQueue snapshotQueue
 
 	// Used for notifying holder when a field is added.
+	// Also passed to field for foreign-index lookup.
 	holder *Holder
 
 	// Instantiates new translation stores for fields.
@@ -426,18 +427,15 @@ func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 		return nil, errors.Wrap(err, "initializing")
 	}
 
+	// Pass holder through to the field for use in looking
+	// up a foreign index.
+	f.holder = i.holder
+
+	f.setOptions(&opt)
+
 	// Open field.
 	if err := f.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")
-	}
-
-	// Apply field options.
-	// This is already happening in f.Open() just before this, but in
-	// that case, the options being applied are those read from the meta
-	// file on disk.
-	if err := f.applyOptions(opt); err != nil {
-		f.Close()
-		return nil, errors.Wrap(err, "applying options")
 	}
 
 	if err := f.saveMeta(); err != nil {

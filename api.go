@@ -1084,13 +1084,10 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 			req.Shard = math.MaxUint64
 		}
 
-		// Translate values when the field has a ForeignIndex with keys.
-		if fidx := field.Options().ForeignIndex; fidx != "" {
-			foreignIndex := api.holder.Index(fidx)
-			if foreignIndex == nil {
-				return errors.Errorf("foreign index does not exist: %s", fidx)
-			}
-			uints, err := foreignIndex.translateStore.TranslateKeys(req.StringValues)
+		// Translate values when the field uses keys (for example, when
+		// the field has a ForeignIndex with keys).
+		if field.keys() {
+			uints, err := field.translateStore.TranslateKeys(req.StringValues)
 			if err != nil {
 				return errors.Wrap(err, "translating string values")
 			}
