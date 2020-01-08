@@ -326,10 +326,19 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 		}
 
 	} else {
-		keys, ok := req.Columns.Type.(*pb.IdsOrKeys_Keys)
-		if !ok {
+		var cols []string
+
+		switch keys := req.Columns.Type.(type) {
+		case *pb.IdsOrKeys_Ids:
+			// The default behavior (in api/client/grpc.go) is to
+			// send an empty set of Ids even if the index supports
+			// keys, so in that case we just need to ignore it.
+		case *pb.IdsOrKeys_Keys:
+			cols = keys.Keys.Vals
+		default:
 			return errToStatusError(errors.New("invalid key columns"))
 		}
+
 		ci := []*pb.ColumnInfo{
 			{Name: "_id", Datatype: "string"},
 		}
@@ -339,7 +348,6 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 
 		// If Columns is empty, then get the _exists list (via All()),
 		// from the index and loop over that instead.
-		cols := keys.Keys.Vals
 		if len(cols) > 0 {
 			// Apply limit/offset to the provided columns.
 			if int(offset) >= len(cols) {
