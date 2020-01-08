@@ -19,6 +19,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/logger"
@@ -111,6 +112,10 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 
 	var fields []*pilosa.Field
 	for _, field := range index.Fields() {
+		// exclude internal fields (starting with "_")
+		if strings.HasPrefix(field.Name(), "_") {
+			continue
+		}
 		if len(req.FilterFields) > 0 {
 			for _, filter := range req.FilterFields {
 				if filter == field.Name() {
