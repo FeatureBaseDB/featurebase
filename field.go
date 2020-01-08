@@ -798,8 +798,8 @@ func (f *Field) Close() error {
 	return nil
 }
 
-// keys returns true if the field uses string keys.
-func (f *Field) keys() bool {
+// Keys returns true if the field uses string keys.
+func (f *Field) Keys() bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.usesKeys
@@ -1154,6 +1154,21 @@ func (f *Field) allTimeViewsSortedByQuantum() (me []*view) {
 		return lt
 	})
 	return me
+}
+
+// StringValue reads an integer field value for a column, and converts
+// it to a string based on a foreign index string key.
+func (f *Field) StringValue(columnID uint64) (value string, exists bool, err error) {
+	bsig := f.bsiGroup(f.name)
+	if bsig == nil {
+		return value, false, ErrBSIGroupNotFound
+	}
+
+	val, exists, err := f.Value(columnID)
+	if exists {
+		value, err = f.translateStore.TranslateID(uint64(val))
+	}
+	return value, exists, err
 }
 
 // FloatValue reads an integer field value for a column, and converts
@@ -1678,6 +1693,7 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 		TimeQuantum:    string(o.TimeQuantum),
 		Keys:           o.Keys,
 		NoStandardView: o.NoStandardView,
+		ForeignIndex:   o.ForeignIndex,
 	}
 }
 
@@ -1698,7 +1714,25 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			o.CacheSize,
 			o.Keys,
 		})
-	case FieldTypeInt, FieldTypeDecimal:
+	case FieldTypeInt:
+		return json.Marshal(struct {
+			Type         string `json:"type"`
+			Base         int64  `json:"base"`
+			BitDepth     uint   `json:"bitDepth"`
+			Min          int64  `json:"min"`
+			Max          int64  `json:"max"`
+			Keys         bool   `json:"keys"`
+			ForeignIndex string `json:"foreignIndex"`
+		}{
+			o.Type,
+			o.Base,
+			o.BitDepth,
+			o.Min,
+			o.Max,
+			o.Keys,
+			o.ForeignIndex,
+		})
+	case FieldTypeDecimal:
 		return json.Marshal(struct {
 			Type     string `json:"type"`
 			Base     int64  `json:"base"`

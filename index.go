@@ -198,6 +198,10 @@ fileLoop:
 					return errors.Wrapf(ErrName, "'%s'", fi.Name())
 				}
 
+				// Pass holder through to the field for use in looking
+				// up a foreign index.
+				fld.holder = i.holder
+
 				if err := fld.Open(); err != nil {
 					return fmt.Errorf("open field: name=%s, err=%s", fld.Name(), err)
 				}

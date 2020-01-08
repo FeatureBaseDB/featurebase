@@ -80,12 +80,14 @@ func (h grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 func fieldDataType(f *pilosa.Field) string {
 	switch f.Type() {
 	case "set", "mutex":
-		if f.Options().Keys {
+		if f.Keys() {
 			return "[]string"
-		} else {
-			return "[]uint64"
 		}
+		return "[]uint64"
 	case "int":
+		if f.Keys() {
+			return "string"
+		}
 		return "int64"
 	case "decimal":
 		return "float64"
@@ -128,7 +130,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 	}
 	offset := req.Offset
 
-	if !index.Options().Keys {
+	if !index.Keys() {
 		ints, ok := req.Columns.Type.(*pb.IdsOrKeys_Ids)
 		if !ok {
 			return errors.New("invalid int columns")
@@ -243,15 +245,28 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 					}
 
 				case "int":
-					value, exists, err := field.Value(col)
-					if err != nil {
-						return errors.Wrap(err, "getting int field value for column")
-					} else if exists {
-						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: value}})
+					if field.Keys() {
+						value, exists, err := field.StringValue(col)
+						if err != nil {
+							return errors.Wrap(err, "getting string field value for column")
+						} else if exists {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: value}})
+						} else {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: nil})
+						}
 					} else {
-						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: nil})
+						value, exists, err := field.Value(col)
+						if err != nil {
+							return errors.Wrap(err, "getting int field value for column")
+						} else if exists {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: value}})
+						} else {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: nil})
+						}
 					}
 
 				case "decimal":
@@ -426,16 +441,30 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						return errors.Wrap(err, "translating column key")
 					}
 
-					value, exists, err := field.Value(id)
-					if err != nil {
-						return errors.Wrap(err, "getting int field value for column")
-					} else if exists {
-						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: value}})
+					if field.Keys() {
+						value, exists, err := field.StringValue(id)
+						if err != nil {
+							return errors.Wrap(err, "getting string field value for column")
+						} else if exists {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: value}})
+						} else {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: nil})
+						}
 					} else {
-						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: nil})
+						value, exists, err := field.Value(id)
+						if err != nil {
+							return errors.Wrap(err, "getting int field value for column")
+						} else if exists {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: value}})
+						} else {
+							rowResp.Columns = append(rowResp.Columns,
+								&pb.ColumnResponse{ColumnVal: nil})
+						}
 					}
+
 				case "decimal":
 					// Translate column key.
 					id, err := index.TranslateStore().TranslateKey(col)

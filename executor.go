@@ -3619,7 +3619,7 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 				}
 				c.Args[rowKey] = rowID
 			}
-		} else if field.keys() {
+		} else if field.Keys() {
 			if err := e.translateRowKey(c, field.translateStore, rowKey); err != nil {
 				return errors.Wrap(err, "translating rowkey")
 			}
@@ -3744,7 +3744,7 @@ func (e *executor) translateGroupByCall(index string, idx *Index, c *pql.Call) e
 
 	for i, field := range fields {
 		prev := previous[i]
-		if field.keys() {
+		if field.Keys() {
 			prevStr, ok := prev.(string)
 			if !ok {
 				return errors.New("prev value must be a string when field 'keys' option enabled")
@@ -3841,7 +3841,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 			if field == nil {
 				return nil, fmt.Errorf("field %q not found", fieldName)
 			}
-			if field.keys() {
+			if field.Keys() {
 				key, err := field.translateStore.TranslateID(result.Pair.ID)
 				if err != nil {
 					return nil, err
@@ -3863,7 +3863,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 			if field == nil {
 				return nil, fmt.Errorf("field %q not found", fieldName)
 			}
-			if field.keys() {
+			if field.Keys() {
 				other := make([]Pair, len(result.Pairs))
 				for i := range result.Pairs {
 					key, err := field.translateStore.TranslateID(result.Pairs[i].ID)
@@ -3892,7 +3892,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 				if field == nil {
 					return nil, ErrFieldNotFound
 				}
-				if field.keys() {
+				if field.Keys() {
 					key, err := field.translateStore.TranslateID(g.RowID)
 					if err != nil {
 						return nil, errors.Wrap(err, "translating row ID in Group")
@@ -3921,7 +3921,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 
 		if field := idx.Field(fieldName); field == nil {
 			return nil, ErrFieldNotFound
-		} else if field.keys() {
+		} else if field.Keys() {
 			other.Keys = make([]string, len(result))
 			for i, id := range result {
 				key, err := field.translateStore.TranslateID(id)
