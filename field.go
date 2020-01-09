@@ -516,19 +516,13 @@ func (f *Field) Open() error {
 		// If the field has a foreign index, and that index uses keys,
 		// then use that index's translateStore instead.
 		if f.options.ForeignIndex != "" {
-			foreignIndex := f.holder.Index(f.options.ForeignIndex)
-			if foreignIndex == nil {
-				return errors.Errorf("foreign index does not exist: %s", f.options.ForeignIndex)
-			} else if foreignIndex.Keys() {
-				f.usesKeys = true
-				f.translateStore = foreignIndex.translateStore
+			if err := f.holder.checkForeignIndex(f); err != nil {
+				return errors.Wrap(err, "checking foreign index")
 			}
 		} else {
-			// Instantiate & open translation store.
-			if f.translateStore, err = f.OpenTranslateStore(filepath.Join(f.path, "keys"), f.index, f.name); err != nil {
-				return errors.Wrap(err, "opening translate store")
+			if err := f.applyTranslateStore(); err != nil {
+				return errors.Wrap(err, "applying translate store")
 			}
-			f.usesKeys = f.options.Keys
 		}
 
 		return nil
@@ -539,6 +533,35 @@ func (f *Field) Open() error {
 
 	f.logger.Debugf("successfully opened field index/field: %s/%s", f.index, f.name)
 	return nil
+}
+
+// applyTranslateStore opens the configured translate store.
+func (f *Field) applyTranslateStore() error {
+	// Instantiate & open translation store.
+	var err error
+	f.translateStore, err = f.OpenTranslateStore(filepath.Join(f.path, "keys"), f.index, f.name)
+	if err != nil {
+		return errors.Wrap(err, "opening translate store")
+	}
+	f.usesKeys = f.options.Keys
+	return nil
+}
+
+// applyForeignIndex sets the field's translateStore
+// to that of a foreign index in the case where the
+// foreign index uses keys. If the foreign index does
+// not use keys, it falls back to applying the field's
+// default translate store.
+func (f *Field) applyForeignIndex() error {
+	foreignIndex := f.holder.Index(f.options.ForeignIndex)
+	if foreignIndex == nil {
+		return errors.Wrapf(ErrForeignIndexNotFound, "%s", f.options.ForeignIndex)
+	} else if foreignIndex.Keys() {
+		f.usesKeys = true
+		f.translateStore = foreignIndex.translateStore
+		return nil
+	}
+	return f.applyTranslateStore()
 }
 
 var fieldQueue = make(chan struct{}, 16)

@@ -26,6 +26,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/test"
+	"github.com/pkg/errors"
 )
 
 func TestHolder_Open(t *testing.T) {
@@ -216,6 +217,64 @@ func TestHolder_Open(t *testing.T) {
 		if err := h.Reopen(); err != nil {
 			t.Fatalf("unexpected error: %s", err)
 		}
+	})
+
+	t.Run("ForeignIndex", func(t *testing.T) {
+		t.Run("ErrForeignIndexNotFound", func(t *testing.T) {
+			h := test.MustOpenHolder()
+			defer h.Close()
+
+			if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+				t.Fatal(err)
+			} else {
+				_, err := idx.CreateField("bar", pilosa.OptFieldTypeInt(0, 100), pilosa.OptFieldForeignIndex("nonexistent"))
+				if err == nil {
+					t.Fatalf("expected error: %s", pilosa.ErrForeignIndexNotFound)
+				} else if errors.Cause(err) != pilosa.ErrForeignIndexNotFound {
+					t.Fatalf("expected error: %s, but got: %s", pilosa.ErrForeignIndexNotFound, err)
+				}
+			}
+		})
+
+		// Foreign index zzz is opened after foo/bar.
+		t.Run("ForeignIndexNotOpenYet", func(t *testing.T) {
+			h := test.MustOpenHolder()
+			defer h.Close()
+
+			if _, err := h.CreateIndex("zzz", pilosa.IndexOptions{}); err != nil {
+				t.Fatal(err)
+			} else if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+				t.Fatal(err)
+			} else if _, err := idx.CreateField("bar", pilosa.OptFieldTypeInt(0, 100), pilosa.OptFieldForeignIndex("zzz")); err != nil {
+				t.Fatal(err)
+			} else if err := h.Holder.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := h.Reopen(); err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+		})
+
+		// Foreign index aaa is opened before foo/bar.
+		t.Run("ForeignIndexIsOpen", func(t *testing.T) {
+			h := test.MustOpenHolder()
+			defer h.Close()
+
+			if _, err := h.CreateIndex("aaa", pilosa.IndexOptions{}); err != nil {
+				t.Fatal(err)
+			} else if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+				t.Fatal(err)
+			} else if _, err := idx.CreateField("bar", pilosa.OptFieldTypeInt(0, 100), pilosa.OptFieldForeignIndex("aaa")); err != nil {
+				t.Fatal(err)
+			} else if err := h.Holder.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := h.Reopen(); err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+		})
 	})
 }
 

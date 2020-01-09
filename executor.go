@@ -3802,15 +3802,8 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 
 		if fieldName := callArgString(call, "field"); fieldName != "" {
 			field := idx.Field(fieldName)
-			if field != nil {
-				// Get the foreign index.
-				if fidx := field.Options().ForeignIndex; fidx != "" {
-					foreignIndex := e.Holder.Index(fidx)
-					if foreignIndex == nil {
-						return nil, errors.Errorf("foreign index does not exist: %s", fidx)
-					}
-					store = foreignIndex.translateStore
-				}
+			if field != nil && field.Keys() {
+				store = field.TranslateStore()
 			}
 		}
 
