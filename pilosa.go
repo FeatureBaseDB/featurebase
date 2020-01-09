@@ -48,7 +48,7 @@ var (
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")
 
-	ErrName  = errors.New("invalid index or field name, must match [a-z][a-z0-9_-]* and contain at most 64 characters")
+	ErrName  = errors.New("invalid index or field name, must match [a-z][a-z0-9_-]* and contain at most 230 characters")
 	ErrLabel = errors.New("invalid row or column label, must match [A-Za-z0-9_-]")
 
 	// ErrFragmentNotFound is returned when a fragment does not exist.
@@ -118,7 +118,7 @@ func newNotFoundError(err error) NotFoundError {
 }
 
 // Regular expression to validate index and field names.
-var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
+var nameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,229}$`)
 
 // ColumnAttrSet represents a set of attributes for a vertical column in an index.
 // Can have a set of attributes attached to it.
