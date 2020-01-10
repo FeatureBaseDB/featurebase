@@ -19,6 +19,7 @@ message FieldOptions {
 	int64 Base = 13;
 	uint64 BitDepth = 14;
 	int64 Scale = 15;
+	string ForeignIndex = 16;
 }
 
 message ImportResponse {

@@ -108,6 +108,8 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 				cmd.FieldOptions.Type = pilosa.FieldTypeInt
 			} else {
 				cmd.FieldOptions.Type = pilosa.FieldTypeSet
+				cmd.FieldOptions.CacheType = pilosa.CacheTypeRanked
+				cmd.FieldOptions.CacheSize = pilosa.DefaultCacheSize
 			}
 		}
 		err := cmd.ensureSchema(ctx)

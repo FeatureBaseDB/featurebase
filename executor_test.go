@@ -3854,6 +3854,70 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 
 }
 
+func TestExecutor_ForeignIndex(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+
+	c.CreateField(t, "parent", pilosa.IndexOptions{Keys: true}, "general")
+	c.CreateField(t, "child", pilosa.IndexOptions{}, "parent_id",
+		pilosa.OptFieldTypeInt(0, math.MaxInt64),
+		pilosa.OptFieldForeignIndex("parent"),
+	)
+	c.CreateField(t, "child", pilosa.IndexOptions{}, "color",
+		pilosa.OptFieldKeys(),
+	)
+
+	// Populate parent data.
+	c.Query(t, "parent", `
+			Set("one", general=1)
+			Set("two", general=1)
+			Set("three", general=1)
+
+			Set("twenty-one", general=2)
+			Set("twenty-two", general=2)
+			Set("twenty-three", general=2)
+
+			Set("one", general=3)
+			Set("twenty-one", general=3)
+		`)
+
+	// Populate child data.
+	c.Query(t, "child", `
+			Set(1, parent_id="one")
+			Set(2, parent_id="two")
+			Set(3, parent_id="one")
+			Set(4, parent_id="twenty-one")
+		`)
+
+	// Populate color data.
+	c.Query(t, "child", `
+			Set(1, color="red")
+			Set(2, color="blue")
+			Set(3, color="blue")
+			Set(4, color="red")
+		`)
+
+	distinct := c.Query(t, "child", `Distinct(index="child", field="parent_id")`).Results[0].(pilosa.SignedRow)
+	if !reflect.DeepEqual(distinct.Pos.Keys, []string{"one", "two", "twenty-one"}) {
+		t.Fatalf("unexpected keys: %v", distinct.Pos.Keys)
+	}
+
+	eq := c.Query(t, "child", `Row(parent_id=="one")`).Results[0].(*pilosa.Row)
+	if !reflect.DeepEqual(eq.Columns(), []uint64{1, 3}) {
+		t.Fatalf("unexpected columns: %v", eq.Columns())
+	}
+
+	neq := c.Query(t, "child", `Row(parent_id!="one")`).Results[0].(*pilosa.Row)
+	if !reflect.DeepEqual(neq.Columns(), []uint64{2, 4}) {
+		t.Fatalf("unexpected columns: %v", neq.Columns())
+	}
+
+	join := c.Query(t, "parent", `Intersect(Row(general=3), Distinct(Row(color="blue"), index="child", field="parent_id"))`).Results[0].(*pilosa.Row)
+	if !reflect.DeepEqual(join.Keys, []string{"one"}) {
+		t.Fatalf("unexpected keys: %v", join.Keys)
+	}
+}
+
 func TestExecutor_Execute_GroupBy(t *testing.T) {
 	groupByTest := func(t *testing.T, clusterSize int) {
 		c := test.MustRunCluster(t, 1)
