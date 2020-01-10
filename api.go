@@ -544,7 +544,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 		var colStr string
 		var err error
 
-		if field.keys() {
+		if field.Keys() {
 			if rowStr, err = field.translateStore.TranslateID(rowID); err != nil {
 				return errors.Wrap(err, "translating row")
 			}
@@ -959,7 +959,7 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 	// check to see if keys need translation.
 	if !options.IgnoreKeyCheck {
 		// Translate row keys.
-		if field.keys() {
+		if field.Keys() {
 			if len(req.RowIDs) != 0 {
 				return errors.New("row ids cannot be used because field uses string keys")
 			}
@@ -980,7 +980,7 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 
 		// For translated data, map the columnIDs to shards. If
 		// this node does not own the shard, forward to the node that does.
-		if index.Keys() || field.keys() {
+		if index.Keys() || field.Keys() {
 			m := make(map[uint64][]Bit)
 
 			for i, colID := range req.ColumnIDs {
@@ -1082,6 +1082,22 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 				return errors.Wrap(err, "translating columns")
 			}
 			req.Shard = math.MaxUint64
+		}
+
+		// Translate values when the field uses keys (for example, when
+		// the field has a ForeignIndex with keys).
+		if field.Keys() {
+			uints, err := field.translateStore.TranslateKeys(req.StringValues)
+			if err != nil {
+				return errors.Wrap(err, "translating string values")
+			}
+			// Because the BSI field supports negative value, we have to
+			// convert the slice of uint64 keys to a slice of int64.
+			ints := make([]int64, len(uints))
+			for i := range uints {
+				ints[i] = int64(uints[i])
+			}
+			req.Values = ints
 		}
 	}
 

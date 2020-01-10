@@ -29,6 +29,8 @@ var (
 	ErrIndexExists   = errors.New("index already exists")
 	ErrIndexNotFound = errors.New("index not found")
 
+	ErrForeignIndexNotFound = errors.New("foreign index not found")
+
 	// ErrFieldRequired is returned when no field is specified.
 	ErrFieldRequired = errors.New("field required")
 	ErrFieldExists   = errors.New("field already exists")
