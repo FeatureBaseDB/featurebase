@@ -17,6 +17,7 @@ package client
 import (
 	"context"
 	"crypto/tls"
+	"log"
 	"sync"
 
 	pb "github.com/pilosa/pilosa/v2/proto"
@@ -107,7 +108,8 @@ func (c *GRPCClient) Conn() *grpc.ClientConn {
 	c.mu.RUnlock()
 
 	if err := c.resetConn(); err != nil {
-		// TODO: log this error once logger is in place
+		// TODO: log this error with logger
+		log.Printf("error resetting connection: %s", err)
 	}
 
 	c.mu.RLock()
