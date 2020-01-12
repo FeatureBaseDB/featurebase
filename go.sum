@@ -91,6 +91,8 @@ github.com/molecula/apophenia v0.0.0-20190827192002-68b7a14a478b h1:cZADDaNYM7xn
 github.com/molecula/apophenia v0.0.0-20190827192002-68b7a14a478b/go.mod h1:uXd1BiH7xLmgkhVmspdJLENv6uGWrTL/MQX2TN7Yz9s=
 github.com/molecula/ext v0.0.0-20191202195653-240f38a75171 h1:4VK7u/RM+54Yaz8aRB9vIaDSnbKi3M0NQYg5tsZvOT4=
 github.com/molecula/ext v0.0.0-20191202195653-240f38a75171/go.mod h1:r6EIj0GH8dx5xxFLW6Voi1/mX3wXOUkJu6AoEE/xvGQ=
+github.com/molecula/ext v0.0.0-20200103203257-8a458a73e8c2 h1:XOImsA5XhGklFj8Y0TxSm1qWZzEwYxom2JOXiu9GMq0=
+github.com/molecula/ext v0.0.0-20200103203257-8a458a73e8c2/go.mod h1:r6EIj0GH8dx5xxFLW6Voi1/mX3wXOUkJu6AoEE/xvGQ=
 github.com/molecula/extensions v0.0.0-20191218165536-562244600fd4 h1:mDB/dicofRVFuRYcCVPk+JBiVKXlfbzMahuqHvrYqu4=
 github.com/molecula/extensions v0.0.0-20191218165536-562244600fd4/go.mod h1:QQgN5OFjuBAi4Q2UYVMzfvi4k9yvg/qqC+MNFB4I9JI=
 github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=

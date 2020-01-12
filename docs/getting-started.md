@@ -100,7 +100,7 @@ curl localhost:10101/index/repository -X POST
 ``` response
 {"success":true}
 ```
-The index name must be 64 characters or fewer, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
+The index name must be 230 characters or fewer, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
 
 Let's create the `stargazer` field which has user IDs of stargazers as its rows:
 ``` request
@@ -325,7 +325,7 @@ Next, let's create the `repository` index:
 	repository := schema.Index("repository")
 ```
 
-The index name must be 64 characters or fewer, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
+The index name must be 230 characters or fewer, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
 
 Let's create the `stargazer` field which has user IDs of stargazers as its rows:
 ```
@@ -615,7 +615,7 @@ Next, let's create the `repository` index:
 ```
 	Index repository = schema.index("repository");
 ```
-The index name must be 64 characters or fewer, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
+The index name must be 230 characters or fewer, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
 
 Let's create the `stargazer` field which has user IDs of stargazers as its rows:
 ```
@@ -818,7 +818,7 @@ Next, let's create the `repository` index:
 ```
 repository = schema.index("repository")
 ```
-The index name must be 64 characters or fewer, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
+The index name must be 230 characters or fewer, start with a letter, and consist only of lowercase alphanumeric characters or `_-`. The same goes for field names.
 
 Let's create the `stargazer` field which has user IDs of stargazers as its rows:
 ```

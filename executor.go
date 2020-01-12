@@ -3619,18 +3619,9 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 				}
 				c.Args[rowKey] = rowID
 			}
-		} else if field.keys() {
-			if c.Args[rowKey] != nil && !isString(c.Args[rowKey]) {
-				// allow passing row id directly (this can come in handy, but make sure it is a valid row id)
-				if !isValidID(c.Args[rowKey]) {
-					return errors.Errorf("row value must be a string or non-negative integer, but got: %v of %[1]T", c.Args[rowKey])
-				}
-			} else if value := callArgString(c, rowKey); value != "" {
-				id, err := field.translateStore.TranslateKey(value)
-				if err != nil {
-					return err
-				}
-				c.Args[rowKey] = id
+		} else if field.Keys() {
+			if err := e.translateRowKey(c, field.translateStore, rowKey); err != nil {
+				return errors.Wrap(err, "translating rowkey")
 			}
 		} else {
 			if isString(c.Args[rowKey]) {
@@ -3659,6 +3650,42 @@ func (e *executor) translateCall(index string, idx *Index, c *pql.Call) error {
 		}
 	}
 
+	return nil
+}
+
+func (e *executor) translateRowKey(c *pql.Call, store TranslateStore, rowKey string) error {
+	if c.Args[rowKey] != nil && isCondition(c.Args[rowKey]) {
+		// In the case where a field has a foreign index with keys,
+		// allow `== "key"` or `!= "key"` to be used against the BSI
+		// field.
+		cond := c.Args[rowKey].(*pql.Condition)
+		if isString(cond.Value) {
+			switch cond.Op {
+			case pql.EQ, pql.NEQ:
+				id, err := store.TranslateKey(cond.Value.(string))
+				if err != nil {
+					return errors.Wrap(err, "translating key")
+				}
+				c.Args[rowKey] = &pql.Condition{
+					Op:    cond.Op,
+					Value: id,
+				}
+			default:
+				return errors.Errorf("conditional is not supported with string predicates: %s", cond.Op)
+			}
+		}
+	} else if c.Args[rowKey] != nil && !isString(c.Args[rowKey]) {
+		// allow passing row id directly (this can come in handy, but make sure it is a valid row id)
+		if !isValidID(c.Args[rowKey]) {
+			return errors.Errorf("row value must be a string or non-negative integer, but got: %v of %[1]T", c.Args[rowKey])
+		}
+	} else if value := callArgString(c, rowKey); value != "" {
+		id, err := store.TranslateKey(value)
+		if err != nil {
+			return errors.Wrap(err, "translating key")
+		}
+		c.Args[rowKey] = id
+	}
 	return nil
 }
 
@@ -3717,7 +3744,7 @@ func (e *executor) translateGroupByCall(index string, idx *Index, c *pql.Call) e
 
 	for i, field := range fields {
 		prev := previous[i]
-		if field.keys() {
+		if field.Keys() {
 			prevStr, ok := prev.(string)
 			if !ok {
 				return errors.New("prev value must be a string when field 'keys' option enabled")
@@ -3767,13 +3794,47 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 			return other, nil
 		}
 
+	// TODO: instead of supporting SignedRow here, we may be able to
+	// make the return type for an int field with a ForeignIndex be
+	// a *Row instead (because it should always be positive).
+	case SignedRow:
+		var store TranslateStore
+
+		if fieldName := callArgString(call, "field"); fieldName != "" {
+			field := idx.Field(fieldName)
+			if field != nil && field.Keys() {
+				store = field.TranslateStore()
+			}
+		}
+
+		// In the case where a field/foreignIndex doesn't exist,
+		// fall back to using the index translateStore.
+		if store == nil && idx.Keys() {
+			store = idx.translateStore
+		}
+
+		if store != nil {
+			rslt := result.Pos
+			other := &Row{Attrs: rslt.Attrs}
+			for _, segment := range rslt.Segments() {
+				for _, col := range segment.Columns() {
+					key, err := store.TranslateID(col)
+					if err != nil {
+						return nil, err
+					}
+					other.Keys = append(other.Keys, key)
+				}
+			}
+			return SignedRow{Pos: other}, nil
+		}
+
 	case PairField:
 		if fieldName := callArgString(call, "field"); fieldName != "" {
 			field := idx.Field(fieldName)
 			if field == nil {
 				return nil, fmt.Errorf("field %q not found", fieldName)
 			}
-			if field.keys() {
+			if field.Keys() {
 				key, err := field.translateStore.TranslateID(result.Pair.ID)
 				if err != nil {
 					return nil, err
@@ -3795,7 +3856,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 			if field == nil {
 				return nil, fmt.Errorf("field %q not found", fieldName)
 			}
-			if field.keys() {
+			if field.Keys() {
 				other := make([]Pair, len(result.Pairs))
 				for i := range result.Pairs {
 					key, err := field.translateStore.TranslateID(result.Pairs[i].ID)
@@ -3824,7 +3885,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 				if field == nil {
 					return nil, ErrFieldNotFound
 				}
-				if field.keys() {
+				if field.Keys() {
 					key, err := field.translateStore.TranslateID(g.RowID)
 					if err != nil {
 						return nil, errors.Wrap(err, "translating row ID in Group")
@@ -3853,7 +3914,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 
 		if field := idx.Field(fieldName); field == nil {
 			return nil, ErrFieldNotFound
-		} else if field.keys() {
+		} else if field.Keys() {
 			other.Keys = make([]string, len(result))
 			for i, id := range result {
 				key, err := field.translateStore.TranslateID(id)
@@ -4063,6 +4124,11 @@ func callArgString(call *pql.Call, key string) string {
 
 func isString(v interface{}) bool {
 	_, ok := v.(string)
+	return ok
+}
+
+func isCondition(v interface{}) bool {
+	_, ok := v.(*pql.Condition)
 	return ok
 }
 

@@ -21,7 +21,7 @@ import (
 func TestValidateName(t *testing.T) {
 	names := []string{
 		"a", "ab", "ab1", "b-c", "d_e", "exists",
-		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"longbutnottoolongaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa12345689012345689012345678901234567890",
 	}
 	for _, name := range names {
 		if validateName(name) != nil {
@@ -33,7 +33,7 @@ func TestValidateName(t *testing.T) {
 func TestValidateNameInvalid(t *testing.T) {
 	names := []string{
 		"", "'", "^", "/", "\\", "A", "*", "a:b", "valid?no", "yüce", "1", "_", "-",
-		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", "_exists",
+		"long123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", "_exists",
 	}
 	for _, name := range names {
 		if validateName(name) == nil {
