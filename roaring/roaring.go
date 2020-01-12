@@ -422,7 +422,11 @@ func (b *Bitmap) remove(v uint64) bool {
 	c := b.Containers.Get(highbits(v))
 	newC, changed := c.remove(lowbits(v))
 	if newC != c {
-		b.Containers.Put(highbits(v), newC)
+		if newC != nil {
+			b.Containers.Put(highbits(v), newC)
+		} else {
+			b.Containers.Remove(highbits(v))
+		}
 	}
 	return changed
 }
