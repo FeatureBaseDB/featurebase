@@ -80,11 +80,16 @@ func (h grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 // uint64, bool, etc.) based on the Pilosa field type.
 func fieldDataType(f *pilosa.Field) string {
 	switch f.Type() {
-	case "set", "mutex":
+	case "set":
 		if f.Keys() {
 			return "[]string"
 		}
 		return "[]uint64"
+	case "mutex":
+		if f.Keys() {
+			return "string"
+		}
+		return "uint64"
 	case "int":
 		if f.Keys() {
 			return "string"
