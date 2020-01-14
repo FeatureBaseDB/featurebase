@@ -3576,3 +3576,47 @@ func TestFragmentConcurrentReadWrite(t *testing.T) {
 
 	t.Logf("%d", acc)
 }
+
+func TestFragment_Bug_Q2DoubleDelete(t *testing.T) {
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
+	b := []byte{60, 48, 0, 0, 1, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 24, 0, 0, 0, 1, 0}
+	defer f.Clean(t)
+	err := f.importRoaringT(b, false)
+	if err != nil {
+		t.Fatalf("importing roaring: %v", err)
+	}
+	//check the bit
+	res := f.row(1).Columns()
+	if len(res) < 1 || f.row(1).Columns()[0] != 1 {
+		t.Fatalf("expecting 1 got: %v", res)
+	}
+	//clear the bit
+	changed, _ := f.clearBit(1, 1)
+	if !changed {
+		t.Fatalf("expected change got %v", changed)
+	}
+	//check missing
+	res = f.row(1).Columns()
+	if len(res) != 0 {
+		t.Fatalf("expected nothing got %v", res)
+	}
+	// import again
+	err = f.importRoaringT(b, false)
+	if err != nil {
+		t.Fatalf("importing roaring: %v", err)
+	}
+	//check
+	res = f.row(1).Columns()
+	if len(res) < 1 || f.row(1).Columns()[0] != 1 {
+		t.Fatalf("again expecting 1 got: %v", res)
+	}
+	changed, _ = f.clearBit(1, 1)
+	if !changed {
+		t.Fatalf("again expected change got %v", changed)
+	}
+	//check missing
+	res = f.row(1).Columns()
+	if len(res) != 0 {
+		t.Fatalf("expected nothing got %v", res)
+	}
+}
