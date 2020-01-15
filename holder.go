@@ -84,6 +84,16 @@ type Holder struct {
 	// Instantiates new translation stores
 	OpenTranslateStore  OpenTranslateStoreFunc
 	OpenTranslateReader OpenTranslateReaderFunc
+
+	// Queue of fields (having a foreign index) which have
+	// opened before their foreign index has opened.
+	foreignIndexFields []*Field
+
+	// opening is set to true while Holder is opening.
+	// It's used to determine if foreign index application
+	// needs to be queued and completed after all indexes
+	// have opened.
+	opening bool
 }
 
 // lockedChan looks a little ridiculous admittedly, but exists for good reason.
@@ -134,6 +144,9 @@ func NewHolder(partitionN int) *Holder {
 
 // Open initializes the root data directory for the holder.
 func (h *Holder) Open() error {
+	h.opening = true
+	defer func() { h.opening = false }()
+
 	// Reset closing in case Holder is being reopened.
 	h.closing = make(chan struct{})
 
@@ -195,6 +208,14 @@ func (h *Holder) Open() error {
 		h.indexes[index.Name()] = index
 		h.mu.Unlock()
 	}
+
+	// If any fields were opened before their foreign index
+	// was opened, it's safe to process those now since all index
+	// opens have completed by this point.
+	if err := h.processForeignIndexFields(); err != nil {
+		return errors.Wrap(err, "processing foreign index fields")
+	}
+
 	h.Logger.Printf("open holder: complete")
 
 	// Periodically flush cache.
@@ -205,6 +226,33 @@ func (h *Holder) Open() error {
 	h.snapshotQueue.ScanHolder(h)
 
 	h.opened.Close()
+	return nil
+}
+
+// checkForeignIndex is a check before applying a foreign
+// index to a field; if the index is not yet available,
+// (because holder is still opening and may not have opened
+// the index yet), this method queues it up to be processed
+// once all indexes have been opened.
+func (h *Holder) checkForeignIndex(f *Field) error {
+	if h.opening {
+		if fi := h.Index(f.options.ForeignIndex); fi == nil {
+			h.foreignIndexFields = append(h.foreignIndexFields, f)
+			return nil
+		}
+	}
+	return f.applyForeignIndex()
+}
+
+// processForeignIndexFields applies a foreign index to any
+// fields which were opened before their foreign index.
+func (h *Holder) processForeignIndexFields() error {
+	for _, f := range h.foreignIndexFields {
+		if err := f.applyForeignIndex(); err != nil {
+			return errors.Wrap(err, "applying foreign index")
+		}
+	}
+	h.foreignIndexFields = h.foreignIndexFields[:0] // reset
 	return nil
 }
 

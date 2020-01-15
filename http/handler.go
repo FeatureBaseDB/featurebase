@@ -808,6 +808,9 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 			fos = append(fos, pilosa.OptFieldKeys())
 		}
 	}
+	if req.Options.ForeignIndex != nil {
+		fos = append(fos, pilosa.OptFieldForeignIndex(*req.Options.ForeignIndex))
+	}
 
 	_, err = h.api.CreateField(r.Context(), indexName, fieldName, fos...)
 	if _, ok := err.(pilosa.BadRequestError); ok {
@@ -833,6 +836,7 @@ type fieldOptions struct {
 	TimeQuantum    *pilosa.TimeQuantum `json:"timeQuantum,omitempty"`
 	Keys           *bool               `json:"keys,omitempty"`
 	NoStandardView bool                `json:"noStandardView,omitempty"`
+	ForeignIndex   *string             `json:"foreignIndex,omitempty"`
 }
 
 func (o *fieldOptions) validate() error {
@@ -860,6 +864,8 @@ func (o *fieldOptions) validate() error {
 			return pilosa.NewBadRequestError(errors.New("max does not apply to field type set"))
 		} else if o.TimeQuantum != nil {
 			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type set"))
+		} else if o.ForeignIndex != nil {
+			return pilosa.NewBadRequestError(errors.New("set field cannot be a foreign key"))
 		}
 	case pilosa.FieldTypeInt, pilosa.FieldTypeDecimal:
 		if o.CacheType != nil {
@@ -868,6 +874,8 @@ func (o *fieldOptions) validate() error {
 			return pilosa.NewBadRequestError(errors.New("cacheSize does not apply to field type int"))
 		} else if o.TimeQuantum != nil {
 			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type int"))
+		} else if o.ForeignIndex != nil && o.Type == pilosa.FieldTypeDecimal {
+			return pilosa.NewBadRequestError(errors.New("decimal field cannot be a foreign key"))
 		}
 	case pilosa.FieldTypeTime:
 		if o.CacheType != nil {
@@ -880,6 +888,8 @@ func (o *fieldOptions) validate() error {
 			return pilosa.NewBadRequestError(errors.New("max does not apply to field type time"))
 		} else if o.TimeQuantum == nil {
 			return pilosa.NewBadRequestError(errors.New("timeQuantum is required for field type time"))
+		} else if o.ForeignIndex != nil {
+			return pilosa.NewBadRequestError(errors.New("time field cannot be a foreign key"))
 		}
 	case pilosa.FieldTypeMutex:
 		if o.CacheType == nil {
@@ -894,6 +904,8 @@ func (o *fieldOptions) validate() error {
 			return pilosa.NewBadRequestError(errors.New("max does not apply to field type mutex"))
 		} else if o.TimeQuantum != nil {
 			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type mutex"))
+		} else if o.ForeignIndex != nil {
+			return pilosa.NewBadRequestError(errors.New("mutex field cannot be a foreign key"))
 		}
 	case pilosa.FieldTypeBool:
 		if o.CacheType != nil {
@@ -908,6 +920,8 @@ func (o *fieldOptions) validate() error {
 			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type bool"))
 		} else if o.Keys != nil {
 			return pilosa.NewBadRequestError(errors.New("keys does not apply to field type bool"))
+		} else if o.ForeignIndex != nil {
+			return pilosa.NewBadRequestError(errors.New("bool field cannot be a foreign key"))
 		}
 	default:
 		return errors.Errorf("invalid field type: %s", o.Type)

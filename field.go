@@ -81,6 +81,15 @@ type Field struct {
 	// Field options.
 	options FieldOptions
 
+	// finalOptions is used with a final call to applyOptions.
+	// The initial call to applyOptions is made with options
+	// loaded from the meta file on disk (in the case when
+	// a field is being re-opened). If the field creator calls
+	// setOptions before calling Open(), then those options
+	// will be held in finalOptions, and applied instead of
+	// those from the meta file.
+	finalOptions *FieldOptions
+
 	bsiGroups []*bsiGroup
 
 	// Shards with data on any node in the cluster, according to this node.
@@ -94,6 +103,15 @@ type Field struct {
 
 	// Instantiates new translation stores
 	OpenTranslateStore OpenTranslateStoreFunc
+
+	// Used for looking up a foreign index.
+	holder *Holder
+
+	// Stores whether or not the field has keys enabled.
+	// This is most helpful for cases where the keys are
+	// based on a foreign index; this prevents having to
+	// call holder.index.Keys() every time.
+	usesKeys bool
 }
 
 // FieldOption is a functional option type for pilosa.fieldOptions.
@@ -104,6 +122,17 @@ type FieldOption func(fo *FieldOptions) error
 func OptFieldKeys() FieldOption {
 	return func(fo *FieldOptions) error {
 		fo.Keys = true
+		return nil
+	}
+}
+
+// OptFieldForeignIndex marks this field as a foreign key to another
+// index. That is, the values of this field should be interpreted as
+// referencing records (Pilosa columns) in another index. TODO explain
+// where/how this is used by Pilosa.
+func OptFieldForeignIndex(index string) FieldOption {
+	return func(fo *FieldOptions) error {
+		fo.ForeignIndex = index
 		return nil
 	}
 }
@@ -230,6 +259,11 @@ func OptFieldTypeBool() FieldOption {
 }
 
 // NewField returns a new instance of field.
+// NOTE: This function is only used in tests, which is why
+// it only takes a single `FieldOption` (the assumption being
+// that it's of the type `OptFieldType*`). This means
+// this function couldn't be used to set, for example,
+// `FieldOptions.Keys`.
 func NewField(path, index, name string, opts FieldOption) (*Field, error) {
 	err := validateName(name)
 	if err != nil {
@@ -260,7 +294,7 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 		broadcaster: NopBroadcaster,
 		Stats:       stats.NopStatsClient,
 
-		options: applyDefaultOptions(fo),
+		options: *applyDefaultOptions(&fo),
 
 		remoteAvailableShards: roaring.NewBitmap(),
 
@@ -464,7 +498,13 @@ func (f *Field) Open() error {
 			return errors.Wrap(err, "loading available shards")
 		}
 
-		// Apply the field options loaded from meta.
+		// If options were provided using setOptions(), then
+		// use those instead of the options from the meta file.
+		if f.finalOptions != nil {
+			f.options = *f.finalOptions
+		}
+
+		// Apply the field options loaded from meta (or set via setOptions()).
 		f.logger.Debugf("apply options for index/field: %s/%s", f.index, f.name)
 		if err := f.applyOptions(f.options); err != nil {
 			return errors.Wrap(err, "applying options")
@@ -480,9 +520,16 @@ func (f *Field) Open() error {
 			return errors.Wrap(err, "opening attrstore")
 		}
 
-		f.logger.Debugf("open translate store for index/field: %s/%s", f.index, f.name)
-		if f.translateStore, err = f.OpenTranslateStore(f.TranslateStorePath(), f.index, f.name, -1, -1); err != nil {
-			return errors.Wrap(err, "opening field translate store")
+		// If the field has a foreign index, and that index uses keys,
+		// then use that index's translateStore instead.
+		if f.options.ForeignIndex != "" {
+			if err := f.holder.checkForeignIndex(f); err != nil {
+				return errors.Wrap(err, "checking foreign index")
+			}
+		} else {
+			if err := f.applyTranslateStore(); err != nil {
+				return errors.Wrap(err, "applying translate store")
+			}
 		}
 
 		return nil
@@ -493,6 +540,35 @@ func (f *Field) Open() error {
 
 	f.logger.Debugf("successfully opened field index/field: %s/%s", f.index, f.name)
 	return nil
+}
+
+// applyTranslateStore opens the configured translate store.
+func (f *Field) applyTranslateStore() error {
+	// Instantiate & open translation store.
+	var err error
+	f.translateStore, err = f.OpenTranslateStore(f.TranslateStorePath(), f.index, f.name, -1, -1)
+	if err != nil {
+		return errors.Wrap(err, "opening field translate store")
+	}
+	f.usesKeys = f.options.Keys
+	return nil
+}
+
+// applyForeignIndex sets the field's translateStore
+// to that of a foreign index in the case where the
+// foreign index uses keys. If the foreign index does
+// not use keys, it falls back to applying the field's
+// default translate store.
+func (f *Field) applyForeignIndex() error {
+	foreignIndex := f.holder.Index(f.options.ForeignIndex)
+	if foreignIndex == nil {
+		return errors.Wrapf(ErrForeignIndexNotFound, "%s", f.options.ForeignIndex)
+	} else if foreignIndex.Keys() {
+		f.usesKeys = true
+		f.translateStore = foreignIndex.translateStore
+		return nil
+	}
+	return f.applyTranslateStore()
 }
 
 var fieldQueue = make(chan struct{}, 16)
@@ -601,6 +677,7 @@ func (f *Field) loadMeta() error {
 	f.options.TimeQuantum = TimeQuantum(pb.TimeQuantum)
 	f.options.Keys = pb.Keys
 	f.options.NoStandardView = pb.NoStandardView
+	f.options.ForeignIndex = pb.ForeignIndex
 
 	return nil
 }
@@ -631,6 +708,11 @@ func (f *Field) saveMeta() error {
 	return nil
 }
 
+// setOptions saves options for final application during Open().
+func (f *Field) setOptions(opts *FieldOptions) {
+	f.finalOptions = applyDefaultOptions(opts)
+}
+
 // applyOptions configures the field based on opt.
 func (f *Field) applyOptions(opt FieldOptions) error {
 	switch opt.Type {
@@ -654,6 +736,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.BitDepth = 0
 		f.options.TimeQuantum = ""
 		f.options.Keys = opt.Keys
+		f.options.ForeignIndex = ""
 	case FieldTypeInt, FieldTypeDecimal:
 		f.options.Type = opt.Type
 		f.options.CacheType = CacheTypeNone
@@ -665,6 +748,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.BitDepth = opt.BitDepth
 		f.options.TimeQuantum = ""
 		f.options.Keys = opt.Keys
+		f.options.ForeignIndex = opt.ForeignIndex
 
 		// Create new bsiGroup.
 		bsig := &bsiGroup{
@@ -698,6 +782,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 			f.Close()
 			return errors.Wrap(err, "setting time quantum")
 		}
+		f.options.ForeignIndex = ""
 	case FieldTypeBool:
 		f.options.Type = FieldTypeBool
 		f.options.CacheType = CacheTypeNone
@@ -708,6 +793,7 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.BitDepth = 0
 		f.options.TimeQuantum = ""
 		f.options.Keys = false
+		f.options.ForeignIndex = ""
 	default:
 		return errors.New("invalid field type")
 	}
@@ -743,11 +829,11 @@ func (f *Field) Close() error {
 	return nil
 }
 
-// keys returns true if the field uses string keys.
-func (f *Field) keys() bool {
+// Keys returns true if the field uses string keys.
+func (f *Field) Keys() bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	return f.options.Keys
+	return f.usesKeys
 }
 
 // bsiGroup returns a bsiGroup by name.
@@ -1099,6 +1185,21 @@ func (f *Field) allTimeViewsSortedByQuantum() (me []*view) {
 		return lt
 	})
 	return me
+}
+
+// StringValue reads an integer field value for a column, and converts
+// it to a string based on a foreign index string key.
+func (f *Field) StringValue(columnID uint64) (value string, exists bool, err error) {
+	bsig := f.bsiGroup(f.name)
+	if bsig == nil {
+		return value, false, ErrBSIGroupNotFound
+	}
+
+	val, exists, err := f.Value(columnID)
+	if exists {
+		value, err = f.translateStore.TranslateID(uint64(val))
+	}
+	return value, exists, err
 }
 
 // FloatValue reads an integer field value for a column, and converts
@@ -1590,17 +1691,16 @@ type FieldOptions struct {
 	CacheType      string      `json:"cacheType,omitempty"`
 	Type           string      `json:"type,omitempty"`
 	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
+	ForeignIndex   string      `json:"foreignIndex"`
 }
 
-// applyDefaultOptions returns a new FieldOptions object
-// with default values if o does not contain a valid type.
-func applyDefaultOptions(o FieldOptions) FieldOptions {
+// applyDefaultOptions updates FieldOptions with the default
+// values if o does not contain a valid type.
+func applyDefaultOptions(o *FieldOptions) *FieldOptions {
 	if o.Type == "" {
-		return FieldOptions{
-			Type:      DefaultFieldType,
-			CacheType: DefaultCacheType,
-			CacheSize: DefaultCacheSize,
-		}
+		o.Type = DefaultFieldType
+		o.CacheType = DefaultCacheType
+		o.CacheSize = DefaultCacheSize
 	}
 	return o
 }
@@ -1626,6 +1726,7 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 		TimeQuantum:    string(o.TimeQuantum),
 		Keys:           o.Keys,
 		NoStandardView: o.NoStandardView,
+		ForeignIndex:   o.ForeignIndex,
 	}
 }
 
@@ -1646,7 +1747,25 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 			o.CacheSize,
 			o.Keys,
 		})
-	case FieldTypeInt, FieldTypeDecimal:
+	case FieldTypeInt:
+		return json.Marshal(struct {
+			Type         string `json:"type"`
+			Base         int64  `json:"base"`
+			BitDepth     uint   `json:"bitDepth"`
+			Min          int64  `json:"min"`
+			Max          int64  `json:"max"`
+			Keys         bool   `json:"keys"`
+			ForeignIndex string `json:"foreignIndex"`
+		}{
+			o.Type,
+			o.Base,
+			o.BitDepth,
+			o.Min,
+			o.Max,
+			o.Keys,
+			o.ForeignIndex,
+		})
+	case FieldTypeDecimal:
 		return json.Marshal(struct {
 			Type     string `json:"type"`
 			Base     int64  `json:"base"`

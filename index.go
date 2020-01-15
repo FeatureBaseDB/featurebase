@@ -63,6 +63,7 @@ type Index struct {
 	snapshotQueue snapshotQueue
 
 	// Used for notifying holder when a field is added.
+	// Also passed to field for foreign-index lookup.
 	holder *Holder
 
 	// Per-partition translation stores
@@ -215,6 +216,10 @@ fileLoop:
 				if err != nil {
 					return errors.Wrapf(ErrName, "'%s'", fi.Name())
 				}
+
+				// Pass holder through to the field for use in looking
+				// up a foreign index.
+				fld.holder = i.holder
 
 				if err := fld.Open(); err != nil {
 					return fmt.Errorf("open field: name=%s, err=%s", fld.Name(), err)
@@ -447,15 +452,15 @@ func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 		return nil, errors.Wrap(err, "initializing")
 	}
 
+	// Pass holder through to the field for use in looking
+	// up a foreign index.
+	f.holder = i.holder
+
+	f.setOptions(&opt)
+
 	// Open field.
 	if err := f.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")
-	}
-
-	// Apply field options.
-	if err := f.applyOptions(opt); err != nil {
-		f.Close()
-		return nil, errors.Wrap(err, "applying options")
 	}
 
 	if err := f.saveMeta(); err != nil {
