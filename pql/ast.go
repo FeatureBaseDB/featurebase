@@ -338,6 +338,8 @@ var callInfoByFunc = map[string]callInfo{
 	"Row":    {allowUnknown: true},
 	"Range":  {allowUnknown: true},
 
+	"Distinct": {allowUnknown: true},
+
 	// allow only "field=X" cases with string field names
 	"Max": allowField,
 	"Min": allowField,

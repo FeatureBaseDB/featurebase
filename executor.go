@@ -185,7 +185,7 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	// Translate query keys to ids, if necessary.
 	// No need to translate a remote call.
 	if !opt.Remote {
-		if err := e.translateCalls(ctx, index, idx, q.Calls); err != nil {
+		if err := e.translateCalls(ctx, index, q.Calls); err != nil {
 			return resp, err
 		} else if err := validateQueryContext(ctx); err != nil {
 			return resp, err
@@ -3526,279 +3526,234 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 	}
 }
 
-func (e *executor) translateCalls(ctx context.Context, defaultIndexName string, defaultIdx *Index, calls []*pql.Call) (err error) {
+func (e *executor) translateCalls(ctx context.Context, defaultIndexName string, calls []*pql.Call) (err error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.translateCalls")
 	defer span.Finish()
 
 	// Generate a list of all used
-	indexNameMap := make(map[string]struct{})
+	keySets := make(map[string]map[string]struct{})
+	keySets[defaultIndexName] = make(map[string]struct{})
 	for i := range calls {
-		if err := e.collectCallIndexNameMap(ctx, defaultIndexName, calls[i], indexNameMap); err != nil {
+		if err := e.collectCallKeySets(ctx, defaultIndexName, calls[i], keySets); err != nil {
 			return err
 		}
 	}
 
 	// Perform a separate batch translation for each separate index used.
-	for indexName := range indexNameMap {
-		// Determine the target index name.
-		if indexName == "" {
-			indexName = defaultIndexName
-		}
-		isDefaultIndex := indexName == defaultIndexName
-
-		// Determine the target index.
-		idx := defaultIdx
-		if !isDefaultIndex {
-			idx = idx.holder.indexes[indexName]
-			if idx == nil {
-				return fmt.Errorf("unknown index %q specified in cross-index call", indexName)
-			}
+	keyMaps := make(map[string]map[string]uint64)
+	for indexName, keySet := range keySets {
+		idx := e.Holder.indexes[indexName]
+		if idx == nil {
+			return fmt.Errorf("canot find index %q", indexName)
 		}
 
-		// Collect all index keys & bulk translate them.
-		keyMap := make(map[string]uint64)
-		if idx.Keys() {
-			keySet := make(map[string]struct{})
-			for i := range calls {
-				if err := e.collectCallIndexKeys(indexName, idx, isDefaultIndex, calls[i], keySet); err != nil {
-					return err
-				}
-			}
-
-			if keyMap, err = e.Cluster.translateIndexKeySet(ctx, indexName, keySet); err != nil {
-				return err
-			}
+		if !idx.Keys() || len(keySets) == 0 {
+			continue
 		}
-
-		// Translate calls.
-		for i := range calls {
-			if err := e.translateCall(indexName, idx, isDefaultIndex, calls[i], keyMap); err != nil {
-				return err
-			}
+		if keyMaps[indexName], err = e.Cluster.translateIndexKeySet(ctx, indexName, keySet); err != nil {
+			return err
 		}
 	}
+
+	// Translate calls.
+	for i := range calls {
+		if err := e.translateCall(defaultIndexName, calls[i], keyMaps); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
-func (e *executor) collectCallIndexNameMap(ctx context.Context, defaultIndexName string, c *pql.Call, m map[string]struct{}) error {
-	callIndex := c.CallIndex()
-	if callIndex == "" {
-		callIndex = defaultIndexName
+func (e *executor) collectCallKeySets(ctx context.Context, indexName string, c *pql.Call, m map[string]map[string]struct{}) error {
+	// Specifying an 'index' call overrides indexes on subsequent calls.
+	if s := c.CallIndex(); s != "" {
+		indexName = s
 	}
-	m[callIndex] = struct{}{}
 
-	if c.Name == "GroupBy" {
-		for _, arg := range c.Args {
-			if arg, ok := arg.(*pql.Call); ok {
-				if err := e.collectCallIndexNameMap(ctx, defaultIndexName, arg, m); err != nil {
-					return errors.Wrap(err, "collecting group by call index name")
-				}
+	if m[indexName] == nil {
+		m[indexName] = make(map[string]struct{})
+	}
+
+	// Collect key for this call.
+	colKey, _, _ := c.TranslateInfo(columnLabel, rowLabel)
+	if c.Args[colKey] != nil && isString(c.Args[colKey]) {
+		if value := callArgString(c, colKey); value != "" {
+			m[indexName][value] = struct{}{}
+		}
+	}
+
+	// Recursively collect argument calls.
+	for _, arg := range c.Args {
+		if arg, ok := arg.(*pql.Call); ok {
+			if err := e.collectCallKeySets(ctx, indexName, arg, m); err != nil {
+				return errors.Wrap(err, "collecting group by call index name")
 			}
 		}
 	}
 
+	// Recursively collect child calls.
 	for _, child := range c.Children {
-		if err := e.collectCallIndexNameMap(ctx, defaultIndexName, child, m); err != nil {
+		if err := e.collectCallKeySets(ctx, indexName, child, m); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (e *executor) collectCallIndexKeys(index string, idx *Index, isDefaultIndex bool, c *pql.Call, keySet map[string]struct{}) error {
-	// Handle group by separately.
-	if c.Name == "GroupBy" {
-		for _, child := range c.Children {
-			if err := e.collectCallIndexKeys(index, idx, isDefaultIndex, child, keySet); err != nil {
-				return errors.Wrapf(err, "translating %s", child)
-			}
-		}
-
-		if callIndex := c.CallIndex(); callIndex == index || (callIndex == "" && isDefaultIndex) {
-			for _, arg := range c.Args {
-				if arg, ok := arg.(*pql.Call); ok {
-					if err := e.collectCallIndexKeys(index, idx, isDefaultIndex, arg, keySet); err != nil {
-						return errors.Wrap(err, "translating group by arg call")
-					}
-				}
-			}
-		}
-		return nil
+func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[string]map[string]uint64) error {
+	// Specifying an 'index' arg applies to all nested calls.
+	if s := c.CallIndex(); s != "" {
+		indexName = s
 	}
-
-	if callIndex := c.CallIndex(); callIndex == index || (callIndex == "" && isDefaultIndex) {
-		colKey, _, _ := c.TranslateInfo(columnLabel, rowLabel)
-		if c.Args[colKey] != nil && isString(c.Args[colKey]) {
-			if value := callArgString(c, colKey); value != "" {
-				keySet[value] = struct{}{}
-			}
-		}
-	}
-	return nil
-}
-
-func (e *executor) translateCall(indexName string, idx *Index, isDefaultIndex bool, c *pql.Call, keyMap map[string]uint64) error {
-	if c.Name == "GroupBy" {
-		return errors.Wrap(e.translateGroupByCall(indexName, idx, isDefaultIndex, c, keyMap), "translating GroupBy")
-	}
+	keyMap := keyMaps[indexName]
 
 	// Translate column key.
-	if callIndex := c.CallIndex(); callIndex == indexName || (callIndex == "" && isDefaultIndex) {
-		colKey, rowKey, fieldName := c.TranslateInfo(columnLabel, rowLabel)
-		if idx.Keys() {
-			if c.Args[colKey] != nil && !isString(c.Args[colKey]) {
-				if !isValidID(c.Args[colKey]) {
-					return errors.Errorf("column value must be a string or non-negative integer, but got: %v of %[1]T", c.Args[colKey])
-				}
-			} else if value := callArgString(c, colKey); value != "" {
-				c.Args[colKey] = keyMap[value]
+	colKey, rowKey, fieldName := c.TranslateInfo(columnLabel, rowLabel)
+	idx := e.Holder.indexes[indexName]
+	if idx.Keys() {
+		if c.Args[colKey] != nil && !isString(c.Args[colKey]) {
+			if !isValidID(c.Args[colKey]) {
+				return errors.Errorf("column value must be a string or non-negative integer, but got: %v of %[1]T", c.Args[colKey])
 			}
-		} else {
-			if isString(c.Args[colKey]) {
-				return errors.New("string 'col' value not allowed unless index 'keys' option enabled")
-			}
+		} else if value := callArgString(c, colKey); value != "" {
+			c.Args[colKey] = keyMap[value]
+		}
+	} else {
+		if isString(c.Args[colKey]) {
+			return errors.New("string 'col' value not allowed unless index 'keys' option enabled")
+		}
+	}
+
+	// Translate row key, if field is specified & key exists.
+	if fieldName != "" {
+		field := idx.Field(fieldName)
+		if field == nil {
+			// Instead of returning ErrFieldNotFound here,
+			// we just return, and don't attempt the translation.
+			// The assumption is that the non-existent field
+			// will raise an error downstream when it's used.
+			return nil
 		}
 
-		// Translate row key, if field is specified & key exists.
-		if fieldName != "" {
-			field := idx.Field(fieldName)
-			if field == nil {
-				// Instead of returning ErrFieldNotFound here,
-				// we just return, and don't attempt the translation.
-				// The assumption is that the non-existent field
-				// will raise an error downstream when it's used.
-				return nil
+		// Bool field keys do not use the translator because there
+		// are only two possible values. Instead, they are handled
+		// directly.
+		if field.Type() == FieldTypeBool {
+			// TODO: This code block doesn't make sense for a `Rows()`
+			// queries on a `bool` field. Need to review this better,
+			// include it in tests, and probably back-port it to Pilosa.
+			if c.Name != "Rows" {
+				boolVal, err := callArgBool(c, rowKey)
+				if err != nil {
+					return errors.Wrap(err, "getting bool key")
+				}
+				rowID := falseRowID
+				if boolVal {
+					rowID = trueRowID
+				}
+				c.Args[rowKey] = rowID
 			}
-
-			// Bool field keys do not use the translator because there
-			// are only two possible values. Instead, they are handled
-			// directly.
-			if field.Type() == FieldTypeBool {
-				// TODO: This code block doesn't make sense for a `Rows()`
-				// queries on a `bool` field. Need to review this better,
-				// include it in tests, and probably back-port it to Pilosa.
-				if c.Name != "Rows" {
-					boolVal, err := callArgBool(c, rowKey)
-					if err != nil {
-						return errors.Wrap(err, "getting bool key")
-					}
-					rowID := falseRowID
-					if boolVal {
-						rowID = trueRowID
-					}
-					c.Args[rowKey] = rowID
-				}
-			} else if field.Keys() {
-				if c.Args[rowKey] != nil && isCondition(c.Args[rowKey]) {
-					// In the case where a field has a foreign index with keys,
-					// allow `== "key"` or `!= "key"` to be used against the BSI
-					// field.
-					cond := c.Args[rowKey].(*pql.Condition)
-					if isString(cond.Value) {
-						switch cond.Op {
-						case pql.EQ, pql.NEQ:
-							id, err := field.TranslateStore().TranslateKey(cond.Value.(string))
-							if err != nil {
-								return errors.Wrap(err, "translating key")
-							}
-							c.Args[rowKey] = &pql.Condition{
-								Op:    cond.Op,
-								Value: id,
-							}
-						default:
-							return errors.Errorf("conditional is not supported with string predicates: %s", cond.Op)
+		} else if field.Keys() {
+			if c.Args[rowKey] != nil && isCondition(c.Args[rowKey]) {
+				// In the case where a field has a foreign index with keys,
+				// allow `== "key"` or `!= "key"` to be used against the BSI
+				// field.
+				cond := c.Args[rowKey].(*pql.Condition)
+				if isString(cond.Value) {
+					switch cond.Op {
+					case pql.EQ, pql.NEQ:
+						id, err := field.TranslateStore().TranslateKey(cond.Value.(string))
+						if err != nil {
+							return errors.Wrap(err, "translating key")
 						}
+						c.Args[rowKey] = &pql.Condition{
+							Op:    cond.Op,
+							Value: id,
+						}
+					default:
+						return errors.Errorf("conditional is not supported with string predicates: %s", cond.Op)
 					}
-				} else if c.Args[rowKey] != nil && !isString(c.Args[rowKey]) {
-					// allow passing row id directly (this can come in handy, but make sure it is a valid row id)
-					if !isValidID(c.Args[rowKey]) {
-						return errors.Errorf("row value must be a string or non-negative integer, but got: %v of %[1]T", c.Args[rowKey])
-					}
-				} else if value := callArgString(c, rowKey); value != "" {
-					id, err := field.TranslateStore().TranslateKey(value)
-					if err != nil {
-						return err
-					}
-					c.Args[rowKey] = id
 				}
-			} else {
-				if isString(c.Args[rowKey]) {
-					return errors.New("string 'row' value not allowed unless field 'keys' option enabled")
+			} else if c.Args[rowKey] != nil && !isString(c.Args[rowKey]) {
+				// allow passing row id directly (this can come in handy, but make sure it is a valid row id)
+				if !isValidID(c.Args[rowKey]) {
+					return errors.Errorf("row value must be a string or non-negative integer, but got: %v of %[1]T", c.Args[rowKey])
 				}
+			} else if value := callArgString(c, rowKey); value != "" {
+				id, err := field.TranslateStore().TranslateKey(value)
+				if err != nil {
+					return err
+				}
+				c.Args[rowKey] = id
+			}
+		} else {
+			if isString(c.Args[rowKey]) {
+				return errors.New("string 'row' value not allowed unless field 'keys' option enabled")
 			}
 		}
 	}
 
 	// Translate child calls.
 	for _, child := range c.Children {
-		if err := e.translateCall(indexName, idx, isDefaultIndex, child, keyMap); err != nil {
+		if err := e.translateCall(indexName, child, keyMaps); err != nil {
 			return err
 		}
 	}
 
-	return nil
-}
-
-func (e *executor) translateGroupByCall(index string, idx *Index, isDefaultIndex bool, c *pql.Call, keyMap map[string]uint64) error {
-	if c.Name != "GroupBy" {
-		panic("translateGroupByCall called with '" + c.Name + "'")
-	}
-
-	for _, child := range c.Children {
-		if err := e.translateCall(index, idx, isDefaultIndex, child, keyMap); err != nil {
-			return errors.Wrapf(err, "translating %s", child)
-		}
-	}
-
+	// Translate call args.
 	for _, arg := range c.Args {
 		if arg, ok := arg.(*pql.Call); ok {
-			if err := e.translateCall(index, idx, isDefaultIndex, arg, keyMap); err != nil {
-				return errors.Wrap(err, "translating group by arg")
+			if err := e.translateCall(indexName, arg, keyMaps); err != nil {
+				return errors.Wrap(err, "translating arg")
 			}
 		}
 	}
 
-	prev, ok := c.Args["previous"]
-	if !ok {
-		return nil // nothing else to be translated
-	}
-	previous, ok := prev.([]interface{})
-	if !ok {
-		return errors.Errorf("'previous' argument must be list, but got %T", prev)
-	}
-	if len(c.Children) != len(previous) {
-		return errors.Errorf("mismatched lengths for previous: %d and children: %d in %s", len(previous), len(c.Children), c)
-	}
-
-	fields := make([]*Field, len(c.Children))
-	for i, child := range c.Children {
-		fieldname := callArgString(child, "_field")
-		field := idx.Field(fieldname)
-		if field == nil {
-			return errors.Wrapf(ErrFieldNotFound, "getting field '%s' from '%s'", fieldname, child)
+	// GroupBy-specific call translation.
+	if c.Name == "GroupBy" {
+		prev, ok := c.Args["previous"]
+		if !ok {
+			return nil // nothing else to be translated
 		}
-		fields[i] = field
-	}
-
-	for i, field := range fields {
-		prev := previous[i]
-		if field.Keys() {
-			prevStr, ok := prev.(string)
-			if !ok {
-				return errors.New("prev value must be a string when field 'keys' option enabled")
-			}
-			id, err := field.TranslateStore().TranslateKey(prevStr)
-			if err != nil {
-				return errors.Wrapf(err, "translating row key '%s'", prevStr)
-			}
-			previous[i] = id
-		} else {
-			if prevStr, ok := prev.(string); ok {
-				return errors.Errorf("got string row val '%s' in 'previous' for field %s which doesn't use string keys", prevStr, field.Name())
-			}
+		previous, ok := prev.([]interface{})
+		if !ok {
+			return errors.Errorf("'previous' argument must be list, but got %T", prev)
+		}
+		if len(c.Children) != len(previous) {
+			return errors.Errorf("mismatched lengths for previous: %d and children: %d in %s", len(previous), len(c.Children), c)
 		}
 
+		fields := make([]*Field, len(c.Children))
+		for i, child := range c.Children {
+			fieldname := callArgString(child, "_field")
+			field := idx.Field(fieldname)
+			if field == nil {
+				return errors.Wrapf(ErrFieldNotFound, "getting field '%s' from '%s'", fieldname, child)
+			}
+			fields[i] = field
+		}
+
+		for i, field := range fields {
+			prev := previous[i]
+			if field.Keys() {
+				prevStr, ok := prev.(string)
+				if !ok {
+					return errors.New("prev value must be a string when field 'keys' option enabled")
+				}
+				id, err := field.TranslateStore().TranslateKey(prevStr)
+				if err != nil {
+					return errors.Wrapf(err, "translating row key '%s'", prevStr)
+				}
+				previous[i] = id
+			} else {
+				if prevStr, ok := prev.(string); ok {
+					return errors.Errorf("got string row val '%s' in 'previous' for field %s which doesn't use string keys", prevStr, field.Name())
+				}
+			}
+		}
 	}
+
 	return nil
 }
 

@@ -3712,7 +3712,7 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 				Query: tst.query,
 			})
 			if err != nil {
-				t.Fatalf("got an error %v", err)
+				t.Fatal(err)
 			}
 			results := r.Results[0].([]pilosa.GroupCount)
 			test.CheckGroupBy(t, tst.expected, results)
@@ -3912,7 +3912,6 @@ func TestExecutor_ForeignIndex(t *testing.T) {
 		t.Fatalf("unexpected columns: %v", neq.Columns())
 	}
 
-	// TODO: this test is failing because field `color` is being associated to index `parent`
 	join := c.Query(t, "parent", `Intersect(Row(general=3), Distinct(Row(color="blue"), index="child", field="parent_id"))`).Results[0].(*pilosa.Row)
 	if !reflect.DeepEqual(join.Keys, []string{"one"}) {
 		t.Fatalf("unexpected keys: %v", join.Keys)
