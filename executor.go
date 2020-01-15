@@ -3689,7 +3689,27 @@ func (e *executor) translateCall(indexName string, idx *Index, isDefaultIndex bo
 					c.Args[rowKey] = rowID
 				}
 			} else if field.Keys() {
-				if c.Args[rowKey] != nil && !isString(c.Args[rowKey]) {
+				if c.Args[rowKey] != nil && isCondition(c.Args[rowKey]) {
+					// In the case where a field has a foreign index with keys,
+					// allow `== "key"` or `!= "key"` to be used against the BSI
+					// field.
+					cond := c.Args[rowKey].(*pql.Condition)
+					if isString(cond.Value) {
+						switch cond.Op {
+						case pql.EQ, pql.NEQ:
+							id, err := field.TranslateStore().TranslateKey(cond.Value.(string))
+							if err != nil {
+								return errors.Wrap(err, "translating key")
+							}
+							c.Args[rowKey] = &pql.Condition{
+								Op:    cond.Op,
+								Value: id,
+							}
+						default:
+							return errors.Errorf("conditional is not supported with string predicates: %s", cond.Op)
+						}
+					}
+				} else if c.Args[rowKey] != nil && !isString(c.Args[rowKey]) {
 					// allow passing row id directly (this can come in handy, but make sure it is a valid row id)
 					if !isValidID(c.Args[rowKey]) {
 						return errors.Errorf("row value must be a string or non-negative integer, but got: %v of %[1]T", c.Args[rowKey])
@@ -3854,7 +3874,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 		// In the case where a field/foreignIndex doesn't exist,
 		// fall back to using the index translateStore.
 		if store == nil && idx.Keys() {
-			store = idx.translateStore
+			store = nil // TODO: this may need to be idx.TranslateStore(?)
 		}
 
 		if store != nil {

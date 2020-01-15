@@ -565,7 +565,7 @@ func (f *Field) applyForeignIndex() error {
 		return errors.Wrapf(ErrForeignIndexNotFound, "%s", f.options.ForeignIndex)
 	} else if foreignIndex.Keys() {
 		f.usesKeys = true
-		f.translateStore = foreignIndex.translateStore
+		f.translateStore = foreignIndex.TranslateStore(0) // TODO: this is wrong
 		return nil
 	}
 	return f.applyTranslateStore()

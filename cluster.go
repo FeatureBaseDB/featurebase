@@ -869,7 +869,7 @@ func shardPartition(index string, shard uint64, partitionN int) int {
 	return int(h.Sum64() % uint64(partitionN))
 }
 
-// keyPartition returns the partition that a shard belongs to.
+// keyPartition returns the partition that a key belongs to.
 func (c *cluster) keyPartition(index, key string) int {
 	return keyPartition(index, key, c.partitionN)
 }
