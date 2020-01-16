@@ -3576,10 +3576,30 @@ func (e *executor) collectCallKeySets(ctx context.Context, indexName string, c *
 	}
 
 	// Collect key for this call.
-	colKey, _, _ := c.TranslateInfo(columnLabel, rowLabel)
+	colKey, rowKey, fieldName := c.TranslateInfo(columnLabel, rowLabel)
 	if c.Args[colKey] != nil && isString(c.Args[colKey]) {
 		if value := callArgString(c, colKey); value != "" {
 			m[indexName][value] = struct{}{}
+		}
+	}
+
+	// Collection foreign index keys.
+	if fieldName != "" {
+		idx := e.Holder.indexes[indexName]
+		if field := idx.Field(fieldName); field != nil && field.ForeignIndex() != "" {
+			foreignIndexName := field.ForeignIndex()
+			if m[foreignIndexName] == nil {
+				m[foreignIndexName] = make(map[string]struct{})
+			}
+
+			if c.Args[rowKey] != nil && isCondition(c.Args[rowKey]) {
+				cond := c.Args[rowKey].(*pql.Condition)
+				if isString(cond.Value) {
+					m[foreignIndexName][cond.Value.(string)] = struct{}{}
+				}
+			} else if value := callArgString(c, rowKey); value != "" {
+				m[foreignIndexName][value] = struct{}{}
+			}
 		}
 	}
 
@@ -3601,7 +3621,7 @@ func (e *executor) collectCallKeySets(ctx context.Context, indexName string, c *
 	return nil
 }
 
-func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[string]map[string]uint64) error {
+func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[string]map[string]uint64) (err error) {
 	// Specifying an 'index' arg applies to all nested calls.
 	if s := c.CallIndex(); s != "" {
 		indexName = s
@@ -3636,6 +3656,17 @@ func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[stri
 			return nil
 		}
 
+		// Determine if foreign index is being used for translation.
+		useKeys := field.Keys()
+		foreignIndexName := field.ForeignIndex()
+		if foreignIndexName != "" {
+			foreignIndex := e.Holder.indexes[foreignIndexName]
+			if foreignIndex == nil {
+				return errors.Errorf("foreign index not found: %q", foreignIndexName)
+			}
+			useKeys = foreignIndex.Keys()
+		}
+
 		// Bool field keys do not use the translator because there
 		// are only two possible values. Instead, they are handled
 		// directly.
@@ -3654,7 +3685,7 @@ func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[stri
 				}
 				c.Args[rowKey] = rowID
 			}
-		} else if field.Keys() {
+		} else if useKeys {
 			if c.Args[rowKey] != nil && isCondition(c.Args[rowKey]) {
 				// In the case where a field has a foreign index with keys,
 				// allow `== "key"` or `!= "key"` to be used against the BSI
@@ -3663,10 +3694,15 @@ func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[stri
 				if isString(cond.Value) {
 					switch cond.Op {
 					case pql.EQ, pql.NEQ:
-						id, err := field.TranslateStore().TranslateKey(cond.Value.(string))
-						if err != nil {
-							return errors.Wrap(err, "translating key")
+						var id uint64
+						if foreignIndexName != "" {
+							id = keyMaps[foreignIndexName][cond.Value.(string)]
+						} else {
+							if id, err = field.TranslateStore().TranslateKey(cond.Value.(string)); err != nil {
+								return errors.Wrap(err, "translating key")
+							}
 						}
+
 						c.Args[rowKey] = &pql.Condition{
 							Op:    cond.Op,
 							Value: id,
@@ -3681,9 +3717,13 @@ func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[stri
 					return errors.Errorf("row value must be a string or non-negative integer, but got: %v of %[1]T", c.Args[rowKey])
 				}
 			} else if value := callArgString(c, rowKey); value != "" {
-				id, err := field.TranslateStore().TranslateKey(value)
-				if err != nil {
-					return err
+				var id uint64
+				if foreignIndexName != "" {
+					id = keyMaps[foreignIndexName][value]
+				} else {
+					if id, err = field.TranslateStore().TranslateKey(value); err != nil {
+						return err
+					}
 				}
 				c.Args[rowKey] = id
 			}

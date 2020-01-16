@@ -522,14 +522,8 @@ func (f *Field) Open() error {
 
 		// If the field has a foreign index, and that index uses keys,
 		// then use that index's translateStore instead.
-		if f.options.ForeignIndex != "" {
-			if err := f.holder.checkForeignIndex(f); err != nil {
-				return errors.Wrap(err, "checking foreign index")
-			}
-		} else {
-			if err := f.applyTranslateStore(); err != nil {
-				return errors.Wrap(err, "applying translate store")
-			}
+		if err := f.applyTranslateStore(); err != nil {
+			return errors.Wrap(err, "applying translate store")
 		}
 
 		return nil
@@ -554,21 +548,18 @@ func (f *Field) applyTranslateStore() error {
 	return nil
 }
 
-// applyForeignIndex sets the field's translateStore
-// to that of a foreign index in the case where the
-// foreign index uses keys. If the foreign index does
-// not use keys, it falls back to applying the field's
-// default translate store.
 func (f *Field) applyForeignIndex() error {
 	foreignIndex := f.holder.Index(f.options.ForeignIndex)
 	if foreignIndex == nil {
 		return errors.Wrapf(ErrForeignIndexNotFound, "%s", f.options.ForeignIndex)
-	} else if foreignIndex.Keys() {
-		f.usesKeys = true
-		f.translateStore = foreignIndex.TranslateStore(0) // TODO: this is wrong
-		return nil
 	}
-	return f.applyTranslateStore()
+	return nil
+}
+
+// ForeignIndex returns the foreign index name attached to the field.
+// Returns blank string if no foreign index exists.
+func (f *Field) ForeignIndex() string {
+	return f.options.ForeignIndex
 }
 
 var fieldQueue = make(chan struct{}, 16)
