@@ -3544,7 +3544,7 @@ func (e *executor) translateCalls(ctx context.Context, defaultIndexName string, 
 	for indexName, keySet := range keySets {
 		idx := e.Holder.indexes[indexName]
 		if idx == nil {
-			return fmt.Errorf("canot find index %q", indexName)
+			return fmt.Errorf("cannot find index %q", indexName)
 		}
 
 		if !idx.Keys() || len(keySets) == 0 {
@@ -3656,17 +3656,6 @@ func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[stri
 			return nil
 		}
 
-		// Determine if foreign index is being used for translation.
-		useKeys := field.Keys()
-		foreignIndexName := field.ForeignIndex()
-		if foreignIndexName != "" {
-			foreignIndex := e.Holder.indexes[foreignIndexName]
-			if foreignIndex == nil {
-				return errors.Errorf("foreign index not found: %q", foreignIndexName)
-			}
-			useKeys = foreignIndex.Keys()
-		}
-
 		// Bool field keys do not use the translator because there
 		// are only two possible values. Instead, they are handled
 		// directly.
@@ -3685,7 +3674,8 @@ func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[stri
 				}
 				c.Args[rowKey] = rowID
 			}
-		} else if useKeys {
+		} else if field.Keys() {
+			foreignIndexName := field.ForeignIndex()
 			if c.Args[rowKey] != nil && isCondition(c.Args[rowKey]) {
 				// In the case where a field has a foreign index with keys,
 				// allow `== "key"` or `!= "key"` to be used against the BSI
@@ -3857,34 +3847,36 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 	// make the return type for an int field with a ForeignIndex be
 	// a *Row instead (because it should always be positive).
 	case SignedRow:
-		var store TranslateStore
+		sr, err := func() (*SignedRow, error) {
+			fieldName := callArgString(call, "field")
+			if fieldName == "" {
+				return nil, nil
+			}
 
-		if fieldName := callArgString(call, "field"); fieldName != "" {
 			field := idx.Field(fieldName)
-			if field != nil && field.Keys() {
-				store = field.TranslateStore()
+			if field == nil {
+				return nil, nil
 			}
-		}
 
-		// In the case where a field/foreignIndex doesn't exist,
-		// fall back to using the index translateStore.
-		if store == nil && idx.Keys() {
-			store = nil // TODO: this may need to be idx.TranslateStore(?)
-		}
-
-		if store != nil {
-			rslt := result.Pos
-			other := &Row{Attrs: rslt.Attrs}
-			for _, segment := range rslt.Segments() {
-				for _, col := range segment.Columns() {
-					key, err := store.TranslateID(col)
+			if field.Keys() {
+				rslt := result.Pos
+				other := &Row{Attrs: rslt.Attrs}
+				for _, segment := range rslt.Segments() {
+					keys, err := e.Cluster.translateIndexIDs(context.Background(), field.ForeignIndex(), segment.Columns())
 					if err != nil {
-						return nil, err
+						return nil, errors.Wrap(err, "translating index ids")
 					}
-					other.Keys = append(other.Keys, key)
+					other.Keys = append(other.Keys, keys...)
 				}
+				return &SignedRow{Pos: other}, nil
 			}
-			return SignedRow{Pos: other}, nil
+
+			return nil, nil
+		}()
+		if err != nil {
+			return nil, err
+		} else if sr != nil {
+			return *sr, nil
 		}
 
 	case PairField:
