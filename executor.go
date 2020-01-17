@@ -3857,34 +3857,47 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 	// make the return type for an int field with a ForeignIndex be
 	// a *Row instead (because it should always be positive).
 	case SignedRow:
-		var store TranslateStore
+		sr, err := func() (*SignedRow, error) {
+			fieldName := callArgString(call, "field")
+			if fieldName == "" {
+				return nil, nil
+			}
 
-		if fieldName := callArgString(call, "field"); fieldName != "" {
 			field := idx.Field(fieldName)
-			if field != nil && field.Keys() {
-				store = field.TranslateStore()
+			if field == nil {
+				return nil, nil
 			}
-		}
 
-		// In the case where a field/foreignIndex doesn't exist,
-		// fall back to using the index translateStore.
-		if store == nil && idx.Keys() {
-			store = nil // TODO: this may need to be idx.TranslateStore(?)
-		}
-
-		if store != nil {
-			rslt := result.Pos
-			other := &Row{Attrs: rslt.Attrs}
-			for _, segment := range rslt.Segments() {
-				for _, col := range segment.Columns() {
-					key, err := store.TranslateID(col)
-					if err != nil {
-						return nil, err
-					}
-					other.Keys = append(other.Keys, key)
+			// Determine if foreign index is being used for translation.
+			useKeys := field.Keys()
+			foreignIndexName := field.ForeignIndex()
+			if foreignIndexName != "" {
+				foreignIndex := e.Holder.indexes[foreignIndexName]
+				if foreignIndex == nil {
+					return nil, errors.Errorf("foreign index not found: %q", foreignIndexName)
 				}
+				useKeys = foreignIndex.Keys()
 			}
-			return SignedRow{Pos: other}, nil
+
+			if useKeys {
+				rslt := result.Pos
+				other := &Row{Attrs: rslt.Attrs}
+				for _, segment := range rslt.Segments() {
+					keys, err := e.Cluster.translateIndexIDs(context.Background(), foreignIndexName, segment.Columns())
+					if err != nil {
+						return nil, errors.Wrap(err, "translating index ids")
+					}
+					other.Keys = append(other.Keys, keys...)
+				}
+				return &SignedRow{Pos: other}, nil
+			}
+
+			return nil, nil
+		}()
+		if err != nil {
+			return nil, err
+		} else if sr != nil {
+			return *sr, nil
 		}
 
 	case PairField:
