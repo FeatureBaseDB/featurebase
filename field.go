@@ -520,8 +520,7 @@ func (f *Field) Open() error {
 			return errors.Wrap(err, "opening attrstore")
 		}
 
-		// If the field has a foreign index, and that index uses keys,
-		// then use that index's translateStore instead.
+		// Apply the field-specific translateStore.
 		if err := f.applyTranslateStore(); err != nil {
 			return errors.Wrap(err, "applying translate store")
 		}
@@ -553,6 +552,14 @@ func (f *Field) applyTranslateStore() error {
 		return errors.Wrap(err, "opening field translate store")
 	}
 	f.usesKeys = f.options.Keys
+
+	// In the case where the field has a foreign index, set
+	// the usesKeys value accordingly.
+	if foreignIndexName := f.ForeignIndex(); foreignIndexName != "" {
+		if foreignIndex := f.holder.indexes[foreignIndexName]; foreignIndex != nil {
+			f.usesKeys = foreignIndex.Keys()
+		}
+	}
 	return nil
 }
 

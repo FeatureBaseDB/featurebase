@@ -1086,22 +1086,11 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 			req.Shard = math.MaxUint64
 		}
 
-		// Determine if foreign index is being used for translation.
-		useKeys := field.Keys()
-		foreignIndexName := field.ForeignIndex()
-		if foreignIndexName != "" {
-			foreignIndex := api.holder.indexes[foreignIndexName]
-			if foreignIndex == nil {
-				return errors.Errorf("foreign index not found: %q", foreignIndexName)
-			}
-			useKeys = foreignIndex.Keys()
-		}
-
 		// Translate values when the field uses keys (for example, when
 		// the field has a ForeignIndex with keys).
-		if useKeys {
+		if field.Keys() {
 			// Perform translation.
-			uints, err := api.cluster.translateIndexKeys(ctx, foreignIndexName, req.StringValues)
+			uints, err := api.cluster.translateIndexKeys(ctx, field.ForeignIndex(), req.StringValues)
 			if err != nil {
 				return err
 			}

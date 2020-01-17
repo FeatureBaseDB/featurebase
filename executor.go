@@ -3656,17 +3656,6 @@ func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[stri
 			return nil
 		}
 
-		// Determine if foreign index is being used for translation.
-		useKeys := field.Keys()
-		foreignIndexName := field.ForeignIndex()
-		if foreignIndexName != "" {
-			foreignIndex := e.Holder.indexes[foreignIndexName]
-			if foreignIndex == nil {
-				return errors.Errorf("foreign index not found: %q", foreignIndexName)
-			}
-			useKeys = foreignIndex.Keys()
-		}
-
 		// Bool field keys do not use the translator because there
 		// are only two possible values. Instead, they are handled
 		// directly.
@@ -3685,7 +3674,8 @@ func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[stri
 				}
 				c.Args[rowKey] = rowID
 			}
-		} else if useKeys {
+		} else if field.Keys() {
+			foreignIndexName := field.ForeignIndex()
 			if c.Args[rowKey] != nil && isCondition(c.Args[rowKey]) {
 				// In the case where a field has a foreign index with keys,
 				// allow `== "key"` or `!= "key"` to be used against the BSI
@@ -3868,22 +3858,11 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 				return nil, nil
 			}
 
-			// Determine if foreign index is being used for translation.
-			useKeys := field.Keys()
-			foreignIndexName := field.ForeignIndex()
-			if foreignIndexName != "" {
-				foreignIndex := e.Holder.indexes[foreignIndexName]
-				if foreignIndex == nil {
-					return nil, errors.Errorf("foreign index not found: %q", foreignIndexName)
-				}
-				useKeys = foreignIndex.Keys()
-			}
-
-			if useKeys {
+			if field.Keys() {
 				rslt := result.Pos
 				other := &Row{Attrs: rslt.Attrs}
 				for _, segment := range rslt.Segments() {
-					keys, err := e.Cluster.translateIndexIDs(context.Background(), foreignIndexName, segment.Columns())
+					keys, err := e.Cluster.translateIndexIDs(context.Background(), field.ForeignIndex(), segment.Columns())
 					if err != nil {
 						return nil, errors.Wrap(err, "translating index ids")
 					}
