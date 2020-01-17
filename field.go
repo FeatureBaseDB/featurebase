@@ -526,6 +526,14 @@ func (f *Field) Open() error {
 			return errors.Wrap(err, "applying translate store")
 		}
 
+		// If the field has a foreign index, make sure the index
+		// exists.
+		if f.options.ForeignIndex != "" {
+			if err := f.holder.checkForeignIndex(f); err != nil {
+				return errors.Wrap(err, "checking foreign index")
+			}
+		}
+
 		return nil
 	}(); err != nil {
 		f.Close()
@@ -548,6 +556,14 @@ func (f *Field) applyTranslateStore() error {
 	return nil
 }
 
+// applyForeignIndex used to set the field's translateStore to
+// that of the foreign index, but since moving to partitioned
+// translate stores on indexes, that doesn't happen anymore.
+// So now all this method does is check that the foreign index
+// actually exists. If we decided this was unnecessary (which
+// it kind of is), we could remove the field.holder and all
+// the logic which does this check on holder open after all
+// indexes have opened.
 func (f *Field) applyForeignIndex() error {
 	foreignIndex := f.holder.Index(f.options.ForeignIndex)
 	if foreignIndex == nil {
