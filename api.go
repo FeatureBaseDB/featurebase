@@ -1100,22 +1100,17 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 		// Translate values when the field uses keys (for example, when
 		// the field has a ForeignIndex with keys).
 		if useKeys {
-			keySet := make(map[string]struct{})
-			for i := range req.StringValues {
-				keySet[req.StringValues[i]] = struct{}{}
-			}
-
-			// Perform a separate batch translation for each separate index used.
-			keyMap := make(map[string]uint64)
-			if keyMap, err = api.cluster.translateIndexKeySet(ctx, foreignIndexName, keySet); err != nil {
+			// Perform translation.
+			uints, err := api.cluster.translateIndexKeys(ctx, foreignIndexName, req.StringValues)
+			if err != nil {
 				return err
 			}
 
 			// Because the BSI field supports negative values, we have to
 			// convert the uint64 keys to a slice of int64.
-			ints := make([]int64, len(req.StringValues))
-			for i := range req.StringValues {
-				ints[i] = int64(keyMap[req.StringValues[i]])
+			ints := make([]int64, len(uints))
+			for i := range uints {
+				ints[i] = int64(uints[i])
 			}
 			req.Values = ints
 		}
