@@ -3940,10 +3940,7 @@ func sameStringSlice(x, y []string) bool {
 			delete(diff, _y)
 		}
 	}
-	if len(diff) == 0 {
-		return true
-	}
-	return false
+	return len(diff) == 0
 }
 
 func TestExecutor_Execute_GroupBy(t *testing.T) {
