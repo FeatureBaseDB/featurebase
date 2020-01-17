@@ -1086,18 +1086,36 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 			req.Shard = math.MaxUint64
 		}
 
+		// Determine if foreign index is being used for translation.
+		useKeys := field.Keys()
+		foreignIndexName := field.ForeignIndex()
+		if foreignIndexName != "" {
+			foreignIndex := api.holder.indexes[foreignIndexName]
+			if foreignIndex == nil {
+				return errors.Errorf("foreign index not found: %q", foreignIndexName)
+			}
+			useKeys = foreignIndex.Keys()
+		}
+
 		// Translate values when the field uses keys (for example, when
 		// the field has a ForeignIndex with keys).
-		if field.Keys() {
-			uints, err := field.translateStore.TranslateKeys(req.StringValues)
-			if err != nil {
-				return errors.Wrap(err, "translating string values")
+		if useKeys {
+			keySet := make(map[string]struct{})
+			for i := range req.StringValues {
+				keySet[req.StringValues[i]] = struct{}{}
 			}
-			// Because the BSI field supports negative value, we have to
-			// convert the slice of uint64 keys to a slice of int64.
-			ints := make([]int64, len(uints))
-			for i := range uints {
-				ints[i] = int64(uints[i])
+
+			// Perform a separate batch translation for each separate index used.
+			keyMap := make(map[string]uint64)
+			if keyMap, err = api.cluster.translateIndexKeySet(ctx, foreignIndexName, keySet); err != nil {
+				return err
+			}
+
+			// Because the BSI field supports negative values, we have to
+			// convert the uint64 keys to a slice of int64.
+			ints := make([]int64, len(req.StringValues))
+			for i := range req.StringValues {
+				ints[i] = int64(keyMap[req.StringValues[i]])
 			}
 			req.Values = ints
 		}

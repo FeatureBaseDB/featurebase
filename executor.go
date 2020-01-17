@@ -3544,7 +3544,7 @@ func (e *executor) translateCalls(ctx context.Context, defaultIndexName string, 
 	for indexName, keySet := range keySets {
 		idx := e.Holder.indexes[indexName]
 		if idx == nil {
-			return fmt.Errorf("canot find index %q", indexName)
+			return fmt.Errorf("cannot find index %q", indexName)
 		}
 
 		if !idx.Keys() || len(keySets) == 0 {
