@@ -2709,6 +2709,14 @@ func unionInPlaceWrapper(a, b *Container) *Container {
 	out.UnionInPlace(B)
 	return out.Containers.Get(0)
 }
+func differenceInPlaceWrapper(a, b *Container) *Container {
+	out := NewBitmap()
+	out.Containers.Put(0, a.Clone())
+	B := NewBitmap()
+	B.Containers.Put(0, b)
+	out.DifferenceInPlace(B)
+	return out.Containers.Get(0)
+}
 
 func TestContainerCombinations(t *testing.T) {
 
@@ -3283,6 +3291,120 @@ func TestContainerCombinations(t *testing.T) {
 		{flip, "outerBitsSet", "", "innerBitsSet"},
 		{flip, "oddBitsSet", "", "evenBitsSet"},
 		{flip, "evenBitsSet", "", "oddBitsSet"},
+
+		// differenceInPlace
+		{differenceInPlaceWrapper, "empty", "empty", "empty"},
+		{differenceInPlaceWrapper, "empty", "full", "empty"},
+		{differenceInPlaceWrapper, "empty", "firstBitSet", "empty"},
+		{differenceInPlaceWrapper, "empty", "lastBitSet", "empty"},
+		{differenceInPlaceWrapper, "empty", "firstBitUnset", "empty"},
+		{differenceInPlaceWrapper, "empty", "lastBitUnset", "empty"},
+		{differenceInPlaceWrapper, "empty", "innerBitsSet", "empty"},
+		{differenceInPlaceWrapper, "empty", "outerBitsSet", "empty"},
+		{differenceInPlaceWrapper, "empty", "oddBitsSet", "empty"},
+		{differenceInPlaceWrapper, "empty", "evenBitsSet", "empty"},
+		//
+		{differenceInPlaceWrapper, "full", "empty", "full"},
+		{differenceInPlaceWrapper, "full", "full", "empty"},
+		{differenceInPlaceWrapper, "full", "firstBitSet", "firstBitUnset"},
+		{differenceInPlaceWrapper, "full", "lastBitSet", "lastBitUnset"},
+		{differenceInPlaceWrapper, "full", "firstBitUnset", "firstBitSet"},
+		{differenceInPlaceWrapper, "full", "lastBitUnset", "lastBitSet"},
+		{differenceInPlaceWrapper, "full", "innerBitsSet", "outerBitsSet"},
+		{differenceInPlaceWrapper, "full", "outerBitsSet", "innerBitsSet"},
+		{differenceInPlaceWrapper, "full", "oddBitsSet", "evenBitsSet"},
+		{differenceInPlaceWrapper, "full", "evenBitsSet", "oddBitsSet"},
+		//
+		{differenceInPlaceWrapper, "firstBitSet", "empty", "firstBitSet"},
+		{differenceInPlaceWrapper, "firstBitSet", "full", "empty"},
+		{differenceInPlaceWrapper, "firstBitSet", "firstBitSet", "empty"},
+		{differenceInPlaceWrapper, "firstBitSet", "lastBitSet", "firstBitSet"},
+		{differenceInPlaceWrapper, "firstBitSet", "firstBitUnset", "firstBitSet"},
+		{differenceInPlaceWrapper, "firstBitSet", "lastBitUnset", "empty"},
+		{differenceInPlaceWrapper, "firstBitSet", "innerBitsSet", "firstBitSet"},
+		{differenceInPlaceWrapper, "firstBitSet", "outerBitsSet", "empty"},
+		{differenceInPlaceWrapper, "firstBitSet", "oddBitsSet", "firstBitSet"},
+		{differenceInPlaceWrapper, "firstBitSet", "evenBitsSet", "empty"},
+		//
+		{differenceInPlaceWrapper, "lastBitSet", "empty", "lastBitSet"},
+		{differenceInPlaceWrapper, "lastBitSet", "full", "empty"},
+		{differenceInPlaceWrapper, "lastBitSet", "firstBitSet", "lastBitSet"},
+		{differenceInPlaceWrapper, "lastBitSet", "lastBitSet", "empty"},
+		{differenceInPlaceWrapper, "lastBitSet", "firstBitUnset", "empty"},
+		{differenceInPlaceWrapper, "lastBitSet", "lastBitUnset", "lastBitSet"},
+		{differenceInPlaceWrapper, "lastBitSet", "innerBitsSet", "lastBitSet"},
+		{differenceInPlaceWrapper, "lastBitSet", "outerBitsSet", "empty"},
+		{differenceInPlaceWrapper, "lastBitSet", "oddBitsSet", "empty"},
+		{differenceInPlaceWrapper, "lastBitSet", "evenBitsSet", "lastBitSet"},
+		//
+		{differenceInPlaceWrapper, "firstBitUnset", "empty", "firstBitUnset"},
+		{differenceInPlaceWrapper, "firstBitUnset", "full", "empty"},
+		{differenceInPlaceWrapper, "firstBitUnset", "firstBitSet", "firstBitUnset"},
+		{differenceInPlaceWrapper, "firstBitUnset", "lastBitSet", "innerBitsSet"},
+		{differenceInPlaceWrapper, "firstBitUnset", "firstBitUnset", "empty"},
+		{differenceInPlaceWrapper, "firstBitUnset", "lastBitUnset", "lastBitSet"},
+		{differenceInPlaceWrapper, "firstBitUnset", "innerBitsSet", "lastBitSet"},
+		{differenceInPlaceWrapper, "firstBitUnset", "outerBitsSet", "innerBitsSet"},
+		//{differenceInPlaceWrapper, "firstBitUnset", "oddBitsSet", ""},
+		{differenceInPlaceWrapper, "firstBitUnset", "evenBitsSet", "oddBitsSet"},
+		//
+		{differenceInPlaceWrapper, "lastBitUnset", "empty", "lastBitUnset"},
+		{differenceInPlaceWrapper, "lastBitUnset", "full", "empty"},
+		{differenceInPlaceWrapper, "lastBitUnset", "firstBitSet", "innerBitsSet"},
+		{differenceInPlaceWrapper, "lastBitUnset", "lastBitSet", "lastBitUnset"},
+		{differenceInPlaceWrapper, "lastBitUnset", "firstBitUnset", "firstBitSet"},
+		{differenceInPlaceWrapper, "lastBitUnset", "lastBitUnset", "empty"},
+		{differenceInPlaceWrapper, "lastBitUnset", "innerBitsSet", "firstBitSet"},
+		{differenceInPlaceWrapper, "lastBitUnset", "outerBitsSet", "innerBitsSet"},
+		{differenceInPlaceWrapper, "lastBitUnset", "oddBitsSet", "evenBitsSet"},
+		//{differenceInPlaceWrapper, "lastBitUnset", "evenBitsSet", ""},
+		//
+		{differenceInPlaceWrapper, "innerBitsSet", "empty", "innerBitsSet"},
+		{differenceInPlaceWrapper, "innerBitsSet", "full", "empty"},
+		{differenceInPlaceWrapper, "innerBitsSet", "firstBitSet", "innerBitsSet"},
+		{differenceInPlaceWrapper, "innerBitsSet", "lastBitSet", "innerBitsSet"},
+		{differenceInPlaceWrapper, "innerBitsSet", "firstBitUnset", "empty"},
+		{differenceInPlaceWrapper, "innerBitsSet", "lastBitUnset", "empty"},
+		{differenceInPlaceWrapper, "innerBitsSet", "innerBitsSet", "empty"},
+		{differenceInPlaceWrapper, "innerBitsSet", "outerBitsSet", "innerBitsSet"},
+		//{differenceInPlaceWrapper, "innerBitsSet", "oddBitsSet", ""},
+		//{differenceInPlaceWrapper, "innerBitsSet", "evenBitsSet", ""},
+		//
+		{differenceInPlaceWrapper, "outerBitsSet", "empty", "outerBitsSet"},
+		{differenceInPlaceWrapper, "outerBitsSet", "full", "empty"},
+		{differenceInPlaceWrapper, "outerBitsSet", "firstBitSet", "lastBitSet"},
+		{differenceInPlaceWrapper, "outerBitsSet", "lastBitSet", "firstBitSet"},
+		{differenceInPlaceWrapper, "outerBitsSet", "firstBitUnset", "firstBitSet"},
+		{differenceInPlaceWrapper, "outerBitsSet", "lastBitUnset", "lastBitSet"},
+		{differenceInPlaceWrapper, "outerBitsSet", "innerBitsSet", "outerBitsSet"},
+		{differenceInPlaceWrapper, "outerBitsSet", "outerBitsSet", "empty"},
+		{differenceInPlaceWrapper, "outerBitsSet", "oddBitsSet", "firstBitSet"},
+		{differenceInPlaceWrapper, "outerBitsSet", "evenBitsSet", "lastBitSet"},
+		//
+		{differenceInPlaceWrapper, "oddBitsSet", "empty", "oddBitsSet"},
+		{differenceInPlaceWrapper, "oddBitsSet", "full", "empty"},
+		{differenceInPlaceWrapper, "oddBitsSet", "firstBitSet", "oddBitsSet"},
+		//{differenceInPlaceWrapper, "oddBitsSet", "lastBitSet", ""},
+		{differenceInPlaceWrapper, "oddBitsSet", "firstBitUnset", "empty"},
+		{differenceInPlaceWrapper, "oddBitsSet", "lastBitUnset", "lastBitSet"},
+		{differenceInPlaceWrapper, "oddBitsSet", "innerBitsSet", "lastBitSet"},
+		//{difference, "oddBitsSet", "outerBitsSet", ""},
+		{differenceInPlaceWrapper, "oddBitsSet", "oddBitsSet", "empty"},
+		{differenceInPlaceWrapper, "oddBitsSet", "evenBitsSet", "oddBitsSet"},
+		//
+		{differenceInPlaceWrapper, "evenBitsSet", "empty", "evenBitsSet"},
+		{differenceInPlaceWrapper, "evenBitsSet", "full", "empty"},
+		//{difference, "evenBitsSet", "firstBitSet", ""},
+		{differenceInPlaceWrapper, "evenBitsSet", "lastBitSet", "evenBitsSet"},
+		{differenceInPlaceWrapper, "evenBitsSet", "firstBitUnset", "firstBitSet"},
+		{differenceInPlaceWrapper, "evenBitsSet", "lastBitUnset", "empty"},
+		{differenceInPlaceWrapper, "evenBitsSet", "innerBitsSet", "firstBitSet"},
+		//{difference, "evenBitsSet", "outerBitsSet", ""},
+		{differenceInPlaceWrapper, "evenBitsSet", "oddBitsSet", "evenBitsSet"},
+		{differenceInPlaceWrapper, "evenBitsSet", "evenBitsSet", "empty"},
+		/*
+		 */
+
 	}
 	for _, testOp := range testOps {
 		for _, x := range containerTypes {
@@ -3895,4 +4017,15 @@ func TestBitmapAny(t *testing.T) {
 	if bm.Any() {
 		t.Error("shouldn't be any left")
 	}
+}
+
+func TestStuff(t *testing.T) {
+	a := doContainer(containerRun, runFull())
+	b := doContainer(containerBitmap, bitmapFull())
+	//	b := doContainer(containerBitmap, bitmapLastBitSet())
+	r := differenceInPlaceWrapper(a, b)
+	if r.N() != 0 {
+		t.Error("fail")
+	}
+
 }
