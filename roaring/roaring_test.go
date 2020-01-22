@@ -1740,40 +1740,46 @@ func BenchmarkUnionBulk(b *testing.B) {
 	}
 }
 
-func TestBitmap_differenceInPlace(t *testing.T) {
-	bm := testBM()
-	//the array
+func TestBitmap_DifferenceInPlace(t *testing.T) {
+	// array
 	arraybm := roaring.NewSliceBitmap()
-	bitmapbm := roaring.NewSliceBitmap()
-	smallrunbm := roaring.NewSliceBitmap()
-	largerunbm := roaring.NewSliceBitmap()
-
 	for i := uint64(0); i < 1024; i += 4 {
 		_, _ = arraybm.Add((1 << 16) + i)
 	}
 	arraybm.Optimize()
 
+	// bitmap
+	bitmapbm := roaring.NewSliceBitmap()
 	for i := uint64(0); i < 16384; i += 2 {
 		_, _ = bitmapbm.Add((2 << 16) + i)
 	}
 	bitmapbm.Optimize()
-	//small run
+
+	// small run
+	smallrunbm := roaring.NewSliceBitmap()
 	for i := uint64(0); i < 1024; i++ {
 		_, _ = smallrunbm.Add((3 << 16) + i)
 	}
 	smallrunbm.Optimize()
+
+	// large run
+	largerunbm := roaring.NewSliceBitmap()
 	for i := uint64(0); i < 65535; i++ {
 		_, _ = largerunbm.Add((4 << 16) + i)
 	}
-	smallrunbm.Optimize()
+	largerunbm.Optimize()
+
+	// test the difference in place
+	bm := testBM()
 	bm.DifferenceInPlace(arraybm, bitmapbm, smallrunbm, largerunbm)
 	if bm.Count() != 0 {
-		t.Fatalf("expected bitmap to be empty, it wasn't. %d", bm.Count())
+		t.Fatalf("expected bitmap count to be 0, but got: %d", bm.Count())
 	}
+
 	bm = testBM()
 	bm.DifferenceInPlace(bitmapbm, smallrunbm, largerunbm)
 	if bm.Count() != 256 {
-		t.Fatalf("expected bitmap to have 256, it wasn't. %d", bm.Count())
+		t.Fatalf("expected bitmap count to be 256, but got: %d", bm.Count())
 	}
 }
 
