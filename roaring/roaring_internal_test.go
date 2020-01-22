@@ -2709,6 +2709,7 @@ func unionInPlaceWrapper(a, b *Container) *Container {
 	out.UnionInPlace(B)
 	return out.Containers.Get(0)
 }
+
 func differenceInPlaceWrapper(a, b *Container) *Container {
 	out := NewBitmap()
 	out.Containers.Put(0, a.Clone())
@@ -3388,23 +3389,20 @@ func TestContainerCombinations(t *testing.T) {
 		{differenceInPlaceWrapper, "oddBitsSet", "firstBitUnset", "empty"},
 		{differenceInPlaceWrapper, "oddBitsSet", "lastBitUnset", "lastBitSet"},
 		{differenceInPlaceWrapper, "oddBitsSet", "innerBitsSet", "lastBitSet"},
-		//{difference, "oddBitsSet", "outerBitsSet", ""},
+		//{differenceInPlaceWrapper, "oddBitsSet", "outerBitsSet", ""},
 		{differenceInPlaceWrapper, "oddBitsSet", "oddBitsSet", "empty"},
 		{differenceInPlaceWrapper, "oddBitsSet", "evenBitsSet", "oddBitsSet"},
 		//
 		{differenceInPlaceWrapper, "evenBitsSet", "empty", "evenBitsSet"},
 		{differenceInPlaceWrapper, "evenBitsSet", "full", "empty"},
-		//{difference, "evenBitsSet", "firstBitSet", ""},
+		//{differenceInPlaceWrapper, "evenBitsSet", "firstBitSet", ""},
 		{differenceInPlaceWrapper, "evenBitsSet", "lastBitSet", "evenBitsSet"},
 		{differenceInPlaceWrapper, "evenBitsSet", "firstBitUnset", "firstBitSet"},
 		{differenceInPlaceWrapper, "evenBitsSet", "lastBitUnset", "empty"},
 		{differenceInPlaceWrapper, "evenBitsSet", "innerBitsSet", "firstBitSet"},
-		//{difference, "evenBitsSet", "outerBitsSet", ""},
+		//{differenceInPlaceWrapper, "evenBitsSet", "outerBitsSet", ""},
 		{differenceInPlaceWrapper, "evenBitsSet", "oddBitsSet", "evenBitsSet"},
 		{differenceInPlaceWrapper, "evenBitsSet", "evenBitsSet", "empty"},
-		/*
-		 */
-
 	}
 	for _, testOp := range testOps {
 		for _, x := range containerTypes {
@@ -4019,13 +4017,11 @@ func TestBitmapAny(t *testing.T) {
 	}
 }
 
-func TestStuff(t *testing.T) {
+func TestDifferenceInPlace_N(t *testing.T) {
 	a := doContainer(containerRun, runFull())
 	b := doContainer(containerBitmap, bitmapFull())
-	//	b := doContainer(containerBitmap, bitmapLastBitSet())
 	r := differenceInPlaceWrapper(a, b)
 	if r.N() != 0 {
-		t.Error("fail")
+		t.Error("expected difference of containers to have n=0")
 	}
-
 }

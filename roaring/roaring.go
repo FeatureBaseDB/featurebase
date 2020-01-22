@@ -25,7 +25,6 @@ import (
 	"sort"
 	"unsafe"
 
-	"github.com/pilosa/pilosa"
 	"github.com/pkg/errors"
 )
 
@@ -834,16 +833,18 @@ func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
 // Bitmap 4 |___X_______________________|     |      |___X_______________________|     |      |___X_______________________|
 //              _
 func (b *Bitmap) unionInPlace(others ...*Bitmap) {
+	const staticSize = 20
 	var (
 		requiredSliceSize = len(others)
-		// To avoid having to allocate a slice everytime, if the number of bitmaps
-		// being unioned is small enough we can just use this stack-allocated array.
-		staticHandledIters = [20]handledIter{}
+		// To avoid having to allocate a slice every time, if the number of bitmaps
+		// being unioned is small enough (i.e. smaller than staticSize), we can just
+		// use this stack-allocated array.
+		staticHandledIters = [staticSize]handledIter{}
 		bitmapIters        handledIters
 		target             = b
 	)
 
-	if requiredSliceSize <= 20 {
+	if requiredSliceSize <= staticSize {
 		bitmapIters = staticHandledIters[:0]
 	} else {
 		bitmapIters = make(handledIters, 0, requiredSliceSize)
@@ -5454,18 +5455,29 @@ type containerUnionSummaryStats struct {
 	hasMaxRange bool
 }
 
+// DifferenceInPlace returns the bitwise difference of b and others, modifying
+// b in place.
 func (b *Bitmap) DifferenceInPlace(others ...*Bitmap) {
+	bSize := b.Size()
+
+	// If b doesn't have any containers then return early.
+	if bSize == 0 {
+		return
+	}
+
+	const staticSize = 20
 	var (
 		requiredSliceSize = len(others)
-		// To avoid having to allocate a slice everytime, if the number of bitmaps
-		// being unioned is small enough we can just use this stack-allocated array.
-		staticHandledIters = [20]handledIter{}
-		bitmapIters        handledIters
-		target             = b
-		removeContinerKeys = [pilosa.ShardWidth / (1 << 16)]uint64{} //i need a better guess for this
+		// To avoid having to allocate a slice every time, if the number of bitmaps
+		// being differenced is small enough (i.e. smaller than staticSize), we can
+		// just use this stack-allocated array.
+		staticHandledIters  = [staticSize]handledIter{}
+		bitmapIters         handledIters
+		target              = b
+		removeContainerKeys = make([]uint64, bSize)
 	)
 
-	if requiredSliceSize <= 20 {
+	if requiredSliceSize <= staticSize {
 		bitmapIters = staticHandledIters[:0]
 	} else {
 		bitmapIters = make(handledIters, 0, requiredSliceSize)
@@ -5494,9 +5506,9 @@ func (b *Bitmap) DifferenceInPlace(others ...*Bitmap) {
 			}
 			iKey, iContainer := iIter.iter.Value()
 			if targetKey == iKey {
-				curContainer.differenceInPlaceO(iContainer)
+				curContainer.differenceInPlace(iContainer)
 				if curContainer.N() == 0 { //according to comments N = 1-count, so N should == 1 if 0 elements
-					removeContinerKeys[n] = iKey
+					removeContainerKeys[n] = iKey
 					n++
 					break
 				}
@@ -5508,35 +5520,13 @@ func (b *Bitmap) DifferenceInPlace(others ...*Bitmap) {
 	}
 
 	for i := 0; i < n; i++ {
-		b.Containers.Remove(removeContinerKeys[i])
+		b.Containers.Remove(removeContainerKeys[i])
 
 	}
 	target.Containers.Repair()
 }
 
 func (c *Container) differenceInPlace(other *Container) {
-	if other.isArray() {
-		for _, v := range other.array() {
-			c.remove(v)
-		}
-	} else if other.isBitmap() {
-		for i, word := range other.bitmap() {
-			for word != 0 {
-				t := word & -word
-				c.remove(uint16((i*64 + int(popcount(t-1)))))
-				word ^= t
-			}
-		}
-	} else if other.isRun() {
-		for _, r := range other.runs() {
-			for v := int(r.start); v <= int(r.last); v++ {
-				c.remove(uint16(v))
-			}
-		}
-	}
-}
-
-func (c *Container) differenceInPlaceO(other *Container) {
 	if other.isArray() {
 		if c.isArray() {
 			differenceArrayArrayInPlace(c, other)
@@ -5564,10 +5554,13 @@ func (c *Container) differenceInPlaceO(other *Container) {
 	}
 }
 
-func differenceArrayArrayInPlace(output, other *Container) {
+func differenceArrayArrayInPlace(c, other *Container) {
 	statsHit("differenceInPlace/ArrayArray")
-	aa, ab := output.array(), other.array()
+	aa, ab := c.array(), other.array()
 	na, nb := len(aa), len(ab)
+	if na == 0 || nb == 0 {
+		return
+	}
 	n := 0
 	for i, j := 0, 0; i < na; {
 		va := aa[i]
@@ -5590,13 +5583,17 @@ func differenceArrayArrayInPlace(output, other *Container) {
 		}
 	}
 	aa = aa[:n]
-	output.setArray(aa)
+	c.setArray(aa)
 }
+
 func differenceArrayBitmapInPlace(c, other *Container) {
 	statsHit("differenceInPlace/ArrayBitmap")
 	aa := c.array()
 	n := 0
 	bitmap := other.bitmap()
+	if len(aa) == 0 || len(bitmap) == 0 {
+		return
+	}
 	for _, va := range aa {
 		bmidx := va / 64
 		bidx := va % 64
@@ -5659,9 +5656,13 @@ func differenceArrayRunInPlace(c, other *Container) {
 func differenceBitmapArrayInPlace(c, other *Container) {
 	statsHit("differenceInPlace/BitmapArray")
 	bitmap := c.bitmap()
+	ab := other.array()
+	if len(bitmap) == 0 || len(ab) == 0 {
+		return
+	}
 
 	n := c.N()
-	for _, v := range other.array() {
+	for _, v := range ab {
 		if c.bitmapContains(v) {
 			bitmap[v/64] &^= (uint64(1) << uint(v%64))
 			n--
@@ -5677,10 +5678,15 @@ func differenceBitmapBitmapInPlace(c, other *Container) {
 	statsHit("differenceInPlace/BitmapBitmap")
 	// local variables added to prevent BCE checks in loop
 	// see https://go101.org/article/bounds-check-elimination.html
+	a := c.bitmap()
+	b := other.bitmap()
+	if len(a) == 0 || len(b) == 0 {
+		return
+	}
 
 	var (
-		ab = c.bitmap()[:bitmapN]
-		bb = other.bitmap()[:bitmapN]
+		ab = a[:bitmapN]
+		bb = b[:bitmapN]
 		n  int32
 	)
 
@@ -5693,16 +5699,21 @@ func differenceBitmapBitmapInPlace(c, other *Container) {
 		c.bitmapToArray() // Will this work?
 	}
 }
+
 func differenceBitmapRunInPlace(c, other *Container) {
 	statsHit("differenceInPlace/BitmapRun")
+	if len(c.bitmap()) == 0 {
+		return
+	}
 	for _, run := range other.runs() {
 		c.bitmapZeroRange(uint64(run.start), uint64(run.last)+1)
 	}
 }
+
 func differenceRunArrayInPlace(c, other *Container) {
 	statsHit("differenceInPlace/RunArray")
 	ra, ab := c.runs(), other.array()
-	if len(ab) == 0 {
+	if len(ra) == 0 || len(ab) == 0 {
 		return
 	}
 	runs := make([]interval16, 0, len(ra))
@@ -5755,9 +5766,13 @@ RUNLOOP:
 	}
 	c.optimize()
 }
+
 func differenceRunBitmapInPlace(c, other *Container) {
 	statsHit("differenceInPlace/RunBitmap")
 	ra := c.runs()
+	if len(ra) == 0 || len(other.bitmap()) == 0 {
+		return
+	}
 	// If a is full, difference is the flip of b.
 	if len(ra) > 0 && ra[0].start == 0 && ra[0].last == 65535 {
 		clone := other.Clone()
@@ -5820,6 +5835,7 @@ func differenceRunBitmapInPlace(c, other *Container) {
 		c.runToBitmap()
 	}
 }
+
 func differenceRunRunInPlace(c, other *Container) {
 	statsHit("differenceInPlace/RunRun")
 
