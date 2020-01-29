@@ -545,6 +545,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 		var err error
 
 		if field.Keys() {
+			// TODO: handle case: field.ForeignIndex
 			if rowStr, err = field.TranslateStore().TranslateID(rowID); err != nil {
 				return errors.Wrap(err, "translating row")
 			}
@@ -1451,6 +1452,10 @@ func (api *API) TranslateIndexKey(ctx context.Context, indexName string, key str
 	return api.cluster.translateIndexKey(ctx, indexName, key)
 }
 
+func (api *API) TranslateIndexIDs(ctx context.Context, indexName string, ids []uint64) ([]string, error) {
+	return api.cluster.translateIndexIDs(ctx, indexName, ids)
+}
+
 // TranslateKeys handles a TranslateKeyRequest.
 func (api *API) TranslateKeys(ctx context.Context, r io.Reader) (_ []byte, err error) {
 	var req TranslateKeysRequest
@@ -1469,6 +1474,11 @@ func (api *API) TranslateKeys(ctx context.Context, r io.Reader) (_ []byte, err e
 	} else {
 		if field := api.holder.Field(req.Index, req.Field); field == nil {
 			return nil, ErrFieldNotFound
+		} else if fi := field.ForeignIndex(); fi != "" {
+			ids, err = api.cluster.translateIndexKeys(ctx, fi, req.Keys)
+			if err != nil {
+				return nil, err
+			}
 		} else if ids, err = field.TranslateStore().TranslateKeys(req.Keys); err != nil {
 			return nil, err
 		}
@@ -1500,6 +1510,11 @@ func (api *API) TranslateIDs(ctx context.Context, r io.Reader) (_ []byte, err er
 	} else {
 		if field := api.holder.Field(req.Index, req.Field); field == nil {
 			return nil, ErrFieldNotFound
+		} else if fi := field.ForeignIndex(); fi != "" {
+			keys, err = api.cluster.translateIndexIDs(ctx, fi, req.IDs)
+			if err != nil {
+				return nil, err
+			}
 		} else if keys, err = field.TranslateStore().TranslateIDs(req.IDs); err != nil {
 			return nil, err
 		}

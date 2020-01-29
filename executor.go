@@ -3771,6 +3771,7 @@ func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[stri
 				if !ok {
 					return errors.New("prev value must be a string when field 'keys' option enabled")
 				}
+				// TODO: does this need to take field.ForeignIndex() into consideration?
 				id, err := field.TranslateStore().TranslateKey(prevStr)
 				if err != nil {
 					return errors.Wrapf(err, "translating row key '%s'", prevStr)
@@ -3937,6 +3938,7 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 					return nil, ErrFieldNotFound
 				}
 				if field.Keys() {
+					// TODO: does this need to take field.ForeignIndex() into consideration?
 					key, err := field.TranslateStore().TranslateID(g.RowID)
 					if err != nil {
 						return nil, errors.Wrap(err, "translating row ID in Group")

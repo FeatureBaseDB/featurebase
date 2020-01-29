@@ -576,6 +576,7 @@ func (f *Field) applyForeignIndex() error {
 	if foreignIndex == nil {
 		return errors.Wrapf(ErrForeignIndexNotFound, "%s", f.options.ForeignIndex)
 	}
+	f.usesKeys = foreignIndex.Keys()
 	return nil
 }
 
