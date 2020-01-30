@@ -5518,7 +5518,6 @@ func (b *Bitmap) DifferenceInPlace(others ...*Bitmap) {
 				} else {
 					break
 				}
-
 			}
 
 			if targetKey == iKey {
