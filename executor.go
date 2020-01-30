@@ -3583,7 +3583,7 @@ func (e *executor) collectCallKeySets(ctx context.Context, indexName string, c *
 		}
 	}
 
-	// Collection foreign index keys.
+	// Collect foreign index keys.
 	if fieldName != "" {
 		idx := e.Holder.indexes[indexName]
 		if field := idx.Field(fieldName); field != nil && field.ForeignIndex() != "" {
