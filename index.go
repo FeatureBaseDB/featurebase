@@ -62,8 +62,7 @@ type Index struct {
 	logger        logger.Logger
 	snapshotQueue snapshotQueue
 
-	// Used for notifying holder when a field is added.
-	// Also passed to field for foreign-index lookup.
+	// Passed to field for foreign-index lookup.
 	holder *Holder
 
 	// Per-partition translation stores
