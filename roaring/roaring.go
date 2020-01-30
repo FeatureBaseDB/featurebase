@@ -995,7 +995,15 @@ func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 }
 
 // Difference returns the difference of b and other.
-func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
+func (b *Bitmap) Difference(other ...*Bitmap) *Bitmap {
+	output := b.singleDifference(other[0])
+	if len(other) > 1 {
+		output.DifferenceInPlace(other[1:]...)
+	}
+	return output
+}
+
+func (b *Bitmap) singleDifference(other *Bitmap) *Bitmap {
 	output := NewBitmap()
 	iiter, _ := b.Containers.Iterator(0)
 	jiter, _ := other.Containers.Iterator(0)
@@ -5474,7 +5482,7 @@ func (b *Bitmap) DifferenceInPlace(others ...*Bitmap) {
 		staticHandledIters  = [staticSize]handledIter{}
 		bitmapIters         handledIters
 		target              = b
-		removeContainerKeys = make([]uint64, bSize)
+		removeContainerKeys = make([]uint64, 0, bSize)
 	)
 
 	if requiredSliceSize <= staticSize {
@@ -5495,32 +5503,40 @@ func (b *Bitmap) DifferenceInPlace(others ...*Bitmap) {
 
 	targetItr, _ := target.Containers.Iterator(0)
 	// Go through all the containers and remove the other bits
-	n := 0
 	for targetItr.Next() {
 		targetKey, curContainer := targetItr.Value()
 		// Loop until every iters current value has been handled.
-
 		for _, iIter := range bitmapIters {
 			if !iIter.hasNext {
 				continue
 			}
 			iKey, iContainer := iIter.iter.Value()
-			if targetKey == iKey {
-				curContainer.differenceInPlace(iContainer)
-				if curContainer.N() == 0 { //according to comments N = 1-count, so N should == 1 if 0 elements
-					removeContainerKeys[n] = iKey
-					n++
+			for iKey < targetKey {
+				iIter.hasNext = iIter.iter.Next()
+				if iIter.hasNext {
+					iKey, iContainer = iIter.iter.Value()
+				} else {
 					break
 				}
-				iIter.hasNext = iIter.iter.Next()
-			} else if targetKey > iKey {
+			}
+
+			if targetKey == iKey {
+				if curContainer.frozen() {
+					curContainer = curContainer.Clone()
+					b.Containers.Put(targetKey, curContainer)
+				}
+				curContainer.differenceInPlace(iContainer)
+				if curContainer.N() == 0 {
+					removeContainerKeys = append(removeContainerKeys, iKey)
+					break
+				}
 				iIter.hasNext = iIter.iter.Next()
 			}
 		}
 	}
 
-	for i := 0; i < n; i++ {
-		b.Containers.Remove(removeContainerKeys[i])
+	for _, key := range removeContainerKeys {
+		b.Containers.Remove(key)
 
 	}
 	target.Containers.Repair()

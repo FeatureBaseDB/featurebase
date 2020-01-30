@@ -138,3 +138,61 @@ func TestRow_Includes(t *testing.T) {
 		t.Fatalf("row should include %d", 2*ShardWidth)
 	}
 }
+
+func TestRow_DifferenceInPlace(t *testing.T) {
+	row0 := pilosa.NewRow(0)
+	row1 := pilosa.NewRow()
+	row2 := pilosa.NewRow(0)
+	res := row0.Difference(row1, row2)
+
+	if !row0.Includes(0) {
+		t.Fatal("row should include 0")
+	}
+	if res.Count() != 0 {
+		t.Fatal("results should be empty")
+	}
+}
+func eq(a, b []uint64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i, v := range a {
+		if v != b[i] {
+			return false
+		}
+	}
+	return true
+}
+func TestRow_DifferenceInPlace2(t *testing.T) {
+	lucky := []uint64{1, 3, 7, 9, 13, 15, 21, 25, 31, 33, 37, 43, 49, 51, 63, 67, 69, 73, 75, 79, 87, 93, 99, 105, 111, 115, 127, 129, 133, 135, 141, 151, 159, 163, 169, 171, 189, 193, 195, 201, 205, 211, 219, 223, 231, 235, 237, 241, 259, 261, 267, 273, 283, 285, 289, 297}
+	src := pilosa.NewRow(lucky...)
+	row1 := pilosa.NewRow()
+	m := uint64(9)
+	for i := m; i <= lucky[len(lucky)-1]; i += m {
+		row1.SetBit(i)
+	}
+	m = uint64(3)
+	row2 := pilosa.NewRow()
+	for i := m; i <= lucky[len(lucky)-1]; i += m {
+		row2.SetBit(i)
+	}
+	row3 := pilosa.NewRow()
+	m = uint64(5)
+	for i := m; i <= lucky[len(lucky)-1]; i += m {
+		row3.SetBit(i)
+	}
+	row4 := pilosa.NewRow()
+	m = uint64(7)
+	for i := m; i <= lucky[len(lucky)-1]; i += m {
+		row4.SetBit(i)
+	}
+	res5 := src.Difference(row1, row2, row3, row4)
+	res6 := src.Difference(row4, row3, row2, row1)
+	res7 := src.Difference(row4).Difference(row3).Difference(row2).Difference(row1)
+	if !eq(res5.Columns(), res6.Columns()) {
+		t.Fatalf("results do not match: %v, %v", res5.Columns(), res6.Columns())
+	}
+	if !eq(res6.Columns(), res7.Columns()) {
+		t.Fatalf("results do not match: %v, %v", res6.Columns(), res7.Columns())
+	}
+}

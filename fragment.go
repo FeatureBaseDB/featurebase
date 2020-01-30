@@ -1247,7 +1247,6 @@ func (f *fragment) rangeGT(bitDepth uint, predicate int64, allowEquality bool) (
 
 func (f *fragment) rangeGTUnsigned(filter *Row, bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
 	keep := NewRow()
-
 	// Filter any bits that don't match the current bit value.
 	for i := int(bitDepth - 1); i >= 0; i-- {
 		row := f.row(uint64(bsiOffsetBit + i))
@@ -1260,12 +1259,12 @@ func (f *fragment) rangeGTUnsigned(filter *Row, bitDepth uint, predicate uint64,
 			if bit == 1 {
 				return keep, nil
 			}
-			return filter.Difference(filter.Difference(row).Difference(keep)), nil
+			return filter.Difference(filter.Difference(row, keep)), nil
 		}
 
 		// If bit is set then remove all unset columns not already kept.
 		if bit == 1 {
-			filter = filter.Difference(filter.Difference(row).Difference(keep))
+			filter = filter.Difference(filter.Difference(row, keep))
 			continue
 		}
 
@@ -1333,7 +1332,7 @@ func (f *fragment) rangeBetweenUnsigned(filter *Row, bitDepth uint, predicateMin
 		// GTE predicateMin
 		// If bit is set then remove all unset columns not already kept.
 		if bit1 == 1 {
-			filter = filter.Difference(filter.Difference(row).Difference(keep1))
+			filter = filter.Difference(filter.Difference(row, keep1))
 		} else {
 			// If bit is unset then add columns with set bit to keep.
 			// Don't bother to compute this on the final iteration.
