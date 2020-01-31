@@ -545,7 +545,8 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 		var err error
 
 		if field.Keys() {
-			if rowStr, err = field.translateStore.TranslateID(rowID); err != nil {
+			// TODO: handle case: field.ForeignIndex
+			if rowStr, err = field.TranslateStore().TranslateID(rowID); err != nil {
 				return errors.Wrap(err, "translating row")
 			}
 		} else {
@@ -553,7 +554,9 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 		}
 
 		if index.Keys() {
-			if colStr, err = index.translateStore.TranslateID(columnID); err != nil {
+			if store := index.TranslateStore(api.cluster.idPartition(indexName, columnID)); store == nil {
+				return errors.Wrap(err, "partition does not exist")
+			} else if colStr, err = store.TranslateID(columnID); err != nil {
 				return errors.Wrap(err, "translating column")
 			}
 		} else {
@@ -963,7 +966,7 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 			if len(req.RowIDs) != 0 {
 				return errors.New("row ids cannot be used because field uses string keys")
 			}
-			if req.RowIDs, err = field.translateStore.TranslateKeys(req.RowKeys); err != nil {
+			if req.RowIDs, err = field.TranslateStore().TranslateKeys(req.RowKeys); err != nil {
 				return errors.Wrap(err, "translating rows")
 			}
 		}
@@ -973,7 +976,7 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 			if len(req.ColumnIDs) != 0 {
 				return errors.New("column ids cannot be used because index uses string keys")
 			}
-			if req.ColumnIDs, err = index.translateStore.TranslateKeys(req.ColumnKeys); err != nil {
+			if req.ColumnIDs, err = api.cluster.translateIndexKeys(ctx, req.Index, req.ColumnKeys); err != nil {
 				return errors.Wrap(err, "translating columns")
 			}
 		}
@@ -1078,7 +1081,7 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 			if len(req.ColumnIDs) != 0 {
 				return errors.New("column ids cannot be used because index uses string keys")
 			}
-			if req.ColumnIDs, err = index.translateStore.TranslateKeys(req.ColumnKeys); err != nil {
+			if req.ColumnIDs, err = api.cluster.translateIndexKeys(ctx, req.Index, req.ColumnKeys); err != nil {
 				return errors.Wrap(err, "translating columns")
 			}
 			req.Shard = math.MaxUint64
@@ -1087,12 +1090,14 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 		// Translate values when the field uses keys (for example, when
 		// the field has a ForeignIndex with keys).
 		if field.Keys() {
-			uints, err := field.translateStore.TranslateKeys(req.StringValues)
+			// Perform translation.
+			uints, err := api.cluster.translateIndexKeys(ctx, field.ForeignIndex(), req.StringValues)
 			if err != nil {
-				return errors.Wrap(err, "translating string values")
+				return err
 			}
-			// Because the BSI field supports negative value, we have to
-			// convert the slice of uint64 keys to a slice of int64.
+
+			// Because the BSI field supports negative values, we have to
+			// convert the uint64 keys to a slice of int64.
 			ints := make([]int64, len(uints))
 			for i := range uints {
 				ints[i] = int64(uints[i])
@@ -1384,14 +1389,75 @@ func (api *API) Info() serverInfo {
 }
 
 // GetTranslateEntryReader provides an entry reader for key translation logs starting at offset.
-func (api *API) GetTranslateEntryReader(ctx context.Context, offsets TranslateOffsetMap) (TranslateEntryReader, error) {
+func (api *API) GetTranslateEntryReader(ctx context.Context, offsets TranslateOffsetMap) (_ TranslateEntryReader, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "API.GetTranslateEntryReader")
 	defer span.Finish()
-	return api.holder.TranslateEntryReader(ctx, offsets)
+
+	// Ensure all readers are cleaned up if any error.
+	var a []TranslateEntryReader
+	defer func() {
+		if err != nil {
+			for i := range a {
+				a[i].Close()
+			}
+		}
+	}()
+
+	// Fetch all index partition readers.
+	for indexName, indexMap := range offsets {
+		index := api.holder.Index(indexName)
+		if index == nil {
+			return nil, ErrIndexNotFound
+		}
+
+		for partitionID, offset := range indexMap.Partitions {
+			store := index.TranslateStore(partitionID)
+			if store == nil {
+				return nil, ErrTranslateStoreNotFound
+			}
+
+			r, err := store.EntryReader(ctx, uint64(offset))
+			if err != nil {
+				return nil, errors.Wrap(err, "index partition translate reader")
+			}
+			a = append(a, r)
+		}
+	}
+
+	// Fetch all field readers.
+	for indexName, indexMap := range offsets {
+		index := api.holder.Index(indexName)
+		if index == nil {
+			return nil, ErrIndexNotFound
+		}
+
+		for fieldName, offset := range indexMap.Fields {
+			field := index.Field(fieldName)
+			if field == nil {
+				return nil, ErrIndexNotFound
+			}
+
+			r, err := field.TranslateStore().EntryReader(ctx, uint64(offset))
+			if err != nil {
+				return nil, errors.Wrap(err, "field translate reader")
+			}
+			a = append(a, r)
+		}
+	}
+
+	return NewMultiTranslateEntryReader(ctx, a), nil
+}
+
+func (api *API) TranslateIndexKey(ctx context.Context, indexName string, key string) (uint64, error) {
+	return api.cluster.translateIndexKey(ctx, indexName, key)
+}
+
+func (api *API) TranslateIndexIDs(ctx context.Context, indexName string, ids []uint64) ([]string, error) {
+	return api.cluster.translateIndexIDs(ctx, indexName, ids)
 }
 
 // TranslateKeys handles a TranslateKeyRequest.
-func (api *API) TranslateKeys(r io.Reader) ([]byte, error) {
+func (api *API) TranslateKeys(ctx context.Context, r io.Reader) (_ []byte, err error) {
 	var req TranslateKeysRequest
 	if buf, err := ioutil.ReadAll(r); err != nil {
 		return nil, NewBadRequestError(errors.Wrap(err, "read translate keys request error"))
@@ -1400,19 +1466,64 @@ func (api *API) TranslateKeys(r io.Reader) ([]byte, error) {
 	}
 
 	// Lookup store for either index or field and translate keys.
-	store, err := api.holder.TranslateStore(req.Index, req.Field)
-	if err != nil {
-		return nil, err
-	}
-	ids, err := store.TranslateKeys(req.Keys)
-	if err != nil {
-		return nil, err
+	var ids []uint64
+	if req.Field == "" {
+		if ids, err = api.cluster.translateIndexKeys(ctx, req.Index, req.Keys); err != nil {
+			return nil, err
+		}
+	} else {
+		if field := api.holder.Field(req.Index, req.Field); field == nil {
+			return nil, ErrFieldNotFound
+		} else if fi := field.ForeignIndex(); fi != "" {
+			ids, err = api.cluster.translateIndexKeys(ctx, fi, req.Keys)
+			if err != nil {
+				return nil, err
+			}
+		} else if ids, err = field.TranslateStore().TranslateKeys(req.Keys); err != nil {
+			return nil, err
+		}
 	}
 
 	// Encode response.
 	buf, err := api.Serializer.Marshal(&TranslateKeysResponse{IDs: ids})
 	if err != nil {
 		return nil, errors.Wrap(err, "translate keys response encoding error")
+	}
+	return buf, nil
+}
+
+// TranslateIDs handles a TranslateIDRequest.
+func (api *API) TranslateIDs(ctx context.Context, r io.Reader) (_ []byte, err error) {
+	var req TranslateIDsRequest
+	if buf, err := ioutil.ReadAll(r); err != nil {
+		return nil, NewBadRequestError(errors.Wrap(err, "read translate ids request error"))
+	} else if err := api.Serializer.Unmarshal(buf, &req); err != nil {
+		return nil, NewBadRequestError(errors.Wrap(err, "unmarshal translate ids request error"))
+	}
+
+	// Lookup store for either index or field and translate ids.
+	var keys []string
+	if req.Field == "" {
+		if keys, err = api.cluster.translateIndexIDs(ctx, req.Index, req.IDs); err != nil {
+			return nil, err
+		}
+	} else {
+		if field := api.holder.Field(req.Index, req.Field); field == nil {
+			return nil, ErrFieldNotFound
+		} else if fi := field.ForeignIndex(); fi != "" {
+			keys, err = api.cluster.translateIndexIDs(ctx, fi, req.IDs)
+			if err != nil {
+				return nil, err
+			}
+		} else if keys, err = field.TranslateStore().TranslateIDs(req.IDs); err != nil {
+			return nil, err
+		}
+	}
+
+	// Encode response.
+	buf, err := api.Serializer.Marshal(&TranslateIDsResponse{Keys: keys})
+	if err != nil {
+		return nil, errors.Wrap(err, "translate ids response encoding error")
 	}
 	return buf, nil
 }

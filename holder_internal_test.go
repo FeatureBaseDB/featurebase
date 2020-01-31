@@ -39,7 +39,7 @@ func (h *tHolder) Close() error {
 // Note that the holder must be Closed first.
 func (h *tHolder) Reopen() error {
 	path, logger := h.Path, h.Holder.Logger
-	h.Holder = NewHolder()
+	h.Holder = NewHolder(DefaultPartitionN)
 	h.Holder.Path = path
 	h.Holder.Logger = logger
 	return h.Holder.Open()
@@ -51,7 +51,7 @@ func newHolder() *tHolder {
 		panic(err)
 	}
 
-	h := &tHolder{Holder: NewHolder()}
+	h := &tHolder{Holder: NewHolder(DefaultPartitionN)}
 	h.Path = path
 	return h
 }
@@ -302,7 +302,7 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 
 // Ensure holder can reopen.
 func TestHolderCleaner_Reopen(t *testing.T) {
-	h := NewHolder()
+	h := NewHolder(DefaultPartitionN)
 	h.Path = "path"
 	err := h.Open()
 	if err != nil {

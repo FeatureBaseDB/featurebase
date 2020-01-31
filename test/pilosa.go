@@ -137,6 +137,7 @@ func (m *Command) Reopen() error {
 // MustCreateIndex uses this command's API to create an index and fails the test
 // if there is an error.
 func (m *Command) MustCreateIndex(tb testing.TB, name string, opts pilosa.IndexOptions) *pilosa.Index {
+	tb.Helper()
 	idx, err := m.API.CreateIndex(context.Background(), name, opts)
 	if err != nil {
 		tb.Fatalf("creating index: %v with options: %v, err: %v", name, opts, err)
@@ -147,6 +148,7 @@ func (m *Command) MustCreateIndex(tb testing.TB, name string, opts pilosa.IndexO
 // MustCreateField uses this command's API to create the field. The index must
 // already exist - it fails the test if there is an error.
 func (m *Command) MustCreateField(tb testing.TB, index, field string, opts ...pilosa.FieldOption) *pilosa.Field {
+	tb.Helper()
 	f, err := m.API.CreateField(context.Background(), index, field, opts...)
 	if err != nil {
 		tb.Fatalf("creating field: %s in index: %s err: %v", field, index, err)
@@ -157,6 +159,7 @@ func (m *Command) MustCreateField(tb testing.TB, index, field string, opts ...pi
 // MustQuery uses this command's API to execute the given query request, failing
 // if Query returns a non-nil error, otherwise returning the QueryResponse.
 func (m *Command) MustQuery(tb testing.TB, req *pilosa.QueryRequest) pilosa.QueryResponse {
+	tb.Helper()
 	resp, err := m.API.Query(context.Background(), req)
 	if err != nil {
 		tb.Fatalf("making query: %v, err: %v", req, err)
@@ -248,6 +251,7 @@ type Cluster []*Command
 // Query executes an API.Query through one of the cluster's node's API. It fails
 // the test if there is an error.
 func (c Cluster) Query(t testing.TB, index, query string) pilosa.QueryResponse {
+	t.Helper()
 	if len(c) == 0 {
 		t.Fatal("must have at least one node in cluster to query")
 	}
@@ -256,6 +260,7 @@ func (c Cluster) Query(t testing.TB, index, query string) pilosa.QueryResponse {
 }
 
 func (c Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uint64) {
+	t.Helper()
 	byShard := make(map[uint64][][2]uint64)
 	for _, rowcol := range rowcols {
 		shard := rowcol[1] / pilosa.ShardWidth
@@ -296,6 +301,7 @@ func (c Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uint
 
 // CreateField creates the index (if necessary) and field specified.
 func (c Cluster) CreateField(t testing.TB, index string, iopts pilosa.IndexOptions, field string, fopts ...pilosa.FieldOption) *pilosa.Field {
+	t.Helper()
 	idx, err := c[0].API.CreateIndex(context.Background(), index, iopts)
 	if err != nil && !strings.Contains(err.Error(), "index already exists") {
 		t.Fatalf("creating index: %v", err)
@@ -344,6 +350,7 @@ func (c Cluster) Close() error {
 
 // MustNewCluster creates a new cluster
 func MustNewCluster(tb testing.TB, size int, opts ...[]server.CommandOption) Cluster {
+	tb.Helper()
 	c, err := newCluster(size, opts...)
 	if err != nil {
 		tb.Fatalf("new cluster: %v", err)
@@ -391,6 +398,7 @@ func runCluster(size int, opts ...[]server.CommandOption) (Cluster, error) {
 
 // MustRunCluster creates and starts a new cluster
 func MustRunCluster(tb testing.TB, size int, opts ...[]server.CommandOption) Cluster {
+	tb.Helper()
 	c, err := runCluster(size, opts...)
 	if err != nil {
 		tb.Fatalf("run cluster: %v", err)
@@ -429,6 +437,7 @@ func MustDo(method, urlStr string, body string) *httpResponse {
 }
 
 func CheckGroupBy(t *testing.T, expected, results []pilosa.GroupCount) {
+	t.Helper()
 	if len(results) != len(expected) {
 		t.Fatalf("number of groupings mismatch:\n got:%+v\nwant:%+v\n", results, expected)
 	}

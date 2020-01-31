@@ -256,10 +256,31 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 
 				case "int":
 					if field.Keys() {
-						value, exists, err := field.StringValue(col)
-						if err != nil {
-							return errors.Wrap(err, "getting string field value for column")
-						} else if exists {
+						var value string
+						var exists bool
+						var err error
+						if fi := field.ForeignIndex(); fi != "" {
+							// Get the value from the int field.
+							intVal, ok, err := field.Value(col)
+							if err != nil {
+								return errors.Wrap(err, "getting int value")
+							} else if ok {
+								vals, err := h.api.TranslateIndexIDs(context.Background(), fi, []uint64{uint64(intVal)})
+								if err != nil {
+									return errors.Wrap(err, "getting keys for ids")
+								}
+								if len(vals) > 0 && vals[0] != "" {
+									value = vals[0]
+									exists = true
+								}
+							}
+						} else {
+							value, exists, err = field.StringValue(col)
+							if err != nil {
+								return errors.Wrap(err, "getting string field value for column")
+							}
+						}
+						if exists {
 							rowResp.Columns = append(rowResp.Columns,
 								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: value}})
 						} else {
@@ -454,16 +475,37 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 
 				case "int":
 					// Translate column key.
-					id, err := index.TranslateStore().TranslateKey(col)
+					id, err := h.api.TranslateIndexKey(context.Background(), index.Name(), col)
 					if err != nil {
 						return errors.Wrap(err, "translating column key")
 					}
 
 					if field.Keys() {
-						value, exists, err := field.StringValue(id)
-						if err != nil {
-							return errors.Wrap(err, "getting string field value for column")
-						} else if exists {
+						var value string
+						var exists bool
+						var err error
+						if fi := field.ForeignIndex(); fi != "" {
+							// Get the value from the int field.
+							intVal, ok, err := field.Value(id)
+							if err != nil {
+								return errors.Wrap(err, "getting int value")
+							} else if ok {
+								vals, err := h.api.TranslateIndexIDs(context.Background(), fi, []uint64{uint64(intVal)})
+								if err != nil {
+									return errors.Wrap(err, "getting keys for ids")
+								}
+								if len(vals) > 0 && vals[0] != "" {
+									value = vals[0]
+									exists = true
+								}
+							}
+						} else {
+							value, exists, err = field.StringValue(id)
+							if err != nil {
+								return errors.Wrap(err, "getting string field value for column")
+							}
+						}
+						if exists {
 							rowResp.Columns = append(rowResp.Columns,
 								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: value}})
 						} else {
@@ -485,7 +527,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 
 				case "decimal":
 					// Translate column key.
-					id, err := index.TranslateStore().TranslateKey(col)
+					id, err := h.api.TranslateIndexKey(context.Background(), index.Name(), col)
 					if err != nil {
 						return errors.Wrap(err, "translating column key")
 					}

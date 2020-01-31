@@ -338,6 +338,8 @@ var callInfoByFunc = map[string]callInfo{
 	"Row":    {allowUnknown: true},
 	"Range":  {allowUnknown: true},
 
+	"Distinct": {allowUnknown: true},
+
 	// allow only "field=X" cases with string field names
 	"Max": allowField,
 	"Min": allowField,
@@ -740,6 +742,36 @@ func (c *Call) HasConditionArg() bool {
 		}
 	}
 	return false
+}
+
+// TranslateInfo returns the relevant translation fields.
+func (c *Call) TranslateInfo(columnLabel, rowLabel string) (colKey, rowKey, fieldName string) {
+	switch c.Name {
+	case "Set", "Clear", "Row", "Range", "SetColumnAttrs", "ClearRow":
+		// Positional args in new PQL syntax require special handling here.
+		fieldName, _ = c.FieldArg()
+		return "_" + columnLabel, fieldName, fieldName
+	case "SetRowAttrs":
+		// Positional args in new PQL syntax require special handling here.
+		return "", "_" + rowLabel, c.ArgString("_field")
+	case "Rows":
+		return "column", "previous", c.ArgString("_field")
+	case "IncludesColumn":
+		return "column", "", ""
+	case "GroupBy":
+		return "", "", ""
+	default:
+		return "col", "row", c.ArgString("_field")
+	}
+}
+
+func (c *Call) ArgString(key string) string {
+	value, ok := c.Args[key]
+	if !ok {
+		return ""
+	}
+	s, _ := value.(string)
+	return s
 }
 
 // Condition represents an operation & value.

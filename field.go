@@ -75,9 +75,6 @@ type Field struct {
 	// Row attribute storage and cache
 	rowAttrStore AttrStore
 
-	// Key/ID translation store.
-	translateStore TranslateStore
-
 	broadcaster broadcaster
 	Stats       stats.StatsClient
 
@@ -101,7 +98,10 @@ type Field struct {
 	logger logger.Logger
 
 	snapshotQueue snapshotQueue
-	// Instantiates new translation store on open.
+
+	translateStore TranslateStore
+
+	// Instantiates new translation stores
 	OpenTranslateStore OpenTranslateStoreFunc
 
 	// Used for looking up a foreign index.
@@ -314,11 +314,18 @@ func (f *Field) Index() string { return f.index }
 // Path returns the path the field was initialized with.
 func (f *Field) Path() string { return f.path }
 
+// TranslateStorePath returns the translation database path for the field.
+func (f *Field) TranslateStorePath() string {
+	return filepath.Join(f.path, "keys")
+}
+
+// TranslateStore returns the field's translation store.
+func (f *Field) TranslateStore() TranslateStore {
+	return f.translateStore
+}
+
 // RowAttrStore returns the attribute storage.
 func (f *Field) RowAttrStore() AttrStore { return f.rowAttrStore }
-
-// TranslateStore returns the underlying translation store for the field.
-func (f *Field) TranslateStore() TranslateStore { return f.translateStore }
 
 // AvailableShards returns a bitmap of shards that contain data.
 func (f *Field) AvailableShards() *roaring.Bitmap {
@@ -513,15 +520,16 @@ func (f *Field) Open() error {
 			return errors.Wrap(err, "opening attrstore")
 		}
 
-		// If the field has a foreign index, and that index uses keys,
-		// then use that index's translateStore instead.
+		// Apply the field-specific translateStore.
+		if err := f.applyTranslateStore(); err != nil {
+			return errors.Wrap(err, "applying translate store")
+		}
+
+		// If the field has a foreign index, make sure the index
+		// exists.
 		if f.options.ForeignIndex != "" {
 			if err := f.holder.checkForeignIndex(f); err != nil {
 				return errors.Wrap(err, "checking foreign index")
-			}
-		} else {
-			if err := f.applyTranslateStore(); err != nil {
-				return errors.Wrap(err, "applying translate store")
 			}
 		}
 
@@ -539,29 +547,43 @@ func (f *Field) Open() error {
 func (f *Field) applyTranslateStore() error {
 	// Instantiate & open translation store.
 	var err error
-	f.translateStore, err = f.OpenTranslateStore(filepath.Join(f.path, "keys"), f.index, f.name)
+	f.translateStore, err = f.OpenTranslateStore(f.TranslateStorePath(), f.index, f.name, -1, -1)
 	if err != nil {
-		return errors.Wrap(err, "opening translate store")
+		return errors.Wrap(err, "opening field translate store")
 	}
 	f.usesKeys = f.options.Keys
+
+	// In the case where the field has a foreign index, set
+	// the usesKeys value accordingly.
+	if foreignIndexName := f.ForeignIndex(); foreignIndexName != "" {
+		if foreignIndex := f.holder.indexes[foreignIndexName]; foreignIndex != nil {
+			f.usesKeys = foreignIndex.Keys()
+		}
+	}
 	return nil
 }
 
-// applyForeignIndex sets the field's translateStore
-// to that of a foreign index in the case where the
-// foreign index uses keys. If the foreign index does
-// not use keys, it falls back to applying the field's
-// default translate store.
+// applyForeignIndex used to set the field's translateStore to
+// that of the foreign index, but since moving to partitioned
+// translate stores on indexes, that doesn't happen anymore.
+// So now all this method does is check that the foreign index
+// actually exists. If we decided this was unnecessary (which
+// it kind of is), we could remove the field.holder and all
+// the logic which does this check on holder open after all
+// indexes have opened.
 func (f *Field) applyForeignIndex() error {
 	foreignIndex := f.holder.Index(f.options.ForeignIndex)
 	if foreignIndex == nil {
 		return errors.Wrapf(ErrForeignIndexNotFound, "%s", f.options.ForeignIndex)
-	} else if foreignIndex.Keys() {
-		f.usesKeys = true
-		f.translateStore = foreignIndex.translateStore
-		return nil
 	}
-	return f.applyTranslateStore()
+	f.usesKeys = foreignIndex.Keys()
+	return nil
+}
+
+// ForeignIndex returns the foreign index name attached to the field.
+// Returns blank string if no foreign index exists.
+func (f *Field) ForeignIndex() string {
+	return f.options.ForeignIndex
 }
 
 var fieldQueue = make(chan struct{}, 16)
@@ -804,6 +826,13 @@ func (f *Field) Close() error {
 		_ = f.rowAttrStore.Close()
 	}
 
+	// Close field translation store.
+	if f.translateStore != nil {
+		if err := f.translateStore.Close(); err != nil {
+			return err
+		}
+	}
+
 	// Close all views.
 	for _, view := range f.viewMap {
 		if err := view.close(); err != nil {
@@ -811,12 +840,6 @@ func (f *Field) Close() error {
 		}
 	}
 	f.viewMap = make(map[string]*view)
-
-	if f.translateStore != nil {
-		if err := f.translateStore.Close(); err != nil {
-			return err
-		}
-	}
 
 	return nil
 }
@@ -1583,18 +1606,20 @@ func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportO
 		requiredDepth = v
 	}
 	// Increase bit depth if required.
-	if requiredDepth > bsig.BitDepth {
-		if err := func() error {
-			f.mu.Lock()
-			defer f.mu.Unlock()
+	if err := func() error {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		bitDepth := bsig.BitDepth
+		if requiredDepth > bitDepth {
 			bsig.BitDepth = requiredDepth
 			f.options.BitDepth = requiredDepth
 			return f.saveMeta()
-		}(); err != nil {
-			return errors.Wrap(err, "increasing bsi bit depth")
+		} else {
+			requiredDepth = bitDepth
 		}
-	} else {
-		requiredDepth = bsig.BitDepth
+		return nil
+	}(); err != nil {
+		return errors.Wrap(err, "increasing bsi bit depth")
 	}
 
 	// Import into each fragment.

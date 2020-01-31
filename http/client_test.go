@@ -294,22 +294,29 @@ func TestClient_Export(t *testing.T) {
 		buf := bytes.NewBuffer(nil)
 		bw := bufio.NewWriter(buf)
 
-		// Send export request.
-		if err := c.ExportCSV(context.Background(), "keyed", "unkeyedf", 0, bw); err != nil {
-			t.Fatal(err)
+		// Send export request for every partition.
+		for i := 0; i < pilosa.DefaultPartitionN; i++ {
+			if err := c.ExportCSV(context.Background(), "keyed", "unkeyedf", uint64(i), bw); err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		got := buf.String()
 
-		// Expected output.
-		exp := ""
-		for _, bit := range data {
-			exp += fmt.Sprintf("%d,%s\n", bit.RowID, bit.ColumnKey)
-		}
+		// Expected output is not sorted because of key sharding.
+		exp := "" +
+			"2,col200\n" +
+			"2,col201\n" +
+			"2,col202\n" +
+			"2,col203\n" +
+			"1,col103\n" +
+			"1,col102\n" +
+			"1,col101\n" +
+			"1,col100\n"
 
 		// Verify data.
 		if got != exp {
-			t.Fatalf("unexpected export data: %s", got)
+			t.Fatalf("unexpected export data: %q, expected %q", got, exp)
 		}
 	})
 
@@ -329,21 +336,28 @@ func TestClient_Export(t *testing.T) {
 		bw := bufio.NewWriter(buf)
 
 		// Send export request.
-		if err := c.ExportCSV(context.Background(), "keyed", "keyedf", 0, bw); err != nil {
-			t.Fatal(err)
+		for i := 0; i < pilosa.DefaultPartitionN; i++ {
+			if err := c.ExportCSV(context.Background(), "keyed", "keyedf", uint64(i), bw); err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		got := buf.String()
 
-		// Expected output.
-		exp := ""
-		for _, bit := range data {
-			exp += fmt.Sprintf("%s,%s\n", bit.RowKey, bit.ColumnKey)
-		}
+		// Expected output is unsorted because of key sharding.
+		exp := "" +
+			"row2,col200\n" +
+			"row2,col201\n" +
+			"row2,col202\n" +
+			"row2,col203\n" +
+			"row1,col103\n" +
+			"row1,col102\n" +
+			"row1,col101\n" +
+			"row1,col100\n"
 
 		// Verify data.
 		if got != exp {
-			t.Fatalf("unexpected export data: %s", got)
+			t.Fatalf("unexpected export data: %q, expected %q", got, exp)
 		}
 	})
 }

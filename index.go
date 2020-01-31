@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -44,6 +45,9 @@ type Index struct {
 	trackExistence bool
 	existenceFld   *Field
 
+	// Partitions used by translation.
+	partitionN int
+
 	// Fields by name.
 	fields map[string]*Field
 
@@ -52,33 +56,34 @@ type Index struct {
 	// Column attribute storage and cache.
 	columnAttrs AttrStore
 
-	translateStore TranslateStore
-
 	broadcaster broadcaster
 	Stats       stats.StatsClient
 
 	logger        logger.Logger
 	snapshotQueue snapshotQueue
 
-	// Used for notifying holder when a field is added.
-	// Also passed to field for foreign-index lookup.
+	// Passed to field for foreign-index lookup.
 	holder *Holder
 
-	// Instantiates new translation stores for fields.
+	// Per-partition translation stores
+	translateStores map[int]TranslateStore
+
+	// Instantiates new translation stores
 	OpenTranslateStore OpenTranslateStoreFunc
 }
 
 // NewIndex returns a new instance of Index.
-func NewIndex(path, name string) (*Index, error) {
+func NewIndex(path, name string, partitionN int) (*Index, error) {
 	err := validateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
 	}
 
 	return &Index{
-		path:   path,
-		name:   name,
-		fields: make(map[string]*Field),
+		path:       path,
+		name:       name,
+		partitionN: partitionN,
+		fields:     make(map[string]*Field),
 
 		newAttrStore: newNopAttrStore,
 		columnAttrs:  nopStore,
@@ -87,6 +92,8 @@ func NewIndex(path, name string) (*Index, error) {
 		Stats:          stats.NopStatsClient,
 		logger:         logger.NopLogger,
 		trackExistence: true,
+
+		translateStores: make(map[int]TranslateStore),
 
 		OpenTranslateStore: OpenInMemTranslateStore,
 	}, nil
@@ -98,14 +105,21 @@ func (i *Index) Name() string { return i.name }
 // Path returns the path the index was initialized with.
 func (i *Index) Path() string { return i.path }
 
+// TranslateStorePath returns the translation database path for a partition.
+func (i *Index) TranslateStorePath(partitionID int) string {
+	return filepath.Join(i.path, "keys", strconv.Itoa(partitionID))
+}
+
+// TranslateStore returns the translation store for a given partition.
+func (i *Index) TranslateStore(partitionID int) TranslateStore {
+	return i.translateStores[partitionID]
+}
+
 // Keys returns true if the index uses string keys.
 func (i *Index) Keys() bool { return i.keys }
 
 // ColumnAttrStore returns the storage for column attributes.
 func (i *Index) ColumnAttrStore() AttrStore { return i.columnAttrs }
-
-// TranslateStore returns the underlying translation store for the index.
-func (i *Index) TranslateStore() TranslateStore { return i.translateStore }
 
 // Options returns all options for this index.
 func (i *Index) Options() IndexOptions {
@@ -150,9 +164,13 @@ func (i *Index) Open() (err error) {
 		return errors.Wrap(err, "opening attrstore")
 	}
 
-	// Instantiate & open translation store.
-	if i.translateStore, err = i.OpenTranslateStore(filepath.Join(i.path, "keys"), i.name, ""); err != nil {
-		return errors.Wrap(err, "opening translate store")
+	i.logger.Debugf("open translate store for index: %s", i.name)
+	for partitionID := 0; partitionID < i.partitionN; partitionID++ {
+		store, err := i.OpenTranslateStore(i.TranslateStorePath(partitionID), i.name, "", partitionID, i.partitionN)
+		if err != nil {
+			return errors.Wrap(err, "opening index translate store")
+		}
+		i.translateStores[partitionID] = store
 	}
 
 	return nil
@@ -276,6 +294,14 @@ func (i *Index) Close() error {
 	// Close the attribute store.
 	i.columnAttrs.Close()
 
+	// Close partitioned translation stores.
+	for _, store := range i.translateStores {
+		if err := store.Close(); err != nil {
+			return errors.Wrap(err, "closing translation store")
+		}
+	}
+	i.translateStores = make(map[int]TranslateStore)
+
 	// Close all fields.
 	for _, f := range i.fields {
 		if err := f.Close(); err != nil {
@@ -283,12 +309,6 @@ func (i *Index) Close() error {
 		}
 	}
 	i.fields = make(map[string]*Field)
-
-	if i.translateStore != nil {
-		if err := i.translateStore.Close(); err != nil {
-			return err
-		}
-	}
 
 	return nil
 }
@@ -449,11 +469,6 @@ func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 
 	// Add to index's field lookup.
 	i.fields[name] = f
-
-	// Update replication, if needed.
-	if i.holder != nil {
-		go i.holder.refreshTranslateStoreReplicator()
-	}
 
 	return f, nil
 }

@@ -25,6 +25,7 @@ var _ pilosa.TranslateStore = (*TranslateStore)(nil)
 type TranslateStore struct {
 	CloseFunc         func() error
 	MaxIDFunc         func() (uint64, error)
+	PartitionIDFunc   func() int
 	ReadOnlyFunc      func() bool
 	SetReadOnlyFunc   func(v bool)
 	TranslateKeyFunc  func(key string) (uint64, error)
@@ -41,6 +42,10 @@ func (s *TranslateStore) Close() error {
 
 func (s *TranslateStore) MaxID() (uint64, error) {
 	return s.MaxIDFunc()
+}
+
+func (s *TranslateStore) PartitionID() int {
+	return s.PartitionIDFunc()
 }
 
 func (s *TranslateStore) ReadOnly() bool {

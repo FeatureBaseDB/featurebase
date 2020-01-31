@@ -96,7 +96,7 @@ func newIndexWithTempPath(name string) *Index {
 	if err != nil {
 		panic(err)
 	}
-	index, err := NewIndex(path, name)
+	index, err := NewIndex(path, name, DefaultPartitionN)
 	if err != nil {
 		panic(err)
 	}
@@ -352,7 +352,7 @@ func TestCluster_Partition(t *testing.T) {
 		c := newCluster()
 		c.partitionN = partitionN
 
-		partitionID := c.partition(index, shard)
+		partitionID := c.shardPartition(index, shard)
 		if partitionID < 0 || partitionID >= partitionN {
 			t.Errorf("partition out of range: shard=%d, p=%d, n=%d", shard, partitionID, partitionN)
 		}

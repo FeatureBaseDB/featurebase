@@ -26,7 +26,7 @@ import (
 )
 
 func TestInMemTranslateStore_TranslateKey(t *testing.T) {
-	s := pilosa.NewInMemTranslateStore("IDX", "FLD")
+	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, pilosa.DefaultPartitionN)
 
 	// Ensure initial key translates to ID 1.
 	if id, err := s.TranslateKey("foo"); err != nil {
@@ -51,7 +51,7 @@ func TestInMemTranslateStore_TranslateKey(t *testing.T) {
 }
 
 func TestInMemTranslateStore_TranslateID(t *testing.T) {
-	s := pilosa.NewInMemTranslateStore("IDX", "FLD")
+	s := pilosa.NewInMemTranslateStore("IDX", "FLD", 0, pilosa.DefaultPartitionN)
 
 	// Setup initial keys.
 	if _, err := s.TranslateKey("foo"); err != nil {

@@ -32,8 +32,8 @@ var (
 )
 
 // OpenTranslateStore opens and initializes a boltdb translation store.
-func OpenTranslateStore(path, index, field string) (pilosa.TranslateStore, error) {
-	s := NewTranslateStore(index, field)
+func OpenTranslateStore(path, index, field string, partitionID, partitionN int) (pilosa.TranslateStore, error) {
+	s := NewTranslateStore(index, field, partitionID, partitionN)
 	s.Path = path
 	if err := s.Open(); err != nil {
 		return nil, err
@@ -49,8 +49,10 @@ type TranslateStore struct {
 	mu sync.RWMutex
 	db *bolt.DB
 
-	index string
-	field string
+	index       string
+	field       string
+	partitionID int
+	partitionN  int
 
 	once    sync.Once
 	closing chan struct{}
@@ -63,10 +65,12 @@ type TranslateStore struct {
 }
 
 // NewTranslateStore returns a new instance of TranslateStore.
-func NewTranslateStore(index, field string) *TranslateStore {
+func NewTranslateStore(index, field string, partitionID, partitionN int) *TranslateStore {
 	return &TranslateStore{
 		index:       index,
 		field:       field,
+		partitionID: partitionID,
+		partitionN:  partitionN,
 		closing:     make(chan struct{}),
 		writeNotify: make(chan struct{}),
 	}
@@ -106,6 +110,11 @@ func (s *TranslateStore) Close() (err error) {
 		}
 	}
 	return nil
+}
+
+// PartitionID returns the partition id the store was initialized with.
+func (s *TranslateStore) PartitionID() int {
+	return s.partitionID
 }
 
 // ReadOnly returns true if the store is in read-only mode.
@@ -158,9 +167,10 @@ func (s *TranslateStore) TranslateKey(key string) (id uint64, _ error) {
 		bkt := tx.Bucket([]byte("keys"))
 		if id = findIDByKey(bkt, key); id != 0 {
 			return nil
-		} else if id, err = bkt.NextSequence(); err != nil {
-			return err
-		} else if err := bkt.Put([]byte(key), u64tob(id)); err != nil {
+		}
+
+		id = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
+		if err := bkt.Put([]byte(key), u64tob(id)); err != nil {
 			return err
 		} else if err := tx.Bucket([]byte("ids")).Put(u64tob(id), []byte(key)); err != nil {
 			return err
@@ -220,9 +230,10 @@ func (s *TranslateStore) TranslateKeys(keys []string) (ids []uint64, _ error) {
 
 			if ids[i] = findIDByKey(bkt, key); ids[i] != 0 {
 				continue
-			} else if ids[i], err = bkt.NextSequence(); err != nil {
-				return err
-			} else if err := bkt.Put([]byte(key), u64tob(ids[i])); err != nil {
+			}
+
+			ids[i] = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
+			if err := bkt.Put([]byte(key), u64tob(ids[i])); err != nil {
 				return err
 			} else if err := tx.Bucket([]byte("ids")).Put(u64tob(ids[i]), []byte(key)); err != nil {
 				return err
@@ -311,14 +322,20 @@ func (s *TranslateStore) notifyWrite() {
 // MaxID returns the highest id in the store.
 func (s *TranslateStore) MaxID() (max uint64, err error) {
 	if err := s.db.View(func(tx *bolt.Tx) error {
-		if key, _ := tx.Bucket([]byte("ids")).Cursor().Last(); key != nil {
-			max = btou64(key)
-		}
+		max = maxID(tx)
 		return nil
 	}); err != nil {
 		return 0, err
 	}
 	return max, nil
+}
+
+// MaxID returns the highest id in the store.
+func maxID(tx *bolt.Tx) uint64 {
+	if key, _ := tx.Bucket([]byte("ids")).Cursor().Last(); key != nil {
+		return btou64(key)
+	}
+	return 0
 }
 
 type TranslateEntryReader struct {

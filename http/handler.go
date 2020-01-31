@@ -309,6 +309,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST").Name("PostIndexAttrDiff")
 	router.HandleFunc("/internal/translate/data", handler.handlePostTranslateData).Methods("POST").Name("PostTranslateData")
 	router.HandleFunc("/internal/translate/keys", handler.handlePostTranslateKeys).Methods("POST").Name("PostTranslateKeys")
+	router.HandleFunc("/internal/translate/ids", handler.handlePostTranslateIDs).Methods("POST").Name("PostTranslateIDs")
 	router.HandleFunc("/internal/index/{index}/field/{field}/attr/diff", handler.handlePostFieldAttrDiff).Methods("POST").Name("PostFieldAttrDiff")
 	router.HandleFunc("/internal/index/{index}/field/{field}/remote-available-shards/{shardID}", handler.handleDeleteRemoteAvailableShard).Methods("DELETE")
 	router.HandleFunc("/internal/nodes", handler.handleGetNodes).Methods("GET").Name("GetNodes")
@@ -1766,9 +1767,33 @@ func (h *Handler) handlePostTranslateKeys(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	buf, err := h.api.TranslateKeys(r.Body)
+	buf, err := h.api.TranslateKeys(r.Context(), r.Body)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("translate keys: %v", err), http.StatusInternalServerError)
+	}
+
+	// Write response.
+	_, err = w.Write(buf)
+	if err != nil {
+		h.logger.Printf("writing translate keys response: %v", err)
+		return
+	}
+}
+
+func (h *Handler) handlePostTranslateIDs(w http.ResponseWriter, r *http.Request) {
+	// Verify that request is only communicating over protobufs.
+	if r.Header.Get("Content-Type") != "application/x-protobuf" {
+		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
+		return
+	} else if r.Header.Get("Accept") != "application/x-protobuf" {
+		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+		return
+	}
+
+	buf, err := h.api.TranslateIDs(r.Context(), r.Body)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("translate ids: %v", err), http.StatusInternalServerError)
+		return
 	}
 
 	// Write response.

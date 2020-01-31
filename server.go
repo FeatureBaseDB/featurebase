@@ -300,10 +300,12 @@ func OptServerOpenTranslateReader(fn OpenTranslateReaderFunc) ServerOption {
 
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
+	cluster := newCluster()
+
 	s := &Server{
 		closing:       make(chan struct{}),
-		cluster:       newCluster(),
-		holder:        NewHolder(),
+		cluster:       cluster,
+		holder:        NewHolder(cluster.partitionN),
 		diagnostics:   newDiagnosticsCollector(defaultDiagnosticServer),
 		systemInfo:    newNopSystemInfo(),
 		defaultClient: nopInternalClient{},
@@ -527,6 +529,10 @@ func (s *Server) Open() error {
 	s.syncer.Closing = s.closing
 	s.syncer.Stats = s.holder.Stats.WithTags("HolderSyncer")
 
+	if err := s.syncer.ResetTranslationSync(); err != nil {
+		return err
+	}
+
 	// Start background monitoring.
 	s.wg.Add(3)
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
@@ -660,8 +666,14 @@ func (s *Server) receiveMessage(m Message) error {
 		if err != nil {
 			return err
 		}
+		if err := s.syncer.ResetTranslationSync(); err != nil {
+			return err
+		}
 	case *DeleteIndexMessage:
 		if err := s.holder.DeleteIndex(obj.Index); err != nil {
+			return err
+		}
+		if err := s.syncer.ResetTranslationSync(); err != nil {
 			return err
 		}
 	case *CreateFieldMessage:
@@ -674,9 +686,15 @@ func (s *Server) receiveMessage(m Message) error {
 		if err != nil {
 			return err
 		}
+		if err := s.syncer.ResetTranslationSync(); err != nil {
+			return err
+		}
 	case *DeleteFieldMessage:
 		idx := s.holder.Index(obj.Index)
 		if err := idx.DeleteField(obj.Field); err != nil {
+			return err
+		}
+		if err := s.syncer.ResetTranslationSync(); err != nil {
 			return err
 		}
 	case *DeleteAvailableShardMessage:

@@ -25,6 +25,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/test"
@@ -299,20 +300,26 @@ func TestImportCommand_KeyReplication(t *testing.T) {
 
 	// Verify that the data is available on both nodes.
 	for _, host := range []string{host0, host1} {
-		qry := "Count(Row(f=foo0))"
-		resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+host+"/index/i/query", strings.NewReader(qry)))
-		if err != nil {
-			t.Fatalf("Querying data for validation: %s", err)
-		}
+		if err := test.RetryUntil(2*time.Second, func() error {
+			qry := "Count(Row(f=foo0))"
+			resp, err := http.DefaultClient.Do(MustNewHTTPRequest("POST", "http://"+host+"/index/i/query", strings.NewReader(qry)))
+			if err != nil {
+				return fmt.Errorf("Querying data for validation: %s", err)
+			}
 
-		// Read body and unmarshal response.
-		exp := `{"results":[100]}` + "\n"
-		if body, err := ioutil.ReadAll(resp.Body); err != nil {
-			t.Fatalf("reading: %s", err)
-		} else if !reflect.DeepEqual(body, []byte(exp)) {
-			t.Fatalf("expected: %s, but got: %s", exp, body)
+			// Read body and unmarshal response.
+			exp := `{"results":[100]}` + "\n"
+			if body, err := ioutil.ReadAll(resp.Body); err != nil {
+				return fmt.Errorf("reading: %s", err)
+			} else if !reflect.DeepEqual(body, []byte(exp)) {
+				return fmt.Errorf("expected: %s, but got: %s", exp, body)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
 		}
 	}
+
 }
 
 // Ensure that integer import with keys runs.

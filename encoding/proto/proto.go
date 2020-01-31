@@ -273,6 +273,22 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		decodeTranslateKeysResponse(msg, mt)
 		return nil
+	case *pilosa.TranslateIDsRequest:
+		msg := &internal.TranslateIDsRequest{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling TranslateIDsRequest")
+		}
+		decodeTranslateIDsRequest(msg, mt)
+		return nil
+	case *pilosa.TranslateIDsResponse:
+		msg := &internal.TranslateIDsResponse{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling TranslateIDsResponse")
+		}
+		decodeTranslateIDsResponse(msg, mt)
+		return nil
 	default:
 		panic(fmt.Sprintf("unhandled pilosa.Message of type %T: %#v", mt, m))
 	}
@@ -338,6 +354,10 @@ func encodeToProto(m pilosa.Message) proto.Message {
 		return encodeTranslateKeysRequest(mt)
 	case *pilosa.TranslateKeysResponse:
 		return encodeTranslateKeysResponse(mt)
+	case *pilosa.TranslateIDsRequest:
+		return encodeTranslateIDsRequest(mt)
+	case *pilosa.TranslateIDsResponse:
+		return encodeTranslateIDsResponse(mt)
 	}
 	return nil
 }
@@ -760,17 +780,31 @@ func encodeRecalculateCaches(*pilosa.RecalculateCaches) *internal.RecalculateCac
 	return &internal.RecalculateCaches{}
 }
 
+func encodeTranslateKeysRequest(request *pilosa.TranslateKeysRequest) *internal.TranslateKeysRequest {
+	return &internal.TranslateKeysRequest{
+		Index: request.Index,
+		Field: request.Field,
+		Keys:  request.Keys,
+	}
+}
+
 func encodeTranslateKeysResponse(response *pilosa.TranslateKeysResponse) *internal.TranslateKeysResponse {
 	return &internal.TranslateKeysResponse{
 		IDs: response.IDs,
 	}
 }
 
-func encodeTranslateKeysRequest(request *pilosa.TranslateKeysRequest) *internal.TranslateKeysRequest {
-	return &internal.TranslateKeysRequest{
+func encodeTranslateIDsRequest(request *pilosa.TranslateIDsRequest) *internal.TranslateIDsRequest {
+	return &internal.TranslateIDsRequest{
 		Index: request.Index,
 		Field: request.Field,
-		Keys:  request.Keys,
+		IDs:   request.IDs,
+	}
+}
+
+func encodeTranslateIDsResponse(response *pilosa.TranslateIDsResponse) *internal.TranslateIDsResponse {
+	return &internal.TranslateIDsResponse{
+		Keys: response.Keys,
 	}
 }
 
@@ -1104,6 +1138,16 @@ func decodeTranslateKeysRequest(pb *internal.TranslateKeysRequest, m *pilosa.Tra
 
 func decodeTranslateKeysResponse(pb *internal.TranslateKeysResponse, m *pilosa.TranslateKeysResponse) {
 	m.IDs = pb.IDs
+}
+
+func decodeTranslateIDsRequest(pb *internal.TranslateIDsRequest, m *pilosa.TranslateIDsRequest) {
+	m.Index = pb.Index
+	m.Field = pb.Field
+	m.IDs = pb.IDs
+}
+
+func decodeTranslateIDsResponse(pb *internal.TranslateIDsResponse, m *pilosa.TranslateIDsResponse) {
+	m.Keys = pb.Keys
 }
 
 // QueryResult types.

@@ -40,8 +40,8 @@ import (
 )
 
 const (
-	// defaultPartitionN is the default number of partitions in a cluster.
-	defaultPartitionN = 256
+	// DefaultPartitionN is the default number of partitions in a cluster.
+	DefaultPartitionN = 256
 
 	// ClusterState represents the state returned in the /status endpoint.
 	ClusterStateStarting = "STARTING"
@@ -235,13 +235,15 @@ type cluster struct { // nolint: maligned
 	logger logger.Logger
 
 	InternalClient InternalClient
+
+	// OpenTranslateReader OpenTranslateReaderFunc
 }
 
 // newCluster returns a new instance of Cluster with defaults.
 func newCluster() *cluster {
 	return &cluster{
 		Hasher:     &jmphasher{},
-		partitionN: defaultPartitionN,
+		partitionN: DefaultPartitionN,
 		ReplicaN:   1,
 
 		joiningLeavingNodes: make(chan nodeAction, 10), // buffered channel
@@ -390,14 +392,6 @@ func (c *cluster) addNode(node *Node) error {
 		return nil
 	}
 
-	// If the cluster membership has changed, reset the primary for
-	// translate store replication.
-	if c.holder != nil {
-		if err := c.holder.setPrimaryTranslateStore(c.unprotectedPrimaryReplicaNode()); err != nil {
-			return err
-		}
-	}
-
 	// add to topology
 	if c.Topology == nil {
 		return fmt.Errorf("Cluster.Topology is nil")
@@ -416,14 +410,6 @@ func (c *cluster) addNode(node *Node) error {
 func (c *cluster) removeNode(nodeID string) error {
 	// remove from cluster
 	c.removeNodeBasicSorted(nodeID)
-
-	// If the cluster membership has changed, reset the primary for
-	// translate store replication.
-	if c.holder != nil {
-		if err := c.holder.setPrimaryTranslateStore(c.unprotectedPrimaryReplicaNode()); err != nil {
-			return err
-		}
-	}
 
 	// remove from topology
 	if c.Topology == nil {
@@ -867,8 +853,12 @@ func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*ResizeSour
 	return m, nil
 }
 
-// partition returns the partition that a shard belongs to.
-func (c *cluster) partition(index string, shard uint64) int {
+// shardPartition returns the partition that a shard belongs to.
+func (c *cluster) shardPartition(index string, shard uint64) int {
+	return shardPartition(index, shard, c.partitionN)
+}
+
+func shardPartition(index string, shard uint64, partitionN int) int {
 	var buf [8]byte
 	binary.BigEndian.PutUint64(buf[:], shard)
 
@@ -876,7 +866,25 @@ func (c *cluster) partition(index string, shard uint64) int {
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(index))
 	_, _ = h.Write(buf[:])
-	return int(h.Sum64() % uint64(c.partitionN))
+	return int(h.Sum64() % uint64(partitionN))
+}
+
+// keyPartition returns the partition that a key belongs to.
+func (c *cluster) keyPartition(index, key string) int {
+	return keyPartition(index, key, c.partitionN)
+}
+
+func keyPartition(index, key string, partitionN int) int {
+	// Hash the bytes and mod by partition count.
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(index))
+	_, _ = h.Write([]byte(key))
+	return int(h.Sum64() % uint64(partitionN))
+}
+
+// idPartition returns the partition that an id belongs to.
+func (c *cluster) idPartition(index string, id uint64) int {
+	return shardPartition(index, id/ShardWidth, c.partitionN)
 }
 
 // ShardNodes returns a list of nodes that own a fragment. Safe for concurrent use.
@@ -888,7 +896,19 @@ func (c *cluster) ShardNodes(index string, shard uint64) []*Node {
 
 // shardNodes returns a list of nodes that own a fragment. unprotected
 func (c *cluster) shardNodes(index string, shard uint64) []*Node {
-	return c.partitionNodes(c.partition(index, shard))
+	return c.partitionNodes(c.shardPartition(index, shard))
+}
+
+// KeyNodes returns a list of nodes that own a fragment. Safe for concurrent use.
+func (c *cluster) KeyNodes(index, key string) []*Node {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.keyNodes(index, key)
+}
+
+// keyNodes returns a list of nodes that own a key. unprotected
+func (c *cluster) keyNodes(index, key string) []*Node {
+	return c.partitionNodes(c.keyPartition(index, key))
 }
 
 // ownsShard returns true if a host owns a fragment.
@@ -900,7 +920,6 @@ func (c *cluster) ownsShard(nodeID string, index string, shard uint64) bool {
 
 // partitionNodes returns a list of nodes that own a partition. unprotected.
 func (c *cluster) partitionNodes(partitionID int) []*Node {
-
 	// Default replica count to between one and the number of nodes.
 	// The replica count can be zero if there are no nodes.
 	replicaN := c.ReplicaN
@@ -922,11 +941,18 @@ func (c *cluster) partitionNodes(partitionID int) []*Node {
 	return nodes
 }
 
+// ownsPartition returns true if a host owns a partition.
+func (c *cluster) ownsPartition(nodeID string, partition int) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return Nodes(c.partitionNodes(partition)).ContainsID(nodeID)
+}
+
 // containsShards is like OwnsShards, but it includes replicas.
 func (c *cluster) containsShards(index string, availableShards *roaring.Bitmap, node *Node) []uint64 {
 	var shards []uint64
 	availableShards.ForEach(func(i uint64) {
-		p := c.partition(index, i)
+		p := c.shardPartition(index, i)
 		// Determine the nodes for partition.
 		nodes := c.partitionNodes(p)
 		for _, n := range nodes {
@@ -2045,6 +2071,148 @@ func (c *cluster) setStatic(hosts []string) error {
 		c.nodes = append(c.nodes, &Node{URI: *uri})
 	}
 	return nil
+}
+
+func (c *cluster) translateIndexKey(ctx context.Context, indexName string, key string) (uint64, error) {
+	keyMap, err := c.translateIndexKeySet(ctx, indexName, map[string]struct{}{key: struct{}{}})
+	if err != nil {
+		return 0, err
+	}
+	return keyMap[key], nil
+}
+
+func (c *cluster) translateIndexKeys(ctx context.Context, indexName string, keys []string) ([]uint64, error) {
+	keySet := make(map[string]struct{})
+	for _, key := range keys {
+		keySet[key] = struct{}{}
+	}
+
+	keyMap, err := c.translateIndexKeySet(ctx, indexName, keySet)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]uint64, len(keys))
+	for i := range keys {
+		ids[i] = keyMap[keys[i]]
+	}
+	return ids, nil
+}
+
+func (c *cluster) translateIndexKeySet(ctx context.Context, indexName string, keySet map[string]struct{}) (map[string]uint64, error) {
+	keyMap := make(map[string]uint64)
+
+	idx := c.holder.Index(indexName)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	}
+
+	// Split keys by partition.
+	keysByPartition := make(map[int][]string, c.partitionN)
+	for key := range keySet {
+		partitionID := c.keyPartition(indexName, key)
+		keysByPartition[partitionID] = append(keysByPartition[partitionID], key)
+	}
+
+	// Translate keys by partition.
+	var g errgroup.Group
+	var mu sync.Mutex
+	for partitionID := range keysByPartition {
+		partitionID := partitionID
+		keys := keysByPartition[partitionID]
+
+		g.Go(func() (err error) {
+			var ids []uint64
+			if c.ownsPartition(c.Node.ID, partitionID) {
+				if ids, err = idx.TranslateStore(partitionID).TranslateKeys(keys); err != nil {
+					return err
+				}
+			} else {
+				nodes := c.partitionNodes(partitionID)
+				if ids, err = c.InternalClient.TranslateKeysNode(ctx, &nodes[0].URI, indexName, "", keys); err != nil {
+					return err
+				}
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			for i := range keys {
+				keyMap[keys[i]] = ids[i]
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	return keyMap, nil
+}
+
+func (c *cluster) translateIndexIDs(ctx context.Context, indexName string, ids []uint64) ([]string, error) {
+	idSet := make(map[uint64]struct{})
+	for _, id := range ids {
+		idSet[id] = struct{}{}
+	}
+
+	idMap, err := c.translateIndexIDSet(ctx, indexName, idSet)
+	if err != nil {
+		return nil, err
+	}
+
+	keys := make([]string, len(ids))
+	for i := range ids {
+		keys[i] = idMap[ids[i]]
+	}
+	return keys, nil
+}
+
+func (c *cluster) translateIndexIDSet(ctx context.Context, indexName string, idSet map[uint64]struct{}) (map[uint64]string, error) {
+	idMap := make(map[uint64]string)
+
+	index := c.holder.Index(indexName)
+	if index == nil {
+		return nil, ErrIndexNotFound
+	}
+
+	// Split ids by partition.
+	idsByPartition := make(map[int][]uint64, c.partitionN)
+	for id := range idSet {
+		partitionID := c.idPartition(indexName, id)
+		idsByPartition[partitionID] = append(idsByPartition[partitionID], id)
+	}
+
+	// Translate ids by partition.
+	var g errgroup.Group
+	var mu sync.Mutex
+	for partitionID := range idsByPartition {
+		partitionID := partitionID
+		ids := idsByPartition[partitionID]
+
+		g.Go(func() (err error) {
+			var keys []string
+			if c.ownsPartition(c.Node.ID, partitionID) {
+				if keys, err = index.TranslateStore(partitionID).TranslateIDs(ids); err != nil {
+					return err
+				}
+			} else {
+				nodes := c.partitionNodes(partitionID)
+				if keys, err = c.InternalClient.TranslateIDsNode(ctx, &nodes[0].URI, indexName, "", ids); err != nil {
+					return err
+				}
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			for i := range ids {
+				idMap[ids[i]] = keys[i]
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	return idMap, nil
 }
 
 // ClusterStatus describes the status of the cluster including its

@@ -1124,6 +1124,106 @@ func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, msg [
 	return errors.Wrap(resp.Body.Close(), "closing response body")
 }
 
+// TranslateKeysNode sends a key translation request to a specific node.
+func (c *InternalClient) TranslateKeysNode(ctx context.Context, uri *pilosa.URI, index, field string, keys []string) ([]uint64, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "TranslateKeysNode")
+	defer span.Finish()
+
+	if index == "" {
+		return nil, pilosa.ErrIndexRequired
+	}
+
+	buf, err := c.serializer.Marshal(&pilosa.TranslateKeysRequest{
+		Index: index,
+		Field: field,
+		Keys:  keys,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "marshaling TranslateKeysRequest")
+	}
+
+	// Create HTTP request.
+	u := uri.Path("/internal/translate/keys")
+	req, err := http.NewRequest("POST", u, bytes.NewReader(buf))
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("Accept", "application/x-protobuf")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	// Execute request against the host.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Read body and unmarshal response.
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading")
+	}
+
+	tkresp := &pilosa.TranslateKeysResponse{}
+	if err := c.serializer.Unmarshal(body, tkresp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %s", err)
+	}
+	return tkresp.IDs, nil
+}
+
+// TranslateIDsNode sends an id translation request to a specific node.
+func (c *InternalClient) TranslateIDsNode(ctx context.Context, uri *pilosa.URI, index, field string, ids []uint64) ([]string, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "TranslateIDsNode")
+	defer span.Finish()
+
+	if index == "" {
+		return nil, pilosa.ErrIndexRequired
+	}
+
+	buf, err := c.serializer.Marshal(&pilosa.TranslateIDsRequest{
+		Index: index,
+		Field: field,
+		IDs:   ids,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "marshaling TranslateIDsRequest")
+	}
+
+	// Create HTTP request.
+	u := uri.Path("/internal/translate/ids")
+	req, err := http.NewRequest("POST", u, bytes.NewReader(buf))
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("Accept", "application/x-protobuf")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	// Execute request against the host.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Read body and unmarshal response.
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading")
+	}
+
+	tkresp := &pilosa.TranslateIDsResponse{}
+	if err := c.serializer.Unmarshal(body, tkresp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %s", err)
+	}
+	return tkresp.Keys, nil
+}
+
 // executeRequest executes the given request and checks the Response. For
 // responses with non-2XX status, the body is read and closed, and an error is
 // returned. If the error is nil, the caller must ensure that the response body

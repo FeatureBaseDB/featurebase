@@ -203,13 +203,14 @@ func TestAPI_Import(t *testing.T) {
 
 		// Generate some keyed records.
 		rowIDs := []uint64{}
-		colKeys := []string{}
 		timestamps := []int64{}
 		for i := 1; i <= 10; i++ {
 			rowIDs = append(rowIDs, rowID)
 			timestamps = append(timestamps, timestamp)
-			colKeys = append(colKeys, fmt.Sprintf("col%d", i))
 		}
+
+		// Keys are sharded so ordering is not guaranteed.
+		colKeys := []string{"col10", "col8", "col9", "col6", "col7", "col4", "col5", "col2", "col3", "col1"}
 
 		// Import data with keys to the coordinator (node0) and verify that it gets
 		// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
@@ -261,63 +262,6 @@ func TestAPI_Import(t *testing.T) {
 		}
 
 	})
-
-	t.Run("RowKeyColumnID", func(t *testing.T) {
-		ctx := context.Background()
-		index := "rkci"
-		field := "f"
-
-		_, err := m0.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: false})
-		if err != nil {
-			t.Fatalf("creating index: %v", err)
-		}
-		_, err = m0.API.CreateField(ctx, index, field, pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, 100), pilosa.OptFieldKeys())
-		if err != nil {
-			t.Fatalf("creating field: %v", err)
-		}
-
-		rowKey := "rowkey"
-
-		// Generate some keyed records.
-		rowKeys := []string{rowKey, rowKey, rowKey}
-		colIDs := []uint64{1, 2, pilosa.ShardWidth + 1}
-		timestamps := []int64{0, 0, 0}
-
-		// Import data with keys to the coordinator (node0) and verify that it gets
-		// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
-		req := &pilosa.ImportRequest{
-			Index:      index,
-			Field:      field,
-			Shard:      0,
-			RowKeys:    rowKeys,
-			ColumnIDs:  colIDs,
-			Timestamps: timestamps,
-		}
-		if err := m0.API.Import(ctx, req); err != nil {
-			t.Fatal(err)
-		}
-
-		pql := fmt.Sprintf("Row(%s=%s)", field, rowKey)
-
-		// Query node0.
-		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
-			t.Fatal(err)
-		} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, colIDs) {
-			t.Fatalf("unexpected column ids: %+v", columns)
-		}
-
-		// Query node1.
-		if err := test.RetryUntil(5*time.Second, func() error {
-			if res, err := m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
-				return err
-			} else if columns := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, colIDs) {
-				return fmt.Errorf("unexpected column ids: %+v", columns)
-			}
-			return nil
-		}); err != nil {
-			t.Fatal(err)
-		}
-	})
 }
 
 func TestAPI_ImportValue(t *testing.T) {
@@ -356,11 +300,12 @@ func TestAPI_ImportValue(t *testing.T) {
 
 		// Generate some keyed records.
 		values := []int64{}
-		colKeys := []string{}
 		for i := 1; i <= 10; i++ {
 			values = append(values, int64(i))
-			colKeys = append(colKeys, fmt.Sprintf("col%d", i))
 		}
+
+		// Column keys are sharded so their order is not guaranteed.
+		colKeys := []string{"col10", "col8", "col9", "col6", "col7", "col4", "col5", "col2", "col3", "col1"}
 
 		// Import data with keys to the coordinator (node0) and verify that it gets
 		// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
