@@ -296,13 +296,22 @@ func (f *fragment) applyStorage(data []byte, file *os.File, newGen generation, m
 	// Tell storage to prefer mapping if and only if we think the data
 	// is mmapped and valid.
 	f.storage.PreferMapping(mapped)
-	f.storage.SetSource(newGen)
 	// RemapRoaringStorage will fix any mapped containers to point either
 	// to the provided data (if PreferMapping was called with true and
 	// data is provided and there's a corresponding container) or to
 	// allocated storage, so when it's done, there's nothing in it that
 	// is mapped to anything *other than* the provided data.
-	return f.storage.RemapRoaringStorage(data)
+	mapped, err := f.storage.RemapRoaringStorage(data)
+	if err != nil {
+		// OOPS! something went wrong, we don't know why, we can't
+		// sanely recover from that.
+		_, _ = f.storage.RemapRoaringStorage(nil)
+		mapped = false
+		f.storage.SetSource(nil)
+	} else {
+		f.storage.SetSource(newGen)
+	}
+	return mapped, err
 }
 
 // openStorage opens the storage bitmap.
