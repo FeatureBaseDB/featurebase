@@ -833,16 +833,18 @@ func (b *Bitmap) unionIntoTargetSingle(target *Bitmap, other *Bitmap) {
 // Bitmap 4 |___X_______________________|     |      |___X_______________________|     |      |___X_______________________|
 //              _
 func (b *Bitmap) unionInPlace(others ...*Bitmap) {
+	const staticSize = 20
 	var (
 		requiredSliceSize = len(others)
-		// To avoid having to allocate a slice everytime, if the number of bitmaps
-		// being unioned is small enough we can just use this stack-allocated array.
-		staticHandledIters = [20]handledIter{}
+		// To avoid having to allocate a slice every time, if the number of bitmaps
+		// being unioned is small enough (i.e. smaller than staticSize), we can just
+		// use this stack-allocated array.
+		staticHandledIters = [staticSize]handledIter{}
 		bitmapIters        handledIters
 		target             = b
 	)
 
-	if requiredSliceSize <= 20 {
+	if requiredSliceSize <= staticSize {
 		bitmapIters = staticHandledIters[:0]
 	} else {
 		bitmapIters = make(handledIters, 0, requiredSliceSize)
@@ -993,10 +995,16 @@ func (b *Bitmap) unionInPlace(others ...*Bitmap) {
 }
 
 // Difference returns the difference of b and other.
-func (b *Bitmap) Difference(other *Bitmap) *Bitmap {
-	output := NewBitmap()
-	output.Source = b.Source
+func (b *Bitmap) Difference(other ...*Bitmap) *Bitmap {
+	output := b.singleDifference(other[0])
+	if len(other) > 1 {
+		output.DifferenceInPlace(other[1:]...)
+	}
+	return output
+}
 
+func (b *Bitmap) singleDifference(other *Bitmap) *Bitmap {
+	output := NewBitmap()
 	iiter, _ := b.Containers.Iterator(0)
 	jiter, _ := other.Containers.Iterator(0)
 	i, j := iiter.Next(), jiter.Next()
@@ -2668,6 +2676,7 @@ func (c *Container) arrayRemove(v uint16) (*Container, bool) {
 	}
 	// removing the last item? we can just return the empty container.
 	if c.N() == 1 {
+		c.n = 0
 		return nil, true
 	}
 	c = c.Thaw()
@@ -2684,6 +2693,7 @@ func (c *Container) bitmapRemove(v uint16) (*Container, bool) {
 	}
 	// removing the last item? we can just return the empty container.
 	if c.N() == 1 {
+		c.n = 0
 		return nil, true
 	}
 	c = c.Thaw()
@@ -2709,6 +2719,7 @@ func (c *Container) runRemove(v uint16) (*Container, bool) {
 	}
 	// removing the last item? we can just return the empty container.
 	if c.N() == 1 {
+		c.n = 0
 		return nil, true
 	}
 	c = c.Thaw()
@@ -5450,4 +5461,460 @@ type containerUnionSummaryStats struct {
 	// avoid using an expensive bitmap container for bitmaps that have some
 	// extremely dense containers.
 	hasMaxRange bool
+}
+
+// DifferenceInPlace returns the bitwise difference of b and others, modifying
+// b in place.
+func (b *Bitmap) DifferenceInPlace(others ...*Bitmap) {
+	bSize := b.Size()
+
+	// If b doesn't have any containers then return early.
+	if bSize == 0 {
+		return
+	}
+
+	const staticSize = 20
+	var (
+		requiredSliceSize = len(others)
+		// To avoid having to allocate a slice every time, if the number of bitmaps
+		// being differenced is small enough (i.e. smaller than staticSize), we can
+		// just use this stack-allocated array.
+		staticHandledIters  = [staticSize]handledIter{}
+		bitmapIters         handledIters
+		target              = b
+		removeContainerKeys = make([]uint64, 0, bSize)
+	)
+
+	if requiredSliceSize <= staticSize {
+		bitmapIters = staticHandledIters[:0]
+	} else {
+		bitmapIters = make(handledIters, 0, requiredSliceSize)
+	}
+
+	for _, other := range others {
+		otherIter, _ := other.Containers.Iterator(0)
+		if otherIter.Next() {
+			bitmapIters = append(bitmapIters, handledIter{
+				iter:    otherIter,
+				hasNext: true,
+			})
+		}
+	}
+
+	targetItr, _ := target.Containers.Iterator(0)
+	// Go through all the containers and remove the other bits
+	for targetItr.Next() {
+		targetKey, curContainer := targetItr.Value()
+		// Loop until every iters current value has been handled.
+		for _, iIter := range bitmapIters {
+			if !iIter.hasNext {
+				continue
+			}
+			iKey, iContainer := iIter.iter.Value()
+			for iKey < targetKey {
+				iIter.hasNext = iIter.iter.Next()
+				if iIter.hasNext {
+					iKey, iContainer = iIter.iter.Value()
+				} else {
+					break
+				}
+			}
+
+			if targetKey == iKey {
+				if curContainer.frozen() {
+					curContainer = curContainer.Clone()
+					b.Containers.Put(targetKey, curContainer)
+				}
+				curContainer.differenceInPlace(iContainer)
+				if curContainer.N() == 0 {
+					removeContainerKeys = append(removeContainerKeys, iKey)
+					break
+				}
+				iIter.hasNext = iIter.iter.Next()
+			}
+		}
+	}
+
+	for _, key := range removeContainerKeys {
+		b.Containers.Remove(key)
+
+	}
+	target.Containers.Repair()
+}
+
+func (c *Container) differenceInPlace(other *Container) {
+	if other.isArray() {
+		if c.isArray() {
+			differenceArrayArrayInPlace(c, other)
+		} else if c.isBitmap() {
+			differenceBitmapArrayInPlace(c, other)
+		} else if c.isRun() {
+			differenceRunArrayInPlace(c, other)
+		}
+	} else if other.isBitmap() {
+		if c.isArray() {
+			differenceArrayBitmapInPlace(c, other)
+		} else if c.isBitmap() {
+			differenceBitmapBitmapInPlace(c, other)
+		} else if c.isRun() {
+			differenceRunBitmapInPlace(c, other)
+		}
+	} else if other.isRun() {
+		if c.isArray() {
+			differenceArrayRunInPlace(c, other)
+		} else if c.isBitmap() {
+			differenceBitmapRunInPlace(c, other)
+		} else if c.isRun() {
+			differenceRunRunInPlace(c, other)
+		}
+	}
+}
+
+func differenceArrayArrayInPlace(c, other *Container) {
+	statsHit("differenceInPlace/ArrayArray")
+	aa, ab := c.array(), other.array()
+	na, nb := len(aa), len(ab)
+	if na == 0 || nb == 0 {
+		return
+	}
+	n := 0
+	for i, j := 0, 0; i < na; {
+		va := aa[i]
+		if j >= nb {
+			aa[n] = va
+			n++
+			i++
+			continue
+		}
+
+		vb := ab[j]
+		if va < vb {
+			aa[n] = va
+			n++
+			i++
+		} else if va > vb {
+			j++
+		} else {
+			i, j = i+1, j+1
+		}
+	}
+	aa = aa[:n]
+	c.setArray(aa)
+}
+
+func differenceArrayBitmapInPlace(c, other *Container) {
+	statsHit("differenceInPlace/ArrayBitmap")
+	aa := c.array()
+	n := 0
+	bitmap := other.bitmap()
+	if len(aa) == 0 || len(bitmap) == 0 {
+		return
+	}
+	for _, va := range aa {
+		bmidx := va / 64
+		bidx := va % 64
+		mask := uint64(1) << bidx
+		b := bitmap[bmidx]
+
+		if mask&^b > 0 {
+			aa[n] = va
+			n++
+		}
+	}
+	aa = aa[:n]
+	c.setArray(aa)
+}
+
+func differenceArrayRunInPlace(c, other *Container) {
+	statsHit("differenceInPlace/ArrayRun")
+
+	i := 0 // array index
+	j := 0 // run index
+	aa, rb := c.array(), other.runs()
+	if len(aa) == 0 || len(rb) == 0 {
+		return
+	}
+	n := 0
+
+	// handle overlap
+	for i < len(aa) {
+
+		// keep all array elements before beginning of runs
+		if aa[i] < rb[j].start {
+			aa[n] = aa[i]
+			n++
+			i++
+			continue
+		}
+
+		// if array element in run, skip it
+		if aa[i] >= rb[j].start && aa[i] <= rb[j].last {
+			i++
+			continue
+		}
+
+		// if array element larger than current run, check next run
+		if aa[i] > rb[j].last {
+			j++
+			if j == len(rb) {
+				break
+			}
+		}
+	}
+	for ; i < len(aa); i++ {
+		aa[n] = aa[i]
+		n++
+	}
+	aa = aa[:n]
+	c.setArray(aa)
+}
+
+func differenceBitmapArrayInPlace(c, other *Container) {
+	statsHit("differenceInPlace/BitmapArray")
+	bitmap := c.bitmap()
+	ab := other.array()
+	if len(bitmap) == 0 || len(ab) == 0 {
+		return
+	}
+
+	n := c.N()
+	for _, v := range ab {
+		if c.bitmapContains(v) {
+			bitmap[v/64] &^= (uint64(1) << uint(v%64))
+			n--
+		}
+	}
+	c.setN(n)
+	if n < ArrayMaxSize {
+		c.bitmapToArray() // With This Work
+	}
+}
+
+func differenceBitmapBitmapInPlace(c, other *Container) {
+	statsHit("differenceInPlace/BitmapBitmap")
+	// local variables added to prevent BCE checks in loop
+	// see https://go101.org/article/bounds-check-elimination.html
+	a := c.bitmap()
+	b := other.bitmap()
+	if len(a) == 0 || len(b) == 0 {
+		return
+	}
+
+	var (
+		ab = a[:bitmapN]
+		bb = b[:bitmapN]
+		n  int32
+	)
+
+	for i := 0; i < bitmapN; i++ {
+		ab[i] = ab[i] & (^bb[i])
+		n += int32(popcount(ab[i]))
+	}
+	c.setN(n)
+	if n < ArrayMaxSize {
+		c.bitmapToArray() // Will this work?
+	}
+}
+
+func differenceBitmapRunInPlace(c, other *Container) {
+	statsHit("differenceInPlace/BitmapRun")
+	if len(c.bitmap()) == 0 {
+		return
+	}
+	for _, run := range other.runs() {
+		c.bitmapZeroRange(uint64(run.start), uint64(run.last)+1)
+	}
+}
+
+func differenceRunArrayInPlace(c, other *Container) {
+	statsHit("differenceInPlace/RunArray")
+	ra, ab := c.runs(), other.array()
+	if len(ra) == 0 || len(ab) == 0 {
+		return
+	}
+	runs := make([]interval16, 0, len(ra))
+	bidx := 0
+	vb := ab[bidx]
+
+RUNLOOP:
+	for _, run := range ra {
+		start := run.start
+		for vb < run.start {
+			bidx++
+			if bidx >= len(ab) {
+				break
+			}
+			vb = ab[bidx]
+		}
+		for vb >= run.start && vb <= run.last {
+			if vb == start {
+				if vb == 65535 { // overflow
+					break RUNLOOP
+				}
+				start++
+				bidx++
+				if bidx >= len(ab) {
+					break
+				}
+				vb = ab[bidx]
+				continue
+			}
+			runs = append(runs, interval16{start: start, last: vb - 1})
+			if vb == 65535 { // overflow
+				break RUNLOOP
+			}
+			start = vb + 1
+			bidx++
+			if bidx >= len(ab) {
+				break
+			}
+			vb = ab[bidx]
+		}
+
+		if start <= run.last {
+			runs = append(runs, interval16{start: start, last: run.last})
+		}
+	}
+	c.setRuns(runs)
+	c.n = 0
+	for _, run := range runs {
+		c.n += int32(run.last-run.start) + 1
+	}
+	c.optimize()
+}
+
+func differenceRunBitmapInPlace(c, other *Container) {
+	statsHit("differenceInPlace/RunBitmap")
+	ra := c.runs()
+	if len(ra) == 0 || len(other.bitmap()) == 0 {
+		return
+	}
+	// If a is full, difference is the flip of b.
+	if len(ra) > 0 && ra[0].start == 0 && ra[0].last == 65535 {
+		clone := other.Clone()
+		bitmap := clone.bitmap()
+		for i, word := range other.bitmap() {
+			bitmap[i] = ^word
+		}
+		c.setTyp(containerBitmap)
+		c.setMapped(false)
+		c.setBitmap(bitmap)
+		c.setN(c.count())
+		return
+	}
+	runs := make([]interval16, 0, len(ra))
+	for _, inputRun := range ra {
+		run := inputRun
+		add := true
+		for bit := inputRun.start; bit <= inputRun.last; bit++ {
+			if other.bitmapContains(bit) {
+				if run.start == bit {
+					if bit == 65535 { //overflow
+						add = false
+					}
+
+					run.start++
+				} else if bit == run.last {
+					run.last--
+				} else {
+					run.last = bit - 1
+					if run.last >= run.start {
+						runs = append(runs, run)
+					}
+					run.start = bit + 1
+					run.last = inputRun.last
+				}
+				if run.start > run.last {
+					break
+				}
+			}
+
+			if bit == 65535 { //overflow
+				break
+			}
+		}
+		if run.start <= run.last {
+			if add {
+				runs = append(runs, run)
+			}
+		}
+	}
+
+	c.setRuns(runs)
+	c.n = 0
+	for _, run := range runs {
+		c.n += int32(run.last-run.start) + 1
+	}
+	if c.N() < ArrayMaxSize && int32(len(runs)) > c.N()/2 {
+		c.runToArray()
+	} else if len(runs) > runMaxSize {
+		c.runToBitmap()
+	}
+}
+
+func differenceRunRunInPlace(c, other *Container) {
+	statsHit("differenceInPlace/RunRun")
+
+	ra, rb := c.runs(), other.runs()
+	if len(ra) == 0 || len(rb) == 0 {
+		return
+	}
+	apos := 0 // current a-run index
+	bpos := 0 // current b-run index
+	astart := ra[apos].start
+	alast := ra[apos].last
+	bstart := rb[bpos].start
+	blast := rb[bpos].last
+	alen := len(ra)
+	blen := len(rb)
+
+	runs := make([]interval16, 0, alen+blen) // TODO allocate max then truncate? or something else
+	// cardinality upper bound: sum of number of runs
+	// each B-run could split an A-run in two, up to len(b.runs) times
+
+	for apos < alen && bpos < blen {
+		switch {
+		case alast < bstart:
+			// current A-run entirely precedes current B-run: keep full A-run, advance to next A-run
+			runs = append(runs, interval16{start: astart, last: alast})
+			apos++
+			if apos < alen {
+				astart = ra[apos].start
+				alast = ra[apos].last
+			}
+		case blast < astart:
+			// current B-run entirely precedes current A-run: advance to next B-run
+			bpos++
+			if bpos < blen {
+				bstart = rb[bpos].start
+				blast = rb[bpos].last
+			}
+		default:
+			// overlap
+			if astart < bstart {
+				runs = append(runs, interval16{start: astart, last: bstart - 1})
+			}
+			if alast > blast {
+				astart = blast + 1
+			} else {
+				apos++
+				if apos < alen {
+					astart = ra[apos].start
+					alast = ra[apos].last
+				}
+			}
+		}
+	}
+	if apos < alen {
+		runs = append(runs, interval16{start: astart, last: alast})
+		apos++
+		if apos < alen {
+			runs = append(runs, ra[apos:]...)
+		}
+	}
+	c.setRuns(runs)
+	c.n = 0
+	for _, run := range runs {
+		c.n += int32(run.last-run.start) + 1
+	}
 }

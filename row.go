@@ -304,21 +304,26 @@ func (r *Row) GenericNaryOp(op ext.GenericBitmapOpBitmap, others []*Row, args ma
 }
 
 // Difference returns the diff of r and other.
-func (r *Row) Difference(other *Row) *Row {
-	var segments []rowSegment
+func (r *Row) Difference(others ...*Row) *Row {
+	var output []rowSegment
+	o := make(map[uint64][]*rowSegment)
 
-	itr := newMergeSegmentIterator(r.segments, other.segments)
-	for s0, s1 := itr.next(); s0 != nil || s1 != nil; s0, s1 = itr.next() {
-		if s0 == nil {
-			continue
-		} else if s1 == nil {
-			segments = append(segments, *s0)
-			continue
+	for x := range others {
+		for y := range others[x].segments {
+			segment := others[x].segments[y]
+			o[segment.shard] = append(o[segment.shard], &segment)
 		}
-		segments = append(segments, *s0.Difference(s1))
 	}
+	for _, segment := range r.segments {
 
-	return &Row{segments: segments}
+		dest, ok := o[segment.shard]
+		if ok {
+			output = append(output, *segment.Difference(dest...))
+		} else {
+			output = append(output, segment)
+		}
+	}
+	return &Row{segments: output}
 }
 
 // GenericUnary returns the results of a generic op on r.
@@ -576,9 +581,13 @@ func (s *rowSegment) GenericNaryOp(op ext.GenericBitmapOpBitmap, others []*rowSe
 }
 
 // Difference returns the diff of s and other.
-func (s *rowSegment) Difference(other *rowSegment) *rowSegment {
-	data := s.data.Difference(other.data)
-	data = data.Freeze()
+func (s *rowSegment) Difference(others ...*rowSegment) *rowSegment {
+	datas := make([]*roaring.Bitmap, len(others))
+	for i, other := range others {
+		datas[i] = other.data
+	}
+	data := s.data.Difference(datas...)
+	data.Freeze()
 
 	return &rowSegment{
 		data:     data,
