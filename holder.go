@@ -438,7 +438,7 @@ func (h *Holder) CreateIndex(name string, opt IndexOptions) (*Index, error) {
 	defer h.mu.Unlock()
 
 	// Ensure index doesn't already exist.
-	if h.indexes[name] != nil {
+	if h.index(name) != nil {
 		return nil, newConflictError(ErrIndexExists)
 	}
 	return h.createIndex(name, opt)
@@ -447,31 +447,20 @@ func (h *Holder) CreateIndex(name string, opt IndexOptions) (*Index, error) {
 // CreateIndexIfNotExists returns an index by name.
 // The index is created if it does not already exist.
 func (h *Holder) CreateIndexIfNotExists(name string, opt IndexOptions) (*Index, error) {
-	h.mu.RLock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 
-	// Find index in cache first.
-	if index := h.indexes[name]; index != nil {
-		h.mu.RUnlock()
+	// Return index if it exists.
+	if index := h.index(name); index != nil {
 		return index, nil
 	}
 
-	h.mu.RUnlock()
-
-	index, err := h.CreateIndex(name, opt)
-	if _, ok := err.(ConflictError); err != nil && !ok {
-		return nil, err
-	}
-	return index, nil
+	return h.createIndex(name, opt)
 }
 
 func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	if name == "" {
 		return nil, errors.New("index name required")
-	}
-
-	// Return index if it exists.
-	if index := h.index(name); index != nil {
-		return index, nil
 	}
 
 	// Otherwise create a new index.
@@ -483,9 +472,10 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	index.keys = opt.Keys
 	index.trackExistence = opt.TrackExistence
 
-	if err := index.Open(); err != nil {
+	if err = index.Open(); err != nil {
 		return nil, errors.Wrap(err, "opening")
-	} else if err := index.saveMeta(); err != nil {
+	}
+	if err = index.saveMeta(); err != nil {
 		return nil, errors.Wrap(err, "meta")
 	}
 

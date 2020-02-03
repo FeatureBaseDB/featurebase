@@ -275,6 +275,32 @@ func TestHolder_Open(t *testing.T) {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
+
+		// Try to re-create existing index
+		t.Run("CreateIndexIfNotExists", func(t *testing.T) {
+			h := test.MustOpenHolder()
+			defer h.Close()
+
+			idx1, err := h.CreateIndexIfNotExists("aaa", pilosa.IndexOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err = h.CreateIndex("aaa", pilosa.IndexOptions{}); err == nil {
+				t.Fatalf("expected: ConflictError, got: nil")
+			} else if _, ok := err.(pilosa.ConflictError); !ok {
+				t.Fatalf("expected: ConflictError, got: %s", err)
+			}
+
+			idx2, err := h.CreateIndexIfNotExists("aaa", pilosa.IndexOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if idx1 != idx2 {
+				t.Fatalf("expected the same indexes, got: %s and %s", idx1.Name(), idx2.Name())
+			}
+		})
 	})
 }
 
