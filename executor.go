@@ -2941,38 +2941,41 @@ func (e *executor) executeSet(ctx context.Context, index string, c *pql.Call, op
 		}
 	}
 
-	// Int field.
-	if f.Type() == FieldTypeInt || f.Type() == FieldTypeDecimal {
+	switch f.Type() {
+	case FieldTypeInt, FieldTypeDecimal:
+		// Int or Decimal field.
+		v, ok := c.Arg(fieldName)
+		if !ok {
+			return false, fmt.Errorf("Set() row argument '%v' required", rowLabel)
+		}
 		// Read row value.
-		rowVal, ok, err := c.IntArg(fieldName)
+		rowVal, err := getScaledInt(f, v)
+		if err != nil {
+			return false, fmt.Errorf("reading Set() row: %v", err)
+		}
+		return e.executeSetValueField(ctx, index, c, f, colID, rowVal, opt)
+
+	default:
+		// Read row ID.
+		rowID, ok, err := c.UintArg(fieldName)
 		if err != nil {
 			return false, fmt.Errorf("reading Set() row: %v", err)
 		} else if !ok {
 			return false, fmt.Errorf("Set() row argument '%v' required", rowLabel)
 		}
 
-		return e.executeSetValueField(ctx, index, c, f, colID, rowVal, opt)
-	}
-
-	// Read row ID.
-	rowID, ok, err := c.UintArg(fieldName)
-	if err != nil {
-		return false, fmt.Errorf("reading Set() row: %v", err)
-	} else if !ok {
-		return false, fmt.Errorf("Set() row argument '%v' required", rowLabel)
-	}
-
-	var timestamp *time.Time
-	sTimestamp, ok := c.Args["_timestamp"].(string)
-	if ok {
-		t, err := time.Parse(TimeFormat, sTimestamp)
-		if err != nil {
-			return false, fmt.Errorf("invalid date: %s", sTimestamp)
+		var timestamp *time.Time
+		sTimestamp, ok := c.Args["_timestamp"].(string)
+		if ok {
+			t, err := time.Parse(TimeFormat, sTimestamp)
+			if err != nil {
+				return false, fmt.Errorf("invalid date: %s", sTimestamp)
+			}
+			timestamp = &t
 		}
-		timestamp = &t
-	}
 
-	return e.executeSetBitField(ctx, index, c, f, colID, rowID, timestamp, opt)
+		return e.executeSetBitField(ctx, index, c, f, colID, rowID, timestamp, opt)
+	}
 }
 
 // executeSetBitField executes a Set() call for a specific field.
@@ -4448,8 +4451,10 @@ func getCondIntSlice(f *Field, cond *pql.Condition) ([]int64, error) {
 // the field type.
 func getScaledInt(f *Field, v interface{}) (int64, error) {
 	var value int64
-	if f.Options().Type == FieldTypeDecimal {
-		scale := f.Options().Scale
+
+	opt := f.Options()
+	if opt.Type == FieldTypeDecimal {
+		scale := opt.Scale
 		switch tv := v.(type) {
 		case int64:
 			value = int64(float64(tv) * math.Pow10(int(scale)))

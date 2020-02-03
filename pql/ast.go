@@ -557,6 +557,13 @@ func (c *Call) CallIndex() string {
 	return ""
 }
 
+// Arg is for reading the value at key from call.Args.
+// If the key is not in Call.Args, the value of the returned bool will be false.
+func (c *Call) Arg(key string) (interface{}, bool) {
+	v, ok := c.Args[key]
+	return v, ok
+}
+
 // BoolArg is for reading the value at key from call.Args as a bool. If the
 // key is not in Call.Args, the value of the returned bool will be false, and
 // the error will be nil. The value is assumed to be a bool. An error is

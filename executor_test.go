@@ -766,6 +766,63 @@ func TestExecutor_Execute_SetBool(t *testing.T) {
 	})
 }
 
+// Ensure a set query can be executed on a decimal field.
+func TestExecutor_Execute_SetDecimal(t *testing.T) {
+	t.Run("Basic", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		// Create fields.
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+		if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeDecimal(2)); err != nil {
+			t.Fatal(err)
+		}
+
+		// Set a value.
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1000, f=1.5)`}); err != nil {
+			t.Fatal(err)
+		} else if !res.Results[0].(bool) {
+			t.Fatalf("expected column changed")
+		}
+
+		// Set the same value again verify nothing changed.
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1000, f=1.5)`}); err != nil {
+			t.Fatal(err)
+		} else if res.Results[0].(bool) {
+			t.Fatalf("expected column to be unchanged")
+		}
+
+		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f == 1.5)`}); err != nil {
+			t.Fatal(err)
+		} else if columns := result.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{1000}) {
+			t.Fatalf("unexpected colums: %+v", columns)
+		}
+
+		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f > 1.4999)`}); err != nil {
+			t.Fatal(err)
+		} else if columns := result.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(columns, []uint64{1000}) {
+			t.Fatalf("unexpected colums: %+v", columns)
+		}
+	})
+	t.Run("Error", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+		// Create fields.
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
+		if _, err := index.CreateFieldIfNotExists("f", pilosa.OptFieldTypeDecimal(2)); err != nil {
+			t.Fatal(err)
+		}
+
+		// Set decimal using a string value.
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1000, f="1.5")`}); err == nil {
+			t.Fatalf("expected invalid decimal type error")
+		}
+	})
+}
+
 // Ensure old PQL syntax doesn't break anything too badly.
 func TestExecutor_Execute_OldPQL(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
