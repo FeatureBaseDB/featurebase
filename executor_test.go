@@ -4724,13 +4724,15 @@ func TestExecutor_Execute_NoIndex(t *testing.T) {
 	defer c.Close()
 	hldr := test.Holder{Holder: c[0].Server.Holder()}
 	index := hldr.MustCreateIndexIfNotExists("i", *indexOptions)
-	//_, err := index.CreateField("f", fieldOption...)
-	index.CreateField("f")
+	_, err := index.CreateField("f")
+	if err != nil {
+		t.Fatal("should work")
+	}
 
 	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{
 		Index: "i",
 		Query: "Count(Distinct(Row(gpu_tag='GTX'), index=systems, field=jarvis_id))",
-	}); err == nil {
+	}); errors.Cause(err) != pilosa.ErrIndexNotFound {
 		t.Fatal("expecting error: 'index systems does not exist'")
 	}
 }
