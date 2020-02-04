@@ -4415,7 +4415,6 @@ func runCallTest(t *testing.T, writeQuery string, readQueries []string, indexOpt
 
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
-
 	hldr := test.Holder{Holder: c[0].Server.Holder()}
 	index := hldr.MustCreateIndexIfNotExists("i", *indexOptions)
 	_, err := index.CreateField("f", fieldOption...)
@@ -4716,4 +4715,22 @@ func TestExecutor_Execute_MinMaxCountEqual(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestExecutor_Execute_NoIndex(t *testing.T) {
+	t.Helper()
+	indexOptions := &pilosa.IndexOptions{}
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
+	index := hldr.MustCreateIndexIfNotExists("i", *indexOptions)
+	//_, err := index.CreateField("f", fieldOption...)
+	index.CreateField("f")
+
+	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{
+		Index: "i",
+		Query: "Count(Distinct(Row(gpu_tag='GTX'), index=systems, field=jarvis_id))",
+	}); err == nil {
+		t.Fatal("expecting error: 'index systems does not exist'")
+	}
 }
