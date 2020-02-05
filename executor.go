@@ -3588,7 +3588,10 @@ func (e *executor) collectCallKeySets(ctx context.Context, indexName string, c *
 
 	// Collect foreign index keys.
 	if fieldName != "" {
-		idx := e.Holder.indexes[indexName]
+		idx, exists := e.Holder.indexes[indexName]
+		if !exists {
+			return errors.Wrapf(ErrIndexNotFound, "%s", indexName)
+		}
 		if field := idx.Field(fieldName); field != nil && field.ForeignIndex() != "" {
 			foreignIndexName := field.ForeignIndex()
 			if m[foreignIndexName] == nil {
@@ -3633,7 +3636,10 @@ func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[stri
 
 	// Translate column key.
 	colKey, rowKey, fieldName := c.TranslateInfo(columnLabel, rowLabel)
-	idx := e.Holder.indexes[indexName]
+	idx, exists := e.Holder.indexes[indexName]
+	if !exists {
+		return errors.Wrapf(ErrIndexNotFound, "%s", indexName)
+	}
 	if idx.Keys() {
 		if c.Args[colKey] != nil && !isString(c.Args[colKey]) {
 			if !isValidID(c.Args[colKey]) {
