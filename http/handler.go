@@ -282,11 +282,15 @@ func newRouter(handler *Handler) *mux.Router {
 	router.Handle("/metrics", promhttp.Handler())
 	router.HandleFunc("/export", handler.handleGetExport).Methods("GET").Name("GetExport")
 	router.HandleFunc("/index", handler.handleGetIndexes).Methods("GET").Name("GetIndexes")
+	router.HandleFunc("/index", handler.handlePostIndex).Methods("POST").Name("PostIndex")
+	router.HandleFunc("/index/", handler.handlePostIndex).Methods("POST").Name("PostIndex")
 	router.HandleFunc("/index/{index}", handler.handleGetIndex).Methods("GET").Name("GetIndex")
 	router.HandleFunc("/index/{index}", handler.handlePostIndex).Methods("POST").Name("PostIndex")
 	router.HandleFunc("/index/{index}", handler.handleDeleteIndex).Methods("DELETE").Name("DeleteIndex")
 	//router.HandleFunc("/index/{index}/field", handler.handleGetFields).Methods("GET") // Not implemented.
 	router.HandleFunc("/index/{index}/import-column-attrs", handler.handlePostImportColumnAttrs).Methods("POST").Name("PostImportColumnAttrs")
+	router.HandleFunc("/index/{index}/field", handler.handlePostField).Methods("POST").Name("PostField")
+	router.HandleFunc("/index/{index}/field/", handler.handlePostField).Methods("POST").Name("PostField")
 	router.HandleFunc("/index/{index}/field/{field}", handler.handlePostField).Methods("POST").Name("PostField")
 	router.HandleFunc("/index/{index}/field/{field}", handler.handleDeleteField).Methods("DELETE").Name("DeleteField")
 	router.HandleFunc("/index/{index}/field/{field}/import", handler.handlePostImport).Methods("POST").Name("PostImport")
@@ -684,7 +688,11 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
-	indexName := mux.Vars(r)["index"]
+	indexName, ok := mux.Vars(r)["index"]
+	if !ok {
+		http.Error(w, "index name is required", http.StatusBadRequest)
+		return
+	}
 
 	resp := successResponse{h: h}
 
@@ -752,8 +760,18 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
-	indexName := mux.Vars(r)["index"]
-	fieldName := mux.Vars(r)["field"]
+
+	indexName, ok := mux.Vars(r)["index"]
+	if !ok {
+		http.Error(w, "index name is required", http.StatusBadRequest)
+		return
+	}
+
+	fieldName, ok := mux.Vars(r)["field"]
+	if !ok {
+		http.Error(w, "field name is required", http.StatusBadRequest)
+		return
+	}
 
 	resp := successResponse{h: h}
 
