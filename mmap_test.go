@@ -16,8 +16,10 @@ package pilosa
 
 import (
 	"math/rand"
-	"sync/atomic"
+	"runtime"
 	"testing"
+
+	"github.com/pilosa/pilosa/v2/logger"
 )
 
 type cv struct {
@@ -31,37 +33,28 @@ type cv struct {
 // a failure mode we've been bitten by once...
 func TestMmapBehavior(t *testing.T) {
 	depth := uint(6)
-	var done int64
 	f := mustOpenBSIFragment("i", "f", viewStandard, 0)
+	f.Logger = logger.NewLogfLogger(t)
 	defer f.Clean(t)
-
-	ch := make(chan struct{})
 
 	for i := 0; i < f.MaxOpN; i++ {
 		_, _ = f.setBit(0, uint64(i*32))
 	}
 	// force snapshot so we get a mmapped row...
-	_ = f.Snapshot()
-	row := f.row(0)
-	segment := row.Segments()[0]
-	bitmap := segment.data
-
-	// request information from the frozen bitmap we got back
-	go func() {
-		for atomic.LoadInt64(&done) == 0 {
-			for i := 0; i < f.MaxOpN; i++ {
-				_ = bitmap.Contains(uint64(i * 32))
-			}
-		}
-		close(ch)
-	}()
+	err := f.Snapshot()
+	if err != nil {
+		t.Fatalf("initial snapshot error: %v", err)
+	}
 
 	values := make([]cv, 1024)
 	for i := range values {
-		cols := make([]uint64, 512)
-		vals := make([]int64, 512)
+		cols := make([]uint64, 128)
+		vals := make([]int64, 128)
 		for j := range cols {
-			cols[j] = uint64(rand.Int63n(ShardWidth))
+			// pick values in the first 16 cols of each of the 16
+			// shards in a default shardwidth, so each set will
+			// probably change some values from the previous one.
+			cols[j] = uint64(((rand.Int63n(16) & int64(i>>2)) << 16) + rand.Int63n(16))
 			vals[j] = int64(rand.Int63n(1 << depth))
 		}
 		values[i] = cv{cols, vals}
@@ -69,15 +62,16 @@ func TestMmapBehavior(t *testing.T) {
 
 	// modify the original bitmap, until it causes a snapshot, which
 	// then invalidates the other map...
-	for j := 0; j < 5; j++ {
-		for i := 0; i < f.MaxOpN/int(depth+1); i++ {
-			cv := values[i%len(values)]
-			err := f.importValue(cv.cols, cv.vals, depth, (i%3 == 1))
-			if err != nil {
-				t.Fatalf("importValue[%d][%d]: %v", j, i, err)
-			}
+	for i := 0; i < 32; i++ {
+		cv := values[i%len(values)]
+		runtime.GC()
+		err := f.importValue(cv.cols, cv.vals, depth, (i%3 == 1))
+		if err != nil {
+			t.Fatalf("importValue[%d]: %v", i, err)
+		}
+		err = f.Snapshot()
+		if err != nil {
+			t.Fatalf("snapshot[%d]: %v", i, err)
 		}
 	}
-	atomic.StoreInt64(&done, 1)
-	<-ch
 }

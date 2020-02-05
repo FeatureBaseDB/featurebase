@@ -105,3 +105,27 @@ func (cl *CaptureLogger) Printf(format string, v ...interface{}) {
 func (cl *CaptureLogger) Debugf(format string, v ...interface{}) {
 	cl.Debugs = append(cl.Debugs, fmt.Sprintf(format, v...))
 }
+
+// Logfer is a thing that has only a Logf() method, like for instance,
+// testing.T or testing.B.
+type Logfer interface {
+	Logf(format string, v ...interface{})
+}
+
+// LogfLogger is a logger that wraps something that has a Logf interface
+// and makes it act like our logger.
+type LogfLogger struct {
+	wrapped Logfer
+}
+
+func (ll *LogfLogger) Printf(format string, v ...interface{}) {
+	ll.wrapped.Logf(format, v...)
+}
+
+func (ll *LogfLogger) Debugf(format string, v ...interface{}) {
+	ll.wrapped.Logf(format, v...)
+}
+
+func NewLogfLogger(l Logfer) *LogfLogger {
+	return &LogfLogger{wrapped: l}
+}
