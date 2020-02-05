@@ -34,10 +34,13 @@ var ErrMaxMapCountReached = errors.New("maximum map count reached")
 var maxMapCount uint64 = 60000
 var mu sync.RWMutex
 
-func SetMaxMapCount(max uint64) {
+// SetMaxMapCount sets the maximum map count, and returns the previous maximum.
+func SetMaxMapCount(max uint64) uint64 {
+	prev := maxMapCount
 	mu.Lock()
 	maxMapCount = max
 	mu.Unlock()
+	return prev
 }
 
 // Mmap increments the global map count, and then calls syscall.Mmap. It

@@ -15,11 +15,13 @@
 package pilosa
 
 import (
+	"fmt"
 	"math/rand"
 	"runtime"
 	"testing"
 
 	"github.com/pilosa/pilosa/v2/logger"
+	"github.com/pilosa/pilosa/v2/syswrap"
 )
 
 type cv struct {
@@ -27,11 +29,7 @@ type cv struct {
 	vals []int64
 }
 
-// This test should basically never fail, but it might if you were running
-// out of available mmaps. Which you can fake up by adding '&& false' to the test
-// in newGeneration in generation.go. So this is probably useless but it's
-// a failure mode we've been bitten by once...
-func TestMmapBehavior(t *testing.T) {
+func forceSnapshotsCheckMapping(t *testing.T) {
 	depth := uint(6)
 	f := mustOpenBSIFragment("i", "f", viewStandard, 0)
 	f.Logger = logger.NewLogfLogger(t)
@@ -64,7 +62,11 @@ func TestMmapBehavior(t *testing.T) {
 	// then invalidates the other map...
 	for i := 0; i < 32; i++ {
 		cv := values[i%len(values)]
-		runtime.GC()
+		// periodically force gc, so if we have a small pool of maps
+		// we'll go in and out of mapping mode
+		if i%5 == 0 {
+			runtime.GC()
+		}
 		err := f.importValue(cv.cols, cv.vals, depth, (i%3 == 1))
 		if err != nil {
 			t.Fatalf("importValue[%d]: %v", i, err)
@@ -73,5 +75,28 @@ func TestMmapBehavior(t *testing.T) {
 		if err != nil {
 			t.Fatalf("snapshot[%d]: %v", i, err)
 		}
+	}
+}
+
+// This test should basically never fail, but it might if you were running
+// out of available mmaps. Which you can fake up by adding '&& false' to the test
+// in newGeneration in generation.go. So this is probably useless but it's
+// a failure mode we've been bitten by once...
+func TestMmapBehavior(t *testing.T) {
+	var changed bool
+	var original uint64
+	defer func() {
+		syswrap.SetMaxMapCount(original)
+	}()
+
+	for _, mmapMaxVal := range []uint64{0, 3} {
+		prev := syswrap.SetMaxMapCount(mmapMaxVal)
+		if !changed {
+			original = prev
+			changed = true
+		}
+		t.Run(fmt.Sprintf("maps%d", mmapMaxVal), func(t *testing.T) {
+			forceSnapshotsCheckMapping(t)
+		})
 	}
 }
