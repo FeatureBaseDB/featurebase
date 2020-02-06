@@ -1031,13 +1031,30 @@ func TestHandler_Endpoints(t *testing.T) {
 	})
 }
 
+func TestCluster_TranslateStore(t *testing.T) {
+	cluster := make(test.Cluster, 1)
+	cluster[0] = test.NewCommandNode(true,
+		server.OptCommandServerOptions(
+			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+			pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+		),
+	)
+	cluster[0].Config.Gossip.Port = "0"
+	err := cluster[0].Start()
+	if err != nil {
+		t.Fatalf("starting cluster 0: %v", err)
+	}
+
+	test.MustDo("POST", cluster[0].URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
+}
+
 func TestClusterTranslator(t *testing.T) {
 	cluster := make(test.Cluster, 2)
 	cluster[0] = test.NewCommandNode(true)
 	cluster[0].Config.Gossip.Port = "0"
 	err := cluster[0].Start()
 	if err != nil {
-		t.Fatalf("starting cluster 1: %v", err)
+		t.Fatalf("starting cluster 0: %v", err)
 	}
 	cluster[1] = test.NewCommandNode(false,
 		server.OptCommandServerOptions(

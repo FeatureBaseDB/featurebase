@@ -107,7 +107,7 @@ func (i *Index) Path() string { return i.path }
 
 // TranslateStorePath returns the translation database path for a partition.
 func (i *Index) TranslateStorePath(partitionID int) string {
-	return filepath.Join(i.path, "keys", strconv.Itoa(partitionID))
+	return filepath.Join(i.path, translateStoreDir, strconv.Itoa(partitionID))
 }
 
 // TranslateStore returns the translation store for a given partition.

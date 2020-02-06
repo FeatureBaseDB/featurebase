@@ -138,6 +138,8 @@ func NewHolder(partitionN int) *Holder {
 
 		cacheFlushInterval: defaultCacheFlushInterval,
 
+		OpenTranslateStore: OpenInMemTranslateStore,
+
 		Logger: logger.NopLogger,
 	}
 }
@@ -496,6 +498,7 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	index.newAttrStore = h.NewAttrStore
 	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ".data"))
 	index.snapshotQueue = h.snapshotQueue
+	index.OpenTranslateStore = h.OpenTranslateStore
 	index.holder = h
 	return index, nil
 }
@@ -1011,7 +1014,7 @@ func (s *holderSyncer) initializeIndexTranslateReplication() error {
 			continue
 		}
 
-		// Connect to remote not and begin streaming.
+		// Connect to remote node and begin streaming.
 		rd, err := s.Holder.OpenTranslateReader(context.Background(), node.URI.String(), m)
 		if err != nil {
 			return err
