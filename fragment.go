@@ -294,6 +294,9 @@ func (f *fragment) importStorage(data []byte, file *os.File, newGen generation, 
 // to use a new storage as backing store.
 func (f *fragment) applyStorage(data []byte, file *os.File, newGen generation, mapped bool) (bool, error) {
 	if len(data) == 0 {
+		// This shouldn't be used anyway in this path, but just in
+		// case, we'll be explicit about it.
+		f.storage.PreferMapping(false)
 		if file != nil {
 			fi, err := file.Stat()
 			if err != nil {
