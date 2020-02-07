@@ -36,8 +36,8 @@ var mu sync.RWMutex
 
 // SetMaxMapCount sets the maximum map count, and returns the previous maximum.
 func SetMaxMapCount(max uint64) uint64 {
-	prev := maxMapCount
 	mu.Lock()
+	prev := maxMapCount
 	maxMapCount = max
 	mu.Unlock()
 	return prev

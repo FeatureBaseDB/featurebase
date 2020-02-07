@@ -28,8 +28,8 @@ var maxFileCount uint64 = 500000
 var fileMu sync.RWMutex
 
 func SetMaxFileCount(max uint64) uint64 {
-	prev := maxFileCount
 	fileMu.Lock()
+	prev := maxFileCount
 	maxFileCount = max
 	fileMu.Unlock()
 	return prev
