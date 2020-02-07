@@ -3779,7 +3779,10 @@ func unionArrayArrayInPlace(a, b *Container) *Container {
 			// for InPlace, we actually want to ensure that
 			// we update a, as long as it's not frozen.
 			a = a.Thaw()
-			a.setArray(b.array())
+			// ... but we also want to be sure we don't end up
+			// copying in a mapped object into our not-mapped
+			// object.
+			a.setArrayMaybeCopy(b.array(), b.Mapped())
 			return a.optimize()
 		}
 		return a
