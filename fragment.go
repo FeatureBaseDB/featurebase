@@ -296,6 +296,9 @@ func (f *fragment) applyStorage(data []byte, file *os.File, newGen generation, m
 	if len(data) == 0 {
 		if file != nil {
 			fi, err := file.Stat()
+			if err != nil {
+				f.Logger.Printf("trying to apply new storage to existing bitmap, stat failed: %v", err)
+			}
 			if err == nil && fi != nil && fi.Size() == 0 {
 				return f.emptyStorage(file)
 			}
@@ -305,7 +308,7 @@ func (f *fragment) applyStorage(data []byte, file *os.File, newGen generation, m
 		// our containers to use that storage *to take advantage of
 		// mmap*, we'll just make sure our containers aren't pointing to
 		// old storage and say "nope".
-		f.storage.RemapRoaringStorage(nil)
+		_, _ = f.storage.RemapRoaringStorage(nil)
 		f.storage.SetSource(nil)
 		return false, nil
 	}
