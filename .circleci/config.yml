@@ -50,6 +50,15 @@ jobs:
       - run: make build GOOS=linux GOARCH=arm GOARM=6
       - run: make build GOOS=linux GOARCH=arm GOARM=7
       - run: make build GOOS=linux GOARCH=arm64
+  test-golang-1.14-rc:
+    <<: *defaults
+    docker:
+      - image: circleci/golang:1.14-rc
+    steps:
+      - *fast-checkout
+      - *add-github-auth
+      - run: sudo apt-get install lsof
+      - run: make test
   test-golang-1.13: &base-test
     <<: *defaults
     steps:
@@ -175,6 +184,9 @@ workflows:
           requires:
             - setup
       - test-build-arm:
+          requires:
+            - setup
+      - test-golang-1.14-rc:
           requires:
             - setup
       - test-golang-1.13-enterprise:
