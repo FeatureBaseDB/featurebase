@@ -88,7 +88,12 @@ func readOffsets(b *Bitmap, data []byte, pos int, keyN uint32) error {
 
 		// Map byte slice directly to the container data.
 		citer.Next()
-		_, c := citer.Value()
+		k, c := citer.Value()
+		if !c.Mapped() {
+			fmt.Printf("inexplicable: container %d (%d/%d) doesn't think it's mapped. fixing that.\n",
+				k, i, keyN)
+			c.setMapped(true)
+		}
 		switch c.typ() {
 		case containerArray:
 			c.setArray((*[0xFFFFFFF]uint16)(unsafe.Pointer(&data[offset]))[:c.N():c.N()])
@@ -108,7 +113,12 @@ func readWithRuns(b *Bitmap, data []byte, pos int, keyN uint32) error {
 	citer, _ := b.Containers.Iterator(0)
 	for i := 0; i < int(keyN); i++ {
 		citer.Next()
-		_, c := citer.Value()
+		k, c := citer.Value()
+		if !c.Mapped() {
+			fmt.Printf("inexplicable: container %d (%d/%d) doesn't think it's mapped. fixing that.\n",
+				k, i, keyN)
+			c.setMapped(true)
+		}
 		switch c.typ() {
 		case containerRun:
 			runCount := binary.LittleEndian.Uint16(data[pos : pos+runCountHeaderSize])
@@ -176,11 +186,16 @@ func (b *Bitmap) unmarshalPilosaRoaring(data []byte) error {
 
 		// Map byte slice directly to the container data.
 		citer.Next()
-		_, c := citer.Value()
+		k, c := citer.Value()
 
 		// this shouldn't happen, since we don't normally store nils.
 		if c == nil {
 			continue
+		}
+		if !c.Mapped() {
+			fmt.Printf("inexplicable: container %d (%d/%d) doesn't think it's mapped. fixing that.\n",
+				k, i, keyN)
+			c.setMapped(true)
 		}
 		switch c.typ() {
 		case containerRun:
