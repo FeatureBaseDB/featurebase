@@ -101,7 +101,7 @@ func NewCommandNode(isCoordinator bool, opts ...server.CommandOption) *Command {
 
 // MustRunCommand returns a new, running Main. Panic on error.
 func MustRunCommand() *Command {
-	m := newCommand()
+	m := newCommand(server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
 	m.Config.Metric.Diagnostics = false // Disable diagnostics.
 	m.Config.Gossip.Port = "0"
 	if err := m.Start(); err != nil {
