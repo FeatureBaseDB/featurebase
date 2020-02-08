@@ -1050,7 +1050,11 @@ func TestCluster_TranslateStore(t *testing.T) {
 
 func TestClusterTranslator(t *testing.T) {
 	cluster := make(test.Cluster, 2)
-	cluster[0] = test.NewCommandNode(true)
+	cluster[0] = test.NewCommandNode(true,
+		server.OptCommandServerOptions(
+			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+		),
+	)
 	cluster[0].Config.Gossip.Port = "0"
 	err := cluster[0].Start()
 	if err != nil {

@@ -89,6 +89,10 @@ func newCommand(opts ...server.CommandOption) *Command {
 
 // NewCommandNode returns a new instance of Command with clustering enabled.
 func NewCommandNode(isCoordinator bool, opts ...server.CommandOption) *Command {
+	// We want tests to default to using the in-memory translate store, so we
+	// prepend opts with that functional option. If a different translate store
+	// has been specified, it will override this one.
+	opts = prependWithMemStore(opts)
 	m := newCommand(opts...)
 	m.Config.Cluster.Disabled = false
 	m.Config.Cluster.Coordinator = isCoordinator
@@ -398,12 +402,40 @@ func runCluster(size int, opts ...[]server.CommandOption) (Cluster, error) {
 
 // MustRunCluster creates and starts a new cluster
 func MustRunCluster(tb testing.TB, size int, opts ...[]server.CommandOption) Cluster {
+	// We want tests to default to using the in-memory translate store, so we
+	// prepend opts with that functional option. If a different translate store
+	// has been specified, it will override this one.
+	opts = prependOpts(opts)
+
 	tb.Helper()
 	c, err := runCluster(size, opts...)
 	if err != nil {
 		tb.Fatalf("run cluster: %v", err)
 	}
 	return c
+}
+
+// prependOpts applies prependWithMemStore to each of the ops (one per
+// node, or one for the entire cluser).
+func prependOpts(opts [][]server.CommandOption) [][]server.CommandOption {
+	if len(opts) == 0 {
+		opts = [][]server.CommandOption{
+			prependWithMemStore([]server.CommandOption{}),
+		}
+	} else {
+		for i := range opts {
+			opts[i] = prependWithMemStore(opts[i])
+		}
+	}
+	return opts
+}
+
+// prependWithMemStore prepends opts with the OpenInMemTranslateStore.
+func prependWithMemStore(opts []server.CommandOption) []server.CommandOption {
+	defaultOpts := []server.CommandOption{
+		server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)),
+	}
+	return append(defaultOpts, opts...)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
