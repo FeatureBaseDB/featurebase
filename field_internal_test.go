@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -574,5 +575,157 @@ func TestBSIGroup_importValue(t *testing.T) {
 		} else if !reflect.DeepEqual(row.Columns(), tt.expCols) {
 			t.Fatalf("test %d, expected columns: %v, but got: %v", i, tt.expCols, row.Columns())
 		}
+	}
+}
+
+func TestIntField_MinMaxForShard(t *testing.T) {
+	f := MustOpenField(OptFieldTypeInt(-100, 200))
+
+	options := &ImportOptions{}
+	for i, test := range []struct {
+		name      string
+		columnIDs []uint64
+		values    []int64
+		expMax    ValCount
+		expMin    ValCount
+	}{
+		{
+			name:      "zero",
+			columnIDs: []uint64{},
+			values:    []int64{},
+		},
+		{
+			name:      "single",
+			columnIDs: []uint64{1},
+			values:    []int64{10},
+			expMax:    ValCount{Val: 10, Count: 1},
+			expMin:    ValCount{Val: 10, Count: 1},
+		},
+		{
+			name:      "twovals",
+			columnIDs: []uint64{1, 2},
+			values:    []int64{10, 20},
+			expMax:    ValCount{Val: 20, Count: 1},
+			expMin:    ValCount{Val: 10, Count: 1},
+		},
+		{
+			name:      "multiplecounts",
+			columnIDs: []uint64{1, 2, 3, 4, 5},
+			values:    []int64{10, 20, 10, 10, 20},
+			expMax:    ValCount{Val: 20, Count: 2},
+			expMin:    ValCount{Val: 10, Count: 3},
+		},
+		{
+			name:      "middlevals",
+			columnIDs: []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+			values:    []int64{10, 20, 10, 10, 20, 11, 12, 11, 13, 11},
+			expMax:    ValCount{Val: 20, Count: 2},
+			expMin:    ValCount{Val: 10, Count: 3},
+		},
+		{
+			name:      "middlevals",
+			columnIDs: []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 100000000, 100000001},
+			values:    []int64{10, 20, 10, 10, 20, 11, 12, 11, 13, 11, 44, 1},
+			expMax:    ValCount{Val: 20, Count: 2},
+			expMin:    ValCount{Val: 10, Count: 3},
+		},
+	} {
+		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
+			if err := f.importValue(test.columnIDs, test.values, options); err != nil {
+				t.Fatalf("test %d, importing values: %s", i, err.Error())
+			}
+
+			maxvc, err := f.MaxForShard(0, nil)
+			if err != nil {
+				t.Fatalf("getting max for shard: %v", err)
+			}
+			if maxvc != test.expMax {
+				t.Fatalf("max expected:\n%+v\ngot:\n%+v", test.expMax, maxvc)
+			}
+
+			minvc, err := f.MinForShard(0, nil)
+			if err != nil {
+				t.Fatalf("getting min for shard: %v", err)
+			}
+			if minvc != test.expMin {
+				t.Fatalf("min expected:\n%+v\ngot:\n%+v", test.expMin, minvc)
+			}
+		})
+	}
+}
+
+func TestDecimalField_MinMaxForShard(t *testing.T) {
+	f := MustOpenField(OptFieldTypeDecimal(3))
+
+	options := &ImportOptions{}
+	for i, test := range []struct {
+		name      string
+		columnIDs []uint64
+		values    []float64
+		expMax    ValCount
+		expMin    ValCount
+	}{
+		{
+			name:      "zero",
+			columnIDs: []uint64{},
+			values:    []float64{},
+		},
+		{
+			name:      "single",
+			columnIDs: []uint64{1},
+			values:    []float64{10.1},
+			expMax:    ValCount{FloatVal: 10.1, Count: 1},
+			expMin:    ValCount{FloatVal: 10.1, Count: 1},
+		},
+		{
+			name:      "twovals",
+			columnIDs: []uint64{1, 2},
+			values:    []float64{10.1, 20.2},
+			expMax:    ValCount{FloatVal: 20.2, Count: 1},
+			expMin:    ValCount{FloatVal: 10.1, Count: 1},
+		},
+		{
+			name:      "multiplecounts",
+			columnIDs: []uint64{1, 2, 3, 4, 5},
+			values:    []float64{10.1, 20.2, 10.1, 10.1, 20.2},
+			expMax:    ValCount{FloatVal: 20.2, Count: 2},
+			expMin:    ValCount{FloatVal: 10.1, Count: 3},
+		},
+		{
+			name:      "middlevals",
+			columnIDs: []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+			values:    []float64{10.1, 20.2, 10.1, 10.1, 20.2, 11, 12, 11, 13, 11},
+			expMax:    ValCount{FloatVal: 20.2, Count: 2},
+			expMin:    ValCount{FloatVal: 10.1, Count: 3},
+		},
+		{
+			name:      "another shard",
+			columnIDs: []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 100000000, 100000001},
+			values:    []float64{10.1, 20.2, 10.1, 10.1, 20.2, 11, 12, 11, 13, 11, 44.39, 0.23},
+			expMax:    ValCount{FloatVal: 20.2, Count: 2},
+			expMin:    ValCount{FloatVal: 10.1, Count: 3},
+		},
+	} {
+		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
+			if err := f.importFloatValue(test.columnIDs, test.values, options); err != nil {
+				t.Fatalf("test %d, importing values: %s", i, err.Error())
+			}
+
+			maxvc, err := f.MaxForShard(0, nil)
+			if err != nil {
+				t.Fatalf("getting max for shard: %v", err)
+			}
+			if maxvc != test.expMax {
+				t.Fatalf("max expected:\n%+v\ngot:\n%+v", test.expMax, maxvc)
+			}
+
+			minvc, err := f.MinForShard(0, nil)
+			if err != nil {
+				t.Fatalf("getting min for shard: %v", err)
+			}
+			if minvc != test.expMin {
+				t.Fatalf("min expected:\n%+v\ngot:\n%+v", test.expMin, minvc)
+			}
+		})
 	}
 }

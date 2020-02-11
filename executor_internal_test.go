@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -380,4 +381,60 @@ func TestExecutor_GroupCountCondition(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestValCountComparisons(t *testing.T) {
+	tests := []struct {
+		name       string
+		vc         ValCount
+		other      ValCount
+		expLarger  ValCount
+		expSmaller ValCount
+	}{
+		{
+			name: "zero",
+		},
+		{
+			name:       "ints",
+			vc:         ValCount{Val: 10, Count: 1},
+			other:      ValCount{Val: 3, Count: 2},
+			expLarger:  ValCount{Val: 10, Count: 1},
+			expSmaller: ValCount{Val: 3, Count: 2},
+		},
+		{
+			name:       "floats",
+			vc:         ValCount{FloatVal: 10.2, Count: 1},
+			other:      ValCount{FloatVal: 3.4, Count: 2},
+			expLarger:  ValCount{FloatVal: 10.2, Count: 1},
+			expSmaller: ValCount{FloatVal: 3.4, Count: 2},
+		},
+		{
+			name:       "intsEquality",
+			vc:         ValCount{Val: 10, Count: 1},
+			other:      ValCount{Val: 10, Count: 2},
+			expLarger:  ValCount{Val: 10, Count: 3},
+			expSmaller: ValCount{Val: 10, Count: 3},
+		},
+		{
+			name:       "floatsEquality",
+			vc:         ValCount{FloatVal: 10.7, Count: 1},
+			other:      ValCount{FloatVal: 10.7, Count: 2},
+			expLarger:  ValCount{FloatVal: 10.7, Count: 3},
+			expSmaller: ValCount{FloatVal: 10.7, Count: 3},
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
+			gotLarger := test.vc.larger(test.other)
+			if gotLarger != test.expLarger {
+				t.Fatalf("larger failed, expected:\n%+v\ngot:\n%+v", test.expLarger, gotLarger)
+			}
+
+			gotSmaller := test.vc.smaller(test.other)
+			if gotSmaller != test.expSmaller {
+				t.Fatalf("smaller failed, expected:\n%+v\ngot:\n%+v", test.expSmaller, gotSmaller)
+			}
+		})
+	}
 }

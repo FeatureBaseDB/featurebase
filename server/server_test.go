@@ -298,6 +298,41 @@ func TestMain_GroupBy(t *testing.T) {
 	}
 }
 
+func TestMain_MinMaxFloat(t *testing.T) {
+	m := test.MustRunCommand()
+	defer m.Close()
+
+	// Create fields.
+	client := m.Client()
+	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+		t.Fatal(err)
+	}
+	if err := client.CreateFieldWithOptions(context.Background(), "i", "dec", pilosa.FieldOptions{Type: pilosa.FieldTypeDecimal, Scale: 3, Max: 100000}); err != nil {
+		t.Fatal(err)
+	}
+
+	query := `
+		Set(0, dec=1.32)
+		Set(1, dec=4.44)
+	`
+
+	// Set columns on row.
+	if _, err := m.Query("i", "", query); err != nil {
+		t.Fatal(err)
+	}
+
+	// Query row.
+	exp0 := pilosa.ValCount{FloatVal: 4.44, Count: 1}
+	exp1 := pilosa.ValCount{FloatVal: 1.32, Count: 1}
+	if res, err := m.QueryProtobuf("i", `Max(field=dec) Min(field=dec)`); err != nil {
+		t.Fatal(err)
+	} else if res.Results[0] != exp0 ||
+		res.Results[1] != exp1 {
+		t.Fatalf("unexpected results: %+v", res.Results)
+
+	}
+}
+
 // Ensure the host can be parsed.
 func TestConfig_Parse_Host(t *testing.T) {
 	if c, err := ParseConfig(`bind = "local"`); err != nil {

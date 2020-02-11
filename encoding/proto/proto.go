@@ -1335,8 +1335,9 @@ func decodePairField(pb *internal.Pair) pilosa.PairField {
 
 func decodeValCount(pb *internal.ValCount) pilosa.ValCount {
 	return pilosa.ValCount{
-		Val:   pb.Val,
-		Count: pb.Count,
+		Val:      pb.Val,
+		FloatVal: pb.FloatVal,
+		Count:    pb.Count,
 	}
 }
 
@@ -1460,8 +1461,9 @@ func encodePairField(p pilosa.PairField) *internal.Pair {
 
 func encodeValCount(vc pilosa.ValCount) *internal.ValCount {
 	return &internal.ValCount{
-		Val:   vc.Val,
-		Count: vc.Count,
+		Val:      vc.Val,
+		FloatVal: vc.FloatVal,
+		Count:    vc.Count,
 	}
 }
 
