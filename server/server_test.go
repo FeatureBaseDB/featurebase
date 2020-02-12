@@ -27,7 +27,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"testing/quick"
 	"time"
 
 	"github.com/pelletier/go-toml"
@@ -51,78 +50,77 @@ func TestMain_Set_Quick(t *testing.T) {
 		t.Skip("short")
 	}
 
-	if err := quick.Check(func(cmds []SetCommand) bool {
-		m := test.MustRunCommand()
-		defer m.Close()
+	for i := 0; i < 100; i++ {
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			t.Parallel()
 
-		// Create client.
-		client, err := http.NewInternalClient(m.API.Node().URI.HostPort(), http.GetHTTPClient(nil))
-		if err != nil {
-			t.Fatal(err)
-		}
+			rand := rand.New(rand.NewSource(int64(i)))
+			cmds := GenerateSetCommands(1000, rand)
 
-		// Execute Set() commands.
-		for _, cmd := range cmds {
-			if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+			m := test.MustRunCommand()
+			defer m.Close()
+
+			// Create client.
+			client, err := http.NewInternalClient(m.API.Node().URI.HostPort(), http.GetHTTPClient(nil))
+			if err != nil {
 				t.Fatal(err)
 			}
-			if err := client.CreateField(context.Background(), "i", cmd.Field); err != nil && err != pilosa.ErrFieldExists {
-				t.Fatal(err)
-			}
-			if _, err := m.Query("i", "", fmt.Sprintf(`Set(%d, %s=%d)`, cmd.ColumnID, cmd.Field, cmd.ID)); err != nil {
-				t.Fatal(err)
-			}
-		}
 
-		// Validate data.
-		for field, fieldSet := range SetCommands(cmds).Fields() {
-			for id, columnIDs := range fieldSet {
-				exp := MustMarshalJSON(map[string]interface{}{
-					"results": []interface{}{
-						map[string]interface{}{
-							"columns": columnIDs,
-							"attrs":   map[string]interface{}{},
-						},
-					},
-				}) + "\n"
-				if res, err := m.Query("i", "", fmt.Sprintf(`Row(%s=%d)`, field, id)); err != nil {
+			// Execute Set() commands.
+			for _, cmd := range cmds {
+				if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
 					t.Fatal(err)
-				} else if res != exp {
-					t.Fatalf("unexpected result:\n\ngot=%s\n\nexp=%s\n\n", res, exp)
+				}
+				if err := client.CreateField(context.Background(), "i", cmd.Field); err != nil && err != pilosa.ErrFieldExists {
+					t.Fatal(err)
+				}
+				if _, err := m.Query("i", "", fmt.Sprintf(`Set(%d, %s=%d)`, cmd.ColumnID, cmd.Field, cmd.ID)); err != nil {
+					t.Fatal(err)
 				}
 			}
-		}
 
-		if err := m.Reopen(); err != nil {
-			t.Fatal(err)
-		}
-
-		// Validate data after reopening.
-		for field, fieldSet := range SetCommands(cmds).Fields() {
-			for id, columnIDs := range fieldSet {
-				exp := MustMarshalJSON(map[string]interface{}{
-					"results": []interface{}{
-						map[string]interface{}{
-							"columns": columnIDs,
-							"attrs":   map[string]interface{}{},
+			// Validate data.
+			for field, fieldSet := range SetCommands(cmds).Fields() {
+				for id, columnIDs := range fieldSet {
+					exp := MustMarshalJSON(map[string]interface{}{
+						"results": []interface{}{
+							map[string]interface{}{
+								"columns": columnIDs,
+								"attrs":   map[string]interface{}{},
+							},
 						},
-					},
-				}) + "\n"
-				if res, err := m.Query("i", "", fmt.Sprintf(`Row(%s=%d)`, field, id)); err != nil {
-					t.Fatal(err)
-				} else if res != exp {
-					t.Fatalf("unexpected result (reopen):\n\ngot=%s\n\nexp=%s\n\n", res, exp)
+					}) + "\n"
+					if res, err := m.Query("i", "", fmt.Sprintf(`Row(%s=%d)`, field, id)); err != nil {
+						t.Fatal(err)
+					} else if res != exp {
+						t.Fatalf("unexpected result:\n\ngot=%s\n\nexp=%s\n\n", res, exp)
+					}
 				}
 			}
-		}
 
-		return true
-	}, &quick.Config{
-		Values: func(values []reflect.Value, rand *rand.Rand) {
-			values[0] = reflect.ValueOf(GenerateSetCommands(1000, rand))
-		},
-	}); err != nil {
-		t.Fatal(err)
+			if err := m.Reopen(); err != nil {
+				t.Fatal(err)
+			}
+
+			// Validate data after reopening.
+			for field, fieldSet := range SetCommands(cmds).Fields() {
+				for id, columnIDs := range fieldSet {
+					exp := MustMarshalJSON(map[string]interface{}{
+						"results": []interface{}{
+							map[string]interface{}{
+								"columns": columnIDs,
+								"attrs":   map[string]interface{}{},
+							},
+						},
+					}) + "\n"
+					if res, err := m.Query("i", "", fmt.Sprintf(`Row(%s=%d)`, field, id)); err != nil {
+						t.Fatal(err)
+					} else if res != exp {
+						t.Fatalf("unexpected result (reopen):\n\ngot=%s\n\nexp=%s\n\n", res, exp)
+					}
+				}
+			}
+		})
 	}
 }
 
@@ -497,7 +495,7 @@ func TestClusteringNodesReplica1(t *testing.T) {
 	// this isn't necessary, but makes the test run way faster
 	config.Gossip.Port = strconv.Itoa(int(cluster[2].Command.GossipTransport().URI.Port))
 
-	cluster[2].Command = server.NewCommand(cluster[2].Stdin, cluster[2].Stdout, cluster[2].Stderr)
+	cluster[2].Command = server.NewCommand(cluster[2].Stdin, cluster[2].Stdout, cluster[2].Stderr, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
 	cluster[2].Command.Config = config
 
 	// Run new program.
@@ -571,7 +569,7 @@ func TestClusteringNodesReplica2(t *testing.T) {
 	// this isn't necessary, but makes the test run way faster
 	config.Gossip.Port = strconv.Itoa(int(cluster[2].Command.GossipTransport().URI.Port))
 
-	cluster[2].Command = server.NewCommand(cluster[2].Stdin, cluster[2].Stdout, cluster[2].Stderr)
+	cluster[2].Command = server.NewCommand(cluster[2].Stdin, cluster[2].Stdout, cluster[2].Stderr, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
 	cluster[2].Command.Config = config
 
 	// Run new program.
@@ -591,7 +589,7 @@ func TestClusteringNodesReplica2(t *testing.T) {
 	// this isn't necessary, but makes the test run way faster
 	config.Gossip.Port = strconv.Itoa(int(cluster[1].Command.GossipTransport().URI.Port))
 
-	cluster[1].Command = server.NewCommand(cluster[1].Stdin, cluster[1].Stdout, cluster[1].Stderr)
+	cluster[1].Command = server.NewCommand(cluster[1].Stdin, cluster[1].Stdout, cluster[1].Stderr, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
 	cluster[1].Command.Config = config
 
 	// Run new program.
@@ -864,7 +862,7 @@ func TestClusterQueriesAfterRestart(t *testing.T) {
 
 	// this isn't necessary, but makes the test run way faster
 	config.Gossip.Port = strconv.Itoa(int(cmd1.Command.GossipTransport().URI.Port))
-	cmd1.Command = server.NewCommand(cmd1.Stdin, cmd1.Stdout, cmd1.Stderr)
+	cmd1.Command = server.NewCommand(cmd1.Stdin, cmd1.Stdout, cmd1.Stderr, server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
 	cmd1.Command.Config = config
 	err = cmd1.Start()
 	if err != nil {
@@ -885,6 +883,7 @@ func TestClusterQueriesAfterRestart(t *testing.T) {
 	if results.Results[0].(uint64) != 100 {
 		t.Fatalf("Count should be 100, but got %v of type %[1]T", results.Results[0])
 	}
+
 }
 
 // TODO: confirm that things keep working if a node is hard-closed (no nodeLeave event) and immediately restarted with a different address.

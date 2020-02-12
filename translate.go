@@ -22,6 +22,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	// translateStoreDir is the subdirctory into which the partitioned
+	// translate store data is stored.
+	translateStoreDir = "_keys"
+)
+
 // Translate store errors.
 var (
 	ErrTranslateStoreClosed       = errors.New("translate store closed")
@@ -70,6 +76,11 @@ type OpenTranslateStoreFunc func(path, index, field string, partitionID, partiti
 
 // GenerateNextPartitionedID returns the next ID within the same partition.
 func GenerateNextPartitionedID(index string, prev uint64, partitionID, partitionN int) uint64 {
+	// If the translation store is not partitioned, just return
+	// the next ID.
+	if partitionID == -1 {
+		return prev + 1
+	}
 	// Try to use the next ID if it is in the same partition.
 	// Otherwise find ID in next shard that has a matching partition.
 	for id := prev + 1; ; id += ShardWidth {

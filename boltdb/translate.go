@@ -144,7 +144,7 @@ func (s *TranslateStore) Size() int64 {
 	return tx.Size()
 }
 
-// TranslateKeys converts a string key to an integer ID.
+// TranslateKey converts a string key to an integer ID.
 // If key does not have an associated id then one is created.
 func (s *TranslateStore) TranslateKey(key string) (id uint64, _ error) {
 	// Find id by key under read lock.
@@ -188,8 +188,8 @@ func (s *TranslateStore) TranslateKey(key string) (id uint64, _ error) {
 	return id, nil
 }
 
-// TranslateKeys converts a string key to an integer ID.
-// If key does not have an associated id then one is created.
+// TranslateKeys converts a slice of string keys to a slice of integer IDs.
+// If a key does not have an associated id then one is created.
 func (s *TranslateStore) TranslateKeys(keys []string) (ids []uint64, _ error) {
 	if len(keys) == 0 {
 		return nil, nil

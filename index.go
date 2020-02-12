@@ -107,7 +107,7 @@ func (i *Index) Path() string { return i.path }
 
 // TranslateStorePath returns the translation database path for a partition.
 func (i *Index) TranslateStorePath(partitionID int) string {
-	return filepath.Join(i.path, "keys", strconv.Itoa(partitionID))
+	return filepath.Join(i.path, translateStoreDir, strconv.Itoa(partitionID))
 }
 
 // TranslateStore returns the translation store for a given partition.
@@ -165,12 +165,26 @@ func (i *Index) Open() (err error) {
 	}
 
 	i.logger.Debugf("open translate store for index: %s", i.name)
+
+	var g errgroup.Group
+	var mu sync.Mutex
 	for partitionID := 0; partitionID < i.partitionN; partitionID++ {
-		store, err := i.OpenTranslateStore(i.TranslateStorePath(partitionID), i.name, "", partitionID, i.partitionN)
-		if err != nil {
-			return errors.Wrap(err, "opening index translate store")
-		}
-		i.translateStores[partitionID] = store
+		partitionID := partitionID
+
+		g.Go(func() error {
+			store, err := i.OpenTranslateStore(i.TranslateStorePath(partitionID), i.name, "", partitionID, i.partitionN)
+			if err != nil {
+				return errors.Wrapf(err, "opening index translate store: partition=%d", partitionID)
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			i.translateStores[partitionID] = store
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return err
 	}
 
 	return nil
