@@ -2679,13 +2679,6 @@ func (e *executor) executeClearBit(ctx context.Context, index string, c *pql.Cal
 		return false, ErrFieldNotFound
 	}
 
-	// Clear column on existence field
-	if ef := idx.existenceField(); ef != nil {
-		if _, err := ef.ClearBit(0, colID); err != nil {
-			return false, errors.Wrap(err, "clearing existence column")
-		}
-	}
-
 	// Int field.
 	if f.Type() == FieldTypeInt || f.Type() == FieldTypeDecimal {
 		return e.executeClearValueField(ctx, index, c, f, colID, opt)

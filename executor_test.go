@@ -692,6 +692,48 @@ func TestExecutor_Execute_Clear(t *testing.T) {
 			t.Fatalf("expected column changed")
 		}
 	})
+
+	t.Run("RowKeyColumnKey_NotClearNot", func(t *testing.T) {
+		writeQuery := `Set("056009039|q2db_3385|11", f="all_users")`
+		readQueries := []string{
+			`Not(Row(f="has_deleted_date"))`,
+			`Clear("056009039|q2db_3385|11", f="has_deleted_date")`,
+			`Not(Row(f="has_deleted_date")) `,
+		}
+		results := []interface{}{
+			"056009039|q2db_3385|11",
+			false,
+			"056009039|q2db_3385|11",
+		}
+
+		responses := runCallTest(t, writeQuery, readQueries, &pilosa.IndexOptions{
+			Keys:           true,
+			TrackExistence: true,
+		}, pilosa.OptFieldKeys())
+		for i, resp := range responses {
+			if len(resp.Results) != 1 {
+				t.Fatalf("response %d: len(results) expected: 1, got: %d", i, len(resp.Results))
+			}
+
+			switch r := resp.Results[0].(type) {
+			case bool:
+				if results[i] != r {
+					t.Fatalf("response %d: expected: %v, got: %v", i, results[i], r)
+				}
+
+			case *pilosa.Row:
+				if len(r.Keys) != 1 {
+					t.Fatalf("response %d: len(keys) expected: 1, got: %d", i, len(r.Keys))
+				}
+				if results[i] != r.Keys[0] {
+					t.Fatalf("response %d: expected: %v, got: %v", i, results[i], r.Keys[0])
+				}
+
+			default:
+				t.Fatalf("response %d: expected: %T, got: %T", i, results[i], r)
+			}
+		}
+	})
 }
 
 // Ensure a set query can be executed on a bool field.
