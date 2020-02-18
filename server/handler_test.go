@@ -492,7 +492,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader(`TopN(f0, n=2)`)))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if body := w.Body.String(); body != `{"results":[[{"id":30,"count":3},{"id":31,"count":1}]]}`+"\n" {
+		} else if body := w.Body.String(); body != `{"results":[[{"id":30,"key":"","count":3},{"id":31,"key":"","count":1}]]}`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
 		}
 	})

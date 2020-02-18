@@ -39,6 +39,14 @@ var (
 )
 
 // TranslateStore is the storage for translation string-to-uint64 values.
+// For BoltDB implementation an empty string will be converted into the sentinel byte slice:
+// var emptyKey = []byte{
+// 	0x00, 0x00, 0x00,
+// 	0x4d, 0x54, 0x4d, 0x54, // MTMT
+// 	0x00,
+// 	0xc2, 0xa0, // NO-BREAK SPACE
+// 	0x00,
+// }
 type TranslateStore interface {
 	io.Closer
 
