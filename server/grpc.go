@@ -570,6 +570,10 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
 					}
+
+				case "time":
+					rowResp.Columns = append(rowResp.Columns,
+						&pb.ColumnResponse{ColumnVal: nil})
 				}
 			}
 
