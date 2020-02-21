@@ -1369,6 +1369,7 @@ func (f *Field) Sum(filter *Row, name string) (sum, count int64, err error) {
 
 // FloatMin performs a Min query and converts the result to a float
 // based on the field's configured scale.
+// TODO: this and Min are probably worthless
 func (f *Field) FloatMin(filter *Row, name string) (min float64, count int64, err error) {
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
@@ -1404,6 +1405,11 @@ func (f *Field) Min(filter *Row, name string) (min, count int64, err error) {
 
 // FloatMax performs a max query and converts the result to a float
 // based on the field's configured scale.
+//
+// TODO, this isn't really used, because it's kind of useless. It will
+// only get the max among shards on this node, but all query execution
+// already happens at the shard level and bypasses this entirely
+// calling fragment.max instead.
 func (f *Field) FloatMax(filter *Row, name string) (max float64, count int64, err error) {
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
@@ -1415,6 +1421,73 @@ func (f *Field) FloatMax(filter *Row, name string) (max float64, count int64, er
 		max = float64(maxI) / math.Pow10(int(bsig.Scale))
 	}
 	return max, count, err
+}
+
+func (f *Field) MaxForShard(shard uint64, filter *Row) (ValCount, error) {
+	bsig := f.bsiGroup(f.name)
+	if bsig == nil {
+		return ValCount{}, ErrBSIGroupNotFound
+	}
+
+	view := f.view(viewBSIGroupPrefix + f.name)
+	if view == nil {
+		return ValCount{}, nil
+	}
+
+	fragment := view.Fragment(shard)
+	if fragment == nil {
+		return ValCount{}, nil
+	}
+
+	max, cnt, err := fragment.max(filter, bsig.BitDepth)
+	if err != nil {
+		return ValCount{}, errors.Wrap(err, "calling fragment.max")
+	}
+
+	valCount := ValCount{Count: int64(cnt)}
+
+	if f.Options().Type == FieldTypeDecimal {
+		valCount.FloatVal = float64(max) / math.Pow10(int(bsig.Scale))
+	} else {
+		valCount.Val = max
+	}
+
+	return valCount, nil
+}
+
+// MinForShard returns the minimum value which appears in this shard
+// (this field must be an Int or Decimal field). It also returns the
+// number of times the minimum value appears.
+func (f *Field) MinForShard(shard uint64, filter *Row) (ValCount, error) {
+	bsig := f.bsiGroup(f.name)
+	if bsig == nil {
+		return ValCount{}, ErrBSIGroupNotFound
+	}
+
+	view := f.view(viewBSIGroupPrefix + f.name)
+	if view == nil {
+		return ValCount{}, nil
+	}
+
+	fragment := view.Fragment(shard)
+	if fragment == nil {
+		return ValCount{}, nil
+	}
+
+	min, cnt, err := fragment.min(filter, bsig.BitDepth)
+	if err != nil {
+		return ValCount{}, errors.Wrap(err, "calling fragment.min")
+	}
+
+	valCount := ValCount{Count: int64(cnt)}
+
+	if f.Options().Type == FieldTypeDecimal {
+		valCount.FloatVal = float64(min) / math.Pow10(int(bsig.Scale))
+	} else {
+		valCount.Val = min
+	}
+
+	return valCount, nil
 }
 
 // Max returns the max for a field.

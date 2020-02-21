@@ -35,6 +35,16 @@ func TestGRPC(t *testing.T) {
 			expHeaders []expHeader
 			expColumns [][]expColumn
 		}{
+			{
+				pilosa.ValCount{Val: 1, Count: 1},
+				[]expHeader{{"value", "int64"}, {"count", "int64"}},
+				[][]expColumn{{int64(1), int64(1)}},
+			},
+			{
+				pilosa.ValCount{FloatVal: 1.24, Count: 1},
+				[]expHeader{{"value", "float64"}, {"count", "int64"}},
+				[][]expColumn{{float64(1.24), int64(1)}},
+			},
 			// Row (uint64)
 			{
 				pilosa.NewRow(10, 11, 12),
@@ -263,6 +273,11 @@ func TestGRPC(t *testing.T) {
 						}
 					case int64:
 						val := column.GetInt64Val()
+						if val != v {
+							t.Fatalf("test %d expected column val: %v but got: %v", ti, v, val)
+						}
+					case float64:
+						val := column.GetFloat64Val()
 						if val != v {
 							t.Fatalf("test %d expected column val: %v but got: %v", ti, v, val)
 						}

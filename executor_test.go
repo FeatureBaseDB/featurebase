@@ -4692,6 +4692,10 @@ func TestExecutor_Execute_MinMaxCountEqual(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if _, err := idx.CreateField("dec", pilosa.OptFieldTypeDecimal(3)); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
 			Set(0, f=3)
 			Set(1, f=3)
@@ -4706,6 +4710,10 @@ func TestExecutor_Execute_MinMaxCountEqual(t *testing.T) {
 			Set(` + strconv.Itoa(2*ShardWidth+1) + `, f=3)
 			Set(0, x=3)
 			Set(1, x=3)
+            Set(0, dec=5.122)
+            Set(1, dec=12.985)
+            Set(2, dec=4.234)
+            Set(3, dec=12.985)
 
 		`}); err != nil {
 		t.Fatal(err)
@@ -4734,6 +4742,29 @@ func TestExecutor_Execute_MinMaxCountEqual(t *testing.T) {
 			}
 		}
 	})
+	t.Run("MinDec", func(t *testing.T) {
+		tests := []struct {
+			filter string
+			exp    float64
+			cnt    int64
+		}{
+			{filter: ``, exp: 4.234, cnt: 1},
+			{filter: `Row(x=3)`, exp: 5.122, cnt: 1},
+		}
+		for i, tt := range tests {
+			var pql string
+			if tt.filter == "" {
+				pql = `Min(field=dec)`
+			} else {
+				pql = fmt.Sprintf(`Min(%s, field=dec)`, tt.filter)
+			}
+			if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+				t.Fatal(err)
+			} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{FloatVal: tt.exp, Count: tt.cnt}) {
+				t.Fatalf("unexpected result, test %d: %s", i, spew.Sdump(result.Results[0]))
+			}
+		}
+	})
 
 	t.Run("Max", func(t *testing.T) {
 		tests := []struct {
@@ -4754,6 +4785,30 @@ func TestExecutor_Execute_MinMaxCountEqual(t *testing.T) {
 				t.Fatal(err)
 			} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: tt.exp, Count: tt.cnt}) {
 				t.Fatalf("unexpected result, test %d: %s", i, spew.Sdump(result))
+			}
+		}
+	})
+
+	t.Run("MaxDec", func(t *testing.T) {
+		tests := []struct {
+			filter string
+			exp    float64
+			cnt    int64
+		}{
+			{filter: ``, exp: 12.985, cnt: 2},
+			{filter: `Row(x=3)`, exp: 12.985, cnt: 1},
+		}
+		for i, tt := range tests {
+			var pql string
+			if tt.filter == "" {
+				pql = `Max(field=dec)`
+			} else {
+				pql = fmt.Sprintf(`Max(%s, field=dec)`, tt.filter)
+			}
+			if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+				t.Fatal(err)
+			} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{FloatVal: tt.exp, Count: tt.cnt}) {
+				t.Fatalf("unexpected result, test %d: %s", i, spew.Sdump(result.Results[0]))
 			}
 		}
 	})

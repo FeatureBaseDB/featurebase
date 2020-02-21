@@ -50,6 +50,7 @@ message GroupCount{
 message ValCount {
 	int64 Val = 1;
 	int64 Count = 2;
+	double FloatVal = 3;
 }
 
 message ColumnAttrSet {

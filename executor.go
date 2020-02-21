@@ -770,7 +770,8 @@ func (e *executor) executeSum(ctx context.Context, index string, c *pql.Call, sh
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSum")
 	defer span.Finish()
 
-	if field := c.Args["field"]; field == "" {
+	fieldName, ok := c.Args["field"].(string)
+	if !ok || fieldName == "" {
 		return ValCount{}, errors.New("Sum(): field required")
 	}
 
@@ -797,6 +798,21 @@ func (e *executor) executeSum(ctx context.Context, index string, c *pql.Call, sh
 
 	if other.Count == 0 {
 		return ValCount{}, nil
+	}
+
+	// scale summed response into float if decimal field and this is
+	// not a remote query (we're about to return to original client).
+	if !opt.Remote {
+		field := e.Holder.Field(index, fieldName)
+		if field == nil {
+			return ValCount{}, ErrFieldNotFound
+		}
+		if field.Type() == FieldTypeDecimal {
+			if scale := field.Options().Scale; scale != 0 {
+				other.FloatVal = float64(other.Val) / math.Pow10(int(scale))
+				other.Val = 0
+			}
+		}
 	}
 	return other, nil
 }
@@ -1244,24 +1260,7 @@ func (e *executor) executeMinShard(ctx context.Context, index string, c *pql.Cal
 		return ValCount{}, nil
 	}
 
-	bsig := field.bsiGroup(fieldName)
-	if bsig == nil {
-		return ValCount{}, nil
-	}
-
-	fragment := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
-	if fragment == nil {
-		return ValCount{}, nil
-	}
-
-	fmin, fcount, err := fragment.min(filter, bsig.BitDepth)
-	if err != nil {
-		return ValCount{}, err
-	}
-	return ValCount{
-		Val:   int64(fmin) + bsig.Base,
-		Count: int64(fcount),
-	}, nil
+	return field.MinForShard(shard, filter)
 }
 
 // executeMaxShard calculates the max for bsiGroups on a shard.
@@ -1282,24 +1281,7 @@ func (e *executor) executeMaxShard(ctx context.Context, index string, c *pql.Cal
 		return ValCount{}, nil
 	}
 
-	bsig := field.bsiGroup(fieldName)
-	if bsig == nil {
-		return ValCount{}, nil
-	}
-
-	fragment := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
-	if fragment == nil {
-		return ValCount{}, nil
-	}
-
-	fmax, fcount, err := fragment.max(filter, bsig.BitDepth)
-	if err != nil {
-		return ValCount{}, err
-	}
-	return ValCount{
-		Val:   int64(fmax) + bsig.Base,
-		Count: int64(fcount),
-	}, nil
+	return field.MaxForShard(shard, filter)
 }
 
 // executeMinRowShard returns the minimum row ID for a shard.
@@ -4113,10 +4095,11 @@ func (sr *SignedRow) union(other SignedRow) SignedRow {
 	return ret
 }
 
-// ValCount represents a grouping of sum & count for Sum() and Average() calls.
+// ValCount represents a grouping of sum & count for Sum() and Average() calls. Also Min, Max....
 type ValCount struct {
-	Val   int64 `json:"value"`
-	Count int64 `json:"count"`
+	Val      int64   `json:"value"`
+	FloatVal float64 `json:"floatValue"`
+	Count    int64   `json:"count"`
 }
 
 func (vc *ValCount) add(other ValCount) ValCount {
@@ -4128,6 +4111,9 @@ func (vc *ValCount) add(other ValCount) ValCount {
 
 // smaller returns the smaller of the two ValCounts.
 func (vc *ValCount) smaller(other ValCount) ValCount {
+	if vc.FloatVal != 0 || other.FloatVal != 0 {
+		return vc.floatSmaller(other)
+	}
 	if vc.Count == 0 || (other.Val < vc.Val && other.Count > 0) {
 		return other
 	}
@@ -4141,8 +4127,26 @@ func (vc *ValCount) smaller(other ValCount) ValCount {
 	}
 }
 
+func (vc *ValCount) floatSmaller(other ValCount) ValCount {
+	if vc.Count == 0 || (other.FloatVal < vc.FloatVal && other.Count > 0) {
+		return other
+	}
+	extra := int64(0)
+	if vc.FloatVal == other.FloatVal {
+		extra += other.Count
+	}
+	return ValCount{
+		FloatVal: vc.FloatVal,
+		Count:    vc.Count + extra,
+	}
+
+}
+
 // larger returns the larger of the two ValCounts.
 func (vc *ValCount) larger(other ValCount) ValCount {
+	if vc.FloatVal != 0 || other.FloatVal != 0 {
+		return vc.floatLarger(other)
+	}
 	if vc.Count == 0 || (other.Val > vc.Val && other.Count > 0) {
 		return other
 	}
@@ -4153,6 +4157,20 @@ func (vc *ValCount) larger(other ValCount) ValCount {
 	return ValCount{
 		Val:   vc.Val,
 		Count: vc.Count + extra,
+	}
+}
+
+func (vc *ValCount) floatLarger(other ValCount) ValCount {
+	if vc.Count == 0 || (other.FloatVal > vc.FloatVal && other.Count > 0) {
+		return other
+	}
+	extra := int64(0)
+	if vc.FloatVal == other.FloatVal {
+		extra += other.Count
+	}
+	return ValCount{
+		FloatVal: vc.FloatVal,
+		Count:    vc.Count + extra,
 	}
 }
 

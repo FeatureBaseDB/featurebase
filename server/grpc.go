@@ -777,16 +777,32 @@ func makeRows(resp pilosa.QueryResponse, logger logger.Logger) chan *pb.RowRespo
 						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BoolVal{BoolVal: r}},
 					}}
 			case pilosa.ValCount:
-				ci := []*pb.ColumnInfo{
-					{Name: "value", Datatype: "int64"},
-					{Name: "count", Datatype: "int64"},
+				var ci []*pb.ColumnInfo
+				// ValCount can have a float or integeger value, but
+				// not both (as of this writing).
+				if r.FloatVal != 0 {
+					ci = []*pb.ColumnInfo{
+						{Name: "value", Datatype: "float64"},
+						{Name: "count", Datatype: "int64"},
+					}
+					results <- &pb.RowResponse{
+						Headers: ci,
+						Columns: []*pb.ColumnResponse{
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Float64Val{Float64Val: r.FloatVal}},
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: r.Count}},
+						}}
+				} else {
+					ci = []*pb.ColumnInfo{
+						{Name: "value", Datatype: "int64"},
+						{Name: "count", Datatype: "int64"},
+					}
+					results <- &pb.RowResponse{
+						Headers: ci,
+						Columns: []*pb.ColumnResponse{
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: r.Val}},
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: r.Count}},
+						}}
 				}
-				results <- &pb.RowResponse{
-					Headers: ci,
-					Columns: []*pb.ColumnResponse{
-						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: r.Val}},
-						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: r.Count}},
-					}}
 			case pilosa.SignedRow:
 				// TODO: address the overflow issue with values outside the int64 range
 				ci := []*pb.ColumnInfo{{Name: r.Field(), Datatype: "int64"}}

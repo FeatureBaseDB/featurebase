@@ -298,6 +298,41 @@ func TestMain_GroupBy(t *testing.T) {
 	}
 }
 
+func TestMain_MinMaxFloat(t *testing.T) {
+	m := test.MustRunCommand()
+	defer m.Close()
+
+	// Create fields.
+	client := m.Client()
+	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{}); err != nil && err != pilosa.ErrIndexExists {
+		t.Fatal(err)
+	}
+	if err := client.CreateFieldWithOptions(context.Background(), "i", "dec", pilosa.FieldOptions{Type: pilosa.FieldTypeDecimal, Scale: 3, Max: 100000}); err != nil {
+		t.Fatal(err)
+	}
+
+	query := `
+		Set(0, dec=1.32)
+		Set(1, dec=4.44)
+	`
+
+	// Set columns on row.
+	if _, err := m.Query("i", "", query); err != nil {
+		t.Fatal(err)
+	}
+
+	// Query row.
+	exp0 := pilosa.ValCount{FloatVal: 4.44, Count: 1}
+	exp1 := pilosa.ValCount{FloatVal: 1.32, Count: 1}
+	if res, err := m.QueryProtobuf("i", `Max(field=dec) Min(field=dec)`); err != nil {
+		t.Fatal(err)
+	} else if res.Results[0] != exp0 ||
+		res.Results[1] != exp1 {
+		t.Fatalf("unexpected results: %+v", res.Results)
+
+	}
+}
+
 // Ensure the host can be parsed.
 func TestConfig_Parse_Host(t *testing.T) {
 	if c, err := ParseConfig(`bind = "local"`); err != nil {
@@ -983,4 +1018,46 @@ func TestClusterExhaustingConnectionsImport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("setting lots of shards: %v", err)
 	}
+}
+
+func TestClusterMinMaxSumDecimal(t *testing.T) {
+	cluster := test.MustRunCluster(t, 3)
+	defer cluster.Close()
+	cmd := cluster[0]
+
+	cmd.MustCreateIndex(t, "testdec", pilosa.IndexOptions{Keys: true, TrackExistence: true})
+	cmd.MustCreateField(t, "testdec", "adec", pilosa.OptFieldTypeDecimal(2))
+
+	test.MustDo("POST", cluster[0].URL()+"/index/testdec/query", `
+Set("a", adec=42.2)
+Set("b", adec=11.12)
+Set("c", adec=13.41)
+Set("d", adec=99.87)
+Set("e", adec=11.13)
+Set("f", adec=12.12)
+Set("g", adec=15.52)
+Set("h", adec=100.22)
+`)
+
+	result := test.MustDo("POST", cluster[0].URL()+"/index/testdec/query", "Sum(field=adec)")
+	if !strings.Contains(result.Body, `"floatValue":305.59`) {
+		t.Fatalf("expected float sum of 305.59, but got: '%s'", result.Body)
+	} else if !strings.Contains(result.Body, `"count":8`) {
+		t.Fatalf("expected count 8, but got: '%s'", result.Body)
+	}
+
+	result = test.MustDo("POST", cluster[0].URL()+"/index/testdec/query", "Max(field=adec)")
+	if !strings.Contains(result.Body, `"floatValue":100.22`) {
+		t.Fatalf("expected float max of 100.22, but got: '%s'", result.Body)
+	} else if !strings.Contains(result.Body, `"count":1`) {
+		t.Fatalf("expected count 1, but got: '%s'", result.Body)
+	}
+
+	result = test.MustDo("POST", cluster[0].URL()+"/index/testdec/query", "Min(field=adec)")
+	if !strings.Contains(result.Body, `"floatValue":11.12`) {
+		t.Fatalf("expected float min of 11.12, but got: '%s'", result.Body)
+	} else if !strings.Contains(result.Body, `"count":1`) {
+		t.Fatalf("expected count 1, but got: '%s'", result.Body)
+	}
+
 }
