@@ -1019,3 +1019,45 @@ func TestClusterExhaustingConnectionsImport(t *testing.T) {
 		t.Fatalf("setting lots of shards: %v", err)
 	}
 }
+
+func TestClusterMinMaxSumDecimal(t *testing.T) {
+	cluster := test.MustRunCluster(t, 3)
+	defer cluster.Close()
+	cmd := cluster[0]
+
+	cmd.MustCreateIndex(t, "testdec", pilosa.IndexOptions{Keys: true, TrackExistence: true})
+	cmd.MustCreateField(t, "testdec", "adec", pilosa.OptFieldTypeDecimal(2))
+
+	test.MustDo("POST", cluster[0].URL()+"/index/testdec/query", `
+Set("a", adec=42.2)
+Set("b", adec=11.12)
+Set("c", adec=13.41)
+Set("d", adec=99.87)
+Set("e", adec=11.13)
+Set("f", adec=12.12)
+Set("g", adec=15.52)
+Set("h", adec=100.22)
+`)
+
+	result := test.MustDo("POST", cluster[0].URL()+"/index/testdec/query", "Sum(field=adec)")
+	if !strings.Contains(result.Body, `"floatValue":305.59`) {
+		t.Fatalf("expected float sum of 305.59, but got: '%s'", result.Body)
+	} else if !strings.Contains(result.Body, `"count":8`) {
+		t.Fatalf("expected count 8, but got: '%s'", result.Body)
+	}
+
+	result = test.MustDo("POST", cluster[0].URL()+"/index/testdec/query", "Max(field=adec)")
+	if !strings.Contains(result.Body, `"floatValue":100.22`) {
+		t.Fatalf("expected float max of 100.22, but got: '%s'", result.Body)
+	} else if !strings.Contains(result.Body, `"count":1`) {
+		t.Fatalf("expected count 1, but got: '%s'", result.Body)
+	}
+
+	result = test.MustDo("POST", cluster[0].URL()+"/index/testdec/query", "Min(field=adec)")
+	if !strings.Contains(result.Body, `"floatValue":11.12`) {
+		t.Fatalf("expected float min of 11.12, but got: '%s'", result.Body)
+	} else if !strings.Contains(result.Body, `"count":1`) {
+		t.Fatalf("expected count 1, but got: '%s'", result.Body)
+	}
+
+}

@@ -770,7 +770,8 @@ func (e *executor) executeSum(ctx context.Context, index string, c *pql.Call, sh
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeSum")
 	defer span.Finish()
 
-	if field := c.Args["field"]; field == "" {
+	fieldName, ok := c.Args["field"].(string)
+	if !ok || fieldName == "" {
 		return ValCount{}, errors.New("Sum(): field required")
 	}
 
@@ -797,6 +798,21 @@ func (e *executor) executeSum(ctx context.Context, index string, c *pql.Call, sh
 
 	if other.Count == 0 {
 		return ValCount{}, nil
+	}
+
+	// scale summed response into float if decimal field and this is
+	// not a remote query (we're about to return to original client).
+	if !opt.Remote {
+		field := e.Holder.Field(index, fieldName)
+		if field == nil {
+			return ValCount{}, ErrFieldNotFound
+		}
+		if field.Type() == FieldTypeDecimal {
+			if scale := field.Options().Scale; scale != 0 {
+				other.FloatVal = float64(other.Val) / math.Pow10(int(scale))
+				other.Val = 0
+			}
+		}
 	}
 	return other, nil
 }
