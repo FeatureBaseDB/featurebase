@@ -229,8 +229,8 @@ func (m *Command) SetupServer() error {
 	runtime.SetBlockProfileRate(m.Config.Profile.BlockRate)
 	runtime.SetMutexProfileFraction(m.Config.Profile.MutexFraction)
 
-	syswrap.SetMaxMapCount(m.Config.MaxMapCount)
-	syswrap.SetMaxFileCount(m.Config.MaxFileCount)
+	_ = syswrap.SetMaxMapCount(m.Config.MaxMapCount)
+	_ = syswrap.SetMaxFileCount(m.Config.MaxFileCount)
 
 	err := m.setupLogger()
 	if err != nil {

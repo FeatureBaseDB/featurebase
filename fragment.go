@@ -28,6 +28,7 @@ import (
 	"math"
 	"math/bits"
 	"os"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -105,6 +106,8 @@ type fragment struct {
 	field string
 	view  string
 	shard uint64
+	// debugging tool: addresses of current and previous maps
+	prevdata, currdata struct{ from, to uintptr }
 
 	// File-backed storage
 	path            string
@@ -291,18 +294,46 @@ func (f *fragment) importStorage(data []byte, file *os.File, newGen generation, 
 // to use a new storage as backing store.
 func (f *fragment) applyStorage(data []byte, file *os.File, newGen generation, mapped bool) (bool, error) {
 	if len(data) == 0 {
-		return f.emptyStorage(file)
+		// This shouldn't be used anyway in this path, but just in
+		// case, we'll be explicit about it.
+		f.storage.PreferMapping(false)
+		if file != nil {
+			fi, err := file.Stat()
+			if err != nil {
+				f.Logger.Printf("trying to apply new storage to existing bitmap, stat failed: %v", err)
+			}
+			if err == nil && fi != nil && fi.Size() == 0 {
+				return f.emptyStorage(file)
+			}
+		}
+		// if we can't be sure of that, we assume data is 0 because
+		// we couldn't mmap it, and since all we'd be doing is remapping
+		// our containers to use that storage *to take advantage of
+		// mmap*, we'll just make sure our containers aren't pointing to
+		// old storage and say "nope".
+		_, _ = f.storage.RemapRoaringStorage(nil)
+		f.storage.SetSource(nil)
+		return false, nil
 	}
 	// Tell storage to prefer mapping if and only if we think the data
 	// is mmapped and valid.
 	f.storage.PreferMapping(mapped)
-	f.storage.SetSource(newGen)
 	// RemapRoaringStorage will fix any mapped containers to point either
 	// to the provided data (if PreferMapping was called with true and
 	// data is provided and there's a corresponding container) or to
 	// allocated storage, so when it's done, there's nothing in it that
 	// is mapped to anything *other than* the provided data.
-	return f.storage.RemapRoaringStorage(data)
+	mapped, err := f.storage.RemapRoaringStorage(data)
+	if err != nil {
+		// OOPS! something went wrong, we don't know why, we can't
+		// sanely recover from that.
+		_, _ = f.storage.RemapRoaringStorage(nil)
+		mapped = false
+		f.storage.SetSource(nil)
+	} else {
+		f.storage.SetSource(newGen)
+	}
+	return mapped, err
 }
 
 // openStorage opens the storage bitmap.
@@ -330,6 +361,16 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 	}
 	var err error
 	f.gen, err = newGeneration(f.gen, f.path, unmarshalData, storageOp, f.Logger)
+	if f.gen != nil {
+		scratchData := f.gen.Bytes()
+		f.prevdata = f.currdata
+		var scratchAddrs struct{ from, to uintptr }
+		if scratchData != nil {
+			scratchAddrs.from = uintptr(unsafe.Pointer(&scratchData[0]))
+			scratchAddrs.to = scratchAddrs.from + uintptr(len(scratchData))
+		}
+		f.currdata = scratchAddrs
+	}
 	if generationDebug {
 		// We might have already done this anyway, if we think we
 		// mapped stuff, but when debugging we want to do it
@@ -1912,6 +1953,19 @@ func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct
 		}
 		return nil
 	})
+	if err != nil {
+		// we got an error. it's possible that the error indicates that something went wrong.
+		mappedIn, mappedOut, unmappedIn, errs, e2 := f.storage.SanityCheckMapping(f.currdata.from, f.currdata.to)
+		if errs != 0 {
+			f.Logger.Printf("transaction failed on %s. storage has %d mapped in range, %d mapped out of range, %d unmapped in range, %d errors total, last %v",
+				f.path, mappedIn, mappedOut, unmappedIn, errs, e2)
+			if f.prevdata.from != f.currdata.from {
+				mappedIn, mappedOut, unmappedIn, errs, e2 = f.storage.SanityCheckMapping(f.prevdata.from, f.prevdata.to)
+				f.Logger.Printf("with previous map, storage would have %d mapped in range, %d mapped out of range, %d unmapped in range, %d errors total, last %v",
+					mappedIn, mappedOut, unmappedIn, errs, e2)
+			}
+		}
+	}
 	return err
 }
 
@@ -2152,8 +2206,27 @@ func track(start time.Time, message string, stats stats.StatsClient, logger logg
 
 // snapshot does the actual snapshot operation. it does not check or care
 // about f.snapshotPending.
-func (f *fragment) snapshot() error {
-	_, err := unprotectedWriteToFragment(f, f.storage)
+func (f *fragment) snapshot() (err error) {
+	wouldPanic := debug.SetPanicOnFault(true)
+	defer func() {
+		debug.SetPanicOnFault(wouldPanic)
+		if r := recover(); r != nil {
+			fmt.Printf("snapshot panic!\n")
+			if e2, ok := r.(error); ok {
+				err = e2
+				// special case: if we caught a page fault, we diagnose that directly. sadly,
+				// we can't see the actual values that were used to generate this, probably.
+				if e2.Error() == "runtime error: invalid memory address or nil pointer dereference" {
+					mappedIn, mappedOut, unmappedIn, errs, _ := f.storage.SanityCheckMapping(f.currdata.from, f.currdata.to)
+					f.Logger.Printf("transaction failed on %s. storage has %d mapped in range, %d mapped out of range, %d unmapped in range, %d errors total",
+						f.path, mappedIn, mappedOut, unmappedIn, errs)
+				}
+			} else {
+				err = fmt.Errorf("non-error panic: %v", r)
+			}
+		}
+	}()
+	_, err = unprotectedWriteToFragment(f, f.storage)
 	if err == nil {
 		f.snapshotStamp = time.Now()
 	}

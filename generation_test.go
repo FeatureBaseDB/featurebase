@@ -1,4 +1,4 @@
-// Copyright 2019 Pilosa Corp.
+// Copyright 2020 Pilosa Corp.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,28 +12,56 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// +build generationdebug
+// +build generationparanoia
 
 package pilosa
 
 import (
-	"fmt"
-	"os"
+	"runtime"
 	"testing"
+	"unsafe"
 )
 
-func examineResults() {
-	results := reportGenerations()
-	if len(results) > 0 {
-		fmt.Printf("generations:\n")
-		for _, res := range results {
-			fmt.Printf("  %s\n", res)
-		}
-	}
-}
+func TestGenerationPanic(t *testing.T) {
+	f := mustOpenFragment("i", "f", viewStandard, 0, "none")
+	defer f.Clean(t)
 
-func TestMain(m *testing.M) {
-	ret := m.Run()
-	examineResults()
-	os.Exit(ret)
+	for i := 0; i < f.MaxOpN; i++ {
+		_, _ = f.setBit(0, uint64(i*32))
+	}
+	// force snapshot so we get a mmapped row...
+	_ = f.Snapshot()
+	_ = f.row(0)
+	var prevData []byte
+
+	if f.gen.(*mmapGeneration).data == nil {
+		t.Fatalf("generation code didn't create a mapping, apparently?")
+	}
+	prevData = f.gen.(*mmapGeneration).data
+	f.mu.Lock()
+	_ = f.snapshotQueue.Immediate(f)
+	f.mu.Unlock()
+	runtime.GC()
+	for i := 0; i < (f.MaxOpN / 2); i++ {
+		_, _ = f.setBit(0, uint64(i*32)+23)
+	}
+	f.mu.Lock()
+	f.snapshotQueue.Await(f)
+	f.mu.Unlock()
+	runtime.GC()
+	newData := f.gen.(*mmapGeneration).data
+	if unsafe.Pointer(&prevData[0]) == unsafe.Pointer(&newData[0]) {
+		t.Fatalf("test can't run usefully, didn't get new data pointer")
+	}
+
+	err := f.gen.Transaction(&f.storage.OpWriter, func() error {
+		prevData[0] = 0x3c
+		return nil
+	})
+	if err == nil {
+		t.Fatalf("expected a panic to get caught, but nothing happened")
+	}
+	if err.Error() != "invalid memory access during transaction" {
+		t.Fatalf("expected \"invalid memory access during transaction\", got %q", err.Error())
+	}
 }

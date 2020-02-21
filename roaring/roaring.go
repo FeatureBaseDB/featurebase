@@ -1529,6 +1529,33 @@ func (r *baseRoaringIterator) Current() (key uint64, cType byte, n int, length i
 	return r.currentKey, r.currentType, r.currentN, r.currentLen, r.currentPointer, r.lastErr
 }
 
+// SanityCheckMapping is a debugging function which checks whether containers
+// are *correctly* recorded as mapped or unmapped.
+func (b *Bitmap) SanityCheckMapping(from, to uintptr) (mappedIn int64, mappedOut int64, unmappedIn int64, errs int, err error) {
+	b.Containers.UpdateEvery(func(key uint64, c *Container, existed bool) (*Container, bool) {
+		dptr := uintptr(unsafe.Pointer(c.pointer))
+		if dptr >= from && dptr < to {
+			if c.Mapped() {
+				mappedIn++
+			} else {
+				err = fmt.Errorf("container key %d, addr %x, inside %x+%d\n",
+					key, dptr, from, to-from)
+				errs++
+				unmappedIn++
+			}
+		} else {
+			if c.Mapped() {
+				err = fmt.Errorf("container key %d, addr %x, outside %x+%d, but mapped\n",
+					key, dptr, from, to-from)
+				errs++
+				mappedOut++
+			}
+		}
+		return c, false
+	})
+	return mappedIn, mappedOut, unmappedIn, errs, err
+}
+
 // RemapRoaringStorage tries to update all containers to refer to
 // the roaring bitmap in the provided []byte. If any containers are
 // marked as mapped, but do not match the provided storage, they will
@@ -3752,7 +3779,10 @@ func unionArrayArrayInPlace(a, b *Container) *Container {
 			// for InPlace, we actually want to ensure that
 			// we update a, as long as it's not frozen.
 			a = a.Thaw()
-			a.setArray(b.array())
+			// ... but we also want to be sure we don't end up
+			// copying in a mapped object into our not-mapped
+			// object.
+			a.setArrayMaybeCopy(b.array(), b.Mapped())
 			return a.optimize()
 		}
 		return a
