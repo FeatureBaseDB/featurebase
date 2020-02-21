@@ -11,9 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package boltdb
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -45,6 +47,14 @@ func OpenTranslateStore(path, index, field string, partitionID, partitionN int) 
 var _ pilosa.TranslateStore = &TranslateStore{}
 
 // TranslateStore is an on-disk storage engine for translating string-to-uint64 values.
+// An empty string will be converted into the sentinel byte slice:
+// var emptyKey = []byte{
+// 	0x00, 0x00, 0x00,
+// 	0x4d, 0x54, 0x4d, 0x54, // MTMT
+// 	0x00,
+// 	0xc2, 0xa0, // NO-BREAK SPACE
+// 	0x00,
+// }
 type TranslateStore struct {
 	mu sync.RWMutex
 	db *bolt.DB
@@ -149,7 +159,7 @@ func (s *TranslateStore) Size() int64 {
 func (s *TranslateStore) TranslateKey(key string) (id uint64, _ error) {
 	// Find id by key under read lock.
 	if err := s.db.View(func(tx *bolt.Tx) error {
-		id = findIDByKey(tx.Bucket([]byte("keys")), key)
+		id, _ = findIDByKey(tx.Bucket([]byte("keys")), key)
 		return nil
 	}); err != nil {
 		return 0, err
@@ -165,14 +175,16 @@ func (s *TranslateStore) TranslateKey(key string) (id uint64, _ error) {
 	var written bool
 	if err := s.db.Update(func(tx *bolt.Tx) (err error) {
 		bkt := tx.Bucket([]byte("keys"))
-		if id = findIDByKey(bkt, key); id != 0 {
+
+		var boltKey []byte
+		if id, boltKey = findIDByKey(bkt, key); id != 0 {
 			return nil
 		}
 
 		id = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
-		if err := bkt.Put([]byte(key), u64tob(id)); err != nil {
+		if err := bkt.Put(boltKey, u64tob(id)); err != nil {
 			return err
-		} else if err := tx.Bucket([]byte("ids")).Put(u64tob(id), []byte(key)); err != nil {
+		} else if err := tx.Bucket([]byte("ids")).Put(u64tob(id), boltKey); err != nil {
 			return err
 		}
 		written = true
@@ -203,7 +215,7 @@ func (s *TranslateStore) TranslateKeys(keys []string) (ids []uint64, _ error) {
 	if err := s.db.View(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket([]byte("keys"))
 		for i, key := range keys {
-			if id := findIDByKey(bkt, key); id != 0 {
+			if id, _ := findIDByKey(bkt, key); id != 0 {
 				ids[i] = id
 				found++
 			}
@@ -228,14 +240,15 @@ func (s *TranslateStore) TranslateKeys(keys []string) (ids []uint64, _ error) {
 				continue
 			}
 
-			if ids[i] = findIDByKey(bkt, key); ids[i] != 0 {
+			var boltKey []byte
+			if ids[i], boltKey = findIDByKey(bkt, key); ids[i] != 0 {
 				continue
 			}
 
 			ids[i] = pilosa.GenerateNextPartitionedID(s.index, maxID(tx), s.partitionID, s.partitionN)
-			if err := bkt.Put([]byte(key), u64tob(ids[i])); err != nil {
+			if err := bkt.Put(boltKey, u64tob(ids[i])); err != nil {
 				return err
-			} else if err := tx.Bucket([]byte("ids")).Put(u64tob(ids[i]), []byte(key)); err != nil {
+			} else if err := tx.Bucket([]byte("ids")).Put(u64tob(ids[i]), boltKey); err != nil {
 				return err
 			}
 			written = true
@@ -297,7 +310,7 @@ func (s *TranslateStore) ForceSet(id uint64, key string) error {
 	return nil
 }
 
-// Reader returns a reader that streams the underlying data file.
+// EntryReader returns a reader that streams the underlying data file.
 func (s *TranslateStore) EntryReader(ctx context.Context, offset uint64) (pilosa.TranslateEntryReader, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	return &TranslateEntryReader{ctx: ctx, cancel: cancel, store: s, offset: offset}, nil
@@ -404,13 +417,33 @@ func (r *TranslateEntryReader) ReadEntry(entry *pilosa.TranslateEntry) error {
 	}
 }
 
-func findIDByKey(bkt *bolt.Bucket, key string) uint64 {
-	if value := bkt.Get([]byte(key)); value != nil {
-		return btou64(value)
+// emptyKey is a sentinel byte slice which stands for "" as a key.
+var emptyKey = []byte{
+	0x00, 0x00, 0x00,
+	0x4d, 0x54, 0x4d, 0x54, // MTMT
+	0x00,
+	0xc2, 0xa0, // NO-BREAK SPACE
+	0x00,
+}
+
+func findIDByKey(bkt *bolt.Bucket, key string) (uint64, []byte) {
+	var boltKey []byte
+	if key == "" {
+		boltKey = emptyKey
+	} else {
+		boltKey = []byte(key)
 	}
-	return 0
+
+	if value := bkt.Get(boltKey); value != nil {
+		return btou64(value), boltKey
+	}
+	return 0, boltKey
 }
 
 func findKeyByID(bkt *bolt.Bucket, id uint64) string {
-	return string(bkt.Get(u64tob(id)))
+	boltKey := bkt.Get(u64tob(id))
+	if bytes.Equal(boltKey, emptyKey) {
+		return ""
+	}
+	return string(boltKey)
 }

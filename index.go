@@ -250,7 +250,7 @@ fileLoop:
 
 // openExistenceField gets or creates the existence field and associates it to the index.
 func (i *Index) openExistenceField() error {
-	f, err := i.createFieldIfNotExists(existenceFieldName, FieldOptions{CacheType: CacheTypeNone, CacheSize: 0})
+	f, err := i.createFieldIfNotExists(existenceFieldName, &FieldOptions{CacheType: CacheTypeNone, CacheSize: 0})
 	if err != nil {
 		return errors.Wrap(err, "creating existence field")
 	}
@@ -401,13 +401,10 @@ func (i *Index) CreateField(name string, opts ...FieldOption) (*Field, error) {
 		return nil, newConflictError(ErrFieldExists)
 	}
 
-	// Apply functional options.
-	fo := FieldOptions{}
-	for _, opt := range opts {
-		err := opt(&fo)
-		if err != nil {
-			return nil, errors.Wrap(err, "applying option")
-		}
+	// Apply and validate functional options.
+	fo, err := newFieldOptions(opts...)
+	if err != nil {
+		return nil, errors.Wrap(err, "applying option")
 	}
 
 	return i.createField(name, fo)
@@ -428,19 +425,16 @@ func (i *Index) CreateFieldIfNotExists(name string, opts ...FieldOption) (*Field
 		return f, nil
 	}
 
-	// Apply functional options.
-	fo := FieldOptions{}
-	for _, opt := range opts {
-		err := opt(&fo)
-		if err != nil {
-			return nil, errors.Wrap(err, "applying option")
-		}
+	// Apply and validate functional options.
+	fo, err := newFieldOptions(opts...)
+	if err != nil {
+		return nil, errors.Wrap(err, "applying option")
 	}
 
 	return i.createField(name, fo)
 }
 
-func (i *Index) createFieldIfNotExists(name string, opt FieldOptions) (*Field, error) {
+func (i *Index) createFieldIfNotExists(name string, opt *FieldOptions) (*Field, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -452,7 +446,7 @@ func (i *Index) createFieldIfNotExists(name string, opt FieldOptions) (*Field, e
 	return i.createField(name, opt)
 }
 
-func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
+func (i *Index) createField(name string, opt *FieldOptions) (*Field, error) {
 	if name == "" {
 		return nil, errors.New("field name required")
 	} else if opt.CacheType != "" && !isValidCacheType(opt.CacheType) {
@@ -469,7 +463,7 @@ func (i *Index) createField(name string, opt FieldOptions) (*Field, error) {
 	// up a foreign index.
 	f.holder = i.holder
 
-	f.setOptions(&opt)
+	f.setOptions(opt)
 
 	// Open field.
 	if err := f.Open(); err != nil {

@@ -121,6 +121,18 @@ Upon creation, fields are configured to be of a certain type. Pilosa supports th
 #### Set
 
 Set is the default field type in Pilosa. Set fields represent a standard, binary matrix of rows and columns where each row key represents a possible field value. The following example creates a `set` field called "info" with a ranked cache containing up to 100,000 records.
+Row and/or column key can be a string literal (e.g. "value"). This mapping is also stored in a separate BoltDB data structure. Becauase BoltDB does not allow to have empty strings as keys, in pilosa we translate an empty string key into sentinel byte slice:
+```go
+[]byte{
+	0x00, 0x00, 0x00,
+	0x4d, 0x54, 0x4d, 0x54, // MTMT
+	0x00,
+	0xc2, 0xa0, // NO-BREAK SPACE
+	0x00,
+}
+```
+(where the first three bytes are _zero_ bytes, next four bytes stands for `MTMT` literal and the rest four bytes represent NBSP prefixed and suffixed with _zero_ byte).
+In reverse translation, if we get from BoltDB the sentinel key, pilosa will rewrite it into an empty string (`""`).
 
 ``` request
 curl localhost:10101/index/repository/field/info \

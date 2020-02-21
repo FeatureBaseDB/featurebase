@@ -1709,6 +1709,30 @@ type FieldOptions struct {
 	ForeignIndex   string      `json:"foreignIndex"`
 }
 
+// newFieldOptions returns a new instance of FieldOptions
+// with applied and validated functional options.
+func newFieldOptions(opts ...FieldOption) (*FieldOptions, error) {
+	fo := FieldOptions{}
+	for _, opt := range opts {
+		err := opt(&fo)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if fo.Keys {
+		switch fo.Type {
+		case FieldTypeInt:
+			return nil, ErrIntFieldWithKeys
+
+		case FieldTypeDecimal:
+			return nil, ErrDecimalFieldWithKeys
+		}
+	}
+
+	return &fo, nil
+}
+
 // applyDefaultOptions updates FieldOptions with the default
 // values if o does not contain a valid type.
 func applyDefaultOptions(o *FieldOptions) *FieldOptions {

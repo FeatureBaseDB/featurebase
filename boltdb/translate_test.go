@@ -97,6 +97,10 @@ func TestTranslateStore_TranslateID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	id3, err := s.TranslateKey("")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Ensure IDs can be translated back to keys.
 	if key, err := s.TranslateID(id1); err != nil {
@@ -110,6 +114,13 @@ func TestTranslateStore_TranslateID(t *testing.T) {
 	} else if got, want := key, "bar"; got != want {
 		t.Fatalf("TranslateID()=%s, want %s", got, want)
 	}
+
+	if key, err := s.TranslateID(id3); err != nil {
+		t.Fatal(err)
+	} else if got, want := key, ""; got != want {
+		t.Fatalf("TranslateID()=%s, want %s", got, want)
+	}
+
 }
 
 func TestTranslateStore_TranslateIDs(t *testing.T) {

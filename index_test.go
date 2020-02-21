@@ -185,6 +185,30 @@ func TestIndex_CreateField(t *testing.T) {
 			})
 		*/
 	})
+
+	t.Run("WithKeys", func(t *testing.T) {
+		// Don't allow an int field to be created with keys=true
+		t.Run("IntField", func(t *testing.T) {
+			index := test.MustOpenIndex()
+			defer index.Close()
+
+			_, err := index.CreateField("f", pilosa.OptFieldTypeInt(-1, 1), pilosa.OptFieldKeys())
+			if errors.Cause(err) != pilosa.ErrIntFieldWithKeys {
+				t.Fatal("int field cannot be created with keys=true")
+			}
+		})
+
+		// Don't allow a decimal field to be created with keys=true
+		t.Run("DecimalField", func(t *testing.T) {
+			index := test.MustOpenIndex()
+			defer index.Close()
+
+			_, err := index.CreateField("f", pilosa.OptFieldTypeDecimal(1, -1, 1), pilosa.OptFieldKeys())
+			if errors.Cause(err) != pilosa.ErrDecimalFieldWithKeys {
+				t.Fatal("decimal field cannot be created with keys=true")
+			}
+		})
+	})
 }
 
 // Ensure index can delete a field.
