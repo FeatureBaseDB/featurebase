@@ -1369,7 +1369,7 @@ func (f *Field) Sum(filter *Row, name string) (sum, count int64, err error) {
 
 // FloatMin performs a Min query and converts the result to a float
 // based on the field's configured scale.
-// TODO: this and Min are probably worhtless
+// TODO: this and Min are probably worthless
 func (f *Field) FloatMin(filter *Row, name string) (min float64, count int64, err error) {
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
