@@ -83,6 +83,12 @@ func makeHolder() (*Holder, string, error) {
 }
 
 func testSetBit(t *testing.T, h *Holder, index, field string, rowID, columnID uint64) {
+	tx, err := h.Begin(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	idx, err := h.CreateIndexIfNotExists(index, IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
@@ -91,9 +97,12 @@ func testSetBit(t *testing.T, h *Holder, index, field string, rowID, columnID ui
 	if err != nil {
 		t.Fatalf("setting bit: %v", err)
 	}
-	_, err = f.SetBit(rowID, columnID, nil)
+	_, err = f.SetBit(tx, rowID, columnID, nil)
 	if err != nil {
 		t.Fatalf("setting bit: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -105,7 +105,6 @@ func newIndexWithTempPath(name string) *Index {
 
 // Ensure that fragSources creates the correct fragment mapping.
 func TestFragSources(t *testing.T) {
-
 	uri0, err := NewURIFromAddress("host0")
 	if err != nil {
 		t.Fatal(err)
@@ -159,23 +158,28 @@ func TestFragSources(t *testing.T) {
 
 	idx := newIndexWithTempPath("i")
 	defer idx.Close()
+
+	// Obtain transaction.
+	tx := &RoaringTx{Index: idx}
+	defer func() { _ = tx.Rollback() }()
+
 	field, err := idx.CreateFieldIfNotExists("f", OptFieldTypeDefault())
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = field.SetBit(1, 101, nil)
+	_, err = field.SetBit(tx, 1, 101, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = field.SetBit(1, ShardWidth+1, nil)
+	_, err = field.SetBit(tx, 1, ShardWidth+1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = field.SetBit(1, ShardWidth*2+1, nil)
+	_, err = field.SetBit(tx, 1, ShardWidth*2+1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = field.SetBit(1, ShardWidth*3+1, nil)
+	_, err = field.SetBit(tx, 1, ShardWidth*3+1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -795,7 +799,10 @@ func TestCluster_ResizeStates(t *testing.T) {
 		node0Field := node0.holder.Field("i", "f")
 		node0View := node0Field.view("standard")
 		node0Fragment := node0View.Fragment(1)
-		node0Checksum := node0Fragment.Checksum()
+		node0Checksum, err := node0Fragment.Checksum()
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		// addNode needs to block until the resize process has completed.
 		if err := tc.addNode(); err != nil {
@@ -828,7 +835,9 @@ func TestCluster_ResizeStates(t *testing.T) {
 		node1Fragment := node1View.Fragment(1)
 
 		// Ensure checksums are the same.
-		if chksum := node1Fragment.Checksum(); !bytes.Equal(chksum, node0Checksum) {
+		if chksum, err := node1Fragment.Checksum(); err != nil {
+			t.Fatal(err)
+		} else if !bytes.Equal(chksum, node0Checksum) {
 			t.Fatalf("expected standard view checksum to match: %x - %x", chksum, node0Checksum)
 		}
 

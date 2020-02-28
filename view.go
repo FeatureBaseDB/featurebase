@@ -402,74 +402,76 @@ func (v *view) deleteFragment(shard uint64) error {
 }
 
 // row returns a row for a shard of the view.
-func (v *view) row(rowID uint64) *Row {
+func (v *view) row(tx Tx, rowID uint64) (*Row, error) {
 	row := NewRow()
 	for _, frag := range v.allFragments() {
-		fr := frag.row(rowID)
-		if fr == nil {
+		fr, err := frag.row(tx, rowID)
+		if err != nil {
+			return nil, err
+		} else if fr == nil {
 			continue
 		}
 		row.Merge(fr)
 	}
-	return row
+	return row, nil
 
 }
 
 // setBit sets a bit within the view.
-func (v *view) setBit(rowID, columnID uint64) (changed bool, err error) {
+func (v *view) setBit(tx Tx, rowID, columnID uint64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		return changed, err
 	}
-	return frag.setBit(rowID, columnID)
+	return frag.setBit(tx, rowID, columnID)
 }
 
 // clearBit clears a bit within the view.
-func (v *view) clearBit(rowID, columnID uint64) (changed bool, err error) {
+func (v *view) clearBit(tx Tx, rowID, columnID uint64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag := v.Fragment(shard)
 	if frag == nil {
 		return false, nil
 	}
-	return frag.clearBit(rowID, columnID)
+	return frag.clearBit(tx, rowID, columnID)
 }
 
 // value uses a column of bits to read a multi-bit value.
-func (v *view) value(columnID uint64, bitDepth uint) (value int64, exists bool, err error) {
+func (v *view) value(tx Tx, columnID uint64, bitDepth uint) (value int64, exists bool, err error) {
 	shard := columnID / ShardWidth
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		return value, exists, err
 	}
-	return frag.value(columnID, bitDepth)
+	return frag.value(tx, columnID, bitDepth)
 }
 
 // setValue uses a column of bits to set a multi-bit value.
-func (v *view) setValue(columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
+func (v *view) setValue(tx Tx, columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		return changed, err
 	}
-	return frag.setValue(columnID, bitDepth, value)
+	return frag.setValue(tx, columnID, bitDepth, value)
 }
 
 // clearValue removes a specific value assigned to columnID
-func (v *view) clearValue(columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
+func (v *view) clearValue(tx Tx, columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag := v.Fragment(shard)
 	if frag == nil {
 		return false, nil
 	}
-	return frag.clearValue(columnID, bitDepth, value)
+	return frag.clearValue(tx, columnID, bitDepth, value)
 }
 
 // rangeOp returns rows with a field value encoding matching the predicate.
-func (v *view) rangeOp(op pql.Token, bitDepth uint, predicate int64) (*Row, error) {
+func (v *view) rangeOp(tx Tx, op pql.Token, bitDepth uint, predicate int64) (*Row, error) {
 	r := NewRow()
 	for _, frag := range v.allFragments() {
-		other, err := frag.rangeOp(op, bitDepth, predicate)
+		other, err := frag.rangeOp(tx, op, bitDepth, predicate)
 		if err != nil {
 			return nil, err
 		}

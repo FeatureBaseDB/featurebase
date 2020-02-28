@@ -137,13 +137,18 @@ func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 	holder := NewHolder(DefaultPartitionN)
 	defer holder.Close()
 
+	tx, err := holder.Begin(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	e := &executor{
 		Holder:  holder,
 		Cluster: NewTestCluster(1),
 	}
 	e.Holder.Path, _ = ioutil.TempDir(*TempDir, "")
-	err := e.Holder.Open()
-	if err != nil {
+	if err := e.Holder.Open(); err != nil {
 		t.Fatalf("opening holder: %v", err)
 	}
 
@@ -158,11 +163,15 @@ func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 		t.Fatalf("creating fields %v, %v", errb, errbk)
 	}
 
-	_, err1 := fb.SetBit(1, 1, nil)
-	_, err2 := fb.SetBit(2, 2, nil)
-	_, err3 := fb.SetBit(3, 3, nil)
+	_, err1 := fb.SetBit(tx, 1, 1, nil)
+	_, err2 := fb.SetBit(tx, 2, 2, nil)
+	_, err3 := fb.SetBit(tx, 3, 3, nil)
 	if err1 != nil || err2 != nil || err3 != nil {
 		t.Fatalf("setting bit %v, %v, %v", err1, err2, err3)
+	}
+
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
 	}
 
 	tests := []struct {

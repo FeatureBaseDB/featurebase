@@ -35,8 +35,10 @@ func forceSnapshotsCheckMapping(t *testing.T) {
 	f.Logger = logger.NewLogfLogger(t)
 	defer f.Clean(t)
 
+	tx := &RoaringTx{fragment: f}
+
 	for i := 0; i < f.MaxOpN; i++ {
-		_, _ = f.setBit(0, uint64(i*32))
+		_, _ = f.setBit(tx, 0, uint64(32*i))
 	}
 	// force snapshot so we get a mmapped row...
 	err := f.Snapshot()
@@ -67,7 +69,7 @@ func forceSnapshotsCheckMapping(t *testing.T) {
 		if i%5 == 0 {
 			runtime.GC()
 		}
-		err := f.importValue(cv.cols, cv.vals, depth, (i%3 == 1))
+		err := f.importValue(tx, cv.cols, cv.vals, depth, (i%3 == 1))
 		if err != nil {
 			t.Fatalf("importValue[%d]: %v", i, err)
 		}

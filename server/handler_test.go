@@ -173,19 +173,29 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	})
 
+	tx, err := holder.Begin(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
 	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(0, 0, nil); err != nil {
+	} else if _, err := f.SetBit(tx, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(0, 0, nil); err != nil {
+	} else if _, err := f.SetBit(tx, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeDefault()); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
 
