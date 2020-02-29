@@ -15,6 +15,7 @@
 package pilosa_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -22,7 +23,11 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/boltdb"
+	"github.com/pilosa/pilosa/v2/http"
 	"github.com/pilosa/pilosa/v2/mock"
+	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/test"
 )
 
 func TestInMemTranslateStore_TranslateKey(t *testing.T) {
@@ -173,6 +178,117 @@ func TestMultiTranslateEntryReader(t *testing.T) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 		if err := r.Close(); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+// Test key translation with multiple nodes.
+func TestTranslation_Reset(t *testing.T) {
+	// We need to ensure that the translate key partitions for each
+	// node are getting set as read-only based on the full cluster,
+	// not just the state of the cluster at the time of the individual
+	// node restart.
+	t.Run("RollingRestart", func(t *testing.T) {
+		// Start a 4-node cluster.
+		// Note that the prefix on the nodeID is intentional; it puts the
+		// nodes in a specific order which exercises the condition for
+		// which we are testing. In a normal use case, these would be
+		// randomly generated uuids, so this is mimicking that.
+		c := test.MustRunCluster(t, 4,
+			[]server.CommandOption{
+				server.OptCommandServerOptions(
+					pilosa.OptServerIsCoordinator(true),
+					pilosa.OptServerNodeID("2node0"),
+					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				)},
+			[]server.CommandOption{
+				server.OptCommandServerOptions(
+					pilosa.OptServerIsCoordinator(false),
+					pilosa.OptServerNodeID("4node1"),
+					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				)},
+			[]server.CommandOption{
+				server.OptCommandServerOptions(
+					pilosa.OptServerIsCoordinator(false),
+					pilosa.OptServerNodeID("3node2"),
+					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				)},
+			[]server.CommandOption{
+				server.OptCommandServerOptions(
+					pilosa.OptServerIsCoordinator(false),
+					pilosa.OptServerNodeID("1node3"),
+					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				)},
+		)
+
+		node0 := c[0]
+		node1 := c[1]
+		node2 := c[2]
+		node3 := c[3]
+
+		ctx := context.Background()
+		idx := "i"
+
+		// Create an index with keys.
+		if _, err := node0.API.CreateIndex(ctx, idx,
+			pilosa.IndexOptions{
+				Keys: true,
+			}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Stop the cluster.
+		if err := node0.Command.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := node1.Command.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := node2.Command.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := node3.Command.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Restart the nodes serially.
+		if err := node0.SoftOpen(); err != nil {
+			t.Fatal(err)
+		}
+		gossipSeeds := []string{node0.GossipAddress()}
+
+		node1.Config.Gossip.Seeds = gossipSeeds
+		if err := node1.SoftOpen(); err != nil {
+			t.Fatal(err)
+		}
+		node2.Config.Gossip.Seeds = gossipSeeds
+		if err := node2.SoftOpen(); err != nil {
+			t.Fatal(err)
+		}
+		node3.Config.Gossip.Seeds = gossipSeeds
+		if err := node3.SoftOpen(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Send a key translation request that triggers
+		// a read-only translate store error if the
+		// translate store sync is not reset correctly.
+
+		// Generate request body for translate row keys request
+		reqBody, err := node0.API.Serializer.Marshal(&pilosa.TranslateKeysRequest{
+			Index: idx,
+			Keys:  []string{"a1"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := node0.API.TranslateKeys(ctx, bytes.NewReader(reqBody)); err != nil {
 			t.Fatal(err)
 		}
 	})

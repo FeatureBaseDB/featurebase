@@ -725,6 +725,11 @@ func (s *Server) receiveMessage(m Message) error {
 		if err != nil {
 			return err
 		}
+		if s.syncer.Cluster != nil {
+			if err := s.syncer.ResetTranslationSync(); err != nil {
+				return err
+			}
+		}
 	case *ResizeInstruction:
 		err := s.cluster.followResizeInstruction(obj)
 		if err != nil {
