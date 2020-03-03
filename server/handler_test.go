@@ -641,7 +641,6 @@ func TestHandler_Endpoints(t *testing.T) {
 		fieldName := "f-int-ubound-err"
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
 			strings.NewReader(`{"options":{"type":"int", "min": 10, "max": -10}}`)))
-		fmt.Println("body", w.Body.String())
 		if w.Code != gohttp.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
