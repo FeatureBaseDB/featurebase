@@ -224,6 +224,8 @@ type cluster struct { // nolint: maligned
 
 	abortAntiEntropyCh chan struct{}
 
+	translationSyncer translationSyncer
+
 	mu         sync.RWMutex
 	jobs       map[int64]*resizeJob
 	currentJob *resizeJob
@@ -250,6 +252,8 @@ func newCluster() *cluster {
 		jobs:                make(map[int64]*resizeJob),
 		closing:             make(chan struct{}),
 		joining:             make(chan struct{}),
+
+		translationSyncer: NopTranslationSyncer,
 
 		InternalClient: newNopInternalClient(),
 
@@ -463,7 +467,7 @@ func (c *cluster) unprotectedSetState(state string) {
 
 	switch state {
 	case ClusterStateNormal, ClusterStateDegraded:
-		// If state is RESIZING -> NORMAL then run cleanup.
+		// If state is RESIZING -> [NORMAL, DEGRADED] then run cleanup.
 		if c.state == ClusterStateResizing {
 			doCleanup = true
 		}
@@ -471,7 +475,17 @@ func (c *cluster) unprotectedSetState(state string) {
 
 	c.state = state
 
-	if state == ClusterStateResizing {
+	switch state {
+	case ClusterStateNormal:
+		// Because the cluster state is changing to NORMAL,
+		// we [potentially] need to reset the translation sync.
+		// If, for example, the cluster has changed size and is
+		// now settling to NORMAL, the partition ownership may
+		// have changed, and this will force that to be recalculated.
+		if err := c.translationSyncer.Reset(); err != nil {
+			c.logger.Printf("error resetting translation syncer: %s", err)
+		}
+	case ClusterStateResizing:
 		c.abortAntiEntropy()
 	}
 

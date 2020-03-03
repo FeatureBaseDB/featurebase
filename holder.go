@@ -85,6 +85,8 @@ type Holder struct {
 	OpenTranslateStore  OpenTranslateStoreFunc
 	OpenTranslateReader OpenTranslateReaderFunc
 
+	translationSyncer translationSyncer
+
 	// Queue of fields (having a foreign index) which have
 	// opened before their foreign index has opened.
 	foreignIndexFields []*Field
@@ -139,6 +141,8 @@ func NewHolder(partitionN int) *Holder {
 		cacheFlushInterval: defaultCacheFlushInterval,
 
 		OpenTranslateStore: OpenInMemTranslateStore,
+
+		translationSyncer: NopTranslationSyncer,
 
 		Logger: logger.NopLogger,
 	}
@@ -228,7 +232,10 @@ func (h *Holder) Open() error {
 	h.snapshotQueue.ScanHolder(h)
 
 	h.opened.Close()
-	return nil
+
+	// Since the holder is just opening, this is not so much a reset,
+	// as it is an initial setting of the transation sync process.
+	return h.translationSyncer.Reset()
 }
 
 // checkForeignIndex is a check before applying a foreign
@@ -484,6 +491,12 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	// Update options.
 	h.indexes[index.Name()] = index
 
+	// Since this is a new index, we need to kick off
+	// its translation sync.
+	if err := h.translationSyncer.Reset(); err != nil {
+		return nil, errors.Wrap(err, "resetting translation sync")
+	}
+
 	return index, nil
 }
 
@@ -499,6 +512,7 @@ func (h *Holder) newIndex(path, name string) (*Index, error) {
 	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ".data"))
 	index.snapshotQueue = h.snapshotQueue
 	index.OpenTranslateStore = h.OpenTranslateStore
+	index.translationSyncer = h.translationSyncer
 	index.holder = h
 	return index, nil
 }
@@ -527,7 +541,10 @@ func (h *Holder) DeleteIndex(name string) error {
 	// Remove reference.
 	delete(h.indexes, name)
 
-	return nil
+	// I'm not sure if calling Reset() here is necessary
+	// since closing the index stops its translation
+	// sync processes.
+	return h.translationSyncer.Reset()
 }
 
 // Field returns the field for an index and name.
@@ -922,8 +939,8 @@ func (s *holderSyncer) syncFragment(index, field, view string, shard uint64) err
 	return nil
 }
 
-// ResetTranslationSync reinitializes streaming sync of translation data.
-func (s *holderSyncer) ResetTranslationSync() error {
+// resetTranslationSync reinitializes streaming sync of translation data.
+func (s *holderSyncer) resetTranslationSync() error {
 	// Stop existing streams.
 	if err := s.stopTranslationSync(); err != nil {
 		return errors.Wrap(err, "stop translation sync")
@@ -944,6 +961,53 @@ func (s *holderSyncer) ResetTranslationSync() error {
 	return nil
 }
 
+////////////////////////////////////////////////////////////
+
+// translationSyncer provides an interface allowing a function
+// to notify the server that an action has occurred which requires
+// the translation sync process to be reset. In general, this
+// includes anything which modifies schema (add/remove index, etc),
+// or anything that changes the cluster topology (add/remove node).
+// I originally considered leveraging the broadcaster since that was
+// already in place and provides similar event messages, but the
+// broadcaster is really meant for notifiying other nodes, while
+// this is more akin to an internal message bus. In fact, I think
+// a future iteration on this may be to make it more generic so
+// it can act as an internal message bus where one of the messages
+// being published is "translationSyncReset".
+type translationSyncer interface {
+	Reset() error
+}
+
+// NopTranslationSyncer represents a translationSyncer that doesn't do anything.
+var NopTranslationSyncer translationSyncer = &nopTranslationSyncer{}
+
+type nopTranslationSyncer struct{}
+
+// Reset is a no-op implementation of translationSyncer Reset method.
+func (nopTranslationSyncer) Reset() error { return nil }
+
+// activeTranslationSyncer represents a translationSyncer that resets
+// the server's translation syncer.
+type activeTranslationSyncer struct {
+	ch chan struct{}
+}
+
+// newActiveTranslationSyncer returns a new instance of activeTranslationSyncer.
+func newActiveTranslationSyncer(ch chan struct{}) *activeTranslationSyncer {
+	return &activeTranslationSyncer{
+		ch: ch,
+	}
+}
+
+// Reset resets the server's translation syncer.
+func (a *activeTranslationSyncer) Reset() error {
+	a.ch <- struct{}{}
+	return nil
+}
+
+////////////////////////////////////////////////////////////
+
 // stopTranslationSync closes and waits for all outstanding translation readers
 // to complete. This should be called before reconnecting to the cluster in case
 // of a cluster resize or schema change.
@@ -958,17 +1022,36 @@ func (s *holderSyncer) stopTranslationSync() error {
 	return g.Wait()
 }
 
-// setTranslateReadOnlyFlags updates all translation stores to enabled or disable
+// setTranslateReadOnlyFlags updates all translation stores to enable or disable
 // writing new translation keys. Index stores are writable if the node owns the
 // partition. Field stores are writable if the node is the coordinator.
 func (s *holderSyncer) setTranslateReadOnlyFlags() {
 	isCoordinator := s.Cluster.isCoordinator()
 
 	for _, index := range s.Holder.Indexes() {
+		// There is a race condition here:
+		// if Indexes() returns idx1, and then in another
+		// process, holder.DeleteIndex(idx1) is called,
+		// then the next step trying to get TranslateStore(partitionID)
+		// for an index that is closed (and therefore its transateStores
+		// no longer exist) will fail with a nil pointer error.
+		// For now, I just checked that the translateStore hasn't been
+		// set to nil before trying to use it, but another option may
+		// be to prevent the translateStores from being zeroed out
+		// while this process is active. Checking for nil as we do
+		// really obviates the need for the RLock around the for loop.
+
+		// Obtain a read lock on index to prevent Index.Close() from
+		// destroying the Index.translateStores map before this is
+		// done using it.
+		index.mu.RLock()
 		for partitionID := 0; partitionID < s.Cluster.partitionN; partitionID++ {
 			ownsPartition := s.Cluster.ownsPartition(s.Node.ID, partitionID)
-			index.TranslateStore(partitionID).SetReadOnly(!ownsPartition)
+			if ts := index.TranslateStore(partitionID); ts != nil {
+				ts.SetReadOnly(!ownsPartition)
+			}
 		}
+		index.mu.RUnlock()
 
 		for _, field := range index.Fields() {
 			field.TranslateStore().SetReadOnly(!isCoordinator)
@@ -1030,16 +1113,13 @@ func (s *holderSyncer) initializeIndexTranslateReplication() error {
 // initializeFieldTranslateReplication connects the coordinator to stream field data.
 func (s *holderSyncer) initializeFieldTranslateReplication() error {
 	// Skip if coordinator.
-	if s.Cluster.Node.IsCoordinator {
+	if s.Cluster.isCoordinator() {
 		return nil
 	}
 
 	// Build a map of partition offsets to stream from.
 	m := make(TranslateOffsetMap)
 	for _, index := range s.Holder.Indexes() {
-		if !index.Keys() {
-			continue
-		}
 		for _, field := range index.Fields() {
 			store := field.TranslateStore()
 			offset, err := store.MaxID()
