@@ -233,9 +233,7 @@ func (h *Holder) Open() error {
 
 	h.opened.Close()
 
-	// Since the holder is just opening, this is not so much a reset,
-	// as it is an initial setting of the transation sync process.
-	return h.translationSyncer.Reset()
+	return nil
 }
 
 // checkForeignIndex is a check before applying a foreign

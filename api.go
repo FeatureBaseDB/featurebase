@@ -1434,7 +1434,7 @@ func (api *API) GetTranslateEntryReader(ctx context.Context, offsets TranslateOf
 		for fieldName, offset := range indexMap.Fields {
 			field := index.Field(fieldName)
 			if field == nil {
-				return nil, ErrIndexNotFound
+				return nil, ErrFieldNotFound
 			}
 
 			r, err := field.TranslateStore().EntryReader(ctx, uint64(offset))
