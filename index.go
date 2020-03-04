@@ -68,6 +68,8 @@ type Index struct {
 	// Per-partition translation stores
 	translateStores map[int]TranslateStore
 
+	translationSyncer translationSyncer
+
 	// Instantiates new translation stores
 	OpenTranslateStore OpenTranslateStoreFunc
 }
@@ -94,6 +96,8 @@ func NewIndex(path, name string, partitionN int) (*Index, error) {
 		trackExistence: true,
 
 		translateStores: make(map[int]TranslateStore),
+
+		translationSyncer: NopTranslationSyncer,
 
 		OpenTranslateStore: OpenInMemTranslateStore,
 	}, nil
@@ -478,6 +482,11 @@ func (i *Index) createField(name string, opt *FieldOptions) (*Field, error) {
 	// Add to index's field lookup.
 	i.fields[name] = f
 
+	// Kick off the field's translation sync process.
+	if err := i.translationSyncer.Reset(); err != nil {
+		return nil, errors.Wrap(err, "resetting translation syncer")
+	}
+
 	return f, nil
 }
 
@@ -533,7 +542,7 @@ func (i *Index) DeleteField(name string) error {
 	// Remove reference.
 	delete(i.fields, name)
 
-	return nil
+	return i.translationSyncer.Reset()
 }
 
 type indexSlice []*Index

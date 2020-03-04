@@ -77,6 +77,9 @@ type Server struct { // nolint: maligned
 	isCoordinator       bool
 	syncer              holderSyncer
 
+	translationSyncer      translationSyncer
+	resetTranslationSyncCh chan struct{}
+
 	defaultClient InternalClient
 	dataDir       string
 }
@@ -316,9 +319,15 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		metricInterval:      0,
 		diagnosticInterval:  0,
 
+		resetTranslationSyncCh: make(chan struct{}),
+
 		logger: logger.NopLogger,
 	}
 	s.cluster.InternalClient = s.defaultClient
+
+	s.translationSyncer = newActiveTranslationSyncer(s.resetTranslationSyncCh)
+	s.holder.translationSyncer = s.translationSyncer
+	s.cluster.translationSyncer = s.translationSyncer
 
 	s.diagnostics.server = s
 
@@ -503,6 +512,18 @@ func (s *Server) Open() error {
 		log.Println(errors.Wrap(err, "logging startup"))
 	}
 
+	// Set up the holderSyncer.
+	s.syncer.Holder = s.holder
+	s.syncer.Node = s.cluster.Node
+	s.syncer.Cluster = s.cluster
+	s.syncer.Closing = s.closing
+	s.syncer.Stats = s.holder.Stats.WithTags("HolderSyncer")
+
+	// Start background process listening for translation
+	// sync resets.
+	s.wg.Add(1)
+	go func() { defer s.wg.Done(); s.monitorResetTranslationSync() }()
+
 	// Open Cluster management.
 	if err := s.cluster.waitForStarted(); err != nil {
 		return errors.Wrap(err, "opening Cluster")
@@ -522,16 +543,6 @@ func (s *Server) Open() error {
 	// this starts, the joins are queued up in the Cluster.joiningLeavingNodes
 	// buffered channel.
 	s.cluster.listenForJoins()
-
-	s.syncer.Holder = s.holder
-	s.syncer.Node = s.cluster.Node
-	s.syncer.Cluster = s.cluster
-	s.syncer.Closing = s.closing
-	s.syncer.Stats = s.holder.Stats.WithTags("HolderSyncer")
-
-	if err := s.syncer.ResetTranslationSync(); err != nil {
-		return err
-	}
 
 	// Start background monitoring.
 	s.wg.Add(3)
@@ -593,6 +604,34 @@ func (s *Server) NodeID() string { return s.nodeID }
 // node has the data from all replicas across the cluster.
 func (s *Server) SyncData() error {
 	return errors.Wrap(s.syncer.SyncHolder(), "syncing holder")
+}
+
+// monitorResetTranslationSync is a background process which
+// listens for events indicating the need to reset the translation
+// sync processes.
+func (s *Server) monitorResetTranslationSync() {
+	s.logger.Printf("holder translation sync monitor initializing")
+	for {
+		// Wait for a reset or a close.
+		select {
+		case <-s.closing:
+			return
+		case <-s.resetTranslationSyncCh:
+			s.logger.Printf("holder translation sync beginning")
+			s.wg.Add(1)
+			go func() {
+				// Obtaining this lock ensures that there is only
+				// once instance of resetTranslationSync() running
+				// at once.
+				s.syncer.mu.Lock()
+				defer s.syncer.mu.Unlock()
+				defer s.wg.Done()
+				if err := s.syncer.resetTranslationSync(); err != nil {
+					s.logger.Printf("holder translation sync error: err=%s", err)
+				}
+			}()
+		}
+	}
 }
 
 func (s *Server) monitorAntiEntropy() {
@@ -666,14 +705,8 @@ func (s *Server) receiveMessage(m Message) error {
 		if err != nil {
 			return err
 		}
-		if err := s.syncer.ResetTranslationSync(); err != nil {
-			return err
-		}
 	case *DeleteIndexMessage:
 		if err := s.holder.DeleteIndex(obj.Index); err != nil {
-			return err
-		}
-		if err := s.syncer.ResetTranslationSync(); err != nil {
 			return err
 		}
 	case *CreateFieldMessage:
@@ -686,15 +719,9 @@ func (s *Server) receiveMessage(m Message) error {
 		if err != nil {
 			return err
 		}
-		if err := s.syncer.ResetTranslationSync(); err != nil {
-			return err
-		}
 	case *DeleteFieldMessage:
 		idx := s.holder.Index(obj.Index)
 		if err := idx.DeleteField(obj.Field); err != nil {
-			return err
-		}
-		if err := s.syncer.ResetTranslationSync(); err != nil {
 			return err
 		}
 	case *DeleteAvailableShardMessage:
@@ -724,11 +751,6 @@ func (s *Server) receiveMessage(m Message) error {
 		err := s.cluster.mergeClusterStatus(obj)
 		if err != nil {
 			return err
-		}
-		if s.syncer.Cluster != nil {
-			if err := s.syncer.ResetTranslationSync(); err != nil {
-				return err
-			}
 		}
 	case *ResizeInstruction:
 		err := s.cluster.followResizeInstruction(obj)
