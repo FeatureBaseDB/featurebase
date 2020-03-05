@@ -18,7 +18,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"reflect"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -290,6 +292,78 @@ func TestTranslation_Reset(t *testing.T) {
 
 		if _, err := node0.API.TranslateKeys(ctx, bytes.NewReader(reqBody)); err != nil {
 			t.Fatal(err)
+		}
+	})
+}
+
+// Test key translation with multiple nodes.
+func TestTranslation_Coordinator(t *testing.T) {
+	// Ensure that field key translations requests sent to
+	// non-coordinator nodes are forwarded to the coordinator.
+	t.Run("ForwardFieldKey", func(t *testing.T) {
+		// Start a 2-node cluster.
+		c := test.MustRunCluster(t, 2,
+			[]server.CommandOption{
+				server.OptCommandServerOptions(
+					pilosa.OptServerIsCoordinator(true),
+					pilosa.OptServerNodeID("node0"),
+					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				)},
+			[]server.CommandOption{
+				server.OptCommandServerOptions(
+					pilosa.OptServerIsCoordinator(false),
+					pilosa.OptServerNodeID("node1"),
+					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+				)},
+		)
+		defer c.Close()
+
+		node0 := c[0]
+		node1 := c[1]
+
+		ctx := context.Background()
+		idx := "i"
+		fld := "f"
+
+		// Create an index without keys.
+		if _, err := node0.API.CreateIndex(ctx, idx,
+			pilosa.IndexOptions{
+				Keys: false,
+			}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create a field with keys.
+		if _, err := node0.API.CreateField(ctx, idx, fld,
+			pilosa.OptFieldKeys(),
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		key := "abc"
+		pql := fmt.Sprintf(`Set(1, %s="%s")`, fld, key)
+
+		// Send a translation request to node1 (non-coordinator).
+		_, err := node1.API.Query(ctx,
+			&pilosa.QueryRequest{Index: idx, Query: pql},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Read the row and ensure the key was set.
+		qry := fmt.Sprintf(`Row(%s="%s")`, fld, key)
+		resp, err := node0.API.Query(ctx,
+			&pilosa.QueryRequest{Index: idx, Query: qry},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		row := resp.Results[0].(*pilosa.Row)
+		if cols := row.Columns(); !reflect.DeepEqual(cols, []uint64{1}) {
+			t.Fatalf("unexpected columns: %+v", cols)
 		}
 	})
 }

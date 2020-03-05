@@ -15,6 +15,7 @@
 package pilosa
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -57,7 +58,7 @@ func TestExecutor_TranslateGroupByCall(t *testing.T) {
 		t.Fatalf("parsing query: %v", err)
 	}
 	c := query.Calls[0]
-	err = e.translateCall("i", c, make(map[string]map[string]uint64))
+	err = e.translateCall(context.Background(), "i", c, make(map[string]map[string]uint64))
 	if err != nil {
 		t.Fatalf("translating call: %v", err)
 	}
@@ -121,7 +122,7 @@ func TestExecutor_TranslateGroupByCall(t *testing.T) {
 				t.Fatalf("parsing query: %v", err)
 			}
 			c := query.Calls[0]
-			err = e.translateCall("i", c, make(map[string]map[string]uint64))
+			err = e.translateCall(context.Background(), "i", c, make(map[string]map[string]uint64))
 			if err == nil {
 				t.Fatalf("expected error, but translated call is '%s", c)
 			}

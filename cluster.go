@@ -237,8 +237,6 @@ type cluster struct { // nolint: maligned
 	logger logger.Logger
 
 	InternalClient InternalClient
-
-	// OpenTranslateReader OpenTranslateReaderFunc
 }
 
 // newCluster returns a new instance of Cluster with defaults.
@@ -2085,6 +2083,38 @@ func (c *cluster) setStatic(hosts []string) error {
 		c.nodes = append(c.nodes, &Node{URI: *uri})
 	}
 	return nil
+}
+
+// translateFieldKey gets a single key from translateFieldKeys.
+func (c *cluster) translateFieldKey(ctx context.Context, field *Field, key string) (uint64, error) {
+	ids, err := c.translateFieldKeys(ctx, field, key)
+	if err != nil {
+		return 0, err
+	} else if len(ids) == 0 {
+		return 0, errors.New("translating key on coordinator returned empty set")
+	}
+	return ids[0], nil
+}
+
+// translateFieldKeys is basically a wrapper around
+// field.TranslateStore().TranslateKey(key), but in
+// the case where the local node's translate store
+// is read-only (i.e. it's not the primary translate
+// store), then this method will forward the translation
+// request to the coordinator.
+func (c *cluster) translateFieldKeys(ctx context.Context, field *Field, keys ...string) ([]uint64, error) {
+	ids, err := field.TranslateStore().TranslateKeys(keys)
+	// If we get a "read only" error, then forward the request
+	// to the coordinator.
+	if errors.Cause(err) == ErrTranslateStoreReadOnly {
+		coordinatorNode := c.coordinatorNode()
+		if ids, err := c.InternalClient.TranslateKeysNode(ctx, &coordinatorNode.URI, field.Index(), field.Name(), keys); err != nil {
+			return ids, errors.Wrap(err, "translating keys on coordinator")
+		} else {
+			return ids, nil
+		}
+	}
+	return ids, err
 }
 
 func (c *cluster) translateIndexKey(ctx context.Context, indexName string, key string) (uint64, error) {
