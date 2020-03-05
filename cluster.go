@@ -2087,7 +2087,7 @@ func (c *cluster) setStatic(hosts []string) error {
 
 // translateFieldKey gets a single key from translateFieldKeys.
 func (c *cluster) translateFieldKey(ctx context.Context, field *Field, key string) (uint64, error) {
-	ids, err := c.translateFieldKeys(ctx, field, []string{key})
+	ids, err := c.translateFieldKeys(ctx, field, key)
 	if err != nil {
 		return 0, err
 	} else if len(ids) == 0 {
@@ -2102,7 +2102,7 @@ func (c *cluster) translateFieldKey(ctx context.Context, field *Field, key strin
 // is read-only (i.e. it's not the primary translate
 // store), then this method will forward the translation
 // request to the coordinator.
-func (c *cluster) translateFieldKeys(ctx context.Context, field *Field, keys []string) ([]uint64, error) {
+func (c *cluster) translateFieldKeys(ctx context.Context, field *Field, keys ...string) ([]uint64, error) {
 	ids, err := field.TranslateStore().TranslateKeys(keys)
 	// If we get a "read only" error, then forward the request
 	// to the coordinator.

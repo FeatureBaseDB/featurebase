@@ -966,7 +966,7 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 			if len(req.RowIDs) != 0 {
 				return errors.New("row ids cannot be used because field uses string keys")
 			}
-			if req.RowIDs, err = api.cluster.translateFieldKeys(ctx, field, req.RowKeys); err != nil {
+			if req.RowIDs, err = api.cluster.translateFieldKeys(ctx, field, req.RowKeys...); err != nil {
 				return errors.Wrapf(err, "translating field keys")
 			}
 		}
@@ -1479,7 +1479,7 @@ func (api *API) TranslateKeys(ctx context.Context, r io.Reader) (_ []byte, err e
 			if err != nil {
 				return nil, err
 			}
-		} else if ids, err = api.cluster.translateFieldKeys(ctx, field, req.Keys); err != nil {
+		} else if ids, err = api.cluster.translateFieldKeys(ctx, field, req.Keys...); err != nil {
 			return nil, errors.Wrapf(err, "translating field keys")
 		}
 	}
