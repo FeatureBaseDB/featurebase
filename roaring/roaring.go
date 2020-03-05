@@ -297,7 +297,7 @@ func (b *Bitmap) AddN(a ...uint64) (changed int, err error) {
 
 	changed = b.DirectAddN(a...) // modifies a in-place
 
-	if b.OpWriter != nil {
+	if b.OpWriter != nil && changed > 0 {
 		op := &op{
 			typ:    opTypeAddBatch,
 			values: a[:changed],
@@ -404,7 +404,7 @@ func (b *Bitmap) RemoveN(a ...uint64) (changed int, err error) {
 
 	changed = b.DirectRemoveN(a...) // modifies a in-place
 
-	if b.OpWriter != nil {
+	if b.OpWriter != nil && changed > 0 {
 		op := &op{
 			typ:    opTypeRemoveBatch,
 			values: a[:changed],
@@ -1727,7 +1727,7 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, log bool, rowSize ui
 		return changed, rowSet, itrErr
 	}
 	err = nil
-	if log {
+	if log && changed > 0 {
 		op := op{opN: changed, roaring: data}
 		if clear {
 			op.typ = opTypeRemoveRoaring
@@ -4820,6 +4820,11 @@ func (op *op) UnmarshalBinary(data []byte) error {
 			return fmt.Errorf("op data truncated - expected %d, got %d", 13+op.value, len(data))
 		}
 		op.opN = int(binary.LittleEndian.Uint32(data[13:17]))
+		// gratuitous hack: treat any roaring write as having at least 1/8 of
+		// its length in bits, even if it didn't actually change things.
+		if op.opN < int(op.value/8) {
+			op.opN = int(op.value / 8)
+		}
 		op.roaring = data[17 : 17+op.value]
 		_, _ = h.Write(data[13 : 17+op.value])
 		// op.value = 0
