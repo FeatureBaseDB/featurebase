@@ -3535,7 +3535,7 @@ func (e *executor) translateCalls(ctx context.Context, defaultIndexName string, 
 
 	// Translate calls.
 	for i := range calls {
-		if err := e.translateCall(defaultIndexName, calls[i], keyMaps); err != nil {
+		if err := e.translateCall(ctx, defaultIndexName, calls[i], keyMaps); err != nil {
 			return err
 		}
 	}
@@ -3602,7 +3602,7 @@ func (e *executor) collectCallKeySets(ctx context.Context, indexName string, c *
 	return nil
 }
 
-func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[string]map[string]uint64) (err error) {
+func (e *executor) translateCall(ctx context.Context, indexName string, c *pql.Call, keyMaps map[string]map[string]uint64) (err error) {
 	// Specifying an 'index' arg applies to all nested calls.
 	if s := c.CallIndex(); s != "" {
 		indexName = s
@@ -3672,8 +3672,8 @@ func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[stri
 						if foreignIndexName != "" {
 							id = keyMaps[foreignIndexName][cond.Value.(string)]
 						} else {
-							if id, err = field.TranslateStore().TranslateKey(cond.Value.(string)); err != nil {
-								return errors.Wrap(err, "translating key")
+							if id, err = e.Cluster.translateFieldKey(ctx, field, cond.Value.(string)); err != nil {
+								return errors.Wrapf(err, "translating field key: %s", cond.Value)
 							}
 						}
 
@@ -3695,8 +3695,8 @@ func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[stri
 				if foreignIndexName != "" {
 					id = keyMaps[foreignIndexName][value]
 				} else {
-					if id, err = field.TranslateStore().TranslateKey(value); err != nil {
-						return err
+					if id, err = e.Cluster.translateFieldKey(ctx, field, value); err != nil {
+						return errors.Wrapf(err, "translating field key: %s", value)
 					}
 				}
 				c.Args[rowKey] = id
@@ -3710,7 +3710,7 @@ func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[stri
 
 	// Translate child calls.
 	for _, child := range c.Children {
-		if err := e.translateCall(indexName, child, keyMaps); err != nil {
+		if err := e.translateCall(ctx, indexName, child, keyMaps); err != nil {
 			return err
 		}
 	}
@@ -3718,7 +3718,7 @@ func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[stri
 	// Translate call args.
 	for _, arg := range c.Args {
 		if arg, ok := arg.(*pql.Call); ok {
-			if err := e.translateCall(indexName, arg, keyMaps); err != nil {
+			if err := e.translateCall(ctx, indexName, arg, keyMaps); err != nil {
 				return errors.Wrap(err, "translating arg")
 			}
 		}
@@ -3756,9 +3756,9 @@ func (e *executor) translateCall(indexName string, c *pql.Call, keyMaps map[stri
 					return errors.New("prev value must be a string when field 'keys' option enabled")
 				}
 				// TODO: does this need to take field.ForeignIndex() into consideration?
-				id, err := field.TranslateStore().TranslateKey(prevStr)
+				id, err := e.Cluster.translateFieldKey(ctx, field, prevStr)
 				if err != nil {
-					return errors.Wrapf(err, "translating row key '%s'", prevStr)
+					return errors.Wrapf(err, "translating field key: %s", prevStr)
 				}
 				previous[i] = id
 			} else {
