@@ -523,3 +523,40 @@ func TestHolderSyncer_TimeQuantum(t *testing.T) {
 		}
 	}
 }
+
+// Ensure holder can sync integer views with a remote holder.
+func TestHolderSyncer_IntField(t *testing.T) {
+	c := test.MustNewCluster(t, 2)
+	c[0].Config.Cluster.ReplicaN = 2
+	c[0].Config.AntiEntropy.Interval = 0
+	c[1].Config.Cluster.ReplicaN = 2
+	c[1].Config.AntiEntropy.Interval = 0
+	err := c.Start()
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
+	}
+	defer c.Close()
+
+	_, err = c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatalf("creating index i: %v", err)
+	}
+	_, err = c[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeInt(0, 100))
+	if err != nil {
+		t.Fatalf("creating field f: %v", err)
+	}
+
+	hldr0 := &test.Holder{Holder: c[0].Server.Holder()}
+	hldr1 := &test.Holder{Holder: c[1].Server.Holder()}
+
+	// Set data on the local holder for node0.
+	hldr0.SetValue("i", "f", 1, 1)
+
+	// Set data on node1.
+	hldr1.SetValue("i", "f", 2, 2)
+
+	err = c[0].Server.SyncData()
+	if err != nil {
+		t.Fatalf("syncing node 0: %v", err)
+	}
+}
