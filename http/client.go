@@ -1121,7 +1121,9 @@ func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, msg [
 	if err != nil {
 		return errors.Wrap(err, "executing request")
 	}
-	return errors.Wrap(resp.Body.Close(), "closing response body")
+	defer resp.Body.Close()
+	_, err = io.Copy(ioutil.Discard, resp.Body)
+	return errors.Wrap(err, "draining SendMessage response body")
 }
 
 // TranslateKeysNode sends a key translation request to a specific node.
