@@ -911,6 +911,16 @@ func (s *holderSyncer) syncFragment(index, field, view string, shard uint64) err
 		return ErrFieldNotFound
 	}
 
+	// TODO: this is a temporary fix put in place to prevent
+	// the syncer from trying to sync replicas of fields
+	// other than `set` or `time` (i.e. `int`, `mutex`, `bool`,
+	// `decimal`) using ImportRoaring, because ImportRoaring
+	// only supports `set` and `time` fields.
+	if f.Type() != FieldTypeSet && f.Type() != FieldTypeTime {
+		s.Holder.Logger.Printf("temporarily skipping fragment sync: %s/%d", field, shard)
+		return nil
+	}
+
 	// Ensure view exists locally.
 	v, err := f.createViewIfNotExists(view)
 	if err != nil {

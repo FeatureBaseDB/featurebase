@@ -16,6 +16,7 @@ package test
 
 import (
 	"io/ioutil"
+	"math"
 	"os"
 	"time"
 
@@ -163,5 +164,18 @@ func (h *Holder) ClearBit(index, field string, rowID, columnID uint64) {
 func (h *Holder) MustSetBits(index, field string, rowID uint64, columnIDs ...uint64) {
 	for _, columnID := range columnIDs {
 		h.SetBit(index, field, rowID, columnID)
+	}
+}
+
+// SetValue sets an value on the given field.
+func (h *Holder) SetValue(index, field string, columnID uint64, value int64) {
+	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+	if err != nil {
+		panic(err)
+	}
+	_, err = f.SetValue(columnID, value)
+	if err != nil {
+		panic(err)
 	}
 }
