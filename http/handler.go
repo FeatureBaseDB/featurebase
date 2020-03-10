@@ -1174,7 +1174,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		// Field type: Set, Time
+		// Field type: set, time, mutex
 		// Marshal into request object.
 		req := &pilosa.ImportRequest{}
 		if err := h.api.Serializer.Unmarshal(body, req); err != nil {

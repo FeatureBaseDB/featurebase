@@ -696,7 +696,7 @@ func (f *fragment) unprotectedSetRow(row *Row, rowID uint64) (changed bool, err 
 	return changed, nil
 }
 
-// ClearRow clears a row for a given rowID within the fragment.
+// clearRow clears a row for a given rowID within the fragment.
 // This updates both the on-disk storage and the in-cache bitmap.
 func (f *fragment) clearRow(rowID uint64) (changed bool, err error) {
 	f.mu.Lock()
@@ -736,6 +736,25 @@ func (f *fragment) unprotectedClearRow(rowID uint64) (changed bool, err error) {
 	f.stats.Count("clearRow", 1, 1.0)
 
 	return changed, nil
+}
+
+// unprotectedClearBlock clears all rows for a given block.
+// This updates both the on-disk storage and the in-cache bitmap.
+func (f *fragment) unprotectedClearBlock(block int) (changed bool, err error) {
+	firstRow := uint64(block * HashBlockSize)
+	err = f.gen.Transaction(&f.storage.OpWriter, func() error {
+		var rowChanged bool
+		for rowID := uint64(firstRow); rowID < firstRow+HashBlockSize; rowID++ {
+			if changed, err := f.unprotectedClearRow(rowID); err != nil {
+				return errors.Wrapf(err, "clearing row: %d", rowID)
+			} else if changed {
+				rowChanged = true
+			}
+		}
+		changed = rowChanged
+		return nil
+	})
+	return changed, err
 }
 
 func (f *fragment) bit(rowID, columnID uint64) (bool, error) {
@@ -1733,7 +1752,7 @@ func (f *fragment) blockData(id int) (rowIDs, columnIDs []uint64) {
 // The state of a bit is determined by consensus from all blocks being considered.
 //
 // For example, if 3 blocks are compared and two have a set bit and one has a
-// cleared bit then the bit is considered cleared. The function returns the
+// cleared bit then the bit is considered set. The function returns the
 // diff per incoming block so that all can be in sync.
 func (f *fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, err error) {
 	// Ensure that all pair sets are of equal length.
@@ -2122,14 +2141,19 @@ func (f *fragment) importValue(columnIDs []uint64, values []int64, bitDepth uint
 // https://github.com/RoaringBitmap/RoaringFormatSpec or from pilosa's version
 // of the roaring format. The cache is updated to reflect the new data.
 func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) error {
-	rowSize := uint64(1 << shardVsContainerExponent)
 	span, ctx := tracing.StartSpanFromContext(ctx, "fragment.importRoaring")
 	defer span.Finish()
 	span, ctx = tracing.StartSpanFromContext(ctx, "importRoaring.AcquireFragmentLock")
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	span.Finish()
-	span, ctx = tracing.StartSpanFromContext(ctx, "importRoaring.ImportRoaringBits")
+
+	return f.unprotectedImportRoaring(ctx, data, clear)
+}
+
+func (f *fragment) unprotectedImportRoaring(ctx context.Context, data []byte, clear bool) error {
+	rowSize := uint64(1 << shardVsContainerExponent)
+	span, ctx := tracing.StartSpanFromContext(ctx, "importRoaring.ImportRoaringBits")
 	var changed int
 	var rowSet map[uint64]int
 	err := f.gen.Transaction(&f.storage.OpWriter, func() (err error) {
@@ -2173,6 +2197,20 @@ func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) e
 	f.incrementOpN(changed)
 	span.Finish()
 	return nil
+}
+
+// importRoaringOverwrite overwrites the specified block with the provided data.
+func (f *fragment) importRoaringOverwrite(ctx context.Context, data []byte, block int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Clear the existing data from fragment block.
+	if _, err := f.unprotectedClearBlock(block); err != nil {
+		return errors.Wrapf(err, "clearing block: %d", block)
+	}
+
+	// Union the new block data with the fragment data.
+	return f.unprotectedImportRoaring(ctx, data, false)
 }
 
 // incrementOpN increase the operation count by one.
@@ -2611,6 +2649,19 @@ func (f *fragment) unprotectedRows(start uint64, filters ...rowFilter) []uint64 
 	return rows
 }
 
+// blockToRoaringData converts a fragment block into a roaring.Bitmap
+// which represents a portion of the data within a single shard.
+// TODO: it seems like we should be able to get the
+// block data as roaring without having to go through
+// this rows/columns step.
+func (f *fragment) blockToRoaringData(block int) ([]byte, error) {
+	rowIDs, columnIDs := f.blockData(block)
+	return bitsToRoaringData(pairSet{
+		columnIDs: columnIDs,
+		rowIDs:    rowIDs,
+	})
+}
+
 // upgradeRoaringBSIv2 upgrades a fragment that contains old BSI formatting
 // to a new BSI format (v2). The new format moves the "exists" bit to the
 // beginning & adds a negative sign bit.
@@ -2731,6 +2782,9 @@ type fragmentSyncer struct {
 	Node    *Node
 	Cluster *cluster
 
+	// FieldType helps determine which method of syncing to use.
+	FieldType string
+
 	Closing <-chan struct{}
 }
 
@@ -2754,6 +2808,16 @@ func (s *fragmentSyncer) syncFragment() error {
 	nodes := s.Cluster.shardNodes(s.Fragment.index, s.Fragment.shard)
 	if len(nodes) == 1 {
 		return nil
+	}
+
+	// This is here solely to prevent unnecessary work;
+	// if this node isn't the primary replica, there's no need
+	// to continue processing int/decimal fields.
+	if nodes[0].ID != s.Node.ID {
+		switch s.FieldType {
+		case FieldTypeInt, FieldTypeDecimal:
+			return nil
+		}
 	}
 
 	// Create a set of blocks.
@@ -2814,11 +2878,79 @@ func (s *fragmentSyncer) syncFragment() error {
 		if byteSlicesEqual(checksums) {
 			continue
 		}
-		// Synchronize block.
-		if err := s.syncBlock(blockID); err != nil {
-			return fmt.Errorf("sync block: id=%d, err=%s", blockID, err)
+
+		// If we've gotten here, it means that the block differs
+		// between nodes. If this particular fragment is part of an
+		// `int` or `decimal` field, then instead of using a consensus
+		// to determine which bits to update, we consider the primary
+		// replica to be correct, and overwrite the non-primary replicas
+		// with the primary's data.
+		switch s.FieldType {
+		case FieldTypeInt, FieldTypeDecimal:
+			// Synchronize block from the primary replica.
+			if err := s.syncBlockFromPrimary(blockID); err != nil {
+				return fmt.Errorf("sync block from primary: id=%d, err=%s", blockID, err)
+			}
+			s.Fragment.stats.Count("BlockRepairPrimary", 1, 1.0)
+		default:
+			// Synchronize block.
+			if err := s.syncBlock(blockID); err != nil {
+				return fmt.Errorf("sync block: id=%d, err=%s", blockID, err)
+			}
+			s.Fragment.stats.Count("BlockRepair", 1, 1.0)
 		}
-		s.Fragment.stats.Count("BlockRepair", 1, 1.0)
+	}
+
+	return nil
+}
+
+// syncBlockFromPrimary sends all rows for a given block
+// from the primary replica to non-primary replicas.
+// Since this is pushing updates out to replicas, it only
+// runs on the primary replica.
+// Returns an error if any remote hosts are unreachable.
+func (s *fragmentSyncer) syncBlockFromPrimary(id int) error {
+	span, ctx := tracing.StartSpanFromContext(context.Background(), "FragmentSyncer.syncBlockFromPrimary")
+	defer span.Finish()
+
+	f := s.Fragment
+
+	// Determine replica set. Return early if this is not
+	// the primary node.
+	nodes := s.Cluster.shardNodes(f.index, f.shard)
+	if s.Node.ID != nodes[0].ID {
+		f.Logger.Debugf("non-primary replica expecting sync from primary: %s, index=%s, field=%s, shard=%d", nodes[0].ID, f.index, f.field, f.shard)
+		return nil
+	}
+
+	// Get the local block represented as roaring data.
+	localData, err := f.blockToRoaringData(id)
+	if err != nil {
+		return errors.Wrap(err, "converting block to roaring data")
+	}
+
+	// Verify sync is not prematurely closing.
+	if s.isClosing() {
+		return nil
+	}
+
+	// Create the overwrite request to be sent to non-primary replicas.
+	overwriteReq := &ImportRoaringRequest{
+		Action: RequestActionOverwrite,
+		Block:  id,
+		Views:  map[string][]byte{cleanViewName(f.view): localData},
+	}
+
+	// Write updates to remote blocks.
+	for _, node := range nodes {
+		if s.Node.ID == node.ID {
+			continue
+		}
+
+		uri := &node.URI
+		if err := s.Cluster.InternalClient.ImportRoaring(ctx, uri, f.index, f.field, f.shard, true, overwriteReq); err != nil {
+			return errors.Wrap(err, "sending roaring data (overwrite)")
+		}
 	}
 
 	return nil
@@ -2883,8 +3015,8 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 			}
 
 			setReq := &ImportRoaringRequest{
-				Clear: false,
-				Views: map[string][]byte{cleanViewName(f.view): setData},
+				Action: RequestActionSet,
+				Views:  map[string][]byte{cleanViewName(f.view): setData},
 			}
 
 			if err := s.Cluster.InternalClient.ImportRoaring(ctx, uris[i], f.index, f.field, f.shard, true, setReq); err != nil {
@@ -2900,8 +3032,8 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 			}
 
 			clearReq := &ImportRoaringRequest{
-				Clear: true,
-				Views: map[string][]byte{"": clearData},
+				Action: RequestActionClear,
+				Views:  map[string][]byte{cleanViewName(f.view): clearData},
 			}
 
 			if err := s.Cluster.InternalClient.ImportRoaring(ctx, uris[i], f.index, f.field, f.shard, true, clearReq); err != nil {

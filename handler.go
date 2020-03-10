@@ -184,11 +184,19 @@ type ImportRequest struct {
 	Timestamps []int64
 }
 
+const (
+	RequestActionSet       = "set"
+	RequestActionClear     = "clear"
+	RequestActionOverwrite = "overwrite"
+)
+
 // ImportRoaringRequest describes the import request structure
 // for an import containing roaring-encoded data.
 type ImportRoaringRequest struct {
-	Clear bool
-	Views map[string][]byte
+	Clear  bool
+	Action string // [set, clear, overwrite]
+	Block  int
+	Views  map[string][]byte
 }
 
 // ImportResponse is the structured response of an import.
