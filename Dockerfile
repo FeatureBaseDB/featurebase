@@ -21,5 +21,8 @@ COPY NOTICE /NOTICE
 EXPOSE 10101
 VOLUME /data
 
+ENV PILOSA_DATA_DIR /data
+ENV PILOSA_BIND http://0.0.0.0:10101
+
 ENTRYPOINT ["/pilosa"]
-CMD ["server", "--data-dir", "/data", "--bind", "http://0.0.0.0:10101"]
+CMD ["server"]
