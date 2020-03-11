@@ -321,9 +321,9 @@ func importWorker(importWork chan importJob) {
 			for viewName, viewData := range j.req.Views {
 				// The logic here corresponds to the logic in fragment.cleanViewName().
 				// Unfortunately, the logic in that method is not completely exclusive
-				// (i.e. an "other" view named with format YYYMMDD woud be handled
+				// (i.e. an "other" view named with format YYYYMMDD would be handled
 				// incorrectly). One way to address this would be to change the logic
-				// overall so there weren't conflicts. For now, I'm just going to
+				// overall so there weren't conflicts. For now, we just
 				// rely on the field type to inform the intended view name.
 				if viewName == "" {
 					viewName = viewStandard
