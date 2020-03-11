@@ -42,6 +42,10 @@ vendor: go.mod
 test:
 	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS)
 
+# Run test suite with race flag
+test-race:
+	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS) -race -timeout 30m
+
 bench:
 	go test ./... -bench=. -run=NoneZ -timeout=127m $(TESTFLAGS)
 
@@ -151,6 +155,9 @@ docker-test:
 # Run golangci-lint
 golangci-lint: require-golangci-lint
 	golangci-lint run --skip-files '.*\.peg\.go'
+
+# Alias
+linter: golangci-lint
 
 # Run gometalinter with custom flags
 gometalinter: require-gometalinter vendor
