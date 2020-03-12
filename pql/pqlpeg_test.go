@@ -42,7 +42,7 @@ SetBit(Union(Zitmap(row==4), Intersect(Qitmap(blah>4), Ritmap(field="http://zoo9
 	if err != nil {
 		t.Fatalf("should have parsed: %v", err)
 	}
-	if q.String() != `TopN(Bitmap(id == "other"), _field="blah", field="f", n=0)` {
+	if q.String() != `TopN(Bitmap(id== "other"), _field="blah", field="f", n=0)` {
 		t.Fatalf("Failed, got: %s", q)
 	}
 
@@ -55,8 +55,7 @@ SetBit(Union(Zitmap(row==4), Intersect(Qitmap(blah>4), Ritmap(field="http://zoo9
 	if err != nil {
 		t.Fatalf("should have parsed: %v", err)
 	}
-
-	if q.String() != `Bitmap(did == "other", row=4)` {
+	if q.String() != `Bitmap(did== "other", row=4)` {
 		t.Fatalf("got %s", q)
 	}
 

@@ -729,7 +729,7 @@ func (c *Call) String() string {
 		// the equal sign in the string representation.
 		switch v := c.Args[key].(type) {
 		case *Condition:
-			fmt.Fprintf(&buf, "%v %s", key, v.String())
+			fmt.Fprintf(&buf, "%s", v.StringWithSubj(key))
 		default:
 			fmt.Fprintf(&buf, "%v=%s", key, formatValue(v))
 		}

@@ -37,7 +37,7 @@ func TestCall_String(t *testing.T) {
 				"field0": &pql.Condition{Op: pql.GTE, Value: 10},
 			},
 		}
-		if s := c.String(); s != `Range(field0 >= 10, other="f")` {
+		if s := c.String(); s != `Range(field0>= 10, other="f")` {
 			t.Fatalf("unexpected string: %s", s)
 		}
 	})
