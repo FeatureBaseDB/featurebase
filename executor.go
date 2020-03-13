@@ -2926,7 +2926,7 @@ func (e *executor) executeSet(ctx context.Context, index string, c *pql.Call, op
 		// Read row value.
 		rowVal, err := getScaledInt(f, v)
 		if err != nil {
-			return false, fmt.Errorf("reading Set() row: %v", err)
+			return false, fmt.Errorf("reading Set() row (int/decimal): %v", err)
 		}
 		return e.executeSetValueField(ctx, index, c, f, colID, rowVal, opt)
 
@@ -4477,6 +4477,8 @@ func getScaledInt(f *Field, v interface{}) (int64, error) {
 			value = int64(float64(tv) * math.Pow10(int(scale)))
 		case uint64:
 			value = int64(float64(tv) * math.Pow10(int(scale)))
+		case pql.Decimal:
+			value = tv.ToInt64(scale)
 		case float64:
 			value = int64(tv * math.Pow10(int(scale)))
 		default:
