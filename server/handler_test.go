@@ -232,20 +232,20 @@ func TestHandler_Endpoints(t *testing.T) {
 		}) {
 			t.Fatalf("Unexpected result %v", resp.Results[0])
 		}
-
 	})
 
-	t.Run("ImportRoaringFieldTypeFail", func(t *testing.T) {
-		// Roaring import into a non-set field should fail.
-		if _, err := i0.CreateFieldIfNotExists("int-field", pilosa.OptFieldTypeInt(0, 1)); err != nil {
+	t.Run("ImportRoaringOverwrite", func(t *testing.T) {
+		if _, err := i0.CreateFieldIfNotExists("int-field", pilosa.OptFieldTypeInt(0, 10)); err != nil {
 			t.Fatal(err)
 		}
 		w := httptest.NewRecorder()
-		roaringData, _ := hex.DecodeString("3B3001000100000900010000000100010009000100")
+		roaringData, _ := hex.DecodeString("3C30000002000000000000000000000001000000200000000000000001000000280000002A00000001000100")
+
 		msg := pilosa.ImportRoaringRequest{
-			Clear: false,
+			Action: pilosa.RequestActionOverwrite,
+			Block:  0,
 			Views: map[string][]byte{
-				"": roaringData,
+				"bsig_int-field": roaringData,
 			},
 		}
 		ser := proto.Serializer{}
@@ -256,11 +256,15 @@ func TestHandler_Endpoints(t *testing.T) {
 		httpReq := test.MustNewHTTPRequest("POST", "/index/i0/field/int-field/import-roaring/0", bytes.NewBuffer(data))
 		httpReq.Header.Set("Content-Type", "application/x-protobuf")
 		httpReq.Header.Set("Accept", "application/x-protobuf")
-		h.ServeHTTP(w, httpReq)
-		if w.Code != gohttp.StatusBadRequest {
-			t.Fatalf("unexpected status code: %d", w.Code)
-		}
 
+		h.ServeHTTP(w, httpReq)
+		resp, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i0", Query: "Row(int-field>0)"})
+		if err != nil {
+			t.Fatalf("querying: %v", err)
+		}
+		if row := resp.Results[0].(*pilosa.Row); !reflect.DeepEqual(row.Columns(), []uint64{1}) {
+			t.Fatalf("Unexpected result %v", row.Columns())
+		}
 	})
 
 	t.Run("Status", func(t *testing.T) {

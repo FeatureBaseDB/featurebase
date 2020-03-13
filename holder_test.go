@@ -17,6 +17,7 @@ package pilosa_test
 import (
 	"bytes"
 	"context"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -25,6 +26,7 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/test"
 	"github.com/pkg/errors"
 )
@@ -526,37 +528,109 @@ func TestHolderSyncer_TimeQuantum(t *testing.T) {
 
 // Ensure holder can sync integer views with a remote holder.
 func TestHolderSyncer_IntField(t *testing.T) {
-	c := test.MustNewCluster(t, 2)
-	c[0].Config.Cluster.ReplicaN = 2
-	c[0].Config.AntiEntropy.Interval = 0
-	c[1].Config.Cluster.ReplicaN = 2
-	c[1].Config.AntiEntropy.Interval = 0
-	err := c.Start()
-	if err != nil {
-		t.Fatalf("starting cluster: %v", err)
-	}
-	defer c.Close()
+	t.Run("BasicSync", func(t *testing.T) {
+		c := test.MustNewCluster(t, 2)
+		c[0].Config.Cluster.ReplicaN = 2
+		c[0].Config.AntiEntropy.Interval = 0
+		c[1].Config.Cluster.ReplicaN = 2
+		c[1].Config.AntiEntropy.Interval = 0
+		err := c.Start()
+		if err != nil {
+			t.Fatalf("starting cluster: %v", err)
+		}
+		defer c.Close()
 
-	_, err = c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
-	if err != nil {
-		t.Fatalf("creating index i: %v", err)
-	}
-	_, err = c[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeInt(0, 100))
-	if err != nil {
-		t.Fatalf("creating field f: %v", err)
-	}
+		_, err = c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatalf("creating index i: %v", err)
+		}
+		_, err = c[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeInt(0, 100))
+		if err != nil {
+			t.Fatalf("creating field f: %v", err)
+		}
 
-	hldr0 := &test.Holder{Holder: c[0].Server.Holder()}
-	hldr1 := &test.Holder{Holder: c[1].Server.Holder()}
+		hldr0 := &test.Holder{Holder: c[0].Server.Holder()}
+		hldr1 := &test.Holder{Holder: c[1].Server.Holder()}
 
-	// Set data on the local holder for node0.
-	hldr0.SetValue("i", "f", 1, 1)
+		// Set data on the local holder for node0.
+		hldr0.SetValue("i", "f", 1, 1)
 
-	// Set data on node1.
-	hldr1.SetValue("i", "f", 2, 2)
+		// Set data on node1.
+		hldr1.SetValue("i", "f", 2, 2)
 
-	err = c[0].Server.SyncData()
-	if err != nil {
-		t.Fatalf("syncing node 0: %v", err)
-	}
+		err = c[0].Server.SyncData()
+		if err != nil {
+			t.Fatalf("syncing node 0: %v", err)
+		}
+
+		// Verify data is the same on both nodes.
+		for i, hldr := range []*test.Holder{hldr0, hldr1} {
+			if a, exists := hldr.Value("i", "f", 1); !exists || a != 1 {
+				t.Errorf("unexpected value(node%d/0): %d, exists: %v", i, a, exists)
+			}
+			if a, exists := hldr.Value("i", "f", 2); exists {
+				t.Errorf("unexpected value(node%d/1): %d, exists: %v", i, a, exists)
+			}
+		}
+	})
+
+	t.Run("MultiShard", func(t *testing.T) {
+		c := test.MustNewCluster(t, 2)
+		c[0].Config.Cluster.ReplicaN = 2
+		c[0].Config.AntiEntropy.Interval = 0
+		c[1].Config.Cluster.ReplicaN = 2
+		c[1].Config.AntiEntropy.Interval = 0
+		err := c.Start()
+		if err != nil {
+			t.Fatalf("starting cluster: %v", err)
+		}
+		defer c.Close()
+
+		_, err = c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatalf("creating index i: %v", err)
+		}
+		_, err = c[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+		if err != nil {
+			t.Fatalf("creating field f: %v", err)
+		}
+
+		hldr0 := &test.Holder{Holder: c[0].Server.Holder()}
+		hldr1 := &test.Holder{Holder: c[1].Server.Holder()}
+
+		// Set data on the local holder for node0.
+		hldr0.SetValue("i", "f", 1*pilosa.ShardWidth, 11)
+		hldr0.SetValue("i", "f", 3*pilosa.ShardWidth, 32)
+		hldr0.SetValue("i", "f", 4*pilosa.ShardWidth, math.MinInt32)
+		hldr0.SetValue("i", "f", 7*pilosa.ShardWidth, math.MinInt32)
+
+		// Set data on node1.
+		hldr1.SetValue("i", "f", 0*pilosa.ShardWidth, 2)
+		hldr1.SetValue("i", "f", 2*pilosa.ShardWidth, 22)
+		hldr1.SetValue("i", "f", 4*pilosa.ShardWidth, math.MaxInt32)
+		hldr1.SetValue("i", "f", 7*pilosa.ShardWidth, math.MaxInt32)
+
+		// Primary for shards (for index "i"):
+		// node0: [0,3,7]
+		// node1: [1,2,4]
+
+		err = c[0].Server.SyncData()
+		if err != nil {
+			t.Fatalf("syncing node 0: %v", err)
+		}
+		err = c[1].Server.SyncData()
+		if err != nil {
+			t.Fatalf("syncing node 1: %v", err)
+		}
+
+		// Verify data is the same on both nodes.
+		for i, hldr := range []*test.Holder{hldr0, hldr1} {
+			if a := hldr.Range("i", "f", pql.GT, 0); !reflect.DeepEqual(a.Columns(), []uint64{2 * pilosa.ShardWidth, 3 * pilosa.ShardWidth, 4 * pilosa.ShardWidth}) {
+				t.Errorf("unexpected columns(node%d/0): %d", i, a.Columns())
+			}
+			if a := hldr.Range("i", "f", pql.LT, 0); !reflect.DeepEqual(a.Columns(), []uint64{7 * pilosa.ShardWidth}) {
+				t.Errorf("unexpected columns(node%d/0): %d", i, a.Columns())
+			}
+		}
+	})
 }

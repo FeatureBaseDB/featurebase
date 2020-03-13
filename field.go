@@ -1747,6 +1747,31 @@ func (f *Field) importRoaring(ctx context.Context, data []byte, shard uint64, vi
 	return nil
 }
 
+func (f *Field) importRoaringOverwrite(ctx context.Context, data []byte, shard uint64, viewName string, block int) error {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Field.importRoaringOverwrite")
+	defer span.Finish()
+
+	if viewName == "" {
+		viewName = viewStandard
+	}
+	span.LogKV("view", viewName, "bytes", len(data), "shard", shard)
+	view, err := f.createViewIfNotExists(viewName)
+	if err != nil {
+		return errors.Wrap(err, "creating view")
+	}
+
+	frag, err := view.CreateFragmentIfNotExists(shard)
+	if err != nil {
+		return errors.Wrap(err, "creating fragment")
+	}
+
+	if err := frag.importRoaringOverwrite(ctx, data, block); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 type fieldSlice []*Field
 
 func (p fieldSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }

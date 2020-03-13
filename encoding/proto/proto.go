@@ -418,11 +418,13 @@ func encodeImportRoaringRequest(m *pilosa.ImportRoaringRequest) *internal.Import
 			Name: viewName,
 			Data: viewData,
 		}
-		i += 1
+		i++
 	}
 	return &internal.ImportRoaringRequest{
-		Clear: m.Clear,
-		Views: views,
+		Clear:  m.Clear,
+		Action: m.Action,
+		Block:  uint64(m.Block),
+		Views:  views,
 	}
 }
 
@@ -1071,6 +1073,8 @@ func decodeImportRoaringRequest(pb *internal.ImportRoaringRequest, m *pilosa.Imp
 		views[view.Name] = view.Data
 	}
 	m.Clear = pb.Clear
+	m.Action = pb.Action
+	m.Block = int(pb.Block)
 	m.Views = views
 }
 

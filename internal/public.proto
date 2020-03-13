@@ -152,6 +152,8 @@ message ImportRoaringRequestView {
 message ImportRoaringRequest {
 	bool Clear = 1;
 	repeated ImportRoaringRequestView views = 2;
+	string Action = 3;
+	uint64 Block = 4;
 }
 
 message ImportColumnAttrsRequest {

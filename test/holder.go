@@ -22,6 +22,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
+	"github.com/pilosa/pilosa/v2/pql"
 )
 
 // Holder is a test wrapper for pilosa.Holder.
@@ -167,7 +168,7 @@ func (h *Holder) MustSetBits(index, field string, rowID uint64, columnIDs ...uin
 	}
 }
 
-// SetValue sets an value on the given field.
+// SetValue sets an integer value on the given field.
 func (h *Holder) SetValue(index, field string, columnID uint64, value int64) {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
 	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
@@ -178,4 +179,33 @@ func (h *Holder) SetValue(index, field string, columnID uint64, value int64) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+// Value returns the integer value for a given column.
+func (h *Holder) Value(index, field string, columnID uint64) (int64, bool) {
+	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+	if err != nil {
+		panic(err)
+	}
+	val, exists, err := f.Value(columnID)
+	if err != nil {
+		panic(err)
+	}
+	return val, exists
+}
+
+// Range returns a Row (of column IDs) for a field based
+// on the given range.
+func (h *Holder) Range(index, field string, op pql.Token, predicate int64) *pilosa.Row {
+	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
+	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
+	if err != nil {
+		panic(err)
+	}
+	row, err := f.Range(field, op, predicate)
+	if err != nil {
+		panic(err)
+	}
+	return row
 }

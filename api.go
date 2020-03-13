@@ -319,26 +319,56 @@ func importWorker(importWork chan importJob) {
 	for j := range importWork {
 		err := func() error {
 			for viewName, viewData := range j.req.Views {
+				// The logic here corresponds to the logic in fragment.cleanViewName().
+				// Unfortunately, the logic in that method is not completely exclusive
+				// (i.e. an "other" view named with format YYYYMMDD would be handled
+				// incorrectly). One way to address this would be to change the logic
+				// overall so there weren't conflicts. For now, we just
+				// rely on the field type to inform the intended view name.
 				if viewName == "" {
 					viewName = viewStandard
-				} else {
+				} else if j.field.Type() == FieldTypeTime {
 					viewName = fmt.Sprintf("%s_%s", viewStandard, viewName)
 				}
 				if len(viewData) == 0 {
 					return fmt.Errorf("no data to import for view: %s", viewName)
 				}
-				fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
-				if fileMagic == roaring.MagicNumber { // if pilosa roaring format
-					if err := j.field.importRoaring(j.ctx, viewData, j.shard, viewName, j.req.Clear); err != nil {
-						return errors.Wrap(err, "importing pilosa roaring")
+
+				// TODO: deprecate ImportRoaringRequest.Clear, but
+				// until we do, we need to check its value to provide
+				// backward compatibility.
+				doAction := j.req.Action
+				if doAction == "" {
+					if j.req.Clear {
+						doAction = RequestActionClear
+					} else {
+						doAction = RequestActionSet
 					}
-				} else {
-					// must make a copy of data to operate on locally on standard roaring format.
-					// field.importRoaring changes the standard roaring run format to pilosa roaring
-					data := make([]byte, len(viewData))
-					copy(data, viewData)
-					if err := j.field.importRoaring(j.ctx, data, j.shard, viewName, j.req.Clear); err != nil {
-						return errors.Wrap(err, "importing standard roaring")
+				}
+
+				var doClear bool
+				switch doAction {
+				case RequestActionOverwrite:
+					if err := j.field.importRoaringOverwrite(j.ctx, viewData, j.shard, viewName, j.req.Block); err != nil {
+						return errors.Wrap(err, "importing roaring as overwrite")
+					}
+				case RequestActionClear:
+					doClear = true
+					fallthrough
+				case RequestActionSet:
+					fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
+					if fileMagic == roaring.MagicNumber { // if pilosa roaring format
+						if err := j.field.importRoaring(j.ctx, viewData, j.shard, viewName, doClear); err != nil {
+							return errors.Wrap(err, "importing pilosa roaring")
+						}
+					} else {
+						// must make a copy of data to operate on locally on standard roaring format.
+						// field.importRoaring changes the standard roaring run format to pilosa roaring
+						data := make([]byte, len(viewData))
+						copy(data, viewData)
+						if err := j.field.importRoaring(j.ctx, data, j.shard, viewName, doClear); err != nil {
+							return errors.Wrap(err, "importing standard roaring")
+						}
 					}
 				}
 			}
@@ -386,8 +416,9 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 	}
 
 	// only set and time fields are supported
-	if field.Type() != FieldTypeSet && field.Type() != FieldTypeTime {
-		return NewBadRequestError(errors.Errorf("roaring import is only supported for set and time fields, not '%s' fields.", field.Type()))
+	// TODO: get rid of this (need to confirm other field types)
+	if field.Type() != FieldTypeSet && field.Type() != FieldTypeTime && field.Type() != FieldTypeInt && field.Type() != FieldTypeDecimal {
+		return NewBadRequestError(errors.Errorf("roaring import is only supported for set, time, int, and decimal fields, not '%s' fields.", field.Type()))
 	}
 
 	errCh := make(chan error, len(nodes))
