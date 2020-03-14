@@ -1407,6 +1407,64 @@ func TestExecutor_Execute_TopN_Attr_Src(t *testing.T) {
 
 // Ensure Min()  and Max() queries can be executed.
 func TestExecutor_Execute_MinMax(t *testing.T) {
+	t.Run("WithOffset", func(t *testing.T) {
+		t.Run("Int", func(t *testing.T) {
+			c := test.MustRunCluster(t, 1)
+			defer c.Close()
+			hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+			idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			tests := []struct {
+				min int64
+				max int64
+				set int64
+			}{
+				{10, 20, 11},
+				{-10, 20, 11},
+				{-10, 20, -9},
+				{-20, -10, -11},
+			}
+			for i, test := range tests {
+				fld := fmt.Sprintf("f%d", i)
+				t.Run("MinMaxField_"+fld, func(t *testing.T) {
+					if _, err := idx.CreateField(fld, pilosa.OptFieldTypeInt(test.min, test.max)); err != nil {
+						t.Fatal(err)
+					}
+
+					if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: fmt.Sprintf(`
+				Set(10, %s=%d)
+			`, fld, test.set)}); err != nil {
+						t.Fatal(err)
+					}
+
+					var pql string
+
+					t.Run("Min", func(t *testing.T) {
+						pql = fmt.Sprintf(`Min(field=%s)`, fld)
+						if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+							t.Fatal(err)
+						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: test.set, Count: 1}) {
+							t.Fatalf("unexpected min result, test %d: %s", i, spew.Sdump(result))
+						}
+					})
+
+					t.Run("Max", func(t *testing.T) {
+						pql = fmt.Sprintf(`Max(field=%s)`, fld)
+						if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+							t.Fatal(err)
+						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: test.set, Count: 1}) {
+							t.Fatalf("unexpected max result, test %d: %s", i, spew.Sdump(result))
+						}
+					})
+				})
+			}
+		})
+	})
+
 	t.Run("ColumnID", func(t *testing.T) {
 		c := test.MustRunCluster(t, 1)
 		defer c.Close()
