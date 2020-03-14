@@ -1449,7 +1449,7 @@ func (f *Field) MaxForShard(shard uint64, filter *Row) (ValCount, error) {
 	if f.Options().Type == FieldTypeDecimal {
 		valCount.FloatVal = float64(max) / math.Pow10(int(bsig.Scale))
 	} else {
-		valCount.Val = max
+		valCount.Val = max + bsig.Base
 	}
 
 	return valCount, nil
@@ -1484,7 +1484,7 @@ func (f *Field) MinForShard(shard uint64, filter *Row) (ValCount, error) {
 	if f.Options().Type == FieldTypeDecimal {
 		valCount.FloatVal = float64(min) / math.Pow10(int(bsig.Scale))
 	} else {
-		valCount.Val = min
+		valCount.Val = min + bsig.Base
 	}
 
 	return valCount, nil
