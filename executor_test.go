@@ -1481,10 +1481,10 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 				max   int64
 				set   pql.Decimal
 			}{
-				{2, 10, 20, pql.Decimal{false, 115, 1}},
-				{2, -10, 20, pql.Decimal{false, 115, 1}},
-				{2, -10, 20, pql.Decimal{true, 95, 1}},
-				{2, -20, -10, pql.Decimal{true, 115, 1}},
+				{2, 10, 20, pql.Decimal{Sign: false, Value: 115, Scale: 1}},
+				{2, -10, 20, pql.Decimal{Sign: false, Value: 115, Scale: 1}},
+				{2, -10, 20, pql.Decimal{Sign: true, Value: 95, Scale: 1}},
+				{2, -20, -10, pql.Decimal{Sign: true, Value: 115, Scale: 1}},
 			}
 			for i, test := range tests {
 				fld := fmt.Sprintf("f%d", i)

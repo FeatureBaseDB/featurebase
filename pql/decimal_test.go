@@ -15,6 +15,7 @@
 package pql_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa/v2/pql"
@@ -26,34 +27,64 @@ func TestDecimal(t *testing.T) {
 		tests := []struct {
 			s      string
 			exp    pql.Decimal
-			expErr error // TODO: add tests for errors
+			expErr string
 		}{
-			{"123.4567", pql.Decimal{false, 1234567, 4}, nil},
-			{"  123.4567", pql.Decimal{false, 1234567, 4}, nil},
-			{"  123.4567  ", pql.Decimal{false, 1234567, 4}, nil},
-			{"123.456700", pql.Decimal{false, 1234567, 4}, nil},
-			{"00123.4567", pql.Decimal{false, 1234567, 4}, nil},
-			{"+123.4567", pql.Decimal{false, 1234567, 4}, nil},
-			{"-123.4567", pql.Decimal{true, 1234567, 4}, nil},
-			{"-00123.4567", pql.Decimal{true, 1234567, 4}, nil},
-			{"-12.25", pql.Decimal{true, 1225, 2}, nil},
+			{"0", pql.Decimal{false, 0, 0}, ""},
+			{"-0", pql.Decimal{false, 0, 0}, ""},
+			{"0.0", pql.Decimal{false, 0, 0}, ""},
+			{"-0.00", pql.Decimal{false, 0, 0}, ""},
+			{"123.4567", pql.Decimal{false, 1234567, 4}, ""},
+			{"  123.4567", pql.Decimal{false, 1234567, 4}, ""},
+			{"  123.4567  ", pql.Decimal{false, 1234567, 4}, ""},
+			{"123.456700", pql.Decimal{false, 1234567, 4}, ""},
+			{"00123.4567", pql.Decimal{false, 1234567, 4}, ""},
+			{"+123.4567", pql.Decimal{false, 1234567, 4}, ""},
+			{"-123.4567", pql.Decimal{true, 1234567, 4}, ""},
+			{"-00123.4567", pql.Decimal{true, 1234567, 4}, ""},
+			{"-12.25", pql.Decimal{true, 1225, 2}, ""},
 
-			{"123", pql.Decimal{false, 123, 0}, nil},
-			{"-12300", pql.Decimal{true, 123, -2}, nil},
-			{"+012300", pql.Decimal{false, 123, -2}, nil},
-			{"12300", pql.Decimal{false, 123, -2}, nil},
-			{"12300.", pql.Decimal{false, 123, -2}, nil},
-			{"12300.0", pql.Decimal{false, 123, -2}, nil},
-			{"123.0", pql.Decimal{false, 123, 0}, nil},
+			{"123", pql.Decimal{false, 123, 0}, ""},
+			{"-12300", pql.Decimal{true, 123, -2}, ""},
+			{"+012300", pql.Decimal{false, 123, -2}, ""},
+			{"12300", pql.Decimal{false, 123, -2}, ""},
+			{"12300.", pql.Decimal{false, 123, -2}, ""},
+			{"12300.0", pql.Decimal{false, 123, -2}, ""},
+			{"123.0", pql.Decimal{false, 123, 0}, ""},
 
-			{"0.123", pql.Decimal{false, 123, 3}, nil},
-			{"0.001230", pql.Decimal{false, 123, 5}, nil},
-			{" 0.001230 ", pql.Decimal{false, 123, 5}, nil},
-			{"-0.001230 ", pql.Decimal{true, 123, 5}, nil},
+			{".123", pql.Decimal{false, 123, 3}, ""},
+			{"0.123", pql.Decimal{false, 123, 3}, ""},
+			{"0.001230", pql.Decimal{false, 123, 5}, ""},
+			{" 0.001230 ", pql.Decimal{false, 123, 5}, ""},
+			{"-0.001230 ", pql.Decimal{true, 123, 5}, ""},
+
+			// uint32 edges.
+			{".000004294967295", pql.Decimal{false, 4294967295, 15}, ""},
+			{"-.000004294967295", pql.Decimal{true, 4294967295, 15}, ""},
+			{"-42949.67295", pql.Decimal{true, 4294967295, 5}, ""},
+			{"42949.67295", pql.Decimal{false, 4294967295, 5}, ""},
+			{"-42949.67295", pql.Decimal{true, 4294967295, 5}, ""},
+			{"4294967295000", pql.Decimal{false, 4294967295, -3}, ""},
+			{"-4294967295000", pql.Decimal{true, 4294967295, -3}, ""},
+
+			// Error cases.
+			{"", pql.Decimal{}, "decimal string is empty"},
+			{"-", pql.Decimal{}, "decimal string is empty"},
+			{"*0.123", pql.Decimal{}, "invalid syntax"},
+			{"abc", pql.Decimal{}, "invalid syntax"},
+			{"0.12.3", pql.Decimal{}, "invalid decimal string"},
+			{"--12300", pql.Decimal{}, "invalid syntax"},
+			{"429496729.6", pql.Decimal{}, "value out of range"},
+			{"-429496729.6", pql.Decimal{}, "value out of range"},
+			{"4294967296000", pql.Decimal{}, "value out of range"},
+			{"-4294967296000", pql.Decimal{}, "value out of range"},
 		}
 		for i, test := range tests {
 			dec, err := pql.ParseDecimal(test.s)
-			if err != nil {
+			if test.expErr != "" {
+				if err == nil || !strings.Contains(err.Error(), test.expErr) {
+					t.Fatalf("expected error to contain: %s, but got: %v", test.expErr, err)
+				}
+			} else if err != nil {
 				t.Fatalf("parsing string `%s`: %s", test.s, err)
 			} else if dec != test.exp {
 				t.Fatalf("test %d expected: %v, but got: %v", i, test.exp, dec)

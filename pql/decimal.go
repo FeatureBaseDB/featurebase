@@ -117,9 +117,6 @@ const (
 
 // ParseDecimal parses a string into a Decimal.
 func ParseDecimal(s string) (Decimal, error) {
-	if s == "" {
-		return Decimal{}, nil
-	}
 	var sign bool
 	var value uint64
 	var scale int64
@@ -140,6 +137,7 @@ func ParseDecimal(s string) (Decimal, error) {
 	mantissa := make([]byte, len(s))
 
 	state := stateSign
+	var foundLeadingZero bool
 	for i := 0; i < len(s); i++ {
 		switch state {
 		case stateSign:
@@ -158,6 +156,7 @@ func ParseDecimal(s string) (Decimal, error) {
 		case stateLeadingZeros:
 			switch s[i] {
 			case '0':
+				foundLeadingZero = true
 				continue
 			default:
 				state = stateMantissa
@@ -177,6 +176,13 @@ func ParseDecimal(s string) (Decimal, error) {
 				pos++
 			}
 		}
+	}
+
+	// If we've gotten here and state is still in stateSign or
+	// it's in stateLeadingZeros without finding any zeros,
+	// it means no value was provided.
+	if state == stateSign || (state == stateLeadingZeros && !foundLeadingZero) {
+		return Decimal{}, errors.New("decimal string is empty")
 	}
 
 	// Trim trailing zeros/spaces of mantissa
@@ -203,6 +209,13 @@ func ParseDecimal(s string) (Decimal, error) {
 		scale = -1 * int64(trimZeroCnt)
 	} else {
 		scale = int64(len(mantissa) - decimalPos)
+	}
+
+	// If mantissa is empty, treat it as "0".
+	if len(mantissa) == 0 {
+		mantissa = []byte{'0'}
+		sign = false
+		scale = 0
 	}
 
 	value, err = strconv.ParseUint(string(mantissa), 10, 32)
