@@ -54,6 +54,20 @@ func (d Decimal) ToInt64(scale int64) int64 {
 	return ret
 }
 
+// Float64 returns d as a float64.
+func (d Decimal) Float64() float64 {
+	var ret float64
+	if d.Scale == 0 {
+		ret = float64(d.Value)
+	} else {
+		ret = float64(d.Value) / math.Pow10(int(d.Scale))
+	}
+	if d.Sign {
+		ret *= -1
+	}
+	return ret
+}
+
 // String returns the string representation of the decimal.
 func (d Decimal) String() string {
 	var s string
