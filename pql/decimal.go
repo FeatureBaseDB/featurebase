@@ -24,17 +24,15 @@ import (
 )
 
 // Decimal represents a decimal value; the intention
-// is to avoid relying on float64, and they primary
+// is to avoid relying on float64, and the primary
 // purpose is to have a predictable way to encode such
 // values used in query strings.
-// Sign = true represents a negative value.
 // Scale is the number of digits to the right of the
 // decimal point.
 // Precision is currently not considered; precision, for
 // our purposes is implied to be the complete, known value.
 type Decimal struct {
-	Sign  bool
-	Value uint32
+	Value int64
 	Scale int64
 }
 
@@ -44,12 +42,9 @@ func (d Decimal) ToInt64(scale int64) int64 {
 	var ret int64
 	scaleDiff := scale - d.Scale
 	if scaleDiff == 0 {
-		ret = int64(d.Value)
+		ret = d.Value
 	} else {
 		ret = int64(float64(d.Value) * math.Pow10(int(scaleDiff)))
-	}
-	if d.Sign {
-		ret *= -1
 	}
 	return ret
 }
@@ -62,9 +57,6 @@ func (d Decimal) Float64() float64 {
 	} else {
 		ret = float64(d.Value) / math.Pow10(int(d.Scale))
 	}
-	if d.Sign {
-		ret *= -1
-	}
 	return ret
 }
 
@@ -72,7 +64,16 @@ func (d Decimal) Float64() float64 {
 func (d Decimal) String() string {
 	var s string
 
+	var neg bool
 	sval := fmt.Sprintf("%d", d.Value)
+
+	// Strip the negative sign off for now, and
+	// re-apply it at the end.
+	if sval[0] == '-' {
+		neg = true
+		sval = sval[1:]
+	}
+
 	if d.Scale == 0 {
 		s = sval
 	} else if d.Scale < 0 {
@@ -103,7 +104,7 @@ func (d Decimal) String() string {
 		s = string(buf)
 	}
 
-	if d.Sign {
+	if neg {
 		return "-" + s
 	}
 	return s
@@ -118,7 +119,7 @@ const (
 // ParseDecimal parses a string into a Decimal.
 func ParseDecimal(s string) (Decimal, error) {
 	var sign bool
-	var value uint64
+	var value int64
 	var scale int64
 	var err error
 
@@ -218,14 +219,22 @@ func ParseDecimal(s string) (Decimal, error) {
 		scale = 0
 	}
 
-	value, err = strconv.ParseUint(string(mantissa), 10, 32)
+	value, err = strconv.ParseInt(string(mantissa), 10, 64)
 	if err != nil {
 		return Decimal{}, errors.Wrap(err, "converting mantissa to uint32")
 	}
+	// Because we pulled the sign off at the beginning, if value is
+	// negative here, it likely means the string had two "-"" characters.
+	if value < 0 {
+		return Decimal{}, errors.New("invalid negative value")
+	}
+
+	if sign {
+		value *= -1
+	}
 
 	return Decimal{
-		Sign:  sign,
-		Value: uint32(value),
+		Value: value,
 		Scale: scale,
 	}, nil
 }

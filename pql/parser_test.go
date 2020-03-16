@@ -105,10 +105,10 @@ func TestParser_Parse(t *testing.T) {
 			&pql.Call{
 				Name: "Row",
 				Args: map[string]interface{}{
-					"key": pql.Decimal{false, 1225, 2},
-					"foo": pql.Decimal{false, 13167, 3},
-					"bar": pql.Decimal{false, 2, 0},
-					"baz": pql.Decimal{false, 9, 1},
+					"key": pql.Decimal{1225, 2},
+					"foo": pql.Decimal{13167, 3},
+					"bar": pql.Decimal{2, 0},
+					"baz": pql.Decimal{9, 1},
 				},
 			},
 		) {
@@ -125,7 +125,7 @@ func TestParser_Parse(t *testing.T) {
 			&pql.Call{
 				Name: "Row",
 				Args: map[string]interface{}{
-					"key": pql.Decimal{true, 1225, 2},
+					"key": pql.Decimal{-1225, 2},
 					"foo": int64(-13),
 				},
 			},
@@ -181,7 +181,7 @@ func TestParser_Parse(t *testing.T) {
 				Name: "Row",
 				Args: map[string]interface{}{
 					"key": "foo",
-					"x":   &pql.Condition{Op: pql.EQ, Value: pql.Decimal{false, 1225, 2}},
+					"x":   &pql.Condition{Op: pql.EQ, Value: pql.Decimal{1225, 2}},
 					"y":   &pql.Condition{Op: pql.GTE, Value: int64(100)},
 					"z":   &pql.Condition{Op: pql.BETWEEN, Value: []interface{}{int64(4), int64(8)}},
 					"m":   &pql.Condition{Op: pql.NEQ, Value: nil},
@@ -191,5 +191,4 @@ func TestParser_Parse(t *testing.T) {
 			t.Fatalf("unexpected call: %#v", q.Calls[0])
 		}
 	})
-
 }

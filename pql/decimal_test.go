@@ -29,42 +29,41 @@ func TestDecimal(t *testing.T) {
 			exp    pql.Decimal
 			expErr string
 		}{
-			{"0", pql.Decimal{false, 0, 0}, ""},
-			{"-0", pql.Decimal{false, 0, 0}, ""},
-			{"0.0", pql.Decimal{false, 0, 0}, ""},
-			{"-0.00", pql.Decimal{false, 0, 0}, ""},
-			{"123.4567", pql.Decimal{false, 1234567, 4}, ""},
-			{"  123.4567", pql.Decimal{false, 1234567, 4}, ""},
-			{"  123.4567  ", pql.Decimal{false, 1234567, 4}, ""},
-			{"123.456700", pql.Decimal{false, 1234567, 4}, ""},
-			{"00123.4567", pql.Decimal{false, 1234567, 4}, ""},
-			{"+123.4567", pql.Decimal{false, 1234567, 4}, ""},
-			{"-123.4567", pql.Decimal{true, 1234567, 4}, ""},
-			{"-00123.4567", pql.Decimal{true, 1234567, 4}, ""},
-			{"-12.25", pql.Decimal{true, 1225, 2}, ""},
+			{"0", pql.Decimal{0, 0}, ""},
+			{"-0", pql.Decimal{0, 0}, ""},
+			{"0.0", pql.Decimal{0, 0}, ""},
+			{"-0.00", pql.Decimal{0, 0}, ""},
+			{"123.4567", pql.Decimal{1234567, 4}, ""},
+			{"  123.4567", pql.Decimal{1234567, 4}, ""},
+			{"  123.4567  ", pql.Decimal{1234567, 4}, ""},
+			{"123.456700", pql.Decimal{1234567, 4}, ""},
+			{"00123.4567", pql.Decimal{1234567, 4}, ""},
+			{"+123.4567", pql.Decimal{1234567, 4}, ""},
+			{"-123.4567", pql.Decimal{-1234567, 4}, ""},
+			{"-00123.4567", pql.Decimal{-1234567, 4}, ""},
+			{"-12.25", pql.Decimal{-1225, 2}, ""},
 
-			{"123", pql.Decimal{false, 123, 0}, ""},
-			{"-12300", pql.Decimal{true, 123, -2}, ""},
-			{"+012300", pql.Decimal{false, 123, -2}, ""},
-			{"12300", pql.Decimal{false, 123, -2}, ""},
-			{"12300.", pql.Decimal{false, 123, -2}, ""},
-			{"12300.0", pql.Decimal{false, 123, -2}, ""},
-			{"123.0", pql.Decimal{false, 123, 0}, ""},
+			{"123", pql.Decimal{123, 0}, ""},
+			{"-12300", pql.Decimal{-123, -2}, ""},
+			{"+012300", pql.Decimal{123, -2}, ""},
+			{"12300", pql.Decimal{123, -2}, ""},
+			{"12300.", pql.Decimal{123, -2}, ""},
+			{"12300.0", pql.Decimal{123, -2}, ""},
+			{"123.0", pql.Decimal{123, 0}, ""},
 
-			{".123", pql.Decimal{false, 123, 3}, ""},
-			{"0.123", pql.Decimal{false, 123, 3}, ""},
-			{"0.001230", pql.Decimal{false, 123, 5}, ""},
-			{" 0.001230 ", pql.Decimal{false, 123, 5}, ""},
-			{"-0.001230 ", pql.Decimal{true, 123, 5}, ""},
+			{".123", pql.Decimal{123, 3}, ""},
+			{"0.123", pql.Decimal{123, 3}, ""},
+			{"0.001230", pql.Decimal{123, 5}, ""},
+			{" 0.001230 ", pql.Decimal{123, 5}, ""},
+			{"-0.001230 ", pql.Decimal{-123, 5}, ""},
 
-			// uint32 edges.
-			{".000004294967295", pql.Decimal{false, 4294967295, 15}, ""},
-			{"-.000004294967295", pql.Decimal{true, 4294967295, 15}, ""},
-			{"-42949.67295", pql.Decimal{true, 4294967295, 5}, ""},
-			{"42949.67295", pql.Decimal{false, 4294967295, 5}, ""},
-			{"-42949.67295", pql.Decimal{true, 4294967295, 5}, ""},
-			{"4294967295000", pql.Decimal{false, 4294967295, -3}, ""},
-			{"-4294967295000", pql.Decimal{true, 4294967295, -3}, ""},
+			// int64 edges.
+			{".000009223372036854775807", pql.Decimal{9223372036854775807, 24}, ""},
+			{"-.000009223372036854775807", pql.Decimal{-9223372036854775807, 24}, ""},
+			{"92233720368547.75807", pql.Decimal{9223372036854775807, 5}, ""},
+			{"-92233720368547.75807", pql.Decimal{-9223372036854775807, 5}, ""},
+			{"9223372036854775807000", pql.Decimal{9223372036854775807, -3}, ""},
+			{"-9223372036854775807000", pql.Decimal{-9223372036854775807, -3}, ""},
 
 			// Error cases.
 			{"", pql.Decimal{}, "decimal string is empty"},
@@ -72,20 +71,20 @@ func TestDecimal(t *testing.T) {
 			{"*0.123", pql.Decimal{}, "invalid syntax"},
 			{"abc", pql.Decimal{}, "invalid syntax"},
 			{"0.12.3", pql.Decimal{}, "invalid decimal string"},
-			{"--12300", pql.Decimal{}, "invalid syntax"},
-			{"429496729.6", pql.Decimal{}, "value out of range"},
-			{"-429496729.6", pql.Decimal{}, "value out of range"},
-			{"4294967296000", pql.Decimal{}, "value out of range"},
-			{"-4294967296000", pql.Decimal{}, "value out of range"},
+			{"--12300", pql.Decimal{}, "invalid negative value"},
+			{"922337203685477580.8", pql.Decimal{}, "value out of range"},
+			{"-922337203685477580.8", pql.Decimal{}, "value out of range"},
+			{"9223372036854775808000", pql.Decimal{}, "value out of range"},
+			{"-9223372036854775808000", pql.Decimal{}, "value out of range"},
 		}
 		for i, test := range tests {
 			dec, err := pql.ParseDecimal(test.s)
 			if test.expErr != "" {
 				if err == nil || !strings.Contains(err.Error(), test.expErr) {
-					t.Fatalf("expected error to contain: %s, but got: %v", test.expErr, err)
+					t.Fatalf("test %d expected error to contain: %s, but got: %v", i, test.expErr, err)
 				}
 			} else if err != nil {
-				t.Fatalf("parsing string `%s`: %s", test.s, err)
+				t.Fatalf("test %d parsing string `%s`: %s", i, test.s, err)
 			} else if dec != test.exp {
 				t.Fatalf("test %d expected: %v, but got: %v", i, test.exp, dec)
 			}
@@ -98,22 +97,22 @@ func TestDecimal(t *testing.T) {
 			scale int64
 			exp   int64
 		}{
-			{pql.Decimal{false, 0, 0}, 0, 0},  // 0 : 0
-			{pql.Decimal{false, 0, 0}, 1, 0},  // 0 : 0.0
-			{pql.Decimal{false, 0, 0}, -1, 0}, // 0 : 0
+			{pql.Decimal{0, 0}, 0, 0},  // 0 : 0
+			{pql.Decimal{0, 0}, 1, 0},  // 0 : 0.0
+			{pql.Decimal{0, 0}, -1, 0}, // 0 : 0
 
-			{pql.Decimal{false, 1234567, 4}, 5, 12345670}, // 123.4567 : 123.45670
-			{pql.Decimal{false, 1234567, 4}, 4, 1234567},  // 123.4567 : 123.4567
-			{pql.Decimal{false, 1234567, 4}, 3, 123456},   // 123.4567 : 123.456
+			{pql.Decimal{1234567, 4}, 5, 12345670}, // 123.4567 : 123.45670
+			{pql.Decimal{1234567, 4}, 4, 1234567},  // 123.4567 : 123.4567
+			{pql.Decimal{1234567, 4}, 3, 123456},   // 123.4567 : 123.456
 
-			{pql.Decimal{true, 1234567, 4}, 5, -12345670}, // -123.4567 : -123.45670
-			{pql.Decimal{true, 1234567, 4}, 4, -1234567},  // -123.4567 : -123.4567
-			{pql.Decimal{true, 1234567, 4}, 3, -123456},   // -123.4567 : -123.456
+			{pql.Decimal{-1234567, 4}, 5, -12345670}, // -123.4567 : -123.45670
+			{pql.Decimal{-1234567, 4}, 4, -1234567},  // -123.4567 : -123.4567
+			{pql.Decimal{-1234567, 4}, 3, -123456},   // -123.4567 : -123.456
 
-			{pql.Decimal{false, 123, -2}, 5, 1230000000}, // 12300 : 12300.00000
-			{pql.Decimal{false, 123, -2}, -1, 1230},      // 12300 : 1230
-			{pql.Decimal{false, 123, 1}, -1, 1},          // 12.3 : 1
-			{pql.Decimal{false, 123, 1}, -2, 0},          // 12.3 : 0
+			{pql.Decimal{123, -2}, 5, 1230000000}, // 12300 : 12300.00000
+			{pql.Decimal{123, -2}, -1, 1230},      // 12300 : 1230
+			{pql.Decimal{123, 1}, -1, 1},          // 12.3 : 1
+			{pql.Decimal{123, 1}, -2, 0},          // 12.3 : 0
 		}
 		for i, test := range tests {
 			v := test.dec.ToInt64(test.scale)
