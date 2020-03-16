@@ -194,6 +194,10 @@ func OptFieldTypeDecimal(scale int64, minmax ...int64) FieldOption {
 		fo.Max = math.MaxInt64
 		if len(minmax) == 2 {
 			min, max := minmax[0], minmax[1]
+			if scale != 0 {
+				min = int64(float64(min) * math.Pow10(int(scale)))
+				max = int64(float64(max) * math.Pow10(int(scale)))
+			}
 			if min > max {
 				return errors.Errorf("decimal field min cannot be greater than max, got %d, %d", min, max)
 			}
@@ -202,7 +206,13 @@ func OptFieldTypeDecimal(scale int64, minmax ...int64) FieldOption {
 		} else if len(minmax) > 2 {
 			return errors.Errorf("unknown extra parameters beyond min and max: %v", minmax)
 		} else if len(minmax) == 1 {
-			fo.Min = minmax[0]
+			// It's not necessary to handle the scale==0 case separately,
+			// but it avoids the type conversion.
+			if scale == 0 {
+				fo.Min = minmax[0]
+			} else {
+				fo.Min = int64(float64(minmax[0]) * math.Pow10(int(scale)))
+			}
 		}
 		fo.Type = FieldTypeDecimal
 		fo.Base = bsiBase(fo.Min, fo.Max)
@@ -1447,7 +1457,7 @@ func (f *Field) MaxForShard(shard uint64, filter *Row) (ValCount, error) {
 	valCount := ValCount{Count: int64(cnt)}
 
 	if f.Options().Type == FieldTypeDecimal {
-		valCount.FloatVal = float64(max) / math.Pow10(int(bsig.Scale))
+		valCount.FloatVal = float64(max+bsig.Base) / math.Pow10(int(bsig.Scale))
 	} else {
 		valCount.Val = max + bsig.Base
 	}
@@ -1482,7 +1492,7 @@ func (f *Field) MinForShard(shard uint64, filter *Row) (ValCount, error) {
 	valCount := ValCount{Count: int64(cnt)}
 
 	if f.Options().Type == FieldTypeDecimal {
-		valCount.FloatVal = float64(min) / math.Pow10(int(bsig.Scale))
+		valCount.FloatVal = float64(min+bsig.Base) / math.Pow10(int(bsig.Scale))
 	} else {
 		valCount.Val = min + bsig.Base
 	}

@@ -62,7 +62,7 @@ func (q *Query) lastCallStackElem() *callStackElem {
 
 func (q *Query) addPosNum(key, value string) {
 	q.addField(key)
-	q.addNumVal(value)
+	q.addNumVal(value, false)
 }
 
 func (q *Query) addPosStr(key, value string) {
@@ -87,9 +87,9 @@ func (q *Query) endConditional() {
 	if len(q.conditional) != 5 {
 		panic(fmt.Sprintf("conditional of wrong length: %#v", q.conditional))
 	}
-	low := parseNum(q.conditional[0])
+	low := parseNum(q.conditional[0], false)
 	field := q.conditional[2]
-	high := parseNum(q.conditional[4])
+	high := parseNum(q.conditional[4], false)
 
 	var op Token
 	switch q.conditional[1] + q.conditional[3] {
@@ -157,12 +157,12 @@ func (q *Query) addVal(val interface{}) {
 	elem.lastCond = ILLEGAL
 }
 
-func (q *Query) addNumVal(val string) {
+func (q *Query) addNumVal(val string, asFloat bool) {
 	elem := q.lastCallStackElem()
 	if elem == nil || elem.lastField == "" {
 		panic(fmt.Sprintf("addIntVal called with '%s' when lastField is empty", val))
 	}
-	ival := parseNum(val)
+	ival := parseNum(val, asFloat)
 	if elem.inList {
 		if elem.lastCond != ILLEGAL {
 			list := elem.call.Args[elem.lastField].(*Condition).Value.([]interface{})
@@ -968,11 +968,15 @@ func joinUint64Slice(a []uint64) string {
 	return "[" + strings.Join(other, ",") + "]"
 }
 
-func parseNum(val string) interface{} {
+func parseNum(val string, asFloat bool) interface{} {
 	var ival interface{}
 	var err error
 	if strings.Contains(val, ".") {
-		ival, err = strconv.ParseFloat(val, 64)
+		if asFloat {
+			ival, err = strconv.ParseFloat(val, 64)
+		} else {
+			ival, err = ParseDecimal(val)
+		}
 	} else {
 		ival, err = strconv.ParseInt(val, 10, 64)
 	}

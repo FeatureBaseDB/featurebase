@@ -6,22 +6,27 @@ type PQL Peg {
 
 
 Calls <- sp (Call sp)* !.
-Call <-  'Set' {p.startCall("Set")} open col comma args (comma timestamp)? close {p.endCall()}
-       / 'SetRowAttrs' {p.startCall("SetRowAttrs")} open posfield comma row comma args close {p.endCall()}
-       / 'SetColumnAttrs' {p.startCall("SetColumnAttrs")} open col comma args close {p.endCall()}
-       / 'Clear' {p.startCall("Clear")} open col comma args close {p.endCall()}
-       / 'ClearRow' {p.startCall("ClearRow")} open arg close {p.endCall()}
-       / 'Store' {p.startCall("Store")} open Call comma arg close {p.endCall()}
+Call <-  'Set' {p.startCall("Set")} open col comma dargs (comma timestamp)? close {p.endCall()}
+       / 'SetRowAttrs' {p.startCall("SetRowAttrs")} open posfield comma row comma fargs close {p.endCall()}
+       / 'SetColumnAttrs' {p.startCall("SetColumnAttrs")} open col comma fargs close {p.endCall()}
+       / 'Clear' {p.startCall("Clear")} open col comma dargs close {p.endCall()}
+       / 'ClearRow' {p.startCall("ClearRow")} open darg close {p.endCall()}
+       / 'Store' {p.startCall("Store")} open Call comma darg close {p.endCall()}
        / 'TopN' {p.startCall("TopN")} open posfield (comma allargs)? close {p.endCall()}
        / 'Rows' {p.startCall("Rows")} open posfield (comma allargs)? close {p.endCall()}
-       / 'Range' {p.startCall("Range")} open field sp '=' sp value comma 'from='? {p.addField("from")} timestampfmt {p.addVal(buffer[begin:end])} comma 'to='? sp {p.addField("to")} timestampfmt {p.addVal(buffer[begin:end])} close {p.endCall()}
+       / 'Range' {p.startCall("Range")} open field sp '=' sp fvalue comma 'from='? {p.addField("from")} timestampfmt {p.addVal(buffer[begin:end])} comma 'to='? sp {p.addField("to")} timestampfmt {p.addVal(buffer[begin:end])} close {p.endCall()}
        / < IDENT > { p.startCall(buffer[begin:end] ) } open allargs comma? close { p.endCall() }
-allargs <- Call (comma Call)* (comma args)? / args / sp
-args <- arg (comma args)? sp
-arg <- (   field sp '=' sp value
-         / field sp COND sp value
-         / conditional
-         )
+allargs <- Call (comma Call)* (comma dargs)? / dargs / sp
+fargs <- farg (comma fargs)? sp
+farg <- ( field sp '=' sp fvalue
+        / field sp COND sp fvalue
+        / conditional
+        )
+dargs <- darg (comma dargs)? sp
+darg <- ( field sp '=' sp dvalue
+        / field sp COND sp dvalue
+        / conditional
+        )
 COND <- ( '><' { p.addBTWN() }
         / '<=' { p.addLTE() }
         / '>=' { p.addGTE() }
@@ -36,21 +41,38 @@ condint <- < '-'? [0-9]* '.' [0-9]+ / '0' / '-'? [1-9] [0-9]* > sp {p.condAdd(bu
 condLT <- <('<=' / '<')> sp {p.condAdd(buffer[begin:end])}
 condfield <- <fieldExpr> sp {p.condAdd(buffer[begin:end])}
 
-value <- ( item
-         / lbrack { p.startList() } list rbrack { p.endList() }
+dvalue <- ( ditem
+         / lbrack { p.startList() } dlist rbrack { p.endList() }
          )
-list <- item (comma list)?
-item <- ( 'null' &(comma / sp close) { p.addVal(nil) }
+fvalue <- ( fitem
+          / lbrack { p.startList() } flist rbrack { p.endList() }
+          )
+dlist <- ditem (comma dlist)?
+flist <- fitem (comma flist)?
+ditem <- ( itema
+         / decimal
+         / itemb
+         )
+fitem <- ( itema
+         / float
+         / itemb
+         )
+itema <- ( 'null' &(comma / sp close) { p.addVal(nil) }
          / 'true' &(comma / sp close) { p.addVal(true) }
          / 'false' &(comma / sp close) { p.addVal(false) }
          / timestampfmt { p.addVal(buffer[begin:end]) }
-         / < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(buffer[begin:end]) }
-         / < '-'? '.'[0-9]+ > { p.addNumVal(buffer[begin:end]) }
-         / < IDENT > { p.startCall(buffer[begin:end]) } open allargs comma? close { p.addVal(p.endCall()) }
+         )
+itemb <- ( < IDENT > { p.startCall(buffer[begin:end]) } open allargs comma? close { p.addVal(p.endCall()) }
          / < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > { p.addVal(buffer[begin:end]) }
          / < '"'  doublequotedstring '"' > { s, _ := strconv.Unquote(buffer[begin:end]); p.addVal(s) }
          / '\'' < singlequotedstring > '\'' { p.addVal(buffer[begin:end]) }
          )
+float <- ( < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(buffer[begin:end], true) }
+         / < '-'? '.'[0-9]+ > { p.addNumVal(buffer[begin:end], true) }
+         )
+decimal <- ( < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(buffer[begin:end], false) }
+           / < '-'? '.'[0-9]+ > { p.addNumVal(buffer[begin:end], false) }
+           )
 
 doublequotedstring <- ( '\\"' / '\\\\' / [^"] )*
 singlequotedstring <- ( '\\\'' / '\\\\' / [^'] )*
