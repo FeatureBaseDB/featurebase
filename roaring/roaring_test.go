@@ -457,6 +457,12 @@ func TestBitmap_RunCountRange(t *testing.T) {
 	if n := bm2.CountRange(3, 2); n != 0 {
 		t.Fatalf("unexpected n: %d", n)
 	}
+
+	bm3 := roaring.NewFileBitmap(1, 2, 3, 4)
+	bm3.Optimize() // convert to runs
+	if n := bm3.CountRange(1, 3); n != 2 {
+		t.Fatalf("unexpected n: %d", n)
+	}
 }
 
 func TestBitmap_Intersection(t *testing.T) {

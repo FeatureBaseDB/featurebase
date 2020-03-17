@@ -2348,18 +2348,18 @@ func (c *Container) runCountRange(start, end int32) (n int32) {
 			break
 		}
 		// iv is superset of range
-		if int32(iv.start) < start && int32(iv.last) > end {
+		if int32(iv.start) <= start && int32(iv.last) >= end {
 			return end - start
 		}
 		// iv is subset of range
-		if int32(iv.start) >= start && int32(iv.last) < end {
+		if int32(iv.start) >= start && int32(iv.last) <= end {
 			n += iv.runlen()
 		}
-		// iv overlaps beginning of range
+		// iv overlaps beginning of range without being a subset
 		if int32(iv.start) < start && int32(iv.last) < end {
 			n += int32(iv.last) - start + 1
 		}
-		// iv overlaps end of range
+		// iv overlaps end of range without being a subset
 		if int32(iv.start) > start && int32(iv.last) >= end {
 			n += end - int32(iv.start)
 		}
