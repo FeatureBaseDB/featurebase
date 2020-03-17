@@ -664,10 +664,13 @@ func (s *Server) monitorAntiEntropy() {
 		}
 		// Sync holders.
 		s.logger.Printf("holder sync beginning")
+		s.cluster.muAntiEntropy.Lock()
 		if err := s.syncer.SyncHolder(); err != nil {
+			s.cluster.muAntiEntropy.Unlock()
 			s.logger.Printf("holder sync error: err=%s", err)
 			continue
 		}
+		s.cluster.muAntiEntropy.Unlock()
 
 		// Record successful sync in log.
 		s.logger.Printf("holder sync complete")
