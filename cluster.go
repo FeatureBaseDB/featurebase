@@ -223,6 +223,7 @@ type cluster struct { // nolint: maligned
 	joined  bool
 
 	abortAntiEntropyCh chan struct{}
+	muAntiEntropy      sync.Mutex
 
 	translationSyncer translationSyncer
 
@@ -483,8 +484,6 @@ func (c *cluster) unprotectedSetState(state string) {
 		if err := c.translationSyncer.Reset(); err != nil {
 			c.logger.Printf("error resetting translation syncer: %s", err)
 		}
-	case ClusterStateResizing:
-		c.abortAntiEntropy()
 	}
 
 	// TODO: consider NOT running cleanup on an active node that has
@@ -1832,6 +1831,17 @@ func (c *cluster) ReceiveEvent(e *NodeEvent) (err error) {
 
 // nodeJoin should only be called by the coordinator.
 func (c *cluster) nodeJoin(node *Node) error {
+	c.abortAntiEntropy()
+	// Technically there is a race condition here which could
+	// allow the anti-entropy process to re-start (and acquire
+	// the lock) before this lock has time to succeed. In that
+	// case, the user would have to wait through an entire
+	// anti-entropy cycle. We decided it wasn't worth the
+	// complexity (of, for example, implementing this with
+	// channels) to avoid that rare case.
+	c.muAntiEntropy.Lock()
+	defer c.muAntiEntropy.Unlock()
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.logger.Printf("node join event on coordinator, node: %s, id: %s", node.URI, node.ID)
@@ -1902,6 +1912,17 @@ func (c *cluster) nodeJoin(node *Node) error {
 
 // nodeLeave initiates the removal of a node from the cluster.
 func (c *cluster) nodeLeave(nodeID string) error {
+	c.abortAntiEntropy()
+	// Technically there is a race condition here which could
+	// allow the anti-entropy process to re-start (and acquire
+	// the lock) before this lock has time to succeed. In that
+	// case, the user would have to wait through an entire
+	// anti-entropy cycle. We decided it wasn't worth the
+	// complexity (of, for example, implementing this with
+	// channels) to avoid that rare case.
+	c.muAntiEntropy.Lock()
+	defer c.muAntiEntropy.Unlock()
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// Refuse the request if this is not the coordinator.
