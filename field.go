@@ -195,8 +195,19 @@ func OptFieldTypeDecimal(scale int64, minmax ...int64) FieldOption {
 		if len(minmax) == 2 {
 			min, max := minmax[0], minmax[1]
 			if scale != 0 {
-				min = int64(float64(min) * math.Pow10(int(scale)))
-				max = int64(float64(max) * math.Pow10(int(scale)))
+				// If the min/max provided are already on the boundary of int64,
+				// then we don't want to operate on them and cause overflow.
+				// There are still overflow scenarios where a user provides a
+				// min/max which is not on the boundary, but overflow once the
+				// scale is applied. This does not address those cases, but at
+				// least it addresses the default case (where a min/max is not
+				// provided).
+				if min != math.MinInt64 {
+					min = int64(float64(min) * math.Pow10(int(scale)))
+				}
+				if max != math.MaxInt64 {
+					max = int64(float64(max) * math.Pow10(int(scale)))
+				}
 			}
 			if min > max {
 				return errors.Errorf("decimal field min cannot be greater than max, got %d, %d", min, max)
@@ -208,7 +219,7 @@ func OptFieldTypeDecimal(scale int64, minmax ...int64) FieldOption {
 		} else if len(minmax) == 1 {
 			// It's not necessary to handle the scale==0 case separately,
 			// but it avoids the type conversion.
-			if scale == 0 {
+			if scale == 0 || minmax[0] == math.MinInt64 {
 				fo.Min = minmax[0]
 			} else {
 				fo.Min = int64(float64(minmax[0]) * math.Pow10(int(scale)))
