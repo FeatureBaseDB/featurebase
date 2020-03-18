@@ -654,6 +654,31 @@ func TestIntField_MinMaxForShard(t *testing.T) {
 	}
 }
 
+func TestDecimalField_MinMaxBoundaries(t *testing.T) {
+	for i, test := range []struct {
+		min    int64
+		max    int64
+		scale  int64
+		expmin int64
+		expmax int64
+	}{
+		{min: math.MinInt64, max: math.MaxInt64, scale: 3, expmin: math.MinInt64, expmax: math.MaxInt64},
+		{min: 44, max: 88, scale: 3, expmin: 44000, expmax: 88000},
+		{min: -44, max: 88, scale: 3, expmin: -44000, expmax: 88000},
+	} {
+		t.Run("minmax"+strconv.Itoa(i), func(t *testing.T) {
+			f := MustOpenField(OptFieldTypeDecimal(test.scale, test.min, test.max))
+
+			if f.Options().Min != test.expmin {
+				t.Fatalf("expected min: %v, but got: %v", test.expmin, f.Options().Min)
+			}
+			if f.Options().Max != test.expmax {
+				t.Fatalf("expected max: %v, but got: %v", test.expmax, f.Options().Max)
+			}
+		})
+	}
+}
+
 func TestDecimalField_MinMaxForShard(t *testing.T) {
 	f := MustOpenField(OptFieldTypeDecimal(3))
 
