@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pilosa/pilosa/v2/roaring"
 )
@@ -98,6 +99,7 @@ func TestHolder_Optn(t *testing.T) {
 		if os.Geteuid() == 0 {
 			t.Skip("Skipping permissions test since user is root.")
 		}
+		AvailableShardFileFlushDuration.Set(100 * time.Millisecond)
 		h := newHolder()
 		defer h.Close()
 
@@ -182,6 +184,7 @@ func TestHolder_Optn(t *testing.T) {
 
 // Ensure holder can clean up orphaned fragments.
 func TestHolderCleaner_CleanHolder(t *testing.T) {
+	AvailableShardFileFlushDuration.Set(100 * time.Millisecond) //shorten the default time to force a file write
 	cluster := NewTestCluster(2)
 
 	// Create a local holder.
@@ -223,6 +226,7 @@ func TestHolderCleaner_CleanHolder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("adding remote shards: %v", err)
 	}
+	time.Sleep(2 * AvailableShardFileFlushDuration.Get())
 
 	// Keep replication the same and ensure we get the expected results.
 	cluster.ReplicaN = 2
