@@ -800,52 +800,21 @@ func (cond *Condition) StringWithSubj(subj string) string {
 	case EQ, NEQ, LT, LTE, GT, GTE:
 		return fmt.Sprintf("%s%s", subj, cond.String())
 	case BETWEEN, BTWN_LT_LTE, BTWN_LTE_LT, BTWN_LT_LT:
-		val, ok := cond.Int64SliceValue() // TODO: this should depend on subj type (int64 vs. uint64)
+		val, ok := cond.StringSliceValue()
 		if !ok || len(val) < 2 {
 			return ""
 		}
 		if cond.Op == BETWEEN {
-			return fmt.Sprintf("%d<=%s<=%d", val[0], subj, val[1])
+			return fmt.Sprintf("%s<=%s<=%s", val[0], subj, val[1])
 		} else if cond.Op == BTWN_LT_LTE {
-			return fmt.Sprintf("%d<%s<=%d", val[0], subj, val[1])
+			return fmt.Sprintf("%s<%s<=%s", val[0], subj, val[1])
 		} else if cond.Op == BTWN_LTE_LT {
-			return fmt.Sprintf("%d<=%s<%d", val[0], subj, val[1])
+			return fmt.Sprintf("%s<=%s<%s", val[0], subj, val[1])
 		} else if cond.Op == BTWN_LT_LT {
-			return fmt.Sprintf("%d<%s<%d", val[0], subj, val[1])
+			return fmt.Sprintf("%s<%s<%s", val[0], subj, val[1])
 		}
 	}
 	return ""
-}
-
-// IntSliceValue reads cond.Value as a slice of uint64.
-// If the value is a slice of uint64 it will convert
-// it to []int64. Otherwise, if it is not a []int64 it will return an error.
-//
-// TODO(2.0) this is now only referenced in a test and should probably
-// be removed. The functionality was replaced by getCondIntSlice in
-// pilosa/executor.go which needed to check for floating point values
-// and also have access to the Pilosa field to see if floating point
-// values were valid and how they needed to be scaled.
-func (cond *Condition) IntSliceValue() ([]int64, error) {
-	val := cond.Value
-
-	switch tval := val.(type) {
-	case []interface{}:
-		ret := make([]int64, len(tval))
-		for i, v := range tval {
-			switch tv := v.(type) {
-			case int64:
-				ret[i] = tv
-			case uint64:
-				ret[i] = int64(tv)
-			default:
-				return nil, fmt.Errorf("unexpected value type %T in IntSliceValue, val %v", tv, tv)
-			}
-		}
-		return ret, nil
-	default:
-		return nil, fmt.Errorf("unexpected type %T in IntSliceValue, val %v", tval, tval)
-	}
 }
 
 func (cond *Condition) Uint64Value() (uint64, bool) {
@@ -911,6 +880,35 @@ func (cond *Condition) Int64SliceValue() ([]int64, bool) {
 				ret[i] = tv
 			case uint64:
 				ret[i] = int64(tv)
+			default:
+				return nil, false
+			}
+		}
+		return ret, true
+	}
+
+	return nil, false
+}
+
+// StringSliceValue returns the value(s) of the conditional
+// as a slice of strings. For example, if cond.Value is
+// []int64{-10,20}, this will return []string{"-10","20"}.
+// It also returns a bool indicating that the conversion
+// succeeded.
+func (cond *Condition) StringSliceValue() ([]string, bool) {
+	val := cond.Value
+
+	switch tval := val.(type) {
+	case []interface{}:
+		ret := make([]string, len(tval))
+		for i, v := range tval {
+			switch tv := v.(type) {
+			case int64:
+				ret[i] = strconv.FormatInt(tv, 10)
+			case uint64:
+				ret[i] = strconv.FormatUint(tv, 10)
+			case Decimal:
+				ret[i] = tv.String()
 			default:
 				return nil, false
 			}
