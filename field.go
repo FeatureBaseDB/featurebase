@@ -1084,17 +1084,19 @@ func (f *Field) deleteView(name string) error {
 // Row returns a row of the standard view.
 // It seems this method is only being used by the test
 // package, and the fact that it's only allowed on
-// `set` fields is odd. This may be considered for
-// deprecation in a future version.
+// `set`,`mutex`, and `bool` fields is odd. This may
+// be considered for deprecation in a future version.
 func (f *Field) Row(rowID uint64) (*Row, error) {
-	if f.Type() != FieldTypeSet {
+	switch f.Type() {
+	case FieldTypeSet, FieldTypeMutex, FieldTypeBool:
+		view := f.view(viewStandard)
+		if view == nil {
+			return nil, ErrInvalidView
+		}
+		return view.row(rowID), nil
+	default:
 		return nil, errors.Errorf("row method unsupported for field type: %s", f.Type())
 	}
-	view := f.view(viewStandard)
-	if view == nil {
-		return nil, ErrInvalidView
-	}
-	return view.row(rowID), nil
 }
 
 // SetBit sets a bit on a view within the field.

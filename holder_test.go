@@ -409,9 +409,13 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating field f0: %v", err)
 	}
-	_, err = c[0].API.CreateField(context.Background(), "y", "z", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+	_, err = c[0].API.CreateField(context.Background(), "y", "z", pilosa.OptFieldTypeMutex(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
 	if err != nil {
 		t.Fatalf("creating field z in y: %v", err)
+	}
+	_, err = c[0].API.CreateField(context.Background(), "y", "b", pilosa.OptFieldTypeBool())
+	if err != nil {
+		t.Fatalf("creating field b in y: %v", err)
 	}
 
 	hldr0 := &test.Holder{Holder: c[0].Server.Holder()}
@@ -427,6 +431,7 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 
 	// Set a bit to create the fragment.
 	hldr0.SetBit("y", "z", 0, 0)
+	hldr0.SetBit("y", "b", 0, 0) // rowID = 0 means false
 
 	// Set data on the remote holder.
 	hldr1.SetBit("i", "f", 0, 4000)
@@ -436,6 +441,10 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	hldr1.SetBit("y", "z", 10, (3*ShardWidth)+4)
 	hldr1.SetBit("y", "z", 10, (3*ShardWidth)+5)
 	hldr1.SetBit("y", "z", 10, (3*ShardWidth)+7)
+
+	hldr1.SetBit("y", "b", 1, (3*ShardWidth)+4) // true
+	hldr1.SetBit("y", "b", 0, (3*ShardWidth)+5) // false
+	hldr1.SetBit("y", "b", 1, (3*ShardWidth)+7) // true
 
 	err = c[0].Server.SyncData()
 	if err != nil {
@@ -470,6 +479,13 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 
 		if a := hldr.Row("y", "z", 10).Columns(); !reflect.DeepEqual(a, []uint64{(3 * ShardWidth) + 4, (3 * ShardWidth) + 5, (3 * ShardWidth) + 7}) {
 			t.Errorf("unexpected columns(%d/y/z): %+v", i, a)
+		}
+
+		if a := hldr.Row("y", "b", 0).Columns(); !reflect.DeepEqual(a, []uint64{0, (3 * ShardWidth) + 5}) {
+			t.Errorf("unexpected false columns(%d/y/b): %+v", i, a)
+		}
+		if a := hldr.Row("y", "b", 1).Columns(); !reflect.DeepEqual(a, []uint64{(3 * ShardWidth) + 4, (3 * ShardWidth) + 7}) {
+			t.Errorf("unexpected true columns(%d/y/b): %+v", i, a)
 		}
 	}
 }
