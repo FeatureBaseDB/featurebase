@@ -415,12 +415,6 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 		return newNotFoundError(ErrFieldNotFound)
 	}
 
-	// only set and time fields are supported
-	// TODO: get rid of this (need to confirm other field types)
-	if field.Type() != FieldTypeSet && field.Type() != FieldTypeTime && field.Type() != FieldTypeInt && field.Type() != FieldTypeDecimal {
-		return NewBadRequestError(errors.Errorf("roaring import is only supported for set, time, int, and decimal fields, not '%s' fields.", field.Type()))
-	}
-
 	errCh := make(chan error, len(nodes))
 
 	for _, node := range nodes {
