@@ -15,7 +15,6 @@
 package pql_test
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/pilosa/pilosa/v2/pql"
@@ -43,27 +42,24 @@ func TestCall_String(t *testing.T) {
 	})
 }
 
-// Ensure condition can handle values for BETWEEN operator.
-func TestCondition_Value(t *testing.T) {
-	t.Run("Between Values", func(t *testing.T) {
-		for _, tt := range []struct {
-			val []interface{}
-			exp []int64
-		}{
-			{[]interface{}{int64(4), int64(8)}, []int64{4, 8}},
-			{[]interface{}{uint64(4), uint64(8)}, []int64{4, 8}},
-			{[]interface{}{uint64(1), uint64(2), uint64(3)}, []int64{1, 2, 3}},
-		} {
-			c := &pql.Condition{
-				Op:    pql.BETWEEN,
-				Value: tt.val,
-			}
-			v, err := c.IntSliceValue()
-			if err != nil {
-				t.Fatal(err)
-			} else if !reflect.DeepEqual(v, tt.exp) {
-				t.Fatalf("invalid between values. expected: %v, got %v", tt.exp, v)
-			}
+// Ensure condition string with subject is correct.
+func TestCondition_StringWithSubj(t *testing.T) {
+	op := pql.BETWEEN
+	subj := "subj"
+	for _, tt := range []struct {
+		val []interface{}
+		exp string
+	}{
+		{[]interface{}{int64(4), int64(8)}, "4<=subj<=8"},
+		{[]interface{}{uint64(5), uint64(9)}, "5<=subj<=9"},
+		{[]interface{}{pql.Decimal{Value: -401, Scale: 2}, pql.Decimal{Value: 802, Scale: 1}}, "-4.01<=subj<=80.2"},
+	} {
+		c := &pql.Condition{
+			Op:    op,
+			Value: tt.val,
 		}
-	})
+		if sws := c.StringWithSubj(subj); sws != tt.exp {
+			t.Fatalf("invalid between string. expected: %s, got %s", tt.exp, sws)
+		}
+	}
 }
