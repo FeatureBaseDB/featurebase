@@ -17,6 +17,8 @@ package boltdb
 import (
 	"bytes"
 	"context"
+	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -341,6 +343,42 @@ func (s *TranslateStore) MaxID() (max uint64, err error) {
 		return 0, err
 	}
 	return max, nil
+}
+
+// WriteTo writes the contents of the store to the writer.
+func (s *TranslateStore) WriteTo(w io.Writer) (int64, error) {
+	tx, err := s.db.Begin(false)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	return tx.WriteTo(w)
+}
+
+// ReadFrom reads the content and overwrites the existing store.
+func (s *TranslateStore) ReadFrom(r io.Reader) (int64, error) {
+	// Close store.
+	if err := s.Close(); err != nil {
+		return 0, errors.Wrap(err, "closing store")
+	}
+
+	buf := bytes.NewBuffer(nil)
+	n, err := buf.ReadFrom(r)
+	if err != nil {
+		return n, errors.Wrap(err, "reading from reader")
+	}
+
+	// Overwrite the store file.
+	if err := ioutil.WriteFile(s.Path, buf.Bytes(), 0666); err != nil {
+		return n, errors.Wrap(err, "writing file")
+	}
+
+	// Re-open the store.
+	if err := s.Open(); err != nil {
+		return n, errors.Wrap(err, "re-opening store")
+	}
+
+	return n, nil
 }
 
 // MaxID returns the highest id in the store.

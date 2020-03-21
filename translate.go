@@ -77,6 +77,15 @@ type TranslateStore interface {
 
 	// Returns a reader from the given ID offset.
 	EntryReader(ctx context.Context, offset uint64) (TranslateEntryReader, error)
+
+	// WriteTo ensures that the TranslateStore implements io.WriterTo.
+	// It should write the contents of the store to the writer.
+	WriteTo(io.Writer) (int64, error)
+
+	// ReadFrom ensures that the TranslateStore implements io.ReaderFrom.
+	// It should read from the reader and replace the data store with
+	// the read payload.
+	ReadFrom(io.Reader) (int64, error)
 }
 
 // OpenTranslateStoreFunc represents a function for instantiating and opening a TranslateStore.
@@ -403,6 +412,18 @@ func (s *InMemTranslateStore) EntryReader(ctx context.Context, offset uint64) (T
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return newInMemTranslateEntryReader(ctx, s, offset), nil
+}
+
+// TODO: implement this
+// WriteTo writes the contents of the store to the writer.
+func (s *InMemTranslateStore) WriteTo(w io.Writer) (int64, error) {
+	return 0, nil
+}
+
+// TODO: implement this
+// ReadFrom ensures that the TranslateStore implements io.ReaderFrom.
+func (s *InMemTranslateStore) ReadFrom(r io.Reader) (int64, error) {
+	return 0, nil
 }
 
 // MaxID returns the highest identifier in the store.

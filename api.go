@@ -692,6 +692,30 @@ func (api *API) FragmentData(ctx context.Context, indexName, fieldName, viewName
 	return f, nil
 }
 
+// TranslateData returns all translation data in the specified partition.
+func (api *API) TranslateData(ctx context.Context, indexName string, partition int) (io.WriterTo, error) {
+	span, _ := tracing.StartSpanFromContext(ctx, "API.TranslateData")
+	defer span.Finish()
+
+	if err := api.validate(apiTranslateData); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
+	}
+
+	// Retrieve index from holder.
+	idx := api.holder.Index(indexName)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	}
+
+	// Retrieve translatestore from holder.
+	store := idx.TranslateStore(partition)
+	if store == nil {
+		return nil, ErrTranslateStoreNotFound
+	}
+
+	return store, nil
+}
+
 // Hosts returns a list of the hosts in the cluster including their ID,
 // URL, and which is the coordinator.
 func (api *API) Hosts(ctx context.Context) []*Node {
@@ -1586,6 +1610,7 @@ const (
 	apiFragmentBlockData
 	apiFragmentBlocks
 	apiFragmentData
+	apiTranslateData
 	apiField
 	apiFieldAttrDiff
 	//apiHosts // not implemented
@@ -1616,8 +1641,9 @@ var methodsCommon = map[apiMethod]struct{}{
 }
 
 var methodsResizing = map[apiMethod]struct{}{
-	apiFragmentData: {},
-	apiResizeAbort:  {},
+	apiFragmentData:  {},
+	apiTranslateData: {},
+	apiResizeAbort:   {},
 }
 
 var methodsNormal = map[apiMethod]struct{}{

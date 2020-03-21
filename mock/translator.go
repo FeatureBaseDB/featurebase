@@ -16,6 +16,7 @@ package mock
 
 import (
 	"context"
+	"io"
 
 	"github.com/pilosa/pilosa/v2"
 )
@@ -78,6 +79,16 @@ func (s *TranslateStore) ForceSet(id uint64, key string) error {
 
 func (s *TranslateStore) EntryReader(ctx context.Context, offset uint64) (pilosa.TranslateEntryReader, error) {
 	return s.EntryReaderFunc(ctx, offset)
+}
+
+// TODO: implement this
+func (s *TranslateStore) WriteTo(w io.Writer) (int64, error) {
+	return 0, nil
+}
+
+// TODO: implement this
+func (s *TranslateStore) ReadFrom(r io.Reader) (int64, error) {
+	return 0, nil
 }
 
 var _ pilosa.TranslateEntryReader = (*TranslateEntryReader)(nil)

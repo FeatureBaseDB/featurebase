@@ -19,25 +19,26 @@ func _() {
 	_ = x[apiFragmentBlockData-8]
 	_ = x[apiFragmentBlocks-9]
 	_ = x[apiFragmentData-10]
-	_ = x[apiField-11]
-	_ = x[apiFieldAttrDiff-12]
-	_ = x[apiImport-13]
-	_ = x[apiImportValue-14]
-	_ = x[apiIndex-15]
-	_ = x[apiIndexAttrDiff-16]
-	_ = x[apiQuery-17]
-	_ = x[apiRecalculateCaches-18]
-	_ = x[apiRemoveNode-19]
-	_ = x[apiResizeAbort-20]
-	_ = x[apiSetCoordinator-21]
-	_ = x[apiShardNodes-22]
-	_ = x[apiViews-23]
-	_ = x[apiApplySchema-24]
+	_ = x[apiTranslateData-11]
+	_ = x[apiField-12]
+	_ = x[apiFieldAttrDiff-13]
+	_ = x[apiImport-14]
+	_ = x[apiImportValue-15]
+	_ = x[apiIndex-16]
+	_ = x[apiIndexAttrDiff-17]
+	_ = x[apiQuery-18]
+	_ = x[apiRecalculateCaches-19]
+	_ = x[apiRemoveNode-20]
+	_ = x[apiResizeAbort-21]
+	_ = x[apiSetCoordinator-22]
+	_ = x[apiShardNodes-23]
+	_ = x[apiViews-24]
+	_ = x[apiApplySchema-25]
 }
 
-const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteAvailableShardapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFragmentDataapiFieldapiFieldAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiSetCoordinatorapiShardNodesapiViewsapiApplySchema"
+const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteAvailableShardapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFragmentDataapiTranslateDataapiFieldapiFieldAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiSetCoordinatorapiShardNodesapiViewsapiApplySchema"
 
-var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 82, 96, 109, 121, 141, 158, 173, 181, 197, 206, 220, 228, 244, 252, 272, 285, 299, 316, 329, 337, 351}
+var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 82, 96, 109, 121, 141, 158, 173, 189, 197, 213, 222, 236, 244, 260, 268, 288, 301, 315, 332, 345, 353, 367}
 
 func (i apiMethod) String() string {
 	if i < 0 || i >= apiMethod(len(_apiMethod_index)-1) {

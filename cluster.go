@@ -864,6 +864,63 @@ func (c *cluster) fragSources(to *cluster, idx *Index) (map[string][]*ResizeSour
 	return m, nil
 }
 
+// translationNodes returns a list of translationResizeNodes - for each node
+// in the `to` cluster - required to move from cluster `c` to cluster `to`. unprotected.
+// Because the parition scheme for every index is the same, this is used as a template
+// to create index-specific `TranslationResizeSource`s.
+func (c *cluster) translationNodes(to *cluster) (map[string][]*translationResizeNode, error) {
+	m := make(map[string][]*translationResizeNode)
+
+	// Determine if a node is being added or removed.
+	action, diffNodeID, err := c.diff(to)
+	if err != nil {
+		return nil, errors.Wrap(err, "diffing")
+	}
+
+	// Initialize the map with all the nodes in `to`.
+	for _, n := range to.nodes {
+		m[n.ID] = nil
+	}
+
+	for pid := 0; pid < c.partitionN; pid++ {
+		fNodes := c.partitionNodes(pid)
+		tNodes := to.partitionNodes(pid)
+
+		// For `to` cluster, we only need the first node in the
+		// list because that's the primary. For the `from` cluster,
+		// we only need the first node, unless that node is being
+		// removed, then we use the second node. If no second node
+		// exists in that case, then we have to raise an error
+		// indicating that not enough replicas exist to support
+		// the resize.
+		if len(tNodes) > 0 {
+			var foundPrimary bool
+			for i := range fNodes {
+				if action == resizeJobActionRemove && fNodes[i].ID == diffNodeID {
+					continue
+				}
+				// We only need to add the source if the nodes differ;
+				// in other words if the primary partition is on the
+				// same node, it doesn't need to retrieve it.
+				if tNodes[0].ID != fNodes[i].ID {
+					m[tNodes[0].ID] = append(m[tNodes[0].ID],
+						&translationResizeNode{
+							node:        fNodes[i],
+							partitionID: pid,
+						})
+				}
+				foundPrimary = true
+				break
+			}
+			if !foundPrimary {
+				return nil, ErrResizeNoReplicas
+			}
+		}
+	}
+
+	return m, nil
+}
+
 // shardPartition returns the partition that a shard belongs to.
 func (c *cluster) shardPartition(index string, shard uint64) int {
 	return shardPartition(index, shard, c.partitionN)
@@ -1271,38 +1328,82 @@ func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*
 		toCluster.addNodeBasicSorted(nodeAction.node)
 	}
 
-	// multiIndex is a map of sources initialized with all the nodes in toCluster.
-	multiIndex := make(map[string][]*ResizeSource)
+	indexes := c.holder.Indexes()
 
+	// fragmentSourcesByNode is a map of Node.ID to sources of fragment data.
+	// It is initialized with all the nodes in toCluster.
+	fragmentSourcesByNode := make(map[string][]*ResizeSource)
 	for _, n := range toCluster.nodes {
-		multiIndex[n.ID] = nil
+		fragmentSourcesByNode[n.ID] = nil
 	}
 
-	// Add to multiIndex the instructions for each index.
-	for _, idx := range c.holder.Indexes() {
+	// Add to fragmentSourcesByNode the instructions for each index.
+	for _, idx := range indexes {
 		fragSources, err := c.fragSources(toCluster, idx)
 		if err != nil {
 			return nil, errors.Wrap(err, "getting sources")
 		}
 
-		for id, sources := range fragSources {
-			multiIndex[id] = append(multiIndex[id], sources...)
+		for nodeid, sources := range fragSources {
+			fragmentSourcesByNode[nodeid] = append(fragmentSourcesByNode[nodeid], sources...)
 		}
 	}
 
-	for id, sources := range multiIndex {
+	// translationSourcesByNode is a map of Node.ID to sources of partitioned
+	// key translation data for indexes.
+	// It is initialized with all the nodes in toCluster.
+	translationSourcesByNode := make(map[string][]*TranslationResizeSource)
+	for _, n := range toCluster.nodes {
+		translationSourcesByNode[n.ID] = nil
+	}
+
+	if len(indexes) > 0 {
+		// Add to translationSourcesByNode the instructions for the cluster.
+		translationNodes, err := c.translationNodes(toCluster)
+		if err != nil {
+			return nil, errors.Wrap(err, "getting translation sources")
+		}
+
+		// Create a list of TranslationResizeSource for each index,
+		// using translationNodes as a template.
+		translationSources := make(map[string][]*TranslationResizeSource)
+		for _, idx := range indexes {
+			// Only include indexes with keys.
+			if !idx.Keys() {
+				continue
+			}
+			indexName := idx.Name()
+			for node, resizeNodes := range translationNodes {
+				for i := range resizeNodes {
+					translationSources[node] = append(translationSources[node],
+						&TranslationResizeSource{
+							Node:        resizeNodes[i].node,
+							Index:       indexName,
+							PartitionID: resizeNodes[i].partitionID,
+						})
+				}
+			}
+		}
+
+		for nodeid, sources := range translationSources {
+			translationSourcesByNode[nodeid] = sources
+		}
+	}
+
+	for _, node := range toCluster.nodes {
 		// If a host doesn't need to request data, mark it as complete.
-		if len(sources) == 0 {
-			j.IDs[id] = true
+		if len(fragmentSourcesByNode[node.ID]) == 0 && len(translationSourcesByNode[node.ID]) == 0 {
+			j.IDs[node.ID] = true
 			continue
 		}
 		instr := &ResizeInstruction{
-			JobID:         j.ID,
-			Node:          toCluster.unprotectedNodeByID(id),
-			Coordinator:   c.unprotectedCoordinatorNode(),
-			Sources:       sources,
-			NodeStatus:    c.nodeStatus(), // Include the NodeStatus in order to ensure that schema and availableShards are in sync on the receiving node.
-			ClusterStatus: c.unprotectedStatus(),
+			JobID:              j.ID,
+			Node:               toCluster.unprotectedNodeByID(node.ID),
+			Coordinator:        c.unprotectedCoordinatorNode(),
+			Sources:            fragmentSourcesByNode[node.ID],
+			TranslationSources: translationSourcesByNode[node.ID],
+			NodeStatus:         c.nodeStatus(), // Include the NodeStatus in order to ensure that schema and availableShards are in sync on the receiving node.
+			ClusterStatus:      c.unprotectedStatus(),
 		}
 		j.Instructions = append(j.Instructions, instr)
 	}
@@ -1386,9 +1487,8 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 
 			// Request each source file in ResizeSources.
 			for _, src := range instr.Sources {
-				c.logger.Printf("get shard %d for index %s from host %s", src.Shard, src.Index, src.Node.URI)
-
 				srcURI := src.Node.URI
+				c.logger.Printf("get shard %d for index %s from host %s", src.Shard, src.Index, srcURI)
 
 				// Retrieve field.
 				f := c.holder.Field(src.Index, src.Field)
@@ -1409,7 +1509,7 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 				}
 
 				// Stream shard from remote node.
-				c.logger.Printf("retrieve shard %d for index %s from host %s", src.Shard, src.Index, src.Node.URI)
+				c.logger.Printf("retrieve shard %d for index %s from host %s", src.Shard, src.Index, srcURI)
 				rd, err := c.InternalClient.RetrieveShardFromURI(ctx, src.Index, src.Field, src.View, src.Shard, srcURI)
 				if err != nil {
 					// For now it is an acceptable error if the fragment is not found
@@ -1423,7 +1523,7 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 					}
 					return errors.Wrap(err, "retrieving shard")
 				} else if rd == nil {
-					return fmt.Errorf("shard %v doesn't exist on host: %s", src.Shard, src.Node.URI)
+					return fmt.Errorf("shard %v doesn't exist on host: %s", src.Shard, srcURI)
 				}
 
 				// Write to local field and always close reader.
@@ -1435,6 +1535,32 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 					return errors.Wrap(err, "copying remote shard")
 				}
 			}
+
+			// Request each translation source file in TranslationResizeSources.
+			for _, src := range instr.TranslationSources {
+				srcURI := src.Node.URI
+
+				// Retrieve partition from remote node.
+				c.logger.Printf("retrieve translate partition %d for index %s from host %s", src.PartitionID, src.Index, srcURI)
+				rd, err := c.InternalClient.RetrieveTranslatePartitionFromURI(ctx, src.Index, src.PartitionID, srcURI)
+				if err != nil {
+					return errors.Wrap(err, "retrieving translate partition")
+				} else if rd == nil {
+					return fmt.Errorf("partition %d doesn't exist on host: %s", src.PartitionID, src.Node.URI)
+				}
+
+				// Get the translate store for this index/partition.
+				idx := c.holder.Index(src.Index)
+				if idx == nil {
+					return ErrIndexNotFound
+				}
+
+				store := idx.TranslateStore(src.PartitionID)
+				if _, err = store.ReadFrom(rd); err != nil {
+					return errors.Wrap(err, "reading from reader")
+				}
+			}
+
 			return nil
 		}(); err != nil {
 			complete.Error = err.Error()
@@ -2291,12 +2417,13 @@ type ClusterStatus struct {
 // ResizeInstruction contains the instruction provided to a node
 // during a cluster resize operation.
 type ResizeInstruction struct {
-	JobID         int64
-	Node          *Node
-	Coordinator   *Node
-	Sources       []*ResizeSource
-	NodeStatus    *NodeStatus
-	ClusterStatus *ClusterStatus
+	JobID              int64
+	Node               *Node
+	Coordinator        *Node
+	Sources            []*ResizeSource
+	TranslationSources []*TranslationResizeSource
+	NodeStatus         *NodeStatus
+	ClusterStatus      *ClusterStatus
 }
 
 // ResizeSource is the source of data for a node acting on a
@@ -2307,6 +2434,21 @@ type ResizeSource struct {
 	Field string `protobuf:"bytes,3,opt,name=Field,proto3" json:"Field,omitempty"`
 	View  string `protobuf:"bytes,4,opt,name=View,proto3" json:"View,omitempty"`
 	Shard uint64 `protobuf:"varint,5,opt,name=Shard,proto3" json:"Shard,omitempty"`
+}
+
+// TranslationResizeSource is the source of translation data for
+// a node acting on a ResizeInstruction.
+type TranslationResizeSource struct {
+	Node        *Node
+	Index       string
+	PartitionID int
+}
+
+// translateResizeNode holds the node/partition pairs used
+// to create a TranslationResizeSource for each index.
+type translationResizeNode struct {
+	node        *Node
+	partitionID int
 }
 
 // Schema contains information about indexes and their configuration.

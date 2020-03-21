@@ -182,7 +182,7 @@ func (h *Handler) populateValidators() {
 	h.validators["GetIndex"] = queryValidationSpecRequired()
 	h.validators["PostIndex"] = queryValidationSpecRequired()
 	h.validators["DeleteIndex"] = queryValidationSpecRequired()
-	h.validators["GetTranslateData"] = queryValidationSpecRequired("offset")
+	h.validators["GetTranslateData"] = queryValidationSpecRequired("index", "partition")
 	h.validators["PostTranslateKeys"] = queryValidationSpecRequired()
 	h.validators["PostField"] = queryValidationSpecRequired()
 	h.validators["DeleteField"] = queryValidationSpecRequired()
@@ -312,6 +312,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/fragment/data", handler.handleGetFragmentData).Methods("GET").Name("GetFragmentData")
 	router.HandleFunc("/internal/fragment/nodes", handler.handleGetFragmentNodes).Methods("GET").Name("GetFragmentNodes")
 	router.HandleFunc("/internal/index/{index}/attr/diff", handler.handlePostIndexAttrDiff).Methods("POST").Name("PostIndexAttrDiff")
+	router.HandleFunc("/internal/translate/data", handler.handleGetTranslateData).Methods("GET").Name("GetTranslateData")
 	router.HandleFunc("/internal/translate/data", handler.handlePostTranslateData).Methods("POST").Name("PostTranslateData")
 	router.HandleFunc("/internal/translate/keys", handler.handlePostTranslateKeys).Methods("POST").Name("PostTranslateKeys")
 	router.HandleFunc("/internal/translate/ids", handler.handlePostTranslateIDs).Methods("POST").Name("PostTranslateIDs")
@@ -1391,6 +1392,27 @@ func (h *Handler) handleGetFragmentData(w http.ResponseWriter, r *http.Request) 
 	// Stream fragment to response body.
 	if _, err := f.WriteTo(w); err != nil {
 		h.logger.Printf("error streaming fragment data: %s", err)
+	}
+}
+
+// handleGetTranslateData handles GET /internal/translate/data requests.
+func (h *Handler) handleGetTranslateData(w http.ResponseWriter, r *http.Request) {
+	// Read partition parameter.
+	q := r.URL.Query()
+	partition, err := strconv.ParseUint(q.Get("partition"), 10, 32)
+	if err != nil {
+		http.Error(w, "partition required", http.StatusBadRequest)
+		return
+	}
+	// Retrieve partition data from holder.
+	p, err := h.api.TranslateData(r.Context(), q.Get("index"), int(partition))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	// Stream translate partition to response body.
+	if _, err := p.WriteTo(w); err != nil {
+		h.logger.Printf("error streaming translation data: %s", err)
 	}
 }
 

@@ -14,9 +14,12 @@
 package boltdb_test
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -320,6 +323,70 @@ func MustNewTranslateStore() *boltdb.TranslateStore {
 	s := boltdb.NewTranslateStore("I", "F", 0, pilosa.DefaultPartitionN)
 	s.Path = f.Name()
 	return s
+}
+
+func TestTranslateStore_ReadWrite(t *testing.T) {
+	t.Run("WriteTo_ReadFrom", func(t *testing.T) {
+		s := MustOpenNewTranslateStore()
+		defer MustCloseTranslateStore(s)
+
+		batch0 := []string{}
+		for i := 0; i < 100; i++ {
+			batch0 = append(batch0, fmt.Sprintf("key%d", i))
+		}
+		batch1 := []string{}
+		for i := 100; i < 200; i++ {
+			batch1 = append(batch1, fmt.Sprintf("key%d", i))
+		}
+
+		// Populate the store with the keys in batch0.
+		if _, err := s.TranslateKeys(batch0); err != nil {
+			t.Fatal(err)
+		}
+
+		// Put the contents of the store into a buffer.
+		buf := bytes.NewBuffer(nil)
+		expN := int64(32768)
+
+		// After this, the buffer should contain batch0.
+		if n, err := s.WriteTo(buf); err != nil {
+			t.Fatalf("writing to buffer: %s", err)
+		} else if n != expN {
+			t.Fatalf("expected buffer size: %d, but got: %d", expN, n)
+		}
+
+		// Populate the store with the keys in batch1.
+		if _, err := s.TranslateKeys(batch1); err != nil {
+			t.Fatal(err)
+		}
+
+		expIDs := []uint64{247463987, 247464087}
+
+		// Check the IDs for a key from each batch.
+		if ids, err := s.TranslateKeys([]string{"key50", "key150"}); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(expIDs, ids) {
+			t.Fatalf("first expected ids: %v, but got: %v", expIDs, ids)
+		}
+
+		// Reset the contents of the store with the data in the buffer.
+		if n, err := s.ReadFrom(buf); err != nil {
+			t.Fatalf("reading from buffer: %s", err)
+		} else if n != expN {
+			t.Fatalf("expected buffer size: %d, but got: %d", expN, n)
+		}
+
+		// This time, we expect the second key to be different because
+		// we overwrote the store, and then just set that key.
+		expIDs = []uint64{247463987, 247464037}
+
+		// Check the IDs for a key from each batch.
+		if ids, err := s.TranslateKeys([]string{"key50", "key150"}); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(expIDs, ids) {
+			t.Fatalf("last expected ids: %v, but got: %v", expIDs, ids)
+		}
+	})
 }
 
 // MustOpenNewTranslateStore returns a new, opened TranslateStore.
