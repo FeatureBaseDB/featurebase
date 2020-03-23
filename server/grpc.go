@@ -76,6 +76,29 @@ func (h grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 	return nil
 }
 
+// QueryPQLUnary is a unary-response (non-streaming) version of QueryPQL, returning a TableResponse.
+func (h grpcHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest) (*pb.TableResponse, error) {
+	query := pilosa.QueryRequest{
+		Index: req.Index,
+		Query: req.Pql,
+	}
+	resp, err := h.api.Query(context.Background(), &query)
+	if err != nil {
+		return nil, errToStatusError(err)
+	}
+	response := &pb.TableResponse{
+		Rows: make([]*pb.Row, 0),
+	}
+	for row := range makeRows(resp, h.logger) {
+		if len(row.Headers) != 0 {
+			response.Headers = row.Headers
+		}
+		response.Rows = append(response.Rows, &pb.Row{Columns: row.Columns})
+	}
+
+	return response, nil
+}
+
 // fieldDataType returns a useful data type (string,
 // uint64, bool, etc.) based on the Pilosa field type.
 func fieldDataType(f *pilosa.Field) string {
