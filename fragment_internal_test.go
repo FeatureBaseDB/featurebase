@@ -377,23 +377,29 @@ func TestFragment_Sum(t *testing.T) {
 	defer f.Clean(t)
 
 	// Set values.
-	if _, err := f.setValue(1000, bitDepth, 382); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.setValue(2000, bitDepth, 300); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.setValue(3000, bitDepth, 2818); err != nil {
-		t.Fatal(err)
-	} else if _, err := f.setValue(4000, bitDepth, 300); err != nil {
-		t.Fatal(err)
+	vals := []struct {
+		cid uint64
+		val int64
+	}{
+		{1000, 382},
+		{2000, 300},
+		{2500, -600},
+		{3000, 2818},
+		{4000, 300},
+	}
+	for _, v := range vals {
+		if _, err := f.setValue(v.cid, bitDepth, v.val); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	t.Run("NoFilter", func(t *testing.T) {
 		if sum, n, err := f.sum(nil, bitDepth); err != nil {
 			t.Fatal(err)
-		} else if n != 4 {
+		} else if n != 5 {
 			t.Fatalf("unexpected count: %d", n)
-		} else if sum != 3800 {
-			t.Fatalf("unexpected sum: %d", sum)
+		} else if got, exp := sum, int64(382+300-600+2818+300); got != exp {
+			t.Fatalf("unexpected sum: got: %d, exp: %d", sum, exp)
 		}
 	})
 
@@ -402,8 +408,8 @@ func TestFragment_Sum(t *testing.T) {
 			t.Fatal(err)
 		} else if n != 2 {
 			t.Fatalf("unexpected count: %d", n)
-		} else if sum != 600 {
-			t.Fatalf("unexpected sum: %d", sum)
+		} else if got, exp := sum, int64(300+300); got != exp {
+			t.Fatalf("unexpected sum: got: %d, exp: %d", sum, exp)
 		}
 	})
 
@@ -414,10 +420,10 @@ func TestFragment_Sum(t *testing.T) {
 	t.Run("ClearValue", func(t *testing.T) {
 		if sum, n, err := f.sum(nil, bitDepth); err != nil {
 			t.Fatal(err)
-		} else if n != 3 {
+		} else if n != 4 {
 			t.Fatalf("unexpected count: %d", n)
-		} else if sum != (3800 - 382) {
-			t.Fatalf("unexpected sum: got %d, expecting %d", sum, 3800-382)
+		} else if got, exp := sum, int64(3800-382-600); got != exp {
+			t.Fatalf("unexpected sum: got: %d, exp: %d", sum, exp)
 		}
 	})
 }
