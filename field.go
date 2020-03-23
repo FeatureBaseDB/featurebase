@@ -375,7 +375,6 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 
 		OpenTranslateStore: OpenInMemTranslateStore,
 	}
-	f.options.ContainsShard = f.containsShard //used for notification optimization
 
 	return f, nil
 }
@@ -417,6 +416,8 @@ func (f *Field) AvailableShards() *roaring.Bitmap {
 func (f *Field) containsShard(shard uint64) bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
+	fmt.Println("CONTAINS SHARD:", shard, f.Name())
+	fmt.Println(f.remoteAvailableShards)
 	return f.remoteAvailableShards.Contains(shard)
 }
 
@@ -608,7 +609,7 @@ func (f *Field) Open() error {
 	f.logger.Debugf("successfully opened field index/field: %s/%s", f.index, f.name)
 	return nil
 }
-func saveIt(fieldPath string, availableShardBytes []byte) {
+func blockingWriteAvailableShards(fieldPath string, availableShardBytes []byte) {
 	path := filepath.Join(fieldPath, ".available.shards")
 	// Create a temporary file to save to.
 	tempPath := path + tempExt
@@ -624,12 +625,12 @@ func saveIt(fieldPath string, availableShardBytes []byte) {
 	}
 
 }
-func saveItAsync(fieldPath string, availableShardBytes []byte, done chan bool) {
+func nonBlockingWriteAvailableShards(fieldPath string, availableShardBytes []byte, done chan bool) {
 	if len(availableShardBytes) == 0 {
 		return
 	}
 	go func() {
-		saveIt(fieldPath, availableShardBytes)
+		blockingWriteAvailableShards(fieldPath, availableShardBytes)
 		done <- true
 	}()
 }
@@ -649,18 +650,18 @@ func (f *Field) writeAvailableShards() {
 			if len(data) > 0 {
 				if !writing {
 					writing = true
-					saveItAsync(f.path, data, tracker)
+					nonBlockingWriteAvailableShards(f.path, data, tracker)
 					data = nil
 				}
 			}
 		case <-tracker:
 			writing = false
 		case <-f.doneChan:
-			if writing {
+			if writing { //wait to writing is complete
 				<-tracker
 			}
 			if len(data) > 0 {
-				saveIt(f.path, data)
+				blockingWriteAvailableShards(f.path, data)
 			}
 			alive = false
 		}
@@ -1186,6 +1187,7 @@ func (f *Field) newView(path, name string) *view {
 	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats
 	view.broadcaster = f.broadcaster
+	view.shardPresent = f.containsShard
 	if f.snapshotQueue != nil {
 		view.snapshotQueue = f.snapshotQueue
 	}
@@ -2005,16 +2007,12 @@ type FieldOptions struct {
 	Type           string      `json:"type,omitempty"`
 	TimeQuantum    TimeQuantum `json:"timeQuantum,omitempty"`
 	ForeignIndex   string      `json:"foreignIndex"`
-	ContainsShard  func(uint64) bool
 }
 
 // newFieldOptions returns a new instance of FieldOptions
 // with applied and validated functional options.
 func newFieldOptions(opts ...FieldOption) (*FieldOptions, error) {
 	fo := FieldOptions{}
-	fo.ContainsShard = func(uint64) bool {
-		return false
-	}
 	for _, opt := range opts {
 		err := opt(&fo)
 		if err != nil {
@@ -2043,8 +2041,6 @@ func applyDefaultOptions(o *FieldOptions) *FieldOptions {
 		o.CacheType = DefaultCacheType
 		o.CacheSize = DefaultCacheSize
 	}
-	o.ContainsShard = func(uint64) bool { return false } //used for shardnotify optimization
-
 	return o
 }
 

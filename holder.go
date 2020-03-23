@@ -1185,7 +1185,7 @@ func (s *holderSyncer) readFieldTranslateReader(rd TranslateEntryReader) {
 		// Find appropriate store.
 		f := s.Holder.Field(entry.Index, entry.Field)
 		if f == nil {
-			s.Holder.Logger.Printf("field not found: %q/%q", entry.Index, entry.Field)
+			s.Holder.Logger.Printf("field not found: %s/%s", entry.Index, entry.Field)
 			return
 		}
 

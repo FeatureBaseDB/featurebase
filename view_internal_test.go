@@ -30,9 +30,8 @@ func mustOpenView(index, field, name string) *view {
 	}
 
 	fo := FieldOptions{
-		CacheType:     DefaultCacheType,
-		CacheSize:     DefaultCacheSize,
-		ContainsShard: func(uint64) bool { return false },
+		CacheType: DefaultCacheType,
+		CacheSize: DefaultCacheSize,
 	}
 
 	v := newView(path, index, field, name, fo)

@@ -80,7 +80,7 @@ func newView(path, index, field, name string, fieldOptions FieldOptions) *view {
 		broadcaster:  NopBroadcaster,
 		stats:        stats.NopStatsClient,
 		logger:       logger.NopLogger,
-		shardPresent: fieldOptions.ContainsShard,
+		shardPresent: func(uint64) bool { return false },
 	}
 }
 
@@ -283,10 +283,11 @@ func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 }
 
 func (v *view) notifyIfNew(shard uint64) {
+	fmt.Println("Present", shard)
 	if v.shardPresent(shard) {
 		return
 	}
-
+	fmt.Println("BROADCAST", shard)
 	broadcastChan := make(chan struct{})
 
 	go func() {
