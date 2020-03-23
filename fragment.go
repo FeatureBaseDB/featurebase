@@ -984,8 +984,13 @@ func (f *fragment) sum(filter *Row, bitDepth uint) (sum int64, count uint64, err
 	}
 	count = consider.Count()
 
-	// Determine positive & negative sets.
+	// Get negative set
 	nrow := f.row(bsiSignBit)
+
+	// Filter negative set
+	nrow = consider.Intersect(nrow)
+
+	// Get postive set
 	prow := consider.Difference(nrow)
 
 	// Compute the sum based on the bit count of each row multiplied by the
