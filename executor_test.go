@@ -1038,7 +1038,7 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err := c[0].RecalculateCaches()
+		err := c[0].RecalculateCaches(t)
 		if err != nil {
 			t.Fatalf("recalculating caches: %v", err)
 		}
@@ -1082,7 +1082,7 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err := c[0].RecalculateCaches()
+		err := c[0].RecalculateCaches(t)
 		if err != nil {
 			t.Fatalf("recalculating caches: %v", err)
 		}
@@ -1126,7 +1126,7 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err := c[0].RecalculateCaches()
+		err := c[0].RecalculateCaches(t)
 		if err != nil {
 			t.Fatalf("recalculating caches: %v", err)
 		}
@@ -1172,7 +1172,7 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err := c[0].RecalculateCaches()
+		err := c[0].RecalculateCaches(t)
 		if err != nil {
 			t.Fatalf("recalculating caches: %v", err)
 		}
@@ -1207,7 +1207,7 @@ func TestExecutor_Execute_TopN(t *testing.T) {
 			Set(0, f=1)
 		`}); err != nil {
 			t.Fatal(err)
-		} else if err := c[0].RecalculateCaches(); err != nil {
+		} else if err := c[0].RecalculateCaches(t); err != nil {
 			t.Fatalf("recalculating caches: %v", err)
 		}
 
@@ -1336,7 +1336,7 @@ func TestExecutor_Execute_TopN_Src(t *testing.T) {
 	hldr.SetBit("i", "other", 100, ShardWidth+1)
 	hldr.SetBit("i", "other", 100, ShardWidth+2)
 
-	err := c[0].RecalculateCaches()
+	err := c[0].RecalculateCaches(t)
 	if err != nil {
 		t.Fatalf("recalculating caches: %v", err)
 	}
@@ -3459,7 +3459,7 @@ func TestExecutor_Execute_ClearRow(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := c[0].RecalculateCaches(); err != nil {
+		if err := c[0].RecalculateCaches(t); err != nil {
 			t.Fatalf("recalculating caches: %v", err)
 		}
 

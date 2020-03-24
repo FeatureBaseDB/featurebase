@@ -57,7 +57,7 @@ func TestMain_Set_Quick(t *testing.T) {
 			rand := rand.New(rand.NewSource(int64(i)))
 			cmds := GenerateSetCommands(1000, rand)
 
-			m := test.MustRunCommand()
+			m := test.RunCommand(t)
 			defer m.Close()
 
 			// Create client.
@@ -74,7 +74,7 @@ func TestMain_Set_Quick(t *testing.T) {
 				if err := client.CreateField(context.Background(), "i", cmd.Field); err != nil && err != pilosa.ErrFieldExists {
 					t.Fatal(err)
 				}
-				if _, err := m.Query("i", "", fmt.Sprintf(`Set(%d, %s=%d)`, cmd.ColumnID, cmd.Field, cmd.ID)); err != nil {
+				if _, err := m.Query(t, "i", "", fmt.Sprintf(`Set(%d, %s=%d)`, cmd.ColumnID, cmd.Field, cmd.ID)); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -90,7 +90,7 @@ func TestMain_Set_Quick(t *testing.T) {
 							},
 						},
 					}) + "\n"
-					if res, err := m.Query("i", "", fmt.Sprintf(`Row(%s=%d)`, field, id)); err != nil {
+					if res, err := m.Query(t, "i", "", fmt.Sprintf(`Row(%s=%d)`, field, id)); err != nil {
 						t.Fatal(err)
 					} else if res != exp {
 						t.Fatalf("unexpected result:\n\ngot=%s\n\nexp=%s\n\n", res, exp)
@@ -113,7 +113,7 @@ func TestMain_Set_Quick(t *testing.T) {
 							},
 						},
 					}) + "\n"
-					if res, err := m.Query("i", "", fmt.Sprintf(`Row(%s=%d)`, field, id)); err != nil {
+					if res, err := m.Query(t, "i", "", fmt.Sprintf(`Row(%s=%d)`, field, id)); err != nil {
 						t.Fatal(err)
 					} else if res != exp {
 						t.Fatalf("unexpected result (reopen):\n\ngot=%s\n\nexp=%s\n\n", res, exp)
@@ -126,7 +126,7 @@ func TestMain_Set_Quick(t *testing.T) {
 
 // Ensure program can set row attributes and retrieve them.
 func TestMain_SetRowAttrs(t *testing.T) {
-	m := test.MustRunCommand()
+	m := test.RunCommand(t)
 	defer m.Close()
 
 	// Create fields.
@@ -142,36 +142,36 @@ func TestMain_SetRowAttrs(t *testing.T) {
 	}
 
 	// Set columns on different rows in different fields.
-	if _, err := m.Query("i", "", `Set(100, x=1)`); err != nil {
+	if _, err := m.Query(t, "i", "", `Set(100, x=1)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `Set(100, x=2)`); err != nil {
+	} else if _, err := m.Query(t, "i", "", `Set(100, x=2)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `Set(100, x=2)`); err != nil {
+	} else if _, err := m.Query(t, "i", "", `Set(100, x=2)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `Set(100, neg=3)`); err != nil {
+	} else if _, err := m.Query(t, "i", "", `Set(100, neg=3)`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set row attributes.
-	if _, err := m.Query("i", "", `SetRowAttrs(x, 1, x=100)`); err != nil {
+	if _, err := m.Query(t, "i", "", `SetRowAttrs(x, 1, x=100)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetRowAttrs(x, 2, x=-200)`); err != nil {
+	} else if _, err := m.Query(t, "i", "", `SetRowAttrs(x, 2, x=-200)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetRowAttrs(z, 2, x=300)`); err != nil {
+	} else if _, err := m.Query(t, "i", "", `SetRowAttrs(z, 2, x=300)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `SetRowAttrs(neg, 3, x=-0.44)`); err != nil {
+	} else if _, err := m.Query(t, "i", "", `SetRowAttrs(neg, 3, x=-0.44)`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Query row x/1.
-	if res, err := m.Query("i", "", `Row(x=1)`); err != nil {
+	if res, err := m.Query(t, "i", "", `Row(x=1)`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":100},"columns":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
 	}
 
 	// Query row x/2.
-	if res, err := m.Query("i", "", `Row(x=2)`); err != nil {
+	if res, err := m.Query(t, "i", "", `Row(x=2)`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":-200},"columns":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
@@ -182,19 +182,19 @@ func TestMain_SetRowAttrs(t *testing.T) {
 	}
 
 	// Query rows after reopening.
-	if res, err := m.Query("i", "columnAttrs=true", `Row(x=1)`); err != nil {
+	if res, err := m.Query(t, "i", "columnAttrs=true", `Row(x=1)`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":100},"columns":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
 	}
 
-	if res, err := m.Query("i", "columnAttrs=true", `Row(neg=3)`); err != nil {
+	if res, err := m.Query(t, "i", "columnAttrs=true", `Row(neg=3)`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":-0.44},"columns":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
 	}
 	// Query row x/2.
-	if res, err := m.Query("i", "", `Row(x=2)`); err != nil {
+	if res, err := m.Query(t, "i", "", `Row(x=2)`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{"x":-200},"columns":[100]}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
@@ -203,7 +203,7 @@ func TestMain_SetRowAttrs(t *testing.T) {
 
 // Ensure program can set column attributes and retrieve them.
 func TestMain_SetColumnAttrs(t *testing.T) {
-	m := test.MustRunCommand()
+	m := test.RunCommand(t)
 	defer m.Close()
 
 	// Create fields.
@@ -215,19 +215,19 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 	}
 
 	// Set columns on row.
-	if _, err := m.Query("i", "", `Set(100, x=1)`); err != nil {
+	if _, err := m.Query(t, "i", "", `Set(100, x=1)`); err != nil {
 		t.Fatal(err)
-	} else if _, err := m.Query("i", "", `Set(101, x=1)`); err != nil {
+	} else if _, err := m.Query(t, "i", "", `Set(101, x=1)`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Set column attributes.
-	if _, err := m.Query("i", "", `SetColumnAttrs(100, foo="bar")`); err != nil {
+	if _, err := m.Query(t, "i", "", `SetColumnAttrs(100, foo="bar")`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Query row.
-	if res, err := m.Query("i", "columnAttrs=true", `Row(x=1)`); err != nil {
+	if res, err := m.Query(t, "i", "columnAttrs=true", `Row(x=1)`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{},"columns":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
 		t.Fatalf("unexpected result: %s", res)
@@ -238,7 +238,7 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 	}
 
 	// Query row after reopening.
-	if res, err := m.Query("i", "columnAttrs=true", `Row(x=1)`); err != nil {
+	if res, err := m.Query(t, "i", "columnAttrs=true", `Row(x=1)`); err != nil {
 		t.Fatal(err)
 	} else if res != `{"results":[{"attrs":{},"columns":[100,101]}],"columnAttrs":[{"id":100,"attrs":{"foo":"bar"}}]}`+"\n" {
 		t.Fatalf("unexpected result(reopen): %s", res)
@@ -246,7 +246,7 @@ func TestMain_SetColumnAttrs(t *testing.T) {
 }
 
 func TestMain_GroupBy(t *testing.T) {
-	m := test.MustRunCommand()
+	m := test.RunCommand(t)
 	defer m.Close()
 
 	// Create fields.
@@ -279,7 +279,7 @@ func TestMain_GroupBy(t *testing.T) {
 	`
 
 	// Set columns on row.
-	if _, err := m.Query("i", "", query); err != nil {
+	if _, err := m.Query(t, "i", "", query); err != nil {
 		t.Fatal(err)
 	}
 
@@ -299,7 +299,7 @@ func TestMain_GroupBy(t *testing.T) {
 }
 
 func TestMain_MinMaxFloat(t *testing.T) {
-	m := test.MustRunCommand()
+	m := test.RunCommand(t)
 	defer m.Close()
 
 	// Create fields.
@@ -317,7 +317,7 @@ func TestMain_MinMaxFloat(t *testing.T) {
 	`
 
 	// Set columns on row.
-	if _, err := m.Query("i", "", query); err != nil {
+	if _, err := m.Query(t, "i", "", query); err != nil {
 		t.Fatal(err)
 	}
 
@@ -396,12 +396,12 @@ func TestMain_RecalculateHashes(t *testing.T) {
 			data = append(data, fmt.Sprintf(`Set(%d, f=%d)`, columnID, rowID))
 		}
 	}
-	if _, err := cluster[0].Query("i", "", strings.Join(data, "")); err != nil {
+	if _, err := cluster[0].Query(t, "i", "", strings.Join(data, "")); err != nil {
 		t.Fatal("setting columns:", err)
 	}
 
 	// Calculate caches on the first node
-	err := cluster[0].RecalculateCaches()
+	err := cluster[0].RecalculateCaches(t)
 	if err != nil {
 		t.Fatalf("recalculating caches: %v", err)
 	}
@@ -410,7 +410,7 @@ func TestMain_RecalculateHashes(t *testing.T) {
 
 	// Run a TopN query on all nodes. The result should be the same as the target.
 	for _, m := range cluster {
-		res, err := m.Query("i", "", `TopN(f)`)
+		res, err := m.Query(t, "i", "", `TopN(f)`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -737,7 +737,7 @@ func TestRemoveConcurrentIndexCreation(t *testing.T) {
 
 // Ensure program imports timestamps as UTC.
 func TestMain_ImportTimestamp(t *testing.T) {
-	m := test.MustRunCommand()
+	m := test.RunCommand(t)
 	defer m.Close()
 
 	indexName := "i"
@@ -789,7 +789,7 @@ func TestMain_ImportTimestamp(t *testing.T) {
 }
 
 func TestMain_ImportTimestampNoStandardView(t *testing.T) {
-	m := test.MustRunCommand()
+	m := test.RunCommand(t)
 	defer m.Close()
 
 	indexName := "i"
@@ -1028,7 +1028,7 @@ func TestClusterMinMaxSumDecimal(t *testing.T) {
 	cmd.MustCreateIndex(t, "testdec", pilosa.IndexOptions{Keys: true, TrackExistence: true})
 	cmd.MustCreateField(t, "testdec", "adec", pilosa.OptFieldTypeDecimal(2))
 
-	test.MustDo("POST", cluster[0].URL()+"/index/testdec/query", `
+	test.Do(t, "POST", cluster[0].URL()+"/index/testdec/query", `
 Set("a", adec=42.2)
 Set("b", adec=11.12)
 Set("c", adec=13.41)
@@ -1039,21 +1039,21 @@ Set("g", adec=15.52)
 Set("h", adec=100.22)
 `)
 
-	result := test.MustDo("POST", cluster[0].URL()+"/index/testdec/query", "Sum(field=adec)")
+	result := test.Do(t, "POST", cluster[0].URL()+"/index/testdec/query", "Sum(field=adec)")
 	if !strings.Contains(result.Body, `"floatValue":305.59`) {
 		t.Fatalf("expected float sum of 305.59, but got: '%s'", result.Body)
 	} else if !strings.Contains(result.Body, `"count":8`) {
 		t.Fatalf("expected count 8, but got: '%s'", result.Body)
 	}
 
-	result = test.MustDo("POST", cluster[0].URL()+"/index/testdec/query", "Max(field=adec)")
+	result = test.Do(t, "POST", cluster[0].URL()+"/index/testdec/query", "Max(field=adec)")
 	if !strings.Contains(result.Body, `"floatValue":100.22`) {
 		t.Fatalf("expected float max of 100.22, but got: '%s'", result.Body)
 	} else if !strings.Contains(result.Body, `"count":1`) {
 		t.Fatalf("expected count 1, but got: '%s'", result.Body)
 	}
 
-	result = test.MustDo("POST", cluster[0].URL()+"/index/testdec/query", "Min(field=adec)")
+	result = test.Do(t, "POST", cluster[0].URL()+"/index/testdec/query", "Min(field=adec)")
 	if !strings.Contains(result.Body, `"floatValue":11.12`) {
 		t.Fatalf("expected float min of 11.12, but got: '%s'", result.Body)
 	} else if !strings.Contains(result.Body, `"count":1`) {

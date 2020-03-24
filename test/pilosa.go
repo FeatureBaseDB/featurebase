@@ -99,13 +99,14 @@ func NewCommandNode(isCoordinator bool, opts ...server.CommandOption) *Command {
 	return m
 }
 
-// MustRunCommand returns a new, running Main. Panic on error.
-func MustRunCommand() *Command {
+// RunCommand returns a new, running Main. Panic on error.
+func RunCommand(t *testing.T) *Command {
+	t.Helper()
 	m := newCommand(server.OptCommandServerOptions(pilosa.OptServerOpenTranslateStore(pilosa.OpenInMemTranslateStore)))
 	m.Config.Metric.Diagnostics = false // Disable diagnostics.
 	m.Config.Gossip.Port = "0"
 	if err := m.Start(); err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	return m
 }
@@ -174,9 +175,9 @@ func (m *Command) MustCreateField(tb testing.TB, index, field string, opts ...pi
 	return f
 }
 
-// MustQuery uses this command's API to execute the given query request, failing
+// QueryAPI uses this command's API to execute the given query request, failing
 // if Query returns a non-nil error, otherwise returning the QueryResponse.
-func (m *Command) MustQuery(tb testing.TB, req *pilosa.QueryRequest) pilosa.QueryResponse {
+func (m *Command) QueryAPI(tb testing.TB, req *pilosa.QueryRequest) pilosa.QueryResponse {
 	tb.Helper()
 	resp, err := m.API.Query(context.Background(), req)
 	if err != nil {
@@ -203,8 +204,8 @@ func (m *Command) Client() *http.InternalClient {
 }
 
 // Query executes a query against the program through the HTTP API.
-func (m *Command) Query(index, rawQuery, query string) (string, error) {
-	resp := MustDo("POST", m.URL()+fmt.Sprintf("/index/%s/query?", index)+rawQuery, query)
+func (m *Command) Query(t *testing.T, index, rawQuery, query string) (string, error) {
+	resp := Do(t, "POST", m.URL()+fmt.Sprintf("/index/%s/query?", index)+rawQuery, query)
 	if resp.StatusCode != gohttp.StatusOK {
 		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 	}
@@ -255,8 +256,8 @@ func (m *Command) QueryProtobuf(indexName string, query string) (*pilosa.QueryRe
 }
 
 // RecalculateCaches is deprecated. Use MustRecalculateCaches.
-func (m *Command) RecalculateCaches() error {
-	resp := MustDo("POST", fmt.Sprintf("%s/recalculate-caches", m.URL()), "")
+func (m *Command) RecalculateCaches(t *testing.T) error {
+	resp := Do(t, "POST", fmt.Sprintf("%s/recalculate-caches", m.URL()), "")
 	if resp.StatusCode != 204 {
 		return fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 	}
@@ -274,7 +275,7 @@ func (c Cluster) Query(t testing.TB, index, query string) pilosa.QueryResponse {
 		t.Fatal("must have at least one node in cluster to query")
 	}
 
-	return c[0].MustQuery(t, &pilosa.QueryRequest{Index: index, Query: query})
+	return c[0].QueryAPI(t, &pilosa.QueryRequest{Index: index, Query: query})
 }
 
 func (c Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uint64) {
@@ -454,15 +455,16 @@ func prependWithMemStore(opts []server.CommandOption) []server.CommandOption {
 
 ////////////////////////////////////////////////////////////////////////////////////
 
-// MustDo executes http.Do() with an http.NewRequest(). Panic on error.
-func MustDo(method, urlStr string, body string) *httpResponse {
+// Do executes http.Do() with an http.NewRequest().
+func Do(t *testing.T, method, urlStr string, body string) *httpResponse {
+	t.Helper()
 	req, err := gohttp.NewRequest(
 		method,
 		urlStr,
 		strings.NewReader(body),
 	)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -470,13 +472,13 @@ func MustDo(method, urlStr string, body string) *httpResponse {
 
 	resp, err := gohttp.DefaultClient.Do(req)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	defer resp.Body.Close()
 
 	buf, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
 	return &httpResponse{Response: resp, Body: string(buf)}
