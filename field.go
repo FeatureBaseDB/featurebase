@@ -413,11 +413,10 @@ func (f *Field) AvailableShards() *roaring.Bitmap {
 	return b
 }
 
+// constainsShard is used for limiting unnecessary CreateShard broadcast
 func (f *Field) containsShard(shard uint64) bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	fmt.Println("CONTAINS SHARD:", shard, f.Name())
-	fmt.Println(f.remoteAvailableShards)
 	return f.remoteAvailableShards.Contains(shard)
 }
 
@@ -1187,7 +1186,7 @@ func (f *Field) newView(path, name string) *view {
 	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats
 	view.broadcaster = f.broadcaster
-	view.shardPresent = f.containsShard
+	view.remoteShardPresent = f.containsShard
 	if f.snapshotQueue != nil {
 		view.snapshotQueue = f.snapshotQueue
 	}

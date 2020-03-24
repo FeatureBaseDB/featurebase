@@ -55,12 +55,12 @@ type view struct {
 	// Fragments by shard.
 	fragments map[uint64]*fragment
 
-	broadcaster   broadcaster
-	stats         stats.StatsClient
-	rowAttrStore  AttrStore
-	logger        logger.Logger
-	snapshotQueue snapshotQueue
-	shardPresent  func(uint64) bool
+	broadcaster        broadcaster
+	stats              stats.StatsClient
+	rowAttrStore       AttrStore
+	logger             logger.Logger
+	snapshotQueue      snapshotQueue
+	remoteShardPresent func(uint64) bool
 }
 
 // newView returns a new instance of View.
@@ -77,10 +77,10 @@ func newView(path, index, field, name string, fieldOptions FieldOptions) *view {
 
 		fragments: make(map[uint64]*fragment),
 
-		broadcaster:  NopBroadcaster,
-		stats:        stats.NopStatsClient,
-		logger:       logger.NopLogger,
-		shardPresent: func(uint64) bool { return false },
+		broadcaster:        NopBroadcaster,
+		stats:              stats.NopStatsClient,
+		logger:             logger.NopLogger,
+		remoteShardPresent: func(uint64) bool { return false },
 	}
 }
 
@@ -283,11 +283,9 @@ func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 }
 
 func (v *view) notifyIfNew(shard uint64) {
-	fmt.Println("Present", shard)
-	if v.shardPresent(shard) {
+	if v.remoteShardPresent(shard) { //checks the fields remoteShards bitmap to see if broadcast needed
 		return
 	}
-	fmt.Println("BROADCAST", shard)
 	broadcastChan := make(chan struct{})
 
 	go func() {
