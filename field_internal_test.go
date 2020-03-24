@@ -351,7 +351,7 @@ func TestField_RowTime(t *testing.T) {
 }
 
 func TestField_PersistAvailableShards(t *testing.T) {
-	AvailableShardFileFlushDuration.Set(200 * time.Millisecond) //shorten the default time to force a file write
+	availableShardFileFlushDuration.Set(200 * time.Millisecond) //shorten the default time to force a file write
 	f := OpenField(t, OptFieldTypeDefault())
 
 	// bm represents remote available shards.
@@ -360,7 +360,7 @@ func TestField_PersistAvailableShards(t *testing.T) {
 	if err := f.AddRemoteAvailableShards(bm); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(2 * AvailableShardFileFlushDuration.Get())
+	time.Sleep(2 * availableShardFileFlushDuration.Get())
 
 	// Reload field and verify that shard data is persisted.
 	if err := f.Reopen(); err != nil {
@@ -372,7 +372,7 @@ func TestField_PersistAvailableShards(t *testing.T) {
 }
 
 func TestField_CorruptAvailableShards(t *testing.T) {
-	AvailableShardFileFlushDuration.Set(200 * time.Millisecond) //shorten the default time to force a file write
+	availableShardFileFlushDuration.Set(200 * time.Millisecond) //shorten the default time to force a file write
 	f := OpenField(t, OptFieldTypeDefault())
 
 	// bm represents remote available shards.
@@ -381,7 +381,7 @@ func TestField_CorruptAvailableShards(t *testing.T) {
 	if err := f.AddRemoteAvailableShards(bm); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(2 * AvailableShardFileFlushDuration.Get())
+	time.Sleep(2 * availableShardFileFlushDuration.Get())
 
 	path := filepath.Join(f.path, ".available.shards")
 
@@ -404,7 +404,7 @@ func TestField_CorruptAvailableShards(t *testing.T) {
 }
 
 func TestField_TruncatedAvailableShards(t *testing.T) {
-	AvailableShardFileFlushDuration.Set(200 * time.Millisecond) //shorten the default time to force a file write
+	availableShardFileFlushDuration.Set(200 * time.Millisecond) //shorten the default time to force a file write
 	f := OpenField(t, OptFieldTypeDefault())
 
 	// bm represents remote available shards.
@@ -413,7 +413,7 @@ func TestField_TruncatedAvailableShards(t *testing.T) {
 	if err := f.AddRemoteAvailableShards(bm); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(2 * AvailableShardFileFlushDuration.Get())
+	time.Sleep(2 * availableShardFileFlushDuration.Get())
 
 	path := filepath.Join(f.path, ".available.shards")
 
@@ -434,7 +434,7 @@ func TestField_TruncatedAvailableShards(t *testing.T) {
 // Ensure that persisting available shards having a smaller footprint (for example,
 // when going from a bitmap to a smaller, RLE representation) succeeds.
 func TestField_PersistAvailableShardsFootprint(t *testing.T) {
-	AvailableShardFileFlushDuration.Set(200 * time.Millisecond) //shorten the default time to force a file write
+	availableShardFileFlushDuration.Set(200 * time.Millisecond) //shorten the default time to force a file write
 	f := OpenField(t, OptFieldTypeDefault())
 
 	// bm represents remote available shards.
@@ -449,7 +449,7 @@ func TestField_PersistAvailableShardsFootprint(t *testing.T) {
 	if err := f.AddRemoteAvailableShards(bm); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(2 * AvailableShardFileFlushDuration.Get())
+	time.Sleep(2 * availableShardFileFlushDuration.Get())
 
 	// Reload field and verify that shard data is persisted.
 	if err := f.Reopen(); err != nil {

@@ -34,7 +34,7 @@ func NewTestCluster(n int) *cluster {
 		panic(err)
 	}
 
-	AvailableShardFileFlushDuration.Set(100 * time.Millisecond)
+	availableShardFileFlushDuration.Set(100 * time.Millisecond)
 	c := newCluster()
 	c.ReplicaN = 1
 	c.Hasher = NewTestModHasher()

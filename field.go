@@ -80,7 +80,7 @@ func (p *protected) Get() time.Duration {
 	return p.duration
 }
 
-var AvailableShardFileFlushDuration = &protected{
+var availableShardFileFlushDuration = &protected{
 	duration: 5 * time.Second,
 }
 
@@ -636,7 +636,7 @@ func nonBlockingWriteAvailableShards(fieldPath string, availableShardBytes []byt
 
 func (f *Field) writeAvailableShards() {
 	defer f.wg.Done()
-	ticker := time.NewTicker(AvailableShardFileFlushDuration.Get())
+	ticker := time.NewTicker(availableShardFileFlushDuration.Get())
 	var data []byte
 	tracker := make(chan bool)
 	writing := false
