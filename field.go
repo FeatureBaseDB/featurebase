@@ -595,7 +595,7 @@ func (f *Field) Open() error {
 				return errors.Wrap(err, "checking foreign index")
 			}
 		}
-		f.availableShardChan = make(chan []byte, 1)
+		f.availableShardChan = make(chan []byte)
 		f.doneChan = make(chan struct{})
 		f.wg.Add(1)
 		go f.writeAvailableShards()
