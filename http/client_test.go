@@ -117,15 +117,15 @@ func TestClient_MultiNode(t *testing.T) {
 	// Rebuild the RankCache.
 	// We have to do this to avoid the 10-second cache invalidation delay
 	// built into cache.Invalidate()
-	err = c[0].RecalculateCaches()
+	err = c[0].RecalculateCaches(t)
 	if err != nil {
 		t.Fatalf("recalculating cache: %v", err)
 	}
-	err = c[1].RecalculateCaches()
+	err = c[1].RecalculateCaches(t)
 	if err != nil {
 		t.Fatalf("recalculating cache: %v", err)
 	}
-	err = c[2].RecalculateCaches()
+	err = c[2].RecalculateCaches(t)
 	if err != nil {
 		t.Fatalf("recalculating cache: %v", err)
 	}
@@ -616,7 +616,7 @@ func TestClient_ImportKeys(t *testing.T) {
 				t.Fatal(err)
 			}
 			cmd.MustRecalculateCaches(t)
-			resp := cmd.MustQuery(t, &pilosa.QueryRequest{
+			resp := cmd.QueryAPI(t, &pilosa.QueryRequest{
 				Index: "keyed",
 				Query: "TopN(keyedf)",
 			})
@@ -643,7 +643,7 @@ func TestClient_ImportKeys(t *testing.T) {
 				t.Fatal(err)
 			}
 			cmd.MustRecalculateCaches(t)
-			resp := cmd.MustQuery(t, &pilosa.QueryRequest{
+			resp := cmd.QueryAPI(t, &pilosa.QueryRequest{
 				Index: "keyed",
 				Query: "TopN(unkeyedf)",
 			})
@@ -670,7 +670,7 @@ func TestClient_ImportKeys(t *testing.T) {
 				t.Fatal(err)
 			}
 			cmd.MustRecalculateCaches(t)
-			resp := cmd.MustQuery(t, &pilosa.QueryRequest{
+			resp := cmd.QueryAPI(t, &pilosa.QueryRequest{
 				Index: "unkeyed",
 				Query: "TopN(keyedf)",
 			})
@@ -715,7 +715,7 @@ func TestClient_ImportKeys(t *testing.T) {
 				t.Fatal(err)
 			}
 			cmd0.MustRecalculateCaches(t)
-			resp := cmd0.MustQuery(t, &pilosa.QueryRequest{
+			resp := cmd0.QueryAPI(t, &pilosa.QueryRequest{
 				Index: "keyed",
 				Query: "TopN(keyedf0)",
 			})
@@ -747,7 +747,7 @@ func TestClient_ImportKeys(t *testing.T) {
 			time.Sleep(500 * time.Millisecond)
 
 			cmd1.MustRecalculateCaches(t)
-			resp := cmd1.MustQuery(t, &pilosa.QueryRequest{
+			resp := cmd1.QueryAPI(t, &pilosa.QueryRequest{
 				Index: "keyed",
 				Query: "TopN(keyedf1)",
 			})

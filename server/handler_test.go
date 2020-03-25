@@ -1048,7 +1048,7 @@ func TestCluster_TranslateStore(t *testing.T) {
 		t.Fatalf("starting cluster 0: %v", err)
 	}
 
-	test.MustDo("POST", cluster[0].URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
+	test.Do(t, "POST", cluster[0].URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
 }
 
 func TestClusterTranslator(t *testing.T) {
@@ -1076,15 +1076,15 @@ func TestClusterTranslator(t *testing.T) {
 		t.Fatalf("starting cluster 1: %v", err)
 	}
 
-	test.MustDo("POST", cluster[0].URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
-	test.MustDo("POST", cluster[0].URL()+"/index/i0/field/f0", "{\"options\": {\"keys\": true}}")
+	test.Do(t, "POST", cluster[0].URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
+	test.Do(t, "POST", cluster[0].URL()+"/index/i0/field/f0", "{\"options\": {\"keys\": true}}")
 
-	test.MustDo("POST", cluster[0].URL()+"/index/i0/query", "Set(\"foo\", f0=\"bar\")")
+	test.Do(t, "POST", cluster[0].URL()+"/index/i0/query", "Set(\"foo\", f0=\"bar\")")
 
 	var result0, result1 string
 	if err := test.RetryUntil(2*time.Second, func() error {
-		result0 = test.MustDo("POST", cluster[0].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
-		result1 = test.MustDo("POST", cluster[1].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
+		result0 = test.Do(t, "POST", cluster[0].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
+		result1 = test.Do(t, "POST", cluster[1].URL()+"/index/i0/query", "Row(f0=\"bar\")").Body
 		if result0 != result1 {
 			return fmt.Errorf("`%s` != `%s`", result0, result1)
 		}

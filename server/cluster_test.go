@@ -86,7 +86,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 	}
 
 	// Write data on first node.
-	if _, err := m0.Query("i", "", fmt.Sprintf(`
+	if _, err := m0.Query(t, "i", "", fmt.Sprintf(`
             Set(1, f=1)
             Set(%d, f=1)
         `, 2*pilosa.ShardWidth+1)); err != nil {
@@ -117,7 +117,7 @@ func TestMain_SendReceiveMessage(t *testing.T) {
 
 // Ensure that an empty node comes up in a NORMAL state.
 func TestClusterResize_EmptyNode(t *testing.T) {
-	m0 := test.MustRunCommand()
+	m0 := test.RunCommand(t)
 	defer m0.Close()
 
 	if m0.API.State() != pilosa.ClusterStateNormal {
@@ -200,7 +200,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 
 		// Write data on first node.
-		if _, err := m0.Query("i", "", `
+		if _, err := m0.Query(t, "i", "", `
 				Set(1, f=1)
 				Set(1300000, f=1)
 			`); err != nil {
@@ -211,7 +211,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		exp := `{"results":[{"attrs":{},"columns":[1,1300000]}]}` + "\n"
 
 		// Verify the data exists on the single node.
-		if res, err := m0.Query("i", "", `Row(f=1)`); err != nil {
+		if res, err := m0.Query(t, "i", "", `Row(f=1)`); err != nil {
 			t.Fatal(err)
 		} else if res != exp {
 			t.Fatalf("unexpected result: %s", res)
@@ -234,12 +234,12 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 
 		// Verify the data exists on both nodes.
-		if res, err := m0.Query("i", "", `Row(f=1)`); err != nil {
+		if res, err := m0.Query(t, "i", "", `Row(f=1)`); err != nil {
 			t.Fatal(err)
 		} else if res != exp {
 			t.Fatalf("unexpected result: %s", res)
 		}
-		if res, err := m1.Query("i", "", `Row(f=1)`); err != nil {
+		if res, err := m1.Query(t, "i", "", `Row(f=1)`); err != nil {
 			t.Fatal(err)
 		} else if res != exp {
 			t.Fatalf("unexpected result: %s", res)
@@ -263,7 +263,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 
 		// Write data on first node. Note that no data is placed on shard 1.
-		if _, err := m0.Query("i", "", `
+		if _, err := m0.Query(t, "i", "", `
 				Set(1, f=1)
 				Set(2400000, f=1)
 			`); err != nil {
@@ -274,7 +274,7 @@ func TestClusterResize_AddNode(t *testing.T) {
 		exp := `{"results":[{"attrs":{},"columns":[1,2400000]}]}` + "\n"
 
 		// Verify the data exists on the single node.
-		if res, err := m0.Query("i", "", `Row(f=1)`); err != nil {
+		if res, err := m0.Query(t, "i", "", `Row(f=1)`); err != nil {
 			t.Fatal(err)
 		} else if res != exp {
 			t.Fatalf("unexpected result: %s", res)
@@ -297,12 +297,12 @@ func TestClusterResize_AddNode(t *testing.T) {
 		}
 
 		// Verify the data exists on both nodes.
-		if res, err := m0.Query("i", "", `Row(f=1)`); err != nil {
+		if res, err := m0.Query(t, "i", "", `Row(f=1)`); err != nil {
 			t.Fatal(err)
 		} else if res != exp {
 			t.Fatalf("unexpected result: %s", res)
 		}
-		if res, err := m1.Query("i", "", `Row(f=1)`); err != nil {
+		if res, err := m1.Query(t, "i", "", `Row(f=1)`); err != nil {
 			t.Fatal(err)
 		} else if res != exp {
 			t.Fatalf("unexpected result: %s", res)
@@ -373,7 +373,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		}
 
 		// Write data on first node.
-		if _, err := m0.Query("i", "", `
+		if _, err := m0.Query(t, "i", "", `
 				Set(1, f=1)
 				Set(1300000, f=1)
 			`); err != nil {
@@ -384,7 +384,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		exp := `{"results":[{"attrs":{},"columns":[1,1300000]}]}` + "\n"
 
 		// Verify the data exists on the single node.
-		if res, err := m0.Query("i", "", `Row(f=1)`); err != nil {
+		if res, err := m0.Query(t, "i", "", `Row(f=1)`); err != nil {
 			t.Fatal(err)
 		} else if res != exp {
 			t.Fatalf("unexpected result: %s", res)
@@ -412,12 +412,12 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		}
 
 		// Verify the data exists on both nodes.
-		if res, err := m0.Query("i", "", `Row(f=1)`); err != nil {
+		if res, err := m0.Query(t, "i", "", `Row(f=1)`); err != nil {
 			t.Fatal(err)
 		} else if res != exp {
 			t.Fatalf("unexpected result: %s", res)
 		}
-		if res, err := m1.Query("i", "", `Row(f=1)`); err != nil {
+		if res, err := m1.Query(t, "i", "", `Row(f=1)`); err != nil {
 			t.Fatal(err)
 		} else if res != exp {
 			t.Fatalf("unexpected result: %s", res)
@@ -441,7 +441,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		}
 
 		// Write data on first node. Note that no data is placed on shard 1.
-		if _, err := m0.Query("i", "", `
+		if _, err := m0.Query(t, "i", "", `
 				Set(1, f=1)
 				Set(2400000, f=1)
 			`); err != nil {
@@ -452,7 +452,7 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		exp := `{"results":[{"attrs":{},"columns":[1,2400000]}]}` + "\n"
 
 		// Verify the data exists on the single node.
-		if res, err := m0.Query("i", "", `Row(f=1)`); err != nil {
+		if res, err := m0.Query(t, "i", "", `Row(f=1)`); err != nil {
 			t.Fatal(err)
 		} else if res != exp {
 			t.Fatalf("unexpected result: %s", res)
@@ -480,12 +480,12 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 		}
 
 		// Verify the data exists on both nodes.
-		if res, err := m0.Query("i", "", `Row(f=1)`); err != nil {
+		if res, err := m0.Query(t, "i", "", `Row(f=1)`); err != nil {
 			t.Fatal(err)
 		} else if res != exp {
 			t.Fatalf("unexpected result: %s", res)
 		}
-		if res, err := m1.Query("i", "", `Row(f=1)`); err != nil {
+		if res, err := m1.Query(t, "i", "", `Row(f=1)`); err != nil {
 			t.Fatal(err)
 		} else if res != exp {
 			t.Fatalf("unexpected result: %s", res)
@@ -558,7 +558,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 	m1 := cluster[1]
 
 	mustNodeID := func(baseURL string) string {
-		body := test.MustDo("GET", fmt.Sprintf("%s/status", baseURL), "").Body
+		body := test.Do(t, "GET", fmt.Sprintf("%s/status", baseURL), "").Body
 		var resp map[string]interface{}
 		err := json.Unmarshal([]byte(body), &resp)
 		if err != nil {
@@ -571,7 +571,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 	}
 
 	t.Run("ErrorRemoveInvalidNode", func(t *testing.T) {
-		resp := test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), `{"id": "invalid-node-id"}`)
+		resp := test.Do(t, "POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), `{"id": "invalid-node-id"}`)
 		expBody := "removing node: finding node to remove: node with provided ID does not exist"
 		if resp.StatusCode != http.StatusNotFound {
 			t.Fatalf("expected StatusCode %d but got %d", http.StatusNotFound, resp.StatusCode)
@@ -582,7 +582,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 
 	t.Run("ErrorRemoveCoordinator", func(t *testing.T) {
 		nodeID := mustNodeID(m0.URL())
-		resp := test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
+		resp := test.Do(t, "POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
 
 		expBody := "removing node: calling node leave: coordinator cannot be removed; first, make a different node the new coordinator"
 		if resp.StatusCode != http.StatusInternalServerError {
@@ -595,7 +595,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 	t.Run("ErrorRemoveOnNonCoordinator", func(t *testing.T) {
 		coordinatorNodeID := mustNodeID(m0.URL())
 		nodeID := mustNodeID(m1.URL())
-		resp := test.MustDo("POST", m1.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
+		resp := test.Do(t, "POST", m1.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
 
 		expBody := fmt.Sprintf("removing node: calling node leave: node removal requests are only valid on the coordinator node: %s", coordinatorNodeID)
 		if resp.StatusCode != http.StatusInternalServerError {
@@ -622,12 +622,12 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 			setColumns += fmt.Sprintf("Set(%d, f=1) ", i*pilosa.ShardWidth)
 		}
 
-		if _, err := m0.Query("i", "", setColumns); err != nil {
+		if _, err := m0.Query(t, "i", "", setColumns); err != nil {
 			t.Fatal(err)
 		}
 
 		nodeID := mustNodeID(m1.URL())
-		resp := test.MustDo("POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
+		resp := test.Do(t, "POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
 		expBody := "not enough data to perform resize"
 		if resp.StatusCode != http.StatusInternalServerError {
 			t.Fatalf("expected StatusCode %d but got %d", http.StatusInternalServerError, resp.StatusCode)
