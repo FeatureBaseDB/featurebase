@@ -264,7 +264,8 @@ func (i *Index) openExistenceField() error {
 
 // loadMeta reads meta data for the index, if any.
 func (i *Index) loadMeta() error {
-	var pb internal.IndexMeta
+	// TrackExistence is by default true
+	pb := &internal.IndexMeta{TrackExistence: true}
 
 	// Read data from meta file.
 	buf, err := ioutil.ReadFile(filepath.Join(i.path, ".meta"))
@@ -273,14 +274,18 @@ func (i *Index) loadMeta() error {
 	} else if err != nil {
 		return errors.Wrap(err, "reading")
 	} else {
-		if err := proto.Unmarshal(buf, &pb); err != nil {
+		if err := proto.Unmarshal(buf, pb); err != nil {
 			return errors.Wrap(err, "unmarshalling")
 		}
 	}
 
 	// Copy metadata fields.
-	i.keys = pb.Keys
-	i.trackExistence = pb.TrackExistence
+	if pb == nil {
+		i.trackExistence = true
+	} else {
+		i.trackExistence = pb.TrackExistence
+	}
+	i.keys = pb.GetKeys()
 
 	return nil
 }
