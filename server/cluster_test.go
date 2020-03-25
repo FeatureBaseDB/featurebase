@@ -138,7 +138,7 @@ func TestClusterResize_EmptyNodes(t *testing.T) {
 }
 
 // Ensure that adding a node correctly resizes the cluster.
-func TestXClusterResize_AddNode(t *testing.T) {
+func TestClusterResize_AddNode(t *testing.T) {
 	t.Run("NoData", func(t *testing.T) {
 		clus := test.MustRunCluster(t, 2)
 		defer clus.Close()
@@ -387,8 +387,6 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 			t.Fatal(err)
 		} else if res != exp {
 			t.Fatalf("unexpected result: %s", res)
-		} else {
-			fmt.Println(res)
 		}
 
 		// Configure node1

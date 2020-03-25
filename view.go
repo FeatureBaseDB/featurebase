@@ -278,11 +278,11 @@ func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 	frag.RowAttrStore = v.rowAttrStore
 
 	v.fragments[shard] = frag
-	v.notifyIfNew(shard)
+	v.notifyIfNewShard(shard)
 	return frag, nil
 }
 
-func (v *view) notifyIfNew(shard uint64) {
+func (v *view) notifyIfNewShard(shard uint64) {
 	if v.remoteShardPresent(shard) { //checks the fields remoteShards bitmap to see if broadcast needed
 		return
 	}
