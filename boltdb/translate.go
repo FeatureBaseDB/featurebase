@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -33,6 +32,11 @@ var (
 	// ErrTranslateStoreClosed is returned when reading from an TranslateEntryReader
 	// and the underlying store is closed.
 	ErrTranslateStoreClosed = errors.New("boltdb: translate store closing")
+)
+
+const (
+	// snapshotExt is the file extension used for an in-process snapshot.
+	snapshotExt = ".snapshotting"
 )
 
 // OpenTranslateStore opens and initializes a boltdb translation store.
@@ -356,21 +360,32 @@ func (s *TranslateStore) WriteTo(w io.Writer) (int64, error) {
 }
 
 // ReadFrom reads the content and overwrites the existing store.
-func (s *TranslateStore) ReadFrom(r io.Reader) (int64, error) {
+func (s *TranslateStore) ReadFrom(r io.Reader) (n int64, err error) {
 	// Close store.
 	if err := s.Close(); err != nil {
 		return 0, errors.Wrap(err, "closing store")
 	}
 
-	buf := bytes.NewBuffer(nil)
-	n, err := buf.ReadFrom(r)
+	// Create a temporary file to snapshot to.
+	snapshotPath := s.Path + snapshotExt
+	file, err := os.Create(snapshotPath)
 	if err != nil {
-		return n, errors.Wrap(err, "reading from reader")
+		return n, errors.Wrap(err, "creating snapshot file")
 	}
 
-	// Overwrite the store file.
-	if err := ioutil.WriteFile(s.Path, buf.Bytes(), 0666); err != nil {
-		return n, errors.Wrap(err, "writing file")
+	// Write payload to snapshot.
+	if n, err = io.Copy(file, r); err != nil {
+		file.Close()
+		return n, errors.Wrap(err, "snapshot write to")
+	}
+
+	// we close the file here so we don't still have it open when trying
+	// to open it in a moment.
+	file.Close()
+
+	// Move snapshot to data file location.
+	if err := os.Rename(snapshotPath, s.Path); err != nil {
+		return n, errors.Wrap(err, "renaming snapshot")
 	}
 
 	// Re-open the store.
