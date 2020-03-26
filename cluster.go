@@ -886,11 +886,12 @@ func (c *cluster) translationNodes(to *cluster) (map[string][]*translationResize
 		fNodes := c.partitionNodes(pid)
 		tNodes := to.partitionNodes(pid)
 
-		// For `to` cluster, we only need the first node in the
-		// list because that's the primary. For the `from` cluster,
-		// we only need the first node, unless that node is being
-		// removed, then we use the second node. If no second node
-		// exists in that case, then we have to raise an error
+		// For `to` cluster, we include all nodes containing a
+		// replica for the partition. The source for each replica
+		// will be the primary in the `from` cluster. For the `from`
+		// cluster, we only need the first node, unless that node is
+		// being removed, then we use the second node. If no second
+		// node exists in that case, then we have to raise an error
 		// indicating that not enough replicas exist to support
 		// the resize.
 		if len(tNodes) > 0 {
@@ -902,12 +903,14 @@ func (c *cluster) translationNodes(to *cluster) (map[string][]*translationResize
 				// We only need to add the source if the nodes differ;
 				// in other words if the primary partition is on the
 				// same node, it doesn't need to retrieve it.
-				if tNodes[0].ID != fNodes[i].ID {
-					m[tNodes[0].ID] = append(m[tNodes[0].ID],
-						&translationResizeNode{
-							node:        fNodes[i],
-							partitionID: pid,
-						})
+				for n := range tNodes {
+					if tNodes[n].ID != fNodes[i].ID {
+						m[tNodes[n].ID] = append(m[tNodes[n].ID],
+							&translationResizeNode{
+								node:        fNodes[i],
+								partitionID: pid,
+							})
+					}
 				}
 				foundPrimary = true
 				break
@@ -1540,6 +1543,11 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 			for _, src := range instr.TranslationSources {
 				srcURI := src.Node.URI
 
+				idx := c.holder.Index(src.Index)
+				if idx == nil {
+					return ErrIndexNotFound
+				}
+
 				// Retrieve partition from remote node.
 				c.logger.Printf("retrieve translate partition %d for index %s from host %s", src.PartitionID, src.Index, srcURI)
 				rd, err := c.InternalClient.RetrieveTranslatePartitionFromURI(ctx, src.Index, src.PartitionID, srcURI)
@@ -1549,15 +1557,15 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 					return fmt.Errorf("partition %d doesn't exist on host: %s", src.PartitionID, src.Node.URI)
 				}
 
-				// Get the translate store for this index/partition.
-				idx := c.holder.Index(src.Index)
-				if idx == nil {
-					return ErrIndexNotFound
-				}
-
-				store := idx.TranslateStore(src.PartitionID)
-				if _, err = store.ReadFrom(rd); err != nil {
+				// Write to local store and always close reader.
+				if err := func() error {
+					defer rd.Close()
+					// Get the translate store for this index/partition.
+					store := idx.TranslateStore(src.PartitionID)
+					_, err = store.ReadFrom(rd)
 					return errors.Wrap(err, "reading from reader")
+				}(); err != nil {
+					return errors.Wrap(err, "copying remote partition")
 				}
 			}
 
