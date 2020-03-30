@@ -797,7 +797,7 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 	switch req.Options.Type {
 	case pilosa.FieldTypeSet:
 		fos = append(fos, pilosa.OptFieldTypeSet(*req.Options.CacheType, *req.Options.CacheSize))
-	case pilosa.FieldTypeInt, pilosa.FieldTypeDecimal:
+	case pilosa.FieldTypeInt:
 		if req.Options.Min == nil {
 			min := pql.NewDecimal(int64(math.MinInt64), 0)
 			req.Options.Min = &min
@@ -806,24 +806,30 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 			max := pql.NewDecimal(int64(math.MaxInt64), 0)
 			req.Options.Max = &max
 		}
-		if req.Options.Type == pilosa.FieldTypeDecimal {
-			scale := int64(0)
-			if req.Options.Scale != nil {
-				scale = *req.Options.Scale
-			}
-			var minmax []pql.Decimal
-			if req.Options.Min != nil {
-				minmax = []pql.Decimal{
-					*req.Options.Min,
-				}
-				if req.Options.Max != nil {
-					minmax = append(minmax, *req.Options.Max)
-				}
-			}
-			fos = append(fos, pilosa.OptFieldTypeDecimal(scale, minmax...))
-		} else {
-			fos = append(fos, pilosa.OptFieldTypeInt(req.Options.Min.ToInt64(0), req.Options.Max.ToInt64(0)))
+		fos = append(fos, pilosa.OptFieldTypeInt(req.Options.Min.ToInt64(0), req.Options.Max.ToInt64(0)))
+	case pilosa.FieldTypeDecimal:
+		scale := int64(0)
+		if req.Options.Scale != nil {
+			scale = *req.Options.Scale
 		}
+		if req.Options.Min == nil {
+			min := pql.NewDecimal(int64(math.MinInt64), scale)
+			req.Options.Min = &min
+		}
+		if req.Options.Max == nil {
+			max := pql.NewDecimal(int64(math.MaxInt64), scale)
+			req.Options.Max = &max
+		}
+		var minmax []pql.Decimal
+		if req.Options.Min != nil {
+			minmax = []pql.Decimal{
+				*req.Options.Min,
+			}
+			if req.Options.Max != nil {
+				minmax = append(minmax, *req.Options.Max)
+			}
+		}
+		fos = append(fos, pilosa.OptFieldTypeDecimal(scale, minmax...))
 	case pilosa.FieldTypeTime:
 		fos = append(fos, pilosa.OptFieldTypeTime(*req.Options.TimeQuantum, req.Options.NoStandardView))
 	case pilosa.FieldTypeMutex:
@@ -895,8 +901,20 @@ func (o *fieldOptions) validate() error {
 		} else if o.ForeignIndex != nil {
 			return pilosa.NewBadRequestError(errors.New("set field cannot be a foreign key"))
 		}
-	case pilosa.FieldTypeInt, pilosa.FieldTypeDecimal:
+	case pilosa.FieldTypeInt:
 		if o.CacheType != nil {
+			return pilosa.NewBadRequestError(errors.New("cacheType does not apply to field type int"))
+		} else if o.CacheSize != nil {
+			return pilosa.NewBadRequestError(errors.New("cacheSize does not apply to field type int"))
+		} else if o.TimeQuantum != nil {
+			return pilosa.NewBadRequestError(errors.New("timeQuantum does not apply to field type int"))
+		} else if o.ForeignIndex != nil && o.Type == pilosa.FieldTypeDecimal {
+			return pilosa.NewBadRequestError(errors.New("decimal field cannot be a foreign key"))
+		}
+	case pilosa.FieldTypeDecimal:
+		if o.Scale == nil {
+			return pilosa.NewBadRequestError(errors.New("decimal field requires a scale argument"))
+		} else if o.CacheType != nil {
 			return pilosa.NewBadRequestError(errors.New("cacheType does not apply to field type int"))
 		} else if o.CacheSize != nil {
 			return pilosa.NewBadRequestError(errors.New("cacheSize does not apply to field type int"))
