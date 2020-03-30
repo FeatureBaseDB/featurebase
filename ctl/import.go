@@ -28,6 +28,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/http"
+	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pkg/errors"
 )
@@ -104,7 +105,7 @@ func (cmd *ImportCommand) Run(ctx context.Context) error {
 			// set the correct type for the field
 			if cmd.FieldOptions.TimeQuantum != "" {
 				cmd.FieldOptions.Type = pilosa.FieldTypeTime
-			} else if cmd.FieldOptions.Min != 0 || cmd.FieldOptions.Max != 0 {
+			} else if cmd.FieldOptions.Min != pql.NewDecimal(0, 0) || cmd.FieldOptions.Max != pql.NewDecimal(0, 0) {
 				cmd.FieldOptions.Type = pilosa.FieldTypeInt
 			} else {
 				cmd.FieldOptions.Type = pilosa.FieldTypeSet
