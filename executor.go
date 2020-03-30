@@ -438,7 +438,7 @@ func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shar
 		// still need to handle them. Since everything else was
 		// already precomputed by handlePreCallChildren, though,
 		// we don't need this logic in executeCall.
-		if newIndex := call.CallIndex(); newIndex != "" {
+		if newIndex := call.CallIndex(); newIndex != "" && newIndex != index {
 			v, err = e.executeCall(ctx, newIndex, call, nil, opt)
 		} else {
 			v, err = e.executeCall(ctx, index, call, shards, opt)
