@@ -636,7 +636,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 	}
 
 	t.Run("ErrorRemoveInvalidNode", func(t *testing.T) {
-		resp := test.Do(t, "POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), `{"id": "invalid-node-id"}`)
+		resp := test.Do(t, "POST", m0.URL()+"/cluster/resize/remove-node", `{"id": "invalid-node-id"}`)
 		expBody := "removing node: finding node to remove: node with provided ID does not exist"
 		if resp.StatusCode != http.StatusNotFound {
 			t.Fatalf("expected StatusCode %d but got %d", http.StatusNotFound, resp.StatusCode)
@@ -647,7 +647,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 
 	t.Run("ErrorRemoveCoordinator", func(t *testing.T) {
 		nodeID := mustNodeID(m0.URL())
-		resp := test.Do(t, "POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
+		resp := test.Do(t, "POST", m0.URL()+"/cluster/resize/remove-node", fmt.Sprintf(`{"id": "%s"}`, nodeID))
 
 		expBody := "removing node: calling node leave: coordinator cannot be removed; first, make a different node the new coordinator"
 		if resp.StatusCode != http.StatusInternalServerError {
@@ -660,7 +660,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 	t.Run("ErrorRemoveOnNonCoordinator", func(t *testing.T) {
 		coordinatorNodeID := mustNodeID(m0.URL())
 		nodeID := mustNodeID(m1.URL())
-		resp := test.Do(t, "POST", m1.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
+		resp := test.Do(t, "POST", m1.URL()+"/cluster/resize/remove-node", fmt.Sprintf(`{"id": "%s"}`, nodeID))
 
 		expBody := fmt.Sprintf("removing node: calling node leave: node removal requests are only valid on the coordinator node: %s", coordinatorNodeID)
 		if resp.StatusCode != http.StatusInternalServerError {
@@ -692,7 +692,7 @@ func TestClusterResize_RemoveNode(t *testing.T) {
 		}
 
 		nodeID := mustNodeID(m1.URL())
-		resp := test.Do(t, "POST", m0.URL()+fmt.Sprintf("/cluster/resize/remove-node"), fmt.Sprintf(`{"id": "%s"}`, nodeID))
+		resp := test.Do(t, "POST", m0.URL()+"/cluster/resize/remove-node", fmt.Sprintf(`{"id": "%s"}`, nodeID))
 		expBody := "not enough data to perform resize"
 		if resp.StatusCode != http.StatusInternalServerError {
 			t.Fatalf("expected StatusCode %d but got %d", http.StatusInternalServerError, resp.StatusCode)

@@ -1,20 +1,28 @@
-version: 2
-defaults: &defaults
-  working_directory: /go/src/github.com/pilosa/pilosa
-  docker:
-    - image: circleci/golang:1.13
-  environment:
-    GO111MODULE: "on"
-fast-checkout: &fast-checkout
-  attach_workspace:
-    at: .
-add-github-auth: &add-github-auth
-  run: git config --global url."https://moleculacorp:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com".insteadOf "https://github.com"
+version: 2.1
+
+executors:
+  golang:
+    parameters:
+      version:
+        type: string
+        default: "1.14"
+    docker:
+      - image: circleci/golang:<< parameters.version >>
+    working_directory: /go/src/github.com/pilosa/pilosa
+    environment:
+      GO111MODULE: "on" # TODO: Only needed for Go <1.13, remove when dropping support for 1.11/1.12.
+
+commands:
+  add-github-auth:
+    steps:
+      - run: git config --global url."https://moleculacorp:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com".insteadOf "https://github.com"
+
 jobs:
   setup:
-    <<: *defaults
+    executor:
+      name: golang
     steps:
-      - *add-github-auth
+      - add-github-auth
       - checkout
       - restore_cache:
           keys:
@@ -28,102 +36,71 @@ jobs:
           root: .
           paths: "*"
   check-license-headers:
-    <<: *defaults
+    executor:
+      name: golang
     steps:
-      - *fast-checkout
-      - *add-github-auth
+      - attach_workspace:
+          at: .
       - run: make check-license-headers
   linter:
-    <<: *defaults
+    executor:
+      name: golang
     steps:
-      - *fast-checkout
-      - *add-github-auth
-      - run: curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s v1.20.0
-      - run: sudo cp bin/golangci-lint /usr/local/bin/
+      - attach_workspace:
+          at: .
+      - add-github-auth
+      - run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sudo sh -s -- -b /usr/local/bin v1.24.0
       - run: make golangci-lint
   test-build-arm:
-    <<: *defaults
+    executor:
+      name: golang
     steps:
-      - *fast-checkout
-      - *add-github-auth
+      - attach_workspace:
+          at: .
+      - add-github-auth
       - run: make build GOOS=linux GOARCH=arm GOARM=5
       - run: make build GOOS=linux GOARCH=arm GOARM=6
       - run: make build GOOS=linux GOARCH=arm GOARM=7
       - run: make build GOOS=linux GOARCH=arm64
-  test-golang-1.14-rc:
-    <<: *defaults
-    docker:
-      - image: circleci/golang:1.14-rc
+  test:
+    parameters:
+      golang_version:
+        type: string
+        default: "1.14"
+      shard_width:
+        type: string
+        default: "20"
+      test_flags:
+        type: string
+        default: ""
+      goarch:
+        type: string
+        default: amd64
+    executor:
+      name: golang
+      version: << parameters.golang_version >>
     steps:
-      - *fast-checkout
-      - *add-github-auth
+      - attach_workspace:
+          at: .
+      - add-github-auth
       - run: sudo apt-get install lsof
-      - run: make test
-  test-golang-1.13: &base-test
-    <<: *defaults
-    steps:
-      - *fast-checkout
-      - *add-github-auth
-      - run: sudo apt-get install lsof
-      - run: make test
-  test-golang-1.13-shard22:
-    <<: *defaults
-    steps:
-      - *fast-checkout
-      - *add-github-auth
-      - run: sudo apt-get install lsof
-      - run: make test SHARD_WIDTH=22
-  test-golang-1.13-race:
-    <<: *defaults
-    steps:
-      - *fast-checkout
-      - *add-github-auth
-      - run: sudo apt-get install lsof
-      - run:
-          command: make test TESTFLAGS="-race -v -timeout=30m"
-          no_output_timeout: 30m
-  test-golang-1.13-386:
-    <<: *base-test
-    environment:
-      GO111MODULE: "on"
-      GOARCH: 386
-  test-golang-1.13-enterprise:
-    <<: *defaults
-    steps:
-      - *fast-checkout
-      - *add-github-auth
-      - run: sudo apt-get install lsof
-      - run: make test ENTERPRISE=1
-  test-golang-1.12:
-    <<: *defaults
-    docker:
-      - image: circleci/golang:1.12
-    steps:
-      - *fast-checkout
-      - *add-github-auth
-      - run: sudo apt-get install lsof
-      - run: make test
-  test-golang-1.11:
-    <<: *defaults
-    docker:
-      - image: circleci/golang:1.11
-    steps:
-      - *fast-checkout
-      - *add-github-auth
-      - run: sudo apt-get install lsof
-      - run: make test
+      - run: make test SHARD_WIDTH=<< parameters.shard_width >> TESTFLAGS=<< parameters.test_flags >> GOARCH=<< parameters.goarch >>
   cluster-tests:
-    <<: *defaults
+    executor:
+      name: golang
     steps:
-      - *fast-checkout
-      - *add-github-auth
+      - attach_workspace:
+          at: .
+      - add-github-auth
       - setup_remote_docker
       - run: make clustertests-build
   prerelease:
-    <<: *base-test
+    executor:
+      name: golang
     steps:
-      - *fast-checkout
-      - *add-github-auth
+      - attach_workspace:
+          at: .
+      - add-github-auth
       - run: make prerelease
       - store_artifacts:
           path: build
@@ -131,10 +108,11 @@ jobs:
           root: .
           paths: build
   release:
-    <<: *defaults
+    executor:
+      name: golang
     steps:
-      - *fast-checkout
-      - *add-github-auth
+      - attach_workspace:
+          at: .
       - run: make release
       - store_artifacts:
           path: build
@@ -145,36 +123,48 @@ jobs:
     docker:
       - image: circleci/python:2.7-jessie
     steps:
-      - run: '[[ -v CIRCLE_PR_NUMBER ]] && circleci step halt || true' # Skip job if this is a PR
-      - *fast-checkout
-      - *add-github-auth
+      - attach_workspace:
+          at: .
       - run: sudo pip install awscli
       - run: make prerelease-upload
   dockerhub-upload:
-    <<: *defaults
+    parameters:
+      tag_branch:
+        type: boolean
+        default: true
+      tag_tag:
+        type: boolean
+        default: false
+      tag_latest:
+        type: boolean
+        default: false
+      target_name:
+        type: string
+        default: moleculacorp/pilosa
+    executor:
+      name: golang
     steps:
-      - run: '[[ -v CIRCLE_PR_NUMBER ]] && circleci step halt || true' # Skip job if this is a PR
-      - *fast-checkout
-      - *add-github-auth
+      - attach_workspace:
+          at: .
+      - add-github-auth
       - setup_remote_docker
       - run: make docker
-      - run: docker tag pilosa:$(git describe --tags) pilosa/pilosa:master
       - run: docker login -u $DOCKER_USER -p $DOCKER_PASS
-      - run: docker push pilosa/pilosa:master
-  docker-enterprise-upload:
-    <<: *defaults
-    steps:
-      #- run: '[[ -v CIRCLE_PR_NUMBER ]] && circleci step halt || true' # Skip job if this is a PR
-      - *fast-checkout
-      - *add-github-auth
-      - setup_remote_docker
-      - run: make docker-enterprise
-      - run: docker tag pilosa:$(git describe --tags) molecula.azurecr.io/pilosa-enterprise:unstable
-      - run: docker login -u $DOCKER_USER -p $DOCKER_PASS
-      - run: docker push molecula.azurecr.io/pilosa-enterprise:unstable
+      - when:
+          condition: << parameters.tag_branch >>
+          steps:
+            - run: make docker-tag-push DOCKER_TARGET=<< parameters.target_name >>:<< pipeline.git.branch >>
+      - when:
+          condition: << parameters.tag_tag >>
+          steps:
+            - run: make docker-tag-push DOCKER_TARGET=<< parameters.target_name >>:$(git describe --tags)
+      - when:
+          condition: << parameters.tag_latest >>
+          steps:
+            - run: make docker-tag-push DOCKER_TARGET=<< parameters.target_name >>:latest
+        
 workflows:
-  version: 2
-  test:
+  build:
     jobs:
       - setup
       - linter:
@@ -186,25 +176,26 @@ workflows:
       - test-build-arm:
           requires:
             - setup
-      - test-golang-1.14-rc:
+      - test:
+          name: test-golang-<< matrix.golang_version >>
+          matrix:
+            parameters:
+              golang_version: ["1.14", "1.13", "1.12", "1.11"]
           requires:
             - setup
-      - test-golang-1.13-enterprise:
+      - test:
+          name: test-race
+          test_flags: -race -v -timeout=30m
           requires:
             - setup
-      - test-golang-1.13-race:
+      - test:
+          name: test-386
+          goarch: "386"
           requires:
             - setup
-      - test-golang-1.13-386:
-          requires:
-            - setup
-      - test-golang-1.13:
-          requires:
-            - setup
-      - test-golang-1.12:
-          requires:
-            - setup
-      - test-golang-1.11:
+      - test:
+          name: test-shardwidth-22
+          shard_width: "22"
           requires:
             - setup
       - cluster-tests:
@@ -214,15 +205,32 @@ workflows:
           requires:
             - linter
             - check-license-headers
-            - test-golang-1.13
-      - release:
+            - test-golang-1.14
+      - dockerhub-upload:
+          name: dockerhub-upload-stable
+          tag_branch: true
+          tag_tag: true
+          tag_latest: true
           requires:
             - linter
             - check-license-headers
-            - test-golang-1.13
+            - test-golang-1.14
           filters:
+            branches:
+              only: enterprise
             tags:
               only: /^v.*/
+      - dockerhub-upload:
+          name: dockerhub-upload-unstable
+          tag_branch: true
+          tag_tag: false
+          tag_latest: false
+          requires:
+            - linter
+            - check-license-headers
+            - test-golang-1.14
+          filters:
             branches:
-              ignore: /.*/
-
+              only: enterprise
+            tags:
+              ignore: /^v.*/
