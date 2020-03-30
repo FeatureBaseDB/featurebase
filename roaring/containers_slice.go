@@ -43,7 +43,8 @@ func (sc *sliceContainers) Put(key uint64, c *Container) {
 	} else {
 		sc.containers[i] = c
 	}
-
+	sc.lastKey = key
+	sc.lastContainer = c
 }
 
 func (sc *sliceContainers) PutContainerValues(key uint64, typ byte, n int, mapped bool) {
@@ -159,7 +160,7 @@ func (sc *sliceContainers) Reset() {
 	sc.keys = sc.keys[:0]
 	sc.containers = sc.containers[:0]
 	sc.lastContainer = nil
-	sc.lastKey = 0
+	sc.lastKey = ^uint64(0)
 }
 
 func (sc *sliceContainers) ResetN(n int) {
@@ -171,7 +172,7 @@ func (sc *sliceContainers) ResetN(n int) {
 		sc.containers = sc.containers[:0]
 	}
 	sc.lastContainer = nil
-	sc.lastKey = 0
+	sc.lastKey = ^uint64(0)
 }
 
 func (sc *sliceContainers) seek(key uint64) (int, bool) {
@@ -227,6 +228,9 @@ func (sc *sliceContainers) UpdateEvery(fn func(uint64, *Container, bool) (*Conta
 			sc.containers[i] = nc
 		}
 	}
+	// invalidate cache.
+	sc.lastKey = ^uint64(0)
+	sc.lastContainer = nil
 }
 
 type sliceIterator struct {
