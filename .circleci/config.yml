@@ -84,7 +84,7 @@ jobs:
           at: .
       - add-github-auth
       - run: sudo apt-get install lsof
-      - run: make test SHARD_WIDTH=<< parameters.shard_width >> TESTFLAGS=<< parameters.test_flags >> GOARCH=<< parameters.goarch >>
+      - run: make test SHARD_WIDTH=<< parameters.shard_width >> TESTFLAGS="<< parameters.test_flags >>" GOARCH=<< parameters.goarch >>
   cluster-tests:
     executor:
       name: golang
@@ -217,7 +217,7 @@ workflows:
             - test-golang-1.14
           filters:
             branches:
-              only: enterprise
+              ignore: /.*/
             tags:
               only: /^v.*/
       - dockerhub-upload:
