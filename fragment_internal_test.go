@@ -25,6 +25,8 @@ import (
 	"math/rand"
 	"os"
 	"reflect"
+	"runtime"
+	"runtime/debug"
 	"sort"
 	"sync/atomic"
 	"testing"
@@ -3581,6 +3583,60 @@ func TestFragmentConcurrentReadWrite(t *testing.T) {
 	}
 
 	t.Logf("%d", acc)
+}
+
+func TestRemapCache(t *testing.T) {
+	f := mustOpenFragment("i", "f", viewStandard, 0, "")
+	// request a panic that doesn't kill the program on fault
+	wouldFault := debug.SetPanicOnFault(true)
+	defer func() {
+		debug.SetPanicOnFault(wouldFault)
+		if r := recover(); r != nil {
+			if err, ok := r.(error); ok {
+				// special case: if we caught a page fault, we diagnose that directly. sadly,
+				// we can't see the actual values that were used to generate this, probably.
+				if err.Error() == "runtime error: invalid memory address or nil pointer dereference" {
+					t.Fatalf("segfault trapped during remap test (expected failure mode)")
+				}
+			}
+			t.Fatalf("unexpected panic: %v", r)
+		}
+	}()
+	// create a container
+	_, err := f.storage.Add(65537)
+	if err != nil {
+		t.Fatalf("storage add: %v", err)
+	}
+	// cause the container to be mapped
+	err = f.Snapshot()
+	if err != nil {
+		t.Fatalf("storage snapshot: %v", err)
+	}
+	// freeze the row
+	_ = f.row(0)
+	// add a bit that isn't in that container, so that container doesn't
+	// change
+	_, err = f.storage.Add(2)
+	if err != nil {
+		t.Fatalf("storage add: %v", err)
+	}
+	// make the original container be the most recent, thus cached, container
+	_, err = f.bit(0, 65537)
+	if err != nil {
+		t.Fatalf("storage bit check: %v", err)
+	}
+	// force snapshot, remapping the containers
+	err = f.Snapshot()
+	if err != nil {
+		t.Fatalf("storage snapshot: %v", err)
+	}
+	// get rid of the old mapping
+	runtime.GC()
+	// try to read that container again
+	_, err = f.bit(0, 65537)
+	if err != nil {
+		t.Fatalf("storage bit check: %v", err)
+	}
 }
 
 func TestFragment_Bug_Q2DoubleDelete(t *testing.T) {
