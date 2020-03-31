@@ -1,4 +1,4 @@
-.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test generate generate-protoc generate-pql gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build test
+.PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build test
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
@@ -138,6 +138,12 @@ generate: generate-protoc generate-stringer generate-pql
 docker: vendor
 	docker build --build-arg BUILD_FLAGS="${FLAGS}" -t "pilosa:$(VERSION)" .
 	@echo Created docker image: pilosa:$(VERSION)
+
+# Tag and push a Docker image
+docker-tag-push: vendor
+	docker tag "pilosa:$(VERSION)" $(DOCKER_TARGET)
+	docker push $(DOCKER_TARGET)
+	@echo Pushed docker image: $(DOCKER_TARGET)
 
 # Create Docker image from Dockerfile (enterprise)
 docker-enterprise: vendor

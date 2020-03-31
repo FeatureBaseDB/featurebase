@@ -1225,7 +1225,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	// Marshal response object.
 	buf, e := h.api.Serializer.Marshal(&pilosa.ImportResponse{Err: ""})
 	if e != nil {
-		http.Error(w, fmt.Sprintf("marshal import response"), http.StatusInternalServerError)
+		http.Error(w, "marshal import response", http.StatusInternalServerError)
 		return
 	}
 
@@ -1738,7 +1738,7 @@ func (h *Handler) handlePostImportColumnAttrs(w http.ResponseWriter, r *http.Req
 	// Marshal response object.
 	buf, e := h.api.Serializer.Marshal(&pilosa.ImportResponse{Err: ""})
 	if e != nil {
-		http.Error(w, fmt.Sprintf("marshal import-column-attrs response"), http.StatusInternalServerError)
+		http.Error(w, "marshal import-column-attrs response", http.StatusInternalServerError)
 		return
 	}
 
