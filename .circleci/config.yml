@@ -84,7 +84,9 @@ jobs:
           at: .
       - add-github-auth
       - run: sudo apt-get install lsof
-      - run: make test SHARD_WIDTH=<< parameters.shard_width >> TESTFLAGS="<< parameters.test_flags >>" GOARCH=<< parameters.goarch >>
+      - run:
+          command: make test SHARD_WIDTH=<< parameters.shard_width >> TESTFLAGS="<< parameters.test_flags >>" GOARCH=<< parameters.goarch >>
+          no_output_timeout: 30m
   cluster-tests:
     executor:
       name: golang
