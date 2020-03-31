@@ -321,6 +321,10 @@ func (e *executor) handlePreCalls(ctx context.Context, index string, c *pql.Call
 	// like Distinct, where you can't predict output shard for a result
 	// from the shard being queried.
 	if newIndex != "" && newIndex != index {
+		if err := e.handlePreCallChildren(ctx, index, c, shards, opt); err != nil {
+			return err
+		}
+
 		c.Type = pql.PrecallGlobal
 		index = newIndex
 		// we need to recompute shards, then

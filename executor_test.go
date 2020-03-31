@@ -15,6 +15,7 @@
 package pilosa_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -4979,4 +4980,105 @@ func TestExecutor_Execute_NoIndex(t *testing.T) {
 	}); errors.Cause(err) != pilosa.ErrIndexNotFound {
 		t.Fatal("expecting error: 'index systems does not exist'")
 	}
+}
+
+func TestExecutor_Execute_CountDistinct(t *testing.T) {
+	data, err := ioutil.ReadFile("testdata/schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := test.MustRunCluster(t, 1)
+
+	defer c.Close()
+	api := c[0].API
+
+	schema := &pilosa.Schema{}
+	if err := json.NewDecoder(bytes.NewReader(data)).Decode(schema); err != nil {
+		t.Fatal(err)
+	}
+	if err := api.ApplySchema(context.TODO(), schema, false); err != nil {
+		t.Fatal(err)
+	}
+
+	writeQuery := `Set(100, type=AntidotePoint)Set(100, equip_id=100)Set(100, site_id=100)Set(100, id=100)`
+	for _, i := range schema.Indexes {
+		if _, err := api.Query(context.TODO(), &pilosa.QueryRequest{Index: i.Name, Query: writeQuery}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// test query - Distinct of Distincts
+	pql := `Distinct(
+		Intersect(
+			Distinct(
+				Intersect(Row(type=AntidotePoint)),
+			index=power_ts, field=equip_id),
+			Distinct(
+				Intersect(Row(type=AntidotePoint)),
+			index=power_ts, field=equip_id)
+		), index=equipment, field=site_id)`
+
+	// Check if test query gives correct results (one column 100)
+	t.Run("Distinct", func(t *testing.T) {
+		resp, err := api.Query(context.TODO(), &pilosa.QueryRequest{
+			Index: "sites",
+			Query: pql,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, ok := resp.Results[0].(pilosa.SignedRow)
+		if !ok {
+			t.Fatalf("invalid response type, expected: pilosa.SignedRow, got: %T", resp.Results[0])
+		}
+		if r.Pos.Count() != 1 {
+			t.Fatalf("invalid pilosa.SignedRow.Pos.Count, expected: 1, got: %v", r.Pos.Count())
+		}
+		if r.Pos.Columns()[0] != 100 {
+			t.Fatalf("invalid pilosa.SignedRow.Pos.Columns, expected: [100], got: %v", r.Pos.Columns())
+		}
+	})
+
+	// Following tests check if wrapping Distinct of Distincts query by Count and GroupBy
+	// is fixed and does not give an error: 'unknown call: Distinct' error.
+
+	// Check if Count on test query gives correct, exactly 1 result
+	t.Run("Count(Distinct)", func(t *testing.T) {
+		resp, err := api.Query(context.TODO(), &pilosa.QueryRequest{
+			Index: "sites",
+			Query: fmt.Sprintf("Count(%s)", pql),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		cnt, ok := resp.Results[0].(uint64)
+		if !ok {
+			t.Fatalf("invalid response type, expected: uint64, got: %T", resp.Results[0])
+		}
+		if cnt != 1 {
+			t.Fatalf("invalid result, expected: 1, got: %v", cnt)
+		}
+	})
+
+	// Check if GroupBy on test query gives correct, exactly 1 result
+	t.Run("GroupBy(Distinct)", func(t *testing.T) {
+		resp, err := api.Query(context.TODO(), &pilosa.QueryRequest{
+			Index: "sites",
+			Query: fmt.Sprintf("GroupBy(Rows(type), filter=%s)", pql),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		gc, ok := resp.Results[0].([]pilosa.GroupCount)
+		if !ok {
+			t.Fatalf("invalid response type, expected: []pilosa.GroupCount, got: %T", resp.Results[0])
+		}
+		if len(gc) != 1 {
+			t.Fatalf("invalid group count length, expected: 1, got: %v", len(gc))
+		}
+		if gc[0].Count != 1 {
+			t.Fatalf("invalid group count count, expected: 1, got: %v", gc[0].Count)
+		}
+	})
 }
