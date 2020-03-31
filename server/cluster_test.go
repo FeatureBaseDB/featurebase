@@ -491,6 +491,71 @@ func TestClusterResize_AddNodeConcurrentIndex(t *testing.T) {
 			t.Fatalf("unexpected result: %s", res)
 		}
 	})
+	t.Run("WithIndexKeys", func(t *testing.T) {
+		// Configure node0
+		m0 := test.MustRunCluster(t, 1)[0]
+		defer m0.Close()
+
+		seed := m0.GossipAddress()
+
+		// Create a client for each node.
+		client0 := m0.Client()
+
+		// Create indexes and fields on one node.
+		if err := client0.CreateIndex(context.Background(), "i", pilosa.IndexOptions{Keys: true}); err != nil && err != pilosa.ErrIndexExists {
+			t.Fatal(err)
+		} else if err := client0.CreateField(context.Background(), "i", "f"); err != nil {
+			t.Fatal(err)
+		}
+
+		// Write data on first node.
+		if _, err := m0.Query(t, "i", "", `
+				Set('col1', f=1)
+				Set('col2', f=1)
+			`); err != nil {
+			t.Fatal(err)
+		}
+
+		// exp is the expected result for the Row queries that follow.
+		exp := `{"results":[{"attrs":{},"columns":[],"keys":["col2","col1"]}]}` + "\n"
+
+		// Verify the data exists on the single node.
+		if res, err := m0.Query(t, "i", "", `Row(f=1)`); err != nil {
+			t.Fatal(err)
+		} else if res != exp {
+			t.Fatalf("unexpected result: %s", res)
+		}
+
+		// Configure node1
+		m1 := test.NewCommandNode(false)
+		m1.Config.Gossip.Port = "0"
+		m1.Config.Gossip.Seeds = []string{seed}
+		errc := make(chan error, 1)
+		go func() {
+			_, err := m0.API.CreateIndex(context.Background(), "blah", pilosa.IndexOptions{})
+			errc <- err
+		}()
+		err := m1.Start()
+		if err != nil {
+			t.Fatalf("starting second main: %v", err)
+		}
+		defer m1.Close()
+
+		if !checkClusterState(m0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s", m0.API.State())
+		} else if !checkClusterState(m1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s", m1.API.State())
+		}
+
+		// Verify the data exists on both nodes.
+		for i, node := range []*test.Command{m0, m1} {
+			if res, err := node.Query(t, "i", "", `Row(f=1)`); err != nil {
+				t.Fatal(err)
+			} else if res != exp {
+				t.Fatalf("node%d expected: %s, but got: %s", i, exp, res)
+			}
+		}
+	})
 }
 
 // Ensure that redundant gossip seeds are used

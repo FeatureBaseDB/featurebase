@@ -1469,3 +1469,40 @@ func nodePathToURL(node *pilosa.Node, path string) url.URL {
 		Path:   path,
 	}
 }
+
+// RetrieveTranslatePartitionFromURI returns a ReadCloser which contains the data of the
+// specified translate partition from the specified node. Caller *must* close the returned
+// ReadCloser or risk leaking goroutines/tcp connections.
+func (c *InternalClient) RetrieveTranslatePartitionFromURI(ctx context.Context, index string, partition int, uri pilosa.URI) (io.ReadCloser, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.RetrieveTranslatePartitionFromURI")
+	defer span.Finish()
+
+	node := &pilosa.Node{
+		URI: uri,
+	}
+
+	u := nodePathToURL(node, "/internal/translate/data")
+	u.RawQuery = url.Values{
+		"index":     {index},
+		"partition": {strconv.FormatInt(int64(partition), 10)},
+	}.Encode()
+
+	// Build request.
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating request")
+	}
+
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	// Execute request.
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			return nil, pilosa.ErrFragmentNotFound
+		}
+		return nil, err
+	}
+
+	return resp.Body, nil
+}

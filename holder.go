@@ -348,7 +348,10 @@ func (h *Holder) availableShardsByIndex() map[string]*roaring.Bitmap {
 func (h *Holder) Schema() []*IndexInfo {
 	var a []*IndexInfo
 	for _, index := range h.Indexes() {
-		di := &IndexInfo{Name: index.Name()}
+		di := &IndexInfo{
+			Name:    index.Name(),
+			Options: index.Options(),
+		}
 		for _, field := range index.Fields() {
 			fi := &FieldInfo{Name: field.Name(), Options: field.Options()}
 			for _, view := range field.views() {

@@ -517,12 +517,13 @@ func encodeQueryResponse(m *pilosa.QueryResponse) *internal.QueryResponse {
 
 func encodeResizeInstruction(m *pilosa.ResizeInstruction) *internal.ResizeInstruction {
 	return &internal.ResizeInstruction{
-		JobID:         m.JobID,
-		Node:          encodeNode(m.Node),
-		Coordinator:   encodeNode(m.Coordinator),
-		Sources:       encodeResizeSources(m.Sources),
-		NodeStatus:    encodeNodeStatus(m.NodeStatus),
-		ClusterStatus: encodeClusterStatus(m.ClusterStatus),
+		JobID:              m.JobID,
+		Node:               encodeNode(m.Node),
+		Coordinator:        encodeNode(m.Coordinator),
+		Sources:            encodeResizeSources(m.Sources),
+		TranslationSources: encodeTranslationResizeSources(m.TranslationSources),
+		NodeStatus:         encodeNodeStatus(m.NodeStatus),
+		ClusterStatus:      encodeClusterStatus(m.ClusterStatus),
 	}
 }
 
@@ -544,6 +545,22 @@ func encodeResizeSource(m *pilosa.ResizeSource) *internal.ResizeSource {
 	}
 }
 
+func encodeTranslationResizeSources(srcs []*pilosa.TranslationResizeSource) []*internal.TranslationResizeSource {
+	new := make([]*internal.TranslationResizeSource, 0, len(srcs))
+	for _, src := range srcs {
+		new = append(new, encodeTranslationResizeSource(src))
+	}
+	return new
+}
+
+func encodeTranslationResizeSource(m *pilosa.TranslationResizeSource) *internal.TranslationResizeSource {
+	return &internal.TranslationResizeSource{
+		Node:        encodeNode(m.Node),
+		Index:       m.Index,
+		PartitionID: int32(m.PartitionID),
+	}
+}
+
 func encodeSchema(m *pilosa.Schema) *internal.Schema {
 	return &internal.Schema{
 		Indexes: encodeIndexInfos(m.Indexes),
@@ -560,8 +577,9 @@ func encodeIndexInfos(idxs []*pilosa.IndexInfo) []*internal.Index {
 
 func encodeIndexInfo(idx *pilosa.IndexInfo) *internal.Index {
 	return &internal.Index{
-		Name:   idx.Name,
-		Fields: encodeFieldInfos(idx.Fields),
+		Name:    idx.Name,
+		Options: encodeIndexMeta(&idx.Options),
+		Fields:  encodeFieldInfos(idx.Fields),
 	}
 }
 
@@ -819,6 +837,8 @@ func decodeResizeInstruction(ri *internal.ResizeInstruction, m *pilosa.ResizeIns
 	decodeNode(ri.Coordinator, m.Coordinator)
 	m.Sources = make([]*pilosa.ResizeSource, len(ri.Sources))
 	decodeResizeSources(ri.Sources, m.Sources)
+	m.TranslationSources = make([]*pilosa.TranslationResizeSource, len(ri.TranslationSources))
+	decodeTranslationResizeSources(ri.TranslationSources, m.TranslationSources)
 	m.NodeStatus = &pilosa.NodeStatus{}
 	decodeNodeStatus(ri.NodeStatus, m.NodeStatus)
 	m.ClusterStatus = &pilosa.ClusterStatus{}
@@ -841,6 +861,20 @@ func decodeResizeSource(rs *internal.ResizeSource, m *pilosa.ResizeSource) {
 	m.Shard = rs.Shard
 }
 
+func decodeTranslationResizeSources(srcs []*internal.TranslationResizeSource, m []*pilosa.TranslationResizeSource) {
+	for i := range srcs {
+		m[i] = &pilosa.TranslationResizeSource{}
+		decodeTranslationResizeSource(srcs[i], m[i])
+	}
+}
+
+func decodeTranslationResizeSource(rs *internal.TranslationResizeSource, m *pilosa.TranslationResizeSource) {
+	m.Node = &pilosa.Node{}
+	decodeNode(rs.Node, m.Node)
+	m.Index = rs.Index
+	m.PartitionID = int(rs.PartitionID)
+}
+
 func decodeSchema(s *internal.Schema, m *pilosa.Schema) {
 	m.Indexes = make([]*pilosa.IndexInfo, len(s.Indexes))
 	decodeIndexes(s.Indexes, m.Indexes)
@@ -855,6 +889,8 @@ func decodeIndexes(idxs []*internal.Index, m []*pilosa.IndexInfo) {
 
 func decodeIndex(idx *internal.Index, m *pilosa.IndexInfo) {
 	m.Name = idx.Name
+	m.Options = pilosa.IndexOptions{}
+	decodeIndexMeta(idx.Options, &m.Options)
 	m.Fields = make([]*pilosa.FieldInfo, len(idx.Fields))
 	decodeFields(idx.Fields, m.Fields)
 }

@@ -96,6 +96,7 @@ message Schema {
 
 message Index {
 	string Name = 1;
+	IndexMeta Options = 5;
 	repeated Field Fields = 4;
 }
 
@@ -168,6 +169,7 @@ message ResizeInstruction {
 	Node Node = 2;
 	Node Coordinator = 3;
 	repeated ResizeSource Sources = 4;
+	repeated TranslationResizeSource TranslationSources = 8;
 	NodeStatus NodeStatus = 7;
 	ClusterStatus ClusterStatus = 6;
 }
@@ -178,6 +180,12 @@ message ResizeSource {
 	string Field = 3;
 	string View = 4;
 	uint64 Shard = 5;
+}
+
+message TranslationResizeSource {
+	Node Node = 1;
+	string Index = 2;
+	int32 PartitionID = 3;
 }
 
 message ResizeInstructionComplete {
