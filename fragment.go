@@ -1862,21 +1862,20 @@ func (f *fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, e
 		}
 	}
 
-	// Set local bits.
+	rowSet := make(map[uint64]struct{}, len(sets[0].columnIDs))
+	// compute positions directly, replacing columnIDs with the computed
+	// positions
 	for i := range sets[0].columnIDs {
-		if _, err := f.unprotectedSetBit(sets[0].rowIDs[i], (f.shard*ShardWidth)+sets[0].columnIDs[i]); err != nil {
-			return nil, nil, errors.Wrap(err, "setting")
-		}
+		rowSet[sets[0].rowIDs[i]] = struct{}{}
+		sets[0].columnIDs[i] += sets[0].rowIDs[i] * ShardWidth
 	}
-
-	// Clear local bits.
 	for i := range clears[0].columnIDs {
-		if _, err := f.unprotectedClearBit(clears[0].rowIDs[i], (f.shard*ShardWidth)+clears[0].columnIDs[i]); err != nil {
-			return nil, nil, errors.Wrap(err, "clearing")
-		}
+		rowSet[clears[0].rowIDs[i]] = struct{}{}
+		clears[0].columnIDs[i] += clears[0].rowIDs[i] * ShardWidth
 	}
+	err = f.importPositions(sets[0].columnIDs, clears[0].columnIDs, rowSet)
 
-	return sets[1:], clears[1:], nil
+	return sets[1:], clears[1:], err
 }
 
 // bulkImport bulk imports a set of bits and then snapshots the storage.
