@@ -45,5 +45,8 @@ Inspects a data file and provides stats.
 			return inspector.Run(context.Background())
 		},
 	}
+	flags := inspectCmd.Flags()
+	flags.BoolVarP(&inspector.Quiet, "quiet", "q", false, "don't list details of containers")
+	flags.IntVarP(&inspector.Max, "max", "n", 0, "list at most max items (0 = unlimited)")
 	return inspectCmd
 }
