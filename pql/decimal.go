@@ -455,3 +455,38 @@ func (d *Decimal) UnmarshalJSON(data []byte) error {
 func (d Decimal) MarshalJSON() ([]byte, error) {
 	return []byte(d.String()), nil
 }
+
+// UnmarshalYAML is a custom unmarshaller for the Decimal
+// type.
+func (d *Decimal) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var data string
+	if err := unmarshal(&data); err != nil {
+		return err
+	}
+
+	o, err := ParseDecimal(data)
+	if err != nil {
+		return errors.Wrapf(err, "parsing decimal: %s", data)
+	}
+	d.Value = o.Value
+	d.Scale = o.Scale
+
+	return nil
+}
+
+// MarshalYAML is a custom marshaller for the Decimal type.
+func (d Decimal) MarshalYAML() (interface{}, error) {
+	// TODO: I don't love that this results in a quoted string
+	// in the yaml document:
+	//
+	// min: "-100.05"
+	//
+	// It would be nice if we could get that to result in:
+	//
+	// min: -100.05
+	//
+	// Note that we _can_ do that by casting the output as
+	// float64 (for certain cases), but the whole point of
+	// Decimal is to avoid using float64.
+	return d.String(), nil
+}
