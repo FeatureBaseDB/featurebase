@@ -119,7 +119,7 @@ func fieldDataType(f *pilosa.Field) string {
 		}
 		return "int64"
 	case "decimal":
-		return "float64"
+		return "decimal"
 	case "bool":
 		return "bool"
 	case "time":
@@ -324,12 +324,12 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 					}
 
 				case "decimal":
-					value, exists, err := field.FloatValue(col)
+					dec, exists, err := field.DecimalValue(col)
 					if err != nil {
 						return errors.Wrap(err, "getting decimal field value for column")
 					} else if exists {
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Float64Val{Float64Val: value}})
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_DecimalVal{DecimalVal: &pb.Decimal{Value: dec.Value, Scale: dec.Scale}}})
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
@@ -555,12 +555,12 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						return errors.Wrap(err, "translating column key")
 					}
 
-					value, exists, err := field.FloatValue(id)
+					dec, exists, err := field.DecimalValue(id)
 					if err != nil {
 						return errors.Wrap(err, "getting decimal field value for column")
 					} else if exists {
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Float64Val{Float64Val: value}})
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_DecimalVal{DecimalVal: &pb.Decimal{Value: dec.Value, Scale: dec.Scale}}})
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
@@ -801,9 +801,20 @@ func makeRows(resp pilosa.QueryResponse, logger logger.Logger) chan *pb.RowRespo
 					}}
 			case pilosa.ValCount:
 				var ci []*pb.ColumnInfo
-				// ValCount can have a float or integeger value, but
-				// not both (as of this writing).
-				if r.FloatVal != 0 {
+				// ValCount can have a decimal, float, or integer value, but
+				// not more than one (as of this writing).
+				if r.DecimalVal != nil {
+					ci = []*pb.ColumnInfo{
+						{Name: "value", Datatype: "decimal"},
+						{Name: "count", Datatype: "int64"},
+					}
+					results <- &pb.RowResponse{
+						Headers: ci,
+						Columns: []*pb.ColumnResponse{
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_DecimalVal{DecimalVal: &pb.Decimal{Value: r.DecimalVal.Value, Scale: r.DecimalVal.Scale}}},
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: r.Count}},
+						}}
+				} else if r.FloatVal != 0 {
 					ci = []*pb.ColumnInfo{
 						{Name: "value", Datatype: "float64"},
 						{Name: "count", Datatype: "int64"},

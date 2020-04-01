@@ -804,7 +804,7 @@ func (e *executor) executeSum(ctx context.Context, index string, c *pql.Call, sh
 		return ValCount{}, nil
 	}
 
-	// scale summed response into float if decimal field and this is
+	// scale summed response if it's a decimal field and this is
 	// not a remote query (we're about to return to original client).
 	if !opt.Remote {
 		field := e.Holder.Field(index, fieldName)
@@ -812,12 +812,14 @@ func (e *executor) executeSum(ctx context.Context, index string, c *pql.Call, sh
 			return ValCount{}, ErrFieldNotFound
 		}
 		if field.Type() == FieldTypeDecimal {
-			if scale := field.Options().Scale; scale != 0 {
-				other.FloatVal = float64(other.Val) / math.Pow10(int(scale))
-				other.Val = 0
-			}
+			other.DecimalVal = &pql.Decimal{
+				Value: other.Val,
+				Scale: field.Options().Scale}
+			other.FloatVal = 0
+			other.Val = 0
 		}
 	}
+
 	return other, nil
 }
 
@@ -4079,9 +4081,10 @@ func (sr *SignedRow) union(other SignedRow) SignedRow {
 
 // ValCount represents a grouping of sum & count for Sum() and Average() calls. Also Min, Max....
 type ValCount struct {
-	Val      int64   `json:"value"`
-	FloatVal float64 `json:"floatValue"`
-	Count    int64   `json:"count"`
+	Val        int64        `json:"value"`
+	FloatVal   float64      `json:"floatValue"`
+	DecimalVal *pql.Decimal `json:"decimalValue"`
+	Count      int64        `json:"count"`
 }
 
 func (vc *ValCount) add(other ValCount) ValCount {
@@ -4093,7 +4096,9 @@ func (vc *ValCount) add(other ValCount) ValCount {
 
 // smaller returns the smaller of the two ValCounts.
 func (vc *ValCount) smaller(other ValCount) ValCount {
-	if vc.FloatVal != 0 || other.FloatVal != 0 {
+	if vc.DecimalVal != nil {
+		return vc.decimalSmaller(other)
+	} else if vc.FloatVal != 0 || other.FloatVal != 0 {
 		return vc.floatSmaller(other)
 	}
 	if vc.Count == 0 || (other.Val < vc.Val && other.Count > 0) {
@@ -4109,6 +4114,20 @@ func (vc *ValCount) smaller(other ValCount) ValCount {
 	}
 }
 
+func (vc *ValCount) decimalSmaller(other ValCount) ValCount {
+	if vc.Count == 0 || (other.DecimalVal.LessThan(*vc.DecimalVal) && other.Count > 0) {
+		return other
+	}
+	extra := int64(0)
+	if vc.DecimalVal.EqualTo(*other.DecimalVal) {
+		extra += other.Count
+	}
+	return ValCount{
+		DecimalVal: vc.DecimalVal,
+		Count:      vc.Count + extra,
+	}
+}
+
 func (vc *ValCount) floatSmaller(other ValCount) ValCount {
 	if vc.Count == 0 || (other.FloatVal < vc.FloatVal && other.Count > 0) {
 		return other
@@ -4121,12 +4140,13 @@ func (vc *ValCount) floatSmaller(other ValCount) ValCount {
 		FloatVal: vc.FloatVal,
 		Count:    vc.Count + extra,
 	}
-
 }
 
 // larger returns the larger of the two ValCounts.
 func (vc *ValCount) larger(other ValCount) ValCount {
-	if vc.FloatVal != 0 || other.FloatVal != 0 {
+	if vc.DecimalVal != nil {
+		return vc.decimalLarger(other)
+	} else if vc.FloatVal != 0 || other.FloatVal != 0 {
 		return vc.floatLarger(other)
 	}
 	if vc.Count == 0 || (other.Val > vc.Val && other.Count > 0) {
@@ -4139,6 +4159,20 @@ func (vc *ValCount) larger(other ValCount) ValCount {
 	return ValCount{
 		Val:   vc.Val,
 		Count: vc.Count + extra,
+	}
+}
+
+func (vc *ValCount) decimalLarger(other ValCount) ValCount {
+	if vc.Count == 0 || (other.DecimalVal.GreaterThan(*vc.DecimalVal) && other.Count > 0) {
+		return other
+	}
+	extra := int64(0)
+	if vc.DecimalVal.EqualTo(*other.DecimalVal) {
+		extra += other.Count
+	}
+	return ValCount{
+		DecimalVal: vc.DecimalVal,
+		Count:      vc.Count + extra,
 	}
 }
 

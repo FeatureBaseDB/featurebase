@@ -42,7 +42,13 @@ message ColumnResponse{
     Uint64Array uint64ArrayVal = 6;
     StringArray stringArrayVal = 7;
     double float64Val = 8;
+    Decimal decimalVal = 9;
   }
+}
+
+message Decimal {
+	int64 value = 1;
+	int64 scale = 2;
 }
 
 message InspectRequest {
