@@ -438,7 +438,7 @@ func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shar
 		// still need to handle them. Since everything else was
 		// already precomputed by handlePreCallChildren, though,
 		// we don't need this logic in executeCall.
-		if newIndex := call.CallIndex(); newIndex != "" {
+		if newIndex := call.CallIndex(); newIndex != "" && newIndex != index {
 			v, err = e.executeCall(ctx, newIndex, call, nil, opt)
 		} else {
 			v, err = e.executeCall(ctx, index, call, shards, opt)
@@ -1006,37 +1006,14 @@ func (e *executor) executeMaxRow(ctx context.Context, index string, c *pql.Call,
 
 // executePrecomputedCall pretends to execute a call that we have a precomputed value for.
 func (e *executor) executePrecomputedCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (*Row, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executePrecomputedCall")
+	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executePrecomputedCall")
 	defer span.Finish()
+	result := NewRow()
 
-	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(shard uint64) (interface{}, error) {
-		if c.Precomputed != nil {
-			return c.Precomputed[shard], nil
-		}
-		// This might not be an error -- if there were no values, we will not have created
-		// the corresponding row.
-		return NewRow(), nil
+	for _, row := range c.Precomputed {
+		result.Merge(row.(*Row))
 	}
-
-	// Merge returned results at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
-		other, _ := prev.(*Row)
-		if other == nil {
-			other = NewRow()
-		}
-		other.Merge(v.(*Row))
-		return other
-	}
-
-	other, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
-	if err != nil {
-		return nil, errors.Wrap(err, "map reduce")
-	}
-
-	row, _ := other.(*Row)
-
-	return row, nil
+	return result, nil
 }
 
 // executeBitmapCall executes a call that returns a bitmap.

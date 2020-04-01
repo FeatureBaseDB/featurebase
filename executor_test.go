@@ -5082,3 +5082,32 @@ func TestExecutor_Execute_CountDistinct(t *testing.T) {
 		}
 	})
 }
+
+// Ensure that a top-level, bare distinct on multiple nodes
+// is handled correctly.
+func TestExecutor_BareDistinct(t *testing.T) {
+	t.Helper()
+	c := test.MustRunCluster(t, 2)
+	defer c.Close()
+
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "ints",
+		pilosa.OptFieldTypeInt(0, math.MaxInt64),
+	)
+
+	// Populate integer data.
+	c.Query(t, "i", fmt.Sprintf(`
+			Set(0, ints=1)
+			Set(%d, ints=2)
+		`, ShardWidth))
+
+	for _, pql := range []string{
+		`Distinct(field="ints")`,
+		`Distinct(index="i", field="ints")`,
+	} {
+		exp := []uint64{1, 2}
+		res := c.Query(t, "i", pql).Results[0].(pilosa.SignedRow)
+		if got := res.Pos.Columns(); !reflect.DeepEqual(exp, got) {
+			t.Fatalf("expected: %v, but got: %v", exp, got)
+		}
+	}
+}
