@@ -49,7 +49,7 @@ jobs:
       - attach_workspace:
           at: .
       - add-github-auth
-      - run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sudo sh -s -- -b /usr/local/bin v1.24.0
+      - run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sudo sh -s -- -b /usr/local/bin v1.23.8
       - run: make golangci-lint
   test-build-arm:
     executor:
@@ -84,7 +84,9 @@ jobs:
           at: .
       - add-github-auth
       - run: sudo apt-get install lsof
-      - run: make test SHARD_WIDTH=<< parameters.shard_width >> TESTFLAGS=<< parameters.test_flags >> GOARCH=<< parameters.goarch >>
+      - run:
+          command: make test SHARD_WIDTH=<< parameters.shard_width >> TESTFLAGS="<< parameters.test_flags >>" GOARCH=<< parameters.goarch >>
+          no_output_timeout: 30m
   cluster-tests:
     executor:
       name: golang
@@ -217,7 +219,7 @@ workflows:
             - test-golang-1.14
           filters:
             branches:
-              only: enterprise
+              ignore: /.*/
             tags:
               only: /^v.*/
       - dockerhub-upload:
