@@ -34,6 +34,7 @@ import (
 	"github.com/pilosa/pilosa/v2/boltdb"
 	"github.com/pilosa/pilosa/v2/encoding/proto"
 	"github.com/pilosa/pilosa/v2/http"
+	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
 )
@@ -574,10 +575,10 @@ func TestHandler_Endpoints(t *testing.T) {
 		if field == nil {
 			t.Fatalf("field not found: %s", fieldName)
 		}
-		if math.MinInt64 != field.Options.Min {
+		if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 0), field.Options.Min) {
 			t.Fatalf("field min %d != %d", int64(math.MinInt64), field.Options.Min)
 		}
-		if math.MaxInt64 != field.Options.Max {
+		if !reflect.DeepEqual(pql.NewDecimal(math.MaxInt64, 0), field.Options.Max) {
 			t.Fatalf("field max %d != %d", int64(math.MaxInt64), field.Options.Max)
 		}
 	})
@@ -603,10 +604,10 @@ func TestHandler_Endpoints(t *testing.T) {
 		if field == nil {
 			t.Fatalf("field not found: %s", fieldName)
 		}
-		if math.MinInt64 != field.Options.Min {
+		if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 0), field.Options.Min) {
 			t.Fatalf("field min %d != %d", int64(math.MinInt64), field.Options.Min)
 		}
-		if 10 != field.Options.Max {
+		if !reflect.DeepEqual(pql.NewDecimal(1, -1), field.Options.Max) {
 			t.Fatalf("field max %d != %d", 10, field.Options.Max)
 		}
 	})
@@ -632,10 +633,10 @@ func TestHandler_Endpoints(t *testing.T) {
 		if field == nil {
 			t.Fatalf("field not found: %s", fieldName)
 		}
-		if -10 != field.Options.Min {
+		if !reflect.DeepEqual(pql.NewDecimal(-1, -1), field.Options.Min) {
 			t.Fatalf("field min %d != %d", 10, field.Options.Min)
 		}
-		if math.MaxInt64 != field.Options.Max {
+		if !reflect.DeepEqual(pql.NewDecimal(math.MaxInt64, 0), field.Options.Max) {
 			t.Fatalf("field max %d != %d", int64(math.MaxInt64), field.Options.Max)
 		}
 	})
@@ -647,6 +648,79 @@ func TestHandler_Endpoints(t *testing.T) {
 			strings.NewReader(`{"options":{"type":"int", "min": 10, "max": -10}}`)))
 		if w.Code != gohttp.StatusBadRequest {
 			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+	})
+
+	t.Run("Query decimal field unbounded", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		fieldName := "f-decimal-ubound"
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
+			strings.NewReader(`{"options":{"type":"decimal", "scale": 0}}`)))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		w = httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", strings.NewReader("")))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		rsp := getSchemaResponse{}
+		if err := json.Unmarshal(w.Body.Bytes(), &rsp); err != nil {
+			t.Fatalf("json decode: %s", err)
+		}
+		field := rsp.findField("i0", fieldName)
+		if field == nil {
+			t.Fatalf("field not found: %s", fieldName)
+		}
+		if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 0), field.Options.Min) {
+			t.Fatalf("field min %d != %d", int64(math.MinInt64), field.Options.Min)
+		}
+		if !reflect.DeepEqual(pql.NewDecimal(math.MaxInt64, 0), field.Options.Max) {
+			t.Fatalf("field max %d != %d", int64(math.MaxInt64), field.Options.Max)
+		}
+	})
+
+	t.Run("Query decimal field unbounded min", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		fieldName := "f-decimal-ubound-min"
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
+			strings.NewReader(`{"options":{"type":"decimal", "scale": 1, "max": 10.5}}`)))
+		if w.Code != gohttp.StatusOK {
+			fmt.Println(w.Body.String())
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		w = httptest.NewRecorder()
+		h.ServeHTTP(w, test.MustNewHTTPRequest("GET", "/schema", strings.NewReader("")))
+		if w.Code != gohttp.StatusOK {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		}
+		rsp := getSchemaResponse{}
+		if err := json.Unmarshal(w.Body.Bytes(), &rsp); err != nil {
+			t.Fatalf("json decode: %s", err)
+		}
+		field := rsp.findField("i0", fieldName)
+		if field == nil {
+			t.Fatalf("field not found: %s", fieldName)
+		}
+		if !reflect.DeepEqual(pql.NewDecimal(math.MinInt64, 1), field.Options.Min) {
+			t.Fatalf("field min %d != %d", pql.NewDecimal(math.MinInt64, 1), field.Options.Min)
+		}
+		if !reflect.DeepEqual(pql.NewDecimal(105, 1), field.Options.Max) {
+			t.Fatalf("field max %s != %d", pql.NewDecimal(105, 1), field.Options.Max)
+		}
+	})
+
+	// Ensure that decimal fields error when scale is not provided.
+	t.Run("Query decimal field scale error", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		fieldName := "f-decimal-ubound"
+		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", fmt.Sprintf("/index/i0/field/%s", fieldName),
+			strings.NewReader(`{"options":{"type":"decimal"}}`)))
+		expErr := "decimal field requires a scale argument"
+		if w.Code != gohttp.StatusBadRequest {
+			t.Fatalf("unexpected status code: %d", w.Code)
+		} else if !strings.Contains(w.Body.String(), expErr) {
+			t.Fatalf("expected error to contain: %s, but got: %s", expErr, w.Body.String())
 		}
 	})
 

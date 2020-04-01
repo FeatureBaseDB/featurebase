@@ -54,8 +54,8 @@ omitted. If it is present then its format should be YYYY-MM-DDTHH:MM.
 	flags.BoolVar(&Importer.IndexOptions.Keys, "index-keys", false, "Specify keys=true when creating an index")
 	flags.BoolVar(&Importer.FieldOptions.Keys, "field-keys", false, "Specify keys=true when creating a field")
 	flags.StringVar(&Importer.FieldOptions.Type, "field-type", "", "Specify the field type when creating a field. One of: set, int, decimal, time, bool, mutex")
-	flags.Int64Var(&Importer.FieldOptions.Min, "field-min", 0, "Specify the minimum for an int field on creation")
-	flags.Int64Var(&Importer.FieldOptions.Max, "field-max", 0, "Specify the maximum for an int field on creation")
+	flags.Int64Var(&Importer.FieldOptions.Min.Value, "field-min", 0, "Specify the minimum for an int field on creation") // TODO: noting that decimal field min/max are not supported here.
+	flags.Int64Var(&Importer.FieldOptions.Max.Value, "field-max", 0, "Specify the maximum for an int field on creation")
 	flags.StringVar(&Importer.FieldOptions.CacheType, "field-cache-type", pilosa.CacheTypeRanked, "Specify the cache type for a set field on creation. One of: none, lru, ranked")
 	flags.Uint32Var(&Importer.FieldOptions.CacheSize, "field-cache-size", 50000, "Specify the cache size for a set field on creation")
 	flags.Var(&Importer.FieldOptions.TimeQuantum, "field-time-quantum", "Specify the time quantum for a time field on creation. One of: D, DH, H, M, MD, MDH, Y, YM, YMD, YMDH")

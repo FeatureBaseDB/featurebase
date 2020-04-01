@@ -21,6 +21,7 @@ import (
 	"github.com/pilosa/pilosa/v2"
 
 	"github.com/pilosa/pilosa/v2/cmd"
+	"github.com/pilosa/pilosa/v2/pql"
 )
 
 func TestImportHelp(t *testing.T) {
@@ -58,8 +59,8 @@ field = "f1"
 				v.Check(cmd.Importer.Field, "f1")
 				v.Check(cmd.Importer.FieldOptions, pilosa.FieldOptions{
 					Keys:      true,
-					Max:       100,
-					Min:       -10,
+					Max:       pql.NewDecimal(100, 0),
+					Min:       pql.NewDecimal(-10, 0),
 					CacheType: pilosa.CacheTypeRanked,
 					CacheSize: 50000,
 				})
