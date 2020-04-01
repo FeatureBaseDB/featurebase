@@ -5111,3 +5111,53 @@ func TestExecutor_BareDistinct(t *testing.T) {
 		}
 	}
 }
+
+func TestExecutor_Execute_TopNDistinct(t *testing.T) {
+	data, err := ioutil.ReadFile("testdata/schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := test.MustRunCluster(t, 1)
+
+	defer c.Close()
+	api := c[0].API
+
+	schema := &pilosa.Schema{}
+	if err := json.NewDecoder(bytes.NewReader(data)).Decode(schema); err != nil {
+		t.Fatal(err)
+	}
+	if err := api.ApplySchema(context.TODO(), schema, false); err != nil {
+		t.Fatal(err)
+	}
+
+	writeQuery := `Set(100, type=AntidotePoint)Set(100, equip_id=100)Set(100, site_id=100)Set(100, id=100)`
+	for _, i := range schema.Indexes {
+		if _, err := api.Query(context.TODO(), &pilosa.QueryRequest{Index: i.Name, Query: writeQuery}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	pql := `TopN(type, Distinct(Row(type=AntidotePoint), index=power_ts, field=equip_id))`
+
+	// Check if test query gives correct results (one column 100)
+	t.Run("TopN", func(t *testing.T) {
+		resp, err := api.Query(context.TODO(), &pilosa.QueryRequest{
+			Index: "equipment",
+			Query: pql,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		pf, ok := resp.Results[0].(*pilosa.PairsField)
+		if !ok {
+			t.Fatalf("invalid response type, expected: *pilosa.PairsField, got: %T", resp.Results[0])
+		}
+		if len(pf.Pairs) != 1 {
+			t.Fatalf("invalid Pairs length, expected: 1, got: %v", len(pf.Pairs))
+		}
+		if pf.Pairs[0].Count != 1 {
+			t.Fatalf("invalid Pairs count, expected: 1, got: %v", pf.Pairs[0].Count)
+		}
+	})
+}

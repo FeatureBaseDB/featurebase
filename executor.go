@@ -1362,6 +1362,7 @@ func (e *executor) executeTopN(ctx context.Context, index string, c *pql.Call, s
 		}, nil
 	}
 	// Only the original caller should refetch the full counts.
+	// TODO(@kuba--): ...but do we really need `Clone` here?
 	other := c.Clone()
 
 	ids := Pairs(pairs.Pairs).Keys()

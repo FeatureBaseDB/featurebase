@@ -690,6 +690,11 @@ func (c *Call) Clone() *Call {
 			other.Children[i] = c.Children[i].Clone()
 		}
 	}
+	// @seebs "...it should be safe,
+	// because nothing should be writing to Precomputed
+	// once it's gotten created in the first place."
+	other.Precomputed = c.Precomputed
+
 	return other
 }
 
