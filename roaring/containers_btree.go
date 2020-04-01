@@ -62,12 +62,6 @@ func (btc *bTreeContainers) Put(key uint64, c *Container) {
 	// Get can result in the tree containing a different container
 	// than we'll get on next lookup.
 	btc.lastKey, btc.lastContainer = key, c
-	// If a mapped container is added to the tree, reset the
-	// lastContainer cache so that the cache is not pointing
-	// at a read-only mmap.
-	if c.Mapped() {
-		btc.lastKey = ^uint64(0)
-	}
 	btc.tree.Set(key, c)
 }
 
@@ -119,7 +113,6 @@ func (btc *bTreeContainers) GetOrCreate(key uint64) *Container {
 		btc.lastContainer = cont
 		return cont
 	}
-
 	btc.lastContainer = v
 	return btc.lastContainer
 }
@@ -229,6 +222,9 @@ func (btc *bTreeContainers) UpdateEvery(fn func(uint64, *Container, bool) (*Cont
 	// currently not handling the error from this, but in practice it has
 	// to be io.EOF.
 	_ = e.Every(fn)
+	// invalidate cache.
+	btc.lastKey = ^uint64(0)
+	btc.lastContainer = nil
 }
 
 type btcIterator struct {

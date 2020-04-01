@@ -5540,6 +5540,10 @@ func (b *Bitmap) DifferenceInPlace(others ...*Bitmap) {
 	// Go through all the containers and remove the other bits
 	for targetItr.Next() {
 		targetKey, curContainer := targetItr.Value()
+		// no point in subtracting things from an empty container.
+		if curContainer.N() == 0 {
+			removeContainerKeys = append(removeContainerKeys, targetKey)
+		}
 		// Loop until every iters current value has been handled.
 		for _, iIter := range bitmapIters {
 			if !iIter.hasNext {
@@ -5554,16 +5558,18 @@ func (b *Bitmap) DifferenceInPlace(others ...*Bitmap) {
 					break
 				}
 			}
-
 			if targetKey == iKey {
-				if curContainer.frozen() {
-					curContainer = curContainer.Clone()
-					b.Containers.Put(targetKey, curContainer)
-				}
-				curContainer.differenceInPlace(iContainer)
-				if curContainer.N() == 0 {
-					removeContainerKeys = append(removeContainerKeys, iKey)
-					break
+				// note: a nil container is valid, and has N == 0.
+				if iContainer.N() != 0 {
+					if curContainer.frozen() {
+						curContainer = curContainer.Clone()
+						b.Containers.Put(targetKey, curContainer)
+					}
+					curContainer.differenceInPlace(iContainer)
+					if curContainer.N() == 0 {
+						removeContainerKeys = append(removeContainerKeys, targetKey)
+						break
+					}
 				}
 				iIter.hasNext = iIter.iter.Next()
 			}
@@ -5578,6 +5584,9 @@ func (b *Bitmap) DifferenceInPlace(others ...*Bitmap) {
 }
 
 func (c *Container) differenceInPlace(other *Container) {
+	if other == nil {
+		return
+	}
 	if other.isArray() {
 		if c.isArray() {
 			differenceArrayArrayInPlace(c, other)
