@@ -1839,6 +1839,30 @@ func (f *Field) importRoaringOverwrite(ctx context.Context, data []byte, shard u
 		return err
 	}
 
+	// If field is int or decimal, then we need to update field.options.BitDepth
+	// and bsiGroup.BitDepth based on the imported data.
+	switch f.Options().Type {
+	case FieldTypeInt, FieldTypeDecimal:
+		frag.calculateMaxRowID()
+		maxRowID, _ := frag.maxRow(nil)
+
+		var bitDepth uint
+		if maxRowID+1 > bsiOffsetBit {
+			bitDepth = uint(maxRowID + 1 - bsiOffsetBit)
+		}
+
+		bsig := f.bsiGroup(f.name)
+
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if bitDepth > f.options.BitDepth {
+			f.options.BitDepth = bitDepth
+		}
+		if bsig != nil {
+			bsig.BitDepth = bitDepth
+		}
+	}
+
 	return nil
 }
 

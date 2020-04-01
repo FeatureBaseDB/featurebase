@@ -1142,6 +1142,12 @@ func (f *fragment) maxRow(filter *Row) (uint64, uint64) {
 	return 0, 0
 }
 
+// calculateMaxRowID determines the field's maxRowID value based
+// on the contents of its storage, and sets the struct argument.
+func (f *fragment) calculateMaxRowID() {
+	f.maxRowID = f.storage.Max() / ShardWidth
+}
+
 // rangeOp returns bitmaps with a bsiGroup value encoding matching the predicate.
 func (f *fragment) rangeOp(op pql.Token, bitDepth uint, predicate int64) (*Row, error) {
 	switch op {

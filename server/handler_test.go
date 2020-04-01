@@ -240,7 +240,20 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatal(err)
 		}
 		w := httptest.NewRecorder()
-		roaringData, _ := hex.DecodeString("3C30000002000000000000000000000001000000200000000000000001000000280000002A00000001000100")
+
+		// byShardWidth is a map of the same roaring (fragment) data generated
+		// with different shard widths.
+		// TODO: a better approach may be to generate this in the test based
+		// on shard width.
+		byShardWidth := make(map[uint64][]byte)
+		// col/val: 3/3, 8/8
+		byShardWidth[1<<20] = []byte{60, 48, 0, 1, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 32, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 48, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 80, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 72, 0, 0, 0, 76, 0, 0, 0, 78, 0, 0, 0, 80, 0, 0, 0, 3, 0, 8, 0, 3, 0, 3, 0, 8, 0}
+		byShardWidth[1<<22] = []byte{60, 48, 0, 1, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 128, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 192, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 64, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 72, 0, 0, 0, 76, 0, 0, 0, 78, 0, 0, 0, 80, 0, 0, 0, 3, 0, 8, 0, 3, 0, 3, 0, 8, 0}
+
+		var roaringData []byte
+		if data, ok := byShardWidth[pilosa.ShardWidth]; ok {
+			roaringData = data
+		}
 
 		msg := pilosa.ImportRoaringRequest{
 			Action: pilosa.RequestActionOverwrite,
@@ -263,7 +276,7 @@ func TestHandler_Endpoints(t *testing.T) {
 		if err != nil {
 			t.Fatalf("querying: %v", err)
 		}
-		if row := resp.Results[0].(*pilosa.Row); !reflect.DeepEqual(row.Columns(), []uint64{1}) {
+		if row := resp.Results[0].(*pilosa.Row); !reflect.DeepEqual(row.Columns(), []uint64{3, 8}) {
 			t.Fatalf("Unexpected result %v", row.Columns())
 		}
 	})
@@ -1068,7 +1081,12 @@ func TestHandler_Endpoints(t *testing.T) {
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
-		target := []uint64{162529281, 159383553, 160432129}
+		var target []uint64
+		if pilosa.ShardWidth == 1<<22 {
+			target = []uint64{650117121, 637534209, 641728513}
+		} else {
+			target = []uint64{162529281, 159383553, 160432129}
+		}
 		resp := pilosa.TranslateKeysResponse{}
 		err = cmd.API.Serializer.Unmarshal(w.Body.Bytes(), &resp)
 		if err != nil {
