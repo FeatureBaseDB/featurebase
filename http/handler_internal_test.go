@@ -22,7 +22,6 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/pql"
 )
 
 // Test custom UnmarshalJSON for postIndexRequest object
@@ -100,8 +99,8 @@ func stringPtr(s string) *string {
 	return &s
 }
 
-func decimalPtr(d pql.Decimal) *pql.Decimal {
-	return &d
+func int64Ptr(i int64) *int64 {
+	return &i
 }
 
 // Test fieldOption validation.
@@ -136,10 +135,10 @@ func TestFieldOptionValidation(t *testing.T) {
 		// FieldType: Int
 		{json: `{"options": {"type": "int"}}`, err: "min is required for field type int"},
 		{json: `{"options": {"type": "int", "min": 0}}`, err: "max is required for field type int"},
-		{json: `{"options": {"type": "int", "min": 0, "max": 1001}}`, expected: postFieldRequest{Options: fieldOptions{
+		{json: `{"options": {"type": "int", "min": 0, "max": 1000}}`, expected: postFieldRequest{Options: fieldOptions{
 			Type: pilosa.FieldTypeInt,
-			Min:  decimalPtr(pql.NewDecimal(0, 0)),
-			Max:  decimalPtr(pql.NewDecimal(1001, 0)),
+			Min:  int64Ptr(0),
+			Max:  int64Ptr(1000),
 		}}},
 		{json: `{"options": {"type": "int", "min": 0, "max": 1000, "cacheType": "ranked"}}`, err: "cacheType does not apply to field type int"},
 		{json: `{"options": {"type": "int", "min": 0, "max": 1000, "cacheSize": 1000}}`, err: "cacheSize does not apply to field type int"},

@@ -1478,14 +1478,14 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 
 			tests := []struct {
 				scale int64
-				min   pql.Decimal
-				max   pql.Decimal
+				min   int64
+				max   int64
 				set   pql.Decimal
 			}{
-				{2, pql.Decimal{Value: 1, Scale: -1}, pql.Decimal{Value: 2, Scale: -1}, pql.Decimal{Value: 115, Scale: 1}},
-				{2, pql.Decimal{Value: -1, Scale: -1}, pql.Decimal{Value: 2, Scale: -1}, pql.Decimal{Value: 115, Scale: 1}},
-				{2, pql.Decimal{Value: -1, Scale: -1}, pql.Decimal{Value: 2, Scale: -1}, pql.Decimal{Value: -95, Scale: 1}},
-				{2, pql.Decimal{Value: -2, Scale: -1}, pql.Decimal{Value: -1, Scale: -1}, pql.Decimal{Value: -115, Scale: 1}},
+				{2, 10, 20, pql.Decimal{Value: 115, Scale: 1}},
+				{2, -10, 20, pql.Decimal{Value: 115, Scale: 1}},
+				{2, -10, 20, pql.Decimal{Value: -95, Scale: 1}},
+				{2, -20, -10, pql.Decimal{Value: -115, Scale: 1}},
 			}
 			for i, test := range tests {
 				fld := fmt.Sprintf("f%d", i)
@@ -2247,37 +2247,6 @@ func TestExecutor_Execute_Range_Deprecated(t *testing.T) {
 			}
 		})
 	})
-}
-
-// Ensure decimal args are supported for Decimal fields.
-func TestExecutor_DecimalArgs(t *testing.T) {
-	c := test.MustRunCluster(t, 1)
-	defer c.Close()
-	hldr := test.Holder{Holder: c[0].Server.Holder()}
-
-	idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	min, err := pql.ParseDecimal("-10.5")
-	if err != nil {
-		t.Fatal(err)
-	}
-	max, err := pql.ParseDecimal("10.5")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := idx.CreateField("f", pilosa.OptFieldTypeDecimal(2, min, max)); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
-		Set(0, f=0)
-	`}); err != nil {
-		t.Fatal(err)
-	}
 }
 
 // Ensure a Row(bsiGroup) query can be executed.

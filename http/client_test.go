@@ -1147,7 +1147,7 @@ func TestClient_CreateDecimalField(t *testing.T) {
 		t.Fatalf("creating index: %v", err)
 	}
 	field := "dfield"
-	err = c.CreateFieldWithOptions(context.Background(), index, field, pilosa.FieldOptions{Type: pilosa.FieldTypeDecimal, Scale: 1, Min: pql.NewDecimal(-1000, 0), Max: pql.NewDecimal(1000, 0)})
+	err = c.CreateFieldWithOptions(context.Background(), index, field, pilosa.FieldOptions{Type: pilosa.FieldTypeDecimal, Scale: 1, Min: -1000, Max: 1000})
 	if err != nil {
 		t.Fatalf("creating field: %v", err)
 	}

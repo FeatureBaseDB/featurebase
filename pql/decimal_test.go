@@ -15,8 +15,6 @@
 package pql_test
 
 import (
-	"encoding/json"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -61,7 +59,7 @@ func TestDecimal(t *testing.T) {
 
 			// int64 edges.
 			{".000009223372036854775807", pql.Decimal{9223372036854775807, 24}, ""},
-			{"-.000009223372036854775808", pql.Decimal{-9223372036854775808, 24}, ""},
+			{"-.000009223372036854775807", pql.Decimal{-9223372036854775807, 24}, ""},
 			{"92233720368547.75807", pql.Decimal{9223372036854775807, 5}, ""},
 			{"-92233720368547.75807", pql.Decimal{-9223372036854775807, 5}, ""},
 			{"9223372036854775807000", pql.Decimal{9223372036854775807, -3}, ""},
@@ -73,12 +71,11 @@ func TestDecimal(t *testing.T) {
 			{"*0.123", pql.Decimal{}, "invalid syntax"},
 			{"abc", pql.Decimal{}, "invalid syntax"},
 			{"0.12.3", pql.Decimal{}, "invalid decimal string"},
-			{"--12300", pql.Decimal{}, "invalid syntax"},
-
-			{"922337203685477580.9", pql.Decimal{}, "value out of range"},
-			{"-922337203685477580.9", pql.Decimal{}, "value out of range"},
+			{"--12300", pql.Decimal{}, "invalid negative value"},
+			{"922337203685477580.8", pql.Decimal{}, "value out of range"},
+			{"-922337203685477580.8", pql.Decimal{}, "value out of range"},
 			{"9223372036854775808000", pql.Decimal{}, "value out of range"},
-			{"-9223372036854775809000", pql.Decimal{}, "value out of range"},
+			{"-9223372036854775808000", pql.Decimal{}, "value out of range"},
 		}
 		for i, test := range tests {
 			dec, err := pql.ParseDecimal(test.s)
@@ -163,90 +160,5 @@ func TestDecimal(t *testing.T) {
 				t.Fatalf("test %d expected: %s, but got: %s", i, test.exp, str)
 			}
 		}
-	})
-
-	t.Run("Comparisons", func(t *testing.T) {
-		tests := []struct {
-			d1     pql.Decimal
-			d2     pql.Decimal
-			expLT  bool
-			expLTE bool
-			expGT  bool
-			expGTE bool
-			expEQ  bool
-		}{
-			{pql.NewDecimal(0, 0), pql.NewDecimal(0, 0), false, true, false, true, true},
-			{pql.NewDecimal(0, 0), pql.NewDecimal(10, 0), true, true, false, false, false},
-			{pql.NewDecimal(10, 0), pql.NewDecimal(0, 0), false, false, true, true, false},
-			{pql.NewDecimal(123456, 3), pql.NewDecimal(123456, 3), false, true, false, true, true},
-			{pql.NewDecimal(123456, 3), pql.NewDecimal(123456, 4), false, false, true, true, false},
-			{pql.NewDecimal(123456, 4), pql.NewDecimal(123456, 3), true, true, false, false, false},
-			{pql.NewDecimal(1233456, 4), pql.NewDecimal(123456, 3), true, true, false, false, false},
-
-			{pql.NewDecimal(0, 0), pql.NewDecimal(-10, 0), false, false, true, true, false},
-			{pql.NewDecimal(-10, 0), pql.NewDecimal(0, 0), true, true, false, false, false},
-			{pql.NewDecimal(-123456, 3), pql.NewDecimal(-123456, 3), false, true, false, true, true},
-			{pql.NewDecimal(-123456, 3), pql.NewDecimal(-123456, 4), true, true, false, false, false},
-			{pql.NewDecimal(-123456, 4), pql.NewDecimal(-123456, 3), false, false, true, true, false},
-			{pql.NewDecimal(-1233456, 4), pql.NewDecimal(-123456, 3), false, false, true, true, false},
-
-			{pql.NewDecimal(10, 0), pql.NewDecimal(-10, 0), false, false, true, true, false},
-			{pql.NewDecimal(-10, 0), pql.NewDecimal(10, 0), true, true, false, false, false},
-			{pql.NewDecimal(-123456, 3), pql.NewDecimal(123456, 3), true, true, false, false, false},
-			{pql.NewDecimal(123456, 3), pql.NewDecimal(-123456, 3), false, false, true, true, false},
-			{pql.NewDecimal(-123456, 3), pql.NewDecimal(123456, 4), true, true, false, false, false},
-			{pql.NewDecimal(123456, 3), pql.NewDecimal(-123456, 4), false, false, true, true, false},
-			{pql.NewDecimal(-123456, 4), pql.NewDecimal(123456, 3), true, true, false, false, false},
-			{pql.NewDecimal(123456, 4), pql.NewDecimal(-123456, 3), false, false, true, true, false},
-			{pql.NewDecimal(-1233456, 4), pql.NewDecimal(123456, 3), true, true, false, false, false},
-			{pql.NewDecimal(1233456, 4), pql.NewDecimal(-123456, 3), false, false, true, true, false},
-
-			{pql.NewDecimal(9223372036854775807, 0), pql.NewDecimal(9223372036854775807, 0), false, true, false, true, true},
-			{pql.NewDecimal(9223372036854775807, 2), pql.NewDecimal(9223372036854775807, 0), true, true, false, false, false},
-			{pql.NewDecimal(9223372036854775807, 19), pql.NewDecimal(9223372036854775807, 0), true, true, false, false, false},
-
-			{pql.NewDecimal(-9223372036854775808, 0), pql.NewDecimal(-9223372036854775808, 0), false, true, false, true, true},
-			{pql.NewDecimal(-9223372036854775808, 0), pql.NewDecimal(-9223372036854775807, 0), true, true, false, false, false},
-			{pql.NewDecimal(-9223372036854775808, 2), pql.NewDecimal(-9223372036854775808, 0), false, false, true, true, false},
-			{pql.NewDecimal(-9223372036854775808, 19), pql.NewDecimal(-9223372036854775807, 0), false, false, true, true, false},
-		}
-		for i, test := range tests {
-			if got := test.d1.LessThan(test.d2); got != test.expLT {
-				t.Fatalf("test LT %d expected %s < %s to be %v, but got: %v", i, test.d1, test.d2, test.expLT, got)
-			}
-			if got := test.d1.LessThanOrEqualTo(test.d2); got != test.expLTE {
-				t.Fatalf("test LTE %d expected %s <= %s to be %v, but got: %v", i, test.d1, test.d2, test.expLTE, got)
-			}
-			if got := test.d1.GreaterThan(test.d2); got != test.expGT {
-				t.Fatalf("test GT %d expected %s > %s to be %v, but got: %v", i, test.d1, test.d2, test.expGT, got)
-			}
-			if got := test.d1.GreaterThanOrEqualTo(test.d2); got != test.expGTE {
-				t.Fatalf("test GTE %d expected %s >= %s to be %v, but got: %v", i, test.d1, test.d2, test.expGTE, got)
-			}
-			if got := test.d1.EqualTo(test.d2); got != test.expEQ {
-				t.Fatalf("test EQ %d expected %s == %s to be %v, but got: %v", i, test.d1, test.d2, test.expEQ, got)
-			}
-		}
-	})
-
-	t.Run("JSON", func(t *testing.T) {
-		t.Run("Unmarshal", func(t *testing.T) {
-			tests := []struct {
-				json string
-				exp  pql.Decimal
-			}{
-				{"1234.56", pql.NewDecimal(123456, 2)},
-			}
-			for i, test := range tests {
-				b := []byte(test.json)
-				dec := &pql.Decimal{}
-				if err := json.Unmarshal(b, &dec); err != nil {
-					panic(err)
-				}
-				if !reflect.DeepEqual(*dec, test.exp) {
-					t.Fatalf("test %d expected: %T, but got: %T", i, test.exp, dec)
-				}
-			}
-		})
 	})
 }

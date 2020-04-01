@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/test"
 	"github.com/pkg/errors"
 )
@@ -204,7 +203,7 @@ func TestIndex_CreateField(t *testing.T) {
 			index := test.MustOpenIndex()
 			defer index.Close()
 
-			_, err := index.CreateField("f", pilosa.OptFieldTypeDecimal(1, pql.Decimal{Value: -1}, pql.Decimal{Value: 1}), pilosa.OptFieldKeys())
+			_, err := index.CreateField("f", pilosa.OptFieldTypeDecimal(1, -1, 1), pilosa.OptFieldKeys())
 			if errors.Cause(err) != pilosa.ErrDecimalFieldWithKeys {
 				t.Fatal("decimal field cannot be created with keys=true")
 			}

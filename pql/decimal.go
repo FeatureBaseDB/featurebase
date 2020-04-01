@@ -23,38 +23,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-// pow10 is a map used to avoid the float64 required by math.Pow10()
-var pow10 = map[int64]int64{
-	0:  1,
-	1:  10,
-	2:  100,
-	3:  1000,
-	4:  10000,
-	5:  100000,
-	6:  1000000,
-	7:  10000000,
-	8:  100000000,
-	9:  1000000000,
-	10: 10000000000,
-	11: 100000000000,
-	12: 1000000000000,
-	13: 10000000000000,
-	14: 100000000000000,
-	15: 1000000000000000,
-	16: 10000000000000000,
-	17: 100000000000000000,
-	18: 1000000000000000000,
-	//19: 10000000000000000000,
-}
-
-// Pow10 is a function which can be used in place of math.Pow10()
-// to avoid the float64 logic. Note that only powers 0-18 are
-// currently supported; anything else will return 0, which is
-// probably going to result in incorrect values.
-func Pow10(p int64) int64 {
-	return pow10[p]
-}
-
 // Decimal represents a decimal value; the intention
 // is to avoid relying on float64, and the primary
 // purpose is to have a predictable way to encode such
@@ -68,147 +36,6 @@ type Decimal struct {
 	Scale int64
 }
 
-// NewDecimal returns a Decimal based on the provided arguments.
-func NewDecimal(value, scale int64) Decimal {
-	return Decimal{
-		Value: value,
-		Scale: scale,
-	}
-}
-
-// MinMax returns the minimum and maximum values
-// supported by the provided scale.
-func MinMax(scale int64) (Decimal, Decimal) {
-	min := NewDecimal(math.MinInt64, scale)
-	max := NewDecimal(math.MaxInt64, scale)
-	return min, max
-}
-
-// LessThan returns true if d < d2.
-func (d Decimal) LessThan(d2 Decimal) bool {
-	return d.lessThan(d2, false)
-}
-
-// LessThanOrEqualTo returns true if d <= d2.
-func (d Decimal) LessThanOrEqualTo(d2 Decimal) bool {
-	return d.lessThan(d2, true)
-}
-
-// GreaterThan returns true if d > d2.
-func (d Decimal) GreaterThan(d2 Decimal) bool {
-	return d.greaterThan(d2, false)
-}
-
-// GreaterThanOrEqualTo returns true if d >= d2.
-func (d Decimal) GreaterThanOrEqualTo(d2 Decimal) bool {
-	return d.greaterThan(d2, true)
-}
-
-// EqualTo returns true if d == d2.
-func (d Decimal) EqualTo(d2 Decimal) bool {
-	if d.Scale == d2.Scale {
-		return d.Value == d2.Value
-	}
-
-	quotientD := quotient(d)
-	quotientD2 := quotient(d2)
-	if quotientD != quotientD2 {
-		return false
-	}
-	remainderD, remainderD2 := remainder(d), remainder(d2)
-	if d.Scale < d2.Scale {
-		scaleDiff := d2.Scale - d.Scale
-		return (remainderD * pow10[scaleDiff]) == remainderD2
-	}
-	scaleDiff := d.Scale - d2.Scale
-	return remainderD == (remainderD2 * pow10[scaleDiff])
-}
-
-func (d Decimal) lessThan(d2 Decimal, eq bool) bool {
-	if d.Scale == d2.Scale {
-		if eq {
-			return d.Value <= d2.Value
-		}
-		return d.Value < d2.Value
-	}
-
-	quotientD, quotientD2 := quotient(d), quotient(d2)
-	if quotientD < quotientD2 {
-		return true
-	} else if quotientD == quotientD2 {
-		remainderD, remainderD2 := remainder(d), remainder(d2)
-		if d.Scale < d2.Scale {
-			scaleDiff := d2.Scale - d.Scale
-			if eq {
-				return (remainderD * pow10[scaleDiff]) <= remainderD2
-			}
-			return (remainderD * pow10[scaleDiff]) < remainderD2
-		}
-		scaleDiff := d.Scale - d2.Scale
-		if eq {
-			return remainderD <= (remainderD2 * pow10[scaleDiff])
-		}
-		return remainderD < (remainderD2 * pow10[scaleDiff])
-	}
-
-	return false
-}
-
-func (d Decimal) greaterThan(d2 Decimal, eq bool) bool {
-	if d.Scale == d2.Scale {
-		if eq {
-			return d.Value >= d2.Value
-		}
-		return d.Value > d2.Value
-	}
-
-	quotientD, quotientD2 := quotient(d), quotient(d2)
-	if quotientD > quotientD2 {
-		return true
-	} else if quotientD == quotientD2 {
-		remainderD, remainderD2 := remainder(d), remainder(d2)
-		if d.Scale < d2.Scale {
-			scaleDiff := d2.Scale - d.Scale
-			if eq {
-				return (remainderD * pow10[scaleDiff]) >= remainderD2
-			}
-			return (remainderD * pow10[scaleDiff]) > remainderD2
-		}
-		scaleDiff := d.Scale - d2.Scale
-		if eq {
-			return remainderD >= (remainderD2 * pow10[scaleDiff])
-		}
-		return remainderD > (remainderD2 * pow10[scaleDiff])
-	}
-
-	return false
-}
-
-// SupportedByScale returns true if d can be represented
-// by a decimal based on scale.
-// For example:
-// scale = 2:
-// min: -92233720368547758.08
-// max:  92233720368547758.07
-// would not support: NewDecimal(9223372036854775807, 0)
-func (d Decimal) SupportedByScale(scale int64) bool {
-	min, max := MinMax(scale)
-
-	if d.GreaterThanOrEqualTo(min) && d.LessThanOrEqualTo(max) {
-		return true
-	}
-	return false
-}
-
-// IsValid returns true if the decimal does not break
-// any assumption or resrictions on input.
-func (d Decimal) IsValid() bool {
-	if d.Scale < -18 || d.Scale > 19 {
-		return false
-	}
-	return true
-}
-
 // ToInt64 returns d as an int64 adjusted to the
 // provided scale.
 func (d Decimal) ToInt64(scale int64) int64 {
@@ -216,17 +43,13 @@ func (d Decimal) ToInt64(scale int64) int64 {
 	scaleDiff := scale - d.Scale
 	if scaleDiff == 0 {
 		ret = d.Value
-	} else if scaleDiff < 0 {
-		ret = d.Value / Pow10(-1*scaleDiff)
 	} else {
-		ret = d.Value * Pow10(scaleDiff)
+		ret = int64(float64(d.Value) * math.Pow10(int(scaleDiff)))
 	}
 	return ret
 }
 
 // Float64 returns d as a float64.
-// TODO: this could potentially lose precision; we should audit
-// its use and protect against unexpected results.
 func (d Decimal) Float64() float64 {
 	var ret float64
 	if d.Scale == 0 {
@@ -396,19 +219,15 @@ func ParseDecimal(s string) (Decimal, error) {
 		scale = 0
 	}
 
-	// We have to use ParseUint here (as opposed to ParseInt) because
-	// math.MinInt64 is a valid value, but its absolute value is not.
-	// So this allows us to handle that one value without overflow, and
-	// then we check for the uint bounds in the next step.
-	uvalue, err := strconv.ParseUint(string(mantissa), 10, 64)
+	value, err = strconv.ParseInt(string(mantissa), 10, 64)
 	if err != nil {
-		return Decimal{}, errors.Wrap(err, "converting mantissa string to uint64")
+		return Decimal{}, errors.Wrap(err, "converting mantissa to uint32")
 	}
-
-	if (sign && uvalue > -1*math.MinInt64) || (!sign && uvalue > math.MaxInt64) {
-		return Decimal{}, errors.New("value out of range")
+	// Because we pulled the sign off at the beginning, if value is
+	// negative here, it likely means the string had two "-"" characters.
+	if value < 0 {
+		return Decimal{}, errors.New("invalid negative value")
 	}
-	value = int64(uvalue)
 
 	if sign {
 		value *= -1
@@ -418,22 +237,6 @@ func ParseDecimal(s string) (Decimal, error) {
 		Value: value,
 		Scale: scale,
 	}, nil
-}
-
-func quotient(d Decimal) int64 {
-	if d.Scale == 0 {
-		return d.Value
-	} else if d.Scale > 0 && d.Scale < 19 {
-		return d.Value / pow10[d.Scale]
-	}
-	return 0
-}
-
-func remainder(d Decimal) int64 {
-	if d.Scale >= 0 && d.Scale < 19 {
-		return d.Value % pow10[d.Scale]
-	}
-	return 0
 }
 
 // UnmarshalJSON is a custom unmarshaller for the Decimal
