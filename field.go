@@ -178,80 +178,55 @@ func OptFieldTypeInt(min, max int64) FieldOption {
 			return errors.New("int field min cannot be greater than max")
 		}
 		fo.Type = FieldTypeInt
-		fo.Min = pql.NewDecimal(min, 0)
-		fo.Max = pql.NewDecimal(max, 0)
+		fo.Min = min
+		fo.Max = max
 		fo.Base = bsiBase(min, max)
 		return nil
 	}
 }
 
-// OptFieldTypeDecimal is a functional option for creating a `decimal` field.
-// Unless we decide to expand the range of supported values, `scale` is
-// restricted to the range [0,19]. This supports anything from:
-//
-// scale = 0:
-// min: -9223372036854775808.
-// max:  9223372036854775807.
-//
-// to:
-//
-// scale = 19:
-// min: -0.9223372036854775808
-// max:  0.9223372036854775807
-//
-// While it's possible to support scale values outside of this range,
-// the coverage for those scales are no longer continuous. For example,
-//
-// scale = -2:
-// min : [-922337203685477580800, -100]
-// GAPs: [-99, -1], [-199, -101] ... [-922337203685477580799, -922337203685477580701]
-//       0
-// max : [100, 922337203685477580700]
-// GAPs: [1, 99], [101, 199] ... [922337203685477580601, 922337203685477580699]
-//
-// An alternative to this gap strategy would be to scale the supported range
-// to a continuous 64-bit space (which is not unreasonable using bsiGroup.Base).
-// The issue with this approach is that we would need to know which direction
-// to favor. For example, there are two possible ranges for `scale = -2`:
-//
-// min : [-922337203685477580800, -922337203685477580800+(2^64)]
-// max : [922337203685477580700-(2^64), 922337203685477580700]
-//
-func OptFieldTypeDecimal(scale int64, minmax ...pql.Decimal) FieldOption {
+func OptFieldTypeDecimal(scale int64, minmax ...int64) FieldOption {
 	return func(fo *FieldOptions) error {
 		if fo.Type != "" {
 			return errors.Errorf("can't set field type to 'decimal', already set to: %s", fo.Type)
 		}
-		if scale < 0 || scale > 19 {
-			return errors.Errorf("scale values outside the range [0,19] are not supported: %d", scale)
-		}
-
-		fo.Min, fo.Max = pql.MinMax(scale)
+		fo.Min = math.MinInt64
+		fo.Max = math.MaxInt64
 		if len(minmax) == 2 {
-			min := minmax[0]
-			max := minmax[1]
-			if !min.IsValid() || !max.IsValid() {
-				return errors.Errorf("min/max range %s-%s is not supported", min, max)
-			} else if !min.SupportedByScale(scale) || !max.SupportedByScale(scale) {
-				return errors.Errorf("min/max range %s-%s is not supported by scale %d", min, max, scale)
-			} else if min.GreaterThan(max) {
-				return errors.Errorf("decimal field min cannot be greater than max, got %s, %s", min, max)
+			min, max := minmax[0], minmax[1]
+			if scale != 0 {
+				// If the min/max provided are already on the boundary of int64,
+				// then we don't want to operate on them and cause overflow.
+				// There are still overflow scenarios where a user provides a
+				// min/max which is not on the boundary, but overflow once the
+				// scale is applied. This does not address those cases, but at
+				// least it addresses the default case (where a min/max is not
+				// provided).
+				if min != math.MinInt64 {
+					min = int64(float64(min) * math.Pow10(int(scale)))
+				}
+				if max != math.MaxInt64 {
+					max = int64(float64(max) * math.Pow10(int(scale)))
+				}
+			}
+			if min > max {
+				return errors.Errorf("decimal field min cannot be greater than max, got %d, %d", min, max)
 			}
 			fo.Min = min
 			fo.Max = max
 		} else if len(minmax) > 2 {
 			return errors.Errorf("unknown extra parameters beyond min and max: %v", minmax)
 		} else if len(minmax) == 1 {
-			min := minmax[0]
-			if !min.IsValid() {
-				return errors.Errorf("min %s is not supported", min)
-			} else if !min.SupportedByScale(scale) {
-				return errors.Errorf("min %s is not supported by scale %d", min, scale)
+			// It's not necessary to handle the scale==0 case separately,
+			// but it avoids the type conversion.
+			if scale == 0 || minmax[0] == math.MinInt64 {
+				fo.Min = minmax[0]
+			} else {
+				fo.Min = int64(float64(minmax[0]) * math.Pow10(int(scale)))
 			}
-			fo.Min = min
 		}
 		fo.Type = FieldTypeDecimal
-		fo.Base = bsiBase(fo.Min.ToInt64(scale), fo.Max.ToInt64(scale))
+		fo.Base = bsiBase(fo.Min, fo.Max)
 		fo.Scale = scale
 		return nil
 	}
@@ -717,14 +692,10 @@ func (f *Field) loadMeta() error {
 		}
 	}
 
-	min := pql.NewDecimal(pb.Min.Value, pb.Min.Scale)
-	max := pql.NewDecimal(pb.Max.Value, pb.Max.Scale)
-
 	// Initialize "base" to "min" when upgrading from v1 BSI format.
 	if pb.BitDepth == 0 {
-		minInt64, maxInt64 := min.ToInt64(0), max.ToInt64(0)
-		pb.Base = bsiBase(minInt64, maxInt64)
-		pb.BitDepth = uint64(bitDepthInt64(maxInt64 - minInt64))
+		pb.Base = bsiBase(pb.Min, pb.Max)
+		pb.BitDepth = uint64(bitDepthInt64(pb.Max - pb.Min))
 		if pb.BitDepth == 0 {
 			pb.BitDepth = 1
 		}
@@ -734,8 +705,8 @@ func (f *Field) loadMeta() error {
 	f.options.Type = pb.Type
 	f.options.CacheType = pb.CacheType
 	f.options.CacheSize = pb.CacheSize
-	f.options.Min = min
-	f.options.Max = max
+	f.options.Min = pb.Min
+	f.options.Max = pb.Max
 	f.options.Base = pb.Base
 	f.options.Scale = pb.Scale
 	f.options.BitDepth = uint(pb.BitDepth)
@@ -795,8 +766,8 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		} else if opt.CacheSize != 0 {
 			f.options.CacheSize = opt.CacheSize
 		}
-		f.options.Min = pql.Decimal{}
-		f.options.Max = pql.Decimal{}
+		f.options.Min = 0
+		f.options.Max = 0
 		f.options.Base = 0
 		f.options.BitDepth = 0
 		f.options.TimeQuantum = ""
@@ -819,8 +790,8 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		bsig := &bsiGroup{
 			Name:     f.name,
 			Type:     bsiGroupTypeInt,
-			Min:      opt.Min.ToInt64(opt.Scale),
-			Max:      opt.Max.ToInt64(opt.Scale),
+			Min:      opt.Min,
+			Max:      opt.Max,
 			Base:     opt.Base,
 			Scale:    opt.Scale,
 			BitDepth: opt.BitDepth,
@@ -836,8 +807,8 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Type = opt.Type
 		f.options.CacheType = CacheTypeNone
 		f.options.CacheSize = 0
-		f.options.Min = pql.Decimal{}
-		f.options.Max = pql.Decimal{}
+		f.options.Min = 0
+		f.options.Max = 0
 		f.options.Base = 0
 		f.options.BitDepth = 0
 		f.options.Keys = opt.Keys
@@ -852,8 +823,8 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		f.options.Type = FieldTypeBool
 		f.options.CacheType = CacheTypeNone
 		f.options.CacheSize = 0
-		f.options.Min = pql.Decimal{}
-		f.options.Max = pql.Decimal{}
+		f.options.Min = 0
+		f.options.Max = 0
 		f.options.Base = 0
 		f.options.BitDepth = 0
 		f.options.TimeQuantum = ""
@@ -1847,8 +1818,8 @@ func (p fieldInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
 type FieldOptions struct {
 	Base           int64       `json:"base,omitempty"`
 	BitDepth       uint        `json:"bitDepth,omitempty"`
-	Min            pql.Decimal `json:"min,omitempty"`
-	Max            pql.Decimal `json:"max,omitempty"`
+	Min            int64       `json:"min,omitempty"`
+	Max            int64       `json:"max,omitempty"`
 	Scale          int64       `json:"scale,omitempty"`
 	Keys           bool        `json:"keys"`
 	NoStandardView bool        `json:"noStandardView,omitempty"`
@@ -1910,8 +1881,8 @@ func encodeFieldOptions(o *FieldOptions) *internal.FieldOptions {
 		Base:           o.Base,
 		Scale:          o.Scale,
 		BitDepth:       uint64(o.BitDepth),
-		Min:            &internal.Decimal{Value: o.Min.Value, Scale: o.Min.Scale},
-		Max:            &internal.Decimal{Value: o.Max.Value, Scale: o.Max.Scale},
+		Min:            o.Min,
+		Max:            o.Max,
 		TimeQuantum:    string(o.TimeQuantum),
 		Keys:           o.Keys,
 		NoStandardView: o.NoStandardView,
@@ -1938,13 +1909,13 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 		})
 	case FieldTypeInt:
 		return json.Marshal(struct {
-			Type         string      `json:"type"`
-			Base         int64       `json:"base"`
-			BitDepth     uint        `json:"bitDepth"`
-			Min          pql.Decimal `json:"min"`
-			Max          pql.Decimal `json:"max"`
-			Keys         bool        `json:"keys"`
-			ForeignIndex string      `json:"foreignIndex"`
+			Type         string `json:"type"`
+			Base         int64  `json:"base"`
+			BitDepth     uint   `json:"bitDepth"`
+			Min          int64  `json:"min"`
+			Max          int64  `json:"max"`
+			Keys         bool   `json:"keys"`
+			ForeignIndex string `json:"foreignIndex"`
 		}{
 			o.Type,
 			o.Base,
@@ -1956,13 +1927,13 @@ func (o *FieldOptions) MarshalJSON() ([]byte, error) {
 		})
 	case FieldTypeDecimal:
 		return json.Marshal(struct {
-			Type     string      `json:"type"`
-			Base     int64       `json:"base"`
-			Scale    int64       `json:"scale"`
-			BitDepth uint        `json:"bitDepth"`
-			Min      pql.Decimal `json:"min"`
-			Max      pql.Decimal `json:"max"`
-			Keys     bool        `json:"keys"`
+			Type     string `json:"type"`
+			Base     int64  `json:"base"`
+			Scale    int64  `json:"scale"`
+			BitDepth uint   `json:"bitDepth"`
+			Min      int64  `json:"min"`
+			Max      int64  `json:"max"`
+			Keys     bool   `json:"keys"`
 		}{
 			o.Type,
 			o.Base,

@@ -447,9 +447,39 @@ func TestAPI_ImportValue(t *testing.T) {
 			t.Fatalf("creating index: %v", err)
 		}
 		_, err = m0.API.CreateField(ctx, index, field, pilosa.OptFieldTypeDecimal(-1))
-		if err == nil {
-			t.Fatal("expected error creating field")
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
 		}
+
+		// Generate some keyed records.
+		values := []float64{}
+		colIDs := []uint64{}
+		for i := 0; i < 10; i++ {
+			values = append(values, float64(i)*100+10)
+			colIDs = append(colIDs, uint64(i))
+		}
+
+		// Import data with keys to the coordinator (node0) and verify that it gets
+		// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
+		req := &pilosa.ImportValueRequest{
+			Index:       index,
+			Field:       field,
+			ColumnIDs:   colIDs,
+			FloatValues: values,
+		}
+		if err := m1.API.ImportValue(ctx, req); err != nil {
+			t.Fatal(err)
+		}
+
+		pql := fmt.Sprintf("Row(%s>600)", field)
+
+		// Query node0.
+		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
+			t.Fatal(err)
+		} else if ids := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(ids, colIDs[6:]) {
+			t.Fatalf("unexpected column keys: %+v", ids)
+		}
+
 	})
 
 	t.Run("ValStringField", func(t *testing.T) {

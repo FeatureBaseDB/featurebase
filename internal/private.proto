@@ -12,19 +12,14 @@ message FieldOptions {
 	string CacheType = 3;
 	uint32 CacheSize = 4;
 	string TimeQuantum = 5;
+	int64 Min = 9;
+	int64 Max = 10;
 	bool Keys = 11;
 	bool NoStandardView = 12;
 	int64 Base = 13;
 	uint64 BitDepth = 14;
 	int64 Scale = 15;
 	string ForeignIndex = 16;
-	Decimal Min = 17;
-	Decimal Max = 18;
-}
-
-message Decimal {
-	int64 Value = 1;
-	int64 Scale = 2;
 }
 
 message ImportResponse {
