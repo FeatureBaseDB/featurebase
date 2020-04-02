@@ -4335,12 +4335,14 @@ func differenceRunBitmap(a, b *Container) *Container {
 	if len(ra) > 0 && ra[0].start == 0 && ra[0].last == 65535 {
 		return flipBitmap(b)
 	}
+	bb := b.bitmap()[:1024]
 	runs := make([]interval16, 0, len(ra))
 	for _, inputRun := range ra {
 		run := inputRun
 		add := true
 		for bit := inputRun.start; bit <= inputRun.last; bit++ {
-			if b.bitmapContains(bit) {
+			idx, exp := int(bit>>6), bit&63
+			if (bb[idx]>>exp)&1 != 0 {
 				if run.start == bit {
 					if bit == 65535 { //overflow
 						add = false
@@ -4352,6 +4354,10 @@ func differenceRunBitmap(a, b *Container) *Container {
 				} else {
 					run.last = bit - 1
 					if run.last >= run.start {
+						if len(runs) >= runMaxSize {
+							asBitmap := a.runToBitmap()
+							return differenceBitmapBitmap(asBitmap, b)
+						}
 						runs = append(runs, run)
 					}
 					run.start = bit + 1
@@ -4368,6 +4374,10 @@ func differenceRunBitmap(a, b *Container) *Container {
 		}
 		if run.start <= run.last {
 			if add {
+				if len(runs) >= runMaxSize {
+					asBitmap := a.runToBitmap()
+					return differenceBitmapBitmap(asBitmap, b)
+				}
 				runs = append(runs, run)
 			}
 		}
