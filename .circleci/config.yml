@@ -212,20 +212,6 @@ workflows:
             - check-license-headers
             - test-golang-1.14
       - dockerhub-upload:
-          name: dockerhub-upload-stable
-          tag_branch: true
-          tag_tag: true
-          tag_latest: true
-          requires:
-            - linter
-            - check-license-headers
-            - test-golang-1.14
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only: /^v.*/
-      - dockerhub-upload:
           name: dockerhub-upload-unstable
           tag_branch: true
           tag_tag: false
@@ -237,5 +223,17 @@ workflows:
           filters:
             branches:
               only: enterprise
+      - dockerhub-upload:
+          name: dockerhub-upload-stable
+          tag_branch: true
+          tag_tag: true
+          tag_latest: true
+          requires:
+            - linter
+            - check-license-headers
+            - test-golang-1.14
+          filters:
             tags:
-              ignore: /^v.*/
+              only: /^v.*/
+            branches:
+              ignore: /.*/
