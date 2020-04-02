@@ -2916,11 +2916,34 @@ func (c *Container) runToBitmap() *Container {
 		return c
 	}
 	bitmap := make([]uint64, bitmapN)
-	for _, r := range c.runs() {
-		// TODO this can be ~64x faster for long runs by setting maxBitmap instead of single bits
-		//note v must be int or will overflow
-		for v := int(r.start); v <= int(r.last); v++ {
-			bitmap[v/64] |= (uint64(1) << uint(v%64))
+	for _, iv := range c.runs() {
+		w1, w2 := iv.start/64, iv.last/64
+		b1, b2 := iv.start&63, iv.last&63
+		// a mask for everything under bit X looks like
+		// (1 << x) - 1. Say b1 is 4; our mask will want
+		// to have the bottom 4 bits be zero, so we shift
+		// left 4, getting 10000, then subtract 1, and
+		// get 01111, which is the mask to *remove*.
+		m1 := (uint64(1) << b1) - 1
+		// inclusive mask: same thing, then shift left 1 and
+		// or in 1. So for 4, we'd get 011111, which is the
+		// mask to *keep*.
+		m2 := (((uint64(1) << b2) - 1) << 1) | 1
+		if w1 == w2 {
+			// If we only had bit 4 in the range, this would
+			// end up being 011111 &^ 01111, or 010000.
+			bitmap[w1] |= (m2 &^ m1)
+			continue
+		}
+		// for w2, the "To" field, we want to set the bottom N
+		// bits. For w1, the "From" word, we want to set all *but*
+		// the bottom N bits.
+		bitmap[w2] |= m2
+		bitmap[w1] |= ^m1
+		words := bitmap[w1+1 : w2]
+		// set every bit between them
+		for i := range words {
+			words[i] = ^uint64(0)
 		}
 	}
 	if c.frozen() {
