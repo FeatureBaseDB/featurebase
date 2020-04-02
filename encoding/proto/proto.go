@@ -971,8 +971,10 @@ func decodeCreateIndexMessage(pb *internal.CreateIndexMessage, m *pilosa.CreateI
 }
 
 func decodeIndexMeta(pb *internal.IndexMeta, m *pilosa.IndexOptions) {
-	m.Keys = pb.Keys
-	m.TrackExistence = pb.TrackExistence
+	if pb != nil {
+		m.Keys = pb.Keys
+		m.TrackExistence = pb.TrackExistence
+	}
 }
 
 func decodeDeleteIndexMessage(pb *internal.DeleteIndexMessage, m *pilosa.DeleteIndexMessage) {
