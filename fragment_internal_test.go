@@ -3641,7 +3641,21 @@ func TestRemapCache(t *testing.T) {
 
 func TestFragment_Bug_Q2DoubleDelete(t *testing.T) {
 	f := mustOpenFragment("i", "f", viewStandard, 0, "")
-	b := []byte{60, 48, 0, 0, 1, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 24, 0, 0, 0, 1, 0}
+
+	// byShardWidth is a map of the same roaring (fragment) data generated
+	// with different shard widths.
+	// TODO: a better approach may be to generate this in the test based
+	// on shard width.
+	byShardWidth := make(map[uint64][]byte)
+	// row/col: 1/1
+	byShardWidth[1<<20] = []byte{60, 48, 0, 0, 1, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 24, 0, 0, 0, 1, 0}
+	byShardWidth[1<<22] = []byte{60, 48, 0, 0, 1, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 24, 0, 0, 0, 1, 0}
+
+	var b []byte
+	if data, ok := byShardWidth[ShardWidth]; ok {
+		b = data
+	}
+
 	defer f.Clean(t)
 	err := f.importRoaringT(b, false)
 	if err != nil {
