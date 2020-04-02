@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package internal;
 
+import "public.proto";
+
 message IndexMeta {
 	bool Keys = 3;
 	bool TrackExistence = 4;
@@ -20,11 +22,6 @@ message FieldOptions {
 	string ForeignIndex = 16;
 	Decimal Min = 17;
 	Decimal Max = 18;
-}
-
-message Decimal {
-	int64 Value = 1;
-	int64 Scale = 2;
 }
 
 message ImportResponse {

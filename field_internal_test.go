@@ -753,36 +753,36 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 			name:      "single",
 			columnIDs: []uint64{1},
 			values:    []float64{10.1},
-			expMax:    ValCount{FloatVal: 10.1, Count: 1},
-			expMin:    ValCount{FloatVal: 10.1, Count: 1},
+			expMax:    ValCount{DecimalVal: &pql.Decimal{Value: 10100, Scale: 3}, Count: 1},
+			expMin:    ValCount{DecimalVal: &pql.Decimal{Value: 10100, Scale: 3}, Count: 1},
 		},
 		{
 			name:      "twovals",
 			columnIDs: []uint64{1, 2},
 			values:    []float64{10.1, 20.2},
-			expMax:    ValCount{FloatVal: 20.2, Count: 1},
-			expMin:    ValCount{FloatVal: 10.1, Count: 1},
+			expMax:    ValCount{DecimalVal: &pql.Decimal{Value: 20200, Scale: 3}, Count: 1},
+			expMin:    ValCount{DecimalVal: &pql.Decimal{Value: 10100, Scale: 3}, Count: 1},
 		},
 		{
 			name:      "multiplecounts",
 			columnIDs: []uint64{1, 2, 3, 4, 5},
 			values:    []float64{10.1, 20.2, 10.1, 10.1, 20.2},
-			expMax:    ValCount{FloatVal: 20.2, Count: 2},
-			expMin:    ValCount{FloatVal: 10.1, Count: 3},
+			expMax:    ValCount{DecimalVal: &pql.Decimal{Value: 20200, Scale: 3}, Count: 2},
+			expMin:    ValCount{DecimalVal: &pql.Decimal{Value: 10100, Scale: 3}, Count: 3},
 		},
 		{
 			name:      "middlevals",
 			columnIDs: []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 			values:    []float64{10.1, 20.2, 10.1, 10.1, 20.2, 11, 12, 11, 13, 11},
-			expMax:    ValCount{FloatVal: 20.2, Count: 2},
-			expMin:    ValCount{FloatVal: 10.1, Count: 3},
+			expMax:    ValCount{DecimalVal: &pql.Decimal{Value: 20200, Scale: 3}, Count: 2},
+			expMin:    ValCount{DecimalVal: &pql.Decimal{Value: 10100, Scale: 3}, Count: 3},
 		},
 		{
 			name:      "another shard",
 			columnIDs: []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 100000000, 100000001},
 			values:    []float64{10.1, 20.2, 10.1, 10.1, 20.2, 11, 12, 11, 13, 11, 44.39, 0.23},
-			expMax:    ValCount{FloatVal: 20.2, Count: 2},
-			expMin:    ValCount{FloatVal: 10.1, Count: 3},
+			expMax:    ValCount{DecimalVal: &pql.Decimal{Value: 20200, Scale: 3}, Count: 2},
+			expMin:    ValCount{DecimalVal: &pql.Decimal{Value: 10100, Scale: 3}, Count: 3},
 		},
 	} {
 		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
@@ -794,7 +794,7 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 			if err != nil {
 				t.Fatalf("getting max for shard: %v", err)
 			}
-			if maxvc != test.expMax {
+			if !reflect.DeepEqual(maxvc, test.expMax) {
 				t.Fatalf("max expected:\n%+v\ngot:\n%+v", test.expMax, maxvc)
 			}
 
@@ -802,7 +802,7 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 			if err != nil {
 				t.Fatalf("getting min for shard: %v", err)
 			}
-			if minvc != test.expMin {
+			if !reflect.DeepEqual(minvc, test.expMin) {
 				t.Fatalf("min expected:\n%+v\ngot:\n%+v", test.expMin, minvc)
 			}
 		})

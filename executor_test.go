@@ -1481,11 +1481,36 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 				min   pql.Decimal
 				max   pql.Decimal
 				set   pql.Decimal
+				exp   pql.Decimal
 			}{
-				{2, pql.Decimal{Value: 1, Scale: -1}, pql.Decimal{Value: 2, Scale: -1}, pql.Decimal{Value: 115, Scale: 1}},
-				{2, pql.Decimal{Value: -1, Scale: -1}, pql.Decimal{Value: 2, Scale: -1}, pql.Decimal{Value: 115, Scale: 1}},
-				{2, pql.Decimal{Value: -1, Scale: -1}, pql.Decimal{Value: 2, Scale: -1}, pql.Decimal{Value: -95, Scale: 1}},
-				{2, pql.Decimal{Value: -2, Scale: -1}, pql.Decimal{Value: -1, Scale: -1}, pql.Decimal{Value: -115, Scale: 1}},
+				{
+					2,
+					pql.Decimal{Value: 1, Scale: -1},
+					pql.Decimal{Value: 2, Scale: -1},
+					pql.Decimal{Value: 115, Scale: 1},
+					pql.Decimal{Value: 1150, Scale: 2},
+				},
+				{
+					2,
+					pql.Decimal{Value: -1, Scale: -1},
+					pql.Decimal{Value: 2, Scale: -1},
+					pql.Decimal{Value: 115, Scale: 1},
+					pql.Decimal{Value: 1150, Scale: 2},
+				},
+				{
+					2,
+					pql.Decimal{Value: -1, Scale: -1},
+					pql.Decimal{Value: 2, Scale: -1},
+					pql.Decimal{Value: -95, Scale: 1},
+					pql.Decimal{Value: -950, Scale: 2},
+				},
+				{
+					2,
+					pql.Decimal{Value: -2, Scale: -1},
+					pql.Decimal{Value: -1, Scale: -1},
+					pql.Decimal{Value: -115, Scale: 1},
+					pql.Decimal{Value: -1150, Scale: 2},
+				},
 			}
 			for i, test := range tests {
 				fld := fmt.Sprintf("f%d", i)
@@ -1506,7 +1531,7 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 						pql = fmt.Sprintf(`Min(field=%s)`, fld)
 						if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
 							t.Fatal(err)
-						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{FloatVal: test.set.Float64(), Count: 1}) {
+						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: &test.exp, Count: 1}) {
 							t.Fatalf("unexpected min result, test %d: %s", i, spew.Sdump(result))
 						}
 					})
@@ -1515,7 +1540,7 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 						pql = fmt.Sprintf(`Max(field=%s)`, fld)
 						if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
 							t.Fatal(err)
-						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{FloatVal: test.set.Float64(), Count: 1}) {
+						} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: &test.exp, Count: 1}) {
 							t.Fatalf("unexpected max result, test %d: %s", i, spew.Sdump(result))
 						}
 					})
@@ -1816,6 +1841,10 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		if _, err := idx.CreateField("dec", pilosa.OptFieldTypeDecimal(3)); err != nil {
+			t.Fatal(err)
+		}
+
 		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
 			Set(0, x=0)
 			Set(` + strconv.Itoa(ShardWidth+1) + `, x=0)
@@ -1827,24 +1856,48 @@ func TestExecutor_Execute_Sum(t *testing.T) {
 			Set(` + strconv.Itoa((5*ShardWidth)+100) + `, foo=50)
 			Set(` + strconv.Itoa(ShardWidth+1) + `, foo=60)
 			Set(0, other=1000)
+
+			Set(0, dec=100.001)
+			Set(` + strconv.Itoa(ShardWidth) + `, dec=200.002)
+			Set(` + strconv.Itoa(ShardWidth+1) + `, dec=400.004)
 		`}); err != nil {
 			t.Fatal(err)
 		}
 
-		t.Run("NoFilter", func(t *testing.T) {
-			if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Sum(field=foo)`}); err != nil {
-				t.Fatal(err)
-			} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: 200, Count: 5}) {
-				t.Fatalf("unexpected result: %s", spew.Sdump(result))
-			}
+		t.Run("Integer", func(t *testing.T) {
+			t.Run("NoFilter", func(t *testing.T) {
+				if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Sum(field=foo)`}); err != nil {
+					t.Fatal(err)
+				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: 200, Count: 5}) {
+					t.Fatalf("unexpected result: %s", spew.Sdump(result))
+				}
+			})
+
+			t.Run("WithFilter", func(t *testing.T) {
+				if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Sum(Row(x=0), field=foo)`}); err != nil {
+					t.Fatal(err)
+				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: 80, Count: 2}) {
+					t.Fatalf("unexpected result: %s", spew.Sdump(result))
+				}
+			})
 		})
 
-		t.Run("WithFilter", func(t *testing.T) {
-			if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Sum(Row(x=0), field=foo)`}); err != nil {
-				t.Fatal(err)
-			} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{Val: 80, Count: 2}) {
-				t.Fatalf("unexpected result: %s", spew.Sdump(result))
-			}
+		t.Run("Decimal", func(t *testing.T) {
+			t.Run("NoFilter", func(t *testing.T) {
+				if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Sum(field=dec)`}); err != nil {
+					t.Fatal(err)
+				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: &pql.Decimal{Value: 700007, Scale: 3}, Count: 3}) {
+					t.Fatalf("unexpected result: %s", spew.Sdump(result))
+				}
+			})
+
+			t.Run("WithFilter", func(t *testing.T) {
+				if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Sum(Row(x=0), field=dec)`}); err != nil {
+					t.Fatal(err)
+				} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: &pql.Decimal{Value: 500005, Scale: 3}, Count: 2}) {
+					t.Fatalf("unexpected result: %s", spew.Sdump(result))
+				}
+			})
 		})
 	})
 
@@ -4893,11 +4946,11 @@ func TestExecutor_Execute_MinMaxCountEqual(t *testing.T) {
 	t.Run("MinDec", func(t *testing.T) {
 		tests := []struct {
 			filter string
-			exp    float64
+			exp    pql.Decimal
 			cnt    int64
 		}{
-			{filter: ``, exp: 4.234, cnt: 1},
-			{filter: `Row(x=3)`, exp: 5.122, cnt: 1},
+			{filter: ``, exp: pql.NewDecimal(4234, 3), cnt: 1},
+			{filter: `Row(x=3)`, exp: pql.NewDecimal(5122, 3), cnt: 1},
 		}
 		for i, tt := range tests {
 			var pql string
@@ -4908,7 +4961,7 @@ func TestExecutor_Execute_MinMaxCountEqual(t *testing.T) {
 			}
 			if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
 				t.Fatal(err)
-			} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{FloatVal: tt.exp, Count: tt.cnt}) {
+			} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: &tt.exp, Count: tt.cnt}) {
 				t.Fatalf("unexpected result, test %d: %s", i, spew.Sdump(result.Results[0]))
 			}
 		}
@@ -4940,11 +4993,11 @@ func TestExecutor_Execute_MinMaxCountEqual(t *testing.T) {
 	t.Run("MaxDec", func(t *testing.T) {
 		tests := []struct {
 			filter string
-			exp    float64
+			exp    pql.Decimal
 			cnt    int64
 		}{
-			{filter: ``, exp: 12.985, cnt: 2},
-			{filter: `Row(x=3)`, exp: 12.985, cnt: 1},
+			{filter: ``, exp: pql.NewDecimal(12985, 3), cnt: 2},
+			{filter: `Row(x=3)`, exp: pql.NewDecimal(12985, 3), cnt: 1},
 		}
 		for i, tt := range tests {
 			var pql string
@@ -4955,7 +5008,7 @@ func TestExecutor_Execute_MinMaxCountEqual(t *testing.T) {
 			}
 			if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
 				t.Fatal(err)
-			} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{FloatVal: tt.exp, Count: tt.cnt}) {
+			} else if !reflect.DeepEqual(result.Results[0], pilosa.ValCount{DecimalVal: &tt.exp, Count: tt.cnt}) {
 				t.Fatalf("unexpected result, test %d: %s", i, spew.Sdump(result.Results[0]))
 			}
 		}

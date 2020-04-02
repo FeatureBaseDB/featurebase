@@ -1381,9 +1381,20 @@ func decodePairField(pb *internal.Pair) pilosa.PairField {
 
 func decodeValCount(pb *internal.ValCount) pilosa.ValCount {
 	return pilosa.ValCount{
-		Val:      pb.Val,
-		FloatVal: pb.FloatVal,
-		Count:    pb.Count,
+		Val:        pb.Val,
+		FloatVal:   pb.FloatVal,
+		DecimalVal: decodeDecimalStruct(pb.DecimalVal),
+		Count:      pb.Count,
+	}
+}
+
+func decodeDecimalStruct(pb *internal.Decimal) *pql.Decimal {
+	if pb == nil {
+		return nil
+	}
+	return &pql.Decimal{
+		Value: pb.Value,
+		Scale: pb.Scale,
 	}
 }
 
@@ -1507,9 +1518,20 @@ func encodePairField(p pilosa.PairField) *internal.Pair {
 
 func encodeValCount(vc pilosa.ValCount) *internal.ValCount {
 	return &internal.ValCount{
-		Val:      vc.Val,
-		FloatVal: vc.FloatVal,
-		Count:    vc.Count,
+		Val:        vc.Val,
+		FloatVal:   vc.FloatVal,
+		DecimalVal: encodeDecimal(vc.DecimalVal),
+		Count:      vc.Count,
+	}
+}
+
+func encodeDecimal(p *pql.Decimal) *internal.Decimal {
+	if p == nil {
+		return nil
+	}
+	return &internal.Decimal{
+		Value: p.Value,
+		Scale: p.Scale,
 	}
 }
 

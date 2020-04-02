@@ -51,6 +51,12 @@ message ValCount {
 	int64 Val = 1;
 	int64 Count = 2;
 	double FloatVal = 3;
+	Decimal DecimalVal = 4;
+}
+
+message Decimal {
+	int64 Value = 1;
+	int64 Scale = 2;
 }
 
 message ColumnAttrSet {

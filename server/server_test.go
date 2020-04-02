@@ -323,14 +323,12 @@ func TestMain_MinMaxFloat(t *testing.T) {
 	}
 
 	// Query row.
-	exp0 := pilosa.ValCount{FloatVal: 4.44, Count: 1}
-	exp1 := pilosa.ValCount{FloatVal: 1.32, Count: 1}
+	exp0 := pilosa.ValCount{DecimalVal: &pql.Decimal{Value: 4440, Scale: 3}, Count: 1}
+	exp1 := pilosa.ValCount{DecimalVal: &pql.Decimal{Value: 1320, Scale: 3}, Count: 1}
 	if res, err := m.QueryProtobuf("i", `Max(field=dec) Min(field=dec)`); err != nil {
 		t.Fatal(err)
-	} else if res.Results[0] != exp0 ||
-		res.Results[1] != exp1 {
+	} else if !reflect.DeepEqual(res.Results[0], exp0) || !reflect.DeepEqual(res.Results[1], exp1) {
 		t.Fatalf("unexpected results: %+v", res.Results)
-
 	}
 }
 
@@ -1041,24 +1039,23 @@ Set("h", adec=100.22)
 `)
 
 	result := test.Do(t, "POST", cluster[0].URL()+"/index/testdec/query", "Sum(field=adec)")
-	if !strings.Contains(result.Body, `"floatValue":305.59`) {
-		t.Fatalf("expected float sum of 305.59, but got: '%s'", result.Body)
+	if !strings.Contains(result.Body, `"decimalValue":305.59`) {
+		t.Fatalf("expected decimal sum of 305.59, but got: '%s'", result.Body)
 	} else if !strings.Contains(result.Body, `"count":8`) {
 		t.Fatalf("expected count 8, but got: '%s'", result.Body)
 	}
 
 	result = test.Do(t, "POST", cluster[0].URL()+"/index/testdec/query", "Max(field=adec)")
-	if !strings.Contains(result.Body, `"floatValue":100.22`) {
-		t.Fatalf("expected float max of 100.22, but got: '%s'", result.Body)
+	if !strings.Contains(result.Body, `"decimalValue":100.22`) {
+		t.Fatalf("expected decimal max of 100.22, but got: '%s'", result.Body)
 	} else if !strings.Contains(result.Body, `"count":1`) {
 		t.Fatalf("expected count 1, but got: '%s'", result.Body)
 	}
 
 	result = test.Do(t, "POST", cluster[0].URL()+"/index/testdec/query", "Min(field=adec)")
-	if !strings.Contains(result.Body, `"floatValue":11.12`) {
-		t.Fatalf("expected float min of 11.12, but got: '%s'", result.Body)
+	if !strings.Contains(result.Body, `"decimalValue":11.12`) {
+		t.Fatalf("expected decimal min of 11.12, but got: '%s'", result.Body)
 	} else if !strings.Contains(result.Body, `"count":1`) {
 		t.Fatalf("expected count 1, but got: '%s'", result.Body)
 	}
-
 }

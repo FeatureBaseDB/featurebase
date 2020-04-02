@@ -1284,6 +1284,22 @@ func (f *Field) FloatValue(columnID uint64) (value float64, exists bool, err err
 	return value, exists, err
 }
 
+// DecimalValue reads a decimal field value for a column, and converts
+// it to a pql.Decimal based on the configured scale.
+func (f *Field) DecimalValue(columnID uint64) (value pql.Decimal, exists bool, err error) {
+	bsig := f.bsiGroup(f.name)
+	if bsig == nil {
+		return value, false, ErrBSIGroupNotFound
+	}
+
+	val, exists, err := f.Value(columnID)
+	if exists {
+		value.Value = val
+		value.Scale = bsig.Scale
+	}
+	return value, exists, err
+}
+
 // Value reads a field value for a column.
 func (f *Field) Value(columnID uint64) (value int64, exists bool, err error) {
 	bsig := f.bsiGroup(f.name)
@@ -1499,7 +1515,8 @@ func (f *Field) MaxForShard(shard uint64, filter *Row) (ValCount, error) {
 	valCount := ValCount{Count: int64(cnt)}
 
 	if f.Options().Type == FieldTypeDecimal {
-		valCount.FloatVal = float64(max+bsig.Base) / math.Pow10(int(bsig.Scale))
+		dec := pql.NewDecimal(max+bsig.Base, bsig.Scale)
+		valCount.DecimalVal = &dec
 	} else {
 		valCount.Val = max + bsig.Base
 	}
@@ -1534,7 +1551,8 @@ func (f *Field) MinForShard(shard uint64, filter *Row) (ValCount, error) {
 	valCount := ValCount{Count: int64(cnt)}
 
 	if f.Options().Type == FieldTypeDecimal {
-		valCount.FloatVal = float64(min+bsig.Base) / math.Pow10(int(bsig.Scale))
+		dec := pql.NewDecimal(min+bsig.Base, bsig.Scale)
+		valCount.DecimalVal = &dec
 	} else {
 		valCount.Val = min + bsig.Base
 	}
