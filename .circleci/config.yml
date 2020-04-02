@@ -70,6 +70,9 @@ jobs:
       shard_width:
         type: string
         default: "20"
+      test_make_target:
+        type: string
+        default: "test"
       test_flags:
         type: string
         default: ""
@@ -85,7 +88,7 @@ jobs:
       - add-github-auth
       - run: sudo apt-get install lsof
       - run:
-          command: make test SHARD_WIDTH=<< parameters.shard_width >> TESTFLAGS="<< parameters.test_flags >>" GOARCH=<< parameters.goarch >>
+          command: make << parameters.test_make_target >> SHARD_WIDTH=<< parameters.shard_width >> GOARCH=<< parameters.goarch >>
           no_output_timeout: 30m
   cluster-tests:
     executor:
@@ -187,7 +190,7 @@ workflows:
             - setup
       - test:
           name: test-race
-          test_flags: -race -v -timeout=30m
+          test_make_target: test-race
           requires:
             - setup
       - test:
