@@ -21,6 +21,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/internal"
+	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pkg/errors"
 )
@@ -611,8 +612,8 @@ func encodeFieldOptions(o *pilosa.FieldOptions) *internal.FieldOptions {
 		Type:         o.Type,
 		CacheType:    o.CacheType,
 		CacheSize:    o.CacheSize,
-		Min:          o.Min,
-		Max:          o.Max,
+		Min:          &internal.Decimal{Value: o.Min.Value, Scale: o.Min.Scale},
+		Max:          &internal.Decimal{Value: o.Max.Value, Scale: o.Max.Scale},
 		Base:         o.Base,
 		Scale:        o.Scale,
 		BitDepth:     uint64(o.BitDepth),
@@ -915,14 +916,19 @@ func decodeFieldOptions(options *internal.FieldOptions, m *pilosa.FieldOptions) 
 	m.Type = options.Type
 	m.CacheType = options.CacheType
 	m.CacheSize = options.CacheSize
-	m.Min = options.Min
-	m.Max = options.Max
+	decodeDecimal(options.Min, &m.Min)
+	decodeDecimal(options.Max, &m.Max)
 	m.Base = options.Base
 	m.Scale = options.Scale
 	m.BitDepth = uint(options.BitDepth)
 	m.TimeQuantum = pilosa.TimeQuantum(options.TimeQuantum)
 	m.Keys = options.Keys
 	m.ForeignIndex = options.ForeignIndex
+}
+
+func decodeDecimal(d *internal.Decimal, m *pql.Decimal) {
+	m.Value = d.Value
+	m.Scale = d.Scale
 }
 
 func decodeNodes(a []*internal.Node, m []*pilosa.Node) {
@@ -1239,7 +1245,7 @@ func decodeQueryResult(pb *internal.QueryResult) interface{} {
 	panic(fmt.Sprintf("unknown type: %d", pb.Type))
 }
 
-// DecodeRow converts r from its internal representation.
+// decodeRow converts r from its internal representation.
 func decodeRow(pr *internal.Row) *pilosa.Row {
 	if pr == nil {
 		return pilosa.NewRow()

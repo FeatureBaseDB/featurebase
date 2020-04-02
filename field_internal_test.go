@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -160,7 +161,7 @@ func TestBSIGroup_BaseValue(t *testing.T) {
 
 // Ensure field can open and retrieve a view.
 func TestField_DeleteView(t *testing.T) {
-	f := MustOpenField(OptFieldTypeDefault())
+	f := OpenField(t, OptFieldTypeDefault())
 	defer f.Close()
 
 	viewName := viewStandard + "_v"
@@ -197,23 +198,23 @@ type TestField struct {
 }
 
 // NewTestField returns a new instance of TestField d/0.
-func NewTestField(opts FieldOption) *TestField {
+func NewTestField(t *testing.T, opts FieldOption) *TestField {
 	path, err := ioutil.TempDir(*TempDir, "pilosa-field-")
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	field, err := NewField(path, "i", "f", opts)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	return &TestField{Field: field}
 }
 
-// MustOpenField returns a new, opened field at a temporary path. Panic on error.
-func MustOpenField(opts FieldOption) *TestField {
-	f := NewTestField(opts)
+// OpenField returns a new, opened field at a temporary path.
+func OpenField(t *testing.T, opts FieldOption) *TestField {
+	f := NewTestField(t, opts)
 	if err := f.Open(); err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 	return f
 }
@@ -260,7 +261,7 @@ func (f *TestField) MustSetBit(row, col uint64, ts ...time.Time) {
 
 // Ensure field can open and retrieve a view.
 func TestField_CreateViewIfNotExists(t *testing.T) {
-	f := MustOpenField(OptFieldTypeDefault())
+	f := OpenField(t, OptFieldTypeDefault())
 	defer f.Close()
 
 	// Create view.
@@ -285,7 +286,7 @@ func TestField_CreateViewIfNotExists(t *testing.T) {
 }
 
 func TestField_SetTimeQuantum(t *testing.T) {
-	f := MustOpenField(OptFieldTypeTime(TimeQuantum("")))
+	f := OpenField(t, OptFieldTypeTime(TimeQuantum("")))
 	defer f.Close()
 
 	// Set & retrieve time quantum.
@@ -304,7 +305,7 @@ func TestField_SetTimeQuantum(t *testing.T) {
 }
 
 func TestField_RowTime(t *testing.T) {
-	f := MustOpenField(OptFieldTypeTime(TimeQuantum("")))
+	f := OpenField(t, OptFieldTypeTime(TimeQuantum("")))
 	defer f.Close()
 
 	if err := f.setTimeQuantum(TimeQuantum("YMDH")); err != nil {
@@ -350,7 +351,7 @@ func TestField_RowTime(t *testing.T) {
 }
 
 func TestField_PersistAvailableShards(t *testing.T) {
-	f := MustOpenField(OptFieldTypeDefault())
+	f := OpenField(t, OptFieldTypeDefault())
 
 	// bm represents remote available shards.
 	bm := roaring.NewBitmap(1, 2, 3)
@@ -369,7 +370,7 @@ func TestField_PersistAvailableShards(t *testing.T) {
 }
 
 func TestField_CorruptAvailableShards(t *testing.T) {
-	f := MustOpenField(OptFieldTypeDefault())
+	f := OpenField(t, OptFieldTypeDefault())
 
 	// bm represents remote available shards.
 	bm := roaring.NewBitmap(1, 2, 3)
@@ -399,7 +400,7 @@ func TestField_CorruptAvailableShards(t *testing.T) {
 }
 
 func TestField_TruncatedAvailableShards(t *testing.T) {
-	f := MustOpenField(OptFieldTypeDefault())
+	f := OpenField(t, OptFieldTypeDefault())
 
 	// bm represents remote available shards.
 	bm := roaring.NewBitmap(1, 2, 3)
@@ -427,7 +428,7 @@ func TestField_TruncatedAvailableShards(t *testing.T) {
 // Ensure that persisting available shards having a smaller footprint (for example,
 // when going from a bitmap to a smaller, RLE representation) succeeds.
 func TestField_PersistAvailableShardsFootprint(t *testing.T) {
-	f := MustOpenField(OptFieldTypeDefault())
+	f := OpenField(t, OptFieldTypeDefault())
 
 	// bm represents remote available shards.
 	bm := roaring.NewBitmap()
@@ -538,7 +539,7 @@ func TestField_ApplyOptions(t *testing.T) {
 // into consideration. This would cause an import of 1/8/1
 // to result in a value of 9 instead of 1.
 func TestBSIGroup_importValue(t *testing.T) {
-	f := MustOpenField(OptFieldTypeInt(-100, 200))
+	f := OpenField(t, OptFieldTypeInt(-100, 200))
 
 	options := &ImportOptions{}
 	for i, tt := range []struct {
@@ -579,7 +580,7 @@ func TestBSIGroup_importValue(t *testing.T) {
 }
 
 func TestIntField_MinMaxForShard(t *testing.T) {
-	f := MustOpenField(OptFieldTypeInt(-100, 200))
+	f := OpenField(t, OptFieldTypeInt(-100, 200))
 
 	options := &ImportOptions{}
 	for i, test := range []struct {
@@ -654,33 +655,86 @@ func TestIntField_MinMaxForShard(t *testing.T) {
 	}
 }
 
+// Ensure we get errors when they are expected.
 func TestDecimalField_MinMaxBoundaries(t *testing.T) {
 	for i, test := range []struct {
-		min    int64
-		max    int64
 		scale  int64
-		expmin int64
-		expmax int64
+		min    pql.Decimal
+		max    pql.Decimal
+		expErr bool
 	}{
-		{min: math.MinInt64, max: math.MaxInt64, scale: 3, expmin: math.MinInt64, expmax: math.MaxInt64},
-		{min: 44, max: 88, scale: 3, expmin: 44000, expmax: 88000},
-		{min: -44, max: 88, scale: 3, expmin: -44000, expmax: 88000},
+		{
+			scale:  3,
+			min:    pql.NewDecimal(math.MinInt64, 0),
+			max:    pql.NewDecimal(math.MaxInt64, 0),
+			expErr: true,
+		},
+		{
+			scale:  3,
+			min:    pql.NewDecimal(math.MinInt64, 3),
+			max:    pql.NewDecimal(math.MaxInt64, 3),
+			expErr: false,
+		},
+		{
+			scale:  3,
+			min:    pql.NewDecimal(44, 0),
+			max:    pql.NewDecimal(88, 0),
+			expErr: false,
+		},
+		{
+			scale:  3,
+			min:    pql.NewDecimal(-44, 0),
+			max:    pql.NewDecimal(88, 0),
+			expErr: false,
+		},
+		{
+			scale:  19,
+			min:    pql.NewDecimal(1, 0),
+			max:    pql.NewDecimal(2, 0),
+			expErr: true,
+		},
+		{
+			scale:  19,
+			min:    pql.NewDecimal(math.MinInt64, 18),
+			max:    pql.NewDecimal(math.MaxInt64, 18),
+			expErr: true,
+		},
+		{
+			scale:  0,
+			min:    pql.NewDecimal(1, 20),
+			max:    pql.NewDecimal(2, 20),
+			expErr: true,
+		},
+		{
+			scale:  0,
+			min:    pql.NewDecimal(1, -1),
+			max:    pql.NewDecimal(2, -1),
+			expErr: false,
+		},
+		{
+			scale:  0,
+			min:    pql.NewDecimal(1, -19),
+			max:    pql.NewDecimal(2, -19),
+			expErr: true,
+		},
 	} {
 		t.Run("minmax"+strconv.Itoa(i), func(t *testing.T) {
-			f := MustOpenField(OptFieldTypeDecimal(test.scale, test.min, test.max))
-
-			if f.Options().Min != test.expmin {
-				t.Fatalf("expected min: %v, but got: %v", test.expmin, f.Options().Min)
-			}
-			if f.Options().Max != test.expmax {
-				t.Fatalf("expected max: %v, but got: %v", test.expmax, f.Options().Max)
+			_, err := NewField("no-path", "i", "f", OptFieldTypeDecimal(test.scale, test.min, test.max))
+			if err != nil && test.expErr {
+				if !strings.Contains(err.Error(), "is not supported") {
+					t.Fatal(err)
+				}
+			} else if err != nil && !test.expErr {
+				t.Fatalf("did not expect error, but got: %s", err)
+			} else if err == nil && test.expErr {
+				t.Fatal("expected error, but got none")
 			}
 		})
 	}
 }
 
 func TestDecimalField_MinMaxForShard(t *testing.T) {
-	f := MustOpenField(OptFieldTypeDecimal(3))
+	f := OpenField(t, OptFieldTypeDecimal(3))
 
 	options := &ImportOptions{}
 	for i, test := range []struct {
