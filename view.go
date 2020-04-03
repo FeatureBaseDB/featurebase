@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pilosa/pilosa/v2/logger"
@@ -61,6 +62,9 @@ type view struct {
 	logger             logger.Logger
 	snapshotQueue      snapshotQueue
 	remoteShardPresent func(uint64) bool
+
+	knownShards       *roaring.Bitmap
+	knownShardsCopied uint32
 }
 
 // newView returns a new instance of View.
@@ -81,11 +85,48 @@ func newView(path, index, field, name string, fieldOptions FieldOptions) *view {
 		stats:              stats.NopStatsClient,
 		logger:             logger.NopLogger,
 		remoteShardPresent: func(uint64) bool { return false },
+		knownShards:        roaring.NewSliceBitmap(),
 	}
+}
+
+// addKnownShard adds a known shard to v, which you should only do when
+// holding the lock -- but that's probably a given, since you're presumably
+// calling it because you were potentially altering the shard list. Since
+// you have the write lock, availableShards() can't be happening right now.
+// Either it'll get the previous value or the next value of knownShards,
+// and either is probably fine.
+//
+// This means that we only copy the (probably tiny) bitmap if we're
+// modifying it after it's been read. If it never gets read, knownShardsCopied
+// never changes. If it gets read, then we treat that one as immutable --
+// we never modify it again, because the field code might be reading it, so
+// we make a fresh copy. Since shards almost never change, the expected
+// behavior is that we call addKnownShard a lot during initial startup,
+// when knownShardsCopied is 0, and then after that calls to availableShards
+// return that bitmap, and set knownShardsCopied to 1, but we rarely modify
+// the list.
+func (v *view) addKnownShard(shard uint64) {
+	if atomic.LoadUint32(&v.knownShardsCopied) == 1 {
+		v.knownShards = v.knownShards.Clone()
+		atomic.StoreUint32(&v.knownShardsCopied, 0)
+	}
+	_, _ = v.knownShards.Add(shard)
+}
+
+// removeKnownShard removes a known shard from v. See the notes on addKnownShard.
+func (v *view) removeKnownShard(shard uint64) {
+	if atomic.LoadUint32(&v.knownShardsCopied) == 1 {
+		v.knownShards = v.knownShards.Clone()
+		atomic.StoreUint32(&v.knownShardsCopied, 0)
+	}
+	_, _ = v.knownShards.Remove(shard)
 }
 
 // open opens and initializes the view.
 func (v *view) open() error {
+	if v.knownShards == nil {
+		v.knownShards = roaring.NewSliceBitmap()
+	}
 
 	// Never keep a cache for field views.
 	if strings.HasPrefix(v.name, viewBSIGroupPrefix) {
@@ -169,6 +210,7 @@ fileLoop:
 				v.logger.Debugf("add index/field/view/fragment to view.fragments: %s/%s/%s/%d", v.index, v.field, v.name, shard)
 				mu.Lock()
 				v.fragments[frag.shard] = frag
+				v.addKnownShard(frag.shard)
 				mu.Unlock()
 				return nil
 			})
@@ -206,6 +248,7 @@ fragLoop:
 	}
 	err := eg.Wait()
 	v.fragments = make(map[uint64]*fragment)
+	v.knownShards = nil
 	return err
 }
 
@@ -220,14 +263,15 @@ func (v *view) flags() byte {
 
 // availableShards returns a bitmap of shards which contain data.
 func (v *view) availableShards() *roaring.Bitmap {
+	// A read lock prevents anything with the write lock from being
+	// active, so anything that's calling add/removeKnownShard won't
+	// be doing it here. But we do need to indicate that we came
+	// through, but we don't want to block on a write lock. So we
+	// use an atomic for that.
 	v.mu.RLock()
 	defer v.mu.RUnlock()
-
-	b := roaring.NewBitmap()
-	for shard := range v.fragments {
-		_, _ = b.Add(shard) // ignore error, no writer attached
-	}
-	return b
+	atomic.StoreUint32(&v.knownShardsCopied, 1)
+	return v.knownShards
 }
 
 // fragmentPath returns the path to a fragment in the view.
@@ -278,6 +322,7 @@ func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 	frag.RowAttrStore = v.rowAttrStore
 
 	v.fragments[shard] = frag
+	v.addKnownShard(shard)
 	v.notifyIfNewShard(shard)
 	return frag, nil
 }
@@ -355,6 +400,7 @@ func (v *view) deleteFragment(shard uint64) error {
 	}
 
 	delete(v.fragments, shard)
+	v.removeKnownShard(shard)
 
 	return nil
 }
