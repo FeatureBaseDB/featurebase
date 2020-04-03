@@ -3253,7 +3253,7 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 	if err := idx.ColumnAttrStore().SetAttrs(col, attrs); err != nil {
 		return err
 	}
-	idx.Stats.Count(MetricSetProfileAttrs, 1, 1.0)
+	idx.Stats.Count(MetricSetColumnAttrs, 1, 1.0)
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {
 		return nil

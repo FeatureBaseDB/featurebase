@@ -13,7 +13,7 @@ const (
 	MetricRow                   = "query_row_total"
 	MetricRowBSI                = "query_row_bsi_total"
 	MetricSetRowAttrs           = "query_set_row_attrs_total"
-	MetricSetProfileAttrs       = "query_set_profile_attrs_total"
+	MetricSetColumnAttrs        = "query_set_column_attrs_total"
 	MetricMaximumRow            = "maximum_row"
 	MetricSetBit                = "set_bit_total"
 	MetricClearBit              = "clear_bit_total"
