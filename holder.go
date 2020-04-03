@@ -801,10 +801,10 @@ func (s *holderSyncer) SyncHolder() error {
 					}
 				}
 			}
-			s.Stats.Histogram(MetricSyncField, float64(time.Since(tf)), 1.0)
+			s.Stats.Histogram(MetricSyncFieldDuration, float64(time.Since(tf)), 1.0)
 			tf = time.Now() // reset tf
 		}
-		s.Stats.Histogram(MetricSyncIndex, float64(time.Since(ti)), 1.0)
+		s.Stats.Histogram(MetricSyncIndexDuration, float64(time.Since(ti)), 1.0)
 		ti = time.Now() // reset ti
 	}
 

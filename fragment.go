@@ -2249,7 +2249,7 @@ func (f *fragment) Snapshot() error {
 func track(start time.Time, message string, stats stats.StatsClient, logger logger.Logger) {
 	elapsed := time.Since(start)
 	logger.Debugf("%s took %s", message, elapsed)
-	stats.Histogram(MetricSnapshot, elapsed.Seconds(), 1.0)
+	stats.Histogram(MetricSnapshotDuration, elapsed.Seconds(), 1.0)
 }
 
 // snapshot does the actual snapshot operation. it does not check or care
