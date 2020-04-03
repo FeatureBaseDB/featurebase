@@ -654,7 +654,7 @@ func (s *Server) monitorAntiEntropy() {
 		case <-s.cluster.abortAntiEntropyCh: // receive here so we don't block resizing
 			continue
 		case <-ticker.C:
-			s.holder.Stats.Count("AntiEntropy", 1, 1.0)
+			s.holder.Stats.Count(MetricAntiEntropy, 1, 1.0)
 		}
 		t := time.Now()
 		if s.cluster.State() == ClusterStateResizing {
@@ -675,7 +675,7 @@ func (s *Server) monitorAntiEntropy() {
 		// Record successful sync in log.
 		s.logger.Printf("holder sync complete")
 		dif := time.Since(t)
-		s.holder.Stats.Histogram("AntiEntropyDuration", float64(dif), 1.0)
+		s.holder.Stats.Histogram(MetricAntiEntropyDuration, float64(dif), 1.0)
 
 		// Drain tick channel since we just finished anti-entropy. If the AE
 		// process took a long time, we don't want them to pile up on each
@@ -957,26 +957,26 @@ func (s *Server) monitorRuntime() {
 			return
 		case <-s.gcNotifier.AfterGC():
 			// GC just ran.
-			s.holder.Stats.Count("garbage_collection", 1, 1.0)
+			s.holder.Stats.Count(MetricGarbageCollection, 1, 1.0)
 		case <-ticker.C:
 		}
 
 		// Record the number of go routines.
-		s.holder.Stats.Gauge("goroutines", float64(runtime.NumGoroutine()), 1.0)
+		s.holder.Stats.Gauge(MetricGoroutines, float64(runtime.NumGoroutine()), 1.0)
 
 		openFiles, err := countOpenFiles()
 		// Open File handles.
 		if err == nil {
-			s.holder.Stats.Gauge("OpenFiles", float64(openFiles), 1.0)
+			s.holder.Stats.Gauge(MetricOpenFiles, float64(openFiles), 1.0)
 		}
 
 		// Runtime memory metrics.
 		runtime.ReadMemStats(&m)
-		s.holder.Stats.Gauge("HeapAlloc", float64(m.HeapAlloc), 1.0)
-		s.holder.Stats.Gauge("HeapInuse", float64(m.HeapInuse), 1.0)
-		s.holder.Stats.Gauge("StackInuse", float64(m.StackInuse), 1.0)
-		s.holder.Stats.Gauge("Mallocs", float64(m.Mallocs), 1.0)
-		s.holder.Stats.Gauge("Frees", float64(m.Frees), 1.0)
+		s.holder.Stats.Gauge(MetricHeapAlloc, float64(m.HeapAlloc), 1.0)
+		s.holder.Stats.Gauge(MetricHeapInuse, float64(m.HeapInuse), 1.0)
+		s.holder.Stats.Gauge(MetricStackInuse, float64(m.StackInuse), 1.0)
+		s.holder.Stats.Gauge(MetricMallocs, float64(m.Mallocs), 1.0)
+		s.holder.Stats.Gauge(MetricFrees, float64(m.Frees), 1.0)
 	}
 }
 

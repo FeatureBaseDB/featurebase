@@ -2229,7 +2229,7 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 		return rows[0], nil
 	}
 	row := rows[0].Union(rows[1:]...)
-	f.Stats.Count("range", 1, 1.0)
+	f.Stats.Count(MetricRow, 1, 1.0)
 	return row, nil
 
 }
@@ -2283,6 +2283,7 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 			return NewRow(), nil
 		}
 
+		f.Stats.Count(MetricRowBSI, 1, 1.0)
 		return frag.notNull()
 
 	} else if cond.Op == pql.BETWEEN || cond.Op == pql.BTWN_LT_LT ||
@@ -2324,6 +2325,7 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 			return frag.notNull()
 		}
 
+		f.Stats.Count(MetricRowBSI, 1, 1.0)
 		return frag.rangeBetween(bsig.BitDepth, baseValueMin, baseValueMax)
 
 	} else {
@@ -2360,7 +2362,7 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 			return frag.notNull()
 		}
 
-		f.Stats.Count("range:bsigroup", 1, 1.0)
+		f.Stats.Count(MetricRowBSI, 1, 1.0)
 		return frag.rangeOp(cond.Op, bsig.BitDepth, baseValue)
 	}
 }
@@ -3103,7 +3105,7 @@ func (e *executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	if err := field.RowAttrStore().SetAttrs(rowID, attrs); err != nil {
 		return err
 	}
-	field.Stats.Count("SetRowAttrs", 1, 1.0)
+	field.Stats.Count(MetricSetRowAttrs, 1, 1.0)
 
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {
@@ -3197,7 +3199,7 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 		if err := field.RowAttrStore().SetBulkAttrs(fieldMap); err != nil {
 			return nil, err
 		}
-		field.Stats.Count("SetRowAttrs", 1, 1.0)
+		field.Stats.Count(MetricSetRowAttrs, 1, 1.0)
 	}
 
 	// Do not forward call if this is already being forwarded.
@@ -3251,7 +3253,7 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 	if err := idx.ColumnAttrStore().SetAttrs(col, attrs); err != nil {
 		return err
 	}
-	idx.Stats.Count("SetProfileAttrs", 1, 1.0)
+	idx.Stats.Count(MetricSetProfileAttrs, 1, 1.0)
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {
 		return nil

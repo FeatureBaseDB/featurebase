@@ -801,10 +801,10 @@ func (s *holderSyncer) SyncHolder() error {
 					}
 				}
 			}
-			s.Stats.Histogram("syncField", float64(time.Since(tf)), 1.0)
+			s.Stats.Histogram(MetricSyncField, float64(time.Since(tf)), 1.0)
 			tf = time.Now() // reset tf
 		}
-		s.Stats.Histogram("syncIndex", float64(time.Since(ti)), 1.0)
+		s.Stats.Histogram(MetricSyncIndex, float64(time.Since(ti)), 1.0)
 		ti = time.Now() // reset ti
 	}
 
@@ -828,7 +828,7 @@ func (s *holderSyncer) syncIndex(index string) error {
 	if err != nil {
 		return errors.Wrap(err, "getting blocks")
 	}
-	s.Stats.CountWithCustomTags("ColumnAttrStoreBlocks", int64(len(blks)), 1.0, []string{indexTag})
+	s.Stats.CountWithCustomTags(MetricColumnAttrStoreBlocks, int64(len(blks)), 1.0, []string{indexTag})
 
 	// Sync with every other host.
 	for _, node := range Nodes(s.Cluster.nodes).FilterID(s.Node.ID) {
@@ -840,7 +840,7 @@ func (s *holderSyncer) syncIndex(index string) error {
 		} else if len(m) == 0 {
 			continue
 		}
-		s.Stats.CountWithCustomTags("ColumnAttrDiff", int64(len(m)), 1.0, []string{indexTag, node.ID})
+		s.Stats.CountWithCustomTags(MetricColumnAttrDiff, int64(len(m)), 1.0, []string{indexTag, node.ID})
 
 		// Update local copy.
 		if err := idx.ColumnAttrStore().SetBulkAttrs(m); err != nil {
@@ -875,7 +875,7 @@ func (s *holderSyncer) syncField(index, name string) error {
 	if err != nil {
 		return errors.Wrap(err, "getting blocks")
 	}
-	s.Stats.CountWithCustomTags("RowAttrStoreBlocks", int64(len(blks)), 1.0, []string{indexTag, fieldTag})
+	s.Stats.CountWithCustomTags(MetricRowAttrStoreBlocks, int64(len(blks)), 1.0, []string{indexTag, fieldTag})
 
 	// Sync with every other host.
 	for _, node := range Nodes(s.Cluster.nodes).FilterID(s.Node.ID) {
@@ -889,7 +889,7 @@ func (s *holderSyncer) syncField(index, name string) error {
 		} else if len(m) == 0 {
 			continue
 		}
-		s.Stats.CountWithCustomTags("RowAttrDiff", int64(len(m)), 1.0, []string{indexTag, fieldTag, node.ID})
+		s.Stats.CountWithCustomTags(MetricRowAttrDiff, int64(len(m)), 1.0, []string{indexTag, fieldTag, node.ID})
 
 		// Update local copy.
 		if err := f.RowAttrStore().SetBulkAttrs(m); err != nil {
