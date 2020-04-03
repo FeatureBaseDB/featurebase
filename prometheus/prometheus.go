@@ -27,7 +27,7 @@ import (
 
 const (
 	// namespace is prepended to each metric event name with "_"
-	namespace = "pilosa"
+	defaultNamespace = "pilosa"
 )
 
 // Ensure client implements interface.
@@ -46,11 +46,22 @@ type prometheusClient struct {
 	gaugeVecs   map[string]*prometheus.GaugeVec
 	observers   map[string]prometheus.Observer
 	summaryVecs map[string]*prometheus.SummaryVec
+	namespace   string
+}
+
+// ClientOption is a functional option type for prometheusClient
+type ClientOption func(c *prometheusClient)
+
+// OptClientPrefix is a functional option on prometheusClient used to set the namespace
+func OptClientNamespace(namespace string) ClientOption {
+	return func(c *prometheusClient) {
+		c.namespace = namespace
+	}
 }
 
 // NewPrometheusClient returns a new instance of StatsClient.
-func NewPrometheusClient() (*prometheusClient, error) {
-	return &prometheusClient{
+func NewPrometheusClient(opts ...ClientOption) (*prometheusClient, error) {
+	client := &prometheusClient{
 		logger:      logger.NopLogger,
 		counters:    make(map[string]prometheus.Counter),
 		counterVecs: make(map[string]*prometheus.CounterVec),
@@ -58,7 +69,14 @@ func NewPrometheusClient() (*prometheusClient, error) {
 		gaugeVecs:   make(map[string]*prometheus.GaugeVec),
 		observers:   make(map[string]prometheus.Observer),
 		summaryVecs: make(map[string]*prometheus.SummaryVec),
-	}, nil
+		namespace:   defaultNamespace,
+	}
+
+	for _, opt := range opts {
+		opt(client)
+	}
+
+	return client, nil
 }
 
 // Open no-op to satisfy interface
@@ -90,6 +108,7 @@ func (c *prometheusClient) WithTags(tags ...string) stats.StatsClient {
 		gaugeVecs:   c.gaugeVecs,
 		observers:   c.observers,
 		summaryVecs: c.summaryVecs,
+		namespace:   c.namespace,
 	}
 }
 
@@ -103,7 +122,7 @@ func (c *prometheusClient) Count(name string, value int64, rate float64) {
 	name = strings.Replace(name, ".", "_", -1)
 	labels := c.labels()
 	opts := prometheus.CounterOpts{
-		Namespace: namespace,
+		Namespace: c.namespace,
 		Name:      name,
 	}
 	if len(labels) == 0 {
@@ -152,7 +171,7 @@ func (c *prometheusClient) Gauge(name string, value float64, rate float64) {
 	name = strings.Replace(name, ".", "_", -1)
 	labels := c.labels()
 	opts := prometheus.GaugeOpts{
-		Namespace: namespace,
+		Namespace: c.namespace,
 		Name:      name,
 	}
 	if len(labels) == 0 {
@@ -193,7 +212,7 @@ func (c *prometheusClient) Histogram(name string, value float64, rate float64) {
 	name = strings.Replace(name, ".", "_", -1)
 	labels := c.labels()
 	opts := prometheus.SummaryOpts{
-		Namespace:  namespace,
+		Namespace:  c.namespace,
 		Name:       name,
 		Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
 	}
