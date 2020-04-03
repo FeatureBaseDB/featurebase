@@ -517,7 +517,7 @@ func (s *Server) Open() error {
 	s.syncer.Node = s.cluster.Node
 	s.syncer.Cluster = s.cluster
 	s.syncer.Closing = s.closing
-	s.syncer.Stats = s.holder.Stats.WithTags("HolderSyncer")
+	s.syncer.Stats = s.holder.Stats.WithTags("component:HolderSyncer")
 
 	// Start background process listening for translation
 	// sync resets.

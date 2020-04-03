@@ -94,7 +94,7 @@ func (c *prometheusClient) Tags() []string {
 
 // labels returns an instance of prometheus.Labels with the value of the set tags.
 func (c *prometheusClient) labels() prometheus.Labels {
-	return tagsToLabels(c.tags)
+	return tagsToLabels(c.tags, c.logger)
 }
 
 // WithTags returns a new client with additional tags appended.
@@ -296,12 +296,13 @@ func unionStringSlice(a, b []string) []string {
 	return other
 }
 
-func tagsToLabels(tags []string) (labels prometheus.Labels) {
+func tagsToLabels(tags []string, logger logger.Logger) (labels prometheus.Labels) {
 	labels = make(prometheus.Labels)
 	for _, tag := range tags {
 		tagParts := strings.SplitAfterN(tag, ":", 2)
 		if len(tagParts) != 2 {
 			// only process tags in "key:value" form
+			logger.Debugf("Invalid Prometheus label: %v\n", tag)
 			continue
 		}
 		labels[tagParts[0][0:len(tagParts[0])-1]] = tagParts[1]
