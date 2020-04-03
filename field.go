@@ -717,8 +717,25 @@ func (f *Field) loadMeta() error {
 		}
 	}
 
-	min := pql.NewDecimal(pb.Min.Value, pb.Min.Scale)
-	max := pql.NewDecimal(pb.Max.Value, pb.Max.Scale)
+	// Since pb.Min and pb.Max were changed to pql.Decimal,
+	// and since they now have a different protobuf field
+	// number, an existing meta file may have values in the
+	// old min/max fields which need to be converted to
+	// pql.Decimal.
+	// TODO: we can remove the OldMin/OldMax once we're
+	// confident no one is still using the older version.
+	var min pql.Decimal
+	if pb.Min != nil {
+		min = pql.NewDecimal(pb.Min.Value, pb.Min.Scale)
+	} else {
+		min = pql.NewDecimal(pb.OldMin, 0)
+	}
+	var max pql.Decimal
+	if pb.Max != nil {
+		max = pql.NewDecimal(pb.Max.Value, pb.Max.Scale)
+	} else {
+		max = pql.NewDecimal(pb.OldMax, 0)
+	}
 
 	// Initialize "base" to "min" when upgrading from v1 BSI format.
 	if pb.BitDepth == 0 {
