@@ -108,6 +108,7 @@ func (c *prometheusClient) WithTags(tags ...string) stats.StatsClient {
 		gaugeVecs:   c.gaugeVecs,
 		observers:   c.observers,
 		summaryVecs: c.summaryVecs,
+		namespace:   c.namespace,
 	}
 }
 
