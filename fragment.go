@@ -2248,7 +2248,7 @@ func (f *fragment) Snapshot() error {
 
 func track(start time.Time, message string, stats stats.StatsClient, logger logger.Logger) {
 	elapsed := time.Since(start)
-	logger.Printf("%s took %s", message, elapsed)
+	logger.Debugf("%s took %s", message, elapsed)
 	stats.Histogram("snapshot", elapsed.Seconds(), 1.0)
 }
 
