@@ -36,6 +36,7 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/encoding/proto"
 	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/tracing"
@@ -470,6 +471,17 @@ func validHeaderAcceptJSON(header http.Header) bool {
 		return false
 	}
 	return true
+}
+
+// headerAcceptRoaringRow tells us that the request should accept roaring
+// rows in response.
+func headerAcceptRoaringRow(header http.Header) bool {
+	for _, v := range header["X-Pilosa-Row"] {
+		if v == "roaring" {
+			return true
+		}
+	}
+	return false
 }
 
 // handleGetSchema handles GET /schema requests.
@@ -1223,7 +1235,7 @@ func (h *Handler) readProtobufQueryRequest(r *http.Request) (*pilosa.QueryReques
 	}
 
 	qreq := &pilosa.QueryRequest{}
-	err = h.api.Serializer.Unmarshal(body, qreq)
+	err = proto.DefaultSerializer.Unmarshal(body, qreq)
 	if err != nil {
 		return nil, errors.Wrap(err, "unmarshalling query request")
 	}
@@ -1271,15 +1283,19 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*pilosa.QueryRequest, er
 func (h *Handler) writeQueryResponse(w http.ResponseWriter, r *http.Request, resp *pilosa.QueryResponse) error {
 	if !validHeaderAcceptJSON(r.Header) {
 		w.Header().Set("Content-Type", "application/protobuf")
-		return h.writeProtobufQueryResponse(w, resp)
+		return h.writeProtobufQueryResponse(w, resp, headerAcceptRoaringRow(r.Header))
 	}
 	w.Header().Set("Content-Type", "application/json")
 	return h.writeJSONQueryResponse(w, resp)
 }
 
 // writeProtobufQueryResponse writes the response from the executor to w as protobuf.
-func (h *Handler) writeProtobufQueryResponse(w io.Writer, resp *pilosa.QueryResponse) error {
-	if buf, err := h.api.Serializer.Marshal(resp); err != nil {
+func (h *Handler) writeProtobufQueryResponse(w io.Writer, resp *pilosa.QueryResponse, writeRoaring bool) error {
+	serializer := proto.DefaultSerializer
+	if writeRoaring {
+		serializer = proto.RoaringSerializer
+	}
+	if buf, err := serializer.Marshal(resp); err != nil {
 		return errors.Wrap(err, "marshalling")
 	} else if _, err := w.Write(buf); err != nil {
 		return errors.Wrap(err, "writing")
@@ -1342,7 +1358,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		// Field type: Int
 		// Marshal into request object.
 		req := &pilosa.ImportValueRequest{}
-		if err := h.api.Serializer.Unmarshal(body, req); err != nil {
+		if err := proto.DefaultSerializer.Unmarshal(body, req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -1360,7 +1376,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		// Field type: set, time, mutex
 		// Marshal into request object.
 		req := &pilosa.ImportRequest{}
-		if err := h.api.Serializer.Unmarshal(body, req); err != nil {
+		if err := proto.DefaultSerializer.Unmarshal(body, req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -1377,7 +1393,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Marshal response object.
-	buf, e := h.api.Serializer.Marshal(&pilosa.ImportResponse{Err: ""})
+	buf, e := proto.DefaultSerializer.Marshal(&pilosa.ImportResponse{Err: ""})
 	if e != nil {
 		http.Error(w, "marshal import response", http.StatusInternalServerError)
 		return
@@ -1885,7 +1901,7 @@ func (h *Handler) handlePostImportColumnAttrs(w http.ResponseWriter, r *http.Req
 	}
 
 	req := &pilosa.ImportColumnAttrsRequest{}
-	if err := h.api.Serializer.Unmarshal(body, req); err != nil {
+	if err := proto.DefaultSerializer.Unmarshal(body, req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -1896,7 +1912,7 @@ func (h *Handler) handlePostImportColumnAttrs(w http.ResponseWriter, r *http.Req
 	}
 
 	// Marshal response object.
-	buf, e := h.api.Serializer.Marshal(&pilosa.ImportResponse{Err: ""})
+	buf, e := proto.DefaultSerializer.Marshal(&pilosa.ImportResponse{Err: ""})
 	if e != nil {
 		http.Error(w, "marshal import-column-attrs response", http.StatusInternalServerError)
 		return
@@ -1943,7 +1959,7 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 
 	req := &pilosa.ImportRoaringRequest{}
 	span, _ = tracing.StartSpanFromContext(ctx, "Unmarshal")
-	err = h.api.Serializer.Unmarshal(body, req)
+	err = proto.DefaultSerializer.Unmarshal(body, req)
 	span.Finish()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1969,7 +1985,7 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 	}
 
 	// Marshal response object.
-	buf, err := h.api.Serializer.Marshal(resp)
+	buf, err := proto.DefaultSerializer.Marshal(resp)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("marshal import-roaring response: %v", err), http.StatusInternalServerError)
 		return
