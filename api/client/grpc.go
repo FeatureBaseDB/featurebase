@@ -27,6 +27,8 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
+const maxMsgSize = 1024 * 1024 * 100 // 100 megs ought to be enough for anybody!
+
 // GRPCClient is a client for working with the gRPC server.
 type GRPCClient struct {
 	dialTarget string
@@ -73,6 +75,8 @@ func (c *GRPCClient) resetConn() error {
 	} else {
 		opts = append(opts, grpc.WithInsecure())
 	}
+
+	opts = append(opts, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize)))
 
 	var err error
 	if c.conn, err = grpc.Dial(c.dialTarget, opts...); err != nil {
