@@ -40,11 +40,13 @@ vendor: go.mod
 
 # Run test suite
 test:
-	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS)
+	case $$(go version) in *go1.14*) NOCHECKPTR="-gcflags=all=-d=checkptr=0";; *) NOCHECKPTR="";; esac ; \
+	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS) $$NOCHECKPTR
 
 # Run test suite with race flag
 test-race:
-	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS) -race -timeout 30m
+	case $$(go version) in *go1.14*) NOCHECKPTR="-gcflags=all=-d=checkptr=0";; *) NOCHECKPTR="";; esac ; \
+	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS) -race $$NOCHECKPTR -timeout 30m
 
 bench:
 	go test ./... -bench=. -run=NoneZ -timeout=127m $(TESTFLAGS)
