@@ -31,6 +31,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/handlers"
@@ -122,8 +123,18 @@ func OptHandlerCloseTimeout(d time.Duration) handlerOption {
 	}
 }
 
+var makeImportOk sync.Once
+var importOk []byte
+
 // NewHandler returns a new instance of Handler with a default logger.
 func NewHandler(opts ...handlerOption) (*Handler, error) {
+	makeImportOk.Do(func() {
+		var err error
+		importOk, err = proto.DefaultSerializer.Marshal(&pilosa.ImportResponse{Err: ""})
+		if err != nil {
+			panic(fmt.Sprintf("trying to cache import-OK response: %v", err))
+		}
+	})
 	handler := &Handler{
 		logger:       logger.NopLogger,
 		closeTimeout: time.Second * 30,
@@ -1392,15 +1403,8 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Marshal response object.
-	buf, e := proto.DefaultSerializer.Marshal(&pilosa.ImportResponse{Err: ""})
-	if e != nil {
-		http.Error(w, "marshal import response", http.StatusInternalServerError)
-		return
-	}
-
 	// Write response.
-	_, err = w.Write(buf)
+	_, err = w.Write(importOk)
 	if err != nil {
 		h.logger.Printf("writing import response: %v", err)
 	}
@@ -1911,15 +1915,8 @@ func (h *Handler) handlePostImportColumnAttrs(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Marshal response object.
-	buf, e := proto.DefaultSerializer.Marshal(&pilosa.ImportResponse{Err: ""})
-	if e != nil {
-		http.Error(w, "marshal import-column-attrs response", http.StatusInternalServerError)
-		return
-	}
-
 	// Write response.
-	_, err = w.Write(buf)
+	_, err = w.Write(importOk)
 	if err != nil {
 		h.logger.Printf("writing import-column-attrs response: %v", err)
 	}
