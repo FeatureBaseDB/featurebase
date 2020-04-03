@@ -463,7 +463,7 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return nil, errors.Wrap(err, "validating args")
 	}
 	indexTag := "index:" + index
-	metricName := "query_" + c.Name
+	metricName := "query_" + strings.ToLower(c.Name) + "_total"
 
 	// Fixes #2009
 	// See: https://github.com/pilosa/pilosa/issues/2009

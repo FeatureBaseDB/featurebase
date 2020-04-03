@@ -101,8 +101,8 @@ func TestStatsCount_TopN(t *testing.T) {
 	called := false
 	hldr.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
-			if name != "TopN" {
-				t.Errorf("Expected TopN, Results %s", name)
+			if name != "query_topn_total" {
+				t.Errorf("Expected query_topn_total, Results %s", name)
 			}
 
 			if tags[0] != "index:d" {
@@ -130,8 +130,8 @@ func TestStatsCount_Bitmap(t *testing.T) {
 	called := false
 	hldr.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
-			if name != "Row" {
-				t.Errorf("Expected Row, Results %s", name)
+			if name != "query_row_total" {
+				t.Errorf("Expected query_row_total, Results %s", name)
 			}
 
 			if tags[0] != "index:d" {
@@ -165,8 +165,8 @@ func TestStatsCount_SetColumnAttrs(t *testing.T) {
 
 	field.Stats = &MockStats{
 		mockCount: func(name string, value int64, rate float64) {
-			if name != "SetRowAttrs" {
-				t.Errorf("Expected SetRowAttrs, Results %s", name)
+			if name != "query_setrowattrs_total" {
+				t.Errorf("Expected query_setrowattrs_total, Results %s", name)
 			}
 			called = true
 		},
@@ -195,8 +195,8 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 
 	idx.Stats = &MockStats{
 		mockCount: func(name string, value int64, rate float64) {
-			if name != "SetProfileAttrs" {
-				t.Errorf("Expected SetProfilepAttrs, Results %s", name)
+			if name != "query_setcolumnattrs_total" {
+				t.Errorf("Expected query_setcolumnattrs_total, Results %s", name)
 			}
 
 			called = true
@@ -222,8 +222,8 @@ func TestStatsCount_APICalls(t *testing.T) {
 		called := false
 		hldr.Stats = &MockStats{
 			mockCount: func(name string, value int64, rate float64) {
-				if name != "createIndex" {
-					t.Errorf("Expected createIndex, Results %s", name)
+				if name != "create_index_total" {
+					t.Errorf("Expected create_index_total, Results %s", name)
 				}
 				called = true
 			},
@@ -239,8 +239,8 @@ func TestStatsCount_APICalls(t *testing.T) {
 		called := false
 		hldr.Stats = &MockStats{
 			mockCountWithTags: func(name string, value int64, rate float64, index []string) {
-				if name != "createField" {
-					t.Errorf("Expected createField, Results %s", name)
+				if name != "create_field_total" {
+					t.Errorf("Expected create_field_total, Results %s", name)
 				}
 				if index[0] != "index:i" {
 					t.Errorf("Expected index:i, Results %s", index)
@@ -260,8 +260,8 @@ func TestStatsCount_APICalls(t *testing.T) {
 		called := false
 		hldr.Stats = &MockStats{
 			mockCountWithTags: func(name string, value int64, rate float64, index []string) {
-				if name != "deleteField" {
-					t.Errorf("Expected deleteField, Results %s", name)
+				if name != "delete_field_total" {
+					t.Errorf("Expected delete_field_total, Results %s", name)
 				}
 				if index[0] != "index:i" {
 					t.Errorf("Expected index:i, Results %s", index)
@@ -281,8 +281,8 @@ func TestStatsCount_APICalls(t *testing.T) {
 		called := false
 		hldr.Stats = &MockStats{
 			mockCount: func(name string, value int64, rate float64) {
-				if name != "deleteIndex" {
-					t.Errorf("Expected deleteIndex, Results %s", name)
+				if name != "delete_index_total" {
+					t.Errorf("Expected delete_index_total, Results %s", name)
 				}
 
 				called = true
