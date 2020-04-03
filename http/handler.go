@@ -296,7 +296,7 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 
 		stats := h.api.StatsWithTags(statsTags)
 		if stats != nil {
-			stats.Timing(MetricHttpRequest, dur, 0.1)
+			stats.Timing(pilosa.MetricHttpRequest, dur, 0.1)
 		}
 	})
 }
