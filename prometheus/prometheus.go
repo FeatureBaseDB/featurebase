@@ -26,6 +26,7 @@ import (
 )
 
 const (
+	// namespace is prepended to each metric event name with "_"
 	defaultNamespace = "pilosa"
 )
 
