@@ -462,7 +462,8 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	} else if err := e.validateCallArgs(c); err != nil {
 		return nil, errors.Wrap(err, "validating args")
 	}
-	indexTag := fmt.Sprintf("index:%s", index)
+	indexTag := "index:" + index
+	metricName := "query_" + c.Name
 
 	// Fixes #2009
 	// See: https://github.com/pilosa/pilosa/issues/2009
@@ -487,28 +488,28 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 
 	// Special handling for mutation and top-n calls.
 	if op, ok := e.additionalCountOps[c.Name]; ok {
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		e.Holder.Stats.CountWithCustomTags(metricName, 1, 1.0, []string{indexTag})
 		return e.executeGenericCount(ctx, index, c, op, shards, opt)
 	}
 	if op, ok := e.additionalFieldOps[c.Name]; ok {
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		e.Holder.Stats.CountWithCustomTags(metricName, 1, 1.0, []string{indexTag})
 		return e.executeGenericField(ctx, index, c, op, shards, opt)
 	}
 	switch c.Name {
 	case "Sum":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		e.Holder.Stats.CountWithCustomTags(metricName, 1, 1.0, []string{indexTag})
 		return e.executeSum(ctx, index, c, shards, opt)
 	case "Min":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		e.Holder.Stats.CountWithCustomTags(metricName, 1, 1.0, []string{indexTag})
 		return e.executeMin(ctx, index, c, shards, opt)
 	case "Max":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		e.Holder.Stats.CountWithCustomTags(metricName, 1, 1.0, []string{indexTag})
 		return e.executeMax(ctx, index, c, shards, opt)
 	case "MinRow":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		e.Holder.Stats.CountWithCustomTags(metricName, 1, 1.0, []string{indexTag})
 		return e.executeMinRow(ctx, index, c, shards, opt)
 	case "MaxRow":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		e.Holder.Stats.CountWithCustomTags(metricName, 1, 1.0, []string{indexTag})
 		return e.executeMaxRow(ctx, index, c, shards, opt)
 	case "Clear":
 		return e.executeClearBit(ctx, index, c, opt)
@@ -517,7 +518,7 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "Store":
 		return e.executeSetRow(ctx, index, c, shards, opt)
 	case "Count":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		e.Holder.Stats.CountWithCustomTags(metricName, 1, 1.0, []string{indexTag})
 		return e.executeCount(ctx, index, c, shards, opt)
 	case "Set":
 		return e.executeSet(ctx, index, c, opt)
@@ -526,13 +527,13 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "SetColumnAttrs":
 		return nil, e.executeSetColumnAttrs(ctx, index, c, opt)
 	case "TopN":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		e.Holder.Stats.CountWithCustomTags(metricName, 1, 1.0, []string{indexTag})
 		return e.executeTopN(ctx, index, c, shards, opt)
 	case "Rows":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		e.Holder.Stats.CountWithCustomTags(metricName, 1, 1.0, []string{indexTag})
 		return e.executeRows(ctx, index, c, shards, opt)
 	case "GroupBy":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		e.Holder.Stats.CountWithCustomTags(metricName, 1, 1.0, []string{indexTag})
 		return e.executeGroupBy(ctx, index, c, shards, opt)
 	case "Options":
 		return e.executeOptionsCall(ctx, index, c, shards, opt)
@@ -543,7 +544,7 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	case "Precomputed":
 		return e.executePrecomputedCall(ctx, index, c, shards, opt)
 	default:
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		e.Holder.Stats.CountWithCustomTags(metricName, 1, 1.0, []string{indexTag})
 		return e.executeBitmapCall(ctx, index, c, shards, opt)
 	}
 }
