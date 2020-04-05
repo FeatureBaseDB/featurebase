@@ -1115,6 +1115,7 @@ func (c *InternalClient) SendMessage(ctx context.Context, uri *pilosa.URI, msg [
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Connection", "keep-alive")
 
 	// Execute request.
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1232,6 +1233,7 @@ func (c *InternalClient) TranslateIDsNode(ctx context.Context, uri *pilosa.URI, 
 // is closed.
 func (c *InternalClient) executeRequest(req *http.Request) (*http.Response, error) {
 	tracing.GlobalTracer.InjectHTTPHeaders(req)
+	req.Close = false
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		if resp != nil {
