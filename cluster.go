@@ -1443,7 +1443,7 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 		return errors.Wrap(err, "merging cluster status")
 	}
 
-	c.logger.Printf("done MergeClusterStatus, start goroutine")
+	c.logger.Printf("done MergeClusterStatus, start goroutine (%s)", c.Node.ID)
 
 	// The actual resizing runs in a goroutine because we don't want to block
 	// the distribution of other ResizeInstructions to the rest of the cluster.

@@ -1185,7 +1185,7 @@ func (s *holderSyncer) readFieldTranslateReader(rd TranslateEntryReader) {
 		// Find appropriate store.
 		f := s.Holder.Field(entry.Index, entry.Field)
 		if f == nil {
-			s.Holder.Logger.Printf("field not found: %q/%q", entry.Index, entry.Field)
+			s.Holder.Logger.Printf("field not found: %s/%s", entry.Index, entry.Field)
 			return
 		}
 
@@ -1233,6 +1233,15 @@ func (c *holderCleaner) CleanHolder() error {
 
 		// Get the fragments registered in memory.
 		for _, field := range index.Fields() {
+			// deletedShards is used to track which shards for the field
+			// were deleted. Any shards that get deleted from this node
+			// get added to remoteAvailableShards. This is done because
+			// the CleanHolder process is cleaning up shards which got
+			// moved to other nodes. Because those shards still exist
+			// (just no longer on this particular node), this node still
+			// needs to consider each of them as an available shard in
+			// the cluster.
+			var deletedShards []uint64
 			for _, view := range field.views() {
 				for _, fragment := range view.allFragments() {
 					fragShard := fragment.shard
@@ -1244,6 +1253,12 @@ func (c *holderCleaner) CleanHolder() error {
 					if err := view.deleteFragment(fragShard); err != nil {
 						return errors.Wrap(err, "deleting fragment")
 					}
+					deletedShards = append(deletedShards, fragShard)
+				}
+			}
+			if len(deletedShards) > 0 {
+				if err := field.AddRemoteAvailableShards(roaring.NewBitmap(deletedShards...)); err != nil {
+					return errors.Wrap(err, "adding remote available shards")
 				}
 			}
 		}

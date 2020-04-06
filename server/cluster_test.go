@@ -206,7 +206,6 @@ func TestClusterResize_AddNode(t *testing.T) {
 			`); err != nil {
 			t.Fatal(err)
 		}
-
 		// exp is the expected result for the Row queries that follow.
 		exp := `{"results":[{"attrs":{},"columns":[1,1300000]}]}` + "\n"
 

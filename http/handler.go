@@ -1590,7 +1590,7 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
 		return
 	}
-
+	defer r.Body.Close()
 	err := h.api.ClusterMessage(r.Context(), r.Body)
 	if err != nil {
 		// TODO this was the previous behavior, but perhaps not everything is a bad request

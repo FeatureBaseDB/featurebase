@@ -15,11 +15,12 @@
 package pilosa
 
 import (
-	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"math"
 	"os"
 	"path/filepath"
@@ -62,6 +63,26 @@ const (
 	FieldTypeBool    = "bool"
 	FieldTypeDecimal = "decimal"
 )
+
+type protected struct {
+	mu       sync.Mutex
+	duration time.Duration
+}
+
+func (p *protected) Set(d time.Duration) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.duration = d
+}
+func (p *protected) Get() time.Duration {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.duration
+}
+
+var availableShardFileFlushDuration = &protected{
+	duration: 5 * time.Second,
+}
 
 // Field represents a container for views.
 type Field struct {
@@ -112,6 +133,12 @@ type Field struct {
 	// based on a foreign index; this prevents having to
 	// call holder.index.Keys() every time.
 	usesKeys bool
+
+	// Synchronization primitives needed for async writing of
+	// the remoteAvailableShards
+	availableShardChan chan []byte
+	doneChan           chan struct{}
+	wg                 sync.WaitGroup
 }
 
 // FieldOption is a functional option type for pilosa.fieldOptions.
@@ -348,6 +375,7 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 
 		OpenTranslateStore: OpenInMemTranslateStore,
 	}
+
 	return f, nil
 }
 
@@ -383,6 +411,13 @@ func (f *Field) AvailableShards() *roaring.Bitmap {
 		b = b.Union(view.availableShards())
 	}
 	return b
+}
+
+// constainsShard is used for limiting unnecessary CreateShard broadcast
+func (f *Field) containsShard(shard uint64) bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.remoteAvailableShards.Contains(shard)
 }
 
 // AddRemoteAvailableShards merges the set of available shards into the current known set
@@ -441,29 +476,11 @@ func (f *Field) saveAvailableShards() error {
 }
 
 func (f *Field) unprotectedSaveAvailableShards() error {
-	path := filepath.Join(f.path, ".available.shards")
-	// Create a temporary file to save to.
-	tempPath := path + tempExt
-
-	// Open or create file.
-	file, err := os.OpenFile(tempPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
-	if err != nil {
-		return errors.Wrap(err, "opening temporary available shards file")
+	var buf bytes.Buffer
+	if _, err := f.remoteAvailableShards.WriteTo(&buf); err != nil {
+		return errors.Wrap(err, "rendering available shards ")
 	}
-	defer file.Close()
-
-	// Write available shards to file.
-	bw := bufio.NewWriter(file)
-	if _, err = f.remoteAvailableShards.WriteTo(bw); err != nil {
-		return errors.Wrap(err, "writing bitmap to buffer")
-	}
-	bw.Flush()
-
-	// Move snapshot to data file location.
-	if err := os.Rename(tempPath, path); err != nil {
-		return fmt.Errorf("rename snapshot: %s", err)
-	}
-
+	f.availableShardChan <- buf.Bytes()
 	return nil
 }
 
@@ -578,7 +595,10 @@ func (f *Field) Open() error {
 				return errors.Wrap(err, "checking foreign index")
 			}
 		}
-
+		f.availableShardChan = make(chan []byte)
+		f.doneChan = make(chan struct{})
+		f.wg.Add(1)
+		go f.writeAvailableShards()
 		return nil
 	}(); err != nil {
 		f.Close()
@@ -587,6 +607,65 @@ func (f *Field) Open() error {
 
 	f.logger.Debugf("successfully opened field index/field: %s/%s", f.index, f.name)
 	return nil
+}
+func blockingWriteAvailableShards(fieldPath string, availableShardBytes []byte) {
+	path := filepath.Join(fieldPath, ".available.shards")
+	// Create a temporary file to save to.
+	tempPath := path + tempExt
+	err := ioutil.WriteFile(tempPath, availableShardBytes, 0666)
+	if err != nil {
+		log.Println("failed to write ", tempPath)
+		return
+	}
+
+	// Move snapshot to data file location.
+	if err := os.Rename(tempPath, path); err != nil {
+		log.Printf("rename snapshot: %s", err)
+	}
+
+}
+func nonBlockingWriteAvailableShards(fieldPath string, availableShardBytes []byte, done chan bool) {
+	if len(availableShardBytes) == 0 {
+		return
+	}
+	go func() {
+		blockingWriteAvailableShards(fieldPath, availableShardBytes)
+		done <- true
+	}()
+}
+
+func (f *Field) writeAvailableShards() {
+	defer f.wg.Done()
+	ticker := time.NewTicker(availableShardFileFlushDuration.Get())
+	var data []byte
+	tracker := make(chan bool)
+	writing := false
+
+	for alive := true; alive; {
+		select {
+		case newdata := <-f.availableShardChan:
+			data = newdata
+		case <-ticker.C:
+			if len(data) > 0 {
+				if !writing {
+					writing = true
+					nonBlockingWriteAvailableShards(f.path, data, tracker)
+					data = nil
+				}
+			}
+		case <-tracker:
+			writing = false
+		case <-f.doneChan:
+			if writing { //wait to writing is complete
+				<-tracker
+			}
+			if len(data) > 0 {
+				blockingWriteAvailableShards(f.path, data)
+			}
+			alive = false
+		}
+	}
+	ticker.Stop()
 }
 
 // applyTranslateStore opens the configured translate store.
@@ -887,7 +966,15 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 func (f *Field) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-
+	// Shutdown the available shards writer
+	if f.doneChan != nil {
+		f.doneChan <- struct{}{}
+		f.wg.Wait()
+		close(f.availableShardChan)
+		close(f.doneChan)
+		f.availableShardChan = nil
+		f.doneChan = nil
+	}
 	// Close the attribute store.
 	if f.rowAttrStore != nil {
 		_ = f.rowAttrStore.Close()
@@ -1099,6 +1186,7 @@ func (f *Field) newView(path, name string) *view {
 	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats
 	view.broadcaster = f.broadcaster
+	view.remoteShardPresent = f.containsShard
 	if f.snapshotQueue != nil {
 		view.snapshotQueue = f.snapshotQueue
 	}

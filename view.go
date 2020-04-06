@@ -55,11 +55,12 @@ type view struct {
 	// Fragments by shard.
 	fragments map[uint64]*fragment
 
-	broadcaster   broadcaster
-	stats         stats.StatsClient
-	rowAttrStore  AttrStore
-	logger        logger.Logger
-	snapshotQueue snapshotQueue
+	broadcaster        broadcaster
+	stats              stats.StatsClient
+	rowAttrStore       AttrStore
+	logger             logger.Logger
+	snapshotQueue      snapshotQueue
+	remoteShardPresent func(uint64) bool
 }
 
 // newView returns a new instance of View.
@@ -76,9 +77,10 @@ func newView(path, index, field, name string, fieldOptions FieldOptions) *view {
 
 		fragments: make(map[uint64]*fragment),
 
-		broadcaster: NopBroadcaster,
-		stats:       stats.NopStatsClient,
-		logger:      logger.NopLogger,
+		broadcaster:        NopBroadcaster,
+		stats:              stats.NopStatsClient,
+		logger:             logger.NopLogger,
+		remoteShardPresent: func(uint64) bool { return false },
 	}
 }
 
@@ -276,6 +278,14 @@ func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 	frag.RowAttrStore = v.rowAttrStore
 
 	v.fragments[shard] = frag
+	v.notifyIfNewShard(shard)
+	return frag, nil
+}
+
+func (v *view) notifyIfNewShard(shard uint64) {
+	if v.remoteShardPresent(shard) { //checks the fields remoteShards bitmap to see if broadcast needed
+		return
+	}
 	broadcastChan := make(chan struct{})
 
 	go func() {
@@ -299,8 +309,6 @@ func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 	case <-time.After(50 * time.Millisecond):
 		v.logger.Debugf("broadcasting create shard took >50ms")
 	}
-
-	return frag, nil
 }
 
 func (v *view) newFragment(path string, shard uint64) *fragment {
