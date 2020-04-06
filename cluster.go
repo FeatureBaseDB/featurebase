@@ -1482,7 +1482,6 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 						c.logger.Printf("local field not found: %s/%s", is.Name, fs.Name)
 						continue
 					}
-					fmt.Printf("field: %+v  (%s)\n", fs.AvailableShards.Slice(), c.Node.ID)
 					if err := f.AddRemoteAvailableShards(fs.AvailableShards); err != nil {
 						return errors.Wrap(err, "adding remote available shards")
 					}
