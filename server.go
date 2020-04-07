@@ -66,9 +66,10 @@ type Server struct { // nolint: maligned
 	extensions       []*ext.ExtensionInfo
 
 	// External
-	systemInfo SystemInfo
-	gcNotifier GCNotifier
-	logger     logger.Logger
+	systemInfo    SystemInfo
+	gcNotifier    GCNotifier
+	logger        logger.Logger
+	snapshotQueue SnapshotQueue
 
 	nodeID              string
 	uri                 URI
@@ -533,6 +534,9 @@ func (s *Server) UpAndDown() error {
 func (s *Server) Open() error {
 	s.logger.Printf("open server")
 
+	// Start background monitoring.
+	s.snapshotQueue = newSnapshotQueue(10, 2, s.logger)
+
 	// Log startup
 	err := s.holder.logStartup()
 	if err != nil {
@@ -560,6 +564,8 @@ func (s *Server) Open() error {
 	if err := s.holder.Open(); err != nil {
 		return errors.Wrap(err, "opening Holder")
 	}
+	// bring up the background tasks for the holder.
+	s.holder.Activate()
 	if err := s.cluster.setNodeState(nodeStateReady); err != nil {
 		return errors.Wrap(err, "setting nodeState")
 	}
@@ -571,7 +577,6 @@ func (s *Server) Open() error {
 	// buffered channel.
 	s.cluster.listenForJoins()
 
-	// Start background monitoring.
 	s.wg.Add(3)
 	go func() { defer s.wg.Done(); s.monitorAntiEntropy() }()
 	go func() { defer s.wg.Done(); s.monitorRuntime() }()
@@ -595,6 +600,11 @@ func (s *Server) Close() error {
 	}
 	if s.holder != nil {
 		errh = s.holder.Close()
+	}
+	if s.snapshotQueue != nil {
+		s.holder.SnapshotQueue = nil
+		s.snapshotQueue.Stop()
+		s.snapshotQueue = nil
 	}
 	// prefer to return holder error over cluster
 	// error. This order is somewhat arbitrary. It would be better if we had

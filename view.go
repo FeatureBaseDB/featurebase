@@ -26,7 +26,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
@@ -49,6 +48,8 @@ type view struct {
 	field string
 	name  string
 
+	holder *Holder
+
 	fieldType string
 	cacheType string
 	cacheSize uint32
@@ -56,23 +57,23 @@ type view struct {
 	// Fragments by shard.
 	fragments map[uint64]*fragment
 
-	broadcaster   broadcaster
-	stats         stats.StatsClient
-	rowAttrStore  AttrStore
-	logger        logger.Logger
-	snapshotQueue snapshotQueue
+	broadcaster  broadcaster
+	stats        stats.StatsClient
+	rowAttrStore AttrStore
 
 	knownShards       *roaring.Bitmap
 	knownShardsCopied uint32
 }
 
 // newView returns a new instance of View.
-func newView(path, index, field, name string, fieldOptions FieldOptions) *view {
+func newView(holder *Holder, path, index, field, name string, fieldOptions FieldOptions) *view {
 	return &view{
 		path:  path,
 		index: index,
 		field: field,
 		name:  name,
+
+		holder: holder,
 
 		fieldType: fieldOptions.Type,
 		cacheType: fieldOptions.CacheType,
@@ -82,7 +83,6 @@ func newView(path, index, field, name string, fieldOptions FieldOptions) *view {
 
 		broadcaster: NopBroadcaster,
 		stats:       stats.NopStatsClient,
-		logger:      logger.NopLogger,
 		knownShards: roaring.NewSliceBitmap(),
 	}
 }
@@ -133,14 +133,14 @@ func (v *view) open() error {
 
 	if err := func() error {
 		// Ensure the view's path exists.
-		v.logger.Debugf("ensure view path exists: %s", v.path)
+		v.holder.Logger.Debugf("ensure view path exists: %s", v.path)
 		if err := os.MkdirAll(v.path, 0777); err != nil {
 			return errors.Wrap(err, "creating view directory")
 		} else if err := os.MkdirAll(filepath.Join(v.path, "fragments"), 0777); err != nil {
 			return errors.Wrap(err, "creating fragments directory")
 		}
 
-		v.logger.Debugf("open fragments for index/field/view: %s/%s/%s", v.index, v.field, v.name)
+		v.holder.Logger.Debugf("open fragments for index/field/view: %s/%s/%s", v.index, v.field, v.name)
 		if err := v.openFragments(); err != nil {
 			return errors.Wrap(err, "opening fragments")
 		}
@@ -151,7 +151,7 @@ func (v *view) open() error {
 		return err
 	}
 
-	v.logger.Debugf("successfully opened index/field/view: %s/%s/%s", v.index, v.field, v.name)
+	v.holder.Logger.Debugf("successfully opened index/field/view: %s/%s/%s", v.index, v.field, v.name)
 	return nil
 }
 
@@ -190,12 +190,12 @@ fileLoop:
 			// Parse filename into integer.
 			shard, err := strconv.ParseUint(filepath.Base(fi.Name()), 10, 64)
 			if err != nil {
-				v.logger.Debugf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", v.index, v.field, v.name, fi.Name())
+				v.holder.Logger.Debugf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", v.index, v.field, v.name, fi.Name())
 				continue
 			}
 
 			workQueue <- struct{}{}
-			v.logger.Debugf("open index/field/view/fragment: %s/%s/%s/%d", v.index, v.field, v.name, shard)
+			v.holder.Logger.Debugf("open index/field/view/fragment: %s/%s/%s/%d", v.index, v.field, v.name, shard)
 			eg.Go(func() error {
 				defer func() {
 					<-workQueue
@@ -205,7 +205,7 @@ fileLoop:
 					return fmt.Errorf("open fragment: shard=%d, err=%s", frag.shard, err)
 				}
 				frag.RowAttrStore = v.rowAttrStore
-				v.logger.Debugf("add index/field/view/fragment to view.fragments: %s/%s/%s/%d", v.index, v.field, v.name, shard)
+				v.holder.Logger.Debugf("add index/field/view/fragment to view.fragments: %s/%s/%s/%d", v.index, v.field, v.name, shard)
 				mu.Lock()
 				v.fragments[frag.shard] = frag
 				v.addKnownShard(frag.shard)
@@ -342,7 +342,7 @@ func (v *view) notifyIfNewShard(shard uint64) {
 		// Broadcast a message that a new max shard was just created.
 		err := v.broadcaster.SendSync(msg)
 		if err != nil {
-			v.logger.Printf("broadcasting create shard: %v", err)
+			v.holder.Logger.Printf("broadcasting create shard: %v", err)
 		}
 		close(broadcastChan)
 	}()
@@ -352,19 +352,15 @@ func (v *view) notifyIfNewShard(shard uint64) {
 	select {
 	case <-broadcastChan:
 	case <-time.After(50 * time.Millisecond):
-		v.logger.Debugf("broadcasting create shard took >50ms")
+		v.holder.Logger.Debugf("broadcasting create shard took >50ms")
 	}
 }
 
 func (v *view) newFragment(path string, shard uint64) *fragment {
-	frag := newFragment(path, v.index, v.field, v.name, shard, v.flags())
+	frag := newFragment(v.holder, path, v.index, v.field, v.name, shard, v.flags())
 	frag.CacheType = v.cacheType
 	frag.CacheSize = v.cacheSize
-	frag.Logger = v.logger
 	frag.stats = v.stats
-	if v.snapshotQueue != nil {
-		frag.snapshotQueue = v.snapshotQueue
-	}
 	if v.fieldType == FieldTypeMutex {
 		frag.mutexVector = newRowsVector(frag)
 	} else if v.fieldType == FieldTypeBool {
@@ -382,7 +378,7 @@ func (v *view) deleteFragment(shard uint64) error {
 		return ErrFragmentNotFound
 	}
 
-	v.logger.Printf("delete fragment: (%s/%s/%s) %d", v.index, v.field, v.name, shard)
+	v.holder.Logger.Printf("delete fragment: (%s/%s/%s) %d", v.index, v.field, v.name, shard)
 
 	// Close data files before deletion.
 	if err := fragment.Close(); err != nil {
@@ -396,7 +392,7 @@ func (v *view) deleteFragment(shard uint64) error {
 
 	// Delete fragment cache file.
 	if err := os.Remove(fragment.cachePath()); err != nil {
-		v.logger.Printf("no cache file to delete for shard %d", shard)
+		v.holder.Logger.Printf("no cache file to delete for shard %d", shard)
 	}
 
 	delete(v.fragments, shard)

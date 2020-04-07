@@ -77,9 +77,8 @@ type Holder struct {
 	// The interval at which the cached row ids are persisted to disk.
 	cacheFlushInterval time.Duration
 
-	Logger logger.Logger
-
-	snapshotQueue snapshotQueue
+	Logger        logger.Logger
+	SnapshotQueue SnapshotQueue
 
 	// Instantiates new translation stores
 	OpenTranslateStore  OpenTranslateStoreFunc
@@ -169,6 +168,8 @@ func NewHolder(partitionN int) *Holder {
 		translationSyncer: NopTranslationSyncer,
 
 		Logger: logger.NopLogger,
+
+		SnapshotQueue: defaultSnapshotQueue,
 	}
 }
 
@@ -213,11 +214,6 @@ func (h *Holder) Open() error {
 		return errors.Wrap(err, "reading directory")
 	}
 
-	// Run snapshots asynchronously. The snapshotQueue will have a background
-	// task associated with it which flushes it and waits until this channel
-	// is closed, so we should always close this channel when done.
-	h.snapshotQueue = newSnapshotQueue(10, 2, h.Logger)
-
 	for _, fi := range fis {
 		// Skip files or hidden directories.
 		if !fi.IsDir() || strings.HasPrefix(fi.Name(), ".") {
@@ -261,16 +257,23 @@ func (h *Holder) Open() error {
 
 	h.Logger.Printf("open holder: complete")
 
-	// Periodically flush cache.
-	h.wg.Add(1)
-	go func() { defer h.wg.Done(); h.monitorCacheFlush() }()
-
 	h.Stats.Open()
-	h.snapshotQueue.ScanHolder(h)
 
 	h.opened.Close()
 
 	return nil
+}
+
+// Activate runs the background tasks relevant to keeping a holder in a stable
+// state, such as scanning it for needed snapshots, or flushing caches. This
+// is separate from opening because, while a server would nearly always want
+// to do this, other use cases (like consistency checks of a data directory)
+// need to avoid it even getting started.
+func (h *Holder) Activate() {
+	// Periodically flush cache.
+	h.wg.Add(2)
+	go func() { defer h.wg.Done(); h.monitorCacheFlush() }()
+	go func() { defer h.wg.Done(); h.SnapshotQueue.ScanHolder(h, h.closing) }()
 }
 
 // checkForeignIndex is a check before applying a foreign
@@ -312,10 +315,6 @@ func (h *Holder) Close() error {
 		if err := index.Close(); err != nil {
 			return errors.Wrap(err, "closing index")
 		}
-	}
-	if h.snapshotQueue != nil {
-		h.snapshotQueue.Stop()
-		h.snapshotQueue = nil
 	}
 
 	// Reset opened in case Holder needs to be reopened.
@@ -587,19 +586,16 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 }
 
 func (h *Holder) newIndex(path, name string) (*Index, error) {
-	index, err := NewIndex(path, name, h.partitionN)
+	index, err := NewIndex(h, path, name)
 	if err != nil {
 		return nil, err
 	}
-	index.logger = h.Logger
 	index.Stats = h.Stats.WithTags(fmt.Sprintf("index:%s", index.Name()))
 	index.broadcaster = h.broadcaster
 	index.newAttrStore = h.NewAttrStore
 	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ".data"))
-	index.snapshotQueue = h.snapshotQueue
 	index.OpenTranslateStore = h.OpenTranslateStore
 	index.translationSyncer = h.translationSyncer
-	index.holder = h
 	return index, nil
 }
 

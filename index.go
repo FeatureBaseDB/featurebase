@@ -27,7 +27,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2/internal"
-	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pkg/errors"
@@ -46,9 +45,6 @@ type Index struct {
 	trackExistence bool
 	existenceFld   *Field
 
-	// Partitions used by translation.
-	partitionN int
-
 	// Fields by name.
 	fields map[string]*Field
 
@@ -59,9 +55,6 @@ type Index struct {
 
 	broadcaster broadcaster
 	Stats       stats.StatsClient
-
-	logger        logger.Logger
-	snapshotQueue snapshotQueue
 
 	// Passed to field for foreign-index lookup.
 	holder *Holder
@@ -76,24 +69,23 @@ type Index struct {
 }
 
 // NewIndex returns a new instance of Index.
-func NewIndex(path, name string, partitionN int) (*Index, error) {
+func NewIndex(holder *Holder, path, name string) (*Index, error) {
 	err := validateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
 	}
 
 	return &Index{
-		path:       path,
-		name:       name,
-		partitionN: partitionN,
-		fields:     make(map[string]*Field),
+		path:   path,
+		name:   name,
+		fields: make(map[string]*Field),
 
 		newAttrStore: newNopAttrStore,
 		columnAttrs:  nopStore,
 
 		broadcaster:    NopBroadcaster,
 		Stats:          stats.NopStatsClient,
-		logger:         logger.NopLogger,
+		holder:         holder,
 		trackExistence: true,
 
 		translateStores: make(map[int]TranslateStore),
@@ -155,18 +147,18 @@ func (i *Index) OpenWithTimestamp() error { return i.open(true) }
 
 func (i *Index) open(withTimestamp bool) (err error) {
 	// Ensure the path exists.
-	i.logger.Debugf("ensure index path exists: %s", i.path)
+	i.holder.Logger.Debugf("ensure index path exists: %s", i.path)
 	if err := os.MkdirAll(i.path, 0777); err != nil {
 		return errors.Wrap(err, "creating directory")
 	}
 
 	// Read meta file.
-	i.logger.Debugf("load meta file for index: %s", i.name)
+	i.holder.Logger.Debugf("load meta file for index: %s", i.name)
 	if err := i.loadMeta(); err != nil {
 		return errors.Wrap(err, "loading meta file")
 	}
 
-	i.logger.Debugf("open fields for index: %s", i.name)
+	i.holder.Logger.Debugf("open fields for index: %s", i.name)
 	if err := i.openFields(withTimestamp); err != nil {
 		return errors.Wrap(err, "opening fields")
 	}
@@ -181,15 +173,15 @@ func (i *Index) open(withTimestamp bool) (err error) {
 		return errors.Wrap(err, "opening attrstore")
 	}
 
-	i.logger.Debugf("open translate store for index: %s", i.name)
+	i.holder.Logger.Debugf("open translate store for index: %s", i.name)
 
 	var g errgroup.Group
 	var mu sync.Mutex
-	for partitionID := 0; partitionID < i.partitionN; partitionID++ {
+	for partitionID := 0; partitionID < i.holder.partitionN; partitionID++ {
 		partitionID := partitionID
 
 		g.Go(func() error {
-			store, err := i.OpenTranslateStore(i.TranslateStorePath(partitionID), i.name, "", partitionID, i.partitionN)
+			store, err := i.OpenTranslateStore(i.TranslateStorePath(partitionID), i.name, "", partitionID, i.holder.partitionN)
 			if err != nil {
 				return errors.Wrapf(err, "opening index translate store: partition=%d", partitionID)
 			}
@@ -239,7 +231,7 @@ fileLoop:
 				defer func() {
 					<-indexQueue
 				}()
-				i.logger.Debugf("open field: %s", fi.Name())
+				i.holder.Logger.Debugf("open field: %s", fi.Name())
 				mu.Lock()
 				fld, err := i.newField(i.fieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 				if withTimestamp {
@@ -257,7 +249,7 @@ fileLoop:
 				if err := fld.Open(); err != nil {
 					return fmt.Errorf("open field: name=%s, err=%s", fld.Name(), err)
 				}
-				i.logger.Debugf("add field to index.fields: %s", fi.Name())
+				i.holder.Logger.Debugf("add field to index.fields: %s", fi.Name())
 				mu.Lock()
 				i.fields[fld.Name()] = fld
 				mu.Unlock()
@@ -512,17 +504,13 @@ func (i *Index) createField(name string, opt *FieldOptions) (*Field, error) {
 }
 
 func (i *Index) newField(path, name string) (*Field, error) {
-	f, err := newField(path, i.name, name, OptFieldTypeDefault())
+	f, err := newField(i.holder, path, i.name, name, OptFieldTypeDefault())
 	if err != nil {
 		return nil, err
 	}
-	f.logger = i.logger
 	f.Stats = i.Stats
 	f.broadcaster = i.broadcaster
 	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))
-	if i.snapshotQueue != nil {
-		f.snapshotQueue = i.snapshotQueue
-	}
 	f.OpenTranslateStore = i.OpenTranslateStore
 	return f, nil
 }

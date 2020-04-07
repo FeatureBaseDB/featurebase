@@ -2513,8 +2513,8 @@ type BitmapInfo struct {
 	OpDetails      []OpInfo
 	BitCount       uint64
 	ContainerCount int
-	Containers     []ContainerInfo
-	OpContainers   []ContainerInfo
+	Containers     []ContainerInfo // The containers found in the bitmap originally
+	OpContainers   []ContainerInfo // The containers resulting from ops log changes.
 }
 
 // Iterator represents an iterator over a Bitmap.

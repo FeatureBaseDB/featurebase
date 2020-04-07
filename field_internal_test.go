@@ -205,7 +205,7 @@ func NewTestField(t *testing.T, opts FieldOption) *TestField {
 	if err != nil {
 		t.Fatal(err)
 	}
-	field, err := NewField(path, "i", "f", opts)
+	field, err := NewField(NewHolder(DefaultPartitionN), path, "i", "f", opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +235,7 @@ func (f *TestField) Reopen() error {
 	}
 
 	path, index, name := f.Path(), f.Index(), f.Name()
-	f.Field, err = NewField(path, index, name, OptFieldTypeDefault())
+	f.Field, err = NewField(NewHolder(DefaultPartitionN), path, index, name, OptFieldTypeDefault())
 	if err != nil {
 		return err
 	}
@@ -730,7 +730,7 @@ func TestDecimalField_MinMaxBoundaries(t *testing.T) {
 		},
 	} {
 		t.Run("minmax"+strconv.Itoa(i), func(t *testing.T) {
-			_, err := NewField("no-path", "i", "f", OptFieldTypeDecimal(test.scale, test.min, test.max))
+			_, err := NewField(NewHolder(DefaultPartitionN), "no-path", "i", "f", OptFieldTypeDecimal(test.scale, test.min, test.max))
 			if err != nil && test.expErr {
 				if !strings.Contains(err.Error(), "is not supported") {
 					t.Fatal(err)

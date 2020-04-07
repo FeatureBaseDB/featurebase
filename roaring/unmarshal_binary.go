@@ -96,8 +96,9 @@ func (b *Bitmap) UnmarshalBinary(data []byte) (err error) {
 	return nil
 }
 
-// unmarshalPilosaRoaring treats data as being encoded in Pilosa's 64 bit
-// roaring format and decodes it into b.
+// InspectBinary reads a roaring bitmap, plus a possible ops log,
+// and reports back on the contents, including distinguishing between
+// the original ops log and the post-ops-log contents.
 func InspectBinary(data []byte) (info BitmapInfo, err error) {
 	if data == nil {
 		return info, errors.New("no roaring bitmap provided")

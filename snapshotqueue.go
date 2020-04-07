@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"fmt"
+	"math/bits"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -39,12 +40,22 @@ import (
 // Await, Enqueue, and Immediate should be called only with the fragment lock
 // held.
 //
-// ScanHolder spawns a new goroutine. You don't need to use `go` on it.
-type snapshotQueue interface {
+// If you create a queue, it should get stopped at some point. The
+// atomicSnapshotQueue implementation used as defaultSnapshotQueue has
+// a Start function which will tell you whether it actually started a
+// queue. This logic exists because in a normal server case, you probably
+// want the queue to be shut down as part of server shutdown, but if you're
+// running cluster tests, you probably want to start and shop the queue as
+// part of the test, not stop it when any server terminates.
+//
+// It's less likely to be desireable to start/stop individual queues,
+// because fragments use the defaultSnapshotQueue anyway. This design
+// needs revisiting.
+type SnapshotQueue interface {
 	Immediate(*fragment) error
 	Enqueue(*fragment)
 	Await(*fragment) error
-	ScanHolder(*Holder)
+	ScanHolder(*Holder, chan struct{})
 	Stop()
 }
 
@@ -64,20 +75,18 @@ func (q *queuelessSnapshotQueue) Immediate(f *fragment) error {
 	return f.snapshot()
 }
 
-func (q *queuelessSnapshotQueue) ScanHolder(h *Holder) {
+func (q *queuelessSnapshotQueue) ScanHolder(h *Holder, done chan struct{}) {
 }
 
 func (q *queuelessSnapshotQueue) Stop() {
 }
 
-// defaultSnapshotQueue is the fallback to use if none is available,
-// and currently uses queueless -- it runs all snapshots immediately.
-var defaultSnapshotQueue *queuelessSnapshotQueue
+var defaultSnapshotQueue = &queuelessSnapshotQueue{}
 
 // newSnapshotQueue makes a new snapshot queue, of depth N, with
 // w worker threads.
-func newSnapshotQueue(n int, w int, l logger.Logger) snapshotQueue {
-	sq := prioritySnapshotQueue{normal: make(chan snapshotRequest, n), urgent: make(chan snapshotRequest), background: make(chan snapshotRequest), done: make(chan struct{}), logger: l}
+func newSnapshotQueue(n int, w int, l logger.Logger) SnapshotQueue {
+	sq := prioritySnapshotQueue{normal: make(chan snapshotRequest, n), urgent: make(chan snapshotRequest), background: make(chan snapshotRequest), done: make(chan struct{}), maxOpN: 10000, logger: l}
 	if sq.logger == nil {
 		sq.logger = logger.NewStandardLogger(os.Stderr)
 	}
@@ -108,9 +117,11 @@ type prioritySnapshotQueue struct {
 	done             chan struct{}
 	mu               sync.RWMutex
 	scanWG, workerWG sync.WaitGroup
+	maxOpN           int
+	observedOpN      [16]int
 	stats            struct {
-		enqueued uint64
-		skipped  uint64
+		enqueued uint32
+		skipped  uint32
 	}
 }
 
@@ -192,7 +203,9 @@ func (sq *prioritySnapshotQueue) Stop() {
 	sq.urgent = nil
 	close(sq.background)
 	sq.background = nil
-	if sq.stats.skipped > 0 || sq.stats.enqueued > 1 {
+	enqueued := atomic.LoadUint32(&sq.stats.enqueued)
+	skipped := atomic.LoadUint32(&sq.stats.skipped)
+	if skipped > 0 || enqueued > 1 {
 		sq.logger.Printf("snapshot queue: enqueued %d, skipped %d\n", sq.stats.enqueued, sq.stats.skipped)
 	}
 }
@@ -217,10 +230,10 @@ func (sq *prioritySnapshotQueue) Enqueue(f *fragment) {
 	// try to enqueue snapshot
 	select {
 	case sq.normal <- snapshotRequest{frag: f, when: time.Now()}:
-		atomic.AddUint64(&sq.stats.enqueued, 1)
+		atomic.AddUint32(&sq.stats.enqueued, 1)
 		return
 	default:
-		atomic.AddUint64(&sq.stats.skipped, 1)
+		atomic.AddUint32(&sq.stats.skipped, 1)
 		f.snapshotPending = false
 		return
 	}
@@ -230,6 +243,11 @@ func (sq *prioritySnapshotQueue) Enqueue(f *fragment) {
 // held. Await waits on a condition variable inside f, associated with the
 // fragment's lock, so this does not conflict with the lock being used for
 // snapshots.
+//
+// Note that workers don't stop just because the queue's been stopped; only
+// the background scanner is stopped. So an Await shouldn't block forever
+// even if the queue gets shut down. If you're reading this, possibly that
+// analysis is incorrect.
 func (sq *prioritySnapshotQueue) Await(f *fragment) (err error) {
 	for f.snapshotPending {
 		f.snapshotCond.Wait()
@@ -281,9 +299,19 @@ func (sq *prioritySnapshotQueue) needsSnapshot(f *fragment) bool {
 	if f.snapshotPending {
 		return false
 	}
-	if f.opN > f.MaxOpN {
+	if f.opN > sq.maxOpN {
 		return true
 	}
+	// aka "log2(n) + 1", or 0 for n==0
+	pow2 := 32 - bits.LeadingZeros32(uint32(f.opN))
+	// 15 == 16384. we assume that since 16384 is higher than our
+	// normal maxOpN, it's always a reasonable value.
+	if pow2 > 15 {
+		pow2 = 15
+	}
+	// store in inverse order so the lowest slot in the array is the
+	// highest cardinality
+	sq.observedOpN[15-pow2]++
 	return false
 }
 
@@ -291,10 +319,10 @@ func (sq *prioritySnapshotQueue) needsSnapshot(f *fragment) bool {
 // indexes/fields/views/fragments, looking for fragments which have OpN
 // high enough to justify a snapshot but don't seem to have one pending.
 // It then dumps these in the low priority background queue.
-func (sq *prioritySnapshotQueue) ScanHolder(h *Holder) {
+func (sq *prioritySnapshotQueue) ScanHolder(h *Holder, done chan struct{}) {
 	sq.mu.Lock()
 	sq.scanWG.Add(1)
-	go sq.scanHolderWorker(h, sq.background, sq.done)
+	go sq.scanHolderWorker(h, sq.background, done)
 	sq.mu.Unlock()
 }
 
@@ -302,6 +330,9 @@ func (sq *prioritySnapshotQueue) ScanHolder(h *Holder) {
 // fragments which need snapshots taken. It's the cleanup task for snapshots
 // that would have been requested by Enqueue, but the queue was full.
 func (sq *prioritySnapshotQueue) scanHolderWorker(h *Holder, background chan snapshotRequest, done chan struct{}) {
+	// queueDone is global to this snapshotQueue, done is specific to this holder
+	// scanner.
+	queueDone := sq.done
 	defer sq.scanWG.Done()
 	var indexNames, fieldNames, viewNames []string
 	var fragNums []uint64
@@ -379,9 +410,11 @@ func (sq *prioritySnapshotQueue) scanHolderWorker(h *Holder, background chan sna
 							// background queue. If there's nothing that needs snapshots,
 							// we pause frequently for a second or so at a time.
 							counter++
-							if counter == 100 {
+							if counter == 1000 {
 								select {
 								case <-time.After(1 * time.Second):
+								case <-queueDone:
+									return
 								case <-done:
 									return
 								}
@@ -400,9 +433,36 @@ func (sq *prioritySnapshotQueue) scanHolderWorker(h *Holder, background chan sna
 			// No reason to be active if we're not finding anything.
 			select {
 			case <-time.After(60 * time.Second):
+			case <-queueDone:
+				return
 			case <-done:
 				return
 			}
+		}
+		sq.logger.Debugf("observedOpN by power of 2: %d\n", sq.observedOpN[:])
+		total := 0
+		for _, v := range sq.observedOpN {
+			total += v
+		}
+		target := total / 4
+		subTotal := 0
+		for i, v := range sq.observedOpN {
+			subTotal += v
+			if subTotal >= target {
+				prevMaxOpN := sq.maxOpN
+				sq.maxOpN = (1 << (15 - uint(i))) / 2
+				if sq.maxOpN > 0 {
+					sq.maxOpN--
+				}
+				if prevMaxOpN != sq.maxOpN {
+					sq.logger.Printf("background scan: %d/%d fragments considered have opN %d or higher\n",
+						subTotal, total, sq.maxOpN)
+				}
+				break
+			}
+		}
+		for i := range sq.observedOpN {
+			sq.observedOpN[i] = 0
 		}
 	}
 }
