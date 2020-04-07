@@ -422,6 +422,13 @@ func (p PairsField) MarshalJSON() ([]byte, error) {
 	return json.Marshal(p.Pairs)
 }
 
+// int64Slice represents a sortable slice of int64 numbers.
+type int64Slice []int64
+
+func (p int64Slice) Len() int           { return len(p) }
+func (p int64Slice) Less(i, j int) bool { return p[i] < p[j] }
+func (p int64Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+
 // uint64Slice represents a sortable slice of uint64 numbers.
 type uint64Slice []uint64
 

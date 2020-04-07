@@ -738,6 +738,8 @@ func makeRows(resp pilosa.QueryResponse, logger logger.Logger) chan *pb.RowRespo
 						for _, fieldRow := range gc.Group {
 							if fieldRow.RowKey != "" {
 								ci = append(ci, &pb.ColumnInfo{Name: fieldRow.Field, Datatype: "string"})
+							} else if fieldRow.Value != nil {
+								ci = append(ci, &pb.ColumnInfo{Name: fieldRow.Field, Datatype: "int64"})
 							} else {
 								ci = append(ci, &pb.ColumnInfo{Name: fieldRow.Field, Datatype: "uint64"})
 							}
@@ -753,8 +755,10 @@ func makeRows(resp pilosa.QueryResponse, logger logger.Logger) chan *pb.RowRespo
 					for _, fieldRow := range gc.Group {
 						if fieldRow.RowKey != "" {
 							rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: fieldRow.RowKey}})
+						} else if fieldRow.Value != nil {
+							rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: *fieldRow.Value}})
 						} else {
-							rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(fieldRow.RowID)}})
+							rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: fieldRow.RowID}})
 						}
 					}
 					rowResp.Columns = append(rowResp.Columns,

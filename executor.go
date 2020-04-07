@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -1685,6 +1686,7 @@ type FieldRow struct {
 	Field  string `json:"field"`
 	RowID  uint64 `json:"rowID"`
 	RowKey string `json:"rowKey,omitempty"`
+	Value  *int64 `json:"value,omitempty"`
 }
 
 // MarshalJSON marshals FieldRow to JSON such that
@@ -1699,6 +1701,17 @@ func (fr FieldRow) MarshalJSON() ([]byte, error) {
 			RowKey: fr.RowKey,
 		})
 	}
+
+	if fr.Value != nil {
+		return json.Marshal(struct {
+			Field string `json:"field"`
+			Value int64  `json:"value"`
+		}{
+			Field: fr.Field,
+			Value: *fr.Value,
+		})
+	}
+
 	return json.Marshal(struct {
 		Field string `json:"field"`
 		RowID uint64 `json:"rowID"`
@@ -1710,6 +1723,9 @@ func (fr FieldRow) MarshalJSON() ([]byte, error) {
 
 // String is the FieldRow stringer.
 func (fr FieldRow) String() string {
+	if fr.Value != nil {
+		return fmt.Sprintf("%s.%d.%d.%s", fr.Field, fr.RowID, *fr.Value, fr.RowKey)
+	}
 	return fmt.Sprintf("%s.%d.%s", fr.Field, fr.RowID, fr.RowKey)
 }
 
@@ -1756,12 +1772,23 @@ func mergeGroupCounts(a, b []GroupCount, limit int) []GroupCount {
 
 // Compare is used in ordering two GroupCount objects.
 func (g GroupCount) Compare(o GroupCount) int {
-	for i := range g.Group {
-		if g.Group[i].RowID < o.Group[i].RowID {
-			return -1
-		}
-		if g.Group[i].RowID > o.Group[i].RowID {
-			return 1
+	for i, g1 := range g.Group {
+		g2 := o.Group[i]
+
+		if g1.Value != nil && g2.Value != nil {
+			if *g1.Value < *g2.Value {
+				return -1
+			}
+			if *g1.Value > *g2.Value {
+				return 1
+			}
+		} else {
+			if g1.RowID < g2.RowID {
+				return -1
+			}
+			if g1.RowID > g2.RowID {
+				return 1
+			}
 		}
 	}
 	return 0
@@ -1939,6 +1966,7 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 		if err != nil {
 			return nil, err
 		}
+
 		if gc.Count > 0 {
 			num++
 			results = append(results, gc)
@@ -4253,7 +4281,7 @@ type groupByIterator struct {
 	shard    uint64
 
 	// rowIters contains a rowIterator for each of the fields in the Group By.
-	rowIters []*rowIterator
+	rowIters []rowIterator
 	// rows contains the current row data for each of the fields in the Group
 	// By. Each row is the intersection of itself and the rows of the fields
 	// with an index lower than its own. This is a performance optimization so
@@ -4261,8 +4289,9 @@ type groupByIterator struct {
 	// field to the right require only a single intersect with the row of the
 	// previous field to determine the count of the new group.
 	rows []struct {
-		row *Row
-		id  uint64
+		row   *Row
+		id    uint64
+		value *int64
 	}
 
 	// fields helps with the construction of GroupCount results by holding all
@@ -4284,29 +4313,47 @@ func newGroupByIterator(executor *executor, rowIDs []RowIDs, children []*pql.Cal
 		executor: executor,
 		index:    index,
 		shard:    shard,
-		rowIters: make([]*rowIterator, len(children)),
+		rowIters: make([]rowIterator, len(children)),
 		rows: make([]struct {
-			row *Row
-			id  uint64
+			row   *Row
+			id    uint64
+			value *int64
 		}, len(children)),
 		filter:    filter,
 		aggregate: aggregate,
 		fields:    make([]FieldRow, len(children)),
 	}
 
-	var fieldName string
-	var ok bool
+	var (
+		fieldName string
+		viewName  string
+		ok        bool
+	)
 	ignorePrev := false
 	for i, call := range children {
 		if fieldName, ok = call.Args["_field"].(string); !ok {
 			return nil, errors.Errorf("%s call must have field with valid (string) field name. Got %v of type %[2]T", call.Name, call.Args["_field"])
 		}
-		if holder.Field(index, fieldName) == nil {
+		field := holder.Field(index, fieldName)
+		if field == nil {
 			return nil, ErrFieldNotFound
 		}
 		gbi.fields[i].Field = fieldName
+
+		switch field.Type() {
+		case FieldTypeSet, FieldTypeTime, FieldTypeMutex, FieldTypeBool:
+			viewName = viewStandard
+
+		case FieldTypeInt:
+			viewName = viewBSIGroupPrefix + fieldName
+
+		default: // FieldTypeDecimal
+			return nil, errors.Errorf("%s call must have field of one of types: %s",
+				call.Name, strings.Join([]string{FieldTypeSet, FieldTypeTime, FieldTypeMutex, FieldTypeBool, FieldTypeInt}, ","))
+		}
+
 		// Fetch fragment.
-		frag := holder.fragment(index, fieldName, viewStandard, shard)
+		frag := holder.fragment(index, fieldName, viewName, shard)
 		if frag == nil { // this means this whole shard doesn't have all it needs to continue
 			return nil, nil
 		}
@@ -4325,13 +4372,14 @@ func newGroupByIterator(executor *executor, rowIDs []RowIDs, children []*pql.Cal
 			}
 			gbi.rowIters[i].Seek(prev)
 		}
-		nextRow, rowID, wrapped := gbi.rowIters[i].Next()
+		nextRow, rowID, value, wrapped := gbi.rowIters[i].Next()
 		if nextRow == nil {
 			gbi.done = true
 			return gbi, nil
 		}
 		gbi.rows[i].row = nextRow
 		gbi.rows[i].id = rowID
+		gbi.rows[i].value = value
 		if hasPrev && rowID != prev {
 			// ignorePrev signals that we didn't find a previous row, so all
 			// Rows queries "deeper" than it need to ignore the previous
@@ -4343,13 +4391,14 @@ func newGroupByIterator(executor *executor, rowIDs []RowIDs, children []*pql.Cal
 			// previous field, and if that one wraps we need to keep going
 			// backward.
 			for j := i - 1; j >= 0; j-- {
-				nextRow, rowID, wrapped := gbi.rowIters[j].Next()
+				nextRow, rowID, value, wrapped := gbi.rowIters[j].Next()
 				if nextRow == nil {
 					gbi.done = true
 					return gbi, nil
 				}
 				gbi.rows[j].row = nextRow
 				gbi.rows[j].id = rowID
+				gbi.rows[j].value = value
 				if !wrapped {
 					break
 				}
@@ -4374,7 +4423,7 @@ func newGroupByIterator(executor *executor, rowIDs []RowIDs, children []*pql.Cal
 func (gbi *groupByIterator) nextAtIdx(i int) {
 	// loop until we find a non-empty row. This is an optimization - the loop and if/break can be removed.
 	for {
-		nr, rowID, wrapped := gbi.rowIters[i].Next()
+		nr, rowID, value, wrapped := gbi.rowIters[i].Next()
 		if nr == nil {
 			gbi.done = true
 			return
@@ -4390,6 +4439,7 @@ func (gbi *groupByIterator) nextAtIdx(i int) {
 			gbi.rows[i].row = nr.Intersect(gbi.rows[i-1].row)
 		}
 		gbi.rows[i].id = rowID
+		gbi.rows[i].value = value
 
 		if !gbi.rows[i].row.IsEmpty() {
 			break
@@ -4412,7 +4462,8 @@ func (gbi *groupByIterator) Next(ctx context.Context) (ret GroupCount, done bool
 				ret.Count = gbi.rows[len(gbi.rows)-1].row.intersectionCount(gbi.rows[len(gbi.rows)-2].row)
 			}
 		} else {
-			filter := gbi.rows[len(gbi.rows)-1].row
+			gr := gbi.rows[len(gbi.rows)-1]
+			filter := gr.row
 			if len(gbi.rows) != 1 {
 				filter = filter.Intersect(gbi.rows[len(gbi.rows)-2].row)
 			}
@@ -4437,11 +4488,12 @@ func (gbi *groupByIterator) Next(ctx context.Context) (ret GroupCount, done bool
 	ret.Group = make([]FieldRow, len(gbi.rows))
 	copy(ret.Group, gbi.fields)
 	for i, r := range gbi.rows {
+
 		ret.Group[i].RowID = r.id
+		ret.Group[i].Value = r.value
 	}
 
 	// set up for next call
-
 	gbi.nextAtIdx(len(gbi.rows) - 1)
 
 	return ret, false, nil

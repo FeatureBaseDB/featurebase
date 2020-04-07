@@ -2717,40 +2717,183 @@ func upgradeRoaringBSIv2(f *fragment, bitDepth uint) (string, error) {
 	return newPath, nil
 }
 
-type rowIterator struct {
+type rowIterator interface {
+	// TODO(kuba) linter suggests to use io.Seeker
+	// Seek(offset int64, whence int) (int64, error)
+	Seek(uint64)
+
+	Next() (*Row, uint64, *int64, bool)
+}
+
+func (f *fragment) rowIterator(wrap bool, filters ...rowFilter) rowIterator {
+	if strings.HasPrefix(f.view, viewBSIGroupPrefix) {
+		return f.intRowIterator(wrap, filters...)
+	}
+	// viewStandard
+	// TODO(kuba) - IMHO we should check if f.view is viewStandard,
+	// but because of testing the function returns set iterator as default one.
+	return f.setRowIterator(wrap, filters...)
+}
+
+type intRowIterator struct {
+	f      *fragment
+	values int64Slice         // sorted slice of int values
+	colIDs map[int64][]uint64 // [int value] -> [column IDs]
+	cur    int                // current value index (rowID)
+	wrap   bool
+}
+
+func (f *fragment) intRowIterator(wrap bool, filters ...rowFilter) rowIterator {
+	it := intRowIterator{
+		f:      f,
+		colIDs: make(map[int64][]uint64),
+		cur:    0,
+		wrap:   wrap,
+	}
+
+	// accumulator [column ID] -> [int value]
+	acc := make(map[uint64]int64)
+
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	f.foreachRow(filters, func(rid uint64) {
+		// skip exist(0) and sign(1) rows
+		if rid == bsiExistsBit || rid == bsiSignBit {
+			return
+		}
+
+		val := int64(1 << (rid - bsiOffsetBit))
+		for _, cid := range f.unprotectedRow(rid).Columns() {
+			acc[cid] |= val
+		}
+	})
+
+	// apply exist and sign bits
+	allCols := f.unprotectedRow(0).Columns()
+	signCols := f.unprotectedRow(1).Columns()
+	signIdx, signLen := 0, len(signCols)
+
+	// all distinct values
+	values := make(map[int64]struct{})
+	for _, cid := range allCols {
+		// apply sign bit
+		if signIdx < signLen && cid == signCols[signIdx] {
+			if tmp, ok := acc[cid]; ok {
+				acc[cid] = -tmp
+			}
+
+			signIdx++
+		}
+
+		val := acc[cid]
+		it.colIDs[val] = append(it.colIDs[val], cid)
+
+		if _, ok := values[val]; !ok {
+			it.values = append(it.values, val)
+			values[val] = struct{}{}
+		}
+	}
+	sort.Sort(it.values)
+
+	return &it
+}
+
+func (f *fragment) foreachRow(filters []rowFilter, fn func(rid uint64)) {
+	var lastRow uint64 = math.MaxUint64
+	i, _ := f.storage.Containers.Iterator(rowToKey(0))
+	// Loop over the existing containers.
+	for i.Next() {
+		key, c := i.Value()
+		// virtual row for the current container
+		vRow := key >> shardVsContainerExponent
+		// skip dups
+		if vRow == lastRow {
+			continue
+		}
+
+		// apply filters
+		addRow, done := true, false
+		for _, filter := range filters {
+			var d bool
+			addRow, d = filter(vRow, key, c)
+			done = done || d
+			if !addRow {
+				break
+			}
+		}
+		if addRow {
+			lastRow = vRow
+			if fn != nil {
+				fn(vRow)
+			}
+		}
+		if done {
+			break
+		}
+	}
+}
+
+func (it *intRowIterator) Seek(rowID uint64) {
+	idx := sort.Search(len(it.values), func(i int) bool {
+		return it.values[i] >= it.values[rowID]
+	})
+	it.cur = idx
+}
+
+func (it *intRowIterator) Next() (r *Row, rowID uint64, value *int64, wrapped bool) {
+	if it.cur >= len(it.values) {
+		if !it.wrap || len(it.values) == 0 {
+			return nil, 0, nil, true
+		}
+		wrapped = true
+		it.cur = 0
+	}
+	if it.cur >= 0 {
+		rowID = uint64(it.cur)
+		value = &it.values[rowID]
+		r = NewRow(it.colIDs[*value]...)
+	}
+	it.cur++
+	return r, rowID, value, wrapped
+}
+
+type setRowIterator struct {
 	f      *fragment
 	rowIDs []uint64
 	cur    int
 	wrap   bool
 }
 
-func (f *fragment) rowIterator(wrap bool, filters ...rowFilter) *rowIterator {
-	return &rowIterator{
+func (f *fragment) setRowIterator(wrap bool, filters ...rowFilter) rowIterator {
+	return &setRowIterator{
 		f:      f,
 		rowIDs: f.rows(0, filters...), // TODO: this may be memory intensive in high cardinality cases
 		wrap:   wrap,
 	}
 }
 
-func (ri *rowIterator) Seek(rowID uint64) {
-	idx := sort.Search(len(ri.rowIDs), func(i int) bool {
-		return ri.rowIDs[i] >= rowID
+func (it *setRowIterator) Seek(rowID uint64) {
+	idx := sort.Search(len(it.rowIDs), func(i int) bool {
+		return it.rowIDs[i] >= rowID
 	})
-	ri.cur = idx
+	it.cur = idx
 }
 
-func (ri *rowIterator) Next() (r *Row, rowID uint64, wrapped bool) {
-	if ri.cur >= len(ri.rowIDs) {
-		if !ri.wrap || len(ri.rowIDs) == 0 {
-			return nil, 0, true
+func (it *setRowIterator) Next() (r *Row, rowID uint64, _ *int64, wrapped bool) {
+	if it.cur >= len(it.rowIDs) {
+		if !it.wrap || len(it.rowIDs) == 0 {
+			return nil, 0, nil, true
 		}
-		ri.Seek(0)
+		it.Seek(0)
 		wrapped = true
 	}
-	rowID = ri.rowIDs[ri.cur]
-	r = ri.f.row(rowID)
-	ri.cur++
-	return r, rowID, wrapped
+	id := it.rowIDs[it.cur]
+	r = it.f.row(id)
+
+	rowID = id
+
+	it.cur++
+	return r, rowID, nil, wrapped
 }
 
 // FragmentBlock represents info about a subsection of the rows in a block.

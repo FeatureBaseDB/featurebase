@@ -30,6 +30,7 @@ func TestGRPC(t *testing.T) {
 
 		type expColumn interface{}
 
+		va, vb := int64(-11), int64(-12)
 		tests := []struct {
 			result     interface{}
 			expHeaders []expHeader
@@ -138,6 +139,13 @@ func TestGRPC(t *testing.T) {
 						},
 						Count: 456,
 					},
+					pilosa.GroupCount{
+						Group: []pilosa.FieldRow{
+							{Field: "va", Value: &va},
+							{Field: "vb", Value: &vb},
+						},
+						Count: 789,
+					},
 				},
 				[]expHeader{
 					{"a", "uint64"},
@@ -148,6 +156,7 @@ func TestGRPC(t *testing.T) {
 				[][]expColumn{
 					{uint64(10), uint64(11), uint64(123), int64(0)},
 					{uint64(10), uint64(12), uint64(456), int64(0)},
+					{int64(va), int64(vb), uint64(789), int64(0)},
 				},
 			},
 			// []GroupCount (string)

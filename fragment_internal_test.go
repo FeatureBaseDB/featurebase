@@ -2989,7 +2989,7 @@ func TestFragmentRowIterator(t *testing.T) {
 
 		iter := f.rowIterator(false)
 		for i := uint64(0); i < 4; i++ {
-			row, id, wrapped := iter.Next()
+			row, id, _, wrapped := iter.Next()
 			if id != i {
 				t.Fatalf("expected row %d but got %d", i, id)
 			}
@@ -3000,7 +3000,7 @@ func TestFragmentRowIterator(t *testing.T) {
 				t.Fatalf("got wrong columns back on iteration %d - should just be 0 but %v", i, row.Columns())
 			}
 		}
-		row, id, wrapped := iter.Next()
+		row, id, _, wrapped := iter.Next()
 		if row != nil {
 			t.Fatalf("row should be nil after iterator is exhausted, got %v", row.Columns())
 		}
@@ -3022,7 +3022,7 @@ func TestFragmentRowIterator(t *testing.T) {
 
 		iter := f.rowIterator(false)
 		for i := uint64(1); i < 8; i += 2 {
-			row, id, wrapped := iter.Next()
+			row, id, _, wrapped := iter.Next()
 			if id != i {
 				t.Fatalf("expected row %d but got %d", i, id)
 			}
@@ -3033,7 +3033,7 @@ func TestFragmentRowIterator(t *testing.T) {
 				t.Fatalf("got wrong columns back on iteration %d - should just be 0 but %v", i, row.Columns())
 			}
 		}
-		row, id, wrapped := iter.Next()
+		row, id, _, wrapped := iter.Next()
 		if row != nil {
 			t.Fatalf("row should be nil after iterator is exhausted, got %v", row.Columns())
 		}
@@ -3055,7 +3055,7 @@ func TestFragmentRowIterator(t *testing.T) {
 
 		iter := f.rowIterator(true)
 		for i := uint64(0); i < 5; i++ {
-			row, id, wrapped := iter.Next()
+			row, id, _, wrapped := iter.Next()
 			if id != i%4 {
 				t.Fatalf("expected row %d but got %d", i%4, id)
 			}
@@ -3080,7 +3080,7 @@ func TestFragmentRowIterator(t *testing.T) {
 
 		iter := f.rowIterator(true)
 		for i := uint64(1); i < 10; i += 2 {
-			row, id, wrapped := iter.Next()
+			row, id, _, wrapped := iter.Next()
 			if id != i%8 {
 				t.Errorf("expected row %d but got %d", i%8, id)
 			}

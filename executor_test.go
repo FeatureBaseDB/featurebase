@@ -2762,16 +2762,16 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 			t.Fatalf("creating field: %v", err)
 		}
 		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
-Set(500001, fn=5)
-Set(1500001, fn=5)
-Set(2500001, fn=5)
-Set(3500001, fn=5)
-Set(1500001, fn=3)
-Set(1500002, fn=3)
-Set(3500003, fn=3)
-Set(500001, fn=4)
-Set(4500001, fn=4)
-`}); err != nil {
+	Set(500001, fn=5)
+	Set(1500001, fn=5)
+	Set(2500001, fn=5)
+	Set(3500001, fn=5)
+	Set(1500001, fn=3)
+	Set(1500002, fn=3)
+	Set(3500003, fn=3)
+	Set(500001, fn=4)
+	Set(4500001, fn=4)
+	`}); err != nil {
 			t.Fatalf("querying remote: %v", err)
 		}
 		err := c[0].API.RecalculateCaches(context.Background())
@@ -2818,6 +2818,48 @@ Set(4500001, fn=4)
 				{Group: []pilosa.FieldRow{{Field: "f", RowID: 7}}, Count: 1},
 				{Group: []pilosa.FieldRow{{Field: "f", RowID: 10}}, Count: 4},
 			}
+			results := res.Results[0].([]pilosa.GroupCount)
+			test.CheckGroupBy(t, expected, results)
+		}
+	})
+
+	t.Run("remote groupBy on ints", func(t *testing.T) {
+		_, err = c[0].API.CreateField(context.Background(), "i", "fint", pilosa.OptFieldTypeInt(-1000, 1000))
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+		Set(0, fint=1)
+		Set(1, fint=2)
+
+		Set(2,fint=-2)
+		Set(3,fint=-1)
+
+		Set(4,fint=4)
+
+		Set(10, fint=0)
+		Set(100, fint=0)
+		Set(1000, fint=0)
+		Set(10000,fint=0)
+		Set(100000,fint=0)
+		`}); err != nil {
+			t.Fatalf("querying remote: %v", err)
+		}
+
+		if res, err := c[1].API.Query(context.Background(), &pilosa.QueryRequest{
+			Index: "i",
+			Query: `GroupBy(Rows(fint), limit=4, filter=Union(Row(fint < 1), Row(fint > 2)))`,
+		}); err != nil {
+			t.Fatalf("GroupBy querying: %v", err)
+		} else {
+			var a, b, c, d int64 = -2, -1, 0, 4
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "fint", RowID: 0, Value: &a}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "fint", RowID: 1, Value: &b}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "fint", RowID: 2, Value: &c}}, Count: 5},
+				{Group: []pilosa.FieldRow{{Field: "fint", RowID: 5, Value: &d}}, Count: 1},
+			}
+
 			results := res.Results[0].([]pilosa.GroupCount)
 			test.CheckGroupBy(t, expected, results)
 		}
@@ -3890,6 +3932,7 @@ func TestExecutor_Execute_Query_Error(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 	c.CreateField(t, "i", pilosa.IndexOptions{}, "general")
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "integer", pilosa.OptFieldTypeInt(-1000, 1000))
 
 	tests := []struct {
 		query string
@@ -3919,6 +3962,10 @@ func TestExecutor_Execute_Query_Error(t *testing.T) {
 			query: "GroupBy(Rows(general), filter=Rows(general))",
 			error: "parsing: parsing:",
 		},
+		{
+			query: "GroupBy(Rows(integer), prev=-1)",
+			error: "unknown arg 'prev'",
+		},
 	}
 
 	for i, test := range tests {
@@ -3942,6 +3989,8 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 	defer c.Close()
 	c.CreateField(t, "istring", pilosa.IndexOptions{Keys: true}, "generals", pilosa.OptFieldKeys())
 	c.CreateField(t, "istring", pilosa.IndexOptions{Keys: true}, "v", pilosa.OptFieldTypeInt(0, 1000))
+	c.CreateField(t, "istring", pilosa.IndexOptions{Keys: true}, "vv", pilosa.OptFieldTypeInt(0, 1000))
+	c.CreateField(t, "istring", pilosa.IndexOptions{Keys: true}, "nv", pilosa.OptFieldTypeInt(-1000, 1000))
 
 	if err := c[0].API.Import(context.Background(), &pilosa.ImportRequest{
 		Index:      "istring",
@@ -3953,12 +4002,34 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 		t.Fatalf("importing: %v", err)
 	}
 
+	var v1, v2, v3, v4, v5, v6, v7, v8, v9, v10 int64 = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+	var nv1, nv2, nv3, nv4 int64 = -1, -2, -3, -4
 	if err := c[0].API.ImportValue(context.Background(), &pilosa.ImportValueRequest{
 		Index:      "istring",
 		Field:      "v",
 		Shard:      0,
 		ColumnKeys: []string{"c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10"},
-		Values:     []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+		Values:     []int64{v1, v2, v3, v4, v5, v6, v7, v8, v9, v10},
+	}); err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	if err := c[0].API.ImportValue(context.Background(), &pilosa.ImportValueRequest{
+		Index:      "istring",
+		Field:      "vv",
+		Shard:      0,
+		ColumnKeys: []string{"c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10"},
+		Values:     []int64{v1, v2, v2, v3, v3, v3, v4, v4, v4, v4},
+	}); err != nil {
+		t.Fatalf("importing: %v", err)
+	}
+
+	if err := c[0].API.ImportValue(context.Background(), &pilosa.ImportValueRequest{
+		Index:      "istring",
+		Field:      "nv",
+		Shard:      0,
+		ColumnKeys: []string{"c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10"},
+		Values:     []int64{nv1, nv2, nv2, nv3, nv3, nv3, nv4, nv4, nv4, nv4},
 	}); err != nil {
 		t.Fatalf("importing: %v", err)
 	}
@@ -4002,6 +4073,127 @@ func TestExecutor_GroupByStrings(t *testing.T) {
 		{
 			query:    "GroupBy(Rows(generals), aggregate=Sum(field=v), having=Condition(count>5))",
 			expected: []pilosa.GroupCount{},
+		},
+		{
+			query: "GroupBy(Rows(v))",
+			expected: []pilosa.GroupCount{
+				{
+					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v1}},
+					Count: 1,
+					Sum:   0,
+				},
+				{
+					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v2}},
+					Count: 1,
+					Sum:   0,
+				},
+				{
+					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v3}},
+					Count: 1,
+					Sum:   0,
+				},
+				{
+					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v4}},
+					Count: 1,
+					Sum:   0,
+				},
+				{
+					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v5}},
+					Count: 1,
+					Sum:   0,
+				},
+				{
+					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v6}},
+					Count: 1,
+					Sum:   0,
+				},
+				{
+					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v7}},
+					Count: 1,
+					Sum:   0,
+				},
+				{
+					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v8}},
+					Count: 1,
+					Sum:   0,
+				},
+				{
+					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v9}},
+					Count: 1,
+					Sum:   0,
+				},
+				{
+					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "v", Value: &v10}},
+					Count: 1,
+					Sum:   0,
+				},
+			},
+		},
+		{
+			query: "GroupBy(Rows(vv), aggregate=Sum(field=vv), having=Condition(count > 2))",
+			expected: []pilosa.GroupCount{
+				{
+					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "vv", Value: &v3}},
+					Count: 3,
+					Sum:   9,
+				},
+				{
+					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "vv", Value: &v4}},
+					Count: 4,
+					Sum:   16,
+				},
+			},
+		},
+		{
+			query: "GroupBy(Rows(nv), aggregate=Sum(field=nv), limit=2)",
+			expected: []pilosa.GroupCount{
+				{
+					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "nv", Value: &nv4}},
+					Count: 4,
+					Sum:   -16,
+				},
+				{
+					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "nv", Value: &nv3}},
+					Count: 3,
+					Sum:   -9,
+				},
+			},
+		},
+		{
+			query: "GroupBy(Rows(nv), aggregate=Sum(field=nv), having=Condition(count > 2), limit=2)",
+			expected: []pilosa.GroupCount{
+				{
+					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "nv", Value: &nv4}},
+					Count: 4,
+					Sum:   -16,
+				},
+				{
+					Group: []pilosa.FieldRow{pilosa.FieldRow{Field: "nv", Value: &nv3}},
+					Count: 3,
+					Sum:   -9,
+				},
+			},
+		},
+		{
+			query: "GroupBy(Rows(vv), Rows(nv), aggregate=Sum(field=vv), having=Condition(count > 2))",
+			expected: []pilosa.GroupCount{
+				{
+					Group: []pilosa.FieldRow{
+						pilosa.FieldRow{Field: "vv", Value: &v3},
+						pilosa.FieldRow{Field: "nv", Value: &nv3},
+					},
+					Count: 3,
+					Sum:   9,
+				},
+				{
+					Group: []pilosa.FieldRow{
+						pilosa.FieldRow{Field: "vv", Value: &v4},
+						pilosa.FieldRow{Field: "nv", Value: &nv4},
+					},
+					Count: 4,
+					Sum:   16,
+				},
+			},
 		},
 	}
 
