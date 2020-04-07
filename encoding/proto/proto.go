@@ -1339,6 +1339,9 @@ func decodeFieldRows(a []*internal.FieldRow) []pilosa.FieldRow {
 		} else {
 			other[i].RowKey = fr.RowKey
 		}
+		if fr.Value != nil {
+			other[i].Value = &fr.Value.Value
+		}
 	}
 	return other
 }
@@ -1469,6 +1472,9 @@ func encodeFieldRows(a []pilosa.FieldRow) []*internal.FieldRow {
 			other[i] = &internal.FieldRow{
 				Field: fr.Field,
 				RowID: fr.RowID,
+			}
+			if fr.Value != nil {
+				other[i].Value = &internal.Int64{Value: *fr.Value}
 			}
 		} else {
 			other[i] = &internal.FieldRow{
