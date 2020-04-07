@@ -77,8 +77,7 @@ func (sc *sliceContainers) Remove(key uint64) {
 		return
 	}
 	if key == sc.lastKey {
-		sc.lastKey = ^uint64(0)
-		sc.lastContainer = nil
+		sc.invalidateCache()
 	}
 	sc.keys = append(sc.keys[:i], sc.keys[i+1:]...)
 	sc.containers = append(sc.containers[:i], sc.containers[i+1:]...)
@@ -159,8 +158,7 @@ func (sc *sliceContainers) Count() uint64 {
 func (sc *sliceContainers) Reset() {
 	sc.keys = sc.keys[:0]
 	sc.containers = sc.containers[:0]
-	sc.lastContainer = nil
-	sc.lastKey = ^uint64(0)
+	sc.invalidateCache()
 }
 
 func (sc *sliceContainers) ResetN(n int) {
@@ -171,8 +169,7 @@ func (sc *sliceContainers) ResetN(n int) {
 		sc.keys = sc.keys[:0]
 		sc.containers = sc.containers[:0]
 	}
-	sc.lastContainer = nil
-	sc.lastKey = ^uint64(0)
+	sc.invalidateCache()
 }
 
 func (sc *sliceContainers) seek(key uint64) (int, bool) {
@@ -187,13 +184,28 @@ func (sc *sliceContainers) seek(key uint64) (int, bool) {
 
 func (sc *sliceContainers) Iterator(key uint64) (citer ContainerIterator, found bool) {
 	i, found := sc.seek(key)
-	return &sliceIterator{e: sc, i: i}, found
+	return &sliceIterator{e: sc, i: i, index: i}, found
 }
 
+// Repair tries to repair all containers,
+// results in nil and empty containers getting dropped from the slice.
+// For instance, that has to happen for writing the roaring format,
+// which can't represent an empty container (c.N() == 0).
 func (sc *sliceContainers) Repair() {
-	for _, c := range sc.containers {
+	n := 0
+	for i, c := range sc.containers {
+		if c == nil {
+			continue
+		}
 		c.Repair()
+		sc.containers[n] = c
+		sc.keys[n] = sc.keys[i]
+		n++
 	}
+	sc.containers = sc.containers[:n]
+	sc.keys = sc.keys[:n]
+
+	sc.invalidateCache()
 }
 
 // Update calls fn (existing-container, existed), and expects
@@ -228,27 +240,35 @@ func (sc *sliceContainers) UpdateEvery(fn func(uint64, *Container, bool) (*Conta
 			sc.containers[i] = nc
 		}
 	}
-	// invalidate cache.
+
+	sc.invalidateCache()
+}
+
+func (sc *sliceContainers) invalidateCache() {
 	sc.lastKey = ^uint64(0)
 	sc.lastContainer = nil
 }
 
 type sliceIterator struct {
 	e     *sliceContainers
-	i     int
-	key   uint64
-	value *Container
+	i     int        // next e's index to get key, value
+	index int        // current e's index of key, value
+	key   uint64     // current key
+	value *Container // current value
 }
 
 func (si *sliceIterator) Next() bool {
 	if si.e == nil {
 		return false
 	}
+
 	// discard nil containers from iteration. we don't always
 	// actually remove them because copying is expensive.
 	for si.i < len(si.e.keys) {
 		si.key = si.e.keys[si.i]
 		si.value = si.e.containers[si.i]
+		// keep the current index of key, value
+		si.index = si.i
 		si.i++
 		if si.value != nil {
 			return true

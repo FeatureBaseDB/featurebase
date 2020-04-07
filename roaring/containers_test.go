@@ -99,3 +99,89 @@ func testContainersIterator(cs Containers, t *testing.T) {
 		t.Fatalf("itr should be done, but got true")
 	}
 }
+
+func TestSliceContainers(t *testing.T) {
+	const size = 10
+	n := size
+	sc := newSliceContainers()
+
+	// Add n keys
+	for i := 0; i < n; i++ {
+		key, set := uint64(i), []uint16{uint16(i)}
+		sc.Put(key, NewContainerArray(set))
+	}
+
+	t.Run("Get n keys", func(t *testing.T) {
+		for i := 0; i < n; i++ {
+			key, set := uint64(i), []uint16{uint16(i)}
+			c := sc.Get(key)
+			if c == nil {
+				t.Fatalf("Get(%d) returned nil container", key)
+			}
+			if c.data[0] != set[0] {
+				t.Fatalf("Get(%d): expected: %v, got: %v", key, set[0], c.data[0])
+			}
+		}
+	})
+
+	t.Run("Last key/container", func(t *testing.T) {
+		key, c := sc.Last()
+		if key != uint64(n-1) || c.data[0] != uint16(n-1) {
+			t.Fatalf("Last: expected: %v, got: %d, %v", n-1, key, c.data)
+		}
+	})
+
+	// Remove odd keys
+	for i := 1; i < size; i += 2 {
+		key := uint64(i)
+		sc.Remove(key)
+		n--
+	}
+
+	t.Run("Try to Get removed containers", func(t *testing.T) {
+		for i := 1; i < size; i += 2 {
+			key := uint64(i)
+			c := sc.Get(key)
+			if c != nil {
+				t.Fatalf("Get(for non existing key %d): found container: %v", key, c.data)
+			}
+		}
+
+		// Test - Last key/container
+		key, c := sc.Last()
+		if key != uint64(size-2) || c.data[0] != uint16(size-2) {
+			t.Fatalf("Last: expected: %v, got: %d, %v", size-2, key, c.data)
+		}
+
+		if sc.Size() != n {
+			t.Fatalf("Size: expected: %d, got: %d", n, sc.Size())
+		}
+	})
+
+	t.Run("Nil containers and repair them", func(t *testing.T) {
+		// Remove half of even containers
+		for i := range sc.containers {
+			if i%2 == 0 {
+				sc.containers[i] = nil
+				n--
+			}
+		}
+		sc.Repair()
+
+		if sc.Size() != n {
+			t.Fatalf("Size: expected: %d, got: %d", n, sc.Size())
+		}
+
+		for i, key := range sc.keys {
+			if sc.containers[i] == nil {
+				t.Fatalf("Found nil container for key: %d at index: %d", key, i)
+			} else {
+				if sc.containers[i].data[0] != uint16(key) {
+					t.Fatalf("Invalid container data for key: %d at index: %d - expected: %d, got: %d",
+						key, i, uint16(key), sc.containers[i].data[0],
+					)
+				}
+			}
+		}
+	})
+}

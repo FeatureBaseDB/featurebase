@@ -694,6 +694,474 @@ func (b *Bitmap) Intersect(other *Bitmap) *Bitmap {
 	return output
 }
 
+type mutableContainersIterator struct {
+	c Containers
+
+	cit ContainerIterator
+	sit *sliceIterator
+}
+
+func newMutableContainersIterator(cs Containers, key uint64) *mutableContainersIterator {
+	it := &mutableContainersIterator{c: cs}
+
+	if sc, ok := cs.(*sliceContainers); ok {
+		if i, found := sc.seek(key); found {
+			it.sit = &sliceIterator{e: sc, i: i, index: i}
+			return it
+		}
+	}
+
+	it.cit, _ = cs.Iterator(key)
+	return it
+}
+
+func (it *mutableContainersIterator) update(key uint64, newCont *Container) {
+	if it.sit != nil {
+		if key == it.sit.key {
+			it.sit.e.containers[it.sit.index] = newCont
+		}
+	}
+
+	it.c.Update(key, func(_ *Container, _ bool) (*Container, bool) {
+		return newCont, true
+	})
+}
+
+func (it *mutableContainersIterator) Next() bool {
+	if it.sit != nil {
+		return it.sit.Next()
+	}
+
+	return it.cit.Next()
+}
+
+func (it *mutableContainersIterator) Value() (uint64, *Container) {
+	if it.sit != nil {
+		return it.sit.Value()
+	}
+
+	return it.cit.Value()
+}
+
+// IntersectInPlace returns the bitwise intersection of b and others,
+// modifying b in place.
+func (b *Bitmap) IntersectInPlace(others ...*Bitmap) {
+	var bSize int
+	if bSize = b.Size(); bSize == 0 {
+		// If b doesn't have any containers then return early.
+		return
+	}
+
+	otherIters := make(handledIters, 0, len(others))
+	for _, other := range others {
+		it, _ := other.Containers.Iterator(0)
+		if !it.Next() {
+			// An empty bitmap - reset all
+			b.Containers.Reset()
+			return
+		}
+
+		otherIters = append(otherIters, handledIter{
+			iter:    it,
+			hasNext: true,
+		})
+	}
+
+	bIter := newMutableContainersIterator(b.Containers, 0)
+	for bIter.Next() {
+		bKey, bCont := bIter.Value()
+		if bCont.N() == 0 {
+			// No point in intersecting things from an empty container.
+			bIter.update(bKey, nil)
+			continue
+		}
+
+		// Loop until every iters current value has been handled.
+		for _, otherIter := range otherIters {
+			if !otherIter.hasNext {
+				continue
+			}
+
+			otherKey, otherCont := otherIter.iter.Value()
+			for otherKey < bKey {
+				otherIter.hasNext = otherIter.iter.Next()
+				if !otherIter.hasNext {
+					break
+				}
+				otherKey, otherCont = otherIter.iter.Value()
+			}
+
+			if bKey == otherKey {
+				// Note: a nil container is valid, and has N == 0.
+				if otherCont.N() != 0 {
+					if bCont.frozen() {
+						bCont = bCont.Clone()
+						b.Containers.Put(bKey, bCont)
+					}
+					bCont = bCont.intersectInPlace(otherCont)
+					bIter.update(bKey, bCont)
+					if bCont == nil || bCont.N() == 0 {
+						break
+					}
+
+					otherIter.hasNext = otherIter.iter.Next()
+					continue
+				}
+			}
+
+			bIter.update(bKey, nil)
+			break
+		}
+	}
+
+	b.Containers.Repair()
+}
+
+func (c *Container) intersectInPlace(other *Container) *Container {
+	// short-circuit the trivial cases
+	if c == nil || other == nil || c.N() == 0 || other.N() == 0 {
+		c = nil
+		return c
+	}
+	cFull, otherFull := (c.N() == maxContainerVal+1), (other.N() == maxContainerVal+1)
+	if cFull && otherFull {
+		return c
+	}
+	if cFull {
+		return c.copyInPlace(other)
+	}
+	if otherFull {
+		return c
+	}
+
+	switch c.typ() {
+	case containerArray:
+		switch other.typ() {
+		case containerArray:
+			return intersectArrayArrayInPlace(c, other)
+		case containerBitmap:
+			return intersectArrayBitmapInPlace(c, other)
+		case containerRun:
+			return intersectArrayRunInPlace(c, other)
+		}
+
+	case containerBitmap:
+		switch other.typ() {
+		case containerArray:
+			return intersectBitmapArrayInPlace(c, other)
+		case containerBitmap:
+			return intersectBitmapBitmapInPlace(c, other)
+		case containerRun:
+			return intersectBitmapRunInPlace(c, other)
+		}
+
+	case containerRun:
+		switch other.typ() {
+		case containerArray:
+			return intersectRunArrayInPlace(c, other)
+		case containerBitmap:
+			return intersectRunBitmapInPlace(c, other)
+		case containerRun:
+			return intersectRunRunInPlace(c, other)
+		}
+	}
+
+	if roaringParanoia {
+		panic(fmt.Sprintf("invalid intersect op: unknown types %d/%d", c.typ(), other.typ()))
+	}
+	return nil
+}
+
+func (c *Container) copyInPlace(other *Container) *Container {
+	switch other.typ() {
+	case containerArray:
+		c.setTyp(containerArray)
+		c.setArrayMaybeCopy(other.array(), true)
+		c.setN(other.N())
+
+	case containerBitmap:
+		bmp := make([]uint64, bitmapN)
+		copy(bmp, other.bitmap())
+		c.setTyp(containerBitmap)
+		c.setBitmap(bmp)
+		c.setN(other.N())
+
+	case containerRun:
+		c.setTyp(containerRun)
+		c.setRunsMaybeCopy(other.runs(), true)
+		c.setN(other.N())
+	}
+
+	return c
+}
+
+func intersectArrayArrayInPlace(a, b *Container) *Container {
+	statsHit("intersectInPlace/ArrayArray")
+
+	a = a.Thaw()
+	aa, ba := a.array(), b.array()
+	an, bn := len(aa), len(ba)
+	n := 0
+	for i, j := 0, 0; i < an && j < bn; {
+		va, vb := aa[i], ba[j]
+
+		if va < vb {
+			i++
+		} else if va > vb {
+			j++
+		} else {
+			aa[n] = va
+			n, i, j = n+1, i+1, j+1
+		}
+	}
+	aa = aa[:n]
+	a.setArray(aa)
+
+	return a
+}
+
+func intersectArrayRunInPlace(a, b *Container) *Container {
+	statsHit("intersectInPlace/ArrayRun")
+
+	a = a.Thaw()
+	aa, br := a.array(), b.runs()
+	an, bn := len(aa), len(br)
+
+	n := 0
+	for i, j := 0, 0; i < an && j < bn; {
+		va, vb := aa[i], br[j]
+		if va < vb.start {
+			i++
+		} else if va > vb.last {
+			j++
+		} else {
+			aa[n] = va
+			n++
+			i++
+		}
+	}
+
+	aa = aa[:n]
+	a.setArray(aa)
+
+	return a
+}
+
+func intersectArrayBitmapInPlace(a, b *Container) *Container {
+	statsHit("intersectInPlace/ArrayBitmap")
+
+	a = a.Thaw()
+	aa := a.array()
+	bb := b.bitmap()
+
+	n := 0
+	for _, va := range aa {
+		b := bb[va>>6]
+		bidx := va % 64
+		mask := uint64(1) << bidx
+		if b&mask > 0 {
+			aa[n] = va
+			n++
+		}
+	}
+
+	aa = aa[:n]
+	a.setArray(aa)
+
+	return a
+}
+
+func intersectBitmapBitmapInPlace(a, b *Container) *Container {
+	statsHit("intersectInPlace/BitmapBitmap")
+
+	a = a.Thaw()
+	ab := a.bitmap()[:bitmapN]
+	bb := b.bitmap()[:bitmapN]
+
+	n := int32(0)
+	for i := 0; i < bitmapN; i += 4 {
+		// unrolling is still effective in go
+		ptr := (*[4]uint64)(unsafe.Pointer(&bb[i]))
+		ab[i] &= ptr[0]
+		ab[i+1] &= ptr[1]
+		ab[i+2] &= ptr[2]
+		ab[i+3] &= ptr[3]
+
+		n += int32(popcount(ab[i])) +
+			int32(popcount(ab[i+1])) +
+			int32(popcount(ab[i+2])) +
+			int32(popcount(ab[i+3]))
+	}
+	a.setN(n)
+
+	return a
+}
+
+func intersectBitmapArrayInPlace(a, b *Container) *Container {
+	statsHit("intersectInPlace/BitmapArray")
+
+	a = a.Thaw()
+	ab := a.bitmap()
+	ba := b.array()
+
+	bn := len(ba)
+	array := make([]uint16, bn)
+	n := int32(0)
+	for _, vb := range ba {
+		i := vb >> 6
+		mask := uint64(1) << uint(vb%64)
+		if ab[i]&mask > 0 {
+			array[n] = vb
+			n++
+		}
+	}
+	array = array[:n]
+	a.setTyp(containerArray)
+	a.setArray(array)
+	a.setN(n)
+
+	return a
+}
+
+func intersectBitmapRunInPlace(a, b *Container) *Container {
+	statsHit("intersectInPlace/BitmapRun")
+
+	a = a.Thaw()
+	ab := a.bitmap()
+	br := b.runs()
+	an := len(ab)
+	bitmap := make([]uint64, an)
+
+	n := int32(0)
+	for _, vb := range br {
+		i := vb.start >> 6 // index into a
+
+		vastart := i << 6
+		valast := vastart + 63
+		for valast >= vb.start && vastart <= vb.last && int(i) < an {
+			if vastart >= vb.start && valast <= vb.last { // a within b
+				bitmap[i] = ab[i]
+				n += int32(popcount(ab[i]))
+			} else if vb.start >= vastart && vb.last <= valast { // b within a
+				var mask uint64 = ((1 << (vb.last - vb.start + 1)) - 1) << (vb.start - vastart)
+				bits := ab[i] & mask
+				bitmap[i] |= bits
+				n += int32(popcount(bits))
+			} else if vastart < vb.start { // a overlaps front of b
+				offset := 64 - (1 + valast - vb.start)
+				bits := (ab[i] >> offset) << offset
+				bitmap[i] |= bits
+				n += int32(popcount(bits))
+			} else if vb.start < vastart { // b overlaps front of a
+				offset := 64 - (1 + vb.last - vastart)
+				bits := (ab[i] << offset) >> offset
+				bitmap[i] |= bits
+				n += int32(popcount(bits))
+			}
+
+			i++
+			vastart = i << 6
+			valast = vastart + 63
+		}
+	}
+	a.setBitmap(bitmap)
+	a.setN(n)
+
+	return a
+}
+
+func intersectRunRunInPlace(a, b *Container) *Container {
+	statsHit("intersectInPlace/RunRun")
+
+	a = a.Thaw()
+	ar, br := a.runs(), b.runs()
+	an, bn := len(ar), len(br)
+
+	var runs []interval16
+	if an > bn {
+		runs = make([]interval16, 0, an)
+	} else {
+		runs = make([]interval16, 0, bn)
+	}
+
+	n := int32(0)
+	for i, j := 0, 0; i < an && j < bn; {
+		va, vb := ar[i], br[j]
+
+		if va.last < vb.start {
+			// |--va--| |--vb--|
+			i++
+		} else if vb.last < va.start {
+			// |--vb--| |--va--|
+			j++
+		} else if va.last > vb.last && va.start >= vb.start {
+			// |--vb-|-|-va--|
+			runs = append(runs, interval16{start: va.start, last: vb.last})
+			n += int32(vb.last-va.start) + 1
+			j++
+		} else if va.last > vb.last && va.start < vb.start {
+			// |--va|--vb--|--|
+			runs = append(runs, vb)
+			n += int32(vb.last-vb.start) + 1
+			j++
+		} else if va.last <= vb.last && va.start >= vb.start {
+			// |--vb|--va--|--|
+			runs = append(runs, va)
+			n += int32(va.last-va.start) + 1
+			i++
+		} else if va.last <= vb.last && va.start < vb.start {
+			// |--va-|-|-vb--|
+			runs = append(runs, interval16{start: vb.start, last: va.last})
+			n += int32(va.last-vb.start) + 1
+			i++
+		}
+	}
+	a.setRuns(runs)
+	a.setN(n)
+
+	return a
+}
+
+func intersectRunArrayInPlace(a, b *Container) *Container {
+	statsHit("intersectInPlace/RunArray")
+
+	a = a.Thaw()
+	ar, ba := a.runs(), b.array()
+	an, bn := len(ar), len(ba)
+
+	array := make([]uint16, bn)
+	n := 0
+	for i, j := 0, 0; i < an && j < bn; {
+		va, vb := ar[i], ba[j]
+		if vb < va.start {
+			j++
+		} else if vb > va.last {
+			i++
+		} else {
+			array[n] = vb
+			n++
+			j++
+		}
+	}
+
+	array = array[:n]
+	a.setTyp(containerArray)
+	a.setArray(array)
+
+	return a
+}
+
+func intersectRunBitmapInPlace(a, b *Container) *Container {
+	statsHit("intersectInPlace/RunBitmap")
+
+	// TODO(@kuba--):
+	// Figure out how to efficiently intersect dense runs with bitmaps.
+	// So far we convert run to bitmap and intersect bitmaps - it's much faster
+	// than naive O(n^2) algorithm.
+	a = a.runToBitmap()
+	return intersectBitmapBitmapInPlace(a, b)
+}
+
 // Union returns the bitwise union of b and others as a new bitmap.
 func (b *Bitmap) Union(others ...*Bitmap) *Bitmap {
 	if len(others) == 1 {
