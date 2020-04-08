@@ -381,6 +381,16 @@ func (e *executor) handlePreCalls(ctx context.Context, index string, c *pql.Call
 	return nil
 }
 
+// dumpPrecomputedCalls throws away precomputed call data. this is used so we
+// can drop any large data associated with a call once we've processed
+// the call.
+func (e *executor) dumpPrecomputedCalls(ctx context.Context, c *pql.Call) {
+	for _, call := range c.Children {
+		e.dumpPrecomputedCalls(ctx, call)
+	}
+	c.Precomputed = nil
+}
+
 // handlePreCallChildren handles any pre-calls in the children of a given call.
 func (e *executor) handlePreCallChildren(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) error {
 	for i := range c.Children {
@@ -433,7 +443,7 @@ func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shar
 
 	// Execute each call serially.
 	results := make([]interface{}, 0, len(q.Calls))
-	for _, call := range q.Calls {
+	for i, call := range q.Calls {
 		if err := validateQueryContext(ctx); err != nil {
 			return nil, err
 		}
@@ -463,6 +473,11 @@ func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shar
 			return nil, err
 		}
 		results = append(results, v)
+		// Some Calls can have significant data associated with them
+		// that gets generated during processing, such as Precomputed
+		// values. Dumping the precomputed data, if any, lets the GC
+		// free the memory before we get there.
+		e.dumpPrecomputedCalls(ctx, q.Calls[i])
 	}
 	return results, nil
 }
