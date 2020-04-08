@@ -31,18 +31,19 @@ const maxMsgSize = 1024 * 1024 * 100 // 100 megs ought to be enough for anybody!
 
 // GRPCClient is a client for working with the gRPC server.
 type GRPCClient struct {
-	dialTarget string
-	tlsConfig  *tls.Config
+	dialTargets []string
+	tlsConfig   *tls.Config
 
-	mu   sync.RWMutex
-	conn *grpc.ClientConn
+	mu          sync.RWMutex
+	conn        *grpc.ClientConn
+	targetIndex int
 }
 
 // NewGRPCClient returns a new instance of GRPCClient.
-func NewGRPCClient(dialTarget string, tlsConfig *tls.Config) (*GRPCClient, error) {
+func NewGRPCClient(dialTargets []string, tlsConfig *tls.Config) (*GRPCClient, error) {
 	c := &GRPCClient{
-		dialTarget: dialTarget,
-		tlsConfig:  tlsConfig,
+		dialTargets: dialTargets,
+		tlsConfig:   tlsConfig,
 	}
 	// resetConn sets GRPCClient.conn when it doesn't
 	// exist yet.
@@ -79,11 +80,22 @@ func (c *GRPCClient) resetConn() error {
 	opts = append(opts, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize)))
 
 	var err error
-	if c.conn, err = grpc.Dial(c.dialTarget, opts...); err != nil {
+	if c.conn, err = grpc.Dial(c.dialTargets[c.getTargetIndex()], opts...); err != nil {
 		return errors.Wrap(err, "creating new grpc client")
 	}
 
 	return nil
+}
+
+// getTargetIndex gets the current target index, then increments it for
+// next time. Unprotected.
+func (c *GRPCClient) getTargetIndex() int {
+	if len(c.dialTargets) == 0 {
+		return 0
+	}
+	ret := c.targetIndex
+	c.targetIndex = (c.targetIndex + 1) % len(c.dialTargets) // cycle through dialTargets
+	return ret
 }
 
 // Close closes any connections the client has opened.
