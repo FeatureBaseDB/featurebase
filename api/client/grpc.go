@@ -80,12 +80,22 @@ func (c *GRPCClient) resetConn() error {
 	opts = append(opts, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize)))
 
 	var err error
-	if c.conn, err = grpc.Dial(c.dialTargets[c.targetIndex], opts...); err != nil {
-		c.targetIndex = (c.targetIndex + 1) % len(c.dialTargets) // cycle through dialTargets
+	if c.conn, err = grpc.Dial(c.dialTargets[c.getTargetIndex()], opts...); err != nil {
 		return errors.Wrap(err, "creating new grpc client")
 	}
 
 	return nil
+}
+
+// getTargetIndex gets the current target index, then increments it for
+// next time. Unprotected.
+func (c *GRPCClient) getTargetIndex() int {
+	if len(c.dialTargets) == 0 {
+		return 0
+	}
+	ret := c.targetIndex
+	c.targetIndex = (c.targetIndex + 1) % len(c.dialTargets) // cycle through dialTargets
+	return ret
 }
 
 // Close closes any connections the client has opened.
