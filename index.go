@@ -347,7 +347,7 @@ func (i *Index) AvailableShards() *roaring.Bitmap {
 
 	b := roaring.NewBitmap()
 	for _, f := range i.fields {
-		b = b.Union(f.AvailableShards())
+		b.UnionInPlace(f.AvailableShards())
 	}
 
 	i.Stats.Gauge("maxShard", float64(b.Max()), 1.0)

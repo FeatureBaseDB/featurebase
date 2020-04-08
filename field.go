@@ -408,7 +408,7 @@ func (f *Field) AvailableShards() *roaring.Bitmap {
 
 	b := f.remoteAvailableShards.Clone()
 	for _, view := range f.viewMap {
-		b = b.Union(view.availableShards())
+		b.UnionInPlace(view.availableShards())
 	}
 	return b
 }
