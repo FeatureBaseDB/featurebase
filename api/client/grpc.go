@@ -31,18 +31,19 @@ const maxMsgSize = 1024 * 1024 * 100 // 100 megs ought to be enough for anybody!
 
 // GRPCClient is a client for working with the gRPC server.
 type GRPCClient struct {
-	dialTarget string
-	tlsConfig  *tls.Config
+	dialTargets []string
+	tlsConfig   *tls.Config
 
-	mu   sync.RWMutex
-	conn *grpc.ClientConn
+	mu          sync.RWMutex
+	conn        *grpc.ClientConn
+	targetIndex int
 }
 
 // NewGRPCClient returns a new instance of GRPCClient.
-func NewGRPCClient(dialTarget string, tlsConfig *tls.Config) (*GRPCClient, error) {
+func NewGRPCClient(dialTargets []string, tlsConfig *tls.Config) (*GRPCClient, error) {
 	c := &GRPCClient{
-		dialTarget: dialTarget,
-		tlsConfig:  tlsConfig,
+		dialTargets: dialTargets,
+		tlsConfig:   tlsConfig,
 	}
 	// resetConn sets GRPCClient.conn when it doesn't
 	// exist yet.
@@ -79,7 +80,8 @@ func (c *GRPCClient) resetConn() error {
 	opts = append(opts, grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize)))
 
 	var err error
-	if c.conn, err = grpc.Dial(c.dialTarget, opts...); err != nil {
+	if c.conn, err = grpc.Dial(c.dialTargets[c.targetIndex], opts...); err != nil {
+		c.targetIndex = (c.targetIndex + 1) % len(c.dialTargets) // cycle through dialTargets
 		return errors.Wrap(err, "creating new grpc client")
 	}
 
