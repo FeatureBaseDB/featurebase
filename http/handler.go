@@ -206,6 +206,29 @@ func (h *Handler) populateValidators() {
 	h.validators["GetShardMax"] = queryValidationSpecRequired()
 }
 
+type contextKeyQuery int
+
+const (
+	contextKeyQueryRequest contextKeyQuery = iota
+	contextKeyQueryError
+)
+
+// addQueryContext puts the results of handler.readQueryRequest into the Context for use by
+// both other middleware and any handlers.
+func (h *Handler) addQueryContext(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pathParts := strings.Split(r.URL.Path, "/")
+		if len(pathParts) >= 3 && pathParts[3] == "query" {
+			req, err := h.readQueryRequest(r)
+			ctx := context.WithValue(r.Context(), contextKeyQueryRequest, req)
+			ctx = context.WithValue(ctx, contextKeyQueryError, err)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		} else {
+			next.ServeHTTP(w, r)
+		}
+	})
+}
+
 func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := mux.CurrentRoute(r).GetName()
@@ -246,7 +269,14 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 
 		longQueryTime := h.api.LongQueryTime()
 		if longQueryTime > 0 && dur > longQueryTime {
-			h.logger.Printf("%s %s %v", r.Method, r.URL.String(), dur)
+			queryRequest := r.Context().Value(contextKeyQueryRequest)
+			req, ok := queryRequest.(*pilosa.QueryRequest)
+			queryString := req.Query
+			if !ok {
+				queryString = "Unknown Query"
+			}
+
+			h.logger.Printf("%s %s %v %s", r.Method, r.URL.String(), dur, queryString)
 			statsTags = append(statsTags, "slow_query")
 		}
 
@@ -322,6 +352,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/internal/shards/max", handler.handleGetShardsMax).Methods("GET").Name("GetShardsMax") // TODO: deprecate, but it's being used by the client
 
 	router.Use(handler.queryArgValidator)
+	router.Use(handler.addQueryContext)
 	router.Use(handler.extractTracing)
 	router.Use(handler.collectStats)
 	return router
@@ -501,9 +532,14 @@ type getStatusResponse struct {
 
 // handlePostQuery handles /query requests.
 func (h *Handler) handlePostQuery(w http.ResponseWriter, r *http.Request) {
-	// Parse incoming request.
-	req, err := h.readQueryRequest(r)
-	if err != nil {
+
+	// Read previouly parsed request from context
+	qreq := r.Context().Value(contextKeyQueryRequest)
+	qerr := r.Context().Value(contextKeyQueryError)
+	req, ok := qreq.(*pilosa.QueryRequest)
+	err, _ := qerr.(error)
+
+	if err != nil || !ok {
 		w.WriteHeader(http.StatusBadRequest)
 		e := h.writeQueryResponse(w, r, &pilosa.QueryResponse{Err: err})
 		if e != nil {
