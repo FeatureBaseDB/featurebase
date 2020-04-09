@@ -131,7 +131,7 @@ type Config struct {
 	} `toml:"anti-entropy"`
 
 	Metric struct {
-		// Service can be statsd, expvar, or none.
+		// Service can be statsd, prometheus, expvar, or none.
 		Service string `toml:"service"`
 		// Host tells the statsd client where to write.
 		Host         string        `toml:"host"`
