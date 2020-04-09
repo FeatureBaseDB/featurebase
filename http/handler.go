@@ -273,7 +273,7 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 			req, ok := queryRequest.(*pilosa.QueryRequest)
 			queryString := req.Query
 			if !ok {
-				queryString = "Unknown Query"
+				queryString = ""
 			}
 
 			h.logger.Printf("%s %s %v %s", r.Method, r.URL.String(), dur, queryString)
