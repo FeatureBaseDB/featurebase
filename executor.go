@@ -861,7 +861,6 @@ func (e *executor) executeGenericField(ctx context.Context, index string, c *pql
 func (e *executor) executeMin(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (ValCount, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeMin")
 	defer span.Finish()
-
 	if field := c.Args["field"]; field == "" {
 		return ValCount{}, errors.New("Min(): field required")
 	}
@@ -4124,7 +4123,7 @@ func (vc *ValCount) add(other ValCount) ValCount {
 
 // smaller returns the smaller of the two ValCounts.
 func (vc *ValCount) smaller(other ValCount) ValCount {
-	if vc.DecimalVal != nil {
+	if vc.DecimalVal != nil || other.DecimalVal != nil {
 		return vc.decimalSmaller(other)
 	} else if vc.FloatVal != 0 || other.FloatVal != 0 {
 		return vc.floatSmaller(other)
@@ -4143,7 +4142,10 @@ func (vc *ValCount) smaller(other ValCount) ValCount {
 }
 
 func (vc *ValCount) decimalSmaller(other ValCount) ValCount {
-	if vc.Count == 0 || (other.DecimalVal.LessThan(*vc.DecimalVal) && other.Count > 0) {
+	if other.DecimalVal == nil {
+		return *vc
+	}
+	if vc.Count == 0 || vc.DecimalVal == nil || (other.DecimalVal.LessThan(*vc.DecimalVal) && other.Count > 0) {
 		return other
 	}
 	extra := int64(0)
@@ -4172,7 +4174,7 @@ func (vc *ValCount) floatSmaller(other ValCount) ValCount {
 
 // larger returns the larger of the two ValCounts.
 func (vc *ValCount) larger(other ValCount) ValCount {
-	if vc.DecimalVal != nil {
+	if vc.DecimalVal != nil || other.DecimalVal != nil {
 		return vc.decimalLarger(other)
 	} else if vc.FloatVal != 0 || other.FloatVal != 0 {
 		return vc.floatLarger(other)
@@ -4191,7 +4193,10 @@ func (vc *ValCount) larger(other ValCount) ValCount {
 }
 
 func (vc *ValCount) decimalLarger(other ValCount) ValCount {
-	if vc.Count == 0 || (other.DecimalVal.GreaterThan(*vc.DecimalVal) && other.Count > 0) {
+	if other.DecimalVal == nil {
+		return *vc
+	}
+	if vc.Count == 0 || vc.DecimalVal == nil || (other.DecimalVal.GreaterThan(*vc.DecimalVal) && other.Count > 0) {
 		return other
 	}
 	extra := int64(0)
