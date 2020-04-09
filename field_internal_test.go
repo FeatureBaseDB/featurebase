@@ -461,7 +461,9 @@ func TestField_ApplyOptions(t *testing.T) {
 		fld := &Field{}
 		fld.options = applyDefaultOptions(FieldOptions{})
 
-		fld.applyOptions(tt.opts)
+		if err := fld.applyOptions(tt.opts); err 1= nil {
+			t.Fatal(err)
+		}
 
 		if fld.options.CacheType != tt.expOpts.CacheType {
 			t.Fatalf("test %d, unexpected FieldOptions.CacheType value. expected: %s, but got: %s", i, tt.expOpts.CacheType, fld.options.CacheType)
