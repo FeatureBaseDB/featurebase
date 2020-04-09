@@ -109,7 +109,7 @@ func TestStatsCount_TopN(t *testing.T) {
 			}
 
 			if tags[0] != "index:d" {
-				t.Errorf("Expected db, Results %s", tags[0])
+				t.Errorf("Expected index, Results %s", tags[0])
 			}
 
 			called = true
@@ -138,7 +138,7 @@ func TestStatsCount_Bitmap(t *testing.T) {
 			}
 
 			if tags[0] != "index:d" {
-				t.Errorf("Expected db, Results %s", tags[0])
+				t.Errorf("Expected index, Results %s", tags[0])
 			}
 
 			called = true
@@ -173,7 +173,7 @@ func TestStatsCount_SetRowAttrsBulk(t *testing.T) {
 			}
 
 			if tags[0] != "index:d" {
-				t.Errorf("Expected db, Results %s", tags[0])
+				t.Errorf("Expected index, Results %s", tags[0])
 			}
 			called = true
 		},
@@ -207,7 +207,7 @@ func TestStatsCount_SetColumnAttrs(t *testing.T) {
 			}
 
 			if tags[0] != "index:d" {
-				t.Errorf("Expected db, Results %s", tags[0])
+				t.Errorf("Expected index, Results %s", tags[0])
 			}
 			called = true
 		},
