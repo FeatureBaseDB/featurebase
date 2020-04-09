@@ -3044,13 +3044,13 @@ func (s *fragmentSyncer) syncFragment() error {
 			if err := s.syncBlockFromPrimary(blockID); err != nil {
 				return fmt.Errorf("sync block from primary: id=%d, err=%s", blockID, err)
 			}
-			s.Fragment.stats.Count(MetricBlockRepairPrimary, 1, 1.0)
+			s.Fragment.stats.CountWithCustomTags(MetricBlockRepair, 1, 1.0, []string{"primary:true"})
 		default:
 			// Synchronize block.
 			if err := s.syncBlock(blockID); err != nil {
 				return fmt.Errorf("sync block: id=%d, err=%s", blockID, err)
 			}
-			s.Fragment.stats.Count(MetricBlockRepair, 1, 1.0)
+			s.Fragment.stats.CountWithCustomTags(MetricBlockRepair, 1, 1.0, []string{"primary:false"})
 		}
 	}
 

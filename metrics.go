@@ -38,7 +38,6 @@ const (
 	MetricClearingN             = "clearing_total"
 	MetricClearedN              = "cleared_total"
 	MetricSnapshotDuration      = "snapshot_duration_seconds"
-	MetricBlockRepairPrimary    = "block_repair_primary_total"
 	MetricBlockRepair           = "block_repair_total"
 	MetricSyncFieldDuration     = "sync_field_duration_seconds"
 	MetricSyncIndexDuration     = "sync_index_duration_seconds"
