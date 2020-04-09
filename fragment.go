@@ -2191,7 +2191,14 @@ func (f *fragment) importValueSmallWrite(columnIDs []uint64, values []int64, bit
 		rowSet[uint64(i)] = struct{}{}
 	}
 	err := f.importPositions(toSet, toClear, rowSet)
-	return errors.Wrap(err, "importing positions")
+	if err != nil {
+		return errors.Wrap(err, "importing positions")
+	}
+
+	// Reset the rowCache.
+	f.rowCache = &simpleCache{make(map[uint64]*Row)}
+
+	return nil
 }
 
 // importValue bulk imports a set of range-encoded values.
@@ -2229,6 +2236,9 @@ func (f *fragment) importValue(columnIDs []uint64, values []int64, bitDepth uint
 	}
 	// We don't actually care, except we want our stats to be accurate.
 	f.incrementOpN(totalChanges)
+
+	// Reset the rowCache.
+	f.rowCache = &simpleCache{make(map[uint64]*Row)}
 
 	// in theory, this should probably have happened anyway, but if enough
 	// of the bits matched existing bits, we'll be under our opN estimate, and
