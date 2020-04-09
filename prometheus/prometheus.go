@@ -302,7 +302,7 @@ func tagsToLabels(tags []string, logger logger.Logger) (labels prometheus.Labels
 		tagParts := strings.SplitAfterN(tag, ":", 2)
 		if len(tagParts) != 2 {
 			// only process tags in "key:value" form
-			logger.Debugf("Invalid Prometheus label: %v\n", tag)
+			logger.Printf("Error: invalid Prometheus label: %v\n", tag)
 			continue
 		}
 		labels[tagParts[0][0:len(tagParts[0])-1]] = tagParts[1]

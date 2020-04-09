@@ -277,12 +277,16 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 			}
 
 			h.logger.Printf("%s %s %v %s", r.Method, r.URL.String(), dur, queryString)
-			statsTags = append(statsTags, "speed:true")
+			statsTags = append(statsTags, "slow:true")
+		} else {
+			statsTags = append(statsTags, "slow:false")
 		}
 
 		pathParts := strings.Split(r.URL.Path, "/")
 		if externalPrefixFlag[pathParts[1]] {
 			statsTags = append(statsTags, "where:external")
+		} else {
+			statsTags = append(statsTags, "where:internal")
 		}
 
 		statsTags = append(statsTags, "useragent:"+r.UserAgent())

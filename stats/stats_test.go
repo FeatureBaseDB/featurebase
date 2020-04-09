@@ -152,7 +152,7 @@ func TestStatsCount_Bitmap(t *testing.T) {
 	}
 }
 
-func TestStatsCount_SetColumnAttrs(t *testing.T) {
+func TestStatsCount_SetRowAttrsBulk(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 	hldr := test.Holder{Holder: c[0].Server.Holder()}
@@ -166,10 +166,14 @@ func TestStatsCount_SetColumnAttrs(t *testing.T) {
 		t.Fatal("field not found")
 	}
 
-	field.Stats = &MockStats{
-		mockCount: func(name string, value int64, rate float64) {
+	hldr.Holder.Stats = &MockStats{
+		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
 			if name != pilosa.MetricSetRowAttrs {
 				t.Errorf("Expected %v, Results %s", pilosa.MetricSetRowAttrs, name)
+			}
+
+			if tags[0] != "index:d" {
+				t.Errorf("Expected db, Results %s", tags[0])
 			}
 			called = true
 		},
@@ -182,7 +186,7 @@ func TestStatsCount_SetColumnAttrs(t *testing.T) {
 	}
 }
 
-func TestStatsCount_SetProfileAttrs(t *testing.T) {
+func TestStatsCount_SetColumnAttrs(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 	hldr := test.Holder{Holder: c[0].Server.Holder()}
@@ -196,12 +200,15 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 		t.Fatal("idex not found")
 	}
 
-	idx.Stats = &MockStats{
-		mockCount: func(name string, value int64, rate float64) {
+	hldr.Holder.Stats = &MockStats{
+		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
 			if name != pilosa.MetricSetColumnAttrs {
 				t.Errorf("Expected %v, Results %s", pilosa.MetricSetColumnAttrs, name)
 			}
 
+			if tags[0] != "index:d" {
+				t.Errorf("Expected db, Results %s", tags[0])
+			}
 			called = true
 		},
 	}

@@ -3217,7 +3217,11 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 		if err := field.RowAttrStore().SetBulkAttrs(fieldMap); err != nil {
 			return nil, err
 		}
-		field.Stats.Count(MetricSetRowAttrs, 1, 1.0)
+	}
+
+	if !opt.Remote {
+		tags := []string{"index:" + index, "bulk:true"}
+		e.Holder.Stats.CountWithCustomTags(MetricSetRowAttrs, int64(len(m)), 1.0, tags)
 	}
 
 	// Do not forward call if this is already being forwarded.
