@@ -461,7 +461,7 @@ func TestField_ApplyOptions(t *testing.T) {
 		fld := &Field{}
 		fld.options = applyDefaultOptions(FieldOptions{})
 
-		if err := fld.applyOptions(tt.opts); err 1= nil {
+		if err := fld.applyOptions(tt.opts); err != nil {
 			t.Fatal(err)
 		}
 
