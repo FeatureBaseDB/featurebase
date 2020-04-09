@@ -218,7 +218,7 @@ const (
 func (h *Handler) addQueryContext(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pathParts := strings.Split(r.URL.Path, "/")
-		if len(pathParts) >= 3 && pathParts[3] == "query" {
+		if len(pathParts) > 3 && pathParts[3] == "query" {
 			req, err := h.readQueryRequest(r)
 			ctx := context.WithValue(r.Context(), contextKeyQueryRequest, req)
 			ctx = context.WithValue(ctx, contextKeyQueryError, err)
