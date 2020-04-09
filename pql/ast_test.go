@@ -36,7 +36,7 @@ func TestCall_String(t *testing.T) {
 				"field0": &pql.Condition{Op: pql.GTE, Value: 10},
 			},
 		}
-		if s := c.String(); s != `Range(field0>= 10, other="f")` {
+		if s := c.String(); s != `Range(field0>=10, other="f")` {
 			t.Fatalf("unexpected string: %s", s)
 		}
 	})
@@ -44,18 +44,20 @@ func TestCall_String(t *testing.T) {
 
 // Ensure condition string with subject is correct.
 func TestCondition_StringWithSubj(t *testing.T) {
-	op := pql.BETWEEN
 	subj := "subj"
 	for _, tt := range []struct {
-		val []interface{}
+		op  pql.Token
+		val interface{}
 		exp string
 	}{
-		{[]interface{}{int64(4), int64(8)}, "4<=subj<=8"},
-		{[]interface{}{uint64(5), uint64(9)}, "5<=subj<=9"},
-		{[]interface{}{pql.Decimal{Value: -401, Scale: 2}, pql.Decimal{Value: 802, Scale: 1}}, "-4.01<=subj<=80.2"},
+		{pql.BETWEEN, []interface{}{int64(4), int64(8)}, "4<=subj<=8"},
+		{pql.BETWEEN, []interface{}{uint64(5), uint64(9)}, "5<=subj<=9"},
+		{pql.BETWEEN, []interface{}{pql.Decimal{Value: -401, Scale: 2}, pql.Decimal{Value: 802, Scale: 1}}, "-4.01<=subj<=80.2"},
+		{pql.EQ, nil, "subj==null"},
+		{pql.NEQ, nil, "subj!=null"},
 	} {
 		c := &pql.Condition{
-			Op:    op,
+			Op:    tt.op,
 			Value: tt.val,
 		}
 		if sws := c.StringWithSubj(subj); sws != tt.exp {
