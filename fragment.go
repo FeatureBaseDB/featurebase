@@ -208,7 +208,6 @@ func (f *fragment) Open() error {
 
 		// Read last bit to determine max row.
 		f.maxRowID = f.storage.Max() / ShardWidth
-		f.stats.Gauge(MetricMaximumRow, float64(f.maxRowID), 1.0)
 		return nil
 	}(); err != nil {
 		f.close()
@@ -581,7 +580,6 @@ func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 	// Update row count if they have increased.
 	if rowID > f.maxRowID {
 		f.maxRowID = rowID
-		f.stats.Gauge(MetricMaximumRow, float64(f.maxRowID), 1.0)
 	}
 
 	return changed, nil

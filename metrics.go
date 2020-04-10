@@ -28,7 +28,6 @@ const (
 	MetricRowBSI                     = "query_row_bsi_total"
 	MetricSetRowAttrs                = "query_setrowattrs_total"
 	MetricSetColumnAttrs             = "query_setcolumnattrs_total"
-	MetricMaximumRow                 = "shard_maximum_row"
 	MetricSetBit                     = "set_bit_total"
 	MetricClearBit                   = "clear_bit_total"
 	MetricImportingN                 = "importing_total"
