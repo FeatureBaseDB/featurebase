@@ -44,9 +44,6 @@ type StatsClient interface {
 	// Sets the value of a metric.
 	Gauge(name string, value float64, rate float64)
 
-	// Sets the value of a metric with custom tags
-	GaugeWithCustomTags(name string, value float64, rate float64, tags []string)
-
 	// Tracks statistical distribution of a metric.
 	Histogram(name string, value float64, rate float64)
 
@@ -76,14 +73,12 @@ func (c *nopStatsClient) WithTags(tags ...string) StatsClient                   
 func (c *nopStatsClient) Count(name string, value int64, rate float64)                              {}
 func (c *nopStatsClient) CountWithCustomTags(name string, value int64, rate float64, tags []string) {}
 func (c *nopStatsClient) Gauge(name string, value float64, rate float64)                            {}
-func (c *nopStatsClient) GaugeWithCustomTags(name string, value float64, rate float64, tags []string) {
-}
-func (c *nopStatsClient) Histogram(name string, value float64, rate float64)    {}
-func (c *nopStatsClient) Set(name string, value string, rate float64)           {}
-func (c *nopStatsClient) Timing(name string, value time.Duration, rate float64) {}
-func (c *nopStatsClient) SetLogger(logger logger.Logger)                        {}
-func (c *nopStatsClient) Open()                                                 {}
-func (c *nopStatsClient) Close() error                                          { return nil }
+func (c *nopStatsClient) Histogram(name string, value float64, rate float64)                        {}
+func (c *nopStatsClient) Set(name string, value string, rate float64)                               {}
+func (c *nopStatsClient) Timing(name string, value time.Duration, rate float64)                     {}
+func (c *nopStatsClient) SetLogger(logger logger.Logger)                                            {}
+func (c *nopStatsClient) Open()                                                                     {}
+func (c *nopStatsClient) Close() error                                                              { return nil }
 
 // expvarStatsClient writes stats out to expvars.
 type expvarStatsClient struct {
@@ -132,13 +127,6 @@ func (c *expvarStatsClient) CountWithCustomTags(name string, value int64, rate f
 
 // Gauge sets the value of a metric.
 func (c *expvarStatsClient) Gauge(name string, value float64, rate float64) {
-	var f expvar.Float
-	f.Set(value)
-	c.m.Set(name, &f)
-}
-
-// GaugeWithCustomTags Sets the value of a metric with custom tags
-func (c *expvarStatsClient) GaugeWithCustomTags(name string, value float64, rate float64, tags []string) {
 	var f expvar.Float
 	f.Set(value)
 	c.m.Set(name, &f)
@@ -213,13 +201,6 @@ func (a MultiStatsClient) CountWithCustomTags(name string, value int64, rate flo
 func (a MultiStatsClient) Gauge(name string, value float64, rate float64) {
 	for _, c := range a {
 		c.Gauge(name, value, rate)
-	}
-}
-
-// GaugeWithCustomTags Sets the value of a metric with custom tags
-func (a MultiStatsClient) GaugeWithCustomTags(name string, value float64, rate float64, tags []string) {
-	for _, c := range a {
-		c.GaugeWithCustomTags(name, value, rate, tags)
 	}
 }
 

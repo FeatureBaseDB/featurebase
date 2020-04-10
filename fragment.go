@@ -30,7 +30,6 @@ import (
 	"os"
 	"runtime/debug"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -209,9 +208,7 @@ func (f *fragment) Open() error {
 
 		// Read last bit to determine max row.
 		f.maxRowID = f.storage.Max() / ShardWidth
-		fieldTag := "field:" + f.field
-		shardTag := "shard:" + strconv.FormatInt(int64(f.shard), 10)
-		f.stats.GaugeWithCustomTags(MetricMaximumRow, float64(f.maxRowID), 1.0, []string{fieldTag, shardTag})
+		f.stats.Gauge(MetricMaximumRow, float64(f.maxRowID), 1.0)
 		return nil
 	}(); err != nil {
 		f.close()
@@ -584,9 +581,7 @@ func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 	// Update row count if they have increased.
 	if rowID > f.maxRowID {
 		f.maxRowID = rowID
-		fieldTag := "field:" + f.field
-		shardTag := "shard:" + strconv.FormatInt(int64(f.shard), 10)
-		f.stats.GaugeWithCustomTags(MetricMaximumRow, float64(f.maxRowID), 1.0, []string{fieldTag, shardTag})
+		f.stats.Gauge(MetricMaximumRow, float64(f.maxRowID), 1.0)
 	}
 
 	return changed, nil

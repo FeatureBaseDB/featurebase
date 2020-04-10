@@ -202,11 +202,6 @@ func (c *prometheusClient) Gauge(name string, value float64, rate float64) {
 	gauge.Set(float64(value))
 }
 
-// GaugeWithCustomTags sets the value of a metric with custom tags.
-func (c *prometheusClient) GaugeWithCustomTags(name string, value float64, rate float64, t []string) {
-	c.WithTags(append(c.tags, t...)...).Gauge(name, value, rate)
-}
-
 // Histogram tracks statistical distribution of a metric.
 func (c *prometheusClient) Histogram(name string, value float64, rate float64) {
 	mu.Lock()
