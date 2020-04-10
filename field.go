@@ -2233,7 +2233,7 @@ func (b *bsiGroup) baseValue(op pql.Token, value int64) (baseValue int64, outOfR
 // baseValueBetween adjusts the min/max value to align with the range for Field.
 func (b *bsiGroup) baseValueBetween(lo, hi int64) (baseValueLo, baseValueHi int64, outOfRange bool) {
 	min, max := b.bitDepthMin(), b.bitDepthMax()
-	if hi < min || lo > max {
+	if hi < min || lo > max || hi < lo {
 		return 0, 0, true
 	}
 
