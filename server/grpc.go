@@ -20,10 +20,12 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/logger"
 	pb "github.com/pilosa/pilosa/v2/proto"
+	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -37,6 +39,8 @@ type grpcHandler struct {
 	api *pilosa.API
 
 	logger logger.Logger
+
+	stats stats.StatsClient
 }
 
 // errorToStatusError appends an appropriate grpc status code
@@ -62,16 +66,23 @@ func (h grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 		Index: req.Index,
 		Query: req.Pql,
 	}
+	t := time.Now()
 	resp, err := h.api.Query(context.Background(), &query)
+	dur := time.Since(t)
 	if err != nil {
 		return errToStatusError(err)
 	}
+	h.stats.Timing(pilosa.MetricGRPCStreamQueryDurationSeconds, dur, 0.1)
+
+	t = time.Now()
 	for row := range makeRows(resp, h.logger) {
 		err = stream.Send(row)
 		if err != nil {
 			return errToStatusError(err)
 		}
 	}
+	dur = time.Since(t)
+	h.stats.Timing(pilosa.MetricGRPCStreamFormatDurationSeconds, dur, 0.1)
 
 	return nil
 }
@@ -82,10 +93,15 @@ func (h grpcHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest)
 		Index: req.Index,
 		Query: req.Pql,
 	}
+	t := time.Now()
 	resp, err := h.api.Query(context.Background(), &query)
+	dur := time.Since(t)
 	if err != nil {
 		return nil, errToStatusError(err)
 	}
+	h.stats.Timing(pilosa.MetricGRPCUnaryQueryDurationSeconds, dur, 0.1)
+
+	t = time.Now()
 	response := &pb.TableResponse{
 		Rows: make([]*pb.Row, 0),
 	}
@@ -95,6 +111,8 @@ func (h grpcHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest)
 		}
 		response.Rows = append(response.Rows, &pb.Row{Columns: row.Columns})
 	}
+	dur = time.Since(t)
+	h.stats.Timing(pilosa.MetricGRPCUnaryFormatDurationSeconds, dur, 0.1)
 
 	return response, nil
 }
@@ -878,6 +896,7 @@ type grpcServer struct {
 	hostPort   string
 
 	logger logger.Logger
+	stats  stats.StatsClient
 }
 
 type grpcServerOption func(s *grpcServer) error
@@ -904,6 +923,13 @@ func OptGRPCServerLogger(logger logger.Logger) grpcServerOption {
 	}
 }
 
+func OptGRPCServerStats(stats stats.StatsClient) grpcServerOption {
+	return func(s *grpcServer) error {
+		s.stats = stats
+		return nil
+	}
+}
+
 func (s *grpcServer) Serve(tlsConfig *tls.Config) error {
 	// create listener
 	lis, err := net.Listen("tcp", s.hostPort)
@@ -920,7 +946,7 @@ func (s *grpcServer) Serve(tlsConfig *tls.Config) error {
 
 	// create grpc server
 	s.grpcServer = grpc.NewServer(opts...)
-	pb.RegisterPilosaServer(s.grpcServer, grpcHandler{api: s.api, logger: s.logger})
+	pb.RegisterPilosaServer(s.grpcServer, grpcHandler{api: s.api, logger: s.logger, stats: s.stats})
 
 	// register the server so its services are available to grpc_cli and others
 	reflection.Register(s.grpcServer)

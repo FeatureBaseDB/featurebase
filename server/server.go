@@ -376,6 +376,7 @@ func (m *Command) SetupServer() error {
 		OptGRPCServerAPI(m.API),
 		OptGRPCServerURI(grpcURI),
 		OptGRPCServerLogger(m.logger),
+		OptGRPCServerStats(statsClient),
 	)
 	return errors.Wrap(err, "new grpc server")
 }
