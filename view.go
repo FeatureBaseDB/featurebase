@@ -56,12 +56,11 @@ type view struct {
 	// Fragments by shard.
 	fragments map[uint64]*fragment
 
-	broadcaster        broadcaster
-	stats              stats.StatsClient
-	rowAttrStore       AttrStore
-	logger             logger.Logger
-	snapshotQueue      snapshotQueue
-	remoteShardPresent func(uint64) bool
+	broadcaster   broadcaster
+	stats         stats.StatsClient
+	rowAttrStore  AttrStore
+	logger        logger.Logger
+	snapshotQueue snapshotQueue
 
 	knownShards       *roaring.Bitmap
 	knownShardsCopied uint32
@@ -81,11 +80,10 @@ func newView(path, index, field, name string, fieldOptions FieldOptions) *view {
 
 		fragments: make(map[uint64]*fragment),
 
-		broadcaster:        NopBroadcaster,
-		stats:              stats.NopStatsClient,
-		logger:             logger.NopLogger,
-		remoteShardPresent: func(uint64) bool { return false },
-		knownShards:        roaring.NewSliceBitmap(),
+		broadcaster: NopBroadcaster,
+		stats:       stats.NopStatsClient,
+		logger:      logger.NopLogger,
+		knownShards: roaring.NewSliceBitmap(),
 	}
 }
 
@@ -322,15 +320,17 @@ func (v *view) CreateFragmentIfNotExists(shard uint64) (*fragment, error) {
 	frag.RowAttrStore = v.rowAttrStore
 
 	v.fragments[shard] = frag
-	v.addKnownShard(shard)
 	v.notifyIfNewShard(shard)
+	v.addKnownShard(shard)
 	return frag, nil
 }
 
 func (v *view) notifyIfNewShard(shard uint64) {
-	if v.remoteShardPresent(shard) { //checks the fields remoteShards bitmap to see if broadcast needed
+
+	if v.knownShards.Contains(shard) { //checks the fields remoteShards bitmap to see if broadcast needed
 		return
 	}
+
 	broadcastChan := make(chan struct{})
 
 	go func() {

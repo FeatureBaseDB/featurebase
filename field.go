@@ -1186,7 +1186,6 @@ func (f *Field) newView(path, name string) *view {
 	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats
 	view.broadcaster = f.broadcaster
-	view.remoteShardPresent = f.containsShard
 	if f.snapshotQueue != nil {
 		view.snapshotQueue = f.snapshotQueue
 	}
@@ -1914,7 +1913,6 @@ func (f *Field) importRoaring(ctx context.Context, data []byte, shard uint64, vi
 	if err != nil {
 		return errors.Wrap(err, "creating fragment")
 	}
-
 	if err := frag.importRoaring(ctx, data, clear); err != nil {
 		return err
 	}
@@ -1939,7 +1937,6 @@ func (f *Field) importRoaringOverwrite(ctx context.Context, data []byte, shard u
 	if err != nil {
 		return errors.Wrap(err, "creating fragment")
 	}
-
 	if err := frag.importRoaringOverwrite(ctx, data, block); err != nil {
 		return err
 	}

@@ -414,7 +414,6 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 	if field == nil {
 		return newNotFoundError(ErrFieldNotFound)
 	}
-
 	errCh := make(chan error, len(nodes))
 
 	for _, node := range nodes {
