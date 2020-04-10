@@ -691,7 +691,6 @@ func (f *fragment) unprotectedSetRow(row *Row, rowID uint64) (changed bool, err 
 
 	// Snapshot storage.
 	f.snapshotQueue.Enqueue(f)
-	f.stats.Count(MetricSetRow, 1, 1.0)
 
 	return changed, nil
 }
@@ -732,8 +731,6 @@ func (f *fragment) unprotectedClearRow(rowID uint64) (changed bool, err error) {
 
 	// Snapshot storage.
 	f.snapshotQueue.Enqueue(f)
-
-	f.stats.Count(MetricClearRow, 1, 1.0)
 
 	return changed, nil
 }
