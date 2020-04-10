@@ -1512,6 +1512,38 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 					pql.Decimal{Value: -1150, Scale: 2},
 				},
 			}
+			// This extra field exists to make there be shards which are present,
+			// but have no decimal values set, to make sure they don't break
+			// the results.
+			if _, err := idx.CreateFieldIfNotExists("z", pilosa.OptFieldTypeDefault()); err != nil {
+				t.Fatal(err)
+			}
+			if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1, z=0)`}); err != nil {
+				t.Fatal(err)
+			} else if !res.Results[0].(bool) {
+				t.Fatalf("expected column changed")
+			}
+			// set things in other shards, that won't have decimal values
+			if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(1234567, z=0)`}); err != nil {
+				t.Fatal(err)
+			} else if !res.Results[0].(bool) {
+				t.Fatalf("expected column changed")
+			}
+			if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2345678, z=0)`}); err != nil {
+				t.Fatal(err)
+			} else if !res.Results[0].(bool) {
+				t.Fatalf("expected column changed")
+			}
+			if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(3456789, z=0)`}); err != nil {
+				t.Fatal(err)
+			} else if !res.Results[0].(bool) {
+				t.Fatalf("expected column changed")
+			}
+			if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(4567890, z=0)`}); err != nil {
+				t.Fatal(err)
+			} else if !res.Results[0].(bool) {
+				t.Fatalf("expected column changed")
+			}
 			for i, test := range tests {
 				fld := fmt.Sprintf("f%d", i)
 				t.Run("MinMaxField_"+fld, func(t *testing.T) {
@@ -1520,7 +1552,7 @@ func TestExecutor_Execute_MinMax(t *testing.T) {
 					}
 
 					if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: fmt.Sprintf(`
-                Set(10, %s=%s)
+                Set(6700000, %s=%s)
             `, fld, test.set)}); err != nil {
 						t.Fatal(err)
 					}
