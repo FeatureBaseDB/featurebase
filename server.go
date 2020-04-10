@@ -675,7 +675,7 @@ func (s *Server) monitorAntiEntropy() {
 		// Record successful sync in log.
 		s.logger.Printf("holder sync complete")
 		dif := time.Since(t)
-		s.holder.Stats.Histogram(MetricAntiEntropyDurationSeconds, float64(dif), 1.0)
+		s.holder.Stats.Timing(MetricAntiEntropyDurationSeconds, dif, 1.0)
 
 		// Drain tick channel since we just finished anti-entropy. If the AE
 		// process took a long time, we don't want them to pile up on each
