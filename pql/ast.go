@@ -795,7 +795,7 @@ type Condition struct {
 
 // String returns the string representation of the condition.
 func (cond *Condition) String() string {
-	return fmt.Sprintf("%s %s", cond.Op.String(), formatValue(cond.Value))
+	return fmt.Sprintf("%s%s", cond.Op.String(), formatValue(cond.Value))
 }
 
 // StringWithSubj returns the string representation of the condition
@@ -926,6 +926,8 @@ func (cond *Condition) StringSliceValue() ([]string, bool) {
 
 func formatValue(v interface{}) string {
 	switch v := v.(type) {
+	case nil:
+		return "null"
 	case string:
 		return fmt.Sprintf("%q", v)
 	case []interface{}:
