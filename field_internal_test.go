@@ -144,6 +144,7 @@ func TestBSIGroup_BaseValue(t *testing.T) {
 			{b1, 5, 20, 5, 20, false},
 			{b1, 20, 1005, 20, 255, false},
 			{b1, 1005, 2000, 0, 0, true},
+			{b1, 0, -1, 0, 0, true},
 
 			{b2, 5, 95, -95, -5, false},
 			{b2, 95, 120, -5, 20, false},
