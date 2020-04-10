@@ -2251,7 +2251,6 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 		return rows[0], nil
 	}
 	row := rows[0].Union(rows[1:]...)
-	f.Stats.Count(MetricRow, 1, 1.0)
 	return row, nil
 
 }

@@ -575,7 +575,7 @@ func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 	// a new copy if no one's reading it.
 	f.rowCache.Add(rowID, nil)
 
-	f.stats.Count(MetricSetBit, 1, 0.001)
+	f.stats.Count(MetricSetBit, 1, 1.0)
 
 	// Update row count if they have increased.
 	if rowID > f.maxRowID {

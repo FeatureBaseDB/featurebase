@@ -66,7 +66,6 @@ func (h grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 		Index: req.Index,
 		Query: req.Pql,
 	}
-	statsTags := make([]string, 0, 5)
 
 	t := time.Now()
 	resp, err := h.api.Query(context.Background(), &query)
@@ -87,16 +86,8 @@ func (h grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 		}
 	}
 	durFormat := time.Since(t)
-	if query.Remote {
-		statsTags = append(statsTags, "where:external")
-	} else {
-		statsTags = append(statsTags, "where:internal")
-	}
-	stats := h.stats.WithTags(statsTags...)
-	if stats != nil {
-		stats.Timing(pilosa.MetricGRPCStreamQueryDurationSeconds, durQuery, 0.1)
-		stats.Timing(pilosa.MetricGRPCStreamFormatDurationSeconds, durFormat, 0.1)
-	}
+	h.stats.Timing(pilosa.MetricGRPCStreamQueryDurationSeconds, durQuery, 0.1)
+	h.stats.Timing(pilosa.MetricGRPCStreamFormatDurationSeconds, durFormat, 0.1)
 
 	return nil
 }
@@ -107,7 +98,6 @@ func (h grpcHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest)
 		Index: req.Index,
 		Query: req.Pql,
 	}
-	statsTags := make([]string, 0, 5)
 
 	t := time.Now()
 	resp, err := h.api.Query(context.Background(), &query)
@@ -131,16 +121,8 @@ func (h grpcHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest)
 		response.Rows = append(response.Rows, &pb.Row{Columns: row.Columns})
 	}
 	durFormat := time.Since(t)
-	if query.Remote {
-		statsTags = append(statsTags, "where:external")
-	} else {
-		statsTags = append(statsTags, "where:internal")
-	}
-	stats := h.stats.WithTags(statsTags...)
-	if stats != nil {
-		h.stats.Timing(pilosa.MetricGRPCUnaryQueryDurationSeconds, durQuery, 0.1)
-		h.stats.Timing(pilosa.MetricGRPCUnaryFormatDurationSeconds, durFormat, 0.1)
-	}
+	h.stats.Timing(pilosa.MetricGRPCUnaryQueryDurationSeconds, durQuery, 0.1)
+	h.stats.Timing(pilosa.MetricGRPCUnaryFormatDurationSeconds, durFormat, 0.1)
 
 	return response, nil
 }
