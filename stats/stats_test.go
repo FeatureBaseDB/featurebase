@@ -46,7 +46,7 @@ func TestMultiStatClient_Expvar(t *testing.T) {
 	hldr.SetBit("d", "f", 0, pilosa.ShardWidth+2)
 	hldr.ClearBit("d", "f", 0, 1)
 
-	indexStats := fmt.Sprintf(`{"%s": %d, "%s": %d, "%s": %d}`, pilosa.MetricClearBit, 1, pilosa.MetricMaximumRow, 0, pilosa.MetricSetBit, 4)
+	indexStats := fmt.Sprintf(`{"%s": %d, "%s": %d}`, pilosa.MetricClearBit, 1, pilosa.MetricSetBit, 4)
 
 	if stats.Expvar.String() != `{"index:d": `+indexStats+`}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
