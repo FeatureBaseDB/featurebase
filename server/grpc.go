@@ -44,9 +44,12 @@ type grpcHandler struct {
 }
 
 // errorToStatusError appends an appropriate grpc status code
-// to the error (returning it as a status.Error). It is
-// assumed that the input err is non-nil.
+// to the error (returning it as a status.Error).
 func errToStatusError(err error) error {
+	if err == nil {
+		return status.New(codes.OK, "").Err()
+	}
+
 	// Check error string.
 	switch errors.Cause(err) {
 	case pilosa.ErrIndexNotFound, pilosa.ErrFieldNotFound:
@@ -68,28 +71,36 @@ func (h grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 	}
 
 	t := time.Now()
-	resp, err := h.api.Query(context.Background(), &query)
+	resp, err := h.api.Query(stream.Context(), &query)
 	durQuery := time.Since(t)
+	// TODO: what about resp.Err?
+	// TODO: what about resp.CollumnAttrSets?
 	if err != nil {
 		return errToStatusError(err)
+	} else if len(resp.Results) != 1 {
+		// TODO: make a test for this
+		return status.Error(codes.InvalidArgument, "QueryPQL handles exactly one query")
 	}
 	longQueryTime := h.api.LongQueryTime()
 	if longQueryTime > 0 && durQuery > longQueryTime {
 		h.logger.Printf("GRPC QueryPQL %v %s", durQuery, query.Query)
 	}
 
+	rslt := resp.Results[0]
+	toRowser, err := toRowserWrapper(rslt)
+	if err != nil {
+		return errors.Wrap(err, "wrapping as type ToRowser")
+	}
+
 	t = time.Now()
-	for row := range makeRows(resp, h.logger) {
-		err = stream.Send(row)
-		if err != nil {
-			return errToStatusError(err)
-		}
+	if err := toRowser.ToRows(stream.Send); err != nil {
+		return errToStatusError(err)
 	}
 	durFormat := time.Since(t)
 	h.stats.Timing(pilosa.MetricGRPCStreamQueryDurationSeconds, durQuery, 0.1)
 	h.stats.Timing(pilosa.MetricGRPCStreamFormatDurationSeconds, durFormat, 0.1)
 
-	return nil
+	return errToStatusError(nil)
 }
 
 // QueryPQLUnary is a unary-response (non-streaming) version of QueryPQL, returning a TableResponse.
@@ -100,31 +111,116 @@ func (h grpcHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest)
 	}
 
 	t := time.Now()
-	resp, err := h.api.Query(context.Background(), &query)
+	resp, err := h.api.Query(ctx, &query)
 	durQuery := time.Since(t)
 	if err != nil {
 		return nil, errToStatusError(err)
+	} else if len(resp.Results) != 1 {
+		// TODO: make a test for this
+		return nil, status.Error(codes.InvalidArgument, "QueryPQLUnary handles exactly one query")
 	}
 	longQueryTime := h.api.LongQueryTime()
 	if longQueryTime > 0 && durQuery > longQueryTime {
 		h.logger.Printf("GRPC QueryPQLUnary %v %s", durQuery, query.Query)
 	}
 
-	t = time.Now()
-	response := &pb.TableResponse{
-		Rows: make([]*pb.Row, 0),
+	rslt := resp.Results[0]
+	toTabler, err := toTablerWrapper(rslt)
+	if err != nil {
+		return nil, errors.Wrap(err, "wrapping as type ToTabler")
 	}
-	for row := range makeRows(resp, h.logger) {
-		if len(row.Headers) != 0 {
-			response.Headers = row.Headers
-		}
-		response.Rows = append(response.Rows, &pb.Row{Columns: row.Columns})
+
+	t = time.Now()
+	table, err := toTabler.ToTable()
+	if err != nil {
+		return nil, errToStatusError(err)
 	}
 	durFormat := time.Since(t)
+
 	h.stats.Timing(pilosa.MetricGRPCUnaryQueryDurationSeconds, durQuery, 0.1)
 	h.stats.Timing(pilosa.MetricGRPCUnaryFormatDurationSeconds, durFormat, 0.1)
 
-	return response, nil
+	return table, errToStatusError(nil)
+}
+
+// ResultUint64 is a wrapper around a uint64 result type
+// so that we can implement the ToTabler and ToRowser
+// interfaces.
+type ResultUint64 uint64
+
+// ToTable implements the ToTabler interface.
+func (r ResultUint64) ToTable() (*pb.TableResponse, error) {
+	return pb.RowsToTable(&r, 1)
+}
+
+// ToRows implements the ToRowser interface.
+func (r ResultUint64) ToRows(callback func(*pb.RowResponse) error) error {
+	return callback(&pb.RowResponse{
+		Headers: []*pb.ColumnInfo{{Name: "count", Datatype: "uint64"}},
+		Columns: []*pb.ColumnResponse{
+			&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(r)}},
+		}})
+}
+
+// ResultBool is a wrapper around a bool result type
+// so that we can implement the ToTabler and ToRowser
+// interfaces.
+type ResultBool bool
+
+// ToTable implements the ToTabler interface.
+func (r ResultBool) ToTable() (*pb.TableResponse, error) {
+	return pb.RowsToTable(&r, 1)
+}
+
+// ToRows implements the ToRowser interface.
+func (r ResultBool) ToRows(callback func(*pb.RowResponse) error) error {
+	return callback(&pb.RowResponse{
+		Headers: []*pb.ColumnInfo{{Name: "result", Datatype: "bool"}},
+		Columns: []*pb.ColumnResponse{
+			&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BoolVal{BoolVal: bool(r)}},
+		}})
+}
+
+// Normally we wouldn't need this wrapper, but since pilosa returns
+// some concrete types for which we can't implement the ToTabler
+// interface, we have to check for those here and then wrap them
+// with a custom type.
+func toTablerWrapper(result interface{}) (pb.ToTabler, error) {
+	toTabler, ok := result.(pb.ToTabler)
+	if !ok {
+		switch v := result.(type) {
+		case []pilosa.GroupCount:
+			toTabler = pilosa.GroupCounts(v)
+		case uint64:
+			toTabler = ResultUint64(v)
+		case bool:
+			toTabler = ResultBool(v)
+		default:
+			return nil, errors.Errorf("ToTabler interface not implemented by type: %T", result)
+		}
+	}
+	return toTabler, nil
+}
+
+// Normally we wouldn't need this wrapper, but since pilosa returns
+// some concrete types for which we can't implement the ToRowser
+// interface, we have to check for those here and then wrap them
+// with a custom type.
+func toRowserWrapper(result interface{}) (pb.ToRowser, error) {
+	toRowser, ok := result.(pb.ToRowser)
+	if !ok {
+		switch v := result.(type) {
+		case []pilosa.GroupCount:
+			toRowser = pilosa.GroupCounts(v)
+		case uint64:
+			toRowser = ResultUint64(v)
+		case bool:
+			toRowser = ResultBool(v)
+		default:
+			return nil, errors.Errorf("ToRowser interface not implemented by type: %T", result)
+		}
+	}
+	return toRowser, nil
 }
 
 // fieldDataType returns a useful data type (string,
@@ -161,7 +257,7 @@ func fieldDataType(f *pilosa.Field) string {
 func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectServer) error {
 	const defaultLimit = 100000
 
-	index, err := h.api.Index(context.Background(), req.Index)
+	index, err := h.api.Index(stream.Context(), req.Index)
 	if err != nil {
 		return errToStatusError(err)
 	}
@@ -223,7 +319,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 				Index: req.Index,
 				Query: pql,
 			}
-			resp, err := h.api.Query(context.Background(), &query)
+			resp, err := h.api.Query(stream.Context(), &query)
 			if err != nil {
 				return errors.Wrapf(err, "querying for all: %s", pql)
 			}
@@ -260,7 +356,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						Index: req.Index,
 						Query: pql,
 					}
-					resp, err := h.api.Query(context.Background(), &query)
+					resp, err := h.api.Query(stream.Context(), &query)
 					if err != nil {
 						return errors.Wrapf(err, "querying rows for set: %s", pql)
 					}
@@ -284,7 +380,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						Index: req.Index,
 						Query: pql,
 					}
-					resp, err := h.api.Query(context.Background(), &query)
+					resp, err := h.api.Query(stream.Context(), &query)
 					if err != nil {
 						return errors.Wrap(err, "querying rows for mutex")
 					}
@@ -316,7 +412,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 							if err != nil {
 								return errors.Wrap(err, "getting int value")
 							} else if ok {
-								vals, err := h.api.TranslateIndexIDs(context.Background(), fi, []uint64{uint64(intVal)})
+								vals, err := h.api.TranslateIndexIDs(stream.Context(), fi, []uint64{uint64(intVal)})
 								if err != nil {
 									return errors.Wrap(err, "getting keys for ids")
 								}
@@ -369,7 +465,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						Index: req.Index,
 						Query: pql,
 					}
-					resp, err := h.api.Query(context.Background(), &query)
+					resp, err := h.api.Query(stream.Context(), &query)
 					if err != nil {
 						return errors.Wrap(err, "querying rows for bool")
 					}
@@ -442,7 +538,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 				Index: req.Index,
 				Query: pql,
 			}
-			resp, err := h.api.Query(context.Background(), &query)
+			resp, err := h.api.Query(stream.Context(), &query)
 			if err != nil {
 				return errors.Wrapf(err, "querying for all: %s", pql)
 			}
@@ -479,7 +575,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						Index: req.Index,
 						Query: pql,
 					}
-					resp, err := h.api.Query(context.Background(), &query)
+					resp, err := h.api.Query(stream.Context(), &query)
 					if err != nil {
 						return errors.Wrap(err, "querying set rows(keys)")
 					}
@@ -503,7 +599,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						Index: req.Index,
 						Query: pql,
 					}
-					resp, err := h.api.Query(context.Background(), &query)
+					resp, err := h.api.Query(stream.Context(), &query)
 					if err != nil {
 						return errors.Wrap(err, "querying mutex rows(keys)")
 					}
@@ -526,7 +622,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 
 				case "int":
 					// Translate column key.
-					id, err := h.api.TranslateIndexKey(context.Background(), index.Name(), col)
+					id, err := h.api.TranslateIndexKey(stream.Context(), index.Name(), col)
 					if err != nil {
 						return errors.Wrap(err, "translating column key")
 					}
@@ -541,7 +637,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 							if err != nil {
 								return errors.Wrap(err, "getting int value")
 							} else if ok {
-								vals, err := h.api.TranslateIndexIDs(context.Background(), fi, []uint64{uint64(intVal)})
+								vals, err := h.api.TranslateIndexIDs(stream.Context(), fi, []uint64{uint64(intVal)})
 								if err != nil {
 									return errors.Wrap(err, "getting keys for ids")
 								}
@@ -578,7 +674,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 
 				case "decimal":
 					// Translate column key.
-					id, err := h.api.TranslateIndexKey(context.Background(), index.Name(), col)
+					id, err := h.api.TranslateIndexKey(stream.Context(), index.Name(), col)
 					if err != nil {
 						return errors.Wrap(err, "translating column key")
 					}
@@ -600,7 +696,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						Index: req.Index,
 						Query: pql,
 					}
-					resp, err := h.api.Query(context.Background(), &query)
+					resp, err := h.api.Query(stream.Context(), &query)
 					if err != nil {
 						return errors.Wrap(err, "querying bool rows(keys)")
 					}
@@ -635,269 +731,6 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 
 	}
 	return nil
-}
-
-// I think ideally this would be plugged in the executor somewhere
-// in order to get some concurrency benefit but we can
-// start with the combined response
-func makeRows(resp pilosa.QueryResponse, logger logger.Logger) chan *pb.RowResponse {
-	results := make(chan *pb.RowResponse)
-	go func() {
-		var breakLoop bool // Support the "break" inside the switch.
-		for _, result := range resp.Results {
-			if breakLoop {
-				break
-			}
-			switch r := result.(type) {
-			case *pilosa.Row:
-				if len(r.Keys) > 0 {
-					// Column keys
-					ci := []*pb.ColumnInfo{
-						{Name: "_id", Datatype: "string"},
-					}
-					for _, x := range r.Keys {
-						results <- &pb.RowResponse{
-							Headers: ci,
-							Columns: []*pb.ColumnResponse{
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: x}},
-							}}
-						ci = nil //only send on the first
-					}
-				} else {
-					// Column IDs
-					ci := []*pb.ColumnInfo{
-						{Name: "_id", Datatype: "uint64"},
-					}
-					for _, x := range r.Columns() {
-						results <- &pb.RowResponse{
-							Headers: ci,
-							Columns: []*pb.ColumnResponse{
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: x}},
-							}}
-						ci = nil //only send on the first
-					}
-
-					// The following will return roaring segments.
-					// This is commented out for now until we decide how we want to use this.
-					/*
-						// Roaring segments
-						ci := []*pb.ColumnInfo{
-							// TODO:
-							{Name: "shard", Datatype: "uint64"},
-							{Name: "segment", Datatype: "roaring"},
-						}
-						for _, x := range r.Segments() {
-							shard, b := x.Raw()
-							results <- &pb.RowResponse{
-								Headers: ci,
-								Columns: []*pb.ColumnResponse{
-									&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_IntVal{int64(shard)}},
-									&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BlobVal{b}},
-								}}
-							ci = nil //only send on the first
-						}
-					*/
-				}
-			case pilosa.PairField:
-				if r.Pair.Key != "" {
-					results <- &pb.RowResponse{
-						Headers: []*pb.ColumnInfo{
-							{Name: r.Field, Datatype: "string"},
-							{Name: "count", Datatype: "uint64"},
-						},
-						Columns: []*pb.ColumnResponse{
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: r.Pair.Key}},
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: r.Pair.Count}},
-						},
-					}
-				} else {
-					results <- &pb.RowResponse{
-						Headers: []*pb.ColumnInfo{
-							{Name: r.Field, Datatype: "uint64"},
-							{Name: "count", Datatype: "uint64"},
-						},
-						Columns: []*pb.ColumnResponse{
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: r.Pair.ID}},
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: r.Pair.Count}},
-						},
-					}
-				}
-			case *pilosa.PairsField:
-				// Determine if the ID has string keys.
-				var stringKeys bool
-				if len(r.Pairs) > 0 {
-					if r.Pairs[0].Key != "" {
-						stringKeys = true
-					}
-				}
-
-				dtype := "uint64"
-				if stringKeys {
-					dtype = "string"
-				}
-				ci := []*pb.ColumnInfo{
-					{Name: r.Field, Datatype: dtype},
-					{Name: "count", Datatype: "uint64"},
-				}
-				for _, pair := range r.Pairs {
-					if stringKeys {
-						results <- &pb.RowResponse{
-							Headers: ci,
-							Columns: []*pb.ColumnResponse{
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: pair.Key}},
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(pair.Count)}},
-							},
-						}
-					} else {
-						results <- &pb.RowResponse{
-							Headers: ci,
-							Columns: []*pb.ColumnResponse{
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(pair.ID)}},
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(pair.Count)}},
-							},
-						}
-					}
-					ci = nil //only send on the first
-				}
-			case []pilosa.GroupCount:
-				for i, gc := range r {
-					var ci []*pb.ColumnInfo
-					if i == 0 {
-						for _, fieldRow := range gc.Group {
-							if fieldRow.RowKey != "" {
-								ci = append(ci, &pb.ColumnInfo{Name: fieldRow.Field, Datatype: "string"})
-							} else if fieldRow.Value != nil {
-								ci = append(ci, &pb.ColumnInfo{Name: fieldRow.Field, Datatype: "int64"})
-							} else {
-								ci = append(ci, &pb.ColumnInfo{Name: fieldRow.Field, Datatype: "uint64"})
-							}
-						}
-						ci = append(ci, &pb.ColumnInfo{Name: "count", Datatype: "uint64"})
-						ci = append(ci, &pb.ColumnInfo{Name: "sum", Datatype: "int64"})
-					}
-					rowResp := &pb.RowResponse{
-						Headers: ci,
-						Columns: []*pb.ColumnResponse{},
-					}
-
-					for _, fieldRow := range gc.Group {
-						if fieldRow.RowKey != "" {
-							rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: fieldRow.RowKey}})
-						} else if fieldRow.Value != nil {
-							rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: *fieldRow.Value}})
-						} else {
-							rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: fieldRow.RowID}})
-						}
-					}
-					rowResp.Columns = append(rowResp.Columns,
-						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: gc.Count}},
-						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: gc.Sum}},
-					)
-					results <- rowResp
-				}
-			case pilosa.RowIdentifiers:
-				if len(r.Keys) > 0 {
-					ci := []*pb.ColumnInfo{{Name: r.Field(), Datatype: "string"}}
-					for _, key := range r.Keys {
-						results <- &pb.RowResponse{
-							Headers: ci,
-							Columns: []*pb.ColumnResponse{
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: key}},
-							}}
-						ci = nil
-					}
-				} else {
-					ci := []*pb.ColumnInfo{{Name: r.Field(), Datatype: "uint64"}}
-					for _, id := range r.Rows {
-						results <- &pb.RowResponse{
-							Headers: ci,
-							Columns: []*pb.ColumnResponse{
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(id)}},
-							}}
-						ci = nil
-					}
-				}
-			case uint64:
-				ci := []*pb.ColumnInfo{{Name: "count", Datatype: "uint64"}}
-				results <- &pb.RowResponse{
-					Headers: ci,
-					Columns: []*pb.ColumnResponse{
-						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(r)}},
-					}}
-			case bool:
-				ci := []*pb.ColumnInfo{{Name: "result", Datatype: "bool"}}
-				results <- &pb.RowResponse{
-					Headers: ci,
-					Columns: []*pb.ColumnResponse{
-						&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_BoolVal{BoolVal: r}},
-					}}
-			case pilosa.ValCount:
-				var ci []*pb.ColumnInfo
-				// ValCount can have a decimal, float, or integer value, but
-				// not more than one (as of this writing).
-				if r.DecimalVal != nil {
-					ci = []*pb.ColumnInfo{
-						{Name: "value", Datatype: "decimal"},
-						{Name: "count", Datatype: "int64"},
-					}
-					results <- &pb.RowResponse{
-						Headers: ci,
-						Columns: []*pb.ColumnResponse{
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_DecimalVal{DecimalVal: &pb.Decimal{Value: r.DecimalVal.Value, Scale: r.DecimalVal.Scale}}},
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: r.Count}},
-						}}
-				} else if r.FloatVal != 0 {
-					ci = []*pb.ColumnInfo{
-						{Name: "value", Datatype: "float64"},
-						{Name: "count", Datatype: "int64"},
-					}
-					results <- &pb.RowResponse{
-						Headers: ci,
-						Columns: []*pb.ColumnResponse{
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Float64Val{Float64Val: r.FloatVal}},
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: r.Count}},
-						}}
-				} else {
-					ci = []*pb.ColumnInfo{
-						{Name: "value", Datatype: "int64"},
-						{Name: "count", Datatype: "int64"},
-					}
-					results <- &pb.RowResponse{
-						Headers: ci,
-						Columns: []*pb.ColumnResponse{
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: r.Val}},
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: r.Count}},
-						}}
-				}
-			case pilosa.SignedRow:
-				// TODO: address the overflow issue with values outside the int64 range
-				ci := []*pb.ColumnInfo{{Name: r.Field(), Datatype: "int64"}}
-				negs := r.Neg.Columns()
-				for i := len(negs) - 1; i >= 0; i-- {
-					results <- &pb.RowResponse{
-						Headers: ci,
-						Columns: []*pb.ColumnResponse{
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: -1 * int64(negs[i])}},
-						}}
-					ci = nil
-				}
-				for _, id := range r.Pos.Columns() {
-					results <- &pb.RowResponse{
-						Headers: ci,
-						Columns: []*pb.ColumnResponse{
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: int64(id)}},
-						}}
-					ci = nil
-				}
-
-			default:
-				logger.Printf("unhandled %T\n", r)
-				breakLoop = true
-			}
-		}
-		close(results)
-	}()
-	return results
 }
 
 type grpcServer struct {

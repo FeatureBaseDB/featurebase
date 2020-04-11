@@ -15,10 +15,10 @@
 package pilosa
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -35,6 +35,53 @@ type StreamClient interface {
 // returned by the stream via Recv().
 type StreamServer interface {
 	Send(*RowResponse) error
+}
+
+// ToTabler is an interface for any type that can
+// represent itself as a TableResponse.
+type ToTabler interface {
+	ToTable() (*TableResponse, error)
+}
+
+// ToRowser is an interface for any type that can
+// represent itself as one or more RowResponses.
+// ToRows takes a callback function which should be
+// called for each row in the response.
+type ToRowser interface {
+	ToRows(func(*RowResponse) error) error
+}
+
+// RowsToTable is a helper function which takes a ToRowser,
+// along with the number of rows, and returns a TableResponse.
+// Obviously passing the number of rows seems unnecessary,
+// and we could remove that requirement, but for now we
+// do it to allow for pre-allocation of the rows slice.
+func RowsToTable(tr ToRowser, n int) (*TableResponse, error) {
+	var headers []*ColumnInfo
+	rows := make([]*Row, n)
+
+	// This callback gets called for every "row" in r.
+	// Each row populates its position in the pre-allocated
+	// `rows`. The headers get set based on those received
+	// in the first row.
+	var idx int
+	cb := func(rr *RowResponse) error {
+		if idx == 0 {
+			headers = rr.GetHeaders()
+		}
+		rows[idx] = &Row{Columns: rr.GetColumns()}
+		idx++
+		return nil
+	}
+
+	if err := tr.ToRows(cb); err != nil {
+		return nil, errors.Wrap(err, "calling callback")
+	}
+
+	return &TableResponse{
+		Headers: headers,
+		Rows:    rows,
+	}, nil
 }
 
 // EOF acts as an io.EOF encoded into a RowResponse.

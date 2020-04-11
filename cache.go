@@ -24,7 +24,9 @@ import (
 	"time"
 
 	"github.com/pilosa/pilosa/v2/lru"
+	pb "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/stats"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -323,10 +325,42 @@ type Pair struct {
 	Count uint64 `json:"count"`
 }
 
-// PairField
+// PairField is a Pair with its associated field.
 type PairField struct {
 	Pair  Pair
 	Field string
+}
+
+// ToTable implements the ToTabler interface.
+func (p PairField) ToTable() (*pb.TableResponse, error) {
+	return pb.RowsToTable(p, 1)
+}
+
+// ToRows implements the ToRowser interface.
+func (p PairField) ToRows(callback func(*pb.RowResponse) error) error {
+	if p.Pair.Key != "" {
+		return callback(&pb.RowResponse{
+			Headers: []*pb.ColumnInfo{
+				{Name: p.Field, Datatype: "string"},
+				{Name: "count", Datatype: "uint64"},
+			},
+			Columns: []*pb.ColumnResponse{
+				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: p.Pair.Key}},
+				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: p.Pair.Count}},
+			},
+		})
+	} else {
+		return callback(&pb.RowResponse{
+			Headers: []*pb.ColumnInfo{
+				{Name: p.Field, Datatype: "uint64"},
+				{Name: "count", Datatype: "uint64"},
+			},
+			Columns: []*pb.ColumnResponse{
+				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: p.Pair.ID}},
+				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: p.Pair.Count}},
+			},
+		})
+	}
 }
 
 // MarshalJSON marshals PairField into a JSON-encoded byte slice,
@@ -410,10 +444,58 @@ func (p Pairs) String() string {
 	return buf.String()
 }
 
-// PairsField
+// PairsField is a Pairs object with its associated field.
 type PairsField struct {
 	Pairs []Pair
 	Field string
+}
+
+// ToTable implements the ToTabler interface.
+func (p *PairsField) ToTable() (*pb.TableResponse, error) {
+	return pb.RowsToTable(p, len(p.Pairs))
+}
+
+// ToRows implements the ToRowser interface.
+func (p *PairsField) ToRows(callback func(*pb.RowResponse) error) error {
+	// Determine if the ID has string keys.
+	var stringKeys bool
+	if len(p.Pairs) > 0 {
+		if p.Pairs[0].Key != "" {
+			stringKeys = true
+		}
+	}
+
+	dtype := "uint64"
+	if stringKeys {
+		dtype = "string"
+	}
+	ci := []*pb.ColumnInfo{
+		{Name: p.Field, Datatype: dtype},
+		{Name: "count", Datatype: "uint64"},
+	}
+	for _, pair := range p.Pairs {
+		if stringKeys {
+			if err := callback(&pb.RowResponse{
+				Headers: ci,
+				Columns: []*pb.ColumnResponse{
+					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: pair.Key}},
+					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(pair.Count)}},
+				}}); err != nil {
+				return errors.Wrap(err, "calling callback")
+			}
+		} else {
+			if err := callback(&pb.RowResponse{
+				Headers: ci,
+				Columns: []*pb.ColumnResponse{
+					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(pair.ID)}},
+					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(pair.Count)}},
+				}}); err != nil {
+				return errors.Wrap(err, "calling callback")
+			}
+		}
+		ci = nil //only send on the first
+	}
+	return nil
 }
 
 // MarshalJSON marshals PairsField into a JSON-encoded byte slice,
