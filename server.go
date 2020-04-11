@@ -382,7 +382,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	// Append the NodeID tag to stats.
-	s.holder.Stats = s.holder.Stats.WithTags(fmt.Sprintf("NodeID:%s", s.nodeID))
+	s.holder.Stats = s.holder.Stats.WithTags(fmt.Sprintf("node_id:%s", s.nodeID))
 
 	s.executor.Holder = s.holder
 	s.executor.Node = node
