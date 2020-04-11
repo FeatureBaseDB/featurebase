@@ -270,10 +270,10 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 		longQueryTime := h.api.LongQueryTime()
 		if longQueryTime > 0 && dur > longQueryTime {
 			queryRequest := r.Context().Value(contextKeyQueryRequest)
-			req, ok := queryRequest.(*pilosa.QueryRequest)
-			queryString := req.Query
-			if !ok {
-				queryString = ""
+
+			var queryString string
+			if req, ok := queryRequest.(*pilosa.QueryRequest); ok {
+				queryString = req.Query
 			}
 
 			h.logger.Printf("%s %s %v %s", r.Method, r.URL.String(), dur, queryString)
