@@ -278,7 +278,6 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 
 			h.logger.Printf("%s %s %v %s", r.Method, r.URL.String(), dur, queryString)
 			statsTags = append(statsTags, "slow_query")
-			r.Body.Close()
 		}
 
 		pathParts := strings.Split(r.URL.Path, "/")
@@ -1541,7 +1540,6 @@ func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *ht
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
-	defer r.Body.Close()
 	// Decode request.
 	var req removeNodeRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -1628,7 +1626,6 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
 		return
 	}
-	defer r.Body.Close()
 	err := h.api.ClusterMessage(r.Context(), r.Body)
 	if err != nil {
 		// TODO this was the previous behavior, but perhaps not everything is a bad request
@@ -1649,7 +1646,6 @@ func (h *Handler) handlePostTranslateData(w http.ResponseWriter, r *http.Request
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer r.Body.Close()
 	// Stream all translation data.
 	rd, err := h.api.GetTranslateEntryReader(r.Context(), offsets)
 	if errors.Cause(err) == pilosa.ErrNotImplemented {
@@ -1753,7 +1749,6 @@ func (h *Handler) handlePostImportColumnAttrs(w http.ResponseWriter, r *http.Req
 		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
 		return
 	}
-	defer r.Body.Close()
 
 	opts := []pilosa.ImportOption{}
 
@@ -1790,7 +1785,6 @@ func (h *Handler) handlePostImportColumnAttrs(w http.ResponseWriter, r *http.Req
 
 // handlPostRoaringImport
 func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
 	// Verify that request is only communicating over protobufs.
 	if r.Header.Get("Content-Type") != "application/x-protobuf" {
 		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
@@ -1872,7 +1866,6 @@ func (h *Handler) handlePostTranslateKeys(w http.ResponseWriter, r *http.Request
 		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
 		return
 	}
-	defer r.Body.Close()
 
 	buf, err := h.api.TranslateKeys(r.Context(), r.Body)
 	if err != nil {
@@ -1896,7 +1889,6 @@ func (h *Handler) handlePostTranslateIDs(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
 		return
 	}
-	defer r.Body.Close()
 	buf, err := h.api.TranslateIDs(r.Context(), r.Body)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("translate ids: %v", err), http.StatusInternalServerError)
