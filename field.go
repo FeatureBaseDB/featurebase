@@ -413,13 +413,6 @@ func (f *Field) AvailableShards() *roaring.Bitmap {
 	return b
 }
 
-// constainsShard is used for limiting unnecessary CreateShard broadcast
-func (f *Field) containsShard(shard uint64) bool {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	return f.remoteAvailableShards.Contains(shard)
-}
-
 // AddRemoteAvailableShards merges the set of available shards into the current known set
 // and saves the set to a file.
 func (f *Field) AddRemoteAvailableShards(b *roaring.Bitmap) error {
@@ -1186,7 +1179,6 @@ func (f *Field) newView(path, name string) *view {
 	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats
 	view.broadcaster = f.broadcaster
-	view.remoteShardPresent = f.containsShard
 	if f.snapshotQueue != nil {
 		view.snapshotQueue = f.snapshotQueue
 	}
@@ -1914,7 +1906,6 @@ func (f *Field) importRoaring(ctx context.Context, data []byte, shard uint64, vi
 	if err != nil {
 		return errors.Wrap(err, "creating fragment")
 	}
-
 	if err := frag.importRoaring(ctx, data, clear); err != nil {
 		return err
 	}
@@ -1939,7 +1930,6 @@ func (f *Field) importRoaringOverwrite(ctx context.Context, data []byte, shard u
 	if err != nil {
 		return errors.Wrap(err, "creating fragment")
 	}
-
 	if err := frag.importRoaringOverwrite(ctx, data, block); err != nil {
 		return err
 	}

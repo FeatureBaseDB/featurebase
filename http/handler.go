@@ -1626,7 +1626,6 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
 		return
 	}
-	defer r.Body.Close()
 	err := h.api.ClusterMessage(r.Context(), r.Body)
 	if err != nil {
 		// TODO this was the previous behavior, but perhaps not everything is a bad request
@@ -1647,7 +1646,6 @@ func (h *Handler) handlePostTranslateData(w http.ResponseWriter, r *http.Request
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	// Stream all translation data.
 	rd, err := h.api.GetTranslateEntryReader(r.Context(), offsets)
 	if errors.Cause(err) == pilosa.ErrNotImplemented {
@@ -1795,7 +1793,6 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
 		return
 	}
-
 	indexName := mux.Vars(r)["index"]
 	fieldName := mux.Vars(r)["field"]
 
@@ -1833,7 +1830,6 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 		http.Error(w, "shard should be an unsigned integer", http.StatusBadRequest)
 		return
 	}
-
 	resp := &pilosa.ImportResponse{}
 	// TODO give meaningful stats for import
 	err = h.api.ImportRoaring(ctx, indexName, fieldName, shard, remote, req)
@@ -1893,7 +1889,6 @@ func (h *Handler) handlePostTranslateIDs(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
 		return
 	}
-
 	buf, err := h.api.TranslateIDs(r.Context(), r.Body)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("translate ids: %v", err), http.StatusInternalServerError)
