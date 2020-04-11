@@ -270,19 +270,23 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 		longQueryTime := h.api.LongQueryTime()
 		if longQueryTime > 0 && dur > longQueryTime {
 			queryRequest := r.Context().Value(contextKeyQueryRequest)
-			req, ok := queryRequest.(*pilosa.QueryRequest)
-			queryString := req.Query
-			if !ok {
-				queryString = ""
+
+			var queryString string
+			if req, ok := queryRequest.(*pilosa.QueryRequest); ok {
+				queryString = req.Query
 			}
 
 			h.logger.Printf("%s %s %v %s", r.Method, r.URL.String(), dur, queryString)
-			statsTags = append(statsTags, "slow_query")
+			statsTags = append(statsTags, "slow:true")
+		} else {
+			statsTags = append(statsTags, "slow:false")
 		}
 
 		pathParts := strings.Split(r.URL.Path, "/")
 		if externalPrefixFlag[pathParts[1]] {
-			statsTags = append(statsTags, "external")
+			statsTags = append(statsTags, "where:external")
+		} else {
+			statsTags = append(statsTags, "where:internal")
 		}
 
 		statsTags = append(statsTags, "useragent:"+r.UserAgent())
@@ -296,7 +300,7 @@ func (h *Handler) collectStats(next http.Handler) http.Handler {
 
 		stats := h.api.StatsWithTags(statsTags)
 		if stats != nil {
-			stats.Timing("http.request", dur, 0.1)
+			stats.Timing(pilosa.MetricHTTPRequest, dur, 0.1)
 		}
 	})
 }

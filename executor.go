@@ -462,7 +462,13 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 	} else if err := e.validateCallArgs(c); err != nil {
 		return nil, errors.Wrap(err, "validating args")
 	}
-	indexTag := fmt.Sprintf("index:%s", index)
+	indexTag := "index:" + index
+	metricName := "query_" + strings.ToLower(c.Name) + "_total"
+	statFn := func() {
+		if !opt.Remote {
+			e.Holder.Stats.CountWithCustomTags(metricName, 1, 1.0, []string{indexTag})
+		}
+	}
 
 	// Fixes #2009
 	// See: https://github.com/pilosa/pilosa/issues/2009
@@ -487,63 +493,71 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 
 	// Special handling for mutation and top-n calls.
 	if op, ok := e.additionalCountOps[c.Name]; ok {
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		statFn()
 		return e.executeGenericCount(ctx, index, c, op, shards, opt)
 	}
 	if op, ok := e.additionalFieldOps[c.Name]; ok {
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		statFn()
 		return e.executeGenericField(ctx, index, c, op, shards, opt)
 	}
 	switch c.Name {
 	case "Sum":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		statFn()
 		return e.executeSum(ctx, index, c, shards, opt)
 	case "Min":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		statFn()
 		return e.executeMin(ctx, index, c, shards, opt)
 	case "Max":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		statFn()
 		return e.executeMax(ctx, index, c, shards, opt)
 	case "MinRow":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		statFn()
 		return e.executeMinRow(ctx, index, c, shards, opt)
 	case "MaxRow":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		statFn()
 		return e.executeMaxRow(ctx, index, c, shards, opt)
 	case "Clear":
+		statFn()
 		return e.executeClearBit(ctx, index, c, opt)
 	case "ClearRow":
+		statFn()
 		return e.executeClearRow(ctx, index, c, shards, opt)
 	case "Store":
+		statFn()
 		return e.executeSetRow(ctx, index, c, shards, opt)
 	case "Count":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		statFn()
 		return e.executeCount(ctx, index, c, shards, opt)
 	case "Set":
+		statFn()
 		return e.executeSet(ctx, index, c, opt)
 	case "SetRowAttrs":
+		statFn()
 		return nil, e.executeSetRowAttrs(ctx, index, c, opt)
 	case "SetColumnAttrs":
+		statFn()
 		return nil, e.executeSetColumnAttrs(ctx, index, c, opt)
 	case "TopN":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		statFn()
 		return e.executeTopN(ctx, index, c, shards, opt)
 	case "Rows":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		statFn()
 		return e.executeRows(ctx, index, c, shards, opt)
 	case "GroupBy":
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		statFn()
 		return e.executeGroupBy(ctx, index, c, shards, opt)
 	case "Options":
+		statFn()
 		return e.executeOptionsCall(ctx, index, c, shards, opt)
 	case "IncludesColumn":
 		return e.executeIncludesColumnCall(ctx, index, c, shards, opt)
 	case "All":
+		statFn()
 		return e.executeAllCall(ctx, index, c, shards, opt)
 	case "Precomputed":
 		return e.executePrecomputedCall(ctx, index, c, shards, opt)
 	default:
-		e.Holder.Stats.CountWithCustomTags(c.Name, 1, 1.0, []string{indexTag})
+		statFn()
 		return e.executeBitmapCall(ctx, index, c, shards, opt)
 	}
 }
@@ -1022,6 +1036,15 @@ func (e *executor) executePrecomputedCall(ctx context.Context, index string, c *
 func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (*Row, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeBitmapCall")
 	defer span.Finish()
+
+	indexTag := "index:" + index
+	metricName := "query_" + strings.ToLower(c.Name) + "_total"
+	if c.Name == "Row" && c.HasConditionArg() {
+		metricName = "query_row_bsi_total"
+	}
+	if !opt.Remote {
+		e.Holder.Stats.CountWithCustomTags(metricName, 1, 1.0, []string{indexTag})
+	}
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(shard uint64) (interface{}, error) {
@@ -2228,7 +2251,6 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 		return rows[0], nil
 	}
 	row := rows[0].Union(rows[1:]...)
-	f.Stats.Count("range", 1, 1.0)
 	return row, nil
 
 }
@@ -2359,7 +2381,6 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 			return frag.notNull()
 		}
 
-		f.Stats.Count("range:bsigroup", 1, 1.0)
 		return frag.rangeOp(cond.Op, bsig.BitDepth, baseValue)
 	}
 }
@@ -3102,7 +3123,6 @@ func (e *executor) executeSetRowAttrs(ctx context.Context, index string, c *pql.
 	if err := field.RowAttrStore().SetAttrs(rowID, attrs); err != nil {
 		return err
 	}
-	field.Stats.Count("SetRowAttrs", 1, 1.0)
 
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {
@@ -3196,7 +3216,11 @@ func (e *executor) executeBulkSetRowAttrs(ctx context.Context, index string, cal
 		if err := field.RowAttrStore().SetBulkAttrs(fieldMap); err != nil {
 			return nil, err
 		}
-		field.Stats.Count("SetRowAttrs", 1, 1.0)
+	}
+
+	if !opt.Remote {
+		tags := []string{"index:" + index, "bulk:true"}
+		e.Holder.Stats.CountWithCustomTags(MetricSetRowAttrs, int64(len(m)), 1.0, tags)
 	}
 
 	// Do not forward call if this is already being forwarded.
@@ -3250,7 +3274,6 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, index string, c *p
 	if err := idx.ColumnAttrStore().SetAttrs(col, attrs); err != nil {
 		return err
 	}
-	idx.Stats.Count("SetProfileAttrs", 1, 1.0)
 	// Do not forward call if this is already being forwarded.
 	if opt.Remote {
 		return nil

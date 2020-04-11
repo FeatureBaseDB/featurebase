@@ -208,7 +208,6 @@ func (f *fragment) Open() error {
 
 		// Read last bit to determine max row.
 		f.maxRowID = f.storage.Max() / ShardWidth
-		f.stats.Gauge("rows", float64(f.maxRowID), 1.0)
 		return nil
 	}(); err != nil {
 		f.close()
@@ -576,12 +575,11 @@ func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 	// a new copy if no one's reading it.
 	f.rowCache.Add(rowID, nil)
 
-	f.stats.Count("setBit", 1, 0.001)
+	f.stats.Count(MetricSetBit, 1, 1.0)
 
 	// Update row count if they have increased.
 	if rowID > f.maxRowID {
 		f.maxRowID = rowID
-		f.stats.Gauge("rows", float64(f.maxRowID), 1.0)
 	}
 
 	return changed, nil
@@ -635,7 +633,7 @@ func (f *fragment) unprotectedClearBit(rowID, columnID uint64) (changed bool, er
 	// a new copy if no one's reading it.
 	f.rowCache.Add(rowID, nil)
 
-	f.stats.Count("clearBit", 1, 1.0)
+	f.stats.Count(MetricClearBit, 1, 1.0)
 
 	return changed, nil
 }
@@ -691,7 +689,6 @@ func (f *fragment) unprotectedSetRow(row *Row, rowID uint64) (changed bool, err 
 
 	// Snapshot storage.
 	f.snapshotQueue.Enqueue(f)
-	f.stats.Count("setRow", 1, 1.0)
 
 	return changed, nil
 }
@@ -732,8 +729,6 @@ func (f *fragment) unprotectedClearRow(rowID uint64) (changed bool, err error) {
 
 	// Snapshot storage.
 	f.snapshotQueue.Enqueue(f)
-
-	f.stats.Count("clearRow", 1, 1.0)
 
 	return changed, nil
 }
@@ -1945,22 +1940,22 @@ func (f *fragment) bulkImportStandard(rowIDs, columnIDs []uint64, options *Impor
 func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct{}) error {
 	err := f.gen.Transaction(&f.storage.OpWriter, func() error {
 		if len(set) > 0 {
-			f.stats.Count("ImportingN", int64(len(set)), 1)
+			f.stats.Count(MetricImportingN, int64(len(set)), 1)
 			changedN, err := f.storage.AddN(set...) // TODO benchmark Add/RemoveN behavior with sorted/unsorted positions
 			if err != nil {
 				return errors.Wrap(err, "adding positions")
 			}
-			f.stats.Count("ImportedN", int64(changedN), 1)
+			f.stats.Count(MetricImportedN, int64(changedN), 1)
 			f.incrementOpN(changedN)
 		}
 
 		if len(clear) > 0 {
-			f.stats.Count("ClearingN", int64(len(clear)), 1)
+			f.stats.Count(MetricClearingN, int64(len(clear)), 1)
 			changedN, err := f.storage.RemoveN(clear...)
 			if err != nil {
 				return errors.Wrap(err, "clearing positions")
 			}
-			f.stats.Count("ClearedN", int64(changedN), 1)
+			f.stats.Count(MetricClearedN, int64(changedN), 1)
 			f.incrementOpN(changedN)
 		}
 
@@ -2248,8 +2243,8 @@ func (f *fragment) Snapshot() error {
 
 func track(start time.Time, message string, stats stats.StatsClient, logger logger.Logger) {
 	elapsed := time.Since(start)
-	logger.Printf("%s took %s", message, elapsed)
-	stats.Histogram("snapshot", elapsed.Seconds(), 1.0)
+	logger.Debugf("%s took %s", message, elapsed)
+	stats.Timing(MetricSnapshotDurationSeconds, elapsed, 1.0)
 }
 
 // snapshot does the actual snapshot operation. it does not check or care
@@ -3044,13 +3039,13 @@ func (s *fragmentSyncer) syncFragment() error {
 			if err := s.syncBlockFromPrimary(blockID); err != nil {
 				return fmt.Errorf("sync block from primary: id=%d, err=%s", blockID, err)
 			}
-			s.Fragment.stats.Count("BlockRepairPrimary", 1, 1.0)
+			s.Fragment.stats.CountWithCustomTags(MetricBlockRepair, 1, 1.0, []string{"primary:true"})
 		default:
 			// Synchronize block.
 			if err := s.syncBlock(blockID); err != nil {
 				return fmt.Errorf("sync block: id=%d, err=%s", blockID, err)
 			}
-			s.Fragment.stats.Count("BlockRepair", 1, 1.0)
+			s.Fragment.stats.CountWithCustomTags(MetricBlockRepair, 1, 1.0, []string{"primary:false"})
 		}
 	}
 

@@ -350,7 +350,7 @@ func (i *Index) AvailableShards() *roaring.Bitmap {
 		b.UnionInPlace(f.AvailableShards())
 	}
 
-	i.Stats.Gauge("maxShard", float64(b.Max()), 1.0)
+	i.Stats.Gauge(MetricMaxShard, float64(b.Max()), 1.0)
 	return b
 }
 

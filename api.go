@@ -185,7 +185,7 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	if err != nil {
 		return nil, errors.Wrap(err, "sending CreateIndex message")
 	}
-	api.holder.Stats.Count("createIndex", 1, 1.0)
+	api.holder.Stats.Count(MetricCreateIndex, 1, 1.0)
 	return index, nil
 }
 
@@ -229,7 +229,7 @@ func (api *API) DeleteIndex(ctx context.Context, indexName string) error {
 		api.server.logger.Printf("problem sending DeleteIndex message: %s", err)
 		return errors.Wrap(err, "sending DeleteIndex message")
 	}
-	api.holder.Stats.Count("deleteIndex", 1, 1.0)
+	api.holder.Stats.Count(MetricDeleteIndex, 1, 1.0)
 	return nil
 }
 
@@ -276,7 +276,7 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 		api.server.logger.Printf("problem sending CreateField message: %s", err)
 		return nil, errors.Wrap(err, "sending CreateField message")
 	}
-	api.holder.Stats.CountWithCustomTags("createField", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
+	api.holder.Stats.CountWithCustomTags(MetricCreateField, 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
 	return field, nil
 }
 
@@ -487,7 +487,7 @@ func (api *API) DeleteField(ctx context.Context, indexName string, fieldName str
 		api.server.logger.Printf("problem sending DeleteField message: %s", err)
 		return errors.Wrap(err, "sending DeleteField message")
 	}
-	api.holder.Stats.CountWithCustomTags("deleteField", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
+	api.holder.Stats.CountWithCustomTags(MetricDeleteField, 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
 	return nil
 }
 
@@ -519,7 +519,7 @@ func (api *API) DeleteAvailableShard(_ context.Context, indexName, fieldName str
 		api.server.logger.Printf("problem sending DeleteAvailableShard message: %s", err)
 		return errors.Wrap(err, "sending DeleteAvailableShard message")
 	}
-	api.holder.Stats.CountWithCustomTags("deleteAvailableShard", 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
+	api.holder.Stats.CountWithCustomTags(MetricDeleteAvailableShard, 1, 1.0, []string{fmt.Sprintf("index:%s", indexName)})
 	return nil
 }
 

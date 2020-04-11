@@ -16,6 +16,7 @@ package stats_test
 
 import (
 	"context"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -45,39 +46,41 @@ func TestMultiStatClient_Expvar(t *testing.T) {
 	hldr.SetBit("d", "f", 0, pilosa.ShardWidth+2)
 	hldr.ClearBit("d", "f", 0, 1)
 
-	if stats.Expvar.String() != `{"index:d": {"clearBit": 1, "rows": 0, "setBit": 4}}` {
+	indexStats := fmt.Sprintf(`{"%s": %d, "%s": %d}`, pilosa.MetricClearBit, 1, pilosa.MetricSetBit, 4)
+
+	if stats.Expvar.String() != `{"index:d": `+indexStats+`}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	hldr.Stats.CountWithCustomTags("cc", 1, 1.0, []string{"foo:bar"})
-	if stats.Expvar.String() != `{"cc": 1, "index:d": {"clearBit": 1, "rows": 0, "setBit": 4}}` {
+	if stats.Expvar.String() != `{"cc": 1, "index:d": `+indexStats+`}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	// Gauge creates a unique key, subsequent Gauge calls will overwrite
 	hldr.Stats.Gauge("g", 5, 1.0)
 	hldr.Stats.Gauge("g", 8, 1.0)
-	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"clearBit": 1, "rows": 0, "setBit": 4}}` {
+	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": `+indexStats+`}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	// Set creates a unique key, subsequent sets will overwrite
 	hldr.Stats.Set("s", "4", 1.0)
 	hldr.Stats.Set("s", "7", 1.0)
-	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"clearBit": 1, "rows": 0, "setBit": 4}, "s": "7"}` {
+	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": `+indexStats+`, "s": "7"}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	// Record timing duration and a uniquely Set key/value
 	dur, _ := time.ParseDuration("123us")
 	hldr.Stats.Timing("tt", dur, 1.0)
-	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": {"clearBit": 1, "rows": 0, "setBit": 4}, "s": "7", "tt": 123µs}` {
+	if stats.Expvar.String() != `{"cc": 1, "g": 8, "index:d": `+indexStats+`, "s": "7", "tt": 123µs}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
 	// Expvar histogram is implemented as a gauge
 	hldr.Stats.Histogram("hh", 3, 1.0)
-	if stats.Expvar.String() != `{"cc": 1, "g": 8, "hh": 3, "index:d": {"clearBit": 1, "rows": 0, "setBit": 4}, "s": "7", "tt": 123µs}` {
+	if stats.Expvar.String() != `{"cc": 1, "g": 8, "hh": 3, "index:d": `+indexStats+`, "s": "7", "tt": 123µs}` {
 		t.Fatalf("unexpected expvar : %s", stats.Expvar.String())
 	}
 
@@ -101,12 +104,12 @@ func TestStatsCount_TopN(t *testing.T) {
 	called := false
 	hldr.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
-			if name != "TopN" {
-				t.Errorf("Expected TopN, Results %s", name)
+			if name != "query_topn_total" {
+				t.Errorf("Expected query_topn_total, Results %s", name)
 			}
 
 			if tags[0] != "index:d" {
-				t.Errorf("Expected db, Results %s", tags[0])
+				t.Errorf("Expected index, Results %s", tags[0])
 			}
 
 			called = true
@@ -130,12 +133,12 @@ func TestStatsCount_Bitmap(t *testing.T) {
 	called := false
 	hldr.Holder.Stats = &MockStats{
 		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
-			if name != "Row" {
-				t.Errorf("Expected Row, Results %s", name)
+			if name != pilosa.MetricRow {
+				t.Errorf("Expected %s, Results %s", pilosa.MetricRow, name)
 			}
 
 			if tags[0] != "index:d" {
-				t.Errorf("Expected db, Results %s", tags[0])
+				t.Errorf("Expected index, Results %s", tags[0])
 			}
 
 			called = true
@@ -149,7 +152,7 @@ func TestStatsCount_Bitmap(t *testing.T) {
 	}
 }
 
-func TestStatsCount_SetColumnAttrs(t *testing.T) {
+func TestStatsCount_SetRowAttrsBulk(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 	hldr := test.Holder{Holder: c[0].Server.Holder()}
@@ -163,10 +166,14 @@ func TestStatsCount_SetColumnAttrs(t *testing.T) {
 		t.Fatal("field not found")
 	}
 
-	field.Stats = &MockStats{
-		mockCount: func(name string, value int64, rate float64) {
-			if name != "SetRowAttrs" {
-				t.Errorf("Expected SetRowAttrs, Results %s", name)
+	hldr.Holder.Stats = &MockStats{
+		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
+			if name != pilosa.MetricSetRowAttrs {
+				t.Errorf("Expected %v, Results %s", pilosa.MetricSetRowAttrs, name)
+			}
+
+			if tags[0] != "index:d" {
+				t.Errorf("Expected index, Results %s", tags[0])
 			}
 			called = true
 		},
@@ -179,7 +186,7 @@ func TestStatsCount_SetColumnAttrs(t *testing.T) {
 	}
 }
 
-func TestStatsCount_SetProfileAttrs(t *testing.T) {
+func TestStatsCount_SetColumnAttrs(t *testing.T) {
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 	hldr := test.Holder{Holder: c[0].Server.Holder()}
@@ -193,12 +200,15 @@ func TestStatsCount_SetProfileAttrs(t *testing.T) {
 		t.Fatal("idex not found")
 	}
 
-	idx.Stats = &MockStats{
-		mockCount: func(name string, value int64, rate float64) {
-			if name != "SetProfileAttrs" {
-				t.Errorf("Expected SetProfilepAttrs, Results %s", name)
+	hldr.Holder.Stats = &MockStats{
+		mockCountWithTags: func(name string, value int64, rate float64, tags []string) {
+			if name != pilosa.MetricSetColumnAttrs {
+				t.Errorf("Expected %v, Results %s", pilosa.MetricSetColumnAttrs, name)
 			}
 
+			if tags[0] != "index:d" {
+				t.Errorf("Expected index, Results %s", tags[0])
+			}
 			called = true
 		},
 	}
@@ -222,8 +232,8 @@ func TestStatsCount_APICalls(t *testing.T) {
 		called := false
 		hldr.Stats = &MockStats{
 			mockCount: func(name string, value int64, rate float64) {
-				if name != "createIndex" {
-					t.Errorf("Expected createIndex, Results %s", name)
+				if name != pilosa.MetricCreateIndex {
+					t.Errorf("Expected %v, Results %s", pilosa.MetricCreateIndex, name)
 				}
 				called = true
 			},
@@ -239,8 +249,8 @@ func TestStatsCount_APICalls(t *testing.T) {
 		called := false
 		hldr.Stats = &MockStats{
 			mockCountWithTags: func(name string, value int64, rate float64, index []string) {
-				if name != "createField" {
-					t.Errorf("Expected createField, Results %s", name)
+				if name != pilosa.MetricCreateField {
+					t.Errorf("Expected %v, Results %s", pilosa.MetricCreateField, name)
 				}
 				if index[0] != "index:i" {
 					t.Errorf("Expected index:i, Results %s", index)
@@ -260,8 +270,8 @@ func TestStatsCount_APICalls(t *testing.T) {
 		called := false
 		hldr.Stats = &MockStats{
 			mockCountWithTags: func(name string, value int64, rate float64, index []string) {
-				if name != "deleteField" {
-					t.Errorf("Expected deleteField, Results %s", name)
+				if name != pilosa.MetricDeleteField {
+					t.Errorf("Expected %v, Results %s", pilosa.MetricDeleteField, name)
 				}
 				if index[0] != "index:i" {
 					t.Errorf("Expected index:i, Results %s", index)
@@ -281,8 +291,8 @@ func TestStatsCount_APICalls(t *testing.T) {
 		called := false
 		hldr.Stats = &MockStats{
 			mockCount: func(name string, value int64, rate float64) {
-				if name != "deleteIndex" {
-					t.Errorf("Expected deleteIndex, Results %s", name)
+				if name != pilosa.MetricDeleteIndex {
+					t.Errorf("Expected %v, Results %s", pilosa.MetricDeleteIndex, name)
 				}
 
 				called = true

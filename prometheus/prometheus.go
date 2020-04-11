@@ -94,7 +94,7 @@ func (c *prometheusClient) Tags() []string {
 
 // labels returns an instance of prometheus.Labels with the value of the set tags.
 func (c *prometheusClient) labels() prometheus.Labels {
-	return tagsToLabels(c.tags)
+	return tagsToLabels(c.tags, c.logger)
 }
 
 // WithTags returns a new client with additional tags appended.
@@ -252,8 +252,7 @@ func (c *prometheusClient) Set(name string, value string, rate float64) {
 
 // Timing tracks timing information for a metric.
 func (c *prometheusClient) Timing(name string, value time.Duration, rate float64) {
-	durationMs := value / time.Second
-	c.Histogram(name, float64(durationMs), rate)
+	c.Histogram(name, value.Seconds(), rate)
 }
 
 // SetLogger sets the logger for client.
@@ -296,12 +295,13 @@ func unionStringSlice(a, b []string) []string {
 	return other
 }
 
-func tagsToLabels(tags []string) (labels prometheus.Labels) {
+func tagsToLabels(tags []string, logger logger.Logger) (labels prometheus.Labels) {
 	labels = make(prometheus.Labels)
 	for _, tag := range tags {
 		tagParts := strings.SplitAfterN(tag, ":", 2)
 		if len(tagParts) != 2 {
 			// only process tags in "key:value" form
+			logger.Printf("Error: invalid Prometheus label: %v\n", tag)
 			continue
 		}
 		labels[tagParts[0][0:len(tagParts[0])-1]] = tagParts[1]

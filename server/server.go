@@ -376,6 +376,7 @@ func (m *Command) SetupServer() error {
 		OptGRPCServerAPI(m.API),
 		OptGRPCServerURI(grpcURI),
 		OptGRPCServerLogger(m.logger),
+		OptGRPCServerStats(statsClient),
 	)
 	return errors.Wrap(err, "new grpc server")
 }
@@ -453,7 +454,7 @@ func newStatsClient(name string, host string) (stats.StatsClient, error) {
 	case "nop", "none":
 		return stats.NopStatsClient, nil
 	default:
-		return nil, errors.Errorf("'%v' not a valid stats client, choose from [expvar, statsd, none].", name)
+		return nil, errors.Errorf("'%v' not a valid stats client, choose from [expvar, statsd, prometheus, none].", name)
 	}
 }
 

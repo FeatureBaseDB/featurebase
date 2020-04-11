@@ -231,7 +231,7 @@ func (c *rankCache) Invalidate() {
 func (c *rankCache) Recalculate() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.stats.Count("cache.recalculate", 1, 1.0)
+	c.stats.Count(MetricRecalculateCache, 1, 1.0)
 	c.recalculate()
 }
 
@@ -241,7 +241,7 @@ func (c *rankCache) invalidate() {
 	if time.Since(c.updateTime).Seconds() < 10 {
 		return
 	}
-	c.stats.Count("cache.invalidate", 1, 1.0)
+	c.stats.Count(MetricInvalidateCache, 1, 1.0)
 	c.recalculate()
 }
 
@@ -259,7 +259,7 @@ func (c *rankCache) recalculate() {
 	// Store the count of the item at the threshold index.
 	c.rankings = rankings
 	length := len(c.rankings)
-	c.stats.Gauge("RankCache", float64(length), 1.0)
+	c.stats.Gauge(MetricRankCacheLength, float64(length), 1.0)
 
 	var removeItems []bitmapPair // cached, ordered list
 	if length > int(c.maxEntries) {
@@ -275,7 +275,7 @@ func (c *rankCache) recalculate() {
 
 	// If size is larger than the threshold then trim it.
 	if len(c.entries) > c.thresholdBuffer {
-		c.stats.Count("cache.threshold", 1, 1.0)
+		c.stats.Count(MetricCacheThresholdReached, 1, 1.0)
 		for _, pair := range removeItems {
 			delete(c.entries, pair.ID)
 		}
