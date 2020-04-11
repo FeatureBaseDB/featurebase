@@ -413,13 +413,6 @@ func (f *Field) AvailableShards() *roaring.Bitmap {
 	return b
 }
 
-// constainsShard is used for limiting unnecessary CreateShard broadcast
-func (f *Field) containsShard(shard uint64) bool {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-	return f.remoteAvailableShards.Contains(shard)
-}
-
 // AddRemoteAvailableShards merges the set of available shards into the current known set
 // and saves the set to a file.
 func (f *Field) AddRemoteAvailableShards(b *roaring.Bitmap) error {
