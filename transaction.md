@@ -1,0 +1,111 @@
+# Initial Transaction Support
+
+This is not full-featured transaction support with commit and rollback
+for now; this is a placeholder intended to allow us to solve shorter-term
+problems.
+
+The primaryw purpose of this is to allow an exclusive transaction to
+block new ingest activity from starting, while permitting existing ingest
+operations to complete, even if a single ingest requires multiple operations.
+This allows users with cooperating ingest operations to ensure a stable state
+for the data on disk before triggering snapshots or other writes.
+
+## Overview: What transactions are
+
+A transaction reflects an ongoing set of related operations that may be
+occurring in multiple or distinct messages. There is no support for
+rolling back a failed transaction. Transactions can coexist, and there's
+nothing controlling simultaneous access to fields.
+
+However, a transaction can be exclusive. An exclusive transaction cannot
+start until other transactions complete, but no non-exclusive transaction
+can start while an exclusive transaction is waiting.
+
+Transactions are holder-wide, not index-specific. Transactions are also
+presumably cluster-wide.
+
+### API Details
+
+The base transaction endpoints are `/transactions`, for listing or creating
+transactions, and `/transaction/[id]`, for listing, creating, finishing, or
+cancelling a transaction.
+
+A POST to `/transactions` attempts to create a transaction, assigning it an
+arbitrary ID that is not the ID of any existing transaction. A `GET` from
+`/transactions` lists existing transactions.
+
+A POST to `/transaction/[id]` tries to create a transaction with the given
+ID, failing if it can't for any reason, including the reason "this ID is
+already in use". A GET from `/transaction/[id]` retrieves information about
+the transaction.
+
+When creating a transaction, you may specify an options object:
+
+	```
+	{
+		"exclusive": true, // default is false
+		"timeout": 300     // in seconds, default is 300
+	}
+	```
+
+For an exclusive transaction, you may also specify the optional parameter
+"pause-snapshots" as a boolean. A `true` value indicates that the snapshot
+queue should be paused once this transaction becomes active. *Note that pausing
+the snapshot queue can cause some write operations to block indefinitely.*
+If a transaction requests that the snapshot queue be paused, it will not
+report itself "active" until the snapshot queue has completed any outstanding
+snapshots and paused itself. The full sequence of events, then, is:
+
+* Stop allowing new transactions to start.
+* Wait for transactions to complete.
+* Pause snapshot queue.
+* Wait for snapshot queue to report that it's successfully paused.
+* Transition to active state.
+
+Exclusive transactions which pause the snapshot queue should not write to
+the database; this is used as a way to block activity so backups can be made.
+
+When requesting information about a transaction, you get back an object:
+
+	```
+	{
+		"active": true,
+		"timeout": 300,       // timeout time in seconds
+		"stats": {
+			"idle": 0,    // time in seconds since last activity
+			"queries": 3, // queries submitted in this transaction
+			"errors": 0   // errors produced by queries
+		}
+	}
+	```
+
+To mark a transaction as complete, you POST to `/transaction/[id]/finish`, and
+get back the same information you'd have gotten from a GET for that transaction.
+The finish request may block if any existing queries are running as part of
+that transaction, but immediately prevents any new queries from starting for
+that transaction.
+
+Queries can be associated with a transaction by including
+`X-Pilosa-Transaction: [id]` in their request headers. A transaction's idle
+timer is reset by any query against it, even a query which doesn't write
+anything.
+
+When an exclusive transaction is created, it does not necessarily start out
+in the `active` state. It immediately blocks the starting of new non-exclusive
+transactions, but does not transiction to an `active` state until existing
+transactions complete. During this time, a GET to it should return:
+
+	```
+	{
+		"active": false,
+		"blocked-by": [ "id" ]
+	}
+	```
+
+where blocked-by is a list of the IDs of any transactions blocking the
+transition.
+
+If multiple exclusive transactions are requested, they become active
+sequentially in the order the requests came in, and the snapshot queue and
+other transactions are not permitted to resume until the exclusive transactions
+all complete.
