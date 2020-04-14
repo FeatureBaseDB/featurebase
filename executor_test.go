@@ -3713,6 +3713,20 @@ func TestExecutor_Execute_SetRow(t *testing.T) {
 		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth - 1, ShardWidth + 1}) {
 			t.Fatalf("unexpected columns: %+v", bits)
 		}
+
+		// Store row 10 into a table which doesn't exist.
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Store(Row(f=10), nonexistent=20)`}); err != nil {
+			t.Fatal(err)
+		} else if res := res.Results[0].(bool); !res {
+			t.Fatalf("unexpected set row result: %+v", res)
+		}
+
+		// Ensure the row was populated.
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(nonexistent=20)`}); err != nil {
+			t.Fatal(err)
+		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth - 1, ShardWidth + 1}) {
+			t.Fatalf("unexpected columns: %+v", bits)
+		}
 	})
 	t.Run("Set_NoSource", func(t *testing.T) {
 		c := test.MustRunCluster(t, 1)
