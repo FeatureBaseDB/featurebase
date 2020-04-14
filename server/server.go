@@ -36,6 +36,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/client9/reopen"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
 	"github.com/pilosa/pilosa/v2/encoding/proto"
@@ -419,15 +420,26 @@ func (m *Command) setupLogger() error {
 	if m.Config.LogPath == "" {
 		m.logOutput = m.Stderr
 	} else {
-		f, err := os.OpenFile(m.Config.LogPath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0600)
+		f, err := reopen.NewFileWriter(m.Config.LogPath)
 		if err != nil {
 			return errors.Wrap(err, "opening file")
 		}
+		sighup := make(chan os.Signal, 1)
+		signal.Notify(sighup, syscall.SIGHUP)
+		go func() {
+			for {
+				// duplicate stderr onto log file
+				err = m.dup(int(f.Fd()), int(os.Stderr.Fd()))
+				if err != nil {
+					io.WriteString(f, "syscall dup error: "+err.Error())
+				}
+
+				// reopen log file on SIGHUP
+				<-sighup
+				f.Reopen()
+			}
+		}()
 		m.logOutput = f
-		err = m.dup(int(f.Fd()), int(os.Stderr.Fd()))
-		if err != nil {
-			return errors.Wrap(err, "syscall dup stderr to logfile")
-		}
 	}
 
 	if m.Config.Verbose {
