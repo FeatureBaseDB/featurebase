@@ -416,14 +416,23 @@ func (m *Command) setupNetworking() error {
 }
 
 // setupLogger sets up the logger based on the configuration.
-func (m *Command) setupLogger() error {
+func (m *Command) setupLogger() (err error) {
+	var f *reopen.FileWriter
 	if m.Config.LogPath == "" {
 		m.logOutput = m.Stderr
 	} else {
-		f, err := reopen.NewFileWriter(m.Config.LogPath)
+		f, err = reopen.NewFileWriter(m.Config.LogPath)
 		if err != nil {
 			return errors.Wrap(err, "opening file")
 		}
+		m.logOutput = f
+	}
+	if m.Config.Verbose {
+		m.logger = logger.NewVerboseLogger(m.logOutput)
+	} else {
+		m.logger = logger.NewStandardLogger(m.logOutput)
+	}
+	if m.Config.LogPath != "" {
 		sighup := make(chan os.Signal, 1)
 		signal.Notify(sighup, syscall.SIGHUP)
 		go func() {
@@ -431,21 +440,17 @@ func (m *Command) setupLogger() error {
 				// duplicate stderr onto log file
 				err = m.dup(int(f.Fd()), int(os.Stderr.Fd()))
 				if err != nil {
-					io.WriteString(f, "syscall dup error: "+err.Error())
+					m.logger.Printf("syscall dup: %s\n", err.Error())
 				}
 
 				// reopen log file on SIGHUP
 				<-sighup
-				f.Reopen()
+				err = f.Reopen()
+				if err != nil {
+					m.logger.Printf("reopen: %s\n", err.Error())
+				}
 			}
 		}()
-		m.logOutput = f
-	}
-
-	if m.Config.Verbose {
-		m.logger = logger.NewVerboseLogger(m.logOutput)
-	} else {
-		m.logger = logger.NewStandardLogger(m.logOutput)
 	}
 	return nil
 }
