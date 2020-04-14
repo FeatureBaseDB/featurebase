@@ -2825,15 +2825,27 @@ func (e *executor) executeClearRowShard(ctx context.Context, index string, c *pq
 }
 
 // executeSetRow executes a Store() call.
-func (e *executor) executeSetRow(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (bool, error) {
+func (e *executor) executeSetRow(ctx context.Context, indexName string, c *pql.Call, shards []uint64, opt *execOptions) (bool, error) {
 	// Ensure the field type supports Store().
 	fieldName, err := c.FieldArg()
 	if err != nil {
 		return false, errors.New("field required for Store()")
 	}
-	field := e.Holder.Field(index, fieldName)
+	field := e.Holder.Field(indexName, fieldName)
 	if field == nil {
-		return false, ErrFieldNotFound
+		// Find index.
+		index := e.Holder.Index(indexName)
+		if index == nil {
+			return false, newNotFoundError(ErrIndexNotFound)
+		}
+
+		// Create field.
+		field, err = index.CreateField(fieldName, OptFieldTypeSet(CacheTypeNone, 0))
+		if err != nil {
+			// We wrap these because we want to indicate that it wasn't found,
+			// but also the problem we encountered trying to create it.
+			return false, newNotFoundError(errors.Wrap(err, "creating field"))
+		}
 	}
 	if field.Type() != FieldTypeSet {
 		return false, fmt.Errorf("can't Store() on a %s field", field.Type())
@@ -2841,7 +2853,7 @@ func (e *executor) executeSetRow(ctx context.Context, index string, c *pql.Call,
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(shard uint64) (interface{}, error) {
-		return e.executeSetRowShard(ctx, index, c, shard)
+		return e.executeSetRowShard(ctx, indexName, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
@@ -2853,7 +2865,7 @@ func (e *executor) executeSetRow(ctx context.Context, index string, c *pql.Call,
 		return val || prev.(bool)
 	}
 
-	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
+	result, err := e.mapReduce(ctx, indexName, shards, c, opt, mapFn, reduceFn)
 	return result.(bool), err
 }
 
