@@ -5251,6 +5251,23 @@ func TestExecutor_Execute_MinMaxCountEqual(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("MinMaxRangeError", func(t *testing.T) {
+		// Min
+		pql := `Set(4, dec=-92233720368547758.08)`
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err == nil {
+			t.Fatalf("expected error but got: nil")
+		} else if errors.Cause(err) != pilosa.ErrDecimalOutOfRange {
+			t.Fatalf("expected error: %s, but got: %s", pilosa.ErrDecimalOutOfRange, err)
+		}
+		// Max
+		pql = `Set(4, dec=92233720368547758.07)`
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err == nil {
+			t.Fatalf("expected error but got: nil")
+		} else if errors.Cause(err) != pilosa.ErrDecimalOutOfRange {
+			t.Fatalf("expected error: %s, but got: %s", pilosa.ErrDecimalOutOfRange, err)
+		}
+	})
 }
 
 func TestExecutor_Execute_NoIndex(t *testing.T) {

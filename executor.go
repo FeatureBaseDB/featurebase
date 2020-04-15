@@ -2967,6 +2967,16 @@ func (e *executor) executeSet(ctx context.Context, index string, c *pql.Call, op
 		if !ok {
 			return false, fmt.Errorf("Set() row argument '%v' required", rowLabel)
 		}
+
+		// Before we scale a decimal to an integer, we need to make sure the decimal
+		// is between min/max for the field. If it's not, converting to an integer
+		// can result in an overflow.
+		if dec, ok := v.(pql.Decimal); ok && f.Options().Type == FieldTypeDecimal {
+			if dec.LessThan(f.Options().Min) || dec.GreaterThan(f.Options().Max) {
+				return false, ErrDecimalOutOfRange
+			}
+		}
+
 		// Read row value.
 		rowVal, err := getScaledInt(f, v)
 		if err != nil {

@@ -425,6 +425,8 @@ func quotient(d Decimal) int64 {
 		return d.Value
 	} else if d.Scale > 0 && d.Scale < 19 {
 		return d.Value / pow10[d.Scale]
+	} else if d.Scale < 0 && d.Scale > -19 {
+		return d.Value * pow10[-1*d.Scale]
 	}
 	return 0
 }
