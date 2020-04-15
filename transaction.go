@@ -166,7 +166,7 @@ func (tm *TransactionManager) finish(id string) (Transaction, error) {
 // if there isn't one.
 func (tm *TransactionManager) Get(id string) (Transaction, error) {
 	tm.mu.RLock()
-	tm.mu.RUnlock()
+	defer tm.mu.RUnlock()
 
 	return tm.store.Get(id)
 }
