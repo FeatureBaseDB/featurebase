@@ -2,6 +2,7 @@ module github.com/pilosa/pilosa/v2
 
 replace github.com/hashicorp/memberlist => github.com/pilosa/memberlist v0.1.4-0.20190415211605-f6512523c021
 
+// TODO: Remove the following line if this is merged: https://github.com/client9/reopen/pull/9
 replace github.com/client9/reopen => github.com/codysoyland/reopen v1.0.1-0.20200414204206-42cbe848be3b
 
 require (
