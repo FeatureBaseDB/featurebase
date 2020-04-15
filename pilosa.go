@@ -46,6 +46,7 @@ var (
 	ErrBSIGroupValueTooHigh     = errors.New("bsigroup value too high")
 	ErrInvalidRangeOperation    = errors.New("invalid range operation")
 	ErrInvalidBetweenValue      = errors.New("invalid value for between operation")
+	ErrDecimalOutOfRange        = errors.New("decimal value out of range")
 
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")

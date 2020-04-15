@@ -800,13 +800,13 @@ func (f *Field) loadMeta() error {
 	if pb.Min != nil {
 		min = pql.NewDecimal(pb.Min.Value, pb.Min.Scale)
 	} else {
-		min = pql.NewDecimal(pb.OldMin, 0)
+		min = pql.NewDecimal(pb.OldMin, pb.Scale)
 	}
 	var max pql.Decimal
 	if pb.Max != nil {
 		max = pql.NewDecimal(pb.Max.Value, pb.Max.Scale)
 	} else {
-		max = pql.NewDecimal(pb.OldMax, 0)
+		max = pql.NewDecimal(pb.OldMax, pb.Scale)
 	}
 
 	// Initialize "base" to "min" when upgrading from v1 BSI format.
