@@ -2200,7 +2200,9 @@ func (b *bsiGroup) baseValue(op pql.Token, value int64) (baseValue int64, outOfR
 	if op == pql.GT || op == pql.GTE {
 		if value > max {
 			return baseValue, true
-		} else if value > min {
+		} else if value < min {
+			baseValue = int64(min - b.Base)
+		} else {
 			baseValue = int64(value - b.Base)
 		}
 	} else if op == pql.LT || op == pql.LTE {

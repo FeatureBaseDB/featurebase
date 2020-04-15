@@ -4583,22 +4583,28 @@ func getCondIntSlice(f *Field, cond *pql.Condition) ([]int64, error) {
 }
 
 // getScaledInt gets the scaled integer value for v based on
-// the field type.
+// the field type. In the `decimalToInt64()` function, the
+// returned int64 value will be adjusted to correspond to the
+// range of the field. This is only necessary for pql.Decimal
+// values. For example, if v is less than f.Options.Min, int64 will
+// return int64(f.Options.Min)-1, or math.MinInt64 if f.Options.Min
+// is already equal to math.MinInt64.
 func getScaledInt(f *Field, v interface{}) (int64, error) {
 	var value int64
 
 	opt := f.Options()
 	if opt.Type == FieldTypeDecimal {
-		scale := opt.Scale
 		switch tv := v.(type) {
-		case int64:
-			value = int64(float64(tv) * math.Pow10(int(scale)))
 		case uint64:
-			value = int64(float64(tv) * math.Pow10(int(scale)))
+			dec := pql.NewDecimal(int64(tv), 0)
+			value = decimalToInt64(dec, opt)
+		case int64:
+			dec := pql.NewDecimal(tv, 0)
+			value = decimalToInt64(dec, opt)
 		case pql.Decimal:
-			value = tv.ToInt64(scale)
+			value = decimalToInt64(tv, opt)
 		case float64:
-			value = int64(tv * math.Pow10(int(scale)))
+			value = int64(tv * math.Pow10(int(opt.Scale)))
 		default:
 			return 0, errors.Errorf("unexpected decimal value type %T, val %v", tv, tv)
 		}
@@ -4613,4 +4619,25 @@ func getScaledInt(f *Field, v interface{}) (int64, error) {
 		}
 	}
 	return value, nil
+}
+
+func decimalToInt64(dec pql.Decimal, opt FieldOptions) int64 {
+	scale := opt.Scale
+	if dec.GreaterThanOrEqualTo(opt.Min) && dec.LessThanOrEqualTo(opt.Max) {
+		return dec.ToInt64(scale)
+	} else if dec.LessThan(opt.Min) {
+		value := opt.Min.ToInt64(scale)
+		if value != math.MinInt64 {
+			value--
+		}
+		return value
+	} else if dec.GreaterThan(opt.Max) {
+		value := opt.Max.ToInt64(scale)
+		if value != math.MaxInt64 {
+			value++
+		}
+		return value
+	}
+
+	return 0
 }

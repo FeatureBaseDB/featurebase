@@ -92,6 +92,7 @@ func TestBSIGroup_BaseValue(t *testing.T) {
 			{b1, pql.GT, -8, -8, false},
 			{b1, pql.GT, 1005, 0, true},
 			{b1, pql.GT, 0, 0, false},
+			{b1, pql.GT, -300, -255, false},
 
 			{b2, pql.GT, 5, -95, false},
 			{b2, pql.GT, -8, -108, false},
