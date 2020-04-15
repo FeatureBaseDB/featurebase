@@ -4596,6 +4596,9 @@ func getScaledInt(f *Field, v interface{}) (int64, error) {
 	if opt.Type == FieldTypeDecimal {
 		switch tv := v.(type) {
 		case uint64:
+			if tv > math.MaxInt64 {
+				return 0, errors.Errorf("uint64 value out of range for pql.Decimal: %d", tv)
+			}
 			dec := pql.NewDecimal(int64(tv), 0)
 			value = decimalToInt64(dec, opt)
 		case int64:
