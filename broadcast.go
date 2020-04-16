@@ -69,6 +69,7 @@ const (
 	messageTypeRecalculateCaches
 	messageTypeNodeEvent
 	messageTypeNodeStatus
+	messageTypeTransaction
 )
 
 // MarshalInternalMessage serializes the pilosa message and adds pilosa internal
@@ -116,6 +117,8 @@ func getMessage(typ byte) Message {
 		return &NodeEvent{}
 	case messageTypeNodeStatus:
 		return &NodeStatus{}
+	case messageTypeTransaction:
+		return &TransactionMessage{}
 	default:
 		panic(fmt.Sprintf("unknown message type %d", typ))
 	}
@@ -155,6 +158,8 @@ func getMessageType(m Message) byte {
 		return messageTypeNodeEvent
 	case *NodeStatus:
 		return messageTypeNodeStatus
+	case *TransactionMessage:
+		return messageTypeTransaction
 	default:
 		panic(fmt.Sprintf("don't have type for message %#v", m))
 	}

@@ -140,9 +140,8 @@ func (tm *TransactionManager) finish(id string) (Transaction, error) {
 	// After removing, check to see if we need to activate an exclusive transaction
 	trnsMap, err := tm.store.List()
 	if err != nil {
-		// returning an error here is weird because we've already
-		// removed the transaction
-		return trns, errors.Wrap(err, "listing transactions in Finish")
+		tm.log().Printf("error listing transactions in Finish: %v", err)
+		return trns, nil
 	}
 
 	if len(trnsMap) == 1 {
@@ -154,7 +153,8 @@ func (tm *TransactionManager) finish(id string) (Transaction, error) {
 				etrans.Active = true
 				etrans.Deadline = time.Now().Add(etrans.Timeout)
 				if err := tm.store.Put(etrans); err != nil {
-					return trns, errors.Wrap(err, "activating exclusive transaction after finishing last transaction")
+					tm.log().Printf("activating exclusive transaction after finishing last transaction: %v", err)
+					return trns, nil
 				}
 			}
 		}
@@ -357,3 +357,20 @@ const ErrTransactionNotFound = Error("transaction not found")
 const ErrTransactionExclusive = Error("there is already an exclusive transaction")
 const ErrTransactionExists = Error("transaction with the given id already exists")
 const ErrTransactionInactive = Error("cannot finish an inactive transaction")
+
+func CompareTransactions(t1, t2 Transaction) error {
+	if t1.ID != t2.ID {
+		return errors.Errorf("transaction IDs not equal: %+v %+v", t1, t2)
+	}
+	if t1.Active != t2.Active {
+		return errors.Errorf("transaction Actives not equal: %+v %+v", t1, t2)
+	}
+	if t1.Exclusive != t2.Exclusive {
+		return errors.Errorf("transaction Exclusives not equal: %+v %+v", t1, t2)
+	}
+	if t1.Timeout != t2.Timeout {
+		return errors.Errorf("transaction Timeouts not equal: %+v %+v", t1, t2)
+	}
+	// don't care about Deadline or Stats
+	return nil
+}

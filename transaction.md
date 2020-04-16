@@ -4,7 +4,7 @@ This is not full-featured transaction support with commit and rollback
 for now; this is a placeholder intended to allow us to solve shorter-term
 problems.
 
-The primaryw purpose of this is to allow an exclusive transaction to
+The primary purpose of this is to allow an exclusive transaction to
 block new ingest activity from starting, while permitting existing ingest
 operations to complete, even if a single ingest requires multiple operations.
 This allows users with cooperating ingest operations to ensure a stable state
@@ -109,3 +109,64 @@ If multiple exclusive transactions are requested, they become active
 sequentially in the order the requests came in, and the snapshot queue and
 other transactions are not permitted to resume until the exclusive transactions
 all complete.
+
+
+
+### Implementation Notes
+
+All requests go through coordinator.
+
+When creating a new transaction, we'll create it on every node in the
+cluster and persist it to disk.
+
+Only the coordinator will accept requests to start a transaction.
+
+Timeouts only expire when there has been *no activity* on a transaction for the timeout duration. 
+Any activity on the transaction may extend the deadline (unimplemented).
+
+When finishing a transaction, we'll finish it on the coordinator and
+then broadcast the finish to the cluster before returning to the
+client.
+
+When getting an exclusive transaction, if the transaction is active,
+we'll make sure that all nodes agree before returning it.
+
+
+Coordinator forwards all requests to every other node so they can stay
+in sync. If the coordinator doesn't hear back from a node, the request
+fails. The coordinator only reaches out to active nodes, so if the
+cluster is in DEGRADED, things can still continue.
+
+If an node is down and comes back up it needs to synchronize its state
+with the coordinator (unimplemented).
+
+There is a separate TransactionManager and TransactionStore
+
+The store is just responsible for persisting info about
+transactions. The manager handles all the logic (at the node level).
+Logic related to cluster and remote vs local node is handled by the
+Server. The Holder contains the TransactionManager, and the Server
+contains the logic for how to handle external vs intra cluster
+requests (remote==true).
+
+There is intra-cluster messaging for transactions which is handled
+with the new TransactionMessage and goes through the usual
+SendMessage/Broadcaster stuff.
+
+There is also external API which is handled by the HTTP handler and
+goes through API (and is passed directly to Server). (unimplemented)
+
+
+#### TODO
+
+- [x] implement api layer and cluster logic, startup, etc. 
+- [ ] implement HTTP layer including header/transaction ID
+- [ ] implement and use persistent transaction store rather than inmem.
+- [ ] update go-pilosa/gpexp to actually USE transactions
+  - [ ] update IDK to use updated go-pilosa
+
+#### Testing TransactionManager
+- there should never be more than one Exclusive transaction
+- if the Exclusive transaction is active, there should be no other transactions
+
+

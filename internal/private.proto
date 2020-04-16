@@ -207,3 +207,19 @@ message Topology {
 }
 
 message RecalculateCaches {}
+
+message TransactionMessage {
+	string Action = 1;
+	Transaction Transaction = 2;
+}
+
+message Transaction {
+	string ID = 1;
+	bool Active = 2;
+	bool Exclusive = 3;
+	int64 Timeout = 4;
+	int64 Deadline = 5;
+	TransactionStats Stats = 6;
+}
+
+message TransactionStats {}

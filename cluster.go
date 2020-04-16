@@ -2589,3 +2589,15 @@ type FieldStatus struct {
 // RecalculateCaches is an internal message for recalculating all caches
 // within a holder.
 type RecalculateCaches struct{}
+
+// Transaction Actions
+const (
+	TRANSACTION_START    = "start"
+	TRANSACTION_FINISH   = "finish"
+	TRANSACTION_VALIDATE = "validate"
+)
+
+type TransactionMessage struct {
+	Transaction Transaction
+	Action      string
+}

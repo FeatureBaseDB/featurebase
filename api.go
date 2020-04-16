@@ -1585,6 +1585,22 @@ func (api *API) PrimaryReplicaNodeURL() url.URL {
 	return node.URI.URL()
 }
 
+func (api *API) StartTransaction(id string, timeout time.Duration, exclusive bool, remote bool) (Transaction, error) {
+	return api.server.StartTransaction(id, timeout, exclusive, remote)
+}
+
+func (api *API) FinishTransaction(id string, remote bool) (Transaction, error) {
+	return api.server.FinishTransaction(id, remote)
+}
+
+func (api *API) Transactions() (map[string]Transaction, error) {
+	return api.server.Transactions()
+}
+
+func (api *API) GetTransaction(id string, remote bool) (Transaction, error) {
+	return api.server.GetTransaction(id, remote)
+}
+
 type serverInfo struct {
 	ShardWidth       uint64 `json:"shardWidth"`
 	Memory           uint64 `json:"memory"`
