@@ -19,6 +19,7 @@ import (
 	"sort"
 
 	"github.com/molecula/ext"
+	pb "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pkg/errors"
 )
@@ -82,6 +83,53 @@ func NewRowFromRoaring(data []byte) *Row {
 		r.segments[i] = segment
 	}
 	return r
+}
+
+// ToTable implements the ToTabler interface.
+func (r *Row) ToTable() (*pb.TableResponse, error) {
+	var n int
+	if len(r.Keys) > 0 {
+		n = len(r.Keys)
+	} else {
+		n = len(r.Columns())
+	}
+	return pb.RowsToTable(r, n)
+}
+
+// ToRows implements the ToRowser interface.
+func (r *Row) ToRows(callback func(*pb.RowResponse) error) error {
+	if len(r.Keys) > 0 {
+		// Column keys
+		ci := []*pb.ColumnInfo{
+			{Name: "_id", Datatype: "string"},
+		}
+		for _, x := range r.Keys {
+			if err := callback(&pb.RowResponse{
+				Headers: ci,
+				Columns: []*pb.ColumnResponse{
+					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: x}},
+				}}); err != nil {
+				return errors.Wrap(err, "calling callback")
+			}
+			ci = nil //only send on the first
+		}
+	} else {
+		// Column IDs
+		ci := []*pb.ColumnInfo{
+			{Name: "_id", Datatype: "uint64"},
+		}
+		for _, x := range r.Columns() {
+			if err := callback(&pb.RowResponse{
+				Headers: ci,
+				Columns: []*pb.ColumnResponse{
+					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: x}},
+				}}); err != nil {
+				return errors.Wrap(err, "calling callback")
+			}
+			ci = nil //only send on the first
+		}
+	}
+	return nil
 }
 
 // Roaring returns the row treated as a unified roaring bitmap.

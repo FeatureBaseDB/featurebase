@@ -26,6 +26,7 @@ import (
 
 	"github.com/molecula/ext"
 	"github.com/pilosa/pilosa/v2/pql"
+	pb "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/shardwidth"
 	"github.com/pilosa/pilosa/v2/tracing"
@@ -1556,6 +1557,47 @@ type RowIdentifiers struct {
 	field string
 }
 
+// ToTable implements the ToTabler interface.
+func (r RowIdentifiers) ToTable() (*pb.TableResponse, error) {
+	var n int
+	if len(r.Keys) > 0 {
+		n = len(r.Keys)
+	} else {
+		n = len(r.Rows)
+	}
+	return pb.RowsToTable(&r, n)
+}
+
+// ToRows implements the ToRowser interface.
+func (r RowIdentifiers) ToRows(callback func(*pb.RowResponse) error) error {
+	if len(r.Keys) > 0 {
+		ci := []*pb.ColumnInfo{{Name: r.Field(), Datatype: "string"}}
+		for _, key := range r.Keys {
+			if err := callback(&pb.RowResponse{
+				Headers: ci,
+				Columns: []*pb.ColumnResponse{
+					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: key}},
+				}}); err != nil {
+				return errors.Wrap(err, "calling callback")
+			}
+			ci = nil
+		}
+	} else {
+		ci := []*pb.ColumnInfo{{Name: r.Field(), Datatype: "uint64"}}
+		for _, id := range r.Rows {
+			if err := callback(&pb.RowResponse{
+				Headers: ci,
+				Columns: []*pb.ColumnResponse{
+					&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: uint64(id)}},
+				}}); err != nil {
+				return errors.Wrap(err, "calling callback")
+			}
+			ci = nil
+		}
+	}
+	return nil
+}
+
 // Field returns the field name associated to the row.
 func (r *RowIdentifiers) Field() string {
 	return r.field
@@ -1749,6 +1791,56 @@ func (fr FieldRow) String() string {
 		return fmt.Sprintf("%s.%d.%d.%s", fr.Field, fr.RowID, *fr.Value, fr.RowKey)
 	}
 	return fmt.Sprintf("%s.%d.%s", fr.Field, fr.RowID, fr.RowKey)
+}
+
+// GroupCounts is a list of GroupCount.
+type GroupCounts []GroupCount
+
+// ToTable implements the ToTabler interface.
+func (g GroupCounts) ToTable() (*pb.TableResponse, error) {
+	return pb.RowsToTable(&g, len(g))
+}
+
+// ToRows implements the ToRowser interface.
+func (g GroupCounts) ToRows(callback func(*pb.RowResponse) error) error {
+	for i, gc := range g {
+		var ci []*pb.ColumnInfo
+		if i == 0 {
+			for _, fieldRow := range gc.Group {
+				if fieldRow.RowKey != "" {
+					ci = append(ci, &pb.ColumnInfo{Name: fieldRow.Field, Datatype: "string"})
+				} else if fieldRow.Value != nil {
+					ci = append(ci, &pb.ColumnInfo{Name: fieldRow.Field, Datatype: "int64"})
+				} else {
+					ci = append(ci, &pb.ColumnInfo{Name: fieldRow.Field, Datatype: "uint64"})
+				}
+			}
+			ci = append(ci, &pb.ColumnInfo{Name: "count", Datatype: "uint64"})
+			ci = append(ci, &pb.ColumnInfo{Name: "sum", Datatype: "int64"})
+		}
+		rowResp := &pb.RowResponse{
+			Headers: ci,
+			Columns: []*pb.ColumnResponse{},
+		}
+
+		for _, fieldRow := range gc.Group {
+			if fieldRow.RowKey != "" {
+				rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_StringVal{StringVal: fieldRow.RowKey}})
+			} else if fieldRow.Value != nil {
+				rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: *fieldRow.Value}})
+			} else {
+				rowResp.Columns = append(rowResp.Columns, &pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: fieldRow.RowID}})
+			}
+		}
+		rowResp.Columns = append(rowResp.Columns,
+			&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Uint64Val{Uint64Val: gc.Count}},
+			&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: gc.Sum}},
+		)
+		if err := callback(rowResp); err != nil {
+			return errors.Wrap(err, "calling callback")
+		}
+	}
+	return nil
 }
 
 // GroupCount represents a result item for a group by query.
@@ -4127,6 +4219,46 @@ func (s *SignedRow) Field() string {
 	return s.field
 }
 
+// ToTable implements the ToTabler interface.
+func (s SignedRow) ToTable() (*pb.TableResponse, error) {
+	var n uint64
+	if s.Neg != nil {
+		n += s.Neg.Count()
+	}
+	if s.Pos != nil {
+		n += s.Pos.Count()
+	}
+	return pb.RowsToTable(&s, int(n))
+}
+
+// ToRows implements the ToRowser interface.
+func (s SignedRow) ToRows(callback func(*pb.RowResponse) error) error {
+	// TODO: address the overflow issue with values outside the int64 range
+	ci := []*pb.ColumnInfo{{Name: s.Field(), Datatype: "int64"}}
+	negs := s.Neg.Columns()
+	for i := len(negs) - 1; i >= 0; i-- {
+		if err := callback(&pb.RowResponse{
+			Headers: ci,
+			Columns: []*pb.ColumnResponse{
+				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: -1 * int64(negs[i])}},
+			}}); err != nil {
+			return errors.Wrap(err, "calling callback")
+		}
+		ci = nil
+	}
+	for _, id := range s.Pos.Columns() {
+		if err := callback(&pb.RowResponse{
+			Headers: ci,
+			Columns: []*pb.ColumnResponse{
+				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: int64(id)}},
+			}}); err != nil {
+			return errors.Wrap(err, "calling callback")
+		}
+		ci = nil
+	}
+	return nil
+}
+
 func (sr *SignedRow) union(other SignedRow) SignedRow {
 	ret := SignedRow{&Row{}, &Row{}, ""}
 
@@ -4157,6 +4289,59 @@ type ValCount struct {
 	FloatVal   float64      `json:"floatValue"`
 	DecimalVal *pql.Decimal `json:"decimalValue"`
 	Count      int64        `json:"count"`
+}
+
+// ToTable implements the ToTabler interface.
+func (v ValCount) ToTable() (*pb.TableResponse, error) {
+	return pb.RowsToTable(&v, 1)
+}
+
+// ToRows implements the ToRowser interface.
+func (v ValCount) ToRows(callback func(*pb.RowResponse) error) error {
+	var ci []*pb.ColumnInfo
+	// ValCount can have a decimal, float, or integer value, but
+	// not more than one (as of this writing).
+	if v.DecimalVal != nil {
+		ci = []*pb.ColumnInfo{
+			{Name: "value", Datatype: "decimal"},
+			{Name: "count", Datatype: "int64"},
+		}
+		if err := callback(&pb.RowResponse{
+			Headers: ci,
+			Columns: []*pb.ColumnResponse{
+				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_DecimalVal{DecimalVal: &pb.Decimal{Value: v.DecimalVal.Value, Scale: v.DecimalVal.Scale}}},
+				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: v.Count}},
+			}}); err != nil {
+			return errors.Wrap(err, "calling callback")
+		}
+	} else if v.FloatVal != 0 {
+		ci = []*pb.ColumnInfo{
+			{Name: "value", Datatype: "float64"},
+			{Name: "count", Datatype: "int64"},
+		}
+		if err := callback(&pb.RowResponse{
+			Headers: ci,
+			Columns: []*pb.ColumnResponse{
+				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Float64Val{Float64Val: v.FloatVal}},
+				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: v.Count}},
+			}}); err != nil {
+			return errors.Wrap(err, "calling callback")
+		}
+	} else {
+		ci = []*pb.ColumnInfo{
+			{Name: "value", Datatype: "int64"},
+			{Name: "count", Datatype: "int64"},
+		}
+		if err := callback(&pb.RowResponse{
+			Headers: ci,
+			Columns: []*pb.ColumnResponse{
+				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: v.Val}},
+				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: v.Count}},
+			}}); err != nil {
+			return errors.Wrap(err, "calling callback")
+		}
+	}
+	return nil
 }
 
 func (vc *ValCount) add(other ValCount) ValCount {

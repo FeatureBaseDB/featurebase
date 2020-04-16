@@ -18,11 +18,10 @@ import (
 	"testing"
 
 	"github.com/pilosa/pilosa/v2"
-	"github.com/pilosa/pilosa/v2/logger"
 )
 
 func TestGRPC(t *testing.T) {
-	t.Run("makeRows", func(t *testing.T) {
+	t.Run("ToTable", func(t *testing.T) {
 		type expHeader struct {
 			name     string
 			dataType string
@@ -36,16 +35,6 @@ func TestGRPC(t *testing.T) {
 			expHeaders []expHeader
 			expColumns [][]expColumn
 		}{
-			{
-				pilosa.ValCount{Val: 1, Count: 1},
-				[]expHeader{{"value", "int64"}, {"count", "int64"}},
-				[][]expColumn{{int64(1), int64(1)}},
-			},
-			{
-				pilosa.ValCount{FloatVal: 1.24, Count: 1},
-				[]expHeader{{"value", "float64"}, {"count", "int64"}},
-				[][]expColumn{{float64(1.24), int64(1)}},
-			},
 			// Row (uint64)
 			{
 				pilosa.NewRow(10, 11, 12),
@@ -70,11 +59,14 @@ func TestGRPC(t *testing.T) {
 					{"twelve"},
 				},
 			},
-			// Pair (uint64)
+			// PairField (uint64)
 			{
-				pilosa.Pair{ID: 10, Count: 123},
+				pilosa.PairField{
+					Pair:  pilosa.Pair{ID: 10, Count: 123},
+					Field: "fld",
+				},
 				[]expHeader{
-					{"_id", "uint64"},
+					{"fld", "uint64"},
 					{"count", "uint64"},
 				},
 				[][]expColumn{
@@ -83,23 +75,29 @@ func TestGRPC(t *testing.T) {
 			},
 			// Pair (string)
 			{
-				pilosa.Pair{Key: "ten", Count: 123},
+				pilosa.PairField{
+					Pair:  pilosa.Pair{Key: "ten", Count: 123},
+					Field: "fld",
+				},
 				[]expHeader{
-					{"_id", "string"},
+					{"fld", "string"},
 					{"count", "uint64"},
 				},
 				[][]expColumn{
 					{string("ten"), uint64(123)},
 				},
 			},
-			// []Pair (uint64)
+			// *PairsField (uint64)
 			{
-				[]pilosa.Pair{
-					{ID: 10, Count: 123},
-					{ID: 11, Count: 456},
+				&pilosa.PairsField{
+					Pairs: []pilosa.Pair{
+						{ID: 10, Count: 123},
+						{ID: 11, Count: 456},
+					},
+					Field: "fld",
 				},
 				[]expHeader{
-					{"_id", "uint64"},
+					{"fld", "uint64"},
 					{"count", "uint64"},
 				},
 				[][]expColumn{
@@ -107,14 +105,17 @@ func TestGRPC(t *testing.T) {
 					{uint64(11), uint64(456)},
 				},
 			},
-			// []Pair (string)
+			// *PairsField (string)
 			{
-				[]pilosa.Pair{
-					{Key: "ten", Count: 123},
-					{Key: "eleven", Count: 456},
+				&pilosa.PairsField{
+					Pairs: []pilosa.Pair{
+						{Key: "ten", Count: 123},
+						{Key: "eleven", Count: 456},
+					},
+					Field: "fld",
 				},
 				[]expHeader{
-					{"_id", "string"},
+					{"fld", "string"},
 					{"count", "uint64"},
 				},
 				[][]expColumn{
@@ -236,35 +237,61 @@ func TestGRPC(t *testing.T) {
 					{true},
 				},
 			},
+			// ValCount
+			{
+				pilosa.ValCount{Val: 1, Count: 1},
+				[]expHeader{{"value", "int64"}, {"count", "int64"}},
+				[][]expColumn{{int64(1), int64(1)}},
+			},
+			{
+				pilosa.ValCount{FloatVal: 1.24, Count: 1},
+				[]expHeader{{"value", "float64"}, {"count", "int64"}},
+				[][]expColumn{{float64(1.24), int64(1)}},
+			},
+			// SignedRow
+			{
+				pilosa.SignedRow{
+					Neg: pilosa.NewRow(13, 14, 15),
+					Pos: pilosa.NewRow(10, 11, 12),
+				},
+				[]expHeader{
+					{"", "int64"},
+				},
+				[][]expColumn{
+					{int64(-15)},
+					{int64(-14)},
+					{int64(-13)},
+					{int64(10)},
+					{int64(11)},
+					{int64(12)},
+				},
+			},
 		}
 
-		logger := logger.NopLogger
 		for ti, test := range tests {
-			results := make([]interface{}, 0)
-			results = append(results, test.result)
+			toTabler, err := toTablerWrapper(test.result)
+			if err != nil {
+				t.Fatal(err)
+			}
+			table, err := toTabler.ToTable()
+			if err != nil {
+				t.Fatal(err)
+			}
 
-			qr := pilosa.QueryResponse{}
-			qr.Results = results
-
-			ch := makeRows(qr, logger)
-
-			cnt := 0
-			for row := range ch {
-				// Ensure headers match (on the first row).
-				if cnt == 0 {
-					for i, header := range row.GetHeaders() {
-						if header.Name != test.expHeaders[i].name {
-							t.Fatalf("test %d expected header name: %s, but got: %s", ti, test.expHeaders[i].name, header.Name)
-						}
-						if header.Datatype != test.expHeaders[i].dataType {
-							t.Fatalf("test %d expected header data type: %s, but got: %s", ti, test.expHeaders[i].dataType, header.Datatype)
-						}
-					}
+			// Ensure headers match.
+			for i, header := range table.GetHeaders() {
+				if header.Name != test.expHeaders[i].name {
+					t.Fatalf("test %d expected header name: %s, but got: %s", ti, test.expHeaders[i].name, header.Name)
 				}
+				if header.Datatype != test.expHeaders[i].dataType {
+					t.Fatalf("test %d expected header data type: %s, but got: %s", ti, test.expHeaders[i].dataType, header.Datatype)
+				}
+			}
 
-				// Ensure column data matches.
-				for i, column := range row.GetColumns() {
-					switch v := test.expColumns[cnt][i].(type) {
+			// Ensure column data matches.
+			for i, row := range table.GetRows() {
+				for j, column := range row.GetColumns() {
+					switch v := test.expColumns[i][j].(type) {
 					case string:
 						val := column.GetStringVal()
 						if val != v {
@@ -294,8 +321,6 @@ func TestGRPC(t *testing.T) {
 						t.Fatalf("test %d has unhandled data type: %T", ti, v)
 					}
 				}
-
-				cnt++
 			}
 		}
 	})
