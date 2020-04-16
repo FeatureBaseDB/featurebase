@@ -574,13 +574,11 @@ func (s *rowSegment) IntersectionCount(other *rowSegment) uint64 {
 // Intersect returns the itersection of s and other.
 func (s *rowSegment) Intersect(other *rowSegment) *rowSegment {
 	data := s.data.Intersect(other.data)
-	data = data.Freeze()
 
 	return &rowSegment{
-		data:     data,
-		shard:    s.shard,
-		n:        data.Count(),
-		writable: true,
+		data:  data,
+		shard: s.shard,
+		n:     data.Count(),
 	}
 }
 
@@ -591,13 +589,11 @@ func (s *rowSegment) Union(others ...*rowSegment) *rowSegment {
 		datas[i] = other.data
 	}
 	data := s.data.Union(datas...)
-	data.Freeze()
 
 	return &rowSegment{
-		data:     data,
-		shard:    s.shard,
-		n:        data.Count(),
-		writable: true,
+		data:  data,
+		shard: s.shard,
+		n:     data.Count(),
 	}
 }
 
@@ -635,26 +631,22 @@ func (s *rowSegment) Difference(others ...*rowSegment) *rowSegment {
 		datas[i] = other.data
 	}
 	data := s.data.Difference(datas...)
-	data.Freeze()
 
 	return &rowSegment{
-		data:     data,
-		shard:    s.shard,
-		n:        data.Count(),
-		writable: true,
+		data:  data,
+		shard: s.shard,
+		n:     data.Count(),
 	}
 }
 
 // Xor returns the xor of s and other.
 func (s *rowSegment) Xor(other *rowSegment) *rowSegment {
 	data := s.data.Xor(other.data)
-	data = data.Freeze()
 
 	return &rowSegment{
-		data:     data,
-		shard:    s.shard,
-		n:        data.Count(),
-		writable: true,
+		data:  data,
+		shard: s.shard,
+		n:     data.Count(),
 	}
 }
 
@@ -666,13 +658,11 @@ func (s *rowSegment) Shift() (*rowSegment, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "shifting roaring data")
 	}
-	data = data.Freeze()
 
 	return &rowSegment{
-		data:     data,
-		shard:    s.shard,
-		n:        data.Count(),
-		writable: true,
+		data:  data,
+		shard: s.shard,
+		n:     data.Count(),
 	}, nil
 }
 
