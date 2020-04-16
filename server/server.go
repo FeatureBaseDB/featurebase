@@ -416,8 +416,9 @@ func (m *Command) setupNetworking() error {
 }
 
 // setupLogger sets up the logger based on the configuration.
-func (m *Command) setupLogger() (err error) {
+func (m *Command) setupLogger() error {
 	var f *reopen.FileWriter
+	var err error
 	if m.Config.LogPath == "" {
 		m.logOutput = m.Stderr
 	} else {
@@ -438,7 +439,7 @@ func (m *Command) setupLogger() (err error) {
 		go func() {
 			for {
 				// duplicate stderr onto log file
-				err = m.dup(int(f.Fd()), int(os.Stderr.Fd()))
+				err := m.dup(int(f.Fd()), int(os.Stderr.Fd()))
 				if err != nil {
 					m.logger.Printf("syscall dup: %s\n", err.Error())
 				}
