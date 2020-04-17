@@ -164,6 +164,8 @@ goes through API (and is passed directly to Server). (unimplemented)
 - [ ] implement and use persistent transaction store rather than inmem.
 - [ ] update go-pilosa/gpexp to actually USE transactions
   - [ ] update IDK to use updated go-pilosa
+  
+- ID validation. No slashes, no non-URL safe chars
 
 #### Testing TransactionManager
 - there should never be more than one Exclusive transaction

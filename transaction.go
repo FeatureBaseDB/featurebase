@@ -1,6 +1,7 @@
 package pilosa
 
 import (
+	"encoding/json"
 	"sync"
 	"time"
 
@@ -12,25 +13,25 @@ import (
 // needs to be tracked and spans multiple API calls.
 type Transaction struct {
 	// ID is an arbitrary string identifier. All transactions must have a unique ID.
-	ID string
+	ID string `json:"id"`
 
 	// Active notes whether an Exclusive transaction is active, or
 	// still pending (if other active transactions exist). All
 	// non-exclusive transactions are always active.
-	Active bool
+	Active bool `json:"active"`
 
 	// Exclusive is set on transactions which can only become active when no other transactions exist.
-	Exclusive bool
+	Exclusive bool `json:"exclusive"`
 
 	// Timeout is the minimum idle time for which this transaction should continue to exist.
-	Timeout time.Duration
+	Timeout time.Duration `json:"timeout"`
 
 	// Deadline is calculated from Timeout, and should be reset each
 	// time there is activity on the transaction.
-	Deadline time.Time
+	Deadline time.Time `json:"deadline"`
 
 	// Stats track statistics for the transaction. Not yet used.
-	Stats TransactionStats
+	Stats TransactionStats `json:"stats"`
 }
 
 type TransactionStats struct{}
@@ -86,7 +87,7 @@ func (tm *TransactionManager) Start(id string, timeout time.Duration, exclusive 
 			// if someone wants a transaction, and we're not able to
 			// give it to them, we want to be checking deadlines.
 			tm.startDeadlineChecker()
-			return Transaction{}, ErrTransactionExclusive
+			return trns, ErrTransactionExclusive
 		}
 	}
 	if trns, ok := trnsMap[id]; ok {
@@ -354,9 +355,8 @@ type Error string
 func (e Error) Error() string { return string(e) }
 
 const ErrTransactionNotFound = Error("transaction not found")
-const ErrTransactionExclusive = Error("there is already an exclusive transaction")
+const ErrTransactionExclusive = Error("there is an exclusive transaction, try later")
 const ErrTransactionExists = Error("transaction with the given id already exists")
-const ErrTransactionInactive = Error("cannot finish an inactive transaction")
 
 func CompareTransactions(t1, t2 Transaction) error {
 	if t1.ID != t2.ID {
@@ -373,4 +373,59 @@ func CompareTransactions(t1, t2 Transaction) error {
 	}
 	// don't care about Deadline or Stats
 	return nil
+}
+
+func (trns *Transaction) UnmarshalJSON(b []byte) error {
+	tmp := &struct {
+		ID        string      `json:"id"`
+		Active    bool        `json:"active"`
+		Exclusive bool        `json:"exclusive"`
+		Timeout   interface{} `json:"timeout"`
+		Deadline  string      `json:"deadline"`
+	}{}
+	err := json.Unmarshal(b, tmp)
+	if err != nil {
+		return err
+	}
+	trns.ID = tmp.ID
+	trns.Active = tmp.Active
+	trns.Exclusive = tmp.Exclusive
+	switch tm := tmp.Timeout.(type) {
+	case string:
+		dur, err := time.ParseDuration(tm)
+		if err != nil {
+			return errors.Wrapf(err, "timeout as string must be a valid duration got: '%s'", tm)
+		}
+		trns.Timeout = dur
+	case float64:
+		// interpret as number of seconds
+		seconds := int64(tm)
+		nsec := (tm - float64(seconds)) * 1e9
+		trns.Timeout = time.Duration(seconds*1e9 + int64(nsec))
+	case nil:
+		break
+	default:
+		return errors.New("timeout must be float64 or string")
+	}
+
+	if tmp.Deadline != "" {
+		trns.Deadline, err = time.Parse(time.RFC3339Nano, tmp.Deadline)
+	}
+	return errors.Wrap(err, "parsing deadline")
+}
+
+func (trns *Transaction) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&struct {
+		ID        string `json:"id"`
+		Active    bool   `json:"active"`
+		Exclusive bool   `json:"exclusive"`
+		Timeout   string `json:"timeout"`
+		Deadline  string `json:"deadline"`
+	}{
+		ID:        trns.ID,
+		Active:    trns.Active,
+		Exclusive: trns.Exclusive,
+		Timeout:   trns.Timeout.String(),
+		Deadline:  trns.Deadline.Format(time.RFC3339Nano),
+	})
 }

@@ -1,6 +1,7 @@
 package pilosa_test
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -233,4 +234,77 @@ func TestInMemTransactionStore(t *testing.T) {
 		t.Errorf("unexpected transaction at blah: %+v", l["blah"])
 	}
 
+}
+
+func TestMarshalUnmarshalTransaction(t *testing.T) {
+	tests := []struct {
+		name        string
+		transaction pilosa.Transaction
+	}{
+		{
+			name: "empty",
+		},
+		{
+			name: "basic",
+			transaction: pilosa.Transaction{
+				ID:        "blah",
+				Active:    true,
+				Exclusive: true,
+				Timeout:   time.Minute,
+				Deadline:  time.Now(),
+			},
+		},
+	}
+
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			bytes, err := json.Marshal(&tst.transaction)
+			if err != nil {
+				t.Errorf("marshalling: %v", err)
+			}
+
+			nt := &pilosa.Transaction{}
+			err = json.Unmarshal(bytes, nt)
+			if err != nil {
+				t.Fatalf("unmarshalling: %v", err)
+			}
+
+			test.CompareTransactions(t, tst.transaction, *nt)
+		})
+	}
+}
+
+func TestUnmarshalTransaction(t *testing.T) {
+	tests := []struct {
+		name            string
+		transactionJSON string
+		exp             pilosa.Transaction
+	}{
+		{
+			name:            "empty",
+			transactionJSON: `{}`,
+		},
+		{
+			name:            "basicPost",
+			transactionJSON: `{"id": "blah", "exclusive": false, "timeout": "1m"}`,
+			exp:             pilosa.Transaction{ID: "blah", Timeout: time.Minute},
+		},
+		{
+			name:            "basicPostFloatTimeout",
+			transactionJSON: `{"id": "blah", "exclusive": false, "timeout": 10.5}`,
+			exp:             pilosa.Transaction{ID: "blah", Timeout: time.Second*10 + time.Second/2},
+		},
+	}
+
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			nt := &pilosa.Transaction{}
+			err := json.Unmarshal([]byte(tst.transactionJSON), nt)
+			if err != nil {
+				t.Fatalf("unmarshalling: %v", err)
+			}
+
+			test.CompareTransactions(t, tst.exp, *nt)
+		})
+	}
 }

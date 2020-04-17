@@ -26,6 +26,7 @@ import (
 	"net/url"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/encoding/proto"
@@ -392,6 +393,7 @@ func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits 
 
 	// Get the coordinator node; all bits are sent to the
 	// primary translate store (i.e. coordinator).
+	// TODO... is that right^^?
 	nodes, err := c.Nodes(ctx)
 	if err != nil {
 		return fmt.Errorf("getting nodes: %s", err)
@@ -1227,11 +1229,165 @@ func (c *InternalClient) TranslateIDsNode(ctx context.Context, uri *pilosa.URI, 
 	return tkresp.Keys, nil
 }
 
+func (c *InternalClient) Transactions(ctx context.Context) (map[string]pilosa.Transaction, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.Transactions")
+	defer span.Finish()
+
+	trnsMap := make(map[string]pilosa.Transaction)
+
+	u := uriPathToURL(c.defaultURI, "/transactions")
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return trnsMap, errors.Wrap(err, "creating transactions request")
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	resp, err := c.executeRequest(req.WithContext(ctx))
+	if err != nil {
+		return trnsMap, errors.Wrap(err, "executing request")
+	}
+	defer resp.Body.Close()
+	tmpTrnsMap := make(map[string]*pilosa.Transaction)
+	err = json.NewDecoder(resp.Body).Decode(&tmpTrnsMap)
+
+	for id, trnsp := range tmpTrnsMap {
+		trnsMap[id] = *trnsp
+	}
+
+	return trnsMap, errors.Wrap(err, "json decoding")
+}
+
+func (c *InternalClient) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (pilosa.Transaction, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.StartTransaction")
+	defer span.Finish()
+	tr := &TransactionResponse{Transaction: &pilosa.Transaction{}}
+	buf, err := json.Marshal(&pilosa.Transaction{
+		ID:        id,
+		Timeout:   timeout,
+		Exclusive: exclusive,
+	})
+	if err != nil {
+		return pilosa.Transaction{}, errors.Wrap(err, "marshalling payload")
+	}
+	// We're using the defaultURI here because this is only used by
+	// tests, and we want to test requests against all hosts. A robust
+	// client implementation would ensure that these requests go to
+	// the coordinator.
+	u := uriPathToURL(c.defaultURI, "/transaction/"+id)
+	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(buf))
+	if err != nil {
+		return pilosa.Transaction{}, errors.Wrap(err, "creating post transaction request")
+	}
+	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	resp, err := c.executeRequest(req.WithContext(ctx), giveRawResponse(true))
+	if err != nil {
+		return pilosa.Transaction{}, errors.Wrap(err, "executing request")
+	}
+	defer resp.Body.Close()
+	err = json.NewDecoder(resp.Body).Decode(&tr)
+	if err != nil {
+		return pilosa.Transaction{}, errors.Wrap(err, "decoding response")
+	}
+	if resp.StatusCode == 409 {
+		err = pilosa.ErrTransactionExclusive
+	} else if tr.Error != "" {
+		err = errors.New(tr.Error)
+	}
+	return *tr.Transaction, err
+}
+
+func (c *InternalClient) FinishTransaction(ctx context.Context, id string) (pilosa.Transaction, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.FinishTransaction")
+	defer span.Finish()
+
+	u := uriPathToURL(c.defaultURI, "/transaction/"+id+"/finish")
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return pilosa.Transaction{}, errors.Wrap(err, "creating finish transaction request")
+	}
+
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	resp, err := c.executeRequest(req.WithContext(ctx), giveRawResponse(true))
+	if err != nil {
+		return pilosa.Transaction{}, errors.Wrap(err, "executing request")
+	}
+	defer resp.Body.Close()
+	tr := &TransactionResponse{Transaction: &pilosa.Transaction{}}
+	err = json.NewDecoder(resp.Body).Decode(&tr)
+	if err != nil {
+		return pilosa.Transaction{}, errors.Wrap(err, "decoding response")
+	}
+
+	if tr.Error != "" {
+		err = errors.New(tr.Error)
+	}
+	return *tr.Transaction, err
+}
+
+func (c *InternalClient) GetTransaction(ctx context.Context, id string) (pilosa.Transaction, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "InternalClient.GetTransaction")
+	defer span.Finish()
+
+	// We're using the defaultURI here because this is only used by
+	// tests, and we want to test requests against all hosts. A robust
+	// client implementation would ensure that these requests go to
+	// the coordinator.
+	u := uriPathToURL(c.defaultURI, "/transaction/"+id)
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return pilosa.Transaction{}, errors.Wrap(err, "creating get transaction request")
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
+
+	resp, err := c.executeRequest(req.WithContext(ctx), giveRawResponse(true))
+	if err != nil {
+		return pilosa.Transaction{}, errors.Wrap(err, "executing request")
+	}
+	defer resp.Body.Close()
+	tr := &TransactionResponse{Transaction: &pilosa.Transaction{}}
+	err = json.NewDecoder(resp.Body).Decode(&tr)
+	if err != nil {
+		return pilosa.Transaction{}, errors.Wrap(err, "decoding response")
+	}
+
+	if tr.Error != "" {
+		err = errors.New(tr.Error)
+	}
+	return *tr.Transaction, err
+}
+
+type executeOpts struct {
+	// giveRawResponse instructs executeRequest not to process the
+	// respStatusCode and try to extract errors or whatever.
+	giveRawResponse bool
+}
+
+type executeRequestOption func(*executeOpts)
+
+func giveRawResponse(b bool) executeRequestOption {
+	return func(eo *executeOpts) {
+		eo.giveRawResponse = b
+	}
+}
+
 // executeRequest executes the given request and checks the Response. For
 // responses with non-2XX status, the body is read and closed, and an error is
 // returned. If the error is nil, the caller must ensure that the response body
 // is closed.
-func (c *InternalClient) executeRequest(req *http.Request) (*http.Response, error) {
+func (c *InternalClient) executeRequest(req *http.Request, opts ...executeRequestOption) (*http.Response, error) {
+	eo := &executeOpts{}
+	for _, opt := range opts {
+		opt(eo)
+	}
+
 	tracing.GlobalTracer.InjectHTTPHeaders(req)
 	req.Close = false
 	resp, err := c.httpClient.Do(req)
@@ -1240,6 +1396,9 @@ func (c *InternalClient) executeRequest(req *http.Request) (*http.Response, erro
 			resp.Body.Close()
 		}
 		return nil, errors.Wrap(err, "getting response")
+	}
+	if eo.giveRawResponse {
+		return resp, nil
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		defer resp.Body.Close()

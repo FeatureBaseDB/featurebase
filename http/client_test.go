@@ -23,6 +23,7 @@ import (
 	gohttp "net/http"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
+	"github.com/pkg/errors"
 )
 
 // Test distributed TopN Row count across 3 nodes.
@@ -1239,6 +1241,150 @@ func TestClient_CreateDecimalField(t *testing.T) {
 	}
 	if !reflect.DeepEqual(resp.Results[0].(*pilosa.Row).Columns(), []uint64{2, 3}) {
 		t.Fatalf("unexpected results: %v", resp.Results[0].(*pilosa.Row).Columns())
+	}
+}
+
+func TestClientTransactions(t *testing.T) {
+	c := test.MustRunCluster(t, 3)
+	defer c.Close()
+
+	client0 := MustNewClient(c[0].URL(), http.GetHTTPClient(nil))
+	client1 := MustNewClient(c[1].URL(), http.GetHTTPClient(nil))
+
+	// can create, list, get, and finish a transaction
+	var expDeadline time.Time
+	if trns, err := client0.StartTransaction(context.Background(), "blah", time.Minute, false); err != nil {
+		t.Fatalf("error starting transaction: %v", err)
+	} else {
+		expDeadline = time.Now().Add(time.Minute)
+		test.CompareTransactions(t,
+			pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Deadline: expDeadline},
+			trns)
+	}
+
+	if trnsMap, err := client0.Transactions(context.Background()); err != nil {
+		t.Errorf("listing transactions: %v", err)
+	} else {
+		if len(trnsMap) != 1 {
+			t.Errorf("unexpected trnsMap: %+v", trnsMap)
+		}
+		test.CompareTransactions(t,
+			pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Deadline: expDeadline},
+			trnsMap["blah"])
+	}
+
+	if trns, err := client0.GetTransaction(context.Background(), "blah"); err != nil {
+		t.Fatalf("error getting transaction: %v", err)
+	} else {
+		test.CompareTransactions(t,
+			pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Deadline: expDeadline},
+			trns)
+	}
+
+	if trns, err := client0.FinishTransaction(context.Background(), "blah"); err != nil {
+		t.Fatalf("error finishing transaction: %v", err)
+	} else {
+		test.CompareTransactions(t,
+			pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Deadline: expDeadline},
+			trns)
+	}
+
+	// can create exclusive transaction
+	if trns, err := client0.StartTransaction(context.Background(), "blahe", time.Minute, true); err != nil {
+		t.Fatalf("error starting transaction: %v", err)
+	} else {
+		expDeadline = time.Now().Add(time.Minute)
+		test.CompareTransactions(t,
+			pilosa.Transaction{ID: "blahe", Timeout: time.Minute, Active: true, Exclusive: true, Deadline: expDeadline},
+			trns)
+	}
+
+	// cannot start new transaction - correct error and exclusive transaction are returned
+	if trns, err := client0.StartTransaction(context.Background(), "blah", time.Minute, false); errors.Cause(err) != pilosa.ErrTransactionExclusive {
+		t.Fatalf("shouldn't be able to start transaction while an exclusive is running, but got: %+v, %v", trns, err)
+	} else {
+		test.CompareTransactions(t,
+			pilosa.Transaction{ID: "blahe", Timeout: time.Minute, Active: true, Exclusive: true, Deadline: expDeadline},
+			trns)
+	}
+
+	// finish exclusive transaction
+	if trns, err := client0.FinishTransaction(context.Background(), "blahe"); err != nil {
+		t.Fatalf("error finishing transaction: %v", err)
+	} else {
+		test.CompareTransactions(t,
+			pilosa.Transaction{ID: "blahe", Timeout: time.Minute, Active: true, Exclusive: true, Deadline: expDeadline},
+			trns)
+	}
+
+	// start new transaction
+	if trns, err := client0.StartTransaction(context.Background(), "blah", time.Minute, false); err != nil {
+		t.Fatalf("error starting transaction: %v", err)
+	} else {
+		expDeadline = time.Now().Add(time.Minute)
+		test.CompareTransactions(t,
+			pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Deadline: expDeadline},
+			trns)
+	}
+
+	// try to start same transaction
+	if trns, err := client0.StartTransaction(context.Background(), "blah", time.Minute, false); err == nil ||
+		!strings.Contains(err.Error(), pilosa.ErrTransactionExists.Error()) {
+		t.Fatalf("expected ErrTransactionExists, but got: %v", err)
+	} else {
+		test.CompareTransactions(t,
+			pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Deadline: expDeadline},
+			trns)
+	}
+
+	// start an exclusive transaction which can't go active
+	if trns, err := client0.StartTransaction(context.Background(), "blahe", time.Minute, true); err != nil {
+		t.Fatalf("error starting transaction: %v", err)
+	} else {
+		expDeadline = time.Now().Add(time.Minute)
+		test.CompareTransactions(t,
+			pilosa.Transaction{ID: "blahe", Timeout: time.Minute, Active: false, Exclusive: true, Deadline: expDeadline},
+			trns)
+	}
+
+	// finish exclusive transaction that never went active
+	if trns, err := client0.FinishTransaction(context.Background(), "blahe"); err != nil {
+		t.Fatalf("error finishing transaction: %v", err)
+	} else {
+		test.CompareTransactions(t,
+			pilosa.Transaction{ID: "blahe", Timeout: time.Minute, Active: false, Exclusive: true, Deadline: expDeadline},
+			trns)
+	}
+
+	// finish non-existent transaction
+	if trns, err := client0.FinishTransaction(context.Background(), "zzz"); err == nil ||
+		!strings.Contains(err.Error(), pilosa.ErrTransactionNotFound.Error()) {
+		t.Fatalf("unexpected error finishing nonexistent transaction: %v", err)
+	} else {
+		test.CompareTransactions(t,
+			pilosa.Transaction{},
+			trns)
+	}
+
+	// get non-existent transaction
+	if trns, err := client0.GetTransaction(context.Background(), "xxx"); err == nil ||
+		!strings.Contains(err.Error(), pilosa.ErrTransactionNotFound.Error()) {
+		t.Fatalf("unexpected error getting nonexistent transaction: %v", err)
+	} else {
+		test.CompareTransactions(t,
+			pilosa.Transaction{},
+			trns)
+	}
+
+	// non-coordinator
+	if trns, err := client1.StartTransaction(context.Background(), "blah", time.Minute, false); err == nil ||
+		!strings.Contains(err.Error(), pilosa.ErrNodeNotCoordinator.Error()) {
+		t.Fatalf("unexpected error starting on non-coordinator: %v", err)
+	} else {
+		expDeadline = time.Now().Add(time.Minute)
+		test.CompareTransactions(t,
+			pilosa.Transaction{},
+			trns)
 	}
 }
 
