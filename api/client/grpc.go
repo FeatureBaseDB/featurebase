@@ -156,6 +156,22 @@ func (c *GRPCClient) Query(ctx context.Context, index string, pql string) (pb.St
 	return stream, err
 }
 
+// QueryUnary returns a TableResponse for the given index and PQL string.
+func (c *GRPCClient) QueryUnary(ctx context.Context, index string, pql string) (*pb.TableResponse, error) {
+	conn := c.Conn()
+
+	if conn == nil {
+		return nil, errors.New("client has not established a grpc connection")
+	}
+
+	grpcClient := pb.NewPilosaClient(conn)
+
+	return grpcClient.QueryPQLUnary(ctx, &pb.QueryPQLRequest{
+		Index: index,
+		Pql:   pql,
+	})
+}
+
 // Inspect returns a stream of RowResponse for the given index, columns, and filters.
 // It is intended to mimic something like "select [fields] from table where recordID IN (...)".
 func (c *GRPCClient) Inspect(ctx context.Context, index string, columnIDs []uint64, columnKeys []string, fieldFilters []string, limit, offset uint64) (pb.StreamClient, error) {
