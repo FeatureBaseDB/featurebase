@@ -2,12 +2,16 @@ module github.com/pilosa/pilosa/v2
 
 replace github.com/hashicorp/memberlist => github.com/pilosa/memberlist v0.1.4-0.20190415211605-f6512523c021
 
+// TODO: Remove the following line if this is merged: https://github.com/client9/reopen/pull/9
+replace github.com/client9/reopen => github.com/codysoyland/reopen v1.0.1-0.20200414204206-42cbe848be3b
+
 require (
 	github.com/CAFxX/gcnotifier v0.0.0-20190112062741-224a280d589d
 	github.com/DataDog/datadog-go v0.0.0-20180822151419-281ae9f2d895
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
 	github.com/boltdb/bolt v1.3.1
 	github.com/cespare/xxhash v1.1.0
+	github.com/client9/reopen v0.0.0-00010101000000-000000000000
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-ole/go-ole v1.2.4 // indirect

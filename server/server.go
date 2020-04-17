@@ -36,6 +36,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/client9/reopen"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
 	"github.com/pilosa/pilosa/v2/encoding/proto"
@@ -412,6 +413,47 @@ func (m *Command) setupNetworking() error {
 	m.gossipMemberSet = gossipMemberSet
 
 	return errors.Wrap(gossipMemberSet.Open(), "opening gossip memberset")
+}
+
+// setupLogger sets up the logger based on the configuration.
+func (m *Command) setupLogger() error {
+	var f *reopen.FileWriter
+	var err error
+	if m.Config.LogPath == "" {
+		m.logOutput = m.Stderr
+	} else {
+		f, err = reopen.NewFileWriter(m.Config.LogPath)
+		if err != nil {
+			return errors.Wrap(err, "opening file")
+		}
+		m.logOutput = f
+	}
+	if m.Config.Verbose {
+		m.logger = logger.NewVerboseLogger(m.logOutput)
+	} else {
+		m.logger = logger.NewStandardLogger(m.logOutput)
+	}
+	if m.Config.LogPath != "" {
+		sighup := make(chan os.Signal, 1)
+		signal.Notify(sighup, syscall.SIGHUP)
+		go func() {
+			for {
+				// duplicate stderr onto log file
+				err := m.dup(int(f.Fd()), int(os.Stderr.Fd()))
+				if err != nil {
+					m.logger.Printf("syscall dup: %s\n", err.Error())
+				}
+
+				// reopen log file on SIGHUP
+				<-sighup
+				err = f.Reopen()
+				if err != nil {
+					m.logger.Printf("reopen: %s\n", err.Error())
+				}
+			}
+		}()
+	}
+	return nil
 }
 
 // GossipTransport allows a caller to return the gossip transport created when

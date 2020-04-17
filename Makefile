@@ -46,7 +46,7 @@ test:
 # Run test suite with race flag
 test-race:
 	case $$(go version) in *go1.14*) NOCHECKPTR="-gcflags=all=-d=checkptr=0";; *) NOCHECKPTR="";; esac ; \
-	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS) -race $$NOCHECKPTR -timeout 30m
+	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS) -race $$NOCHECKPTR -timeout 30m -v
 
 bench:
 	go test ./... -bench=. -run=NoneZ -timeout=127m $(TESTFLAGS)
