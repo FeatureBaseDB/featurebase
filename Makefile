@@ -13,6 +13,7 @@ ENTERPRISE ?= 0
 ENTERPRISE_ENABLED = $(subst 0,,$(ENTERPRISE))
 RELEASE ?= 0
 RELEASE_ENABLED = $(subst 0,,$(RELEASE))
+NOCHECKPTR=$(shell go version | grep -q 'go1.1[4,5,6,7]' && echo \"-gcflags=all=-d=checkptr=0\" )
 BUILD_TAGS += $(if $(ENTERPRISE_ENABLED),enterprise)
 BUILD_TAGS += $(if $(RELEASE_ENABLED),release)
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
@@ -40,13 +41,11 @@ vendor: go.mod
 
 # Run test suite
 test:
-	case $$(go version) in *go1.14*) NOCHECKPTR="-gcflags=all=-d=checkptr=0";; *) NOCHECKPTR="";; esac ; \
-	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS) $$NOCHECKPTR
+	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)
 
 # Run test suite with race flag
 test-race:
-	case $$(go version) in *go1.14*) NOCHECKPTR="-gcflags=all=-d=checkptr=0";; *) NOCHECKPTR="";; esac ; \
-	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS) -race $$NOCHECKPTR -timeout 30m -v
+	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS) -race $(NOCHECKPTR) -timeout 30m -v
 
 bench:
 	go test ./... -bench=. -run=NoneZ -timeout=127m $(TESTFLAGS)
