@@ -71,6 +71,7 @@ const (
 type Node struct {
 	ID            string `json:"id"`
 	URI           URI    `json:"uri"`
+	GRPCURI       URI    `json:"grpc-uri"`
 	IsCoordinator bool   `json:"isCoordinator"`
 	State         string `json:"state"`
 }

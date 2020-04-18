@@ -736,7 +736,7 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 type grpcServer struct {
 	api        *pilosa.API
 	grpcServer *grpc.Server
-	hostPort   string
+	ln         net.Listener
 
 	logger logger.Logger
 	stats  stats.StatsClient
@@ -751,10 +751,9 @@ func OptGRPCServerAPI(api *pilosa.API) grpcServerOption {
 	}
 }
 
-func OptGRPCServerURI(uri *pilosa.URI) grpcServerOption {
-	hostport := fmt.Sprintf("%s:%d", uri.Host, uri.Port)
+func OptGRPCServerListener(ln net.Listener) grpcServerOption {
 	return func(s *grpcServer) error {
-		s.hostPort = hostport
+		s.ln = ln
 		return nil
 	}
 }
@@ -774,12 +773,7 @@ func OptGRPCServerStats(stats stats.StatsClient) grpcServerOption {
 }
 
 func (s *grpcServer) Serve(tlsConfig *tls.Config) error {
-	// create listener
-	lis, err := net.Listen("tcp", s.hostPort)
-	if err != nil {
-		return errors.Wrap(err, "creating listener")
-	}
-	s.logger.Printf("enabled grpc listening on %s", lis.Addr())
+	s.logger.Printf("enabled grpc listening on %s", s.ln.Addr())
 
 	opts := make([]grpc.ServerOption, 0)
 	if tlsConfig != nil {
@@ -795,7 +789,7 @@ func (s *grpcServer) Serve(tlsConfig *tls.Config) error {
 	reflection.Register(s.grpcServer)
 
 	// and start...
-	if err := s.grpcServer.Serve(lis); err != nil {
+	if err := s.grpcServer.Serve(s.ln); err != nil {
 		return errors.Wrap(err, "starting grpc server")
 	}
 	return nil
