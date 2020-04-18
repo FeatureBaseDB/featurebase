@@ -1386,6 +1386,20 @@ func TestClientTransactions(t *testing.T) {
 			pilosa.Transaction{},
 			trns)
 	}
+
+	// start transaction with blank id
+	if trns, err := client0.StartTransaction(context.Background(), "", time.Minute, false); err != nil {
+		t.Fatalf("error starting transaction: %v", err)
+	} else {
+		expDeadline = time.Now().Add(time.Minute)
+		if len(trns.ID) != 36 {
+			t.Errorf("expected generated UUID, but got '%s'", trns.ID)
+		}
+		test.CompareTransactions(t,
+			pilosa.Transaction{ID: trns.ID, Timeout: time.Minute, Active: true, Deadline: expDeadline},
+			trns)
+	}
+
 }
 
 // Client represents a test wrapper for pilosa.Client.

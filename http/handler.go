@@ -343,6 +343,8 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET").Name("GetVersion")
 	router.HandleFunc("/transactions", handler.handleGetTransactions).Methods("GET").Name("GetTransactions")
 	router.HandleFunc("/transaction/{id}", handler.handleGetTransaction).Methods("GET").Name("GetTransaction")
+	router.HandleFunc("/transaction/", handler.handlePostTransaction).Methods("POST").Name("PostTransaction")
+	router.HandleFunc("/transaction", handler.handlePostTransaction).Methods("POST").Name("PostTransaction")
 	router.HandleFunc("/transaction/{id}", handler.handlePostTransaction).Methods("POST").Name("PostTransaction")
 	router.HandleFunc("/transaction/{id}/finish", handler.handlePostFinishTransaction).Methods("POST").Name("PostFinishTransaction")
 
@@ -1124,7 +1126,10 @@ func (h *Handler) handlePostTransaction(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	id := mux.Vars(r)["id"]
+	id, ok := mux.Vars(r)["id"]
+	if !ok {
+		id = reqTrns.ID
+	}
 	trns, err := h.api.StartTransaction(id, reqTrns.Timeout, reqTrns.Exclusive, false)
 
 	h.doTransactionResponse(w, err, trns)

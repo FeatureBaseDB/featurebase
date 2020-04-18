@@ -159,11 +159,13 @@ goes through API (and is passed directly to Server). (unimplemented)
 
 #### TODO
 
-- [x] implement api layer and cluster logic, startup, etc. 
+- [x] implement api layer and cluster logic, startup, etc.
+- [ ] add new cluster state to explicitly reject certain requests during exclusive transaction?
 - [ ] implement HTTP layer including header/transaction ID
 - [ ] implement and use persistent transaction store rather than inmem.
 - [ ] update go-pilosa/gpexp to actually USE transactions
   - [ ] update IDK to use updated go-pilosa
+- [ ] external testing with e.g. curl
   
 - ID validation. No slashes, no non-URL safe chars
 
@@ -171,4 +173,71 @@ goes through API (and is passed directly to Server). (unimplemented)
 - there should never be more than one Exclusive transaction
 - if the Exclusive transaction is active, there should be no other transactions
 
+
+### Documentation
+
+Before performing a backup, you must request an exclusive "transaction" with the cluster. Do this via and HTTP POST to the coordinator node at path:
+
+`/transaction` OR `/transaction/{id}` if you wish to specify a custom ID (any alphanum+dash). Otherwise a UUID will be generated and returned in the response.
+
+Use headers:
+
+```
+Accept: application/json
+Content-Type: application/json
+```
+
+And body like:
+
+```
+{
+  "timeout": "10m",
+  "exclusive": true
+}
+```
+
+You may choose any timeout you like, though it's better to err on the
+longer side of how long you expect the backup to take. You explicitly
+finish the transaction once you're done, so the timeout exists solely
+for cleanup in the case of failures.
+
+This will return a JSON "transaction response" object.
+```
+{
+"transaction": {
+  "id":"5e572d95-4204-40cd-804c-92976b68dc9b",
+  "active":true,
+  "exclusive":false,
+  "timeout":"1m0s",
+  "deadline":"2020-04-17T21:54:18.69359-05:00"
+  },
+"error":"some message"
+}
+```
+
+The `error` field MAY not be present if there is no error.
+
+You MUST check whether `active` is true. If not, you must poll the transaction endpoint with a GET request and your ID until it is true. This looks like:
+
+GET `/transaction/5e572d95-4204-40cd-804c-92976b68dc9b`
+
+with headers:
+
+```
+Accept: application/json
+```
+
+and also returns a "transaction response" object.
+
+Once an "active", "exclusive" transaction is returned, proceed with your backup.
+
+Once the backup is complete, finish the transaction with
+
+POST `/transaction/{id}/finish`
+
+with headers:
+
+```
+Accept: application/json
+```
 

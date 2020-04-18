@@ -1247,7 +1247,10 @@ func (c *InternalClient) Transactions(ctx context.Context) (map[string]pilosa.Tr
 	if err != nil {
 		return trnsMap, errors.Wrap(err, "executing request")
 	}
-	defer resp.Body.Close()
+	defer func() {
+		io.Copy(ioutil.Discard, resp.Body)
+		resp.Body.Close()
+	}()
 	tmpTrnsMap := make(map[string]*pilosa.Transaction)
 	err = json.NewDecoder(resp.Body).Decode(&tmpTrnsMap)
 
@@ -1288,7 +1291,10 @@ func (c *InternalClient) StartTransaction(ctx context.Context, id string, timeou
 	if err != nil {
 		return pilosa.Transaction{}, errors.Wrap(err, "executing request")
 	}
-	defer resp.Body.Close()
+	defer func() {
+		io.Copy(ioutil.Discard, resp.Body)
+		resp.Body.Close()
+	}()
 	err = json.NewDecoder(resp.Body).Decode(&tr)
 	if err != nil {
 		return pilosa.Transaction{}, errors.Wrap(err, "decoding response")
@@ -1318,7 +1324,10 @@ func (c *InternalClient) FinishTransaction(ctx context.Context, id string) (pilo
 	if err != nil {
 		return pilosa.Transaction{}, errors.Wrap(err, "executing request")
 	}
-	defer resp.Body.Close()
+	defer func() {
+		io.Copy(ioutil.Discard, resp.Body)
+		resp.Body.Close()
+	}()
 	tr := &TransactionResponse{Transaction: &pilosa.Transaction{}}
 	err = json.NewDecoder(resp.Body).Decode(&tr)
 	if err != nil {
@@ -1351,7 +1360,10 @@ func (c *InternalClient) GetTransaction(ctx context.Context, id string) (pilosa.
 	if err != nil {
 		return pilosa.Transaction{}, errors.Wrap(err, "executing request")
 	}
-	defer resp.Body.Close()
+	defer func() {
+		io.Copy(ioutil.Discard, resp.Body)
+		resp.Body.Close()
+	}()
 	tr := &TransactionResponse{Transaction: &pilosa.Transaction{}}
 	err = json.NewDecoder(resp.Body).Decode(&tr)
 	if err != nil {
