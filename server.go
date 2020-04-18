@@ -70,6 +70,7 @@ type Server struct { // nolint: maligned
 
 	nodeID              string
 	uri                 URI
+	grpcURI             URI
 	antiEntropyInterval time.Duration
 	metricInterval      time.Duration
 	diagnosticInterval  time.Duration
@@ -236,6 +237,15 @@ func OptServerURI(uri *URI) ServerOption {
 	}
 }
 
+// OptServerGRPCURI is a functional option on Server
+// used to set the server gRPC URI.
+func OptServerGRPCURI(uri *URI) ServerOption {
+	return func(s *Server) error {
+		s.grpcURI = *uri
+		return nil
+	}
+}
+
 // OptServerClusterDisabled tells the server whether to use a static cluster with the
 // defined hosts. Mostly used for testing.
 func OptServerClusterDisabled(disabled bool, hosts []string) ServerOption {
@@ -370,6 +380,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	node := &Node{
 		ID:            s.nodeID,
 		URI:           s.uri,
+		GRPCURI:       s.grpcURI,
 		IsCoordinator: s.cluster.Coordinator == s.nodeID,
 		State:         nodeStateDown,
 	}
