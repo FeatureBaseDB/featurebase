@@ -161,7 +161,9 @@ goes through API (and is passed directly to Server). (unimplemented)
 
 - [x] implement api layer and cluster logic, startup, etc.
 - [ ] add new cluster state to explicitly reject certain requests during exclusive transaction?
-- [ ] implement HTTP layer including header/transaction ID
+- [x] implement HTTP layer
+- [x] implement transaction id in header
+- [x] propagate context
 - [ ] implement and use persistent transaction store rather than inmem.
 - [ ] update go-pilosa/gpexp to actually USE transactions
   - [ ] update IDK to use updated go-pilosa

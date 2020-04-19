@@ -1585,20 +1585,20 @@ func (api *API) PrimaryReplicaNodeURL() url.URL {
 	return node.URI.URL()
 }
 
-func (api *API) StartTransaction(id string, timeout time.Duration, exclusive bool, remote bool) (Transaction, error) {
-	return api.server.StartTransaction(id, timeout, exclusive, remote)
+func (api *API) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool, remote bool) (Transaction, error) {
+	return api.server.StartTransaction(ctx, id, timeout, exclusive, remote)
 }
 
-func (api *API) FinishTransaction(id string, remote bool) (Transaction, error) {
-	return api.server.FinishTransaction(id, remote)
+func (api *API) FinishTransaction(ctx context.Context, id string, remote bool) (Transaction, error) {
+	return api.server.FinishTransaction(ctx, id, remote)
 }
 
-func (api *API) Transactions() (map[string]Transaction, error) {
-	return api.server.Transactions()
+func (api *API) Transactions(ctx context.Context) (map[string]Transaction, error) {
+	return api.server.Transactions(ctx)
 }
 
-func (api *API) GetTransaction(id string, remote bool) (Transaction, error) {
-	return api.server.GetTransaction(id, remote)
+func (api *API) GetTransaction(ctx context.Context, id string, remote bool) (Transaction, error) {
+	return api.server.GetTransaction(ctx, id, remote)
 }
 
 type serverInfo struct {

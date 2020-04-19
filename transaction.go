@@ -1,6 +1,7 @@
 package pilosa
 
 import (
+	"context"
 	"encoding/json"
 	"sync"
 	"time"
@@ -72,7 +73,7 @@ func NewTransactionManager(store TransactionStore) *TransactionManager {
 // is returned—this is primarily so that the caller can discover if an
 // exclusive transaction has been made immediately active or if they
 // need to poll.
-func (tm *TransactionManager) Start(id string, timeout time.Duration, exclusive bool) (Transaction, error) {
+func (tm *TransactionManager) Start(ctx context.Context, id string, timeout time.Duration, exclusive bool) (Transaction, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
@@ -120,7 +121,7 @@ func (tm *TransactionManager) Start(id string, timeout time.Duration, exclusive 
 
 // Finish completes and removes a transaction, returning the completed
 // transaction (so that the caller can e.g. view the Stats)
-func (tm *TransactionManager) Finish(id string) (Transaction, error) {
+func (tm *TransactionManager) Finish(ctx context.Context, id string) (Transaction, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 	return tm.finish(id)
@@ -165,7 +166,7 @@ func (tm *TransactionManager) finish(id string) (Transaction, error) {
 
 // Get retrieves the transaction with the given ID. Returns ErrTransactionNotFound
 // if there isn't one.
-func (tm *TransactionManager) Get(id string) (Transaction, error) {
+func (tm *TransactionManager) Get(ctx context.Context, id string) (Transaction, error) {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
 
@@ -174,7 +175,7 @@ func (tm *TransactionManager) Get(id string) (Transaction, error) {
 
 // List returns map of all transactions by their ID. It is a copy and
 // so may be retained and modified by the caller.
-func (tm *TransactionManager) List() (map[string]Transaction, error) {
+func (tm *TransactionManager) List(ctx context.Context) (map[string]Transaction, error) {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
 	return tm.store.List()
@@ -183,7 +184,7 @@ func (tm *TransactionManager) List() (map[string]Transaction, error) {
 // ResetDeadline updates the deadline for the transaction with the
 // given ID to be equal to the current time plus the transaction's
 // timeout.
-func (tm *TransactionManager) ResetDeadline(id string) (Transaction, error) {
+func (tm *TransactionManager) ResetDeadline(ctx context.Context, id string) (Transaction, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 	trns, err := tm.store.Get(id)

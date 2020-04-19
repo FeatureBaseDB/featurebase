@@ -1046,7 +1046,7 @@ func (h *Handler) handleGetTransactions(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
-	trnsMap, err := h.api.Transactions()
+	trnsMap, err := h.api.Transactions(r.Context())
 	if err != nil {
 		switch errors.Cause(err) {
 		case pilosa.ErrNodeNotCoordinator:
@@ -1107,7 +1107,7 @@ func (h *Handler) handleGetTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := mux.Vars(r)["id"]
-	trns, err := h.api.GetTransaction(id, false)
+	trns, err := h.api.GetTransaction(r.Context(), id, false)
 	h.doTransactionResponse(w, err, trns)
 }
 
@@ -1130,7 +1130,7 @@ func (h *Handler) handlePostTransaction(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		id = reqTrns.ID
 	}
-	trns, err := h.api.StartTransaction(id, reqTrns.Timeout, reqTrns.Exclusive, false)
+	trns, err := h.api.StartTransaction(r.Context(), id, reqTrns.Timeout, reqTrns.Exclusive, false)
 
 	h.doTransactionResponse(w, err, trns)
 }
@@ -1141,7 +1141,7 @@ func (h *Handler) handlePostFinishTransaction(w http.ResponseWriter, r *http.Req
 		return
 	}
 	id := mux.Vars(r)["id"]
-	trns, err := h.api.FinishTransaction(id, false)
+	trns, err := h.api.FinishTransaction(r.Context(), id, false)
 	h.doTransactionResponse(w, err, trns)
 }
 

@@ -1,6 +1,7 @@
 package pilosa_test
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ func TestTransactionManager(t *testing.T) {
 
 	tm := pilosa.NewTransactionManager(store)
 	tm.Log = test.NewBufferLogger()
+	ctx := context.Background()
 
 	// can add a non-exclusive transaction
 	trns1 := mustStart(t, tm, "a", time.Microsecond, false)
@@ -28,7 +30,7 @@ func TestTransactionManager(t *testing.T) {
 	test.CompareTransactions(t, pilosa.Transaction{ID: "b", Active: true, Timeout: time.Microsecond, Deadline: time.Now()}, trns2)
 
 	// trying to start a transaction with same name errors and returns previous transaction
-	t3, err := tm.Start("a", time.Second, true)
+	t3, err := tm.Start(ctx, "a", time.Second, true)
 	if err != pilosa.ErrTransactionExists {
 		t.Errorf("expected transaction exists, but got: '%v'", err)
 	}
@@ -51,19 +53,19 @@ func TestTransactionManager(t *testing.T) {
 	test.CompareTransactions(t, pilosa.Transaction{ID: "ce", Active: false, Exclusive: true, Timeout: time.Millisecond * 5, Deadline: time.Now().Add(time.Millisecond * 5)}, trnsE)
 
 	// can't start new transactions while an exclusive transaction is pending
-	if _, err := tm.Start("d", time.Millisecond, false); err != pilosa.ErrTransactionExclusive {
+	if _, err := tm.Start(ctx, "d", time.Millisecond, false); err != pilosa.ErrTransactionExclusive {
 		t.Errorf("unexpected error starting transaction while an exclusive transaction exists: %v", err)
 	}
 
 	// can't start new exclusive transactions while an exclusive transaction is pending
-	if _, err := tm.Start("ee", time.Millisecond, true); err != pilosa.ErrTransactionExclusive {
+	if _, err := tm.Start(ctx, "ee", time.Millisecond, true); err != pilosa.ErrTransactionExclusive {
 		t.Errorf("unexpected error starting transaction while an exclusive transaction exists: %v", err)
 	}
 
 	// exclusive transaction becomes active after deadlines expire
 	for i := 0; true; i++ {
 		time.Sleep(time.Microsecond)
-		trnsE, err := tm.Get("ce")
+		trnsE, err := tm.Get(ctx, "ce")
 		if err != nil {
 			t.Errorf("error retrieving exclusive transaction: %v", err)
 		}
@@ -76,19 +78,19 @@ func TestTransactionManager(t *testing.T) {
 	}
 
 	// can't start new transactions while an exclusive transaction is active
-	if _, err := tm.Start("f", time.Millisecond, false); err != pilosa.ErrTransactionExclusive {
+	if _, err := tm.Start(ctx, "f", time.Millisecond, false); err != pilosa.ErrTransactionExclusive {
 		t.Errorf("unexpected error starting transaction while an exclusive transaction exists: %v", err)
 	}
 
 	// can't start new exclusive transactions while an exclusive transaction is active
-	if _, err := tm.Start("ge", time.Millisecond, true); err != pilosa.ErrTransactionExclusive {
+	if _, err := tm.Start(ctx, "ge", time.Millisecond, true); err != pilosa.ErrTransactionExclusive {
 		t.Errorf("unexpected error starting transaction while an exclusive transaction exists: %v", err)
 	}
 
 	// exclusive transaction gets expired after other transactions have attempted to start
 	for i := 0; true; i++ {
 		time.Sleep(time.Millisecond * 2)
-		trnsE, err := tm.Get("ce")
+		trnsE, err := tm.Get(ctx, "ce")
 		if err == nil {
 			if i > 10 {
 				t.Fatalf("exclusive transaction didn't expire: %+v", trnsE)
@@ -105,7 +107,7 @@ func TestTransactionManager(t *testing.T) {
 	test.CompareTransactions(t, pilosa.Transaction{ID: "he", Active: true, Exclusive: true, Timeout: time.Hour, Deadline: time.Now().Add(time.Hour)}, trnsHE)
 
 	// can't start new transactions while an exclusive transaction is active
-	if _, err := tm.Start("i", time.Millisecond, false); err != pilosa.ErrTransactionExclusive {
+	if _, err := tm.Start(ctx, "i", time.Millisecond, false); err != pilosa.ErrTransactionExclusive {
 		t.Errorf("unexpected error starting transaction while an exclusive transaction exists: %v", err)
 	}
 
@@ -150,7 +152,7 @@ func TestTransactionManager(t *testing.T) {
 	time.Sleep(time.Millisecond * 3)
 
 	// reset deadline
-	trnsM_reset, err := tm.ResetDeadline("m")
+	trnsM_reset, err := tm.ResetDeadline(ctx, "m")
 	if err != nil {
 		t.Errorf("resetting deadline: %v", err)
 	}
@@ -168,7 +170,7 @@ func TestTransactionManager(t *testing.T) {
 
 func mustStart(t *testing.T, tm *pilosa.TransactionManager, id string, timeout time.Duration, exclusive bool) pilosa.Transaction {
 	t.Helper()
-	trns, err := tm.Start(id, timeout, exclusive)
+	trns, err := tm.Start(context.Background(), id, timeout, exclusive)
 	if err != nil {
 		t.Errorf("starting transaction: %v", err)
 	}
@@ -177,7 +179,7 @@ func mustStart(t *testing.T, tm *pilosa.TransactionManager, id string, timeout t
 
 func mustFinish(t *testing.T, tm *pilosa.TransactionManager, id string) pilosa.Transaction {
 	t.Helper()
-	trns, err := tm.Finish(id)
+	trns, err := tm.Finish(context.Background(), id)
 	if err != nil {
 		t.Errorf("finishing transaction: %v", err)
 	}
@@ -186,7 +188,7 @@ func mustFinish(t *testing.T, tm *pilosa.TransactionManager, id string) pilosa.T
 
 func mustGet(t *testing.T, tm *pilosa.TransactionManager, id string) pilosa.Transaction {
 	t.Helper()
-	trns, err := tm.Get(id)
+	trns, err := tm.Get(context.Background(), id)
 	if err != nil {
 		t.Errorf("getting transaction %s: %v", id, err)
 	}
@@ -195,7 +197,7 @@ func mustGet(t *testing.T, tm *pilosa.TransactionManager, id string) pilosa.Tran
 
 func mustList(t *testing.T, tm *pilosa.TransactionManager) map[string]pilosa.Transaction {
 	t.Helper()
-	trnsMap, err := tm.List()
+	trnsMap, err := tm.List(context.Background())
 	if err != nil {
 		t.Errorf("getting transaction list: %v", err)
 	}

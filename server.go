@@ -808,19 +808,20 @@ func (s *Server) receiveMessage(m Message) error {
 
 func (s *Server) handleTransactionMessage(tm *TransactionMessage) error {
 	mtrns := tm.Transaction // message transaction
+	ctx := context.Background()
 	switch tm.Action {
 	case TRANSACTION_START:
-		_, err := s.StartTransaction(mtrns.ID, mtrns.Timeout, mtrns.Exclusive, true)
+		_, err := s.StartTransaction(ctx, mtrns.ID, mtrns.Timeout, mtrns.Exclusive, true)
 		if err != nil {
 			return errors.Wrap(err, "starting transaction locally")
 		}
 	case TRANSACTION_FINISH:
-		_, err := s.FinishTransaction(mtrns.ID, true)
+		_, err := s.FinishTransaction(ctx, mtrns.ID, true)
 		if err != nil {
 			return errors.Wrap(err, "finishing transaction locally")
 		}
 	case TRANSACTION_VALIDATE:
-		trns, err := s.GetTransaction(mtrns.ID, true)
+		trns, err := s.GetTransaction(ctx, mtrns.ID, true)
 		if err != nil {
 			return errors.Wrap(err, "getting local transaction to validate")
 		}
@@ -1024,7 +1025,7 @@ func (s *Server) monitorRuntime() {
 	}
 }
 
-func (srv *Server) StartTransaction(id string, timeout time.Duration, exclusive bool, remote bool) (Transaction, error) {
+func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool, remote bool) (Transaction, error) {
 	node := srv.node()
 	if !remote && !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
 		return Transaction{}, ErrNodeNotCoordinator
@@ -1038,7 +1039,7 @@ func (srv *Server) StartTransaction(id string, timeout time.Duration, exclusive 
 		if id == "" {
 			id = uuid.NewV4().String()
 		}
-		trns, err := srv.holder.StartTransaction(id, timeout, exclusive)
+		trns, err := srv.holder.StartTransaction(ctx, id, timeout, exclusive)
 		if err != nil {
 			return trns, errors.Wrap(err, "starting transaction")
 		}
@@ -1049,7 +1050,7 @@ func (srv *Server) StartTransaction(id string, timeout time.Duration, exclusive 
 			})
 		if err != nil {
 			// try to clean up, but ignore errors
-			srv.holder.FinishTransaction(id)
+			srv.holder.FinishTransaction(ctx, id)
 			srv.SendSync(
 				&TransactionMessage{
 					Action:      TRANSACTION_FINISH,
@@ -1060,12 +1061,12 @@ func (srv *Server) StartTransaction(id string, timeout time.Duration, exclusive 
 		}
 		return trns, nil
 	} else { // remote
-		return srv.holder.StartTransaction(id, timeout, exclusive)
+		return srv.holder.StartTransaction(ctx, id, timeout, exclusive)
 	}
 
 }
 
-func (srv *Server) FinishTransaction(id string, remote bool) (Transaction, error) {
+func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool) (Transaction, error) {
 	node := srv.node()
 	if !remote && !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
 		return Transaction{}, ErrNodeNotCoordinator
@@ -1075,7 +1076,7 @@ func (srv *Server) FinishTransaction(id string, remote bool) (Transaction, error
 	}
 
 	if !remote {
-		trns, err := srv.holder.FinishTransaction(id)
+		trns, err := srv.holder.FinishTransaction(ctx, id)
 		if err != nil {
 			return trns, errors.Wrap(err, "finishing transaction")
 		}
@@ -1091,21 +1092,21 @@ func (srv *Server) FinishTransaction(id string, remote bool) (Transaction, error
 		}
 		return trns, nil
 	} else { // remote
-		return srv.holder.FinishTransaction(id)
+		return srv.holder.FinishTransaction(ctx, id)
 	}
 
 }
 
-func (srv *Server) Transactions() (map[string]Transaction, error) {
+func (srv *Server) Transactions(ctx context.Context) (map[string]Transaction, error) {
 	node := srv.node()
 	if !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
 		return nil, ErrNodeNotCoordinator
 	}
 
-	return srv.holder.Transactions()
+	return srv.holder.Transactions(ctx)
 }
 
-func (srv *Server) GetTransaction(id string, remote bool) (Transaction, error) {
+func (srv *Server) GetTransaction(ctx context.Context, id string, remote bool) (Transaction, error) {
 	node := srv.node()
 	if !remote && !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
 		return Transaction{}, ErrNodeNotCoordinator
@@ -1115,7 +1116,7 @@ func (srv *Server) GetTransaction(id string, remote bool) (Transaction, error) {
 		return Transaction{}, errors.New("got a remote finish call to coordinator or single node cluster... shouldn't ever happen")
 	}
 
-	trns, err := srv.holder.GetTransaction(id)
+	trns, err := srv.holder.GetTransaction(ctx, id)
 	if err != nil {
 		return Transaction{}, errors.Wrap(err, "getting transaction")
 	}

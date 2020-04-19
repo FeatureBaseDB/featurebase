@@ -104,20 +104,20 @@ type Holder struct {
 	opening bool
 }
 
-func (h *Holder) StartTransaction(id string, timeout time.Duration, exclusive bool) (Transaction, error) {
-	return h.transactionManager.Start(id, timeout, exclusive)
+func (h *Holder) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (Transaction, error) {
+	return h.transactionManager.Start(ctx, id, timeout, exclusive)
 }
 
-func (h *Holder) FinishTransaction(id string) (Transaction, error) {
-	return h.transactionManager.Finish(id)
+func (h *Holder) FinishTransaction(ctx context.Context, id string) (Transaction, error) {
+	return h.transactionManager.Finish(ctx, id)
 }
 
-func (h *Holder) Transactions() (map[string]Transaction, error) {
-	return h.transactionManager.List()
+func (h *Holder) Transactions(ctx context.Context) (map[string]Transaction, error) {
+	return h.transactionManager.List(ctx)
 }
 
-func (h *Holder) GetTransaction(id string) (Transaction, error) {
-	return h.transactionManager.Get(id)
+func (h *Holder) GetTransaction(ctx context.Context, id string) (Transaction, error) {
+	return h.transactionManager.Get(ctx, id)
 }
 
 // lockedChan looks a little ridiculous admittedly, but exists for good reason.
