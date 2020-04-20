@@ -132,7 +132,10 @@ func TestChangeInode(t *testing.T) {
 	if err != nil {
 		t.Errorf("Renaming error: %s", err)
 	}
-	f.Write([]byte("after1\n"))
+	_, err = f.Write([]byte("after1\n"))
+	if err != nil {
+		t.Errorf("Write error: %s", err)
+	}
 
 	// Test that reopen always appends
 	err = f.Reopen()
