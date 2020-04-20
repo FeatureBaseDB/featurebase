@@ -36,7 +36,6 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/client9/reopen"
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/boltdb"
 	"github.com/pilosa/pilosa/v2/encoding/proto"
@@ -430,12 +429,12 @@ func (m *Command) setupNetworking() error {
 
 // setupLogger sets up the logger based on the configuration.
 func (m *Command) setupLogger() error {
-	var f *reopen.FileWriter
+	var f *logger.FileWriter
 	var err error
 	if m.Config.LogPath == "" {
 		m.logOutput = m.Stderr
 	} else {
-		f, err = reopen.NewFileWriter(m.Config.LogPath)
+		f, err = logger.NewFileWriter(m.Config.LogPath)
 		if err != nil {
 			return errors.Wrap(err, "opening file")
 		}
