@@ -376,6 +376,8 @@ func CompareTransactions(t1, t2 Transaction) error {
 	return nil
 }
 
+const RFC3339NanoNoZone = "2006-01-02T15:04:05.999999999"
+
 func (trns *Transaction) UnmarshalJSON(b []byte) error {
 	tmp := &struct {
 		ID        string      `json:"id"`
@@ -410,7 +412,7 @@ func (trns *Transaction) UnmarshalJSON(b []byte) error {
 	}
 
 	if tmp.Deadline != "" {
-		trns.Deadline, err = time.Parse(time.RFC3339Nano, tmp.Deadline)
+		trns.Deadline, err = time.ParseInLocation(RFC3339NanoNoZone, tmp.Deadline, time.UTC)
 	}
 	return errors.Wrap(err, "parsing deadline")
 }
@@ -427,6 +429,6 @@ func (trns *Transaction) MarshalJSON() ([]byte, error) {
 		Active:    trns.Active,
 		Exclusive: trns.Exclusive,
 		Timeout:   trns.Timeout.String(),
-		Deadline:  trns.Deadline.Format(time.RFC3339Nano),
+		Deadline:  trns.Deadline.In(time.UTC).Format(RFC3339NanoNoZone),
 	})
 }

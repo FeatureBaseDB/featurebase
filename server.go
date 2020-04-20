@@ -1050,13 +1050,19 @@ func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time
 			})
 		if err != nil {
 			// try to clean up, but ignore errors
-			srv.holder.FinishTransaction(ctx, id)
-			srv.SendSync(
+			_, errLocal := srv.holder.FinishTransaction(ctx, id)
+			errBroadcast := srv.SendSync(
 				&TransactionMessage{
 					Action:      TRANSACTION_FINISH,
 					Transaction: trns,
 				},
 			)
+			if errLocal != nil || errBroadcast != nil {
+				srv.logger.Printf("error(s) while trying to clean up transaction which failed to start, local: %v, broadcast: %v",
+					errLocal,
+					errBroadcast,
+				)
+			}
 			return trns, errors.Wrap(err, "broadcasting transaction start")
 		}
 		return trns, nil

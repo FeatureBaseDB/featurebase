@@ -1381,7 +1381,6 @@ func TestClientTransactions(t *testing.T) {
 		!strings.Contains(err.Error(), pilosa.ErrNodeNotCoordinator.Error()) {
 		t.Fatalf("unexpected error starting on non-coordinator: %v", err)
 	} else {
-		expDeadline = time.Now().Add(time.Minute)
 		test.CompareTransactions(t,
 			pilosa.Transaction{},
 			trns)
