@@ -1033,43 +1033,42 @@ func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time
 	if remote && (node.IsCoordinator || len(srv.cluster.Nodes()) == 1) {
 		return Transaction{}, errors.New("got a remote start call to coordinator or single node cluster... shouldn't ever happen")
 	}
-	// empty string id should generate an id
 
-	if !remote { // we are the coordinator,
-		if id == "" {
-			id = uuid.NewV4().String()
-		}
-		trns, err := srv.holder.StartTransaction(ctx, id, timeout, exclusive)
-		if err != nil {
-			return trns, errors.Wrap(err, "starting transaction")
-		}
-		err = srv.SendSync(
-			&TransactionMessage{
-				Action:      TRANSACTION_START,
-				Transaction: trns,
-			})
-		if err != nil {
-			// try to clean up, but ignore errors
-			_, errLocal := srv.holder.FinishTransaction(ctx, id)
-			errBroadcast := srv.SendSync(
-				&TransactionMessage{
-					Action:      TRANSACTION_FINISH,
-					Transaction: trns,
-				},
-			)
-			if errLocal != nil || errBroadcast != nil {
-				srv.logger.Printf("error(s) while trying to clean up transaction which failed to start, local: %v, broadcast: %v",
-					errLocal,
-					errBroadcast,
-				)
-			}
-			return trns, errors.Wrap(err, "broadcasting transaction start")
-		}
-		return trns, nil
-	} else { // remote
+	if remote {
 		return srv.holder.StartTransaction(ctx, id, timeout, exclusive)
 	}
 
+	// empty string id should generate an id
+	if id == "" {
+		id = uuid.NewV4().String()
+	}
+	trns, err := srv.holder.StartTransaction(ctx, id, timeout, exclusive)
+	if err != nil {
+		return trns, errors.Wrap(err, "starting transaction")
+	}
+	err = srv.SendSync(
+		&TransactionMessage{
+			Action:      TRANSACTION_START,
+			Transaction: trns,
+		})
+	if err != nil {
+		// try to clean up, but ignore errors
+		_, errLocal := srv.holder.FinishTransaction(ctx, id)
+		errBroadcast := srv.SendSync(
+			&TransactionMessage{
+				Action:      TRANSACTION_FINISH,
+				Transaction: trns,
+			},
+		)
+		if errLocal != nil || errBroadcast != nil {
+			srv.logger.Printf("error(s) while trying to clean up transaction which failed to start, local: %v, broadcast: %v",
+				errLocal,
+				errBroadcast,
+			)
+		}
+		return trns, errors.Wrap(err, "broadcasting transaction start")
+	}
+	return trns, nil
 }
 
 func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool) (Transaction, error) {
@@ -1081,26 +1080,24 @@ func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool
 		return Transaction{}, errors.New("got a remote finish call to coordinator or single node cluster... shouldn't ever happen")
 	}
 
-	if !remote {
-		trns, err := srv.holder.FinishTransaction(ctx, id)
-		if err != nil {
-			return trns, errors.Wrap(err, "finishing transaction")
-		}
-		err = srv.SendSync(
-			&TransactionMessage{
-				Action:      TRANSACTION_FINISH,
-				Transaction: trns,
-			},
-		)
-		if err != nil {
-			srv.logger.Printf("error broadcasting transaction finish: %v", err)
-			// TODO retry?
-		}
-		return trns, nil
-	} else { // remote
+	if remote {
 		return srv.holder.FinishTransaction(ctx, id)
 	}
-
+	trns, err := srv.holder.FinishTransaction(ctx, id)
+	if err != nil {
+		return trns, errors.Wrap(err, "finishing transaction")
+	}
+	err = srv.SendSync(
+		&TransactionMessage{
+			Action:      TRANSACTION_FINISH,
+			Transaction: trns,
+		},
+	)
+	if err != nil {
+		srv.logger.Printf("error broadcasting transaction finish: %v", err)
+		// TODO retry?
+	}
+	return trns, nil
 }
 
 func (srv *Server) Transactions(ctx context.Context) (map[string]Transaction, error) {
@@ -1145,9 +1142,8 @@ func (srv *Server) GetTransaction(ctx context.Context, id string, remote bool) (
 			return Transaction{}, errors.Wrap(err, "contacting remote hosts")
 		}
 		return trns, nil
-	} else { // remote
-		return trns, nil
 	}
+	return trns, nil
 }
 
 // countOpenFiles on operating systems that support lsof.

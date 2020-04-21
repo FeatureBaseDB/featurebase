@@ -92,7 +92,7 @@ anything.
 
 When an exclusive transaction is created, it does not necessarily start out
 in the `active` state. It immediately blocks the starting of new non-exclusive
-transactions, but does not transiction to an `active` state until existing
+transactions, but does not transition to an `active` state until existing
 transactions complete. During this time, a GET to it should return:
 
 	```
@@ -137,7 +137,7 @@ in sync. If the coordinator doesn't hear back from a node, the request
 fails. The coordinator only reaches out to active nodes, so if the
 cluster is in DEGRADED, things can still continue.
 
-If an node is down and comes back up it needs to synchronize its state
+If a node is down and comes back up, it needs to synchronize its state
 with the coordinator (unimplemented).
 
 There is a separate TransactionManager and TransactionStore
@@ -147,7 +147,7 @@ transactions. The manager handles all the logic (at the node level).
 Logic related to cluster and remote vs local node is handled by the
 Server. The Holder contains the TransactionManager, and the Server
 contains the logic for how to handle external vs intra cluster
-requests (remote==true).
+requests (remote=true).
 
 There is intra-cluster messaging for transactions which is handled
 with the new TransactionMessage and goes through the usual
