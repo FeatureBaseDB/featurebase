@@ -825,8 +825,7 @@ func (s *Server) handleTransactionMessage(tm *TransactionMessage) error {
 		if err != nil {
 			return errors.Wrap(err, "getting local transaction to validate")
 		}
-		err = CompareTransactions(mtrns, trns)
-		return errors.Wrap(err, "comparing transactions")
+		return CompareTransactions(mtrns, trns)
 	default:
 		return errors.Errorf("unknown transaction action: '%s'", tm.Action)
 	}

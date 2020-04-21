@@ -28,17 +28,8 @@ const deadlineSkew = time.Millisecond * 10
 // (within deadlineSkew).
 func CompareTransactions(t *testing.T, trns1, trns2 pilosa.Transaction) {
 	t.Helper()
-	if trns1.ID != trns2.ID {
-		t.Errorf("IDs differ:\n%+v\n%+v", trns1, trns2)
-	}
-	if trns1.Active != trns2.Active {
-		t.Errorf("Actives differ:\n%+v\n%+v", trns1, trns2)
-	}
-	if trns1.Exclusive != trns2.Exclusive {
-		t.Errorf("Exclusives differ:\n%+v\n%+v", trns1, trns2)
-	}
-	if trns1.Timeout != trns2.Timeout {
-		t.Errorf("Timeouts differ:\n%+v\n%+v", trns1, trns2)
+	if err := pilosa.CompareTransactions(trns1, trns2); err != nil {
+		t.Errorf("%v", err)
 	}
 
 	diff := trns1.Deadline.Sub(trns2.Deadline)
