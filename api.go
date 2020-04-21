@@ -1586,18 +1586,30 @@ func (api *API) PrimaryReplicaNodeURL() url.URL {
 }
 
 func (api *API) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool, remote bool) (Transaction, error) {
+	if err := api.validate(apiStartTransaction); err != nil {
+		return Transaction{}, errors.Wrap(err, "validating api method")
+	}
 	return api.server.StartTransaction(ctx, id, timeout, exclusive, remote)
 }
 
 func (api *API) FinishTransaction(ctx context.Context, id string, remote bool) (Transaction, error) {
+	if err := api.validate(apiFinishTransaction); err != nil {
+		return Transaction{}, errors.Wrap(err, "validating api method")
+	}
 	return api.server.FinishTransaction(ctx, id, remote)
 }
 
 func (api *API) Transactions(ctx context.Context) (map[string]Transaction, error) {
+	if err := api.validate(apiTransactions); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
+	}
 	return api.server.Transactions(ctx)
 }
 
 func (api *API) GetTransaction(ctx context.Context, id string, remote bool) (Transaction, error) {
+	if err := api.validate(apiGetTransaction); err != nil {
+		return Transaction{}, errors.Wrap(err, "validating api method")
+	}
 	return api.server.GetTransaction(ctx, id, remote)
 }
 
@@ -1648,6 +1660,10 @@ const (
 	//apiVersion // not implemented
 	apiViews
 	apiApplySchema
+	apiStartTransaction
+	apiFinishTransaction
+	apiTransactions
+	apiGetTransaction
 )
 
 var methodsCommon = map[apiMethod]struct{}{
@@ -1683,4 +1699,8 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiShardNodes:           {},
 	apiViews:                {},
 	apiApplySchema:          {},
+	apiStartTransaction:     {},
+	apiFinishTransaction:    {},
+	apiTransactions:         {},
+	apiGetTransaction:       {},
 }
