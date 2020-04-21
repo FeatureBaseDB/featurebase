@@ -30,18 +30,19 @@ type Transaction struct {
 	// ID is an arbitrary string identifier. All transactions must have a unique ID.
 	ID string `json:"id"`
 
-	// Active notes whether an Exclusive transaction is active, or
+	// Active notes whether an exclusive transaction is active, or
 	// still pending (if other active transactions exist). All
 	// non-exclusive transactions are always active.
 	Active bool `json:"active"`
 
-	// Exclusive is set on transactions which can only become active when no other transactions exist.
+	// Exclusive is set to true for transactions which can only become active when no other
+	// transactions exist.
 	Exclusive bool `json:"exclusive"`
 
 	// Timeout is the minimum idle time for which this transaction should continue to exist.
 	Timeout time.Duration `json:"timeout"`
 
-	// Deadline is calculated from Timeout, and should be reset each
+	// Deadline is calculated from Timeout, and will be reset each
 	// time there is activity on the transaction.
 	Deadline time.Time `json:"deadline"`
 
@@ -67,7 +68,7 @@ type TransactionManager struct {
 }
 
 // NewTransactionManager creates a new TransactionManager with the
-// given store.
+// given store, and starts a deadline-checker in a goroutine.
 func NewTransactionManager(store TransactionStore) *TransactionManager {
 	tm := &TransactionManager{
 		Log:               logger.NopLogger,
@@ -101,6 +102,13 @@ func (tm *TransactionManager) Start(ctx context.Context, id string, timeout time
 		if trns.Exclusive {
 			// if someone wants a transaction, and we're not able to
 			// give it to them, we want to be checking deadlines.
+			// TODO: it would be nice if we could identify whether
+			// this trns has expired, and if so, automatically remove
+			// it and continue without returning ErrTransactionExclusive
+			// on this iteration of the loop. One way we could do that is
+			// to call tm.checkDeadlines() here (note that we'd have to
+			// have an unprotectedCheckDeadlines()), and then after that
+			// check if trns still exists in tm.store. If not, continue.
 			tm.startDeadlineChecker()
 			return trns, ErrTransactionExclusive
 		}
@@ -122,7 +130,9 @@ func (tm *TransactionManager) Start(ctx context.Context, id string, timeout time
 		Timeout:   timeout,
 		Deadline:  deadline,
 	}
-	err = tm.store.Put(trns)
+	if err = tm.store.Put(trns); err != nil {
+		return trns, errors.Wrap(err, "adding to store")
+	}
 
 	// we won't check deadlines unless there's actually an exclusive
 	// transaction pending
@@ -130,7 +140,7 @@ func (tm *TransactionManager) Start(ctx context.Context, id string, timeout time
 		tm.startDeadlineChecker()
 	}
 
-	return trns, errors.Wrap(err, "adding to store")
+	return trns, nil
 }
 
 // Finish completes and removes a transaction, returning the completed
@@ -339,9 +349,8 @@ func (s *InMemTransactionStore) Get(id string) (Transaction, error) {
 
 	if trns, ok := s.tmap[id]; ok {
 		return trns, nil
-	} else {
-		return Transaction{}, ErrTransactionNotFound
 	}
+	return Transaction{}, ErrTransactionNotFound
 }
 
 func (s *InMemTransactionStore) List() (map[string]Transaction, error) {
@@ -359,10 +368,8 @@ func (s *InMemTransactionStore) Remove(id string) (Transaction, error) {
 	if trns, ok := s.tmap[id]; ok {
 		delete(s.tmap, id)
 		return trns, nil
-	} else {
-		return Transaction{}, ErrTransactionNotFound
 	}
-
+	return Transaction{}, ErrTransactionNotFound
 }
 
 type Error string
