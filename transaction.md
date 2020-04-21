@@ -165,6 +165,7 @@ goes through API (and is passed directly to Server). (unimplemented)
 - [ ] implement transaction id in header
 - [x] propagate context
 - [ ] implement and use persistent transaction store rather than inmem.
+  - [ ] implement some method for syncing transaction stores
 - [ ] update go-pilosa/gpexp to actually USE transactions
   - [ ] update IDK to use updated go-pilosa
 - [ ] external testing with e.g. curl
