@@ -65,6 +65,7 @@ func newCommand(opts ...server.CommandOption) *Command {
 	// does not fail on 32-bit systems.
 	opts = append([]server.CommandOption{
 		server.OptCommandCloseTimeout(time.Millisecond * 2),
+		server.OptCommandNoSleep(),
 	}, opts...)
 	m := &Command{commandOptions: opts}
 	m.Command = server.NewCommand(bytes.NewReader(nil), ioutil.Discard, ioutil.Discard, opts...)
@@ -409,6 +410,7 @@ func runCluster(size int, opts ...[]server.CommandOption) (Cluster, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "new cluster")
 	}
+
 	if err = cluster.Start(); err != nil {
 		return nil, errors.Wrap(err, "starting cluster")
 	}

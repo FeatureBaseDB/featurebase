@@ -17,6 +17,7 @@ package proto
 import (
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2"
@@ -290,6 +291,14 @@ func (Serializer) Unmarshal(buf []byte, m pilosa.Message) error {
 		}
 		decodeTranslateIDsResponse(msg, mt)
 		return nil
+	case *pilosa.TransactionMessage:
+		msg := &internal.TransactionMessage{}
+		err := proto.Unmarshal(buf, msg)
+		if err != nil {
+			return errors.Wrap(err, "unmarshaling TransactionMessage")
+		}
+		decodeTransactionMessage(msg, mt)
+		return nil
 	default:
 		panic(fmt.Sprintf("unhandled pilosa.Message of type %T: %#v", mt, m))
 	}
@@ -359,6 +368,8 @@ func encodeToProto(m pilosa.Message) proto.Message {
 		return encodeTranslateIDsRequest(mt)
 	case *pilosa.TranslateIDsResponse:
 		return encodeTranslateIDsResponse(mt)
+	case *pilosa.TransactionMessage:
+		return encodeTransactionMessage(mt)
 	}
 	return nil
 }
@@ -829,6 +840,38 @@ func encodeTranslateIDsResponse(response *pilosa.TranslateIDsResponse) *internal
 	}
 }
 
+func encodeTransactionMessage(msg *pilosa.TransactionMessage) *internal.TransactionMessage {
+	return &internal.TransactionMessage{
+		Action:      msg.Action,
+		Transaction: encodeTransaction(msg.Transaction),
+	}
+}
+
+func encodeTransaction(trns *pilosa.Transaction) *internal.Transaction {
+	if trns == nil {
+		return nil
+	}
+	return &internal.Transaction{
+		ID:        trns.ID,
+		Active:    trns.Active,
+		Exclusive: trns.Exclusive,
+		Timeout:   int64(trns.Timeout),
+		Deadline:  encodeTransactionDeadline(trns.Deadline),
+		Stats:     encodeTransactionStats(trns.Stats),
+	}
+}
+
+func encodeTransactionDeadline(deadline time.Time) int64 {
+	if deadline.Year() > 2262 || deadline.Year() < 1678 {
+		return 0
+	}
+	return deadline.UnixNano()
+}
+
+func encodeTransactionStats(stats pilosa.TransactionStats) *internal.TransactionStats {
+	return &internal.TransactionStats{}
+}
+
 func decodeResizeInstruction(ri *internal.ResizeInstruction, m *pilosa.ResizeInstruction) {
 	m.JobID = ri.JobID
 	m.Node = &pilosa.Node{}
@@ -1196,6 +1239,27 @@ func decodeTranslateIDsRequest(pb *internal.TranslateIDsRequest, m *pilosa.Trans
 
 func decodeTranslateIDsResponse(pb *internal.TranslateIDsResponse, m *pilosa.TranslateIDsResponse) {
 	m.Keys = pb.Keys
+}
+
+func decodeTransactionMessage(pb *internal.TransactionMessage, m *pilosa.TransactionMessage) {
+	m.Action = pb.Action
+	if pb.Transaction == nil {
+		m.Transaction = nil
+		return
+	} else if m.Transaction == nil {
+		m.Transaction = &pilosa.Transaction{}
+	}
+	decodeTransaction(pb.Transaction, m.Transaction)
+}
+
+func decodeTransaction(pb *internal.Transaction, trns *pilosa.Transaction) {
+
+	trns.ID = pb.ID
+	trns.Active = pb.Active
+	trns.Exclusive = pb.Exclusive
+	trns.Timeout = time.Duration(pb.Timeout)
+	trns.Deadline = time.Unix(0, pb.Deadline)
+	// TODO m.Stats... once it has anything
 }
 
 // QueryResult types.

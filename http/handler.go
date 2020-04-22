@@ -204,6 +204,10 @@ func (h *Handler) populateValidators() {
 	h.validators["PostFieldAttrDiff"] = queryValidationSpecRequired()
 	h.validators["GetNodes"] = queryValidationSpecRequired()
 	h.validators["GetShardMax"] = queryValidationSpecRequired()
+	h.validators["GetTransactions"] = queryValidationSpecRequired()
+	h.validators["GetTransaction"] = queryValidationSpecRequired()
+	h.validators["PostTransaction"] = queryValidationSpecRequired()
+	h.validators["PostFinishTransaction"] = queryValidationSpecRequired()
 }
 
 type contextKeyQuery int
@@ -336,6 +340,12 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET").Name("GetSchema")
 	router.HandleFunc("/schema", handler.handlePostSchema).Methods("POST").Name("PostSchema")
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET").Name("GetStatus")
+	router.HandleFunc("/transaction", handler.handlePostTransaction).Methods("POST").Name("PostTransaction")
+	router.HandleFunc("/transaction/", handler.handlePostTransaction).Methods("POST").Name("PostTransaction")
+	router.HandleFunc("/transaction/{id}", handler.handleGetTransaction).Methods("GET").Name("GetTransaction")
+	router.HandleFunc("/transaction/{id}", handler.handlePostTransaction).Methods("POST").Name("PostTransaction")
+	router.HandleFunc("/transaction/{id}/finish", handler.handlePostFinishTransaction).Methods("POST").Name("PostFinishTransaction")
+	router.HandleFunc("/transactions", handler.handleGetTransactions).Methods("GET").Name("GetTransactions")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET").Name("GetVersion")
 
 	// /internal endpoints are for internal use only; they may change at any time.
@@ -1029,6 +1039,102 @@ func (h *Handler) handleDeleteField(w http.ResponseWriter, r *http.Request) {
 	resp := successResponse{h: h}
 	err := h.api.DeleteField(r.Context(), indexName, fieldName)
 	resp.write(w, err)
+}
+
+func (h *Handler) handleGetTransactions(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+	trnsMap, err := h.api.Transactions(r.Context())
+	if err != nil {
+		switch errors.Cause(err) {
+		case pilosa.ErrNodeNotCoordinator:
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			http.Error(w, "problem getting transactions: "+err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(trnsMap); err != nil {
+		h.logger.Printf("encoding GetTransactions response: %s", err)
+	}
+}
+
+type TransactionResponse struct {
+	Transaction *pilosa.Transaction `json:"transaction,omitempty"`
+	Error       string              `json:"error,omitempty"`
+}
+
+func (h *Handler) doTransactionResponse(w http.ResponseWriter, err error, trns *pilosa.Transaction) {
+	if err != nil {
+		switch errors.Cause(err) {
+		case pilosa.ErrNodeNotCoordinator, pilosa.ErrTransactionExists:
+			w.WriteHeader(http.StatusBadRequest)
+		case pilosa.ErrTransactionExclusive:
+			w.WriteHeader(http.StatusConflict)
+		case pilosa.ErrTransactionNotFound:
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}
+
+	var errString string
+	if err != nil {
+		errString = err.Error()
+	}
+	err = json.NewEncoder(w).Encode(
+		TransactionResponse{Error: errString, Transaction: trns})
+	if err != nil {
+		h.logger.Printf("encoding transaction response: %v", err)
+	}
+
+}
+
+func (h *Handler) handleGetTransaction(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+	id := mux.Vars(r)["id"]
+	trns, err := h.api.GetTransaction(r.Context(), id, false)
+	h.doTransactionResponse(w, err, trns)
+}
+
+func (h *Handler) handlePostTransaction(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+	reqTrns := &pilosa.Transaction{}
+	if err := json.NewDecoder(r.Body).Decode(reqTrns); err != nil || reqTrns.Timeout == 0 {
+		if err == nil {
+			http.Error(w, "timeout is required and cannot be 0", http.StatusBadRequest)
+		} else {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+		return
+	}
+
+	id, ok := mux.Vars(r)["id"]
+	if !ok {
+		id = reqTrns.ID
+	}
+	trns, err := h.api.StartTransaction(r.Context(), id, reqTrns.Timeout, reqTrns.Exclusive, false)
+
+	h.doTransactionResponse(w, err, trns)
+}
+
+func (h *Handler) handlePostFinishTransaction(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+	id := mux.Vars(r)["id"]
+	trns, err := h.api.FinishTransaction(r.Context(), id, false)
+	h.doTransactionResponse(w, err, trns)
 }
 
 // handleDeleteRemoteAvailableShard handles DELETE /field/{field}/available-shards/{shardID} request.

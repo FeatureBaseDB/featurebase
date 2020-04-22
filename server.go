@@ -28,6 +28,8 @@ import (
 	"time"
 
 	"github.com/molecula/ext"
+	uuid "github.com/satori/go.uuid"
+
 	// extensions pulls in some extensions depending on build tags
 	_ "github.com/pilosa/pilosa/v2/extensions"
 	"github.com/pilosa/pilosa/v2/logger"
@@ -794,8 +796,39 @@ func (s *Server) receiveMessage(m Message) error {
 		}
 	case *NodeStatus:
 		s.handleRemoteStatus(obj)
+	case *TransactionMessage:
+		err := s.handleTransactionMessage(obj)
+		if err != nil {
+			return errors.Wrapf(err, "handling transaction message: %v", obj)
+		}
 	}
 
+	return nil
+}
+
+func (s *Server) handleTransactionMessage(tm *TransactionMessage) error {
+	mtrns := tm.Transaction // message transaction
+	ctx := context.Background()
+	switch tm.Action {
+	case TRANSACTION_START:
+		_, err := s.StartTransaction(ctx, mtrns.ID, mtrns.Timeout, mtrns.Exclusive, true)
+		if err != nil {
+			return errors.Wrap(err, "starting transaction locally")
+		}
+	case TRANSACTION_FINISH:
+		_, err := s.FinishTransaction(ctx, mtrns.ID, true)
+		if err != nil {
+			return errors.Wrap(err, "finishing transaction locally")
+		}
+	case TRANSACTION_VALIDATE:
+		trns, err := s.GetTransaction(ctx, mtrns.ID, true)
+		if err != nil {
+			return errors.Wrap(err, "getting local transaction to validate")
+		}
+		return CompareTransactions(mtrns, trns)
+	default:
+		return errors.Errorf("unknown transaction action: '%s'", tm.Action)
+	}
 	return nil
 }
 
@@ -989,6 +1022,127 @@ func (s *Server) monitorRuntime() {
 		s.holder.Stats.Gauge(MetricMallocs, float64(m.Mallocs), 1.0)
 		s.holder.Stats.Gauge(MetricFrees, float64(m.Frees), 1.0)
 	}
+}
+
+func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool, remote bool) (*Transaction, error) {
+	node := srv.node()
+	if !remote && !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
+		return nil, ErrNodeNotCoordinator
+	}
+	if remote && (node.IsCoordinator || len(srv.cluster.Nodes()) == 1) {
+		return nil, errors.New("got a remote start call to coordinator or single node cluster... shouldn't ever happen")
+	}
+
+	if remote {
+		return srv.holder.StartTransaction(ctx, id, timeout, exclusive)
+	}
+
+	// empty string id should generate an id
+	if id == "" {
+		id = uuid.NewV4().String()
+	}
+	trns, err := srv.holder.StartTransaction(ctx, id, timeout, exclusive)
+	if err != nil {
+		return trns, errors.Wrap(err, "starting transaction")
+	}
+	err = srv.SendSync(
+		&TransactionMessage{
+			Action:      TRANSACTION_START,
+			Transaction: trns,
+		})
+	if err != nil {
+		// try to clean up, but ignore errors
+		_, errLocal := srv.holder.FinishTransaction(ctx, id)
+		errBroadcast := srv.SendSync(
+			&TransactionMessage{
+				Action:      TRANSACTION_FINISH,
+				Transaction: trns,
+			},
+		)
+		if errLocal != nil || errBroadcast != nil {
+			srv.logger.Printf("error(s) while trying to clean up transaction which failed to start, local: %v, broadcast: %v",
+				errLocal,
+				errBroadcast,
+			)
+		}
+		return trns, errors.Wrap(err, "broadcasting transaction start")
+	}
+	return trns, nil
+}
+
+func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool) (*Transaction, error) {
+	node := srv.node()
+	if !remote && !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
+		return nil, ErrNodeNotCoordinator
+	}
+	if remote && (node.IsCoordinator || len(srv.cluster.Nodes()) == 1) {
+		return nil, errors.New("got a remote finish call to coordinator or single node cluster... shouldn't ever happen")
+	}
+
+	if remote {
+		return srv.holder.FinishTransaction(ctx, id)
+	}
+	trns, err := srv.holder.FinishTransaction(ctx, id)
+	if err != nil {
+		return trns, errors.Wrap(err, "finishing transaction")
+	}
+	err = srv.SendSync(
+		&TransactionMessage{
+			Action:      TRANSACTION_FINISH,
+			Transaction: trns,
+		},
+	)
+	if err != nil {
+		srv.logger.Printf("error broadcasting transaction finish: %v", err)
+		// TODO retry?
+	}
+	return trns, nil
+}
+
+func (srv *Server) Transactions(ctx context.Context) (map[string]*Transaction, error) {
+	node := srv.node()
+	if !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
+		return nil, ErrNodeNotCoordinator
+	}
+
+	return srv.holder.Transactions(ctx)
+}
+
+func (srv *Server) GetTransaction(ctx context.Context, id string, remote bool) (*Transaction, error) {
+	node := srv.node()
+	if !remote && !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
+		return nil, ErrNodeNotCoordinator
+	}
+
+	if remote && (node.IsCoordinator || len(srv.cluster.Nodes()) == 1) {
+		return nil, errors.New("got a remote finish call to coordinator or single node cluster... shouldn't ever happen")
+	}
+
+	trns, err := srv.holder.GetTransaction(ctx, id)
+	if err != nil {
+		return nil, errors.Wrap(err, "getting transaction")
+	}
+
+	// The way a client would find out that the exclusive transaction
+	// it requested is active is by polling the GetTransaction
+	// endpoint. Therefore, returning an active, exclusive
+	// transaction, from here is what truly makes the transaction
+	// "live". Before doing so, we want to make sure all nodes
+	// agree. (in case other nodes have activity on this transaction
+	// we're not aware of)
+	if !remote && trns.Exclusive && trns.Active {
+		err := srv.SendSync(
+			&TransactionMessage{
+				Action:      TRANSACTION_VALIDATE,
+				Transaction: trns,
+			},
+		)
+		if err != nil {
+			return nil, errors.Wrap(err, "contacting remote hosts")
+		}
+		return trns, nil
+	}
+	return trns, nil
 }
 
 // countOpenFiles on operating systems that support lsof.

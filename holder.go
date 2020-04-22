@@ -85,6 +85,12 @@ type Holder struct {
 	OpenTranslateStore  OpenTranslateStoreFunc
 	OpenTranslateReader OpenTranslateReaderFunc
 
+	// Func to open whatever implementation of transaction store we're using.
+	OpenTransactionStore OpenTransactionStoreFunc
+
+	// transactionManager
+	transactionManager *TransactionManager
+
 	translationSyncer translationSyncer
 
 	// Queue of fields (having a foreign index) which have
@@ -96,6 +102,22 @@ type Holder struct {
 	// needs to be queued and completed after all indexes
 	// have opened.
 	opening bool
+}
+
+func (h *Holder) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (*Transaction, error) {
+	return h.transactionManager.Start(ctx, id, timeout, exclusive)
+}
+
+func (h *Holder) FinishTransaction(ctx context.Context, id string) (*Transaction, error) {
+	return h.transactionManager.Finish(ctx, id)
+}
+
+func (h *Holder) Transactions(ctx context.Context) (map[string]*Transaction, error) {
+	return h.transactionManager.List(ctx)
+}
+
+func (h *Holder) GetTransaction(ctx context.Context, id string) (*Transaction, error) {
+	return h.transactionManager.Get(ctx, id)
 }
 
 // lockedChan looks a little ridiculous admittedly, but exists for good reason.
@@ -142,6 +164,8 @@ func NewHolder(partitionN int) *Holder {
 
 		OpenTranslateStore: OpenInMemTranslateStore,
 
+		OpenTransactionStore: OpenInMemTransactionStore,
+
 		translationSyncer: NopTranslationSyncer,
 
 		Logger: logger.NopLogger,
@@ -169,6 +193,13 @@ func (h *Holder) Open() error {
 	} else if !ok {
 		return ErrCannotOpenV1TranslateFile
 	}
+
+	tstore, err := h.OpenTransactionStore(h.Path)
+	if err != nil {
+		return errors.Wrap(err, "opening transaction store")
+	}
+	h.transactionManager = NewTransactionManager(tstore)
+	h.transactionManager.Log = h.Logger
 
 	// Open path to read all index directories.
 	f, err := os.Open(h.Path)
