@@ -134,7 +134,7 @@ func (tm *TransactionManager) Start(ctx context.Context, id string, timeout time
 		return trns, errors.Wrap(err, "adding to store")
 	}
 
-	// we won't check deadlines unless there's actually an exclusive
+	// we won't check deadlines unless there's actually a
 	// transaction pending
 	if exclusive && !active {
 		tm.startDeadlineChecker()

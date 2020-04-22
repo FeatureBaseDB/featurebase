@@ -169,6 +169,7 @@ goes through API (and is passed directly to Server). (unimplemented)
 - [ ] update go-pilosa/gpexp to actually USE transactions
   - [ ] update IDK to use updated go-pilosa
 - [ ] external testing with e.g. curl
+- [ ] validate incoming transaction IDs
   
 - ID validation. No slashes, no non-URL safe chars
 
