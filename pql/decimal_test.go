@@ -67,6 +67,15 @@ func TestDecimal(t *testing.T) {
 			{"9223372036854775807000", pql.Decimal{9223372036854775807, -3}, ""},
 			{"-9223372036854775807000", pql.Decimal{-9223372036854775807, -3}, ""},
 
+			// precision adjustment
+			{"2.666666666666666667", pql.Decimal{2666666666666666667, 18}, ""},
+			{"2.6666666666666666667", pql.Decimal{2666666666666666666, 18}, ""},
+			{"2.6666666666666666666667", pql.Decimal{2666666666666666666, 18}, ""},
+			{"-9.223372036854775808", pql.Decimal{-9223372036854775808, 18}, ""},
+			{"-9.223372036854775809", pql.Decimal{-922337203685477580, 17}, ""},
+			{"9.223372036854775807", pql.Decimal{9223372036854775807, 18}, ""},
+			{"9.223372036854775808", pql.Decimal{922337203685477580, 17}, ""},
+
 			// Error cases.
 			{"", pql.Decimal{}, "decimal string is empty"},
 			{"-", pql.Decimal{}, "decimal string is empty"},
@@ -75,8 +84,9 @@ func TestDecimal(t *testing.T) {
 			{"0.12.3", pql.Decimal{}, "invalid decimal string"},
 			{"--12300", pql.Decimal{}, "invalid syntax"},
 
-			{"922337203685477580.9", pql.Decimal{}, "value out of range"},
-			{"-922337203685477580.9", pql.Decimal{}, "value out of range"},
+			// These are no longer error cases since we introduced precision adjustment.
+			//{"922337203685477580.9", pql.Decimal{}, "value out of range"},
+			//{"-922337203685477580.9", pql.Decimal{}, "value out of range"},
 			{"9223372036854775808000", pql.Decimal{}, "value out of range"},
 			{"-9223372036854775809000", pql.Decimal{}, "value out of range"},
 		}

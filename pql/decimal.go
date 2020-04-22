@@ -396,6 +396,17 @@ func ParseDecimal(s string) (Decimal, error) {
 		scale = 0
 	}
 
+	// If the mantissa can't be represented by an int64, but it contains
+	// enough decimal places such that we can sacrifice precision, then
+	// we do that. This is an attempt to be compatible with the way
+	// `strconv.ParseFloat` works.
+	if m, s, ok := reducePrecision(sign, mantissa, scale); ok {
+		mantissa = m
+		scale = s
+	} else {
+		return Decimal{}, errors.Errorf("value out of range: %s", mantissa)
+	}
+
 	// We have to use ParseUint here (as opposed to ParseInt) because
 	// math.MinInt64 is a valid value, but its absolute value is not.
 	// So this allows us to handle that one value without overflow, and
@@ -418,6 +429,47 @@ func ParseDecimal(s string) (Decimal, error) {
 		Value: value,
 		Scale: scale,
 	}, nil
+}
+
+// reducePrecision takes a []byte mantissa and scale, and if possible
+// will adjust the mantissa (by reducing precision) until it can be
+// represented by an int64. The returned bool indicates whether the
+// reduction was successful.
+func reducePrecision(sign bool, mantissa []byte, scale int64) ([]byte, int64, bool) {
+	// Trim leading zeros before considering length.
+	var zeroIdx int
+	for i := range mantissa {
+		if mantissa[i] == '0' {
+			zeroIdx++
+		} else {
+			break
+		}
+	}
+	mantissa = mantissa[zeroIdx:]
+
+	// If we zero out the mantissa to an empty
+	// string, that means it's value should be 0.
+	if len(mantissa) == 0 {
+		mantissa = []byte{'0'}
+	}
+
+	lenMantissa := len(mantissa)
+	maxStr := "9223372036854775807"
+	if sign {
+		maxStr = "9223372036854775808"
+	}
+
+	if lenMantissa <= 18 || (lenMantissa == 19 && string(mantissa) <= maxStr) {
+		return mantissa, scale, true
+	}
+
+	// If we don't have any decimal places to sacrifice,
+	// we can't change anything.
+	if scale <= 0 {
+		return mantissa, scale, false
+	}
+
+	return reducePrecision(sign, mantissa[:len(mantissa)-1], scale-1)
 }
 
 func quotient(d Decimal) int64 {
