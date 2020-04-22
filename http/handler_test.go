@@ -66,7 +66,10 @@ func TestMarshalUnmarshalTransactionResponse(t *testing.T) {
 			}
 
 			mytr := &http.TransactionResponse{}
-			json.Unmarshal(data, mytr)
+			err = json.Unmarshal(data, mytr)
+			if err != nil {
+				t.Fatalf("unmarshalling: %v", err)
+			}
 
 			if mytr.Error != tst.tr.Error {
 				t.Errorf("errors mismatch:exp/got \n%v\n%v", tst.tr.Error, mytr.Error)

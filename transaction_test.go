@@ -234,7 +234,7 @@ func TestInMemTransactionStore(t *testing.T) {
 		t.Fatalf("unexpected transaction for blah: %+v", t)
 	}
 
-	trns, err = ims.Get("nope")
+	_, err = ims.Get("nope")
 	if err != pilosa.ErrTransactionNotFound {
 		t.Fatalf("unexpected error: %v", err)
 	}
