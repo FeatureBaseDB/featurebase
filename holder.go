@@ -194,12 +194,12 @@ func (h *Holder) Open() error {
 		return ErrCannotOpenV1TranslateFile
 	}
 
-	if tstore, err := h.OpenTransactionStore(h.Path); err != nil {
+	tstore, err := h.OpenTransactionStore(h.Path)
+	if err != nil {
 		return errors.Wrap(err, "opening transaction store")
-	} else {
-		h.transactionManager = NewTransactionManager(tstore)
-		h.transactionManager.Log = h.Logger
 	}
+	h.transactionManager = NewTransactionManager(tstore)
+	h.transactionManager.Log = h.Logger
 
 	// Open path to read all index directories.
 	f, err := os.Open(h.Path)

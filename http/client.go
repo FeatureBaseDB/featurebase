@@ -394,6 +394,12 @@ func (c *InternalClient) ImportK(ctx context.Context, index, field string, bits 
 	// Get the coordinator node; all bits are sent to the
 	// primary translate store (i.e. coordinator).
 	// TODO... is that right^^?
+	// RESPONSE: It looks like in ctl/import.go, we could change the
+	// logic in ImportCommand.importBits() to only use ImportK
+	// when useRowKeys = true. It's no longer necessary to
+	// send column key translations to the coordinator (although
+	// it should still work). As far as I know, the only thing
+	// that uses ImportK is the pilosa import sub-command.
 	nodes, err := c.Nodes(ctx)
 	if err != nil {
 		return fmt.Errorf("getting nodes: %s", err)
