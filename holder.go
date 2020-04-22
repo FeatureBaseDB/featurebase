@@ -104,19 +104,19 @@ type Holder struct {
 	opening bool
 }
 
-func (h *Holder) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (Transaction, error) {
+func (h *Holder) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (*Transaction, error) {
 	return h.transactionManager.Start(ctx, id, timeout, exclusive)
 }
 
-func (h *Holder) FinishTransaction(ctx context.Context, id string) (Transaction, error) {
+func (h *Holder) FinishTransaction(ctx context.Context, id string) (*Transaction, error) {
 	return h.transactionManager.Finish(ctx, id)
 }
 
-func (h *Holder) Transactions(ctx context.Context) (map[string]Transaction, error) {
+func (h *Holder) Transactions(ctx context.Context) (map[string]*Transaction, error) {
 	return h.transactionManager.List(ctx)
 }
 
-func (h *Holder) GetTransaction(ctx context.Context, id string) (Transaction, error) {
+func (h *Holder) GetTransaction(ctx context.Context, id string) (*Transaction, error) {
 	return h.transactionManager.Get(ctx, id)
 }
 

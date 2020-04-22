@@ -847,7 +847,10 @@ func encodeTransactionMessage(msg *pilosa.TransactionMessage) *internal.Transact
 	}
 }
 
-func encodeTransaction(trns pilosa.Transaction) *internal.Transaction {
+func encodeTransaction(trns *pilosa.Transaction) *internal.Transaction {
+	if trns == nil {
+		return nil
+	}
 	return &internal.Transaction{
 		ID:        trns.ID,
 		Active:    trns.Active,
@@ -1240,10 +1243,17 @@ func decodeTranslateIDsResponse(pb *internal.TranslateIDsResponse, m *pilosa.Tra
 
 func decodeTransactionMessage(pb *internal.TransactionMessage, m *pilosa.TransactionMessage) {
 	m.Action = pb.Action
-	decodeTransaction(pb.Transaction, &m.Transaction)
+	if pb.Transaction == nil {
+		m.Transaction = nil
+		return
+	} else if m.Transaction == nil {
+		m.Transaction = &pilosa.Transaction{}
+	}
+	decodeTransaction(pb.Transaction, m.Transaction)
 }
 
 func decodeTransaction(pb *internal.Transaction, trns *pilosa.Transaction) {
+
 	trns.ID = pb.ID
 	trns.Active = pb.Active
 	trns.Exclusive = pb.Exclusive

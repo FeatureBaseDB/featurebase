@@ -1258,7 +1258,7 @@ func TestClientTransactions(t *testing.T) {
 	} else {
 		expDeadline = time.Now().Add(time.Minute)
 		test.CompareTransactions(t,
-			pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Deadline: expDeadline},
+			&pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Deadline: expDeadline},
 			trns)
 	}
 
@@ -1269,7 +1269,7 @@ func TestClientTransactions(t *testing.T) {
 			t.Errorf("unexpected trnsMap: %+v", trnsMap)
 		}
 		test.CompareTransactions(t,
-			pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Deadline: expDeadline},
+			&pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Deadline: expDeadline},
 			trnsMap["blah"])
 	}
 
@@ -1277,7 +1277,7 @@ func TestClientTransactions(t *testing.T) {
 		t.Fatalf("error getting transaction: %v", err)
 	} else {
 		test.CompareTransactions(t,
-			pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Deadline: expDeadline},
+			&pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Deadline: expDeadline},
 			trns)
 	}
 
@@ -1285,7 +1285,7 @@ func TestClientTransactions(t *testing.T) {
 		t.Fatalf("error finishing transaction: %v", err)
 	} else {
 		test.CompareTransactions(t,
-			pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Deadline: expDeadline},
+			&pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Deadline: expDeadline},
 			trns)
 	}
 
@@ -1295,7 +1295,7 @@ func TestClientTransactions(t *testing.T) {
 	} else {
 		expDeadline = time.Now().Add(time.Minute)
 		test.CompareTransactions(t,
-			pilosa.Transaction{ID: "blahe", Timeout: time.Minute, Active: true, Exclusive: true, Deadline: expDeadline},
+			&pilosa.Transaction{ID: "blahe", Timeout: time.Minute, Active: true, Exclusive: true, Deadline: expDeadline},
 			trns)
 	}
 
@@ -1304,7 +1304,7 @@ func TestClientTransactions(t *testing.T) {
 		t.Fatalf("shouldn't be able to start transaction while an exclusive is running, but got: %+v, %v", trns, err)
 	} else {
 		test.CompareTransactions(t,
-			pilosa.Transaction{ID: "blahe", Timeout: time.Minute, Active: true, Exclusive: true, Deadline: expDeadline},
+			&pilosa.Transaction{ID: "blahe", Timeout: time.Minute, Active: true, Exclusive: true, Deadline: expDeadline},
 			trns)
 	}
 
@@ -1313,7 +1313,7 @@ func TestClientTransactions(t *testing.T) {
 		t.Fatalf("error finishing transaction: %v", err)
 	} else {
 		test.CompareTransactions(t,
-			pilosa.Transaction{ID: "blahe", Timeout: time.Minute, Active: true, Exclusive: true, Deadline: expDeadline},
+			&pilosa.Transaction{ID: "blahe", Timeout: time.Minute, Active: true, Exclusive: true, Deadline: expDeadline},
 			trns)
 	}
 
@@ -1323,7 +1323,7 @@ func TestClientTransactions(t *testing.T) {
 	} else {
 		expDeadline = time.Now().Add(time.Minute)
 		test.CompareTransactions(t,
-			pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Deadline: expDeadline},
+			&pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Deadline: expDeadline},
 			trns)
 	}
 
@@ -1333,7 +1333,7 @@ func TestClientTransactions(t *testing.T) {
 		t.Fatalf("expected ErrTransactionExists, but got: %v", err)
 	} else {
 		test.CompareTransactions(t,
-			pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Deadline: expDeadline},
+			&pilosa.Transaction{ID: "blah", Timeout: time.Minute, Active: true, Deadline: expDeadline},
 			trns)
 	}
 
@@ -1343,7 +1343,7 @@ func TestClientTransactions(t *testing.T) {
 	} else {
 		expDeadline = time.Now().Add(time.Minute)
 		test.CompareTransactions(t,
-			pilosa.Transaction{ID: "blahe", Timeout: time.Minute, Active: false, Exclusive: true, Deadline: expDeadline},
+			&pilosa.Transaction{ID: "blahe", Timeout: time.Minute, Active: false, Exclusive: true, Deadline: expDeadline},
 			trns)
 	}
 
@@ -1352,7 +1352,7 @@ func TestClientTransactions(t *testing.T) {
 		t.Fatalf("error finishing transaction: %v", err)
 	} else {
 		test.CompareTransactions(t,
-			pilosa.Transaction{ID: "blahe", Timeout: time.Minute, Active: false, Exclusive: true, Deadline: expDeadline},
+			&pilosa.Transaction{ID: "blahe", Timeout: time.Minute, Active: false, Exclusive: true, Deadline: expDeadline},
 			trns)
 	}
 
@@ -1362,7 +1362,7 @@ func TestClientTransactions(t *testing.T) {
 		t.Fatalf("unexpected error finishing nonexistent transaction: %v", err)
 	} else {
 		test.CompareTransactions(t,
-			pilosa.Transaction{},
+			nil,
 			trns)
 	}
 
@@ -1372,7 +1372,7 @@ func TestClientTransactions(t *testing.T) {
 		t.Fatalf("unexpected error getting nonexistent transaction: %v", err)
 	} else {
 		test.CompareTransactions(t,
-			pilosa.Transaction{},
+			nil,
 			trns)
 	}
 
@@ -1382,7 +1382,7 @@ func TestClientTransactions(t *testing.T) {
 		t.Fatalf("unexpected error starting on non-coordinator: %v", err)
 	} else {
 		test.CompareTransactions(t,
-			pilosa.Transaction{},
+			nil,
 			trns)
 	}
 
@@ -1395,7 +1395,7 @@ func TestClientTransactions(t *testing.T) {
 			t.Errorf("expected generated UUID, but got '%s'", trns.ID)
 		}
 		test.CompareTransactions(t,
-			pilosa.Transaction{ID: trns.ID, Timeout: time.Minute, Active: true, Deadline: expDeadline},
+			&pilosa.Transaction{ID: trns.ID, Timeout: time.Minute, Active: true, Deadline: expDeadline},
 			trns)
 	}
 

@@ -399,14 +399,14 @@ func TestTransactionsAPI(t *testing.T) {
 	if trns, err := api0.StartTransaction(ctx, "a", time.Minute, false, false); err != nil {
 		t.Errorf("couldn't start transaction: %v", err)
 	} else {
-		test.CompareTransactions(t, pilosa.Transaction{ID: "a", Active: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
+		test.CompareTransactions(t, &pilosa.Transaction{ID: "a", Active: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
 	}
 
 	// can retrieve transaction from other nodes with remote=true
 	if trns, err := api1.GetTransaction(ctx, "a", true); err != nil {
 		t.Errorf("couldn't fetch transaction from other node with remote=true: %v", err)
 	} else {
-		test.CompareTransactions(t, pilosa.Transaction{ID: "a", Active: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
+		test.CompareTransactions(t, &pilosa.Transaction{ID: "a", Active: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
 	}
 
 	// can start transaction with blank id and get uuid back
@@ -418,7 +418,7 @@ func TestTransactionsAPI(t *testing.T) {
 		if len(id) != 36 { // UUID
 			t.Errorf("unexpected generated ID: %s", id)
 		}
-		test.CompareTransactions(t, pilosa.Transaction{ID: id, Active: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
+		test.CompareTransactions(t, &pilosa.Transaction{ID: id, Active: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
 	}
 
 	// can't finish transaction on non-coordinator
@@ -452,7 +452,7 @@ func TestTransactionsAPI(t *testing.T) {
 	if trns, err := api0.StartTransaction(ctx, "a", time.Minute, false, false); err != nil {
 		t.Errorf("couldn't start transaction: %v", err)
 	} else {
-		test.CompareTransactions(t, pilosa.Transaction{ID: "a", Active: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
+		test.CompareTransactions(t, &pilosa.Transaction{ID: "a", Active: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
 	}
 
 	// can start exclusive transaction and is not immediately active
@@ -471,14 +471,14 @@ func TestTransactionsAPI(t *testing.T) {
 	if trns, err := api0.GetTransaction(ctx, "exc", false); err != nil {
 		t.Errorf("couldn't poll exclusive transaction: %v", err)
 	} else {
-		test.CompareTransactions(t, pilosa.Transaction{ID: "exc", Active: true, Exclusive: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
+		test.CompareTransactions(t, &pilosa.Transaction{ID: "exc", Active: true, Exclusive: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
 	}
 
 	// transaction is active on other nodes with remote=true
 	if trns, err := api1.GetTransaction(ctx, "exc", true); err != nil {
 		t.Errorf("couldn't poll exclusive transaction: %v", err)
 	} else {
-		test.CompareTransactions(t, pilosa.Transaction{ID: "exc", Active: true, Exclusive: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
+		test.CompareTransactions(t, &pilosa.Transaction{ID: "exc", Active: true, Exclusive: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
 	}
 
 	// LATER, test deadline extension on non-coordinator blocks active, exclusive transaction being returned

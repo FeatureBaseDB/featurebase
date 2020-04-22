@@ -1057,15 +1057,7 @@ func (h *Handler) handleGetTransactions(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// JSON marshalling bullshit. Maybe we should just use
-	// *Transaction everywhere.
-	tmapP := make(map[string]*pilosa.Transaction)
-	for id, trns := range trnsMap {
-		trns := trns
-		tmapP[id] = &trns
-	}
-
-	if err := json.NewEncoder(w).Encode(tmapP); err != nil {
+	if err := json.NewEncoder(w).Encode(trnsMap); err != nil {
 		h.logger.Printf("encoding GetTransactions response: %s", err)
 	}
 }
@@ -1075,7 +1067,7 @@ type TransactionResponse struct {
 	Error       string              `json:"error,omitempty"`
 }
 
-func (h *Handler) doTransactionResponse(w http.ResponseWriter, err error, trns pilosa.Transaction) {
+func (h *Handler) doTransactionResponse(w http.ResponseWriter, err error, trns *pilosa.Transaction) {
 	if err != nil {
 		switch errors.Cause(err) {
 		case pilosa.ErrNodeNotCoordinator, pilosa.ErrTransactionExists:
@@ -1094,7 +1086,7 @@ func (h *Handler) doTransactionResponse(w http.ResponseWriter, err error, trns p
 		errString = err.Error()
 	}
 	err = json.NewEncoder(w).Encode(
-		TransactionResponse{Error: errString, Transaction: &trns})
+		TransactionResponse{Error: errString, Transaction: trns})
 	if err != nil {
 		h.logger.Printf("encoding transaction response: %v", err)
 	}

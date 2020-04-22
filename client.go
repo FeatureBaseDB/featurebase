@@ -75,10 +75,10 @@ type InternalClient interface {
 	ImportRoaring(ctx context.Context, uri *URI, index, field string, shard uint64, remote bool, req *ImportRoaringRequest) error
 	ImportColumnAttrs(ctx context.Context, uri *URI, index string, req *ImportColumnAttrsRequest) error
 
-	StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (Transaction, error)
-	FinishTransaction(ctx context.Context, id string) (Transaction, error)
-	Transactions(ctx context.Context) (map[string]Transaction, error)
-	GetTransaction(ctx context.Context, id string) (Transaction, error)
+	StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (*Transaction, error)
+	FinishTransaction(ctx context.Context, id string) (*Transaction, error)
+	Transactions(ctx context.Context) (map[string]*Transaction, error)
+	GetTransaction(ctx context.Context, id string) (*Transaction, error)
 }
 
 //===============
@@ -211,15 +211,15 @@ func (n nopInternalClient) RetrieveTranslatePartitionFromURI(ctx context.Context
 	return nil, nil
 }
 
-func (n nopInternalClient) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (Transaction, error) {
-	return Transaction{}, nil
-}
-func (n nopInternalClient) FinishTransaction(ctx context.Context, id string) (Transaction, error) {
-	return Transaction{}, nil
-}
-func (n nopInternalClient) Transactions(ctx context.Context) (map[string]Transaction, error) {
+func (n nopInternalClient) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (*Transaction, error) {
 	return nil, nil
 }
-func (n nopInternalClient) GetTransaction(ctx context.Context, id string) (Transaction, error) {
-	return Transaction{}, nil
+func (n nopInternalClient) FinishTransaction(ctx context.Context, id string) (*Transaction, error) {
+	return nil, nil
+}
+func (n nopInternalClient) Transactions(ctx context.Context) (map[string]*Transaction, error) {
+	return nil, nil
+}
+func (n nopInternalClient) GetTransaction(ctx context.Context, id string) (*Transaction, error) {
+	return nil, nil
 }

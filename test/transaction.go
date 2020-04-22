@@ -26,10 +26,13 @@ const deadlineSkew = time.Millisecond * 10
 // CompareTransactions errors describing how the
 // transactions differ (if at all). The deadlines need only be close
 // (within deadlineSkew).
-func CompareTransactions(t *testing.T, trns1, trns2 pilosa.Transaction) {
+func CompareTransactions(t *testing.T, trns1, trns2 *pilosa.Transaction) {
 	t.Helper()
 	if err := pilosa.CompareTransactions(trns1, trns2); err != nil {
 		t.Errorf("%v", err)
+	}
+	if trns1 == nil || trns2 == nil {
+		return
 	}
 
 	diff := trns1.Deadline.Sub(trns2.Deadline)

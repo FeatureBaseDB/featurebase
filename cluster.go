@@ -2598,6 +2598,6 @@ const (
 )
 
 type TransactionMessage struct {
-	Transaction Transaction
+	Transaction *Transaction
 	Action      string
 }

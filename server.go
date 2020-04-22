@@ -1024,13 +1024,13 @@ func (s *Server) monitorRuntime() {
 	}
 }
 
-func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool, remote bool) (Transaction, error) {
+func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool, remote bool) (*Transaction, error) {
 	node := srv.node()
 	if !remote && !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
-		return Transaction{}, ErrNodeNotCoordinator
+		return nil, ErrNodeNotCoordinator
 	}
 	if remote && (node.IsCoordinator || len(srv.cluster.Nodes()) == 1) {
-		return Transaction{}, errors.New("got a remote start call to coordinator or single node cluster... shouldn't ever happen")
+		return nil, errors.New("got a remote start call to coordinator or single node cluster... shouldn't ever happen")
 	}
 
 	if remote {
@@ -1070,13 +1070,13 @@ func (srv *Server) StartTransaction(ctx context.Context, id string, timeout time
 	return trns, nil
 }
 
-func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool) (Transaction, error) {
+func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool) (*Transaction, error) {
 	node := srv.node()
 	if !remote && !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
-		return Transaction{}, ErrNodeNotCoordinator
+		return nil, ErrNodeNotCoordinator
 	}
 	if remote && (node.IsCoordinator || len(srv.cluster.Nodes()) == 1) {
-		return Transaction{}, errors.New("got a remote finish call to coordinator or single node cluster... shouldn't ever happen")
+		return nil, errors.New("got a remote finish call to coordinator or single node cluster... shouldn't ever happen")
 	}
 
 	if remote {
@@ -1099,7 +1099,7 @@ func (srv *Server) FinishTransaction(ctx context.Context, id string, remote bool
 	return trns, nil
 }
 
-func (srv *Server) Transactions(ctx context.Context) (map[string]Transaction, error) {
+func (srv *Server) Transactions(ctx context.Context) (map[string]*Transaction, error) {
 	node := srv.node()
 	if !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
 		return nil, ErrNodeNotCoordinator
@@ -1108,19 +1108,19 @@ func (srv *Server) Transactions(ctx context.Context) (map[string]Transaction, er
 	return srv.holder.Transactions(ctx)
 }
 
-func (srv *Server) GetTransaction(ctx context.Context, id string, remote bool) (Transaction, error) {
+func (srv *Server) GetTransaction(ctx context.Context, id string, remote bool) (*Transaction, error) {
 	node := srv.node()
 	if !remote && !node.IsCoordinator && len(srv.cluster.Nodes()) > 1 {
-		return Transaction{}, ErrNodeNotCoordinator
+		return nil, ErrNodeNotCoordinator
 	}
 
 	if remote && (node.IsCoordinator || len(srv.cluster.Nodes()) == 1) {
-		return Transaction{}, errors.New("got a remote finish call to coordinator or single node cluster... shouldn't ever happen")
+		return nil, errors.New("got a remote finish call to coordinator or single node cluster... shouldn't ever happen")
 	}
 
 	trns, err := srv.holder.GetTransaction(ctx, id)
 	if err != nil {
-		return Transaction{}, errors.Wrap(err, "getting transaction")
+		return nil, errors.Wrap(err, "getting transaction")
 	}
 
 	// The way a client would find out that the exclusive transaction
@@ -1138,7 +1138,7 @@ func (srv *Server) GetTransaction(ctx context.Context, id string, remote bool) (
 			},
 		)
 		if err != nil {
-			return Transaction{}, errors.Wrap(err, "contacting remote hosts")
+			return nil, errors.Wrap(err, "contacting remote hosts")
 		}
 		return trns, nil
 	}

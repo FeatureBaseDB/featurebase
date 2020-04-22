@@ -15,11 +15,13 @@
 package http_test
 
 import (
+	"encoding/json"
 	"net"
 	"testing"
 
 	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/http"
+	"github.com/pilosa/pilosa/v2/test"
 )
 
 func TestHandlerOptions(t *testing.T) {
@@ -38,5 +40,38 @@ func TestHandlerOptions(t *testing.T) {
 	_, err = http.NewHandler(http.OptHandlerListener(ln))
 	if err == nil {
 		t.Fatalf("expected error making handler without options, got nil")
+	}
+}
+
+func TestMarshalUnmarshalTransactionResponse(t *testing.T) {
+	tests := []struct {
+		name string
+		tr   *http.TransactionResponse
+	}{
+		{
+			name: "nil transaction",
+			tr:   &http.TransactionResponse{},
+		},
+		{
+			name: "empty transaction",
+			tr:   &http.TransactionResponse{Transaction: &pilosa.Transaction{}},
+		},
+	}
+
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			data, err := json.Marshal(tst.tr)
+			if err != nil {
+				t.Fatalf("marshaling: %v", err)
+			}
+
+			mytr := &http.TransactionResponse{}
+			json.Unmarshal(data, mytr)
+
+			if mytr.Error != tst.tr.Error {
+				t.Errorf("errors mismatch:exp/got \n%v\n%v", tst.tr.Error, mytr.Error)
+			}
+			test.CompareTransactions(t, tst.tr.Transaction, mytr.Transaction)
+		})
 	}
 }

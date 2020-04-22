@@ -37,11 +37,11 @@ func TestTransactionManager(t *testing.T) {
 
 	// can add a non-exclusive transaction
 	trns1 := mustStart(t, tm, "a", time.Microsecond, false)
-	test.CompareTransactions(t, pilosa.Transaction{ID: "a", Active: true, Timeout: time.Microsecond, Deadline: time.Now()}, trns1)
+	test.CompareTransactions(t, &pilosa.Transaction{ID: "a", Active: true, Timeout: time.Microsecond, Deadline: time.Now()}, trns1)
 
 	// can have two non exclusive transactions
 	trns2 := mustStart(t, tm, "b", time.Microsecond, false)
-	test.CompareTransactions(t, pilosa.Transaction{ID: "b", Active: true, Timeout: time.Microsecond, Deadline: time.Now()}, trns2)
+	test.CompareTransactions(t, &pilosa.Transaction{ID: "b", Active: true, Timeout: time.Microsecond, Deadline: time.Now()}, trns2)
 
 	// trying to start a transaction with same name errors and returns previous transaction
 	t3, err := tm.Start(ctx, "a", time.Second, true)
@@ -64,7 +64,7 @@ func TestTransactionManager(t *testing.T) {
 
 	// can submit an exclusive transaction
 	trnsE := mustStart(t, tm, "ce", time.Millisecond*5, true)
-	test.CompareTransactions(t, pilosa.Transaction{ID: "ce", Active: false, Exclusive: true, Timeout: time.Millisecond * 5, Deadline: time.Now().Add(time.Millisecond * 5)}, trnsE)
+	test.CompareTransactions(t, &pilosa.Transaction{ID: "ce", Active: false, Exclusive: true, Timeout: time.Millisecond * 5, Deadline: time.Now().Add(time.Millisecond * 5)}, trnsE)
 
 	// can't start new transactions while an exclusive transaction is pending
 	if _, err := tm.Start(ctx, "d", time.Millisecond, false); err != pilosa.ErrTransactionExclusive {
@@ -118,7 +118,7 @@ func TestTransactionManager(t *testing.T) {
 
 	// can start a new exclusive transaction and it's immediately active
 	trnsHE := mustStart(t, tm, "he", time.Hour, true)
-	test.CompareTransactions(t, pilosa.Transaction{ID: "he", Active: true, Exclusive: true, Timeout: time.Hour, Deadline: time.Now().Add(time.Hour)}, trnsHE)
+	test.CompareTransactions(t, &pilosa.Transaction{ID: "he", Active: true, Exclusive: true, Timeout: time.Hour, Deadline: time.Now().Add(time.Hour)}, trnsHE)
 
 	// can't start new transactions while an exclusive transaction is active
 	if _, err := tm.Start(ctx, "i", time.Millisecond, false); err != pilosa.ErrTransactionExclusive {
@@ -131,7 +131,7 @@ func TestTransactionManager(t *testing.T) {
 
 	// can start normal transaction after finishing exclusive transaction
 	trnsJ := mustStart(t, tm, "j", time.Hour, false)
-	test.CompareTransactions(t, pilosa.Transaction{ID: "j", Active: true, Timeout: time.Hour, Deadline: time.Now().Add(time.Hour)}, trnsJ)
+	test.CompareTransactions(t, &pilosa.Transaction{ID: "j", Active: true, Timeout: time.Hour, Deadline: time.Now().Add(time.Hour)}, trnsJ)
 
 	// can finish normal transaction
 	trnsJ_finish := mustFinish(t, tm, "j")
@@ -139,11 +139,11 @@ func TestTransactionManager(t *testing.T) {
 
 	// can start normal transaction after finishing normal transaction
 	trnsK := mustStart(t, tm, "k", time.Hour, false)
-	test.CompareTransactions(t, pilosa.Transaction{ID: "k", Active: true, Timeout: time.Hour, Deadline: time.Now().Add(time.Hour)}, trnsK)
+	test.CompareTransactions(t, &pilosa.Transaction{ID: "k", Active: true, Timeout: time.Hour, Deadline: time.Now().Add(time.Hour)}, trnsK)
 
 	// can start new exclusive transaction, but not immediately active
 	trnsLE := mustStart(t, tm, "le", time.Hour, true)
-	test.CompareTransactions(t, pilosa.Transaction{ID: "le", Exclusive: true, Timeout: time.Hour, Deadline: time.Now().Add(time.Hour)}, trnsLE)
+	test.CompareTransactions(t, &pilosa.Transaction{ID: "le", Exclusive: true, Timeout: time.Hour, Deadline: time.Now().Add(time.Hour)}, trnsLE)
 
 	// finishing k should activate le
 	trnsK_finish := mustFinish(t, tm, "k")
@@ -156,11 +156,11 @@ func TestTransactionManager(t *testing.T) {
 
 	// can start normal transaction to test deadline reset
 	trnsM := mustStart(t, tm, "m", time.Millisecond*4, false)
-	test.CompareTransactions(t, pilosa.Transaction{ID: "m", Active: true, Timeout: time.Millisecond * 4, Deadline: time.Now().Add(time.Millisecond * 4)}, trnsM)
+	test.CompareTransactions(t, &pilosa.Transaction{ID: "m", Active: true, Timeout: time.Millisecond * 4, Deadline: time.Now().Add(time.Millisecond * 4)}, trnsM)
 
 	// start new exclusive transaction to trigger deadline check
 	trnsNE := mustStart(t, tm, "ne", time.Hour, true)
-	test.CompareTransactions(t, pilosa.Transaction{ID: "ne", Exclusive: true, Timeout: time.Hour, Deadline: time.Now().Add(time.Hour)}, trnsNE)
+	test.CompareTransactions(t, &pilosa.Transaction{ID: "ne", Exclusive: true, Timeout: time.Hour, Deadline: time.Now().Add(time.Hour)}, trnsNE)
 
 	// sleep for most of the deadline
 	time.Sleep(time.Millisecond * 3)
@@ -182,7 +182,7 @@ func TestTransactionManager(t *testing.T) {
 
 }
 
-func mustStart(t *testing.T, tm *pilosa.TransactionManager, id string, timeout time.Duration, exclusive bool) pilosa.Transaction {
+func mustStart(t *testing.T, tm *pilosa.TransactionManager, id string, timeout time.Duration, exclusive bool) *pilosa.Transaction {
 	t.Helper()
 	trns, err := tm.Start(context.Background(), id, timeout, exclusive)
 	if err != nil {
@@ -191,7 +191,7 @@ func mustStart(t *testing.T, tm *pilosa.TransactionManager, id string, timeout t
 	return trns
 }
 
-func mustFinish(t *testing.T, tm *pilosa.TransactionManager, id string) pilosa.Transaction {
+func mustFinish(t *testing.T, tm *pilosa.TransactionManager, id string) *pilosa.Transaction {
 	t.Helper()
 	trns, err := tm.Finish(context.Background(), id)
 	if err != nil {
@@ -200,7 +200,7 @@ func mustFinish(t *testing.T, tm *pilosa.TransactionManager, id string) pilosa.T
 	return trns
 }
 
-func mustGet(t *testing.T, tm *pilosa.TransactionManager, id string) pilosa.Transaction {
+func mustGet(t *testing.T, tm *pilosa.TransactionManager, id string) *pilosa.Transaction {
 	t.Helper()
 	trns, err := tm.Get(context.Background(), id)
 	if err != nil {
@@ -209,7 +209,7 @@ func mustGet(t *testing.T, tm *pilosa.TransactionManager, id string) pilosa.Tran
 	return trns
 }
 
-func mustList(t *testing.T, tm *pilosa.TransactionManager) map[string]pilosa.Transaction {
+func mustList(t *testing.T, tm *pilosa.TransactionManager) map[string]*pilosa.Transaction {
 	t.Helper()
 	trnsMap, err := tm.List(context.Background())
 	if err != nil {
@@ -221,7 +221,7 @@ func mustList(t *testing.T, tm *pilosa.TransactionManager) map[string]pilosa.Tra
 func TestInMemTransactionStore(t *testing.T) {
 	ims := pilosa.NewInMemTransactionStore()
 
-	err := ims.Put(pilosa.Transaction{ID: "blah", Timeout: time.Second})
+	err := ims.Put(&pilosa.Transaction{ID: "blah", Timeout: time.Second})
 	if err != nil {
 		t.Fatalf("adding blah: %v", err)
 	}
@@ -255,14 +255,15 @@ func TestInMemTransactionStore(t *testing.T) {
 func TestMarshalUnmarshalTransaction(t *testing.T) {
 	tests := []struct {
 		name        string
-		transaction pilosa.Transaction
+		transaction *pilosa.Transaction
 	}{
 		{
-			name: "empty",
+			name:        "empty",
+			transaction: &pilosa.Transaction{},
 		},
 		{
 			name: "basic",
-			transaction: pilosa.Transaction{
+			transaction: &pilosa.Transaction{
 				ID:        "blah",
 				Active:    true,
 				Exclusive: true,
@@ -274,7 +275,7 @@ func TestMarshalUnmarshalTransaction(t *testing.T) {
 
 	for _, tst := range tests {
 		t.Run(tst.name, func(t *testing.T) {
-			bytes, err := json.Marshal(&tst.transaction)
+			bytes, err := json.Marshal(tst.transaction)
 			if err != nil {
 				t.Errorf("marshalling: %v", err)
 			}
@@ -285,7 +286,7 @@ func TestMarshalUnmarshalTransaction(t *testing.T) {
 				t.Fatalf("unmarshalling: %v", err)
 			}
 
-			test.CompareTransactions(t, tst.transaction, *nt)
+			test.CompareTransactions(t, tst.transaction, nt)
 		})
 	}
 }
@@ -294,21 +295,22 @@ func TestUnmarshalTransaction(t *testing.T) {
 	tests := []struct {
 		name            string
 		transactionJSON string
-		exp             pilosa.Transaction
+		exp             *pilosa.Transaction
 	}{
 		{
 			name:            "empty",
 			transactionJSON: `{}`,
+			exp:             &pilosa.Transaction{},
 		},
 		{
 			name:            "basicPost",
 			transactionJSON: `{"id": "blah", "exclusive": false, "timeout": "1m"}`,
-			exp:             pilosa.Transaction{ID: "blah", Timeout: time.Minute},
+			exp:             &pilosa.Transaction{ID: "blah", Timeout: time.Minute},
 		},
 		{
 			name:            "basicPostFloatTimeout",
 			transactionJSON: `{"id": "blah", "exclusive": false, "timeout": 10.5}`,
-			exp:             pilosa.Transaction{ID: "blah", Timeout: time.Second*10 + time.Second/2},
+			exp:             &pilosa.Transaction{ID: "blah", Timeout: time.Second*10 + time.Second/2},
 		},
 	}
 
@@ -320,7 +322,7 @@ func TestUnmarshalTransaction(t *testing.T) {
 				t.Fatalf("unmarshalling: %v", err)
 			}
 
-			test.CompareTransactions(t, tst.exp, *nt)
+			test.CompareTransactions(t, tst.exp, nt)
 		})
 	}
 }

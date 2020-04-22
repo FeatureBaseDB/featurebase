@@ -88,13 +88,13 @@ func NewTransactionManager(store TransactionStore) *TransactionManager {
 // is returned—this is primarily so that the caller can discover if an
 // exclusive transaction has been made immediately active or if they
 // need to poll.
-func (tm *TransactionManager) Start(ctx context.Context, id string, timeout time.Duration, exclusive bool) (Transaction, error) {
+func (tm *TransactionManager) Start(ctx context.Context, id string, timeout time.Duration, exclusive bool) (*Transaction, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
 	trnsMap, err := tm.store.List()
 	if err != nil {
-		return Transaction{}, errors.Wrap(err, "listing transactions in Start")
+		return nil, errors.Wrap(err, "listing transactions in Start")
 	}
 
 	// check for an exclusive transaction
@@ -123,7 +123,7 @@ func (tm *TransactionManager) Start(ctx context.Context, id string, timeout time
 
 	// set deadline according to timeout
 	deadline := time.Now().Add(timeout)
-	trns := Transaction{
+	trns := &Transaction{
 		ID:        id,
 		Active:    active,
 		Exclusive: exclusive,
@@ -131,7 +131,7 @@ func (tm *TransactionManager) Start(ctx context.Context, id string, timeout time
 		Deadline:  deadline,
 	}
 	if err = tm.store.Put(trns); err != nil {
-		return trns, errors.Wrap(err, "adding to store")
+		return nil, errors.Wrap(err, "adding to store")
 	}
 
 	// we won't check deadlines unless there's actually a
@@ -145,22 +145,17 @@ func (tm *TransactionManager) Start(ctx context.Context, id string, timeout time
 
 // Finish completes and removes a transaction, returning the completed
 // transaction (so that the caller can e.g. view the Stats)
-func (tm *TransactionManager) Finish(ctx context.Context, id string) (Transaction, error) {
+func (tm *TransactionManager) Finish(ctx context.Context, id string) (*Transaction, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 	return tm.finish(id)
 }
 
 // finish is the unprotected implementation of Finish
-func (tm *TransactionManager) finish(id string) (Transaction, error) {
-	// sanity check
-	if trns, err := tm.store.Get(id); err != nil {
-		return trns, err
-	}
-
+func (tm *TransactionManager) finish(id string) (*Transaction, error) {
 	trns, err := tm.store.Remove(id)
 	if err != nil {
-		return trns, err
+		return nil, err
 	}
 
 	// After removing, check to see if we need to activate an exclusive transaction
@@ -190,7 +185,7 @@ func (tm *TransactionManager) finish(id string) (Transaction, error) {
 
 // Get retrieves the transaction with the given ID. Returns ErrTransactionNotFound
 // if there isn't one.
-func (tm *TransactionManager) Get(ctx context.Context, id string) (Transaction, error) {
+func (tm *TransactionManager) Get(ctx context.Context, id string) (*Transaction, error) {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
 
@@ -199,7 +194,7 @@ func (tm *TransactionManager) Get(ctx context.Context, id string) (Transaction, 
 
 // List returns map of all transactions by their ID. It is a copy and
 // so may be retained and modified by the caller.
-func (tm *TransactionManager) List(ctx context.Context) (map[string]Transaction, error) {
+func (tm *TransactionManager) List(ctx context.Context) (map[string]*Transaction, error) {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
 	return tm.store.List()
@@ -208,12 +203,12 @@ func (tm *TransactionManager) List(ctx context.Context) (map[string]Transaction,
 // ResetDeadline updates the deadline for the transaction with the
 // given ID to be equal to the current time plus the transaction's
 // timeout.
-func (tm *TransactionManager) ResetDeadline(ctx context.Context, id string) (Transaction, error) {
+func (tm *TransactionManager) ResetDeadline(ctx context.Context, id string) (*Transaction, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 	trns, err := tm.store.Get(id)
 	if err != nil {
-		return trns, errors.Wrap(err, "getting transaction")
+		return nil, errors.Wrap(err, "getting transaction")
 	}
 
 	trns.Deadline = time.Now().Add(trns.Timeout)
@@ -272,13 +267,10 @@ func (tm *TransactionManager) checkDeadlines() time.Duration {
 	// track the time interval to next deadline
 	nextInterval := time.Duration(0)
 	for id, trns := range trnsMap {
-		// fmt.Printf("trns: %v", id)
 		if !trns.Active {
-			// fmt.Printf(" not active\n")
 			continue
 		}
 		if !now.Before(trns.Deadline) {
-			// fmt.Printf(" finishing\n")
 			trnsF, err := tm.finish(id)
 			if err != nil {
 				tm.log().Printf("error finishing expired transaction '%s': %+v: %v", id, trnsF, err)
@@ -287,7 +279,6 @@ func (tm *TransactionManager) checkDeadlines() time.Duration {
 			}
 		} else {
 			interval := trns.Deadline.Sub(now)
-			// fmt.Printf(" getting new interval: %v, next: %v\n", interval, nextInterval)
 			if nextInterval == 0 || interval < nextInterval {
 				nextInterval = interval
 			}
@@ -307,13 +298,13 @@ func (tm *TransactionManager) log() logger.Logger {
 // Pilosa transactions must implement.
 type TransactionStore interface {
 	// Put stores a new transaction or replaces an existing transaction with the given one.
-	Put(trns Transaction) error
+	Put(trns *Transaction) error
 	// Get retrieves the transaction at id or returns ErrTransactionNotFound if there isn't one.
-	Get(id string) (Transaction, error)
+	Get(id string) (*Transaction, error)
 	// List returns a map of all transactions by ID. The map must be safe to modify by the caller.
-	List() (map[string]Transaction, error)
+	List() (map[string]*Transaction, error)
 	// Remove deletes the transaction from the store. It must return ErrTransactionNotFound if there isn't one.
-	Remove(id string) (Transaction, error)
+	Remove(id string) (*Transaction, error)
 }
 
 type OpenTransactionStoreFunc func(path string) (TransactionStore, error)
@@ -326,16 +317,16 @@ func OpenInMemTransactionStore(path string) (TransactionStore, error) {
 // useful for testing.
 type InMemTransactionStore struct {
 	mu   sync.RWMutex
-	tmap map[string]Transaction
+	tmap map[string]*Transaction
 }
 
 func NewInMemTransactionStore() *InMemTransactionStore {
 	return &InMemTransactionStore{
-		tmap: make(map[string]Transaction),
+		tmap: make(map[string]*Transaction),
 	}
 }
 
-func (s *InMemTransactionStore) Put(trns Transaction) error {
+func (s *InMemTransactionStore) Put(trns *Transaction) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -343,25 +334,25 @@ func (s *InMemTransactionStore) Put(trns Transaction) error {
 	return nil
 }
 
-func (s *InMemTransactionStore) Get(id string) (Transaction, error) {
+func (s *InMemTransactionStore) Get(id string) (*Transaction, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if trns, ok := s.tmap[id]; ok {
 		return trns, nil
 	}
-	return Transaction{}, ErrTransactionNotFound
+	return nil, ErrTransactionNotFound
 }
 
-func (s *InMemTransactionStore) List() (map[string]Transaction, error) {
-	cp := make(map[string]Transaction)
+func (s *InMemTransactionStore) List() (map[string]*Transaction, error) {
+	cp := make(map[string]*Transaction)
 	for id, trns := range s.tmap {
 		cp[id] = trns
 	}
 	return cp, nil
 }
 
-func (s *InMemTransactionStore) Remove(id string) (Transaction, error) {
+func (s *InMemTransactionStore) Remove(id string) (*Transaction, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -369,7 +360,7 @@ func (s *InMemTransactionStore) Remove(id string) (Transaction, error) {
 		delete(s.tmap, id)
 		return trns, nil
 	}
-	return Transaction{}, ErrTransactionNotFound
+	return nil, ErrTransactionNotFound
 }
 
 type Error string
@@ -380,7 +371,13 @@ const ErrTransactionNotFound = Error("transaction not found")
 const ErrTransactionExclusive = Error("there is an exclusive transaction, try later")
 const ErrTransactionExists = Error("transaction with the given id already exists")
 
-func CompareTransactions(t1, t2 Transaction) error {
+func CompareTransactions(t1, t2 *Transaction) error {
+	if t1 == nil && t2 == nil {
+		return nil
+	}
+	if t1 == nil || t2 == nil {
+		return errors.Errorf("transactions are not equal: %+v %+v", t1, t2)
+	}
 	if t1.ID != t2.ID {
 		return errors.Errorf("transaction IDs not equal: %+v %+v", t1, t2)
 	}
