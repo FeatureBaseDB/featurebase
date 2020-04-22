@@ -200,10 +200,11 @@ And body like:
 }
 ```
 
-You may choose any timeout you like, though it's better to err on the
-longer side of how long you expect the backup to take. You explicitly
-finish the transaction once you're done, so the timeout exists solely
-for cleanup in the case of failures.
+You MUST specify a timeout. You may choose any timeout you like,
+though it's better to err on the longer side of how long you expect
+the backup to take. You explicitly finish the transaction once you're
+done, so the timeout exists solely for cleanup in the case of
+failures.
 
 This will return a JSON "transaction response" object.
 ```
@@ -244,4 +245,12 @@ with headers:
 ```
 Accept: application/json
 ```
+
+Finishing the transaction removes it from the transaction store
+completely. A 200 response indicates that this was completed
+successfully. The "finish" request will also return a Transaction
+response object which contains the transaction as it looked at the
+time of its removal. Notably, if the transaction was active, it will
+contain `active: true` though it does not exist any more and cannot be
+used.
 
