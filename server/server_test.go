@@ -36,6 +36,7 @@ import (
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/server"
 	"github.com/pilosa/pilosa/v2/test"
+	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -468,10 +469,27 @@ func TestTransactionsAPI(t *testing.T) {
 	}
 
 	// can poll exclusive transaction and is active
+	var excTrns *pilosa.Transaction
 	if trns, err := api0.GetTransaction(ctx, "exc", false); err != nil {
 		t.Errorf("couldn't poll exclusive transaction: %v", err)
 	} else {
-		test.CompareTransactions(t, &pilosa.Transaction{ID: "exc", Active: true, Exclusive: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}, trns)
+		excTrns = &pilosa.Transaction{ID: "exc", Active: true, Exclusive: true, Timeout: time.Minute, Deadline: time.Now().Add(time.Minute)}
+		test.CompareTransactions(t, excTrns, trns)
+	}
+
+	// can't start another exclusive transaction
+	if trns, err := api0.StartTransaction(ctx, "exc2", time.Minute, true, false); errors.Cause(err) != pilosa.ErrTransactionExclusive {
+		t.Errorf("unexpected error: %v", err)
+	} else {
+		// returned transaction should be the exclusive one which is blocking this one
+		test.CompareTransactions(t, excTrns, trns)
+	}
+
+	// can't keep the second exclusive name but make it nonexclusive and start a transaction
+	if trns, err := api0.StartTransaction(ctx, "exc2", time.Minute, false, false); errors.Cause(err) != pilosa.ErrTransactionExclusive {
+		t.Errorf("unexpected error: %v", err)
+	} else {
+		test.CompareTransactions(t, excTrns, trns)
 	}
 
 	// transaction is active on other nodes with remote=true

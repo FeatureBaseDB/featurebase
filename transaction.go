@@ -330,7 +330,7 @@ func (s *InMemTransactionStore) Put(trns *Transaction) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.tmap[trns.ID] = trns
+	s.tmap[trns.ID] = trns.Copy()
 	return nil
 }
 
@@ -339,7 +339,7 @@ func (s *InMemTransactionStore) Get(id string) (*Transaction, error) {
 	defer s.mu.RUnlock()
 
 	if trns, ok := s.tmap[id]; ok {
-		return trns, nil
+		return trns.Copy(), nil
 	}
 	return nil, ErrTransactionNotFound
 }
@@ -347,7 +347,7 @@ func (s *InMemTransactionStore) Get(id string) (*Transaction, error) {
 func (s *InMemTransactionStore) List() (map[string]*Transaction, error) {
 	cp := make(map[string]*Transaction)
 	for id, trns := range s.tmap {
-		cp[id] = trns
+		cp[id] = trns.Copy()
 	}
 	return cp, nil
 }
@@ -358,7 +358,7 @@ func (s *InMemTransactionStore) Remove(id string) (*Transaction, error) {
 
 	if trns, ok := s.tmap[id]; ok {
 		delete(s.tmap, id)
-		return trns, nil
+		return trns.Copy(), nil
 	}
 	return nil, ErrTransactionNotFound
 }
@@ -447,4 +447,15 @@ func (trns *Transaction) MarshalJSON() ([]byte, error) {
 		Timeout:   trns.Timeout.String(),
 		Deadline:  trns.Deadline.In(time.UTC).Format(time.RFC3339Nano),
 	})
+}
+
+func (trns *Transaction) Copy() *Transaction {
+	return &Transaction{
+		ID:        trns.ID,
+		Active:    trns.Active,
+		Exclusive: trns.Exclusive,
+		Timeout:   trns.Timeout,
+		Deadline:  trns.Deadline,
+		Stats:     trns.Stats,
+	}
 }
