@@ -451,6 +451,7 @@ func reducePrecision(sign bool, mantissa []byte, scale int64) ([]byte, int64, bo
 	// string, that means it's value should be 0.
 	if len(mantissa) == 0 {
 		mantissa = []byte{'0'}
+		return mantissa, scale, true
 	}
 
 	lenMantissa := len(mantissa)
