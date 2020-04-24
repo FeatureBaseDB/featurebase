@@ -55,6 +55,9 @@ func tExec(t *testing.T, cmd *cobra.Command, out io.Reader, w io.WriteCloser) (o
 	if err := w.Close(); err != nil {
 		return output, fmt.Errorf("closing cmd's stdout: %v", err)
 	}
+
+	// NOTE: if cmd.Execute doesn't return, then this select (and
+	// therefore the one-second timeout, won't be reached)
 	select {
 	case <-done:
 	case <-time.After(time.Second * 1):
@@ -64,7 +67,7 @@ func tExec(t *testing.T, cmd *cobra.Command, out io.Reader, w io.WriteCloser) (o
 }
 
 // ExecNewRootCommand executes the pilosa root command with the given arguments
-// and returns it's output. It will fail if the command does not complete within
+// and returns its output. It will fail if the command does not complete within
 // 1 second.
 func ExecNewRootCommand(t *testing.T, args ...string) (string, error) {
 	out, w := io.Pipe()

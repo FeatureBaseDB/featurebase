@@ -98,14 +98,14 @@ type Config struct {
 	// intentionally not defined as a flag... only exposed here so
 	// that we can limit the size while running tests in CI so we
 	// don't exhaust the goroutine limit.
-	WorkerPoolSize int
+	WorkerPoolSize int `toml:"-"`
 
 	// ImportWorkerPoolSize controls how many goroutines are created for
 	// processing importRoaring jobs. Defaults to runtime.NumCPU(). It is
 	// intentionally not defined as a flag... only exposed here so
 	// that we can limit the size while running tests in CI so we
 	// don't exhaust the goroutine limit.
-	ImportWorkerPoolSize int
+	ImportWorkerPoolSize int `toml:"-"`
 
 	Cluster struct {
 		// Disabled controls whether clustering functionality is enabled.
