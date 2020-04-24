@@ -437,16 +437,15 @@ func (r *successResponse) write(w http.ResponseWriter, err error) {
 
 	// Write the response.
 	if statusCode == 0 {
+		w.Header().Set("Content-Type", "application/json")
 		_, err := w.Write(msg)
 		if err != nil {
 			r.h.logger.Printf("error writing response: %v", err)
-			http.Error(w, string(msg), http.StatusInternalServerError)
 			return
 		}
 		_, err = w.Write([]byte("\n"))
 		if err != nil {
 			r.h.logger.Printf("error writing newline after response: %v", err)
-			http.Error(w, string(msg), http.StatusInternalServerError)
 			return
 		}
 	} else {
@@ -480,6 +479,7 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	schema := h.api.Schema(r.Context())
 	if err := json.NewEncoder(w).Encode(map[string]interface{}{"indexes": schema}); err != nil { // TODO: use pilosa.Schema instead of map[string]interface{} here?
 		h.logger.Printf("write schema response error: %s", err)
@@ -518,6 +518,7 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 		Nodes:   h.api.Hosts(r.Context()),
 		LocalID: h.api.Node().ID,
 	}
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(status); err != nil {
 		h.logger.Printf("write status response error: %s", err)
 	}
@@ -529,6 +530,7 @@ func (h *Handler) handleGetInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	info := h.api.Info()
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(info); err != nil {
 		h.logger.Printf("write info response error: %s", err)
 	}
@@ -608,6 +610,7 @@ func (h *Handler) handleGetShardsMax(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(getShardsMaxResponse{
 		Standard: h.api.MaxShards(r.Context()),
 	}); err != nil {
@@ -633,6 +636,7 @@ func (h *Handler) handleGetIndex(w http.ResponseWriter, r *http.Request) {
 	indexName := mux.Vars(r)["index"]
 	for _, idx := range h.api.Schema(r.Context()) {
 		if idx.Name == indexName {
+			w.Header().Set("Content-Type", "application/json")
 			if err := json.NewEncoder(w).Encode(idx); err != nil {
 				h.logger.Printf("write response error: %s", err)
 			}
@@ -791,6 +795,7 @@ func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request
 	}
 
 	// Encode response.
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(postIndexAttrDiffResponse{
 		Attrs: attrs,
 	}); err != nil {
@@ -1057,6 +1062,7 @@ func (h *Handler) handleGetTransactions(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(trnsMap); err != nil {
 		h.logger.Printf("encoding GetTransactions response: %s", err)
 	}
@@ -1085,6 +1091,7 @@ func (h *Handler) doTransactionResponse(w http.ResponseWriter, err error, trns *
 	if err != nil {
 		errString = err.Error()
 	}
+	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(
 		TransactionResponse{Error: errString, Transaction: trns})
 	if err != nil {
@@ -1181,6 +1188,7 @@ func (h *Handler) handlePostFieldAttrDiff(w http.ResponseWriter, r *http.Request
 	}
 
 	// Encode response.
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(postFieldAttrDiffResponse{
 		Attrs: attrs,
 	}); err != nil {
@@ -1440,6 +1448,7 @@ func (h *Handler) handleGetFragmentNodes(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Write to response.
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(nodes); err != nil {
 		h.logger.Printf("json write error: %s", err)
 	}
@@ -1456,6 +1465,7 @@ func (h *Handler) handleGetNodes(w http.ResponseWriter, r *http.Request) {
 	nodes := h.api.Hosts(r.Context())
 
 	// Write to response.
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(nodes); err != nil {
 		h.logger.Printf("json write error: %s", err)
 	}
@@ -1509,6 +1519,7 @@ func (h *Handler) handleGetFragmentBlocks(w http.ResponseWriter, r *http.Request
 	}
 
 	// Encode response.
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(getFragmentBlocksResponse{
 		Blocks: blocks,
 	}); err != nil {
@@ -1568,6 +1579,7 @@ func (h *Handler) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	err := json.NewEncoder(w).Encode(struct {
 		Version string `json:"version"`
 	}{
@@ -1627,6 +1639,7 @@ func (h *Handler) handlePostClusterResizeSetCoordinator(w http.ResponseWriter, r
 		return
 	}
 	// Encode response.
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(setCoordinatorResponse{
 		Old: oldNode,
 		New: newNode,
@@ -1669,6 +1682,7 @@ func (h *Handler) handlePostClusterResizeRemoveNode(w http.ResponseWriter, r *ht
 	}
 
 	// Encode response.
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(removeNodeResponse{
 		Remove: removeNode,
 	}); err != nil {
@@ -1705,6 +1719,7 @@ func (h *Handler) handlePostClusterResizeAbort(w http.ResponseWriter, r *http.Re
 		}
 	}
 	// Encode response.
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(clusterResizeAbortResponse{
 		Info: msg,
 	}); err != nil {
@@ -1742,6 +1757,7 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(defaultClusterMessageResponse{}); err != nil {
 		h.logger.Printf("response encoding error: %s", err)
 	}
