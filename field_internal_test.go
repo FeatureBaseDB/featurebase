@@ -439,6 +439,40 @@ func TestBSIGroup_BaseDefaultValue(t *testing.T) {
 	}
 }
 
+func TestField_ApplyOptions(t *testing.T) {
+	for i, tt := range []struct {
+		opts    FieldOptions
+		expOpts FieldOptions
+	}{
+		{
+			FieldOptions{
+				Type:      FieldTypeSet,
+				CacheType: CacheTypeNone,
+				CacheSize: 0,
+			},
+			FieldOptions{
+				Type:      FieldTypeSet,
+				CacheType: CacheTypeNone,
+				CacheSize: 0,
+			},
+		},
+	} {
+
+		fld := &Field{}
+		fld.options = applyDefaultOptions(FieldOptions{})
+
+		if err := fld.applyOptions(tt.opts); err != nil {
+			t.Fatal(err)
+		}
+
+		if fld.options.CacheType != tt.expOpts.CacheType {
+			t.Fatalf("test %d, unexpected FieldOptions.CacheType value. expected: %s, but got: %s", i, tt.expOpts.CacheType, fld.options.CacheType)
+		} else if fld.options.CacheSize != tt.expOpts.CacheSize {
+			t.Fatalf("test %d, unexpected FieldOptions.CacheSize value. expected: %d, but got: %d", i, tt.expOpts.CacheSize, fld.options.CacheSize)
+    }
+  }
+}
+      
 // Ensure that importValue handles requiredDepth correctly.
 // This test sets the same column value to 1, then 8, then 1.
 // A previous bug was incorrectly determining bitDepth based
