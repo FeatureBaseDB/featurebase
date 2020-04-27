@@ -1195,6 +1195,9 @@ func (c *cluster) listenForJoins() {
 // for future lookup by JobID.
 func (c *cluster) unprotectedGenerateResizeJob(nodeAction nodeAction) (*resizeJob, error) {
 	c.logger.Printf("generateResizeJob: %v", nodeAction)
+	if c.currentJob != nil {
+		return nil, fmt.Errorf("there is currently a resize job running")
+	}
 
 	j, err := c.unprotectedGenerateResizeJobByAction(nodeAction)
 	if err != nil {
@@ -1206,9 +1209,6 @@ func (c *cluster) unprotectedGenerateResizeJob(nodeAction nodeAction) (*resizeJo
 	c.jobs[j.ID] = j
 
 	// Set job as currentJob.
-	if c.currentJob != nil {
-		return nil, fmt.Errorf("there is currently a resize job running")
-	}
 	c.currentJob = j
 
 	return j, nil

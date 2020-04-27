@@ -37,14 +37,14 @@ func TestAPI_Import(t *testing.T) {
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.OpenTranslateReader),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node1"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
 				pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-				pilosa.OptServerOpenTranslateReader(http.OpenTranslateReader),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 			)},
 	)
 	defer c.Close()
@@ -189,13 +189,13 @@ func TestAPI_ImportValue(t *testing.T) {
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node0"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.OpenTranslateReader),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 			)},
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
 				pilosa.OptServerNodeID("node1"),
 				pilosa.OptServerClusterHasher(&offsetModHasher{}),
-				pilosa.OptServerOpenTranslateReader(http.OpenTranslateReader),
+				pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
 			)},
 	)
 	defer c.Close()

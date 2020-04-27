@@ -107,6 +107,14 @@ func (kpr *keypairReloader) GetCertificateFunc() func(*tls.ClientHelloInfo) (*tl
 	}
 }
 
+func (kpr *keypairReloader) GetClientCertificateFunc() func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+	return func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+		kpr.certMu.RLock()
+		defer kpr.certMu.RUnlock()
+		return kpr.cert, nil
+	}
+}
+
 func GetTLSConfig(tlsConfig *TLSConfig, logger *log.Logger) (TLSConfig *tls.Config, err error) {
 	if tlsConfig.CertificatePath != "" && tlsConfig.CertificateKeyPath != "" {
 		kpr, err := NewKeypairReloader(tlsConfig.CertificatePath, tlsConfig.CertificateKeyPath, logger)
@@ -118,6 +126,7 @@ func GetTLSConfig(tlsConfig *TLSConfig, logger *log.Logger) (TLSConfig *tls.Conf
 			PreferServerCipherSuites: true,
 			MinVersion:               tls.VersionTLS12,
 			GetCertificate:           kpr.GetCertificateFunc(),
+			GetClientCertificate:     kpr.GetClientCertificateFunc(),
 		}
 		if tlsConfig.CACertPath != "" {
 			b, err := ioutil.ReadFile(tlsConfig.CACertPath)

@@ -104,6 +104,13 @@ func OptCommandCloseTimeout(d time.Duration) CommandOption {
 	}
 }
 
+func OptCommandConfig(config *Config) CommandOption {
+	return func(c *Command) error {
+		c.Config = config
+		return nil
+	}
+}
+
 // NewCommand returns a new instance of Main.
 func NewCommand(stdin io.Reader, stdout, stderr io.Writer, opts ...CommandOption) *Command {
 	c := &Command{
@@ -128,7 +135,6 @@ func NewCommand(stdin io.Reader, stdout, stderr io.Writer, opts ...CommandOption
 
 // Start starts the pilosa server - it returns once the server is running.
 func (m *Command) Start() (err error) {
-	defer close(m.Started)
 
 	// Seed random number generator
 	rand.Seed(time.Now().UTC().UnixNano())
@@ -158,6 +164,7 @@ func (m *Command) Start() (err error) {
 
 	m.logger.Printf("listening as %s\n", m.listenURI)
 
+	close(m.Started)
 	return nil
 }
 
@@ -308,7 +315,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerDiagnosticsInterval(diagnosticsInterval),
 		pilosa.OptServerExecutorPoolSize(m.Config.WorkerPoolSize),
 		pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
-		pilosa.OptServerOpenTranslateReader(http.OpenTranslateReader),
+		pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(c)),
 		pilosa.OptServerLogger(m.logger),
 		pilosa.OptServerAttrStoreFunc(boltdb.NewAttrStore),
 		pilosa.OptServerSystemInfo(gopsutil.NewSystemInfo()),

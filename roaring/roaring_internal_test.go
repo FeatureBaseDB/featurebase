@@ -147,6 +147,16 @@ func TestRunCountRange(t *testing.T) {
 	c.add(10)
 	c.add(11)
 
+	cnt = c.runCountRange(4, 8)
+	if cnt != 3 {
+		t.Fatalf("should get 3 from range overlaps front of interval, but got: %v", cnt)
+	}
+
+	cnt = c.runCountRange(5, 8)
+	if cnt != 3 {
+		t.Fatalf("should get 3 from range within interval, but got: %v", cnt)
+	}
+
 	cnt = c.runCountRange(6, 8)
 	if cnt != 2 {
 		t.Fatalf("should get 2 from range within interval, but got: %v", cnt)
@@ -160,6 +170,31 @@ func TestRunCountRange(t *testing.T) {
 	cnt = c.runCountRange(9, 14)
 	if cnt != 3 {
 		t.Fatalf("should get 3 from range overlaps back of interval, but got: %v", cnt)
+	}
+
+	cnt = c.runCountRange(8, 10)
+	if cnt != 2 {
+		t.Fatalf("should get 2 from range within interval, but got: %v", cnt)
+	}
+
+	cnt = c.runCountRange(8, 11)
+	if cnt != 3 {
+		t.Fatalf("should get 3 from range within interval, but got: %v", cnt)
+	}
+
+	cnt = c.runCountRange(8, 12)
+	if cnt != 4 {
+		t.Fatalf("should get 4 from range overlaps back of interval, but got: %v", cnt)
+	}
+
+	cnt = c.runCountRange(5, 12)
+	if cnt != 7 {
+		t.Fatalf("should get 7 from interval within range, but got: %v", cnt)
+	}
+
+	cnt = c.runCountRange(5, 11)
+	if cnt != 6 {
+		t.Fatalf("should get 6 from interval equal to range, but got: %v", cnt)
 	}
 
 	c.add(17)

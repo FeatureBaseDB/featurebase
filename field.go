@@ -596,12 +596,10 @@ func (f *Field) applyOptions(opt FieldOptions) error {
 		if opt.CacheType != "" {
 			f.options.CacheType = opt.CacheType
 		}
-		if opt.CacheSize != 0 {
-			if opt.CacheType == CacheTypeNone {
-				f.options.CacheSize = 0
-			} else {
-				f.options.CacheSize = opt.CacheSize
-			}
+		if opt.CacheType == CacheTypeNone {
+			f.options.CacheSize = 0
+		} else if opt.CacheSize != 0 {
+			f.options.CacheSize = opt.CacheSize
 		}
 		f.options.Min = 0
 		f.options.Max = 0
@@ -1292,34 +1290,12 @@ func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportO
 		return errors.Wrap(ErrBSIGroupNotFound, f.name)
 	}
 
-	// Find the lowest/highest values.
+	// We want to determine the required bit depth, in case the field doesn't
+	// have as many bits currently as would be needed to represent these values,
+	// but only if the values are in-range for the field.
 	var min, max int64
-	for i, value := range values {
-		if i == 0 || value < min {
-			min = value
-		}
-		if i == 0 || value > max {
-			max = value
-		}
-	}
-
-	// Determine the highest bit depth required by the min & max.
-	requiredDepth := bitDepthInt64(min - bsig.Base)
-	if v := bitDepthInt64(max - bsig.Base); v > requiredDepth {
-		requiredDepth = v
-	}
-
-	// Increase bit depth if required.
-	if requiredDepth > bsig.BitDepth {
-		if err := func() error {
-			f.mu.Lock()
-			defer f.mu.Unlock()
-			bsig.BitDepth = requiredDepth
-			f.options.BitDepth = requiredDepth
-			return f.saveMeta()
-		}(); err != nil {
-			return errors.Wrap(err, "increasing bsi bit depth")
-		}
+	if len(values) > 0 {
+		min, max = values[0], values[0]
 	}
 
 	// Split import data by fragment.
@@ -1331,6 +1307,12 @@ func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportO
 		} else if value < bsig.Min {
 			return fmt.Errorf("%v, columnID=%v, value=%v", ErrBSIGroupValueTooLow, columnID, value)
 		}
+		if value > max {
+			max = value
+		}
+		if value < min {
+			min = value
+		}
 
 		// Attach value to each bsiGroup view.
 		for _, name := range []string{viewName} {
@@ -1340,6 +1322,26 @@ func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportO
 			data.Values = append(data.Values, value)
 			dataByFragment[key] = data
 		}
+	}
+
+	// Determine the highest bit depth required by the min & max.
+	requiredDepth := bitDepthInt64(min - bsig.Base)
+	if v := bitDepthInt64(max - bsig.Base); v > requiredDepth {
+		requiredDepth = v
+	}
+	// Increase bit depth if required.
+	if requiredDepth > bsig.BitDepth {
+		if err := func() error {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			bsig.BitDepth = requiredDepth
+			f.options.BitDepth = requiredDepth
+			return f.saveMeta()
+		}(); err != nil {
+			return errors.Wrap(err, "increasing bsi bit depth")
+		}
+	} else {
+		requiredDepth = bsig.BitDepth
 	}
 
 	// Import into each fragment.
