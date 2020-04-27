@@ -1147,7 +1147,9 @@ type baseRoaringIterator struct {
 	currentN          int
 	currentLen        int
 	currentPointer    *uint16
-	currentDataOffset uint32
+	currentDataOffset uint64
+	prevOffset32      uint32
+	chunkOffset       uint64
 	lastDataOffset    int64
 	lastErr           error
 }
@@ -1161,6 +1163,8 @@ func (b *baseRoaringIterator) SilenceLint() {
 	_ = b.offsets
 	_ = b.headers
 	_ = b.currentIdx
+	_ = b.chunkOffset
+	_ = b.prevOffset32
 }
 
 type pilosaRoaringIterator struct {
@@ -1196,14 +1200,14 @@ func newOfficialRoaringIterator(data []byte) (*officialRoaringIterator, error) {
 	r.headers = data[headerOffset:offsetOffset]
 	// note: offsets are only actually used with the no-run headers.
 	if r.haveRuns {
-		r.currentDataOffset = uint32(offsetOffset)
+		r.currentDataOffset = uint64(offsetOffset)
 	} else {
 		if len(r.data) < offsetOffset+int(r.keys*4) {
 			return nil, fmt.Errorf("insufficient data for offsets (need %d bytes, found %d)",
 				r.keys*4, len(r.data)-offsetOffset)
 		}
 		r.offsets = data[offsetOffset : offsetOffset+int(r.keys*4)]
-		r.currentDataOffset = uint32(offsetOffset)
+		r.currentDataOffset = uint64(offsetOffset)
 	}
 	// set key to -1; user should call Next first.
 	r.currentIdx = -1
@@ -1247,7 +1251,11 @@ func newPilosaRoaringIterator(data []byte) (*pilosaRoaringIterator, error) {
 	// if there's no containers, we want to act as though data started at the end
 	// of the list of offsets, which was also empty, so we don't think the entire thing
 	// is actually a malformed op
-	r.currentDataOffset = uint32(offsetEnd)
+	r.prevOffset32 = uint32(offsetEnd)
+	r.currentDataOffset = uint64(offsetEnd)
+	// it's possible that there's so many headers that we're actually over
+	// 4GB into the file already.
+	r.chunkOffset = r.currentDataOffset &^ ((1 << 32) - 1)
 	// set key to -1; user should call Next first.
 	r.currentIdx = -1
 	r.currentKey = ^uint64(0)
@@ -1304,7 +1312,12 @@ func (r *pilosaRoaringIterator) Next() (key uint64, cType byte, n int, length in
 	r.currentKey = binary.LittleEndian.Uint64(header[0:8])
 	r.currentType = byte(binary.LittleEndian.Uint16(header[8:10]))
 	r.currentN = int(binary.LittleEndian.Uint16(header[10:12])) + 1
-	r.currentDataOffset = binary.LittleEndian.Uint32(r.offsets[r.currentIdx*4:])
+	offset32 := binary.LittleEndian.Uint32(r.offsets[r.currentIdx*4:])
+	if offset32 < r.prevOffset32 {
+		r.chunkOffset += (1 << 32)
+	}
+	r.prevOffset32 = offset32
+	r.currentDataOffset = r.chunkOffset + uint64(offset32)
 
 	// a run container keeps its data after an initial 2 byte length header
 	var runCount uint16
@@ -1312,7 +1325,7 @@ func (r *pilosaRoaringIterator) Next() (key uint64, cType byte, n int, length in
 		runCount = binary.LittleEndian.Uint16(r.data[r.currentDataOffset : r.currentDataOffset+runCountHeaderSize])
 		r.currentDataOffset += 2
 	}
-	if r.currentDataOffset > uint32(len(r.data)) || r.currentDataOffset < headerBaseSize {
+	if r.currentDataOffset > uint64(len(r.data)) || r.currentDataOffset < headerBaseSize {
 		r.Done(fmt.Errorf("container %d/%d, key %d, had offset %d, maximum %d",
 			r.currentIdx, r.keys, r.currentKey, r.currentDataOffset, len(r.data)))
 		return r.Current()
@@ -1335,7 +1348,7 @@ func (r *pilosaRoaringIterator) Next() (key uint64, cType byte, n int, length in
 			r.currentIdx, r.keys, r.currentKey, r.currentDataOffset, size, len(r.data)))
 		return r.Current()
 	}
-	r.currentDataOffset += uint32(size)
+	r.currentDataOffset += uint64(size)
 	r.lastErr = nil
 	return r.Current()
 }
@@ -1358,7 +1371,7 @@ func (r *officialRoaringIterator) Next() (key uint64, cType byte, n int, length 
 	// with runs, we can't actually look up offsets; the format just stores
 	// things sequentially. so we have to actually track the offset in that case.
 	if !r.haveRuns {
-		r.currentDataOffset = binary.LittleEndian.Uint32(r.offsets[r.currentIdx*4:])
+		r.currentDataOffset = uint64(binary.LittleEndian.Uint32(r.offsets[r.currentIdx*4:]))
 	}
 	// a run container keeps its data after an initial 2 byte length header
 	var runCount uint16
@@ -1371,7 +1384,7 @@ func (r *officialRoaringIterator) Next() (key uint64, cType byte, n int, length 
 		runCount = binary.LittleEndian.Uint16(r.data[r.currentDataOffset : r.currentDataOffset+runCountHeaderSize])
 		r.currentDataOffset += 2
 	}
-	if r.currentDataOffset > uint32(len(r.data)) || r.currentDataOffset < headerBaseSize {
+	if r.currentDataOffset > uint64(len(r.data)) || r.currentDataOffset < headerBaseSize {
 		r.Done(fmt.Errorf("container %d/%d, key %d, had offset %d, maximum %d",
 			r.currentIdx, r.keys, r.currentKey, r.currentDataOffset, len(r.data)))
 		return r.Current()
@@ -1403,7 +1416,7 @@ func (r *officialRoaringIterator) Next() (key uint64, cType byte, n int, length 
 			r.currentIdx, r.keys, r.currentKey, r.currentDataOffset, size, len(r.data)))
 		return r.Current()
 	}
-	r.currentDataOffset += uint32(size)
+	r.currentDataOffset += uint64(size)
 	r.lastErr = nil
 	return r.Current()
 }
