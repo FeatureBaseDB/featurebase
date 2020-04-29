@@ -634,7 +634,7 @@ func (s *Server) monitorResetTranslationSync() {
 			s.wg.Add(1)
 			go func() {
 				// Obtaining this lock ensures that there is only
-				// once instance of resetTranslationSync() running
+				// one instance of resetTranslationSync() running
 				// at once.
 				s.syncer.mu.Lock()
 				defer s.syncer.mu.Unlock()

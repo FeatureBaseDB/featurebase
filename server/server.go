@@ -87,7 +87,6 @@ type Command struct {
 	listenURI    *pilosa.URI
 	tlsConfig    *tls.Config
 	closeTimeout time.Duration
-	noSleep      bool
 
 	serverOptions []pilosa.ServerOption
 }
@@ -111,17 +110,6 @@ func OptCommandCloseTimeout(d time.Duration) CommandOption {
 func OptCommandConfig(config *Config) CommandOption {
 	return func(c *Command) error {
 		c.Config = config
-		return nil
-	}
-}
-
-// OptCommandNoSleep disables the 5 second sleep for non-coordinator
-// nodes on startup. See https://github.com/molecula/pilosa/issues/266
-// This option should only be used by tests, and expect it to be
-// deprecated.
-func OptCommandNoSleep() CommandOption {
-	return func(c *Command) error {
-		c.noSleep = true
 		return nil
 	}
 }
