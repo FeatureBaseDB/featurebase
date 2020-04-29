@@ -145,13 +145,6 @@ func (h *Holder) Open() error {
 		return errors.Wrap(err, "creating directory")
 	}
 
-	// Verify that we are not trying to open with v1 translation data.
-	if ok, err := h.hasV1TranslateKeysFile(); err != nil {
-		return errors.Wrap(err, "verify v1 translation file")
-	} else if !ok {
-		return ErrCannotOpenV1TranslateFile
-	}
-
 	// Open path to read all index directories.
 	f, err := os.Open(h.Path)
 	if err != nil {
@@ -274,16 +267,6 @@ func (h *Holder) HasData() (bool, error) {
 			continue
 		}
 		return true, nil
-	}
-	return false, nil
-}
-
-// hasV1TranslateKeysFile returns true if a v1 translation data file exists on disk.
-func (h *Holder) hasV1TranslateKeysFile() (bool, error) {
-	if _, err := os.Stat(filepath.Join(h.Path, ".keys")); os.IsNotExist(err) {
-		return true, nil
-	} else if err != nil {
-		return false, err
 	}
 	return false, nil
 }
