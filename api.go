@@ -769,7 +769,7 @@ func (api *API) ClusterMessage(ctx context.Context, reqBody io.Reader) error {
 		return errors.Wrap(err, "deserializing cluster message")
 	}
 
-	// Forward the error message.
+	// Forward the message.
 	if err := api.server.receiveMessage(msg); err != nil {
 		return errors.Wrap(err, "receiving message")
 	}

@@ -158,15 +158,8 @@ func (m *Command) Start() (err error) {
 	if err != nil {
 		return errors.Wrap(err, "setting up server")
 	}
-	if !m.API.Node().IsCoordinator {
-		// hack to give coordinator a head start
-		// TODO https://github.com/molecula/pilosa/issues/266
-		if len(m.Config.Gossip.Seeds) > 0 && !m.noSleep {
-			time.Sleep(5 * time.Second)
-		}
-	}
 
-	// SetupNetworking
+	// Set up networking (i.e. gossip)
 	err = m.setupNetworking()
 	if err != nil {
 		return errors.Wrap(err, "setting up networking")

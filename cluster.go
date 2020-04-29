@@ -482,9 +482,21 @@ func (c *cluster) unprotectedSetState(state string) {
 		// If, for example, the cluster has changed size and is
 		// now settling to NORMAL, the partition ownership may
 		// have changed, and this will force that to be recalculated.
-		if err := c.translationSyncer.Reset(); err != nil {
-			c.logger.Printf("error resetting translation syncer: %s", err)
-		}
+		//
+		// We can't call Reset() if Server.Open() hasn't run yet,
+		// because that's where we start monitorResetTranslationSync()
+		// which reads the reset channel. If we get here before
+		// Server.Open(), this will deadlock on that channel read.
+		// In order to address this, we call Reset() in a goroutine
+		// so even if it blocks waiting for monitorResetTranslationSync()
+		// to start, it doesn't cause a deadlock, and once Server.Open()
+		// is called, then the sync reset (or in the STARTING case, the
+		// initial sync start) will happen.
+		go func() {
+			if err := c.translationSyncer.Reset(); err != nil {
+				c.logger.Printf("error resetting translation syncer: %s", err)
+			}
+		}()
 	}
 
 	// TODO: consider NOT running cleanup on an active node that has
@@ -573,6 +585,19 @@ func (c *cluster) determineClusterState() (clusterState string) {
 	if c.haveTopologyAgreement() && c.allNodesReady() {
 		return ClusterStateNormal
 	}
+	// TODO:
+	// If the cluster is still STARTING, there's no need to put it into
+	// state DEGRADED. It's possible to force a starting cluster to go
+	// into state DEGRADED by, for example, restarting a 2-node cluster
+	// with replica=3. In that case, the coordinator would come up and
+	// it would immediately trigger this condition. Checking for
+	// state != STARTING here would prevent that. Unfortunately, based
+	// on test TestClusteringNodesReplica2, we expect a DEGRADED cluster
+	// to go back into state STARTING if it loses more replicas than
+	// can support queries. In that case, we might actually want it to
+	// go from STARTING back to DEGRADED. Leaving it as is for now, but
+	// noting that it's a little confusing that a cluster starting up
+	// could possibly go into state DEGRADED.
 	if len(c.Topology.nodeIDs)-len(c.nodeIDs()) < c.ReplicaN && c.allNodesReady() {
 		return ClusterStateDegraded
 	}
@@ -1100,7 +1125,7 @@ func (c *cluster) waitForStarted() error {
 		// (and now in a state of STARTING) so that it can be put to the correct
 		// cluster state.
 		// TODO: Because the normal code path already sends a NodeJoin event (via
-		// memberlist), this it a bit redundant in most cases. Perhaps determine
+		// memberlist), this is a bit redundant in most cases. Perhaps determine
 		// that the node has been restarted and don't do this step.
 		msg := &NodeEvent{
 			Event: NodeJoin,
@@ -1225,7 +1250,6 @@ func (c *cluster) unprotectedSetStateAndBroadcast(state string) error {
 	// Broadcast cluster status changes to the cluster.
 	status := c.unprotectedStatus()
 	return c.unprotectedSendSync(status) // TODO fix c.Status
-
 }
 
 func (c *cluster) sendTo(node *Node, m Message) error {
@@ -2067,8 +2091,8 @@ func (c *cluster) nodeLeave(nodeID string) error {
 	}
 
 	if c.state != ClusterStateNormal && c.state != ClusterStateDegraded {
-		return fmt.Errorf("cluster must be '%s' to remove a node but is '%s'",
-			ClusterStateNormal, c.state)
+		return fmt.Errorf("cluster must be '%s' or '%s' to remove a node but is '%s'",
+			ClusterStateNormal, ClusterStateDegraded, c.state)
 	}
 
 	// Ensure that node is in the cluster.
