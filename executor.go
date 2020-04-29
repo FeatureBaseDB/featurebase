@@ -3178,6 +3178,9 @@ func (gbi *groupByIterator) nextAtIdx(i int) {
 		}
 		if wrapped && i != 0 {
 			gbi.nextAtIdx(i - 1)
+			if gbi.done {
+				return
+			}
 		}
 		if i == 0 && gbi.filter != nil {
 			gbi.rows[i].row = nr.Intersect(gbi.filter)
