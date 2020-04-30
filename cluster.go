@@ -1096,7 +1096,7 @@ func (c *cluster) waitForStarted() error {
 	if !c.isCoordinator() {
 		// In the case where a node has been restarted and memberlist has
 		// not had enough time to determine the node went down/up, then
-		// the coorninator needs to be alerted that this node is back up
+		// the coordinator needs to be alerted that this node is back up
 		// (and now in a state of STARTING) so that it can be put to the correct
 		// cluster state.
 		// TODO: Because the normal code path already sends a NodeJoin event (via
