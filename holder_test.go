@@ -536,13 +536,62 @@ func TestHolderSyncer_BlockIteratorLimits(t *testing.T) {
 		t.Fatalf("syncing node 0: %v", err)
 	}
 
-	// Verify data is the same on both nodes.
+	// Verify data is the same on all nodes.
 	for i, hldr := range []*test.Holder{hldr0, hldr1, hldr2} {
 		if a := hldr.Row("i", "f", blockEdge-1).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
 			t.Errorf("unexpected columns(%d/block 0): %+v", i, a)
 		}
 		if a := hldr.Row("i", "f", blockEdge).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
 			t.Errorf("unexpected columns(%d/block 1): %+v", i, a)
+		}
+	}
+}
+
+// Ensure holder correctly handles clears during block sync.
+func TestHolderSyncer_Clears(t *testing.T) {
+	c := test.MustNewCluster(t, 3)
+	c[0].Config.Cluster.ReplicaN = 3
+	c[0].Config.AntiEntropy.Interval = 0
+	c[1].Config.Cluster.ReplicaN = 3
+	c[1].Config.AntiEntropy.Interval = 0
+	err := c.Start()
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
+	}
+	defer c.Close()
+
+	_, err = c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatalf("creating index i: %v", err)
+	}
+	_, err = c[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+	if err != nil {
+		t.Fatalf("creating field f: %v", err)
+	}
+
+	hldr0 := &test.Holder{Holder: c[0].Server.Holder()}
+	hldr1 := &test.Holder{Holder: c[1].Server.Holder()}
+	hldr2 := &test.Holder{Holder: c[2].Server.Holder()}
+
+	// Set data on the local holder that should be cleared
+	// because it's the only instance of this value.
+	hldr0.SetBit("i", "f", 0, 30)
+
+	// Set similar data on the replicas, but
+	// different from what's on local. This should end
+	// up being set on all replicas
+	hldr1.SetBit("i", "f", 0, 20)
+	hldr2.SetBit("i", "f", 0, 20)
+
+	err = c[0].Server.SyncData()
+	if err != nil {
+		t.Fatalf("syncing node 0: %v", err)
+	}
+
+	// Verify data is the same on all nodes.
+	for i, hldr := range []*test.Holder{hldr0, hldr1, hldr2} {
+		if a := hldr.Row("i", "f", 0).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
+			t.Errorf("unexpected columns(%d): %+v", i, a)
 		}
 	}
 }
