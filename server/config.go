@@ -27,7 +27,6 @@ import (
 	"github.com/pilosa/pilosa/v2/gossip"
 	"github.com/pilosa/pilosa/v2/toml"
 	"github.com/pkg/errors"
-	jaeger "github.com/uber/jaeger-client-go"
 )
 
 // TLSConfig contains TLS configuration
@@ -207,7 +206,7 @@ func NewConfig() *Config {
 	c.Metric.Diagnostics = true
 
 	// Tracing config.
-	c.Tracing.SamplerType = jaeger.SamplerTypeRemote
+	c.Tracing.SamplerType = "off"
 	c.Tracing.SamplerParam = 0.001
 
 	c.Profile.BlockRate = 10000000 // 1 sample per 10 ms
