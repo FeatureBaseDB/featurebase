@@ -490,6 +490,61 @@ func TestHolderSyncer_SyncHolder(t *testing.T) {
 	}
 }
 
+// Ensure holder can sync with a remote holder and respects
+// the row boundaries of the block.
+func TestHolderSyncer_BlockIteratorLimits(t *testing.T) {
+	c := test.MustNewCluster(t, 3)
+	c[0].Config.Cluster.ReplicaN = 3
+	c[0].Config.AntiEntropy.Interval = 0
+	c[1].Config.Cluster.ReplicaN = 3
+	c[1].Config.AntiEntropy.Interval = 0
+	err := c.Start()
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
+	}
+	defer c.Close()
+
+	_, err = c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatalf("creating index i: %v", err)
+	}
+	_, err = c[0].API.CreateField(context.Background(), "i", "f", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+	if err != nil {
+		t.Fatalf("creating field f: %v", err)
+	}
+
+	hldr0 := &test.Holder{Holder: c[0].Server.Holder()}
+	hldr1 := &test.Holder{Holder: c[1].Server.Holder()}
+	hldr2 := &test.Holder{Holder: c[2].Server.Holder()}
+
+	// Set data on the local holder.
+	hldr0.SetBit("i", "f", 99, 10)
+	hldr0.SetBit("i", "f", 100, 20)
+
+	// Set the same data on one of the replicas
+	// so that we have a quorum.
+	hldr1.SetBit("i", "f", 99, 10)
+	hldr1.SetBit("i", "f", 100, 20)
+
+	// Leave the third replica empty to force a block merge.
+	//
+
+	err = c[0].Server.SyncData()
+	if err != nil {
+		t.Fatalf("syncing node 0: %v", err)
+	}
+
+	// Verify data is the same on both nodes.
+	for i, hldr := range []*test.Holder{hldr0, hldr1, hldr2} {
+		if a := hldr.Row("i", "f", 99).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+			t.Errorf("unexpected columns(%d/0): %+v", i, a)
+		}
+		if a := hldr.Row("i", "f", 100).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
+			t.Errorf("unexpected columns(%d/0): %+v", i, a)
+		}
+	}
+}
+
 // Ensure holder can sync time quantum views with a remote holder.
 func TestHolderSyncer_TimeQuantum(t *testing.T) {
 	c := test.MustNewCluster(t, 2)
