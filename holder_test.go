@@ -513,18 +513,20 @@ func TestHolderSyncer_BlockIteratorLimits(t *testing.T) {
 		t.Fatalf("creating field f: %v", err)
 	}
 
+	blockEdge := uint64(pilosa.HashBlockSize)
+
 	hldr0 := &test.Holder{Holder: c[0].Server.Holder()}
 	hldr1 := &test.Holder{Holder: c[1].Server.Holder()}
 	hldr2 := &test.Holder{Holder: c[2].Server.Holder()}
 
 	// Set data on the local holder.
-	hldr0.SetBit("i", "f", 99, 10)
-	hldr0.SetBit("i", "f", 100, 20)
+	hldr0.SetBit("i", "f", blockEdge-1, 10)
+	hldr0.SetBit("i", "f", blockEdge, 20)
 
 	// Set the same data on one of the replicas
 	// so that we have a quorum.
-	hldr1.SetBit("i", "f", 99, 10)
-	hldr1.SetBit("i", "f", 100, 20)
+	hldr1.SetBit("i", "f", blockEdge-1, 10)
+	hldr1.SetBit("i", "f", blockEdge, 20)
 
 	// Leave the third replica empty to force a block merge.
 	//
@@ -536,11 +538,11 @@ func TestHolderSyncer_BlockIteratorLimits(t *testing.T) {
 
 	// Verify data is the same on both nodes.
 	for i, hldr := range []*test.Holder{hldr0, hldr1, hldr2} {
-		if a := hldr.Row("i", "f", 99).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
-			t.Errorf("unexpected columns(%d/0): %+v", i, a)
+		if a := hldr.Row("i", "f", blockEdge-1).Columns(); !reflect.DeepEqual(a, []uint64{10}) {
+			t.Errorf("unexpected columns(%d/block 0): %+v", i, a)
 		}
-		if a := hldr.Row("i", "f", 100).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
-			t.Errorf("unexpected columns(%d/0): %+v", i, a)
+		if a := hldr.Row("i", "f", blockEdge).Columns(); !reflect.DeepEqual(a, []uint64{20}) {
+			t.Errorf("unexpected columns(%d/block 1): %+v", i, a)
 		}
 	}
 }
