@@ -1888,8 +1888,8 @@ func (f *fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, e
 	clears = make([]pairSet, len(data)+1)
 
 	// Limit upper row/column pair.
-	maxRowID := uint64(id+1) * HashBlockSize
-	maxColumnID := uint64(ShardWidth)
+	maxRowID := (uint64(id+1) * HashBlockSize) - 1
+	maxColumnID := uint64(ShardWidth) - 1
 
 	// Create buffered iterator for local block.
 	itrs := make([]*bufIterator, 1, len(data)+1)
@@ -1969,8 +1969,8 @@ func (f *fragment) mergeBlock(id int, data []pairSet) (sets, clears []pairSet, e
 				sets[i].rowIDs = append(sets[i].rowIDs, min.rowID)
 				sets[i].columnIDs = append(sets[i].columnIDs, min.columnID)
 			} else {
-				clears[i].rowIDs = append(sets[i].rowIDs, min.rowID)
-				clears[i].columnIDs = append(sets[i].columnIDs, min.columnID)
+				clears[i].rowIDs = append(clears[i].rowIDs, min.rowID)
+				clears[i].columnIDs = append(clears[i].columnIDs, min.columnID)
 			}
 		}
 	}
