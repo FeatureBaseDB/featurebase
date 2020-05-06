@@ -3273,6 +3273,98 @@ func TestExecutor_Execute_Not(t *testing.T) {
 }
 
 // Ensure an all query can be executed.
+func TestExecutor_Execute_FieldValue(t *testing.T) {
+	c := test.MustRunCluster(t, 2)
+	defer c.Close()
+	//hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+	node0 := c[0]
+	node1 := c[1]
+
+	// Index with IDs
+	c.CreateField(t, "i", pilosa.IndexOptions{Keys: false}, "f", pilosa.OptFieldTypeInt(-1100, 1000))
+	c.CreateField(t, "i", pilosa.IndexOptions{Keys: false}, "dec", pilosa.OptFieldTypeDecimal(3))
+
+	if _, err := node0.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+			Set(1, f=3)
+			Set(2, f=-4)
+			Set(` + strconv.Itoa(ShardWidth+1) + `, f=3)
+            Set(1, dec=12.985)
+            Set(2, dec=-4.234)
+		`}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Index with Keys
+	c.CreateField(t, "ik", pilosa.IndexOptions{Keys: true}, "f", pilosa.OptFieldTypeInt(-1100, 1000))
+	c.CreateField(t, "ik", pilosa.IndexOptions{Keys: true}, "dec", pilosa.OptFieldTypeDecimal(3))
+
+	if _, err := node0.API.Query(context.Background(), &pilosa.QueryRequest{Index: "ik", Query: `
+			Set("one", f=3)
+			Set("two", f=-4)
+            Set("one", dec=12.985)
+            Set("two", dec=-4.234)
+		`}); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		index  string
+		qry    string
+		expVal interface{}
+		expErr string
+	}{
+		// IDs
+		{index: "i", qry: "FieldValue(field=f, column=1)", expVal: int64(3)},
+		{index: "i", qry: "FieldValue(field=f, column=2)", expVal: int64(-4)},
+		{index: "i", qry: "FieldValue(field=f, column=" + strconv.Itoa(ShardWidth+1) + ")", expVal: int64(3)},
+
+		{index: "i", qry: "FieldValue(field=dec, column=1)", expVal: pql.NewDecimal(12985, 3)},
+		{index: "i", qry: "FieldValue(field=dec, column=2)", expVal: pql.NewDecimal(-4234, 3)},
+
+		// Keys
+		{index: "ik", qry: "FieldValue(field=f, column='one')", expVal: int64(3)},
+		{index: "ik", qry: "FieldValue(field=f, column='two')", expVal: int64(-4)},
+
+		{index: "ik", qry: "FieldValue(field=dec, column='one')", expVal: pql.NewDecimal(12985, 3)},
+		{index: "ik", qry: "FieldValue(field=dec, column='two')", expVal: pql.NewDecimal(-4234, 3)},
+
+		// Errors
+		{index: "i", qry: "FieldValue()", expErr: pilosa.ErrFieldRequired.Error()},
+	}
+	for n, node := range []*test.Command{node0, node1} {
+		for i, test := range tests {
+			if res, err := node.API.Query(context.Background(), &pilosa.QueryRequest{Index: test.index, Query: test.qry}); err != nil && test.expErr == "" {
+				t.Fatal(err)
+			} else if err != nil && test.expErr != "" {
+				if !strings.Contains(err.Error(), test.expErr) {
+					t.Fatalf("test %d on node%d expected error: %s, but got: %s", i, n, test.expErr, err)
+				}
+			} else if err == nil && test.expErr != "" {
+				t.Fatalf("test %d on node%d expected error but got nil", i, n)
+			} else if vc, ok := res.Results[0].(pilosa.ValCount); !ok {
+				t.Fatalf("test %d on node%d expected pilosa.ValCount, but got: %T", i, n, res.Results[0])
+			} else if vc.Count != 1 {
+				t.Fatalf("test %d on node%d expected Count 1, but got: %d", i, n, vc.Count)
+			} else {
+				switch exp := test.expVal.(type) {
+				case pql.Decimal:
+					if *vc.DecimalVal != exp {
+						t.Fatalf("test %d on node%d expected pql.Decimal(%s), but got: %s", i, n, exp, vc.DecimalVal)
+					}
+				case int64:
+					if vc.Val != exp {
+						t.Fatalf("test %d on node%d expected int64(%d), but got: %d", i, n, exp, vc.Val)
+					}
+				default:
+					t.Fatalf("test %d on node%d received unhandled type: %T", i, n, test.expVal)
+				}
+			}
+		}
+	}
+}
+
+// Ensure an all query can be executed.
 func TestExecutor_Execute_All(t *testing.T) {
 	t.Run("ColumnID", func(t *testing.T) {
 		c := test.MustRunCluster(t, 1)
