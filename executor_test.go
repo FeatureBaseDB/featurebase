@@ -2886,10 +2886,10 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 		} else {
 			var a, b, c, d int64 = -2, -1, 0, 4
 			expected := []pilosa.GroupCount{
-				{Group: []pilosa.FieldRow{{Field: "fint", RowID: 0, Value: &a}}, Count: 1},
-				{Group: []pilosa.FieldRow{{Field: "fint", RowID: 1, Value: &b}}, Count: 1},
-				{Group: []pilosa.FieldRow{{Field: "fint", RowID: 2, Value: &c}}, Count: 5},
-				{Group: []pilosa.FieldRow{{Field: "fint", RowID: 5, Value: &d}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "fint", Value: &a}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "fint", Value: &b}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "fint", Value: &c}}, Count: 5},
+				{Group: []pilosa.FieldRow{{Field: "fint", Value: &d}}, Count: 1},
 			}
 
 			results := res.Results[0].([]pilosa.GroupCount)
