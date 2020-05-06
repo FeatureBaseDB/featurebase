@@ -408,11 +408,19 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						var err error
 						if fi := field.ForeignIndex(); fi != "" {
 							// Get the value from the int field.
-							intVal, ok, err := field.Value(col)
+							pql := fmt.Sprintf("FieldValue(field=%s, column=%d)", field.Name(), col)
+							query := pilosa.QueryRequest{
+								Index: req.Index,
+								Query: pql,
+							}
+							resp, err := h.api.Query(stream.Context(), &query)
 							if err != nil {
-								return errors.Wrap(err, "getting int value")
-							} else if ok {
-								vals, err := h.api.TranslateIndexIDs(stream.Context(), fi, []uint64{uint64(intVal)})
+								return errors.Wrap(err, "getting int field value for column")
+							}
+
+							valCount, ok := resp.Results[0].(pilosa.ValCount)
+							if ok && valCount.Count == 1 {
+								vals, err := h.api.TranslateIndexIDs(stream.Context(), fi, []uint64{uint64(valCount.Val)})
 								if err != nil {
 									return errors.Wrap(err, "getting keys for ids")
 								}
@@ -435,12 +443,20 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 								&pb.ColumnResponse{ColumnVal: nil})
 						}
 					} else {
-						value, exists, err := field.Value(col)
+						pql := fmt.Sprintf("FieldValue(field=%s, column=%d)", field.Name(), col)
+						query := pilosa.QueryRequest{
+							Index: req.Index,
+							Query: pql,
+						}
+						resp, err := h.api.Query(stream.Context(), &query)
 						if err != nil {
 							return errors.Wrap(err, "getting int field value for column")
-						} else if exists {
+						}
+
+						valCount, ok := resp.Results[0].(pilosa.ValCount)
+						if ok && valCount.Count == 1 {
 							rowResp.Columns = append(rowResp.Columns,
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: value}})
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: valCount.Val}})
 						} else {
 							rowResp.Columns = append(rowResp.Columns,
 								&pb.ColumnResponse{ColumnVal: nil})
@@ -448,12 +464,20 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 					}
 
 				case "decimal":
-					dec, exists, err := field.DecimalValue(col)
+					pql := fmt.Sprintf("FieldValue(field=%s, column=%d)", field.Name(), col)
+					query := pilosa.QueryRequest{
+						Index: req.Index,
+						Query: pql,
+					}
+					resp, err := h.api.Query(stream.Context(), &query)
 					if err != nil {
 						return errors.Wrap(err, "getting decimal field value for column")
-					} else if exists {
+					}
+
+					valCount, ok := resp.Results[0].(pilosa.ValCount)
+					if ok && valCount.Count == 1 {
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_DecimalVal{DecimalVal: &pb.Decimal{Value: dec.Value, Scale: dec.Scale}}})
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_DecimalVal{DecimalVal: &pb.Decimal{Value: valCount.DecimalVal.Value, Scale: valCount.DecimalVal.Scale}}})
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})
@@ -633,11 +657,19 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 						var err error
 						if fi := field.ForeignIndex(); fi != "" {
 							// Get the value from the int field.
-							intVal, ok, err := field.Value(id)
+							pql := fmt.Sprintf("FieldValue(field=%s, column=%d)", field.Name(), id)
+							query := pilosa.QueryRequest{
+								Index: req.Index,
+								Query: pql,
+							}
+							resp, err := h.api.Query(stream.Context(), &query)
 							if err != nil {
-								return errors.Wrap(err, "getting int value")
-							} else if ok {
-								vals, err := h.api.TranslateIndexIDs(stream.Context(), fi, []uint64{uint64(intVal)})
+								return errors.Wrap(err, "getting int field value for column")
+							}
+
+							valCount, ok := resp.Results[0].(pilosa.ValCount)
+							if ok && valCount.Count == 1 {
+								vals, err := h.api.TranslateIndexIDs(stream.Context(), fi, []uint64{uint64(valCount.Val)})
 								if err != nil {
 									return errors.Wrap(err, "getting keys for ids")
 								}
@@ -660,12 +692,20 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 								&pb.ColumnResponse{ColumnVal: nil})
 						}
 					} else {
-						value, exists, err := field.Value(id)
+						pql := fmt.Sprintf("FieldValue(field=%s, column=%d)", field.Name(), id)
+						query := pilosa.QueryRequest{
+							Index: req.Index,
+							Query: pql,
+						}
+						resp, err := h.api.Query(stream.Context(), &query)
 						if err != nil {
 							return errors.Wrap(err, "getting int field value for column")
-						} else if exists {
+						}
+
+						valCount, ok := resp.Results[0].(pilosa.ValCount)
+						if ok && valCount.Count == 1 {
 							rowResp.Columns = append(rowResp.Columns,
-								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: value}})
+								&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: valCount.Val}})
 						} else {
 							rowResp.Columns = append(rowResp.Columns,
 								&pb.ColumnResponse{ColumnVal: nil})
@@ -673,18 +713,20 @@ func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSer
 					}
 
 				case "decimal":
-					// Translate column key.
-					id, err := h.api.TranslateIndexKey(stream.Context(), index.Name(), col)
-					if err != nil {
-						return errors.Wrap(err, "translating column key")
+					pql := fmt.Sprintf("FieldValue(field=%s, column='%s')", field.Name(), col)
+					query := pilosa.QueryRequest{
+						Index: req.Index,
+						Query: pql,
 					}
-
-					dec, exists, err := field.DecimalValue(id)
+					resp, err := h.api.Query(stream.Context(), &query)
 					if err != nil {
 						return errors.Wrap(err, "getting decimal field value for column")
-					} else if exists {
+					}
+
+					valCount, ok := resp.Results[0].(pilosa.ValCount)
+					if ok && valCount.Count == 1 {
 						rowResp.Columns = append(rowResp.Columns,
-							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_DecimalVal{DecimalVal: &pb.Decimal{Value: dec.Value, Scale: dec.Scale}}})
+							&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_DecimalVal{DecimalVal: &pb.Decimal{Value: valCount.DecimalVal.Value, Scale: valCount.DecimalVal.Scale}}})
 					} else {
 						rowResp.Columns = append(rowResp.Columns,
 							&pb.ColumnResponse{ColumnVal: nil})

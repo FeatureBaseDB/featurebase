@@ -552,6 +552,9 @@ func (e *executor) executeCall(ctx context.Context, index string, c *pql.Call, s
 		return e.executeOptionsCall(ctx, index, c, shards, opt)
 	case "IncludesColumn":
 		return e.executeIncludesColumnCall(ctx, index, c, shards, opt)
+	case "FieldValue":
+		statFn()
+		return e.executeFieldValueCall(ctx, index, c, shards, opt)
 	case "All":
 		statFn()
 		return e.executeAllCall(ctx, index, c, shards, opt)
@@ -661,6 +664,92 @@ func (e *executor) executeIncludesColumnCall(ctx context.Context, index string, 
 		return false, err
 	}
 	return result.(bool), nil
+}
+
+// executeFieldValueCall executes a FieldValue() call.
+func (e *executor) executeFieldValueCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (ValCount, error) {
+	fieldName, ok := c.Args["field"].(string)
+	if !ok || fieldName == "" {
+		return ValCount{}, errors.New("FieldValue(): field required")
+	}
+
+	// Fetch field.
+	field := e.Holder.Field(index, fieldName)
+	if field == nil {
+		return ValCount{}, ErrFieldNotFound
+	}
+
+	// Fetch index.
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return ValCount{}, ErrIndexNotFound
+	}
+
+	var colID uint64
+
+	if colKey, ok := c.Args["column"].(string); ok && idx.Keys() {
+		if id, err := e.Cluster.translateIndexKey(ctx, index, colKey); err != nil {
+			return ValCount{}, errors.Wrap(err, "getting column id")
+		} else {
+			colID = id
+		}
+	} else {
+		if id, ok, err := c.UintArg("column"); !ok || err != nil {
+			// TODO: this error is getting swallowed somewhere (via curl)
+			return ValCount{}, errors.Wrap(err, "getting column argument")
+		} else {
+			colID = id
+		}
+	}
+
+	shard := colID / ShardWidth
+
+	// Execute calls in bulk on each remote node and merge.
+	mapFn := func(shard uint64) (interface{}, error) {
+		return e.executeFieldValueCallShard(ctx, field, colID, shard)
+	}
+
+	// Select single returned result at coordinating node.
+	reduceFn := func(prev, v interface{}) interface{} {
+		other, _ := prev.(ValCount)
+		if other.Count == 1 {
+			return other
+		}
+		return v
+	}
+
+	result, err := e.mapReduce(ctx, index, []uint64{shard}, c, opt, mapFn, reduceFn)
+	if err != nil {
+		return ValCount{}, errors.Wrap(err, "map reduce")
+	}
+	other, _ := result.(ValCount)
+
+	return other, nil
+}
+
+func (e *executor) executeFieldValueCallShard(ctx context.Context, field *Field, col uint64, shard uint64) (ValCount, error) {
+	value, exists, err := field.Value(col)
+	if err != nil {
+		return ValCount{}, errors.Wrap(err, "getting field value")
+	} else if !exists {
+		return ValCount{}, nil
+	}
+
+	other := ValCount{
+		Count: 1,
+	}
+
+	if field.Type() == FieldTypeInt {
+		other.Val = value
+	} else if field.Type() == FieldTypeDecimal {
+		other.DecimalVal = &pql.Decimal{
+			Value: value,
+			Scale: field.Options().Scale}
+		other.FloatVal = 0
+		other.Val = 0
+	}
+
+	return other, nil
 }
 
 // executeAllCall executes an All() call.
@@ -2266,7 +2355,7 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 		return e.executeRowBSIGroupShard(ctx, index, c, shard)
 	}
 
-	// Fetch column label from index.
+	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
 		return nil, ErrIndexNotFound

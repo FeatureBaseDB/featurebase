@@ -349,6 +349,13 @@ var callInfoByFunc = map[string]callInfo{
 	"Difference": {allowUnknown: false},
 	"Intersect":  {allowUnknown: false},
 	"Not":        {allowUnknown: false},
+	"FieldValue": {
+		allowUnknown: false,
+		prototypes: map[string]interface{}{
+			"field":  "",
+			"column": stringOrInt64,
+		},
+	},
 	"All": {
 		allowUnknown: false,
 		prototypes: map[string]interface{}{

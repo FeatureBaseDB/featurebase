@@ -34,11 +34,15 @@ func _() {
 	_ = x[apiShardNodes-23]
 	_ = x[apiViews-24]
 	_ = x[apiApplySchema-25]
+	_ = x[apiStartTransaction-26]
+	_ = x[apiFinishTransaction-27]
+	_ = x[apiTransactions-28]
+	_ = x[apiGetTransaction-29]
 }
 
-const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteAvailableShardapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFragmentDataapiTranslateDataapiFieldapiFieldAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiSetCoordinatorapiShardNodesapiViewsapiApplySchema"
+const _apiMethod_name = "apiClusterMessageapiCreateFieldapiCreateIndexapiDeleteFieldapiDeleteAvailableShardapiDeleteIndexapiDeleteViewapiExportCSVapiFragmentBlockDataapiFragmentBlocksapiFragmentDataapiTranslateDataapiFieldapiFieldAttrDiffapiImportapiImportValueapiIndexapiIndexAttrDiffapiQueryapiRecalculateCachesapiRemoveNodeapiResizeAbortapiSetCoordinatorapiShardNodesapiViewsapiApplySchemaapiStartTransactionapiFinishTransactionapiTransactionsapiGetTransaction"
 
-var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 82, 96, 109, 121, 141, 158, 173, 189, 197, 213, 222, 236, 244, 260, 268, 288, 301, 315, 332, 345, 353, 367}
+var _apiMethod_index = [...]uint16{0, 17, 31, 45, 59, 82, 96, 109, 121, 141, 158, 173, 189, 197, 213, 222, 236, 244, 260, 268, 288, 301, 315, 332, 345, 353, 367, 386, 406, 421, 438}
 
 func (i apiMethod) String() string {
 	if i < 0 || i >= apiMethod(len(_apiMethod_index)-1) {
