@@ -1844,16 +1844,6 @@ type FieldRow struct {
 // MarshalJSON marshals FieldRow to JSON such that
 // either a Key or an ID is included.
 func (fr FieldRow) MarshalJSON() ([]byte, error) {
-	if fr.RowKey != "" {
-		return json.Marshal(struct {
-			Field  string `json:"field"`
-			RowKey string `json:"rowKey"`
-		}{
-			Field:  fr.Field,
-			RowKey: fr.RowKey,
-		})
-	}
-
 	if fr.Value != nil {
 		return json.Marshal(struct {
 			Field string `json:"field"`
@@ -1861,6 +1851,16 @@ func (fr FieldRow) MarshalJSON() ([]byte, error) {
 		}{
 			Field: fr.Field,
 			Value: *fr.Value,
+		})
+	}
+
+	if fr.RowKey != "" {
+		return json.Marshal(struct {
+			Field  string `json:"field"`
+			RowKey string `json:"rowKey"`
+		}{
+			Field:  fr.Field,
+			RowKey: fr.RowKey,
 		})
 	}
 

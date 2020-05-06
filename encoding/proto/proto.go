@@ -1398,13 +1398,12 @@ func decodeFieldRows(a []*internal.FieldRow) []pilosa.FieldRow {
 	for i := range a {
 		fr := a[i]
 		other[i].Field = fr.Field
-		if fr.RowKey == "" {
+		if fr.Value != nil {
+			other[i].Value = &fr.Value.Value
+		} else if fr.RowKey == "" {
 			other[i].RowID = fr.RowID
 		} else {
 			other[i].RowKey = fr.RowKey
-		}
-		if fr.Value != nil {
-			other[i].Value = &fr.Value.Value
 		}
 	}
 	return other
@@ -1532,19 +1531,14 @@ func encodeFieldRows(a []pilosa.FieldRow) []*internal.FieldRow {
 	other := make([]*internal.FieldRow, len(a))
 	for i := range a {
 		fr := a[i]
-		if fr.RowKey == "" {
-			other[i] = &internal.FieldRow{
-				Field: fr.Field,
-				RowID: fr.RowID,
-			}
-			if fr.Value != nil {
-				other[i].Value = &internal.Int64{Value: *fr.Value}
-			}
+		other[i] = &internal.FieldRow{Field: fr.Field}
+
+		if fr.Value != nil {
+			other[i].Value = &internal.Int64{Value: *fr.Value}
+		} else if fr.RowKey == "" {
+			other[i].RowID = fr.RowID
 		} else {
-			other[i] = &internal.FieldRow{
-				Field:  fr.Field,
-				RowKey: fr.RowKey,
-			}
+			other[i].RowKey = fr.RowKey
 		}
 	}
 	return other
