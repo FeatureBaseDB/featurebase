@@ -673,33 +673,32 @@ func (e *executor) executeFieldValueCall(ctx context.Context, index string, c *p
 		return ValCount{}, errors.New("FieldValue(): field required")
 	}
 
-	// Fetch field.
-	field := e.Holder.Field(index, fieldName)
-	if field == nil {
-		return ValCount{}, ErrFieldNotFound
-	}
-
 	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
 		return ValCount{}, ErrIndexNotFound
 	}
 
-	var colID uint64
+	// Fetch field.
+	field := idx.Field(fieldName)
+	if field == nil {
+		return ValCount{}, ErrFieldNotFound
+	}
 
+	var colID uint64
 	if colKey, ok := c.Args["column"].(string); ok && idx.Keys() {
-		if id, err := e.Cluster.translateIndexKey(ctx, index, colKey); err != nil {
+		id, err := e.Cluster.translateIndexKey(ctx, index, colKey)
+		if err != nil {
 			return ValCount{}, errors.Wrap(err, "getting column id")
-		} else {
-			colID = id
 		}
+		colID = id
 	} else {
-		if id, ok, err := c.UintArg("column"); !ok || err != nil {
+		id, ok, err := c.UintArg("column")
+		if !ok || err != nil {
 			// TODO: this error is getting swallowed somewhere (via curl)
 			return ValCount{}, errors.Wrap(err, "getting column argument")
-		} else {
-			colID = id
 		}
+		colID = id
 	}
 
 	shard := colID / ShardWidth
