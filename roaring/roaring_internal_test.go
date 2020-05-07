@@ -2754,6 +2754,15 @@ func differenceInPlaceWrapper(a, b *Container) *Container {
 	return out.Containers.Get(0)
 }
 
+func intersectInPlaceWrapper(a, b *Container) *Container {
+	out := NewBitmap()
+	out.Containers.Put(0, a.Clone())
+	B := NewBitmap()
+	B.Containers.Put(0, b)
+	out.IntersectInPlace(B)
+	return out.Containers.Get(0)
+}
+
 func TestContainerCombinations(t *testing.T) {
 
 	cts := setupContainerTests()
@@ -2871,6 +2880,109 @@ func TestContainerCombinations(t *testing.T) {
 		{intersect, "evenBitsSet", "outerBitsSet", "firstBitSet"},
 		{intersect, "evenBitsSet", "oddBitsSet", "empty"},
 		{intersect, "evenBitsSet", "evenBitsSet", "evenBitsSet"},
+
+		// intersect in place
+		{intersectInPlaceWrapper, "empty", "empty", "empty"},
+		{intersectInPlaceWrapper, "empty", "full", "empty"},
+		{intersectInPlaceWrapper, "empty", "firstBitSet", "empty"},
+		{intersectInPlaceWrapper, "empty", "lastBitSet", "empty"},
+		{intersectInPlaceWrapper, "empty", "firstBitUnset", "empty"},
+		{intersectInPlaceWrapper, "empty", "lastBitUnset", "empty"},
+		{intersectInPlaceWrapper, "empty", "innerBitsSet", "empty"},
+		{intersectInPlaceWrapper, "empty", "outerBitsSet", "empty"},
+		{intersectInPlaceWrapper, "empty", "oddBitsSet", "empty"},
+		{intersectInPlaceWrapper, "empty", "evenBitsSet", "empty"},
+		//
+		{intersectInPlaceWrapper, "full", "empty", "empty"},
+		{intersectInPlaceWrapper, "full", "full", "full"},
+		{intersectInPlaceWrapper, "full", "firstBitSet", "firstBitSet"},
+		{intersectInPlaceWrapper, "full", "lastBitSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "full", "firstBitUnset", "firstBitUnset"},
+		{intersectInPlaceWrapper, "full", "lastBitUnset", "lastBitUnset"},
+		{intersectInPlaceWrapper, "full", "innerBitsSet", "innerBitsSet"},
+		{intersectInPlaceWrapper, "full", "outerBitsSet", "outerBitsSet"},
+		{intersectInPlaceWrapper, "full", "oddBitsSet", "oddBitsSet"},
+		{intersectInPlaceWrapper, "full", "evenBitsSet", "evenBitsSet"},
+		//
+		{intersectInPlaceWrapper, "firstBitSet", "empty", "empty"},
+		{intersectInPlaceWrapper, "firstBitSet", "full", "firstBitSet"},
+		{intersectInPlaceWrapper, "firstBitSet", "firstBitSet", "firstBitSet"},
+		{intersectInPlaceWrapper, "firstBitSet", "lastBitSet", "empty"},
+		{intersectInPlaceWrapper, "firstBitSet", "firstBitUnset", "empty"},
+		{intersectInPlaceWrapper, "firstBitSet", "lastBitUnset", "firstBitSet"},
+		{intersectInPlaceWrapper, "firstBitSet", "innerBitsSet", "empty"},
+		{intersectInPlaceWrapper, "firstBitSet", "outerBitsSet", "firstBitSet"},
+		{intersectInPlaceWrapper, "firstBitSet", "oddBitsSet", "empty"},
+		{intersectInPlaceWrapper, "firstBitSet", "evenBitsSet", "firstBitSet"},
+		//
+		{intersectInPlaceWrapper, "lastBitSet", "empty", "empty"},
+		{intersectInPlaceWrapper, "lastBitSet", "full", "lastBitSet"},
+		{intersectInPlaceWrapper, "lastBitSet", "firstBitSet", "empty"},
+		{intersectInPlaceWrapper, "lastBitSet", "lastBitSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "lastBitSet", "firstBitUnset", "lastBitSet"},
+		{intersectInPlaceWrapper, "lastBitSet", "lastBitUnset", "empty"},
+		{intersectInPlaceWrapper, "lastBitSet", "innerBitsSet", "empty"},
+		{intersectInPlaceWrapper, "lastBitSet", "outerBitsSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "lastBitSet", "oddBitsSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "lastBitSet", "evenBitsSet", "empty"},
+		//
+		{intersectInPlaceWrapper, "firstBitUnset", "empty", "empty"},
+		{intersectInPlaceWrapper, "firstBitUnset", "full", "firstBitUnset"},
+		{intersectInPlaceWrapper, "firstBitUnset", "firstBitSet", "empty"},
+		{intersectInPlaceWrapper, "firstBitUnset", "lastBitSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "firstBitUnset", "firstBitUnset", "firstBitUnset"},
+		{intersectInPlaceWrapper, "firstBitUnset", "lastBitUnset", "innerBitsSet"},
+		{intersectInPlaceWrapper, "firstBitUnset", "innerBitsSet", "innerBitsSet"},
+		{intersectInPlaceWrapper, "firstBitUnset", "outerBitsSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "firstBitUnset", "oddBitsSet", "oddBitsSet"},
+		//
+		{intersectInPlaceWrapper, "lastBitUnset", "empty", "empty"},
+		{intersectInPlaceWrapper, "lastBitUnset", "full", "lastBitUnset"},
+		{intersectInPlaceWrapper, "lastBitUnset", "firstBitSet", "firstBitSet"},
+		{intersectInPlaceWrapper, "lastBitUnset", "lastBitSet", "empty"},
+		{intersectInPlaceWrapper, "lastBitUnset", "firstBitUnset", "innerBitsSet"},
+		{intersectInPlaceWrapper, "lastBitUnset", "lastBitUnset", "lastBitUnset"},
+		{intersectInPlaceWrapper, "lastBitUnset", "innerBitsSet", "innerBitsSet"},
+		{intersectInPlaceWrapper, "lastBitUnset", "outerBitsSet", "firstBitSet"},
+		{intersectInPlaceWrapper, "lastBitUnset", "evenBitsSet", "evenBitsSet"},
+		//
+		{intersectInPlaceWrapper, "innerBitsSet", "empty", "empty"},
+		{intersectInPlaceWrapper, "innerBitsSet", "full", "innerBitsSet"},
+		{intersectInPlaceWrapper, "innerBitsSet", "firstBitSet", "empty"},
+		{intersectInPlaceWrapper, "innerBitsSet", "lastBitSet", "empty"},
+		{intersectInPlaceWrapper, "innerBitsSet", "firstBitUnset", "innerBitsSet"},
+		{intersectInPlaceWrapper, "innerBitsSet", "lastBitUnset", "innerBitsSet"},
+		{intersectInPlaceWrapper, "innerBitsSet", "innerBitsSet", "innerBitsSet"},
+		{intersectInPlaceWrapper, "innerBitsSet", "outerBitsSet", "empty"},
+		//
+		{intersectInPlaceWrapper, "outerBitsSet", "empty", "empty"},
+		{intersectInPlaceWrapper, "outerBitsSet", "full", "outerBitsSet"},
+		{intersectInPlaceWrapper, "outerBitsSet", "firstBitSet", "firstBitSet"},
+		{intersectInPlaceWrapper, "outerBitsSet", "lastBitSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "outerBitsSet", "firstBitUnset", "lastBitSet"},
+		{intersectInPlaceWrapper, "outerBitsSet", "lastBitUnset", "firstBitSet"},
+		{intersectInPlaceWrapper, "outerBitsSet", "innerBitsSet", "empty"},
+		{intersectInPlaceWrapper, "outerBitsSet", "outerBitsSet", "outerBitsSet"},
+		{intersectInPlaceWrapper, "outerBitsSet", "oddBitsSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "outerBitsSet", "evenBitsSet", "firstBitSet"},
+		//
+		{intersectInPlaceWrapper, "oddBitsSet", "empty", "empty"},
+		{intersectInPlaceWrapper, "oddBitsSet", "full", "oddBitsSet"},
+		{intersectInPlaceWrapper, "oddBitsSet", "firstBitSet", "empty"},
+		{intersectInPlaceWrapper, "oddBitsSet", "lastBitSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "oddBitsSet", "firstBitUnset", "oddBitsSet"},
+		{intersectInPlaceWrapper, "oddBitsSet", "outerBitsSet", "lastBitSet"},
+		{intersectInPlaceWrapper, "oddBitsSet", "oddBitsSet", "oddBitsSet"},
+		{intersectInPlaceWrapper, "oddBitsSet", "evenBitsSet", "empty"},
+		//
+		{intersectInPlaceWrapper, "evenBitsSet", "empty", "empty"},
+		{intersectInPlaceWrapper, "evenBitsSet", "full", "evenBitsSet"},
+		{intersectInPlaceWrapper, "evenBitsSet", "firstBitSet", "firstBitSet"},
+		{intersectInPlaceWrapper, "evenBitsSet", "lastBitSet", "empty"},
+		{intersectInPlaceWrapper, "evenBitsSet", "lastBitUnset", "evenBitsSet"},
+		{intersectInPlaceWrapper, "evenBitsSet", "outerBitsSet", "firstBitSet"},
+		{intersectInPlaceWrapper, "evenBitsSet", "oddBitsSet", "empty"},
+		{intersectInPlaceWrapper, "evenBitsSet", "evenBitsSet", "evenBitsSet"},
 
 		// union
 		{union, "empty", "empty", "empty"},

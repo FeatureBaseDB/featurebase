@@ -481,6 +481,288 @@ func TestBitmap_Intersection(t *testing.T) {
 
 }
 
+func TestBitmap_IntersectionInPlace(t *testing.T) {
+	bm0 := roaring.NewFileBitmap(0, 2683177)
+	bm1 := roaring.NewFileBitmap()
+	for i := uint64(628); i < 2683301; i++ {
+		if _, err := bm1.Add(i); err != nil {
+			t.Fatalf("adding bits: %v", err)
+		}
+	}
+
+	bm0.IntersectInPlace(bm1)
+	if n := bm0.Count(); n != 1 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_IntersectionInPlace_Empty(t *testing.T) {
+	bm0 := roaring.NewFileBitmap(0, 2683177)
+	bm1 := roaring.NewFileBitmap()
+
+	bm0.IntersectInPlace(bm1)
+	if n := bm0.Count(); n != 0 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	bm1.IntersectInPlace(roaring.NewFileBitmap(0, 2683177))
+	if n := bm1.Count(); n != 0 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_IntersectArrayArrayInPlace(t *testing.T) {
+	bm0 := roaring.NewFileBitmap(0, 1, 7, 9, 11, 2683, 5005)
+	bm1 := roaring.NewFileBitmap(0, 2683, 2684, 5000)
+	expected := []uint64{0, 2683}
+
+	bm0.IntersectInPlace(bm1)
+	if n := bm0.Count(); n != 2 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	for _, e := range expected {
+		if !bm0.Contains(e) {
+			t.Fatalf("missing value %d", e)
+		}
+	}
+
+	// confirm that it also works going the other way
+	bm1.IntersectInPlace(bm0)
+	if n := bm1.Count(); n != 2 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	for _, e := range expected {
+		if !bm1.Contains(e) {
+			t.Fatalf("missing value %d", e)
+		}
+	}
+}
+
+func TestBitmap_IntersectArrayBitmapInPlace(t *testing.T) {
+	bm0 := roaring.NewFileBitmap(0, 1, 7, 9, 11, 2683, 5005)
+	bm1 := roaring.NewFileBitmap()
+	for i := uint64(1); i < 65536; i += 3 {
+		if _, err := bm1.Add(i); err != nil {
+			t.Fatalf("adding bits(%d): %v", i, err)
+		}
+	}
+
+	expected := []uint64{1, 7, 2683, 5005}
+
+	bm0.IntersectInPlace(bm1)
+
+	if n := bm0.Count(); n != uint64(len(expected)) {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	for _, e := range expected {
+		if !bm0.Contains(e) {
+			t.Fatalf("missing value %d", e)
+		}
+	}
+}
+
+func TestBitmap_IntersectArrayRunInPlace(t *testing.T) {
+	bm0 := roaring.NewFileBitmap(0, 1, 7, 9, 11, 2683, 5005)
+	bm1 := roaring.NewFileBitmap(5, 6, 7, 8, 9, 10, 11, 13)
+	bm1.Optimize() // convert to runs
+
+	expected := []uint64{7, 9, 11}
+
+	bm0.IntersectInPlace(bm1)
+
+	if n := bm0.Count(); n != uint64(len(expected)) {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	for _, e := range expected {
+		if !bm0.Contains(e) {
+			t.Fatalf("missing value %d", e)
+		}
+	}
+}
+
+func TestBitmap_IntersectBitmapBitmapInPlace(t *testing.T) {
+	bm0 := roaring.NewFileBitmap()
+	for i := uint64(0); i < 65536; i += 2 {
+		if _, err := bm0.Add(i); err != nil {
+			t.Fatalf("adding bits: %v", err)
+		}
+	}
+
+	bm1 := roaring.NewFileBitmap()
+	for i := uint64(0); i < 65536; i += 3 {
+		if _, err := bm1.Add(i); err != nil {
+			t.Fatalf("adding bits: %v", err)
+		}
+	}
+
+	bm0.IntersectInPlace(bm1)
+	if n := bm0.Count(); n != 10923 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_IntersectBitmapArrayInPlace(t *testing.T) {
+	bm0 := roaring.NewFileBitmap(0, 1, 7, 9, 11, 2683, 5005)
+	bm1 := roaring.NewFileBitmap()
+	for i := uint64(1); i < 65536; i += 3 {
+		if _, err := bm1.Add(i); err != nil {
+			t.Fatalf("adding bits(%d): %v", i, err)
+		}
+	}
+
+	expected := []uint64{1, 7, 2683, 5005}
+
+	bm1.IntersectInPlace(bm0)
+
+	if n := bm1.Count(); n != uint64(len(expected)) {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	for _, e := range expected {
+		if !bm1.Contains(e) {
+			t.Fatalf("missing value %d", e)
+		}
+	}
+
+	bm11 := roaring.NewFileBitmap(5, 6, 7, 8, 9, 10, 11, 13, 2683)
+	bm12 := roaring.NewFileBitmap(6, 7, 10, 13, 2683)
+
+	bm0.IntersectInPlace(bm11, bm12)
+
+	expected = []uint64{7, 2683}
+	if n := bm0.Count(); n != uint64(len(expected)) {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	for _, e := range expected {
+		if !bm0.Contains(e) {
+			t.Fatalf("missing value %d", e)
+		}
+	}
+}
+
+func TestBitmap_IntersectBitmapRunInPlace(t *testing.T) {
+	// Intersect two runs that result in a bitmap.
+	bm1 := roaring.NewFileBitmap()
+	runLen := uint64(25)
+	spaceLen := uint64(8)
+	offset := (runLen / 2) + spaceLen
+	for i := uint64(0); i < (65536 - runLen - offset); i += (runLen + spaceLen) {
+		for j := uint64(0); j < runLen; j++ {
+			if _, err := bm1.Add(offset + i + j); err != nil {
+				t.Fatalf("adding bits: %v", err)
+			}
+		}
+	}
+	bm1.Optimize() // convert to runs
+
+	bm0 := roaring.NewFileBitmap()
+	runLen = uint64(32)
+	spaceLen = uint64(1)
+	for i := uint64(0); i < (65536 - runLen); i += (runLen + spaceLen) {
+		for j := uint64(0); j < runLen; j++ {
+			if _, err := bm0.Add(i + j); err != nil {
+				t.Fatalf("adding bits: %v", err)
+			}
+		}
+	}
+
+	bm0.IntersectInPlace(bm1)
+	if n := bm0.Count(); n != 47628 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_IntersectRunRunInPlace(t *testing.T) {
+	// Intersect two runs that result in an array.
+	bm0 := roaring.NewFileBitmap(0, 1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15)
+	bm0.Optimize() // convert to runs
+	bm1 := roaring.NewFileBitmap(5, 6, 7, 8, 9, 10, 11, 13)
+	bm1.Optimize() // convert to runs
+	bm0.IntersectInPlace(bm1)
+	if n := bm0.Count(); n != 4 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+
+	// Intersect two runs that result in a bitmap.
+	bm2 := roaring.NewFileBitmap()
+	runLen := uint64(25)
+	spaceLen := uint64(8)
+	offset := (runLen / 2) + spaceLen
+	for i := uint64(0); i < (65536 - runLen - offset); i += (runLen + spaceLen) {
+		for j := uint64(0); j < runLen; j++ {
+			if _, err := bm2.Add(offset + i + j); err != nil {
+				t.Fatalf("adding bits: %v", err)
+			}
+		}
+	}
+	bm2.Optimize() // convert to runs
+	bm3 := roaring.NewFileBitmap()
+	runLen = uint64(32)
+	spaceLen = uint64(1)
+	for i := uint64(0); i < (65536 - runLen); i += (runLen + spaceLen) {
+		for j := uint64(0); j < runLen; j++ {
+			if _, err := bm3.Add(i + j); err != nil {
+				t.Fatalf("adding bits: %v", err)
+			}
+		}
+	}
+	bm3.Optimize() // convert to runs
+	bm2.IntersectInPlace(bm3)
+	if n := bm2.Count(); n != 47628 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
+func TestBitmap_IntersectRunArrayInPlace(t *testing.T) {
+	// Intersect two runs that result in an array.
+	bm0 := roaring.NewFileBitmap(0, 1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15)
+	bm0.Optimize() // convert to runs
+	bm1 := roaring.NewFileBitmap(5, 6, 7, 8, 9, 10, 11, 13)
+
+	bm0.IntersectInPlace(bm1)
+
+	expected := []uint64{5, 10, 11, 13}
+	if n := bm0.Count(); n != uint64(len(expected)) {
+		t.Fatalf("unexpected n: %d", n)
+	}
+	for _, e := range expected {
+		if !bm0.Contains(e) {
+			t.Fatalf("missing value %d", e)
+		}
+	}
+}
+
+func TestBitmap_IntersectRunBitmapInPlace(t *testing.T) {
+	// Intersect two runs that result in a bitmap.
+	bm0 := roaring.NewFileBitmap()
+	runLen := uint64(25)
+	spaceLen := uint64(8)
+	offset := (runLen / 2) + spaceLen
+	for i := uint64(0); i < (65536 - runLen - offset); i += (runLen + spaceLen) {
+		for j := uint64(0); j < runLen; j++ {
+			if _, err := bm0.Add(offset + i + j); err != nil {
+				t.Fatalf("adding bits: %v", err)
+			}
+		}
+	}
+	bm0.Optimize() // convert to runs
+
+	bm1 := roaring.NewFileBitmap()
+	runLen = uint64(32)
+	spaceLen = uint64(1)
+	for i := uint64(0); i < (65536 - runLen); i += (runLen + spaceLen) {
+		for j := uint64(0); j < runLen; j++ {
+			if _, err := bm1.Add(i + j); err != nil {
+				t.Fatalf("adding bits: %v", err)
+			}
+		}
+	}
+
+	bm0.IntersectInPlace(bm1)
+	if n := bm0.Count(); n != 47628 {
+		t.Fatalf("unexpected n: %d", n)
+	}
+}
+
 func TestBitmap_Union1(t *testing.T) {
 	bm0 := roaring.NewFileBitmap(0, 2683177)
 	bm1 := roaring.NewFileBitmap()
@@ -1193,9 +1475,13 @@ func testBitmapQuick(t *testing.T, n int, min, max uint64) {
 	}
 }
 
-func TestBitmap_Marshal_Quick_Array1(t *testing.T)  { testBitmapMarshalQuick(t, 1000, 1000, 2000, false) }
-func TestBitmap_Marshal_Quick_Array2(t *testing.T)  { testBitmapMarshalQuick(t, 10000, 0, 1000, false) }
-func TestBitmap_Marshal_Quick_Bitmap1(t *testing.T) { testBitmapMarshalQuick(t, 10000, 0, 10000, false) }
+func TestBitmap_Marshal_Quick_Array1(t *testing.T) {
+	testBitmapMarshalQuick(t, 1000, 1000, 2000, false)
+}
+func TestBitmap_Marshal_Quick_Array2(t *testing.T) { testBitmapMarshalQuick(t, 10000, 0, 1000, false) }
+func TestBitmap_Marshal_Quick_Bitmap1(t *testing.T) {
+	testBitmapMarshalQuick(t, 10000, 0, 10000, false)
+}
 func TestBitmap_Marshal_Quick_Bitmap2(t *testing.T) {
 	testBitmapMarshalQuick(t, 10000, 10000, 20000, false)
 }
@@ -1403,55 +1689,55 @@ func isAllType(b *roaring.Bitmap, typ string) bool {
 	return true
 }
 
-// getBenchData yields some sample data
-func getBenchData(tb testing.TB) *benchmarkSampleData {
-	data := &sampleData
-	if data.a1 == nil {
-		// throughout this, we ignore any errors from bitmap adds,
-		// because errors in those should result in the Optimize
-		// pass producing the wrong values, so we can just check there.
-		const max = (1 << 24) / 64
+func newBenchData(tb testing.TB) *benchmarkSampleData {
+	tb.Helper()
 
-		// Build bitmap with array container.
-		data.a1 = roaring.NewFileBitmap()
-		data.a2 = roaring.NewFileBitmap()
-		// two lists of different lengths
-		for i, n := 0, roaring.ArrayMaxSize/3; i < n; i++ {
-			_, _ = data.a1.Add(uint64(rand.Intn(max)))
-			_, _ = data.a2.Add(uint64(rand.Intn(max)))
-		}
-		for i, n := 0, roaring.ArrayMaxSize/3; i < n; i++ {
-			_, _ = data.a1.Add(uint64(rand.Intn(max)))
-		}
+	var data benchmarkSampleData
 
-		// Build bitmap with bitmap container.
-		data.b = roaring.NewFileBitmap()
-		for i, n := 0, MaxContainerVal/3; i < n; i++ {
-			_, _ = data.b.Add(uint64(i * 3))
-		}
+	// throughout this, we ignore any errors from bitmap adds,
+	// because errors in those should result in the Optimize
+	// pass producing the wrong values, so we can just check there.
+	const max = (1 << 24) / 64
 
-		// build bitmap with run container
-		data.r1 = roaring.NewFileBitmap()
-		for i, n := 0, MaxContainerVal; i < n; i++ {
-			_, _ = data.r1.Add(uint64(i))
-		}
-		// build bitmap with multiple runs
-		data.r2 = roaring.NewFileBitmap()
-		for i, n := 0, MaxContainerVal; i < n; i++ {
-			_, _ = data.r2.Add(uint64(i))
-			// break the runs up, this should produce 16 runs, which
-			// is small enough to make RLE tempting
-			if i&0xfff == 0xfff {
-				i += 5
-			}
-		}
-		data.a1.Optimize()
-		data.a2.Optimize()
-		data.b.Optimize()
-		data.r1.Optimize()
-		data.r2.Optimize()
-
+	// Build bitmap with array container.
+	data.a1 = roaring.NewFileBitmap()
+	data.a2 = roaring.NewFileBitmap()
+	// two lists of different lengths
+	for i, n := 0, roaring.ArrayMaxSize/3; i < n; i++ {
+		_, _ = data.a1.Add(uint64(rand.Intn(max)))
+		_, _ = data.a2.Add(uint64(rand.Intn(max)))
 	}
+	for i, n := 0, roaring.ArrayMaxSize/3; i < n; i++ {
+		_, _ = data.a1.Add(uint64(rand.Intn(max)))
+	}
+
+	// Build bitmap with bitmap container.
+	data.b = roaring.NewFileBitmap()
+	for i, n := 0, MaxContainerVal/3; i < n; i++ {
+		_, _ = data.b.Add(uint64(i * 3))
+	}
+
+	// build bitmap with run container
+	data.r1 = roaring.NewFileBitmap()
+	for i, n := 0, MaxContainerVal; i < n; i++ {
+		_, _ = data.r1.Add(uint64(i))
+	}
+	// build bitmap with multiple runs
+	data.r2 = roaring.NewFileBitmap()
+	for i, n := 0, MaxContainerVal; i < n; i++ {
+		_, _ = data.r2.Add(uint64(i))
+		// break the runs up, this should produce 16 runs, which
+		// is small enough to make RLE tempting
+		if i&0xfff == 0xfff {
+			i += 5
+		}
+	}
+	data.a1.Optimize()
+	data.a2.Optimize()
+	data.b.Optimize()
+	data.r1.Optimize()
+	data.r2.Optimize()
+
 	if !isAllType(data.a1, "array") {
 		tb.Fatalf("expected data.a1 to be an array, it wasn't.")
 	}
@@ -1466,6 +1752,34 @@ func getBenchData(tb testing.TB) *benchmarkSampleData {
 	}
 	if !isAllType(data.r2, "run") {
 		tb.Fatalf("expected data.r2 to be RLE, it wasn't.")
+	}
+
+	return &data
+}
+
+// getBenchData yields some sample data
+func getBenchData(tb testing.TB) *benchmarkSampleData {
+	tb.Helper()
+
+	data := &sampleData
+	if data.a1 == nil {
+		data = newBenchData(tb)
+	} else {
+		if !isAllType(data.a1, "array") {
+			tb.Fatalf("expected data.a1 to be an array, it wasn't.")
+		}
+		if !isAllType(data.a2, "array") {
+			tb.Fatalf("expected data.a2 to be an array, it wasn't.")
+		}
+		if !isAllType(data.b, "bitmap") {
+			tb.Fatalf("expected data.b to be a bitmap, it wasn't.")
+		}
+		if !isAllType(data.r1, "run") {
+			tb.Fatalf("expected data.r1 to be RLE, it wasn't.")
+		}
+		if !isAllType(data.r2, "run") {
+			tb.Fatalf("expected data.r2 to be RLE, it wasn't.")
+		}
 	}
 	return data
 }
@@ -1726,23 +2040,11 @@ func BenchmarkSliceDescendingStriped(b *testing.B) {
 	}
 }
 
-func BenchmarkUnion(b *testing.B) {
-	data := getBenchData(b)
-	for n := 0; n < b.N; n++ {
-		data.a1.
-			Union(data.a2).
-			Union(data.b).
-			Union(data.r1).
-			Union(data.r2)
-	}
-}
-
 func BenchmarkUnionBulk(b *testing.B) {
-	data := getBenchData(b)
 	for n := 0; n < b.N; n++ {
-		bm := roaring.NewBitmap()
-		bm.
-			UnionInPlace(data.a1, data.a2, data.b, data.r1, data.r2)
+		data := getBenchData(b)
+		bm := data.a1.Clone()
+		bm.UnionInPlace(data.a2, data.b, data.r1, data.r2)
 	}
 }
 
@@ -1789,13 +2091,58 @@ func TestBitmap_DifferenceInPlace(t *testing.T) {
 	}
 }
 
-func BenchmarkDifferencInPlace(b *testing.B) {
-	data := getBenchData(b)
+func BenchmarkUnion(b *testing.B) {
 	for n := 0; n < b.N; n++ {
+		data := getBenchData(b)
 		bm := roaring.NewBitmap()
-		bm.
-			UnionInPlace(data.a1, data.a2, data.b, data.r1, data.r2)
-		bm.
-			DifferenceInPlace(data.a1, data.r2, data.b, data.r1)
+		bm.Union(data.a1).Union(data.a2).Union(data.b).Union(data.r1).Union(data.r2)
+	}
+}
+
+func BenchmarkUnionInPlace(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		data := getBenchData(b)
+		bm := data.a1.Clone()
+		bm.UnionInPlace(data.a2, data.b, data.r1, data.r2)
+	}
+}
+
+func BenchmarkDifference(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		data := getBenchData(b)
+		bm := data.a1.Clone()
+		bm.UnionInPlace(data.a2, data.b, data.r1, data.r2)
+
+		bm.Difference(data.r2).Difference(data.b).Difference(data.r1)
+	}
+}
+
+func BenchmarkDifferenceInPlace(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		data := getBenchData(b)
+		bm := data.a1.Clone()
+		bm.UnionInPlace(data.a2, data.b, data.r1, data.r2)
+
+		bm.DifferenceInPlace(data.r2, data.b, data.r1)
+	}
+}
+
+func BenchmarkIntersect(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		data := getBenchData(b)
+		bm := data.a1.Clone()
+		bm.UnionInPlace(data.a2, data.b, data.r1, data.r2)
+
+		bm.Intersect(data.a2).Intersect(data.b).Intersect(data.r1).Intersect(data.r2)
+	}
+}
+
+func BenchmarkIntersectInPlace(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		data := getBenchData(b)
+		bm := data.a1.Clone()
+		bm.UnionInPlace(data.a2, data.b, data.r1, data.r2)
+
+		bm.IntersectInPlace(data.a2, data.b, data.r1, data.r2)
 	}
 }
