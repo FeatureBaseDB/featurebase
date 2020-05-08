@@ -222,7 +222,7 @@ workflows:
             - test-golang-1.14
           filters:
             branches:
-              only: enterprise
+              only: master
       - dockerhub-upload:
           name: dockerhub-upload-stable
           tag_branch: true
