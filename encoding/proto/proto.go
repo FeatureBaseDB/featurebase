@@ -1253,13 +1253,12 @@ func decodeTransactionMessage(pb *internal.TransactionMessage, m *pilosa.Transac
 }
 
 func decodeTransaction(pb *internal.Transaction, trns *pilosa.Transaction) {
-
 	trns.ID = pb.ID
 	trns.Active = pb.Active
 	trns.Exclusive = pb.Exclusive
 	trns.Timeout = time.Duration(pb.Timeout)
 	trns.Deadline = time.Unix(0, pb.Deadline)
-	// TODO m.Stats... once it has anything
+	// TODO: trns.Stats... once it has anything
 }
 
 // QueryResult types.

@@ -42,8 +42,9 @@ type Transaction struct {
 	// Timeout is the minimum idle time for which this transaction should continue to exist.
 	Timeout time.Duration `json:"timeout"`
 
-	// Deadline is calculated from Timeout. TODO reset deadline each time there is activity on the transaction. (we can't do this until there is some method of associating a request/call with a transaction)
-	// time there is activity on the transaction.
+	// Deadline is calculated from Timeout. TODO reset deadline each time there is activity
+	// on the transaction. (we can't do this until there is some method of associating a
+	// request/call with a transaction)
 	Deadline time.Time `json:"deadline"`
 
 	// Stats track statistics for the transaction. Not yet used.

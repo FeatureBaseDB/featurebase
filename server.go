@@ -88,7 +88,6 @@ type Server struct { // nolint: maligned
 }
 
 // Holder returns the holder for server.
-// TODO: have this return an interface for Holder instead of concrete object?
 func (s *Server) Holder() *Holder {
 	return s.holder
 }
@@ -1159,7 +1158,6 @@ func countOpenFiles() (int, error) {
 		lines := strings.Split(string(out), strconv.Itoa(pid))
 		return len(lines), nil
 	case "windows":
-		// TODO: count open file handles on windows
 		return 0, errors.New("countOpenFiles() on Windows is not supported")
 	default:
 		return 0, errors.New("countOpenFiles() on this OS is not supported")

@@ -44,6 +44,8 @@ type FieldValue struct {
 // something hasn't been architected correctly.
 // While I understand that putting the entire Client behind an interface might require this many methods,
 // I don't want to let it go unquestioned.
+// Another note from Travis: I think we eventually want to unify `InternalClient` with the `go-pilosa` client.
+// Doing that may obviate the need to refactor this.
 type InternalClient interface {
 	InternalQueryClient
 

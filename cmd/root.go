@@ -31,13 +31,13 @@ func NewRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 		productName = "Pilosa Enterprise " + pilosa.Version
 	}
 	rc := &cobra.Command{
-		Use:   "pilosa",
+		Use: "pilosa",
+		// TODO: These short/long descriptions could use some updating.
 		Short: "Pilosa - A Distributed In-memory Binary Bitmap Index.",
-		// TODO - is documentation actually there?
 		Long: `Pilosa is a fast index to turbocharge your database.
 
 This binary contains Pilosa itself, as well as common
-tools for administering pilosa, importing/exporting data,
+tools for administering Pilosa, importing/exporting data,
 backing up, and more. Complete documentation is available
 at https://www.pilosa.com/docs/.
 

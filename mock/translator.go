@@ -81,12 +81,10 @@ func (s *TranslateStore) EntryReader(ctx context.Context, offset uint64) (pilosa
 	return s.EntryReaderFunc(ctx, offset)
 }
 
-// TODO: implement this
 func (s *TranslateStore) WriteTo(w io.Writer) (int64, error) {
 	return 0, nil
 }
 
-// TODO: implement this
 func (s *TranslateStore) ReadFrom(r io.Reader) (int64, error) {
 	return 0, nil
 }
