@@ -414,16 +414,20 @@ func (s *InMemTranslateStore) EntryReader(ctx context.Context, offset uint64) (T
 	return newInMemTranslateEntryReader(ctx, s, offset), nil
 }
 
-// TODO: implement this
-// WriteTo writes the contents of the store to the writer.
+// WriteTo ensures that the TranslateStore implements io.WriterTo.
+// It's not important that this be implemented. It would really
+// only be necessary if we wanted to test cluster resizing while using
+// an in-memory translate store.
 func (s *InMemTranslateStore) WriteTo(w io.Writer) (int64, error) {
-	return 0, nil
+	return 0, nil // TODO: try to use ErrNotImplemented
 }
 
-// TODO: implement this
 // ReadFrom ensures that the TranslateStore implements io.ReaderFrom.
+// It's not important that this be implemented. It would really
+// only be necessary if we wanted to test cluster resizing while using
+// an in-memory translate store.
 func (s *InMemTranslateStore) ReadFrom(r io.Reader) (int64, error) {
-	return 0, nil
+	return 0, nil // TODO: try to use ErrNotImplemented
 }
 
 // MaxID returns the highest identifier in the store.

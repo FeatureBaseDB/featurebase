@@ -57,7 +57,9 @@ type QueryRequest struct {
 // QueryResponse represent a response from a processed query.
 type QueryResponse struct {
 	// Result for each top-level query call.
-	// Can be a Bitmap, Pairs, or uint64. // TODO: this comment is out of date.
+	// The result type differs depending on the query; types
+	// include: Row, RowIdentifiers, GroupCounts, SignedRow,
+	// ValCount, Pair, Pairs, bool, uint64.
 	Results []interface{}
 
 	// Set of column attribute objects matching IDs returned in Result.

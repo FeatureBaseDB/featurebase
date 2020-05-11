@@ -43,6 +43,8 @@ import (
 //
 func TestReopenAppend(t *testing.T) {
 	// TODO fix
+	// (travis) I have no idea what this TODO is asking for.
+	// Perhaps use `ioutil.TempFile()`?
 	var fname = "/tmp/foo"
 
 	// Step 1 -- Create a sample file using normal means
@@ -105,6 +107,8 @@ func TestReopenAppend(t *testing.T) {
 //
 func TestChangeInode(t *testing.T) {
 	// TODO fix
+	// (travis) I have no idea what this TODO is asking for.
+	// Perhaps use `ioutil.TempFile()`?
 	var fname = "/tmp/foo"
 
 	// Step 1 -- Create a empty sample file

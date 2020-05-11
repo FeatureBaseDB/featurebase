@@ -298,6 +298,9 @@ func (c Cluster) ImportBits(t testing.TB, index, field string, rowcols [][2]uint
 			t.Fatalf("getting shard nodes: %v", err)
 		}
 		// TODO won't be necessary to do all nodes once that works hits
+		// (travis) this TODO is not clear to me, but I think it's
+		// suggesting that elsewhere we would support importing to a
+		// single node, regardless of where the data ends up.
 		for _, node := range nodes {
 			for _, com := range c {
 				if com.API.Node().ID != node.ID {
