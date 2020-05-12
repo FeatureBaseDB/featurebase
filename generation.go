@@ -333,6 +333,7 @@ func newGeneration(existing generation, path string, readData bool, setup func([
 	m := mmapGeneration{path: path, logger: logger}
 	if existing != nil {
 		m.generation = existing.Generation() + 1
+		m.retries = existing.(*mmapGeneration).retries
 		// we might keep a previous generation around just for its generation count.
 		if !existing.Dead() {
 			defer existing.Done()
