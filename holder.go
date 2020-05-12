@@ -101,6 +101,11 @@ type Holder struct {
 	// needs to be queued and completed after all indexes
 	// have opened.
 	opening bool
+
+	// ReadOnly indicates that this holder's contents should not produce
+	// disk writes under any circumstances. It must be set before Open
+	// is called, and changing it is not supported.
+	ReadOnly bool
 }
 
 func (h *Holder) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (*Transaction, error) {

@@ -223,6 +223,9 @@ func (f *fragment) Open() error {
 // get no data. It tries to write the current storage to the provided file,
 // which is assumed to be the file they didn't get any data from.
 func (f *fragment) emptyStorage(file *os.File) (bool, error) {
+	if f.holder.ReadOnly {
+		return false, errors.New("can't flush/create storage for read-only holder")
+	}
 	// No data. We'll mark this for no mapping, clear any existing
 	// mapped containers, and set the Source to nil. We also have no
 	// ops.
@@ -276,7 +279,10 @@ func (f *fragment) importStorage(data []byte, file *os.File, newGen generation, 
 		}
 		f.holder.Logger.Printf("warning: unmarshal storage, file=%s, err=%v", file.Name(), err)
 		trunc, ok := cause.(roaring.FileShouldBeTruncatedError)
-		if ok {
+		if ok && !f.holder.ReadOnly {
+			// if the holder is ReadOnly, we silently ignore the "advisory"
+			// error. This may be a bad idea.
+
 			// generation code looks for a FileShouldBeTruncatedError
 			return false, trunc
 		}
