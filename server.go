@@ -326,7 +326,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 		gcNotifier: NopGCNotifier,
 
-		antiEntropyInterval: time.Minute * 10,
+		antiEntropyInterval: 0,
 		metricInterval:      0,
 		diagnosticInterval:  0,
 
