@@ -198,7 +198,7 @@ func NewConfig() *Config {
 	c.Gossip.ToTheDeadTime = toml.Duration(30 * time.Second)
 
 	// AntiEntropy config.
-	c.AntiEntropy.Interval = toml.Duration(10 * time.Minute)
+	c.AntiEntropy.Interval = toml.Duration(0)
 
 	// Metric config.
 	c.Metric.Service = "none"
