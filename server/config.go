@@ -203,7 +203,7 @@ func NewConfig() *Config {
 	// Metric config.
 	c.Metric.Service = "none"
 	c.Metric.PollInterval = toml.Duration(0 * time.Minute)
-	c.Metric.Diagnostics = true
+	c.Metric.Diagnostics = false
 
 	// Tracing config.
 	c.Tracing.SamplerType = "off"
