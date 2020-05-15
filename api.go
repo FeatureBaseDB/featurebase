@@ -159,7 +159,12 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 		return QueryResponse{}, errors.Wrap(err, "executing")
 	}
 
-	return resp, nil
+	// The most important is to ensure that resp.Err isn't being swallowed
+	if resp.Err != nil {
+		err = errors.Wrap(resp.Err, "executing")
+	}
+
+	return resp, err
 }
 
 // CreateIndex makes a new Pilosa index.
