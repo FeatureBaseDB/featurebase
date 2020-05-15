@@ -12,12 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package server
+package server_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pilosa/pilosa/v2"
+	pb "github.com/pilosa/pilosa/v2/proto"
+	"github.com/pilosa/pilosa/v2/server"
+	"github.com/pilosa/pilosa/v2/test"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestGRPC(t *testing.T) {
@@ -269,7 +275,7 @@ func TestGRPC(t *testing.T) {
 		}
 
 		for ti, test := range tests {
-			toTabler, err := toTablerWrapper(test.result)
+			toTabler, err := server.ToTablerWrapper(test.result)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -324,4 +330,34 @@ func TestGRPC(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestQueryPQLUnary(t *testing.T) {
+	m := test.RunCommand(t)
+	defer m.Close()
+
+	i := m.MustCreateIndex(t, "i", pilosa.IndexOptions{})
+	m.MustCreateField(t, i.Name(), "f", pilosa.OptFieldKeys())
+
+	ctx := context.Background()
+	gh := server.NewGRPCHandler(m.API)
+
+	_, err := gh.QueryPQLUnary(ctx, &pb.QueryPQLRequest{
+		Index: i.Name(),
+		Pql:   `Set(0, f="zero")`,
+	})
+	if err != nil {
+		// Unary query should work
+		t.Fatal(err)
+	}
+
+	_, err = gh.QueryPQLUnary(ctx, &pb.QueryPQLRequest{
+		Index: i.Name(),
+		Pql:   `Set(1, f="one") Set(2, f="two")`,
+	})
+	staterr := status.Convert(err)
+	if staterr == nil || staterr.Code() != codes.InvalidArgument {
+		// QueryPQLUnary handles exactly one query
+		t.Fatalf("expected error: InvalidArgument, got: %v", err)
+	}
 }

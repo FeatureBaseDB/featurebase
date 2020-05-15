@@ -34,13 +34,25 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// grpcHandler contains methods which handle the various gRPC requests.
-type grpcHandler struct {
-	api *pilosa.API
-
+// GRPCHandler contains methods which handle the various gRPC requests.
+type GRPCHandler struct {
+	api    *pilosa.API
 	logger logger.Logger
+	stats  stats.StatsClient
+}
 
-	stats stats.StatsClient
+func NewGRPCHandler(api *pilosa.API) *GRPCHandler {
+	return &GRPCHandler{api: api, logger: logger.NopLogger, stats: stats.NopStatsClient}
+}
+
+func (h *GRPCHandler) WithLogger(logger logger.Logger) *GRPCHandler {
+	h.logger = logger
+	return h
+}
+
+func (h *GRPCHandler) WithStats(stats stats.StatsClient) *GRPCHandler {
+	h.stats = stats
+	return h
 }
 
 // errorToStatusError appends an appropriate grpc status code
@@ -64,7 +76,7 @@ func errToStatusError(err error) error {
 }
 
 // QueryPQL handles the PQL request and sends RowResponses to the stream.
-func (h grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQLServer) error {
+func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQLServer) error {
 	query := pilosa.QueryRequest{
 		Index: req.Index,
 		Query: req.Pql,
@@ -73,7 +85,6 @@ func (h grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 	t := time.Now()
 	resp, err := h.api.Query(stream.Context(), &query)
 	durQuery := time.Since(t)
-	// TODO: what about resp.Err?
 	// TODO: what about resp.CollumnAttrSets?
 	if err != nil {
 		return errToStatusError(err)
@@ -87,7 +98,7 @@ func (h grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 	}
 
 	rslt := resp.Results[0]
-	toRowser, err := toRowserWrapper(rslt)
+	toRowser, err := ToRowserWrapper(rslt)
 	if err != nil {
 		return errors.Wrap(err, "wrapping as type ToRowser")
 	}
@@ -104,7 +115,7 @@ func (h grpcHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQL
 }
 
 // QueryPQLUnary is a unary-response (non-streaming) version of QueryPQL, returning a TableResponse.
-func (h grpcHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest) (*pb.TableResponse, error) {
+func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest) (*pb.TableResponse, error) {
 	query := pilosa.QueryRequest{
 		Index: req.Index,
 		Query: req.Pql,
@@ -116,7 +127,6 @@ func (h grpcHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest)
 	if err != nil {
 		return nil, errToStatusError(err)
 	} else if len(resp.Results) != 1 {
-		// TODO: make a test for this
 		return nil, status.Error(codes.InvalidArgument, "QueryPQLUnary handles exactly one query")
 	}
 	longQueryTime := h.api.LongQueryTime()
@@ -125,7 +135,7 @@ func (h grpcHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest)
 	}
 
 	rslt := resp.Results[0]
-	toTabler, err := toTablerWrapper(rslt)
+	toTabler, err := ToTablerWrapper(rslt)
 	if err != nil {
 		return nil, errors.Wrap(err, "wrapping as type ToTabler")
 	}
@@ -185,7 +195,7 @@ func (r ResultBool) ToRows(callback func(*pb.RowResponse) error) error {
 // some concrete types for which we can't implement the ToTabler
 // interface, we have to check for those here and then wrap them
 // with a custom type.
-func toTablerWrapper(result interface{}) (pb.ToTabler, error) {
+func ToTablerWrapper(result interface{}) (pb.ToTabler, error) {
 	toTabler, ok := result.(pb.ToTabler)
 	if !ok {
 		switch v := result.(type) {
@@ -206,7 +216,7 @@ func toTablerWrapper(result interface{}) (pb.ToTabler, error) {
 // some concrete types for which we can't implement the ToRowser
 // interface, we have to check for those here and then wrap them
 // with a custom type.
-func toRowserWrapper(result interface{}) (pb.ToRowser, error) {
+func ToRowserWrapper(result interface{}) (pb.ToRowser, error) {
 	toRowser, ok := result.(pb.ToRowser)
 	if !ok {
 		switch v := result.(type) {
@@ -254,7 +264,7 @@ func fieldDataType(f *pilosa.Field) string {
 }
 
 // Inspect handles the inspect request and sends an InspectResponse to the stream.
-func (h grpcHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectServer) error {
+func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectServer) error {
 	const defaultLimit = 100000
 
 	index, err := h.api.Index(stream.Context(), req.Index)
@@ -825,7 +835,7 @@ func (s *grpcServer) Serve(tlsConfig *tls.Config) error {
 
 	// create grpc server
 	s.grpcServer = grpc.NewServer(opts...)
-	pb.RegisterPilosaServer(s.grpcServer, grpcHandler{api: s.api, logger: s.logger, stats: s.stats})
+	pb.RegisterPilosaServer(s.grpcServer, NewGRPCHandler(s.api).WithLogger(s.logger).WithStats(s.stats))
 
 	// register the server so its services are available to grpc_cli and others
 	reflection.Register(s.grpcServer)
