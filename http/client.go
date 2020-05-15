@@ -291,6 +291,7 @@ func (c *InternalClient) QueryNode(ctx context.Context, uri *pilosa.URI, index s
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("Accept", "application/x-protobuf")
+	req.Header.Set("X-Pilosa-Row", "roaring")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
@@ -495,6 +496,7 @@ func (c *InternalClient) importNode(ctx context.Context, node *pilosa.Node, inde
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("Accept", "application/x-protobuf")
+	req.Header.Set("X-Pilosa-Row", "roaring")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
@@ -682,6 +684,7 @@ func (c *InternalClient) ImportRoaring(ctx context.Context, uri *pilosa.URI, ind
 	}
 	httpReq.Header.Set("Content-Type", "application/x-protobuf")
 	httpReq.Header.Set("Accept", "application/x-protobuf")
+	httpReq.Header.Set("X-Pilosa-Row", "roaring")
 	httpReq.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
@@ -731,6 +734,7 @@ func (c *InternalClient) ImportColumnAttrs(ctx context.Context, uri *pilosa.URI,
 	}
 	httpReq.Header.Set("Content-Type", "application/x-protobuf")
 	httpReq.Header.Set("Accept", "application/x-protobuf")
+	httpReq.Header.Set("X-Pilosa-Row", "roaring")
 	httpReq.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
@@ -1006,6 +1010,7 @@ func (c *InternalClient) BlockData(ctx context.Context, uri *pilosa.URI, index, 
 	req.Header.Set("Content-Type", "application/protobuf")
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
 	req.Header.Set("Accept", "application/protobuf")
+	req.Header.Set("X-Pilosa-Row", "roaring")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	resp, err := c.executeRequest(req.WithContext(ctx))
@@ -1163,6 +1168,7 @@ func (c *InternalClient) TranslateKeysNode(ctx context.Context, uri *pilosa.URI,
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("Accept", "application/x-protobuf")
+	req.Header.Set("X-Pilosa-Row", "roaring")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.
@@ -1213,6 +1219,7 @@ func (c *InternalClient) TranslateIDsNode(ctx context.Context, uri *pilosa.URI, 
 	req.Header.Set("Content-Length", strconv.Itoa(len(buf)))
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("Accept", "application/x-protobuf")
+	req.Header.Set("X-Pilosa-Row", "roaring")
 	req.Header.Set("User-Agent", "pilosa/"+pilosa.Version)
 
 	// Execute request against the host.

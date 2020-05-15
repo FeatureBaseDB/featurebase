@@ -192,7 +192,9 @@ func (sq *prioritySnapshotQueue) Stop() {
 	sq.urgent = nil
 	close(sq.background)
 	sq.background = nil
-	sq.logger.Printf("snapshot queue: enqueued %d, skipped %d\n", sq.stats.enqueued, sq.stats.skipped)
+	if sq.stats.skipped > 0 || sq.stats.enqueued > 1 {
+		sq.logger.Printf("snapshot queue: enqueued %d, skipped %d\n", sq.stats.enqueued, sq.stats.skipped)
+	}
 }
 
 // Enqueue tries to add a fragment to the queue, if the fragment is not already
