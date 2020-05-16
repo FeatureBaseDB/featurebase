@@ -173,7 +173,7 @@ func TestParser_Parse(t *testing.T) {
 
 	// Parse with condition arguments.
 	t.Run("WithCondition", func(t *testing.T) {
-		q, err := pql.ParseString(`Row(key=foo, x == 12.25, y >= 100, z >< [4,8], m != null)`)
+		q, err := pql.ParseString(`Row(key=foo, x == 12.25, y >= 100, z >< [4,8], m != null, n == null)`)
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(q.Calls[0],
@@ -185,6 +185,7 @@ func TestParser_Parse(t *testing.T) {
 					"y":   &pql.Condition{Op: pql.GTE, Value: int64(100)},
 					"z":   &pql.Condition{Op: pql.BETWEEN, Value: []interface{}{int64(4), int64(8)}},
 					"m":   &pql.Condition{Op: pql.NEQ, Value: nil},
+					"n":   &pql.Condition{Op: pql.EQ, Value: nil},
 				},
 			},
 		) {

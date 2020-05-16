@@ -2463,21 +2463,15 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 		return nil, ErrFieldNotFound
 	}
 
-	// EQ null           (not implemented: flip frag.NotNull with max ColumnID)
+	// EQ null           _exists - frag.NotNull()
 	// NEQ null          frag.NotNull()
 	// BETWEEN a,b(in)   BETWEEN/frag.RowBetween()
 	// BETWEEN a,b(out)  BETWEEN/frag.NotNull()
 	// EQ <int>          frag.RangeOp
 	// NEQ <int>         frag.RangeOp
 
-	// Handle `!= null`.
+	// Handle `!= null` and `== null`.
 	if cond.Op == pql.NEQ && cond.Value == nil {
-		// Find bsiGroup.
-		bsig := f.bsiGroup(fieldName)
-		if bsig == nil {
-			return nil, ErrBSIGroupNotFound
-		}
-
 		// Retrieve fragment.
 		frag := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
 		if frag == nil {
@@ -2485,6 +2479,37 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 		}
 
 		return frag.notNull()
+
+	} else if cond.Op == pql.EQ && cond.Value == nil {
+		// Make sure the index supports existence tracking.
+		idx := e.Holder.Index(index)
+		if idx == nil {
+			return nil, ErrIndexNotFound
+		} else if idx.existenceField() == nil {
+			return nil, errors.Errorf("index does not support existence tracking: %s", index)
+		}
+
+		var existenceRow *Row
+		existenceFrag := e.Holder.fragment(index, existenceFieldName, viewStandard, shard)
+		if existenceFrag == nil {
+			existenceRow = NewRow()
+		} else {
+			existenceRow = existenceFrag.row(0)
+		}
+
+		var notNull *Row
+		var err error
+
+		// Retrieve notNull from fragment if it exists.
+		if frag := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard); frag != nil {
+			if notNull, err = frag.notNull(); err != nil {
+				return nil, errors.Wrap(err, "getting fragment not null")
+			}
+		} else {
+			notNull = NewRow()
+		}
+
+		return existenceRow.Difference(notNull), nil
 
 	} else if cond.Op == pql.BETWEEN || cond.Op == pql.BTWN_LT_LT ||
 		cond.Op == pql.BTWN_LTE_LT || cond.Op == pql.BTWN_LT_LTE {

@@ -2371,7 +2371,7 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 	defer c.Close()
 	hldr := test.Holder{Holder: c[0].Server.Holder()}
 
-	idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
+	idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2414,6 +2414,19 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 	}
 
 	t.Run("EQ", func(t *testing.T) {
+		// EQ null
+		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(other == null)`}); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{1,
+			50,
+			ShardWidth,
+			ShardWidth + 1,
+			ShardWidth + 2,
+			(5 * ShardWidth) + 100,
+		}, result.Results[0].(*pilosa.Row).Columns()) {
+			t.Fatalf("unexpected result: %#v", result.Results[0].(*pilosa.Row).Columns())
+		}
+		// EQ <int>
 		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(foo == 20)`}); err != nil {
 			t.Fatal(err)
 		} else if got, exp := result.Results[0].(*pilosa.Row).Columns(), []uint64{50, (5 * ShardWidth) + 100}; !reflect.DeepEqual(exp, got) {
