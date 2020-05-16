@@ -2189,11 +2189,6 @@ type bsiGroup struct {
 // ex: Field.Min = 0, Field.Max = 1023
 // baseValue(LT, 2000) returns 1023, which will perform "LT 1023" and effectively
 // exclude any columns with value = 1023.
-// Note that in this case (because the range uses the full BitDepth 0 to 1023),
-// we can't simply return 1024.
-// In order to make this work, we effectively need to change the operator to LTE.
-// Executor.executeBSIGroupRangeShard() takes this into account and returns
-// `frag.FieldNotNull(bsig.BitDepth())` in such instances.
 func (b *bsiGroup) baseValue(op pql.Token, value int64) (baseValue int64, outOfRange bool) {
 	min, max := b.bitDepthMin(), b.bitDepthMax()
 
@@ -2202,6 +2197,10 @@ func (b *bsiGroup) baseValue(op pql.Token, value int64) (baseValue int64, outOfR
 			return baseValue, true
 		} else if value < min {
 			baseValue = int64(min - b.Base)
+			// Address edge case noted in comments above.
+			if op == pql.GT {
+				baseValue--
+			}
 		} else {
 			baseValue = int64(value - b.Base)
 		}
@@ -2210,6 +2209,10 @@ func (b *bsiGroup) baseValue(op pql.Token, value int64) (baseValue int64, outOfR
 			return baseValue, true
 		} else if value > max {
 			baseValue = int64(max - b.Base)
+			// Address edge case noted in comments above.
+			if op == pql.LT {
+				baseValue++
+			}
 		} else {
 			baseValue = int64(value - b.Base)
 		}

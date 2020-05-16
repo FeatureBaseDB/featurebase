@@ -4845,6 +4845,13 @@ func getCondIntSlice(f *Field, cond *pql.Condition) ([]int64, error) {
 		ret[i] = s
 	}
 
+	// In the case where one (or both) of the predicates is on the
+	// opposite edge, return early to avoid the increment/decrement
+	// logic below and prevent an overflow.
+	if ret[0] == math.MaxInt64 || ret[1] == math.MinInt64 {
+		return ret, nil
+	}
+
 	switch cond.Op {
 	case pql.BTWN_LT_LTE: // a < x <= b
 		ret[0]++

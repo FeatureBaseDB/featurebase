@@ -69,12 +69,12 @@ func TestBSIGroup_BaseValue(t *testing.T) {
 			{b0, pql.LT, 5, 105, false},
 			{b0, pql.LT, -8, 92, false},
 			{b0, pql.LT, -108, -8, false},
-			{b0, pql.LT, 1005, 1023, false},
+			{b0, pql.LT, 1005, 1024, false},
 			{b0, pql.LT, 0, 100, false},
 
 			{b1, pql.LT, 5, 5, false},
 			{b1, pql.LT, -8, -8, false},
-			{b1, pql.LT, 1005, 255, false},
+			{b1, pql.LT, 1005, 256, false},
 			{b1, pql.LT, 0, 0, false},
 
 			{b2, pql.LT, 5, -95, false},
@@ -92,7 +92,7 @@ func TestBSIGroup_BaseValue(t *testing.T) {
 			{b1, pql.GT, -8, -8, false},
 			{b1, pql.GT, 1005, 0, true},
 			{b1, pql.GT, 0, 0, false},
-			{b1, pql.GT, -300, -255, false},
+			{b1, pql.GT, -300, -256, false},
 
 			{b2, pql.GT, 5, -95, false},
 			{b2, pql.GT, -8, -108, false},
