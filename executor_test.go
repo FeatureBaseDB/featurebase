@@ -2559,6 +2559,93 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 	})
 }
 
+// Ensure a Row(bsiGroup) query can be executed (edge cases).
+func TestExecutor_Execute_Row_BSIGroupEdge(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+	hldr := test.Holder{Holder: c[0].Server.Holder()}
+
+	idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("LT", func(t *testing.T) {
+		if _, err := idx.CreateField("f1", pilosa.OptFieldTypeInt(-2000, 2000)); err != nil {
+			t.Fatal(err)
+		}
+
+		// Set a value at the edge of bitDepth (i.e. 2^n-1; here, n=3).
+		// It must also be the max value in the field; in other words,
+		// set the value to bsiGroup.bitDepthMax().
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+			Set(100, f1=7)
+		`}); err != nil {
+			t.Fatal(err)
+		}
+
+		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f1 < 10)`}); err != nil {
+			t.Fatal(err)
+		} else if got, exp := result.Results[0].(*pilosa.Row).Columns(), []uint64{100}; !reflect.DeepEqual(got, exp) {
+			t.Fatalf("unexpected result: got=%v, exp=%v", got, exp)
+		}
+	})
+
+	t.Run("GT", func(t *testing.T) {
+		if _, err := idx.CreateField("f2", pilosa.OptFieldTypeInt(-2000, 2000)); err != nil {
+			t.Fatal(err)
+		}
+
+		// Set a value at the negative edge of bitDepth (i.e. -(2^n-1); here, n=3).
+		// It must also be the min value in the field; in other words,
+		// set the value to bsiGroup.bitDepthMin().
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+		Set(200, f2=-7)
+	`}); err != nil {
+			t.Fatal(err)
+		}
+
+		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(f2 > -10)`}); err != nil {
+			t.Fatal(err)
+		} else if got, exp := result.Results[0].(*pilosa.Row).Columns(), []uint64{200}; !reflect.DeepEqual(got, exp) {
+			t.Fatalf("unexpected result: got=%v, exp=%v", got, exp)
+		}
+	})
+
+	t.Run("BTWN_LT_LT", func(t *testing.T) {
+		if _, err := idx.CreateField("f3", pilosa.OptFieldTypeInt(-2000, 2000)); err != nil {
+			t.Fatal(err)
+		}
+
+		// Set a value anywhere in range.
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+		Set(300, f3=10)
+	`}); err != nil {
+			t.Fatal(err)
+		}
+
+		// Query INT_MAX < x < INT_MIN. Because that's an invalid range, we should
+		// get back an empty result set.
+		tests := []struct {
+			predA int64
+			predB int64
+		}{
+			{math.MaxInt64, math.MinInt64},
+			{math.MaxInt64, 1000},
+			{-1000, math.MinInt64},
+		}
+
+		for i, test := range tests {
+			pql := fmt.Sprintf("Row(%d < f3 < %d)", test.predA, test.predB)
+			if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: pql}); err != nil {
+				t.Fatal(err)
+			} else if got, exp := result.Results[0].(*pilosa.Row).Columns(), []uint64{}; !reflect.DeepEqual(got, exp) {
+				t.Fatalf("test %d unexpected result: got=%v, exp=%v", i, got, exp)
+			}
+		}
+	})
+}
+
 // Ensure a Range(bsiGroup) query can be executed. (Deprecated)
 func TestExecutor_Execute_Range_BSIGroup_Deprecated(t *testing.T) {
 	c := test.MustRunCluster(t, 1)

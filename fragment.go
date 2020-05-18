@@ -1242,7 +1242,6 @@ func (f *fragment) rangeLTUnsigned(filter *Row, bitDepth uint, predicate uint64,
 	// if the predicate is larger than all representable numbers given
 	// our bitDepth... then just return everything.
 	if msb(predicate) > bitDepth {
-
 		return filter, nil
 	}
 
