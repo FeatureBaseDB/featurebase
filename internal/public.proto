@@ -111,6 +111,7 @@ message QueryResult {
 	RowIdentifiers RowIdentifiers = 9;
 	SignedRow SignedRow = 10;
 	PairsField PairsField = 11;
+	PairField PairField = 12;
 }
 
 message ImportRequest {

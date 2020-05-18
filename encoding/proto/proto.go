@@ -516,7 +516,7 @@ func (s Serializer) encodeQueryResponse(m *pilosa.QueryResponse) *internal.Query
 			pb.Results[i].Pairs = []*internal.Pair{s.encodePair(result)}
 		case pilosa.PairField:
 			pb.Results[i].Type = queryResultTypePairField
-			pb.Results[i].Pairs = []*internal.Pair{s.encodePairField(result)}
+			pb.Results[i].PairField = s.encodePairField(result)
 		case nil:
 			pb.Results[i].Type = queryResultTypeNil
 		default:
@@ -1311,7 +1311,7 @@ func (s Serializer) decodeQueryResult(pb *internal.QueryResult) interface{} {
 	case queryResultTypePair:
 		return s.decodePair(pb.Pairs[0])
 	case queryResultTypePairField:
-		return s.decodePairField(pb.Pairs[0])
+		return s.decodePairField(pb.PairField)
 	}
 	panic(fmt.Sprintf("unknown type: %d", pb.Type))
 }
@@ -1441,14 +1441,14 @@ func (s Serializer) decodePair(pb *internal.Pair) pilosa.Pair {
 	}
 }
 
-func (s Serializer) decodePairField(pb *internal.Pair) pilosa.PairField {
+func (s Serializer) decodePairField(pb *internal.PairField) pilosa.PairField {
 	return pilosa.PairField{
 		Pair: pilosa.Pair{
-			ID:    pb.ID,
-			Key:   pb.Key,
-			Count: pb.Count,
+			ID:    pb.Pair.ID,
+			Key:   pb.Pair.Key,
+			Count: pb.Pair.Count,
 		},
-		//Field: pb.Field, // TODO: in order to have this, we need PairField in QueryResponse.
+		Field: pb.Field,
 	}
 }
 
@@ -1576,15 +1576,11 @@ func (s Serializer) encodePair(p pilosa.Pair) *internal.Pair {
 	}
 }
 
-func (s Serializer) encodePairField(p pilosa.PairField) *internal.Pair {
-	/*
-		// TODO: in order to have this, we need PairField in QueryResponse.
-		return &internal.Pair{
-			Pair:  s.encodePair(p.Pair),
-			Field: p.Field,
-		}
-	*/
-	return s.encodePair(p.Pair)
+func (s Serializer) encodePairField(p pilosa.PairField) *internal.PairField {
+	return &internal.PairField{
+		Pair:  s.encodePair(p.Pair),
+		Field: p.Field,
+	}
 }
 
 func (s Serializer) encodeValCount(vc pilosa.ValCount) *internal.ValCount {
