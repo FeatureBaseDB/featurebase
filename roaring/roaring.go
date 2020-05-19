@@ -207,9 +207,12 @@ func NewBitmap(a ...uint64) *Bitmap {
 	b := &Bitmap{
 		Containers: newSliceContainers(),
 	}
-	// TODO: We have no way to report this. We aren't in a server context
+	// We have no way to report this. We aren't in a server context
 	// so we haven't got a logger, nothing is checking for nil returns
-	// from this...
+	// from this.
+	// Because we just created Bitmap, its OpWriter is nil, so there
+	// is no code path which would cause AddN() to return an error.
+	// Therefore, it's safe to swallow this error.
 	_, _ = b.AddN(a...)
 	return b
 }
@@ -222,9 +225,12 @@ func NewSliceBitmap(a ...uint64) *Bitmap {
 	b := &Bitmap{
 		Containers: newSliceContainers(),
 	}
-	// TODO: We have no way to report this. We aren't in a server context
+	// We have no way to report this. We aren't in a server context
 	// so we haven't got a logger, nothing is checking for nil returns
-	// from this...
+	// from this.
+	// Because we just created Bitmap, its OpWriter is nil, so there
+	// is no code path which would cause AddN() to return an error.
+	// Therefore, it's safe to swallow this error.
 	_, _ = b.AddN(a...)
 	return b
 }

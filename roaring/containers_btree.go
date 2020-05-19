@@ -36,7 +36,10 @@ func NewBTreeBitmap(a ...uint64) *Bitmap {
 	b := &Bitmap{
 		Containers: newBTreeContainers(),
 	}
-	// TODO: We have no way to report this.
+	// We have no way to report this.
+	// Because we just created Bitmap, its OpWriter is nil, so there
+	// is no code path which would cause Add() to return an error.
+	// Therefore, it's safe to swallow this error.
 	_, _ = b.Add(a...)
 	return b
 }
