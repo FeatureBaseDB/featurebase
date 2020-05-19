@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/rand"
 	"path"
+	"reflect"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -995,6 +996,28 @@ func TestBtreeEnumeratorPrevSanity(t *testing.T) {
 		if g, e := v, test.valueOut; g != e {
 			t.Fatal(i, g, e)
 		}
+	}
+}
+
+// TestBtreeEnumeratorEveryRegression is a regression test for a "use-after-free" bug.
+// Previously, deleting a container would cause some values to be skipped (and sometimes trigger a race condition).
+func TestBtreeEnumeratorEveryRegression(t *testing.T) {
+	r := treeNew()
+
+	r.Set(uint64(10), getDummyC(100))
+	r.Set(uint64(20), getDummyC(200))
+	r.Set(uint64(30), getDummyC(300))
+
+	e, _ := r.Seek(0)
+	expect := []uint64{10, 20, 30}
+	var found []uint64
+	_ = e.Every(func(key uint64, oldV *Container, exists bool) (*Container, bool) {
+		found = append(found, key)
+		return nil, true
+	})
+
+	if !reflect.DeepEqual(expect, found) { // Before the fix, this skipped the 20.
+		t.Errorf("had %v in bitmap; only found %v", expect, found)
 	}
 }
 
