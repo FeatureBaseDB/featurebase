@@ -21,7 +21,7 @@ import (
 	"github.com/pilosa/pilosa/v2"
 )
 
-const deadlineSkew = time.Millisecond * 20
+const deadlineSkew = time.Second
 
 // CompareTransactions errors describing how the
 // transactions differ (if at all). The deadlines need only be close
