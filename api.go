@@ -1594,14 +1594,41 @@ func (api *API) StartTransaction(ctx context.Context, id string, timeout time.Du
 	if err := api.validate(apiStartTransaction); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
-	return api.server.StartTransaction(ctx, id, timeout, exclusive, remote)
+	t, err := api.server.StartTransaction(ctx, id, timeout, exclusive, remote)
+	if exclusive {
+		switch err {
+		case nil:
+			api.holder.Stats.Count(MetricExclusiveTransactionRequest, 1, 1.0)
+		case ErrTransactionExclusive:
+			api.holder.Stats.Count(MetricExclusiveTransactionBlocked, 1, 1.0)
+		}
+		if t.Active {
+			api.holder.Stats.Count(MetricExclusiveTransactionActive, 1, 1.0)
+		}
+	} else {
+		switch err {
+		case nil:
+			api.holder.Stats.Count(MetricTransactionStart, 1, 1.0)
+		case ErrTransactionExclusive:
+			api.holder.Stats.Count(MetricTransactionBlocked, 1, 1.0)
+		}
+	}
+	return t, err
 }
 
 func (api *API) FinishTransaction(ctx context.Context, id string, remote bool) (*Transaction, error) {
 	if err := api.validate(apiFinishTransaction); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
-	return api.server.FinishTransaction(ctx, id, remote)
+	t, err := api.server.FinishTransaction(ctx, id, remote)
+	if err == nil {
+		if t.Exclusive {
+			api.holder.Stats.Count(MetricExclusiveTransactionEnd, 1, 1.0)
+		} else {
+			api.holder.Stats.Count(MetricTransactionEnd, 1, 1.0)
+		}
+	}
+	return t, err
 }
 
 func (api *API) Transactions(ctx context.Context) (map[string]*Transaction, error) {
@@ -1615,7 +1642,13 @@ func (api *API) GetTransaction(ctx context.Context, id string, remote bool) (*Tr
 	if err := api.validate(apiGetTransaction); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
-	return api.server.GetTransaction(ctx, id, remote)
+	t, err := api.server.GetTransaction(ctx, id, remote)
+	if err == nil {
+		if t.Exclusive && t.Active {
+			api.holder.Stats.Count(MetricExclusiveTransactionActive, 1, 1.0)
+		}
+	}
+	return t, err
 }
 
 type serverInfo struct {
