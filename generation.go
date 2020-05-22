@@ -263,7 +263,7 @@ func (m *mmapGeneration) openFile() (shouldClose bool, err error) {
 	}
 	// do we actually want this in every openFile? I don't know.
 	if err := syscall.Flock(int(m.file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		m.file.Close()
+		_ = syswrap.CloseFile(m.file)
 		m.file = nil
 		return false, fmt.Errorf("flock: %s", err)
 	}
