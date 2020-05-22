@@ -20,12 +20,12 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
-	"sort"
 	"testing"
 	"testing/quick"
 	"time"
 
 	"github.com/pilosa/pilosa/v2"
+	"github.com/pilosa/pilosa/v2/generator"
 	"github.com/pilosa/pilosa/v2/roaring"
 	_ "github.com/pilosa/pilosa/v2/test"
 )
@@ -280,11 +280,36 @@ func TestBitmap_Slice_Empty(t *testing.T) {
 }
 
 // Ensure a bitmap can return a slice of values within a range.
-// TODO duplicate for all container types
 func TestBitmap_SliceRange(t *testing.T) {
-	if a := roaring.NewFileBitmap(0, 1000001, 1000002, 1000003).SliceRange(1, 1000003); !reflect.DeepEqual(a, []uint64{1000001, 1000002}) {
-		t.Fatalf("unexpected slice: %+v", a)
-	}
+	t.Run("array", func(t *testing.T) {
+		if a := roaring.NewFileBitmap(0, 1000001, 1000002, 1000003).SliceRange(1, 1000003); !reflect.DeepEqual(a, []uint64{1000001, 1000002}) {
+			t.Fatalf("unexpected slice: %+v", a)
+		}
+	})
+
+	t.Run("bitmap", func(t *testing.T) {
+		bm := roaring.NewFileBitmap()
+		for i := uint64(10); i < 10000; i++ {
+			_, _ = bm.Add(i * 2)
+		}
+		bm.Optimize()
+
+		if a := bm.SliceRange(20, 30); !reflect.DeepEqual(a, []uint64{20, 22, 24, 26, 28}) {
+			t.Fatalf("unexpected slice: %+v", a)
+		}
+	})
+
+	t.Run("run", func(t *testing.T) {
+		bm := roaring.NewFileBitmap()
+		for i := uint64(0); i < 11; i++ {
+			_, _ = bm.Add(i)
+		}
+		bm.Optimize()
+
+		if a := bm.SliceRange(6, 10); !reflect.DeepEqual(a, []uint64{6, 7, 8, 9}) {
+			t.Fatalf("unexpected slice: %+v", a)
+		}
+	})
 }
 
 // Ensure a bitmap can loop over a set of values.
@@ -1442,7 +1467,7 @@ func testBitmapQuick(t *testing.T, n int, min, max uint64) {
 		// If `got` is nil and `exp` has zero length, don't perform the DeepEqual
 		// because when `a` is empty (`a = []uint64{}`) then `got` is a nil slice
 		// while `exp` is an empty slice. Therefore they will not be considered equal.
-		if got, exp := bm.Slice(), uint64SetSlice(m); !(got == nil && len(exp) == 0) && !reflect.DeepEqual(got, exp) {
+		if got, exp := bm.Slice(), generator.Uint64SetSlice(m); !(got == nil && len(exp) == 0) && !reflect.DeepEqual(got, exp) {
 			t.Fatalf("unexpected values:\n\ngot=%+v\n\nexp=%+v\n\n", got, exp)
 		}
 
@@ -1467,7 +1492,7 @@ func testBitmapQuick(t *testing.T, n int, min, max uint64) {
 		return true
 	}, &quick.Config{
 		Values: func(values []reflect.Value, rand *rand.Rand) {
-			values[0] = reflect.ValueOf(GenerateUint64Slice(n, min, max, false, rand))
+			values[0] = reflect.ValueOf(generator.Uint64Slice(n, min, max, false, rand))
 		},
 	})
 	if err != nil {
@@ -1478,7 +1503,9 @@ func testBitmapQuick(t *testing.T, n int, min, max uint64) {
 func TestBitmap_Marshal_Quick_Array1(t *testing.T) {
 	testBitmapMarshalQuick(t, 1000, 1000, 2000, false)
 }
-func TestBitmap_Marshal_Quick_Array2(t *testing.T) { testBitmapMarshalQuick(t, 10000, 0, 1000, false) }
+func TestBitmap_Marshal_Quick_Array2(t *testing.T) {
+	testBitmapMarshalQuick(t, 10000, 0, 1000, false)
+}
 func TestBitmap_Marshal_Quick_Bitmap1(t *testing.T) {
 	testBitmapMarshalQuick(t, 10000, 0, 10000, false)
 }
@@ -1494,6 +1521,12 @@ func TestBitmap_Marshal_Quick_Bitmap_Sorted(t *testing.T) {
 }
 
 // TODO update for RLE
+// (travis) - it's not clear to me how to generate a run container
+// using `testBitmapMarshalQuick`. Because it's randomly generated,
+// even some of the "Bitmap" tests generate array containers. Also,
+// I think in order for the container to be a run, we would need
+// to call bm.Optimize() on the bitmap, and I'm hesitant to add that
+// because it's not clear to me how that would affect the tests.
 
 // Ensure a bitmap can be marshaled and unmarshaled.
 func testBitmapMarshalQuick(t *testing.T, n int, min, max uint64, sorted bool) {
@@ -1538,12 +1571,12 @@ func testBitmapMarshalQuick(t *testing.T, n int, min, max uint64, sorted bool) {
 			}
 
 			// Verify the original bitmap has the correct set of values.
-			if exp, got := uint64SetSlice(set), bm.Slice(); !reflect.DeepEqual(exp, got) {
+			if exp, got := generator.Uint64SetSlice(set), bm.Slice(); !reflect.DeepEqual(exp, got) {
 				t.Fatalf("mismatch: %s\n\nexp=%+v\n\ngot=%+v\n\n", diff(exp, got), exp, got)
 			}
 
 			// Verify the bitmap loaded with the ops log has the correct set of values.
-			if exp, got := uint64SetSlice(set), bm2.Slice(); !reflect.DeepEqual(exp, got) {
+			if exp, got := generator.Uint64SetSlice(set), bm2.Slice(); !reflect.DeepEqual(exp, got) {
 				t.Fatalf("mismatch: %s\n\nexp=%+v\n\ngot=%+v\n\n", diff(exp, got), exp, got)
 			}
 		}
@@ -1551,8 +1584,8 @@ func testBitmapMarshalQuick(t *testing.T, n int, min, max uint64, sorted bool) {
 		return true
 	}, &quick.Config{
 		Values: func(values []reflect.Value, rand *rand.Rand) {
-			values[0] = reflect.ValueOf(GenerateUint64Slice(n, min, max, sorted, rand))
-			values[1] = reflect.ValueOf(GenerateUint64Slice(100, min, max, sorted, rand))
+			values[0] = reflect.ValueOf(generator.Uint64Slice(n, min, max, sorted, rand))
+			values[1] = reflect.ValueOf(generator.Uint64Slice(100, min, max, sorted, rand))
 		},
 	})
 	if err != nil {
@@ -1561,9 +1594,8 @@ func testBitmapMarshalQuick(t *testing.T, n int, min, max uint64, sorted bool) {
 }
 
 // Ensure iterator can iterate over all the values on the bitmap.
-// TODO duplicate for all container types
 func TestIterator(t *testing.T) {
-	t.Run("bitmap", func(t *testing.T) {
+	t.Run("array", func(t *testing.T) {
 		itr := roaring.NewFileBitmap(1, 2, 3).Iterator()
 		itr.Seek(0)
 
@@ -1573,6 +1605,29 @@ func TestIterator(t *testing.T) {
 		}
 
 		if !reflect.DeepEqual(a, []uint64{1, 2, 3}) {
+			t.Fatalf("unexpected values: %+v", a)
+		}
+	})
+
+	t.Run("bitmap", func(t *testing.T) {
+		bm := roaring.NewFileBitmap()
+		exp := []uint64{}
+		for i := uint64(0); i < 10000; i++ {
+			v := i * 2
+			_, _ = bm.Add(v)
+			exp = append(exp, v)
+		}
+		bm.Optimize()
+
+		itr := bm.Iterator()
+		itr.Seek(0)
+
+		var a []uint64
+		for v, eof := itr.Next(); !eof; v, eof = itr.Next() {
+			a = append(a, v)
+		}
+
+		if !reflect.DeepEqual(a, exp) {
 			t.Fatalf("unexpected values: %+v", a)
 		}
 	})
@@ -1783,37 +1838,6 @@ func getBenchData(tb testing.TB) *benchmarkSampleData {
 	}
 	return data
 }
-
-// GenerateUint64Slice generates between [0, n) random uint64 numbers between min and max.
-func GenerateUint64Slice(n int, min, max uint64, sorted bool, rand *rand.Rand) []uint64 {
-	a := make([]uint64, rand.Intn(n))
-	for i := range a {
-		a[i] = min + uint64(rand.Int63n(int64(max-min)))
-	}
-
-	if sorted {
-		sort.Sort(uint64Slice(a))
-	}
-
-	return a
-}
-
-// uint64SetSlice returns the values in a uint64 set.
-func uint64SetSlice(m map[uint64]struct{}) []uint64 {
-	a := make([]uint64, 0, len(m))
-	for v := range m {
-		a = append(a, v)
-	}
-	sort.Sort(uint64Slice(a))
-	return a
-}
-
-// uint64Slice represents a sortable slice of uint64 numbers.
-type uint64Slice []uint64
-
-func (p uint64Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
-func (p uint64Slice) Len() int           { return len(p) }
-func (p uint64Slice) Less(i, j int) bool { return p[i] < p[j] }
 
 func diff(a, b []uint64) string {
 	if len(a) != len(b) {

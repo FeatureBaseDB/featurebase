@@ -19,11 +19,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/pilosa/pilosa/v2/generator"
 	"github.com/pkg/errors"
 )
 
@@ -4026,7 +4028,11 @@ func TestDirectAddNVsAdd(t *testing.T) {
 		{9384932, 101000, 2, 1, 0},
 		{3489, 19230, 394, 0, 893982, 890283, 14, 7},
 	}
-	// TODO generate more tests and fuzz
+	// Add some randomly created tests.
+	rand := rand.New(rand.NewSource(1))
+	for i := 0; i < 100; i++ {
+		tests = append(tests, generator.Uint64Slice(1+rand.Intn(1000), 0, 10000000, i%2 == 0, rand))
+	}
 	testsCopy := make([][]uint64, len(tests))
 	copy(testsCopy, tests)
 	for i, test := range testsCopy {
