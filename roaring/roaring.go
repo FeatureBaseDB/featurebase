@@ -160,7 +160,7 @@ type Containers interface {
 	// replace the given container.
 	UpdateEvery(fn func(uint64, *Container, bool) (*Container, bool))
 
-	// Iterator returns a Contiterator which after a call to Next(), a call to Value() will
+	// Iterator returns a ContainterIterator which after a call to Next(), a call to Value() will
 	// return the first container at or after key. found will be true if a
 	// container is found at key.
 	Iterator(key uint64) (citer ContainerIterator, found bool)

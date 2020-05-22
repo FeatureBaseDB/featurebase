@@ -374,7 +374,7 @@ func (r *Row) Difference(others ...*Row) *Row {
 	return &Row{segments: output}
 }
 
-// GenericUnary returns the results of a generic op on r.
+// GenericUnaryOp returns the results of a generic op on r.
 func (r *Row) GenericUnaryOp(op ext.GenericBitmapOpBitmap, args map[string]interface{}) *Row {
 	work := r
 	var segments []rowSegment
@@ -660,7 +660,8 @@ func (s *rowSegment) Xor(other *rowSegment) *rowSegment {
 
 // Shift returns s shifted by 1 bit.
 func (s *rowSegment) Shift() (*rowSegment, error) {
-	//TODO deal with overflow
+	// TODO: deal with overflow
+	// See issue: https://github.com/molecula/pilosa/issues/403
 	data, err := s.data.Shift(1)
 	if err != nil {
 		return nil, errors.Wrap(err, "shifting roaring data")
@@ -675,9 +676,8 @@ func (s *rowSegment) Shift() (*rowSegment, error) {
 	}, nil
 }
 
-// GenericUnary returns s subject to op.
+// GenericUnaryOp returns s subject to op.
 func (s *rowSegment) GenericUnaryOp(op ext.GenericBitmapOpBitmap, args map[string]interface{}) *rowSegment {
-	//TODO deal with overflow
 	data := UnwrapBitmap(op([]ext.Bitmap{WrapBitmap(s.data)}, args))
 
 	return &rowSegment{
