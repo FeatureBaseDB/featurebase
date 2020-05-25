@@ -718,7 +718,7 @@ func (s *Server) receiveMessage(m Message) error {
 			return err
 		}
 		idx.mu.Lock()
-		idx.etag = obj.ETag
+		idx.createdAt = obj.CreatedAt
 		idx.mu.Unlock()
 	case *DeleteIndexMessage:
 		if err := s.holder.DeleteIndex(obj.Index); err != nil {
@@ -735,7 +735,7 @@ func (s *Server) receiveMessage(m Message) error {
 			return err
 		}
 		fld.mu.Lock()
-		fld.etag = obj.ETag
+		fld.createdAt = obj.CreatedAt
 		fld.mu.Unlock()
 	case *DeleteFieldMessage:
 		idx := s.holder.Index(obj.Index)

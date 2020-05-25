@@ -193,16 +193,16 @@ func TestAPI_Import(t *testing.T) {
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
-		if index.ETag() == 0 {
-			t.Fatal("index etag is empty")
+		if index.CreatedAt() == 0 {
+			t.Fatal("index createdAt is empty")
 		}
 
 		field, err := m0.API.CreateField(ctx, indexName, fieldName, pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, 100))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
-		if field.ETag() == 0 {
-			t.Fatal("field etag is empty")
+		if field.CreatedAt() == 0 {
+			t.Fatal("field createdAt is empty")
 		}
 
 		rowID := uint64(1)
@@ -222,12 +222,14 @@ func TestAPI_Import(t *testing.T) {
 		// Import data with keys to the coordinator (node0) and verify that it gets
 		// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
 		req := &pilosa.ImportRequest{
-			Index:      indexName,
-			Field:      fieldName,
-			Shard:      0,
-			RowIDs:     rowIDs,
-			ColumnKeys: colKeys,
-			Timestamps: timestamps,
+			Index:          indexName,
+			IndexCreatedAt: index.CreatedAt(),
+			Field:          fieldName,
+			FieldCreatedAt: field.CreatedAt(),
+			Shard:          0,
+			RowIDs:         rowIDs,
+			ColumnKeys:     colKeys,
+			Timestamps:     timestamps,
 		}
 		if err := m0.API.Import(ctx, req); err != nil {
 			t.Fatal(err)

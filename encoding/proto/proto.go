@@ -403,27 +403,31 @@ func (s Serializer) encodeImportResponse(m *pilosa.ImportResponse) *internal.Imp
 
 func (s Serializer) encodeImportRequest(m *pilosa.ImportRequest) *internal.ImportRequest {
 	return &internal.ImportRequest{
-		Index:      m.Index,
-		Field:      m.Field,
-		Shard:      m.Shard,
-		RowIDs:     m.RowIDs,
-		ColumnIDs:  m.ColumnIDs,
-		RowKeys:    m.RowKeys,
-		ColumnKeys: m.ColumnKeys,
-		Timestamps: m.Timestamps,
+		Index:          m.Index,
+		Field:          m.Field,
+		IndexCreatedAt: m.IndexCreatedAt,
+		FieldCreatedAt: m.FieldCreatedAt,
+		Shard:          m.Shard,
+		RowIDs:         m.RowIDs,
+		ColumnIDs:      m.ColumnIDs,
+		RowKeys:        m.RowKeys,
+		ColumnKeys:     m.ColumnKeys,
+		Timestamps:     m.Timestamps,
 	}
 }
 
 func (s Serializer) encodeImportValueRequest(m *pilosa.ImportValueRequest) *internal.ImportValueRequest {
 	return &internal.ImportValueRequest{
-		Index:        m.Index,
-		Field:        m.Field,
-		Shard:        m.Shard,
-		ColumnIDs:    m.ColumnIDs,
-		ColumnKeys:   m.ColumnKeys,
-		Values:       m.Values,
-		FloatValues:  m.FloatValues,
-		StringValues: m.StringValues,
+		Index:          m.Index,
+		Field:          m.Field,
+		IndexCreatedAt: m.IndexCreatedAt,
+		FieldCreatedAt: m.FieldCreatedAt,
+		Shard:          m.Shard,
+		ColumnIDs:      m.ColumnIDs,
+		ColumnKeys:     m.ColumnKeys,
+		Values:         m.Values,
+		FloatValues:    m.FloatValues,
+		StringValues:   m.StringValues,
 	}
 }
 
@@ -438,10 +442,12 @@ func (s Serializer) encodeImportRoaringRequest(m *pilosa.ImportRoaringRequest) *
 		i++
 	}
 	return &internal.ImportRoaringRequest{
-		Clear:  m.Clear,
-		Action: m.Action,
-		Block:  uint64(m.Block),
-		Views:  views,
+		IndexCreatedAt: m.IndexCreatedAt,
+		FieldCreatedAt: m.FieldCreatedAt,
+		Clear:          m.Clear,
+		Action:         m.Action,
+		Block:          uint64(m.Block),
+		Views:          views,
 	}
 }
 
@@ -593,10 +599,10 @@ func (s Serializer) encodeIndexInfos(idxs []*pilosa.IndexInfo) []*internal.Index
 
 func (s Serializer) encodeIndexInfo(idx *pilosa.IndexInfo) *internal.Index {
 	return &internal.Index{
-		Name:    idx.Name,
-		ETag:    idx.ETag,
-		Options: s.encodeIndexMeta(&idx.Options),
-		Fields:  s.encodeFieldInfos(idx.Fields),
+		Name:      idx.Name,
+		CreatedAt: idx.CreatedAt,
+		Options:   s.encodeIndexMeta(&idx.Options),
+		Fields:    s.encodeFieldInfos(idx.Fields),
 	}
 }
 
@@ -610,10 +616,10 @@ func (s Serializer) encodeFieldInfos(fs []*pilosa.FieldInfo) []*internal.Field {
 
 func (s Serializer) encodeFieldInfo(f *pilosa.FieldInfo) *internal.Field {
 	ifield := &internal.Field{
-		Name:  f.Name,
-		ETag:  f.ETag,
-		Meta:  s.encodeFieldOptions(&f.Options),
-		Views: make([]string, 0, len(f.Views)),
+		Name:      f.Name,
+		CreatedAt: f.CreatedAt,
+		Meta:      s.encodeFieldOptions(&f.Options),
+		Views:     make([]string, 0, len(f.Views)),
 	}
 
 	for _, viewinfo := range f.Views {
@@ -687,9 +693,9 @@ func (s Serializer) encodeCreateShardMessage(m *pilosa.CreateShardMessage) *inte
 
 func (s Serializer) encodeCreateIndexMessage(m *pilosa.CreateIndexMessage) *internal.CreateIndexMessage {
 	return &internal.CreateIndexMessage{
-		Index: m.Index,
-		ETag:  m.ETag,
-		Meta:  s.encodeIndexMeta(m.Meta),
+		Index:     m.Index,
+		CreatedAt: m.CreatedAt,
+		Meta:      s.encodeIndexMeta(m.Meta),
 	}
 }
 
@@ -708,10 +714,10 @@ func (s Serializer) encodeDeleteIndexMessage(m *pilosa.DeleteIndexMessage) *inte
 
 func (s Serializer) encodeCreateFieldMessage(m *pilosa.CreateFieldMessage) *internal.CreateFieldMessage {
 	return &internal.CreateFieldMessage{
-		Index: m.Index,
-		Field: m.Field,
-		ETag:  m.ETag,
-		Meta:  s.encodeFieldOptions(m.Meta),
+		Index:     m.Index,
+		Field:     m.Field,
+		CreatedAt: m.CreatedAt,
+		Meta:      s.encodeFieldOptions(m.Meta),
 	}
 }
 
@@ -790,9 +796,9 @@ func (s Serializer) encodeNodeStatus(m *pilosa.NodeStatus) *internal.NodeStatus 
 
 func (s Serializer) encodeIndexStatus(m *pilosa.IndexStatus) *internal.IndexStatus {
 	return &internal.IndexStatus{
-		Name:   m.Name,
-		ETag:   m.ETag,
-		Fields: s.encodeFieldStatuses(m.Fields),
+		Name:      m.Name,
+		CreatedAt: m.CreatedAt,
+		Fields:    s.encodeFieldStatuses(m.Fields),
 	}
 }
 
@@ -807,7 +813,7 @@ func (s Serializer) encodeIndexStatuses(a []*pilosa.IndexStatus) []*internal.Ind
 func (s Serializer) encodeFieldStatus(m *pilosa.FieldStatus) *internal.FieldStatus {
 	return &internal.FieldStatus{
 		Name:            m.Name,
-		ETag:            m.ETag,
+		CreatedAt:       m.CreatedAt,
 		AvailableShards: m.AvailableShards.Slice(),
 	}
 }
@@ -944,7 +950,7 @@ func (s Serializer) decodeIndexes(idxs []*internal.Index, m []*pilosa.IndexInfo)
 
 func (s Serializer) decodeIndex(idx *internal.Index, m *pilosa.IndexInfo) {
 	m.Name = idx.Name
-	m.ETag = idx.ETag
+	m.CreatedAt = idx.CreatedAt
 	m.Options = pilosa.IndexOptions{}
 	s.decodeIndexMeta(idx.Options, &m.Options)
 	m.Fields = make([]*pilosa.FieldInfo, len(idx.Fields))
@@ -960,7 +966,7 @@ func (s Serializer) decodeFields(fs []*internal.Field, m []*pilosa.FieldInfo) {
 
 func (s Serializer) decodeField(f *internal.Field, m *pilosa.FieldInfo) {
 	m.Name = f.Name
-	m.ETag = f.ETag
+	m.CreatedAt = f.CreatedAt
 	m.Options = pilosa.FieldOptions{}
 	s.decodeFieldOptions(f.Meta, &m.Options)
 	m.Views = make([]*pilosa.ViewInfo, 0, len(f.Views))
@@ -1024,7 +1030,7 @@ func (s Serializer) decodeCreateShardMessage(pb *internal.CreateShardMessage, m 
 
 func (s Serializer) decodeCreateIndexMessage(pb *internal.CreateIndexMessage, m *pilosa.CreateIndexMessage) {
 	m.Index = pb.Index
-	m.ETag = pb.ETag
+	m.CreatedAt = pb.CreatedAt
 	m.Meta = &pilosa.IndexOptions{}
 	s.decodeIndexMeta(pb.Meta, m.Meta)
 }
@@ -1043,7 +1049,7 @@ func (s Serializer) decodeDeleteIndexMessage(pb *internal.DeleteIndexMessage, m 
 func (s Serializer) decodeCreateFieldMessage(pb *internal.CreateFieldMessage, m *pilosa.CreateFieldMessage) {
 	m.Index = pb.Index
 	m.Field = pb.Field
-	m.ETag = pb.ETag
+	m.CreatedAt = pb.CreatedAt
 	m.Meta = &pilosa.FieldOptions{}
 	s.decodeFieldOptions(pb.Meta, m.Meta)
 }
@@ -1117,7 +1123,7 @@ func (s Serializer) decodeIndexStatuses(a []*internal.IndexStatus) []*pilosa.Ind
 
 func (s Serializer) decodeIndexStatus(pb *internal.IndexStatus, m *pilosa.IndexStatus) {
 	m.Name = pb.Name
-	m.ETag = pb.ETag
+	m.CreatedAt = pb.CreatedAt
 	m.Fields = s.decodeFieldStatuses(pb.Fields)
 }
 
@@ -1132,7 +1138,7 @@ func (s Serializer) decodeFieldStatuses(a []*internal.FieldStatus) []*pilosa.Fie
 
 func (s Serializer) decodeFieldStatus(pb *internal.FieldStatus, m *pilosa.FieldStatus) {
 	m.Name = pb.Name
-	m.ETag = pb.ETag
+	m.CreatedAt = pb.CreatedAt
 	m.AvailableShards = roaring.NewBitmap(pb.AvailableShards...)
 }
 
@@ -1161,6 +1167,8 @@ func (s Serializer) decodeImportRequest(pb *internal.ImportRequest, m *pilosa.Im
 	m.RowKeys = pb.RowKeys
 	m.ColumnKeys = pb.ColumnKeys
 	m.Timestamps = pb.Timestamps
+	m.IndexCreatedAt = pb.IndexCreatedAt
+	m.FieldCreatedAt = pb.FieldCreatedAt
 }
 
 func (s Serializer) decodeImportValueRequest(pb *internal.ImportValueRequest, m *pilosa.ImportValueRequest) {
@@ -1172,6 +1180,8 @@ func (s Serializer) decodeImportValueRequest(pb *internal.ImportValueRequest, m 
 	m.Values = pb.Values
 	m.FloatValues = pb.FloatValues
 	m.StringValues = pb.StringValues
+	m.IndexCreatedAt = pb.IndexCreatedAt
+	m.FieldCreatedAt = pb.FieldCreatedAt
 }
 
 func (s Serializer) decodeImportRoaringRequest(pb *internal.ImportRoaringRequest, m *pilosa.ImportRoaringRequest) {
@@ -1183,6 +1193,8 @@ func (s Serializer) decodeImportRoaringRequest(pb *internal.ImportRoaringRequest
 	m.Action = pb.Action
 	m.Block = int(pb.Block)
 	m.Views = views
+	m.IndexCreatedAt = pb.IndexCreatedAt
+	m.FieldCreatedAt = pb.FieldCreatedAt
 }
 
 func (s Serializer) decodeImportColumnAttrsRequest(pb *internal.ImportColumnAttrsRequest, m *pilosa.ImportColumnAttrsRequest) {

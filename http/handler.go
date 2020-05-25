@@ -401,9 +401,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // successResponse is a general success/error struct for http responses.
 type successResponse struct {
-	h       *Handler
-	Success bool   `json:"success"`
-	Error   *Error `json:"error,omitempty"`
+	h         *Handler
+	Success   bool   `json:"success"`
+	Name      string `json:"name,omitempty"`
+	CreatedAt int64  `json:"createdAt,omitempty"`
+	Error     *Error `json:"error,omitempty"`
 }
 
 // check determines success or failure based on the error.
@@ -773,7 +775,7 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := successResponse{h: h}
+	resp := successResponse{h: h, Name: indexName}
 
 	// Decode request.
 	req := postIndexRequest{
@@ -788,11 +790,12 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	index, err := h.api.CreateIndex(r.Context(), indexName, req.Options)
+
 	if index != nil {
-		w.Header().Add("ETag", strconv.FormatInt(index.ETag(), 10))
-	} else if _, ok = err.(pilosa.ConflictError); ok {
+		resp.CreatedAt = index.CreatedAt()
+	} else if _, ok = errors.Cause(err).(pilosa.ConflictError); ok {
 		if index, _ = h.api.Index(r.Context(), indexName); index != nil {
-			w.Header().Add("ETag", strconv.FormatInt(index.ETag(), 10))
+			resp.CreatedAt = index.CreatedAt()
 		}
 	}
 	resp.write(w, err)
@@ -859,7 +862,7 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := successResponse{h: h}
+	resp := successResponse{h: h, Name: fieldName}
 
 	// Decode request.
 	var req postFieldRequest
@@ -937,10 +940,10 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if field != nil {
-		w.Header().Add("ETag", strconv.FormatInt(field.ETag(), 10))
-	} else if _, ok = err.(pilosa.ConflictError); ok {
+		resp.CreatedAt = field.CreatedAt()
+	} else if _, ok = errors.Cause(err).(pilosa.ConflictError); ok {
 		if field, _ = h.api.Field(r.Context(), indexName, fieldName); field != nil {
-			w.Header().Add("ETag", strconv.FormatInt(field.ETag(), 10))
+			resp.CreatedAt = field.CreatedAt()
 		}
 	}
 	resp.write(w, err)
@@ -1339,30 +1342,6 @@ func validateProtobufHeader(r *http.Request) (error string, code int) {
 	if r.Header.Get("Accept") != "application/x-protobuf" {
 		return "Not acceptable", http.StatusNotAcceptable
 	}
-	return
-}
-
-func validateETagHeader(r *http.Request, index *pilosa.Index, field *pilosa.Field) (error string, code int) {
-	etags := strings.Split(r.Header.Get("If-Match"), ",")
-	netags := len(etags)
-	for i := 0; i < netags && i < 2; i++ {
-		etags[i] = strings.TrimLeft(strings.TrimSpace(etags[i]), "W/")
-	}
-	if netags == 1 && etags[0] != "" && etags[0] != "*" {
-		return "Precondition Failed", http.StatusPreconditionFailed
-	}
-	if netags > 1 {
-		indexETag := etags[0]
-		if indexETag != "" && strconv.FormatInt(index.ETag(), 10) != indexETag {
-			return "Precondition Failed", http.StatusPreconditionFailed
-		}
-
-		fieldETag := etags[1]
-		if fieldETag != "" && strconv.FormatInt(field.ETag(), 10) != fieldETag {
-			return "Precondition Failed", http.StatusPreconditionFailed
-		}
-	}
-
 	return
 }
 
@@ -1868,12 +1847,6 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify if request matches etag
-	if error, code := validateETagHeader(r, index, field); error != "" {
-		http.Error(w, error, code)
-		return
-	}
-
 	// If the clear flag is true, treat the import as clear bits.
 	q := r.URL.Query()
 	doClear := q.Get("clear") == "true"
@@ -1902,7 +1875,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 
 		if err := h.api.ImportValue(r.Context(), req, opts...); err != nil {
 			switch errors.Cause(err) {
-			case pilosa.ErrClusterDoesNotOwnShard:
+			case pilosa.ErrClusterDoesNotOwnShard, pilosa.ErrPreconditionFailed:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
 			default:
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1920,7 +1893,7 @@ func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
 
 		if err := h.api.Import(r.Context(), req, opts...); err != nil {
 			switch errors.Cause(err) {
-			case pilosa.ErrClusterDoesNotOwnShard:
+			case pilosa.ErrClusterDoesNotOwnShard, pilosa.ErrPreconditionFailed:
 				http.Error(w, err.Error(), http.StatusPreconditionFailed)
 			default:
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1984,27 +1957,7 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 	// Get index and field type to determine how to handle the
 	// import data.
 	indexName := mux.Vars(r)["index"]
-	index, err := h.api.Index(r.Context(), indexName)
-	if err != nil {
-		if errors.Cause(err) == pilosa.ErrIndexNotFound {
-			http.Error(w, err.Error(), http.StatusNotFound)
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
 	fieldName := mux.Vars(r)["field"]
-	field := index.Field(fieldName)
-	if field == nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-
-	// Verify if request matches etag
-	if error, code := validateETagHeader(r, index, field); error != "" {
-		http.Error(w, error, code)
-		return
-	}
 
 	q := r.URL.Query()
 	remoteStr := q.Get("remote")
@@ -2047,6 +2000,10 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 		resp.Err = err.Error()
 		if _, ok := err.(pilosa.BadRequestError); ok {
 			w.WriteHeader(http.StatusBadRequest)
+		} else if _, ok := err.(pilosa.NotFoundError); ok {
+			w.WriteHeader(http.StatusNotFound)
+		} else if _, ok := err.(pilosa.PreconditionFailedError); ok {
+			w.WriteHeader(http.StatusPreconditionFailed)
 		} else {
 			w.WriteHeader(http.StatusInternalServerError)
 		}

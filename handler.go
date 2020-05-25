@@ -114,8 +114,10 @@ var NopHandler Handler = nopHandler{}
 // ImportValueRequest describes the import request structure
 // for a value (BSI) import.
 type ImportValueRequest struct {
-	Index string
-	Field string
+	Index          string
+	IndexCreatedAt int64
+	Field          string
+	FieldCreatedAt int64
 	// if Shard is MaxUint64 (an impossible shard value), this
 	// indicates that the column IDs may come from multiple shards.
 	Shard        uint64
@@ -141,6 +143,11 @@ func (ivr *ImportValueRequest) Swap(i, j int) {
 
 // Validate ensures that the payload of the request is valid.
 func (ivr *ImportValueRequest) Validate() error {
+	return ivr.ValidateWithTimestamp(ivr.IndexCreatedAt, ivr.FieldCreatedAt)
+}
+
+// ValidateWithTimestamp ensures that the payload of the request is valid.
+func (ivr *ImportValueRequest) ValidateWithTimestamp(indexCreatedAt, fieldCreatedAt int64) error {
 	if ivr.Index == "" || ivr.Field == "" {
 		return errors.Errorf("index and field required, but got '%s' and '%s'", ivr.Index, ivr.Field)
 	}
@@ -160,6 +167,11 @@ func (ivr *ImportValueRequest) Validate() error {
 	if valueSetCount > 1 {
 		return errors.Errorf("must pass ints, floats, or strings but not multiple")
 	}
+	if ivr.IndexCreatedAt != 0 && ivr.FieldCreatedAt != 0 {
+		if ivr.IndexCreatedAt != indexCreatedAt || ivr.FieldCreatedAt != fieldCreatedAt {
+			return ErrPreconditionFailed
+		}
+	}
 	return nil
 }
 
@@ -176,14 +188,26 @@ type ImportColumnAttrsRequest struct {
 // ImportRequest describes the import request structure
 // for an import.
 type ImportRequest struct {
-	Index      string
-	Field      string
-	Shard      uint64
-	RowIDs     []uint64
-	ColumnIDs  []uint64
-	RowKeys    []string
-	ColumnKeys []string
-	Timestamps []int64
+	Index          string
+	IndexCreatedAt int64
+	Field          string
+	FieldCreatedAt int64
+	Shard          uint64
+	RowIDs         []uint64
+	ColumnIDs      []uint64
+	RowKeys        []string
+	ColumnKeys     []string
+	Timestamps     []int64
+}
+
+// ValidateWithTimestamp ensures that the payload of the request is valid.
+func (ir *ImportRequest) ValidateWithTimestamp(indexCreatedAt, fieldCreatedAt int64) error {
+	if ir.IndexCreatedAt != 0 && ir.FieldCreatedAt != 0 {
+		if ir.IndexCreatedAt != indexCreatedAt || ir.FieldCreatedAt != fieldCreatedAt {
+			return ErrPreconditionFailed
+		}
+	}
+	return nil
 }
 
 const (
@@ -195,10 +219,22 @@ const (
 // ImportRoaringRequest describes the import request structure
 // for an import containing roaring-encoded data.
 type ImportRoaringRequest struct {
-	Clear  bool
-	Action string // [set, clear, overwrite]
-	Block  int
-	Views  map[string][]byte
+	IndexCreatedAt int64
+	FieldCreatedAt int64
+	Clear          bool
+	Action         string // [set, clear, overwrite]
+	Block          int
+	Views          map[string][]byte
+}
+
+// ValidateWithTimestamp ensures that the payload of the request is valid.
+func (irr *ImportRoaringRequest) ValidateWithTimestamp(indexCreatedAt, fieldCreatedAt int64) error {
+	if irr.IndexCreatedAt != 0 && irr.FieldCreatedAt != 0 {
+		if irr.IndexCreatedAt != indexCreatedAt || irr.FieldCreatedAt != fieldCreatedAt {
+			return ErrPreconditionFailed
+		}
+	}
+	return nil
 }
 
 // ImportResponse is the structured response of an import.

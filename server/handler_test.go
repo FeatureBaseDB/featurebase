@@ -195,9 +195,9 @@ func TestHandler_Endpoints(t *testing.T) {
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
 		}
-		body := w.Body.String()
-		target := fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%[1]d}]}
-`, pilosa.ShardWidth)
+
+		body := strings.TrimSpace(w.Body.String())
+		target := fmt.Sprintf(`{"indexes":[{"name":"i0","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}},{"name":"f1","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%d},{"name":"i1","options":{"keys":false,"trackExistence":false},"fields":[{"name":"f0","options":{"type":"set","cacheType":"ranked","cacheSize":50000,"keys":false}}],"shardWidth":%[1]d}]}`, pilosa.ShardWidth)
 		if body != target {
 			t.Fatalf("%s != %s", target, body)
 		}
@@ -213,9 +213,11 @@ func TestHandler_Endpoints(t *testing.T) {
 		idx := indexInfo[0]
 		fld := indexInfo[0].Fields[0]
 		msg := pilosa.ImportRequest{
-			Index: idx.Name,
-			Field: fld.Name,
-			Shard: 0,
+			Index:          idx.Name,
+			IndexCreatedAt: idx.CreatedAt,
+			Field:          fld.Name,
+			FieldCreatedAt: fld.CreatedAt,
+			Shard:          0,
 		}
 		ser := proto.Serializer{}
 		data, err := ser.Marshal(&msg)
@@ -223,29 +225,30 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatal(err)
 		}
 		path := fmt.Sprintf("/index/%s/field/%s/import", idx.Name, fld.Name)
-		etag := fmt.Sprintf("%d, %d", idx.ETag, fld.ETag)
-
 		httpReq := test.MustNewHTTPRequest("POST", path, bytes.NewBuffer(data))
 		httpReq.Header.Set("Content-Type", "application/x-protobuf")
 		httpReq.Header.Set("Accept", "application/x-protobuf")
-		httpReq.Header.Set("If-Match", etag)
 
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httpReq)
-		if w.Body.String() != "" {
+		if w.Code != 200 {
 			t.Fatalf(w.Body.String())
 		}
 
-		etag = "invalid-index-etag, invalid-field-etag"
-
+		msg.IndexCreatedAt = -idx.CreatedAt
+		msg.FieldCreatedAt = -fld.CreatedAt
+		data, err = ser.Marshal(&msg)
+		if err != nil {
+			t.Fatal(err)
+		}
 		httpReq = test.MustNewHTTPRequest("POST", path, bytes.NewBuffer(data))
 		httpReq.Header.Set("Content-Type", "application/x-protobuf")
 		httpReq.Header.Set("Accept", "application/x-protobuf")
-		httpReq.Header.Set("If-Match", etag)
 
+		w = httptest.NewRecorder()
 		h.ServeHTTP(w, httpReq)
 
-		if strings.TrimSpace(w.Body.String()) != "Precondition Failed" {
+		if w.Code != 412 {
 			t.Fatal("expected: Precondition Failed, got:" + w.Body.String())
 		}
 	})
@@ -253,17 +256,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("ImportRoaring", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		roaringData, _ := hex.DecodeString("3B3001000100000900010000000100010009000100")
-		msg := pilosa.ImportRoaringRequest{
-			Clear: false,
-			Views: map[string][]byte{
-				"": roaringData,
-			},
-		}
-		ser := proto.Serializer{}
-		data, err := ser.Marshal(&msg)
-		if err != nil {
-			t.Fatal(err)
-		}
+
 		idx, err := cmd.API.Index(context.Background(), "i0")
 		if err != nil {
 			t.Fatal(err)
@@ -273,12 +266,25 @@ func TestHandler_Endpoints(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		msg := pilosa.ImportRoaringRequest{
+			IndexCreatedAt: idx.CreatedAt(),
+			FieldCreatedAt: fld.CreatedAt(),
+			Clear:          false,
+			Views: map[string][]byte{
+				"": roaringData,
+			},
+		}
+		ser := proto.Serializer{}
+		data, err := ser.Marshal(&msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		httpReq := test.MustNewHTTPRequest("POST", "/index/i0/field/f1/import-roaring/0", bytes.NewBuffer(data))
 		httpReq.Header.Set("Content-Type", "application/x-protobuf")
 		httpReq.Header.Set("Accept", "application/x-protobuf")
-		httpReq.Header.Set("If-Match", fmt.Sprintf("%d, %d", idx.ETag(), fld.ETag()))
 		h.ServeHTTP(w, httpReq)
-		if w.Body.String() != "" {
+		if w.Code != 200 {
 			t.Fatalf("Unexpected response body: %s", w.Body.String())
 		}
 		resp, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i0", Query: "TopN(f1)"})
@@ -821,8 +827,15 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i", strings.NewReader("")))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d, body: %s", w.Code, w.Body.String())
-		} else if w.Body.String() != `{"success":true}`+"\n" {
-			t.Fatalf("unexpected response body: %s", w.Body.String())
+		} else {
+			var resp struct {
+				Success bool `json:"success"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+
+			if !resp.Success {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
 		}
 		// Verify index is gone.
 		if hldr.Index("i") != nil {
@@ -839,10 +852,18 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, test.MustNewHTTPRequest("DELETE", "/index/i/field/f1", strings.NewReader("")))
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d, body: %s", w.Code, w.Body.String())
-		} else if body := w.Body.String(); body != `{"success":true}`+"\n" {
-			t.Fatalf("unexpected body: %s", body)
-		} else if f := hldr.Index("i").Field("f1"); f != nil {
-			t.Fatal("expected nil field")
+		} else {
+			var resp struct {
+				Success bool `json:"success"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if !resp.Success {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
+
+			if f := hldr.Index("i").Field("f1"); f != nil {
+				t.Fatal("expected nil field")
+			}
 		}
 	})
 
@@ -1020,8 +1041,14 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":true}`+"\n" {
-			t.Fatalf("unexpected body: %q", w.Body.String())
+		} else {
+			var resp struct {
+				Success bool `json:"success"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if !resp.Success {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
 		}
 
 		// create index again
@@ -1030,8 +1057,16 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusConflict {
 			t.Errorf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":false,"error":{"message":"creating index: index already exists"}}`+"\n" {
-			t.Errorf("unexpected body: %q", w.Body.String())
+		} else {
+			var resp struct {
+				Success   bool   `json:"success"`
+				Name      string `json:"name,omitempty"`
+				CreatedAt int64  `json:"createdAt,omitempty"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if resp.Success || resp.Name == "" || resp.CreatedAt == 0 {
+				t.Errorf("unexpected body: %q", w.Body.String())
+			}
 		}
 
 		// create field
@@ -1040,8 +1075,16 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":true}`+"\n" {
-			t.Fatalf("unexpected body: %q", w.Body.String())
+		} else {
+			var resp struct {
+				Success   bool   `json:"success"`
+				Name      string `json:"name,omitempty"`
+				CreatedAt int64  `json:"createdAt,omitempty"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if !resp.Success || resp.Name == "" || resp.CreatedAt == 0 {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
 		}
 
 		// create field again
@@ -1050,8 +1093,16 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusConflict {
 			t.Errorf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":false,"error":{"message":"creating field: field already exists"}}`+"\n" {
-			t.Errorf("unexpected body: %q", w.Body.String())
+		} else {
+			var resp struct {
+				Success   bool   `json:"success"`
+				Name      string `json:"name,omitempty"`
+				CreatedAt int64  `json:"createdAt,omitempty"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if resp.Success || resp.Name == "" || resp.CreatedAt == 0 {
+				t.Errorf("unexpected body: %q", w.Body.String())
+			}
 		}
 
 		// delete field
@@ -1060,8 +1111,14 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":true}`+"\n" {
-			t.Fatalf("unexpected body: %q", w.Body.String())
+		} else {
+			var resp struct {
+				Success bool `json:"success"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if !resp.Success {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
 		}
 
 		// delete field again
@@ -1080,8 +1137,14 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":true}`+"\n" {
-			t.Fatalf("unexpected body: %q", w.Body.String())
+		} else {
+			var resp struct {
+				Success bool `json:"success"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if !resp.Success {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
 		}
 
 		// delete index again
@@ -1090,8 +1153,14 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusNotFound {
 			t.Errorf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":false,"error":{"message":"deleting index: index not found"}}`+"\n" {
-			t.Errorf("unexpected body: %q", w.Body.String())
+		} else {
+			var resp struct {
+				Success bool `json:"success"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if resp.Success {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
 		}
 	})
 
@@ -1102,8 +1171,14 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":true}`+"\n" {
-			t.Fatalf("unexpected body: %q", w.Body.String())
+		} else {
+			var resp struct {
+				Success bool `json:"success"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if !resp.Success {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
 		}
 
 		// create field
@@ -1112,8 +1187,14 @@ func TestHandler_Endpoints(t *testing.T) {
 		h.ServeHTTP(w, r)
 		if w.Code != gohttp.StatusOK {
 			t.Fatalf("unexpected status code: %d", w.Code)
-		} else if w.Body.String() != `{"success":true}`+"\n" {
-			t.Fatalf("unexpected body: %q", w.Body.String())
+		} else {
+			var resp struct {
+				Success bool `json:"success"`
+			}
+			_ = json.Unmarshal(w.Body.Bytes(), &resp)
+			if !resp.Success {
+				t.Fatalf("unexpected body: %q", w.Body.String())
+			}
 		}
 
 		// set some bits

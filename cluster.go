@@ -2144,7 +2144,7 @@ func (c *cluster) nodeStatus() *NodeStatus {
 	}
 	var availableShards *roaring.Bitmap
 	for _, idx := range ns.Schema.Indexes {
-		is := &IndexStatus{Name: idx.Name, ETag: idx.ETag}
+		is := &IndexStatus{Name: idx.Name, CreatedAt: idx.CreatedAt}
 		for _, f := range idx.Fields {
 			if field := c.holder.Field(idx.Name, f.Name); field != nil {
 				availableShards = field.AvailableShards()
@@ -2153,7 +2153,7 @@ func (c *cluster) nodeStatus() *NodeStatus {
 			}
 			is.Fields = append(is.Fields, &FieldStatus{
 				Name:            f.Name,
-				ETag:            f.ETag,
+				CreatedAt:       f.CreatedAt,
 				AvailableShards: availableShards,
 			})
 		}
@@ -2528,9 +2528,9 @@ type CreateShardMessage struct {
 
 // CreateIndexMessage is an internal message indicating index creation.
 type CreateIndexMessage struct {
-	Index string
-	ETag  int64
-	Meta  *IndexOptions
+	Index     string
+	CreatedAt int64
+	Meta      *IndexOptions
 }
 
 // DeleteIndexMessage is an internal message indicating index deletion.
@@ -2540,10 +2540,10 @@ type DeleteIndexMessage struct {
 
 // CreateFieldMessage is an internal message indicating field creation.
 type CreateFieldMessage struct {
-	Index string
-	Field string
-	ETag  int64
-	Meta  *FieldOptions
+	Index     string
+	Field     string
+	CreatedAt int64
+	Meta      *FieldOptions
 }
 
 // DeleteFieldMessage is an internal message indicating field deletion.
@@ -2606,15 +2606,15 @@ type NodeStatus struct {
 
 // IndexStatus is an internal message representing the contents of an index.
 type IndexStatus struct {
-	Name   string
-	ETag   int64
-	Fields []*FieldStatus
+	Name      string
+	CreatedAt int64
+	Fields    []*FieldStatus
 }
 
 // FieldStatus is an internal message representing the contents of a field.
 type FieldStatus struct {
 	Name            string
-	ETag            int64
+	CreatedAt       int64
 	AvailableShards *roaring.Bitmap
 }
 

@@ -235,8 +235,8 @@ func (h *Holder) Open() error {
 		}
 
 		if h.isCoordinator() {
-			index.etag = newETag()
-			err = index.OpenWithETag()
+			index.createdAt = timestamp()
+			err = index.OpenWithTimestamp()
 		} else {
 			err = index.Open()
 		}
@@ -386,15 +386,15 @@ func (h *Holder) Schema() []*IndexInfo {
 	var a []*IndexInfo
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{
-			Name:    index.Name(),
-			ETag:    index.ETag(),
-			Options: index.Options(),
+			Name:      index.Name(),
+			CreatedAt: index.CreatedAt(),
+			Options:   index.Options(),
 		}
 		for _, field := range index.Fields() {
 			fi := &FieldInfo{
-				Name:    field.Name(),
-				ETag:    field.ETag(),
-				Options: field.Options(),
+				Name:      field.Name(),
+				CreatedAt: field.CreatedAt(),
+				Options:   field.Options(),
 			}
 			for _, view := range field.views() {
 				fi.Views = append(fi.Views, &ViewInfo{Name: view.name})
@@ -415,7 +415,7 @@ func (h *Holder) limitedSchema() []*IndexInfo {
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{
 			Name:       index.Name(),
-			ETag:       index.ETag(),
+			CreatedAt:  index.CreatedAt(),
 			Options:    index.Options(),
 			ShardWidth: ShardWidth,
 		}
@@ -424,9 +424,9 @@ func (h *Holder) limitedSchema() []*IndexInfo {
 				continue
 			}
 			fi := &FieldInfo{
-				Name:    field.Name(),
-				ETag:    field.ETag(),
-				Options: field.Options(),
+				Name:      field.Name(),
+				CreatedAt: field.CreatedAt(),
+				Options:   field.Options(),
 			}
 			di.Fields = append(di.Fields, fi)
 		}
@@ -445,9 +445,9 @@ func (h *Holder) applySchema(schema *Schema) error {
 		if err != nil {
 			return errors.Wrap(err, "creating index")
 		}
-		if i.ETag != 0 {
+		if i.CreatedAt != 0 {
 			idx.mu.Lock()
-			idx.etag = i.ETag
+			idx.createdAt = i.CreatedAt
 			idx.mu.Unlock()
 		}
 
@@ -457,9 +457,9 @@ func (h *Holder) applySchema(schema *Schema) error {
 			if err != nil {
 				return errors.Wrap(err, "creating field")
 			}
-			if f.ETag != 0 {
+			if f.CreatedAt != 0 {
 				fld.mu.Lock()
-				fld.etag = f.ETag
+				fld.createdAt = f.CreatedAt
 				fld.mu.Unlock()
 			}
 

@@ -36,11 +36,11 @@ import (
 
 // Index represents a container for fields.
 type Index struct {
-	mu   sync.RWMutex
-	etag int64
-	path string
-	name string
-	keys bool // use string keys
+	mu        sync.RWMutex
+	createdAt int64
+	path      string
+	name      string
+	keys      bool // use string keys
 
 	// Existence tracking.
 	trackExistence bool
@@ -104,11 +104,11 @@ func NewIndex(path, name string, partitionN int) (*Index, error) {
 	}, nil
 }
 
-// ETag is an identifier for a specific version of an index.
-func (i *Index) ETag() int64 {
+// CreatedAt is an timestamp for a specific version of an index.
+func (i *Index) CreatedAt() int64 {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
-	return i.etag
+	return i.createdAt
 }
 
 // Name returns name of the index.
@@ -150,10 +150,10 @@ func (i *Index) options() IndexOptions {
 // Open opens and initializes the index.
 func (i *Index) Open() error { return i.open(false) }
 
-// OpenWithETag opens and initializes the index and set a new ETag for fields.
-func (i *Index) OpenWithETag() error { return i.open(true) }
+// OpenWithTimestamp opens and initializes the index and set a new CreatedAt timestamp for fields.
+func (i *Index) OpenWithTimestamp() error { return i.open(true) }
 
-func (i *Index) open(withETag bool) (err error) {
+func (i *Index) open(withTimestamp bool) (err error) {
 	// Ensure the path exists.
 	i.logger.Debugf("ensure index path exists: %s", i.path)
 	if err := os.MkdirAll(i.path, 0777); err != nil {
@@ -167,7 +167,7 @@ func (i *Index) open(withETag bool) (err error) {
 	}
 
 	i.logger.Debugf("open fields for index: %s", i.name)
-	if err := i.openFields(withETag); err != nil {
+	if err := i.openFields(withTimestamp); err != nil {
 		return errors.Wrap(err, "opening fields")
 	}
 
@@ -210,7 +210,7 @@ func (i *Index) open(withETag bool) (err error) {
 var indexQueue = make(chan struct{}, 8)
 
 // openFields opens and initializes the fields inside the index.
-func (i *Index) openFields(withETag bool) error {
+func (i *Index) openFields(withTimestamp bool) error {
 	f, err := os.Open(i.path)
 	if err != nil {
 		return errors.Wrap(err, "opening directory")
@@ -242,8 +242,8 @@ fileLoop:
 				i.logger.Debugf("open field: %s", fi.Name())
 				mu.Lock()
 				fld, err := i.newField(i.fieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
-				if withETag {
-					fld.etag = newETag()
+				if withTimestamp {
+					fld.createdAt = timestamp()
 				}
 				mu.Unlock()
 				if err != nil {
@@ -575,7 +575,7 @@ func (p indexSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 // IndexInfo represents schema information for an index.
 type IndexInfo struct {
 	Name       string       `json:"name"`
-	ETag       int64        `json:"etag,omitempty"`
+	CreatedAt  int64        `json:"createdAt,omitempty"`
 	Options    IndexOptions `json:"options"`
 	Fields     []*FieldInfo `json:"fields"`
 	ShardWidth uint64       `json:"shardWidth"`

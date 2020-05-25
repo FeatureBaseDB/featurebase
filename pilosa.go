@@ -66,6 +66,9 @@ var (
 	// we won't need this error at all by 2.0 though.
 	ErrClusterDoesNotOwnShard = errors.New("node does not own shard")
 
+	// ErrPreconditionFailed is returned when specified index/field createdAt timestamps don't match
+	ErrPreconditionFailed = errors.New("precondition failed")
+
 	ErrNodeIDNotExists    = errors.New("node with provided ID does not exist")
 	ErrNodeNotCoordinator = errors.New("node is not the coordinator")
 	ErrResizeNotRunning   = errors.New("no resize job currently running")
@@ -123,6 +126,15 @@ type NotFoundError struct {
 // newNotFoundError returns err wrapped in a NotFoundError.
 func newNotFoundError(err error) NotFoundError {
 	return NotFoundError{err}
+}
+
+type PreconditionFailedError struct {
+	error
+}
+
+// newPreconditionFailedError returns err wrapped in a PreconditionFailedError.
+func newPreconditionFailedError(err error) PreconditionFailedError {
+	return PreconditionFailedError{err}
 }
 
 // Regular expression to validate index and field names.
@@ -192,7 +204,7 @@ func stringSlicesAreEqual(a, b []string) bool {
 	return true
 }
 
-func newETag() int64 {
+func timestamp() int64 {
 	return time.Now().UTC().UnixNano()
 }
 
