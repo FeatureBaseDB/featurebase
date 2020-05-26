@@ -1009,6 +1009,9 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 	if err != nil {
 		return errors.Wrap(err, "getting index and field")
 	}
+	span.LogKV(
+		"index", req.Index,
+		"field", req.Field)
 
 	// Unless explicitly ignoring key validation (meaning keys have been
 	// translated to ids in a previous step at the coordinator node), then
@@ -1016,6 +1019,7 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 	if !options.IgnoreKeyCheck {
 		// Translate row keys.
 		if field.Keys() {
+			span.LogKV("row_keys", true)
 			if len(req.RowIDs) != 0 {
 				return errors.New("row ids cannot be used because field uses string keys")
 			}
@@ -1026,6 +1030,7 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 
 		// Translate column keys.
 		if index.Keys() {
+			span.LogKV("column_keys", true)
 			if len(req.ColumnIDs) != 0 {
 				return errors.New("column ids cannot be used because index uses string keys")
 			}
@@ -1124,13 +1129,16 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 	if err != nil {
 		return errors.Wrap(err, "getting index and field")
 	}
-
+	span.LogKV(
+		"index", req.Index,
+		"field", req.Field)
 	// Unless explicitly ignoring key validation (meaning keys have been
 	// translate to ids in a previous step at the coordinator node), then
 	// check to see if keys need translation.
 	if !options.IgnoreKeyCheck {
 		// Translate column keys.
 		if index.Keys() {
+			span.LogKV("column_keys", true)
 			if len(req.ColumnIDs) != 0 {
 				return errors.New("column ids cannot be used because index uses string keys")
 			}
@@ -1144,6 +1152,7 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 		// the field has a ForeignIndex with keys).
 		if field.Keys() {
 			// Perform translation.
+			span.LogKV("row_keys", true)
 			uints, err := api.cluster.translateIndexKeys(ctx, field.ForeignIndex(), req.StringValues)
 			if err != nil {
 				return err

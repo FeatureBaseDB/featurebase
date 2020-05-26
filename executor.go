@@ -155,6 +155,7 @@ func (e *executor) registerOps(ops []ext.BitmapOp) error {
 // Execute executes a PQL query.
 func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *execOptions) (QueryResponse, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.Execute")
+	span.LogKV("pql", q.String())
 	defer span.Finish()
 
 	resp := QueryResponse{}
@@ -1124,6 +1125,7 @@ func (e *executor) executePrecomputedCall(ctx context.Context, index string, c *
 // executeBitmapCall executes a call that returns a bitmap.
 func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (*Row, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeBitmapCall")
+	span.LogKV("pql_call_name", c.Name)
 	defer span.Finish()
 
 	indexTag := "index:" + index
@@ -1206,6 +1208,7 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, index string, c *
 	}
 
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeBitmapCallShard")
+	span.LogKV("pql_call_name", c.Name)
 	defer span.Finish()
 
 	if _, ok := e.additionalCountOps[c.Name]; ok {
