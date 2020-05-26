@@ -48,5 +48,9 @@ Inspects a data file and provides stats.
 	flags := inspectCmd.Flags()
 	flags.BoolVarP(&inspector.Quiet, "quiet", "q", false, "don't list details of containers")
 	flags.IntVarP(&inspector.Max, "max", "n", 0, "list at most max items (0 = unlimited)")
+	flags.StringVarP(&inspector.InspectOpts.Indexes, "index", "i", "", "filter indexes")
+	flags.StringVarP(&inspector.InspectOpts.Views, "view", "v", "", "filter views")
+	flags.StringVarP(&inspector.InspectOpts.Fields, "field", "f", "", "filter fields")
+	flags.StringVarP(&inspector.InspectOpts.Shards, "shard", "s", "", "filter shards")
 	return inspectCmd
 }

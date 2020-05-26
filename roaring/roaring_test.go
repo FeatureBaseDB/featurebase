@@ -1733,7 +1733,7 @@ type benchmarkSampleData struct {
 var sampleData benchmarkSampleData
 
 func isAllType(b *roaring.Bitmap, typ string) bool {
-	bi := b.Info()
+	bi := b.Info(true)
 	for _, c := range bi.Containers {
 		if c.Type != typ {
 			return false

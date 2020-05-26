@@ -124,6 +124,7 @@ type fragment struct {
 	snapshotCond    sync.Cond
 	snapshotErr     error     // error yielded by the last snapshot operation
 	snapshotStamp   time.Time // timestamp of last snapshot
+	open            bool      // is this fragment actually open?
 
 	// Cache for row counts.
 	CacheType string // passed in by field
@@ -156,6 +157,8 @@ type fragment struct {
 	mutexVector vector
 
 	stats stats.StatsClient
+
+	bitmapInfo *roaring.BitmapInfo
 }
 
 // newFragment returns a new instance of Fragment.
@@ -181,6 +184,23 @@ func newFragment(holder *Holder, path, index, field, view string, shard uint64, 
 
 // cachePath returns the path to the fragment's cache data.
 func (f *fragment) cachePath() string { return f.path + cacheExt }
+
+type FragmentInfo struct {
+	BitmapInfo     roaring.BitmapInfo
+	BlockChecksums []FragmentBlock `json:"BlockChecksums,omitempty"`
+}
+
+func (f *fragment) inspect(params InspectRequestParams) (fi FragmentInfo) {
+	if f.bitmapInfo == nil {
+		fi.BitmapInfo = f.storage.Info(params.Containers)
+	} else {
+		fi.BitmapInfo = *f.bitmapInfo
+	}
+	if params.Checksum {
+		fi.BlockChecksums = f.Blocks()
+	}
+	return fi
+}
 
 // Open opens the underlying storage.
 func (f *fragment) Open() error {
@@ -214,6 +234,7 @@ func (f *fragment) Open() error {
 		f.close()
 		return err
 	}
+	f.open = true
 
 	f.holder.Logger.Debugf("successfully opened index/field/view/fragment: %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	return nil
@@ -223,7 +244,7 @@ func (f *fragment) Open() error {
 // get no data. It tries to write the current storage to the provided file,
 // which is assumed to be the file they didn't get any data from.
 func (f *fragment) emptyStorage(file *os.File) (bool, error) {
-	if f.holder.ReadOnly {
+	if f.holder.Opts.ReadOnly {
 		return false, errors.New("can't flush/create storage for read-only holder")
 	}
 	// No data. We'll mark this for no mapping, clear any existing
@@ -279,7 +300,7 @@ func (f *fragment) importStorage(data []byte, file *os.File, newGen generation, 
 		}
 		f.holder.Logger.Printf("warning: unmarshal storage, file=%s, err=%v", file.Name(), err)
 		trunc, ok := cause.(roaring.FileShouldBeTruncatedError)
-		if ok && !f.holder.ReadOnly {
+		if ok && !f.holder.Opts.ReadOnly {
 			// if the holder is ReadOnly, we silently ignore the "advisory"
 			// error. This may be a bad idea.
 
@@ -342,6 +363,12 @@ func (f *fragment) applyStorage(data []byte, file *os.File, newGen generation, m
 	return mapped, err
 }
 
+func (f *fragment) inspectStorage(data []byte, file *os.File, newGen generation, mapped bool) (didMap bool, err error) {
+	f.bitmapInfo = &roaring.BitmapInfo{}
+	f.storage, didMap, err = roaring.InspectBinary(data, mapped, f.bitmapInfo)
+	return didMap, err
+}
+
 // openStorage opens the storage bitmap.
 //
 // This has been massively reworked recently, and now hands a lot of
@@ -360,10 +387,17 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 	}
 	f.rowCache = &simpleCache{make(map[uint64]*Row)}
 	var storageOp func([]byte, *os.File, generation, bool) (bool, error)
-	if unmarshalData {
-		storageOp = f.importStorage
+	if f.holder.Opts.Inspect {
+		// note that this will unmarshal even if we already have
+		// storage; when Inspect is on for a holder, we actually want
+		// to be able to report this.
+		storageOp = f.inspectStorage
 	} else {
-		storageOp = f.applyStorage
+		if unmarshalData {
+			storageOp = f.importStorage
+		} else {
+			storageOp = f.applyStorage
+		}
 	}
 	var err error
 	f.gen, err = newGeneration(f.gen, f.path, unmarshalData, storageOp, f.holder.Logger)
@@ -436,6 +470,9 @@ func (f *fragment) Close() error {
 	for f.snapshotPending {
 		f.snapshotCond.Wait()
 	}
+	// Note: snapshots won't progress on a closed fragment, so we
+	// wait until after a possible pending snapshot to close.
+	f.open = false
 	return f.close()
 }
 
@@ -2283,6 +2320,9 @@ func track(start time.Time, message string, stats stats.StatsClient, logger logg
 // snapshot does the actual snapshot operation. it does not check or care
 // about f.snapshotPending.
 func (f *fragment) snapshot() (err error) {
+	if !f.open {
+		return errors.New("snapshot request on closed fragment")
+	}
 	wouldPanic := debug.SetPanicOnFault(true)
 	defer func() {
 		debug.SetPanicOnFault(wouldPanic)

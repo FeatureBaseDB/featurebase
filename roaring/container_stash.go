@@ -45,35 +45,47 @@ type Container struct {
 
 type containerFlags uint8
 
+var containerFlagStrings = [...]string{
+	"",
+	"mapped",
+	"frozen",
+	"frozen/mapped",
+	"pristine",
+	"pristine/mapped",
+	"pristine/frozen",
+	"pristine/frozen/mapped",
+}
+
+func (f containerFlags) String() string {
+	return containerFlagStrings[f&7]
+}
+
 const (
 	flagMapped = containerFlags(1 << iota)
 	flagFrozen
+	flagPristine
 )
 
 func (c *Container) String() string {
 	if c == nil {
 		return "<nil container>"
 	}
-	froze := ""
-	switch c.flags {
-	case flagFrozen:
-		froze = "frozen "
-	case flagMapped:
-		froze = "mapped "
-	case flagFrozen | flagMapped:
-		froze = "frozen/mapped"
+	var space, froze string
+	if c.flags != 0 {
+		space = " "
+		froze = c.flags.String()
 	}
 	switch c.typeID {
 	case containerArray:
-		return fmt.Sprintf("<%sarray container, N=%d>", froze, c.N())
+		return fmt.Sprintf("<%s%sarray container, N=%d>", froze, space, c.N())
 	case containerBitmap:
-		return fmt.Sprintf("<%sbitmap container, N=%d, len %dx uint64>",
-			froze, c.N(), len(c.bitmap()))
+		return fmt.Sprintf("<%s%sbitmap container, N=%d, len %dx uint64>",
+			froze, space, c.N(), len(c.bitmap()))
 	case containerRun:
-		return fmt.Sprintf("<%srun container, N=%d, len %dx interval>",
-			froze, c.N(), len(c.runs()))
+		return fmt.Sprintf("<%s%srun container, N=%d, len %dx interval>",
+			froze, space, c.N(), len(c.runs()))
 	default:
-		return fmt.Sprintf("<unknown %s%d container, N=%d>", froze, c.typeID, c.N())
+		return fmt.Sprintf("<unknown %s%s%d container, N=%d>", froze, space, c.typeID, c.N())
 	}
 }
 
@@ -292,6 +304,7 @@ func (c *Container) unmapOrClone() *Container {
 		return c.Clone()
 	}
 	c.flags &^= flagMapped
+	c.flags &^= flagPristine
 	// mapped: we want to unmap the storage.
 	switch c.typeID {
 	case containerArray:
@@ -368,6 +381,7 @@ func (c *Container) setArrayMaybeCopy(array []uint16, doCopy bool) {
 	if len(array) > 1<<16 {
 		panic("impossibly large array")
 	}
+	c.flags &^= flagPristine
 	// array we can fit in data store:
 	if len(array) <= stashedArraySize {
 		copy(c.data[:stashedArraySize], array)
@@ -497,6 +511,7 @@ func (c *Container) setBitmap(bitmap []uint64) {
 		panic("illegal bitmap length")
 	}
 	c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(&bitmap[0])), bitmapN, bitmapN
+	c.flags &^= flagPristine
 }
 
 // runs yields the data viewed as a slice of intervals.
@@ -531,6 +546,7 @@ func (c *Container) setRunsMaybeCopy(runs []interval16, doCopy bool) {
 	if len(runs) > 1<<15 {
 		panic("impossibly large run set")
 	}
+	c.flags &^= flagPristine
 	// array we can fit in data store:
 	if len(runs) <= stashedRunSize {
 		newRuns := (*[stashedRunSize]interval16)(unsafe.Pointer(&c.data))[:len(runs)]

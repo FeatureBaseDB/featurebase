@@ -2666,6 +2666,12 @@ func mustOpenBSIFragment(index, field, view string, shard uint64) *fragment {
 	return mustOpenFragmentFlags(index, field, view, shard, "", 1)
 }
 
+var testHolder = NewHolder(DefaultPartitionN)
+
+func init() {
+	testHolder.SnapshotQueue = newSnapshotQueue(1, 1, nil)
+}
+
 // mustOpenFragment returns a new instance of Fragment with a temporary path.
 func mustOpenFragmentFlags(index, field, view string, shard uint64, cacheType string, flags byte) *fragment {
 	file, err := ioutil.TempFile(*TempDir, "pilosa-fragment-")
@@ -2678,7 +2684,8 @@ func mustOpenFragmentFlags(index, field, view string, shard uint64, cacheType st
 		cacheType = DefaultCacheType
 	}
 
-	f := newFragment(NewHolder(DefaultPartitionN), file.Name(), index, field, view, shard, flags)
+	f := newFragment(testHolder, file.Name(), index, field, view, shard, flags)
+
 	f.CacheType = cacheType
 	f.RowAttrStore = &memAttrStore{
 		store: make(map[uint64]map[string]interface{}),

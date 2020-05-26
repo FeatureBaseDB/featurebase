@@ -1721,6 +1721,8 @@ func (b *Bitmap) writeToUnoptimized(w io.Writer) (n int64, err error) {
 // bitmap and yield information about containers, including type, size, and
 // the location of their data structures.
 type roaringIterator interface {
+	// Len reports the number of containers total.
+	Len() (count int64)
 	// Next yields the information about the next container
 	Next() (key uint64, cType byte, n int, length int, pointer *uint16, err error)
 	// Remaining yields the bytes left over past the end of the roaring data,
@@ -1883,6 +1885,11 @@ func (r *baseRoaringIterator) Done(err error) {
 	r.currentPointer = nil
 	r.lastDataOffset = int64(r.currentDataOffset)
 	r.currentDataOffset = 0
+}
+
+// Len() indicates the total number of containers the iterator expects to have.
+func (r *baseRoaringIterator) Len() int64 {
+	return r.keys
 }
 
 func (r *baseRoaringIterator) Remaining() ([]byte, int64) {
@@ -2436,20 +2443,24 @@ func (b *Bitmap) roaringSize() (int64, int64) {
 }
 
 // Info returns stats for the bitmap.
-func (b *Bitmap) Info() BitmapInfo {
+func (b *Bitmap) Info(includeContainers bool) BitmapInfo {
 	info := BitmapInfo{
-		OpN:        b.opN,
-		Ops:        b.ops,
-		Containers: make([]ContainerInfo, 0, b.Containers.Size()),
+		OpN:            b.opN,
+		Ops:            b.ops,
+		ContainerCount: b.Containers.Size(),
 	}
-	info.ContainerCount = cap(info.Containers)
+	if includeContainers {
+		info.Containers = make([]ContainerInfo, 0, info.ContainerCount)
+	}
 	citer, _ := b.Containers.Iterator(0)
 	for citer.Next() {
 		k, c := citer.Value()
 		ci := c.info()
 		ci.Key = k
 		info.BitCount += uint64(c.N())
-		info.Containers = append(info.Containers, ci)
+		if includeContainers {
+			info.Containers = append(info.Containers, ci)
+		}
 	}
 	return info
 }
@@ -2510,11 +2521,12 @@ func (b *Bitmap) Flip(start, end uint64) *Bitmap {
 type BitmapInfo struct {
 	OpN            int
 	Ops            int
-	OpDetails      []OpInfo
+	OpDetails      []OpInfo `json:"OpDetails,omitempty"`
 	BitCount       uint64
 	ContainerCount int
-	Containers     []ContainerInfo // The containers found in the bitmap originally
-	OpContainers   []ContainerInfo // The containers resulting from ops log changes.
+	Containers     []ContainerInfo `json:"Containers,omitempty"`   // The containers found in the bitmap originally
+	OpContainers   []ContainerInfo `json:"OpContainers,omitempty"` // The containers resulting from ops log changes.
+	From, To       uintptr         // if set, indicates the address range used when unpacking
 }
 
 // Iterator represents an iterator over a Bitmap.
@@ -3718,6 +3730,7 @@ func (c *Container) info() ContainerInfo {
 		info.Alloc = 0
 		return info
 	}
+	info.Flags = c.flags.String()
 
 	if c.isArray() {
 		info.Type = "array"
@@ -3799,6 +3812,7 @@ func (c *Container) bitmapRepair() {
 type ContainerInfo struct {
 	Key     uint64  // container key
 	Type    string  // container type (array, bitmap, or run)
+	Flags   string  // flag state
 	N       int32   // number of bits
 	Alloc   int     // memory used
 	Pointer uintptr // address

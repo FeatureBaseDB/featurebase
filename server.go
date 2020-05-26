@@ -565,6 +565,7 @@ func (s *Server) Open() error {
 		return errors.Wrap(err, "opening Holder")
 	}
 	// bring up the background tasks for the holder.
+	s.holder.SnapshotQueue = s.snapshotQueue
 	s.holder.Activate()
 	if err := s.cluster.setNodeState(nodeStateReady); err != nil {
 		return errors.Wrap(err, "setting nodeState")

@@ -221,6 +221,8 @@ func (h *Handler) populateValidators() {
 	h.validators["GetTransaction"] = queryValidationSpecRequired()
 	h.validators["PostTransaction"] = queryValidationSpecRequired()
 	h.validators["PostFinishTransaction"] = queryValidationSpecRequired()
+	h.validators["Inspect"] = queryValidationSpecRequired().Optional("indexes", "fields", "views", "shards", "checksum", "containers")
+
 }
 
 type contextKeyQuery int
@@ -352,6 +354,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/field/{field}/import-roaring/{shard}", handler.handlePostImportRoaring).Methods("POST").Name("PostImportRoaring")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
 	router.HandleFunc("/info", handler.handleGetInfo).Methods("GET").Name("GetInfo")
+	router.HandleFunc("/inspect", handler.handleInspect).Methods("GET").Name("Inspect")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST").Name("RecalculateCaches")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET").Name("GetSchema")
 	router.HandleFunc("/schema", handler.handlePostSchema).Methods("POST").Name("PostSchema")
@@ -587,6 +590,37 @@ func (h *Handler) handleGetInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(info); err != nil {
 		h.logger.Printf("write info response error: %s", err)
+	}
+}
+
+func (h *Handler) handleInspect(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+	q := r.URL.Query()
+	_, checksum := q["checksum"]
+	_, containers := q["containers"]
+	req := pilosa.InspectRequest{
+		HolderFilterParams: pilosa.HolderFilterParams{
+			Indexes: q.Get("indexes"),
+			Fields:  q.Get("fields"),
+			Views:   q.Get("views"),
+			Shards:  q.Get("shards"),
+		},
+		InspectRequestParams: pilosa.InspectRequestParams{
+			Checksum:   checksum,
+			Containers: containers,
+		},
+	}
+	info, err := h.api.Inspect(r.Context(), &req)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("inspect request: %v", err), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(info); err != nil {
+		h.logger.Printf("write inspect response error: %s", err)
 	}
 }
 
