@@ -234,7 +234,13 @@ func (h *Holder) Open() error {
 			return errors.Wrap(err, "opening index")
 		}
 
-		if err := index.Open(); err != nil {
+		if h.isCoordinator() {
+			index.etag = newETag()
+			err = index.OpenWithETag()
+		} else {
+			err = index.Open()
+		}
+		if err != nil {
 			if err == ErrName {
 				h.Logger.Printf("ERROR opening index: %s, err=%s", index.Name(), err)
 				continue
@@ -381,10 +387,15 @@ func (h *Holder) Schema() []*IndexInfo {
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{
 			Name:    index.Name(),
+			ETag:    index.ETag(),
 			Options: index.Options(),
 		}
 		for _, field := range index.Fields() {
-			fi := &FieldInfo{Name: field.Name(), Options: field.Options()}
+			fi := &FieldInfo{
+				Name:    field.Name(),
+				ETag:    field.ETag(),
+				Options: field.Options(),
+			}
 			for _, view := range field.views() {
 				fi.Views = append(fi.Views, &ViewInfo{Name: view.name})
 			}
@@ -404,6 +415,7 @@ func (h *Holder) limitedSchema() []*IndexInfo {
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{
 			Name:       index.Name(),
+			ETag:       index.ETag(),
 			Options:    index.Options(),
 			ShardWidth: ShardWidth,
 		}
@@ -411,7 +423,11 @@ func (h *Holder) limitedSchema() []*IndexInfo {
 			if strings.HasPrefix(field.name, "_") {
 				continue
 			}
-			fi := &FieldInfo{Name: field.Name(), Options: field.Options()}
+			fi := &FieldInfo{
+				Name:    field.Name(),
+				ETag:    field.ETag(),
+				Options: field.Options(),
+			}
 			di.Fields = append(di.Fields, fi)
 		}
 		sort.Sort(fieldInfoSlice(di.Fields))
@@ -424,20 +440,32 @@ func (h *Holder) limitedSchema() []*IndexInfo {
 // applySchema applies an internal Schema to Holder.
 func (h *Holder) applySchema(schema *Schema) error {
 	// Create indexes that don't exist.
-	for _, index := range schema.Indexes {
-		idx, err := h.CreateIndexIfNotExists(index.Name, index.Options)
+	for _, i := range schema.Indexes {
+		idx, err := h.CreateIndexIfNotExists(i.Name, i.Options)
 		if err != nil {
 			return errors.Wrap(err, "creating index")
 		}
+		if i.ETag != 0 {
+			idx.mu.Lock()
+			idx.etag = i.ETag
+			idx.mu.Unlock()
+		}
+
 		// Create fields that don't exist.
-		for _, f := range index.Fields {
-			field, err := idx.createFieldIfNotExists(f.Name, &f.Options)
+		for _, f := range i.Fields {
+			fld, err := idx.createFieldIfNotExists(f.Name, &f.Options)
 			if err != nil {
 				return errors.Wrap(err, "creating field")
 			}
+			if f.ETag != 0 {
+				fld.mu.Lock()
+				fld.etag = f.ETag
+				fld.mu.Unlock()
+			}
+
 			// Create views that don't exist.
 			for _, v := range f.Views {
-				_, err := field.createViewIfNotExists(v.Name)
+				_, err := fld.createViewIfNotExists(v.Name)
 				if err != nil {
 					return errors.Wrap(err, "creating view")
 				}
@@ -650,6 +678,13 @@ func (h *Holder) recalculateCaches() {
 	for _, index := range h.Indexes() {
 		index.recalculateCaches()
 	}
+}
+
+func (h *Holder) isCoordinator() bool {
+	if s, ok := h.broadcaster.(*Server); ok {
+		return s.isCoordinator
+	}
+	return false
 }
 
 // setFileLimit attempts to set the open file limit to the FileLimit constant defined above.

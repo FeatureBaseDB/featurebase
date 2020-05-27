@@ -1272,9 +1272,7 @@ func (c *cluster) listenForJoins() {
 		// Then we want to set the cluster state to NORMAL and resume processing of joiningLeavingNodes events.
 		// We use a bool `setNormal` to indicate when at least one node has joined.
 		var setNormal bool
-
 		for {
-
 			// Handle all pending joins before changing state back to NORMAL.
 			select {
 			case nodeAction := <-c.joiningLeavingNodes:
@@ -2146,7 +2144,7 @@ func (c *cluster) nodeStatus() *NodeStatus {
 	}
 	var availableShards *roaring.Bitmap
 	for _, idx := range ns.Schema.Indexes {
-		is := &IndexStatus{Name: idx.Name}
+		is := &IndexStatus{Name: idx.Name, ETag: idx.ETag}
 		for _, f := range idx.Fields {
 			if field := c.holder.Field(idx.Name, f.Name); field != nil {
 				availableShards = field.AvailableShards()
@@ -2155,6 +2153,7 @@ func (c *cluster) nodeStatus() *NodeStatus {
 			}
 			is.Fields = append(is.Fields, &FieldStatus{
 				Name:            f.Name,
+				ETag:            f.ETag,
 				AvailableShards: availableShards,
 			})
 		}
@@ -2491,7 +2490,7 @@ type translationResizeNode struct {
 
 // Schema contains information about indexes and their configuration.
 type Schema struct {
-	Indexes []*IndexInfo
+	Indexes []*IndexInfo `json:"indexes"`
 }
 
 func encodeTopology(topology *Topology) *internal.Topology {
@@ -2530,6 +2529,7 @@ type CreateShardMessage struct {
 // CreateIndexMessage is an internal message indicating index creation.
 type CreateIndexMessage struct {
 	Index string
+	ETag  int64
 	Meta  *IndexOptions
 }
 
@@ -2542,6 +2542,7 @@ type DeleteIndexMessage struct {
 type CreateFieldMessage struct {
 	Index string
 	Field string
+	ETag  int64
 	Meta  *FieldOptions
 }
 
@@ -2606,12 +2607,14 @@ type NodeStatus struct {
 // IndexStatus is an internal message representing the contents of an index.
 type IndexStatus struct {
 	Name   string
+	ETag   int64
 	Fields []*FieldStatus
 }
 
 // FieldStatus is an internal message representing the contents of a field.
 type FieldStatus struct {
 	Name            string
+	ETag            int64
 	AvailableShards *roaring.Bitmap
 }
 

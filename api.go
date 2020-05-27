@@ -181,10 +181,15 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	if err != nil {
 		return nil, errors.Wrap(err, "creating index")
 	}
+	index.mu.Lock()
+	index.etag = newETag()
+	index.mu.Unlock()
+
 	// Send the create index message to all nodes.
 	err = api.server.SendSync(
 		&CreateIndexMessage{
 			Index: indexName,
+			ETag:  index.ETag(),
 			Meta:  &options,
 		})
 	if err != nil {
@@ -269,14 +274,17 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 	if err != nil {
 		return nil, errors.Wrap(err, "creating field")
 	}
+	field.mu.Lock()
+	field.etag = newETag()
+	field.mu.Unlock()
 
 	// Send the create field message to all nodes.
-	err = api.server.SendSync(
-		&CreateFieldMessage{
-			Index: indexName,
-			Field: fieldName,
-			Meta:  &fo,
-		})
+	err = api.server.SendSync(&CreateFieldMessage{
+		Index: indexName,
+		Field: fieldName,
+		ETag:  field.ETag(),
+		Meta:  &fo,
+	})
 	if err != nil {
 		api.server.logger.Printf("problem sending CreateField message: %s", err)
 		return nil, errors.Wrap(err, "sending CreateField message")
@@ -803,6 +811,18 @@ func (api *API) ApplySchema(ctx context.Context, s *Schema, remote bool) error {
 		return errors.Wrap(err, "validating api method")
 	}
 
+	// set etags for indexes and fields (if empty), and then apply schema.
+	for _, index := range s.Indexes {
+		if index.ETag == 0 {
+			index.ETag = newETag()
+		}
+		for _, field := range index.Fields {
+			if field.ETag == 0 {
+				field.ETag = newETag()
+			}
+		}
+	}
+
 	if !remote {
 		nodes := api.cluster.Nodes()
 		for i, node := range nodes {
@@ -813,7 +833,11 @@ func (api *API) ApplySchema(ctx context.Context, s *Schema, remote bool) error {
 		}
 	}
 
-	return api.holder.applySchema(s)
+	if err := api.holder.applySchema(s); err != nil {
+		return errors.Wrap(err, "applying schema")
+	}
+
+	return nil
 }
 
 // Views returns the views in the given field.

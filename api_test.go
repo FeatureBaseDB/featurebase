@@ -186,16 +186,23 @@ func TestAPI_Import(t *testing.T) {
 
 	t.Run("RowIDColumnKey", func(t *testing.T) {
 		ctx := context.Background()
-		index := "rick"
-		field := "f"
+		indexName := "rick"
+		fieldName := "f"
 
-		_, err := m0.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: true, TrackExistence: true})
+		index, err := m0.API.CreateIndex(ctx, indexName, pilosa.IndexOptions{Keys: true, TrackExistence: true})
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
-		_, err = m0.API.CreateField(ctx, index, field, pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, 100))
+		if index.ETag() == 0 {
+			t.Fatal("index etag is empty")
+		}
+
+		field, err := m0.API.CreateField(ctx, indexName, fieldName, pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, 100))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
+		}
+		if field.ETag() == 0 {
+			t.Fatal("field etag is empty")
 		}
 
 		rowID := uint64(1)
@@ -215,8 +222,8 @@ func TestAPI_Import(t *testing.T) {
 		// Import data with keys to the coordinator (node0) and verify that it gets
 		// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
 		req := &pilosa.ImportRequest{
-			Index:      index,
-			Field:      field,
+			Index:      indexName,
+			Field:      fieldName,
 			Shard:      0,
 			RowIDs:     rowIDs,
 			ColumnKeys: colKeys,
@@ -226,10 +233,10 @@ func TestAPI_Import(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		pql := fmt.Sprintf("Row(%s=%d)", field, rowID)
+		pql := fmt.Sprintf("Row(%s=%d)", fieldName, rowID)
 
 		// Query node0.
-		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
+		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: indexName, Query: pql}); err != nil {
 			t.Fatal(err)
 		} else if keys := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, colKeys) {
 			t.Fatalf("unexpected column keys: %#v", keys)
@@ -237,7 +244,7 @@ func TestAPI_Import(t *testing.T) {
 
 		// Query node1.
 		if err := test.RetryUntil(5*time.Second, func() error {
-			if res, err := m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
+			if res, err := m1.API.Query(ctx, &pilosa.QueryRequest{Index: indexName, Query: pql}); err != nil {
 				return err
 			} else if keys := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, colKeys) {
 				return fmt.Errorf("unexpected column keys: %#v", keys)

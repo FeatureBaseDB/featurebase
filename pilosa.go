@@ -17,6 +17,7 @@ package pilosa
 import (
 	"encoding/json"
 	"regexp"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -189,6 +190,10 @@ func stringSlicesAreEqual(a, b []string) bool {
 	}
 
 	return true
+}
+
+func newETag() int64 {
+	return time.Now().UTC().UnixNano()
 }
 
 // AddressWithDefaults converts addr into a valid address,

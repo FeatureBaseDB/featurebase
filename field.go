@@ -87,6 +87,7 @@ var availableShardFileFlushDuration = &protected{
 // Field represents a container for views.
 type Field struct {
 	mu    sync.RWMutex
+	etag  int64
 	path  string
 	index string
 	name  string
@@ -381,6 +382,14 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 
 // Name returns the name the field was initialized with.
 func (f *Field) Name() string { return f.name }
+
+// ETag is an identifier for a specific version of field.
+func (f *Field) ETag() int64 {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	return f.etag
+}
 
 // Index returns the index name the field was initialized with.
 func (f *Field) Index() string { return f.index }
@@ -1972,6 +1981,7 @@ func (p fieldSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 // FieldInfo represents schema information for a field.
 type FieldInfo struct {
 	Name    string       `json:"name"`
+	ETag    int64        `json:"etag,omitempty"`
 	Options FieldOptions `json:"options"`
 	Views   []*ViewInfo  `json:"views,omitempty"`
 }

@@ -203,6 +203,53 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	})
 
+	t.Run("Import", func(t *testing.T) {
+		indexInfo := cmd.API.Schema(context.Background())
+		err := cmd.API.ApplySchema(context.Background(), &pilosa.Schema{Indexes: indexInfo}, false)
+		if err != nil {
+			t.Fatalf("applying schema: %v", err)
+		}
+
+		idx := indexInfo[0]
+		fld := indexInfo[0].Fields[0]
+		msg := pilosa.ImportRequest{
+			Index: idx.Name,
+			Field: fld.Name,
+			Shard: 0,
+		}
+		ser := proto.Serializer{}
+		data, err := ser.Marshal(&msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := fmt.Sprintf("/index/%s/field/%s/import", idx.Name, fld.Name)
+		etag := fmt.Sprintf("%d, %d", idx.ETag, fld.ETag)
+
+		httpReq := test.MustNewHTTPRequest("POST", path, bytes.NewBuffer(data))
+		httpReq.Header.Set("Content-Type", "application/x-protobuf")
+		httpReq.Header.Set("Accept", "application/x-protobuf")
+		httpReq.Header.Set("If-Match", etag)
+
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httpReq)
+		if w.Body.String() != "" {
+			t.Fatalf(w.Body.String())
+		}
+
+		etag = "invalid-index-etag, invalid-field-etag"
+
+		httpReq = test.MustNewHTTPRequest("POST", path, bytes.NewBuffer(data))
+		httpReq.Header.Set("Content-Type", "application/x-protobuf")
+		httpReq.Header.Set("Accept", "application/x-protobuf")
+		httpReq.Header.Set("If-Match", etag)
+
+		h.ServeHTTP(w, httpReq)
+
+		if strings.TrimSpace(w.Body.String()) != "Precondition Failed" {
+			t.Fatal("expected: Precondition Failed, got:" + w.Body.String())
+		}
+	})
+
 	t.Run("ImportRoaring", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		roaringData, _ := hex.DecodeString("3B3001000100000900010000000100010009000100")
@@ -217,10 +264,23 @@ func TestHandler_Endpoints(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		idx, err := cmd.API.Index(context.Background(), "i0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		fld, err := cmd.API.Field(context.Background(), "i0", "f1")
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		httpReq := test.MustNewHTTPRequest("POST", "/index/i0/field/f1/import-roaring/0", bytes.NewBuffer(data))
 		httpReq.Header.Set("Content-Type", "application/x-protobuf")
 		httpReq.Header.Set("Accept", "application/x-protobuf")
+		httpReq.Header.Set("If-Match", fmt.Sprintf("%d, %d", idx.ETag(), fld.ETag()))
 		h.ServeHTTP(w, httpReq)
+		if w.Body.String() != "" {
+			t.Fatalf("Unexpected response body: %s", w.Body.String())
+		}
 		resp, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i0", Query: "TopN(f1)"})
 		if err != nil {
 			t.Fatalf("querying: %v", err)

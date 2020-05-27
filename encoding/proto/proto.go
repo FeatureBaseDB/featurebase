@@ -594,6 +594,7 @@ func (s Serializer) encodeIndexInfos(idxs []*pilosa.IndexInfo) []*internal.Index
 func (s Serializer) encodeIndexInfo(idx *pilosa.IndexInfo) *internal.Index {
 	return &internal.Index{
 		Name:    idx.Name,
+		ETag:    idx.ETag,
 		Options: s.encodeIndexMeta(&idx.Options),
 		Fields:  s.encodeFieldInfos(idx.Fields),
 	}
@@ -610,6 +611,7 @@ func (s Serializer) encodeFieldInfos(fs []*pilosa.FieldInfo) []*internal.Field {
 func (s Serializer) encodeFieldInfo(f *pilosa.FieldInfo) *internal.Field {
 	ifield := &internal.Field{
 		Name:  f.Name,
+		ETag:  f.ETag,
 		Meta:  s.encodeFieldOptions(&f.Options),
 		Views: make([]string, 0, len(f.Views)),
 	}
@@ -686,6 +688,7 @@ func (s Serializer) encodeCreateShardMessage(m *pilosa.CreateShardMessage) *inte
 func (s Serializer) encodeCreateIndexMessage(m *pilosa.CreateIndexMessage) *internal.CreateIndexMessage {
 	return &internal.CreateIndexMessage{
 		Index: m.Index,
+		ETag:  m.ETag,
 		Meta:  s.encodeIndexMeta(m.Meta),
 	}
 }
@@ -707,6 +710,7 @@ func (s Serializer) encodeCreateFieldMessage(m *pilosa.CreateFieldMessage) *inte
 	return &internal.CreateFieldMessage{
 		Index: m.Index,
 		Field: m.Field,
+		ETag:  m.ETag,
 		Meta:  s.encodeFieldOptions(m.Meta),
 	}
 }
@@ -787,6 +791,7 @@ func (s Serializer) encodeNodeStatus(m *pilosa.NodeStatus) *internal.NodeStatus 
 func (s Serializer) encodeIndexStatus(m *pilosa.IndexStatus) *internal.IndexStatus {
 	return &internal.IndexStatus{
 		Name:   m.Name,
+		ETag:   m.ETag,
 		Fields: s.encodeFieldStatuses(m.Fields),
 	}
 }
@@ -802,6 +807,7 @@ func (s Serializer) encodeIndexStatuses(a []*pilosa.IndexStatus) []*internal.Ind
 func (s Serializer) encodeFieldStatus(m *pilosa.FieldStatus) *internal.FieldStatus {
 	return &internal.FieldStatus{
 		Name:            m.Name,
+		ETag:            m.ETag,
 		AvailableShards: m.AvailableShards.Slice(),
 	}
 }
@@ -938,6 +944,7 @@ func (s Serializer) decodeIndexes(idxs []*internal.Index, m []*pilosa.IndexInfo)
 
 func (s Serializer) decodeIndex(idx *internal.Index, m *pilosa.IndexInfo) {
 	m.Name = idx.Name
+	m.ETag = idx.ETag
 	m.Options = pilosa.IndexOptions{}
 	s.decodeIndexMeta(idx.Options, &m.Options)
 	m.Fields = make([]*pilosa.FieldInfo, len(idx.Fields))
@@ -953,6 +960,7 @@ func (s Serializer) decodeFields(fs []*internal.Field, m []*pilosa.FieldInfo) {
 
 func (s Serializer) decodeField(f *internal.Field, m *pilosa.FieldInfo) {
 	m.Name = f.Name
+	m.ETag = f.ETag
 	m.Options = pilosa.FieldOptions{}
 	s.decodeFieldOptions(f.Meta, &m.Options)
 	m.Views = make([]*pilosa.ViewInfo, 0, len(f.Views))
@@ -1016,6 +1024,7 @@ func (s Serializer) decodeCreateShardMessage(pb *internal.CreateShardMessage, m 
 
 func (s Serializer) decodeCreateIndexMessage(pb *internal.CreateIndexMessage, m *pilosa.CreateIndexMessage) {
 	m.Index = pb.Index
+	m.ETag = pb.ETag
 	m.Meta = &pilosa.IndexOptions{}
 	s.decodeIndexMeta(pb.Meta, m.Meta)
 }
@@ -1034,6 +1043,7 @@ func (s Serializer) decodeDeleteIndexMessage(pb *internal.DeleteIndexMessage, m 
 func (s Serializer) decodeCreateFieldMessage(pb *internal.CreateFieldMessage, m *pilosa.CreateFieldMessage) {
 	m.Index = pb.Index
 	m.Field = pb.Field
+	m.ETag = pb.ETag
 	m.Meta = &pilosa.FieldOptions{}
 	s.decodeFieldOptions(pb.Meta, m.Meta)
 }
@@ -1107,6 +1117,7 @@ func (s Serializer) decodeIndexStatuses(a []*internal.IndexStatus) []*pilosa.Ind
 
 func (s Serializer) decodeIndexStatus(pb *internal.IndexStatus, m *pilosa.IndexStatus) {
 	m.Name = pb.Name
+	m.ETag = pb.ETag
 	m.Fields = s.decodeFieldStatuses(pb.Fields)
 }
 
@@ -1121,6 +1132,7 @@ func (s Serializer) decodeFieldStatuses(a []*internal.FieldStatus) []*pilosa.Fie
 
 func (s Serializer) decodeFieldStatus(pb *internal.FieldStatus, m *pilosa.FieldStatus) {
 	m.Name = pb.Name
+	m.ETag = pb.ETag
 	m.AvailableShards = roaring.NewBitmap(pb.AvailableShards...)
 }
 
