@@ -655,6 +655,7 @@ func (s Serializer) encodeNode(n *pilosa.Node) *internal.Node {
 		URI:           s.encodeURI(n.URI),
 		IsCoordinator: n.IsCoordinator,
 		State:         n.State,
+		GRPCURI:       s.encodeURI(n.GRPCURI),
 	}
 }
 
@@ -996,6 +997,7 @@ func (s Serializer) decodeClusterStatus(cs *internal.ClusterStatus, m *pilosa.Cl
 func (s Serializer) decodeNode(node *internal.Node, m *pilosa.Node) {
 	m.ID = node.ID
 	s.decodeURI(node.URI, &m.URI)
+	s.decodeURI(node.GRPCURI, &m.GRPCURI)
 	m.IsCoordinator = node.IsCoordinator
 	m.State = node.State
 }

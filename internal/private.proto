@@ -110,6 +110,7 @@ message Node {
 	URI URI = 2;
 	bool IsCoordinator = 3;
 	string State = 4;
+	URI GRPCURI = 5;
 }
 
 message NodeStateMessage {
