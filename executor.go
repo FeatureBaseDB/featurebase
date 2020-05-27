@@ -1125,7 +1125,7 @@ func (e *executor) executePrecomputedCall(ctx context.Context, index string, c *
 // executeBitmapCall executes a call that returns a bitmap.
 func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (*Row, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeBitmapCall")
-	span.LogKV("pql_call_name", c.Name)
+	span.LogKV("pqlCallName", c.Name)
 	defer span.Finish()
 
 	indexTag := "index:" + index
