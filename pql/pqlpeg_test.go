@@ -239,7 +239,15 @@ func TestPEGWorking(t *testing.T) {
 			input:  "Row(a == 4)",
 			ncalls: 1},
 		{
+			name:   "RangeEQNULL",
+			input:  "Row(a == null)",
+			ncalls: 1},
+		{
 			name:   "RangeNEQ",
+			input:  "Row(a != 4)",
+			ncalls: 1},
+		{
+			name:   "RangeNEQNull",
 			input:  "Row(a != null)",
 			ncalls: 1},
 		{
