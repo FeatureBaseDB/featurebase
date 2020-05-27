@@ -659,6 +659,7 @@ func (c *cluster) addNodeBasicSorted(node *Node) bool {
 			n.State = node.State
 			n.IsCoordinator = node.IsCoordinator
 			n.URI = node.URI
+			n.GRPCURI = node.GRPCURI
 			return true
 		}
 		return false
@@ -1745,8 +1746,9 @@ func (j *resizeJob) distributeResizeInstructions() error {
 		// Because the node may not be in the cluster yet, create
 		// a dummy node object to use in the SendTo() method.
 		node := &Node{
-			ID:  instr.Node.ID,
-			URI: instr.Node.URI,
+			ID:      instr.Node.ID,
+			URI:     instr.Node.URI,
+			GRPCURI: instr.Node.GRPCURI,
 		}
 		j.Logger.Printf("send resize instructions: %v", instr)
 		if err := j.Broadcaster.SendTo(node, instr); err != nil {
@@ -2045,6 +2047,9 @@ func (c *cluster) nodeJoin(node *Node) error {
 		if cnode.URI != node.URI {
 			c.logger.Printf("node: %v changed URI from %s to %s", cnode.ID, cnode.URI, node.URI)
 			cnode.URI = node.URI
+		}
+		if cnode.GRPCURI != node.GRPCURI {
+			cnode.GRPCURI = node.GRPCURI
 		}
 		return c.unprotectedSetStateAndBroadcast(c.determineClusterState())
 	}
