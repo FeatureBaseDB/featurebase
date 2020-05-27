@@ -1208,7 +1208,6 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, index string, c *
 	}
 
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeBitmapCallShard")
-	span.LogKV("pql_call_name", c.Name)
 	defer span.Finish()
 
 	if _, ok := e.additionalCountOps[c.Name]; ok {
