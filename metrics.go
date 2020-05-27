@@ -58,4 +58,11 @@ const (
 	MetricStackInuse                      = "stack_inuse"
 	MetricMallocs                         = "mallocs"
 	MetricFrees                           = "frees"
+	MetricTransactionStart                = "transaction_start"
+	MetricTransactionEnd                  = "trasaction_end"
+	MetricTransactionBlocked              = "transaction_blocked"
+	MetricExclusiveTransactionRequest     = "transaction_exclusive_request"
+	MetricExclusiveTransactionActive      = "transaction_exclusive_active"
+	MetricExclusiveTransactionEnd         = "trasaction_exclusive_end"
+	MetricExclusiveTransactionBlocked     = "transaction_exclusive_blocked"
 )
