@@ -149,6 +149,7 @@ message ClusterStatus {
 	string ClusterID = 1;
 	string State = 2;
 	repeated Node Nodes = 3;
+	Schema Schema = 4;
 }
 
 message BSIGroup {

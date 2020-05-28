@@ -182,4 +182,5 @@ message ImportColumnAttrsRequest {
 	string AttrKey = 3;
 	repeated string AttrVals = 4;
 	repeated uint64 ColumnIDs = 5;
+	int64 IndexCreatedAt = 6;
 }

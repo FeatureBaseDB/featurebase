@@ -610,6 +610,7 @@ func (c *cluster) unprotectedStatus() *ClusterStatus {
 		ClusterID: c.id,
 		State:     c.state,
 		Nodes:     c.nodes,
+		Schema:    &Schema{Indexes: c.holder.Schema()},
 	}
 }
 
@@ -2213,6 +2214,9 @@ func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 		}
 	}
 
+	if cs.Schema != nil {
+		c.holder.applyCreatedAt(cs.Schema.Indexes)
+	}
 	c.unprotectedSetState(cs.State)
 
 	c.markAsJoined()
@@ -2449,6 +2453,7 @@ type ClusterStatus struct {
 	ClusterID string
 	State     string
 	Nodes     []*Node
+	Schema    *Schema
 }
 
 // ResizeInstruction contains the instruction provided to a node

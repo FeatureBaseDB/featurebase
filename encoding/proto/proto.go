@@ -453,11 +453,12 @@ func (s Serializer) encodeImportRoaringRequest(m *pilosa.ImportRoaringRequest) *
 
 func (s Serializer) encodeImportColumnAttrsRequest(m *pilosa.ImportColumnAttrsRequest) *internal.ImportColumnAttrsRequest {
 	return &internal.ImportColumnAttrsRequest{
-		Index:     m.Index,
-		Shard:     m.Shard,
-		AttrKey:   m.AttrKey,
-		AttrVals:  m.AttrVals,
-		ColumnIDs: m.ColumnIDs,
+		Index:          m.Index,
+		IndexCreatedAt: m.IndexCreatedAt,
+		Shard:          m.Shard,
+		AttrKey:        m.AttrKey,
+		AttrVals:       m.AttrVals,
+		ColumnIDs:      m.ColumnIDs,
 	}
 }
 
@@ -680,6 +681,7 @@ func (s Serializer) encodeClusterStatus(m *pilosa.ClusterStatus) *internal.Clust
 		State:     m.State,
 		ClusterID: m.ClusterID,
 		Nodes:     s.encodeNodes(m.Nodes),
+		Schema:    s.encodeSchema(m.Schema),
 	}
 }
 
@@ -1006,6 +1008,8 @@ func (s Serializer) decodeClusterStatus(cs *internal.ClusterStatus, m *pilosa.Cl
 	m.ClusterID = cs.ClusterID
 	m.Nodes = make([]*pilosa.Node, len(cs.Nodes))
 	s.decodeNodes(cs.Nodes, m.Nodes)
+	m.Schema = &pilosa.Schema{}
+	s.decodeSchema(cs.Schema, m.Schema)
 }
 
 func (s Serializer) decodeNode(node *internal.Node, m *pilosa.Node) {
@@ -1199,6 +1203,7 @@ func (s Serializer) decodeImportRoaringRequest(pb *internal.ImportRoaringRequest
 
 func (s Serializer) decodeImportColumnAttrsRequest(pb *internal.ImportColumnAttrsRequest, m *pilosa.ImportColumnAttrsRequest) {
 	m.Index = pb.Index
+	m.IndexCreatedAt = pb.IndexCreatedAt
 	m.Shard = pb.Shard
 	m.AttrKey = pb.AttrKey
 	m.AttrVals = pb.AttrVals

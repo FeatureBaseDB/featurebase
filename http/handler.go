@@ -1935,7 +1935,12 @@ func (h *Handler) handlePostImportColumnAttrs(w http.ResponseWriter, r *http.Req
 	}
 
 	if err := h.api.ImportColumnAttrs(r.Context(), req, opts...); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		switch errors.Cause(err) {
+		case pilosa.ErrClusterDoesNotOwnShard, pilosa.ErrPreconditionFailed:
+			http.Error(w, err.Error(), http.StatusPreconditionFailed)
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 

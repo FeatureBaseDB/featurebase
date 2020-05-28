@@ -1302,6 +1302,12 @@ func (api *API) ImportColumnAttrs(ctx context.Context, req *ImportColumnAttrsReq
 		return errors.Wrap(err, "validating shard ownership")
 	}
 
+	if req.IndexCreatedAt != 0 {
+		if index.CreatedAt() != req.IndexCreatedAt {
+			return ErrPreconditionFailed
+		}
+	}
+
 	bulkAttrs := make(map[uint64]map[string]interface{})
 	for n := 0; n < len(req.ColumnIDs); n++ {
 		bulkAttrs[uint64(req.ColumnIDs[n])] = map[string]interface{}{req.AttrKey: req.AttrVals[n]}

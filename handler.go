@@ -178,11 +178,12 @@ func (ivr *ImportValueRequest) ValidateWithTimestamp(indexCreatedAt, fieldCreate
 // ImportColumnAttrsRequest describes the import request structure
 // for a ColumnAttr import
 type ImportColumnAttrsRequest struct {
-	AttrKey   string
-	ColumnIDs []uint64
-	AttrVals  []string
-	Shard     int64
-	Index     string
+	AttrKey        string
+	ColumnIDs      []uint64
+	AttrVals       []string
+	Shard          int64
+	Index          string
+	IndexCreatedAt int64
 }
 
 // ImportRequest describes the import request structure
