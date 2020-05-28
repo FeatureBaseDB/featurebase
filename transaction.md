@@ -30,7 +30,7 @@ The base transaction endpoints are `/transactions`, for listing or creating
 transactions, and `/transaction/[id]`, for listing, creating, finishing, or
 cancelling a transaction.
 
-A POST to `/transactions` attempts to create a transaction, assigning it an
+A POST to `/transaction` attempts to create a transaction, assigning it an
 arbitrary ID that is not the ID of any existing transaction. A `GET` from
 `/transactions` lists existing transactions.
 
