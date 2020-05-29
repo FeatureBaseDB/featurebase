@@ -18,7 +18,9 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/pkg/errors"
 )
@@ -94,4 +96,80 @@ func (p *parser) Parse() (*Query, error) {
 	}
 
 	return &p.Query, nil
+}
+
+// Unquote interprets s as a single-quoted, double-quoted, or
+// backquoted Go string literal, returning the string value that s
+// quotes. It is a copy of stdlib's strconv.Unquote, but modified so
+// that if s is single-quoted, it can still be a string rather than
+// only character literal. This version of Unquote also accepts
+// unquoted strings and passes them back unchanged.
+func Unquote(s string) (string, error) {
+	n := len(s)
+	if n < 2 {
+		return s, nil
+	}
+	quote := s[0]
+	if quote != '"' && quote != '\'' && quote != '`' {
+		return s, nil
+	}
+	if quote != s[n-1] {
+		return "", strconv.ErrSyntax
+	}
+	s = s[1 : n-1]
+
+	if quote == '`' {
+		if contains(s, '`') {
+			return "", strconv.ErrSyntax
+		}
+		if contains(s, '\r') {
+			// -1 because we know there is at least one \r to remove.
+			buf := make([]byte, 0, len(s)-1)
+			for i := 0; i < len(s); i++ {
+				if s[i] != '\r' {
+					buf = append(buf, s[i])
+				}
+			}
+			return string(buf), nil
+		}
+		return s, nil
+	}
+	if quote != '"' && quote != '\'' {
+		return "", strconv.ErrSyntax
+	}
+	if contains(s, '\n') {
+		return "", strconv.ErrSyntax
+	}
+
+	// Is it trivial? Avoid allocation.
+	if !contains(s, '\\') && !contains(s, quote) {
+		switch quote {
+		case '"', '\'':
+			if utf8.ValidString(s) {
+				return s, nil
+			}
+		}
+	}
+
+	var runeTmp [utf8.UTFMax]byte
+	buf := make([]byte, 0, 3*len(s)/2) // Try to avoid more allocations.
+	for len(s) > 0 {
+		c, multibyte, ss, err := strconv.UnquoteChar(s, quote)
+		if err != nil {
+			return "", err
+		}
+		s = ss
+		if c < utf8.RuneSelf || !multibyte {
+			buf = append(buf, byte(c))
+		} else {
+			n := utf8.EncodeRune(runeTmp[:], c)
+			buf = append(buf, runeTmp[:n]...)
+		}
+	}
+	return string(buf), nil
+}
+
+// contains reports whether the string contains the byte c.
+func contains(s string, c byte) bool {
+	return strings.ContainsRune(s, rune(c))
 }

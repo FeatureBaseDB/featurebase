@@ -134,6 +134,13 @@ func (q *Query) validateArgField(elem *callStackElem) {
 }
 
 func (q *Query) addVal(val interface{}) {
+	if vs, ok := val.(string); ok {
+		vsu, err := Unquote(vs)
+		if err != nil {
+			panic(err)
+		}
+		val = vsu
+	}
 	elem := q.lastCallStackElem()
 	if elem == nil || elem.lastField == "" {
 		panic(fmt.Sprintf("addVal called with '%s' when lastField is empty", val))
