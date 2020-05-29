@@ -181,15 +181,17 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	if err != nil {
 		return nil, errors.Wrap(err, "creating index")
 	}
+
+	createdAt := timestamp()
 	index.mu.Lock()
-	index.createdAt = timestamp()
+	index.createdAt = createdAt
 	index.mu.Unlock()
 
 	// Send the create index message to all nodes.
 	err = api.server.SendSync(
 		&CreateIndexMessage{
 			Index:     indexName,
-			CreatedAt: index.CreatedAt(),
+			CreatedAt: createdAt,
 			Meta:      &options,
 		})
 	if err != nil {
@@ -274,15 +276,16 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 	if err != nil {
 		return nil, errors.Wrap(err, "creating field")
 	}
+	createdAt := timestamp()
 	field.mu.Lock()
-	field.createdAt = timestamp()
+	field.createdAt = createdAt
 	field.mu.Unlock()
 
 	// Send the create field message to all nodes.
 	err = api.server.SendSync(&CreateFieldMessage{
 		Index:     indexName,
 		Field:     fieldName,
-		CreatedAt: field.CreatedAt(),
+		CreatedAt: createdAt,
 		Meta:      &fo,
 	})
 	if err != nil {
@@ -836,11 +839,7 @@ func (api *API) ApplySchema(ctx context.Context, s *Schema, remote bool) error {
 		}
 	}
 
-	if err := api.holder.applySchema(s); err != nil {
-		return errors.Wrap(err, "applying schema")
-	}
-
-	return nil
+	return errors.Wrap(api.holder.applySchema(s), "applying schema")
 }
 
 // Views returns the views in the given field.

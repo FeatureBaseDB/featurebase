@@ -2214,9 +2214,6 @@ func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 		}
 	}
 
-	if cs.Schema != nil {
-		c.holder.applyCreatedAt(cs.Schema.Indexes)
-	}
 	c.unprotectedSetState(cs.State)
 
 	c.markAsJoined()

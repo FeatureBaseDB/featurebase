@@ -770,6 +770,12 @@ func (s *Server) receiveMessage(m Message) error {
 		if err != nil {
 			return err
 		}
+		if !s.isCoordinator {
+			if obj.Schema != nil {
+				s.holder.applyCreatedAt(obj.Schema.Indexes)
+			}
+		}
+
 	case *ResizeInstruction:
 		err := s.cluster.followResizeInstruction(obj)
 		if err != nil {

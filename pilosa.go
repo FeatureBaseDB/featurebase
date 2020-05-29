@@ -205,7 +205,7 @@ func stringSlicesAreEqual(a, b []string) bool {
 }
 
 func timestamp() int64 {
-	return time.Now().UTC().UnixNano()
+	return time.Now().UnixNano()
 }
 
 // AddressWithDefaults converts addr into a valid address,
