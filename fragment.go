@@ -1340,7 +1340,7 @@ func (f *fragment) rangeLT(bitDepth uint, predicate int64, allowEquality bool) (
 	}
 
 	// If predicate is positive, return all positives less than predicate and all negatives.
-	if (predicate >= 0 && allowEquality) || (predicate >= -1 && !allowEquality) {
+	if (predicate > 0) || (predicate = 0 && allowEquality) {
 		pos, err := f.rangeLTUnsigned(b.Difference(f.row(bsiSignBit)), bitDepth, upredicate, allowEquality)
 		if err != nil {
 			return nil, err
