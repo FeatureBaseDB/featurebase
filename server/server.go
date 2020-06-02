@@ -274,6 +274,15 @@ func (m *Command) SetupServer() error {
 		grpcURI.SetPort(uint16(m.grpcLn.Addr().(*net.TCPAddr).Port))
 	}
 
+	if grpcURI.Scheme == "http" {
+		grpcURI.Scheme = "grpc"
+	}
+
+	// discover the address if not specified
+	if grpcURI.Host == "0.0.0.0" {
+		grpcURI.Host = outboundIP().String()
+	}
+
 	// Setup TLS
 	if uri.Scheme == "https" {
 		m.tlsConfig, err = GetTLSConfig(&m.Config.TLS, m.logger.Logger())
