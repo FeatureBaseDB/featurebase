@@ -1044,6 +1044,11 @@ func (c *cluster) partitionNodes(partitionID int) []*Node {
 func (c *cluster) ownsPartition(nodeID string, partition int) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+	return c.unprotectedOwnsPartition(nodeID, partition)
+}
+
+// unprotectedOwnsPartition returns true if a host owns a partition.
+func (c *cluster) unprotectedOwnsPartition(nodeID string, partition int) bool {
 	return Nodes(c.partitionNodes(partition)).ContainsID(nodeID)
 }
 
