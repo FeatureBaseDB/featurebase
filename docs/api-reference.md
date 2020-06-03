@@ -24,21 +24,25 @@ curl -XGET localhost:10101/index/user
 ```
 ``` response
 {
-    "fields": [
-        {
-            "name": "event",
-            "options": {
-                "keys": false,
-                "timeQuantum": "YMD",
-                "type": "time"
-            }
-        }
-    ],
-    "name": "user",
-    "options": {
-        "keys": false,
-        "trackExistence": true
+  "name": "user",
+  "createdAt": 1591178953061239000,
+  "options": {
+    "keys": false,
+    "trackExistence": true
+  },
+  "fields": [
+    {
+      "name": "event",
+      "createdAt": 1591178962332452000,
+      "options": {
+        "type": "set",
+        "cacheType": "ranked",
+        "cacheSize": 50000,
+        "keys": false
+      }
     }
+  ],
+  "shardWidth": 1048576
 }
 ```
 
@@ -57,7 +61,7 @@ The request payload is in JSON, and may contain the `options` field. The `option
 curl -XPOST localhost:10101/index/user -d '{"options":{"keys":true}}'
 ```
 ``` response
-{"success":true}
+{"success":true,"name":"user","createdAt":1591179042178854000}
 ```
 
 ### Remove index
@@ -151,18 +155,32 @@ represents a particular bit to be set. Timestamps are optional, but if they
 exist must also contain the same number of items as rows and columns. The
 column IDs must all be in the shard specified in the request.
 
+Some endpoints and data structures include a `CreatedAt` fields.
+This is typically stored as a timestamp, but it's purpose is not to inform of the creation date of a particular index or field,
+but to serve as a unique identifier for use in cache invalidation.
+
+The problem is that users of Pilosa (such as ingesters e.g. the <a href="https://github.com/molecula/idk">IDK</a>),
+can usually assume that translation keys for records and field values never change - they are only appended to, and can therefore be trivially cached.
+This is true except in cases where an index or field gets deleted and then recreated,
+or if Pilosa is restored from a backup.
+So the ingesters must send their current `CreatedAt` value which will have changed if either of those two conditions has occured (or if Pilosa was just restarted),
+and the ingester will know that it needs to drop its cache.
+
 ```
 message ImportRequest {
-	string Index = 1;
-	string Field = 2;
-	uint64 Shard = 3;
-	repeated uint64 RowIDs = 4;
-	repeated uint64 ColumnIDs = 5;
-	repeated string RowKeys = 7;
-	repeated string ColumnKeys = 8;
-	repeated int64 Timestamps = 6;
+    string Index = 1;
+    string Field = 2;
+    uint64 Shard = 3;
+    repeated uint64 RowIDs = 4;
+    repeated uint64 ColumnIDs = 5;
+    repeated int64 Timestamps = 6;
+    repeated string RowKeys = 7;
+    repeated string ColumnKeys = 8;
+    int64 IndexCreatedAt = 9;
+    int64 FieldCreatedAt = 10;
 }
 ```
+
 
 
 ### Create field
@@ -200,7 +218,7 @@ curl localhost:10101/index/user/field/quantity \
      -d '{"options": {"type": "int", "min": -1000, "max":2000}}'
 ```
 ``` response
-{"success":true}
+{"success":true,"name":"quantity","createdAt":1591180110914425000}
 ```
 
 Integer fields are stored as n-bit range-encoded values. Pilosa supports 63-bit, signed integers with values between `min` and `max`.
@@ -209,16 +227,16 @@ Integer fields are stored as n-bit range-encoded values. Pilosa supports 63-bit,
 curl localhost:10101/index/user/field/language -X POST
 ```
 ``` response
-{"success":true}
+{"success":true,"name":"language","createdAt":1591180128294321000}
 ```
 
 ``` request
 curl localhost:10101/index/repository/field/stats \
     -X POST \
-    -d '{"fields": [{"name": "pullrequests", "type": "int", "min": 0, "max": 1000000}]}'
+    -d '{"options":{"type": "int", "min": 0, "max": 1000000}}'
 ```
 ``` response
-{"success":true}
+{"success":true,"name":"stats","createdAt":1591180737881627000}
 ```
 
 ### Remove field
@@ -245,34 +263,52 @@ curl -XGET localhost:10101/schema
 ```
 ``` response
 {
-    "indexes": [
+  "indexes": [
+    {
+      "name": "user",
+      "createdAt": 1591178953061239000,
+      "options": {
+        "keys": false,
+        "trackExistence": true
+      },
+      "fields": [
         {
-            "fields": [
-                {
-                    "name": "event",
-                    "options": {
-                        "keys": false,
-                        "timeQuantum": "YMD",
-                        "type": "time"
-                    }
-                },
-                {
-                    "name": "language",
-                    "options": {
-                        "cacheSize": 50000,
-                        "cacheType": "ranked",
-                        "keys": false,
-                        "type": "set"
-                    }
-                }
-            ],
-            "name": "user",
-            "options": {
-                "keys": false,
-                "trackExistence": true
-            }
+          "name": "event",
+          "createdAt": 1591178962332452000,
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": false
+          }
+        },
+        {
+          "name": "language",
+          "createdAt": 1591180128294321000,
+          "options": {
+            "type": "set",
+            "cacheType": "ranked",
+            "cacheSize": 50000,
+            "keys": false
+          }
+        },
+        {
+          "name": "quantity",
+          "createdAt": 1591180110914425000,
+          "options": {
+            "type": "int",
+            "base": 0,
+            "bitDepth": 0,
+            "min": -1000,
+            "max": 2000,
+            "keys": false,
+            "foreignIndex": ""
+          }
         }
-    ]
+      ],
+      "shardWidth": 1048576
+    }
+  ]
 }
 ```
 
@@ -304,7 +340,7 @@ Returns the version of the Pilosa server.
 curl -XGET localhost:10101/version
 ```
 ``` response
-{"version":"v0.6.0"}
+{"version":"2.0.0-alpha.20-6-gb9d8d6b4"}
 ```
 
 ### Get status
@@ -318,19 +354,25 @@ curl -XGET localhost:10101/status
 ```
 ```response
 {
-    "localID": "d3369125-29d8-4305-a351-b4474d14a542",
-    "nodes": [
-        {
-            "id": "d3369125-29d8-4305-a351-b4474d14a542",
-            "isCoordinator": true,
-            "uri": {
-                "host": "localhost",
-                "port": 10101,
-                "scheme": "http"
-            }
-        }
-    ],
-    "state": "NORMAL"
+  "state": "NORMAL",
+  "nodes": [
+    {
+      "id": "1b018ce0-5de5-4da9-9285-6c4c0d8106f9",
+      "uri": {
+        "scheme": "http",
+        "host": "localhost",
+        "port": 10101
+      },
+      "grpc-uri": {
+        "scheme": "http",
+        "host": "localhost",
+        "port": 20101
+      },
+      "isCoordinator": true,
+      "state": "READY"
+    }
+  ],
+  "localID": "1b018ce0-5de5-4da9-9285-6c4c0d8106f9"
 }
 ```
 
