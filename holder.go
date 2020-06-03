@@ -1120,7 +1120,8 @@ func (s *holderSyncer) stopTranslationSync() error {
 // writing new translation keys. Index stores are writable if the node owns the
 // partition. Field stores are writable if the node is the coordinator.
 func (s *holderSyncer) setTranslateReadOnlyFlags() {
-	isCoordinator := s.Cluster.isCoordinator()
+	s.Cluster.mu.RLock()
+	isCoordinator := s.Cluster.unprotectedIsCoordinator()
 
 	for _, index := range s.Holder.Indexes() {
 		// There is a race condition here:
@@ -1140,7 +1141,7 @@ func (s *holderSyncer) setTranslateReadOnlyFlags() {
 		// done using it.
 		index.mu.RLock()
 		for partitionID := 0; partitionID < s.Cluster.partitionN; partitionID++ {
-			ownsPartition := s.Cluster.ownsPartition(s.Node.ID, partitionID)
+			ownsPartition := s.Cluster.unprotectedOwnsPartition(s.Node.ID, partitionID)
 			if ts := index.TranslateStore(partitionID); ts != nil {
 				ts.SetReadOnly(!ownsPartition)
 			}
@@ -1151,6 +1152,7 @@ func (s *holderSyncer) setTranslateReadOnlyFlags() {
 			field.TranslateStore().SetReadOnly(!isCoordinator)
 		}
 	}
+	s.Cluster.mu.RUnlock()
 }
 
 // initializeIndexTranslateReplication connects to each node that is the
