@@ -159,7 +159,7 @@ Some endpoints and data structures include a `CreatedAt` fields.
 This is typically stored as a timestamp, but it's purpose is not to inform of the creation date of a particular index or field,
 but to serve as a unique identifier for use in cache invalidation.
 
-The problem is that users of Pilosa (such as ingesters e.g. the <a href="https://github.com/molecula/idk">IDK</a>),
+The problem is that users of Pilosa (such as ingesters e.g. the [IDK](https://github.com/molecula/idk))
 can usually assume that translation keys for records and field values never change - they are only appended to, and can therefore be trivially cached.
 This is true except in cases where an index or field gets deleted and then recreated,
 or if Pilosa is restored from a backup.
