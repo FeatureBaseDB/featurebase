@@ -324,16 +324,20 @@ func (g *memberSet) LocalState(join bool) []byte {
 		Schema: &pilosa.Schema{Indexes: g.papi.Schema(context.Background())},
 	}
 	for _, idx := range m.Schema.Indexes {
-		is := &pilosa.IndexStatus{Name: idx.Name}
+		is := &pilosa.IndexStatus{Name: idx.Name, CreatedAt: idx.CreatedAt}
+
 		for _, f := range idx.Fields {
 			availableShards := roaring.NewBitmap()
 			if field, _ := g.papi.Field(context.Background(), idx.Name, f.Name); field != nil {
 				availableShards = field.AvailableShards()
 			}
-			is.Fields = append(is.Fields, &pilosa.FieldStatus{
+
+			fs := &pilosa.FieldStatus{
 				Name:            f.Name,
+				CreatedAt:       f.CreatedAt,
 				AvailableShards: availableShards,
-			})
+			}
+			is.Fields = append(is.Fields, fs)
 		}
 		m.Indexes = append(m.Indexes, is)
 	}

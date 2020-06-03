@@ -17,6 +17,7 @@ package pilosa
 import (
 	"encoding/json"
 	"regexp"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -64,6 +65,9 @@ var (
 	// TODO(2.0) poorly named - used when a *node* doesn't own a shard. Probably
 	// we won't need this error at all by 2.0 though.
 	ErrClusterDoesNotOwnShard = errors.New("node does not own shard")
+
+	// ErrPreconditionFailed is returned when specified index/field createdAt timestamps don't match
+	ErrPreconditionFailed = errors.New("precondition failed")
 
 	ErrNodeIDNotExists    = errors.New("node with provided ID does not exist")
 	ErrNodeNotCoordinator = errors.New("node is not the coordinator")
@@ -122,6 +126,15 @@ type NotFoundError struct {
 // newNotFoundError returns err wrapped in a NotFoundError.
 func newNotFoundError(err error) NotFoundError {
 	return NotFoundError{err}
+}
+
+type PreconditionFailedError struct {
+	error
+}
+
+// newPreconditionFailedError returns err wrapped in a PreconditionFailedError.
+func newPreconditionFailedError(err error) PreconditionFailedError {
+	return PreconditionFailedError{err}
 }
 
 // Regular expression to validate index and field names.
@@ -189,6 +202,10 @@ func stringSlicesAreEqual(a, b []string) bool {
 	}
 
 	return true
+}
+
+func timestamp() int64 {
+	return time.Now().UnixNano()
 }
 
 // AddressWithDefaults converts addr into a valid address,

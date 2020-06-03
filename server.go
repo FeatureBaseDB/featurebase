@@ -356,14 +356,11 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 	s.executor = newExecutor(executorOpts...)
 
-	// s.holder.translateFile.logger = s.logger
-
 	path, err := expandDirName(s.dataDir)
 	if err != nil {
 		return nil, err
 	}
 	s.holder.Path = path
-	// s.holder.translateFile.Path = filepath.Join(path, ".keys")
 	s.holder.Logger = s.logger
 	s.holder.Stats.SetLogger(s.logger)
 
@@ -716,10 +713,13 @@ func (s *Server) receiveMessage(m Message) error {
 		}
 	case *CreateIndexMessage:
 		opt := obj.Meta
-		_, err := s.holder.CreateIndex(obj.Index, *opt)
+		idx, err := s.holder.CreateIndex(obj.Index, *opt)
 		if err != nil {
 			return err
 		}
+		idx.mu.Lock()
+		idx.createdAt = obj.CreatedAt
+		idx.mu.Unlock()
 	case *DeleteIndexMessage:
 		if err := s.holder.DeleteIndex(obj.Index); err != nil {
 			return err
@@ -730,10 +730,13 @@ func (s *Server) receiveMessage(m Message) error {
 			return fmt.Errorf("local index not found: %s", obj.Index)
 		}
 		opt := obj.Meta
-		_, err := idx.createFieldIfNotExists(obj.Field, opt)
+		fld, err := idx.createFieldIfNotExists(obj.Field, opt)
 		if err != nil {
 			return err
 		}
+		fld.mu.Lock()
+		fld.createdAt = obj.CreatedAt
+		fld.mu.Unlock()
 	case *DeleteFieldMessage:
 		idx := s.holder.Index(obj.Index)
 		if err := idx.DeleteField(obj.Field); err != nil {
@@ -767,6 +770,12 @@ func (s *Server) receiveMessage(m Message) error {
 		if err != nil {
 			return err
 		}
+		if !s.isCoordinator {
+			if obj.Schema != nil {
+				s.holder.applyCreatedAt(obj.Schema.Indexes)
+			}
+		}
+
 	case *ResizeInstruction:
 		err := s.cluster.followResizeInstruction(obj)
 		if err != nil {

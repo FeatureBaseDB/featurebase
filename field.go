@@ -86,10 +86,11 @@ var availableShardFileFlushDuration = &protected{
 
 // Field represents a container for views.
 type Field struct {
-	mu    sync.RWMutex
-	path  string
-	index string
-	name  string
+	mu        sync.RWMutex
+	createdAt int64
+	path      string
+	index     string
+	name      string
 
 	viewMap map[string]*view
 
@@ -381,6 +382,14 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 
 // Name returns the name the field was initialized with.
 func (f *Field) Name() string { return f.name }
+
+// CreatedAt is an timestamp for a specific version of field.
+func (f *Field) CreatedAt() int64 {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	return f.createdAt
+}
 
 // Index returns the index name the field was initialized with.
 func (f *Field) Index() string { return f.index }
@@ -1971,9 +1980,10 @@ func (p fieldSlice) Less(i, j int) bool { return p[i].Name() < p[j].Name() }
 
 // FieldInfo represents schema information for a field.
 type FieldInfo struct {
-	Name    string       `json:"name"`
-	Options FieldOptions `json:"options"`
-	Views   []*ViewInfo  `json:"views,omitempty"`
+	Name      string       `json:"name"`
+	CreatedAt int64        `json:"createdAt,omitempty"`
+	Options   FieldOptions `json:"options"`
+	Views     []*ViewInfo  `json:"views,omitempty"`
 }
 
 type fieldInfoSlice []*FieldInfo
