@@ -45,6 +45,7 @@ type API struct {
 	holder  *Holder
 	cluster *cluster
 	server  *Server
+	tracker *queryTracker
 
 	importWorkersWG      sync.WaitGroup
 	importWorkerPoolSize int
@@ -95,6 +96,8 @@ func NewAPI(opts ...apiOption) (*API, error) {
 		}()
 	}
 
+	api.tracker = newQueryTracker()
+
 	return api, nil
 }
 
@@ -130,6 +133,7 @@ func (api *API) validate(f apiMethod) error {
 func (api *API) Close() error {
 	close(api.importWork)
 	api.importWorkersWG.Wait()
+	api.tracker.Stop()
 	return nil
 }
 
@@ -146,6 +150,7 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	if err != nil {
 		return QueryResponse{}, errors.Wrap(err, "parsing")
 	}
+	defer api.tracker.Finish(api.tracker.Start(req.Query))
 	execOpts := &execOptions{
 		Remote:          req.Remote,
 		Profile:         req.Profile,
@@ -1701,6 +1706,13 @@ func (api *API) GetTransaction(ctx context.Context, id string, remote bool) (*Tr
 	return t, err
 }
 
+func (api *API) ActiveQueries(ctx context.Context) ([]ActiveQueryStatus, error) {
+	if err := api.validate(apiActiveQueries); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
+	}
+	return api.tracker.ActiveQueries(), nil
+}
+
 type serverInfo struct {
 	ShardWidth       uint64 `json:"shardWidth"`
 	Memory           uint64 `json:"memory"`
@@ -1752,6 +1764,7 @@ const (
 	apiFinishTransaction
 	apiTransactions
 	apiGetTransaction
+	apiActiveQueries
 )
 
 var methodsCommon = map[apiMethod]struct{}{
@@ -1791,4 +1804,5 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiFinishTransaction:    {},
 	apiTransactions:         {},
 	apiGetTransaction:       {},
+	apiActiveQueries:        {},
 }

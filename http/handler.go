@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"mime"
 	"net"
 	"net/http"
 	_ "net/http/pprof" // Imported for its side-effect of registering pprof endpoints with the server.
@@ -358,6 +359,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/transaction/{id}", handler.handlePostTransaction).Methods("POST").Name("PostTransaction")
 	router.HandleFunc("/transaction/{id}/finish", handler.handlePostFinishTransaction).Methods("POST").Name("PostFinishTransaction")
 	router.HandleFunc("/transactions", handler.handleGetTransactions).Methods("GET").Name("GetTransactions")
+	router.HandleFunc("/queries", handler.handleGetActiveQueries).Methods("GET").Name("GetActiveQueries")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET").Name("GetVersion")
 
 	// /internal endpoints are for internal use only; they may change at any time.
@@ -475,9 +477,33 @@ func (h *Handler) handleHome(w http.ResponseWriter, _ *http.Request) {
 // headers are present, but none of them are "application/json"
 // (or any matching wildcard). Otherwise returns true.
 func validHeaderAcceptJSON(header http.Header) bool {
+	return validHeaderAcceptType(header, "application", "json")
+}
+
+func validHeaderAcceptType(header http.Header, typ, subtyp string) bool {
 	if v, found := header["Accept"]; found {
 		for _, v := range v {
-			if v == "application/json" || v == "*/*" || v == "*/json" || v == "application/*" {
+			t, _, err := mime.ParseMediaType(v)
+			if err != nil {
+				switch err {
+				case mime.ErrInvalidMediaParameter:
+					// This is an optional feature, so we can keep going anyway.
+				default:
+					continue
+				}
+			}
+			spl := strings.SplitN(t, "/", 2)
+			if len(spl) < 2 {
+				continue
+			}
+			switch {
+			case spl[0] == typ && spl[1] == subtyp:
+				return true
+			case spl[0] == "*" && spl[1] == subtyp:
+				return true
+			case spl[0] == typ && spl[1] == "*":
+				return true
+			case spl[0] == "*" && spl[1] == "*":
 				return true
 			}
 		}
@@ -832,6 +858,52 @@ func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request
 		Attrs: attrs,
 	}); err != nil {
 		h.logger.Printf("response encoding error: %s", err)
+	}
+}
+
+func (h *Handler) handleGetActiveQueries(w http.ResponseWriter, r *http.Request) {
+	var rtype string
+	switch {
+	case validHeaderAcceptType(r.Header, "text", "plain"):
+		rtype = "text/plain"
+	case validHeaderAcceptJSON(r.Header):
+		rtype = "application/json"
+	default:
+		http.Error(w, "no acceptable response type selected", http.StatusNotAcceptable)
+		return
+	}
+	queries, err := h.api.ActiveQueries(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", rtype)
+	switch rtype {
+	case "text/plain":
+		durations := make([]string, len(queries))
+		for i, q := range queries {
+			durations[i] = q.Age.String()
+		}
+		var maxlen int
+		for _, l := range durations {
+			if len(l) > maxlen {
+				maxlen = len(l)
+			}
+		}
+		for i, q := range queries {
+			_, err := fmt.Fprintf(w, "%*s%q\n", -(maxlen + 2), durations[i], q.Query)
+			if err != nil {
+				h.logger.Printf("sending GetActiveQueries response: %s", err)
+				return
+			}
+		}
+		if _, err := w.Write([]byte{'\n'}); err != nil {
+			h.logger.Printf("sending GetActiveQueries response: %s", err)
+		}
+	case "application/json":
+		if err := json.NewEncoder(w).Encode(queries); err != nil {
+			h.logger.Printf("encoding GetActiveQueries response: %s", err)
+		}
 	}
 }
 
