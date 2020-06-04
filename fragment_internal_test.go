@@ -2412,8 +2412,9 @@ func TestGetZipfRowsSliceRoaring(t *testing.T) {
 	if err != nil {
 		t.Fatalf("importing roaring: %v", err)
 	}
-	if !reflect.DeepEqual(f.rows(0), []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}) {
-		t.Fatalf("unexpected rows: %v", f.rows(0))
+	rows := f.rows(context.Background(), 0)
+	if !reflect.DeepEqual(rows, []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}) {
+		t.Fatalf("unexpected rows: %v", rows)
 	}
 	for i := uint64(1); i < 10; i++ {
 		if f.row(i).Count() >= f.row(i-1).Count() {
@@ -2714,12 +2715,12 @@ func TestFragment_RowsIteration(t *testing.T) {
 			}
 		}
 
-		ids := f.rows(0)
+		ids := f.rows(context.Background(), 0)
 		if !reflect.DeepEqual(expectedAll, ids) {
 			t.Fatalf("Do not match %v %v", expectedAll, ids)
 		}
 
-		ids = f.rows(0, filterColumn(1))
+		ids = f.rows(context.Background(), 0, filterColumn(1))
 		if !reflect.DeepEqual(expectedOdd, ids) {
 			t.Fatalf("Do not match %v %v", expectedOdd, ids)
 		}
@@ -2738,12 +2739,12 @@ func TestFragment_RowsIteration(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		ids := f.rows(0)
+		ids := f.rows(context.Background(), 0)
 		if !reflect.DeepEqual(expected, ids) {
 			t.Fatalf("Do not match %v %v", expected, ids)
 		}
 
-		ids = f.rows(0, filterColumn(66000))
+		ids = f.rows(context.Background(), 0, filterColumn(66000))
 		if !reflect.DeepEqual(expected, ids) {
 			t.Fatalf("Do not match %v %v", expected, ids)
 		}
@@ -2761,11 +2762,11 @@ func TestFragment_RowsIteration(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				ids := f.rows(0)
+				ids := f.rows(context.Background(), 0)
 				if !reflect.DeepEqual(expectedRows, ids) {
 					t.Fatalf("Do not match %v %v", expectedRows, ids)
 				}
-				ids = f.rows(0, filterColumn(c))
+				ids = f.rows(context.Background(), 0, filterColumn(c))
 				if !reflect.DeepEqual(expectedRows, ids) {
 					t.Fatalf("Do not match %v %v", expectedRows, ids)
 				}

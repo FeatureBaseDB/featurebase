@@ -2607,14 +2607,14 @@ func filterWithRows(rows []uint64) rowFilter {
 // returning done == true will cause processing to stop after all filters for
 // this container have been processed. The rows accumulated up to this point
 // (including this row if all filters passed) will be returned.
-func (f *fragment) rows(start uint64, filters ...rowFilter) []uint64 {
+func (f *fragment) rows(ctx context.Context, start uint64, filters ...rowFilter) []uint64 {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	return f.unprotectedRows(start, filters...)
+	return f.unprotectedRows(ctx, start, filters...)
 }
 
 // unprotectedRows calls rows without grabbing the mutex.
-func (f *fragment) unprotectedRows(start uint64, filters ...rowFilter) []uint64 {
+func (f *fragment) unprotectedRows(ctx context.Context, start uint64, filters ...rowFilter) []uint64 {
 	startKey := rowToKey(start)
 	i, _ := f.storage.Containers.Iterator(startKey)
 	rows := make([]uint64, 0)
@@ -2622,6 +2622,10 @@ func (f *fragment) unprotectedRows(start uint64, filters ...rowFilter) []uint64 
 
 	// Loop over the existing containers.
 	for i.Next() {
+		// caller doesn't need a result anymore.
+		if ctx.Err() != nil {
+			return nil
+		}
 		key, c := i.Value()
 
 		// virtual row for the current container
@@ -2861,7 +2865,7 @@ type setRowIterator struct {
 func (f *fragment) setRowIterator(wrap bool, filters ...rowFilter) rowIterator {
 	return &setRowIterator{
 		f:      f,
-		rowIDs: f.rows(0, filters...), // TODO: this may be memory intensive in high cardinality cases
+		rowIDs: f.rows(context.Background(), 0, filters...), // TODO: this may be memory intensive in high cardinality cases
 		wrap:   wrap,
 	}
 }
@@ -3282,7 +3286,7 @@ func newRowsVector(f *fragment) *rowsVector {
 // otherwise it returns false. Ensure that you already
 // have the mutex before calling this.
 func (v *rowsVector) Get(colID uint64) (uint64, bool, error) {
-	rows := v.f.unprotectedRows(0, filterColumn(colID))
+	rows := v.f.unprotectedRows(context.Background(), 0, filterColumn(colID))
 	if len(rows) > 1 {
 		return 0, false, errors.New("found multiple row values for column")
 	} else if len(rows) == 1 {
@@ -3316,7 +3320,7 @@ func newBoolVector(f *fragment) *boolVector {
 // otherwise it returns false. Ensure that you already
 // have the fragment mutex before calling this.
 func (v *boolVector) Get(colID uint64) (uint64, bool, error) {
-	rows := v.f.unprotectedRows(0, filterColumn(colID))
+	rows := v.f.unprotectedRows(context.Background(), 0, filterColumn(colID))
 	if len(rows) > 1 {
 		return 0, false, errors.New("found multiple row values for column")
 	} else if len(rows) == 1 {
