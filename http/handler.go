@@ -880,24 +880,24 @@ func (h *Handler) handleGetActiveQueries(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", rtype)
 	switch rtype {
 	case "text/plain":
-		lines := make([]string, len(queries))
+		durations := make([]string, len(queries))
 		for i, q := range queries {
-			lines[i] = q.Age.String()
+			durations[i] = q.Age.String()
 		}
 		var maxlen int
-		for _, l := range lines {
+		for _, l := range durations {
 			if len(l) > maxlen {
 				maxlen = len(l)
 			}
 		}
-		spaces := strings.Repeat(" ", maxlen+2)
-		for i, l := range lines {
-			lines[i] += spaces[len(l):]
-		}
 		for i, q := range queries {
-			lines[i] += q.Query
+			_, err := fmt.Fprintf(w, "%*s%q\n", -(maxlen + 2), durations[i], q.Query)
+			if err != nil {
+				h.logger.Printf("sending GetActiveQueries response: %s", err)
+				return
+			}
 		}
-		if _, err := w.Write([]byte(strings.Join(lines, "\n") + "\n")); err != nil {
+		if _, err := w.Write([]byte{'\n'}); err != nil {
 			h.logger.Printf("sending GetActiveQueries response: %s", err)
 		}
 	case "application/json":
