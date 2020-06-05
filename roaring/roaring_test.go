@@ -1837,18 +1837,6 @@ func getBenchData(tb testing.TB) *benchmarkSampleData {
 	return data
 }
 
-func diff(a, b []uint64) string {
-	if len(a) != len(b) {
-		return fmt.Sprintf("len: %d != %d", len(a), len(b))
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return fmt.Sprintf("index %d: %d != %d", i, a[i], b[i])
-		}
-	}
-	return ""
-}
-
 func TestBitmap_Intersect(t *testing.T) {
 	bm0 := testBM()
 	result := bm0.Intersect(bm0)
