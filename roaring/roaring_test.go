@@ -866,7 +866,7 @@ func TestBitmap_UnionInPlaceProp(t *testing.T) {
 		seed               = time.Now().UnixNano()
 		source             = rand.NewSource(seed)
 		rng                = rand.New(source)
-		numTests           = 100
+		numTests           = 20
 		maxNumIntsPerBatch = 100
 		maxNumBatches      = 100
 		maxRangePercent    = 2
@@ -1425,10 +1425,10 @@ func TestBitmap_Shift(t *testing.T) {
 }
 
 func TestBitmap_Quick_Array1(t *testing.T)     { testBitmapQuick(t, 1000, 1000, 2000) }
-func TestBitmap_Quick_Array2(t *testing.T)     { testBitmapQuick(t, 10000, 0, 1000) }
-func TestBitmap_Quick_Bitmap1(t *testing.T)    { testBitmapQuick(t, 10000, 0, 10000) }
-func TestBitmap_Quick_Bitmap2(t *testing.T)    { testBitmapQuick(t, 10000, 10000, 20000) }
-func TestBitmap_Quick_LargeValue(t *testing.T) { testBitmapQuick(t, 10000, 0, math.MaxInt64) }
+func TestBitmap_Quick_Array2(t *testing.T)     { testBitmapQuick(t, 1000, 0, 1000) }
+func TestBitmap_Quick_Bitmap1(t *testing.T)    { testBitmapQuick(t, 1000, 0, 10000) }
+func TestBitmap_Quick_Bitmap2(t *testing.T)    { testBitmapQuick(t, 1000, 10000, 20000) }
+func TestBitmap_Quick_LargeValue(t *testing.T) { testBitmapQuick(t, 1000, 0, math.MaxInt64) }
 
 // Ensure a bitmap can perform basic operations on randomly generated values.
 func testBitmapQuick(t *testing.T, n int, min, max uint64) {
@@ -1504,20 +1504,20 @@ func TestBitmap_Marshal_Quick_Array1(t *testing.T) {
 	testBitmapMarshalQuick(t, 1000, 1000, 2000, false)
 }
 func TestBitmap_Marshal_Quick_Array2(t *testing.T) {
-	testBitmapMarshalQuick(t, 10000, 0, 1000, false)
+	testBitmapMarshalQuick(t, 1000, 0, 1000, false)
 }
 func TestBitmap_Marshal_Quick_Bitmap1(t *testing.T) {
-	testBitmapMarshalQuick(t, 10000, 0, 10000, false)
+	testBitmapMarshalQuick(t, 1000, 0, 10000, false)
 }
 func TestBitmap_Marshal_Quick_Bitmap2(t *testing.T) {
-	testBitmapMarshalQuick(t, 10000, 10000, 20000, false)
+	testBitmapMarshalQuick(t, 1000, 10000, 20000, false)
 }
 func TestBitmap_Marshal_Quick_LargeValue(t *testing.T) {
 	testBitmapMarshalQuick(t, 100, 0, math.MaxInt64, false)
 }
 
 func TestBitmap_Marshal_Quick_Bitmap_Sorted(t *testing.T) {
-	testBitmapMarshalQuick(t, 10000, 0, 10000, true)
+	testBitmapMarshalQuick(t, 1000, 0, 10000, true)
 }
 
 // TODO update for RLE
