@@ -721,6 +721,268 @@ func TestUnionMixed(t *testing.T) {
 	})
 }
 
+func TestUnionInterval16InPlace(t *testing.T) {
+	t.Run("single overlap", func(t *testing.T) {
+		a := []interval16{interval16{1, 10}, interval16{21, 28}}
+		b := []interval16{interval16{8, 12}}
+		runs, n := unionInterval16InPlace(a, b)
+
+		const expectedN = 20
+		if n != expectedN {
+			t.Fatalf("N expected: %d, got: %d", expectedN, n)
+		}
+		expected := []interval16{interval16{1, 12}, interval16{21, 28}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
+	})
+
+	t.Run("nested intervals", func(t *testing.T) {
+		a := []interval16{interval16{3, 13}, interval16{17, 20}}
+		b := []interval16{interval16{1, 4}, interval16{6, 7}, interval16{8, 9}, interval16{10, 11}, interval16{14, 17}}
+		runs, n := unionInterval16InPlace(a, b)
+
+		const expectedN = 20
+		if n != expectedN {
+			t.Fatalf("N expected: %d, got: %d", expectedN, n)
+		}
+		expected := []interval16{interval16{1, 13}, interval16{14, 20}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
+	})
+
+	t.Run("no overlap", func(t *testing.T) {
+		a := []interval16{interval16{3, 4}, interval16{7, 8}}
+		b := []interval16{interval16{1, 2}, interval16{5, 6}, interval16{9, 10}}
+		runs, n := unionInterval16InPlace(a, b)
+
+		const expectedN = 10
+		if n != expectedN {
+			t.Fatalf("N expected: %d, got: %d", expectedN, n)
+		}
+		expected := []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 6}, interval16{7, 8}, interval16{9, 10}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
+	})
+
+	t.Run("b in a", func(t *testing.T) {
+		a := []interval16{interval16{1, 10}}
+		b := []interval16{interval16{5, 7}}
+		runs, n := unionInterval16InPlace(a, b)
+
+		const expectedN = 10
+		if n != expectedN {
+			t.Fatalf("N expected: %d, got: %d", expectedN, n)
+		}
+		expected := []interval16{interval16{1, 10}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
+	})
+
+	t.Run("a eq b", func(t *testing.T) {
+		a := []interval16{interval16{1, 10}}
+		b := []interval16{interval16{1, 10}}
+		runs, n := unionInterval16InPlace(a, b)
+
+		const expectedN = 10
+		if n != expectedN {
+			t.Fatalf("N expected: %d, got: %d", expectedN, n)
+		}
+		expected := []interval16{interval16{1, 10}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
+	})
+
+	t.Run("a in b", func(t *testing.T) {
+		a := []interval16{interval16{5, 7}}
+		b := []interval16{interval16{1, 10}}
+		runs, n := unionInterval16InPlace(a, b)
+
+		const expectedN = 10
+		if n != expectedN {
+			t.Fatalf("N expected: %d, got: %d", expectedN, n)
+		}
+		expected := []interval16{interval16{1, 10}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
+	})
+
+	t.Run("a ahead b", func(t *testing.T) {
+		a := []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}}
+		b := []interval16{interval16{10, 11}, interval16{12, 13}, interval16{14, 15}}
+		runs, n := unionInterval16InPlace(a, b)
+
+		const expectedN = 13
+		if n != expectedN {
+			t.Fatalf("N expected: %d, got: %d", expectedN, n)
+		}
+		expected := []interval16{
+			interval16{1, 2},
+			interval16{3, 4},
+			interval16{5, 7},
+			interval16{10, 11},
+			interval16{12, 13},
+			interval16{14, 15},
+		}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
+	})
+
+	t.Run("b ahead a", func(t *testing.T) {
+		a := []interval16{interval16{10, 11}, interval16{12, 13}, interval16{14, 15}}
+		b := []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}}
+
+		runs, n := unionInterval16InPlace(a, b)
+
+		const expectedN = 13
+		if n != expectedN {
+			t.Fatalf("N expected: %d, got: %d", expectedN, n)
+		}
+		expected := []interval16{
+			interval16{1, 2},
+			interval16{3, 4},
+			interval16{5, 7},
+			interval16{10, 11},
+			interval16{12, 13},
+			interval16{14, 15},
+		}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
+	})
+
+	t.Run("empty a and b", func(t *testing.T) {
+		a := []interval16{}
+		b := []interval16{}
+
+		runs, n := unionInterval16InPlace(a, b)
+
+		const expectedN = 0
+		if n != expectedN {
+			t.Fatalf("N expected: %d, got: %d", expectedN, n)
+		}
+		expected := []interval16{}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
+	})
+
+	t.Run("empty a", func(t *testing.T) {
+		a := []interval16{}
+		b := []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}}
+
+		runs, n := unionInterval16InPlace(a, b)
+
+		const expectedN = 7
+		if n != expectedN {
+			t.Fatalf("N expected: %d, got: %d", expectedN, n)
+		}
+		expected := []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
+	})
+
+	t.Run("empty b", func(t *testing.T) {
+		a := []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}}
+		b := []interval16{}
+
+		runs, n := unionInterval16InPlace(a, b)
+
+		const expectedN = 7
+		if n != expectedN {
+			t.Fatalf("N expected: %d, got: %d", expectedN, n)
+		}
+		expected := []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
+	})
+
+	t.Run("single a", func(t *testing.T) {
+		a := []interval16{interval16{1, 2}}
+		b := []interval16{}
+
+		runs, n := unionInterval16InPlace(a, b)
+
+		const expectedN = 2
+		if n != expectedN {
+			t.Fatalf("N expected: %d, got: %d", expectedN, n)
+		}
+		expected := []interval16{interval16{1, 2}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
+	})
+
+	t.Run("single b", func(t *testing.T) {
+		a := []interval16{}
+		b := []interval16{interval16{1, 2}}
+
+		runs, n := unionInterval16InPlace(a, b)
+
+		const expectedN = 2
+		if n != expectedN {
+			t.Fatalf("N expected: %d, got: %d", expectedN, n)
+		}
+		expected := []interval16{interval16{1, 2}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
+	})
+
+	t.Run("oddBitsSet lastBitUnset", func(t *testing.T) {
+		a := []interval16{interval16{1, 1}, interval16{3, 3}, interval16{5, 5}}
+		b := []interval16{interval16{0, 4}}
+
+		runs, n := unionInterval16InPlace(a, b)
+
+		expected := []interval16{interval16{0, 4}, interval16{5, 5}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
+		const expectedN = 6
+		if n != expectedN {
+			t.Fatalf("N expected: %d, got: %d", expectedN, n)
+		}
+
+	})
+}
+
 func TestIntersectMixed(t *testing.T) {
 	a := NewContainerRun([]interval16{{start: 5, last: 10}})
 	b := NewContainerArray([]uint16{1, 4, 5, 7, 10, 11, 12})

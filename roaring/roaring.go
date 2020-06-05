@@ -3134,8 +3134,7 @@ func (c *Container) unionInPlace(other *Container) *Container {
 			c = c.runToBitmap()
 			return unionBitmapArrayInPlace(c, other)
 		case containerRun:
-			c = c.runToBitmap()
-			return unionBitmapRunInPlace(c, other)
+			return unionRunRunInPlace(c, other)
 		}
 	}
 	if roaringParanoia {
@@ -4713,6 +4712,145 @@ func unionBitmapBitmapInPlace(a, b *Container) *Container {
 		ab[i+3] |= bb[i+3]
 	}
 	return a
+}
+
+// unions run b into run a, mutating a in place.
+func unionRunRunInPlace(a, b *Container) *Container {
+	statsHit("unionInPlace/RunRun")
+
+	a = a.Thaw()
+	runs, n := unionInterval16InPlace(a.runs(), b.runs())
+
+	a.setN(n)
+	a.setRuns(runs)
+	return a
+}
+
+func unionInterval16InPlace(a, b []interval16) ([]interval16, int32) {
+	n := int32(0)
+
+	an, bn := len(a), len(b)
+	i, j, k := 0, 0, 0
+	for {
+		// select the next interval - v
+		var (
+			v     *interval16
+			local *interval16
+			visa  bool // v is from a
+		)
+		if i < an && j < bn {
+			if a[i].start <= b[j].start {
+				v, visa = &a[i], true
+				i++
+			} else if j < bn {
+				v = &b[j]
+				j++
+			}
+		} else {
+			if i < an {
+				v, visa = &a[i], true
+				i++
+			} else if j < bn {
+				v = &b[j]
+				j++
+			}
+		}
+		// no more intervals - break
+		if v == nil {
+			if len(a) > 0 {
+				// count the last interval
+				n += int32(a[k].last-a[k].start) + 1
+			}
+			break
+		}
+
+	next:
+		if k == an {
+			// append what's left
+			a = append(a, *v)
+			an++
+			continue
+		}
+
+		// current, locally unioned interval
+		if local == nil {
+			local = &a[k]
+		}
+
+		if v.last < local.start {
+			// [---- v ----][---- local ----]
+			// insert v into a
+			a = append(a, interval16{})
+			copy(a[i+1:], a[i:])
+			a[i] = *v
+			an++
+			i++
+			continue
+		}
+
+		if v.start > local.last {
+			// [---- local ----][---- v ----]
+			// set already unioned interval and go next
+			// if int32(v.start-local.last) <= 1 {
+			// 	local.last = v.last
+			// 	continue
+			// }
+
+			a[k] = *local
+			n += int32(local.last-local.start) + 1
+			k++
+
+			// if we set unioned interval we can go to the next interval
+			if visa {
+				// v is from a, so we can skip "digested intervals"
+				// and jump already to v
+				local = v
+			} else {
+				// ...otherwise, move to the next one,
+				// so let assign local in next iteration
+				local = nil
+			}
+
+			goto next
+		}
+
+		if v.start < local.start {
+			if v.last >= local.start && v.last <= local.last {
+				//    [---- local ----]
+				// [---- v ----]
+				local.start = v.start
+			} else if v.last > local.last {
+				//  [- local -]
+				// [---- v ----]
+				*local = *v
+			}
+			continue
+		}
+
+		if v.start >= local.start && v.start <= local.last {
+			if v.last <= local.last {
+				// [---- local ----]
+				//     [-- v --]
+
+				// this assignment looks silly, but if we extended local
+				// and "digested" many nested intervals, we can squash a, e.g.:
+				//    [a1] [a2] [a3] [a4]
+				// [------ b ------]
+				// will give us:
+				// [ ----- a1 -----] [a4]
+				a[k] = *local
+			} else if v.last > local.last {
+				// [---- local ----]
+				//         [---- v ----]
+				local.last = v.last
+			}
+		}
+	}
+
+	if len(a) > 0 {
+		a = a[:k+1]
+	}
+	return a, n
 }
 
 func difference(a, b *Container) *Container {
