@@ -1570,14 +1570,12 @@ func testBitmapMarshalQuick(t *testing.T, n int, min, max uint64, sorted bool) {
 				t.Fatal(err)
 			}
 
-			// Verify the original bitmap has the correct set of values.
-			if exp, got := generator.Uint64SetSlice(set), bm.Slice(); !reflect.DeepEqual(exp, got) {
-				t.Fatalf("mismatch: %s\n\nexp=%+v\n\ngot=%+v\n\n", diff(exp, got), exp, got)
+			if _, err := roaring.CompareBitmapMap(bm, set); err != nil {
+				t.Fatalf("source mismatch: %v", err)
 			}
 
-			// Verify the bitmap loaded with the ops log has the correct set of values.
-			if exp, got := generator.Uint64SetSlice(set), bm2.Slice(); !reflect.DeepEqual(exp, got) {
-				t.Fatalf("mismatch: %s\n\nexp=%+v\n\ngot=%+v\n\n", diff(exp, got), exp, got)
+			if _, err := roaring.CompareBitmapMap(bm2, set); err != nil {
+				t.Fatalf("unmarshalled mismatch: %v", err)
 			}
 		}
 

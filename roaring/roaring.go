@@ -5756,7 +5756,37 @@ func xorBitmapRun(a, b *Container) *Container {
 	return output
 }
 
-// CompareEquality is used mostly in test cases to confirm that two bitmaps came
+// CompareBitmapSlice checks whether a bitmap has the same values in it
+// that a provided slice does.
+func CompareBitmapSlice(b *Bitmap, vals []uint64) (bool, error) {
+	count := b.Count()
+	if count != uint64(len(vals)) {
+		return false, fmt.Errorf("length mismatch: bitmap has %d bits, slice has %d", count, len(vals))
+	}
+	for _, v := range vals {
+		if !b.Contains(v) {
+			return false, fmt.Errorf("bitmap lacks expected value %d", v)
+		}
+	}
+	return true, nil
+}
+
+// CompareBitmapMap checks whether a bitmap has the same values in it
+// that a provided map[uint64]struct{} has as keys.
+func CompareBitmapMap(b *Bitmap, vals map[uint64]struct{}) (bool, error) {
+	count := b.Count()
+	if count != uint64(len(vals)) {
+		return false, fmt.Errorf("length mismatch: bitmap has %d bits, map has %d", count, len(vals))
+	}
+	for v := range vals {
+		if !b.Contains(v) {
+			return false, fmt.Errorf("bitmap lacks expected value %d", v)
+		}
+	}
+	return true, nil
+}
+
+// BitwiseEqual is used mostly in test cases to confirm that two bitmaps came
 // out the same. It does not expect corresponding opN, or OpWriter, but expects
 // identical bit contents. It does not expect identical representations; a bitmap
 // container can be identical to an array container. It returns a boolean value,
