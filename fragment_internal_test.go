@@ -2760,9 +2760,9 @@ func TestFragment_RowsIteration(t *testing.T) {
 		defer f.Clean(t)
 
 		expectedRows := make([]uint64, 0)
-		for r := uint64(1); r < uint64(10000); r += 100 {
+		for r := uint64(1); r < uint64(10000); r += 250 {
 			expectedRows = append(expectedRows, r)
-			for c := uint64(1); c < uint64(ShardWidth-1); c += 10000 {
+			for c := uint64(1); c < uint64(ShardWidth-1); c += (ShardWidth >> 5) {
 				if _, err := f.setBit(r, c); err != nil {
 					t.Fatal(err)
 				}
