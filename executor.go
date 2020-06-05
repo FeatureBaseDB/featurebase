@@ -59,6 +59,8 @@ type executor struct {
 	// Maximum number of Set() or Clear() commands per request.
 	MaxWritesPerRequest int
 
+	shutdown       bool
+	workMu         sync.RWMutex
 	workersWG      sync.WaitGroup
 	workerPoolSize int
 	work           chan job
@@ -115,6 +117,9 @@ func newExecutor(opts ...executorOption) *executor {
 }
 
 func (e *executor) Close() error {
+	e.workMu.Lock()
+	defer e.workMu.Unlock()
+	e.shutdown = true
 	close(e.work)
 	e.workersWG.Wait()
 	return nil
@@ -3768,6 +3773,8 @@ func worker(work chan job) {
 	}
 }
 
+var errShutdown = errors.New("executor has shut down")
+
 // mapperLocal performs map & reduce entirely on the local node.
 func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFunc, reduceFn reduceFunc) (interface{}, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapperLocal")
@@ -3775,6 +3782,12 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	done := ctx.Done()
+	e.workMu.RLock()
+	defer e.workMu.RUnlock()
+
+	if e.shutdown {
+		return nil, errShutdown
+	}
 
 	ch := make(chan mapResponse, len(shards))
 
