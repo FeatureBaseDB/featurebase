@@ -77,6 +77,8 @@ type Server struct { // nolint: maligned
 	metricInterval      time.Duration
 	diagnosticInterval  time.Duration
 	maxWritesPerRequest int
+	confirmDownSleep    time.Duration
+	confirmDownRetries  int
 	isCoordinator       bool
 	syncer              holderSyncer
 
@@ -229,6 +231,17 @@ func OptServerDiagnosticsInterval(dur time.Duration) ServerOption {
 	}
 }
 
+// OptServerNodeDownRetries is a functional option on Server
+// used to specify the retries and sleep duration for node down
+// checks.
+func OptServerNodeDownRetries(retries int, sleep time.Duration) ServerOption {
+	return func(s *Server) error {
+		s.confirmDownRetries = retries
+		s.confirmDownSleep = sleep
+		return nil
+	}
+}
+
 // OptServerURI is a functional option on Server
 // used to set the server URI.
 func OptServerURI(uri *URI) ServerOption {
@@ -330,6 +343,9 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		metricInterval:      0,
 		diagnosticInterval:  0,
 
+		confirmDownRetries: defaultConfirmDownRetries,
+		confirmDownSleep:   defaultConfirmDownSleep,
+
 		resetTranslationSyncCh: make(chan struct{}),
 
 		logger: logger.NopLogger,
@@ -399,6 +415,8 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
 	s.cluster.broadcaster = s
 	s.cluster.maxWritesPerRequest = s.maxWritesPerRequest
+	s.cluster.confirmDownRetries = s.confirmDownRetries
+	s.cluster.confirmDownSleep = s.confirmDownSleep
 	s.holder.broadcaster = s
 	err = s.loadAllExtensions()
 	if err != nil {

@@ -943,18 +943,22 @@ func TestCluster_confirmNodeDownUp(t *testing.T) {
 		t.Error(err)
 	}
 	uri.Port = uint16(iport)
-	if confirmNodeDown(uri, logger.NewVerboseLogger(os.Stdout)) {
+	c := newCluster()
+	c.logger = logger.NewVerboseLogger(os.Stdout)
+	if c.confirmNodeDown(uri) {
 		t.Errorf("expected node to be up")
 	}
 
 }
 func TestCluster_confirmNodeDownTimeout(t *testing.T) {
+	sleep := 50 * time.Millisecond
+	retries := 5
 	if testing.Short() {
 		t.Skip()
 	}
 	r := mux.NewRouter()
 	r.HandleFunc("/version", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(confirmDownSleep * time.Second * confirmDownRetries)
+		time.Sleep(sleep * time.Duration(retries))
 		fmt.Fprintln(w, "ignored")
 	}))
 	server := httptest.NewServer(r)
@@ -973,8 +977,11 @@ func TestCluster_confirmNodeDownTimeout(t *testing.T) {
 		t.Error(err)
 	}
 	uri.Port = uint16(iport)
-
-	if !confirmNodeDown(uri, logger.NewVerboseLogger(os.Stdout)) {
+	c := newCluster()
+	c.confirmDownSleep = sleep
+	c.confirmDownRetries = retries
+	c.logger = logger.NewVerboseLogger(os.Stdout)
+	if !c.confirmNodeDown(uri) {
 		t.Errorf("expected node to be down")
 	}
 }
@@ -987,8 +994,12 @@ func TestCluster_confirmNodeDownDown(t *testing.T) {
 	uri.Scheme = "http"
 	uri.Host = "DoesntMatter"
 	uri.Port = 6666
+	c := newCluster()
+	c.confirmDownSleep = 50 * time.Millisecond
+	c.confirmDownRetries = 5
+	c.logger = logger.NewVerboseLogger(os.Stdout)
 
-	if !confirmNodeDown(uri, logger.NewVerboseLogger(os.Stdout)) {
+	if !c.confirmNodeDown(uri) {
 		t.Errorf("expected node to be down")
 	}
 }
