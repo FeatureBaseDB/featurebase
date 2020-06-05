@@ -1159,14 +1159,24 @@ func (f *fragment) rangeOp(op pql.Token, bitDepth uint, predicate int64) (*Row, 
 	}
 }
 
+func absInt64(v int64) uint64 {
+	switch {
+	case v > 0:
+		return uint64(v)
+	case v == -9223372036854775808:
+		return 9223372036854775808
+	default:
+		return uint64(-v)
+	}
+}
+
 func (f *fragment) rangeEQ(bitDepth uint, predicate int64) (*Row, error) {
 	// Start with set of columns with values set.
 	b := f.row(bsiExistsBit)
 
 	// Filter to only positive/negative numbers.
-	upredicate := uint64(predicate)
+	upredicate := absInt64(predicate)
 	if predicate < 0 {
-		upredicate = uint64(-predicate)
 		b = b.Intersect(f.row(bsiSignBit)) // only negatives
 	} else {
 		b = b.Difference(f.row(bsiSignBit)) // only positives
@@ -1204,27 +1214,42 @@ func (f *fragment) rangeNEQ(bitDepth uint, predicate int64) (*Row, error) {
 }
 
 func (f *fragment) rangeLT(bitDepth uint, predicate int64, allowEquality bool) (*Row, error) {
+	if predicate == 1 && !allowEquality {
+		predicate, allowEquality = 0, true
+	}
+
 	// Start with set of columns with values set.
 	b := f.row(bsiExistsBit)
 
-	// Create predicate without sign bit.
-	upredicate := uint64(predicate)
-	if predicate < 0 {
-		upredicate = uint64(-predicate)
-	}
+	// Get the sign bit row.
+	sign := f.row(bsiSignBit)
 
-	// If predicate is positive, return all positives less than predicate and all negatives.
-	if (predicate >= 0 && allowEquality) || (predicate >= -1 && !allowEquality) {
-		pos, err := f.rangeLTUnsigned(b.Difference(f.row(bsiSignBit)), bitDepth, upredicate, allowEquality)
+	// Create predicate without sign bit.
+	upredicate := absInt64(predicate)
+
+	switch {
+	case predicate == 0 && !allowEquality:
+		// Match all negative integers.
+		return b.Intersect(sign), nil
+	case predicate == 0 && allowEquality:
+		// Match all integers that are either negative or 0.
+		zeroes, err := f.rangeEQ(bitDepth, 0)
 		if err != nil {
 			return nil, err
 		}
-		neg := f.row(bsiSignBit)
-		return neg.Union(pos), nil
+		return b.Intersect(sign).Union(zeroes), nil
+	case predicate < 0:
+		// Match all every negative number beyond the predicate.
+		return f.rangeGTUnsigned(b.Intersect(sign), bitDepth, upredicate, allowEquality)
+	default:
+		// Match positive numbers less than the predicate, and all negatives.
+		pos, err := f.rangeLTUnsigned(b.Difference(sign), bitDepth, upredicate, allowEquality)
+		if err != nil {
+			return nil, err
+		}
+		neg := b.Intersect(sign)
+		return pos.Union(neg), nil
 	}
-
-	// Otherwise if predicate is negative, return all negatives greater than upredicate.
-	return f.rangeGTUnsigned(b.Intersect(f.row(bsiSignBit)), bitDepth, upredicate, allowEquality)
 }
 
 // msb gives the 1-indexed position (counting from lsb) of the most
@@ -1237,110 +1262,99 @@ func msb(x uint64) uint {
 
 // rangeLTUnsigned returns all bits LT/LTE the predicate without considering the sign bit.
 func (f *fragment) rangeLTUnsigned(filter *Row, bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
-	keep := NewRow()
-
-	// if the predicate is larger than all representable numbers given
-	// our bitDepth... then just return everything.
-	if msb(predicate) > bitDepth {
+	if msb(predicate) > bitDepth || (allowEquality && predicate == (1<<bitDepth)-1) {
+		// This query matches all possible values.
 		return filter, nil
 	}
 
-	// Filter any bits that don't match the current bit value.
-	leadingZeros := true
+	// Compare intermediate bits.
+	matched := NewRow()
+	remaining := filter
 	for i := int(bitDepth - 1); i >= 0; i-- {
 		row := f.row(uint64(bsiOffsetBit + i))
-		bit := (predicate >> uint(i)) & 1
-
-		// Remove any columns with higher bits set.
-		if leadingZeros {
-			if bit == 0 {
-				filter = filter.Difference(row)
-				continue
-			} else {
-				leadingZeros = false
-			}
-		}
-
-		// Handle last bit differently.
-		// If bit is zero then return only already kept columns.
-		// If bit is one then remove any one columns.
-		if i == 0 && !allowEquality {
-			if bit == 0 {
-				return keep, nil
-			}
-			return filter.Difference(row.Difference(keep)), nil
-		}
-
-		// If bit is zero then remove all set columns not in excluded bitmap.
-		if bit == 0 {
-			filter = filter.Difference(row.Difference(keep))
-			continue
-		}
-
-		// If bit is set then add columns for set bits to exclude.
-		// Don't bother to compute this on the final iteration.
-		if i > 0 {
-			keep = keep.Union(filter.Difference(row))
+		zeroes := remaining.Difference(row)
+		switch (predicate >> uint(i)) & 1 {
+		case 1:
+			// Match everything with a zero bit here.
+			matched = matched.Union(zeroes)
+		case 0:
+			// Discard everything with a one bit here.
+			remaining = zeroes
 		}
 	}
 
-	return filter, nil
+	if allowEquality {
+		matched = matched.Union(remaining)
+	}
+
+	return matched, nil
 }
 
 func (f *fragment) rangeGT(bitDepth uint, predicate int64, allowEquality bool) (*Row, error) {
+	if predicate == -1 && !allowEquality {
+		predicate, allowEquality = 0, true
+	}
+
 	b := f.row(bsiExistsBit)
 
 	// Create predicate without sign bit.
-	upredicate := uint64(predicate)
-	if predicate < 0 {
-		upredicate = uint64(-predicate)
-	}
+	upredicate := absInt64(predicate)
 
-	// If predicate is positive, return all positives greater than predicate.
-	if (predicate >= 0 && allowEquality) || (predicate >= -1 && !allowEquality) {
-		return f.rangeGTUnsigned(b.Difference(f.row(bsiSignBit)), bitDepth, upredicate, allowEquality)
-	}
+	sign := f.row(bsiSignBit)
 
-	// If predicate is negative, return all negatives less than than upredicate and all positives.
-	neg, err := f.rangeLTUnsigned(b.Intersect(f.row(bsiSignBit)), bitDepth, upredicate, allowEquality)
-	if err != nil {
-		return nil, err
+	switch {
+	case predicate == 0 && !allowEquality:
+		// Match all positive numbers except zero.
+		nonzero, err := f.rangeNEQ(bitDepth, 0)
+		if err != nil {
+			return nil, err
+		}
+		b = nonzero
+		fallthrough
+	case predicate == 0 && allowEquality:
+		// Match all positive numbers.
+		return b.Difference(sign), nil
+	case predicate >= 0:
+		// Match all positive numbers greater than the predicate.
+		return f.rangeGTUnsigned(b.Difference(sign), bitDepth, upredicate, allowEquality)
+	default:
+		// Match all positives and greater negatives.
+		neg, err := f.rangeLTUnsigned(b.Intersect(sign), bitDepth, upredicate, allowEquality)
+		if err != nil {
+			return nil, err
+		}
+		pos := b.Difference(sign)
+		return pos.Union(neg), nil
 	}
-	pos := b.Difference(f.row(bsiSignBit))
-	return pos.Union(neg), nil
 }
 
 func (f *fragment) rangeGTUnsigned(filter *Row, bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
-	keep := NewRow()
-	// Filter any bits that don't match the current bit value.
+	if allowEquality && predicate == 0 {
+		// This query matches all possible values.
+		return filter, nil
+	}
+
+	// Compare intermediate bits.
+	matched := NewRow()
+	remaining := filter
 	for i := int(bitDepth - 1); i >= 0; i-- {
 		row := f.row(uint64(bsiOffsetBit + i))
-		bit := (predicate >> uint(i)) & 1
-
-		// Handle last bit differently.
-		// If bit is one then return only already kept columns.
-		// If bit is zero then remove any unset columns.
-		if i == 0 && !allowEquality {
-			if bit == 1 {
-				return keep, nil
-			}
-			return filter.Difference(filter.Difference(row, keep)), nil
-		}
-
-		// If bit is set then remove all unset columns not already kept.
-		if bit == 1 {
-			filter = filter.Difference(filter.Difference(row, keep))
-			continue
-		}
-
-		// If bit is unset then add columns with set bit to keep.
-		// Don't bother to compute this on the final iteration.
-		if i > 0 {
-			keep = keep.Union(filter.Intersect(row))
+		ones := remaining.Intersect(row)
+		switch (predicate >> uint(i)) & 1 {
+		case 1:
+			// Discard everything with a zero bit here.
+			remaining = ones
+		case 0:
+			// Match everything with a one bit here.
+			matched = matched.Union(ones)
 		}
 	}
 
-	return filter, nil
+	if allowEquality {
+		matched = matched.Union(remaining)
+	}
+
+	return matched, nil
 }
 
 // notNull returns the exists row.
@@ -1353,73 +1367,66 @@ func (f *fragment) rangeBetween(bitDepth uint, predicateMin, predicateMax int64)
 	b := f.row(bsiExistsBit)
 
 	// Convert predicates to unsigned values.
-	upredicateMin, upredicateMax := uint64(predicateMin), uint64(predicateMax)
-	if predicateMin < 0 {
-		upredicateMin = uint64(-predicateMin)
-	}
-	if predicateMax < 0 {
-		upredicateMax = uint64(-predicateMax)
-	}
+	upredicateMin, upredicateMax := absInt64(predicateMin), absInt64(predicateMax)
 
-	// Handle positive-only values.
-	if predicateMin >= 0 {
+	switch {
+	case predicateMin >= 0:
+		// Handle positive-only values.
 		return f.rangeBetweenUnsigned(b.Difference(f.row(bsiSignBit)), bitDepth, upredicateMin, upredicateMax)
-	}
-
-	// Handle negative-only values. Swap unsigned min/max predicates.
-	if predicateMax < 0 {
+	case predicateMax < 0:
+		// Handle negative-only values. Swap unsigned min/max predicates.
 		return f.rangeBetweenUnsigned(b.Intersect(f.row(bsiSignBit)), bitDepth, upredicateMax, upredicateMin)
+	default:
+		// If predicate crosses positive/negative boundary then handle separately and union.
+		pos, err := f.rangeLTUnsigned(b.Difference(f.row(bsiSignBit)), bitDepth, upredicateMax, true)
+		if err != nil {
+			return nil, err
+		}
+		neg, err := f.rangeLTUnsigned(b.Intersect(f.row(bsiSignBit)), bitDepth, upredicateMin, true)
+		if err != nil {
+			return nil, err
+		}
+		return pos.Union(neg), nil
 	}
-
-	// If predicate crosses positive/negative boundary then handle separately and union.
-	pos, err := f.rangeLTUnsigned(b.Difference(f.row(bsiSignBit)), bitDepth, upredicateMax, true)
-	if err != nil {
-		return nil, err
-	}
-	neg, err := f.rangeLTUnsigned(b.Intersect(f.row(bsiSignBit)), bitDepth, upredicateMin, true)
-	if err != nil {
-		return nil, err
-	}
-	return pos.Union(neg), nil
 }
 
 // rangeBetweenUnsigned returns BSI columns for a range of values. Disregards the sign bit.
 func (f *fragment) rangeBetweenUnsigned(filter *Row, bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
-	keep1 := NewRow() // GTE
-	keep2 := NewRow() // LTE
+	switch {
+	case predicateMax-predicateMin < 2:
+		// This query matches all possible values.
+		return filter, nil
+	case predicateMax > (1<<bitDepth)-1:
+		// The upper bound cannot be violated.
+		return f.rangeGTUnsigned(filter, bitDepth, predicateMin, true)
+	case predicateMin == 0:
+		// The lower bound cannot be violated.
+		return f.rangeLTUnsigned(filter, bitDepth, predicateMax, true)
+	}
 
-	// Filter any bits that don't match the current bit value.
-	for i := int(bitDepth - 1); i >= 0; i-- {
+	// Compare any upper bits which are equal.
+	firstDiff := int(msb(predicateMax^predicateMin)) - 1
+	remaining := filter
+	for i := int(bitDepth - 1); i > firstDiff; i-- {
 		row := f.row(uint64(bsiOffsetBit + i))
-		bit1 := (predicateMin >> uint(i)) & 1
-		bit2 := (predicateMax >> uint(i)) & 1
-
-		// GTE predicateMin
-		// If bit is set then remove all unset columns not already kept.
-		if bit1 == 1 {
-			filter = filter.Difference(filter.Difference(row, keep1))
-		} else {
-			// If bit is unset then add columns with set bit to keep.
-			// Don't bother to compute this on the final iteration.
-			if i > 0 {
-				keep1 = keep1.Union(filter.Intersect(row))
-			}
-		}
-
-		// LTE predicateMax
-		// If bit is zero then remove all set bits not in excluded bitmap.
-		if bit2 == 0 {
-			filter = filter.Difference(row.Difference(keep2))
-		} else {
-			// If bit is set then add columns for set bits to exclude.
-			// Don't bother to compute this on the final iteration.
-			if i > 0 {
-				keep2 = keep2.Union(filter.Difference(row))
-			}
+		switch (predicateMin >> uint(i)) & 1 {
+		case 1:
+			remaining = remaining.Intersect(row)
+		case 0:
+			remaining = remaining.Difference(row)
 		}
 	}
 
-	return filter, nil
+	var err error
+	remaining, err = f.rangeGTUnsigned(remaining, uint(firstDiff+1), predicateMin, true)
+	if err != nil {
+		return nil, err
+	}
+	remaining, err = f.rangeLTUnsigned(remaining, uint(firstDiff+1), predicateMax, true)
+	if err != nil {
+		return nil, err
+	}
+	return remaining, nil
 }
 
 // pos translates the row ID and column ID into a position in the storage bitmap.
