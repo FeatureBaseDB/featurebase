@@ -14,6 +14,8 @@
 
 package roaring
 
+import "sync"
+
 ///////////////////////////////////////////////////////////////////////////
 
 var containerWidth uint64 = 65536
@@ -261,51 +263,56 @@ func doContainer(typ byte, data interface{}) *Container {
 	return nil
 }
 
+var makeCts sync.Once
+var sampleTestContainers map[byte]map[string]*Container
+
 func setupContainerTests() map[byte]map[string]*Container {
 
-	cts := make(map[byte]map[string]*Container)
+	makeCts.Do(func() {
+		sampleTestContainers = make(map[byte]map[string]*Container)
 
-	// array containers
-	cts[containerArray] = map[string]*Container{
-		"empty":         doContainer(containerArray, arrayEmpty()),
-		"full":          doContainer(containerArray, arrayFull()),
-		"firstBitSet":   doContainer(containerArray, arrayFirstBitSet()),
-		"lastBitSet":    doContainer(containerArray, arrayLastBitSet()),
-		"firstBitUnset": doContainer(containerArray, arrayFirstBitUnset()),
-		"lastBitUnset":  doContainer(containerArray, arrayLastBitUnset()),
-		"innerBitsSet":  doContainer(containerArray, arrayInnerBitsSet()),
-		"outerBitsSet":  doContainer(containerArray, arrayOuterBitsSet()),
-		"oddBitsSet":    doContainer(containerArray, arrayOddBitsSet()),
-		"evenBitsSet":   doContainer(containerArray, arrayEvenBitsSet()),
-	}
+		// array containers
+		sampleTestContainers[containerArray] = map[string]*Container{
+			"empty":         doContainer(containerArray, arrayEmpty()),
+			"full":          doContainer(containerArray, arrayFull()),
+			"firstBitSet":   doContainer(containerArray, arrayFirstBitSet()),
+			"lastBitSet":    doContainer(containerArray, arrayLastBitSet()),
+			"firstBitUnset": doContainer(containerArray, arrayFirstBitUnset()),
+			"lastBitUnset":  doContainer(containerArray, arrayLastBitUnset()),
+			"innerBitsSet":  doContainer(containerArray, arrayInnerBitsSet()),
+			"outerBitsSet":  doContainer(containerArray, arrayOuterBitsSet()),
+			"oddBitsSet":    doContainer(containerArray, arrayOddBitsSet()),
+			"evenBitsSet":   doContainer(containerArray, arrayEvenBitsSet()),
+		}
 
-	// bitmap containers
-	cts[containerBitmap] = map[string]*Container{
-		"empty":         doContainer(containerBitmap, bitmapEmpty()),
-		"full":          doContainer(containerBitmap, bitmapFull()),
-		"firstBitSet":   doContainer(containerBitmap, bitmapFirstBitSet()),
-		"lastBitSet":    doContainer(containerBitmap, bitmapLastBitSet()),
-		"firstBitUnset": doContainer(containerBitmap, bitmapFirstBitUnset()),
-		"lastBitUnset":  doContainer(containerBitmap, bitmapLastBitUnset()),
-		"innerBitsSet":  doContainer(containerBitmap, bitmapInnerBitsSet()),
-		"outerBitsSet":  doContainer(containerBitmap, bitmapOuterBitsSet()),
-		"oddBitsSet":    doContainer(containerBitmap, bitmapOddBitsSet()),
-		"evenBitsSet":   doContainer(containerBitmap, bitmapEvenBitsSet()),
-	}
+		// bitmap containers
+		sampleTestContainers[containerBitmap] = map[string]*Container{
+			"empty":         doContainer(containerBitmap, bitmapEmpty()),
+			"full":          doContainer(containerBitmap, bitmapFull()),
+			"firstBitSet":   doContainer(containerBitmap, bitmapFirstBitSet()),
+			"lastBitSet":    doContainer(containerBitmap, bitmapLastBitSet()),
+			"firstBitUnset": doContainer(containerBitmap, bitmapFirstBitUnset()),
+			"lastBitUnset":  doContainer(containerBitmap, bitmapLastBitUnset()),
+			"innerBitsSet":  doContainer(containerBitmap, bitmapInnerBitsSet()),
+			"outerBitsSet":  doContainer(containerBitmap, bitmapOuterBitsSet()),
+			"oddBitsSet":    doContainer(containerBitmap, bitmapOddBitsSet()),
+			"evenBitsSet":   doContainer(containerBitmap, bitmapEvenBitsSet()),
+		}
 
-	// run containers
-	cts[containerRun] = map[string]*Container{
-		"empty":         doContainer(containerRun, runEmpty()),
-		"full":          doContainer(containerRun, runFull()),
-		"firstBitSet":   doContainer(containerRun, runFirstBitSet()),
-		"lastBitSet":    doContainer(containerRun, runLastBitSet()),
-		"firstBitUnset": doContainer(containerRun, runFirstBitUnset()),
-		"lastBitUnset":  doContainer(containerRun, runLastBitUnset()),
-		"innerBitsSet":  doContainer(containerRun, runInnerBitsSet()),
-		"outerBitsSet":  doContainer(containerRun, runOuterBitsSet()),
-		"oddBitsSet":    doContainer(containerRun, runOddBitsSet()),
-		"evenBitsSet":   doContainer(containerRun, runEvenBitsSet()),
-	}
+		// run containers
+		sampleTestContainers[containerRun] = map[string]*Container{
+			"empty":         doContainer(containerRun, runEmpty()),
+			"full":          doContainer(containerRun, runFull()),
+			"firstBitSet":   doContainer(containerRun, runFirstBitSet()),
+			"lastBitSet":    doContainer(containerRun, runLastBitSet()),
+			"firstBitUnset": doContainer(containerRun, runFirstBitUnset()),
+			"lastBitUnset":  doContainer(containerRun, runLastBitUnset()),
+			"innerBitsSet":  doContainer(containerRun, runInnerBitsSet()),
+			"outerBitsSet":  doContainer(containerRun, runOuterBitsSet()),
+			"oddBitsSet":    doContainer(containerRun, runOddBitsSet()),
+			"evenBitsSet":   doContainer(containerRun, runEvenBitsSet()),
+		}
+	})
 
-	return cts
+	return sampleTestContainers
 }

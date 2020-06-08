@@ -62,9 +62,8 @@ const (
 	resizeJobActionAdd    = "ADD"
 	resizeJobActionRemove = "REMOVE"
 
-	confirmDownRetries = 10
-	confirmDownSleep   = 1
-	confirmDownTimeout = 2
+	defaultConfirmDownRetries = 10
+	defaultConfirmDownSleep   = 1 * time.Second
 )
 
 // Node represents a node in the cluster.
@@ -239,6 +238,9 @@ type cluster struct { // nolint: maligned
 	logger logger.Logger
 
 	InternalClient InternalClient
+
+	confirmDownRetries int
+	confirmDownSleep   time.Duration
 }
 
 // newCluster returns a new instance of Cluster with defaults.
@@ -258,6 +260,9 @@ func newCluster() *cluster {
 		InternalClient: newNopInternalClient(),
 
 		logger: logger.NopLogger,
+
+		confirmDownRetries: defaultConfirmDownRetries,
+		confirmDownSleep:   defaultConfirmDownSleep,
 	}
 }
 
@@ -1923,7 +1928,7 @@ func (c *cluster) considerTopology() error {
 // band aid to protect against false nodeLeave events from memberlist
 // the test is the lightest weight endpoint of the node in question /version
 // TODO provide more robust solution to false nodeLeave events
-func confirmNodeDown(uri URI, log logger.Logger) bool {
+func (c *cluster) confirmNodeDown(uri URI) bool {
 	u := url.URL{
 		Scheme: uri.Scheme,
 		Host:   uri.HostPort(),
@@ -1931,11 +1936,11 @@ func confirmNodeDown(uri URI, log logger.Logger) bool {
 	}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		log.Printf("bad request:%s %s", u.String(), err)
+		c.logger.Printf("bad request:%s %s", u.String(), err)
 		return false
 	}
-	for i := 0; i < confirmDownRetries; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), confirmDownTimeout*time.Second)
+	for i := 0; i < c.confirmDownRetries; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), c.confirmDownSleep*2)
 		defer cancel()
 		resp, err := http.DefaultClient.Do(req.WithContext(ctx))
 		var bod []byte
@@ -1946,8 +1951,8 @@ func confirmNodeDown(uri URI, log logger.Logger) bool {
 			}
 		}
 
-		log.Printf("NodeLeave confirm with %s %d. err: '%v' bod: '%s'", uri.HostPort(), i, err, bod)
-		time.Sleep(confirmDownSleep * time.Second)
+		c.logger.Printf("NodeLeave confirm with %s %d. err: '%v' bod: '%s'", uri.HostPort(), i, err, bod)
+		time.Sleep(c.confirmDownSleep)
 	}
 	return true
 }
@@ -1975,7 +1980,7 @@ func (c *cluster) ReceiveEvent(e *NodeEvent) (err error) {
 			// not already removed by a removeNode request. We treat this as the
 			// host being temporarily unavailable, and expect it to come back
 			// up.
-			if confirmNodeDown(e.Node.URI, c.logger) {
+			if c.confirmNodeDown(e.Node.URI) {
 				if c.removeNodeBasicSorted(e.Node.ID) {
 					c.Topology.nodeStates[e.Node.ID] = nodeStateDown
 					// put the cluster into STARTING if we've lost a number of nodes
