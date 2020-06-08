@@ -3476,15 +3476,15 @@ func TestExecutor_Execute_All(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Create an import request that sets a full shard,
-		// plus a couple bits set on either side of it, and
-		// a final bit set in a fourth shard.
+		// Create an import request that sets things on either end
+		// of a shard, plus a couple bits set on either side of it,
+		// and a final bit set in a fourth shard.
 		//
 		//    shard0     shard1     shard2     shard3
 		// |----------|----------|----------|----------|
-		// |        **|**********|**        | *
+		// |        **|**      **|**        | *
 		//
-		bitCount := ShardWidth + 5
+		bitCount := 100 + 5
 		req := &pilosa.ImportRequest{
 			Index:     index.Name(),
 			Field:     fld.Name(),
@@ -3492,9 +3492,13 @@ func TestExecutor_Execute_All(t *testing.T) {
 			RowIDs:    make([]uint64, bitCount),
 			ColumnIDs: make([]uint64, bitCount),
 		}
-		for i := 0; i < bitCount-1; i++ {
+		for i := 0; i < bitCount/2; i++ {
 			req.RowIDs[i] = 10
 			req.ColumnIDs[i] = uint64(i + ShardWidth - 2)
+		}
+		for i := bitCount / 2; i < bitCount-1; i++ {
+			req.RowIDs[i] = 10
+			req.ColumnIDs[i] = uint64(i + (ShardWidth * 2) - bitCount + 5)
 		}
 		req.RowIDs[bitCount-1] = 10
 		req.ColumnIDs[bitCount-1] = uint64((3 * ShardWidth) + 2)
@@ -3521,7 +3525,7 @@ func TestExecutor_Execute_All(t *testing.T) {
 			{qry: fmt.Sprintf("All(limit=2, offset=%d)", bitCount-5), expCols: req.ColumnIDs[bitCount-5 : bitCount-3], expCnt: 2},
 			{qry: "All(limit=2, offset=2)", expCols: req.ColumnIDs[2:4], expCnt: 2},
 			{qry: "All(limit=1, offset=1)", expCols: req.ColumnIDs[1:2], expCnt: 1},
-			{qry: fmt.Sprintf("All(limit=%d, offset=2)", ShardWidth), expCols: req.ColumnIDs[2 : bitCount-3], expCnt: ShardWidth},
+			{qry: fmt.Sprintf("All(limit=%d, offset=2)", bitCount-3), expCols: req.ColumnIDs[2 : bitCount-1], expCnt: uint64(bitCount - 3)},
 		}
 		for i, test := range tests {
 			if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: test.qry}); err != nil {

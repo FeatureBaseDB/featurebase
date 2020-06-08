@@ -15,6 +15,7 @@
 package roaring
 
 import (
+	"math/rand"
 	"reflect"
 	"testing"
 )
@@ -110,13 +111,15 @@ func TestUnionSlice(t *testing.T) {
 }
 
 func TestMaxInSlice(t *testing.T) {
+	// arbitrary, we just want to get the same values every time
+	r := rand.New(rand.NewSource(23))
 	a := []uint64{1, 4, 9, 5, 24, 13}
 	v := maxInSlice(a)
 	if uint64(24) != v {
 		t.Fatalf("expected %v, but got %v", uint64(24), v)
 	}
 
-	for i := uint64(1000); i <= uint64(100000); i++ {
+	for i := uint64(1000); i <= uint64(100000); i += uint64(r.Intn(35)) + 1 {
 		a = append(a, i)
 		if v = maxInSlice(a); v != i {
 			t.Fatalf("expected %v, but got %v", i, v)
