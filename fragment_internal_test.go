@@ -111,6 +111,11 @@ func TestFragment_ClearBit(t *testing.T) {
 func TestFragment_RowcacheMap(t *testing.T) {
 	var done int64
 	f := mustOpenFragment("i", "f", viewStandard, 0, "")
+	// Under -race, this test turns out to take a fairly long time
+	// to run with larger OpN, because we write 50,000 bits to
+	// the bitmap, and everything is being race-detected, and we don't
+	// actually need that many to get the result we care about.
+	f.MaxOpN = 2000
 	defer f.Clean(t)
 
 	ch := make(chan struct{})
@@ -2755,9 +2760,9 @@ func TestFragment_RowsIteration(t *testing.T) {
 		defer f.Clean(t)
 
 		expectedRows := make([]uint64, 0)
-		for r := uint64(1); r < uint64(10000); r += 100 {
+		for r := uint64(1); r < uint64(10000); r += 250 {
 			expectedRows = append(expectedRows, r)
-			for c := uint64(1); c < uint64(ShardWidth-1); c += 10000 {
+			for c := uint64(1); c < uint64(ShardWidth-1); c += (ShardWidth >> 5) {
 				if _, err := f.setBit(r, c); err != nil {
 					t.Fatal(err)
 				}
