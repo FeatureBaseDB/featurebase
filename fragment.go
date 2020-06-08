@@ -1262,29 +1262,39 @@ func msb(x uint64) uint {
 
 // rangeLTUnsigned returns all bits LT/LTE the predicate without considering the sign bit.
 func (f *fragment) rangeLTUnsigned(filter *Row, bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
-	if msb(predicate) > bitDepth || (allowEquality && predicate == (1<<bitDepth)-1) {
+	switch {
+	case msb(predicate) > bitDepth:
+		fallthrough
+	case predicate == (1<<bitDepth)-1 && allowEquality:
 		// This query matches all possible values.
 		return filter, nil
+	case predicate == (1<<bitDepth)-1 && !allowEquality:
+		// This query matches everything that is not (1<<bitDepth)-1.
+		remaining := filter
+		for i := uint(0); i < bitDepth && remaining.Any(); i++ {
+			row := f.row(uint64(bsiOffsetBit + i))
+			remaining = remaining.Intersect(row)
+		}
+		return remaining, nil
+	case allowEquality:
+		predicate++
 	}
 
 	// Compare intermediate bits.
 	matched := NewRow()
 	remaining := filter
-	for i := int(bitDepth - 1); i >= 0; i-- {
+	for i := int(bitDepth - 1); i >= 0 && predicate > 0 && remaining.Any(); i-- {
 		row := f.row(uint64(bsiOffsetBit + i))
 		zeroes := remaining.Difference(row)
 		switch (predicate >> uint(i)) & 1 {
 		case 1:
 			// Match everything with a zero bit here.
 			matched = matched.Union(zeroes)
+			predicate &^= 1 << uint(i)
 		case 0:
 			// Discard everything with a one bit here.
 			remaining = zeroes
 		}
-	}
-
-	if allowEquality {
-		matched = matched.Union(remaining)
 	}
 
 	return matched, nil
@@ -1329,15 +1339,27 @@ func (f *fragment) rangeGT(bitDepth uint, predicate int64, allowEquality bool) (
 }
 
 func (f *fragment) rangeGTUnsigned(filter *Row, bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
-	if allowEquality && predicate == 0 {
+	switch {
+	case predicate == 0 && allowEquality:
 		// This query matches all possible values.
 		return filter, nil
+	case predicate == 0 && !allowEquality:
+		// This query matches everything that is not 0.
+		remaining := filter
+		for i := uint(0); i < bitDepth && remaining.Any(); i++ {
+			row := f.row(uint64(bsiOffsetBit + i))
+			remaining = remaining.Difference(row)
+		}
+		return remaining, nil
+	case allowEquality:
+		predicate--
 	}
 
 	// Compare intermediate bits.
 	matched := NewRow()
 	remaining := filter
-	for i := int(bitDepth - 1); i >= 0; i-- {
+	predicate |= (^uint64(0)) << bitDepth
+	for i := int(bitDepth - 1); i >= 0 && predicate < ^uint64(0) && remaining.Any(); i-- {
 		row := f.row(uint64(bsiOffsetBit + i))
 		ones := remaining.Intersect(row)
 		switch (predicate >> uint(i)) & 1 {
@@ -1347,11 +1369,8 @@ func (f *fragment) rangeGTUnsigned(filter *Row, bitDepth uint, predicate uint64,
 		case 0:
 			// Match everything with a one bit here.
 			matched = matched.Union(ones)
+			predicate |= 1 << uint(i)
 		}
-	}
-
-	if allowEquality {
-		matched = matched.Union(remaining)
 	}
 
 	return matched, nil
@@ -1370,6 +1389,8 @@ func (f *fragment) rangeBetween(bitDepth uint, predicateMin, predicateMax int64)
 	upredicateMin, upredicateMax := absInt64(predicateMin), absInt64(predicateMax)
 
 	switch {
+	case predicateMin == predicateMax:
+		return f.rangeEQ(bitDepth, predicateMin)
 	case predicateMin >= 0:
 		// Handle positive-only values.
 		return f.rangeBetweenUnsigned(b.Difference(f.row(bsiSignBit)), bitDepth, upredicateMin, upredicateMax)
@@ -1393,9 +1414,6 @@ func (f *fragment) rangeBetween(bitDepth uint, predicateMin, predicateMax int64)
 // rangeBetweenUnsigned returns BSI columns for a range of values. Disregards the sign bit.
 func (f *fragment) rangeBetweenUnsigned(filter *Row, bitDepth uint, predicateMin, predicateMax uint64) (*Row, error) {
 	switch {
-	case predicateMax-predicateMin < 2:
-		// This query matches all possible values.
-		return filter, nil
 	case predicateMax > (1<<bitDepth)-1:
 		// The upper bound cannot be violated.
 		return f.rangeGTUnsigned(filter, bitDepth, predicateMin, true)
