@@ -1273,7 +1273,6 @@ func (f *Field) ClearBit(rowID, colID uint64) (changed bool, err error) {
 	view, present := f.viewMap[viewName]
 	if !present {
 		return changed, errors.Wrap(err, "clearing missing view")
-
 	}
 
 	// Clear non-time bit.
