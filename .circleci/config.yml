@@ -6,9 +6,12 @@ executors:
       version:
         type: string
         default: "1.14"
+      resource_class:
+        type: string
+        default: medium
     docker:
       - image: circleci/golang:<< parameters.version >>
-    resource_class: xlarge
+    resource_class: << parameters.resource_class >>
     working_directory: /go/src/github.com/pilosa/pilosa
     environment:
       GO111MODULE: "on" # TODO: Only needed for Go <1.13, remove when dropping support for 1.11/1.12.
@@ -65,6 +68,9 @@ jobs:
       - run: make build GOOS=linux GOARCH=arm64
   test:
     parameters:
+      resource_class:
+        type: string
+        default: medium
       golang_version:
         type: string
         default: "1.14"
@@ -83,6 +89,7 @@ jobs:
     executor:
       name: golang
       version: << parameters.golang_version >>
+      resource_class: << parameters.resource_class >>
     steps:
       - attach_workspace:
           at: .
@@ -192,6 +199,7 @@ workflows:
       - test:
           name: test-race
           test_make_target: test-race
+          resource_class: xlarge
           requires:
             - setup
       - test:
