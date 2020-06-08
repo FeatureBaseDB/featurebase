@@ -15,6 +15,7 @@
 package gopsutil
 
 import (
+	"math"
 	"runtime"
 	"strings"
 
@@ -114,6 +115,13 @@ func (s *systemInfo) collectPlatformInfo() error {
 		}
 		s.cpuModel = infos[0].ModelName
 		s.cpuMHz = computeMHz(s.cpuModel)
+		if s.cpuMHz < 0 {
+			s.cpuMHz = int(math.Round(infos[0].Mhz))
+		}
+		if s.cpuMHz < 0 {
+			// This is supposed to be unsigned.
+			s.cpuMHz = 0
+		}
 
 		// gopsutil reports core and clock speed info inconsistently
 		// by OS
