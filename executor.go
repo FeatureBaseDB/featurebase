@@ -3107,7 +3107,15 @@ func (e *executor) executeSetRow(ctx context.Context, indexName string, c *pql.C
 	}
 
 	result, err := e.mapReduce(ctx, indexName, shards, c, opt, mapFn, reduceFn)
-	return result.(bool), err
+	if err != nil {
+		return false, err
+	}
+
+	b, ok := result.(bool)
+	if !ok {
+		return false, errors.New("unsupported result type")
+	}
+	return b, nil
 }
 
 // executeSetRowShard executes a SetRow() call for a single shard.

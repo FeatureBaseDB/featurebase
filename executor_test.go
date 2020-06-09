@@ -4018,6 +4018,25 @@ func TestExecutor_Execute_SetRow(t *testing.T) {
 			t.Fatalf("unexpected columns: %+v", bits)
 		}
 	})
+	t.Run("Err_Store(Distinct)", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackExistence: true})
+		f1, err := index.CreateField("f1", pilosa.OptFieldTypeDefault())
+		if err != nil {
+			t.Fatal(err)
+		}
+		f2, err := index.CreateField("f2", pilosa.OptFieldTypeDefault())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		q := fmt.Sprintf(`Store(Distinct(field=%s), %s=2)`, f1.Name(), f2.Name())
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: index.Name(), Query: q}); err == nil {
+			t.Fatalf("expected 'unsupported result type' error, got: %+v", res)
+		}
+	})
 }
 
 func benchmarkExistence(nn bool, b *testing.B) {
