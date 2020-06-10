@@ -1270,12 +1270,12 @@ func (f *fragment) rangeLTUnsigned(filter *Row, bitDepth uint, predicate uint64,
 		return filter, nil
 	case predicate == (1<<bitDepth)-1 && !allowEquality:
 		// This query matches everything that is not (1<<bitDepth)-1.
-		remaining := filter
-		for i := uint(0); i < bitDepth && remaining.Any(); i++ {
+		matches := NewRow()
+		for i := uint(0); i < bitDepth; i++ {
 			row := f.row(uint64(bsiOffsetBit + i))
-			remaining = remaining.Intersect(row)
+			matches = matches.Union(filter.Difference(row))
 		}
-		return remaining, nil
+		return matches, nil
 	case allowEquality:
 		predicate++
 	}
@@ -1345,12 +1345,12 @@ func (f *fragment) rangeGTUnsigned(filter *Row, bitDepth uint, predicate uint64,
 		return filter, nil
 	case predicate == 0 && !allowEquality:
 		// This query matches everything that is not 0.
-		remaining := filter
-		for i := uint(0); i < bitDepth && remaining.Any(); i++ {
+		matches := NewRow()
+		for i := uint(0); i < bitDepth; i++ {
 			row := f.row(uint64(bsiOffsetBit + i))
-			remaining = remaining.Difference(row)
+			matches = matches.Union(filter.Intersect(row))
 		}
-		return remaining, nil
+		return matches, nil
 	case allowEquality:
 		predicate--
 	}
