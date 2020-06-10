@@ -2996,6 +2996,37 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 			test.CheckGroupBy(t, expected, results)
 		}
 	})
+
+	t.Run("groupbBy on ints with offset regression", func(t *testing.T) {
+		_, err = c[0].API.CreateField(context.Background(), "i", "hint", pilosa.OptFieldTypeInt(1, 1000))
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+		Set(0, hint=1)
+		Set(1, hint=2)
+		Set(2, hint=3)
+		`}); err != nil {
+			t.Fatalf("querying remote: %v", err)
+		}
+
+		if res, err := c[1].API.Query(context.Background(), &pilosa.QueryRequest{
+			Index: "i",
+			Query: `GroupBy(Rows(hint))`,
+		}); err != nil {
+			t.Fatalf("GroupBy querying: %v", err)
+		} else {
+			var a, b, c int64 = 1, 2, 3
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "hint", Value: &a}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "hint", Value: &b}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "hint", Value: &c}}, Count: 1},
+			}
+
+			results := res.Results[0].([]pilosa.GroupCount)
+			test.CheckGroupBy(t, expected, results)
+		}
+	})
 }
 
 // Ensure executor returns an error if too many writes are in a single request.
