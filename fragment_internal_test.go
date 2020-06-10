@@ -624,6 +624,23 @@ func TestFragment_Range(t *testing.T) {
 		}
 	})
 
+	t.Run("LTMaxRegression", func(t *testing.T) {
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
+		defer f.Clean(t)
+
+		if _, err := f.setValue(1, 2, 3); err != nil {
+			t.Fatal(err)
+		} else if _, err := f.setValue(2, 2, 0); err != nil {
+			t.Fatal(err)
+		}
+
+		if b, err := f.rangeLTUnsigned(NewRow(1, 2), 2, 3, false); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{2}) {
+			t.Fatalf("unepxected coulmns: %+v", b.Columns())
+		}
+	})
+
 	t.Run("GT", func(t *testing.T) {
 		f := mustOpenFragment("i", "f", viewStandard, 0, "")
 		defer f.Clean(t)
@@ -669,6 +686,23 @@ func TestFragment_Range(t *testing.T) {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
+		}
+	})
+
+	t.Run("GTMinRegression", func(t *testing.T) {
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
+		defer f.Clean(t)
+
+		if _, err := f.setValue(1, 2, 0); err != nil {
+			t.Fatal(err)
+		} else if _, err := f.setValue(2, 2, 1); err != nil {
+			t.Fatal(err)
+		}
+
+		if b, err := f.rangeGTUnsigned(NewRow(1, 2), 2, 0, false); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{2}) {
+			t.Fatalf("unepxected coulmns: %+v", b.Columns())
 		}
 	})
 
