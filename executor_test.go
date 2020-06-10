@@ -2997,7 +2997,7 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 		}
 	})
 
-	t.Run("groupbBy on ints with offset regression", func(t *testing.T) {
+	t.Run("groupBy on ints with offset regression", func(t *testing.T) {
 		_, err = c[0].API.CreateField(context.Background(), "i", "hint", pilosa.OptFieldTypeInt(1, 1000))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)

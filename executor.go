@@ -1799,10 +1799,11 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 		if err != nil {
 			return nil, errors.Wrap(err, "getting column")
 		}
-		if _, ok := child.Args["_field"].(string); !ok {
+		fieldName, ok := child.Args["_field"].(string)
+		if !ok {
 			return nil, errors.Errorf("%s call must have field with valid (string) field name. Got %v of type %[2]T", child.Name, child.Args["_field"])
 		}
-		f := idx.Field(child.Args["_field"].(string))
+		f := idx.Field(fieldName)
 		if f == nil {
 			return nil, ErrFieldNotFound
 		}
