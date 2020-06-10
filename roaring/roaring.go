@@ -4721,8 +4721,8 @@ func unionRunRunInPlace(a, b *Container) *Container {
 	a = a.Thaw()
 	runs, n := unionInterval16InPlace(a.runs(), b.runs())
 
-	a.setN(n)
 	a.setRuns(runs)
+	a.setN(n)
 	return a
 }
 
@@ -4732,57 +4732,50 @@ func unionInterval16InPlace(a, b []interval16) ([]interval16, int32) {
 	an, bn := len(a), len(b)
 	i, j, k := 0, 0, 0
 	for {
-		// select the next interval - v
 		var (
-			v     *interval16
+			v     interval16
 			local *interval16
-			visa  bool // v is from a
 		)
+
 		if i < an && j < bn {
 			if a[i].start <= b[j].start {
-				v, visa = &a[i], true
+				v = a[i]
 				i++
-			} else if j < bn {
-				v = &b[j]
+			} else {
+				v = b[j]
 				j++
 			}
 		} else {
 			if i < an {
-				v, visa = &a[i], true
+				v = a[i]
 				i++
 			} else if j < bn {
-				v = &b[j]
+				v = b[j]
 				j++
+			} else {
+				break
 			}
-		}
-		// no more intervals - break
-		if v == nil {
-			if len(a) > 0 {
-				// count the last interval
-				n += int32(a[k].last-a[k].start) + 1
-			}
-			break
 		}
 
-	next:
+	reeval:
 		if k == an {
-			// append what's left
-			a = append(a, *v)
+			// append what's left and try to optimize it later
+			a = append(a, v)
 			an++
 			continue
 		}
 
-		// current, locally unioned interval
+		// locally unioned interval
 		if local == nil {
 			local = &a[k]
 		}
 
 		if v.last < local.start {
 			// [---- v ----][---- local ----]
-			// insert v into a
+			// prepend v into a
 			a = append(a, interval16{})
 			copy(a[i+1:], a[i:])
-			a[i] = *v
+			a[i] = v
 			an++
 			i++
 			continue
@@ -4790,28 +4783,19 @@ func unionInterval16InPlace(a, b []interval16) ([]interval16, int32) {
 
 		if v.start > local.last {
 			// [---- local ----][---- v ----]
-			// set already unioned interval and go next
-			// if int32(v.start-local.last) <= 1 {
-			// 	local.last = v.last
-			// 	continue
-			// }
 
-			a[k] = *local
-			n += int32(local.last-local.start) + 1
-			k++
-
-			// if we set unioned interval we can go to the next interval
-			if visa {
-				// v is from a, so we can skip "digested intervals"
-				// and jump already to v
-				local = v
-			} else {
-				// ...otherwise, move to the next one,
-				// so let assign local in next iteration
-				local = nil
+			// check if we can optimize run and combine neighbours
+			if int32(v.start-local.last) <= 1 {
+				local.last = v.last
+				continue
 			}
 
-			goto next
+			// set already unioned interval and reevaluate v
+			a[k] = *local
+			k++
+			n += int32(local.last-local.start) + 1
+			local = &v
+			goto reeval
 		}
 
 		if v.start < local.start {
@@ -4822,18 +4806,15 @@ func unionInterval16InPlace(a, b []interval16) ([]interval16, int32) {
 			} else if v.last > local.last {
 				//  [- local -]
 				// [---- v ----]
-				*local = *v
+				*local = v
 			}
-			continue
-		}
-
-		if v.start >= local.start && v.start <= local.last {
+		} else if v.start <= local.last {
 			if v.last <= local.last {
 				// [---- local ----]
 				//     [-- v --]
 
-				// this assignment looks silly, but if we extended local
-				// and "digested" many nested intervals, we can squash a, e.g.:
+				// this assignment overwrites the first available position to set - a[k]
+				// it's done to "swallow" many nested intervals, e.g.:
 				//    [a1] [a2] [a3] [a4]
 				// [------ b ------]
 				// will give us:
@@ -4848,6 +4829,8 @@ func unionInterval16InPlace(a, b []interval16) ([]interval16, int32) {
 	}
 
 	if len(a) > 0 {
+		// count the latest interval
+		n += int32(a[k].last-a[k].start) + 1
 		a = a[:k+1]
 	}
 	return a, n

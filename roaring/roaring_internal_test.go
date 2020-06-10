@@ -725,16 +725,26 @@ func TestUnionInterval16InPlace(t *testing.T) {
 	t.Run("single overlap", func(t *testing.T) {
 		a := []interval16{interval16{1, 10}, interval16{21, 28}}
 		b := []interval16{interval16{8, 12}}
+		bb := make([]interval16, len(b))
+		copy(bb, b)
+
 		runs, n := unionInterval16InPlace(a, b)
+
+		expected := []interval16{interval16{1, 12}, interval16{21, 28}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
 
 		const expectedN = 20
 		if n != expectedN {
 			t.Fatalf("N expected: %d, got: %d", expectedN, n)
 		}
-		expected := []interval16{interval16{1, 12}, interval16{21, 28}}
-		for i, v := range expected {
-			if runs[i] != v {
-				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+
+		for i, v := range bb {
+			if b[i] != v {
+				t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, b)
 			}
 		}
 	})
@@ -742,16 +752,26 @@ func TestUnionInterval16InPlace(t *testing.T) {
 	t.Run("nested intervals", func(t *testing.T) {
 		a := []interval16{interval16{3, 13}, interval16{17, 20}}
 		b := []interval16{interval16{1, 4}, interval16{6, 7}, interval16{8, 9}, interval16{10, 11}, interval16{14, 17}}
+		bb := make([]interval16, len(b))
+		copy(bb, b)
+
 		runs, n := unionInterval16InPlace(a, b)
+
+		expected := []interval16{interval16{1, 20}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
 
 		const expectedN = 20
 		if n != expectedN {
 			t.Fatalf("N expected: %d, got: %d", expectedN, n)
 		}
-		expected := []interval16{interval16{1, 13}, interval16{14, 20}}
-		for i, v := range expected {
-			if runs[i] != v {
-				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+
+		for i, v := range bb {
+			if b[i] != v {
+				t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, b)
 			}
 		}
 	})
@@ -759,16 +779,26 @@ func TestUnionInterval16InPlace(t *testing.T) {
 	t.Run("no overlap", func(t *testing.T) {
 		a := []interval16{interval16{3, 4}, interval16{7, 8}}
 		b := []interval16{interval16{1, 2}, interval16{5, 6}, interval16{9, 10}}
+		bb := make([]interval16, len(b))
+		copy(bb, b)
+
 		runs, n := unionInterval16InPlace(a, b)
+
+		expected := []interval16{interval16{1, 10}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
 
 		const expectedN = 10
 		if n != expectedN {
 			t.Fatalf("N expected: %d, got: %d", expectedN, n)
 		}
-		expected := []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 6}, interval16{7, 8}, interval16{9, 10}}
-		for i, v := range expected {
-			if runs[i] != v {
-				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+
+		for i, v := range bb {
+			if b[i] != v {
+				t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, b)
 			}
 		}
 	})
@@ -776,16 +806,26 @@ func TestUnionInterval16InPlace(t *testing.T) {
 	t.Run("b in a", func(t *testing.T) {
 		a := []interval16{interval16{1, 10}}
 		b := []interval16{interval16{5, 7}}
+		bb := make([]interval16, len(b))
+		copy(bb, b)
+
 		runs, n := unionInterval16InPlace(a, b)
+
+		expected := []interval16{interval16{1, 10}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
 
 		const expectedN = 10
 		if n != expectedN {
 			t.Fatalf("N expected: %d, got: %d", expectedN, n)
 		}
-		expected := []interval16{interval16{1, 10}}
-		for i, v := range expected {
-			if runs[i] != v {
-				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+
+		for i, v := range bb {
+			if b[i] != v {
+				t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, b)
 			}
 		}
 	})
@@ -793,16 +833,26 @@ func TestUnionInterval16InPlace(t *testing.T) {
 	t.Run("a eq b", func(t *testing.T) {
 		a := []interval16{interval16{1, 10}}
 		b := []interval16{interval16{1, 10}}
+		bb := make([]interval16, len(b))
+		copy(bb, b)
+
 		runs, n := unionInterval16InPlace(a, b)
+
+		expected := []interval16{interval16{1, 10}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
 
 		const expectedN = 10
 		if n != expectedN {
 			t.Fatalf("N expected: %d, got: %d", expectedN, n)
 		}
-		expected := []interval16{interval16{1, 10}}
-		for i, v := range expected {
-			if runs[i] != v {
-				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+
+		for i, v := range bb {
+			if b[i] != v {
+				t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, b)
 			}
 		}
 	})
@@ -810,16 +860,26 @@ func TestUnionInterval16InPlace(t *testing.T) {
 	t.Run("a in b", func(t *testing.T) {
 		a := []interval16{interval16{5, 7}}
 		b := []interval16{interval16{1, 10}}
+		bb := make([]interval16, len(b))
+		copy(bb, b)
+
 		runs, n := unionInterval16InPlace(a, b)
+
+		expected := []interval16{interval16{1, 10}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
 
 		const expectedN = 10
 		if n != expectedN {
 			t.Fatalf("N expected: %d, got: %d", expectedN, n)
 		}
-		expected := []interval16{interval16{1, 10}}
-		for i, v := range expected {
-			if runs[i] != v {
-				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+
+		for i, v := range bb {
+			if b[i] != v {
+				t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, b)
 			}
 		}
 	})
@@ -827,23 +887,29 @@ func TestUnionInterval16InPlace(t *testing.T) {
 	t.Run("a ahead b", func(t *testing.T) {
 		a := []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}}
 		b := []interval16{interval16{10, 11}, interval16{12, 13}, interval16{14, 15}}
+		bb := make([]interval16, len(b))
+		copy(bb, b)
+
 		runs, n := unionInterval16InPlace(a, b)
+
+		expected := []interval16{
+			interval16{1, 7},
+			interval16{10, 15},
+		}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
 
 		const expectedN = 13
 		if n != expectedN {
 			t.Fatalf("N expected: %d, got: %d", expectedN, n)
 		}
-		expected := []interval16{
-			interval16{1, 2},
-			interval16{3, 4},
-			interval16{5, 7},
-			interval16{10, 11},
-			interval16{12, 13},
-			interval16{14, 15},
-		}
-		for i, v := range expected {
-			if runs[i] != v {
-				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+
+		for i, v := range bb {
+			if b[i] != v {
+				t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, b)
 			}
 		}
 	})
@@ -851,24 +917,29 @@ func TestUnionInterval16InPlace(t *testing.T) {
 	t.Run("b ahead a", func(t *testing.T) {
 		a := []interval16{interval16{10, 11}, interval16{12, 13}, interval16{14, 15}}
 		b := []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}}
+		bb := make([]interval16, len(b))
+		copy(bb, b)
 
 		runs, n := unionInterval16InPlace(a, b)
+
+		expected := []interval16{
+			interval16{1, 7},
+			interval16{10, 15},
+		}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
 
 		const expectedN = 13
 		if n != expectedN {
 			t.Fatalf("N expected: %d, got: %d", expectedN, n)
 		}
-		expected := []interval16{
-			interval16{1, 2},
-			interval16{3, 4},
-			interval16{5, 7},
-			interval16{10, 11},
-			interval16{12, 13},
-			interval16{14, 15},
-		}
-		for i, v := range expected {
-			if runs[i] != v {
-				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+
+		for i, v := range bb {
+			if b[i] != v {
+				t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, b)
 			}
 		}
 	})
@@ -876,17 +947,26 @@ func TestUnionInterval16InPlace(t *testing.T) {
 	t.Run("empty a and b", func(t *testing.T) {
 		a := []interval16{}
 		b := []interval16{}
+		bb := make([]interval16, len(b))
+		copy(bb, b)
 
 		runs, n := unionInterval16InPlace(a, b)
+
+		expected := []interval16{}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
 
 		const expectedN = 0
 		if n != expectedN {
 			t.Fatalf("N expected: %d, got: %d", expectedN, n)
 		}
-		expected := []interval16{}
-		for i, v := range expected {
-			if runs[i] != v {
-				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+
+		for i, v := range bb {
+			if b[i] != v {
+				t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, b)
 			}
 		}
 	})
@@ -894,17 +974,26 @@ func TestUnionInterval16InPlace(t *testing.T) {
 	t.Run("empty a", func(t *testing.T) {
 		a := []interval16{}
 		b := []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}}
+		bb := make([]interval16, len(b))
+		copy(bb, b)
 
 		runs, n := unionInterval16InPlace(a, b)
+
+		expected := []interval16{interval16{1, 7}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
 
 		const expectedN = 7
 		if n != expectedN {
 			t.Fatalf("N expected: %d, got: %d", expectedN, n)
 		}
-		expected := []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}}
-		for i, v := range expected {
-			if runs[i] != v {
-				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+
+		for i, v := range bb {
+			if b[i] != v {
+				t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, b)
 			}
 		}
 	})
@@ -912,17 +1001,26 @@ func TestUnionInterval16InPlace(t *testing.T) {
 	t.Run("empty b", func(t *testing.T) {
 		a := []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}}
 		b := []interval16{}
+		bb := make([]interval16, len(b))
+		copy(bb, b)
 
 		runs, n := unionInterval16InPlace(a, b)
+
+		expected := []interval16{interval16{1, 7}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
 
 		const expectedN = 7
 		if n != expectedN {
 			t.Fatalf("N expected: %d, got: %d", expectedN, n)
 		}
-		expected := []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}}
-		for i, v := range expected {
-			if runs[i] != v {
-				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+
+		for i, v := range bb {
+			if b[i] != v {
+				t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, b)
 			}
 		}
 	})
@@ -930,17 +1028,26 @@ func TestUnionInterval16InPlace(t *testing.T) {
 	t.Run("single a", func(t *testing.T) {
 		a := []interval16{interval16{1, 2}}
 		b := []interval16{}
+		bb := make([]interval16, len(b))
+		copy(bb, b)
 
 		runs, n := unionInterval16InPlace(a, b)
+
+		expected := []interval16{interval16{1, 2}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
 
 		const expectedN = 2
 		if n != expectedN {
 			t.Fatalf("N expected: %d, got: %d", expectedN, n)
 		}
-		expected := []interval16{interval16{1, 2}}
-		for i, v := range expected {
-			if runs[i] != v {
-				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+
+		for i, v := range bb {
+			if b[i] != v {
+				t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, b)
 			}
 		}
 	})
@@ -948,17 +1055,53 @@ func TestUnionInterval16InPlace(t *testing.T) {
 	t.Run("single b", func(t *testing.T) {
 		a := []interval16{}
 		b := []interval16{interval16{1, 2}}
+		bb := make([]interval16, len(b))
+		copy(bb, b)
 
 		runs, n := unionInterval16InPlace(a, b)
+
+		expected := []interval16{interval16{1, 2}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
 
 		const expectedN = 2
 		if n != expectedN {
 			t.Fatalf("N expected: %d, got: %d", expectedN, n)
 		}
-		expected := []interval16{interval16{1, 2}}
+
+		for i, v := range bb {
+			if b[i] != v {
+				t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, b)
+			}
+		}
+	})
+
+	t.Run("single a single b", func(t *testing.T) {
+		a := []interval16{interval16{3, 4}}
+		b := []interval16{interval16{1, 2}}
+		bb := make([]interval16, len(b))
+		copy(bb, b)
+
+		runs, n := unionInterval16InPlace(a, b)
+
+		expected := []interval16{interval16{1, 4}}
 		for i, v := range expected {
 			if runs[i] != v {
 				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
+
+		const expectedN = 4
+		if n != expectedN {
+			t.Fatalf("N expected: %d, got: %d", expectedN, n)
+		}
+
+		for i, v := range bb {
+			if b[i] != v {
+				t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, b)
 			}
 		}
 	})
@@ -966,10 +1109,12 @@ func TestUnionInterval16InPlace(t *testing.T) {
 	t.Run("oddBitsSet lastBitUnset", func(t *testing.T) {
 		a := []interval16{interval16{1, 1}, interval16{3, 3}, interval16{5, 5}}
 		b := []interval16{interval16{0, 4}}
+		bb := make([]interval16, len(b))
+		copy(bb, b)
 
 		runs, n := unionInterval16InPlace(a, b)
 
-		expected := []interval16{interval16{0, 4}, interval16{5, 5}}
+		expected := []interval16{interval16{0, 5}}
 		for i, v := range expected {
 			if runs[i] != v {
 				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
@@ -980,6 +1125,63 @@ func TestUnionInterval16InPlace(t *testing.T) {
 			t.Fatalf("N expected: %d, got: %d", expectedN, n)
 		}
 
+		for i, v := range bb {
+			if b[i] != v {
+				t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, b)
+			}
+		}
+	})
+
+	t.Run("all bits", func(t *testing.T) {
+		a := []interval16{interval16{1, 1}, interval16{3, 3}, interval16{5, 5}}
+		b := []interval16{interval16{0, 0}, interval16{2, 2}, interval16{4, 4}}
+		bb := make([]interval16, len(b))
+		copy(bb, b)
+
+		runs, n := unionInterval16InPlace(a, b)
+
+		expected := []interval16{interval16{0, 5}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
+		const expectedN = 6
+		if n != expectedN {
+			t.Fatalf("N expected: %d, got: %d", expectedN, n)
+		}
+
+		for i, v := range bb {
+			if b[i] != v {
+				t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, b)
+			}
+		}
+	})
+
+	t.Run("short a long b", func(t *testing.T) {
+		a := []interval16{interval16{5, 5}, interval16{7, 7}, interval16{9, 10}, interval16{12, 12}, interval16{15, 17}, interval16{19, 20}}
+		b := []interval16{interval16{1, 10}, interval16{12, 12}, interval16{14, 18}}
+		bb := make([]interval16, len(b))
+		copy(bb, b)
+
+		runs, n := unionInterval16InPlace(a, b)
+
+		expected := []interval16{interval16{1, 10}, interval16{12, 12}, interval16{14, 20}}
+		for i, v := range expected {
+			if runs[i] != v {
+				t.Fatalf("runs expected: %+v, got: %+v", expected, runs)
+			}
+		}
+		const expectedN = 18
+		if n != expectedN {
+			t.Fatalf("N expected: %d, got: %d", expectedN, n)
+		}
+
+		for i, v := range bb {
+			if b[i] != v {
+				t.Fatalf("b changed - runs expected: %+v, got: %+v", bb, b)
+			}
+		}
 	})
 }
 
