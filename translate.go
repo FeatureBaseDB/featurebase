@@ -16,7 +16,9 @@ package pilosa
 
 import (
 	"context"
+	"encoding/json"
 	"io"
+	"io/ioutil"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -414,20 +416,43 @@ func (s *InMemTranslateStore) EntryReader(ctx context.Context, offset uint64) (T
 	return newInMemTranslateEntryReader(ctx, s, offset), nil
 }
 
-// WriteTo ensures that the TranslateStore implements io.WriterTo.
-// It's not important that this be implemented. It would really
-// only be necessary if we wanted to test cluster resizing while using
-// an in-memory translate store.
+// WriteTo implements io.WriterTo. It's not efficient or careful, but we
+// don't expect to use InMemTranslateStore much, it's mostly there to
+// avoid disk load during testing.
 func (s *InMemTranslateStore) WriteTo(w io.Writer) (int64, error) {
-	return 0, nil // TODO: try to use ErrNotImplemented
+	bytes, err := json.Marshal(s.keysByID)
+	if err != nil {
+		return 0, err
+	}
+	n, err := w.Write(bytes)
+	return int64(n), err
 }
 
-// ReadFrom ensures that the TranslateStore implements io.ReaderFrom.
-// It's not important that this be implemented. It would really
-// only be necessary if we wanted to test cluster resizing while using
-// an in-memory translate store.
-func (s *InMemTranslateStore) ReadFrom(r io.Reader) (int64, error) {
-	return 0, nil // TODO: try to use ErrNotImplemented
+// ReadFrom implements io.ReaderFrom. It's not efficient or careful, but we
+// don't expect to use InMemTranslateStore much, it's mostly there to
+// avoid disk load during testing.
+func (s *InMemTranslateStore) ReadFrom(r io.Reader) (count int64, err error) {
+	var bytes []byte
+	bytes, err = ioutil.ReadAll(r)
+	count = int64(len(bytes))
+	if err != nil {
+		return count, err
+	}
+	var keysByID map[uint64]string
+	err = json.Unmarshal(bytes, &keysByID)
+	if err != nil {
+		return count, err
+	}
+	s.maxID = 0
+	s.keysByID = keysByID
+	s.idsByKey = make(map[string]uint64, len(s.keysByID))
+	for k, v := range s.keysByID {
+		s.idsByKey[v] = k
+		if k > s.maxID {
+			s.maxID = k
+		}
+	}
+	return count, nil
 }
 
 // MaxID returns the highest identifier in the store.
