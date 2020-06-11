@@ -1431,11 +1431,11 @@ func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*
 	}
 
 	for _, node := range toCluster.nodes {
-		// If a host doesn't need to request data, mark it as complete.
-		if len(fragmentSourcesByNode[node.ID]) == 0 && len(translationSourcesByNode[node.ID]) == 0 {
-			j.IDs[node.ID] = true
-			continue
-		}
+		// We may send a resize instruction that has no sources that
+		// the node needs to read from -- for instance, if there's no
+		// data in any fragments it would process. But it still needs
+		// to get the NodeStatus to pick up the schema so it knows
+		// about existing indexes.
 		instr := &ResizeInstruction{
 			JobID:              j.ID,
 			Node:               toCluster.unprotectedNodeByID(node.ID),
@@ -2410,7 +2410,7 @@ func (c *cluster) translateIndexIDs(ctx context.Context, indexName string, ids [
 }
 
 func (c *cluster) translateIndexIDSet(ctx context.Context, indexName string, idSet map[uint64]struct{}) (map[uint64]string, error) {
-	idMap := make(map[uint64]string)
+	idMap := make(map[uint64]string, len(idSet))
 
 	index := c.holder.Index(indexName)
 	if index == nil {

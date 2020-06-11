@@ -195,6 +195,9 @@ func (m *Command) MustRecalculateCaches(tb testing.TB) {
 // URL returns the base URL string for accessing the running program.
 func (m *Command) URL() string { return m.API.Node().URI.String() }
 
+// ID returns the node ID used by the running program.
+func (m *Command) ID() string { return m.API.Node().ID }
+
 // Client returns a client to connect to the program.
 func (m *Command) Client() *http.InternalClient {
 	return m.Server.InternalClient().(*http.InternalClient)
@@ -202,11 +205,39 @@ func (m *Command) Client() *http.InternalClient {
 
 // Query executes a query against the program through the HTTP API.
 func (m *Command) Query(t *testing.T, index, rawQuery, query string) (string, error) {
-	resp := Do(t, "POST", m.URL()+fmt.Sprintf("/index/%s/query?", index)+rawQuery, query)
+	resp := Do(t, "POST", fmt.Sprintf("%s/index/%s/query?%s", m.URL(), index, rawQuery), query)
 	if resp.StatusCode != gohttp.StatusOK {
 		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
 	}
 	return resp.Body, nil
+}
+
+// Queryf is like Query, but with a format string.
+func (m *Command) Queryf(t *testing.T, index, rawQuery, query string, params ...interface{}) (string, error) {
+	query = fmt.Sprintf(query, params...)
+	resp := Do(t, "POST", fmt.Sprintf("%s/index/%s/query?%s", m.URL(), index, rawQuery), query)
+	if resp.StatusCode != gohttp.StatusOK {
+		return "", fmt.Errorf("invalid status: %d, body=%s", resp.StatusCode, resp.Body)
+	}
+	return resp.Body, nil
+}
+
+// QueryExpect executes a query against the program through the HTTP API, and
+// confirms that it got an expected response.
+func (m *Command) QueryExpect(t *testing.T, index, rawQuery, query string, expected string) {
+	resp := Do(t, "POST", fmt.Sprintf("%s/index/%s/query?%s", m.URL(), index, rawQuery), query)
+	if resp.StatusCode != gohttp.StatusOK {
+		t.Fatalf("invalid status from %s: %d, body=%q", m.ID(), resp.StatusCode, resp.Body)
+	}
+	last := len(resp.Body) - 1
+	// Trim trailing newline so we don't need it to be present in the expected data.
+	if last >= 0 && resp.Body[last] == '\n' {
+		resp.Body = resp.Body[:last]
+	}
+
+	if resp.Body != expected {
+		t.Fatalf("node %s, query %q: expected response %s, got %s", m.ID(), query, expected, resp.Body)
+	}
 }
 
 func (m *Command) QueryProtobuf(indexName string, query string) (*pilosa.QueryResponse, error) {
@@ -260,8 +291,6 @@ func (m *Command) RecalculateCaches(t *testing.T) error {
 	}
 	return nil
 }
-
-////////////////////////////////////////////////////////////////////////////////////
 
 // Do executes http.Do() with an http.NewRequest().
 func Do(t *testing.T, method, urlStr string, body string) *httpResponse {

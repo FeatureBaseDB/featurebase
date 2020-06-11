@@ -1290,6 +1290,7 @@ func TestCluster_TranslateStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("starting cluster 0: %v", err)
 	}
+	defer cluster[0].Close()
 
 	test.Do(t, "POST", cluster[0].URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
 }
@@ -1306,6 +1307,7 @@ func TestClusterTranslator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("starting cluster 0: %v", err)
 	}
+	defer cluster[0].Close()
 	cluster[1] = test.NewCommandNode(false,
 		server.OptCommandServerOptions(
 			pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
@@ -1318,6 +1320,7 @@ func TestClusterTranslator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("starting cluster 1: %v", err)
 	}
+	defer cluster[1].Close()
 
 	test.Do(t, "POST", cluster[0].URL()+"/index/i0", "{\"options\": {\"keys\": true}}")
 	test.Do(t, "POST", cluster[0].URL()+"/index/i0/field/f0", "{\"options\": {\"keys\": true}}")

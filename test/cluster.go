@@ -16,9 +16,9 @@ package test
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"path"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -140,10 +140,53 @@ func (c Cluster) Close() error {
 	return nil
 }
 
-// MustNewCluster creates a new cluster
+// AwaitState waits for the cluster coordinator (assumed to be the first
+// node) to reach a specified state.
+func (c Cluster) AwaitCoordinatorState(expectedState string, timeout time.Duration) error {
+	if len(c) < 1 {
+		return errors.New("can't await coordinator state on an empty cluster")
+	}
+	return c[:1].AwaitState(expectedState, timeout)
+}
+
+// ExceptionalState returns an error if any node in the cluster is not
+// in the expected state.
+func (c Cluster) ExceptionalState(expectedState string) error {
+	for _, node := range c {
+		state := node.API.State()
+		if state != expectedState {
+			return fmt.Errorf("node %q: state %s", node.ID(), state)
+		}
+	}
+	return nil
+}
+
+// AwaitState waits for the whole cluster to reach a specified state.
+func (c Cluster) AwaitState(expectedState string, timeout time.Duration) (err error) {
+	if len(c) < 1 {
+		return errors.New("can't await state of an empty cluster")
+	}
+	startTime := time.Now()
+	var elapsed time.Duration
+	for elapsed = 0; elapsed <= timeout; elapsed = time.Since(startTime) {
+		// Counterintuitive: We're returning if the err *is* nil,
+		// meaning we've reached the expected state.
+		if err = c.ExceptionalState(expectedState); err == nil {
+			return err
+		}
+		time.Sleep(1 * time.Millisecond)
+	}
+	return fmt.Errorf("waited %v for cluster to reach state %q: %v",
+		elapsed, expectedState, err)
+}
+
+// MustNewCluster creates a new cluster. If opts contains only one
+// slice of command options, those options are used with every node.
+// If it is empty, default options are used. Otherwise, it must contain size
+// slices of command options, which are used with corresponding nodes.
 func MustNewCluster(tb testing.TB, size int, opts ...[]server.CommandOption) Cluster {
 	tb.Helper()
-	c, err := newCluster(size, opts...)
+	c, err := newCluster(tb, size, opts...)
 	if err != nil {
 		tb.Fatalf("new cluster: %v", err)
 	}
@@ -151,7 +194,7 @@ func MustNewCluster(tb testing.TB, size int, opts ...[]server.CommandOption) Clu
 }
 
 // newCluster creates a new cluster
-func newCluster(size int, opts ...[]server.CommandOption) (Cluster, error) {
+func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (Cluster, error) {
 	if size == 0 {
 		return nil, errors.New("cluster must contain at least one node")
 	}
@@ -160,26 +203,7 @@ func newCluster(size int, opts ...[]server.CommandOption) (Cluster, error) {
 	}
 
 	cluster := make(Cluster, size)
-	// try to find a Test function to use as the "name" for our node.
-	name := "node"
-	callers := make([]uintptr, 10)
-	n := runtime.Callers(2, callers)
-	callers = callers[:n]
-	for _, pc := range callers {
-		fn := runtime.FuncForPC(pc)
-		if fn != nil {
-			fnName := fn.Name()
-			sections := strings.Split(fnName, ".")
-			if len(sections) > 1 {
-				fnName = sections[2]
-			}
-			if strings.HasPrefix(fnName, "Test") {
-				name = "test" + fnName[4:]
-				break
-			}
-		}
-	}
-	_ = name
+	name := tb.Name()
 	for i := 0; i < size; i++ {
 		var commandOpts []server.CommandOption
 		if len(opts) > 0 {
@@ -197,8 +221,8 @@ func newCluster(size int, opts ...[]server.CommandOption) (Cluster, error) {
 }
 
 // runCluster creates and starts a new cluster
-func runCluster(size int, opts ...[]server.CommandOption) (Cluster, error) {
-	cluster, err := newCluster(size, opts...)
+func runCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (Cluster, error) {
+	cluster, err := newCluster(tb, size, opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "new cluster")
 	}
@@ -209,7 +233,8 @@ func runCluster(size int, opts ...[]server.CommandOption) (Cluster, error) {
 	return cluster, nil
 }
 
-// MustRunCluster creates and starts a new cluster
+// MustRunCluster creates and starts a new cluster. The opts parameter
+// is slightly magical; see MustNewCluster.
 func MustRunCluster(tb testing.TB, size int, opts ...[]server.CommandOption) Cluster {
 	// We want tests to default to using the in-memory translate store, so we
 	// prepend opts with that functional option. If a different translate store
@@ -217,7 +242,7 @@ func MustRunCluster(tb testing.TB, size int, opts ...[]server.CommandOption) Clu
 	opts = prependOpts(opts)
 
 	tb.Helper()
-	c, err := runCluster(size, opts...)
+	c, err := runCluster(tb, size, opts...)
 	if err != nil {
 		tb.Fatalf("run cluster: %v", err)
 	}
