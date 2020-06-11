@@ -510,14 +510,10 @@ func (r *Row) Columns() []uint64 {
 
 // Includes returns true if the row contains the given column.
 func (r *Row) Includes(col uint64) bool {
-	// TODO: improve the efficiency of this method by
-	// performing the column filter at the bitmap level
-	// rather than iterating through the results here.
+	shard := col / ShardWidth
 	for i := range r.segments {
-		for _, c := range r.segments[i].Columns() {
-			if c == col {
-				return true
-			}
+		if r.segments[i].shard == shard {
+			return r.segments[i].data.Contains(col)
 		}
 	}
 	return false
