@@ -1770,10 +1770,16 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 		return nil, err
 	}
 
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	}
+
 	// perform necessary Rows queries (any that have limit or columns args) -
 	// TODO, call async? would only help if multiple Rows queries had a column
 	// or limit arg.
 	// TODO support TopN in here would be really cool - and pretty easy I think.
+	bases := make(map[int]int64)
 	childRows := make([]RowIDs, len(c.Children))
 	for i, child := range c.Children {
 		// Check "field" first for backwards compatibility, then set _field.
@@ -1793,6 +1799,19 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 		if err != nil {
 			return nil, errors.Wrap(err, "getting column")
 		}
+		fieldName, ok := child.Args["_field"].(string)
+		if !ok {
+			return nil, errors.Errorf("%s call must have field with valid (string) field name. Got %v of type %[2]T", child.Name, child.Args["_field"])
+		}
+		f := idx.Field(fieldName)
+		if f == nil {
+			return nil, ErrFieldNotFound
+		}
+		switch f.Type() {
+		case FieldTypeInt:
+			bases[i] = f.bsiGroup(f.name).Base
+		}
+
 		if hasLimit || hasCol { // we need to perform this query cluster-wide ahead of executeGroupByShard
 			childRows[i], err = e.executeRows(ctx, index, child, shards, opt)
 			if err != nil {
@@ -1806,7 +1825,7 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
-		return e.executeGroupByShard(ctx, index, c, filter, shard, childRows)
+		return e.executeGroupByShard(ctx, index, c, filter, shard, childRows, bases)
 	}
 	// Merge returned results at coordinating node.
 	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
@@ -2157,7 +2176,7 @@ func applyConditionToGroupCounts(gcs []GroupCount, subj string, cond *pql.Condit
 	return gcs[:i]
 }
 
-func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql.Call, filter *pql.Call, shard uint64, childRows []RowIDs) (_ []GroupCount, err error) {
+func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql.Call, filter *pql.Call, shard uint64, childRows []RowIDs, bases map[int]int64) (_ []GroupCount, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGroupByShard")
 	defer span.Finish()
 
@@ -2202,6 +2221,13 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 		if gc.Count > 0 {
 			num++
 			results = append(results, gc)
+		}
+	}
+
+	// Apply bases.
+	for i, base := range bases {
+		for _, r := range results {
+			*r.Group[i].Value += base
 		}
 	}
 
