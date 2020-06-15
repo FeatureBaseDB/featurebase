@@ -1534,6 +1534,9 @@ func (b *Bitmap) Xor(other *Bitmap) *Bitmap {
 }
 
 // Shift shifts the contents of b by 1.
+//
+// NOTE: This method is unsupported. See the `Shift()`
+// method on `Row` in `row.go`.
 func (b *Bitmap) Shift(n int) (*Bitmap, error) {
 	if n != 1 {
 		return nil, errors.New("cannot shift by a value other than 1")

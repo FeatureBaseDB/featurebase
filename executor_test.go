@@ -5173,6 +5173,10 @@ func runCallTest(t *testing.T, writeQuery string, readQueries []string, indexOpt
 	return responses
 }
 
+// NOTE: The shift function in its current state is unsupported.
+// If any of these tests fail due to improvements made to the roaring
+// code, it is reasonable to remove these tests. See the `Shift()`
+// method on `Row` in `row.go`.
 func TestExecutor_Execute_Shift(t *testing.T) {
 	t.Run("Shift Bit 0", func(t *testing.T) {
 		c := test.MustRunCluster(t, 1)

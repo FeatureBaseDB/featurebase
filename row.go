@@ -387,6 +387,23 @@ func (r *Row) GenericUnaryOp(op ext.GenericBitmapOpBitmap, args map[string]inter
 
 // Shift returns the bitwise shift of r by n bits.
 // Currently only positive shift values are supported.
+//
+// NOTE: the Shift method is currently unsupported, and
+// is considerred to be incorrect. Please DO NOT use it.
+// We are leaving it here in case someone internally wants
+// to use it with the understanding that the results may
+// be incorrect.
+//
+// Why unsupported? For a full description, see:
+// https://github.com/molecula/pilosa/issues/403.
+// In short, the current implementation will shift a bit
+// at the edge of a shard out of the shard and into a
+// container which is assumed to be an invalid container
+// for the shard. So for example, shifting the last bit
+// of shard 0 (containers 0-15) will shift that bit out
+// to container 16. While this "sort of" works, it
+// breaks an assumption about containers, and might stop
+// working in the future if that assumption is enforced.
 func (r *Row) Shift(n int64) (*Row, error) {
 	if n < 0 {
 		return nil, errors.New("cannot shift by negative values")
