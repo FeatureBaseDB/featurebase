@@ -62,9 +62,8 @@ const (
 	resizeJobActionAdd    = "ADD"
 	resizeJobActionRemove = "REMOVE"
 
-	confirmDownRetries = 10
-	confirmDownSleep   = 1
-	confirmDownTimeout = 2
+	defaultConfirmDownRetries = 10
+	defaultConfirmDownSleep   = 1 * time.Second
 )
 
 // Node represents a node in the cluster.
@@ -239,6 +238,9 @@ type cluster struct { // nolint: maligned
 	logger logger.Logger
 
 	InternalClient InternalClient
+
+	confirmDownRetries int
+	confirmDownSleep   time.Duration
 }
 
 // newCluster returns a new instance of Cluster with defaults.
@@ -258,6 +260,9 @@ func newCluster() *cluster {
 		InternalClient: newNopInternalClient(),
 
 		logger: logger.NopLogger,
+
+		confirmDownRetries: defaultConfirmDownRetries,
+		confirmDownSleep:   defaultConfirmDownSleep,
 	}
 }
 
@@ -610,6 +615,7 @@ func (c *cluster) unprotectedStatus() *ClusterStatus {
 		ClusterID: c.id,
 		State:     c.state,
 		Nodes:     c.nodes,
+		Schema:    &Schema{Indexes: c.holder.Schema()},
 	}
 }
 
@@ -659,6 +665,7 @@ func (c *cluster) addNodeBasicSorted(node *Node) bool {
 			n.State = node.State
 			n.IsCoordinator = node.IsCoordinator
 			n.URI = node.URI
+			n.GRPCURI = node.GRPCURI
 			return true
 		}
 		return false
@@ -1042,6 +1049,11 @@ func (c *cluster) partitionNodes(partitionID int) []*Node {
 func (c *cluster) ownsPartition(nodeID string, partition int) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+	return c.unprotectedOwnsPartition(nodeID, partition)
+}
+
+// unprotectedOwnsPartition returns true if a host owns a partition.
+func (c *cluster) unprotectedOwnsPartition(nodeID string, partition int) bool {
 	return Nodes(c.partitionNodes(partition)).ContainsID(nodeID)
 }
 
@@ -1271,9 +1283,7 @@ func (c *cluster) listenForJoins() {
 		// Then we want to set the cluster state to NORMAL and resume processing of joiningLeavingNodes events.
 		// We use a bool `setNormal` to indicate when at least one node has joined.
 		var setNormal bool
-
 		for {
-
 			// Handle all pending joins before changing state back to NORMAL.
 			select {
 			case nodeAction := <-c.joiningLeavingNodes:
@@ -1745,8 +1755,9 @@ func (j *resizeJob) distributeResizeInstructions() error {
 		// Because the node may not be in the cluster yet, create
 		// a dummy node object to use in the SendTo() method.
 		node := &Node{
-			ID:  instr.Node.ID,
-			URI: instr.Node.URI,
+			ID:      instr.Node.ID,
+			URI:     instr.Node.URI,
+			GRPCURI: instr.Node.GRPCURI,
 		}
 		j.Logger.Printf("send resize instructions: %v", instr)
 		if err := j.Broadcaster.SendTo(node, instr); err != nil {
@@ -1917,7 +1928,7 @@ func (c *cluster) considerTopology() error {
 // band aid to protect against false nodeLeave events from memberlist
 // the test is the lightest weight endpoint of the node in question /version
 // TODO provide more robust solution to false nodeLeave events
-func confirmNodeDown(uri URI, log logger.Logger) bool {
+func (c *cluster) confirmNodeDown(uri URI) bool {
 	u := url.URL{
 		Scheme: uri.Scheme,
 		Host:   uri.HostPort(),
@@ -1925,11 +1936,11 @@ func confirmNodeDown(uri URI, log logger.Logger) bool {
 	}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		log.Printf("bad request:%s %s", u.String(), err)
+		c.logger.Printf("bad request:%s %s", u.String(), err)
 		return false
 	}
-	for i := 0; i < confirmDownRetries; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), confirmDownTimeout*time.Second)
+	for i := 0; i < c.confirmDownRetries; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), c.confirmDownSleep*2)
 		defer cancel()
 		resp, err := http.DefaultClient.Do(req.WithContext(ctx))
 		var bod []byte
@@ -1940,8 +1951,8 @@ func confirmNodeDown(uri URI, log logger.Logger) bool {
 			}
 		}
 
-		log.Printf("NodeLeave confirm with %s %d. err: '%v' bod: '%s'", uri.HostPort(), i, err, bod)
-		time.Sleep(confirmDownSleep * time.Second)
+		c.logger.Printf("NodeLeave confirm with %s %d. err: '%v' bod: '%s'", uri.HostPort(), i, err, bod)
+		time.Sleep(c.confirmDownSleep)
 	}
 	return true
 }
@@ -1969,7 +1980,7 @@ func (c *cluster) ReceiveEvent(e *NodeEvent) (err error) {
 			// not already removed by a removeNode request. We treat this as the
 			// host being temporarily unavailable, and expect it to come back
 			// up.
-			if confirmNodeDown(e.Node.URI, c.logger) {
+			if c.confirmNodeDown(e.Node.URI) {
 				if c.removeNodeBasicSorted(e.Node.ID) {
 					c.Topology.nodeStates[e.Node.ID] = nodeStateDown
 					// put the cluster into STARTING if we've lost a number of nodes
@@ -2045,6 +2056,9 @@ func (c *cluster) nodeJoin(node *Node) error {
 		if cnode.URI != node.URI {
 			c.logger.Printf("node: %v changed URI from %s to %s", cnode.ID, cnode.URI, node.URI)
 			cnode.URI = node.URI
+		}
+		if cnode.GRPCURI != node.GRPCURI {
+			cnode.GRPCURI = node.GRPCURI
 		}
 		return c.unprotectedSetStateAndBroadcast(c.determineClusterState())
 	}
@@ -2141,7 +2155,7 @@ func (c *cluster) nodeStatus() *NodeStatus {
 	}
 	var availableShards *roaring.Bitmap
 	for _, idx := range ns.Schema.Indexes {
-		is := &IndexStatus{Name: idx.Name}
+		is := &IndexStatus{Name: idx.Name, CreatedAt: idx.CreatedAt}
 		for _, f := range idx.Fields {
 			if field := c.holder.Field(idx.Name, f.Name); field != nil {
 				availableShards = field.AvailableShards()
@@ -2150,6 +2164,7 @@ func (c *cluster) nodeStatus() *NodeStatus {
 			}
 			is.Fields = append(is.Fields, &FieldStatus{
 				Name:            f.Name,
+				CreatedAt:       f.CreatedAt,
 				AvailableShards: availableShards,
 			})
 		}
@@ -2445,6 +2460,7 @@ type ClusterStatus struct {
 	ClusterID string
 	State     string
 	Nodes     []*Node
+	Schema    *Schema
 }
 
 // ResizeInstruction contains the instruction provided to a node
@@ -2486,7 +2502,7 @@ type translationResizeNode struct {
 
 // Schema contains information about indexes and their configuration.
 type Schema struct {
-	Indexes []*IndexInfo
+	Indexes []*IndexInfo `json:"indexes"`
 }
 
 func encodeTopology(topology *Topology) *internal.Topology {
@@ -2524,8 +2540,9 @@ type CreateShardMessage struct {
 
 // CreateIndexMessage is an internal message indicating index creation.
 type CreateIndexMessage struct {
-	Index string
-	Meta  *IndexOptions
+	Index     string
+	CreatedAt int64
+	Meta      *IndexOptions
 }
 
 // DeleteIndexMessage is an internal message indicating index deletion.
@@ -2535,9 +2552,10 @@ type DeleteIndexMessage struct {
 
 // CreateFieldMessage is an internal message indicating field creation.
 type CreateFieldMessage struct {
-	Index string
-	Field string
-	Meta  *FieldOptions
+	Index     string
+	Field     string
+	CreatedAt int64
+	Meta      *FieldOptions
 }
 
 // DeleteFieldMessage is an internal message indicating field deletion.
@@ -2600,13 +2618,15 @@ type NodeStatus struct {
 
 // IndexStatus is an internal message representing the contents of an index.
 type IndexStatus struct {
-	Name   string
-	Fields []*FieldStatus
+	Name      string
+	CreatedAt int64
+	Fields    []*FieldStatus
 }
 
 // FieldStatus is an internal message representing the contents of a field.
 type FieldStatus struct {
 	Name            string
+	CreatedAt       int64
 	AvailableShards *roaring.Bitmap
 }
 

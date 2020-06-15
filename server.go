@@ -77,6 +77,8 @@ type Server struct { // nolint: maligned
 	metricInterval      time.Duration
 	diagnosticInterval  time.Duration
 	maxWritesPerRequest int
+	confirmDownSleep    time.Duration
+	confirmDownRetries  int
 	isCoordinator       bool
 	syncer              holderSyncer
 
@@ -229,6 +231,17 @@ func OptServerDiagnosticsInterval(dur time.Duration) ServerOption {
 	}
 }
 
+// OptServerNodeDownRetries is a functional option on Server
+// used to specify the retries and sleep duration for node down
+// checks.
+func OptServerNodeDownRetries(retries int, sleep time.Duration) ServerOption {
+	return func(s *Server) error {
+		s.confirmDownRetries = retries
+		s.confirmDownSleep = sleep
+		return nil
+	}
+}
+
 // OptServerURI is a functional option on Server
 // used to set the server URI.
 func OptServerURI(uri *URI) ServerOption {
@@ -330,6 +343,9 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		metricInterval:      0,
 		diagnosticInterval:  0,
 
+		confirmDownRetries: defaultConfirmDownRetries,
+		confirmDownSleep:   defaultConfirmDownSleep,
+
 		resetTranslationSyncCh: make(chan struct{}),
 
 		logger: logger.NopLogger,
@@ -356,14 +372,11 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 	s.executor = newExecutor(executorOpts...)
 
-	// s.holder.translateFile.logger = s.logger
-
 	path, err := expandDirName(s.dataDir)
 	if err != nil {
 		return nil, err
 	}
 	s.holder.Path = path
-	// s.holder.translateFile.Path = filepath.Join(path, ".keys")
 	s.holder.Logger = s.logger
 	s.holder.Stats.SetLogger(s.logger)
 
@@ -402,6 +415,8 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.executor.MaxWritesPerRequest = s.maxWritesPerRequest
 	s.cluster.broadcaster = s
 	s.cluster.maxWritesPerRequest = s.maxWritesPerRequest
+	s.cluster.confirmDownRetries = s.confirmDownRetries
+	s.cluster.confirmDownSleep = s.confirmDownSleep
 	s.holder.broadcaster = s
 	err = s.loadAllExtensions()
 	if err != nil {
@@ -716,10 +731,13 @@ func (s *Server) receiveMessage(m Message) error {
 		}
 	case *CreateIndexMessage:
 		opt := obj.Meta
-		_, err := s.holder.CreateIndex(obj.Index, *opt)
+		idx, err := s.holder.CreateIndex(obj.Index, *opt)
 		if err != nil {
 			return err
 		}
+		idx.mu.Lock()
+		idx.createdAt = obj.CreatedAt
+		idx.mu.Unlock()
 	case *DeleteIndexMessage:
 		if err := s.holder.DeleteIndex(obj.Index); err != nil {
 			return err
@@ -730,10 +748,13 @@ func (s *Server) receiveMessage(m Message) error {
 			return fmt.Errorf("local index not found: %s", obj.Index)
 		}
 		opt := obj.Meta
-		_, err := idx.createFieldIfNotExists(obj.Field, opt)
+		fld, err := idx.createFieldIfNotExists(obj.Field, opt)
 		if err != nil {
 			return err
 		}
+		fld.mu.Lock()
+		fld.createdAt = obj.CreatedAt
+		fld.mu.Unlock()
 	case *DeleteFieldMessage:
 		idx := s.holder.Index(obj.Index)
 		if err := idx.DeleteField(obj.Field); err != nil {
@@ -767,6 +788,12 @@ func (s *Server) receiveMessage(m Message) error {
 		if err != nil {
 			return err
 		}
+		if !s.isCoordinator {
+			if obj.Schema != nil {
+				s.holder.applyCreatedAt(obj.Schema.Indexes)
+			}
+		}
+
 	case *ResizeInstruction:
 		err := s.cluster.followResizeInstruction(obj)
 		if err != nil {

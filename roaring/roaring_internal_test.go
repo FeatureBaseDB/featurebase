@@ -19,11 +19,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/pilosa/pilosa/v2/generator"
 	"github.com/pkg/errors"
 )
 
@@ -2630,7 +2632,7 @@ func TestBitmapClone(t *testing.T) {
 		}
 	}
 	c := b.Clone()
-	if err := bitmapsEqual(b, c); err != nil {
+	if _, err := b.BitwiseEqual(c); err != nil {
 		t.Fatalf("Clone Objects not equal: %v\n", err)
 	}
 	d := func() *Bitmap { //anybody know how to declare a nil value?
@@ -2733,34 +2735,46 @@ func getFunctionName(i interface{}) string {
 	return y[0]
 }
 
-// UnionInPlace is defined at the Bitmap level, but this wrapper lets us insert
-// it into our ContainerCombinations tests so that it gets exercised on a wide
-// variety of container data.
 func unionInPlaceWrapper(a, b *Container) *Container {
-	out := NewBitmap()
-	out.Containers.Put(0, a.Clone())
-	B := NewBitmap()
-	B.Containers.Put(0, b)
-	out.UnionInPlace(B)
-	return out.Containers.Get(0)
+	ret := a.Clone().unionInPlace(b)
+	ret.Repair()
+	return ret
 }
 
 func differenceInPlaceWrapper(a, b *Container) *Container {
-	out := NewBitmap()
-	out.Containers.Put(0, a.Clone())
-	B := NewBitmap()
-	B.Containers.Put(0, b)
-	out.DifferenceInPlace(B)
-	return out.Containers.Get(0)
+	a = a.Clone()
+	// this should probably return its new value, but currently does not
+	a.differenceInPlace(b)
+	return a
 }
 
 func intersectInPlaceWrapper(a, b *Container) *Container {
-	out := NewBitmap()
-	out.Containers.Put(0, a.Clone())
-	B := NewBitmap()
-	B.Containers.Put(0, b)
-	out.IntersectInPlace(B)
-	return out.Containers.Get(0)
+	return a.Clone().intersectInPlace(b)
+}
+
+func TestContainerBitwiseCompare(t *testing.T) {
+	cts := setupContainerTests()
+
+	for t1, containers := range cts {
+		for name, c := range containers {
+			for t2, other := range cts {
+				for otherName, otherC := range other {
+					err := c.BitwiseCompare(otherC)
+					if err != nil {
+						if otherName == name {
+							t.Fatalf("container types %d/%d, contents %s: unexpected error %v",
+								t1, t2, name, err)
+						}
+					} else {
+						if name != otherName {
+							t.Fatalf("container types %d/%d, unexpected %s == %s",
+								t1, t2, name, otherName)
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 func TestContainerCombinations(t *testing.T) {
@@ -3560,51 +3574,8 @@ func TestContainerCombinations(t *testing.T) {
 
 				// Convert to all container types and check result.
 				for _, ct := range containerTypes {
-					clone := ret.Clone()
-					if ct == containerArray {
-						if clone == nil {
-							clone = NewContainerArray(nil)
-						} else if clone.isBitmap() {
-							clone = clone.bitmapToArray()
-						} else if clone.isRun() {
-							clone = clone.runToArray()
-						}
-						if clone.N() != cts[ct][exp].N() {
-							t.Errorf("test %s expected array n=%d, but got n=%d", desc, cts[ct][exp].N(), clone.N())
-						}
-						// Because xorRunRun resulting in an empty container returns an array container with a
-						// nil slice array, then we need to check len() on array first (look for 0).
-						if !(len(clone.array()) == 0 && len(cts[ct][exp].array()) == 0) && !reflect.DeepEqual(clone.array(), cts[ct][exp].array()) {
-							t.Errorf("test %s expected array %X, but got %X", desc, cts[ct][exp].array(), clone.array())
-						}
-					} else if ct == containerBitmap {
-						if clone == nil {
-							clone = NewContainerBitmap(0, nil)
-						} else if clone.isArray() {
-							clone = clone.arrayToBitmap()
-						} else if clone.isRun() {
-							clone = clone.runToBitmap()
-						}
-						if clone.N() != cts[ct][exp].N() {
-							t.Errorf("test %s expected bitmap n=%d, but got n=%d", desc, cts[ct][exp].N(), clone.N())
-						}
-						if !reflect.DeepEqual(clone.bitmap(), cts[ct][exp].bitmap()) {
-							t.Errorf("test %s expected bitmap %X, but got %X", desc, cts[ct][exp].bitmap(), clone.bitmap())
-						}
-					} else if ct == containerRun {
-						if clone == nil {
-							clone = NewContainerRun(nil)
-						} else if clone.isArray() {
-							clone = clone.arrayToRun(0)
-						} else if clone.isBitmap() {
-							clone = clone.bitmapToRun(0)
-						}
-						if clone.N() != cts[ct][exp].N() {
-							t.Errorf("test %s expected runs n=%d, but got n=%d", desc, cts[ct][exp].N(), clone.N())
-						}
-						if !reflect.DeepEqual(clone.runs(), cts[ct][exp].runs()) {
-							t.Errorf("test %s expected runs %X, but got %X", desc, cts[ct][exp].runs(), clone.runs())
-						}
+					if err := ret.BitwiseCompare(cts[ct][exp]); err != nil {
+						t.Errorf("test %s: %v", desc, err)
 					}
 				}
 			}
@@ -4026,7 +3997,11 @@ func TestDirectAddNVsAdd(t *testing.T) {
 		{9384932, 101000, 2, 1, 0},
 		{3489, 19230, 394, 0, 893982, 890283, 14, 7},
 	}
-	// TODO generate more tests and fuzz
+	// Add some randomly created tests.
+	rand := rand.New(rand.NewSource(1))
+	for i := 0; i < 100; i++ {
+		tests = append(tests, generator.Uint64Slice(1+rand.Intn(1000), 0, 10000000, i%2 == 0, rand))
+	}
 	testsCopy := make([][]uint64, len(tests))
 	copy(testsCopy, tests)
 	for i, test := range testsCopy {

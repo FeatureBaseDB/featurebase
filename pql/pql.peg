@@ -64,8 +64,8 @@ itema <- ( 'null' &(comma / sp close) { p.addVal(nil) }
          )
 itemb <- ( < IDENT > { p.startCall(buffer[begin:end]) } open allargs comma? close { p.addVal(p.endCall()) }
          / < ([[A-Z]] / [0-9] / '-' / '_' / ':')+ > { p.addVal(buffer[begin:end]) }
-         / < '"'  doublequotedstring '"' > { s, _ := strconv.Unquote(buffer[begin:end]); p.addVal(s) }
-         / '\'' < singlequotedstring > '\'' { p.addVal(buffer[begin:end]) }
+         / < '"'  doublequotedstring '"' > { p.addVal(buffer[begin:end]) }
+         / < '\''  singlequotedstring  '\'' > { p.addVal(buffer[begin:end]) }
          )
 float <- ( < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(buffer[begin:end], true) }
          / < '-'? '.'[0-9]+ > { p.addNumVal(buffer[begin:end], true) }
@@ -74,8 +74,8 @@ decimal <- ( < '-'? [0-9]+ ('.'[0-9]*)? > { p.addNumVal(buffer[begin:end], false
            / < '-'? '.'[0-9]+ > { p.addNumVal(buffer[begin:end], false) }
            )
 
-doublequotedstring <- ( '\\"' / '\\\\' / [^"] )*
-singlequotedstring <- ( '\\\'' / '\\\\' / [^'] )*
+doublequotedstring <- ( '\\"' / '\\\\' / '\\n' / '\\t' / [^"\\] )*
+singlequotedstring <- ( '\\\'' / '\\\\' / '\\n' / '\\t' /  [^'\\] )*
 
 fieldExpr <- ( [[A-Z]] / '_' ) ( [[A-Z]] / [0-9] / '_' / '-' )*
 field <- <fieldExpr / reserved> { p.addField(buffer[begin:end]) }
@@ -83,12 +83,12 @@ reserved <- ('_row' / '_col' / '_start' / '_end' / '_timestamp' / '_field')
 posfield <- <fieldExpr> { p.addPosStr("_field", buffer[begin:end]) }
 uint <- [1-9] [0-9]* / '0'
 col <- ( <uint> {p.addPosNum("_col", buffer[begin:end])}
-        / '\'' <singlequotedstring> '\'' {p.addPosStr("_col", buffer[begin:end])}
-        / '"' <doublequotedstring> '"' {p.addPosStr("_col", buffer[begin:end])}
+        / < '\'' singlequotedstring '\'' > {p.addPosStr("_col", buffer[begin:end])}
+        / < '"' doublequotedstring '"' > {p.addPosStr("_col", buffer[begin:end])}
         )
 row <- ( <uint> {p.addPosNum("_row", buffer[begin:end])}
-        / '\'' <singlequotedstring> '\'' {p.addPosStr("_row", buffer[begin:end])}
-        / '"' <doublequotedstring> '"' {p.addPosStr("_row", buffer[begin:end])}
+        / < '\'' singlequotedstring '\'' > {p.addPosStr("_row", buffer[begin:end])}
+        / < '"' doublequotedstring '"' > {p.addPosStr("_row", buffer[begin:end])}
         )
 
 open <- '(' sp

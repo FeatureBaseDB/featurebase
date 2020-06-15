@@ -111,6 +111,11 @@ func TestFragment_ClearBit(t *testing.T) {
 func TestFragment_RowcacheMap(t *testing.T) {
 	var done int64
 	f := mustOpenFragment("i", "f", viewStandard, 0, "")
+	// Under -race, this test turns out to take a fairly long time
+	// to run with larger OpN, because we write 50,000 bits to
+	// the bitmap, and everything is being race-detected, and we don't
+	// actually need that many to get the result we care about.
+	f.MaxOpN = 2000
 	defer f.Clean(t)
 
 	ch := make(chan struct{})
@@ -619,6 +624,23 @@ func TestFragment_Range(t *testing.T) {
 		}
 	})
 
+	t.Run("LTMaxRegression", func(t *testing.T) {
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
+		defer f.Clean(t)
+
+		if _, err := f.setValue(1, 2, 3); err != nil {
+			t.Fatal(err)
+		} else if _, err := f.setValue(2, 2, 0); err != nil {
+			t.Fatal(err)
+		}
+
+		if b, err := f.rangeLTUnsigned(NewRow(1, 2), 2, 3, false); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{2}) {
+			t.Fatalf("unepxected coulmns: %+v", b.Columns())
+		}
+	})
+
 	t.Run("GT", func(t *testing.T) {
 		f := mustOpenFragment("i", "f", viewStandard, 0, "")
 		defer f.Clean(t)
@@ -664,6 +686,23 @@ func TestFragment_Range(t *testing.T) {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(b.Columns(), []uint64{1000, 3000, 4000}) {
 			t.Fatalf("unexpected columns: %+v", b.Columns())
+		}
+	})
+
+	t.Run("GTMinRegression", func(t *testing.T) {
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
+		defer f.Clean(t)
+
+		if _, err := f.setValue(1, 2, 0); err != nil {
+			t.Fatal(err)
+		} else if _, err := f.setValue(2, 2, 1); err != nil {
+			t.Fatal(err)
+		}
+
+		if b, err := f.rangeGTUnsigned(NewRow(1, 2), 2, 0, false); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{2}) {
+			t.Fatalf("unepxected coulmns: %+v", b.Columns())
 		}
 	})
 
@@ -2412,8 +2451,9 @@ func TestGetZipfRowsSliceRoaring(t *testing.T) {
 	if err != nil {
 		t.Fatalf("importing roaring: %v", err)
 	}
-	if !reflect.DeepEqual(f.rows(0), []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}) {
-		t.Fatalf("unexpected rows: %v", f.rows(0))
+	rows := f.rows(context.Background(), 0)
+	if !reflect.DeepEqual(rows, []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}) {
+		t.Fatalf("unexpected rows: %v", rows)
 	}
 	for i := uint64(1); i < 10; i++ {
 		if f.row(i).Count() >= f.row(i-1).Count() {
@@ -2714,12 +2754,12 @@ func TestFragment_RowsIteration(t *testing.T) {
 			}
 		}
 
-		ids := f.rows(0)
+		ids := f.rows(context.Background(), 0)
 		if !reflect.DeepEqual(expectedAll, ids) {
 			t.Fatalf("Do not match %v %v", expectedAll, ids)
 		}
 
-		ids = f.rows(0, filterColumn(1))
+		ids = f.rows(context.Background(), 0, filterColumn(1))
 		if !reflect.DeepEqual(expectedOdd, ids) {
 			t.Fatalf("Do not match %v %v", expectedOdd, ids)
 		}
@@ -2738,12 +2778,12 @@ func TestFragment_RowsIteration(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		ids := f.rows(0)
+		ids := f.rows(context.Background(), 0)
 		if !reflect.DeepEqual(expected, ids) {
 			t.Fatalf("Do not match %v %v", expected, ids)
 		}
 
-		ids = f.rows(0, filterColumn(66000))
+		ids = f.rows(context.Background(), 0, filterColumn(66000))
 		if !reflect.DeepEqual(expected, ids) {
 			t.Fatalf("Do not match %v %v", expected, ids)
 		}
@@ -2754,18 +2794,18 @@ func TestFragment_RowsIteration(t *testing.T) {
 		defer f.Clean(t)
 
 		expectedRows := make([]uint64, 0)
-		for r := uint64(1); r < uint64(10000); r += 100 {
+		for r := uint64(1); r < uint64(10000); r += 250 {
 			expectedRows = append(expectedRows, r)
-			for c := uint64(1); c < uint64(ShardWidth-1); c += 10000 {
+			for c := uint64(1); c < uint64(ShardWidth-1); c += (ShardWidth >> 5) {
 				if _, err := f.setBit(r, c); err != nil {
 					t.Fatal(err)
 				}
 
-				ids := f.rows(0)
+				ids := f.rows(context.Background(), 0)
 				if !reflect.DeepEqual(expectedRows, ids) {
 					t.Fatalf("Do not match %v %v", expectedRows, ids)
 				}
-				ids = f.rows(0, filterColumn(c))
+				ids = f.rows(context.Background(), 0, filterColumn(c))
 				if !reflect.DeepEqual(expectedRows, ids) {
 					t.Fatalf("Do not match %v %v", expectedRows, ids)
 				}

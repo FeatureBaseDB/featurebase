@@ -15,14 +15,15 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"expvar"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
+	"mime"
 	"net"
 	"net/http"
 	_ "net/http/pprof" // Imported for its side-effect of registering pprof endpoints with the server.
@@ -358,6 +359,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/transaction/{id}", handler.handlePostTransaction).Methods("POST").Name("PostTransaction")
 	router.HandleFunc("/transaction/{id}/finish", handler.handlePostFinishTransaction).Methods("POST").Name("PostFinishTransaction")
 	router.HandleFunc("/transactions", handler.handleGetTransactions).Methods("GET").Name("GetTransactions")
+	router.HandleFunc("/queries", handler.handleGetActiveQueries).Methods("GET").Name("GetActiveQueries")
 	router.HandleFunc("/version", handler.handleGetVersion).Methods("GET").Name("GetVersion")
 
 	// /internal endpoints are for internal use only; they may change at any time.
@@ -401,9 +403,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // successResponse is a general success/error struct for http responses.
 type successResponse struct {
-	h       *Handler
-	Success bool   `json:"success"`
-	Error   *Error `json:"error,omitempty"`
+	h         *Handler
+	Success   bool   `json:"success"`
+	Name      string `json:"name,omitempty"`
+	CreatedAt int64  `json:"createdAt,omitempty"`
+	Error     *Error `json:"error,omitempty"`
 }
 
 // check determines success or failure based on the error.
@@ -473,9 +477,33 @@ func (h *Handler) handleHome(w http.ResponseWriter, _ *http.Request) {
 // headers are present, but none of them are "application/json"
 // (or any matching wildcard). Otherwise returns true.
 func validHeaderAcceptJSON(header http.Header) bool {
+	return validHeaderAcceptType(header, "application", "json")
+}
+
+func validHeaderAcceptType(header http.Header, typ, subtyp string) bool {
 	if v, found := header["Accept"]; found {
 		for _, v := range v {
-			if v == "application/json" || v == "*/*" || v == "*/json" || v == "application/*" {
+			t, _, err := mime.ParseMediaType(v)
+			if err != nil {
+				switch err {
+				case mime.ErrInvalidMediaParameter:
+					// This is an optional feature, so we can keep going anyway.
+				default:
+					continue
+				}
+			}
+			spl := strings.SplitN(t, "/", 2)
+			if len(spl) < 2 {
+				continue
+			}
+			switch {
+			case spl[0] == typ && spl[1] == subtyp:
+				return true
+			case spl[0] == "*" && spl[1] == subtyp:
+				return true
+			case spl[0] == typ && spl[1] == "*":
+				return true
+			case spl[0] == "*" && spl[1] == "*":
 				return true
 			}
 		}
@@ -504,7 +532,7 @@ func (h *Handler) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	schema := h.api.Schema(r.Context())
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{"indexes": schema}); err != nil { // TODO: use pilosa.Schema instead of map[string]interface{} here?
+	if err := json.NewEncoder(w).Encode(pilosa.Schema{Indexes: schema}); err != nil {
 		h.logger.Printf("write schema response error: %s", err)
 	}
 }
@@ -773,7 +801,7 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := successResponse{h: h}
+	resp := successResponse{h: h, Name: indexName}
 
 	// Decode request.
 	req := postIndexRequest{
@@ -787,8 +815,15 @@ func (h *Handler) handlePostIndex(w http.ResponseWriter, r *http.Request) {
 		resp.write(w, err)
 		return
 	}
-	_, err = h.api.CreateIndex(r.Context(), indexName, req.Options)
+	index, err := h.api.CreateIndex(r.Context(), indexName, req.Options)
 
+	if index != nil {
+		resp.CreatedAt = index.CreatedAt()
+	} else if _, ok = errors.Cause(err).(pilosa.ConflictError); ok {
+		if index, _ = h.api.Index(r.Context(), indexName); index != nil {
+			resp.CreatedAt = index.CreatedAt()
+		}
+	}
 	resp.write(w, err)
 }
 
@@ -826,6 +861,52 @@ func (h *Handler) handlePostIndexAttrDiff(w http.ResponseWriter, r *http.Request
 	}
 }
 
+func (h *Handler) handleGetActiveQueries(w http.ResponseWriter, r *http.Request) {
+	var rtype string
+	switch {
+	case validHeaderAcceptType(r.Header, "text", "plain"):
+		rtype = "text/plain"
+	case validHeaderAcceptJSON(r.Header):
+		rtype = "application/json"
+	default:
+		http.Error(w, "no acceptable response type selected", http.StatusNotAcceptable)
+		return
+	}
+	queries, err := h.api.ActiveQueries(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", rtype)
+	switch rtype {
+	case "text/plain":
+		durations := make([]string, len(queries))
+		for i, q := range queries {
+			durations[i] = q.Age.String()
+		}
+		var maxlen int
+		for _, l := range durations {
+			if len(l) > maxlen {
+				maxlen = len(l)
+			}
+		}
+		for i, q := range queries {
+			_, err := fmt.Fprintf(w, "%*s%q\n", -(maxlen + 2), durations[i], q.Query)
+			if err != nil {
+				h.logger.Printf("sending GetActiveQueries response: %s", err)
+				return
+			}
+		}
+		if _, err := w.Write([]byte{'\n'}); err != nil {
+			h.logger.Printf("sending GetActiveQueries response: %s", err)
+		}
+	case "application/json":
+		if err := json.NewEncoder(w).Encode(queries); err != nil {
+			h.logger.Printf("encoding GetActiveQueries response: %s", err)
+		}
+	}
+}
+
 type postIndexAttrDiffRequest struct {
 	Blocks []pilosa.AttrBlock `json:"blocks"`
 }
@@ -853,7 +934,7 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := successResponse{h: h}
+	resp := successResponse{h: h, Name: fieldName}
 
 	// Decode request.
 	var req postFieldRequest
@@ -925,10 +1006,17 @@ func (h *Handler) handlePostField(w http.ResponseWriter, r *http.Request) {
 		fos = append(fos, pilosa.OptFieldForeignIndex(*req.Options.ForeignIndex))
 	}
 
-	_, err = h.api.CreateField(r.Context(), indexName, fieldName, fos...)
+	field, err := h.api.CreateField(r.Context(), indexName, fieldName, fos...)
 	if _, ok := err.(pilosa.BadRequestError); ok {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+	if field != nil {
+		resp.CreatedAt = field.CreatedAt()
+	} else if _, ok = errors.Cause(err).(pilosa.ConflictError); ok {
+		if field, _ = h.api.Field(r.Context(), indexName, fieldName); field != nil {
+			resp.CreatedAt = field.CreatedAt()
+		}
 	}
 	resp.write(w, err)
 }
@@ -1240,7 +1328,7 @@ func (h *Handler) readQueryRequest(r *http.Request) (*pilosa.QueryRequest, error
 // readProtobufQueryRequest parses query parameters in protobuf from r.
 func (h *Handler) readProtobufQueryRequest(r *http.Request) (*pilosa.QueryRequest, error) {
 	// Slurp the body.
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := readBody(r)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading")
 	}
@@ -1258,7 +1346,7 @@ func (h *Handler) readURLQueryRequest(r *http.Request) (*pilosa.QueryRequest, er
 	q := r.URL.Query()
 
 	// Parse query string.
-	buf, err := ioutil.ReadAll(r.Body)
+	buf, err := readBody(r)
 	if err != nil {
 		return nil, errors.Wrap(err, "reading")
 	}
@@ -1319,95 +1407,14 @@ func (h *Handler) writeJSONQueryResponse(w io.Writer, resp *pilosa.QueryResponse
 	return json.NewEncoder(w).Encode(resp)
 }
 
-// handlePostImport handles /import requests.
-func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
-	// Verify that request is only communicating over protobufs.
+func validateProtobufHeader(r *http.Request) (error string, code int) {
 	if r.Header.Get("Content-Type") != "application/x-protobuf" {
-		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
-		return
-	} else if r.Header.Get("Accept") != "application/x-protobuf" {
-		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
-		return
+		return "Unsupported media type", http.StatusUnsupportedMediaType
 	}
-	indexName := mux.Vars(r)["index"]
-	fieldName := mux.Vars(r)["field"]
-
-	// If the clear flag is true, treat the import as clear bits.
-	q := r.URL.Query()
-	doClear := q.Get("clear") == "true"
-	doIgnoreKeyCheck := q.Get("ignoreKeyCheck") == "true"
-
-	opts := []pilosa.ImportOption{
-		pilosa.OptImportOptionsClear(doClear),
-		pilosa.OptImportOptionsIgnoreKeyCheck(doIgnoreKeyCheck),
+	if r.Header.Get("Accept") != "application/x-protobuf" {
+		return "Not acceptable", http.StatusNotAcceptable
 	}
-
-	// Get index and field type to determine how to handle the
-	// import data.
-	field, err := h.api.Field(r.Context(), indexName, fieldName)
-	if err != nil {
-		switch errors.Cause(err) {
-		case pilosa.ErrIndexNotFound:
-			fallthrough
-		case pilosa.ErrFieldNotFound:
-			http.Error(w, err.Error(), http.StatusNotFound)
-		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	// Read entire body.
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Unmarshal request based on field type.
-	if field.Type() == pilosa.FieldTypeInt || field.Type() == pilosa.FieldTypeDecimal {
-		// Field type: Int
-		// Marshal into request object.
-		req := &pilosa.ImportValueRequest{}
-		if err := proto.DefaultSerializer.Unmarshal(body, req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		if err := h.api.ImportValue(r.Context(), req, opts...); err != nil {
-			switch errors.Cause(err) {
-			case pilosa.ErrClusterDoesNotOwnShard:
-				http.Error(w, err.Error(), http.StatusPreconditionFailed)
-			default:
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
-			return
-		}
-	} else {
-		// Field type: set, time, mutex
-		// Marshal into request object.
-		req := &pilosa.ImportRequest{}
-		if err := proto.DefaultSerializer.Unmarshal(body, req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		if err := h.api.Import(r.Context(), req, opts...); err != nil {
-			switch errors.Cause(err) {
-			case pilosa.ErrClusterDoesNotOwnShard:
-				http.Error(w, err.Error(), http.StatusPreconditionFailed)
-			default:
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
-			return
-		}
-	}
-
-	// Write response.
-	_, err = w.Write(importOk)
-	if err != nil {
-		h.logger.Printf("writing import response: %v", err)
-	}
+	return
 }
 
 // handleGetExport handles /export requests.
@@ -1885,6 +1892,95 @@ func GetHTTPClient(t *tls.Config) *http.Client {
 	return &http.Client{Transport: transport}
 }
 
+// handlePostImport handles /import requests.
+func (h *Handler) handlePostImport(w http.ResponseWriter, r *http.Request) {
+	// Verify that request is only communicating over protobufs.
+	if error, code := validateProtobufHeader(r); error != "" {
+		http.Error(w, error, code)
+		return
+	}
+
+	// Get index and field type to determine how to handle the
+	// import data.
+	indexName := mux.Vars(r)["index"]
+	index, err := h.api.Index(r.Context(), indexName)
+	if err != nil {
+		if errors.Cause(err) == pilosa.ErrIndexNotFound {
+			http.Error(w, err.Error(), http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	fieldName := mux.Vars(r)["field"]
+	field := index.Field(fieldName)
+	if field == nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	// If the clear flag is true, treat the import as clear bits.
+	q := r.URL.Query()
+	doClear := q.Get("clear") == "true"
+	doIgnoreKeyCheck := q.Get("ignoreKeyCheck") == "true"
+
+	opts := []pilosa.ImportOption{
+		pilosa.OptImportOptionsClear(doClear),
+		pilosa.OptImportOptionsIgnoreKeyCheck(doIgnoreKeyCheck),
+	}
+
+	// Read entire body.
+	body, err := readBody(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// Unmarshal request based on field type.
+	if field.Type() == pilosa.FieldTypeInt || field.Type() == pilosa.FieldTypeDecimal {
+		// Field type: Int
+		// Marshal into request object.
+		req := &pilosa.ImportValueRequest{}
+		if err := proto.DefaultSerializer.Unmarshal(body, req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if err := h.api.ImportValue(r.Context(), req, opts...); err != nil {
+			switch errors.Cause(err) {
+			case pilosa.ErrClusterDoesNotOwnShard, pilosa.ErrPreconditionFailed:
+				http.Error(w, err.Error(), http.StatusPreconditionFailed)
+			default:
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+	} else {
+		// Field type: set, time, mutex
+		// Marshal into request object.
+		req := &pilosa.ImportRequest{}
+		if err := proto.DefaultSerializer.Unmarshal(body, req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if err := h.api.Import(r.Context(), req, opts...); err != nil {
+			switch errors.Cause(err) {
+			case pilosa.ErrClusterDoesNotOwnShard, pilosa.ErrPreconditionFailed:
+				http.Error(w, err.Error(), http.StatusPreconditionFailed)
+			default:
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+	}
+
+	// Write response.
+	_, err = w.Write(importOk)
+	if err != nil {
+		h.logger.Printf("writing import response: %v", err)
+	}
+}
+
 // handlePostImportColumnAttrs
 func (h *Handler) handlePostImportColumnAttrs(w http.ResponseWriter, r *http.Request) {
 	// Verify that request is only communicating over protobufs.
@@ -1898,7 +1994,7 @@ func (h *Handler) handlePostImportColumnAttrs(w http.ResponseWriter, r *http.Req
 
 	opts := []pilosa.ImportOption{}
 
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := readBody(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -1911,7 +2007,12 @@ func (h *Handler) handlePostImportColumnAttrs(w http.ResponseWriter, r *http.Req
 	}
 
 	if err := h.api.ImportColumnAttrs(r.Context(), req, opts...); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		switch errors.Cause(err) {
+		case pilosa.ErrClusterDoesNotOwnShard, pilosa.ErrPreconditionFailed:
+			http.Error(w, err.Error(), http.StatusPreconditionFailed)
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -1922,16 +2023,16 @@ func (h *Handler) handlePostImportColumnAttrs(w http.ResponseWriter, r *http.Req
 	}
 }
 
-// handlPostRoaringImport
+// handlePostImportRoaring
 func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request) {
 	// Verify that request is only communicating over protobufs.
-	if r.Header.Get("Content-Type") != "application/x-protobuf" {
-		http.Error(w, "Unsupported media type", http.StatusUnsupportedMediaType)
-		return
-	} else if r.Header.Get("Accept") != "application/x-protobuf" {
-		http.Error(w, "Not acceptable", http.StatusNotAcceptable)
+	if error, code := validateProtobufHeader(r); error != "" {
+		http.Error(w, error, code)
 		return
 	}
+
+	// Get index and field type to determine how to handle the
+	// import data.
 	indexName := mux.Vars(r)["index"]
 	fieldName := mux.Vars(r)["field"]
 
@@ -1946,7 +2047,7 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 
 	// Read entire body.
 	span, _ := tracing.StartSpanFromContext(ctx, "ioutil.ReadAll-Body")
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := readBody(r)
 	span.LogKV("bodySize", len(body))
 	span.Finish()
 	if err != nil {
@@ -1976,6 +2077,10 @@ func (h *Handler) handlePostImportRoaring(w http.ResponseWriter, r *http.Request
 		resp.Err = err.Error()
 		if _, ok := err.(pilosa.BadRequestError); ok {
 			w.WriteHeader(http.StatusBadRequest)
+		} else if _, ok := err.(pilosa.NotFoundError); ok {
+			w.WriteHeader(http.StatusNotFound)
+		} else if _, ok := err.(pilosa.PreconditionFailedError); ok {
+			w.WriteHeader(http.StatusPreconditionFailed)
 		} else {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
@@ -2039,4 +2144,19 @@ func (h *Handler) handlePostTranslateIDs(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		h.logger.Printf("writing translate keys response: %v", err)
 	}
+}
+
+// Read entire request body.
+func readBody(r *http.Request) ([]byte, error) {
+	var contentLength int64 = bytes.MinRead
+	if r.ContentLength > 0 {
+		contentLength = r.ContentLength
+	}
+
+	buf := bytes.NewBuffer(make([]byte, 0, 1+contentLength))
+	if _, err := buf.ReadFrom(r.Body); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }

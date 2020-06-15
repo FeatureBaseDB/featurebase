@@ -2371,7 +2371,7 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 	defer c.Close()
 	hldr := test.Holder{Holder: c[0].Server.Holder()}
 
-	idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{})
+	idx, err := hldr.CreateIndex("i", pilosa.IndexOptions{TrackExistence: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2414,6 +2414,19 @@ func TestExecutor_Execute_Row_BSIGroup(t *testing.T) {
 	}
 
 	t.Run("EQ", func(t *testing.T) {
+		// EQ null
+		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(other == null)`}); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual([]uint64{1,
+			50,
+			ShardWidth,
+			ShardWidth + 1,
+			ShardWidth + 2,
+			(5 * ShardWidth) + 100,
+		}, result.Results[0].(*pilosa.Row).Columns()) {
+			t.Fatalf("unexpected result: %#v", result.Results[0].(*pilosa.Row).Columns())
+		}
+		// EQ <int>
 		if result, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Row(foo == 20)`}); err != nil {
 			t.Fatal(err)
 		} else if got, exp := result.Results[0].(*pilosa.Row).Columns(), []uint64{50, (5 * ShardWidth) + 100}; !reflect.DeepEqual(exp, got) {
@@ -2983,6 +2996,37 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 			test.CheckGroupBy(t, expected, results)
 		}
 	})
+
+	t.Run("groupBy on ints with offset regression", func(t *testing.T) {
+		_, err = c[0].API.CreateField(context.Background(), "i", "hint", pilosa.OptFieldTypeInt(1, 1000))
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `
+		Set(0, hint=1)
+		Set(1, hint=2)
+		Set(2, hint=3)
+		`}); err != nil {
+			t.Fatalf("querying remote: %v", err)
+		}
+
+		if res, err := c[1].API.Query(context.Background(), &pilosa.QueryRequest{
+			Index: "i",
+			Query: `GroupBy(Rows(hint))`,
+		}); err != nil {
+			t.Fatalf("GroupBy querying: %v", err)
+		} else {
+			var a, b, c int64 = 1, 2, 3
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "hint", Value: &a}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "hint", Value: &b}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "hint", Value: &c}}, Count: 1},
+			}
+
+			results := res.Results[0].([]pilosa.GroupCount)
+			test.CheckGroupBy(t, expected, results)
+		}
+	})
 }
 
 // Ensure executor returns an error if too many writes are in a single request.
@@ -3463,15 +3507,15 @@ func TestExecutor_Execute_All(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Create an import request that sets a full shard,
-		// plus a couple bits set on either side of it, and
-		// a final bit set in a fourth shard.
+		// Create an import request that sets things on either end
+		// of a shard, plus a couple bits set on either side of it,
+		// and a final bit set in a fourth shard.
 		//
 		//    shard0     shard1     shard2     shard3
 		// |----------|----------|----------|----------|
-		// |        **|**********|**        | *
+		// |        **|**      **|**        | *
 		//
-		bitCount := ShardWidth + 5
+		bitCount := 100 + 5
 		req := &pilosa.ImportRequest{
 			Index:     index.Name(),
 			Field:     fld.Name(),
@@ -3479,9 +3523,13 @@ func TestExecutor_Execute_All(t *testing.T) {
 			RowIDs:    make([]uint64, bitCount),
 			ColumnIDs: make([]uint64, bitCount),
 		}
-		for i := 0; i < bitCount-1; i++ {
+		for i := 0; i < bitCount/2; i++ {
 			req.RowIDs[i] = 10
 			req.ColumnIDs[i] = uint64(i + ShardWidth - 2)
+		}
+		for i := bitCount / 2; i < bitCount-1; i++ {
+			req.RowIDs[i] = 10
+			req.ColumnIDs[i] = uint64(i + (ShardWidth * 2) - bitCount + 5)
 		}
 		req.RowIDs[bitCount-1] = 10
 		req.ColumnIDs[bitCount-1] = uint64((3 * ShardWidth) + 2)
@@ -3508,7 +3556,7 @@ func TestExecutor_Execute_All(t *testing.T) {
 			{qry: fmt.Sprintf("All(limit=2, offset=%d)", bitCount-5), expCols: req.ColumnIDs[bitCount-5 : bitCount-3], expCnt: 2},
 			{qry: "All(limit=2, offset=2)", expCols: req.ColumnIDs[2:4], expCnt: 2},
 			{qry: "All(limit=1, offset=1)", expCols: req.ColumnIDs[1:2], expCnt: 1},
-			{qry: fmt.Sprintf("All(limit=%d, offset=2)", ShardWidth), expCols: req.ColumnIDs[2 : bitCount-3], expCnt: ShardWidth},
+			{qry: fmt.Sprintf("All(limit=%d, offset=2)", bitCount-3), expCols: req.ColumnIDs[2 : bitCount-1], expCnt: uint64(bitCount - 3)},
 		}
 		for i, test := range tests {
 			if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: test.qry}); err != nil {
@@ -3999,6 +4047,25 @@ func TestExecutor_Execute_SetRow(t *testing.T) {
 			t.Fatal(err)
 		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth - 1, ShardWidth + 1}) {
 			t.Fatalf("unexpected columns: %+v", bits)
+		}
+	})
+	t.Run("Err_Store(Distinct)", func(t *testing.T) {
+		c := test.MustRunCluster(t, 1)
+		defer c.Close()
+		hldr := test.Holder{Holder: c[0].Server.Holder()}
+		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackExistence: true})
+		f1, err := index.CreateField("f1", pilosa.OptFieldTypeDefault())
+		if err != nil {
+			t.Fatal(err)
+		}
+		f2, err := index.CreateField("f2", pilosa.OptFieldTypeDefault())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		q := fmt.Sprintf(`Store(Distinct(field=%s), %s=2)`, f1.Name(), f2.Name())
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: index.Name(), Query: q}); err == nil {
+			t.Fatalf("expected 'unsupported result type' error, got: %+v", res)
 		}
 	})
 }

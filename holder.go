@@ -234,7 +234,13 @@ func (h *Holder) Open() error {
 			return errors.Wrap(err, "opening index")
 		}
 
-		if err := index.Open(); err != nil {
+		if h.isCoordinator() {
+			index.createdAt = timestamp()
+			err = index.OpenWithTimestamp()
+		} else {
+			err = index.Open()
+		}
+		if err != nil {
 			if err == ErrName {
 				h.Logger.Printf("ERROR opening index: %s, err=%s", index.Name(), err)
 				continue
@@ -380,11 +386,16 @@ func (h *Holder) Schema() []*IndexInfo {
 	var a []*IndexInfo
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{
-			Name:    index.Name(),
-			Options: index.Options(),
+			Name:      index.Name(),
+			CreatedAt: index.CreatedAt(),
+			Options:   index.Options(),
 		}
 		for _, field := range index.Fields() {
-			fi := &FieldInfo{Name: field.Name(), Options: field.Options()}
+			fi := &FieldInfo{
+				Name:      field.Name(),
+				CreatedAt: field.CreatedAt(),
+				Options:   field.Options(),
+			}
 			for _, view := range field.views() {
 				fi.Views = append(fi.Views, &ViewInfo{Name: view.name})
 			}
@@ -404,6 +415,7 @@ func (h *Holder) limitedSchema() []*IndexInfo {
 	for _, index := range h.Indexes() {
 		di := &IndexInfo{
 			Name:       index.Name(),
+			CreatedAt:  index.CreatedAt(),
 			Options:    index.Options(),
 			ShardWidth: ShardWidth,
 		}
@@ -411,7 +423,11 @@ func (h *Holder) limitedSchema() []*IndexInfo {
 			if strings.HasPrefix(field.name, "_") {
 				continue
 			}
-			fi := &FieldInfo{Name: field.Name(), Options: field.Options()}
+			fi := &FieldInfo{
+				Name:      field.Name(),
+				CreatedAt: field.CreatedAt(),
+				Options:   field.Options(),
+			}
 			di.Fields = append(di.Fields, fi)
 		}
 		sort.Sort(fieldInfoSlice(di.Fields))
@@ -424,20 +440,32 @@ func (h *Holder) limitedSchema() []*IndexInfo {
 // applySchema applies an internal Schema to Holder.
 func (h *Holder) applySchema(schema *Schema) error {
 	// Create indexes that don't exist.
-	for _, index := range schema.Indexes {
-		idx, err := h.CreateIndexIfNotExists(index.Name, index.Options)
+	for _, i := range schema.Indexes {
+		idx, err := h.CreateIndexIfNotExists(i.Name, i.Options)
 		if err != nil {
 			return errors.Wrap(err, "creating index")
 		}
+		if i.CreatedAt != 0 {
+			idx.mu.Lock()
+			idx.createdAt = i.CreatedAt
+			idx.mu.Unlock()
+		}
+
 		// Create fields that don't exist.
-		for _, f := range index.Fields {
-			field, err := idx.createFieldIfNotExists(f.Name, &f.Options)
+		for _, f := range i.Fields {
+			fld, err := idx.createFieldIfNotExists(f.Name, &f.Options)
 			if err != nil {
 				return errors.Wrap(err, "creating field")
 			}
+			if f.CreatedAt != 0 {
+				fld.mu.Lock()
+				fld.createdAt = f.CreatedAt
+				fld.mu.Unlock()
+			}
+
 			// Create views that don't exist.
 			for _, v := range f.Views {
-				_, err := field.createViewIfNotExists(v.Name)
+				_, err := fld.createViewIfNotExists(v.Name)
 				if err != nil {
 					return errors.Wrap(err, "creating view")
 				}
@@ -445,6 +473,32 @@ func (h *Holder) applySchema(schema *Schema) error {
 		}
 	}
 	return nil
+}
+
+func (h *Holder) applyCreatedAt(indexes []*IndexInfo) {
+	for _, ii := range indexes {
+		idx := h.Index(ii.Name)
+		if idx == nil {
+			continue
+		}
+		if ii.CreatedAt != 0 {
+			idx.mu.Lock()
+			idx.createdAt = ii.CreatedAt
+			idx.mu.Unlock()
+		}
+
+		for _, fi := range ii.Fields {
+			fld := idx.Field(fi.Name)
+			if fld == nil {
+				continue
+			}
+			if fi.CreatedAt != 0 {
+				fld.mu.Lock()
+				fld.createdAt = fi.CreatedAt
+				fld.mu.Unlock()
+			}
+		}
+	}
 }
 
 // IndexPath returns the path where a given index is stored.
@@ -650,6 +704,13 @@ func (h *Holder) recalculateCaches() {
 	for _, index := range h.Indexes() {
 		index.recalculateCaches()
 	}
+}
+
+func (h *Holder) isCoordinator() bool {
+	if s, ok := h.broadcaster.(*Server); ok {
+		return s.isCoordinator
+	}
+	return false
 }
 
 // setFileLimit attempts to set the open file limit to the FileLimit constant defined above.
@@ -1059,7 +1120,8 @@ func (s *holderSyncer) stopTranslationSync() error {
 // writing new translation keys. Index stores are writable if the node owns the
 // partition. Field stores are writable if the node is the coordinator.
 func (s *holderSyncer) setTranslateReadOnlyFlags() {
-	isCoordinator := s.Cluster.isCoordinator()
+	s.Cluster.mu.RLock()
+	isCoordinator := s.Cluster.unprotectedIsCoordinator()
 
 	for _, index := range s.Holder.Indexes() {
 		// There is a race condition here:
@@ -1079,7 +1141,7 @@ func (s *holderSyncer) setTranslateReadOnlyFlags() {
 		// done using it.
 		index.mu.RLock()
 		for partitionID := 0; partitionID < s.Cluster.partitionN; partitionID++ {
-			ownsPartition := s.Cluster.ownsPartition(s.Node.ID, partitionID)
+			ownsPartition := s.Cluster.unprotectedOwnsPartition(s.Node.ID, partitionID)
 			if ts := index.TranslateStore(partitionID); ts != nil {
 				ts.SetReadOnly(!ownsPartition)
 			}
@@ -1090,6 +1152,7 @@ func (s *holderSyncer) setTranslateReadOnlyFlags() {
 			field.TranslateStore().SetReadOnly(!isCoordinator)
 		}
 	}
+	s.Cluster.mu.RUnlock()
 }
 
 // initializeIndexTranslateReplication connects to each node that is the

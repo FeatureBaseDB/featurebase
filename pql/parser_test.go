@@ -16,6 +16,7 @@ package pql_test
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa/v2/pql"
@@ -173,7 +174,7 @@ func TestParser_Parse(t *testing.T) {
 
 	// Parse with condition arguments.
 	t.Run("WithCondition", func(t *testing.T) {
-		q, err := pql.ParseString(`Row(key=foo, x == 12.25, y >= 100, z >< [4,8], m != null)`)
+		q, err := pql.ParseString(`Row(key=foo, x == 12.25, y >= 100, z >< [4,8], m != null, n == null)`)
 		if err != nil {
 			t.Fatal(err)
 		} else if !reflect.DeepEqual(q.Calls[0],
@@ -185,10 +186,77 @@ func TestParser_Parse(t *testing.T) {
 					"y":   &pql.Condition{Op: pql.GTE, Value: int64(100)},
 					"z":   &pql.Condition{Op: pql.BETWEEN, Value: []interface{}{int64(4), int64(8)}},
 					"m":   &pql.Condition{Op: pql.NEQ, Value: nil},
+					"n":   &pql.Condition{Op: pql.EQ, Value: nil},
 				},
 			},
 		) {
 			t.Fatalf("unexpected call: %#v", q.Calls[0])
 		}
 	})
+
+}
+
+func TestUnquote(t *testing.T) {
+	tests := []struct {
+		name   string
+		value  string
+		exp    string
+		expErr string
+	}{
+		{
+			name:  "simple double",
+			value: `"hello"`,
+			exp:   "hello",
+		},
+		{
+			name:  "simple single",
+			value: `'hello'`,
+			exp:   "hello",
+		},
+		{
+			name:  "double with esc",
+			value: `"he\"llo"`,
+			exp:   "he\"llo",
+		},
+		{
+			name:  "single with esc",
+			value: `'he\'llo'`,
+			exp:   "he'llo",
+		},
+		{
+			name:  "single with backslash and esc",
+			value: `'he\\\'llo'`,
+			exp:   `he\'llo`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := pql.Unquote(test.value)
+			if testErr(t, test.expErr, err) {
+				return
+			}
+			if got != test.exp {
+				t.Errorf("exp: '%s'\ngot: '%s'", test.exp, got)
+			}
+		})
+	}
+
+}
+
+func testErr(t *testing.T, exp string, actual error) (done bool) {
+	t.Helper()
+	if exp == "" && actual == nil {
+		return false
+	}
+	if exp == "" && actual != nil {
+		t.Fatalf("unexpected error: %v", actual)
+	}
+	if exp != "" && actual == nil {
+		t.Fatalf("expected error like '%s'", exp)
+	}
+	if !strings.Contains(actual.Error(), exp) {
+		t.Fatalf("unmatched errs exp/got\n%s\n%v", exp, actual)
+	}
+	return true
 }

@@ -63,15 +63,15 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 	m1 := c[1]
 	t.Run("ImportColumnAttrs", func(t *testing.T) {
 		ctx := context.Background()
-		index := "i"
-		field := "f"
+		indexName := "i"
+		fieldName := "f"
 		attrKey := "k"
 
-		_, err := m0.API.CreateIndex(ctx, index, pilosa.IndexOptions{})
+		index, err := m0.API.CreateIndex(ctx, indexName, pilosa.IndexOptions{})
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
-		_, err = m0.API.CreateField(ctx, index, field)
+		_, err = m0.API.CreateField(ctx, indexName, fieldName)
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
@@ -86,27 +86,28 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 			columnIDs0 = append(columnIDs0, uint64(n))
 			val0 := attrFun(uint64(n))
 			attrVals0 = append(attrVals0, val0)
-			setPql0 := fmt.Sprintf("Set(%d, %s=0) ", n, field)
-			if _, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: setPql0}); err != nil {
+			setPql0 := fmt.Sprintf("Set(%d, %s=0) ", n, fieldName)
+			if _, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: indexName, Query: setPql0}); err != nil {
 				t.Fatal(err)
 			}
 
 			columnIDs1 = append(columnIDs1, uint64(n+ShardWidth))
 			val1 := attrFun(uint64(n + ShardWidth))
 			attrVals1 = append(attrVals1, val1)
-			setPql1 := fmt.Sprintf("Set(%d, %s=0) ", n+ShardWidth, field)
-			if _, err := m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: setPql1}); err != nil {
+			setPql1 := fmt.Sprintf("Set(%d, %s=0) ", n+ShardWidth, fieldName)
+			if _, err := m1.API.Query(ctx, &pilosa.QueryRequest{Index: indexName, Query: setPql1}); err != nil {
 				t.Fatal(err)
 			}
 		}
 
 		// send shard0 to node1
 		req := &pilosa.ImportColumnAttrsRequest{
-			AttrKey:   attrKey,
-			ColumnIDs: columnIDs0,
-			AttrVals:  attrVals0,
-			Shard:     0,
-			Index:     index,
+			AttrKey:        attrKey,
+			ColumnIDs:      columnIDs0,
+			AttrVals:       attrVals0,
+			Shard:          0,
+			Index:          indexName,
+			IndexCreatedAt: index.CreatedAt(),
 		}
 
 		if err := m1.API.ImportColumnAttrs(ctx, req); err != nil {
@@ -115,11 +116,12 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 
 		// send shard1 to node0
 		req = &pilosa.ImportColumnAttrsRequest{
-			AttrKey:   attrKey,
-			ColumnIDs: columnIDs1,
-			AttrVals:  attrVals1,
-			Shard:     1,
-			Index:     index,
+			AttrKey:        attrKey,
+			ColumnIDs:      columnIDs1,
+			AttrVals:       attrVals1,
+			Shard:          1,
+			Index:          indexName,
+			IndexCreatedAt: index.CreatedAt(),
 		}
 
 		if err := m0.API.ImportColumnAttrs(ctx, req); err != nil {
@@ -127,8 +129,8 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 		}
 
 		// Query node0.
-		pql := fmt.Sprintf("Options(Row(%s=0), columnAttrs=true)", field)
-		res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql})
+		pql := fmt.Sprintf("Options(Row(%s=0), columnAttrs=true)", fieldName)
+		res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: indexName, Query: pql})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -143,8 +145,8 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 			}
 		}
 		// Query node1.
-		pql = fmt.Sprintf("Options(Row(%s=0), columnAttrs=true)", field)
-		res, err = m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql})
+		pql = fmt.Sprintf("Options(Row(%s=0), columnAttrs=true)", fieldName)
+		res, err = m1.API.Query(ctx, &pilosa.QueryRequest{Index: indexName, Query: pql})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -186,16 +188,23 @@ func TestAPI_Import(t *testing.T) {
 
 	t.Run("RowIDColumnKey", func(t *testing.T) {
 		ctx := context.Background()
-		index := "rick"
-		field := "f"
+		indexName := "rick"
+		fieldName := "f"
 
-		_, err := m0.API.CreateIndex(ctx, index, pilosa.IndexOptions{Keys: true, TrackExistence: true})
+		index, err := m0.API.CreateIndex(ctx, indexName, pilosa.IndexOptions{Keys: true, TrackExistence: true})
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
-		_, err = m0.API.CreateField(ctx, index, field, pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, 100))
+		if index.CreatedAt() == 0 {
+			t.Fatal("index createdAt is empty")
+		}
+
+		field, err := m0.API.CreateField(ctx, indexName, fieldName, pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, 100))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
+		}
+		if field.CreatedAt() == 0 {
+			t.Fatal("field createdAt is empty")
 		}
 
 		rowID := uint64(1)
@@ -215,21 +224,23 @@ func TestAPI_Import(t *testing.T) {
 		// Import data with keys to the coordinator (node0) and verify that it gets
 		// translated and forwarded to the owner of shard 0 (node1; because of offsetModHasher)
 		req := &pilosa.ImportRequest{
-			Index:      index,
-			Field:      field,
-			Shard:      0,
-			RowIDs:     rowIDs,
-			ColumnKeys: colKeys,
-			Timestamps: timestamps,
+			Index:          indexName,
+			IndexCreatedAt: index.CreatedAt(),
+			Field:          fieldName,
+			FieldCreatedAt: field.CreatedAt(),
+			Shard:          0,
+			RowIDs:         rowIDs,
+			ColumnKeys:     colKeys,
+			Timestamps:     timestamps,
 		}
 		if err := m0.API.Import(ctx, req); err != nil {
 			t.Fatal(err)
 		}
 
-		pql := fmt.Sprintf("Row(%s=%d)", field, rowID)
+		pql := fmt.Sprintf("Row(%s=%d)", fieldName, rowID)
 
 		// Query node0.
-		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
+		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: indexName, Query: pql}); err != nil {
 			t.Fatal(err)
 		} else if keys := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, colKeys) {
 			t.Fatalf("unexpected column keys: %#v", keys)
@@ -237,7 +248,7 @@ func TestAPI_Import(t *testing.T) {
 
 		// Query node1.
 		if err := test.RetryUntil(5*time.Second, func() error {
-			if res, err := m1.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
+			if res, err := m1.API.Query(ctx, &pilosa.QueryRequest{Index: indexName, Query: pql}); err != nil {
 				return err
 			} else if keys := res.Results[0].(*pilosa.Row).Keys; !reflect.DeepEqual(keys, colKeys) {
 				return fmt.Errorf("unexpected column keys: %#v", keys)

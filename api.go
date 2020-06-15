@@ -45,6 +45,7 @@ type API struct {
 	holder  *Holder
 	cluster *cluster
 	server  *Server
+	tracker *queryTracker
 
 	importWorkersWG      sync.WaitGroup
 	importWorkerPoolSize int
@@ -95,6 +96,8 @@ func NewAPI(opts ...apiOption) (*API, error) {
 		}()
 	}
 
+	api.tracker = newQueryTracker()
+
 	return api, nil
 }
 
@@ -130,6 +133,7 @@ func (api *API) validate(f apiMethod) error {
 func (api *API) Close() error {
 	close(api.importWork)
 	api.importWorkersWG.Wait()
+	api.tracker.Stop()
 	return nil
 }
 
@@ -146,6 +150,7 @@ func (api *API) Query(ctx context.Context, req *QueryRequest) (QueryResponse, er
 	if err != nil {
 		return QueryResponse{}, errors.Wrap(err, "parsing")
 	}
+	defer api.tracker.Finish(api.tracker.Start(req.Query))
 	execOpts := &execOptions{
 		Remote:          req.Remote,
 		Profile:         req.Profile,
@@ -181,11 +186,18 @@ func (api *API) CreateIndex(ctx context.Context, indexName string, options Index
 	if err != nil {
 		return nil, errors.Wrap(err, "creating index")
 	}
+
+	createdAt := timestamp()
+	index.mu.Lock()
+	index.createdAt = createdAt
+	index.mu.Unlock()
+
 	// Send the create index message to all nodes.
 	err = api.server.SendSync(
 		&CreateIndexMessage{
-			Index: indexName,
-			Meta:  &options,
+			Index:     indexName,
+			CreatedAt: createdAt,
+			Meta:      &options,
 		})
 	if err != nil {
 		return nil, errors.Wrap(err, "sending CreateIndex message")
@@ -269,14 +281,18 @@ func (api *API) CreateField(ctx context.Context, indexName string, fieldName str
 	if err != nil {
 		return nil, errors.Wrap(err, "creating field")
 	}
+	createdAt := timestamp()
+	field.mu.Lock()
+	field.createdAt = createdAt
+	field.mu.Unlock()
 
 	// Send the create field message to all nodes.
-	err = api.server.SendSync(
-		&CreateFieldMessage{
-			Index: indexName,
-			Field: fieldName,
-			Meta:  &fo,
-		})
+	err = api.server.SendSync(&CreateFieldMessage{
+		Index:     indexName,
+		Field:     fieldName,
+		CreatedAt: createdAt,
+		Meta:      &fo,
+	})
 	if err != nil {
 		api.server.logger.Printf("problem sending CreateField message: %s", err)
 		return nil, errors.Wrap(err, "sending CreateField message")
@@ -413,14 +429,17 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 		return errors.Wrap(err, "validating api method")
 	}
 
-	nodes := api.cluster.shardNodes(indexName, shard)
-
-	field := api.holder.Field(indexName, fieldName)
-	if field == nil {
+	index, field, err := api.indexField(indexName, fieldName, shard)
+	if index == nil || field == nil {
 		return newNotFoundError(ErrFieldNotFound)
 	}
-	errCh := make(chan error, len(nodes))
 
+	if err = req.ValidateWithTimestamp(index.CreatedAt(), field.CreatedAt()); err != nil {
+		return newPreconditionFailedError(err)
+	}
+
+	nodes := api.cluster.shardNodes(indexName, shard)
+	errCh := make(chan error, len(nodes))
 	for _, node := range nodes {
 		node := node
 		if node.ID == api.server.nodeID {
@@ -803,6 +822,18 @@ func (api *API) ApplySchema(ctx context.Context, s *Schema, remote bool) error {
 		return errors.Wrap(err, "validating api method")
 	}
 
+	// set CreatedAt for indexes and fields (if empty), and then apply schema.
+	for _, index := range s.Indexes {
+		if index.CreatedAt == 0 {
+			index.CreatedAt = timestamp()
+		}
+		for _, field := range index.Fields {
+			if field.CreatedAt == 0 {
+				field.CreatedAt = timestamp()
+			}
+		}
+	}
+
 	if !remote {
 		nodes := api.cluster.Nodes()
 		for i, node := range nodes {
@@ -813,7 +844,7 @@ func (api *API) ApplySchema(ctx context.Context, s *Schema, remote bool) error {
 		}
 	}
 
-	return api.holder.applySchema(s)
+	return errors.Wrap(api.holder.applySchema(s), "applying schema")
 }
 
 // Views returns the views in the given field.
@@ -999,16 +1030,23 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 		return errors.Wrap(err, "validating api method")
 	}
 
+	index, field, err := api.indexField(req.Index, req.Field, req.Shard)
+	if err != nil {
+		return errors.Wrap(err, "getting index and field")
+	}
+
+	if err := req.ValidateWithTimestamp(index.CreatedAt(), field.CreatedAt()); err != nil {
+		return errors.Wrap(err, "validating import value request")
+	}
+
 	// Set up import options.
 	options, err := setUpImportOptions(opts...)
 	if err != nil {
 		return errors.Wrap(err, "setting up import options")
 	}
-
-	index, field, err := api.indexField(req.Index, req.Field, req.Shard)
-	if err != nil {
-		return errors.Wrap(err, "getting index and field")
-	}
+	span.LogKV(
+		"index", req.Index,
+		"field", req.Field)
 
 	// Unless explicitly ignoring key validation (meaning keys have been
 	// translated to ids in a previous step at the coordinator node), then
@@ -1016,6 +1054,7 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 	if !options.IgnoreKeyCheck {
 		// Translate row keys.
 		if field.Keys() {
+			span.LogKV("rowKeys", true)
 			if len(req.RowIDs) != 0 {
 				return errors.New("row ids cannot be used because field uses string keys")
 			}
@@ -1026,6 +1065,7 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 
 		// Translate column keys.
 		if index.Keys() {
+			span.LogKV("columnKeys", true)
 			if len(req.ColumnIDs) != 0 {
 				return errors.New("column ids cannot be used because index uses string keys")
 			}
@@ -1110,7 +1150,12 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 		return errors.Wrap(err, "validating api method")
 	}
 
-	if err := req.Validate(); err != nil {
+	index, field, err := api.indexField(req.Index, req.Field, req.Shard)
+	if err != nil {
+		return errors.Wrap(err, "getting index and field")
+	}
+
+	if err := req.ValidateWithTimestamp(index.CreatedAt(), field.CreatedAt()); err != nil {
 		return errors.Wrap(err, "validating import value request")
 	}
 
@@ -1120,17 +1165,20 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 		return errors.Wrap(err, "setting up import options")
 	}
 
-	index, field, err := api.indexField(req.Index, req.Field, req.Shard)
+	index, field, err = api.indexField(req.Index, req.Field, req.Shard)
 	if err != nil {
 		return errors.Wrap(err, "getting index and field")
 	}
-
+	span.LogKV(
+		"index", req.Index,
+		"field", req.Field)
 	// Unless explicitly ignoring key validation (meaning keys have been
 	// translate to ids in a previous step at the coordinator node), then
 	// check to see if keys need translation.
 	if !options.IgnoreKeyCheck {
 		// Translate column keys.
 		if index.Keys() {
+			span.LogKV("columnKeys", true)
 			if len(req.ColumnIDs) != 0 {
 				return errors.New("column ids cannot be used because index uses string keys")
 			}
@@ -1144,6 +1192,7 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 		// the field has a ForeignIndex with keys).
 		if field.Keys() {
 			// Perform translation.
+			span.LogKV("rowKeys", true)
 			uints, err := api.cluster.translateIndexKeys(ctx, field.ForeignIndex(), req.StringValues)
 			if err != nil {
 				return err
@@ -1255,6 +1304,12 @@ func (api *API) ImportColumnAttrs(ctx context.Context, req *ImportColumnAttrsReq
 
 	if err := api.validateShardOwnership(req.Index, uint64(req.Shard)); err != nil {
 		return errors.Wrap(err, "validating shard ownership")
+	}
+
+	if req.IndexCreatedAt != 0 {
+		if index.CreatedAt() != req.IndexCreatedAt {
+			return ErrPreconditionFailed
+		}
 	}
 
 	bulkAttrs := make(map[uint64]map[string]interface{})
@@ -1594,14 +1649,41 @@ func (api *API) StartTransaction(ctx context.Context, id string, timeout time.Du
 	if err := api.validate(apiStartTransaction); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
-	return api.server.StartTransaction(ctx, id, timeout, exclusive, remote)
+	t, err := api.server.StartTransaction(ctx, id, timeout, exclusive, remote)
+	if exclusive {
+		switch err {
+		case nil:
+			api.holder.Stats.Count(MetricExclusiveTransactionRequest, 1, 1.0)
+		case ErrTransactionExclusive:
+			api.holder.Stats.Count(MetricExclusiveTransactionBlocked, 1, 1.0)
+		}
+		if t.Active {
+			api.holder.Stats.Count(MetricExclusiveTransactionActive, 1, 1.0)
+		}
+	} else {
+		switch err {
+		case nil:
+			api.holder.Stats.Count(MetricTransactionStart, 1, 1.0)
+		case ErrTransactionExclusive:
+			api.holder.Stats.Count(MetricTransactionBlocked, 1, 1.0)
+		}
+	}
+	return t, err
 }
 
 func (api *API) FinishTransaction(ctx context.Context, id string, remote bool) (*Transaction, error) {
 	if err := api.validate(apiFinishTransaction); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
-	return api.server.FinishTransaction(ctx, id, remote)
+	t, err := api.server.FinishTransaction(ctx, id, remote)
+	if err == nil {
+		if t.Exclusive {
+			api.holder.Stats.Count(MetricExclusiveTransactionEnd, 1, 1.0)
+		} else {
+			api.holder.Stats.Count(MetricTransactionEnd, 1, 1.0)
+		}
+	}
+	return t, err
 }
 
 func (api *API) Transactions(ctx context.Context) (map[string]*Transaction, error) {
@@ -1615,7 +1697,20 @@ func (api *API) GetTransaction(ctx context.Context, id string, remote bool) (*Tr
 	if err := api.validate(apiGetTransaction); err != nil {
 		return nil, errors.Wrap(err, "validating api method")
 	}
-	return api.server.GetTransaction(ctx, id, remote)
+	t, err := api.server.GetTransaction(ctx, id, remote)
+	if err == nil {
+		if t.Exclusive && t.Active {
+			api.holder.Stats.Count(MetricExclusiveTransactionActive, 1, 1.0)
+		}
+	}
+	return t, err
+}
+
+func (api *API) ActiveQueries(ctx context.Context) ([]ActiveQueryStatus, error) {
+	if err := api.validate(apiActiveQueries); err != nil {
+		return nil, errors.Wrap(err, "validating api method")
+	}
+	return api.tracker.ActiveQueries(), nil
 }
 
 type serverInfo struct {
@@ -1669,6 +1764,7 @@ const (
 	apiFinishTransaction
 	apiTransactions
 	apiGetTransaction
+	apiActiveQueries
 )
 
 var methodsCommon = map[apiMethod]struct{}{
@@ -1708,4 +1804,5 @@ var methodsNormal = map[apiMethod]struct{}{
 	apiFinishTransaction:    {},
 	apiTransactions:         {},
 	apiGetTransaction:       {},
+	apiActiveQueries:        {},
 }

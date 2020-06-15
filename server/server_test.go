@@ -1092,6 +1092,50 @@ func TestClusterExhaustingConnections(t *testing.T) {
 	}
 }
 
+func TestQueryingWithQuotesAndStuff(t *testing.T) {
+	m := test.RunCommand(t)
+	defer m.Close()
+
+	client, err := http.NewInternalClient(m.API.Node().URI.HostPort(), http.GetHTTPClient(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Execute Set() commands.
+	if err := client.CreateIndex(context.Background(), "i", pilosa.IndexOptions{Keys: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.CreateFieldWithOptions(context.Background(), "i", "fld", pilosa.FieldOptions{Keys: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Test escaped single quote gets set properly
+	if res, err := m.Query(t, "i", "", `Set('bl\'ah', fld=ha)`); err != nil {
+		t.Fatal(err)
+	} else if !strings.Contains(res, "[true]") {
+		t.Errorf("setting escaped single quote result: %s", res)
+	}
+	if res, err := m.Query(t, "i", "", `Row(fld=ha)`); err != nil {
+		t.Fatal(err)
+	} else if !strings.Contains(res, `bl'ah`) {
+		t.Errorf("value with escaped single quote set improperly: %s", res)
+	}
+
+	// Test escaped double quote gets set properly
+	if res, err := m.Query(t, "i", "", `Set("d\"ah", fld=dq)`); err != nil {
+		t.Fatal(err)
+	} else if !strings.Contains(res, "[true]") {
+		t.Errorf("value with escaped double quote set improperly: %s", res)
+	}
+	if res, err := m.Query(t, "i", "", `Row(fld=dq)`); err != nil {
+		t.Fatal(err)
+	} else if !strings.Contains(res, `d\"ah`) {
+		// the backslash is there because JSON needs to escape the
+		// double quote since it uses double quotes
+		t.Errorf("value with escaped double quote set improperly: %s", res)
+	}
+}
+
 func TestClusterExhaustingConnectionsImport(t *testing.T) {
 	if !runStress {
 		t.Skip("stress")

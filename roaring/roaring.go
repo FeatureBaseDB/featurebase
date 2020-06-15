@@ -160,7 +160,7 @@ type Containers interface {
 	// replace the given container.
 	UpdateEvery(fn func(uint64, *Container, bool) (*Container, bool))
 
-	// Iterator returns a Contiterator which after a call to Next(), a call to Value() will
+	// Iterator returns a ContainterIterator which after a call to Next(), a call to Value() will
 	// return the first container at or after key. found will be true if a
 	// container is found at key.
 	Iterator(key uint64) (citer ContainerIterator, found bool)
@@ -1738,7 +1738,9 @@ type baseRoaringIterator struct {
 	currentN          int
 	currentLen        int
 	currentPointer    *uint16
-	currentDataOffset uint32
+	currentDataOffset uint64
+	prevOffset32      uint32
+	chunkOffset       uint64
 	lastDataOffset    int64
 	lastErr           error
 }
@@ -1752,6 +1754,8 @@ func (b *baseRoaringIterator) SilenceLint() {
 	_ = b.offsets
 	_ = b.headers
 	_ = b.currentIdx
+	_ = b.chunkOffset
+	_ = b.prevOffset32
 }
 
 type pilosaRoaringIterator struct {
@@ -1787,14 +1791,14 @@ func newOfficialRoaringIterator(data []byte) (*officialRoaringIterator, error) {
 	r.headers = data[headerOffset:offsetOffset]
 	// note: offsets are only actually used with the no-run headers.
 	if r.haveRuns {
-		r.currentDataOffset = uint32(offsetOffset)
+		r.currentDataOffset = uint64(offsetOffset)
 	} else {
 		if len(r.data) < offsetOffset+int(r.keys*4) {
 			return nil, fmt.Errorf("insufficient data for offsets (need %d bytes, found %d)",
 				r.keys*4, len(r.data)-offsetOffset)
 		}
 		r.offsets = data[offsetOffset : offsetOffset+int(r.keys*4)]
-		r.currentDataOffset = uint32(offsetOffset)
+		r.currentDataOffset = uint64(offsetOffset)
 	}
 	// set key to -1; user should call Next first.
 	r.currentIdx = -1
@@ -1838,7 +1842,11 @@ func newPilosaRoaringIterator(data []byte) (*pilosaRoaringIterator, error) {
 	// if there's no containers, we want to act as though data started at the end
 	// of the list of offsets, which was also empty, so we don't think the entire thing
 	// is actually a malformed op
-	r.currentDataOffset = uint32(offsetEnd)
+	r.prevOffset32 = uint32(offsetEnd)
+	r.currentDataOffset = uint64(offsetEnd)
+	// it's possible that there's so many headers that we're actually over
+	// 4GB into the file already.
+	r.chunkOffset = r.currentDataOffset &^ ((1 << 32) - 1)
 	// set key to -1; user should call Next first.
 	r.currentIdx = -1
 	r.currentKey = ^uint64(0)
@@ -1895,7 +1903,12 @@ func (r *pilosaRoaringIterator) Next() (key uint64, cType byte, n int, length in
 	r.currentKey = binary.LittleEndian.Uint64(header[0:8])
 	r.currentType = byte(binary.LittleEndian.Uint16(header[8:10]))
 	r.currentN = int(binary.LittleEndian.Uint16(header[10:12])) + 1
-	r.currentDataOffset = binary.LittleEndian.Uint32(r.offsets[r.currentIdx*4:])
+	offset32 := binary.LittleEndian.Uint32(r.offsets[r.currentIdx*4:])
+	if offset32 < r.prevOffset32 {
+		r.chunkOffset += (1 << 32)
+	}
+	r.prevOffset32 = offset32
+	r.currentDataOffset = r.chunkOffset + uint64(offset32)
 
 	// a run container keeps its data after an initial 2 byte length header
 	var runCount uint16
@@ -1903,7 +1916,7 @@ func (r *pilosaRoaringIterator) Next() (key uint64, cType byte, n int, length in
 		runCount = binary.LittleEndian.Uint16(r.data[r.currentDataOffset : r.currentDataOffset+runCountHeaderSize])
 		r.currentDataOffset += 2
 	}
-	if r.currentDataOffset > uint32(len(r.data)) || r.currentDataOffset < headerBaseSize {
+	if r.currentDataOffset > uint64(len(r.data)) || r.currentDataOffset < headerBaseSize {
 		r.Done(fmt.Errorf("container %d/%d, key %d, had offset %d, maximum %d",
 			r.currentIdx, r.keys, r.currentKey, r.currentDataOffset, len(r.data)))
 		return r.Current()
@@ -1926,7 +1939,7 @@ func (r *pilosaRoaringIterator) Next() (key uint64, cType byte, n int, length in
 			r.currentIdx, r.keys, r.currentKey, r.currentDataOffset, size, len(r.data)))
 		return r.Current()
 	}
-	r.currentDataOffset += uint32(size)
+	r.currentDataOffset += uint64(size)
 	r.lastErr = nil
 	return r.Current()
 }
@@ -1949,7 +1962,7 @@ func (r *officialRoaringIterator) Next() (key uint64, cType byte, n int, length 
 	// with runs, we can't actually look up offsets; the format just stores
 	// things sequentially. so we have to actually track the offset in that case.
 	if !r.haveRuns {
-		r.currentDataOffset = binary.LittleEndian.Uint32(r.offsets[r.currentIdx*4:])
+		r.currentDataOffset = uint64(binary.LittleEndian.Uint32(r.offsets[r.currentIdx*4:]))
 	}
 	// a run container keeps its data after an initial 2 byte length header
 	var runCount uint16
@@ -1962,7 +1975,7 @@ func (r *officialRoaringIterator) Next() (key uint64, cType byte, n int, length 
 		runCount = binary.LittleEndian.Uint16(r.data[r.currentDataOffset : r.currentDataOffset+runCountHeaderSize])
 		r.currentDataOffset += 2
 	}
-	if r.currentDataOffset > uint32(len(r.data)) || r.currentDataOffset < headerBaseSize {
+	if r.currentDataOffset > uint64(len(r.data)) || r.currentDataOffset < headerBaseSize {
 		r.Done(fmt.Errorf("container %d/%d, key %d, had offset %d, maximum %d",
 			r.currentIdx, r.keys, r.currentKey, r.currentDataOffset, len(r.data)))
 		return r.Current()
@@ -1994,7 +2007,7 @@ func (r *officialRoaringIterator) Next() (key uint64, cType byte, n int, length 
 			r.currentIdx, r.keys, r.currentKey, r.currentDataOffset, size, len(r.data)))
 		return r.Current()
 	}
-	r.currentDataOffset += uint32(size)
+	r.currentDataOffset += uint64(size)
 	r.lastErr = nil
 	return r.Current()
 }
@@ -2012,14 +2025,14 @@ func (b *Bitmap) SanityCheckMapping(from, to uintptr) (mappedIn int64, mappedOut
 			if c.Mapped() {
 				mappedIn++
 			} else {
-				err = fmt.Errorf("container key %d, addr %x, inside %x+%d\n",
+				err = fmt.Errorf("container key %d, addr %x, inside %x+%d",
 					key, dptr, from, to-from)
 				errs++
 				unmappedIn++
 			}
 		} else {
 			if c.Mapped() {
-				err = fmt.Errorf("container key %d, addr %x, outside %x+%d, but mapped\n",
+				err = fmt.Errorf("container key %d, addr %x, outside %x+%d, but mapped",
 					key, dptr, from, to-from)
 				errs++
 				mappedOut++
@@ -4539,50 +4552,95 @@ func (c *Container) bitmapZeroRange(i, j uint64) {
 	c.setN(n)
 }
 
-// equals reports whether two containers are equal.
-func (c *Container) equals(c2 *Container) bool {
-	if c == nil || c2 == nil {
-		if c != c2 {
-			return false
+func typePair(ct1, ct2 byte) int {
+	return int((ct1 << 4) | ct2)
+}
+
+// compareArrayBitmap actually only verifies that everything in the array
+// is in the bitmap. It's used only after comparing the N for the containers,
+// so if there's anything in the bitmap that's not in the array, either there's
+// something in the array that's not in the bitmap, or we didn't get here.
+func compareArrayBitmap(a []uint16, b []uint64) error {
+	for _, v := range a {
+		w, bit := b[v>>6], v&63
+		if w>>bit&1 == 0 {
+			return fmt.Errorf("value %d missing", v)
 		}
 	}
-	if c.Mapped() != c2.Mapped() || c.typ() != c2.typ() || c.N() != c2.N() {
-		return false
+	return nil
+}
+
+// compareArrayRuns determines whether an array matches a provided
+// set of runs. As with compareArrayBitmap, it only verifies presence
+// of the array's values in the run collection. the run collection
+// can't be empty; if it were, N would have been 0, and we wouldn't
+// have gotten here.
+func compareArrayRuns(a []uint16, r []interval16) error {
+	ri := 0
+	ru := r[ri]
+	ri++
+	for _, v := range a {
+		if v < ru.start {
+			return fmt.Errorf("value %d missing", v)
+		}
+		if v > ru.last {
+			if ri >= len(r) {
+				return fmt.Errorf("value %d missing", v)
+			}
+			ru = r[ri]
+			ri++
+			// if they're identical, the array value must be
+			// the start of the next run.
+			if v != ru.start {
+				return fmt.Errorf("value %d missing", v)
+			}
+		}
 	}
-	if c.typ() == containerArray {
-		ca, c2a := c.array(), c2.array()
-		if len(ca) != len(c2a) {
-			return false
-		}
-		for i := 0; i < len(ca); i++ {
-			if ca[i] != c2a[i] {
-				return false
-			}
-		}
-	} else if c.typ() == containerBitmap {
-		cb, c2b := c.bitmap(), c2.bitmap()
-		if len(cb) != len(c2b) {
-			return false
-		}
-		for i := 0; i < len(cb); i++ {
-			if cb[i] != c2b[i] {
-				return false
-			}
-		}
-	} else if c.typ() == containerRun {
-		cr, c2r := c.runs(), c2.runs()
-		if len(cr) != len(c2r) {
-			return false
-		}
-		for i := 0; i < len(cr); i++ {
-			if cr[i] != c2r[i] {
-				return false
-			}
-		}
-	} else {
-		panic(fmt.Sprintf("unknown container type: %v", c.typ()))
+	return nil
+}
+
+// compareArrayArray reports whether everything in a1 is equal to everything
+// in a2.
+func compareArrayArray(a1, a2 []uint16) error {
+	if len(a1) != len(a2) {
+		return fmt.Errorf("unexpected length mismatch, %d vs %d", len(a1), len(a2))
 	}
-	return true
+	for i := range a1 {
+		if a1[i] != a2[i] {
+			return fmt.Errorf("item %d: %d vs %d", i, a1[i], a2[i])
+		}
+	}
+	return nil
+}
+
+// BitwiseCompare reports whether two containers are equal. It returns
+// an error describing any difference it finds. This is mostly intended
+// for use in tests that expect equality.
+func (c *Container) BitwiseCompare(c2 *Container) error {
+	if c.N() != c2.N() {
+		return errors.New("containers are different lengths")
+	}
+	if c.N() == 0 {
+		return nil
+	}
+	switch typePair(c.typ(), c2.typ()) {
+	case typePair(containerArray, containerArray):
+		return compareArrayArray(c.array(), c2.array())
+	case typePair(containerArray, containerBitmap):
+		return compareArrayBitmap(c.array(), c2.bitmap())
+	case typePair(containerBitmap, containerArray):
+		return compareArrayBitmap(c2.array(), c.bitmap())
+	case typePair(containerArray, containerRun):
+		return compareArrayRuns(c.array(), c2.runs())
+	case typePair(containerRun, containerArray):
+		return compareArrayRuns(c2.array(), c.runs())
+	default:
+		c3 := xor(c, c2)
+		if c3.N() != 0 {
+			return fmt.Errorf("%d bits differenct between containers", c3.N())
+		}
+	}
+	return nil
 }
 
 func unionArrayBitmap(a, b *Container) *Container {
@@ -5743,7 +5801,37 @@ func xorBitmapRun(a, b *Container) *Container {
 	return output
 }
 
-// CompareEquality is used mostly in test cases to confirm that two bitmaps came
+// CompareBitmapSlice checks whether a bitmap has the same values in it
+// that a provided slice does.
+func CompareBitmapSlice(b *Bitmap, vals []uint64) (bool, error) {
+	count := b.Count()
+	if count != uint64(len(vals)) {
+		return false, fmt.Errorf("length mismatch: bitmap has %d bits, slice has %d", count, len(vals))
+	}
+	for _, v := range vals {
+		if !b.Contains(v) {
+			return false, fmt.Errorf("bitmap lacks expected value %d", v)
+		}
+	}
+	return true, nil
+}
+
+// CompareBitmapMap checks whether a bitmap has the same values in it
+// that a provided map[uint64]struct{} has as keys.
+func CompareBitmapMap(b *Bitmap, vals map[uint64]struct{}) (bool, error) {
+	count := b.Count()
+	if count != uint64(len(vals)) {
+		return false, fmt.Errorf("length mismatch: bitmap has %d bits, map has %d", count, len(vals))
+	}
+	for v := range vals {
+		if !b.Contains(v) {
+			return false, fmt.Errorf("bitmap lacks expected value %d", v)
+		}
+	}
+	return true, nil
+}
+
+// BitwiseEqual is used mostly in test cases to confirm that two bitmaps came
 // out the same. It does not expect corresponding opN, or OpWriter, but expects
 // identical bit contents. It does not expect identical representations; a bitmap
 // container can be identical to an array container. It returns a boolean value,
@@ -5810,35 +5898,6 @@ func (b *Bitmap) BitwiseEqual(c *Bitmap) (bool, error) {
 		return false, fmt.Errorf("container mismatch: %d vs %d containers, second bitmap has extra container %d [%d bits]", bct, cct, ck, cc)
 	}
 	return true, nil
-}
-
-func bitmapsEqual(b, c *Bitmap) error { // nolint: deadcode
-	statsHit("bitmapsEqual")
-	if b.OpWriter != c.OpWriter {
-		return errors.New("opWriters not equal")
-	}
-	if b.opN != c.opN {
-		return errors.New("opNs not equal")
-	}
-
-	biter, _ := b.Containers.Iterator(0)
-	citer, _ := c.Containers.Iterator(0)
-	bn, cn := biter.Next(), citer.Next()
-	for ; bn && cn; bn, cn = biter.Next(), citer.Next() {
-		bk, bc := biter.Value()
-		ck, cc := citer.Value()
-		if bk != ck {
-			return errors.New("keys not equal")
-		}
-		if !bc.equals(cc) {
-			return errors.New("containers not equal")
-		}
-	}
-	if bn && !cn || cn && !bn {
-		return errors.New("different numbers of containers")
-	}
-
-	return nil
 }
 
 func popcount(x uint64) uint64 {

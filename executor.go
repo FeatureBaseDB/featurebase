@@ -59,6 +59,8 @@ type executor struct {
 	// Maximum number of Set() or Clear() commands per request.
 	MaxWritesPerRequest int
 
+	shutdown       bool
+	workMu         sync.RWMutex
 	workersWG      sync.WaitGroup
 	workerPoolSize int
 	work           chan job
@@ -115,6 +117,9 @@ func newExecutor(opts ...executorOption) *executor {
 }
 
 func (e *executor) Close() error {
+	e.workMu.Lock()
+	defer e.workMu.Unlock()
+	e.shutdown = true
 	close(e.work)
 	e.workersWG.Wait()
 	return nil
@@ -155,6 +160,7 @@ func (e *executor) registerOps(ops []ext.BitmapOp) error {
 // Execute executes a PQL query.
 func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shards []uint64, opt *execOptions) (QueryResponse, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.Execute")
+	span.LogKV("pql", q.String())
 	defer span.Finish()
 
 	resp := QueryResponse{}
@@ -357,7 +363,9 @@ func (e *executor) handlePreCalls(ctx context.Context, index string, c *pql.Call
 		row = r.Pos
 	default:
 		return fmt.Errorf("precomputed call %s returned unexpected non-Row data: %T", c.Name, v)
-
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	c.Children = []*pql.Call{}
 	c.Name = "Precomputed"
@@ -376,6 +384,9 @@ func (e *executor) handlePreCalls(ctx context.Context, index string, c *pql.Call
 // handlePreCallChildren handles any pre-calls in the children of a given call.
 func (e *executor) handlePreCallChildren(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) error {
 	for i := range c.Children {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := e.handlePreCalls(ctx, index, c.Children[i], shards, opt); err != nil {
 			return err
 		}
@@ -383,6 +394,9 @@ func (e *executor) handlePreCallChildren(ctx context.Context, index string, c *p
 	for _, val := range c.Args {
 		// Handle Call() operations which exist inside named arguments, too.
 		if call, ok := val.(*pql.Call); ok {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			if err := e.handlePreCalls(ctx, index, call, shards, opt); err != nil {
 				return err
 			}
@@ -649,12 +663,12 @@ func (e *executor) executeIncludesColumnCall(ctx context.Context, index string, 
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(shard uint64) (interface{}, error) {
+	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
 		return e.executeIncludesColumnCallShard(ctx, index, c, shard, col)
 	}
 
 	// Merge returned results at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		other, _ := prev.(bool)
 		return other || v.(bool)
 	}
@@ -704,12 +718,12 @@ func (e *executor) executeFieldValueCall(ctx context.Context, index string, c *p
 	shard := colID / ShardWidth
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(shard uint64) (interface{}, error) {
+	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
 		return e.executeFieldValueCallShard(ctx, field, colID, shard)
 	}
 
 	// Select single returned result at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		other, _ := prev.(ValCount)
 		if other.Count == 1 {
 			return other
@@ -833,12 +847,15 @@ func (e *executor) executeAllCall(ctx context.Context, index string, c *pql.Call
 // using the executor.mapReduce() method.
 func (e *executor) executeAllCallMapReduce(ctx context.Context, index string, c *pql.Call, shard uint64, opt *execOptions) (*Row, error) {
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(shard uint64) (interface{}, error) {
+	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
 		return e.executeAllCallShard(ctx, index, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		other, _ := prev.(*Row)
 		if other == nil {
 			other = NewRow()
@@ -888,12 +905,12 @@ func (e *executor) executeSum(ctx context.Context, index string, c *pql.Call, sh
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(shard uint64) (interface{}, error) {
+	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
 		return e.executeSumCountShard(ctx, index, c, nil, shard)
 	}
 
 	// Merge returned results at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		other, _ := prev.(ValCount)
 		return other.add(v.(ValCount))
 	}
@@ -940,13 +957,16 @@ func (e *executor) executeGenericField(ctx context.Context, index string, c *pql
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(shard uint64) (interface{}, error) {
+	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
 		return e.executeGenericFieldShard(ctx, index, c, op, shard)
 	}
 
 	// Merge returned results at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		other, _ := prev.(SignedRow)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		return other.union(v.(SignedRow))
 	}
 
@@ -973,12 +993,12 @@ func (e *executor) executeMin(ctx context.Context, index string, c *pql.Call, sh
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(shard uint64) (interface{}, error) {
+	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
 		return e.executeMinShard(ctx, index, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		other, _ := prev.(ValCount)
 		return other.smaller(v.(ValCount))
 	}
@@ -1009,12 +1029,12 @@ func (e *executor) executeMax(ctx context.Context, index string, c *pql.Call, sh
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(shard uint64) (interface{}, error) {
+	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
 		return e.executeMaxShard(ctx, index, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		other, _ := prev.(ValCount)
 		return other.larger(v.(ValCount))
 	}
@@ -1041,12 +1061,12 @@ func (e *executor) executeMinRow(ctx context.Context, index string, c *pql.Call,
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(shard uint64) (interface{}, error) {
+	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
 		return e.executeMinRowShard(ctx, index, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		// if minRowID exists, and if it is smaller than the other one return it.
 		// otherwise return the minRowID of the one which exists.
 		if prev == nil {
@@ -1080,12 +1100,12 @@ func (e *executor) executeMaxRow(ctx context.Context, index string, c *pql.Call,
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(shard uint64) (interface{}, error) {
+	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
 		return e.executeMaxRowShard(ctx, index, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		// if minRowID exists, and if it is smaller than the other one return it.
 		// otherwise return the minRowID of the one which exists.
 		if prev == nil {
@@ -1124,6 +1144,7 @@ func (e *executor) executePrecomputedCall(ctx context.Context, index string, c *
 // executeBitmapCall executes a call that returns a bitmap.
 func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (*Row, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeBitmapCall")
+	span.LogKV("pqlCallName", c.Name)
 	defer span.Finish()
 
 	indexTag := "index:" + index
@@ -1136,15 +1157,18 @@ func (e *executor) executeBitmapCall(ctx context.Context, index string, c *pql.C
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(shard uint64) (interface{}, error) {
+	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
 		return e.executeBitmapCallShard(ctx, index, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		other, _ := prev.(*Row)
 		if other == nil {
 			other = NewRow()
+		}
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 		other.Merge(v.(*Row))
 		return other
@@ -1503,18 +1527,21 @@ func (e *executor) executeTopNShards(ctx context.Context, index string, c *pql.C
 	defer span.Finish()
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(shard uint64) (interface{}, error) {
+	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
 		return e.executeTopNShard(ctx, index, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		other, _ := prev.(*PairsField)
 		vpf, _ := v.(*PairsField)
 		if other == nil {
 			return vpf
 		} else if vpf == nil {
 			return other
+		}
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 		other.Pairs = Pairs(other.Pairs).Add(vpf.Pairs)
 		return other
@@ -1743,10 +1770,16 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 		return nil, err
 	}
 
+	idx := e.Holder.Index(index)
+	if idx == nil {
+		return nil, ErrIndexNotFound
+	}
+
 	// perform necessary Rows queries (any that have limit or columns args) -
 	// TODO, call async? would only help if multiple Rows queries had a column
 	// or limit arg.
 	// TODO support TopN in here would be really cool - and pretty easy I think.
+	bases := make(map[int]int64)
 	childRows := make([]RowIDs, len(c.Children))
 	for i, child := range c.Children {
 		// Check "field" first for backwards compatibility, then set _field.
@@ -1766,6 +1799,19 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 		if err != nil {
 			return nil, errors.Wrap(err, "getting column")
 		}
+		fieldName, ok := child.Args["_field"].(string)
+		if !ok {
+			return nil, errors.Errorf("%s call must have field with valid (string) field name. Got %v of type %[2]T", child.Name, child.Args["_field"])
+		}
+		f := idx.Field(fieldName)
+		if f == nil {
+			return nil, ErrFieldNotFound
+		}
+		switch f.Type() {
+		case FieldTypeInt:
+			bases[i] = f.bsiGroup(f.name).Base
+		}
+
 		if hasLimit || hasCol { // we need to perform this query cluster-wide ahead of executeGroupByShard
 			childRows[i], err = e.executeRows(ctx, index, child, shards, opt)
 			if err != nil {
@@ -1778,12 +1824,15 @@ func (e *executor) executeGroupBy(ctx context.Context, index string, c *pql.Call
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(shard uint64) (interface{}, error) {
-		return e.executeGroupByShard(ctx, index, c, filter, shard, childRows)
+	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
+		return e.executeGroupByShard(ctx, index, c, filter, shard, childRows, bases)
 	}
 	// Merge returned results at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		other, _ := prev.([]GroupCount)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		return mergeGroupCounts(other, v.([]GroupCount), limit)
 	}
 	// Get full result set.
@@ -2127,7 +2176,7 @@ func applyConditionToGroupCounts(gcs []GroupCount, subj string, cond *pql.Condit
 	return gcs[:i]
 }
 
-func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql.Call, filter *pql.Call, shard uint64, childRows []RowIDs) (_ []GroupCount, err error) {
+func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql.Call, filter *pql.Call, shard uint64, childRows []RowIDs, bases map[int]int64) (_ []GroupCount, err error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGroupByShard")
 	defer span.Finish()
 
@@ -2175,6 +2224,13 @@ func (e *executor) executeGroupByShard(ctx context.Context, index string, c *pql
 		}
 	}
 
+	// Apply bases.
+	for i, base := range bases {
+		for _, r := range results {
+			*r.Group[i].Value += base
+		}
+	}
+
 	return results, nil
 }
 
@@ -2197,7 +2253,7 @@ func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, s
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(shard uint64) (interface{}, error) {
+	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
 		return e.executeRowsShard(ctx, index, fieldName, c, shard)
 	}
 
@@ -2210,8 +2266,11 @@ func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, s
 	}
 
 	// Merge returned results at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		other, _ := prev.(RowIDs)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		return other.merge(v.(RowIDs), limit)
 	}
 	// Get full result set.
@@ -2223,7 +2282,7 @@ func (e *executor) executeRows(ctx context.Context, index string, c *pql.Call, s
 	return results, nil
 }
 
-func (e *executor) executeRowsShard(_ context.Context, index string, fieldName string, c *pql.Call, shard uint64) (RowIDs, error) {
+func (e *executor) executeRowsShard(ctx context.Context, index string, fieldName string, c *pql.Call, shard uint64) (RowIDs, error) {
 	// Fetch index.
 	idx := e.Holder.Index(index)
 	if idx == nil {
@@ -2333,12 +2392,15 @@ func (e *executor) executeRowsShard(_ context.Context, index string, fieldName s
 	}
 
 	for _, view := range views {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		frag := e.Holder.fragment(index, fieldName, view, shard)
 		if frag == nil {
 			continue
 		}
 
-		viewRows := frag.rows(start, filters...)
+		viewRows := frag.rows(ctx, start, filters...)
 		rowIDs = rowIDs.merge(viewRows, limit)
 	}
 
@@ -2463,21 +2525,15 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 		return nil, ErrFieldNotFound
 	}
 
-	// EQ null           (not implemented: flip frag.NotNull with max ColumnID)
+	// EQ null           _exists - frag.NotNull()
 	// NEQ null          frag.NotNull()
 	// BETWEEN a,b(in)   BETWEEN/frag.RowBetween()
 	// BETWEEN a,b(out)  BETWEEN/frag.NotNull()
 	// EQ <int>          frag.RangeOp
 	// NEQ <int>         frag.RangeOp
 
-	// Handle `!= null`.
+	// Handle `!= null` and `== null`.
 	if cond.Op == pql.NEQ && cond.Value == nil {
-		// Find bsiGroup.
-		bsig := f.bsiGroup(fieldName)
-		if bsig == nil {
-			return nil, ErrBSIGroupNotFound
-		}
-
 		// Retrieve fragment.
 		frag := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
 		if frag == nil {
@@ -2485,6 +2541,37 @@ func (e *executor) executeRowBSIGroupShard(ctx context.Context, index string, c 
 		}
 
 		return frag.notNull()
+
+	} else if cond.Op == pql.EQ && cond.Value == nil {
+		// Make sure the index supports existence tracking.
+		idx := e.Holder.Index(index)
+		if idx == nil {
+			return nil, ErrIndexNotFound
+		} else if idx.existenceField() == nil {
+			return nil, errors.Errorf("index does not support existence tracking: %s", index)
+		}
+
+		var existenceRow *Row
+		existenceFrag := e.Holder.fragment(index, existenceFieldName, viewStandard, shard)
+		if existenceFrag == nil {
+			existenceRow = NewRow()
+		} else {
+			existenceRow = existenceFrag.row(0)
+		}
+
+		var notNull *Row
+		var err error
+
+		// Retrieve notNull from fragment if it exists.
+		if frag := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard); frag != nil {
+			if notNull, err = frag.notNull(); err != nil {
+				return nil, errors.Wrap(err, "getting fragment not null")
+			}
+		} else {
+			notNull = NewRow()
+		}
+
+		return existenceRow.Difference(notNull), nil
 
 	} else if cond.Op == pql.BETWEEN || cond.Op == pql.BTWN_LT_LT ||
 		cond.Op == pql.BTWN_LTE_LT || cond.Op == pql.BTWN_LT_LTE {
@@ -2787,7 +2874,7 @@ func (e *executor) executeGenericCount(ctx context.Context, index string, c *pql
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(shard uint64) (interface{}, error) {
+	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
 		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
 		if err != nil {
 			return 0, err
@@ -2796,7 +2883,7 @@ func (e *executor) executeGenericCount(ctx context.Context, index string, c *pql
 	}
 
 	// Merge returned results at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		other, _ := prev.(uint64)
 		return other + v.(uint64)
 	}
@@ -2822,7 +2909,7 @@ func (e *executor) executeCount(ctx context.Context, index string, c *pql.Call, 
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(shard uint64) (interface{}, error) {
+	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
 		row, err := e.executeBitmapCallShard(ctx, index, c.Children[0], shard)
 		if err != nil {
 			return 0, err
@@ -2831,7 +2918,7 @@ func (e *executor) executeCount(ctx context.Context, index string, c *pql.Call, 
 	}
 
 	// Merge returned results at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		other, _ := prev.(uint64)
 		return other + v.(uint64)
 	}
@@ -2944,12 +3031,12 @@ func (e *executor) executeClearRow(ctx context.Context, index string, c *pql.Cal
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(shard uint64) (interface{}, error) {
+	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
 		return e.executeClearRowShard(ctx, index, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		val := v.(bool)
 		if prev == nil {
 			return val
@@ -3032,12 +3119,12 @@ func (e *executor) executeSetRow(ctx context.Context, indexName string, c *pql.C
 	}
 
 	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(shard uint64) (interface{}, error) {
+	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
 		return e.executeSetRowShard(ctx, indexName, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
-	reduceFn := func(prev, v interface{}) interface{} {
+	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		val := v.(bool)
 		if prev == nil {
 			return val
@@ -3046,7 +3133,15 @@ func (e *executor) executeSetRow(ctx context.Context, indexName string, c *pql.C
 	}
 
 	result, err := e.mapReduce(ctx, indexName, shards, c, opt, mapFn, reduceFn)
-	return result.(bool), err
+	if err != nil {
+		return false, err
+	}
+
+	b, ok := result.(bool)
+	if !ok {
+		return false, errors.New("unsupported result type")
+	}
+	return b, nil
 }
 
 // executeSetRowShard executes a SetRow() call for a single shard.
@@ -3566,7 +3661,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 	}
 
 	// Start mapping across all primary owners.
-	if err := e.mapper(ctx, ch, nodes, index, shards, c, opt, mapFn, reduceFn); err != nil {
+	if err := e.mapper(ctx, cancel, ch, nodes, index, shards, c, opt, mapFn, reduceFn); err != nil {
 		return nil, errors.Wrap(err, "starting mapper")
 	}
 
@@ -3586,7 +3681,7 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 				nodes = Nodes(nodes).Filter(resp.node)
 
 				// Begin mapper against secondary nodes.
-				if err := e.mapper(ctx, ch, nodes, index, resp.shards, c, opt, mapFn, reduceFn); errors.Cause(err) == errShardUnavailable {
+				if err := e.mapper(ctx, cancel, ch, nodes, index, resp.shards, c, opt, mapFn, reduceFn); errors.Cause(err) == errShardUnavailable {
 					return nil, resp.err
 				} else if err != nil {
 					return nil, errors.Wrap(err, "calling mapper")
@@ -3595,7 +3690,11 @@ func (e *executor) mapReduce(ctx context.Context, index string, shards []uint64,
 			}
 
 			// Reduce value.
-			result = reduceFn(result, resp.result)
+			result = reduceFn(ctx, result, resp.result)
+			if err, ok := result.(error); ok {
+				cancel()
+				return nil, err
+			}
 
 			// If all shards have been processed then return.
 			shardN += len(resp.shards)
@@ -3643,9 +3742,10 @@ func makeEmbeddedDataForShards(allRows []*Row, shards []uint64) []*Row {
 	return newRows
 }
 
-func (e *executor) mapper(ctx context.Context, ch chan mapResponse, nodes []*Node, index string, shards []uint64, c *pql.Call, opt *execOptions, mapFn mapFunc, reduceFn reduceFunc) error {
+func (e *executor) mapper(ctx context.Context, cancel context.CancelFunc, ch chan mapResponse, nodes []*Node, index string, shards []uint64, c *pql.Call, opt *execOptions, mapFn mapFunc, reduceFn reduceFunc) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapper")
 	defer span.Finish()
+	done := ctx.Done()
 
 	// Group shards together by nodes.
 	m, err := e.shardsByNode(nodes, index, shards)
@@ -3672,11 +3772,16 @@ func (e *executor) mapper(ctx context.Context, ch chan mapResponse, nodes []*Nod
 				}
 				resp.err = err
 			}
-
 			// Return response to the channel.
 			select {
-			case <-ctx.Done():
+			case <-done:
 			case ch <- resp:
+				// The cancel coming after the above send is intentional.
+				// We want to report the actual error that happened
+				// before we cause anything to return "context canceled".
+				if resp.err != nil {
+					cancel()
+				}
 			}
 		}(n, nodeShards)
 	}
@@ -3693,7 +3798,7 @@ type job struct {
 
 func worker(work chan job) {
 	for j := range work {
-		result, err := j.mapFn(j.shard)
+		result, err := j.mapFn(j.ctx, j.shard)
 
 		select {
 		case <-j.ctx.Done():
@@ -3702,10 +3807,21 @@ func worker(work chan job) {
 	}
 }
 
+var errShutdown = errors.New("executor has shut down")
+
 // mapperLocal performs map & reduce entirely on the local node.
 func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFunc, reduceFn reduceFunc) (interface{}, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.mapperLocal")
 	defer span.Finish()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	done := ctx.Done()
+	e.workMu.RLock()
+	defer e.workMu.RUnlock()
+
+	if e.shutdown {
+		return nil, errShutdown
+	}
 
 	ch := make(chan mapResponse, len(shards))
 
@@ -3723,13 +3839,17 @@ func (e *executor) mapperLocal(ctx context.Context, shards []uint64, mapFn mapFu
 	var result interface{}
 	for {
 		select {
-		case <-ctx.Done():
+		case <-done:
 			return nil, ctx.Err()
 		case resp := <-ch:
 			if resp.err != nil {
 				return nil, resp.err
 			}
-			result = reduceFn(result, resp.result)
+			result = reduceFn(ctx, result, resp.result)
+			if err, ok := result.(error); ok {
+				cancel()
+				return nil, err
+			}
 			maxShard++
 		}
 
@@ -4241,9 +4361,9 @@ func validateQueryContext(ctx context.Context) error {
 // errShardUnavailable is a marker error if no nodes are available.
 var errShardUnavailable = errors.New("shard unavailable")
 
-type mapFunc func(shard uint64) (interface{}, error)
+type mapFunc func(ctx context.Context, shard uint64) (interface{}, error)
 
-type reduceFunc func(prev, v interface{}) interface{}
+type reduceFunc func(ctx context.Context, prev, v interface{}) interface{}
 
 type mapResponse struct {
 	node   *Node
@@ -4743,18 +4863,21 @@ func newGroupByIterator(executor *executor, rowIDs []RowIDs, children []*pql.Cal
 
 // nextAtIdx is a recursive helper method for getting the next row for the field
 // at index i, and then updating the rows in the "higher" fields if it wraps.
-func (gbi *groupByIterator) nextAtIdx(i int) {
+func (gbi *groupByIterator) nextAtIdx(ctx context.Context, i int) (err error) {
 	// loop until we find a non-empty row. This is an optimization - the loop and if/break can be removed.
 	for {
+		if err = ctx.Err(); err != nil {
+			return err
+		}
 		nr, rowID, value, wrapped := gbi.rowIters[i].Next()
 		if nr == nil {
 			gbi.done = true
-			return
+			return nil
 		}
 		if wrapped && i != 0 {
-			gbi.nextAtIdx(i - 1)
-			if gbi.done {
-				return
+			err = gbi.nextAtIdx(ctx, i-1)
+			if gbi.done || err != nil {
+				return err
 			}
 		}
 		if i == 0 && gbi.filter != nil {
@@ -4771,6 +4894,7 @@ func (gbi *groupByIterator) nextAtIdx(i int) {
 			break
 		}
 	}
+	return nil
 }
 
 // Next returns a GroupCount representing the next group by record. When there
@@ -4778,6 +4902,9 @@ func (gbi *groupByIterator) nextAtIdx(i int) {
 func (gbi *groupByIterator) Next(ctx context.Context) (ret GroupCount, done bool, err error) {
 	// loop until we find a result with count > 0
 	for {
+		if err := ctx.Err(); err != nil {
+			return ret, false, err
+		}
 		if gbi.done {
 			return ret, true, nil
 		}
@@ -4805,7 +4932,10 @@ func (gbi *groupByIterator) Next(ctx context.Context) (ret GroupCount, done bool
 			}
 		}
 		if ret.Count == 0 {
-			gbi.nextAtIdx(len(gbi.rows) - 1)
+			err := gbi.nextAtIdx(ctx, len(gbi.rows)-1)
+			if err != nil {
+				return ret, false, err
+			}
 			continue
 		}
 		break
@@ -4820,9 +4950,9 @@ func (gbi *groupByIterator) Next(ctx context.Context) (ret GroupCount, done bool
 	}
 
 	// set up for next call
-	gbi.nextAtIdx(len(gbi.rows) - 1)
+	err = gbi.nextAtIdx(ctx, len(gbi.rows)-1)
 
-	return ret, false, nil
+	return ret, false, err
 }
 
 // getCondIntSlice looks at the field, the cond op type (which is

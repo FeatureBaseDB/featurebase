@@ -374,7 +374,7 @@ func (r *Row) Difference(others ...*Row) *Row {
 	return &Row{segments: output}
 }
 
-// GenericUnary returns the results of a generic op on r.
+// GenericUnaryOp returns the results of a generic op on r.
 func (r *Row) GenericUnaryOp(op ext.GenericBitmapOpBitmap, args map[string]interface{}) *Row {
 	work := r
 	var segments []rowSegment
@@ -510,14 +510,10 @@ func (r *Row) Columns() []uint64 {
 
 // Includes returns true if the row contains the given column.
 func (r *Row) Includes(col uint64) bool {
-	// TODO: improve the efficiency of this method by
-	// performing the column filter at the bitmap level
-	// rather than iterating through the results here.
+	shard := col / ShardWidth
 	for i := range r.segments {
-		for _, c := range r.segments[i].Columns() {
-			if c == col {
-				return true
-			}
+		if r.segments[i].shard == shard {
+			return r.segments[i].data.Contains(col)
 		}
 	}
 	return false
@@ -574,13 +570,11 @@ func (s *rowSegment) IntersectionCount(other *rowSegment) uint64 {
 // Intersect returns the itersection of s and other.
 func (s *rowSegment) Intersect(other *rowSegment) *rowSegment {
 	data := s.data.Intersect(other.data)
-	data = data.Freeze()
 
 	return &rowSegment{
-		data:     data,
-		shard:    s.shard,
-		n:        data.Count(),
-		writable: true,
+		data:  data,
+		shard: s.shard,
+		n:     data.Count(),
 	}
 }
 
@@ -591,13 +585,11 @@ func (s *rowSegment) Union(others ...*rowSegment) *rowSegment {
 		datas[i] = other.data
 	}
 	data := s.data.Union(datas...)
-	data.Freeze()
 
 	return &rowSegment{
-		data:     data,
-		shard:    s.shard,
-		n:        data.Count(),
-		writable: true,
+		data:  data,
+		shard: s.shard,
+		n:     data.Count(),
 	}
 }
 
@@ -635,49 +627,43 @@ func (s *rowSegment) Difference(others ...*rowSegment) *rowSegment {
 		datas[i] = other.data
 	}
 	data := s.data.Difference(datas...)
-	data.Freeze()
 
 	return &rowSegment{
-		data:     data,
-		shard:    s.shard,
-		n:        data.Count(),
-		writable: true,
+		data:  data,
+		shard: s.shard,
+		n:     data.Count(),
 	}
 }
 
 // Xor returns the xor of s and other.
 func (s *rowSegment) Xor(other *rowSegment) *rowSegment {
 	data := s.data.Xor(other.data)
-	data = data.Freeze()
 
 	return &rowSegment{
-		data:     data,
-		shard:    s.shard,
-		n:        data.Count(),
-		writable: true,
+		data:  data,
+		shard: s.shard,
+		n:     data.Count(),
 	}
 }
 
 // Shift returns s shifted by 1 bit.
 func (s *rowSegment) Shift() (*rowSegment, error) {
-	//TODO deal with overflow
+	// TODO: deal with overflow
+	// See issue: https://github.com/molecula/pilosa/issues/403
 	data, err := s.data.Shift(1)
 	if err != nil {
 		return nil, errors.Wrap(err, "shifting roaring data")
 	}
-	data = data.Freeze()
 
 	return &rowSegment{
-		data:     data,
-		shard:    s.shard,
-		n:        data.Count(),
-		writable: true,
+		data:  data,
+		shard: s.shard,
+		n:     data.Count(),
 	}, nil
 }
 
-// GenericUnary returns s subject to op.
+// GenericUnaryOp returns s subject to op.
 func (s *rowSegment) GenericUnaryOp(op ext.GenericBitmapOpBitmap, args map[string]interface{}) *rowSegment {
-	//TODO deal with overflow
 	data := UnwrapBitmap(op([]ext.Bitmap{WrapBitmap(s.data)}, args))
 
 	return &rowSegment{
