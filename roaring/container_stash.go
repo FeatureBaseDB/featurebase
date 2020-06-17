@@ -453,7 +453,7 @@ func (c *Container) AsBitmap(target []uint64) (out []uint64) {
 
 // fillerBitmap is a bitmap full of filler.
 var fillerBitmap = func() (a [1024]uint64) {
-		for i := 0; i < len(a); i++ {
+		for i := range a {
 			a[i] = ^uint64(0)
 		}
 		return a
