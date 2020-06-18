@@ -4726,114 +4726,184 @@ func unionRunRunInPlace(a, b *Container) *Container {
 	return a
 }
 
+// unionInterval16InPlace merges two slice of intervals in place (in a).
+// The main concept is to go value by value (instead of interval by interval)
+// and count `.start` and `.last` points.
+// If we get the `state == 0` it means we just built a new interval (`val`),
+// and we can set it in `a` at the possition `off`
 func unionInterval16InPlace(a, b []interval16) ([]interval16, int32) {
 	n := int32(0)
-
 	an, bn := len(a), len(b)
-	i, j, k := 0, 0, 0
+
+	var (
+		// ai - index of a, aii - subindex (0: a[ai].start, 1: a[ai].last).
+		ai, aii int = 0, 0
+
+		// bi - index of b, bii - subindex (0: b[bi].start, 1: b[bi].last).
+		bi, bii int = 0, 0
+
+		// Offset of a - next available index to set.
+		off int = 0
+		// Value to set/append to a at off
+		val interval16
+
+		// Current state - state equals 0 means we are clear (out of intervals)
+		// When we start a new interval we add +1 when we get out of interval we add -1.
+		state int
+
+		// subindex (ii) to state mapping
+		// .start: [0] -> 1
+		// .last:  [1] -> -1
+		iiMap = [2]int{1, -1}
+
+		// If fromB is equal 2 it means that both val.start and val.last come from b,
+		// so we need to extend a, first
+		fromB int8
+
+		// eval functions evaluates global state and value
+		eval = func(arr [2]uint16, ii int, onlyB bool) {
+			if state == 0 && ii == 0 {
+				// we are clear and start a new interval
+				val.start = arr[ii]
+				if onlyB {
+					fromB++
+				}
+			}
+
+			state += iiMap[ii]
+
+			if state == 0 {
+				// we just got out of interval
+				// ii == 1
+				val.last = arr[ii]
+				if onlyB {
+					fromB++
+				}
+			}
+		}
+		// eval2 function is a special variant for eval function
+		// it's only used when two interval endings are equal, e.g.:
+		// a: ------------------|
+		// b:        -----------|
+		// the most important part is to change the global for both endings
+		// before we check if we're getting out of interval and start the new one.
+		eval2 = func(arr [2]uint16, i1, i2 int) {
+			if state == 0 && (i1 == 0 || i2 == 0) {
+				// we are clear and start a new interval
+				val.start = arr[i1]
+
+			}
+
+			state += iiMap[i1]
+			state += iiMap[i2]
+
+			if state == 0 {
+				// (i1 == 1 || i2 == 1)
+				// we just got out of interval
+				val.last = arr[i1]
+			}
+		}
+	)
+
 	for {
-		var (
-			v     interval16
-			local *interval16
-		)
+		// av, bv reflects a[ai] and b[bi] intervals as an array,
+		// so we can internally iterate over values (points).
+		var av, bv [2]uint16
 
-		if i < an && j < bn {
-			if a[i].start <= b[j].start {
-				v = a[i]
-				i++
-			} else {
-				v = b[j]
-				j++
+		if ai < an && bi < bn {
+			av[0], av[1] = a[ai].start, a[ai].last
+			bv[0], bv[1] = b[bi].start, b[bi].last
+
+			if av[aii] < bv[bii] {
+				// a: |-------------------
+				// b:           |-------------------
+
+				eval(av, aii, false)
+				aii++
+			} else if av[aii] == bv[bii] {
+				// a: |-------------------
+				// b: |-------------------
+				// or
+				// a: ------------------|
+				// b:                   |-------------------
+				// or
+				// a: ------------------|
+				// b:      |------------|
+				// ...
+
+				eval2(av, aii, bii)
+				aii++
+				bii++
+			} else { // bv[bii] < av[aii]
+				// a:           |-------------------
+				// b: |-------------------
+
+				eval(bv, bii, true)
+				bii++
 			}
+		} else if ai < an { // only a left
+			av[0], av[1] = a[ai].start, a[ai].last
+			eval(av, aii, false)
+			aii++
+		} else if bi < bn { // only b left
+			bv[0], bv[1] = b[bi].start, b[bi].last
+			eval(bv, bii, false)
+			bii++
 		} else {
-			if i < an {
-				v = a[i]
-				i++
-			} else if j < bn {
-				v = b[j]
-				j++
-			} else {
-				break
+			break
+		}
+
+		if state == 0 {
+			if fromB == 2 {
+				// val.start and val.last come from b, so we need to extend a, first
+				a = append(a, interval16{})
+				copy(a[off+1:], a[off:])
+				ai++
+				an++
 			}
+			fromB = 0
+			a, off = appendInterval16At(a, val, off)
+			n += int32(val.last-val.start) + 1
 		}
 
-	reeval:
-		if k == an {
-			// append what's left and try to optimize it later
-			a = append(a, v)
-			an++
-			continue
+		if aii == 2 {
+			// move to the next a's interval
+			aii = 0
+			ai++
 		}
 
-		// locally unioned interval
-		if local == nil {
-			local = &a[k]
-		}
-
-		if v.last < local.start {
-			// [---- v ----][---- local ----]
-			// prepend v into a
-			a = append(a, interval16{})
-			copy(a[i+1:], a[i:])
-			a[i] = v
-			an++
-			i++
-			continue
-		}
-
-		if v.start > local.last {
-			// [---- local ----][---- v ----]
-
-			// check if we can optimize run and combine neighbours
-			if int32(v.start-local.last) <= 1 {
-				local.last = v.last
-				continue
-			}
-
-			// set already unioned interval and reevaluate v
-			a[k] = *local
-			k++
-			n += int32(local.last-local.start) + 1
-			local = &v
-			goto reeval
-		}
-
-		if v.start < local.start {
-			if v.last >= local.start && v.last <= local.last {
-				//    [---- local ----]
-				// [---- v ----]
-				local.start = v.start
-			} else if v.last > local.last {
-				//  [- local -]
-				// [---- v ----]
-				*local = v
-			}
-		} else if v.start <= local.last {
-			if v.last <= local.last {
-				// [---- local ----]
-				//     [-- v --]
-
-				// this assignment overwrites the first available position to set - a[k]
-				// it's done to "swallow" many nested intervals, e.g.:
-				//    [a1] [a2] [a3] [a4]
-				// [------ b ------]
-				// will give us:
-				// [ ----- a1 -----] [a4]
-				a[k] = *local
-			} else if v.last > local.last {
-				// [---- local ----]
-				//         [---- v ----]
-				local.last = v.last
-			}
+		if bii == 2 {
+			// move to the next b's interval
+			bii = 0
+			bi++
 		}
 	}
 
 	if len(a) > 0 {
-		// count the latest interval
-		n += int32(a[k].last-a[k].start) + 1
-		a = a[:k+1]
+		a = a[:off]
 	}
 	return a, n
+}
+
+// appendInterval16At appends or sets val in a at off position
+// The function returns modified a ([]interval16) and new offset (off)
+func appendInterval16At(a []interval16, val interval16, off int) ([]interval16, int) {
+
+	if off > 0 && int32(val.start)-int32(a[off-1].last) <= 1 {
+		a[off-1].last = val.last
+		return a, off
+	}
+
+	if off == len(a) {
+		a = append(a, val)
+		off++
+		return a, off
+	}
+
+	a[off] = val
+	off++
+
+	return a, off
 }
 
 func difference(a, b *Container) *Container {
