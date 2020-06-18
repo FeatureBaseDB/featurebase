@@ -5719,3 +5719,42 @@ func TestExecutor_Execute_TopNDistinct(t *testing.T) {
 		}
 	})
 }
+
+func TestTimelessClearRegression(t *testing.T) {
+	data, err := ioutil.ReadFile("testdata/timeRegressionSchema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+
+	api := c[0].API
+
+	schema := &pilosa.Schema{}
+	if err := json.NewDecoder(bytes.NewReader(data)).Decode(schema); err != nil {
+		t.Fatal(err)
+	}
+	if err := api.ApplySchema(context.TODO(), schema, false); err != nil {
+		t.Fatal(err)
+	}
+
+	idxName := schema.Indexes[0].Name
+
+	setQuery := `Set(511, stargazer=376)`
+	if _, err := api.Query(context.TODO(), &pilosa.QueryRequest{Index: idxName, Query: setQuery}); err != nil {
+		t.Fatal(err)
+	}
+
+	setQuery = `Set(512, stargazer=300, 2017-05-18T00:00)`
+	if _, err := api.Query(context.TODO(), &pilosa.QueryRequest{Index: idxName, Query: setQuery}); err != nil {
+		t.Fatal(err)
+	}
+
+	clearQuery := `Clear(511, stargazer=376)`
+	if res, err := api.Query(context.TODO(), &pilosa.QueryRequest{Index: idxName, Query: clearQuery}); err != nil {
+		t.Fatal(err)
+	} else if res.Results[0] != true {
+		t.Fatal("clear supposedly failed")
+	}
+}
