@@ -251,12 +251,12 @@ type testOp struct {
 func doContainer(typ byte, data interface{}) *Container {
 	switch typ {
 	case containerArray:
-		return NewContainerArray(data.([]uint16))
+		return NewContainerArray(data.([]uint16)).Freeze()
 	case containerBitmap:
-		c := NewContainerBitmap(-1, data.([]uint64))
+		c := NewContainerBitmap(-1, data.([]uint64)).Freeze()
 		return c
 	case containerRun:
-		return NewContainerRun(data.([]interval16))
+		return NewContainerRun(data.([]interval16)).Freeze()
 	}
 	return nil
 }

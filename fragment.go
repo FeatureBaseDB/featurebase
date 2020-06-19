@@ -556,6 +556,17 @@ func (f *fragment) unprotectedSetBit(rowID, columnID uint64) (changed bool, err 
 
 	// Don't update the cache if nothing changed.
 	if !changed {
+		row, _ := f.rowCache.Fetch(rowID)
+		if row != nil && !row.Includes(columnID) {
+			// paranoia time. It should be impossible for the
+			// rowCache to have an entry which lacks a bit which is
+			// in storage, but we've seen some behavior which
+			// indicated this is happening... so we'll check and
+			// clear the rowCache rather than risking returning
+			// inconsistent data in a query.
+			f.Logger.Printf("INCONSISTENT: index:%s field:%s found bit row/col %d/%d not in cache after in storage; dropping cached row, consider restarting Pilosa.", f.index, f.field, rowID, columnID)
+			f.rowCache.Add(rowID, nil)
+		}
 		return changed, nil
 	}
 
