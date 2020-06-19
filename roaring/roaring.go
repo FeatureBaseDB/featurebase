@@ -21,6 +21,7 @@ import (
 	"hash/fnv"
 	"io"
 	"math/bits"
+	"os"
 	"sort"
 	"unsafe"
 
@@ -3196,6 +3197,9 @@ func (c *Container) arrayRemove(v uint16) (*Container, bool) {
 	}
 	// removing the last item? we can just return the empty container.
 	if c.N() == 1 {
+		if c.flags&(flagFrozen|flagMapped) != 0 {
+			fmt.Fprintf(os.Stderr, "INCONSISTENT: array remove of %d setting N in another container\n", v)
+		}
 		c.n = 0
 		return nil, true
 	}
@@ -3213,6 +3217,9 @@ func (c *Container) bitmapRemove(v uint16) (*Container, bool) {
 	}
 	// removing the last item? we can just return the empty container.
 	if c.N() == 1 {
+		if c.flags&(flagFrozen|flagMapped) != 0 {
+			fmt.Fprintf(os.Stderr, "INCONSISTENT: bitmap remove of %d setting N in another container\n", v)
+		}
 		c.n = 0
 		return nil, true
 	}
@@ -3239,6 +3246,9 @@ func (c *Container) runRemove(v uint16) (*Container, bool) {
 	}
 	// removing the last item? we can just return the empty container.
 	if c.N() == 1 {
+		if c.flags&(flagFrozen|flagMapped) != 0 {
+			fmt.Fprintf(os.Stderr, "INCONSISTENT: run remove of %d setting N in another container\n", v)
+		}
 		c.n = 0
 		return nil, true
 	}
@@ -4291,6 +4301,9 @@ func unionArrayArrayInPlace(a, b *Container) *Container {
 			// ... but we also want to be sure we don't end up
 			// copying in a mapped object into our not-mapped
 			// object.
+			if !b.Mapped() {
+				fmt.Fprintf(os.Stderr, "INCONSISTENT: unionArrayArray referencing array of %d elements\n", b.N())
+			}
 			a.setArrayMaybeCopy(b.array(), b.Mapped())
 			return a.optimize()
 		}
