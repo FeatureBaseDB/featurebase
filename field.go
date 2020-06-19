@@ -1281,15 +1281,14 @@ func (f *Field) ClearBit(rowID, colID uint64) (changed bool, err error) {
 	// Retrieve view. Exit if it doesn't exist.
 	view, present := f.viewMap[viewName]
 	if !present {
-		return changed, errors.Wrap(err, "clearing missing view")
-
+		return false, errors.Wrap(err, "clearing missing view")
 	}
 
 	// Clear non-time bit.
 	if v, err := view.clearBit(rowID, colID); err != nil {
-		return changed, errors.Wrap(err, "clearing on view")
+		return false, errors.Wrap(err, "clearing on view")
 	} else if v {
-		changed = v
+		changed = changed || v
 	}
 	if len(f.viewMap) == 1 { // assuming no time views
 		return changed, nil
@@ -1304,10 +1303,12 @@ func (f *Field) ClearBit(rowID, colID uint64) (changed bool, err error) {
 			level--
 		}
 		if level < skipAbove {
-			if changed, err = view.clearBit(rowID, colID); err != nil {
+			cleared, err := view.clearBit(rowID, colID)
+			changed = changed || cleared
+			if err != nil {
 				return changed, errors.Wrapf(err, "clearing on view %s", view.name)
 			}
-			if !changed {
+			if !cleared {
 				skipAbove = level + 1
 			} else {
 				skipAbove = maxInt
