@@ -4863,7 +4863,7 @@ func unionInterval16InPlace(a, b []interval16) ([]interval16, int32) {
 			}
 			fromB = 0
 			a, off = appendInterval16At(a, val, off)
-			n += int32(val.last-val.start) + 1
+			n += int32(val.last) - int32(val.start) + 1
 		}
 
 		if aii == 2 {

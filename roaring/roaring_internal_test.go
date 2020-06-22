@@ -4329,3 +4329,77 @@ func TestDifferenceInPlace_N(t *testing.T) {
 		t.Error("expected difference of containers to have n=0")
 	}
 }
+
+func BenchmarkUnionRunRunInPlace(bm *testing.B) {
+	bm.Skip("Skipping long running BenchmarkUnionRunRunInPlace")
+
+	runs := []struct {
+		name string
+		fn   func() []interval16
+	}{
+		{"FirstBitSet", runFirstBitSet},
+		{"LastBitSet", runLastBitSet},
+		{"FirstBitUnset", runFirstBitUnset},
+		{"LastBitUnset", runLastBitUnset},
+		{"InnerBitsSet", runInnerBitsSet},
+		{"OuterBitsSet", runOuterBitsSet},
+		{"OddBitsSet", runOddBitsSet},
+		{"EvenBitsSet", runEvenBitsSet},
+	}
+
+	for _, ar := range runs {
+		for _, br := range runs {
+			bm.Run("RunToBitmapRun-"+ar.name+"_"+br.name, func(bm *testing.B) {
+				for i := 0; i < bm.N; i++ {
+					arun := doContainer(containerRun, ar.fn())
+					brun := doContainer(containerRun, br.fn())
+
+					abmp := arun.runToBitmap()
+					unionBitmapRunInPlace(abmp, brun)
+				}
+			})
+
+			bm.Run("RunRun-"+ar.name+"_"+br.name, func(bm *testing.B) {
+				for i := 0; i < bm.N; i++ {
+					arun := doContainer(containerRun, ar.fn())
+					brun := doContainer(containerRun, br.fn())
+
+					unionRunRunInPlace(arun, brun)
+				}
+			})
+		}
+	}
+}
+
+func TestUnionRunRunInPlaceBitwiseCompare(t *testing.T) {
+	runs := []struct {
+		name string
+		run  []interval16
+	}{
+		{name: "FirstBitSet", run: runFirstBitSet()},
+		{name: "LastBitSet", run: runLastBitSet()},
+		{name: "FirstBitUnset", run: runFirstBitUnset()},
+		{name: "LastBitUnset", run: runLastBitUnset()},
+		{name: "InnerBitsSet", run: runInnerBitsSet()},
+		{name: "OuterBitsSet", run: runOuterBitsSet()},
+		{name: "OddBitsSet", run: runOddBitsSet()},
+		{name: "EvenBitsSet", run: runEvenBitsSet()},
+	}
+
+	for _, a := range runs {
+		for _, b := range runs {
+			t.Run(a.name+"-"+b.name, func(t *testing.T) {
+				arun := doContainer(containerRun, a.run)
+				brun := doContainer(containerRun, b.run)
+
+				out1 := unionBitmapRunInPlace(arun.runToBitmap(), brun)
+				out2 := unionRunRunInPlace(arun, brun)
+
+				err := out1.BitwiseCompare(out2.runToBitmap())
+				if err != nil {
+					t.Fatal(err)
+				}
+			})
+		}
+	}
+}
