@@ -252,14 +252,17 @@ func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
 
 		if validator, ok := h.validators[key]; ok {
 			if err := validator.validate(r.URL.Query()); err != nil {
-				// TODO: Return the response depending on the Accept header
-				response := errorResponse{Error: err.Error()}
-				body, err := json.Marshal(response)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					return
+				errText := err.Error()
+				if validHeaderAcceptJSON(r.Header) {
+					response := errorResponse{Error: errText}
+					data, err := json.Marshal(response)
+					if err != nil {
+						h.logger.Printf("failed to encode error %q as JSON: %v", errText, err)
+					} else {
+						errText = string(data)
+					}
 				}
-				http.Error(w, string(body), http.StatusBadRequest)
+				http.Error(w, errText, http.StatusBadRequest)
 				return
 			}
 		}
@@ -1782,6 +1785,7 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		// TODO this was the previous behavior, but perhaps not everything is a bad request
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -2114,6 +2118,7 @@ func (h *Handler) handlePostTranslateKeys(w http.ResponseWriter, r *http.Request
 	buf, err := h.api.TranslateKeys(r.Context(), r.Body)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("translate keys: %v", err), http.StatusInternalServerError)
+		return
 	}
 
 	// Write response.
