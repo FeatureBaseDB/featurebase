@@ -20,6 +20,16 @@ commands:
   add-github-auth:
     steps:
       - run: git config --global url."https://moleculacorp:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com".insteadOf "https://github.com"
+  restore-mod-cache:
+    steps:
+      - restore_cache:
+          keys:
+            - mod-cache-{{ checksum "go.sum" }}
+  save-mod-cache:
+    steps:
+      - save_cache:
+          keys:
+            - mod-cache-{{ checksum "go.sum" }}
 
 jobs:
   setup:
@@ -28,40 +38,30 @@ jobs:
     steps:
       - add-github-auth
       - checkout
-      - restore_cache:
-          keys:
-            - mod-cache-{{ checksum "go.sum" }}
+      - restore-mod-cache
       - run: "go mod download"
-      - save_cache:
-          key: mod-cache-{{ checksum "go.sum" }}
-          paths:
-            - /go/pkg/mod/
-      - persist_to_workspace:
-          root: .
-          paths: "*"
+      - save-mod-cache
   check-license-headers:
     executor:
       name: golang
     steps:
-      - attach_workspace:
-          at: .
+      - checkout
+      - restore-mod-cache
       - run: make check-license-headers
   linter:
     executor:
       name: golang
     steps:
-      - attach_workspace:
-          at: .
-      - add-github-auth
+      - checkout
+      - restore-mod-cache
       - run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sudo sh -s -- -b /usr/local/bin v1.23.8
       - run: make golangci-lint
   test-build-arm:
     executor:
       name: golang
     steps:
-      - attach_workspace:
-          at: .
-      - add-github-auth
+      - checkout
+      - restore-mod-cache
       - run: make build GOOS=linux GOARCH=arm GOARM=5
       - run: make build GOOS=linux GOARCH=arm GOARM=6
       - run: make build GOOS=linux GOARCH=arm GOARM=7
@@ -91,9 +91,8 @@ jobs:
       version: << parameters.golang_version >>
       resource_class: << parameters.resource_class >>
     steps:
-      - attach_workspace:
-          at: .
-      - add-github-auth
+      - checkout
+      - restore-mod-cache
       - run: sudo apt-get install lsof
       - run:
           command: make << parameters.test_make_target >> SHARD_WIDTH=<< parameters.shard_width >> GOARCH=<< parameters.goarch >>
@@ -102,18 +101,16 @@ jobs:
     executor:
       name: golang
     steps:
-      - attach_workspace:
-          at: .
-      - add-github-auth
+      - checkout
+      - restore-mod-cache
       - setup_remote_docker
       - run: make clustertests-build
   prerelease:
     executor:
       name: golang
     steps:
-      - attach_workspace:
-          at: .
-      - add-github-auth
+      - checkout
+      - restore-mod-cache
       - run: make prerelease
       - store_artifacts:
           path: build
@@ -124,6 +121,8 @@ jobs:
     executor:
       name: golang
     steps:
+      - checkout
+      - restore-mod-cache
       - attach_workspace:
           at: .
       - run: make release
@@ -136,6 +135,8 @@ jobs:
     docker:
       - image: circleci/python:2.7-jessie
     steps:
+      - checkout
+      - restore-mod-cache
       - attach_workspace:
           at: .
       - run: sudo pip install awscli
@@ -144,9 +145,8 @@ jobs:
     executor:
       name: golang
     steps:
-      - attach_workspace:
-          at: .
-      - add-github-auth
+      - checkout
+      - restore-mod-cache
       - setup_remote_docker
       - run: make docker
       - run: docker login -u $DOCKER_USER -p $DOCKER_PASS
@@ -155,9 +155,8 @@ jobs:
     executor:
       name: golang
     steps:
-      - attach_workspace:
-          at: .
-      - add-github-auth
+      - checkout
+      - restore-mod-cache
       - setup_remote_docker
       - run: make docker
       - run: docker login -u $DOCKER_USER -p $DOCKER_PASS
