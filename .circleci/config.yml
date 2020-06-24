@@ -144,7 +144,6 @@ jobs:
     executor:
       name: golang
     steps:
-      - checkout
       - attach_workspace:
           at: .
       - add-github-auth
@@ -156,7 +155,6 @@ jobs:
     executor:
       name: golang
     steps:
-      - checkout
       - attach_workspace:
           at: .
       - add-github-auth
