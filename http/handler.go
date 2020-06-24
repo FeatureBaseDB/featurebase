@@ -1783,8 +1783,12 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 	}
 	err := h.api.ClusterMessage(r.Context(), r.Body)
 	if err != nil {
-		// TODO this was the previous behavior, but perhaps not everything is a bad request
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		switch err := err.(type) {
+		case pilosa.MessageProcessingError:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		default:
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
 		return
 	}
 
