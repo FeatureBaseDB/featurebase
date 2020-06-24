@@ -39,7 +39,7 @@ jobs:
       - add-github-auth
       - checkout
       - restore-mod-cache
-      - run: "go mod download"
+      - run: go mod download
       - save-mod-cache
   check-license-headers:
     executor:
