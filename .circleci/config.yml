@@ -28,6 +28,8 @@ commands:
     steps:
       - save_cache:
           key: mod-cache-{{ checksum "go.sum" }}
+          paths:
+            - /go/pkg/mod/
 
 jobs:
   setup:
