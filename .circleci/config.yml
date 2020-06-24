@@ -23,13 +23,11 @@ commands:
   restore-mod-cache:
     steps:
       - restore_cache:
-          keys:
-            - mod-cache-{{ checksum "go.sum" }}
+          key: mod-cache-{{ checksum "go.sum" }}
   save-mod-cache:
     steps:
       - save_cache:
-          keys:
-            - mod-cache-{{ checksum "go.sum" }}
+          key: mod-cache-{{ checksum "go.sum" }}
 
 jobs:
   setup:
