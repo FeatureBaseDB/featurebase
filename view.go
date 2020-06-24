@@ -469,62 +469,6 @@ func (v *view) clearValue(columnID uint64, bitDepth uint, value int64) (changed 
 	return frag.clearValue(columnID, bitDepth, value)
 }
 
-// sum returns the sum & count of a field.
-func (v *view) sum(filter *Row, bitDepth uint) (sum int64, count uint64, err error) {
-	for _, f := range v.allFragments() {
-		fsum, fcount, err := f.sum(filter, bitDepth)
-		if err != nil {
-			return sum, count, err
-		}
-		sum += fsum
-		count += fcount
-	}
-	return sum, count, nil
-}
-
-// min returns the min and count of a field.
-func (v *view) min(filter *Row, bitDepth uint) (min int64, count uint64, err error) {
-	var minHasValue bool
-	for _, f := range v.allFragments() {
-		fmin, fcount, err := f.min(filter, bitDepth)
-		if err != nil {
-			return min, count, err
-		}
-		// Don't consider a min based on zero columns.
-		if fcount == 0 {
-			continue
-		}
-
-		if !minHasValue {
-			min = fmin
-			minHasValue = true
-			count += fcount
-			continue
-		}
-
-		if fmin < min {
-			min = fmin
-			count += fcount
-		}
-	}
-	return min, count, nil
-}
-
-// max returns the max and count of a field.
-func (v *view) max(filter *Row, bitDepth uint) (max int64, count uint64, err error) {
-	for _, f := range v.allFragments() {
-		fmax, fcount, err := f.max(filter, bitDepth)
-		if err != nil {
-			return max, count, err
-		}
-		if fcount > 0 && fmax > max {
-			max = fmax
-			count += fcount
-		}
-	}
-	return max, count, nil
-}
-
 // rangeOp returns rows with a field value encoding matching the predicate.
 func (v *view) rangeOp(op pql.Token, bitDepth uint, predicate int64) (*Row, error) {
 	r := NewRow()

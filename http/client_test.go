@@ -777,7 +777,7 @@ func TestClient_ImportKeys(t *testing.T) {
 
 		// Load bitmap into cache to ensure cache gets updated.
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{Keys: true})
-		field, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-100, 100))
+		_, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-100, 100))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -790,15 +790,6 @@ func TestClient_ImportKeys(t *testing.T) {
 			{ColumnKey: "col3", Value: 40},
 		}); err != nil {
 			t.Fatal(err)
-		}
-
-		// Verify Sum.
-		sum, cnt, err := field.Sum(nil, fldName)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if sum != 50 || cnt != 3 {
-			t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=50, cnt=3", sum, cnt)
 		}
 
 		// Verify range.
@@ -821,15 +812,6 @@ func TestClient_ImportKeys(t *testing.T) {
 			{ColumnKey: "col2", Value: 20},
 		}, pilosa.OptImportOptionsClear(true)); err != nil {
 			t.Fatal(err)
-		}
-
-		// Verify Sum.
-		sum, cnt, err = field.Sum(nil, fldName)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if sum != 30 || cnt != 2 {
-			t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=30, cnt=2", sum, cnt)
 		}
 
 		// Verify Range.
@@ -928,7 +910,7 @@ func TestClient_ImportValue(t *testing.T) {
 
 	// Load bitmap into cache to ensure cache gets updated.
 	index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{})
-	field, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-100, 100))
+	_, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-100, 100))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -944,43 +926,21 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Sum.
-	sum, cnt, err := field.Sum(nil, fldName)
-	if err != nil {
+	if resp, err := c.Query(context.Background(), "i", &pilosa.QueryRequest{Query: `Sum(field=f)`}); err != nil {
 		t.Fatal(err)
-	}
-	if sum != 50 || cnt != 3 {
-		t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=50, cnt=3", sum, cnt)
-	}
-
-	// Verify Min.
-	min, cnt, err := field.Min(nil, fldName)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if min != -10 || cnt != 1 {
-		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=-10, cnt=1", min, cnt)
-	}
-
-	// Verify Min with Filter.
-	filter, err := field.Range(fldName, pql.GT, 40)
-	if err != nil {
-		t.Fatal(err)
-	}
-	min, cnt, err = field.Min(filter, fldName)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if min != 0 || cnt != 0 {
-		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=0, cnt=0", min, cnt)
+	} else if vc, ok := resp.Results[0].(pilosa.ValCount); !ok {
+		t.Fatalf("expected ValCount; got %T", resp.Results[0])
+	} else if vc.Val != 50 || vc.Count != 3 {
+		t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=50, cnt=3", vc.Val, vc.Count)
 	}
 
 	// Verify Max.
-	max, cnt, err := field.Max(nil, fldName)
-	if err != nil {
+	if resp, err := c.Query(context.Background(), "i", &pilosa.QueryRequest{Query: `Max(field=f)`}); err != nil {
 		t.Fatal(err)
-	}
-	if max != 40 || cnt != 1 {
-		t.Fatalf("unexpected values: got max=%v, count=%v; expected max=40, cnt=1", max, cnt)
+	} else if vc, ok := resp.Results[0].(pilosa.ValCount); !ok {
+		t.Fatalf("expected ValCount; got %T", resp.Results[0])
+	} else if vc.Val != 40 || vc.Count != 1 {
+		t.Fatalf("unexpected values: got max=%v, count=%v; expected max=40, cnt=1", vc.Val, vc.Count)
 	}
 
 	// Send import request.
@@ -992,34 +952,21 @@ func TestClient_ImportValue(t *testing.T) {
 	}
 
 	// Verify Sum.
-	sum, cnt, err = field.Sum(nil, fldName)
-	if err != nil {
+	if resp, err := c.Query(context.Background(), "i", &pilosa.QueryRequest{Query: `Sum(field=f)`}); err != nil {
 		t.Fatal(err)
-	}
-	if sum != 20 || cnt != 1 {
-		t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=20, cnt=1", sum, cnt)
-	}
-
-	// Verify Min with Filter.
-	filter, err = field.Range(fldName, pql.GT, 40)
-	if err != nil {
-		t.Fatal(err)
-	}
-	min, cnt, err = field.Min(filter, fldName)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if min != 0 || cnt != 0 {
-		t.Fatalf("unexpected values: got min=%v, count=%v; expected min=0, cnt=0", min, cnt)
+	} else if vc, ok := resp.Results[0].(pilosa.ValCount); !ok {
+		t.Fatalf("expected ValCount; got %T", resp.Results[0])
+	} else if vc.Val != 20 || vc.Count != 1 {
+		t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=20, cnt=1", vc.Val, vc.Count)
 	}
 
 	// Verify Max.
-	max, cnt, err = field.Max(nil, fldName)
-	if err != nil {
+	if resp, err := c.Query(context.Background(), "i", &pilosa.QueryRequest{Query: `Max(field=f)`}); err != nil {
 		t.Fatal(err)
-	}
-	if max != 20 || cnt != 1 {
-		t.Fatalf("unexpected values: got max=%v, count=%v; expected max=20, cnt=1", max, cnt)
+	} else if vc, ok := resp.Results[0].(pilosa.ValCount); !ok {
+		t.Fatalf("expected ValCount; got %T", resp.Results[0])
+	} else if vc.Val != 20 || vc.Count != 1 {
+		t.Fatalf("unexpected values: got max=%v, count=%v; expected max=20, cnt=1", vc.Val, vc.Count)
 	}
 }
 
@@ -1071,7 +1018,7 @@ func TestClient_ImportExistence(t *testing.T) {
 		fldName := "fint"
 
 		index := hldr.MustCreateIndexIfNotExists(idxName, pilosa.IndexOptions{TrackExistence: true})
-		field, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-100, 100))
+		_, err := index.CreateFieldIfNotExists(fldName, pilosa.OptFieldTypeInt(-100, 100))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1087,12 +1034,12 @@ func TestClient_ImportExistence(t *testing.T) {
 		}
 
 		// Verify Sum.
-		sum, cnt, err := field.Sum(nil, fldName)
-		if err != nil {
+		if resp, err := c.Query(context.Background(), idxName, &pilosa.QueryRequest{Query: fmt.Sprintf(`Sum(field=%s)`, fldName)}); err != nil {
 			t.Fatal(err)
-		}
-		if sum != 50 || cnt != 3 {
-			t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=50, cnt=3", sum, cnt)
+		} else if vc, ok := resp.Results[0].(pilosa.ValCount); !ok {
+			t.Fatalf("expected ValCount; got %T", resp.Results[0])
+		} else if vc.Val != 50 || vc.Count != 3 {
+			t.Fatalf("unexpected values: got sum=%v, count=%v; expected sum=50, cnt=3", vc.Val, vc.Count)
 		}
 
 		// Verify existence.
