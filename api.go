@@ -795,9 +795,28 @@ func (api *API) ClusterMessage(ctx context.Context, reqBody io.Reader) error {
 
 	// Forward the message.
 	if err := api.server.receiveMessage(msg); err != nil {
-		return errors.Wrap(err, "receiving message")
+		return MessageProcessingError{err}
 	}
 	return nil
+}
+
+// MessageProcessingError is an error indicating that a cluster message could not be processed.
+type MessageProcessingError struct {
+	Err error
+}
+
+func (err MessageProcessingError) Error() string {
+	return "processing message: " + err.Err.Error()
+}
+
+// Cause allows the error to be unwrapped.
+func (err MessageProcessingError) Cause() error {
+	return err.Err
+}
+
+// Unwrap allows the error to be unwrapped.
+func (err MessageProcessingError) Unwrap() error {
+	return err.Err
 }
 
 // Schema returns information about each index in Pilosa including which fields
