@@ -140,46 +140,39 @@ jobs:
           at: .
       - run: sudo pip install awscli
       - run: make prerelease-upload
-  dockerhub-upload:
-    parameters:
-      tag_branch:
-        type: boolean
-        default: true
-      tag_tag:
-        type: boolean
-        default: false
-      tag_latest:
-        type: boolean
-        default: false
-      target_name:
-        type: string
-        default: moleculacorp/pilosa
+  dockerhub-upload-unstable:
     executor:
       name: golang
     steps:
+      - checkout
       - attach_workspace:
           at: .
       - add-github-auth
       - setup_remote_docker
       - run: make docker
       - run: docker login -u $DOCKER_USER -p $DOCKER_PASS
-      - when:
-          condition: << parameters.tag_branch >>
-          steps:
-            - run: make docker-tag-push DOCKER_TARGET=<< parameters.target_name >>:<< pipeline.git.branch >>
-      - when:
-          condition: << parameters.tag_tag >>
-          steps:
-            - run: make docker-tag-push DOCKER_TARGET=<< parameters.target_name >>:$(git describe --tags)
-      - when:
-          condition: << parameters.tag_latest >>
-          steps:
-            - run: make docker-tag-push DOCKER_TARGET=<< parameters.target_name >>:latest
-        
+      - run: make docker-tag-push DOCKER_TARGET=moleculacorp/pilosa:<< pipeline.git.branch >>
+  dockerhub-upload-stable:
+    executor:
+      name: golang
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - add-github-auth
+      - setup_remote_docker
+      - run: make docker
+      - run: docker login -u $DOCKER_USER -p $DOCKER_PASS
+      - run: make docker-tag-push DOCKER_TARGET=moleculacorp/pilosa:<< pipeline.git.tag >>
+      - run: make docker-tag-push DOCKER_TARGET=moleculacorp/pilosa:latest
+
 workflows:
   build:
     jobs:
-      - setup
+      - setup:
+          filters:
+            tags:
+              only: /^v.*/
       - linter:
           requires:
             - setup
@@ -196,6 +189,9 @@ workflows:
               golang_version: ["1.14", "1.13", "1.12", "1.11"]
           requires:
             - setup
+          filters:
+            tags:
+              only: /^v.*/
       - test:
           name: test-race
           test_make_target: test-race
@@ -220,27 +216,17 @@ workflows:
             - linter
             - check-license-headers
             - test-golang-1.14
-      - dockerhub-upload:
-          name: dockerhub-upload-unstable
-          tag_branch: true
-          tag_tag: false
-          tag_latest: false
+      - dockerhub-upload-unstable:
+          context: molecula
           requires:
-            - linter
-            - check-license-headers
-            - test-golang-1.14
+            - setup
           filters:
             branches:
               only: master
-      - dockerhub-upload:
-          name: dockerhub-upload-stable
-          tag_branch: true
-          tag_tag: true
-          tag_latest: true
+      - dockerhub-upload-stable:
+          context: molecula
           requires:
-            - linter
-            - check-license-headers
-            - test-golang-1.14
+            - setup
           filters:
             tags:
               only: /^v.*/
