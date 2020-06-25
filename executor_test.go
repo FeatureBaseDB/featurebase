@@ -3027,6 +3027,121 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 			test.CheckGroupBy(t, expected, results)
 		}
 	})
+
+	t.Run("Row on ints with ASSIGN condition", func(t *testing.T) {
+		_, err := c[0].API.CreateIndex(context.Background(), "intidx", pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+
+		_, err = c[0].API.CreateField(context.Background(), "intidx", "gint", pilosa.OptFieldTypeInt(-1000, 1000))
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "intidx", Query: `
+		Set(1000, gint=1)
+		Set(2000, gint=2)
+		Set(3000, gint=3)
+		`}); err != nil {
+			t.Fatalf("querying remote: %v", err)
+		}
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{
+			Index: "intidx",
+			Query: `Row(gint=2)Row(gint==1)`,
+		}); err != nil {
+			t.Fatalf("Row querying: %v", err)
+		} else {
+
+			row0, row1 := res.Results[0].(*pilosa.Row), res.Results[1].(*pilosa.Row)
+			if len(row0.Columns()) != 1 || len(row1.Columns()) != 1 {
+				t.Fatalf(`Expected: []uint64{2000} []uint64{1000}, Got: %+v %+v`, row0.Columns(), row1.Columns())
+			}
+			if row0.Columns()[0] != 2000 || row1.Columns()[0] != 1000 {
+				t.Fatalf(`Expected: []uint64{2000} []uint64{1000}, Got: %+v %+v`, row0.Columns(), row1.Columns())
+			}
+		}
+	})
+
+	t.Run("Row on decimals with ASSIGN condition", func(t *testing.T) {
+		_, err := c[0].API.CreateIndex(context.Background(), "decidx", pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+
+		_, err = c[0].API.CreateField(context.Background(), "decidx", "fdec", pilosa.OptFieldTypeDecimal(0))
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "decidx", Query: `
+		Set(11, fdec=1.1)
+		Set(22, fdec=2.2)
+		Set(33, fdec=3.3)
+		`}); err != nil {
+			t.Fatalf("querying remote: %v", err)
+		}
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{
+			Index: "decidx",
+			Query: `Row(fdec=2.2)Row(fdec==1.1)`,
+		}); err != nil {
+			t.Fatalf("Row querying: %v", err)
+		} else {
+			row0, row1 := res.Results[0].(*pilosa.Row), res.Results[1].(*pilosa.Row)
+			if len(row0.Columns()) != 1 || len(row1.Columns()) != 1 {
+				t.Fatalf(`Expected: []uint64{22} []uint64{11}, Got: %+v %+v`, row0.Columns(), row1.Columns())
+			}
+			if row0.Columns()[0] != 22 || row1.Columns()[0] != 11 {
+				t.Fatalf(`Expected: []uint64{22} []uint64{11}, Got: %+v %+v`, row0.Columns(), row1.Columns())
+			}
+		}
+	})
+
+	t.Run("Row on foreign key with ASSIGN condition", func(t *testing.T) {
+		_, err := c[0].API.CreateIndex(context.Background(), "parent", pilosa.IndexOptions{Keys: true})
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+		_, err = c[0].API.CreateField(context.Background(), "parent", "general", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+		_, err = c[0].API.CreateIndex(context.Background(), "child", pilosa.IndexOptions{Keys: false})
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+		_, err = c[0].API.CreateField(context.Background(), "child", "parentid",
+			pilosa.OptFieldForeignIndex("parent"),
+			pilosa.OptFieldTypeInt(-9223372036854775808, 9223372036854775807),
+		)
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "child", Query: `
+		Set(1, parentid="one")
+		Set(2, parentid="two")
+		Set(3, parentid="three")
+		`}); err != nil {
+			t.Fatalf("querying remote: %v", err)
+		}
+
+		if res, err := c[1].API.Query(context.Background(), &pilosa.QueryRequest{
+			Index: "child",
+			Query: `Row(parentid="two")Row(parentid=="one")`,
+		}); err != nil {
+			t.Fatalf("Row querying: %v", err)
+		} else {
+
+			row0, row1 := res.Results[0].(*pilosa.Row), res.Results[1].(*pilosa.Row)
+			if len(row0.Columns()) != 1 || len(row1.Columns()) != 1 {
+				t.Fatalf(`Expected: []uint64{1} []uint64{0}, Got: %+v %+v`, row0.Columns(), row1.Columns())
+			}
+			if row0.Columns()[0] != 2 || row1.Columns()[0] != 1 {
+				t.Fatalf(`Expected: []uint64{1} []uint64{0}, Got: %+v %+v`, row0.Columns(), row1.Columns())
+			}
+		}
+	})
 }
 
 // Ensure executor returns an error if too many writes are in a single request.
