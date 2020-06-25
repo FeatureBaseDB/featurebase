@@ -2036,7 +2036,9 @@ func (c *cluster) nodeJoin(node *Node) error {
 			if c.haveTopologyAgreement() {
 				return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
 			}
-			return nil
+			// This lets the remote node to proceed with opening its holder,
+			// instead of waiting in DOWN state because cluster is in STARTING state.
+			return c.sendTo(node, c.unprotectedStatus())
 		} else if err != nil {
 			return errors.Wrap(err, "checking if holder has data")
 		}

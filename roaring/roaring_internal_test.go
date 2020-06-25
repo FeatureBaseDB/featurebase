@@ -249,20 +249,20 @@ func TestBitmapCountRange(t *testing.T) {
 	tests := []struct {
 		start  int32
 		end    int32
-		bitmap []uint64
+		bitmap [bitmapN]uint64
 		exp    int32
 	}{
-		{start: 0, end: 1, bitmap: []uint64{1}, exp: 1},
-		{start: 2, end: 7, bitmap: []uint64{0xFFFFFFFFFFFFFF18}, exp: 2},
-		{start: 67, end: 68, bitmap: []uint64{0, 0x8}, exp: 1},
-		{start: 1, end: 68, bitmap: []uint64{0x3, 0x8, 0xF}, exp: 2},
-		{start: 1, end: 258, bitmap: []uint64{0xF, 0x8, 0xA, 0x4, 0xFFFFFFFFFFFFFFFF}, exp: 9},
-		{start: 66, end: 71, bitmap: []uint64{0xF, 0xFFFFFFFFFFFFFF18}, exp: 2},
-		{start: 63, end: 64, bitmap: []uint64{0x8000000000000000}, exp: 1},
+		{start: 0, end: 1, bitmap: [bitmapN]uint64{1}, exp: 1},
+		{start: 2, end: 7, bitmap: [bitmapN]uint64{0xFFFFFFFFFFFFFF18}, exp: 2},
+		{start: 67, end: 68, bitmap: [bitmapN]uint64{0, 0x8}, exp: 1},
+		{start: 1, end: 68, bitmap: [bitmapN]uint64{0x3, 0x8, 0xF}, exp: 2},
+		{start: 1, end: 258, bitmap: [bitmapN]uint64{0xF, 0x8, 0xA, 0x4, 0xFFFFFFFFFFFFFFFF}, exp: 9},
+		{start: 66, end: 71, bitmap: [bitmapN]uint64{0xF, 0xFFFFFFFFFFFFFF18}, exp: 2},
+		{start: 63, end: 64, bitmap: [bitmapN]uint64{0x8000000000000000}, exp: 1},
 	}
 
 	for i, test := range tests {
-		c.setBitmap(test.bitmap)
+		c.setBitmap(test.bitmap[:])
 		if ret := c.bitmapCountRange(test.start, test.end); ret != test.exp {
 			t.Fatalf("test #%v count of %v from %v to %v should be %v but got %v", i, test.bitmap, test.start, test.end, test.exp, ret)
 		}
@@ -294,39 +294,39 @@ func TestIntersectionCountArrayBitmap2(t *testing.T) {
 	a, b := NewContainerArray(nil), NewContainerBitmap(0, nil)
 	tests := []struct {
 		array  []uint16
-		bitmap []uint64
+		bitmap [bitmapN]uint64
 		exp    int32
 	}{
 		{
 			array:  []uint16{0},
-			bitmap: []uint64{1},
+			bitmap: [bitmapN]uint64{1},
 			exp:    1,
 		},
 		{
 			array:  []uint16{0, 1},
-			bitmap: []uint64{3},
+			bitmap: [bitmapN]uint64{3},
 			exp:    2,
 		},
 		{
 			array:  []uint16{64, 128, 129, 2000},
-			bitmap: []uint64{932421, 2},
+			bitmap: [bitmapN]uint64{932421, 2},
 			exp:    0,
 		},
 		{
 			array:  []uint16{0, 65, 130, 195},
-			bitmap: []uint64{255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255},
+			bitmap: [bitmapN]uint64{255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255},
 			exp:    4,
 		},
 		{
 			array:  []uint16{63, 120, 543, 639, 12000},
-			bitmap: []uint64{0x8000000000000000, 0, 0, 0, 0, 0, 0, 0, 0, 0x8000000000000000},
+			bitmap: [bitmapN]uint64{0x8000000000000000, 0, 0, 0, 0, 0, 0, 0, 0, 0x8000000000000000},
 			exp:    2,
 		},
 	}
 
 	for i, test := range tests {
 		a.setArray(test.array)
-		b.setBitmap(test.bitmap)
+		b.setBitmap(test.bitmap[:])
 		ret := intersectionCountArrayBitmap(a, b)
 		if ret != test.exp {
 			t.Fatalf("test #%v intersectCountArrayBitmap fail received: %v exp: %v", i, ret, test.exp)
@@ -3751,15 +3751,17 @@ func TestContainerCombinations(t *testing.T) {
 		for _, x := range containerTypes {
 			for _, y := range containerTypes {
 				desc := fmt.Sprintf("%s(%s/%s, %s/%s)", getFunctionName(testOp.f), containerTypeNames[x], testOp.x, containerTypeNames[y], testOp.y)
-				ret := runContainerFunc(testOp.f, cts[x][testOp.x], cts[y][testOp.y])
-				exp := testOp.exp
+				t.Run(desc, func(t *testing.T) {
+					ret := runContainerFunc(testOp.f, cts[x][testOp.x], cts[y][testOp.y])
+					exp := testOp.exp
 
-				// Convert to all container types and check result.
-				for _, ct := range containerTypes {
-					if err := ret.BitwiseCompare(cts[ct][exp]); err != nil {
-						t.Errorf("test %s: %v", desc, err)
+					// Convert to all container types and check result.
+					for _, ct := range containerTypes {
+						if err := ret.BitwiseCompare(cts[ct][exp]); err != nil {
+							t.Error(err)
+						}
 					}
-				}
+				})
 			}
 		}
 	}

@@ -16,8 +16,6 @@ package roaring
 
 import (
 	"fmt"
-	"reflect"
-	"runtime"
 	"unsafe"
 )
 
@@ -123,9 +121,9 @@ func NewContainerBitmapN(bitmap []uint64, n int32) *Container {
 	}
 	// pad to required length
 	if len(bitmap) < bitmapN {
-		bm2 := make([]uint64, bitmapN)
-		copy(bm2, bitmap)
-		bitmap = bm2
+		var bm [bitmapN]uint64
+		copy(bm[:], bitmap)
+		bitmap = bm[:]
 	}
 	c := &Container{typeID: containerBitmap, n: n}
 	c.setBitmap(bitmap)
@@ -135,7 +133,7 @@ func NewContainerBitmapN(bitmap []uint64, n int32) *Container {
 // NewContainerArray returns an array container using the provided set of
 // values. It's okay if the slice is nil; that's a length of zero.
 func NewContainerArray(set []uint16) *Container {
-	c := &Container{typeID: containerArray, n: int32(len(set))}
+	c := &Container{typeID: containerArray}
 	c.setArray(set)
 	return c
 }
@@ -144,15 +142,17 @@ func NewContainerArray(set []uint16) *Container {
 // values. It's okay if the slice is nil; that's a length of zero. It copies
 // the provided slice to new storage.
 func NewContainerArrayCopy(set []uint16) *Container {
-	c := &Container{typeID: containerArray, n: int32(len(set))}
+	c := &Container{typeID: containerArray}
 	c.setArrayMaybeCopy(set, true)
 	return c
 }
 
 // NewContainerArrayN returns an array container using the specified
 // set of values, but overriding n.
+// This is deprecated. It never worked in the first place.
+// The provided value of n is ignored and instead derived from the set length.
 func NewContainerArrayN(set []uint16, n int32) *Container {
-	c := &Container{typeID: containerArray, n: n}
+	c := &Container{typeID: containerArray}
 	c.setArray(set)
 	return c
 }
@@ -287,7 +287,7 @@ func (c *Container) Thaw() *Container {
 
 func (c *Container) unmapOrClone() *Container {
 	if c.flags&flagFrozen != 0 {
-		// Caqn't modify this container, therefore, we have to make a
+		// Can't modify this container, therefore, we have to make a
 		// copy.
 		return c.Clone()
 	}
@@ -296,45 +296,44 @@ func (c *Container) unmapOrClone() *Container {
 	switch c.typeID {
 	case containerArray:
 		// mapped flag is wrong here
-		if c.pointer == (*uint16)(unsafe.Pointer(&c.data)) {
+		if c.pointer == &c.data[0] {
 			return c
 		}
 		// maybe it fits in storage
-		if c.len <= stashedArraySize {
-			copy(c.data[:stashedArraySize], c.array())
-			c.pointer, c.cap = (*uint16)(unsafe.Pointer(&c.data)), stashedArraySize
+		if c.len <= int32(len(c.data)) {
+			copy(c.data[:], c.array())
+			c.pointer, c.cap = &c.data[0], stashedArraySize
 			return c
 		}
-		array := c.array()
-		tmp := make([]uint16, c.len)
-		copy(tmp, array)
-		h := (*reflect.SliceHeader)(unsafe.Pointer(&tmp))
-		c.pointer, c.cap = (*uint16)(unsafe.Pointer(h.Data)), int32(h.Cap)
-		runtime.KeepAlive(&tmp)
+		arr := make([]uint16, c.len)
+		copy(arr, c.array())
+		if cap(arr) > 1<<16 {
+			arr = arr[: len(arr) : 1<<16]
+		}
+		c.pointer, c.cap = &arr[0], int32(cap(arr))
 	case containerRun:
 		// mapped flag is wrong here
-		if c.pointer == (*uint16)(unsafe.Pointer(&c.data)) {
+		if c.pointer == &c.data[0] {
 			return c
 		}
 		oldRuns := c.runs()
 		// maybe it fits in storage
 		if c.len <= stashedRunSize {
-			c.pointer, c.cap = (*uint16)(unsafe.Pointer(&c.data)), stashedRunSize
+			c.pointer, c.cap = &c.data[0], stashedRunSize
 			copy(c.runs(), oldRuns)
 			return c
 		}
-		tmp := make([]interval16, c.len)
-		copy(tmp, oldRuns)
-		h := (*reflect.SliceHeader)(unsafe.Pointer(&tmp))
-		c.pointer, c.cap = (*uint16)(unsafe.Pointer(h.Data)), int32(h.Cap)
-		runtime.KeepAlive(&tmp)
+		runs := make([]interval16, c.len)
+		copy(runs, oldRuns)
+		if cap(runs) > 1<<15 {
+			runs = runs[: len(runs) : 1<<15]
+		}
+		c.pointer, c.cap = &runs[0].start, int32(cap(runs))
 	case containerBitmap:
-		bitmap := c.bitmap()
-		tmp := make([]uint64, bitmapN)
-		copy(tmp, bitmap)
-		h := (*reflect.SliceHeader)(unsafe.Pointer(&tmp))
-		c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(h.Data)), bitmapN, bitmapN
-		runtime.KeepAlive(&tmp)
+		oldBitmap := c.bitmap()
+		var bitmap [1024]uint64
+		copy(bitmap[:], oldBitmap)
+		c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(&bitmap)), bitmapN, bitmapN
 	default:
 		panic(fmt.Sprintf("can't thaw invalid container, type %d", c.typeID))
 	}
@@ -351,7 +350,7 @@ func (c *Container) array() []uint16 {
 			panic("attempt to read non-array's array")
 		}
 	}
-	return *(*[]uint16)(unsafe.Pointer(&reflect.SliceHeader{Data: uintptr(unsafe.Pointer(c.pointer)), Len: int(c.len), Cap: int(c.cap)}))
+	return (*[1 << 16]uint16)(unsafe.Pointer(c.pointer))[:c.len:c.cap]
 }
 
 // setArrayMaybeCopy stores a set of uint16s as data. c must not be frozen.
@@ -366,36 +365,32 @@ func (c *Container) setArrayMaybeCopy(array []uint16, doCopy bool) {
 			panic("attempt to write non-array's array")
 		}
 	}
-	// no array: start with our default 5-value array
-	if array == nil {
-		c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(&c.data[0])), 0, stashedArraySize
-		c.n = c.len
-		return
-	}
-	h := (*reflect.SliceHeader)(unsafe.Pointer(&array))
-	if h.Data == uintptr(unsafe.Pointer(c.pointer)) {
-		// nothing to do but update length
-		c.len = int32(h.Len)
-		c.n = c.len
-		return
+	if len(array) > 1<<16 {
+		panic("impossibly large array")
 	}
 	// array we can fit in data store:
 	if len(array) <= stashedArraySize {
 		copy(c.data[:stashedArraySize], array)
-		c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(&c.data[0])), int32(len(array)), stashedArraySize
+		c.pointer, c.len, c.cap = &c.data[0], int32(len(array)), stashedArraySize
 		c.n = c.len
 		c.flags &^= flagMapped // this is no longer using a hypothetical mmapped input array
 		return
 	}
+	if &array[0] == c.pointer {
+		// nothing to do but update length
+		c.len = int32(len(array))
+		c.n = c.len
+		return
+	}
 	// copy the array
 	if doCopy {
-		a2 := make([]uint16, len(array))
-		copy(a2, array)
-		h = (*reflect.SliceHeader)(unsafe.Pointer(&a2))
+		array = append([]uint16(nil), array...)
 	}
-	c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(h.Data)), int32(h.Len), int32(h.Cap)
+	if cap(array) > 1<<16 {
+		array = array[: len(array) : 1<<16]
+	}
+	c.pointer, c.len, c.cap = &array[0], int32(len(array)), int32(cap(array))
 	c.n = c.len
-	runtime.KeepAlive(&array)
 }
 
 // setArrayMaybeCopy stores a set of uint16s as data. c must not be frozen.
@@ -413,7 +408,7 @@ func (c *Container) bitmap() []uint64 {
 			panic("attempt to read non-bitmap's bitmap")
 		}
 	}
-	return *(*[]uint64)(unsafe.Pointer(&reflect.SliceHeader{Data: uintptr(unsafe.Pointer(c.pointer)), Len: int(c.len), Cap: int(c.cap)}))
+	return (*[1024]uint64)(unsafe.Pointer(c.pointer))[:]
 }
 
 // AsBitmap yields a 65k-bit bitmap, storing it in the target if a target
@@ -448,16 +443,16 @@ func (c *Container) AsBitmap(target []uint64) (out []uint64) {
 		return out
 	}
 	// in theory this shouldn't happen?
-	return out
+	panic("unreachable")
 }
 
 // fillerBitmap is a bitmap full of filler.
 var fillerBitmap = func() (a [1024]uint64) {
-		for i := range a {
-			a[i] = ^uint64(0)
-		}
-		return a
-	}()
+	for i := range a {
+		a[i] = ^uint64(0)
+	}
+	return a
+}()
 
 func splatRun(into *[1024]uint64, from interval16) {
 	// Handle the case where the start and end fall within the same word.
@@ -498,9 +493,10 @@ func (c *Container) setBitmap(bitmap []uint64) {
 			panic("attempt to write non-bitmap's bitmap")
 		}
 	}
-	h := (*reflect.SliceHeader)(unsafe.Pointer(&bitmap))
-	c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(h.Data)), int32(h.Len), int32(h.Cap)
-	runtime.KeepAlive(&bitmap)
+	if len(bitmap) != 1024 {
+		panic("illegal bitmap length")
+	}
+	c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(&bitmap[0])), bitmapN, bitmapN
 }
 
 // runs yields the data viewed as a slice of intervals.
@@ -513,7 +509,7 @@ func (c *Container) runs() []interval16 {
 			panic("attempt to read non-run's runs")
 		}
 	}
-	return *(*[]interval16)(unsafe.Pointer(&reflect.SliceHeader{Data: uintptr(unsafe.Pointer(c.pointer)), Len: int(c.len), Cap: int(c.cap)}))
+	return (*[1 << 15]interval16)(unsafe.Pointer(c.pointer))[:c.len:c.cap]
 }
 
 // setRuns stores a set of intervals as data. c must not be frozen.
@@ -532,33 +528,29 @@ func (c *Container) setRunsMaybeCopy(runs []interval16, doCopy bool) {
 			panic("attempt to write non-run's runs")
 		}
 	}
-	// no array: start with our default 2-value array
-	if runs == nil {
-		c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(&c.data[0])), 0, stashedRunSize
-		return
+	if len(runs) > 1<<15 {
+		panic("impossibly large run set")
 	}
-	h := (*reflect.SliceHeader)(unsafe.Pointer(&runs))
-	if h.Data == uintptr(unsafe.Pointer(c.pointer)) {
-		// nothing to do but update length
-		c.len = int32(h.Len)
-		return
-	}
-
 	// array we can fit in data store:
 	if len(runs) <= stashedRunSize {
-		newRuns := *(*[]interval16)(unsafe.Pointer(&reflect.SliceHeader{Data: uintptr(unsafe.Pointer(&c.data[0])), Len: stashedRunSize, Cap: stashedRunSize}))
+		newRuns := (*[stashedRunSize]interval16)(unsafe.Pointer(&c.data))[:len(runs)]
 		copy(newRuns, runs)
-		c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(&c.data[0])), int32(len(runs)), stashedRunSize
+		c.pointer, c.len, c.cap = &c.data[0], int32(len(newRuns)), int32(cap(newRuns))
 		c.flags &^= flagMapped // this is no longer using a hypothetical mmapped input array
 		return
 	}
-	if doCopy {
-		r2 := make([]interval16, len(runs))
-		copy(r2, runs)
-		h = (*reflect.SliceHeader)(unsafe.Pointer(&r2))
+	if &runs[0].start == c.pointer {
+		// nothing to do but update length
+		c.len = int32(len(runs))
+		return
 	}
-	c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(h.Data)), int32(h.Len), int32(h.Cap)
-	runtime.KeepAlive(&runs)
+	if doCopy {
+		runs = append([]interval16(nil), runs...)
+	}
+	if cap(runs) > 1<<15 {
+		runs = runs[: len(runs) : 1<<15]
+	}
+	c.pointer, c.len, c.cap = &runs[0].start, int32(len(runs)), int32(cap(runs))
 }
 
 // UpdateOrMake updates the container, yielding a new container if necessary.
@@ -585,9 +577,9 @@ func (c *Container) UpdateOrMake(typ byte, n int32, mapped bool) *Container {
 	// we don't know that any existing slice is usable, so let's ditch it
 	switch c.typeID {
 	case containerArray:
-		c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(&c.data[0])), int32(0), stashedArraySize
+		c.pointer, c.len, c.cap = &c.data[0], 0, stashedArraySize
 	case containerRun:
-		c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(&c.data[0])), 0, stashedRunSize
+		c.pointer, c.len, c.cap = &c.data[0], 0, stashedRunSize
 	default:
 		c.pointer, c.len, c.cap = nil, 0, 0
 	}
@@ -608,9 +600,9 @@ func (c *Container) Update(typ byte, n int32, mapped bool) {
 	// we don't know that any existing slice is usable, so let's ditch it
 	switch c.typeID {
 	case containerArray:
-		c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(&c.data[0])), int32(0), stashedArraySize
+		c.pointer, c.len, c.cap = nil, 0, 0
 	case containerRun:
-		c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(&c.data[0])), 0, stashedRunSize
+		c.pointer, c.len, c.cap = nil, 0, 0
 	default:
 		c.pointer, c.len, c.cap = nil, 0, 0
 	}
