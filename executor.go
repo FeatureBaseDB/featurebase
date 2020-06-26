@@ -2427,16 +2427,9 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 	if err != nil {
 		return nil, errors.New("Row() argument required: field")
 	}
-	f := e.Holder.Field(index, fieldName)
+	f := idx.Field(fieldName)
 	if f == nil {
 		return nil, ErrFieldNotFound
-	}
-
-	rowID, rowOK, rowErr := c.UintArg(fieldName)
-	if rowErr != nil {
-		return nil, fmt.Errorf("Row() error with arg for row: %v", rowErr)
-	} else if !rowOK {
-		return nil, fmt.Errorf("Row() must specify %v", rowLabel)
 	}
 
 	// Parse "from" time, if set.
@@ -2455,8 +2448,33 @@ func (e *executor) executeRowShard(ctx context.Context, index string, c *pql.Cal
 		}
 	}
 
+	timeNotSet := fromTime.IsZero() && toTime.IsZero()
+
+	// This is workaround to support pql.ASSIGN ('=') as condition ('==') for int and decimal fields
+	if c.Name == "Row" && timeNotSet &&
+		(f.Type() == FieldTypeInt || f.Type() == FieldTypeDecimal) {
+		// re-write args as conditions for fieldName
+		for k, v := range c.Args {
+			if _, ok := v.(*pql.Condition); k == fieldName && !ok {
+				c.Args[k] = &pql.Condition{
+					Op:    pql.EQ,
+					Value: v,
+				}
+
+				return e.executeRowBSIGroupShard(ctx, index, c, shard)
+			}
+		}
+	}
+
+	rowID, rowOK, rowErr := c.UintArg(fieldName)
+	if rowErr != nil {
+		return nil, fmt.Errorf("Row() error with arg for row: %v", rowErr)
+	} else if !rowOK {
+		return nil, fmt.Errorf("Row() must specify %v", rowLabel)
+	}
+
 	// Simply return row if times are not set.
-	if c.Name == "Row" && fromTime.IsZero() && toTime.IsZero() {
+	if c.Name == "Row" && timeNotSet {
 		frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
 		if frag == nil {
 			return NewRow(), nil

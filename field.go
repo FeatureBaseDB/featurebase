@@ -1376,37 +1376,6 @@ func (f *Field) StringValue(columnID uint64) (value string, exists bool, err err
 	return value, exists, err
 }
 
-// FloatValue reads an integer field value for a column, and converts
-// it to a float based on the configured scale.
-func (f *Field) FloatValue(columnID uint64) (value float64, exists bool, err error) {
-	bsig := f.bsiGroup(f.name)
-	if bsig == nil {
-		return 0, false, ErrBSIGroupNotFound
-	}
-
-	val, exists, err := f.Value(columnID)
-	if exists {
-		value = float64(val) / math.Pow10(int(bsig.Scale))
-	}
-	return value, exists, err
-}
-
-// DecimalValue reads a decimal field value for a column, and converts
-// it to a pql.Decimal based on the configured scale.
-func (f *Field) DecimalValue(columnID uint64) (value pql.Decimal, exists bool, err error) {
-	bsig := f.bsiGroup(f.name)
-	if bsig == nil {
-		return value, false, ErrBSIGroupNotFound
-	}
-
-	val, exists, err := f.Value(columnID)
-	if exists {
-		value.Value = val
-		value.Scale = bsig.Scale
-	}
-	return value, exists, err
-}
-
 // Value reads a field value for a column.
 func (f *Field) Value(columnID uint64) (value int64, exists bool, err error) {
 	bsig := f.bsiGroup(f.name)
@@ -1427,18 +1396,6 @@ func (f *Field) Value(columnID uint64) (value int64, exists bool, err error) {
 		return 0, false, nil
 	}
 	return int64(v) + bsig.Base, true, nil
-}
-
-// SetFloatValue takes a floating point value, and converts it to an
-// integer based on the field's configured scale, before setting that
-// integer via SetValue.
-func (f *Field) SetFloatValue(columnID uint64, value float64) (changed bool, err error) {
-	bsig := f.bsiGroup(f.name)
-	if bsig == nil {
-		return false, ErrBSIGroupNotFound
-	}
-	val := int64(float64(value) * math.Pow10(int(bsig.Scale)))
-	return f.SetValue(columnID, val)
 }
 
 // SetValue sets a field value for a column.
@@ -1504,98 +1461,6 @@ func (f *Field) ClearValue(columnID uint64) (changed bool, err error) {
 		return view.clearValue(columnID, bsig.BitDepth, value)
 	}
 	return false, nil
-}
-
-// FloatSum performs a Sum query and converts the result to a float
-// based on the field's configured scale.
-func (f *Field) FloatSum(filter *Row, name string) (sum float64, count int64, err error) {
-	bsig := f.bsiGroup(f.name)
-	if bsig == nil {
-		return 0, 0, ErrBSIGroupNotFound
-	}
-
-	sumI, count, err := f.Sum(filter, name)
-	if err == nil {
-		sum = float64(sumI) / math.Pow10(int(bsig.Scale))
-	}
-	return sum, count, err
-
-}
-
-// Sum returns the sum and count for a field.
-// An optional filtering row can be provided.
-func (f *Field) Sum(filter *Row, name string) (sum, count int64, err error) {
-	bsig := f.bsiGroup(name)
-	if bsig == nil {
-		return 0, 0, ErrBSIGroupNotFound
-	}
-
-	view := f.view(viewBSIGroupPrefix + name)
-	if view == nil {
-		return 0, 0, nil
-	}
-
-	vsum, vcount, err := view.sum(filter, bsig.BitDepth)
-	if err != nil {
-		return 0, 0, err
-	}
-	return int64(vsum) + (int64(vcount) * bsig.Base), int64(vcount), nil
-}
-
-// FloatMin performs a Min query and converts the result to a float
-// based on the field's configured scale.
-// TODO: this and Min are probably worthless
-func (f *Field) FloatMin(filter *Row, name string) (min float64, count int64, err error) {
-	bsig := f.bsiGroup(f.name)
-	if bsig == nil {
-		return 0, 0, ErrBSIGroupNotFound
-	}
-
-	minI, count, err := f.Min(filter, name)
-	if err == nil {
-		min = float64(minI) / math.Pow10(int(bsig.Scale))
-	}
-	return min, count, err
-}
-
-// Min returns the min for a field.
-// An optional filtering row can be provided.
-func (f *Field) Min(filter *Row, name string) (min, count int64, err error) {
-	bsig := f.bsiGroup(name)
-	if bsig == nil {
-		return 0, 0, ErrBSIGroupNotFound
-	}
-
-	view := f.view(viewBSIGroupPrefix + name)
-	if view == nil {
-		return 0, 0, nil
-	}
-
-	vmin, vcount, err := view.min(filter, bsig.BitDepth)
-	if err != nil {
-		return 0, 0, err
-	}
-	return int64(vmin) + bsig.Base, int64(vcount), nil
-}
-
-// FloatMax performs a max query and converts the result to a float
-// based on the field's configured scale.
-//
-// TODO, this isn't really used, because it's kind of useless. It will
-// only get the max among shards on this node, but all query execution
-// already happens at the shard level and bypasses this entirely
-// calling fragment.max instead.
-func (f *Field) FloatMax(filter *Row, name string) (max float64, count int64, err error) {
-	bsig := f.bsiGroup(f.name)
-	if bsig == nil {
-		return 0, 0, ErrBSIGroupNotFound
-	}
-
-	maxI, count, err := f.Max(filter, name)
-	if err == nil {
-		max = float64(maxI) / math.Pow10(int(bsig.Scale))
-	}
-	return max, count, err
 }
 
 func (f *Field) MaxForShard(shard uint64, filter *Row) (ValCount, error) {
@@ -1665,26 +1530,6 @@ func (f *Field) MinForShard(shard uint64, filter *Row) (ValCount, error) {
 	}
 
 	return valCount, nil
-}
-
-// Max returns the max for a field.
-// An optional filtering row can be provided.
-func (f *Field) Max(filter *Row, name string) (max, count int64, err error) {
-	bsig := f.bsiGroup(name)
-	if bsig == nil {
-		return 0, 0, ErrBSIGroupNotFound
-	}
-
-	view := f.view(viewBSIGroupPrefix + name)
-	if view == nil {
-		return 0, 0, nil
-	}
-
-	vmax, vcount, err := view.max(filter, bsig.BitDepth)
-	if err != nil {
-		return 0, 0, err
-	}
-	return int64(vmax) + bsig.Base, int64(vcount), nil
 }
 
 // Range performs a conditional operation on Field.

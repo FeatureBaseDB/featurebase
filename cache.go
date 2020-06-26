@@ -121,7 +121,8 @@ func (c *lruCache) Top() []bitmapPair {
 			Count: n,
 		})
 	}
-	sort.Sort(bitmapPairs(a))
+	pairs := bitmapPairs(a)
+	sort.Sort(&pairs)
 	return a
 }
 
@@ -137,9 +138,10 @@ var _ cache = &lruCache{}
 
 // rankCache represents a cache with sorted entries.
 type rankCache struct {
-	mu       sync.Mutex
-	entries  map[uint64]uint64
-	rankings []bitmapPair // cached, ordered list
+	mu           sync.Mutex
+	entries      map[uint64]uint64
+	rankings     bitmapPairs // cached, ordered list
+	rankingsRead bool
 
 	updateN    int
 	updateTime time.Time
@@ -214,12 +216,15 @@ func (c *rankCache) Len() int {
 func (c *rankCache) IDs() []uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	a := make([]uint64, 0, len(c.entries))
-	for id := range c.entries {
-		a = append(a, id)
+	if len(c.entries) == 0 {
+		return nil
 	}
-	sort.Sort(uint64Slice(a))
-	return a
+	ids := make([]uint64, 0, len(c.entries))
+	for id := range c.entries {
+		ids = append(ids, id)
+	}
+	sort.Sort(uint64Slice(ids))
+	return ids
 }
 
 // Invalidate recalculates the entries by rank.
@@ -248,18 +253,26 @@ func (c *rankCache) invalidate() {
 }
 
 func (c *rankCache) recalculate() {
+	if c.rankingsRead {
+		c.rankings = nil
+		c.rankingsRead = false
+	}
+
 	// Convert cache to a sorted list.
-	rankings := make([]bitmapPair, 0, len(c.entries))
+	rankings := c.rankings[:0]
+	if cap(rankings) < len(c.entries) {
+		rankings = make([]bitmapPair, 0, len(c.entries))
+	}
 	for id, cnt := range c.entries {
 		rankings = append(rankings, bitmapPair{
 			ID:    id,
 			Count: cnt,
 		})
 	}
-	sort.Sort(bitmapPairs(rankings))
+	c.rankings = rankings
+	sort.Sort(&c.rankings)
 
 	// Store the count of the item at the threshold index.
-	c.rankings = rankings
 	length := len(c.rankings)
 	c.stats.Gauge(MetricRankCacheLength, float64(length), 1.0)
 
@@ -290,7 +303,13 @@ func (c *rankCache) SetStats(s stats.StatsClient) {
 }
 
 // Top returns an ordered list of pairs.
-func (c *rankCache) Top() []bitmapPair { return c.rankings }
+func (c *rankCache) Top() []bitmapPair {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.rankingsRead = true
+	return c.rankings
+}
 
 // WriteTo writes the cache to w.
 func (c *rankCache) WriteTo(w io.Writer) (n int64, err error) {
@@ -314,9 +333,9 @@ type bitmapPair struct {
 // bitmapPairs is a sortable list of BitmapPair objects.
 type bitmapPairs []bitmapPair
 
-func (p bitmapPairs) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
-func (p bitmapPairs) Len() int           { return len(p) }
-func (p bitmapPairs) Less(i, j int) bool { return p[i].Count > p[j].Count }
+func (p *bitmapPairs) Swap(i, j int)      { (*p)[i], (*p)[j] = (*p)[j], (*p)[i] }
+func (p *bitmapPairs) Len() int           { return len(*p) }
+func (p *bitmapPairs) Less(i, j int) bool { return (*p)[i].Count > (*p)[j].Count }
 
 // Pair holds an id/count pair.
 type Pair struct {
