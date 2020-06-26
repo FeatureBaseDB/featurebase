@@ -1,7 +1,6 @@
 .PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build test
 
 CLONE_URL=github.com/pilosa/pilosa
-TAG := $(shell git describe --abbrev=0 --tags 2> /dev/null || echo unknown)
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
 VARIANT = Molecula
 VERSION_ID = $(VERSION)-$(GOOS)-$(GOARCH)
@@ -10,7 +9,7 @@ BRANCH_ID := $(BRANCH)-$(GOOS)-$(GOARCH)
 BUILD_TIME := $(shell date -u +%FT%T%z)
 SHARD_WIDTH = 20
 COMMIT := $(shell git describe --exact-match >/dev/null 2>&1 || git rev-parse --short HEAD)
-LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(TAG) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Variant=$(VARIANT) -X github.com/pilosa/pilosa/v2.Commit=$(COMMIT)"
+LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(VERSION) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Variant=$(VARIANT) -X github.com/pilosa/pilosa/v2.Commit=$(COMMIT)"
 GO_VERSION=latest
 RELEASE ?= 0
 RELEASE_ENABLED = $(subst 0,,$(RELEASE))
