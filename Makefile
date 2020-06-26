@@ -1,20 +1,19 @@
 .PHONY: build check-clean clean cover cover-viz default docker docker-build docker-test docker-tag-push generate generate-protoc generate-pql gometalinter install install-build-deps install-golangci-lint install-gometalinter install-protoc install-protoc-gen-gofast install-peg prerelease prerelease-upload release release-build test
 
 CLONE_URL=github.com/pilosa/pilosa
-VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
-VERSION_ID = $(if $(ENTERPRISE_ENABLED),enterprise-)$(VERSION)-$(GOOS)-$(GOARCH)
+VERSION := $(shell git describe --abbrev=0 --tags 2> /dev/null || echo unknown)
+VARIANT = Molecula
+VERSION_ID = $(if $(VARIANT),$(shell echo $(VARIANT) | tr A-Z a-z)-)$(VERSION)-$(GOOS)-$(GOARCH)
 BRANCH := $(if $(TRAVIS_BRANCH),$(TRAVIS_BRANCH),$(if $(CIRCLE_BRANCH),$(CIRCLE_BRANCH),$(shell git rev-parse --abbrev-ref HEAD)))
 BRANCH_ID := $(BRANCH)-$(GOOS)-$(GOARCH)
 BUILD_TIME := $(shell date -u +%FT%T%z)
 SHARD_WIDTH = 20
-LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(VERSION) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Enterprise=$(if $(ENTERPRISE_ENABLED),1)"
+COMMIT := $(shell git describe --exact-match >/dev/null 2>&1 || git rev-parse --short HEAD)
+LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(VERSION) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Variant=$(VARIANT) -X github.com/pilosa/pilosa/v2.Commit=$(COMMIT)"
 GO_VERSION=latest
-ENTERPRISE ?= 0
-ENTERPRISE_ENABLED = $(subst 0,,$(ENTERPRISE))
 RELEASE ?= 0
 RELEASE_ENABLED = $(subst 0,,$(RELEASE))
 NOCHECKPTR=$(shell go version | grep -q 'go1.1[4,5,6,7]' && echo \"-gcflags=all=-d=checkptr=0\" )
-BUILD_TAGS += $(if $(ENTERPRISE_ENABLED),enterprise)
 BUILD_TAGS += $(if $(RELEASE_ENABLED),release)
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
 BUILD_TAGS += $(foreach p,$(PLUGINS),plugin$(p))
@@ -66,8 +65,7 @@ build:
 # Create a single release build under the build directory
 release-build:
 	$(MAKE) $(if $(DOCKER_BUILD),docker-)build FLAGS="-o build/pilosa-$(VERSION_ID)/pilosa" RELEASE=1
-	cp NOTICE README.md build/pilosa-$(VERSION_ID)
-	$(if $(ENTERPRISE_ENABLED),cp enterprise/COPYING build/pilosa-$(VERSION_ID),cp LICENSE build/pilosa-$(VERSION_ID))
+	cp NOTICE README.md LICENSE build/pilosa-$(VERSION_ID)
 	tar -cvz -C build -f build/pilosa-$(VERSION_ID).tar.gz pilosa-$(VERSION_ID)/
 	@echo Created release build: build/pilosa-$(VERSION_ID).tar.gz
 
