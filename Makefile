@@ -2,19 +2,18 @@
 
 CLONE_URL=github.com/pilosa/pilosa
 VERSION := $(shell git describe --tags 2> /dev/null || echo unknown)
-VERSION_ID = $(if $(ENTERPRISE_ENABLED),enterprise-)$(VERSION)-$(GOOS)-$(GOARCH)
+VARIANT = Molecula
+VERSION_ID = $(VERSION)-$(GOOS)-$(GOARCH)
 BRANCH := $(if $(TRAVIS_BRANCH),$(TRAVIS_BRANCH),$(if $(CIRCLE_BRANCH),$(CIRCLE_BRANCH),$(shell git rev-parse --abbrev-ref HEAD)))
 BRANCH_ID := $(BRANCH)-$(GOOS)-$(GOARCH)
 BUILD_TIME := $(shell date -u +%FT%T%z)
 SHARD_WIDTH = 20
-LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(VERSION) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Enterprise=$(if $(ENTERPRISE_ENABLED),1)"
+COMMIT := $(shell git describe --exact-match >/dev/null 2>&1 || git rev-parse --short HEAD)
+LDFLAGS="-X github.com/pilosa/pilosa/v2.Version=$(VERSION) -X github.com/pilosa/pilosa/v2.BuildTime=$(BUILD_TIME) -X github.com/pilosa/pilosa/v2.Variant=$(VARIANT) -X github.com/pilosa/pilosa/v2.Commit=$(COMMIT)"
 GO_VERSION=latest
-ENTERPRISE ?= 0
-ENTERPRISE_ENABLED = $(subst 0,,$(ENTERPRISE))
 RELEASE ?= 0
 RELEASE_ENABLED = $(subst 0,,$(RELEASE))
 NOCHECKPTR=$(shell go version | grep -q 'go1.1[4,5,6,7]' && echo \"-gcflags=all=-d=checkptr=0\" )
-BUILD_TAGS += $(if $(ENTERPRISE_ENABLED),enterprise)
 BUILD_TAGS += $(if $(RELEASE_ENABLED),release)
 BUILD_TAGS += shardwidth$(SHARD_WIDTH)
 BUILD_TAGS += $(foreach p,$(PLUGINS),plugin$(p))
@@ -66,8 +65,7 @@ build:
 # Create a single release build under the build directory
 release-build:
 	$(MAKE) $(if $(DOCKER_BUILD),docker-)build FLAGS="-o build/pilosa-$(VERSION_ID)/pilosa" RELEASE=1
-	cp NOTICE README.md build/pilosa-$(VERSION_ID)
-	$(if $(ENTERPRISE_ENABLED),cp enterprise/COPYING build/pilosa-$(VERSION_ID),cp LICENSE build/pilosa-$(VERSION_ID))
+	cp NOTICE README.md LICENSE build/pilosa-$(VERSION_ID)
 	tar -cvz -C build -f build/pilosa-$(VERSION_ID).tar.gz pilosa-$(VERSION_ID)/
 	@echo Created release build: build/pilosa-$(VERSION_ID).tar.gz
 
@@ -80,11 +78,8 @@ endif
 # Create release build tarballs for all supported platforms. Linux compilation happens under Docker.
 release: check-clean
 	$(MAKE) release-build GOOS=darwin GOARCH=amd64
-	$(MAKE) release-build GOOS=darwin GOARCH=amd64 ENTERPRISE=1
 	$(MAKE) release-build GOOS=linux GOARCH=amd64
-	$(MAKE) release-build GOOS=linux GOARCH=amd64 ENTERPRISE=1
 	$(MAKE) release-build GOOS=linux GOARCH=386
-	$(MAKE) release-build GOOS=linux GOARCH=386 ENTERPRISE=1
 
 
 # try (e.g.) internal/clustertests/docker-compose-replication2.yml
@@ -145,11 +140,6 @@ docker-tag-push: vendor
 	docker tag "pilosa:$(VERSION)" $(DOCKER_TARGET)
 	docker push $(DOCKER_TARGET)
 	@echo Pushed docker image: $(DOCKER_TARGET)
-
-# Create Docker image from Dockerfile (enterprise)
-docker-enterprise: vendor
-	docker build --build-arg MAKE_FLAGS="ENTERPRISE=1" -t "pilosa-enterprise:$(VERSION)" .
-	@echo Created docker image: pilosa-enterprise:$(VERSION)
 
 # Compile Pilosa inside Docker container
 docker-build:

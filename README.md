@@ -63,13 +63,12 @@ There are supported libraries for the following languages:
 - [Java](https://www.pilosa.com/docs/client-libraries/#java)
 - [Python](https://www.pilosa.com/docs/client-libraries/#python)
 
-## Licenses
+## License
 
-The core Pilosa code base and all default builds (referred to as Pilosa Community Edition) are licensed completely under the Apache License, Version 2.0.
-If you build Pilosa with the `enterprise` build tag (Pilosa Enterprise Edition), then that build will include features licensed under the GNU Affero General
-Public License (AGPL). Enterprise code is located entirely in the [github.com/pilosa/pilosa/enterprise](https://github.com/pilosa/pilosa/tree/master/enterprise)
-directory. See [github.com/pilosa/pilosa/NOTICE](https://github.com/pilosa/pilosa/blob/master/NOTICE) and
-[github.com/pilosa/pilosa/LICENSE](https://github.com/pilosa/pilosa/blob/master/LICENSE) for more information about Pilosa licenses.
+Pilosa is licensed under the Apache License, Version 2.0.
+
+A copy of the license is located in [github.com/pilosa/pilosa/LICENSE](https://github.com/pilosa/pilosa/blob/master/LICENSE).
+More details about licensing are found in [github.com/pilosa/pilosa/NOTICE](https://github.com/pilosa/pilosa/blob/master/NOTICE).
 
 ## Get Support
 
