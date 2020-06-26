@@ -79,11 +79,8 @@ endif
 # Create release build tarballs for all supported platforms. Linux compilation happens under Docker.
 release: check-clean
 	$(MAKE) release-build GOOS=darwin GOARCH=amd64
-	$(MAKE) release-build GOOS=darwin GOARCH=amd64 ENTERPRISE=1
 	$(MAKE) release-build GOOS=linux GOARCH=amd64
-	$(MAKE) release-build GOOS=linux GOARCH=amd64 ENTERPRISE=1
 	$(MAKE) release-build GOOS=linux GOARCH=386
-	$(MAKE) release-build GOOS=linux GOARCH=386 ENTERPRISE=1
 
 
 # try (e.g.) internal/clustertests/docker-compose-replication2.yml
@@ -144,11 +141,6 @@ docker-tag-push: vendor
 	docker tag "pilosa:$(VERSION)" $(DOCKER_TARGET)
 	docker push $(DOCKER_TARGET)
 	@echo Pushed docker image: $(DOCKER_TARGET)
-
-# Create Docker image from Dockerfile (enterprise)
-docker-enterprise: vendor
-	docker build --build-arg MAKE_FLAGS="ENTERPRISE=1" -t "pilosa-enterprise:$(VERSION)" .
-	@echo Created docker image: pilosa-enterprise:$(VERSION)
 
 # Compile Pilosa inside Docker container
 docker-build:

@@ -4,7 +4,6 @@
 ./internal/private.pb.go
 ./internal/public.pb.go
 ./lru/lru.go
-./enterprise/enterprise.go
 ./roaring/btree.go
 ./roaring/btree_test.go
 ./proto/pilosa.pb.go
