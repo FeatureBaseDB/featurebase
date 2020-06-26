@@ -1647,7 +1647,8 @@ func (f *fragment) topBitmapPairs(rowIDs []uint64) []bitmapPair {
 			})
 		}
 	}
-	sort.Sort(bitmapPairs(pairs))
+	sortPairs := bitmapPairs(pairs)
+	sort.Sort(&sortPairs)
 	return pairs
 }
 
