@@ -1660,7 +1660,6 @@ func (h *Holder) Process(ctx context.Context, op HolderOperator) (err error) {
 	var fragNums []uint64
 
 	h.mu.Lock()
-	indexNames = indexNames[:0]
 	for indexName := range h.indexes {
 		indexNames = append(indexNames, indexName)
 	}
