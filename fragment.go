@@ -106,6 +106,10 @@ type fragment struct {
 	field string
 	view  string
 	shard uint64
+
+	// parent holder, used to find snapshot queue, etc.
+	holder *Holder
+
 	// debugging tool: addresses of current and previous maps
 	prevdata, currdata struct{ from, to uintptr }
 
@@ -120,6 +124,7 @@ type fragment struct {
 	snapshotCond    sync.Cond
 	snapshotErr     error     // error yielded by the last snapshot operation
 	snapshotStamp   time.Time // timestamp of last snapshot
+	open            bool      // is this fragment actually open?
 
 	// Cache for row counts.
 	CacheType string // passed in by field
@@ -153,11 +158,11 @@ type fragment struct {
 
 	stats stats.StatsClient
 
-	snapshotQueue snapshotQueue
+	bitmapInfo *roaring.BitmapInfo
 }
 
 // newFragment returns a new instance of Fragment.
-func newFragment(path, index, field, view string, shard uint64, flags byte) *fragment {
+func newFragment(holder *Holder, path, index, field, view string, shard uint64, flags byte) *fragment {
 	f := &fragment{
 		path:      path,
 		index:     index,
@@ -168,11 +173,10 @@ func newFragment(path, index, field, view string, shard uint64, flags byte) *fra
 		CacheType: DefaultCacheType,
 		CacheSize: DefaultCacheSize,
 
-		Logger: logger.NopLogger,
+		holder: holder,
 		MaxOpN: defaultFragmentMaxOpN,
 
-		stats:         stats.NopStatsClient,
-		snapshotQueue: defaultSnapshotQueue,
+		stats: stats.NopStatsClient,
 	}
 	f.snapshotCond = sync.Cond{L: &f.mu}
 	return f
@@ -181,6 +185,23 @@ func newFragment(path, index, field, view string, shard uint64, flags byte) *fra
 // cachePath returns the path to the fragment's cache data.
 func (f *fragment) cachePath() string { return f.path + cacheExt }
 
+type FragmentInfo struct {
+	BitmapInfo     roaring.BitmapInfo
+	BlockChecksums []FragmentBlock `json:"BlockChecksums,omitempty"`
+}
+
+func (f *fragment) inspect(params InspectRequestParams) (fi FragmentInfo) {
+	if f.bitmapInfo == nil {
+		fi.BitmapInfo = f.storage.Info(params.Containers)
+	} else {
+		fi.BitmapInfo = *f.bitmapInfo
+	}
+	if params.Checksum {
+		fi.BlockChecksums = f.Blocks()
+	}
+	return fi
+}
+
 // Open opens the underlying storage.
 func (f *fragment) Open() error {
 	f.mu.Lock()
@@ -188,13 +209,13 @@ func (f *fragment) Open() error {
 
 	if err := func() error {
 		// Initialize storage in a function so we can close if anything goes wrong.
-		f.Logger.Debugf("open storage for index/field/view/fragment: %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
+		f.holder.Logger.Debugf("open storage for index/field/view/fragment: %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 		if err := f.openStorage(true); err != nil {
 			return errors.Wrap(err, "opening storage")
 		}
 
 		// Fill cache with rows persisted to disk.
-		f.Logger.Debugf("open cache for index/field/view/fragment: %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
+		f.holder.Logger.Debugf("open cache for index/field/view/fragment: %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 		if err := f.openCache(); err != nil {
 			e2 := f.closeStorage()
 			if e2 != nil {
@@ -213,8 +234,9 @@ func (f *fragment) Open() error {
 		f.close()
 		return err
 	}
+	f.open = true
 
-	f.Logger.Debugf("successfully opened index/field/view/fragment: %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
+	f.holder.Logger.Debugf("successfully opened index/field/view/fragment: %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	return nil
 }
 
@@ -222,6 +244,9 @@ func (f *fragment) Open() error {
 // get no data. It tries to write the current storage to the provided file,
 // which is assumed to be the file they didn't get any data from.
 func (f *fragment) emptyStorage(file *os.File) (bool, error) {
+	if f.holder.Opts.ReadOnly {
+		return false, errors.New("can't flush/create storage for read-only holder")
+	}
 	// No data. We'll mark this for no mapping, clear any existing
 	// mapped containers, and set the Source to nil. We also have no
 	// ops.
@@ -273,9 +298,12 @@ func (f *fragment) importStorage(data []byte, file *os.File, newGen generation, 
 			}
 			return false, fmt.Errorf("unmarshal storage: file=%s, err=%s", file.Name(), err)
 		}
-		f.Logger.Printf("warning: unmarshal storage, file=%s, err=%v", file.Name(), err)
+		f.holder.Logger.Printf("warning: unmarshal storage, file=%s, err=%v", file.Name(), err)
 		trunc, ok := cause.(roaring.FileShouldBeTruncatedError)
-		if ok {
+		if ok && !f.holder.Opts.ReadOnly {
+			// if the holder is ReadOnly, we silently ignore the "advisory"
+			// error. This may be a bad idea.
+
 			// generation code looks for a FileShouldBeTruncatedError
 			return false, trunc
 		}
@@ -299,7 +327,7 @@ func (f *fragment) applyStorage(data []byte, file *os.File, newGen generation, m
 		if file != nil {
 			fi, err := file.Stat()
 			if err != nil {
-				f.Logger.Printf("trying to apply new storage to existing bitmap, stat failed: %v", err)
+				f.holder.Logger.Printf("trying to apply new storage to existing bitmap, stat failed: %v", err)
 			}
 			if err == nil && fi != nil && fi.Size() == 0 {
 				return f.emptyStorage(file)
@@ -335,6 +363,12 @@ func (f *fragment) applyStorage(data []byte, file *os.File, newGen generation, m
 	return mapped, err
 }
 
+func (f *fragment) inspectStorage(data []byte, file *os.File, newGen generation, mapped bool) (didMap bool, err error) {
+	f.bitmapInfo = &roaring.BitmapInfo{}
+	f.storage, didMap, err = roaring.InspectBinary(data, mapped, f.bitmapInfo)
+	return didMap, err
+}
+
 // openStorage opens the storage bitmap.
 //
 // This has been massively reworked recently, and now hands a lot of
@@ -353,13 +387,20 @@ func (f *fragment) openStorage(unmarshalData bool) error {
 	}
 	f.rowCache = &simpleCache{make(map[uint64]*Row)}
 	var storageOp func([]byte, *os.File, generation, bool) (bool, error)
-	if unmarshalData {
-		storageOp = f.importStorage
+	if f.holder.Opts.Inspect {
+		// note that this will unmarshal even if we already have
+		// storage; when Inspect is on for a holder, we actually want
+		// to be able to report this.
+		storageOp = f.inspectStorage
 	} else {
-		storageOp = f.applyStorage
+		if unmarshalData {
+			storageOp = f.importStorage
+		} else {
+			storageOp = f.applyStorage
+		}
 	}
 	var err error
-	f.gen, err = newGeneration(f.gen, f.path, unmarshalData, storageOp, f.Logger)
+	f.gen, err = newGeneration(f.gen, f.path, unmarshalData, storageOp, f.holder.Logger)
 	if f.gen != nil {
 		scratchData := f.gen.Bytes()
 		f.prevdata = f.currdata
@@ -407,7 +448,7 @@ func (f *fragment) openCache() error {
 	// Unmarshal cache data.
 	var pb internal.Cache
 	if err := proto.Unmarshal(buf, &pb); err != nil {
-		f.Logger.Printf("error unmarshaling cache data, skipping: path=%s, err=%s", path, err)
+		f.holder.Logger.Printf("error unmarshaling cache data, skipping: path=%s, err=%s", path, err)
 		return nil
 	}
 
@@ -429,19 +470,22 @@ func (f *fragment) Close() error {
 	for f.snapshotPending {
 		f.snapshotCond.Wait()
 	}
+	// Note: snapshots won't progress on a closed fragment, so we
+	// wait until after a possible pending snapshot to close.
+	f.open = false
 	return f.close()
 }
 
 func (f *fragment) close() error {
 	// Flush cache if closing gracefully.
 	if err := f.flushCache(); err != nil {
-		f.Logger.Printf("fragment: error flushing cache on close: err=%s, path=%s", err, f.path)
+		f.holder.Logger.Printf("fragment: error flushing cache on close: err=%s, path=%s", err, f.path)
 		return errors.Wrap(err, "flushing cache")
 	}
 
 	// Close underlying storage.
 	if err := f.closeStorage(); err != nil {
-		f.Logger.Printf("fragment: error closing storage: err=%s, path=%s", err, f.path)
+		f.holder.Logger.Printf("fragment: error closing storage: err=%s, path=%s", err, f.path)
 		return errors.Wrap(err, "closing storage")
 	}
 
@@ -688,7 +732,8 @@ func (f *fragment) unprotectedSetRow(row *Row, rowID uint64) (changed bool, err 
 	f.rowCache.Add(rowID, nil)
 
 	// Snapshot storage.
-	f.snapshotQueue.Enqueue(f)
+	f.holder.SnapshotQueue.Enqueue(f)
+	f.stats.Count("setRow", 1, 1.0)
 
 	return changed, nil
 }
@@ -728,7 +773,7 @@ func (f *fragment) unprotectedClearRow(rowID uint64) (changed bool, err error) {
 	f.rowCache.Add(rowID, nil)
 
 	// Snapshot storage.
-	f.snapshotQueue.Enqueue(f)
+	f.holder.SnapshotQueue.Enqueue(f)
 
 	return changed, nil
 }
@@ -2006,11 +2051,11 @@ func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct
 		// we got an error. it's possible that the error indicates that something went wrong.
 		mappedIn, mappedOut, unmappedIn, errs, e2 := f.storage.SanityCheckMapping(f.currdata.from, f.currdata.to)
 		if errs != 0 {
-			f.Logger.Printf("transaction failed on %s. storage has %d mapped in range, %d mapped out of range, %d unmapped in range, %d errors total, last %v",
+			f.holder.Logger.Printf("transaction failed on %s. storage has %d mapped in range, %d mapped out of range, %d unmapped in range, %d errors total, last %v",
 				f.path, mappedIn, mappedOut, unmappedIn, errs, e2)
 			if f.prevdata.from != f.currdata.from {
 				mappedIn, mappedOut, unmappedIn, errs, e2 = f.storage.SanityCheckMapping(f.prevdata.from, f.prevdata.to)
-				f.Logger.Printf("with previous map, storage would have %d mapped in range, %d mapped out of range, %d unmapped in range, %d errors total, last %v",
+				f.holder.Logger.Printf("with previous map, storage would have %d mapped in range, %d mapped out of range, %d unmapped in range, %d errors total, last %v",
 					mappedIn, mappedOut, unmappedIn, errs, e2)
 			}
 		}
@@ -2164,7 +2209,7 @@ func (f *fragment) importValue(columnIDs []uint64, values []int64, bitDepth uint
 	// in theory, this should probably have been queued anyway, but if enough
 	// of the bits matched existing bits, we'll be under our opN estimate, and
 	// we want to ensure that the snapshot happens.
-	return f.snapshotQueue.Immediate(f)
+	return f.holder.SnapshotQueue.Immediate(f)
 }
 
 // importRoaring imports from the official roaring data format defined at
@@ -2252,7 +2297,7 @@ func (f *fragment) incrementOpN(changed int) {
 	f.opN += changed
 	f.ops++
 	if f.opN > f.MaxOpN {
-		f.snapshotQueue.Enqueue(f)
+		f.holder.SnapshotQueue.Enqueue(f)
 	}
 }
 
@@ -2275,6 +2320,9 @@ func track(start time.Time, message string, stats stats.StatsClient, logger logg
 // snapshot does the actual snapshot operation. it does not check or care
 // about f.snapshotPending.
 func (f *fragment) snapshot() (err error) {
+	if !f.open {
+		return errors.New("snapshot request on closed fragment")
+	}
 	wouldPanic := debug.SetPanicOnFault(true)
 	defer func() {
 		debug.SetPanicOnFault(wouldPanic)
@@ -2286,7 +2334,7 @@ func (f *fragment) snapshot() (err error) {
 				// we can't see the actual values that were used to generate this, probably.
 				if e2.Error() == "runtime error: invalid memory address or nil pointer dereference" {
 					mappedIn, mappedOut, unmappedIn, errs, _ := f.storage.SanityCheckMapping(f.currdata.from, f.currdata.to)
-					f.Logger.Printf("transaction failed on %s. storage has %d mapped in range, %d mapped out of range, %d unmapped in range, %d errors total",
+					f.holder.Logger.Printf("transaction failed on %s. storage has %d mapped in range, %d mapped out of range, %d unmapped in range, %d errors total",
 						f.path, mappedIn, mappedOut, unmappedIn, errs)
 				}
 			} else {
@@ -2306,7 +2354,7 @@ func (f *fragment) snapshot() (err error) {
 func unprotectedWriteToFragment(f *fragment, bm *roaring.Bitmap) (n int64, err error) { // nolint: interfacer
 	completeMessage := fmt.Sprintf("fragment: snapshot complete %s/%s/%s/%d", f.index, f.field, f.view, f.shard)
 	start := time.Now()
-	defer track(start, completeMessage, f.stats, f.Logger)
+	defer track(start, completeMessage, f.stats, f.holder.Logger)
 
 	// Create a temporary file to snapshot to.
 	snapshotPath := f.path + snapshotExt
@@ -3096,7 +3144,7 @@ func (s *fragmentSyncer) syncBlockFromPrimary(id int) error {
 	// the primary node.
 	nodes := s.Cluster.shardNodes(f.index, f.shard)
 	if s.Node.ID != nodes[0].ID {
-		f.Logger.Debugf("non-primary replica expecting sync from primary: %s, index=%s, field=%s, shard=%d", nodes[0].ID, f.index, f.field, f.shard)
+		f.holder.Logger.Debugf("non-primary replica expecting sync from primary: %s, index=%s, field=%s, shard=%d", nodes[0].ID, f.index, f.field, f.shard)
 		return nil
 	}
 

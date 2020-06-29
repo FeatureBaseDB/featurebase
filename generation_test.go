@@ -39,14 +39,14 @@ func TestGenerationPanic(t *testing.T) {
 	}
 	prevData = f.gen.(*mmapGeneration).data
 	f.mu.Lock()
-	_ = f.snapshotQueue.Immediate(f)
+	_ = defaultSnapshotQueue.Immediate(f)
 	f.mu.Unlock()
 	runtime.GC()
 	for i := 0; i < (f.MaxOpN / 2); i++ {
 		_, _ = f.setBit(0, uint64(i*32)+23)
 	}
 	f.mu.Lock()
-	f.snapshotQueue.Await(f)
+	defaultSnapshotQueue.Await(f)
 	f.mu.Unlock()
 	runtime.GC()
 	newData := f.gen.(*mmapGeneration).data

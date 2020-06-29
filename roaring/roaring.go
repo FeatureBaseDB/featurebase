@@ -1721,11 +1721,14 @@ func (b *Bitmap) writeToUnoptimized(w io.Writer) (n int64, err error) {
 // bitmap and yield information about containers, including type, size, and
 // the location of their data structures.
 type roaringIterator interface {
+	// Len reports the number of containers total.
+	Len() (count int64)
 	// Next yields the information about the next container
 	Next() (key uint64, cType byte, n int, length int, pointer *uint16, err error)
 	// Remaining yields the bytes left over past the end of the roaring data,
-	// which is typically an ops log in our case.
-	Remaining() []byte
+	// which is typically an ops log in our case, and also its offset in case
+	// we need to talk about truncation.
+	Remaining() ([]byte, int64)
 }
 
 // baseRoaringIterator holds values used by both Pilosa and official Roaring
@@ -1884,11 +1887,16 @@ func (r *baseRoaringIterator) Done(err error) {
 	r.currentDataOffset = 0
 }
 
-func (r *baseRoaringIterator) Remaining() []byte {
+// Len() indicates the total number of containers the iterator expects to have.
+func (r *baseRoaringIterator) Len() int64 {
+	return r.keys
+}
+
+func (r *baseRoaringIterator) Remaining() ([]byte, int64) {
 	if r.lastDataOffset == 0 {
-		return nil
+		return nil, 0
 	}
-	return r.data[r.lastDataOffset:]
+	return r.data[r.lastDataOffset:], r.lastDataOffset
 }
 
 func (r *pilosaRoaringIterator) Next() (key uint64, cType byte, n int, length int, pointer *uint16, err error) {
@@ -2435,19 +2443,24 @@ func (b *Bitmap) roaringSize() (int64, int64) {
 }
 
 // Info returns stats for the bitmap.
-func (b *Bitmap) Info() bitmapInfo {
-	info := bitmapInfo{
-		OpN:        b.opN,
-		Ops:        b.ops,
-		Containers: make([]containerInfo, 0, b.Containers.Size()),
+func (b *Bitmap) Info(includeContainers bool) BitmapInfo {
+	info := BitmapInfo{
+		OpN:            b.opN,
+		Ops:            b.ops,
+		ContainerCount: b.Containers.Size(),
 	}
-
+	if includeContainers {
+		info.Containers = make([]ContainerInfo, 0, info.ContainerCount)
+	}
 	citer, _ := b.Containers.Iterator(0)
 	for citer.Next() {
 		k, c := citer.Value()
 		ci := c.info()
 		ci.Key = k
-		info.Containers = append(info.Containers, ci)
+		info.BitCount += uint64(c.N())
+		if includeContainers {
+			info.Containers = append(info.Containers, ci)
+		}
 	}
 	return info
 }
@@ -2504,11 +2517,16 @@ func (b *Bitmap) Flip(start, end uint64) *Bitmap {
 	return result
 }
 
-// bitmapInfo represents a point-in-time snapshot of bitmap stats.
-type bitmapInfo struct {
-	OpN        int
-	Ops        int
-	Containers []containerInfo
+// BitmapInfo represents a point-in-time snapshot of bitmap stats.
+type BitmapInfo struct {
+	OpN            int
+	Ops            int
+	OpDetails      []OpInfo `json:"OpDetails,omitempty"`
+	BitCount       uint64
+	ContainerCount int
+	Containers     []ContainerInfo `json:"Containers,omitempty"`   // The containers found in the bitmap originally
+	OpContainers   []ContainerInfo `json:"OpContainers,omitempty"` // The containers resulting from ops log changes.
+	From, To       uintptr         // if set, indicates the address range used when unpacking
 }
 
 // Iterator represents an iterator over a Bitmap.
@@ -3705,13 +3723,14 @@ func (c *Container) size() int {
 }
 
 // info returns the current stats about the container.
-func (c *Container) info() containerInfo {
-	info := containerInfo{N: c.N()}
+func (c *Container) info() ContainerInfo {
+	info := ContainerInfo{N: c.N(), Mapped: c.Mapped()}
 	if c == nil {
 		info.Type = "nil"
 		info.Alloc = 0
 		return info
 	}
+	info.Flags = c.flags.String()
 
 	if c.isArray() {
 		info.Type = "array"
@@ -3723,17 +3742,7 @@ func (c *Container) info() containerInfo {
 		info.Type = "bitmap"
 		info.Alloc = len(c.bitmap()) * 8 // sizeof(uint64)
 	}
-
-	if c.Mapped() {
-		if c.isArray() {
-			info.Pointer = unsafe.Pointer(&c.array()[0])
-		} else if c.isRun() {
-			info.Pointer = unsafe.Pointer(&c.runs()[0])
-		} else {
-			info.Pointer = unsafe.Pointer(&c.bitmap()[0])
-		}
-	}
-
+	info.Pointer = uintptr(unsafe.Pointer(c.pointer))
 	return info
 }
 
@@ -3799,13 +3808,15 @@ func (c *Container) bitmapRepair() {
 	c.setN(n)
 }
 
-// containerInfo represents a point-in-time snapshot of container stats.
-type containerInfo struct {
-	Key     uint64         // container key
-	Type    string         // container type (array, bitmap, or run)
-	N       int32          // number of bits
-	Alloc   int            // memory used
-	Pointer unsafe.Pointer // offset within the mmap
+// ContainerInfo represents a point-in-time snapshot of container stats.
+type ContainerInfo struct {
+	Key     uint64  // container key
+	Type    string  // container type (array, bitmap, or run)
+	Flags   string  // flag state
+	N       int32   // number of bits
+	Alloc   int     // memory used
+	Pointer uintptr // address
+	Mapped  bool    // whether this container thinks it is mmapped
 }
 
 // flip returns a new container containing the inverse of all
@@ -5267,6 +5278,15 @@ const (
 	opTypeRemoveRoaring = opType(5)
 )
 
+var opTypes = []string{
+	"add",
+	"remove",
+	"addN",
+	"removeN",
+	"addRoaring",
+	"removeRoaring",
+}
+
 // op represents an operation on the bitmap.
 type op struct {
 	typ     opType
@@ -5274,6 +5294,24 @@ type op struct {
 	value   uint64
 	values  []uint64
 	roaring []byte
+}
+
+// OpInfo is a description of an op.
+type OpInfo struct {
+	Type string
+	OpN  int
+	Size int
+}
+
+func (op *op) info() (info OpInfo) {
+	if int(op.typ) < len(opTypes) {
+		info.Type = opTypes[op.typ]
+	} else {
+		info.Type = fmt.Sprintf("unknown-type-%d", op.typ)
+	}
+	info.OpN = op.opN
+	info.Size = op.size()
+	return info
 }
 
 // apply executes the operation against a bitmap.

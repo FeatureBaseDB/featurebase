@@ -263,7 +263,7 @@ func (m *mmapGeneration) openFile() (shouldClose bool, err error) {
 	}
 	// do we actually want this in every openFile? I don't know.
 	if err := syscall.Flock(int(m.file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		m.file.Close()
+		_ = syswrap.CloseFile(m.file)
 		m.file = nil
 		return false, fmt.Errorf("flock: %s", err)
 	}
@@ -333,6 +333,7 @@ func newGeneration(existing generation, path string, readData bool, setup func([
 	m := mmapGeneration{path: path, logger: logger}
 	if existing != nil {
 		m.generation = existing.Generation() + 1
+		m.retries = existing.(*mmapGeneration).retries
 		// we might keep a previous generation around just for its generation count.
 		if !existing.Dead() {
 			defer existing.Done()

@@ -96,7 +96,7 @@ func newIndexWithTempPath(name string) *Index {
 	if err != nil {
 		panic(err)
 	}
-	index, err := NewIndex(path, name, DefaultPartitionN)
+	index, err := NewIndex(NewHolder(DefaultPartitionN), path, name)
 	if err != nil {
 		panic(err)
 	}
