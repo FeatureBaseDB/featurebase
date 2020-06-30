@@ -79,8 +79,8 @@ func (c *Container) String() string {
 	case containerArray:
 		return fmt.Sprintf("<%s%sarray container, N=%d>", froze, space, c.N())
 	case containerBitmap:
-		return fmt.Sprintf("<%s%sbitmap container, N=%d, len %dx uint64>",
-			froze, space, c.N(), len(c.bitmap()))
+		return fmt.Sprintf("<%s%sbitmap container, N=%d>",
+			froze, space, c.N())
 	case containerRun:
 		return fmt.Sprintf("<%s%srun container, N=%d, len %dx interval>",
 			froze, space, c.N(), len(c.runs()))
@@ -93,9 +93,7 @@ func (c *Container) String() string {
 // may later become more interesting.
 func NewContainer() *Container {
 	statsHit("NewContainer")
-	c := &Container{typeID: containerArray, len: 0, cap: stashedArraySize}
-	c.pointer = (*uint16)(unsafe.Pointer(&c.data[0]))
-	return c
+	return NewContainerArray(nil)
 }
 
 // NewContainerBitmap makes a bitmap container using the provided bitmap, or
@@ -107,14 +105,13 @@ func NewContainerBitmap(n int, bitmap []uint64) *Container {
 	if bitmap == nil {
 		return NewContainerBitmapN(nil, 0)
 	}
-	// pad to required length
-	if len(bitmap) < bitmapN {
-		bm2 := make([]uint64, bitmapN)
-		copy(bm2, bitmap)
-		bitmap = bm2
-	}
 	c := &Container{typeID: containerBitmap}
-	c.setBitmap(bitmap)
+	if len(bitmap) != bitmapN {
+		// adjust to required length
+		c.setBitmapCopy(bitmap)
+	} else {
+		c.setBitmap(bitmap)
+	}
 	// set n based on bitmap contents.
 	if n < 0 {
 		c.bitmapRepair()
@@ -131,14 +128,13 @@ func NewContainerBitmapN(bitmap []uint64, n int32) *Container {
 	if bitmap == nil {
 		bitmap = make([]uint64, bitmapN)
 	}
-	// pad to required length
-	if len(bitmap) < bitmapN {
-		var bm [bitmapN]uint64
-		copy(bm[:], bitmap)
-		bitmap = bm[:]
-	}
 	c := &Container{typeID: containerBitmap, n: n}
-	c.setBitmap(bitmap)
+	if len(bitmap) != bitmapN {
+		// adjust to required length
+		c.setBitmapCopy(bitmap)
+	} else {
+		c.setBitmap(bitmap)
+	}
 	return c
 }
 
@@ -164,9 +160,7 @@ func NewContainerArrayCopy(set []uint16) *Container {
 // This is deprecated. It never worked in the first place.
 // The provided value of n is ignored and instead derived from the set length.
 func NewContainerArrayN(set []uint16, n int32) *Container {
-	c := &Container{typeID: containerArray}
-	c.setArray(set)
-	return c
+	return NewContainerArray(set)
 }
 
 // NewContainerRun creates a new run container using a provided (possibly nil)
@@ -286,10 +280,8 @@ func (c *Container) Freeze() *Container {
 // Thaw returns a modifiable container identical to c. This may be c, or it
 // may be a new container with distinct backing store.
 func (c *Container) Thaw() *Container {
-	if roaringParanoia {
-		if c == nil {
-			panic("trying to thaw a nil container")
-		}
+	if c == nil {
+		panic("trying to thaw a nil container")
 	}
 	if c.flags&(flagFrozen|flagMapped) == 0 {
 		return c
@@ -308,45 +300,11 @@ func (c *Container) unmapOrClone() *Container {
 	// mapped: we want to unmap the storage.
 	switch c.typeID {
 	case containerArray:
-		// mapped flag is wrong here
-		if c.pointer == &c.data[0] {
-			return c
-		}
-		// maybe it fits in storage
-		if c.len <= int32(len(c.data)) {
-			copy(c.data[:], c.array())
-			c.pointer, c.cap = &c.data[0], stashedArraySize
-			return c
-		}
-		arr := make([]uint16, c.len)
-		copy(arr, c.array())
-		if cap(arr) > 1<<16 {
-			arr = arr[: len(arr) : 1<<16]
-		}
-		c.pointer, c.cap = &arr[0], int32(cap(arr))
+		c.setArrayMaybeCopy(c.array(), true)
 	case containerRun:
-		// mapped flag is wrong here
-		if c.pointer == &c.data[0] {
-			return c
-		}
-		oldRuns := c.runs()
-		// maybe it fits in storage
-		if c.len <= stashedRunSize {
-			c.pointer, c.cap = &c.data[0], stashedRunSize
-			copy(c.runs(), oldRuns)
-			return c
-		}
-		runs := make([]interval16, c.len)
-		copy(runs, oldRuns)
-		if cap(runs) > 1<<15 {
-			runs = runs[: len(runs) : 1<<15]
-		}
-		c.pointer, c.cap = &runs[0].start, int32(cap(runs))
+		c.setRunsMaybeCopy(c.runs(), true)
 	case containerBitmap:
-		oldBitmap := c.bitmap()
-		var bitmap [1024]uint64
-		copy(bitmap[:], oldBitmap)
-		c.pointer, c.len, c.cap = (*uint16)(unsafe.Pointer(&bitmap)), bitmapN, bitmapN
+		c.setBitmapCopy(c.bitmap())
 	default:
 		panic(fmt.Sprintf("can't thaw invalid container, type %d", c.typeID))
 	}
@@ -355,10 +313,10 @@ func (c *Container) unmapOrClone() *Container {
 
 // array yields the data viewed as a slice of uint16 values.
 func (c *Container) array() []uint16 {
+	if c == nil {
+		panic("attempt to read a nil container's array")
+	}
 	if roaringParanoia {
-		if c == nil {
-			panic("attempt to read a nil container's array")
-		}
 		if c.typeID != containerArray {
 			panic("attempt to read non-array's array")
 		}
@@ -390,7 +348,7 @@ func (c *Container) setArrayMaybeCopy(array []uint16, doCopy bool) {
 		c.flags &^= flagMapped // this is no longer using a hypothetical mmapped input array
 		return
 	}
-	if &array[0] == c.pointer {
+	if &array[0] == c.pointer && !doCopy {
 		// nothing to do but update length
 		c.len = int32(len(array))
 		c.n = c.len
@@ -414,10 +372,10 @@ func (c *Container) setArray(array []uint16) {
 
 // bitmap yields the data viewed as a slice of uint64s holding bits.
 func (c *Container) bitmap() []uint64 {
+	if c == nil {
+		panic("attempt to read nil container's bitmap")
+	}
 	if roaringParanoia {
-		if c == nil {
-			panic("attempt to read nil container's bitmap")
-		}
 		if c.typeID != containerBitmap {
 			panic("attempt to read non-bitmap's bitmap")
 		}
@@ -497,6 +455,13 @@ func splatRun(into *[1024]uint64, from interval16) {
 	copy(into[fillStart:fillEnd+1], fillerBitmap[:])
 }
 
+// setBitmapCopy stores a copy of a bitmap as data.
+func (c *Container) setBitmapCopy(bitmap []uint64) {
+	var bitmapCopy [bitmapN]uint64
+	copy(bitmapCopy[:], bitmap)
+	c.setBitmap(bitmapCopy[:])
+}
+
 // setBitmap stores a set of uint64s as data.
 func (c *Container) setBitmap(bitmap []uint64) {
 	if c == nil || c.frozen() {
@@ -516,10 +481,10 @@ func (c *Container) setBitmap(bitmap []uint64) {
 
 // runs yields the data viewed as a slice of intervals.
 func (c *Container) runs() []interval16 {
+	if c == nil {
+		panic("attempt to read nil container's runs")
+	}
 	if roaringParanoia {
-		if c == nil {
-			panic("attempt to read nil container's runs")
-		}
 		if c.typeID != containerRun {
 			panic("attempt to read non-run's runs")
 		}
@@ -555,7 +520,7 @@ func (c *Container) setRunsMaybeCopy(runs []interval16, doCopy bool) {
 		c.flags &^= flagMapped // this is no longer using a hypothetical mmapped input array
 		return
 	}
-	if &runs[0].start == c.pointer {
+	if &runs[0].start == c.pointer && !doCopy {
 		// nothing to do but update length
 		c.len = int32(len(runs))
 		return
@@ -626,30 +591,24 @@ func (c *Container) Update(typ byte, n int32, mapped bool) {
 
 // isArray returns true if the container is an array container.
 func (c *Container) isArray() bool {
-	if roaringParanoia {
-		if c == nil {
-			panic("calling isArray on nil container")
-		}
+	if c == nil {
+		panic("calling isArray on nil container")
 	}
 	return c.typeID == containerArray
 }
 
 // isBitmap returns true if the container is a bitmap container.
 func (c *Container) isBitmap() bool {
-	if roaringParanoia {
-		if c == nil {
-			panic("calling isBitmap on nil container")
-		}
+	if c == nil {
+		panic("calling isBitmap on nil container")
 	}
 	return c.typeID == containerBitmap
 }
 
 // isRun returns true if the container is a run-length-encoded container.
 func (c *Container) isRun() bool {
-	if roaringParanoia {
-		if c == nil {
-			panic("calling isRun on nil container")
-		}
+	if c == nil {
+		panic("calling isRun on nil container")
 	}
 	return c.typeID == containerRun
 }
