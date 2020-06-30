@@ -724,7 +724,6 @@ func (e *executor) executeFieldValueCall(ctx context.Context, index string, c *p
 	} else {
 		id, ok, err := c.UintArg("column")
 		if !ok || err != nil {
-			// TODO: this error is getting swallowed somewhere (via curl)
 			return ValCount{}, errors.Wrap(err, "getting column argument")
 		}
 		colID = id
@@ -4041,20 +4040,20 @@ func (e *executor) translateCall(ctx context.Context, indexName string, c *pql.C
 		// are only two possible values. Instead, they are handled
 		// directly.
 		if field.Type() == FieldTypeBool {
-			// TODO: This code block doesn't make sense for a `Rows()`
-			// queries on a `bool` field. Need to review this better,
-			// include it in tests, and probably back-port it to Pilosa.
-			if c.Name != "Rows" {
-				boolVal, err := callArgBool(c, rowKey)
-				if err != nil {
-					return errors.Wrap(err, "getting bool key")
-				}
-				rowID := falseRowID
-				if boolVal {
-					rowID = trueRowID
-				}
-				c.Args[rowKey] = rowID
+			if c.Name == "Rows" {
+				// TranslateInfo for Rows returns "previous" as rowKey,
+				// so for bool fields we would get "missing bool argument" error
+				return nil
 			}
+			boolVal, err := callArgBool(c, rowKey)
+			if err != nil {
+				return errors.Wrapf(err, "getting bool key (%+v)", rowKey)
+			}
+			rowID := falseRowID
+			if boolVal {
+				rowID = trueRowID
+			}
+			c.Args[rowKey] = rowID
 		} else if field.Keys() {
 			foreignIndexName := field.ForeignIndex()
 			if c.Args[rowKey] != nil && isCondition(c.Args[rowKey]) {

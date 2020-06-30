@@ -133,6 +133,62 @@ func TestExecutor_TranslateGroupByCall(t *testing.T) {
 	}
 }
 
+func TestExecutor_TranslateRowsOnBool(t *testing.T) {
+	holder := NewHolder(DefaultPartitionN)
+	defer holder.Close()
+
+	e := &executor{
+		Holder:  holder,
+		Cluster: NewTestCluster(1),
+	}
+	e.Holder.Path, _ = ioutil.TempDir(*TempDir, "")
+	err := e.Holder.Open()
+	if err != nil {
+		t.Fatalf("opening holder: %v", err)
+	}
+
+	idx, err := e.Holder.CreateIndex("i", IndexOptions{})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+
+	fb, errb := idx.CreateField("b", OptFieldTypeBool())
+	_, errbk := idx.CreateField("bk", OptFieldTypeBool(), OptFieldKeys())
+	if errb != nil || errbk != nil {
+		t.Fatalf("creating fields %v, %v", errb, errbk)
+	}
+
+	_, err1 := fb.SetBit(1, 1, nil)
+	_, err2 := fb.SetBit(2, 2, nil)
+	_, err3 := fb.SetBit(3, 3, nil)
+	if err1 != nil || err2 != nil || err3 != nil {
+		t.Fatalf("seeting bit %v, %v, %v", err1, err2, err3)
+	}
+
+	tests := []struct {
+		pql string
+	}{
+		{pql: "Rows(b)"},
+		{pql: "GroupBy(Rows(b))"},
+		{pql: "Set(4, b=true)"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.pql, func(t *testing.T) {
+			query, err := pql.ParseString(test.pql)
+			if err != nil {
+				t.Fatalf("parsing query: %v", err)
+			}
+
+			c := query.Calls[0]
+			err = e.translateCall(context.Background(), "i", c, make(map[string]map[string]uint64))
+			if err != nil {
+				t.Fatalf("translating call: %v", err)
+			}
+		})
+	}
+}
+
 func isInt(a interface{}) bool {
 	switch a.(type) {
 	case int, int64, uint, uint64:
