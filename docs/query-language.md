@@ -615,7 +615,7 @@ have the attribute specified by `attrName` with one of the values specified in
 
 **Caveats:**
 
-In general, the order of the resulting row keys is not guaranteed to reflect the true order of bit counts across an index. The exact solution to the problem of computing the TopN counts is NP-hard (being equivalent to the knapsack problem), so TopN is instead implemented as a heuristic. This provides a significant performance improvement, at the cost of uncertainty in the result order. Some conditions can increase this uncertainty:
+In general, the order of the resulting row keys is not guaranteed to reflect the true order of bit counts across an index. The exact solution to the problem of computing the TopN counts is prohibitively expensive, so TopN is instead implemented as a heuristic. This provides a significant performance improvement, at the cost of uncertainty in the result order. Some conditions can increase this uncertainty:
 
 * Large number of shards
 * Uniform distribution of bits across shards
