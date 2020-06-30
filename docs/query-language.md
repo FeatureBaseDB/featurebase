@@ -615,9 +615,17 @@ have the attribute specified by `attrName` with one of the values specified in
 
 **Caveats:**
 
-* Performing a TopN() query on a field with cache type ranked will return the top rows sorted by count in descending order.
-* Fields with cache type lru will maintain an LRU (Least Recently Used replacement policy) cache, thus a TopN query on this type of field will return rows sorted in order of most recently set bit.
-* The field's cache size determines the number of sorted rows to maintain in the cache for purposes of TopN queries. There is a tradeoff between performance and accuracy; increasing the cache size will improve accuracy of results at the cost of performance.
+In general, the order of the resulting row keys is not guaranteed to reflect the true order of bit counts across an index. The exact solution to the problem of computing the TopN counts is NP-hard (being equivalent to the knapsack problem), so TopN is instead implemented as a heuristic. This provides a significant performance improvement, at the cost of uncertainty in the result order. Some conditions can increase this uncertainty:
+
+* Large number of shards
+* Uniform distribution of bits across shards
+* Small differences in bit counts between successive rows
+
+The implementation is based on a per-shard cache. Some details of this may be relevant:
+
+* The field's cache size determines the number of sorted rows to maintain in the cache for purposes of TopN queries. There is a tradeoff between performance and accuracy; increasing the cache size will improve accuracy of results at the cost of performance. Note that this per-shard tradeoff is independent of the per-index performance/accuracy tradeoff mentioned above.
+* Fields with cache type `ranked` will return the top rows sorted by count in descending order.
+* Fields with cache type `lru` will maintain an LRU (Least Recently Used replacement policy) cache, thus a TopN query on this type of field will return rows sorted in order of most recently set bit.
 * Once full, the cache will truncate the set of rows according to the field option CacheSize. Rows that straddle the limit and have the same count will be truncated in no particular order.
 * The TopN query's attribute filter is applied to the existing sorted cache of rows. Rows that fall outside of the sorted cache range, even if they would normally pass the filter, are ignored.
 
