@@ -162,7 +162,7 @@ func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 	_, err2 := fb.SetBit(2, 2, nil)
 	_, err3 := fb.SetBit(3, 3, nil)
 	if err1 != nil || err2 != nil || err3 != nil {
-		t.Fatalf("seeting bit %v, %v, %v", err1, err2, err3)
+		t.Fatalf("setting bit %v, %v, %v", err1, err2, err3)
 	}
 
 	tests := []struct {
