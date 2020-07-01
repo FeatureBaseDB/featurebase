@@ -4486,30 +4486,67 @@ func (s SignedRow) ToTable() (*pb.TableResponse, error) {
 
 // ToRows implements the ToRowser interface.
 func (s SignedRow) ToRows(callback func(*pb.RowResponse) error) error {
-	// TODO: address the overflow issue with values outside the int64 range
+
 	ci := []*pb.ColumnInfo{{Name: s.Field(), Datatype: "int64"}}
 	negs := s.Neg.Columns()
 	for i := len(negs) - 1; i >= 0; i-- {
+		val, err := toNegInt64(negs[i])
+		if err != nil {
+			return errors.Wrap(err, "converting uint64 to int64 (negative)")
+		}
+
 		if err := callback(&pb.RowResponse{
 			Headers: ci,
 			Columns: []*pb.ColumnResponse{
-				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: -1 * int64(negs[i])}},
-			}}); err != nil {
+				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: val}},
+			},
+		}); err != nil {
 			return errors.Wrap(err, "calling callback")
 		}
 		ci = nil
 	}
 	for _, id := range s.Pos.Columns() {
+		val, err := toInt64(id)
+		if err != nil {
+			return errors.Wrap(err, "converting uint64 to int64 (positive)")
+		}
+
 		if err := callback(&pb.RowResponse{
 			Headers: ci,
 			Columns: []*pb.ColumnResponse{
-				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: int64(id)}},
-			}}); err != nil {
+				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: val}},
+			},
+		}); err != nil {
 			return errors.Wrap(err, "calling callback")
 		}
 		ci = nil
 	}
 	return nil
+}
+
+func toNegInt64(n uint64) (int64, error) {
+	const absMinInt64 = uint64(1 << 63)
+
+	if n > absMinInt64 {
+		return 0, errors.Errorf("value %d overflows int64", n)
+	}
+
+	if n == absMinInt64 {
+		return int64(-1 << 63), nil
+	}
+
+	// n < 1 << 63
+	return -int64(n), nil
+}
+
+func toInt64(n uint64) (int64, error) {
+	const maxInt64 = uint64(1<<63) - 1
+
+	if n > maxInt64 {
+		return 0, errors.Errorf("value %d overflows int64", n)
+	}
+
+	return int64(n), nil
 }
 
 func (sr *SignedRow) union(other SignedRow) SignedRow {
