@@ -33,9 +33,10 @@ var (
 	ErrForeignIndexNotFound = errors.New("foreign index not found")
 
 	// ErrFieldRequired is returned when no field is specified.
-	ErrFieldRequired = errors.New("field required")
-	ErrFieldExists   = errors.New("field already exists")
-	ErrFieldNotFound = errors.New("field not found")
+	ErrFieldRequired  = errors.New("field required")
+	ErrColumnRequired = errors.New("column required")
+	ErrFieldExists    = errors.New("field already exists")
+	ErrFieldNotFound  = errors.New("field not found")
 
 	ErrBSIGroupNotFound         = errors.New("bsigroup not found")
 	ErrBSIGroupExists           = errors.New("bsigroup already exists")
