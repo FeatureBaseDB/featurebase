@@ -699,7 +699,12 @@ func (e *executor) executeIncludesColumnCall(ctx context.Context, index string, 
 func (e *executor) executeFieldValueCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (ValCount, error) {
 	fieldName, ok := c.Args["field"].(string)
 	if !ok || fieldName == "" {
-		return ValCount{}, errors.New("FieldValue(): field required")
+		return ValCount{}, ErrFieldRequired
+	}
+
+	colKey, ok := c.Args["column"]
+	if !ok || colKey == "" {
+		return ValCount{}, ErrColumnRequired
 	}
 
 	// Fetch index.
@@ -715,8 +720,8 @@ func (e *executor) executeFieldValueCall(ctx context.Context, index string, c *p
 	}
 
 	var colID uint64
-	if colKey, ok := c.Args["column"].(string); ok && idx.Keys() {
-		id, err := e.Cluster.translateIndexKey(ctx, index, colKey)
+	if key, ok := colKey.(string); ok && idx.Keys() {
+		id, err := e.Cluster.translateIndexKey(ctx, index, key)
 		if err != nil {
 			return ValCount{}, errors.Wrap(err, "getting column id")
 		}
