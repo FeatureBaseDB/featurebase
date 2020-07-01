@@ -21,7 +21,6 @@ import (
 	"hash/fnv"
 	"io"
 	"math/bits"
-	"reflect"
 	"sort"
 	"unsafe"
 
@@ -124,11 +123,6 @@ type Containers interface {
 
 	// Put adds the container at key.
 	Put(key uint64, c *Container)
-
-	// PutContainerValues updates an existing container at key.
-	// If a container does not exist for key, a new one is allocated.
-	// TODO(2.0) make n  int32
-	PutContainerValues(key uint64, typ byte, n int, mapped bool)
 
 	// Remove takes the container at key out.
 	Remove(key uint64)
@@ -236,8 +230,7 @@ func NewSliceBitmap(a ...uint64) *Bitmap {
 }
 
 // NewFileBitmap returns a Bitmap with an initial set of values, used for file storage.
-// By default, this is a copy of NewBitmap, but is replaced with B+Tree in server/enterprise.go
-var NewFileBitmap func(a ...uint64) *Bitmap = NewBTreeBitmap
+var NewFileBitmap = NewBTreeBitmap
 
 // Clone returns a heap allocated copy of the bitmap.
 // Note: The OpWriter IS NOT copied to the new bitmap.
@@ -296,6 +289,7 @@ func (b *Bitmap) Add(a ...uint64) (changed bool, err error) {
 
 // AddN adds values to the bitmap, appending them all to the op log in a batched
 // write. It returns the number of changed bits.
+// The input slice may be reordered, and the set of changed bits will end up in a[:changed].
 func (b *Bitmap) AddN(a ...uint64) (changed int, err error) {
 	if len(a) == 0 {
 		return 0, nil
@@ -468,7 +462,7 @@ func (b *Bitmap) Count() (n uint64) {
 	return b.Containers.Count()
 }
 
-// Any returns "b.Count() > 0"... but faster than doing that.
+// Any checks whether there are any set bits within the bitmap.
 func (b *Bitmap) Any() bool {
 	iter, _ := b.Containers.Iterator(0)
 	// TODO (jaffee) I'm not sure if it's possible/legal to have an empty
@@ -872,10 +866,7 @@ func (c *Container) intersectInPlace(other *Container) *Container {
 		}
 	}
 
-	if roaringParanoia {
-		panic(fmt.Sprintf("invalid intersect op: unknown types %d/%d", c.typ(), other.typ()))
-	}
-	return nil
+	panic(fmt.Errorf("invalid intersect op: unknown types %d/%d", c.typ(), other.typ()))
 }
 
 func (c *Container) copyInPlace(other *Container) *Container {
@@ -883,19 +874,19 @@ func (c *Container) copyInPlace(other *Container) *Container {
 	case containerArray:
 		c.setTyp(containerArray)
 		c.setArrayMaybeCopy(other.array(), true)
-		c.setN(other.N())
 
 	case containerBitmap:
-		bmp := make([]uint64, bitmapN)
-		copy(bmp, other.bitmap())
 		c.setTyp(containerBitmap)
-		c.setBitmap(bmp)
+		c.setBitmapCopy(other.bitmap())
 		c.setN(other.N())
 
 	case containerRun:
 		c.setTyp(containerRun)
 		c.setRunsMaybeCopy(other.runs(), true)
 		c.setN(other.N())
+
+	default:
+		panic(fmt.Errorf("invalid container type: %v", c.typ()))
 	}
 
 	return c
@@ -987,6 +978,9 @@ func intersectBitmapBitmapInPlace(a, b *Container) *Container {
 	n := int32(0)
 	for i := 0; i < bitmapN; i += 4 {
 		// unrolling is still effective in go
+		// TODO: the generated machine code is extremely bad here, because we are forcing the compiler to reload ab immediately after storing it
+		// The body of the loop has a total of 8 branches: 4 bounds checks + 4 feature checks.
+		// We could substantially improve this by converting the entire bitmap to [256][4]uint64.
 		ptr := (*[4]uint64)(unsafe.Pointer(&bb[i]))
 		ab[i] &= ptr[0]
 		ab[i+1] &= ptr[1]
@@ -1024,7 +1018,6 @@ func intersectBitmapArrayInPlace(a, b *Container) *Container {
 	array = array[:n]
 	a.setTyp(containerArray)
 	a.setArray(array)
-	a.setN(n)
 
 	return a
 }
@@ -2397,20 +2390,16 @@ func BitmapsToRoaring(bitmaps []*Bitmap) []byte {
 			binary.LittleEndian.PutUint16(header[10:12], uint16(n-1))
 			binary.LittleEndian.PutUint32(offset[0:4], uint32(dataOffset+int(offsetEnd)))
 			nextData := data[dataOffset:]
-			switch c.typeID {
+			switch c.typeID { // TODO: make this work on big endian machines
 			case containerArray:
-				asUint16 := *(*[]uint16)(unsafe.Pointer(&reflect.SliceHeader{Data: uintptr(unsafe.Pointer(&nextData[0])), Len: int(c.len), Cap: int(c.len)}))
-				copy(asUint16, c.array())
-				dataOffset += 2 * int(c.len)
+				dataOffset += 2 * copy((*[1 << 16]uint16)(unsafe.Pointer(&nextData[0]))[:], c.array())
 			case containerBitmap:
-				asUint64 := *(*[]uint64)(unsafe.Pointer(&reflect.SliceHeader{Data: uintptr(unsafe.Pointer(&nextData[0])), Len: 1024, Cap: 1024}))
-				copy(asUint64, c.bitmap())
+				copy((*[1024]uint64)(unsafe.Pointer(&nextData[0]))[:], c.bitmap())
 				dataOffset += 8192
 			case containerRun:
-				asInterval16 := *(*[]interval16)(unsafe.Pointer(&reflect.SliceHeader{Data: uintptr(unsafe.Pointer(&nextData[2])), Len: int(c.len), Cap: int(c.len)}))
-				copy(asInterval16, c.runs())
 				binary.LittleEndian.PutUint16(nextData[0:2], uint16(c.len))
-				dataOffset += int(4*c.len) + 2
+				dataOffset += 2
+				dataOffset += 4 * copy((*[1 << 15]interval16)(unsafe.Pointer(&nextData[2]))[:], c.runs())
 			}
 		}
 	}
@@ -3156,10 +3145,7 @@ func (c *Container) unionInPlace(other *Container) *Container {
 			return unionBitmapRunInPlace(c, other)
 		}
 	}
-	if roaringParanoia {
-		panic(fmt.Sprintf("invalid union op: unknown types %d/%d", c.typ(), other.typ()))
-	}
-	return c
+	panic(fmt.Errorf("invalid union op: unknown types %d/%d", c.typ(), other.typ()))
 }
 
 func (c *Container) arrayContains(v uint16) bool {
@@ -5455,10 +5441,8 @@ func (op *op) size() int {
 	case opTypeAddRoaring, opTypeRemoveRoaring:
 		return 1 + 8 + 4 + 4 + len(op.roaring)
 	}
-	if roaringParanoia {
-		panic(fmt.Sprintf("op size() called on unknown op type %d", op.typ))
-	}
-	return 0
+
+	panic(fmt.Errorf("op size() called on unknown op type %d", op.typ))
 }
 
 // size returns the size needed to encode the op, in bytes. for
@@ -5474,10 +5458,8 @@ func (op *op) encodeSize() int {
 	case opTypeAddRoaring, opTypeRemoveRoaring:
 		return 1 + 8 + 4 + 4
 	}
-	if roaringParanoia {
-		panic(fmt.Sprintf("op encodeSize() called on unknown op type %d", op.typ))
-	}
-	return 0
+
+	panic(fmt.Errorf("op encodeSize() called on unknown op type %d", op.typ))
 }
 
 // count returns the number of bits the operation mutates.
@@ -5490,7 +5472,7 @@ func (op *op) count() int {
 	case 4, 5:
 		return op.opN
 	default:
-		panic(fmt.Sprintf("unknown operation type: %d", op.typ))
+		panic(fmt.Errorf("unknown operation type: %d", op.typ))
 	}
 }
 
