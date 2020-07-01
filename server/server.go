@@ -238,11 +238,7 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "setting up logger")
 	}
 
-	productName := "Pilosa"
-	if pilosa.EnterpriseEnabled {
-		productName += " Enterprise"
-	}
-	m.logger.Printf("%s %s, build time %s\n", productName, pilosa.Version, pilosa.BuildTime)
+	m.logger.Printf("%s", pilosa.VersionInfo())
 
 	// validateAddrs sets the appropriate values for Bind and Advertise
 	// based on the inputs. It is not responsible for applying defaults, although

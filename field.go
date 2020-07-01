@@ -31,7 +31,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2/internal"
-	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
@@ -116,10 +115,6 @@ type Field struct {
 
 	// Shards with data on any node in the cluster, according to this node.
 	remoteAvailableShards *roaring.Bitmap
-
-	logger logger.Logger
-
-	snapshotQueue snapshotQueue
 
 	translateStore TranslateStore
 
@@ -338,17 +333,17 @@ func OptFieldTypeBool() FieldOption {
 // that it's of the type `OptFieldType*`). This means
 // this function couldn't be used to set, for example,
 // `FieldOptions.Keys`.
-func NewField(path, index, name string, opts FieldOption) (*Field, error) {
+func NewField(holder *Holder, path, index, name string, opts FieldOption) (*Field, error) {
 	err := validateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
 	}
 
-	return newField(path, index, name, opts)
+	return newField(holder, path, index, name, opts)
 }
 
 // newField returns a new instance of field (without name validation).
-func newField(path, index, name string, opts FieldOption) (*Field, error) {
+func newField(holder *Holder, path, index, name string, opts FieldOption) (*Field, error) {
 	// Apply functional option.
 	fo := FieldOptions{}
 	err := opts(&fo)
@@ -372,7 +367,7 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 
 		remoteAvailableShards: roaring.NewBitmap(),
 
-		logger: logger.NopLogger,
+		holder: holder,
 
 		OpenTranslateStore: OpenInMemTranslateStore,
 	}
@@ -448,7 +443,7 @@ func (f *Field) loadAvailableShards() error {
 	}
 	// some other problem:
 	if err != nil {
-		f.logger.Printf("available shards file present but unreadable, discarding: %v", err)
+		f.holder.Logger.Printf("available shards file present but unreadable, discarding: %v", err)
 		err = os.Remove(path)
 		if err != nil {
 			return errors.Wrap(err, "deleting corrupt available shards list")
@@ -457,7 +452,7 @@ func (f *Field) loadAvailableShards() error {
 	}
 	bm := roaring.NewBitmap()
 	if err = bm.UnmarshalBinary(buf); err != nil {
-		f.logger.Printf("available shards file corrupt, discarding: %v", err)
+		f.holder.Logger.Printf("available shards file corrupt, discarding: %v", err)
 		err = os.Remove(path)
 		if err != nil {
 			return errors.Wrap(err, "deleting corrupt available shards list")
@@ -548,17 +543,17 @@ func (f *Field) Options() FieldOptions {
 func (f *Field) Open() error {
 	if err := func() (err error) {
 		// Ensure the field's path exists.
-		f.logger.Debugf("ensure field path exists: %s", f.path)
+		f.holder.Logger.Debugf("ensure field path exists: %s", f.path)
 		if err := os.MkdirAll(f.path, 0777); err != nil {
 			return errors.Wrap(err, "creating field dir")
 		}
 
-		f.logger.Debugf("load meta file for index/field: %s/%s", f.index, f.name)
+		f.holder.Logger.Debugf("load meta file for index/field: %s/%s", f.index, f.name)
 		if err := f.loadMeta(); err != nil {
 			return errors.Wrap(err, "loading meta")
 		}
 
-		f.logger.Debugf("load available shards for index/field: %s/%s", f.index, f.name)
+		f.holder.Logger.Debugf("load available shards for index/field: %s/%s", f.index, f.name)
 		if err := f.loadAvailableShards(); err != nil {
 			return errors.Wrap(err, "loading available shards")
 		}
@@ -570,17 +565,17 @@ func (f *Field) Open() error {
 		}
 
 		// Apply the field options loaded from meta (or set via setOptions()).
-		f.logger.Debugf("apply options for index/field: %s/%s", f.index, f.name)
+		f.holder.Logger.Debugf("apply options for index/field: %s/%s", f.index, f.name)
 		if err := f.applyOptions(f.options); err != nil {
 			return errors.Wrap(err, "applying options")
 		}
 
-		f.logger.Debugf("open views for index/field: %s/%s", f.index, f.name)
+		f.holder.Logger.Debugf("open views for index/field: %s/%s", f.index, f.name)
 		if err := f.openViews(); err != nil {
 			return errors.Wrap(err, "opening views")
 		}
 
-		f.logger.Debugf("open row attribute store for index/field: %s/%s", f.index, f.name)
+		f.holder.Logger.Debugf("open row attribute store for index/field: %s/%s", f.index, f.name)
 		if err := f.rowAttrStore.Open(); err != nil {
 			return errors.Wrap(err, "opening attrstore")
 		}
@@ -607,7 +602,7 @@ func (f *Field) Open() error {
 		return err
 	}
 
-	f.logger.Debugf("successfully opened field index/field: %s/%s", f.index, f.name)
+	f.holder.Logger.Debugf("successfully opened field index/field: %s/%s", f.index, f.name)
 	return nil
 }
 func blockingWriteAvailableShards(fieldPath string, availableShardBytes []byte) {
@@ -748,7 +743,7 @@ fileLoop:
 					<-fieldQueue
 				}()
 				name := filepath.Base(fi.Name())
-				f.logger.Debugf("open index/field/view: %s/%s/%s", f.index, f.name, fi.Name())
+				f.holder.Logger.Debugf("open index/field/view: %s/%s/%s", f.index, f.name, fi.Name())
 				view := f.newView(f.viewPath(name), name)
 				if err := view.open(); err != nil {
 					return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
@@ -770,7 +765,7 @@ fileLoop:
 				}
 
 				view.rowAttrStore = f.rowAttrStore
-				f.logger.Debugf("add index/field/view to field.viewMap: %s/%s/%s", f.index, f.name, view.name)
+				f.holder.Logger.Debugf("add index/field/view to field.viewMap: %s/%s/%s", f.index, f.name, view.name)
 				mu.Lock()
 				f.viewMap[view.name] = view
 				mu.Unlock()
@@ -1183,14 +1178,10 @@ func (f *Field) createViewIfNotExistsBase(name string) (*view, bool, error) {
 }
 
 func (f *Field) newView(path, name string) *view {
-	view := newView(path, f.index, f.name, name, f.options)
-	view.logger = f.logger
+	view := newView(f.holder, path, f.index, f.name, name, f.options)
 	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats
 	view.broadcaster = f.broadcaster
-	if f.snapshotQueue != nil {
-		view.snapshotQueue = f.snapshotQueue
-	}
 	return view
 }
 

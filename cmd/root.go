@@ -26,10 +26,6 @@ import (
 )
 
 func NewRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
-	productName := "Pilosa " + pilosa.Version
-	if pilosa.EnterpriseEnabled {
-		productName = "Pilosa Enterprise " + pilosa.Version
-	}
 	rc := &cobra.Command{
 		Use: "pilosa",
 		// TODO: These short/long descriptions could use some updating.
@@ -41,8 +37,7 @@ tools for administering Pilosa, importing/exporting data,
 backing up, and more. Complete documentation is available
 at https://www.pilosa.com/docs/.
 
-` + productName + `
-Build Time: ` + pilosa.BuildTime + "\n",
+` + pilosa.VersionInfo() + "\n",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			v := viper.New()
 			err := setAllConfig(v, cmd.Flags(), "PILOSA")

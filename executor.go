@@ -381,6 +381,16 @@ func (e *executor) handlePreCalls(ctx context.Context, index string, c *pql.Call
 	return nil
 }
 
+// dumpPrecomputedCalls throws away precomputed call data. this is used so we
+// can drop any large data associated with a call once we've processed
+// the call.
+func (e *executor) dumpPrecomputedCalls(ctx context.Context, c *pql.Call) {
+	for _, call := range c.Children {
+		e.dumpPrecomputedCalls(ctx, call)
+	}
+	c.Precomputed = nil
+}
+
 // handlePreCallChildren handles any pre-calls in the children of a given call.
 func (e *executor) handlePreCallChildren(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) error {
 	for i := range c.Children {
@@ -433,7 +443,7 @@ func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shar
 
 	// Execute each call serially.
 	results := make([]interface{}, 0, len(q.Calls))
-	for _, call := range q.Calls {
+	for i, call := range q.Calls {
 		if err := validateQueryContext(ctx); err != nil {
 			return nil, err
 		}
@@ -463,6 +473,11 @@ func (e *executor) execute(ctx context.Context, index string, q *pql.Query, shar
 			return nil, err
 		}
 		results = append(results, v)
+		// Some Calls can have significant data associated with them
+		// that gets generated during processing, such as Precomputed
+		// values. Dumping the precomputed data, if any, lets the GC
+		// free the memory before we get there.
+		e.dumpPrecomputedCalls(ctx, q.Calls[i])
 	}
 	return results, nil
 }
@@ -684,7 +699,12 @@ func (e *executor) executeIncludesColumnCall(ctx context.Context, index string, 
 func (e *executor) executeFieldValueCall(ctx context.Context, index string, c *pql.Call, shards []uint64, opt *execOptions) (ValCount, error) {
 	fieldName, ok := c.Args["field"].(string)
 	if !ok || fieldName == "" {
-		return ValCount{}, errors.New("FieldValue(): field required")
+		return ValCount{}, ErrFieldRequired
+	}
+
+	colKey, ok := c.Args["column"]
+	if !ok || colKey == "" {
+		return ValCount{}, ErrColumnRequired
 	}
 
 	// Fetch index.
@@ -700,8 +720,8 @@ func (e *executor) executeFieldValueCall(ctx context.Context, index string, c *p
 	}
 
 	var colID uint64
-	if colKey, ok := c.Args["column"].(string); ok && idx.Keys() {
-		id, err := e.Cluster.translateIndexKey(ctx, index, colKey)
+	if key, ok := colKey.(string); ok && idx.Keys() {
+		id, err := e.Cluster.translateIndexKey(ctx, index, key)
 		if err != nil {
 			return ValCount{}, errors.Wrap(err, "getting column id")
 		}
@@ -709,7 +729,6 @@ func (e *executor) executeFieldValueCall(ctx context.Context, index string, c *p
 	} else {
 		id, ok, err := c.UintArg("column")
 		if !ok || err != nil {
-			// TODO: this error is getting swallowed somewhere (via curl)
 			return ValCount{}, errors.Wrap(err, "getting column argument")
 		}
 		colID = id
@@ -4026,20 +4045,20 @@ func (e *executor) translateCall(ctx context.Context, indexName string, c *pql.C
 		// are only two possible values. Instead, they are handled
 		// directly.
 		if field.Type() == FieldTypeBool {
-			// TODO: This code block doesn't make sense for a `Rows()`
-			// queries on a `bool` field. Need to review this better,
-			// include it in tests, and probably back-port it to Pilosa.
-			if c.Name != "Rows" {
-				boolVal, err := callArgBool(c, rowKey)
-				if err != nil {
-					return errors.Wrap(err, "getting bool key")
-				}
-				rowID := falseRowID
-				if boolVal {
-					rowID = trueRowID
-				}
-				c.Args[rowKey] = rowID
+			if c.Name == "Rows" {
+				// TranslateInfo for Rows returns "previous" as rowKey,
+				// so for bool fields we would get "missing bool argument" error
+				return nil
 			}
+			boolVal, err := callArgBool(c, rowKey)
+			if err != nil {
+				return errors.Wrapf(err, "getting bool key (%+v)", rowKey)
+			}
+			rowID := falseRowID
+			if boolVal {
+				rowID = trueRowID
+			}
+			c.Args[rowKey] = rowID
 		} else if field.Keys() {
 			foreignIndexName := field.ForeignIndex()
 			if c.Args[rowKey] != nil && isCondition(c.Args[rowKey]) {
@@ -4467,30 +4486,67 @@ func (s SignedRow) ToTable() (*pb.TableResponse, error) {
 
 // ToRows implements the ToRowser interface.
 func (s SignedRow) ToRows(callback func(*pb.RowResponse) error) error {
-	// TODO: address the overflow issue with values outside the int64 range
+
 	ci := []*pb.ColumnInfo{{Name: s.Field(), Datatype: "int64"}}
 	negs := s.Neg.Columns()
 	for i := len(negs) - 1; i >= 0; i-- {
+		val, err := toNegInt64(negs[i])
+		if err != nil {
+			return errors.Wrap(err, "converting uint64 to int64 (negative)")
+		}
+
 		if err := callback(&pb.RowResponse{
 			Headers: ci,
 			Columns: []*pb.ColumnResponse{
-				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: -1 * int64(negs[i])}},
-			}}); err != nil {
+				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: val}},
+			},
+		}); err != nil {
 			return errors.Wrap(err, "calling callback")
 		}
 		ci = nil
 	}
 	for _, id := range s.Pos.Columns() {
+		val, err := toInt64(id)
+		if err != nil {
+			return errors.Wrap(err, "converting uint64 to int64 (positive)")
+		}
+
 		if err := callback(&pb.RowResponse{
 			Headers: ci,
 			Columns: []*pb.ColumnResponse{
-				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: int64(id)}},
-			}}); err != nil {
+				&pb.ColumnResponse{ColumnVal: &pb.ColumnResponse_Int64Val{Int64Val: val}},
+			},
+		}); err != nil {
 			return errors.Wrap(err, "calling callback")
 		}
 		ci = nil
 	}
 	return nil
+}
+
+func toNegInt64(n uint64) (int64, error) {
+	const absMinInt64 = uint64(1 << 63)
+
+	if n > absMinInt64 {
+		return 0, errors.Errorf("value %d overflows int64", n)
+	}
+
+	if n == absMinInt64 {
+		return int64(-1 << 63), nil
+	}
+
+	// n < 1 << 63
+	return -int64(n), nil
+}
+
+func toInt64(n uint64) (int64, error) {
+	const maxInt64 = uint64(1<<63) - 1
+
+	if n > maxInt64 {
+		return 0, errors.Errorf("value %d overflows int64", n)
+	}
+
+	return int64(n), nil
 }
 
 func (sr *SignedRow) union(other SignedRow) SignedRow {

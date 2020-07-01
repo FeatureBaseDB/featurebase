@@ -63,8 +63,8 @@ func TestTransactionManager(t *testing.T) {
 	test.CompareTransactions(t, trnsMap["b"], trns2)
 
 	// can submit an exclusive transaction
-	trnsE := mustStart(t, tm, "ce", time.Millisecond*5, true)
-	test.CompareTransactions(t, &pilosa.Transaction{ID: "ce", Active: false, Exclusive: true, Timeout: time.Millisecond * 5, Deadline: time.Now().Add(time.Millisecond * 5)}, trnsE)
+	trnsE := mustStart(t, tm, "ce", 100*time.Millisecond, true)
+	test.CompareTransactions(t, &pilosa.Transaction{ID: "ce", Active: false, Exclusive: true, Timeout: 100 * time.Millisecond, Deadline: time.Now().Add(100 * time.Millisecond)}, trnsE)
 
 	// can't start new transactions while an exclusive transaction is pending
 	if _, err := tm.Start(ctx, "d", time.Millisecond, false); err != pilosa.ErrTransactionExclusive {
@@ -78,7 +78,7 @@ func TestTransactionManager(t *testing.T) {
 
 	// exclusive transaction becomes active after deadlines expire
 	for i := 0; true; i++ {
-		time.Sleep(time.Microsecond)
+		time.Sleep(time.Millisecond)
 		trnsE, err := tm.Get(ctx, "ce")
 		if err != nil {
 			t.Errorf("error retrieving exclusive transaction: %v", err)
@@ -86,7 +86,7 @@ func TestTransactionManager(t *testing.T) {
 		if trnsE.Active {
 			break
 		}
-		if i > 100 {
+		if i > 10000 {
 			t.Fatalf("exclusive transaction never became active: %+v", trnsE)
 		}
 	}
@@ -103,7 +103,7 @@ func TestTransactionManager(t *testing.T) {
 
 	// exclusive transaction gets expired after other transactions have attempted to start
 	for i := 0; true; i++ {
-		time.Sleep(time.Millisecond * 2)
+		time.Sleep(time.Millisecond * 20)
 		trnsE, err := tm.Get(ctx, "ce")
 		if err == nil {
 			if i > 10 {
@@ -155,26 +155,26 @@ func TestTransactionManager(t *testing.T) {
 	mustFinish(t, tm, "le")
 
 	// can start normal transaction to test deadline reset
-	trnsM := mustStart(t, tm, "m", time.Millisecond*4, false)
-	test.CompareTransactions(t, &pilosa.Transaction{ID: "m", Active: true, Timeout: time.Millisecond * 4, Deadline: time.Now().Add(time.Millisecond * 4)}, trnsM)
+	trnsM := mustStart(t, tm, "m", time.Millisecond*400, false)
+	test.CompareTransactions(t, &pilosa.Transaction{ID: "m", Active: true, Timeout: time.Millisecond * 400, Deadline: time.Now().Add(time.Millisecond * 400)}, trnsM)
 
 	// start new exclusive transaction to trigger deadline check
 	trnsNE := mustStart(t, tm, "ne", time.Hour, true)
 	test.CompareTransactions(t, &pilosa.Transaction{ID: "ne", Exclusive: true, Timeout: time.Hour, Deadline: time.Now().Add(time.Hour)}, trnsNE)
 
 	// sleep for most of the deadline
-	time.Sleep(time.Millisecond * 3)
+	time.Sleep(time.Millisecond * 300)
 
 	// reset deadline
 	trnsM_reset, err := tm.ResetDeadline(ctx, "m")
 	if err != nil {
 		t.Errorf("resetting deadline: %v", err)
 	}
-	trnsM.Deadline = time.Now().Add(time.Millisecond * 4)
+	trnsM.Deadline = time.Now().Add(time.Millisecond * 400)
 	test.CompareTransactions(t, trnsM, trnsM_reset)
 
 	// sleep until past the original deadline
-	time.Sleep(time.Millisecond * 2)
+	time.Sleep(time.Millisecond * 200)
 
 	// verify that trnsM still exists
 	trnsM_again := mustGet(t, tm, "m")

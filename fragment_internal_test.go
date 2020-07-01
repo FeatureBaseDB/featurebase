@@ -1477,7 +1477,7 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 	}
 
 	// Open the fragment specified by the path.
-	f := newFragment(*FragmentPath, "i", "f", viewStandard, 0, 0)
+	f := newFragment(NewHolder(DefaultPartitionN), *FragmentPath, "i", "f", viewStandard, 0, 0)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
@@ -2006,7 +2006,7 @@ func BenchmarkFragment_Snapshot(b *testing.B) {
 
 	b.ReportAllocs()
 	// Open the fragment specified by the path.
-	f := newFragment(*FragmentPath, "i", "f", viewStandard, 0, 0)
+	f := newFragment(NewHolder(DefaultPartitionN), *FragmentPath, "i", "f", viewStandard, 0, 0)
 	if err := f.Open(); err != nil {
 		b.Fatal(err)
 	}
@@ -2121,7 +2121,7 @@ func BenchmarkImportRoaring(b *testing.B) {
 						// care whether this succeeds,
 						// but if it's happening we want
 						// it to be done.
-						_ = f.snapshotQueue.Await(f)
+						_ = defaultSnapshotQueue.Await(f)
 						f.Clean(b)
 						b.Fatalf("import error: %v", err)
 					}
@@ -2162,7 +2162,7 @@ func BenchmarkImportRoaringConcurrent(b *testing.B) {
 								err := frags[j].importRoaringT(data[j], false)
 								// error unimportant if it happened, but we want
 								// any snapshots to have finished.
-								_ = frags[j].snapshotQueue.Await(frags[j])
+								_ = defaultSnapshotQueue.Await(frags[j])
 								return err
 							})
 						}
@@ -2203,7 +2203,7 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 								if err != nil {
 									b.Fatalf("importing roaring: %v", err)
 								}
-								err = frags[j].snapshotQueue.Immediate(frags[j])
+								err = defaultSnapshotQueue.Immediate(frags[j])
 								if err != nil {
 									b.Fatalf("snapshot after import: %v", err)
 								}
@@ -2214,7 +2214,7 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 								j := j
 								eg.Go(func() error {
 									err := frags[j].importRoaringT(updata, false)
-									err2 := frags[j].snapshotQueue.Await(frags[j])
+									err2 := defaultSnapshotQueue.Await(frags[j])
 									if err == nil {
 										err = err2
 									}
@@ -2282,7 +2282,7 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 						if err != nil {
 							b.Errorf("import error: %v", err)
 						}
-						err = f.snapshotQueue.Immediate(f)
+						err = defaultSnapshotQueue.Immediate(f)
 						if err != nil {
 							b.Errorf("snapshot after import error: %v", err)
 						}
@@ -2292,7 +2292,7 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 							f.Clean(b)
 							b.Errorf("import error: %v", err)
 						}
-						err = f.snapshotQueue.Await(f)
+						err = defaultSnapshotQueue.Await(f)
 						if err != nil {
 							b.Errorf("snapshot after import error: %v", err)
 						}
@@ -2391,7 +2391,7 @@ func BenchmarkImportIntoLargeFragment(b *testing.B) {
 		}
 		origF.Close()
 		fi.Close()
-		nf := newFragment(fi.Name(), "i", "f", viewStandard, 0, 0)
+		nf := newFragment(NewHolder(DefaultPartitionN), fi.Name(), "i", "f", viewStandard, 0, 0)
 		err = nf.Open()
 		if err != nil {
 			b.Fatalf("opening fragment: %v", err)
@@ -2428,7 +2428,7 @@ func BenchmarkImportRoaringIntoLargeFragment(b *testing.B) {
 		}
 		origF.Close()
 		fi.Close()
-		nf := newFragment(fi.Name(), "i", "f", viewStandard, 0, 0)
+		nf := newFragment(NewHolder(DefaultPartitionN), fi.Name(), "i", "f", viewStandard, 0, 0)
 		err = nf.Open()
 		if err != nil {
 			b.Fatalf("opening fragment: %v", err)
@@ -2607,17 +2607,23 @@ func (f *fragment) sanityCheck(t testing.TB) {
 
 func (f *fragment) Clean(t testing.TB) {
 	f.mu.Lock()
-	err := f.snapshotQueue.Await(f)
-	f.mu.Unlock()
-	if err != nil {
-		t.Fatalf("snapshot failed before sanity check: %v", err)
-	}
-	f.sanityCheck(t)
-	if f.storage != nil && f.storage.Source != nil {
-		if f.storage.Source.Dead() {
-			t.Fatalf("cleaning up fragment %s, source %s, source already dead", f.path, f.storage.Source.ID())
+	// we need to ensure that we unlock the mutex before terminating
+	// the clean operation, but we need it held during the sanity
+	// check or else, in some cases, the background snapshot queue
+	// can decide to pick it up.
+	func() {
+		defer f.mu.Unlock()
+		err := defaultSnapshotQueue.Await(f)
+		if err != nil {
+			t.Fatalf("snapshot failed before sanity check: %v", err)
 		}
-	}
+		f.sanityCheck(t)
+		if f.storage != nil && f.storage.Source != nil {
+			if f.storage.Source.Dead() {
+				t.Fatalf("cleaning up fragment %s, source %s, source already dead", f.path, f.storage.Source.ID())
+			}
+		}
+	}()
 	errc := f.Close()
 	// prevent double-closes of generation during testing.
 	f.gen = nil
@@ -2625,10 +2631,6 @@ func (f *fragment) Clean(t testing.TB) {
 	errp := os.Remove(f.cachePath())
 	if errc != nil || errf != nil {
 		t.Fatal("cleaning up fragment: ", errc, errf, errp)
-	}
-	if f.snapshotQueue != nil {
-		f.snapshotQueue.Stop()
-		f.snapshotQueue = nil
 	}
 	// not all fragments have cache files
 	if errp != nil && !os.IsNotExist(errp) {
@@ -2649,10 +2651,6 @@ func (f *fragment) CleanKeep(t testing.TB) {
 	if errc != nil {
 		t.Fatal("closing fragment: ", errc, errp)
 	}
-	if f.snapshotQueue != nil {
-		f.snapshotQueue.Stop()
-		f.snapshotQueue = nil
-	}
 	// not all fragments have cache files
 	if errp != nil && !os.IsNotExist(errp) {
 		t.Fatalf("cleaning up fragment cache: %v", errp)
@@ -2668,6 +2666,12 @@ func mustOpenBSIFragment(index, field, view string, shard uint64) *fragment {
 	return mustOpenFragmentFlags(index, field, view, shard, "", 1)
 }
 
+var testHolder = NewHolder(DefaultPartitionN)
+
+func init() {
+	testHolder.SnapshotQueue = newSnapshotQueue(1, 1, nil)
+}
+
 // mustOpenFragment returns a new instance of Fragment with a temporary path.
 func mustOpenFragmentFlags(index, field, view string, shard uint64, cacheType string, flags byte) *fragment {
 	file, err := ioutil.TempFile(*TempDir, "pilosa-fragment-")
@@ -2680,12 +2684,12 @@ func mustOpenFragmentFlags(index, field, view string, shard uint64, cacheType st
 		cacheType = DefaultCacheType
 	}
 
-	f := newFragment(file.Name(), index, field, view, shard, flags)
+	f := newFragment(testHolder, file.Name(), index, field, view, shard, flags)
+
 	f.CacheType = cacheType
 	f.RowAttrStore = &memAttrStore{
 		store: make(map[uint64]map[string]interface{}),
 	}
-	f.snapshotQueue = newSnapshotQueue(1, 1, nil)
 
 	if err := f.Open(); err != nil {
 		panic(err)
@@ -3179,7 +3183,7 @@ func TestUnionInPlaceMapped(t *testing.T) {
 	// it's used only in computation of things that usually don't go to
 	// disk, which is why we handle this specially in testing and not
 	// generically.
-	err = f.snapshotQueue.Immediate(f)
+	err = defaultSnapshotQueue.Immediate(f)
 	if err != nil {
 		t.Fatalf("snapshot after union-in-place: %v", err)
 	}
@@ -3332,7 +3336,6 @@ func TestImportClearRestart(t *testing.T) {
 			cols: []uint64{1, 1, 1, 1, 1, 1},
 		},
 	}
-
 	for i, test := range tests {
 		for _, maxOpN := range []int{0, 10000} {
 			t.Run(fmt.Sprintf("%dMaxOpN%d", i, maxOpN), func(t *testing.T) {
@@ -3385,7 +3388,7 @@ func TestImportClearRestart(t *testing.T) {
 
 				check(t, f, exp)
 
-				f2 := newFragment(f.path, "i", "f", viewStandard, 0, 0)
+				f2 := newFragment(NewHolder(DefaultPartitionN), f.path, "i", "f", viewStandard, 0, 0)
 				f2.MaxOpN = maxOpN
 				f2.CacheType = f.CacheType
 
@@ -3419,7 +3422,7 @@ func TestImportClearRestart(t *testing.T) {
 
 				check(t, f2, exp)
 
-				f3 := newFragment(f2.path, "i", "f", viewStandard, 0, 0)
+				f3 := newFragment(NewHolder(DefaultPartitionN), f2.path, "i", "f", viewStandard, 0, 0)
 				f3.MaxOpN = maxOpN
 				f3.CacheType = f.CacheType
 

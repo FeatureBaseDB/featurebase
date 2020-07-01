@@ -41,7 +41,7 @@ func TestInspectCommand_Run(t *testing.T) {
 	file.Close()
 	cm.Path = file.Name()
 	err = cm.Run(context.Background())
-	expectedError := "unmarshalling: "
+	expectedError := "inspecting: "
 	if !strings.Contains(err.Error(), expectedError) {
 		t.Fatalf("expected error '%s', got '%v'", expectedError, err)
 	}
@@ -52,7 +52,7 @@ func TestInspectCommand_Run(t *testing.T) {
 	if err != nil {
 		t.Fatalf("copying data: %v", err)
 	}
-	if !strings.Contains(buf.String(), "unmarshalling bitmap...") {
+	if !strings.Contains(buf.String(), "inspecting bitmap...") {
 		t.Fatalf("Inspect doesn't work: %s", err)
 	}
 
