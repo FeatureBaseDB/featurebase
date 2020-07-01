@@ -495,3 +495,71 @@ func TestValCountComparisons(t *testing.T) {
 		})
 	}
 }
+
+func TestToNegInt64(t *testing.T) {
+	tests := []struct {
+		u64      uint64
+		i64      int64
+		overflow bool
+	}{
+		{
+			u64: uint64(1 << 63),
+			i64: int64(-1 << 63),
+		},
+		{
+			u64: uint64(1<<63) - 1,
+			i64: int64(-1<<63) + 1,
+		},
+		{
+			u64:      uint64(1<<63) + 1,
+			overflow: true,
+		},
+	}
+
+	for _, tc := range tests {
+		val, err := toNegInt64(tc.u64)
+		if err != nil && !tc.overflow {
+			t.Fatalf("error: %+v, expected: %+v", err, tc)
+		}
+
+		if val != tc.i64 {
+			t.Fatalf("Expected: %+v, Got: %+v", tc.i64, val)
+		}
+	}
+}
+
+func TestToInt64(t *testing.T) {
+	tests := []struct {
+		u64      uint64
+		i64      int64
+		overflow bool
+	}{
+		{
+			u64: uint64(1<<63) - 1,
+			i64: 1<<63 - 1,
+		},
+		{
+			u64: uint64(0),
+			i64: 0,
+		},
+		{
+			u64:      uint64(1 << 63),
+			overflow: true,
+		},
+		{
+			u64:      1<<64 - 1,
+			overflow: true,
+		},
+	}
+
+	for _, tc := range tests {
+		val, err := toInt64(tc.u64)
+		if err != nil && !tc.overflow {
+			t.Fatalf("error: %+v, expected: %+v", err, tc)
+		}
+
+		if val != tc.i64 {
+			t.Fatalf("Expected: %+v, Got: %+v", tc.i64, val)
+		}
+	}
+}
