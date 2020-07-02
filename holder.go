@@ -613,6 +613,11 @@ func (h *Holder) Close() error {
 	return nil
 }
 
+// Begin starts a transaction on the holder.
+func (h *Holder) Begin(writable bool) (Tx, error) {
+	return NewMultiTx(writable, h), nil
+}
+
 // HasData returns true if Holder contains at least one index.
 // This is used to determine if the rebalancing of data is necessary
 // when a node joins the cluster.

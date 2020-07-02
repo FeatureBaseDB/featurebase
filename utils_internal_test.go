@@ -133,8 +133,21 @@ func (t *ClusterCluster) SetBit(index, field string, rowID, colID uint64, x *tim
 		if f == nil {
 			return fmt.Errorf("index/field does not exist: %s/%s", index, field)
 		}
-		_, err := f.SetBit(rowID, colID, x)
-		if err != nil {
+
+		if err := func() error {
+			tx, err := c.holder.Begin(true)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = tx.Rollback() }()
+
+			if _, err := f.SetBit(tx, rowID, colID, x); err != nil {
+				return err
+			} else if err := tx.Commit(); err != nil {
+				return err
+			}
+			return nil
+		}(); err != nil {
 			return err
 		}
 	}

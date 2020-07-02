@@ -362,6 +362,12 @@ func (i *Index) AvailableShards() *roaring.Bitmap {
 	return b
 }
 
+// Begin starts a transaction on a shard of the index.
+func (i *Index) Begin(writable bool, shard uint64) (Tx, error) {
+	// TODO(bbj): Check for underlying storage as RBF or roaring.
+	return &RoaringTx{Index: i}, nil
+}
+
 // fieldPath returns the path to a field in the index.
 func (i *Index) fieldPath(name string) string { return filepath.Join(i.path, name) }
 

@@ -30,35 +30,35 @@ import (
 )
 
 // String produces a human viewable string of the contents.
-func (iv interval16) String() string {
-	return fmt.Sprintf("[%d, %d]", iv.start, iv.last)
+func (iv Interval16) String() string {
+	return fmt.Sprintf("[%d, %d]", iv.Start, iv.Last)
 }
 
 func TestRunAppendInterval(t *testing.T) {
 	a := NewContainerRun(nil)
 	tests := []struct {
-		base []interval16
-		app  interval16
+		base []Interval16
+		app  Interval16
 		exp  int32
 	}{
 		{
-			base: []interval16{},
-			app:  interval16{start: 22, last: 25},
+			base: []Interval16{},
+			app:  Interval16{Start: 22, Last: 25},
 			exp:  4,
 		},
 		{
-			base: []interval16{{start: 20, last: 23}},
-			app:  interval16{start: 22, last: 25},
+			base: []Interval16{{Start: 20, Last: 23}},
+			app:  Interval16{Start: 22, Last: 25},
 			exp:  2,
 		},
 		{
-			base: []interval16{{start: 20, last: 23}},
-			app:  interval16{start: 21, last: 22},
+			base: []Interval16{{Start: 20, Last: 23}},
+			app:  Interval16{Start: 21, Last: 22},
 			exp:  0,
 		},
 		{
-			base: []interval16{{start: 20, last: 23}},
-			app:  interval16{start: 19, last: 25},
+			base: []Interval16{{Start: 20, Last: 23}},
+			app:  Interval16{Start: 19, Last: 25},
 			exp:  2, // runAppendInterval explicitly does not support intervals whose start is < c.runs[-1].start
 		},
 	}
@@ -73,11 +73,11 @@ func TestRunAppendInterval(t *testing.T) {
 }
 
 func TestInterval16RunLen(t *testing.T) {
-	iv := interval16{start: 7, last: 9}
+	iv := Interval16{Start: 7, Last: 9}
 	if iv.runlen() != 3 {
 		t.Fatalf("should be 3")
 	}
-	iv = interval16{start: 7, last: 7}
+	iv = Interval16{Start: 7, Last: 7}
 	if iv.runlen() != 1 {
 		t.Fatalf("should be 1")
 	}
@@ -87,17 +87,17 @@ func TestContainerRunAdd(t *testing.T) {
 	c := NewContainerRun(nil)
 	tests := []struct {
 		op  uint16
-		exp []interval16
+		exp []Interval16
 	}{
-		{1, []interval16{{start: 1, last: 1}}},
-		{2, []interval16{{start: 1, last: 2}}},
-		{4, []interval16{{start: 1, last: 2}, {start: 4, last: 4}}},
-		{3, []interval16{{start: 1, last: 4}}},
-		{10, []interval16{{start: 1, last: 4}, {start: 10, last: 10}}},
-		{7, []interval16{{start: 1, last: 4}, {start: 7, last: 7}, {start: 10, last: 10}}},
-		{6, []interval16{{start: 1, last: 4}, {start: 6, last: 7}, {start: 10, last: 10}}},
-		{0, []interval16{{start: 0, last: 4}, {start: 6, last: 7}, {start: 10, last: 10}}},
-		{8, []interval16{{start: 0, last: 4}, {start: 6, last: 8}, {start: 10, last: 10}}},
+		{1, []Interval16{{Start: 1, Last: 1}}},
+		{2, []Interval16{{Start: 1, Last: 2}}},
+		{4, []Interval16{{Start: 1, Last: 2}, {Start: 4, Last: 4}}},
+		{3, []Interval16{{Start: 1, Last: 4}}},
+		{10, []Interval16{{Start: 1, Last: 4}, {Start: 10, Last: 10}}},
+		{7, []Interval16{{Start: 1, Last: 4}, {Start: 7, Last: 7}, {Start: 10, Last: 10}}},
+		{6, []Interval16{{Start: 1, Last: 4}, {Start: 6, Last: 7}, {Start: 10, Last: 10}}},
+		{0, []Interval16{{Start: 0, Last: 4}, {Start: 6, Last: 7}, {Start: 10, Last: 10}}},
+		{8, []Interval16{{Start: 0, Last: 4}, {Start: 6, Last: 8}, {Start: 10, Last: 10}}},
 	}
 	for _, test := range tests {
 		c.setMapped(true)
@@ -120,7 +120,7 @@ func TestContainerRunAdd2(t *testing.T) {
 	if !ret {
 		t.Fatalf("result of adding new bit should be true: %v", c.runs())
 	}
-	if !reflect.DeepEqual(c.runs(), []interval16{{start: 0, last: 0}}) {
+	if !reflect.DeepEqual(c.runs(), []Interval16{{Start: 0, Last: 0}}) {
 		t.Fatalf("should have 1 run of length 1, but have %v", c.runs())
 	}
 	c, ret = c.add(0)
@@ -270,23 +270,23 @@ func TestBitmapCountRange(t *testing.T) {
 }
 
 func TestIntersectionCountArrayBitmap3(t *testing.T) {
-	a, b := NewContainerBitmapN(getFullBitmap(), maxContainerVal+1), NewContainerBitmapN(getFullBitmap(), maxContainerVal+1)
+	a, b := NewContainerBitmapN(getFullBitmap(), MaxContainerVal+1), NewContainerBitmapN(getFullBitmap(), MaxContainerVal+1)
 
 	res := intersectBitmapBitmap(a, b)
-	if res.N() != res.count() || res.N() != maxContainerVal+1 {
-		t.Fatalf("test #1 intersectCountBitmapBitmap fail orig: %v new: %v exp: %v", res.N(), res.count(), maxContainerVal+1)
+	if res.N() != res.count() || res.N() != MaxContainerVal+1 {
+		t.Fatalf("test #1 intersectCountBitmapBitmap fail orig: %v new: %v exp: %v", res.N(), res.count(), MaxContainerVal+1)
 	}
 
 	a = a.bitmapToRun(0)
 	res = intersectBitmapRun(b, a)
-	if res.N() != res.count() || res.N() != maxContainerVal+1 {
-		t.Fatalf("test #2 intersectCountBitmapRun fail orig: %v new: %v exp: %v", res.N(), res.count(), maxContainerVal+1)
+	if res.N() != res.count() || res.N() != MaxContainerVal+1 {
+		t.Fatalf("test #2 intersectCountBitmapRun fail orig: %v new: %v exp: %v", res.N(), res.count(), MaxContainerVal+1)
 	}
 	b.bitmapToRun(0)
 	res = intersectRunRun(a, b)
 	n := intersectionCountRunRun(a, b)
-	if res.N() != res.count() || res.N() != maxContainerVal+1 || res.N() != int32(n) {
-		t.Fatalf("test #3 intersectCountRunRun fail orig: %v new: %v exp: %v", res.N(), res.count(), maxContainerVal+1)
+	if res.N() != res.count() || res.N() != MaxContainerVal+1 || res.N() != int32(n) {
+		t.Fatalf("test #3 intersectCountRunRun fail orig: %v new: %v exp: %v", res.N(), res.count(), MaxContainerVal+1)
 	}
 }
 
@@ -335,22 +335,22 @@ func TestIntersectionCountArrayBitmap2(t *testing.T) {
 }
 
 func TestRunRemove(t *testing.T) {
-	c := NewContainerRun([]interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}})
+	c := NewContainerRun([]Interval16{{Start: 2, Last: 10}, {Start: 12, Last: 13}, {Start: 15, Last: 16}})
 	tests := []struct {
 		op     uint16
-		exp    []interval16
+		exp    []Interval16
 		expRet bool
 	}{
-		{2, []interval16{{start: 3, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}, true},
-		{10, []interval16{{start: 3, last: 9}, {start: 12, last: 13}, {start: 15, last: 16}}, true},
-		{12, []interval16{{start: 3, last: 9}, {start: 13, last: 13}, {start: 15, last: 16}}, true},
-		{13, []interval16{{start: 3, last: 9}, {start: 15, last: 16}}, true},
-		{16, []interval16{{start: 3, last: 9}, {start: 15, last: 15}}, true},
-		{6, []interval16{{start: 3, last: 5}, {start: 7, last: 9}, {start: 15, last: 15}}, true},
-		{8, []interval16{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, true},
-		{8, []interval16{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, false},
-		{1, []interval16{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, false},
-		{44, []interval16{{start: 3, last: 5}, {start: 7, last: 7}, {start: 9, last: 9}, {start: 15, last: 15}}, false},
+		{2, []Interval16{{Start: 3, Last: 10}, {Start: 12, Last: 13}, {Start: 15, Last: 16}}, true},
+		{10, []Interval16{{Start: 3, Last: 9}, {Start: 12, Last: 13}, {Start: 15, Last: 16}}, true},
+		{12, []Interval16{{Start: 3, Last: 9}, {Start: 13, Last: 13}, {Start: 15, Last: 16}}, true},
+		{13, []Interval16{{Start: 3, Last: 9}, {Start: 15, Last: 16}}, true},
+		{16, []Interval16{{Start: 3, Last: 9}, {Start: 15, Last: 15}}, true},
+		{6, []Interval16{{Start: 3, Last: 5}, {Start: 7, Last: 9}, {Start: 15, Last: 15}}, true},
+		{8, []Interval16{{Start: 3, Last: 5}, {Start: 7, Last: 7}, {Start: 9, Last: 9}, {Start: 15, Last: 15}}, true},
+		{8, []Interval16{{Start: 3, Last: 5}, {Start: 7, Last: 7}, {Start: 9, Last: 9}, {Start: 15, Last: 15}}, false},
+		{1, []Interval16{{Start: 3, Last: 5}, {Start: 7, Last: 7}, {Start: 9, Last: 9}, {Start: 15, Last: 15}}, false},
+		{44, []Interval16{{Start: 3, Last: 5}, {Start: 7, Last: 7}, {Start: 9, Last: 9}, {Start: 15, Last: 15}}, false},
 	}
 
 	for i, test := range tests {
@@ -370,7 +370,7 @@ func TestRunRemove(t *testing.T) {
 }
 
 func TestRunMax(t *testing.T) {
-	c := NewContainerRun([]interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}})
+	c := NewContainerRun([]Interval16{{Start: 2, Last: 10}, {Start: 12, Last: 13}, {Start: 15, Last: 16}})
 	max := c.max()
 	if max != 16 {
 		t.Fatalf("max for %v should be 16", c.runs())
@@ -385,7 +385,7 @@ func TestRunMax(t *testing.T) {
 
 func TestIntersectionCountArrayRun(t *testing.T) {
 	a := NewContainerArray([]uint16{1, 5, 10, 11, 12})
-	b := NewContainerRun([]interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}})
+	b := NewContainerRun([]Interval16{{Start: 2, Last: 10}, {Start: 12, Last: 13}, {Start: 15, Last: 16}})
 
 	ret := intersectionCountArrayRun(a, b)
 	if ret != 3 {
@@ -397,7 +397,7 @@ func TestIntersectionCountBitmapRun(t *testing.T) {
 	ob := make([]uint64, bitmapN)
 	ob[0] = 1 << 63
 	a := NewContainerBitmap(1, ob)
-	b := NewContainerRun([]interval16{{start: 63, last: 64}})
+	b := NewContainerRun([]Interval16{{Start: 63, Last: 64}})
 
 	ret := intersectionCountBitmapRun(a, b)
 	if ret != 1 {
@@ -405,7 +405,7 @@ func TestIntersectionCountBitmapRun(t *testing.T) {
 	}
 
 	a = NewContainerBitmap(-1, []uint64{0xF0000001, 0xFF00000000000000, 0xFF000000000000F0, 0x0F0000})
-	b = NewContainerRun([]interval16{{start: 29, last: 31}, {start: 125, last: 134}, {start: 191, last: 197}, {start: 200, last: 300}})
+	b = NewContainerRun([]Interval16{{Start: 29, Last: 31}, {Start: 125, Last: 134}, {Start: 191, Last: 197}, {Start: 200, Last: 300}})
 
 	ret = intersectionCountBitmapRun(a, b)
 	if ret != 14 {
@@ -415,40 +415,40 @@ func TestIntersectionCountBitmapRun(t *testing.T) {
 
 func TestIntersectionCountRunRun(t *testing.T) {
 	tests := []struct {
-		aruns []interval16
-		bruns []interval16
+		aruns []Interval16
+		bruns []Interval16
 		exp   int32
 	}{
 		{
-			aruns: []interval16{},
-			bruns: []interval16{{start: 3, last: 8}}, exp: 0},
+			aruns: []Interval16{},
+			bruns: []Interval16{{Start: 3, Last: 8}}, exp: 0},
 		{
-			aruns: []interval16{{start: 2, last: 10}},
-			bruns: []interval16{{start: 3, last: 8}}, exp: 6},
+			aruns: []Interval16{{Start: 2, Last: 10}},
+			bruns: []Interval16{{Start: 3, Last: 8}}, exp: 6},
 		{
-			aruns: []interval16{{start: 2, last: 10}},
-			bruns: []interval16{{start: 1, last: 11}}, exp: 9},
+			aruns: []Interval16{{Start: 2, Last: 10}},
+			bruns: []Interval16{{Start: 1, Last: 11}}, exp: 9},
 		{
-			aruns: []interval16{{start: 2, last: 10}},
-			bruns: []interval16{{start: 0, last: 2}}, exp: 1},
+			aruns: []Interval16{{Start: 2, Last: 10}},
+			bruns: []Interval16{{Start: 0, Last: 2}}, exp: 1},
 		{
-			aruns: []interval16{{start: 2, last: 10}},
-			bruns: []interval16{{start: 1, last: 10}}, exp: 9},
+			aruns: []Interval16{{Start: 2, Last: 10}},
+			bruns: []Interval16{{Start: 1, Last: 10}}, exp: 9},
 		{
-			aruns: []interval16{{start: 2, last: 10}},
-			bruns: []interval16{{start: 5, last: 12}}, exp: 6},
+			aruns: []Interval16{{Start: 2, Last: 10}},
+			bruns: []Interval16{{Start: 5, Last: 12}}, exp: 6},
 		{
-			aruns: []interval16{{start: 2, last: 10}},
-			bruns: []interval16{{start: 10, last: 99}}, exp: 1},
+			aruns: []Interval16{{Start: 2, Last: 10}},
+			bruns: []Interval16{{Start: 10, Last: 99}}, exp: 1},
 		{
-			aruns: []interval16{{start: 2, last: 10}, {start: 44, last: 99}},
-			bruns: []interval16{{start: 12, last: 14}}, exp: 0},
+			aruns: []Interval16{{Start: 2, Last: 10}, {Start: 44, Last: 99}},
+			bruns: []Interval16{{Start: 12, Last: 14}}, exp: 0},
 		{
-			aruns: []interval16{{start: 2, last: 10}, {start: 12, last: 13}},
-			bruns: []interval16{{start: 2, last: 10}, {start: 12, last: 13}}, exp: 11},
+			aruns: []Interval16{{Start: 2, Last: 10}, {Start: 12, Last: 13}},
+			bruns: []Interval16{{Start: 2, Last: 10}, {Start: 12, Last: 13}}, exp: 11},
 		{
-			aruns: []interval16{{start: 8, last: 12}, {start: 15, last: 19}},
-			bruns: []interval16{{start: 9, last: 9}, {start: 11, last: 17}}, exp: 6},
+			aruns: []Interval16{{Start: 8, Last: 12}, {Start: 15, Last: 19}},
+			bruns: []Interval16{{Start: 9, Last: 9}, {Start: 11, Last: 17}}, exp: 6},
 	}
 	for i, test := range tests {
 		a := NewContainerRun(test.aruns)
@@ -465,27 +465,27 @@ func TestIntersectArrayRun(t *testing.T) {
 	b := NewContainerRun(nil)
 	tests := []struct {
 		array []uint16
-		runs  []interval16
+		runs  []Interval16
 		exp   []uint16
 	}{
 		{
 			array: []uint16{1, 4, 5, 7, 10, 11, 12},
-			runs:  []interval16{{start: 5, last: 10}},
+			runs:  []Interval16{{Start: 5, Last: 10}},
 			exp:   []uint16{5, 7, 10},
 		},
 		{
 			array: []uint16{},
-			runs:  []interval16{{start: 5, last: 10}},
+			runs:  []Interval16{{Start: 5, Last: 10}},
 			exp:   []uint16(nil),
 		},
 		{
 			array: []uint16{1, 4, 5, 7, 10, 11, 12},
-			runs:  []interval16{},
+			runs:  []Interval16{},
 			exp:   []uint16(nil),
 		},
 		{
 			array: []uint16{0, 1, 4, 5, 7, 10, 11, 12},
-			runs:  []interval16{{start: 0, last: 5}, {start: 7, last: 7}},
+			runs:  []Interval16{{Start: 0, Last: 5}, {Start: 7, Last: 7}},
 			exp:   []uint16{0, 1, 4, 5, 7},
 		},
 	}
@@ -508,45 +508,45 @@ func TestIntersectRunRun(t *testing.T) {
 	a := NewContainerRun(nil)
 	b := NewContainerRun(nil)
 	tests := []struct {
-		aruns []interval16
-		bruns []interval16
-		exp   []interval16
+		aruns []Interval16
+		bruns []Interval16
+		exp   []Interval16
 		expN  int32
 	}{
 		{
-			aruns: []interval16{},
-			bruns: []interval16{{start: 5, last: 10}},
-			exp:   []interval16(nil),
+			aruns: []Interval16{},
+			bruns: []Interval16{{Start: 5, Last: 10}},
+			exp:   []Interval16(nil),
 			expN:  0,
 		},
 		{
-			aruns: []interval16{{start: 5, last: 12}},
-			bruns: []interval16{{start: 5, last: 10}},
-			exp:   []interval16{{start: 5, last: 10}},
+			aruns: []Interval16{{Start: 5, Last: 12}},
+			bruns: []Interval16{{Start: 5, Last: 10}},
+			exp:   []Interval16{{Start: 5, Last: 10}},
 			expN:  6,
 		},
 		{
-			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
-			bruns: []interval16{{start: 5, last: 10}},
-			exp:   []interval16{{start: 5, last: 5}, {start: 7, last: 10}},
+			aruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 8}, {Start: 9, Last: 12}},
+			bruns: []Interval16{{Start: 5, Last: 10}},
+			exp:   []Interval16{{Start: 5, Last: 5}, {Start: 7, Last: 10}},
 			expN:  5,
 		},
 		{
-			aruns: []interval16{{start: 20, last: 30}},
-			bruns: []interval16{{start: 5, last: 10}, {start: 19, last: 21}},
-			exp:   []interval16{{start: 20, last: 21}},
+			aruns: []Interval16{{Start: 20, Last: 30}},
+			bruns: []Interval16{{Start: 5, Last: 10}, {Start: 19, Last: 21}},
+			exp:   []Interval16{{Start: 20, Last: 21}},
 			expN:  2,
 		},
 		{
-			aruns: []interval16{{start: 5, last: 10}},
-			bruns: []interval16{{start: 7, last: 12}},
-			exp:   []interval16{{start: 7, last: 10}},
+			aruns: []Interval16{{Start: 5, Last: 10}},
+			bruns: []Interval16{{Start: 7, Last: 12}},
+			exp:   []Interval16{{Start: 7, Last: 10}},
 			expN:  4,
 		},
 		{
-			aruns: []interval16{{start: 5, last: 12}},
-			bruns: []interval16{{start: 7, last: 10}},
-			exp:   []interval16{{start: 7, last: 10}},
+			aruns: []Interval16{{Start: 5, Last: 12}},
+			bruns: []Interval16{{Start: 7, Last: 10}},
+			exp:   []Interval16{{Start: 7, Last: 10}},
 			expN:  4,
 		},
 	}
@@ -570,37 +570,37 @@ func TestIntersectRunRun(t *testing.T) {
 func TestIntersectBitmapRunBitmap(t *testing.T) {
 	tests := []struct {
 		bitmap []uint64
-		runs   []interval16
+		runs   []Interval16
 		exp    []uint64
 		expN   int32
 	}{
 		{
 			bitmap: []uint64{1},
-			runs:   []interval16{{start: 0, last: 0}, {start: 2, last: 5}, {start: 62, last: 71}, {start: 77, last: 4096}},
+			runs:   []Interval16{{Start: 0, Last: 0}, {Start: 2, Last: 5}, {Start: 62, Last: 71}, {Start: 77, Last: 4096}},
 			exp:    []uint64{1},
 			expN:   1,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 1, last: 1}},
+			runs:   []Interval16{{Start: 1, Last: 1}},
 			exp:    []uint64{2},
 			expN:   1,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 1, last: 1}, {start: 10, last: 12}, {start: 61, last: 77}},
+			runs:   []Interval16{{Start: 1, Last: 1}, {Start: 10, Last: 12}, {Start: 61, Last: 77}},
 			exp:    []uint64{0xe000000000001C02},
 			expN:   7,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 1, last: 1}, {start: 61, last: 77}},
+			runs:   []Interval16{{Start: 1, Last: 1}, {Start: 61, Last: 77}},
 			exp:    []uint64{0xE000000000000002, 0x00000000000003FFF},
 			expN:   18,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 1, 1, 1, 0xA, 1, 1, 0, 1},
-			runs:   []interval16{{start: 63, last: 10000}},
+			runs:   []Interval16{{Start: 63, Last: 10000}},
 			exp:    []uint64{0x8000000000000000, 1, 1, 1, 0xA, 1, 1, 0, 1},
 			expN:   9,
 		},
@@ -630,37 +630,37 @@ func TestIntersectBitmapRunArray(t *testing.T) {
 	b := NewContainerRun(nil)
 	tests := []struct {
 		bitmap []uint64
-		runs   []interval16
+		runs   []Interval16
 		exp    []uint16
 		expN   int32
 	}{
 		{
 			bitmap: []uint64{1},
-			runs:   []interval16{{start: 0, last: 0}, {start: 2, last: 5}, {start: 62, last: 71}, {start: 77, last: 4096}},
+			runs:   []Interval16{{Start: 0, Last: 0}, {Start: 2, Last: 5}, {Start: 62, Last: 71}, {Start: 77, Last: 4096}},
 			exp:    []uint16{0},
 			expN:   1,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 1, last: 1}},
+			runs:   []Interval16{{Start: 1, Last: 1}},
 			exp:    []uint16{1},
 			expN:   1,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 1, last: 1}, {start: 10, last: 12}, {start: 61, last: 77}},
+			runs:   []Interval16{{Start: 1, Last: 1}, {Start: 10, Last: 12}, {Start: 61, Last: 77}},
 			exp:    []uint16{1, 10, 11, 12, 61, 62, 63},
 			expN:   7,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 1, last: 1}, {start: 61, last: 68}},
+			runs:   []Interval16{{Start: 1, Last: 1}, {Start: 61, Last: 68}},
 			exp:    []uint16{1, 61, 62, 63, 64, 65, 66, 67, 68},
 			expN:   9,
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 1, 1, 1, 0xA, 1, 1, 0, 1},
-			runs:   []interval16{{start: 63, last: 10000}, {start: 65000, last: 65535}},
+			runs:   []Interval16{{Start: 63, Last: 10000}, {Start: 65000, Last: 65535}},
 			exp:    []uint16{63, 64, 128, 192, 257, 259, 320, 384, 512},
 			expN:   9,
 		},
@@ -688,7 +688,7 @@ func TestUnionMixed(t *testing.T) {
 	b := NewContainerBitmap(2, []uint64{0x3})
 
 	// run container
-	r := NewContainerRun([]interval16{{start: 5, last: 10}})
+	r := NewContainerRun([]Interval16{{Start: 5, Last: 10}})
 
 	t.Run("various container Unions", func(t *testing.T) {
 		tests := []struct {
@@ -724,163 +724,163 @@ func TestUnionMixed(t *testing.T) {
 func TestUnionInterval16InPlace(t *testing.T) {
 	tests := []struct {
 		name      string
-		a         []interval16
-		b         []interval16
-		expected  []interval16
+		a         []Interval16
+		b         []Interval16
+		expected  []Interval16
 		expectedN int32
 	}{
 		{
 			name:      "firstBitUnset lastBitSet",
-			a:         []interval16{interval16{1, 10}},
-			b:         []interval16{interval16{10, 10}},
-			expected:  []interval16{interval16{1, 10}},
+			a:         []Interval16{Interval16{1, 10}},
+			b:         []Interval16{Interval16{10, 10}},
+			expected:  []Interval16{Interval16{1, 10}},
 			expectedN: 10,
 		},
 		{
 			name:      "single overlap",
-			a:         []interval16{interval16{1, 10}, interval16{21, 28}},
-			b:         []interval16{interval16{8, 12}},
-			expected:  []interval16{interval16{1, 12}, interval16{21, 28}},
+			a:         []Interval16{Interval16{1, 10}, Interval16{21, 28}},
+			b:         []Interval16{Interval16{8, 12}},
+			expected:  []Interval16{Interval16{1, 12}, Interval16{21, 28}},
 			expectedN: 20,
 		},
 		{
 			name:      "nested intervals",
-			a:         []interval16{interval16{3, 13}, interval16{17, 20}},
-			b:         []interval16{interval16{1, 4}, interval16{6, 7}, interval16{8, 9}, interval16{10, 11}, interval16{14, 17}},
-			expected:  []interval16{interval16{1, 20}},
+			a:         []Interval16{Interval16{3, 13}, Interval16{17, 20}},
+			b:         []Interval16{Interval16{1, 4}, Interval16{6, 7}, Interval16{8, 9}, Interval16{10, 11}, Interval16{14, 17}},
+			expected:  []Interval16{Interval16{1, 20}},
 			expectedN: 20,
 		},
 		{
 			name:      "no overlap",
-			a:         []interval16{interval16{3, 4}, interval16{7, 8}},
-			b:         []interval16{interval16{1, 2}, interval16{5, 6}, interval16{9, 10}},
-			expected:  []interval16{interval16{1, 10}},
+			a:         []Interval16{Interval16{3, 4}, Interval16{7, 8}},
+			b:         []Interval16{Interval16{1, 2}, Interval16{5, 6}, Interval16{9, 10}},
+			expected:  []Interval16{Interval16{1, 10}},
 			expectedN: 10,
 		},
 		{
 			name:      "b in a",
-			a:         []interval16{interval16{1, 10}},
-			b:         []interval16{interval16{5, 7}},
-			expected:  []interval16{interval16{1, 10}},
+			a:         []Interval16{Interval16{1, 10}},
+			b:         []Interval16{Interval16{5, 7}},
+			expected:  []Interval16{Interval16{1, 10}},
 			expectedN: 10,
 		},
 		{
 			name:      "a eq b",
-			a:         []interval16{interval16{1, 10}},
-			b:         []interval16{interval16{1, 10}},
-			expected:  []interval16{interval16{1, 10}},
+			a:         []Interval16{Interval16{1, 10}},
+			b:         []Interval16{Interval16{1, 10}},
+			expected:  []Interval16{Interval16{1, 10}},
 			expectedN: 10,
 		},
 		{
 			name:      "a in b",
-			a:         []interval16{interval16{5, 7}},
-			b:         []interval16{interval16{1, 10}},
-			expected:  []interval16{interval16{1, 10}},
+			a:         []Interval16{Interval16{5, 7}},
+			b:         []Interval16{Interval16{1, 10}},
+			expected:  []Interval16{Interval16{1, 10}},
 			expectedN: 10,
 		},
 		{
 			name:      "a ahead b",
-			a:         []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}},
-			b:         []interval16{interval16{10, 11}, interval16{12, 13}, interval16{14, 15}},
-			expected:  []interval16{interval16{1, 7}, interval16{10, 15}},
+			a:         []Interval16{Interval16{1, 2}, Interval16{3, 4}, Interval16{5, 7}},
+			b:         []Interval16{Interval16{10, 11}, Interval16{12, 13}, Interval16{14, 15}},
+			expected:  []Interval16{Interval16{1, 7}, Interval16{10, 15}},
 			expectedN: 13,
 		},
 		{
 			name:      "b ahead a",
-			a:         []interval16{interval16{10, 11}, interval16{12, 13}, interval16{14, 15}},
-			b:         []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}},
-			expected:  []interval16{interval16{1, 7}, interval16{10, 15}},
+			a:         []Interval16{Interval16{10, 11}, Interval16{12, 13}, Interval16{14, 15}},
+			b:         []Interval16{Interval16{1, 2}, Interval16{3, 4}, Interval16{5, 7}},
+			expected:  []Interval16{Interval16{1, 7}, Interval16{10, 15}},
 			expectedN: 13,
 		},
 		{
 			name:      "empty a and b",
-			a:         []interval16{},
-			b:         []interval16{},
-			expected:  []interval16{},
+			a:         []Interval16{},
+			b:         []Interval16{},
+			expected:  []Interval16{},
 			expectedN: 0,
 		},
 		{
 			name:      "empty a",
-			a:         []interval16{},
-			b:         []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}},
-			expected:  []interval16{interval16{1, 7}},
+			a:         []Interval16{},
+			b:         []Interval16{Interval16{1, 2}, Interval16{3, 4}, Interval16{5, 7}},
+			expected:  []Interval16{Interval16{1, 7}},
 			expectedN: 7,
 		},
 		{
 			name:      "empty b",
-			a:         []interval16{interval16{1, 2}, interval16{3, 4}, interval16{5, 7}},
-			b:         []interval16{},
-			expected:  []interval16{interval16{1, 7}},
+			a:         []Interval16{Interval16{1, 2}, Interval16{3, 4}, Interval16{5, 7}},
+			b:         []Interval16{},
+			expected:  []Interval16{Interval16{1, 7}},
 			expectedN: 7,
 		},
 		{
 			name:      "single a",
-			a:         []interval16{interval16{1, 2}},
-			b:         []interval16{},
-			expected:  []interval16{interval16{1, 2}},
+			a:         []Interval16{Interval16{1, 2}},
+			b:         []Interval16{},
+			expected:  []Interval16{Interval16{1, 2}},
 			expectedN: 2,
 		},
 		{
 			name:      "single b",
-			a:         []interval16{},
-			b:         []interval16{interval16{1, 2}},
-			expected:  []interval16{interval16{1, 2}},
+			a:         []Interval16{},
+			b:         []Interval16{Interval16{1, 2}},
+			expected:  []Interval16{Interval16{1, 2}},
 			expectedN: 2,
 		},
 		{
 			name:      "single a single b",
-			a:         []interval16{interval16{3, 4}},
-			b:         []interval16{interval16{1, 2}},
-			expected:  []interval16{interval16{1, 4}},
+			a:         []Interval16{Interval16{3, 4}},
+			b:         []Interval16{Interval16{1, 2}},
+			expected:  []Interval16{Interval16{1, 4}},
 			expectedN: 4,
 		},
 		{
 			name:      "oddBitsSet lastBitUnset",
-			a:         []interval16{interval16{1, 1}, interval16{3, 3}, interval16{5, 5}},
-			b:         []interval16{interval16{0, 4}},
-			expected:  []interval16{interval16{0, 5}},
+			a:         []Interval16{Interval16{1, 1}, Interval16{3, 3}, Interval16{5, 5}},
+			b:         []Interval16{Interval16{0, 4}},
+			expected:  []Interval16{Interval16{0, 5}},
 			expectedN: 6,
 		},
 		{
 			name:      "all bits",
-			a:         []interval16{interval16{1, 1}, interval16{3, 3}, interval16{5, 5}},
-			b:         []interval16{interval16{0, 0}, interval16{2, 2}, interval16{4, 4}},
-			expected:  []interval16{interval16{0, 5}},
+			a:         []Interval16{Interval16{1, 1}, Interval16{3, 3}, Interval16{5, 5}},
+			b:         []Interval16{Interval16{0, 0}, Interval16{2, 2}, Interval16{4, 4}},
+			expected:  []Interval16{Interval16{0, 5}},
 			expectedN: 6,
 		},
 		{
 			name:      "short a long b",
-			a:         []interval16{interval16{5, 5}, interval16{7, 7}, interval16{9, 10}, interval16{12, 12}, interval16{15, 17}, interval16{19, 20}},
-			b:         []interval16{interval16{1, 10}, interval16{12, 12}, interval16{14, 18}},
-			expected:  []interval16{interval16{1, 10}, interval16{12, 12}, interval16{14, 20}},
+			a:         []Interval16{Interval16{5, 5}, Interval16{7, 7}, Interval16{9, 10}, Interval16{12, 12}, Interval16{15, 17}, Interval16{19, 20}},
+			b:         []Interval16{Interval16{1, 10}, Interval16{12, 12}, Interval16{14, 18}},
+			expected:  []Interval16{Interval16{1, 10}, Interval16{12, 12}, Interval16{14, 20}},
 			expectedN: 18,
 		},
 		{
 			name:      "common endings",
-			a:         []interval16{interval16{1, 5}, interval16{15, 20}, interval16{25, 35}},
-			b:         []interval16{interval16{1, 10}, interval16{15, 20}, interval16{30, 35}},
-			expected:  []interval16{interval16{1, 10}, interval16{15, 20}, interval16{25, 35}},
+			a:         []Interval16{Interval16{1, 5}, Interval16{15, 20}, Interval16{25, 35}},
+			b:         []Interval16{Interval16{1, 10}, Interval16{15, 20}, Interval16{30, 35}},
+			expected:  []Interval16{Interval16{1, 10}, Interval16{15, 20}, Interval16{25, 35}},
 			expectedN: 27,
 		},
 		{
 			name:      "common endings and overlap",
-			a:         []interval16{interval16{1, 5}, interval16{10, 15}},
-			b:         []interval16{interval16{5, 10}, interval16{12, 17}},
-			expected:  []interval16{interval16{1, 17}},
+			a:         []Interval16{Interval16{1, 5}, Interval16{10, 15}},
+			b:         []Interval16{Interval16{5, 10}, Interval16{12, 17}},
+			expected:  []Interval16{Interval16{1, 17}},
 			expectedN: 17,
 		},
 		{
 			name:      "no common endings and overlap",
-			a:         []interval16{interval16{5, 10}, interval16{12, 17}},
-			b:         []interval16{interval16{0, 11}, interval16{15, 20}},
-			expected:  []interval16{interval16{0, 20}},
+			a:         []Interval16{Interval16{5, 10}, Interval16{12, 17}},
+			b:         []Interval16{Interval16{0, 11}, Interval16{15, 20}},
+			expected:  []Interval16{Interval16{0, 20}},
 			expectedN: 21,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			bb := make([]interval16, len(tc.b))
+			bb := make([]Interval16, len(tc.b))
 			copy(bb, tc.b)
 
 			runs, n := unionInterval16InPlace(tc.a, tc.b)
@@ -904,7 +904,7 @@ func TestUnionInterval16InPlace(t *testing.T) {
 }
 
 func TestIntersectMixed(t *testing.T) {
-	a := NewContainerRun([]interval16{{start: 5, last: 10}})
+	a := NewContainerRun([]Interval16{{Start: 5, Last: 10}})
 	b := NewContainerArray([]uint16{1, 4, 5, 7, 10, 11, 12})
 	c := NewContainerBitmap(2, []uint64{0x60})
 
@@ -917,8 +917,8 @@ func TestIntersectMixed(t *testing.T) {
 		t.Fatalf("test #1 expected %v, but got %v", []uint16{5, 7, 10}, res.array())
 	}
 	res = intersect(a, a)
-	if !reflect.DeepEqual(res.runs(), []interval16{{start: 5, last: 10}}) {
-		t.Fatalf("test #3 expected %v, but got %v", []interval16{{start: 5, last: 10}}, res.runs())
+	if !reflect.DeepEqual(res.runs(), []Interval16{{Start: 5, Last: 10}}) {
+		t.Fatalf("test #3 expected %v, but got %v", []Interval16{{Start: 5, Last: 10}}, res.runs())
 	}
 
 	res = intersect(c, a)
@@ -942,7 +942,7 @@ func TestIntersectMixed(t *testing.T) {
 
 }
 func TestDifferenceMixed(t *testing.T) {
-	a := NewContainerRun([]interval16{{start: 5, last: 10}})
+	a := NewContainerRun([]Interval16{{Start: 5, Last: 10}})
 
 	b := NewContainerArray([]uint16{0, 2, 4, 6, 8, 10, 12})
 
@@ -962,7 +962,7 @@ func TestDifferenceMixed(t *testing.T) {
 	}
 
 	res = difference(a, a)
-	if !reflect.DeepEqual(res.runs(), []interval16{}) {
+	if !reflect.DeepEqual(res.runs(), []Interval16{}) {
 		t.Fatalf("test #3 expected empty but got %v", res.runs())
 	}
 
@@ -972,8 +972,8 @@ func TestDifferenceMixed(t *testing.T) {
 	}
 
 	res = difference(a, c)
-	if !reflect.DeepEqual(res.runs(), []interval16{{start: 7, last: 10}}) {
-		t.Fatalf("test #5 expected %v, but got %v", []interval16{{start: 7, last: 10}}, res.runs())
+	if !reflect.DeepEqual(res.runs(), []Interval16{{Start: 7, Last: 10}}) {
+		t.Fatalf("test #5 expected %v, but got %v", []Interval16{{Start: 7, Last: 10}}, res.runs())
 	}
 
 	res = difference(b, c)
@@ -1012,49 +1012,49 @@ func TestUnionRunRun(t *testing.T) {
 	a := NewContainerRun(nil)
 	b := NewContainerRun(nil)
 	tests := []struct {
-		aruns []interval16
-		bruns []interval16
-		exp   []interval16
+		aruns []Interval16
+		bruns []Interval16
+		exp   []Interval16
 	}{
 		{
-			aruns: []interval16{},
-			bruns: []interval16{{start: 5, last: 10}},
-			exp:   []interval16{{start: 5, last: 10}},
+			aruns: []Interval16{},
+			bruns: []Interval16{{Start: 5, Last: 10}},
+			exp:   []Interval16{{Start: 5, Last: 10}},
 		},
 		{
-			aruns: []interval16{{start: 5, last: 12}},
-			bruns: []interval16{{start: 5, last: 10}},
-			exp:   []interval16{{start: 5, last: 12}},
+			aruns: []Interval16{{Start: 5, Last: 12}},
+			bruns: []Interval16{{Start: 5, Last: 10}},
+			exp:   []Interval16{{Start: 5, Last: 12}},
 		},
 		{
-			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
-			bruns: []interval16{{start: 5, last: 10}},
-			exp:   []interval16{{start: 1, last: 3}, {start: 5, last: 12}},
+			aruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 8}, {Start: 9, Last: 12}},
+			bruns: []Interval16{{Start: 5, Last: 10}},
+			exp:   []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 12}},
 		},
 		{
-			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
-			bruns: []interval16{{start: 2, last: 65535}},
-			exp:   []interval16{{start: 1, last: 65535}},
+			aruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 8}, {Start: 9, Last: 12}},
+			bruns: []Interval16{{Start: 2, Last: 65535}},
+			exp:   []Interval16{{Start: 1, Last: 65535}},
 		},
 		{
-			aruns: []interval16{{start: 2, last: 65535}},
-			bruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
-			exp:   []interval16{{start: 1, last: 65535}},
+			aruns: []Interval16{{Start: 2, Last: 65535}},
+			bruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 8}, {Start: 9, Last: 12}},
+			exp:   []Interval16{{Start: 1, Last: 65535}},
 		},
 		{
-			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
-			bruns: []interval16{{start: 0, last: 65535}},
-			exp:   []interval16{{start: 0, last: 65535}},
+			aruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 8}, {Start: 9, Last: 12}},
+			bruns: []Interval16{{Start: 0, Last: 65535}},
+			exp:   []Interval16{{Start: 0, Last: 65535}},
 		},
 		{
-			aruns: []interval16{{start: 0, last: 65535}},
-			bruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 8}, {start: 9, last: 12}},
-			exp:   []interval16{{start: 0, last: 65535}},
+			aruns: []Interval16{{Start: 0, Last: 65535}},
+			bruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 8}, {Start: 9, Last: 12}},
+			exp:   []Interval16{{Start: 0, Last: 65535}},
 		},
 		{
-			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 9}, {start: 12, last: 22}},
-			bruns: []interval16{{start: 2, last: 8}, {start: 16, last: 27}, {start: 33, last: 34}},
-			exp:   []interval16{{start: 1, last: 9}, {start: 12, last: 27}, {start: 33, last: 34}},
+			aruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 9}, {Start: 12, Last: 22}},
+			bruns: []Interval16{{Start: 2, Last: 8}, {Start: 16, Last: 27}, {Start: 33, Last: 34}},
+			exp:   []Interval16{{Start: 1, Last: 9}, {Start: 12, Last: 27}, {Start: 33, Last: 34}},
 		},
 	}
 	for i, test := range tests {
@@ -1072,27 +1072,27 @@ func TestUnionArrayRun(t *testing.T) {
 	b := NewContainerRun(nil)
 	tests := []struct {
 		array []uint16
-		runs  []interval16
+		runs  []Interval16
 		exp   []uint16
 	}{
 		{
 			array: []uint16{1, 4, 5, 7, 10, 11, 12},
-			runs:  []interval16{{start: 5, last: 10}},
+			runs:  []Interval16{{Start: 5, Last: 10}},
 			exp:   []uint16{1, 4, 5, 6, 7, 8, 9, 10, 11, 12},
 		},
 		{
 			array: []uint16{},
-			runs:  []interval16{{start: 5, last: 10}},
+			runs:  []Interval16{{Start: 5, Last: 10}},
 			exp:   []uint16{5, 6, 7, 8, 9, 10},
 		},
 		{
 			array: []uint16{1, 4, 5, 7, 10, 11, 12},
-			runs:  []interval16{},
+			runs:  []Interval16{},
 			exp:   []uint16{1, 4, 5, 7, 10, 11, 12},
 		},
 		{
 			array: []uint16{0, 1, 4, 5, 7, 10, 11, 12},
-			runs:  []interval16{{start: 0, last: 5}, {start: 7, last: 7}},
+			runs:  []Interval16{{Start: 0, Last: 5}, {Start: 7, Last: 7}},
 			exp:   []uint16{0, 1, 2, 3, 4, 5, 7, 10, 11, 12},
 		},
 	}
@@ -1195,27 +1195,27 @@ func TestBitmapToArray(t *testing.T) {
 
 func TestRunToBitmap(t *testing.T) {
 	tests := []struct {
-		runs []interval16
+		runs []Interval16
 		exp  []uint64
 	}{
 		{
-			runs: []interval16{},
+			runs: []Interval16{},
 			exp:  []uint64{},
 		},
 		{
-			runs: []interval16{{start: 0, last: 0}},
+			runs: []Interval16{{Start: 0, Last: 0}},
 			exp:  []uint64{1},
 		},
 		{
-			runs: []interval16{{start: 0, last: 4}},
+			runs: []Interval16{{Start: 0, Last: 4}},
 			exp:  []uint64{31},
 		},
 		{
-			runs: []interval16{{start: 2, last: 2}, {start: 5, last: 7}, {start: 13, last: 14}, {start: 17, last: 17}},
+			runs: []Interval16{{Start: 2, Last: 2}, {Start: 5, Last: 7}, {Start: 13, Last: 14}, {Start: 17, Last: 17}},
 			exp:  []uint64{155876},
 		},
 		{
-			runs: []interval16{{start: 0, last: 3}, {start: 60, last: 67}},
+			runs: []Interval16{{Start: 0, Last: 3}, {Start: 60, Last: 67}},
 			exp:  []uint64{0xF00000000000000F, 0x000000000000000F},
 		},
 	}
@@ -1247,55 +1247,55 @@ func getFullBitmap() []uint64 {
 func TestBitmapToRun(t *testing.T) {
 	tests := []struct {
 		bitmap []uint64
-		exp    []interval16
+		exp    []Interval16
 	}{
 		{
 			// empty run
 			bitmap: []uint64{},
-			exp:    []interval16{},
+			exp:    []Interval16{},
 		},
 		{
 			// single-bit run
 			bitmap: []uint64{1},
-			exp:    []interval16{{start: 0, last: 0}},
+			exp:    []Interval16{{Start: 0, Last: 0}},
 		},
 		{
 			// single multi-bit run in one word
 			bitmap: []uint64{31},
-			exp:    []interval16{{start: 0, last: 4}},
+			exp:    []Interval16{{Start: 0, Last: 4}},
 		},
 		{
 			// multiple runs in one word
 			bitmap: []uint64{155876},
-			exp:    []interval16{{start: 2, last: 2}, {start: 5, last: 7}, {start: 13, last: 14}, {start: 17, last: 17}},
+			exp:    []Interval16{{Start: 2, Last: 2}, {Start: 5, Last: 7}, {Start: 13, Last: 14}, {Start: 17, Last: 17}},
 		},
 		{
 			// span two words, both mixed
 			bitmap: []uint64{0xF00000000000000F, 0x000000000000000F},
-			exp:    []interval16{{start: 0, last: 3}, {start: 60, last: 67}},
+			exp:    []Interval16{{Start: 0, Last: 3}, {Start: 60, Last: 67}},
 		},
 		{
 			// span two words, first = maxBitmap
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 0xF},
-			exp:    []interval16{{start: 0, last: 67}},
+			exp:    []Interval16{{Start: 0, Last: 67}},
 		},
 		{
 			// span two words, second = maxBitmap
 			bitmap: []uint64{0xF000000000000000, 0xFFFFFFFFFFFFFFFF},
-			exp:    []interval16{{start: 60, last: 127}},
+			exp:    []Interval16{{Start: 60, Last: 127}},
 		},
 		{
 			// span three words
 			bitmap: []uint64{0xF000000000000000, 0xFFFFFFFFFFFFFFFF, 0xF},
-			exp:    []interval16{{start: 60, last: 131}},
+			exp:    []Interval16{{Start: 60, Last: 131}},
 		},
 		{
 			bitmap: make([]uint64, bitmapN),
-			exp:    []interval16{{start: 65408, last: 65535}},
+			exp:    []Interval16{{Start: 65408, Last: 65535}},
 		},
 		{
 			bitmap: getFullBitmap(),
-			exp:    []interval16{{start: 0, last: 65535}},
+			exp:    []Interval16{{Start: 0, Last: 65535}},
 		},
 	}
 	tests[8].bitmap[1022] = 0xFFFFFFFFFFFFFFFF
@@ -1318,23 +1318,23 @@ func TestBitmapToRun(t *testing.T) {
 func TestArrayToRun(t *testing.T) {
 	tests := []struct {
 		array []uint16
-		exp   []interval16
+		exp   []Interval16
 	}{
 		{
 			array: []uint16{},
-			exp:   []interval16{},
+			exp:   []Interval16{},
 		},
 		{
 			array: []uint16{0},
-			exp:   []interval16{{start: 0, last: 0}},
+			exp:   []Interval16{{Start: 0, Last: 0}},
 		},
 		{
 			array: []uint16{0, 1, 2, 3, 4},
-			exp:   []interval16{{start: 0, last: 4}},
+			exp:   []Interval16{{Start: 0, Last: 4}},
 		},
 		{
 			array: []uint16{2, 5, 6, 7, 13, 14, 17},
-			exp:   []interval16{{start: 2, last: 2}, {start: 5, last: 7}, {start: 13, last: 14}, {start: 17, last: 17}},
+			exp:   []Interval16{{Start: 2, Last: 2}, {Start: 5, Last: 7}, {Start: 13, Last: 14}, {Start: 17, Last: 17}},
 		},
 	}
 
@@ -1349,23 +1349,23 @@ func TestArrayToRun(t *testing.T) {
 
 func TestRunToArray(t *testing.T) {
 	tests := []struct {
-		runs []interval16
+		runs []Interval16
 		exp  []uint16
 	}{
 		{
-			runs: []interval16{},
+			runs: []Interval16{},
 			exp:  []uint16{},
 		},
 		{
-			runs: []interval16{{start: 0, last: 0}},
+			runs: []Interval16{{Start: 0, Last: 0}},
 			exp:  []uint16{0},
 		},
 		{
-			runs: []interval16{{start: 0, last: 4}},
+			runs: []Interval16{{Start: 0, Last: 4}},
 			exp:  []uint16{0, 1, 2, 3, 4},
 		},
 		{
-			runs: []interval16{{start: 2, last: 2}, {start: 5, last: 7}, {start: 13, last: 14}, {start: 17, last: 17}},
+			runs: []Interval16{{Start: 2, Last: 2}, {Start: 5, Last: 7}, {Start: 13, Last: 14}, {Start: 17, Last: 17}},
 			exp:  []uint16{2, 5, 6, 7, 13, 14, 17},
 		},
 	}
@@ -1423,13 +1423,13 @@ func TestBitmapZeroRange(t *testing.T) {
 func TestUnionBitmapRun(t *testing.T) {
 	tests := []struct {
 		bitmap []uint64
-		runs   []interval16
+		runs   []Interval16
 		exp    []uint64
 		expN   int32
 	}{
 		{
 			bitmap: []uint64{2},
-			runs:   []interval16{{start: 0, last: 0}, {start: 2, last: 5}, {start: 62, last: 71}, {start: 77, last: 78}},
+			runs:   []Interval16{{Start: 0, Last: 0}, {Start: 2, Last: 5}, {Start: 62, Last: 71}, {Start: 77, Last: 78}},
 			exp:    []uint64{0xC00000000000003F, 0x60FF},
 			expN:   18,
 		},
@@ -1545,12 +1545,12 @@ func TestArrayCountRuns(t *testing.T) {
 func TestDifferenceArrayRun(t *testing.T) {
 	tests := []struct {
 		array []uint16
-		runs  []interval16
+		runs  []Interval16
 		exp   []uint16
 	}{
 		{
 			array: []uint16{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
-			runs:  []interval16{{start: 5, last: 10}},
+			runs:  []Interval16{{Start: 5, Last: 10}},
 			exp:   []uint16{0, 1, 2, 3, 4, 11, 12},
 		},
 	}
@@ -1566,54 +1566,54 @@ func TestDifferenceArrayRun(t *testing.T) {
 
 func TestDifferenceRunArray(t *testing.T) {
 	tests := []struct {
-		runs  []interval16
+		runs  []Interval16
 		array []uint16
-		exp   []interval16
+		exp   []Interval16
 	}{
 		{
-			runs:  []interval16{{start: 0, last: 12}},
+			runs:  []Interval16{{Start: 0, Last: 12}},
 			array: []uint16{5, 6, 7, 8, 9, 10},
-			exp:   []interval16{{start: 0, last: 4}, {start: 11, last: 12}},
+			exp:   []Interval16{{Start: 0, Last: 4}, {Start: 11, Last: 12}},
 		},
 		{
-			runs:  []interval16{{start: 0, last: 12}},
+			runs:  []Interval16{{Start: 0, Last: 12}},
 			array: []uint16{0, 1, 2, 3},
-			exp:   []interval16{{start: 4, last: 12}},
+			exp:   []Interval16{{Start: 4, Last: 12}},
 		},
 		{
-			runs:  []interval16{{start: 0, last: 12}},
+			runs:  []Interval16{{Start: 0, Last: 12}},
 			array: []uint16{9, 10, 11, 12, 13},
-			exp:   []interval16{{start: 0, last: 8}},
+			exp:   []Interval16{{Start: 0, Last: 8}},
 		},
 		{
-			runs:  []interval16{{start: 1, last: 12}},
+			runs:  []Interval16{{Start: 1, Last: 12}},
 			array: []uint16{0, 9, 10, 11, 12, 13},
-			exp:   []interval16{{start: 1, last: 8}},
+			exp:   []Interval16{{Start: 1, Last: 8}},
 		},
 		{
-			runs:  []interval16{{start: 1, last: 12}, {start: 14, last: 14}, {start: 18, last: 18}},
+			runs:  []Interval16{{Start: 1, Last: 12}, {Start: 14, Last: 14}, {Start: 18, Last: 18}},
 			array: []uint16{0, 9, 10, 11, 12, 13, 14, 17},
-			exp:   []interval16{{start: 1, last: 8}, {start: 18, last: 18}},
+			exp:   []Interval16{{Start: 1, Last: 8}, {Start: 18, Last: 18}},
 		},
 		{
-			runs:  []interval16{{start: 1, last: 12}, {start: 14, last: 14}, {start: 18, last: 18}},
+			runs:  []Interval16{{Start: 1, Last: 12}, {Start: 14, Last: 14}, {Start: 18, Last: 18}},
 			array: []uint16{0, 9, 10, 11, 12, 13, 14, 17, 19},
-			exp:   []interval16{{start: 1, last: 8}, {start: 18, last: 18}},
+			exp:   []Interval16{{Start: 1, Last: 8}, {Start: 18, Last: 18}},
 		},
 		{
-			runs:  []interval16{{start: 1, last: 12}, {start: 14, last: 17}, {start: 19, last: 28}},
+			runs:  []Interval16{{Start: 1, Last: 12}, {Start: 14, Last: 17}, {Start: 19, Last: 28}},
 			array: []uint16{0, 9, 10, 11, 12, 13, 14, 17, 19, 25, 27},
-			exp:   []interval16{{start: 1, last: 8}, {start: 15, last: 16}, {start: 20, last: 24}, {start: 26, last: 26}, {start: 28, last: 28}},
+			exp:   []Interval16{{Start: 1, Last: 8}, {Start: 15, Last: 16}, {Start: 20, Last: 24}, {Start: 26, Last: 26}, {Start: 28, Last: 28}},
 		},
 		{
-			runs:  []interval16{{start: 0, last: 20}, {start: 65533, last: 65535}},
+			runs:  []Interval16{{Start: 0, Last: 20}, {Start: 65533, Last: 65535}},
 			array: []uint16{65533, 65534, 65535},
-			exp:   []interval16{{start: 0, last: 20}},
+			exp:   []Interval16{{Start: 0, Last: 20}},
 		},
 		{
-			runs:  []interval16{{start: 0, last: 20}, {start: 65530, last: 65535}},
+			runs:  []Interval16{{Start: 0, Last: 20}, {Start: 65530, Last: 65535}},
 			array: []uint16{37, 65535},
-			exp:   []interval16{{start: 0, last: 20}, {start: 65530, last: 65534}},
+			exp:   []Interval16{{Start: 0, Last: 20}, {Start: 65530, Last: 65534}},
 		},
 	}
 	for i, test := range tests {
@@ -1639,49 +1639,49 @@ func MakeLastBitSet() []uint64 {
 
 func TestDifferenceRunBitmap(t *testing.T) {
 	tests := []struct {
-		runs   []interval16
+		runs   []Interval16
 		bitmap []uint64
-		exp    []interval16
+		exp    []Interval16
 	}{
 		{
-			runs:   []interval16{{start: 0, last: 63}},
+			runs:   []Interval16{{Start: 0, Last: 63}},
 			bitmap: MakeBitmap([]uint64{0x0000FFFF000000F0}),
-			exp:    []interval16{{start: 0, last: 3}, {start: 8, last: 31}, {start: 48, last: 63}},
+			exp:    []Interval16{{Start: 0, Last: 3}, {Start: 8, Last: 31}, {Start: 48, Last: 63}},
 		},
 		{
-			runs:   []interval16{{start: 0, last: 63}},
+			runs:   []Interval16{{Start: 0, Last: 63}},
 			bitmap: MakeBitmap([]uint64{0x8000000000000000}),
-			exp:    []interval16{{start: 0, last: 62}},
+			exp:    []Interval16{{Start: 0, Last: 62}},
 		},
 		{
-			runs:   []interval16{{start: 0, last: 63}},
+			runs:   []Interval16{{Start: 0, Last: 63}},
 			bitmap: MakeBitmap([]uint64{0x0000000000000001}),
-			exp:    []interval16{{start: 1, last: 63}},
+			exp:    []Interval16{{Start: 1, Last: 63}},
 		},
 		{
-			runs:   []interval16{{start: 0, last: 63}},
+			runs:   []Interval16{{Start: 0, Last: 63}},
 			bitmap: MakeBitmap([]uint64{0x0, 0x0000000000000001}),
-			exp:    []interval16{{start: 0, last: 63}},
+			exp:    []Interval16{{Start: 0, Last: 63}},
 		},
 		{
-			runs:   []interval16{{start: 0, last: 65}},
+			runs:   []Interval16{{Start: 0, Last: 65}},
 			bitmap: MakeBitmap([]uint64{0x0, 0x0000000000000001}),
-			exp:    []interval16{{start: 0, last: 63}, {start: 65, last: 65}},
+			exp:    []Interval16{{Start: 0, Last: 63}, {Start: 65, Last: 65}},
 		},
 		{
-			runs:   []interval16{{start: 0, last: 65}},
+			runs:   []Interval16{{Start: 0, Last: 65}},
 			bitmap: MakeBitmap([]uint64{0x0, 0x8000000000000000}),
-			exp:    []interval16{{start: 0, last: 65}},
+			exp:    []Interval16{{Start: 0, Last: 65}},
 		},
 		{
-			runs:   []interval16{{start: 1, last: 65535}},
+			runs:   []Interval16{{Start: 1, Last: 65535}},
 			bitmap: MakeBitmap([]uint64{0x0000000000000001}),
-			exp:    []interval16{{start: 1, last: 65535}},
+			exp:    []Interval16{{Start: 1, Last: 65535}},
 		},
 		{
-			runs:   []interval16{{start: 0, last: 65533}, {start: 65535, last: 65535}},
+			runs:   []Interval16{{Start: 0, Last: 65533}, {Start: 65535, Last: 65535}},
 			bitmap: MakeLastBitSet(),
-			exp:    []interval16{{start: 0, last: 65533}},
+			exp:    []Interval16{{Start: 0, Last: 65533}},
 		},
 	}
 	for i, test := range tests {
@@ -1697,67 +1697,66 @@ func TestDifferenceRunBitmap(t *testing.T) {
 func TestDifferenceBitmapRun(t *testing.T) {
 	tests := []struct {
 		bitmap []uint64
-		runs   []interval16
+		runs   []Interval16
 		exp    []uint64
 	}{
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 4, last: 7}, {start: 32, last: 47}},
+			runs:   []Interval16{{Start: 4, Last: 7}, {Start: 32, Last: 47}},
 			exp:    []uint64{0xFFFF0000FFFFFF0F},
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFBF},
-			runs:   []interval16{{start: 0, last: 5}, {start: 7, last: 63}},
+			runs:   []Interval16{{Start: 0, Last: 5}, {Start: 7, Last: 63}},
 			exp:    []uint64{0x0000000000000000},
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFBF},
-			runs:   []interval16{{start: 0, last: 5}},
+			runs:   []Interval16{{Start: 0, Last: 5}},
 			exp:    []uint64{0xFFFFFFFFFFFFFF80},
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 60, last: 63}},
+			runs:   []Interval16{{Start: 60, Last: 63}},
 			exp:    []uint64{0x0FFFFFFFFFFFFFFF},
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 60, last: 65}},
+			runs:   []Interval16{{Start: 60, Last: 65}},
 			exp:    []uint64{0x0FFFFFFFFFFFFFFF},
 		},
 		{
 			bitmap: []uint64{0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF},
-			runs:   []interval16{{start: 60, last: 65}, {start: 67, last: 72}, {start: 126, last: 130}},
+			runs:   []Interval16{{Start: 60, Last: 65}, {Start: 67, Last: 72}, {Start: 126, Last: 130}},
 			exp:    []uint64{0x0FFFFFFFFFFFFFFF, 0x3FFFFFFFFFFFFE04, 0xFFFFFFFFFFFFFFF8},
 		},
 		{
 			bitmap: []uint64{0x0000000000000001},
-			runs:   []interval16{{start: 0, last: 0}},
+			runs:   []Interval16{{Start: 0, Last: 0}},
 			exp:    []uint64{0x0000000000000000},
 		},
 		{
 			bitmap: []uint64{0x8000000000000000},
-			runs:   []interval16{{start: 63, last: 63}},
+			runs:   []Interval16{{Start: 63, Last: 63}},
 			exp:    []uint64{0x0000000000000000},
 		},
 		{
 			bitmap: []uint64{0xC000000000000000, 0x0000000000000003},
-			runs:   []interval16{{start: 63, last: 64}},
+			runs:   []Interval16{{Start: 63, Last: 64}},
 			exp:    []uint64{0x4000000000000000, 0x0000000000000002},
 		},
 		{
 			bitmap: []uint64{0x0000000000000000},
-			runs:   []interval16{{start: 5, last: 7}},
+			runs:   []Interval16{{Start: 5, Last: 7}},
 			exp:    []uint64{0x0000000000000000},
-		},
-		{
+		}, {
 			bitmap: bitmapLastBitSet(),
-			runs:   []interval16{{start: 65535, last: 65535}},
+			runs:   []Interval16{{Start: 65535, Last: 65535}},
 			exp:    bitmapEmpty(),
 		},
 		{
 			bitmap: bitmapFull(),
-			runs:   []interval16{{start: 0, last: 65535}},
+			runs:   []Interval16{{Start: 0, Last: 65535}},
 			exp:    bitmapEmpty(),
 		},
 	}
@@ -1847,18 +1846,18 @@ func TestDifferenceBitmapBitmap(t *testing.T) {
 
 func TestDifferenceRunRun(t *testing.T) {
 	tests := []struct {
-		aruns []interval16
-		bruns []interval16
-		exp   []interval16
+		aruns []Interval16
+		bruns []Interval16
+		exp   []Interval16
 		expn  int32
 	}{
 		{
 			// this tests all six overlap combinations
 			// A                     [   ]                   [   ]                        [ ]              [     ]             [   ]                 [  ]
 			// B                    [     ]                [   ]                     [ ]                     [  ]                [   ]                    [  ]
-			aruns: []interval16{{start: 3, last: 6}, {start: 13, last: 16}, {start: 24, last: 26}, {start: 33, last: 38}, {start: 43, last: 46}, {start: 53, last: 56}},
-			bruns: []interval16{{start: 1, last: 8}, {start: 11, last: 14}, {start: 21, last: 23}, {start: 35, last: 37}, {start: 44, last: 48}, {start: 57, last: 59}},
-			exp:   []interval16{{start: 15, last: 16}, {start: 24, last: 26}, {start: 33, last: 34}, {start: 38, last: 38}, {start: 43, last: 43}, {start: 53, last: 56}},
+			aruns: []Interval16{{Start: 3, Last: 6}, {Start: 13, Last: 16}, {Start: 24, Last: 26}, {Start: 33, Last: 38}, {Start: 43, Last: 46}, {Start: 53, Last: 56}},
+			bruns: []Interval16{{Start: 1, Last: 8}, {Start: 11, Last: 14}, {Start: 21, Last: 23}, {Start: 35, Last: 37}, {Start: 44, Last: 48}, {Start: 57, Last: 59}},
+			exp:   []Interval16{{Start: 15, Last: 16}, {Start: 24, Last: 26}, {Start: 33, Last: 34}, {Start: 38, Last: 38}, {Start: 43, Last: 43}, {Start: 53, Last: 56}},
 			expn:  13,
 		},
 	}
@@ -1951,7 +1950,7 @@ func TestWriteReadFullBitmap(t *testing.T) {
 }
 
 func TestWriteReadRun(t *testing.T) {
-	cr := NewContainerRun([]interval16{{start: 3, last: 13}, {start: 100, last: 109}})
+	cr := NewContainerRun([]Interval16{{Start: 3, Last: 13}, {Start: 100, Last: 109}})
 	br := NewFileBitmap()
 	br.Containers.Put(0, cr)
 	br2 := NewFileBitmap()
@@ -1977,19 +1976,19 @@ func TestXorArrayRun(t *testing.T) {
 	}{
 		{
 			a:   NewContainerArray([]uint16{1, 5, 10, 11, 12}),
-			b:   NewContainerRun([]interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}),
+			b:   NewContainerRun([]Interval16{{Start: 2, Last: 10}, {Start: 12, Last: 13}, {Start: 15, Last: 16}}),
 			exp: NewContainerArray([]uint16{1, 2, 3, 4, 6, 7, 8, 9, 11, 13, 15, 16}),
 		}, {
 			a:   NewContainerArray([]uint16{1, 5, 10, 11, 12, 13, 14}),
-			b:   NewContainerRun([]interval16{{start: 2, last: 10}, {start: 12, last: 13}, {start: 15, last: 16}}),
+			b:   NewContainerRun([]Interval16{{Start: 2, Last: 10}, {Start: 12, Last: 13}, {Start: 15, Last: 16}}),
 			exp: NewContainerArray([]uint16{1, 2, 3, 4, 6, 7, 8, 9, 11, 14, 15, 16}),
 		}, {
 			a:   NewContainerArray([]uint16{65535}),
-			b:   NewContainerRun([]interval16{{start: 65534, last: 65535}}),
+			b:   NewContainerRun([]Interval16{{Start: 65534, Last: 65535}}),
 			exp: NewContainerArray([]uint16{65534}),
 		}, {
 			a:   NewContainerArray([]uint16{65535}),
-			b:   NewContainerRun([]interval16{{start: 65535, last: 65535}}),
+			b:   NewContainerRun([]Interval16{{Start: 65535, Last: 65535}}),
 			exp: NewContainerArray([]uint16{}),
 		},
 	}
@@ -2011,8 +2010,8 @@ func TestXorArrayRun(t *testing.T) {
 
 //special case that didn't fit the xorrunrun table testing below.
 func TestXorRunRun1(t *testing.T) {
-	a := NewContainerRun([]interval16{{start: 4, last: 10}})
-	b := NewContainerRun([]interval16{{start: 5, last: 10}})
+	a := NewContainerRun([]Interval16{{Start: 4, Last: 10}})
+	b := NewContainerRun([]Interval16{{Start: 5, Last: 10}})
 	ret := xorRunRun(a, b)
 	if !reflect.DeepEqual(ret.array(), []uint16{4}) {
 		t.Fatalf("test #1 expected %v, but got %v", []uint16{4}, ret.array())
@@ -2027,84 +2026,84 @@ func TestXorRunRun(t *testing.T) {
 	a := NewContainerRun(nil)
 	b := NewContainerRun(nil)
 	tests := []struct {
-		aruns []interval16
-		bruns []interval16
-		exp   []interval16
+		aruns []Interval16
+		bruns []Interval16
+		exp   []Interval16
 	}{
 		{
-			aruns: []interval16{},
-			bruns: []interval16{{start: 5, last: 10}},
-			exp:   []interval16{{start: 5, last: 10}},
+			aruns: []Interval16{},
+			bruns: []Interval16{{Start: 5, Last: 10}},
+			exp:   []Interval16{{Start: 5, Last: 10}},
 		},
 		{
-			aruns: []interval16{{start: 0, last: 4}},
-			bruns: []interval16{{start: 6, last: 10}},
-			exp:   []interval16{{start: 0, last: 4}, {start: 6, last: 10}},
+			aruns: []Interval16{{Start: 0, Last: 4}},
+			bruns: []Interval16{{Start: 6, Last: 10}},
+			exp:   []Interval16{{Start: 0, Last: 4}, {Start: 6, Last: 10}},
 		},
 		{
-			aruns: []interval16{{start: 0, last: 6}},
-			bruns: []interval16{{start: 4, last: 10}},
-			exp:   []interval16{{start: 0, last: 3}, {start: 7, last: 10}},
+			aruns: []Interval16{{Start: 0, Last: 6}},
+			bruns: []Interval16{{Start: 4, Last: 10}},
+			exp:   []Interval16{{Start: 0, Last: 3}, {Start: 7, Last: 10}},
 		},
 		{
-			aruns: []interval16{{start: 4, last: 10}},
-			bruns: []interval16{{start: 0, last: 6}},
-			exp:   []interval16{{start: 0, last: 3}, {start: 7, last: 10}},
+			aruns: []Interval16{{Start: 4, Last: 10}},
+			bruns: []Interval16{{Start: 0, Last: 6}},
+			exp:   []Interval16{{Start: 0, Last: 3}, {Start: 7, Last: 10}},
 		},
 		{
-			aruns: []interval16{{start: 0, last: 10}},
-			bruns: []interval16{{start: 0, last: 6}},
-			exp:   []interval16{{start: 7, last: 10}},
+			aruns: []Interval16{{Start: 0, Last: 10}},
+			bruns: []Interval16{{Start: 0, Last: 6}},
+			exp:   []Interval16{{Start: 7, Last: 10}},
 		},
 		{
-			aruns: []interval16{{start: 0, last: 6}},
-			bruns: []interval16{{start: 0, last: 10}},
-			exp:   []interval16{{start: 7, last: 10}},
+			aruns: []Interval16{{Start: 0, Last: 6}},
+			bruns: []Interval16{{Start: 0, Last: 10}},
+			exp:   []Interval16{{Start: 7, Last: 10}},
 		},
 		{
-			aruns: []interval16{{start: 0, last: 6}},
-			bruns: []interval16{{start: 0, last: 10}},
-			exp:   []interval16{{start: 7, last: 10}},
+			aruns: []Interval16{{Start: 0, Last: 6}},
+			bruns: []Interval16{{Start: 0, Last: 10}},
+			exp:   []Interval16{{Start: 7, Last: 10}},
 		},
 		{
-			aruns: []interval16{{start: 5, last: 12}},
-			bruns: []interval16{{start: 5, last: 10}},
-			exp:   []interval16{{start: 11, last: 12}},
+			aruns: []Interval16{{Start: 5, Last: 12}},
+			bruns: []Interval16{{Start: 5, Last: 10}},
+			exp:   []Interval16{{Start: 11, Last: 12}},
 		},
 		{
-			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 12}},
-			bruns: []interval16{{start: 5, last: 10}},
-			exp:   []interval16{{start: 1, last: 3}, {start: 6, last: 6}, {start: 11, last: 12}},
+			aruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 12}},
+			bruns: []Interval16{{Start: 5, Last: 10}},
+			exp:   []Interval16{{Start: 1, Last: 3}, {Start: 6, Last: 6}, {Start: 11, Last: 12}},
 		},
 		{
-			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 12}},
-			bruns: []interval16{{start: 2, last: 65535}},
-			exp:   []interval16{{start: 1, last: 1}, {start: 4, last: 4}, {start: 6, last: 6}, {start: 13, last: 65535}},
+			aruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 12}},
+			bruns: []Interval16{{Start: 2, Last: 65535}},
+			exp:   []Interval16{{Start: 1, Last: 1}, {Start: 4, Last: 4}, {Start: 6, Last: 6}, {Start: 13, Last: 65535}},
 		},
 		{
-			aruns: []interval16{{start: 2, last: 65535}},
-			bruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 12}},
-			exp:   []interval16{{start: 1, last: 1}, {start: 4, last: 4}, {start: 6, last: 6}, {start: 13, last: 65535}},
+			aruns: []Interval16{{Start: 2, Last: 65535}},
+			bruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 12}},
+			exp:   []Interval16{{Start: 1, Last: 1}, {Start: 4, Last: 4}, {Start: 6, Last: 6}, {Start: 13, Last: 65535}},
 		},
 		{
-			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 12}},
-			bruns: []interval16{{start: 0, last: 65535}},
-			exp:   []interval16{{start: 0, last: 0}, {start: 4, last: 4}, {start: 6, last: 6}, {start: 13, last: 65535}},
+			aruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 12}},
+			bruns: []Interval16{{Start: 0, Last: 65535}},
+			exp:   []Interval16{{Start: 0, Last: 0}, {Start: 4, Last: 4}, {Start: 6, Last: 6}, {Start: 13, Last: 65535}},
 		},
 		{
-			aruns: []interval16{{start: 0, last: 65535}},
-			bruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 12}},
-			exp:   []interval16{{start: 0, last: 0}, {start: 4, last: 4}, {start: 6, last: 6}, {start: 13, last: 65535}},
+			aruns: []Interval16{{Start: 0, Last: 65535}},
+			bruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 12}},
+			exp:   []Interval16{{Start: 0, Last: 0}, {Start: 4, Last: 4}, {Start: 6, Last: 6}, {Start: 13, Last: 65535}},
 		},
 		{
-			aruns: []interval16{{start: 1, last: 3}, {start: 5, last: 5}, {start: 7, last: 9}, {start: 12, last: 22}},
-			bruns: []interval16{{start: 2, last: 8}, {start: 16, last: 27}, {start: 33, last: 34}},
-			exp:   []interval16{{start: 1, last: 1}, {start: 4, last: 4}, {start: 6, last: 6}, {start: 9, last: 9}, {start: 12, last: 15}, {start: 23, last: 27}, {start: 33, last: 34}},
+			aruns: []Interval16{{Start: 1, Last: 3}, {Start: 5, Last: 5}, {Start: 7, Last: 9}, {Start: 12, Last: 22}},
+			bruns: []Interval16{{Start: 2, Last: 8}, {Start: 16, Last: 27}, {Start: 33, Last: 34}},
+			exp:   []Interval16{{Start: 1, Last: 1}, {Start: 4, Last: 4}, {Start: 6, Last: 6}, {Start: 9, Last: 9}, {Start: 12, Last: 15}, {Start: 23, Last: 27}, {Start: 33, Last: 34}},
 		},
 		{
-			aruns: []interval16{{start: 65530, last: 65535}},
-			bruns: []interval16{{start: 65532, last: 65535}},
-			exp:   []interval16{{start: 65530, last: 65531}},
+			aruns: []Interval16{{Start: 65530, Last: 65535}},
+			bruns: []Interval16{{Start: 65532, Last: 65535}},
+			exp:   []Interval16{{Start: 65530, Last: 65531}},
 		},
 	}
 	for i, test := range tests {
@@ -2188,12 +2187,12 @@ func TestBitmapXorRange(t *testing.T) {
 func TestXorBitmapRun(t *testing.T) {
 	tests := []struct {
 		bitmap []uint64
-		runs   []interval16
+		runs   []Interval16
 		exp    []uint64
 	}{
 		{
 			bitmap: []uint64{0x0, 0x0, 0x0},
-			runs:   []interval16{{start: 129, last: 131}},
+			runs:   []Interval16{{Start: 129, Last: 131}},
 			exp:    []uint64{0x0, 0x0, 0x00000000000000E},
 		},
 	}
@@ -2523,7 +2522,7 @@ func TestIteratorVarious(t *testing.T) {
 
 func TestRunBinSearchContains(t *testing.T) {
 	tests := []struct {
-		runs  []interval16
+		runs  []Interval16
 		index uint16
 		exp   struct {
 			index int32
@@ -2531,7 +2530,7 @@ func TestRunBinSearchContains(t *testing.T) {
 		}
 	}{
 		{
-			runs:  []interval16{{start: 0, last: 10}},
+			runs:  []Interval16{{Start: 0, Last: 10}},
 			index: uint16(3),
 			exp: struct {
 				index int32
@@ -2539,7 +2538,7 @@ func TestRunBinSearchContains(t *testing.T) {
 			}{index: 0, found: true},
 		},
 		{
-			runs:  []interval16{{start: 0, last: 10}},
+			runs:  []Interval16{{Start: 0, Last: 10}},
 			index: uint16(13),
 			exp: struct {
 				index int32
@@ -2547,7 +2546,7 @@ func TestRunBinSearchContains(t *testing.T) {
 			}{index: 0, found: false},
 		},
 		{
-			runs:  []interval16{{start: 0, last: 10}, {start: 20, last: 30}},
+			runs:  []Interval16{{Start: 0, Last: 10}, {Start: 20, Last: 30}},
 			index: uint16(13),
 			exp: struct {
 				index int32
@@ -2555,7 +2554,7 @@ func TestRunBinSearchContains(t *testing.T) {
 			}{index: 0, found: false},
 		},
 		{
-			runs:  []interval16{{start: 0, last: 10}, {start: 20, last: 30}},
+			runs:  []Interval16{{Start: 0, Last: 10}, {Start: 20, Last: 30}},
 			index: uint16(36),
 			exp: struct {
 				index int32
@@ -2576,55 +2575,55 @@ func TestRunBinSearchContains(t *testing.T) {
 
 func TestRunBinSearch(t *testing.T) {
 	tests := []struct {
-		runs   []interval16
+		runs   []Interval16
 		search uint16
 		exp    bool
 		expi   int32
 	}{
 		{
-			runs:   []interval16{{2, 10}, {50, 60}, {80, 90}},
+			runs:   []Interval16{{2, 10}, {50, 60}, {80, 90}},
 			search: 1,
 			exp:    false,
 			expi:   0,
 		},
 		{
-			runs:   []interval16{{2, 10}, {50, 60}, {80, 90}},
+			runs:   []Interval16{{2, 10}, {50, 60}, {80, 90}},
 			search: 2,
 			exp:    true,
 			expi:   0,
 		},
 		{
-			runs:   []interval16{{2, 10}, {50, 60}, {80, 90}},
+			runs:   []Interval16{{2, 10}, {50, 60}, {80, 90}},
 			search: 5,
 			exp:    true,
 			expi:   0,
 		},
 		{
-			runs:   []interval16{{2, 10}, {50, 60}, {80, 90}},
+			runs:   []Interval16{{2, 10}, {50, 60}, {80, 90}},
 			search: 10,
 			exp:    true,
 			expi:   0,
 		},
 		{
-			runs:   []interval16{{2, 10}, {50, 60}, {80, 90}},
+			runs:   []Interval16{{2, 10}, {50, 60}, {80, 90}},
 			search: 20,
 			exp:    false,
 			expi:   1,
 		},
 		{
-			runs:   []interval16{{2, 10}, {50, 60}, {80, 90}},
+			runs:   []Interval16{{2, 10}, {50, 60}, {80, 90}},
 			search: 55,
 			exp:    true,
 			expi:   1,
 		},
 		{
-			runs:   []interval16{{2, 10}, {50, 60}, {80, 90}},
+			runs:   []Interval16{{2, 10}, {50, 60}, {80, 90}},
 			search: 70,
 			exp:    false,
 			expi:   2,
 		},
 		{
-			runs:   []interval16{{2, 10}, {50, 60}, {80, 90}},
+			runs:   []Interval16{{2, 10}, {50, 60}, {80, 90}},
 			search: 100,
 			exp:    false,
 			expi:   3,
@@ -3973,31 +3972,31 @@ func TestShiftBitmap(t *testing.T) {
 }
 func TestShiftRun(t *testing.T) {
 	tests := []struct {
-		runs  []interval16
+		runs  []Interval16
 		n     int32
 		en    int32
-		exp   []interval16
+		exp   []Interval16
 		carry bool
 	}{
 		{
-			runs:  []interval16{{start: 5, last: 10}},
+			runs:  []Interval16{{Start: 5, Last: 10}},
 			n:     5,
 			en:    5,
-			exp:   []interval16{{start: 6, last: 11}},
+			exp:   []Interval16{{Start: 6, Last: 11}},
 			carry: false,
 		},
 		{
-			runs:  []interval16{{start: 5, last: 65535}},
+			runs:  []Interval16{{Start: 5, Last: 65535}},
 			n:     65530,
 			en:    65529,
-			exp:   []interval16{{start: 6, last: 65535}},
+			exp:   []Interval16{{Start: 6, Last: 65535}},
 			carry: true,
 		},
 		{
-			runs:  []interval16{{start: 65535, last: 65535}},
+			runs:  []Interval16{{Start: 65535, Last: 65535}},
 			n:     1,
 			en:    0,
-			exp:   []interval16{},
+			exp:   []Interval16{},
 			carry: true,
 		},
 	}
@@ -4337,7 +4336,7 @@ func BenchmarkUnionRunRunInPlace(bm *testing.B) {
 
 	runs := []struct {
 		name string
-		fn   func() []interval16
+		fn   func() []Interval16
 	}{
 		{"FirstBitSet", runFirstBitSet},
 		{"LastBitSet", runLastBitSet},
@@ -4376,7 +4375,7 @@ func BenchmarkUnionRunRunInPlace(bm *testing.B) {
 func TestUnionRunRunInPlaceBitwiseCompare(t *testing.T) {
 	runs := []struct {
 		name string
-		run  []interval16
+		run  []Interval16
 	}{
 		{name: "FirstBitSet", run: runFirstBitSet()},
 		{name: "LastBitSet", run: runLastBitSet()},

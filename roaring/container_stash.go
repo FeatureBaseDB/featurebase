@@ -165,29 +165,29 @@ func NewContainerArrayN(set []uint16, n int32) *Container {
 
 // NewContainerRun creates a new run container using a provided (possibly nil)
 // slice of intervals.
-func NewContainerRun(set []interval16) *Container {
+func NewContainerRun(set []Interval16) *Container {
 	c := &Container{typeID: containerRun}
 	c.setRuns(set)
 	for _, run := range set {
-		c.n += int32(run.last-run.start) + 1
+		c.n += int32(run.Last-run.Start) + 1
 	}
 	return c
 }
 
 // NewContainerRunCopy creates a new run container using a provided (possibly nil)
 // slice of intervals. It copies the provided slice to new storage.
-func NewContainerRunCopy(set []interval16) *Container {
+func NewContainerRunCopy(set []Interval16) *Container {
 	c := &Container{typeID: containerRun}
 	c.setRunsMaybeCopy(set, true)
 	for _, run := range set {
-		c.n += int32(run.last-run.start) + 1
+		c.n += int32(run.Last-run.Start) + 1
 	}
 	return c
 }
 
 // NewContainerRunN creates a new run array using a provided (possibly nil)
 // slice of intervals. It overrides n using the provided value.
-func NewContainerRunN(set []interval16, n int32) *Container {
+func NewContainerRunN(set []Interval16, n int32) *Container {
 	c := &Container{typeID: containerRun, n: n}
 	c.setRuns(set)
 	return c
@@ -426,27 +426,33 @@ var fillerBitmap = func() (a [1024]uint64) {
 	return a
 }()
 
-func splatRun(into *[1024]uint64, from interval16) {
+func splatRun(into *[1024]uint64, from Interval16) {
+	// TODO this can be ~64x faster for long runs by setting maxBitmap instead of single bits
+	// note v must be int or will overflow
+	// for v := int(from.Start); v <= int(from.Last); v++ {
+	// 	into[v/64] |= (uint64(1) << uint(v%64))
+	// }
+
 	// Handle the case where the start and end fall within the same word.
-	if from.start/64 == from.last/64 {
-		highMask := ^uint64(0) >> (63 - (from.last % 64))
-		lowMask := ^uint64(0) << (from.start % 64)
-		into[from.start/64] |= highMask & lowMask
+	if from.Start/64 == from.Last/64 {
+		highMask := ^uint64(0) >> (63 - (from.Last % 64))
+		lowMask := ^uint64(0) << (from.Start % 64)
+		into[from.Start/64] |= highMask & lowMask
 		return
 	}
 
 	// Calculate preliminary bulk fill bounds.
-	fillStart, fillEnd := from.start/64, from.last/64
+	fillStart, fillEnd := from.Start/64, from.Last/64
 
 	// Handle run start.
-	if from.start%64 != 0 {
-		into[from.start/64] |= ^uint64(0) << (from.start % 64)
+	if from.Start%64 != 0 {
+		into[from.Start/64] |= ^uint64(0) << (from.Start % 64)
 		fillStart++
 	}
 
 	// Handle run end.
-	if from.last%64 != 63 {
-		into[from.last/64] |= ^uint64(0) >> (63 - (from.last % 64))
+	if from.Last%64 != 63 {
+		into[from.Last/64] |= ^uint64(0) >> (63 - (from.Last % 64))
 		fillEnd--
 	}
 
@@ -480,7 +486,7 @@ func (c *Container) setBitmap(bitmap []uint64) {
 }
 
 // runs yields the data viewed as a slice of intervals.
-func (c *Container) runs() []interval16 {
+func (c *Container) runs() []Interval16 {
 	if c == nil {
 		panic("attempt to read nil container's runs")
 	}
@@ -489,17 +495,17 @@ func (c *Container) runs() []interval16 {
 			panic("attempt to read non-run's runs")
 		}
 	}
-	return (*[1 << 15]interval16)(unsafe.Pointer(c.pointer))[:c.len:c.cap]
+	return (*[1 << 15]Interval16)(unsafe.Pointer(c.pointer))[:c.len:c.cap]
 }
 
 // setRuns stores a set of intervals as data. c must not be frozen.
-func (c *Container) setRuns(runs []interval16) {
+func (c *Container) setRuns(runs []Interval16) {
 	c.setRunsMaybeCopy(runs, false)
 }
 
 // setRunsMaybeCopy stores a set of intervals as data. c must not be frozen.
 // If doCopy is set, the values will be copied to different storage.
-func (c *Container) setRunsMaybeCopy(runs []interval16, doCopy bool) {
+func (c *Container) setRunsMaybeCopy(runs []Interval16, doCopy bool) {
 	if roaringParanoia {
 		if c == nil || c.frozen() {
 			panic("setRuns on nil or frozen container")
@@ -514,24 +520,24 @@ func (c *Container) setRunsMaybeCopy(runs []interval16, doCopy bool) {
 	c.flags &^= flagPristine
 	// array we can fit in data store:
 	if len(runs) <= stashedRunSize {
-		newRuns := (*[stashedRunSize]interval16)(unsafe.Pointer(&c.data))[:len(runs)]
+		newRuns := (*[stashedRunSize]Interval16)(unsafe.Pointer(&c.data))[:len(runs)]
 		copy(newRuns, runs)
 		c.pointer, c.len, c.cap = &c.data[0], int32(len(newRuns)), int32(cap(newRuns))
 		c.flags &^= flagMapped // this is no longer using a hypothetical mmapped input array
 		return
 	}
-	if &runs[0].start == c.pointer && !doCopy {
+	if &runs[0].Start == c.pointer && !doCopy {
 		// nothing to do but update length
 		c.len = int32(len(runs))
 		return
 	}
 	if doCopy {
-		runs = append([]interval16(nil), runs...)
+		runs = append([]Interval16(nil), runs...)
 	}
 	if cap(runs) > 1<<15 {
 		runs = runs[: len(runs) : 1<<15]
 	}
-	c.pointer, c.len, c.cap = &runs[0].start, int32(len(runs)), int32(cap(runs))
+	c.pointer, c.len, c.cap = &runs[0].Start, int32(len(runs)), int32(cap(runs))
 }
 
 // UpdateOrMake updates the container, yielding a new container if necessary.

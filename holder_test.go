@@ -162,11 +162,19 @@ func TestHolder_Open(t *testing.T) {
 		h := test.MustOpenHolder()
 		defer h.Close()
 
+		tx, err := h.Begin(true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = tx.Rollback() }()
+
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
 		} else if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
-		} else if _, err := field.SetBit(0, 0, nil); err != nil {
+		} else if _, err := field.SetBit(tx, 0, 0, nil); err != nil {
+			t.Fatal(err)
+		} else if err := tx.Commit(); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
@@ -184,11 +192,19 @@ func TestHolder_Open(t *testing.T) {
 		h := test.MustOpenHolder()
 		defer h.Close()
 
+		tx, err := h.Begin(true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = tx.Rollback() }()
+
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
 		} else if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
-		} else if _, err := field.SetBit(0, 0, nil); err != nil {
+		} else if _, err := field.SetBit(tx, 0, 0, nil); err != nil {
+			t.Fatal(err)
+		} else if err := tx.Commit(); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
@@ -204,11 +220,19 @@ func TestHolder_Open(t *testing.T) {
 		h := test.MustOpenHolder()
 		defer h.Close()
 
+		tx, err := h.Begin(true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = tx.Rollback() }()
+
 		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
 		} else if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
-		} else if _, err := field.SetBit(0, 0, nil); err != nil {
+		} else if _, err := field.SetBit(tx, 0, 0, nil); err != nil {
+			t.Fatal(err)
+		} else if err := tx.Commit(); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)

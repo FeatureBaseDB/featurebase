@@ -903,8 +903,15 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		// Obtain transaction.
+		tx, err := hldr.Begin(false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = tx.Rollback() }()
+
 		f := hldr.Field("i", "f")
-		if value, exists, err := f.Value(10); err != nil {
+		if value, exists, err := f.Value(tx, 10); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
@@ -912,7 +919,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatalf("unexpected value: %v", value)
 		}
 
-		if value, exists, err := f.Value(100); err != nil {
+		if value, exists, err := f.Value(tx, 100); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")

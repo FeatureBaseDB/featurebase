@@ -52,7 +52,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) (err error) {
 		case containerArray:
 			newC = NewContainerArray((*[4096]uint16)(unsafe.Pointer(itrPointer))[:itrLen:itrLen])
 		case containerRun:
-			newC = NewContainerRunN((*[2048]interval16)(unsafe.Pointer(itrPointer))[:itrLen:itrLen], int32(itrN))
+			newC = NewContainerRunN((*[2048]Interval16)(unsafe.Pointer(itrPointer))[:itrLen:itrLen], int32(itrN))
 		case containerBitmap:
 			newC = NewContainerBitmapN((*[1024]uint64)(unsafe.Pointer(itrPointer))[:1024:itrLen], int32(itrN))
 		default:
@@ -144,7 +144,7 @@ func InspectBinary(data []byte, mapped bool, info *BitmapInfo) (b *Bitmap, mappe
 		case containerArray:
 			newC = NewContainerArray((*[4096]uint16)(unsafe.Pointer(itrPointer))[:itrLen:itrLen])
 		case containerRun:
-			newC = NewContainerRunN((*[2048]interval16)(unsafe.Pointer(itrPointer))[:itrLen:itrLen], int32(itrN))
+			newC = NewContainerRunN((*[2048]Interval16)(unsafe.Pointer(itrPointer))[:itrLen:itrLen], int32(itrN))
 		case containerBitmap:
 			newC = NewContainerBitmapN((*[1024]uint64)(unsafe.Pointer(itrPointer))[:1024:itrLen], int32(itrN))
 		default:

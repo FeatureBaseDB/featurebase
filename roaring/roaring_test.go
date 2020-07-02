@@ -315,8 +315,9 @@ func TestBitmap_SliceRange(t *testing.T) {
 // Ensure a bitmap can loop over a set of values.
 func TestBitmap_ForEach(t *testing.T) {
 	var a []uint64
-	roaring.NewFileBitmap(1, 2, 3).ForEach(func(v uint64) {
+	_ = roaring.NewFileBitmap(1, 2, 3).ForEach(func(v uint64) error {
 		a = append(a, v)
+		return nil
 	})
 	if !reflect.DeepEqual(a, []uint64{1, 2, 3}) {
 		t.Fatalf("unexpected values: %+v", a)
@@ -326,8 +327,9 @@ func TestBitmap_ForEach(t *testing.T) {
 // Ensure a bitmap can loop over a set of values in a range.
 func TestBitmap_ForEachRange(t *testing.T) {
 	var a []uint64
-	roaring.NewFileBitmap(1, 2, 3, 4).ForEachRange(2, 4, func(v uint64) {
+	_ = roaring.NewFileBitmap(1, 2, 3, 4).ForEachRange(2, 4, func(v uint64) error {
 		a = append(a, v)
+		return nil
 	})
 	if !reflect.DeepEqual(a, []uint64{2, 3}) {
 		t.Fatalf("unexpected values: %+v", a)
