@@ -47,29 +47,6 @@ func (sc *sliceContainers) Put(key uint64, c *Container) {
 	sc.lastContainer = c
 }
 
-func (sc *sliceContainers) PutContainerValues(key uint64, typ byte, n int, mapped bool) {
-	i := search64(sc.keys, key)
-	if i < 0 {
-		c := NewContainer()
-		c.setTyp(typ)
-		c.setN(int32(n))
-		c.setMapped(mapped)
-		sc.insertAt(key, c, -i-1)
-	} else {
-		// if the container already exists, and is frozen, this may
-		// result in copying its data, which is sort of pointless
-		// because PutContainerValues almost always gets called
-		// because we're reading new data from a file -- but also
-		// that means this case probably never happens.
-		c := sc.containers[i].Thaw()
-		c.setTyp(typ)
-		c.setN(int32(n))
-		c.setMapped(mapped)
-		sc.containers[i] = c
-	}
-
-}
-
 func (sc *sliceContainers) Remove(key uint64) {
 	statsHit("sliceContainers/Remove")
 	i := search64(sc.keys, key)
