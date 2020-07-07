@@ -210,6 +210,8 @@ type btcIterator struct {
 	val *Container
 }
 
+func (i *btcIterator) Close() {}
+
 func (i *btcIterator) Next() bool {
 	k, v, err := i.e.Next()
 	if err == io.EOF {

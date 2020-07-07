@@ -67,16 +67,32 @@ type Index struct {
 
 	// Instantiates new translation stores
 	OpenTranslateStore OpenTranslateStoreFunc
+
+	// txf chooses the transaction and storage strategy
+	Txf *TxFactory
 }
 
 // NewIndex returns a new instance of Index.
 func NewIndex(holder *Holder, path, name string) (*Index, error) {
-	err := validateName(name)
+
+	// Emulate what the spf13/cobra does, letting env vars override
+	// the defaults, because we may be under a simple "go test" run where
+	// not all that command line machinery has been spun up.
+	txsrc := os.Getenv("PILOSA_TXSRC")
+	if txsrc == "" {
+		txsrc = DefaultTxsrc
+	}
+	txf, err := newTxFactory(txsrc, path)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating newTxFactory")
+	}
+
+	err = validateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
 	}
 
-	return &Index{
+	idx := &Index{
 		path:   path,
 		name:   name,
 		fields: make(map[string]*Field),
@@ -94,7 +110,11 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 		translationSyncer: NopTranslationSyncer,
 
 		OpenTranslateStore: OpenInMemTranslateStore,
-	}, nil
+
+		Txf: txf,
+	}
+	idx.Txf.idx = idx
+	return idx, nil
 }
 
 // CreatedAt is an timestamp for a specific version of an index.
@@ -326,6 +346,11 @@ func (i *Index) Close() error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
+	err := i.Txf.CloseIndex(i)
+	if err != nil {
+		return errors.Wrap(err, "closing index")
+	}
+
 	// Close the attribute store.
 	i.columnAttrs.Close()
 
@@ -367,9 +392,8 @@ func (i *Index) AvailableShards() *roaring.Bitmap {
 }
 
 // Begin starts a transaction on a shard of the index.
-func (i *Index) Begin(writable bool, shard uint64) (Tx, error) {
-	// TODO(bbj): Check for underlying storage as RBF or roaring.
-	return &RoaringTx{Index: i}, nil
+func (i *Index) BeginTx(writable bool, shard uint64) (Tx, error) {
+	return i.Txf.NewTx(Txo{Write: writable, Index: i, Shard: shard}), nil
 }
 
 // fieldPath returns the path to a field in the index.

@@ -45,6 +45,40 @@ func NewRow(columns ...uint64) *Row {
 	return r
 }
 
+func (r *Row) Clone() (clone *Row) {
+	if r == nil {
+		return nil
+	}
+	var keyClone []string
+	if len(r.Keys) > 0 {
+		keyClone = make([]string, len(r.Keys))
+		copy(keyClone, r.Keys)
+	}
+
+	attrClone := make(map[string]interface{})
+	for k, v := range r.Attrs {
+		attrClone[k] = v
+	}
+	clone = &Row{
+		Keys:  keyClone,
+		Attrs: attrClone,
+	}
+
+	for _, seg := range r.segments {
+		segClone := rowSegment{
+			shard:    seg.shard,
+			writable: true, // we know it is safe; it is a copy.
+			n:        seg.n,
+		}
+		if seg.data != nil {
+			segClone.data = seg.data.Clone() // *roaring.Bitmap
+		}
+		//segClone.InvalidateCount() // not needed?
+		clone.segments = append(clone.segments, segClone)
+	}
+	return clone
+}
+
 // NewRowFromBitmap divides a bitmap into rows, which it now calls shards. This
 // transposes; data that was in any shard for Row 0 is now considered shard 0,
 // etcetera.
@@ -520,7 +554,7 @@ func (r *Row) MarshalJSON() ([]byte, error) {
 func (r *Row) Columns() []uint64 {
 	a := make([]uint64, 0, r.Count())
 	for i := range r.segments {
-		a = append(a, r.segments[i].Columns()...)
+		a = append(a, r.segments[i].Columns()...) // Accessing Tx memory that is now invalid.
 	}
 	return a
 }

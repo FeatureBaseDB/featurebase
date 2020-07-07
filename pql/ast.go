@@ -244,7 +244,7 @@ func (q *Query) WriteCallN() int {
 	var n int
 	for _, call := range q.Calls {
 		switch call.Name {
-		case "Set", "Clear", "SetRowAttrs", "SetColumnAttrs":
+		case "Set", "Clear", "SetRowAttrs", "SetColumnAttrs", "ClearRow", "Store", "SetBit":
 			n++
 		}
 	}

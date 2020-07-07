@@ -135,11 +135,13 @@ func (t *ClusterCluster) SetBit(index, field string, rowID, colID uint64, x *tim
 		}
 
 		if err := func() error {
-			tx, err := c.holder.Begin(true)
+			tx, err := c.holder.BeginTx(writable, c.holder.indexes[f.index])
+			if tx != nil {
+				defer tx.Rollback()
+			}
 			if err != nil {
 				return err
 			}
-			defer func() { _ = tx.Rollback() }()
 
 			if _, err := f.SetBit(tx, rowID, colID, x); err != nil {
 				return err

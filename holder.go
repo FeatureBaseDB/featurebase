@@ -115,6 +115,10 @@ type HolderOpts struct {
 	// If Inspect is set, we'll try to obtain additional information
 	// about fragments when opening them.
 	Inspect bool
+
+	// Txsrc controls the tx/storage engine we instatiate. Set by
+	// server.go OptServerTxsrc
+	Txsrc string
 }
 
 func (h *Holder) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (*Transaction, error) {
@@ -507,6 +511,10 @@ func (h *Holder) Open() error {
 		if !fi.IsDir() || strings.HasPrefix(fi.Name(), ".") {
 			continue
 		}
+		// Skip badgerdb files too.
+		if strings.HasSuffix(fi.Name(), "badgerdb") {
+			continue
+		}
 
 		h.Logger.Printf("opening index: %s", filepath.Base(fi.Name()))
 
@@ -614,8 +622,8 @@ func (h *Holder) Close() error {
 }
 
 // Begin starts a transaction on the holder.
-func (h *Holder) Begin(writable bool) (Tx, error) {
-	return NewMultiTx(writable, h), nil
+func (h *Holder) BeginTx(writable bool, index *Index) (Tx, error) {
+	return index.Txf.NewTx(Txo{Write: writable, Index: index}), nil
 }
 
 // HasData returns true if Holder contains at least one index.
@@ -906,6 +914,11 @@ func (h *Holder) DeleteIndex(name string) error {
 	// Close index.
 	if err := index.Close(); err != nil {
 		return errors.Wrap(err, "closing")
+	}
+
+	// remove any backing store.
+	if err := index.Txf.DeleteIndex(name); err != nil {
+		return errors.Wrap(err, "index.Txf.DeleteIndex")
 	}
 
 	// Delete index directory.

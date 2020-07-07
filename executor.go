@@ -180,8 +180,14 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 		return resp, ErrIndexNotFound
 	}
 
+	needWriteTxn := false
+	nw := q.WriteCallN()
+	if nw > 0 {
+		needWriteTxn = true
+	}
+
 	// Verify that the number of writes do not exceed the maximum.
-	if e.MaxWritesPerRequest > 0 && q.WriteCallN() > e.MaxWritesPerRequest {
+	if e.MaxWritesPerRequest > 0 && nw > e.MaxWritesPerRequest {
 		return resp, ErrTooManyWrites
 	}
 
@@ -210,12 +216,11 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 		}
 	}
 
-	// TODO: Determine if query is read-only.
-	tx, err := e.Holder.Begin(true)
+	tx, err := e.Holder.BeginTx(needWriteTxn, idx)
 	if err != nil {
 		return resp, err
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer tx.Rollback()
 
 	results, err := e.execute(ctx, tx, index, q, shards, opt)
 	if err != nil {
@@ -267,19 +272,75 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	// Translate response objects from ids to keys, if necessary.
 	// No need to translate a remote call.
 	if !opt.Remote {
+		// only translateResults if this local node is the final destination. only string/column keys.
 		if err := e.translateResults(ctx, index, idx, q.Calls, results); err != nil {
 			return resp, err
 		} else if err := validateQueryContext(ctx); err != nil {
 			return resp, err
 		}
 	}
+	// Must copy out of Tx data before Commiting, because it will become invalid afterwards.
+	respSafeNoTxData := e.safeCopy(resp)
 
 	// Commit transaction.
 	if err := tx.Commit(); err != nil {
-		return resp, err
+		return respSafeNoTxData, err
 	}
+	return respSafeNoTxData, nil
+}
 
-	return resp, nil
+// safeCopy copies everything in resp that has Bitmap material,
+// to avoid anything coming from the mmap-ed Tx storage.
+func (e *executor) safeCopy(resp QueryResponse) (out QueryResponse) {
+	out = QueryResponse{
+		// not transactional, from attribute storage so no need to clone these:
+		ColumnAttrSets: resp.ColumnAttrSets, // []*ColumnAttrSet
+		Err:            resp.Err,            //  error
+		Profile:        resp.Profile,        //  *tracing.Profile
+	}
+	// Results can contain *roaring.Bitmap, so need to copy from Tx mmap-ed memory.
+	for _, v := range resp.Results {
+		switch x := v.(type) {
+		case *Row:
+			rowSafe := x.Clone()
+			out.Results = append(out.Results, rowSafe)
+		case bool:
+			out.Results = append(out.Results, x)
+		case nil:
+			out.Results = append(out.Results, nil)
+		case uint64:
+			out.Results = append(out.Results, x) // for counts
+		case *PairsField:
+			// no bitmap material, so should be ok to skip Clone()
+			out.Results = append(out.Results, x)
+		case PairField: // not PairsField but PairField
+			// no bitmap material, so should be ok to skip Clone()
+			out.Results = append(out.Results, x)
+		case ValCount:
+			// no bitmap material, so should be ok to skip Clone()
+			out.Results = append(out.Results, x)
+		case SignedRow:
+			// has *Row in it, so has Bitmap material, and very likely needs Clone.
+			y := x.Clone()
+			out.Results = append(out.Results, *y)
+		case GroupCount:
+			// no bitmap material, so should be ok to skip Clone()
+			out.Results = append(out.Results, x)
+		case []GroupCount:
+			out.Results = append(out.Results, x)
+		case RowIdentifiers:
+			// no bitmap material, so should be ok to skip Clone()
+			out.Results = append(out.Results, x)
+		case RowIDs:
+			// defined as: type RowIDs []uint64
+			// so does not contain bitmap material, and
+			// should not need to be cloned.
+			out.Results = append(out.Results, x)
+		default:
+			panic(fmt.Sprintf("handle %T here", v))
+		}
+	}
+	return
 }
 
 // readColumnAttrSets returns a list of column attribute objects by id.
@@ -308,6 +369,7 @@ func (e *executor) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttr
 // handlePreCalls traverses the call tree looking for calls that need
 // precomputed values. Right now, that's just Distinct.
 func (e *executor) handlePreCalls(ctx context.Context, tx Tx, index string, c *pql.Call, shards []uint64, opt *execOptions) error {
+
 	if c.Name == "Precomputed" {
 		idx := c.Args["valueidx"].(int64)
 		if idx >= 0 && idx < int64(len(opt.EmbeddedData)) {
@@ -457,6 +519,7 @@ func (e *executor) execute(ctx context.Context, tx Tx, index string, q *pql.Quer
 	// Execute each call serially.
 	results := make([]interface{}, 0, len(q.Calls))
 	for i, call := range q.Calls {
+
 		if err := validateQueryContext(ctx); err != nil {
 			return nil, err
 		}
@@ -1019,6 +1082,7 @@ func (e *executor) executeAllCallMapReduce(ctx context.Context, tx Tx, index str
 
 // executeIncludesColumnCallShard
 func (e *executor) executeIncludesColumnCallShard(ctx context.Context, tx Tx, index string, c *pql.Call, shard uint64, column uint64) (bool, error) {
+
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeIncludesColumnCallShard")
 	defer span.Finish()
 
@@ -1308,7 +1372,8 @@ func (e *executor) executeBitmapCall(ctx context.Context, tx Tx, index string, c
 	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
 		other, _ := prev.(*Row)
 		if other == nil {
-			other = NewRow()
+
+			other = NewRow() // bug! this row ends up containing Badger Txn data that should be accessed outside the Txn.
 		}
 		if err := ctx.Err(); err != nil {
 			return err
@@ -1823,6 +1888,21 @@ type RowIdentifiers struct {
 	field string
 }
 
+func (r *RowIdentifiers) Clone() (clone *RowIdentifiers) {
+	clone = &RowIdentifiers{
+		field: r.field,
+	}
+	if r.Rows != nil {
+		clone.Rows = make([]uint64, len(r.Rows))
+		copy(clone.Rows, r.Rows)
+	}
+	if r.Keys != nil {
+		clone.Keys = make([]string, len(r.Keys))
+		copy(clone.Keys, r.Keys)
+	}
+	return
+}
+
 // ToTable implements the ToTabler interface.
 func (r RowIdentifiers) ToTable() (*pb.TableResponse, error) {
 	var n int
@@ -2041,6 +2121,20 @@ type FieldRow struct {
 	Value  *int64 `json:"value,omitempty"`
 }
 
+func (fr *FieldRow) Clone() (clone *FieldRow) {
+	clone = &FieldRow{
+		Field:  fr.Field,
+		RowID:  fr.RowID,
+		RowKey: fr.RowKey,
+	}
+	if fr.Value != nil {
+		// deep copy, for safety.
+		v := *fr.Value
+		clone.Value = &v
+	}
+	return
+}
+
 // MarshalJSON marshals FieldRow to JSON such that
 // either a Key or an ID is included.
 func (fr FieldRow) MarshalJSON() ([]byte, error) {
@@ -2136,6 +2230,18 @@ type GroupCount struct {
 	Group []FieldRow `json:"group"`
 	Count uint64     `json:"count"`
 	Sum   int64      `json:"sum"`
+}
+
+func (g *GroupCount) Clone() (r *GroupCount) {
+	r = &GroupCount{
+		Group: make([]FieldRow, len(g.Group)),
+		Count: g.Count,
+		Sum:   g.Sum,
+	}
+	for i := range g.Group {
+		r.Group[i] = *(g.Group[i].Clone())
+	}
+	return
 }
 
 // mergeGroupCounts merges two slices of GroupCounts throwing away any that go
@@ -2642,6 +2748,7 @@ func (e *executor) executeRowShard(ctx context.Context, tx Tx, index string, c *
 
 	// Simply return row if times are not set.
 	if c.Name == "Row" && timeNotSet {
+
 		frag := e.Holder.fragment(index, fieldName, viewStandard, shard)
 		if frag == nil {
 			return NewRow(), nil
@@ -3771,6 +3878,7 @@ func (e *executor) executeSetColumnAttrs(ctx context.Context, tx Tx, index strin
 	delete(attrs, "field")
 
 	// Set attributes.
+
 	if err := idx.ColumnAttrStore().SetAttrs(col, attrs); err != nil {
 		return err
 	}
@@ -4654,6 +4762,15 @@ type SignedRow struct {
 	field string
 }
 
+func (s *SignedRow) Clone() (r *SignedRow) {
+	r = &SignedRow{
+		Neg:   s.Neg.Clone(), // Row.Clone() returns nil for nil.
+		Pos:   s.Pos.Clone(),
+		field: s.field,
+	}
+	return
+}
+
 // Field returns the field name associated to the signed row.
 func (s *SignedRow) Field() string {
 	return s.field
@@ -4766,6 +4883,18 @@ type ValCount struct {
 	FloatVal   float64      `json:"floatValue"`
 	DecimalVal *pql.Decimal `json:"decimalValue"`
 	Count      int64        `json:"count"`
+}
+
+func (v *ValCount) Clone() (r *ValCount) {
+	r = &ValCount{
+		Val:      v.Val,
+		FloatVal: v.FloatVal,
+		Count:    v.Count,
+	}
+	if v.DecimalVal != nil {
+		r.DecimalVal = v.DecimalVal.Clone()
+	}
+	return
 }
 
 // ToTable implements the ToTabler interface.

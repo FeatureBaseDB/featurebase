@@ -122,9 +122,14 @@ func TestHolder_Open(t *testing.T) {
 		h := test.MustOpenHolder()
 		defer h.Close()
 
-		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+		var idx *pilosa.Index
+		var err error
+
+		if idx, err = h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if _, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
+		}
+
+		if _, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
@@ -140,9 +145,13 @@ func TestHolder_Open(t *testing.T) {
 		h := test.MustOpenHolder()
 		defer h.Close()
 
-		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+		var idx *pilosa.Index
+		var err error
+		if idx, err = h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
 			t.Fatal(err)
-		} else if _, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
+		}
+
+		if _, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
 		} else if err := h.Holder.Close(); err != nil {
 			t.Fatal(err)
@@ -162,15 +171,18 @@ func TestHolder_Open(t *testing.T) {
 		h := test.MustOpenHolder()
 		defer h.Close()
 
-		tx, err := h.Begin(true)
+		var idx *pilosa.Index
+		var err error
+		if idx, err = h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		tx, err := h.BeginTx(writable, idx)
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = tx.Rollback() }()
+		defer tx.Rollback()
 
-		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
-			t.Fatal(err)
-		} else if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
+		if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
 		} else if _, err := field.SetBit(tx, 0, 0, nil); err != nil {
 			t.Fatal(err)
@@ -192,15 +204,19 @@ func TestHolder_Open(t *testing.T) {
 		h := test.MustOpenHolder()
 		defer h.Close()
 
-		tx, err := h.Begin(true)
+		var idx *pilosa.Index
+		var err error
+		if idx, err = h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+			t.Fatal(err)
+		}
+
+		tx, err := h.BeginTx(writable, idx)
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = tx.Rollback() }()
+		defer tx.Rollback()
 
-		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
-			t.Fatal(err)
-		} else if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
+		if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
 		} else if _, err := field.SetBit(tx, 0, 0, nil); err != nil {
 			t.Fatal(err)
@@ -220,15 +236,17 @@ func TestHolder_Open(t *testing.T) {
 		h := test.MustOpenHolder()
 		defer h.Close()
 
-		tx, err := h.Begin(true)
+		idx, err := h.CreateIndex("foo", pilosa.IndexOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = tx.Rollback() }()
-
-		if idx, err := h.CreateIndex("foo", pilosa.IndexOptions{}); err != nil {
+		tx, err := h.BeginTx(writable, idx)
+		if err != nil {
 			t.Fatal(err)
-		} else if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
+		}
+		defer tx.Rollback()
+
+		if field, err := idx.CreateField("bar", pilosa.OptFieldTypeDefault()); err != nil {
 			t.Fatal(err)
 		} else if _, err := field.SetBit(tx, 0, 0, nil); err != nil {
 			t.Fatal(err)
@@ -686,7 +704,10 @@ func TestHolderSyncer_IntField(t *testing.T) {
 		}
 		defer c.Close()
 
-		_, err = c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+		var idx0 *pilosa.Index
+		_ = idx0
+		idx0, err = c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+		_ = idx0
 		if err != nil {
 			t.Fatalf("creating index i: %v", err)
 		}
@@ -698,24 +719,40 @@ func TestHolderSyncer_IntField(t *testing.T) {
 		hldr0 := &test.Holder{Holder: c[0].Server.Holder()}
 		hldr1 := &test.Holder{Holder: c[1].Server.Holder()}
 
-		// Set data on the local holder for node0.
+		// Set data on the local holder for node0. columnID=1, value=1
 		hldr0.SetValue("i", "f", 1, 1)
 
-		// Set data on node1.
-		hldr1.SetValue("i", "f", 2, 2)
+		// in c0 expect the 1 bit
+		//idx0.Dump("in c0, before SyncData")
 
+		// Set data on node1. columnID=2, value=2
+		idx1 := hldr1.SetValue("i", "f", 2, 2)
+		_ = idx1
+
+		//idx1.Dump("in c1, before SyncData")
+
+		//vv("before c[0] SyncData")
 		err = c[0].Server.SyncData()
 		if err != nil {
 			t.Fatalf("syncing node 0: %v", err)
 		}
+		//vv("after c[0] SyncData")
+
+		// expect 3 rows, the 1 bit + 2 rows for the 2 value as BSI. But, we only see that c0 overwrote c1.
+		//idx0.Dump("in c0, after syncData")
+		//idx1.Dump("in c1, after syncData")
+
+		// Problem is: data at c1 was replaced by c0, instead of being merged with existing c1.
+		// Problem is: data at c0 did not receive and merge the c1 data.
 
 		// Verify data is the same on both nodes.
 		for i, hldr := range []*test.Holder{hldr0, hldr1} {
 			if a, exists := hldr.Value("i", "f", 1); !exists || a != 1 {
-				t.Errorf("unexpected value(node%d/0): %d, exists: %v", i, a, exists)
+				// expects exists==true, a==1
+				t.Errorf("unexpected value(node%d/0): a:%d, exists: %v", i, a, exists) // failing TestHolderSyncer_IntField under Badger, unexpected value(node1/0): a:0, exists: true
 			}
 			if a, exists := hldr.Value("i", "f", 2); exists {
-				t.Errorf("unexpected value(node%d/1): %d, exists: %v", i, a, exists)
+				t.Errorf("unexpected value(node%d/1): a:%d, exists: %v", i, a, exists)
 			}
 		}
 	})
@@ -732,7 +769,10 @@ func TestHolderSyncer_IntField(t *testing.T) {
 		}
 		defer c.Close()
 
-		_, err = c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+		var idx0 *pilosa.Index
+		_ = idx0
+		idx0, err = c[0].API.CreateIndex(context.Background(), "i", pilosa.IndexOptions{})
+		_ = idx0
 		if err != nil {
 			t.Fatalf("creating index i: %v", err)
 		}
@@ -768,6 +808,10 @@ func TestHolderSyncer_IntField(t *testing.T) {
 		if err != nil {
 			t.Fatalf("syncing node 1: %v", err)
 		}
+
+		// dump the badger keys for both c0 and c1
+		//vv("in c0, allkeys = '%v'", idx0.StringifiedBadgerKeys(nil))
+		//vv("in c1, allkeys = '%v'", c[1].index.StringifiedBadgerKeys())
 
 		// Verify data is the same on both nodes.
 		for i, hldr := range []*test.Holder{hldr0, hldr1} {

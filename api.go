@@ -330,6 +330,7 @@ func setUpImportOptions(opts ...ImportOption) (*ImportOptions, error) {
 
 type importJob struct {
 	ctx     context.Context
+	tx      Tx
 	req     *ImportRoaringRequest
 	shard   uint64
 	field   *Field
@@ -370,9 +371,15 @@ func importWorker(importWork chan importJob) {
 				var doClear bool
 				switch doAction {
 				case RequestActionOverwrite:
-					tx := &RoaringTx{Field: j.field}
+					// TODO(jea): the question here is, why are we commiting this separately from j.tx?
+					// why doesn't j.tx suffice? It doesn't but why/which is correct?
+					tx := j.field.holder.indexes[j.field.index].Txf.NewTx(Txo{Write: true, Field: j.field})
+					defer tx.Rollback()
 					if err := j.field.importRoaringOverwrite(j.ctx, tx, viewData, j.shard, viewName, j.req.Block); err != nil {
 						return errors.Wrap(err, "importing roaring as overwrite")
+					}
+					if err := tx.Commit(); err != nil {
+						return errors.Wrap(err, "commit of importing roaring as overwrite")
 					}
 				case RequestActionClear:
 					doClear = true
@@ -380,7 +387,7 @@ func importWorker(importWork chan importJob) {
 				case RequestActionSet:
 					fileMagic := uint32(binary.LittleEndian.Uint16(viewData[0:2]))
 					if fileMagic == roaring.MagicNumber { // if pilosa roaring format
-						if err := j.field.importRoaring(j.ctx, viewData, j.shard, viewName, doClear); err != nil {
+						if err := j.field.importRoaring(j.ctx, j.tx, viewData, j.shard, viewName, doClear); err != nil {
 							return errors.Wrap(err, "importing pilosa roaring")
 						}
 					} else {
@@ -388,7 +395,7 @@ func importWorker(importWork chan importJob) {
 						// field.importRoaring changes the standard roaring run format to pilosa roaring
 						data := make([]byte, len(viewData))
 						copy(data, viewData)
-						if err := j.field.importRoaring(j.ctx, data, j.shard, viewName, doClear); err != nil {
+						if err := j.field.importRoaring(j.ctx, j.tx, data, j.shard, viewName, doClear); err != nil {
 							return errors.Wrap(err, "importing standard roaring")
 						}
 					}
@@ -439,6 +446,10 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 		return newPreconditionFailedError(err)
 	}
 
+	//  Obtain transaction.
+	tx := index.Txf.NewTx(Txo{Write: true, Index: index})
+	defer tx.Rollback()
+
 	nodes := api.cluster.shardNodes(indexName, shard)
 	errCh := make(chan error, len(nodes))
 	for _, node := range nodes {
@@ -446,6 +457,7 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 		if node.ID == api.server.nodeID {
 			api.importWork <- importJob{
 				ctx:     ctx,
+				tx:      tx,
 				req:     req,
 				shard:   shard,
 				field:   field,
@@ -465,9 +477,11 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 	for {
 		select {
 		case <-ctx.Done():
+			// defered tx.Rollback() happens automatically here.
 			return ctx.Err()
 		case nodeErr := <-errCh:
 			if nodeErr != nil {
+				// defered tx.Rollback() happens automatically here.
 				return nodeErr
 			}
 			maxNode++
@@ -475,7 +489,7 @@ func (api *API) ImportRoaring(ctx context.Context, indexName, fieldName string, 
 
 		// Exit once all nodes are processed.
 		if maxNode == len(nodes) {
-			return nil
+			return tx.Commit()
 		}
 	}
 }
@@ -583,7 +597,8 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 	}
 
 	// Obtain transaction
-	tx := &RoaringTx{Index: index}
+	tx := index.Txf.NewTx(Txo{Write: !writable, Index: index})
+	defer tx.Rollback()
 
 	// Wrap writer with a CSV writer.
 	cw := csv.NewWriter(w)
@@ -626,10 +641,8 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 
 	// Ensure data is flushed.
 	cw.Flush()
-
 	span.LogKV("n", n)
-
-	return nil
+	return tx.Commit()
 }
 
 // ShardNodes returns the node and all replicas which should contain a shard's data.
@@ -1061,7 +1074,8 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 	}
 
 	//  Obtain transaction.
-	tx := &RoaringTx{Index: index}
+	tx := index.Txf.NewTx(Txo{Write: true, Index: index})
+	defer tx.Rollback()
 
 	if err := req.ValidateWithTimestamp(index.CreatedAt(), field.CreatedAt()); err != nil {
 		return errors.Wrap(err, "validating import value request")
@@ -1165,8 +1179,12 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 	err = field.Import(tx, req.RowIDs, req.ColumnIDs, timestamps, opts...)
 	if err != nil {
 		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
+	} else {
+		err = tx.Commit()
 	}
+
 	return errors.Wrap(err, "importing")
+
 }
 
 // ImportValue bulk imports values into a particular field.
@@ -1188,7 +1206,8 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 	}
 
 	// Obtain transaction.
-	tx := &RoaringTx{Index: index}
+	tx := index.Txf.NewTx(Txo{Write: true, Index: index})
+	defer tx.Rollback()
 
 	// Set up import options.
 	options, err := setUpImportOptions(opts...)
@@ -1274,7 +1293,9 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 				api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 			}
 		}
-
+		if err == nil {
+			err = tx.Commit()
+		}
 		return errors.Wrap(err, "importing value")
 	}
 

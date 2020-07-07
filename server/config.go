@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/gossip"
 	"github.com/pilosa/pilosa/v2/toml"
 	"github.com/pkg/errors"
@@ -166,6 +167,19 @@ type Config struct {
 		// MutexFraction is passed directly to runtime.SetMutexProfileFraction
 		MutexFraction int `toml:"mutex-fraction"`
 	} `toml:"profile"`
+
+	// Txsrc determines which Tx implementation the holder/Index will use; one
+	// of the available transactional-storage engines. Choices are listed
+	// in the string constants below. Should be one of
+	// "roaring","badger", "rbf", "badger_roaring", "roaring_badger", "rbf_roaring",
+	// "roaring_rbf", "badger_rbf", "rbf_badger", or any later addition. The
+	// engines with _ underscore indicate use of a blueGreenTx with a comparison
+	// of values back from each Tx method, and a panic if they differ. This
+	// is an effective test for consistency. If "rbf_roaring" is specified, then
+	// the roaring values are the ones actually returned from the blueGreenTx.
+	// If "roaring_rbf" is chosen, then the RBF values are the ones actually
+	// returned from the blueGreenTx.
+	Txsrc string `toml:"txsrc"`
 }
 
 // NewConfig returns an instance of Config with default options.
@@ -221,6 +235,8 @@ func NewConfig() *Config {
 
 	c.Profile.BlockRate = 10000000 // 1 sample per 10 ms
 	c.Profile.MutexFraction = 100  // 1% sampling
+
+	c.Txsrc = pilosa.DefaultTxsrc
 
 	return c
 }

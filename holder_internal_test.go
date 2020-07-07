@@ -79,21 +79,22 @@ func makeHolder() (*Holder, string, error) {
 	}
 	h := NewHolder(DefaultPartitionN)
 	h.Path = path
-
-	return h, h.Path, nil
+	return h, path, nil
 }
 
 func testSetBit(t *testing.T, h *Holder, index, field string, rowID, columnID uint64) {
-	tx, err := h.Begin(true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = tx.Rollback() }()
 
 	idx, err := h.CreateIndexIfNotExists(index, IndexOptions{})
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
+
+	tx, err := h.BeginTx(writable, idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+
 	f, err := idx.CreateFieldIfNotExists(field, OptFieldTypeDefault())
 	if err != nil {
 		t.Fatalf("setting bit: %v", err)

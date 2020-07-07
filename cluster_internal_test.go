@@ -161,7 +161,7 @@ func TestFragSources(t *testing.T) {
 
 	// Obtain transaction.
 	tx := &RoaringTx{Index: idx}
-	defer func() { _ = tx.Rollback() }()
+	defer tx.Rollback()
 
 	field, err := idx.CreateFieldIfNotExists("f", OptFieldTypeDefault())
 	if err != nil {
@@ -787,6 +787,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 		if err := tc.CreateField("i", "f", OptFieldTypeDefault()); err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
+		// Each tc.SetBit starts and commits its own Tx.
 		if err := tc.SetBit("i", "f", 1, 101, nil); err != nil {
 			t.Fatalf("setting bit: %v", err)
 		}
@@ -804,6 +805,12 @@ func TestCluster_ResizeStates(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		idx0 := node0.holder.Index("i")
+		if idx0 == nil {
+			t.Fatal(`idx0 was nil, could not retrieve Index("i")`)
+		}
+		//idx0.Dump("node0")
+
 		// addNode needs to block until the resize process has completed.
 		if err := tc.addNode(); err != nil {
 			t.Fatalf("adding node: %v", err)
@@ -816,6 +823,7 @@ func TestCluster_ResizeStates(t *testing.T) {
 		} else if node1.State() != ClusterStateNormal {
 			t.Errorf("expected node1 state: %v, but got: %v", ClusterStateNormal, node1.State())
 		}
+		// INVAR: after node1.State() is normal, the rebalancing should have been done.
 
 		expectedTop := &Topology{
 			nodeIDs: []string{node0.Node.ID, node1.Node.ID},
@@ -834,11 +842,19 @@ func TestCluster_ResizeStates(t *testing.T) {
 		node1View := node1Field.view("standard")
 		node1Fragment := node1View.Fragment(1)
 
+		idx1 := node1.holder.Index("i")
+		if idx1 == nil {
+			t.Fatal(`idx1 was nil, could not retrieve Index("i")`)
+		}
+		//idx0.Dump("after rebalance, node0")
+		//idx1.Dump("after rebalance, node1")
+
 		// Ensure checksums are the same.
 		if chksum, err := node1Fragment.Checksum(); err != nil {
 			t.Fatal(err)
 		} else if !bytes.Equal(chksum, node0Checksum) {
 			t.Fatalf("expected standard view checksum to match: %x - %x", chksum, node0Checksum)
+			// badger red:  TestCluster_ResizeStates/Multiple_nodes,_with_data: cluster_internal_test.go:841: expected standard view checksum to match: ef46db3751d8e999 - fad4de25ee696ca0
 		}
 
 		// Close TestCluster.

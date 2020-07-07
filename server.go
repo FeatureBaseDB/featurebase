@@ -326,6 +326,17 @@ func OptServerOpenTranslateReader(fn OpenTranslateReaderFunc) ServerOption {
 	}
 }
 
+// OptServerTxsrc is a functional option on Server
+// used to specify the transactional-storage to use,
+// resulting in RoaringTx, RbfTx, BadgerTx, or a blueGreen* Tx
+// being used for all Tx interface calls.
+func OptServerTxsrc(txsrc string) ServerOption {
+	return func(s *Server) error {
+		s.holder.Opts.Txsrc = txsrc
+		return nil
+	}
+}
+
 // NewServer returns a new instance of Server.
 func NewServer(opts ...ServerOption) (*Server, error) {
 	cluster := newCluster()

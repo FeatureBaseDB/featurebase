@@ -350,6 +350,13 @@ type PairField struct {
 	Field string
 }
 
+func (p PairField) Clone() (r PairField) {
+	return PairField{
+		Pair:  p.Pair,
+		Field: p.Field,
+	}
+}
+
 // ToTable implements the ToTabler interface.
 func (p PairField) ToTable() (*pb.TableResponse, error) {
 	return pb.RowsToTable(p, 1)
@@ -467,6 +474,15 @@ func (p Pairs) String() string {
 type PairsField struct {
 	Pairs []Pair
 	Field string
+}
+
+func (p *PairsField) Clone() (r *PairsField) {
+	r = &PairsField{
+		Pairs: make([]Pair, len(p.Pairs)),
+		Field: p.Field,
+	}
+	copy(r.Pairs, p.Pairs)
+	return
 }
 
 // ToTable implements the ToTabler interface.

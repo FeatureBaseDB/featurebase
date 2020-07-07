@@ -173,29 +173,38 @@ func TestHandler_Endpoints(t *testing.T) {
 		}
 	})
 
-	tx, err := holder.Begin(true)
+	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
+	tx0, err := holder.BeginTx(true, i0.Index)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer tx0.Rollback()
 
-	i0 := hldr.MustCreateIndexIfNotExists("i0", pilosa.IndexOptions{})
 	i1 := hldr.MustCreateIndexIfNotExists("i1", pilosa.IndexOptions{})
+	tx1, err := holder.BeginTx(true, i1.Index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx1.Rollback()
+
 	if f, err := i0.CreateFieldIfNotExists("f1", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(tx, 0, 0, nil); err != nil {
+	} else if _, err := f.SetBit(tx0, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if f, err := i1.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(tx, 0, 0, nil); err != nil {
+	} else if _, err := f.SetBit(tx1, 0, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := i0.CreateFieldIfNotExists("f0", pilosa.OptFieldTypeDefault()); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := tx0.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx1.Commit(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -638,7 +647,7 @@ func TestHandler_Endpoints(t *testing.T) {
 	t.Run("Query empty", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, test.MustNewHTTPRequest("POST", "/index/i0/query", strings.NewReader("")))
-		if body := w.Body.String(); body != `{"results":[]}`+"\n" {
+		if body := w.Body.String(); body != `{"results":[]}`+"\n" && body != `{"results":null}`+"\n" {
 			t.Fatalf("unexpected body: %q", body)
 		}
 	})

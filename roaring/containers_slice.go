@@ -91,11 +91,16 @@ func (sc *sliceContainers) GetOrCreate(key uint64) *Container {
 }
 
 func (sc *sliceContainers) Clone() Containers {
+
 	other := newSliceContainers()
 	other.keys = make([]uint64, len(sc.keys))
 	other.containers = make([]*Container, len(sc.containers))
 	copy(other.keys, sc.keys)
 	for i, c := range sc.containers {
+		if c == nil {
+			other.containers[i] = nil
+			continue
+		}
 		other.containers[i] = c.Clone()
 	}
 	return other
@@ -233,6 +238,8 @@ type sliceIterator struct {
 	key   uint64     // current key
 	value *Container // current value
 }
+
+func (si *sliceIterator) Close() {}
 
 func (si *sliceIterator) Next() bool {
 	if si.e == nil {

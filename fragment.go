@@ -129,7 +129,14 @@ type fragment struct {
 
 	// Cache for row counts.
 	CacheType string // passed in by field
-	cache     cache
+
+	// cache keeps a local rowid,count ranking:
+	// telling us which is the most populated rows in that field.
+	// Is only on "set fields" with rowCache enabled. So
+	// BSI, mutex, bool fields do not have this.
+	// Good: it Only has a string and a count, so cannot use Tx memory.
+	cache cache
+
 	CacheSize uint32
 
 	// Stats reporting.
@@ -160,6 +167,15 @@ type fragment struct {
 	stats stats.StatsClient
 
 	bitmapInfo *roaring.BitmapInfo
+
+	// txTestingOnly: this looks gross.
+	// Nonetheless, it allowed us to
+	// integrate Tx into the
+	// fragment_internal_test.go suite
+	// and not break the world all at once.
+	//
+	// Only for testing, obviously.
+	txTestingOnly Tx
 }
 
 // newFragment returns a new instance of Fragment.
@@ -190,6 +206,10 @@ func (f *fragment) cachePath() string { return f.path + cacheExt }
 type FragmentInfo struct {
 	BitmapInfo     roaring.BitmapInfo
 	BlockChecksums []FragmentBlock `json:"BlockChecksums,omitempty"`
+}
+
+func (f *fragment) Index() *Index {
+	return f.holder.Index(f.index)
 }
 
 func (f *fragment) inspect(params InspectRequestParams) (fi FragmentInfo) {
@@ -529,16 +549,20 @@ func (f *fragment) mustRow(tx Tx, rowID uint64) *Row {
 // unprotectedRow returns a row from the row cache if available or from storage
 // (updating the cache).
 func (f *fragment) unprotectedRow(tx Tx, rowID uint64) (*Row, error) {
-	r, ok := f.rowCache.Fetch(rowID)
-	if ok && r != nil {
-		return r, nil
+	useRowCache := tx.UseRowCache()
+	if useRowCache {
+		r, ok := f.rowCache.Fetch(rowID)
+		if ok && r != nil {
+			return r, nil
+		}
 	}
-
 	row, err := f.rowFromStorage(tx, rowID)
 	if err != nil {
 		return nil, err
 	}
-	f.rowCache.Add(rowID, row)
+	if useRowCache {
+		f.rowCache.Add(rowID, row)
+	}
 	return row, nil
 }
 
@@ -559,7 +583,7 @@ func (f *fragment) rowFromStorage(tx Tx, rowID uint64) (*Row, error) {
 
 	row := &Row{
 		segments: []rowSegment{{
-			data:     data,
+			data:     data, // this data contains BadgerTx data, which should not survive Txn commit.
 			shard:    f.shard,
 			writable: true,
 		}},
@@ -602,7 +626,7 @@ func (f *fragment) handleMutex(tx Tx, rowID, columnID uint64) error {
 
 // unprotectedSetBit TODO should be replaced by an invocation of importPositions with a single bit to set.
 func (f *fragment) unprotectedSetBit(tx Tx, rowID, columnID uint64) (changed bool, err error) {
-	changed = false
+
 	// Determine the position of the bit in the storage.
 	pos, err := f.pos(rowID, columnID)
 	if err != nil {
@@ -610,7 +634,10 @@ func (f *fragment) unprotectedSetBit(tx Tx, rowID, columnID uint64) (changed boo
 	}
 
 	// Write to storage.
-	if changed, err = tx.Add(f.index, f.field, f.view, f.shard, pos); err != nil {
+	changeCount := 0
+	changeCount, err = tx.Add(f.index, f.field, f.view, f.shard, doBatched, pos)
+	changed = changeCount > 0
+	if err != nil {
 		return false, errors.Wrap(err, "writing")
 	}
 
@@ -623,7 +650,7 @@ func (f *fragment) unprotectedSetBit(tx Tx, rowID, columnID uint64) (changed boo
 	delete(f.checksums, int(rowID/HashBlockSize))
 
 	// Increment number of operations until snapshot is required.
-	f.incrementOpN(1)
+	tx.IncrementOpN(f.index, f.field, f.view, f.shard, 1)
 
 	// If we're using a cache, update it. Otherwise skip the
 	// possibly-expensive count operation.
@@ -671,20 +698,23 @@ func (f *fragment) unprotectedClearBit(tx Tx, rowID, columnID uint64) (changed b
 	}
 
 	// Write to storage.
-	if changed, err = tx.Remove(f.index, f.field, f.view, f.shard, pos); err != nil {
+	changeCount := 0
+	if changeCount, err = tx.Remove(f.index, f.field, f.view, f.shard, pos); err != nil {
 		return false, errors.Wrap(err, "writing")
 	}
 
 	// Don't update the cache if nothing changed.
-	if !changed {
-		return changed, nil
+	if changeCount <= 0 {
+		return false, nil
+	} else {
+		changed = true
 	}
 
 	// Invalidate block checksum.
 	delete(f.checksums, int(rowID/HashBlockSize))
 
 	// Increment number of operations until snapshot is required.
-	f.incrementOpN(1)
+	tx.IncrementOpN(f.index, f.field, f.view, f.shard, 1)
 
 	// If we're using a cache, update it. Otherwise skip the
 	// possibly-expensive count operation.
@@ -997,15 +1027,17 @@ func (f *fragment) importSetValue(tx Tx, columnID uint64, bitDepth uint, value i
 		}
 
 		if uvalue&(1<<i) != 0 {
-			if c, err := tx.Add(f.index, f.field, f.view, f.shard, bit); err != nil {
+			c, err := tx.Add(f.index, f.field, f.view, f.shard, !doBatched, bit)
+			if err != nil {
 				return changed, errors.Wrap(err, "adding")
-			} else if c {
+			} else if c > 0 {
 				changed++
 			}
 		} else {
-			if c, err := tx.Remove(f.index, f.field, f.view, f.shard, bit); err != nil {
+			changeCount, err := tx.Remove(f.index, f.field, f.view, f.shard, bit)
+			if err != nil {
 				return changed, errors.Wrap(err, "removing")
-			} else if c {
+			} else if changeCount > 0 {
 				changed++
 			}
 		}
@@ -1017,13 +1049,13 @@ func (f *fragment) importSetValue(tx Tx, columnID uint64, bitDepth uint, value i
 	} else if clear {
 		if c, err := tx.Remove(f.index, f.field, f.view, f.shard, p); err != nil {
 			return changed, errors.Wrap(err, "removing not-null from storage")
-		} else if c {
+		} else if c > 0 {
 			changed++
 		}
 	} else {
-		if c, err := tx.Add(f.index, f.field, f.view, f.shard, p); err != nil {
+		if c, err := tx.Add(f.index, f.field, f.view, f.shard, !doBatched, p); err != nil {
 			return changed, errors.Wrap(err, "adding not-null to storage")
-		} else if c {
+		} else if c > 0 {
 			changed++
 		}
 	}
@@ -1034,13 +1066,13 @@ func (f *fragment) importSetValue(tx Tx, columnID uint64, bitDepth uint, value i
 	} else if value >= 0 || clear {
 		if c, err := tx.Remove(f.index, f.field, f.view, f.shard, p); err != nil {
 			return changed, errors.Wrap(err, "removing sign from storage")
-		} else if c {
+		} else if c > 0 {
 			changed++
 		}
 	} else {
-		if c, err := tx.Add(f.index, f.field, f.view, f.shard, p); err != nil {
+		if c, err := tx.Add(f.index, f.field, f.view, f.shard, !doBatched, p); err != nil {
 			return changed, errors.Wrap(err, "adding sign to storage")
-		} else if c {
+		} else if c > 0 {
 			changed++
 		}
 	}
@@ -1889,8 +1921,17 @@ func (f *fragment) Blocks() ([]FragmentBlock, error) {
 
 	var a []FragmentBlock
 
-	// Initialize the iterator.
-	itr := f.storage.Iterator()
+	idx := f.holder.Index(f.index)
+	if idx == nil {
+		panic(fmt.Sprintf("index was nil in fragment.Blocks(): f.index='%v'; f.holder.indexes='%#v'\n", f.index, f.holder.indexes))
+	}
+	tx := idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+	defer tx.Rollback()
+	// no Commit below, b/c is read-only.
+
+	itr := tx.NewTxIterator(f.index, f.field, f.view, f.shard)
+	defer itr.Close()
+
 	itr.Seek(0)
 
 	// Initialize block hasher.
@@ -1967,7 +2008,13 @@ func (f *fragment) readContiguousChecksums(a *[]FragmentBlock, blockID int) (n i
 func (f *fragment) blockData(id int) (rowIDs, columnIDs []uint64, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if err := f.storage.ForEachRange(uint64(id)*HashBlockSize*ShardWidth, (uint64(id)+1)*HashBlockSize*ShardWidth, func(i uint64) error {
+
+	idx := f.holder.Index(f.index)
+	tx := idx.Txf.NewTx(Txo{Write: !writable, Index: idx})
+	defer tx.Rollback()
+	// readonly, so no Commit()
+
+	if err := tx.ForEachRange(f.index, f.field, f.view, f.shard, uint64(id)*HashBlockSize*ShardWidth, (uint64(id)+1)*HashBlockSize*ShardWidth, func(i uint64) error {
 		rowIDs = append(rowIDs, i/ShardWidth)
 		columnIDs = append(columnIDs, i%ShardWidth)
 		return nil
@@ -2101,7 +2148,7 @@ func (f *fragment) mergeBlock(tx Tx, id int, data []pairSet) (sets, clears []pai
 		rowSet[clears[0].rowIDs[i]] = struct{}{}
 		clears[0].columnIDs[i] += clears[0].rowIDs[i] * ShardWidth
 	}
-	err = f.importPositions(sets[0].columnIDs, clears[0].columnIDs, rowSet)
+	err = f.importPositions(tx, sets[0].columnIDs, clears[0].columnIDs, rowSet)
 
 	return sets[1:], clears[1:], err
 }
@@ -2149,9 +2196,9 @@ func (f *fragment) bulkImportStandard(tx Tx, rowIDs, columnIDs []uint64, options
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if options.Clear {
-		err = f.importPositions(nil, positions, rowSet)
+		err = f.importPositions(tx, nil, positions, rowSet)
 	} else {
-		err = f.importPositions(positions, nil, rowSet)
+		err = f.importPositions(tx, positions, nil, rowSet)
 	}
 	return errors.Wrap(err, "bulkImportStandard")
 }
@@ -2164,26 +2211,31 @@ func (f *fragment) bulkImportStandard(tx Tx, rowIDs, columnIDs []uint64, options
 // importPositions tries to intelligently decide whether or not to do a full
 // snapshot of the fragment or just do in-memory updates while appending
 // operations to the op log.
-func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct{}) error {
+func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64]struct{}) error {
+	//tx.AddN()
 	err := f.gen.Transaction(&f.storage.OpWriter, func() error {
 		if len(set) > 0 {
 			f.stats.Count(MetricImportingN, int64(len(set)), 1)
-			changedN, err := f.storage.AddN(set...) // TODO benchmark Add/RemoveN behavior with sorted/unsorted positions
+
+			// TODO benchmark Add/RemoveN behavior with sorted/unsorted positions
+			// Note: AddN() avoids writing to the op-log. While Add() does.
+			changedN, err := tx.Add(f.index, f.field, f.view, f.shard, !doBatched, set...)
+
 			if err != nil {
 				return errors.Wrap(err, "adding positions")
 			}
 			f.stats.Count(MetricImportedN, int64(changedN), 1)
-			f.incrementOpN(changedN)
+			tx.IncrementOpN(f.index, f.field, f.view, f.shard, changedN)
 		}
 
 		if len(clear) > 0 {
 			f.stats.Count(MetricClearingN, int64(len(clear)), 1)
-			changedN, err := f.storage.RemoveN(clear...)
+			changedN, err := tx.Remove(f.index, f.field, f.view, f.shard, clear...)
 			if err != nil {
 				return errors.Wrap(err, "clearing positions")
 			}
 			f.stats.Count(MetricClearedN, int64(changedN), 1)
-			f.incrementOpN(changedN)
+			tx.IncrementOpN(f.index, f.field, f.view, f.shard, changedN)
 		}
 
 		// Update cache counts for all affected rows.
@@ -2192,7 +2244,14 @@ func (f *fragment) importPositions(set, clear []uint64, rowSet map[uint64]struct
 			delete(f.checksums, int(rowID/HashBlockSize))
 
 			if f.CacheType != CacheTypeNone {
-				n := f.storage.CountRange(rowID*ShardWidth, (rowID+1)*ShardWidth)
+				start := rowID * ShardWidth
+				end := (rowID + 1) * ShardWidth
+
+				n, err := tx.CountRange(f.index, f.field, f.view, f.shard, start, end)
+				if err != nil {
+					return errors.Wrap(err, "CountRange")
+				}
+
 				f.cache.BulkAdd(rowID, n)
 			}
 
@@ -2275,10 +2334,10 @@ func (f *fragment) bulkImportMutex(tx Tx, rowIDs, columnIDs []uint64) error {
 	toSet := rowIDs[:i]
 	toClear := columnIDs[:clearIdx]
 
-	return errors.Wrap(f.importPositions(toSet, toClear, rowSet), "importing positions")
+	return errors.Wrap(f.importPositions(tx, toSet, toClear, rowSet), "importing positions")
 }
 
-func (f *fragment) importValueSmallWrite(columnIDs []uint64, values []int64, bitDepth uint, clear bool) error {
+func (f *fragment) importValueSmallWrite(tx Tx, columnIDs []uint64, values []int64, bitDepth uint, clear bool) error {
 	// TODO figure out how to avoid re-allocating these each time. Probably
 	// possible to store them on the fragment with a capacity based on
 	// MaxOpN. For now, we know that the total number of bits to be
@@ -2310,7 +2369,7 @@ func (f *fragment) importValueSmallWrite(columnIDs []uint64, values []int64, bit
 	for i := uint(0); i < bitDepth+1; i++ {
 		rowSet[uint64(i)] = struct{}{}
 	}
-	err := f.importPositions(toSet, toClear, rowSet)
+	err := f.importPositions(tx, toSet, toClear, rowSet)
 	if err != nil {
 		return errors.Wrap(err, "importing positions")
 	}
@@ -2332,7 +2391,7 @@ func (f *fragment) importValue(tx Tx, columnIDs []uint64, values []int64, bitDep
 	}
 
 	if len(columnIDs)*int(bitDepth+1)+f.opN < f.MaxOpN {
-		return errors.Wrap(f.importValueSmallWrite(columnIDs, values, bitDepth, clear), "import small write")
+		return errors.Wrap(f.importValueSmallWrite(tx, columnIDs, values, bitDepth, clear), "import small write")
 	}
 
 	// Process every value.
@@ -2374,7 +2433,7 @@ func (f *fragment) importValue(tx Tx, columnIDs []uint64, values []int64, bitDep
 // importRoaring imports from the official roaring data format defined at
 // https://github.com/RoaringBitmap/RoaringFormatSpec or from pilosa's version
 // of the roaring format. The cache is updated to reflect the new data.
-func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) error {
+func (f *fragment) importRoaring(ctx context.Context, tx Tx, data []byte, clear bool) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "fragment.importRoaring")
 	defer span.Finish()
 	span, ctx = tracing.StartSpanFromContext(ctx, "importRoaring.AcquireFragmentLock")
@@ -2382,16 +2441,22 @@ func (f *fragment) importRoaring(ctx context.Context, data []byte, clear bool) e
 	defer f.mu.Unlock()
 	span.Finish()
 
-	return f.unprotectedImportRoaring(ctx, data, clear)
+	return f.unprotectedImportRoaring(ctx, tx, data, clear)
 }
 
-func (f *fragment) unprotectedImportRoaring(ctx context.Context, data []byte, clear bool) error {
+func (f *fragment) unprotectedImportRoaring(ctx context.Context, tx Tx, data []byte, clear bool) error {
 	rowSize := uint64(1 << shardVsContainerExponent)
 	span, ctx := tracing.StartSpanFromContext(ctx, "importRoaring.ImportRoaringBits")
 	var changed int
 	var rowSet map[uint64]int
 	err := f.gen.Transaction(&f.storage.OpWriter, func() (err error) {
-		changed, rowSet, err = f.storage.ImportRoaringBits(data, clear, true, rowSize)
+		var rit roaring.RoaringIterator
+		rit, err = roaring.NewRoaringIterator(data)
+		if err != nil {
+			return err
+		}
+
+		changed, rowSet, err = tx.ImportRoaringBits(f.index, f.field, f.view, f.shard, rit, clear, true, rowSize)
 		return err
 	})
 
@@ -2428,7 +2493,9 @@ func (f *fragment) unprotectedImportRoaring(ctx context.Context, data []byte, cl
 	}
 
 	span, _ = tracing.StartSpanFromContext(ctx, "importRoaring.incrementOpN")
-	f.incrementOpN(changed)
+
+	tx.IncrementOpN(f.index, f.field, f.view, f.shard, changed)
+
 	span.Finish()
 	return nil
 }
@@ -2444,7 +2511,7 @@ func (f *fragment) importRoaringOverwrite(ctx context.Context, tx Tx, data []byt
 	}
 
 	// Union the new block data with the fragment data.
-	return f.unprotectedImportRoaring(ctx, data, false)
+	return f.unprotectedImportRoaring(ctx, tx, data, false)
 }
 
 // incrementOpN increase the operation count by one.
@@ -2486,7 +2553,6 @@ func (f *fragment) snapshot() (err error) {
 	defer func() {
 		debug.SetPanicOnFault(wouldPanic)
 		if r := recover(); r != nil {
-			fmt.Printf("snapshot panic!\n")
 			if e2, ok := r.(error); ok {
 				err = e2
 				// special case: if we caught a page fault, we diagnose that directly. sadly,
@@ -2869,6 +2935,7 @@ func (f *fragment) unprotectedRows(ctx context.Context, tx Tx, start uint64, fil
 	if err != nil {
 		return nil, err
 	}
+	defer i.Close() // must close iterators allocated on a Tx
 	rows := make([]uint64, 0)
 	var lastRow uint64 = math.MaxUint64
 
@@ -3074,6 +3141,8 @@ func (f *fragment) foreachRow(tx Tx, filters []rowFilter, fn func(rid uint64) er
 	if err != nil {
 		return err
 	}
+	defer i.Close() // must close tx allocated iterators when done.
+
 	// Loop over the existing containers.
 	for i.Next() {
 		key, c := i.Value()
@@ -3263,7 +3332,7 @@ func (s *fragmentSyncer) syncFragment() error {
 	for _, node := range nodes {
 		// Read local blocks.
 		if node.ID == s.Node.ID {
-			b, err := s.Fragment.Blocks()
+			b, err := s.Fragment.Blocks() // comes from Tx store, creates its own Tx.
 			if err != nil {
 				return err
 			}
@@ -3404,7 +3473,6 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 	defer span.Finish()
 
 	f := s.Fragment
-	tx := &RoaringTx{fragment: f}
 
 	// Read pairs from each remote block.
 	var uris []*URI
@@ -3423,6 +3491,7 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 		uris = append(uris, uri)
 
 		// Only sync the standard block.
+		// Does a remote fetch
 		rowIDs, columnIDs, err := s.Cluster.InternalClient.BlockData(ctx, &node.URI, f.index, f.field, f.view, f.shard, id)
 		if err != nil {
 			return errors.Wrap(err, "getting block")
@@ -3439,10 +3508,22 @@ func (s *fragmentSyncer) syncBlock(id int) error {
 		return nil
 	}
 
+	idx := f.holder.Index(f.index)
+	tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx})
+	defer tx.Rollback()
+
 	// Merge blocks together.
 	sets, clears, err := f.mergeBlock(tx, id, pairSets)
 	if err != nil {
 		return errors.Wrap(err, "merging")
+	}
+
+	// no safeCopy needed here. We are not leaking data outside the tx, because
+	// sets and clears only contain columnIDs.
+
+	err = tx.Commit()
+	if err != nil {
+		return err
 	}
 
 	// Write updates to remote blocks.

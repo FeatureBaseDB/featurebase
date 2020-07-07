@@ -137,12 +137,6 @@ func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 	holder := NewHolder(DefaultPartitionN)
 	defer holder.Close()
 
-	tx, err := holder.Begin(true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
 	e := &executor{
 		Holder:  holder,
 		Cluster: NewTestCluster(1),
@@ -156,6 +150,12 @@ func TestExecutor_TranslateRowsOnBool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("creating index: %v", err)
 	}
+
+	tx, err := holder.BeginTx(writable, idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
 
 	fb, errb := idx.CreateField("b", OptFieldTypeBool())
 	_, errbk := idx.CreateField("bk", OptFieldTypeBool(), OptFieldKeys())
