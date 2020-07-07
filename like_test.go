@@ -65,7 +65,7 @@ func TestPlanLike(t *testing.T) {
 			like: "%x",
 			plan: []filterStep{
 				{
-					kind: filterStepSkipThrough,
+					kind: filterStepSuffix,
 					str:  "x",
 				},
 			},
@@ -81,12 +81,62 @@ func TestPlanLike(t *testing.T) {
 					str:  "x",
 				},
 				{
-					kind: filterStepSkipThrough,
+					kind: filterStepSuffix,
 					str:  "y",
 				},
 			},
 			match:    []string{"xy", "xzy", "xyzzy"},
 			nonmatch: []string{"plugh", ".xy.", ".x.y", "x.y."},
+		},
+		{
+			name: "DoubleDeckerSandwich",
+			like: "x%y%z",
+			plan: []filterStep{
+				{
+					kind: filterStepPrefix,
+					str:  "x",
+				},
+				{
+					kind: filterStepSkipThrough,
+					str:  "y",
+				},
+				{
+					kind: filterStepSuffix,
+					str:  "z",
+				},
+			},
+			match:    []string{"xyz", "xzyzz", "x.y.z", "x.y.y..z"},
+			nonmatch: []string{"plugh", ".xyz.", ".x.y.z", "x.y.z."},
+		},
+		{
+			name: "Skips",
+			like: "a_b_%_c_%_%_d",
+			plan: []filterStep{
+				{
+					kind: filterStepPrefix,
+					str:  "a",
+				},
+				{
+					kind: filterStepSkipN,
+					n:    1,
+				},
+				{
+					kind: filterStepPrefix,
+					str:  "b",
+				},
+				{
+					kind: filterStepSkipThrough,
+					str:  "c",
+					n:    2,
+				},
+				{
+					kind: filterStepSuffix,
+					str:  "d",
+					n:    3,
+				},
+			},
+			match:    []string{"a1b234c5678d"},
+			nonmatch: []string{"abcd", "a1b2345678d", "a1b2c5678d"},
 		},
 		{
 			name: "SingleRune",
@@ -98,7 +148,7 @@ func TestPlanLike(t *testing.T) {
 				},
 			},
 			match:    []string{"a", "á", "☺"},
-			nonmatch: []string{"ab", "á", "h̷"},
+			nonmatch: []string{"ab", "á", "h̷", ""},
 		},
 		{
 			name: "DoubleRune",
