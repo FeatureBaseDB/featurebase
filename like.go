@@ -190,11 +190,18 @@ func matchLike(key string, like ...filterStep) bool {
 			}
 		case filterStepSuffix:
 			// Match a suffix.
-			j := strings.LastIndex(key, step.str)
-			if j < step.n {
+			if !strings.HasSuffix(key, step.str) {
+				// Suffix not present.
 				return false
 			}
-			key = key[j+len(step.str):]
+			if step.n <= 0 {
+				// No skip length check necessary.
+				return true
+			}
+
+			// Check length of the substring before the suffix.
+			key = key[:len(key)-len(step.str)]
+			fallthrough
 		case filterStepMinLength:
 			if len(key) < step.n {
 				// The string is definitely too short.
