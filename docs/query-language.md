@@ -615,13 +615,11 @@ have the attribute specified by `attrName` with one of the values specified in
 
 **Caveats:**
 
-In general, the order of the resulting row keys is not guaranteed to reflect the true order of bit counts across an index. The exact solution to the problem of computing the TopN counts is prohibitively expensive, so TopN is instead implemented as a heuristic. This provides a significant performance improvement, at the cost of uncertainty in the result order. Some conditions can increase this uncertainty:
+In general, the order of the resulting row keys is not guaranteed to reflect the true order of bit counts across an index. The exact solution to the problem of computing the TopN counts is prohibitively expensive, so TopN is instead implemented as a heuristic. This provides a significant performance improvement, at the cost of uncertainty in the result order.
 
-* Large number of shards
-* Uniform distribution of bits across shards
-* Small differences in bit counts between successive rows
+The implementation is based on a per-shard cache. The accuracy of the results depends on how well the counts for the overall index are reflected in the individual shards (so TopN queries on a single-shard index are exact). If the distribution of bits across shards is uniform, shard counts are representative. This is often a reasonable assumption, especially for the top results for large data sets, in which counts might follow Zipfian, exponential, or other long-tail distributions. However, this assumption may not hold for some applications.
 
-The implementation is based on a per-shard cache. Some details of this may be relevant:
+Additional implementation details:
 
 * The field's cache size determines the number of sorted rows to maintain in the cache for purposes of TopN queries. There is a tradeoff between performance and accuracy; increasing the cache size will improve accuracy of results at the cost of performance. Note that this per-shard tradeoff is independent of the per-index performance/accuracy tradeoff mentioned above.
 * Fields with cache type `ranked` will return the top rows sorted by count in descending order.
