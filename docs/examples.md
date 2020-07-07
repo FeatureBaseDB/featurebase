@@ -81,7 +81,7 @@ lfm := pdk.LinearFloatMapper{
 }
 ```
 
-`Min` and `Max` define the linear function, and `Res` determines the maximum allowed value for the output row ID - we chose these values to produce a “round to nearest integer” behavior. Other predefined mappers have their own specific parameters, usually two or three.
+`Min` and `Max` define the linear function, and `Res` determines the maximum allowed value for the output row ID - we chose these values to produce a "round to nearest integer" behavior. Other predefined mappers have their own specific parameters, usually two or three.
 
 This mapper function is the core operation, but we need a few other pieces to define the overall process, which is encapsulated in the ColumnMapper object. This object defines which field(s) of the input data source to use (`Fields`), how to parse them (`Parsers`), what mapping to use (`Mapper`), and the name of the field to use (`Field`). <!-- TODO update so this makes sense -->
 ```go

@@ -302,7 +302,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 
     ```toml
     [metric]
-    service = “statsd”
+    service = "statsd"
     ```
 
 #### Metric Host
@@ -319,7 +319,7 @@ The config file is in the [toml format](https://github.com/toml-lang/toml) and h
 #### Metric Poll Interval
 
 * Description: Rate at which runtime metrics (such as open file handles and memory usage) are collected.
-* Flag: `metric.poll-interval=”0m15s”`
+* Flag: `metric.poll-interval="0m15s"`
 * Env: `PILOSA_METRIC_POLL_INTERVAL=0m15s`
 * Config:
 
