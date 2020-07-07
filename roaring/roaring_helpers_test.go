@@ -175,65 +175,65 @@ func bitmapEvenBitsSet() []uint64 {
 }
 
 ////////////////// run
-func runEmpty() []interval16 {
-	return make([]interval16, 0)
+func runEmpty() []Interval16 {
+	return make([]Interval16, 0)
 }
 
-func runFull() []interval16 {
-	run := make([]interval16, 0)
-	run = append(run, interval16{start: 0, last: 65535})
+func runFull() []Interval16 {
+	run := make([]Interval16, 0)
+	run = append(run, Interval16{Start: 0, Last: 65535})
 	return run
 }
 
-func runFirstBitSet() []interval16 {
-	run := make([]interval16, 0)
-	run = append(run, interval16{start: 0, last: 0})
+func runFirstBitSet() []Interval16 {
+	run := make([]Interval16, 0)
+	run = append(run, Interval16{Start: 0, Last: 0})
 	return run
 }
 
-func runLastBitSet() []interval16 {
-	run := make([]interval16, 0)
-	run = append(run, interval16{start: 65535, last: 65535})
+func runLastBitSet() []Interval16 {
+	run := make([]Interval16, 0)
+	run = append(run, Interval16{Start: 65535, Last: 65535})
 	return run
 }
 
-func runFirstBitUnset() []interval16 {
-	run := make([]interval16, 0)
-	run = append(run, interval16{start: 1, last: 65535})
+func runFirstBitUnset() []Interval16 {
+	run := make([]Interval16, 0)
+	run = append(run, Interval16{Start: 1, Last: 65535})
 	return run
 }
 
-func runLastBitUnset() []interval16 {
-	run := make([]interval16, 0)
-	run = append(run, interval16{start: 0, last: 65534})
+func runLastBitUnset() []Interval16 {
+	run := make([]Interval16, 0)
+	run = append(run, Interval16{Start: 0, Last: 65534})
 	return run
 }
 
-func runInnerBitsSet() []interval16 {
-	run := make([]interval16, 0)
-	run = append(run, interval16{start: 1, last: 65534})
+func runInnerBitsSet() []Interval16 {
+	run := make([]Interval16, 0)
+	run = append(run, Interval16{Start: 1, Last: 65534})
 	return run
 }
 
-func runOuterBitsSet() []interval16 {
-	run := make([]interval16, 0)
-	run = append(run, interval16{start: 0, last: 0})
-	run = append(run, interval16{start: 65535, last: 65535})
+func runOuterBitsSet() []Interval16 {
+	run := make([]Interval16, 0)
+	run = append(run, Interval16{Start: 0, Last: 0})
+	run = append(run, Interval16{Start: 65535, Last: 65535})
 	return run
 }
 
-func runOddBitsSet() []interval16 {
-	run := make([]interval16, containerWidth/2)
+func runOddBitsSet() []Interval16 {
+	run := make([]Interval16, containerWidth/2)
 	for i := 0; i < int(containerWidth/2); i++ {
-		run[i] = interval16{start: uint16(2*i + 1), last: uint16(2*i + 1)}
+		run[i] = Interval16{Start: uint16(2*i + 1), Last: uint16(2*i + 1)}
 	}
 	return run
 }
 
-func runEvenBitsSet() []interval16 {
-	run := make([]interval16, containerWidth/2)
+func runEvenBitsSet() []Interval16 {
+	run := make([]Interval16, containerWidth/2)
 	for i := 0; i < int(containerWidth/2); i++ {
-		run[i] = interval16{start: uint16(2 * i), last: uint16(2 * i)}
+		run[i] = Interval16{Start: uint16(2 * i), Last: uint16(2 * i)}
 	}
 	return run
 }
@@ -258,7 +258,7 @@ func doContainer(typ byte, data interface{}) *Container {
 		c := NewContainerBitmap(-1, data.([]uint64))
 		return c
 	case containerRun:
-		return NewContainerRun(data.([]interval16))
+		return NewContainerRun(data.([]Interval16))
 	}
 	return nil
 }

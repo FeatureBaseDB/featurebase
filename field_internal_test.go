@@ -246,15 +246,15 @@ func (f *TestField) Reopen() error {
 	return nil
 }
 
-func (f *TestField) MustSetBit(row, col uint64, ts ...time.Time) {
+func (f *TestField) MustSetBit(tx Tx, row, col uint64, ts ...time.Time) {
 	if len(ts) == 0 {
-		_, err := f.Field.SetBit(row, col, nil)
+		_, err := f.Field.SetBit(tx, row, col, nil)
 		if err != nil {
 			panic(err)
 		}
 	}
 	for _, t := range ts {
-		_, err := f.Field.SetBit(row, col, &t)
+		_, err := f.Field.SetBit(tx, row, col, &t)
 		if err != nil {
 			panic(err)
 		}
@@ -310,41 +310,44 @@ func TestField_RowTime(t *testing.T) {
 	f := OpenField(t, OptFieldTypeTime(TimeQuantum("")))
 	defer f.Close()
 
+	// Obtain transaction.
+	tx := &RoaringTx{Field: f.Field}
+
 	if err := f.setTimeQuantum(TimeQuantum("YMDH")); err != nil {
 		t.Fatal(err)
 	}
 
-	f.MustSetBit(1, 1, time.Date(2010, time.January, 5, 12, 0, 0, 0, time.UTC))
-	f.MustSetBit(1, 2, time.Date(2011, time.January, 5, 12, 0, 0, 0, time.UTC))
-	f.MustSetBit(1, 3, time.Date(2010, time.February, 5, 12, 0, 0, 0, time.UTC))
-	f.MustSetBit(1, 4, time.Date(2010, time.January, 6, 12, 0, 0, 0, time.UTC))
-	f.MustSetBit(1, 5, time.Date(2010, time.January, 5, 13, 0, 0, 0, time.UTC))
+	f.MustSetBit(tx, 1, 1, time.Date(2010, time.January, 5, 12, 0, 0, 0, time.UTC))
+	f.MustSetBit(tx, 1, 2, time.Date(2011, time.January, 5, 12, 0, 0, 0, time.UTC))
+	f.MustSetBit(tx, 1, 3, time.Date(2010, time.February, 5, 12, 0, 0, 0, time.UTC))
+	f.MustSetBit(tx, 1, 4, time.Date(2010, time.January, 6, 12, 0, 0, 0, time.UTC))
+	f.MustSetBit(tx, 1, 5, time.Date(2010, time.January, 5, 13, 0, 0, 0, time.UTC))
 
-	if r, err := f.RowTime(1, time.Date(2010, time.November, 5, 12, 0, 0, 0, time.UTC), "Y"); err != nil {
+	if r, err := f.RowTime(tx, 1, time.Date(2010, time.November, 5, 12, 0, 0, 0, time.UTC), "Y"); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(r.Columns(), []uint64{1, 3, 4, 5}) {
 		t.Fatalf("wrong columns: %#v", r.Columns())
 	}
 
-	if r, err := f.RowTime(1, time.Date(2010, time.February, 7, 13, 0, 0, 0, time.UTC), "YM"); err != nil {
+	if r, err := f.RowTime(tx, 1, time.Date(2010, time.February, 7, 13, 0, 0, 0, time.UTC), "YM"); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(r.Columns(), []uint64{3}) {
 		t.Fatalf("wrong columns: %#v", r.Columns())
 	}
 
-	if r, err := f.RowTime(1, time.Date(2010, time.February, 7, 13, 0, 0, 0, time.UTC), "M"); err != nil {
+	if r, err := f.RowTime(tx, 1, time.Date(2010, time.February, 7, 13, 0, 0, 0, time.UTC), "M"); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(r.Columns(), []uint64{3}) {
 		t.Fatalf("wrong columns: %#v", r.Columns())
 	}
 
-	if r, err := f.RowTime(1, time.Date(2010, time.January, 5, 12, 0, 0, 0, time.UTC), "MD"); err != nil {
+	if r, err := f.RowTime(tx, 1, time.Date(2010, time.January, 5, 12, 0, 0, 0, time.UTC), "MD"); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(r.Columns(), []uint64{1, 5}) {
 		t.Fatalf("wrong columns: %#v", r.Columns())
 	}
 
-	if r, err := f.RowTime(1, time.Date(2010, time.January, 5, 13, 0, 0, 0, time.UTC), "MDH"); err != nil {
+	if r, err := f.RowTime(tx, 1, time.Date(2010, time.January, 5, 13, 0, 0, 0, time.UTC), "MDH"); err != nil {
 		t.Fatal(err)
 	} else if !reflect.DeepEqual(r.Columns(), []uint64{5}) {
 		t.Fatalf("wrong columns: %#v", r.Columns())
@@ -578,11 +581,13 @@ func TestBSIGroup_importValue(t *testing.T) {
 			[]uint64{100},
 		},
 	} {
-		if err := f.importValue(tt.columnIDs, tt.values, options); err != nil {
+		tx := &RoaringTx{Field: f.Field}
+
+		if err := f.importValue(tx, tt.columnIDs, tt.values, options); err != nil {
 			t.Fatalf("test %d, importing values: %s", i, err.Error())
 		}
 
-		if row, err := f.Range(f.name, pql.EQ, tt.checkVal); err != nil {
+		if row, err := f.Range(tx, f.name, pql.EQ, tt.checkVal); err != nil {
 			t.Fatalf("test %d, getting range: %s", i, err.Error())
 		} else if !reflect.DeepEqual(row.Columns(), tt.expCols) {
 			t.Fatalf("test %d, expected columns: %v, but got: %v", i, tt.expCols, row.Columns())
@@ -643,11 +648,13 @@ func TestIntField_MinMaxForShard(t *testing.T) {
 		},
 	} {
 		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
-			if err := f.importValue(test.columnIDs, test.values, options); err != nil {
+			tx := &RoaringTx{Field: f.Field}
+
+			if err := f.importValue(tx, test.columnIDs, test.values, options); err != nil {
 				t.Fatalf("test %d, importing values: %s", i, err.Error())
 			}
 
-			maxvc, err := f.MaxForShard(0, nil)
+			maxvc, err := f.MaxForShard(tx, 0, nil)
 			if err != nil {
 				t.Fatalf("getting max for shard: %v", err)
 			}
@@ -655,7 +662,7 @@ func TestIntField_MinMaxForShard(t *testing.T) {
 				t.Fatalf("max expected:\n%+v\ngot:\n%+v", test.expMax, maxvc)
 			}
 
-			minvc, err := f.MinForShard(0, nil)
+			minvc, err := f.MinForShard(tx, 0, nil)
 			if err != nil {
 				t.Fatalf("getting min for shard: %v", err)
 			}
@@ -797,11 +804,13 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 		},
 	} {
 		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
-			if err := f.importFloatValue(test.columnIDs, test.values, options); err != nil {
+			tx := &RoaringTx{Field: f.Field}
+
+			if err := f.importFloatValue(tx, test.columnIDs, test.values, options); err != nil {
 				t.Fatalf("test %d, importing values: %s", i, err.Error())
 			}
 
-			maxvc, err := f.MaxForShard(0, nil)
+			maxvc, err := f.MaxForShard(tx, 0, nil)
 			if err != nil {
 				t.Fatalf("getting max for shard: %v", err)
 			}
@@ -809,7 +818,7 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 				t.Fatalf("max expected:\n%+v\ngot:\n%+v", test.expMax, maxvc)
 			}
 
-			minvc, err := f.MinForShard(0, nil)
+			minvc, err := f.MinForShard(tx, 0, nil)
 			if err != nil {
 				t.Fatalf("getting min for shard: %v", err)
 			}

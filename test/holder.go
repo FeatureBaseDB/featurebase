@@ -86,7 +86,9 @@ func (h *Holder) Row(index, field string, rowID uint64) *pilosa.Row {
 	if err != nil {
 		panic(err)
 	}
-	row, err := f.Row(rowID)
+	tx := &pilosa.RoaringTx{Index: idx.Index}
+
+	row, err := f.Row(tx, rowID)
 	if err != nil {
 		panic(err)
 	}
@@ -100,7 +102,9 @@ func (h *Holder) ReadRow(index, field string, rowID uint64) *pilosa.Row {
 	if f == nil {
 		panic(pilosa.ErrFieldNotFound)
 	}
-	row, err := f.Row(rowID)
+	tx := &pilosa.RoaringTx{Field: f}
+
+	row, err := f.Row(tx, rowID)
 	if err != nil {
 		panic(err)
 	}
@@ -122,7 +126,9 @@ func (h *Holder) RowTime(index, field string, rowID uint64, t time.Time, quantum
 	if err != nil {
 		panic(err)
 	}
-	row, err := f.RowTime(rowID, t, quantum)
+	tx := &pilosa.RoaringTx{Index: idx.Index}
+
+	row, err := f.RowTime(tx, rowID, t, quantum)
 	if err != nil {
 		panic(err)
 	}
@@ -141,7 +147,9 @@ func (h *Holder) SetBitTime(index, field string, rowID, columnID uint64, t *time
 	if err != nil {
 		panic(err)
 	}
-	_, err = f.SetBit(rowID, columnID, t)
+	tx := &pilosa.RoaringTx{Index: idx.Index}
+
+	_, err = f.SetBit(tx, rowID, columnID, t)
 	if err != nil {
 		panic(err)
 	}
@@ -154,7 +162,9 @@ func (h *Holder) ClearBit(index, field string, rowID, columnID uint64) {
 	if err != nil {
 		panic(err)
 	}
-	_, err = f.ClearBit(rowID, columnID)
+	tx := &pilosa.RoaringTx{Index: idx.Index}
+
+	_, err = f.ClearBit(tx, rowID, columnID)
 	if err != nil {
 		panic(err)
 	}
@@ -175,7 +185,9 @@ func (h *Holder) SetValue(index, field string, columnID uint64, value int64) {
 	if err != nil {
 		panic(err)
 	}
-	_, err = f.SetValue(columnID, value)
+	tx := &pilosa.RoaringTx{Index: idx.Index}
+
+	_, err = f.SetValue(tx, columnID, value)
 	if err != nil {
 		panic(err)
 	}
@@ -188,7 +200,9 @@ func (h *Holder) Value(index, field string, columnID uint64) (int64, bool) {
 	if err != nil {
 		panic(err)
 	}
-	val, exists, err := f.Value(columnID)
+	tx := &pilosa.RoaringTx{Index: idx.Index}
+
+	val, exists, err := f.Value(tx, columnID)
 	if err != nil {
 		panic(err)
 	}
@@ -203,7 +217,9 @@ func (h *Holder) Range(index, field string, op pql.Token, predicate int64) *pilo
 	if err != nil {
 		panic(err)
 	}
-	row, err := f.Range(field, op, predicate)
+	tx := &pilosa.RoaringTx{Index: idx.Index}
+
+	row, err := f.Range(tx, field, op, predicate)
 	if err != nil {
 		panic(err)
 	}

@@ -272,6 +272,9 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 		return errToStatusError(err)
 	}
 
+	// Obtain transaction.
+	tx := pilosa.NewMultiTxWithIndex(true, index)
+
 	var fields []*pilosa.Field
 	for _, field := range index.Fields() {
 		// exclude internal fields (starting with "_")
@@ -440,7 +443,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 								}
 							}
 						} else {
-							value, exists, err = field.StringValue(col)
+							value, exists, err = field.StringValue(tx, col)
 							if err != nil {
 								return errors.Wrap(err, "getting string field value for column")
 							}
@@ -689,7 +692,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 								}
 							}
 						} else {
-							value, exists, err = field.StringValue(id)
+							value, exists, err = field.StringValue(tx, id)
 							if err != nil {
 								return errors.Wrap(err, "getting string field value for column")
 							}

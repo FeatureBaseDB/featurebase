@@ -903,8 +903,15 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		// Obtain transaction.
+		tx, err := hldr.Begin(false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = tx.Rollback() }()
+
 		f := hldr.Field("i", "f")
-		if value, exists, err := f.Value(10); err != nil {
+		if value, exists, err := f.Value(tx, 10); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
@@ -912,7 +919,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatalf("unexpected value: %v", value)
 		}
 
-		if value, exists, err := f.Value(100); err != nil {
+		if value, exists, err := f.Value(tx, 100); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
@@ -3522,7 +3529,6 @@ func TestExecutor_Execute_Not(t *testing.T) {
 func TestExecutor_Execute_FieldValue(t *testing.T) {
 	c := test.MustRunCluster(t, 2)
 	defer c.Close()
-	//hldr := test.Holder{Holder: c[0].Server.Holder()}
 
 	node0 := c[0]
 	node1 := c[1]
@@ -3535,8 +3541,8 @@ func TestExecutor_Execute_FieldValue(t *testing.T) {
 			Set(1, f=3)
 			Set(2, f=-4)
 			Set(` + strconv.Itoa(ShardWidth+1) + `, f=3)
-            Set(1, dec=12.985)
-            Set(2, dec=-4.234)
+			Set(1, dec=12.985)
+			Set(2, dec=-4.234)
 		`}); err != nil {
 		t.Fatal(err)
 	}
@@ -3548,8 +3554,8 @@ func TestExecutor_Execute_FieldValue(t *testing.T) {
 	if _, err := node0.API.Query(context.Background(), &pilosa.QueryRequest{Index: "ik", Query: `
 			Set("one", f=3)
 			Set("two", f=-4)
-            Set("one", dec=12.985)
-            Set("two", dec=-4.234)
+			Set("one", dec=12.985)
+			Set("two", dec=-4.234)
 		`}); err != nil {
 		t.Fatal(err)
 	}
@@ -3577,6 +3583,8 @@ func TestExecutor_Execute_FieldValue(t *testing.T) {
 
 		// Errors
 		{index: "i", qry: "FieldValue()", expErr: pilosa.ErrFieldRequired.Error()},
+		{index: "i", qry: "FieldValue(field=dec)", expErr: pilosa.ErrColumnRequired.Error()},
+		{index: "ik", qry: "FieldValue(field=f)", expErr: pilosa.ErrColumnRequired.Error()},
 	}
 	for n, node := range []*test.Command{node0, node1} {
 		for i, test := range tests {

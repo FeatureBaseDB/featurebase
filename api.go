@@ -370,7 +370,8 @@ func importWorker(importWork chan importJob) {
 				var doClear bool
 				switch doAction {
 				case RequestActionOverwrite:
-					if err := j.field.importRoaringOverwrite(j.ctx, viewData, j.shard, viewName, j.req.Block); err != nil {
+					tx := &RoaringTx{Field: j.field}
+					if err := j.field.importRoaringOverwrite(j.ctx, tx, viewData, j.shard, viewName, j.req.Block); err != nil {
 						return errors.Wrap(err, "importing roaring as overwrite")
 					}
 				case RequestActionClear:
@@ -581,6 +582,9 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 		return ErrFragmentNotFound
 	}
 
+	// Obtain transaction
+	tx := &RoaringTx{Index: index}
+
 	// Wrap writer with a CSV writer.
 	cw := csv.NewWriter(w)
 
@@ -616,7 +620,7 @@ func (api *API) ExportCSV(ctx context.Context, indexName string, fieldName strin
 	}
 
 	// Iterate over each column.
-	if err := f.forEachBit(fn); err != nil {
+	if err := f.forEachBit(tx, fn); err != nil {
 		return errors.Wrap(err, "writing CSV")
 	}
 
@@ -643,7 +647,7 @@ func (api *API) ShardNodes(ctx context.Context, indexName string, shard uint64) 
 // FragmentBlockData is an endpoint for internal usage. It is not guaranteed to
 // return anything useful. Currently it returns protobuf encoded row and column
 // ids from a "block" which is a subdivision of a fragment.
-func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, error) {
+func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) (_ []byte, err error) {
 	span, _ := tracing.StartSpanFromContext(ctx, "API.FragmentBlockData")
 	defer span.Finish()
 
@@ -667,7 +671,10 @@ func (api *API) FragmentBlockData(ctx context.Context, body io.Reader) ([]byte, 
 	}
 
 	var resp = BlockDataResponse{}
-	resp.RowIDs, resp.ColumnIDs = f.blockData(int(req.Block))
+	resp.RowIDs, resp.ColumnIDs, err = f.blockData(int(req.Block))
+	if err != nil {
+		return nil, err
+	}
 
 	// Encode response.
 	buf, err := api.Serializer.Marshal(&resp)
@@ -694,8 +701,7 @@ func (api *API) FragmentBlocks(ctx context.Context, indexName, fieldName, viewNa
 	}
 
 	// Retrieve blocks.
-	blocks := f.Blocks()
-	return blocks, nil
+	return f.Blocks()
 }
 
 // FragmentData returns all data in the specified fragment.
@@ -1054,6 +1060,9 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 		return errors.Wrap(err, "getting index and field")
 	}
 
+	//  Obtain transaction.
+	tx := &RoaringTx{Index: index}
+
 	if err := req.ValidateWithTimestamp(index.CreatedAt(), field.CreatedAt()); err != nil {
 		return errors.Wrap(err, "validating import value request")
 	}
@@ -1146,14 +1155,14 @@ func (api *API) Import(ctx context.Context, req *ImportRequest, opts ...ImportOp
 
 	// Import columnIDs into existence field.
 	if !options.Clear {
-		if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
+		if err := importExistenceColumns(tx, index, req.ColumnIDs); err != nil {
 			api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 			return errors.Wrap(err, "importing existence columns")
 		}
 	}
 
 	// Import into fragment.
-	err = field.Import(req.RowIDs, req.ColumnIDs, timestamps, opts...)
+	err = field.Import(tx, req.RowIDs, req.ColumnIDs, timestamps, opts...)
 	if err != nil {
 		api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 	}
@@ -1177,6 +1186,9 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 	if err := req.ValidateWithTimestamp(index.CreatedAt(), field.CreatedAt()); err != nil {
 		return errors.Wrap(err, "validating import value request")
 	}
+
+	// Obtain transaction.
+	tx := &RoaringTx{Index: index}
 
 	// Set up import options.
 	options, err := setUpImportOptions(opts...)
@@ -1244,7 +1256,7 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 		}
 		// Import columnIDs into existence field.
 		if !options.Clear {
-			if err := importExistenceColumns(index, req.ColumnIDs); err != nil {
+			if err := importExistenceColumns(tx, index, req.ColumnIDs); err != nil {
 				api.server.logger.Printf("import existence error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 				return errors.Wrap(err, "importing existence columns")
 			}
@@ -1252,12 +1264,12 @@ func (api *API) ImportValue(ctx context.Context, req *ImportValueRequest, opts .
 
 		// Import into fragment.
 		if len(req.Values) > 0 {
-			err = field.importValue(req.ColumnIDs, req.Values, options)
+			err = field.importValue(tx, req.ColumnIDs, req.Values, options)
 			if err != nil {
 				api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 			}
 		} else if len(req.FloatValues) > 0 {
-			err = field.importFloatValue(req.ColumnIDs, req.FloatValues, options)
+			err = field.importFloatValue(tx, req.ColumnIDs, req.FloatValues, options)
 			if err != nil {
 				api.server.logger.Printf("import error: index=%s, field=%s, shard=%d, columns=%d, err=%s", req.Index, req.Field, req.Shard, len(req.ColumnIDs), err)
 			}
@@ -1342,14 +1354,14 @@ func (api *API) ImportColumnAttrs(ctx context.Context, req *ImportColumnAttrsReq
 	return nil
 }
 
-func importExistenceColumns(index *Index, columnIDs []uint64) error {
+func importExistenceColumns(tx Tx, index *Index, columnIDs []uint64) error {
 	ef := index.existenceField()
 	if ef == nil {
 		return nil
 	}
 
 	existenceRowIDs := make([]uint64, len(columnIDs))
-	return ef.Import(existenceRowIDs, columnIDs, nil)
+	return ef.Import(tx, existenceRowIDs, columnIDs, nil)
 }
 
 // MaxShards returns the maximum shard number for each index in a map.

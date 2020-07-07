@@ -47,14 +47,18 @@ func (b *Bitmap) UnmarshalBinary(data []byte) (err error) {
 
 	itrKey, itrCType, itrN, itrLen, itrPointer, itrErr = itr.Next()
 	for itrErr == nil {
-		newC := &Container{
-			typeID:  itrCType,
-			n:       int32(itrN),
-			len:     int32(itrLen),
-			cap:     int32(itrLen),
-			pointer: itrPointer,
-			flags:   flagMapped,
+		var newC *Container
+		switch itrCType {
+		case containerArray:
+			newC = NewContainerArray((*[4096]uint16)(unsafe.Pointer(itrPointer))[:itrLen:itrLen])
+		case containerRun:
+			newC = NewContainerRunN((*[2048]Interval16)(unsafe.Pointer(itrPointer))[:itrLen:itrLen], int32(itrN))
+		case containerBitmap:
+			newC = NewContainerBitmapN((*[1024]uint64)(unsafe.Pointer(itrPointer))[:1024:itrLen], int32(itrN))
+		default:
+			panic("invalid container type")
 		}
+		newC.setMapped(true)
 		if !b.preferMapping {
 			newC.unmapOrClone()
 		}
@@ -126,30 +130,33 @@ func InspectBinary(data []byte, mapped bool, info *BitmapInfo) (b *Bitmap, mappe
 
 	itrKey, itrCType, itrN, itrLen, itrPointer, itrErr = itr.Next()
 	for itrErr == nil {
-		newC := &Container{
-			typeID:  itrCType,
-			n:       int32(itrN),
-			len:     int32(itrLen),
-			cap:     int32(itrLen),
-			pointer: itrPointer,
-			flags:   flagMapped,
+		var size int
+		switch itrCType {
+		case containerArray:
+			size = int(itrN) * 2
+		case containerBitmap:
+			size = 8192
+		case containerRun:
+			size = itrLen*interval16Size + runCountHeaderSize
 		}
+		var newC *Container
+		switch itrCType {
+		case containerArray:
+			newC = NewContainerArray((*[4096]uint16)(unsafe.Pointer(itrPointer))[:itrLen:itrLen])
+		case containerRun:
+			newC = NewContainerRunN((*[2048]Interval16)(unsafe.Pointer(itrPointer))[:itrLen:itrLen], int32(itrN))
+		case containerBitmap:
+			newC = NewContainerBitmapN((*[1024]uint64)(unsafe.Pointer(itrPointer))[:1024:itrLen], int32(itrN))
+		default:
+			panic("invalid container type")
+		}
+		newC.setMapped(true)
 		if !mapped {
 			newC.unmapOrClone()
 		}
 		newC.flags |= flagPristine
 		if newC.flags&flagMapped != 0 {
 			mappedAny = true
-		}
-		var size int
-		b.Containers.Put(itrKey, newC)
-		switch itrCType {
-		case containerArray:
-			size = int(newC.n) * 2
-		case containerBitmap:
-			size = 8192
-		case containerRun:
-			size = itrLen*interval16Size + runCountHeaderSize
 		}
 		info.Containers = append(info.Containers, ContainerInfo{
 			N:       newC.n,
