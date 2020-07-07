@@ -2802,6 +2802,22 @@ func filterColumn(col uint64) rowFilter {
 	}
 }
 
+func filterLike(like string, t TranslateStore, e chan error) rowFilter {
+	plan := planLike(like)
+
+	return func(rowID, key uint64, c *roaring.Container) (include, done bool) {
+		keyStr, err := t.TranslateID(rowID)
+		if err != nil {
+			select {
+			case e <- err:
+			default:
+			}
+			return false, true
+		}
+		return matchLike(keyStr, plan...), false
+	}
+}
+
 // TODO: this works, but it would be more performant if the fragment could seek
 // to the next row in the rows list rather than asking the filter for each
 // container serially. The container iterator would need to expose a seek

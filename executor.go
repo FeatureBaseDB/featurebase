@@ -2431,6 +2431,14 @@ func (e *executor) executeRowsShard(ctx context.Context, tx Tx, index string, fi
 		limit = int(lim)
 	}
 
+	var likeErr chan error
+	if like, hasLike, err := c.StringArg("like"); err != nil {
+		return nil, errors.Wrap(err, "getting like pattern")
+	} else if hasLike {
+		likeErr = make(chan error, 1)
+		filters = append(filters, filterLike(like, f.TranslateStore(), likeErr))
+	}
+
 	for _, view := range views {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -2443,6 +2451,11 @@ func (e *executor) executeRowsShard(ctx context.Context, tx Tx, index string, fi
 		viewRows, err := frag.rows(ctx, tx, start, filters...)
 		if err != nil {
 			return nil, err
+		}
+		select {
+		case err = <-likeErr:
+			return nil, err
+		default:
 		}
 		rowIDs = rowIDs.merge(viewRows, limit)
 	}
