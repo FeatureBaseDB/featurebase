@@ -52,6 +52,7 @@ curl localhost:10101/index/repository/query \
 * `CALL` Any query.
 * `ROW_CALL` Any query which returns a row, such as `Row`, `Union`, `Difference`, `Xor`, `Intersect`, `Not`.
 * `ROWS_CALL` A query that returns a `Rows` result (i.e. a list of row IDs). Currently only the `Rows` query.
+* `ROWSET_CALL` A query that returns a set of rows. Currently only the `Rows` and `TopN` queries.
 * `[]ATTR_VALUE` Denotes an array of `ATTR_VALUE`s. (e.g. `["a", "b", "c"]`).
 
 ### Write Operations
@@ -796,7 +797,7 @@ Options(Row(f1=10), shards=[0, 2])
 **Spec:**
 
 ```
-Rows(<FIELD>, previous=<UINT|STRING>, limit=<UINT>, column=<UINT|STRING>, from=<TIMESTAMP>, to=<TIMESTAMP>)
+Rows(<FIELD>, previous=<UINT|STRING>, limit=<UINT>, column=<UINT|STRING>, from=<TIMESTAMP>, to=<TIMESTAMP>, like=<STRING>)
 ```
 
 **Description:**
@@ -817,6 +818,10 @@ If the field is of type `time`, the `from` and `to` arguments can be provided
 to restrict the result to a specific time span. If `from` and `to` are
 not provided, the full range of existing data will be queried.
 
+If `like` is given, only keys matching a pattern will be selected.
+A `like` pattern may use `_` as a placeholder to match a single UTF-8 codepoint, and `%` to match 0 or more codepoints.
+All other characters will be matched exactly.
+
 **Result Type:** Object with `"rows" or "keys" and an array of integers or strings respectively.`
 
 **Examples:**
@@ -834,7 +839,15 @@ With keys:
 Rows(job)
 ```
 ```response
-{"rows":null,"keys":["engineer","management","student""]}
+{"rows":null,"keys":["engineer","management","student"]}
+```
+
+With `like`:
+```request
+Rows(job, like="%t")
+```
+```response
+{"rows":null,"keys":["management","student"]}
 ```
 
 #### Group By
@@ -923,3 +936,31 @@ GroupBy(Rows(age), Rows(job), limit=7, filter=Row(country=USA))
  {"group":[{"field":"age","rowID":22},{"field":"job","rowKey":"student"}],"count":3},
  {"group":[{"field":"age","rowID":29},{"field":"job","rowKey":"management"}],"count":7}]
 ```
+
+#### UnionRows
+
+**Spec:**
+
+```
+UnionRows([ROWSET_CALL ...])
+```
+
+**Description:**
+
+UnionRows performs a logical OR on the rows matched by the results of all `ROWSET_CALL` queries passed to it.
+
+**Result Type:** object with attrs and bits
+
+attrs will always be empty
+
+**Examples:**
+
+Query columns with a bit set in any row (repositories that are starred by any user):
+```request
+UnionRows(Rows(stargazer))
+```
+```response
+{"attrs":{},"columns":[10, 20, 30]}
+```
+
+* columns are repositories that were starred by any user
