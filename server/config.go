@@ -29,6 +29,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	defaultBindPort     = "10101"
+	defaultBindGRPCPort = "20101"
+)
+
 // TLSConfig contains TLS configuration
 type TLSConfig struct {
 	// CertificatePath contains the path to the certificate (.crt or .pem file)
@@ -59,6 +64,11 @@ type Config struct {
 	// in the cluster. It should be reachable by all other nodes and should
 	// route to an interface that Bind is listening on.
 	Advertise string `toml:"advertise"`
+
+	// AdvertiseGRPC is the address advertised by the server to other nodes
+	// in the cluster. It should be reachable by all other nodes and should
+	// route to an interface that BindGRPC is listening on.
+	AdvertiseGRPC string `toml:"advertise-grpc"`
 
 	// MaxWritesPerRequest limits the number of mutating commands that can be in
 	// a single request to the server. This includes Set, Clear,
@@ -162,8 +172,8 @@ type Config struct {
 func NewConfig() *Config {
 	c := &Config{
 		DataDir:             "~/.pilosa",
-		Bind:                ":10101",
-		BindGRPC:            ":20101",
+		Bind:                ":" + defaultBindPort,
+		BindGRPC:            ":" + defaultBindGRPCPort,
 		MaxWritesPerRequest: 5000,
 
 		// We default these Max File/Map counts very high. This is basically a
@@ -223,25 +233,32 @@ func NewConfig() *Config {
 // indicate it's left unspecified.
 func (cfg *Config) validateAddrs(ctx context.Context) error {
 	// Validate the advertise address.
-	advScheme, advHost, advPort, err := validateAdvertiseAddr(ctx, cfg.Advertise, cfg.Bind)
+	advScheme, advHost, advPort, err := validateAdvertiseAddr(ctx, cfg.Advertise, cfg.Bind, defaultBindPort)
 	if err != nil {
 		return errors.Wrapf(err, "validating advertise address")
 	}
 	cfg.Advertise = schemeHostPortString(advScheme, advHost, advPort)
 
 	// Validate the listen address.
-	listenScheme, listenHost, listenPort, err := validateListenAddr(ctx, cfg.Bind)
+	listenScheme, listenHost, listenPort, err := validateListenAddr(ctx, cfg.Bind, defaultBindPort)
 	if err != nil {
 		return errors.Wrap(err, "validating listen address")
 	}
 	cfg.Bind = schemeHostPortString(listenScheme, listenHost, listenPort)
 
+	// Validate the gRPC advertise address.
+	_, grpcAdvHost, grpcAdvPort, err := validateAdvertiseAddr(ctx, cfg.AdvertiseGRPC, cfg.BindGRPC, defaultBindGRPCPort)
+	if err != nil {
+		return errors.Wrapf(err, "validating grpc advertise address")
+	}
+	cfg.AdvertiseGRPC = schemeHostPortString("grpc", grpcAdvHost, grpcAdvPort)
+
 	// Validate the gRPC listen address.
-	grpcListenScheme, grpcListenHost, grpcListenPort, err := validateListenAddr(ctx, cfg.BindGRPC)
+	_, grpcListenHost, grpcListenPort, err := validateListenAddr(ctx, cfg.BindGRPC, defaultBindGRPCPort)
 	if err != nil {
 		return errors.Wrap(err, "validating grpc listen address")
 	}
-	cfg.BindGRPC = schemeHostPortString(grpcListenScheme, grpcListenHost, grpcListenPort)
+	cfg.BindGRPC = schemeHostPortString("grpc", grpcListenHost, grpcListenPort)
 
 	return nil
 }
@@ -251,8 +268,8 @@ func (cfg *Config) validateAddrs(ctx context.Context) error {
 // the configured listen address if any, otherwise it makes a best
 // guess at the outbound IP address.
 // Returns scheme, host, port as strings.
-func validateAdvertiseAddr(ctx context.Context, advAddr, listenAddr string) (string, string, string, error) {
-	listenScheme, listenHost, listenPort, err := splitAddr(listenAddr)
+func validateAdvertiseAddr(ctx context.Context, advAddr, listenAddr, defaultPort string) (string, string, string, error) {
+	listenScheme, listenHost, listenPort, err := splitAddr(listenAddr, defaultPort)
 	if err != nil {
 		return "", "", "", errors.Wrap(err, "getting listen address")
 	}
@@ -318,8 +335,8 @@ func outboundIP() net.IP {
 // the default (localhost) should be used. Rresolves host names to IP
 // addresses.
 // Returns scheme, host, port as strings.
-func validateListenAddr(ctx context.Context, addr string) (string, string, string, error) {
-	scheme, host, port, err := splitAddr(addr)
+func validateListenAddr(ctx context.Context, addr, defaultPort string) (string, string, string, error) {
+	scheme, host, port, err := splitAddr(addr, defaultPort)
 	if err != nil {
 		return "", "", "", errors.Wrap(err, "getting listen address")
 	}
@@ -348,7 +365,7 @@ func schemeHostPortString(scheme, host, port string) string {
 }
 
 // splitAddr returns scheme, host, port as strings.
-func splitAddr(addr string) (string, string, string, error) {
+func splitAddr(addr string, defaultPort string) (string, string, string, error) {
 	scheme, hostPort := splitScheme(addr)
 	host, port := "", ""
 	if hostPort != "" {
@@ -362,7 +379,7 @@ func splitAddr(addr string) (string, string, string, error) {
 	// results in a port of 0, which causes Pilosa to listen on
 	// a random port.
 	if port == "" {
-		port = "10101"
+		port = defaultPort
 	}
 	return scheme, host, port, nil
 }
