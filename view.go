@@ -42,11 +42,12 @@ const (
 
 // view represents a container for field data.
 type view struct {
-	mu    sync.RWMutex
-	path  string
-	index string
-	field string
-	name  string
+	mu            sync.RWMutex
+	path          string
+	index         string
+	field         string
+	name          string
+	qualifiedName string
 
 	holder *Holder
 
@@ -68,10 +69,11 @@ type view struct {
 // newView returns a new instance of View.
 func newView(holder *Holder, path, index, field, name string, fieldOptions FieldOptions) *view {
 	return &view{
-		path:  path,
-		index: index,
-		field: field,
-		name:  name,
+		path:          path,
+		index:         index,
+		field:         field,
+		name:          name,
+		qualifiedName: FormatQualifiedViewName(index, field, name),
 
 		holder: holder,
 
@@ -512,3 +514,8 @@ type viewInfoSlice []*ViewInfo
 func (p viewInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p viewInfoSlice) Len() int           { return len(p) }
 func (p viewInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
+
+// FormatQualifiedViewName generates a qualified name for the view to be used with Tx operations.
+func FormatQualifiedViewName(index, field, view string) string {
+	return fmt.Sprintf("%s\x00%s\x00%s\x00", index, field, view)
+}

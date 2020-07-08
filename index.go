@@ -35,11 +35,12 @@ import (
 
 // Index represents a container for fields.
 type Index struct {
-	mu        sync.RWMutex
-	createdAt int64
-	path      string
-	name      string
-	keys      bool // use string keys
+	mu            sync.RWMutex
+	createdAt     int64
+	path          string
+	name          string
+	qualifiedName string
+	keys          bool // use string keys
 
 	// Existence tracking.
 	trackExistence bool
@@ -105,6 +106,9 @@ func (i *Index) CreatedAt() int64 {
 
 // Name returns name of the index.
 func (i *Index) Name() string { return i.name }
+
+// QualifiedName returns the qualified name of the index.
+func (i *Index) QualifiedName() string { return i.qualifiedName }
 
 // Path returns the path the index was initialized with.
 func (i *Index) Path() string { return i.path }
@@ -610,4 +614,9 @@ type importData struct {
 type importValueData struct {
 	ColumnIDs []uint64
 	Values    []int64
+}
+
+// FormatQualifiedIndexName generates a qualified name for the index to be used with Tx operations.
+func FormatQualifiedIndexName(index string) string {
+	return fmt.Sprintf("%s\x00", index)
 }
