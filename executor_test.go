@@ -4742,6 +4742,10 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 			q:   `Rows(f, previous="1", limit=0, column="0")`,
 			exp: []string{},
 		},
+		{
+			q: `Rows(f, like="__")`,
+			exp: []string{"10", "11", "12", "13", "14", "15", "16", "17", "18"},
+		},
 	}
 
 	for i, test := range tests {
@@ -5841,6 +5845,31 @@ func TestExecutor_Execute_TopNDistinct(t *testing.T) {
 			t.Fatalf("invalid Pairs count, expected: 1, got: %v", pf.Pairs[0].Count)
 		}
 	})
+}
+
+func Test_Executor_Execute_UnionRows(t *testing.T) {
+	c := test.MustRunCluster(t, 2)
+	defer c.Close()
+
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "s",
+		pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 50000),
+	)
+
+	// Populate data.
+	c.Query(t, "i", `
+			Set(0, s=1)
+			Set(1, s=2)
+			Set(2, s=3)
+			Set(3, s=1)
+			Set(3, s=5)
+		`)
+
+	if res := c.Query(t, "i", `Count(UnionRows(TopN(s, n=1)))`); res.Results[0] != uint64(2) {
+		t.Errorf("expected 2 columns, got %v", res.Results[0])
+	}
+	if res := c.Query(t, "i", `Count(UnionRows(Rows(s)))`); res.Results[0] != uint64(4) {
+		t.Errorf("expected 4 columns, got %v", res.Results[0])
+	}
 }
 
 func TestTimelessClearRegression(t *testing.T) {
