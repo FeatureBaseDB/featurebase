@@ -392,8 +392,9 @@ var callInfoByFunc = map[string]callInfo{
 			"n": int64(0),
 		},
 	},
-	"Union": {allowUnknown: false},
-	"Xor":   {allowUnknown: false},
+	"Union":     {allowUnknown: false},
+	"UnionRows": {allowUnknown: false},
+	"Xor":       {allowUnknown: false},
 
 	// things that take _field
 	"TopN": allowUnderField,
