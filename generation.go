@@ -20,7 +20,7 @@ import (
 	"io/ioutil"
 	"os"
 	"runtime"
-	"runtime/debug"
+	// "runtime/debug"
 	"sync"
 	"syscall"
 	"time"
@@ -169,29 +169,29 @@ func (m *mmapGeneration) Transaction(fileP *io.Writer, fn func() error) (transac
 	}
 	// We are done locking the generation itself for now.
 	m.mu.Unlock()
-	wouldPanic := debug.SetPanicOnFault(true)
-	defer func() {
-		debug.SetPanicOnFault(wouldPanic)
-		if r := recover(); r != nil {
-			if err, ok := r.(error); ok {
-				// special case: if we caught a page fault, we diagnose that directly. sadly,
-				// we can't see the actual values that were used to generate this, probably.
-				if err.Error() == "runtime error: invalid memory address or nil pointer dereference" {
-					if transactionErr == nil {
-						transactionErr = errors.New("invalid memory access during transaction")
-					} else {
-						transactionErr = fmt.Errorf("invalid memory access during transaction, previous error %v", transactionErr)
-					}
-					return
-				}
-			}
-			if transactionErr == nil {
-				transactionErr = fmt.Errorf("panic during transaction: %v", r)
-			} else {
-				transactionErr = fmt.Errorf("panic during erroring transaction: panic %v, previous error %v", r, transactionErr)
-			}
-		}
-	}()
+	// wouldPanic := debug.SetPanicOnFault(true)
+	//	defer func() {
+	//		debug.SetPanicOnFault(wouldPanic)
+	//		if r := recover(); r != nil {
+	//			if err, ok := r.(error); ok {
+	//				// special case: if we caught a page fault, we diagnose that directly. sadly,
+	//				// we can't see the actual values that were used to generate this, probably.
+	//				if err.Error() == "runtime error: invalid memory address or nil pointer dereference" {
+	//					if transactionErr == nil {
+	//						transactionErr = errors.New("invalid memory access during transaction")
+	//					} else {
+	//						transactionErr = fmt.Errorf("invalid memory access during transaction, previous error %v", transactionErr)
+	//					}
+	//					return
+	//				}
+	//			}
+	//			if transactionErr == nil {
+	//				transactionErr = fmt.Errorf("panic during transaction: %v", r)
+	//			} else {
+	//				transactionErr = fmt.Errorf("panic during erroring transaction: panic %v, previous error %v", r, transactionErr)
+	//			}
+	//		}
+	//	}()
 	return fn()
 }
 

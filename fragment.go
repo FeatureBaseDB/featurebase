@@ -30,6 +30,7 @@ import (
 	"os"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -3610,4 +3611,22 @@ func (v *boolVector) Get(tx Tx, colID uint64) (uint64, bool, error) {
 		}
 	}
 	return 0, false, nil
+}
+
+// FormatQualifiedFragmentName generates a qualified name for the fragment to be used with Tx operations.
+func FormatQualifiedFragmentName(index, field, view string, shard uint64) string {
+	return fmt.Sprintf("%s\x00%s\x00%s\x00%d", index, field, view, shard)
+}
+
+// ParseQualifiedFragmentName parses a qualified name into its parts.
+func ParseQualifiedFragmentName(name string) (index, field, view string, shard uint64, err error) {
+	a := strings.Split(name, "\x00")
+	if len(a) < 4 {
+		return "", "", "", 0, fmt.Errorf("invalid qualified name: %q", name)
+	}
+	index, field, view = string(a[0]), string(a[1]), string(a[2])
+	if shard, err = strconv.ParseUint(a[3], 10, 64); err != nil {
+		return "", "", "", 0, fmt.Errorf("invalid qualified name: %q", name)
+	}
+	return index, field, view, shard, nil
 }

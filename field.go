@@ -85,11 +85,12 @@ var availableShardFileFlushDuration = &protected{
 
 // Field represents a container for views.
 type Field struct {
-	mu        sync.RWMutex
-	createdAt int64
-	path      string
-	index     string
-	name      string
+	mu            sync.RWMutex
+	createdAt     int64
+	path          string
+	index         string
+	name          string
+	qualifiedName string
 
 	viewMap map[string]*view
 
@@ -352,9 +353,10 @@ func newField(holder *Holder, path, index, name string, opts FieldOption) (*Fiel
 	}
 
 	f := &Field{
-		path:  path,
-		index: index,
-		name:  name,
+		path:          path,
+		index:         index,
+		name:          name,
+		qualifiedName: FormatQualifiedFieldName(index, name),
 
 		viewMap: make(map[string]*view),
 
@@ -2146,4 +2148,9 @@ func bitDepthInt64(v int64) uint {
 		return bitDepth(uint64(-v))
 	}
 	return bitDepth(uint64(v))
+}
+
+// FormatQualifiedFieldName generates a qualified name for the field to be used with Tx operations.
+func FormatQualifiedFieldName(index, field string) string {
+	return fmt.Sprintf("%s\x00%s\x00", index, field)
 }
