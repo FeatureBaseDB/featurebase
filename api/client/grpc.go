@@ -174,7 +174,7 @@ func (c *GRPCClient) QueryUnary(ctx context.Context, index string, pql string) (
 
 // Inspect returns a stream of RowResponse for the given index, columns, and filters.
 // It is intended to mimic something like "select [fields] from table where recordID IN (...)".
-func (c *GRPCClient) Inspect(ctx context.Context, index string, columnIDs []uint64, columnKeys []string, fieldFilters []string, limit, offset uint64) (pb.StreamClient, error) {
+func (c *GRPCClient) Inspect(ctx context.Context, index string, columnIDs []uint64, columnKeys []string, query string, fieldFilters []string, limit, offset uint64) (pb.StreamClient, error) {
 	conn := c.Conn()
 
 	if conn == nil {
@@ -201,6 +201,7 @@ func (c *GRPCClient) Inspect(ctx context.Context, index string, columnIDs []uint
 		FilterFields: fieldFilters,
 		Limit:        limit,
 		Offset:       offset,
+		Query:        query,
 	})
 
 	if err != nil {
