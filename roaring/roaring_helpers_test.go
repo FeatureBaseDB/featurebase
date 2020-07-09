@@ -255,8 +255,7 @@ func doContainer(typ byte, data interface{}) *Container {
 	case containerArray:
 		return NewContainerArray(data.([]uint16)).Freeze()
 	case containerBitmap:
-		c := NewContainerBitmap(-1, data.([]uint64)).Freeze()
-		return c
+		return NewContainerBitmap(-1, data.([]uint64)).Freeze()
 	case containerRun:
 		return NewContainerRun(data.([]interval16)).Freeze()
 	}

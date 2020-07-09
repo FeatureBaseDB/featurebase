@@ -4391,8 +4391,8 @@ func TestUnionRunRunInPlaceBitwiseCompare(t *testing.T) {
 	for _, a := range runs {
 		for _, b := range runs {
 			t.Run(a.name+"-"+b.name, func(t *testing.T) {
-				arun := doContainer(containerRun, a.run)
-				brun := doContainer(containerRun, b.run)
+				arun := doContainer(containerRun, a.run).Thaw()
+				brun := doContainer(containerRun, b.run).Thaw()
 
 				out1 := unionBitmapRunInPlace(arun.runToBitmap(), brun)
 				out2 := unionRunRunInPlace(arun, brun)
