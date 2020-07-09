@@ -26,7 +26,6 @@ import (
 type addrs struct{ bind, advertise string }
 
 func TestConfig_validateAddrs(t *testing.T) {
-
 	// Prepare some reference strings that will be checked in the
 	// test below.
 	outboundAddr := outboundIP().String()
@@ -104,8 +103,9 @@ func TestConfig_validateAddrs(t *testing.T) {
 		{"",
 			addrs{"0.0.0.0:1234", ""},
 			addrs{"0.0.0.0:1234", outboundAddr + ":1234"}},
-		// Expected errors.
 
+		// Expected errors.
+		//
 		// Missing port number.
 		{"missing port in address",
 			addrs{"localhost", ""},
@@ -139,17 +139,145 @@ func TestConfig_validateAddrs(t *testing.T) {
 			} else if err == nil && test.expErr != "" {
 				t.Fatalf("expected error string to contain %s, but got no error", test.expErr)
 			} else if err != nil && test.expErr != "" {
-				if strings.Contains(err.Error(), test.expErr) {
-					return
-				} else {
+				if !strings.Contains(err.Error(), test.expErr) {
 					t.Fatalf("expected error string to contain %s, but got %s", test.expErr, err.Error())
 				}
+				return
 			}
 
 			if c.Bind != test.exp.bind {
 				t.Fatalf("bind address: expected %s, but got %s", test.exp.bind, c.Bind)
 			} else if c.Advertise != test.exp.advertise {
 				t.Fatalf("advertise address: expected %s, but got %s", test.exp.advertise, c.Advertise)
+			}
+		})
+	}
+}
+
+func TestConfig_validateAddrsGRPC(t *testing.T) {
+	// Prepare some reference strings that will be checked in the
+	// test below.
+	outboundAddr := outboundIP().String()
+	hostname, err := os.Hostname()
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostAddr, err := lookupAddr(context.Background(), net.DefaultResolver, hostname)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(hostAddr, ":") {
+		hostAddr = "[" + hostAddr + "]"
+	}
+
+	tests := []struct {
+		expErr string
+		in     addrs
+		exp    addrs
+	}{
+		// Default values; addresses set empty.
+		{"",
+			addrs{"", ""},
+			addrs{"grpc://:20101", "grpc://:20101"}},
+		{"",
+			addrs{":", ""},
+			addrs{"grpc://:20101", "grpc://:20101"}},
+		{"",
+			addrs{"", ":"},
+			addrs{"grpc://:20101", "grpc://:20101"}},
+		{"",
+			addrs{":", ":"},
+			addrs{"grpc://:20101", "grpc://:20101"}},
+		// Listener :port.
+		{"",
+			addrs{":1234", ""},
+			addrs{"grpc://:1234", "grpc://:1234"}},
+		// Listener with host:port.
+		{"",
+			addrs{hostAddr + ":20101", ""},
+			addrs{"grpc://" + hostAddr + ":20101", "grpc://" + hostAddr + ":20101"}},
+		// Listener with host:.
+		{"",
+			addrs{hostAddr + ":", ""},
+			addrs{"grpc://" + hostAddr + ":20101", "grpc://" + hostAddr + ":20101"}},
+		// Listener with scheme:.
+		{"",
+			addrs{"http://" + hostAddr + ":", ""},
+			addrs{"grpc://" + hostAddr + ":20101", "grpc://" + hostAddr + ":20101"}},
+		// Listener with localhost:port.
+		{"",
+			addrs{"localhost:1234", ""},
+			addrs{"grpc://localhost:1234", "grpc://localhost:1234"}},
+		// Listener with localhost:.
+		{"",
+			addrs{"localhost:", ""},
+			addrs{"grpc://localhost:20101", "grpc://localhost:20101"}},
+		// Listener and advertise addresses.
+		{"",
+			addrs{hostAddr + ":1234", hostAddr + ":"},
+			addrs{"grpc://" + hostAddr + ":1234", "grpc://" + hostAddr + ":1234"}},
+		// Explicit port number in advertise addr.
+		{"",
+			addrs{hostAddr + ":1234", hostAddr + ":7890"},
+			addrs{"grpc://" + hostAddr + ":1234", "grpc://" + hostAddr + ":7890"}},
+		// Use a non-numeric port number.
+		{"",
+			addrs{":postgresql", ""},
+			addrs{"grpc://:5432", "grpc://:5432"}},
+		// Advertise port 0 means reuse listen port.
+		{"",
+			addrs{":1234", ":0"},
+			addrs{"grpc://:1234", "grpc://:1234"}},
+		// Listen on all interfaces. Determine advertise address.
+		{"",
+			addrs{"0.0.0.0:1234", ""},
+			addrs{"grpc://0.0.0.0:1234", "grpc://" + outboundAddr + ":1234"}},
+
+		// Expected errors.
+		//
+		// Missing port number.
+		{"missing port in address",
+			addrs{"localhost", ""},
+			addrs{}},
+		{"missing port in address",
+			addrs{":1234", "localhost"},
+			addrs{}},
+		// Invalid port number.
+		{"invalid port",
+			addrs{"localhost:-1234", ""},
+			addrs{}},
+		{"validating grpc advertise address",
+			addrs{"localhost:foo", ""},
+			addrs{}},
+		{"no such host",
+			addrs{"333.333.333.333:1234", ""},
+			addrs{}},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			c := NewConfig()
+
+			c.BindGRPC = test.in.bind
+			c.AdvertiseGRPC = test.in.advertise
+
+			err := c.validateAddrs(context.Background())
+
+			if err != nil && test.expErr == "" {
+				t.Fatal(err)
+			} else if err == nil && test.expErr != "" {
+				t.Fatalf("expected error string to contain %s, but got no error", test.expErr)
+			} else if err != nil && test.expErr != "" {
+				if !strings.Contains(err.Error(), test.expErr) {
+					t.Fatalf("expected error string to contain %s, but got %s", test.expErr, err.Error())
+				}
+				return
+			}
+
+			if c.BindGRPC != test.exp.bind {
+				t.Fatalf("bind address: expected %s, but got %s", test.exp.bind, c.BindGRPC)
+			} else if c.AdvertiseGRPC != test.exp.advertise {
+				t.Fatalf("advertise address: expected %s, but got %s", test.exp.advertise, c.AdvertiseGRPC)
 			}
 		})
 	}

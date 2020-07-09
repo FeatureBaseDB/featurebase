@@ -265,20 +265,6 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "creating grpc listener")
 	}
 
-	// If grpc port is 0, get auto-allocated port from listener
-	if grpcURI.Port == 0 {
-		grpcURI.SetPort(uint16(m.grpcLn.Addr().(*net.TCPAddr).Port))
-	}
-
-	if grpcURI.Scheme == "http" {
-		grpcURI.Scheme = "grpc"
-	}
-
-	// discover the address if not specified
-	if grpcURI.Host == "0.0.0.0" {
-		grpcURI.Host = outboundIP().String()
-	}
-
 	// Setup TLS
 	if uri.Scheme == "https" {
 		m.tlsConfig, err = GetTLSConfig(&m.Config.TLS, m.logger.Logger())
@@ -321,6 +307,15 @@ func (m *Command) SetupServer() error {
 		advertiseURI.SetPort(uri.Port)
 	}
 
+	// Get grpc advertise address as uri.
+	advertiseGRPCURI, err := pilosa.NewURIFromAddress(m.Config.AdvertiseGRPC)
+	if err != nil {
+		return errors.Wrap(err, "processing grpc advertise address")
+	}
+	if advertiseGRPCURI.Port == 0 {
+		advertiseGRPCURI.SetPort(grpcURI.Port)
+	}
+
 	// Primary store configuration is handled automatically now.
 	if m.Config.Translation.PrimaryURL != "" {
 		m.logger.Printf("DEPRECATED: The primary-url configuration option is no longer used.")
@@ -349,7 +344,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerGCNotifier(gcnotify.NewActiveGCNotifier()),
 		pilosa.OptServerStatsClient(statsClient),
 		pilosa.OptServerURI(advertiseURI),
-		pilosa.OptServerGRPCURI(grpcURI),
+		pilosa.OptServerGRPCURI(advertiseGRPCURI),
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
 		pilosa.OptServerSerializer(proto.Serializer{}),
