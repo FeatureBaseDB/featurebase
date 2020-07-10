@@ -265,6 +265,11 @@ func (m *Command) SetupServer() error {
 		return errors.Wrap(err, "creating grpc listener")
 	}
 
+	// If grpc port is 0, get auto-allocated port from listener
+	if grpcURI.Port == 0 {
+		grpcURI.SetPort(uint16(m.grpcLn.Addr().(*net.TCPAddr).Port))
+	}
+
 	// Setup TLS
 	if uri.Scheme == "https" {
 		m.tlsConfig, err = GetTLSConfig(&m.Config.TLS, m.logger.Logger())
