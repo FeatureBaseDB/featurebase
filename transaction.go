@@ -25,7 +25,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var txIDRegexp = regexp.MustCompile("^[A-Za-z0-9_-]$")
+var txIDRegexp = regexp.MustCompile("^[A-Za-z0-9_-]*$")
 
 // Transaction contains information related to a block of work that
 // needs to be tracked and spans multiple API calls.
