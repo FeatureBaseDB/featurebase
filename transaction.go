@@ -17,12 +17,15 @@ package pilosa
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"sync"
 	"time"
 
 	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pkg/errors"
 )
+
+var txIDRegexp = regexp.MustCompile("^[A-Za-z0-9_-]$")
 
 // Transaction contains information related to a block of work that
 // needs to be tracked and spans multiple API calls.
@@ -92,6 +95,10 @@ func NewTransactionManager(store TransactionStore) *TransactionManager {
 func (tm *TransactionManager) Start(ctx context.Context, id string, timeout time.Duration, exclusive bool) (*Transaction, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
+
+	if !txIDRegexp.Match([]byte(id)) {
+		return nil, errors.New("invalid transaction ID, must match [A-Za-z0-9_-]")
+	}
 
 	trnsMap, err := tm.store.List()
 	if err != nil {
