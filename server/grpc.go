@@ -296,8 +296,17 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 
 	if req.Query != "" {
 		// Execute the query and use it to select columns.
-		if req.Columns.Type != nil {
-			return errors.New("found a list of columns in a query-based inspect call")
+		if req.Columns != nil && req.Columns.Type != nil {
+			l := 0
+			switch v := req.Columns.Type.(type) {
+			case *pb.IdsOrKeys_Ids:
+				l = len(v.Ids.Vals)
+			case *pb.IdsOrKeys_Keys:
+				l = len(v.Keys.Vals)
+			}
+			if l > 0 {
+				return errors.New("found a list of columns in a query-based inspect call")
+			}
 		}
 		query := pilosa.QueryRequest{
 			Index: req.Index,
@@ -315,12 +324,16 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 			return errors.Errorf("incorrect query result type %T for query %q", resp.Results[0], req.Query)
 		}
 		if len(row.Keys) > 0 {
-			req.Columns.Type = &pb.IdsOrKeys_Keys{
-				Keys: &pb.StringArray{Vals: row.Keys},
+			req.Columns = &pb.IdsOrKeys{
+				Type: &pb.IdsOrKeys_Keys{
+					Keys: &pb.StringArray{Vals: row.Keys},
+				},
 			}
 		} else {
-			req.Columns.Type = &pb.IdsOrKeys_Ids{
-				Ids: &pb.Uint64Array{Vals: row.Columns()},
+			req.Columns = &pb.IdsOrKeys{
+				Type: &pb.IdsOrKeys_Ids{
+					Ids: &pb.Uint64Array{Vals: row.Columns()},
+				},
 			}
 		}
 		if !row.Any() {
