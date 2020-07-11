@@ -25,7 +25,7 @@ func mustOpenIndex(opt IndexOptions) *Index {
 	if err != nil {
 		panic(err)
 	}
-	index, err := NewIndex(path, "i", DefaultPartitionN)
+	index, err := NewIndex(NewHolder(1), path, "i")
 	if err != nil {
 		panic(err)
 	}

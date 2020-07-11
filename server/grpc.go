@@ -272,6 +272,9 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 		return errToStatusError(err)
 	}
 
+	// Obtain transaction.
+	tx := pilosa.NewMultiTxWithIndex(true, index)
+
 	var fields []*pilosa.Field
 	for _, field := range index.Fields() {
 		// exclude internal fields (starting with "_")
@@ -288,6 +291,54 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 			}
 		} else {
 			fields = append(fields, field)
+		}
+	}
+
+	if req.Query != "" {
+		// Execute the query and use it to select columns.
+		if req.Columns != nil && req.Columns.Type != nil {
+			l := 0
+			switch v := req.Columns.Type.(type) {
+			case *pb.IdsOrKeys_Ids:
+				l = len(v.Ids.Vals)
+			case *pb.IdsOrKeys_Keys:
+				l = len(v.Keys.Vals)
+			}
+			if l > 0 {
+				return errors.New("found a list of columns in a query-based inspect call")
+			}
+		}
+		query := pilosa.QueryRequest{
+			Index: req.Index,
+			Query: req.Query,
+		}
+		resp, err := h.api.Query(stream.Context(), &query)
+		if err != nil {
+			return errors.Wrapf(err, "querying for columns with %q", req.Query)
+		}
+		if len(resp.Results) != 1 {
+			return errors.Errorf("expected 1 result for inspect query; got %d from %q", len(resp.Results), req.Query)
+		}
+		row, ok := resp.Results[0].(*pilosa.Row)
+		if !ok {
+			return errors.Errorf("incorrect query result type %T for query %q", resp.Results[0], req.Query)
+		}
+		if len(row.Keys) > 0 {
+			req.Columns = &pb.IdsOrKeys{
+				Type: &pb.IdsOrKeys_Keys{
+					Keys: &pb.StringArray{Vals: row.Keys},
+				},
+			}
+		} else {
+			req.Columns = &pb.IdsOrKeys{
+				Type: &pb.IdsOrKeys_Ids{
+					Ids: &pb.Uint64Array{Vals: row.Columns()},
+				},
+			}
+		}
+		if !row.Any() {
+			// No columns were matched.
+			return nil
 		}
 	}
 
@@ -440,7 +491,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 								}
 							}
 						} else {
-							value, exists, err = field.StringValue(col)
+							value, exists, err = field.StringValue(tx, col)
 							if err != nil {
 								return errors.Wrap(err, "getting string field value for column")
 							}
@@ -689,7 +740,7 @@ func (h *GRPCHandler) Inspect(req *pb.InspectRequest, stream pb.Pilosa_InspectSe
 								}
 							}
 						} else {
-							value, exists, err = field.StringValue(id)
+							value, exists, err = field.StringValue(tx, id)
 							if err != nil {
 								return errors.Wrap(err, "getting string field value for column")
 							}

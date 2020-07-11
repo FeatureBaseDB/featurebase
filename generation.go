@@ -20,7 +20,7 @@ import (
 	"io/ioutil"
 	"os"
 	"runtime"
-	"runtime/debug"
+	// "runtime/debug"
 	"sync"
 	"syscall"
 	"time"
@@ -169,29 +169,29 @@ func (m *mmapGeneration) Transaction(fileP *io.Writer, fn func() error) (transac
 	}
 	// We are done locking the generation itself for now.
 	m.mu.Unlock()
-	wouldPanic := debug.SetPanicOnFault(true)
-	defer func() {
-		debug.SetPanicOnFault(wouldPanic)
-		if r := recover(); r != nil {
-			if err, ok := r.(error); ok {
-				// special case: if we caught a page fault, we diagnose that directly. sadly,
-				// we can't see the actual values that were used to generate this, probably.
-				if err.Error() == "runtime error: invalid memory address or nil pointer dereference" {
-					if transactionErr == nil {
-						transactionErr = errors.New("invalid memory access during transaction")
-					} else {
-						transactionErr = fmt.Errorf("invalid memory access during transaction, previous error %v", transactionErr)
-					}
-					return
-				}
-			}
-			if transactionErr == nil {
-				transactionErr = fmt.Errorf("panic during transaction: %v", r)
-			} else {
-				transactionErr = fmt.Errorf("panic during erroring transaction: panic %v, previous error %v", r, transactionErr)
-			}
-		}
-	}()
+	// wouldPanic := debug.SetPanicOnFault(true)
+	//	defer func() {
+	//		debug.SetPanicOnFault(wouldPanic)
+	//		if r := recover(); r != nil {
+	//			if err, ok := r.(error); ok {
+	//				// special case: if we caught a page fault, we diagnose that directly. sadly,
+	//				// we can't see the actual values that were used to generate this, probably.
+	//				if err.Error() == "runtime error: invalid memory address or nil pointer dereference" {
+	//					if transactionErr == nil {
+	//						transactionErr = errors.New("invalid memory access during transaction")
+	//					} else {
+	//						transactionErr = fmt.Errorf("invalid memory access during transaction, previous error %v", transactionErr)
+	//					}
+	//					return
+	//				}
+	//			}
+	//			if transactionErr == nil {
+	//				transactionErr = fmt.Errorf("panic during transaction: %v", r)
+	//			} else {
+	//				transactionErr = fmt.Errorf("panic during erroring transaction: panic %v, previous error %v", r, transactionErr)
+	//			}
+	//		}
+	//	}()
 	return fn()
 }
 
@@ -263,7 +263,7 @@ func (m *mmapGeneration) openFile() (shouldClose bool, err error) {
 	}
 	// do we actually want this in every openFile? I don't know.
 	if err := syscall.Flock(int(m.file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		m.file.Close()
+		_ = syswrap.CloseFile(m.file)
 		m.file = nil
 		return false, fmt.Errorf("flock: %s", err)
 	}
@@ -333,6 +333,7 @@ func newGeneration(existing generation, path string, readData bool, setup func([
 	m := mmapGeneration{path: path, logger: logger}
 	if existing != nil {
 		m.generation = existing.Generation() + 1
+		m.retries = existing.(*mmapGeneration).retries
 		// we might keep a previous generation around just for its generation count.
 		if !existing.Dead() {
 			defer existing.Done()

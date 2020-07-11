@@ -755,7 +755,7 @@ func (c *cluster) fragsByHost(idx *Index) fragsByHost {
 // for the given set of shards with data.
 func (c *cluster) fragCombos(idx string, availableShards *roaring.Bitmap, fieldViews viewsByField) fragsByHost {
 	t := make(fragsByHost)
-	availableShards.ForEach(func(i uint64) {
+	_ = availableShards.ForEach(func(i uint64) error {
 		nodes := c.shardNodes(idx, i)
 		for _, n := range nodes {
 			// for each field/view combination:
@@ -765,6 +765,7 @@ func (c *cluster) fragCombos(idx string, availableShards *roaring.Bitmap, fieldV
 				}
 			}
 		}
+		return nil
 	})
 	return t
 }
@@ -1060,7 +1061,7 @@ func (c *cluster) unprotectedOwnsPartition(nodeID string, partition int) bool {
 // containsShards is like OwnsShards, but it includes replicas.
 func (c *cluster) containsShards(index string, availableShards *roaring.Bitmap, node *Node) []uint64 {
 	var shards []uint64
-	availableShards.ForEach(func(i uint64) {
+	_ = availableShards.ForEach(func(i uint64) error {
 		p := c.shardPartition(index, i)
 		// Determine the nodes for partition.
 		nodes := c.partitionNodes(p)
@@ -1069,6 +1070,7 @@ func (c *cluster) containsShards(index string, availableShards *roaring.Bitmap, 
 				shards = append(shards, i)
 			}
 		}
+		return nil
 	})
 	return shards
 }
@@ -2036,7 +2038,9 @@ func (c *cluster) nodeJoin(node *Node) error {
 			if c.haveTopologyAgreement() {
 				return c.unprotectedSetStateAndBroadcast(ClusterStateNormal)
 			}
-			return nil
+			// This lets the remote node to proceed with opening its holder,
+			// instead of waiting in DOWN state because cluster is in STARTING state.
+			return c.sendTo(node, c.unprotectedStatus())
 		} else if err != nil {
 			return errors.Wrap(err, "checking if holder has data")
 		}

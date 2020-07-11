@@ -68,32 +68,6 @@ func (btc *bTreeContainers) Put(key uint64, c *Container) {
 	btc.tree.Set(key, c)
 }
 
-func (u updater) update(oldV *Container, exists bool) (*Container, bool) {
-	// update the existing container
-	if exists {
-		oldV = oldV.UpdateOrMake(u.typ, u.n, u.mapped)
-		return oldV, true
-	}
-	cont := NewContainer()
-	cont.setTyp(u.typ)
-	cont.setN(u.n)
-	cont.setMapped(u.mapped)
-	return cont, true
-}
-
-// this struct is added to prevent the closure locals from being escaped out to the heap
-type updater struct {
-	key    uint64
-	n      int32
-	typ    byte
-	mapped bool
-}
-
-func (btc *bTreeContainers) PutContainerValues(key uint64, typ byte, n int, mapped bool) {
-	a := updater{key, int32(n), typ, mapped}
-	btc.tree.Put(key, a.update)
-}
-
 func (btc *bTreeContainers) Remove(key uint64) {
 	btc.tree.Delete(key)
 	if key == btc.lastKey {

@@ -399,6 +399,7 @@ func BenchmarkBtreeSetSeq1e6(b *testing.B) {
 
 func benchmarkSetSeq(b *testing.B, n int) {
 	b.ResetTimer()
+	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 		r := treeNew()
@@ -436,6 +437,7 @@ func benchmarkGetSeq(b *testing.B, n int) {
 	}
 	debug.FreeOSMemory()
 	b.ResetTimer()
+	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		for j := 0; j < n; j++ {
 			r.Get(uint64(j))
@@ -468,6 +470,7 @@ func benchmarkSetRnd(b *testing.B, n int) {
 		a[i] = rng.Next()
 	}
 	b.ResetTimer()
+	b.ReportAllocs()
 	c := getDummyC(1)
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
@@ -512,6 +515,7 @@ func benchmarkGetRnd(b *testing.B, n int) {
 	}
 	debug.FreeOSMemory()
 	b.ResetTimer()
+	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		for _, v := range a {
 			r.Get(uint64(v))

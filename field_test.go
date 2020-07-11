@@ -35,16 +35,17 @@ func TestField_SetValue(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		tx := &pilosa.RoaringTx{Field: f.Field}
 
 		// Set value on field.
-		if changed, err := f.SetValue(100, 21); err != nil {
+		if changed, err := f.SetValue(tx, 100, 21); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Read value.
-		if value, exists, err := f.Value(100); err != nil {
+		if value, exists, err := f.Value(tx, 100); err != nil {
 			t.Fatal(err)
 		} else if value != 21 {
 			t.Fatalf("unexpected value: %d", value)
@@ -53,7 +54,7 @@ func TestField_SetValue(t *testing.T) {
 		}
 
 		// Setting value should return no change.
-		if changed, err := f.SetValue(100, 21); err != nil {
+		if changed, err := f.SetValue(tx, 100, 21); err != nil {
 			t.Fatal(err)
 		} else if changed {
 			t.Fatal("expected no change")
@@ -68,23 +69,24 @@ func TestField_SetValue(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		tx := &pilosa.RoaringTx{Field: f.Field}
 
 		// Set value.
-		if changed, err := f.SetValue(100, 21); err != nil {
+		if changed, err := f.SetValue(tx, 100, 21); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Set different value.
-		if changed, err := f.SetValue(100, 23); err != nil {
+		if changed, err := f.SetValue(tx, 100, 23); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Read value.
-		if value, exists, err := f.Value(100); err != nil {
+		if value, exists, err := f.Value(tx, 100); err != nil {
 			t.Fatal(err)
 		} else if value != 23 {
 			t.Fatalf("unexpected value: %d", value)
@@ -101,9 +103,10 @@ func TestField_SetValue(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		tx := &pilosa.RoaringTx{Field: f.Field}
 
 		// Set value.
-		if _, err := f.SetValue(100, 21); err != pilosa.ErrBSIGroupNotFound {
+		if _, err := f.SetValue(tx, 100, 21); err != pilosa.ErrBSIGroupNotFound {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -116,9 +119,10 @@ func TestField_SetValue(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		tx := &pilosa.RoaringTx{Field: f.Field}
 
 		// Set value.
-		if _, err := f.SetValue(100, 15); err != pilosa.ErrBSIGroupValueTooLow {
+		if _, err := f.SetValue(tx, 100, 15); err != pilosa.ErrBSIGroupValueTooLow {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -131,9 +135,10 @@ func TestField_SetValue(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		tx := &pilosa.RoaringTx{Field: f.Field}
 
 		// Set value.
-		if _, err := f.SetValue(100, 31); err != pilosa.ErrBSIGroupValueTooHigh {
+		if _, err := f.SetValue(tx, 100, 31); err != pilosa.ErrBSIGroupValueTooHigh {
 			t.Fatalf("unexpected error: %s", err)
 		}
 	})
@@ -144,7 +149,7 @@ func TestField_NameRestriction(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	field, err := pilosa.NewField(path, "i", ".meta", pilosa.OptFieldTypeDefault())
+	field, err := pilosa.NewField(pilosa.NewHolder(pilosa.DefaultPartitionN), path, "i", ".meta", pilosa.OptFieldTypeDefault())
 	if field != nil {
 		t.Fatalf("unexpected field name %s", err)
 	}
@@ -177,13 +182,13 @@ func TestField_NameValidation(t *testing.T) {
 		panic(err)
 	}
 	for _, name := range validFieldNames {
-		_, err := pilosa.NewField(path, "i", name, pilosa.OptFieldTypeDefault())
+		_, err := pilosa.NewField(pilosa.NewHolder(pilosa.DefaultPartitionN), path, "i", name, pilosa.OptFieldTypeDefault())
 		if err != nil {
 			t.Fatalf("unexpected field name: %s %s", name, err)
 		}
 	}
 	for _, name := range invalidFieldNames {
-		_, err := pilosa.NewField(path, "i", name, pilosa.OptFieldTypeDefault())
+		_, err := pilosa.NewField(pilosa.NewHolder(pilosa.DefaultPartitionN), path, "i", name, pilosa.OptFieldTypeDefault())
 		if err == nil {
 			t.Fatalf("expected error on field name: %s", name)
 		}
@@ -199,11 +204,12 @@ func TestField_AvailableShards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	tx := &pilosa.RoaringTx{Field: f.Field}
 
 	// Set values on shards 0 & 2, and verify.
-	if _, err := f.SetBit(0, 100, nil); err != nil {
+	if _, err := f.SetBit(tx, 0, 100, nil); err != nil {
 		t.Fatal(err)
-	} else if _, err := f.SetBit(0, ShardWidth*2, nil); err != nil {
+	} else if _, err := f.SetBit(tx, 0, ShardWidth*2, nil); err != nil {
 		t.Fatal(err)
 	} else if diff := cmp.Diff(f.AvailableShards().Slice(), []uint64{0, 2}); diff != "" {
 		t.Fatal(diff)
@@ -238,16 +244,17 @@ func TestField_ClearValue(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		tx := &pilosa.RoaringTx{Field: f.Field}
 
 		// Set value on field.
-		if changed, err := f.SetValue(100, 21); err != nil {
+		if changed, err := f.SetValue(tx, 100, 21); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal("expected change")
 		}
 
 		// Read value.
-		if value, exists, err := f.Value(100); err != nil {
+		if value, exists, err := f.Value(tx, 100); err != nil {
 			t.Fatal(err)
 		} else if value != 21 {
 			t.Fatalf("unexpected value: %d", value)
@@ -255,14 +262,14 @@ func TestField_ClearValue(t *testing.T) {
 			t.Fatal("expected value to exist")
 		}
 
-		if changed, err := f.ClearValue(100); err != nil {
+		if changed, err := f.ClearValue(tx, 100); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal(err)
 		}
 
 		// Read value.
-		if _, exists, err := f.Value(100); err != nil {
+		if _, exists, err := f.Value(tx, 100); err != nil {
 			t.Fatal(err)
 		} else if exists {
 			t.Fatal("expected value to not exist")

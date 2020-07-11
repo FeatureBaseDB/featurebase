@@ -34,7 +34,7 @@ func mustOpenView(index, field, name string) *view {
 		CacheSize: DefaultCacheSize,
 	}
 
-	v := newView(path, index, field, name, fo)
+	v := newView(NewHolder(DefaultPartitionN), path, index, field, name, fo)
 	if err := v.open(); err != nil {
 		panic(err)
 	}

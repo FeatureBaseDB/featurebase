@@ -57,6 +57,7 @@ message InspectRequest {
   repeated string filterFields = 3;
   uint64 limit = 4;
   uint64 offset = 5;
+  string query = 6;
 }
 
 message Uint64Array {

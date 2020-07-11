@@ -361,7 +361,7 @@ func TestAPI_ImportValue(t *testing.T) {
 		if err != nil {
 			t.Fatalf("creating index: %v", err)
 		}
-		fld, err := m1.API.CreateField(ctx, index, field, pilosa.OptFieldTypeDecimal(1))
+		_, err = m1.API.CreateField(ctx, index, field, pilosa.OptFieldTypeDecimal(1))
 		if err != nil {
 			t.Fatalf("creating field: %v", err)
 		}
@@ -386,65 +386,13 @@ func TestAPI_ImportValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		pql := fmt.Sprintf("Row(%s>6)", field)
+		query := fmt.Sprintf("Row(%s>6)", field)
 
 		// Query node0.
-		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: pql}); err != nil {
+		if res, err := m0.API.Query(ctx, &pilosa.QueryRequest{Index: index, Query: query}); err != nil {
 			t.Fatal(err)
 		} else if ids := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(ids, colIDs[6:]) {
 			t.Fatalf("unexpected column keys: %+v", ids)
-		}
-
-		sum, count, err := fld.FloatSum(nil, field)
-		if err != nil {
-			t.Fatalf("getting floatsum: %v", err)
-		} else if sum != 0.1+1.1+2.1+3.1+4.1+5.1+6.1+7.1+8.1+9.1 {
-			t.Fatalf("unexpected sum: %f", sum)
-		} else if count != 10 {
-			t.Fatalf("unexpected count: %d", count)
-		}
-
-		min, count, err := fld.FloatMin(nil, field)
-		if err != nil {
-			t.Fatalf("getting floatmin: %v", err)
-		} else if min != 0.1 {
-			t.Fatalf("unexpected min: %f", min)
-		} else if count != 1 {
-			t.Fatalf("unexpected count: %d", count)
-		}
-
-		max, count, err := fld.FloatMax(nil, field)
-		if err != nil {
-			t.Fatalf("getting floatmax: %v", err)
-		} else if max != 9.1 {
-			t.Fatalf("unexpected max: %f", max)
-		} else if count != 1 {
-			t.Fatalf("unexpected count: %d", count)
-		}
-
-		val, exists, err := fld.FloatValue(1)
-		if err != nil {
-			t.Fatalf("unepxected err getting floatvalue")
-		} else if !exists {
-			t.Fatalf("column 1 should exist")
-		} else if val != 1.1 {
-			t.Fatalf("unexpected floatvalue %f", val)
-		}
-
-		changed, err := fld.SetFloatValue(11, 11.1)
-		if err != nil {
-			t.Fatalf("setting float value: %v", err)
-		} else if !changed {
-			t.Fatalf("expected change")
-		}
-
-		val, exists, err = fld.FloatValue(11)
-		if err != nil {
-			t.Fatalf("getting float val: %v", err)
-		} else if !exists {
-			t.Fatalf("should exist")
-		} else if val != 11.1 {
-			t.Fatalf("unexpected val: %f", 11.1)
 		}
 	})
 

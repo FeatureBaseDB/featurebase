@@ -133,6 +133,71 @@ func TestExecutor_TranslateGroupByCall(t *testing.T) {
 	}
 }
 
+func TestExecutor_TranslateRowsOnBool(t *testing.T) {
+	holder := NewHolder(DefaultPartitionN)
+	defer holder.Close()
+
+	tx, err := holder.Begin(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	e := &executor{
+		Holder:  holder,
+		Cluster: NewTestCluster(1),
+	}
+	e.Holder.Path, _ = ioutil.TempDir(*TempDir, "")
+	if err := e.Holder.Open(); err != nil {
+		t.Fatalf("opening holder: %v", err)
+	}
+
+	idx, err := e.Holder.CreateIndex("i", IndexOptions{})
+	if err != nil {
+		t.Fatalf("creating index: %v", err)
+	}
+
+	fb, errb := idx.CreateField("b", OptFieldTypeBool())
+	_, errbk := idx.CreateField("bk", OptFieldTypeBool(), OptFieldKeys())
+	if errb != nil || errbk != nil {
+		t.Fatalf("creating fields %v, %v", errb, errbk)
+	}
+
+	_, err1 := fb.SetBit(tx, 1, 1, nil)
+	_, err2 := fb.SetBit(tx, 2, 2, nil)
+	_, err3 := fb.SetBit(tx, 3, 3, nil)
+	if err1 != nil || err2 != nil || err3 != nil {
+		t.Fatalf("setting bit %v, %v, %v", err1, err2, err3)
+	}
+
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		pql string
+	}{
+		{pql: "Rows(b)"},
+		{pql: "GroupBy(Rows(b))"},
+		{pql: "Set(4, b=true)"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.pql, func(t *testing.T) {
+			query, err := pql.ParseString(test.pql)
+			if err != nil {
+				t.Fatalf("parsing query: %v", err)
+			}
+
+			c := query.Calls[0]
+			err = e.translateCall(context.Background(), "i", c, make(map[string]map[string]uint64))
+			if err != nil {
+				t.Fatalf("translating call: %v", err)
+			}
+		})
+	}
+}
+
 func isInt(a interface{}) bool {
 	switch a.(type) {
 	case int, int64, uint, uint64:
@@ -437,5 +502,73 @@ func TestValCountComparisons(t *testing.T) {
 				t.Fatalf("smaller failed, expected:\n%+v\ngot:\n%+v", test.expSmaller, gotSmaller)
 			}
 		})
+	}
+}
+
+func TestToNegInt64(t *testing.T) {
+	tests := []struct {
+		u64      uint64
+		i64      int64
+		overflow bool
+	}{
+		{
+			u64: uint64(1 << 63),
+			i64: int64(-1 << 63),
+		},
+		{
+			u64: uint64(1<<63) - 1,
+			i64: int64(-1<<63) + 1,
+		},
+		{
+			u64:      uint64(1<<63) + 1,
+			overflow: true,
+		},
+	}
+
+	for _, tc := range tests {
+		val, err := toNegInt64(tc.u64)
+		if err != nil && !tc.overflow {
+			t.Fatalf("error: %+v, expected: %+v", err, tc)
+		}
+
+		if val != tc.i64 {
+			t.Fatalf("Expected: %+v, Got: %+v", tc.i64, val)
+		}
+	}
+}
+
+func TestToInt64(t *testing.T) {
+	tests := []struct {
+		u64      uint64
+		i64      int64
+		overflow bool
+	}{
+		{
+			u64: uint64(1<<63) - 1,
+			i64: 1<<63 - 1,
+		},
+		{
+			u64: uint64(0),
+			i64: 0,
+		},
+		{
+			u64:      uint64(1 << 63),
+			overflow: true,
+		},
+		{
+			u64:      1<<64 - 1,
+			overflow: true,
+		},
+	}
+
+	for _, tc := range tests {
+		val, err := toInt64(tc.u64)
+		if err != nil && !tc.overflow {
+			t.Fatalf("error: %+v, expected: %+v", err, tc)
+		}
+
+		if val != tc.i64 {
+			t.Fatalf("Expected: %+v, Got: %+v", tc.i64, val)
+		}
 	}
 }

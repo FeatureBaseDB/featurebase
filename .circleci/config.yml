@@ -13,55 +13,53 @@ executors:
       - image: circleci/golang:<< parameters.version >>
     resource_class: << parameters.resource_class >>
     working_directory: /go/src/github.com/pilosa/pilosa
-    environment:
-      GO111MODULE: "on" # TODO: Only needed for Go <1.13, remove when dropping support for 1.11/1.12.
 
 commands:
   add-github-auth:
     steps:
       - run: git config --global url."https://moleculacorp:${GITHUB_PERSONAL_ACCESS_TOKEN}@github.com".insteadOf "https://github.com"
+  restore-mod-cache:
+    steps:
+      - restore_cache:
+          key: mod-cache-{{ checksum "go.sum" }}
+  save-mod-cache:
+    steps:
+      - save_cache:
+          key: mod-cache-{{ checksum "go.sum" }}
+          paths:
+            - /go/pkg/mod/
+  checkout-plus:
+    steps:
+      - add-github-auth
+      - checkout
+      - restore-mod-cache
 
 jobs:
   setup:
     executor:
       name: golang
     steps:
-      - add-github-auth
-      - checkout
-      - restore_cache:
-          keys:
-            - mod-cache-{{ checksum "go.sum" }}
-      - run: "go mod download"
-      - save_cache:
-          key: mod-cache-{{ checksum "go.sum" }}
-          paths:
-            - /go/pkg/mod/
-      - persist_to_workspace:
-          root: .
-          paths: "*"
+      - checkout-plus
+      - run: go mod download
+      - save-mod-cache
   check-license-headers:
     executor:
       name: golang
     steps:
-      - attach_workspace:
-          at: .
+      - checkout-plus
       - run: make check-license-headers
   linter:
     executor:
       name: golang
     steps:
-      - attach_workspace:
-          at: .
-      - add-github-auth
+      - checkout-plus
       - run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sudo sh -s -- -b /usr/local/bin v1.23.8
       - run: make golangci-lint
   test-build-arm:
     executor:
       name: golang
     steps:
-      - attach_workspace:
-          at: .
-      - add-github-auth
+      - checkout-plus
       - run: make build GOOS=linux GOARCH=arm GOARM=5
       - run: make build GOOS=linux GOARCH=arm GOARM=6
       - run: make build GOOS=linux GOARCH=arm GOARM=7
@@ -91,9 +89,7 @@ jobs:
       version: << parameters.golang_version >>
       resource_class: << parameters.resource_class >>
     steps:
-      - attach_workspace:
-          at: .
-      - add-github-auth
+      - checkout-plus
       - run: sudo apt-get install lsof
       - run:
           command: make << parameters.test_make_target >> SHARD_WIDTH=<< parameters.shard_width >> GOARCH=<< parameters.goarch >>
@@ -102,18 +98,14 @@ jobs:
     executor:
       name: golang
     steps:
-      - attach_workspace:
-          at: .
-      - add-github-auth
+      - checkout-plus
       - setup_remote_docker
       - run: make clustertests-build
   prerelease:
     executor:
       name: golang
     steps:
-      - attach_workspace:
-          at: .
-      - add-github-auth
+      - checkout-plus
       - run: make prerelease
       - store_artifacts:
           path: build
@@ -124,6 +116,7 @@ jobs:
     executor:
       name: golang
     steps:
+      - checkout-plus
       - attach_workspace:
           at: .
       - run: make release
@@ -136,50 +129,39 @@ jobs:
     docker:
       - image: circleci/python:2.7-jessie
     steps:
+      - checkout-plus
       - attach_workspace:
           at: .
       - run: sudo pip install awscli
       - run: make prerelease-upload
-  dockerhub-upload:
-    parameters:
-      tag_branch:
-        type: boolean
-        default: true
-      tag_tag:
-        type: boolean
-        default: false
-      tag_latest:
-        type: boolean
-        default: false
-      target_name:
-        type: string
-        default: moleculacorp/pilosa
+  dockerhub-upload-unstable:
     executor:
       name: golang
     steps:
-      - attach_workspace:
-          at: .
-      - add-github-auth
+      - checkout-plus
       - setup_remote_docker
       - run: make docker
       - run: docker login -u $DOCKER_USER -p $DOCKER_PASS
-      - when:
-          condition: << parameters.tag_branch >>
-          steps:
-            - run: make docker-tag-push DOCKER_TARGET=<< parameters.target_name >>:<< pipeline.git.branch >>
-      - when:
-          condition: << parameters.tag_tag >>
-          steps:
-            - run: make docker-tag-push DOCKER_TARGET=<< parameters.target_name >>:$(git describe --tags)
-      - when:
-          condition: << parameters.tag_latest >>
-          steps:
-            - run: make docker-tag-push DOCKER_TARGET=<< parameters.target_name >>:latest
-        
+      - run: make docker-tag-push DOCKER_TARGET=moleculacorp/pilosa:<< pipeline.git.branch >>
+  dockerhub-upload-stable:
+    executor:
+      name: golang
+    steps:
+      - checkout-plus
+      - setup_remote_docker
+      - run: make docker
+      - run: docker login -u $DOCKER_USER -p $DOCKER_PASS
+      - run: make docker-tag-push DOCKER_TARGET=moleculacorp/pilosa:<< pipeline.git.tag >>
+      - run: make docker-tag-push DOCKER_TARGET=moleculacorp/pilosa:latest
+
 workflows:
   build:
     jobs:
-      - setup
+      - setup:
+          context: molecula
+          filters:
+            tags:
+              only: /^v.*/
       - linter:
           requires:
             - setup
@@ -193,9 +175,12 @@ workflows:
           name: test-golang-<< matrix.golang_version >>
           matrix:
             parameters:
-              golang_version: ["1.14", "1.13", "1.12", "1.11"]
+              golang_version: ["1.14", "1.13"]
           requires:
             - setup
+          filters:
+            tags:
+              only: /^v.*/
       - test:
           name: test-race
           test_make_target: test-race
@@ -220,27 +205,17 @@ workflows:
             - linter
             - check-license-headers
             - test-golang-1.14
-      - dockerhub-upload:
-          name: dockerhub-upload-unstable
-          tag_branch: true
-          tag_tag: false
-          tag_latest: false
+      - dockerhub-upload-unstable:
+          context: molecula
           requires:
-            - linter
-            - check-license-headers
-            - test-golang-1.14
+            - setup
           filters:
             branches:
               only: master
-      - dockerhub-upload:
-          name: dockerhub-upload-stable
-          tag_branch: true
-          tag_tag: true
-          tag_latest: true
+      - dockerhub-upload-stable:
+          context: molecula
           requires:
-            - linter
-            - check-license-headers
-            - test-golang-1.14
+            - setup
           filters:
             tags:
               only: /^v.*/

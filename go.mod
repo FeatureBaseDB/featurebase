@@ -6,8 +6,10 @@ require (
 	github.com/CAFxX/gcnotifier v0.0.0-20190112062741-224a280d589d
 	github.com/DataDog/datadog-go v0.0.0-20180822151419-281ae9f2d895
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
+	github.com/benbjohnson/immutable v0.2.0
 	github.com/boltdb/bolt v1.3.1
 	github.com/cespare/xxhash v1.1.0
+	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-ole/go-ole v1.2.4 // indirect

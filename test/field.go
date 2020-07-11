@@ -33,7 +33,7 @@ func newField(opts pilosa.FieldOption) *Field {
 	if err != nil {
 		panic(err)
 	}
-	field, err := pilosa.NewField(path, "i", "f", opts)
+	field, err := pilosa.NewField(pilosa.NewHolder(pilosa.DefaultPartitionN), path, "i", "f", opts)
 	if err != nil {
 		panic(err)
 	}
@@ -63,7 +63,7 @@ func (f *Field) reopen() error {
 	}
 
 	path, index, name := f.Path(), f.Index(), f.Name()
-	f.Field, err = pilosa.NewField(path, index, name, pilosa.OptFieldTypeDefault())
+	f.Field, err = pilosa.NewField(pilosa.NewHolder(pilosa.DefaultPartitionN), path, index, name, pilosa.OptFieldTypeDefault())
 	if err != nil {
 		return err
 	}

@@ -21,7 +21,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -77,9 +79,8 @@ type Holder struct {
 	// The interval at which the cached row ids are persisted to disk.
 	cacheFlushInterval time.Duration
 
-	Logger logger.Logger
-
-	snapshotQueue snapshotQueue
+	Logger        logger.Logger
+	SnapshotQueue SnapshotQueue
 
 	// Instantiates new translation stores
 	OpenTranslateStore  OpenTranslateStoreFunc
@@ -102,6 +103,18 @@ type Holder struct {
 	// needs to be queued and completed after all indexes
 	// have opened.
 	opening bool
+
+	Opts HolderOpts
+}
+
+type HolderOpts struct {
+	// ReadOnly indicates that this holder's contents should not produce
+	// disk writes under any circumstances. It must be set before Open
+	// is called, and changing it is not supported.
+	ReadOnly bool
+	// If Inspect is set, we'll try to obtain additional information
+	// about fragments when opening them.
+	Inspect bool
 }
 
 func (h *Holder) StartTransaction(ctx context.Context, id string, timeout time.Duration, exclusive bool) (*Transaction, error) {
@@ -169,7 +182,283 @@ func NewHolder(partitionN int) *Holder {
 		translationSyncer: NopTranslationSyncer,
 
 		Logger: logger.NopLogger,
+
+		SnapshotQueue: defaultSnapshotQueue,
 	}
+}
+
+type HolderInfo struct {
+	FragmentInfo  map[string]FragmentInfo
+	FragmentNames []string
+}
+
+type regexpList []*regexp.Regexp
+
+func newRegexpList(regexes string) (results regexpList, err error) {
+	if regexes == "" {
+		return nil, nil
+	}
+	for _, sub := range strings.Split(regexes, ",") {
+		re, err := regexp.Compile(sub)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, re)
+	}
+	return results, nil
+}
+
+func (rl regexpList) Match(haystack string) bool {
+	if rl == nil {
+		return true
+	}
+	for _, re := range rl {
+		if re.MatchString(haystack) {
+			return true
+		}
+	}
+	return false
+}
+
+// shardRange represents a series of shards
+type shardRange struct {
+	min, max uint64
+}
+
+type shardRangeList []shardRange
+
+func newShardRangeList(shards string) (results shardRangeList, err error) {
+	if shards == "" {
+		return nil, nil
+	}
+	for _, sub := range strings.Split(shards, ",") {
+		var sr shardRange
+		minMax := strings.Split(sub, "-")
+		if len(minMax) > 2 {
+			return nil, fmt.Errorf("invalid range %q", sub)
+		}
+		sr.min, err = strconv.ParseUint(minMax[0], 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		sr.max = sr.min
+		if len(minMax) == 2 {
+			sr.max, err = strconv.ParseUint(minMax[0], 10, 64)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if sr.max < sr.min {
+			return nil, fmt.Errorf("invalid range %q: max < min", sub)
+		}
+		results = append(results, sr)
+	}
+	return results, nil
+}
+
+func (sl shardRangeList) Match(shard uint64) bool {
+	if sl == nil {
+		return true
+	}
+	for _, sr := range sl {
+		if shard >= sr.min && shard <= sr.max {
+			return true
+		}
+	}
+	return false
+}
+
+// HolderFilter represents something that potentially filters out
+// parts of a holder, indicating whether or not to process them,
+// or recurse into them. It is permissible to recurse a thing
+// without processing it, or process it without recursing it.
+// For instance, something looking to accumulate statistics
+// about views might return (true, false) from CheckView,
+// while a fragment scanning operation would return (false, true)
+// from everything above CheckFrag.
+type HolderFilter interface {
+	CheckIndex(iname string) (process bool, recurse bool)
+	CheckField(iname, fname string) (process bool, recurse bool)
+	CheckView(iname, fname, vname string) (process bool, recurse bool)
+	CheckFragment(iname, fname, vname string, shard uint64) (process bool)
+}
+
+// HolderFilterAll is a placeholder type which always returns true for the
+// check functions. You can embed it to make a HolderOperator which processes
+// everything.
+type HolderFilterAll struct{}
+
+func (HolderFilterAll) CheckIndex(string) (bool, bool) {
+	return true, true
+}
+
+func (HolderFilterAll) CheckField(string, string) (bool, bool) {
+	return true, true
+}
+
+func (HolderFilterAll) CheckView(string, string, string) (bool, bool) {
+	return true, true
+}
+
+func (HolderFilterAll) CheckFragment(string, string, string, uint64) bool {
+	return true
+}
+
+// HolderProcessNone is a placeholder type which does nothing for the
+// process functions. You can embed it to make a HolderOperator which
+// does nothing, or embed it and provide your own ProcessFragment to
+// do just that.
+type HolderProcessNone struct{}
+
+func (HolderProcessNone) ProcessIndex(*Index) error {
+	return nil
+}
+
+func (HolderProcessNone) ProcessField(*Field) error {
+	return nil
+}
+
+func (HolderProcessNone) ProcessView(*view) error {
+	return nil
+}
+
+func (HolderProcessNone) ProcessFragment(*fragment) error {
+	return nil
+}
+
+// HolderProcess represents something that has operations which can be
+// performed on indexes, fields, views, and/or fragments.
+type HolderProcess interface {
+	ProcessIndex(*Index) error
+	ProcessField(*Field) error
+	ProcessView(*view) error
+	ProcessFragment(*fragment) error
+}
+
+// HolderOperator is both a filter and a process. This is the general
+// form of "I want to do something to some part of a holder."
+type HolderOperator interface {
+	HolderFilter
+	HolderProcess
+}
+
+var _ HolderOperator = (*holderInspector)(nil)
+
+type HolderFilterParams struct {
+	Indexes string
+	Fields  string
+	Views   string
+	Shards  string
+}
+
+type holderFilterFull struct {
+	HolderFilterParams
+	indexRegexps regexpList
+	fieldRegexps regexpList
+	viewRegexps  regexpList
+	shardRanges  shardRangeList
+}
+
+type inspectRequestFull struct {
+	HolderFilter
+	params InspectRequestParams
+}
+
+func (i *holderFilterFull) CheckIndex(iname string) (process, recurse bool) {
+	return true, i.indexRegexps.Match(iname)
+}
+
+func (i *holderFilterFull) CheckField(iname, fname string) (process, recurse bool) {
+	return true, i.fieldRegexps.Match(fname)
+}
+
+func (i *holderFilterFull) CheckView(iname, fname, vname string) (process, recurse bool) {
+	return true, i.viewRegexps.Match(vname)
+}
+
+func (i *holderFilterFull) CheckFragment(iname, fname, vname string, shard uint64) (process bool) {
+	return i.shardRanges.Match(shard)
+}
+
+func NewHolderFilter(params HolderFilterParams) (result HolderFilter, err error) {
+	filter := &holderFilterFull{
+		HolderFilterParams: params,
+	}
+	filter.indexRegexps, err = newRegexpList(params.Indexes)
+	if err != nil {
+		return nil, err
+	}
+	filter.fieldRegexps, err = newRegexpList(params.Fields)
+	if err != nil {
+		return nil, err
+	}
+	filter.viewRegexps, err = newRegexpList(params.Views)
+	if err != nil {
+		return nil, err
+	}
+	filter.shardRanges, err = newShardRangeList(params.Shards)
+	if err != nil {
+		return nil, err
+	}
+	return filter, nil
+}
+
+func expandInspectRequest(req *InspectRequest) (*inspectRequestFull, error) {
+	filter, err := NewHolderFilter(req.HolderFilterParams)
+	if err != nil {
+		return nil, err
+	}
+	irf := &inspectRequestFull{
+		HolderFilter: filter,
+		params:       req.InspectRequestParams,
+	}
+	return irf, nil
+}
+
+type holderInspector struct {
+	*inspectRequestFull
+	pathParts [3]string
+	path      string
+	hi        *HolderInfo
+}
+
+func (h *holderInspector) ProcessIndex(i *Index) error {
+	h.pathParts[0] = i.name
+	return nil
+}
+
+func (h *holderInspector) ProcessField(f *Field) error {
+	h.pathParts[1] = f.name
+	return nil
+}
+
+func (h *holderInspector) ProcessView(v *view) error {
+	h.pathParts[2] = v.name
+	h.path = strings.Join(h.pathParts[:], "/")
+	return nil
+}
+
+func (h *holderInspector) ProcessFragment(f *fragment) error {
+	path := h.path + "/" + strconv.FormatUint(f.shard, 10)
+	h.hi.FragmentInfo[path] = f.inspect(h.inspectRequestFull.params)
+	h.hi.FragmentNames = append(h.hi.FragmentNames, path)
+	return nil
+}
+
+func (h *Holder) Inspect(ctx context.Context, req *InspectRequest) (*HolderInfo, error) {
+	fullReq, err := expandInspectRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	inspector := &holderInspector{
+		inspectRequestFull: fullReq,
+		hi: &HolderInfo{
+			FragmentInfo: make(map[string]FragmentInfo),
+		},
+	}
+	err = h.Process(ctx, inspector)
+	sort.Strings(inspector.hi.FragmentNames)
+	return inspector.hi, err
 }
 
 // Open initializes the root data directory for the holder.
@@ -212,11 +501,6 @@ func (h *Holder) Open() error {
 	if err != nil {
 		return errors.Wrap(err, "reading directory")
 	}
-
-	// Run snapshots asynchronously. The snapshotQueue will have a background
-	// task associated with it which flushes it and waits until this channel
-	// is closed, so we should always close this channel when done.
-	h.snapshotQueue = newSnapshotQueue(10, 2, h.Logger)
 
 	for _, fi := range fis {
 		// Skip files or hidden directories.
@@ -261,16 +545,23 @@ func (h *Holder) Open() error {
 
 	h.Logger.Printf("open holder: complete")
 
-	// Periodically flush cache.
-	h.wg.Add(1)
-	go func() { defer h.wg.Done(); h.monitorCacheFlush() }()
-
 	h.Stats.Open()
-	h.snapshotQueue.ScanHolder(h)
 
 	h.opened.Close()
 
 	return nil
+}
+
+// Activate runs the background tasks relevant to keeping a holder in a stable
+// state, such as scanning it for needed snapshots, or flushing caches. This
+// is separate from opening because, while a server would nearly always want
+// to do this, other use cases (like consistency checks of a data directory)
+// need to avoid it even getting started.
+func (h *Holder) Activate() {
+	// Periodically flush cache.
+	h.wg.Add(2)
+	go func() { defer h.wg.Done(); h.monitorCacheFlush() }()
+	go func() { defer h.wg.Done(); h.SnapshotQueue.ScanHolder(h, h.closing) }()
 }
 
 // checkForeignIndex is a check before applying a foreign
@@ -313,10 +604,6 @@ func (h *Holder) Close() error {
 			return errors.Wrap(err, "closing index")
 		}
 	}
-	if h.snapshotQueue != nil {
-		h.snapshotQueue.Stop()
-		h.snapshotQueue = nil
-	}
 
 	// Reset opened in case Holder needs to be reopened.
 	h.opened.mu.Lock()
@@ -324,6 +611,11 @@ func (h *Holder) Close() error {
 	h.opened.mu.Unlock()
 
 	return nil
+}
+
+// Begin starts a transaction on the holder.
+func (h *Holder) Begin(writable bool) (Tx, error) {
+	return NewMultiTx(writable, h), nil
 }
 
 // HasData returns true if Holder contains at least one index.
@@ -587,19 +879,16 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 }
 
 func (h *Holder) newIndex(path, name string) (*Index, error) {
-	index, err := NewIndex(path, name, h.partitionN)
+	index, err := NewIndex(h, path, name)
 	if err != nil {
 		return nil, err
 	}
-	index.logger = h.Logger
 	index.Stats = h.Stats.WithTags(fmt.Sprintf("index:%s", index.Name()))
 	index.broadcaster = h.broadcaster
 	index.newAttrStore = h.NewAttrStore
 	index.columnAttrs = h.NewAttrStore(filepath.Join(index.path, ".data"))
-	index.snapshotQueue = h.snapshotQueue
 	index.OpenTranslateStore = h.OpenTranslateStore
 	index.translationSyncer = h.translationSyncer
-	index.holder = h
 	return index, nil
 }
 
@@ -1367,4 +1656,133 @@ func uint64InSlice(i uint64, s []uint64) bool {
 		}
 	}
 	return false
+}
+
+// Process loops through a holder based on the Check functions in op, calling
+// the Process functions in op when indicated.
+func (h *Holder) Process(ctx context.Context, op HolderOperator) (err error) {
+	var indexNames, fieldNames, viewNames []string
+	var fragNums []uint64
+
+	h.mu.Lock()
+	for indexName := range h.indexes {
+		indexNames = append(indexNames, indexName)
+	}
+	h.mu.Unlock()
+	for _, indexName := range indexNames {
+		if err = ctx.Err(); err != nil {
+			return err
+		}
+		process, recurse := op.CheckIndex(indexName)
+		if !process && !recurse {
+			continue
+		}
+		h.mu.Lock()
+		index := h.indexes[indexName]
+		h.mu.Unlock()
+		if index == nil {
+			continue
+		}
+		if err = ctx.Err(); err != nil {
+			return err
+		}
+		if process {
+			err = op.ProcessIndex(index)
+			if err != nil {
+				return err
+			}
+		}
+		if !recurse {
+			continue
+		}
+		fieldNames = fieldNames[:0]
+		index.mu.Lock()
+		for fieldName := range index.fields {
+			fieldNames = append(fieldNames, fieldName)
+		}
+		index.mu.Unlock()
+		for _, fieldName := range fieldNames {
+			if err = ctx.Err(); err != nil {
+				return err
+			}
+			process, recurse := op.CheckField(indexName, fieldName)
+			if !process && !recurse {
+				continue
+			}
+			index.mu.Lock()
+			field := index.fields[fieldName]
+			index.mu.Unlock()
+			if field == nil {
+				continue
+			}
+			if err = ctx.Err(); err != nil {
+				return err
+			}
+			if process {
+				err = op.ProcessField(field)
+				if err != nil {
+					return err
+				}
+			}
+			if !recurse {
+				continue
+			}
+			viewNames = viewNames[:0]
+			field.mu.Lock()
+			for viewName := range field.viewMap {
+				viewNames = append(viewNames, viewName)
+			}
+			field.mu.Unlock()
+			for _, viewName := range viewNames {
+				if err = ctx.Err(); err != nil {
+					return err
+				}
+				process, recurse := op.CheckView(indexName, fieldName, viewName)
+				if !process && !recurse {
+					continue
+				}
+				field.mu.Lock()
+				view := field.viewMap[viewName]
+				field.mu.Unlock()
+				if view == nil {
+					continue
+				}
+				if err = ctx.Err(); err != nil {
+					return err
+				}
+				if process {
+					err = op.ProcessView(view)
+					if err != nil {
+						return err
+					}
+				}
+				if !recurse {
+					continue
+				}
+				fragNums := fragNums[:0]
+				view.mu.Lock()
+				for fragNum := range view.fragments {
+					fragNums = append(fragNums, fragNum)
+				}
+				view.mu.Unlock()
+				for _, fragNum := range fragNums {
+					if err = ctx.Err(); err != nil {
+						return err
+					}
+					process := op.CheckFragment(indexName, fieldName, viewName, fragNum)
+					if !process {
+						continue
+					}
+					view.mu.Lock()
+					frag := view.fragments[fragNum]
+					view.mu.Unlock()
+					err = op.ProcessFragment(frag)
+					if err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	return nil
 }

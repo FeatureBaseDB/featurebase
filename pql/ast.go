@@ -384,6 +384,7 @@ var callInfoByFunc = map[string]callInfo{
 			"previous": nil,
 			"from":     nil,
 			"to":       nil,
+			"like":     "",
 		},
 	},
 	"Shift": {allowUnknown: false,
@@ -391,8 +392,9 @@ var callInfoByFunc = map[string]callInfo{
 			"n": int64(0),
 		},
 	},
-	"Union": {allowUnknown: false},
-	"Xor":   {allowUnknown: false},
+	"Union":     {allowUnknown: false},
+	"UnionRows": {allowUnknown: false},
+	"Xor":       {allowUnknown: false},
 
 	// things that take _field
 	"TopN": allowUnderField,
@@ -659,6 +661,19 @@ func (c *Call) UintSliceArg(key string) ([]uint64, bool, error) {
 		return ret, true, nil
 	default:
 		return nil, true, fmt.Errorf("unexpected type %T in UintSliceArg, val %v", tval, tval)
+	}
+}
+
+func (c *Call) StringArg(key string) (string, bool, error) {
+	val, ok := c.Args[key]
+	if !ok {
+		return "", false, nil
+	}
+	switch tval := val.(type) {
+	case string:
+		return tval, true, nil
+	default:
+		return "", true, fmt.Errorf("unexpected type %T in StringArg, val %v", tval, tval)
 	}
 }
 

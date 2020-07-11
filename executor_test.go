@@ -903,8 +903,15 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		// Obtain transaction.
+		tx, err := hldr.Begin(false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = tx.Rollback() }()
+
 		f := hldr.Field("i", "f")
-		if value, exists, err := f.Value(10); err != nil {
+		if value, exists, err := f.Value(tx, 10); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
@@ -912,7 +919,7 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 			t.Fatalf("unexpected value: %v", value)
 		}
 
-		if value, exists, err := f.Value(100); err != nil {
+		if value, exists, err := f.Value(tx, 100); err != nil {
 			t.Fatal(err)
 		} else if !exists {
 			t.Fatal("expected value to exist")
@@ -3027,6 +3034,121 @@ func TestExecutor_Execute_Remote_Row(t *testing.T) {
 			test.CheckGroupBy(t, expected, results)
 		}
 	})
+
+	t.Run("Row on ints with ASSIGN condition", func(t *testing.T) {
+		_, err := c[0].API.CreateIndex(context.Background(), "intidx", pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+
+		_, err = c[0].API.CreateField(context.Background(), "intidx", "gint", pilosa.OptFieldTypeInt(-1000, 1000))
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "intidx", Query: `
+		Set(1000, gint=1)
+		Set(2000, gint=2)
+		Set(3000, gint=3)
+		`}); err != nil {
+			t.Fatalf("querying remote: %v", err)
+		}
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{
+			Index: "intidx",
+			Query: `Row(gint=2)Row(gint==1)`,
+		}); err != nil {
+			t.Fatalf("Row querying: %v", err)
+		} else {
+
+			row0, row1 := res.Results[0].(*pilosa.Row), res.Results[1].(*pilosa.Row)
+			if len(row0.Columns()) != 1 || len(row1.Columns()) != 1 {
+				t.Fatalf(`Expected: []uint64{2000} []uint64{1000}, Got: %+v %+v`, row0.Columns(), row1.Columns())
+			}
+			if row0.Columns()[0] != 2000 || row1.Columns()[0] != 1000 {
+				t.Fatalf(`Expected: []uint64{2000} []uint64{1000}, Got: %+v %+v`, row0.Columns(), row1.Columns())
+			}
+		}
+	})
+
+	t.Run("Row on decimals with ASSIGN condition", func(t *testing.T) {
+		_, err := c[0].API.CreateIndex(context.Background(), "decidx", pilosa.IndexOptions{})
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+
+		_, err = c[0].API.CreateField(context.Background(), "decidx", "fdec", pilosa.OptFieldTypeDecimal(0))
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "decidx", Query: `
+		Set(11, fdec=1.1)
+		Set(22, fdec=2.2)
+		Set(33, fdec=3.3)
+		`}); err != nil {
+			t.Fatalf("querying remote: %v", err)
+		}
+
+		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{
+			Index: "decidx",
+			Query: `Row(fdec=2.2)Row(fdec==1.1)`,
+		}); err != nil {
+			t.Fatalf("Row querying: %v", err)
+		} else {
+			row0, row1 := res.Results[0].(*pilosa.Row), res.Results[1].(*pilosa.Row)
+			if len(row0.Columns()) != 1 || len(row1.Columns()) != 1 {
+				t.Fatalf(`Expected: []uint64{22} []uint64{11}, Got: %+v %+v`, row0.Columns(), row1.Columns())
+			}
+			if row0.Columns()[0] != 22 || row1.Columns()[0] != 11 {
+				t.Fatalf(`Expected: []uint64{22} []uint64{11}, Got: %+v %+v`, row0.Columns(), row1.Columns())
+			}
+		}
+	})
+
+	t.Run("Row on foreign key with ASSIGN condition", func(t *testing.T) {
+		_, err := c[0].API.CreateIndex(context.Background(), "parent", pilosa.IndexOptions{Keys: true})
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+		_, err = c[0].API.CreateField(context.Background(), "parent", "general", pilosa.OptFieldTypeSet(pilosa.DefaultCacheType, pilosa.DefaultCacheSize))
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+		_, err = c[0].API.CreateIndex(context.Background(), "child", pilosa.IndexOptions{Keys: false})
+		if err != nil {
+			t.Fatalf("creating index: %v", err)
+		}
+		_, err = c[0].API.CreateField(context.Background(), "child", "parentid",
+			pilosa.OptFieldForeignIndex("parent"),
+			pilosa.OptFieldTypeInt(-9223372036854775808, 9223372036854775807),
+		)
+		if err != nil {
+			t.Fatalf("creating field: %v", err)
+		}
+
+		if _, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: "child", Query: `
+		Set(1, parentid="one")
+		Set(2, parentid="two")
+		Set(3, parentid="three")
+		`}); err != nil {
+			t.Fatalf("querying remote: %v", err)
+		}
+
+		if res, err := c[1].API.Query(context.Background(), &pilosa.QueryRequest{
+			Index: "child",
+			Query: `Row(parentid="two")Row(parentid=="one")`,
+		}); err != nil {
+			t.Fatalf("Row querying: %v", err)
+		} else {
+
+			row0, row1 := res.Results[0].(*pilosa.Row), res.Results[1].(*pilosa.Row)
+			if len(row0.Columns()) != 1 || len(row1.Columns()) != 1 {
+				t.Fatalf(`Expected: []uint64{1} []uint64{0}, Got: %+v %+v`, row0.Columns(), row1.Columns())
+			}
+			if row0.Columns()[0] != 2 || row1.Columns()[0] != 1 {
+				t.Fatalf(`Expected: []uint64{1} []uint64{0}, Got: %+v %+v`, row0.Columns(), row1.Columns())
+			}
+		}
+	})
 }
 
 // Ensure executor returns an error if too many writes are in a single request.
@@ -3407,7 +3529,6 @@ func TestExecutor_Execute_Not(t *testing.T) {
 func TestExecutor_Execute_FieldValue(t *testing.T) {
 	c := test.MustRunCluster(t, 2)
 	defer c.Close()
-	//hldr := test.Holder{Holder: c[0].Server.Holder()}
 
 	node0 := c[0]
 	node1 := c[1]
@@ -3420,8 +3541,8 @@ func TestExecutor_Execute_FieldValue(t *testing.T) {
 			Set(1, f=3)
 			Set(2, f=-4)
 			Set(` + strconv.Itoa(ShardWidth+1) + `, f=3)
-            Set(1, dec=12.985)
-            Set(2, dec=-4.234)
+			Set(1, dec=12.985)
+			Set(2, dec=-4.234)
 		`}); err != nil {
 		t.Fatal(err)
 	}
@@ -3433,8 +3554,8 @@ func TestExecutor_Execute_FieldValue(t *testing.T) {
 	if _, err := node0.API.Query(context.Background(), &pilosa.QueryRequest{Index: "ik", Query: `
 			Set("one", f=3)
 			Set("two", f=-4)
-            Set("one", dec=12.985)
-            Set("two", dec=-4.234)
+			Set("one", dec=12.985)
+			Set("two", dec=-4.234)
 		`}); err != nil {
 		t.Fatal(err)
 	}
@@ -3462,6 +3583,8 @@ func TestExecutor_Execute_FieldValue(t *testing.T) {
 
 		// Errors
 		{index: "i", qry: "FieldValue()", expErr: pilosa.ErrFieldRequired.Error()},
+		{index: "i", qry: "FieldValue(field=dec)", expErr: pilosa.ErrColumnRequired.Error()},
+		{index: "ik", qry: "FieldValue(field=f)", expErr: pilosa.ErrColumnRequired.Error()},
 	}
 	for n, node := range []*test.Command{node0, node1} {
 		for i, test := range tests {
@@ -4619,6 +4742,10 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 			q:   `Rows(f, previous="1", limit=0, column="0")`,
 			exp: []string{},
 		},
+		{
+			q: `Rows(f, like="__")`,
+			exp: []string{"10", "11", "12", "13", "14", "15", "16", "17", "18"},
+		},
 	}
 
 	for i, test := range tests {
@@ -5173,6 +5300,10 @@ func runCallTest(t *testing.T, writeQuery string, readQueries []string, indexOpt
 	return responses
 }
 
+// NOTE: The shift function in its current state is unsupported.
+// If any of these tests fail due to improvements made to the roaring
+// code, it is reasonable to remove these tests. See the `Shift()`
+// method on `Row` in `row.go`.
 func TestExecutor_Execute_Shift(t *testing.T) {
 	t.Run("Shift Bit 0", func(t *testing.T) {
 		c := test.MustRunCluster(t, 1)
@@ -5714,4 +5845,68 @@ func TestExecutor_Execute_TopNDistinct(t *testing.T) {
 			t.Fatalf("invalid Pairs count, expected: 1, got: %v", pf.Pairs[0].Count)
 		}
 	})
+}
+
+func Test_Executor_Execute_UnionRows(t *testing.T) {
+	c := test.MustRunCluster(t, 2)
+	defer c.Close()
+
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "s",
+		pilosa.OptFieldTypeSet(pilosa.CacheTypeRanked, 50000),
+	)
+
+	// Populate data.
+	c.Query(t, "i", `
+			Set(0, s=1)
+			Set(1, s=2)
+			Set(2, s=3)
+			Set(3, s=1)
+			Set(3, s=5)
+		`)
+
+	if res := c.Query(t, "i", `Count(UnionRows(TopN(s, n=1)))`); res.Results[0] != uint64(2) {
+		t.Errorf("expected 2 columns, got %v", res.Results[0])
+	}
+	if res := c.Query(t, "i", `Count(UnionRows(Rows(s)))`); res.Results[0] != uint64(4) {
+		t.Errorf("expected 4 columns, got %v", res.Results[0])
+	}
+}
+
+func TestTimelessClearRegression(t *testing.T) {
+	data, err := ioutil.ReadFile("testdata/timeRegressionSchema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+
+	api := c[0].API
+
+	schema := &pilosa.Schema{}
+	if err := json.NewDecoder(bytes.NewReader(data)).Decode(schema); err != nil {
+		t.Fatal(err)
+	}
+	if err := api.ApplySchema(context.TODO(), schema, false); err != nil {
+		t.Fatal(err)
+	}
+
+	idxName := schema.Indexes[0].Name
+
+	setQuery := `Set(511, stargazer=376)`
+	if _, err := api.Query(context.TODO(), &pilosa.QueryRequest{Index: idxName, Query: setQuery}); err != nil {
+		t.Fatal(err)
+	}
+
+	setQuery = `Set(512, stargazer=300, 2017-05-18T00:00)`
+	if _, err := api.Query(context.TODO(), &pilosa.QueryRequest{Index: idxName, Query: setQuery}); err != nil {
+		t.Fatal(err)
+	}
+
+	clearQuery := `Clear(511, stargazer=376)`
+	if res, err := api.Query(context.TODO(), &pilosa.QueryRequest{Index: idxName, Query: clearQuery}); err != nil {
+		t.Fatal(err)
+	} else if res.Results[0] != true {
+		t.Fatal("clear supposedly failed")
+	}
 }

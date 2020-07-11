@@ -15,6 +15,7 @@
 package roaring
 
 import (
+	"math/rand"
 	"testing"
 )
 
@@ -185,3 +186,47 @@ func TestSliceContainers(t *testing.T) {
 		}
 	})
 }
+
+func genRun(r *rand.Rand) Interval16 {
+gen:
+	dat := r.Uint32()
+	start, end := uint16(dat>>16), uint16(dat)
+	if start > end {
+		goto gen
+	}
+	return Interval16{start, end}
+}
+
+func splatRunNaive(into []uint64, from Interval16) {
+	for v := int(from.Start); v <= int(from.Last); v++ {
+		into[v/64] |= (uint64(1) << uint(v%64))
+	}
+}
+
+func TestSplat(t *testing.T) {
+	r := rand.New(rand.NewSource(42))
+	for i := 0; i < 1024; i++ {
+		run := genRun(r)
+
+		var a, b [1024]uint64
+		splatRunNaive(a[:], run)
+		splatRun(&b, run)
+		if a != b {
+			t.Errorf("incorrect splat of run [%d, %d]", run.Start, run.Last)
+		}
+	}
+}
+
+func benchSplat(b *testing.B, run Interval16) {
+	var buf [1024]uint64
+	for i := 0; i < b.N; i++ {
+		splatRun(&buf, run)
+	}
+}
+
+func BenchmarkSplatSingle(b *testing.B)   { benchSplat(b, Interval16{42, 42}) }
+func BenchmarkSplatPartword(b *testing.B) { benchSplat(b, Interval16{16, 31}) }
+func BenchmarkSplatWord(b *testing.B)     { benchSplat(b, Interval16{16, 31}) }
+func BenchmarkSplatEdges(b *testing.B)    { benchSplat(b, Interval16{15, 16}) }
+func BenchmarkSplatMedium(b *testing.B)   { benchSplat(b, Interval16{13, 65}) }
+func BenchmarkSplatAll(b *testing.B)      { benchSplat(b, Interval16{0, ^uint16(0)}) }

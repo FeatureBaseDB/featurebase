@@ -31,7 +31,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pilosa/pilosa/v2/internal"
-	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
@@ -86,11 +85,12 @@ var availableShardFileFlushDuration = &protected{
 
 // Field represents a container for views.
 type Field struct {
-	mu        sync.RWMutex
-	createdAt int64
-	path      string
-	index     string
-	name      string
+	mu            sync.RWMutex
+	createdAt     int64
+	path          string
+	index         string
+	name          string
+	qualifiedName string
 
 	viewMap map[string]*view
 
@@ -116,10 +116,6 @@ type Field struct {
 
 	// Shards with data on any node in the cluster, according to this node.
 	remoteAvailableShards *roaring.Bitmap
-
-	logger logger.Logger
-
-	snapshotQueue snapshotQueue
 
 	translateStore TranslateStore
 
@@ -338,17 +334,17 @@ func OptFieldTypeBool() FieldOption {
 // that it's of the type `OptFieldType*`). This means
 // this function couldn't be used to set, for example,
 // `FieldOptions.Keys`.
-func NewField(path, index, name string, opts FieldOption) (*Field, error) {
+func NewField(holder *Holder, path, index, name string, opts FieldOption) (*Field, error) {
 	err := validateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
 	}
 
-	return newField(path, index, name, opts)
+	return newField(holder, path, index, name, opts)
 }
 
 // newField returns a new instance of field (without name validation).
-func newField(path, index, name string, opts FieldOption) (*Field, error) {
+func newField(holder *Holder, path, index, name string, opts FieldOption) (*Field, error) {
 	// Apply functional option.
 	fo := FieldOptions{}
 	err := opts(&fo)
@@ -357,9 +353,10 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 	}
 
 	f := &Field{
-		path:  path,
-		index: index,
-		name:  name,
+		path:          path,
+		index:         index,
+		name:          name,
+		qualifiedName: FormatQualifiedFieldName(index, name),
 
 		viewMap: make(map[string]*view),
 
@@ -372,7 +369,7 @@ func newField(path, index, name string, opts FieldOption) (*Field, error) {
 
 		remoteAvailableShards: roaring.NewBitmap(),
 
-		logger: logger.NopLogger,
+		holder: holder,
 
 		OpenTranslateStore: OpenInMemTranslateStore,
 	}
@@ -448,7 +445,7 @@ func (f *Field) loadAvailableShards() error {
 	}
 	// some other problem:
 	if err != nil {
-		f.logger.Printf("available shards file present but unreadable, discarding: %v", err)
+		f.holder.Logger.Printf("available shards file present but unreadable, discarding: %v", err)
 		err = os.Remove(path)
 		if err != nil {
 			return errors.Wrap(err, "deleting corrupt available shards list")
@@ -457,7 +454,7 @@ func (f *Field) loadAvailableShards() error {
 	}
 	bm := roaring.NewBitmap()
 	if err = bm.UnmarshalBinary(buf); err != nil {
-		f.logger.Printf("available shards file corrupt, discarding: %v", err)
+		f.holder.Logger.Printf("available shards file corrupt, discarding: %v", err)
 		err = os.Remove(path)
 		if err != nil {
 			return errors.Wrap(err, "deleting corrupt available shards list")
@@ -548,17 +545,17 @@ func (f *Field) Options() FieldOptions {
 func (f *Field) Open() error {
 	if err := func() (err error) {
 		// Ensure the field's path exists.
-		f.logger.Debugf("ensure field path exists: %s", f.path)
+		f.holder.Logger.Debugf("ensure field path exists: %s", f.path)
 		if err := os.MkdirAll(f.path, 0777); err != nil {
 			return errors.Wrap(err, "creating field dir")
 		}
 
-		f.logger.Debugf("load meta file for index/field: %s/%s", f.index, f.name)
+		f.holder.Logger.Debugf("load meta file for index/field: %s/%s", f.index, f.name)
 		if err := f.loadMeta(); err != nil {
 			return errors.Wrap(err, "loading meta")
 		}
 
-		f.logger.Debugf("load available shards for index/field: %s/%s", f.index, f.name)
+		f.holder.Logger.Debugf("load available shards for index/field: %s/%s", f.index, f.name)
 		if err := f.loadAvailableShards(); err != nil {
 			return errors.Wrap(err, "loading available shards")
 		}
@@ -570,17 +567,17 @@ func (f *Field) Open() error {
 		}
 
 		// Apply the field options loaded from meta (or set via setOptions()).
-		f.logger.Debugf("apply options for index/field: %s/%s", f.index, f.name)
+		f.holder.Logger.Debugf("apply options for index/field: %s/%s", f.index, f.name)
 		if err := f.applyOptions(f.options); err != nil {
 			return errors.Wrap(err, "applying options")
 		}
 
-		f.logger.Debugf("open views for index/field: %s/%s", f.index, f.name)
+		f.holder.Logger.Debugf("open views for index/field: %s/%s", f.index, f.name)
 		if err := f.openViews(); err != nil {
 			return errors.Wrap(err, "opening views")
 		}
 
-		f.logger.Debugf("open row attribute store for index/field: %s/%s", f.index, f.name)
+		f.holder.Logger.Debugf("open row attribute store for index/field: %s/%s", f.index, f.name)
 		if err := f.rowAttrStore.Open(); err != nil {
 			return errors.Wrap(err, "opening attrstore")
 		}
@@ -607,7 +604,7 @@ func (f *Field) Open() error {
 		return err
 	}
 
-	f.logger.Debugf("successfully opened field index/field: %s/%s", f.index, f.name)
+	f.holder.Logger.Debugf("successfully opened field index/field: %s/%s", f.index, f.name)
 	return nil
 }
 func blockingWriteAvailableShards(fieldPath string, availableShardBytes []byte) {
@@ -748,7 +745,7 @@ fileLoop:
 					<-fieldQueue
 				}()
 				name := filepath.Base(fi.Name())
-				f.logger.Debugf("open index/field/view: %s/%s/%s", f.index, f.name, fi.Name())
+				f.holder.Logger.Debugf("open index/field/view: %s/%s/%s", f.index, f.name, fi.Name())
 				view := f.newView(f.viewPath(name), name)
 				if err := view.open(); err != nil {
 					return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)
@@ -770,7 +767,7 @@ fileLoop:
 				}
 
 				view.rowAttrStore = f.rowAttrStore
-				f.logger.Debugf("add index/field/view to field.viewMap: %s/%s/%s", f.index, f.name, view.name)
+				f.holder.Logger.Debugf("add index/field/view to field.viewMap: %s/%s/%s", f.index, f.name, view.name)
 				mu.Lock()
 				f.viewMap[view.name] = view
 				mu.Unlock()
@@ -1093,7 +1090,7 @@ func (f *Field) setTimeQuantum(q TimeQuantum) error {
 
 // RowTime gets the row at the particular time with the granularity specified by
 // the quantum.
-func (f *Field) RowTime(rowID uint64, time time.Time, quantum string) (*Row, error) {
+func (f *Field) RowTime(tx Tx, rowID uint64, time time.Time, quantum string) (*Row, error) {
 	if !TimeQuantum(quantum).Valid() {
 		return nil, ErrInvalidTimeQuantum
 	}
@@ -1102,7 +1099,7 @@ func (f *Field) RowTime(rowID uint64, time time.Time, quantum string) (*Row, err
 	if view == nil {
 		return nil, errors.Errorf("view with quantum %v not found.", quantum)
 	}
-	return view.row(rowID), nil
+	return view.row(tx, rowID)
 }
 
 // viewPath returns the path to a view in the field.
@@ -1183,14 +1180,10 @@ func (f *Field) createViewIfNotExistsBase(name string) (*view, bool, error) {
 }
 
 func (f *Field) newView(path, name string) *view {
-	view := newView(path, f.index, f.name, name, f.options)
-	view.logger = f.logger
+	view := newView(f.holder, path, f.index, f.name, name, f.options)
 	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats
 	view.broadcaster = f.broadcaster
-	if f.snapshotQueue != nil {
-		view.snapshotQueue = f.snapshotQueue
-	}
 	return view
 }
 
@@ -1221,21 +1214,21 @@ func (f *Field) deleteView(name string) error {
 // package, and the fact that it's only allowed on
 // `set`,`mutex`, and `bool` fields is odd. This may
 // be considered for deprecation in a future version.
-func (f *Field) Row(rowID uint64) (*Row, error) {
+func (f *Field) Row(tx Tx, rowID uint64) (*Row, error) {
 	switch f.Type() {
 	case FieldTypeSet, FieldTypeMutex, FieldTypeBool:
 		view := f.view(viewStandard)
 		if view == nil {
 			return nil, ErrInvalidView
 		}
-		return view.row(rowID), nil
+		return view.row(tx, rowID)
 	default:
 		return nil, errors.Errorf("row method unsupported for field type: %s", f.Type())
 	}
 }
 
 // SetBit sets a bit on a view within the field.
-func (f *Field) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err error) {
+func (f *Field) SetBit(tx Tx, rowID, colID uint64, t *time.Time) (changed bool, err error) {
 	viewName := viewStandard
 	if !f.options.NoStandardView {
 		// Retrieve view. Exit if it doesn't exist.
@@ -1245,7 +1238,7 @@ func (f *Field) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err err
 		}
 
 		// Set non-time bit.
-		if v, err := view.setBit(rowID, colID); err != nil {
+		if v, err := view.setBit(tx, rowID, colID); err != nil {
 			return changed, errors.Wrap(err, "setting on view")
 		} else if v {
 			changed = v
@@ -1264,7 +1257,7 @@ func (f *Field) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err err
 			return changed, errors.Wrapf(err, "creating view %s", subname)
 		}
 
-		if c, err := view.setBit(rowID, colID); err != nil {
+		if c, err := view.setBit(tx, rowID, colID); err != nil {
 			return changed, errors.Wrapf(err, "setting on view %s", subname)
 		} else if c {
 			changed = true
@@ -1275,21 +1268,20 @@ func (f *Field) SetBit(rowID, colID uint64, t *time.Time) (changed bool, err err
 }
 
 // ClearBit clears a bit within the field.
-func (f *Field) ClearBit(rowID, colID uint64) (changed bool, err error) {
+func (f *Field) ClearBit(tx Tx, rowID, colID uint64) (changed bool, err error) {
 	viewName := viewStandard
 
 	// Retrieve view. Exit if it doesn't exist.
 	view, present := f.viewMap[viewName]
 	if !present {
-		return changed, errors.Wrap(err, "clearing missing view")
-
+		return false, errors.Wrap(err, "clearing missing view")
 	}
 
 	// Clear non-time bit.
-	if v, err := view.clearBit(rowID, colID); err != nil {
-		return changed, errors.Wrap(err, "clearing on view")
+	if v, err := view.clearBit(tx, rowID, colID); err != nil {
+		return false, errors.Wrap(err, "clearing on view")
 	} else if v {
-		changed = v
+		changed = changed || v
 	}
 	if len(f.viewMap) == 1 { // assuming no time views
 		return changed, nil
@@ -1304,10 +1296,12 @@ func (f *Field) ClearBit(rowID, colID uint64) (changed bool, err error) {
 			level--
 		}
 		if level < skipAbove {
-			if changed, err = view.clearBit(rowID, colID); err != nil {
+			cleared, err := view.clearBit(tx, rowID, colID)
+			changed = changed || cleared
+			if err != nil {
 				return changed, errors.Wrapf(err, "clearing on view %s", view.name)
 			}
-			if !changed {
+			if !cleared {
 				skipAbove = level + 1
 			} else {
 				skipAbove = maxInt
@@ -1362,52 +1356,21 @@ func (f *Field) allTimeViewsSortedByQuantum() (me []*view) {
 
 // StringValue reads an integer field value for a column, and converts
 // it to a string based on a foreign index string key.
-func (f *Field) StringValue(columnID uint64) (value string, exists bool, err error) {
+func (f *Field) StringValue(tx Tx, columnID uint64) (value string, exists bool, err error) {
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return value, false, ErrBSIGroupNotFound
 	}
 
-	val, exists, err := f.Value(columnID)
+	val, exists, err := f.Value(tx, columnID)
 	if exists {
 		value, err = f.translateStore.TranslateID(uint64(val))
 	}
 	return value, exists, err
 }
 
-// FloatValue reads an integer field value for a column, and converts
-// it to a float based on the configured scale.
-func (f *Field) FloatValue(columnID uint64) (value float64, exists bool, err error) {
-	bsig := f.bsiGroup(f.name)
-	if bsig == nil {
-		return 0, false, ErrBSIGroupNotFound
-	}
-
-	val, exists, err := f.Value(columnID)
-	if exists {
-		value = float64(val) / math.Pow10(int(bsig.Scale))
-	}
-	return value, exists, err
-}
-
-// DecimalValue reads a decimal field value for a column, and converts
-// it to a pql.Decimal based on the configured scale.
-func (f *Field) DecimalValue(columnID uint64) (value pql.Decimal, exists bool, err error) {
-	bsig := f.bsiGroup(f.name)
-	if bsig == nil {
-		return value, false, ErrBSIGroupNotFound
-	}
-
-	val, exists, err := f.Value(columnID)
-	if exists {
-		value.Value = val
-		value.Scale = bsig.Scale
-	}
-	return value, exists, err
-}
-
 // Value reads a field value for a column.
-func (f *Field) Value(columnID uint64) (value int64, exists bool, err error) {
+func (f *Field) Value(tx Tx, columnID uint64) (value int64, exists bool, err error) {
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return 0, false, ErrBSIGroupNotFound
@@ -1419,7 +1382,7 @@ func (f *Field) Value(columnID uint64) (value int64, exists bool, err error) {
 		return 0, false, nil
 	}
 
-	v, exists, err := view.value(columnID, bsig.BitDepth)
+	v, exists, err := view.value(tx, columnID, bsig.BitDepth)
 	if err != nil {
 		return 0, false, err
 	} else if !exists {
@@ -1428,20 +1391,8 @@ func (f *Field) Value(columnID uint64) (value int64, exists bool, err error) {
 	return int64(v) + bsig.Base, true, nil
 }
 
-// SetFloatValue takes a floating point value, and converts it to an
-// integer based on the field's configured scale, before setting that
-// integer via SetValue.
-func (f *Field) SetFloatValue(columnID uint64, value float64) (changed bool, err error) {
-	bsig := f.bsiGroup(f.name)
-	if bsig == nil {
-		return false, ErrBSIGroupNotFound
-	}
-	val := int64(float64(value) * math.Pow10(int(bsig.Scale)))
-	return f.SetValue(columnID, val)
-}
-
 // SetValue sets a field value for a column.
-func (f *Field) SetValue(columnID uint64, value int64) (changed bool, err error) {
+func (f *Field) SetValue(tx Tx, columnID uint64, value int64) (changed bool, err error) {
 	// Fetch bsiGroup & validate min/max.
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
@@ -1481,11 +1432,11 @@ func (f *Field) SetValue(columnID uint64, value int64) (changed bool, err error)
 	if err != nil {
 		return false, errors.Wrap(err, "creating view")
 	}
-	return view.setValue(columnID, bsig.BitDepth, baseValue)
+	return view.setValue(tx, columnID, bsig.BitDepth, baseValue)
 }
 
 // ClearValue removes a field value for a column.
-func (f *Field) ClearValue(columnID uint64) (changed bool, err error) {
+func (f *Field) ClearValue(tx Tx, columnID uint64) (changed bool, err error) {
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return false, ErrBSIGroupNotFound
@@ -1495,109 +1446,17 @@ func (f *Field) ClearValue(columnID uint64) (changed bool, err error) {
 	if view == nil {
 		return false, nil
 	}
-	value, exists, err := view.value(columnID, bsig.BitDepth)
+	value, exists, err := view.value(tx, columnID, bsig.BitDepth)
 	if err != nil {
 		return false, err
 	}
 	if exists {
-		return view.clearValue(columnID, bsig.BitDepth, value)
+		return view.clearValue(tx, columnID, bsig.BitDepth, value)
 	}
 	return false, nil
 }
 
-// FloatSum performs a Sum query and converts the result to a float
-// based on the field's configured scale.
-func (f *Field) FloatSum(filter *Row, name string) (sum float64, count int64, err error) {
-	bsig := f.bsiGroup(f.name)
-	if bsig == nil {
-		return 0, 0, ErrBSIGroupNotFound
-	}
-
-	sumI, count, err := f.Sum(filter, name)
-	if err == nil {
-		sum = float64(sumI) / math.Pow10(int(bsig.Scale))
-	}
-	return sum, count, err
-
-}
-
-// Sum returns the sum and count for a field.
-// An optional filtering row can be provided.
-func (f *Field) Sum(filter *Row, name string) (sum, count int64, err error) {
-	bsig := f.bsiGroup(name)
-	if bsig == nil {
-		return 0, 0, ErrBSIGroupNotFound
-	}
-
-	view := f.view(viewBSIGroupPrefix + name)
-	if view == nil {
-		return 0, 0, nil
-	}
-
-	vsum, vcount, err := view.sum(filter, bsig.BitDepth)
-	if err != nil {
-		return 0, 0, err
-	}
-	return int64(vsum) + (int64(vcount) * bsig.Base), int64(vcount), nil
-}
-
-// FloatMin performs a Min query and converts the result to a float
-// based on the field's configured scale.
-// TODO: this and Min are probably worthless
-func (f *Field) FloatMin(filter *Row, name string) (min float64, count int64, err error) {
-	bsig := f.bsiGroup(f.name)
-	if bsig == nil {
-		return 0, 0, ErrBSIGroupNotFound
-	}
-
-	minI, count, err := f.Min(filter, name)
-	if err == nil {
-		min = float64(minI) / math.Pow10(int(bsig.Scale))
-	}
-	return min, count, err
-}
-
-// Min returns the min for a field.
-// An optional filtering row can be provided.
-func (f *Field) Min(filter *Row, name string) (min, count int64, err error) {
-	bsig := f.bsiGroup(name)
-	if bsig == nil {
-		return 0, 0, ErrBSIGroupNotFound
-	}
-
-	view := f.view(viewBSIGroupPrefix + name)
-	if view == nil {
-		return 0, 0, nil
-	}
-
-	vmin, vcount, err := view.min(filter, bsig.BitDepth)
-	if err != nil {
-		return 0, 0, err
-	}
-	return int64(vmin) + bsig.Base, int64(vcount), nil
-}
-
-// FloatMax performs a max query and converts the result to a float
-// based on the field's configured scale.
-//
-// TODO, this isn't really used, because it's kind of useless. It will
-// only get the max among shards on this node, but all query execution
-// already happens at the shard level and bypasses this entirely
-// calling fragment.max instead.
-func (f *Field) FloatMax(filter *Row, name string) (max float64, count int64, err error) {
-	bsig := f.bsiGroup(f.name)
-	if bsig == nil {
-		return 0, 0, ErrBSIGroupNotFound
-	}
-
-	maxI, count, err := f.Max(filter, name)
-	if err == nil {
-		max = float64(maxI) / math.Pow10(int(bsig.Scale))
-	}
-	return max, count, err
-}
-
-func (f *Field) MaxForShard(shard uint64, filter *Row) (ValCount, error) {
+func (f *Field) MaxForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) {
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return ValCount{}, ErrBSIGroupNotFound
@@ -1613,7 +1472,7 @@ func (f *Field) MaxForShard(shard uint64, filter *Row) (ValCount, error) {
 		return ValCount{}, nil
 	}
 
-	max, cnt, err := fragment.max(filter, bsig.BitDepth)
+	max, cnt, err := fragment.max(tx, filter, bsig.BitDepth)
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "calling fragment.max")
 	}
@@ -1633,7 +1492,7 @@ func (f *Field) MaxForShard(shard uint64, filter *Row) (ValCount, error) {
 // MinForShard returns the minimum value which appears in this shard
 // (this field must be an Int or Decimal field). It also returns the
 // number of times the minimum value appears.
-func (f *Field) MinForShard(shard uint64, filter *Row) (ValCount, error) {
+func (f *Field) MinForShard(tx Tx, shard uint64, filter *Row) (ValCount, error) {
 	bsig := f.bsiGroup(f.name)
 	if bsig == nil {
 		return ValCount{}, ErrBSIGroupNotFound
@@ -1649,7 +1508,7 @@ func (f *Field) MinForShard(shard uint64, filter *Row) (ValCount, error) {
 		return ValCount{}, nil
 	}
 
-	min, cnt, err := fragment.min(filter, bsig.BitDepth)
+	min, cnt, err := fragment.min(tx, filter, bsig.BitDepth)
 	if err != nil {
 		return ValCount{}, errors.Wrap(err, "calling fragment.min")
 	}
@@ -1666,28 +1525,8 @@ func (f *Field) MinForShard(shard uint64, filter *Row) (ValCount, error) {
 	return valCount, nil
 }
 
-// Max returns the max for a field.
-// An optional filtering row can be provided.
-func (f *Field) Max(filter *Row, name string) (max, count int64, err error) {
-	bsig := f.bsiGroup(name)
-	if bsig == nil {
-		return 0, 0, ErrBSIGroupNotFound
-	}
-
-	view := f.view(viewBSIGroupPrefix + name)
-	if view == nil {
-		return 0, 0, nil
-	}
-
-	vmax, vcount, err := view.max(filter, bsig.BitDepth)
-	if err != nil {
-		return 0, 0, err
-	}
-	return int64(vmax) + bsig.Base, int64(vcount), nil
-}
-
 // Range performs a conditional operation on Field.
-func (f *Field) Range(name string, op pql.Token, predicate int64) (*Row, error) {
+func (f *Field) Range(tx Tx, name string, op pql.Token, predicate int64) (*Row, error) {
 	// Retrieve and validate bsiGroup.
 	bsig := f.bsiGroup(name)
 	if bsig == nil {
@@ -1707,11 +1546,11 @@ func (f *Field) Range(name string, op pql.Token, predicate int64) (*Row, error) 
 		return NewRow(), nil
 	}
 
-	return view.rangeOp(op, bsig.BitDepth, baseValue)
+	return view.rangeOp(tx, op, bsig.BitDepth, baseValue)
 }
 
 // Import bulk imports data.
-func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time, opts ...ImportOption) error {
+func (f *Field) Import(tx Tx, rowIDs, columnIDs []uint64, timestamps []*time.Time, opts ...ImportOption) error {
 
 	// Set up import options.
 	options := &ImportOptions{}
@@ -1783,7 +1622,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time, opts
 			return errors.Wrap(err, "creating fragment")
 		}
 
-		if err := frag.bulkImport(data.RowIDs, data.ColumnIDs, options); err != nil {
+		if err := frag.bulkImport(tx, data.RowIDs, data.ColumnIDs, options); err != nil {
 			return err
 		}
 	}
@@ -1791,7 +1630,7 @@ func (f *Field) Import(rowIDs, columnIDs []uint64, timestamps []*time.Time, opts
 	return nil
 }
 
-func (f *Field) importFloatValue(columnIDs []uint64, values []float64, options *ImportOptions) error {
+func (f *Field) importFloatValue(tx Tx, columnIDs []uint64, values []float64, options *ImportOptions) error {
 	// convert values to int64 values based on scale
 	ivalues := make([]int64, len(values))
 	bsig := f.bsiGroup(f.name)
@@ -1803,11 +1642,11 @@ func (f *Field) importFloatValue(columnIDs []uint64, values []float64, options *
 		ivalues[i] = int64(fval * mult)
 	}
 	// then call importValue
-	return f.importValue(columnIDs, ivalues, options)
+	return f.importValue(tx, columnIDs, ivalues, options)
 }
 
 // importValue bulk imports range-encoded value data.
-func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportOptions) error {
+func (f *Field) importValue(tx Tx, columnIDs []uint64, values []int64, options *ImportOptions) error {
 	viewName := viewBSIGroupPrefix + f.name
 	// Get the bsiGroup so we know bitDepth.
 	bsig := f.bsiGroup(f.name)
@@ -1890,7 +1729,7 @@ func (f *Field) importValue(columnIDs []uint64, values []int64, options *ImportO
 			baseValues[i] = value - bsig.Base
 		}
 
-		if err := frag.importValue(data.ColumnIDs, baseValues, requiredDepth, options.Clear); err != nil {
+		if err := frag.importValue(tx, data.ColumnIDs, baseValues, requiredDepth, options.Clear); err != nil {
 			return err
 		}
 	}
@@ -1922,7 +1761,7 @@ func (f *Field) importRoaring(ctx context.Context, data []byte, shard uint64, vi
 	return nil
 }
 
-func (f *Field) importRoaringOverwrite(ctx context.Context, data []byte, shard uint64, viewName string, block int) error {
+func (f *Field) importRoaringOverwrite(ctx context.Context, tx Tx, data []byte, shard uint64, viewName string, block int) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Field.importRoaringOverwrite")
 	defer span.Finish()
 
@@ -1939,7 +1778,7 @@ func (f *Field) importRoaringOverwrite(ctx context.Context, data []byte, shard u
 	if err != nil {
 		return errors.Wrap(err, "creating fragment")
 	}
-	if err := frag.importRoaringOverwrite(ctx, data, block); err != nil {
+	if err := frag.importRoaringOverwrite(ctx, tx, data, block); err != nil {
 		return err
 	}
 
@@ -1948,9 +1787,14 @@ func (f *Field) importRoaringOverwrite(ctx context.Context, data []byte, shard u
 	switch f.Options().Type {
 	case FieldTypeInt, FieldTypeDecimal:
 		frag.mu.Lock()
-		frag.calculateMaxRowID()
-		maxRowID, _ := frag.maxRow(nil)
+		if err := frag.calculateMaxRowID(); err != nil {
+			return err
+		}
+		maxRowID, _, err := frag.maxRow(tx, nil)
 		frag.mu.Unlock()
+		if err != nil {
+			return err
+		}
 
 		var bitDepth uint
 		if maxRowID+1 > bsiOffsetBit {
@@ -2304,4 +2148,9 @@ func bitDepthInt64(v int64) uint {
 		return bitDepth(uint64(-v))
 	}
 	return bitDepth(uint64(v))
+}
+
+// FormatQualifiedFieldName generates a qualified name for the field to be used with Tx operations.
+func FormatQualifiedFieldName(index, field string) string {
+	return fmt.Sprintf("%s\x00%s\x00", index, field)
 }

@@ -33,9 +33,10 @@ var (
 	ErrForeignIndexNotFound = errors.New("foreign index not found")
 
 	// ErrFieldRequired is returned when no field is specified.
-	ErrFieldRequired = errors.New("field required")
-	ErrFieldExists   = errors.New("field already exists")
-	ErrFieldNotFound = errors.New("field not found")
+	ErrFieldRequired  = errors.New("field required")
+	ErrColumnRequired = errors.New("column required")
+	ErrFieldExists    = errors.New("field already exists")
+	ErrFieldNotFound  = errors.New("field not found")
 
 	ErrBSIGroupNotFound         = errors.New("bsigroup not found")
 	ErrBSIGroupExists           = errors.New("bsigroup already exists")
@@ -52,8 +53,7 @@ var (
 	ErrInvalidView      = errors.New("invalid view")
 	ErrInvalidCacheType = errors.New("invalid cache type")
 
-	ErrName  = errors.New("invalid index or field name, must match [a-z][a-z0-9_-]* and contain at most 230 characters")
-	ErrLabel = errors.New("invalid row or column label, must match [A-Za-z0-9_-]")
+	ErrName = errors.New("invalid index or field name, must match [a-z][a-z0-9_-]* and contain at most 230 characters")
 
 	// ErrFragmentNotFound is returned when a fragment does not exist.
 	ErrFragmentNotFound = errors.New("fragment not found")

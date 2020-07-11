@@ -221,6 +221,8 @@ func (h *Handler) populateValidators() {
 	h.validators["GetTransaction"] = queryValidationSpecRequired()
 	h.validators["PostTransaction"] = queryValidationSpecRequired()
 	h.validators["PostFinishTransaction"] = queryValidationSpecRequired()
+	h.validators["Inspect"] = queryValidationSpecRequired().Optional("indexes", "fields", "views", "shards", "checksum", "containers")
+
 }
 
 type contextKeyQuery int
@@ -252,14 +254,17 @@ func (h *Handler) queryArgValidator(next http.Handler) http.Handler {
 
 		if validator, ok := h.validators[key]; ok {
 			if err := validator.validate(r.URL.Query()); err != nil {
-				// TODO: Return the response depending on the Accept header
-				response := errorResponse{Error: err.Error()}
-				body, err := json.Marshal(response)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					return
+				errText := err.Error()
+				if validHeaderAcceptJSON(r.Header) {
+					response := errorResponse{Error: errText}
+					data, err := json.Marshal(response)
+					if err != nil {
+						h.logger.Printf("failed to encode error %q as JSON: %v", errText, err)
+					} else {
+						errText = string(data)
+					}
 				}
-				http.Error(w, string(body), http.StatusBadRequest)
+				http.Error(w, errText, http.StatusBadRequest)
 				return
 			}
 		}
@@ -349,6 +354,7 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/index/{index}/field/{field}/import-roaring/{shard}", handler.handlePostImportRoaring).Methods("POST").Name("PostImportRoaring")
 	router.HandleFunc("/index/{index}/query", handler.handlePostQuery).Methods("POST").Name("PostQuery")
 	router.HandleFunc("/info", handler.handleGetInfo).Methods("GET").Name("GetInfo")
+	router.HandleFunc("/inspect", handler.handleInspect).Methods("GET").Name("Inspect")
 	router.HandleFunc("/recalculate-caches", handler.handleRecalculateCaches).Methods("POST").Name("RecalculateCaches")
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET").Name("GetSchema")
 	router.HandleFunc("/schema", handler.handlePostSchema).Methods("POST").Name("PostSchema")
@@ -584,6 +590,37 @@ func (h *Handler) handleGetInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(info); err != nil {
 		h.logger.Printf("write info response error: %s", err)
+	}
+}
+
+func (h *Handler) handleInspect(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+	q := r.URL.Query()
+	_, checksum := q["checksum"]
+	_, containers := q["containers"]
+	req := pilosa.InspectRequest{
+		HolderFilterParams: pilosa.HolderFilterParams{
+			Indexes: q.Get("indexes"),
+			Fields:  q.Get("fields"),
+			Views:   q.Get("views"),
+			Shards:  q.Get("shards"),
+		},
+		InspectRequestParams: pilosa.InspectRequestParams{
+			Checksum:   checksum,
+			Containers: containers,
+		},
+	}
+	info, err := h.api.Inspect(r.Context(), &req)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("inspect request: %v", err), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(info); err != nil {
+		h.logger.Printf("write inspect response error: %s", err)
 	}
 }
 
@@ -1780,8 +1817,13 @@ func (h *Handler) handlePostClusterMessage(w http.ResponseWriter, r *http.Reques
 	}
 	err := h.api.ClusterMessage(r.Context(), r.Body)
 	if err != nil {
-		// TODO this was the previous behavior, but perhaps not everything is a bad request
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		switch err := err.(type) {
+		case pilosa.MessageProcessingError:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		default:
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -2114,6 +2156,7 @@ func (h *Handler) handlePostTranslateKeys(w http.ResponseWriter, r *http.Request
 	buf, err := h.api.TranslateKeys(r.Context(), r.Body)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("translate keys: %v", err), http.StatusInternalServerError)
+		return
 	}
 
 	// Write response.

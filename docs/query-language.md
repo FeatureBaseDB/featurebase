@@ -52,6 +52,7 @@ curl localhost:10101/index/repository/query \
 * `CALL` Any query.
 * `ROW_CALL` Any query which returns a row, such as `Row`, `Union`, `Difference`, `Xor`, `Intersect`, `Not`.
 * `ROWS_CALL` A query that returns a `Rows` result (i.e. a list of row IDs). Currently only the `Rows` query.
+* `ROWSET_CALL` A query that returns a set of rows. Currently only the `Rows` and `TopN` queries.
 * `[]ATTR_VALUE` Denotes an array of `ATTR_VALUE`s. (e.g. `["a", "b", "c"]`).
 
 ### Write Operations
@@ -595,34 +596,6 @@ Count(Row(stargazer=1))
 
 * Result is the number of repositories that user 1 has starred.
 
-#### Shift
-**Spec:**
-
-```
-Shift(<ROW_CALL>, [n=UINT])
-```
-
-**Description:**
-
-Returns the row specified by `ROW_CALL` shifted by `n` bits.
-
-**Result Type:** object with attrs and columns
-
-attrs will always be empty
-
-**Examples:**
-
-Query all columns with a bit set in row 1 of the field `stargazer`
-and shift the result by 2:
-```request
-Shift(Row(stargazer=1), n=2)
-```
-```response
-{"attrs":{},"columns":[12, 22]}
-```
-
-* columns are the repositories which user 1 has starred shifted by 2 bits.
-
 #### TopN
 
 **Spec:**
@@ -643,9 +616,15 @@ have the attribute specified by `attrName` with one of the values specified in
 
 **Caveats:**
 
-* Performing a TopN() query on a field with cache type ranked will return the top rows sorted by count in descending order.
-* Fields with cache type lru will maintain an LRU (Least Recently Used replacement policy) cache, thus a TopN query on this type of field will return rows sorted in order of most recently set bit.
-* The field's cache size determines the number of sorted rows to maintain in the cache for purposes of TopN queries. There is a tradeoff between performance and accuracy; increasing the cache size will improve accuracy of results at the cost of performance.
+In general, the order of the resulting row keys is not guaranteed to reflect the true order of bit counts across an index. The exact solution to the problem of computing the TopN counts is prohibitively expensive, so TopN is instead implemented as a heuristic. This provides a significant performance improvement, at the cost of uncertainty in the result order.
+
+The implementation is based on a per-shard cache. The accuracy of the results depends on how well the counts for the overall index are reflected in the individual shards (so TopN queries on a single-shard index are exact). If the distribution of bits across shards is uniform, shard counts are representative. This is often a reasonable assumption, especially for the top results for large data sets, in which counts might follow Zipfian, exponential, or other long-tail distributions. However, this assumption may not hold for some applications.
+
+Additional implementation details:
+
+* The field's cache size determines the number of sorted rows to maintain in the cache for purposes of TopN queries. There is a tradeoff between performance and accuracy; increasing the cache size will improve accuracy of results at the cost of performance. Note that this per-shard tradeoff is independent of the per-index performance/accuracy tradeoff mentioned above.
+* Fields with cache type `ranked` will return the top rows sorted by count in descending order.
+* Fields with cache type `lru` will maintain an LRU (Least Recently Used replacement policy) cache, thus a TopN query on this type of field will return rows sorted in order of most recently set bit.
 * Once full, the cache will truncate the set of rows according to the field option CacheSize. Rows that straddle the limit and have the same count will be truncated in no particular order.
 * The TopN query's attribute filter is applied to the existing sorted cache of rows. Rows that fall outside of the sorted cache range, even if they would normally pass the filter, are ignored.
 
@@ -818,7 +797,7 @@ Options(Row(f1=10), shards=[0, 2])
 **Spec:**
 
 ```
-Rows(<FIELD>, previous=<UINT|STRING>, limit=<UINT>, column=<UINT|STRING>, from=<TIMESTAMP>, to=<TIMESTAMP>)
+Rows(<FIELD>, previous=<UINT|STRING>, limit=<UINT>, column=<UINT|STRING>, from=<TIMESTAMP>, to=<TIMESTAMP>, like=<STRING>)
 ```
 
 **Description:**
@@ -839,6 +818,10 @@ If the field is of type `time`, the `from` and `to` arguments can be provided
 to restrict the result to a specific time span. If `from` and `to` are
 not provided, the full range of existing data will be queried.
 
+If `like` is given, only keys matching a pattern will be selected.
+A `like` pattern may use `_` as a placeholder to match a single UTF-8 codepoint, and `%` to match 0 or more codepoints.
+All other characters will be matched exactly.
+
 **Result Type:** Object with `"rows" or "keys" and an array of integers or strings respectively.`
 
 **Examples:**
@@ -856,7 +839,15 @@ With keys:
 Rows(job)
 ```
 ```response
-{"rows":null,"keys":["engineer","management","student""]}
+{"rows":null,"keys":["engineer","management","student"]}
+```
+
+With `like`:
+```request
+Rows(job, like="%t")
+```
+```response
+{"rows":null,"keys":["management","student"]}
 ```
 
 #### Group By
@@ -945,3 +936,31 @@ GroupBy(Rows(age), Rows(job), limit=7, filter=Row(country=USA))
  {"group":[{"field":"age","rowID":22},{"field":"job","rowKey":"student"}],"count":3},
  {"group":[{"field":"age","rowID":29},{"field":"job","rowKey":"management"}],"count":7}]
 ```
+
+#### UnionRows
+
+**Spec:**
+
+```
+UnionRows([ROWSET_CALL ...])
+```
+
+**Description:**
+
+UnionRows performs a logical OR on the rows matched by the results of all `ROWSET_CALL` queries passed to it.
+
+**Result Type:** object with attrs and bits
+
+attrs will always be empty
+
+**Examples:**
+
+Query columns with a bit set in any row (repositories that are starred by any user):
+```request
+UnionRows(Rows(stargazer))
+```
+```response
+{"attrs":{},"columns":[10, 20, 30]}
+```
+
+* columns are repositories that were starred by any user

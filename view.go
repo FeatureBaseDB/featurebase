@@ -26,7 +26,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
@@ -43,11 +42,14 @@ const (
 
 // view represents a container for field data.
 type view struct {
-	mu    sync.RWMutex
-	path  string
-	index string
-	field string
-	name  string
+	mu            sync.RWMutex
+	path          string
+	index         string
+	field         string
+	name          string
+	qualifiedName string
+
+	holder *Holder
 
 	fieldType string
 	cacheType string
@@ -56,23 +58,24 @@ type view struct {
 	// Fragments by shard.
 	fragments map[uint64]*fragment
 
-	broadcaster   broadcaster
-	stats         stats.StatsClient
-	rowAttrStore  AttrStore
-	logger        logger.Logger
-	snapshotQueue snapshotQueue
+	broadcaster  broadcaster
+	stats        stats.StatsClient
+	rowAttrStore AttrStore
 
 	knownShards       *roaring.Bitmap
 	knownShardsCopied uint32
 }
 
 // newView returns a new instance of View.
-func newView(path, index, field, name string, fieldOptions FieldOptions) *view {
+func newView(holder *Holder, path, index, field, name string, fieldOptions FieldOptions) *view {
 	return &view{
-		path:  path,
-		index: index,
-		field: field,
-		name:  name,
+		path:          path,
+		index:         index,
+		field:         field,
+		name:          name,
+		qualifiedName: FormatQualifiedViewName(index, field, name),
+
+		holder: holder,
 
 		fieldType: fieldOptions.Type,
 		cacheType: fieldOptions.CacheType,
@@ -82,7 +85,6 @@ func newView(path, index, field, name string, fieldOptions FieldOptions) *view {
 
 		broadcaster: NopBroadcaster,
 		stats:       stats.NopStatsClient,
-		logger:      logger.NopLogger,
 		knownShards: roaring.NewSliceBitmap(),
 	}
 }
@@ -133,14 +135,14 @@ func (v *view) open() error {
 
 	if err := func() error {
 		// Ensure the view's path exists.
-		v.logger.Debugf("ensure view path exists: %s", v.path)
+		v.holder.Logger.Debugf("ensure view path exists: %s", v.path)
 		if err := os.MkdirAll(v.path, 0777); err != nil {
 			return errors.Wrap(err, "creating view directory")
 		} else if err := os.MkdirAll(filepath.Join(v.path, "fragments"), 0777); err != nil {
 			return errors.Wrap(err, "creating fragments directory")
 		}
 
-		v.logger.Debugf("open fragments for index/field/view: %s/%s/%s", v.index, v.field, v.name)
+		v.holder.Logger.Debugf("open fragments for index/field/view: %s/%s/%s", v.index, v.field, v.name)
 		if err := v.openFragments(); err != nil {
 			return errors.Wrap(err, "opening fragments")
 		}
@@ -151,7 +153,7 @@ func (v *view) open() error {
 		return err
 	}
 
-	v.logger.Debugf("successfully opened index/field/view: %s/%s/%s", v.index, v.field, v.name)
+	v.holder.Logger.Debugf("successfully opened index/field/view: %s/%s/%s", v.index, v.field, v.name)
 	return nil
 }
 
@@ -190,12 +192,12 @@ fileLoop:
 			// Parse filename into integer.
 			shard, err := strconv.ParseUint(filepath.Base(fi.Name()), 10, 64)
 			if err != nil {
-				v.logger.Debugf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", v.index, v.field, v.name, fi.Name())
+				v.holder.Logger.Debugf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", v.index, v.field, v.name, fi.Name())
 				continue
 			}
 
 			workQueue <- struct{}{}
-			v.logger.Debugf("open index/field/view/fragment: %s/%s/%s/%d", v.index, v.field, v.name, shard)
+			v.holder.Logger.Debugf("open index/field/view/fragment: %s/%s/%s/%d", v.index, v.field, v.name, shard)
 			eg.Go(func() error {
 				defer func() {
 					<-workQueue
@@ -205,7 +207,7 @@ fileLoop:
 					return fmt.Errorf("open fragment: shard=%d, err=%s", frag.shard, err)
 				}
 				frag.RowAttrStore = v.rowAttrStore
-				v.logger.Debugf("add index/field/view/fragment to view.fragments: %s/%s/%s/%d", v.index, v.field, v.name, shard)
+				v.holder.Logger.Debugf("add index/field/view/fragment to view.fragments: %s/%s/%s/%d", v.index, v.field, v.name, shard)
 				mu.Lock()
 				v.fragments[frag.shard] = frag
 				v.addKnownShard(frag.shard)
@@ -342,7 +344,7 @@ func (v *view) notifyIfNewShard(shard uint64) {
 		// Broadcast a message that a new max shard was just created.
 		err := v.broadcaster.SendSync(msg)
 		if err != nil {
-			v.logger.Printf("broadcasting create shard: %v", err)
+			v.holder.Logger.Printf("broadcasting create shard: %v", err)
 		}
 		close(broadcastChan)
 	}()
@@ -352,19 +354,15 @@ func (v *view) notifyIfNewShard(shard uint64) {
 	select {
 	case <-broadcastChan:
 	case <-time.After(50 * time.Millisecond):
-		v.logger.Debugf("broadcasting create shard took >50ms")
+		v.holder.Logger.Debugf("broadcasting create shard took >50ms")
 	}
 }
 
 func (v *view) newFragment(path string, shard uint64) *fragment {
-	frag := newFragment(path, v.index, v.field, v.name, shard, v.flags())
+	frag := newFragment(v.holder, path, v.index, v.field, v.name, shard, v.flags())
 	frag.CacheType = v.cacheType
 	frag.CacheSize = v.cacheSize
-	frag.Logger = v.logger
 	frag.stats = v.stats
-	if v.snapshotQueue != nil {
-		frag.snapshotQueue = v.snapshotQueue
-	}
 	if v.fieldType == FieldTypeMutex {
 		frag.mutexVector = newRowsVector(frag)
 	} else if v.fieldType == FieldTypeBool {
@@ -382,7 +380,7 @@ func (v *view) deleteFragment(shard uint64) error {
 		return ErrFragmentNotFound
 	}
 
-	v.logger.Printf("delete fragment: (%s/%s/%s) %d", v.index, v.field, v.name, shard)
+	v.holder.Logger.Printf("delete fragment: (%s/%s/%s) %d", v.index, v.field, v.name, shard)
 
 	// Close data files before deletion.
 	if err := fragment.Close(); err != nil {
@@ -396,7 +394,7 @@ func (v *view) deleteFragment(shard uint64) error {
 
 	// Delete fragment cache file.
 	if err := os.Remove(fragment.cachePath()); err != nil {
-		v.logger.Printf("no cache file to delete for shard %d", shard)
+		v.holder.Logger.Printf("no cache file to delete for shard %d", shard)
 	}
 
 	delete(v.fragments, shard)
@@ -406,130 +404,76 @@ func (v *view) deleteFragment(shard uint64) error {
 }
 
 // row returns a row for a shard of the view.
-func (v *view) row(rowID uint64) *Row {
+func (v *view) row(tx Tx, rowID uint64) (*Row, error) {
 	row := NewRow()
 	for _, frag := range v.allFragments() {
-		fr := frag.row(rowID)
-		if fr == nil {
+		fr, err := frag.row(tx, rowID)
+		if err != nil {
+			return nil, err
+		} else if fr == nil {
 			continue
 		}
 		row.Merge(fr)
 	}
-	return row
+	return row, nil
 
 }
 
 // setBit sets a bit within the view.
-func (v *view) setBit(rowID, columnID uint64) (changed bool, err error) {
+func (v *view) setBit(tx Tx, rowID, columnID uint64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		return changed, err
 	}
-	return frag.setBit(rowID, columnID)
+	return frag.setBit(tx, rowID, columnID)
 }
 
 // clearBit clears a bit within the view.
-func (v *view) clearBit(rowID, columnID uint64) (changed bool, err error) {
+func (v *view) clearBit(tx Tx, rowID, columnID uint64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag := v.Fragment(shard)
 	if frag == nil {
 		return false, nil
 	}
-	return frag.clearBit(rowID, columnID)
+	return frag.clearBit(tx, rowID, columnID)
 }
 
 // value uses a column of bits to read a multi-bit value.
-func (v *view) value(columnID uint64, bitDepth uint) (value int64, exists bool, err error) {
+func (v *view) value(tx Tx, columnID uint64, bitDepth uint) (value int64, exists bool, err error) {
 	shard := columnID / ShardWidth
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		return value, exists, err
 	}
-	return frag.value(columnID, bitDepth)
+	return frag.value(tx, columnID, bitDepth)
 }
 
 // setValue uses a column of bits to set a multi-bit value.
-func (v *view) setValue(columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
+func (v *view) setValue(tx Tx, columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag, err := v.CreateFragmentIfNotExists(shard)
 	if err != nil {
 		return changed, err
 	}
-	return frag.setValue(columnID, bitDepth, value)
+	return frag.setValue(tx, columnID, bitDepth, value)
 }
 
 // clearValue removes a specific value assigned to columnID
-func (v *view) clearValue(columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
+func (v *view) clearValue(tx Tx, columnID uint64, bitDepth uint, value int64) (changed bool, err error) {
 	shard := columnID / ShardWidth
 	frag := v.Fragment(shard)
 	if frag == nil {
 		return false, nil
 	}
-	return frag.clearValue(columnID, bitDepth, value)
-}
-
-// sum returns the sum & count of a field.
-func (v *view) sum(filter *Row, bitDepth uint) (sum int64, count uint64, err error) {
-	for _, f := range v.allFragments() {
-		fsum, fcount, err := f.sum(filter, bitDepth)
-		if err != nil {
-			return sum, count, err
-		}
-		sum += fsum
-		count += fcount
-	}
-	return sum, count, nil
-}
-
-// min returns the min and count of a field.
-func (v *view) min(filter *Row, bitDepth uint) (min int64, count uint64, err error) {
-	var minHasValue bool
-	for _, f := range v.allFragments() {
-		fmin, fcount, err := f.min(filter, bitDepth)
-		if err != nil {
-			return min, count, err
-		}
-		// Don't consider a min based on zero columns.
-		if fcount == 0 {
-			continue
-		}
-
-		if !minHasValue {
-			min = fmin
-			minHasValue = true
-			count += fcount
-			continue
-		}
-
-		if fmin < min {
-			min = fmin
-			count += fcount
-		}
-	}
-	return min, count, nil
-}
-
-// max returns the max and count of a field.
-func (v *view) max(filter *Row, bitDepth uint) (max int64, count uint64, err error) {
-	for _, f := range v.allFragments() {
-		fmax, fcount, err := f.max(filter, bitDepth)
-		if err != nil {
-			return max, count, err
-		}
-		if fcount > 0 && fmax > max {
-			max = fmax
-			count += fcount
-		}
-	}
-	return max, count, nil
+	return frag.clearValue(tx, columnID, bitDepth, value)
 }
 
 // rangeOp returns rows with a field value encoding matching the predicate.
-func (v *view) rangeOp(op pql.Token, bitDepth uint, predicate int64) (*Row, error) {
+func (v *view) rangeOp(tx Tx, op pql.Token, bitDepth uint, predicate int64) (*Row, error) {
 	r := NewRow()
 	for _, frag := range v.allFragments() {
-		other, err := frag.rangeOp(op, bitDepth, predicate)
+		other, err := frag.rangeOp(tx, op, bitDepth, predicate)
 		if err != nil {
 			return nil, err
 		}
@@ -570,3 +514,8 @@ type viewInfoSlice []*ViewInfo
 func (p viewInfoSlice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p viewInfoSlice) Len() int           { return len(p) }
 func (p viewInfoSlice) Less(i, j int) bool { return p[i].Name < p[j].Name }
+
+// FormatQualifiedViewName generates a qualified name for the view to be used with Tx operations.
+func FormatQualifiedViewName(index, field, view string) string {
+	return fmt.Sprintf("%s\x00%s\x00%s\x00", index, field, view)
+}
