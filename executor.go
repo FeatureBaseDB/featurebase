@@ -4350,7 +4350,7 @@ func (e *executor) translateResults(ctx context.Context, index string, idx *Inde
 	}
 
 	for i := range results {
-		results[i], err = e.translateResult(index, idx, calls[i], results[i], idMap)
+		results[i], err = e.translateResult(ctx, index, idx, calls[i], results[i], idMap)
 		if err != nil {
 			return err
 		}
@@ -4374,7 +4374,7 @@ func (e *executor) collectResultIDs(index string, idx *Index, call *pql.Call, re
 	return nil
 }
 
-func (e *executor) translateResult(index string, idx *Index, call *pql.Call, result interface{}, idSet map[uint64]string) (interface{}, error) {
+func (e *executor) translateResult(ctx context.Context, index string, idx *Index, call *pql.Call, result interface{}, idSet map[uint64]string) (interface{}, error) {
 	switch result := result.(type) {
 	case *Row:
 		if idx.Keys() {
@@ -4481,10 +4481,23 @@ func (e *executor) translateResult(index string, idx *Index, call *pql.Call, res
 					return nil, ErrFieldNotFound
 				}
 				if field.Keys() {
-					// TODO: does this need to take field.ForeignIndex() into consideration?
-					key, err := field.TranslateStore().TranslateID(g.RowID)
-					if err != nil {
-						return nil, errors.Wrap(err, "translating row ID in Group")
+					var key string
+					var err error
+					if fi := field.ForeignIndex(); fi != "" && g.Value != nil {
+						val := uint64(*g.Value) // not worried about overflow here because it's a foreign key
+						keys, err := e.Cluster.translateIndexIDs(ctx, fi, []uint64{val})
+						if err != nil {
+							return nil, errors.Wrap(err, "translating foreign index in Group")
+						}
+						if len(keys) == 1 {
+							key = keys[0]
+							group[i].Value = nil // Remove value now that it has been translated.
+						}
+					} else {
+						key, err = field.TranslateStore().TranslateID(g.RowID)
+						if err != nil {
+							return nil, errors.Wrap(err, "translating row ID in Group")
+						}
 					}
 					group[i].RowKey = key
 				}
