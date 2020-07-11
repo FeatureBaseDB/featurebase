@@ -4299,7 +4299,12 @@ func (e *executor) translateCall(ctx context.Context, indexName string, c *pql.C
 
 		fields := make([]*Field, len(c.Children))
 		for i, child := range c.Children {
-			fieldname := callArgString(child, "_field")
+			var fieldname string
+			if fieldname = callArgString(child, "_field"); fieldname == "" {
+				// TODO: it's unsettling that we expect "_field" but in some
+				// cases get "field". We should figure out why that happens.
+				fieldname = callArgString(child, "field")
+			}
 			field := idx.Field(fieldname)
 			if field == nil {
 				return errors.Wrapf(ErrFieldNotFound, "getting field '%s' from '%s'", fieldname, child)
@@ -4314,10 +4319,21 @@ func (e *executor) translateCall(ctx context.Context, indexName string, c *pql.C
 				if !ok {
 					return errors.New("prev value must be a string when field 'keys' option enabled")
 				}
-				// TODO: does this need to take field.ForeignIndex() into consideration?
-				id, err := e.Cluster.translateFieldKey(ctx, field, prevStr)
-				if err != nil {
-					return errors.Wrapf(err, "translating field key: %s", prevStr)
+				var id uint64
+				var err error
+				if fi := field.ForeignIndex(); fi != "" {
+					ids, err := e.Cluster.translateIndexKeys(ctx, fi, []string{prevStr})
+					if err != nil {
+						return errors.Wrap(err, "translating foreign index key in groupby previous")
+					}
+					if len(ids) == 1 {
+						id = ids[0]
+					}
+				} else {
+					id, err = e.Cluster.translateFieldKey(ctx, field, prevStr)
+					if err != nil {
+						return errors.Wrapf(err, "translating field key: %s", prevStr)
+					}
 				}
 				previous[i] = id
 			} else {
