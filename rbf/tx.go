@@ -1,17 +1,3 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package rbf
 
 import (
@@ -50,8 +36,14 @@ func (tx *Tx) Commit() error {
 		tx.db.pageMap = tx.pageMap
 	}
 
+	if err := tx.db.checkpoint(); err != nil {
+		return err
+	}
+
 	// Disconnect transaction from DB.
-	return tx.db.removeTx(tx)
+	tx.db.removeTx(tx)
+
+	return nil
 }
 
 func (tx *Tx) Rollback() error {
@@ -70,8 +62,14 @@ func (tx *Tx) Rollback() error {
 		}
 	}
 
+	if err := tx.db.checkpoint(); err != nil {
+		return err
+	}
+
 	// Disconnect transaction from DB.
-	return tx.db.removeTx(tx)
+	tx.db.removeTx(tx)
+
+	return nil
 }
 
 // Root returns the root page number for a bitmap. Returns 0 if the bitmap does not exist.
@@ -246,9 +244,7 @@ func (tx *Tx) writeRootRecordPages(records []*RootRecord) (err error) {
 			return err
 		}
 
-		if err := tx.deallocate(pgno); err != nil {
-			return err
-		}
+		tx.deallocate(pgno)
 		pgno = readRootRecordOverflowPgno(page)
 	}
 
@@ -410,7 +406,14 @@ func (tx *Tx) checkPageAllocations() error {
 		if isInuse && isFree {
 			return fmt.Errorf("page in-use & free: pgno=%d", pgno)
 		} else if !isInuse && !isFree {
-			return fmt.Errorf("page not in-use & not free: pgno=%d", pgno)
+			page, _ := tx.readPage(pgno)
+			flags := readFlags(page)
+			if flags == PageTypeBranch || flags == PageTypeLeaf {
+
+				return fmt.Errorf("page not in-use & not free: pgno=%d", pgno)
+			}
+			//assuming its a bitmap so its ok TODO ben?
+			return nil
 		}
 	}
 
@@ -436,7 +439,7 @@ func (tx *Tx) freePageSet() (map[uint32]struct{}, error) {
 		}
 
 		cell := c.cell()
-		for _, v := range cell.Values() {
+		for _, v := range cell.Values(tx) {
 			pgno := uint32((cell.Key << 16) & uint64(v))
 			m[pgno] = struct{}{}
 		}

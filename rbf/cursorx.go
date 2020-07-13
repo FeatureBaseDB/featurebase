@@ -27,9 +27,7 @@ import (
 // but for now i'll do it
 func (c *Cursor) Rows() ([]uint64, error) {
 	shardVsContainerExponent := uint(4) //needs constant exported from roaring package
-	if err := c.First(); err != nil {
-		return nil, err
-	}
+	c.First()
 	rows := make([]uint64, 0)
 	var err error
 	var lastRow uint64 = math.MaxUint64
@@ -48,7 +46,6 @@ func (c *Cursor) Rows() ([]uint64, error) {
 	}
 	return rows, err
 }
-
 func (tx *Tx) FieldViews() []string {
 	r, _ := tx.rootRecords()
 	res := make([]string, len(r))
@@ -57,23 +54,17 @@ func (tx *Tx) FieldViews() []string {
 	}
 	return res
 }
-
-func (c *Cursor) DumpKeys() error {
-	if err := c.First(); err != nil {
-		return err
-	}
+func (c *Cursor) DumpKeys() {
+	c.First()
 	for {
 		err := c.Next()
 		if err == io.EOF {
-			return nil
-		} else if err != nil {
-			return err
+			break
 		}
 		cell := c.cell()
 		fmt.Println("key", cell.Key)
 	}
 }
-
 func (c *Cursor) DumpStack() {
 	fmt.Println("STACK")
 	for i := c.stack.index; i >= 0; i-- {
@@ -81,18 +72,18 @@ func (c *Cursor) DumpStack() {
 	}
 	fmt.Println()
 }
-
-func (c *Cursor) Dump() {
-	bufStdout := bufio.NewWriter(os.Stdout)
-	defer bufStdout.Flush()
+func (c *Cursor) Dump(name string) {
+	writer, _ := os.Create(name)
+	defer writer.Close()
+	bufStdout := bufio.NewWriter(writer)
 	fmt.Fprintf(bufStdout, "digraph RBF{\n")
 	fmt.Fprintf(bufStdout, "rankdir=\"LR\"\n")
 
 	fmt.Fprintf(bufStdout, "node [shape=record height=.1]\n")
 	dumpdot(c.tx, 0, " ", bufStdout)
 	fmt.Fprintf(bufStdout, "\n}")
+	bufStdout.Flush()
 }
-
 func (c *Cursor) Row(rowID uint64) (*roaring.Bitmap, error) {
 	base := rowID * ShardWidth
 
@@ -108,9 +99,7 @@ func (c *Cursor) Row(rowID uint64) (*roaring.Bitmap, error) {
 		elem := &c.stack.elems[c.stack.index]
 		n := readCellN(c.leafPage)
 		if elem.index >= n {
-			if err := c.goNextPage(); err != nil {
-				return nil, err
-			}
+			c.goNextPage()
 		}
 	}
 	other := roaring.NewSliceBitmap()
@@ -148,4 +137,42 @@ func toContainer(l leafCell) *roaring.Container {
 		return roaring.NewContainerRun(toInterval16(l.Data))
 	}
 	return nil
+}
+
+type Walker interface {
+	Visitor(pgno uint32, records []*RootRecord)
+	VisitRoot(pgno uint32, name string)
+	VisitBranch(pgno uint32)
+	VisitLeaf(pgno uint32)
+	VisitBitmap(pgno uint32)
+}
+
+func Page(tx *Tx, pgno uint32, walker Walker) {
+	page, err := tx.readPage(pgno)
+	if err != nil {
+		panic(err)
+	}
+
+	if IsMetaPage(page) {
+		Walk(tx, readMetaRootRecordPageNo(page), walker.Visitor)
+		return
+	}
+
+	// Handle
+	switch typ := readFlags(page); typ {
+	case PageTypeBranch:
+		walker.VisitBranch(pgno)
+		for i, n := 0, readCellN(page); i < n; i++ {
+			cell := readBranchCell(page, i)
+			if cell.Flags&ContainerTypeBitmap == 0 { // leaf/branch child page
+				Page(tx, cell.Pgno, walker)
+			} else {
+				walker.VisitBitmap(cell.Pgno)
+			}
+		}
+	case PageTypeLeaf:
+		walker.VisitLeaf(pgno)
+	default:
+		panic(err)
+	}
 }

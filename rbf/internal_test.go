@@ -21,6 +21,6 @@ func TestUsed(t *testing.T) {
 	t.Skip("This function is always skipped")
 	dump(nil)
 	hexdump(nil)
-	pagedump(nil, "", nil)
+	pagedumpi(nil, "", nil)
 	treedump(nil, 0, "", nil)
 }

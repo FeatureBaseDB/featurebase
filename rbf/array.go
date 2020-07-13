@@ -1,17 +1,3 @@
-// Copyright 2017 Pilosa Corp.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package rbf
 
 import (
@@ -28,6 +14,12 @@ func toArray16(a []byte) []uint16 {
 // fromArray16 converts a slice of uint16 values into a byte slice using unsafe.
 func fromArray16(a []uint16) []byte {
 	return (*[8192]byte)(unsafe.Pointer(&a[0]))[: len(a)*2 : len(a)*2]
+}
+
+func cloneArray16(a []uint16) []uint16 {
+	other := make([]uint16, len(a))
+	copy(other, a)
+	return other
 }
 
 // arrayIndex returns the insertion index of v in a. Returns true if exact match.
@@ -66,4 +58,10 @@ func toInterval16(a []byte) []roaring.Interval16 {
 // fromArray16 converts a slice of uint16 values into a byte slice using unsafe.
 func fromInterval16(a []roaring.Interval16) []byte {
 	return (*[8192]byte)(unsafe.Pointer(&a[0]))[: len(a)*4 : len(a)*4]
+}
+
+func cloneInterval16(a []roaring.Interval16) []roaring.Interval16 {
+	other := make([]roaring.Interval16, len(a))
+	copy(other, a)
+	return other
 }
