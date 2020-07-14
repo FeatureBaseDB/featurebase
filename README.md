@@ -40,7 +40,7 @@ See our [Documentation](https://www.pilosa.com/docs/) for information about inst
     and verify that it's running:
     
     ```shell
-    curl localhost:10101/nodes
+    curl localhost:10101/status
     ```
 
 3.  Follow along with the [Sample Project](https://www.pilosa.com/docs/getting-started/#sample-project) to get a better understanding of Pilosa's capabilities.
