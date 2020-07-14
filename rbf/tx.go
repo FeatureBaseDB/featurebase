@@ -41,9 +41,7 @@ func (tx *Tx) Commit() error {
 	}
 
 	// Disconnect transaction from DB.
-	tx.db.removeTx(tx)
-
-	return nil
+	return tx.db.removeTx(tx)
 }
 
 func (tx *Tx) Rollback() error {
@@ -67,9 +65,7 @@ func (tx *Tx) Rollback() error {
 	}
 
 	// Disconnect transaction from DB.
-	tx.db.removeTx(tx)
-
-	return nil
+	return tx.db.removeTx(tx)
 }
 
 // Root returns the root page number for a bitmap. Returns 0 if the bitmap does not exist.

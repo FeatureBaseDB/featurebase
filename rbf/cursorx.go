@@ -21,14 +21,20 @@ import (
 	"os"
 
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pkg/errors"
 )
 
 //probably should just implement the container interface
 // but for now i'll do it
 func (c *Cursor) Rows() ([]uint64, error) {
 	shardVsContainerExponent := uint(4) //needs constant exported from roaring package
-	c.First()
 	rows := make([]uint64, 0)
+	if err := c.First(); err != nil {
+		if err == io.EOF { //root leaf with no elements
+			return rows, nil
+		}
+		return nil, errors.Wrap(err, "rows")
+	}
 	var err error
 	var lastRow uint64 = math.MaxUint64
 	for {
@@ -55,7 +61,10 @@ func (tx *Tx) FieldViews() []string {
 	return res
 }
 func (c *Cursor) DumpKeys() {
-	c.First()
+	if err := c.First(); err != nil {
+		//ignoring errors for this debug function
+		return
+	}
 	for {
 		err := c.Next()
 		if err == io.EOF {
@@ -99,7 +108,9 @@ func (c *Cursor) Row(rowID uint64) (*roaring.Bitmap, error) {
 		elem := &c.stack.elems[c.stack.index]
 		n := readCellN(c.leafPage)
 		if elem.index >= n {
-			c.goNextPage()
+			if err := c.goNextPage(); err != nil {
+				return nil, errors.Wrap(err, "row")
+			}
 		}
 	}
 	other := roaring.NewSliceBitmap()

@@ -307,7 +307,7 @@ func toPgno(val []byte) uint32 {
 func (c *Cursor) putLeafCell(in leafArgs) (err error) {
 	cells := readLeafCells(c.leafPage, c.leafCells[:])
 	elem := &c.stack.elems[c.stack.index]
-	cell := leafCell{Key: in.Key, Type: in.Type, N: in.N, Data: in.Data}
+	cell := leafCell(in)
 
 	if elem.index >= len(cells) || c.Key() != cell.Key {
 		//new cell
@@ -376,7 +376,9 @@ func (c *Cursor) putLeafCell(in leafArgs) (err error) {
 		if in.Type == ContainerTypeBitmap {
 			var bm [PageSize]byte
 			copy(bm[:], fromArray64(toArray64(in.Data)))
-			c.tx.writeBitmapPage(toPgno(cell.Data), bm[:])
+			if err = c.tx.writeBitmapPage(toPgno(cell.Data), bm[:]); err != nil {
+				return errors.Wrap(err, "putLeafCell writing bitmap page")
+			}
 		}
 		var buf [PageSize]byte
 		// Write cells to page.

@@ -30,11 +30,13 @@ func fromArray16(a []uint16) []byte {
 	return (*[8192]byte)(unsafe.Pointer(&a[0]))[: len(a)*2 : len(a)*2]
 }
 
+/* lint
 func cloneArray16(a []uint16) []uint16 {
 	other := make([]uint16, len(a))
 	copy(other, a)
 	return other
 }
+*/
 
 // arrayIndex returns the insertion index of v in a. Returns true if exact match.
 func arrayIndex(a []uint16, v uint16) (int, bool) {
@@ -74,8 +76,10 @@ func fromInterval16(a []roaring.Interval16) []byte {
 	return (*[8192]byte)(unsafe.Pointer(&a[0]))[: len(a)*4 : len(a)*4]
 }
 
+/* lint
 func cloneInterval16(a []roaring.Interval16) []roaring.Interval16 {
 	other := make([]roaring.Interval16, len(a))
 	copy(other, a)
 	return other
 }
+*/

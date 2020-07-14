@@ -4,7 +4,6 @@ package rbf
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -99,12 +98,14 @@ func writeMetaRootRecordPageNo(page []byte, pgno uint32) { binary.BigEndian.PutU
 func readMetaFreelistPageNo(page []byte) uint32        { return binary.BigEndian.Uint32(page[24:]) }
 func writeMetaFreelistPageNo(page []byte, pgno uint32) { binary.BigEndian.PutUint32(page[24:], pgno) }
 
+/* lint
 func readMetaChecksum(page []byte) uint32 {
 	return binary.BigEndian.Uint32(page[PageSize-4 : PageSize])
 }
 func writeMetaChecksum(page []byte, chksum uint32) {
 	binary.BigEndian.PutUint32(page[PageSize-4:PageSize], chksum)
 }
+*/
 
 // Root record page helpers
 
@@ -471,9 +472,11 @@ func search(n int, f func(int) int) (index int, exact bool) {
 	return i, false
 }
 
+/* lint
 func itohex(v int) string { return fmt.Sprintf("0x%x", v) }
 
 func hexdump(b []byte) { println(hex.Dump(b)) }
+*/
 
 func pagedumpi(b []byte, indent string, writer io.Writer) {
 	pgno := readPageNo(b)

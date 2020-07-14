@@ -15,6 +15,7 @@
 package rbf_test
 
 import (
+	"io"
 	"math/bits"
 	"math/rand"
 	"reflect"
@@ -866,7 +867,9 @@ func TestCursor_UpdateBranchCells(t *testing.T) {
 	}
 	changed, err = c.Remove(1)
 	if changed {
-		c.First()
+		if err := c.First(); err != nil && err != io.EOF {
+			t.Fatal(err)
+		}
 		if got, want := c.Values(), []uint16{}; !reflect.DeepEqual(got, want) {
 			t.Fatal(err)
 		}
@@ -885,7 +888,9 @@ func TestCursor_UpdateBranchCells(t *testing.T) {
 	}
 	changed, err = c.Remove(2)
 	if changed {
-		c.First()
+		if err := c.First(); err != nil && err != io.EOF {
+			panic(err)
+		}
 		if got, want := c.Values(), []uint16{1}; !reflect.DeepEqual(got, want) {
 			t.Fatal(err)
 		}
@@ -895,7 +900,9 @@ func TestCursor_UpdateBranchCells(t *testing.T) {
 
 	changed, err = c.Remove(1)
 	if changed {
-		c.First()
+		if err := c.First(); err != nil && err != io.EOF {
+			panic(err)
+		}
 		if got, want := c.Values(), []uint16{}; !reflect.DeepEqual(got, want) {
 			t.Fatal(err)
 		}
@@ -929,7 +936,9 @@ func TestCursor_SplitBranchCells(t *testing.T) {
 	numContainers := 314
 	for i := 0; i < numContainers; i++ { //need to calculate how many will force a split
 		b := rb(uint64(i))
-		tx.AddRoaring("x", b)
+		if _, err := tx.AddRoaring("x", b); err != nil {
+			panic(err)
+		}
 	}
 	before := &EasyWalker{tx: tx}
 	rbf.Page(tx, 0, before)
@@ -939,10 +948,9 @@ func TestCursor_SplitBranchCells(t *testing.T) {
 
 	}
 	// adding one more container should split it
-	tx.AddRoaring("x", rb(uint64(numContainers)))
-	c, _ := tx.Cursor("x")
-	c.First()
-	c.Dump("test.dot")
+	if _, err := tx.AddRoaring("x", rb(uint64(numContainers))); err != nil {
+		panic(err)
+	}
 
 	after := &EasyWalker{tx: tx}
 	rbf.Page(tx, 0, after)
@@ -977,14 +985,20 @@ func TestCursor_RemoveCells(t *testing.T) {
 	numContainers := 455 //enough containers to cause a split
 	for i := 0; i < numContainers; i++ {
 		b := rb(uint64(i))
-		tx.AddRoaring("x", b)
+		if _, err := tx.AddRoaring("x", b); err != nil {
+			panic(err)
+		}
 	}
 
 	for i := numContainers; i >= 1; i-- {
-		cur.RemoveRoaring(rb(uint64(i)))
+		if _, err := cur.RemoveRoaring(rb(uint64(i))); err != nil {
+			panic(err)
+		}
 	}
 
-	cur.RemoveRoaring(rb(uint64(0)))
+	if _, err := cur.RemoveRoaring(rb(uint64(0))); err != nil {
+		panic(err)
+	}
 
 	//f, err := os.OpenFile("before.dot", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 066)
 }
@@ -1000,7 +1014,9 @@ func TestCursor_PlayContainer(t *testing.T) {
 	}
 	many := func(c *rbf.Cursor, start, count uint64) {
 		for i := start; i < start+count; i++ {
-			c.Add(i)
+			if _, err := c.Add(i); err != nil {
+				panic(err)
+			}
 		}
 	}
 	cur, _ := tx.Cursor("x")
@@ -1018,7 +1034,9 @@ func TestCursor_PlayContainer(t *testing.T) {
 	   many(cur, 9*65536, rbf.ArrayMaxSize+10) //+offset)
 	*/
 
-	cur.First()
+	if err := cur.First(); err != nil {
+		panic(err)
+	}
 	cur.Dump("fun.dot")
 }
 
@@ -1044,13 +1062,17 @@ func TestCursor_OneBitmap(t *testing.T) {
 	numContainers := 4
 	for i := 0; i < numContainers; i++ { //need to calculate how many will force a split
 		b := rb(uint64(i)) // measured at i=454 seems reasonable should occur at Len(branchcells)+header >8192
-		tx.AddRoaring("x", b)
+		if _, err := tx.AddRoaring("x", b); err != nil {
+			panic(err)
+		}
 	}
 	cur, err := tx.Cursor("x")
 	if err != nil {
 		panic(err)
 	}
-	cur.First()
+	if err := cur.First(); err != nil {
+		panic(err)
+	}
 	cur.Dump("fun.dot")
 }
 func TestCursor_GenerateAll(t *testing.T) {
@@ -1066,23 +1088,31 @@ func TestCursor_GenerateAll(t *testing.T) {
 		bm.Put(11, roaring.NewContainerArray([]uint16{1, 2, 3}))
 		return bm
 	}()
-	tx.AddRoaring("x", ar)
+	if _, err := tx.AddRoaring("x", ar); err != nil {
+		panic(err)
+	}
 	rb := func() *roaring.Bitmap {
 		bm := roaring.NewBitmap()
 		bm.Put(1, roaring.NewContainerRun([]roaring.Interval16{{Start: 1, Last: 12}}))
 		return bm
 	}()
-	tx.AddRoaring("x", rb)
+	if _, err := tx.AddRoaring("x", rb); err != nil {
+		panic(err)
+	}
 	bb := func() *roaring.Bitmap {
 		bm := roaring.NewBitmap()
 		bm.Put(0, roaring.NewContainerBitmap(makeBitmap([]uint16{75})))
 		return bm
 	}()
-	tx.AddRoaring("x", bb)
+	if _, err := tx.AddRoaring("x", bb); err != nil {
+		panic(err)
+	}
 	if err := tx.CreateBitmap("field/view/"); err != nil {
 		t.Fatal(err)
 	}
-	tx.AddRoaring("field/view/", bb)
+	if _, err := tx.AddRoaring("field/view/", bb); err != nil {
+		panic(err)
+	}
 	cur, err := tx.Cursor("field/view/")
 	if err != nil {
 		panic(err)
