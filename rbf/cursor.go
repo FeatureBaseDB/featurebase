@@ -156,7 +156,7 @@ func (c *Cursor) Add(v uint64) (changed bool, err error) {
 		return false, nil
 	case ContainerTypeBitmap:
 		// Exit if bit set in bitmap container.
-		pgno, bm, err := c.tx.GetBitmap(&cell)
+		pgno, bm, err := c.tx.leafCellBitmap(toPgno(cell.Data))
 
 		if err != nil {
 			return false, errors.Wrap(err, "cursor.Add")
@@ -236,7 +236,7 @@ func (c *Cursor) Remove(v uint64) (changed bool, err error) {
 		}
 		return true, c.putLeafCell(leafArgs{Key: cell.Key, Type: ContainerTypeRLE, N: len(runs), Data: fromInterval16(runs)})
 	case ContainerTypeBitmap:
-		pgno, bm, err := c.tx.GetBitmap(&cell)
+		pgno, bm, err := c.tx.leafCellBitmap(toPgno(cell.Data))
 		if err != nil {
 			return false, errors.Wrap(err, "cursor.add")
 		}
@@ -286,7 +286,7 @@ func (c *Cursor) Contains(v uint64) (exists bool, err error) {
 		}
 		return false, nil
 	case ContainerTypeBitmap:
-		_, a, err := c.tx.GetBitmap(&cell)
+		_, a, err := c.tx.leafCellBitmap(toPgno(cell.Data))
 		if err != nil {
 			return false, errors.Wrap(err, "cursor.Contains")
 		}
@@ -943,7 +943,7 @@ func (c *Cursor) Union(rowID uint64, row []uint64) error {
 		case ContainerTypeRLE:
 			panic("TODO(BBJ): rbf.Bitmap.Union() RLE support")
 		case ContainerTypeBitmap:
-			_, bm, err := c.tx.GetBitmap(&cell)
+			_, bm, err := c.tx.leafCellBitmap(toPgno(cell.Data))
 			if err != nil {
 				return errors.Wrap(err, "union")
 			}
@@ -991,7 +991,7 @@ func (c *Cursor) Intersect(rowID uint64, row []uint64) error {
 		case ContainerTypeRLE:
 			panic("TODO(BBJ): rbf.Bitmap.Intersect() RLE support")
 		case ContainerTypeBitmap:
-			_, bm, err := c.tx.GetBitmap(&cell)
+			_, bm, err := c.tx.leafCellBitmap(toPgno(cell.Data))
 			if err != nil {
 				return errors.Wrap(err, "cursor.Intersect")
 			}
@@ -1117,7 +1117,7 @@ func (c *Cursor) merge(key uint64, data *roaring.Container) (bool, error) {
 		d := toArray16(cell.Data)
 		container = roaring.NewContainerArray(d)
 	case ContainerTypeBitmap:
-		_, d, err := c.tx.GetBitmap(&cell)
+		_, d, err := c.tx.leafCellBitmap(toPgno(cell.Data))
 		if err != nil {
 			return false, errors.Wrap(err, "cursor.merge")
 		}
@@ -1204,7 +1204,7 @@ func (c *Cursor) difference(key uint64, data *roaring.Container) (bool, error) {
 		d := toArray16(cell.Data)
 		container = roaring.NewContainerArray(d)
 	case ContainerTypeBitmap:
-		_, d, err := c.tx.GetBitmap(&cell)
+		_, d, err := c.tx.leafCellBitmap(toPgno(cell.Data))
 		if err != nil {
 			return false, errors.Wrap(err, "cursor.difference")
 		}

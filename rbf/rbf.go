@@ -281,7 +281,7 @@ func (c *leafCell) Bitmap(tx *Tx) []uint64 {
 		}
 		return buf
 	case ContainerTypeBitmap:
-		_, bm, _ := tx.GetBitmap(c)
+		_, bm, _ := tx.leafCellBitmap(toPgno(c.Data))
 		return bm
 	default:
 		panic(fmt.Sprintf("invalid container type: %d", c.Type))
@@ -307,7 +307,7 @@ func (c *leafCell) Values(tx *Tx) []uint16 {
 		return a
 	case ContainerTypeBitmap:
 		a := make([]uint16, 0, BitmapN*64)
-		_, bm, _ := tx.GetBitmap(c)
+		_, bm, _ := tx.leafCellBitmap(toPgno(c.Data))
 		for i, v := range bm {
 			for j := uint(0); j < 64; j++ {
 				if v&(1<<j) != 0 {

@@ -676,8 +676,7 @@ func (tx *Tx) AddRoaring(name string, bm *roaring.Bitmap) (changed bool, err err
 	}
 	return c.AddRoaring(bm)
 }
-func (tx *Tx) GetBitmap(c *leafCell) (pgno uint32, bm []uint64, err error) {
-	pgno = toPgno(c.Data)
+func (tx *Tx) leafCellBitmap(pgno uint32) (uint32, []uint64, error) {
 	page, err := tx.readPage(pgno)
 	if err != nil {
 		return 0, nil, err

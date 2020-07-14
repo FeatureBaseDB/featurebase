@@ -2565,7 +2565,7 @@ func TestRunBinSearchContains(t *testing.T) {
 	for i, test := range tests {
 		index := test.index
 		runs := test.runs
-		idx, found := binSearchRuns(index, runs)
+		idx, found := BinSearchRuns(index, runs)
 
 		if test.exp.index != idx && test.exp.found != found {
 			t.Fatalf("test #%v expected %v , but got %v %v", i, test.exp, idx, found)
@@ -2630,7 +2630,7 @@ func TestRunBinSearch(t *testing.T) {
 		},
 	}
 	for i, test := range tests {
-		idx, contains := binSearchRuns(test.search, test.runs)
+		idx, contains := BinSearchRuns(test.search, test.runs)
 		if !(test.exp == contains && test.expi == idx) {
 			t.Fatalf("test #%v expected (%v, %v) but got (%v, %v)", i, test.exp, test.expi, contains, idx)
 		}

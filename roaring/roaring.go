@@ -3161,7 +3161,7 @@ func (c *Container) bitmapContains(v uint16) bool {
 	return (c.bitmap()[v/64] & (1 << uint64(v%64))) != 0
 }
 
-// binSearchRuns returns the index of the run containing v, and true, when v is contained;
+// BinSearchRuns returns the index of the run containing v, and true, when v is contained;
 // or the index of the next run starting after v, and false, when v is not contained.
 func BinSearchRuns(v uint16, a []Interval16) (int32, bool) {
 	i := int32(sort.Search(len(a),
