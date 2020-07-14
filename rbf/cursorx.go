@@ -139,12 +139,18 @@ func toContainer(l leafCell) *roaring.Container {
 	return nil
 }
 
+type Nodetype int
+
+const (
+	Branch Nodetype = iota
+	Leaf
+	Bitmap
+)
+
 type Walker interface {
 	Visitor(pgno uint32, records []*RootRecord)
 	VisitRoot(pgno uint32, name string)
-	VisitBranch(pgno uint32)
-	VisitLeaf(pgno uint32)
-	VisitBitmap(pgno uint32)
+	Visit(pgno uint32, n Nodetype)
 }
 
 func Page(tx *Tx, pgno uint32, walker Walker) {
@@ -161,17 +167,17 @@ func Page(tx *Tx, pgno uint32, walker Walker) {
 	// Handle
 	switch typ := readFlags(page); typ {
 	case PageTypeBranch:
-		walker.VisitBranch(pgno)
+		walker.Visit(pgno, Branch)
 		for i, n := 0, readCellN(page); i < n; i++ {
 			cell := readBranchCell(page, i)
 			if cell.Flags&ContainerTypeBitmap == 0 { // leaf/branch child page
 				Page(tx, cell.Pgno, walker)
 			} else {
-				walker.VisitBitmap(cell.Pgno)
+				walker.Visit(cell.Pgno, Bitmap)
 			}
 		}
 	case PageTypeLeaf:
-		walker.VisitLeaf(pgno)
+		walker.Visit(pgno, Leaf)
 	default:
 		panic(err)
 	}

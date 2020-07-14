@@ -822,15 +822,16 @@ func (e *EasyWalker) Visitor(pgno uint32, records []*rbf.RootRecord) {
 func (e *EasyWalker) VisitRoot(pgno uint32, name string) {
 	e.path.WriteString("R")
 }
-func (e *EasyWalker) VisitBranch(pgno uint32) {
-	e.path.WriteString("B")
+func (e *EasyWalker) Visit(pgno uint32, node rbf.Nodetype) {
+	switch node {
+	case rbf.Branch:
+		e.path.WriteString("B")
+	case rbf.Leaf:
+		e.path.WriteString("L")
+	case rbf.Bitmap:
+		e.path.WriteString("b")
+	}
 
-}
-func (e *EasyWalker) VisitLeaf(pgno uint32) {
-	e.path.WriteString("L")
-
-}
-func (e *EasyWalker) VisitBitmap(pgno uint32) {
 }
 func (e *EasyWalker) String() string {
 	return e.path.String()
