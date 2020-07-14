@@ -9,6 +9,7 @@ import (
 	"unsafe"
 
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -155,9 +156,10 @@ func (c *Cursor) Add(v uint64) (changed bool, err error) {
 		return false, nil
 	case ContainerTypeBitmap:
 		// Exit if bit set in bitmap container.
-		pgno, bm, err := cell.GetBitmap(c.tx)
+		pgno, bm, err := c.tx.GetBitmap(&cell)
+
 		if err != nil {
-			return false, err
+			return false, errors.Wrap(err, "cursor.Add")
 		}
 
 		a := cloneArray64(bm)
@@ -234,9 +236,9 @@ func (c *Cursor) Remove(v uint64) (changed bool, err error) {
 		}
 		return true, c.putLeafCell(leafArgs{Key: cell.Key, Type: ContainerTypeRLE, N: len(runs), Data: fromInterval16(runs)})
 	case ContainerTypeBitmap:
-		pgno, bm, err := cell.GetBitmap(c.tx)
+		pgno, bm, err := c.tx.GetBitmap(&cell)
 		if err != nil {
-			return false, err
+			return false, errors.Wrap(err, "cursor.add")
 		}
 		a := cloneArray64(bm)
 		if a[lo/64]&(1<<uint64(lo%64)) == 0 {
@@ -284,8 +286,10 @@ func (c *Cursor) Contains(v uint64) (exists bool, err error) {
 		}
 		return false, nil
 	case ContainerTypeBitmap:
-		_, a, err := cell.GetBitmap(c.tx)
-
+		_, a, err := c.tx.GetBitmap(&cell)
+		if err != nil {
+			return false, errors.Wrap(err, "cursor.Contains")
+		}
 		return a[lo/64]&(1<<uint64(lo%64)) != 0, err
 	default:
 		return false, fmt.Errorf("rbf.Cursor.Contains(): invalid container type: %d", cell.Type)
@@ -320,7 +324,10 @@ func (c *Cursor) putLeafCell(in leafArgs) (err error) {
 	} else if in.Type == ContainerTypeBitmap {
 		ecell := cells[elem.index]
 		if ecell.Type != ContainerTypeBitmap {
-			bitmapPgno, _ := c.tx.allocate()
+			bitmapPgno, err := c.tx.allocate()
+			if err != nil {
+				return errors.Wrap(err, "cursor.putLeafCell")
+			}
 			cell.Data = fromPgno(bitmapPgno)
 		} else {
 			cell.Data = ecell.Data //fill in the old pgno
@@ -936,7 +943,10 @@ func (c *Cursor) Union(rowID uint64, row []uint64) error {
 		case ContainerTypeRLE:
 			panic("TODO(BBJ): rbf.Bitmap.Union() RLE support")
 		case ContainerTypeBitmap:
-			_, bm, _ := cell.GetBitmap(c.tx)
+			_, bm, err := c.tx.GetBitmap(&cell)
+			if err != nil {
+				return errors.Wrap(err, "union")
+			}
 			for i, v := range bm {
 				row[(offset/64)+uint64(i)] |= v
 			}
@@ -981,9 +991,9 @@ func (c *Cursor) Intersect(rowID uint64, row []uint64) error {
 		case ContainerTypeRLE:
 			panic("TODO(BBJ): rbf.Bitmap.Intersect() RLE support")
 		case ContainerTypeBitmap:
-			_, bm, err := cell.GetBitmap(c.tx)
+			_, bm, err := c.tx.GetBitmap(&cell)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "cursor.Intersect")
 			}
 			for i, v := range bm {
 				row[(offset/64)+uint64(i)] &= v
@@ -1107,9 +1117,9 @@ func (c *Cursor) merge(key uint64, data *roaring.Container) (bool, error) {
 		d := toArray16(cell.Data)
 		container = roaring.NewContainerArray(d)
 	case ContainerTypeBitmap:
-		_, d, err := cell.GetBitmap(c.tx)
+		_, d, err := c.tx.GetBitmap(&cell)
 		if err != nil {
-			return false, err
+			return false, errors.Wrap(err, "cursor.merge")
 		}
 		container = roaring.NewContainerBitmap(cell.N, d)
 	case ContainerTypeRLE:
@@ -1194,9 +1204,9 @@ func (c *Cursor) difference(key uint64, data *roaring.Container) (bool, error) {
 		d := toArray16(cell.Data)
 		container = roaring.NewContainerArray(d)
 	case ContainerTypeBitmap:
-		_, d, err := cell.GetBitmap(c.tx)
+		_, d, err := c.tx.GetBitmap(&cell)
 		if err != nil {
-			return false, err
+			return false, errors.Wrap(err, "cursor.difference")
 		}
 		container = roaring.NewContainerBitmap(cell.N, d)
 	case ContainerTypeRLE:

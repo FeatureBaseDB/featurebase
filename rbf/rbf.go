@@ -108,7 +108,7 @@ func writeMetaChecksum(page []byte, chksum uint32) {
 
 // Root record page helpers
 
-func readRootRecordOverflowPgno(page []byte) uint32 { return binary.BigEndian.Uint32(page[8:]) }
+func WalkRootRecordPages(page []byte) uint32 { return binary.BigEndian.Uint32(page[8:]) }
 func writeRootRecordOverflowPgno(page []byte, pgno uint32) {
 	binary.BigEndian.PutUint32(page[8:], pgno)
 }
@@ -293,7 +293,7 @@ func (c *leafCell) Bitmap(tx *Tx) []uint64 {
 		}
 		return buf
 	case ContainerTypeBitmap:
-		_, bm, _ := c.GetBitmap(tx)
+		_, bm, _ := tx.GetBitmap(c)
 		return bm
 	default:
 		panic(fmt.Sprintf("invalid container type: %d", c.Type))
@@ -319,7 +319,7 @@ func (c *leafCell) Values(tx *Tx) []uint16 {
 		return a
 	case ContainerTypeBitmap:
 		a := make([]uint16, 0, BitmapN*64)
-		_, bm, _ := c.GetBitmap(tx)
+		_, bm, _ := tx.GetBitmap(c)
 		for i, v := range bm {
 			for j := uint(0); j < 64; j++ {
 				if v&(1<<j) != 0 {
@@ -540,7 +540,7 @@ func Walk(tx *Tx, pgno uint32, v func(uint32, []*RootRecord)) {
 		}
 		v(pgno, a)
 		// Read next overflow page number.
-		pgno = readRootRecordOverflowPgno(page)
+		pgno = WalkRootRecordPages(page)
 	}
 }
 
@@ -604,7 +604,7 @@ func rrdump(tx *Tx, pgno uint32, v func(uint32, []*RootRecord)) {
 		}
 		v(pgno, a)
 		// Read next overflow page number.
-		pgno = readRootRecordOverflowPgno(page)
+		pgno = WalkRootRecordPages(page)
 	}
 }
 

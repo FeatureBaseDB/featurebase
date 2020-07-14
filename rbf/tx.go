@@ -230,7 +230,7 @@ func (tx *Tx) rootRecords() ([]*RootRecord, error) {
 		records = append(records, a...)
 
 		// Read next overflow page number.
-		pgno = readRootRecordOverflowPgno(page)
+		pgno = WalkRootRecordPages(page)
 	}
 	return records, nil
 }
@@ -244,8 +244,11 @@ func (tx *Tx) writeRootRecordPages(records []*RootRecord) (err error) {
 			return err
 		}
 
-		tx.deallocate(pgno)
-		pgno = readRootRecordOverflowPgno(page)
+		err = tx.deallocate(pgno)
+		if err != nil {
+			return err
+		}
+		pgno = WalkRootRecordPages(page)
 	}
 
 	// Exit early if no records exist.
@@ -459,7 +462,7 @@ func (tx *Tx) inusePageSet() (map[uint32]struct{}, error) {
 		if err != nil {
 			return nil, err
 		}
-		pgno = readRootRecordOverflowPgno(page)
+		pgno = WalkRootRecordPages(page)
 	}
 
 	// Traverse freelist and mark pages as in-use.
@@ -672,4 +675,12 @@ func (tx *Tx) AddRoaring(name string, bm *roaring.Bitmap) (changed bool, err err
 		return false, err
 	}
 	return c.AddRoaring(bm)
+}
+func (tx *Tx) GetBitmap(c *leafCell) (pgno uint32, bm []uint64, err error) {
+	pgno = toPgno(c.Data)
+	page, err := tx.readPage(pgno)
+	if err != nil {
+		return 0, nil, err
+	}
+	return pgno, toArray64(page), err
 }

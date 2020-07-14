@@ -1048,3 +1048,39 @@ func TestCursor_OneBitmap(t *testing.T) {
 	cur.First()
 	cur.Dump("fun.dot")
 }
+func TestCursor_GenerateAll(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+	tx := MustBegin(t, db, true)
+	defer MustRollback(t, tx)
+	if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+	ar := func() *roaring.Bitmap {
+		bm := roaring.NewBitmap()
+		bm.Put(11, roaring.NewContainerArray([]uint16{1, 2, 3}))
+		return bm
+	}()
+	tx.AddRoaring("x", ar)
+	rb := func() *roaring.Bitmap {
+		bm := roaring.NewBitmap()
+		bm.Put(1, roaring.NewContainerRun([]roaring.Interval16{{Start: 1, Last: 12}}))
+		return bm
+	}()
+	tx.AddRoaring("x", rb)
+	bb := func() *roaring.Bitmap {
+		bm := roaring.NewBitmap()
+		bm.Put(0, roaring.NewContainerBitmap(makeBitmap([]uint16{75})))
+		return bm
+	}()
+	tx.AddRoaring("x", bb)
+	if err := tx.CreateBitmap("field/view/"); err != nil {
+		t.Fatal(err)
+	}
+	tx.AddRoaring("field/view/", bb)
+	cur, err := tx.Cursor("field/view/")
+	if err != nil {
+		panic(err)
+	}
+	cur.Dump("fun.dot")
+}
