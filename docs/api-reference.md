@@ -376,6 +376,27 @@ curl -XGET localhost:10101/status
 }
 ```
 
+### Get active queries
+
+`GET /queries`
+
+Returns the set of active queries. Supports pretty printing in `text/plain` format or JSON output in `application/json` format.
+Also includes the amount of time that the query has been running (in nanoseconds when using JSON).
+
+```request
+curl -XGET localhost:10101/queries
+```
+```response
+182.412µs  All()
+```
+
+```request
+curl -XGET -H "Accept: application/json" localhost:10101/queries
+```
+```response
+[{"query":"All()","age":135123}]
+```
+
 ### Recalculate Caches
 
 `POST /recalculate-caches`
