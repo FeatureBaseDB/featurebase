@@ -939,6 +939,10 @@ func TestCursor_SplitBranchCells(t *testing.T) {
 	}
 	// adding one more container should split it
 	tx.AddRoaring("x", rb(uint64(numContainers)))
+	c, _ := tx.Cursor("x")
+	c.First()
+	c.Dump("test.dot")
+
 	after := &EasyWalker{tx: tx}
 	rbf.Page(tx, 0, after)
 	if after.String() != "RBLL" {

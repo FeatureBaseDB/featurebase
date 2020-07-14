@@ -161,11 +161,7 @@ func dataOffset(n int) int {
 }
 
 func IsBitmapHeader(page []byte) bool {
-	if readFlags(page) != PageTypeBitmapHeader {
-		return false
-	}
-	// TODO(BBJ): Verify checksum.
-	return true
+	return readFlags(page) == PageTypeBitmapHeader
 }
 
 type RootRecord struct {
@@ -254,14 +250,6 @@ type leafArgs leafCell
 // Size returns the size of the leaf cell, in bytes.
 func (c *leafCell) Size() int {
 	return leafCellHeaderSize + len(c.Data)
-}
-func (c *leafCell) GetBitmap(tx *Tx) (pgno uint32, bm []uint64, err error) {
-	pgno = toPgno(c.Data)
-	page, err := tx.readPage(pgno)
-	if err != nil {
-		return 0, nil, err
-	}
-	return pgno, toArray64(page), err
 }
 
 // Bitmap returns a bitmap representation of the cell data.
