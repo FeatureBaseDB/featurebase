@@ -45,9 +45,11 @@ type standardLogger struct {
 	logger *log.Logger
 }
 
+const logFlags = log.Ldate | log.Ltime | log.Lmicroseconds
+
 func NewStandardLogger(w io.Writer) *standardLogger {
 	return &standardLogger{
-		logger: log.New(w, "", log.LstdFlags),
+		logger: log.New(w, "", logFlags),
 	}
 }
 
@@ -68,7 +70,7 @@ type verboseLogger struct {
 
 func NewVerboseLogger(w io.Writer) *verboseLogger {
 	return &verboseLogger{
-		logger: log.New(w, "", log.LstdFlags),
+		logger: log.New(w, "", logFlags),
 	}
 }
 
