@@ -4743,7 +4743,7 @@ func TestExecutor_Execute_Rows_Keys(t *testing.T) {
 			exp: []string{},
 		},
 		{
-			q: `Rows(f, like="__")`,
+			q:   `Rows(f, like="__")`,
 			exp: []string{"10", "11", "12", "13", "14", "15", "16", "17", "18"},
 		},
 	}
@@ -5187,6 +5187,43 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			results := c.Query(t, "i", `GroupBy(Rows(generalk), Rows(subk))`).Results[0].([]pilosa.GroupCount)
 			test.CheckGroupBy(t, expected, results)
 
+		})
+
+		// Foreign Index
+		c.CreateField(t, "fip", pilosa.IndexOptions{Keys: true}, "parent")
+		c.CreateField(t, "fic", pilosa.IndexOptions{}, "child",
+			pilosa.OptFieldTypeInt(0, math.MaxInt64),
+			pilosa.OptFieldForeignIndex("fip"),
+		)
+		// Set data on the parent so we have some index keys.
+		c.Query(t, "fip", `
+			Set("one", parent=1)
+			Set("two", parent=2)
+			Set("three", parent=3)
+			Set("four", parent=4)
+			Set("five", parent=5)
+		`)
+		// Set data on the child to align with the foreign index keys.
+		c.Query(t, "fic", `
+			Set(1, child="one")
+			Set(2, child="one")
+			Set(3, child="one")
+			Set(4, child="three")
+			Set(5, child="three")
+			Set(6, child="five")
+		`)
+
+		t.Run("test foreign index with keys", func(t *testing.T) {
+			// the execututor returns row IDs when the field has keys, so they should be included in the target.
+			// because the order is determined by the partitioned index key, they seem out of order.
+			expected := []pilosa.GroupCount{
+				{Group: []pilosa.FieldRow{{Field: "child", RowID: 0, RowKey: "one"}}, Count: 3},
+				{Group: []pilosa.FieldRow{{Field: "child", RowID: 1, RowKey: "five"}}, Count: 1},
+				{Group: []pilosa.FieldRow{{Field: "child", RowID: 2, RowKey: "three"}}, Count: 2},
+			}
+
+			results := c.Query(t, "fic", `GroupBy(Rows(child))`).Results[0].([]pilosa.GroupCount)
+			test.CheckGroupBy(t, expected, results)
 		})
 
 	}

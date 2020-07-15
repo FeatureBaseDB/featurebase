@@ -78,8 +78,9 @@ func makeHolder() (*Holder, string, error) {
 		return nil, "", err
 	}
 	h := NewHolder(DefaultPartitionN)
+	h.Path = path
 
-	return h, path, nil
+	return h, h.Path, nil
 }
 
 func testSetBit(t *testing.T, h *Holder, index, field string, rowID, columnID uint64) {
