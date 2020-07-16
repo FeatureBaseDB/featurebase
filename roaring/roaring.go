@@ -2198,6 +2198,95 @@ func (c *Container) Contains(v uint16) bool {
 	}
 }
 
+// BitwiseCompare reports whether two containers are equal. It returns
+// an error describing any difference it finds. This is mostly intended
+// for use in tests that expect equality.
+func (c *Container) BitwiseCompare(c2 *Container) error {
+	if c.N() != c2.N() {
+		return errors.New("containers are different lengths")
+	}
+	if c.N() == 0 {
+		return nil
+	}
+	switch typePair(c.typ(), c2.typ()) {
+	case typePair(containerArray, containerArray):
+		return compareArrayArray(c.array(), c2.array())
+	case typePair(containerArray, containerBitmap):
+		return compareArrayBitmap(c.array(), c2.bitmap())
+	case typePair(containerBitmap, containerArray):
+		return compareArrayBitmap(c2.array(), c.bitmap())
+	case typePair(containerArray, containerRun):
+		return compareArrayRuns(c.array(), c2.runs())
+	case typePair(containerRun, containerArray):
+		return compareArrayRuns(c2.array(), c.runs())
+	default:
+		c3 := xor(c, c2)
+		if c3.N() != 0 {
+			return fmt.Errorf("%d bits differenct between containers", c3.N())
+		}
+	}
+	return nil
+}
+
+func typePair(ct1, ct2 byte) int {
+	return int((ct1 << 4) | ct2)
+}
+
+func compareArrayArray(a1, a2 []uint16) error {
+	if len(a1) != len(a2) {
+		return fmt.Errorf("unexpected length mismatch, %d vs %d", len(a1), len(a2))
+	}
+	for i := range a1 {
+		if a1[i] != a2[i] {
+			return fmt.Errorf("item %d: %d vs %d", i, a1[i], a2[i])
+		}
+	}
+	return nil
+}
+
+// compareArrayRuns determines whether an array matches a provided
+// set of runs. As with compareArrayBitmap, it only verifies presence
+// of the array's values in the run collection. the run collection
+// can't be empty; if it were, N would have been 0, and we wouldn't
+// have gotten here.
+func compareArrayRuns(a []uint16, r []interval16) error {
+	ri := 0
+	ru := r[ri]
+	ri++
+	for _, v := range a {
+		if v < ru.start {
+			return fmt.Errorf("value %d missing", v)
+		}
+		if v > ru.last {
+			if ri >= len(r) {
+				return fmt.Errorf("value %d missing", v)
+			}
+			ru = r[ri]
+			ri++
+			// if they're identical, the array value must be
+			// the start of the next run.
+			if v != ru.start {
+				return fmt.Errorf("value %d missing", v)
+			}
+		}
+	}
+	return nil
+}
+
+// compareArrayBitmap actually only verifies that everything in the array
+// is in the bitmap. It's used only after comparing the N for the containers,
+// so if there's anything in the bitmap that's not in the array, either there's
+// something in the array that's not in the bitmap, or we didn't get here.
+func compareArrayBitmap(a []uint16, b []uint64) error {
+	for _, v := range a {
+		w, bit := b[v>>6], v&63
+		if w>>bit&1 == 0 {
+			return fmt.Errorf("value %d missing", v)
+		}
+	}
+	return nil
+}
+
 func (c *Container) bitmapCountRuns() (r int32) {
 	return bitmapCountRuns(c.bitmap())
 }
@@ -2342,8 +2431,7 @@ func (c *Container) unionInPlace(other *Container) *Container {
 			c = c.runToBitmap()
 			return unionBitmapArrayInPlace(c, other)
 		case containerRun:
-			c = c.runToBitmap()
-			return unionBitmapRunInPlace(c, other)
+			return unionRunRunInPlace(c, other)
 		}
 	}
 	if roaringParanoia {
@@ -2458,7 +2546,6 @@ func (c *Container) runRemove(v uint16) (*Container, bool) {
 		runs = append(runs, interval16{})
 		copy(runs[i+2:], runs[i+1:])
 		runs[i+1] = interval16{start: v + 1, last: last}
-		// runs = append(runs[:i+1], append([]interval16{{start: v + 1, last: last}}, runs[i+1:]...)...)
 	}
 	c.setN(c.N() - 1)
 	c.setRuns(runs)
@@ -3836,6 +3923,197 @@ func unionBitmapBitmapInPlace(a, b *Container) *Container {
 		ab[i+3] |= bb[i+3]
 	}
 	return a
+}
+
+// unionRunRunInPlace unions run b into run a, mutating a in place.
+func unionRunRunInPlace(a, b *Container) *Container {
+	a = a.Thaw()
+	runs, n := unionInterval16InPlace(a.runs(), b.runs())
+
+	a.setRuns(runs)
+	a.setN(n)
+	return a
+}
+
+// unioninterval16InPlace merges two slices in place (in a).
+// The main concept is to go value by value (instead of interval by interval)
+// and count `.start` and `.last` points.
+// If we get the `state == 0` it means we just built a new interval (`val`),
+// and we can set it in `a` at the possition `off`
+func unionInterval16InPlace(a, b []interval16) ([]interval16, int32) {
+	n := int32(0)
+	an, bn := len(a), len(b)
+
+	var (
+		// ai - index of a, aii - subindex (0: a[ai].start, 1: a[ai].last).
+		ai, aii int = 0, 0
+
+		// bi - index of b, bii - subindex (0: b[bi].start, 1: b[bi].last).
+		bi, bii int = 0, 0
+
+		// Offset of a - next available index to set.
+		off int = 0
+		// Value to set/append to a at off
+		val interval16
+
+		// Current state - state equals 0 means we are clear (out of intervals)
+		// When we start a new interval we add +1,
+		// when we get out of interval we add  -1.
+		state int
+
+		// mapping: subindex (ii) to state
+		// .start: [0] ->  1
+		// .last:  [1] -> -1
+		iiMap = [2]int{1, -1}
+
+		// If fromB is equal 2 it means that both val.start and val.last come from b,
+		// so we need to extend a, first
+		fromB int8
+
+		// eval functions evaluates global state and value
+		eval = func(arr [2]uint16, ii int, onlyB bool) {
+			if state == 0 && ii == 0 {
+				// we are clear and start a new interval
+				val.start = arr[ii]
+				if onlyB {
+					fromB++
+				}
+			}
+
+			state += iiMap[ii]
+
+			if state == 0 {
+				// we just got out of interval
+				// ii == 1
+				val.last = arr[ii]
+				if onlyB {
+					fromB++
+				}
+			}
+		}
+		// eval2 function is a special variant for eval function
+		// it's only used when two interval endings are equal, e.g.:
+		// a: ------------------|
+		// b:        -----------|
+		// the most important part is to change the global for both endings
+		// before we check if we're getting out of interval and start the new one.
+		eval2 = func(arr [2]uint16, i1, i2 int) {
+			if state == 0 && (i1 == 0 || i2 == 0) {
+				// we are clear and start a new interval
+				val.start = arr[i1]
+
+			}
+
+			state += iiMap[i1]
+			state += iiMap[i2]
+
+			if state == 0 {
+				// (i1 == 1 || i2 == 1)
+				// we just got out of interval
+				val.last = arr[i1]
+			}
+		}
+	)
+
+	for {
+		// av, bv reflects a[ai] and b[bi] intervals as an array,
+		// so we can internally iterate over values (points).
+		var av, bv [2]uint16
+
+		if ai < an && bi < bn {
+			av[0], av[1] = a[ai].start, a[ai].last
+			bv[0], bv[1] = b[bi].start, b[bi].last
+
+			if av[aii] < bv[bii] {
+				// a: |-------------------
+				// b:           |-------------------
+
+				eval(av, aii, false)
+				aii++
+			} else if av[aii] == bv[bii] {
+				// a: |-------------------
+				// b: |-------------------
+				// or
+				// a: ------------------|
+				// b:                   |-------------------
+				// or
+				// a: ------------------|
+				// b:      |------------|
+				// ...
+
+				eval2(av, aii, bii)
+				aii++
+				bii++
+			} else { // bv[bii] < av[aii]
+				// a:           |-------------------
+				// b: |-------------------
+
+				eval(bv, bii, true)
+				bii++
+			}
+		} else if ai < an { // only a left
+			av[0], av[1] = a[ai].start, a[ai].last
+			eval(av, aii, false)
+			aii++
+		} else if bi < bn { // only b left
+			bv[0], bv[1] = b[bi].start, b[bi].last
+			eval(bv, bii, false)
+			bii++
+		} else {
+			break
+		}
+
+		if state == 0 {
+			if fromB == 2 {
+				// val.start and val.last come from b, so we need to extend a, first
+				a = append(a, interval16{})
+				copy(a[off+1:], a[off:])
+				ai++
+				an++
+			}
+			fromB = 0
+			a, off = appendinterval16At(a, val, off)
+			n += int32(val.last) - int32(val.start) + 1
+		}
+
+		if aii == 2 {
+			// move to the next a's interval
+			aii = 0
+			ai++
+		}
+
+		if bii == 2 {
+			// move to the next b's interval
+			bii = 0
+			bi++
+		}
+	}
+
+	if len(a) > 0 {
+		a = a[:off]
+	}
+	return a, n
+}
+
+// appendinterval16At appends or sets val in a at off position
+// The function returns modified a ([]interval16) and new offset (off)
+func appendinterval16At(a []interval16, val interval16, off int) ([]interval16, int) {
+
+	if off > 0 && int32(val.start)-int32(a[off-1].last) <= 1 {
+		a[off-1].last = val.last
+		return a, off
+	}
+
+	if off == len(a) {
+		a = append(a, val)
+		off++
+		return a, off
+	}
+
+	a[off] = val
+	off++
+
+	return a, off
 }
 
 func difference(a, b *Container) *Container {
