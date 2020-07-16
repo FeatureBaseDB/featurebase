@@ -486,12 +486,6 @@ func search(n int, f func(int) int) (index int, exact bool) {
 	return i, false
 }
 
-/* lint
-func itohex(v int) string { return fmt.Sprintf("0x%x", v) }
-
-func hexdump(b []byte) { println(hex.Dump(b)) }
-*/
-
 func pagedumpi(b []byte, indent string, writer io.Writer) {
 	pgno := readPageNo(b)
 	if pgno == Magic32() {

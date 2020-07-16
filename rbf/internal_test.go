@@ -14,13 +14,15 @@
 
 package rbf
 
-import "testing"
+import (
+	"testing"
+)
 
 // This function exists to mark debugging helper function as "used" by the linter.
 func TestUsed(t *testing.T) {
 	t.Skip("This function is always skipped")
 	dump(nil)
-	hexdump(nil)
+	//hexdump(nil)
 	pagedumpi(nil, "", nil)
 	treedump(nil, 0, "", nil)
 }
