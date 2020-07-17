@@ -126,7 +126,7 @@ func (c *Cursor) Row(rowID uint64) (*roaring.Bitmap, error) {
 		if cell.Key >= hi1 {
 			break
 		}
-		other.Containers.Put(off+(cell.Key-hi0), toContainer(cell))
+		other.Containers.Put(off+(cell.Key-hi0), toContainer(cell, c.tx))
 	}
 	return other, nil
 }
@@ -138,10 +138,13 @@ func (c *Cursor) CurrentPageType() int {
 	return cell.Type
 }
 
-func toContainer(l leafCell) *roaring.Container {
+func toContainer(l leafCell, tx *Tx) *roaring.Container {
 	switch l.Type {
 	case ContainerTypeArray:
 		return roaring.NewContainerArray(toArray16(l.Data))
+	case ContainerTypeBitmapPtr:
+		_, bm, _ := tx.leafCellBitmap(toPgno(l.Data))
+		return roaring.NewContainerBitmap(l.N, bm)
 	case ContainerTypeBitmap:
 		return roaring.NewContainerBitmap(l.N, toArray64(l.Data))
 	case ContainerTypeRLE:
@@ -181,11 +184,7 @@ func Page(tx *Tx, pgno uint32, walker Walker) {
 		walker.Visit(pgno, Branch)
 		for i, n := 0, readCellN(page); i < n; i++ {
 			cell := readBranchCell(page, i)
-			if cell.Flags&ContainerTypeBitmap == 0 { // leaf/branch child page
-				Page(tx, cell.Pgno, walker)
-			} else {
-				walker.Visit(cell.Pgno, Bitmap)
-			}
+			Page(tx, cell.Pgno, walker)
 		}
 	case PageTypeLeaf:
 		walker.Visit(pgno, Leaf)

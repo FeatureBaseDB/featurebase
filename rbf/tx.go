@@ -78,7 +78,11 @@ func (tx *Tx) Rollback() error {
 	}
 
 	// Disconnect transaction from DB.
-	return tx.db.removeTx(tx)
+	err := tx.db.removeTx(tx)
+	if err != nil {
+		//TODO need to fix this error
+	}
+	return nil
 }
 
 // Root returns the root page number for a bitmap. Returns 0 if the bitmap does not exist.
@@ -516,14 +520,8 @@ func (tx *Tx) walkTree(pgno uint32, fn func(uint32) error) error {
 	case PageTypeBranch:
 		for i, n := 0, readCellN(page); i < n; i++ {
 			cell := readBranchCell(page, i)
-			if cell.Flags&ContainerTypeBitmap != 0 { // bitmap cell (cannot traverse into)
-				if err := fn(cell.Pgno); err != nil {
-					return err
-				}
-			} else {
-				if err := tx.walkTree(cell.Pgno, fn); err != nil {
-					return err
-				}
+			if err := tx.walkTree(cell.Pgno, fn); err != nil {
+				return err
 			}
 		}
 		return nil
@@ -600,14 +598,8 @@ func (tx *Tx) deallocateTree(pgno uint32) error {
 	case PageTypeBranch:
 		for i, n := 0, readCellN(page); i < n; i++ {
 			cell := readBranchCell(page, i)
-			if cell.Flags&ContainerTypeBitmap == 0 { // leaf/branch child page
-				if err := tx.deallocateTree(cell.Pgno); err != nil {
-					return err
-				}
-			} else {
-				if err := tx.deallocate(cell.Pgno); err != nil { // bitmap child page
-					return err
-				}
+			if err := tx.deallocateTree(cell.Pgno); err != nil {
+				return err
 			}
 		}
 		return nil

@@ -67,6 +67,7 @@ const (
 	ContainerTypeArray
 	ContainerTypeRLE
 	ContainerTypeBitmap
+	ContainerTypeBitmapPtr
 )
 
 const (
@@ -295,7 +296,7 @@ func (c *leafCell) Bitmap(tx *Tx) []uint64 {
 			}
 		}
 		return buf
-	case ContainerTypeBitmap:
+	case ContainerTypeBitmapPtr:
 		_, bm, _ := tx.leafCellBitmap(toPgno(c.Data))
 		return bm
 	default:
@@ -320,7 +321,7 @@ func (c *leafCell) Values(tx *Tx) []uint16 {
 		}
 		a = a[:n]
 		return a
-	case ContainerTypeBitmap:
+	case ContainerTypeBitmapPtr:
 		a := make([]uint16, 0, BitmapN*64)
 		_, bm, _ := tx.leafCellBitmap(toPgno(c.Data))
 		for i, v := range bm {
@@ -347,7 +348,7 @@ func (c *leafCell) firstValue() uint16 {
 	case ContainerTypeRLE:
 		r := toInterval16(c.Data)
 		return r[0].Start
-	case ContainerTypeBitmap:
+	case ContainerTypeBitmapPtr:
 		for i, v := range toArray64(c.Data) {
 			for j := uint(0); j < 64; j++ {
 				if v&(1<<j) != 0 {
@@ -380,7 +381,7 @@ func readLeafCell(page []byte, i int) leafCell {
 		cell.Data = buf[16 : 16+(cell.N*2)]
 	case ContainerTypeRLE:
 		cell.Data = buf[16 : 16+(cell.N*4)]
-	case ContainerTypeBitmap:
+	case ContainerTypeBitmapPtr:
 		cell.Data = buf[16 : 16+4]
 	default:
 	}
@@ -508,7 +509,7 @@ func pagedumpi(b []byte, indent string, writer io.Writer) {
 				fmt.Fprintf(writer, "%s[%d]: key=%d type=array n=%d \n", indent, i, cell.Key, cell.N)
 			case ContainerTypeRLE:
 				fmt.Fprintf(writer, "%s[%d]: key=%d type=rle n=%d\n", indent, i, cell.Key, cell.N)
-			case ContainerTypeBitmap:
+			case ContainerTypeBitmapPtr:
 				fmt.Fprintf(writer, "%s[%d]: key=%d type=bitmap n=%d\n", indent, i, cell.Key, cell.N)
 			default:
 				fmt.Fprintf(writer, "%s[%d]: key=%d type=unknown<%d> n=%d\n", indent, i, cell.Key, cell.Type, cell.N)
@@ -575,11 +576,7 @@ func treedump(tx *Tx, pgno uint32, indent string, writer io.Writer) {
 
 		for i, n := 0, readCellN(page); i < n; i++ {
 			cell := readBranchCell(page, i)
-			if cell.Flags&ContainerTypeBitmap == 0 { // leaf/branch child page
-				treedump(tx, cell.Pgno, "    "+indent, writer)
-			} else {
-				fmt.Fprintf(writer, "%s BITMAP(%d)\n", fmtindent("    "+indent), cell.Pgno)
-			}
+			treedump(tx, cell.Pgno, "    "+indent, writer)
 		}
 	case PageTypeLeaf:
 		fmt.Fprintf(writer, "%s LEAF(%d) n=%d\n", fmtindent(indent), pgno, readCellN(page))

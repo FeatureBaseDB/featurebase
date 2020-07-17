@@ -803,8 +803,6 @@ func TestCursor_RLEConversion(t *testing.T) {
 	}
 	if got, want := c.Values(), want; !reflect.DeepEqual(got, want) {
 		t.Fatalf("Values()=%#v, want %#v", got, want)
-	} else if c.CurrentPageType() != rbf.ContainerTypeBitmap {
-		t.Fatalf("Should be bitmap but is %v", c.CurrentPageType())
 	}
 
 }

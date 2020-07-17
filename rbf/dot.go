@@ -29,7 +29,7 @@ func dotCell(b []byte, parent string, writer io.Writer) {
 				fmt.Fprintf(writer, "<tr><td border=\"1\" bgcolor=\"green\"><font color=\"white\">[%d]: key=%d type=array n=%d</font></td></tr>\n", i, cell.Key, cell.N)
 			case ContainerTypeRLE:
 				fmt.Fprintf(writer, "<tr><td border=\"1\" bgcolor=\"blue\"><font color=\"white\">[%d]: key=%d type=rle n=%d</font></td></tr>\n", i, cell.Key, cell.N)
-			case ContainerTypeBitmap:
+			case ContainerTypeBitmapPtr:
 				bpn := toPgno(cell.Data)
 				fmt.Fprintf(writer, "<tr><td border=\"1\" bgcolor=\"red\" port=\"%d\"><font color=\"white\">[%d]: key=%d type=bitmap n=%d </font></td></tr>\n", bpn, i, cell.Key, cell.N)
 				links = append(links, fmt.Sprintf("bitmap%d[label=\"bitmap (%d)\"]\n cell%d:%d -> bitmap%d\n", bpn, bpn, pgno, i, bpn))
