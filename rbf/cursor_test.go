@@ -80,7 +80,7 @@ func TestCursor_FirstNext_Quick(t *testing.T) {
 		t.Skip("race detection enabled, skipping")
 	}
 
-	const n = 100000
+	const n = 10000
 
 	QuickCheck(t, func(t *testing.T, rand *rand.Rand) {
 		t.Parallel()
@@ -202,7 +202,7 @@ func TestCursor_LastPrev_Quick(t *testing.T) {
 		t.Skip("race detection enabled, skipping")
 	}
 
-	const n = 100000
+	const n = 10000
 
 	QuickCheck(t, func(t *testing.T, rand *rand.Rand) {
 		t.Parallel()
@@ -323,7 +323,7 @@ func TestCursor_Union(t *testing.T) {
 			defer MustCloseDB(t, db)
 			tx := MustBegin(t, db, true)
 			defer MustRollback(t, tx)
-			values := GenerateValues(rand, 100000)
+			values := GenerateValues(rand, 10000)
 			rows := ToRows(values)
 
 			if err := tx.CreateBitmap("x"); err != nil {
@@ -404,7 +404,7 @@ func TestCursor_Intersect(t *testing.T) {
 			defer MustCloseDB(t, db)
 			tx := MustBegin(t, db, true)
 			defer MustRollback(t, tx)
-			values := GenerateValues(rand, rand.Intn(100000))
+			values := GenerateValues(rand, rand.Intn(10000))
 			rows := ToRows(values)
 
 			if err := tx.CreateBitmap("x"); err != nil {

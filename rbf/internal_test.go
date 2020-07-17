@@ -21,8 +21,11 @@ import (
 // This function exists to mark debugging helper function as "used" by the linter.
 func TestUsed(t *testing.T) {
 	t.Skip("This function is always skipped")
-	dump(nil)
-	//hexdump(nil)
+/*	dump(nil)
+	hexdump(nil)
 	pagedumpi(nil, "", nil)
 	treedump(nil, 0, "", nil)
+	onpanic(nil)
+	itohex(0)
+*/
 }

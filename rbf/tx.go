@@ -79,9 +79,12 @@ func (tx *Tx) Rollback() error {
 
 	// Disconnect transaction from DB.
 	err := tx.db.removeTx(tx)
-	if err != nil {
-		//TODO need to fix this error
-	}
+	_ = err
+	/*
+		if err != nil {
+			//TODO need to fix this error
+		}
+	*/
 	return nil
 }
 
@@ -149,12 +152,15 @@ func (tx *Tx) CreateBitmap(name string) error {
 
 	return nil
 }
+
+/*
 func dump(r []*RootRecord) {
 	for _, i := range r {
 		fmt.Println("RECORD", i.Name, i.Pgno)
 	}
 
 }
+*/
 
 // DeleteBitmap removes a bitmap with the given name.
 // Returns an error if the bitmap does not exist.

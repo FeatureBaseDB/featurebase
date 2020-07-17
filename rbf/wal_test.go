@@ -16,8 +16,7 @@ package rbf_test
 
 import (
 	"bytes"
-	"encoding/hex"
-	"fmt"
+        "encoding/hex"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -27,9 +26,6 @@ import (
 	"github.com/pilosa/pilosa/v2/rbf"
 )
 
-func itohex(v int) string { return fmt.Sprintf("0x%x", v) }
-
-func hexdump(b []byte) { println(hex.Dump(b)) }
 
 func TestWALSegment_Open(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
