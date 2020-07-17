@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 package rbf
 
 import (
@@ -32,7 +31,8 @@ func dotCell(b []byte, parent string, writer io.Writer) {
 	switch {
 	case flags&PageTypeLeaf != 0:
 		fmt.Fprintf(writer, "cell%d [ shape=none label=<<table border=\"0\" cellspacing=\"0\">\n", pgno)
-		fmt.Fprintf(writer, "<tr><td border=\"1\">CELL</td></tr>\n")
+		fmt.Fprintf(writer, "<tr><td border=\"1\">CELL (%d) </td></tr>\n", pgno)
+		links := make([]string, 0)
 		for i := 0; i < cellN; i++ {
 			cell := readLeafCell(b, i)
 			switch cell.Type {
@@ -41,12 +41,19 @@ func dotCell(b []byte, parent string, writer io.Writer) {
 				fmt.Fprintf(writer, "<tr><td border=\"1\" bgcolor=\"green\"><font color=\"white\">[%d]: key=%d type=array n=%d</font></td></tr>\n", i, cell.Key, cell.N)
 			case ContainerTypeRLE:
 				fmt.Fprintf(writer, "<tr><td border=\"1\" bgcolor=\"blue\"><font color=\"white\">[%d]: key=%d type=rle n=%d</font></td></tr>\n", i, cell.Key, cell.N)
+			case ContainerTypeBitmapPtr:
+				bpn := toPgno(cell.Data)
+				fmt.Fprintf(writer, "<tr><td border=\"1\" bgcolor=\"red\" port=\"%d\"><font color=\"white\">[%d]: key=%d type=bitmap n=%d </font></td></tr>\n", bpn, i, cell.Key, cell.N)
+				links = append(links, fmt.Sprintf("bitmap%d[label=\"bitmap (%d)\"]\n cell%d:%d -> bitmap%d\n", bpn, bpn, pgno, i, bpn))
 			default:
-				fmt.Fprintf(writer, "<tr><td border=\"1\" bgcolor=\"red\">[%d]: key=%d type=unknown<%d> n=%d</td></tr>\n", i, cell.Key, cell.Type, cell.N)
+				fmt.Fprintf(writer, "<tr><td border=\"1\" bgcolor=\"yellow\">[%d]: key=%d type=unknown<%d> n=%d</td></tr>\n", i, cell.Key, cell.Type, cell.N)
 			}
 		}
 		fmt.Fprintf(writer, "</table>>]\n")
 		fmt.Fprintf(writer, "%s -> cell%d\n", parent, pgno)
+		for _, link := range links {
+			fmt.Fprintf(writer, "%s", link)
+		}
 	default:
 		//should not happen
 		fmt.Fprintf(writer, "==!PAGE %d flags=%d\n", pgno, flags)
@@ -76,7 +83,7 @@ func dumpdot(tx *Tx, pgno uint32, parent string, writer io.Writer) {
 
 			}
 		}
-		rrdump(tx, readMetaRootRecordPageNo(page), visitor)
+		Walk(tx, readMetaRootRecordPageNo(page), visitor)
 
 		return
 	}
@@ -92,14 +99,12 @@ func dumpdot(tx *Tx, pgno uint32, parent string, writer io.Writer) {
 				dumpdot(tx, cell.Pgno, p, writer)
 			} else {
 				b := fmt.Sprintf("bm%d", cell.Pgno)
-				fmt.Fprintf(writer, "%s[label=\"BITMAP(%d)\"]\n %s -> %s\n", b, cell.Pgno, p, b)
+				fmt.Fprintf(writer, "%s[label=\"BITMAP(%d) key=%d \"]\n %s -> %s\n", b, cell.Pgno, cell.Key, p, b)
 			}
 		}
 	case PageTypeLeaf:
 		p := fmt.Sprintf("leaf%d", pgno)
 		fmt.Fprintf(writer, "%s[label=\"LEAF(%d)| n=%d\"]\n%s->%s\n", p, pgno, readCellN(page), parent, p)
 		dotCell(page, p, writer)
-	default:
-		panic(err)
 	}
 }

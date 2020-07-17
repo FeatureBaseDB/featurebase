@@ -21,16 +21,20 @@ import (
 	"os"
 
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pkg/errors"
 )
 
 //probably should just implement the container interface
 // but for now i'll do it
 func (c *Cursor) Rows() ([]uint64, error) {
 	shardVsContainerExponent := uint(4) //needs constant exported from roaring package
-	if err := c.First(); err != nil {
-		return nil, err
-	}
 	rows := make([]uint64, 0)
+	if err := c.First(); err != nil {
+		if err == io.EOF { //root leaf with no elements
+			return rows, nil
+		}
+		return nil, errors.Wrap(err, "rows")
+	}
 	var err error
 	var lastRow uint64 = math.MaxUint64
 	for {
@@ -48,7 +52,6 @@ func (c *Cursor) Rows() ([]uint64, error) {
 	}
 	return rows, err
 }
-
 func (tx *Tx) FieldViews() []string {
 	r, _ := tx.rootRecords()
 	res := make([]string, len(r))
@@ -57,23 +60,20 @@ func (tx *Tx) FieldViews() []string {
 	}
 	return res
 }
-
-func (c *Cursor) DumpKeys() error {
+func (c *Cursor) DumpKeys() {
 	if err := c.First(); err != nil {
-		return err
+		//ignoring errors for this debug function
+		return
 	}
 	for {
 		err := c.Next()
 		if err == io.EOF {
-			return nil
-		} else if err != nil {
-			return err
+			break
 		}
 		cell := c.cell()
 		fmt.Println("key", cell.Key)
 	}
 }
-
 func (c *Cursor) DumpStack() {
 	fmt.Println("STACK")
 	for i := c.stack.index; i >= 0; i-- {
@@ -81,18 +81,18 @@ func (c *Cursor) DumpStack() {
 	}
 	fmt.Println()
 }
-
-func (c *Cursor) Dump() {
-	bufStdout := bufio.NewWriter(os.Stdout)
-	defer bufStdout.Flush()
+func (c *Cursor) Dump(name string) {
+	writer, _ := os.Create(name)
+	defer writer.Close()
+	bufStdout := bufio.NewWriter(writer)
 	fmt.Fprintf(bufStdout, "digraph RBF{\n")
 	fmt.Fprintf(bufStdout, "rankdir=\"LR\"\n")
 
 	fmt.Fprintf(bufStdout, "node [shape=record height=.1]\n")
 	dumpdot(c.tx, 0, " ", bufStdout)
 	fmt.Fprintf(bufStdout, "\n}")
+	bufStdout.Flush()
 }
-
 func (c *Cursor) Row(rowID uint64) (*roaring.Bitmap, error) {
 	base := rowID * ShardWidth
 
@@ -109,7 +109,7 @@ func (c *Cursor) Row(rowID uint64) (*roaring.Bitmap, error) {
 		n := readCellN(c.leafPage)
 		if elem.index >= n {
 			if err := c.goNextPage(); err != nil {
-				return nil, err
+				return nil, errors.Wrap(err, "row")
 			}
 		}
 	}
@@ -126,7 +126,7 @@ func (c *Cursor) Row(rowID uint64) (*roaring.Bitmap, error) {
 		if cell.Key >= hi1 {
 			break
 		}
-		other.Containers.Put(off+(cell.Key-hi0), toContainer(cell))
+		other.Containers.Put(off+(cell.Key-hi0), toContainer(cell, c.tx))
 	}
 	return other, nil
 }
@@ -138,14 +138,57 @@ func (c *Cursor) CurrentPageType() int {
 	return cell.Type
 }
 
-func toContainer(l leafCell) *roaring.Container {
+func toContainer(l leafCell, tx *Tx) *roaring.Container {
 	switch l.Type {
 	case ContainerTypeArray:
 		return roaring.NewContainerArray(toArray16(l.Data))
+	case ContainerTypeBitmapPtr:
+		_, bm, _ := tx.leafCellBitmap(toPgno(l.Data))
+		return roaring.NewContainerBitmap(l.N, bm)
 	case ContainerTypeBitmap:
 		return roaring.NewContainerBitmap(l.N, toArray64(l.Data))
 	case ContainerTypeRLE:
 		return roaring.NewContainerRun(toInterval16(l.Data))
 	}
 	return nil
+}
+
+type Nodetype int
+
+const (
+	Branch Nodetype = iota
+	Leaf
+	Bitmap
+)
+
+type Walker interface {
+	Visitor(pgno uint32, records []*RootRecord)
+	VisitRoot(pgno uint32, name string)
+	Visit(pgno uint32, n Nodetype)
+}
+
+func Page(tx *Tx, pgno uint32, walker Walker) {
+	page, err := tx.readPage(pgno)
+	if err != nil {
+		panic(err)
+	}
+
+	if IsMetaPage(page) {
+		Walk(tx, readMetaRootRecordPageNo(page), walker.Visitor)
+		return
+	}
+
+	// Handle
+	switch typ := readFlags(page); typ {
+	case PageTypeBranch:
+		walker.Visit(pgno, Branch)
+		for i, n := 0, readCellN(page); i < n; i++ {
+			cell := readBranchCell(page, i)
+			Page(tx, cell.Pgno, walker)
+		}
+	case PageTypeLeaf:
+		walker.Visit(pgno, Leaf)
+	default:
+		panic(err)
+	}
 }

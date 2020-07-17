@@ -15,10 +15,12 @@
 package rbf_test
 
 import (
+	"io"
 	"math/bits"
 	"math/rand"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/pilosa/pilosa/v2/rbf"
@@ -78,7 +80,7 @@ func TestCursor_FirstNext_Quick(t *testing.T) {
 		t.Skip("race detection enabled, skipping")
 	}
 
-	const n = 100000
+	const n = 10000
 
 	QuickCheck(t, func(t *testing.T, rand *rand.Rand) {
 		t.Parallel()
@@ -200,7 +202,7 @@ func TestCursor_LastPrev_Quick(t *testing.T) {
 		t.Skip("race detection enabled, skipping")
 	}
 
-	const n = 100000
+	const n = 10000
 
 	QuickCheck(t, func(t *testing.T, rand *rand.Rand) {
 		t.Parallel()
@@ -321,7 +323,7 @@ func TestCursor_Union(t *testing.T) {
 			defer MustCloseDB(t, db)
 			tx := MustBegin(t, db, true)
 			defer MustRollback(t, tx)
-			values := GenerateValues(rand, 100000)
+			values := GenerateValues(rand, 10000)
 			rows := ToRows(values)
 
 			if err := tx.CreateBitmap("x"); err != nil {
@@ -402,7 +404,7 @@ func TestCursor_Intersect(t *testing.T) {
 			defer MustCloseDB(t, db)
 			tx := MustBegin(t, db, true)
 			defer MustRollback(t, tx)
-			values := GenerateValues(rand, rand.Intn(100000))
+			values := GenerateValues(rand, rand.Intn(10000))
 			rows := ToRows(values)
 
 			if err := tx.CreateBitmap("x"); err != nil {
@@ -762,6 +764,7 @@ func TestCursor_RLEConversion(t *testing.T) {
 	} else if err := c.First(); err != nil {
 		t.Fatal(err)
 	}
+
 	if c.CurrentPageType() != rbf.ContainerTypeRLE {
 		t.Fatalf("Should Be RLE but is: %v\n", c.CurrentPageType())
 	}
@@ -772,6 +775,14 @@ func TestCursor_RLEConversion(t *testing.T) {
 	if !exists {
 		t.Fatalf("Should Contain %v", 0x7)
 	}
+	exists, err = c.Contains(0x6)
+	if err != nil {
+		t.Fatalf("ERR:%v", err)
+	}
+	if exists {
+		t.Fatalf("Should Not Contain %v", 0x6)
+	}
+
 	//add a few bits to create another run
 	_, err = tx.Add("x",
 		func() []uint64 {
@@ -792,8 +803,317 @@ func TestCursor_RLEConversion(t *testing.T) {
 	}
 	if got, want := c.Values(), want; !reflect.DeepEqual(got, want) {
 		t.Fatalf("Values()=%#v, want %#v", got, want)
-	} else if c.CurrentPageType() != rbf.ContainerTypeBitmap {
-		t.Fatalf("Should be bitmap but is %v", c.CurrentPageType())
 	}
 
+}
+
+type EasyWalker struct {
+	tx   *rbf.Tx
+	path strings.Builder
+}
+
+func (e *EasyWalker) Visitor(pgno uint32, records []*rbf.RootRecord) {
+	for _, record := range records {
+		e.VisitRoot(record.Pgno, record.Name)
+		rbf.Page(e.tx, record.Pgno, e)
+	}
+}
+func (e *EasyWalker) VisitRoot(pgno uint32, name string) {
+	e.path.WriteString("R")
+}
+func (e *EasyWalker) Visit(pgno uint32, node rbf.Nodetype) {
+	switch node {
+	case rbf.Branch:
+		e.path.WriteString("B")
+	case rbf.Leaf:
+		e.path.WriteString("L")
+	case rbf.Bitmap:
+		e.path.WriteString("b")
+	}
+
+}
+func (e *EasyWalker) String() string {
+	return e.path.String()
+}
+
+func TestCursor_UpdateBranchCells(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+	tx := MustBegin(t, db, true)
+	defer MustRollback(t, tx)
+	if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+	c, err := tx.Cursor("x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed, err := c.Add(1)
+	if changed {
+
+		if err := c.First(); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := c.Values(), []uint16{uint16(1)}; !reflect.DeepEqual(got, want) {
+			t.Fatal(err)
+		}
+	} else {
+		t.Fatal("Expected Add Change")
+	}
+	changed, err = c.Remove(1)
+	if changed {
+		if err := c.First(); err != nil && err != io.EOF {
+			t.Fatal(err)
+		}
+		if got, want := c.Values(), []uint16{}; !reflect.DeepEqual(got, want) {
+			t.Fatal(err)
+		}
+	} else {
+		t.Fatal("Expected Remove Change")
+	}
+
+	rb := func() *roaring.Bitmap {
+		bm := roaring.NewBitmap()
+		bm.Put(0, roaring.NewContainerRun([]roaring.Interval16{{Start: 1, Last: 2}}))
+		return bm
+	}()
+	_, err = tx.AddRoaring("x", rb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed, err = c.Remove(2)
+	if changed {
+		if err := c.First(); err != nil && err != io.EOF {
+			panic(err)
+		}
+		if got, want := c.Values(), []uint16{1}; !reflect.DeepEqual(got, want) {
+			t.Fatal(err)
+		}
+	} else {
+		t.Fatal("Expected Remove Change")
+	}
+
+	changed, err = c.Remove(1)
+	if changed {
+		if err := c.First(); err != nil && err != io.EOF {
+			panic(err)
+		}
+		if got, want := c.Values(), []uint16{}; !reflect.DeepEqual(got, want) {
+			t.Fatal(err)
+		}
+	} else {
+		t.Fatal("Expected Remove Change")
+	}
+
+}
+
+func TestCursor_SplitBranchCells(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+	tx := MustBegin(t, db, true)
+	defer MustRollback(t, tx)
+	if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+	rb := func(key uint64) *roaring.Bitmap {
+		bm := roaring.NewBitmap()
+		bits := make([]uint64, rbf.BitmapN)
+		n := 0
+		for i := range bits {
+			bits[i] = ^uint64(0)
+			n += 64
+		}
+		bm.Put(key, roaring.NewContainerBitmap(n, bits))
+		return bm
+	}
+	//634 == offset, 24== size of leafcell with bitmap
+	// measured should split at 634+(24*314)
+	numContainers := 314
+	for i := 0; i < numContainers; i++ { //need to calculate how many will force a split
+		b := rb(uint64(i))
+		if _, err := tx.AddRoaring("x", b); err != nil {
+			panic(err)
+		}
+	}
+	before := &EasyWalker{tx: tx}
+	rbf.Page(tx, 0, before)
+	if before.String() != "RL" {
+
+		t.Fatalf("Expecting RL (one branch) got %v", before.String())
+
+	}
+	// adding one more container should split it
+	if _, err := tx.AddRoaring("x", rb(uint64(numContainers))); err != nil {
+		panic(err)
+	}
+
+	after := &EasyWalker{tx: tx}
+	rbf.Page(tx, 0, after)
+	if after.String() != "RBLL" {
+
+		t.Fatalf("Expecting RBLL (a branch split) got %v", after.String())
+
+	}
+
+}
+
+func TestCursor_RemoveCells(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+	tx := MustBegin(t, db, true)
+	defer MustRollback(t, tx)
+	if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+	cur, _ := tx.Cursor("x")
+	rb := func(key uint64) *roaring.Bitmap {
+		bm := roaring.NewBitmap()
+		bits := make([]uint64, rbf.BitmapN)
+		n := 0
+		for i := range bits {
+			bits[i] = ^uint64(0)
+			n += 64
+		}
+		bm.Put(key, roaring.NewContainerBitmap(n, bits))
+		return bm
+	}
+	numContainers := 455 //enough containers to cause a split
+	for i := 0; i < numContainers; i++ {
+		b := rb(uint64(i))
+		if _, err := tx.AddRoaring("x", b); err != nil {
+			panic(err)
+		}
+	}
+
+	for i := numContainers; i >= 1; i-- {
+		if _, err := cur.RemoveRoaring(rb(uint64(i))); err != nil {
+			panic(err)
+		}
+	}
+
+	if _, err := cur.RemoveRoaring(rb(uint64(0))); err != nil {
+		panic(err)
+	}
+
+	//f, err := os.OpenFile("before.dot", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 066)
+}
+
+//These aren't test i'm just using to generate graphs to look at structure
+func TestCursor_PlayContainer(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+	tx := MustBegin(t, db, true)
+	defer MustRollback(t, tx)
+	if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+	many := func(c *rbf.Cursor, start, count uint64) {
+		for i := start; i < start+count; i++ {
+			if _, err := c.Add(i); err != nil {
+				panic(err)
+			}
+		}
+	}
+	cur, _ := tx.Cursor("x")
+	offset := uint64(0)
+	many(cur, 0, rbf.ArrayMaxSize+offset)
+	many(cur, 65536, rbf.ArrayMaxSize+offset)
+	/*
+	   many(cur, 2*65536, rbf.ArrayMaxSize+offset)
+	   many(cur, 3*65536, rbf.ArrayMaxSize)    //+offset)
+	   many(cur, 4*65536, rbf.ArrayMaxSize)    //+offset)
+	   many(cur, 5*65536, rbf.ArrayMaxSize)    //+offset)
+	   many(cur, 6*65536, 10)                  //+offset)
+	   many(cur, 7*65536, 10)                  //+offset)
+	   many(cur, 8*65536, rbf.ArrayMaxSize+10) //+offset)
+	   many(cur, 9*65536, rbf.ArrayMaxSize+10) //+offset)
+	*/
+
+	if err := cur.First(); err != nil {
+		panic(err)
+	}
+	cur.Dump("fun.dot")
+}
+
+func TestCursor_OneBitmap(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+	tx := MustBegin(t, db, true)
+	defer MustRollback(t, tx)
+	if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+	rb := func(key uint64) *roaring.Bitmap {
+		bm := roaring.NewBitmap()
+		bits := make([]uint64, rbf.BitmapN)
+		n := 0
+		for i := range bits {
+			bits[i] = ^uint64(0)
+			n += 64
+		}
+		bm.Put(key, roaring.NewContainerBitmap(n, bits))
+		return bm
+	}
+	numContainers := 4
+	for i := 0; i < numContainers; i++ { //need to calculate how many will force a split
+		b := rb(uint64(i)) // measured at i=454 seems reasonable should occur at Len(branchcells)+header >8192
+		if _, err := tx.AddRoaring("x", b); err != nil {
+			panic(err)
+		}
+	}
+	cur, err := tx.Cursor("x")
+	if err != nil {
+		panic(err)
+	}
+	if err := cur.First(); err != nil {
+		panic(err)
+	}
+	cur.Dump("fun.dot")
+}
+func TestCursor_GenerateAll(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+	tx := MustBegin(t, db, true)
+	defer MustRollback(t, tx)
+	if err := tx.CreateBitmap("x"); err != nil {
+		t.Fatal(err)
+	}
+	ar := func() *roaring.Bitmap {
+		bm := roaring.NewBitmap()
+		bm.Put(11, roaring.NewContainerArray([]uint16{1, 2, 3}))
+		return bm
+	}()
+	if _, err := tx.AddRoaring("x", ar); err != nil {
+		panic(err)
+	}
+	rb := func() *roaring.Bitmap {
+		bm := roaring.NewBitmap()
+		bm.Put(1, roaring.NewContainerRun([]roaring.Interval16{{Start: 1, Last: 12}}))
+		return bm
+	}()
+	if _, err := tx.AddRoaring("x", rb); err != nil {
+		panic(err)
+	}
+	bb := func() *roaring.Bitmap {
+		bm := roaring.NewBitmap()
+		bm.Put(0, roaring.NewContainerBitmap(makeBitmap([]uint16{75})))
+		return bm
+	}()
+	if _, err := tx.AddRoaring("x", bb); err != nil {
+		panic(err)
+	}
+	if err := tx.CreateBitmap("field/view/"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.AddRoaring("field/view/", bb); err != nil {
+		panic(err)
+	}
+	cur, err := tx.Cursor("field/view/")
+	if err != nil {
+		panic(err)
+	}
+	cur.Dump("fun.dot")
 }

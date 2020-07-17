@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 package rbf
 
 import (
@@ -50,6 +49,10 @@ func (tx *Tx) Commit() error {
 		tx.db.pageMap = tx.pageMap
 	}
 
+	if err := tx.db.checkpoint(); err != nil {
+		return err
+	}
+
 	// Disconnect transaction from DB.
 	return tx.db.removeTx(tx)
 }
@@ -70,8 +73,19 @@ func (tx *Tx) Rollback() error {
 		}
 	}
 
+	if err := tx.db.checkpoint(); err != nil {
+		return err
+	}
+
 	// Disconnect transaction from DB.
-	return tx.db.removeTx(tx)
+	err := tx.db.removeTx(tx)
+	_ = err
+	/*
+		if err != nil {
+			//TODO need to fix this error
+		}
+	*/
+	return nil
 }
 
 // Root returns the root page number for a bitmap. Returns 0 if the bitmap does not exist.
@@ -138,12 +152,15 @@ func (tx *Tx) CreateBitmap(name string) error {
 
 	return nil
 }
+
+/*
 func dump(r []*RootRecord) {
 	for _, i := range r {
 		fmt.Println("RECORD", i.Name, i.Pgno)
 	}
 
 }
+*/
 
 // DeleteBitmap removes a bitmap with the given name.
 // Returns an error if the bitmap does not exist.
@@ -232,7 +249,7 @@ func (tx *Tx) rootRecords() ([]*RootRecord, error) {
 		records = append(records, a...)
 
 		// Read next overflow page number.
-		pgno = readRootRecordOverflowPgno(page)
+		pgno = WalkRootRecordPages(page)
 	}
 	return records, nil
 }
@@ -246,10 +263,11 @@ func (tx *Tx) writeRootRecordPages(records []*RootRecord) (err error) {
 			return err
 		}
 
-		if err := tx.deallocate(pgno); err != nil {
+		err = tx.deallocate(pgno)
+		if err != nil {
 			return err
 		}
-		pgno = readRootRecordOverflowPgno(page)
+		pgno = WalkRootRecordPages(page)
 	}
 
 	// Exit early if no records exist.
@@ -410,7 +428,14 @@ func (tx *Tx) checkPageAllocations() error {
 		if isInuse && isFree {
 			return fmt.Errorf("page in-use & free: pgno=%d", pgno)
 		} else if !isInuse && !isFree {
-			return fmt.Errorf("page not in-use & not free: pgno=%d", pgno)
+			page, _ := tx.readPage(pgno)
+			flags := readFlags(page)
+			if flags == PageTypeBranch || flags == PageTypeLeaf {
+
+				return fmt.Errorf("page not in-use & not free: pgno=%d", pgno)
+			}
+			//assuming its a bitmap so its ok TODO ben?
+			return nil
 		}
 	}
 
@@ -436,7 +461,7 @@ func (tx *Tx) freePageSet() (map[uint32]struct{}, error) {
 		}
 
 		cell := c.cell()
-		for _, v := range cell.Values() {
+		for _, v := range cell.Values(tx) {
 			pgno := uint32((cell.Key << 16) & uint64(v))
 			m[pgno] = struct{}{}
 		}
@@ -456,7 +481,7 @@ func (tx *Tx) inusePageSet() (map[uint32]struct{}, error) {
 		if err != nil {
 			return nil, err
 		}
-		pgno = readRootRecordOverflowPgno(page)
+		pgno = WalkRootRecordPages(page)
 	}
 
 	// Traverse freelist and mark pages as in-use.
@@ -501,14 +526,8 @@ func (tx *Tx) walkTree(pgno uint32, fn func(uint32) error) error {
 	case PageTypeBranch:
 		for i, n := 0, readCellN(page); i < n; i++ {
 			cell := readBranchCell(page, i)
-			if cell.Flags&ContainerTypeBitmap != 0 { // bitmap cell (cannot traverse into)
-				if err := fn(cell.Pgno); err != nil {
-					return err
-				}
-			} else {
-				if err := tx.walkTree(cell.Pgno, fn); err != nil {
-					return err
-				}
+			if err := tx.walkTree(cell.Pgno, fn); err != nil {
+				return err
 			}
 		}
 		return nil
@@ -585,14 +604,8 @@ func (tx *Tx) deallocateTree(pgno uint32) error {
 	case PageTypeBranch:
 		for i, n := 0, readCellN(page); i < n; i++ {
 			cell := readBranchCell(page, i)
-			if cell.Flags&ContainerTypeBitmap == 0 { // leaf/branch child page
-				if err := tx.deallocateTree(cell.Pgno); err != nil {
-					return err
-				}
-			} else {
-				if err := tx.deallocate(cell.Pgno); err != nil { // bitmap child page
-					return err
-				}
+			if err := tx.deallocateTree(cell.Pgno); err != nil {
+				return err
 			}
 		}
 		return nil
@@ -669,4 +682,11 @@ func (tx *Tx) AddRoaring(name string, bm *roaring.Bitmap) (changed bool, err err
 		return false, err
 	}
 	return c.AddRoaring(bm)
+}
+func (tx *Tx) leafCellBitmap(pgno uint32) (uint32, []uint64, error) {
+	page, err := tx.readPage(pgno)
+	if err != nil {
+		return 0, nil, err
+	}
+	return pgno, toArray64(page), err
 }

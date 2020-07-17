@@ -16,7 +16,7 @@ package rbf_test
 
 import (
 	"bytes"
-	"encoding/hex"
+        "encoding/hex"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -25,6 +25,7 @@ import (
 
 	"github.com/pilosa/pilosa/v2/rbf"
 )
+
 
 func TestWALSegment_Open(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {

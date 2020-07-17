@@ -18,7 +18,6 @@ package rbf
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -68,6 +67,7 @@ const (
 	ContainerTypeArray
 	ContainerTypeRLE
 	ContainerTypeBitmap
+	ContainerTypeBitmapPtr
 )
 
 const (
@@ -113,17 +113,18 @@ func writeMetaRootRecordPageNo(page []byte, pgno uint32) { binary.BigEndian.PutU
 func readMetaFreelistPageNo(page []byte) uint32        { return binary.BigEndian.Uint32(page[24:]) }
 func writeMetaFreelistPageNo(page []byte, pgno uint32) { binary.BigEndian.PutUint32(page[24:], pgno) }
 
-// func readMetaChecksum(page []byte) uint32 {
-// 	return binary.BigEndian.Uint32(page[PageSize-4 : PageSize])
-// }
-
-// func writeMetaChecksum(page []byte, chksum uint32) {
-// 	binary.BigEndian.PutUint32(page[PageSize-4:PageSize], chksum)
-// }
+/* lint
+func readMetaChecksum(page []byte) uint32 {
+	return binary.BigEndian.Uint32(page[PageSize-4 : PageSize])
+}
+func writeMetaChecksum(page []byte, chksum uint32) {
+	binary.BigEndian.PutUint32(page[PageSize-4:PageSize], chksum)
+}
+*/
 
 // Root record page helpers
 
-func readRootRecordOverflowPgno(page []byte) uint32 { return binary.BigEndian.Uint32(page[8:]) }
+func WalkRootRecordPages(page []byte) uint32 { return binary.BigEndian.Uint32(page[8:]) }
 func writeRootRecordOverflowPgno(page []byte, pgno uint32) {
 	binary.BigEndian.PutUint32(page[8:], pgno)
 }
@@ -164,7 +165,6 @@ func readCellN(page []byte) int     { return int(binary.BigEndian.Uint16(page[8:
 func writeCellN(page []byte, v int) { binary.BigEndian.PutUint16(page[8:10], uint16(v)) }
 
 func readCellOffset(page []byte, i int) int {
-	assert(i < readCellN(page))
 	return int(binary.BigEndian.Uint16(page[10+(i*2):]))
 }
 
@@ -177,7 +177,6 @@ func dataOffset(n int) int {
 }
 
 func IsBitmapHeader(page []byte) bool {
-	// TODO(BBJ): Verify checksum.
 	return readFlags(page) == PageTypeBitmapHeader
 }
 
@@ -265,14 +264,11 @@ type leafCell struct {
 
 // Size returns the size of the leaf cell, in bytes.
 func (c *leafCell) Size() int {
-	if c.Type == ContainerTypeBitmap {
-		return PageSize
-	}
 	return leafCellHeaderSize + len(c.Data)
 }
 
 // Bitmap returns a bitmap representation of the cell data.
-func (c *leafCell) Bitmap() []uint64 {
+func (c *leafCell) Bitmap(tx *Tx) []uint64 {
 	switch c.Type {
 	case ContainerTypeArray:
 		buf := make([]uint64, PageSize/8)
@@ -299,15 +295,16 @@ func (c *leafCell) Bitmap() []uint64 {
 			}
 		}
 		return buf
-	case ContainerTypeBitmap:
-		return toArray64(c.Data)
+	case ContainerTypeBitmapPtr:
+		_, bm, _ := tx.leafCellBitmap(toPgno(c.Data))
+		return bm
 	default:
 		panic(fmt.Sprintf("invalid container type: %d", c.Type))
 	}
 }
 
 // Values returns a slice of 16-bit values from a container.
-func (c *leafCell) Values() []uint16 {
+func (c *leafCell) Values(tx *Tx) []uint16 {
 	switch c.Type {
 	case ContainerTypeArray:
 		return toArray16(c.Data)
@@ -323,9 +320,10 @@ func (c *leafCell) Values() []uint16 {
 		}
 		a = a[:n]
 		return a
-	case ContainerTypeBitmap:
-		a := make([]uint16, 0, ArrayMaxSize)
-		for i, v := range toArray64(c.Data) {
+	case ContainerTypeBitmapPtr:
+		a := make([]uint16, 0, BitmapN*64)
+		_, bm, _ := tx.leafCellBitmap(toPgno(c.Data))
+		for i, v := range bm {
 			for j := uint(0); j < 64; j++ {
 				if v&(1<<j) != 0 {
 					a = append(a, (uint16(i)*64)+uint16(j))
@@ -333,6 +331,8 @@ func (c *leafCell) Values() []uint16 {
 			}
 		}
 		return a
+	case ContainerTypeNone:
+		return []uint16{}
 	default:
 		panic(fmt.Sprintf("invalid container type: %d", c.Type))
 	}
@@ -347,7 +347,7 @@ func (c *leafCell) firstValue() uint16 {
 	case ContainerTypeRLE:
 		r := toInterval16(c.Data)
 		return r[0].Start
-	case ContainerTypeBitmap:
+	case ContainerTypeBitmapPtr:
 		for i, v := range toArray64(c.Data) {
 			for j := uint(0); j < 64; j++ {
 				if v&(1<<j) != 0 {
@@ -380,17 +380,15 @@ func readLeafCell(page []byte, i int) leafCell {
 		cell.Data = buf[16 : 16+(cell.N*2)]
 	case ContainerTypeRLE:
 		cell.Data = buf[16 : 16+(cell.N*4)]
+	case ContainerTypeBitmapPtr:
+		cell.Data = buf[16 : 16+4]
 	default:
 	}
 
 	return cell
 }
 
-func readLeafCells(page []byte, isBitmap bool, buf []leafCell) []leafCell {
-	if isBitmap {
-		return []leafCell{{Type: ContainerTypeBitmap, Data: page}}
-	}
-
+func readLeafCells(page []byte, buf []leafCell) []leafCell {
 	n := readCellN(page)
 	cells := buf[:n]
 	for i := 0; i < n; i++ {
@@ -488,9 +486,8 @@ func search(n int, f func(int) int) (index int, exact bool) {
 	return i, false
 }
 
-func hexdump(b []byte) { println(hex.Dump(b)) }
-
-func pagedump(b []byte, indent string, writer io.Writer) {
+/*
+func pagedumpi(b []byte, indent string, writer io.Writer) {
 	pgno := readPageNo(b)
 	if pgno == Magic32() {
 		fmt.Fprintf(writer, "==META\n")
@@ -512,7 +509,7 @@ func pagedump(b []byte, indent string, writer io.Writer) {
 				fmt.Fprintf(writer, "%s[%d]: key=%d type=array n=%d \n", indent, i, cell.Key, cell.N)
 			case ContainerTypeRLE:
 				fmt.Fprintf(writer, "%s[%d]: key=%d type=rle n=%d\n", indent, i, cell.Key, cell.N)
-			case ContainerTypeBitmap:
+			case ContainerTypeBitmapPtr:
 				fmt.Fprintf(writer, "%s[%d]: key=%d type=bitmap n=%d\n", indent, i, cell.Key, cell.N)
 			default:
 				fmt.Fprintf(writer, "%s[%d]: key=%d type=unknown<%d> n=%d\n", indent, i, cell.Key, cell.Type, cell.N)
@@ -528,54 +525,9 @@ func pagedump(b []byte, indent string, writer io.Writer) {
 		fmt.Fprintf(writer, "==!PAGE %d flags=%d\n", pgno, flags)
 	}
 }
+*/
 
-// treedump recursively writes the tree representation starting from a given page to STDERR.
-func treedump(tx *Tx, pgno uint32, indent string, writer io.Writer) {
-	page, err := tx.readPage(pgno)
-	if err != nil {
-		panic(err)
-	}
-
-	if IsMetaPage(page) {
-		fmt.Fprintf(writer, "META(%d)\n", pgno)
-		fmt.Fprintf(writer, "└── <FREELIST>\n")
-		//treedump(tx, readMetaFreelistPageNo(page), indent+"    ")
-
-		visitor := func(pgno uint32, records []*RootRecord) {
-			fmt.Fprintf(writer, "└── ROOT RECORD(%d): n=%d\n", pgno, len(records))
-			for _, record := range records {
-				fmt.Fprintf(writer, "└── ROOT(%q) %d\n", record.Name, record.Pgno)
-				treedump(tx, record.Pgno, indent+"    ", writer)
-
-			}
-		}
-		rrdump(tx, readMetaRootRecordPageNo(page), visitor)
-
-		return
-	}
-
-	// Handle
-	switch typ := readFlags(page); typ {
-	case PageTypeBranch:
-		fmt.Fprintf(writer, "%s BRANCH(%d) n=%d\n", fmtindent(indent), pgno, readCellN(page))
-
-		for i, n := 0, readCellN(page); i < n; i++ {
-			cell := readBranchCell(page, i)
-			if cell.Flags&ContainerTypeBitmap == 0 { // leaf/branch child page
-				treedump(tx, cell.Pgno, "    "+indent, writer)
-			} else {
-				fmt.Fprintf(writer, "%s BITMAP(%d)\n", fmtindent("    "+indent), cell.Pgno)
-			}
-		}
-	case PageTypeLeaf:
-		fmt.Fprintf(writer, "%s LEAF(%d) n=%d\n", fmtindent(indent), pgno, readCellN(page))
-		pagedump(page, fmtindent("    "+indent), writer)
-	default:
-		panic(err)
-	}
-}
-
-func rrdump(tx *Tx, pgno uint32, v func(uint32, []*RootRecord)) {
+func Walk(tx *Tx, pgno uint32, v func(uint32, []*RootRecord)) {
 	for pgno := readMetaRootRecordPageNo(tx.meta[:]); pgno != 0; {
 		page, err := tx.readPage(pgno)
 		if err != nil {
@@ -589,15 +541,14 @@ func rrdump(tx *Tx, pgno uint32, v func(uint32, []*RootRecord)) {
 		}
 		v(pgno, a)
 		// Read next overflow page number.
-		pgno = readRootRecordOverflowPgno(page)
+		pgno = WalkRootRecordPages(page)
 	}
 }
 
-func fmtindent(s string) string {
-	if s == "" {
-		return ""
+func assert(condition bool) {
+	if !condition {
+		panic("assertion failed")
 	}
-	return s + "└──"
 }
 
 // RowValues returns a list of integer values from a row bitmap.
@@ -611,10 +562,4 @@ func RowValues(b []uint64) []uint64 {
 		}
 	}
 	return a
-}
-
-func assert(condition bool) {
-	if !condition {
-		panic("assertion failed")
-	}
 }

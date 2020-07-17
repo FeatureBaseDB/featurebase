@@ -2589,7 +2589,7 @@ func (itr *Iterator) Seek(seek uint64) {
 			return
 		}
 
-		j, contains := binSearchRuns(lb, itr.c.runs())
+		j, contains := BinSearchRuns(lb, itr.c.runs())
 		if contains {
 			itr.j = j
 			itr.k = int32(lb) - int32(itr.c.runs()[j].Start) - 1
@@ -3161,9 +3161,9 @@ func (c *Container) bitmapContains(v uint16) bool {
 	return (c.bitmap()[v/64] & (1 << uint64(v%64))) != 0
 }
 
-// binSearchRuns returns the index of the run containing v, and true, when v is contained;
+// BinSearchRuns returns the index of the run containing v, and true, when v is contained;
 // or the index of the next run starting after v, and false, when v is not contained.
-func binSearchRuns(v uint16, a []Interval16) (int32, bool) {
+func BinSearchRuns(v uint16, a []Interval16) (int32, bool) {
 	i := int32(sort.Search(len(a),
 		func(i int) bool { return a[i].Last >= v }))
 	if i < int32(len(a)) {
@@ -3176,7 +3176,7 @@ func binSearchRuns(v uint16, a []Interval16) (int32, bool) {
 // runContains determines if v is in the container assuming c is a run
 // container.
 func (c *Container) runContains(v uint16) bool {
-	_, found := binSearchRuns(v, c.runs())
+	_, found := BinSearchRuns(v, c.runs())
 	return found
 }
 
@@ -3239,7 +3239,7 @@ func (c *Container) bitmapRemove(v uint16) (*Container, bool) {
 // runRemove removes v from a run container, and returns true if v was removed.
 func (c *Container) runRemove(v uint16) (*Container, bool) {
 	runs := c.runs()
-	i, contains := binSearchRuns(v, runs)
+	i, contains := BinSearchRuns(v, runs)
 	if !contains {
 		return c, false
 	}
@@ -6782,4 +6782,7 @@ func Optimize(c *Container) {
 }
 func Union(a, b *Container) *Container {
 	return union(a, b)
+}
+func Difference(a, b *Container) *Container {
+	return difference(a, b)
 }

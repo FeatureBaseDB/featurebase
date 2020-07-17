@@ -207,7 +207,7 @@ func (db *DB) checkpoint() error {
 			continue
 		}
 
-		// Loop over pages in the tranasction.
+		// Loop over pages in the transaction.
 		for ; walID <= metaWALID; walID++ {
 			canCheckpoint := minActiveWALID == 0 || walID <= minActiveWALID
 
