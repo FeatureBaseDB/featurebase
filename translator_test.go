@@ -336,34 +336,39 @@ func TestTranslation_Coordinator(t *testing.T) {
 		}
 
 		// Create a field with keys.
-		if _, err := node0.API.CreateField(ctx, idx, fld,
+		if _, err := node1.API.CreateField(ctx, idx, fld,
 			pilosa.OptFieldKeys(),
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		key := "abc"
-		pql := fmt.Sprintf(`Set(1, %s="%s")`, fld, key)
+		keys := []string{"one", "two", "three"}
+		for i := range keys {
+			pql := fmt.Sprintf(`Set(%d, %s="%s")`, i+1, fld, keys[i])
 
-		// Send a translation request to node1 (non-coordinator).
-		_, err := node1.API.Query(ctx,
-			&pilosa.QueryRequest{Index: idx, Query: pql},
-		)
-		if err != nil {
-			t.Fatal(err)
+			// Send a translation request to node1 (non-coordinator).
+			_, err := node1.API.Query(ctx,
+				&pilosa.QueryRequest{Index: idx, Query: pql},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 
-		// Read the row and ensure the key was set.
-		qry := fmt.Sprintf(`Row(%s="%s")`, fld, key)
-		resp, err := node0.API.Query(ctx,
-			&pilosa.QueryRequest{Index: idx, Query: qry},
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		row := resp.Results[0].(*pilosa.Row)
-		if cols := row.Columns(); !reflect.DeepEqual(cols, []uint64{1}) {
-			t.Fatalf("unexpected columns: %+v", cols)
+		for i := len(keys) - 1; i >= 0; i-- {
+			// Read the row and ensure the key was set.
+			qry := fmt.Sprintf(`Row(%s="%s")`, fld, keys[i])
+			resp, err := node0.API.Query(ctx,
+				&pilosa.QueryRequest{Index: idx, Query: qry},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			row := resp.Results[0].(*pilosa.Row)
+			val := uint64(i + 1)
+			if cols := row.Columns(); !reflect.DeepEqual(cols, []uint64{val}) {
+				t.Fatalf("unexpected columns: %+v", cols)
+			}
 		}
 	})
 }
