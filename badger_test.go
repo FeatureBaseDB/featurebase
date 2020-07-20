@@ -12,6 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// badgerdb builds but won't run in 32-bit 386 world, as of 2020 July 20.
+// See https://github.com/dgraph-io/badger/issues/1384 for any progress.
+// What we see is that the value-log allocations immediately run out of
+// memory. So we turn off 386 with a build tag to keep the .circleci happy.
+
 // +build !386
 
 package pilosa
