@@ -27,7 +27,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) (err error) {
 	if data == nil {
 		return errors.New("no roaring bitmap provided")
 	}
-	var itr roaringIterator
+	var itr RoaringIterator
 	var itrKey uint64
 	var itrCType byte
 	var itrN int
@@ -35,7 +35,7 @@ func (b *Bitmap) UnmarshalBinary(data []byte) (err error) {
 	var itrPointer *uint16
 	var itrErr error
 
-	itr, err = newRoaringIterator(data)
+	itr, err = NewRoaringIterator(data)
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func InspectBinary(data []byte, mapped bool, info *BitmapInfo) (b *Bitmap, mappe
 	if data == nil {
 		return b, mappedAny, errors.New("no roaring bitmap provided")
 	}
-	var itr roaringIterator
+	var itr RoaringIterator
 	var itrKey uint64
 	var itrCType byte
 	var itrN int
@@ -118,7 +118,7 @@ func InspectBinary(data []byte, mapped bool, info *BitmapInfo) (b *Bitmap, mappe
 	var itrPointer *uint16
 	var itrErr error
 
-	itr, err = newRoaringIterator(data)
+	itr, err = NewRoaringIterator(data)
 	if err != nil {
 		return b, mappedAny, err
 	}

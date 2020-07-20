@@ -85,4 +85,7 @@ func BuildServerFlags(cmd *cobra.Command, srv *server.Command) {
 	// Profiling
 	flags.IntVar(&srv.Config.Profile.BlockRate, "profile.block-rate", srv.Config.Profile.BlockRate, "Sampling rate for goroutine blocking profiler. One sample per <rate> ns.")
 	flags.IntVar(&srv.Config.Profile.MutexFraction, "profile.mutex-fraction", srv.Config.Profile.MutexFraction, "Sampling fraction for mutex contention profiling. Sample 1/<rate> of events.")
+
+	// Transactional storage engine
+	flags.StringVarP(&srv.Config.Txsrc, "tx", "", "roaring", "transaction/storage to use: one of roaring, rbf, badger, rbf_roaring, roaring_rbf, badger_roaring, roaring_badger, badger_rbf, or rbf_badger")
 }

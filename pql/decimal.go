@@ -68,6 +68,14 @@ type Decimal struct {
 	Scale int64
 }
 
+func (d Decimal) Clone() (r *Decimal) {
+	r = &Decimal{
+		Value: d.Value,
+		Scale: d.Scale,
+	}
+	return
+}
+
 // NewDecimal returns a Decimal based on the provided arguments.
 func NewDecimal(value, scale int64) Decimal {
 	return Decimal{

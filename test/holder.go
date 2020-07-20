@@ -25,6 +25,8 @@ import (
 	"github.com/pilosa/pilosa/v2/pql"
 )
 
+var panicOn = pilosa.PanicOn
+
 // Holder is a test wrapper for pilosa.Holder.
 type Holder struct {
 	*pilosa.Holder
@@ -86,29 +88,40 @@ func (h *Holder) Row(index, field string, rowID uint64) *pilosa.Row {
 	if err != nil {
 		panic(err)
 	}
-	tx := &pilosa.RoaringTx{Index: idx.Index}
+	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: false, Index: idx.Index})
+	defer tx.Rollback()
 
 	row, err := f.Row(tx, rowID)
 	if err != nil {
 		panic(err)
 	}
-	return row
+	// clone it so that mmapped storage doesn't disappear from under it
+	// once the tx goes away.
+	return row.Clone()
 }
 
 // ReadRow returns a Row for a given field. If the field does not exist,
 // it panics rather than creating the field.
 func (h *Holder) ReadRow(index, field string, rowID uint64) *pilosa.Row {
-	f := h.Holder.Field(index, field)
+	idx := h.Holder.Index(index)
+	if idx == nil {
+		panic(pilosa.ErrIndexNotFound)
+	}
+	f := idx.Field(field)
 	if f == nil {
 		panic(pilosa.ErrFieldNotFound)
 	}
-	tx := &pilosa.RoaringTx{Field: f}
+	tx := idx.Txf.NewTx(pilosa.Txo{Write: false, Field: f})
+	defer tx.Rollback()
 
 	row, err := f.Row(tx, rowID)
 	if err != nil {
 		panic(err)
 	}
-	return row
+
+	// clone it so that mmapped storage doesn't disappear from under it
+	// once the tx goes away.
+	return row.Clone()
 }
 
 func (h *Holder) RowAttrStore(index, field string) pilosa.AttrStore {
@@ -126,13 +139,17 @@ func (h *Holder) RowTime(index, field string, rowID uint64, t time.Time, quantum
 	if err != nil {
 		panic(err)
 	}
-	tx := &pilosa.RoaringTx{Index: idx.Index}
+	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: false, Index: idx.Index})
+	defer tx.Rollback()
 
 	row, err := f.RowTime(tx, rowID, t, quantum)
 	if err != nil {
 		panic(err)
 	}
-	return row
+
+	// clone it so that mmapped storage doesn't disappear from under it
+	// once the tx goes away.
+	return row.Clone()
 }
 
 // SetBit sets a bit on the given field.
@@ -147,12 +164,15 @@ func (h *Holder) SetBitTime(index, field string, rowID, columnID uint64, t *time
 	if err != nil {
 		panic(err)
 	}
-	tx := &pilosa.RoaringTx{Index: idx.Index}
+
+	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: true, Index: idx.Index})
+	defer tx.Rollback()
 
 	_, err = f.SetBit(tx, rowID, columnID, t)
 	if err != nil {
 		panic(err)
 	}
+	panicOn(tx.Commit())
 }
 
 // ClearBit clears a bit on the given field.
@@ -162,12 +182,14 @@ func (h *Holder) ClearBit(index, field string, rowID, columnID uint64) {
 	if err != nil {
 		panic(err)
 	}
-	tx := &pilosa.RoaringTx{Index: idx.Index}
+	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: true, Index: idx.Index})
+	defer tx.Rollback()
 
 	_, err = f.ClearBit(tx, rowID, columnID)
 	if err != nil {
 		panic(err)
 	}
+	panicOn(tx.Commit())
 }
 
 // MustSetBits sets columns on a row. Panic on error.
@@ -179,18 +201,23 @@ func (h *Holder) MustSetBits(index, field string, rowID uint64, columnIDs ...uin
 }
 
 // SetValue sets an integer value on the given field.
-func (h *Holder) SetValue(index, field string, columnID uint64, value int64) {
+func (h *Holder) SetValue(index, field string, columnID uint64, value int64) *Index {
 	idx := h.MustCreateIndexIfNotExists(index, pilosa.IndexOptions{})
 	f, err := idx.CreateFieldIfNotExists(field, pilosa.OptFieldTypeInt(math.MinInt64, math.MaxInt64))
 	if err != nil {
 		panic(err)
 	}
-	tx := &pilosa.RoaringTx{Index: idx.Index}
+	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: true, Index: idx.Index})
+	defer tx.Rollback()
 
 	_, err = f.SetValue(tx, columnID, value)
 	if err != nil {
 		panic(err)
 	}
+	if err := tx.Commit(); err != nil {
+		panic(err)
+	}
+	return idx
 }
 
 // Value returns the integer value for a given column.
@@ -200,7 +227,8 @@ func (h *Holder) Value(index, field string, columnID uint64) (int64, bool) {
 	if err != nil {
 		panic(err)
 	}
-	tx := &pilosa.RoaringTx{Index: idx.Index}
+	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: false, Index: idx.Index})
+	defer tx.Rollback()
 
 	val, exists, err := f.Value(tx, columnID)
 	if err != nil {
@@ -217,11 +245,15 @@ func (h *Holder) Range(index, field string, op pql.Token, predicate int64) *pilo
 	if err != nil {
 		panic(err)
 	}
-	tx := &pilosa.RoaringTx{Index: idx.Index}
+	tx := idx.Index.Txf.NewTx(pilosa.Txo{Write: false, Index: idx.Index})
+	defer tx.Rollback()
 
 	row, err := f.Range(tx, field, op, predicate)
 	if err != nil {
 		panic(err)
 	}
-	return row
+
+	// clone it so that mmapped storage doesn't disappear from under it
+	// once the tx goes away.
+	return row.Clone()
 }

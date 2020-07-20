@@ -149,6 +149,28 @@ docker-build:
 docker-test:
 	docker run --rm -v $(PWD):/go/src/$(CLONE_URL) -w /go/src/$(CLONE_URL) golang:$(GO_VERSION) go test -tags='$(BUILD_TAGS)' $(TESTFLAGS) ./...
 
+# run top tests, not subdirs. print summary red/green after.
+# The \-\-\- FAIL avoids counting the extra two FAIL strings at then bottom of log.topt.
+topt:
+	go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.topt.roar
+	@echo "   log.topt green: \c"; cat log.topt.roar | grep PASS |wc -l
+	@echo "   log.topt   red: \c"; cat log.topt.roar | grep '\-\-\- FAIL' |wc -l
+
+topt-badger:
+	PILOSA_TXSRC=badger go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.topt.badger
+	@echo "   log.topt green: \c"; cat log.topt.badger | grep PASS |wc -l
+	@echo "   log.topt   red: \c"; cat log.topt.badger | grep '\-\-\- FAIL' |wc -l
+
+topt-rbf:
+	PILOSA_TXSRC=rbf go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.topt.rbf
+	@echo "   log.topt green: \c"; cat log.topt.rbf | grep PASS |wc -l
+	@echo "   log.topt   red: \c"; cat log.topt.rbf | grep '\-\-\- FAIL' |wc -l
+
+topt-race:
+	go test -race -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.topt.race
+	@echo "   log.topt green: \c"; cat log.topt.race | grep PASS |wc -l
+	@echo "   log.topt   red: \c"; cat log.topt.race | grep '\-\-\- FAIL' |wc -l
+
 # Run golangci-lint
 golangci-lint: require-golangci-lint
 	golangci-lint run --skip-files '.*\.peg\.go'

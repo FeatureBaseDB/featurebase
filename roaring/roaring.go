@@ -174,6 +174,7 @@ type Containers interface {
 type ContainerIterator interface {
 	Next() bool
 	Value() (uint64, *Container)
+	Close()
 }
 
 // Bitmap represents a roaring bitmap.
@@ -235,6 +236,7 @@ var NewFileBitmap = NewBTreeBitmap
 // Clone returns a heap allocated copy of the bitmap.
 // Note: The OpWriter IS NOT copied to the new bitmap.
 func (b *Bitmap) Clone() *Bitmap {
+
 	if b == nil {
 		return nil
 	}
@@ -748,6 +750,8 @@ func (it *mutableContainersIterator) Value() (uint64, *Container) {
 
 	return it.cit.Value()
 }
+
+func (it *mutableContainersIterator) Close() {}
 
 // IntersectInPlace returns the bitwise intersection of b and others,
 // modifying b in place.
@@ -1716,10 +1720,10 @@ func (b *Bitmap) writeToUnoptimized(w io.Writer) (n int64, err error) {
 	return n, nil
 }
 
-// roaringIterator represents something which can iterate through a roaring
+// RoaringIterator represents something which can iterate through a roaring
 // bitmap and yield information about containers, including type, size, and
 // the location of their data structures.
-type roaringIterator interface {
+type RoaringIterator interface {
 	// Len reports the number of containers total.
 	Len() (count int64)
 	// Next yields the information about the next container
@@ -1728,6 +1732,19 @@ type roaringIterator interface {
 	// which is typically an ops log in our case, and also its offset in case
 	// we need to talk about truncation.
 	Remaining() ([]byte, int64)
+
+	// NextContainer is a helper that is used in place of Next(). It will
+	// allocate a Container from the output of its internal call to Next(),
+	// and return the key and container rc. If Next returns an error, then
+	// NextContainer will return 0, nil.
+	NextContainer() (key uint64, rc *Container)
+
+	// Data returns the underlying data, esp for the Ops log.
+	Data() []byte
+
+	// Clone copies the iterator, preserving it at this point in the iteration.
+	// It may well share much underlying data.
+	Clone() RoaringIterator
 }
 
 // baseRoaringIterator holds values used by both Pilosa and official Roaring
@@ -1761,6 +1778,16 @@ func (b *baseRoaringIterator) SilenceLint() {
 	_ = b.currentIdx
 	_ = b.chunkOffset
 	_ = b.prevOffset32
+}
+
+func (b *pilosaRoaringIterator) Clone() (clone RoaringIterator) {
+	cp := *b
+	return &cp
+}
+
+func (b *officialRoaringIterator) Clone() (clone RoaringIterator) {
+	cp := *b
+	return &cp
 }
 
 type pilosaRoaringIterator struct {
@@ -1859,7 +1886,7 @@ func newPilosaRoaringIterator(data []byte) (*pilosaRoaringIterator, error) {
 	return r, nil
 }
 
-func newRoaringIterator(data []byte) (roaringIterator, error) {
+func NewRoaringIterator(data []byte) (RoaringIterator, error) {
 	if len(data) < headerBaseSize {
 		return nil, errors.New("invalid data: not long enough to be a roaring header")
 	}
@@ -1891,11 +1918,29 @@ func (r *baseRoaringIterator) Len() int64 {
 	return r.keys
 }
 
+func (r *baseRoaringIterator) Data() []byte {
+	return r.data
+}
+
 func (r *baseRoaringIterator) Remaining() ([]byte, int64) {
 	if r.lastDataOffset == 0 {
 		return nil, 0
 	}
 	return r.data[r.lastDataOffset:], r.lastDataOffset
+}
+
+func (r *pilosaRoaringIterator) NextContainer() (key uint64, rc *Container) {
+	itrKey, itrCType, itrN, itrLen, itrPointer, itrErr := r.Next()
+	if itrErr != nil {
+		return 0, nil
+	}
+	rc = &Container{}
+	rc.typeID = itrCType
+	rc.n = int32(itrN)
+	rc.len = int32(itrLen)
+	rc.cap = int32(itrLen)
+	rc.pointer = itrPointer
+	return itrKey, rc
 }
 
 func (r *pilosaRoaringIterator) Next() (key uint64, cType byte, n int, length int, pointer *uint16, err error) {
@@ -1952,6 +1997,20 @@ func (r *pilosaRoaringIterator) Next() (key uint64, cType byte, n int, length in
 	r.currentDataOffset += uint64(size)
 	r.lastErr = nil
 	return r.Current()
+}
+
+func (r *officialRoaringIterator) NextContainer() (key uint64, rc *Container) {
+	itrKey, itrCType, itrN, itrLen, itrPointer, itrErr := r.Next()
+	if itrErr != nil {
+		return 0, nil
+	}
+	rc = &Container{}
+	rc.typeID = itrCType
+	rc.n = int32(itrN)
+	rc.len = int32(itrLen)
+	rc.cap = int32(itrLen)
+	rc.pointer = itrPointer
+	return itrKey, rc
 }
 
 func (r *officialRoaringIterator) Next() (key uint64, cType byte, n int, length int, pointer *uint16, err error) {
@@ -2066,7 +2125,7 @@ func (b *Bitmap) RemapRoaringStorage(data []byte) (mappedAny bool, returnErr err
 	if b.Containers == nil {
 		return false, nil
 	}
-	var itr roaringIterator
+	var itr RoaringIterator
 	var err error
 	var itrKey uint64
 	var itrCType byte
@@ -2079,7 +2138,7 @@ func (b *Bitmap) RemapRoaringStorage(data []byte) (mappedAny bool, returnErr err
 	// map to the data. We still need to do the UpdateEvery loop, we
 	// just won't have an iterator for it.
 	if data != nil && b.preferMapping {
-		itr, err = newRoaringIterator(data)
+		itr, err = NewRoaringIterator(data)
 	}
 	// don't return early: we still have to do the unmapping
 	if err != nil {
@@ -2144,7 +2203,16 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, log bool, rowSize ui
 	if data == nil {
 		return 0, nil, errors.New("no roaring bitmap provided")
 	}
-	var itr roaringIterator
+	var itr RoaringIterator
+
+	itr, err = NewRoaringIterator(data)
+	if err != nil {
+		return 0, nil, err
+	}
+	return b.ImportRoaringRawIterator(itr, clear, log, rowSize)
+}
+
+func (b *Bitmap) ImportRoaringRawIterator(itr RoaringIterator, clear bool, log bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error) {
 	var itrKey uint64
 	var itrCType byte
 	var itrN int
@@ -2152,10 +2220,6 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, log bool, rowSize ui
 	var itrPointer *uint16
 	var itrErr error
 
-	itr, err = newRoaringIterator(data)
-	if err != nil {
-		return 0, nil, err
-	}
 	if itr == nil {
 		return 0, nil, errors.New("failed to create roaring iterator, but don't know why")
 	}
@@ -2225,7 +2289,7 @@ func (b *Bitmap) ImportRoaringBits(data []byte, clear bool, log bool, rowSize ui
 	}
 	err = nil
 	if log && changed > 0 {
-		op := op{opN: changed, roaring: data}
+		op := op{opN: changed, roaring: itr.Data()}
 		if clear {
 			op.typ = opTypeRemoveRoaring
 		} else {
@@ -2257,13 +2321,13 @@ func (b *Bitmap) writeOp(op *op) error {
 
 // Iterator returns a new iterator for the bitmap.
 func (b *Bitmap) Iterator() *Iterator {
-	itr := &Iterator{bitmap: b}
+	itr := NewIterator(&BitmapIteratorFinder{b})
 	itr.Seek(0)
 	return itr
 }
 
 func (b *Bitmap) IteratorAt(start uint64) *Iterator {
-	itr := &Iterator{bitmap: b}
+	itr := NewIterator(&BitmapIteratorFinder{b})
 	itr.Seek(start)
 	return itr
 }
@@ -2287,7 +2351,7 @@ func RoaringToBitmaps(data []byte, shardWidth uint64) ([]*Bitmap, []uint64) {
 	if data == nil {
 		return nil, nil
 	}
-	var itr roaringIterator
+	var itr RoaringIterator
 	var itrKey uint64
 	var itrCType byte
 	var itrN int
@@ -2300,7 +2364,7 @@ func RoaringToBitmaps(data []byte, shardWidth uint64) ([]*Bitmap, []uint64) {
 	var shards []uint64
 	keysPerShard := shardWidth >> 16
 
-	itr, err := newRoaringIterator(data)
+	itr, err := NewRoaringIterator(data)
 	if err != nil || itr == nil {
 		return nil, nil
 	}
@@ -2524,13 +2588,36 @@ type BitmapInfo struct {
 	From, To       uintptr         // if set, indicates the address range used when unpacking
 }
 
+type IteratorFinder interface {
+	FindIterator(uint64) (ContainerIterator, bool)
+	Close()
+}
+type BitmapIteratorFinder struct {
+	bitmap *Bitmap
+}
+
+func (bif *BitmapIteratorFinder) FindIterator(seek uint64) (ContainerIterator, bool) {
+	return bif.bitmap.Containers.Iterator(seek)
+}
+func (bif *BitmapIteratorFinder) Close() {}
+
 // Iterator represents an iterator over a Bitmap.
 type Iterator struct {
-	bitmap *Bitmap
+	finder IteratorFinder
 	citer  ContainerIterator
 	key    uint64
 	c      *Container
 	j, k   int32 // i: container; j: array index, bit index, or run index; k: offset within the run
+}
+
+// NewIterator requires f as an IteratorFinder, it will
+// crash if f is nil.
+func NewIterator(f IteratorFinder) *Iterator {
+	return &Iterator{finder: f}
+}
+
+func (itr *Iterator) Close() {
+	itr.finder.Close()
 }
 
 // Seek moves to the first value equal to or greater than `seek`.
@@ -2540,7 +2627,7 @@ func (itr *Iterator) Seek(seek uint64) {
 	itr.k = -1
 
 	// Move to the correct container.
-	itr.citer, _ = itr.bitmap.Containers.Iterator(highbits(seek))
+	itr.citer, _ = itr.finder.FindIterator(highbits(seek))
 	if !itr.citer.Next() {
 		itr.c = nil
 		return // eof
@@ -6114,10 +6201,10 @@ func (b *Bitmap) BitwiseEqual(c *Bitmap) (bool, error) {
 		cn = biter.Next()
 	}
 	if bn {
-		return false, fmt.Errorf("container mismatch: %d vs %d containers, first bitmap has extra container %d [%d bits]", bct, cct, bk, bc)
+		return false, fmt.Errorf("container mismatch: %d vs %d containers, first bitmap has extra container %d [%v bits]", bct, cct, bk, bc)
 	}
 	if cn {
-		return false, fmt.Errorf("container mismatch: %d vs %d containers, second bitmap has extra container %d [%d bits]", bct, cct, ck, cc)
+		return false, fmt.Errorf("container mismatch: %d vs %d containers, second bitmap has extra container %d [%v bits]", bct, cct, ck, cc)
 	}
 	return true, nil
 }
@@ -6783,6 +6870,35 @@ func Optimize(c *Container) {
 func Union(a, b *Container) *Container {
 	return union(a, b)
 }
+
 func Difference(a, b *Container) *Container {
 	return difference(a, b)
+}
+
+func (c *Container) Add(v uint16) (newC *Container, added bool) {
+	return c.add(v)
+}
+
+func (c *Container) Remove(v uint16) (c2 *Container, removed bool) {
+	return c.remove(v)
+}
+
+func (c *Container) Max() uint16 {
+	return c.max()
+}
+
+func (c *Container) CountRange(start, end int32) (n int32) {
+	return c.countRange(start, end)
+}
+
+func (c *Container) UnionInPlace(other *Container) *Container {
+	return c.unionInPlace(other)
+}
+
+func (c *Container) Difference(other *Container) *Container {
+	return difference(c, other)
+}
+
+func NewSliceContainers() *sliceContainers {
+	return newSliceContainers()
 }

@@ -59,7 +59,7 @@ func (rbc *RBFConverter) Convert(index, field, view string, shard uint64, rb *ro
 	if err != nil {
 		return err
 	}
-	tx, err := db.Begin(true)
+	tx, err := db.Begin(writable)
 	if err != nil {
 		return err
 	}

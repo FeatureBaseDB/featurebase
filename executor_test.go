@@ -41,6 +41,9 @@ import (
 	"github.com/pkg/errors"
 )
 
+// writable initializes Tx that update, use !writable for read-only.
+const writable = true
+
 var (
 	TempDir = getTempDirString()
 )
@@ -142,6 +145,7 @@ func TestExecutor_Execute_Difference(t *testing.T) {
 		c := test.MustRunCluster(t, 1)
 		defer c.Close()
 		hldr := test.Holder{Holder: c[0].Server.Holder()}
+
 		hldr.SetBit("i", "general", 10, 1)
 		hldr.SetBit("i", "general", 10, 2)
 		hldr.SetBit("i", "general", 10, 3)
@@ -223,7 +227,6 @@ func TestExecutor_Execute_Intersect(t *testing.T) {
 		hldr.SetBit("i", "general", 10, 1)
 		hldr.SetBit("i", "general", 10, ShardWidth+1)
 		hldr.SetBit("i", "general", 10, ShardWidth+2)
-
 		hldr.SetBit("i", "general", 11, 1)
 		hldr.SetBit("i", "general", 11, 2)
 		hldr.SetBit("i", "general", 11, ShardWidth+2)
@@ -904,11 +907,11 @@ func TestExecutor_Execute_SetValue(t *testing.T) {
 		}
 
 		// Obtain transaction.
-		tx, err := hldr.Begin(false)
+		tx, err := hldr.BeginTx(!writable, index.Index)
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = tx.Rollback() }()
+		defer tx.Rollback()
 
 		f := hldr.Field("i", "f")
 		if value, exists, err := f.Value(tx, 10); err != nil {
@@ -3435,7 +3438,6 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{ShardWidth + 2}) {
 			t.Fatalf("unexpected columns after Not: %+v", bits)
 		}
-
 		// Reopen cluster to ensure existence field is reloaded.
 		if err := c[0].Reopen(); err != nil {
 			t.Fatal(err)
@@ -3820,7 +3822,6 @@ func TestExecutor_Execute_ClearRow(t *testing.T) {
 		if res := responses[1].Results[0].(bool); !res {
 			t.Fatalf("unexpected clear row result: %+v", res)
 		}
-
 		// Clear the row again and ensure we get a `false` response.
 		if res := responses[2].Results[0].(bool); res {
 			t.Fatalf("unexpected clear row result: %+v", res)
@@ -4023,6 +4024,7 @@ func TestExecutor_Execute_ClearRow(t *testing.T) {
 
 // Ensure a row can be set.
 func TestExecutor_Execute_SetRow(t *testing.T) {
+
 	t.Run("Set_NewRow", func(t *testing.T) {
 		c := test.MustRunCluster(t, 1)
 		defer c.Close()
@@ -4824,6 +4826,7 @@ func TestExecutor_ForeignIndex(t *testing.T) {
 	}
 
 	join := c.Query(t, "parent", `Intersect(Row(general=3), Distinct(Row(color="blue"), index="child", field="parent_id"))`).Results[0].(*pilosa.Row)
+
 	if !reflect.DeepEqual(join.Keys, []string{"one"}) {
 		t.Fatalf("unexpected keys: %v", join.Keys)
 	}
@@ -4870,6 +4873,7 @@ func TestExecutor_Execute_GroupBy(t *testing.T) {
 			{12, 2},
 			{12, ShardWidth + 2},
 		})
+
 		c.ImportBits(t, "i", "sub", [][2]uint64{
 			{100, 0},
 			{100, 1},

@@ -1737,7 +1737,7 @@ func (f *Field) importValue(tx Tx, columnIDs []uint64, values []int64, options *
 	return nil
 }
 
-func (f *Field) importRoaring(ctx context.Context, data []byte, shard uint64, viewName string, clear bool) error {
+func (f *Field) importRoaring(ctx context.Context, tx Tx, data []byte, shard uint64, viewName string, clear bool) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Field.importRoaring")
 	defer span.Finish()
 
@@ -1754,7 +1754,7 @@ func (f *Field) importRoaring(ctx context.Context, data []byte, shard uint64, vi
 	if err != nil {
 		return errors.Wrap(err, "creating fragment")
 	}
-	if err := frag.importRoaring(ctx, data, clear); err != nil {
+	if err := frag.importRoaring(ctx, tx, data, clear); err != nil {
 		return err
 	}
 
