@@ -538,6 +538,30 @@ func TestFragment_Range(t *testing.T) {
 		}
 	})
 
+	t.Run("EQOversizeRegression", func(t *testing.T) {
+		f := mustOpenFragment("i", "f", viewStandard, 0, "")
+		defer f.Clean(t)
+
+		// Set values.
+		if _, err := f.setValue(1000, 1, 0); err != nil {
+			t.Fatal(err)
+		} else if _, err := f.setValue(2000, 1, 1); err != nil {
+			t.Fatal(err)
+		}
+
+		// Query for equality.
+		if b, err := f.rangeOp(pql.EQ, 1, 3); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
+		}
+		if b, err := f.rangeOp(pql.EQ, 1, 4); err != nil {
+			t.Fatal(err)
+		} else if !reflect.DeepEqual(b.Columns(), []uint64{}) {
+			t.Fatalf("unexpected columns: %+v", b.Columns())
+		}
+	})
+
 	t.Run("NEQ", func(t *testing.T) {
 		f := mustOpenFragment("i", "f", viewStandard, 0, "")
 		defer f.Clean(t)
