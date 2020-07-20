@@ -3934,8 +3934,10 @@ func TestImportClearRestart(t *testing.T) {
 				if err != nil {
 					t.Fatalf("initial small import: %v", err)
 				}
-				if expOpN <= maxOpN && f.opN != expOpN {
-					t.Errorf("unexpected opN - %d is not %d", f.opN, expOpN)
+				if idx.Txf.TxType() == roaringFragmentFilesTxn {
+					if expOpN <= maxOpN && f.opN != expOpN {
+						t.Errorf("unexpected opN - %d is not %d", f.opN, expOpN)
+					}
 				}
 				check(t, tx, f, exp)
 
@@ -3952,8 +3954,10 @@ func TestImportClearRestart(t *testing.T) {
 					t.Fatalf("reopening fragment: %v", err)
 				}
 
-				if expOpN <= maxOpN && f.opN != expOpN {
-					t.Errorf("unexpected opN after close/open %d is not %d", f.opN, expOpN)
+				if idx.Txf.TxType() == roaringFragmentFilesTxn {
+					if expOpN <= maxOpN && f.opN != expOpN {
+						t.Errorf("unexpected opN after close/open %d is not %d", f.opN, expOpN)
+					}
 				}
 
 				check(t, tx, f, exp)
@@ -3962,6 +3966,8 @@ func TestImportClearRestart(t *testing.T) {
 				f2.MaxOpN = maxOpN
 				f2.CacheType = f.CacheType
 
+				panicOn(tx.Commit()) // match the f.closeStorage which overlaps the f2 creation.
+
 				tx2 := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f2})
 				defer tx2.Rollback()
 
@@ -3969,15 +3975,16 @@ func TestImportClearRestart(t *testing.T) {
 				if err != nil {
 					t.Fatalf("closing storage: %v", err)
 				}
-				panicOn(tx.Commit()) // match the f.closeStorage which overlaps the f2 creation.
 
 				err = f2.Open()
 				if err != nil {
 					t.Fatalf("opening new fragment: %v", err)
 				}
 
-				if expOpN <= maxOpN && f2.opN != expOpN {
-					t.Errorf("unexpected opN after close/open %d is not %d", f2.opN, expOpN)
+				if idx.Txf.TxType() == roaringFragmentFilesTxn {
+					if expOpN <= maxOpN && f2.opN != expOpN {
+						t.Errorf("unexpected opN after close/open %d is not %d", f2.opN, expOpN)
+					}
 				}
 
 				check(t, tx2, f2, exp)
@@ -3996,6 +4003,8 @@ func TestImportClearRestart(t *testing.T) {
 
 				check(t, tx2, f2, exp)
 
+				panicOn(tx2.Commit())
+
 				f3 := newFragment(NewHolder(DefaultPartitionN), f2.path, "i", "f", viewStandard, 0, 0)
 				f3.MaxOpN = maxOpN
 				f3.CacheType = f.CacheType
@@ -4007,7 +4016,6 @@ func TestImportClearRestart(t *testing.T) {
 				if err != nil {
 					t.Fatalf("f2 closing storage: %v", err)
 				}
-				panicOn(tx2.Commit())
 
 				err = f3.Open()
 				if err != nil {
