@@ -85,7 +85,7 @@ const (
 	blueGreenRBFBadger txtype = 9
 )
 
-func txsrcToTxtype(txsrc string) txtype {
+func MustTxsrcToTxtype(txsrc string) txtype {
 	switch txsrc {
 	case RoaringTxn: // "roaring"
 		return roaringFragmentFilesTxn
@@ -110,10 +110,11 @@ func txsrcToTxtype(txsrc string) txtype {
 }
 
 func newTxFactory(txsrc string, path string) (f *TxFactory, err error) {
-	ty := txsrcToTxtype(txsrc)
+	ty := MustTxsrcToTxtype(txsrc)
 	if ty < 1 || ty > 9 {
 		panic(fmt.Sprintf("invalid txtype '%v'", int(ty)))
 	}
+
 	var bw *BadgerDBWrapper
 	if ty == badgerTxn || ty == 4 || ty == 5 || ty == 8 || ty == 9 {
 		bw, err = openBadgerDBWrapper(path)

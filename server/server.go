@@ -240,6 +240,29 @@ func (m *Command) SetupServer() error {
 
 	m.logger.Printf("%s", pilosa.VersionInfo())
 
+	// If the pilosa command line uses -tx to override the
+	// PILOSA_TXSRC env variable, then we must also correct
+	// the environment, so that pilosa/txfactory.go can determine the
+	// desired Tx engine. This enables "go test" testing in pilosa that
+	// does not spin up a full server, while still respecting the pilosa
+	// server's choice when run full in production.
+	envTxsrc := os.Getenv("PILOSA_TXSRC")
+	if m.Config.Txsrc == "" {
+		// INVAR: No -tx flag on the command line.
+		// We defer to the environment, and then the DefaultTxsrc
+		if envTxsrc == "" {
+			// no env variable requested either.
+			m.Config.Txsrc = pilosa.DefaultTxsrc
+		} else {
+			// Tell the "regular" prod server what to use.
+			m.Config.Txsrc = envTxsrc
+		}
+	}
+	// INVAR: m.Config.Txsrc is valid and not "", but pilosa.DefaultTxsrc could be bad.
+	txty := pilosa.MustTxsrcToTxtype(m.Config.Txsrc) // will panic on unknown Txsrc.
+	os.Setenv("PILOSA_TXSRC", m.Config.Txsrc)
+	m.logger.Printf("using Txsrc '%v'/%v", m.Config.Txsrc, txty)
+
 	// validateAddrs sets the appropriate values for Bind and Advertise
 	// based on the inputs. It is not responsible for applying defaults, although
 	// it does provide a non-zero port (10101) in the case where no port is specified.
@@ -353,6 +376,7 @@ func (m *Command) SetupServer() error {
 		pilosa.OptServerInternalClient(http.NewInternalClientFromURI(uri, c)),
 		pilosa.OptServerClusterDisabled(m.Config.Cluster.Disabled, m.Config.Cluster.Hosts),
 		pilosa.OptServerSerializer(proto.Serializer{}),
+		pilosa.OptServerTxsrc(m.Config.Txsrc),
 		coordinatorOpt,
 	}
 

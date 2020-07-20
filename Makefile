@@ -178,6 +178,9 @@ golangci-lint: require-golangci-lint
 # Alias
 linter: golangci-lint
 
+# Better alias
+ocd: golangci-lint
+
 # Run gometalinter with custom flags
 gometalinter: require-gometalinter vendor
 	GO111MODULE=off gometalinter --vendor --disable-all \
