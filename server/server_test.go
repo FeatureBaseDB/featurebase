@@ -630,15 +630,9 @@ func TestClusteringNodesReplica1(t *testing.T) {
 	cluster := test.MustRunCluster(t, 3)
 	defer cluster.Close()
 
-	var wait = true
-	for wait {
-		wait = false
-		for _, node := range cluster {
-			if node.API.State() != pilosa.ClusterStateNormal {
-				wait = true
-			}
-		}
-		time.Sleep(time.Millisecond * 1)
+	err := cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
 	}
 
 	if err := cluster[2].Command.Close(); err != nil {
@@ -665,14 +659,9 @@ func TestClusteringNodesReplica1(t *testing.T) {
 		t.Fatalf("restarting node 2: %v", err)
 	}
 
-	for wait {
-		wait = false
-		for _, node := range cluster {
-			if node.API.State() != pilosa.ClusterStateNormal {
-				wait = true
-			}
-		}
-		time.Sleep(time.Millisecond)
+	err = cluster.AwaitState(pilosa.ClusterStateNormal, 200*time.Millisecond)
+	if err != nil {
+		t.Fatalf("resuming normal operations: %v", err)
 	}
 }
 
@@ -685,24 +674,20 @@ func TestClusteringNodesReplica2(t *testing.T) {
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
+	defer cluster.Close()
 
-	var wait = true
-	for wait {
-		wait = false
-		for _, node := range cluster {
-			if node.API.State() != pilosa.ClusterStateNormal {
-				wait = true
-			}
-		}
-		time.Sleep(time.Millisecond * 1)
+	err = cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
 	}
 
 	if err := cluster[2].Command.Close(); err != nil {
 		t.Fatalf("closing third node: %v", err)
 	}
 
-	if cluster[0].API.State() != pilosa.ClusterStateDegraded {
-		t.Fatalf("expected state to be DEGRADED, but got %s", cluster[0].API.State())
+	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateDegraded, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("after closing first server: %v", err)
 	}
 
 	// confirm that cluster keeps accepting queries if replication > 1
@@ -715,8 +700,9 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("closing 2nd node: %v", err)
 	}
 
-	if cluster[0].API.State() != pilosa.ClusterStateStarting {
-		t.Fatalf("expected state to be Starting, but got %s", cluster[0].API.State())
+	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateStarting, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("after closing second server: %v", err)
 	}
 
 	if _, err := cluster[0].API.Query(context.Background(), &pilosa.QueryRequest{}); !strings.Contains(err.Error(), "not allowed in state STARTING") {
@@ -739,8 +725,9 @@ func TestClusteringNodesReplica2(t *testing.T) {
 		t.Fatalf("restarting node 2: %v", err)
 	}
 
-	if cluster[0].API.State() != pilosa.ClusterStateDegraded {
-		t.Fatalf("expected state to be DEGRADED, but got %s", cluster[0].API.State())
+	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateDegraded, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("after restarting first server: %v", err)
 	}
 
 	// Create new main with the same config.
@@ -756,19 +743,12 @@ func TestClusteringNodesReplica2(t *testing.T) {
 
 	// Run new program.
 	if err := cluster[1].Start(); err != nil {
-		t.Fatalf("restarting node 2: %v", err)
+		t.Fatalf("restarting node 1: %v", err)
 	}
 
-	defer cluster.Close()
-
-	for wait {
-		wait = false
-		for _, node := range cluster {
-			if node.API.State() != pilosa.ClusterStateNormal {
-				wait = true
-			}
-		}
-		time.Sleep(time.Millisecond)
+	err = cluster.AwaitState(pilosa.ClusterStateNormal, 200*time.Microsecond)
+	if err != nil {
+		t.Fatalf("resuming normal operations: %v", err)
 	}
 }
 
@@ -781,32 +761,38 @@ func TestRemoveNodeAfterItDies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
+	// The anonymous function is necessary so that the slice
+	// passed to Close() as a receiver is the modified value
+	// of cluster, because we're removing the last entry from it
+	// below.
+	defer func() {
+		cluster.Close()
+	}()
 
-	var wait = true
-	for wait {
-		wait = false
-		for _, node := range cluster {
-			if node.API.State() != pilosa.ClusterStateNormal {
-				wait = true
-			}
-		}
-		time.Sleep(time.Millisecond * 1)
+	err = cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
 	}
 
-	if err := cluster[2].Command.Close(); err != nil {
+	// prevent double-closing cluster[2] from the deferred Close above
+	disabled, cluster := cluster[2], cluster[:2]
+
+	if err := disabled.Command.Close(); err != nil {
 		t.Fatalf("closing third node: %v", err)
 	}
 
-	if cluster[0].API.State() != pilosa.ClusterStateDegraded {
-		t.Fatalf("expected state to be DEGRADED, but got %s", cluster[0].API.State())
+	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateDegraded, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
 	}
 
-	if _, err := cluster[0].API.RemoveNode(cluster[2].API.Node().ID); err != nil {
+	if _, err := cluster[0].API.RemoveNode(disabled.API.Node().ID); err != nil {
 		t.Fatalf("removing failed node: %v", err)
 	}
 
-	if cluster[0].API.State() != pilosa.ClusterStateNormal {
-		t.Fatalf("expected state to be DEGRADED, but got %s", cluster[0].API.State())
+	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateNormal, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("removing disabled node: %v", err)
 	}
 
 	hosts := cluster[0].API.Hosts(context.Background())
@@ -824,16 +810,10 @@ func TestRemoveConcurrentIndexCreation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("starting cluster: %v", err)
 	}
-
-	var wait = true
-	for wait {
-		wait = false
-		for _, node := range cluster {
-			if node.API.State() != pilosa.ClusterStateNormal {
-				wait = true
-			}
-		}
-		time.Sleep(time.Millisecond * 1)
+	defer cluster.Close()
+	err = cluster.AwaitState(pilosa.ClusterStateNormal, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
 	}
 
 	errc := make(chan error)
@@ -846,11 +826,9 @@ func TestRemoveConcurrentIndexCreation(t *testing.T) {
 		t.Fatalf("removing node: %v", err)
 	}
 
-	for i := 0; cluster[0].API.State() != pilosa.ClusterStateNormal; i++ {
-		time.Sleep(time.Millisecond)
-		if i > 10 {
-			t.Fatalf("expected state to be DEGRADED, but got %s", cluster[0].API.State())
-		}
+	err = cluster.AwaitCoordinatorState(pilosa.ClusterStateNormal, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("starting cluster: %v", err)
 	}
 
 	hosts := cluster[0].API.Hosts(context.Background())
