@@ -44,7 +44,7 @@ test:
 
 # Run test suite with race flag
 test-race:
-	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS) -race $(NOCHECKPTR) -timeout 30m -v
+	go test ./... -tags='$(BUILD_TAGS)' $(TESTFLAGS) -race $(NOCHECKPTR) -timeout 60m -v
 
 bench:
 	go test ./... -bench=. -run=NoneZ -timeout=127m $(TESTFLAGS)
