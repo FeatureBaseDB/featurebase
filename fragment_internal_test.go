@@ -3945,6 +3945,339 @@ func TestIntLTRegression(t *testing.T) {
 	}
 }
 
+func sliceEq(x, y []uint64) bool {
+	if len(x) == 0 {
+		x = nil
+	}
+	if len(y) == 0 {
+		y = nil
+	}
+	return reflect.DeepEqual(x, y)
+}
+
+func TestFragmentBSIUnsigned(t *testing.T) {
+	f, idx := mustOpenFragment("i", "f", "v", 0, CacheTypeNone)
+	_ = idx
+	defer f.Clean(t)
+
+	// Obtain transaction.
+	tx := &RoaringTx{fragment: f}
+
+	// Number of bits to test.
+	const k = 6
+
+	// Load all numbers into an effectively diagonal matrix.
+	for i := 0; i < 1<<k; i++ {
+		ok, err := f.setValue(tx, uint64(i), k, int64(i))
+		if err != nil {
+			t.Fatalf("failed to set col %d to %d: %v", uint64(i), int64(i), err)
+		} else if !ok {
+			t.Fatalf("no change when setting col %d to %d", uint64(i), int64(i))
+		}
+	}
+
+	// Generate a list of columns.
+	cols := make([]uint64, 1<<k)
+	for i := range cols {
+		cols[i] = uint64(i)
+	}
+
+	// Minimum and maximum checking bounds.
+	// This is mostly arbitrary.
+	minCheck, maxCheck := -3, 1<<(k+1)
+
+	t.Run("<", func(t *testing.T) {
+		for i := minCheck; i < maxCheck; i++ {
+			row, err := f.rangeLT(tx, k, int64(i), false)
+			if err != nil {
+				t.Fatalf("failed to query fragment: %v", err)
+			}
+			var expect []uint64
+			switch {
+			case i < 0:
+			case i < len(cols):
+				expect = cols[:i]
+			default:
+				expect = cols
+			}
+			got := row.Columns()
+			if !sliceEq(expect, got) {
+				t.Errorf("expected %v but got %v for x < %d", expect, got, i)
+			}
+		}
+	})
+	t.Run("<=", func(t *testing.T) {
+		for i := minCheck; i < maxCheck; i++ {
+			row, err := f.rangeLT(tx, k, int64(i), true)
+			if err != nil {
+				t.Fatalf("failed to query fragment: %v", err)
+			}
+			var expect []uint64
+			switch {
+			case i < 0:
+			case i < len(cols)-1:
+				expect = cols[:i+1]
+			default:
+				expect = cols
+			}
+			got := row.Columns()
+			if !sliceEq(expect, got) {
+				t.Errorf("expected %v but got %v for x <= %d", expect, got, i)
+			}
+		}
+	})
+	t.Run(">", func(t *testing.T) {
+		for i := minCheck; i < maxCheck; i++ {
+			row, err := f.rangeGT(tx, k, int64(i), false)
+			if err != nil {
+				t.Fatalf("failed to query fragment: %v", err)
+			}
+			var expect []uint64
+			switch {
+			case i < 0:
+				expect = cols
+			case i < len(cols)-1:
+				expect = cols[i+1:]
+			default:
+			}
+			got := row.Columns()
+			if !sliceEq(expect, got) {
+				t.Errorf("expected %v but got %v for x > %d", expect, got, i)
+			}
+		}
+	})
+	t.Run(">=", func(t *testing.T) {
+		for i := minCheck; i < maxCheck; i++ {
+			row, err := f.rangeGT(tx, k, int64(i), true)
+			if err != nil {
+				t.Fatalf("failed to query fragment: %v", err)
+			}
+			var expect []uint64
+			switch {
+			case i < 0:
+				expect = cols
+			case i < len(cols):
+				expect = cols[i:]
+			default:
+			}
+			got := row.Columns()
+			if !sliceEq(expect, got) {
+				t.Errorf("expected %v but got %v for x >= %d", expect, got, i)
+			}
+		}
+	})
+	t.Run("Range", func(t *testing.T) {
+		for i := minCheck; i < maxCheck; i++ {
+			for j := i; j < maxCheck; j++ {
+				row, err := f.rangeBetween(tx, k, int64(i), int64(j))
+				if err != nil {
+					t.Fatalf("failed to query fragment: %v", err)
+				}
+				var lower, upper int
+				switch {
+				case i < 0:
+					lower = 0
+				case i > len(cols):
+					lower = len(cols)
+				default:
+					lower = i
+				}
+				switch {
+				case j < 0:
+					upper = 0
+				case j >= len(cols):
+					upper = len(cols)
+				default:
+					upper = j + 1
+				}
+				expect := cols[lower:upper]
+				got := row.Columns()
+				if !sliceEq(expect, got) {
+					t.Errorf("expected %v but got %v for %d <= x <= %d", expect, got, i, j)
+				}
+			}
+		}
+	})
+	t.Run("==", func(t *testing.T) {
+		for i := minCheck; i < maxCheck; i++ {
+			row, err := f.rangeEQ(tx, k, int64(i))
+			if err != nil {
+				t.Fatalf("failed to query fragment: %v", err)
+			}
+			var expect []uint64
+			if i >= 0 && i < len(cols) {
+				expect = cols[i : i+1]
+			}
+			got := row.Columns()
+			if !sliceEq(expect, got) {
+				t.Errorf("expected %v but got %v for x == %d", expect, got, i)
+			}
+		}
+	})
+}
+
+func TestFragmentBSISigned(t *testing.T) {
+	f, idx := mustOpenFragment("i", "f", "v", 0, CacheTypeNone)
+	_ = idx
+	defer f.Clean(t)
+
+	// Obtain transaction.
+	tx := &RoaringTx{fragment: f}
+
+	// Number of bits to test.
+	const k = 6
+
+	// Load all numbers into an effectively diagonal matrix.
+	minVal, maxVal := 1-(1<<k), (1<<k)-1
+	for i := minVal; i <= maxVal; i++ {
+		ok, err := f.setValue(tx, uint64(i-minVal), k, int64(i))
+		if err != nil {
+			t.Fatalf("failed to set col %d to %d: %v", uint64(i-minVal), int64(i), err)
+		} else if !ok {
+			t.Fatalf("no change when setting col %d to %d", uint64(i-minVal), int64(i))
+		}
+	}
+
+	// Generate a list of columns.
+	cols := make([]uint64, (maxVal-minVal)+1)
+	for i := range cols {
+		cols[i] = uint64(i)
+	}
+
+	// Minimum and maximum checking bounds.
+	// This is mostly arbitrary.
+	minCheck, maxCheck := 2*minVal, 2*maxVal
+
+	t.Run("<", func(t *testing.T) {
+		for i := minCheck; i < maxCheck; i++ {
+			row, err := f.rangeLT(tx, k, int64(i), false)
+			if err != nil {
+				t.Fatalf("failed to query fragment: %v", err)
+			}
+			var expect []uint64
+			switch {
+			case i < minVal:
+			case i <= maxVal:
+				expect = cols[:i-minVal]
+			default:
+				expect = cols
+			}
+			got := row.Columns()
+			if !sliceEq(expect, got) {
+				t.Errorf("expected %v but got %v for x < %d", expect, got, i)
+			}
+		}
+	})
+	t.Run("<=", func(t *testing.T) {
+		for i := minCheck; i < maxCheck; i++ {
+			row, err := f.rangeLT(tx, k, int64(i), true)
+			if err != nil {
+				t.Fatalf("failed to query fragment: %v", err)
+			}
+			var expect []uint64
+			switch {
+			case i < minVal:
+			case i < maxVal:
+				expect = cols[:(i-minVal)+1]
+			default:
+				expect = cols
+			}
+			got := row.Columns()
+			if !sliceEq(expect, got) {
+				t.Errorf("expected %v but got %v for x <= %d", expect, got, i)
+			}
+		}
+	})
+	t.Run(">", func(t *testing.T) {
+		for i := minCheck; i < maxCheck; i++ {
+			row, err := f.rangeGT(tx, k, int64(i), false)
+			if err != nil {
+				t.Fatalf("failed to query fragment: %v", err)
+			}
+			var expect []uint64
+			switch {
+			case i < minVal:
+				expect = cols
+			case i < maxVal:
+				expect = cols[(i-minVal)+1:]
+			default:
+			}
+			got := row.Columns()
+			if !sliceEq(expect, got) {
+				t.Errorf("expected %v but got %v for x > %d", expect, got, i)
+			}
+		}
+	})
+	t.Run(">=", func(t *testing.T) {
+		for i := minCheck; i < maxCheck; i++ {
+			row, err := f.rangeGT(tx, k, int64(i), true)
+			if err != nil {
+				t.Fatalf("failed to query fragment: %v", err)
+			}
+			var expect []uint64
+			switch {
+			case i < minVal:
+				expect = cols
+			case i <= maxVal:
+				expect = cols[i-minVal:]
+			default:
+			}
+			got := row.Columns()
+			if !sliceEq(expect, got) {
+				t.Errorf("expected %v but got %v for x >= %d", expect, got, i)
+			}
+		}
+	})
+	t.Run("Range", func(t *testing.T) {
+		for i := minCheck; i < maxCheck; i++ {
+			for j := i; j < maxCheck; j++ {
+				row, err := f.rangeBetween(tx, k, int64(i), int64(j))
+				if err != nil {
+					t.Fatalf("failed to query fragment: %v", err)
+				}
+				var lower, upper int
+				switch {
+				case i < minVal:
+					lower = 0
+				case i > maxVal:
+					lower = len(cols)
+				default:
+					lower = i - minVal
+				}
+				switch {
+				case j < minVal:
+					upper = 0
+				case j > maxVal:
+					upper = len(cols)
+				default:
+					upper = (j - minVal) + 1
+				}
+				expect := cols[lower:upper]
+				got := row.Columns()
+				if !sliceEq(expect, got) {
+					t.Errorf("expected %v but got %v for %d <= x <= %d", expect, got, i, j)
+				}
+			}
+		}
+	})
+	t.Run("==", func(t *testing.T) {
+		for i := minCheck; i < maxCheck; i++ {
+			row, err := f.rangeEQ(tx, k, int64(i))
+			if err != nil {
+				t.Fatalf("failed to query fragment: %v", err)
+			}
+			var expect []uint64
+			if i >= minVal && i <= maxVal {
+				expect = cols[i-minVal : (i-minVal)+1]
+			}
+			got := row.Columns()
+			if !sliceEq(expect, got) {
+				t.Errorf("expected %v but got %v for x == %d", expect, got, i)
+			}
+		}
+	})
+}
+
 func TestImportClearRestart(t *testing.T) {
 	tests := []struct {
 		rows []uint64
