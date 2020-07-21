@@ -1026,20 +1026,34 @@ func (c *cluster) ownsShard(nodeID string, index string, shard uint64) bool {
 func (c *cluster) partitionNodes(partitionID int) []*Node {
 	// Default replica count to between one and the number of nodes.
 	// The replica count can be zero if there are no nodes.
+
+	// Assume that c.nodes may be missing a node that is part of the cluster but not currently present.
+	// The partition calculation must use the full cluster size in BOTH cases:
+	// - use len(c.Topology.nodeIDs) instead of len(c.nodes),
+	// - collect nodes from c.Topology.nodeIDs rather than from c.nodes,
+	// - when the node is missing, it should be considered, found absent from c.nodes, then omitted from the return slice.
+
 	replicaN := c.ReplicaN
-	if replicaN > len(c.nodes) {
-		replicaN = len(c.nodes)
+	nodeN := len(c.Topology.nodeIDs)
+	if replicaN > nodeN {
+		replicaN = nodeN
 	} else if replicaN == 0 {
 		replicaN = 1
 	}
 
 	// Determine primary owner node.
-	nodeIndex := c.Hasher.Hash(uint64(partitionID), len(c.nodes))
+	nodeIndex := c.Hasher.Hash(uint64(partitionID), nodeN)
 
 	// Collect nodes around the ring.
-	nodes := make([]*Node, replicaN)
+	nodes := make([]*Node, 0, replicaN)
 	for i := 0; i < replicaN; i++ {
-		nodes[i] = c.nodes[(nodeIndex+i)%len(c.nodes)]
+		maybeNodeID := c.Topology.nodeIDs[(nodeIndex+i)%nodeN]
+		for _, node := range c.nodes {
+			if node.ID == maybeNodeID {
+				nodes = append(nodes, node)
+				break
+			}
+		}
 	}
 
 	return nodes
@@ -2178,7 +2192,7 @@ func (c *cluster) nodeStatus() *NodeStatus {
 func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.logger.Printf("merge cluster status: node=%s cluster=%v", c.Node.ID, cs)
+	c.logger.Printf("merge cluster status: node=%s cluster=%v, topologySize=%v", c.Node.ID, cs, len(c.Topology.nodeIDs))
 	// Ignore status updates from self (coordinator).
 	if c.unprotectedIsCoordinator() {
 		return nil

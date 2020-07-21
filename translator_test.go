@@ -297,6 +297,7 @@ func TestTranslation_Reset(t *testing.T) {
 	})
 }
 
+// Test index key translation replication under node failure.
 func TestTranslation_Replication(t *testing.T) {
 	t.Run("Replication", func(t *testing.T) {
 		c := test.MustRunCluster(t, 3,
@@ -325,7 +326,6 @@ func TestTranslation_Replication(t *testing.T) {
 
 		node0 := c[0]
 		node1 := c[1]
-		//node2 := c[2]
 
 		ctx := context.Background()
 		idx := "i"
@@ -352,7 +352,6 @@ func TestTranslation_Replication(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		//exp := `{"results":[{"attrs":{},"columns":[],"keys":["x8","x9","x1","x2","x3","x4","x5","x6","x7"]}]}`
 		exp := `{"results":[{"attrs":{},"columns":[],"keys":["x1","x2"]}]}`
 
 		if !checkClusterState(node0, pilosa.ClusterStateNormal, 1000) {
