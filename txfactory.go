@@ -22,6 +22,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pkg/errors"
 )
@@ -55,14 +56,33 @@ var sep = string(os.PathSeparator)
 type TxFactory struct {
 	typeOfTx txtype
 
-	bw *BadgerDBWrapper
+	badgerDB *BadgerDBWrapper
+
+	rbfDB *rbf.DB
+
+	roaringDB *RoaringStore
 
 	// could have more than one *Index, but for now keep it simple,
 	// and allow blueGreenTx to report badger contents via idx
 	idx *Index
-
-	// TODO:  put RBF database handle here.
 }
+
+/* want glue-green to multiplex, so don't do this directly
+// but rather f.CloseStore()
+func (f *TxFactory) Store() TxStore {
+	switch f.typeOfTx {
+	case roaringFragmentFilesTxn:
+		return &RoaringStore{}
+	case badgerTxn:
+		return f.badgerDB
+	case rbfTxn:
+		return f.rbfDB
+		//	case blueGreenBadgerRoaring:
+		//	case blueGreenRoaringBadger:
+	}
+	panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", f.typeOfTx))
+}
+*/
 
 // integer types for fast switch{}
 type txtype int
@@ -84,6 +104,32 @@ const (
 	blueGreenBadgerRBF txtype = 8
 	blueGreenRBFBadger txtype = 9
 )
+
+func (txf *TxFactory) NeedsSnapshot() bool {
+	switch txf.typeOfTx {
+	case noneTxn:
+		panic("noneTxn should not occur")
+	case roaringFragmentFilesTxn:
+		return true
+	case badgerTxn:
+		return false
+	case rbfTxn:
+		return false
+	case blueGreenBadgerRoaring:
+		return true
+	case blueGreenRoaringBadger:
+		return true
+	case blueGreenRBFRoaring:
+		return true
+	case blueGreenRoaringRBF:
+		return true
+	case blueGreenBadgerRBF:
+		return false
+	case blueGreenRBFBadger:
+		return false
+	}
+	panic(fmt.Sprintf("unknown typeOfTx '%v'", txf.typeOfTx))
+}
 
 func MustTxsrcToTxtype(txsrc string) txtype {
 	switch txsrc {
@@ -109,29 +155,52 @@ func MustTxsrcToTxtype(txsrc string) txtype {
 	panic(fmt.Sprintf("unknown txsrc '%v'", txsrc))
 }
 
-func newTxFactory(txsrc string, path string) (f *TxFactory, err error) {
+// always store files in a subdir of dir. If we are having one
+// database or many can depend on name.
+func NewTxFactory(txsrc string, dir, name string) (f *TxFactory, err error) {
+
 	ty := MustTxsrcToTxtype(txsrc)
 	if ty < 1 || ty > 9 {
 		panic(fmt.Sprintf("invalid txtype '%v'", int(ty)))
 	}
 
-	var bw *BadgerDBWrapper
-	if ty == badgerTxn || ty == 4 || ty == 5 || ty == 8 || ty == 9 {
-		bw, err = openBadgerDBWrapper(path)
+	f = &TxFactory{
+		typeOfTx:  ty,
+		roaringDB: NewRoaringStore(),
+	}
+	switch ty {
+	case badgerTxn, blueGreenBadgerRoaring, blueGreenRoaringBadger, blueGreenBadgerRBF, blueGreenRBFBadger:
+
+		// one, big, bad-ass badger for all data: the honeyBadger.
+		//
+		// Note that having a single Tx backing store for all indexes
+		// enables cross-index Tx, which are important and are tested for.
+		path := dir + sep + "honeyBadger"
+
+		f.badgerDB, err = globalBadgerReg.openBadgerDBWrapper(path)
 		// TODO(jea): figure out what the appropriate error path is here.
 		//fmt.Printf("warning: could not open badgerdb on path '%v': '%v'. For safety, we are opening a new '%v-fallback' instead\n", path, err, path+"-fallback")
 		if err != nil {
-			//bw, err = newBadgerDBWrapper(path + "-fallback")
-			bw, err = newBadgerDBWrapper(path)
+			f.badgerDB, err = globalBadgerReg.newBadgerDBWrapper(path)
 		}
-		panicOn(err)
-
-		bw.doAllocZero = true
+		if err != nil {
+			return nil, errors.Wrap(err, fmt.Sprintf("cannot open badger db. path='%v'", path))
+		}
+		// electric-fence like finding of access to mmapped data beyond
+		// transaction end time.
+		f.badgerDB.doAllocZero = true
 	}
-	return &TxFactory{
-		typeOfTx: ty,
-		bw:       bw,
-	}, err
+
+	switch ty {
+	case rbfTxn, blueGreenRBFRoaring, blueGreenRoaringRBF, blueGreenBadgerRBF, blueGreenRBFBadger:
+		path := dir + sep + name + ".rbf"
+		f.rbfDB = rbf.NewDB(path)
+		if err := f.rbfDB.Open(); err != nil {
+			return nil, errors.Wrap(err, fmt.Sprintf("cannot open rbf db. path='%v'", path))
+		}
+	}
+
+	return f, err
 }
 
 // Txo holds the transaction options
@@ -153,34 +222,35 @@ func (f *TxFactory) DeleteIndex(name string) error {
 		// from holder.go:955, by default is already done there with os.RemoveAll()
 		return nil
 	case badgerTxn:
-		return f.bw.DeleteIndex(name)
+		return f.badgerDB.DeleteIndex(name)
 	case rbfTxn:
 		panic("todo rbfTxn DeleteIndex(name)")
 	case blueGreenBadgerRoaring:
-		return f.bw.DeleteIndex(name)
+		return f.badgerDB.DeleteIndex(name)
 	case blueGreenRoaringBadger:
-		return f.bw.DeleteIndex(name)
+		return f.badgerDB.DeleteIndex(name)
 	}
 	panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", f.typeOfTx))
 }
 
-func (f *TxFactory) Close() error {
+func (f *TxFactory) DeleteFragmentFromStore(index, field, view string, shard uint64, frag *fragment) error {
 	switch f.typeOfTx {
 	case roaringFragmentFilesTxn:
-		return nil
+		return f.roaringDB.DeleteFragment(index, field, view, shard, frag)
 	case badgerTxn:
-		// note cannot actually close Badger here.
-		// causes problems b/c tries holder.DeleteIndex tries to delete the index after db is closed.
-		//return f.bw.Close()
-		return nil
+		return f.badgerDB.DeleteFragment(index, field, view, shard, frag)
 	case rbfTxn:
-		panic("todo rbfTxn Close()")
+		//return f.rbfDB.DeleteFragment(index, field, view, shard, frag)
+		return nil
 	case blueGreenBadgerRoaring:
-		return nil
+		_ = f.badgerDB.DeleteFragment(index, field, view, shard, frag)
+		return f.roaringDB.DeleteFragment(index, field, view, shard, frag)
 	case blueGreenRoaringBadger:
-		return nil
+		_ = f.roaringDB.DeleteFragment(index, field, view, shard, frag)
+		return f.badgerDB.DeleteFragment(index, field, view, shard, frag)
 	}
 	panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", f.typeOfTx))
+
 }
 
 func (f *TxFactory) CloseIndex(idx *Index) error {
@@ -188,10 +258,14 @@ func (f *TxFactory) CloseIndex(idx *Index) error {
 	case roaringFragmentFilesTxn:
 		return nil
 	case badgerTxn:
+		// note cannot actually close Badger here.
+		// causes problems b/c tries holder.DeleteIndex tries to delete the index after db is closed.
+		//return f.badgerDB.Close()
 		return nil
 	case rbfTxn:
-		panic("todo rbfTxn CloseIndex()")
-
+		// for same reason as above may not be able to close here.
+		//return f.rbfDB.Close()
+		return nil
 	case blueGreenBadgerRoaring:
 		return nil
 	case blueGreenRoaringBadger:
@@ -202,23 +276,66 @@ func (f *TxFactory) CloseIndex(idx *Index) error {
 
 func (f *TxFactory) NewTx(o Txo) Tx {
 
+	indexName := ""
+	if o.Index != nil {
+		indexName = o.Index.name
+	}
+
 	switch f.typeOfTx {
 	case roaringFragmentFilesTxn:
 		return &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment}
 	case badgerTxn:
-		btx := f.bw.NewBadgerTx(o.Write)
+		btx := f.badgerDB.NewBadgerTx(o.Write, indexName)
 		return btx
 	case rbfTxn:
 		panic("todo rbfTxn creation")
-
+		/*
+			rbftx, err := f.rbfDB.Begin(o.Write)
+			if err != nil {
+				errors.Wrap(err, "rbfDB.Begin transaction errored")
+			}
+			return rbftx
+		*/
 	case blueGreenBadgerRoaring:
-		btx := f.bw.NewBadgerTx(o.Write)
+		btx := f.badgerDB.NewBadgerTx(o.Write, indexName)
 		rtx := &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment}
 		return newBlueGreenTx(btx, rtx, f.idx)
 	case blueGreenRoaringBadger:
-		btx := f.bw.NewBadgerTx(o.Write)
+		btx := f.badgerDB.NewBadgerTx(o.Write, indexName)
 		rtx := &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment}
 		return newBlueGreenTx(rtx, btx, f.idx)
+
+		/*
+			case blueGreenBadgerRBF:
+				btx := f.badgerDB.NewBadgerTx(o.Write, indexName)
+				rbftx, err := f.rbfDB.Begin(o.Write)
+				if err != nil {
+					errors.Wrap(err, "rbfDB.Begin transaction errored")
+				}
+				return newBlueGreenTx(btx, rbftx, f.idx)
+			case blueGreenRBFBadger:
+				btx := f.badgerDB.NewBadgerTx(o.Write, indexName)
+				rbftx, err := f.rbfDB.Begin(o.Write)
+				if err != nil {
+					errors.Wrap(err, "rbfDB.Begin transaction errored")
+				}
+				return newBlueGreenTx(rbftx, btx, f.idx)
+
+			case blueGreenRBFRoaring:
+				rbftx, err := f.rbfDB.Begin(o.Write)
+				if err != nil {
+					errors.Wrap(err, "rbfDB.Begin transaction errored")
+				}
+				rtx := &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment}
+				return newBlueGreenTx(rbftx, rtx, f.idx)
+			case blueGreenRoaringRBF:
+				rbftx, err := f.rbfDB.Begin(o.Write)
+				if err != nil {
+					errors.Wrap(err, "rbfDB.Begin transaction errored")
+				}
+				rtx := &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment}
+				return newBlueGreenTx(rtx, rbftx, f.idx)
+		*/
 	}
 	panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", f.typeOfTx))
 }
@@ -255,7 +372,7 @@ func (ty txtype) String() string {
 // Hence to view uncommited keys, you must provide in optionalUseThisTx the
 // Tx in which they have been added.
 func (idx *Index) StringifiedBadgerKeys(optionalUseThisTx Tx) string {
-	return idx.Txf.bw.StringifiedBadgerKeys(optionalUseThisTx)
+	return idx.Txf.badgerDB.StringifiedBadgerKeys(optionalUseThisTx)
 }
 
 // fragmentSpecFromRoaringPath takes a path releative to the

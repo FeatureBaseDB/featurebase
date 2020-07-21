@@ -32,6 +32,8 @@ import (
 )
 
 func TestHolder_Open(t *testing.T) {
+	skipForBadger := os.Getenv("PILOSA_TXSRC") == "badger"
+
 	t.Run("ErrIndexName", func(t *testing.T) {
 		h := test.MustOpenHolder()
 
@@ -165,6 +167,9 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrFragmentStoragePermission", func(t *testing.T) {
+		if skipForBadger {
+			t.Skip("skipping for badger")
+		}
 		if os.Geteuid() == 0 {
 			t.Skip("Skipping permissions test since user is root.")
 		}
@@ -201,6 +206,10 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrFragmentStorageCorrupt", func(t *testing.T) {
+		if skipForBadger {
+			t.Skip("skipping for badger")
+		}
+
 		h := test.MustOpenHolder()
 		defer h.Close()
 
@@ -233,6 +242,10 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrFragmentStorageRecoverable", func(t *testing.T) {
+		if skipForBadger {
+			t.Skip("skipping for badger")
+		}
+
 		h := test.MustOpenHolder()
 		defer h.Close()
 
@@ -723,24 +736,17 @@ func TestHolderSyncer_IntField(t *testing.T) {
 		hldr0.SetValue("i", "f", 1, 1)
 
 		// in c0 expect the 1 bit
-		//idx0.Dump("in c0, before SyncData")
 
 		// Set data on node1. columnID=2, value=2
 		idx1 := hldr1.SetValue("i", "f", 2, 2)
 		_ = idx1
 
-		//idx1.Dump("in c1, before SyncData")
-
-		//vv("before c[0] SyncData")
 		err = c[0].Server.SyncData()
 		if err != nil {
 			t.Fatalf("syncing node 0: %v", err)
 		}
-		//vv("after c[0] SyncData")
 
 		// expect 3 rows, the 1 bit + 2 rows for the 2 value as BSI. But, we only see that c0 overwrote c1.
-		//idx0.Dump("in c0, after syncData")
-		//idx1.Dump("in c1, after syncData")
 
 		// Problem is: data at c1 was replaced by c0, instead of being merged with existing c1.
 		// Problem is: data at c0 did not receive and merge the c1 data.
@@ -810,8 +816,6 @@ func TestHolderSyncer_IntField(t *testing.T) {
 		}
 
 		// dump the badger keys for both c0 and c1
-		//vv("in c0, allkeys = '%v'", idx0.StringifiedBadgerKeys(nil))
-		//vv("in c1, allkeys = '%v'", c[1].index.StringifiedBadgerKeys())
 
 		// Verify data is the same on both nodes.
 		for i, hldr := range []*test.Holder{hldr0, hldr1} {

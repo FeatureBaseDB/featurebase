@@ -387,7 +387,7 @@ func (c *Container) bitmap() []uint64 {
 // is provided. The target should be zeroed, or this becomes an implicit
 // union.
 func (c *Container) AsBitmap(target []uint64) (out []uint64) {
-	if c.typeID == containerBitmap {
+	if c != nil && c.typeID == containerBitmap {
 		return c.bitmap()
 	}
 	// Reminder: len(nil) == 0.
@@ -398,6 +398,10 @@ func (c *Container) AsBitmap(target []uint64) (out []uint64) {
 		for i := range out {
 			out[i] = 0
 		}
+	}
+	// A nil *Container is a valid empty container.
+	if c == nil {
+		return out
 	}
 	if c.typeID == containerArray {
 		a := c.array()

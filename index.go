@@ -99,14 +99,14 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 		}
 	}
 
-	txf, err := newTxFactory(txsrc, path)
-	if err != nil {
-		return nil, errors.Wrap(err, "creating newTxFactory")
-	}
-
-	err = validateName(name)
+	err := validateName(name)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating name")
+	}
+
+	txf, err := NewTxFactory(txsrc, holder.Path, name)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating newTxFactory")
 	}
 
 	idx := &Index{
@@ -134,6 +134,14 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 	return idx, nil
 }
 
+func (i *Index) NewTx(txo Txo) Tx {
+	return i.Txf.NewTx(txo)
+}
+
+func (i *Index) NeedsSnapshot() bool {
+	return i.Txf.NeedsSnapshot()
+}
+
 // CreatedAt is an timestamp for a specific version of an index.
 func (i *Index) CreatedAt() int64 {
 	i.mu.RLock()
@@ -148,7 +156,9 @@ func (i *Index) Name() string { return i.name }
 func (i *Index) QualifiedName() string { return i.qualifiedName }
 
 // Path returns the path the index was initialized with.
-func (i *Index) Path() string { return i.path }
+func (i *Index) Path() string {
+	return i.path
+}
 
 // TranslateStorePath returns the translation database path for a partition.
 func (i *Index) TranslateStorePath(partitionID int) string {
@@ -181,12 +191,12 @@ func (i *Index) options() IndexOptions {
 }
 
 // Open opens and initializes the index.
-func (i *Index) Open() error { return i.open(false) }
+func (i *Index) Open(haveHolderLock bool) error { return i.open(false, haveHolderLock) }
 
 // OpenWithTimestamp opens and initializes the index and set a new CreatedAt timestamp for fields.
-func (i *Index) OpenWithTimestamp() error { return i.open(true) }
+func (i *Index) OpenWithTimestamp(haveHolderLock bool) error { return i.open(true, haveHolderLock) }
 
-func (i *Index) open(withTimestamp bool) (err error) {
+func (i *Index) open(withTimestamp, haveHolderLock bool) (err error) {
 	// Ensure the path exists.
 	i.holder.Logger.Debugf("ensure index path exists: %s", i.path)
 	if err := os.MkdirAll(i.path, 0777); err != nil {
@@ -200,7 +210,7 @@ func (i *Index) open(withTimestamp bool) (err error) {
 	}
 
 	i.holder.Logger.Debugf("open fields for index: %s", i.name)
-	if err := i.openFields(withTimestamp); err != nil {
+	if err := i.openFields(withTimestamp, haveHolderLock); err != nil {
 		return errors.Wrap(err, "opening fields")
 	}
 
@@ -243,7 +253,7 @@ func (i *Index) open(withTimestamp bool) (err error) {
 var indexQueue = make(chan struct{}, 8)
 
 // openFields opens and initializes the fields inside the index.
-func (i *Index) openFields(withTimestamp bool) error {
+func (i *Index) openFields(withTimestamp, haveHolderLock bool) error {
 	f, err := os.Open(i.path)
 	if err != nil {
 		return errors.Wrap(err, "opening directory")
@@ -273,7 +283,31 @@ fileLoop:
 					<-indexQueue
 				}()
 				i.holder.Logger.Debugf("open field: %s", fi.Name())
+
 				mu.Lock()
+
+				// i.holder needs to know about its index i for the Txf to work.
+				//
+				// We face either a deadlock or a race here.
+				//
+				// We get a deadlock in TestIndex_CreateField/"BSIFields"/"OK"
+				// if we call addIndexFromField, because in that test
+				// we get here while already holding i.holder.mu.
+				//
+				// On the other had, we get races on other tests
+				// such as TestExecutor_Execute_Existence/Row
+				// if we call unprotectedAddIndexFromField which does
+				// not lock i.holder.mu.
+				//
+				// The resolution was to have the goroutines that are holding
+				// the lock already tell us. That is the haveHolderLock
+				// argument.
+				if haveHolderLock {
+					i.holder.unprotectedAddIndexFromField(i)
+				} else {
+					i.holder.addIndexFromField(i)
+				}
+
 				fld, err := i.newField(i.fieldPath(filepath.Base(fi.Name())), filepath.Base(fi.Name()))
 				if withTimestamp {
 					fld.createdAt = timestamp()
@@ -287,6 +321,7 @@ fileLoop:
 				// up a foreign index.
 				fld.holder = i.holder
 
+				// open all the views
 				if err := fld.Open(); err != nil {
 					return fmt.Errorf("open field: name=%s, err=%s", fld.Name(), err)
 				}
@@ -546,6 +581,9 @@ func (i *Index) createField(name string, opt *FieldOptions) (*Field, error) {
 	// Add to index's field lookup.
 	i.fields[name] = f
 
+	// enable Txf to find the index in field_test.go TestField_SetValue
+	f.idx = i
+
 	// Kick off the field's translation sync process.
 	if err := i.translationSyncer.Reset(); err != nil {
 		return nil, errors.Wrap(err, "resetting translation syncer")
@@ -559,6 +597,7 @@ func (i *Index) newField(path, name string) (*Field, error) {
 	if err != nil {
 		return nil, err
 	}
+	f.idx = i
 	f.Stats = i.Stats
 	f.broadcaster = i.broadcaster
 	f.rowAttrStore = i.newAttrStore(filepath.Join(f.path, ".data"))

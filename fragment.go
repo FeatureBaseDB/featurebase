@@ -108,6 +108,9 @@ type fragment struct {
 	view  string
 	shard uint64
 
+	// idx cached to avoid repeatedly looking it up everywhere.
+	idx *Index
+
 	// parent holder, used to find snapshot queue, etc.
 	holder *Holder
 
@@ -180,6 +183,10 @@ type fragment struct {
 
 // newFragment returns a new instance of Fragment.
 func newFragment(holder *Holder, path, index, field, view string, shard uint64, flags byte) *fragment {
+	idx := holder.Index(index)
+	if idx == nil {
+		panic(fmt.Sprintf("holder=%#v but got nil idx back from holder!", holder))
+	}
 	f := &fragment{
 		path:  path,
 		index: index,
@@ -187,6 +194,7 @@ func newFragment(holder *Holder, path, index, field, view string, shard uint64, 
 		view:  view,
 		shard: shard,
 		flags: flags,
+		idx:   idx,
 
 		CacheType: DefaultCacheType,
 		CacheSize: DefaultCacheSize,
@@ -250,7 +258,9 @@ func (f *fragment) Open() error {
 		f.checksums = make(map[int][]byte)
 
 		// Read last bit to determine max row.
-		return f.calculateMaxRowID()
+		tx := f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Fragment: f})
+		defer tx.Rollback()
+		return f.calculateMaxRowID(tx)
 	}(); err != nil {
 		f.close()
 		return err
@@ -398,6 +408,15 @@ func (f *fragment) inspectStorage(data []byte, file *os.File, newGen generation,
 // logic is now mostly in importStorage (reading in a bitmap) and applyStorage
 // (remapping an existing bitmap to match a new backing store).
 func (f *fragment) openStorage(unmarshalData bool) error {
+
+	if !f.idx.NeedsSnapshot() {
+		f.gen = &NopGeneration{}
+		f.rowCache = &simpleCache{make(map[uint64]*Row)}
+		f.currdata = struct{ from, to uintptr }{}
+		f.prevdata = f.currdata
+		return nil // openStorage becomes a noop under RBF, Badger, etc.
+	}
+
 	// Create a roaring bitmap to serve as storage for the shard.
 	if f.storage == nil {
 		f.storage = roaring.NewFileBitmap()
@@ -473,10 +492,16 @@ func (f *fragment) openCache() error {
 		return nil
 	}
 
+	tx := f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Fragment: f})
+	defer tx.Rollback()
+
 	// Read in all rows by ID.
 	// This will cause them to be added to the cache.
 	for _, id := range pb.IDs {
-		n := f.storage.CountRange(id*ShardWidth, (id+1)*ShardWidth)
+		n, err := tx.CountRange(f.index, f.field, f.view, f.shard, id*ShardWidth, (id+1)*ShardWidth)
+		if err != nil {
+			return errors.Wrap(err, "CountRange")
+		}
 		f.cache.BulkAdd(id, n)
 	}
 	f.cache.Invalidate()
@@ -583,7 +608,7 @@ func (f *fragment) rowFromStorage(tx Tx, rowID uint64) (*Row, error) {
 
 	row := &Row{
 		segments: []rowSegment{{
-			data:     data, // this data contains BadgerTx data, which should not survive Txn commit.
+			data:     data,
 			shard:    f.shard,
 			writable: true,
 		}},
@@ -598,7 +623,11 @@ func (f *fragment) rowFromStorage(tx Tx, rowID uint64) (*Row, error) {
 func (f *fragment) setBit(tx Tx, rowID, columnID uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	err = f.gen.Transaction(&f.storage.OpWriter, func() error {
+	var wp *io.Writer
+	if f.storage != nil {
+		wp = &f.storage.OpWriter
+	}
+	err = f.gen.Transaction(wp, func() error {
 		// handle mutux field type
 		if f.mutexVector != nil {
 			if err := f.handleMutex(tx, rowID, columnID); err != nil {
@@ -680,7 +709,11 @@ func (f *fragment) unprotectedSetBit(tx Tx, rowID, columnID uint64) (changed boo
 func (f *fragment) clearBit(tx Tx, rowID, columnID uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	err = f.gen.Transaction(&f.storage.OpWriter, func() error {
+	var wp *io.Writer
+	if f.storage != nil {
+		wp = &f.storage.OpWriter
+	}
+	err = f.gen.Transaction(wp, func() error {
 		changed, err = f.unprotectedClearBit(tx, rowID, columnID)
 		return err
 	})
@@ -739,7 +772,11 @@ func (f *fragment) unprotectedClearBit(tx Tx, rowID, columnID uint64) (changed b
 func (f *fragment) setRow(tx Tx, row *Row, rowID uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	err = f.gen.Transaction(&f.storage.OpWriter, func() error {
+	var wp *io.Writer
+	if f.storage != nil {
+		wp = &f.storage.OpWriter
+	}
+	err = f.gen.Transaction(wp, func() error {
 		changed, err = f.unprotectedSetRow(tx, row, rowID)
 		return err
 	})
@@ -802,7 +839,11 @@ func (f *fragment) unprotectedSetRow(tx Tx, row *Row, rowID uint64) (changed boo
 func (f *fragment) clearRow(tx Tx, rowID uint64) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	err = f.gen.Transaction(&f.storage.OpWriter, func() error {
+	var wp *io.Writer
+	if f.storage != nil {
+		wp = &f.storage.OpWriter
+	}
+	err = f.gen.Transaction(wp, func() error {
 		changed, err = f.unprotectedClearRow(tx, rowID)
 		return err
 	})
@@ -845,7 +886,11 @@ func (f *fragment) unprotectedClearRow(tx Tx, rowID uint64) (changed bool, err e
 // This updates both the on-disk storage and the in-cache bitmap.
 func (f *fragment) unprotectedClearBlock(tx Tx, block int) (changed bool, err error) {
 	firstRow := uint64(block * HashBlockSize)
-	err = f.gen.Transaction(&f.storage.OpWriter, func() error {
+	var wp *io.Writer
+	if f.storage != nil {
+		wp = &f.storage.OpWriter
+	}
+	err = f.gen.Transaction(wp, func() error {
 		var rowChanged bool
 		for rowID := uint64(firstRow); rowID < firstRow+HashBlockSize; rowID++ {
 			if changed, err := f.unprotectedClearRow(tx, rowID); err != nil {
@@ -953,8 +998,11 @@ func (f *fragment) positionsForValue(columnID uint64, bitDepth uint, value int64
 func (f *fragment) setValueBase(tx Tx, columnID uint64, bitDepth uint, value int64, clear bool) (changed bool, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-
-	err = f.gen.Transaction(&f.storage.OpWriter, func() error {
+	var wp *io.Writer
+	if f.storage != nil {
+		wp = &f.storage.OpWriter
+	}
+	err = f.gen.Transaction(wp, func() error {
 		// Convert value to an unsigned representation.
 		uvalue := uint64(value)
 		if value < 0 {
@@ -1291,8 +1339,12 @@ func (f *fragment) maxRow(tx Tx, filter *Row) (uint64, uint64, error) {
 
 // calculateMaxRowID determines the field's maxRowID value based
 // on the contents of its storage, and sets the struct argument.
-func (f *fragment) calculateMaxRowID() (err error) {
-	f.maxRowID = f.storage.Max() / ShardWidth
+func (f *fragment) calculateMaxRowID(tx Tx) (err error) {
+	max, err := tx.Max(f.index, f.field, f.view, f.shard)
+	if err != nil {
+		return err
+	}
+	f.maxRowID = max / ShardWidth
 	return nil
 }
 
@@ -1484,7 +1536,6 @@ func (f *fragment) rangeGT(tx Tx, bitDepth uint, predicate int64, allowEquality 
 	if err != nil {
 		return nil, err
 	}
-
 	// Create predicate without sign bit.
 	upredicate := absInt64(predicate)
 
@@ -1492,7 +1543,6 @@ func (f *fragment) rangeGT(tx Tx, bitDepth uint, predicate int64, allowEquality 
 	if err != nil {
 		return nil, err
 	}
-
 	switch {
 	case predicate == 0 && !allowEquality:
 		// Match all positive numbers except zero.
@@ -2217,7 +2267,11 @@ func (f *fragment) bulkImportStandard(tx Tx, rowIDs, columnIDs []uint64, options
 // operations to the op log.
 func (f *fragment) importPositions(tx Tx, set, clear []uint64, rowSet map[uint64]struct{}) error {
 	//tx.AddN()
-	err := f.gen.Transaction(&f.storage.OpWriter, func() error {
+	var wp *io.Writer
+	if f.storage != nil {
+		wp = &f.storage.OpWriter
+	}
+	err := f.gen.Transaction(wp, func() error { // segfault
 		if len(set) > 0 {
 			f.stats.Count(MetricImportingN, int64(len(set)), 1)
 
@@ -2453,14 +2507,18 @@ func (f *fragment) unprotectedImportRoaring(ctx context.Context, tx Tx, data []b
 	span, ctx := tracing.StartSpanFromContext(ctx, "importRoaring.ImportRoaringBits")
 	var changed int
 	var rowSet map[uint64]int
-	err := f.gen.Transaction(&f.storage.OpWriter, func() (err error) {
+	var wp *io.Writer
+	if f.storage != nil {
+		wp = &f.storage.OpWriter
+	}
+	err := f.gen.Transaction(wp, func() (err error) {
 		var rit roaring.RoaringIterator
 		rit, err = roaring.NewRoaringIterator(data)
 		if err != nil {
 			return err
 		}
 
-		changed, rowSet, err = tx.ImportRoaringBits(f.index, f.field, f.view, f.shard, rit, clear, true, rowSize)
+		changed, rowSet, err = tx.ImportRoaringBits(f.index, f.field, f.view, f.shard, rit, clear, true, rowSize, nil)
 		return err
 	})
 
@@ -2550,6 +2608,9 @@ func track(start time.Time, message string, stats stats.StatsClient, logger logg
 // snapshot does the actual snapshot operation. it does not check or care
 // about f.snapshotPending.
 func (f *fragment) snapshot() (err error) {
+	if !f.idx.NeedsSnapshot() {
+		return nil
+	}
 	if !f.open {
 		return errors.New("snapshot request on closed fragment")
 	}
@@ -2688,31 +2749,16 @@ func (f *fragment) WriteTo(w io.Writer) (n int64, err error) {
 	return 0, nil
 }
 
+// used in shipping the slices across the network for a resize.
 func (f *fragment) writeStorageToArchive(tw *tar.Writer) error {
-	// Open separate file descriptor to read from.
-	file, err := os.Open(f.path)
+
+	tx := f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx})
+	defer tx.Rollback()
+	file, sz, err := tx.RoaringBitmapReader(f.index, f.field, f.view, f.shard, f.path)
 	if err != nil {
-		return errors.Wrap(err, "opening file")
-	}
-	defer file.Close()
-
-	// Retrieve the current file size under lock so we don't read
-	// while an operation is appending to the end.
-	var sz int64
-	if err := func() error {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-
-		fi, err := file.Stat()
-		if err != nil {
-			return errors.Wrap(err, "statting")
-		}
-		sz = fi.Size()
-
-		return nil
-	}(); err != nil {
 		return err
 	}
+	defer file.Close()
 
 	// Write archive header.
 	if err := tw.WriteHeader(&tar.Header{
@@ -2779,8 +2825,14 @@ func (f *fragment) ReadFrom(r io.Reader) (n int64, err error) {
 		// Process file based on file name.
 		switch hdr.Name {
 		case "data":
-			if err := f.readStorageFromArchive(tr); err != nil {
+			idx := f.holder.Index(f.index)
+			tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f})
+			defer tx.Rollback()
+			if err := f.fillFragmentFromArchive(tx, tr); err != nil {
 				return 0, errors.Wrap(err, "reading storage")
+			}
+			if err := tx.Commit(); err != nil {
+				return 0, errors.Wrap(err, "Commit after tx.ReadFragmentFromArchive")
 			}
 		case "cache":
 			if err := f.readCacheFromArchive(tr); err != nil {
@@ -2794,7 +2846,40 @@ func (f *fragment) ReadFrom(r io.Reader) (n int64, err error) {
 	return 0, nil
 }
 
+// should be morally equivalent to fragment.readStorageFromArchive()
+// below for RoaringTx, but also work on any Tx because it uses
+// tx.ImportRoaringBits().
+func (f *fragment) fillFragmentFromArchive(tx Tx, r io.Reader) error {
+
+	// this is reading from inside a tarball, so definitely no need
+	// to close it here.
+	data, err := ioutil.ReadAll(r)
+	if err != nil {
+		return errors.Wrap(err, "fillFragmentFromArchive ioutil.ReadAll(r)")
+	}
+	if len(data) == 0 {
+		return nil
+	}
+
+	// For reference, compare to what fragment.go:313 fragment.importStorage() does.
+
+	clear := false
+	log := false
+	rowSize := uint64(0)
+	itr, err := roaring.NewRoaringIterator(data)
+	if err != nil {
+		return errors.Wrap(err, "fillFragmentFromArchive NewRoaringIterator")
+	}
+	changed, rowSet, err := tx.ImportRoaringBits(f.index, f.field, f.view, f.shard, itr, clear, log, rowSize, data)
+	_, _ = changed, rowSet
+	if err != nil {
+		return errors.Wrap(err, "fillFragmentFromArchive ImportRoaringBits")
+	}
+	return nil
+}
+
 func (f *fragment) readStorageFromArchive(r io.Reader) error {
+
 	// Create a temporary file to copy into.
 	path := f.path + copyExt
 	file, err := os.Create(path)
@@ -2806,6 +2891,12 @@ func (f *fragment) readStorageFromArchive(r io.Reader) error {
 	// Copy reader into temporary path.
 	if _, err = io.Copy(file, r); err != nil {
 		return errors.Wrap(err, "copying")
+	}
+
+	// TODO(jea): isn't this next Rename a file handle leak?
+	// try closing first
+	if err := f.closeStorage(); err != nil {
+		return errors.Wrap(err, "closeStorage-prior-to-Rename-and-openStorage")
 	}
 
 	// Move snapshot to data file location.

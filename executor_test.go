@@ -3413,6 +3413,7 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 		defer c.Close()
 		hldr := test.Holder{Holder: c[0].Server.Holder()}
 		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackExistence: true})
+
 		_, err := index.CreateField("f", pilosa.OptFieldTypeDefault())
 		if err != nil {
 			t.Fatal(err)
@@ -3438,6 +3439,7 @@ func TestExecutor_Execute_Existence(t *testing.T) {
 		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{ShardWidth + 2}) {
 			t.Fatalf("unexpected columns after Not: %+v", bits)
 		}
+
 		// Reopen cluster to ensure existence field is reloaded.
 		if err := c[0].Reopen(); err != nil {
 			t.Fatal(err)
@@ -4172,25 +4174,6 @@ func TestExecutor_Execute_SetRow(t *testing.T) {
 			t.Fatal(err)
 		} else if bits := res.Results[0].(*pilosa.Row).Columns(); !reflect.DeepEqual(bits, []uint64{3, ShardWidth - 1, ShardWidth + 1}) {
 			t.Fatalf("unexpected columns: %+v", bits)
-		}
-	})
-	t.Run("Err_Store(Distinct)", func(t *testing.T) {
-		c := test.MustRunCluster(t, 1)
-		defer c.Close()
-		hldr := test.Holder{Holder: c[0].Server.Holder()}
-		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{TrackExistence: true})
-		f1, err := index.CreateField("f1", pilosa.OptFieldTypeDefault())
-		if err != nil {
-			t.Fatal(err)
-		}
-		f2, err := index.CreateField("f2", pilosa.OptFieldTypeDefault())
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		q := fmt.Sprintf(`Store(Distinct(field=%s), %s=2)`, f1.Name(), f2.Name())
-		if res, err := c[0].API.Query(context.Background(), &pilosa.QueryRequest{Index: index.Name(), Query: q}); err == nil {
-			t.Fatalf("expected 'unsupported result type' error, got: %+v", res)
 		}
 	})
 }
@@ -5312,6 +5295,7 @@ func runCallTest(t *testing.T, writeQuery string, readQueries []string, indexOpt
 	defer c.Close()
 	hldr := test.Holder{Holder: c[0].Server.Holder()}
 	index := hldr.MustCreateIndexIfNotExists("i", *indexOptions)
+	defer index.Close()
 	_, err := index.CreateField("f", fieldOption...)
 	if err != nil {
 		t.Fatal(err)
@@ -5723,12 +5707,15 @@ func TestExecutor_Execute_CountDistinct(t *testing.T) {
 	if err := json.NewDecoder(bytes.NewReader(data)).Decode(schema); err != nil {
 		t.Fatal(err)
 	}
+
 	if err := api.ApplySchema(context.TODO(), schema, false); err != nil {
 		t.Fatal(err)
 	}
 
+	// AntitodePoint == row 1 b/c keys field.
 	writeQuery := `Set(100, type=AntidotePoint)Set(100, equip_id=100)Set(100, site_id=100)Set(100, id=100)`
-	for _, i := range schema.Indexes {
+	for k, i := range schema.Indexes {
+		_ = k
 		if _, err := api.Query(context.TODO(), &pilosa.QueryRequest{Index: i.Name, Query: writeQuery}); err != nil {
 			t.Fatal(err)
 		}
@@ -5739,11 +5726,11 @@ func TestExecutor_Execute_CountDistinct(t *testing.T) {
 		Intersect(
 			Distinct(
 				Intersect(Row(type=AntidotePoint)),
-			index=power_ts, field=equip_id),
+			index=equipment, field=equip_id),
 			Distinct(
 				Intersect(Row(type=AntidotePoint)),
-			index=power_ts, field=equip_id)
-		), index=equipment, field=site_id)`
+			index=sites, field=equip_id)
+		), index=power_ts, field=site_id)`
 
 	// Check if test query gives correct results (one column 100)
 	t.Run("Distinct", func(t *testing.T) {
@@ -5760,6 +5747,7 @@ func TestExecutor_Execute_CountDistinct(t *testing.T) {
 		}
 		if r.Pos.Count() != 1 {
 			t.Fatalf("invalid pilosa.SignedRow.Pos.Count, expected: 1, got: %v", r.Pos.Count())
+
 		}
 		if r.Pos.Columns()[0] != 100 {
 			t.Fatalf("invalid pilosa.SignedRow.Pos.Columns, expected: [100], got: %v", r.Pos.Columns())

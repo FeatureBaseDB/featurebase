@@ -15,7 +15,12 @@
 package pilosa
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strconv"
 	"sync"
 
 	"github.com/pilosa/pilosa/v2/roaring"
@@ -49,6 +54,10 @@ const writable = true
 // Reads from another, concurrently open, transaction will not see updates
 // that have not been committed.
 type Tx interface {
+
+	// Type returns "roaring", "rbf", "badger", "badger_roaring", or one of the other
+	// blue-green Tx types at the top of txfactory.go
+	Type() string
 
 	// Rollback must be called the end of read-only transactions. Either
 	// Rollback or Commit must be called at the end of writable transactions.
@@ -97,6 +106,11 @@ type Tx interface {
 	// Calling Next() on the returned roaring.ContainerIterator gives
 	// you a roaring.Container that is either run, array, or raw bitmap.
 	// Return value 'found' is true when the ckey container was present.
+	// ckey of 0 gives all containers (in the fragment).
+	//
+	// ContainerIterator must not have side-effects. blueGreenTx will
+	// call it at the very beginning of commit to verify db contents.
+	//
 	ContainerIterator(index, field, view string, shard uint64, ckey uint64) (citer roaring.ContainerIterator, found bool, err error)
 
 	// RoaringBitmap retreives the roaring.Bitmap for the entire shard.
@@ -162,10 +176,52 @@ type Tx interface {
 	OffsetRange(index, field, view string, shard uint64, offset, start, end uint64) (*roaring.Bitmap, error)
 
 	// ImportRoaringBits does efficient bulk import using rit, a roaring.RoaringIterator.
+	//
 	// See the roaring package for details of the RoaringIterator.
+	//
 	// If clear is true, the bits from rit are cleared, otherwise they are set in the
 	// specifed fragment.
-	ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error)
+	//
+	// The data argument can be nil, its ignored for RBF/BadgerTx. It is supplied to
+	// RoaringTx.ImportRoaringBits() in fragment.go fragment.fillFragmentFromArchive()
+	// to do the traditional fragment.readStorageFromArchive() which
+	// does some in memory field/view/fragment metadata updates.
+	// It makes blueGreenTx testing viable too.
+	//
+	// ImportRoaringBits return values changed and rowSet may be inaccurate if
+	// the data []byte is supplied (the RoaringTx implementation neglects this for speed).
+	ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error)
+
+	RoaringBitmapReader(index, field, view string, shard uint64, fragmentPathForRoaring string) (r io.ReadCloser, sz int64, err error)
+
+	// SliceOfShards returns all of the shards for the specified index, field, view triple.
+	// Use within pilosa supposes a new read-only transaction was created just
+	// for the SliceOfShards() call. The original Roaring version is the only
+	// one that needs optionalViewPath; any other Tx implementation can ignore that.
+	SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error)
+}
+
+// TxStore has operations that will create and commit multiple
+// Tx on a backing store.
+type TxStore interface {
+
+	// DeleteFragment deletes all the containers in a fragment.
+	//
+	// This is not in a Tx because it will often do too many deletes for a single
+	// transaction, and clients would be suprised to find their Tx had already
+	// been commited and they are getting an error on double-Commit.
+	// Instead each TxStore implementation creates and commits as many
+	// transactions as needed.
+	//
+	// Argument frag should be passed by any RoaringTx user, but for RBF/Badger it can be nil.
+	// If not nil, it must be of type *fragment. If frag is supplied, then
+	// index must be equal to frag.index, field equal to frag.field, view equal
+	// to frag.view, and shard equal to frag.shard.
+	//
+	DeleteFragment(index, field, view string, shard uint64, frag interface{}) error
+
+	// Close shuts down the database.
+	Close() error
 }
 
 // RawRoaringData used by ImportRoaringBits.
@@ -207,8 +263,24 @@ func NewMultiTxWithIndex(writable bool, index *Index) *MultiTx {
 
 var _ Tx = (*MultiTx)(nil)
 
+func (mtx *MultiTx) Type() string {
+	return RoaringTxn
+}
+
+func (mtx *MultiTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
+	tx, err := mtx.txNoShard(index)
+	panicOn(err)
+	return tx.SliceOfShards(index, field, view, optionalViewPath)
+}
+
 func (mtx *MultiTx) UseRowCache() bool {
 	return true
+}
+
+func (mtx *MultiTx) RoaringBitmapReader(index, field, view string, shard uint64, fragmentPathForRoaring string) (r io.ReadCloser, sz int64, err error) {
+	tx, err := mtx.tx(index, shard)
+	panicOn(err)
+	return tx.RoaringBitmapReader(index, field, view, shard, fragmentPathForRoaring)
 }
 
 func (mtx *MultiTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
@@ -226,8 +298,10 @@ func (mtx *MultiTx) Pointer() string {
 	return fmt.Sprintf("%p", mtx)
 }
 
-func (tx *MultiTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error) {
-	panic("not done")
+func (mtx *MultiTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
+	tx, err := mtx.tx(index, shard)
+	panicOn(err)
+	return tx.ImportRoaringBits(index, field, view, shard, rit, clear, log, rowSize, data)
 }
 
 func (mtx *MultiTx) IncrementOpN(index, field, view string, shard uint64, changedN int) {
@@ -412,6 +486,20 @@ func (mtx *MultiTx) tx(index string, shard uint64) (_ Tx, err error) {
 	return tx, nil
 }
 
+// version of the above for SliceOfShards(), where we don't have a shard.
+func (mtx *MultiTx) txNoShard(index string) (_ Tx, err error) {
+	mtx.mu.Lock()
+	defer mtx.mu.Unlock()
+
+	// Lookup transaction from cache.
+	for _, tx := range mtx.txs {
+		if tx.(*RoaringTx).Index.name == index {
+			return tx, nil
+		}
+	}
+	panic(fmt.Sprintf("no prior RoaringTx available, looking up index='%v'", index))
+}
+
 type multiTxKey struct {
 	index string
 	shard uint64
@@ -426,8 +514,44 @@ type RoaringTx struct {
 	fragment *fragment
 }
 
+func (mtx *RoaringTx) Type() string {
+	return RoaringTxn
+}
+
 func (tx *RoaringTx) UseRowCache() bool {
 	return true
+}
+
+func (tx *RoaringTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
+
+	// SliceOfShards is based on view.openFragments()
+
+	file, err := os.Open(filepath.Join(optionalViewPath, "fragments"))
+	if os.IsNotExist(err) {
+		return
+	} else if err != nil {
+		return nil, errors.Wrap(err, "opening fragments directory")
+	}
+	defer file.Close()
+
+	fis, err := file.Readdir(0)
+	if err != nil {
+		return nil, errors.Wrap(err, "reading fragments directory")
+	}
+
+	for _, fi := range fis {
+		if fi.IsDir() {
+			continue
+		}
+		// Parse filename into integer.
+		shard, err := strconv.ParseUint(filepath.Base(fi.Name()), 10, 64)
+		if err != nil {
+			//v.holder.Logger.Debugf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", v.index, v.field, v.name, fi.Name())
+			continue
+		}
+		sliceOfShards = append(sliceOfShards, shard)
+	}
+	return
 }
 
 func (tx *RoaringTx) Pointer() string {
@@ -442,13 +566,25 @@ func (tx *RoaringTx) NewTxIterator(index, field, view string, shard uint64) *roa
 	return b.Iterator()
 }
 
-func (tx *RoaringTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error) {
-	b, err := tx.bitmap(index, field, view, shard)
-	panicOn(err)
+// ImportRoaringBits return values changed and rowSet will be inaccurate if
+// the data []byte is supplied. This mimics the traditional roaring-per-file
+// and should be faster.
+func (tx *RoaringTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
+
+	f, err := tx.getFragment(index, field, view, shard)
 	if err != nil {
 		return 0, nil, err
 	}
-	return b.ImportRoaringRawIterator(rit, clear, true, rowSize)
+	if len(data) > 0 {
+		// changed and rowSet are ignored anyway when len(data) > 0;
+		// when we are called from fragment.fillFragmentFromArchive()
+		// which is the only place the data []byte is supplied.
+		// blueGreenTx also turns off the checks in this case.
+		return 0, nil, f.readStorageFromArchive(bytes.NewBuffer(data))
+	}
+
+	changed, rowSet, err = f.storage.ImportRoaringRawIterator(rit, clear, true, rowSize)
+	return
 }
 
 func (tx *RoaringTx) Readonly() bool {
@@ -625,8 +761,16 @@ func (tx *RoaringTx) OffsetRange(index, field, view string, shard uint64, offset
 // getFragment is used by IncrementOpN() and by bitmap()
 func (tx *RoaringTx) getFragment(index, field, view string, shard uint64) (*fragment, error) {
 
-	// If a fragment is attached, always use it.
+	// If a fragment is attached, always use it. Since it was set at Tx creation,
+	// it is highly likely to be correct.
 	if tx.fragment != nil {
+		// but still a basic sanity check.
+		if tx.fragment.index != index ||
+			tx.fragment.field != field ||
+			tx.fragment.view != view ||
+			tx.fragment.shard != shard {
+			panic(fmt.Sprintf("different fragment cached vs requested. tx.fragment='%#v', index='%v', field='%v'; view='%v'; shard='%v'", tx.fragment, index, field, view, shard))
+		}
 		return tx.fragment, nil
 	}
 
@@ -659,8 +803,10 @@ func (tx *RoaringTx) getFragment(index, field, view string, shard uint64) (*frag
 	}
 
 	frag := v.Fragment(shard)
+
 	if frag == nil {
-		panic(fmt.Sprintf("fragment not found: %q / %q / %d", field, view, shard))
+		return nil, fmt.Errorf("fragment not found: %q / %q / %d", field, view, shard)
+		//panic(fmt.Sprintf("fragment not found: %q / %q / %d", field, view, shard))
 	}
 
 	// Note: we cannot cache frag into tx.fragment.
@@ -676,4 +822,53 @@ func (tx *RoaringTx) bitmap(index, field, view string, shard uint64) (*roaring.B
 		return nil, err
 	}
 	return frag.storage, nil
+}
+
+type RoaringStore struct{}
+
+func NewRoaringStore() *RoaringStore {
+	return &RoaringStore{}
+}
+
+func (db *RoaringStore) Close() error {
+	return nil
+}
+
+// frag should be passed by any RoaringTx user, but for RBF/Badger it can be nil.
+func (db *RoaringStore) DeleteFragment(index, field, view string, shard uint64, frag interface{}) error {
+
+	fragment, ok := frag.(*fragment)
+	if !ok {
+		return fmt.Errorf("RoaringStore.DeleteFragment must get frag of type *fragment, but got '%T'", frag)
+	}
+
+	// Close data files before deletion.
+	if err := fragment.Close(); err != nil {
+		return errors.Wrap(err, "closing fragment")
+	}
+
+	// Delete fragment file.
+	if err := os.Remove(fragment.path); err != nil {
+		return errors.Wrap(err, "deleting fragment file")
+	}
+
+	// Delete fragment cache file.
+	if err := os.Remove(fragment.cachePath()); err != nil {
+		return errors.Wrap(err, fmt.Sprintf("no cache file to delete for shard %d", fragment.shard))
+	}
+	return nil
+}
+
+func (tx *RoaringTx) RoaringBitmapReader(index, field, view string, shard uint64, fragmentPathForRoaring string) (r io.ReadCloser, sz int64, err error) {
+	file, err := os.Open(fragmentPathForRoaring) // open the fragment file
+	if err != nil {
+		return nil, -1, err
+	}
+	fi, err := file.Stat()
+	if err != nil {
+		return nil, -1, errors.Wrap(err, "statting")
+	}
+	sz = fi.Size()
+	r = file
+	return
 }

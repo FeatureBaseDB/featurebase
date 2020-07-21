@@ -96,7 +96,9 @@ func newIndexWithTempPath(name string) *Index {
 	if err != nil {
 		panic(err)
 	}
-	index, err := NewIndex(NewHolder(DefaultPartitionN), path, name)
+	h := NewHolder(DefaultPartitionN)
+	h.Path = path
+	index, err := h.CreateIndex(name, IndexOptions{})
 	if err != nil {
 		panic(err)
 	}
@@ -160,7 +162,7 @@ func TestFragSources(t *testing.T) {
 	defer idx.Close()
 
 	// Obtain transaction.
-	tx := &RoaringTx{Index: idx}
+	tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx})
 	defer tx.Rollback()
 
 	field, err := idx.CreateFieldIfNotExists("f", OptFieldTypeDefault())
@@ -809,12 +811,12 @@ func TestCluster_ResizeStates(t *testing.T) {
 		if idx0 == nil {
 			t.Fatal(`idx0 was nil, could not retrieve Index("i")`)
 		}
-		//idx0.Dump("node0")
 
 		// addNode needs to block until the resize process has completed.
 		if err := tc.addNode(); err != nil {
 			t.Fatalf("adding node: %v", err)
 		}
+
 		node1 := tc.Clusters[1]
 
 		// Ensure that nodes come up in state NORMAL.
@@ -846,8 +848,6 @@ func TestCluster_ResizeStates(t *testing.T) {
 		if idx1 == nil {
 			t.Fatal(`idx1 was nil, could not retrieve Index("i")`)
 		}
-		//idx0.Dump("after rebalance, node0")
-		//idx1.Dump("after rebalance, node1")
 
 		// Ensure checksums are the same.
 		if chksum, err := node1Fragment.Checksum(); err != nil {
@@ -872,6 +872,7 @@ func TestAE(t *testing.T) {
 			c.abortAntiEntropy()
 			close(ch)
 		}()
+		defer c.abortAntiEntropyQ() // avoid leaking a goroutine.
 		select {
 		case <-ch:
 			return
@@ -883,11 +884,13 @@ func TestAE(t *testing.T) {
 	t.Run("AbortBlocksInitialized", func(t *testing.T) {
 		c := newCluster()
 		c.initializeAntiEntropy()
+
 		ch := make(chan struct{})
 		go func() {
 			c.abortAntiEntropy()
 			close(ch)
 		}()
+		defer c.abortAntiEntropyQ() // avoid leak of goroutine.
 		select {
 		case <-ch:
 			t.Fatalf("aborting anti entropy on an initialized cluster didn't block")

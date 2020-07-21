@@ -71,6 +71,10 @@ func NewDBWithShard(path string, shard int) *DB {
 	}
 }
 
+func (db *DB) DeleteFragment(index, field, view string, shard uint64, frag interface{}) error {
+	panic("TODO: implement rbf.DB.DeleteFragment")
+}
+
 // DataPath returns the path to the data file for the DB.
 func (db *DB) DataPath() string {
 	return filepath.Join(db.Path, "data")
