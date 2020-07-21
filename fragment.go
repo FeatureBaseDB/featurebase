@@ -1330,19 +1330,20 @@ func (f *fragment) rangeEQ(tx Tx, bitDepth uint, predicate int64) (*Row, error) 
 		return nil, err
 	}
 
-	// Filter to only positive/negative numbers.
 	upredicate := absInt64(predicate)
+	if uint(bits.Len64(upredicate)) > bitDepth {
+		// Predicate is out of range.
+		return NewRow(), nil
+	}
+
+	// Filter to only positive/negative numbers.
+	r, err := f.row(tx, bsiSignBit)
+	if err != nil {
+		return nil, err
+	}
 	if predicate < 0 {
-		r, err := f.row(tx, bsiSignBit)
-		if err != nil {
-			return nil, err
-		}
 		b = b.Intersect(r) // only negatives
 	} else {
-		r, err := f.row(tx, bsiSignBit)
-		if err != nil {
-			return nil, err
-		}
 		b = b.Difference(r) // only positives
 	}
 
@@ -1428,18 +1429,10 @@ func (f *fragment) rangeLT(tx Tx, bitDepth uint, predicate int64, allowEquality 
 	}
 }
 
-// msb gives the 1-indexed position (counting from lsb) of the most
-// significant bit. E.G. for 1 it would return 1, for 2 2, for 3 2,
-// for 4 3, for 8 4, etc.
-func msb(x uint64) uint {
-	lz := bits.LeadingZeros64(x)
-	return 64 - uint(lz)
-}
-
 // rangeLTUnsigned returns all bits LT/LTE the predicate without considering the sign bit.
 func (f *fragment) rangeLTUnsigned(tx Tx, filter *Row, bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
 	switch {
-	case msb(predicate) > bitDepth:
+	case uint(bits.Len64(predicate)) > bitDepth:
 		fallthrough
 	case predicate == (1<<bitDepth)-1 && allowEquality:
 		// This query matches all possible values.
@@ -1527,6 +1520,7 @@ func (f *fragment) rangeGT(tx Tx, bitDepth uint, predicate int64, allowEquality 
 }
 
 func (f *fragment) rangeGTUnsigned(tx Tx, filter *Row, bitDepth uint, predicate uint64, allowEquality bool) (*Row, error) {
+prep:
 	switch {
 	case predicate == 0 && allowEquality:
 		// This query matches all possible values.
@@ -1542,8 +1536,13 @@ func (f *fragment) rangeGTUnsigned(tx Tx, filter *Row, bitDepth uint, predicate 
 			matches = matches.Union(filter.Intersect(row))
 		}
 		return matches, nil
+	case !allowEquality && uint(bits.Len64(predicate)) > bitDepth:
+		// The predicate is bigger than the BSI width, so nothing can be bigger.
+		return NewRow(), nil
 	case allowEquality:
 		predicate--
+		allowEquality = false
+		goto prep
 	}
 
 	// Compare intermediate bits.
@@ -1636,9 +1635,9 @@ func (f *fragment) rangeBetweenUnsigned(tx Tx, filter *Row, bitDepth uint, predi
 	}
 
 	// Compare any upper bits which are equal.
-	firstDiff := int(msb(predicateMax^predicateMin)) - 1
+	diffLen := bits.Len64(predicateMax ^ predicateMin)
 	remaining := filter
-	for i := int(bitDepth - 1); i > firstDiff; i-- {
+	for i := int(bitDepth - 1); i >= diffLen; i-- {
 		row, err := f.row(tx, uint64(bsiOffsetBit+i))
 		if err != nil {
 			return nil, err
@@ -1651,12 +1650,17 @@ func (f *fragment) rangeBetweenUnsigned(tx Tx, filter *Row, bitDepth uint, predi
 		}
 	}
 
+	// Clear the bits we just compared.
+	equalMask := (^uint64(0)) << diffLen
+	predicateMin &^= equalMask
+	predicateMax &^= equalMask
+
 	var err error
-	remaining, err = f.rangeGTUnsigned(tx, remaining, uint(firstDiff+1), predicateMin, true)
+	remaining, err = f.rangeGTUnsigned(tx, remaining, uint(diffLen), predicateMin, true)
 	if err != nil {
 		return nil, err
 	}
-	remaining, err = f.rangeLTUnsigned(tx, remaining, uint(firstDiff+1), predicateMax, true)
+	remaining, err = f.rangeLTUnsigned(tx, remaining, uint(diffLen), predicateMax, true)
 	if err != nil {
 		return nil, err
 	}
