@@ -1219,7 +1219,12 @@ func (c *cluster) handleNodeAction(nodeAction nodeAction) error {
 
 	// Wait for the resizeJob to finish or be aborted.
 	c.logger.Printf("wait for jobResult")
-	jobResult := <-j.result
+	var jobResult string
+	select {
+	case <-c.closing:
+		return errors.New("cluster shut down during resize")
+	case jobResult = <-j.result:
+	}
 
 	// Make sure j.run() didn't return an error.
 	if eg.Wait() != nil {
@@ -1354,6 +1359,9 @@ func (c *cluster) unprotectedGenerateResizeJob(nodeAction nodeAction) (*resizeJo
 // the resize instructions to other nodes in the cluster.
 func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*resizeJob, error) {
 	j := newResizeJob(c.nodes, nodeAction.node, nodeAction.action)
+	// A *new* node which is being added needs a schema update even if
+	// there's no data to send it.
+	var sendSchemaToNewNode string
 	j.Broadcaster = c.broadcaster
 
 	// toCluster is a clone of Cluster with the new node added/removed for comparison.
@@ -1366,6 +1374,7 @@ func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*
 		toCluster.removeNodeBasicSorted(nodeAction.node.ID)
 	} else if nodeAction.action == resizeJobActionAdd {
 		toCluster.addNodeBasicSorted(nodeAction.node)
+		sendSchemaToNewNode = nodeAction.node.ID
 	}
 
 	indexes := c.holder.Indexes()
@@ -1431,11 +1440,15 @@ func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*
 	}
 
 	for _, node := range toCluster.nodes {
-		// We may send a resize instruction that has no sources that
-		// the node needs to read from -- for instance, if there's no
-		// data in any fragments it would process. But it still needs
-		// to get the NodeStatus to pick up the schema so it knows
-		// about existing indexes.
+		dataToSend := len(fragmentSourcesByNode[node.ID]) != 0 || len(translationSourcesByNode[node.ID]) != 0
+		// If we're adding a new node, that node needs to get a resize
+		// instruction even if there's no data it needs to read.
+		// Existing nodes already got the schema and are assumed to be
+		// up to date on it.
+		if !dataToSend && node.ID != sendSchemaToNewNode {
+			j.IDs[node.ID] = true
+			continue
+		}
 		instr := &ResizeInstruction{
 			JobID:              j.ID,
 			Node:               toCluster.unprotectedNodeByID(node.ID),
