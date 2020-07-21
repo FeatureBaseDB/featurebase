@@ -22,6 +22,7 @@ import (
 	"io"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pilosa/pilosa/v2"
@@ -294,6 +295,95 @@ func TestTranslation_Reset(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+}
+
+func TestTranslation_Replication(t *testing.T) {
+	t.Run("Replication", func(t *testing.T) {
+		c := test.MustRunCluster(t, 3,
+			[]server.CommandOption{
+				server.OptCommandServerOptions(
+					pilosa.OptServerIsCoordinator(true),
+					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+					pilosa.OptServerReplicaN(2),
+				)},
+			[]server.CommandOption{
+				server.OptCommandServerOptions(
+					pilosa.OptServerIsCoordinator(false),
+					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+					pilosa.OptServerReplicaN(2),
+				)},
+			[]server.CommandOption{
+				server.OptCommandServerOptions(
+					pilosa.OptServerIsCoordinator(false),
+					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+					pilosa.OptServerReplicaN(2),
+				)},
+		)
+
+		node0 := c[0]
+		node1 := c[1]
+		//node2 := c[2]
+
+		ctx := context.Background()
+		idx := "i"
+		field := "f"
+
+		// Create an index with keys.
+		if _, err := node0.API.CreateIndex(ctx, idx,
+			pilosa.IndexOptions{
+				Keys: true,
+			}); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := node0.API.CreateField(ctx, idx, field); err != nil {
+			t.Fatal(err)
+		}
+
+		// Write data on first node.
+		// these keys are a minimal example to reproduce the problem for the case of a 3-node cluster with replication factor 2
+		if _, err := node0.Queryf(t, idx, "", `
+	    Set("x1", f=1)
+	    Set("x2", f=1)
+    `); err != nil {
+			t.Fatal(err)
+		}
+
+		//exp := `{"results":[{"attrs":{},"columns":[],"keys":["x8","x9","x1","x2","x3","x4","x5","x6","x7"]}]}`
+		exp := `{"results":[{"attrs":{},"columns":[],"keys":["x1","x2"]}]}`
+
+		if !checkClusterState(node0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s", node0.API.State())
+		} else if !checkClusterState(node1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s", node1.API.State())
+		}
+
+		// Verify the data exists
+		node0.QueryExpect(t, idx, "", `Row(f=1)`, exp)
+
+		// Kill one node.
+		if err := node1.Command.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify the data exists with one node down
+		node0.QueryExpect(t, idx, "", `Row(f=1)`, exp)
+	})
+}
+
+// checkClusterState polls a given cluster for its state until it
+// receives a matching state. It polls up to n times before returning.
+func checkClusterState(m *test.Command, state string, n int) bool {
+	for i := 0; i < n; i++ {
+		if m.API.State() == state {
+			return true
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return false
 }
 
 // Test key translation with multiple nodes.
