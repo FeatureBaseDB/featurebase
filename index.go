@@ -85,19 +85,20 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 	// Warning: won't work for the tests to say:
 	// txsrc := holder.Opts.Txsrc // WILL BREAK TESTS
 
+	// For *most* of the tests and in a production pilosa server run, we expect that
+	// if holder.opts.Txsrc is set, it will be the exact same as PILOSA_TXSRC.
+	// Unfortunately there are some tests where that won't hold.
+	// So if the env var PILOSA_TXSRC *is* set, we always give it precedence.
+	// This lets `PILOSA_TXSRC=rbf go test -v -run "one_of_my_RBF_tests"` succeed.
 	if txsrc == "" {
-		// nothing in the env for PILOSA_TXSRC; therefore not running under a "make topt.badger" for example.
+		// nothing in the env for PILOSA_TXSRC; therefore not running under a "make topt.rbf" for example.
 		if holder.Opts.Txsrc != "" {
-			// most of the tests and production run, we expect that if holder.opts.Txsrc is set, it
-			// will be the exact same as PILOSA_TXSRC. Unfortunately there are tests where that won't hold.
-			// So if the env var PILOSA_TXSRC *is* set, we always give it precedence.
-			// This lets `PILOSA_TXSRC=rbf go test -v -run "one_of_my_RBF_tests"` succeed.
-			//
 			txsrc = holder.Opts.Txsrc
 		} else {
 			txsrc = DefaultTxsrc
 		}
 	}
+
 	txf, err := newTxFactory(txsrc, path)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating newTxFactory")

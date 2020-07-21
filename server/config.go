@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pilosa/pilosa/v2"
 	"github.com/pilosa/pilosa/v2/gossip"
 	"github.com/pilosa/pilosa/v2/toml"
 	"github.com/pkg/errors"
@@ -235,8 +234,6 @@ func NewConfig() *Config {
 
 	c.Profile.BlockRate = 10000000 // 1 sample per 10 ms
 	c.Profile.MutexFraction = 100  // 1% sampling
-
-	c.Txsrc = pilosa.DefaultTxsrc
 
 	return c
 }
