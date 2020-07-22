@@ -110,6 +110,17 @@ func (a Nodes) ContainsID(id string) bool {
 	return false
 }
 
+// NodeByID returns the node for an ID. If the ID is not found,
+// it returns nil.
+func (a Nodes) NodeByID(id string) *Node {
+	for _, n := range a {
+		if n.ID == id {
+			return n
+		}
+	}
+	return nil
+}
+
 // Filter returns a new list of nodes with node removed.
 func (a Nodes) Filter(n *Node) []*Node {
 	other := make([]*Node, 0, len(a))
@@ -1034,8 +1045,22 @@ func (c *cluster) partitionNodes(partitionID int) []*Node {
 	// - collect nodes from c.Topology.nodeIDs rather than from c.nodes,
 	// - when the node is missing, it should be considered, found absent from c.nodes, then omitted from the return slice.
 
+	// Use c.Topology to determine cluster membership when it
+	// exists and contains data. Otherwise, fall back to using
+	// c.nodes. The only time c.Topology should be nil is in
+	// tests.
+	var useTopology bool
+	if c.Topology != nil && len(c.Topology.nodeIDs) > 0 {
+		useTopology = true
+	}
+
 	replicaN := c.ReplicaN
-	nodeN := len(c.Topology.nodeIDs)
+	var nodeN int
+	if useTopology {
+		nodeN = len(c.Topology.nodeIDs)
+	} else {
+		nodeN = len(c.nodes)
+	}
 	if replicaN > nodeN {
 		replicaN = nodeN
 	} else if replicaN == 0 {
@@ -1048,12 +1073,13 @@ func (c *cluster) partitionNodes(partitionID int) []*Node {
 	// Collect nodes around the ring.
 	nodes := make([]*Node, 0, replicaN)
 	for i := 0; i < replicaN; i++ {
-		maybeNodeID := c.Topology.nodeIDs[(nodeIndex+i)%nodeN]
-		for _, node := range c.nodes {
-			if node.ID == maybeNodeID {
+		if useTopology {
+			maybeNodeID := c.Topology.nodeIDs[(nodeIndex+i)%nodeN]
+			if node := Nodes(c.nodes).NodeByID(maybeNodeID); node != nil {
 				nodes = append(nodes, node)
-				break
 			}
+		} else {
+			nodes = append(nodes, c.nodes[(nodeIndex+i)%len(c.nodes)])
 		}
 	}
 
