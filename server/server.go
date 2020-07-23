@@ -406,6 +406,17 @@ func (m *Command) setupNetworking() error {
 	// get the host portion of addr to use for binding
 	gossipHost := m.listenURI.Host
 	m.gossipTransport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
+	if err != nil && gossipPort >= 32768 {
+		// In testing, we sometimes try to reuse an ephemeral port.
+		// Which probably works. If it doesn't, this test will take
+		// about a minute longer because we'll come back in from a
+		// new port. See also the gossip config in gossip/gossip.go.
+		// TODO: Maybe make that more configurable here.
+		m.logger.Printf("ephemeral port %d already occupied, switching to :0 (%v)", gossipPort, err)
+		m.Config.Gossip.Port = "0"
+		gossipPort = 0
+		m.gossipTransport, err = gossip.NewTransport(gossipHost, gossipPort, m.logger.Logger())
+	}
 	if err != nil {
 		return errors.Wrap(err, "getting transport")
 	}

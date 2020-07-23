@@ -110,6 +110,17 @@ func (a Nodes) ContainsID(id string) bool {
 	return false
 }
 
+// NodeByID returns the node for an ID. If the ID is not found,
+// it returns nil.
+func (a Nodes) NodeByID(id string) *Node {
+	for _, n := range a {
+		if n.ID == id {
+			return n
+		}
+	}
+	return nil
+}
+
 // Filter returns a new list of nodes with node removed.
 func (a Nodes) Filter(n *Node) []*Node {
 	other := make([]*Node, 0, len(a))
@@ -1026,20 +1037,49 @@ func (c *cluster) ownsShard(nodeID string, index string, shard uint64) bool {
 func (c *cluster) partitionNodes(partitionID int) []*Node {
 	// Default replica count to between one and the number of nodes.
 	// The replica count can be zero if there are no nodes.
+
+	// Assume that c.nodes may be missing a node that is part of the cluster but not currently present.
+	// The partition calculation must use the full cluster size in BOTH cases:
+	// - use len(c.Topology.nodeIDs) instead of len(c.nodes),
+	// - collect nodes from c.Topology.nodeIDs rather than from c.nodes,
+	// - when the node is missing, it should be considered, found absent from c.nodes, then omitted from the return slice.
+
+	// Use c.Topology to determine cluster membership when it
+	// exists and contains data. Otherwise, fall back to using
+	// c.nodes. The only time c.Topology should be nil is in
+	// tests.
+	var useTopology bool
+	if c.Topology != nil && len(c.Topology.nodeIDs) > 0 {
+		useTopology = true
+	}
+
 	replicaN := c.ReplicaN
-	if replicaN > len(c.nodes) {
-		replicaN = len(c.nodes)
+	var nodeN int
+	if useTopology {
+		nodeN = len(c.Topology.nodeIDs)
+	} else {
+		nodeN = len(c.nodes)
+	}
+	if replicaN > nodeN {
+		replicaN = nodeN
 	} else if replicaN == 0 {
 		replicaN = 1
 	}
 
 	// Determine primary owner node.
-	nodeIndex := c.Hasher.Hash(uint64(partitionID), len(c.nodes))
+	nodeIndex := c.Hasher.Hash(uint64(partitionID), nodeN)
 
 	// Collect nodes around the ring.
-	nodes := make([]*Node, replicaN)
+	nodes := make([]*Node, 0, replicaN)
 	for i := 0; i < replicaN; i++ {
-		nodes[i] = c.nodes[(nodeIndex+i)%len(c.nodes)]
+		if useTopology {
+			maybeNodeID := c.Topology.nodeIDs[(nodeIndex+i)%nodeN]
+			if node := Nodes(c.nodes).NodeByID(maybeNodeID); node != nil {
+				nodes = append(nodes, node)
+			}
+		} else {
+			nodes = append(nodes, c.nodes[(nodeIndex+i)%len(c.nodes)])
+		}
 	}
 
 	return nodes
@@ -1429,11 +1469,11 @@ func (c *cluster) unprotectedGenerateResizeJobByAction(nodeAction nodeAction) (*
 	}
 
 	for _, node := range toCluster.nodes {
-		// If a host doesn't need to request data, mark it as complete.
-		if len(fragmentSourcesByNode[node.ID]) == 0 && len(translationSourcesByNode[node.ID]) == 0 {
-			j.IDs[node.ID] = true
-			continue
-		}
+		// We may send a resize instruction that has no sources that
+		// the node needs to read from -- for instance, if there's no
+		// data in any fragments it would process. But it still needs
+		// to get the NodeStatus to pick up the schema so it knows
+		// about existing indexes.
 		instr := &ResizeInstruction{
 			JobID:              j.ID,
 			Node:               toCluster.unprotectedNodeByID(node.ID),
@@ -2178,7 +2218,7 @@ func (c *cluster) nodeStatus() *NodeStatus {
 func (c *cluster) mergeClusterStatus(cs *ClusterStatus) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.logger.Printf("merge cluster status: node=%s cluster=%v", c.Node.ID, cs)
+	c.logger.Printf("merge cluster status: node=%s cluster=%v, topologySize=%v", c.Node.ID, cs, len(c.Topology.nodeIDs))
 	// Ignore status updates from self (coordinator).
 	if c.unprotectedIsCoordinator() {
 		return nil
@@ -2408,7 +2448,7 @@ func (c *cluster) translateIndexIDs(ctx context.Context, indexName string, ids [
 }
 
 func (c *cluster) translateIndexIDSet(ctx context.Context, indexName string, idSet map[uint64]struct{}) (map[uint64]string, error) {
-	idMap := make(map[uint64]string)
+	idMap := make(map[uint64]string, len(idSet))
 
 	index := c.holder.Index(indexName)
 	if index == nil {

@@ -296,6 +296,82 @@ func TestTranslation_Reset(t *testing.T) {
 	})
 }
 
+// Test index key translation replication under node failure.
+func TestTranslation_Replication(t *testing.T) {
+	t.Run("Replication", func(t *testing.T) {
+		c := test.MustRunCluster(t, 3,
+			[]server.CommandOption{
+				server.OptCommandServerOptions(
+					pilosa.OptServerIsCoordinator(true),
+					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+					pilosa.OptServerReplicaN(2),
+				)},
+			[]server.CommandOption{
+				server.OptCommandServerOptions(
+					pilosa.OptServerIsCoordinator(false),
+					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+					pilosa.OptServerReplicaN(2),
+				)},
+			[]server.CommandOption{
+				server.OptCommandServerOptions(
+					pilosa.OptServerIsCoordinator(false),
+					pilosa.OptServerOpenTranslateStore(boltdb.OpenTranslateStore),
+					pilosa.OptServerOpenTranslateReader(http.GetOpenTranslateReaderFunc(nil)),
+					pilosa.OptServerReplicaN(2),
+				)},
+		)
+
+		node0 := c[0]
+		node1 := c[1]
+
+		ctx := context.Background()
+		idx := "i"
+		field := "f"
+
+		// Create an index with keys.
+		if _, err := node0.API.CreateIndex(ctx, idx,
+			pilosa.IndexOptions{
+				Keys: true,
+			}); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := node0.API.CreateField(ctx, idx, field); err != nil {
+			t.Fatal(err)
+		}
+
+		// Write data on first node.
+		// these keys are a minimal example to reproduce the problem for the case of a 3-node cluster with replication factor 2
+		if _, err := node0.Queryf(t, idx, "", `
+	    Set("x1", f=1)
+	    Set("x2", f=1)
+    `); err != nil {
+			t.Fatal(err)
+		}
+
+		exp := `{"results":[{"attrs":{},"columns":[],"keys":["x1","x2"]}]}`
+
+		if !test.CheckClusterState(node0, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node0 cluster state: %s", node0.API.State())
+		} else if !test.CheckClusterState(node1, pilosa.ClusterStateNormal, 1000) {
+			t.Fatalf("unexpected node1 cluster state: %s", node1.API.State())
+		}
+
+		// Verify the data exists
+		node0.QueryExpect(t, idx, "", `Row(f=1)`, exp)
+
+		// Kill one node.
+		if err := node1.Command.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Verify the data exists with one node down
+		node0.QueryExpect(t, idx, "", `Row(f=1)`, exp)
+	})
+}
+
 // Test key translation with multiple nodes.
 func TestTranslation_Coordinator(t *testing.T) {
 	// Ensure that field key translations requests sent to
