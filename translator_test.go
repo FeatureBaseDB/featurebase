@@ -22,7 +22,6 @@ import (
 	"io"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pilosa/pilosa/v2"
@@ -354,9 +353,9 @@ func TestTranslation_Replication(t *testing.T) {
 
 		exp := `{"results":[{"attrs":{},"columns":[],"keys":["x1","x2"]}]}`
 
-		if !checkClusterState(node0, pilosa.ClusterStateNormal, 1000) {
+		if !test.CheckClusterState(node0, pilosa.ClusterStateNormal, 1000) {
 			t.Fatalf("unexpected node0 cluster state: %s", node0.API.State())
-		} else if !checkClusterState(node1, pilosa.ClusterStateNormal, 1000) {
+		} else if !test.CheckClusterState(node1, pilosa.ClusterStateNormal, 1000) {
 			t.Fatalf("unexpected node1 cluster state: %s", node1.API.State())
 		}
 
@@ -371,18 +370,6 @@ func TestTranslation_Replication(t *testing.T) {
 		// Verify the data exists with one node down
 		node0.QueryExpect(t, idx, "", `Row(f=1)`, exp)
 	})
-}
-
-// checkClusterState polls a given cluster for its state until it
-// receives a matching state. It polls up to n times before returning.
-func checkClusterState(m *test.Command, state string, n int) bool {
-	for i := 0; i < n; i++ {
-		if m.API.State() == state {
-			return true
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	return false
 }
 
 // Test key translation with multiple nodes.
