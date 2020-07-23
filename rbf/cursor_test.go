@@ -1035,7 +1035,6 @@ func TestCursor_PlayContainer(t *testing.T) {
 	if err := cur.First(); err != nil {
 		panic(err)
 	}
-	cur.Dump("fun.dot")
 }
 
 func TestCursor_OneBitmap(t *testing.T) {
@@ -1071,7 +1070,6 @@ func TestCursor_OneBitmap(t *testing.T) {
 	if err := cur.First(); err != nil {
 		panic(err)
 	}
-	cur.Dump("fun.dot")
 }
 func TestCursor_GenerateAll(t *testing.T) {
 	db := MustOpenDB(t)
@@ -1111,9 +1109,4 @@ func TestCursor_GenerateAll(t *testing.T) {
 	if _, err := tx.AddRoaring("field/view/", bb); err != nil {
 		panic(err)
 	}
-	cur, err := tx.Cursor("field/view/")
-	if err != nil {
-		panic(err)
-	}
-	cur.Dump("fun.dot")
 }
