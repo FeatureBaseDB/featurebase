@@ -175,19 +175,32 @@ func (v *view) openFragmentsInTx() error {
 	eg, ctx := errgroup.WithContext(context.Background())
 	var mu sync.Mutex
 
+	shardCh := make(chan uint64, len(shards))
+	for i := range shards {
+		shardCh <- shards[i]
+	}
+
 shardLoop:
-	for _, shard := range shards {
+	for range shards {
 		select {
 		case <-ctx.Done():
 			break shardLoop
 		default:
 
 			workQueue <- struct{}{}
-			v.holder.Logger.Debugf("open index/field/view/fragment: %s/%s/%s/%d", v.index, v.field, v.name, shard)
 			eg.Go(func() error {
 				defer func() {
 					<-workQueue
 				}()
+
+				var shard uint64
+				select {
+				case shard = <-shardCh:
+				default:
+					return nil // no more work
+				}
+				v.holder.Logger.Debugf("open index/field/view/fragment: %s/%s/%s/%d", v.index, v.field, v.name, shard)
+
 				frag := v.newFragment(v.fragmentPath(shard), shard)
 				if err := frag.Open(); err != nil {
 					return fmt.Errorf("open fragment: shard=%d, err=%s", frag.shard, err)
