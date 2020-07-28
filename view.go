@@ -171,17 +171,38 @@ func (v *view) openFragmentsInTx() error {
 	if err != nil {
 		return errors.Wrap(err, "SliceOfShards")
 	}
+
+	eg, ctx := errgroup.WithContext(context.Background())
+	var mu sync.Mutex
+
+shardLoop:
 	for _, shard := range shards {
-		frag := v.newFragment(v.fragmentPath(shard), shard)
-		if err := frag.Open(); err != nil {
-			return fmt.Errorf("open fragment: shard=%d, err=%s", frag.shard, err)
+		select {
+		case <-ctx.Done():
+			break shardLoop
+		default:
+
+			workQueue <- struct{}{}
+			v.holder.Logger.Debugf("open index/field/view/fragment: %s/%s/%s/%d", v.index, v.field, v.name, shard)
+			eg.Go(func() error {
+				defer func() {
+					<-workQueue
+				}()
+				frag := v.newFragment(v.fragmentPath(shard), shard)
+				if err := frag.Open(); err != nil {
+					return fmt.Errorf("open fragment: shard=%d, err=%s", frag.shard, err)
+				}
+				frag.RowAttrStore = v.rowAttrStore
+				v.holder.Logger.Debugf("add index/field/view/fragment to view.fragments: %s/%s/%s/%d", v.index, v.field, v.name, shard)
+				mu.Lock()
+				v.fragments[frag.shard] = frag
+				v.addKnownShard(frag.shard)
+				mu.Unlock()
+				return nil
+			})
 		}
-		frag.RowAttrStore = v.rowAttrStore
-		v.holder.Logger.Debugf("add index/field/view/fragment to view.fragments: %s/%s/%s/%d", v.index, v.field, v.name, shard)
-		v.fragments[frag.shard] = frag
-		v.addKnownShard(frag.shard)
 	}
-	return nil
+	return eg.Wait()
 }
 
 // close closes the view and its fragments.
