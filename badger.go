@@ -432,6 +432,8 @@ type BadgerDBWrapper struct {
 	// stack() from our creation point, to track tests
 	// that haven't closed us.
 	startStack string
+
+	DeleteEmptyContainer bool
 }
 
 // unprotectedListOpenTxAsString is a debugging helper.
@@ -477,12 +479,13 @@ func (w *BadgerDBWrapper) NewBadgerTx(write bool, initialIndexName string) (tx *
 	defer w.muDb.Unlock()
 
 	tx = &BadgerTx{
-		write:            write,
-		tx:               w.db.NewTransaction(write),
-		Db:               w,
-		initloc:          stack(),
-		doAllocZero:      w.doAllocZero,
-		initialIndexName: initialIndexName,
+		write:                write,
+		tx:                   w.db.NewTransaction(write),
+		Db:                   w,
+		initloc:              stack(),
+		doAllocZero:          w.doAllocZero,
+		initialIndexName:     initialIndexName,
+		DeleteEmptyContainer: w.DeleteEmptyContainer,
 	}
 
 	if w.openTx == nil {
@@ -541,6 +544,8 @@ type BadgerTx struct {
 	ourContainers []*roaring.Container
 
 	initialIndexName string
+
+	DeleteEmptyContainer bool
 }
 
 func (tx *BadgerTx) Type() string {
@@ -769,6 +774,11 @@ func badgerPrefix(index, field, view string, shard uint64) []byte {
 //
 func badgerIndexOnlyPrefix(indexName string) []byte {
 	return []byte(fmt.Sprintf("idx:'%v';", indexName))
+}
+
+// same for deleting a whole field.
+func badgerFieldPrefix(index, field string) []byte {
+	return []byte(fmt.Sprintf("idx:'%v';fld:'%v';", index, field))
 }
 
 // Container returns the requested roaring.Container, selected by fragment and ckey
@@ -1012,7 +1022,10 @@ func (tx *BadgerTx) ContainerIterator(index, field, view string, shard uint64, f
 	if !bi.it.ValidForPrefix(prefix) {
 		return bi, false, nil
 	}
-	return bi, true, nil
+	item := bi.it.Item()
+	// have to compare b/c badger might give us valid iterator
+	// that is past our needle if needle isn't present.
+	return bi, bytes.Equal(item.Key(), needle), nil
 }
 
 // BadgerIterator is the iterator returned from a BadgerTx.ContainerIterator() call.
@@ -1301,18 +1314,18 @@ func (tx *BadgerTx) UnionInPlace(index, field, view string, shard uint64, others
 }
 
 // CountRange returns the count of hot bits in the start, end range on the fragment.
+// roaring.countRange counts the number of bits set between [start, end).
 func (tx *BadgerTx) CountRange(index, field, view string, shard uint64, start, end uint64) (n uint64, err error) {
 
 	skey := highbits(start)
 	ekey := highbits(end)
 
 	citer, found, err := tx.ContainerIterator(index, field, view, shard, skey)
+	_ = found
 	panicOn(err)
 
-	defer citer.Close() // doesn't seem to be getting called.
-	if !found {
-		return 0, nil
-	}
+	defer citer.Close()
+
 	// If range is entirely in one container then just count that range.
 	if skey == ekey {
 		citer.Next()
@@ -1485,7 +1498,7 @@ func (tx *BadgerTx) ImportRoaringBits(index, field, view string, shard uint64, i
 				changed += changes
 				rowSet[currRow] -= changes
 
-				if newC.N() == 0 {
+				if tx.DeleteEmptyContainer && newC.N() == 0 {
 					err = tx.RemoveContainer(index, field, view, shard, itrKey)
 					if err != nil {
 						return
@@ -1565,6 +1578,10 @@ const (
 
 func (tx *BadgerTx) toContainer(typ byte, v []byte) (r *roaring.Container) {
 
+	if len(v) == 0 {
+		return nil
+	}
+
 	// For safety we copy v, since it lives in BadgerDB's memory-mapped vlog-file,
 	// and Badger will recycle it after tx ends with rollback or commit.
 	// We copy into Go runtime GC managed memory. Technically we don't need
@@ -1609,29 +1626,27 @@ func (tx *BadgerTx) toContainer(typ byte, v []byte) (r *roaring.Container) {
 
 // fromArray16 converts to an 8KB page
 func fromArray16(a []uint16) []byte {
+	if len(a) == 0 {
+		return []byte{}
+	}
 	return (*[8192]byte)(unsafe.Pointer(&a[0]))[: len(a)*2 : len(a)*2]
 }
 
 // fromArray64 converts to an 8KB page
 func fromArray64(a []uint64) []byte {
+	if len(a) == 0 {
+		return []byte{}
+	}
 	return (*[8192]byte)(unsafe.Pointer(&a[0]))[:8192:8192]
 }
 
 // fromInterval16 converts to 8KB page
 func fromInterval16(a []roaring.Interval16) []byte {
+	if len(a) == 0 {
+		return []byte{}
+	}
 	return (*[8192]byte)(unsafe.Pointer(&a[0]))[: len(a)*4 : len(a)*4]
 }
-
-// badgerKey method on fragment creates a query key in the
-// standard format by invoking the top level badgerKey with
-// the container key being highbits(rowID * ShardWidth).
-//
-// Commented out for now only to keep the golangci-lint happy,
-// as it has no users at the moment.
-//func (f *fragment) badgerKey(rowID uint64) []byte {
-//	hi0 := highbits(rowID * ShardWidth)
-//	return badgerKey(f.index, f.field, f.view, f.shard, hi0)
-//}
 
 // StringifiedBadgerKeys returns a string with all the container
 // keys available in badger.
@@ -1672,6 +1687,10 @@ func (tx *BadgerTx) countBitsSet(bkey []byte) (n int) {
 
 	n = int(rc.N())
 	return
+}
+
+func (tx *BadgerTx) Dump() {
+	fmt.Printf("%v\n", stringifiedBadgerKeysTx(tx))
 }
 
 // stringifiedBadgerKeysTx reports all the badger keys and a
@@ -1825,6 +1844,19 @@ func dirAsString(path string) (r string) {
 }
 
 var _ = dirAsString // happy linter
+
+func (w *BadgerDBWrapper) DeleteField(index, field, fieldPath string) error {
+
+	// under blue-green roaring_badger, the directory will not be found, b/c roaring will have
+	// already done the os.RemoveAll().	BUT, RemoveAll returns nil error in this case. Docs:
+	// "If the path does not exist, RemoveAll returns nil (no error)"
+	err := os.RemoveAll(fieldPath)
+	if err != nil {
+		return errors.Wrap(err, "removing directory")
+	}
+	prefix := badgerFieldPrefix(index, field)
+	return w.DeletePrefix(prefix)
+}
 
 func (w *BadgerDBWrapper) DeleteFragment(index, field, view string, shard uint64, frag interface{}) error {
 	prefix := badgerPrefix(index, field, view, shard)

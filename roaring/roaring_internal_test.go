@@ -4404,3 +4404,40 @@ func TestUnionRunRunInPlaceBitwiseCompare(t *testing.T) {
 		}
 	}
 }
+
+func TestCloneRoaringIterator(t *testing.T) {
+
+	ca := NewContainerArray([]uint16{1, 10, 100, 1000})
+	ba := NewFileBitmap()
+	ba.Containers.Put(0, ca)
+	ba.Containers.Put(10, ca)
+	ba.Containers.Put(101, ca)
+	ba.Containers.Put(10001, ca)
+	var buf bytes.Buffer
+	_, err := ba.WriteTo(&buf)
+	if err != nil {
+		t.Fatalf("error writing: %v", err)
+	}
+
+	itr, err := NewRoaringIterator(buf.Bytes())
+	if err != nil {
+		t.Fatalf("error NewRoaringIterator(buf.Bytes()): %v", err)
+	}
+
+	itr2 := itr.Clone()
+
+	var keys []uint64
+	for itrKey, synthC := itr.NextContainer(); synthC != nil; itrKey, synthC = itr.NextContainer() {
+		keys = append(keys, itrKey)
+		_ = synthC
+	}
+
+	var keys2 []uint64
+	for itrKey, synthC := itr2.NextContainer(); synthC != nil; itrKey, synthC = itr2.NextContainer() {
+		keys2 = append(keys2, itrKey)
+		_ = synthC
+	}
+	if !reflect.DeepEqual(keys, keys2) {
+		t.Fatalf("keys != keys2. keys='%#v'; keys2='%#v'", keys, keys2)
+	}
+}

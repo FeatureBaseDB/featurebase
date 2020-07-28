@@ -198,9 +198,12 @@ type Tx interface {
 
 	// SliceOfShards returns all of the shards for the specified index, field, view triple.
 	// Use within pilosa supposes a new read-only transaction was created just
-	// for the SliceOfShards() call. The original Roaring version is the only
+	// for the SliceOfShards() call. The legacy RoaringTx version is the only
 	// one that needs optionalViewPath; any other Tx implementation can ignore that.
 	SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error)
+
+	// Dump is for debugging, what does this Tx see as its database?
+	Dump()
 }
 
 // TxStore has operations that will create and commit multiple
@@ -221,6 +224,8 @@ type TxStore interface {
 	// to frag.view, and shard equal to frag.shard.
 	//
 	DeleteFragment(index, field, view string, shard uint64, frag interface{}) error
+
+	DeleteField(index, field string) error
 
 	// Close shuts down the database.
 	Close() error
@@ -267,6 +272,19 @@ var _ Tx = (*MultiTx)(nil)
 
 func (mtx *MultiTx) Type() string {
 	return RoaringTxn
+}
+
+// debugging, what does this Tx see as its database?
+func (mtx *MultiTx) Dump() {
+	mtx.mu.Lock()
+	defer mtx.mu.Unlock()
+	if len(mtx.txs) == 0 {
+		return
+	}
+	for _, tx := range mtx.txs {
+		tx.Dump()
+		return
+	}
 }
 
 func (mtx *MultiTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
@@ -516,8 +534,12 @@ type RoaringTx struct {
 	fragment *fragment
 }
 
-func (mtx *RoaringTx) Type() string {
+func (tx *RoaringTx) Type() string {
 	return RoaringTxn
+}
+
+func (tx *RoaringTx) Dump() {
+	fmt.Printf("%v\n", tx.Index.StringifiedRoaringKeys())
 }
 
 func (tx *RoaringTx) UseRowCache() bool {
@@ -548,6 +570,7 @@ func (tx *RoaringTx) SliceOfShards(index, field, view, optionalViewPath string) 
 		// Parse filename into integer.
 		shard, err := strconv.ParseUint(filepath.Base(fi.Name()), 10, 64)
 		if err != nil {
+			//AlwaysPrintf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", index, field, view, fi.Name())
 			//v.holder.Logger.Debugf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", v.index, v.field, v.name, fi.Name())
 			continue
 		}
@@ -572,7 +595,6 @@ func (tx *RoaringTx) NewTxIterator(index, field, view string, shard uint64) *roa
 // the data []byte is supplied. This mimics the traditional roaring-per-file
 // and should be faster.
 func (tx *RoaringTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
-
 	f, err := tx.getFragment(index, field, view, shard)
 	if err != nil {
 		return 0, nil, err
@@ -836,6 +858,18 @@ func (db *RoaringStore) Close() error {
 	return nil
 }
 
+func (db *RoaringStore) DeleteField(index, field, fieldPath string) error {
+
+	// under blue-green badger_roaring, the directory will not be found, b/c badger will have
+	// already done the os.RemoveAll().	BUT, RemoveAll returns nil error in this case. Docs:
+	// "If the path does not exist, RemoveAll returns nil (no error)"
+	err := os.RemoveAll(fieldPath)
+	if err != nil {
+		return errors.Wrap(err, "removing directory")
+	}
+	return nil
+}
+
 // frag should be passed by any RoaringTx user, but for RBF/Badger it can be nil.
 func (db *RoaringStore) DeleteFragment(index, field, view string, shard uint64, frag interface{}) error {
 
@@ -998,6 +1032,10 @@ func (tx *RBFTx) NewTxIterator(index, field, view string, shard uint64) *roaring
 
 func (tx *RBFTx) Pointer() string {
 	return fmt.Sprintf("%p", tx)
+}
+
+func (tx *RBFTx) Dump() {
+	// todo
 }
 
 // Readonly is true if the transaction is not read-and-write, but only doing reads.

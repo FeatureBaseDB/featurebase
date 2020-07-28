@@ -458,6 +458,7 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *ResizeInstruction) error
 			srctx := srcIdx.Txf.NewTx(Txo{Write: !writable, Index: srcIdx, Fragment: srcFragment})
 
 			destIdx := destCluster.holder.Index(src.Index)
+
 			desttx := destIdx.Txf.NewTx(Txo{Write: writable, Index: destIdx, Fragment: destFragment})
 
 			citer, _, err := srctx.ContainerIterator(src.Index, src.Field, src.View, src.Shard, 0)

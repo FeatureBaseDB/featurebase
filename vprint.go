@@ -141,3 +141,27 @@ func FileSize(name string) (int64, error) {
 	}
 	return fi.Size(), nil
 }
+
+// Caller returns the name of the calling function.
+func Caller(upStack int) string {
+	// elide ourself and runtime.Callers
+	target := upStack + 2
+
+	pc := make([]uintptr, target+2)
+	n := runtime.Callers(0, pc)
+
+	f := runtime.Frame{Function: "unknown"}
+	if n > 0 {
+		frames := runtime.CallersFrames(pc[:n])
+		for i := 0; i <= target; i++ {
+			contender, more := frames.Next()
+			if i == target {
+				f = contender
+			}
+			if !more {
+				break
+			}
+		}
+	}
+	return f.Function
+}

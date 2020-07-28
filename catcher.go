@@ -62,6 +62,10 @@ func (c *catcherTx) ImportRoaringBits(index, field, view string, shard uint64, r
 	return c.b.ImportRoaringBits(index, field, view, shard, rit, clear, log, rowSize, data)
 }
 
+func (c *catcherTx) Dump() {
+	c.b.Dump()
+}
+
 func (c *catcherTx) Readonly() bool {
 	defer func() {
 		if r := recover(); r != nil {

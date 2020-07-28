@@ -1052,6 +1052,7 @@ func TestBadger_ImportRoaringBits(t *testing.T) {
 	index, field, view, shard := "i", "f", "v", uint64(0)
 	tx := dbwrap.NewBadgerTx(writable, index)
 	defer tx.Rollback()
+	tx.DeleteEmptyContainer = true // traditional badger Tx behavior, but not Roaring.
 
 	//bitvalue := uint64(42)
 
@@ -1483,7 +1484,6 @@ func TestBadger_DeleteFragment(t *testing.T) {
 	}
 	err := tx.Commit()
 	panicOn(err)
-	//vv("Dump: %v", dbwrap.StringifiedBadgerKeys(nil))
 
 	// end of setup
 

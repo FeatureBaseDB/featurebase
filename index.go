@@ -621,9 +621,8 @@ func (i *Index) DeleteField(name string) error {
 		return errors.Wrap(err, "closing")
 	}
 
-	// Delete field directory.
-	if err := os.RemoveAll(i.fieldPath(name)); err != nil {
-		return errors.Wrap(err, "removing directory")
+	if err := i.Txf.DeleteFieldFromStore(i.name, name, i.fieldPath(name)); err != nil {
+		return errors.Wrap(err, "Txf.DeleteFieldFromStore")
 	}
 
 	// If the field being deleted is the existence field,
@@ -699,4 +698,14 @@ type importValueData struct {
 // FormatQualifiedIndexName generates a qualified name for the index to be used with Tx operations.
 func FormatQualifiedIndexName(index string) string {
 	return fmt.Sprintf("%s\x00", index)
+}
+
+// Dump prints to stdout the contents of the roaring Containers
+// stored in idx. Mostly for debugging.
+func (idx *Index) Dump(label string) {
+	fileline := FileLine(2)
+	tx := idx.Txf.NewTx(Txo{Write: !writable, Index: idx})
+	defer tx.Rollback()
+	fmt.Printf("\n%v Index.Dump('%v') for index '%v':\n", fileline, label, idx.name)
+	tx.Dump()
 }

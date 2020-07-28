@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"math"
 	"math/rand"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -513,6 +514,12 @@ func TestExecutor_Execute_Count(t *testing.T) {
 
 }
 
+func roaringOnlyTest(t *testing.T) {
+	if os.Getenv("PILOSA_TXSRC") != "roaring" {
+		t.Skip("skip for everything but roaring")
+	}
+}
+
 // Ensure a set query can be executed.
 func TestExecutor_Execute_Set(t *testing.T) {
 	t.Run("RowIDColumnID", func(t *testing.T) {
@@ -521,7 +528,7 @@ func TestExecutor_Execute_Set(t *testing.T) {
 		cmd := cluster[0]
 		holder := cmd.Server.Holder()
 		hldr := test.Holder{Holder: holder}
-		hldr.SetBit("i", "f", 1, 0)
+		hldr.SetBit("i", "f", 1, 0) // creates and commits a Tx internally.
 
 		t.Run("OK", func(t *testing.T) {
 			hldr.ClearBit("i", "f", 11, 1)
@@ -582,10 +589,10 @@ func TestExecutor_Execute_Set(t *testing.T) {
 		cmd := cluster[0]
 		holder := cmd.Server.Holder()
 		hldr := test.Holder{Holder: holder}
-		index := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{Keys: true})
+		idx := hldr.MustCreateIndexIfNotExists("i", pilosa.IndexOptions{Keys: true})
 
 		t.Run("OK", func(t *testing.T) {
-			hldr.SetBit("i", "f", 1, 0)
+			hldr.SetBit("i", "f", 1, 0) // creates and Commits a Tx internally.
 			if n := hldr.Row("i", "f", 11).Count(); n != 0 {
 				t.Fatalf("unexpected row count: %d", n)
 			}
@@ -619,14 +626,16 @@ func TestExecutor_Execute_Set(t *testing.T) {
 		})
 
 		t.Run("ErrInvalidColValueType", func(t *testing.T) {
-			if err := index.DeleteField("f"); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := index.CreateField("f", pilosa.OptFieldTypeDefault()); err != nil {
+
+			if err := idx.DeleteField("f"); err != nil {
 				t.Fatal(err)
 			}
 
-			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2.1, f=1)`}); err == nil || strings.Contains(err.Error(), `column value must be a string or non-negative integer`) {
+			if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault()); err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "i", Query: `Set(2.1, f=1)`}); err == nil || !strings.Contains(err.Error(), "parse error") {
 				t.Fatal(err)
 			}
 
@@ -637,9 +646,9 @@ func TestExecutor_Execute_Set(t *testing.T) {
 			}
 		})
 
-		t.Run("ErrInvalidRowValueType", func(t *testing.T) {
-			index := hldr.MustCreateIndexIfNotExists("inokey", pilosa.IndexOptions{})
-			if _, err := index.CreateField("f", pilosa.OptFieldTypeDefault(), pilosa.OptFieldKeys()); err != nil {
+		t.Run("ErrInvalidRowValueType", func(t *testing.T) { // // failing under badger_roaring
+			idx := hldr.MustCreateIndexIfNotExists("inokey", pilosa.IndexOptions{})
+			if _, err := idx.CreateField("f", pilosa.OptFieldTypeDefault(), pilosa.OptFieldKeys()); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := cmd.API.Query(context.Background(), &pilosa.QueryRequest{Index: "inokey", Query: `Set(2, f=1.2)`}); err == nil || !strings.Contains(err.Error(), "row value must be a string or non-negative integer") {

@@ -32,8 +32,6 @@ import (
 )
 
 func TestHolder_Open(t *testing.T) {
-	skipForBadger := os.Getenv("PILOSA_TXSRC") == "badger"
-	skipForRBF := os.Getenv("PILOSA_TXSRC") == "rbf"
 
 	t.Run("ErrIndexName", func(t *testing.T) {
 		h := test.MustOpenHolder()
@@ -168,11 +166,8 @@ func TestHolder_Open(t *testing.T) {
 	})
 
 	t.Run("ErrFragmentStoragePermission", func(t *testing.T) {
-		if skipForBadger {
-			t.Skip("skipping for badger")
-		} else if skipForRBF {
-			t.Skip("skipping for rbf")
-		}
+		roaringOnlyTest(t)
+
 		if os.Geteuid() == 0 {
 			t.Skip("Skipping permissions test since user is root.")
 		}
@@ -209,11 +204,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrFragmentStorageCorrupt", func(t *testing.T) {
-		if skipForBadger {
-			t.Skip("skipping for badger")
-		} else if skipForRBF {
-			t.Skip("skipping for rbf")
-		}
+		roaringOnlyTest(t)
 
 		h := test.MustOpenHolder()
 		defer h.Close()
@@ -247,11 +238,7 @@ func TestHolder_Open(t *testing.T) {
 		}
 	})
 	t.Run("ErrFragmentStorageRecoverable", func(t *testing.T) {
-		if skipForBadger {
-			t.Skip("skipping for badger")
-		} else if skipForRBF {
-			t.Skip("skipping for rbf")
-		}
+		roaringOnlyTest(t)
 
 		h := test.MustOpenHolder()
 		defer h.Close()
@@ -594,7 +581,6 @@ func TestHolderSyncer_BlockIteratorLimits(t *testing.T) {
 
 	// Leave the third replica empty to force a block merge.
 	//
-
 	err = c[0].Server.SyncData()
 	if err != nil {
 		t.Fatalf("syncing node 0: %v", err)
