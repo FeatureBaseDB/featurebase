@@ -25,7 +25,10 @@ func mustOpenIndex(opt IndexOptions) *Index {
 	if err != nil {
 		panic(err)
 	}
-	index, err := NewIndex(NewHolder(1), path, "i")
+	h := NewHolder(1)
+	h.Path = path
+	index, err := h.CreateIndex("i", opt)
+
 	if err != nil {
 		panic(err)
 	}
@@ -33,7 +36,7 @@ func mustOpenIndex(opt IndexOptions) *Index {
 	index.keys = opt.Keys
 	index.trackExistence = opt.TrackExistence
 
-	if err := index.Open(); err != nil {
+	if err := index.Open(false); err != nil {
 		panic(err)
 	}
 	return index
@@ -44,7 +47,7 @@ func (i *Index) reopen() error {
 	if err := i.Close(); err != nil {
 		return err
 	}
-	if err := i.Open(); err != nil {
+	if err := i.Open(false); err != nil {
 		return err
 	}
 	return nil

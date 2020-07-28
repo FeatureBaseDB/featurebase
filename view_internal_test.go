@@ -34,7 +34,15 @@ func mustOpenView(index, field, name string) *view {
 		CacheSize: DefaultCacheSize,
 	}
 
-	v := newView(NewHolder(DefaultPartitionN), path, index, field, name, fo)
+	h := NewHolder(DefaultPartitionN)
+	h.Path = path
+	// h needs an *Index so we can call h.Index() and get Index.Txf, in TestView_DeleteFragment
+	idx, err := h.createIndex(index, IndexOptions{})
+	_ = idx
+	panicOn(err)
+
+	v := newView(h, path, index, field, name, fo)
+	v.idx = idx
 	if err := v.open(); err != nil {
 		panic(err)
 	}

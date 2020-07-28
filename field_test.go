@@ -25,6 +25,8 @@ import (
 	"github.com/pilosa/pilosa/v2/test"
 )
 
+var panicOn = pilosa.PanicOn
+
 // Ensure a field can set & read a bsiGroup value.
 func TestField_SetValue(t *testing.T) {
 	t.Run("OK", func(t *testing.T) {
@@ -35,7 +37,10 @@ func TestField_SetValue(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tx := &pilosa.RoaringTx{Field: f.Field}
+
+		idxPilosa := f.Field.GetIndex()
+		tx := idxPilosa.NewTx(pilosa.Txo{Write: writable, Index: idxPilosa, Field: f.Field})
+		defer tx.Rollback()
 
 		// Set value on field.
 		if changed, err := f.SetValue(tx, 100, 21); err != nil {
@@ -69,7 +74,9 @@ func TestField_SetValue(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tx := &pilosa.RoaringTx{Field: f.Field}
+		idxP := f.Field.GetIndex()
+		tx := idxP.Txf.NewTx(pilosa.Txo{Write: writable, Index: idxP, Field: f.Field})
+		defer tx.Rollback()
 
 		// Set value.
 		if changed, err := f.SetValue(tx, 100, 21); err != nil {
@@ -103,7 +110,9 @@ func TestField_SetValue(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tx := &pilosa.RoaringTx{Field: f.Field}
+		idxP := f.Field.GetIndex()
+		tx := idxP.Txf.NewTx(pilosa.Txo{Write: writable, Index: idxP, Field: f.Field})
+		defer tx.Rollback()
 
 		// Set value.
 		if _, err := f.SetValue(tx, 100, 21); err != pilosa.ErrBSIGroupNotFound {
@@ -119,7 +128,9 @@ func TestField_SetValue(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tx := &pilosa.RoaringTx{Field: f.Field}
+		idxP := f.Field.GetIndex()
+		tx := idxP.Txf.NewTx(pilosa.Txo{Write: writable, Index: idxP, Field: f.Field})
+		defer tx.Rollback()
 
 		// Set value.
 		if _, err := f.SetValue(tx, 100, 15); err != pilosa.ErrBSIGroupValueTooLow {
@@ -135,7 +146,9 @@ func TestField_SetValue(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tx := &pilosa.RoaringTx{Field: f.Field}
+		idxP := f.Field.GetIndex()
+		tx := idxP.Txf.NewTx(pilosa.Txo{Write: writable, Index: idxP, Field: f.Field})
+		defer tx.Rollback()
 
 		// Set value.
 		if _, err := f.SetValue(tx, 100, 31); err != pilosa.ErrBSIGroupValueTooHigh {
@@ -204,7 +217,9 @@ func TestField_AvailableShards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tx := &pilosa.RoaringTx{Field: f.Field}
+	idxP := f.Field.GetIndex()
+	tx := idxP.Txf.NewTx(pilosa.Txo{Write: writable, Index: idxP, Field: f.Field})
+	defer tx.Rollback()
 
 	// Set values on shards 0 & 2, and verify.
 	if _, err := f.SetBit(tx, 0, 100, nil); err != nil {
@@ -214,6 +229,7 @@ func TestField_AvailableShards(t *testing.T) {
 	} else if diff := cmp.Diff(f.AvailableShards().Slice(), []uint64{0, 2}); diff != "" {
 		t.Fatal(diff)
 	}
+	panicOn(tx.Commit())
 
 	// Set remote shards and verify.
 	if err := f.AddRemoteAvailableShards(roaring.NewBitmap(1, 2, 4)); err != nil {
@@ -244,7 +260,9 @@ func TestField_ClearValue(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tx := &pilosa.RoaringTx{Field: f.Field}
+		idxP := f.Field.GetIndex()
+		tx := idxP.Txf.NewTx(pilosa.Txo{Write: writable, Index: idxP, Field: f.Field})
+		defer tx.Rollback()
 
 		// Set value on field.
 		if changed, err := f.SetValue(tx, 100, 21); err != nil {
@@ -252,6 +270,9 @@ func TestField_ClearValue(t *testing.T) {
 		} else if !changed {
 			t.Fatal("expected change")
 		}
+		panicOn(tx.Commit())
+
+		tx = idxP.Txf.NewTx(pilosa.Txo{Write: !writable, Index: idxP, Field: f.Field})
 
 		// Read value.
 		if value, exists, err := f.Value(tx, 100); err != nil {
@@ -261,12 +282,17 @@ func TestField_ClearValue(t *testing.T) {
 		} else if !exists {
 			t.Fatal("expected value to exist")
 		}
+		tx.Rollback()
+		tx = idxP.Txf.NewTx(pilosa.Txo{Write: writable, Index: idxP, Field: f.Field})
 
 		if changed, err := f.ClearValue(tx, 100); err != nil {
 			t.Fatal(err)
 		} else if !changed {
 			t.Fatal(err)
 		}
+		panicOn(tx.Commit())
+		tx = idxP.Txf.NewTx(pilosa.Txo{Write: !writable, Index: idxP, Field: f.Field})
+		defer tx.Rollback()
 
 		// Read value.
 		if _, exists, err := f.Value(tx, 100); err != nil {

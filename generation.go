@@ -261,6 +261,7 @@ func (m *mmapGeneration) openFile() (shouldClose bool, err error) {
 	if err != nil {
 		return false, err
 	}
+
 	// do we actually want this in every openFile? I don't know.
 	if err := syscall.Flock(int(m.file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		_ = syswrap.CloseFile(m.file)
@@ -437,4 +438,26 @@ func newGeneration(existing generation, path string, readData bool, setup func([
 	// for the finalizer, but we also get higher confidence that it really
 	// does get cleaned up.
 	return &m, nil
+}
+
+// NopGeneration is used in fragment.openStorage() to short-circuit
+// generation stuff that only applies to RoaringTx; doesn't apply to RBFTx/BadgerTx/etc.
+type NopGeneration struct {
+}
+
+func (g *NopGeneration) Transaction(w *io.Writer, f func() error) error {
+	return f()
+}
+func (g *NopGeneration) Done() {}
+func (g *NopGeneration) Generation() int64 {
+	return 0
+}
+func (g *NopGeneration) ID() string {
+	return "NOP"
+}
+func (g *NopGeneration) Dead() bool {
+	return true
+}
+func (g *NopGeneration) Bytes() (ret []byte) {
+	return
 }

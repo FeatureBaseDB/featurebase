@@ -32,7 +32,9 @@ func newIndex() *Index {
 	if err != nil {
 		panic(err)
 	}
-	index, err := pilosa.NewIndex(pilosa.NewHolder(pilosa.DefaultPartitionN), path, "i")
+	h := pilosa.NewHolder(pilosa.DefaultPartitionN)
+	h.Path = path
+	index, err := h.CreateIndex("i", pilosa.IndexOptions{})
 	if err != nil {
 		panic(err)
 	}
@@ -42,7 +44,7 @@ func newIndex() *Index {
 // MustOpenIndex returns a new, opened index at a temporary path. Panic on error.
 func MustOpenIndex() *Index {
 	index := newIndex()
-	if err := index.Open(); err != nil {
+	if err := index.Open(false); err != nil {
 		panic(err)
 	}
 	return index
@@ -62,12 +64,14 @@ func (i *Index) Reopen() error {
 	}
 
 	path, name := i.Path(), i.Name()
-	i.Index, err = pilosa.NewIndex(pilosa.NewHolder(pilosa.DefaultPartitionN), path, name)
+	h := pilosa.NewHolder(pilosa.DefaultPartitionN)
+	h.Path = h.HolderPathFromIndexPath(path, name)
+	i.Index, err = h.CreateIndex(name, pilosa.IndexOptions{})
 	if err != nil {
 		return err
 	}
 
-	if err := i.Open(); err != nil {
+	if err := i.Open(false); err != nil {
 		return err
 	}
 	return nil

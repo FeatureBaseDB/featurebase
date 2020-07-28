@@ -53,8 +53,11 @@ func TestGenerationPanic(t *testing.T) {
 	if unsafe.Pointer(&prevData[0]) == unsafe.Pointer(&newData[0]) {
 		t.Fatalf("test can't run usefully, didn't get new data pointer")
 	}
-
-	err := f.gen.Transaction(&f.storage.OpWriter, func() error {
+	var wp *io.Writer
+	if f.storage != nil {
+		wp = &f.storage.OpWriter
+	}
+	err := f.gen.Transaction(wp, func() error {
 		prevData[0] = 0x3c
 		return nil
 	})

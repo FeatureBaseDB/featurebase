@@ -205,10 +205,17 @@ func NewTestField(t *testing.T, opts FieldOption) *TestField {
 	if err != nil {
 		t.Fatal(err)
 	}
-	field, err := NewField(NewHolder(DefaultPartitionN), path, "i", "f", opts)
+	h := NewHolder(DefaultPartitionN)
+	h.Path = path
+	idx, err := h.CreateIndex("i", IndexOptions{})
+	if err != nil {
+		panic(err)
+	}
+	field, err := NewField(h, path, "i", "f", opts)
 	if err != nil {
 		t.Fatal(err)
 	}
+	field.idx = idx
 	return &TestField{Field: field}
 }
 
@@ -223,6 +230,9 @@ func OpenField(t *testing.T, opts FieldOption) *TestField {
 
 // Close closes the field and removes the underlying data.
 func (f *TestField) Close() error {
+	if f.idx != nil {
+		panicOn(f.idx.Txf.CloseIndex(f.idx))
+	}
 	defer os.RemoveAll(f.Path())
 	return f.Field.Close()
 }
@@ -235,10 +245,17 @@ func (f *TestField) Reopen() error {
 	}
 
 	path, index, name := f.Path(), f.Index(), f.Name()
-	f.Field, err = NewField(NewHolder(DefaultPartitionN), path, index, name, OptFieldTypeDefault())
+	h := NewHolder(DefaultPartitionN)
+	h.Path = path
+	idx, err := h.CreateIndex(index, IndexOptions{})
 	if err != nil {
 		return err
 	}
+	f.Field, err = NewField(h, path, index, name, OptFieldTypeDefault())
+	if err != nil {
+		return err
+	}
+	f.Field.idx = idx
 
 	if err := f.Open(); err != nil {
 		return err
@@ -311,7 +328,8 @@ func TestField_RowTime(t *testing.T) {
 	defer f.Close()
 
 	// Obtain transaction.
-	tx := &RoaringTx{Field: f.Field}
+	tx := f.idx.Txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field})
+	defer tx.Rollback()
 
 	if err := f.setTimeQuantum(TimeQuantum("YMDH")); err != nil {
 		t.Fatal(err)
@@ -322,6 +340,12 @@ func TestField_RowTime(t *testing.T) {
 	f.MustSetBit(tx, 1, 3, time.Date(2010, time.February, 5, 12, 0, 0, 0, time.UTC))
 	f.MustSetBit(tx, 1, 4, time.Date(2010, time.January, 6, 12, 0, 0, 0, time.UTC))
 	f.MustSetBit(tx, 1, 5, time.Date(2010, time.January, 5, 13, 0, 0, 0, time.UTC))
+
+	panicOn(tx.Commit())
+
+	// obtain 2nd transaction to read it back.
+	tx = f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field})
+	defer tx.Rollback()
 
 	if r, err := f.RowTime(tx, 1, time.Date(2010, time.November, 5, 12, 0, 0, 0, time.UTC), "Y"); err != nil {
 		t.Fatal(err)
@@ -358,6 +382,7 @@ func TestField_RowTime(t *testing.T) {
 func TestField_PersistAvailableShards(t *testing.T) {
 	availableShardFileFlushDuration.Set(200 * time.Millisecond) //shorten the default time to force a file write
 	f := OpenField(t, OptFieldTypeDefault())
+	defer f.Close()
 
 	// bm represents remote available shards.
 	bm := roaring.NewBitmap(1, 2, 3)
@@ -379,6 +404,7 @@ func TestField_PersistAvailableShards(t *testing.T) {
 func TestField_CorruptAvailableShards(t *testing.T) {
 	availableShardFileFlushDuration.Set(200 * time.Millisecond) //shorten the default time to force a file write
 	f := OpenField(t, OptFieldTypeDefault())
+	defer f.Close()
 
 	// bm represents remote available shards.
 	bm := roaring.NewBitmap(1, 2, 3)
@@ -411,6 +437,7 @@ func TestField_CorruptAvailableShards(t *testing.T) {
 func TestField_TruncatedAvailableShards(t *testing.T) {
 	availableShardFileFlushDuration.Set(200 * time.Millisecond) //shorten the default time to force a file write
 	f := OpenField(t, OptFieldTypeDefault())
+	defer f.Close()
 
 	// bm represents remote available shards.
 	bm := roaring.NewBitmap(1, 2, 3)
@@ -441,6 +468,7 @@ func TestField_TruncatedAvailableShards(t *testing.T) {
 func TestField_PersistAvailableShardsFootprint(t *testing.T) {
 	availableShardFileFlushDuration.Set(200 * time.Millisecond) //shorten the default time to force a file write
 	f := OpenField(t, OptFieldTypeDefault())
+	defer f.Close()
 
 	// bm represents remote available shards.
 	bm := roaring.NewBitmap()
@@ -554,6 +582,7 @@ func TestField_ApplyOptions(t *testing.T) {
 // to result in a value of 9 instead of 1.
 func TestBSIGroup_importValue(t *testing.T) {
 	f := OpenField(t, OptFieldTypeInt(-100, 200))
+	defer f.Close()
 
 	options := &ImportOptions{}
 	for i, tt := range []struct {
@@ -581,11 +610,16 @@ func TestBSIGroup_importValue(t *testing.T) {
 			[]uint64{100},
 		},
 	} {
-		tx := &RoaringTx{Field: f.Field}
+		tx := f.idx.Txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field})
+		defer tx.Rollback()
 
 		if err := f.importValue(tx, tt.columnIDs, tt.values, options); err != nil {
 			t.Fatalf("test %d, importing values: %s", i, err.Error())
 		}
+
+		panicOn(tx.Commit())
+		tx = f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field})
+		defer tx.Rollback()
 
 		if row, err := f.Range(tx, f.name, pql.EQ, tt.checkVal); err != nil {
 			t.Fatalf("test %d, getting range: %s", i, err.Error())
@@ -597,6 +631,7 @@ func TestBSIGroup_importValue(t *testing.T) {
 
 func TestIntField_MinMaxForShard(t *testing.T) {
 	f := OpenField(t, OptFieldTypeInt(-100, 200))
+	defer f.Close()
 
 	options := &ImportOptions{}
 	for i, test := range []struct {
@@ -648,11 +683,16 @@ func TestIntField_MinMaxForShard(t *testing.T) {
 		},
 	} {
 		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
-			tx := &RoaringTx{Field: f.Field}
+			tx := f.idx.Txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field})
+			defer tx.Rollback()
 
 			if err := f.importValue(tx, test.columnIDs, test.values, options); err != nil {
 				t.Fatalf("test %d, importing values: %s", i, err.Error())
 			}
+
+			panicOn(tx.Commit())
+			tx = f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field})
+			defer tx.Rollback()
 
 			maxvc, err := f.MaxForShard(tx, 0, nil)
 			if err != nil {
@@ -753,6 +793,7 @@ func TestDecimalField_MinMaxBoundaries(t *testing.T) {
 
 func TestDecimalField_MinMaxForShard(t *testing.T) {
 	f := OpenField(t, OptFieldTypeDecimal(3))
+	defer f.Close()
 
 	options := &ImportOptions{}
 	for i, test := range []struct {
@@ -804,11 +845,16 @@ func TestDecimalField_MinMaxForShard(t *testing.T) {
 		},
 	} {
 		t.Run(test.name+strconv.Itoa(i), func(t *testing.T) {
-			tx := &RoaringTx{Field: f.Field}
+			tx := f.idx.Txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field})
+			defer tx.Rollback()
 
 			if err := f.importFloatValue(tx, test.columnIDs, test.values, options); err != nil {
 				t.Fatalf("test %d, importing values: %s", i, err.Error())
 			}
+
+			panicOn(tx.Commit())
+			tx = f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field})
+			defer tx.Rollback()
 
 			maxvc, err := f.MaxForShard(tx, 0, nil)
 			if err != nil {

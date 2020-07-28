@@ -525,7 +525,7 @@ func (c *cluster) unprotectedSetState(state string) {
 		cleaner.Cluster = c
 		cleaner.Closing = c.closing
 
-		// Clean holder.
+		// Clean holder. This is where the shard gets removed after resize.
 		if err := cleaner.CleanHolder(); err != nil {
 			c.logger.Printf("holder clean error: err=%s", err)
 		}
