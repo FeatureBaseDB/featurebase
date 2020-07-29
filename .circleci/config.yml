@@ -55,6 +55,13 @@ jobs:
       - checkout-plus
       - run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sudo sh -s -- -b /usr/local/bin v1.23.8
       - run: make golangci-lint
+  go-mod-tidy:
+    executor:
+      name: golang
+    steps:
+      - checkout-plus
+      - run: go mod tidy
+      - run: git diff --exit-code -- go.mod go.sum
   test-build-arm:
     executor:
       name: golang
@@ -166,6 +173,9 @@ workflows:
           requires:
             - setup
       - check-license-headers:
+          requires:
+            - setup
+      - go-mod-tidy:
           requires:
             - setup
       - test-build-arm:

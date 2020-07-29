@@ -9,11 +9,8 @@ require (
 	github.com/benbjohnson/immutable v0.2.0
 	github.com/boltdb/bolt v1.3.1
 	github.com/cespare/xxhash v1.1.0
-	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e // indirect
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
 	github.com/davecgh/go-spew v1.1.1
-	github.com/dchest/blake2b v1.0.0 // indirect
-	github.com/dgraph-io/badger v1.6.1-0.20191025180844-32a2548a9d85 // indirect
 	github.com/dgraph-io/badger/v2 v2.0.1-rc1.0.20200709123515-8e896a7af361
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/gogo/protobuf v1.2.0
@@ -22,8 +19,7 @@ require (
 	github.com/gorilla/handlers v1.3.0
 	github.com/gorilla/mux v1.7.0
 	github.com/hashicorp/memberlist v0.1.3
-	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	github.com/molecula/ext v0.0.0-20200103203257-8a458a73e8c2
+	github.com/molecula/ext v0.0.0-20200103203257-8a458a73e8c2 // indirect
 	github.com/molecula/extensions v0.0.0-20191218165536-562244600fd4
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/pelletier/go-toml v1.2.0
@@ -40,7 +36,6 @@ require (
 	github.com/uber-go/atomic v1.4.0 // indirect
 	github.com/uber/jaeger-client-go v2.16.0+incompatible
 	github.com/uber/jaeger-lib v2.2.0+incompatible // indirect
-	github.com/willoch/tago v0.0.0-20180311150625-8f2f8e8900dc // indirect
 	github.com/zeebo/blake3 v0.0.4
 	go.uber.org/atomic v1.4.0 // indirect
 	golang.org/x/crypto v0.0.0-20190426145343-a29dc8fdc734 // indirect
