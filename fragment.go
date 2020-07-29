@@ -3025,13 +3025,15 @@ func (f *fragment) rows(ctx context.Context, tx Tx, start uint64, filters ...row
 
 // unprotectedRows calls rows without grabbing the mutex.
 func (f *fragment) unprotectedRows(ctx context.Context, tx Tx, start uint64, filters ...rowFilter) ([]uint64, error) {
+	rows := make([]uint64, 0)
 	startKey := rowToKey(start)
 	i, _, err := tx.ContainerIterator(f.index, f.field, f.view, f.shard, startKey)
 	if err != nil {
 		return nil, err
+	} else if i == nil {
+		return rows, nil
 	}
 	defer i.Close() // must close iterators allocated on a Tx
-	rows := make([]uint64, 0)
 	var lastRow uint64 = math.MaxUint64
 
 	// Loop over the existing containers.

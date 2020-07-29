@@ -81,6 +81,8 @@ func (f *TxFactory) Store() TxStore {
 		//	case blueGreenRoaringBadger:
 	}
 	panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", f.typeOfTx))
+=======
+>>>>>>> Implement pilosa.Tx for RBF
 }
 */
 
@@ -168,6 +170,7 @@ func NewTxFactory(txsrc string, dir, name string) (f *TxFactory, err error) {
 		typeOfTx:  ty,
 		roaringDB: NewRoaringStore(),
 	}
+
 	switch ty {
 	case badgerTxn, blueGreenBadgerRoaring, blueGreenRoaringBadger, blueGreenBadgerRBF, blueGreenRBFBadger:
 
@@ -193,10 +196,9 @@ func NewTxFactory(txsrc string, dir, name string) (f *TxFactory, err error) {
 
 	switch ty {
 	case rbfTxn, blueGreenRBFRoaring, blueGreenRoaringRBF, blueGreenBadgerRBF, blueGreenRBFBadger:
-		path := dir + sep + name + ".rbf"
-		f.rbfDB = rbf.NewDB(path)
+		f.rbfDB = rbf.NewDB(filepath.Join(dir, "db.rbf"))
 		if err := f.rbfDB.Open(); err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("cannot open rbf db. path='%v'", path))
+			return nil, errors.Wrap(err, "cannot open rbf db")
 		}
 	}
 
@@ -240,8 +242,16 @@ func (f *TxFactory) DeleteFragmentFromStore(index, field, view string, shard uin
 	case badgerTxn:
 		return f.badgerDB.DeleteFragment(index, field, view, shard, frag)
 	case rbfTxn:
-		//return f.rbfDB.DeleteFragment(index, field, view, shard, frag)
-		return nil
+		tx, err := f.rbfDB.Begin(true)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+
+		if err := tx.DeleteBitmapsWithPrefix(rbfFieldViewPrefix(field, view)); err != nil {
+			return err
+		}
+		return tx.Commit()
 	case blueGreenBadgerRoaring:
 		_ = f.badgerDB.DeleteFragment(index, field, view, shard, frag)
 		return f.roaringDB.DeleteFragment(index, field, view, shard, frag)
@@ -263,9 +273,7 @@ func (f *TxFactory) CloseIndex(idx *Index) error {
 		//return f.badgerDB.Close()
 		return nil
 	case rbfTxn:
-		// for same reason as above may not be able to close here.
-		//return f.rbfDB.Close()
-		return nil
+		return f.rbfDB.Close()
 	case blueGreenBadgerRoaring:
 		return nil
 	case blueGreenRoaringBadger:
@@ -275,7 +283,6 @@ func (f *TxFactory) CloseIndex(idx *Index) error {
 }
 
 func (f *TxFactory) NewTx(o Txo) Tx {
-
 	indexName := ""
 	if o.Index != nil {
 		indexName = o.Index.name
@@ -288,14 +295,11 @@ func (f *TxFactory) NewTx(o Txo) Tx {
 		btx := f.badgerDB.NewBadgerTx(o.Write, indexName)
 		return btx
 	case rbfTxn:
-		panic("todo rbfTxn creation")
-		/*
-			rbftx, err := f.rbfDB.Begin(o.Write)
-			if err != nil {
-				errors.Wrap(err, "rbfDB.Begin transaction errored")
-			}
-			return rbftx
-		*/
+		tx, err := f.rbfDB.Begin(o.Write)
+		if err != nil {
+			panic(err) // TODO: Add error return on NewTx()
+		}
+		return &RBFTx{tx: tx}
 	case blueGreenBadgerRoaring:
 		btx := f.badgerDB.NewBadgerTx(o.Write, indexName)
 		rtx := &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment}
@@ -379,7 +383,6 @@ func (idx *Index) StringifiedBadgerKeys(optionalUseThisTx Tx) string {
 // index directory, not including the name of the index itself.
 // The path should not start with the path separator sep ('/' or '\\') rune.
 func fragmentSpecFromRoaringPath(path string) (field, view string, shard uint64, err error) {
-
 	if len(path) == 0 {
 		err = fmt.Errorf("fragmentSpecFromRoaringPath error: path '%v' too short", path)
 		return
@@ -408,7 +411,6 @@ func fragmentSpecFromRoaringPath(path string) (field, view string, shard uint64,
 }
 
 func (idx *Index) StringifiedRoaringKeys() (r string) {
-
 	paths, err := listFilesUnderDir(idx.path, false, "", true)
 	panicOn(err)
 	index := idx.name

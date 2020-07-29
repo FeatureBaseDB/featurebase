@@ -84,7 +84,7 @@ func runAdd(runs []roaring.Interval16, v uint16) ([]roaring.Interval16, bool) {
 	}
 	return runs, true
 }
-func checkRun(runs []roaring.Interval16, key uint64) leafCell {
+func checkRun(runs []roaring.Interval16, bitN int, key uint64) leafCell {
 	if len(runs) >= RLEMaxSize {
 		//convertToBitmap
 		bitmap := make([]uint64, BitmapN)
@@ -123,9 +123,9 @@ func checkRun(runs []roaring.Interval16, key uint64) leafCell {
 			n += popcount(v)
 		}
 
-		return leafCell{Key: key, N: int(n), Type: ContainerTypeBitmap, Data: fromArray64(bitmap)}
+		return leafCell{Key: key, N: int(n), BitN: int(n), Type: ContainerTypeBitmap, Data: fromArray64(bitmap)}
 	}
-	return leafCell{Key: key, N: len(runs), Type: ContainerTypeRLE, Data: fromInterval16(runs)}
+	return leafCell{Key: key, N: len(runs), BitN: int(bitN + 1), Type: ContainerTypeRLE, Data: fromInterval16(runs)}
 }
 
 // Add sets a bit on the underlying bitmap.
@@ -136,7 +136,7 @@ func (c *Cursor) Add(v uint64) (changed bool, err error) {
 	if exact, err := c.Seek(hi); err != nil {
 		return false, err
 	} else if !exact {
-		return true, c.putLeafCell(leafCell{Key: hi, Type: ContainerTypeArray, N: 1, Data: fromArray16([]uint16{lo})})
+		return true, c.putLeafCell(leafCell{Key: hi, Type: ContainerTypeArray, N: 1, BitN: 1, Data: fromArray16([]uint16{lo})})
 	}
 
 	// If the container exists and bit is not set then update the page.
@@ -155,7 +155,7 @@ func (c *Cursor) Add(v uint64) (changed bool, err error) {
 		copy(other, a[:i])
 		other[i] = lo
 		copy(other[i+1:], a[i:])
-		return true, c.putLeafCell(leafCell{Key: cell.Key, Type: ContainerTypeArray, N: len(other), Data: fromArray16(other)})
+		return true, c.putLeafCell(leafCell{Key: cell.Key, Type: ContainerTypeArray, N: len(other), BitN: cell.BitN + 1, Data: fromArray16(other)})
 
 	case ContainerTypeRLE:
 		runs := toInterval16(cell.Data)
@@ -163,7 +163,7 @@ func (c *Cursor) Add(v uint64) (changed bool, err error) {
 		copy(c.rle[:], runs)
 		run, added := runAdd(c.rle[:len(runs)], lo)
 		if added {
-			leaf := checkRun(run, cell.Key)
+			leaf := checkRun(run, cell.BitN, cell.Key)
 			return true, c.putLeafCell(leaf)
 		}
 		return false, nil
@@ -185,6 +185,8 @@ func (c *Cursor) Add(v uint64) (changed bool, err error) {
 		if err := c.tx.writeBitmapPage(pgno, fromArray64(a)); err != nil {
 			return false, err
 		}
+		// TODO(bbj): Update parent cell with new BitN.
+
 		return true, nil
 	default:
 		return false, fmt.Errorf("rbf.Cursor.Add(): invalid container type: %d", cell.Type)
@@ -220,7 +222,7 @@ func (c *Cursor) Remove(v uint64) (changed bool, err error) {
 		other := make([]uint16, len(a)-1)
 		copy(other[:i], a[:i])
 		copy(other[i:], a[i+1:])
-		return true, c.putLeafCell(leafCell{Key: cell.Key, Type: ContainerTypeArray, N: len(other), Data: fromArray16(other)})
+		return true, c.putLeafCell(leafCell{Key: cell.Key, Type: ContainerTypeArray, N: len(other), BitN: cell.BitN - 1, Data: fromArray16(other)})
 
 	case ContainerTypeRLE:
 		r := toInterval16(cell.Data)
@@ -265,6 +267,8 @@ func (c *Cursor) Remove(v uint64) (changed bool, err error) {
 		if err := c.tx.writeBitmapPage(pgno, fromArray64(a)); err != nil {
 			return false, err
 		}
+
+		// TODO(bbj): Update parent cell to decrement BitN.
 		return true, nil
 	default:
 		return false, fmt.Errorf("rbf.Cursor.Add(): invalid container type: %d", cell.Type)
@@ -356,7 +360,10 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 		}
 		in.Data = fromArray64(a)
 		cell.Type = ContainerTypeBitmapPtr
-		bitmapPgno, _ := c.tx.allocate()
+		bitmapPgno, err := c.tx.allocate()
+		if err != nil {
+			return err
+		}
 		cell.Data = fromPgno(bitmapPgno)
 	}
 
@@ -812,6 +819,7 @@ func (c *Cursor) Seek(key uint64) (exact bool, err error) {
 		if err != nil {
 			return false, err
 		}
+
 		switch typ := readFlags(buf); typ {
 		case PageTypeBranch:
 			n := readCellN(buf)
@@ -1089,6 +1097,7 @@ func (c *Cursor) goNextPage() error {
 func ConvertToLeafArgs(key uint64, c *roaring.Container) (result leafCell) {
 	result.Key = key
 	result.N = int(c.N())
+	result.BitN = int(c.N())
 	result.Type = ContainerTypeNone
 	if c.N() == 0 {
 		return
@@ -1136,7 +1145,7 @@ func (c *Cursor) merge(key uint64, data *roaring.Container) (bool, error) {
 		if err != nil {
 			return false, errors.Wrap(err, "cursor.merge")
 		}
-		container = roaring.NewContainerBitmap(cell.N, d)
+		container = roaring.NewContainerBitmap(cell.BitN, d)
 	case ContainerTypeRLE:
 		d := toInterval16(cell.Data)
 		container = roaring.NewContainerRun(d)

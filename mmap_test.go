@@ -86,6 +86,8 @@ func forceSnapshotsCheckMapping(t *testing.T) {
 // in newGeneration in generation.go. So this is probably useless but it's
 // a failure mode we've been bitten by once...
 func TestMmapBehavior(t *testing.T) {
+	skipForRBF(t)
+
 	var changed bool
 	var original uint64
 	defer func() {

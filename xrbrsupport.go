@@ -63,7 +63,7 @@ func (rbc *RBFConverter) Convert(index, field, view string, shard uint64, rb *ro
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer tx.Rollback()
 
 	name := fmt.Sprintf("%s/%s", field, view)
 	err = tx.CreateBitmap(name)

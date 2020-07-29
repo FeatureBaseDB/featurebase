@@ -93,10 +93,11 @@ func (c *Cursor) Dump(name string) {
 	fmt.Fprintf(bufStdout, "\n}")
 	bufStdout.Flush()
 }
-func (c *Cursor) Row(rowID uint64) (*roaring.Bitmap, error) {
+
+func (c *Cursor) Row(shard, rowID uint64) (*roaring.Bitmap, error) {
 	base := rowID * ShardWidth
 
-	offset := uint64(c.tx.db.Shard * ShardWidth)
+	offset := uint64(shard * ShardWidth)
 	off := highbits(offset)
 	hi0, hi1 := highbits(base), highbits((rowID+1)*ShardWidth)
 	c.stack.index = 0
