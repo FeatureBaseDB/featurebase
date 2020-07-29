@@ -1786,6 +1786,8 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 
 // Ensure a fragment's cache can be persisted between restarts.
 func TestFragment_RankCache_Persistence(t *testing.T) {
+	skipForRBF(t)
+
 	index := mustOpenIndex(IndexOptions{})
 	defer index.Close()
 
@@ -1847,6 +1849,8 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 
 // Ensure a fragment can be copied to another fragment.
 func TestFragment_WriteTo_ReadFrom(t *testing.T) {
+	skipForRBF(t)
+
 	f0, idx := mustOpenFragment("i", "f", viewStandard, 0, "")
 	_ = idx
 	defer f0.Clean(t)
@@ -4196,6 +4200,8 @@ func TestFragmentRowIterator(t *testing.T) {
 	})
 
 	t.Run("skipped rows wrapped", func(t *testing.T) {
+		skipForRBF(t)
+
 		f, idx := mustOpenFragment("i", "f", "v", 0, CacheTypeRanked)
 		_ = idx
 		defer f.Clean(t)
@@ -4396,6 +4402,8 @@ func TestFragmentRowIterator_WithTxCommit(t *testing.T) {
 			row, id, _, wrapped, err := iter.Next()
 			if err != nil {
 				t.Fatal(err)
+			} else if row == nil {
+				t.Fatal("expected row")
 			}
 			if id != i%8 {
 				t.Errorf("expected row %d but got %d", i%8, id)
@@ -5306,6 +5314,7 @@ func check(t *testing.T, tx Tx, f *fragment, exp map[uint64]map[uint64]struct{})
 }
 
 func TestImportValueConcurrent(t *testing.T) {
+	skipForRBF(t)
 
 	f, idx := mustOpenBSIFragment("i", "f", viewBSIGroupPrefix+"foo", 0)
 	switch idx.Txf.TxType() {
@@ -5629,5 +5638,11 @@ func TestFragment_Bug_Q2DoubleDelete(t *testing.T) {
 	res = f.mustRow(tx, 1).Columns()
 	if len(res) != 0 {
 		t.Fatalf("expected nothing got %v", res)
+	}
+}
+
+func skipForRBF(tb testing.TB) {
+	if os.Getenv("PILOSA_TXSRC") == "rbf" {
+		tb.Skip("skip for RBF")
 	}
 }

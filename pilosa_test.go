@@ -15,6 +15,7 @@
 package pilosa_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -53,5 +54,11 @@ func TestAddressWithDefaults(t *testing.T) {
 				t.Errorf("expected: %v, but got: %v", test.expected, actual)
 			}
 		}
+	}
+}
+
+func skipForRBF(tb testing.TB) {
+	if os.Getenv("PILOSA_TXSRC") == "rbf" {
+		tb.Skip("skip for RBF")
 	}
 }

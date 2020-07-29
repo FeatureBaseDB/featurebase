@@ -29,13 +29,13 @@ func TestTx_CommitRollback(t *testing.T) {
 		defer MustCloseDB(t, db)
 
 		// Create bitmap in transaction but rollback.
-		if tx, err := db.Begin(true); err != nil {
+		tx, err := db.Begin(true)
+		if err != nil {
 			t.Fatal(err)
 		} else if err := tx.CreateBitmap("x"); err != nil {
 			t.Fatal(err)
-		} else if err := tx.Rollback(); err != nil {
-			t.Fatal(err)
 		}
+		tx.Rollback()
 
 		// Create bitmap in transaction again but commit.
 		if tx, err := db.Begin(true); err != nil {
@@ -49,8 +49,8 @@ func TestTx_CommitRollback(t *testing.T) {
 		// Create bitmap again but it should fail as it already exists.
 		if tx, err := db.Begin(true); err != nil {
 			t.Fatal(err)
-		} else if err := tx.CreateBitmap("x"); err == nil || err.Error() != `bitmap already exists: "x"` {
-			_ = tx.Rollback()
+		} else if err := tx.CreateBitmap("x"); err == nil || err != rbf.ErrBitmapExists {
+			tx.Rollback()
 			t.Fatal(err)
 		} else if err := tx.Commit(); err != nil {
 			t.Fatal(err)
@@ -62,13 +62,13 @@ func TestTx_CommitRollback(t *testing.T) {
 		defer func() { MustCloseDB(t, db) }()
 
 		// Create bitmap in transaction but rollback.
-		if tx, err := db.Begin(true); err != nil {
+		tx, err := db.Begin(true)
+		if err != nil {
 			t.Fatal(err)
 		} else if err := tx.CreateBitmap("x"); err != nil {
 			t.Fatal(err)
-		} else if err := tx.Rollback(); err != nil {
-			t.Fatal(err)
 		}
+		tx.Rollback()
 		db = MustReopenDB(t, db)
 
 		// Create bitmap in transaction again but commit.
@@ -84,8 +84,8 @@ func TestTx_CommitRollback(t *testing.T) {
 		// Create bitmap again but it should fail as it already exists.
 		if tx, err := db.Begin(true); err != nil {
 			t.Fatal(err)
-		} else if err := tx.CreateBitmap("x"); err == nil || err.Error() != `bitmap already exists: "x"` {
-			_ = tx.Rollback()
+		} else if err := tx.CreateBitmap("x"); err == nil || err != rbf.ErrBitmapExists {
+			tx.Rollback()
 			t.Fatal(err)
 		} else if err := tx.Commit(); err != nil {
 			t.Fatal(err)
@@ -102,7 +102,7 @@ func TestTx_CommitRollback(t *testing.T) {
 		tx0 := MustBegin(t, db, true)
 		go func() {
 			<-ch0
-			_ = tx0.Rollback()
+			tx0.Rollback()
 		}()
 
 		// Start separate write transaction in different goroutine.
@@ -134,7 +134,7 @@ func TestTx_Add(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
 	tx := MustBegin(t, db, true)
-	defer MustRollback(t, tx)
+	defer tx.Rollback()
 
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
@@ -167,7 +167,7 @@ func TestTx_DeleteBitmap(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
 	tx := MustBegin(t, db, true)
-	defer MustRollback(t, tx)
+	defer tx.Rollback()
 
 	// Create bitmap & add value.
 	if err := tx.CreateBitmap("x"); err != nil {
@@ -192,7 +192,7 @@ func TestTx_RenameBitmap(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
 	tx := MustBegin(t, db, true)
-	defer MustRollback(t, tx)
+	defer tx.Rollback()
 
 	// Create bitmap & add value.
 	if err := tx.CreateBitmap("x"); err != nil {
@@ -226,7 +226,7 @@ func TestTx_Add_Quick(t *testing.T) {
 		db := MustOpenDB(t)
 		defer MustCloseDB(t, db)
 		tx := MustBegin(t, db, true)
-		defer MustRollback(t, tx)
+		defer tx.Rollback()
 		values := GenerateValues(rand, 10000)
 
 		if err := tx.CreateBitmap("x"); err != nil {
@@ -265,7 +265,7 @@ func TestTx_AddRemove_Quick(t *testing.T) {
 		db := MustOpenDB(t)
 		defer MustCloseDB(t, db)
 		tx := MustBegin(t, db, true)
-		defer MustRollback(t, tx)
+		defer tx.Rollback()
 		values := GenerateValues(rand, 10000)
 
 		if err := tx.CreateBitmap("x"); err != nil {
@@ -314,7 +314,7 @@ func TestTx_Multiple_CreateBitmap(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
 	tx := MustBegin(t, db, true)
-	defer MustRollback(t, tx)
+	defer tx.Rollback()
 	values := GenerateValues(rand, 2)
 
 	if err := tx.CreateBitmap("x/1"); err != nil {
@@ -332,7 +332,7 @@ func TestTx_Multiple_CreateBitmap(t *testing.T) {
 	}
 
 	tx1 := MustBegin(t, db, true)
-	defer func() { _ = tx1.Rollback() }()
+	defer tx1.Rollback()
 
 	if err := tx1.CreateBitmap("x/2"); err != nil {
 		t.Fatal(err)
@@ -353,7 +353,7 @@ func TestTx_CursorCrashArray(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
 	tx := MustBegin(t, db, true)
-	defer MustRollback(t, tx)
+	defer tx.Rollback()
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
 	}
@@ -379,7 +379,7 @@ func TestTx_CursorCrashBitmap(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
 	tx := MustBegin(t, db, true)
-	defer MustRollback(t, tx)
+	defer tx.Rollback()
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
 	}
@@ -418,7 +418,7 @@ func BenchmarkTx_Add(b *testing.B) {
 					db := MustOpenDB(b)
 					defer MustCloseDB(b, db)
 					tx := MustBegin(b, db, true)
-					defer MustRollback(b, tx)
+					defer tx.Rollback()
 
 					for _, v := range values {
 						if _, err := tx.Add("x", v); err != nil {
@@ -446,7 +446,7 @@ func BenchmarkTx_Contains(b *testing.B) {
 			db := MustOpenDB(b)
 			defer MustCloseDB(b, db)
 			tx := MustBegin(b, db, true)
-			defer MustRollback(b, tx)
+			defer tx.Rollback()
 
 			b.ResetTimer()
 			t := time.Now()

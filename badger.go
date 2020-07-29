@@ -276,7 +276,6 @@ func badgerPath(path string) string {
 // the existing instance. This insures only one badgerDB
 // per bpath in this pilosa node.
 func (r *badgerRegistrar) openBadgerDBWrapper(bpath string) (*BadgerDBWrapper, error) {
-
 	// now that newTxFactory can call us directly, we might not
 	// have the -badgerdb suffix.
 	if !strings.HasSuffix(bpath, "-badgerdb") {

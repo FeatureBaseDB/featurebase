@@ -33,6 +33,7 @@ import (
 
 func TestHolder_Open(t *testing.T) {
 	skipForBadger := os.Getenv("PILOSA_TXSRC") == "badger"
+	skipForRBF := os.Getenv("PILOSA_TXSRC") == "rbf"
 
 	t.Run("ErrIndexName", func(t *testing.T) {
 		h := test.MustOpenHolder()
@@ -169,6 +170,8 @@ func TestHolder_Open(t *testing.T) {
 	t.Run("ErrFragmentStoragePermission", func(t *testing.T) {
 		if skipForBadger {
 			t.Skip("skipping for badger")
+		} else if skipForRBF {
+			t.Skip("skipping for rbf")
 		}
 		if os.Geteuid() == 0 {
 			t.Skip("Skipping permissions test since user is root.")
@@ -208,6 +211,8 @@ func TestHolder_Open(t *testing.T) {
 	t.Run("ErrFragmentStorageCorrupt", func(t *testing.T) {
 		if skipForBadger {
 			t.Skip("skipping for badger")
+		} else if skipForRBF {
+			t.Skip("skipping for rbf")
 		}
 
 		h := test.MustOpenHolder()
@@ -244,6 +249,8 @@ func TestHolder_Open(t *testing.T) {
 	t.Run("ErrFragmentStorageRecoverable", func(t *testing.T) {
 		if skipForBadger {
 			t.Skip("skipping for badger")
+		} else if skipForRBF {
+			t.Skip("skipping for rbf")
 		}
 
 		h := test.MustOpenHolder()
@@ -410,6 +417,8 @@ func TestHolder_HasData(t *testing.T) {
 
 // Ensure holder can delete an index and its underlying files.
 func TestHolder_DeleteIndex(t *testing.T) {
+	skipForRBF(t)
+
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
@@ -705,6 +714,8 @@ func TestHolderSyncer_TimeQuantum(t *testing.T) {
 
 // Ensure holder can sync integer views with a remote holder.
 func TestHolderSyncer_IntField(t *testing.T) {
+	skipForRBF(t)
+
 	t.Run("BasicSync", func(t *testing.T) {
 		c := test.MustNewCluster(t, 2)
 		c[0].Config.Cluster.ReplicaN = 2

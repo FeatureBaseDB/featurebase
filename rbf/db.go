@@ -54,25 +54,16 @@ type DB struct {
 
 	// The maximum allowed database size. Required by mmap.
 	MaxSize int64
-	Shard   int
 }
 
 // NewDB returns a new instance of DB.
 func NewDB(path string) *DB {
-	return NewDBWithShard(path, 0)
-}
-func NewDBWithShard(path string, shard int) *DB {
 	return &DB{
 		txs:     make(map[*Tx]struct{}),
 		pageMap: immutable.NewMap(&uint32Hasher{}),
 		Path:    path,
 		MaxSize: DefaultMaxSize,
-		Shard:   shard,
 	}
-}
-
-func (db *DB) DeleteFragment(index, field, view string, shard uint64, frag interface{}) error {
-	panic("TODO: implement rbf.DB.DeleteFragment")
 }
 
 // DataPath returns the path to the data file for the DB.
@@ -101,7 +92,7 @@ func (db *DB) Open() (err error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	if err := os.MkdirAll(filepath.Dir(db.Path), 0755); err != nil {
+	if err := os.MkdirAll(db.Path, 0755); err != nil {
 		return err
 	} else if db.file, err = os.OpenFile(db.DataPath(), os.O_WRONLY|os.O_CREATE, 0666); err != nil {
 		return fmt.Errorf("open file: %w", err)
@@ -573,7 +564,7 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 	// This page is only written at the end of a dirty transaction.
 	page, err := db.readPage(db.pageMap, 0)
 	if err != nil {
-		_ = tx.Rollback()
+		tx.Rollback()
 		return nil, err
 	}
 	copy(tx.meta[:], page)
@@ -617,7 +608,7 @@ func (db *DB) Check() error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer tx.Rollback()
 	return tx.Check()
 }
 

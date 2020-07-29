@@ -16,7 +16,10 @@ package rbf
 import (
 	"fmt"
 	"io"
+	"math"
 	"sort"
+	"strings"
+	"sync"
 
 	"github.com/benbjohnson/immutable"
 	"github.com/pilosa/pilosa/v2/roaring"
@@ -24,6 +27,7 @@ import (
 
 // Tx represents a transaction.
 type Tx struct {
+	mu       sync.RWMutex
 	db       *DB            // parent db
 	meta     [PageSize]byte // copy of current meta page
 	walID    int64          // max WAL ID at start of tx
@@ -32,8 +36,16 @@ type Tx struct {
 	dirty    bool           // if true, changes have been made
 }
 
+// Writable returns true if the transaction can mutate data.
+func (tx *Tx) Writable() bool {
+	return tx.writable
+}
+
 // Commit completes the transaction and persists data changes.
 func (tx *Tx) Commit() error {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
 	if tx.db == nil {
 		return ErrTxClosed
 	}
@@ -57,9 +69,14 @@ func (tx *Tx) Commit() error {
 	return tx.db.removeTx(tx)
 }
 
-func (tx *Tx) Rollback() error {
+func (tx *Tx) Rollback() {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
+	// TODO(bbj): Invalidate DB if rollback fails. Possibly attempt reopen?
+
 	if tx.db == nil {
-		return ErrTxClosed
+		return
 	}
 
 	// If any pages have been written, ensure we write a new meta page with
@@ -67,29 +84,26 @@ func (tx *Tx) Rollback() error {
 	// discard pages in the transaction during playback of the WAL on open.
 	if tx.dirty {
 		if err := tx.writeMetaPage(MetaPageFlagRollback); err != nil {
-			return err
+			panic(err)
 		} else if err := tx.db.SyncWAL(); err != nil {
-			return err
+			panic(err)
 		}
 	}
 
-	if err := tx.db.checkpoint(); err != nil {
-		return err
-	}
+	_ = tx.db.checkpoint() // TODO: Check error
 
 	// Disconnect transaction from DB.
-	err := tx.db.removeTx(tx)
-	_ = err
-	/*
-		if err != nil {
-			//TODO need to fix this error
-		}
-	*/
-	return nil
+	_ = tx.db.removeTx(tx) // TODO: Check error
 }
 
 // Root returns the root page number for a bitmap. Returns 0 if the bitmap does not exist.
 func (tx *Tx) Root(name string) (uint32, error) {
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+	return tx.root(name)
+}
+
+func (tx *Tx) root(name string) (uint32, error) {
 	records, err := tx.rootRecords()
 	if err != nil {
 		return 0, err
@@ -97,14 +111,43 @@ func (tx *Tx) Root(name string) (uint32, error) {
 
 	i := sort.Search(len(records), func(i int) bool { return records[i].Name >= name })
 	if i >= len(records) || records[i].Name != name {
-		return 0, fmt.Errorf("bitmap not found: %q", name)
+		return 0, ErrBitmapNotFound
 	}
 	return records[i].Pgno, nil
+}
+
+// BitmapNames returns a list of all bitmap names.
+func (tx *Tx) BitmapNames() ([]string, error) {
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+
+	if tx.db == nil {
+		return nil, ErrTxClosed
+	}
+
+	// Read list of root records.
+	records, err := tx.rootRecords()
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to a list of strings.
+	names := make([]string, len(records))
+	for i := range records {
+		names[i] = records[i].Name
+	}
+	return names, nil
 }
 
 // CreateBitmap creates a new empty bitmap with the given name.
 // Returns an error if the bitmap already exists.
 func (tx *Tx) CreateBitmap(name string) error {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+	return tx.createBitmap(name)
+}
+
+func (tx *Tx) createBitmap(name string) error {
 	if tx.db == nil {
 		return ErrTxClosed
 	} else if !tx.writable {
@@ -122,7 +165,7 @@ func (tx *Tx) CreateBitmap(name string) error {
 	// Find btree by name. Exit if already exists.
 	index := sort.Search(len(records), func(i int) bool { return records[i].Name >= name })
 	if index < len(records) && records[index].Name == name {
-		return fmt.Errorf("bitmap already exists: %q", name)
+		return ErrBitmapExists
 	}
 	//fmt.Println("CREATE BITMAP", name, index)
 
@@ -153,6 +196,22 @@ func (tx *Tx) CreateBitmap(name string) error {
 	return nil
 }
 
+// CreateBitmapIfNotExists creates a new empty bitmap with the given name.
+// This is a no-op if the bitmap already exists.
+func (tx *Tx) CreateBitmapIfNotExists(name string) error {
+	if err := tx.CreateBitmap(name); err != nil && err != ErrBitmapExists {
+		return err
+	}
+	return nil
+}
+
+func (tx *Tx) createBitmapIfNotExists(name string) error {
+	if err := tx.createBitmap(name); err != nil && err != ErrBitmapExists {
+		return err
+	}
+	return nil
+}
+
 /*
 func dump(r []*RootRecord) {
 	for _, i := range r {
@@ -165,6 +224,9 @@ func dump(r []*RootRecord) {
 // DeleteBitmap removes a bitmap with the given name.
 // Returns an error if the bitmap does not exist.
 func (tx *Tx) DeleteBitmap(name string) error {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
 	if tx.db == nil {
 		return ErrTxClosed
 	} else if !tx.writable {
@@ -200,9 +262,55 @@ func (tx *Tx) DeleteBitmap(name string) error {
 	return nil
 }
 
+// DeleteBitmapsWithPrefix removes all bitmaps with a given prefix.
+func (tx *Tx) DeleteBitmapsWithPrefix(prefix string) error {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
+	if tx.db == nil {
+		return ErrTxClosed
+	} else if !tx.writable {
+		return ErrTxNotWritable
+	}
+
+	// Read list of root records.
+	records, err := tx.rootRecords()
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i < len(records); i++ {
+		record := records[i]
+
+		// Skip bitmaps without matching prefix.
+		if !strings.HasPrefix(record.Name, prefix) {
+			continue
+		}
+
+		// Deallocate all pages in the tree.
+		if err := tx.deallocateTree(record.Pgno); err != nil {
+			return err
+		}
+
+		// Delete from record list.
+		records = append(records[:i], records[i+1:]...)
+		i--
+	}
+
+	// Rewrite record pages.
+	if err := tx.writeRootRecordPages(records); err != nil {
+		return fmt.Errorf("write bitmaps: %w", err)
+	}
+
+	return nil
+}
+
 // RenameBitmap updates the name of an existing bitmap.
 // Returns an error if the bitmap does not exist.
 func (tx *Tx) RenameBitmap(oldname, newname string) error {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
 	if tx.db == nil {
 		return ErrTxClosed
 	} else if !tx.writable {
@@ -314,78 +422,103 @@ func (tx *Tx) writeRootRecordPages(records []*RootRecord) (err error) {
 }
 
 // Add sets a given bit on the bitmap.
-func (tx *Tx) Add(name string, a ...uint64) (changed bool, err error) {
+func (tx *Tx) Add(name string, a ...uint64) (changeCount int, err error) {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
 	if tx.db == nil {
-		return false, ErrTxClosed
+		return 0, ErrTxClosed
 	} else if !tx.writable {
-		return false, ErrTxNotWritable
+		return 0, ErrTxNotWritable
 	} else if name == "" {
-		return false, ErrBitmapNameRequired
+		return 0, ErrBitmapNameRequired
 	}
 
-	c, err := tx.Cursor(name)
+	if err := tx.createBitmapIfNotExists(name); err != nil {
+		return 0, err
+	}
+
+	c, err := tx.cursor(name)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	for _, v := range a {
 		if vchanged, err := c.Add(v); err != nil {
-			return changed, err
+			return changeCount, err
 		} else if vchanged {
-			changed = true
+			changeCount++
 		}
 	}
-	return changed, nil
+	return changeCount, nil
 }
 
 // Remove unsets a given bit on the bitmap.
-func (tx *Tx) Remove(name string, a ...uint64) (changed bool, err error) {
+func (tx *Tx) Remove(name string, a ...uint64) (changeCount int, err error) {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
 	if tx.db == nil {
-		return false, ErrTxClosed
+		return 0, ErrTxClosed
 	} else if !tx.writable {
-		return false, ErrTxNotWritable
+		return 0, ErrTxNotWritable
 	} else if name == "" {
-		return false, ErrBitmapNameRequired
+		return 0, ErrBitmapNameRequired
 	}
 
-	c, err := tx.Cursor(name)
+	c, err := tx.cursor(name)
 	if err != nil {
-		return false, err
+		return 0, err
+	} else if c == nil {
+		return 0, nil
 	}
 	for _, v := range a {
 		if vchanged, err := c.Remove(v); err != nil {
-			return changed, err
+			return changeCount, err
 		} else if vchanged {
-			changed = true
+			changeCount++
 		}
 	}
-	return changed, nil
+	return changeCount, nil
 }
 
 // Contains returns true if the given bit is set on the bitmap.
 func (tx *Tx) Contains(name string, v uint64) (bool, error) {
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+
 	if tx.db == nil {
 		return false, ErrTxClosed
 	} else if name == "" {
 		return false, ErrBitmapNameRequired
 	}
 
-	c, err := tx.Cursor(name)
+	c, err := tx.cursor(name)
 	if err != nil {
 		return false, err
+	} else if c == nil {
+		return false, nil
 	}
 	return c.Contains(v)
 }
 
 // Cursor returns an instance of a cursor this bitmap.
 func (tx *Tx) Cursor(name string) (*Cursor, error) {
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+	return tx.cursor(name)
+}
+
+func (tx *Tx) cursor(name string) (*Cursor, error) {
 	if tx.db == nil {
 		return nil, ErrTxClosed
 	} else if name == "" {
 		return nil, ErrBitmapNameRequired
 	}
 
-	root, err := tx.Root(name)
-	if err != nil {
+	root, err := tx.root(name)
+	if err == ErrBitmapNotFound {
+		return nil, nil
+	} else if err != nil {
 		return nil, err
 	}
 
@@ -394,8 +527,109 @@ func (tx *Tx) Cursor(name string) (*Cursor, error) {
 	return &c, nil
 }
 
+// RoaringBitmap returns a bitmap as a Roaring bitmap.
+func (tx *Tx) RoaringBitmap(name string) (*roaring.Bitmap, error) {
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+
+	if tx.db == nil {
+		return nil, ErrTxClosed
+	} else if name == "" {
+		return nil, ErrBitmapNameRequired
+	}
+
+	c, err := tx.cursor(name)
+	if err != nil {
+		return nil, err
+	} else if c == nil {
+		return roaring.NewSliceBitmap(), nil
+	}
+
+	other := roaring.NewSliceBitmap()
+	if err := c.First(); err == io.EOF {
+		return other, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	for {
+		if err := c.Next(); err == io.EOF {
+			return other, nil
+		} else if err != nil {
+			return nil, err
+		}
+
+		cell := c.cell()
+		other.Containers.Put(cell.Key, toContainer(cell, tx))
+	}
+}
+
+// Container returns a Roaring container by key.
+func (tx *Tx) Container(name string, key uint64) (*roaring.Container, error) {
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+
+	if tx.db == nil {
+		return nil, ErrTxClosed
+	} else if name == "" {
+		return nil, ErrBitmapNameRequired
+	}
+
+	c, err := tx.cursor(name)
+	if err != nil {
+		return nil, err
+	} else if c == nil {
+		return nil, err
+	} else if exact, err := c.Seek(key); err != nil || !exact {
+		return nil, err
+	}
+	return toContainer(c.cell(), tx), nil
+}
+
+// PutContainer inserts a container into a bitmap. Overwrites if key already exists.
+func (tx *Tx) PutContainer(name string, key uint64, cont *roaring.Container) error {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
+	cell := ConvertToLeafArgs(key, cont)
+	if cell.BitN == 0 {
+		return nil
+	}
+
+	if err := tx.createBitmapIfNotExists(name); err != nil {
+		return err
+	}
+
+	c, err := tx.cursor(name)
+	if err != nil {
+		return err
+	} else if _, err := c.Seek(cell.Key); err != nil {
+		return err
+	}
+	return c.putLeafCell(cell)
+}
+
+// RemoveContainer removes a container from the bitmap by key.
+func (tx *Tx) RemoveContainer(name string, key uint64) error {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
+	c, err := tx.cursor(name)
+	if err != nil {
+		return err
+	} else if c == nil {
+		return nil
+	} else if exact, err := c.Seek(key); err != nil || !exact {
+		return err
+	}
+	return c.deleteLeafCell(key)
+}
+
 // Check verifies the integrity of the database.
 func (tx *Tx) Check() error {
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+
 	if tx.db == nil {
 		return ErrTxClosed
 	}
@@ -677,16 +911,252 @@ func (tx *Tx) writeMetaPage(flag uint32) error {
 }
 
 func (tx *Tx) AddRoaring(name string, bm *roaring.Bitmap) (changed bool, err error) {
-	c, err := tx.Cursor(name)
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+
+	if err := tx.createBitmapIfNotExists(name); err != nil {
+		return false, err
+	}
+
+	c, err := tx.cursor(name)
 	if err != nil {
 		return false, err
 	}
 	return c.AddRoaring(bm)
 }
+
 func (tx *Tx) leafCellBitmap(pgno uint32) (uint32, []uint64, error) {
 	page, err := tx.readPage(pgno)
 	if err != nil {
 		return 0, nil, err
 	}
 	return pgno, toArray64(page), err
+}
+
+func (tx *Tx) ContainerIterator(name string, key uint64) (citer roaring.ContainerIterator, found bool, err error) {
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+
+	c, err := tx.cursor(name)
+	if err != nil {
+		// TODO(bbj): Don't return error if bitmap is simply not found?
+		return nil, false, err
+	} else if c == nil {
+		return nil, false, nil
+	} else if err := c.First(); err != nil {
+		return nil, false, err
+	}
+	return &containerIterator{cursor: c}, true, nil
+}
+
+func (tx *Tx) ForEach(name string, fn func(i uint64) error) error {
+	return tx.ForEachRange(name, 0, math.MaxUint64, fn)
+}
+
+func (tx *Tx) ForEachRange(name string, start, end uint64, fn func(uint64) error) error {
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+
+	c, err := tx.cursor(name)
+	if err != nil {
+		return err
+	} else if c == nil {
+		return nil
+	} else if _, err := c.Seek(highbits(start)); err != nil {
+		return err
+	}
+
+	for {
+		if err := c.Next(); err == io.EOF {
+			return nil
+		} else if err != nil {
+			return err
+		}
+
+		switch cell := c.cell(); cell.Type {
+		case ContainerTypeArray:
+			for _, lo := range toArray16(cell.Data) {
+				v := cell.Key<<16 | uint64(lo)
+				if v < start {
+					continue
+				} else if v > end {
+					return nil
+				} else if err := fn(v); err != nil {
+					return err
+				}
+			}
+		case ContainerTypeRLE:
+			for _, r := range toInterval16(cell.Data) {
+				for lo := int(r.Start); lo <= int(r.Last); lo++ {
+					v := cell.Key<<16 | uint64(lo)
+					if v < start {
+						continue
+					} else if v > end {
+						return nil
+					} else if err := fn(v); err != nil {
+						return err
+					}
+				}
+			}
+		case ContainerTypeBitmap:
+			for i, bits := range toArray64(cell.Data) {
+				for j := uint(0); j < 64; j++ {
+					if bits&(1<<j) != 0 {
+						continue
+					}
+
+					v := cell.Key<<16 | (uint64(i) * 64) | uint64(j)
+					if v < start {
+						continue
+					} else if v > end {
+						return nil
+					} else if err := fn(v); err != nil {
+						return err
+					}
+				}
+			}
+		default:
+			panic(fmt.Sprintf("invalid container type: %d", cell.Type))
+		}
+	}
+}
+
+func (tx *Tx) Count(name string) (uint64, error) {
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+
+	c, err := tx.cursor(name)
+	if err != nil {
+		return 0, err
+	} else if c == nil {
+		return 0, nil
+	} else if err := c.First(); err != nil {
+		return 0, err
+	}
+
+	var n uint64
+	for {
+		if err := c.Next(); err == io.EOF {
+			break
+		} else if err != nil {
+			return 0, err
+		}
+
+		n += uint64(c.cell().BitN)
+	}
+	return n, nil
+}
+
+func (tx *Tx) Max(name string) (uint64, error) {
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+
+	c, err := tx.cursor(name)
+	if err != nil {
+		return 0, err
+	} else if c == nil {
+		return 0, nil
+	} else if err := c.Last(); err == io.EOF {
+		return 0, nil
+	} else if err != nil {
+		return 0, err
+	}
+
+	cell := c.cell()
+	return uint64((cell.Key << 16) | uint64(cell.lastValue())), nil
+}
+
+func (tx *Tx) Min(name string) (uint64, bool, error) {
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+
+	c, err := tx.cursor(name)
+	if err != nil {
+		return 0, false, err
+	} else if c == nil {
+		return 0, false, nil
+	} else if err := c.First(); err == io.EOF {
+		return 0, false, nil
+	} else if err != nil {
+		return 0, false, err
+	}
+
+	cell := c.cell()
+	return uint64((cell.Key << 16) | uint64(cell.firstValue())), true, nil
+}
+
+func (tx *Tx) UnionInPlace(name string, others ...*roaring.Bitmap) error {
+	panic("TODO")
+}
+
+func (tx *Tx) CountRange(name string, start, end uint64) (uint64, error) {
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+
+	c, err := tx.cursor(name)
+	if err != nil {
+		return 0, err
+	} else if c == nil {
+		return 0, nil
+	}
+
+	if err := c.First(); err == io.EOF {
+		return 0, nil
+	} else if err != nil {
+		return 0, err
+	}
+
+	var n uint64
+	for {
+		if err := c.Next(); err == io.EOF {
+			break
+		} else if err != nil {
+			return 0, err
+		}
+
+		cell := c.cell()
+		if cell.Key > highbits(end) {
+			break
+		}
+
+		if cell.Key == highbits(start) {
+			n += uint64(cell.countRange(lowbits(start), math.MaxUint16))
+		} else if cell.Key == highbits(end) {
+			n += uint64(cell.countRange(0, lowbits(end)))
+		} else {
+			n += uint64(cell.BitN)
+		}
+	}
+	return n, nil
+}
+
+func (tx *Tx) OffsetRange(name string, offset, start, end uint64) (*roaring.Bitmap, error) {
+	tx.mu.RLock()
+	defer tx.mu.RUnlock()
+
+	b, err := tx.RoaringBitmap(name)
+	if err != nil {
+		return nil, err
+	}
+	return b.OffsetRange(offset, start, end), nil
+}
+
+// containerIterator wraps Cursor to implement roaring.ContainerIterator.
+type containerIterator struct {
+	cursor *Cursor
+}
+
+// Close is a no-op. It exists to implement the roaring.ContainerIterator interface.
+func (itr *containerIterator) Close() {}
+
+// Next moves the iterator to the next container.
+func (itr *containerIterator) Next() bool {
+	err := itr.cursor.Next()
+	return err != nil
+}
+
+// Value returns the current key & container.
+func (itr *containerIterator) Value() (uint64, *roaring.Container) {
+	cell := itr.cursor.cell()
+	return cell.Key, toContainer(cell, itr.cursor.tx)
 }

@@ -2860,20 +2860,19 @@ func (c *Container) countRange(start, end int32) (n int32) {
 		return 0
 	}
 	if c.isArray() {
-		return c.arrayCountRange(start, end)
+		return ArrayCountRange(c.array(), start, end)
 	} else if c.isRun() {
-		return c.runCountRange(start, end)
+		return RunCountRange(c.runs(), start, end)
 	}
-	return c.bitmapCountRange(start, end)
+	return BitmapCountRange(c.bitmap(), start, end)
 }
 
-func (c *Container) arrayCountRange(start, end int32) (n int32) {
+func ArrayCountRange(array []uint16, start, end int32) (n int32) {
 	if roaringParanoia {
 		if start > end {
 			panic(fmt.Sprintf("counting in range but %v > %v", start, end))
 		}
 	}
-	array := c.array()
 	i := int32(sort.Search(len(array), func(i int) bool { return int32(array[i]) >= start }))
 	for ; i < int32(len(array)); i++ {
 		v := int32(array[i])
@@ -2885,7 +2884,7 @@ func (c *Container) arrayCountRange(start, end int32) (n int32) {
 	return n
 }
 
-func (c *Container) bitmapCountRange(start, end int32) int32 {
+func BitmapCountRange(bitmap []uint64, start, end int32) int32 {
 	if roaringParanoia {
 		if start > end {
 			panic(fmt.Sprintf("counting in range but %v > %v", start, end))
@@ -2894,7 +2893,6 @@ func (c *Container) bitmapCountRange(start, end int32) int32 {
 	var n uint64
 	i, j := start/64, end/64
 	// Special case when start and end fall in the same word.
-	bitmap := c.bitmap()
 	if i == j {
 		offi, offj := uint(start%64), uint(64-end%64)
 		n += popcount((bitmap[i] >> offi) << (offj + offi))
@@ -2921,13 +2919,13 @@ func (c *Container) bitmapCountRange(start, end int32) int32 {
 	return int32(n)
 }
 
-func (c *Container) runCountRange(start, end int32) (n int32) {
+// RunCountRange returns the ranged bit count for RLE pairs.
+func RunCountRange(runs []Interval16, start, end int32) (n int32) {
 	if roaringParanoia {
 		if start > end {
 			panic(fmt.Sprintf("counting in range but %v > %v", start, end))
 		}
 	}
-	runs := c.runs()
 	for _, iv := range runs {
 		// iv is before range
 		if int32(iv.Last) < start {
@@ -3837,12 +3835,12 @@ func (c *Container) check() error {
 			a.Append(fmt.Errorf("array count mismatch: count=%d, n=%d", len(array), c.N()))
 		}
 	} else if c.isRun() {
-		n := c.runCountRange(0, MaxContainerVal+1)
+		n := RunCountRange(c.runs(), 0, MaxContainerVal+1)
 		if n != c.N() {
 			a.Append(fmt.Errorf("run count mismatch: count=%d, n=%d", n, c.N()))
 		}
 	} else if c.isBitmap() {
-		if n := c.bitmapCountRange(0, MaxContainerVal+1); n != c.N() {
+		if n := BitmapCountRange(c.bitmap(), 0, MaxContainerVal+1); n != c.N() {
 			a.Append(fmt.Errorf("bitmap count mismatch: count=%d, n=%d", n, c.N()))
 		}
 	} else {
@@ -4052,7 +4050,7 @@ func intersectionCountRunRun(a, b *Container) (n int32) {
 func intersectionCountBitmapRun(a, b *Container) (n int32) {
 	statsHit("intersectionCount/BitmapRun")
 	for _, iv := range b.runs() {
-		n += a.bitmapCountRange(int32(iv.Start), int32(iv.Last)+1)
+		n += BitmapCountRange(a.bitmap(), int32(iv.Start), int32(iv.Last)+1)
 	}
 	return n
 }

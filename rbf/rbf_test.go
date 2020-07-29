@@ -119,14 +119,6 @@ func MustBegin(tb testing.TB, db *rbf.DB, writable bool) *rbf.Tx {
 	return tx
 }
 
-// MustRollback rolls back a transaction or fails.
-func MustRollback(tb testing.TB, tx *rbf.Tx) {
-	tb.Helper()
-	if err := tx.Rollback(); err != nil && err != rbf.ErrTxClosed {
-		tb.Logf("rollback error: %q", err)
-	}
-}
-
 // MustAddRandom adds values to a bitmap in a random order.
 func MustAddRandom(tb testing.TB, rand *rand.Rand, tx *rbf.Tx, name string, values ...uint64) {
 	tb.Helper()

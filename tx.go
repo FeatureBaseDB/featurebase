@@ -21,8 +21,10 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 
+	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pkg/errors"
 )
@@ -871,4 +873,148 @@ func (tx *RoaringTx) RoaringBitmapReader(index, field, view string, shard uint64
 	sz = fi.Size()
 	r = file
 	return
+}
+
+type RBFTx struct {
+	tx *rbf.Tx
+}
+
+func (tx *RBFTx) Type() string {
+	return RBFTxn
+}
+
+func (tx *RBFTx) Rollback() {
+	tx.tx.Rollback()
+}
+
+func (tx *RBFTx) Commit() error {
+	return tx.tx.Commit()
+}
+
+func (tx *RBFTx) RoaringBitmap(index, field, view string, shard uint64) (*roaring.Bitmap, error) {
+	return tx.tx.RoaringBitmap(rbfName(field, view, shard))
+}
+
+func (tx *RBFTx) Container(index, field, view string, shard uint64, key uint64) (*roaring.Container, error) {
+	return tx.tx.Container(rbfName(field, view, shard), key)
+}
+
+func (tx *RBFTx) PutContainer(index, field, view string, shard uint64, key uint64, c *roaring.Container) error {
+	return tx.tx.PutContainer(rbfName(field, view, shard), key, c)
+}
+
+func (tx *RBFTx) RemoveContainer(index, field, view string, shard uint64, key uint64) error {
+	return tx.tx.RemoveContainer(rbfName(field, view, shard), key)
+}
+
+func (tx *RBFTx) Add(index, field, view string, shard uint64, batched bool, a ...uint64) (changeCount int, err error) {
+	return tx.tx.Add(rbfName(field, view, shard), a...)
+}
+
+func (tx *RBFTx) Remove(index, field, view string, shard uint64, a ...uint64) (changeCount int, err error) {
+	return tx.tx.Remove(rbfName(field, view, shard), a...)
+}
+
+func (tx *RBFTx) Contains(index, field, view string, shard uint64, v uint64) (exists bool, err error) {
+	return tx.tx.Contains(rbfName(field, view, shard), v)
+}
+
+func (tx *RBFTx) ContainerIterator(index, field, view string, shard uint64, key uint64) (citer roaring.ContainerIterator, found bool, err error) {
+	return tx.tx.ContainerIterator(rbfName(field, view, shard), key)
+}
+
+func (tx *RBFTx) ForEach(index, field, view string, shard uint64, fn func(i uint64) error) error {
+	return tx.tx.ForEach(rbfName(field, view, shard), fn)
+}
+
+func (tx *RBFTx) ForEachRange(index, field, view string, shard uint64, start, end uint64, fn func(uint64) error) error {
+	return tx.tx.ForEachRange(rbfName(field, view, shard), start, end, fn)
+}
+
+func (tx *RBFTx) Count(index, field, view string, shard uint64) (uint64, error) {
+	return tx.tx.Count(rbfName(field, view, shard))
+}
+
+func (tx *RBFTx) Max(index, field, view string, shard uint64) (uint64, error) {
+	return tx.tx.Max(rbfName(field, view, shard))
+}
+
+func (tx *RBFTx) Min(index, field, view string, shard uint64) (uint64, bool, error) {
+	return tx.tx.Min(rbfName(field, view, shard))
+}
+
+func (tx *RBFTx) UnionInPlace(index, field, view string, shard uint64, others ...*roaring.Bitmap) error {
+	return tx.tx.UnionInPlace(rbfName(field, view, shard), others...)
+}
+
+func (tx *RBFTx) CountRange(index, field, view string, shard uint64, start, end uint64) (uint64, error) {
+	return tx.tx.CountRange(rbfName(field, view, shard), start, end)
+}
+
+func (tx *RBFTx) OffsetRange(index, field, view string, shard uint64, offset, start, end uint64) (*roaring.Bitmap, error) {
+	return tx.tx.OffsetRange(rbfName(field, view, shard), offset, start, end)
+}
+
+func (tx *RBFTx) IncrementOpN(index, field, view string, shard uint64, changedN int) {}
+
+func (tx *RBFTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
+	// TODO: Implement RBFTX.ImportRoaringBits"
+	return 0, make(map[uint64]int), nil
+}
+
+func (tx *RBFTx) RoaringBitmapReader(index, field, view string, shard uint64, fragmentPathForRoaring string) (r io.ReadCloser, sz int64, err error) {
+	panic("TODO: Implement RBFTx.RoaringBitmapReader()")
+}
+
+func (tx *RBFTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
+	prefix := rbfFieldViewPrefix(field, view)
+
+	names, err := tx.tx.BitmapNames()
+	if err != nil {
+		return nil, err
+	}
+
+	// Iterate over shard names and collect shards from matching field/view prefix.
+	for _, name := range names {
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+
+		s := strings.TrimPrefix(name, prefix)
+		shard, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			return nil, errors.Wrap(err, "parse shard id from rbf key")
+		}
+		sliceOfShards = append(sliceOfShards, shard)
+	}
+	return sliceOfShards, nil
+}
+
+func (tx *RBFTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
+	b, err := tx.RoaringBitmap(index, field, view, shard)
+	panicOn(err)
+	return b.Iterator()
+}
+
+func (tx *RBFTx) Pointer() string {
+	return fmt.Sprintf("%p", tx)
+}
+
+// Readonly is true if the transaction is not read-and-write, but only doing reads.
+func (tx *RBFTx) Readonly() bool {
+	return !tx.tx.Writable()
+}
+
+func (tx *RBFTx) UseRowCache() bool {
+	return false
+}
+
+// rbfName returns a NULL-separated key used for identifying bitmap maps in RBF.
+func rbfName(field, view string, shard uint64) string {
+	return fmt.Sprintf("%s\x00%s\x00%d", field, view, shard)
+}
+
+// rbfFieldViewPrefix returns a NULL-separated prefix for keys in RBF.
+func rbfFieldViewPrefix(field, view string) string {
+	return fmt.Sprintf("%s\x00%s\x00", field, view)
 }
