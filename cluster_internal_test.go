@@ -854,7 +854,6 @@ func TestCluster_ResizeStates(t *testing.T) {
 			t.Fatal(err)
 		} else if !bytes.Equal(chksum, node0Checksum) {
 			t.Fatalf("expected standard view checksum to match: %x - %x", chksum, node0Checksum)
-			// badger red:  TestCluster_ResizeStates/Multiple_nodes,_with_data: cluster_internal_test.go:841: expected standard view checksum to match: ef46db3751d8e999 - fad4de25ee696ca0
 		}
 
 		// Close TestCluster.

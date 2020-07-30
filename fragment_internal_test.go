@@ -1771,6 +1771,8 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 		t.Fatalf("unexpected cache len: %d", cache.Len())
 	}
 
+	panicOn(tx.Commit())
+
 	// Reopen the fragment.
 	if err := f.Reopen(); err != nil {
 		t.Fatal(err)
@@ -1847,16 +1849,27 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 	}
 }
 
+func roaringOnlyTest(t *testing.T) {
+	if os.Getenv("PILOSA_TXSRC") != "roaring" {
+		t.Skip("skip for everything but roaring")
+	}
+}
+
+func roaringOnlyBenchmark(b *testing.B) {
+	if os.Getenv("PILOSA_TXSRC") != "roaring" {
+		b.Skip("skip for everything but roaring")
+	}
+}
+
 // Ensure a fragment can be copied to another fragment.
 func TestFragment_WriteTo_ReadFrom(t *testing.T) {
-	skipForRBF(t)
+	roaringOnlyTest(t)
 
 	f0, idx := mustOpenFragment("i", "f", viewStandard, 0, "")
 	_ = idx
 	defer f0.Clean(t)
 
-	// Obtain transaction.
-	tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f0})
+	tx := f0.txTestingOnly
 	defer tx.Rollback()
 
 	// Set and then clear bits on the fragment.
@@ -2032,6 +2045,8 @@ func TestFragment_Zero_Tanimoto(t *testing.T) {
 }
 
 func TestFragment_Snapshot_Run(t *testing.T) {
+	roaringOnlyTest(t)
+
 	f, idx := mustOpenFragment("i", "f", viewStandard, 0, "")
 	_ = idx
 	defer f.Clean(t)
@@ -3094,10 +3109,7 @@ func BenchmarkImportRoaringConcurrent(b *testing.B) {
 	}
 }
 func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
-	skipForBadger := os.Getenv("PILOSA_TXSRC") == "badger"
-	if skipForBadger {
-		b.Skip("skip for badger")
-	}
+	roaringOnlyBenchmark(b)
 	if testing.Short() {
 		b.SkipNow()
 	}
@@ -3385,7 +3397,7 @@ func BenchmarkImportRoaringIntoLargeFragment(b *testing.B) {
 		//nf, idx := mustOpenFragmentFlags(index, field, view string, shard uint64, cacheType string, flags byte)
 
 		th := newTestHolder()
-		idx := fragTestMustOpenIndex("i", th, IndexOptions{})
+		idx := fragTestMustOpenIndex(filepath.Dir(fi.Name()), "i", th, IndexOptions{})
 		if th.NeedsSnapshot() {
 			th.SnapshotQueue = newSnapshotQueue(1, 1, nil)
 		}
@@ -3663,12 +3675,8 @@ func newTestHolder() *Holder {
 }
 
 // fragTestMustOpenIndex returns a new, opened index at a temporary path. Panic on error.
-func fragTestMustOpenIndex(index string, holder *Holder, opt IndexOptions) *Index {
-	path, err := ioutil.TempDir(*TempDir, "pilosa-index-")
-	if err != nil {
-		panic(err)
-	}
-	holder.Path = path
+func fragTestMustOpenIndex(holderDir, index string, holder *Holder, opt IndexOptions) *Index {
+	holder.Path = holderDir
 	holder.mu.Lock()
 	idx, err := holder.createIndex(index, opt)
 	holder.mu.Unlock()
@@ -3685,23 +3693,24 @@ func fragTestMustOpenIndex(index string, holder *Holder, opt IndexOptions) *Inde
 
 // mustOpenFragment returns a new instance of Fragment with a temporary path.
 func mustOpenFragmentFlags(index, field, view string, shard uint64, cacheType string, flags byte) (*fragment, *Index) {
-	file, err := ioutil.TempFile(*TempDir, "pilosa-fragment-")
-	if err != nil {
-		panic(err)
-	}
-	file.Close()
+
+	holderDir, err := ioutil.TempDir(*TempDir, "holder-dir")
+	panicOn(err)
 
 	if cacheType == "" {
 		cacheType = DefaultCacheType
 	}
 
-	// new:
 	th := newTestHolder()
-	idx := fragTestMustOpenIndex(index, th, IndexOptions{})
+	idx := fragTestMustOpenIndex(holderDir, index, th, IndexOptions{})
 	if th.NeedsSnapshot() {
 		th.SnapshotQueue = newSnapshotQueue(1, 1, nil)
 	}
-	f := newFragment(th, file.Name(), index, field, view, shard, flags)
+
+	fragDir := fmt.Sprintf("%v/%v/views/%v/fragments/", idx.path, field, view)
+	panicOn(os.MkdirAll(fragDir, 0777))
+	fragPath := fragDir + fmt.Sprintf("%v", shard)
+	f := newFragment(th, fragPath, index, field, view, shard, flags)
 
 	tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f})
 	f.txTestingOnly = tx
@@ -3811,6 +3820,10 @@ func TestFragment_RowsIteration(t *testing.T) {
 		} else if _, err := f.setBit(tx, 2, 166000); err != nil {
 			t.Fatal(err)
 		}
+		panicOn(tx.Commit())
+
+		tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+		defer tx.Rollback()
 
 		ids, err := f.rows(context.Background(), tx, 0)
 		if err != nil {
@@ -4421,11 +4434,7 @@ func TestFragmentRowIterator_WithTxCommit(t *testing.T) {
 }
 
 func TestUnionInPlaceMapped(t *testing.T) {
-
-	skipForBadger := os.Getenv("PILOSA_TXSRC") == "badger"
-	if skipForBadger {
-		t.Skip("skip for badger")
-	}
+	roaringOnlyTest(t)
 
 	f, idx := mustOpenFragment("i", "f", "v", 0, CacheTypeNone)
 	// note: clean has to be deferred first, because it has to run with
@@ -5112,6 +5121,8 @@ func TestFragmentBSISigned(t *testing.T) {
 }
 
 func TestImportClearRestart(t *testing.T) {
+	roaringOnlyTest(t)
+
 	tests := []struct {
 		rows []uint64
 		cols []uint64
@@ -5272,7 +5283,6 @@ func TestImportClearRestart(t *testing.T) {
 
 				err = f3.Open()
 				if err != nil {
-					// TODO(jea): might be a flaky test? when run from make test
 					t.Fatalf("opening f3: %v", err)
 				}
 				defer f3.Clean(t)

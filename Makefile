@@ -186,41 +186,43 @@ topt-race:
 
 # blue-green checks. These run two different storage engines (rbf, roaring, or badger)
 # and compare each transaction for a result.
-bg-br:
-	mv log.bg.bg_roar log.bg.bg_roar.prev || true
-	PILOSA_TXSRC=badger_roaring go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.bg.bg_roar
-	@echo "   log.bg.bg_roar green: \c"; cat log.bg.bg_roar | grep PASS |wc -l
-	@echo "   log.bg.bg_roar   red: \c"; cat log.bg.bg_roar | grep '\-\-\- FAIL' |wc -l
 
-bg-rb:
+bg-rr: # shorthand for bluegreen test with A:badger; B:roaring
+	mv log.bg-rr log.bg-rr.prev || true
+	set -o pipefail; PILOSA_TXSRC=badger_roaring go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.bg-rr
+	@echo "   log.bg-rr green: \c"; cat log.bg-rr | grep PASS |wc -l
+	@echo "   log.bg-rr   red: \c"; cat log.bg-rr | grep '\-\-\- FAIL' |wc -l
+
+rr-bg: # bluegreen with A:roaring; B:badger (B's values are returned).
 	mv log.bg.roar_bg log.bg.roar_bg.prev || true
-	PILOSA_TXSRC=roaring_badger go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.bg.roar_bg
-	@echo "   log.bg.roar_bg green: \c"; cat log.bg.roar_bg | grep PASS |wc -l
-	@echo "   log.bg.roar_bg   red: \c"; cat log.bg.roar_bg | grep '\-\-\- FAIL' |wc -l
+	set -o pipefail; PILOSA_TXSRC=roaring_badger go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.rr-bg
+	##PILOSA_TXSRC=roaring_badger go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.rr-bg
+	@echo "   log.rr-bg green: \c"; cat log.rr-bg | grep PASS |wc -l
+	@echo "   log.rr-bg   red: \c"; cat log.rr-bg | grep '\-\-\- FAIL' |wc -l
 
-bg-fr:
-	mv log.bg.rbf_roar log.bg.rbf_roar.prev || true
-	PILOSA_TXSRC=rbf_roaring go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.bg.rbf_roar
-	@echo "   log.bg.rbf_roar green: \c"; cat log.bg.rbf_roar | grep PASS |wc -l
-	@echo "   log.bg.rbf_roar   red: \c"; cat log.bg.rbf_roar | grep '\-\-\- FAIL' |wc -l
+rbf-rr:
+	mv log.rbf-rr log.rbf-rr.prev || true
+	set -o pipefail; PILOSA_TXSRC=rbf_roaring go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.rbf-rr
+	@echo "   log.rbf-rr green: \c"; cat log.rbf-rr | grep PASS |wc -l
+	@echo "   log.rbf-rr   red: \c"; cat log.rbf-rr | grep '\-\-\- FAIL' |wc -l
 
-bg-rf:
-	mv log.bg.roar_rbf log.bg.roar_rbf.prev || true
-	PILOSA_TXSRC=roaring_rbf go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.bg.roar_rbf
-	@echo "   log.bg.roar_rbf green: \c"; cat log.bg.roar_rbf | grep PASS |wc -l
-	@echo "   log.bg.roar_rbf   red: \c"; cat log.bg.roar_rbf | grep '\-\-\- FAIL' |wc -l
+rr-rbf:
+	mv log.rr-rbf log.rr-rbf.prev || true
+	set -o pipefail; PILOSA_TXSRC=roaring_rbf go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.rr-rbf
+	@echo "   log.rr-rbf green: \c"; cat log.rr-rbf | grep PASS |wc -l
+	@echo "   log.rr-rbf   red: \c"; cat log.rr-rbf | grep '\-\-\- FAIL' |wc -l
 
-bg-fb:
-	mv log.bg.rbf_badger log.bg.rbf_badger.prev || true
-	PILOSA_TXSRC=rbf_badger go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.bg.rbf_badger
-	@echo "   log.bg.rbf_badger green: \c"; cat log.bg.rbf_badger | grep PASS |wc -l
-	@echo "   log.bg.rbf_badger   red: \c"; cat log.bg.rbf_badger | grep '\-\-\- FAIL' |wc -l
+rbf-bg:
+	mv log.rbf-bg log.rbf-bg.prev || true
+	set -o pipefail; PILOSA_TXSRC=rbf_badger go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.rbf-bg
+	@echo "   log.rbf-bg green: \c"; cat log.rbf-bg | grep PASS |wc -l
+	@echo "   log.rbf-bg   red: \c"; cat log.rbf-bg | grep '\-\-\- FAIL' |wc -l
 
-bg-bf:
-	mv log.bg.badger_rbf log.bg.badger_rbf.prev || true
-	PILOSA_TXSRC=badger_rbf go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.bg.badger_rbf
-	@echo "   log.bg.badger_rbf green: \c"; cat log.bg.badger_rbf | grep PASS |wc -l
-	@echo "   log.bg.badger_rbf   red: \c"; cat log.bg.badger_rbf | grep '\-\-\- FAIL' |wc -l
+bg-rbf:
+	mv log.bg-rbf log.bg-rbf.prev || true
+	set -o pipefail; PILOSA_TXSRC=badger_rbf go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.bg-rbf
+	@echo "   log.bg-rbf green: \c"; cat log.bg-rbf | grep PASS |wc -l
+	@echo "   log.bg-rbf   red: \c"; cat log.bg-rbf | grep '\-\-\- FAIL' |wc -l
 
 
 # Run golangci-lint

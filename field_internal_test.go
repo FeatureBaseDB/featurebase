@@ -611,22 +611,25 @@ func TestBSIGroup_importValue(t *testing.T) {
 		},
 	} {
 		tx := f.idx.Txf.NewTx(Txo{Write: writable, Index: f.idx, Field: f.Field})
-		defer tx.Rollback()
+		// can't do this, we are in a loop, not a function:
+		// defer tx.Rollback()
 
 		if err := f.importValue(tx, tt.columnIDs, tt.values, options); err != nil {
 			t.Fatalf("test %d, importing values: %s", i, err.Error())
 		}
 
 		panicOn(tx.Commit())
+
 		tx = f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Field: f.Field})
-		defer tx.Rollback()
+		// no, same reason as above: defer tx.Rollback()
 
 		if row, err := f.Range(tx, f.name, pql.EQ, tt.checkVal); err != nil {
 			t.Fatalf("test %d, getting range: %s", i, err.Error())
 		} else if !reflect.DeepEqual(row.Columns(), tt.expCols) {
 			t.Fatalf("test %d, expected columns: %v, but got: %v", i, tt.expCols, row.Columns())
 		}
-	}
+		tx.Rollback()
+	} // loop
 }
 
 func TestIntField_MinMaxForShard(t *testing.T) {

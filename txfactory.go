@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"text/tabwriter"
 
 	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/roaring"
@@ -66,25 +67,6 @@ type TxFactory struct {
 	// and allow blueGreenTx to report badger contents via idx
 	idx *Index
 }
-
-/* want glue-green to multiplex, so don't do this directly
-// but rather f.CloseStore()
-func (f *TxFactory) Store() TxStore {
-	switch f.typeOfTx {
-	case roaringFragmentFilesTxn:
-		return &RoaringStore{}
-	case badgerTxn:
-		return f.badgerDB
-	case rbfTxn:
-		return f.rbfDB
-		//	case blueGreenBadgerRoaring:
-		//	case blueGreenRoaringBadger:
-	}
-	panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", f.typeOfTx))
-=======
->>>>>>> Implement pilosa.Tx for RBF
-}
-*/
 
 // integer types for fast switch{}
 type txtype int
@@ -231,6 +213,25 @@ func (f *TxFactory) DeleteIndex(name string) error {
 		return f.badgerDB.DeleteIndex(name)
 	case blueGreenRoaringBadger:
 		return f.badgerDB.DeleteIndex(name)
+	}
+	panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", f.typeOfTx))
+}
+
+func (f *TxFactory) DeleteFieldFromStore(index, field, fieldPath string) error {
+	switch f.typeOfTx {
+	case roaringFragmentFilesTxn:
+		return f.roaringDB.DeleteField(index, field, fieldPath)
+	case badgerTxn:
+		return f.badgerDB.DeleteField(index, field, fieldPath)
+	case rbfTxn:
+		//return f.rbfDB.DeleteField(index, field, fieldPath)
+		return nil
+	case blueGreenBadgerRoaring:
+		_ = f.badgerDB.DeleteField(index, field, fieldPath)
+		return f.roaringDB.DeleteField(index, field, fieldPath)
+	case blueGreenRoaringBadger:
+		_ = f.roaringDB.DeleteField(index, field, fieldPath)
+		return f.badgerDB.DeleteField(index, field, fieldPath)
 	}
 	panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", f.typeOfTx))
 }
@@ -416,23 +417,33 @@ func (idx *Index) StringifiedRoaringKeys() (r string) {
 	index := idx.name
 
 	r = "allkeys:[\n"
+	n := 0
 	for _, relpath := range paths {
 		field, view, shard, err := fragmentSpecFromRoaringPath(relpath)
 		if err != nil {
 			continue // ignore .meta paths
 		}
 		abspath := idx.path + sep + relpath
-		s, err := stringifiedRawRoaringFragment(abspath, index, field, view, shard)
+		const showOps = false
+		s, err := stringifiedRawRoaringFragment(abspath, index, field, view, shard, showOps)
 		panicOn(err)
 		//r += fmt.Sprintf("path:'%v' fragment contains:\n") + s
+		if s == "" {
+			s = "<empty bitmap>"
+		}
 		r += s
+		n++
 	}
+	if n == 0 {
+		return "" // new convention that empty database => empty string returned.
+	}
+	// note that we can have a bitmap present, but it can be empty
 	r += "]\n   all-in-blake3:" + blake3sum16([]byte(r)) + "\n"
 
 	return "roaring-" + r
 }
 
-func stringifiedRawRoaringFragment(path string, index, field, view string, shard uint64) (r string, err error) {
+func stringifiedRawRoaringFragment(path string, index, field, view string, shard uint64, showOps bool) (r string, err error) {
 
 	var info roaring.BitmapInfo
 	_ = info
@@ -469,6 +480,21 @@ func stringifiedRawRoaringFragment(path string, index, field, view string, shard
 	if err != nil {
 		err = errors.Wrap(err, "inspecting")
 		return
+	}
+
+	//cmd.DisplayInfo(info)
+	// inlined
+	if showOps {
+		pC := pointerContext{
+			from: info.From,
+			to:   info.To,
+		}
+		if info.ContainerCount > 0 {
+			printContainers(info, pC)
+		}
+		if info.Ops > 0 {
+			printOps(info)
+		}
 	}
 
 	citer, found := rbm.Containers.Iterator(0)
@@ -551,28 +577,6 @@ func fileSize(name string) (int64, error) {
 
 var _ = fileSize // happy linter
 
-// Dump prints to stdout the contents of the roaring Containers
-// stored in idx. Its format may vary depending of the type of
-// idx.Txf transaction factory that is in use.
-// Mostly for debugging.
-func (idx *Index) Dump(label string) {
-	ty := idx.Txf.TxType()
-	fileline := FileLine(2)
-	switch ty {
-	case badgerTxn:
-		fmt.Printf("%v Index.Dump('%v') for index '%v':\n%v\n", fileline, label, idx.name, idx.StringifiedBadgerKeys(nil))
-		return
-	case blueGreenRoaringBadger, blueGreenBadgerRoaring:
-		fmt.Printf("%v Index.Dump('%v') for index '%v', RoaringTx:\n%v\n", fileline, label, idx.name, idx.StringifiedRoaringKeys())
-		fmt.Printf("%v Index.Dump('%v') for index '%v', BadgerTx :\n%v\n", fileline, label, idx.name, idx.StringifiedBadgerKeys(nil))
-		return
-	case roaringFragmentFilesTxn:
-		fmt.Printf("%v Index.Dump('%v') for index '%v', BadgerTx :\n%v\n", fileline, label, idx.name, idx.StringifiedRoaringKeys())
-		return
-	}
-	panic(fmt.Errorf("%v Index.Dump('%v') for index '%v': no implementation for txtype '%v'\n", fileline, label, idx.name, ty))
-}
-
 func containerToBytes(ct *roaring.Container) []byte {
 	ty := roaring.ContainerType(ct)
 	switch ty {
@@ -586,4 +590,110 @@ func containerToBytes(ct *roaring.Container) []byte {
 		return fromInterval16(roaring.AsRuns(ct))
 	}
 	panic(fmt.Sprintf("unknown container type '%v'", int(ty)))
+}
+
+type pointerContext struct {
+	from, to uintptr
+}
+
+func printOps(info roaring.BitmapInfo) {
+	fmt.Fprintln(os.Stdout, "  Ops:")
+	tw := tabwriter.NewWriter(os.Stdout, 0, 8, 0, '\t', 0)
+	fmt.Fprintf(tw, "  \t%s\t%s\t%s\t\n", "TYPE", "OpN", "SIZE")
+	printed := 0
+	for _, op := range info.OpDetails {
+		fmt.Fprintf(tw, "\t%s\t%d\t%d\t\n", op.Type, op.OpN, op.Size)
+		printed++
+	}
+	tw.Flush()
+}
+
+func (p *pointerContext) pretty(c roaring.ContainerInfo) string {
+	var pointer string
+	if c.Mapped {
+		if c.Pointer >= p.from && c.Pointer < p.to {
+			pointer = fmt.Sprintf("@+0x%x", c.Pointer-p.from)
+		} else {
+			pointer = fmt.Sprintf("!0x%x!", c.Pointer)
+		}
+	} else {
+		pointer = fmt.Sprintf("0x%x", c.Pointer)
+	}
+	return fmt.Sprintf("%s \t%d \t%d \t%s ", c.Type, c.N, c.Alloc, pointer)
+}
+
+// stolen from ctl/inspect.go
+func printContainers(info roaring.BitmapInfo, pC pointerContext) {
+	fmt.Fprintln(os.Stdout, "  Containers:")
+	tw := tabwriter.NewWriter(os.Stdout, 0, 8, 0, '\t', 0)
+	fmt.Fprintf(tw, "  \t\tRoaring\t\t\t\tOps\t\t\t\tFlags\t\n")
+	fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n", "KEY", "TYPE", "N", "ALLOC", "OFFSET", "TYPE", "N", "ALLOC", "OFFSET", "FLAGS")
+	c1s := info.Containers
+	c2s := info.OpContainers
+	l1 := len(c1s)
+	l2 := len(c2s)
+	i1 := 0
+	i2 := 0
+	var c1, c2 roaring.ContainerInfo
+	c1.Key = ^uint64(0)
+	c2.Key = ^uint64(0)
+	c1e := false
+	c2e := false
+	if i1 < l1 {
+		c1 = c1s[i1]
+		i1++
+		c1e = true
+	}
+	if i2 < l2 {
+		c2 = c2s[i2]
+		i2++
+		c2e = true
+	}
+	printed := 0
+	for c1e || c2e {
+		c1used := false
+		c2used := false
+		var key uint64
+		c1fmt := "-\t\t\t"
+		c2fmt := "-\t\t\t"
+		// If c2 exists, we'll always prefer its flags,
+		// if it doesn't, this gets overwritten.
+		flags := c2.Flags
+		if !c2e || (c1e && c1.Key < c2.Key) {
+			c1fmt = pC.pretty(c1)
+			key = c1.Key
+			c1used = true
+			flags = c1.Flags
+		} else if !c1e || (c2e && c2.Key < c1.Key) {
+			c2fmt = pC.pretty(c2)
+			key = c2.Key
+			c2used = true
+		} else {
+			// c1e and c2e both set, and neither key is < the other.
+			c1fmt = pC.pretty(c1)
+			c2fmt = pC.pretty(c2)
+			key = c1.Key
+			c1used = true
+			c2used = true
+		}
+		if c1used {
+			if i1 < l1 {
+				c1 = c1s[i1]
+				i1++
+			} else {
+				c1e = false
+			}
+		}
+		if c2used {
+			if i2 < l2 {
+				c2 = c2s[i2]
+				i2++
+			} else {
+				c2e = false
+			}
+		}
+		fmt.Fprintf(tw, "\t%d\t%s\t%s\t%s\t\n", key, c1fmt, c2fmt, flags)
+		printed++
+	}
+	tw.Flush()
 }

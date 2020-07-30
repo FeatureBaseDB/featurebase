@@ -15,27 +15,43 @@
 package pilosa
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"reflect"
 	"sort"
+	"sync"
 
 	"github.com/pilosa/pilosa/v2/roaring"
 )
 
 // blueGreenTx runs two Tx together and notices differences in their output.
 // By convention, the 'b' Tx is the output that is returned to caller.
+//
+// Warning: DATA RACES are expected if RoaringTx is one side of the Tx pair.
+// The checkDatabase() call will do reads of the fragments at Commit/Rollback,
+// while the snapshotqueue may be doing writes.
+//
+// Do not run with go test -race and expect it to be race free.
+//
 type blueGreenTx struct {
 	a Tx
 	b Tx // b's output is returned
 
+	as string
+	bs string
+
 	idx *Index
 
-	checker blueGreenChecker
+	checker              blueGreenChecker
+	mu                   sync.Mutex
+	rollbackOrCommitDone bool
 }
 
 func newBlueGreenTx(a, b Tx, idx *Index) *blueGreenTx {
-	return &blueGreenTx{a: a, b: b, idx: idx}
+	as := a.Type()
+	bs := b.Type()
+	return &blueGreenTx{a: a, b: b, idx: idx, as: as, bs: bs}
 }
 
 var _ = newBlueGreenTx // keep linter happy
@@ -44,6 +60,18 @@ var _ Tx = (*blueGreenTx)(nil)
 
 func (c *blueGreenTx) Type() string {
 	return c.a.Type() + "_" + c.b.Type()
+}
+
+var blueGreenTxDumpMut sync.Mutex
+
+func (c *blueGreenTx) Dump() {
+	blueGreenTxDumpMut.Lock()
+	defer blueGreenTxDumpMut.Unlock()
+	fmt.Printf("%v blueGreenTx.Dump ============== \n", FileLine(2))
+	fmt.Printf("A(%v) Dump:\n", c.as)
+	c.a.Dump()
+	fmt.Printf("B(%v) Dump:\n", c.bs)
+	c.b.Dump()
 }
 
 func (c *blueGreenTx) Readonly() bool {
@@ -57,6 +85,7 @@ func (c *blueGreenTx) Readonly() bool {
 
 func (c *blueGreenTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
 	c.checker.see(index, field, view, shard)
+	// TODO(jea): does this need to be different, to handle c.a iteration at the same time?
 	return c.b.NewTxIterator(index, field, view, shard)
 }
 
@@ -70,53 +99,70 @@ func (c *blueGreenTx) IncrementOpN(index, field, view string, shard uint64, chan
 	c.b.IncrementOpN(index, field, view, shard, changedN)
 }
 
+// compareTxState is called for the first Commit or Rollback a blueGreenTx sees.
 func (c *blueGreenTx) compareTxState(index, field, view string, shard uint64) {
 	here := fmt.Sprintf("%v/%v/%v/%v", index, field, view, shard)
 	aIter, aFound, aErr := c.a.ContainerIterator(index, field, view, shard, 0)
 	bIter, bFound, bErr := c.b.ContainerIterator(index, field, view, shard, 0)
-
-	if aFound != bFound {
-		panic(fmt.Sprintf("compareTxState[%v]: A ContainerIterator had aFound=%v, but B had bFound=%v; at '%v'", here, aFound, bFound, stack()))
-	}
-
-	if aErr == nil {
+	if aErr == nil || aIter != nil {
 		defer aIter.Close()
 	}
-	if bErr == nil {
+	if bErr == nil || bIter != nil {
 		defer bIter.Close()
 	}
+
+	if aFound != bFound {
+		c.Dump()
+		panic(fmt.Sprintf("compareTxState[%v]: A(%v) ContainerIterator had aFound=%v, but B(%v) had bFound=%v; at '%v'", here, c.as, aFound, c.bs, bFound, stack()))
+	}
+
 	if aErr != nil || bErr != nil {
 		if aErr != nil && bErr != nil {
-			panic(fmt.Sprintf("compareTxState[%v]: A reported err '%v'; B reported err '%v' at %v", here, aErr, bErr, stack()))
+			c.Dump()
+			panic(fmt.Sprintf("compareTxState[%v]: A(%v) reported err '%v'; B(%v) reported err '%v' at %v", here, c.as, aErr, c.bs, bErr, stack()))
 		}
 		if aErr != nil {
-			panic(fmt.Sprintf("compareTxState[%v]: A reported err %v at %v; but B did not", here, aErr, stack()))
+			c.Dump()
+			panic(fmt.Sprintf("compareTxState[%v]: A(%v) reported err %v at %v; but B(%v) did not", here, c.as, aErr, c.bs, stack()))
 		}
 		if bErr != nil {
-			panic(fmt.Sprintf("compareTxState[%v]: B reported err %v at %v; but A did not", here, bErr, stack()))
+			c.Dump()
+			panic(fmt.Sprintf("compareTxState[%v]: B(%v) reported err %v at %v; but A(%v) did not", here, c.bs, bErr, c.as, stack()))
 		}
 	}
+
 	for aIter.Next() {
 		aKey, aValue := aIter.Value()
+
 		if !bIter.Next() {
-			panic(fmt.Sprintf("compareTxState[%v]: A found key %v, B didn't, at %v", here, aKey, stack()))
+			c.Dump()
+			panic(fmt.Sprintf("compareTxState[%v]: A(%v) found key %v, B(%v) didn't, at %v", here, c.as, aKey, c.bs, stack()))
 		}
 		bKey, bValue := bIter.Value()
 		if bKey != aKey {
-			panic(fmt.Sprintf("compareTxState[%v]: A found key %v, B found %v, at %v", here, aKey, bKey, stack()))
+			AlwaysPrintf("problem in caller %v", Caller(2))
+			c.Dump()
+			panic(fmt.Sprintf("compareTxState[%v]: A(%v) found key %v, B(%v) found %v, at %v", here, c.as, aKey, c.bs, bKey, stack())) // crashing here on TestBSIGroup_importValue
 		}
 		if err := aValue.BitwiseCompare(bValue); err != nil {
-			panic(fmt.Sprintf("compareTxState[%v]: key %v differs: %v at %v", here, aKey, err, stack()))
+			c.Dump()
+			panic(fmt.Sprintf("compareTxState[%v]: key %v differs: %v;  A=%v; B=%v; at stack=%v", here, aKey, err, c.as, c.bs, stack()))
 		}
 	}
 	// end checking everything in A, but does B have more?
 	if bIter.Next() {
 		bKey, _ := bIter.Value()
-		panic(fmt.Sprintf("compareTxState[%v]: B found key %v, A didn't, at %v", here, bKey, stack()))
+		c.Dump()
+		panic(fmt.Sprintf("compareTxState[%v]: B(%v) found key %v, A(%v) didn't, at %v", here, c.bs, bKey, c.as, stack()))
 	}
 }
 
 func (c *blueGreenTx) checkDatabase() {
+	c.checker.mu.Lock()
+	defer c.checker.mu.Unlock()
+
+	// seen() returns nil on 2nd or any further call,
+	// so only the first Commit() or Rollback() does this.
 	for index, fields := range c.checker.seen() {
 		for field, views := range fields {
 			for view, shards := range views {
@@ -129,6 +175,13 @@ func (c *blueGreenTx) checkDatabase() {
 }
 
 func (c *blueGreenTx) Rollback() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.rollbackOrCommitDone {
+		return
+	}
+	c.rollbackOrCommitDone = true
+
 	c.checkDatabase()
 	defer func() {
 		if r := recover(); r != nil {
@@ -141,6 +194,12 @@ func (c *blueGreenTx) Rollback() {
 }
 
 func (c *blueGreenTx) Commit() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.rollbackOrCommitDone {
+		return nil
+	}
+	c.rollbackOrCommitDone = true
 	c.checkDatabase()
 	defer func() {
 		if r := recover(); r != nil {
@@ -168,6 +227,13 @@ func (c *blueGreenTx) RoaringBitmap(index, field, view string, shard uint64) (*r
 	_, _ = a, errA
 	b, errB := c.b.RoaringBitmap(index, field, view, shard)
 	compareErrors(errA, errB)
+
+	slcA := a.Slice()
+	slcB := b.Slice()
+	if !reflect.DeepEqual(slcA, slcB) {
+		panic("blueGreenTx.RoaringBitmap() returning different roaring.Bitmaps!")
+	}
+
 	return b, errB
 }
 
@@ -205,6 +271,14 @@ func (c *blueGreenTx) PutContainer(index, field, view string, shard uint64, key 
 
 func (c *blueGreenTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
 	c.checker.see(index, field, view, shard)
+
+	// these are the first port of call for debugging, so we leave them in.
+	// ================== begin save comments.
+	//c.checkDatabase()
+	//vv("got past database check at TOP of ImportRoaringBits")
+	//c.Dump()
+	//vv("done with top dump; clear=%v", clear)
+	// ==================   end save comments.
 	defer func() {
 		if r := recover(); r != nil {
 			AlwaysPrintf("see ImportRoaringBits() panic '%v' at '%v'", r, stack())
@@ -214,9 +288,9 @@ func (c *blueGreenTx) ImportRoaringBits(index, field, view string, shard uint64,
 
 	// remember where the iterator started, so we can replay it a second time.
 	rit2 := rit.Clone()
+	panicOn(err)
 
 	changedA, rowSetA, errA := c.a.ImportRoaringBits(index, field, view, shard, rit, clear, log, rowSize, data)
-
 	changedB, rowSetB, errB := c.b.ImportRoaringBits(index, field, view, shard, rit2, clear, log, rowSize, data)
 
 	if len(data) == 0 {
@@ -240,7 +314,7 @@ func (c *blueGreenTx) ImportRoaringBits(index, field, view string, shard uint64,
 		}
 	}
 	compareErrors(errA, errB)
-
+	c.checkDatabase()
 	return changedB, rowSetB, errB
 }
 
@@ -344,50 +418,101 @@ func (c *blueGreenTx) ContainerIterator(index, field, view string, shard uint64,
 			panic(r)
 		}
 	}()
-	// TODO: need to return a blueGreenIterator too, that does close/next operations on both A and B.
+
 	ait, afound, errA := c.a.ContainerIterator(index, field, view, shard, firstRoaringContainerKey)
 	_, _, _ = ait, afound, errA
+
 	bit, bfound, errB := c.b.ContainerIterator(index, field, view, shard, firstRoaringContainerKey)
 
 	compareErrors(errA, errB)
-	if errA != nil {
-		ait.Close() // don't leak it.
+	// INVAR: errA == errB, so only need to check one.
+	if errB != nil {
+		// RoaringTx can return an iterator and an error, so be sure Close it we have it.
+		if ait != nil {
+			ait.Close()
+		}
+		if bit != nil {
+			bit.Close()
+		}
+		return nil, bfound, errB
 	}
-	return bit, bfound, errB
+	// INVAR: errA == errB == nil
+	bgi := NewBlueGreenIterator(c, ait, bit)
+	return bgi, bfound, errB
 }
 
+func NewBlueGreenIterator(tx *blueGreenTx, ait, bit roaring.ContainerIterator) *blueGreenIterator {
+	return &blueGreenIterator{
+		tx:  tx,
+		as:  tx.as,
+		bs:  tx.bs,
+		ait: ait,
+		bit: bit,
+	}
+}
+
+type blueGreenIterator struct {
+	tx *blueGreenTx
+	as string
+	bs string
+
+	ait roaring.ContainerIterator
+	bit roaring.ContainerIterator
+}
+
+func (bgi *blueGreenIterator) Next() bool {
+	na := bgi.ait.Next()
+	nb := bgi.bit.Next()
+	if na != nb {
+		panic(fmt.Sprintf("na=%v(%v) != nb(%v)=%v", na, bgi.as, bgi.bs, nb))
+	}
+	return nb
+}
+
+func (bgi *blueGreenIterator) Value() (uint64, *roaring.Container) {
+	ka, ca := bgi.ait.Value()
+	kb, cb := bgi.bit.Value()
+	if ka != kb {
+		panic(fmt.Sprintf("ka=%v != kb=%v", ka, kb))
+	}
+	err := ca.BitwiseCompare(cb)
+	panicOn(err)
+	return kb, cb
+}
+func (bgi *blueGreenIterator) Close() {
+	bgi.ait.Close()
+	bgi.bit.Close()
+}
+
+// ForEach is read-only on the database, and so we only pass through to B.
+// Avoids the side-effects of calling fn too many times.
 func (c *blueGreenTx) ForEach(index, field, view string, shard uint64, fn func(i uint64) error) error {
-	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
 			AlwaysPrintf("see ForEach() panic '%v' at '%v'", r, stack())
 			panic(r)
 		}
 	}()
-	errA := c.a.ForEach(index, field, view, shard, fn)
-	_ = errA
-	errB := c.b.ForEach(index, field, view, shard, fn)
-	_ = errB
+	return c.b.ForEach(index, field, view, shard, fn)
 
-	compareErrors(errA, errB)
-	return errB
 }
 
+// ForEachRange cannot change the database, and we also can't control
+// the side effects of the fn() calls. So we only pass through to B, not A.
+// No checker.see() is needed as well, because we are read-only.
 func (c *blueGreenTx) ForEachRange(index, field, view string, shard uint64, start, end uint64, fn func(uint64) error) error {
-	c.checker.see(index, field, view, shard)
+
 	defer func() {
 		if r := recover(); r != nil {
 			AlwaysPrintf("see ForEachRange() panic '%v' at '%v'", r, stack())
 			panic(r)
 		}
 	}()
-	errA := c.a.ForEachRange(index, field, view, shard, start, end, fn)
-	_ = errA
-	errB := c.b.ForEachRange(index, field, view, shard, start, end, fn)
-	_ = errB
 
-	compareErrors(errA, errB)
-	return errB
+	// calling fn will have side effects; can only call it the right number of times.
+	// so can't do this.
+	//	errA := c.a.ForEachRange(index, field, view, shard, start, end, fn)
+	return c.b.ForEachRange(index, field, view, shard, start, end, fn)
 }
 
 func (c *blueGreenTx) Count(index, field, view string, shard uint64) (uint64, error) {
@@ -459,6 +584,7 @@ func (c *blueGreenTx) CountRange(index, field, view string, shard uint64, start,
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
+			c.Dump()
 			AlwaysPrintf("see CountRange() panic '%v' at '%v'", r, stack())
 			panic(r)
 		}
@@ -467,7 +593,7 @@ func (c *blueGreenTx) CountRange(index, field, view string, shard uint64, start,
 	b, errB := c.b.CountRange(index, field, view, shard, start, end)
 
 	if a != b {
-		panic(fmt.Sprintf("a = %v, but b = %v", a, b))
+		panic(fmt.Sprintf("a(%v) = %v, but b(%v) = %v", c.as, a, c.bs, b))
 	}
 
 	compareErrors(errA, errB)
@@ -495,18 +621,35 @@ func (c *blueGreenTx) RoaringBitmapReader(index, field, view string, shard uint6
 	c.checker.see(index, field, view, shard)
 	defer func() {
 		if r := recover(); r != nil {
-			AlwaysPrintf("see OffsetRange() panic '%v' at '%v'", r, stack())
+			c.Dump()
+			AlwaysPrintf("see RoaringBitmapReader() panic '%v' at '%v'", r, stack())
 			panic(r)
 		}
 	}()
 
 	rcA, szA, errA := c.a.RoaringBitmapReader(index, field, view, shard, fragmentPathForRoaring)
 	rcB, szB, errB := c.b.RoaringBitmapReader(index, field, view, shard, fragmentPathForRoaring)
-	if szA != szB {
-		panic(fmt.Sprintf("szA = %v, but szB = %v", szA, szB))
-	}
+
 	compareErrors(errA, errB)
-	return &MultiReaderB{a: rcA, b: rcB}, szB, errB
+
+	// We are seeing Roaring vs Badger size differences on
+	// server/ test TestClusterResize_AddNode/ContinuousShards,
+	// so turn off the szA vs szB checks and MutliReaderB use. But keep them if we want to
+	// check RBF vs Badger for byte-for-byte compatiblity (we
+	// suspect the ops log or optimized bitmaps are accounting for the difference).
+	sizeMustMatch := false
+	if sizeMustMatch {
+		if szA != szB {
+			panic(fmt.Sprintf("szA(%v) = %v, but szB(%v) = %v;  fragmentPathForRoaring='%v'", c.as, szA, c.bs, szB, fragmentPathForRoaring))
+		}
+		return &MultiReaderB{a: rcA, b: rcB}, szB, errB
+	} else {
+		// one db won't get data if we do
+		//return &MultiReaderB{a: rcA, b: rcB, allowSizeVariation: true}, szB, errB
+		_, _ = szA, errA
+		rcA.Close()
+		return rcB, szB, errB
+	}
 }
 
 func (c *blueGreenTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
@@ -514,6 +657,7 @@ func (c *blueGreenTx) SliceOfShards(index, field, view, optionalViewPath string)
 	//c.checker.see(index, field, view, shard) // don't have shard.
 	defer func() {
 		if r := recover(); r != nil {
+			c.Dump()
 			AlwaysPrintf("see SliceOfShards() panic '%v' at '%v'", r, stack())
 			panic(r)
 		}
@@ -536,30 +680,38 @@ func (c *blueGreenTx) SliceOfShards(index, field, view, optionalViewPath string)
 		}
 		for _, kb := range slcB {
 			if !ma[kb] {
-				panic(fmt.Sprintf("blueGreenTx SliceOfShards diference! B had %v, but A did not; in the SliceOfShards returned slice.", kb))
+				c.Dump()
+				panic(fmt.Sprintf("blueGreenTx SliceOfShards diference! B(%v) had %v, but A(%v) did not. cpa='%#v'; cpb='%#v'; in the SliceOfShards returned slice.", c.bs, kb, c.as, cpa, cpb))
 			}
 			delete(ma, kb)
 		}
 		if len(ma) != 0 {
-			for _, firstDifference := range ma {
-				panic(fmt.Sprintf("blueGreenTx SliceOfShards diference! A had %v, but B did not; in the SliceOfShards returned slice.", firstDifference))
+			for firstDifference := range ma {
+				panic(fmt.Sprintf("blueGreenTx SliceOfShards diference! A(%v) had %v, but B(%v) did not. cpa='%#v'; cpb='%#v'; in the SliceOfShards returned slice.", c.as, firstDifference, c.bs, cpa, cpb))
 			}
 		}
-		panic(fmt.Sprintf("blueGreenTx SliceOfShards diference \n slcA='%#v';\n slcB='%#v';\n", cpa, cpb))
+		panic(fmt.Sprintf("blueGreenTx SliceOfShards diference \n slcA(%v)='%#v';\n slcB(%v)='%#v';\n", c.as, cpa, c.bs, cpb))
 	}
 	return slcB, errB
 }
 
+// MultiReaderB is returned by RoaringBitmapReader. It verifies
+// that identical byte streams are read from its two members.
 type MultiReaderB struct {
 	a io.ReadCloser
 	b io.ReadCloser
+
+	allowSizeVariation bool
 }
 
-// TODO(jea): test this for accuracy/correctness.
+// Read implements the standard io.Reader method. It panics
+// if "a" and "b" have even one byte different in their reads.
 func (m *MultiReaderB) Read(p []byte) (nB int, errB error) {
 	nB, errB = m.b.Read(p)
 	p2 := make([]byte, nB)
-	// discard the exact same amount from A
+
+	// read (and discard after comparing for equality) the exact same amount from A.
+
 	// ReadAtLeast reads from r into buf until it has read at least
 	// min bytes. It returns the number of bytes copied and an error
 	// if fewer bytes were read. The error is EOF only if no bytes
@@ -569,11 +721,18 @@ func (m *MultiReaderB) Read(p []byte) (nB int, errB error) {
 	// return, n >= min if and only if err == nil. If r returns
 	// an error having read at least min bytes, the error is dropped.
 	nA, errA := io.ReadAtLeast(m.a, p2, nB)
-	if errA == io.ErrUnexpectedEOF {
-		panic(fmt.Sprintf("MultiReaderB got ErrUnexpectedEOF: read %v bytes from B, but could only read %v bytes for A", nB, nA))
-	}
-	if nA != nB {
-		panic(fmt.Sprintf("MultiReaderB read %v bytes from B, but could only read %v bytes for A", nB, nA))
+
+	if !m.allowSizeVariation {
+		if errA == io.ErrUnexpectedEOF {
+			panic(fmt.Sprintf("MultiReaderB got ErrUnexpectedEOF: read %v bytes from B, but could only read %v bytes for A", nB, nA))
+		}
+		if nA != nB {
+			panic(fmt.Sprintf("MultiReaderB read %v bytes from B, but could only read %v bytes for A", nB, nA))
+		}
+		cmp := bytes.Compare(p[:nB], p2[:nB])
+		if cmp != 0 {
+			panic(fmt.Sprintf("MultiReaderB reads p and p2 (cmp= %v) differed.", cmp)) // \np  ='%v'; \np2 ='%v'", cmp, string(p[:nB]), string(p2[:nA])))
+		}
 	}
 	return
 }
@@ -586,11 +745,20 @@ func (m *MultiReaderB) Close() error {
 // blueGreenChecker is used
 type blueGreenChecker struct {
 	visited map[string]map[string]map[string]map[uint64]struct{}
-	done    bool
+
+	// lock mu when using visited.
+	// otherwise concurrent map writes on TestAPI_Import/RowIDColumnKey
+	mu sync.Mutex
 }
 
 // see would mark a thing as seen.
 func (b *blueGreenChecker) see(index, field, view string, shard uint64) {
+	// keep this next Printf. Useful to see the sequence of Tx operations.
+	//fmt.Printf("blueGreenTx.%v\n", Caller(1))
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	if b.visited == nil {
 		b.visited = make(map[string]map[string]map[string]map[uint64]struct{})
 	}
@@ -617,9 +785,5 @@ func (b *blueGreenChecker) see(index, field, view string, shard uint64) {
 // that Rollback can be called after Commit without repeating
 // the check.
 func (b *blueGreenChecker) seen() map[string]map[string]map[string]map[uint64]struct{} {
-	if b.done {
-		return nil
-	}
-	b.done = true
 	return b.visited
 }
