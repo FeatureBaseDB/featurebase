@@ -160,12 +160,6 @@ topt-badger:
 	@echo "   log.topt.badger green: \c"; cat log.topt.badger | grep PASS |wc -l
 	@echo "   log.topt.badger   red: \c"; cat log.topt.badger | grep '\-\-\- FAIL' |wc -l
 
-topt-rb:
-	mv log.topt.roaring_badger log.topt.roaring_badger.prev || true
-	PILOSA_TXSRC=roaring_badger go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.topt.badger
-	@echo "   log.topt.roaring_badger green: \c"; cat log.topt.roaring_badger | grep PASS |wc -l
-	@echo "   log.topt.roaring_badger   red: \c"; cat log.topt.roaring_badger | grep '\-\-\- FAIL' |wc -l
-
 topt-badger-race:
 	mv log.topt.badger-race log.topt.badger-race.prev || true
 	PILOSA_TXSRC=badger go test -race -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.topt.badger-race
