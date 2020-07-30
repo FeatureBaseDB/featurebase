@@ -3902,6 +3902,7 @@ func TestFragment_RoaringImport(t *testing.T) {
 			defer tx.Rollback()
 
 			for num, input := range test {
+				vv("num=%v, input='%#v'", num, input)
 				buf := &bytes.Buffer{}
 				bm := roaring.NewBitmap(input...)
 				_, err := bm.WriteTo(buf)
@@ -3912,6 +3913,8 @@ func TestFragment_RoaringImport(t *testing.T) {
 				if err != nil {
 					t.Fatalf("importing roaring: %v", err)
 				}
+				tx.Dump()
+
 				exp := calcExpected(test[:num+1]...)
 				for row, expCols := range exp {
 					cols := f.mustRow(tx, uint64(row)).Columns()

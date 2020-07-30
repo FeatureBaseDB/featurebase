@@ -14,10 +14,12 @@
 package rbf
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -1152,11 +1154,171 @@ func (itr *containerIterator) Close() {}
 // Next moves the iterator to the next container.
 func (itr *containerIterator) Next() bool {
 	err := itr.cursor.Next()
-	return err != nil
+	return err == nil
 }
 
 // Value returns the current key & container.
 func (itr *containerIterator) Value() (uint64, *roaring.Container) {
 	cell := itr.cursor.cell()
 	return cell.Key, toContainer(cell, itr.cursor.tx)
+}
+
+func (tx *Tx) Dump(index string) {
+	fmt.Println(tx.DumpString(index))
+}
+func (tx *Tx) DumpString(index string) (r string) {
+
+	r = "allkeys:[\n"
+
+	// grab root records, for a list of bitmaps.
+	records, err := tx.rootRecords()
+	panicOn(err)
+	n := 0
+	for _, rr := range records {
+		c, err := tx.cursor(rr.Name)
+		panicOn(err)
+		err = c.First()
+		if err == io.EOF {
+			r += "<empty bitmap>"
+			n++
+			continue
+		}
+		panicOn(err)
+		for {
+			err := c.Next() // hung here?
+			if err == io.EOF {
+				break
+			}
+			panicOn(err)
+			cell := c.cell()
+			ckey := cell.Key
+			ct := toContainer(cell, tx)
+
+			s := stringOfCkeyCt(ckey, ct, rr.Name, index)
+			r += s
+			n++
+		}
+	}
+	if n == 0 {
+		return ""
+	}
+	// note that we can have a bitmap present, but it can be empty
+	r += "]\n   all-in-blake3:" + blake3sum16([]byte(r)) + "\n"
+
+	return "rbf-" + r
+}
+
+func containerToBytes(ct *roaring.Container) []byte {
+	ty := roaring.ContainerType(ct)
+	switch ty {
+	case containerNil:
+		panic("nil container")
+	case containerArray:
+		return fromArray16(roaring.AsArray(ct))
+	case containerBitmap:
+		return fromArray64(roaring.AsBitmap(ct))
+	case containerRun:
+		return fromInterval16(roaring.AsRuns(ct))
+	}
+	panic(fmt.Sprintf("unknown container type '%v'", int(ty)))
+}
+
+func badgerKey(index, field, view string, shard uint64, roaringContainerKey uint64) []byte {
+	// The %020d which adds zero padding up to 20 runes is required to
+	// allow the textual sort to accurately
+	// reflect a numeric sort order. This is because, as a string,
+	// math.MaxUint64 is 20 bytes long.
+	// Example of such a badgerKey with a container-key that is math.MaxUint64:
+	// ...........................................12345678901234567890
+	// idx:'i';fld:'f';vw:'standard';shd:'1';ckey@18446744073709551615
+
+	prefix := badgerPrefix(index, field, view, shard)
+	ckey := []byte(fmt.Sprintf("%020d", roaringContainerKey))
+	bkey := append(prefix, ckey...)
+	MustValidateKey(bkey)
+	return bkey
+}
+
+// badgerPrefix returns everything from badgerKey up to and
+// including the '@' fune in a badger key. The prefix excludes the roaring container key itself.
+// NB must be kept in sync with badgerKey() and badgerKeyExtractContainerKey().
+func badgerPrefix(index, field, view string, shard uint64) []byte {
+	return []byte(fmt.Sprintf("idx:'%v';fld:'%v';vw:'%v';shd:'%020v';ckey@", index, field, view, shard))
+}
+
+// MustValidatekey will panic on a bad badgerKey with an informative message.
+func MustValidateKey(bkey []byte) {
+	n := len(bkey)
+	if n < 56 {
+		panic(fmt.Sprintf("bkey too short min size is 56 but we see %v in '%v'", n, string(bkey)))
+	}
+	beforeCkey := bkey[n-26 : n-20]
+	if !bytes.Equal(beforeCkey, ckeyPartExpected) {
+		panic(fmt.Sprintf(`bkey did not have expected ";ckey@" at 26 bytes from the end of the bkey '%v'; instead had '%v'`, string(bkey), string(beforeCkey)))
+	}
+}
+
+func bitmapAsString(rbm *roaring.Bitmap) (r string) {
+	r = "c("
+	slc := rbm.Slice()
+	width := 0
+	s := ""
+	for _, v := range slc {
+		if width == 0 {
+			s = fmt.Sprintf("%v", v)
+		} else {
+			s = fmt.Sprintf(", %v", v)
+		}
+		width += len(s)
+		r += s
+		if width > 70 {
+			r += ",\n"
+			width = 0
+		}
+	}
+	if width == 0 && len(r) > 2 {
+		r = r[:len(r)-2]
+	}
+	return r + ")"
+}
+
+// should really be exported from the pilosa/roaring package so we don't get out of sync...
+const (
+	containerNil    byte = iota // no container
+	containerArray              // slice of bit position values
+	containerBitmap             // slice of 1024 uint64s
+	containerRun                // container of run-encoded bits
+)
+
+var ckeyPartExpected = []byte(";ckey@")
+
+func invName(rbfName string) (field, view string, shard uint64) {
+	s := strings.Split(rbfName, "\x00")
+	if len(s) != 3 {
+		panic("should have 3 parts")
+	}
+	field = s[0]
+	view = s[1]
+	var err error
+	shard, err = strconv.ParseUint(s[2], 10, 64)
+	panicOn(err)
+	return
+}
+
+func stringOfCkeyCt(ckey uint64, ct *roaring.Container, rrName, index string) (s string) {
+
+	by := containerToBytes(ct)
+	hash := blake3sum16(by)
+
+	cts := roaring.NewSliceContainers()
+	cts.Put(ckey, ct)
+	rbm := &roaring.Bitmap{Containers: cts}
+	srbm := bitmapAsString(rbm)
+
+	field, view, shard := invName(rrName)
+	bkey := string(badgerKey(index, field, view, shard, ckey))
+
+	s = fmt.Sprintf("%v -> %v (%v hot)\n", bkey, hash, ct.N())
+	s += "          ......." + srbm + "\n"
+	return
 }

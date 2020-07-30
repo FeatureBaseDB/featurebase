@@ -464,3 +464,29 @@ func BenchmarkTx_Contains(b *testing.B) {
 		})
 	}
 }
+
+func TestTx_Dump(t *testing.T) {
+	db := MustOpenDB(t)
+	defer MustCloseDB(t, db)
+	tx := MustBegin(t, db, true)
+	defer tx.Rollback()
+
+	index, field, view, shard := "i", "f", "v", uint64(15)
+	nm := rbfName(field, view, shard)
+
+	if err := tx.CreateBitmap(nm); err != nil {
+		t.Fatal(err)
+	} else if _, err := tx.Add(nm, 0x00000001, 0x00000002, 0x00010003, 0x00030004); err != nil {
+		t.Fatal(err)
+	}
+
+	// test that we don't crash, and get *something* back
+	s := tx.DumpString(index)
+	if s == "" {
+		panic("should have had 3 containers!")
+	}
+}
+
+func rbfName(field, view string, shard uint64) string {
+	return fmt.Sprintf("%s\x00%s\x00%d", field, view, shard)
+}

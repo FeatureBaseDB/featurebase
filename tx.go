@@ -910,7 +910,8 @@ func (tx *RoaringTx) RoaringBitmapReader(index, field, view string, shard uint64
 }
 
 type RBFTx struct {
-	tx *rbf.Tx
+	index string
+	tx    *rbf.Tx
 }
 
 func (tx *RBFTx) Type() string {
@@ -1035,7 +1036,7 @@ func (tx *RBFTx) Pointer() string {
 }
 
 func (tx *RBFTx) Dump() {
-	// todo
+	tx.tx.Dump(tx.index)
 }
 
 // Readonly is true if the transaction is not read-and-write, but only doing reads.
