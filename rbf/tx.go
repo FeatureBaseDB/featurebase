@@ -36,6 +36,15 @@ type Tx struct {
 	pageMap  *immutable.Map // mapping of database pages to WAL IDs
 	writable bool           // if true, tx can write
 	dirty    bool           // if true, changes have been made
+
+	// If Rollback() has already completed, don't do it again.
+	// Note db == nil means that commit has already been done.
+	rollbackDone bool
+
+	// DeleteEmptyContainer lets us by default match the roaring
+	// behavior where an existing container has all its bits cleared
+	// but still sticks around in the database.
+	DeleteEmptyContainer bool
 }
 
 // Writable returns true if the transaction can mutate data.
@@ -74,12 +83,17 @@ func (tx *Tx) Commit() error {
 func (tx *Tx) Rollback() {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
-
-	// TODO(bbj): Invalidate DB if rollback fails. Possibly attempt reopen?
-
-	if tx.db == nil {
+	// allow Rollback to be called more than once.
+	if tx.rollbackDone {
 		return
 	}
+	tx.rollbackDone = true
+	if tx.db == nil {
+		// Commit already done.
+		return
+	}
+
+	// TODO(bbj): Invalidate DB if rollback fails. Possibly attempt reopen?
 
 	// If any pages have been written, ensure we write a new meta page with
 	// the rollback flag to mark the end of the transaction. This allows us to
@@ -92,10 +106,18 @@ func (tx *Tx) Rollback() {
 		}
 	}
 
-	_ = tx.db.checkpoint() // TODO: Check error
+	// turn on these error checks! we see
+	// panic: cannot find segment containing WAL page: 1
+	// when running go test -v
+	// TestCursor_FirstNext_Quick/6
+	//
+	//panicOn(tx.db.checkpoint())
+	//panicOn(tx.db.removeTx(tx))
+
+	_ = tx.db.checkpoint()
 
 	// Disconnect transaction from DB.
-	_ = tx.db.removeTx(tx) // TODO: Check error
+	_ = tx.db.removeTx(tx)
 }
 
 // Root returns the root page number for a bitmap. Returns 0 if the bitmap does not exist.
@@ -150,6 +172,8 @@ func (tx *Tx) CreateBitmap(name string) error {
 }
 
 func (tx *Tx) createBitmap(name string) error {
+	//vv("createBitmap(name='%v'", name)
+
 	if tx.db == nil {
 		return ErrTxClosed
 	} else if !tx.writable {
@@ -425,6 +449,8 @@ func (tx *Tx) writeRootRecordPages(records []*RootRecord) (err error) {
 
 // Add sets a given bit on the bitmap.
 func (tx *Tx) Add(name string, a ...uint64) (changeCount int, err error) {
+	//vv("rbf Tx.Add(a='%#v')", a)
+
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
@@ -589,14 +615,14 @@ func (tx *Tx) Container(name string, key uint64) (*roaring.Container, error) {
 }
 
 // PutContainer inserts a container into a bitmap. Overwrites if key already exists.
-func (tx *Tx) PutContainer(name string, key uint64, cont *roaring.Container) error {
+func (tx *Tx) PutContainer(name string, key uint64, ct *roaring.Container) error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
-	cell := ConvertToLeafArgs(key, cont)
-	if cell.BitN == 0 {
+	if ct.N() == 0 {
 		return nil
 	}
+	cell := ConvertToLeafArgs(key, ct)
 
 	if err := tx.createBitmapIfNotExists(name); err != nil {
 		return err
@@ -939,16 +965,27 @@ func (tx *Tx) ContainerIterator(name string, key uint64) (citer roaring.Containe
 	tx.mu.RLock()
 	defer tx.mu.RUnlock()
 
-	c, err := tx.cursor(name)
-	if err != nil {
-		// TODO(bbj): Don't return error if bitmap is simply not found?
-		return nil, false, err
-	} else if c == nil {
-		return nil, false, nil
-	} else if err := c.First(); err != nil {
-		return nil, false, err
+	var c *Cursor
+	c, err = tx.cursor(name)
+	if c == nil && err == nil {
+		// nothing available.
+		citer = &emptyContainerIterator{}
+		return
 	}
-	return &containerIterator{cursor: c}, true, nil
+	if err != nil {
+		return
+	}
+
+	// INVAR: c is not nil
+
+	err = c.First()
+	if err != nil {
+		return
+	}
+	ci := &containerIterator{cursor: c}
+	citer = ci
+
+	return citer, true, nil
 }
 
 func (tx *Tx) ForEach(name string, fn func(i uint64) error) error {
@@ -1091,18 +1128,28 @@ func (tx *Tx) UnionInPlace(name string, others ...*roaring.Bitmap) error {
 	panic("TODO")
 }
 
+// roaring.countRange counts the number of bits set between [start, end).
 func (tx *Tx) CountRange(name string, start, end uint64) (uint64, error) {
 	tx.mu.RLock()
 	defer tx.mu.RUnlock()
 
-	c, err := tx.cursor(name)
-	if err != nil {
-		return 0, err
-	} else if c == nil {
+	if start >= end {
 		return 0, nil
 	}
 
-	if err := c.First(); err == io.EOF {
+	skey := highbits(start)
+	ekey := highbits(end)
+
+	csr, err := tx.cursor(name)
+	if err != nil {
+		return 0, err
+	} else if csr == nil {
+		return 0, nil
+	}
+
+	exact, err := csr.Seek(skey)
+	_ = exact
+	if err == io.EOF {
 		return 0, nil
 	} else if err != nil {
 		return 0, err
@@ -1110,37 +1157,94 @@ func (tx *Tx) CountRange(name string, start, end uint64) (uint64, error) {
 
 	var n uint64
 	for {
-		if err := c.Next(); err == io.EOF {
+		if err := csr.Next(); err == io.EOF {
 			break
 		} else if err != nil {
 			return 0, err
 		}
 
-		cell := c.cell()
-		if cell.Key > highbits(end) {
+		c := csr.cell()
+		k := c.Key
+		if k > ekey {
 			break
 		}
 
-		if cell.Key == highbits(start) {
-			n += uint64(cell.countRange(lowbits(start), math.MaxUint16))
-		} else if cell.Key == highbits(end) {
-			n += uint64(cell.countRange(0, lowbits(end)))
-		} else {
-			n += uint64(cell.BitN)
+		// If range is entirely in one container then just count that range.
+		if skey == ekey {
+			return uint64(c.countRange(int32(lowbits(start)), int32(lowbits(end)))), nil
+		}
+		// INVAR: skey < ekey
+
+		// k > ekey handles the case when start > end and where start and end
+		// are in different containers. Same container case is already handled above.
+		if k > ekey {
+			break
+		}
+		if k == skey {
+			n += uint64(c.countRange(int32(lowbits(start)), roaring.MaxContainerVal+1))
+			continue
+		}
+		if k < ekey {
+			n += uint64(c.BitN)
+			continue
+		}
+		if k == ekey {
+			n += uint64(c.countRange(0, int32(lowbits(end))))
+			break
 		}
 	}
 	return n, nil
 }
 
-func (tx *Tx) OffsetRange(name string, offset, start, end uint64) (*roaring.Bitmap, error) {
+func (tx *Tx) OffsetRange(name string, offset, start, endx uint64) (*roaring.Bitmap, error) {
+	if lowbits(offset) != 0 {
+		panic("offset must not contain low bits")
+	} else if lowbits(start) != 0 {
+		panic("range start must not contain low bits")
+	} else if lowbits(endx) != 0 {
+		panic("range endx must not contain low bits")
+	}
+
 	tx.mu.RLock()
 	defer tx.mu.RUnlock()
 
-	b, err := tx.RoaringBitmap(name)
+	c, err := tx.cursor(name)
 	if err != nil {
 		return nil, err
 	}
-	return b.OffsetRange(offset, start, end), nil
+
+	other := roaring.NewSliceBitmap()
+	off := highbits(offset)
+	hi0, hi1 := highbits(start), highbits(endx)
+
+	if c == nil {
+		// bitmap not found. Match what roaring does and return nil in this case.
+		return other, nil
+	}
+
+	if _, err := c.Seek(hi0); err == io.EOF {
+		return other, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	for {
+		if err := c.Next(); err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, err
+		}
+
+		cell := c.cell()
+		ckey := cell.Key
+
+		// >= hi1 is correct b/c endx cannot have any lowbits set.
+		if ckey >= hi1 {
+			break
+		}
+		other.Containers.Put(off+(ckey-hi0), toContainer(cell, tx))
+	}
+	return other, nil
 }
 
 // containerIterator wraps Cursor to implement roaring.ContainerIterator.
@@ -1163,6 +1267,18 @@ func (itr *containerIterator) Value() (uint64, *roaring.Container) {
 	return cell.Key, toContainer(cell, itr.cursor.tx)
 }
 
+// always returns false for Next()
+type emptyContainerIterator struct{}
+
+func (si *emptyContainerIterator) Close() {}
+
+func (si *emptyContainerIterator) Next() bool {
+	return false
+}
+func (si *emptyContainerIterator) Value() (uint64, *roaring.Container) {
+	panic("emptyContainerIterator never has any Values")
+}
+
 func (tx *Tx) Dump(index string) {
 	fmt.Println(tx.DumpString(index))
 }
@@ -1177,7 +1293,7 @@ func (tx *Tx) DumpString(index string) (r string) {
 	for _, rr := range records {
 		c, err := tx.cursor(rr.Name)
 		panicOn(err)
-		err = c.First()
+		err = c.First() // First will rewind to beginning.
 		if err == io.EOF {
 			r += "<empty bitmap>"
 			n++
@@ -1185,7 +1301,7 @@ func (tx *Tx) DumpString(index string) (r string) {
 		}
 		panicOn(err)
 		for {
-			err := c.Next() // hung here?
+			err := c.Next()
 			if err == io.EOF {
 				break
 			}
@@ -1320,5 +1436,135 @@ func stringOfCkeyCt(ckey uint64, ct *roaring.Container, rrName, index string) (s
 
 	s = fmt.Sprintf("%v -> %v (%v hot)\n", bkey, hash, ct.N())
 	s += "          ......." + srbm + "\n"
+	return
+}
+
+func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
+
+	// begin write boilerplate
+	if tx.db == nil {
+		err = ErrTxClosed
+		return
+	} else if !tx.writable {
+		err = ErrTxNotWritable
+		return
+	} else if name == "" {
+		err = ErrBitmapNameRequired
+		return
+	}
+
+	if err = tx.createBitmapIfNotExists(name); err != nil {
+		return
+	}
+	// end write boilerplate
+
+	n := itr.Len()
+	if n == 0 {
+		return
+	}
+	rowSet = make(map[uint64]int)
+
+	var currRow uint64
+
+	var oldC *roaring.Container
+	for itrKey, synthC := itr.NextContainer(); synthC != nil; itrKey, synthC = itr.NextContainer() {
+		if rowSize != 0 {
+			currRow = itrKey / rowSize
+		}
+		nsynth := int(synthC.N())
+		if nsynth == 0 {
+			continue
+		}
+		// INVAR: nsynth > 0
+
+		oldC, err = tx.Container(name, itrKey)
+		panicOn(err)
+		if err != nil {
+			return
+		}
+
+		if oldC == nil || oldC.N() == 0 {
+			// no container at the itrKey in badger (or all zero container).
+			if clear {
+				// changed of 0 and empty rowSet is perfect, no need to change the defaults.
+				continue
+			} else {
+
+				changed += nsynth
+				rowSet[currRow] += nsynth
+
+				err = tx.PutContainer(name, itrKey, synthC)
+				if err != nil {
+					return
+				}
+				continue
+			}
+		}
+
+		if clear {
+			existN := oldC.N() // number of bits set in the old container
+			newC := oldC.Difference(synthC)
+
+			// update rowSet and changes
+			if newC.N() == existN {
+				// INVAR: do changed need adjusting? nope. same bit count,
+				// so no change could have happened.
+				continue
+			} else {
+				changes := int(existN - newC.N())
+				changed += changes
+				rowSet[currRow] -= changes
+
+				if tx.DeleteEmptyContainer && newC.N() == 0 {
+					err = tx.RemoveContainer(name, itrKey)
+					if err != nil {
+						return
+					}
+					continue
+				}
+				err = tx.PutContainer(name, itrKey, newC)
+				if err != nil {
+					return
+				}
+				continue
+			}
+		} else {
+			// setting bits
+
+			existN := oldC.N()
+			if existN == roaring.MaxContainerVal+1 {
+				// completely full container already, set will do nothing. so changed of 0 default is perfect.
+				continue
+			}
+			if existN == 0 {
+				// can nsynth be zero? No, because of the continue/invariant above where nsynth > 0
+				changed += nsynth
+				rowSet[currRow] += nsynth
+				err = tx.PutContainer(name, itrKey, synthC)
+				if err != nil {
+					return
+				}
+				continue
+			}
+
+			newC := oldC.UnionInPlace(synthC)
+
+			if roaring.ContainerType(newC) == containerBitmap {
+				newC.Repair() // update the bit-count so .n is valid. b/c UnionInPlace doesn't update it.
+			}
+			if newC.N() != existN {
+				changes := int(newC.N() - existN)
+				changed += changes
+				rowSet[currRow] += changes
+
+				err = tx.PutContainer(name, itrKey, newC)
+				if err != nil {
+					panicOn(err)
+					return
+				}
+				continue
+			}
+		}
+	}
 	return
 }

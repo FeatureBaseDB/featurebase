@@ -130,7 +130,6 @@ func (c *blueGreenTx) compareTxState(index, field, view string, shard uint64) {
 			panic(fmt.Sprintf("compareTxState[%v]: B(%v) reported err %v at %v; but A(%v) did not", here, c.bs, bErr, c.as, stack()))
 		}
 	}
-
 	for aIter.Next() {
 		aKey, aValue := aIter.Value()
 
@@ -582,6 +581,7 @@ func (c *blueGreenTx) UnionInPlace(index, field, view string, shard uint64, othe
 
 func (c *blueGreenTx) CountRange(index, field, view string, shard uint64, start, end uint64) (n uint64, err error) {
 	c.checker.see(index, field, view, shard)
+	//vv("CountRange start=0x%x, endx=0x%x", start, end)
 	defer func() {
 		if r := recover(); r != nil {
 			c.Dump()

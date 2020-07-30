@@ -262,8 +262,14 @@ func align8(offset int) int {
 // leafCell represents a leaf cell.
 type leafCell struct {
 	Key  uint64
-	Type int
-	N    int
+	Type int // container type
+
+	// N is the number of "things" in Data:
+	//  for an array container the number of integers in the array.
+	//  for an RLE, number of intervals.
+	// etc.
+	N int
+
 	BitN int
 	Data []byte
 }
@@ -392,19 +398,22 @@ func (c *leafCell) lastValue() uint16 {
 }
 
 // countRange returns the bit count within the given range.
-func (c *leafCell) countRange(start, end uint16) (n int) {
+// We have to take int32 rather than uint16 because the interval is [start, end),
+// and otherwise we have no way to ask to count the entire container (the
+// high bit will be missed).
+func (c *leafCell) countRange(start, end int32) (n int) {
 	// If the full range is being queried, simply use the precalculated count.
-	if start == 0 && end == math.MaxUint16 {
+	if start == 0 && end > math.MaxUint16 {
 		return c.BitN
 	}
 
 	switch c.Type {
 	case ContainerTypeArray:
-		return int(roaring.ArrayCountRange(toArray16(c.Data), int32(start), int32(end)))
+		return int(roaring.ArrayCountRange(toArray16(c.Data), start, end))
 	case ContainerTypeRLE:
-		return int(roaring.RunCountRange(toInterval16(c.Data), int32(start), int32(end)))
+		return int(roaring.RunCountRange(toInterval16(c.Data), start, end))
 	case ContainerTypeBitmap:
-		return int(roaring.BitmapCountRange(toArray64(c.Data), int32(start), int32(end)))
+		return int(roaring.BitmapCountRange(toArray64(c.Data), start, end))
 	default:
 		panic(fmt.Sprintf("invalid container type: %d", c.Type))
 	}
@@ -412,11 +421,15 @@ func (c *leafCell) countRange(start, end uint16) (n int) {
 
 func readLeafCellKey(page []byte, i int) uint64 {
 	offset := readCellOffset(page, i)
+	assert(offset < len(page))
 	return *(*uint64)(unsafe.Pointer(&page[offset]))
 }
 
 func readLeafCell(page []byte, i int) leafCell {
 	offset := readCellOffset(page, i)
+
+	// cd ..; PILOSA_TXSRC=rbf go test -v -run TestFragment_TopN_IDs  -tags=' shardwidth20'  "-gcflags=all=-d=checkptr=0"
+	// gives panic: runtime error: slice bounds out of range [16390:8192] here.
 	buf := page[offset:]
 
 	var cell leafCell
