@@ -4368,6 +4368,7 @@ func unionArrayArray(a, b *Container) *Container {
 			break
 		}
 	}
+	// note: len(output) CAN be > 4096
 	return NewContainerArray(output)
 }
 
@@ -6865,8 +6866,12 @@ func ConvertRunToBitmap(c *Container) {
 func Optimize(c *Container) {
 	c.optimize()
 }
-func Union(a, b *Container) *Container {
-	return union(a, b)
+func Union(a, b *Container) (c *Container) {
+	c = union(a, b)
+	// c can be have arrays that are too big, and need
+	// to be optimized into raw bitmaps.
+	c.optimize()
+	return c
 }
 
 func Difference(a, b *Container) *Container {
