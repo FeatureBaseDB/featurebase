@@ -993,8 +993,7 @@ func (tx *RBFTx) OffsetRange(index, field, view string, shard uint64, offset, st
 func (tx *RBFTx) IncrementOpN(index, field, view string, shard uint64, changedN int) {}
 
 func (tx *RBFTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
-	// TODO: Implement RBFTX.ImportRoaringBits"
-	return 0, make(map[uint64]int), nil
+	return tx.tx.ImportRoaringBits(rbfName(field, view, shard), rit, clear, log, rowSize, data)
 }
 
 func (tx *RBFTx) RoaringBitmapReader(index, field, view string, shard uint64, fragmentPathForRoaring string) (r io.ReadCloser, sz int64, err error) {

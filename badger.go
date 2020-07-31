@@ -1317,6 +1317,10 @@ func (tx *BadgerTx) UnionInPlace(index, field, view string, shard uint64, others
 // roaring.countRange counts the number of bits set between [start, end).
 func (tx *BadgerTx) CountRange(index, field, view string, shard uint64, start, end uint64) (n uint64, err error) {
 
+	if start >= end {
+		return 0, nil
+	}
+
 	skey := highbits(start)
 	ekey := highbits(end)
 
@@ -1415,6 +1419,7 @@ func (tx *BadgerTx) OffsetRange(index, field, view string, shard, offset, start,
 		bkey := item.Key()
 		k := badgerKeyExtractContainerKey(bkey)
 
+		// >= hi1 is correct b/c endx cannot have any lowbits set.
 		if uint64(k) >= hi1 {
 			break
 		}

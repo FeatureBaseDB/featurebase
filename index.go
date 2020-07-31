@@ -72,8 +72,21 @@ type Index struct {
 	Txf *TxFactory
 }
 
-// NewIndex returns a new instance of Index.
+// OpenIndex opens or starts a new Index on path. Path
+// can be empty.
+func OpenIndex(holder *Holder, path, name string) (*Index, error) {
+	openExisting := true
+	return openOrCreateNewIndex(holder, path, name, openExisting)
+}
+
+// NewIndex returns a new instance of Index at path. It will erase anything
+// old already in path.
 func NewIndex(holder *Holder, path, name string) (*Index, error) {
+	openExisting := false
+	return openOrCreateNewIndex(holder, path, name, openExisting)
+}
+
+func openOrCreateNewIndex(holder *Holder, path, name string, openExisting bool) (*Index, error) {
 
 	// Emulate what the spf13/cobra does, letting env vars override
 	// the defaults, because we may be under a simple "go test" run where
@@ -104,7 +117,7 @@ func NewIndex(holder *Holder, path, name string) (*Index, error) {
 		return nil, errors.Wrap(err, "validating name")
 	}
 
-	txf, err := NewTxFactory(txsrc, holder.Path, name)
+	txf, err := NewTxFactory(txsrc, holder.Path, name, openExisting)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating newTxFactory")
 	}
