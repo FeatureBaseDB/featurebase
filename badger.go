@@ -296,6 +296,7 @@ func (r *badgerRegistrar) openBadgerDBWrapper(bpath string) (*BadgerDBWrapper, e
 
 	opt.Compression = badgeroptions.None // turn off compression.
 	opt.ZSTDCompressionLevel = 0         // really, just in case.
+	opt.SyncWrites = true                // default is true, safe.
 
 	// MaxCacheSize docs:
 	//
@@ -1535,7 +1536,7 @@ func (tx *BadgerTx) ImportRoaringBits(index, field, view string, shard uint64, i
 				continue
 			}
 
-			newC := oldC.UnionInPlace(synthC)
+			newC := roaring.Union(oldC, synthC) // UnionInPlace was giving us crashes on overly large containers.
 
 			if roaring.ContainerType(newC) == containerBitmap {
 				newC.Repair() // update the bit-count so .n is valid. b/c UnionInPlace doesn't update it.
@@ -1634,6 +1635,9 @@ func fromArray16(a []uint16) []byte {
 	if len(a) == 0 {
 		return []byte{}
 	}
+	if len(a) > 4096 {
+		panic(fmt.Sprintf("cannot put more than 4096 integers into an array container: %v too big", len(a)))
+	}
 	return (*[8192]byte)(unsafe.Pointer(&a[0]))[: len(a)*2 : len(a)*2]
 }
 
@@ -1649,6 +1653,9 @@ func fromArray64(a []uint64) []byte {
 func fromInterval16(a []roaring.Interval16) []byte {
 	if len(a) == 0 {
 		return []byte{}
+	}
+	if len(a) > 2048 {
+		panic(fmt.Sprintf("cannot put more than 2048 roaring.Interval16 into a container: %v too big", len(a)))
 	}
 	return (*[8192]byte)(unsafe.Pointer(&a[0]))[: len(a)*4 : len(a)*4]
 }
@@ -1767,6 +1774,23 @@ func asInts(a []uint64) (r []int) {
 		r[i] = int(v)
 	}
 	return
+}
+
+var _ = zeroKeyContainerAsString // happy linter
+
+// for debugging
+func zeroKeyContainerAsString(ct *roaring.Container) (r string) {
+	cts := roaring.NewSliceContainers()
+	cts.Put(0, ct)
+	rbm := &roaring.Bitmap{Containers: cts}
+	r = fmt.Sprintf("[%v]:", containerTypeNames[roaring.ContainerType(ct)]) + bitmapAsString(rbm)
+	return
+}
+
+var containerTypeNames = map[byte]string{
+	containerArray:  "array",
+	containerBitmap: "bitmap",
+	containerRun:    "run",
 }
 
 func bitmapAsString(rbm *roaring.Bitmap) (r string) {
