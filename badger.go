@@ -1588,29 +1588,35 @@ func (tx *BadgerTx) toContainer(typ byte, v []byte) (r *roaring.Container) {
 		return nil
 	}
 
-	// For safety we copy v, since it lives in BadgerDB's memory-mapped vlog-file,
-	// and Badger will recycle it after tx ends with rollback or commit.
-	// We copy into Go runtime GC managed memory. Technically we don't need
-	// to do this if all of our use stays within the lifetime
-	// of the badger transaction we were started on. Hence:
-	//
-	// TODO: performance tuning might want w := v here, if we can guarantee no access to memory past the Tx lifetime.
-	//
-	// Problem is, at least some tests appear to not respect transaction boundaries...
-	//
-	// Seebs suggested this nice variation: we could use individual mmaps for these
-	// copies, which would be unusable in production, but workable for testing, and then unmap them,
-	// which would get us probable segfaults on future accesses to them.
-	//
-	w := make([]byte, len(v))
-	copy(w, v)
-	// the copy above makes green: // green go test -v -run TestAPI_ImportColumnAttrs
-	//w := v // if instead of append we use v directly, it causes red: go test -v -run TestAPI_ImportColumnAttrs
+	var w []byte
+	if tx.doAllocZero {
+		// Do electric fence-inspired bad-memory read detection.
+		//
+		// The v []byte lives in BadgerDB's memory-mapped vlog-file,
+		// and Badger will recycle it after tx ends with rollback or commit.
+		//
+		// Problem is, at least some operations were not respecting transaction boundaries.
+		// This technique helped us find them. The rowCache was an example.
+		//
+		// See the global const DetectMemAccessPastTx
+		// at the top of txfactory.go to activate/deactivate this.
+		//
+		// Seebs suggested this nice variation: we could use individual mmaps for these
+		// copies, which would be unusable in production, but workable for testing, and then unmap them,
+		// which would get us probable segfaults on future accesses to them.
+		//
+		// The go runtime also has an -efence flag which may be similarly useful if really pressed.
+		//
+		w = make([]byte, len(v))
+		copy(w, v)
 
-	// register w so we can catch out-of-tx memory access
-	tx.acMu.Lock()
-	defer tx.acMu.Unlock()
-	tx.ourAllocs = append(tx.ourAllocs, w)
+		// register w so we can catch out-of-tx memory access
+		tx.acMu.Lock()
+		defer tx.acMu.Unlock()
+		tx.ourAllocs = append(tx.ourAllocs, w)
+	} else {
+		w = v
+	}
 
 	switch typ {
 	case containerArray:
