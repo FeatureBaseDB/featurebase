@@ -848,31 +848,27 @@ func TestCursor_UpdateBranchCells(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	changed, err := c.Add(1)
 	if err != nil {
 		t.Fatal(err)
-	}
-	changed, err := c.Add(1)
-	if changed {
-
-		if err := c.First(); err != nil {
-			t.Fatal(err)
-		}
-		if got, want := c.Values(), []uint16{uint16(1)}; !reflect.DeepEqual(got, want) {
-			t.Fatal(err)
-		}
-	} else {
+	} else if !changed {
 		t.Fatal("Expected Add Change")
+	} else if err := c.First(); err != nil {
+		t.Fatal(err)
+	} else if got, want := c.Values(), []uint16{uint16(1)}; !reflect.DeepEqual(got, want) {
+		t.Fatal(err)
 	}
+
 	changed, err = c.Remove(1)
-	if changed {
-		if err := c.First(); err != nil && err != io.EOF {
-			t.Fatal(err)
-		}
-		if got, want := c.Values(), []uint16{}; !reflect.DeepEqual(got, want) {
-			t.Fatal(err)
-		}
-	} else {
+	if err != nil {
+		t.Fatal(err)
+	} else if !changed {
 		t.Fatal("Expected Remove Change")
+	} else if err := c.First(); err != nil && err != io.EOF {
+		t.Fatal(err)
+	} else if got, want := c.Values(), ([]uint16)(nil); !reflect.DeepEqual(got, want) {
+		t.Fatal(err)
 	}
 
 	rb := func() *roaring.Bitmap {
@@ -901,7 +897,7 @@ func TestCursor_UpdateBranchCells(t *testing.T) {
 		if err := c.First(); err != nil && err != io.EOF {
 			panic(err)
 		}
-		if got, want := c.Values(), []uint16{}; !reflect.DeepEqual(got, want) {
+		if got, want := c.Values(), ([]uint16)(nil); !reflect.DeepEqual(got, want) {
 			t.Fatal(err)
 		}
 	} else {

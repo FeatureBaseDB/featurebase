@@ -428,10 +428,10 @@ func (c *Cursor) putLeafCell(in leafCell) (err error) {
 
 	// Initialize a new root if we are currently the root page.
 	if c.stack.index == 0 {
-		assert(newRoot)
+		assert(newRoot, "leaf write must be root when stack at root")
 		return c.writeRoot(origPgno, parents)
 	}
-	assert(!newRoot)
+	assert(!newRoot, "leaf write must NOT be root when stack not at root")
 
 	// Otherwise update existing parent.
 	return c.putBranchCells(c.stack.index-1, parents)
@@ -552,10 +552,10 @@ func (c *Cursor) putBranchCells(stackIndex int, newCells []branchCell) (err erro
 
 	// Initialize a new root if we are currently the root page.
 	if stackIndex == 0 {
-		assert(newRoot)
+		assert(newRoot, "branch write must be root when stack at root")
 		return c.writeRoot(origPgno, parents)
 	}
-	assert(!newRoot)
+	assert(!newRoot, "branch write must NOT be root when stack at root")
 
 	// Otherwise update existing parent.
 	return c.putBranchCells(stackIndex-1, parents)
@@ -813,7 +813,7 @@ func (c *Cursor) Seek(key uint64) (exact bool, err error) {
 	c.buffered = true
 	for c.stack.index = 0; ; c.stack.index++ {
 		elem := &c.stack.elems[c.stack.index]
-		assert(elem.pgno != 0)
+		assert(elem.pgno != 0, "cursor should never point to page zero (meta)")
 
 		buf, err := c.tx.readPage(elem.pgno)
 		if err != nil {
@@ -870,6 +870,11 @@ func (c *Cursor) Seek(key uint64) (exact bool, err error) {
 func (c *Cursor) Next() error {
 	if c.buffered {
 		c.buffered = false
+
+		// Move to next available element if we are past the last cell in the page.
+		if elem := &c.stack.elems[c.stack.index]; elem.index >= readCellN(c.leafPage) {
+			return c.goNextPage()
+		}
 		return nil
 	}
 
@@ -1041,6 +1046,9 @@ func (c *Cursor) Intersect(rowID uint64, row []uint64) error {
 // Values returns the values for the container the cursor is currently pointing to.
 func (c *Cursor) Values() []uint16 {
 	elem := &c.stack.elems[c.stack.index]
+	if readCellN(c.leafPage[:]) == 0 {
+		return nil
+	}
 	cell := readLeafCell(c.leafPage[:], elem.index)
 	return cell.Values(c.tx)
 }

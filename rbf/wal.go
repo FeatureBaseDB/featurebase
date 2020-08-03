@@ -143,7 +143,7 @@ func (s *WALSegment) ReadWALPage(walID int64) ([]byte, error) {
 
 // WriteWALPage writes a single page to the WAL segment and returns its WAL identifier.
 func (s *WALSegment) WriteWALPage(page []byte, isMeta bool) (walID int64, err error) {
-	assert(len(page) == PageSize)
+	assert(len(page) == PageSize, "invalid page size: %d", len(page))
 
 	// Initialize write file handle if not yet initialized.
 	if s.w == nil {
