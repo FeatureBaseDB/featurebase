@@ -21,8 +21,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
+	"os"
 	"unsafe"
 
+	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/shardwidth"
 )
 
@@ -81,6 +84,8 @@ var (
 	ErrTxClosed           = errors.New("transaction closed")
 	ErrTxNotWritable      = errors.New("transaction not writable")
 	ErrBitmapNameRequired = errors.New("bitmap name required")
+	ErrBitmapNotFound     = errors.New("bitmap not found")
+	ErrBitmapExists       = errors.New("bitmap already exists")
 )
 
 // Debug is just a temporary flag used for debugging.
@@ -257,8 +262,15 @@ func align8(offset int) int {
 // leafCell represents a leaf cell.
 type leafCell struct {
 	Key  uint64
-	Type int
-	N    int
+	Type int // container type
+
+	// N is the number of "things" in Data:
+	//  for an array container the number of integers in the array.
+	//  for an RLE, number of intervals.
+	// etc.
+	N int
+
+	BitN int
 	Data []byte
 }
 
@@ -361,19 +373,70 @@ func (c *leafCell) firstValue() uint16 {
 	}
 }
 
+// lastValue the last value from the container.
+func (c *leafCell) lastValue() uint16 {
+	switch c.Type {
+	case ContainerTypeArray:
+		a := toArray16(c.Data)
+		return a[len(a)-1]
+	case ContainerTypeRLE:
+		r := toInterval16(c.Data)
+		return r[len(r)-1].Last
+	case ContainerTypeBitmap:
+		a := toArray64(c.Data)
+		for i := len(a) - 1; i >= 0; i-- {
+			for j := 63; j >= 0; j-- {
+				if a[i]&(1<<j) != 0 {
+					return (uint16(i) * 64) + uint16(j)
+				}
+			}
+		}
+		panic(fmt.Sprintf("rbf.leafCell.firstValue(): no values set in bitmap container: key=%d", c.Key))
+	default:
+		panic(fmt.Sprintf("invalid container type: %d", c.Type))
+	}
+}
+
+// countRange returns the bit count within the given range.
+// We have to take int32 rather than uint16 because the interval is [start, end),
+// and otherwise we have no way to ask to count the entire container (the
+// high bit will be missed).
+func (c *leafCell) countRange(start, end int32) (n int) {
+	// If the full range is being queried, simply use the precalculated count.
+	if start == 0 && end > math.MaxUint16 {
+		return c.BitN
+	}
+
+	switch c.Type {
+	case ContainerTypeArray:
+		return int(roaring.ArrayCountRange(toArray16(c.Data), start, end))
+	case ContainerTypeRLE:
+		return int(roaring.RunCountRange(toInterval16(c.Data), start, end))
+	case ContainerTypeBitmap:
+		return int(roaring.BitmapCountRange(toArray64(c.Data), start, end))
+	default:
+		panic(fmt.Sprintf("invalid container type: %d", c.Type))
+	}
+}
+
 func readLeafCellKey(page []byte, i int) uint64 {
 	offset := readCellOffset(page, i)
+	assert(offset < len(page))
 	return *(*uint64)(unsafe.Pointer(&page[offset]))
 }
 
 func readLeafCell(page []byte, i int) leafCell {
 	offset := readCellOffset(page, i)
+
+	// cd ..; PILOSA_TXSRC=rbf go test -v -run TestFragment_TopN_IDs  -tags=' shardwidth20'  "-gcflags=all=-d=checkptr=0"
+	// gives panic: runtime error: slice bounds out of range [16390:8192] here.
 	buf := page[offset:]
 
 	var cell leafCell
 	cell.Key = *(*uint64)(unsafe.Pointer(&buf[0]))
 	cell.Type = int(*(*uint32)(unsafe.Pointer(&buf[8])))
-	cell.N = int(*(*uint32)(unsafe.Pointer(&buf[12])))
+	cell.N = int(*(*uint16)(unsafe.Pointer(&buf[12])))
+	cell.BitN = int(*(*uint16)(unsafe.Pointer(&buf[14])))
 
 	switch cell.Type {
 	case ContainerTypeArray:
@@ -410,7 +473,8 @@ func writeLeafCell(page []byte, i, offset int, cell leafCell) {
 	writeCellOffset(page, i, offset)
 	*(*uint64)(unsafe.Pointer(&page[offset])) = cell.Key
 	*(*uint32)(unsafe.Pointer(&page[offset+8])) = uint32(cell.Type)
-	*(*uint32)(unsafe.Pointer(&page[offset+12])) = uint32(cell.N)
+	*(*uint16)(unsafe.Pointer(&page[offset+12])) = uint16(cell.N)
+	*(*uint16)(unsafe.Pointer(&page[offset+14])) = uint16(cell.BitN)
 	assert(offset+16+len(cell.Data) <= PageSize)
 	copy(page[offset+16:], cell.Data)
 }
@@ -486,8 +550,11 @@ func search(n int, f func(int) int) (index int, exact bool) {
 	return i, false
 }
 
-/*
-func pagedumpi(b []byte, indent string, writer io.Writer) {
+func Pagedump(b []byte, indent string, writer io.Writer) {
+	if writer == nil {
+		writer = os.Stderr
+	}
+
 	pgno := readPageNo(b)
 	if pgno == Magic32() {
 		fmt.Fprintf(writer, "==META\n")
@@ -501,6 +568,7 @@ func pagedumpi(b []byte, indent string, writer io.Writer) {
 	// the page alone so this will output !PAGE for bitmap pages & invalid pages.
 	switch {
 	case flags&PageTypeLeaf != 0:
+		fmt.Fprintf(writer, "==LEAF pgno=%d flags=%d n=%d\n", pgno, flags, cellN)
 		for i := 0; i < cellN; i++ {
 			cell := readLeafCell(b, i)
 			switch cell.Type {
@@ -525,7 +593,6 @@ func pagedumpi(b []byte, indent string, writer io.Writer) {
 		fmt.Fprintf(writer, "==!PAGE %d flags=%d\n", pgno, flags)
 	}
 }
-*/
 
 func Walk(tx *Tx, pgno uint32, v func(uint32, []*RootRecord)) {
 	for pgno := readMetaRootRecordPageNo(tx.meta[:]); pgno != 0; {
@@ -563,3 +630,8 @@ func RowValues(b []uint64) []uint64 {
 	}
 	return a
 }
+
+// func caller(skip int) string {
+// 	_, file, line, _ := runtime.Caller(skip + 1)
+// 	return fmt.Sprintf("%s:%d", file, line)
+// }

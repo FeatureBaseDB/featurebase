@@ -193,6 +193,18 @@ func MustNewCluster(tb testing.TB, size int, opts ...[]server.CommandOption) Clu
 	return c
 }
 
+// CheckClusterState polls a given cluster for its state until it
+// receives a matching state. It polls up to n times before returning.
+func CheckClusterState(m *Command, state string, n int) bool {
+	for i := 0; i < n; i++ {
+		if m.API.State() == state {
+			return true
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return false
+}
+
 // newCluster creates a new cluster
 func newCluster(tb testing.TB, size int, opts ...[]server.CommandOption) (Cluster, error) {
 	if size == 0 {

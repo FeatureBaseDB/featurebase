@@ -24,6 +24,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"runtime/debug"
@@ -445,7 +446,7 @@ func TestFragment_SetValue(t *testing.T) {
 
 		// Obtain transaction.
 		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
+		defer tx.Rollback()
 
 		// Set value.
 		if changed, err := f.setValue(tx, 100, 10, 20); err != nil {
@@ -481,7 +482,7 @@ func TestFragment_SetValue(t *testing.T) {
 
 			// Obtain transaction.
 			tx := f.txTestingOnly
-			defer tx.Rollback() //LOOKATME
+			defer tx.Rollback()
 
 			// Set values.
 			m := make(map[uint64]int64)
@@ -538,12 +539,11 @@ func TestFragment_Sum(t *testing.T) {
 	const bitDepth = 16
 
 	f, idx := mustOpenFragment("i", "f", viewStandard, 0, "")
-	_ = idx
 	defer f.Clean(t)
 
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	// Set values.
 	vals := []struct {
@@ -561,6 +561,10 @@ func TestFragment_Sum(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
+	panicOn(tx.Commit())
+	tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+	defer tx.Rollback()
 
 	t.Run("NoFilter", func(t *testing.T) {
 		if sum, n, err := f.sum(tx, nil, bitDepth); err != nil {
@@ -582,10 +586,19 @@ func TestFragment_Sum(t *testing.T) {
 		}
 	})
 
+	panicOn(tx.Commit())
+	tx = idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f})
+	defer tx.Rollback()
+
 	// verify that clearValue clears values
 	if _, err := f.clearValue(tx, 1000, bitDepth, 23); err != nil {
 		t.Fatal(err)
 	}
+
+	panicOn(tx.Commit())
+	tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+	defer tx.Rollback()
+
 	t.Run("ClearValue", func(t *testing.T) {
 		if sum, n, err := f.sum(tx, nil, bitDepth); err != nil {
 			t.Fatal(err)
@@ -602,12 +615,11 @@ func TestFragment_MinMax(t *testing.T) {
 	const bitDepth = 16
 
 	f, idx := mustOpenFragment("i", "f", viewStandard, 0, "")
-	_ = idx
 	defer f.Clean(t)
 
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	// Set values.
 	if _, err := f.setValue(tx, 1000, bitDepth, 382); err != nil {
@@ -625,6 +637,12 @@ func TestFragment_MinMax(t *testing.T) {
 	} else if _, err := f.setValue(tx, 7000, bitDepth, 0); err != nil {
 		t.Fatal(err)
 	}
+
+	panicOn(tx.Commit())
+
+	// the new tx is shared by Min/Max below.
+	tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+	defer tx.Rollback()
 
 	t.Run("Min", func(t *testing.T) {
 		tests := []struct {
@@ -689,7 +707,7 @@ func TestFragment_Range(t *testing.T) {
 
 		// Obtain transaction.
 		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
+		defer tx.Rollback()
 
 		// Set values.
 		if _, err := f.setValue(tx, 1000, bitDepth, 382); err != nil {
@@ -716,7 +734,8 @@ func TestFragment_Range(t *testing.T) {
 		defer f.Clean(t)
 
 		// Obtain transaction.
-		tx := &RoaringTx{fragment: f}
+		tx := f.txTestingOnly
+		defer tx.Rollback()
 
 		// Set values.
 		if _, err := f.setValue(tx, 1000, 1, 0); err != nil {
@@ -745,7 +764,7 @@ func TestFragment_Range(t *testing.T) {
 
 		// Obtain transaction.
 		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
+		defer tx.Rollback()
 
 		// Set values.
 		if _, err := f.setValue(tx, 1000, bitDepth, 382); err != nil {
@@ -773,7 +792,7 @@ func TestFragment_Range(t *testing.T) {
 
 		// Obtain transaction.
 		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
+		defer tx.Rollback()
 
 		// Set values.
 		if _, err := f.setValue(tx, 1000, bitDepth, 382); err != nil {
@@ -826,7 +845,7 @@ func TestFragment_Range(t *testing.T) {
 
 		// Obtain transaction.
 		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
+		defer tx.Rollback()
 
 		if _, err := f.setValue(tx, 1, 1, 1); err != nil {
 			t.Fatal(err)
@@ -846,7 +865,7 @@ func TestFragment_Range(t *testing.T) {
 
 		// Obtain transaction.
 		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
+		defer tx.Rollback()
 
 		if _, err := f.setValue(tx, 1, 2, 3); err != nil {
 			t.Fatal(err)
@@ -868,7 +887,7 @@ func TestFragment_Range(t *testing.T) {
 
 		// Obtain transaction.
 		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
+		defer tx.Rollback()
 
 		// Set values.
 		if _, err := f.setValue(tx, 1000, bitDepth, 382); err != nil {
@@ -921,7 +940,7 @@ func TestFragment_Range(t *testing.T) {
 
 		// Obtain transaction.
 		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
+		defer tx.Rollback()
 
 		if _, err := f.setValue(tx, 1, 2, 0); err != nil {
 			t.Fatal(err)
@@ -942,7 +961,8 @@ func TestFragment_Range(t *testing.T) {
 		defer f.Clean(t)
 
 		// Obtain transaction.
-		tx := &RoaringTx{fragment: f}
+		tx := f.txTestingOnly
+		defer tx.Rollback()
 
 		if _, err := f.setValue(tx, 1, 2, 0); err != nil {
 			t.Fatal(err)
@@ -964,7 +984,7 @@ func TestFragment_Range(t *testing.T) {
 
 		// Obtain transaction.
 		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
+		defer tx.Rollback()
 
 		// Set values.
 		if _, err := f.setValue(tx, 1000, bitDepth, 382); err != nil {
@@ -1016,7 +1036,8 @@ func TestFragment_Range(t *testing.T) {
 		defer f.Clean(t)
 
 		// Obtain transaction.
-		tx := &RoaringTx{fragment: f}
+		tx := f.txTestingOnly
+		defer tx.Rollback()
 
 		if _, err := f.setValue(tx, 1, 64, 0xf0); err != nil {
 			t.Fatal(err)
@@ -1037,7 +1058,7 @@ func TestFragment_Range(t *testing.T) {
 func benchmarkSetValues(b *testing.B, bitDepth uint, f *fragment, cfunc func(uint64) uint64) {
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	column := uint64(0)
 	for i := 0; i < b.N; i++ {
@@ -1074,7 +1095,7 @@ func BenchmarkFragment_SetValue(b *testing.B) {
 func benchmarkImportValues(b *testing.B, bitDepth uint, f *fragment, cfunc func(uint64) uint64) {
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	column := uint64(0)
 	b.StopTimer()
@@ -1145,7 +1166,7 @@ func BenchmarkFragment_RepeatedSmallImports(b *testing.B) {
 
 							// Obtain transaction.
 							tx := f.txTestingOnly
-							defer tx.Rollback() //LOOKATME
+							defer tx.Rollback()
 
 							err := f.importRoaringT(tx, getZipfRowsSliceRoaring(uint64(numRows), 1, 0, ShardWidth), false)
 							if err != nil {
@@ -1162,6 +1183,7 @@ func BenchmarkFragment_RepeatedSmallImports(b *testing.B) {
 									b.Fatalf("doing small bulk import: %v", err)
 								}
 							}
+							tx.Rollback() // don't exhaust the Tx space under b.N iterations.
 						}
 					})
 				}
@@ -1239,7 +1261,7 @@ func BenchmarkFragment_RepeatedSmallValueImports(b *testing.B) {
 
 						// Obtain transaction.
 						tx := f.txTestingOnly
-						defer tx.Rollback() //LOOKATME
+						defer tx.Rollback()
 
 						err := f.importValue(tx, initialCols, initialVals, 21, false)
 						if err != nil {
@@ -1257,6 +1279,7 @@ func BenchmarkFragment_RepeatedSmallValueImports(b *testing.B) {
 								b.Fatalf("importing values: %v", err)
 							}
 						}
+						tx.Rollback() // don't exhaust the Tx over the b.N iterations.
 					}
 				})
 			}
@@ -1268,12 +1291,11 @@ func BenchmarkFragment_RepeatedSmallValueImports(b *testing.B) {
 // Ensure a fragment can snapshot correctly.
 func TestFragment_Snapshot(t *testing.T) {
 	f, idx := mustOpenFragment("i", "f", viewStandard, 0, "")
-	_ = idx
 	defer f.Clean(t)
 
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	// Set and then clear bits on the fragment.
 	if _, err := f.setBit(tx, 1000, 1); err != nil {
@@ -1283,6 +1305,9 @@ func TestFragment_Snapshot(t *testing.T) {
 	} else if _, err := f.clearBit(tx, 1000, 1); err != nil {
 		t.Fatal(err)
 	}
+	panicOn(tx.Commit())
+	tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+	defer tx.Rollback()
 
 	// Snapshot bitmap and verify data.
 	if err := f.Snapshot(); err != nil {
@@ -1307,7 +1332,7 @@ func TestFragment_ForEachBit(t *testing.T) {
 
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	// Set bits on the fragment.
 	if _, err := f.setBit(tx, 100, 20); err != nil {
@@ -1341,7 +1366,7 @@ func TestFragment_Top(t *testing.T) {
 
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	// Set bits on the rows 100, 101, & 102.
 	f.mustSetBits(tx, 100, 1, 3, 200)
@@ -1364,12 +1389,11 @@ func TestFragment_Top(t *testing.T) {
 // Ensure a fragment can filter rows when retrieving the top n rows.
 func TestFragment_Top_Filter(t *testing.T) {
 	f, idx := mustOpenFragment("i", "f", viewStandard, 0, CacheTypeRanked)
-	_ = idx
 	defer f.Clean(t)
 
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	// Set bits on the rows 100, 101, & 102.
 	f.mustSetBits(tx, 100, 1, 3, 200)
@@ -1385,6 +1409,10 @@ func TestFragment_Top_Filter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("setAttrs: %v", err)
 	}
+
+	panicOn(tx.Commit())
+	tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+	defer tx.Rollback()
 
 	// Retrieve top rows.
 	if pairs, err := f.top(tx, topOptions{
@@ -1410,7 +1438,7 @@ func TestFragment_TopN_Intersect(t *testing.T) {
 
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	// Create an intersecting input row.
 	src := NewRow(1, 2, 3)
@@ -1446,7 +1474,7 @@ func TestFragment_TopN_Intersect_Large(t *testing.T) {
 
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	// Create an intersecting input row.
 	src := NewRow(
@@ -1499,7 +1527,7 @@ func TestFragment_TopN_IDs(t *testing.T) {
 
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	// Set bits on various rows.
 	f.mustSetBits(tx, 100, 1, 2, 3)
@@ -1525,7 +1553,7 @@ func TestFragment_TopN_NopCache(t *testing.T) {
 
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	// Set bits on various rows.
 	f.mustSetBits(tx, 100, 1, 2, 3)
@@ -1700,7 +1728,7 @@ func TestFragment_Blocks_Empty(t *testing.T) {
 	defer f.Clean(t)
 
 	// Obtain transaction.
-	tx := f.txTestingOnly //&RoaringTx{fragment: f}
+	tx := f.txTestingOnly
 	defer tx.Rollback()
 
 	// Set bits on a different block.
@@ -1727,7 +1755,7 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	// Set bits on the fragment.
 	for i := uint64(0); i < 1000; i++ {
@@ -1742,6 +1770,8 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 	} else if cache.Len() != 1000 {
 		t.Fatalf("unexpected cache len: %d", cache.Len())
 	}
+
+	panicOn(tx.Commit())
 
 	// Reopen the fragment.
 	if err := f.Reopen(); err != nil {
@@ -1758,6 +1788,8 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 
 // Ensure a fragment's cache can be persisted between restarts.
 func TestFragment_RankCache_Persistence(t *testing.T) {
+	skipForRBF(t)
+
 	index := mustOpenIndex(IndexOptions{})
 	defer index.Close()
 
@@ -1781,6 +1813,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 
 	// Obtain transaction.
 	tx := index.Txf.NewTx(Txo{Write: writable, Index: index, Fragment: f})
+	defer tx.Rollback()
 
 	// Set bits on the fragment.
 	for i := uint64(0); i < 1000; i++ {
@@ -1788,6 +1821,10 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
+	panicOn(tx.Commit())
+	tx = index.Txf.NewTx(Txo{Write: !writable, Index: index, Fragment: f})
+	defer tx.Rollback()
 
 	// Verify correct cache type and size.
 	if cache, ok := f.cache.(*rankCache); !ok {
@@ -1812,14 +1849,28 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 	}
 }
 
+func roaringOnlyTest(t *testing.T) {
+	if os.Getenv("PILOSA_TXSRC") != "roaring" {
+		t.Skip("skip for everything but roaring")
+	}
+}
+
+func roaringOnlyBenchmark(b *testing.B) {
+	if os.Getenv("PILOSA_TXSRC") != "roaring" {
+		b.Skip("skip for everything but roaring")
+	}
+}
+
 // Ensure a fragment can be copied to another fragment.
 func TestFragment_WriteTo_ReadFrom(t *testing.T) {
+	roaringOnlyTest(t)
+
 	f0, idx := mustOpenFragment("i", "f", viewStandard, 0, "")
 	_ = idx
 	defer f0.Clean(t)
 
-	// Obtain transaction.
-	tx := &RoaringTx{fragment: f0}
+	tx := f0.txTestingOnly
+	defer tx.Rollback()
 
 	// Set and then clear bits on the fragment.
 	if _, err := f0.setBit(tx, 1000, 1); err != nil {
@@ -1847,7 +1898,7 @@ func TestFragment_WriteTo_ReadFrom(t *testing.T) {
 	_ = idx
 	defer f1.Clean(t)
 
-	if rn, err := f1.ReadFrom(&buf); err != nil {
+	if rn, err := f1.ReadFrom(&buf); err != nil { // eventually calls fragment.fillFragmentFromArchive
 		t.Fatal(err)
 	} else if wn != rn {
 		t.Fatalf("read/write byte count mismatch: wn=%d, rn=%d", wn, rn)
@@ -1898,13 +1949,12 @@ func BenchmarkFragment_Blocks(b *testing.B) {
 
 func BenchmarkFragment_IntersectionCount(b *testing.B) {
 	f, idx := mustOpenFragment("i", "f", viewStandard, 0, "")
-	_ = idx
 	defer f.Clean(b)
 	f.MaxOpN = math.MaxInt32
 
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	// Generate some intersecting data.
 	for i := 0; i < 10000; i += 2 {
@@ -1917,6 +1967,10 @@ func BenchmarkFragment_IntersectionCount(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+
+	panicOn(tx.Commit())
+	tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+	defer tx.Rollback()
 
 	// Snapshot to disk before benchmarking.
 	if err := f.Snapshot(); err != nil {
@@ -1939,7 +1993,7 @@ func TestFragment_Tanimoto(t *testing.T) {
 
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	src := NewRow(1, 2, 3)
 
@@ -1967,7 +2021,7 @@ func TestFragment_Zero_Tanimoto(t *testing.T) {
 
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	src := NewRow(1, 2, 3)
 
@@ -1991,13 +2045,15 @@ func TestFragment_Zero_Tanimoto(t *testing.T) {
 }
 
 func TestFragment_Snapshot_Run(t *testing.T) {
+	roaringOnlyTest(t)
+
 	f, idx := mustOpenFragment("i", "f", viewStandard, 0, "")
 	_ = idx
 	defer f.Clean(t)
 
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	// Set bits on the fragment.
 	for i := uint64(1); i < 3; i++ {
@@ -2029,7 +2085,7 @@ func TestFragment_SetMutex(t *testing.T) {
 
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	var cols []uint64
 
@@ -2148,7 +2204,7 @@ func TestFragment_ImportSet(t *testing.T) {
 
 			// Obtain transaction.
 			tx := f.txTestingOnly
-			defer tx.Rollback() //LOOKATME
+			defer tx.Rollback()
 
 			// Set import.
 			err := f.bulkImport(tx, test.setRowIDs, test.setColIDs, &ImportOptions{})
@@ -2181,6 +2237,140 @@ func TestFragment_ImportSet(t *testing.T) {
 	}
 }
 
+func TestFragment_ImportSet_WithTxCommit(t *testing.T) {
+	tests := []struct {
+		setRowIDs   []uint64
+		setColIDs   []uint64
+		setExp      map[uint64][]uint64
+		clearRowIDs []uint64
+		clearColIDs []uint64
+		clearExp    map[uint64][]uint64
+	}{
+		{
+			[]uint64{1, 1, 1, 1},
+			[]uint64{0, 1, 2, 3},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+			},
+			[]uint64{},
+			[]uint64{},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+			},
+		},
+		{
+			[]uint64{1, 1, 1, 1, 2, 2, 2, 2},
+			[]uint64{0, 1, 2, 3, 0, 1, 2, 3},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+				2: {0, 1, 2, 3},
+			},
+			[]uint64{1, 1, 2},
+			[]uint64{1, 2, 3},
+			map[uint64][]uint64{
+				1: {0, 3},
+				2: {0, 1, 2},
+			},
+		},
+		{
+			[]uint64{1, 1, 1, 1, 2},
+			[]uint64{0, 1, 2, 3, 1},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+				2: {1},
+			},
+			[]uint64{1, 1, 1, 1},
+			[]uint64{0, 1, 2, 3},
+			map[uint64][]uint64{
+				1: {},
+				2: {1},
+			},
+		},
+		{
+			[]uint64{1, 1, 1, 1, 2, 2, 1},
+			[]uint64{0, 1, 2, 3, 1, 8, 1},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+				2: {1, 8},
+			},
+			[]uint64{1, 1},
+			[]uint64{0, 0},
+			map[uint64][]uint64{
+				1: {1, 2, 3},
+				2: {1, 8},
+			},
+		},
+		{
+			[]uint64{1, 2, 3},
+			[]uint64{8, 8, 8},
+			map[uint64][]uint64{
+				1: {8},
+				2: {8},
+				3: {8},
+			},
+			[]uint64{1, 2, 3},
+			[]uint64{9, 9, 9},
+			map[uint64][]uint64{
+				1: {8},
+				2: {8},
+				3: {8},
+			},
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("importset%d", i), func(t *testing.T) {
+			f, idx := mustOpenFragment("i", "f", viewStandard, 0, "")
+			_ = idx
+			defer f.Clean(t)
+
+			// Obtain transaction.
+			tx := f.txTestingOnly
+			defer tx.Rollback()
+
+			// Set import.
+			err := f.bulkImport(tx, test.setRowIDs, test.setColIDs, &ImportOptions{})
+			if err != nil {
+				t.Fatalf("bulk importing ids: %v", err)
+			}
+
+			panicOn(tx.Commit())
+			tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+			defer tx.Rollback()
+
+			// Check for expected results.
+			for k, v := range test.setExp {
+				cols := f.mustRow(tx, k).Columns()
+				if !reflect.DeepEqual(cols, v) {
+					t.Fatalf("expected: %v, but got: %v", v, cols)
+				}
+			}
+
+			panicOn(tx.Commit())
+			tx = idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f})
+			defer tx.Rollback()
+
+			// Clear import.
+			err = f.bulkImport(tx, test.clearRowIDs, test.clearColIDs, &ImportOptions{Clear: true})
+			if err != nil {
+				t.Fatalf("bulk clearing ids: %v", err)
+			}
+
+			panicOn(tx.Commit())
+			tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+			defer tx.Rollback()
+
+			// Check for expected results.
+			for k, v := range test.clearExp {
+				cols := f.mustRow(tx, k).Columns()
+				if !reflect.DeepEqual(cols, v) {
+					t.Fatalf("expected: %v, but got: %v", v, cols)
+				}
+			}
+		})
+	}
+}
+
 func TestFragment_ConcurrentImport(t *testing.T) {
 	t.Run("bulkImportStandard", func(t *testing.T) {
 		f, idx := mustOpenFragment("i", "f", viewStandard, 0, "")
@@ -2189,7 +2379,7 @@ func TestFragment_ConcurrentImport(t *testing.T) {
 
 		// Obtain transaction.
 		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
+		defer tx.Rollback()
 
 		eg := errgroup.Group{}
 		eg.Go(func() error { return f.bulkImportStandard(tx, []uint64{1, 2}, []uint64{1, 2}, &ImportOptions{}) })
@@ -2291,7 +2481,7 @@ func TestFragment_ImportMutex(t *testing.T) {
 
 			// Obtain transaction.
 			tx := f.txTestingOnly
-			defer tx.Rollback() //LOOKATME
+			defer tx.Rollback()
 
 			// Set import.
 			err := f.bulkImport(tx, test.setRowIDs, test.setColIDs, &ImportOptions{})
@@ -2312,6 +2502,141 @@ func TestFragment_ImportMutex(t *testing.T) {
 			if err != nil {
 				t.Fatalf("bulk clearing ids: %v", err)
 			}
+
+			// Check for expected results.
+			for k, v := range test.clearExp {
+				cols := f.mustRow(tx, k).Columns()
+				if !reflect.DeepEqual(cols, v) {
+					t.Fatalf("row: %d expected: %v, but got: %v", k, v, cols)
+				}
+			}
+		})
+	}
+}
+
+// Ensure a fragment can import mutually exclusive values.
+// Now with Commits in the middle.
+func TestFragment_ImportMutex_WithTxCommit(t *testing.T) {
+	tests := []struct {
+		setRowIDs   []uint64
+		setColIDs   []uint64
+		setExp      map[uint64][]uint64
+		clearRowIDs []uint64
+		clearColIDs []uint64
+		clearExp    map[uint64][]uint64
+	}{
+		{
+			[]uint64{1, 1, 1, 1},
+			[]uint64{0, 1, 2, 3},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+			},
+			[]uint64{},
+			[]uint64{},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+			},
+		},
+		{
+			[]uint64{1, 1, 1, 1, 2, 2, 2, 2},
+			[]uint64{0, 1, 2, 3, 0, 1, 2, 3},
+			map[uint64][]uint64{
+				1: {},
+				2: {0, 1, 2, 3},
+			},
+			[]uint64{1, 1, 2},
+			[]uint64{1, 2, 3},
+			map[uint64][]uint64{
+				1: {},
+				2: {0, 1, 2},
+			},
+		},
+		{
+			[]uint64{1, 1, 1, 1, 2},
+			[]uint64{0, 1, 2, 3, 1},
+			map[uint64][]uint64{
+				1: {0, 2, 3},
+				2: {1},
+			},
+			[]uint64{1, 1, 1, 1},
+			[]uint64{0, 1, 2, 3},
+			map[uint64][]uint64{
+				1: {},
+				2: {1},
+			},
+		},
+		{
+			[]uint64{1, 1, 1, 1, 2, 2, 1},
+			[]uint64{0, 1, 2, 3, 1, 8, 1},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+				2: {8},
+			},
+			[]uint64{1, 1},
+			[]uint64{0, 0},
+			map[uint64][]uint64{
+				1: {1, 2, 3},
+				2: {8},
+			},
+		},
+		{
+			[]uint64{1, 2, 3},
+			[]uint64{8, 8, 8},
+			map[uint64][]uint64{
+				1: {},
+				2: {},
+				3: {8},
+			},
+			[]uint64{1, 2, 3},
+			[]uint64{9, 9, 9},
+			map[uint64][]uint64{
+				1: {},
+				2: {},
+				3: {8},
+			},
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("importmutex%d", i), func(t *testing.T) {
+			f, idx := mustOpenMutexFragment("i", "f", viewStandard, 0, "")
+			defer f.Clean(t)
+
+			// Obtain transaction.
+			tx := f.txTestingOnly
+			defer tx.Rollback()
+
+			// Set import.
+			err := f.bulkImport(tx, test.setRowIDs, test.setColIDs, &ImportOptions{})
+			if err != nil {
+				t.Fatalf("bulk importing ids: %v", err)
+			}
+
+			panicOn(tx.Commit())
+			tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+			defer tx.Rollback()
+
+			// Check for expected results.
+			for k, v := range test.setExp {
+				cols := f.mustRow(tx, k).Columns()
+				if !reflect.DeepEqual(cols, v) {
+					t.Fatalf("row: %d, expected: %v, but got: %v", k, v, cols)
+				}
+			}
+
+			panicOn(tx.Commit())
+			tx = idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f})
+			defer tx.Rollback()
+
+			// Clear import.
+			err = f.bulkImport(tx, test.clearRowIDs, test.clearColIDs, &ImportOptions{Clear: true})
+			if err != nil {
+				t.Fatalf("bulk clearing ids: %v", err)
+			}
+
+			panicOn(tx.Commit())
+			tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+			defer tx.Rollback()
 
 			// Check for expected results.
 			for k, v := range test.clearExp {
@@ -2415,7 +2740,7 @@ func TestFragment_ImportBool(t *testing.T) {
 
 			// Obtain transaction.
 			tx := f.txTestingOnly
-			defer tx.Rollback() //LOOKATME
+			defer tx.Rollback()
 
 			// Set import.
 			err := f.bulkImport(tx, test.setRowIDs, test.setColIDs, &ImportOptions{})
@@ -2436,6 +2761,142 @@ func TestFragment_ImportBool(t *testing.T) {
 			if err != nil {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
+
+			// Check for expected results.
+			for k, v := range test.clearExp {
+				cols := f.mustRow(tx, k).Columns()
+				if !reflect.DeepEqual(cols, v) {
+					t.Fatalf("expected: %v, but got: %v", v, cols)
+				}
+			}
+		})
+	}
+}
+
+// Ensure a fragment can import bool values, with Commits in between writes and reads.
+func TestFragment_ImportBool_WithTxCommit(t *testing.T) {
+	tests := []struct {
+		setRowIDs   []uint64
+		setColIDs   []uint64
+		setExp      map[uint64][]uint64
+		clearRowIDs []uint64
+		clearColIDs []uint64
+		clearExp    map[uint64][]uint64
+	}{
+		{
+			[]uint64{1, 1, 1, 1},
+			[]uint64{0, 1, 2, 3},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+			},
+			[]uint64{},
+			[]uint64{},
+			map[uint64][]uint64{
+				1: {0, 1, 2, 3},
+			},
+		},
+		{
+			[]uint64{0, 0, 0, 0, 1, 1, 1, 1},
+			[]uint64{0, 1, 2, 3, 0, 1, 2, 3},
+			map[uint64][]uint64{
+				0: {},
+				1: {0, 1, 2, 3},
+			},
+			[]uint64{1, 1, 2},
+			[]uint64{1, 2, 3},
+			map[uint64][]uint64{
+				0: {},
+				1: {0, 3},
+				2: {},
+			},
+		},
+		{
+			[]uint64{0, 0, 0, 0, 1},
+			[]uint64{0, 1, 2, 3, 1},
+			map[uint64][]uint64{
+				0: {0, 2, 3},
+				1: {1},
+			},
+			[]uint64{1, 1, 1, 1},
+			[]uint64{0, 1, 2, 3},
+			map[uint64][]uint64{
+				0: {0, 2, 3},
+				1: {},
+			},
+		},
+		{
+			[]uint64{1, 1, 1, 1, 0, 0, 1},
+			[]uint64{0, 1, 2, 3, 1, 8, 1},
+			map[uint64][]uint64{
+				0: {8},
+				1: {0, 1, 2, 3},
+			},
+			[]uint64{1, 1},
+			[]uint64{0, 0},
+			map[uint64][]uint64{
+				0: {8},
+				1: {1, 2, 3},
+			},
+		},
+		{
+			[]uint64{0, 1, 2},
+			[]uint64{8, 8, 8},
+			map[uint64][]uint64{
+				0: {},
+				1: {}, // This isn't {8} because fragment doesn't validate bool values.
+				2: {8},
+			},
+			[]uint64{1, 2, 3},
+			[]uint64{9, 9, 9},
+			map[uint64][]uint64{
+				0: {},
+				1: {},
+				2: {8},
+			},
+		},
+	}
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("importmutex%d", i), func(t *testing.T) {
+			f, idx := mustOpenBoolFragment("i", "f", viewStandard, 0, "")
+			_ = idx
+			defer f.Clean(t)
+
+			// Obtain transaction.
+			tx := f.txTestingOnly
+			defer tx.Rollback()
+
+			// Set import.
+			err := f.bulkImport(tx, test.setRowIDs, test.setColIDs, &ImportOptions{})
+			if err != nil {
+				t.Fatalf("bulk importing ids: %v", err)
+			}
+
+			panicOn(tx.Commit())
+			tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+			defer tx.Rollback()
+
+			// Check for expected results.
+			for k, v := range test.setExp {
+				cols := f.mustRow(tx, k).Columns()
+				if !reflect.DeepEqual(cols, v) {
+					t.Fatalf("expected: %v, but got: %v", v, cols)
+				}
+			}
+
+			panicOn(tx.Commit())
+			tx = idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f})
+			defer tx.Rollback()
+
+			// Clear import.
+			err = f.bulkImport(tx, test.clearRowIDs, test.clearColIDs, &ImportOptions{Clear: true})
+			if err != nil {
+				t.Fatalf("bulk importing ids: %v", err)
+			}
+
+			panicOn(tx.Commit())
+			tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+			defer tx.Rollback()
 
 			// Check for expected results.
 			for k, v := range test.clearExp {
@@ -2478,10 +2939,6 @@ func BenchmarkFragment_FullSnapshot(b *testing.B) {
 	_ = idx
 	defer f.Clean(b)
 
-	// Obtain transaction.
-	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
-
 	// Generate some intersecting data.
 	maxX := ShardWidth / 2
 	sz := maxX
@@ -2499,9 +2956,14 @@ func BenchmarkFragment_FullSnapshot(b *testing.B) {
 			val += 2
 			i++
 		}
+
+		tx := idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+		defer tx.Rollback()
+
 		if err := f.bulkImport(tx, rows, cols, options); err != nil {
 			b.Fatalf("Error Building Sample: %s", err)
 		}
+		panicOn(tx.Commit())
 		if row > max {
 			max = row
 		}
@@ -2544,14 +3006,16 @@ func BenchmarkFragment_Import(b *testing.B) {
 		copy(rowsUse, rows)
 		copy(colsUse, cols)
 		f, idx := mustOpenFragment("i", "f", viewStandard, 0, "")
-		_ = idx // Obtain transaction.
+		_ = idx
+		// Obtain transaction.
 		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
+		defer tx.Rollback()
 		b.StartTimer()
 		if err := f.bulkImport(tx, rowsUse, colsUse, options); err != nil {
 			b.Errorf("Error Building Sample: %s", err)
 		}
 		b.StopTimer()
+		tx.Rollback()
 		f.Clean(b)
 	}
 }
@@ -2645,6 +3109,7 @@ func BenchmarkImportRoaringConcurrent(b *testing.B) {
 	}
 }
 func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
+	roaringOnlyBenchmark(b)
 	if testing.Short() {
 		b.SkipNow()
 	}
@@ -2664,6 +3129,7 @@ func BenchmarkImportRoaringUpdateConcurrent(b *testing.B) {
 								// the cost of actually doing the op log for the large initial data set
 								// is excessive. force storage into snapshotted state, then use import
 								// to generate an op log and/or snapshot.
+								// note: skipped for badger, above.
 								_, _, err := frags[j].storage.ImportRoaringBits(data, false, false, 0)
 								if err != nil {
 									b.Fatalf("importing roaring: %v", err)
@@ -2719,7 +3185,7 @@ func BenchmarkImportStandard(b *testing.B) {
 					_ = idx
 					// Obtain transaction.
 					tx := f.txTestingOnly
-					defer tx.Rollback() //LOOKATME
+					defer tx.Rollback()
 
 					b.StartTimer()
 					err := f.bulkImport(tx, rowIDs, columnIDs, &ImportOptions{})
@@ -2727,6 +3193,7 @@ func BenchmarkImportStandard(b *testing.B) {
 						b.Errorf("import error: %v", err)
 					}
 					b.StopTimer()
+					tx.Rollback()
 					f.Clean(b)
 				}
 			})
@@ -2757,7 +3224,7 @@ func BenchmarkImportRoaringUpdate(b *testing.B) {
 						// to generate an op log and/or snapshot.
 						itr, err := roaring.NewRoaringIterator(data)
 						panicOn(err)
-						_, _, err = tx.ImportRoaringBits(f.index, f.field, f.view, f.shard, itr, false, false, 0)
+						_, _, err = tx.ImportRoaringBits(f.index, f.field, f.view, f.shard, itr, false, false, 0, nil)
 						if err != nil {
 							b.Errorf("import error: %v", err)
 						}
@@ -2877,14 +3344,21 @@ func BenchmarkImportIntoLargeFragment(b *testing.B) {
 		}
 		origF.Close()
 		fi.Close()
-		nf := newFragment(NewHolder(DefaultPartitionN), fi.Name(), "i", "f", viewStandard, 0, 0)
+
+		h := NewHolder(DefaultPartitionN)
+		h.Path = fi.Name()
+		idx, err := h.CreateIndex("i", IndexOptions{})
+		panicOn(err)
+
+		nf := newFragment(h, fi.Name(), "i", "f", viewStandard, 0, 0)
 		err = nf.Open()
 		if err != nil {
 			b.Fatalf("opening fragment: %v", err)
 		}
 
 		// Obtain transaction.
-		tx := &RoaringTx{fragment: nf}
+		tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: nf})
+		defer tx.Rollback()
 
 		copy(rows, rowsOrig)
 		copy(cols, colsOrig)
@@ -2894,7 +3368,7 @@ func BenchmarkImportIntoLargeFragment(b *testing.B) {
 		if err != nil {
 			b.Fatalf("bulkImport: %v", err)
 		}
-
+		panicOn(tx.Commit())
 		nf.Clean(b)
 	}
 }
@@ -2923,13 +3397,15 @@ func BenchmarkImportRoaringIntoLargeFragment(b *testing.B) {
 		//nf, idx := mustOpenFragmentFlags(index, field, view string, shard uint64, cacheType string, flags byte)
 
 		th := newTestHolder()
-		idx := fragTestMustOpenIndex("i", th, IndexOptions{})
+		idx := fragTestMustOpenIndex(filepath.Dir(fi.Name()), "i", th, IndexOptions{})
+		if th.NeedsSnapshot() {
+			th.SnapshotQueue = newSnapshotQueue(1, 1, nil)
+		}
 		nf := newFragment(th, fi.Name(), "i", "f", viewStandard, 0, 0)
 
 		tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: nf})
 		defer tx.Rollback()
 
-		//nf := newFragment(NewHolder(DefaultPartitionN), fi.Name(), "i", "f", viewStandard, 0, 0)
 		err = nf.Open()
 		if err != nil {
 			b.Fatalf("opening fragment: %v", err)
@@ -3094,6 +3570,7 @@ func BenchmarkFileWrite(b *testing.B) {
 
 /////////////////////////////////////////////////////////////////////
 
+// not called under badger b/c f.idx.NeedsSnapshot() in Clean() avoids it.
 func (f *fragment) sanityCheck(t testing.TB) {
 	newBM := roaring.NewFileBitmap()
 	file, err := os.Open(f.path)
@@ -3110,6 +3587,7 @@ func (f *fragment) sanityCheck(t testing.TB) {
 		t.Fatalf("sanityCheck couldn't unmarshal fragment %s: %v", f.path, err)
 	}
 	// Refactor fragment.storage
+	// note: not called for badger, see above.
 	if equal, reason := newBM.BitwiseEqual(f.storage); !equal {
 		t.Fatalf("fragment %s: unmarshalled bitmap different: %v", f.path, reason)
 	}
@@ -3122,25 +3600,35 @@ func (f *fragment) Clean(t testing.TB) {
 	// check or else, in some cases, the background snapshot queue
 	// can decide to pick it up.
 	func() {
+		// should we skip snapshot queue stuff under badger/rbf?
 		defer f.mu.Unlock()
-		err := defaultSnapshotQueue.Await(f)
-		if err != nil {
-			t.Fatalf("snapshot failed before sanity check: %v", err)
-		}
-		f.sanityCheck(t)
-		if f.storage != nil && f.storage.Source != nil {
-			if f.storage.Source.Dead() {
-				t.Fatalf("cleaning up fragment %s, source %s, source already dead", f.path, f.storage.Source.ID())
+
+		// badger doesn't need snapshot, so this stuff is skipped.
+		// The snapshot queue stuff doesn't work under badger.
+		if f.idx.NeedsSnapshot() {
+			err := defaultSnapshotQueue.Await(f)
+			if err != nil {
+				t.Fatalf("snapshot failed before sanity check: %v", err)
+			}
+			f.sanityCheck(t)
+			if f.storage != nil && f.storage.Source != nil {
+				if f.storage.Source.Dead() {
+					t.Fatalf("cleaning up fragment %s, source %s, source already dead", f.path, f.storage.Source.ID())
+				}
 			}
 		}
 	}()
 	if f.txTestingOnly != nil {
 		f.txTestingOnly.Rollback()
+		panicOn(f.idx.Txf.CloseIndex(f.idx))
 	}
 	errc := f.Close()
 	// prevent double-closes of generation during testing.
 	f.gen = nil
-	errf := os.Remove(f.path)
+	var errf error
+	if FileExists(f.path) {
+		errf = os.Remove(f.path) // remove /var/folders/2x/hm9gp5ys3k9gmm5f_vzm_6wc0000gn/T/pilosa-index-768377904/i/f/views/standard/fragments/0: no such file or directory
+	}
 	errp := os.Remove(f.cachePath())
 	if errc != nil || errf != nil {
 		t.Fatal("cleaning up fragment: ", errc, errf, errp)
@@ -3180,32 +3668,24 @@ func mustOpenBSIFragment(index, field, view string, shard uint64) (*fragment, *I
 	return mustOpenFragmentFlags(index, field, view, shard, "", 1)
 }
 
-var testHolder = NewHolder(DefaultPartitionN)
-
-func init() {
-	testHolder.SnapshotQueue = newSnapshotQueue(1, 1, nil)
-}
-
 func newTestHolder() *Holder {
 	h := NewHolder(DefaultPartitionN)
-	h.SnapshotQueue = newSnapshotQueue(1, 1, nil)
+	//h.SnapshotQueue = newSnapshotQueue(1, 1, nil)
 	return h
 }
 
 // fragTestMustOpenIndex returns a new, opened index at a temporary path. Panic on error.
-func fragTestMustOpenIndex(index string, holder *Holder, opt IndexOptions) *Index {
-	path, err := ioutil.TempDir(*TempDir, "pilosa-index-")
-	if err != nil {
-		panic(err)
-	}
-	holder.Path = path
+func fragTestMustOpenIndex(holderDir, index string, holder *Holder, opt IndexOptions) *Index {
+	holder.Path = holderDir
+	holder.mu.Lock()
 	idx, err := holder.createIndex(index, opt)
+	holder.mu.Unlock()
 	panicOn(err)
 
 	idx.keys = opt.Keys
 	idx.trackExistence = opt.TrackExistence
 
-	if err := idx.Open(); err != nil {
+	if err := idx.Open(false); err != nil {
 		panic(err)
 	}
 	return idx
@@ -3213,25 +3693,27 @@ func fragTestMustOpenIndex(index string, holder *Holder, opt IndexOptions) *Inde
 
 // mustOpenFragment returns a new instance of Fragment with a temporary path.
 func mustOpenFragmentFlags(index, field, view string, shard uint64, cacheType string, flags byte) (*fragment, *Index) {
-	file, err := ioutil.TempFile(*TempDir, "pilosa-fragment-")
-	if err != nil {
-		panic(err)
-	}
-	file.Close()
+
+	holderDir, err := ioutil.TempDir(*TempDir, "holder-dir")
+	panicOn(err)
 
 	if cacheType == "" {
 		cacheType = DefaultCacheType
 	}
 
-	// new:
 	th := newTestHolder()
-	idx := fragTestMustOpenIndex(index, th, IndexOptions{})
-	f := newFragment(th, file.Name(), index, field, view, shard, flags)
+	idx := fragTestMustOpenIndex(holderDir, index, th, IndexOptions{})
+	if th.NeedsSnapshot() {
+		th.SnapshotQueue = newSnapshotQueue(1, 1, nil)
+	}
+
+	fragDir := fmt.Sprintf("%v/%v/views/%v/fragments/", idx.path, field, view)
+	panicOn(os.MkdirAll(fragDir, 0777))
+	fragPath := fragDir + fmt.Sprintf("%v", shard)
+	f := newFragment(th, fragPath, index, field, view, shard, flags)
 
 	tx := idx.Txf.NewTx(Txo{Write: writable, Index: idx, Fragment: f})
 	f.txTestingOnly = tx
-
-	//old: f := newFragment(testHolder, file.Name(), index, field, view, shard, flags)
 
 	f.CacheType = cacheType
 	f.RowAttrStore = &memAttrStore{
@@ -3292,9 +3774,9 @@ func TestFragment_RowsIteration(t *testing.T) {
 	t.Run("firstContainer", func(t *testing.T) {
 		f, idx := mustOpenFragment("i", "f", viewStandard, 0, "")
 		_ = idx
-		defer f.Clean(t)
 		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
+		defer tx.Rollback()
+		defer f.Clean(t)
 
 		expectedAll := make([]uint64, 0)
 		expectedOdd := make([]uint64, 0)
@@ -3326,9 +3808,9 @@ func TestFragment_RowsIteration(t *testing.T) {
 	t.Run("secondRow", func(t *testing.T) {
 		f, idx := mustOpenFragment("i", "f", viewStandard, 0, "")
 		_ = idx
-		defer f.Clean(t)
 		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
+		defer tx.Rollback()
+		defer f.Clean(t)
 
 		expected := []uint64{1, 2}
 		if _, err := f.setBit(tx, 1, 66000); err != nil {
@@ -3338,6 +3820,10 @@ func TestFragment_RowsIteration(t *testing.T) {
 		} else if _, err := f.setBit(tx, 2, 166000); err != nil {
 			t.Fatal(err)
 		}
+		panicOn(tx.Commit())
+
+		tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+		defer tx.Rollback()
 
 		ids, err := f.rows(context.Background(), tx, 0)
 		if err != nil {
@@ -3357,9 +3843,9 @@ func TestFragment_RowsIteration(t *testing.T) {
 	t.Run("combinations", func(t *testing.T) {
 		f, idx := mustOpenFragment("i", "f", viewStandard, 0, "")
 		_ = idx
-		defer f.Clean(t)
 		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
+		defer tx.Rollback()
+		defer f.Clean(t)
 
 		expectedRows := make([]uint64, 0)
 		for r := uint64(1); r < uint64(10000); r += 250 {
@@ -3426,6 +3912,7 @@ func TestFragment_RoaringImport(t *testing.T) {
 				if err != nil {
 					t.Fatalf("importing roaring: %v", err)
 				}
+
 				exp := calcExpected(test[:num+1]...)
 				for row, expCols := range exp {
 					cols := f.mustRow(tx, uint64(row)).Columns()
@@ -3471,6 +3958,7 @@ func TestFragment_RoaringImportTopN(t *testing.T) {
 			if err != nil {
 				t.Fatalf("bulk importing ids: %v", err)
 			}
+
 			expPairs := calcTop(test.rowIDs, test.colIDs)
 			pairs, err := f.top(tx, topOptions{})
 			if err != nil {
@@ -3602,9 +4090,9 @@ func TestFragmentRowIterator(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		f, idx := mustOpenFragment("i", "f", "v", 0, CacheTypeRanked)
 		_ = idx
-		defer f.Clean(t)
 		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
+		defer tx.Rollback()
+		defer f.Clean(t)
 
 		f.mustSetBits(tx, 0, 0)
 		f.mustSetBits(tx, 1, 0)
@@ -3650,7 +4138,7 @@ func TestFragmentRowIterator(t *testing.T) {
 		_ = idx
 		defer f.Clean(t)
 		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
+		defer tx.Rollback()
 
 		f.mustSetBits(tx, 1, 0)
 		f.mustSetBits(tx, 3, 0)
@@ -3696,7 +4184,7 @@ func TestFragmentRowIterator(t *testing.T) {
 		_ = idx
 		defer f.Clean(t)
 		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
+		defer tx.Rollback()
 
 		f.mustSetBits(tx, 0, 0)
 		f.mustSetBits(tx, 1, 0)
@@ -3727,11 +4215,13 @@ func TestFragmentRowIterator(t *testing.T) {
 	})
 
 	t.Run("skipped rows wrapped", func(t *testing.T) {
+		skipForRBF(t)
+
 		f, idx := mustOpenFragment("i", "f", "v", 0, CacheTypeRanked)
 		_ = idx
 		defer f.Clean(t)
 		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
+		defer tx.Rollback()
 
 		f.mustSetBits(tx, 1, 0)
 		f.mustSetBits(tx, 3, 0)
@@ -3762,7 +4252,192 @@ func TestFragmentRowIterator(t *testing.T) {
 	})
 }
 
+// same, with commits
+func TestFragmentRowIterator_WithTxCommit(t *testing.T) {
+	t.Run("basic", func(t *testing.T) {
+		f, idx := mustOpenFragment("i", "f", "v", 0, CacheTypeRanked)
+		_ = idx
+		tx := f.txTestingOnly
+		defer tx.Rollback()
+		defer f.Clean(t)
+
+		f.mustSetBits(tx, 0, 0)
+		f.mustSetBits(tx, 1, 0)
+		f.mustSetBits(tx, 2, 0)
+		f.mustSetBits(tx, 3, 0)
+
+		panicOn(tx.Commit())
+		tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+		defer tx.Rollback()
+
+		iter, err := f.rowIterator(tx, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := uint64(0); i < 4; i++ {
+			row, id, _, wrapped, err := iter.Next()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if id != i {
+				t.Fatalf("expected row %d but got %d", i, id)
+			}
+			if wrapped {
+				t.Fatalf("shouldn't have wrapped")
+			}
+			if !reflect.DeepEqual(row.Columns(), []uint64{0}) {
+				t.Fatalf("got wrong columns back on iteration %d - should just be 0 but %v", i, row.Columns())
+			}
+		}
+		row, id, _, wrapped, err := iter.Next()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if row != nil {
+			t.Fatalf("row should be nil after iterator is exhausted, got %v", row.Columns())
+		}
+		if id != 0 {
+			t.Fatalf("id should be 0 after iterator is exhausted, got %d", id)
+		}
+		if !wrapped {
+			t.Fatalf("wrapped should be true after iterator is exhausted")
+		}
+	})
+
+	t.Run("skipped rows", func(t *testing.T) {
+		f, idx := mustOpenFragment("i", "f", "v", 0, CacheTypeRanked)
+		_ = idx
+		defer f.Clean(t)
+		tx := f.txTestingOnly
+		defer tx.Rollback()
+
+		f.mustSetBits(tx, 1, 0)
+		f.mustSetBits(tx, 3, 0)
+		f.mustSetBits(tx, 5, 0)
+		f.mustSetBits(tx, 7, 0)
+
+		panicOn(tx.Commit())
+		tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+		defer tx.Rollback()
+
+		iter, err := f.rowIterator(tx, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := uint64(1); i < 8; i += 2 {
+			row, id, _, wrapped, err := iter.Next()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if id != i {
+				t.Fatalf("expected row %d but got %d", i, id)
+			}
+			if wrapped {
+				t.Fatalf("shouldn't have wrapped")
+			}
+			if !reflect.DeepEqual(row.Columns(), []uint64{0}) {
+				t.Fatalf("got wrong columns back on iteration %d - should just be 0 but %v", i, row.Columns())
+			}
+		}
+		row, id, _, wrapped, err := iter.Next()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if row != nil {
+			t.Fatalf("row should be nil after iterator is exhausted, got %v", row.Columns())
+		}
+		if id != 0 {
+			t.Fatalf("id should be 0 after iterator is exhausted, got %d", id)
+		}
+		if !wrapped {
+			t.Fatalf("wrapped should be true after iterator is exhausted")
+		}
+	})
+
+	t.Run("basic wrapped", func(t *testing.T) {
+		f, idx := mustOpenFragment("i", "f", "v", 0, CacheTypeRanked)
+		_ = idx
+		defer f.Clean(t)
+		tx := f.txTestingOnly
+		defer tx.Rollback()
+
+		f.mustSetBits(tx, 0, 0)
+		f.mustSetBits(tx, 1, 0)
+		f.mustSetBits(tx, 2, 0)
+		f.mustSetBits(tx, 3, 0)
+
+		panicOn(tx.Commit())
+		tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+		defer tx.Rollback()
+
+		iter, err := f.rowIterator(tx, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := uint64(0); i < 5; i++ {
+			row, id, _, wrapped, err := iter.Next()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if id != i%4 {
+				t.Fatalf("expected row %d but got %d", i%4, id)
+			}
+			if wrapped && i < 4 {
+				t.Fatalf("shouldn't have wrapped")
+			} else if !wrapped && i >= 4 {
+				t.Fatalf("should have wrapped")
+			}
+			if !reflect.DeepEqual(row.Columns(), []uint64{0}) {
+				t.Fatalf("got wrong columns back on iteration %d - should just be 0 but %v", i, row.Columns())
+			}
+		}
+	})
+
+	t.Run("skipped rows wrapped", func(t *testing.T) {
+		f, idx := mustOpenFragment("i", "f", "v", 0, CacheTypeRanked)
+		_ = idx
+		defer f.Clean(t)
+		tx := f.txTestingOnly
+		defer tx.Rollback()
+
+		f.mustSetBits(tx, 1, 0)
+		f.mustSetBits(tx, 3, 0)
+		f.mustSetBits(tx, 5, 0)
+		f.mustSetBits(tx, 7, 0)
+
+		panicOn(tx.Commit())
+		tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+		defer tx.Rollback()
+
+		iter, err := f.rowIterator(tx, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := uint64(1); i < 10; i += 2 {
+			row, id, _, wrapped, err := iter.Next()
+			if err != nil {
+				t.Fatal(err)
+			} else if row == nil {
+				t.Fatal("expected row")
+			}
+			if id != i%8 {
+				t.Errorf("expected row %d but got %d", i%8, id)
+			}
+			if wrapped && i < 8 {
+				t.Errorf("shouldn't have wrapped")
+			} else if !wrapped && i >= 8 {
+				t.Errorf("should have wrapped")
+			}
+			if !reflect.DeepEqual(row.Columns(), []uint64{0}) {
+				t.Fatalf("got wrong columns back on iteration %d - should just be 0 but %v", i, row.Columns())
+			}
+		}
+	})
+}
+
 func TestUnionInPlaceMapped(t *testing.T) {
+	roaringOnlyTest(t)
+
 	f, idx := mustOpenFragment("i", "f", "v", 0, CacheTypeNone)
 	// note: clean has to be deferred first, because it has to run with
 	// the lock *not* held, because it is sometimes so it has to grab the
@@ -3928,7 +4603,7 @@ func TestIntLTRegression(t *testing.T) {
 
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	_, err := f.setValue(tx, 1, 6, 33)
 	if err != nil {
@@ -3961,7 +4636,8 @@ func TestFragmentBSIUnsigned(t *testing.T) {
 	defer f.Clean(t)
 
 	// Obtain transaction.
-	tx := &RoaringTx{fragment: f}
+	tx := f.txTestingOnly
+	defer tx.Rollback()
 
 	// Number of bits to test.
 	const k = 6
@@ -4116,13 +4792,181 @@ func TestFragmentBSIUnsigned(t *testing.T) {
 	})
 }
 
+// same, WithTxCommit version
+func TestFragmentBSIUnsigned_WithTxCommit(t *testing.T) {
+	f, idx := mustOpenFragment("i", "f", "v", 0, CacheTypeNone)
+	_ = idx
+	defer f.Clean(t)
+
+	// Obtain transaction.
+	tx := f.txTestingOnly
+	defer tx.Rollback()
+
+	// Number of bits to test.
+	const k = 6
+
+	// Load all numbers into an effectively diagonal matrix.
+	for i := 0; i < 1<<k; i++ {
+		ok, err := f.setValue(tx, uint64(i), k, int64(i))
+		if err != nil {
+			t.Fatalf("failed to set col %d to %d: %v", uint64(i), int64(i), err)
+		} else if !ok {
+			t.Fatalf("no change when setting col %d to %d", uint64(i), int64(i))
+		}
+	}
+
+	panicOn(tx.Commit())
+	tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+	defer tx.Rollback()
+
+	// Generate a list of columns.
+	cols := make([]uint64, 1<<k)
+	for i := range cols {
+		cols[i] = uint64(i)
+	}
+
+	// Minimum and maximum checking bounds.
+	// This is mostly arbitrary.
+	minCheck, maxCheck := -3, 1<<(k+1)
+
+	t.Run("<", func(t *testing.T) {
+		for i := minCheck; i < maxCheck; i++ {
+			row, err := f.rangeLT(tx, k, int64(i), false)
+			if err != nil {
+				t.Fatalf("failed to query fragment: %v", err)
+			}
+			var expect []uint64
+			switch {
+			case i < 0:
+			case i < len(cols):
+				expect = cols[:i]
+			default:
+				expect = cols
+			}
+			got := row.Columns()
+			if !sliceEq(expect, got) {
+				t.Errorf("expected %v but got %v for x < %d", expect, got, i)
+			}
+		}
+	})
+	t.Run("<=", func(t *testing.T) {
+		for i := minCheck; i < maxCheck; i++ {
+			row, err := f.rangeLT(tx, k, int64(i), true)
+			if err != nil {
+				t.Fatalf("failed to query fragment: %v", err)
+			}
+			var expect []uint64
+			switch {
+			case i < 0:
+			case i < len(cols)-1:
+				expect = cols[:i+1]
+			default:
+				expect = cols
+			}
+			got := row.Columns()
+			if !sliceEq(expect, got) {
+				t.Errorf("expected %v but got %v for x <= %d", expect, got, i)
+			}
+		}
+	})
+	t.Run(">", func(t *testing.T) {
+		for i := minCheck; i < maxCheck; i++ {
+			row, err := f.rangeGT(tx, k, int64(i), false)
+			if err != nil {
+				t.Fatalf("failed to query fragment: %v", err)
+			}
+			var expect []uint64
+			switch {
+			case i < 0:
+				expect = cols
+			case i < len(cols)-1:
+				expect = cols[i+1:]
+			default:
+			}
+			got := row.Columns()
+			if !sliceEq(expect, got) {
+				t.Errorf("expected %v but got %v for x > %d", expect, got, i)
+			}
+		}
+	})
+	t.Run(">=", func(t *testing.T) {
+		for i := minCheck; i < maxCheck; i++ {
+			row, err := f.rangeGT(tx, k, int64(i), true)
+			if err != nil {
+				t.Fatalf("failed to query fragment: %v", err)
+			}
+			var expect []uint64
+			switch {
+			case i < 0:
+				expect = cols
+			case i < len(cols):
+				expect = cols[i:]
+			default:
+			}
+			got := row.Columns()
+			if !sliceEq(expect, got) {
+				t.Errorf("expected %v but got %v for x >= %d", expect, got, i)
+			}
+		}
+	})
+	t.Run("Range", func(t *testing.T) {
+		for i := minCheck; i < maxCheck; i++ {
+			for j := i; j < maxCheck; j++ {
+				row, err := f.rangeBetween(tx, k, int64(i), int64(j))
+				if err != nil {
+					t.Fatalf("failed to query fragment: %v", err)
+				}
+				var lower, upper int
+				switch {
+				case i < 0:
+					lower = 0
+				case i > len(cols):
+					lower = len(cols)
+				default:
+					lower = i
+				}
+				switch {
+				case j < 0:
+					upper = 0
+				case j >= len(cols):
+					upper = len(cols)
+				default:
+					upper = j + 1
+				}
+				expect := cols[lower:upper]
+				got := row.Columns()
+				if !sliceEq(expect, got) {
+					t.Errorf("expected %v but got %v for %d <= x <= %d", expect, got, i, j)
+				}
+			}
+		}
+	})
+	t.Run("==", func(t *testing.T) {
+		for i := minCheck; i < maxCheck; i++ {
+			row, err := f.rangeEQ(tx, k, int64(i))
+			if err != nil {
+				t.Fatalf("failed to query fragment: %v", err)
+			}
+			var expect []uint64
+			if i >= 0 && i < len(cols) {
+				expect = cols[i : i+1]
+			}
+			got := row.Columns()
+			if !sliceEq(expect, got) {
+				t.Errorf("expected %v but got %v for x == %d", expect, got, i)
+			}
+		}
+	})
+}
+
 func TestFragmentBSISigned(t *testing.T) {
 	f, idx := mustOpenFragment("i", "f", "v", 0, CacheTypeNone)
 	_ = idx
 	defer f.Clean(t)
 
 	// Obtain transaction.
-	tx := &RoaringTx{fragment: f}
+	tx := f.txTestingOnly
+	defer tx.Rollback()
 
 	// Number of bits to test.
 	const k = 6
@@ -4279,6 +5123,8 @@ func TestFragmentBSISigned(t *testing.T) {
 }
 
 func TestImportClearRestart(t *testing.T) {
+	roaringOnlyTest(t)
+
 	tests := []struct {
 		rows []uint64
 		cols []uint64
@@ -4365,7 +5211,18 @@ func TestImportClearRestart(t *testing.T) {
 
 				check(t, tx, f, exp)
 
-				f2 := newFragment(NewHolder(DefaultPartitionN), f.path, "i", "f", viewStandard, 0, 0)
+				h := NewHolder(DefaultPartitionN)
+				h.Path = filepath.Dir(f.path)
+				idx2, err := h.CreateIndex("i", IndexOptions{})
+				_ = idx2
+				panicOn(err)
+
+				// OVERWRITING the f.path with a new fragment
+				f2 := newFragment(h, f.path, "i", "f", viewStandard, 0, 0)
+
+				//				f2, idx2 := mustOpenFragment("i", "f", viewStandard, 0, "")
+				//				_ = idx2
+
 				f2.MaxOpN = maxOpN
 				f2.CacheType = f.CacheType
 
@@ -4408,7 +5265,13 @@ func TestImportClearRestart(t *testing.T) {
 
 				panicOn(tx2.Commit())
 
-				f3 := newFragment(NewHolder(DefaultPartitionN), f2.path, "i", "f", viewStandard, 0, 0)
+				h3 := NewHolder(DefaultPartitionN)
+				h3.Path = filepath.Dir(f2.path)
+				idx3, err := h3.CreateIndex("i", IndexOptions{})
+				_ = idx3
+				panicOn(err)
+
+				f3 := newFragment(h3, f2.path, "i", "f", viewStandard, 0, 0)
 				f3.MaxOpN = maxOpN
 				f3.CacheType = f.CacheType
 
@@ -4422,7 +5285,6 @@ func TestImportClearRestart(t *testing.T) {
 
 				err = f3.Open()
 				if err != nil {
-					// TODO(jea): might be a flaky test? when run from make test
 					t.Fatalf("opening f3: %v", err)
 				}
 				defer f3.Clean(t)
@@ -4464,6 +5326,7 @@ func check(t *testing.T, tx Tx, f *fragment, exp map[uint64]map[uint64]struct{})
 }
 
 func TestImportValueConcurrent(t *testing.T) {
+	skipForRBF(t)
 
 	f, idx := mustOpenBSIFragment("i", "f", viewBSIGroupPrefix+"foo", 0)
 	switch idx.Txf.TxType() {
@@ -4529,12 +5392,17 @@ func TestImportMultipleValues(t *testing.T) {
 
 				// Obtain transaction.
 				tx := f.txTestingOnly
-				defer tx.Rollback() //LOOKATME
+				defer tx.Rollback()
 
 				err := f.importValue(tx, test.cols, test.vals, test.depth, false)
 				if err != nil {
 					t.Fatalf("importing values: %v", err)
 				}
+
+				// probably too slow, would hit disk alot:
+				//panicOn(tx.Commit())
+				//tx = idx.Txf.NewTx(Txo{Write: !writable, Index: idx, Fragment: f})
+				//defer tx.Rollback()
 
 				for i := range test.checkCols {
 					cc, cv := test.checkCols[i], test.checkVals[i]
@@ -4592,7 +5460,7 @@ func TestImportValueRowCache(t *testing.T) {
 
 				// Obtain transaction.
 				tx := f.txTestingOnly
-				defer tx.Rollback() //LOOKATME
+				defer tx.Rollback()
 
 				// First import (tc1)
 				if err := f.importValue(tx, test.tc1.cols, test.tc1.vals, test.tc1.depth, false); err != nil {
@@ -4625,12 +5493,13 @@ func TestFragmentConcurrentReadWrite(t *testing.T) {
 	_ = idx
 	defer f.Clean(t)
 
+	// Obtain transaction, but don't start another b/c the
+	// two goroutines below need the same view.
+	tx := f.txTestingOnly
+	defer tx.Rollback()
+
 	eg := &errgroup.Group{}
 	eg.Go(func() error {
-		// Obtain transaction.
-		tx := f.txTestingOnly
-		defer tx.Rollback() //LOOKATME
-
 		for i := uint64(0); i < 1000; i++ {
 			_, err := f.setBit(tx, i%4, i)
 			if err != nil {
@@ -4639,10 +5508,6 @@ func TestFragmentConcurrentReadWrite(t *testing.T) {
 		}
 		return nil
 	})
-
-	// Obtain transaction.
-	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
 
 	acc := uint64(0)
 	for i := uint64(0); i < 100; i++ {
@@ -4659,6 +5524,7 @@ func TestFragmentConcurrentReadWrite(t *testing.T) {
 func TestRemapCache(t *testing.T) {
 	f, idx := mustOpenFragment("i", "f", viewStandard, 0, "")
 	_ = idx
+	index, field, view, shard := f.index, f.field, f.view, f.shard
 
 	// request a panic that doesn't kill the program on fault
 	wouldFault := debug.SetPanicOnFault(true)
@@ -4678,10 +5544,10 @@ func TestRemapCache(t *testing.T) {
 
 	// Obtain transaction.
 	tx := f.txTestingOnly
-	defer tx.Rollback() //LOOKATME
+	defer tx.Rollback()
 
 	// create a container
-	_, err := f.storage.Add(65537)
+	_, err := tx.Add(index, field, view, shard, !doBatched, 65537)
 	if err != nil {
 		t.Fatalf("storage add: %v", err)
 	}
@@ -4694,7 +5560,7 @@ func TestRemapCache(t *testing.T) {
 	_ = f.mustRow(tx, 0)
 	// add a bit that isn't in that container, so that container doesn't
 	// change
-	_, err = f.storage.Add(2)
+	_, err = tx.Add(index, field, view, shard, !doBatched, 2)
 	if err != nil {
 		t.Fatalf("storage add: %v", err)
 	}
@@ -4784,5 +5650,11 @@ func TestFragment_Bug_Q2DoubleDelete(t *testing.T) {
 	res = f.mustRow(tx, 1).Columns()
 	if len(res) != 0 {
 		t.Fatalf("expected nothing got %v", res)
+	}
+}
+
+func skipForRBF(tb testing.TB) {
+	if os.Getenv("PILOSA_TXSRC") == "rbf" {
+		tb.Skip("skip for RBF")
 	}
 }

@@ -12,12 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// explanation of build tags:
+//
 // badgerdb builds but won't run in 32-bit 386 world, as of 2020 July 20.
 // See https://github.com/dgraph-io/badger/issues/1384 for any progress.
 // What we see is that the value-log allocations immediately run out of
 // memory. So we turn off 386 with a build tag to keep the .circleci happy.
+//
+// gendebug_test will have a TestMain if build tag generationdebug is on,
+// so we avoid conflicting with that debug scenario.
 
 // +build !386
+// +build !generationdebug
 
 package pilosa
 
@@ -40,7 +46,7 @@ var _ = &roaring.Bitmap{}
 
 func badgerDBMustHaveBitvalue(dbwrap *BadgerDBWrapper, index, field, view string, shard uint64, bitvalue uint64) {
 
-	tx := dbwrap.NewBadgerTx(!writable)
+	tx := dbwrap.NewBadgerTx(!writable, index)
 	defer tx.Rollback()
 	exists, err := tx.Contains(index, field, view, shard, bitvalue)
 	panicOn(err)
@@ -53,7 +59,7 @@ func badgerDBMustHaveBitvalue(dbwrap *BadgerDBWrapper, index, field, view string
 
 func badgerDBMustNotHaveBitvalue(dbwrap *BadgerDBWrapper, index, field, view string, shard uint64, bitvalue uint64) {
 
-	tx := dbwrap.NewBadgerTx(!writable)
+	tx := dbwrap.NewBadgerTx(!writable, index)
 	defer tx.Rollback()
 	exists, err := tx.Contains(index, field, view, shard, bitvalue)
 	panicOn(err)
@@ -64,7 +70,7 @@ func badgerDBMustNotHaveBitvalue(dbwrap *BadgerDBWrapper, index, field, view str
 }
 
 func badgerDBMustSetBitvalue(dbwrap *BadgerDBWrapper, index, field, view string, shard uint64, putme uint64) {
-	tx := dbwrap.NewBadgerTx(writable)
+	tx := dbwrap.NewBadgerTx(writable, index)
 
 	// add a bit
 	changed, err := tx.Add(index, field, view, shard, doBatched, putme)
@@ -82,14 +88,14 @@ func badgerDBMustSetBitvalue(dbwrap *BadgerDBWrapper, index, field, view string,
 }
 
 func badgerDBMustDeleteBitvalueContainer(dbwrap *BadgerDBWrapper, index, field, view string, shard uint64, putme uint64) {
-	tx := dbwrap.NewBadgerTx(writable)
+	tx := dbwrap.NewBadgerTx(writable, index)
 	hi := highbits(putme)
 	panicOn(tx.RemoveContainer(index, field, view, shard, hi))
 	panicOn(tx.Commit())
 }
 
 func badgerDBMustDeleteBitvalue(dbwrap *BadgerDBWrapper, index, field, view string, shard uint64, putme uint64) {
-	tx := dbwrap.NewBadgerTx(writable)
+	tx := dbwrap.NewBadgerTx(writable, index)
 	_, err := tx.Remove(index, field, view, shard, putme)
 	panicOn(err)
 	panicOn(tx.Commit())
@@ -99,7 +105,7 @@ func mustOpenEmptyBadgerWrapper(path string) (w *BadgerDBWrapper, cleaner func()
 	var err error
 	fn := badgerPath(path)
 	panicOn(os.RemoveAll(fn))
-	w, err = newBadgerDBWrapper(path)
+	w, err = globalBadgerReg.newBadgerDBWrapper(path)
 	panicOn(err)
 
 	// verify it is empty
@@ -109,6 +115,7 @@ func mustOpenEmptyBadgerWrapper(path string) (w *BadgerDBWrapper, cleaner func()
 	}
 
 	return w, func() {
+		w.Close() // stop any started background GC goroutine.
 		os.RemoveAll(fn)
 	}
 }
@@ -118,8 +125,8 @@ func TestBadger_SetBitmap(t *testing.T) {
 	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_SetBitmap")
 	defer clean()
 	defer dbwrap.Close()
-	tx := dbwrap.NewBadgerTx(writable)
 	index, field, view, shard := "i", "f", "v", uint64(0)
+	tx := dbwrap.NewBadgerTx(writable, index)
 	bitvalue := uint64(0)
 	changed, err := tx.Add(index, field, view, shard, doBatched, bitvalue)
 	if changed <= 0 {
@@ -140,7 +147,7 @@ func TestBadger_SetBitmap(t *testing.T) {
 	// commited, so should be visible outside the txn
 	//
 
-	tx2 := dbwrap.NewBadgerTx(!writable)
+	tx2 := dbwrap.NewBadgerTx(!writable, index)
 	exists, err = tx2.Contains(index, field, view, shard, bitvalue)
 	panicOn(err)
 	if !exists {
@@ -159,9 +166,9 @@ func TestBadger_OffsetRange(t *testing.T) {
 	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_SetBitmap")
 	defer clean()
 	defer dbwrap.Close()
-	tx := dbwrap.NewBadgerTx(writable)
-
 	index, field, view, shard := "i", "f", "v", uint64(0)
+	tx := dbwrap.NewBadgerTx(writable, index)
+
 	bitvalue := uint64(1 << 20)
 	changed, err := tx.Add(index, field, view, shard, doBatched, bitvalue)
 	if changed <= 0 {
@@ -194,7 +201,7 @@ func TestBadger_OffsetRange(t *testing.T) {
 	start := uint64(0 << 16)
 	endx := bitvalue + 1<<16
 
-	tx2 := dbwrap.NewBadgerTx(!writable)
+	tx2 := dbwrap.NewBadgerTx(!writable, index)
 	rbm2, err := tx2.OffsetRange(index, field, view, shard, offset, start, endx)
 	panicOn(err)
 	tx2.Rollback()
@@ -208,7 +215,7 @@ func TestBadger_OffsetRange(t *testing.T) {
 
 	// now offset by 2M
 	offset = uint64(2 << 20)
-	tx3 := dbwrap.NewBadgerTx(!writable)
+	tx3 := dbwrap.NewBadgerTx(!writable, index)
 	rbm3, err := tx3.OffsetRange(index, field, view, shard, offset, start, endx)
 	panicOn(err)
 	tx3.Rollback()
@@ -236,7 +243,7 @@ func TestBadger_Count_on_many_containers(t *testing.T) {
 		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
-	tx := dbwrap.NewBadgerTx(writable)
+	tx := dbwrap.NewBadgerTx(writable, index)
 	defer tx.Rollback()
 
 	n, err := tx.Count(index, field, view, shard)
@@ -252,7 +259,7 @@ func TestBadger_Count_dense_containers(t *testing.T) {
 	defer dbwrap.Close()
 	index, field, view, shard := "i", "f", "v", uint64(0)
 
-	tx := dbwrap.NewBadgerTx(writable)
+	tx := dbwrap.NewBadgerTx(writable, index)
 
 	expected := 0
 	// can't do more than about 100k writes per badger txn by default, so
@@ -280,9 +287,9 @@ func TestBadger_ContainerIterator_on_empty(t *testing.T) {
 	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_ContainerIterator")
 	defer clean()
 	defer dbwrap.Close()
-	tx := dbwrap.NewBadgerTx(!writable)
-	defer tx.Rollback()
 	index, field, view, shard := "i", "f", "v", uint64(0)
+	tx := dbwrap.NewBadgerTx(!writable, index)
+	defer tx.Rollback()
 	bitvalue := uint64(0)
 	citer, found, err := tx.ContainerIterator(index, field, view, shard, bitvalue)
 	panicOn(err)
@@ -298,9 +305,9 @@ func TestBadger_ContainerIterator_on_one_bit(t *testing.T) {
 	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_ContainerIterator_on_one_bit")
 	defer clean()
 	defer dbwrap.Close()
-	tx := dbwrap.NewBadgerTx(writable)
-	defer tx.Rollback()
 	index, field, view, shard := "i", "f", "v", uint64(0)
+	tx := dbwrap.NewBadgerTx(writable, index)
+	defer tx.Rollback()
 
 	bitvalue := uint64(42)
 
@@ -398,9 +405,9 @@ func TestBadger_ContainerIterator_on_one_bit_fail_to_find(t *testing.T) {
 	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_ContainerIterator_on_one_bit")
 	defer clean()
 	defer dbwrap.Close()
-	tx := dbwrap.NewBadgerTx(writable)
-	defer tx.Rollback()
 	index, field, view, shard := "i", "f", "v", uint64(0)
+	tx := dbwrap.NewBadgerTx(writable, index)
+	defer tx.Rollback()
 
 	putme := uint64(1<<16) + 3 // in the key:1 container
 	searchme := putme + 1
@@ -453,9 +460,9 @@ func TestBadger_ContainerIterator_empty_iteration_loop(t *testing.T) {
 	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_ContainerIterator_empty_iteration_loop")
 	defer clean()
 	defer dbwrap.Close()
-	tx := dbwrap.NewBadgerTx(writable)
-	defer tx.Rollback()
 	index, field, view, shard := "i", "f", "v", uint64(0)
+	tx := dbwrap.NewBadgerTx(writable, index)
+	defer tx.Rollback()
 
 	putme := uint64(1<<16) + 3  // in the key:1 container
 	searchme := uint64(1 << 17) // in the next container, key:2
@@ -503,9 +510,9 @@ func TestBadger_ForEach_on_one_bit(t *testing.T) {
 	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_ContainerIterator_on_one_bit")
 	defer clean()
 	defer dbwrap.Close()
-	tx := dbwrap.NewBadgerTx(writable)
-	defer tx.Rollback()
 	index, field, view, shard := "i", "f", "v", uint64(0)
+	tx := dbwrap.NewBadgerTx(writable, index)
+	defer tx.Rollback()
 
 	bitvalue := uint64(42)
 
@@ -563,7 +570,7 @@ func TestBadger_RemoveContainer_one_bit_test(t *testing.T) {
 		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 
 		// delete, but rollback instead of commit
-		tx := dbwrap.NewBadgerTx(writable)
+		tx := dbwrap.NewBadgerTx(writable, index)
 		hi := highbits(putme)
 		panicOn(tx.RemoveContainer(index, field, view, shard, hi))
 		tx.Rollback()
@@ -572,7 +579,7 @@ func TestBadger_RemoveContainer_one_bit_test(t *testing.T) {
 		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 
 		// c) within one Tx, after delete it should be gone as viewed within the txn.
-		tx = dbwrap.NewBadgerTx(writable)
+		tx = dbwrap.NewBadgerTx(writable, index)
 		hi = highbits(putme)
 
 		exists, err := tx.Contains(index, field, view, shard, putme)
@@ -624,7 +631,7 @@ func TestBadger_Remove_one_bit_test(t *testing.T) {
 		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 
 		// delete, but rollback instead of commit
-		tx := dbwrap.NewBadgerTx(writable)
+		tx := dbwrap.NewBadgerTx(writable, index)
 		hi, lo := highbits(putme), lowbits(putme)
 		_, _ = hi, lo
 		_, err := tx.Remove(index, field, view, shard, hi)
@@ -635,7 +642,7 @@ func TestBadger_Remove_one_bit_test(t *testing.T) {
 		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 
 		// c) within one Tx, after delete it should be gone as viewed within the txn.
-		tx = dbwrap.NewBadgerTx(writable)
+		tx = dbwrap.NewBadgerTx(writable, index)
 
 		exists, err := tx.Contains(index, field, view, shard, putme)
 		panicOn(err)
@@ -724,7 +731,7 @@ func TestBadger_Max_on_many_containers(t *testing.T) {
 		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
-	tx := dbwrap.NewBadgerTx(!writable)
+	tx := dbwrap.NewBadgerTx(!writable, index)
 	defer tx.Rollback()
 
 	max, err := tx.Max(index, field, view, shard)
@@ -742,7 +749,7 @@ func TestBadger_Min_on_many_containers(t *testing.T) {
 	index, field, view, shard := "i", "f", "v", uint64(0)
 
 	// verify no containers flag works
-	tx := dbwrap.NewBadgerTx(!writable)
+	tx := dbwrap.NewBadgerTx(!writable, index)
 	min, containersExist, err := tx.Min(index, field, view, shard)
 	_ = min
 	panicOn(err)
@@ -759,7 +766,7 @@ func TestBadger_Min_on_many_containers(t *testing.T) {
 		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
-	tx = dbwrap.NewBadgerTx(!writable)
+	tx = dbwrap.NewBadgerTx(!writable, index)
 	defer tx.Rollback()
 
 	min, containersExist, err = tx.Min(index, field, view, shard)
@@ -780,7 +787,7 @@ func TestBadger_CountRange_on_many_containers(t *testing.T) {
 	index, field, view, shard := "i", "f", "v", uint64(0)
 
 	// verify no containers flag works
-	tx := dbwrap.NewBadgerTx(!writable)
+	tx := dbwrap.NewBadgerTx(!writable, index)
 	n, err := tx.CountRange(index, field, view, shard, 0, math.MaxUint64)
 	panicOn(err)
 	if n != 0 {
@@ -796,7 +803,7 @@ func TestBadger_CountRange_on_many_containers(t *testing.T) {
 		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
-	tx = dbwrap.NewBadgerTx(!writable)
+	tx = dbwrap.NewBadgerTx(!writable, index)
 	defer tx.Rollback()
 
 	n, err = tx.CountRange(index, field, view, shard, 0, math.MaxUint64)
@@ -824,7 +831,7 @@ func TestBadger_CountRange_middle_container(t *testing.T) {
 		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
-	tx := dbwrap.NewBadgerTx(!writable)
+	tx := dbwrap.NewBadgerTx(!writable, index)
 	defer tx.Rollback()
 
 	// pick out just the middle container with the 1 bit set on it.
@@ -849,7 +856,7 @@ func TestBadger_CountRange_many_middle_container(t *testing.T) {
 		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
-	tx := dbwrap.NewBadgerTx(!writable)
+	tx := dbwrap.NewBadgerTx(!writable, index)
 	defer tx.Rollback()
 
 	// get them all
@@ -880,7 +887,7 @@ func TestBadger_UnionInPlace(t *testing.T) {
 		badgerDBMustHaveBitvalue(dbwrap, index, field, view, shard, putme)
 	}
 
-	tx2 := dbwrap.NewBadgerTx(!writable)
+	tx2 := dbwrap.NewBadgerTx(!writable, index)
 	n, err := tx2.Count(index, field, view, shard)
 	panicOn(err)
 	if n != 2 {
@@ -895,7 +902,7 @@ func TestBadger_UnionInPlace(t *testing.T) {
 	}
 	mustAddR(others3.Add(4 << 16)) // outside the 2<<16 container
 
-	tx := dbwrap.NewBadgerTx(writable)
+	tx := dbwrap.NewBadgerTx(writable, index)
 	defer tx.Rollback()
 	err = tx.UnionInPlace(index, field, view, shard, others, others2, others3)
 	panicOn(err)
@@ -920,7 +927,7 @@ func TestBadger_RoaringBitmap(t *testing.T) {
 	putme := expected
 	badgerDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
 
-	tx := dbwrap.NewBadgerTx(!writable)
+	tx := dbwrap.NewBadgerTx(!writable, index)
 	defer tx.Rollback()
 
 	rbm, err := tx.RoaringBitmap(index, field, view, shard)
@@ -951,10 +958,8 @@ func TestBadger_reverse_badger_iterator_and_prefix_valid(t *testing.T) {
 		return nil
 	})
 	panicOn(err)
-	//vv("stringifiedBadgerKeys(db) = '%v'", stringifiedBadgerKeys(dbwrap.db))
-	// allkeys:["a:0", "a:1", "a:2", "b:0", "b:1", "b:2", "c:0", "c:1", "c:2", ]'
 
-	tx := dbwrap.NewBadgerTx(!writable)
+	tx := dbwrap.NewBadgerTx(!writable, "no-index-avail")
 
 	prefix := []byte("b:")
 	it := NewBadgerIterator(tx, prefix)
@@ -1014,10 +1019,8 @@ func TestBadger_just_reverse_badger_iterator_and_prefix_valid(t *testing.T) {
 		return nil
 	})
 	panicOn(err)
-	//vv("stringifiedBadgerKeys(db) = '%v'", stringifiedBadgerKeys(dbwrap.db))
-	// allkeys:["a:0", "a:1", "a:2", "b:0", "b:1", "b:2", "c:0", "c:1", "c:2", ]'
 
-	tx := dbwrap.NewBadgerTx(!writable)
+	tx := dbwrap.NewBadgerTx(!writable, "no-index-avail")
 
 	seekto := []byte("c:")
 	prefix := []byte("b:")
@@ -1046,9 +1049,10 @@ func TestBadger_ImportRoaringBits(t *testing.T) {
 	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_ImportRoaringBits")
 	defer clean()
 	defer dbwrap.Close()
-	tx := dbwrap.NewBadgerTx(writable)
-	defer tx.Rollback()
 	index, field, view, shard := "i", "f", "v", uint64(0)
+	tx := dbwrap.NewBadgerTx(writable, index)
+	defer tx.Rollback()
+	tx.DeleteEmptyContainer = true // traditional badger Tx behavior, but not Roaring.
 
 	//bitvalue := uint64(42)
 
@@ -1062,7 +1066,7 @@ func TestBadger_ImportRoaringBits(t *testing.T) {
 	clear := false
 	logme := false
 
-	changed, rowSet, err := tx.ImportRoaringBits(index, field, view, shard, itr, clear, logme, rowSize)
+	changed, rowSet, err := tx.ImportRoaringBits(index, field, view, shard, itr, clear, logme, rowSize, nil)
 	_ = rowSet
 	if changed != len(bits) {
 		panic(fmt.Sprintf("should have changed %v bits: changed='%v', rowSet='%#v', err='%v'", len(bits), changed, rowSet, err))
@@ -1079,7 +1083,7 @@ func TestBadger_ImportRoaringBits(t *testing.T) {
 
 	// now test the union in place with the same set gives no change.
 
-	changed, rowSet, err = tx.ImportRoaringBits(index, field, view, shard, itr, clear, logme, rowSize)
+	changed, rowSet, err = tx.ImportRoaringBits(index, field, view, shard, itr, clear, logme, rowSize, nil)
 	_ = rowSet
 	if changed != 0 {
 		panic(fmt.Sprintf("should have not changed any bits on the second import, but we see changed='%v', rowSet='%#v', err='%v'", changed, rowSet, err))
@@ -1103,7 +1107,7 @@ func TestBadger_ImportRoaringBits(t *testing.T) {
 		itr, err := roaring.NewRoaringIterator(data)
 		panicOn(err)
 
-		changed, rowSet, err := tx.ImportRoaringBits(index, field, view, shard, itr, clear, logme, rowSize)
+		changed, rowSet, err := tx.ImportRoaringBits(index, field, view, shard, itr, clear, logme, rowSize, nil)
 		_ = rowSet
 		if changed != 1 {
 			panic(fmt.Sprintf("should have changed 1 bit: '%v', rowSet='%#v', err='%v'", changed, rowSet, err))
@@ -1128,9 +1132,9 @@ func TestBadger_ImportRoaringBits_set_nonoverlapping_bits(t *testing.T) {
 	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_ImportRoaringBits_set_nonoverlapping_bits")
 	defer clean()
 	defer dbwrap.Close()
-	tx := dbwrap.NewBadgerTx(writable)
-	defer tx.Rollback()
 	index, field, view, shard := "i", "f", "v", uint64(0)
+	tx := dbwrap.NewBadgerTx(writable, index)
+	defer tx.Rollback()
 
 	// get some roaring bits, get an itr RoaringIterator from them
 	rowSize := uint64(0)
@@ -1148,7 +1152,7 @@ func TestBadger_ImportRoaringBits_set_nonoverlapping_bits(t *testing.T) {
 	clear := false
 	logme := false
 
-	changed, rowSet, err := tx.ImportRoaringBits(index, field, view, shard, itr, clear, logme, rowSize)
+	changed, rowSet, err := tx.ImportRoaringBits(index, field, view, shard, itr, clear, logme, rowSize, nil)
 	_ = rowSet
 	if changed != len(bits) {
 		panic(fmt.Sprintf("should have changed %v bits: changed='%v', rowSet='%#v', err='%v'", len(bits), changed, rowSet, err))
@@ -1165,7 +1169,7 @@ func TestBadger_ImportRoaringBits_set_nonoverlapping_bits(t *testing.T) {
 
 	// now import the 2nd, overlapping set and set them.
 
-	changed, rowSet, err = tx.ImportRoaringBits(index, field, view, shard, itr2, clear, logme, rowSize)
+	changed, rowSet, err = tx.ImportRoaringBits(index, field, view, shard, itr2, clear, logme, rowSize, nil)
 	_ = rowSet
 	if changed != 4 {
 		panic(fmt.Sprintf("should have changed 2 bits: the 1 and the 3, but we see changed='%v', rowSet='%#v', err='%v'", changed, rowSet, err))
@@ -1178,9 +1182,9 @@ func TestBadger_ImportRoaringBits_clear_nonoverlapping_bits(t *testing.T) {
 	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_ImportRoaringBits_clear_nonoverlapping_bits")
 	defer clean()
 	defer dbwrap.Close()
-	tx := dbwrap.NewBadgerTx(writable)
-	defer tx.Rollback()
 	index, field, view, shard := "i", "f", "v", uint64(0)
+	tx := dbwrap.NewBadgerTx(writable, index)
+	defer tx.Rollback()
 
 	// get some roaring bits, get an itr RoaringIterator from them
 	rowSize := uint64(0)
@@ -1198,7 +1202,7 @@ func TestBadger_ImportRoaringBits_clear_nonoverlapping_bits(t *testing.T) {
 	clear := false
 	logme := false
 
-	changed, rowSet, err := tx.ImportRoaringBits(index, field, view, shard, itr, clear, logme, rowSize)
+	changed, rowSet, err := tx.ImportRoaringBits(index, field, view, shard, itr, clear, logme, rowSize, nil)
 	_ = rowSet
 	if changed != len(bits) {
 		panic(fmt.Sprintf("should have changed %v bits: changed='%v', rowSet='%#v', err='%v'", len(bits), changed, rowSet, err))
@@ -1216,7 +1220,7 @@ func TestBadger_ImportRoaringBits_clear_nonoverlapping_bits(t *testing.T) {
 	// now import the 2nd overlapping set and clear them.
 	clear = true
 
-	changed, rowSet, err = tx.ImportRoaringBits(index, field, view, shard, itr2, clear, logme, rowSize)
+	changed, rowSet, err = tx.ImportRoaringBits(index, field, view, shard, itr2, clear, logme, rowSize, nil)
 	_ = rowSet
 	if changed != 2 {
 		panic(fmt.Sprintf("should have changed 1 bit: the 2, but we see changed='%v', rowSet='%#v', err='%v'", changed, rowSet, err))
@@ -1252,9 +1256,9 @@ func TestBadger_DeleteIndex(t *testing.T) {
 	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_DeleteIndex")
 	defer clean()
 	defer dbwrap.Close()
-	tx := dbwrap.NewBadgerTx(writable)
-	bitvalue := uint64(777)
 	index, field, view, shard := "i", "f", "v", uint64(0)
+	tx := dbwrap.NewBadgerTx(writable, index)
+	bitvalue := uint64(777)
 	bits := []uint64{0, 3, 1 << 16, 1<<16 + 3, 8 << 16}
 	for _, v := range bits {
 		changed, err := tx.Add(index, field, view, shard, doBatched, v)
@@ -1290,7 +1294,7 @@ func TestBadger_DeleteIndex(t *testing.T) {
 	err = dbwrap.DeleteIndex(index)
 	panicOn(err)
 
-	tx = dbwrap.NewBadgerTx(!writable)
+	tx = dbwrap.NewBadgerTx(!writable, index2)
 	defer tx.Rollback()
 	exists, err = tx.Contains(index2, field, view, shard, bitvalue)
 	panicOn(err)
@@ -1314,9 +1318,9 @@ func TestBadger_DeleteIndex_over100k(t *testing.T) {
 	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_DeleteIndex_over100k")
 	defer clean()
 	defer dbwrap.Close()
-	tx := dbwrap.NewBadgerTx(writable)
-	bitvalue := uint64(777)
 	index, field, view, shard := "i", "f", "v", uint64(0)
+	tx := dbwrap.NewBadgerTx(writable, index)
+	bitvalue := uint64(777)
 	limit := uint64(100002) // default batch size in DeleteIndex is 100k keys per delete transaction.
 	//limit := uint64(101)
 	for v := uint64(1); v < limit; v++ {
@@ -1328,7 +1332,7 @@ func TestBadger_DeleteIndex_over100k(t *testing.T) {
 		panicOn(err)
 		if v%100000 == 0 {
 			panicOn(tx.Commit())
-			tx = dbwrap.NewBadgerTx(writable)
+			tx = dbwrap.NewBadgerTx(writable, index)
 		}
 	}
 
@@ -1345,7 +1349,7 @@ func TestBadger_DeleteIndex_over100k(t *testing.T) {
 	err = dbwrap.DeleteIndex(index)
 	panicOn(err)
 
-	tx = dbwrap.NewBadgerTx(!writable)
+	tx = dbwrap.NewBadgerTx(!writable, index2)
 	defer tx.Rollback()
 	exists, err := tx.Contains(index2, field, view, shard, bitvalue)
 	panicOn(err)
@@ -1444,4 +1448,135 @@ func mustAddR(changed bool, err error) {
 // keep the linter happy that we are checking the error.
 func mustRemove(changeCount int, err error) {
 	panicOn(err)
+}
+
+func TestBadger_DeleteFragment(t *testing.T) {
+
+	// setup
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_DeleteFragment")
+	defer clean()
+	defer dbwrap.Close()
+	index, field, view, shard0 := "i", "f", "v", uint64(0)
+	tx := dbwrap.NewBadgerTx(writable, index)
+
+	shard1 := uint64(1)
+
+	bits := []uint64{0, 3, 1 << 16, 1<<16 + 3, 8 << 16}
+	shards := []uint64{shard0, shard1}
+	for _, s := range shards {
+		for _, v := range bits {
+			changed, err := tx.Add(index, field, view, s, doBatched, v)
+			if changed <= 0 {
+				panic("should have changed")
+			}
+			panicOn(err)
+		}
+	}
+
+	for _, s := range shards {
+		for _, v := range bits {
+			exists, err := tx.Contains(index, field, view, s, v)
+			panicOn(err)
+			if !exists {
+				panic("ARG bitvalue was NOT SET!!!")
+			}
+		}
+	}
+	err := tx.Commit()
+	panicOn(err)
+
+	// end of setup
+
+	survivor := shard0
+	victim := shard1
+	err = dbwrap.DeleteFragment(index, field, view, victim, nil)
+	panicOn(err)
+
+	tx = dbwrap.NewBadgerTx(!writable, index)
+	defer tx.Rollback()
+
+	for _, s := range shards {
+		for _, v := range bits {
+			exists, err := tx.Contains(index, field, view, s, v)
+			panicOn(err)
+			if s == survivor {
+				if !exists {
+					panic(fmt.Sprintf("ARG survivor died : bit %v", v))
+				}
+			} else if s == victim { // victim, should have been deleted
+				if exists {
+					panic(fmt.Sprintf("ARG victim lived : bit %v", v))
+				}
+			}
+		}
+	}
+}
+
+func TestBadger_shardFromBadgerKey(t *testing.T) {
+	if shardFromBadgerKey([]byte("idx:'i';fld:'f';vw:'standard';shd:'1';ckey@18446744073709551615")) != 1 {
+		panic("problem")
+	}
+	if shardFromBadgerKey([]byte("idx:'i';fld:'f';vw:'standard';shd:'0';ckey@18446744073709551615")) != 0 {
+		panic("problem")
+	}
+	if shardFromBadgerKey([]byte("idx:'i';fld:'f';vw:'standard';shd:'18446744073709551615';ckey@18446744073709551615")) != 18446744073709551615 {
+		panic("problem")
+	}
+
+	func() {
+		defer func() {
+			r := recover()
+			if r == nil {
+				panic("should have panic-ed")
+			}
+		}()
+		// called for the panic of a short ckey, only 19 bytes instead of 20
+		shardFromBadgerKey([]byte("idx:'i';fld:'f';vw:'standard';shd:'18446744073709551615';ckey@1844674407370955161"))
+	}()
+
+}
+
+func TestBadger_SliceOfShards(t *testing.T) {
+
+	dbwrap, clean := mustOpenEmptyBadgerWrapper("TestBadger_SliceOfShards")
+	defer clean()
+	defer dbwrap.Close()
+	index, field, view := "i", "f", "v"
+	shards := []uint64{0, 1, 2, 3, 1000001, 2000001}
+	putme := uint64(179)
+	for _, shard := range shards {
+		badgerDBMustSetBitvalue(dbwrap, index, field, view, shard, putme)
+	}
+	tx := dbwrap.NewBadgerTx(!writable, index)
+	defer tx.Rollback()
+
+	slc, err := tx.SliceOfShards(index, field, view, "")
+	panicOn(err)
+	for i := range shards {
+		if shards[i] != slc[i] {
+			panic(fmt.Sprintf("expected at i=%v that slc[i]=%v = shards[i]=%v", i, slc[i], shards[i]))
+		}
+	}
+}
+
+func reportTestBadgersNeedingClose() {
+	globalBadgerReg.mu.Lock()
+	defer globalBadgerReg.mu.Unlock()
+	n := len(globalBadgerReg.mp)
+	if n > 0 {
+		AlwaysPrintf("*** these badgers are still open (n=%v):", n)
+		i := 0
+		for w := range globalBadgerReg.mp {
+			AlwaysPrintf("i=%v, w p=%p stack:\n%v\n\n", i, w, w.startStack)
+			i++
+		}
+	}
+}
+
+var _ = reportTestBadgersNeedingClose // happy linter
+
+func TestMain(m *testing.M) {
+	ret := m.Run()
+	//reportTestBadgersNeedingClose()
+	os.Exit(ret)
 }

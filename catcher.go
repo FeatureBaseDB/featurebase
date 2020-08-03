@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/pilosa/pilosa/v2/roaring"
 )
@@ -51,14 +52,18 @@ func (c *catcherTx) WholeDatabaseBlake3Hash(index, field, view string, shard uin
 	return c.b.WholeDatabaseBlake3Hash(index, field, view, shard)
 }
 
-func (c *catcherTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64) (changed int, rowSet map[uint64]int, err error) {
+func (c *catcherTx) ImportRoaringBits(index, field, view string, shard uint64, rit roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			AlwaysPrintf("see ImportRoaringBits() panic '%v' at '%v'", r, stack())
 			panic(r)
 		}
 	}()
-	return c.b.ImportRoaringBits(index, field, view, shard, rit, clear, log, rowSize)
+	return c.b.ImportRoaringBits(index, field, view, shard, rit, clear, log, rowSize, data)
+}
+
+func (c *catcherTx) Dump() {
+	c.b.Dump()
 }
 
 func (c *catcherTx) Readonly() bool {
@@ -274,4 +279,27 @@ func (c *catcherTx) OffsetRange(index, field, view string, shard, offset, start,
 		}
 	}()
 	return c.b.OffsetRange(index, field, view, shard, offset, start, end)
+}
+
+func (c *catcherTx) RoaringBitmapReader(index, field, view string, shard uint64, fragmentPathForRoaring string) (r io.ReadCloser, sz int64, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			AlwaysPrintf("see RoaringBitmapReader() panic '%v' at '%v'", r, stack())
+			panic(r)
+		}
+	}()
+	return c.b.RoaringBitmapReader(index, field, view, shard, fragmentPathForRoaring)
+}
+
+func (c *catcherTx) Type() string {
+	return c.b.Type()
+}
+func (c *catcherTx) SliceOfShards(index, field, view, optionalViewPath string) (sliceOfShards []uint64, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			AlwaysPrintf("see SliceOfShards() panic '%v' at '%v'", r, stack())
+			panic(r)
+		}
+	}()
+	return c.b.SliceOfShards(index, field, view, optionalViewPath)
 }

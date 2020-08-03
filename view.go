@@ -50,6 +50,7 @@ type view struct {
 	qualifiedName string
 
 	holder *Holder
+	idx    *Index
 
 	fieldType string
 	cacheType string
@@ -136,14 +137,18 @@ func (v *view) open() error {
 	if err := func() error {
 		// Ensure the view's path exists.
 		v.holder.Logger.Debugf("ensure view path exists: %s", v.path)
-		if err := os.MkdirAll(v.path, 0777); err != nil {
+		err := os.MkdirAll(v.path, 0777)
+		if err != nil {
 			return errors.Wrap(err, "creating view directory")
-		} else if err := os.MkdirAll(filepath.Join(v.path, "fragments"), 0777); err != nil {
+		}
+		err = os.MkdirAll(filepath.Join(v.path, "fragments"), 0777)
+		if err != nil {
 			return errors.Wrap(err, "creating fragments directory")
 		}
 
 		v.holder.Logger.Debugf("open fragments for index/field/view: %s/%s/%s", v.index, v.field, v.name)
-		if err := v.openFragments(); err != nil {
+
+		if err := v.openFragmentsInTx(); err != nil {
 			return errors.Wrap(err, "opening fragments")
 		}
 
@@ -159,49 +164,46 @@ func (v *view) open() error {
 
 var workQueue = make(chan struct{}, runtime.NumCPU()*2)
 
-// openFragments opens and initializes the fragments inside the view.
-func (v *view) openFragments() error {
-	file, err := os.Open(filepath.Join(v.path, "fragments"))
-	if os.IsNotExist(err) {
-		return nil
-	} else if err != nil {
-		return errors.Wrap(err, "opening fragments directory")
-	}
-	defer file.Close()
+// replaces v.openFragments() with Tx generic code.
+func (v *view) openFragmentsInTx() error {
 
-	fis, err := file.Readdir(0)
+	tx := v.idx.Txf.NewTx(Txo{Write: !writable, Index: v.idx})
+	defer tx.Rollback()
+
+	shards, err := tx.SliceOfShards(v.index, v.field, v.name, v.path)
 	if err != nil {
-		return errors.Wrap(err, "reading fragments directory")
+		return errors.Wrap(err, "SliceOfShards")
 	}
 
 	eg, ctx := errgroup.WithContext(context.Background())
 	var mu sync.Mutex
 
-fileLoop:
-	for _, loopFi := range fis {
+	shardCh := make(chan uint64, len(shards))
+	for i := range shards {
+		shardCh <- shards[i]
+	}
+
+shardLoop:
+	for range shards {
 		select {
 		case <-ctx.Done():
-			break fileLoop
+			break shardLoop
 		default:
-			fi := loopFi
-
-			if fi.IsDir() {
-				continue
-			}
-
-			// Parse filename into integer.
-			shard, err := strconv.ParseUint(filepath.Base(fi.Name()), 10, 64)
-			if err != nil {
-				v.holder.Logger.Debugf("WARNING: couldn't use non-integer file as shard in index/field/view %s/%s/%s: %s", v.index, v.field, v.name, fi.Name())
-				continue
-			}
 
 			workQueue <- struct{}{}
-			v.holder.Logger.Debugf("open index/field/view/fragment: %s/%s/%s/%d", v.index, v.field, v.name, shard)
 			eg.Go(func() error {
 				defer func() {
 					<-workQueue
 				}()
+
+				var shard uint64
+				select {
+				case shard = <-shardCh:
+				default:
+					return nil // no more work
+				}
+				v.holder.Logger.Debugf("open index/field/view/fragment: %s/%s/%s/%d", v.index, v.field, v.name, shard)
+
 				frag := v.newFragment(v.fragmentPath(shard), shard)
 				if err := frag.Open(); err != nil {
 					return fmt.Errorf("open fragment: shard=%d, err=%s", frag.shard, err)
@@ -359,6 +361,16 @@ func (v *view) notifyIfNewShard(shard uint64) {
 }
 
 func (v *view) newFragment(path string, shard uint64) *fragment {
+
+	if v.holder != nil && v.idx != nil {
+		// A view must have its v.idx *Index registered with its holder.
+		// Otherwise TestField_AvailableShards crashes, as one example.
+		hIdx := v.holder.Index(v.idx.name)
+		if hIdx == nil && v.idx != nil {
+			v.holder.addIndexFromField(v.idx)
+		}
+	}
+
 	frag := newFragment(v.holder, path, v.index, v.field, v.name, shard, v.flags())
 	frag.CacheType = v.cacheType
 	frag.CacheSize = v.cacheSize
@@ -375,28 +387,17 @@ func (v *view) newFragment(path string, shard uint64) *fragment {
 func (v *view) deleteFragment(shard uint64) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	fragment := v.fragments[shard]
-	if fragment == nil {
+	f := v.fragments[shard]
+	if f == nil {
 		return ErrFragmentNotFound
 	}
 
 	v.holder.Logger.Printf("delete fragment: (%s/%s/%s) %d", v.index, v.field, v.name, shard)
 
-	// Close data files before deletion.
-	if err := fragment.Close(); err != nil {
-		return errors.Wrap(err, "closing fragment")
+	idx := f.holder.Index(v.index)
+	if err := idx.Txf.DeleteFragmentFromStore(f.index, f.field, f.view, f.shard, f); err != nil {
+		return errors.Wrap(err, "DeleteFragment")
 	}
-
-	// Delete fragment file.
-	if err := os.Remove(fragment.path); err != nil {
-		return errors.Wrap(err, "deleting fragment file")
-	}
-
-	// Delete fragment cache file.
-	if err := os.Remove(fragment.cachePath()); err != nil {
-		v.holder.Logger.Printf("no cache file to delete for shard %d", shard)
-	}
-
 	delete(v.fragments, shard)
 	v.removeKnownShard(shard)
 

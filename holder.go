@@ -528,9 +528,9 @@ func (h *Holder) Open() error {
 
 		if h.isCoordinator() {
 			index.createdAt = timestamp()
-			err = index.OpenWithTimestamp()
+			err = index.OpenWithTimestamp(false)
 		} else {
-			err = index.Open()
+			err = index.Open(false)
 		}
 		if err != nil {
 			if err == ErrName {
@@ -624,6 +624,17 @@ func (h *Holder) Close() error {
 // Begin starts a transaction on the holder.
 func (h *Holder) BeginTx(writable bool, index *Index) (Tx, error) {
 	return index.Txf.NewTx(Txo{Write: writable, Index: index}), nil
+}
+
+func (h *Holder) NeedsSnapshot() bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, idx := range h.indexes {
+		if idx.NeedsSnapshot() {
+			return true
+		}
+	}
+	return false
 }
 
 // HasData returns true if Holder contains at least one index.
@@ -802,7 +813,20 @@ func (h *Holder) applyCreatedAt(indexes []*IndexInfo) {
 }
 
 // IndexPath returns the path where a given index is stored.
-func (h *Holder) IndexPath(name string) string { return filepath.Join(h.Path, name) }
+func (h *Holder) IndexPath(name string) string {
+	return filepath.Join(h.Path, name)
+}
+
+// HolderPathFromIndexPath is
+// used by test/index.go:71 in test.Index.Reopen() to get the right
+// path into a test Holder that doesn't know its own proper path.
+// If the Holder changes index paths to being something other than
+// holderPath + "/" + indexName, this will need adjusting too.
+func (h *Holder) HolderPathFromIndexPath(indexPath, indexName string) string {
+	n := len(indexPath)
+	hpath2 := indexPath[:n-(len(indexName)+1)]
+	return hpath2
+}
 
 // Index returns the index by name.
 func (h *Holder) Index(name string) *Index {
@@ -811,7 +835,9 @@ func (h *Holder) Index(name string) *Index {
 	return h.index(name)
 }
 
-func (h *Holder) index(name string) *Index { return h.indexes[name] }
+func (h *Holder) index(name string) *Index {
+	return h.indexes[name]
+}
 
 // Indexes returns a list of all indexes in the holder.
 func (h *Holder) Indexes() []*Index {
@@ -867,7 +893,7 @@ func (h *Holder) createIndex(name string, opt IndexOptions) (*Index, error) {
 	index.keys = opt.Keys
 	index.trackExistence = opt.TrackExistence
 
-	if err = index.Open(); err != nil {
+	if err = index.Open(true); err != nil {
 		return nil, errors.Wrap(err, "opening")
 	}
 	if err = index.saveMeta(); err != nil {
@@ -1798,4 +1824,16 @@ func (h *Holder) Process(ctx context.Context, op HolderOperator) (err error) {
 		}
 	}
 	return nil
+}
+
+// used by Index.openFields(), enabling Tx / Txf by telling
+// the holder about its own indexes.
+func (h *Holder) addIndexFromField(idx *Index) {
+	h.mu.Lock()
+	h.indexes[idx.Name()] = idx
+	h.mu.Unlock()
+}
+
+func (h *Holder) unprotectedAddIndexFromField(idx *Index) {
+	h.indexes[idx.Name()] = idx
 }

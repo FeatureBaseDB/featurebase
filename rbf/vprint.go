@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package pilosa
+package rbf
 
 import (
 	"fmt"
@@ -165,3 +165,5 @@ func Caller(upStack int) string {
 	}
 	return f.Function
 }
+
+var _ = stack // happy linter

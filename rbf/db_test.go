@@ -119,14 +119,13 @@ func TestDB_Recovery(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer MustRollback(t, tx)
+		defer tx.Rollback()
 
 		if exists, err := tx.Contains("x", uint64(len(a))); exists || err != nil {
 			t.Fatalf("Contains()=<%v,%#v>", exists, err)
 		} else if exists, err := tx.Contains("x", uint64(len(a)-1)); !exists || err != nil {
 			t.Fatalf("Contains()=<%v,%#v>", exists, err)
-		} else if err := tx.Rollback(); err != nil {
-			t.Fatal(err)
 		}
+		tx.Rollback()
 	})
 }

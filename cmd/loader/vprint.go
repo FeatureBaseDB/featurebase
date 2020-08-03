@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-package pilosa
+package main
 
 import (
 	"fmt"
@@ -165,3 +165,13 @@ func Caller(upStack int) string {
 	}
 	return f.Function
 }
+
+// happy linter:
+var _ = DirExists
+var _ = FileExists
+var _ = Caller
+var _ = stack
+var _ = RFC3339MsecTz0
+var _ = RFC3339UsecTz0
+var _ = AlwaysPrintf
+var _ = FileSize

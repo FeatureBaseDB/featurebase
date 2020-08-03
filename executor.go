@@ -19,12 +19,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/bits"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/molecula/ext"
 	"github.com/pilosa/pilosa/v2/pql"
 	pb "github.com/pilosa/pilosa/v2/proto"
 	"github.com/pilosa/pilosa/v2/roaring"
@@ -64,12 +64,6 @@ type executor struct {
 	workersWG      sync.WaitGroup
 	workerPoolSize int
 	work           chan job
-	// global registry to check for name clashes
-	additionalOps map[string]*ext.BitmapOp
-	// typed registries we can use in lookups
-	additionalBitmapOps map[string]ext.BitmapOpBitmap
-	additionalCountOps  map[string]ext.BitmapOpUnaryCount
-	additionalFieldOps  map[string]ext.BitmapOpBSIBitmap
 }
 
 // executorOption is a functional option type for pilosa.Executor
@@ -122,38 +116,6 @@ func (e *executor) Close() error {
 	e.shutdown = true
 	close(e.work)
 	e.workersWG.Wait()
-	return nil
-}
-
-func (e *executor) registerOps(ops []ext.BitmapOp) error {
-	if e.additionalOps == nil {
-		e.additionalOps = make(map[string]*ext.BitmapOp)
-		e.additionalBitmapOps = make(map[string]ext.BitmapOpBitmap)
-		e.additionalCountOps = make(map[string]ext.BitmapOpUnaryCount)
-		e.additionalFieldOps = make(map[string]ext.BitmapOpBSIBitmap)
-	}
-	for i, op := range ops {
-		name := op.Name
-		if _, exists := e.additionalOps[name]; exists {
-			return fmt.Errorf("op name '%s' already defined", name)
-		}
-		e.additionalOps[name] = &ops[i]
-		typ := ops[i].Func.BitmapOpType()
-		switch {
-		case typ.Input == ext.OpInputBitmap && typ.Output == ext.OpOutputCount:
-			e.additionalCountOps[name] = ops[i].Func.(ext.BitmapOpUnaryCount)
-		case typ.Input == ext.OpInputBitmap && typ.Output == ext.OpOutputBitmap:
-			e.additionalBitmapOps[name] = ops[i].Func.(ext.BitmapOpBitmap)
-		case typ.Input == ext.OpInputNaryBSI && typ.Output == ext.OpOutputSignedBitmap:
-			if fn, ok := ops[i].Func.(ext.BitmapOpBSIBitmapPrecall); ok {
-				e.additionalFieldOps[name] = ext.BitmapOpBSIBitmap(fn)
-			} else {
-				e.additionalFieldOps[name] = ops[i].Func.(ext.BitmapOpBSIBitmap)
-			}
-		default:
-			return fmt.Errorf("unsupported types for '%s': input type %d, output type %d", name, typ.Input, typ.Output)
-		}
-	}
 	return nil
 }
 
@@ -228,7 +190,6 @@ func (e *executor) Execute(ctx context.Context, index string, q *pql.Query, shar
 	} else if err := validateQueryContext(ctx); err != nil {
 		return resp, err
 	}
-
 	resp.Results = results
 
 	// Fill column attributes if requested.
@@ -369,7 +330,6 @@ func (e *executor) readColumnAttrSets(index *Index, ids []uint64) ([]*ColumnAttr
 // handlePreCalls traverses the call tree looking for calls that need
 // precomputed values. Right now, that's just Distinct.
 func (e *executor) handlePreCalls(ctx context.Context, tx Tx, index string, c *pql.Call, shards []uint64, opt *execOptions) error {
-
 	if c.Name == "Precomputed" {
 		idx := c.Args["valueidx"].(int64)
 		if idx >= 0 && idx < int64(len(opt.EmbeddedData)) {
@@ -404,18 +364,17 @@ func (e *executor) handlePreCalls(ctx context.Context, tx Tx, index string, c *p
 	// like Distinct, where you can't predict output shard for a result
 	// from the shard being queried.
 	if newIndex != "" && newIndex != index {
-		if err := e.handlePreCallChildren(ctx, tx, index, c, shards, opt); err != nil {
-			return err
-		}
-
 		c.Type = pql.PrecallGlobal
 		index = newIndex
 		// we need to recompute shards, then
 		shards = nil
 	}
+	if err := e.handlePreCallChildren(ctx, tx, index, c, shards, opt); err != nil {
+		return err
+	}
+	// child calls already handled, no precall for this, so we're done
 	if c.Type == pql.PrecallNone {
-		// otherwise, handle the children
-		return e.handlePreCallChildren(ctx, tx, index, c, shards, opt)
+		return nil
 	}
 	// We don't try to handle sub-calls from here. I'm not 100%
 	// sure that's right, but I think the fact that they're happening
@@ -548,6 +507,7 @@ func (e *executor) execute(ctx context.Context, tx Tx, index string, q *pql.Quer
 		if err != nil {
 			return nil, err
 		}
+
 		results = append(results, v)
 		// Some Calls can have significant data associated with them
 		// that gets generated during processing, such as Precomputed
@@ -708,15 +668,6 @@ func (e *executor) executeCall(ctx context.Context, tx Tx, index string, c *pql.
 		return nil, err
 	}
 
-	// Special handling for mutation and top-n calls.
-	if op, ok := e.additionalCountOps[c.Name]; ok {
-		statFn()
-		return e.executeGenericCount(ctx, tx, index, c, op, shards, opt)
-	}
-	if op, ok := e.additionalFieldOps[c.Name]; ok {
-		statFn()
-		return e.executeGenericField(ctx, tx, index, c, op, shards, opt)
-	}
 	switch c.Name {
 	case "Sum":
 		statFn()
@@ -739,6 +690,9 @@ func (e *executor) executeCall(ctx context.Context, tx Tx, index string, c *pql.
 	case "ClearRow":
 		statFn()
 		return e.executeClearRow(ctx, tx, index, c, shards, opt)
+	case "Distinct":
+		statFn()
+		return e.executeDistinct(ctx, tx, index, c, shards, opt)
 	case "Store":
 		statFn()
 		return e.executeSetRow(ctx, tx, index, c, shards, opt)
@@ -1151,11 +1105,9 @@ func (e *executor) executeSum(ctx context.Context, tx Tx, index string, c *pql.C
 	return other, nil
 }
 
-// executeGenericField executes a generic call on a field. Note that in this
-// implementation, the operation is always a BSI op.
-func (e *executor) executeGenericField(ctx context.Context, tx Tx, index string, c *pql.Call, op ext.BitmapOpBSIBitmap, shards []uint64, opt *execOptions) (SignedRow, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGenericField")
-	span.LogKV("name", c.Name)
+// executeDistinct executes a Distinct call on a field.
+func (e *executor) executeDistinct(ctx context.Context, tx Tx, index string, c *pql.Call, shards []uint64, opt *execOptions) (SignedRow, error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeDistinct")
 	defer span.Finish()
 
 	field := c.Args["field"]
@@ -1165,7 +1117,7 @@ func (e *executor) executeGenericField(ctx context.Context, tx Tx, index string,
 
 	// Execute calls in bulk on each remote node and merge.
 	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
-		return e.executeGenericFieldShard(ctx, tx, index, c, op, shard)
+		return e.executeDistinctShard(ctx, tx, index, c, shard)
 	}
 
 	// Merge returned results at coordinating node.
@@ -1440,13 +1392,6 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, tx Tx, index stri
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeBitmapCallShard")
 	defer span.Finish()
 
-	if _, ok := e.additionalCountOps[c.Name]; ok {
-		return nil, fmt.Errorf("count op %s used as bitmap call", c.Name)
-	}
-	if op, ok := e.additionalBitmapOps[c.Name]; ok {
-		return e.executeGenericBitmapShard(ctx, tx, index, c, op, shard)
-	}
-
 	switch c.Name {
 	case "Row", "Range":
 		return e.executeRowShard(ctx, tx, index, c, shard)
@@ -1464,6 +1409,8 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, tx Tx, index stri
 		return e.executeShiftShard(ctx, tx, index, c, shard)
 	case "All": // Allow a shard computation to use All() (note, limit/offset not applied)
 		return e.executeAllCallShard(ctx, tx, index, c, shard)
+	case "Distinct":
+		return nil, errors.New("Distinct shouldn't be hit as a bitmap call")
 	case "Precomputed":
 		return e.executePrecomputedCallShard(ctx, tx, index, c, shard)
 	default:
@@ -1471,11 +1418,10 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, tx Tx, index stri
 	}
 }
 
-// executeGenericFieldShard executes a generic/extension command on a
-// single shard. Note that in this implementation, the op is always
-// a BSI op.
-func (e *executor) executeGenericFieldShard(ctx context.Context, tx Tx, index string, c *pql.Call, op ext.BitmapOpBSIBitmap, shard uint64) (SignedRow, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGenericShard")
+// executeDistinctShard executes a Distinct call on a single shard, yielding
+// a SignedRow of the values found.
+func (e *executor) executeDistinctShard(ctx context.Context, tx Tx, index string, c *pql.Call, shard uint64) (result SignedRow, err error) {
+	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeDistinctShard")
 	defer span.Finish()
 
 	var filter *Row
@@ -1483,7 +1429,7 @@ func (e *executor) executeGenericFieldShard(ctx context.Context, tx Tx, index st
 	if len(c.Children) == 1 {
 		row, err := e.executeBitmapCallShard(ctx, tx, index, c.Children[0], shard)
 		if err != nil {
-			return SignedRow{}, errors.Wrap(err, "executing bitmap call")
+			return result, errors.Wrap(err, "executing bitmap call")
 		}
 		filter = row
 		if filter != nil && len(filter.segments) > 0 {
@@ -1497,29 +1443,115 @@ func (e *executor) executeGenericFieldShard(ctx context.Context, tx Tx, index st
 
 	field := e.Holder.Field(index, fieldName)
 	if field == nil {
-		return SignedRow{}, nil
+		return result, nil
 	}
 
 	bsig := field.bsiGroup(fieldName)
 	if bsig == nil {
-		return SignedRow{}, nil
+		return result, nil
+	}
+	view := viewBSIGroupPrefix + fieldName
+
+	depth := uint64(bsig.BitDepth)
+	offset := bsig.Base
+
+	existsBitmap, err := tx.OffsetRange(index, fieldName, view, shard, 0, ShardWidth*0, ShardWidth*1)
+	if err != nil {
+		return result, err
+	}
+	if filter != nil {
+		existsBitmap = existsBitmap.Intersect(filterBitmap)
+	}
+	if !existsBitmap.Any() {
+		return result, nil
 	}
 
-	fragment := e.Holder.fragment(index, fieldName, viewBSIGroupPrefix+fieldName, shard)
-	if fragment == nil {
-		return SignedRow{}, nil
+	signBitmap, err := tx.OffsetRange(index, fieldName, view, shard, 0, ShardWidth*1, ShardWidth*2)
+	if err != nil {
+		return result, nil
 	}
 
-	var out ext.SignedBitmap
-	if filterBitmap != nil {
-		out = op(ext.BitmapBSI{FieldData: WrapBitmap(fragment.storage), ShardWidth: ShardWidth, Offset: bsig.Base, Depth: bsig.BitDepth}, []ext.Bitmap{WrapBitmap(filterBitmap)}, c.Args)
-	} else {
-		out = op(ext.BitmapBSI{FieldData: WrapBitmap(fragment.storage), ShardWidth: ShardWidth, Offset: bsig.Base, Depth: bsig.BitDepth}, []ext.Bitmap{}, c.Args)
+	dataBitmaps := make([]*roaring.Bitmap, depth)
+
+	for i := uint64(0); i < depth; i++ {
+		dataBitmaps[i], err = tx.OffsetRange(index, fieldName, view, shard, 0, ShardWidth*(i+2), ShardWidth*(i+3))
+		if err != nil {
+			return result, err
+		}
 	}
 
+	// we need spaces for sign bit, existence/filter bit, and data
+	// row bits, which we'll be grabbing 65k bits at a time
+	stashWords := make([]uint64, 1024*(depth+2))
+	bitStashes := make([][]uint64, depth)
+	for i := uint64(0); i < depth; i++ {
+		start := i * 1024
+		last := start + 1024
+		bitStashes[i] = stashWords[start:last]
+		i++
+	}
+	stashOffset := depth * 1024
+	existStash := stashWords[stashOffset : stashOffset+1024]
+	signStash := stashWords[stashOffset+1024 : stashOffset+2048]
+	dataBits := make([][]uint64, depth)
+
+	posValues := make([]uint64, 0, 64)
+	negValues := make([]uint64, 0, 64)
+
+	posBitmap := roaring.NewFileBitmap()
+	negBitmap := roaring.NewFileBitmap()
+
+	existIterator, _ := existsBitmap.Containers.Iterator(0)
+	for existIterator.Next() {
+		key, value := existIterator.Value()
+		if value.N() == 0 {
+			continue
+		}
+		exists := value.AsBitmap(existStash)
+		sign := signBitmap.Containers.Get(key).AsBitmap(signStash)
+		for i := uint64(0); i < depth; i++ {
+			dataBits[i] = dataBitmaps[i].Containers.Get(key).AsBitmap(bitStashes[i])
+		}
+		for idx, word := range exists {
+			// mask holds a mask we can test the other words against.
+			mask := uint64(1)
+			for word != 0 {
+				shift := uint(bits.TrailingZeros64(word))
+				// we shift one *more* than that, to move the
+				// actual one bit off.
+				word >>= shift + 1
+				mask <<= shift
+				value := int64(0)
+				for b := uint64(0); b < depth; b++ {
+					if dataBits[b][idx]&mask != 0 {
+						value += (1 << b)
+					}
+				}
+				if sign[idx]&mask != 0 {
+					value *= -1
+				}
+				value += int64(offset)
+				if value < 0 {
+					negValues = append(negValues, uint64(-value))
+				} else {
+					posValues = append(posValues, uint64(value))
+				}
+				// and now we processed that bit, so we move the mask over one.
+				mask <<= 1
+			}
+			if len(negValues) > 0 {
+				_, _ = negBitmap.AddN(negValues...)
+				negValues = negValues[:0]
+			}
+			if len(posValues) > 0 {
+				_, _ = posBitmap.AddN(posValues...)
+				posValues = posValues[:0]
+			}
+		}
+	}
 	return SignedRow{
-		Neg: NewRowFromBitmap(UnwrapBitmap(out.Neg)),
-		Pos: NewRowFromBitmap(UnwrapBitmap(out.Pos)),
+		Neg: NewRowFromBitmap(negBitmap),
+		Pos: NewRowFromBitmap(posBitmap),
 	}, nil
 }
 
@@ -2681,11 +2713,13 @@ func (e *executor) executeRowsShard(ctx context.Context, tx Tx, index string, fi
 }
 
 func (e *executor) executeRowShard(ctx context.Context, tx Tx, index string, c *pql.Call, shard uint64) (*Row, error) {
+
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeRowShard")
 	defer span.Finish()
 
 	// Handle bsiGroup ranges differently.
 	if c.HasConditionArg() {
+		// looks the same on badger/roaring. we think.
 		return e.executeRowBSIGroupShard(ctx, tx, index, c, shard)
 	}
 
@@ -2795,6 +2829,7 @@ func (e *executor) executeRowShard(ctx context.Context, tx Tx, index string, c *
 
 // executeRowBSIGroupShard executes a range(bsiGroup) call for a local shard.
 func (e *executor) executeRowBSIGroupShard(ctx context.Context, tx Tx, index string, c *pql.Call, shard uint64) (_ *Row, err error) {
+
 	span, _ := tracing.StartSpanFromContext(ctx, "Executor.executeRowBSIGroupShard")
 	defer span.Finish()
 
@@ -2975,44 +3010,6 @@ func (e *executor) executeIntersectShard(ctx context.Context, tx Tx, index strin
 	return other, nil
 }
 
-// executeGenericBitmapShard executes a generic bitmap call for a local shard.
-func (e *executor) executeGenericBitmapShard(ctx context.Context, tx Tx, index string, c *pql.Call, op ext.BitmapOpBitmap, shard uint64) (*Row, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGenericBitmapShard")
-	defer span.Finish()
-
-	if op.BitmapOpArity() == ext.OpArityUnary {
-		if len(c.Children) != 1 {
-			return nil, fmt.Errorf("%s needs exactly one row parameter", c.Name)
-		}
-		row, err := e.executeBitmapCallShard(ctx, tx, index, c.Children[0], shard)
-		if err != nil {
-			return nil, err
-		}
-		return row.GenericUnaryOp(op.BitmapOpFunc(), c.Args), nil
-	}
-
-	var err error
-	rows := make([]*Row, len(c.Children))
-	for i, input := range c.Children {
-		rows[i], err = e.executeBitmapCallShard(ctx, tx, index, input, shard)
-		if err != nil {
-			return nil, err
-		}
-	}
-	var other *Row
-	switch op.BitmapOpArity() {
-	case ext.OpArityBinary:
-		other = rows[0]
-		for _, row := range rows[1:] {
-			other = other.GenericBinaryOp(op.BitmapOpFunc(), row, c.Args)
-		}
-	case ext.OpArityNary:
-		other = rows[0].GenericNaryOp(op.BitmapOpFunc(), rows[1:], c.Args)
-	}
-	other.invalidateCount()
-	return other, nil
-}
-
 // executeUnionShard executes a union() call for a local shard.
 func (e *executor) executeUnionShard(ctx context.Context, tx Tx, index string, c *pql.Call, shard uint64) (*Row, error) {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeUnionShard")
@@ -3162,41 +3159,6 @@ func (e *executor) executeShiftShard(ctx context.Context, tx Tx, index string, c
 	}
 
 	return row.Shift(n)
-}
-
-// executeGeneric executes a provided count-like call.
-func (e *executor) executeGenericCount(ctx context.Context, tx Tx, index string, c *pql.Call, op ext.BitmapOpUnaryCount, shards []uint64, opt *execOptions) (uint64, error) {
-	span, ctx := tracing.StartSpanFromContext(ctx, "Executor.executeGenericCount")
-	defer span.Finish()
-
-	if len(c.Children) == 0 {
-		return 0, fmt.Errorf("%s() requires an input bitmap", c.Name)
-	} else if len(c.Children) > 1 {
-		return 0, fmt.Errorf("%s() only accepts a single bitmap input", c.Name)
-	}
-
-	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
-		row, err := e.executeBitmapCallShard(ctx, tx, index, c.Children[0], shard)
-		if err != nil {
-			return 0, err
-		}
-		return row.GenericCount(op, c.Args), nil
-	}
-
-	// Merge returned results at coordinating node.
-	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
-		other, _ := prev.(uint64)
-		return other + v.(uint64)
-	}
-
-	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
-	if err != nil {
-		return 0, err
-	}
-	n, _ := result.(uint64)
-
-	return n, nil
 }
 
 // executeCount executes a count() call.

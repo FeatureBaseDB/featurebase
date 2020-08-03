@@ -131,7 +131,7 @@ func TestContainerRunAdd2(t *testing.T) {
 
 func TestRunCountRange(t *testing.T) {
 	c := NewContainerRun(nil)
-	cnt := c.runCountRange(2, 9)
+	cnt := RunCountRange(c.runs(), 2, 9)
 	if cnt != 0 {
 		t.Fatalf("should get 0 from empty container, but got: %v", cnt)
 	}
@@ -139,7 +139,7 @@ func TestRunCountRange(t *testing.T) {
 	c.add(6)
 	c.add(7)
 
-	cnt = c.runCountRange(2, 9)
+	cnt = RunCountRange(c.runs(), 2, 9)
 	if cnt != 3 {
 		t.Fatalf("should get 3 from interval within range, but got: %v", cnt)
 	}
@@ -149,52 +149,52 @@ func TestRunCountRange(t *testing.T) {
 	c.add(10)
 	c.add(11)
 
-	cnt = c.runCountRange(4, 8)
+	cnt = RunCountRange(c.runs(), 4, 8)
 	if cnt != 3 {
 		t.Fatalf("should get 3 from range overlaps front of interval, but got: %v", cnt)
 	}
 
-	cnt = c.runCountRange(5, 8)
+	cnt = RunCountRange(c.runs(), 5, 8)
 	if cnt != 3 {
 		t.Fatalf("should get 3 from range within interval, but got: %v", cnt)
 	}
 
-	cnt = c.runCountRange(6, 8)
+	cnt = RunCountRange(c.runs(), 6, 8)
 	if cnt != 2 {
 		t.Fatalf("should get 2 from range within interval, but got: %v", cnt)
 	}
 
-	cnt = c.runCountRange(3, 9)
+	cnt = RunCountRange(c.runs(), 3, 9)
 	if cnt != 4 {
 		t.Fatalf("should get 4 from range overlaps front of interval, but got: %v", cnt)
 	}
 
-	cnt = c.runCountRange(9, 14)
+	cnt = RunCountRange(c.runs(), 9, 14)
 	if cnt != 3 {
 		t.Fatalf("should get 3 from range overlaps back of interval, but got: %v", cnt)
 	}
 
-	cnt = c.runCountRange(8, 10)
+	cnt = RunCountRange(c.runs(), 8, 10)
 	if cnt != 2 {
 		t.Fatalf("should get 2 from range within interval, but got: %v", cnt)
 	}
 
-	cnt = c.runCountRange(8, 11)
+	cnt = RunCountRange(c.runs(), 8, 11)
 	if cnt != 3 {
 		t.Fatalf("should get 3 from range within interval, but got: %v", cnt)
 	}
 
-	cnt = c.runCountRange(8, 12)
+	cnt = RunCountRange(c.runs(), 8, 12)
 	if cnt != 4 {
 		t.Fatalf("should get 4 from range overlaps back of interval, but got: %v", cnt)
 	}
 
-	cnt = c.runCountRange(5, 12)
+	cnt = RunCountRange(c.runs(), 5, 12)
 	if cnt != 7 {
 		t.Fatalf("should get 7 from interval within range, but got: %v", cnt)
 	}
 
-	cnt = c.runCountRange(5, 11)
+	cnt = RunCountRange(c.runs(), 5, 11)
 	if cnt != 6 {
 		t.Fatalf("should get 6 from interval equal to range, but got: %v", cnt)
 	}
@@ -203,7 +203,7 @@ func TestRunCountRange(t *testing.T) {
 	c.add(19)
 	c.add(18)
 
-	cnt = c.runCountRange(1, 22)
+	cnt = RunCountRange(c.runs(), 1, 22)
 	if cnt != 10 {
 		t.Fatalf("should get 10 from multiple ranges in interval, but got: %v", cnt)
 	}
@@ -211,7 +211,7 @@ func TestRunCountRange(t *testing.T) {
 	c.add(13)
 	c.add(14)
 
-	cnt = c.runCountRange(6, 18)
+	cnt = RunCountRange(c.runs(), 6, 18)
 	if cnt != 9 {
 		t.Fatalf("should get 9 from multiple ranges overlapping both sides, but got: %v", cnt)
 	}
@@ -263,7 +263,7 @@ func TestBitmapCountRange(t *testing.T) {
 
 	for i, test := range tests {
 		c.setBitmap(test.bitmap[:])
-		if ret := c.bitmapCountRange(test.start, test.end); ret != test.exp {
+		if ret := BitmapCountRange(c.bitmap(), test.start, test.end); ret != test.exp {
 			t.Fatalf("test #%v count of %v from %v to %v should be %v but got %v", i, test.bitmap, test.start, test.end, test.exp, ret)
 		}
 	}
@@ -4402,5 +4402,42 @@ func TestUnionRunRunInPlaceBitwiseCompare(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestCloneRoaringIterator(t *testing.T) {
+
+	ca := NewContainerArray([]uint16{1, 10, 100, 1000})
+	ba := NewFileBitmap()
+	ba.Containers.Put(0, ca)
+	ba.Containers.Put(10, ca)
+	ba.Containers.Put(101, ca)
+	ba.Containers.Put(10001, ca)
+	var buf bytes.Buffer
+	_, err := ba.WriteTo(&buf)
+	if err != nil {
+		t.Fatalf("error writing: %v", err)
+	}
+
+	itr, err := NewRoaringIterator(buf.Bytes())
+	if err != nil {
+		t.Fatalf("error NewRoaringIterator(buf.Bytes()): %v", err)
+	}
+
+	itr2 := itr.Clone()
+
+	var keys []uint64
+	for itrKey, synthC := itr.NextContainer(); synthC != nil; itrKey, synthC = itr.NextContainer() {
+		keys = append(keys, itrKey)
+		_ = synthC
+	}
+
+	var keys2 []uint64
+	for itrKey, synthC := itr2.NextContainer(); synthC != nil; itrKey, synthC = itr2.NextContainer() {
+		keys2 = append(keys2, itrKey)
+		_ = synthC
+	}
+	if !reflect.DeepEqual(keys, keys2) {
+		t.Fatalf("keys != keys2. keys='%#v'; keys2='%#v'", keys, keys2)
 	}
 }

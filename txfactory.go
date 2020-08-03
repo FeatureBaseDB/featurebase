@@ -21,7 +21,9 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"text/tabwriter"
 
+	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pkg/errors"
 )
@@ -55,13 +57,15 @@ var sep = string(os.PathSeparator)
 type TxFactory struct {
 	typeOfTx txtype
 
-	bw *BadgerDBWrapper
+	badgerDB *BadgerDBWrapper
+
+	rbfDB *rbf.DB
+
+	roaringDB *RoaringStore
 
 	// could have more than one *Index, but for now keep it simple,
 	// and allow blueGreenTx to report badger contents via idx
 	idx *Index
-
-	// TODO:  put RBF database handle here.
 }
 
 // integer types for fast switch{}
@@ -84,6 +88,32 @@ const (
 	blueGreenBadgerRBF txtype = 8
 	blueGreenRBFBadger txtype = 9
 )
+
+func (txf *TxFactory) NeedsSnapshot() bool {
+	switch txf.typeOfTx {
+	case noneTxn:
+		panic("noneTxn should not occur")
+	case roaringFragmentFilesTxn:
+		return true
+	case badgerTxn:
+		return false
+	case rbfTxn:
+		return false
+	case blueGreenBadgerRoaring:
+		return true
+	case blueGreenRoaringBadger:
+		return true
+	case blueGreenRBFRoaring:
+		return true
+	case blueGreenRoaringRBF:
+		return true
+	case blueGreenBadgerRBF:
+		return false
+	case blueGreenRBFBadger:
+		return false
+	}
+	panic(fmt.Sprintf("unknown typeOfTx '%v'", txf.typeOfTx))
+}
 
 func MustTxsrcToTxtype(txsrc string) txtype {
 	switch txsrc {
@@ -109,29 +139,55 @@ func MustTxsrcToTxtype(txsrc string) txtype {
 	panic(fmt.Sprintf("unknown txsrc '%v'", txsrc))
 }
 
-func newTxFactory(txsrc string, path string) (f *TxFactory, err error) {
+// always store files in a subdir of dir. If we are having one
+// database or many can depend on name.
+func NewTxFactory(txsrc string, dir, name string, openExisting bool) (f *TxFactory, err error) {
+
 	ty := MustTxsrcToTxtype(txsrc)
 	if ty < 1 || ty > 9 {
 		panic(fmt.Sprintf("invalid txtype '%v'", int(ty)))
 	}
 
-	var bw *BadgerDBWrapper
-	if ty == badgerTxn || ty == 4 || ty == 5 || ty == 8 || ty == 9 {
-		bw, err = openBadgerDBWrapper(path)
-		// TODO(jea): figure out what the appropriate error path is here.
-		//fmt.Printf("warning: could not open badgerdb on path '%v': '%v'. For safety, we are opening a new '%v-fallback' instead\n", path, err, path+"-fallback")
-		if err != nil {
-			//bw, err = newBadgerDBWrapper(path + "-fallback")
-			bw, err = newBadgerDBWrapper(path)
-		}
-		panicOn(err)
-
-		bw.doAllocZero = true
+	f = &TxFactory{
+		typeOfTx:  ty,
+		roaringDB: NewRoaringStore(),
 	}
-	return &TxFactory{
-		typeOfTx: ty,
-		bw:       bw,
-	}, err
+
+	switch ty {
+	case badgerTxn, blueGreenBadgerRoaring, blueGreenRoaringBadger, blueGreenBadgerRBF, blueGreenRBFBadger:
+
+		// one, big, bad-ass badger for all data: the honeyBadger.
+		//
+		// Note that having a single Tx backing store for all indexes
+		// enables cross-index Tx, which are important and are tested for.
+		path := dir + sep + "honeyBadger"
+
+		if openExisting {
+			f.badgerDB, err = globalBadgerReg.openBadgerDBWrapper(path)
+			if err != nil {
+				return nil, errors.Wrap(err, fmt.Sprintf("cannot open badger db. path='%v'", path))
+			}
+		} else {
+			f.badgerDB, err = globalBadgerReg.newBadgerDBWrapper(path)
+			if err != nil {
+				return nil, errors.Wrap(err, fmt.Sprintf("cannot create new badger db. path='%v'", path))
+			}
+		}
+		// electric-fence like finding of access to mmapped data beyond
+		// transaction end time.
+		f.badgerDB.doAllocZero = true
+	}
+
+	switch ty {
+	case rbfTxn, blueGreenRBFRoaring, blueGreenRoaringRBF, blueGreenBadgerRBF, blueGreenRBFBadger:
+
+		f.rbfDB = rbf.NewDB(filepath.Join(dir, "db.rbf"))
+		if err := f.rbfDB.Open(); err != nil {
+			return nil, errors.Wrap(err, "cannot open rbf db")
+		}
+	}
+
+	return f, err
 }
 
 // Txo holds the transaction options
@@ -153,34 +209,62 @@ func (f *TxFactory) DeleteIndex(name string) error {
 		// from holder.go:955, by default is already done there with os.RemoveAll()
 		return nil
 	case badgerTxn:
-		return f.bw.DeleteIndex(name)
+		return f.badgerDB.DeleteIndex(name)
 	case rbfTxn:
 		panic("todo rbfTxn DeleteIndex(name)")
 	case blueGreenBadgerRoaring:
-		return f.bw.DeleteIndex(name)
+		return f.badgerDB.DeleteIndex(name)
 	case blueGreenRoaringBadger:
-		return f.bw.DeleteIndex(name)
+		return f.badgerDB.DeleteIndex(name)
 	}
 	panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", f.typeOfTx))
 }
 
-func (f *TxFactory) Close() error {
+func (f *TxFactory) DeleteFieldFromStore(index, field, fieldPath string) error {
 	switch f.typeOfTx {
 	case roaringFragmentFilesTxn:
-		return nil
+		return f.roaringDB.DeleteField(index, field, fieldPath)
 	case badgerTxn:
-		// note cannot actually close Badger here.
-		// causes problems b/c tries holder.DeleteIndex tries to delete the index after db is closed.
-		//return f.bw.Close()
-		return nil
+		return f.badgerDB.DeleteField(index, field, fieldPath)
 	case rbfTxn:
-		panic("todo rbfTxn Close()")
+		//return f.rbfDB.DeleteField(index, field, fieldPath)
+		return nil
 	case blueGreenBadgerRoaring:
-		return nil
+		_ = f.badgerDB.DeleteField(index, field, fieldPath)
+		return f.roaringDB.DeleteField(index, field, fieldPath)
 	case blueGreenRoaringBadger:
-		return nil
+		_ = f.roaringDB.DeleteField(index, field, fieldPath)
+		return f.badgerDB.DeleteField(index, field, fieldPath)
 	}
 	panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", f.typeOfTx))
+}
+
+func (f *TxFactory) DeleteFragmentFromStore(index, field, view string, shard uint64, frag *fragment) error {
+	switch f.typeOfTx {
+	case roaringFragmentFilesTxn:
+		return f.roaringDB.DeleteFragment(index, field, view, shard, frag)
+	case badgerTxn:
+		return f.badgerDB.DeleteFragment(index, field, view, shard, frag)
+	case rbfTxn:
+		tx, err := f.rbfDB.Begin(true)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+
+		if err := tx.DeleteBitmapsWithPrefix(rbfFieldViewPrefix(field, view)); err != nil {
+			return err
+		}
+		return tx.Commit()
+	case blueGreenBadgerRoaring:
+		_ = f.badgerDB.DeleteFragment(index, field, view, shard, frag)
+		return f.roaringDB.DeleteFragment(index, field, view, shard, frag)
+	case blueGreenRoaringBadger:
+		_ = f.roaringDB.DeleteFragment(index, field, view, shard, frag)
+		return f.badgerDB.DeleteFragment(index, field, view, shard, frag)
+	}
+	panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", f.typeOfTx))
+
 }
 
 func (f *TxFactory) CloseIndex(idx *Index) error {
@@ -188,37 +272,88 @@ func (f *TxFactory) CloseIndex(idx *Index) error {
 	case roaringFragmentFilesTxn:
 		return nil
 	case badgerTxn:
+		// note cannot actually close Badger here.
+		// causes problems b/c tries holder.DeleteIndex tries to delete the index after db is closed.
+		//return f.badgerDB.Close()
 		return nil
 	case rbfTxn:
-		panic("todo rbfTxn CloseIndex()")
-
+		return f.rbfDB.Close()
 	case blueGreenBadgerRoaring:
 		return nil
 	case blueGreenRoaringBadger:
 		return nil
+
+	case blueGreenRBFRoaring:
+		_ = f.rbfDB.Close()
+		return nil
+	case blueGreenRoaringRBF:
+		return f.rbfDB.Close()
+	case blueGreenBadgerRBF:
+		return f.rbfDB.Close()
+	case blueGreenRBFBadger:
+		_ = f.rbfDB.Close()
+		return nil
+
 	}
 	panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", f.typeOfTx))
 }
 
 func (f *TxFactory) NewTx(o Txo) Tx {
+	indexName := ""
+	if o.Index != nil {
+		indexName = o.Index.name
+	}
 
 	switch f.typeOfTx {
 	case roaringFragmentFilesTxn:
 		return &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment}
 	case badgerTxn:
-		btx := f.bw.NewBadgerTx(o.Write)
+		btx := f.badgerDB.NewBadgerTx(o.Write, indexName)
 		return btx
 	case rbfTxn:
-		panic("todo rbfTxn creation")
-
+		tx, err := f.rbfDB.Begin(o.Write)
+		if err != nil {
+			panic(err) // TODO: Add error return on NewTx()
+		}
+		return &RBFTx{tx: tx, index: indexName}
 	case blueGreenBadgerRoaring:
-		btx := f.bw.NewBadgerTx(o.Write)
+		btx := f.badgerDB.NewBadgerTx(o.Write, indexName)
 		rtx := &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment}
 		return newBlueGreenTx(btx, rtx, f.idx)
 	case blueGreenRoaringBadger:
-		btx := f.bw.NewBadgerTx(o.Write)
+		btx := f.badgerDB.NewBadgerTx(o.Write, indexName)
 		rtx := &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment}
 		return newBlueGreenTx(rtx, btx, f.idx)
+
+	case blueGreenBadgerRBF:
+		btx := f.badgerDB.NewBadgerTx(o.Write, indexName)
+		rbftx, err := f.rbfDB.Begin(o.Write)
+		if err != nil {
+			panic(errors.Wrap(err, "rbfDB.Begin transaction errored"))
+		}
+		return newBlueGreenTx(btx, &RBFTx{tx: rbftx, index: indexName}, f.idx)
+	case blueGreenRBFBadger:
+		btx := f.badgerDB.NewBadgerTx(o.Write, indexName)
+		rbftx, err := f.rbfDB.Begin(o.Write)
+		if err != nil {
+			panic(errors.Wrap(err, "rbfDB.Begin transaction errored"))
+		}
+		return newBlueGreenTx(&RBFTx{tx: rbftx, index: indexName}, btx, f.idx)
+
+	case blueGreenRBFRoaring:
+		rbftx, err := f.rbfDB.Begin(o.Write)
+		if err != nil {
+			panic(errors.Wrap(err, "rbfDB.Begin transaction errored"))
+		}
+		rtx := &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment}
+		return newBlueGreenTx(&RBFTx{tx: rbftx, index: indexName}, rtx, f.idx)
+	case blueGreenRoaringRBF:
+		rbftx, err := f.rbfDB.Begin(o.Write)
+		if err != nil {
+			panic(errors.Wrap(err, "rbfDB.Begin transaction errored"))
+		}
+		rtx := &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment}
+		return newBlueGreenTx(rtx, &RBFTx{tx: rbftx, index: indexName}, f.idx)
 	}
 	panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", f.typeOfTx))
 }
@@ -255,14 +390,13 @@ func (ty txtype) String() string {
 // Hence to view uncommited keys, you must provide in optionalUseThisTx the
 // Tx in which they have been added.
 func (idx *Index) StringifiedBadgerKeys(optionalUseThisTx Tx) string {
-	return idx.Txf.bw.StringifiedBadgerKeys(optionalUseThisTx)
+	return idx.Txf.badgerDB.StringifiedBadgerKeys(optionalUseThisTx)
 }
 
 // fragmentSpecFromRoaringPath takes a path releative to the
 // index directory, not including the name of the index itself.
 // The path should not start with the path separator sep ('/' or '\\') rune.
 func fragmentSpecFromRoaringPath(path string) (field, view string, shard uint64, err error) {
-
 	if len(path) == 0 {
 		err = fmt.Errorf("fragmentSpecFromRoaringPath error: path '%v' too short", path)
 		return
@@ -291,29 +425,38 @@ func fragmentSpecFromRoaringPath(path string) (field, view string, shard uint64,
 }
 
 func (idx *Index) StringifiedRoaringKeys() (r string) {
-
 	paths, err := listFilesUnderDir(idx.path, false, "", true)
 	panicOn(err)
 	index := idx.name
 
 	r = "allkeys:[\n"
+	n := 0
 	for _, relpath := range paths {
 		field, view, shard, err := fragmentSpecFromRoaringPath(relpath)
 		if err != nil {
 			continue // ignore .meta paths
 		}
 		abspath := idx.path + sep + relpath
-		s, err := stringifiedRawRoaringFragment(abspath, index, field, view, shard)
+		const showOps = false
+		s, err := stringifiedRawRoaringFragment(abspath, index, field, view, shard, showOps)
 		panicOn(err)
 		//r += fmt.Sprintf("path:'%v' fragment contains:\n") + s
+		if s == "" {
+			s = "<empty bitmap>"
+		}
 		r += s
+		n++
 	}
+	if n == 0 {
+		return "" // new convention that empty database => empty string returned.
+	}
+	// note that we can have a bitmap present, but it can be empty
 	r += "]\n   all-in-blake3:" + blake3sum16([]byte(r)) + "\n"
 
 	return "roaring-" + r
 }
 
-func stringifiedRawRoaringFragment(path string, index, field, view string, shard uint64) (r string, err error) {
+func stringifiedRawRoaringFragment(path string, index, field, view string, shard uint64, showOps bool) (r string, err error) {
 
 	var info roaring.BitmapInfo
 	_ = info
@@ -350,6 +493,21 @@ func stringifiedRawRoaringFragment(path string, index, field, view string, shard
 	if err != nil {
 		err = errors.Wrap(err, "inspecting")
 		return
+	}
+
+	//cmd.DisplayInfo(info)
+	// inlined
+	if showOps {
+		pC := pointerContext{
+			from: info.From,
+			to:   info.To,
+		}
+		if info.ContainerCount > 0 {
+			printContainers(info, pC)
+		}
+		if info.Ops > 0 {
+			printOps(info)
+		}
 	}
 
 	citer, found := rbm.Containers.Iterator(0)
@@ -432,28 +590,6 @@ func fileSize(name string) (int64, error) {
 
 var _ = fileSize // happy linter
 
-// Dump prints to stdout the contents of the roaring Containers
-// stored in idx. Its format may vary depending of the type of
-// idx.Txf transaction factory that is in use.
-// Mostly for debugging.
-func (idx *Index) Dump(label string) {
-	ty := idx.Txf.TxType()
-	fileline := FileLine(2)
-	switch ty {
-	case badgerTxn:
-		fmt.Printf("%v Index.Dump('%v') for index '%v':\n%v\n", fileline, label, idx.name, idx.StringifiedBadgerKeys(nil))
-		return
-	case blueGreenRoaringBadger, blueGreenBadgerRoaring:
-		fmt.Printf("%v Index.Dump('%v') for index '%v', RoaringTx:\n%v\n", fileline, label, idx.name, idx.StringifiedRoaringKeys())
-		fmt.Printf("%v Index.Dump('%v') for index '%v', BadgerTx :\n%v\n", fileline, label, idx.name, idx.StringifiedBadgerKeys(nil))
-		return
-	case roaringFragmentFilesTxn:
-		fmt.Printf("%v Index.Dump('%v') for index '%v', BadgerTx :\n%v\n", fileline, label, idx.name, idx.StringifiedRoaringKeys())
-		return
-	}
-	panic(fmt.Errorf("%v Index.Dump('%v') for index '%v': no implementation for txtype '%v'\n", fileline, label, idx.name, ty))
-}
-
 func containerToBytes(ct *roaring.Container) []byte {
 	ty := roaring.ContainerType(ct)
 	switch ty {
@@ -467,4 +603,110 @@ func containerToBytes(ct *roaring.Container) []byte {
 		return fromInterval16(roaring.AsRuns(ct))
 	}
 	panic(fmt.Sprintf("unknown container type '%v'", int(ty)))
+}
+
+type pointerContext struct {
+	from, to uintptr
+}
+
+func printOps(info roaring.BitmapInfo) {
+	fmt.Fprintln(os.Stdout, "  Ops:")
+	tw := tabwriter.NewWriter(os.Stdout, 0, 8, 0, '\t', 0)
+	fmt.Fprintf(tw, "  \t%s\t%s\t%s\t\n", "TYPE", "OpN", "SIZE")
+	printed := 0
+	for _, op := range info.OpDetails {
+		fmt.Fprintf(tw, "\t%s\t%d\t%d\t\n", op.Type, op.OpN, op.Size)
+		printed++
+	}
+	tw.Flush()
+}
+
+func (p *pointerContext) pretty(c roaring.ContainerInfo) string {
+	var pointer string
+	if c.Mapped {
+		if c.Pointer >= p.from && c.Pointer < p.to {
+			pointer = fmt.Sprintf("@+0x%x", c.Pointer-p.from)
+		} else {
+			pointer = fmt.Sprintf("!0x%x!", c.Pointer)
+		}
+	} else {
+		pointer = fmt.Sprintf("0x%x", c.Pointer)
+	}
+	return fmt.Sprintf("%s \t%d \t%d \t%s ", c.Type, c.N, c.Alloc, pointer)
+}
+
+// stolen from ctl/inspect.go
+func printContainers(info roaring.BitmapInfo, pC pointerContext) {
+	fmt.Fprintln(os.Stdout, "  Containers:")
+	tw := tabwriter.NewWriter(os.Stdout, 0, 8, 0, '\t', 0)
+	fmt.Fprintf(tw, "  \t\tRoaring\t\t\t\tOps\t\t\t\tFlags\t\n")
+	fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n", "KEY", "TYPE", "N", "ALLOC", "OFFSET", "TYPE", "N", "ALLOC", "OFFSET", "FLAGS")
+	c1s := info.Containers
+	c2s := info.OpContainers
+	l1 := len(c1s)
+	l2 := len(c2s)
+	i1 := 0
+	i2 := 0
+	var c1, c2 roaring.ContainerInfo
+	c1.Key = ^uint64(0)
+	c2.Key = ^uint64(0)
+	c1e := false
+	c2e := false
+	if i1 < l1 {
+		c1 = c1s[i1]
+		i1++
+		c1e = true
+	}
+	if i2 < l2 {
+		c2 = c2s[i2]
+		i2++
+		c2e = true
+	}
+	printed := 0
+	for c1e || c2e {
+		c1used := false
+		c2used := false
+		var key uint64
+		c1fmt := "-\t\t\t"
+		c2fmt := "-\t\t\t"
+		// If c2 exists, we'll always prefer its flags,
+		// if it doesn't, this gets overwritten.
+		flags := c2.Flags
+		if !c2e || (c1e && c1.Key < c2.Key) {
+			c1fmt = pC.pretty(c1)
+			key = c1.Key
+			c1used = true
+			flags = c1.Flags
+		} else if !c1e || (c2e && c2.Key < c1.Key) {
+			c2fmt = pC.pretty(c2)
+			key = c2.Key
+			c2used = true
+		} else {
+			// c1e and c2e both set, and neither key is < the other.
+			c1fmt = pC.pretty(c1)
+			c2fmt = pC.pretty(c2)
+			key = c1.Key
+			c1used = true
+			c2used = true
+		}
+		if c1used {
+			if i1 < l1 {
+				c1 = c1s[i1]
+				i1++
+			} else {
+				c1e = false
+			}
+		}
+		if c2used {
+			if i2 < l2 {
+				c2 = c2s[i2]
+				i2++
+			} else {
+				c2e = false
+			}
+		}
+		fmt.Fprintf(tw, "\t%d\t%s\t%s\t%s\t\n", key, c1fmt, c2fmt, flags)
+		printed++
+	}
+	tw.Flush()
 }

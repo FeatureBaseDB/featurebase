@@ -22,8 +22,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/molecula/ext"
 )
 
 // Query represents a PQL query.
@@ -345,7 +343,8 @@ var callInfoByFunc = map[string]callInfo{
 	"Row":    {allowUnknown: true},
 	"Range":  {allowUnknown: true},
 
-	"Distinct": {allowUnknown: true},
+	"Distinct":  {allowUnknown: true, callType: PrecallGlobal},
+	"Condition": {allowUnknown: true},
 
 	// allow only "field=X" cases with string field names
 	"Max": allowField,
@@ -462,30 +461,6 @@ var callInfoByFunc = map[string]callInfo{
 	},
 }
 
-// RegisterPluginFuncs adds arg validation for plugin funcs. Not very good
-// arg validation.
-func RegisterPluginFuncs(ops []ext.BitmapOp) {
-	for _, op := range ops {
-		// ignore overlap for now. This should change.
-		if _, ok := callInfoByFunc[op.Name]; ok {
-			continue
-		}
-		ci := callInfo{allowUnknown: true}
-		if len(op.Reserved) > 0 {
-			// mark these as valid/known reserved words
-			ci.prototypes = make(map[string]interface{})
-			for _, res := range op.Reserved {
-				ci.prototypes[res] = nil
-			}
-		}
-		t := op.Func.BitmapOpType()
-		if t.Precall == ext.OpPrecallGlobal {
-			ci.callType = PrecallGlobal
-		}
-		callInfoByFunc[op.Name] = ci
-	}
-}
-
 // CheckCallInfo tries to validate that arguments are correct and valid for the
 // given call. It does not guarantee checking all possible errors; for instance,
 // if an argument is a field name, CheckCallInfo can't validate that the field
@@ -504,6 +479,11 @@ func (c *Call) CheckCallInfo() error {
 		}
 		if !ok && strings.HasPrefix(k, "_") {
 			return fmt.Errorf("'%s': unknown reserved arg '%s'", c.String(), k)
+		}
+		if call, ok := v.(*Call); ok {
+			if err := call.CheckCallInfo(); err != nil {
+				return err
+			}
 		}
 		if acceptable == nil {
 			continue

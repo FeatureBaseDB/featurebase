@@ -371,15 +371,8 @@ func importWorker(importWork chan importJob) {
 				var doClear bool
 				switch doAction {
 				case RequestActionOverwrite:
-					// TODO(jea): the question here is, why are we commiting this separately from j.tx?
-					// why doesn't j.tx suffice? It doesn't but why/which is correct?
-					tx := j.field.holder.indexes[j.field.index].Txf.NewTx(Txo{Write: true, Field: j.field})
-					defer tx.Rollback()
-					if err := j.field.importRoaringOverwrite(j.ctx, tx, viewData, j.shard, viewName, j.req.Block); err != nil {
+					if err := j.field.importRoaringOverwrite(j.ctx, j.tx, viewData, j.shard, viewName, j.req.Block); err != nil {
 						return errors.Wrap(err, "importing roaring as overwrite")
-					}
-					if err := tx.Commit(); err != nil {
-						return errors.Wrap(err, "commit of importing roaring as overwrite")
 					}
 				case RequestActionClear:
 					doClear = true

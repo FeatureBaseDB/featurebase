@@ -27,13 +27,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/molecula/ext"
 	uuid "github.com/satori/go.uuid"
 
 	// extensions pulls in some extensions depending on build tags
 	_ "github.com/pilosa/pilosa/v2/extensions"
 	"github.com/pilosa/pilosa/v2/logger"
-	"github.com/pilosa/pilosa/v2/pql"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"
 	"github.com/pkg/errors"
@@ -63,7 +61,6 @@ type Server struct { // nolint: maligned
 	hosts            []string
 	clusterDisabled  bool
 	serializer       Serializer
-	extensions       []*ext.ExtensionInfo
 
 	// External
 	systemInfo    SystemInfo
@@ -430,30 +427,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	s.cluster.confirmDownRetries = s.confirmDownRetries
 	s.cluster.confirmDownSleep = s.confirmDownSleep
 	s.holder.broadcaster = s
-	err = s.loadAllExtensions()
-	if err != nil {
-		s.logger.Printf("not all plugins loaded successfully")
-	}
-	if len(s.extensions) > 0 {
-		s.logger.Printf("loaded extensions:")
-		for _, ext := range s.extensions {
-			if ext == nil {
-				s.logger.Printf("  inexplicably, a nil extension?!?")
-				continue
-			}
-			s.logger.Printf("  %s %s: %s", ext.Name, ext.Version, ext.Description)
-			if ext.License != "" {
-				s.logger.Printf("    License: %s", ext.License)
-			}
-			if len(ext.BitmapOps) > 0 {
-				opList := make([]string, len(ext.BitmapOps))
-				for i := range ext.BitmapOps {
-					opList[i] = ext.BitmapOps[i].Name
-				}
-				s.logger.Printf("    Ops: %s", strings.Join(opList, ", "))
-			}
-		}
-	}
 
 	err = s.cluster.setup()
 	if err != nil {
@@ -465,56 +438,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 func (s *Server) InternalClient() InternalClient {
 	return s.defaultClient
-}
-
-// loadNewExtensions loads extensions that have been
-// registered since the last call to loadNewExtensions.
-func (s *Server) loadNewExtensions() error { //nolint:unused
-	return s.loadExtensions(ext.NewExtensions())
-}
-
-// loadAllExtensions loads all extensions.
-func (s *Server) loadAllExtensions() error {
-	return s.loadExtensions(ext.AllExtensions())
-}
-
-func (s *Server) loadExtensions(exts []*ext.ExtensionInfo) error {
-	var lastError error
-	for _, extension := range exts {
-		if err := s.loadExtension(extension); err != nil {
-			lastError = err
-		}
-	}
-	return lastError
-}
-
-func (s *Server) loadExtension(extInfo *ext.ExtensionInfo) error {
-	if extInfo.ExtensionAPI != "v0" {
-		return fmt.Errorf("%s: unsupported extension API %s", extInfo.Name, extInfo.ExtensionAPI)
-	}
-	s.extensions = append(s.extensions, extInfo)
-	bitmapOps := extInfo.BitmapOps
-	bmOps, countOps, fieldOps, unknownOps := 0, 0, 0, 0
-	for i := range bitmapOps {
-		typ := bitmapOps[i].Func.BitmapOpType()
-		switch {
-		case typ.Input == ext.OpInputBitmap && typ.Output == ext.OpOutputCount:
-			countOps++
-		case typ.Input == ext.OpInputBitmap && typ.Output == ext.OpOutputBitmap:
-			bmOps++
-		case typ.Input == ext.OpInputNaryBSI && typ.Output == ext.OpOutputSignedBitmap:
-			fieldOps++
-		default:
-			unknownOps++
-		}
-	}
-	err := s.executor.registerOps(bitmapOps)
-	if err != nil {
-		s.logger.Printf("warning: extension registration failed: %v", err)
-	} else {
-		pql.RegisterPluginFuncs(bitmapOps)
-	}
-	return nil
 }
 
 // UpAndDown brings the server up minimally and shuts it down
@@ -545,8 +468,12 @@ func (s *Server) UpAndDown() error {
 func (s *Server) Open() error {
 	s.logger.Printf("open server")
 
-	// Start background monitoring.
-	s.snapshotQueue = newSnapshotQueue(10, 2, s.logger)
+	if s.holder.NeedsSnapshot() {
+		// Start background monitoring.
+		s.snapshotQueue = newSnapshotQueue(10, 2, s.logger)
+	} else {
+		s.snapshotQueue = defaultSnapshotQueue //TODO (twg) rethink this
+	}
 
 	// Log startup
 	err := s.holder.logStartup()
@@ -711,6 +638,7 @@ func (s *Server) monitorAntiEntropy() {
 			// the cluster sets its state to resizing and *then* sends to
 			// abortAntiEntropyCh before starting to resize
 		}
+
 		// Sync holders.
 		s.logger.Printf("holder sync beginning")
 		s.cluster.muAntiEntropy.Lock()

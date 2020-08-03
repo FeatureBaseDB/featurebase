@@ -92,6 +92,8 @@ type Field struct {
 	name          string
 	qualifiedName string
 
+	idx *Index
+
 	viewMap map[string]*view
 
 	// Row attribute storage and cache
@@ -1181,6 +1183,7 @@ func (f *Field) createViewIfNotExistsBase(name string) (*view, bool, error) {
 
 func (f *Field) newView(path, name string) *view {
 	view := newView(f.holder, path, f.index, f.name, name, f.options)
+	view.idx = f.idx
 	view.rowAttrStore = f.rowAttrStore
 	view.stats = f.Stats
 	view.broadcaster = f.broadcaster
@@ -1432,6 +1435,14 @@ func (f *Field) SetValue(tx Tx, columnID uint64, value int64) (changed bool, err
 	if err != nil {
 		return false, errors.Wrap(err, "creating view")
 	}
+	if view.holder == nil {
+		panic("view.holder should not be nil")
+	}
+	if view.idx == nil {
+		panic("view.idx should not be nil")
+	}
+	view.holder.addIndexFromField(view.idx)
+
 	return view.setValue(tx, columnID, bsig.BitDepth, baseValue)
 }
 
@@ -1761,6 +1772,10 @@ func (f *Field) importRoaring(ctx context.Context, tx Tx, data []byte, shard uin
 	return nil
 }
 
+func (f *Field) GetIndex() *Index {
+	return f.idx
+}
+
 func (f *Field) importRoaringOverwrite(ctx context.Context, tx Tx, data []byte, shard uint64, viewName string, block int) error {
 	span, ctx := tracing.StartSpanFromContext(ctx, "Field.importRoaringOverwrite")
 	defer span.Finish()
@@ -1787,7 +1802,7 @@ func (f *Field) importRoaringOverwrite(ctx context.Context, tx Tx, data []byte, 
 	switch f.Options().Type {
 	case FieldTypeInt, FieldTypeDecimal:
 		frag.mu.Lock()
-		if err := frag.calculateMaxRowID(); err != nil {
+		if err := frag.calculateMaxRowID(tx); err != nil {
 			return err
 		}
 		maxRowID, _, err := frag.maxRow(tx, nil)
@@ -2132,6 +2147,9 @@ func isValidCacheType(v string) bool {
 	}
 }
 
+// TODO(jea): why isn't this bits.Len64(x) using import "math/bits"
+// That would be much (80x or more) faster and correct if the high bit is set.
+//
 // bitDepth returns the number of bits required to store a value.
 func bitDepth(v uint64) uint {
 	for i := uint(0); i < 63; i++ {

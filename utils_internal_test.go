@@ -15,8 +15,6 @@
 package pilosa
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
@@ -396,9 +394,8 @@ func (b bcast) SendTo(to *Node, m Message) error {
 	return nil
 }
 
-// FollowResizeInstruction is a version of cluster.FollowResizeInstruction used for testing.
+// FollowResizeInstruction is a version of cluster.followResizeInstruction used for testing.
 func (t *ClusterCluster) FollowResizeInstruction(instr *ResizeInstruction) error {
-
 	// Prepare the return message.
 	complete := &ResizeInstructionComplete{
 		JobID: instr.JobID,
@@ -420,7 +417,8 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *ResizeInstruction) error
 		}
 
 		// Sync available shards.
-		for _, is := range instr.NodeStatus.Indexes {
+		for k, is := range instr.NodeStatus.Indexes {
+			_ = k
 			for _, fs := range is.Fields {
 				f := destCluster.holder.Field(is.Name, fs.Name)
 
@@ -451,23 +449,29 @@ func (t *ClusterCluster) FollowResizeInstruction(instr *ResizeInstruction) error
 				}
 			}
 
-			buf := bytes.NewBuffer(nil)
+			// this is the *test* version of a network call, transferring fragments between
+			// nodes in a cluster. So it is allowed to be kind of a hack.
 
-			bw := bufio.NewWriter(buf)
-			br := bufio.NewReader(buf)
+			// there will be two -badgerdb directories/databases, we need to copy
+			// from src to dest the fragment. This simulates sending the fragment over the network.
+			srcIdx := srcCluster.holder.Index(src.Index)
+			srctx := srcIdx.Txf.NewTx(Txo{Write: !writable, Index: srcIdx, Fragment: srcFragment})
 
-			// Get the fragment from source.
-			if _, err := srcFragment.WriteTo(bw); err != nil {
-				return err
+			destIdx := destCluster.holder.Index(src.Index)
+
+			desttx := destIdx.Txf.NewTx(Txo{Write: writable, Index: destIdx, Fragment: destFragment})
+
+			citer, _, err := srctx.ContainerIterator(src.Index, src.Field, src.View, src.Shard, 0)
+			panicOn(err)
+			d := destFragment
+			for citer.Next() {
+				ckey, c := citer.Value()
+				err := desttx.PutContainer(d.index, d.field, d.view, d.shard, ckey, c)
+				panicOn(err)
 			}
-
-			// Flush the bufio.buf to the io.Writer (buf).
-			bw.Flush()
-
-			// Write data to destination.
-			if _, err := destFragment.ReadFrom(br); err != nil {
-				return err
-			}
+			citer.Close()
+			panicOn(desttx.Commit())
+			srctx.Rollback()
 		}
 
 		return nil

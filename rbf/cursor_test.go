@@ -31,7 +31,7 @@ func TestCursor_FirstNext(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
 	tx := MustBegin(t, db, true)
-	defer MustRollback(t, tx)
+	defer tx.Rollback()
 
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
@@ -95,7 +95,7 @@ func TestCursor_FirstNext_Quick(t *testing.T) {
 		db := MustOpenDB(t)
 		defer MustCloseDB(t, db)
 		tx := MustBegin(t, db, true)
-		defer MustRollback(t, tx)
+		defer tx.Rollback()
 
 		// Insert values in random order.
 		if err := tx.CreateBitmap("x"); err != nil {
@@ -153,7 +153,7 @@ func TestCursor_LastPrev(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
 	tx := MustBegin(t, db, true)
-	defer MustRollback(t, tx)
+	defer tx.Rollback()
 
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
@@ -217,7 +217,7 @@ func TestCursor_LastPrev_Quick(t *testing.T) {
 		db := MustOpenDB(t)
 		defer MustCloseDB(t, db)
 		tx := MustBegin(t, db, true)
-		defer MustRollback(t, tx)
+		defer tx.Rollback()
 
 		// Insert values in random order.
 		if err := tx.CreateBitmap("x"); err != nil {
@@ -276,7 +276,7 @@ func TestCursor_Union(t *testing.T) {
 		db := MustOpenDB(t)
 		defer MustCloseDB(t, db)
 		tx := MustBegin(t, db, true)
-		defer MustRollback(t, tx)
+		defer tx.Rollback()
 
 		if err := tx.CreateBitmap("x"); err != nil {
 			t.Fatal(err)
@@ -322,7 +322,7 @@ func TestCursor_Union(t *testing.T) {
 			db := MustOpenDB(t)
 			defer MustCloseDB(t, db)
 			tx := MustBegin(t, db, true)
-			defer MustRollback(t, tx)
+			defer tx.Rollback()
 			values := GenerateValues(rand, 10000)
 			rows := ToRows(values)
 
@@ -356,7 +356,7 @@ func TestCursor_Intersect(t *testing.T) {
 		db := MustOpenDB(t)
 		defer MustCloseDB(t, db)
 		tx := MustBegin(t, db, true)
-		defer MustRollback(t, tx)
+		defer tx.Rollback()
 
 		row := make([]uint64, rbf.ShardWidth/64)
 
@@ -403,7 +403,7 @@ func TestCursor_Intersect(t *testing.T) {
 			db := MustOpenDB(t)
 			defer MustCloseDB(t, db)
 			tx := MustBegin(t, db, true)
-			defer MustRollback(t, tx)
+			defer tx.Rollback()
 			values := GenerateValues(rand, rand.Intn(10000))
 			rows := ToRows(values)
 
@@ -447,7 +447,7 @@ func TestCursor_AddRoaring(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
 	tx := MustBegin(t, db, true)
-	defer MustRollback(t, tx)
+	defer tx.Rollback()
 
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
@@ -466,7 +466,7 @@ func TestCursor_AddRoaring(t *testing.T) {
 			return bm
 		}(),
 		wantChanged: false,
-		wantErr:     true},
+		wantErr:     false},
 		{
 			name:      "initial Array",
 			fieldview: "x",
@@ -614,7 +614,7 @@ func TestCursor_RLETesting(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
 	tx := MustBegin(t, db, true)
-	defer MustRollback(t, tx)
+	defer tx.Rollback()
 	//setup RLE
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
@@ -696,10 +696,10 @@ func TestCursor_RLETesting(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			changed, err := tx.Add("x", tt.args...)
+			changeCount, err := tx.Add("x", tt.args...)
 			if tt.wantErr && err == nil {
 				t.Errorf("No Error %v", err)
-			} else if tt.wantChanged && !changed {
+			} else if tt.wantChanged && changeCount == 0 {
 				t.Errorf("No Change %v", err)
 			} else if err != nil {
 				t.Fatal(err)
@@ -734,7 +734,7 @@ func TestCursor_RLEConversion(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
 	tx := MustBegin(t, db, true)
-	defer MustRollback(t, tx)
+	defer tx.Rollback()
 	//setup RLE with full container
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
@@ -840,7 +840,7 @@ func TestCursor_UpdateBranchCells(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
 	tx := MustBegin(t, db, true)
-	defer MustRollback(t, tx)
+	defer tx.Rollback()
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
 	}
@@ -914,7 +914,7 @@ func TestCursor_SplitBranchCells(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
 	tx := MustBegin(t, db, true)
-	defer MustRollback(t, tx)
+	defer tx.Rollback()
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
 	}
@@ -964,7 +964,7 @@ func TestCursor_RemoveCells(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
 	tx := MustBegin(t, db, true)
-	defer MustRollback(t, tx)
+	defer tx.Rollback()
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
 	}
@@ -1006,7 +1006,7 @@ func TestCursor_PlayContainer(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
 	tx := MustBegin(t, db, true)
-	defer MustRollback(t, tx)
+	defer tx.Rollback()
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
 	}
@@ -1035,14 +1035,13 @@ func TestCursor_PlayContainer(t *testing.T) {
 	if err := cur.First(); err != nil {
 		panic(err)
 	}
-	cur.Dump("fun.dot")
 }
 
 func TestCursor_OneBitmap(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
 	tx := MustBegin(t, db, true)
-	defer MustRollback(t, tx)
+	defer tx.Rollback()
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
 	}
@@ -1071,13 +1070,12 @@ func TestCursor_OneBitmap(t *testing.T) {
 	if err := cur.First(); err != nil {
 		panic(err)
 	}
-	cur.Dump("fun.dot")
 }
 func TestCursor_GenerateAll(t *testing.T) {
 	db := MustOpenDB(t)
 	defer MustCloseDB(t, db)
 	tx := MustBegin(t, db, true)
-	defer MustRollback(t, tx)
+	defer tx.Rollback()
 	if err := tx.CreateBitmap("x"); err != nil {
 		t.Fatal(err)
 	}
@@ -1111,9 +1109,4 @@ func TestCursor_GenerateAll(t *testing.T) {
 	if _, err := tx.AddRoaring("field/view/", bb); err != nil {
 		panic(err)
 	}
-	cur, err := tx.Cursor("field/view/")
-	if err != nil {
-		panic(err)
-	}
-	cur.Dump("fun.dot")
 }
