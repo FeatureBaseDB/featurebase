@@ -3301,11 +3301,18 @@ func (e *executor) executeClearRow(ctx context.Context, tx Tx, index string, c *
 
 	// Merge returned results at coordinating node.
 	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
-		val := v.(bool)
-		if prev == nil {
+		val, ok := v.(bool)
+		if !ok {
+			return errors.Errorf("executeClearRow.reduceFn: val is non-bool (%+v)", v)
+		}
+		if prev == nil || val {
 			return val
 		}
-		return val || prev.(bool)
+		pval, ok := prev.(bool)
+		if !ok {
+			return errors.Errorf("executeClearRow.reduceFn: prev is non-bool (%+v)", prev)
+		}
+		return pval
 	}
 
 	result, err := e.mapReduce(ctx, index, shards, c, opt, mapFn, reduceFn)
@@ -3393,7 +3400,7 @@ func (e *executor) executeSetRow(ctx context.Context, tx Tx, indexName string, c
 		if !ok {
 			return errors.Errorf("executeSetRow.reduceFn: val is non-bool (%+v)", v)
 		}
-		if val {
+		if prev == nil || val {
 			return val
 		}
 
