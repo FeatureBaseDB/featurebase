@@ -49,6 +49,19 @@ const (
 // Can be overridden with env variable PILOSA_TXSRC for testing.
 const DefaultTxsrc = RoaringTxn
 
+// DetectMemAccessPastTx true helps us catch places in api and executor
+// where mmapped memory is being accessed after the point in time
+// which the transaction has committed or rolled back. Since
+// memory segments will be recycled by the underlying databases,
+// this can lead to corruption. When DetectMemAccessPastTx is true,
+// code in badger.go will copy the transactionally viewed memory before
+// returning it for bitmap reading, and then zero it or overwrite it
+// with -2 when the Tx completes.
+//
+// Should be false for production.
+//
+const DetectMemAccessPastTx = false
+
 var sep = string(os.PathSeparator)
 
 // TxFactory abstracts the creation of Tx interface-level
@@ -175,7 +188,7 @@ func NewTxFactory(txsrc string, dir, name string, openExisting bool) (f *TxFacto
 		}
 		// electric-fence like finding of access to mmapped data beyond
 		// transaction end time.
-		f.badgerDB.doAllocZero = true
+		f.badgerDB.doAllocZero = DetectMemAccessPastTx
 	}
 
 	switch ty {
