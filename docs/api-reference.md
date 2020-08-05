@@ -15,7 +15,7 @@ Is equivalent to `GET /schema` and returns the same response.
 
 ### List index schema
 
-`GET /index/<index-name>`
+`GET /index/{index-name}`
 
 Returns the schema of the specified index in JSON.
 
@@ -48,7 +48,7 @@ curl -XGET localhost:10101/index/user
 
 ### Create index
 
-`POST /index/<index-name>`
+`POST /index/{index-name}`
 
 Creates an index with the given name.
 
@@ -79,7 +79,7 @@ curl -XDELETE localhost:10101/index/user
 
 ### Query index
 
-`POST /index/<index-name>/query`
+`POST /index/{index-name}/query`
 
 Sends a [query](../query-language/) to the Pilosa server with the given index. The request body is UTF-8 encoded text and response body is in JSON by default.
 
@@ -137,7 +137,7 @@ By default, all bits and attributes (*for `Row` queries only*) are returned. In 
 
 ### Import Data
 
-`POST /index/<index-name>/field/<field-name>/import`
+`POST /index/{index-name}/field/{field-name}/import`
 
 Supports high-rate data ingest to a particular shard of a particular field. The
 official client libraries use this endpoint for their import functionality - it
@@ -185,7 +185,7 @@ message ImportRequest {
 
 ### Create field
 
-`POST /index/<index-name>/field/<field-name>`
+`POST /index/{index-name}/field/{field-name}`
 
 Creates a field in the given index with the given name.
 
@@ -241,7 +241,7 @@ curl localhost:10101/index/repository/field/stats \
 
 ### Remove field
 
-`DELETE /index/<index-name>/field/<field-name>`
+`DELETE /index/{index-name}/field/{field-name}`
 
 Removes the given field.
 

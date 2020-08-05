@@ -58,7 +58,7 @@ nav = []
 
 <strong id="range-bsi">[Row (BSI)](../query-language/#row-bsi):</strong> A [PQL](#pql) query that returns bits based on comparison to integers stored in [BSI](#bsi) [fields](#field).
 
-<strong id="rows">[Rows](../query-language/#rows):<strong> A [PQL](#pql) query that returns a list of row IDs in the given field which have at least one bit set. The field argument is mandatory, the others are optional. `Rows` is the primary argument used with the [GroupBy](#groupby) query.
+<strong id="rows">[Rows](../query-language/#rows):</strong> A [PQL](#pql) query that returns a list of row IDs in the given field which have at least one bit set. The field argument is mandatory, the others are optional. `Rows` is the primary argument used with the [GroupBy](#groupby) query.
 
 <strong id="slice">[Slice](../data-model/#shard):</strong> Prior to Pilosa 1.0, shards were known as slices.
 
