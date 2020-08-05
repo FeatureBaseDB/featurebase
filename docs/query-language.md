@@ -429,9 +429,9 @@ Union([ROW_CALL ...])
 
 **Description:**
 
-Union performs a logical OR on the results of all `ROW_CALL` queries passed to it.
+Union performs a set union on the column indexes in the results of all `ROW_CALL` queries passed to it. In comparison to a relational query, this is similar to combining clauses in the "OR" sense.
 
-**Result Type:** object with attrs and bits
+**Result Type:** object with attrs and columns
 
 attrs will always be empty
 
@@ -457,7 +457,7 @@ Intersect(<ROW_CALL>, [ROW_CALL ...])
 
 **Description:**
 
-Intersect performs a logical AND on the results of all `ROW_CALL` queries passed to it.
+Intersect performs a set intersection on the column indexes in the results of all `ROW_CALL` queries passed to it. In comparison to a relational query, this is similar to combining clauses in the "AND" sense.
 
 **Result Type:** object with attrs and columns
 
@@ -949,7 +949,7 @@ UnionRows([ROWSET_CALL ...])
 
 UnionRows performs a logical OR on the rows matched by the results of all `ROWSET_CALL` queries passed to it.
 
-**Result Type:** object with attrs and bits
+**Result Type:** object with attrs and columns
 
 attrs will always be empty
 
