@@ -119,8 +119,10 @@ func TestSliceContainers(t *testing.T) {
 			if c == nil {
 				t.Fatalf("Get(%d) returned nil container", key)
 			}
-			if c.data[0] != set[0] {
-				t.Fatalf("Get(%d): expected: %v, got: %v", key, set[0], c.data[0])
+			if len(c.data) > 0 { // happy linter
+				if c.data[0] != set[0] {
+					t.Fatalf("Get(%d): expected: %v, got: %v", key, set[0], c.data[0])
+				}
 			}
 		}
 	})

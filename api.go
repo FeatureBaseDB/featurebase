@@ -1769,6 +1769,23 @@ func (api *API) ActiveQueries(ctx context.Context) ([]ActiveQueryStatus, error) 
 	return api.tracker.ActiveQueries(), nil
 }
 
+// TranslateIndexDB is an internal function to load the index keys database
+func (api *API) TranslateIndexDB(ctx context.Context, indexName string, partitionID int, rd io.Reader) error {
+	idx := api.holder.Index(indexName)
+	store := idx.TranslateStore(partitionID)
+	_, err := store.ReadFrom(rd)
+	return err
+}
+
+// TranslateFieldDB is an internal function to load the field keys database
+func (api *API) TranslateFieldDB(ctx context.Context, indexName, fieldName string, rd io.Reader) error {
+	idx := api.holder.Index(indexName)
+	field := idx.Field(fieldName)
+	store := field.TranslateStore()
+	_, err := store.ReadFrom(rd)
+	return err
+}
+
 type serverInfo struct {
 	ShardWidth       uint64 `json:"shardWidth"`
 	Memory           uint64 `json:"memory"`

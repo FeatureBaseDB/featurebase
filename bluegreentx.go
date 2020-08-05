@@ -85,7 +85,8 @@ func (c *blueGreenTx) Readonly() bool {
 
 func (c *blueGreenTx) NewTxIterator(index, field, view string, shard uint64) *roaring.Iterator {
 	c.checker.see(index, field, view, shard)
-	// TODO(jea): does this need to be different, to handle c.a iteration at the same time?
+	// can't really do simultaneous iteration on A and B, so punt and
+	// just give back B.
 	return c.b.NewTxIterator(index, field, view, shard)
 }
 
@@ -141,17 +142,20 @@ func (c *blueGreenTx) compareTxState(index, field, view string, shard uint64) {
 		if bKey != aKey {
 			AlwaysPrintf("problem in caller %v", Caller(2))
 			c.Dump()
-			panic(fmt.Sprintf("compareTxState[%v]: A(%v) found key %v, B(%v) found %v, at %v", here, c.as, aKey, c.bs, bKey, stack())) // crashing here on TestBSIGroup_importValue
+			panic(fmt.Sprintf("compareTxState[%v]: A(%v) found key %v, B(%v) found %v, at %v", here, c.as, aKey, c.bs, bKey, stack()))
 		}
 		if err := aValue.BitwiseCompare(bValue); err != nil {
 			c.Dump()
+			vv("compareTxState[%v]: key %v differs: %v;  A=%v; B=%v; at stack=%v", here, aKey, err, c.as, c.bs, stack())
 			panic(fmt.Sprintf("compareTxState[%v]: key %v differs: %v;  A=%v; B=%v; at stack=%v", here, aKey, err, c.as, c.bs, stack()))
 		}
 	}
 	// end checking everything in A, but does B have more?
 	if bIter.Next() {
-		bKey, _ := bIter.Value()
+		AlwaysPrintf("bIter has more than it should. problem in caller %v", Caller(2))
 		c.Dump()
+		bKey, _ := bIter.Value()
+		vv("compareTxState[%v]: B(%v) found key %v, A(%v) didn't, at %v", here, c.bs, bKey, c.as, stack())
 		panic(fmt.Sprintf("compareTxState[%v]: B(%v) found key %v, A(%v) didn't, at %v", here, c.bs, bKey, c.as, stack()))
 	}
 }
@@ -177,7 +181,7 @@ func (c *blueGreenTx) Rollback() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.rollbackOrCommitDone {
-		return
+		return // avoid using discarded tx for Dump, which will panic.
 	}
 	c.rollbackOrCommitDone = true
 
@@ -188,13 +192,16 @@ func (c *blueGreenTx) Rollback() {
 			panic(r)
 		}
 	}()
+	fmt.Printf("blueGreenTx.Rollback() about to call (%v) a.Rollback()\n", c.as)
 	c.a.Rollback()
+	fmt.Printf("blueGreenTx.Rollback() about to call (%v) b.Rollback()\n", c.bs)
 	c.b.Rollback()
 }
 
 func (c *blueGreenTx) Commit() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	fmt.Printf("blueGreenTx.Commit() called.\n")
 	if c.rollbackOrCommitDone {
 		return nil
 	}
@@ -332,7 +339,9 @@ func (c *blueGreenTx) RemoveContainer(index, field, view string, shard uint64, k
 }
 
 func (c *blueGreenTx) UseRowCache() bool {
-	return c.b.UseRowCache()
+	// avoid cross-talk between our two implementations
+	// by never allowing either to use the row cache.
+	return false
 }
 
 func (c *blueGreenTx) Add(index, field, view string, shard uint64, batched bool, a ...uint64) (changeCount int, err error) {
@@ -612,7 +621,10 @@ func (c *blueGreenTx) OffsetRange(index, field, view string, shard, offset, star
 	b, errB := c.b.OffsetRange(index, field, view, shard, offset, start, end)
 
 	err = roaringBitmapDiff(a, b)
-	panicOn(err)
+	if err != nil {
+		c.Dump()
+		panicOn(err)
+	}
 	compareErrors(errA, errB)
 	return b, errB
 }
@@ -731,7 +743,7 @@ func (m *MultiReaderB) Read(p []byte) (nB int, errB error) {
 		}
 		cmp := bytes.Compare(p[:nB], p2[:nB])
 		if cmp != 0 {
-			panic(fmt.Sprintf("MultiReaderB reads p and p2 (cmp= %v) differed.", cmp)) // \np  ='%v'; \np2 ='%v'", cmp, string(p[:nB]), string(p2[:nA])))
+			panic(fmt.Sprintf("MultiReaderB reads p and p2 (cmp= %v) differed.", cmp))
 		}
 	}
 	return
@@ -754,7 +766,7 @@ type blueGreenChecker struct {
 // see would mark a thing as seen.
 func (b *blueGreenChecker) see(index, field, view string, shard uint64) {
 	// keep this next Printf. Useful to see the sequence of Tx operations.
-	//fmt.Printf("blueGreenTx.%v\n", Caller(1))
+	fmt.Printf("blueGreenTx.%v on index='%v'\n", Caller(1), index)
 
 	b.mu.Lock()
 	defer b.mu.Unlock()

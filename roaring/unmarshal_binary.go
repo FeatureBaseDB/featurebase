@@ -49,11 +49,11 @@ func (b *Bitmap) UnmarshalBinary(data []byte) (err error) {
 	for itrErr == nil {
 		var newC *Container
 		switch itrCType {
-		case containerArray:
+		case ContainerArray:
 			newC = NewContainerArray((*[4096]uint16)(unsafe.Pointer(itrPointer))[:itrLen:itrLen])
-		case containerRun:
+		case ContainerRun:
 			newC = NewContainerRunN((*[2048]Interval16)(unsafe.Pointer(itrPointer))[:itrLen:itrLen], int32(itrN))
-		case containerBitmap:
+		case ContainerBitmap:
 			newC = NewContainerBitmapN((*[1024]uint64)(unsafe.Pointer(itrPointer))[:1024:itrLen], int32(itrN))
 		default:
 			panic("invalid container type")
@@ -132,20 +132,20 @@ func InspectBinary(data []byte, mapped bool, info *BitmapInfo) (b *Bitmap, mappe
 	for itrErr == nil {
 		var size int
 		switch itrCType {
-		case containerArray:
+		case ContainerArray:
 			size = int(itrN) * 2
-		case containerBitmap:
+		case ContainerBitmap:
 			size = 8192
-		case containerRun:
+		case ContainerRun:
 			size = itrLen*interval16Size + runCountHeaderSize
 		}
 		var newC *Container
 		switch itrCType {
-		case containerArray:
+		case ContainerArray:
 			newC = NewContainerArray((*[4096]uint16)(unsafe.Pointer(itrPointer))[:itrLen:itrLen])
-		case containerRun:
+		case ContainerRun:
 			newC = NewContainerRunN((*[2048]Interval16)(unsafe.Pointer(itrPointer))[:itrLen:itrLen], int32(itrN))
-		case containerBitmap:
+		case ContainerBitmap:
 			newC = NewContainerBitmapN((*[1024]uint64)(unsafe.Pointer(itrPointer))[:1024:itrLen], int32(itrN))
 		default:
 			panic("invalid container type")

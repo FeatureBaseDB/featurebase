@@ -511,8 +511,10 @@ func (h *Holder) Open() error {
 		if !fi.IsDir() || strings.HasPrefix(fi.Name(), ".") {
 			continue
 		}
-		// Skip badgerdb files too.
-		if strings.HasSuffix(fi.Name(), "badgerdb") {
+		// Skip embedded db files too.
+		if strings.HasSuffix(fi.Name(), "-badgerdb") ||
+			strings.HasSuffix(fi.Name(), "-lmdb") ||
+			strings.HasSuffix(fi.Name(), "-rbfdb") {
 			continue
 		}
 
@@ -610,6 +612,9 @@ func (h *Holder) Close() error {
 	for _, index := range h.indexes {
 		if err := index.Close(); err != nil {
 			return errors.Wrap(err, "closing index")
+		}
+		if err := index.Txf.CloseDB(); err != nil {
+			return errors.Wrap(err, "index.Txf.CloseDB()")
 		}
 	}
 
@@ -1498,7 +1503,6 @@ func (s *holderSyncer) initializeIndexTranslateReplication() error {
 			if !index.Keys() {
 				continue
 			}
-
 			for partitionID := 0; partitionID < s.Cluster.partitionN; partitionID++ {
 				partitionNodes := s.Cluster.partitionNodes(partitionID)
 				isPrimary := partitionNodes[0].ID == node.ID                 // remote is primary?

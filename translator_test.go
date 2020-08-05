@@ -289,7 +289,6 @@ func TestTranslation_Reset(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-
 		if _, err := node0.API.TranslateKeys(ctx, bytes.NewReader(reqBody)); err != nil {
 			t.Fatal(err)
 		}

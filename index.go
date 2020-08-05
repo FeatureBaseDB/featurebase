@@ -33,6 +33,16 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// debug: TODO(jea): remove this init() that does cpu profiling.
+func init() {
+	go func() {
+		// give time for env var TXSRC to be set.
+		//time.Sleep(5 * time.Second)
+		//CPUProfileForDur(5*time.Minute, "cpu.pprof")
+		//CPUProfileForDur(15*time.Second, "cpu.pprof")
+	}()
+}
+
 // Index represents a container for fields.
 type Index struct {
 	mu            sync.RWMutex
@@ -72,21 +82,9 @@ type Index struct {
 	Txf *TxFactory
 }
 
-// OpenIndex opens or starts a new Index on path. Path
-// can be empty.
-func OpenIndex(holder *Holder, path, name string) (*Index, error) {
-	openExisting := true
-	return openOrCreateNewIndex(holder, path, name, openExisting)
-}
-
-// NewIndex returns a new instance of Index at path. It will erase anything
-// old already in path.
+// NewIndex returns an existing (but possibly empty) instance of
+// Index at path. It will not erase any prior content.
 func NewIndex(holder *Holder, path, name string) (*Index, error) {
-	openExisting := false
-	return openOrCreateNewIndex(holder, path, name, openExisting)
-}
-
-func openOrCreateNewIndex(holder *Holder, path, name string, openExisting bool) (*Index, error) {
 
 	// Emulate what the spf13/cobra does, letting env vars override
 	// the defaults, because we may be under a simple "go test" run where
@@ -117,7 +115,7 @@ func openOrCreateNewIndex(holder *Holder, path, name string, openExisting bool) 
 		return nil, errors.Wrap(err, "validating name")
 	}
 
-	txf, err := NewTxFactory(txsrc, holder.Path, name, openExisting)
+	txf, err := NewTxFactory(txsrc, holder.Path, name)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating newTxFactory")
 	}
@@ -252,6 +250,9 @@ func (i *Index) open(withTimestamp, haveHolderLock bool) (err error) {
 
 			mu.Lock()
 			defer mu.Unlock()
+
+			i.mu.Lock()
+			defer i.mu.Unlock()
 			i.translateStores[partitionID] = store
 			return nil
 		})

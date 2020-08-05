@@ -1786,7 +1786,7 @@ func TestFragment_LRUCache_Persistence(t *testing.T) {
 
 // Ensure a fragment's cache can be persisted between restarts.
 func TestFragment_RankCache_Persistence(t *testing.T) {
-	skipForRBF(t)
+	roaringOnlyTest(t)
 
 	index := mustOpenIndex(IndexOptions{})
 	defer index.Close()
@@ -5329,6 +5329,9 @@ func TestImportValueConcurrent(t *testing.T) {
 			"blueGreenTx because the lack of transactional consistency " +
 			"from Roaring-per-file will create false comparison " +
 			"failures."))
+	case lmdbTxn:
+		t.Skip(fmt.Sprintf("skipping TestImportValueConcurrent under " +
+			"lmdb since only a single writer is allowed at once."))
 	}
 
 	// Since eg.Go gets called multiple times below, each
@@ -5644,11 +5647,5 @@ func TestFragment_Bug_Q2DoubleDelete(t *testing.T) {
 	res = f.mustRow(tx, 1).Columns()
 	if len(res) != 0 {
 		t.Fatalf("expected nothing got %v", res)
-	}
-}
-
-func skipForRBF(tb testing.TB) {
-	if os.Getenv("PILOSA_TXSRC") == "rbf" {
-		tb.Skip("skip for RBF")
 	}
 }

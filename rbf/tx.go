@@ -14,12 +14,11 @@
 package rbf
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"math"
 	"sort"
-	"strconv"
+	//"strconv"
 	"strings"
 	"sync"
 
@@ -29,13 +28,14 @@ import (
 
 // Tx represents a transaction.
 type Tx struct {
-	mu       sync.RWMutex
-	db       *DB            // parent db
-	meta     [PageSize]byte // copy of current meta page
-	walID    int64          // max WAL ID at start of tx
-	pageMap  *immutable.Map // mapping of database pages to WAL IDs
-	writable bool           // if true, tx can write
-	dirty    bool           // if true, changes have been made
+	mu          sync.RWMutex
+	db          *DB            // parent db
+	meta        [PageSize]byte // copy of current meta page
+	walID       int64          // max WAL ID at start of tx
+	rootRecords []*RootRecord  // read-only cache of root records
+	pageMap     *immutable.Map // mapping of database pages to WAL IDs
+	writable    bool           // if true, tx can write
+	dirty       bool           // if true, changes have been made
 
 	// If Rollback() has already completed, don't do it again.
 	// Note db == nil means that commit has already been done.
@@ -45,6 +45,10 @@ type Tx struct {
 	// behavior where an existing container has all its bits cleared
 	// but still sticks around in the database.
 	DeleteEmptyContainer bool
+}
+
+func (tx *Tx) DBPath() string {
+	return tx.db.Path
 }
 
 // Writable returns true if the transaction can mutate data.
@@ -69,7 +73,17 @@ func (tx *Tx) Commit() error {
 		} else if err := tx.db.SyncWAL(); err != nil {
 			return err
 		}
+
+		// future plan: after checkpoint is moved to background
+		// or not every removeTx, then we can move the
+		// tx.db.rootRecords = tx.rootRecords into removeTx().
+
+		// avoid race detector firing on a write race here
+		// vs the read of rootRecords at db.Begin()
+		tx.db.mu.Lock()
+		tx.db.rootRecords = tx.rootRecords
 		tx.db.pageMap = tx.pageMap
+		tx.db.mu.Unlock()
 	}
 
 	if err := tx.db.checkpoint(); err != nil {
@@ -83,6 +97,7 @@ func (tx *Tx) Commit() error {
 func (tx *Tx) Rollback() {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
+
 	// allow Rollback to be called more than once.
 	if tx.rollbackDone {
 		return
@@ -118,7 +133,7 @@ func (tx *Tx) Root(name string) (uint32, error) {
 }
 
 func (tx *Tx) root(name string) (uint32, error) {
-	records, err := tx.rootRecords()
+	records, err := tx.RootRecords()
 	if err != nil {
 		return 0, err
 	}
@@ -140,7 +155,7 @@ func (tx *Tx) BitmapNames() ([]string, error) {
 	}
 
 	// Read list of root records.
-	records, err := tx.rootRecords()
+	records, err := tx.RootRecords()
 	if err != nil {
 		return nil, err
 	}
@@ -162,8 +177,6 @@ func (tx *Tx) CreateBitmap(name string) error {
 }
 
 func (tx *Tx) createBitmap(name string) error {
-	//vv("createBitmap(name='%v'", name)
-
 	if tx.db == nil {
 		return ErrTxClosed
 	} else if !tx.writable {
@@ -173,7 +186,7 @@ func (tx *Tx) createBitmap(name string) error {
 	}
 
 	// Read list of root records.
-	records, err := tx.rootRecords()
+	records, err := tx.RootRecords()
 	if err != nil {
 		return err
 	}
@@ -252,7 +265,7 @@ func (tx *Tx) DeleteBitmap(name string) error {
 	}
 
 	// Read list of root records.
-	records, err := tx.rootRecords()
+	records, err := tx.RootRecords()
 	if err != nil {
 		return err
 	}
@@ -274,7 +287,7 @@ func (tx *Tx) DeleteBitmap(name string) error {
 	if err := tx.writeRootRecordPages(records); err != nil {
 		return fmt.Errorf("write bitmaps: %w", err)
 	}
-
+	tx.rootRecords = records
 	return nil
 }
 
@@ -290,7 +303,7 @@ func (tx *Tx) DeleteBitmapsWithPrefix(prefix string) error {
 	}
 
 	// Read list of root records.
-	records, err := tx.rootRecords()
+	records, err := tx.RootRecords()
 	if err != nil {
 		return err
 	}
@@ -317,7 +330,7 @@ func (tx *Tx) DeleteBitmapsWithPrefix(prefix string) error {
 	if err := tx.writeRootRecordPages(records); err != nil {
 		return fmt.Errorf("write bitmaps: %w", err)
 	}
-
+	tx.rootRecords = records
 	return nil
 }
 
@@ -336,7 +349,7 @@ func (tx *Tx) RenameBitmap(oldname, newname string) error {
 	}
 
 	// Read list of root records.
-	records, err := tx.rootRecords()
+	records, err := tx.RootRecords()
 	if err != nil {
 		return err
 	}
@@ -356,8 +369,12 @@ func (tx *Tx) RenameBitmap(oldname, newname string) error {
 	return nil
 }
 
-// rootRecords returns a list of root records.
-func (tx *Tx) rootRecords() ([]*RootRecord, error) {
+// RootRecords returns a list of root records.
+func (tx *Tx) RootRecords() (rr []*RootRecord, err error) {
+	if tx.rootRecords != nil {
+		return tx.rootRecords, nil
+	}
+
 	var records []*RootRecord
 	for pgno := readMetaRootRecordPageNo(tx.meta[:]); pgno != 0; {
 		page, err := tx.readPage(pgno)
@@ -375,11 +392,15 @@ func (tx *Tx) rootRecords() ([]*RootRecord, error) {
 		// Read next overflow page number.
 		pgno = WalkRootRecordPages(page)
 	}
+
+	// Cache result
+	tx.rootRecords = records
 	return records, nil
 }
 
 // writeRootRecordPages writes a list of root record pages.
 func (tx *Tx) writeRootRecordPages(records []*RootRecord) (err error) {
+
 	// Release all existing root record pages.
 	for pgno := readMetaRootRecordPageNo(tx.meta[:]); pgno != 0; {
 		page, err := tx.readPage(pgno)
@@ -434,13 +455,14 @@ func (tx *Tx) writeRootRecordPages(records []*RootRecord) (err error) {
 		}
 	}
 
+	// Update cache records.
+	tx.rootRecords = records
+
 	return nil
 }
 
 // Add sets a given bit on the bitmap.
 func (tx *Tx) Add(name string, a ...uint64) (changeCount int, err error) {
-	//vv("rbf Tx.Add(a='%#v')", a)
-
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
@@ -609,9 +631,10 @@ func (tx *Tx) PutContainer(name string, key uint64, ct *roaring.Container) error
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
-	if ct.N() == 0 {
-		return nil
+	if tx.DeleteEmptyContainer && ct.N() == 0 {
+		return tx.RemoveContainer(name, key)
 	}
+
 	cell := ConvertToLeafArgs(key, ct)
 
 	if err := tx.createBitmapIfNotExists(name); err != nil {
@@ -745,7 +768,7 @@ func (tx *Tx) inusePageSet() (map[uint32]struct{}, error) {
 	}
 
 	// Traverse every b-tree and mark pages as in-use.
-	records, err := tx.rootRecords()
+	records, err := tx.RootRecords()
 	if err != nil {
 		return m, err
 	}
@@ -826,7 +849,7 @@ func (tx *Tx) nextFreelistPageNo() (uint32, error) {
 	}
 
 	cell := c.cell()
-	v := cell.firstValue()
+	v := cell.firstValue(tx)
 
 	pgno := uint32((cell.Key << 16) | uint64(v))
 	return pgno, nil
@@ -870,7 +893,6 @@ func (tx *Tx) deallocateTree(pgno uint32) error {
 }
 
 func (tx *Tx) readPage(pgno uint32) ([]byte, error) {
-	//	fmt.Println("readPage", pgno)
 	// Meta page is always cached on the transaction.
 	if pgno == 0 {
 		return tx.meta[:], nil
@@ -964,10 +986,11 @@ func (tx *Tx) ContainerIterator(name string, key uint64) (citer roaring.Containe
 
 	// INVAR: c is not nil
 
-	if _, err := c.Seek(key); err != nil {
+	exact, err := c.Seek(key)
+	if err != nil {
 		return nil, false, err
 	}
-	return &containerIterator{cursor: c}, true, nil
+	return &containerIterator{cursor: c}, exact, nil
 }
 
 func (tx *Tx) ForEach(name string, fn func(i uint64) error) error {
@@ -1084,7 +1107,7 @@ func (tx *Tx) Max(name string) (uint64, error) {
 	}
 
 	cell := c.cell()
-	return uint64((cell.Key << 16) | uint64(cell.lastValue())), nil
+	return uint64((cell.Key << 16) | uint64(cell.lastValue(tx))), nil
 }
 
 func (tx *Tx) Min(name string) (uint64, bool, error) {
@@ -1103,11 +1126,28 @@ func (tx *Tx) Min(name string) (uint64, bool, error) {
 	}
 
 	cell := c.cell()
-	return uint64((cell.Key << 16) | uint64(cell.firstValue())), true, nil
+	return uint64((cell.Key << 16) | uint64(cell.firstValue(tx))), true, nil
 }
 
 func (tx *Tx) UnionInPlace(name string, others ...*roaring.Bitmap) error {
-	panic("TODO")
+	rbm, err := tx.RoaringBitmap(name)
+	panicOn(err)
+
+	rbm.UnionInPlace(others...)
+	// iterate over the containers that changed within rbm, and write them back to disk.
+
+	it, found := rbm.Containers.Iterator(0)
+	_ = found // don't care about the value of found, because first containerKey might be > 0
+
+	for it.Next() {
+		containerKey, rc := it.Value()
+
+		// TODO: only write the changed ones back, as optimization?
+		//       Compare to ImportRoaringBits.
+		err := tx.PutContainer(name, containerKey, rc)
+		panicOn(err)
+	}
+	return nil
 }
 
 // roaring.countRange counts the number of bits set between [start, end).
@@ -1187,8 +1227,10 @@ func (tx *Tx) OffsetRange(name string, offset, start, endx uint64) (*roaring.Bit
 		panic("range endx must not contain low bits")
 	}
 
-	tx.mu.RLock()
-	defer tx.mu.RUnlock()
+	// need write lock here (not just read lock) b/c caching the tx.rootRecords = records
+	// is a write the race detector fires on.
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
 
 	c, err := tx.cursor(name)
 	if err != nil {
@@ -1261,15 +1303,15 @@ func (si *emptyContainerIterator) Value() (uint64, *roaring.Container) {
 	panic("emptyContainerIterator never has any Values")
 }
 
-func (tx *Tx) Dump(index string) {
-	fmt.Println(tx.DumpString(index))
+func (tx *Tx) Dump() {
+	fmt.Println(tx.DumpString())
 }
-func (tx *Tx) DumpString(index string) (r string) {
+func (tx *Tx) DumpString() (r string) {
 
 	r = "allkeys:[\n"
 
 	// grab root records, for a list of bitmaps.
-	records, err := tx.rootRecords()
+	records, err := tx.RootRecords()
 	panicOn(err)
 	n := 0
 	for _, rr := range records {
@@ -1292,7 +1334,7 @@ func (tx *Tx) DumpString(index string) (r string) {
 			ckey := cell.Key
 			ct := toContainer(cell, tx)
 
-			s := stringOfCkeyCt(ckey, ct, rr.Name, index)
+			s := stringOfCkeyCt(ckey, ct, rr.Name)
 			r += s
 			n++
 		}
@@ -1307,53 +1349,19 @@ func (tx *Tx) DumpString(index string) (r string) {
 }
 
 func containerToBytes(ct *roaring.Container) []byte {
+
 	ty := roaring.ContainerType(ct)
 	switch ty {
-	case containerNil:
+	case roaring.ContainerNil:
 		panic("nil container")
-	case containerArray:
+	case roaring.ContainerArray:
 		return fromArray16(roaring.AsArray(ct))
-	case containerBitmap:
+	case roaring.ContainerBitmap:
 		return fromArray64(roaring.AsBitmap(ct))
-	case containerRun:
+	case roaring.ContainerRun:
 		return fromInterval16(roaring.AsRuns(ct))
 	}
 	panic(fmt.Sprintf("unknown container type '%v'", int(ty)))
-}
-
-func badgerKey(index, field, view string, shard uint64, roaringContainerKey uint64) []byte {
-	// The %020d which adds zero padding up to 20 runes is required to
-	// allow the textual sort to accurately
-	// reflect a numeric sort order. This is because, as a string,
-	// math.MaxUint64 is 20 bytes long.
-	// Example of such a badgerKey with a container-key that is math.MaxUint64:
-	// ...........................................12345678901234567890
-	// idx:'i';fld:'f';vw:'standard';shd:'1';ckey@18446744073709551615
-
-	prefix := badgerPrefix(index, field, view, shard)
-	ckey := []byte(fmt.Sprintf("%020d", roaringContainerKey))
-	bkey := append(prefix, ckey...)
-	MustValidateKey(bkey)
-	return bkey
-}
-
-// badgerPrefix returns everything from badgerKey up to and
-// including the '@' fune in a badger key. The prefix excludes the roaring container key itself.
-// NB must be kept in sync with badgerKey() and badgerKeyExtractContainerKey().
-func badgerPrefix(index, field, view string, shard uint64) []byte {
-	return []byte(fmt.Sprintf("idx:'%v';fld:'%v';vw:'%v';shd:'%020v';ckey@", index, field, view, shard))
-}
-
-// MustValidatekey will panic on a bad badgerKey with an informative message.
-func MustValidateKey(bkey []byte) {
-	n := len(bkey)
-	if n < 56 {
-		panic(fmt.Sprintf("bkey too short min size is 56 but we see %v in '%v'", n, string(bkey)))
-	}
-	beforeCkey := bkey[n-26 : n-20]
-	if !bytes.Equal(beforeCkey, ckeyPartExpected) {
-		panic(fmt.Sprintf(`bkey did not have expected ";ckey@" at 26 bytes from the end of the bkey '%v'; instead had '%v'`, string(bkey), string(beforeCkey)))
-	}
 }
 
 func bitmapAsString(rbm *roaring.Bitmap) (r string) {
@@ -1380,30 +1388,7 @@ func bitmapAsString(rbm *roaring.Bitmap) (r string) {
 	return r + ")"
 }
 
-// should really be exported from the pilosa/roaring package so we don't get out of sync...
-const (
-	containerNil    byte = iota // no container
-	containerArray              // slice of bit position values
-	containerBitmap             // slice of 1024 uint64s
-	containerRun                // container of run-encoded bits
-)
-
-var ckeyPartExpected = []byte(";ckey@")
-
-func invName(rbfName string) (field, view string, shard uint64) {
-	s := strings.Split(rbfName, "\x00")
-	if len(s) != 3 {
-		panic("should have 3 parts")
-	}
-	field = s[0]
-	view = s[1]
-	var err error
-	shard, err = strconv.ParseUint(s[2], 10, 64)
-	panicOn(err)
-	return
-}
-
-func stringOfCkeyCt(ckey uint64, ct *roaring.Container, rrName, index string) (s string) {
+func stringOfCkeyCt(ckey uint64, ct *roaring.Container, rrName string) (s string) {
 
 	by := containerToBytes(ct)
 	hash := blake3sum16(by)
@@ -1413,8 +1398,7 @@ func stringOfCkeyCt(ckey uint64, ct *roaring.Container, rrName, index string) (s
 	rbm := &roaring.Bitmap{Containers: cts}
 	srbm := bitmapAsString(rbm)
 
-	field, view, shard := invName(rrName)
-	bkey := string(badgerKey(index, field, view, shard, ckey))
+	bkey := rrName + fmt.Sprintf("%020d", ckey)
 
 	s = fmt.Sprintf("%v -> %v (%v hot)\n", bkey, hash, ct.N())
 	s += "          ......." + srbm + "\n"
@@ -1422,7 +1406,6 @@ func stringOfCkeyCt(ckey uint64, ct *roaring.Container, rrName, index string) (s
 }
 
 func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear bool, log bool, rowSize uint64, data []byte) (changed int, rowSet map[uint64]int, err error) {
-
 	// begin write boilerplate
 	if tx.db == nil {
 		err = ErrTxClosed
@@ -1484,6 +1467,7 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 		}
 
 		if clear {
+
 			existN := oldC.N() // number of bits set in the old container
 			newC := oldC.Difference(synthC)
 
@@ -1496,14 +1480,6 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 				changes := int(existN - newC.N())
 				changed += changes
 				rowSet[currRow] -= changes
-
-				if tx.DeleteEmptyContainer && newC.N() == 0 {
-					err = tx.RemoveContainer(name, itrKey)
-					if err != nil {
-						return
-					}
-					continue
-				}
 				err = tx.PutContainer(name, itrKey, newC)
 				if err != nil {
 					return
@@ -1529,9 +1505,9 @@ func (tx *Tx) ImportRoaringBits(name string, itr roaring.RoaringIterator, clear 
 				continue
 			}
 
-			newC := oldC.UnionInPlace(synthC)
+			newC := roaring.Union(oldC, synthC) // UnionInPlace was giving us crashes on overly large containers.
 
-			if roaring.ContainerType(newC) == containerBitmap {
+			if roaring.ContainerType(newC) == roaring.ContainerBitmap {
 				newC.Repair() // update the bit-count so .n is valid. b/c UnionInPlace doesn't update it.
 			}
 			if newC.N() != existN {

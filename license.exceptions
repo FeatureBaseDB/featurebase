@@ -11,4 +11,6 @@
 ./logger/filewriter_test.go
 ./vprint.go
 ./rbf/vprint.go
-./cmd/loader/vprint.go
+./cmd/slurp/vprint.go
+./cmd/demo-lmdb/vprint.go
+./gid.go

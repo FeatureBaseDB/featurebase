@@ -252,12 +252,12 @@ type testOp struct {
 
 func doContainer(typ byte, data interface{}) *Container {
 	switch typ {
-	case containerArray:
+	case ContainerArray:
 		return NewContainerArray(data.([]uint16))
-	case containerBitmap:
+	case ContainerBitmap:
 		c := NewContainerBitmap(-1, data.([]uint64))
 		return c
-	case containerRun:
+	case ContainerRun:
 		return NewContainerRun(data.([]Interval16))
 	}
 	return nil
@@ -272,45 +272,45 @@ func setupContainerTests() map[byte]map[string]*Container {
 		sampleTestContainers = make(map[byte]map[string]*Container)
 
 		// array containers
-		sampleTestContainers[containerArray] = map[string]*Container{
-			"empty":         doContainer(containerArray, arrayEmpty()),
-			"full":          doContainer(containerArray, arrayFull()),
-			"firstBitSet":   doContainer(containerArray, arrayFirstBitSet()),
-			"lastBitSet":    doContainer(containerArray, arrayLastBitSet()),
-			"firstBitUnset": doContainer(containerArray, arrayFirstBitUnset()),
-			"lastBitUnset":  doContainer(containerArray, arrayLastBitUnset()),
-			"innerBitsSet":  doContainer(containerArray, arrayInnerBitsSet()),
-			"outerBitsSet":  doContainer(containerArray, arrayOuterBitsSet()),
-			"oddBitsSet":    doContainer(containerArray, arrayOddBitsSet()),
-			"evenBitsSet":   doContainer(containerArray, arrayEvenBitsSet()),
+		sampleTestContainers[ContainerArray] = map[string]*Container{
+			"empty":         doContainer(ContainerArray, arrayEmpty()),
+			"full":          doContainer(ContainerArray, arrayFull()),
+			"firstBitSet":   doContainer(ContainerArray, arrayFirstBitSet()),
+			"lastBitSet":    doContainer(ContainerArray, arrayLastBitSet()),
+			"firstBitUnset": doContainer(ContainerArray, arrayFirstBitUnset()),
+			"lastBitUnset":  doContainer(ContainerArray, arrayLastBitUnset()),
+			"innerBitsSet":  doContainer(ContainerArray, arrayInnerBitsSet()),
+			"outerBitsSet":  doContainer(ContainerArray, arrayOuterBitsSet()),
+			"oddBitsSet":    doContainer(ContainerArray, arrayOddBitsSet()),
+			"evenBitsSet":   doContainer(ContainerArray, arrayEvenBitsSet()),
 		}
 
 		// bitmap containers
-		sampleTestContainers[containerBitmap] = map[string]*Container{
-			"empty":         doContainer(containerBitmap, bitmapEmpty()),
-			"full":          doContainer(containerBitmap, bitmapFull()),
-			"firstBitSet":   doContainer(containerBitmap, bitmapFirstBitSet()),
-			"lastBitSet":    doContainer(containerBitmap, bitmapLastBitSet()),
-			"firstBitUnset": doContainer(containerBitmap, bitmapFirstBitUnset()),
-			"lastBitUnset":  doContainer(containerBitmap, bitmapLastBitUnset()),
-			"innerBitsSet":  doContainer(containerBitmap, bitmapInnerBitsSet()),
-			"outerBitsSet":  doContainer(containerBitmap, bitmapOuterBitsSet()),
-			"oddBitsSet":    doContainer(containerBitmap, bitmapOddBitsSet()),
-			"evenBitsSet":   doContainer(containerBitmap, bitmapEvenBitsSet()),
+		sampleTestContainers[ContainerBitmap] = map[string]*Container{
+			"empty":         doContainer(ContainerBitmap, bitmapEmpty()),
+			"full":          doContainer(ContainerBitmap, bitmapFull()),
+			"firstBitSet":   doContainer(ContainerBitmap, bitmapFirstBitSet()),
+			"lastBitSet":    doContainer(ContainerBitmap, bitmapLastBitSet()),
+			"firstBitUnset": doContainer(ContainerBitmap, bitmapFirstBitUnset()),
+			"lastBitUnset":  doContainer(ContainerBitmap, bitmapLastBitUnset()),
+			"innerBitsSet":  doContainer(ContainerBitmap, bitmapInnerBitsSet()),
+			"outerBitsSet":  doContainer(ContainerBitmap, bitmapOuterBitsSet()),
+			"oddBitsSet":    doContainer(ContainerBitmap, bitmapOddBitsSet()),
+			"evenBitsSet":   doContainer(ContainerBitmap, bitmapEvenBitsSet()),
 		}
 
 		// run containers
-		sampleTestContainers[containerRun] = map[string]*Container{
-			"empty":         doContainer(containerRun, runEmpty()),
-			"full":          doContainer(containerRun, runFull()),
-			"firstBitSet":   doContainer(containerRun, runFirstBitSet()),
-			"lastBitSet":    doContainer(containerRun, runLastBitSet()),
-			"firstBitUnset": doContainer(containerRun, runFirstBitUnset()),
-			"lastBitUnset":  doContainer(containerRun, runLastBitUnset()),
-			"innerBitsSet":  doContainer(containerRun, runInnerBitsSet()),
-			"outerBitsSet":  doContainer(containerRun, runOuterBitsSet()),
-			"oddBitsSet":    doContainer(containerRun, runOddBitsSet()),
-			"evenBitsSet":   doContainer(containerRun, runEvenBitsSet()),
+		sampleTestContainers[ContainerRun] = map[string]*Container{
+			"empty":         doContainer(ContainerRun, runEmpty()),
+			"full":          doContainer(ContainerRun, runFull()),
+			"firstBitSet":   doContainer(ContainerRun, runFirstBitSet()),
+			"lastBitSet":    doContainer(ContainerRun, runLastBitSet()),
+			"firstBitUnset": doContainer(ContainerRun, runFirstBitUnset()),
+			"lastBitUnset":  doContainer(ContainerRun, runLastBitUnset()),
+			"innerBitsSet":  doContainer(ContainerRun, runInnerBitsSet()),
+			"outerBitsSet":  doContainer(ContainerRun, runOuterBitsSet()),
+			"oddBitsSet":    doContainer(ContainerRun, runOddBitsSet()),
+			"evenBitsSet":   doContainer(ContainerRun, runEvenBitsSet()),
 		}
 	})
 

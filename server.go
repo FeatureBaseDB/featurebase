@@ -29,8 +29,6 @@ import (
 
 	uuid "github.com/satori/go.uuid"
 
-	// extensions pulls in some extensions depending on build tags
-	_ "github.com/pilosa/pilosa/v2/extensions"
 	"github.com/pilosa/pilosa/v2/logger"
 	"github.com/pilosa/pilosa/v2/roaring"
 	"github.com/pilosa/pilosa/v2/stats"

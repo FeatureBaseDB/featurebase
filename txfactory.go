@@ -23,8 +23,8 @@ import (
 	"syscall"
 	"text/tabwriter"
 
-	"github.com/pilosa/pilosa/v2/rbf"
 	"github.com/pilosa/pilosa/v2/roaring"
+	"github.com/pilosa/pilosa/v2/txpath"
 	"github.com/pkg/errors"
 )
 
@@ -32,6 +32,7 @@ import (
 const (
 	RoaringTxn string = "roaring"
 	BadgerTxn  string = "badger"
+	LmdbTxn    string = "lmdb"
 	RBFTxn     string = "rbf"
 	// A is listed first, B is second. blueGreenTx returns the B output.
 	BlueGreenBadgerRoaring string = "badger_roaring"
@@ -72,9 +73,13 @@ type TxFactory struct {
 
 	badgerDB *BadgerDBWrapper
 
-	rbfDB *rbf.DB
+	rbfDB *RbfDBWrapper
 
 	roaringDB *RoaringStore
+
+	dbsClosed bool // idemopotent CloseDB()
+
+	//lmDB *LMDBWrapper
 
 	// could have more than one *Index, but for now keep it simple,
 	// and allow blueGreenTx to report badger contents via idx
@@ -100,6 +105,8 @@ const (
 
 	blueGreenBadgerRBF txtype = 8
 	blueGreenRBFBadger txtype = 9
+
+	lmdbTxn txtype = 10
 )
 
 func (txf *TxFactory) NeedsSnapshot() bool {
@@ -123,6 +130,8 @@ func (txf *TxFactory) NeedsSnapshot() bool {
 	case blueGreenBadgerRBF:
 		return false
 	case blueGreenRBFBadger:
+		return false
+	case lmdbTxn:
 		return false
 	}
 	panic(fmt.Sprintf("unknown typeOfTx '%v'", txf.typeOfTx))
@@ -148,16 +157,21 @@ func MustTxsrcToTxtype(txsrc string) txtype {
 		return blueGreenBadgerRBF
 	case BlueGreenRBFBadger: //  "rbf_badger"
 		return blueGreenRBFBadger
+	case LmdbTxn:
+		return lmdbTxn
 	}
 	panic(fmt.Sprintf("unknown txsrc '%v'", txsrc))
 }
 
-// always store files in a subdir of dir. If we are having one
+// NewTxFactory always opens an existing database. If you
+// want to a fresh database, os.RemoveAll on dir/name ahead of time.
+// We always store files in a subdir of dir. If we are having one
 // database or many can depend on name.
-func NewTxFactory(txsrc string, dir, name string, openExisting bool) (f *TxFactory, err error) {
+func NewTxFactory(txsrc string, dir, name string) (f *TxFactory, err error) {
+	//vv("NewTxFactory called for txsrc '%v'; dir='%v'; name='%v'", txsrc, dir, name)
 
 	ty := MustTxsrcToTxtype(txsrc)
-	if ty < 1 || ty > 9 {
+	if ty < 1 || ty > 10 {
 		panic(fmt.Sprintf("invalid txtype '%v'", int(ty)))
 	}
 
@@ -175,17 +189,11 @@ func NewTxFactory(txsrc string, dir, name string, openExisting bool) (f *TxFacto
 		// enables cross-index Tx, which are important and are tested for.
 		path := dir + sep + "honeyBadger"
 
-		if openExisting {
-			f.badgerDB, err = globalBadgerReg.openBadgerDBWrapper(path)
-			if err != nil {
-				return nil, errors.Wrap(err, fmt.Sprintf("cannot open badger db. path='%v'", path))
-			}
-		} else {
-			f.badgerDB, err = globalBadgerReg.newBadgerDBWrapper(path)
-			if err != nil {
-				return nil, errors.Wrap(err, fmt.Sprintf("cannot create new badger db. path='%v'", path))
-			}
+		f.badgerDB, err = globalBadgerReg.openBadgerDBWrapper(path)
+		if err != nil {
+			return nil, errors.Wrap(err, fmt.Sprintf("cannot open badger db. path='%v'", path))
 		}
+
 		// electric-fence like finding of access to mmapped data beyond
 		// transaction end time.
 		f.badgerDB.doAllocZero = DetectMemAccessPastTx
@@ -194,10 +202,23 @@ func NewTxFactory(txsrc string, dir, name string, openExisting bool) (f *TxFacto
 	switch ty {
 	case rbfTxn, blueGreenRBFRoaring, blueGreenRoaringRBF, blueGreenBadgerRBF, blueGreenRBFBadger:
 
-		f.rbfDB = rbf.NewDB(filepath.Join(dir, "db.rbf"))
-		if err := f.rbfDB.Open(); err != nil {
-			return nil, errors.Wrap(err, "cannot open rbf db")
+		path := dir + sep + "all-in-one-rbfdb"
+		f.rbfDB, err = globalRbfDBReg.openRbfDB(path)
+		if err != nil {
+			return nil, errors.Wrap(err, fmt.Sprintf("cannot create new rbf db. path='%v'", path))
 		}
+	}
+
+	switch ty {
+	case lmdbTxn:
+		panic("lmdb is unfinished and relocated to the ldmb/ subdirectory for the moment.")
+		/*
+			path := dir + sep + "all-in-one"
+			f.lmDB, err = globalLMDBReg.newLMDBWrapper(path)
+			if err != nil {
+				return nil, errors.Wrap(err, fmt.Sprintf("cannot create new lmdb db. path='%v'", path))
+			}
+		*/
 	}
 
 	return f, err
@@ -224,7 +245,7 @@ func (f *TxFactory) DeleteIndex(name string) error {
 	case badgerTxn:
 		return f.badgerDB.DeleteIndex(name)
 	case rbfTxn:
-		panic("todo rbfTxn DeleteIndex(name)")
+		return f.rbfDB.DeleteIndex(name)
 	case blueGreenBadgerRoaring:
 		return f.badgerDB.DeleteIndex(name)
 	case blueGreenRoaringBadger:
@@ -239,22 +260,10 @@ func (f *TxFactory) DeleteFieldFromStore(index, field, fieldPath string) error {
 		return f.roaringDB.DeleteField(index, field, fieldPath)
 	case badgerTxn:
 		return f.badgerDB.DeleteField(index, field, fieldPath)
+	//case lmdbTxn:
+	//return f.lmDB.DeleteField(index, field, fieldPath)
 	case rbfTxn:
-		if err := os.RemoveAll(fieldPath); err != nil {
-			return errors.Wrap(err, "removing directory")
-		}
-
-		tx, err := f.rbfDB.Begin(true)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
-
-		if err := tx.DeleteBitmapsWithPrefix(rbfFieldPrefix(field)); err != nil {
-			return err
-		}
-		return tx.Commit()
-
+		return f.rbfDB.DeleteField(index, field, fieldPath)
 	case blueGreenBadgerRoaring:
 		_ = f.badgerDB.DeleteField(index, field, fieldPath)
 		return f.roaringDB.DeleteField(index, field, fieldPath)
@@ -272,16 +281,9 @@ func (f *TxFactory) DeleteFragmentFromStore(index, field, view string, shard uin
 	case badgerTxn:
 		return f.badgerDB.DeleteFragment(index, field, view, shard, frag)
 	case rbfTxn:
-		tx, err := f.rbfDB.Begin(true)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
-
-		if err := tx.DeleteBitmapsWithPrefix(rbfFieldViewPrefix(field, view)); err != nil {
-			return err
-		}
-		return tx.Commit()
+		return f.rbfDB.DeleteFragment(index, field, view, shard, frag)
+		//	case lmdbTxn:
+		//		return f.lmDB.DeleteFragment(index, field, view, shard, frag)
 	case blueGreenBadgerRoaring:
 		_ = f.badgerDB.DeleteFragment(index, field, view, shard, frag)
 		return f.roaringDB.DeleteFragment(index, field, view, shard, frag)
@@ -294,32 +296,38 @@ func (f *TxFactory) DeleteFragmentFromStore(index, field, view string, shard uin
 }
 
 func (f *TxFactory) CloseIndex(idx *Index) error {
+	// under roaring and all the new databases, this is a no-op.
+	return nil
+}
+
+func (f *TxFactory) CloseDB() error {
+	if f.dbsClosed {
+		return nil
+	}
+	f.dbsClosed = true
 	switch f.typeOfTx {
 	case roaringFragmentFilesTxn:
 		return nil
 	case badgerTxn:
-		// note cannot actually close Badger here.
-		// causes problems b/c tries holder.DeleteIndex tries to delete the index after db is closed.
-		//return f.badgerDB.Close()
-		return nil
+		return f.badgerDB.Close()
 	case rbfTxn:
 		return f.rbfDB.Close()
 	case blueGreenBadgerRoaring:
-		return nil
+		return f.badgerDB.Close()
 	case blueGreenRoaringBadger:
-		return nil
-
+		return f.badgerDB.Close()
 	case blueGreenRBFRoaring:
-		_ = f.rbfDB.Close()
-		return nil
+		return f.rbfDB.Close()
 	case blueGreenRoaringRBF:
 		return f.rbfDB.Close()
 	case blueGreenBadgerRBF:
+		_ = f.badgerDB.Close()
 		return f.rbfDB.Close()
 	case blueGreenRBFBadger:
 		_ = f.rbfDB.Close()
+		return f.badgerDB.Close()
+	case lmdbTxn:
 		return nil
-
 	}
 	panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", f.typeOfTx))
 }
@@ -334,52 +342,56 @@ func (f *TxFactory) NewTx(o Txo) Tx {
 	case roaringFragmentFilesTxn:
 		return &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment}
 	case badgerTxn:
-		btx := f.badgerDB.NewBadgerTx(o.Write, indexName)
+		btx := f.badgerDB.NewBadgerTx(o.Write, indexName, o.Fragment)
 		return btx
 	case rbfTxn:
-		tx, err := f.rbfDB.Begin(o.Write)
+		tx, err := f.rbfDB.NewRBFTx(o.Write, indexName, o.Fragment)
+		panicOn(err)
 		if err != nil {
-			panic(err) // TODO: Add error return on NewTx()
+			panic(errors.Wrap(err, "rbfDB.NewRBFTx transaction errored"))
 		}
-		return &RBFTx{tx: tx, index: indexName}
+		return tx
+	case lmdbTxn:
+		//return f.lmDB.newPoolTx(o.Write, indexName)
+
 	case blueGreenBadgerRoaring:
-		btx := f.badgerDB.NewBadgerTx(o.Write, indexName)
+		btx := f.badgerDB.NewBadgerTx(o.Write, indexName, o.Fragment)
 		rtx := &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment}
 		return newBlueGreenTx(btx, rtx, f.idx)
 	case blueGreenRoaringBadger:
-		btx := f.badgerDB.NewBadgerTx(o.Write, indexName)
+		btx := f.badgerDB.NewBadgerTx(o.Write, indexName, o.Fragment)
 		rtx := &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment}
 		return newBlueGreenTx(rtx, btx, f.idx)
 
 	case blueGreenBadgerRBF:
-		btx := f.badgerDB.NewBadgerTx(o.Write, indexName)
-		rbftx, err := f.rbfDB.Begin(o.Write)
+		btx := f.badgerDB.NewBadgerTx(o.Write, indexName, o.Fragment)
+		rbftx, err := f.rbfDB.NewRBFTx(o.Write, indexName, o.Fragment)
 		if err != nil {
-			panic(errors.Wrap(err, "rbfDB.Begin transaction errored"))
+			panic(errors.Wrap(err, "rbfDB.NewRBFTx transaction errored"))
 		}
-		return newBlueGreenTx(btx, &RBFTx{tx: rbftx, index: indexName}, f.idx)
+		return newBlueGreenTx(btx, rbftx, f.idx)
 	case blueGreenRBFBadger:
-		btx := f.badgerDB.NewBadgerTx(o.Write, indexName)
-		rbftx, err := f.rbfDB.Begin(o.Write)
+		btx := f.badgerDB.NewBadgerTx(o.Write, indexName, o.Fragment)
+		rbftx, err := f.rbfDB.NewRBFTx(o.Write, indexName, o.Fragment)
 		if err != nil {
-			panic(errors.Wrap(err, "rbfDB.Begin transaction errored"))
+			panic(errors.Wrap(err, "rbfDB.NewRBFTx transaction errored"))
 		}
-		return newBlueGreenTx(&RBFTx{tx: rbftx, index: indexName}, btx, f.idx)
+		return newBlueGreenTx(rbftx, btx, f.idx)
 
 	case blueGreenRBFRoaring:
-		rbftx, err := f.rbfDB.Begin(o.Write)
+		rbftx, err := f.rbfDB.NewRBFTx(o.Write, indexName, o.Fragment)
 		if err != nil {
-			panic(errors.Wrap(err, "rbfDB.Begin transaction errored"))
+			panic(errors.Wrap(err, "rbfDB.NewRBFTx transaction errored"))
 		}
 		rtx := &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment}
-		return newBlueGreenTx(&RBFTx{tx: rbftx, index: indexName}, rtx, f.idx)
+		return newBlueGreenTx(rbftx, rtx, f.idx)
 	case blueGreenRoaringRBF:
-		rbftx, err := f.rbfDB.Begin(o.Write)
+		rbftx, err := f.rbfDB.NewRBFTx(o.Write, indexName, o.Fragment)
 		if err != nil {
-			panic(errors.Wrap(err, "rbfDB.Begin transaction errored"))
+			panic(errors.Wrap(err, "rbfDB.NewRBFTx transaction errored"))
 		}
 		rtx := &RoaringTx{write: o.Write, Field: o.Field, Index: o.Index, fragment: o.Fragment}
-		return newBlueGreenTx(rtx, &RBFTx{tx: rbftx, index: indexName}, f.idx)
+		return newBlueGreenTx(rtx, rbftx, f.idx)
 	}
 	panic(fmt.Sprintf("unknown f.typeOfTx type: '%v'", f.typeOfTx))
 }
@@ -406,6 +418,8 @@ func (ty txtype) String() string {
 		return "blueGreenBadgerRBF"
 	case blueGreenRBFBadger:
 		return "blueGreenRBFBadger"
+	case lmdbTxn:
+		return "lmdbTxn"
 	}
 	panic(fmt.Sprintf("unhandled ty '%v' in txtype.String()", int(ty)))
 }
@@ -550,7 +564,7 @@ func stringifiedRawRoaringFragment(path string, index, field, view string, shard
 		srbm := bitmapAsString(rbm)
 		panicOn(err)
 
-		bkey := string(badgerKey(index, field, view, shard, ckey))
+		bkey := string(txpath.Key(index, field, view, shard, ckey))
 
 		r += fmt.Sprintf("%v -> %v (%v hot)\n", bkey, hash, ct.N())
 		r += "          ......." + srbm + "\n"
@@ -619,16 +633,16 @@ var _ = fileSize // happy linter
 func containerToBytes(ct *roaring.Container) []byte {
 	ty := roaring.ContainerType(ct)
 	switch ty {
-	case containerNil:
-		panic("nil container")
-	case containerArray:
+	case roaring.ContainerNil:
+		panic("nil roaring.Container")
+	case roaring.ContainerArray:
 		return fromArray16(roaring.AsArray(ct))
-	case containerBitmap:
+	case roaring.ContainerBitmap:
 		return fromArray64(roaring.AsBitmap(ct))
-	case containerRun:
+	case roaring.ContainerRun:
 		return fromInterval16(roaring.AsRuns(ct))
 	}
-	panic(fmt.Sprintf("unknown container type '%v'", int(ty)))
+	panic(fmt.Sprintf("unknown roaring.Container type '%v'", int(ty)))
 }
 
 type pointerContext struct {

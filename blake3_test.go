@@ -16,6 +16,8 @@ package pilosa
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
 	"testing"
 
 	"encoding/hex"
@@ -43,5 +45,27 @@ func TestCryptoRandInt64(t *testing.T) {
 	rnd := cryptoRandInt64()
 	if rnd == 0 {
 		panic("cryptoRandInt64() gave 0, very high odds it has broken")
+	}
+}
+
+func TestHashOfDir(t *testing.T) {
+	dir, err := ioutil.TempDir(".", "TestHashOfDir-dir")
+	panicOn(err)
+	b := dir + sep + "A" + sep + "B"
+	c := dir + sep + "A" + sep + "C"
+	panicOn(os.MkdirAll(b, 0755))
+	panicOn(os.MkdirAll(c, 0755))
+	bmessage := []byte("hello B\n")
+	panicOn(ioutil.WriteFile(b+sep+"b_content", bmessage, 0644))
+	cmessage := []byte("hello C\n")
+	panicOn(ioutil.WriteFile(c+sep+"c_content", cmessage, 0644))
+	defer os.RemoveAll(dir)
+	hsh := HashOfDir(dir)
+
+	c2message := []byte("hello C2\n")
+	panicOn(ioutil.WriteFile(c+sep+"c_content", c2message, 0644))
+	hsh2 := HashOfDir(dir)
+	if hsh2 == hsh {
+		panic("HashOfDir did not detect 1 byte change")
 	}
 }

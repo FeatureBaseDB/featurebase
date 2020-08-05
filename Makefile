@@ -172,6 +172,18 @@ topt-rbf:
 	@echo "   log.topt.rbf green: \c"; cat log.topt.rbf | grep PASS |wc -l
 	@echo "   log.topt.rbf   red: \c"; cat log.topt.rbf | grep '\-\-\- FAIL' |wc -l
 
+topt-rbf-race:
+	mv log.topt.rbf-race log.topt.rbf-race.prev || true
+	PILOSA_TXSRC=rbf go test -race -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.topt.rbf-race
+	@echo "   log.topt.rbf-race green: \c"; cat log.topt.rbf-race | grep PASS |wc -l
+	@echo "   log.topt.rbf-race   red: \c"; cat log.topt.rbf-race | grep '\-\-\- FAIL' |wc -l
+
+topt-lmdb:
+	mv log.topt.lmdb log.topt.lmdb.prev || true
+	PILOSA_TXSRC=lmdb go test -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.topt.lmdb
+	@echo "   log.topt.lmdb green: \c"; cat log.topt.lmdb | grep PASS |wc -l
+	@echo "   log.topt.lmdb   red: \c"; cat log.topt.lmdb | grep '\-\-\- FAIL' |wc -l
+
 topt-race:
 	mv log.topt.race log.topt.race.prev || true
 	go test -race -v -tags='$(BUILD_TAGS)' $(TESTFLAGS) $(NOCHECKPTR)  2>&1 | tee log.topt.race
@@ -221,7 +233,7 @@ bg-rbf:
 
 # Run golangci-lint
 golangci-lint: require-golangci-lint
-	golangci-lint run --skip-files '.*\.peg\.go'
+	golangci-lint run --timeout 3m --skip-files '.*\.peg\.go'
 
 # Alias
 linter: golangci-lint
