@@ -240,8 +240,21 @@ func (f *TxFactory) DeleteFieldFromStore(index, field, fieldPath string) error {
 	case badgerTxn:
 		return f.badgerDB.DeleteField(index, field, fieldPath)
 	case rbfTxn:
-		//return f.rbfDB.DeleteField(index, field, fieldPath)
-		return nil
+		if err := os.RemoveAll(fieldPath); err != nil {
+			return errors.Wrap(err, "removing directory")
+		}
+
+		tx, err := f.rbfDB.Begin(true)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+
+		if err := tx.DeleteBitmapsWithPrefix(rbfFieldPrefix(field)); err != nil {
+			return err
+		}
+		return tx.Commit()
+
 	case blueGreenBadgerRoaring:
 		_ = f.badgerDB.DeleteField(index, field, fieldPath)
 		return f.roaringDB.DeleteField(index, field, fieldPath)

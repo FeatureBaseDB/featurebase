@@ -32,7 +32,6 @@ import (
 )
 
 func TestHolder_Open(t *testing.T) {
-
 	t.Run("ErrIndexName", func(t *testing.T) {
 		h := test.MustOpenHolder()
 
@@ -404,8 +403,6 @@ func TestHolder_HasData(t *testing.T) {
 
 // Ensure holder can delete an index and its underlying files.
 func TestHolder_DeleteIndex(t *testing.T) {
-	skipForRBF(t)
-
 	hldr := test.MustOpenHolder()
 	defer hldr.Close()
 
@@ -700,8 +697,6 @@ func TestHolderSyncer_TimeQuantum(t *testing.T) {
 
 // Ensure holder can sync integer views with a remote holder.
 func TestHolderSyncer_IntField(t *testing.T) {
-	skipForRBF(t)
-
 	t.Run("BasicSync", func(t *testing.T) {
 		c := test.MustNewCluster(t, 2)
 		c[0].Config.Cluster.ReplicaN = 2

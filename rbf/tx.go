@@ -965,27 +965,19 @@ func (tx *Tx) ContainerIterator(name string, key uint64) (citer roaring.Containe
 	tx.mu.RLock()
 	defer tx.mu.RUnlock()
 
-	var c *Cursor
-	c, err = tx.cursor(name)
+	c, err := tx.cursor(name)
 	if c == nil && err == nil {
-		// nothing available.
-		citer = &emptyContainerIterator{}
-		return
-	}
-	if err != nil {
-		return
+		return &emptyContainerIterator{}, false, nil // nothing available.
+	} else if err != nil {
+		return nil, false, err
 	}
 
 	// INVAR: c is not nil
 
-	err = c.First()
-	if err != nil {
-		return
+	if _, err := c.Seek(key); err != nil {
+		return nil, false, err
 	}
-	ci := &containerIterator{cursor: c}
-	citer = ci
-
-	return citer, true, nil
+	return &containerIterator{cursor: c}, true, nil
 }
 
 func (tx *Tx) ForEach(name string, fn func(i uint64) error) error {

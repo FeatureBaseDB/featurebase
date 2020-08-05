@@ -4215,8 +4215,6 @@ func TestFragmentRowIterator(t *testing.T) {
 	})
 
 	t.Run("skipped rows wrapped", func(t *testing.T) {
-		skipForRBF(t)
-
 		f, idx := mustOpenFragment("i", "f", "v", 0, CacheTypeRanked)
 		_ = idx
 		defer f.Clean(t)

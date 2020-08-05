@@ -1052,6 +1052,11 @@ func rbfName(field, view string, shard uint64) string {
 	return fmt.Sprintf("%s\x00%s\x00%d", field, view, shard)
 }
 
+// rbfFieldPrefix returns a prefix for field keys in RBF.
+func rbfFieldPrefix(field string) string {
+	return fmt.Sprintf("%s\x00", field)
+}
+
 // rbfFieldViewPrefix returns a NULL-separated prefix for keys in RBF.
 func rbfFieldViewPrefix(field, view string) string {
 	return fmt.Sprintf("%s\x00%s\x00", field, view)

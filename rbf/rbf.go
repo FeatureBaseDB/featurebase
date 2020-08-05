@@ -421,11 +421,12 @@ func (c *leafCell) countRange(start, end int32) (n int) {
 
 func readLeafCellKey(page []byte, i int) uint64 {
 	offset := readCellOffset(page, i)
-	assert(offset < len(page))
+	assert(offset < len(page), "cell read beyond page size: offset %d >= page size %d", offset, len(page))
 	return *(*uint64)(unsafe.Pointer(&page[offset]))
 }
 
 func readLeafCell(page []byte, i int) leafCell {
+	assert(i < readCellN(page), "cell index %d exceeds cell count %d", i, readCellN(page))
 	offset := readCellOffset(page, i)
 
 	// cd ..; PILOSA_TXSRC=rbf go test -v -run TestFragment_TopN_IDs  -tags=' shardwidth20'  "-gcflags=all=-d=checkptr=0"
@@ -475,7 +476,7 @@ func writeLeafCell(page []byte, i, offset int, cell leafCell) {
 	*(*uint32)(unsafe.Pointer(&page[offset+8])) = uint32(cell.Type)
 	*(*uint16)(unsafe.Pointer(&page[offset+12])) = uint16(cell.N)
 	*(*uint16)(unsafe.Pointer(&page[offset+14])) = uint16(cell.BitN)
-	assert(offset+16+len(cell.Data) <= PageSize)
+	assert(offset+16+len(cell.Data) <= PageSize, "leaf cell write extends beyond page: offset %d + cell size %d > page size %d", offset, 16+len(cell.Data), PageSize)
 	copy(page[offset+16:], cell.Data)
 }
 
@@ -501,7 +502,8 @@ func readBranchCellKey(page []byte, i int) uint64 {
 }
 
 func readBranchCell(page []byte, i int) branchCell {
-	assert(i >= 0)
+	assert(i >= 0, "branch cell index must be zero or greater: index=%d", i)
+	assert(i < readCellN(page), "branch cell index %d must less than cell count %d", i, readCellN(page))
 
 	offset := readCellOffset(page, i)
 	var cell branchCell
@@ -612,9 +614,9 @@ func Walk(tx *Tx, pgno uint32, v func(uint32, []*RootRecord)) {
 	}
 }
 
-func assert(condition bool) {
+func assert(condition bool, format string, args ...interface{}) {
 	if !condition {
-		panic("assertion failed")
+		panic(fmt.Sprintf("assertion failed: "+format, args...))
 	}
 }
 
