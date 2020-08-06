@@ -8,6 +8,8 @@ import (
 	fmt "fmt"
 	proto "github.com/golang/protobuf/proto"
 	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 	math "math"
 )
 
@@ -22,6 +24,333 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
 
+type VDS struct {
+	Name                 string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *VDS) Reset()         { *m = VDS{} }
+func (m *VDS) String() string { return proto.CompactTextString(m) }
+func (*VDS) ProtoMessage()    {}
+func (*VDS) Descriptor() ([]byte, []int) {
+	return fileDescriptor_ef0691a44d1e275c, []int{0}
+}
+
+func (m *VDS) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_VDS.Unmarshal(m, b)
+}
+func (m *VDS) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_VDS.Marshal(b, m, deterministic)
+}
+func (m *VDS) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_VDS.Merge(m, src)
+}
+func (m *VDS) XXX_Size() int {
+	return xxx_messageInfo_VDS.Size(m)
+}
+func (m *VDS) XXX_DiscardUnknown() {
+	xxx_messageInfo_VDS.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_VDS proto.InternalMessageInfo
+
+func (m *VDS) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+type GetVDSsRequest struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *GetVDSsRequest) Reset()         { *m = GetVDSsRequest{} }
+func (m *GetVDSsRequest) String() string { return proto.CompactTextString(m) }
+func (*GetVDSsRequest) ProtoMessage()    {}
+func (*GetVDSsRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_ef0691a44d1e275c, []int{1}
+}
+
+func (m *GetVDSsRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_GetVDSsRequest.Unmarshal(m, b)
+}
+func (m *GetVDSsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_GetVDSsRequest.Marshal(b, m, deterministic)
+}
+func (m *GetVDSsRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetVDSsRequest.Merge(m, src)
+}
+func (m *GetVDSsRequest) XXX_Size() int {
+	return xxx_messageInfo_GetVDSsRequest.Size(m)
+}
+func (m *GetVDSsRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetVDSsRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetVDSsRequest proto.InternalMessageInfo
+
+type GetVDSsResponse struct {
+	Vdss                 []*VDS   `protobuf:"bytes,1,rep,name=vdss,proto3" json:"vdss,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *GetVDSsResponse) Reset()         { *m = GetVDSsResponse{} }
+func (m *GetVDSsResponse) String() string { return proto.CompactTextString(m) }
+func (*GetVDSsResponse) ProtoMessage()    {}
+func (*GetVDSsResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_ef0691a44d1e275c, []int{2}
+}
+
+func (m *GetVDSsResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_GetVDSsResponse.Unmarshal(m, b)
+}
+func (m *GetVDSsResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_GetVDSsResponse.Marshal(b, m, deterministic)
+}
+func (m *GetVDSsResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetVDSsResponse.Merge(m, src)
+}
+func (m *GetVDSsResponse) XXX_Size() int {
+	return xxx_messageInfo_GetVDSsResponse.Size(m)
+}
+func (m *GetVDSsResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetVDSsResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetVDSsResponse proto.InternalMessageInfo
+
+func (m *GetVDSsResponse) GetVdss() []*VDS {
+	if m != nil {
+		return m.Vdss
+	}
+	return nil
+}
+
+type GetVDSRequest struct {
+	Name                 string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *GetVDSRequest) Reset()         { *m = GetVDSRequest{} }
+func (m *GetVDSRequest) String() string { return proto.CompactTextString(m) }
+func (*GetVDSRequest) ProtoMessage()    {}
+func (*GetVDSRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_ef0691a44d1e275c, []int{3}
+}
+
+func (m *GetVDSRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_GetVDSRequest.Unmarshal(m, b)
+}
+func (m *GetVDSRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_GetVDSRequest.Marshal(b, m, deterministic)
+}
+func (m *GetVDSRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetVDSRequest.Merge(m, src)
+}
+func (m *GetVDSRequest) XXX_Size() int {
+	return xxx_messageInfo_GetVDSRequest.Size(m)
+}
+func (m *GetVDSRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetVDSRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetVDSRequest proto.InternalMessageInfo
+
+func (m *GetVDSRequest) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+type GetVDSResponse struct {
+	Vds                  *VDS     `protobuf:"bytes,1,opt,name=vds,proto3" json:"vds,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *GetVDSResponse) Reset()         { *m = GetVDSResponse{} }
+func (m *GetVDSResponse) String() string { return proto.CompactTextString(m) }
+func (*GetVDSResponse) ProtoMessage()    {}
+func (*GetVDSResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_ef0691a44d1e275c, []int{4}
+}
+
+func (m *GetVDSResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_GetVDSResponse.Unmarshal(m, b)
+}
+func (m *GetVDSResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_GetVDSResponse.Marshal(b, m, deterministic)
+}
+func (m *GetVDSResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetVDSResponse.Merge(m, src)
+}
+func (m *GetVDSResponse) XXX_Size() int {
+	return xxx_messageInfo_GetVDSResponse.Size(m)
+}
+func (m *GetVDSResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetVDSResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetVDSResponse proto.InternalMessageInfo
+
+func (m *GetVDSResponse) GetVds() *VDS {
+	if m != nil {
+		return m.Vds
+	}
+	return nil
+}
+
+type PostVDSRequest struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *PostVDSRequest) Reset()         { *m = PostVDSRequest{} }
+func (m *PostVDSRequest) String() string { return proto.CompactTextString(m) }
+func (*PostVDSRequest) ProtoMessage()    {}
+func (*PostVDSRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_ef0691a44d1e275c, []int{5}
+}
+
+func (m *PostVDSRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_PostVDSRequest.Unmarshal(m, b)
+}
+func (m *PostVDSRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_PostVDSRequest.Marshal(b, m, deterministic)
+}
+func (m *PostVDSRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PostVDSRequest.Merge(m, src)
+}
+func (m *PostVDSRequest) XXX_Size() int {
+	return xxx_messageInfo_PostVDSRequest.Size(m)
+}
+func (m *PostVDSRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_PostVDSRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PostVDSRequest proto.InternalMessageInfo
+
+type PostVDSResponse struct {
+	Name                 string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *PostVDSResponse) Reset()         { *m = PostVDSResponse{} }
+func (m *PostVDSResponse) String() string { return proto.CompactTextString(m) }
+func (*PostVDSResponse) ProtoMessage()    {}
+func (*PostVDSResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_ef0691a44d1e275c, []int{6}
+}
+
+func (m *PostVDSResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_PostVDSResponse.Unmarshal(m, b)
+}
+func (m *PostVDSResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_PostVDSResponse.Marshal(b, m, deterministic)
+}
+func (m *PostVDSResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PostVDSResponse.Merge(m, src)
+}
+func (m *PostVDSResponse) XXX_Size() int {
+	return xxx_messageInfo_PostVDSResponse.Size(m)
+}
+func (m *PostVDSResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_PostVDSResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PostVDSResponse proto.InternalMessageInfo
+
+func (m *PostVDSResponse) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+type DeleteVDSRequest struct {
+	Name                 string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *DeleteVDSRequest) Reset()         { *m = DeleteVDSRequest{} }
+func (m *DeleteVDSRequest) String() string { return proto.CompactTextString(m) }
+func (*DeleteVDSRequest) ProtoMessage()    {}
+func (*DeleteVDSRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_ef0691a44d1e275c, []int{7}
+}
+
+func (m *DeleteVDSRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_DeleteVDSRequest.Unmarshal(m, b)
+}
+func (m *DeleteVDSRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_DeleteVDSRequest.Marshal(b, m, deterministic)
+}
+func (m *DeleteVDSRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DeleteVDSRequest.Merge(m, src)
+}
+func (m *DeleteVDSRequest) XXX_Size() int {
+	return xxx_messageInfo_DeleteVDSRequest.Size(m)
+}
+func (m *DeleteVDSRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_DeleteVDSRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DeleteVDSRequest proto.InternalMessageInfo
+
+func (m *DeleteVDSRequest) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+type DeleteVDSResponse struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *DeleteVDSResponse) Reset()         { *m = DeleteVDSResponse{} }
+func (m *DeleteVDSResponse) String() string { return proto.CompactTextString(m) }
+func (*DeleteVDSResponse) ProtoMessage()    {}
+func (*DeleteVDSResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_ef0691a44d1e275c, []int{8}
+}
+
+func (m *DeleteVDSResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_DeleteVDSResponse.Unmarshal(m, b)
+}
+func (m *DeleteVDSResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_DeleteVDSResponse.Marshal(b, m, deterministic)
+}
+func (m *DeleteVDSResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DeleteVDSResponse.Merge(m, src)
+}
+func (m *DeleteVDSResponse) XXX_Size() int {
+	return xxx_messageInfo_DeleteVDSResponse.Size(m)
+}
+func (m *DeleteVDSResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_DeleteVDSResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DeleteVDSResponse proto.InternalMessageInfo
+
 type QueryPQLRequest struct {
 	Index                string   `protobuf:"bytes,1,opt,name=index,proto3" json:"index,omitempty"`
 	Pql                  string   `protobuf:"bytes,2,opt,name=pql,proto3" json:"pql,omitempty"`
@@ -34,7 +363,7 @@ func (m *QueryPQLRequest) Reset()         { *m = QueryPQLRequest{} }
 func (m *QueryPQLRequest) String() string { return proto.CompactTextString(m) }
 func (*QueryPQLRequest) ProtoMessage()    {}
 func (*QueryPQLRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{0}
+	return fileDescriptor_ef0691a44d1e275c, []int{9}
 }
 
 func (m *QueryPQLRequest) XXX_Unmarshal(b []byte) error {
@@ -69,6 +398,45 @@ func (m *QueryPQLRequest) GetPql() string {
 	return ""
 }
 
+type QuerySQLRequest struct {
+	Sql                  string   `protobuf:"bytes,1,opt,name=sql,proto3" json:"sql,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *QuerySQLRequest) Reset()         { *m = QuerySQLRequest{} }
+func (m *QuerySQLRequest) String() string { return proto.CompactTextString(m) }
+func (*QuerySQLRequest) ProtoMessage()    {}
+func (*QuerySQLRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_ef0691a44d1e275c, []int{10}
+}
+
+func (m *QuerySQLRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_QuerySQLRequest.Unmarshal(m, b)
+}
+func (m *QuerySQLRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_QuerySQLRequest.Marshal(b, m, deterministic)
+}
+func (m *QuerySQLRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QuerySQLRequest.Merge(m, src)
+}
+func (m *QuerySQLRequest) XXX_Size() int {
+	return xxx_messageInfo_QuerySQLRequest.Size(m)
+}
+func (m *QuerySQLRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_QuerySQLRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QuerySQLRequest proto.InternalMessageInfo
+
+func (m *QuerySQLRequest) GetSql() string {
+	if m != nil {
+		return m.Sql
+	}
+	return ""
+}
+
 type StatusError struct {
 	Code                 uint32   `protobuf:"varint,1,opt,name=Code,proto3" json:"Code,omitempty"`
 	Message              string   `protobuf:"bytes,2,opt,name=Message,proto3" json:"Message,omitempty"`
@@ -81,7 +449,7 @@ func (m *StatusError) Reset()         { *m = StatusError{} }
 func (m *StatusError) String() string { return proto.CompactTextString(m) }
 func (*StatusError) ProtoMessage()    {}
 func (*StatusError) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{1}
+	return fileDescriptor_ef0691a44d1e275c, []int{11}
 }
 
 func (m *StatusError) XXX_Unmarshal(b []byte) error {
@@ -129,7 +497,7 @@ func (m *RowResponse) Reset()         { *m = RowResponse{} }
 func (m *RowResponse) String() string { return proto.CompactTextString(m) }
 func (*RowResponse) ProtoMessage()    {}
 func (*RowResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{2}
+	return fileDescriptor_ef0691a44d1e275c, []int{12}
 }
 
 func (m *RowResponse) XXX_Unmarshal(b []byte) error {
@@ -182,7 +550,7 @@ func (m *Row) Reset()         { *m = Row{} }
 func (m *Row) String() string { return proto.CompactTextString(m) }
 func (*Row) ProtoMessage()    {}
 func (*Row) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{3}
+	return fileDescriptor_ef0691a44d1e275c, []int{13}
 }
 
 func (m *Row) XXX_Unmarshal(b []byte) error {
@@ -223,7 +591,7 @@ func (m *TableResponse) Reset()         { *m = TableResponse{} }
 func (m *TableResponse) String() string { return proto.CompactTextString(m) }
 func (*TableResponse) ProtoMessage()    {}
 func (*TableResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{4}
+	return fileDescriptor_ef0691a44d1e275c, []int{14}
 }
 
 func (m *TableResponse) XXX_Unmarshal(b []byte) error {
@@ -277,7 +645,7 @@ func (m *ColumnInfo) Reset()         { *m = ColumnInfo{} }
 func (m *ColumnInfo) String() string { return proto.CompactTextString(m) }
 func (*ColumnInfo) ProtoMessage()    {}
 func (*ColumnInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{5}
+	return fileDescriptor_ef0691a44d1e275c, []int{15}
 }
 
 func (m *ColumnInfo) XXX_Unmarshal(b []byte) error {
@@ -333,7 +701,7 @@ func (m *ColumnResponse) Reset()         { *m = ColumnResponse{} }
 func (m *ColumnResponse) String() string { return proto.CompactTextString(m) }
 func (*ColumnResponse) ProtoMessage()    {}
 func (*ColumnResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{6}
+	return fileDescriptor_ef0691a44d1e275c, []int{16}
 }
 
 func (m *ColumnResponse) XXX_Unmarshal(b []byte) error {
@@ -509,7 +877,7 @@ func (m *Decimal) Reset()         { *m = Decimal{} }
 func (m *Decimal) String() string { return proto.CompactTextString(m) }
 func (*Decimal) ProtoMessage()    {}
 func (*Decimal) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{7}
+	return fileDescriptor_ef0691a44d1e275c, []int{17}
 }
 
 func (m *Decimal) XXX_Unmarshal(b []byte) error {
@@ -560,7 +928,7 @@ func (m *InspectRequest) Reset()         { *m = InspectRequest{} }
 func (m *InspectRequest) String() string { return proto.CompactTextString(m) }
 func (*InspectRequest) ProtoMessage()    {}
 func (*InspectRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{8}
+	return fileDescriptor_ef0691a44d1e275c, []int{18}
 }
 
 func (m *InspectRequest) XXX_Unmarshal(b []byte) error {
@@ -634,7 +1002,7 @@ func (m *Uint64Array) Reset()         { *m = Uint64Array{} }
 func (m *Uint64Array) String() string { return proto.CompactTextString(m) }
 func (*Uint64Array) ProtoMessage()    {}
 func (*Uint64Array) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{9}
+	return fileDescriptor_ef0691a44d1e275c, []int{19}
 }
 
 func (m *Uint64Array) XXX_Unmarshal(b []byte) error {
@@ -673,7 +1041,7 @@ func (m *StringArray) Reset()         { *m = StringArray{} }
 func (m *StringArray) String() string { return proto.CompactTextString(m) }
 func (*StringArray) ProtoMessage()    {}
 func (*StringArray) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{10}
+	return fileDescriptor_ef0691a44d1e275c, []int{20}
 }
 
 func (m *StringArray) XXX_Unmarshal(b []byte) error {
@@ -715,7 +1083,7 @@ func (m *IdsOrKeys) Reset()         { *m = IdsOrKeys{} }
 func (m *IdsOrKeys) String() string { return proto.CompactTextString(m) }
 func (*IdsOrKeys) ProtoMessage()    {}
 func (*IdsOrKeys) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ef0691a44d1e275c, []int{11}
+	return fileDescriptor_ef0691a44d1e275c, []int{21}
 }
 
 func (m *IdsOrKeys) XXX_Unmarshal(b []byte) error {
@@ -782,7 +1150,17 @@ func (*IdsOrKeys) XXX_OneofWrappers() []interface{} {
 }
 
 func init() {
+	proto.RegisterType((*VDS)(nil), "pilosa.VDS")
+	proto.RegisterType((*GetVDSsRequest)(nil), "pilosa.GetVDSsRequest")
+	proto.RegisterType((*GetVDSsResponse)(nil), "pilosa.GetVDSsResponse")
+	proto.RegisterType((*GetVDSRequest)(nil), "pilosa.GetVDSRequest")
+	proto.RegisterType((*GetVDSResponse)(nil), "pilosa.GetVDSResponse")
+	proto.RegisterType((*PostVDSRequest)(nil), "pilosa.PostVDSRequest")
+	proto.RegisterType((*PostVDSResponse)(nil), "pilosa.PostVDSResponse")
+	proto.RegisterType((*DeleteVDSRequest)(nil), "pilosa.DeleteVDSRequest")
+	proto.RegisterType((*DeleteVDSResponse)(nil), "pilosa.DeleteVDSResponse")
 	proto.RegisterType((*QueryPQLRequest)(nil), "pilosa.QueryPQLRequest")
+	proto.RegisterType((*QuerySQLRequest)(nil), "pilosa.QuerySQLRequest")
 	proto.RegisterType((*StatusError)(nil), "pilosa.StatusError")
 	proto.RegisterType((*RowResponse)(nil), "pilosa.RowResponse")
 	proto.RegisterType((*Row)(nil), "pilosa.Row")
@@ -799,51 +1177,62 @@ func init() {
 func init() { proto.RegisterFile("pilosa.proto", fileDescriptor_ef0691a44d1e275c) }
 
 var fileDescriptor_ef0691a44d1e275c = []byte{
-	// 690 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x55, 0xdd, 0x6e, 0xd4, 0x3a,
-	0x10, 0x5e, 0x37, 0xe9, 0xee, 0x66, 0xd2, 0x9f, 0x73, 0xdc, 0x73, 0x4a, 0x54, 0x21, 0x08, 0xb9,
-	0x21, 0x08, 0x54, 0x95, 0x42, 0x41, 0x40, 0xb9, 0x68, 0x0b, 0x68, 0x2b, 0x40, 0xb4, 0x86, 0xf6,
-	0xde, 0xbb, 0xf1, 0x96, 0x08, 0x6f, 0xbc, 0x8d, 0xb3, 0x2d, 0xfb, 0x02, 0xbc, 0x01, 0x6f, 0xc0,
-	0x5b, 0x70, 0xcd, 0x7b, 0x21, 0xdb, 0x71, 0x36, 0xa9, 0xb4, 0x08, 0xf5, 0x2e, 0x33, 0xdf, 0x37,
-	0x33, 0x1e, 0x7f, 0x9e, 0x09, 0x2c, 0x8d, 0x53, 0x2e, 0x24, 0xdd, 0x1c, 0xe7, 0xa2, 0x10, 0xb8,
-	0x6d, 0xac, 0xe8, 0x19, 0xac, 0x1e, 0x4f, 0x58, 0x3e, 0x3d, 0x3a, 0x7e, 0x47, 0xd8, 0xf9, 0x84,
-	0xc9, 0x02, 0xff, 0x07, 0x8b, 0x69, 0x96, 0xb0, 0xaf, 0x01, 0x0a, 0x51, 0xec, 0x11, 0x63, 0xe0,
-	0x7f, 0xc0, 0x19, 0x9f, 0xf3, 0x60, 0x41, 0xfb, 0xd4, 0x67, 0xf4, 0x02, 0xfc, 0x8f, 0x05, 0x2d,
-	0x26, 0xf2, 0x75, 0x9e, 0x8b, 0x1c, 0x63, 0x70, 0x0f, 0x44, 0xc2, 0x74, 0xd4, 0x32, 0xd1, 0xdf,
-	0x38, 0x80, 0xce, 0x7b, 0x26, 0x25, 0x3d, 0x63, 0x65, 0xa0, 0x35, 0xa3, 0x1f, 0x08, 0x7c, 0x22,
-	0x2e, 0x09, 0x93, 0x63, 0x91, 0x49, 0x86, 0x1f, 0x40, 0xe7, 0x33, 0xa3, 0x09, 0xcb, 0x65, 0x80,
-	0x42, 0x27, 0xf6, 0xb7, 0xf1, 0x66, 0x79, 0xde, 0x03, 0xc1, 0x27, 0xa3, 0xec, 0x30, 0x1b, 0x0a,
-	0x62, 0x29, 0x78, 0x0b, 0x3a, 0x03, 0xed, 0x96, 0xc1, 0x82, 0x66, 0xaf, 0x37, 0xd9, 0x36, 0x2d,
-	0xb1, 0x34, 0xbc, 0xd3, 0x38, 0x6c, 0xe0, 0x84, 0x28, 0xf6, 0xb7, 0xd7, 0x6c, 0x54, 0x0d, 0x22,
-	0x75, 0x5e, 0xf4, 0x14, 0x1c, 0x22, 0x2e, 0xeb, 0xf5, 0xd0, 0x5f, 0xd5, 0x8b, 0xbe, 0x23, 0x58,
-	0xfe, 0x44, 0xfb, 0x9c, 0x5d, 0xb3, 0xc3, 0xdb, 0xe0, 0xe6, 0xe2, 0xd2, 0xb6, 0xe7, 0x5b, 0xaa,
-	0xba, 0x32, 0x0d, 0x5c, 0xb7, 0xa1, 0x5d, 0x80, 0x59, 0x39, 0xa5, 0x59, 0x46, 0x47, 0xac, 0x54,
-	0x5a, 0x7f, 0xe3, 0x0d, 0xe8, 0x26, 0xb4, 0xa0, 0xc5, 0x74, 0x6c, 0x45, 0xab, 0xec, 0xe8, 0x9b,
-	0x03, 0x2b, 0xcd, 0x8e, 0xf1, 0x2d, 0xf0, 0x64, 0x91, 0xa7, 0xd9, 0xd9, 0x29, 0xe5, 0x26, 0x4f,
-	0xaf, 0x45, 0x66, 0x2e, 0x85, 0x4f, 0xd2, 0xac, 0x78, 0xf2, 0x58, 0xe1, 0x2a, 0x9f, 0xab, 0xf0,
-	0xca, 0x85, 0x6f, 0x42, 0xb7, 0x82, 0x55, 0x13, 0x4e, 0xaf, 0x45, 0x2a, 0x0f, 0xde, 0x80, 0x4e,
-	0x5f, 0x08, 0xae, 0x40, 0x37, 0x44, 0x71, 0xb7, 0xd7, 0x22, 0xd6, 0xa1, 0x31, 0x2e, 0xfa, 0x0a,
-	0x5b, 0x0c, 0x51, 0xbc, 0xa4, 0x31, 0xe3, 0xc0, 0x2f, 0x61, 0xc5, 0x94, 0xd8, 0xcb, 0x73, 0x3a,
-	0x55, 0x94, 0x76, 0xf3, 0x82, 0x4e, 0x66, 0x68, 0xaf, 0x45, 0xae, 0x90, 0x55, 0xb8, 0xe9, 0xa0,
-	0x0a, 0xef, 0x5c, 0xbd, 0xdf, 0x0a, 0x55, 0xe1, 0x4d, 0x32, 0x0e, 0x01, 0x86, 0x5c, 0xd0, 0xb2,
-	0xab, 0x6e, 0x88, 0x62, 0xd4, 0x6b, 0x91, 0x9a, 0x0f, 0x3f, 0x04, 0x48, 0xd8, 0x20, 0x1d, 0x51,
-	0xdd, 0x9a, 0xa7, 0x93, 0xaf, 0xda, 0xe4, 0xaf, 0x0c, 0xa2, 0x42, 0x66, 0xa4, 0x7d, 0x1f, 0x3c,
-	0xf3, 0xb8, 0x4e, 0x29, 0x8f, 0x76, 0xa0, 0x53, 0xb2, 0xd4, 0xb8, 0x5e, 0x50, 0x3e, 0x31, 0x22,
-	0x3a, 0xc4, 0x18, 0xca, 0x2b, 0x07, 0x94, 0x1b, 0x09, 0x1d, 0x62, 0x8c, 0xe8, 0x27, 0x82, 0x95,
-	0xc3, 0x4c, 0x8e, 0xd9, 0xa0, 0xf8, 0xf3, 0xb4, 0xdf, 0xaf, 0x0f, 0x98, 0x3a, 0xdc, 0xbf, 0xf6,
-	0x70, 0x87, 0x89, 0xfc, 0x90, 0xbf, 0x65, 0x53, 0x39, 0x9b, 0xad, 0x08, 0x96, 0x86, 0x29, 0x2f,
-	0x58, 0xfe, 0x26, 0x65, 0x3c, 0x91, 0x81, 0x13, 0x3a, 0xb1, 0x47, 0x1a, 0x3e, 0x55, 0x86, 0xa7,
-	0xa3, 0xb4, 0xd0, 0x32, 0xba, 0xc4, 0x18, 0x78, 0x1d, 0xda, 0x62, 0x38, 0x94, 0xac, 0xd0, 0x0a,
-	0xba, 0xa4, 0xb4, 0x14, 0xfb, 0x5c, 0x6d, 0x25, 0xad, 0x9a, 0x47, 0x8c, 0x11, 0xdd, 0x01, 0xbf,
-	0x26, 0x9b, 0x7a, 0xbc, 0x17, 0x94, 0x9b, 0x69, 0x72, 0x89, 0xfe, 0x56, 0x94, 0x9a, 0x34, 0x0d,
-	0x8a, 0x57, 0x52, 0xce, 0xc0, 0xab, 0x7a, 0xc0, 0x77, 0xc1, 0x49, 0x13, 0xa9, 0x7b, 0x9f, 0xfb,
-	0x38, 0x14, 0x03, 0xdf, 0x03, 0xf7, 0x0b, 0x9b, 0xda, 0xdb, 0x98, 0xf3, 0x0e, 0x34, 0x65, 0xbf,
-	0x0d, 0xae, 0x1a, 0x96, 0xed, 0x5f, 0x08, 0xda, 0x47, 0x9a, 0x86, 0x77, 0xa1, 0x6b, 0xb7, 0x2c,
-	0xbe, 0x61, 0x63, 0xaf, 0xec, 0xdd, 0x8d, 0xb5, 0xfa, 0x90, 0x97, 0xe3, 0x15, 0xb5, 0xb6, 0x10,
-	0xde, 0x83, 0x65, 0xcb, 0x3d, 0xc9, 0x68, 0x3e, 0x9d, 0x9f, 0xe2, 0x7f, 0x0b, 0x34, 0x56, 0x4f,
-	0xd4, 0xc2, 0xcf, 0xa1, 0x53, 0xea, 0x8e, 0xab, 0xd5, 0xd5, 0x7c, 0x08, 0x73, 0xcb, 0xf7, 0xdb,
-	0xfa, 0x8f, 0xf1, 0xe8, 0x77, 0x00, 0x00, 0x00, 0xff, 0xff, 0xc5, 0x01, 0x62, 0x15, 0x41, 0x06,
-	0x00, 0x00,
+	// 871 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x56, 0xdd, 0x72, 0xdb, 0x44,
+	0x14, 0xb6, 0x2a, 0xd5, 0xb2, 0x8e, 0xf3, 0xd7, 0x0d, 0x04, 0xd7, 0x03, 0xd4, 0x6c, 0x07, 0x30,
+	0x03, 0x53, 0x4a, 0xa0, 0x30, 0x85, 0x70, 0xd1, 0xd4, 0x80, 0x33, 0xc0, 0xe0, 0xae, 0xa9, 0xef,
+	0x37, 0xd1, 0x3a, 0x68, 0xd8, 0x68, 0x1d, 0xad, 0x9c, 0xe0, 0x17, 0xe0, 0x0d, 0x78, 0x03, 0xde,
+	0x82, 0x2b, 0xde, 0x8c, 0xd9, 0x5f, 0x49, 0xae, 0x03, 0xa5, 0x77, 0x3a, 0xdf, 0xf9, 0xce, 0xdf,
+	0x9e, 0xb3, 0x7b, 0x04, 0x5b, 0x8b, 0x8c, 0x0b, 0x49, 0x1f, 0x2c, 0x0a, 0x51, 0x0a, 0xd4, 0x36,
+	0x12, 0xbe, 0x0b, 0xe1, 0x6c, 0x34, 0x45, 0x08, 0xa2, 0x9c, 0x5e, 0xb0, 0x5e, 0x30, 0x08, 0x86,
+	0x09, 0xd1, 0xdf, 0x78, 0x0f, 0x76, 0xbe, 0x63, 0xe5, 0x6c, 0x34, 0x95, 0x84, 0x5d, 0x2e, 0x99,
+	0x2c, 0xf1, 0x21, 0xec, 0x7a, 0x44, 0x2e, 0x44, 0x2e, 0x19, 0xba, 0x07, 0xd1, 0x55, 0x2a, 0x65,
+	0x2f, 0x18, 0x84, 0xc3, 0xee, 0x61, 0xf7, 0x81, 0x0d, 0x32, 0x1b, 0x4d, 0x89, 0x56, 0xe0, 0xfb,
+	0xb0, 0x6d, 0x6c, 0xac, 0x93, 0x8d, 0xa1, 0x3e, 0x76, 0xa1, 0xbc, 0xdf, 0xb7, 0x20, 0xbc, 0x4a,
+	0xa5, 0x26, 0xad, 0xb9, 0x55, 0xb8, 0xca, 0x6d, 0x22, 0x64, 0xcd, 0x2d, 0x7e, 0x17, 0x76, 0x3d,
+	0x62, 0x7d, 0x6c, 0x8a, 0xf4, 0x1e, 0xec, 0x8d, 0x18, 0x67, 0x25, 0xfb, 0x8f, 0x8c, 0xf6, 0xe1,
+	0x4e, 0x8d, 0x67, 0x1c, 0xe2, 0xc7, 0xb0, 0xfb, 0x6c, 0xc9, 0x8a, 0xd5, 0xe4, 0xd9, 0x0f, 0xce,
+	0xf6, 0x35, 0xb8, 0x9d, 0xe5, 0x29, 0xfb, 0xcd, 0x1a, 0x1b, 0x01, 0xed, 0x41, 0xb8, 0xb8, 0xe4,
+	0xbd, 0x5b, 0x1a, 0x53, 0x9f, 0xf8, 0xbe, 0x35, 0x9d, 0x56, 0xa6, 0x7b, 0x10, 0xca, 0x4b, 0x6e,
+	0x0d, 0xd5, 0x27, 0xfe, 0x0a, 0xba, 0xd3, 0x92, 0x96, 0x4b, 0xf9, 0x4d, 0x51, 0x88, 0x42, 0xe5,
+	0xf5, 0x54, 0xa4, 0x26, 0xaf, 0x6d, 0xa2, 0xbf, 0x51, 0x0f, 0xe2, 0x1f, 0x99, 0x94, 0xf4, 0x9c,
+	0x59, 0xef, 0x4e, 0xc4, 0x7f, 0x06, 0xd0, 0x25, 0xe2, 0xda, 0x57, 0xff, 0x11, 0xc4, 0xbf, 0x30,
+	0x9a, 0xb2, 0xc2, 0x35, 0x07, 0xb9, 0x53, 0x7c, 0x2a, 0xf8, 0xf2, 0x22, 0x3f, 0xc9, 0xe7, 0x82,
+	0x38, 0x0a, 0x7a, 0x08, 0xf1, 0x99, 0x86, 0x65, 0xef, 0x96, 0x66, 0x1f, 0x34, 0xd9, 0xce, 0x2d,
+	0x71, 0x34, 0xf4, 0xa8, 0x91, 0x6c, 0x2f, 0xd4, 0x9d, 0xda, 0x77, 0x56, 0x35, 0x15, 0xa9, 0xf3,
+	0xf0, 0x17, 0x10, 0x12, 0x71, 0x5d, 0x8f, 0x17, 0xbc, 0x54, 0x3c, 0xfc, 0x47, 0x00, 0xdb, 0x3f,
+	0xd3, 0x53, 0xce, 0x5e, 0xb1, 0xc2, 0x7b, 0x10, 0x15, 0xe2, 0xda, 0x95, 0xe7, 0x47, 0x4a, 0x1d,
+	0x99, 0x56, 0xbc, 0x6a, 0x41, 0x47, 0x00, 0x55, 0xb8, 0x4d, 0xb3, 0x84, 0xfa, 0xd0, 0x49, 0x69,
+	0x49, 0xcb, 0xd5, 0xc2, 0x35, 0xcd, 0xcb, 0xf8, 0xf7, 0x10, 0x76, 0x9a, 0x15, 0xa3, 0xb7, 0x21,
+	0x91, 0x65, 0x91, 0xe5, 0xe7, 0x33, 0x6a, 0xa7, 0x63, 0xdc, 0x22, 0x15, 0xa4, 0xf4, 0xcb, 0x2c,
+	0x2f, 0x3f, 0xff, 0x4c, 0xe9, 0x95, 0xbf, 0x48, 0xe9, 0x3d, 0x84, 0xde, 0x84, 0x8e, 0x57, 0xab,
+	0x22, 0xc2, 0x71, 0x8b, 0x78, 0x04, 0xf5, 0x21, 0x3e, 0x15, 0x82, 0x2b, 0x65, 0x34, 0x08, 0x86,
+	0x9d, 0x71, 0x8b, 0x38, 0x40, 0xeb, 0xb8, 0x38, 0x55, 0xba, 0xdb, 0x83, 0x60, 0xb8, 0xa5, 0x75,
+	0x06, 0x40, 0x5f, 0xc3, 0x8e, 0x09, 0xf1, 0xa4, 0x28, 0xe8, 0x4a, 0x51, 0xda, 0xcd, 0x03, 0x7a,
+	0x5e, 0x69, 0xc7, 0x2d, 0xb2, 0x46, 0x56, 0xe6, 0xa6, 0x02, 0x6f, 0x1e, 0xaf, 0x9f, 0xaf, 0xd7,
+	0x2a, 0xf3, 0x26, 0x19, 0x0d, 0x00, 0xe6, 0x5c, 0x50, 0x5b, 0x55, 0x67, 0x10, 0x0c, 0x83, 0x71,
+	0x8b, 0xd4, 0x30, 0xf4, 0x09, 0x40, 0xca, 0xce, 0xb2, 0x0b, 0xaa, 0x4b, 0x4b, 0xb4, 0xf3, 0x5d,
+	0xe7, 0x7c, 0x64, 0x34, 0xca, 0xa4, 0x22, 0x1d, 0x77, 0x21, 0x31, 0xc3, 0x35, 0xa3, 0x1c, 0x3f,
+	0x82, 0xd8, 0xb2, 0xd4, 0x9d, 0xbe, 0xa2, 0x7c, 0x69, 0x9a, 0x18, 0x12, 0x23, 0x28, 0x54, 0x9e,
+	0x51, 0x6e, 0x5a, 0x18, 0x12, 0x23, 0xe0, 0xbf, 0x02, 0xd8, 0x39, 0xc9, 0xe5, 0x82, 0x9d, 0x95,
+	0xff, 0xfe, 0x24, 0x7c, 0x58, 0xbf, 0x60, 0x2a, 0xb9, 0x3b, 0x2e, 0xb9, 0x93, 0x54, 0xfe, 0x54,
+	0x7c, 0xcf, 0x56, 0xb2, 0xba, 0x5b, 0x18, 0xb6, 0xe6, 0x19, 0x2f, 0x59, 0xf1, 0x6d, 0xc6, 0x78,
+	0x2a, 0x7b, 0xe1, 0x20, 0x1c, 0x26, 0xa4, 0x81, 0xa9, 0x30, 0x3c, 0xbb, 0xc8, 0x4a, 0xdd, 0xc6,
+	0x88, 0x18, 0x01, 0x1d, 0x40, 0x5b, 0xcc, 0xe7, 0x92, 0x95, 0xba, 0x83, 0x11, 0xb1, 0x92, 0x62,
+	0x5f, 0xaa, 0xf7, 0x47, 0x77, 0x2d, 0x21, 0x46, 0xc0, 0xef, 0x40, 0xb7, 0xd6, 0x36, 0x35, 0xbc,
+	0x57, 0x94, 0x9b, 0xdb, 0x14, 0x11, 0xfd, 0xad, 0x28, 0xb5, 0xd6, 0x34, 0x28, 0x89, 0xa5, 0x9c,
+	0x43, 0xe2, 0x6b, 0x40, 0xef, 0x43, 0x98, 0xf9, 0x87, 0xfb, 0x86, 0xe1, 0x50, 0x0c, 0xf4, 0x01,
+	0x44, 0xbf, 0xb2, 0x95, 0x3b, 0x8d, 0x1b, 0xe6, 0x40, 0x53, 0x8e, 0xdb, 0x10, 0xa9, 0xcb, 0x72,
+	0xf8, 0x77, 0x04, 0xed, 0x89, 0xa6, 0xa1, 0x23, 0x88, 0xed, 0x2a, 0x42, 0xfe, 0xe5, 0x68, 0x6e,
+	0xab, 0xfe, 0x1b, 0x2f, 0xe0, 0xf6, 0x19, 0x6f, 0xa1, 0xc7, 0xd0, 0x36, 0x20, 0x7a, 0xbd, 0x49,
+	0x72, 0xb6, 0x07, 0xeb, 0xb0, 0x37, 0x3d, 0x82, 0xd8, 0xee, 0x99, 0x2a, 0x70, 0x73, 0x15, 0x55,
+	0x81, 0xd7, 0x16, 0x12, 0x6e, 0xa1, 0x63, 0x48, 0xfc, 0x5a, 0x41, 0xbd, 0x6a, 0x3c, 0x9b, 0x1b,
+	0xa9, 0x7f, 0x77, 0x83, 0xa6, 0x96, 0x41, 0xc7, 0xad, 0x12, 0xe4, 0x43, 0xad, 0x2d, 0x97, 0xfe,
+	0x7e, 0xfd, 0x7d, 0xf3, 0xb6, 0x0f, 0x03, 0xf4, 0x04, 0xb6, 0x1d, 0xf7, 0x79, 0x4e, 0x8b, 0xd5,
+	0xcd, 0x2e, 0xfc, 0xd1, 0x34, 0x5e, 0xdd, 0x5a, 0x02, 0x93, 0x17, 0x12, 0x98, 0xfc, 0x8f, 0x04,
+	0x26, 0x9b, 0x13, 0x98, 0xbc, 0x44, 0x02, 0x5f, 0x42, 0x6c, 0xef, 0x5c, 0xd5, 0x83, 0xe6, 0x25,
+	0xbc, 0x31, 0xfc, 0x69, 0x5b, 0xff, 0xff, 0x7c, 0xfa, 0x4f, 0x00, 0x00, 0x00, 0xff, 0xff, 0xe6,
+	0xc6, 0xe0, 0xf0, 0x0f, 0x09, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -858,6 +1247,12 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type PilosaClient interface {
+	GetVDSs(ctx context.Context, in *GetVDSsRequest, opts ...grpc.CallOption) (*GetVDSsResponse, error)
+	GetVDS(ctx context.Context, in *GetVDSRequest, opts ...grpc.CallOption) (*GetVDSResponse, error)
+	PostVDS(ctx context.Context, in *PostVDSRequest, opts ...grpc.CallOption) (*PostVDSResponse, error)
+	DeleteVDS(ctx context.Context, in *DeleteVDSRequest, opts ...grpc.CallOption) (*DeleteVDSResponse, error)
+	QuerySQL(ctx context.Context, in *QuerySQLRequest, opts ...grpc.CallOption) (Pilosa_QuerySQLClient, error)
+	QuerySQLUnary(ctx context.Context, in *QuerySQLRequest, opts ...grpc.CallOption) (*TableResponse, error)
 	QueryPQL(ctx context.Context, in *QueryPQLRequest, opts ...grpc.CallOption) (Pilosa_QueryPQLClient, error)
 	QueryPQLUnary(ctx context.Context, in *QueryPQLRequest, opts ...grpc.CallOption) (*TableResponse, error)
 	Inspect(ctx context.Context, in *InspectRequest, opts ...grpc.CallOption) (Pilosa_InspectClient, error)
@@ -871,8 +1266,85 @@ func NewPilosaClient(cc *grpc.ClientConn) PilosaClient {
 	return &pilosaClient{cc}
 }
 
+func (c *pilosaClient) GetVDSs(ctx context.Context, in *GetVDSsRequest, opts ...grpc.CallOption) (*GetVDSsResponse, error) {
+	out := new(GetVDSsResponse)
+	err := c.cc.Invoke(ctx, "/pilosa.Pilosa/GetVDSs", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pilosaClient) GetVDS(ctx context.Context, in *GetVDSRequest, opts ...grpc.CallOption) (*GetVDSResponse, error) {
+	out := new(GetVDSResponse)
+	err := c.cc.Invoke(ctx, "/pilosa.Pilosa/GetVDS", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pilosaClient) PostVDS(ctx context.Context, in *PostVDSRequest, opts ...grpc.CallOption) (*PostVDSResponse, error) {
+	out := new(PostVDSResponse)
+	err := c.cc.Invoke(ctx, "/pilosa.Pilosa/PostVDS", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pilosaClient) DeleteVDS(ctx context.Context, in *DeleteVDSRequest, opts ...grpc.CallOption) (*DeleteVDSResponse, error) {
+	out := new(DeleteVDSResponse)
+	err := c.cc.Invoke(ctx, "/pilosa.Pilosa/DeleteVDS", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pilosaClient) QuerySQL(ctx context.Context, in *QuerySQLRequest, opts ...grpc.CallOption) (Pilosa_QuerySQLClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Pilosa_serviceDesc.Streams[0], "/pilosa.Pilosa/QuerySQL", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &pilosaQuerySQLClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Pilosa_QuerySQLClient interface {
+	Recv() (*RowResponse, error)
+	grpc.ClientStream
+}
+
+type pilosaQuerySQLClient struct {
+	grpc.ClientStream
+}
+
+func (x *pilosaQuerySQLClient) Recv() (*RowResponse, error) {
+	m := new(RowResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *pilosaClient) QuerySQLUnary(ctx context.Context, in *QuerySQLRequest, opts ...grpc.CallOption) (*TableResponse, error) {
+	out := new(TableResponse)
+	err := c.cc.Invoke(ctx, "/pilosa.Pilosa/QuerySQLUnary", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *pilosaClient) QueryPQL(ctx context.Context, in *QueryPQLRequest, opts ...grpc.CallOption) (Pilosa_QueryPQLClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Pilosa_serviceDesc.Streams[0], "/pilosa.Pilosa/QueryPQL", opts...)
+	stream, err := c.cc.NewStream(ctx, &_Pilosa_serviceDesc.Streams[1], "/pilosa.Pilosa/QueryPQL", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -913,7 +1385,7 @@ func (c *pilosaClient) QueryPQLUnary(ctx context.Context, in *QueryPQLRequest, o
 }
 
 func (c *pilosaClient) Inspect(ctx context.Context, in *InspectRequest, opts ...grpc.CallOption) (Pilosa_InspectClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Pilosa_serviceDesc.Streams[1], "/pilosa.Pilosa/Inspect", opts...)
+	stream, err := c.cc.NewStream(ctx, &_Pilosa_serviceDesc.Streams[2], "/pilosa.Pilosa/Inspect", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -946,13 +1418,162 @@ func (x *pilosaInspectClient) Recv() (*RowResponse, error) {
 
 // PilosaServer is the server API for Pilosa service.
 type PilosaServer interface {
+	GetVDSs(context.Context, *GetVDSsRequest) (*GetVDSsResponse, error)
+	GetVDS(context.Context, *GetVDSRequest) (*GetVDSResponse, error)
+	PostVDS(context.Context, *PostVDSRequest) (*PostVDSResponse, error)
+	DeleteVDS(context.Context, *DeleteVDSRequest) (*DeleteVDSResponse, error)
+	QuerySQL(*QuerySQLRequest, Pilosa_QuerySQLServer) error
+	QuerySQLUnary(context.Context, *QuerySQLRequest) (*TableResponse, error)
 	QueryPQL(*QueryPQLRequest, Pilosa_QueryPQLServer) error
 	QueryPQLUnary(context.Context, *QueryPQLRequest) (*TableResponse, error)
 	Inspect(*InspectRequest, Pilosa_InspectServer) error
 }
 
+// UnimplementedPilosaServer can be embedded to have forward compatible implementations.
+type UnimplementedPilosaServer struct {
+}
+
+func (*UnimplementedPilosaServer) GetVDSs(ctx context.Context, req *GetVDSsRequest) (*GetVDSsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetVDSs not implemented")
+}
+func (*UnimplementedPilosaServer) GetVDS(ctx context.Context, req *GetVDSRequest) (*GetVDSResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetVDS not implemented")
+}
+func (*UnimplementedPilosaServer) PostVDS(ctx context.Context, req *PostVDSRequest) (*PostVDSResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PostVDS not implemented")
+}
+func (*UnimplementedPilosaServer) DeleteVDS(ctx context.Context, req *DeleteVDSRequest) (*DeleteVDSResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteVDS not implemented")
+}
+func (*UnimplementedPilosaServer) QuerySQL(req *QuerySQLRequest, srv Pilosa_QuerySQLServer) error {
+	return status.Errorf(codes.Unimplemented, "method QuerySQL not implemented")
+}
+func (*UnimplementedPilosaServer) QuerySQLUnary(ctx context.Context, req *QuerySQLRequest) (*TableResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QuerySQLUnary not implemented")
+}
+func (*UnimplementedPilosaServer) QueryPQL(req *QueryPQLRequest, srv Pilosa_QueryPQLServer) error {
+	return status.Errorf(codes.Unimplemented, "method QueryPQL not implemented")
+}
+func (*UnimplementedPilosaServer) QueryPQLUnary(ctx context.Context, req *QueryPQLRequest) (*TableResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueryPQLUnary not implemented")
+}
+func (*UnimplementedPilosaServer) Inspect(req *InspectRequest, srv Pilosa_InspectServer) error {
+	return status.Errorf(codes.Unimplemented, "method Inspect not implemented")
+}
+
 func RegisterPilosaServer(s *grpc.Server, srv PilosaServer) {
 	s.RegisterService(&_Pilosa_serviceDesc, srv)
+}
+
+func _Pilosa_GetVDSs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetVDSsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PilosaServer).GetVDSs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pilosa.Pilosa/GetVDSs",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PilosaServer).GetVDSs(ctx, req.(*GetVDSsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Pilosa_GetVDS_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetVDSRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PilosaServer).GetVDS(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pilosa.Pilosa/GetVDS",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PilosaServer).GetVDS(ctx, req.(*GetVDSRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Pilosa_PostVDS_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PostVDSRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PilosaServer).PostVDS(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pilosa.Pilosa/PostVDS",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PilosaServer).PostVDS(ctx, req.(*PostVDSRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Pilosa_DeleteVDS_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteVDSRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PilosaServer).DeleteVDS(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pilosa.Pilosa/DeleteVDS",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PilosaServer).DeleteVDS(ctx, req.(*DeleteVDSRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Pilosa_QuerySQL_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(QuerySQLRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PilosaServer).QuerySQL(m, &pilosaQuerySQLServer{stream})
+}
+
+type Pilosa_QuerySQLServer interface {
+	Send(*RowResponse) error
+	grpc.ServerStream
+}
+
+type pilosaQuerySQLServer struct {
+	grpc.ServerStream
+}
+
+func (x *pilosaQuerySQLServer) Send(m *RowResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _Pilosa_QuerySQLUnary_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QuerySQLRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PilosaServer).QuerySQLUnary(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/pilosa.Pilosa/QuerySQLUnary",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PilosaServer).QuerySQLUnary(ctx, req.(*QuerySQLRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _Pilosa_QueryPQL_Handler(srv interface{}, stream grpc.ServerStream) error {
@@ -1020,11 +1641,36 @@ var _Pilosa_serviceDesc = grpc.ServiceDesc{
 	HandlerType: (*PilosaServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
+			MethodName: "GetVDSs",
+			Handler:    _Pilosa_GetVDSs_Handler,
+		},
+		{
+			MethodName: "GetVDS",
+			Handler:    _Pilosa_GetVDS_Handler,
+		},
+		{
+			MethodName: "PostVDS",
+			Handler:    _Pilosa_PostVDS_Handler,
+		},
+		{
+			MethodName: "DeleteVDS",
+			Handler:    _Pilosa_DeleteVDS_Handler,
+		},
+		{
+			MethodName: "QuerySQLUnary",
+			Handler:    _Pilosa_QuerySQLUnary_Handler,
+		},
+		{
 			MethodName: "QueryPQLUnary",
 			Handler:    _Pilosa_QueryPQLUnary_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "QuerySQL",
+			Handler:       _Pilosa_QuerySQL_Handler,
+			ServerStreams: true,
+		},
 		{
 			StreamName:    "QueryPQL",
 			Handler:       _Pilosa_QueryPQL_Handler,

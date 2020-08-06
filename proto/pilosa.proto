@@ -1,9 +1,46 @@
 syntax = "proto3";
 package pilosa;
 
+message VDS {
+  string name = 1;
+}
+
+message GetVDSsRequest {
+}
+
+message GetVDSsResponse {
+  repeated VDS vdss = 1;
+}
+
+message GetVDSRequest {
+  string name = 1;
+}
+
+message GetVDSResponse {
+  VDS vds = 1;
+}
+
+message PostVDSRequest {
+}
+
+message PostVDSResponse {
+  string name = 1;
+}
+
+message DeleteVDSRequest {
+  string name = 1;
+}
+
+message DeleteVDSResponse {
+}
+
 message QueryPQLRequest {
   string index = 1;
   string pql = 2;
+}
+
+message QuerySQLRequest {
+  string sql = 1;
 }
 
 message StatusError{
@@ -47,8 +84,8 @@ message ColumnResponse{
 }
 
 message Decimal {
-	int64 value = 1;
-	int64 scale = 2;
+  int64 value = 1;
+  int64 scale = 2;
 }
 
 message InspectRequest {
@@ -76,6 +113,12 @@ message IdsOrKeys {
 }
 
 service Pilosa {
+  rpc GetVDSs(GetVDSsRequest) returns (GetVDSsResponse) {};
+  rpc GetVDS(GetVDSRequest) returns (GetVDSResponse) {};
+  rpc PostVDS(PostVDSRequest) returns (PostVDSResponse) {};
+  rpc DeleteVDS(DeleteVDSRequest) returns (DeleteVDSResponse) {};
+  rpc QuerySQL(QuerySQLRequest) returns (stream RowResponse) {};
+  rpc QuerySQLUnary(QuerySQLRequest) returns (TableResponse) {};
   rpc QueryPQL(QueryPQLRequest) returns (stream RowResponse) {};
   rpc QueryPQLUnary(QueryPQLRequest) returns (TableResponse) {};
   rpc Inspect(InspectRequest) returns (stream RowResponse) {};

@@ -75,6 +75,30 @@ func errToStatusError(err error) error {
 	return status.Error(codes.Unknown, err.Error())
 }
 
+func (*GRPCHandler) GetVDS(ctx context.Context, req *pb.GetVDSRequest) (*pb.GetVDSResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetVDS not implemented")
+}
+
+func (*GRPCHandler) GetVDSs(ctx context.Context, req *pb.GetVDSsRequest) (*pb.GetVDSsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetVDSs not implemented")
+}
+
+func (*GRPCHandler) PostVDS(ctx context.Context, req *pb.PostVDSRequest) (*pb.PostVDSResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PostVDS not implemented")
+}
+
+func (*GRPCHandler) DeleteVDS(ctx context.Context, req *pb.DeleteVDSRequest) (*pb.DeleteVDSResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteVDS not implemented")
+}
+
+func (*GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQLServer) error {
+	return status.Errorf(codes.Unimplemented, "method QuerySQL not implemented")
+}
+
+func (*GRPCHandler) QuerySQLUnary(ctx context.Context, req *pb.QuerySQLRequest) (*pb.TableResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QuerySQLUnary not implemented")
+}
+
 // QueryPQL handles the PQL request and sends RowResponses to the stream.
 func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQLServer) error {
 	query := pilosa.QueryRequest{
