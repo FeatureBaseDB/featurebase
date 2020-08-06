@@ -393,6 +393,7 @@ var callInfoByFunc = map[string]callInfo{
 	},
 	"Union":     {allowUnknown: false},
 	"UnionRows": {allowUnknown: false},
+	"Extract":   {allowUnknown: false},
 	"Xor":       {allowUnknown: false},
 
 	// things that take _field

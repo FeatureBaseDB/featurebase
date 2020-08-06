@@ -19,6 +19,53 @@ message RowIdentifiers {
 	repeated string Keys = 2;
 }
 
+message IDList {
+	repeated uint64 IDs = 1;
+}
+
+message ExtractedIDColumn {
+	uint64 ID = 1;
+	repeated IDList Vals = 2;
+}
+
+message ExtractedIDMatrix {
+	repeated string Fields = 1;
+	repeated ExtractedIDColumn Columns = 2;
+}
+
+message KeyList {
+	repeated string Keys = 1;
+}
+
+message ExtractedTableValue {
+	oneof Value {
+		IDList IDs = 1;
+		KeyList Keys = 2;
+		int64 BSIValue = 3;
+		uint64 MutexID = 4;
+		string MutexKey = 5;
+		bool Bool = 6;
+	}
+}
+
+message ExtractedTableColumn {
+	oneof KeyOrID {
+		string Key = 1;
+		uint64 ID = 2;
+	}
+	repeated ExtractedTableValue Values = 3;
+}
+
+message ExtractedTableField {
+	string Name = 1;
+	string Type = 2;
+}
+
+message ExtractedTable {
+	repeated ExtractedTableField Fields = 1;
+	repeated ExtractedTableColumn Columns = 2;
+}
+
 message Pair {
 	uint64 ID = 1;
 	string Key = 3;
@@ -112,6 +159,8 @@ message QueryResult {
 	SignedRow SignedRow = 10;
 	PairsField PairsField = 11;
 	PairField PairField = 12;
+	ExtractedIDMatrix ExtractedIDMatrix = 13;
+	ExtractedTable ExtractedTable = 14;
 }
 
 message ImportRequest {

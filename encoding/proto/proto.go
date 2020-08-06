@@ -512,12 +512,18 @@ func (s Serializer) encodeQueryResponse(m *pilosa.QueryResponse) *internal.Query
 		case pilosa.RowIDs:
 			pb.Results[i].Type = queryResultTypeRowIDs
 			pb.Results[i].RowIDs = result
+		case pilosa.ExtractedIDMatrix:
+			pb.Results[i].Type = queryResultTypeExtractedIDMatrix
+			pb.Results[i].ExtractedIDMatrix = s.endcodeExtractedIDMatrix(result)
 		case []pilosa.GroupCount:
 			pb.Results[i].Type = queryResultTypeGroupCounts
 			pb.Results[i].GroupCounts = s.encodeGroupCounts(result)
 		case pilosa.RowIdentifiers:
 			pb.Results[i].Type = queryResultTypeRowIdentifiers
 			pb.Results[i].RowIdentifiers = s.encodeRowIdentifiers(result)
+		case pilosa.ExtractedTable:
+			pb.Results[i].Type = queryResultTypeExtractedTable
+			pb.Results[i].ExtractedTable = s.encodeExtractedTable(result)
 		case pilosa.Pair:
 			pb.Results[i].Type = queryResultTypePair
 			pb.Results[i].Pairs = []*internal.Pair{s.encodePair(result)}
@@ -1313,6 +1319,8 @@ const (
 	queryResultTypePair
 	queryResultTypePairField
 	queryResultTypeSignedRow
+	queryResultTypeExtractedIDMatrix
+	queryResultTypeExtractedTable
 )
 
 func (s Serializer) decodeQueryResult(pb *internal.QueryResult) interface{} {
@@ -1343,6 +1351,10 @@ func (s Serializer) decodeQueryResult(pb *internal.QueryResult) interface{} {
 		return s.decodePair(pb.Pairs[0])
 	case queryResultTypePairField:
 		return s.decodePairField(pb.PairField)
+	case queryResultTypeExtractedIDMatrix:
+		return s.decodeExtractedIDMatrix(pb.ExtractedIDMatrix)
+	case queryResultTypeExtractedTable:
+		return s.decodeExtractedTable(pb.ExtractedTable)
 	}
 	panic(fmt.Sprintf("unknown type: %d", pb.Type))
 }
@@ -1407,6 +1419,83 @@ func (s Serializer) decodeAttr(attr *internal.Attr) (key string, value interface
 		return attr.Key, attr.FloatValue
 	default:
 		return attr.Key, nil
+	}
+}
+
+func (s Serializer) decodeExtractedIDMatrix(m *internal.ExtractedIDMatrix) pilosa.ExtractedIDMatrix {
+	cols := make([]pilosa.ExtractedIDColumn, len(m.Columns))
+	for i, c := range m.Columns {
+		rows := make([][]uint64, len(c.Vals))
+		for j, r := range c.Vals {
+			rows[j] = r.IDs
+		}
+
+		cols[i] = pilosa.ExtractedIDColumn{
+			ColumnID: c.ID,
+			Rows:     rows,
+		}
+	}
+
+	return pilosa.ExtractedIDMatrix{
+		Fields:  m.Fields,
+		Columns: cols,
+	}
+}
+
+func (s Serializer) decodeExtractedTable(t *internal.ExtractedTable) pilosa.ExtractedTable {
+	fields := make([]pilosa.ExtractedTableField, len(t.Fields))
+	for i, f := range t.Fields {
+		fields[i] = pilosa.ExtractedTableField{
+			Name: f.Name,
+			Type: f.Type,
+		}
+	}
+
+	columns := make([]pilosa.ExtractedTableColumn, len(t.Columns))
+	for i, c := range t.Columns {
+		var col pilosa.KeyOrID
+		switch kid := c.KeyOrID.(type) {
+		case *internal.ExtractedTableColumn_ID:
+			col = pilosa.KeyOrID{
+				ID: kid.ID,
+			}
+		case *internal.ExtractedTableColumn_Key:
+			col = pilosa.KeyOrID{
+				Keyed: true,
+				Key:   kid.Key,
+			}
+		}
+
+		rows := make([]interface{}, len(c.Values))
+		for j, v := range rows {
+			var val interface{}
+			switch v := v.(type) {
+			case *internal.ExtractedTableValue_IDs:
+				val = v.IDs.IDs
+			case *internal.ExtractedTableValue_Keys:
+				val = v.Keys.Keys
+			case *internal.ExtractedTableValue_BSIValue:
+				val = v.BSIValue
+			case *internal.ExtractedTableValue_MutexID:
+				val = v.MutexID
+			case *internal.ExtractedTableValue_MutexKey:
+				val = v.MutexKey
+			case *internal.ExtractedTableValue_Bool:
+				val = v.Bool
+			}
+
+			rows[j] = val
+		}
+
+		columns[i] = pilosa.ExtractedTableColumn{
+			Column: col,
+			Rows:   rows,
+		}
+	}
+
+	return pilosa.ExtractedTable{
+		Fields:  fields,
+		Columns: columns,
 	}
 }
 
@@ -1578,6 +1667,98 @@ func (s Serializer) encodeFieldRows(a []pilosa.FieldRow) []*internal.FieldRow {
 		}
 	}
 	return other
+}
+
+func (s Serializer) endcodeExtractedIDMatrix(m pilosa.ExtractedIDMatrix) *internal.ExtractedIDMatrix {
+	cols := make([]*internal.ExtractedIDColumn, len(m.Columns))
+	for i, v := range m.Columns {
+		vals := make([]*internal.IDList, len(v.Rows))
+		for j, f := range v.Rows {
+			vals[j] = &internal.IDList{IDs: f}
+		}
+		cols[i] = &internal.ExtractedIDColumn{
+			ID:   v.ColumnID,
+			Vals: vals,
+		}
+	}
+	return &internal.ExtractedIDMatrix{
+		Fields:  m.Fields,
+		Columns: cols,
+	}
+}
+
+func (s Serializer) encodeExtractedTable(t pilosa.ExtractedTable) *internal.ExtractedTable {
+	fields := make([]*internal.ExtractedTableField, len(t.Fields))
+	for i, f := range t.Fields {
+		fields[i] = &internal.ExtractedTableField{
+			Name: f.Name,
+			Type: f.Type,
+		}
+	}
+
+	cols := make([]*internal.ExtractedTableColumn, len(t.Columns))
+	for i, c := range t.Columns {
+		var col internal.ExtractedTableColumn
+		if c.Column.Keyed {
+			col.KeyOrID = &internal.ExtractedTableColumn_Key{Key: c.Column.Key}
+		} else {
+			col.KeyOrID = &internal.ExtractedTableColumn_ID{ID: c.Column.ID}
+		}
+
+		rows := make([]*internal.ExtractedTableValue, len(c.Rows))
+		for j, v := range c.Rows {
+			switch v := v.(type) {
+			case []uint64:
+				rows[j] = &internal.ExtractedTableValue{
+					Value: &internal.ExtractedTableValue_IDs{
+						IDs: &internal.IDList{
+							IDs: v,
+						},
+					},
+				}
+			case []string:
+				rows[j] = &internal.ExtractedTableValue{
+					Value: &internal.ExtractedTableValue_Keys{
+						Keys: &internal.KeyList{
+							Keys: v,
+						},
+					},
+				}
+			case int64:
+				rows[j] = &internal.ExtractedTableValue{
+					Value: &internal.ExtractedTableValue_BSIValue{
+						BSIValue: v,
+					},
+				}
+			case uint64:
+				rows[j] = &internal.ExtractedTableValue{
+					Value: &internal.ExtractedTableValue_MutexID{
+						MutexID: v,
+					},
+				}
+			case string:
+				rows[j] = &internal.ExtractedTableValue{
+					Value: &internal.ExtractedTableValue_MutexKey{
+						MutexKey: v,
+					},
+				}
+			case bool:
+				rows[j] = &internal.ExtractedTableValue{
+					Value: &internal.ExtractedTableValue_Bool{
+						Bool: v,
+					},
+				}
+			}
+		}
+		col.Values = rows
+
+		cols[i] = &col
+	}
+
+	return &internal.ExtractedTable{
+		Fields:  fields,
+		Columns: cols,
+	}
 }
 
 func (s Serializer) encodePairs(a pilosa.Pairs) []*internal.Pair {
