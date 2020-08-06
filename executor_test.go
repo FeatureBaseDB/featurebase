@@ -3633,8 +3633,6 @@ func TestExecutor_Execute_FieldValue(t *testing.T) {
 
 // Ensure an all query can be executed.
 func TestExecutor_Execute_All(t *testing.T) {
-	skipForRBF(t)
-
 	t.Run("ColumnID", func(t *testing.T) {
 		c := test.MustRunCluster(t, 1)
 		defer c.Close()
@@ -4395,8 +4393,6 @@ func TestExecutor_Execute_Query_Error(t *testing.T) {
 }
 
 func TestExecutor_GroupByStrings(t *testing.T) {
-	skipForRBF(t)
-
 	c := test.MustRunCluster(t, 1)
 	defer c.Close()
 	c.CreateField(t, "istring", pilosa.IndexOptions{Keys: true}, "generals", pilosa.OptFieldKeys())
@@ -4853,8 +4849,6 @@ func sameStringSlice(x, y []string) bool {
 }
 
 func TestExecutor_Execute_GroupBy(t *testing.T) {
-	skipForRBF(t)
-
 	groupByTest := func(t *testing.T, clusterSize int) {
 		c := test.MustRunCluster(t, 1)
 		defer c.Close()

@@ -258,7 +258,7 @@ func (f *fragment) Open() error {
 		f.checksums = make(map[int][]byte)
 
 		// Read last bit to determine max row.
-		tx := f.idx.Txf.NewTx(Txo{Write: !writable, Index: f.idx, Fragment: f})
+		tx := f.idx.Txf.NewTx(Txo{Write: false, Index: f.idx, Fragment: f})
 		defer tx.Rollback()
 		return f.calculateMaxRowID(tx)
 	}(); err != nil {

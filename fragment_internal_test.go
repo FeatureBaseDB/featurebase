@@ -1604,10 +1604,8 @@ func TestFragment_TopN_CacheSize(t *testing.T) {
 	defer f.Clean(t)
 
 	// Obtain transaction.
-
-	tx := index.Txf.NewTx(Txo{Write: writable, Index: index, Fragment: f})
-	f.txTestingOnly = tx
-	defer tx.Rollback() // okay to call 2x. f.Clean(t) will do Rollback() too.
+	tx := index.Txf.NewTx(Txo{Write: writable, Index: index})
+	defer tx.Rollback()
 
 	// Set bits on various rows.
 	f.mustSetBits(tx, 100, 1, 2, 3)
@@ -1812,7 +1810,7 @@ func TestFragment_RankCache_Persistence(t *testing.T) {
 	}
 
 	// Obtain transaction.
-	tx := index.Txf.NewTx(Txo{Write: writable, Index: index, Fragment: f})
+	tx := index.Txf.NewTx(Txo{Write: writable, Index: index})
 	defer tx.Rollback()
 
 	// Set bits on the fragment.
@@ -5324,8 +5322,6 @@ func check(t *testing.T, tx Tx, f *fragment, exp map[uint64]map[uint64]struct{})
 }
 
 func TestImportValueConcurrent(t *testing.T) {
-	skipForRBF(t)
-
 	f, idx := mustOpenBSIFragment("i", "f", viewBSIGroupPrefix+"foo", 0)
 	switch idx.Txf.TxType() {
 	case blueGreenBadgerRoaring, blueGreenRoaringBadger:

@@ -424,12 +424,12 @@ func (db *DB) addWALSegment() error {
 func (db *DB) Close() (err error) {
 	// TODO(bbj): Add wait group to hang until last Tx is complete.
 
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
 	// Wait for writer lock.
 	db.rwmu.Lock()
 	defer db.rwmu.Unlock()
+
+	db.mu.Lock()
+	defer db.mu.Unlock()
 
 	db.opened = false
 
@@ -546,6 +546,11 @@ func (db *DB) initFreelistPage() error {
 func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 	// TODO(BBJ): Acquire write lock if writable.
 
+	// Ensure only one writable transaction at a time.
+	if writable {
+		db.rwmu.Lock()
+	}
+
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -554,11 +559,6 @@ func (db *DB) Begin(writable bool) (_ *Tx, err error) {
 	}
 
 	tx := &Tx{db: db, pageMap: db.pageMap, writable: writable}
-
-	// Ensure only one writable transaction at a time.
-	if tx.writable {
-		db.rwmu.Lock()
-	}
 
 	// Copy meta page into transaction's buffer.
 	// This page is only written at the end of a dirty transaction.

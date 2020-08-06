@@ -165,8 +165,6 @@ func TestAPI_ImportColumnAttrs(t *testing.T) {
 }
 
 func TestAPI_Import(t *testing.T) {
-	skipForRBF(t)
-
 	c := test.MustRunCluster(t, 2,
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
@@ -278,8 +276,6 @@ func TestAPI_Import(t *testing.T) {
 }
 
 func TestAPI_ImportValue(t *testing.T) {
-	skipForRBF(t)
-
 	c := test.MustRunCluster(t, 2,
 		[]server.CommandOption{
 			server.OptCommandServerOptions(
