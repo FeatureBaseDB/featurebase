@@ -792,6 +792,33 @@ Options(Row(f1=10), shards=[0, 2])
 {"attrs":{},"columns":[100, 2097152]}
 ```
 
+#### Row Constant
+
+**Spec:**
+
+```
+ConstRow(columns=<[]COLUMN>)
+```
+
+**Description:**
+
+`ConstRow` provides a constant bitmap value that can be used in place of a `Row` call.
+The columns can be specified as integer IDs or strings.
+
+**Result Type:** row value columns.
+
+e.g. `{"attrs":{},"columns":[10, 20]}`
+
+**Examples:**
+
+Filter specified columns to only those with a bit set in row 1 of the field `stargazer` (repositories that are starred by user 1):
+```request
+Intersect(ConstRow(columns=[10, 20, 30]), Row(stargazer=1))
+```
+```response
+{"attrs":{},"columns":[10, 20]}
+```
+
 #### Rows
 
 **Spec:**
