@@ -75,12 +75,23 @@ func errToStatusError(err error) error {
 	return status.Error(codes.Unknown, err.Error())
 }
 
-func (*GRPCHandler) GetVDS(ctx context.Context, req *pb.GetVDSRequest) (*pb.GetVDSResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetVDS not implemented")
+func (h *GRPCHandler) GetVDS(ctx context.Context, req *pb.GetVDSRequest) (*pb.GetVDSResponse, error) {
+	schema := h.api.Schema(ctx)
+	for _, index := range schema {
+		if req.Name == index.Name {
+			return &pb.GetVDSResponse{Vds: &pb.VDS{Name: index.Name}}, nil
+		}
+	}
+	return nil, status.Error(codes.NotFound, fmt.Sprintf("VDS with name %s not found", req.Name))
 }
 
-func (*GRPCHandler) GetVDSs(ctx context.Context, req *pb.GetVDSsRequest) (*pb.GetVDSsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetVDSs not implemented")
+func (h *GRPCHandler) GetVDSs(ctx context.Context, req *pb.GetVDSsRequest) (*pb.GetVDSsResponse, error) {
+	schema := h.api.Schema(ctx)
+	vdss := make([]*pb.VDS, len(schema))
+	for i, index := range schema {
+		vdss[i] = &pb.VDS{Name: index.Name}
+	}
+	return &pb.GetVDSsResponse{Vdss: vdss}, nil
 }
 
 func (*GRPCHandler) PostVDS(ctx context.Context, req *pb.PostVDSRequest) (*pb.PostVDSResponse, error) {
