@@ -748,6 +748,7 @@ fileLoop:
 				}()
 				name := filepath.Base(fi.Name())
 				f.holder.Logger.Debugf("open index/field/view: %s/%s/%s", f.index, f.name, fi.Name())
+
 				view := f.newView(f.viewPath(name), name)
 				if err := view.open(); err != nil {
 					return fmt.Errorf("opening view: view=%s, err=%s", view.name, err)

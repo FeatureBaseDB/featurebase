@@ -720,8 +720,7 @@ func (s *Server) receiveMessage(m Message) error {
 		if f == nil {
 			return fmt.Errorf("local field not found: %s", obj.Field)
 		}
-		_, _, err := f.createViewIfNotExistsBase(obj.View)
-		if err != nil {
+		if _, _, err := f.createViewIfNotExistsBase(obj.View); err != nil {
 			return err
 		}
 	case *DeleteViewMessage:

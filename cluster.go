@@ -1590,8 +1590,11 @@ func (c *cluster) followResizeInstruction(instr *ResizeInstruction) error {
 				}
 
 				// Create view.
-				v, err := f.createViewIfNotExists(src.View)
-				if err != nil {
+				var v *view
+				if err := func() (err error) {
+					v, err = f.createViewIfNotExists(src.View)
+					return err
+				}(); err != nil {
 					return errors.Wrap(err, "creating view")
 				}
 

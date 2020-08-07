@@ -166,8 +166,7 @@ var workQueue = make(chan struct{}, runtime.NumCPU()*2)
 
 // replaces v.openFragments() with Tx generic code.
 func (v *view) openFragmentsInTx() error {
-
-	tx := v.idx.Txf.NewTx(Txo{Write: !writable, Index: v.idx})
+	tx := v.idx.Txf.NewTx(Txo{Write: false, Index: v.idx})
 	defer tx.Rollback()
 
 	shards, err := tx.SliceOfShards(v.index, v.field, v.name, v.path)
