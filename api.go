@@ -1758,6 +1758,7 @@ func (api *API) Info() serverInfo {
 		CPUType:          si.CPUModel(),
 		Memory:           mem,
 		TxSrc:            api.holder.txf.TxType(),
+		ReplicaN:         api.cluster.ReplicaN,
 	}
 }
 
@@ -2004,6 +2005,7 @@ func (api *API) TranslateFieldDB(ctx context.Context, indexName, fieldName strin
 
 type serverInfo struct {
 	ShardWidth       uint64 `json:"shardWidth"`
+	ReplicaN         int    `json:"replicaN"`
 	Memory           uint64 `json:"memory"`
 	CPUType          string `json:"cpuType"`
 	CPUPhysicalCores int    `json:"cpuPhysicalCores"`
