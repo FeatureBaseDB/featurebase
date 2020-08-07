@@ -106,18 +106,8 @@ func (tx *Tx) Rollback() {
 		}
 	}
 
-	// turn on these error checks! we see
-	// panic: cannot find segment containing WAL page: 1
-	// when running go test -v
-	// TestCursor_FirstNext_Quick/6
-	//
-	//panicOn(tx.db.checkpoint())
-	//panicOn(tx.db.removeTx(tx))
-
-	_ = tx.db.checkpoint()
-
 	// Disconnect transaction from DB.
-	_ = tx.db.removeTx(tx)
+	panicOn(tx.db.removeTx(tx))
 }
 
 // Root returns the root page number for a bitmap. Returns 0 if the bitmap does not exist.
