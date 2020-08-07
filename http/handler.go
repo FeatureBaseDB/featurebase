@@ -702,6 +702,7 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 	status := getStatusResponse{
 		State:   h.api.State(),
 		Nodes:   h.api.Hosts(r.Context()),
+		NodeStates: h.api.HostStates(r.Context()),
 		LocalID: h.api.Node().ID,
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -758,9 +759,10 @@ type getSchemaResponse struct {
 }
 
 type getStatusResponse struct {
-	State   string         `json:"state"`
-	Nodes   []*pilosa.Node `json:"nodes"`
-	LocalID string         `json:"localID"`
+	State      string            `json:"state"`
+	Nodes      []*pilosa.Node    `json:"nodes"`
+	NodeStates map[string]string `json:"nodeStates"`
+	LocalID    string            `json:"localID"`
 }
 
 func hash(s string) string {
