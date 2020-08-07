@@ -649,6 +649,43 @@ func (e *executor) preprocessQuery(ctx context.Context, tx Tx, index string, c *
 			Precomputed: precomputed,
 		}, nil
 
+	case "All":
+		_, hasLimit, err := c.UintArg("limit")
+		if err != nil {
+			return nil, err
+		}
+		_, hasOffset, err := c.UintArg("offset")
+		if err != nil {
+			return nil, err
+		}
+		if !hasLimit && !hasOffset {
+			return c, nil
+		}
+
+		// Rewrite the All() w/ limit to Limit(All()).
+		c.Children = []*pql.Call{
+			{
+				Name: "All",
+			},
+		}
+		c.Name = "Limit"
+		fallthrough
+
+	case "Limit":
+		if len(c.Children) != 1 {
+			return nil, errors.Errorf("expected 1 child of limit call but got %d", len(c.Children))
+		}
+		res, err := e.preprocessQuery(ctx, tx, index, c.Children[0], shards, opt)
+		if err != nil {
+			return nil, err
+		}
+		c.Children[0] = res
+		err = e.executeLimitCall(ctx, tx, index, c, shards, opt)
+		if err != nil {
+			return nil, err
+		}
+		return c, nil
+
 	default:
 		// Recurse through child calls.
 		out := make([]*pql.Call, len(c.Children))
@@ -776,9 +813,6 @@ func (e *executor) executeCall(ctx context.Context, tx Tx, index string, c *pql.
 	case "FieldValue":
 		statFn()
 		return e.executeFieldValueCall(ctx, tx, index, c, shards, opt)
-	case "All":
-		statFn()
-		return e.executeAllCall(ctx, tx, index, c, shards, opt)
 	case "Precomputed":
 		return e.executePrecomputedCall(ctx, tx, index, c, shards, opt)
 	default:
@@ -976,25 +1010,20 @@ func (e *executor) executeFieldValueCallShard(ctx context.Context, tx Tx, field 
 	return other, nil
 }
 
-// executeAllCall executes an All() call.
-func (e *executor) executeAllCall(ctx context.Context, tx Tx, index string, c *pql.Call, shards []uint64, opt *execOptions) (*Row, error) {
-	rslt := NewRow()
+// executeLimitCall executes a Limit() call, **rewriting it to a precomputed call**.
+func (e *executor) executeLimitCall(ctx context.Context, tx Tx, index string, c *pql.Call, shards []uint64, opt *execOptions) error {
+	bitmapCall := c.Children[0]
 
-	var limit uint64
-	var offset uint64
-
-	if lim, hasLimit, err := c.UintArg("limit"); err != nil {
-		return nil, errors.Wrap(err, "getting limit")
-	} else if hasLimit && lim > 0 {
-		limit = uint64(lim)
+	limit, hasLimit, err := c.UintArg("limit")
+	if err != nil {
+		return errors.Wrap(err, "getting limit")
 	}
-	if off, hasOffset, err := c.UintArg("offset"); err != nil {
-		return nil, errors.Wrap(err, "getting offset")
-	} else if hasOffset && off > 0 {
-		offset = uint64(off)
+	offset, _, err := c.UintArg("offset")
+	if err != nil {
+		return errors.Wrap(err, "getting offset")
 	}
 
-	if limit == 0 {
+	if !hasLimit {
 		limit = math.MaxUint64
 	}
 
@@ -1005,11 +1034,33 @@ func (e *executor) executeAllCall(ctx context.Context, tx Tx, index string, c *p
 	// got tracks the number of records gotten to that point.
 	var got uint64
 
+	c.Precomputed = make(map[uint64]interface{})
+
 	for _, shard := range shards {
-		row, err := e.executeAllCallMapReduce(ctx, tx, index, c, shard, opt)
-		if err != nil {
-			return nil, errors.Wrap(err, "executing map reduce on shard")
+		// Execute calls in bulk on each remote node and merge.
+		mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
+			return e.executeBitmapCallShard(ctx, tx, index, bitmapCall, shard)
 		}
+
+		// Merge returned results at coordinating node.
+		reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			other, _ := prev.(*Row)
+			if other == nil {
+				other = NewRow()
+			}
+			other.Merge(v.(*Row))
+			return other
+		}
+
+		result, err := e.mapReduce(ctx, index, []uint64{shard}, c, opt, mapFn, reduceFn)
+		if err != nil {
+			return errors.Wrap(err, "limit map reduce")
+		}
+
+		row, _ := result.(*Row)
 
 		segCnt := row.Count()
 
@@ -1023,14 +1074,14 @@ func (e *executor) executeAllCall(ctx context.Context, tx Tx, index string, c *p
 		// (or it has exactly enough).
 		if segCnt-skip <= limit-got {
 			if skip == 0 {
-				rslt.Merge(row)
+				c.Precomputed[shard] = row
 			} else {
 				cols := row.Columns()
 				partialRow := NewRow()
 				for _, bit := range cols[skip:] {
 					partialRow.SetBit(bit)
 				}
-				rslt.Merge(partialRow)
+				c.Precomputed[shard] = partialRow
 			}
 			got += segCnt - skip
 			// In the case where this segment exactly fulfills the limit, break.
@@ -1047,42 +1098,12 @@ func (e *executor) executeAllCall(ctx context.Context, tx Tx, index string, c *p
 		for _, bit := range cols[skip : skip+limit-got] {
 			partialRow.SetBit(bit)
 		}
-		rslt.Merge(partialRow)
+		c.Precomputed[shard] = partialRow
 		break
 	}
 
-	return rslt, nil
-}
-
-// executeAllCallMapReduce executes a single shard of the All() call
-// using the executor.mapReduce() method.
-func (e *executor) executeAllCallMapReduce(ctx context.Context, tx Tx, index string, c *pql.Call, shard uint64, opt *execOptions) (*Row, error) {
-	// Execute calls in bulk on each remote node and merge.
-	mapFn := func(ctx context.Context, shard uint64) (interface{}, error) {
-		return e.executeAllCallShard(ctx, tx, index, c, shard)
-	}
-
-	// Merge returned results at coordinating node.
-	reduceFn := func(ctx context.Context, prev, v interface{}) interface{} {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		other, _ := prev.(*Row)
-		if other == nil {
-			other = NewRow()
-		}
-		other.Merge(v.(*Row))
-		return other
-	}
-
-	result, err := e.mapReduce(ctx, index, []uint64{shard}, c, opt, mapFn, reduceFn)
-	if err != nil {
-		return nil, errors.Wrap(err, "map reduce")
-	}
-
-	row, _ := result.(*Row)
-
-	return row, nil
+	c.Name = "Precomputed"
+	return nil
 }
 
 // executeIncludesColumnCallShard
@@ -1458,7 +1479,7 @@ func (e *executor) executeBitmapCallShard(ctx context.Context, tx Tx, index stri
 		return e.executeNotShard(ctx, tx, index, c, shard)
 	case "Shift":
 		return e.executeShiftShard(ctx, tx, index, c, shard)
-	case "All": // Allow a shard computation to use All() (note, limit/offset not applied)
+	case "All": // Allow a shard computation to use All()
 		return e.executeAllCallShard(ctx, tx, index, c, shard)
 	case "Distinct":
 		return nil, errors.New("Distinct shouldn't be hit as a bitmap call")

@@ -3650,6 +3650,94 @@ func TestExecutor_Execute_FieldValue(t *testing.T) {
 	}
 }
 
+// Ensure a Limit query can be executed.
+func TestExecutor_Execute_Limit(t *testing.T) {
+	c := test.MustRunCluster(t, 1)
+	defer c.Close()
+
+	c.CreateField(t, "i", pilosa.IndexOptions{TrackExistence: true}, "f")
+	c.ImportBits(t, "i", "f", [][2]uint64{
+		{1, 0},
+		{1, 1},
+		{1, ShardWidth + 1},
+	})
+	columns := []uint64{0, 1, ShardWidth + 1}
+
+	// Test with only a limit specified.
+	t.Run("Limit", func(t *testing.T) {
+		for limit := 0; limit < 5; limit++ {
+			expect := columns
+			if limit < len(expect) {
+				expect = expect[:limit]
+			}
+
+			resp := c.Query(t, "i", fmt.Sprintf("Limit(All(), limit=%d)", limit))
+			if len(resp.Results) != 1 {
+				t.Fatalf("limit=%d: expected 1 result but got %v", limit, resp.Results)
+			}
+			row, ok := resp.Results[0].(*pilosa.Row)
+			if !ok {
+				t.Fatalf("limit=%d: expected a row result but got %T", limit, resp.Results[0])
+			}
+			got := row.Columns()
+			if !reflect.DeepEqual(expect, got) {
+				t.Errorf("limit=%d: expected %v but got %v", limit, expect, got)
+			}
+		}
+	})
+
+	// Test with only an offset specified.
+	t.Run("Offset", func(t *testing.T) {
+		for offset := 0; offset < 5; offset++ {
+			expect := []uint64{}
+			if offset <= len(columns) {
+				expect = columns[offset:]
+			}
+
+			resp := c.Query(t, "i", fmt.Sprintf("Limit(All(), offset=%d)", offset))
+			if len(resp.Results) != 1 {
+				t.Fatalf("offset=%d: expected 1 result but got %v", offset, resp.Results)
+			}
+			row, ok := resp.Results[0].(*pilosa.Row)
+			if !ok {
+				t.Fatalf("offset=%d: expected a row result but got %T", offset, resp.Results[0])
+			}
+			got := row.Columns()
+			if !reflect.DeepEqual(expect, got) {
+				t.Errorf("offset=%d: expected %v but got %v", offset, expect, got)
+			}
+		}
+	})
+
+	// Test with a limit and offset specified.
+	t.Run("LimitOffset", func(t *testing.T) {
+		for limit := 0; limit < 5; limit++ {
+			for offset := 0; offset < 5; offset++ {
+				expect := []uint64{}
+				if offset <= len(columns) {
+					expect = columns[offset:]
+				}
+				if limit < len(expect) {
+					expect = expect[:limit]
+				}
+
+				resp := c.Query(t, "i", fmt.Sprintf("Limit(All(), limit=%d, offset=%d)", limit, offset))
+				if len(resp.Results) != 1 {
+					t.Fatalf("limit=%d,offset=%d: expected 1 result but got %v", limit, offset, resp.Results)
+				}
+				row, ok := resp.Results[0].(*pilosa.Row)
+				if !ok {
+					t.Fatalf("limit=%d,offset=%d: expected a row result but got %T", limit, offset, resp.Results[0])
+				}
+				got := row.Columns()
+				if !reflect.DeepEqual(expect, got) {
+					t.Errorf("limit=%d,offset=%d: expected %v but got %v", limit, offset, expect, got)
+				}
+			}
+		}
+	})
+}
+
 // Ensure an all query can be executed.
 func TestExecutor_Execute_All(t *testing.T) {
 	t.Run("ColumnID", func(t *testing.T) {
