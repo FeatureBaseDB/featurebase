@@ -850,6 +850,41 @@ Rows(job, like="%t")
 {"rows":null,"keys":["management","student"]}
 ```
 
+#### Extract
+
+**Spec:**
+```
+Extract(<ROW_CALL>, [<ROWS_CALL>...])
+```
+
+**Description:**
+
+Extract intersects a set of columns with a set of rows in order to extract a subset of the index.
+The result is a table consisting of the matched columns and the rows which they intersect.
+This is similar to a select query in a SQL database.
+
+**Result Type:** Object with an array of the selected fields and an array of the selected columns.
+The column array contains objects containing a column identifier and an array of field values.
+Field values are typed as such:
+- Bool Field - boolean or null
+- Mutex Field (unkeyed) - 64-bit unsigned integer or null
+- Mutex Field (keyed) - string or null
+- Integer Field - 64-bit signed integer or null
+- Decimal Field - Pilosa decimal value or null
+- Set Field (unkeyed) - array of 64-bit unsigned integers
+- Set Field (keyed) - array of strings
+- Time Field - same as the equivalent Set
+
+**Examples:**
+
+List all stargazers who have starred repository 1, and the full set of repositories they have starred:
+```request
+Extract(Row(stargazer=1), Rows(stargazer))
+```
+```response
+{"fields":[{"name":"stargazer","type":"set"}],"columns":[{"column":3,"rows":[[1, 2, 3]]}]}
+```
+
 #### Group By
 
 **Spec:**
