@@ -87,6 +87,7 @@ type Command struct {
 	listenURI    *pilosa.URI
 	tlsConfig    *tls.Config
 	closeTimeout time.Duration
+	pgserver     *PostgresServer
 
 	serverOptions []pilosa.ServerOption
 }
@@ -170,6 +171,29 @@ func (m *Command) Start() (err error) {
 			m.logger.Printf("grpc server error: %v", err)
 		}
 	}()
+
+	// Initialize postgres.
+	m.pgserver = nil
+	if m.Config.Postgres.Addr != "" {
+		var tlsConf *tls.Config
+		if m.Config.Postgres.TLS.CertificatePath != "" {
+			conf, err := GetTLSConfig(&m.Config.Postgres.TLS, m.logger.Logger())
+			if err != nil {
+				return errors.Wrap(err, "settuing up postgres TLS")
+			}
+			tlsConf = conf
+		}
+		m.pgserver = NewPostgresServer(m.API, m.logger, tlsConf)
+		m.pgserver.s.StartupTimeout = time.Duration(m.Config.Postgres.StartupTimeout)
+		m.pgserver.s.ReadTimeout = time.Duration(m.Config.Postgres.ReadTimeout)
+		m.pgserver.s.WriteTimeout = time.Duration(m.Config.Postgres.WriteTimeout)
+		m.pgserver.s.MaxStartupSize = m.Config.Postgres.MaxStartupSize
+		m.pgserver.s.ConnectionLimit = m.Config.Postgres.ConnectionLimit
+		err := m.pgserver.Start(m.Config.Postgres.Addr)
+		if err != nil {
+			return errors.Wrap(err, "starting postgres")
+		}
+	}
 
 	close(m.Started)
 	return nil
@@ -515,6 +539,7 @@ func (m *Command) Close() error {
 	eg.Go(m.Handler.Close)
 	eg.Go(m.Server.Close)
 	eg.Go(m.API.Close)
+	eg.Go(m.pgserver.Close)
 	if m.gossipMemberSet != nil {
 		eg.Go(m.gossipMemberSet.Close)
 	}
