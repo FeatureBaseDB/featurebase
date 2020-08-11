@@ -2597,8 +2597,11 @@ func (e *executor) executeRowsShard(ctx context.Context, tx Tx, index string, fi
 	// in order to represent `Rows` for the field.
 	var views = []string{viewStandard}
 
-	// Handle `time` fields.
-	if f.Type() == FieldTypeTime {
+	// Handle `int` and `time` fields.
+	switch f.Type() {
+	case FieldTypeInt:
+		return nil, errors.New("int fields not supported by Rows() query")
+	case FieldTypeTime:
 		var err error
 
 		// Parse "from" time, if set.
