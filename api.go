@@ -1739,6 +1739,16 @@ func (api *API) State() string {
 	return api.cluster.State()
 }
 
+// ClusterID returns the cluster ID.
+func (api *API) ClusterID() string {
+	return api.cluster.id
+}
+
+// ClusterName returns the cluster name.
+func (api *API) ClusterName() string {
+	return api.cluster.Name
+}
+
 // Version returns the Pilosa version.
 func (api *API) Version() string {
 	return strings.TrimPrefix(Version, "v")

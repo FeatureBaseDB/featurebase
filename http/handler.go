@@ -700,10 +700,12 @@ func (h *Handler) handleGetStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status := getStatusResponse{
-		State:   h.api.State(),
-		Nodes:   h.api.Hosts(r.Context()),
-		NodeStates: h.api.HostStates(r.Context()),
-		LocalID: h.api.Node().ID,
+		State:       h.api.State(),
+		Nodes:       h.api.Hosts(r.Context()),
+		NodeStates:  h.api.HostStates(r.Context()),
+		LocalID:     h.api.Node().ID,
+		ClusterID:   h.api.ClusterID(),
+		ClusterName: h.api.ClusterName(),
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(status); err != nil {
@@ -759,10 +761,12 @@ type getSchemaResponse struct {
 }
 
 type getStatusResponse struct {
-	State      string            `json:"state"`
-	Nodes      []*pilosa.Node    `json:"nodes"`
-	NodeStates map[string]string `json:"nodeStates"`
-	LocalID    string            `json:"localID"`
+	State       string            `json:"state"`
+	Nodes       []*pilosa.Node    `json:"nodes"`
+	NodeStates  map[string]string `json:"nodeStates"`
+	LocalID     string            `json:"localID"`
+	ClusterID   string            `json:"clusterID"`
+	ClusterName string            `json:"clusterName"`
 }
 
 func hash(s string) string {
