@@ -16,6 +16,7 @@ package pilosa
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -28,6 +29,36 @@ import (
 // stream via Send().
 type StreamClient interface {
 	Recv() (*RowResponse, error)
+}
+
+// ReadIntoTable reads from a StreamClient and stores the result into a table response.
+func ReadIntoTable(cli StreamClient) (*TableResponse, error) {
+	var headers []*ColumnInfo
+	rows := []*Row{}
+
+rx:
+	for {
+		row, err := cli.Recv()
+		switch err {
+		case nil:
+		case io.EOF:
+			break rx
+		default:
+			return nil, err
+		}
+
+		if headers == nil {
+			headers = row.Headers
+		}
+		rows = append(rows, &Row{
+			Columns: row.Columns,
+		})
+	}
+
+	return &TableResponse{
+		Headers: headers,
+		Rows:    rows,
+	}, nil
 }
 
 // StreamServer is an interface for a stream
@@ -82,6 +113,52 @@ func RowsToTable(tr ToRowser, n int) (*TableResponse, error) {
 		Headers: headers,
 		Rows:    rows,
 	}, nil
+}
+
+// RowBuffer acts as a Sender/Receiver of RowResponses.
+// Note that sending a nil value will cause the Recv
+// method to return an io.EOF error.
+type RowBuffer struct {
+	ch chan *RowResponse
+}
+
+// NewRowBuffer returns a new instance of RowBuffer.
+// sz is the size of the buffer.
+func NewRowBuffer(sz int) *RowBuffer {
+	var chSz int
+	if sz > 0 {
+		// Add one to allow for the EOF record.
+		chSz = sz + 1
+	}
+	return &RowBuffer{
+		ch: make(chan *RowResponse, chSz),
+	}
+}
+
+// Recv returns a RowResponse. When the buffer is empty,
+// calling Recv will return an io.EOF error.
+func (rb *RowBuffer) Recv() (*RowResponse, error) {
+	r := <-rb.ch
+
+	// If the StatusError contains a message then return
+	// with the approprate error.
+	se := r.GetStatusError()
+	code := codes.Code(se.GetCode())
+	msg := se.GetMessage()
+	if code != codes.OK {
+		return nil, status.Error(code, msg)
+	} else if msg == "EOF" {
+		return nil, io.EOF
+	} else if msg != "" {
+		return nil, errors.New(msg)
+	}
+
+	return r, nil
+}
+
+func (rb *RowBuffer) Send(rr *RowResponse) error {
+	rb.ch <- rr
+	return nil
 }
 
 // EOF acts as an io.EOF encoded into a RowResponse.
