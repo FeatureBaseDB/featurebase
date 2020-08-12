@@ -75,7 +75,10 @@ func errToStatusError(err error) error {
 	return status.Error(codes.Unknown, err.Error())
 }
 
+// GetVDSs returns a single VDS given a name
 func (h *GRPCHandler) GetVDS(ctx context.Context, req *pb.GetVDSRequest) (*pb.GetVDSResponse, error) {
+	// TODO: Return all schema information associated with the VDS.
+	// It's obviously not very useful to return the same data as given.
 	schema := h.api.Schema(ctx)
 	for _, index := range schema {
 		if req.Name == index.Name {
@@ -85,6 +88,7 @@ func (h *GRPCHandler) GetVDS(ctx context.Context, req *pb.GetVDSRequest) (*pb.Ge
 	return nil, status.Error(codes.NotFound, fmt.Sprintf("VDS with name %s not found", req.Name))
 }
 
+// GetVDSs returns a list of all VDSs
 func (h *GRPCHandler) GetVDSs(ctx context.Context, req *pb.GetVDSsRequest) (*pb.GetVDSsResponse, error) {
 	schema := h.api.Schema(ctx)
 	vdss := make([]*pb.VDS, len(schema))
@@ -94,18 +98,33 @@ func (h *GRPCHandler) GetVDSs(ctx context.Context, req *pb.GetVDSsRequest) (*pb.
 	return &pb.GetVDSsResponse{Vdss: vdss}, nil
 }
 
+// PostVDS creates a new VDS
 func (*GRPCHandler) PostVDS(ctx context.Context, req *pb.PostVDSRequest) (*pb.PostVDSResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PostVDS not implemented")
 }
 
+// DeleteVDS deletes a VDS
 func (*GRPCHandler) DeleteVDS(ctx context.Context, req *pb.DeleteVDSRequest) (*pb.DeleteVDSResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteVDS not implemented")
 }
 
+// QuerySQL handles the SQL request and sends RowResponses to the stream.
 func (*GRPCHandler) QuerySQL(req *pb.QuerySQLRequest, stream pb.Pilosa_QuerySQLServer) error {
 	return status.Errorf(codes.Unimplemented, "method QuerySQL not implemented")
 }
 
+// QuerySQLUnary is a unary-response (non-streaming) version of QuerySQL, returning a TableResponse.
+//
+// Note regarding QuerySQLUnary and QueryPQLUnary:
+// These methods are not ideal, as gRPC responses are payload-length limited to
+// 4MB, so in most cases, we would recommend users use the QuerySQL and
+// QueryPQL methods, as they stream the response as several small RowResponses.
+// The response size limit is configurable on the client size, but we really
+// only recommend these methods in the case that the payload is known to be
+// quite small (e.g. single counts). These are provided mostly to support gRPC
+// Futures, which are used by python-molecula to perform multiple queries
+// concurrently. There is additional discussion and historical context here:
+// https://github.com/molecula/pilosa/pull/644
 func (*GRPCHandler) QuerySQLUnary(ctx context.Context, req *pb.QuerySQLRequest) (*pb.TableResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QuerySQLUnary not implemented")
 }
@@ -150,6 +169,8 @@ func (h *GRPCHandler) QueryPQL(req *pb.QueryPQLRequest, stream pb.Pilosa_QueryPQ
 }
 
 // QueryPQLUnary is a unary-response (non-streaming) version of QueryPQL, returning a TableResponse.
+//
+// Note comment above QuerySQLUnary describing the need for the *Unary methods.
 func (h *GRPCHandler) QueryPQLUnary(ctx context.Context, req *pb.QueryPQLRequest) (*pb.TableResponse, error) {
 	query := pilosa.QueryRequest{
 		Index: req.Index,

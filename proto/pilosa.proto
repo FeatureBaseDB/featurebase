@@ -21,10 +21,10 @@ message GetVDSResponse {
 }
 
 message PostVDSRequest {
+  string name = 1;
 }
 
 message PostVDSResponse {
-  string name = 1;
 }
 
 message DeleteVDSRequest {
