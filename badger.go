@@ -711,7 +711,7 @@ func (tx *BadgerTx) PutContainer(index, field, view string, shard uint64, ckey u
 	entry := badger.NewEntry(bkey, by).WithMeta(ct)
 	tx.mu.Lock()
 	err := tx.tx.SetEntry(entry)
-	tx.mu.Unlock()
+	defer tx.mu.Unlock()
 
 	// ErrTxnTooBig is returned if too many writes are fit into a single transaction.
 	// badger docs: "An ErrTxnTooBig will be reported in case the number of pending
@@ -719,14 +719,11 @@ func (tx *BadgerTx) PutContainer(index, field, view string, shard uint64, ckey u
 	// is best to commit the transaction and start a new transaction immediately."
 	//
 	if err == badger.ErrTxnTooBig {
-		// As now, we don't deal with this. The current strategy is to recommend setting lots
-		// of bits on your container and then change it in a single operation
-		// within the txn, rather than having too many SetEntry() calls in a transactions.
-		// The tests currently have these default limits:
-		// maxBatchCount:104857, maxBatchSize:10066329
-		// For now, we just panic. The user should re-write their code to do
-		// most of the work of setting bits outside the transaction.
-		panic(fmt.Sprintf("error: do not do more than 100K writes in a transaction: '%v'", err))
+		// The integration tests do large bit level loads that exceed 10MB.
+		// So we autocommit and start a new Txn.
+		panicOn(tx.tx.Commit())
+		tx.tx = tx.Db.db.NewTransaction(tx.write)
+		return tx.tx.SetEntry(entry)
 	}
 	return err
 }

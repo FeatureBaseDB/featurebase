@@ -38,7 +38,7 @@ func init() {
 	go func() {
 		// give time for env var TXSRC to be set.
 		//time.Sleep(5 * time.Second)
-		//CPUProfileForDur(5*time.Minute, "cpu.pprof")
+		//CPUProfileForDur(time.Minute, "cpu.pprof")
 		//CPUProfileForDur(15*time.Second, "cpu.pprof")
 	}()
 }
