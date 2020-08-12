@@ -45,6 +45,10 @@ type Transaction struct {
 	// Timeout is the minimum idle time for which this transaction should continue to exist.
 	Timeout time.Duration `json:"timeout"`
 
+	// CreatedAt is the timestamp at which the transaction was created. This supports
+	// the case of listing transactions in a useful order.
+	CreatedAt time.Time `json:"createdAt"`
+
 	// Deadline is calculated from Timeout. TODO reset deadline each time there is activity
 	// on the transaction. (we can't do this until there is some method of associating a
 	// request/call with a transaction)
@@ -130,12 +134,14 @@ func (tm *TransactionManager) Start(ctx context.Context, id string, timeout time
 	active := !exclusive || (len(trnsMap) == 0)
 
 	// set deadline according to timeout
-	deadline := time.Now().Add(timeout)
+	createdAt := time.Now()
+	deadline := createdAt.Add(timeout)
 	trns := &Transaction{
 		ID:        id,
 		Active:    active,
 		Exclusive: exclusive,
 		Timeout:   timeout,
+		CreatedAt: createdAt,
 		Deadline:  deadline,
 	}
 	if err = tm.store.Put(trns); err != nil {
@@ -447,12 +453,14 @@ func (trns *Transaction) MarshalJSON() ([]byte, error) {
 		Active    bool   `json:"active"`
 		Exclusive bool   `json:"exclusive"`
 		Timeout   string `json:"timeout"`
+		CreatedAt string `json:"createdAt"`
 		Deadline  string `json:"deadline"`
 	}{
 		ID:        trns.ID,
 		Active:    trns.Active,
 		Exclusive: trns.Exclusive,
 		Timeout:   trns.Timeout.String(),
+		CreatedAt: trns.CreatedAt.In(time.UTC).Format(time.RFC3339Nano),
 		Deadline:  trns.Deadline.In(time.UTC).Format(time.RFC3339Nano),
 	})
 }
@@ -463,6 +471,7 @@ func (trns *Transaction) Copy() *Transaction {
 		Active:    trns.Active,
 		Exclusive: trns.Exclusive,
 		Timeout:   trns.Timeout,
+		CreatedAt: trns.CreatedAt,
 		Deadline:  trns.Deadline,
 		Stats:     trns.Stats,
 	}

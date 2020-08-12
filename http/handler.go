@@ -32,6 +32,7 @@ import (
 	"reflect"
 	"runtime/debug"
 	"runtime/pprof"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -220,6 +221,7 @@ func (h *Handler) populateValidators() {
 	h.validators["PostFieldAttrDiff"] = queryValidationSpecRequired()
 	h.validators["GetNodes"] = queryValidationSpecRequired()
 	h.validators["GetShardMax"] = queryValidationSpecRequired()
+	h.validators["GetTransactionList"] = queryValidationSpecRequired()
 	h.validators["GetTransactions"] = queryValidationSpecRequired()
 	h.validators["GetTransaction"] = queryValidationSpecRequired()
 	h.validators["PostTransaction"] = queryValidationSpecRequired()
@@ -362,6 +364,8 @@ func newRouter(handler *Handler) *mux.Router {
 	router.HandleFunc("/schema", handler.handleGetSchema).Methods("GET").Name("GetSchema")
 	router.HandleFunc("/schema", handler.handlePostSchema).Methods("POST").Name("PostSchema")
 	router.HandleFunc("/status", handler.handleGetStatus).Methods("GET").Name("GetStatus")
+	router.HandleFunc("/transaction", handler.handleGetTransactionList).Methods("GET").Name("GetTransactionList")
+	router.HandleFunc("/transaction/", handler.handleGetTransactionList).Methods("GET").Name("GetTransactionList")
 	router.HandleFunc("/transaction", handler.handlePostTransaction).Methods("POST").Name("PostTransaction")
 	router.HandleFunc("/transaction/", handler.handlePostTransaction).Methods("POST").Name("PostTransaction")
 	router.HandleFunc("/transaction/{id}", handler.handleGetTransaction).Methods("GET").Name("GetTransaction")
@@ -1239,6 +1243,41 @@ func (h *Handler) handleDeleteField(w http.ResponseWriter, r *http.Request) {
 	resp := successResponse{h: h}
 	err := h.api.DeleteField(r.Context(), indexName, fieldName)
 	resp.write(w, err)
+}
+
+func (h *Handler) handleGetTransactionList(w http.ResponseWriter, r *http.Request) {
+	if !validHeaderAcceptJSON(r.Header) {
+		http.Error(w, "JSON only acceptable response", http.StatusNotAcceptable)
+		return
+	}
+	trnsMap, err := h.api.Transactions(r.Context())
+	if err != nil {
+		switch errors.Cause(err) {
+		case pilosa.ErrNodeNotCoordinator:
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			http.Error(w, "problem getting transactions: "+err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Convert the map of transactions to a slice.
+	trnsList := make([]*pilosa.Transaction, len(trnsMap))
+	var i int
+	for _, v := range trnsMap {
+		trnsList[i] = v
+		i++
+	}
+
+	// Sort the slice by createdAt.
+	sort.Slice(trnsList, func(i, j int) bool {
+		return trnsList[i].CreatedAt.Before(trnsList[j].CreatedAt)
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(trnsList); err != nil {
+		h.logger.Printf("encoding GetTransactionList response: %s", err)
+	}
 }
 
 func (h *Handler) handleGetTransactions(w http.ResponseWriter, r *http.Request) {
