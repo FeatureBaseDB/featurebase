@@ -601,7 +601,7 @@ Limit(Row(stargazer=1), limit=1, offset=1)
 {"results":[{"attrs":{},"columns":[30]}]}
 ```
 
-* columns are repositories that were not starred by user 1
+* columns are repositories that were starred by user 1
 
 #### Count
 **Spec:**
