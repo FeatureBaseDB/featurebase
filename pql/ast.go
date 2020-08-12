@@ -394,7 +394,14 @@ var callInfoByFunc = map[string]callInfo{
 	"Union":     {allowUnknown: false},
 	"UnionRows": {allowUnknown: false},
 	"Extract":   {allowUnknown: false},
-	"Xor":       {allowUnknown: false},
+	"Limit": {
+		allowUnknown: false,
+		prototypes: map[string]interface{}{
+			"limit":  int64(0),
+			"offset": int64(0),
+		},
+	},
+	"Xor": {allowUnknown: false},
 
 	"ConstRow": {
 		allowUnknown: false,

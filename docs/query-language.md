@@ -571,6 +571,38 @@ Not(Row(stargazer=1))
 
 * columns are repositories that were not starred by user 1
 
+#### Limit
+
+**Spec:**
+
+```
+Limit(<ROW_CALL>, [limit=<UINT>], [offset=<UINT>])
+```
+
+**Description:**
+
+Limit executes a `ROW_CALL` and returns a subset of the results.
+If a limit of `n` is specified, then this query will return the first `n` results of the row call.
+If an offset of `m` is specified, then this query will skip the first `m` results of the row call.
+If both a limit and offset are specified, the offset is applied before the limit.
+This can be used to implement pagination.
+
+**Result Type:** object with attrs and columns
+
+attrs will always be empty
+
+**Examples:**
+
+Find the second column that has a bit set in the given row.
+```request
+Limit(Row(stargazer=1), limit=1, offset=1)
+```
+```response
+{"results":[{"attrs":{},"columns":[30]}]}
+```
+
+* columns are repositories that were starred by user 1
+
 #### Count
 **Spec:**
 
