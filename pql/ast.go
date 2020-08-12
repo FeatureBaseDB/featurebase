@@ -396,6 +396,13 @@ var callInfoByFunc = map[string]callInfo{
 	"Extract":   {allowUnknown: false},
 	"Xor":       {allowUnknown: false},
 
+	"ConstRow": {
+		allowUnknown: false,
+		prototypes: map[string]interface{}{
+			"columns": []interface{}{},
+		},
+	},
+
 	// things that take _field
 	"TopN": allowUnderField,
 	// special cases:

@@ -61,6 +61,25 @@ func getTempDirString() (td *string) {
 	return td
 }
 
+func TestExecutor_Execute_ConstRow(t *testing.T) {
+	c := test.MustRunCluster(t, 2)
+	defer c.Close()
+
+	c.CreateField(t, "i", pilosa.IndexOptions{}, "h")
+	c.ImportBits(t, "i", "h", [][2]uint64{
+		{1, 2},
+		{3, 4},
+		{5, 6},
+	})
+
+	resp := c.Query(t, "i", `ConstRow(columns=[2,6])`)
+	expect := []uint64{2, 6}
+	got := resp.Results[0].(*pilosa.Row).Columns()
+	if !reflect.DeepEqual(expect, got) {
+		t.Errorf("expected %v but got %v", expect, got)
+	}
+}
+
 // Ensure a row query can be executed.
 func TestExecutor_Execute_Row(t *testing.T) {
 	t.Run("RowIDColumnID", func(t *testing.T) {

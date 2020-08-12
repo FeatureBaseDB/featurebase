@@ -523,7 +523,6 @@ func (e *executor) execute(ctx context.Context, tx Tx, index string, q *pql.Quer
 }
 
 // preprocessQuery expands any calls that need preprocessing.
-// So far, this only needs to process UnionRows.
 func (e *executor) preprocessQuery(ctx context.Context, tx Tx, index string, c *pql.Call, shards []uint64, opt *execOptions) (*pql.Call, error) {
 	switch c.Name {
 	case "UnionRows":
@@ -603,6 +602,51 @@ func (e *executor) preprocessQuery(ctx context.Context, tx Tx, index string, c *
 		return &pql.Call{
 			Name:     "Union",
 			Children: rows,
+		}, nil
+
+	case "ConstRow":
+		// Fetch user-provided columns list.
+		cols, _ := c.Args["columns"].([]interface{})
+		var ids []uint64
+		var keys []string
+		for _, c := range cols {
+			switch c := c.(type) {
+			case uint64:
+				ids = append(ids, c)
+			case int64:
+				ids = append(ids, uint64(c))
+			case string:
+				keys = append(keys, c)
+			default:
+				return nil, errors.Errorf("invalid column identifier %v of type %T", c, c)
+			}
+		}
+
+		// Translate keys to IDs.
+		if len(keys) > 0 {
+			keyIDs, err := e.Cluster.translateIndexKeys(ctx, index, keys)
+			if err != nil {
+				return nil, errors.Wrap(err, "translating column IDs in ConstRow")
+			}
+			ids = append(ids, keyIDs...)
+		}
+
+		// Split IDs by shard.
+		shardSet := make(map[uint64][]uint64)
+		for _, id := range ids {
+			shardSet[id/ShardWidth] = append(shardSet[id/ShardWidth], id)
+		}
+
+		// Convert ID sets to per-shard Row objects.
+		precomputed := make(map[uint64]interface{})
+		for _, s := range shards {
+			precomputed[s] = NewRow(shardSet[s]...)
+		}
+
+		// Generate a precomputed call with the data.
+		return &pql.Call{
+			Name:        "Precomputed",
+			Precomputed: precomputed,
 		}, nil
 
 	default:
